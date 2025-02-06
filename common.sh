@@ -171,8 +171,8 @@ print_banner() {
 # download_version_db: バージョンデータベースのダウンロード
 #########################################################################
 download_version_db() {
-    ${BASE_WGET} "${BASE_DIR}/versions-common.db" "${BASE_URL}/versions-common.db" \
-    || handle_error "Failed to download versions-common.db"
+    ${BASE_WGET} "${BASE_DIR}/openwrt.db" "${BASE_URL}/openwrt.db" \
+    || handle_error "Failed to download openwrt.db"
 
 }
 
