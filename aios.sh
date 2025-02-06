@@ -20,15 +20,15 @@ packages() {
 # 共通ファイルのダウンロードと読み込み
 #################################
 download_common() {
-    # common-functions.sh が無ければ download_file() で入手
-    if [ ! -f "${BASE_DIR}/common-functions.sh" ]; then
+    # common.sh が無ければ download_file() で入手
+    if [ ! -f "${BASE_DIR}/common.sh" ]; then
         # ダウンロード前の確認が不要なら第3引数は空
-        download_file "common-functions.sh" "${BASE_DIR}/common-functions.sh"
+        download_file "common.sh" "${BASE_DIR}/common.sh"
     fi
 
     # 読み込み
-    . "${BASE_DIR}/common-functions.sh" || {
-        echo "Failed to source common-functions.sh"
+    . "${BASE_DIR}/common.sh" || {
+        echo "Failed to source common.sh"
         exit 1
     }
 }
