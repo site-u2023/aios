@@ -2,7 +2,7 @@
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
 COMMON_FUNCTIONS_SH_VERSION="2025.02.05-rc1"
-echo "common-functions.sh Last update: $COMMON_FUNCTIONS_SH_VERSION"
+echo "common.sh Last update: $COMMON_FUNCTIONS_SH_VERSION"
 
 # === 基本定数の設定 ===
 BASE_WGET="wget --quiet -O"
@@ -79,20 +79,20 @@ handle_error() {
 # エラーハンドリング強化
 #########################################################################
 load_common_functions() {
-    if [ ! -f "${BASE_DIR}/common-functions.sh" ]; then
-        ensure_file "common-functions.sh"
+    if [ ! -f "${BASE_DIR}/common.sh" ]; then
+        ensure_file "common.sh"
     fi
 
-    if ! grep -q "COMMON_FUNCTIONS_SH_VERSION" "${BASE_DIR}/common-functions.sh"; then
-        handle_error "Invalid common-functions.sh file structure."
+    if ! grep -q "COMMON_FUNCTIONS_SH_VERSION" "${BASE_DIR}/common.sh"; then
+        handle_error "Invalid common.sh file structure."
     fi
 
-    . "${BASE_DIR}/common-functions.sh" || handle_error "Failed to load common-functions.sh"
+    . "${BASE_DIR}/common.sh" || handle_error "Failed to load common.sh"
     check_version_compatibility
 }
 
 #!/bin/sh
-# common-functions.sh (抜粋イメージ)
+# common.sh (抜粋イメージ)
 
 #########################################################################
 # check_common
