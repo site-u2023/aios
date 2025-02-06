@@ -1,0 +1,64 @@
+version="2025.02.05-rc1"
+# OpenWrt バージョンデータベース (supported_versions.db)
+# バージョン=パッケージマネージャー|ステータス
+
+# OpenWrt 18.x 系列 (サポート終了)
+18.06.0=opkg|eol
+18.06.1=opkg|eol
+18.06.2=opkg|eol
+18.06.3=opkg|eol
+18.06.4=opkg|eol
+18.06.5=opkg|eol
+18.06.6=opkg|eol
+18.06.7=opkg|eol
+18.06.8=opkg|eol
+18.06.9=opkg|eol
+
+# OpenWrt 19.x 系列
+19.07=opkg|stable
+19.07.0=opkg|stable
+19.07.1=opkg|stable
+19.07.2=opkg|stable
+19.07.3=opkg|stable
+19.07.4=opkg|stable
+19.07.5=opkg|stable
+19.07.6=opkg|stable
+19.07.7=opkg|stable
+19.07.8=opkg|stable
+19.07.9=opkg|stable
+19.07-SNAPSHOT=apk|snapshot
+
+# OpenWrt 21.x 系列
+21.02.0=opkg|stable
+21.02.1=opkg|stable
+21.02.2=opkg|stable
+21.02.3=opkg|stable
+21.02.4=opkg|stable
+21.02.5=opkg|stable
+21.02.6=opkg|stable
+21.02-SNAPSHOT=apk|snapshot
+
+# OpenWrt 22.x 系列
+22.03.0=opkg|stable
+22.03.1=opkg|stable
+22.03.2=opkg|stable
+22.03.3=opkg|stable
+22.03.4=opkg|stable
+22.03.5=opkg|stable
+22.03.6=opkg|stable
+22.03-SNAPSHOT=apk|snapshot
+
+# OpenWrt 23.x 系列
+23.05.0=opkg|stable
+23.05.1=opkg|stable
+23.05.2=opkg|stable
+23.05.3=opkg|stable
+23.05.4=opkg|stable
+23.05-SNAPSHOT=apk|snapshot
+
+# OpenWrt 24.x 系列
+24.10.0=opkg|stable
+24.10-SNAPSHOT=apk|snapshot
+
+# 常に最新の開発版
+SNAPSHOT=apk|snapshot
