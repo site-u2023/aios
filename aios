@@ -1,0 +1,161 @@
+#!/bin/sh
+# License: CC0
+# OpenWrt >= 19.07
+
+AIOS_VERSION="2025.02.05-rc1"
+echo "aios Last update: $AIOS_VERSION"
+
+# === 定数の設定 ===
+BASE_URL="https://raw.githubusercontent.com/site-u2023/aios/main"
+BASE_DIR="/tmp/aios"
+SUPPORTED_LANGUAGES="en ja zh-cn zh-tw id ko de ru"
+INPUT_LANG="$1"
+
+#########################################################################
+# handle_error: 汎用エラーハンドリング関数
+#########################################################################
+# スクリプト内専用エラー処理
+handle_local_error() {
+    echo -e "\033[1;31mLOCAL ERROR:\033[0m $1"
+    # exit 1
+}
+
+# コモン読み込み後は共通関数の handle_error を使用
+. "${BASE_DIR}/common-functions.sh" || handle_local_error "Failed to load common-functions.sh"
+
+
+#########################################################################
+# get_message: 多言語対応メッセージ取得関数
+#########################################################################
+get_message() {
+    local key="$1"
+    local lang="${SELECTED_LANGUAGE:-en}"  # デフォルトは英語
+
+    if [ ! -f "${BASE_DIR}/messages.db" ]; then
+        echo "Message database not found."
+        echo "$key"
+        return
+    fi
+
+    local message=$(grep "^${lang}|${key}=" "${BASE_DIR}/messages.db" | cut -d'=' -f2-)
+    [ -z "$message" ] && message=$(grep "^en|${key}=" "${BASE_DIR}/messages.db" | cut -d'=' -f2-)
+    
+    [ -z "$message" ] && echo "$key" || echo "$message"
+}
+
+#########################################################################
+# ファイルダウンロード関数
+#########################################################################
+download_file() {
+    local remote_file="$1"
+    local destination="$2"
+    echo -e "\033[1;36m$(get_message 'MSG_DOWNLOAD_START'): $remote_file\033[0m"
+    wget --quiet -O "$destination" "${BASE_URL}/${remote_file}" || handle_error "$(get_message 'MSG_DOWNLOAD_FAIL'): $remote_file"
+    echo -e "\033[1;32m$(get_message 'MSG_DOWNLOAD_SUCCESS'): $remote_file\033[0m"
+}
+
+#########################################################################
+# 環境初期化関数
+#########################################################################
+initialize_environment() {
+    mkdir -p "$BASE_DIR" || handle_error "Failed to create directory: $BASE_DIR"
+    echo -e "\033[1;32mEnvironment initialized at $BASE_DIR\033[0m"
+}
+
+#########################################################################
+# バージョン互換性チェック
+#########################################################################
+check_version_compatibility() {
+    REQUIRED_VERSION="$AIOS_VERSION"
+
+    # common-functions.sh のバージョンチェック
+    COMMON_FUNCTIONS_VERSION=$(grep "^COMMON_FUNCTIONS_SH_VERSION=" "${BASE_DIR}/common-functions.sh" | cut -d'=' -f2 | tr -d '"')
+    if [ "$COMMON_FUNCTIONS_VERSION" != "$REQUIRED_VERSION" ]; then
+        echo -e "\033[1;33mVersion mismatch detected for common-functions.sh. Attempting to re-download...\033[0m"
+        download_file "common-functions.sh" "${BASE_DIR}/common-functions.sh"
+        COMMON_FUNCTIONS_VERSION=$(grep "^COMMON_FUNCTIONS_SH_VERSION=" "${BASE_DIR}/common-functions.sh" | cut -d'=' -f2 | tr -d '"')
+        [ "$COMMON_FUNCTIONS_VERSION" != "$REQUIRED_VERSION" ] && handle_error "$(get_message 'MSG_VERSION_UNSUPPORTED'): common-functions.sh ($COMMON_FUNCTIONS_VERSION). Required: $REQUIRED_VERSION"
+    fi
+
+    # messages.db のバージョンチェック
+    MESSAGES_DB_VERSION=$(grep "^version=" "${BASE_DIR}/messages.db" | cut -d'=' -f2)
+    if [ "$MESSAGES_DB_VERSION" != "$REQUIRED_VERSION" ]; then
+        echo -e "\033[1;33mVersion mismatch detected for messages.db. Attempting to re-download...\033[0m"
+        download_file "messages.db" "${BASE_DIR}/messages.db"
+        MESSAGES_DB_VERSION=$(grep "^version=" "${BASE_DIR}/messages.db" | cut -d'=' -f2)
+        [ "$MESSAGES_DB_VERSION" != "$REQUIRED_VERSION" ] && handle_error "$(get_message 'MSG_VERSION_UNSUPPORTED'): messages.db ($MESSAGES_DB_VERSION). Required: $REQUIRED_VERSION"
+    fi
+}
+
+#########################################################################
+# 言語設定の確認
+#########################################################################
+setup_language() {
+    if [ -n "$INPUT_LANG" ] && echo "$SUPPORTED_LANGUAGES" | grep -qw "$INPUT_LANG"; then
+        SELECTED_LANGUAGE="$INPUT_LANG"
+        echo "$SELECTED_LANGUAGE" > "${BASE_DIR}/language_cache"
+    elif [ -f "${BASE_DIR}/language_cache" ]; then
+        SELECTED_LANGUAGE=$(cat "${BASE_DIR}/language_cache")
+    else
+        echo -e "\033[1;33m$(get_message 'MSG_SELECT_LANGUAGE')\033[0m"
+        index=1
+        for lang in $SUPPORTED_LANGUAGES; do
+            echo "$index) $lang"
+            index=$((index + 1))
+        done
+        read -p "Enter number or language (e.g., en, ja): " lang_choice
+        SELECTED_LANGUAGE=$(echo $SUPPORTED_LANGUAGES | awk -v num="$lang_choice" '{print $num}')
+        echo "$SELECTED_LANGUAGE" > "${BASE_DIR}/language_cache"
+    fi
+}
+
+#########################################################################
+# バナー表示
+#########################################################################
+print_banner() {
+    local banner_msg
+    banner_msg=$(get_message 'MSG_BANNER')
+    echo -e "\033[1;36m${banner_msg}\033[0m"
+}
+
+#########################################################################
+# OpenWrt 設定スクリプトの実行
+#########################################################################
+execute_openwrt_config() {
+    download_file "openwrt-config.sh" "${BASE_DIR}/openwrt-config.sh"
+    sh "${BASE_DIR}/openwrt-config.sh" || handle_error "$(get_message 'MSG_EXECUTE_AIOS_FAIL')"
+}
+
+#########################################################################
+# --version オプション処理
+#########################################################################
+if [ "$1" = "--version" ]; then
+    echo "AIOS Version: $AIOS_VERSION"
+    if [ -f "${BASE_DIR}/common-functions.sh" ]; then
+        COMMON_FUNCTIONS_VERSION=$(grep "^COMMON_FUNCTIONS_SH_VERSION=" "${BASE_DIR}/common-functions.sh" | cut -d'=' -f2 | tr -d '"')
+        echo "Common Functions Version: $COMMON_FUNCTIONS_VERSION"
+    else
+        echo "Common Functions Version: Not downloaded"
+    fi
+    exit 0
+fi
+
+#########################################################################
+# メイン処理
+#########################################################################
+mkdir -p "$BASE_DIR"
+
+# 必要なファイルの確認とダウンロード
+ensure_file "common-functions.sh"
+ensure_file "messages.db"
+
+# 互換性チェック（警告レベルで続行可能）
+check_version_compatibility
+
+# 共通関数の読み込み
+. "${BASE_DIR}/common-functions.sh" || handle_error "Failed to load common-functions.sh"
+
+# 言語設定、バナー表示、OpenWrt設定スクリプトの実行
+setup_language
+print_banner
+execute_openwrt_config
