@@ -104,7 +104,7 @@ check_common() {
         full)
             check_language_common
             check_version_common
-            ensure_file "supported_versions.db"
+            ensure_file "openwrt.db"
             ensure_file "messages.db"
             check_version_compatibility
             ;;
@@ -181,12 +181,12 @@ download_version_db() {
 #########################################################################
 check_version_common() {
     local version_file="${BASE_DIR}/check_version"
-    local supported_versions_db="${BASE_DIR}/supported_versions.db"
+    local supported_versions_db="${BASE_DIR}/openwrt.db"
 
     # バージョンデータベースが無い場合はダウンロード
     if [ ! -f "$supported_versions_db" ]; then
         download_supported_versions_db || handle_error \
-            "$(get_message 'download_fail' "$SELECTED_LANGUAGE"): supported_versions.db"
+            "$(get_message 'download_fail' "$SELECTED_LANGUAGE"): openwrt.db"
     fi
 
     # バージョンをキャッシュファイル or /etc/openwrt_release から取得
@@ -200,7 +200,7 @@ check_version_common() {
         echo "$CURRENT_VERSION" > "version_file"
     fi
 
-    # supported_versions.db にエントリがあるか
+    # openwrt.db にエントリがあるか
     if grep -q "^$CURRENT_VERSION=" "$supported_versions_db"; then
         local db_entry db_manager db_status
         # 例: "24.10.0=apk|stable" → db_entry="apk|stable"
@@ -240,7 +240,7 @@ check_version_common() {
 
         echo -e "\033[1;32m$(get_message 'version_supported' "$SELECTED_LANGUAGE"): $CURRENT_VERSION ($VERSION_STATUS)\033[0m"
     else
-        # supported_versions.db に該当バージョンが無い場合
+        # openwrt.db に該当バージョンが無い場合
         handle_error "$(get_message 'unsupported_version' "$SELECTED_LANGUAGE"): $CURRENT_VERSION"
     fi
 }
@@ -305,8 +305,8 @@ download_language_files() {
 # download_supported_versions_db: バージョンデータベースのダウンロード
 #########################################################################
 download_supported_versions_db() {
-    if [ ! -f "${BASE_DIR}/supported_versions.db" ]; then
-        ${BASE_WGET} "${BASE_DIR}/supported_versions.db" "${BASE_URL}/supported_versions.db" || handle_error "Failed to download supported_versions.db"
+    if [ ! -f "${BASE_DIR}/openwrt.db" ]; then
+        ${BASE_WGET} "${BASE_DIR}/openwrt.db" "${BASE_URL}/openwrt.db" || handle_error "Failed to download openwrt.db"
     fi
 }
 
