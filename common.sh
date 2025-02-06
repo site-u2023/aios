@@ -2,7 +2,7 @@
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
 COMMON_FUNCTIONS_SH_VERSION="2025.02.05-rc1"
-echo "common.sh Last update: $COMMON_FUNCTIONS_SH_VERSION"
+echo "common-functions.sh Last update: $COMMON_FUNCTIONS_SH_VERSION"
 
 # === 基本定数の設定 ===
 BASE_WGET="wget --quiet -O"
@@ -79,20 +79,20 @@ handle_error() {
 # エラーハンドリング強化
 #########################################################################
 load_common_functions() {
-    if [ ! -f "${BASE_DIR}/common.sh" ]; then
-        ensure_file "common.sh"
+    if [ ! -f "${BASE_DIR}/common-functions.sh" ]; then
+        ensure_file "common-functions.sh"
     fi
 
-    if ! grep -q "COMMON_FUNCTIONS_SH_VERSION" "${BASE_DIR}/common.sh"; then
-        handle_error "Invalid common.sh file structure."
+    if ! grep -q "COMMON_FUNCTIONS_SH_VERSION" "${BASE_DIR}/common-functions.sh"; then
+        handle_error "Invalid common-functions.sh file structure."
     fi
 
-    . "${BASE_DIR}/common.sh" || handle_error "Failed to load common.sh"
+    . "${BASE_DIR}/common-functions.sh" || handle_error "Failed to load common-functions.sh"
     check_version_compatibility
 }
 
 #!/bin/sh
-# common.sh (抜粋イメージ)
+# common-functions.sh (抜粋イメージ)
 
 #########################################################################
 # check_common
@@ -104,7 +104,7 @@ check_common() {
         full)
             check_language_common
             check_version_common
-            ensure_file "openwrt.db"
+            ensure_file "supported_versions.db"
             ensure_file "messages.db"
             check_version_compatibility
             ;;
@@ -171,8 +171,8 @@ print_banner() {
 # download_version_db: バージョンデータベースのダウンロード
 #########################################################################
 download_version_db() {
-    ${BASE_WGET} "${BASE_DIR}/openwrt.db" "${BASE_URL}/openwrt.db" \
-    || handle_error "Failed to download openwrt.db"
+    ${BASE_WGET} "${BASE_DIR}/versions-common.db" "${BASE_URL}/versions-common.db" \
+    || handle_error "Failed to download versions-common.db"
 
 }
 
@@ -180,13 +180,13 @@ download_version_db() {
 # バージョン確認とパッケージマネージャーの取得関数
 #########################################################################
 check_version_common() {
-    local version_file="${BASE_DIR}/check_version"
-    local supported_versions_db="${BASE_DIR}/openwrt.db"
+    local version_file="${BASE_DIR}/check_openwrt"
+    local supported_versions_db="${BASE_DIR}/supported_versions.db"
 
     # バージョンデータベースが無い場合はダウンロード
     if [ ! -f "$supported_versions_db" ]; then
         download_supported_versions_db || handle_error \
-            "$(get_message 'download_fail' "$SELECTED_LANGUAGE"): openwrt.db"
+            "$(get_message 'download_fail' "$SELECTED_LANGUAGE"): supported_versions.db"
     fi
 
     # バージョンをキャッシュファイル or /etc/openwrt_release から取得
@@ -200,7 +200,7 @@ check_version_common() {
         echo "$CURRENT_VERSION" > "version_file"
     fi
 
-    # openwrt.db にエントリがあるか
+    # supported_versions.db にエントリがあるか
     if grep -q "^$CURRENT_VERSION=" "$supported_versions_db"; then
         local db_entry db_manager db_status
         # 例: "24.10.0=apk|stable" → db_entry="apk|stable"
@@ -240,7 +240,7 @@ check_version_common() {
 
         echo -e "\033[1;32m$(get_message 'version_supported' "$SELECTED_LANGUAGE"): $CURRENT_VERSION ($VERSION_STATUS)\033[0m"
     else
-        # openwrt.db に該当バージョンが無い場合
+        # supported_versions.db に該当バージョンが無い場合
         handle_error "$(get_message 'unsupported_version' "$SELECTED_LANGUAGE"): $CURRENT_VERSION"
     fi
 }
@@ -305,15 +305,15 @@ download_language_files() {
 # download_supported_versions_db: バージョンデータベースのダウンロード
 #########################################################################
 download_supported_versions_db() {
-    if [ ! -f "${BASE_DIR}/openwrt.db" ]; then
-        ${BASE_WGET} "${BASE_DIR}/openwrt.db" "${BASE_URL}/openwrt.db" || handle_error "Failed to download openwrt.db"
+    if [ ! -f "${BASE_DIR}/supported_versions.db" ]; then
+        ${BASE_WGET} "${BASE_DIR}/supported_versions.db" "${BASE_URL}/supported_versions.db" || handle_error "Failed to download supported_versions.db"
     fi
 }
 
 #########################################################################
-# download_messages_db: 選択された言語のメッセージファイルをダウンロード
+# messages_db: 選択された言語のメッセージファイルをダウンロード
 #########################################################################
-download_messages_db() {
+messages_db() {
     if [ ! -f "${BASE_DIR}/messages.db" ]; then
         ${BASE_WGET} "${BASE_DIR}/messages.db" "${BASE_URL}/messages.db" || handle_error "Failed to download messages.db"
     fi
@@ -407,7 +407,7 @@ select_country_and_timezone() {
 
     local language_code
     language_code=$(echo "$matched_country" | awk '{print $3}')
-    echo "$language_code" > "${BASE_DIR}/check_language"
+    echo "$language_code" > "${BASE_DIR}/check_country"
 
     echo -e "$(color green "Selected Language: $language_code")"
     confirm_settings || select_country_and_timezone
@@ -418,7 +418,7 @@ select_country_and_timezone() {
 #########################################################################
 country_full_info() {
     local country_info_file="${BASE_DIR}/country-zone.sh"
-    local selected_language_code=$(cat "${BASE_DIR}/check_language")
+    local selected_language_code=$(cat "${BASE_DIR}/check_country")
 
     if [ -f "$country_info_file" ]; then
         grep -w "$selected_language_code" "$country_info_file"
@@ -564,6 +564,6 @@ install_language_pack() {
 # 初期化処理: バージョン確認、言語設定、メッセージDBのダウンロード
 #########################################################################
 download_supported_versions_db
-download_messages_db
+messages_db
 check_version_common
 check_language_common
