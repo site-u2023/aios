@@ -21,7 +21,7 @@ handle_local_error() {
 }
 
 # コモン読み込み後は共通関数の handle_error を使用
-. "${BASE_DIR}/common-functions.sh" || handle_local_error "Failed to load common-functions.sh"
+. "${BASE_DIR}/common.sh" || handle_local_error "Failed to load common.sh"
 
 
 #########################################################################
@@ -68,13 +68,13 @@ initialize_environment() {
 check_version_compatibility() {
     REQUIRED_VERSION="$AIOS_VERSION"
 
-    # common-functions.sh のバージョンチェック
-    COMMON_FUNCTIONS_VERSION=$(grep "^COMMON_FUNCTIONS_SH_VERSION=" "${BASE_DIR}/common-functions.sh" | cut -d'=' -f2 | tr -d '"')
+    # common.sh のバージョンチェック
+    COMMON_FUNCTIONS_VERSION=$(grep "^COMMON_FUNCTIONS_SH_VERSION=" "${BASE_DIR}/common.sh" | cut -d'=' -f2 | tr -d '"')
     if [ "$COMMON_FUNCTIONS_VERSION" != "$REQUIRED_VERSION" ]; then
-        echo -e "\033[1;33mVersion mismatch detected for common-functions.sh. Attempting to re-download...\033[0m"
-        download_file "common-functions.sh" "${BASE_DIR}/common-functions.sh"
-        COMMON_FUNCTIONS_VERSION=$(grep "^COMMON_FUNCTIONS_SH_VERSION=" "${BASE_DIR}/common-functions.sh" | cut -d'=' -f2 | tr -d '"')
-        [ "$COMMON_FUNCTIONS_VERSION" != "$REQUIRED_VERSION" ] && handle_error "$(get_message 'MSG_VERSION_UNSUPPORTED'): common-functions.sh ($COMMON_FUNCTIONS_VERSION). Required: $REQUIRED_VERSION"
+        echo -e "\033[1;33mVersion mismatch detected for common.sh. Attempting to re-download...\033[0m"
+        download_file "common.sh" "${BASE_DIR}/common.sh"
+        COMMON_FUNCTIONS_VERSION=$(grep "^COMMON_FUNCTIONS_SH_VERSION=" "${BASE_DIR}/common.sh" | cut -d'=' -f2 | tr -d '"')
+        [ "$COMMON_FUNCTIONS_VERSION" != "$REQUIRED_VERSION" ] && handle_error "$(get_message 'MSG_VERSION_UNSUPPORTED'): common.sh ($COMMON_FUNCTIONS_VERSION). Required: $REQUIRED_VERSION"
     fi
 
     # messages.db のバージョンチェック
@@ -131,8 +131,8 @@ execute_openwrt_config() {
 #########################################################################
 if [ "$1" = "--version" ]; then
     echo "AIOS Version: $AIOS_VERSION"
-    if [ -f "${BASE_DIR}/common-functions.sh" ]; then
-        COMMON_FUNCTIONS_VERSION=$(grep "^COMMON_FUNCTIONS_SH_VERSION=" "${BASE_DIR}/common-functions.sh" | cut -d'=' -f2 | tr -d '"')
+    if [ -f "${BASE_DIR}/common.sh" ]; then
+        COMMON_FUNCTIONS_VERSION=$(grep "^COMMON_FUNCTIONS_SH_VERSION=" "${BASE_DIR}/common.sh" | cut -d'=' -f2 | tr -d '"')
         echo "Common Functions Version: $COMMON_FUNCTIONS_VERSION"
     else
         echo "Common Functions Version: Not downloaded"
@@ -146,14 +146,14 @@ fi
 mkdir -p "$BASE_DIR"
 
 # 必要なファイルの確認とダウンロード
-ensure_file "common-functions.sh"
+ensure_file "common.sh"
 ensure_file "messages.db"
 
 # 互換性チェック（警告レベルで続行可能）
 check_version_compatibility
 
 # 共通関数の読み込み
-. "${BASE_DIR}/common-functions.sh" || handle_error "Failed to load common-functions.sh"
+. "${BASE_DIR}/common.sh" || handle_error "Failed to load common.sh"
 
 # 言語設定、バナー表示、OpenWrt設定スクリプトの実行
 setup_language
