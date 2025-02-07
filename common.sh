@@ -592,8 +592,9 @@ check_common() {
         full)
             check_country
             check_openwrt
+            messages.db
             download_script openwrt.db
-            download_script messages.db
+            #download_script messages.db
             download_script country.db
             ;;
         light)
