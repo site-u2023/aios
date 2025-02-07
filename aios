@@ -2,7 +2,7 @@
 # License: CC0
 # OpenWrt >= 19.07
 
-AIOS_VERSION="2025.02.06-1"
+AIOS_VERSION="2025.02.06-10"
 echo "aios Last update: $AIOS_VERSION"
 
 BASE_WGET="wget -O" # テスト用
