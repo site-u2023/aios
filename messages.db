@@ -5,6 +5,24 @@ MESSAGE_VERSION="2025.02.06-1"
 echo "message.db Last update: $MESSAGE_VERSION"
 
 # 追加--------------------------------------------
+# ダウンロード関連メッセージ
+ja|MSG_DOWNLOADING_MISSING_FILE={file} をダウンロード中...
+en|MSG_DOWNLOADING_MISSING_FILE=Downloading {file}...
+
+ja|MSG_DOWNLOAD_CONFIRM={file} をダウンロードしますか？ [Y/n]
+en|MSG_DOWNLOAD_CONFIRM=Do you want to download {file}? [Y/n]
+
+ja|MSG_EXECUTE_AIOS_FAIL=aios の実行に失敗しました。
+en|MSG_EXECUTE_AIOS_FAIL=Failed to execute aios.
+
+# エラーメッセージ
+ja|MSG_ERROR_OCCURRED=エラーが発生しました。
+en|MSG_ERROR_OCCURRED=An error occurred.
+
+ja|MSG_VERSION_UNSUPPORTED={file} のバージョンがサポート外です ({version})。
+en|MSG_VERSION_UNSUPPORTED={file} is unsupported ({version}).
+
+# 追加--------------------------------------------
 # ファイル更新メッセージ
 ja|MSG_UPDATING_SCRIPT={file} を更新しました ({old_version} → {new_version})
 en|MSG_UPDATING_SCRIPT=Updated {file} ({old_version} → {new_version})
