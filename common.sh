@@ -281,6 +281,15 @@ messages_db() {
 }
 
 #########################################################################
+# packages_db: 選択されたパッケージファイルをダウンロード
+#########################################################################
+packages_db() {
+    if [ ! -f "${BASE_DIR}/packages.db" ]; then
+        ${BASE_WGET} "${BASE_DIR}/packages.db" "${BASE_URL}/packages.db" || handle_error "Failed to download packages.db"
+    fi
+}
+
+#########################################################################
 # confirm: Y/N 確認関数
 # 引数1: 確認メッセージキー（多言語対応）
 # 使用例: confirm 'MSG_INSTALL_PROMPT'
@@ -446,53 +455,64 @@ handle_exit() {
 
 #########################################################################
 # install_packages: パッケージをインストールし、言語パックも適用
-# 引数: インストールするパッケージ名のリスト
 #########################################################################
 install_packages() {
-    local package_list=""
-    local uci_list=""
-    local command_list=""
+    local confirm="$1"  # yn (インストール確認)
+    local package_name="$2"
+    shift 2  # 最初の2つの引数を削除
+    local options=("$@")  # uci, ash などのオプションを配列として取得
 
-    # package() の出力を取得（ローカルで指定されたパッケージ名）
-    package_list=$(package)
+    # 最新の packages.db を取得
+    packages_db
 
-    for package_name in $package_list; do
-        local db_package_list=""
-        local db_uci_list=""
-        local db_command_list=""
+    local db_package_list=""
+    local db_uci_list=""
+    local db_command_list=""
 
-        # package.db から該当パッケージの情報を取得
-        while IFS='=' read -r key value; do
-            case "$key" in
-                "packages") db_package_list="$value" ;;
-                "uci") db_uci_list="$db_uci_list\n$value" ;;
-                "command") db_command_list="$db_command_list\n$value" ;;
-            esac
-        done < <(grep -E "^\[?$package_name\]?|packages=|uci=|command=" "${BASE_DIR}/package.db")
+    # packages.db から該当パッケージの情報を取得
+    while IFS='=' read -r key value; do
+        case "$key" in
+            "packages") db_package_list="$value" ;;
+            "uci") db_uci_list="$db_uci_list\n$value" ;;
+            "command") db_command_list="$db_command_list\n$value" ;;
+        esac
+    done < <(grep -E "^\[?$package_name\]?|packages=|uci=|command=" "${BASE_DIR}/packages.db")
 
-        # パッケージのインストール
-        if [ -n "$db_package_list" ]; then
-            install_packages $db_package_list
+    # インストール確認 (`yn` の場合のみ `confirm()` を使用)
+    if [ "$confirm" = "yn" ]; then
+        if ! confirm "MSG_INSTALL_PROMPT_PKG" "$package_name"; then
+            echo -e "$(color yellow "Skipping installation of: $package_name")"
+            return 1
         fi
+    fi
 
-        # UCI の適用（DB にある場合のみ）
-        if [ -n "$db_uci_list" ]; then
-            echo -e "$db_uci_list" | uci batch
-            uci commit
-        fi
+    # パッケージのダウンロード (`download()` を使用)
+    if [ -n "$db_package_list" ]; then
+        for pkg in $db_package_list; do
+            download "$pkg" "${BASE_DIR}/$pkg"
+        done
+    fi
 
-        # コマンドの実行（DB にある場合のみ）
-        if [ -n "$db_command_list" ]; then
-            echo -e "$db_command_list" | while read -r cmd; do
-                eval "$cmd"
-            done
-        fi
-    done
+    # パッケージのインストール
+    if [ -n "$db_package_list" ]; then
+        install_packages $db_package_list
+    fi
+
+    # UCI の適用（`uci` が指定された場合）
+    if [[ " ${options[@]} " =~ " uci " ]] && [ -n "$db_uci_list" ]; then
+        echo -e "$db_uci_list" | uci batch
+        uci commit
+    fi
+
+    # コマンドの実行（`ash` が指定された場合）
+    if [[ " ${options[@]} " =~ " ash " ]] && [ -n "$db_command_list" ]; then
+        echo -e "$db_command_list" | while read -r cmd; do
+            eval "$cmd"
+        done
+    fi
 
     # 言語パッケージの適用（全パッケージ対象）
-    for pkg in $package_list; do
-        install_language_pack "$pkg"
-    done
+    install_language_pack "$package_name"
 }
 
 #------------------------------------------------------------------------------------------
