@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-23"
+COMMON_VERSION="2025.02.05-24"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -540,11 +540,13 @@ install_packages() {
     shift
     local package_list="$*"
 
+    echo "DEBUG: Calling install_packages() with confirm_flag=$confirm_flag and package_list=[$package_list]"  # デバッグ追加
+
     # `confirm()` を1回だけ実行
     if [ "$confirm_flag" = "yn" ] && [ -z "${CONFIRMATION_DONE:-}" ]; then
         local package_names=$(echo "$package_list" | sed 's/  */, /g')  # スペースを統一
 
-        echo "DEBUG: Package list for confirmation: [$package_names]"  # デバッグ
+        echo "DEBUG: Package list for confirmation: [$package_names]"  # デバッグ追加
 
         if ! confirm "MSG_INSTALL_PROMPT_PKG" "$package_names"; then
             echo "$(color yellow "Skipping installation of: $package_names")"
@@ -561,6 +563,7 @@ install_packages() {
     # パッケージのインストール
     attempt_package_install $package_list
 }
+
 
 #########################################################################
 # attempt_package_install: 個別パッケージのインストールおよび言語パック適用
@@ -618,19 +621,20 @@ check_common() {
             download_script messages.db
             download_script country.db
             download_script openwrt.db
-            check_country  # 言語選択
-            normalize_country  # 言語の正規化
-            check_openwrt
+            check_country  
+            normalize_country  
+            check_openwrt_common
+            packages  # `full` モード時に `packages()` を呼び出し
             ;;
         light)
             check_country
             normalize_country
-            check_openwrt
+            check_openwrt_common
             ;;
         *)
             check_country
             normalize_country
-            check_openwrt
+            check_openwrt_common
             ;;
     esac
 }
