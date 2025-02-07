@@ -184,6 +184,7 @@ INPUT_LANG="$1"
 | **check_country_common**        | 言語キャッシュの確認および設定                        | 全スクリプト                         |
 | **openwrt_db**        | バージョンデータベースのダウンロード                       | 全スクリプト                         |
 | **messages_db**        | 選択された言語のメッセージファイルをダウンロード                     | 全スクリプト                         |
+| **packages_db**        | 選択されたパッケージファイルをダウンロード                    | 全スクリプト                         |
 | **confirm**        | ファイルの存在確認と自動ダウンロード（警告対応）                        | 全スクリプト                         |
 | **download**        | ファイルの存在確認と自動ダウンロード（警告対応）                        | 全スクリプト                         |
 | **select_country_and_timezone**        | 国とタイムゾーンの選択                      | 全スクリプト                         |
@@ -213,10 +214,11 @@ INPUT_LANG="$1"
 ```
 | **delete_aios**        | 既存の aios 関連ファイルおよびディレクトリを削除して初期化する                           | aios.sh                    |
 | **check_openwrt_local**        | 初期化処理（ローカル限定）                           | aios.sh                    |
-| **make_directory**        | パッケージリスト（ローカル限定）                       | aios.sh                    |
-| **packages**        | パッケージリスト（ローカル限定）                       | aios.sh                    |
-| **install_ttyd**        | パッケージリスト（ローカル限定）                       | aios.sh                    | ※要汎部品活用
-
+| **make_directory**        |                        | aios.sh                    |
+| **download_common**        |                       | aios.sh                    |
+| **check_common aios**        |                      | aios.sh                    | 
+| **packages**        |                       | aios.sh                    | 
+| **download_file aios**        |                        | aios.sh                    | 
 ```
 
 #### aios
