@@ -73,7 +73,7 @@ download_common() {
 #################################
 # インストール
 #################################
-package() {
+packages() {
     install_packages yn ttyd uci
     install_packages luci-app-ttyd
 }
@@ -87,5 +87,5 @@ check_openwrt_local
 make_directory
 download_common
 check_common aios
-package
+packages
 download_file aios
