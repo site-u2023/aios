@@ -76,7 +76,6 @@ download_common() {
 package() {
     install_packages yn ttyd uci
     install_packages luci-app-ttyd
-    install_packages adguardhome uci ash
 }
 
 
