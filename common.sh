@@ -2,7 +2,7 @@
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
 COMMON_FUNCTIONS_SH_VERSION="2025.02.05-rc1"
-echo "common-functions.sh Last update: $COMMON_FUNCTIONS_SH_VERSION"
+echo "common.sh Last update: $COMMON_FUNCTIONS_SH_VERSION"
 
 # === 基本定数の設定 ===
 BASE_WGET="wget --quiet -O"
@@ -79,20 +79,20 @@ handle_error() {
 # エラーハンドリング強化
 #########################################################################
 load_common_functions() {
-    if [ ! -f "${BASE_DIR}/common-functions.sh" ]; then
-        download_file "common-functions.sh"
+    if [ ! -f "${BASE_DIR}/common.sh" ]; then
+        download_file "common.sh"
     fi
 
-    if ! grep -q "COMMON_FUNCTIONS_SH_VERSION" "${BASE_DIR}/common-functions.sh"; then
-        handle_error "Invalid common-functions.sh file structure."
+    if ! grep -q "COMMON_FUNCTIONS_SH_VERSION" "${BASE_DIR}/common.sh"; then
+        handle_error "Invalid common.sh file structure."
     fi
 
-    . "${BASE_DIR}/common-functions.sh" || handle_error "Failed to load common-functions.sh"
+    . "${BASE_DIR}/common.sh" || handle_error "Failed to load common.sh"
     check_openwrt_compatibility
 }
 
 #!/bin/sh
-# common-functions.sh (抜粋イメージ)
+# common.sh (抜粋イメージ)
 
 #########################################################################
 # download_file: ファイルの存在確認と自動ダウンロード（警告対応）
@@ -142,11 +142,11 @@ print_banner() {
 }
 
 #########################################################################
-# download_version_db: バージョンデータベースのダウンロード
+# download_openwrt.db: バージョンデータベースのダウンロード
 #########################################################################
-download_version_db() {
-    ${BASE_WGET} "${BASE_DIR}/versions-common.db" "${BASE_URL}/versions-common.db" \
-    || handle_error "Failed to download versions-common.db"
+download_openwrt.db() {
+    ${BASE_WGET} "${BASE_DIR}/openwrt.db" "${BASE_URL}/openwrt.db" \
+    || handle_error "Failed to download openwrt.db"
 
 }
 
@@ -159,7 +159,7 @@ check_openwrt_common() {
 
     # バージョンデータベースが無い場合はダウンロード
     if [ ! -f "$supported_versions_db" ]; then
-        download_supported_versions_db || handle_error \
+        openwrt_db || handle_error \
             "$(get_message 'download_fail' "$SELECTED_LANGUAGE"): openwrt.db"
     fi
 
@@ -223,8 +223,8 @@ check_openwrt_common() {
 # check_country_common: 言語キャッシュの確認および設定
 #########################################################################
 check_country_common() {
-    if [ -f "${BASE_DIR}/language_cache" ]; then
-        SELECTED_LANGUAGE=$(cat "${BASE_DIR}/language_cache")
+    if [ -f "${BASE_DIR}/country.ch" ]; then
+        SELECTED_LANGUAGE=$(cat "${BASE_DIR}/country.ch")
     else
         echo -e "\033[1;32mSelect your language:\033[0m"
 
@@ -251,7 +251,7 @@ check_country_common() {
             # 有効な言語かどうか確認
             if [ -n "$lang" ]; then
                 SELECTED_LANGUAGE="$lang"
-                echo "$SELECTED_LANGUAGE" > "${BASE_DIR}/language_cache"
+                echo "$SELECTED_LANGUAGE" > "${BASE_DIR}/country.ch"
                 break
             else
                 echo -e "\033[1;31mInvalid selection. Try again.\033[0m"
@@ -276,9 +276,9 @@ download_language_files() {
 }
 
 #########################################################################
-# download_supported_versions_db: バージョンデータベースのダウンロード
+# openwrt_db: バージョンデータベースのダウンロード
 #########################################################################
-download_supported_versions_db() {
+openwrt_db() {
     if [ ! -f "${BASE_DIR}/openwrt.db" ]; then
         ${BASE_WGET} "${BASE_DIR}/openwrt.db" "${BASE_URL}/openwrt.db" || handle_error "Failed to download openwrt.db"
     fi
