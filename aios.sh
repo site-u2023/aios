@@ -1,7 +1,7 @@
 #!/bin/sh
 # aios.sh (初期エントリースクリプト)
 # License: CC0
-AIOS_VERSION="2025.02.06-8"
+AIOS_VERSION="2025.02.06-9"
 echo "aios.sh Last update: $AIOS_VERSION"
 
 BASE_WGET="wget -O" # テスト用
@@ -47,15 +47,8 @@ download_common() {
 # インストール
 #################################
 packages() {
-    # パッケージグループ (yn: 確認あり / なし: 確認不要)
-    PACKAGE_LIST=(
-        "yn ttyd"  # `yn` はインストール時に確認をとる
-        "luci-app-ttyd uci"
-    )
-
-    for package_group in "${PACKAGE_LIST[@]}"; do
-        install_packages $package_group
-    done
+    install_packages yn ttyd
+    install_packages luci-app-ttyd uci
 }
 
 #################################
