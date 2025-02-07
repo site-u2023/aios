@@ -1,7 +1,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-16"
+COMMON_VERSION="2025.02.05-17"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -98,6 +98,15 @@ download_script() {
         echo -e "$(color green "Successfully downloaded: $file_name")"
     fi
 
+    # バージョン取得
+    local current_version="N/A"
+    local remote_version="N/A"
+
+    if test -s "$install_path"; then
+        current_version=$(grep "^version=" "$install_path" | cut -d'=' -f2 | tr -d '"\r')
+        [ -z "$current_version" ] && current_version="N/A"
+    fi
+    
     # ローカルバージョンを取得
     local current_version=""
     if [ -f "$install_path" ]; then
@@ -194,72 +203,39 @@ packages_db() {
 }
 
 #########################################################################
-# バージョン確認とパッケージマネージャーの取得関数
+# download_script: 指定されたスクリプト・データベースのバージョン確認とダウンロード
 #########################################################################
-check_openwrt() {
-    local version_file="${BASE_DIR}/check_openwrt"
-    local supported_versions_db="${BASE_DIR}/openwrt.db"
+download_script() {
+    local file_name="$1"
+    local install_path="${BASE_DIR}/${file_name}"
+    local remote_url="${BASE_URL}/${file_name}"
 
-    # バージョンデータベースが無い場合はダウンロード
-    if [ ! -f "$supported_versions_db" ]; then
-        openwrt_db || handle_error \
-            "$(get_message 'download_fail' "$SELECTED_LANGUAGE"): openwrt.db"
+    if [ "$file_name" = "aios" ]; then
+        install_path="/usr/bin/aios"
     fi
 
-    # バージョンをキャッシュファイル or /etc/openwrt_release から取得
-    if [ -f "$version_file" ]; then
-        CURRENT_VERSION=$(cat "version_file")
-    else
-        CURRENT_VERSION=$(awk -F"'" '/DISTRIB_RELEASE/ {print $2}' /etc/openwrt_release)
-        # --- ハイフン '-' 以降を削除し、19.07-rc1 → 19.07, 23.05-2 → 23.05 にする ---
-        CURRENT_VERSION=$(echo "$CURRENT_VERSION" | cut -d'-' -f1)
-
-        echo "$CURRENT_VERSION" > "version_file"
+    if [ ! -f "$install_path" ]; then
+        echo -e "$(color yellow "$(get_message 'MSG_DOWNLOADING_MISSING_FILE' "$SELECTED_LANGUAGE" | sed "s/{file}/$file_name/")")"
+        if ! wget --quiet -O "$install_path" "$remote_url"; then
+            echo -e "$(color red "Failed to download: $file_name")"
+            return 1
+        fi
+        echo -e "$(color green "Successfully downloaded: $file_name")"
     fi
 
-    # openwrt.db にエントリがあるか
-    if grep -q "^$CURRENT_VERSION=" "$supported_versions_db"; then
-        local db_entry db_manager db_status
-        # 例: "24.10.0=apk|stable" → db_entry="apk|stable"
-        db_entry=$(grep "^$CURRENT_VERSION=" "$supported_versions_db" | cut -d'=' -f2)
-        db_manager=$(echo "$db_entry" | cut -d'|' -f1)   # "apk" など
-        db_status=$(echo "$db_entry" | cut -d'|' -f2)    # "stable" など
+    # バージョン取得
+    local current_version="N/A"
+    local remote_version="N/A"
 
-        # 初期値を設定
-        PACKAGE_MANAGER="$db_manager"
-        VERSION_STATUS="$db_status"
-
-        # === ここからフォールバックロジック ===
-        case "$PACKAGE_MANAGER" in
-            apk)
-                if ! command -v apk >/dev/null 2>&1; then
-                    if command -v opkg >/dev/null 2>&1; then
-                        PACKAGE_MANAGER="opkg"
-                    else
-                        handle_error "No valid package manager found. 'apk' not found, 'opkg' not found."
-                    fi
-                fi
-                ;;
-            opkg)
-                if ! command -v opkg >/dev/null 2>&1; then
-                    if command -v apk >/dev/null 2>&1; then
-                        PACKAGE_MANAGER="apk"
-                    else
-                        handle_error "No valid package manager found. 'opkg' not found, 'apk' not found."
-                    fi
-                fi
-                ;;
-            *)
-                handle_error "Unsupported package manager: $PACKAGE_MANAGER (from $supported_versions_db)"
-                ;;
-        esac
-        # === フォールバックロジックここまで ===
-
-        echo -e "\033[1;32m$(get_message 'version_supported' "$SELECTED_LANGUAGE"): $CURRENT_VERSION ($VERSION_STATUS)\033[0m"
-    else
-        # openwrt.db に該当バージョンが無い場合
-        handle_error "$(get_message 'unsupported_version' "$SELECTED_LANGUAGE"): $CURRENT_VERSION"
+    if test -s "$install_path"; then
+        current_version=$(grep "^version=" "$install_path" | cut -d'=' -f2 | tr -d '"\r')
+        [ -z "$current_version" ] && current_version="N/A"
     fi
+
+    remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2 | tr -d '"\r')
+    [ -z "$remote_version" ] && remote_version="N/A"
+
+    echo -e "$(color cyan "DEBUG: Checking version for $file_name | Local: [$current_version], Remote: [$remote_version]")"
 }
 
 #########################################################################
@@ -269,13 +245,11 @@ check_country() {
     local country_file="${BASE_DIR}/country.db"
     local found_entries found_entry num_matches choice
 
-    # 言語キャッシュが存在すれば使用
     if [ -f "${BASE_DIR}/check_country" ]; then
         SELECTED_LANGUAGE=$(cat "${BASE_DIR}/check_country")
         return
     fi
 
-    # country.db が存在しない場合はダウンロード
     if [ ! -f "$country_file" ]; then
         country_db || handle_error "Failed to download country.db"
     fi
@@ -284,56 +258,34 @@ check_country() {
 
     while true; do
         read -p "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja'): " input_lang
-        input_lang=$(echo "$input_lang" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')  # 前後の空白を削除
+        input_lang=$(echo "$input_lang" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
-        # 完全一致検索
         found_entries=$(grep -i -w "$input_lang" "$country_file")
 
-        # 曖昧検索（部分一致）
         if [ -z "$found_entries" ]; then
             found_entries=$(grep -i "$input_lang" "$country_file")
         fi
 
-        # 候補なしなら再入力を促す
         if [ -z "$found_entries" ]; then
             echo -e "$(color red "No matching entry found. Please try again.")"
             continue
         fi
 
         num_matches=$(echo "$found_entries" | wc -l)
-
-        # 1つの候補のみなら即確定
         if [ "$num_matches" -eq 1 ]; then
             found_entry="$found_entries"
         else
             echo -e "$(color yellow "Multiple matches found. Please select:")"
-            local i=1
-            echo "$found_entries" | while IFS= read -r line; do
-                echo "[$i] $line"
-                i=$((i+1))
+            select found_entry in $found_entries; do
+                break
             done
-            echo "[0] Re-enter language"
-
-            read -p "Enter the number of your choice: " choice
-            if [ "$choice" = "0" ]; then
-                continue
-            fi
-            found_entry=$(echo "$found_entries" | sed -n "${choice}p")
         fi
 
-        # 有効な選択肢が確定
         break
     done
 
-    # 言語コード、国コードを取得（フィールドの順番を正しく参照）
-    SELECTED_LANGUAGE=$(echo "$found_entry" | awk '{print $3}')  # 言語コード（例: ja）
-    SELECTED_COUNTRY=$(echo "$found_entry" | awk '{print $2}')  # 国コード（例: JP）
-
-    # キャッシュに保存
+    SELECTED_LANGUAGE=$(echo "$found_entry" | awk '{print $3}')
     echo "$SELECTED_LANGUAGE" > "${BASE_DIR}/check_country"
-
-    echo -e "$(color green "Selected Language: $SELECTED_LANGUAGE")"
-    echo -e "$(color green "Selected Country: $SELECTED_COUNTRY")"
 }
 
 #########################################################################
@@ -470,35 +422,27 @@ get_package_manager() {
 # get_message: 多言語対応メッセージ取得関数
 # 引数: $1 = メッセージキー, $2 = 言語コード (オプション, デフォルトは 'ja')
 #########################################################################
+#########################################################################
+# get_message: 多言語対応メッセージ取得関数
+#########################################################################
 get_message() {
     local key="$1"
     local lang="${SELECTED_LANGUAGE:-en}"
     local message_db="${BASE_DIR}/messages.db"
 
-    # メッセージDBが存在しない場合のエラーハンドリング
     if [ ! -f "$message_db" ]; then
         echo -e "$(color red "Message database not found. Defaulting to key: $key")"
         return
     fi
 
-    # メッセージDBから対応メッセージを取得
     local message
     message=$(grep "^${lang}|${key}=" "$message_db" | cut -d'=' -f2-)
+    [ -z "$message" ] && message=$(grep "^en|${key}=" "$message_db" | cut -d'=' -f2-)
 
-    # 見つからない場合、英語のデフォルトメッセージを適用
-    if [ -z "$message" ]; then
-        message=$(grep "^en|${key}=" "$message_db" | cut -d'=' -f2-)
-    fi
+    if [ -n "$2" ]; then message=$(echo "$message" | sed -e "s/{file}/$2/"); fi
+    if [ -n "$3" ]; then message=$(echo "$message" | sed -e "s/{version}/$3/"); fi
+    if [ -n "$4" ]; then message=$(echo "$message" | sed -e "s/{status}/$4/"); fi
 
-    # `{version}` `{status}` の置換処理を追加
-    if [ -n "$2" ]; then
-        message=$(echo "$message" | sed -e "s/{version}/$2/")
-    fi
-    if [ -n "$3" ]; then
-        message=$(echo "$message" | sed -e "s/{status}/$3/")
-    fi
-
-    # メッセージが見つからない場合、デフォルト警告を出力
     if [ -z "$message" ]; then
         echo -e "$(color yellow "Message key not found in database: $key")"
         echo "$key"
