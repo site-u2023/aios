@@ -9,7 +9,6 @@ BASE_WGET="wget -O" # テスト用
 BASE_URL="https://raw.githubusercontent.com/site-u2023/aios/main"
 BASE_DIR="/tmp/aios"
 INPUT_LANG="$1"
-SUPPORTED_VERSIONS="19 21 22 23 24 SNAPSHOT"
 
 #########################################################################
 # delete_aios: 既存の aios 関連ファイルおよびディレクトリを削除して初期化する
@@ -17,36 +16,6 @@ SUPPORTED_VERSIONS="19 21 22 23 24 SNAPSHOT"
 delete_aios() {
     rm -rf "${BASE_DIR}" /usr/bin/aios
     echo "Initialized aios"
-}
-
-#########################################################################
-# check_openwrt_local: OpenWrt バージョン確認
-# - `SUPPORTED_VERSIONS` に含まれていない場合はエラーを出す
-#########################################################################
-check_openwrt_local() {
-    local version_file="/etc/openwrt_release"
-    local current_version
-
-    # OpenWrt のバージョンファイルが存在するか確認
-    if [ ! -f "$version_file" ]; then
-        echo -e "$(color red "Error: OpenWrt version file not found!")"
-        exit 1
-    fi
-
-    # OpenWrt バージョンを取得
-    current_version=$(awk -F"'" '/DISTRIB_RELEASE/ {print $2}' "$version_file" | cut -d'.' -f1)
-
-    # AIOS バージョンを表示
-    echo -e "$(color cyan "AIOS Version: $AIOS_VERSION")"
-    echo -e "$(color cyan "OpenWrt Version Detected: $current_version")"
-
-    # バージョン互換性の確認
-    if echo "$SUPPORTED_VERSIONS" | grep -wq "$current_version"; then
-        echo -e "$(color green "OpenWrt version $current_version is supported.")"
-    else
-        echo -e "$(color red "Error: OpenWrt version $current_version is not supported!")"
-        exit 1
-    fi
 }
 
 #########################################################################
@@ -86,7 +55,6 @@ packages() {
 # メイン処理
 #################################
 delete_aios
-check_openwrt_local
 make_directory
 download_common
 check_common full
