@@ -1,3 +1,10 @@
+#!/bin/sh
+# packages.db
+# License: CC0
+
+PACKAGE_VERSION="2025.02.06-rc1"
+echo "package.db Last update: $PACKAGE_VERSION"
+
 [ttyd]
 packages=ttyd luci-app-ttyd
 
