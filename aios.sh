@@ -64,7 +64,7 @@ download_common() {
     fi
 
     # 読み込み
-    . "${BASE_DIR}/common.sh" || {
+    source "${BASE_DIR}/common.sh" || {
         echo "Failed to source common.sh"
         exit 1
     }
