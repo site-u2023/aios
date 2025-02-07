@@ -88,37 +88,11 @@ load_common_functions() {
     fi
 
     . "${BASE_DIR}/common-functions.sh" || handle_error "Failed to load common-functions.sh"
-    check_version_compatibility
+    check_openwrt_compatibility
 }
 
 #!/bin/sh
 # common-functions.sh (抜粋イメージ)
-
-#########################################################################
-# check_common
-#########################################################################
-check_common() {
-    local mode="$1"
-    # mode により処理を変える (例: "full" と "light" など)
-    case "$mode" in
-        full)
-            check_country_common
-            check_openwrt_common
-            download_file "openwrt.db"
-            download_file "messages.db"
-            check_version_compatibility
-            ;;
-        light)
-            check_country_common
-            # これだけ
-            ;;
-        *)
-            # デフォルト動作
-            check_country_common
-            check_openwrt_common
-            ;;
-    esac
-}
 
 #########################################################################
 # download_file: ファイルの存在確認と自動ダウンロード（警告対応）
@@ -134,9 +108,9 @@ download_file() {
 }
 
 #########################################################################
-# check_version_compatibility: バージョン互換性チェック（警告対応）
+# check_openwrt_compatibility: バージョン互換性チェック（警告対応）
 #########################################################################
-check_version_compatibility() {
+check_openwrt_compatibility() {
     local db_version
 -   db_version=$(grep "^version=" "${BASE_DIR}/messages.db" | cut -d'=' -f2 | tr -d '"')
 +   db_version=$(grep "^version=" "${BASE_DIR}/messages.db" \
@@ -561,9 +535,29 @@ install_language_pack() {
 }
 
 #########################################################################
-# 初期化処理: バージョン確認、言語設定、メッセージDBのダウンロード
+# check_common 
+# 初期化処理: 
 #########################################################################
-download_supported_versions_db
-messages_db
-check_openwrt_common
-check_country_common
+check_common() {
+    local mode="$1"
+    # mode により処理を変える (例: "full" と "light" など)
+    case "$mode" in
+        full)
+            check_country_common
+            check_openwrt_common
+            download_file "country.db"
+            download_file "openwrt.db"
+            download_file "messages.db"
+            check_openwrt_compatibility
+            ;;
+        light)
+            check_country_common
+            # これだけ
+            ;;
+        *)
+            # デフォルト動作
+            check_country_common
+            check_openwrt_common
+            ;;
+    esac
+}
