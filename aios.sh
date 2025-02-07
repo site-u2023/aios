@@ -19,29 +19,34 @@ delete_aios() {
     echo "Initialized aios"
 }
 
-#################################
-# 簡易バージョンチェック
-#################################
+#########################################################################
+# check_openwrt_local: OpenWrt バージョン確認
+# - `SUPPORTED_VERSIONS` に含まれていない場合はエラーを出す
+#########################################################################
 check_openwrt_local() {
     local version_file="/etc/openwrt_release"
     local current_version
 
+    # OpenWrt のバージョンファイルが存在するか確認
     if [ ! -f "$version_file" ]; then
-        echo "Error: OpenWrt version file not found!"
+        echo -e "$(color red "Error: OpenWrt version file not found!")"
         exit 1
     fi
 
-    current_version=$(awk -F"'" '/DISTRIB_RELEASE/ {print $2}' "$version_file" | cut -d'-' -f1)
-    
-    case "$current_version" in
-        19.07|21.02|22.03|23.05|24.10.0|SNAPSHOT)
-            echo "OpenWrt version $current_version is supported."
-            ;;
-        *)
-            echo "Error: OpenWrt version $current_version is not supported!"
-            exit 1
-            ;;
-    esac
+    # OpenWrt バージョンを取得
+    current_version=$(awk -F"'" '/DISTRIB_RELEASE/ {print $2}' "$version_file" | cut -d'.' -f1)
+
+    # AIOS バージョンを表示
+    echo -e "$(color cyan "AIOS Version: $AIOS_VERSION")"
+    echo -e "$(color cyan "OpenWrt Version Detected: $current_version")"
+
+    # バージョン互換性の確認
+    if echo "$SUPPORTED_VERSIONS" | grep -wq "$current_version"; then
+        echo -e "$(color green "OpenWrt version $current_version is supported.")"
+    else
+        echo -e "$(color red "Error: OpenWrt version $current_version is not supported!")"
+        exit 1
+    fi
 }
 
 #########################################################################
