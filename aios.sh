@@ -57,5 +57,4 @@ delete_aios
 make_directory
 download_common
 check_common full
-packages
 download_script aios
