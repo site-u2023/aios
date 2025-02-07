@@ -11,7 +11,7 @@
 #  - TZ_Offsets: タイムゾーンオフセットのリスト（カンマ区切り）
 #
 
-COUNTRY_VERSION="2025.02.06-rc1"
+COUNTRY_VERSION="2025.02.06-1"
 echo "country.db Last update: $COUNTRY_VERSION"
 
 country_data() {
