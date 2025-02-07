@@ -57,6 +57,7 @@ packages() {
 delete_aios
 make_directory
 download_common
+messages_db
 check_common full
 packages
 download_script aios
