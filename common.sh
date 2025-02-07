@@ -551,7 +551,7 @@ check_common() {
             check_openwrt_compatibility
             ;;
         light)
-            check_country_common
+            load_common_functions
             # これだけ
             ;;
         *)
