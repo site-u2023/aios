@@ -59,5 +59,6 @@ packages() {
 make_directory
 download_common
 check_common full
+print_banner
 # packages # 必要に応じて
 download_script openwrt-config.sh
