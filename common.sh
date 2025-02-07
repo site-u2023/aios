@@ -360,7 +360,7 @@ check_country() {
 # normalize_language: 言語コードがサポート対象か検証し、サポート外なら `en` に変更
 #########################################################################
 normalize_language() {
-    local lang_file="${BASE_DIR}/check_language"
+    local lang_file="${BASE_DIR}/check_country"
 
     if [ -f "$lang_file" ]; then
         local read_lang=$(cat "$lang_file")
