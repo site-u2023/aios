@@ -71,53 +71,14 @@ download_common() {
 }
 
 #################################
-# パッケージリスト（ローカル限定） 
+# インストール
 #################################
-packages() {
-    echo "ttyd luci-app-ttyd"
+package() {
+    install_packages yn ttyd uci
+    install_packages luci-app-ttyd
+    install_packages adguardhome uci ash
 }
-#################################
-# インストール+設定
-#################################
-install_ttyd() {
-    local pkg_list
-    pkg_list="$(packages)"  # "ttyd luci-app-ttyd"
 
-    # MSG_INSTALL_PROMPT_PKG 内の {pkg} → "ttyd luci-app-ttyd" に置換
-    if confirm_action "MSG_INSTALL_PROMPT_PKG" "$pkg_list"; then
-        echo -e "\033[1;34mInstalling packages: $pkg_list...\033[0m"
-        install_packages $pkg_list
-
-        echo -e "\033[1;34mApplying ttyd settings...\033[0m"
-        uci batch <<EOF
-set ttyd.@ttyd[0]=ttyd
-set ttyd.@ttyd[0].interface='@lan'
-set ttyd.@ttyd[0].command='/bin/login -f root'
-set ttyd.@ttyd[0].ipv6='1'
-add_list ttyd.@ttyd[0].client_option='theme={"background": "black"}'
-add_list ttyd.@ttyd[0].client_option='titleFixed=ttyd'
-EOF
-
-        uci commit ttyd || {
-            echo "Failed to commit ttyd settings."
-            exit 1
-        }
-
-        /etc/init.d/ttyd enable || {
-            echo "Failed to enable ttyd service."
-            exit 1
-        }
-
-        /etc/init.d/ttyd restart || {
-            echo "Failed to restart ttyd service."
-            exit 1
-        }
-
-        echo -e "\033[1;32m$(get_message 'MSG_SETTINGS_APPLIED' "$SELECTED_LANGUAGE")\033[0m"
-    else
-        echo -e "\033[1;33mSkipping installation of: $pkg_list\033[0m"
-    fi
-}
 
 #################################
 # メイン処理
@@ -127,5 +88,5 @@ check_openwrt_local
 make_directory
 download_common
 check_common aios
-install_ttyd
+package
 download_file aios
