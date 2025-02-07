@@ -1,7 +1,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-9"
+COMMON_VERSION="2025.02.05-10"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -58,28 +58,23 @@ color_code_map() {
 }
 
 #########################################################################
-# handle_error: エラーおよび警告メッセージの処理
-# 引数1: メッセージ
-# 引数2: エラーレベル ('fatal' または 'warning')
+# handle_error: 汎用エラーハンドリング関数
 #########################################################################
 handle_error() {
-    local message="$1"
-    local level="${2:-fatal}"  # デフォルトは致命的エラー
+    local message_key="$1"
+    local file="$2"
+    local version="$3"
 
-    if [ "$level" = "warning" ]; then
-        color yellow "$(get_message 'MSG_VERSION_MISMATCH_WARNING' "$SELECTED_LANGUAGE"): $message"
-    else
-        color red "$(get_message 'MSG_ERROR_OCCURRED' "$SELECTED_LANGUAGE"): $message"
-        exit 1
-    fi
+    local error_message
+    error_message=$(get_message "$message_key")
+
+    # {file} や {version} の置換処理
+    error_message=$(echo "$error_message" | sed -e "s/{file}/$file/" -e "s/{version}/$version/")
+
+    echo -e "$(color red "$error_message")"
+    exit 1
 }
 
-#########################################################################
-# download_script: 指定されたスクリプト・データベースのバージョン確認とダウンロード
-# 使い方:
-#   download_script aios
-#   download_script openwrt.db
-#########################################################################
 #########################################################################
 # download_script: 指定されたスクリプト・データベースのバージョン確認とダウンロード
 # 使い方:
