@@ -565,7 +565,6 @@ check_common() {
     local mode="$1"
     case "$mode" in
         full)
-            check_scripts
             check_country
             check_openwrt
             download_script openwrt.db
@@ -575,10 +574,6 @@ check_common() {
         light)
             check_country
             check_openwrt
-            ;;
-        aios)
-            download_script aios
-            confirm
             ;;
         *)
             check_country
