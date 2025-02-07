@@ -80,6 +80,9 @@ handle_error() {
 # - 古いバージョンのファイルを検出した場合のみ更新
 # - メッセージ表示のON/OFF制御可能（disable_echo_update=1 で停止）
 #########################################################################
+#########################################################################
+# check_scripts: スクリプトとデータベースのバージョン確認・最新化
+#########################################################################
 check_scripts() {
     local files="common.sh messages.db openwrt.db package.db"
     local file_name current_version remote_version disable_echo_update="${1:-0}"
@@ -90,7 +93,7 @@ check_scripts() {
 
         # ファイルが存在しない場合はダウンロード
         if [ ! -f "$file_path" ]; then
-            [ "$disable_echo_update" -eq 0 ] && echo "$(color yellow "$(get_message 'MSG_DOWNLOADING_MISSING_FILE' "$SELECTED_LANGUAGE" | sed "s/{file}/$file_name/")")"
+            [ "$disable_echo_update" -eq 0 ] && echo -e "$(color yellow "$(get_message 'MSG_DOWNLOADING_MISSING_FILE' "$SELECTED_LANGUAGE" | sed "s/{file}/$file_name/")")"
             download "$file_name" "$file_path"
             continue
         fi
@@ -102,14 +105,14 @@ check_scripts() {
         remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2 | tr -d '"\r')
 
         # デバッグ用ログ
-        [ "$disable_echo_update" -eq 0 ] && echo "DEBUG: Checking version for $file_name | Local: [$current_version], Remote: [$remote_version]"
+        [ "$disable_echo_update" -eq 0 ] && echo -e "DEBUG: Checking version for $file_name | Local: [$current_version], Remote: [$remote_version]"
 
         # バージョンチェック: 最新があればダウンロード
         if [ -n "$remote_version" ] && [ "$current_version" != "$remote_version" ]; then
-            [ "$disable_echo_update" -eq 0 ] && echo "$(color cyan "$(get_message 'MSG_UPDATING_SCRIPT' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{old_version}/$current_version/" -e "s/{new_version}/$remote_version/")")"
+            [ "$disable_echo_update" -eq 0 ] && echo -e "$(color cyan "$(get_message 'MSG_UPDATING_SCRIPT' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{old_version}/$current_version/" -e "s/{new_version}/$remote_version/")")"
             download "$file_name" "$file_path"
         else
-            [ "$disable_echo_update" -eq 0 ] && echo "$(color green "$(get_message 'MSG_NO_UPDATE_NEEDED' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{version}/$current_version/")")"
+            [ "$disable_echo_update" -eq 0 ] && echo -e "$(color green "$(get_message 'MSG_NO_UPDATE_NEEDED' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{version}/$current_version/")")"
         fi
     done
 }
@@ -316,16 +319,14 @@ confirm() {
 download() {
     local file_url="$1"
     local destination="$2"
-    local confirm_key="$3"  # 追加: ダウンロード前に確認したいならキーを渡す
 
-    # もし confirm_key がセットされていればダウンロード前に Y/N をとる
-    if [ -n "$confirm_key" ]; then
-        # ユーザーが NO の場合はスキップ
-        if ! confirm "$confirm_key" "$file_url"; then
-            color yellow "Skipping download of $file_url"
-            return 0
-        fi
-    fi    
+    # ダウンロード前の確認
+    if ! confirm "MSG_DOWNLOAD_CONFIRM" "$file_url"; then
+        echo -e "$(color yellow "Skipping download of $file_url")"
+        return 0
+    fi
+
+    # 実際のダウンロード処理
     ${BASE_WGET} "$destination" "${file_url}?cache_bust=$(date +%s)"
     if [ $? -eq 0 ]; then
         echo -e "$(color green "Downloaded: $file_url")"
