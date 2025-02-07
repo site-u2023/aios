@@ -623,18 +623,18 @@ check_common() {
             download_script openwrt.db
             check_country  
             normalize_country  
-            check_openwrt_common
+            check_openwrt
             packages  # `full` モード時に `packages()` を呼び出し
             ;;
         light)
             check_country
             normalize_country
-            check_openwrt_common
+            check_openwrt
             ;;
         *)
             check_country
             normalize_country
-            check_openwrt_common
+            check_openwrt
             ;;
     esac
 }
