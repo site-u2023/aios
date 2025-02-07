@@ -594,7 +594,7 @@ check_common() {
             check_openwrt
             download_script openwrt.db
             #download_script messages.db
-            wget -o https://raw.githubusercontent.com/site-u2023/aios/refs/heads/main/messages.db
+            wget -O https://raw.githubusercontent.com/site-u2023/aios/refs/heads/main/messages.db
             download_script country.db
             ;;
         light)
