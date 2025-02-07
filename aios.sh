@@ -51,10 +51,10 @@ packages() {
     install_packages luci-app-ttyd
 }
 
+delete_aios
 #################################
 # メイン処理
 #################################
-delete_aios
 make_directory
 download_common
 check_common full
@@ -65,9 +65,3 @@ download_script aios
 if [ ! -f "${BASE_DIR}/messages.db" ]; then
     handle_error "messages.db not found after download_script execution."
 fi
-
-# `country.db` の存在を確認
-if [ ! -f "${BASE_DIR}/country.db" ]; then
-    handle_error "country.db not found after download_script execution."
-fi
-
