@@ -98,9 +98,11 @@ download_script() {
     # ファイルが存在しない場合はダウンロード
     if [ ! -f "$install_path" ]; then
         echo -e "$(color yellow "$(get_message 'MSG_DOWNLOADING_MISSING_FILE' "$SELECTED_LANGUAGE" | sed "s/{file}/$file_name/")")"
-        if ! download "$file_name" "$install_path"; then
-            handle_error "Failed to download: $file_name"
+        if ! wget --quiet -O "$install_path" "$remote_url"; then
+            echo -e "$(color red "Failed to download: $file_name")"
+            return 1  # `handle_error` を使わず `return 1` に変更
         fi
+        echo -e "$(color green "Successfully downloaded: $file_name")"
     fi
 
     # ローカルバージョンを取得
@@ -179,18 +181,19 @@ XXXXX_messages_db() {
 }
 
 #########################################################################
-# messages_db: 選択された言語のメッセージファイルをダウンロード
+# messages_db: メッセージデータベースのダウンロード
 #########################################################################
 messages_db() {
     if [ ! -f "${BASE_DIR}/messages.db" ]; then
         echo -e "$(color yellow "Downloading messages.db...")"
-        if ! ${BASE_WGET} "${BASE_URL}/messages.db" -O "${BASE_DIR}/messages.db"; then
+        if ! wget --quiet -O "${BASE_DIR}/messages.db" "${BASE_URL}/messages.db"; then
             echo -e "$(color red "Failed to download messages.db")"
-            return 1  # エラー時は `return 1` にして `exit` しない
+            return 1  # `handle_error` を使わず `return 1` に変更
         fi
         echo -e "$(color green "Successfully downloaded messages.db")"
     fi
 }
+
 
 #########################################################################
 # packages_db: 選択されたパッケージファイルをダウンロード
@@ -458,7 +461,12 @@ get_message() {
         message=$(grep "^en|${key}=" "$message_db" | cut -d'=' -f2-)
     fi
 
-    # メッセージが見つからない場合、デフォルトの警告を出力
+    # `{file}` のプレースホルダーを適切に置換
+    if [ -n "$2" ]; then
+        message=$(echo "$message" | sed -e "s/{file}/$2/")
+    fi
+
+    # メッセージが見つからない場合、デフォルト警告を出力
     if [ -z "$message" ]; then
         echo -e "$(color yellow "Message key not found in database: $key")"
         echo "$key"
