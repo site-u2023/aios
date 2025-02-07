@@ -171,7 +171,7 @@ INPUT_LANG="$1"
 | **handle_error**   | エラーメッセージを表示し、スクリプトを終了します。                       | 全スクリプト                         |
 | **download_script**        | 指定されたスクリプト・データベースのバージョン確認とダウンロード                        | 全スクリプト                         |
 
-| **check_openwrt_common**  | OpenWrtのバージョンを確認し、サポートされているか検証します。            | `aios.sh` , 他全て                   |
+| **check_openwrt**  | OpenWrtのバージョンを確認し、サポートされているか検証します。            | `aios.sh` , 他全て                   |
 | **check_country**  | 指定された言語がサポートされているか確認し、デフォルト言語を設定します。 | `aios.sh` , 他全て                   |
 | **normalize_country**  |言語コードがサポート対象か検証し、サポート外なら `en` に変更 | `aios.sh` , 他全て                   |
 | **download_common**| `common.sh` をダウンロードし、読み込みます。                             | `aios.sh`, 他全て                    |
