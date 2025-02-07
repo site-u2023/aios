@@ -1,9 +1,8 @@
 #!/bin/sh
 # aios.sh (初期エントリースクリプト)
 # License: CC0
-echo aios.sh Last Update 20250207-2
 
-AIOS_VERSION="2025.02.06-rc1"
+AIOS_VERSION="2025.02.06-rc2"
 echo "aios.sh Last update: $AIOS_VERSION"
 
 BASE_WGET="wget -O" # テスト用
