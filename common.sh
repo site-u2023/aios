@@ -1,7 +1,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-8"
+COMMON_VERSION="2025.02.05-9"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -431,25 +431,31 @@ get_package_manager() {
 #########################################################################
 get_message() {
     local key="$1"
-    local lang="${SELECTED_LANGUAGE:-en}"  # デフォルトは英語
+    local lang="${SELECTED_LANGUAGE:-en}"
     local message_db="${BASE_DIR}/messages.db"
 
     # メッセージDBが存在しない場合のエラーハンドリング
     if [ ! -f "$message_db" ]; then
-        echo "Message database not found. Defaulting to key: $key"
+        echo -e "$(color red "Message database not found. Defaulting to key: $key")"
         return
     fi
 
     # メッセージDBから対応メッセージを取得
-    local message=$(grep "^${lang}|${key}=" "$message_db" | cut -d'=' -f2-)
+    local message
+    message=$(grep "^${lang}|${key}=" "$message_db" | cut -d'=' -f2-)
 
-    # 見つからない場合、英語のデフォルトメッセージを使用
+    # 見つからない場合、英語のデフォルトメッセージを適用
     if [ -z "$message" ]; then
         message=$(grep "^en|${key}=" "$message_db" | cut -d'=' -f2-)
     fi
 
-    # 見つからない場合はキーそのものを返す
-    [ -z "$message" ] && echo "$key" || echo "$message"
+    # メッセージが見つからない場合、デフォルトの警告を出力
+    if [ -z "$message" ]; then
+        echo -e "$(color yellow "Message key not found in database: $key")"
+        echo "$key"
+    else
+        echo "$message"
+    fi
 }
 
 #########################################################################
