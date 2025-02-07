@@ -1,6 +1,8 @@
-version="2025.02.05-rc1"
 # OpenWrt バージョンデータベース (supported_versions.db)
 # バージョン=パッケージマネージャー|ステータス
+
+OPENWRT_VERSION="2025.02.06-rc1"
+echo "openwrt.db Last update: $AIOS_VERSION"
 
 # OpenWrt 18.x 系列 (サポート終了)
 18.06.0=opkg|eol
