@@ -76,27 +76,36 @@ handle_error() {
 #########################################################################
 # download_script: 指定されたスクリプト・データベースのバージョン確認とダウンロード
 # 使い方:
-#   download_script aios.sh
-#   download_script messages.db
+#   download_script aios
+#   download_script openwrt.db
 #########################################################################
 download_script() {
     local file_name="$1"
-    local file_path="${BASE_DIR}/${file_name}"
+    local file_ext="${file_name##*.}"
+    local install_path
+
+    # `aios` の場合は `/usr/bin/aios` に保存、それ以外は `/tmp/aios/`
+    if [ "$file_name" = "aios.sh" ]; then
+        install_path="/usr/bin/aios"
+    else
+        install_path="${BASE_DIR}/${file_name}"
+    fi
+
     local remote_url="${BASE_URL}/${file_name}"
 
     # ファイルが存在しない場合はダウンロード
-    if [ ! -f "$file_path" ]; then
+    if [ ! -f "$install_path" ]; then
         echo -e "$(color yellow "$(get_message 'MSG_DOWNLOADING_MISSING_FILE' "$SELECTED_LANGUAGE" | sed "s/{file}/$file_name/")")"
-        download "$file_name" "$file_path"
+        download "$file_name" "$install_path"
     fi
 
     # ローカルバージョンを取得
     local current_version
-    current_version=$(grep "^version=" "$file_path" | cut -d'=' -f2 | tr -d '"\r')
+    current_version=$(grep "^version=" "$install_path" | cut -d'=' -f2 | tr -d '"\r")
 
     # リモートバージョンを取得
     local remote_version
-    remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2 | tr -d '"\r')
+    remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2 | tr -d '"\r")
 
     # デバッグログ
     echo -e "DEBUG: Checking version for $file_name | Local: [$current_version], Remote: [$remote_version]"
@@ -104,15 +113,43 @@ download_script() {
     # バージョンチェック: 最新があればダウンロード
     if [ -n "$remote_version" ] && [ "$current_version" != "$remote_version" ]; then
         echo -e "$(color cyan "$(get_message 'MSG_UPDATING_SCRIPT' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{old_version}/$current_version/" -e "s/{new_version}/$remote_version/")")"
-        download "$file_name" "$file_path"
+        download "$file_name" "$install_path"
     else
         echo -e "$(color green "$(get_message 'MSG_NO_UPDATE_NEEDED' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{version}/$current_version/")")"
     fi
 
-    # .sh の場合のみ実行
-    case "$file_name" in
-        *.sh) sh "$file_path" ;;
-    esac
+    # `aios.sh` の場合のみ実行権限を付与
+    if [ "$file_name" = "aios.sh" ]; then
+        chmod +x /usr/bin/aios
+    fi
+
+    # `.sh` の場合のみ実行
+    if [ "$file_ext" = "sh" ]; then
+        sh "$install_path"
+    fi
+}
+
+#########################################################################
+# 汎用ファイルダウンロード関数
+#########################################################################
+download() {
+    local file_url="$1"
+    local destination="$2"
+
+    # ダウンロード前の確認
+    if ! confirm "MSG_DOWNLOAD_CONFIRM" "$file_url"; then
+        echo -e "$(color yellow "Skipping download of $file_url")"
+        return 0
+    fi
+
+    # 実際のダウンロード処理
+    ${BASE_WGET} "$destination" "${file_url}?cache_bust=$(date +%s)"
+    if [ $? -eq 0 ]; then
+        echo -e "$(color green "Downloaded: $file_url")"
+    else
+        echo -e "$(color red "Failed to download: $file_url")"
+        exit 1
+    fi
 }
 
 #########################################################################
@@ -309,29 +346,6 @@ confirm() {
                 ;;
         esac
     done
-}
-
-#########################################################################
-# 汎用ファイルダウンロード関数
-#########################################################################
-download() {
-    local file_url="$1"
-    local destination="$2"
-
-    # ダウンロード前の確認
-    if ! confirm "MSG_DOWNLOAD_CONFIRM" "$file_url"; then
-        echo -e "$(color yellow "Skipping download of $file_url")"
-        return 0
-    fi
-
-    # 実際のダウンロード処理
-    ${BASE_WGET} "$destination" "${file_url}?cache_bust=$(date +%s)"
-    if [ $? -eq 0 ]; then
-        echo -e "$(color green "Downloaded: $file_url")"
-    else
-        echo -e "$(color red "Failed to download: $file_url")"
-        exit 1
-    fi
 }
 
 #########################################################################
