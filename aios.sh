@@ -57,4 +57,5 @@ delete_aios
 make_directory
 download_common
 check_common full
+packages  # ← `aios.sh` で `packages()` を実行
 download_script aios
