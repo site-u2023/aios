@@ -1,7 +1,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-15"
+COMMON_VERSION="2025.02.05-16"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -77,12 +77,6 @@ handle_error() {
 
 #########################################################################
 # download_script: 指定されたスクリプト・データベースのバージョン確認とダウンロード
-# 使い方:
-#   download_script aios
-#   download_script openwrt.db
-#########################################################################
-#########################################################################
-# download_script: 指定されたスクリプト・データベースのバージョン確認とダウンロード
 #########################################################################
 download_script() {
     local file_name="$1"
@@ -113,6 +107,10 @@ download_script() {
     # リモートバージョンを取得
     local remote_version=""
     remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2 | tr -d '"\r')
+
+    # 空のバージョン情報が表示されるのを防ぐ
+    if [ -z "$current_version" ]; then current_version="N/A"; fi
+    if [ -z "$remote_version" ]; then remote_version="N/A"; fi
 
     # デバッグログ
     echo -e "$(color cyan "DEBUG: Checking version for $file_name | Local: [$current_version], Remote: [$remote_version]")"
@@ -492,9 +490,12 @@ get_message() {
         message=$(grep "^en|${key}=" "$message_db" | cut -d'=' -f2-)
     fi
 
-    # `{file}` のプレースホルダーを適切に置換
+    # `{version}` `{status}` の置換処理を追加
     if [ -n "$2" ]; then
-        message=$(echo "$message" | sed -e "s/{file}/$2/")
+        message=$(echo "$message" | sed -e "s/{version}/$2/")
+    fi
+    if [ -n "$3" ]; then
+        message=$(echo "$message" | sed -e "s/{status}/$3/")
     fi
 
     # メッセージが見つからない場合、デフォルト警告を出力
@@ -542,7 +543,7 @@ install_packages() {
 
     # インストール確認 (`yn` の場合のみ `confirm()` を使用)
     # `confirm()` を1回だけ実行
-    if [ "$confirm" = "yn" ]; then
+    if [ "$confirm_flag" = "yn" ]; then
         local package_names=$(echo "$package_list" | tr ' ' ', ')
         if ! confirm "MSG_INSTALL_PROMPT_PKG" "$package_names"; then
             echo "$(color yellow "Skipping installation of: $package_names")"
