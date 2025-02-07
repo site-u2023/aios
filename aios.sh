@@ -57,12 +57,6 @@ packages() {
 delete_aios
 make_directory
 download_common
-messages_db
 check_common full
 packages
 download_script aios
-
-# `messages.db` の存在を確認
-if [ ! -f "${BASE_DIR}/messages.db" ]; then
-    handle_error "messages.db not found after download_script execution."
-fi
