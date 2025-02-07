@@ -47,8 +47,7 @@ download_common() {
 # インストール
 #################################
 packages() {
-    install_packages yn ttyd
-    install_packages luci-app-ttyd uci
+    install_packages yn ttyd luci-app-ttyd uci  # `yn` を一括で適用
 }
 
 #################################
