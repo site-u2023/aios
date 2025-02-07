@@ -357,9 +357,9 @@ check_country() {
 }
 
 #########################################################################
-# normalize_language: 言語コードがサポート対象か検証し、サポート外なら `en` に変更
+# normalize_country: 言語コードがサポート対象か検証し、サポート外なら `en` に変更
 #########################################################################
-normalize_language() {
+normalize_country() {
     local lang_file="${BASE_DIR}/check_country"
 
     if [ -f "$lang_file" ]; then
@@ -651,17 +651,17 @@ check_common() {
             download_script country.db
             download_script openwrt.db
             check_country  # 言語選択
-            normalize_language  # 言語の正規化
+            normalize_country  # 言語の正規化
             check_openwrt
             ;;
         light)
             check_country
-            normalize_language
+            normalize_country
             check_openwrt
             ;;
         *)
             check_country
-            normalize_language
+            normalize_country
             check_openwrt
             ;;
     esac
