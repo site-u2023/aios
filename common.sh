@@ -98,6 +98,9 @@ download_script() {
     if [ ! -f "$install_path" ]; then
         echo -e "$(color yellow "$(get_message 'MSG_DOWNLOADING_MISSING_FILE' "$SELECTED_LANGUAGE" | sed "s/{file}/$file_name/")")"
         download "$file_name" "$install_path"
+        if ! wget --quiet -O "$install_path" "$remote_url"; then
+            handle_error "Failed to download: $file_name"                   ############## ---- エラー確認 --------- ################
+        fi
     fi
 
     # ローカルバージョンを取得
