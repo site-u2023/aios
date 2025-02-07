@@ -138,12 +138,11 @@ aios_banner() {
 }
 
 #########################################################################
-# download_openwrt.db: バージョンデータベースのダウンロード
+# download_openwrt_db: バージョンデータベースのダウンロード
 #########################################################################
-download_openwrt.db() {
+download_openwrt_db() {
     ${BASE_WGET} "${BASE_DIR}/openwrt.db" "${BASE_URL}/openwrt.db" \
     || handle_error "Failed to download openwrt.db"
-
 }
 
 #########################################################################
