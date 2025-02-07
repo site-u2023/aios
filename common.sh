@@ -1,7 +1,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-3"
+COMMON_VERSION="2025.02.05-5"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -423,19 +423,20 @@ get_package_manager() {
 get_message() {
     local key="$1"
     local lang="${SELECTED_LANGUAGE:-en}"  # デフォルトは英語
+    local message_db="${BASE_DIR}/messages.db"
 
     # メッセージDBが存在しない場合のエラーハンドリング
-    if [ ! -f "${BASE_DIR}/messages.db" ]; then
+    if [ ! -f "$message_db" ]; then
         echo "Message database not found. Defaulting to key: $key"
         return
     fi
 
     # メッセージDBから対応メッセージを取得
-    local message=$(grep "^${lang}|${key}=" "${BASE_DIR}/messages.db" | cut -d'=' -f2-)
+    local message=$(grep "^${lang}|${key}=" "$message_db" | cut -d'=' -f2-)
 
     # 見つからない場合、英語のデフォルトメッセージを使用
     if [ -z "$message" ]; then
-        message=$(grep "^en|${key}=" "${BASE_DIR}/messages.db" | cut -d'=' -f2-)
+        message=$(grep "^en|${key}=" "$message_db" | cut -d'=' -f2-)
     fi
 
     # 見つからない場合はキーそのものを返す
