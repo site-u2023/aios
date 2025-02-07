@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-22"
+COMMON_VERSION="2025.02.05-23"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -542,8 +542,10 @@ install_packages() {
 
     # `confirm()` を1回だけ実行
     if [ "$confirm_flag" = "yn" ] && [ -z "${CONFIRMATION_DONE:-}" ]; then
-        local package_names=$(echo "$package_list" | tr ' ' ', ')
-        
+        local package_names=$(echo "$package_list" | sed 's/  */, /g')  # スペースを統一
+
+        echo "DEBUG: Package list for confirmation: [$package_names]"  # デバッグ
+
         if ! confirm "MSG_INSTALL_PROMPT_PKG" "$package_names"; then
             echo "$(color yellow "Skipping installation of: $package_names")"
             return 1
