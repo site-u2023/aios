@@ -196,24 +196,6 @@ packages_db() {
 }
 
 #########################################################################
-# print_banner: 言語に応じたバナー表示 (messages.db からメッセージ取得)
-#########################################################################
-print_banner() {
-    local msg
-    msg=$(get_message 'MSG_BANNER' "$SELECTED_LANGUAGE")
-
-    echo
-    echo -e "\033[1;35m                    ii i                              \033[0m"
-    echo -e "\033[1;34m         aaaa      iii       oooo      sssss          \033[0m"
-    echo -e "\033[1;36m            aa      ii      oo  oo    ss              \033[0m"
-    echo -e "\033[1;32m         aaaaa      ii      oo  oo     sssss          \033[0m"
-    echo -e "\033[1;33m        aa  aa      ii      oo  oo         ss         \033[0m"
-    echo -e "\033[1;31m         aaaaa     iiii      oooo     ssssss          \033[0m"
-    echo
-    echo -e "\033[1;37m$msg\033[0m"
-}
-
-#########################################################################
 # バージョン確認とパッケージマネージャーの取得関数
 #########################################################################
 check_openwrt() {
