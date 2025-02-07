@@ -566,6 +566,9 @@ check_common() {
             check_country
             check_openwrt
             check_openwrt_compatibility
+            download_script openwrt.db
+            download_script messages.db
+            download_script country.db
             ;;
         light)
             make_directory
@@ -574,6 +577,7 @@ check_common() {
             ;;
         aios)
             make_directory
+            download_script aios
             confirm
             ;;
         *)
