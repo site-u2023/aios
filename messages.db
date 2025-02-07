@@ -5,6 +5,11 @@ MESSAGE_VERSION="2025.02.06-1"
 echo "message.db Last update: $MESSAGE_VERSION"
 
 # 追加--------------------------------------------
+# バージョン情報メッセージ
+ja|version_supported=バージョン {version} はサポートされています ({status})。
+en|version_supported=Version {version} is supported ({status}).
+
+# 追加--------------------------------------------
 # ダウンロード関連メッセージ
 ja|MSG_DOWNLOADING_MISSING_FILE={file} をダウンロード中...
 en|MSG_DOWNLOADING_MISSING_FILE=Downloading {file}...
