@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-29"
+COMMON_VERSION="2025.02.05-30"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -538,7 +538,7 @@ handle_exit() {
 install_packages() {
     local confirm_flag="$1"
     shift
-    local package_list="$*"  # `ash` ではスペース区切りの文字列として扱う
+    local package_list="$*"  # パッケージをスペース区切りの文字列として取得
 
     echo "DEBUG: Calling install_packages() with confirm_flag=$confirm_flag and package_list=[$package_list]"
 
@@ -546,7 +546,7 @@ install_packages() {
         echo "DEBUG: Skipping duplicate install_packages() call."
         return
     fi
-    INSTALLATION_STARTED=1
+    INSTALLATION_STARTED=1  # 1回のみ実行
 
     if [ "$confirm_flag" = "yn" ] && [ -z "${CONFIRMATION_DONE:-}" ]; then
         local package_names=$(echo "$package_list" | sed 's/  */, /g')
@@ -561,6 +561,7 @@ install_packages() {
     fi
 
     for pkg in $package_list; do
+        echo "DEBUG: Installing package: $pkg"
         attempt_package_install "$pkg"
     done
 }
