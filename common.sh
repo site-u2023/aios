@@ -77,7 +77,7 @@ handle_error() {
 # download_script: 指定されたスクリプト・データベースのバージョン確認とダウンロード
 # 使い方:
 #   download_script aios.sh
-#   download_script ttyd.sh
+#   download_script messages.db
 #########################################################################
 download_script() {
     local file_name="$1"
@@ -88,7 +88,6 @@ download_script() {
     if [ ! -f "$file_path" ]; then
         echo -e "$(color yellow "$(get_message 'MSG_DOWNLOADING_MISSING_FILE' "$SELECTED_LANGUAGE" | sed "s/{file}/$file_name/")")"
         download "$file_name" "$file_path"
-        return
     fi
 
     # ローカルバージョンを取得
@@ -109,6 +108,11 @@ download_script() {
     else
         echo -e "$(color green "$(get_message 'MSG_NO_UPDATE_NEEDED' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{version}/$current_version/")")"
     fi
+
+    # .sh の場合のみ実行
+    case "$file_name" in
+        *.sh) sh "$file_path" ;;
+    esac
 }
 
 #########################################################################
