@@ -1,11 +1,12 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-2"
+COMMON_VERSION="2025.02.05-3"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
-BASE_WGET="wget --quiet -O"
+BASE_WGET="wget -O"
+# BASE_WGET="wget --quiet -O"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 SUPPORTED_VERSIONS="${SUPPORTED_VERSIONS:-19.07 21.02 22.03 23.05 24.10.0 SNAPSHOT}"
