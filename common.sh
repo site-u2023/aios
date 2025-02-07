@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-26"
+COMMON_VERSION="2025.02.05-27"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -540,30 +540,34 @@ install_packages() {
     shift
     local package_list="$*"
 
-    echo "DEBUG: Calling install_packages() with confirm_flag=$confirm_flag and package_list=[$package_list]"  # デバッグ追加
+    echo "DEBUG: Calling install_packages() with confirm_flag=$confirm_flag and package_list=[$package_list]"
 
-    # `confirm()` を1回だけ実行
+    # `install_packages()` が2回実行されていないか確認するためのデバッグ
+    if [ -n "${INSTALLATION_STARTED:-}" ]; then
+        echo "DEBUG: Skipping duplicate install_packages() call."
+        return
+    fi
+
+    INSTALLATION_STARTED=1  # 1回のみ実行するようフラグをセット
+
     if [ "$confirm_flag" = "yn" ] && [ -z "${CONFIRMATION_DONE:-}" ]; then
-        local package_names=$(echo "$package_list" | sed 's/  */, /g')  # スペースを統一
+        local package_names=$(echo "$package_list" | sed 's/  */, /g')
 
-        echo "DEBUG: Package list for confirmation: [$package_names]"  # デバッグ追加
+        echo "DEBUG: Package list for confirmation: [$package_names]"
 
         if ! confirm "MSG_INSTALL_PROMPT_PKG" "$package_names"; then
             echo "$(color yellow "Skipping installation of: $package_names")"
             return 1
         fi
-        CONFIRMATION_DONE=1  # 確認が1回だけになるようフラグを設定
+        CONFIRMATION_DONE=1  # 1回のみ確認するようにフラグをセット
     fi
 
-    # `ja` のインストール確認が不要な場合を修正
     if [ "$package_list" = "ja" ]; then
         return 0
     fi
 
-    # パッケージのインストール
     attempt_package_install $package_list
 }
-
 
 #########################################################################
 # attempt_package_install: 個別パッケージのインストールおよび言語パック適用
