@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-30"
+COMMON_VERSION="2025.02.05-31"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -538,31 +538,21 @@ handle_exit() {
 install_packages() {
     local confirm_flag="$1"
     shift
-    local package_list="$*"  # パッケージをスペース区切りの文字列として取得
+    local package_list="$*"
 
     echo "DEBUG: Calling install_packages() with confirm_flag=$confirm_flag and package_list=[$package_list]"
 
-    if [ -n "${INSTALLATION_STARTED:-}" ]; then
-        echo "DEBUG: Skipping duplicate install_packages() call."
-        return
-    fi
-    INSTALLATION_STARTED=1  # 1回のみ実行
-
     if [ "$confirm_flag" = "yn" ] && [ -z "${CONFIRMATION_DONE:-}" ]; then
         local package_names=$(echo "$package_list" | sed 's/  */, /g')
-
-        echo "DEBUG: Package list for confirmation: [$package_names]"
-
         if ! confirm "MSG_INSTALL_PROMPT_PKG" "$package_names"; then
-            echo "$(color yellow "Skipping installation of: $package_names")"
             return 1
         fi
         CONFIRMATION_DONE=1
     fi
 
     for pkg in $package_list; do
-        echo "DEBUG: Installing package: $pkg"
         attempt_package_install "$pkg"
+        install_language_pack "$pkg"  # 言語パッケージのインストールを追加
     done
 }
 
@@ -596,18 +586,21 @@ attempt_package_install() {
 #########################################################################
 install_language_pack() {
     local base_pkg="$1"
-    local lang_pkg="luci-i18n-${base_pkg#luci-app-}-${SELECTED_LANGUAGE}"  # luci-app- の部分を削除してパッケージ名作成
+    local lang_pkg="luci-i18n-${base_pkg#luci-app-}-${SELECTED_LANGUAGE}"
 
-    # 言語DBやキャッシュをチェック
-    if grep -q "^$lang_pkg" "${BASE_DIR}/messages.db"; then
-        if $PACKAGE_MANAGER list | grep -q "^$lang_pkg - "; then
-            $PACKAGE_MANAGER install $lang_pkg && echo -e "$(color green "Language pack installed: $lang_pkg")" || \
-            echo -e "$(color yellow "Failed to install language pack: $lang_pkg. Continuing...")"
+    # `packages.db` からパッケージリストを取得
+    if grep -q "^packages=" "${BASE_DIR}/packages.db"; then
+        local available_pkgs
+        available_pkgs=$(grep "^packages=" "${BASE_DIR}/packages.db" | cut -d'=' -f2)
+
+        if echo "$available_pkgs" | grep -qw "$lang_pkg"; then
+            $PACKAGE_MANAGER install "$lang_pkg"
+            echo "$(color green "Installed language pack: $lang_pkg")"
         else
-            echo -e "$(color cyan "Language pack not found in repo for: $base_pkg. Skipping language pack...")"
+            echo "$(color yellow "Language pack not available in packages.db: $lang_pkg")"
         fi
     else
-        echo -e "$(color cyan "Language pack $lang_pkg not listed in messages.db. Skipping...")"
+        echo "$(color yellow "packages.db not found or invalid. Skipping language pack installation.")"
     fi
 }
 
