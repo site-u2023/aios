@@ -536,11 +536,11 @@ install_language_pack() {
 
 #########################################################################
 # check_common 
-# 初期化処理: 
+# 初期化処理:
+# - モード: "full" (通常), "light" (最低限), "aios" (aios.sh 専用)
 #########################################################################
 check_common() {
     local mode="$1"
-    # mode により処理を変える (例: "full" と "light" など)
     case "$mode" in
         full)
             check_country_common
@@ -552,10 +552,11 @@ check_common() {
             ;;
         light)
             load_common_functions
-            # これだけ
+            ;;
+        aios)
+            check_openwrt_common
             ;;
         *)
-            # デフォルト動作
             check_country_common
             check_openwrt_common
             ;;
