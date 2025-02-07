@@ -538,19 +538,18 @@ handle_exit() {
 install_packages() {
     local confirm_flag="$1"
     shift
-    local package_list=("$@")  # パッケージを配列として取得
+    local package_list="$*"  # `ash` ではスペース区切りの文字列として扱う
 
-    echo "DEBUG: Calling install_packages() with confirm_flag=$confirm_flag and package_list=[${package_list[*]}]"
+    echo "DEBUG: Calling install_packages() with confirm_flag=$confirm_flag and package_list=[$package_list]"
 
-    # `install_packages()` の二重実行を防ぐ
     if [ -n "${INSTALLATION_STARTED:-}" ]; then
         echo "DEBUG: Skipping duplicate install_packages() call."
         return
     fi
-    INSTALLATION_STARTED=1  # 1回のみ実行
+    INSTALLATION_STARTED=1
 
     if [ "$confirm_flag" = "yn" ] && [ -z "${CONFIRMATION_DONE:-}" ]; then
-        local package_names=$(echo "${package_list[*]}" | sed 's/  */, /g')
+        local package_names=$(echo "$package_list" | sed 's/  */, /g')
 
         echo "DEBUG: Package list for confirmation: [$package_names]"
 
@@ -561,7 +560,7 @@ install_packages() {
         CONFIRMATION_DONE=1
     fi
 
-    for pkg in "${package_list[@]}"; do
+    for pkg in $package_list; do
         attempt_package_install "$pkg"
     done
 }
