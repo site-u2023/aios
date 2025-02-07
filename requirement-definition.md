@@ -38,6 +38,7 @@ aios.sh                           ← 初回エントリーポイント
     ├── country.db                ← 国名、言語、短縮国名、ゾーンネーム、タイムゾーンデータベース
     ├── message.db                ← 多言語データベース
     ├── openwrt.db                ← OpenWrバージョンデータベース
+    ├── package.db                ← パッケージデータベース   
     ├── country.cache             ← カントリーコードキャッシュ
     ├── openwrt.ch                ← OpenWrtバージョンキャッシュ
     ├── downloader.ch             ← ダウンローダータイプキャッシュ
@@ -245,15 +246,16 @@ INPUT_LANG="$1"
 |----------------------------|-----------------------------------------------------|------------------------------|
 | **country.db **            | Russia Русский ru RU Europe/Moscow,Asia/Krasnoyarsk,Asia/Yekaterinburg,Asia/Irkutsk,Asia/Vladivostok;MSK-3,SAMT-4,YEKT-5,OMST-6,KRAT-7,IRKT-8,YAKT-9,VLAT-10,MAGT-11 |  `${BASE_DIR}/country.db`  |
 | **message.db**             | ja|MSG_INSTALL_PROMPT_PKG={pkg}                     | ${BASE_DIR}/message.db`      |
-| **openwrt.db**             | 24.10.0=opkg|stable                                 | ${BASE_DIR}/message.db`      |
+| **openwrt.db**             | 24.10.0=opkg|stable                                 | ${BASE_DIR}/openwrt.db`      |
+| **package.db**             | [ttyd]                                | ${BASE_DIR}/package.db`      |
 ```
 
 ## 10.キャッシュファイルの定義
 ```
 | **キャッシュファイル名**   | **説明**                                            | **保存先**                   |
 |----------------------------|-----------------------------------------------------|------------------------------|
-| **openwrt.ch**     | OpenWrtバージョンキャッシュ。                        | `${BASE_DIR}/country.ch`  |
-| **country.ch**          | 選択されたカントリーのキャッシュ。                    | `${BASE_DIR}/openwrt.ch` |
+| **openwrt.ch**     | OpenWrtバージョンキャッシュ。                        | `${BASE_DIR}/openwrt.ch`  |
+| **country.ch**          | 選択されたカントリーのキャッシュ。                    | `${BASE_DIR}/country.ch` |
 | **downloader.ch**          | パッケージマネージャー（apk / opkg）の判定キャッシュ。 | `${BASE_DIR}/downloader.ch` |
 | **script.ch**      | スクリプトファイルバージョンのキャッシュ               | `${BASE_DIR}/script.ch` |
 ```
