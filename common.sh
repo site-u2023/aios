@@ -1,7 +1,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-5"
+COMMON_VERSION="2025.02.05-6"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -284,33 +284,6 @@ check_country() {
     fi
 
     echo -e "\033[1;32mLanguage supported: $SELECTED_LANGUAGE\033[0m"
-}
-
-#########################################################################
-# openwrt_db: バージョンデータベースのダウンロード
-#########################################################################
-openwrt_db() {
-    if [ ! -f "${BASE_DIR}/openwrt.db" ]; then
-        ${BASE_WGET} "${BASE_DIR}/openwrt.db" "${BASE_URL}/openwrt.db" || handle_error "Failed to download openwrt.db"
-    fi
-}
-
-#########################################################################
-# messages_db: 選択された言語のメッセージファイルをダウンロード
-#########################################################################
-messages_db() {
-    if [ ! -f "${BASE_DIR}/messages.db" ]; then
-        ${BASE_WGET} "${BASE_DIR}/messages.db" "${BASE_URL}/messages.db" || handle_error "Failed to download messages.db"
-    fi
-}
-
-#########################################################################
-# packages_db: 選択されたパッケージファイルをダウンロード
-#########################################################################
-packages_db() {
-    if [ ! -f "${BASE_DIR}/packages.db" ]; then
-        ${BASE_WGET} "${BASE_DIR}/packages.db" "${BASE_URL}/packages.db" || handle_error "Failed to download packages.db"
-    fi
 }
 
 #########################################################################
