@@ -125,6 +125,6 @@ EOF
 delete_aios
 check_openwrt_local
 make_directory
-install_ttyd
 check_common full
+install_ttyd
 download_file aios
