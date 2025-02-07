@@ -102,19 +102,19 @@ check_common() {
     # mode により処理を変える (例: "full" と "light" など)
     case "$mode" in
         full)
-            check_language_common
+            check_country_common
             check_version_common
             download_file "openwrt.db"
             download_file "messages.db"
             check_version_compatibility
             ;;
         light)
-            check_language_common
+            check_country_common
             # これだけ
             ;;
         *)
             # デフォルト動作
-            check_language_common
+            check_country_common
             check_version_common
             ;;
     esac
@@ -246,9 +246,9 @@ check_version_common() {
 }
 
 #########################################################################
-# check_language_common: 言語キャッシュの確認および設定
+# check_country_common: 言語キャッシュの確認および設定
 #########################################################################
-check_language_common() {
+check_country_common() {
     if [ -f "${BASE_DIR}/language_cache" ]; then
         SELECTED_LANGUAGE=$(cat "${BASE_DIR}/language_cache")
     else
@@ -566,4 +566,4 @@ install_language_pack() {
 download_supported_versions_db
 messages_db
 check_version_common
-check_language_common
+check_country_common
