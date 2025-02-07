@@ -283,72 +283,105 @@ check_openwrt() {
 }
 
 #########################################################################
-# check_country: 言語キャッシュの確認および設定
-#########################################################################
-#########################################################################
-# check_country: 言語キャッシュの確認および設定
+# check_country: 言語キャッシュの確認および設定（country.db からデータ取得）
 #########################################################################
 check_country() {
-    if [ -f "${BASE_DIR}/country.ch" ]; then
-        SELECTED_LANGUAGE=$(cat "${BASE_DIR}/country.ch")
+    local country_file="${BASE_DIR}/country.db"
+    local found_entries found_entry num_matches choice
+
+    # 言語キャッシュが存在すれば使用
+    if [ -f "${BASE_DIR}/check_language" ]; then
+        SELECTED_LANGUAGE=$(cat "${BASE_DIR}/check_language")
         return
     fi
 
-    echo -e "$(color cyan "Select your language:")"
+    # country.db が存在しない場合はダウンロード
+    if [ ! -f "$country_file" ]; then
+        country_db || handle_error "Failed to download country.db"
+    fi
 
-    local lang_list=($SUPPORTED_LANGUAGES)
-    local index=1
+    echo -e "$(color cyan "Select your language (matching country):")"
 
-    for lang in "${lang_list[@]}"; do
-        echo "$index) $lang"
-        index=$((index + 1))
-    done
-
+    # ユーザー入力受付
     while true; do
-        read -p "Enter number or language (e.g., en, ja): " lang_choice
+        read -p "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja'): " input_lang
+        input_lang=$(echo "$input_lang" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')  # 前後の空白を削除
 
-        # 数字での選択
-        if [ "$lang_choice" -ge 1 ] 2>/dev/null && [ "$lang_choice" -le "${#lang_list[@]}" ]; then
-            SELECTED_LANGUAGE="${lang_list[$((lang_choice - 1))]}"
-            break
+        # 完全一致検索
+        found_entries=$(grep -i -w "$input_lang" "$country_file")
+
+        # 曖昧検索（部分一致）
+        if [ -z "$found_entries" ]; then
+            found_entries=$(grep -i "$input_lang" "$country_file")
         fi
 
-        # 直接言語コードを入力
-        if echo "$SUPPORTED_LANGUAGES" | grep -qw "$lang_choice"; then
-            SELECTED_LANGUAGE="$lang_choice"
-            break
+        # 候補なしなら再入力を促す
+        if [ -z "$found_entries" ]; then
+            echo -e "$(color red "No matching entry found. Please try again.")"
+            continue
         fi
 
-        echo -e "$(color red "Invalid selection. Try again.")"
+        num_matches=$(echo "$found_entries" | wc -l)
+
+        # 1つの候補のみなら即確定
+        if [ "$num_matches" -eq 1 ]; then
+            found_entry="$found_entries"
+        else
+            echo -e "$(color yellow "Multiple matches found. Please select:")"
+            local i=1
+            echo "$found_entries" | while IFS= read -r line; do
+                echo "[$i] $line"
+                i=$((i+1))
+            done
+            echo "[0] Re-enter language"
+
+            read -p "Enter the number of your choice: " choice
+            if [ "$choice" = "0" ]; then
+                continue
+            fi
+            found_entry=$(echo "$found_entries" | sed -n "${choice}p")
+        fi
+
+        # 有効な選択肢が確定
+        break
     done
 
-    echo "$SELECTED_LANGUAGE" > "${BASE_DIR}/country.ch"
-    echo -e "$(color green "Language selected: $SELECTED_LANGUAGE")"
+    # 言語コード、国コードを取得
+    SELECTED_LANGUAGE=$(echo "$found_entry" | awk '{print $2}')
+    SELECTED_COUNTRY=$(echo "$found_entry" | awk '{print $3}')
+
+    # キャッシュに保存
+    echo "$SELECTED_LANGUAGE" > "${BASE_DIR}/check_language"
+    echo "$SELECTED_COUNTRY" > "${BASE_DIR}/check_country"
+
+    echo -e "$(color green "Selected Language: $SELECTED_LANGUAGE")"
+    echo -e "$(color green "Selected Country: $SELECTED_COUNTRY")"
 }
 
 #########################################################################
-# normalize_language: キャッシュの言語コードがサポート対象か検証し、
-#                      サポート外の場合はデフォルト (en) に上書きする
+# normalize_language: 言語コードがサポート対象か検証し、サポート外なら `en` に変更
 #########################################################################
 normalize_language() {
-    local CHECK_LANGUAGE READ_LANGUAGE
-    CHECK_LANGUAGE="${BASE_DIR}/check_country"
-    if [ -f "$CHECK_LANGUAGE" ]; then
-        READ_LANGUAGE=$(cat "$CHECK_LANGUAGE")
+    local lang_file="${BASE_DIR}/check_language"
+
+    if [ -f "$lang_file" ]; then
+        local read_lang=$(cat "$lang_file")
+    else
+        read_lang="en"
     fi
 
     SELECTED_LANGUAGE=""
     for lang in $SUPPORTED_LANGUAGES; do
-        if [ "$READ_LANGUAGE" = "$lang" ]; then
-            SELECTED_LANGUAGE="$READ_LANGUAGE"
+        if [ "$read_lang" = "$lang" ]; then
+            SELECTED_LANGUAGE="$read_lang"
             break
         fi
     done
 
     if [ -z "$SELECTED_LANGUAGE" ]; then
         SELECTED_LANGUAGE="en"
-        echo "Language not supported. Defaulting to English (en)."
-        echo "$SELECTED_LANGUAGE" > "${BASE_DIR}/check_country"
+        echo -e "$(color yellow "Language '$read_lang' is not supported. Defaulting to English (en).")"
+        echo "$SELECTED_LANGUAGE" > "$lang_file"
     fi
 }
 
@@ -608,9 +641,8 @@ install_language_pack() {
 }
 
 #########################################################################
-# check_common 
-# 初期化処理:
-# - モード: "full" (通常), "light" (最低限), "aios" (aios.sh 専用)
+# check_common: 初期化処理
+# - モード: "full" (通常), "light" (最低限)
 #########################################################################
 check_common() {
     local mode="$1"
@@ -619,17 +651,20 @@ check_common() {
             download_script messages.db
             download_script country.db
             download_script openwrt.db
-            check_country
+            check_country  # 言語選択
+            normalize_language  # 言語の正規化
             check_openwrt
-            #wget -O /tmp/aios/messages.db https://raw.githubusercontent.com/site-u2023/aios/main/messages.db
             ;;
         light)
             check_country
+            normalize_language
             check_openwrt
             ;;
         *)
             check_country
+            normalize_language
             check_openwrt
             ;;
     esac
 }
+
