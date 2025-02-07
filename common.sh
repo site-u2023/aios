@@ -601,8 +601,8 @@ check_common() {
             check_country
             check_openwrt
             download_script openwrt.db
-            #download_script messages.db
-            wget -O /tmp/aios/messages.db https://raw.githubusercontent.com/site-u2023/aios/main/messages.db
+            download_script messages.db
+            #wget -O /tmp/aios/messages.db https://raw.githubusercontent.com/site-u2023/aios/main/messages.db
             download_script country.db
             ;;
         light)
