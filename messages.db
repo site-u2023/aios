@@ -5,6 +5,18 @@ MESSAGE_VERSION="2025.02.06-rc1"
 echo "message.db Last update: $MESSAGE_VERSION"
 
 # 追加--------------------------------------------
+# ファイル更新メッセージ
+ja|MSG_UPDATING_SCRIPT={file} を更新しました ({old_version} → {new_version})
+en|MSG_UPDATING_SCRIPT=Updated {file} ({old_version} → {new_version})
+
+ja|MSG_NO_UPDATE_NEEDED={file} の更新はありません ({version})
+en|MSG_NO_UPDATE_NEEDED={file} is up-to-date ({version})
+
+ja|MSG_DOWNLOADING_MISSING_FILE={file} が見つかりません。ダウンロードします。
+en|MSG_DOWNLOADING_MISSING_FILE={file} not found. Downloading now.
+
+
+# 追加--------------------------------------------
 # Yes/No メッセージ
 ja|y=はい
 ja|n=いいえ
