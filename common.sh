@@ -80,7 +80,7 @@ handle_error() {
 #########################################################################
 load_common_functions() {
     if [ ! -f "${BASE_DIR}/common.sh" ]; then
-        download_file "common.sh"
+        download "common.sh"
     fi
 
     if ! grep -q "COMMON_FUNCTIONS_SH_VERSION" "${BASE_DIR}/common.sh"; then
@@ -95,15 +95,15 @@ load_common_functions() {
 # common.sh (抜粋イメージ)
 
 #########################################################################
-# download_file: ファイルの存在確認と自動ダウンロード（警告対応）
+# download: ファイルの存在確認と自動ダウンロード（警告対応）
 #########################################################################
-download_file() {
+download() {
     local file_name="$1"
     local file_path="${BASE_DIR}/${file_name}"
 
     if [ ! -f "$file_path" ]; then
         handle_error "$(get_message 'MSG_FILE_NOT_FOUND_WARNING'): $file_name" "warning"
-        download_file "$file_name" "$file_path"
+        download "$file_name" "$file_path"
     fi
 }
 
@@ -126,7 +126,7 @@ check_openwrt_compatibility() {
 #########################################################################
 # print_banner: 言語に応じたバナー表示 (messages.db からメッセージ取得)
 #########################################################################
-print_banner() {
+aios_banner() {
     local msg
     msg=$(get_message 'MSG_BANNER' "$SELECTED_LANGUAGE")
 
@@ -263,19 +263,6 @@ check_country_common() {
 }
 
 #########################################################################
-# download_language_files: 必要な言語ファイルをダウンロード
-#########################################################################
-download_language_files() {
-    for lang in $SUPPORTED_LANGUAGES; do
-        if [ ! -f "${BASE_DIR}/messages_${lang}.sh" ]; then
-            ${BASE_WGET} "${BASE_DIR}/messages_${lang}.sh" "${BASE_URL}/messages_${lang}.sh" || {
-                echo "Failed to download language file: messages_${lang}.sh"
-            }
-        fi
-    done
-}
-
-#########################################################################
 # openwrt_db: バージョンデータベースのダウンロード
 #########################################################################
 openwrt_db() {
@@ -294,11 +281,11 @@ messages_db() {
 }
 
 #########################################################################
-# confirm_action: Y/N 判定関数
+# confirm: Y/N 確認関数
 # 引数1: 確認メッセージキー（多言語対応）
-# 使用例: confirm_action 'MSG_INSTALL_PROMPT'
+# 使用例: confirm 'MSG_INSTALL_PROMPT'
 #########################################################################
-confirm_action() {
+confirm() {
     local key="$1"
     local replace_param="$2"
     local prompt_message
@@ -335,7 +322,7 @@ confirm_action() {
 #########################################################################
 # 汎用ファイルダウンロード関数
 #########################################################################
-download_file() {
+download() {
     local file_url="$1"
     local destination="$2"
     local confirm_key="$3"  # 追加: ダウンロード前に確認したいならキーを渡す
@@ -343,7 +330,7 @@ download_file() {
     # もし confirm_key がセットされていればダウンロード前に Y/N をとる
     if [ -n "$confirm_key" ]; then
         # ユーザーが NO の場合はスキップ
-        if ! confirm_action "$confirm_key" "$file_url"; then
+        if ! confirm "$confirm_key" "$file_url"; then
             color yellow "Skipping download of $file_url"
             return 0
         fi
@@ -364,7 +351,7 @@ select_country_and_timezone() {
     local country_file="${BASE_DIR}/country-zone.sh"
 
     if [ ! -f "$country_file" ]; then
-        download_file "${BASE_URL}/country-zone.sh" "$country_file"
+        download "${BASE_URL}/country-zone.sh" "$country_file"
     fi
 
     echo -e "$(color cyan "Select a country for language and timezone configuration.")"
@@ -543,18 +530,20 @@ check_common() {
     local mode="$1"
     case "$mode" in
         full)
+            make_directory
             check_country_common
             check_openwrt_common
-            download_file "country.db"
-            download_file "openwrt.db"
-            download_file "messages.db"
+            download "country.db"
+            download "openwrt.db"
+            download "messages.db"
             check_openwrt_compatibility
             ;;
         light)
             load_common_functions
             ;;
         aios)
-            check_openwrt_common
+            make_directory
+            confirm
             ;;
         *)
             check_country_common
