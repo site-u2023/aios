@@ -270,8 +270,18 @@ openwrt_db() {
 # messages_db: 選択された言語のメッセージファイルをダウンロード
 #########################################################################
 messages_db() {
-    if [ ! -f "${BASE_DIR}/messages.db" ]; then
-        ${BASE_WGET} "${BASE_DIR}/messages.db" "${BASE_URL}/messages.db" || handle_error "Failed to download messages.db"
+    local db_file="${BASE_DIR}/messages.db"
+    
+    if [ ! -f "$db_file" ]; then
+        ${BASE_WGET} "$db_file" "${BASE_URL}/messages.db"
+        if [ $? -ne 0 ]; then
+            handle_error "Failed to download messages.db"
+        fi
+    fi
+
+    # ダウンロードが成功してもファイルが空の場合はエラー
+    if [ ! -s "$db_file" ]; then
+        handle_error "Downloaded messages.db is empty or corrupted"
     fi
 }
 
