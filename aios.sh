@@ -51,10 +51,10 @@ packages() {
     install_packages luci-app-ttyd
 }
 
-delete_aios
 #################################
 # メイン処理
 #################################
+delete_aios
 make_directory
 download_common
 check_common full
