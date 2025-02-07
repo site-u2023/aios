@@ -564,7 +564,6 @@ check_common() {
             check_scripts
             check_country
             check_openwrt
-            check_openwrt_compatibility
             download_script openwrt.db
             download_script messages.db
             download_script country.db
