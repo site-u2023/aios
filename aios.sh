@@ -1,7 +1,7 @@
 #!/bin/sh
 # aios.sh (初期エントリースクリプト)
 # License: CC0
-AIOS_VERSION="2025.02.06-2"
+AIOS_VERSION="2025.02.06-3"
 echo "aios.sh Last update: $AIOS_VERSION"
 
 BASE_WGET="wget -O" # テスト用
@@ -54,6 +54,7 @@ packages() {
 #################################
 # メイン処理
 #################################
+delete_aios
 make_directory
 download_common
 check_common full
