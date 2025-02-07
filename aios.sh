@@ -54,8 +54,7 @@ packages() {
 #################################
 # メイン処理
 #################################
-delete_aios
-check_openwrt_local
+make_directory
 download_common
 check_common full
 packages
