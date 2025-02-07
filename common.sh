@@ -449,6 +449,54 @@ handle_exit() {
 # 引数: インストールするパッケージ名のリスト
 #########################################################################
 install_packages() {
+    local package_list=""
+    local uci_list=""
+    local command_list=""
+
+    # package() の出力を取得（ローカルで指定されたパッケージ名）
+    package_list=$(package)
+
+    for package_name in $package_list; do
+        local db_package_list=""
+        local db_uci_list=""
+        local db_command_list=""
+
+        # package.db から該当パッケージの情報を取得
+        while IFS='=' read -r key value; do
+            case "$key" in
+                "packages") db_package_list="$value" ;;
+                "uci") db_uci_list="$db_uci_list\n$value" ;;
+                "command") db_command_list="$db_command_list\n$value" ;;
+            esac
+        done < <(grep -E "^\[?$package_name\]?|packages=|uci=|command=" "${BASE_DIR}/package.db")
+
+        # パッケージのインストール
+        if [ -n "$db_package_list" ]; then
+            install_packages $db_package_list
+        fi
+
+        # UCI の適用（DB にある場合のみ）
+        if [ -n "$db_uci_list" ]; then
+            echo -e "$db_uci_list" | uci batch
+            uci commit
+        fi
+
+        # コマンドの実行（DB にある場合のみ）
+        if [ -n "$db_command_list" ]; then
+            echo -e "$db_command_list" | while read -r cmd; do
+                eval "$cmd"
+            done
+        fi
+    done
+
+    # 言語パッケージの適用（全パッケージ対象）
+    for pkg in $package_list; do
+        install_language_pack "$pkg"
+    done
+}
+
+#------------------------------------------------------------------------------------------
+XXXXX_install_packages() {
     local packages="$*"
     local manager="$PACKAGE_MANAGER"
 
