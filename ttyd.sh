@@ -1,7 +1,7 @@
 #!/bin/sh
 # ttyd.sh
 
-TTYD_SH_VERSION="2025.02.05-rc1"
+TTYD_SH_VERSION="2025.02.05-"
 echo "ttyd.sh Last update: $TTYD_SH_VERSION"
 
 BASE_URL="https://raw.githubusercontent.com/site-u2023/aios/main"
