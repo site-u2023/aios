@@ -1,3 +1,4 @@
+
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
@@ -276,7 +277,24 @@ check_country() {
             found_entry="$found_entries"
         else
             echo -e "$(color yellow "Multiple matches found. Please select:")"
-            select found_entry in $found_entries; do
+            local i=1
+            echo "$found_entries" | while IFS= read -r line; do
+                echo "[$i] $line"
+                i=$((i+1))
+            done
+            echo "[0] Re-enter language"
+
+            while true; do
+                read -p "Enter the number of your choice: " choice
+                if [ "$choice" = "0" ]; then
+                    continue 2  # `while true` を再実行
+                fi
+
+                found_entry=$(echo "$found_entries" | sed -n "${choice}p")
+                if [ -z "$found_entry" ]; then
+                    echo -e "$(color red "Invalid selection. Please try again.")"
+                    continue
+                fi
                 break
             done
         fi
@@ -286,6 +304,8 @@ check_country() {
 
     SELECTED_LANGUAGE=$(echo "$found_entry" | awk '{print $3}')
     echo "$SELECTED_LANGUAGE" > "${BASE_DIR}/check_country"
+
+    echo -e "$(color green "Selected Language: $SELECTED_LANGUAGE")"
 }
 
 #########################################################################
