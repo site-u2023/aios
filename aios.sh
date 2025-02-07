@@ -126,6 +126,6 @@ delete_aios
 check_openwrt_local
 make_directory
 download_common
-check_common full
+check_common aios
 install_ttyd
 download_file aios
