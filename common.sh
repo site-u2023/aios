@@ -1,7 +1,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-rc6"
+COMMON_VERSION="2025.02.05-rc7"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -16,7 +16,6 @@ SUPPORTED_LANGUAGES="${SUPPORTED_LANGUAGES:-en ja zh-cn zh-tw id ko de ru}"
 # 引数1: 色の名前 (例: red, green, blue_white など)
 # 引数2以降: 出力するメッセージ
 #########################################################################
-
 color() {
     local color_code
     color_code=$(color_code_map "$1")
@@ -28,7 +27,6 @@ color() {
 # color_code_map: カラー名から ANSI エスケープシーケンスを返す関数
 # 引数: 色の名前
 #########################################################################
-
 color_code_map() {
     local color="$1"
     case "$color" in
@@ -76,47 +74,44 @@ handle_error() {
 }
 
 #########################################################################
-# load_common_functions: 共通関数のロード
+# check_scripts: スクリプトとデータベースのバージョン確認・最新化
+# 目的:
+# - .sh/.db ファイルのバージョンを確認し、最新があればダウンロード
+# - 古いバージョンのファイルを検出した場合のみ更新
+# - メッセージ表示のON/OFF制御可能（disable_echo_update=1 で停止）
 #########################################################################
-load_common_functions() {
-    if [ ! -f "${BASE_DIR}/common.sh" ]; then
-        download "common.sh"
-    fi
+check_scripts() {
+    local files="common.sh messages.db openwrt.db package.db"
+    local file_name current_version remote_version disable_echo_update="${1:-0}"
 
-    if ! grep -q "COMMON_FUNCTIONS_SH_VERSION" "${BASE_DIR}/common.sh"; then
-        handle_error "Invalid common.sh file structure."
-    fi
+    for file_name in $files; do
+        local file_path="${BASE_DIR}/${file_name}"
+        local remote_url="${BASE_URL}/${file_name}"
 
-    source "${BASE_DIR}/common.sh" || handle_error "Failed to load common.sh"
-}
+        # ファイルが存在しない場合はダウンロード
+        if [ ! -f "$file_path" ]; then
+            [ "$disable_echo_update" -eq 0 ] && echo "$(color yellow "$(get_message 'MSG_DOWNLOADING_MISSING_FILE' "$SELECTED_LANGUAGE"): $file_name")"
+            download "$file_name" "$file_path"
+            continue
+        fi
 
-#########################################################################
-# download: ファイルの存在確認と自動ダウンロード（警告対応）
-#########################################################################
-download() {
-    local file_name="$1"
-    local file_path="${BASE_DIR}/${file_name}"
+        # ローカルバージョンを取得
+        current_version=$(grep "^version=" "$file_path" | cut -d'=' -f2 | tr -d '"\r')
 
-    if [ ! -f "$file_path" ]; then
-        handle_error "$(get_message 'MSG_FILE_NOT_FOUND_WARNING'): $file_name" "warning"
-        download "$file_name" "$file_path"
-    fi
-}
+        # リモートバージョンを取得
+        remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2 | tr -d '"\r')
 
-#########################################################################
-# check_openwrt_compatibility: バージョン互換性チェック（警告対応）
-#########################################################################
-check_openwrt_compatibility() {
-    local db_version
--   db_version=$(grep "^version=" "${BASE_DIR}/messages.db" | cut -d'=' -f2 | tr -d '"')
-+   db_version=$(grep "^version=" "${BASE_DIR}/messages.db" \
-+       | cut -d'=' -f2 \
-+       | tr -d '"\r')
+        # デバッグ用ログ
+        [ "$disable_echo_update" -eq 0 ] && echo "DEBUG: Checking version for $file_name | Local: [$current_version], Remote: [$remote_version]"
 
-    echo "DEBUG: db_version=[$db_version], COMMON_FUNCTIONS_SH_VERSION=[$COMMON_FUNCTIONS_SH_VERSION]"
-    if [ "$db_version" != "$COMMON_FUNCTIONS_SH_VERSION" ]; then
-        handle_error "$(get_message 'MSG_VERSION_MISMATCH_WARNING' "$SELECTED_LANGUAGE"): messages.db ($db_version). Required: $COMMON_FUNCTIONS_SH_VERSION" "warning"
-    fi
+        # バージョンチェック: 最新があればダウンロード
+        if [ -n "$remote_version" ] && [ "$current_version" != "$remote_version" ]; then
+            [ "$disable_echo_update" -eq 0 ] && echo "$(color cyan "$(get_message 'MSG_UPDATING_FILE' "$SELECTED_LANGUAGE"): $file_name ($current_version → $remote_version)")"
+            download "$file_name" "$file_path"
+        else
+            [ "$disable_echo_update" -eq 0 ] && echo "$(color green "$(get_message 'MSG_NO_UPDATE_NEEDED' "$SELECTED_LANGUAGE"): $file_name ($current_version)")"
+        fi
+    done
 }
 
 #########################################################################
@@ -135,14 +130,6 @@ aios_banner() {
     echo -e "\033[1;31m         aaaaa     iiii      oooo     ssssss          \033[0m"
     echo
     echo -e "\033[1;37m$msg\033[0m"
-}
-
-#########################################################################
-# download_openwrt_db: バージョンデータベースのダウンロード
-#########################################################################
-download_openwrt_db() {
-    ${BASE_WGET} "${BASE_DIR}/openwrt.db" "${BASE_URL}/openwrt.db" \
-    || handle_error "Failed to download openwrt.db"
 }
 
 #########################################################################
@@ -570,7 +557,7 @@ check_common() {
             check_openwrt_compatibility
             ;;
         light)
-            load_common_functions
+
             ;;
         aios)
             make_directory
