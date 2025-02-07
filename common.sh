@@ -1,7 +1,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-10"
+COMMON_VERSION="2025.02.05-11"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -81,26 +81,25 @@ handle_error() {
 #   download_script aios
 #   download_script openwrt.db
 #########################################################################
+#########################################################################
+# download_script: 指定されたスクリプト・データベースのバージョン確認とダウンロード
+#########################################################################
 download_script() {
     local file_name="$1"
-    local file_ext="${file_name##*.}"
-    local install_path
+    local install_path="${BASE_DIR}/${file_name}"
+    local remote_url="${BASE_URL}/${file_name}"
 
     # `aios` の場合は `/usr/bin/aios` に配置
     if [ "$file_name" = "aios" ]; then
         install_path="/usr/bin/aios"
-    else
-        install_path="${BASE_DIR}/${file_name}"
     fi
-
-    local remote_url="${BASE_URL}/${file_name}"
 
     # ファイルが存在しない場合はダウンロード
     if [ ! -f "$install_path" ]; then
         echo -e "$(color yellow "$(get_message 'MSG_DOWNLOADING_MISSING_FILE' "$SELECTED_LANGUAGE" | sed "s/{file}/$file_name/")")"
         if ! wget --quiet -O "$install_path" "$remote_url"; then
             echo -e "$(color red "Failed to download: $file_name")"
-            return 1  # `handle_error` を使わず `return 1` に変更
+            return 1
         fi
         echo -e "$(color green "Successfully downloaded: $file_name")"
     fi
@@ -116,26 +115,18 @@ download_script() {
     remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2 | tr -d '"\r')
 
     # デバッグログ
-    echo -e "DEBUG: Checking version for $file_name | Local: [$current_version], Remote: [$remote_version]"
+    echo -e "$(color cyan "DEBUG: Checking version for $file_name | Local: [$current_version], Remote: [$remote_version]")"
 
     # バージョンチェック: 最新があればダウンロード
     if [ -n "$remote_version" ] && [ "$current_version" != "$remote_version" ]; then
         echo -e "$(color cyan "$(get_message 'MSG_UPDATING_SCRIPT' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{old_version}/$current_version/" -e "s/{new_version}/$remote_version/")")"
-        if ! download "$file_name" "$install_path"; then
-            handle_error "Failed to download: $file_name"
+        if ! wget --quiet -O "$install_path" "$remote_url"; then
+            echo -e "$(color red "Failed to download: $file_name")"
+            return 1
         fi
+        echo -e "$(color green "Successfully downloaded: $file_name")"
     else
         echo -e "$(color green "$(get_message 'MSG_NO_UPDATE_NEEDED' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{version}/$current_version/")")"
-    fi
-
-    # `aios` の場合のみ実行権限を付与
-    if [ "$file_name" = "aios" ]; then
-        chmod +x /usr/bin/aios
-    fi
-
-    # `.sh` の場合のみ実行
-    if [ "$file_ext" = "sh" ]; then
-        sh "$install_path"
     fi
 }
 
