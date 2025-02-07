@@ -455,7 +455,7 @@ install_packages() {
     local confirm="$1"  # yn (インストール確認)
     local package_name="$2"
     shift 2  # 最初の2つの引数を削除
-    local options="$@"  # uci, ash などのオプションをスペース区切りで取得
+    local options="$@"  # スペース区切りの文字列として取得
 
     # 最新の packages.db を取得
     packages_db
@@ -471,12 +471,12 @@ install_packages() {
             "uci") db_uci_list="$db_uci_list\n$value" ;;
             "command") db_command_list="$db_command_list\n$value" ;;
         esac
-    done < <(grep -E "^\[?$package_name\]?|packages=|uci=|command=" "${BASE_DIR}/packages.db")
+    done < "${BASE_DIR}/packages.db"
 
     # インストール確認 (`yn` の場合のみ `confirm()` を使用)
     if [ "$confirm" = "yn" ]; then
         if ! confirm "MSG_INSTALL_PROMPT_PKG" "$package_name"; then
-            echo -e "$(color yellow "Skipping installation of: $package_name")"
+            echo "$(color yellow "Skipping installation of: $package_name")"
             return 1
         fi
     fi
@@ -490,17 +490,17 @@ install_packages() {
 
     # パッケージのインストール
     if [ -n "$db_package_list" ]; then
-        attempt_package_install "$db_package_list"
+        attempt_package_install $db_package_list
     fi
 
     # UCI の適用（`uci` が指定された場合）
-    if echo " $options " | grep -q " uci " && [ -n "$db_uci_list" ]; then
+    if echo "$options" | grep -q "uci" && [ -n "$db_uci_list" ]; then
         echo -e "$db_uci_list" | uci batch
         uci commit
     fi
 
     # コマンドの実行（`ash` が指定された場合）
-    if echo " $options " | grep -q " ash " && [ -n "$db_command_list" ]; then
+    if echo "$options" | grep -q "ash" && [ -n "$db_command_list" ]; then
         echo -e "$db_command_list" | while read -r cmd; do
             eval "$cmd"
         done
