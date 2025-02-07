@@ -285,6 +285,9 @@ check_openwrt() {
 #########################################################################
 # check_country: 言語キャッシュの確認および設定（country.db からデータ取得）
 #########################################################################
+#########################################################################
+# check_country: 言語キャッシュの確認および設定（country.db からデータ取得）
+#########################################################################
 check_country() {
     local country_file="${BASE_DIR}/country.db"
     local found_entries found_entry num_matches choice
@@ -302,7 +305,6 @@ check_country() {
 
     echo -e "$(color cyan "Select your language (matching country):")"
 
-    # ユーザー入力受付
     while true; do
         read -p "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja'): " input_lang
         input_lang=$(echo "$input_lang" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')  # 前後の空白を削除
@@ -346,9 +348,9 @@ check_country() {
         break
     done
 
-    # 言語コード、国コードを取得
-    SELECTED_LANGUAGE=$(echo "$found_entry" | awk '{print $2}')
-    SELECTED_COUNTRY=$(echo "$found_entry" | awk '{print $3}')
+    # 言語コード、国コードを取得（フィールドの順番を正しく参照）
+    SELECTED_LANGUAGE=$(echo "$found_entry" | awk '{print $3}')  # 言語コード（例: ja）
+    SELECTED_COUNTRY=$(echo "$found_entry" | awk '{print $2}')  # 国コード（例: JP）
 
     # キャッシュに保存
     echo "$SELECTED_LANGUAGE" > "${BASE_DIR}/check_language"
