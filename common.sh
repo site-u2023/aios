@@ -666,4 +666,3 @@ check_common() {
             ;;
     esac
 }
-
