@@ -80,7 +80,7 @@ handle_error() {
 #########################################################################
 load_common_functions() {
     if [ ! -f "${BASE_DIR}/common-functions.sh" ]; then
-        ensure_file "common-functions.sh"
+        download_file "common-functions.sh"
     fi
 
     if ! grep -q "COMMON_FUNCTIONS_SH_VERSION" "${BASE_DIR}/common-functions.sh"; then
@@ -104,8 +104,8 @@ check_common() {
         full)
             check_language_common
             check_version_common
-            ensure_file "openwrt.db"
-            ensure_file "messages.db"
+            download_file "openwrt.db"
+            download_file "messages.db"
             check_version_compatibility
             ;;
         light)
@@ -121,9 +121,9 @@ check_common() {
 }
 
 #########################################################################
-# ensure_file: ファイルの存在確認と自動ダウンロード（警告対応）
+# download_file: ファイルの存在確認と自動ダウンロード（警告対応）
 #########################################################################
-ensure_file() {
+download_file() {
     local file_name="$1"
     local file_path="${BASE_DIR}/${file_name}"
 
