@@ -74,47 +74,41 @@ handle_error() {
 }
 
 #########################################################################
-# check_scripts: スクリプトとデータベースのバージョン確認・最新化
-# 目的:
-# - .sh/.db ファイルのバージョンを確認し、最新があればダウンロード
-# - 古いバージョンのファイルを検出した場合のみ更新
-# - メッセージ表示のON/OFF制御可能（disable_echo_update=1 で停止）
+# download_script: 指定されたスクリプト・データベースのバージョン確認とダウンロード
+# 使い方:
+#   download_script aios.sh
+#   download_script ttyd.sh
 #########################################################################
-#########################################################################
-# check_scripts: スクリプトとデータベースのバージョン確認・最新化
-#########################################################################
-check_scripts() {
-    local files="common.sh messages.db openwrt.db package.db"
-    local file_name current_version remote_version disable_echo_update="${1:-0}"
+download_script() {
+    local file_name="$1"
+    local file_path="${BASE_DIR}/${file_name}"
+    local remote_url="${BASE_URL}/${file_name}"
 
-    for file_name in $files; do
-        local file_path="${BASE_DIR}/${file_name}"
-        local remote_url="${BASE_URL}/${file_name}"
+    # ファイルが存在しない場合はダウンロード
+    if [ ! -f "$file_path" ]; then
+        echo -e "$(color yellow "$(get_message 'MSG_DOWNLOADING_MISSING_FILE' "$SELECTED_LANGUAGE" | sed "s/{file}/$file_name/")")"
+        download "$file_name" "$file_path"
+        return
+    fi
 
-        # ファイルが存在しない場合はダウンロード
-        if [ ! -f "$file_path" ]; then
-            [ "$disable_echo_update" -eq 0 ] && echo -e "$(color yellow "$(get_message 'MSG_DOWNLOADING_MISSING_FILE' "$SELECTED_LANGUAGE" | sed "s/{file}/$file_name/")")"
-            download "$file_name" "$file_path"
-            continue
-        fi
+    # ローカルバージョンを取得
+    local current_version
+    current_version=$(grep "^version=" "$file_path" | cut -d'=' -f2 | tr -d '"\r')
 
-        # ローカルバージョンを取得
-        current_version=$(grep "^version=" "$file_path" | cut -d'=' -f2 | tr -d '"\r')
+    # リモートバージョンを取得
+    local remote_version
+    remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2 | tr -d '"\r')
 
-        # リモートバージョンを取得
-        remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2 | tr -d '"\r')
+    # デバッグログ
+    echo -e "DEBUG: Checking version for $file_name | Local: [$current_version], Remote: [$remote_version]"
 
-        # デバッグ用ログ
-        [ "$disable_echo_update" -eq 0 ] && echo -e "DEBUG: Checking version for $file_name | Local: [$current_version], Remote: [$remote_version]"
-
-        # バージョンチェック: 最新があればダウンロード
-        if [ -n "$remote_version" ] && [ "$current_version" != "$remote_version" ]; then
-            [ "$disable_echo_update" -eq 0 ] && echo -e "$(color cyan "$(get_message 'MSG_UPDATING_SCRIPT' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{old_version}/$current_version/" -e "s/{new_version}/$remote_version/")")"
-            download "$file_name" "$file_path"
-        else
-            [ "$disable_echo_update" -eq 0 ] && echo -e "$(color green "$(get_message 'MSG_NO_UPDATE_NEEDED' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{version}/$current_version/")")"
-        fi
-    done
+    # バージョンチェック: 最新があればダウンロード
+    if [ -n "$remote_version" ] && [ "$current_version" != "$remote_version" ]; then
+        echo -e "$(color cyan "$(get_message 'MSG_UPDATING_SCRIPT' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{old_version}/$current_version/" -e "s/{new_version}/$remote_version/")")"
+        download "$file_name" "$file_path"
+    else
+        echo -e "$(color green "$(get_message 'MSG_NO_UPDATE_NEEDED' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{version}/$current_version/")")"
+    fi
 }
 
 #########################################################################
@@ -550,15 +544,15 @@ check_common() {
     case "$mode" in
         full)
             make_directory
+            check_scripts
             check_country_common
             check_openwrt_common
-            download "country.db"
-            download "openwrt.db"
-            download "messages.db"
             check_openwrt_compatibility
             ;;
         light)
-
+            make_directory
+            check_country_common
+            check_openwrt_common
             ;;
         aios)
             make_directory
