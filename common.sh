@@ -1,7 +1,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-rc4"
+COMMON_VERSION="2025.02.05-rc5"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -428,24 +428,23 @@ get_package_manager_and_status() {
 #########################################################################
 get_message() {
     local key="$1"
-    local lang="${SELECTED_LANGUAGE:-jn}"  # デフォルトは英語（RCは日本語）
+    local lang="${SELECTED_LANGUAGE:-en}"
+    local db_file="${BASE_DIR}/messages.db"
 
-    # メッセージDBが存在しない場合のエラーハンドリング
-    if [ ! -f "${BASE_DIR}/messages.db" ]; then
+    if [ ! -f "$db_file" ] || [ ! -s "$db_file" ]; then
         echo "Message database not found. Defaulting to key: $key"
         return
     fi
 
-    # メッセージDBから対応メッセージを取得
-    local message=$(grep "^${lang}|${key}=" "${BASE_DIR}/messages.db" | cut -d'=' -f2-)
+    # メッセージ取得
+    local message=$(grep -E "^${lang}\|${key}=" "$db_file" | cut -d'=' -f2- | tr -d '\r')
 
-    # 見つからない場合、英語のデフォルトメッセージを使用
+    # もしローカル言語で見つからなければ英語をデフォルトとして検索
     if [ -z "$message" ]; then
-        message=$(grep "^en|${key}=" "${BASE_DIR}/messages.db" | cut -d'=' -f2-)
+        message=$(grep -E "^en\|${key}=" "$db_file" | cut -d'=' -f2- | tr -d '\r')
     fi
 
-    # 見つからない場合はキーそのものを返す
-    [ -z "$message" ] && echo "$key" || echo "$message"
+    [ -z "$message" ] && echo "Undefined: $key" || echo "$message"
 }
 
 #########################################################################
