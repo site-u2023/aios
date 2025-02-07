@@ -1,4 +1,38 @@
-version="2025.02.05-rc1"
+# メッセージデータベース (多言語対応)
+# フォーマット: 言語コード|メッセージキー=メッセージ
+version="2025.02.05-rc2"
+
+# メッセージデータベース (多言語対応)
+# フォーマット: 言語コード|メッセージキー=メッセージ
+
+# 追加------------------------------------------------------------
+# Yes/No メッセージ
+ja|y=はい
+ja|n=いいえ
+en|y=Yes
+en|n=No
+
+# 設定適用メッセージ
+ja|MSG_SETTINGS_APPLIED=設定が適用されました。
+en|MSG_SETTINGS_APPLIED=Settings have been applied.
+
+# インストール確認プロンプト
+ja|MSG_INSTALL_PROMPT_PKG={pkg} をインストールしますか？ [Y/n]:
+en|MSG_INSTALL_PROMPT_PKG=Do you want to install {pkg}? [Y/n]:
+
+# ダウンロード失敗
+ja|MSG_FILE_NOT_FOUND_WARNING=ファイルが見つかりません: {pkg}
+en|MSG_FILE_NOT_FOUND_WARNING=File not found: {pkg}
+
+# エラーメッセージ
+ja|MSG_ERROR_OCCURRED=エラーが発生しました。
+en|MSG_ERROR_OCCURRED=An error occurred.
+
+# バージョン不一致警告
+ja|MSG_VERSION_MISMATCH_WARNING=バージョンが一致しません: {pkg}
+en|MSG_VERSION_MISMATCH_WARNING=Version mismatch: {pkg}
+
+# 既存デフォ----------------------------------------------------
 
 # バナー用メッセージ
 ja|MSG_BANNER=オープンダブルアールティー専用設定ソフトウェア\nオールインワンスクリプト\n免責事項: 本スクリプトは自己責任でご使用下さい
