@@ -6,6 +6,9 @@ version="2025.02.05-rc2"
 # フォーマット: 言語コード|メッセージキー=メッセージ
 
 # 追加------------------------------------------------------------
+# メッセージデータベース (多言語対応)
+# フォーマット: 言語コード|メッセージキー=メッセージ
+
 # Yes/No メッセージ
 ja|y=はい
 ja|n=いいえ
@@ -31,6 +34,19 @@ en|MSG_ERROR_OCCURRED=An error occurred.
 # バージョン不一致警告
 ja|MSG_VERSION_MISMATCH_WARNING=バージョンが一致しません: {pkg}
 en|MSG_VERSION_MISMATCH_WARNING=Version mismatch: {pkg}
+
+# ダウンロード確認メッセージ
+ja|MSG_DOWNLOAD_CONFIRM={pkg} をダウンロードしますか？ [Y/n]:
+en|MSG_DOWNLOAD_CONFIRM=Do you want to download {pkg}? [Y/n]:
+
+# スクリプト削除確認
+ja|MSG_DELETE_SCRIPT_CONFIRM=スクリプトを削除して終了しますか？ [Y/n]:
+en|MSG_DELETE_SCRIPT_CONFIRM=Do you want to delete the script and exit? [Y/n]:
+
+# スクリプト終了確認
+ja|MSG_EXIT_SCRIPT_CONFIRM=スクリプトを終了しますか？ [Y/n]:
+en|MSG_EXIT_SCRIPT_CONFIRM=Do you want to exit the script? [Y/n]:
+
 
 # 既存デフォ----------------------------------------------------
 
