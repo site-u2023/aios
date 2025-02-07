@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-19"
+COMMON_VERSION="2025.02.05-20"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -536,27 +536,10 @@ handle_exit() {
 # install_packages: パッケージをインストールし、言語パックも適用
 #########################################################################
 install_packages() {
-    local confirm="$1"  # yn (インストール確認)
-    shift  # 最初の引数 (`yn`) を削除
-    local package_list="$*"  # 残りの引数をスペース区切りの文字列として取得
+    local confirm_flag="$1"
+    shift
+    local package_list="$*"
 
-    # 最新の packages.db を取得
-    packages_db
-
-    local db_package_list=""
-    local db_uci_list=""
-    local db_command_list=""
-
-    # packages.db から該当パッケージの情報を取得
-    while IFS='=' read -r key value; do
-        case "$key" in
-            "packages") db_package_list="$value" ;;
-            "uci") db_uci_list="$db_uci_list\n$value" ;;
-            "command") db_command_list="$db_command_list\n$value" ;;
-        esac
-    done < "${BASE_DIR}/packages.db"
-
-    # インストール確認 (`yn` の場合のみ `confirm()` を使用)
     # `confirm()` を1回だけ実行
     if [ "$confirm_flag" = "yn" ]; then
         local package_names=$(echo "$package_list" | tr ' ' ', ')
@@ -566,31 +549,15 @@ install_packages() {
         fi
     fi
 
-    # パッケージのダウンロード (`download()` を使用)
-    if [ -n "$db_package_list" ]; then
-        for pkg in $db_package_list; do
-            download "$pkg" "${BASE_DIR}/$pkg"
-        done
+    # `ja` のインストール確認が不要な場合を修正
+    if [ "$package_list" = "ja" ]; then
+        return 0
     fi
 
     # パッケージのインストール
-    if [ -n "$db_package_list" ]; then
-        attempt_package_install $package_list
-    fi
-
-    # UCI の適用（`uci` が指定された場合）
-    if echo "$package_list" | grep -q "uci" && [ -n "$db_uci_list" ]; then
-        echo -e "$db_uci_list" | uci batch
-        uci commit
-    fi
-
-    # コマンドの実行（`ash` が指定された場合）
-    if echo "$package_list" | grep -q "ash" && [ -n "$db_command_list" ]; then
-        echo -e "$db_command_list" | while read -r cmd; do
-            eval "$cmd"
-        done
-    fi
+    attempt_package_install $package_list
 }
+
 
 #########################################################################
 # attempt_package_install: 個別パッケージのインストールおよび言語パック適用
