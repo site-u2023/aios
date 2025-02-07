@@ -1,7 +1,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-6"
+COMMON_VERSION="2025.02.05-7"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -80,6 +80,12 @@ handle_error() {
 #   download_script aios
 #   download_script openwrt.db
 #########################################################################
+#########################################################################
+# download_script: 指定されたスクリプト・データベースのバージョン確認とダウンロード
+# 使い方:
+#   download_script aios
+#   download_script openwrt.db
+#########################################################################
 download_script() {
     local file_name="$1"
     local file_ext="${file_name##*.}"
@@ -97,18 +103,19 @@ download_script() {
     # ファイルが存在しない場合はダウンロード
     if [ ! -f "$install_path" ]; then
         echo -e "$(color yellow "$(get_message 'MSG_DOWNLOADING_MISSING_FILE' "$SELECTED_LANGUAGE" | sed "s/{file}/$file_name/")")"
-        download "$file_name" "$install_path"
-        if ! wget --quiet -O "$install_path" "$remote_url"; then
-            handle_error "Failed to download: $file_name"                   ############## ---- エラー確認 --------- ################
+        if ! download "$file_name" "$install_path"; then
+            handle_error "Failed to download: $file_name"
         fi
     fi
 
     # ローカルバージョンを取得
-    local current_version
-    current_version=$(grep "^version=" "$install_path" | cut -d'=' -f2 | tr -d '"\r')
+    local current_version=""
+    if [ -f "$install_path" ]; then
+        current_version=$(grep "^version=" "$install_path" | cut -d'=' -f2 | tr -d '"\r')
+    fi
 
     # リモートバージョンを取得
-    local remote_version
+    local remote_version=""
     remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2 | tr -d '"\r')
 
     # デバッグログ
@@ -117,7 +124,9 @@ download_script() {
     # バージョンチェック: 最新があればダウンロード
     if [ -n "$remote_version" ] && [ "$current_version" != "$remote_version" ]; then
         echo -e "$(color cyan "$(get_message 'MSG_UPDATING_SCRIPT' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{old_version}/$current_version/" -e "s/{new_version}/$remote_version/")")"
-        download "$file_name" "$install_path"
+        if ! download "$file_name" "$install_path"; then
+            handle_error "Failed to download: $file_name"
+        fi
     else
         echo -e "$(color green "$(get_message 'MSG_NO_UPDATE_NEEDED' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{version}/$current_version/")")"
     fi
