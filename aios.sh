@@ -1,29 +1,49 @@
 #!/bin/sh
-# ttyd.sh (自動インストール版)
+# aios.sh (初期エントリースクリプト)
 # License: CC0
+echo aios.sh Last Update 20250207-1
 
-TTYD_SH_VERSION="2025.02.05-rc1"
-echo "ttyd.sh Last update: $TTYD_SH_VERSION"
+AIOS_VERSION="2025.02.06-rc1"
+echo "aios.sh Last update: $AIOS_VERSION"
 
 BASE_URL="https://raw.githubusercontent.com/site-u2023/aios/main"
 BASE_DIR="/tmp/aios"
 INPUT_LANG="$1"
 
 #################################
-# パッケージリスト関数
+# 簡易バージョンチェック
 #################################
-packages() {
-    echo "ttyd luci-app-ttyd"
+check_openwrt_simple() {
+    local version_file="/etc/openwrt_release"
+    local current_version
+
+    if [ ! -f "$version_file" ]; then
+        echo "Error: OpenWrt version file not found!"
+        exit 1
+    fi
+
+    current_version=$(awk -F"'" '/DISTRIB_RELEASE/ {print $2}' "$version_file" | cut -d'-' -f1)
+    
+    case "$current_version" in
+        19.07|21.02|22.03|23.05|24.10.0|SNAPSHOT)
+            echo "OpenWrt version $current_version is supported."
+            ;;
+        *)
+            echo "Error: OpenWrt version $current_version is not supported!"
+            exit 1
+            ;;
+    esac
 }
 
 #################################
 # 共通ファイルのダウンロードと読み込み
 #################################
 download_common() {
-    # common.sh が無ければ download_file() で入手
     if [ ! -f "${BASE_DIR}/common.sh" ]; then
-        # ダウンロード前の確認が不要なら第3引数は空
-        download_file "common.sh" "${BASE_DIR}/common.sh"
+        wget --quiet -O "${BASE_DIR}/common.sh" "${BASE_URL}/common.sh" || {
+            echo "Failed to download common.sh"
+            exit 1
+        }
     fi
 
     # 読み込み
@@ -33,6 +53,23 @@ download_common() {
     }
 }
 
+#################################
+# 言語設定
+#################################
+set_language() {
+    if [ -n "$INPUT_LANG" ]; then
+        SELECTED_LANGUAGE="$INPUT_LANG"
+    else
+        SELECTED_LANGUAGE="en"  # デフォルト値
+    fi
+}
+
+#################################
+# パッケージリスト関数
+#################################
+packages() {
+    echo "ttyd luci-app-ttyd"
+}
 #################################
 # インストール+設定
 #################################
@@ -79,14 +116,12 @@ EOF
 #################################
 # メイン処理
 #################################
-download_common
-
-# $1 (INPUT_LANG) が指定されていれば SELECTED_LANGUAGE を上書き
-[ -n "$INPUT_LANG" ] && SELECTED_LANGUAGE="$INPUT_LANG"
+check_openwrt_simple  # 簡易バージョンチェック
+set_language          # 言語設定
+download_common       # 共通関数読み込み
 
 check_country
 download_supported_versions
 check_openwrt
 
-# すぐにインストール + 設定を行う
 install_and_configure_ttyd
