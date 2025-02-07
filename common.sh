@@ -479,13 +479,10 @@ handle_exit() {
 #########################################################################
 # install_packages: パッケージをインストールし、言語パックも適用
 #########################################################################
-#########################################################################
-# install_packages: パッケージをインストールし、言語パックも適用
-#########################################################################
 install_packages() {
     local confirm="$1"  # yn (インストール確認)
     shift  # 最初の引数 (`yn`) を削除
-    local package_list=("$@")  # 残りの引数を配列として取得
+    local package_list="$*"  # 残りの引数をスペース区切りの文字列として取得
 
     # 最新の packages.db を取得
     packages_db
@@ -505,7 +502,7 @@ install_packages() {
 
     # インストール確認 (`yn` の場合のみ `confirm()` を使用)
     if [ "$confirm" = "yn" ]; then
-        local package_names=$(echo "${package_list[@]}" | tr ' ' ', ')
+        local package_names=$(echo "$package_list" | tr ' ' ', ')
         if ! confirm "MSG_INSTALL_PROMPT_PKG" "$package_names"; then
             echo "$(color yellow "Skipping installation of: $package_names")"
             return 1
@@ -525,13 +522,13 @@ install_packages() {
     fi
 
     # UCI の適用（`uci` が指定された場合）
-    if echo "${package_list[@]}" | grep -q "uci" && [ -n "$db_uci_list" ]; then
+    if echo "$package_list" | grep -q "uci" && [ -n "$db_uci_list" ]; then
         echo -e "$db_uci_list" | uci batch
         uci commit
     fi
 
     # コマンドの実行（`ash` が指定された場合）
-    if echo "${package_list[@]}" | grep -q "ash" && [ -n "$db_command_list" ]; then
+    if echo "$package_list" | grep -q "ash" && [ -n "$db_command_list" ]; then
         echo -e "$db_command_list" | while read -r cmd; do
             eval "$cmd"
         done
