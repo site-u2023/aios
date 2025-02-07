@@ -1,5 +1,5 @@
 # 要件定義 (AIOS - All in One Script)
-**Last update:** 2025-02-06-3
+**Last update:** 2025-02-06-4
 
 ---
 
@@ -32,14 +32,13 @@ OpenWrt 環境向けの統合管理スクリプト群。初期設定からデバ
 
 ```
 aios.sh                           ← 初回エントリーポイント
-  |── ttyd.sh                     ← コンソールUI(オプションスクリプト)
   └── aios(/usr/bin)              ← メインエントリーポイント
     ├── common.sh                 ← 共通関数
     ├── country.db                ← 国名、言語、短縮国名、ゾーンネーム、タイムゾーンデータベース
     ├── message.db                ← 多言語データベース
     ├── openwrt.db                ← OpenWrバージョンデータベース
     ├── package.db                ← パッケージデータベース   
-    ├── country.cache             ← カントリーコードキャッシュ
+    ├── country.ch                ← カントリーコードキャッシュ
     ├── openwrt.ch                ← OpenWrtバージョンキャッシュ
     ├── downloader.ch             ← ダウンローダータイプキャッシュ
     ├── script.ch                 ← スクリプトファイルバージョンキャッシュ
@@ -73,7 +72,7 @@ aios.sh                           ← 初回エントリーポイント
 # License: CC0
 # OpenWrt >= 19.07
 
-COMMON_VERSION="2025.02.05-rc1"
+COMMON_VERSION="2025.02.05"
 echo "comon Last update: $COMMON_VERSION"
 
 # 基本定数の設定
@@ -92,7 +91,7 @@ SUPPORTED_LANGUAGES="${SUPPORTED_LANGUAGES:-en}"
 # License: CC0
 # OpenWrt >= 19.07
 
-AIOS_VERSION="2025.02.05-rc1"
+AIOS_VERSION="2025.02.05"
 echo "aios Last update: $AIOS_VERSION"
 
 # BASE_WGET="wget -O"
@@ -122,10 +121,6 @@ INPUT_LANG="$1"
 - `$1` で言語をチェック。指定がない場合はデータベースからカントリーを選択、もしくはキャッシュを利用（DBから完全一致後、曖昧検索で判定）。  
 - カントリー決定後、キャッシュに保存。
 - 
-
-### **`ttyd.sh`:**  
-- `aios` をクライアントのコンソール UI として利用するオプションスクリプト。
-- YN判定でインストール可否
   
 ### **`aios` (メインスクリプト):**  
 - スクリプト群のダウンロードと実行を担当。リンクファイルはファイルバージョンチェックで常に最新をダウンロード（バージョンミスマッチでも続行）。  
@@ -171,26 +166,29 @@ INPUT_LANG="$1"
 ```
 | **関数名**         | **説明**                                                                 | **呼び出し元スクリプト**             |
 |--------------------|--------------------------------------------------------------------------|--------------------------------------|
-| **check_openwrt**  | OpenWrtのバージョンを確認し、サポートされているか検証します。            | `aios.sh` , 他全て                   |
+| **color**          | カラーコードを使用してメッセージを表示します。                           | 全スクリプト
+| **color_code_map**          | カラーコードを使用してメッセージを表示します。                  | 全スクリプト
+| **handle_error**   | エラーメッセージを表示し、スクリプトを終了します。                       | 全スクリプト                         |
+| **download_script**        | 指定されたスクリプト・データベースのバージョン確認とダウンロード                        | 全スクリプト                         |
+
+| **check_openwrt_common**  | OpenWrtのバージョンを確認し、サポートされているか検証します。            | `aios.sh` , 他全て                   |
 | **check_country**  | 指定された言語がサポートされているか確認し、デフォルト言語を設定します。 | `aios.sh` , 他全て                   |
 | **download_common**| `common.sh` をダウンロードし、読み込みます。                             | `aios.sh`, 他全て                    |
 | **download_country**| `country.sh` をダウンロードし、読み込みます。                           | `aios.sh`, `system-config.sh`        |
-| **handle_error**   | エラーメッセージを表示し、スクリプトを終了します。                       | 全スクリプト                         |
 | **handle_exit**    | 正常終了時の処理を行います。                                             | 全スクリプト                         |
-| **color**          | カラーコードを使用してメッセージを表示します。                           | 全スクリプト                         |
-| **check_openwrt_compatibility**        | バージョン互換性チェック（警告対応）                        | 全スクリプト                         |
 | **download_openwrt.db**        | バージョンデータベースのダウンロード                      | 全スクリプト                         |
-| **check_openwrt_common**        | バージョン確認とパッケージマネージャーの取得関数                      | 全スクリプト                         |
-| **check_country_common**        | 言語キャッシュの確認および設定                        | 全スクリプト                         |
+| **check_openwrt**        | バージョン確認とパッケージマネージャーの取得関数                      | 全スクリプト                         |
+| **check_country**        | 言語キャッシュの確認および設定                        | 全スクリプト                         |
 | **openwrt_db**        | バージョンデータベースのダウンロード                       | 全スクリプト                         |
 | **messages_db**        | 選択された言語のメッセージファイルをダウンロード                     | 全スクリプト                         |
 | **packages_db**        | 選択されたパッケージファイルをダウンロード                    | 全スクリプト                         |
 | **confirm**        | ファイルの存在確認と自動ダウンロード（警告対応）                        | 全スクリプト                         |
 | **download**        | ファイルの存在確認と自動ダウンロード（警告対応）                        | 全スクリプト                         |
-| **select_country_and_timezone**        | 国とタイムゾーンの選択                      | 全スクリプト                         |
-| **country_full_info**        | 選択された国と言語の詳細情報を表示                      | 全スクリプト                         |
-| **get_package_manager_and_status**        | パッケージマネージャー判定関数（apk / opkg 対応）                     | 全スクリプト                         |
+| **select_country**        | 国とタイムゾーンの選択                      | 全スクリプト                         |
+| **country_info**        | 選択された国と言語の詳細情報を表示                      | 全スクリプト                         |
+| **get_package_manager**        | パッケージマネージャー判定関数（apk / opkg 対応）                     | 全スクリプト                         |
 | **get_message**        | 多言語対応メッセージ取得関数                 | 全スクリプト                         |
+| **handle_exit**        | exit                         | 全スクリプト                         |
 | **install_packages**        | パッケージをインストールし、言語パックも適用                       | 全スクリプト                         |
 | **attempt_package_install**        | 個別パッケージのインストールおよび言語パック適用                    | 全スクリプト                         |
 | **install_language_pack**        | 言語パッケージの存在確認とインストール                 | 全スクリプト                         |
@@ -216,7 +214,7 @@ INPUT_LANG="$1"
 | **check_openwrt_local**        | 初期化処理（ローカル限定）                           | aios.sh                    |
 | **make_directory**        |                        | aios.sh                    |
 | **download_common**        |                       | aios.sh                    |
-| **check_common aios**        |                      | aios.sh                    | 
+| **check_common full**        |                      | aios.sh                    | 
 | **packages**        |                       | aios.sh                    | 
 | **download_file aios**        |                        | aios.sh                    | 
 ```
@@ -226,12 +224,7 @@ INPUT_LANG="$1"
 ```
 | **関数名**         | **説明**                                                                 | **呼び出し元スクリプト**             |
 | **aios_banner**   | 多言語対応のバナーを表示します。                                         | `aios.sh`,      |　※common.shからローカルに移行予定
-```
 
-#### ttyd.sh
-
-```
-| **関数名**         | **説明**                                                                 | **呼び出し元スクリプト**             |
 ```
 
 #### openwrt-config.sh
