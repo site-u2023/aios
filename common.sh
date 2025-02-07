@@ -455,7 +455,7 @@ install_packages() {
     local confirm="$1"  # yn (インストール確認)
     local package_name="$2"
     shift 2  # 最初の2つの引数を削除
-    local options=("$@")  # uci, ash などのオプションを配列として取得
+    local options="$@"  # uci, ash などのオプションをスペース区切りで取得
 
     # 最新の packages.db を取得
     packages_db
@@ -494,13 +494,13 @@ install_packages() {
     fi
 
     # UCI の適用（`uci` が指定された場合）
-    if [[ " ${options[@]} " =~ " uci " ]] && [ -n "$db_uci_list" ]; then
+    if echo " $options " | grep -q " uci " && [ -n "$db_uci_list" ]; then
         echo -e "$db_uci_list" | uci batch
         uci commit
     fi
 
     # コマンドの実行（`ash` が指定された場合）
-    if [[ " ${options[@]} " =~ " ash " ]] && [ -n "$db_command_list" ]; then
+    if echo " $options " | grep -q " ash " && [ -n "$db_command_list" ]; then
         echo -e "$db_command_list" | while read -r cmd; do
             eval "$cmd"
         done
