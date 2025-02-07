@@ -1,5 +1,5 @@
 # 要件定義 (AIOS - All in One Script)
-**Last update:** 2025-02-06-2
+**Last update:** 2025-02-06-3
 
 ---
 
