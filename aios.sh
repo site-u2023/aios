@@ -9,6 +9,7 @@ BASE_WGET="wget -O" # テスト用
 BASE_URL="https://raw.githubusercontent.com/site-u2023/aios/main"
 BASE_DIR="/tmp/aios"
 INPUT_LANG="$1"
+SUPPORTED_VERSIONS="19 21 22 23 24 SNAPSHOT"
 
 #########################################################################
 # delete_aios: 既存の aios 関連ファイルおよびディレクトリを削除して初期化する
@@ -76,7 +77,6 @@ packages() {
     install_packages luci-app-ttyd
 }
 
-
 #################################
 # メイン処理
 #################################
@@ -84,6 +84,6 @@ delete_aios
 check_openwrt_local
 make_directory
 download_common
-check_common aios
+check_common full
 packages
-download_file aios
+download_script aios
