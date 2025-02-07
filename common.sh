@@ -157,6 +157,33 @@ download() {
 }
 
 #########################################################################
+# openwrt_db: バージョンデータベースのダウンロード
+#########################################################################
+openwrt_db() {
+    if [ ! -f "${BASE_DIR}/openwrt.db" ]; then
+        ${BASE_WGET} "${BASE_DIR}/openwrt.db" "${BASE_URL}/openwrt.db" || handle_error "Failed to download openwrt.db"
+    fi
+}
+
+#########################################################################
+# messages_db: 選択された言語のメッセージファイルをダウンロード
+#########################################################################
+messages_db() {
+    if [ ! -f "${BASE_DIR}/messages.db" ]; then
+        ${BASE_WGET} "${BASE_DIR}/messages.db" "${BASE_URL}/messages.db" || handle_error "Failed to download messages.db"
+    fi
+}
+
+#########################################################################
+# packages_db: 選択されたパッケージファイルをダウンロード
+#########################################################################
+packages_db() {
+    if [ ! -f "${BASE_DIR}/packages.db" ]; then
+        ${BASE_WGET} "${BASE_DIR}/packages.db" "${BASE_URL}/packages.db" || handle_error "Failed to download packages.db"
+    fi
+}
+
+#########################################################################
 # print_banner: 言語に応じたバナー表示 (messages.db からメッセージ取得)
 #########################################################################
 print_banner() {
