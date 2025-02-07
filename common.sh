@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-18"
+COMMON_VERSION="2025.02.05-19"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -402,6 +402,57 @@ select_country() {
 
     echo -e "$(color green "Selected Language: $language_code")"
     confirm_settings || select_country
+}
+
+#########################################################################
+# check_openwrt: OpenWrtのバージョンを確認し、サポートされているか検証する
+#########################################################################
+check_openwrt() {
+    local supported_versions_db="${BASE_DIR}/openwrt.db"
+
+    if [ ! -f "$supported_versions_db" ]; then
+        openwrt_db || handle_error "Failed to download openwrt.db"
+    fi
+
+    CURRENT_VERSION=$(awk -F"'" '/DISTRIB_RELEASE/ {print $2}' /etc/openwrt_release | cut -d'-' -f1)
+
+    if grep -q "^$CURRENT_VERSION=" "$supported_versions_db"; then
+        local db_entry db_manager db_status
+        db_entry=$(grep "^$CURRENT_VERSION=" "$supported_versions_db" | cut -d'=' -f2)
+        db_manager=$(echo "$db_entry" | cut -d'|' -f1)  
+        db_status=$(echo "$db_entry" | cut -d'|' -f2)  
+
+        PACKAGE_MANAGER="$db_manager"
+        VERSION_STATUS="$db_status"
+
+        case "$PACKAGE_MANAGER" in
+            apk)
+                if ! command -v apk >/dev/null 2>&1; then
+                    if command -v opkg >/dev/null 2>&1; then
+                        PACKAGE_MANAGER="opkg"
+                    else
+                        handle_error "No valid package manager found. 'apk' not found, 'opkg' not found."
+                    fi
+                fi
+                ;;
+            opkg)
+                if ! command -v opkg >/dev/null 2>&1; then
+                    if command -v apk >/dev/null 2>&1; then
+                        PACKAGE_MANAGER="apk"
+                    else
+                        handle_error "No valid package manager found. 'opkg' not found, 'apk' not found."
+                    fi
+                fi
+                ;;
+            *)
+                handle_error "Unsupported package manager: $PACKAGE_MANAGER (from $supported_versions_db)"
+                ;;
+        esac
+
+        echo -e "$(color green "$(get_message 'version_supported' "$SELECTED_LANGUAGE" "$CURRENT_VERSION" "$VERSION_STATUS")")"
+    else
+        handle_error "$(get_message 'unsupported_version' "$SELECTED_LANGUAGE" "$CURRENT_VERSION")"
+    fi
 }
 
 #########################################################################
