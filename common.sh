@@ -68,9 +68,9 @@ handle_error() {
     local level="${2:-fatal}"  # デフォルトは致命的エラー
 
     if [ "$level" = "warning" ]; then
-        color yellow "$(get_message 'MSG_VERSION_MISMATCH_WARNING'): $message"
+        color yellow "$(get_message 'MSG_VERSION_MISMATCH_WARNING' "$SELECTED_LANGUAGE"): $message"
     else
-        color red "$(get_message 'MSG_ERROR_OCCURRED'): $message"
+        color red "$(get_message 'MSG_ERROR_OCCURRED' "$SELECTED_LANGUAGE"): $message"
         exit 1
     fi
 }
@@ -270,18 +270,8 @@ openwrt_db() {
 # messages_db: 選択された言語のメッセージファイルをダウンロード
 #########################################################################
 messages_db() {
-    local db_file="${BASE_DIR}/messages.db"
-    
-    if [ ! -f "$db_file" ]; then
-        ${BASE_WGET} "$db_file" "${BASE_URL}/messages.db"
-        if [ $? -ne 0 ]; then
-            handle_error "Failed to download messages.db"
-        fi
-    fi
-
-    # ダウンロードが成功してもファイルが空の場合はエラー
-    if [ ! -s "$db_file" ]; then
-        handle_error "Downloaded messages.db is empty or corrupted"
+    if [ ! -f "${BASE_DIR}/messages.db" ]; then
+        ${BASE_WGET} "${BASE_DIR}/messages.db" "${BASE_URL}/messages.db" || handle_error "Failed to download messages.db"
     fi
 }
 
@@ -428,23 +418,24 @@ get_package_manager_and_status() {
 #########################################################################
 get_message() {
     local key="$1"
-    local lang="${SELECTED_LANGUAGE:-en}"
-    local db_file="${BASE_DIR}/messages.db"
+    local lang="${SELECTED_LANGUAGE:-en}"  # デフォルトは英語
 
-    if [ ! -f "$db_file" ] || [ ! -s "$db_file" ]; then
+    # メッセージDBが存在しない場合のエラーハンドリング
+    if [ ! -f "${BASE_DIR}/messages.db" ]; then
         echo "Message database not found. Defaulting to key: $key"
         return
     fi
 
-    # メッセージ取得
-    local message=$(grep -E "^${lang}\|${key}=" "$db_file" | cut -d'=' -f2- | tr -d '\r')
+    # メッセージDBから対応メッセージを取得
+    local message=$(grep "^${lang}|${key}=" "${BASE_DIR}/messages.db" | cut -d'=' -f2-)
 
-    # もしローカル言語で見つからなければ英語をデフォルトとして検索
+    # 見つからない場合、英語のデフォルトメッセージを使用
     if [ -z "$message" ]; then
-        message=$(grep -E "^en\|${key}=" "$db_file" | cut -d'=' -f2- | tr -d '\r')
+        message=$(grep "^en|${key}=" "${BASE_DIR}/messages.db" | cut -d'=' -f2-)
     fi
 
-    [ -z "$message" ] && echo "Undefined: $key" || echo "$message"
+    # 見つからない場合はキーそのものを返す
+    [ -z "$message" ] && echo "$key" || echo "$message"
 }
 
 #########################################################################
