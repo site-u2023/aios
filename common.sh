@@ -495,7 +495,7 @@ install_packages() {
 
     # パッケージのインストール
     if [ -n "$db_package_list" ]; then
-        install_packages $db_package_list
+        attempt_package_install "$db_package_list"
     fi
 
     # UCI の適用（`uci` が指定された場合）
@@ -510,38 +510,6 @@ install_packages() {
             eval "$cmd"
         done
     fi
-
-    # 言語パッケージの適用（全パッケージ対象）
-    install_language_pack "$package_name"
-}
-
-#------------------------------------------------------------------------------------------
-XXXXX_install_packages() {
-    local packages="$*"
-    local manager="$PACKAGE_MANAGER"
-
-    echo -e "\033[1;34mInstalling packages: $packages using $manager...\033[0m"
-
-    # 最初の1回だけ update
-    if [ -z "$UPDATE_DONE" ]; then
-        case "$manager" in
-            apk)
-                apk update || handle_error "Failed to update APK."
-                ;;
-            opkg)
-                opkg update || handle_error "Failed to update OPKG."
-                ;;
-            *)
-                handle_error "Unsupported package manager detected: $manager"
-                ;;
-        esac
-        UPDATE_DONE=1
-    fi
-
-    # 各パッケージをインストール
-    for pkg in $packages; do
-        attempt_package_install "$pkg"
-    done
 }
 
 #########################################################################
@@ -549,22 +517,22 @@ XXXXX_install_packages() {
 # 引数: インストールするパッケージ名
 #########################################################################
 attempt_package_install() {
-    local pkg="$1"
+    local package_name="$1"
 
     # 既にインストール済みならスキップ
-    if $PACKAGE_MANAGER list-installed | grep -q "^$pkg "; then
-        echo -e "$(color cyan "$pkg is already installed. Skipping...")"
+    if $PACKAGE_MANAGER list-installed | grep -q "^$package_name "; then
+        echo -e "$(color cyan "$package_name is already installed. Skipping...")"
         return
     fi
 
-    if $PACKAGE_MANAGER list | grep -q "^$pkg - "; then
-        $PACKAGE_MANAGER install $pkg && echo -e "$(color green "Successfully installed: $pkg")" || \
-        echo -e "$(color yellow "Failed to install: $pkg. Continuing...")"
+    if $PACKAGE_MANAGER list | grep -q "^$package_name - "; then
+        $PACKAGE_MANAGER install $package_name && echo -e "$(color green "Successfully installed: $package_name")" || \
+        echo -e "$(color yellow "Failed to install: $package_name. Continuing...")"
 
         # 言語パッケージの自動インストール
-        install_language_pack "$pkg"
+        install_language_pack "$package_name"
     else
-        echo -e "$(color yellow "Package not found: $pkg. Skipping...")"
+        echo -e "$(color yellow "Package not found: $package_name. Skipping...")"
     fi
 }
 
