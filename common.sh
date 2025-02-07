@@ -103,7 +103,7 @@ check_common() {
     case "$mode" in
         full)
             check_country_common
-            check_version_common
+            check_openwrt_common
             download_file "openwrt.db"
             download_file "messages.db"
             check_version_compatibility
@@ -115,7 +115,7 @@ check_common() {
         *)
             # デフォルト動作
             check_country_common
-            check_version_common
+            check_openwrt_common
             ;;
     esac
 }
@@ -179,7 +179,7 @@ download_version_db() {
 #########################################################################
 # バージョン確認とパッケージマネージャーの取得関数
 #########################################################################
-check_version_common() {
+check_openwrt_common() {
     local version_file="${BASE_DIR}/check_openwrt"
     local supported_versions_db="${BASE_DIR}/openwrt.db"
 
@@ -565,5 +565,5 @@ install_language_pack() {
 #########################################################################
 download_supported_versions_db
 messages_db
-check_version_common
+check_openwrt_common
 check_country_common
