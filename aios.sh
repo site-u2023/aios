@@ -6,14 +6,24 @@ echo aios.sh Last Update 20250207-1
 AIOS_VERSION="2025.02.06-rc1"
 echo "aios.sh Last update: $AIOS_VERSION"
 
+BASE_WGET="wget -O" # テスト用
+# BASE_WGET="wget --quiet -O"
 BASE_URL="https://raw.githubusercontent.com/site-u2023/aios/main"
 BASE_DIR="/tmp/aios"
 INPUT_LANG="$1"
 
+#########################################################################
+# delete_aios: 既存の aios 関連ファイルおよびディレクトリを削除して初期化する
+#########################################################################
+delete_aios() {
+    rm -rf "${BASE_DIR}" /usr/bin/aios
+    echo "Initialized aios"
+}
+
 #################################
 # 簡易バージョンチェック
 #################################
-check_openwrt_simple() {
+check_openwrt_local() {
     local version_file="/etc/openwrt_release"
     local current_version
 
@@ -35,12 +45,19 @@ check_openwrt_simple() {
     esac
 }
 
+#########################################################################
+# make_directory: 必要なディレクトリ (BASE_DIR) を作成する
+#########################################################################
+make_directory() {
+    mkdir -p "$BASE_DIR"
+}
+
 #################################
 # 共通ファイルのダウンロードと読み込み
 #################################
 download_common() {
     if [ ! -f "${BASE_DIR}/common.sh" ]; then
-        wget --quiet -O "${BASE_DIR}/common.sh" "${BASE_URL}/common.sh" || {
+        ${BASE_WGET} "${BASE_DIR}/common.sh" "${BASE_URL}/common.sh" || {
             echo "Failed to download common.sh"
             exit 1
         }
@@ -54,17 +71,6 @@ download_common() {
 }
 
 #################################
-# 言語設定
-#################################
-set_language() {
-    if [ -n "$INPUT_LANG" ]; then
-        SELECTED_LANGUAGE="$INPUT_LANG"
-    else
-        SELECTED_LANGUAGE="en"  # デフォルト値
-    fi
-}
-
-#################################
 # パッケージリスト関数
 #################################
 packages() {
@@ -73,7 +79,7 @@ packages() {
 #################################
 # インストール+設定
 #################################
-install_and_configure_ttyd() {
+install_ttyd() {
     local pkg_list
     pkg_list="$(packages)"  # "ttyd luci-app-ttyd"
 
@@ -116,12 +122,9 @@ EOF
 #################################
 # メイン処理
 #################################
-check_openwrt_simple  # 簡易バージョンチェック
-set_language          # 言語設定
-download_common       # 共通関数読み込み
-
-check_country
-download_supported_versions
-check_openwrt
-
-install_and_configure_ttyd
+delete_aios
+check_openwrt_local
+make_directory
+install_ttyd
+check_common full
+download_file aios
