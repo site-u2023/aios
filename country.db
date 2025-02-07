@@ -1,8 +1,6 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07
-# 202502022205-1
-# country-info.sh
 #
 # このスクリプトは、統合された国・タイムゾーン情報データを出力します。
 # 各レコードは以下の形式で出力されます:
@@ -12,10 +10,9 @@
 #  - TZ_Cities: タイムゾーン都市のリスト（カンマ区切り）
 #  - TZ_Offsets: タイムゾーンオフセットのリスト（カンマ区切り）
 #
-# 特定の国を検索する場合:
-# sh country-zone.sh Japan
-# 全データを出力する場合:
-# sh country-zone.sh
+
+COUNTRY_VERSION="2025.02.06-rc1"
+echo "country.db Last update: $COUNTRY_VERSION"
 
 country_data() {
 cat << 'EOF'
