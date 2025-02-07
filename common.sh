@@ -1,8 +1,8 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_FUNCTIONS_SH_VERSION="2025.02.05-rc1"
-echo "common.sh Last update: $COMMON_FUNCTIONS_SH_VERSION"
+COMMON_VERSION="2025.02.05-rc2"
+echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
 BASE_WGET="wget --quiet -O"
