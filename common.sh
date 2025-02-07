@@ -136,7 +136,7 @@ print_banner() {
 #########################################################################
 # バージョン確認とパッケージマネージャーの取得関数
 #########################################################################
-check_openwrt_common() {
+check_openwrt() {
     local version_file="${BASE_DIR}/check_openwrt"
     local supported_versions_db="${BASE_DIR}/openwrt.db"
 
@@ -203,9 +203,9 @@ check_openwrt_common() {
 }
 
 #########################################################################
-# check_country_common: 言語キャッシュの確認および設定
+# check_country: 言語キャッシュの確認および設定
 #########################################################################
-check_country_common() {
+check_country() {
     if [ -f "${BASE_DIR}/country.ch" ]; then
         SELECTED_LANGUAGE=$(cat "${BASE_DIR}/country.ch")
     else
@@ -337,7 +337,7 @@ download() {
 #########################################################################
 # 国とタイムゾーンの選択
 #########################################################################
-select_country_and_timezone() {
+select_country() {
     local country_file="${BASE_DIR}/country-zone.sh"
 
     if [ ! -f "$country_file" ]; then
@@ -361,13 +361,13 @@ select_country_and_timezone() {
     echo "$language_code" > "${BASE_DIR}/check_country"
 
     echo -e "$(color green "Selected Language: $language_code")"
-    confirm_settings || select_country_and_timezone
+    confirm_settings || select_country
 }
 
 #########################################################################
 # 選択された国と言語の詳細情報を表示
 #########################################################################
-country_full_info() {
+country_info() {
     local country_info_file="${BASE_DIR}/country-zone.sh"
     local selected_language_code=$(cat "${BASE_DIR}/check_country")
 
@@ -381,7 +381,7 @@ country_full_info() {
 #########################################################################
 # パッケージマネージャー判定関数（apk / opkg 対応）
 #########################################################################
-get_package_manager_and_status() {
+get_package_manager() {
     if [ -f "${BASE_DIR}/downloader_cache" ]; then
         PACKAGE_MANAGER=$(cat "${BASE_DIR}/downloader_cache")
     else
@@ -549,22 +549,22 @@ check_common() {
         full)
             make_directory
             check_scripts
-            check_country_common
-            check_openwrt_common
+            check_country
+            check_openwrt
             check_openwrt_compatibility
             ;;
         light)
             make_directory
-            check_country_common
-            check_openwrt_common
+            check_country
+            check_openwrt
             ;;
         aios)
             make_directory
             confirm
             ;;
         *)
-            check_country_common
-            check_openwrt_common
+            check_country
+            check_openwrt
             ;;
     esac
 }
