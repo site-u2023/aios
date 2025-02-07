@@ -76,7 +76,7 @@ handle_error() {
 }
 
 #########################################################################
-# エラーハンドリング強化
+# load_common_functions: 共通関数のロード
 #########################################################################
 load_common_functions() {
     if [ ! -f "${BASE_DIR}/common.sh" ]; then
@@ -87,12 +87,8 @@ load_common_functions() {
         handle_error "Invalid common.sh file structure."
     fi
 
-    . "${BASE_DIR}/common.sh" || handle_error "Failed to load common.sh"
-    check_openwrt_compatibility
+    source "${BASE_DIR}/common.sh" || handle_error "Failed to load common.sh"
 }
-
-#!/bin/sh
-# common.sh (抜粋イメージ)
 
 #########################################################################
 # download: ファイルの存在確認と自動ダウンロード（警告対応）
