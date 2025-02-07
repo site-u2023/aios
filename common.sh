@@ -569,6 +569,7 @@ install_packages() {
     attempt_package_install $package_list
 }
 
+
 #########################################################################
 # attempt_package_install: 個別パッケージのインストールおよび言語パック適用
 # 引数: インストールするパッケージ名
