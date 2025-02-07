@@ -118,7 +118,7 @@ download_script() {
 #########################################################################
 # print_banner: 言語に応じたバナー表示 (messages.db からメッセージ取得)
 #########################################################################
-aios_banner() {
+print_banner() {
     local msg
     msg=$(get_message 'MSG_BANNER' "$SELECTED_LANGUAGE")
 
