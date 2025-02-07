@@ -285,16 +285,13 @@ check_openwrt() {
 #########################################################################
 # check_country: 言語キャッシュの確認および設定（country.db からデータ取得）
 #########################################################################
-#########################################################################
-# check_country: 言語キャッシュの確認および設定（country.db からデータ取得）
-#########################################################################
 check_country() {
     local country_file="${BASE_DIR}/country.db"
     local found_entries found_entry num_matches choice
 
     # 言語キャッシュが存在すれば使用
-    if [ -f "${BASE_DIR}/check_language" ]; then
-        SELECTED_LANGUAGE=$(cat "${BASE_DIR}/check_language")
+    if [ -f "${BASE_DIR}/check_country" ]; then
+        SELECTED_LANGUAGE=$(cat "${BASE_DIR}/check_country")
         return
     fi
 
@@ -353,8 +350,7 @@ check_country() {
     SELECTED_COUNTRY=$(echo "$found_entry" | awk '{print $2}')  # 国コード（例: JP）
 
     # キャッシュに保存
-    echo "$SELECTED_LANGUAGE" > "${BASE_DIR}/check_language"
-    echo "$SELECTED_COUNTRY" > "${BASE_DIR}/check_country"
+    echo "$SELECTED_LANGUAGE" > "${BASE_DIR}/check_country"
 
     echo -e "$(color green "Selected Language: $SELECTED_LANGUAGE")"
     echo -e "$(color green "Selected Country: $SELECTED_COUNTRY")"
