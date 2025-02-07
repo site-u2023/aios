@@ -1,7 +1,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-13"
+COMMON_VERSION="2025.02.05-14"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -285,44 +285,45 @@ check_openwrt() {
 #########################################################################
 # check_country: 言語キャッシュの確認および設定
 #########################################################################
+#########################################################################
+# check_country: 言語キャッシュの確認および設定
+#########################################################################
 check_country() {
     if [ -f "${BASE_DIR}/country.ch" ]; then
         SELECTED_LANGUAGE=$(cat "${BASE_DIR}/country.ch")
-    else
-        echo -e "\033[1;32mSelect your language:\033[0m"
-
-        # サポート言語リストを表示
-        i=1
-        for lang in $SUPPORTED_LANGUAGES; do
-            echo "$i) $lang"
-            i=$((i+1))
-        done
-
-        # 入力受付ループ
-        while true; do
-            read -p "Enter number or language (e.g., en, ja): " input
-
-            # 数字入力の場合
-            if echo "$input" | grep -qE '^[0-9]+$'; then
-                lang=$(echo $SUPPORTED_LANGUAGES | cut -d' ' -f$input)
-            else
-                # iconv を使わずに大文字小文字変換のみ
-                input_normalized=$(echo "$input" | tr '[:upper:]' '[:lower:]')
-                lang=$(echo "$SUPPORTED_LANGUAGES" | tr '[:upper:]' '[:lower:]' | grep -wo "$input_normalized")
-            fi
-
-            # 有効な言語かどうか確認
-            if [ -n "$lang" ]; then
-                SELECTED_LANGUAGE="$lang"
-                echo "$SELECTED_LANGUAGE" > "${BASE_DIR}/country.ch"
-                break
-            else
-                echo -e "\033[1;31mInvalid selection. Try again.\033[0m"
-            fi
-        done
+        return
     fi
 
-    echo -e "\033[1;32mLanguage supported: $SELECTED_LANGUAGE\033[0m"
+    echo -e "$(color cyan "Select your language:")"
+
+    local lang_list=($SUPPORTED_LANGUAGES)
+    local index=1
+
+    for lang in "${lang_list[@]}"; do
+        echo "$index) $lang"
+        index=$((index + 1))
+    done
+
+    while true; do
+        read -p "Enter number or language (e.g., en, ja): " lang_choice
+
+        # 数字での選択
+        if [ "$lang_choice" -ge 1 ] 2>/dev/null && [ "$lang_choice" -le "${#lang_list[@]}" ]; then
+            SELECTED_LANGUAGE="${lang_list[$((lang_choice - 1))]}"
+            break
+        fi
+
+        # 直接言語コードを入力
+        if echo "$SUPPORTED_LANGUAGES" | grep -qw "$lang_choice"; then
+            SELECTED_LANGUAGE="$lang_choice"
+            break
+        fi
+
+        echo -e "$(color red "Invalid selection. Try again.")"
+    done
+
+    echo "$SELECTED_LANGUAGE" > "${BASE_DIR}/country.ch"
+    echo -e "$(color green "Language selected: $SELECTED_LANGUAGE")"
 }
 
 #########################################################################
