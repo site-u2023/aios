@@ -16,6 +16,7 @@ ja|MSG_DOWNLOADING_MISSING_FILE={file} が見つかりません。ダウンロ�
 en|MSG_DOWNLOADING_MISSING_FILE={file} not found. Downloading now.
 
 
+
 # 追加--------------------------------------------
 # Yes/No メッセージ
 ja|y=はい
