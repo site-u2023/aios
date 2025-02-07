@@ -327,6 +327,32 @@ check_country() {
 }
 
 #########################################################################
+# normalize_language: キャッシュの言語コードがサポート対象か検証し、
+#                      サポート外の場合はデフォルト (en) に上書きする
+#########################################################################
+normalize_language() {
+    local CHECK_LANGUAGE READ_LANGUAGE
+    CHECK_LANGUAGE="${BASE_DIR}/check_country"
+    if [ -f "$CHECK_LANGUAGE" ]; then
+        READ_LANGUAGE=$(cat "$CHECK_LANGUAGE")
+    fi
+
+    SELECTED_LANGUAGE=""
+    for lang in $SUPPORTED_LANGUAGES; do
+        if [ "$READ_LANGUAGE" = "$lang" ]; then
+            SELECTED_LANGUAGE="$READ_LANGUAGE"
+            break
+        fi
+    done
+
+    if [ -z "$SELECTED_LANGUAGE" ]; then
+        SELECTED_LANGUAGE="en"
+        echo "Language not supported. Defaulting to English (en)."
+        echo "$SELECTED_LANGUAGE" > "${BASE_DIR}/check_country"
+    fi
+}
+
+#########################################################################
 # confirm: Y/N 確認関数
 # 引数1: 確認メッセージキー（多言語対応）
 # 使用例: confirm 'MSG_INSTALL_PROMPT'
