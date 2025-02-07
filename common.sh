@@ -563,6 +563,7 @@ install_packages() {
     done < "${BASE_DIR}/packages.db"
 
     # インストール確認 (`yn` の場合のみ `confirm()` を使用)
+    # `confirm()` を1回だけ実行
     if [ "$confirm" = "yn" ]; then
         local package_names=$(echo "$package_list" | tr ' ' ', ')
         if ! confirm "MSG_INSTALL_PROMPT_PKG" "$package_names"; then
@@ -580,7 +581,7 @@ install_packages() {
 
     # パッケージのインストール
     if [ -n "$db_package_list" ]; then
-        attempt_package_install $db_package_list
+        attempt_package_install $package_list
     fi
 
     # UCI の適用（`uci` が指定された場合）
