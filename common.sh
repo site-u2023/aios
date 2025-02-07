@@ -1,7 +1,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-rc7"
+COMMON_VERSION="2025.02.05-1"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -90,7 +90,7 @@ check_scripts() {
 
         # ファイルが存在しない場合はダウンロード
         if [ ! -f "$file_path" ]; then
-            [ "$disable_echo_update" -eq 0 ] && echo "$(color yellow "$(get_message 'MSG_DOWNLOADING_MISSING_FILE' "$SELECTED_LANGUAGE"): $file_name")"
+            [ "$disable_echo_update" -eq 0 ] && echo "$(color yellow "$(get_message 'MSG_DOWNLOADING_MISSING_FILE' "$SELECTED_LANGUAGE" | sed "s/{file}/$file_name/")")"
             download "$file_name" "$file_path"
             continue
         fi
@@ -106,10 +106,10 @@ check_scripts() {
 
         # バージョンチェック: 最新があればダウンロード
         if [ -n "$remote_version" ] && [ "$current_version" != "$remote_version" ]; then
-            [ "$disable_echo_update" -eq 0 ] && echo "$(color cyan "$(get_message 'MSG_UPDATING_FILE' "$SELECTED_LANGUAGE"): $file_name ($current_version → $remote_version)")"
+            [ "$disable_echo_update" -eq 0 ] && echo "$(color cyan "$(get_message 'MSG_UPDATING_SCRIPT' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{old_version}/$current_version/" -e "s/{new_version}/$remote_version/")")"
             download "$file_name" "$file_path"
         else
-            [ "$disable_echo_update" -eq 0 ] && echo "$(color green "$(get_message 'MSG_NO_UPDATE_NEEDED' "$SELECTED_LANGUAGE"): $file_name ($current_version)")"
+            [ "$disable_echo_update" -eq 0 ] && echo "$(color green "$(get_message 'MSG_NO_UPDATE_NEEDED' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{version}/$current_version/")")"
         fi
     done
 }
