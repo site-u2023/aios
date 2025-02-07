@@ -84,8 +84,8 @@ download_script() {
     local file_ext="${file_name##*.}"
     local install_path
 
-    # `aios` の場合は `/usr/bin/aios` に保存、それ以外は `/tmp/aios/`
-    if [ "$file_name" = "aios.sh" ]; then
+    # `aios` の場合は `/usr/bin/aios` に配置
+    if [ "$file_name" = "aios" ]; then
         install_path="/usr/bin/aios"
     else
         install_path="${BASE_DIR}/${file_name}"
@@ -101,11 +101,11 @@ download_script() {
 
     # ローカルバージョンを取得
     local current_version
-    current_version=$(grep "^version=" "$install_path" | cut -d'=' -f2 | tr -d '"\r")
+    current_version=$(grep "^version=" "$install_path" | cut -d'=' -f2 | tr -d '"\r')
 
     # リモートバージョンを取得
     local remote_version
-    remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2 | tr -d '"\r")
+    remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2 | tr -d '"\r')
 
     # デバッグログ
     echo -e "DEBUG: Checking version for $file_name | Local: [$current_version], Remote: [$remote_version]"
@@ -118,8 +118,8 @@ download_script() {
         echo -e "$(color green "$(get_message 'MSG_NO_UPDATE_NEEDED' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{version}/$current_version/")")"
     fi
 
-    # `aios.sh` の場合のみ実行権限を付与
-    if [ "$file_name" = "aios.sh" ]; then
+    # `aios` の場合のみ実行権限を付与
+    if [ "$file_name" = "aios" ]; then
         chmod +x /usr/bin/aios
     fi
 
