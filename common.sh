@@ -561,7 +561,6 @@ check_common() {
     local mode="$1"
     case "$mode" in
         full)
-            make_directory
             check_scripts
             check_country
             check_openwrt
@@ -571,12 +570,10 @@ check_common() {
             download_script country.db
             ;;
         light)
-            make_directory
             check_country
             check_openwrt
             ;;
         aios)
-            make_directory
             download_script aios
             confirm
             ;;
