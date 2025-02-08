@@ -2,13 +2,14 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-5"
+COMMON_VERSION="2025.02.08-6"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
 BASE_WGET="wget -O"
 # BASE_WGET="wget --quiet -O"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
+AIOS_DIR="${AIOS_DIR:-/usr/bin}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 SUPPORTED_VERSIONS="${SUPPORTED_VERSIONS:-19.07 21.02 22.03 23.05 24.10.0 SNAPSHOT}"
 SUPPORTED_LANGUAGES="${SUPPORTED_LANGUAGES:-en ja zh-cn zh-tw id ko de ru}"
@@ -101,9 +102,9 @@ download_script() {
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
 
-    # `aios` の場合は `/usr/bin/aios` に配置
+    # `aios` の場合は `/usr/bin` に配置
     if [ "$file_name" = "aios" ]; then
-        install_path="/usr/bin"
+        install_path="${AIOS_DIR}/${file_name}"
     fi
 
     # ファイルが存在しない場合はダウンロード
