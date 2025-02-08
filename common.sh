@@ -101,10 +101,10 @@ download_script() {
     local file_name="$1"
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
-
+    
     # `aios` の場合は `/usr/bin/aios` に配置
     if [ "$file_name" = "aios" ]; then
-        install_path="/usr/bin/aios"
+        install_path="${AIOS_DIR}/${file_name}"
     fi
 
     # ファイルが存在しない場合はダウンロード
@@ -115,6 +115,12 @@ download_script() {
             return 1
         fi
         echo -e "$(color green "Successfully downloaded: $file_name")"
+
+        # `aios` のみ実行権限を付与
+        if [ "$file_name" = "aios" ]; then
+            chmod +x "$install_path"
+            echo -e "$(color cyan "Applied execute permissions to: $install_path")"
+        fi
     fi
 
     # バージョン取得
