@@ -4,8 +4,8 @@
 AIOS_VERSION="2025.02.08-2"
 echo "aios.sh Last update: $AIOS_VERSION"
 
-BASE_WGET="wget -O" # テスト用
-# BASE_WGET="wget --quiet -O"
+# BASE_WGET="wget -O" # テスト用
+BASE_WGET="wget --quiet -O"
 BASE_URL="https://raw.githubusercontent.com/site-u2023/aios/main"
 BASE_DIR="/tmp/aios"
 INPUT_LANG="$1"
