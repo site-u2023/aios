@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-29"
+COMMON_VERSION="2025.02.09-30"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -288,7 +288,7 @@ select_country() {
             tolower($1) ~ tolower(query) ||
             tolower($2) ~ tolower(query) ||
             tolower($3) ~ tolower(query) ||
-            tolower($4) ~ tolower(query) {print $1, $2, $3, $4}' "$country_file")
+            tolower($4) ~ tolower(query) {print NR, $1, $2, $3, $4}' "$country_file")
 
         matches_found=$(echo "$found_entries" | wc -l)
 
@@ -296,7 +296,7 @@ select_country() {
             echo "$(color yellow "No matching country found. Please try again.")"
             continue
         elif [ "$matches_found" -eq 1 ]; then
-            selected_entry="$found_entries"
+            selected_entry=$(echo "$found_entries" | awk '{print $2, $3, $4, $5}')
             echo -e "$(color cyan "Confirm country selection: $(echo "$selected_entry" | awk '{print $1, $2, $3, $4}')? [Y/n]:")"
             read yn
             case "$yn" in
@@ -307,10 +307,8 @@ select_country() {
         else
             while true; do
                 echo "$(color yellow "Multiple matches found. Please select:")"
-                i=1
                 echo "$found_entries" | while read line; do
-                    echo "[$i] $line"
-                    i=$((i + 1))
+                    echo "$line"
                 done
                 echo "[0] Try again"
 
@@ -322,7 +320,7 @@ select_country() {
                     break
                 fi
 
-                selected_entry=$(echo "$found_entries" | awk "NR==$choice")
+                selected_entry=$(awk -v num="$choice" 'NR==num {print $1, $2, $3, $4}' "$country_file")
 
                 if [ -z "$selected_entry" ]; then
                     echo "$(color red "Invalid selection. Please choose a valid number.")"
@@ -381,10 +379,14 @@ select_country() {
         selected_timezone=$(echo "$tz_data" | awk '{print $2}')
     fi
 
+    # **正しい `country.ch` をDBから取得して記録**
+    selected_db_entry=$(grep "^$country_name" "$country_file")
+    echo "$selected_db_entry $selected_zone_name $selected_timezone" > "$country_cache"
+
+    # **表示修正**
     echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
     echo "$(color green "Language saved to language.ch: $lang_code")"
 
-    echo "$country_name $display_name $lang_code $country_code $selected_zone_name $selected_timezone" > "$country_cache"
     echo "$lang_code" > "$language_cache"
 }
 
