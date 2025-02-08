@@ -9,7 +9,7 @@ echo "common.sh Last update: $COMMON_VERSION"
 BASE_WGET="wget -O"
 # BASE_WGET="wget --quiet -O"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
-AIOS_DIR="${AIOS_DIR:-/usr/bin}"
+AIOS_DIR="/usr/bin"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 SUPPORTED_VERSIONS="${SUPPORTED_VERSIONS:-19.07 21.02 22.03 23.05 24.10.0 SNAPSHOT}"
 SUPPORTED_LANGUAGES="${SUPPORTED_LANGUAGES:-en ja zh-cn zh-tw id ko de ru}"
@@ -110,7 +110,7 @@ download_script() {
     # ファイルが存在しない場合はダウンロード
     if [ ! -f "$install_path" ]; then
         echo -e "$(color yellow "$(get_message 'MSG_DOWNLOADING_MISSING_FILE' "$SELECTED_LANGUAGE" | sed "s/{file}/$file_name/")")"
-        if ! wget --quiet -O "$install_path" "$remote_url"; then
+        if ! ${BASE_WGET} "$install_path" "$remote_url"; then
             echo -e "$(color red "Failed to download: $file_name")"
             return 1
         fi
@@ -146,7 +146,7 @@ download_script() {
     # バージョンチェック: 最新があればダウンロード
     if [ -n "$remote_version" ] && [ "$current_version" != "$remote_version" ]; then
         echo -e "$(color cyan "$(get_message 'MSG_UPDATING_SCRIPT' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{old_version}/$current_version/" -e "s/{new_version}/$remote_version/")")"
-        if ! wget --quiet -O "$install_path" "$remote_url"; then
+        if ! ${BASE_WGET} "$install_path" "$remote_url"; then
             echo -e "$(color red "Failed to download: $file_name")"
             return 1
         fi
@@ -203,7 +203,7 @@ XXXXX_messages_db() {
 messages_db() {
     if [ ! -f "${BASE_DIR}/messages.db" ]; then
         echo -e "$(color yellow "Downloading messages.db...")"
-        if ! wget --quiet -O "${BASE_DIR}/messages.db" "${BASE_URL}/messages.db"; then
+        if ! ${BASE_WGET} "${BASE_DIR}/messages.db" "${BASE_URL}/messages.db"; then
             echo -e "$(color red "Failed to download messages.db")"
             return 1  # `handle_error` を使わず `return 1` に変更
         fi
@@ -242,7 +242,7 @@ download_script() {
     fi
 
     echo "$(color yellow "Downloading latest version of $file_name")"
-    wget --quiet -O "$install_path" "$remote_url"
+    ${BASE_WGET} "$install_path" "$remote_url"
 
     local new_version=$(grep "^version=" "$install_path" | cut -d'=' -f2)
     echo "$file_name=$new_version" >> "$script_cache"
