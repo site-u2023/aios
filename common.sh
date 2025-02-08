@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-20"
+COMMON_VERSION="2025.02.08-22"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -261,7 +261,7 @@ select_country() {
     # **データベース存在確認**
     if [ ! -f "$country_file" ]; then
         echo "$(color red "Country database not found!")"
-        echo "その他 その他 en US UTC" > "$country_cache"
+        echo "Other Other en US UTC" > "$country_cache"
         return
     fi
 
@@ -277,7 +277,7 @@ select_country() {
 
         # **ユーザーが `0` (その他) を選択した場合**
         if [ "$user_input" = "0" ]; then
-            echo "その他 その他 en US UTC" > "$country_cache"
+            echo "Other Other en US UTC" > "$country_cache"
             echo "$(color yellow "No country selected. Defaulting to 'その他 (Other)' with en-US timezone.")"
             return
         fi
@@ -287,7 +287,7 @@ select_country() {
             tolower($1) == tolower(query) ||
             tolower($2) == tolower(query) ||
             tolower($3) == tolower(query) ||
-            tolower($4) == tolower(query) {print $0}' "$country_file")
+            tolower($4) == tolower(query) {print NR, $0}' "$country_file")
 
         # **曖昧検索**
         if [ -z "$found_entries" ]; then
@@ -295,20 +295,18 @@ select_country() {
                 tolower($1) ~ tolower(query) ||
                 tolower($2) ~ tolower(query) ||
                 tolower($3) ~ tolower(query) ||
-                tolower($4) ~ tolower(query) {print $0}' "$country_file")
+                tolower($4) ~ tolower(query) {print NR, $0}' "$country_file")
         fi
 
         # **複数ヒット時の選択**
         if [ "$(echo "$found_entries" | wc -l)" -gt 1 ]; then
             echo "$(color yellow "Multiple matches found. Please select:")"
-            local i=1
             echo "$found_entries" | while read -r entry; do
-                echo "[$i] $entry"
-                i=$((i+1))
+                echo "$entry"
             done
 
             read -p "Enter the number of your choice: " choice
-            selected_entry=$(echo "$found_entries" | sed -n "${choice}p")
+            selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
         else
             selected_entry="$found_entries"
         fi
@@ -319,38 +317,46 @@ select_country() {
             local display_name
             local lang_code
             local country_code
-            local timezones
+            local tz_data
+            local tz_cities
+            local tz_offsets
 
-            country_name=$(echo "$selected_entry" | awk '{print $1}')
-            display_name=$(echo "$selected_entry" | awk '{print $2}')
-            lang_code=$(echo "$selected_entry" | awk '{print $3}')
-            country_code=$(echo "$selected_entry" | awk '{print $4}')
-            timezones=$(echo "$selected_entry" | awk -F';' '{print $2}')
+            country_name=$(echo "$selected_entry" | awk '{print $2}')
+            display_name=$(echo "$selected_entry" | awk '{print $3}')
+            lang_code=$(echo "$selected_entry" | awk '{print $4}')
+            country_code=$(echo "$selected_entry" | awk '{print $5}')
+            tz_data=$(echo "$selected_entry" | awk -F';' '{print $2}')
 
             # **`messages.db` に "MSG_CONFIRM_COUNTRY" を追加**
             confirm_message=$(get_message 'MSG_CONFIRM_COUNTRY' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$country_name/" -e "s/{version}/$display_name ($lang_code, $country_code)/")
 
-            if confirm "$confirm_message"; then
-                # **タイムゾーンの選択**
-                if echo "$timezones" | grep -q ","; then
-                    echo "$(color cyan "Select a timezone for $country_name:")"
-                    local i=1
-                    echo "$timezones" | tr ',' '\n' | while read -r tz; do
-                        echo "[$i] $tz"
-                        i=$((i+1))
-                    done
-
-                    read -p "Enter the number of your choice: " tz_choice
-                    selected_timezone=$(echo "$timezones" | tr ',' '\n' | sed -n "${tz_choice}p")
-                else
-                    selected_timezone="$timezones"
-                fi
-
-                # **キャッシュに保存**
-                echo "$country_name $display_name $lang_code $country_code $selected_timezone" > "$country_cache"
-                echo "$(color green "Country and timezone set: $country_name, $selected_timezone")"
-                return
+            if ! confirm "$confirm_message"; then
+                echo "$(color yellow "Invalid selection. Please try again.")"
+                continue
             fi
+
+            # **タイムゾーンの選択**
+            if echo "$tz_data" | grep -q ","; then
+                echo "$(color cyan "Select a timezone for $country_name:")"
+                local i=1
+                tz_cities=$(echo "$tz_data" | cut -d';' -f1 | tr ',' '\n')
+                tz_offsets=$(echo "$tz_data" | cut -d';' -f2 | tr ',' '\n')
+
+                paste <(echo "$tz_cities") <(echo "$tz_offsets") | while read -r city offset; do
+                    echo "[$i] $city ($offset)"
+                    i=$((i+1))
+                done
+
+                read -p "Enter the number of your choice: " tz_choice
+                selected_timezone=$(paste <(echo "$tz_cities") <(echo "$tz_offsets") | sed -n "${tz_choice}p" | awk '{print $1}')
+            else
+                selected_timezone="$tz_data"
+            fi
+
+            # **キャッシュに保存**
+            echo "$country_name $display_name $lang_code $country_code $selected_timezone" > "$country_cache"
+            echo "$(color green "Country and timezone set: $country_name, $selected_timezone")"
+            return
         fi
 
         echo "$(color yellow "Invalid selection. Please try again.")"
