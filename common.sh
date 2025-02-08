@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-2"
+COMMON_VERSION="2025.02.09-3"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -265,6 +265,7 @@ select_country() {
     local selected_entry=""
     local selected_zone_name=""
     local selected_timezone=""
+    local matches_found=""
 
     # **データベース存在チェック**
     if [ ! -f "$country_file" ]; then
@@ -273,9 +274,9 @@ select_country() {
     fi
 
     while true; do
-        # **全リストを表示（番号なし）**
+        # **全リストを表示**
         echo "$(color cyan "Available countries:")"
-        awk '{print $1, $2, $3, $4}' "$country_file"
+        awk '{print "[" NR "]", $1, $2, $3, $4}' "$country_file"
 
         echo -e "$(color cyan "Enter country name, code, or language:")"
         read user_input
@@ -304,13 +305,12 @@ select_country() {
             tolower($3) ~ tolower(query) ||
             tolower($4) ~ tolower(query) {print $0}' "$country_file")
 
-        if [ -z "$found_entries" ]; then
+        matches_found=$(echo "$found_entries" | wc -l)
+
+        if [ "$matches_found" -eq 0 ]; then
             echo "$(color yellow "No matching country found. Please try again.")"
             continue
-        fi
-
-        # **1件だけならYN確認**
-        if [ "$(echo "$found_entries" | wc -l)" -eq 1 ]; then
+        elif [ "$matches_found" -eq 1 ]; then
             selected_entry="$found_entries"
             echo -e "$(color cyan "Confirm country selection: $(echo "$selected_entry" | awk '{print $1, $2, $3, $4}')? [Y/n]:")"
             read yn
@@ -319,28 +319,27 @@ select_country() {
                 N|n) echo "$(color yellow "Invalid selection. Please try again.")"; continue ;;
                 *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
             esac
+        else
+            echo "$(color yellow "Multiple matches found. Please select:")"
+            echo "$found_entries" | awk '{print "[" NR "]", $1, $2, $3, $4}'
+
+            echo -e "$(color cyan "Enter the number of your choice:")"
+            read choice
+            selected_entry=$(echo "$found_entries" | awk -v num="$choice" 'NR == num {print $0}')
+
+            if [ -z "$selected_entry" ]; then
+                echo "$(color red "Invalid selection. Please choose a valid number.")"
+                continue
+            fi
+
+            echo -e "$(color cyan "Confirm country selection: $(echo "$selected_entry" | awk '{print $1, $2, $3, $4}')? [Y/n]:")"
+            read yn
+            case "$yn" in
+                Y|y) break ;;
+                N|n) echo "$(color yellow "Invalid selection. Please try again.")"; continue ;;
+                *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
+            esac
         fi
-
-        # **複数ヒットした場合、選択を求める**
-        echo "$(color yellow "Multiple matches found. Please select:")"
-        echo "$found_entries" | awk '{print "[" NR "]", $1, $2, $3, $4}'
-
-        echo -e "$(color cyan "Enter the number of your choice:")"
-        read choice
-        selected_entry=$(echo "$found_entries" | awk -v num="$choice" 'NR == num {print $0}')
-
-        if [ -z "$selected_entry" ]; then
-            echo "$(color red "Invalid selection. Please choose a valid number.")"
-            continue
-        fi
-
-        echo -e "$(color cyan "Confirm country selection: $(echo "$selected_entry" | awk '{print $1, $2, $3, $4}')? [Y/n]:")"
-        read yn
-        case "$yn" in
-            Y|y) break ;;
-            N|n) echo "$(color yellow "Invalid selection. Please try again.")"; continue ;;
-            *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
-        esac
     done
 
     # **選択した国の処理**
@@ -389,6 +388,7 @@ select_country() {
     echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
     echo "$(color green "Language saved to language.ch: $lang_code")"
 }
+
 
 #########################################################################
 # normalize_country: `message.db` に対応する言語があるか確認し、セット
