@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-28"
+COMMON_VERSION="2025.02.08-29"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -248,7 +248,7 @@ download_script() {
 }
 
 #########################################################################
-# select_country: `country.db` から国・タイムゾーンを検索し、ユーザーに選択させる
+# select_country: `country.db` から国を検索し、ユーザーに選択させる
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -306,7 +306,7 @@ select_country() {
                 read -p "Enter the number of your choice: " choice
                 selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
             else
-                selected_entry="$found_entries"
+                selected_entry=$(echo "$found_entries" | sed -E 's/\[[0-9]+\] //')
             fi
         fi
 
