@@ -346,13 +346,13 @@ confirm() {
     local prompt_message
     prompt_message=$(get_message "$key" "$SELECTED_LANGUAGE")
 
+    # {pkg} の置換時にスペースが適切か確認
     if [ -n "$replace_param" ]; then
-        # {pkg} → $replace_param へ単純置換
-        prompt_message="${prompt_message//\{pkg\}/$replace_param}"
+        prompt_message=$(echo "$prompt_message" | sed "s/{pkg}/$replace_param/")
     fi
-    
-    # メッセージが取得できなければデフォルトメッセージを使用
-    [ -z "$prompt_message" ] && prompt_message="Do you want to proceed? [Y/n]:"
+
+    # デバッグ: 確認メッセージの出力
+    echo "DEBUG: Confirm message -> [$prompt_message]"
 
     while true; do
         read -p "$prompt_message " confirm
@@ -360,15 +360,15 @@ confirm() {
 
         case "$confirm" in
             [Yy]|[Yy][Ee][Ss]|はい|ハイ)
-                echo -e "$(color green "$(get_message 'MSG_SETTINGS_APPLIED' "$SELECTED_LANGUAGE")")"
+                echo "$(color green "Settings applied successfully.")"
                 return 0
                 ;;
             [Nn]|[Nn][Oo]|いいえ|イイエ)
-                echo -e "$(color yellow "$(get_message 'MSG_SETTINGS_CANCEL' "$SELECTED_LANGUAGE")")"
+                echo "$(color yellow "Settings were not applied.")"
                 return 1
                 ;;
             *)
-                echo -e "$(color red "$(get_message 'MSG_INVALID_SELECTION' "$SELECTED_LANGUAGE")")"
+                echo "$(color red "Invalid selection. Please try again.")"
                 ;;
         esac
     done
@@ -540,11 +540,13 @@ install_packages() {
     shift
     local package_list="$*"
 
-    echo "DEBUG: Calling install_packages() with confirm_flag=$confirm_flag and package_list=[$package_list]"
-
     if [ "$confirm_flag" = "yn" ] && [ -z "${CONFIRMATION_DONE:-}" ]; then
-        local package_names=$(echo "$package_list" | sed 's/  */, /g')
-        if ! confirm "MSG_INSTALL_PROMPT_PKG" "$package_names"; then
+        local formatted_package_list=$(echo "$package_list" | sed 's/  */, /g')  # 複数パッケージをカンマ区切りに整形
+
+        echo "DEBUG: Package list for confirmation -> [$formatted_package_list]"
+
+        if ! confirm "MSG_INSTALL_PROMPT_PKG" "$formatted_package_list"; then
+            echo "$(color yellow "Skipping installation of: $formatted_package_list")"
             return 1
         fi
         CONFIRMATION_DONE=1
@@ -552,7 +554,6 @@ install_packages() {
 
     for pkg in $package_list; do
         attempt_package_install "$pkg"
-        install_language_pack "$pkg"  # 言語パッケージのインストールを追加
     done
 }
 
