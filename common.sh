@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-30"
+COMMON_VERSION="2025.02.09-31"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -274,13 +274,13 @@ select_country() {
 
     while true; do
         echo "$(color cyan "Available countries:")"
-        awk '{print $1, $2, $3, $4}' "$country_file"
+        awk '{print NR, $1, $2, $3, $4}' "$country_file"
 
         echo -e "$(color cyan "Enter country name, code, or language (or press Enter to list all):")"
         read user_input
 
         if [ -z "$user_input" ]; then
-            awk '{print $1, $2, $3, $4}' "$country_file"
+            awk '{print NR, $1, $2, $3, $4}' "$country_file"
             continue
         fi
 
@@ -379,7 +379,7 @@ select_country() {
         selected_timezone=$(echo "$tz_data" | awk '{print $2}')
     fi
 
-    # **正しい `country.ch` をDBから取得して記録**
+    # **正しく `country.ch` を保存**
     selected_db_entry=$(grep "^$country_name" "$country_file")
     echo "$selected_db_entry $selected_zone_name $selected_timezone" > "$country_cache"
 
