@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-02"
+COMMON_VERSION="2025.02.08-03"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -453,7 +453,6 @@ confirm() {
         esac
     done
 }
-
 #########################################################################
 # check_country: 言語キャッシュの確認および設定
 # - `$1` (`SELECT_COUNTRY`) があればそれを優先
