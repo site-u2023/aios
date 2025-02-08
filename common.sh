@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-13"
+COMMON_VERSION="2025.02.09-14"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -388,6 +388,13 @@ select_country() {
     else
         selected_zone_name="$tz_data"
         selected_timezone="$tz_data"
+        echo -e "$(color cyan "Confirm timezone selection: $selected_zone_name ($selected_timezone)? [Y/n]:")"
+        read tz_yn
+        case "$tz_yn" in
+            Y|y) ;;
+            N|n) return ;;
+            *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
+        esac
     fi
 
     # **キャッシュへの保存**
