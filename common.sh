@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-25"
+COMMON_VERSION="2025.02.09-26"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -322,7 +322,7 @@ select_country() {
 
                 if [ "$choice" = "0" ]; then
                     echo "$(color yellow "Returning to country selection.")"
-                    break  # **リストを再表示して最初からやり直し**
+                    break
                 fi
 
                 selected_entry=$(echo "$found_entries" | awk "NR==$choice")
@@ -348,7 +348,7 @@ select_country() {
     display_name=$(echo "$selected_entry" | awk '{print $2}')
     lang_code=$(echo "$selected_entry" | awk '{print $3}')
     country_code=$(echo "$selected_entry" | awk '{print $4}')
-    tz_data=$(grep "^$country_name" "$country_file" | awk -F';' '{print $2}')
+    tz_data=$(grep "^$country_name" "$country_file" | awk -F';' '{print $1, $2}')
 
     # **ゾーンネーム＆タイムゾーン選択**
     if echo "$tz_data" | grep -q ","; then
@@ -369,20 +369,14 @@ select_country() {
                 continue
             fi
 
-            selected_timezone=$(echo "$tz_data" | tr ',' '\n' | awk "NR==$tz_choice")
-
-            if [ -z "$selected_timezone" ]; then
-                echo "$(color red "Invalid selection. Please enter a valid number.")"
-                continue
-            fi
-
+            selected_zone_name=$(echo "$tz_data" | awk -F',' -v num="$tz_choice" '{print $num}')
             break
         done
     else
-        selected_timezone="$tz_data"
+        selected_zone_name="$tz_data"
     fi
 
-    echo "$(color green "Country and timezone set: $country_name, $selected_timezone")"
+    echo "$(color green "Country and timezone set: $country_name, $selected_zone_name")"
     echo "$(color green "Language saved to language.ch: $lang_code")"
 }
 
