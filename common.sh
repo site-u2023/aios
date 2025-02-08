@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-05"
+COMMON_VERSION="2025.02.08-06"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -423,6 +423,18 @@ confirm() {
     local prompt_message
     prompt_message=$(get_message "$key" "$SELECTED_LANGUAGE")
 
+    # メッセージが見つからない場合、デフォルトメッセージを使用
+    if [ -z "$prompt_message" ]; then
+        case "$key" in
+            "MSG_INSTALL_PROMPT")
+                prompt_message="Do you want to install {pkg}? [Y/n]:"
+                ;;
+            *)
+                prompt_message="Confirm action? [Y/n]:"
+                ;;
+        esac
+    fi
+
     # {pkg}, {file}, {version} の置換処理
     if [ -n "$replace_param1" ]; then
         prompt_message=$(echo "$prompt_message" | sed "s/{pkg}/$replace_param1/g")
@@ -454,6 +466,7 @@ confirm() {
         esac
     done
 }
+
 
 #########################################################################
 # check_country: 言語キャッシュの確認および設定
@@ -627,9 +640,7 @@ install_packages() {
 
     # `yn` フラグがある場合、確認メッセージを出す（ここで1回のみ）
     if [ "$confirm_flag" = "yn" ]; then
-        local confirm_msg="Do you want to install$packages_to_install? [Y/n]:"
-        
-        if ! confirm "$confirm_msg"; then
+        if ! confirm "MSG_INSTALL_PROMPT" "$packages_to_install"; then
             echo "$(color yellow "Skipping installation of:$packages_to_install")"
             return 1
         fi
