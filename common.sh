@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08"
+COMMON_VERSION="2025.02.08-1"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -266,11 +266,12 @@ select_country() {
 
     while true; do
         # **国リスト表示**
-        echo -e "$(color cyan "Available countries:")"
+        # echo -e "$(color cyan "Available countries:")"
         awk '{print "[" NR "]", $1, $2, $3, $4}' "$country_file"
 
         # **ユーザー入力**
-        echo -e "$(color cyan "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja', '日本語'):")"
+        # echo -e "$(color cyan "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja', '日本語'):")"
+        echo -e "$(color cyan "Enter number, country name, code, or language:")"
         read -r user_input
 
         # **番号入力の処理**
@@ -402,7 +403,7 @@ normalize_country() {
 }
 
 #########################################################################
-# confirm: Y/N 確認関数
+# confirm: Y/N 確認関数 (全角Y/N対応)
 # 引数1: 確認メッセージキー（多言語対応）
 # 使用例: confirm 'MSG_INSTALL_PROMPT'
 #########################################################################
@@ -424,20 +425,20 @@ confirm() {
         read -rp "$prompt_message " confirm
 
         # **入力が空なら "Y" にする (ただし `confirm()` によって変更可能)**
-        confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')  # 小文字変換
+        confirm=$(echo "$confirm" | sed 'y/ＹＮｙｎ/YNyn/' | tr '[:upper:]' '[:lower:]')  # **全角→半角 + 小文字統一**
         confirm=${confirm:-"y"}
 
         case "$confirm" in
-            [Yy]|yes|はい|ハイ)
+            [Yy]|yes)
                 echo "$(color green "Settings applied successfully.")"
                 return 0  # **成功**
                 ;;
-            [Nn]|no|いいえ|イイエ)
+            [Nn]|no)
                 echo "$(color yellow "Settings were not applied.")"
                 return 1  # **キャンセル**
                 ;;
             *)
-                echo "$(color red "Invalid selection. Please enter Y or N.")"
+                echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
                 ;;
         esac
     done
