@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-10"
+COMMON_VERSION="2025.02.09-11"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -255,7 +255,7 @@ download_script() {
 }
 
 #########################################################################
-# select_country: 国とタイムゾーンの選択
+# select_country: 国とタイムゾーンの選択（100% ash 対応）
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -273,12 +273,15 @@ select_country() {
         return 1
     fi
 
+    # **最初にすべての国リストを表示**
+    awk '{print $1, $2, $3, $4}' "$country_file"
+
     while true; do
         echo -e "$(color cyan "Enter country name, code, or language (or press Enter to list all):")"
         read user_input
 
         if [ -z "$user_input" ]; then
-            # **Enter のみ押された場合は全リスト表示**
+            # **Enter のみ押された場合は全リスト再表示**
             awk '{print $1, $2, $3, $4}' "$country_file"
             continue
         fi
@@ -288,7 +291,7 @@ select_country() {
             tolower($1) ~ tolower(query) ||
             tolower($2) ~ tolower(query) ||
             tolower($3) ~ tolower(query) ||
-            tolower($4) ~ tolower(query) {print "[" NR "]", $1, $2, $3, $4}' "$country_file")
+            tolower($4) ~ tolower(query) {print $1, $2, $3, $4}' "$country_file")
 
         matches_found=$(echo "$found_entries" | wc -l)
 
@@ -296,7 +299,7 @@ select_country() {
             echo "$(color yellow "No matching country found. Please try again.")"
             continue
         elif [ "$matches_found" -eq 1 ]; then
-            selected_entry=$(echo "$found_entries" | sed -E 's/\[[0-9]+\] //')
+            selected_entry="$found_entries"
             echo -e "$(color cyan "Confirm country selection: $(echo "$selected_entry" | awk '{print $1, $2, $3, $4}')? [Y/n]:")"
             read yn
             case "$yn" in
@@ -306,12 +309,16 @@ select_country() {
             esac
         else
             echo "$(color yellow "Multiple matches found. Please select:")"
-            echo "$found_entries"
+            i=1
+            echo "$found_entries" | while read line; do
+                echo "[$i] $line"
+                i=$((i + 1))
+            done
 
             while true; do
                 echo -e "$(color cyan "Enter the number of your choice:")"
                 read choice
-                selected_entry=$(echo "$found_entries" | awk -v num="$choice" 'NR == num {print $0}' | sed -E 's/\[[0-9]+\] //')
+                selected_entry=$(echo "$found_entries" | awk "NR==$choice")
 
                 if [ -z "$selected_entry" ]; then
                     echo "$(color red "Invalid selection. Please choose a valid number.")"
