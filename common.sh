@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-00015"
+COMMON_VERSION="2025.02.08-00017"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -319,32 +319,30 @@ select_country() {
         # `set --` でカンマをスペースに変換し、パラメータ展開
         set -- $(echo "$tz_data" | tr ',' ' ')
         local i=1
-        local timezones=()
 
         for tz in "$@"; do
             echo "[$i] $tz"
-            timezones[$i]="$tz"
+            eval "tz_option_$i=\"$tz\""
             i=$((i+1))
         done
 
         while true; do
             echo -e "$(color cyan "Enter the number of your choice:")"
             read -r tz_choice
-            if [ "$tz_choice" -ge 1 ] && [ "$tz_choice" -le "${#timezones[@]}" ]; then
-                selected_zone_name="${timezones[$tz_choice]}"
-                selected_timezone="${timezones[$tz_choice]}"
+            eval "selected_zone_name=\$tz_option_$tz_choice"
+            eval "selected_timezone=\$tz_option_$tz_choice"
+
+            if [ -n "$selected_zone_name" ]; then
+                echo -e "$(color cyan "Confirm timezone selection: $selected_zone_name ($selected_timezone)? [Y/n]:")"
+                read -r tz_yn
+                case "$tz_yn" in
+                    [Yy]*) break ;;
+                    [Nn]*) echo "$(color yellow "Invalid selection. Please try again.")" ; continue ;;
+                    *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
+                esac
             else
                 echo "$(color red "Invalid selection. Please enter a valid number.")"
-                continue
             fi
-
-            echo -e "$(color cyan "Confirm timezone selection: $selected_zone_name ($selected_timezone)? [Y/n]:")"
-            read -r tz_yn
-            case "$tz_yn" in
-                [Yy]*) break ;;
-                [Nn]*) echo "$(color yellow "Invalid selection. Please try again.")" ; continue ;;
-                *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
-            esac
         done
     else
         selected_zone_name="$tz_data"
