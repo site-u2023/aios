@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-37"
+COMMON_VERSION="2025.02.09-38"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -384,11 +384,14 @@ select_country() {
         echo "$(color green "Selected timezone: $selected_zone_name, $selected_timezone")"
     fi
 
-    # **キャッシュへの保存**
-    echo "$country_name $display_name $lang_code $country_code $selected_zone_name $selected_timezone" > "$country_cache"
-    echo "$lang_code" > "$language_cache"
-    echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
-    echo "$(color green "Language saved to language.ch: $lang_code")"
+# **キャッシュへの保存**
+echo "$country_name $display_name $lang_code $country_code $selected_zone_name $selected_timezone" > "$country_cache"
+echo "$lang_code" > "$language_cache"
+
+# **デバッグ**
+echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
+echo "$(color green "Language saved to language.ch: $lang_code")"
+
 }
 
 
