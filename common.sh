@@ -208,102 +208,48 @@ packages_db() {
 #########################################################################
 download_script() {
     local file_name="$1"
+    local script_cache="${BASE_DIR}/script.ch"
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
 
-    if [ "$file_name" = "aios" ]; then
-        install_path="/usr/bin/aios"
-    fi
+    # キャッシュが存在する場合は利用
+    if [ -f "$script_cache" ] && grep -q "^$file_name=" "$script_cache"; then
+        local cached_version=$(grep "^$file_name=" "$script_cache" | cut -d'=' -f2)
+        local remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2)
 
-    if [ ! -f "$install_path" ]; then
-        echo -e "$(color yellow "$(get_message 'MSG_DOWNLOADING_MISSING_FILE' "$SELECTED_LANGUAGE" | sed "s/{file}/$file_name/")")"
-        if ! wget --quiet -O "$install_path" "$remote_url"; then
-            echo -e "$(color red "Failed to download: $file_name")"
-            return 1
+        if [ "$cached_version" = "$remote_version" ]; then
+            echo "$(color green "$file_name is up-to-date ($cached_version). Skipping download.")"
+            return
         fi
-        echo -e "$(color green "Successfully downloaded: $file_name")"
     fi
 
-    # バージョン取得
-    local current_version="N/A"
-    local remote_version="N/A"
+    echo "$(color yellow "Downloading latest version of $file_name")"
+    wget --quiet -O "$install_path" "$remote_url"
 
-    if test -s "$install_path"; then
-        current_version=$(grep "^version=" "$install_path" | cut -d'=' -f2 | tr -d '"\r')
-        [ -z "$current_version" ] && current_version="N/A"
-    fi
-
-    remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2 | tr -d '"\r')
-    [ -z "$remote_version" ] && remote_version="N/A"
-
-    echo -e "$(color cyan "DEBUG: Checking version for $file_name | Local: [$current_version], Remote: [$remote_version]")"
+    local new_version=$(grep "^version=" "$install_path" | cut -d'=' -f2)
+    echo "$file_name=$new_version" >> "$script_cache"
 }
 
 #########################################################################
 # check_country: 言語キャッシュの確認および設定（country.db からデータ取得）
 #########################################################################
 check_country() {
-    local country_file="${BASE_DIR}/country.db"
-    local found_entries found_entry num_matches choice
+    local country_file="${BASE_DIR}/country.ch"
 
-    if [ -f "${BASE_DIR}/check_country" ]; then
-        SELECTED_LANGUAGE=$(cat "${BASE_DIR}/check_country")
-        return
-    fi
-
-    if [ ! -f "$country_file" ]; then
-        country_db || handle_error "Failed to download country.db"
-    fi
-
-    echo -e "$(color cyan "Select your language (matching country):")"
-
-    while true; do
+    # キャッシュが存在する場合は利用
+    if [ -f "$country_file" ]; then
+        SELECTED_LANGUAGE=$(cat "$country_file")
+    else
+        echo -e "$(color cyan "Select your language (matching country):")"
         read -p "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja'): " input_lang
-        input_lang=$(echo "$input_lang" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        SELECTED_LANGUAGE=$(grep -i -w "$input_lang" "${BASE_DIR}/country.db" | awk '{print $3}')
 
-        found_entries=$(grep -i -w "$input_lang" "$country_file")
-
-        if [ -z "$found_entries" ]; then
-            found_entries=$(grep -i "$input_lang" "$country_file")
-        fi
-
-        if [ -z "$found_entries" ]; then
-            echo -e "$(color red "No matching entry found. Please try again.")"
-            continue
-        fi
-
-        num_matches=$(echo "$found_entries" | wc -l)
-        if [ "$num_matches" -eq 1 ]; then
-            found_entry="$found_entries"
+        if [ -n "$SELECTED_LANGUAGE" ]; then
+            echo "$SELECTED_LANGUAGE" > "$country_file"
         else
-            echo -e "$(color yellow "Multiple matches found. Please select:")"
-            local i=1
-            echo "$found_entries" | while IFS= read -r line; do
-                echo "[$i] $line"
-                i=$((i+1))
-            done
-            echo "[0] Re-enter language"
-
-            while true; do
-                read -p "Enter the number of your choice: " choice
-                if [ "$choice" = "0" ]; then
-                    continue 2  # `while true` を再実行
-                fi
-
-                found_entry=$(echo "$found_entries" | sed -n "${choice}p")
-                if [ -z "$found_entry" ]; then
-                    echo -e "$(color red "Invalid selection. Please try again.")"
-                    continue
-                fi
-                break
-            done
+            handle_error "Country selection failed."
         fi
-
-        break
-    done
-
-    SELECTED_LANGUAGE=$(echo "$found_entry" | awk '{print $3}')
-    echo "$SELECTED_LANGUAGE" > "${BASE_DIR}/check_country"
+    fi
 
     echo -e "$(color green "Selected Language: $SELECTED_LANGUAGE")"
 }
@@ -408,50 +354,24 @@ select_country() {
 # check_openwrt: OpenWrtのバージョンを確認し、サポートされているか検証する
 #########################################################################
 check_openwrt() {
-    local supported_versions_db="${BASE_DIR}/openwrt.db"
+    local version_file="${BASE_DIR}/openwrt.ch"
 
-    if [ ! -f "$supported_versions_db" ]; then
-        openwrt_db || handle_error "Failed to download openwrt.db"
+    # キャッシュが存在する場合は利用
+    if [ -f "$version_file" ]; then
+        CURRENT_VERSION=$(cat "$version_file")
+    else
+        CURRENT_VERSION=$(awk -F"'" '/DISTRIB_RELEASE/ {print $2}' /etc/openwrt_release | cut -d'-' -f1)
+        echo "$CURRENT_VERSION" > "$version_file"
     fi
 
-    CURRENT_VERSION=$(awk -F"'" '/DISTRIB_RELEASE/ {print $2}' /etc/openwrt_release | cut -d'-' -f1)
+    if grep -q "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db"; then
+        local db_entry=$(grep "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db" | cut -d'=' -f2)
+        PACKAGE_MANAGER=$(echo "$db_entry" | cut -d'|' -f1)
+        VERSION_STATUS=$(echo "$db_entry" | cut -d'|' -f2)
 
-    if grep -q "^$CURRENT_VERSION=" "$supported_versions_db"; then
-        local db_entry db_manager db_status
-        db_entry=$(grep "^$CURRENT_VERSION=" "$supported_versions_db" | cut -d'=' -f2)
-        db_manager=$(echo "$db_entry" | cut -d'|' -f1)  
-        db_status=$(echo "$db_entry" | cut -d'|' -f2)  
-
-        PACKAGE_MANAGER="$db_manager"
-        VERSION_STATUS="$db_status"
-
-        case "$PACKAGE_MANAGER" in
-            apk)
-                if ! command -v apk >/dev/null 2>&1; then
-                    if command -v opkg >/dev/null 2>&1; then
-                        PACKAGE_MANAGER="opkg"
-                    else
-                        handle_error "No valid package manager found. 'apk' not found, 'opkg' not found."
-                    fi
-                fi
-                ;;
-            opkg)
-                if ! command -v opkg >/dev/null 2>&1; then
-                    if command -v apk >/dev/null 2>&1; then
-                        PACKAGE_MANAGER="apk"
-                    else
-                        handle_error "No valid package manager found. 'opkg' not found, 'apk' not found."
-                    fi
-                fi
-                ;;
-            *)
-                handle_error "Unsupported package manager: $PACKAGE_MANAGER (from $supported_versions_db)"
-                ;;
-        esac
-
-        echo -e "$(color green "$(get_message 'version_supported' "$SELECTED_LANGUAGE" "$CURRENT_VERSION" "$VERSION_STATUS")")"
+        echo -e "$(color green "バージョン $CURRENT_VERSION はサポートされています ($VERSION_STATUS)")"
     else
-        handle_error "$(get_message 'unsupported_version' "$SELECTED_LANGUAGE" "$CURRENT_VERSION")"
+        handle_error "Unsupported OpenWrt version: $CURRENT_VERSION"
     fi
 }
 
@@ -539,11 +459,24 @@ install_packages() {
     local confirm_flag="$1"
     shift
     local package_list="$*"
+    local package_manager_file="${BASE_DIR}/downloader.ch"
+
+    # キャッシュが存在する場合は利用
+    if [ -f "$package_manager_file" ]; then
+        PACKAGE_MANAGER=$(cat "$package_manager_file")
+    else
+        if command -v apk >/dev/null 2>&1; then
+            PACKAGE_MANAGER="apk"
+        elif command -v opkg >/dev/null 2>&1; then
+            PACKAGE_MANAGER="opkg"
+        else
+            handle_error "No valid package manager found."
+        fi
+        echo "$PACKAGE_MANAGER" > "$package_manager_file"
+    fi
 
     if [ "$confirm_flag" = "yn" ] && [ -z "${CONFIRMATION_DONE:-}" ]; then
         local formatted_package_list=$(echo "$package_list" | sed 's/  */, /g')
-
-        echo "DEBUG: Package list for confirmation -> [$formatted_package_list]"
 
         if ! confirm "MSG_INSTALL_PROMPT_PKG" "$formatted_package_list"; then
             echo "$(color yellow "Skipping installation of: $formatted_package_list")"
@@ -553,14 +486,7 @@ install_packages() {
     fi
 
     for pkg in $package_list; do
-        # 言語コード (`ja`, `en` など) は `install_language_pack()` で処理しない
-        if echo "$pkg" | grep -qE '^(en|ja|zh-cn|zh-tw|id|ko|de|ru)$'; then
-            echo "DEBUG: Skipping package installation for language code: $pkg"
-            continue
-        fi
-
         attempt_package_install "$pkg"
-        install_language_pack "$pkg"  # 言語パックをインストール
     done
 }
 
