@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-17"
+COMMON_VERSION="2025.02.09-19"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -389,10 +389,9 @@ select_country() {
     echo "$lang_code" > "$language_cache"
 
     # **結果の表示**
-    echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
+    echo "$(color green "Country and timezone set: $country_name, $selected_zone_name ($selected_timezone)")"
     echo "$(color green "Language saved to language.ch: $lang_code")"
 }
-
 
 #########################################################################
 # normalize_country: `message.db` に対応する言語があるか確認し、セット
