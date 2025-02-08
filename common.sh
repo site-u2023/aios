@@ -266,7 +266,6 @@ select_country() {
 
     while true; do
         # **国リスト表示**
-        echo -e "$(color cyan "Available countries:")"
         awk '{print "[" NR "]", $1, $2, $3, $4}' "$country_file"
 
         # **ユーザー入力**
