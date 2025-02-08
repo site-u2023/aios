@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-0"
+COMMON_VERSION="2025.02.09-1"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -272,13 +272,20 @@ select_country() {
         return 1
     fi
 
-    # **最初に全リストを表示**
+    # **最初に全リストを表示（番号なし）**
     echo "$(color cyan "Available countries:")"
     awk '{print $1, $2, $3, $4}' "$country_file"
 
     while true; do
         echo -e "$(color cyan "Enter country name, code, or language:")"
         read user_input
+
+        # **空入力なら、全リストを再表示**
+        if [ -z "$user_input" ]; then
+            echo "$(color cyan "Available countries:")"
+            awk '{print $1, $2, $3, $4}' "$country_file"
+            continue
+        fi
 
         # **完全一致検索**
         selected_entry=$(awk -v query="$user_input" '
@@ -288,7 +295,7 @@ select_country() {
             tolower($4) == tolower(query) {print $0}' "$country_file")
 
         if [ -n "$selected_entry" ]; then
-            echo -e "$(color cyan "Confirm country selection: $selected_entry? [Y/n]:")"
+            echo -e "$(color cyan "Confirm country selection: $(echo "$selected_entry" | awk '{print $1, $2, $3, $4}')? [Y/n]:")"
             read yn
             case "$yn" in
                 Y|y) break ;;
@@ -315,17 +322,10 @@ select_country() {
             tolower($1) ~ tolower(query) ||
             tolower($2) ~ tolower(query) ||
             tolower($3) ~ tolower(query) ||
-            tolower($4) ~ tolower(query) {printf "[%d] %s\n", NR, $0}' "$country_file"
+            tolower($4) ~ tolower(query) {print $1, $2, $3, $4}' "$country_file"
 
-        echo -e "$(color cyan "Enter the number of your choice:")"
-        read choice
-
-        # **番号チェック**
-        selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
-        if [ -z "$selected_entry" ]; then
-            echo "$(color red "Invalid selection. Please choose a valid number.")"
-            continue
-        fi
+        echo -e "$(color cyan "Enter the country name again to refine search:")"
+        read user_input
     done
 
     # **選択した国の処理**
@@ -374,7 +374,6 @@ select_country() {
     echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
     echo "$(color green "Language saved to language.ch: $lang_code")"
 }
-
 
 #########################################################################
 # normalize_country: `message.db` に対応する言語があるか確認し、セット
