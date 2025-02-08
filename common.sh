@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-18"
+COMMON_VERSION="2025.02.08-19"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -249,9 +249,6 @@ download_script() {
 
 #########################################################################
 # select_country: `country.db` から国・タイムゾーンを検索し、Y/N 判定
-# - **データベース形式を簡略化**
-# - **ユーザーが `ja` や `Japan` を入力すると検索**
-# - **リスト形式で `[1] Japan 日本語 ja JP` で出力**
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -261,14 +258,14 @@ select_country() {
     local selected_entry=""
     local selected_timezone=""
 
-    # **`country.db` の存在チェック**
+    # **データベース存在確認**
     if [ ! -f "$country_file" ]; then
         echo "$(color red "Country database not found!")"
         echo "Unknown Unknown en XX UTC" > "$country_cache"
         return
     fi
 
-    # **`awk` でスクリプトの行を除外し、データ部分のみを取得**
+    # **国リスト表示**
     echo -e "$(color cyan "Available countries:")"
     awk 'NF >= 5 {print "[" NR "]", $1, $2, $3, $4}' "$country_file"
 
@@ -276,9 +273,10 @@ select_country() {
     echo -e "$(color cyan "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja', '日本語'):")"
     read -r user_input
 
-    # **完全一致検索**
+    # **完全一致検索 (国名 / 言語 / コード)**
     found_entries=$(awk -v query="$user_input" '
         tolower($1) == tolower(query) ||
+        tolower($2) == tolower(query) ||
         tolower($3) == tolower(query) ||
         tolower($4) == tolower(query) {print $0}' "$country_file")
 
@@ -286,6 +284,7 @@ select_country() {
     if [ -z "$found_entries" ]; then
         found_entries=$(awk -v query="$user_input" '
             tolower($1) ~ tolower(query) ||
+            tolower($2) ~ tolower(query) ||
             tolower($3) ~ tolower(query) ||
             tolower($4) ~ tolower(query) {print $0}' "$country_file")
     fi
@@ -319,8 +318,11 @@ select_country() {
         country_code=$(echo "$selected_entry" | awk '{print $4}')
         timezones=$(echo "$selected_entry" | awk -F';' '{print $2}')
 
-        if confirm "$(get_message 'MSG_CONFIRM_COUNTRY' | sed -e "s/{file}/$country_name/" -e "s/{version}/$display_name ($lang_code, $country_code)/")"; then
-            # **複数のタイムゾーンがある場合**
+        # **`messages.db` に "MSG_CONFIRM_COUNTRY" を追加**
+        confirm_message=$(get_message 'MSG_CONFIRM_COUNTRY' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$country_name/" -e "s/{version}/$display_name ($lang_code, $country_code)/")
+
+        if confirm "$confirm_message"; then
+            # **タイムゾーンの選択**
             if echo "$timezones" | grep -q ","; then
                 echo "$(color cyan "Select a timezone for $country_name:")"
                 local i=1
