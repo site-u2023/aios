@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-7"
+COMMON_VERSION="2025.02.09-8"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -281,6 +281,12 @@ select_country() {
         echo -e "$(color cyan "Enter country name, code, or language (or press Enter to list all):")"
         read user_input
 
+        if [ -z "$user_input" ]; then
+            # **Enter のみ押された場合は全リスト表示**
+            awk '{print "[" NR "]", $1, $2, $3, $4}' "$country_file"
+            continue
+        fi
+
         # **完全一致検索**
         selected_entry=$(awk -v query="$user_input" '
             tolower($1) == tolower(query) ||
@@ -292,27 +298,6 @@ select_country() {
 
         if [ "$matches_found" -eq 1 ]; then
             # **完全一致が1件のみの場合**
-            echo -e "$(color cyan "Confirm country selection: $(echo "$selected_entry" | awk '{print $1, $2, $3, $4}')? [Y/n]:")"
-            read yn
-            case "$yn" in
-                Y|y) break ;;
-                N|n) echo "$(color yellow "Invalid selection. Please try again.")"; continue ;;
-                *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
-            esac
-        elif [ "$matches_found" -gt 1 ]; then
-            # **完全一致が複数あれば、番号で選択**
-            echo "$(color yellow "Multiple matches found. Please select:")"
-            echo "$selected_entry" | awk '{print "[" NR "]", $1, $2, $3, $4}'
-
-            echo -e "$(color cyan "Enter the number of your choice:")"
-            read choice
-            selected_entry=$(echo "$selected_entry" | awk -v num="$choice" 'NR == num {print $0}')
-
-            if [ -z "$selected_entry" ]; then
-                echo "$(color red "Invalid selection. Please choose a valid number.")"
-                continue
-            fi
-
             echo -e "$(color cyan "Confirm country selection: $(echo "$selected_entry" | awk '{print $1, $2, $3, $4}')? [Y/n]:")"
             read yn
             case "$yn" in
