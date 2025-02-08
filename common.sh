@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-07"
+COMMON_VERSION="2025.02.08-08"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -467,7 +467,6 @@ confirm() {
     done
 }
 
-
 #########################################################################
 # check_country: 言語キャッシュの確認および設定
 # - `$1` (`SELECT_COUNTRY`) があればそれを優先
@@ -479,7 +478,7 @@ confirm() {
 check_country() {
     local country_file="${BASE_DIR}/country.db"
 
-    # キャッシュがあれば読み込む
+    # `country.ch` のキャッシュがあれば利用
     if [ -f "${BASE_DIR}/country.ch" ]; then
         SELECTED_LANGUAGE=$(cat "${BASE_DIR}/country.ch")
         echo "Using cached country: $SELECTED_LANGUAGE"
@@ -750,13 +749,6 @@ check_common() {
     local INPUT_LANG=""
     local SELECT_COUNTRY=""
 
-    # キャッシュファイルの読み込み
-    if [ -f "${BASE_DIR}/country.ch" ]; then
-        SELECTED_LANGUAGE=$(cat "${BASE_DIR}/country.ch")
-    else
-        check_country  # 言語選択
-    fi
-    
     # 引数解析
     for arg in "$@"; do
         case "$arg" in
@@ -783,23 +775,27 @@ check_common() {
         exit 0
     fi
 
+    # 言語のキャッシュチェック
+    if [ -f "${BASE_DIR}/country.ch" ]; then
+        SELECTED_LANGUAGE=$(cat "${BASE_DIR}/country.ch")
+    else
+        check_country "$INPUT_LANG"
+    fi
+
     case "$mode" in
         full)
             download_script messages.db
             download_script country.db
             download_script openwrt.db
             check_openwrt
-            check_country "$INPUT_LANG"
-            normalize_country  
+            normalize_country  # 言語を正規化
             ;;
         light)
             check_openwrt
-            check_country "$INPUT_LANG"
             normalize_country  
             ;;
         *)
             check_openwrt
-            check_country "$INPUT_LANG"
             normalize_country  
             ;;
     esac
