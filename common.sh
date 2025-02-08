@@ -636,16 +636,17 @@ check_common() {
             download_script messages.db
             download_script country.db
             download_script openwrt.db
-            normalize_country  
-            check_openwrt  
+            check_openwrt
+            check_country 
+    
             ;;
         light)
-            normalize_country
             check_openwrt
+            check_country 
             ;;
         *)
-            normalize_country
             check_openwrt
+            check_country 
             ;;
     esac
 }
