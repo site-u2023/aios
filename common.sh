@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-06"
+COMMON_VERSION="2025.02.08-07"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -477,22 +477,45 @@ confirm() {
 # - すべて失敗したら `en` をセット
 #########################################################################
 check_country() {
-    local SELECT_COUNTRY="$1"
-    local country_file="${BASE_DIR}/country.ch"
+    local country_file="${BASE_DIR}/country.db"
 
-    if [ -n "$SELECT_COUNTRY" ]; then
-        echo "$SELECT_COUNTRY" > "$country_file"
-        echo "$(color green "Language set to: $SELECT_COUNTRY")"
+    # キャッシュがあれば読み込む
+    if [ -f "${BASE_DIR}/country.ch" ]; then
+        SELECTED_LANGUAGE=$(cat "${BASE_DIR}/country.ch")
+        echo "Using cached country: $SELECTED_LANGUAGE"
         return
     fi
 
-    if [ -f "$country_file" ]; then
-        SELECT_COUNTRY=$(cat "$country_file")
-        echo "$(color green "Using cached country: $SELECT_COUNTRY")"
-        return
+    # country.db がない場合はダウンロード
+    if [ ! -f "$country_file" ]; then
+        download_script "country.db"
     fi
 
-    select_country
+    # ユーザーに国を選択させる
+    echo -e "$(color cyan "Available countries:")"
+    awk '{print "["NR"] "$0}' "$country_file"
+
+    while true; do
+        read -p "Enter number, country name, code, or language: " input_lang
+        input_lang=$(echo "$input_lang" | tr -d '[:space:]')  # 空白削除
+
+        # 数字入力の場合
+        if echo "$input_lang" | grep -qE '^[0-9]+$'; then
+            SELECTED_LANGUAGE=$(awk -v num="$input_lang" 'NR == num {print $3}' "$country_file")
+        else
+            SELECTED_LANGUAGE=$(awk -v lang="$input_lang" '$1 == lang || $2 == lang || $3 == lang || $4 == lang {print $3}' "$country_file")
+        fi
+
+        if [ -n "$SELECTED_LANGUAGE" ]; then
+            if confirm "MSG_CONFIRM_COUNTRY" "$SELECTED_LANGUAGE"; then
+                echo "$SELECTED_LANGUAGE" > "${BASE_DIR}/country.ch"
+                echo "Country and timezone set: $SELECTED_LANGUAGE"
+                break
+            fi
+        else
+            echo -e "$(color red "No matching country found. Please try again.")"
+        fi
+    done
 }
 
 #########################################################################
@@ -727,6 +750,13 @@ check_common() {
     local INPUT_LANG=""
     local SELECT_COUNTRY=""
 
+    # キャッシュファイルの読み込み
+    if [ -f "${BASE_DIR}/country.ch" ]; then
+        SELECTED_LANGUAGE=$(cat "${BASE_DIR}/country.ch")
+    else
+        check_country  # 言語選択
+    fi
+    
     # 引数解析
     for arg in "$@"; do
         case "$arg" in
