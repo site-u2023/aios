@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-00025"
+COMMON_VERSION="2025.02.08-00026"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -255,7 +255,7 @@ download_script() {
 }
 
 #########################################################################
-# select_country: 国とタイムゾーンの選択
+# select_country: 国とタイムゾーンの選択（完全新設）
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -271,7 +271,7 @@ select_country() {
         return
     fi
 
-    # **最初にリスト表示**
+    # **国リストの表示**
     echo "$(color cyan "Available countries:")"
     awk '{print $1, $2, $3, $4}' "$country_file"
 
@@ -279,24 +279,18 @@ select_country() {
         echo -e "$(color cyan "Enter country name, code, or language (or press Enter to list all):")"
         read user_input
 
-        # **最初の入力では番号入力を許可しない**
-        if echo "$user_input" | grep -qE '^[0-9]+$'; then
-            echo "$(color red "Invalid input. Please enter a country name, code, or language.")"
-            continue
-        fi
-
         # **完全一致検索**
-        found_entries=$(awk -v query="$user_input" '
+        selected_entry=$(awk -v query="$user_input" '
             tolower($1) == tolower(query) ||
             tolower($2) == tolower(query) ||
             tolower($3) == tolower(query) ||
             tolower($4) == tolower(query) {print $1, $2, $3, $4}' "$country_file")
 
-        if [ -n "$found_entries" ]; then
-            echo -e "$(color cyan "Confirm country selection: $found_entries? [Y/n]:")"
+        if [ -n "$selected_entry" ]; then
+            echo -e "$(color cyan "Confirm country selection: $selected_entry? [Y/n]:")"
             read yn
             case "$yn" in
-                Y|y) selected_entry="$found_entries"; break ;;
+                Y|y) break ;;
                 N|n) echo "$(color yellow "Invalid selection. Please try again.")"; continue ;;
                 *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
             esac
@@ -322,7 +316,7 @@ select_country() {
         # **番号チェック**
         MAX_CHOICE=$(echo "$found_entries" | wc -l)
         if echo "$choice" | grep -qE '^[0-9]+$' && [ "$choice" -ge 1 ] && [ "$choice" -le "$MAX_CHOICE" ]; then
-            selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
+            selected_entry=$(awk -v num="$choice" 'NR == num {print $1, $2, $3, $4}' "$country_file")
         else
             echo "$(color red "Invalid selection. Please choose a number from the displayed list.")"
             continue
@@ -334,7 +328,7 @@ select_country() {
     display_name=$(echo "$selected_entry" | awk '{print $2}')
     lang_code=$(echo "$selected_entry" | awk '{print $3}')
     country_code=$(echo "$selected_entry" | awk '{print $4}')
-    tz_data=$(echo "$selected_entry" | awk -F';' '{print $2}')
+    tz_data=$(grep "^$country_name " "$country_file" | awk -F';' '{print $2}')
 
     # **ゾーンネーム＆タイムゾーン選択**
     if echo "$tz_data" | grep -q ","; then
