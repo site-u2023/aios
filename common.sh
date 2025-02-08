@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-08"
+COMMON_VERSION="2025.02.08-09-000"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -101,7 +101,7 @@ download_script() {
     local file_name="$1"
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
-    
+
     # `aios` の場合は `/usr/bin/aios` に配置
     if [ "$file_name" = "aios" ]; then
         install_path="${AIOS_DIR}/${file_name}"
@@ -109,8 +109,8 @@ download_script() {
 
     # ファイルが存在しない場合はダウンロード
     if [ ! -f "$install_path" ]; then
-        echo -e "$(color yellow "$(get_message 'MSG_DOWNLOADING_MISSING_FILE' "$SELECTED_LANGUAGE" | sed "s/{file}/$file_name/")")"
-        if ! wget --quiet -O "$install_path" "$remote_url"; then
+        echo -e "$(color yellow "Downloading missing file: $file_name...")"
+        if ! ${BASE_WGET} "$install_path" "$remote_url"; then
             echo -e "$(color red "Failed to download: $file_name")"
             return 1
         fi
@@ -125,38 +125,32 @@ download_script() {
 
     # バージョン取得
     local current_version="N/A"
-    local remote_version="N/A"
-
-    if test -s "$install_path"; then
+    if [ -s "$install_path" ]; then
         current_version=$(grep "^version=" "$install_path" | cut -d'=' -f2 | tr -d '"\r')
         [ -z "$current_version" ] && current_version="N/A"
     fi
-    
-    # ローカルバージョンを取得
-    local current_version=""
-    if [ -f "$install_path" ]; then
-        current_version=$(grep "^version=" "$install_path" | cut -d'=' -f2 | tr -d '"\r')
-    fi
 
     # リモートバージョンを取得
-    local remote_version=""
-    remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2 | tr -d '"\r')
-
-    # 空のバージョン情報が表示されるのを防ぐ
-    if [ -z "$current_version" ]; then current_version="N/A"; fi
-    if [ -z "$remote_version" ]; then remote_version="N/A"; fi
+    local remote_version="N/A"
+    remote_version=$(wget -qO- "$remote_url" | grep "^version=" | cut -d'=' -f2 | tr -d '"\r') || remote_version="N/A"
 
     # デバッグログ
     echo -e "$(color cyan "DEBUG: Checking version for $file_name | Local: [$current_version], Remote: [$remote_version]")"
 
     # バージョンチェック: 最新があればダウンロード
-    if [ -n "$remote_version" ] && [ "$current_version" != "$remote_version" ]; then
+    if [ "$remote_version" != "N/A" ] && [ "$current_version" != "$remote_version" ]; then
         echo -e "$(color cyan "$(get_message 'MSG_UPDATING_SCRIPT' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{old_version}/$current_version/" -e "s/{new_version}/$remote_version/")")"
-        if ! wget --quiet -O "$install_path" "$remote_url"; then
+        if ! ${BASE_WGET} "$install_path" "$remote_url"; then
             echo -e "$(color red "Failed to download: $file_name")"
             return 1
         fi
-        echo -e "$(color green "Successfully downloaded: $file_name")"
+        echo -e "$(color green "Successfully updated: $file_name")"
+
+        # `aios` のみ再度実行権限を付与
+        if [ "$file_name" = "aios" ]; then
+            chmod +x "$install_path"
+            echo -e "$(color cyan "Re-applied execute permissions to: $install_path")"
+        fi
     else
         echo -e "$(color green "$(get_message 'MSG_NO_UPDATE_NEEDED' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{version}/$current_version/")")"
     fi
@@ -273,11 +267,9 @@ select_country() {
 
     while true; do
         # **国リスト表示**
-        # echo -e "$(color cyan "Available countries:")"
         awk '{print "[" NR "]", $1, $2, $3, $4}' "$country_file"
 
         # **ユーザー入力**
-        # echo -e "$(color cyan "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja', '日本語'):")"
         echo -e "$(color cyan "Enter number, country name, code, or language:")"
         read -r user_input
 
@@ -325,8 +317,6 @@ select_country() {
             local lang_code
             local country_code
             local tz_data
-            local tz_cities
-            local tz_offsets
 
             country_name=$(echo "$selected_entry" | awk '{print $1}')
             display_name=$(echo "$selected_entry" | awk '{print $2}')
@@ -337,21 +327,10 @@ select_country() {
             confirm_message=$(get_message 'MSG_CONFIRM_COUNTRY' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$country_name/" -e "s/{version}/$display_name ($lang_code, $country_code)/")
 
             # **YN確認の修正**
-            while true; do
-                read -p "$confirm_message " yn
-                case "$yn" in
-                    [Yy]*)
-                        break 2  # **確定**
-                        ;;
-                    [Nn]*)
-                        echo "$(color yellow "Invalid selection. Please try again.")"
-                        continue 2  # **ループに戻る**
-                        ;;
-                    *)
-                        echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
-                        ;;
-                esac
-            done
+            if ! confirm "$confirm_message"; then
+                echo "$(color yellow "Invalid selection. Please try again.")"
+                continue
+            fi
 
             # **タイムゾーンの選択**
             if echo "$tz_data" | grep -q ","; then
@@ -629,24 +608,15 @@ install_packages() {
     local confirm_flag="$1"
     shift  # 最初の引数 (`yn` など) を削除
     local package_list="$@"  # 残りの引数を取得
-
     local packages_to_install=""
     local installed_packages=""
 
     # インストール済みのパッケージをチェック
     for pkg in $package_list; do
-        if command -v apk >/dev/null 2>&1; then
-            if apk list-installed | grep -q "^$pkg "; then
-                installed_packages="$installed_packages $pkg"
-            else
-                packages_to_install="$packages_to_install $pkg"
-            fi
-        elif command -v opkg >/dev/null 2>&1; then
-            if opkg list-installed | grep -q "^$pkg "; then
-                installed_packages="$installed_packages $pkg"
-            else
-                packages_to_install="$packages_to_install $pkg"
-            fi
+        if is_package_installed "$pkg"; then
+            installed_packages="$installed_packages $pkg"
+        else
+            packages_to_install="$packages_to_install $pkg"
         fi
     done
 
@@ -669,14 +639,42 @@ install_packages() {
     fi
 
     # 必要なパッケージをインストール
-    if command -v apk >/dev/null 2>&1; then
-        apk add $packages_to_install
-    elif command -v opkg >/dev/null 2>&1; then
-        opkg install $packages_to_install
-    fi
+    install_package_list "$packages_to_install"
 
     echo "$(color green "Installed:$packages_to_install")"
     return 0
+}
+
+#########################################################################
+# is_package_installed: パッケージがインストール済みか確認
+# 引数: パッケージ名
+# 戻り値: 0 (インストール済み), 1 (未インストール)
+#########################################################################
+is_package_installed() {
+    local pkg="$1"
+    if command -v apk >/dev/null 2>&1; then
+        apk list-installed | grep -q "^$pkg "
+    elif command -v opkg >/dev/null 2>&1; then
+        opkg list-installed | grep -q "^$pkg "
+    else
+        return 1  # パッケージマネージャが見つからない場合は未インストール扱い
+    fi
+}
+
+#########################################################################
+# install_package_list: 必要なパッケージをインストール
+# 引数: インストールするパッケージリスト
+#########################################################################
+install_package_list() {
+    local packages="$@"
+    if command -v apk >/dev/null 2>&1; then
+        apk add $packages
+    elif command -v opkg >/dev/null 2>&1; then
+        opkg install $packages
+    else
+        echo "$(color red "No package manager found.")"
+        return 1
+    fi
 }
 
 #########################################################################
@@ -737,7 +735,7 @@ install_language_pack() {
 # check_common: 初期化処理
 # - `--reset`, `-reset`, `-r` でキャッシュリセット
 # - `--help`, `-help`, `-h` でヘルプ表示
-# - 言語 (`INPUT_LANG`) を `SELECT_COUNTRY` に渡す
+# - 言語 (`INPUT_LANG`) を `SELECTED_LANGUAGE` に渡す
 # - `full` (通常モード), `light` (最低限モード) の選択
 #########################################################################
 check_common() {
@@ -747,7 +745,7 @@ check_common() {
     local RESET_CACHE=false
     local SHOW_HELP=false
     local INPUT_LANG=""
-    local SELECT_COUNTRY=""
+    local SELECTED_COUNTRY=""
 
     # 引数解析
     for arg in "$@"; do
@@ -780,6 +778,7 @@ check_common() {
         SELECTED_LANGUAGE=$(cat "${BASE_DIR}/country.ch")
     else
         check_country "$INPUT_LANG"
+        normalize_country  # 言語を正規化
     fi
 
     case "$mode" in
@@ -788,15 +787,12 @@ check_common() {
             download_script country.db
             download_script openwrt.db
             check_openwrt
-            normalize_country  # 言語を正規化
             ;;
         light)
             check_openwrt
-            normalize_country  
             ;;
         *)
             check_openwrt
-            normalize_country  
             ;;
     esac
 }
