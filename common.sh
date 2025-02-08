@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-00018"
+COMMON_VERSION="2025.02.08-00019"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -353,13 +353,17 @@ XXXXX_select_country() {
     echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
 }
 
+#########################################################################
+# select_country: 国とタイムゾーンの選択
+#########################################################################
 select_country() {
-    country_file="${BASE_DIR}/country.db"
-    country_cache="${BASE_DIR}/country.ch"
-    user_input=""
-    selected_entry=""
-    selected_zone_name=""
-    selected_timezone=""
+    local country_file="${BASE_DIR}/country.db"
+    local country_cache="${BASE_DIR}/country.ch"
+    local language_cache="${BASE_DIR}/language.ch"
+    local user_input=""
+    local selected_entry=""
+    local selected_zone_name=""
+    local selected_timezone=""
 
     if [ ! -f "$country_file" ]; then
         echo "$(color red "Country database not found!")"
@@ -367,20 +371,15 @@ select_country() {
     fi
 
     while true; do
-        awk '{print "[" NR "]", $1, $2, $3, $4}' "$country_file"
         echo -e "$(color cyan "Enter number, country name, code, or language:")"
         read user_input
 
-        # 番号入力の処理
+        # **番号で選択**
         if echo "$user_input" | grep -qE '^[0-9]+$'; then
             selected_entry=$(awk -v num="$user_input" 'NR == num {print $0}' "$country_file")
         else
             while true; do
-                found_entries=$(grep -i "^$user_input" "$country_file" | awk '{print "[" NR "]", $1, $2, $3, $4}')
-
-                if [ -z "$found_entries" ]; then
-                    found_entries=$(grep -i "$user_input" "$country_file" | awk '{print "[" NR "]", $1, $2, $3, $4}')
-                fi
+                found_entries=$(grep -i "$user_input" "$country_file" | awk '{print "[" NR "]", $1, $2, $3, $4}')
 
                 if [ -z "$found_entries" ]; then
                     echo "$(color yellow "No matching country found. Please try again.")"
@@ -388,24 +387,24 @@ select_country() {
                     continue
                 fi
 
+                # 絞り込み後の選択リスト
+                echo "$found_entries"
                 MIN_CHOICE=1
                 MAX_CHOICE=$(echo "$found_entries" | wc -l)
 
                 if [ "$MAX_CHOICE" -gt 1 ]; then
-                    echo "$(color yellow "Multiple matches found. Please select or enter another search term:")"
-                    echo "$found_entries"
-                    read -p "Enter the number of your choice or refine search: " choice
+                    echo -e "$(color cyan "Enter the number of your choice or refine search:")"
+                    read -r choice
 
-                    # **番号が表示されたリスト内であることを確認**
                     if echo "$choice" | grep -qE '^[0-9]+$' && [ "$choice" -ge "$MIN_CHOICE" ] && [ "$choice" -le "$MAX_CHOICE" ]; then
-                        selected_entry=$(echo "$found_entries" | awk -v num="$choice" 'NR == num {print $0}')
+                        selected_entry=$(echo "$found_entries" | awk -v num="$choice" 'NR == num {print $2, $3, $4, $5}')
                         break
                     else
                         echo "$(color red "Invalid selection. Please choose a number from the displayed list.")"
                         continue
                     fi
                 else
-                    selected_entry=$(echo "$found_entries")
+                    selected_entry=$(echo "$found_entries" | awk '{print $2, $3, $4, $5}')
                     break
                 fi
             done
@@ -428,7 +427,7 @@ select_country() {
         fi
     done
 
-    # タイムゾーン選択処理
+    # **ゾーンネーム＆タイムゾーン選択**
     if echo "$tz_data" | grep -q ","; then
         echo "$(color cyan "Select a timezone for $country_name:")"
         set -- $(echo "$tz_data" | tr ',' ' ')
@@ -462,8 +461,11 @@ select_country() {
         selected_timezone="$tz_data"
     fi
 
+    # **キャッシュへの保存**
     echo "$country_name $display_name $lang_code $country_code $selected_zone_name $selected_timezone" > "$country_cache"
+    echo "$lang_code" > "$language_cache"
     echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
+    echo "$(color green "Language saved to language.ch: $lang_code")"
 }
 
 #########################################################################
