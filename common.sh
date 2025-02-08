@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-16"
+COMMON_VERSION="2025.02.09-17"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -281,6 +281,7 @@ select_country() {
         read user_input
 
         if [ -z "$user_input" ]; then
+            # **Enter のみ押された場合は全リスト再表示**
             awk '{print $1, $2, $3, $4}' "$country_file"
             continue
         fi
@@ -321,7 +322,7 @@ select_country() {
 
                 if [ "$choice" = "0" ]; then
                     echo "$(color yellow "Returning to country selection.")"
-                    break  
+                    break  # **リストを再表示して最初からやり直し**
                 fi
 
                 selected_entry=$(echo "$found_entries" | awk "NR==$choice")
@@ -365,7 +366,7 @@ select_country() {
 
             if [ "$tz_choice" = "0" ]; then
                 echo "$(color yellow "Returning to timezone selection.")"
-                continue  
+                continue  # **リストを再表示して最初からやり直し**
             fi
 
             selected_zone_name=$(echo "$tz_data" | tr ',' '\n' | awk "NR==$tz_choice")
@@ -376,7 +377,7 @@ select_country() {
                 continue
             fi
 
-            break  
+            break
         done
     else
         selected_zone_name="$tz_data"
@@ -386,9 +387,12 @@ select_country() {
     # **キャッシュへの保存**
     grep -i "^$country_name" "$country_file" > "$country_cache"
     echo "$lang_code" > "$language_cache"
+
+    # **結果の表示**
     echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
     echo "$(color green "Language saved to language.ch: $lang_code")"
 }
+
 
 #########################################################################
 # normalize_country: `message.db` に対応する言語があるか確認し、セット
