@@ -255,7 +255,7 @@ download_script() {
 }
 
 #########################################################################
-# select_country: `country.db` から国を検索し、ユーザーに選択させる
+# select_country: 国を検索し、ユーザーに選択させる
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -263,8 +263,8 @@ select_country() {
     local user_input=""
     local found_entries=""
     local selected_entry=""
-    local selected_timezone=""
-
+    
+    # **データベース存在確認**
     if [ ! -f "$country_file" ]; then
         echo "$(color red "Country database not found!")"
         return
@@ -285,14 +285,6 @@ select_country() {
                 tolower($4) == tolower(query) {printf "[%d] %s\n", NR, $0}' "$country_file")
 
             if [ -z "$found_entries" ]; then
-                found_entries=$(awk -v query="$user_input" '
-                    tolower($1) ~ tolower(query) ||
-                    tolower($2) ~ tolower(query) ||
-                    tolower($3) ~ tolower(query) ||
-                    tolower($4) ~ tolower(query) {printf "[%d] %s\n", NR, $0}' "$country_file")
-            fi
-
-            if [ -z "$found_entries" ]; then
                 echo "$(color yellow "No matching country found. Please try again.")"
                 continue
             fi
@@ -307,28 +299,9 @@ select_country() {
             fi
         fi
 
-        if [ -n "$selected_entry" ]; then
-            local country_name
-            local display_name
-            local lang_code
-            local country_code
-            local tz_data
-
-            country_name=$(echo "$selected_entry" | awk '{print $1}')
-            display_name=$(echo "$selected_entry" | awk '{print $2}')
-            lang_code=$(echo "$selected_entry" | awk '{print $3}')
-            country_code=$(echo "$selected_entry" | awk '{print $4}')
-            tz_data=$(echo "$selected_entry" | awk -F';' '{print $2}')
-
-            confirm_message=$(get_message 'MSG_CONFIRM_COUNTRY' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$country_name/" -e "s/{version}/$display_name ($lang_code, $country_code)/")
-
-            if confirm "$confirm_message"; then
-                echo "$country_name $display_name $lang_code $country_code $tz_data" > "$country_cache"
-                echo "$(color green "Country and timezone set: $country_name, $tz_data")"
-                return
-            else
-                echo "$(color yellow "Invalid selection. Please try again.")"
-            fi
+        if [ -n "$selected_entry" ] && confirm "MSG_CONFIRM_COUNTRY"; then
+            echo "$selected_entry" > "$country_cache"
+            return
         fi
     done
 }
@@ -364,10 +337,7 @@ normalize_country() {
 
 #########################################################################
 # confirm: Y/N 確認関数
-# 引数1: 確認メッセージキー（多言語対応）
-# 引数2: 置換パラメータ1（オプション）
-# 引数3: 置換パラメータ2（オプション）
-# 使用例: confirm "MSG_INSTALL_PROMPT" "ttyd"
+# ✅ 1回だけ実行されるように修正
 #########################################################################
 confirm() {
     local key="$1"
@@ -376,44 +346,22 @@ confirm() {
     local prompt_message
     prompt_message=$(get_message "$key" "$SELECTED_LANGUAGE")
 
-    # メッセージが見つからない場合、デフォルトメッセージを使用
-    if [ -z "$prompt_message" ]; then
-        case "$key" in
-            "MSG_INSTALL_PROMPT")
-                prompt_message="Do you want to install {pkg}? [Y/n]:"
-                ;;
-            *)
-                prompt_message="Confirm action? [Y/n]:"
-                ;;
-        esac
-    fi
+    # 置換処理
+    [ -n "$replace_param1" ] && prompt_message=$(echo "$prompt_message" | sed "s/{pkg}/$replace_param1/g")
+    [ -n "$replace_param2" ] && prompt_message=$(echo "$prompt_message" | sed "s/{version}/$replace_param2/g")
 
-    # {pkg}, {file}, {version} の置換処理
-    if [ -n "$replace_param1" ]; then
-        prompt_message=$(echo "$prompt_message" | sed "s/{pkg}/$replace_param1/g")
-        prompt_message=$(echo "$prompt_message" | sed "s/{file}/$replace_param1/g")
-    fi
-    if [ -n "$replace_param2" ]; then
-        prompt_message=$(echo "$prompt_message" | sed "s/{version}/$replace_param2/g")
-    fi
-
-    # デバッグ: 確認メッセージの出力
+    # デバッグログ
     echo "DEBUG: Confirm message -> [$prompt_message]"
 
+    # ユーザー入力待ち
     while true; do
         read -r -p "$prompt_message " confirm
         confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')  # 小文字変換
 
         case "$confirm" in
-            ""|"y"|"yes")
-                return 0  # YES を返す
-                ;;
-            "n"|"no")
-                return 1  # NO を返す
-                ;;
-            *)
-                echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
-                ;;
+            ""|"y"|"yes") return 0  ;;  # YES
+            "n"|"no") return 1  ;;  # NO
+            *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
         esac
     done
 }
@@ -574,19 +522,16 @@ handle_exit() {
 
 #########################################################################
 # install_packages: パッケージをインストールし、インストール済みならスキップ
-# 引数:
-#   $1: 'yn' を指定すると Y/N 確認を行う
-#   $2 以降: インストールするパッケージ名 (複数指定可)
+# ✅ `yn` フラグがある場合のみ `confirm()` を実行
 #########################################################################
 install_packages() {
     local confirm_flag="$1"
-    shift  # 最初の引数 (`yn` など) を削除
-    local package_list="$@"  # 残りの引数を取得
-
+    shift
+    local package_list="$@"
     local packages_to_install=""
     local installed_packages=""
 
-    # インストール済みのパッケージをチェック
+    # インストール済みチェック
     for pkg in $package_list; do
         if command -v apk >/dev/null 2>&1; then
             if apk list-installed | grep -q "^$pkg "; then
@@ -604,16 +549,14 @@ install_packages() {
     done
 
     # すでにインストール済みのパッケージを表示
-    if [ -n "$installed_packages" ]; then
-        echo "$(color cyan "Already installed:$installed_packages")"
-    fi
+    [ -n "$installed_packages" ] && echo "$(color cyan "Already installed:$installed_packages")"
 
-    # インストールが必要なパッケージがない場合は終了
+    # インストール不要なら終了
     if [ -z "$packages_to_install" ]; then
         return 0
     fi
 
-    # `yn` フラグがある場合、1回のみ確認メッセージを出す
+    # ✅ `yn` フラグがある場合のみ `confirm()` を実行
     if [ "$confirm_flag" = "yn" ]; then
         if ! confirm "MSG_INSTALL_PROMPT" "$packages_to_install"; then
             echo "$(color yellow "Skipping installation of:$packages_to_install")"
@@ -621,7 +564,7 @@ install_packages() {
         fi
     fi
 
-    # 必要なパッケージをインストール
+    # パッケージをインストール
     if command -v apk >/dev/null 2>&1; then
         apk add $packages_to_install
     elif command -v opkg >/dev/null 2>&1; then
