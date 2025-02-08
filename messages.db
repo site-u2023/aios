@@ -1,8 +1,12 @@
 # メッセージデータベース (多言語対応)
 # フォーマット: 言語コード|メッセージキー=メッセージ
 
-MESSAGE_VERSION="2025.02.06-2"
+MESSAGE_VERSION="2025.02.06-3"
 echo "message.db Last update: $MESSAGE_VERSION"
+
+# 追加--------------------------------------------
+ja|MSG_CONFIRM_COUNTRY=この国を選択しますか？ {file} ({version})?
+en|MSG_CONFIRM_COUNTRY=Confirm country selection: {file} ({version})?
 
 # 追加--------------------------------------------
 # バージョン情報メッセージ
