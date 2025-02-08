@@ -56,6 +56,6 @@ packages() {
 delete_aios
 make_directory
 download_common
-check_common full
+check_common "full" "$INPUT_LANG"
 packages
 download_script aios
