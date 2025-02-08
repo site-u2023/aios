@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-32"
+COMMON_VERSION="2025.02.09-34"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -266,7 +266,6 @@ select_country() {
     local selected_zone_name=""
     local selected_timezone=""
     local found_entries=""
-    local matches_found=0
 
     # **データベース存在チェック**
     if [ ! -f "$country_file" ]; then
@@ -275,23 +274,23 @@ select_country() {
     fi
 
     while true; do
-        # **国リストの表示（最初のエンターでリストを表示）**
-        awk '{print NR, $1, $2, $3, $4}' "$country_file"
+        # **全リスト表示**
+        awk -F';' '{print NR, $1}' "$country_file"
 
         echo -e "$(color cyan "Enter country name, code, or language (or press Enter to list all):")"
         read user_input
 
         if [ -z "$user_input" ]; then
-            awk '{print NR, $1, $2, $3, $4}' "$country_file"
+            awk -F';' '{print NR, $1}' "$country_file"
             continue
         fi
 
         # **曖昧検索**
-        found_entries=$(awk -v query="$user_input" '
+        found_entries=$(awk -F';' -v query="$user_input" '
             tolower($1) ~ tolower(query) ||
             tolower($2) ~ tolower(query) ||
             tolower($3) ~ tolower(query) ||
-            tolower($4) ~ tolower(query) {print NR, $1, $2, $3, $4}' "$country_file")
+            tolower($4) ~ tolower(query) {print NR, $1}' "$country_file")
 
         matches_found=$(echo "$found_entries" | wc -l)
 
@@ -299,8 +298,8 @@ select_country() {
             echo "$(color yellow "No matching country found. Please try again.")"
             continue
         elif [ "$matches_found" -eq 1 ]; then
-            selected_entry=$(echo "$found_entries" | awk '{print $2, $3, $4, $5}')
-            echo -e "$(color cyan "Confirm country selection: $(echo "$selected_entry")? [Y/n]:")"
+            selected_entry=$(echo "$found_entries" | awk '{print $2}')
+            echo -e "$(color cyan "Confirm country selection: $selected_entry? [Y/n]:")"
             read yn
             case "$yn" in
                 Y|y) break ;;
@@ -321,14 +320,14 @@ select_country() {
                     break
                 fi
 
-                selected_entry=$(awk -v num="$choice" 'NR == num {print $1, $2, $3, $4}' "$country_file")
+                selected_entry=$(awk -F';' -v num="$choice" 'NR == num {print $1}' "$country_file")
 
                 if [ -z "$selected_entry" ]; then
                     echo "$(color red "Invalid selection. Please choose a valid number.")"
                     continue
                 fi
 
-                echo -e "$(color cyan "Confirm country selection: $(echo "$selected_entry")? [Y/n]:")"
+                echo -e "$(color cyan "Confirm country selection: $selected_entry? [Y/n]:")"
                 read yn
                 case "$yn" in
                     Y|y) break 2 ;;
@@ -340,11 +339,11 @@ select_country() {
     done
 
     # **選択した国の処理**
-    country_name=$(echo "$selected_entry" | awk '{print $1}')
-    display_name=$(echo "$selected_entry" | awk '{print $2}')
-    lang_code=$(echo "$selected_entry" | awk '{print $3}')
-    country_code=$(echo "$selected_entry" | awk '{print $4}')
-    tz_data=$(grep "^$country_name" "$country_file" | awk -F';' '{print $2}')
+    country_info=$(grep "^$selected_entry" "$country_file")
+    country_name=$(echo "$country_info" | awk -F';' '{print $1}')
+    lang_code=$(echo "$country_info" | awk -F';' '{print $3}')
+    country_code=$(echo "$country_info" | awk -F';' '{print $4}')
+    tz_data=$(echo "$country_info" | awk -F';' '{print $2}')
 
     # **ゾーンネーム＆タイムゾーン選択**
     if echo "$tz_data" | grep -q ","; then
@@ -385,7 +384,7 @@ select_country() {
     echo "$(color green "Language saved to language.ch: $lang_code")"
 
     # **キャッシュ書き込み**
-    echo "$country_name $display_name $lang_code $country_code $selected_zone_name $selected_timezone" > "$country_cache"
+    echo "$country_name;$lang_code;$country_code;$selected_zone_name;$selected_timezone" > "$country_cache"
     echo "$lang_code" > "$language_cache"
 }
 
