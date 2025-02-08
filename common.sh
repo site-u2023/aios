@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-4"
+COMMON_VERSION="2025.02.09-6"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -266,7 +266,7 @@ select_country() {
     local selected_zone_name=""
     local selected_timezone=""
     local matches_found=""
-
+    
     # **データベース存在チェック**
     if [ ! -f "$country_file" ]; then
         echo "$(color red "Country database not found!")"
@@ -274,11 +274,11 @@ select_country() {
     fi
 
     while true; do
-        # **全リストを表示**
+        # **全リストを表示（番号なし）**
         echo "$(color cyan "Available countries:")"
-        awk '{print "[" NR "]", $1, $2, $3, $4}' "$country_file"
+        awk '{print $1, $2, $3, $4}' "$country_file"
 
-        echo -e "$(color cyan "Enter country name, code, or language:")"
+        echo -e "$(color cyan "Enter country name, code, or language (or press Enter to list all):")"
         read user_input
 
         # **完全一致検索**
@@ -388,6 +388,7 @@ select_country() {
     echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
     echo "$(color green "Language saved to language.ch: $lang_code")"
 }
+
 
 #########################################################################
 # normalize_country: `message.db` に対応する言語があるか確認し、セット
