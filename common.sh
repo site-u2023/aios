@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-24"
+COMMON_VERSION="2025.02.08-25"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -267,44 +267,49 @@ select_country() {
     while true; do
         # **国リスト表示**
         echo -e "$(color cyan "Available countries:")"
-        awk 'NF >= 5 {print "[" NR "]", $1, $2, $3, $4}' "$country_file"
+        awk '{print "[" NR "]", $1, $2, $3, $4}' "$country_file"
 
         # **ユーザー入力**
         echo -e "$(color cyan "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja', '日本語'):")"
         read -r user_input
 
-        # **完全一致検索**
-        found_entries=$(awk -v query="$user_input" '
-            tolower($1) == tolower(query) ||
-            tolower($2) == tolower(query) ||
-            tolower($3) == tolower(query) ||
-            tolower($4) == tolower(query) {print NR, $0}' "$country_file")
-
-        # **曖昧検索**
-        if [ -z "$found_entries" ]; then
-            found_entries=$(awk -v query="$user_input" '
-                tolower($1) ~ tolower(query) ||
-                tolower($2) ~ tolower(query) ||
-                tolower($3) ~ tolower(query) ||
-                tolower($4) ~ tolower(query) {print NR, $0}' "$country_file")
-        fi
-
-        # **検索結果の処理**
-        if [ -z "$found_entries" ]; then
-            echo "$(color yellow "No matching country found. Please try again.")"
-            continue
-        fi
-
-        # **複数ヒット時の選択**
-        if [ "$(echo "$found_entries" | wc -l)" -gt 1 ]; then
-            echo "$(color yellow "Multiple matches found. Please select:")"
-            echo "$found_entries" | while read -r entry; do
-                echo "$entry"
-            done
-            read -p "Enter the number of your choice: " choice
-            selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
+        # **番号入力の処理**
+        if echo "$user_input" | grep -qE '^[0-9]+$'; then
+            selected_entry=$(awk -v num="$user_input" 'NR == num {print $0}' "$country_file")
         else
-            selected_entry="$found_entries"
+            # **完全一致検索**
+            found_entries=$(awk -v query="$user_input" '
+                tolower($1) == tolower(query) ||
+                tolower($2) == tolower(query) ||
+                tolower($3) == tolower(query) ||
+                tolower($4) == tolower(query) {print NR, $0}' "$country_file")
+
+            # **曖昧検索**
+            if [ -z "$found_entries" ]; then
+                found_entries=$(awk -v query="$user_input" '
+                    tolower($1) ~ tolower(query) ||
+                    tolower($2) ~ tolower(query) ||
+                    tolower($3) ~ tolower(query) ||
+                    tolower($4) ~ tolower(query) {print NR, $0}' "$country_file")
+            fi
+
+            # **検索結果の処理**
+            if [ -z "$found_entries" ]; then
+                echo "$(color yellow "No matching country found. Please try again.")"
+                continue
+            fi
+
+            # **複数ヒット時の選択**
+            if [ "$(echo "$found_entries" | wc -l)" -gt 1 ]; then
+                echo "$(color yellow "Multiple matches found. Please select:")"
+                echo "$found_entries" | while read -r entry; do
+                    echo "$entry"
+                done
+                read -p "Enter the number of your choice: " choice
+                selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
+            else
+                selected_entry="$found_entries"
+            fi
         fi
 
         # **選択した国が正しいか `confirm()` で Y/N 判定**
@@ -317,10 +322,10 @@ select_country() {
             local tz_cities
             local tz_offsets
 
-            country_name=$(echo "$selected_entry" | awk '{print $2}')
-            display_name=$(echo "$selected_entry" | awk '{print $3}')
-            lang_code=$(echo "$selected_entry" | awk '{print $4}')
-            country_code=$(echo "$selected_entry" | awk '{print $5}')
+            country_name=$(echo "$selected_entry" | awk '{print $1}')
+            display_name=$(echo "$selected_entry" | awk '{print $2}')
+            lang_code=$(echo "$selected_entry" | awk '{print $3}')
+            country_code=$(echo "$selected_entry" | awk '{print $4}')
             tz_data=$(echo "$selected_entry" | awk -F';' '{print $2}')
 
             confirm_message=$(get_message 'MSG_CONFIRM_COUNTRY' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$country_name/" -e "s/{version}/$display_name ($lang_code, $country_code)/")
@@ -355,6 +360,7 @@ select_country() {
         fi
     done
 }
+
 
 #########################################################################
 # normalize_country: `message.db` に対応する言語があるか確認
