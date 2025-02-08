@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-02"
+COMMON_VERSION="2025.02.08-03"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -383,6 +383,13 @@ select_country() {
             return
         fi
     done
+
+    # **デバッグ情報**
+    if [ -f "$country_file" ]; then
+        echo "$(color cyan "DEBUG: country.ch contents: $(cat "$country_file")")"
+    else
+        echo "$(color red "DEBUG: country.ch was not created!")"
+    fi
 }
 
 #########################################################################
@@ -408,6 +415,13 @@ normalize_country() {
         echo "en" > "$country_file"
         SELECTED_LANGUAGE="en"
         echo "$(color yellow "Language not found in messages.db. Using: en")"
+    fi
+
+    # **デバッグ情報**
+    if [ -f "$country_file" ]; then
+        echo "$(color cyan "DEBUG: Final country.ch contents: $(cat "$country_file")")"
+    else
+        echo "$(color red "DEBUG: country.ch was not created after normalization!")"
     fi
 }
 
