@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-4"
+COMMON_VERSION="2025.02.08-5"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -91,53 +91,6 @@ handle_error() {
 
     echo -e "$(color red "$error_message")"
     exit 1
-}
-
-#########################################################################
-# parse: コマンドライン引数を解析
-# - `--reset`, `-reset`, `-r` → キャッシュリセット
-# - `--help`, `-help`, `-h` → ヘルプ表示
-# - 言語 (`ja`, `en`, `zh-cn`, `zh-tw`, `id`, `ko`, `de`, `ru`) → 言語選択
-#########################################################################
-parse() {
-    RESET_CACHE=false
-    SHOW_HELP=false
-    SELECTED_LANGUAGE=""
-
-    for arg in "$@"; do
-        case "$arg" in
-            -reset|--reset|-r)
-                RESET_CACHE=true
-                ;;
-            -help|--help|-h)
-                SHOW_HELP=true
-                ;;
-            ja|en|zh-cn|zh-tw|id|ko|de|ru)
-                SELECTED_LANGUAGE="$arg"
-                ;;
-            *)
-                echo "$(color red "Unknown argument: $arg")"
-                return 1
-                ;;
-        esac
-    done
-
-    # ヘルプ表示
-    if [ "$SHOW_HELP" = true ]; then
-        print_help
-        exit 0
-    fi
-
-    # キャッシュリセット実行
-    if [ "$RESET_CACHE" = true ]; then
-        reset_cache
-    fi
-
-    # 言語設定
-    if [ -n "$SELECTED_LANGUAGE" ]; then
-        echo "$SELECTED_LANGUAGE" > "${BASE_DIR}/country.ch"
-        echo "$(color green "Language set to: $SELECTED_LANGUAGE")"
-    fi
 }
 
 #########################################################################
