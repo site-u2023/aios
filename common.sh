@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-09-02"
+COMMON_VERSION="2025.02.08-09-03"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -99,6 +99,7 @@ handle_error() {
 #########################################################################
 download_script() {
     local file_name="$1"
+    local script_cache="${BASE_DIR}/script.ch"
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
 
@@ -107,52 +108,27 @@ download_script() {
         install_path="${AIOS_DIR}/${file_name}"
     fi
 
-    # ファイルが存在しない場合はダウンロード
-    if [ ! -f "$install_path" ]; then
-        echo -e "$(color yellow "Downloading missing file: $file_name...")"
-        if ! ${BASE_WGET} "$install_path" "$remote_url"; then
-            echo -e "$(color red "Failed to download: $file_name")"
-            return 1
-        fi
-        echo -e "$(color green "Successfully downloaded: $file_name")"
+    # キャッシュが存在する場合は利用
+    if [ -f "$script_cache" ] && grep -q "^$file_name=" "$script_cache"; then
+        local cached_version=$(grep "^$file_name=" "$script_cache" | cut -d'=' -f2)
+        local remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2)
 
-        # `aios` のみ実行権限を付与
-        if [ "$file_name" = "aios" ]; then
-            chmod +x "$install_path"
-            echo -e "$(color cyan "Applied execute permissions to: $install_path")"
+        if [ "$cached_version" = "$remote_version" ]; then
+            echo "$(color green "$file_name is up-to-date ($cached_version). Skipping download.")"
+            return
         fi
     fi
 
-    # バージョン取得
-    local current_version="N/A"
-    if [ -s "$install_path" ]; then
-        current_version=$(grep "^version=" "$install_path" | cut -d'=' -f2 | tr -d '"\r')
-        [ -z "$current_version" ] && current_version="N/A"
-    fi
+    echo "$(color yellow "Downloading latest version of $file_name")"
+    wget --quiet -O "$install_path" "$remote_url"
 
-    # リモートバージョンを取得
-    local remote_version="N/A"
-    remote_version=$(wget -qO- "$remote_url" | grep "^version=" | cut -d'=' -f2 | tr -d '"\r') || remote_version="N/A"
+    local new_version=$(grep "^version=" "$install_path" | cut -d'=' -f2)
+    echo "$file_name=$new_version" >> "$script_cache"
 
-    # デバッグログ
-    echo -e "$(color cyan "DEBUG: Checking version for $file_name | Local: [$current_version], Remote: [$remote_version]")"
-
-    # バージョンチェック: 最新があればダウンロード
-    if [ "$remote_version" != "N/A" ] && [ "$current_version" != "$remote_version" ]; then
-        echo -e "$(color cyan "$(get_message 'MSG_UPDATING_SCRIPT' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{old_version}/$current_version/" -e "s/{new_version}/$remote_version/")")"
-        if ! ${BASE_WGET} "$install_path" "$remote_url"; then
-            echo -e "$(color red "Failed to download: $file_name")"
-            return 1
-        fi
-        echo -e "$(color green "Successfully updated: $file_name")"
-
-        # `aios` のみ再度実行権限を付与
-        if [ "$file_name" = "aios" ]; then
-            chmod +x "$install_path"
-            echo -e "$(color cyan "Re-applied execute permissions to: $install_path")"
-        fi
-    else
-        echo -e "$(color green "$(get_message 'MSG_NO_UPDATE_NEEDED' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{version}/$current_version/")")"
+    # `aios` のみ実行権限を付与
+    if [ "$file_name" = "aios" ]; then
+        chmod +x "$install_path"
+        echo -e "$(color cyan "Applied execute permissions to: $install_path")"
     fi
 }
 
@@ -738,9 +714,6 @@ install_language_pack() {
 # - 言語 (`INPUT_LANG`) を `SELECTED_LANGUAGE` に渡す
 # - `full` (通常モード), `light` (最低限モード) の選択
 #########################################################################
-#########################################################################
-# check_common: 初期化処理
-#########################################################################
 check_common() {
     local mode="$1"
     shift  # 最初の引数 (モード) を削除
@@ -748,7 +721,6 @@ check_common() {
     local RESET_CACHE=false
     local SHOW_HELP=false
     local INPUT_LANG=""
-    local SELECTED_COUNTRY=""
 
     # 引数解析
     for arg in "$@"; do
@@ -776,12 +748,13 @@ check_common() {
         exit 0
     fi
 
-    # 言語のキャッシュチェックと設定
+    # 言語キャッシュのチェック
     if [ -f "${BASE_DIR}/country.ch" ]; then
         SELECTED_LANGUAGE=$(cat "${BASE_DIR}/country.ch")
+        echo "Using cached language: $SELECTED_LANGUAGE"
     else
         check_country "$INPUT_LANG"
-        normalize_country  # 言語を正規化
+        normalize_country
     fi
 
     case "$mode" in
