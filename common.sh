@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-2"
+COMMON_VERSION="2025.02.08-3"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -403,7 +403,7 @@ normalize_country() {
 }
 
 #########################################################################
-# confirm: Y/N 確認関数 (全角Y/N対応, OpenWrt `ash` 最適化)
+# confirm: Y/N 確認関数 (グローバル対応, OpenWrt `ash` 最適化)
 # 引数1: 確認メッセージキー（多言語対応）
 # 使用例: confirm 'MSG_INSTALL_PROMPT'
 #########################################################################
@@ -427,17 +427,16 @@ confirm() {
         # **受け取った入力のデバッグ表示**
         echo "$(color yellow "DEBUG: Received input -> [$confirm]")"
 
-        # **全角→半角変換 (OpenWrt `ash` 互換)**
-        confirm=$(echo "$confirm" | sed 's/Ｙ/Y/g; s/Ｎ/N/g; s/ｙ/y/g; s/ｎ/n/g')
-        confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')  # **小文字統一**
+        # **小文字変換**
+        confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')
         confirm=${confirm:-"y"}  # **デフォルト Y**
 
         case "$confirm" in
-            [Yy]|yes)
+            y|yes)
                 echo "$(color green "Settings applied successfully.")"
                 return 0  # **成功**
                 ;;
-            [Nn]|no)
+            n|no)
                 echo "$(color yellow "Settings were not applied.")"
                 return 1  # **キャンセル**
                 ;;
