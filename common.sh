@@ -255,7 +255,7 @@ download_script() {
 }
 
 #########################################################################
-# select_country: 国を検索し、ユーザーに選択させる
+# select_country: `country.db` から国を検索し、ユーザーに選択させる
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -263,6 +263,7 @@ select_country() {
     local user_input=""
     local found_entries=""
     local selected_entry=""
+    local selected_timezone=""
     
     # **データベース存在確認**
     if [ ! -f "$country_file" ]; then
@@ -299,8 +300,53 @@ select_country() {
             fi
         fi
 
-        if [ -n "$selected_entry" ] && confirm "MSG_CONFIRM_COUNTRY"; then
-            echo "$selected_entry" > "$country_cache"
+        if [ -n "$selected_entry" ]; then
+            local country_name
+            local display_name
+            local lang_code
+            local country_code
+            local tz_data
+
+            country_name=$(echo "$selected_entry" | awk '{print $1}')
+            display_name=$(echo "$selected_entry" | awk '{print $2}')
+            lang_code=$(echo "$selected_entry" | awk '{print $3}')
+            country_code=$(echo "$selected_entry" | awk '{print $4}')
+            tz_data=$(echo "$selected_entry" | awk -F';' '{print $2}')
+
+            # ✅ Y/N 確認 (1回のみ実行)
+            confirm_message=$(get_message 'MSG_CONFIRM_COUNTRY' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$country_name/" -e "s/{version}/$display_name ($lang_code, $country_code)/")
+            if ! confirm "$confirm_message"; then
+                echo "$(color yellow "Invalid selection. Please try again.")"
+                continue
+            fi
+
+            # ✅ タイムゾーンが複数ある場合は選択させる
+            if echo "$tz_data" | grep -q ","; then
+                echo "$(color cyan "Select a timezone for $country_name:")"
+                local i=1
+                echo "$tz_data" | awk -F',' '{for (i=1; i<=NF; i++) print "["i"] "$i}'
+                
+                while true; do
+                    read -p "Enter the number of your choice: " tz_choice
+                    selected_timezone=$(echo "$tz_data" | awk -F',' -v num="$tz_choice" '{print $num}')
+                    
+                    if [ -z "$selected_timezone" ]; then
+                        echo "$(color red "Invalid selection. Please enter a valid number.")"
+                        continue
+                    fi
+
+                    confirm_message=$(get_message 'MSG_CONFIRM_TIMEZONE' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$selected_timezone/")
+                    if confirm "$confirm_message"; then
+                        break
+                    fi
+                done
+            else
+                selected_timezone="$tz_data"
+            fi
+
+            # ✅ `country.ch` に最終情報を保存
+            echo "$country_name $display_name $lang_code $country_code $selected_timezone" > "$country_cache"
+            echo "$(color green "Country and timezone set: $country_name, $selected_timezone")"
             return
         fi
     done
