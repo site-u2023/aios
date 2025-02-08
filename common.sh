@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-00008"
+COMMON_VERSION="2025.02.08-00009"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -258,12 +258,12 @@ download_script() {
 # select_country: 国とタイムゾーンの選択
 #########################################################################
 select_country() {
-    local country_file="${BASE_DIR}/country.db"
-    local country_cache="${BASE_DIR}/country.ch"
-    local user_input=""
-    local selected_entry=""
-    local selected_zone_name=""
-    local selected_timezone=""
+    country_file="${BASE_DIR}/country.db"
+    country_cache="${BASE_DIR}/country.ch"
+    user_input=""
+    selected_entry=""
+    selected_zone_name=""
+    selected_timezone=""
 
     if [ ! -f "$country_file" ]; then
         echo "$(color red "Country database not found!")"
@@ -273,16 +273,16 @@ select_country() {
     while true; do
         awk '{print "[" NR "]", $1, $2, $3, $4}' "$country_file"
         echo -e "$(color cyan "Enter number, country name, code, or language:")"
-        read -r user_input
+        read user_input
 
         if echo "$user_input" | grep -qE '^[0-9]+$'; then
             selected_entry=$(awk -v num="$user_input" 'NR == num {print $0}' "$country_file")
         else
             found_entries=$(awk -v query="$user_input" '
-                tolower($1) == tolower(query) ||
-                tolower($2) == tolower(query) ||
-                tolower($3) == tolower(query) ||
-                tolower($4) == tolower(query) {printf "[%d] %s\n", NR, $0}' "$country_file")
+                $1 == query ||
+                $2 == query ||
+                $3 == query ||
+                $4 == query {printf "[%d] %s\n", NR, $0}' "$country_file")
 
             if [ -z "$found_entries" ]; then
                 echo "$(color yellow "No matching country found. Please try again.")"
@@ -292,7 +292,8 @@ select_country() {
             if [ "$(echo "$found_entries" | wc -l)" -gt 1 ]; then
                 echo "$(color yellow "Multiple matches found. Please select:")"
                 echo "$found_entries"
-                read -p "Enter the number of your choice: " choice
+                echo "Enter the number of your choice: "
+                read choice
                 selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
             else
                 selected_entry=$(echo "$found_entries" | sed -E 's/\[[0-9]+\] //')
@@ -300,17 +301,17 @@ select_country() {
         fi
 
         if [ -n "$selected_entry" ]; then
-            local country_name=$(echo "$selected_entry" | awk '{print $1}')
-            local display_name=$(echo "$selected_entry" | awk '{print $2}')
-            local lang_code=$(echo "$selected_entry" | awk '{print $3}')
-            local country_code=$(echo "$selected_entry" | awk '{print $4}')
-            local tz_data=$(echo "$selected_entry" | awk -F';' '{print $2}')
+            country_name=$(echo "$selected_entry" | awk '{print $1}')
+            display_name=$(echo "$selected_entry" | awk '{print $2}')
+            lang_code=$(echo "$selected_entry" | awk '{print $3}')
+            country_code=$(echo "$selected_entry" | awk '{print $4}')
+            tz_data=$(echo "$selected_entry" | awk -F';' '{print $2}')
 
             echo -e "$(color cyan "Confirm country selection: $country_name ($display_name, $lang_code, $country_code)? [Y/n]:")"
-            read -r yn
+            read yn
             case "$yn" in
-                [Yy]*) break ;;
-                [Nn]*) echo "$(color yellow "Invalid selection. Please try again.")" ; continue ;;
+                Y|y) break ;;
+                N|n) echo "$(color yellow "Invalid selection. Please try again.")"; continue ;;
                 *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
             esac
         fi
@@ -318,29 +319,29 @@ select_country() {
 
     if echo "$tz_data" | grep -q ","; then
         echo "$(color cyan "Select a timezone for $country_name:")"
-        local i=1
-        IFS=',' read -r -a timezones <<< "$tz_data"
-
-        for tz in "${timezones[@]}"; do
+        set -- $(echo "$tz_data" | tr ',' ' ')
+        i=1
+        for tz in "$@"; do
             echo "[$i] $tz"
-            ((i++))
+            i=$((i + 1))
         done
 
         while true; do
-            read -p "Enter the number of your choice: " tz_choice
-            if [[ "$tz_choice" =~ ^[0-9]+$ ]] && [ "$tz_choice" -ge 1 ] && [ "$tz_choice" -le "${#timezones[@]}" ]; then
-                selected_zone_name="${timezones[$((tz_choice - 1))]}"
-                selected_timezone="${timezones[$((tz_choice - 1))]}"
+            echo "Enter the number of your choice: "
+            read tz_choice
+            if echo "$tz_choice" | grep -qE '^[0-9]+$' && [ "$tz_choice" -ge 1 ] && [ "$tz_choice" -le $# ]; then
+                selected_zone_name=$(eval echo \$$tz_choice)
+                selected_timezone=$(eval echo \$$tz_choice)
             else
                 echo "$(color red "Invalid selection. Please enter a valid number.")"
                 continue
             fi
 
             echo -e "$(color cyan "Confirm timezone selection: $selected_zone_name ($selected_timezone)? [Y/n]:")"
-            read -r tz_yn
+            read tz_yn
             case "$tz_yn" in
-                [Yy]*) break ;;
-                [Nn]*) echo "$(color yellow "Invalid selection. Please try again.")" ; continue ;;
+                Y|y) break ;;
+                N|n) echo "$(color yellow "Invalid selection. Please try again.")"; continue ;;
                 *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
             esac
         done
@@ -352,6 +353,7 @@ select_country() {
     echo "$country_name $display_name $lang_code $country_code $selected_zone_name $selected_timezone" > "$country_cache"
     echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
 }
+
 #########################################################################
 # normalize_country: `message.db` に対応する言語があるか確認し、セット
 # - `message.db` に `$SELECTED_LANGUAGE` があればそのまま使用
