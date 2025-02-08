@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-4"
+COMMON_VERSION="2025.02.08-3"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -379,7 +379,31 @@ select_country() {
 }
 
 #########################################################################
-# confirm: Y/N 確認関数 (全角対応, OpenWrt `ash` 最適化)
+# normalize_country: `message.db` に対応する言語があるか確認
+# - `message.db` に `$SELECT_COUNTRY` があればそのまま使用
+# - 無ければ `message.db` にあるデフォルト言語 (`SELECT_COUNTRY=en` など) を使用
+#########################################################################
+normalize_country() {
+    local country_file="${BASE_DIR}/country.ch"
+    local message_db="${BASE_DIR}/messages.db"
+
+    # `country.ch` を読み込む
+    if [ -f "$country_file" ]; then
+        SELECT_COUNTRY=$(cat "$country_file")
+    else
+        SELECT_COUNTRY="en"
+    fi
+
+    if grep -q "^$SELECT_COUNTRY|" "$message_db"; then
+        echo "$(color green "Using message database language: $SELECT_COUNTRY")"
+    else
+        echo "en" > "$country_file"
+        echo "$(color yellow "Language not found in messages.db. Using: en")"
+    fi
+}
+
+#########################################################################
+# confirm: Y/N 確認関数 (グローバル対応, OpenWrt `ash` 最適化)
 # 引数1: 確認メッセージキー（多言語対応）
 # 使用例: confirm 'MSG_INSTALL_PROMPT'
 #########################################################################
@@ -403,9 +427,6 @@ confirm() {
         # **受け取った入力のデバッグ表示**
         echo "$(color yellow "DEBUG: Received input -> [$confirm]")"
 
-        # **全角英字を半角に変換**
-        confirm=$(echo "$confirm" | sed 'y/ｙｎＹＮ/ynYN/')
-        
         # **小文字変換**
         confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')
         confirm=${confirm:-"y"}  # **デフォルト Y**
@@ -424,30 +445,6 @@ confirm() {
                 ;;
         esac
     done
-}
-
-#########################################################################
-# normalize_country: `message.db` に対応する言語があるか確認
-# - `message.db` に `$SELECT_COUNTRY` があればそのまま使用
-# - 無ければ `message.db` にあるデフォルト言語 (`SELECT_COUNTRY=en` など) を使用
-#########################################################################
-normalize_country() {
-    local country_file="${BASE_DIR}/country.ch"
-    local message_db="${BASE_DIR}/messages.db"
-
-    # `country.ch` を読み込む
-    if [ -f "$country_file" ]; then
-        SELECT_COUNTRY=$(cat "$country_file")
-    else
-        SELECT_COUNTRY="en"
-    fi
-
-    if grep -q "^$SELECT_COUNTRY|" "$message_db"; then
-        echo "$(color green "Using message database language: $SELECT_COUNTRY")"
-    else
-        echo "en" > "$country_file"
-        echo "$(color yellow "Language not found in messages.db. Using: en")"
-    fi
 }
 
 #########################################################################
