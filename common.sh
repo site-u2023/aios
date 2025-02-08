@@ -361,7 +361,6 @@ select_country() {
         echo "$(color yellow "Invalid selection. Please try again.")"
     done
 }
-}
 
 #########################################################################
 # normalize_country: `message.db` に対応する言語があるか確認
