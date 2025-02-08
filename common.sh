@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-00014"
+COMMON_VERSION="2025.02.08-00015"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -254,15 +254,11 @@ download_script() {
     echo "$file_name=$new_version" >> "$script_cache"
 }
 
-#########################################################################
-# select_country: 国とタイムゾーンの選択
-#########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${BASE_DIR}/country.ch"
     local user_input=""
     local selected_entry=""
-    local matched_entries=""
     local selected_zone_name=""
     local selected_timezone=""
 
@@ -316,21 +312,27 @@ select_country() {
         fi
     done
 
+    # **✅ タイムゾーン選択 (修正済み)**
     if echo "$tz_data" | grep -q ","; then
         echo "$(color cyan "Select a timezone for $country_name:")"
-        IFS=',' read -r -a timezones <<< "$tz_data"
+        
+        # `set --` でカンマをスペースに変換し、パラメータ展開
+        set -- $(echo "$tz_data" | tr ',' ' ')
         local i=1
+        local timezones=()
 
-        for tz in "${timezones[@]}"; do
+        for tz in "$@"; do
             echo "[$i] $tz"
+            timezones[$i]="$tz"
             i=$((i+1))
         done
 
         while true; do
-            read -p "Enter the number of your choice: " tz_choice
+            echo -e "$(color cyan "Enter the number of your choice:")"
+            read -r tz_choice
             if [ "$tz_choice" -ge 1 ] && [ "$tz_choice" -le "${#timezones[@]}" ]; then
-                selected_zone_name="${timezones[$((tz_choice - 1))]}"
-                selected_timezone="${timezones[$((tz_choice - 1))]}"
+                selected_zone_name="${timezones[$tz_choice]}"
+                selected_timezone="${timezones[$tz_choice]}"
             else
                 echo "$(color red "Invalid selection. Please enter a valid number.")"
                 continue
