@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-27"
+COMMON_VERSION="2025.02.09-28"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -267,14 +267,14 @@ select_country() {
     local selected_timezone=""
     local found_entries=""
 
-    # **データベース存在チェック**
     if [ ! -f "$country_file" ]; then
         echo "$(color red "Country database not found!")"
         return 1
     fi
 
     while true; do
-        # **最初にすべての国リストを表示**
+        # **すべての国リストを表示**
+        echo "$(color cyan "Available countries:")"
         awk '{print $1, $2, $3, $4}' "$country_file"
 
         echo -e "$(color cyan "Enter country name, code, or language (or press Enter to list all):")"
@@ -356,7 +356,6 @@ select_country() {
             echo "$(color cyan "Select a timezone for $country_name:")"
             i=1
             echo "$tz_data" | tr ',' '\n' | while read tz_pair; do
-                # **ゾーンネームとタイムゾーンを適切に分割**
                 zone_name=$(echo "$tz_pair" | awk '{print $1}')
                 timezone=$(echo "$tz_pair" | awk '{print $2}')
                 echo "[$i] $zone_name $timezone"
@@ -395,6 +394,7 @@ select_country() {
     echo "$country_name $display_name $lang_code $country_code $selected_zone_name $selected_timezone" > "$country_cache"
     echo "$lang_code" > "$language_cache"
 }
+
 
 #########################################################################
 # normalize_country: `message.db` に対応する言語があるか確認し、セット
