@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-09-000"
+COMMON_VERSION="2025.02.08-09-02"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -738,6 +738,9 @@ install_language_pack() {
 # - 言語 (`INPUT_LANG`) を `SELECTED_LANGUAGE` に渡す
 # - `full` (通常モード), `light` (最低限モード) の選択
 #########################################################################
+#########################################################################
+# check_common: 初期化処理
+#########################################################################
 check_common() {
     local mode="$1"
     shift  # 最初の引数 (モード) を削除
@@ -773,7 +776,7 @@ check_common() {
         exit 0
     fi
 
-    # 言語のキャッシュチェック
+    # 言語のキャッシュチェックと設定
     if [ -f "${BASE_DIR}/country.ch" ]; then
         SELECTED_LANGUAGE=$(cat "${BASE_DIR}/country.ch")
     else
