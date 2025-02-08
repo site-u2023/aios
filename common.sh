@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-00009"
+COMMON_VERSION="2025.02.08-00010"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -278,11 +278,11 @@ select_country() {
         if echo "$user_input" | grep -qE '^[0-9]+$'; then
             selected_entry=$(awk -v num="$user_input" 'NR == num {print $0}' "$country_file")
         else
-            found_entries=$(awk -v query="$user_input" '
-                $1 == query ||
-                $2 == query ||
-                $3 == query ||
-                $4 == query {printf "[%d] %s\n", NR, $0}' "$country_file")
+            found_entries=$(grep -i "^$user_input " "$country_file")
+
+            if [ -z "$found_entries" ]; then
+                found_entries=$(grep -i "$user_input" "$country_file")
+            fi
 
             if [ -z "$found_entries" ]; then
                 echo "$(color yellow "No matching country found. Please try again.")"
@@ -291,12 +291,12 @@ select_country() {
 
             if [ "$(echo "$found_entries" | wc -l)" -gt 1 ]; then
                 echo "$(color yellow "Multiple matches found. Please select:")"
-                echo "$found_entries"
+                echo "$found_entries" | awk '{print "[" NR "]", $0}'
                 echo "Enter the number of your choice: "
                 read choice
-                selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
+                selected_entry=$(echo "$found_entries" | awk -v num="$choice" 'NR == num {print $0}')
             else
-                selected_entry=$(echo "$found_entries" | sed -E 's/\[[0-9]+\] //')
+                selected_entry=$(echo "$found_entries")
             fi
         fi
 
