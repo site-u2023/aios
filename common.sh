@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-03"
+COMMON_VERSION="2025.02.08-05"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -410,42 +410,43 @@ normalize_country() {
 }
 
 #########################################################################
-# confirm: Y/N 確認関数 (グローバル対応, OpenWrt `ash` 最適化)
+# confirm: Y/N 確認関数
 # 引数1: 確認メッセージキー（多言語対応）
-# 使用例: confirm 'MSG_INSTALL_PROMPT'
+# 引数2: 置換パラメータ1（オプション）
+# 引数3: 置換パラメータ2（オプション）
+# 使用例: confirm "MSG_INSTALL_PROMPT" "ttyd"
 #########################################################################
 confirm() {
     local key="$1"
-    local replace_param="$2"
+    local replace_param1="$2"
+    local replace_param2="$3"
     local prompt_message
     prompt_message=$(get_message "$key" "$SELECTED_LANGUAGE")
 
-    # {pkg} の置換処理
-    if [ -n "$replace_param" ]; then
-        prompt_message=$(echo "$prompt_message" | sed "s/{pkg}/$replace_param/")
+    # {pkg}, {file}, {version} の置換処理
+    if [ -n "$replace_param1" ]; then
+        prompt_message=$(echo "$prompt_message" | sed "s/{pkg}/$replace_param1/g")
+        prompt_message=$(echo "$prompt_message" | sed "s/{file}/$replace_param1/g")
+    fi
+    if [ -n "$replace_param2" ]; then
+        prompt_message=$(echo "$prompt_message" | sed "s/{version}/$replace_param2/g")
     fi
 
-    # **デバッグ: 確認メッセージの出力**
-    echo "$(color cyan "DEBUG: Confirm message -> [$prompt_message]")"
+    # デバッグ: 確認メッセージの出力
+    echo "DEBUG: Confirm message -> [$prompt_message]"
 
     while true; do
-        read -rp "$prompt_message " confirm
-
-        # **受け取った入力のデバッグ表示**
-        echo "$(color yellow "DEBUG: Received input -> [$confirm]")"
-
-        # **小文字変換**
-        confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')
-        confirm=${confirm:-"y"}  # **デフォルト Y**
+        read -r -p "$prompt_message " confirm
+        confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')  # 小文字変換
 
         case "$confirm" in
-            y|yes)
+            ""|"y"|"yes")
                 echo "$(color green "Settings applied successfully.")"
-                return 0  # **成功**
+                return 0
                 ;;
-            n|no)
+            "n"|"no")
                 echo "$(color yellow "Settings were not applied.")"
-                return 1  # **キャンセル**
+                return 1
                 ;;
             *)
                 echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
@@ -453,6 +454,7 @@ confirm() {
         esac
     done
 }
+
 #########################################################################
 # check_country: 言語キャッシュの確認および設定
 # - `$1` (`SELECT_COUNTRY`) があればそれを優先
@@ -582,7 +584,7 @@ handle_exit() {
     exit 0
 }
 
-######################################################################### 
+#########################################################################
 # install_packages: パッケージをインストールし、インストール済みならスキップ
 # 引数:
 #   $1: 'yn' を指定すると Y/N 確認を行う
@@ -625,9 +627,8 @@ install_packages() {
 
     # `yn` フラグがある場合、確認メッセージを出す（ここで1回のみ）
     if [ "$confirm_flag" = "yn" ]; then
-        local confirm_msg=$(get_message "MSG_INSTALL_PROMPT_PKG" "$SELECTED_LANGUAGE")
-        confirm_msg=$(echo "$confirm_msg" | sed "s/{pkg}/$packages_to_install/")
-
+        local confirm_msg="Do you want to install$packages_to_install? [Y/n]:"
+        
         if ! confirm "$confirm_msg"; then
             echo "$(color yellow "Skipping installation of:$packages_to_install")"
             return 1
