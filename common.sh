@@ -475,7 +475,7 @@ check_openwrt() {
 # 選択された国と言語の詳細情報を表示
 #########################################################################
 country_info() {
-    local country_info_file="${BASE_DIR}/country-zone.sh"
+    local country_info_file="${BASE_DIR}/country.ch"
     local selected_language_code=$(cat "${BASE_DIR}/check_country")
 
     if [ -f "$country_info_file" ]; then
