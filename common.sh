@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-6"
+COMMON_VERSION="2025.02.09-7"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -266,7 +266,7 @@ select_country() {
     local selected_zone_name=""
     local selected_timezone=""
     local matches_found=""
-    
+
     # **データベース存在チェック**
     if [ ! -f "$country_file" ]; then
         echo "$(color red "Country database not found!")"
@@ -288,7 +288,31 @@ select_country() {
             tolower($3) == tolower(query) ||
             tolower($4) == tolower(query) {print $0}' "$country_file")
 
-        if [ -n "$selected_entry" ]; then
+        matches_found=$(echo "$selected_entry" | wc -l)
+
+        if [ "$matches_found" -eq 1 ]; then
+            # **完全一致が1件のみの場合**
+            echo -e "$(color cyan "Confirm country selection: $(echo "$selected_entry" | awk '{print $1, $2, $3, $4}')? [Y/n]:")"
+            read yn
+            case "$yn" in
+                Y|y) break ;;
+                N|n) echo "$(color yellow "Invalid selection. Please try again.")"; continue ;;
+                *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
+            esac
+        elif [ "$matches_found" -gt 1 ]; then
+            # **完全一致が複数あれば、番号で選択**
+            echo "$(color yellow "Multiple matches found. Please select:")"
+            echo "$selected_entry" | awk '{print "[" NR "]", $1, $2, $3, $4}'
+
+            echo -e "$(color cyan "Enter the number of your choice:")"
+            read choice
+            selected_entry=$(echo "$selected_entry" | awk -v num="$choice" 'NR == num {print $0}')
+
+            if [ -z "$selected_entry" ]; then
+                echo "$(color red "Invalid selection. Please choose a valid number.")"
+                continue
+            fi
+
             echo -e "$(color cyan "Confirm country selection: $(echo "$selected_entry" | awk '{print $1, $2, $3, $4}')? [Y/n]:")"
             read yn
             case "$yn" in
@@ -388,7 +412,6 @@ select_country() {
     echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
     echo "$(color green "Language saved to language.ch: $lang_code")"
 }
-
 
 #########################################################################
 # normalize_country: `message.db` に対応する言語があるか確認し、セット
