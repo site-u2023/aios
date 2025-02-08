@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-26"
+COMMON_VERSION="2025.02.08-28"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -266,6 +266,7 @@ select_country() {
 
     while true; do
         # **国リスト表示**
+        echo -e "$(color cyan "Available countries:")"
         awk '{print "[" NR "]", $1, $2, $3, $4}' "$country_file"
 
         # **ユーザー入力**
@@ -333,6 +334,7 @@ select_country() {
                     break
                 else
                     echo "$(color yellow "Invalid selection. Please try again.")"
+                    continue
                 fi
             done
 
