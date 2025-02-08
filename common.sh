@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-20"
+COMMON_VERSION="2025.02.09-22"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -356,7 +356,9 @@ select_country() {
             echo "$(color cyan "Select a timezone for $country_name:")"
             i=1
             echo "$tz_data" | tr ',' '\n' | while read tz; do
-                echo "[$i] $tz"
+                zone_name=$(echo "$tz" | awk -F' ' '{print $1}')
+                time_zone=$(echo "$tz" | awk -F' ' '{print $2}')
+                echo "[$i] $zone_name $time_zone"
                 i=$((i + 1))
             done
             echo "[0] Try again"
@@ -369,8 +371,8 @@ select_country() {
                 continue  # **リストを再表示して最初からやり直し**
             fi
 
-            selected_zone_name=$(echo "$tz_data" | tr ',' '\n' | awk "NR==$tz_choice")
-            selected_timezone="$selected_zone_name"
+            selected_zone_name=$(echo "$tz_data" | tr ',' '\n' | awk "NR==$tz_choice" | awk -F' ' '{print $1}')
+            selected_timezone=$(echo "$tz_data" | tr ',' '\n' | awk "NR==$tz_choice" | awk -F' ' '{print $2}')
 
             if [ -z "$selected_zone_name" ]; then
                 echo "$(color red "Invalid selection. Please enter a valid number.")"
@@ -380,8 +382,8 @@ select_country() {
             break
         done
     else
-        selected_zone_name="$tz_data"
-        selected_timezone="$tz_data"
+        selected_zone_name=$(echo "$tz_data" | awk -F' ' '{print $1}')
+        selected_timezone=$(echo "$tz_data" | awk -F' ' '{print $2}')
     fi
 
     # **キャッシュへの保存**
@@ -389,9 +391,10 @@ select_country() {
     echo "$lang_code" > "$language_cache"
 
     # **結果の表示**
-    echo "$(color green "Country and timezone set: $country_name, $selected_zone_name ($selected_timezone)")"
+    echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
     echo "$(color green "Language saved to language.ch: $lang_code")"
 }
+
 
 #########################################################################
 # normalize_country: `message.db` に対応する言語があるか確認し、セット
