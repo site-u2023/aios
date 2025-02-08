@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-4"
+COMMON_VERSION="2025.02.08-5"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -103,7 +103,7 @@ download_script() {
 
     # `aios` の場合は `/usr/bin/aios` に配置
     if [ "$file_name" = "aios" ]; then
-        install_path="/usr/bin/aios"
+        install_path="/usr/bin"
     fi
 
     # ファイルが存在しない場合はダウンロード
@@ -448,30 +448,18 @@ confirm() {
 }
 
 #########################################################################
-# check_country: 言語キャッシュの確認および設定
-# - `$1` (`SELECT_COUNTRY`) があればそれを優先
-# - それが無ければ `country.ch` を参照
-# - さらに無ければ `select_country()` で `country.db` を検索し完全一致 → 曖昧検索
-# - 見つからなかった場合は `confirm()` による Y/N 選択
-# - すべて失敗したら `en` をセット
+# check_country: 言語と国のキャッシュを設定
 #########################################################################
 check_country() {
-    local SELECT_COUNTRY="$1"
-    local country_file="${BASE_DIR}/country.ch"
-
-    if [ -n "$SELECT_COUNTRY" ]; then
-        echo "$SELECT_COUNTRY" > "$country_file"
-        echo "$(color green "Language set to: $SELECT_COUNTRY")"
-        return
+    local selected_country
+    if [ -f "${BASE_DIR}/country.ch" ]; then
+        selected_country=$(cat "${BASE_DIR}/country.ch")
+    else
+        selected_country=$(select_country)
+        echo "$selected_country" > "${BASE_DIR}/country.ch"
     fi
 
-    if [ -f "$country_file" ]; then
-        SELECT_COUNTRY=$(cat "$country_file")
-        echo "$(color green "Using cached country: $SELECT_COUNTRY")"
-        return
-    fi
-
-    select_country
+    echo "$(color green "Using country: $selected_country")"
 }
 
 #########################################################################
