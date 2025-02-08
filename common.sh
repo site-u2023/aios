@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-3"
+COMMON_VERSION="2025.02.08-4"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -295,53 +295,78 @@ download_script() {
 }
 
 #########################################################################
-# check_country: 言語キャッシュの確認および設定（country.db からデータ取得）
+# check_country: 言語キャッシュの確認および設定
+# - `$1` (`SELECT_COUNTRY`) があればそれを優先
+# - それが無ければ `country.ch` を参照
+# - さらに無ければ `country.db` から完全一致検索 → 曖昧検索
+# - すべて失敗したらデフォルト `en` をセット
 #########################################################################
 check_country() {
+    local SELECT_COUNTRY="$1"
     local country_file="${BASE_DIR}/country.ch"
+
+    # `$SELECT_COUNTRY` が設定されていればキャッシュに保存
+    if [ -n "$SELECT_COUNTRY" ]; then
+        echo "$SELECT_COUNTRY" > "$country_file"
+        echo "$(color green "Language set to: $SELECT_COUNTRY")"
+        return
+    fi
 
     # キャッシュが存在する場合は利用
     if [ -f "$country_file" ]; then
-        SELECTED_LANGUAGE=$(cat "$country_file")
-    else
-        echo -e "$(color cyan "Select your language (matching country):")"
-        read -p "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja'): " input_lang
-        SELECTED_LANGUAGE=$(grep -i -w "$input_lang" "${BASE_DIR}/country.db" | awk '{print $3}')
+        SELECT_COUNTRY=$(cat "$country_file")
+        echo "$(color green "Using cached language: $SELECT_COUNTRY")"
+        return
+    fi
 
-        if [ -n "$SELECTED_LANGUAGE" ]; then
-            echo "$SELECTED_LANGUAGE" > "$country_file"
-        else
-            handle_error "Country selection failed."
+    # `country.db` から検索
+    if [ -f "${BASE_DIR}/country.db" ]; then
+        local found_country
+        found_country=$(grep -i -w "$SELECT_COUNTRY" "${BASE_DIR}/country.db" | awk '{print $3}')
+        
+        if [ -n "$found_country" ]; then
+            echo "$found_country" > "$country_file"
+            echo "$(color green "Found language in country.db: $found_country")"
+            return
         fi
     fi
 
-    echo -e "$(color green "Selected Language: $SELECTED_LANGUAGE")"
+    # 言語が見つからなければ `en` をデフォルトにセット
+    echo "en" > "$country_file"
+    echo "$(color yellow "No valid language found. Defaulting to English (en).")"
 }
 
 #########################################################################
-# normalize_country: 言語コードがサポート対象か検証し、サポート外なら `en` に変更
+# normalize_country: `message.db` に対応する言語があるか確認
+# - `message.db` に `$SELECT_COUNTRY` があればそのまま使用
+# - 無ければ `message.db` にあるデフォルト言語 (`SELECT_COUNTRY=en` など) を使用
 #########################################################################
 normalize_country() {
-    local lang_file="${BASE_DIR}/check_country"
+    local country_file="${BASE_DIR}/country.ch"
+    local message_db="${BASE_DIR}/messages.db"
 
-    if [ -f "$lang_file" ]; then
-        local read_lang=$(cat "$lang_file")
+    # `country.ch` を読み込む
+    if [ -f "$country_file" ]; then
+        SELECT_COUNTRY=$(cat "$country_file")
     else
-        read_lang="en"
+        SELECT_COUNTRY="en"
     fi
 
-    SELECTED_LANGUAGE=""
-    for lang in $SUPPORTED_LANGUAGES; do
-        if [ "$read_lang" = "$lang" ]; then
-            SELECTED_LANGUAGE="$read_lang"
-            break
-        fi
-    done
+    # `message.db` に `$SELECT_COUNTRY` が存在するか確認
+    if grep -q "^$SELECT_COUNTRY|" "$message_db"; then
+        echo "$(color green "Using message database language: $SELECT_COUNTRY")"
+    else
+        # `message.db` にデフォルト言語が定義されているか確認
+        local default_lang
+        default_lang=$(grep "^SELECT_COUNTRY=" "$message_db" | cut -d'=' -f2)
 
-    if [ -z "$SELECTED_LANGUAGE" ]; then
-        SELECTED_LANGUAGE="en"
-        echo -e "$(color yellow "Language '$read_lang' is not supported. Defaulting to English (en).")"
-        echo "$SELECTED_LANGUAGE" > "$lang_file"
+        if [ -n "$default_lang" ]; then
+            echo "$default_lang" > "$country_file"
+            echo "$(color yellow "Language not found in messages.db. Defaulting to: $default_lang")"
+        else
+            echo "$(color yellow "Language not found in messages.db. Using: en")"
+            echo "en" > "$country_file"
+        fi
     fi
 }
 
@@ -610,26 +635,62 @@ install_language_pack() {
 
 #########################################################################
 # check_common: 初期化処理
-# - モード: "full" (通常), "light" (最低限)
+# - `--reset`, `-reset`, `-r` でキャッシュリセット
+# - `--help`, `-help`, `-h` でヘルプ表示
+# - 言語 (`INPUT_LANG`) を `SELECT_COUNTRY` に渡す
+# - `full` (通常モード), `light` (最低限モード) の選択
 #########################################################################
 check_common() {
     local mode="$1"
+    shift  # 最初の引数 (モード) を削除
+
+    local RESET_CACHE=false
+    local SHOW_HELP=false
+    local INPUT_LANG=""
+    local SELECT_COUNTRY=""
+
+    # 引数解析
+    for arg in "$@"; do
+        case "$arg" in
+            -reset|--reset|-r)
+                RESET_CACHE=true
+                ;;
+            -help|--help|-h)
+                SHOW_HELP=true
+                ;;
+            *)
+                INPUT_LANG="$arg"
+                ;;
+        esac
+    done
+
+    # キャッシュリセット処理
+    if [ "$RESET_CACHE" = true ]; then
+        reset_cache
+    fi
+
+    # ヘルプ表示
+    if [ "$SHOW_HELP" = true ]; then
+        print_help
+        exit 0
+    fi
+
+    # 言語を `check_country()` に引き渡す
+    check_country "$INPUT_LANG"
+
     case "$mode" in
         full)
             download_script messages.db
             download_script country.db
             download_script openwrt.db
-            check_country  
             normalize_country  
             check_openwrt  
             ;;
         light)
-            check_country
             normalize_country
             check_openwrt
             ;;
         *)
-            check_country
             normalize_country
             check_openwrt
             ;;
