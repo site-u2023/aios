@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-00007"
+COMMON_VERSION="2025.02.08-00008"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -255,17 +255,16 @@ download_script() {
 }
 
 #########################################################################
-# select_country: `country.db` から国を検索し、ユーザーに選択させる
+# select_country: 国とタイムゾーンの選択
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${BASE_DIR}/country.ch"
     local user_input=""
     local selected_entry=""
-    local selected_timezone=""
     local selected_zone_name=""
+    local selected_timezone=""
 
-    # **データベース存在確認**
     if [ ! -f "$country_file" ]; then
         echo "$(color red "Country database not found!")"
         return
@@ -301,37 +300,27 @@ select_country() {
         fi
 
         if [ -n "$selected_entry" ]; then
-            local country_name
-            local display_name
-            local lang_code
-            local country_code
-            local tz_data
+            local country_name=$(echo "$selected_entry" | awk '{print $1}')
+            local display_name=$(echo "$selected_entry" | awk '{print $2}')
+            local lang_code=$(echo "$selected_entry" | awk '{print $3}')
+            local country_code=$(echo "$selected_entry" | awk '{print $4}')
+            local tz_data=$(echo "$selected_entry" | awk -F';' '{print $2}')
 
-            country_name=$(echo "$selected_entry" | awk '{print $1}')
-            display_name=$(echo "$selected_entry" | awk '{print $2}')
-            lang_code=$(echo "$selected_entry" | awk '{print $3}')
-            country_code=$(echo "$selected_entry" | awk '{print $4}')
-            tz_data=$(echo "$selected_entry" | awk -F';' '{print $2}')
-
-            # ✅ Y/N 確認 (ここで 1 回のみ)
             echo -e "$(color cyan "Confirm country selection: $country_name ($display_name, $lang_code, $country_code)? [Y/n]:")"
             read -r yn
             case "$yn" in
-                [Yy]*) break ;;  # 確定
+                [Yy]*) break ;;
                 [Nn]*) echo "$(color yellow "Invalid selection. Please try again.")" ; continue ;;
                 *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
             esac
         fi
     done
 
-    # ✅ タイムゾーン選択
     if echo "$tz_data" | grep -q ","; then
         echo "$(color cyan "Select a timezone for $country_name:")"
         local i=1
-        local timezones
         IFS=',' read -r -a timezones <<< "$tz_data"
 
-        # ゾーンネーム + タイムゾーンの表示
         for tz in "${timezones[@]}"; do
             echo "[$i] $tz"
             ((i++))
@@ -340,14 +329,14 @@ select_country() {
         while true; do
             read -p "Enter the number of your choice: " tz_choice
             if [[ "$tz_choice" =~ ^[0-9]+$ ]] && [ "$tz_choice" -ge 1 ] && [ "$tz_choice" -le "${#timezones[@]}" ]; then
+                selected_zone_name="${timezones[$((tz_choice - 1))]}"
                 selected_timezone="${timezones[$((tz_choice - 1))]}"
             else
                 echo "$(color red "Invalid selection. Please enter a valid number.")"
                 continue
             fi
 
-            # ✅ ゾーンネームとタイムゾーンを合わせて確認メッセージを修正
-            echo -e "$(color cyan "Confirm timezone selection: $selected_timezone? [Y/n]:")"
+            echo -e "$(color cyan "Confirm timezone selection: $selected_zone_name ($selected_timezone)? [Y/n]:")"
             read -r tz_yn
             case "$tz_yn" in
                 [Yy]*) break ;;
@@ -356,14 +345,13 @@ select_country() {
             esac
         done
     else
+        selected_zone_name="$tz_data"
         selected_timezone="$tz_data"
     fi
 
-    # ✅ `country.ch` に最終情報を保存
-    echo "$country_name $display_name $lang_code $country_code $selected_timezone" > "$country_cache"
-    echo "$(color green "Country and timezone set: $country_name, $selected_timezone")"
+    echo "$country_name $display_name $lang_code $country_code $selected_zone_name $selected_timezone" > "$country_cache"
+    echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
 }
-
 #########################################################################
 # normalize_country: `message.db` に対応する言語があるか確認し、セット
 # - `message.db` に `$SELECTED_LANGUAGE` があればそのまま使用
