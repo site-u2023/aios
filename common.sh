@@ -342,36 +342,36 @@ confirm() {
 # - `country.db` のすべてのフィールド (国名, 国コード, 言語, ゾーンネーム, UTC) で検索
 # - 国選択時の表示: `[1] Japan 日本語 ja JP`
 # - ゾーン選択時の表示: `[1] Asia/Tokyo UTC+9`
-# - 複数タイムゾーンがある場合、国選択後にゾーンネームを選択
 # - `confirm()` による Y/N 選択後に `country.ch` に保存
-# - すべて失敗したら `Unknown Unknown en XX UTC` をセット
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${BASE_DIR}/country.ch"
+    local user_input=""
     local found_entries=""
     local selected_entry=""
     local selected_timezone=""
-    local user_input=""
 
+    # `country.db` が無い場合
     if [ ! -f "$country_file" ]; then
         echo "$(color red "Country database not found!")"
         echo "Unknown Unknown en XX UTC" > "$country_cache"
         return
     fi
 
+    # ユーザー入力
     echo -e "$(color cyan "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja', '日本語'):")"
     read -r user_input
 
-    # すべてのフィールド (国名, 国コード, 言語, 言語名, タイムゾーン) で検索
-    found_entries=$(grep -i -w "$user_input" "$country_file")
+    # `country.db` から検索（コメント行を除外）
+    found_entries=$(grep -i -w "$user_input" "$country_file" | grep -v '^#')
 
     # 曖昧検索
     if [ -z "$found_entries" ]; then
-        found_entries=$(grep -i "$user_input" "$country_file")
+        found_entries=$(grep -i "$user_input" "$country_file" | grep -v '^#')
     fi
 
-    # 一致するエントリが複数ある場合、選択肢を表示
+    # 複数候補がある場合
     if [ "$(echo "$found_entries" | wc -l)" -gt 1 ]; then
         echo "$(color yellow "Multiple matches found. Please select:")"
         local i=1
@@ -405,7 +405,7 @@ select_country() {
         timezones=$(echo "$selected_entry" | awk -F';' '{print $2}')
 
         if confirm "Confirm country selection: $country_name ($display_name, $lang_code, $country_code)?"; then
-            # タイムゾーンが複数ある場合、ユーザーに選択させる
+            # タイムゾーンが複数ある場合
             if echo "$timezones" | grep -q ","; then
                 echo "$(color cyan "Select a timezone for $country_name:")"
                 local i=1
@@ -420,6 +420,7 @@ select_country() {
                 selected_timezone="$timezones"
             fi
 
+            # `country.ch` に保存
             echo "$country_name $display_name $lang_code $country_code $selected_timezone" > "$country_cache"
             echo "$(color green "Country and timezone set: $country_name, $selected_timezone")"
             return
