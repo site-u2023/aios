@@ -115,6 +115,12 @@ download_script() {
             return 1
         fi
         echo -e "$(color green "Successfully downloaded: $file_name")"
+
+        # `aios` のみ実行権限を付与
+        if [ "$file_name" = "aios" ]; then
+            chmod +x "$install_path"
+            echo -e "$(color cyan "Applied execute permissions to: $install_path")"
+        fi
     fi
 
     # バージョン取得
