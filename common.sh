@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-10"
+COMMON_VERSION="2025.02.08-11"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -249,7 +249,7 @@ download_script() {
 
 #########################################################################
 # select_country: `country.db` から国・タイムゾーンを検索し、Y/N 判定
-# - `country.db` のすべてのフィールド (国名, 国コード, 言語, ゾーンネーム, UTC) で検索
+# - `country.db` のデータを `get_country_info()` を用いて正しく取得
 # - **最初に [1] Japan 日本語 ja JP の形式で全リスト表示**
 # - **ユーザー入力で完全一致・曖昧検索**
 # - **複数のタイムゾーンがある場合は、国選択後にゾーンネームを選択**
@@ -278,18 +278,18 @@ select_country() {
         local country_code=$(echo "$entry" | awk '{print $4}')
         echo "[$i] $country_name $display_name $lang_code $country_code"
         i=$((i+1))
-    done < "$country_file"
+    done < <(get_country_info "" "all")
 
     # ユーザー入力
     echo -e "$(color cyan "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja', '日本語'):")"
     read -r user_input
 
-    # すべてのフィールド (国名, 国コード, 言語, 言語名, タイムゾーン) で検索
-    found_entries=$(grep -i -w "$user_input" "$country_file" | grep -v '^#')
+    # `get_country_info()` を用いて検索
+    found_entries=$(get_country_info "$user_input" "all")
 
     # 曖昧検索
     if [ -z "$found_entries" ]; then
-        found_entries=$(grep -i "$user_input" "$country_file" | grep -v '^#')
+        found_entries=$(get_country_info "$user_input" "all")
     fi
 
     # **複数ヒット時の選択**
@@ -323,7 +323,7 @@ select_country() {
         display_name=$(echo "$selected_entry" | awk '{print $2}')
         lang_code=$(echo "$selected_entry" | awk '{print $3}')
         country_code=$(echo "$selected_entry" | awk '{print $4}')
-        timezones=$(echo "$selected_entry" | awk -F';' '{print $2}')
+        timezones=$(get_country_info "$country_name" "cities")
 
         if confirm "$(get_message 'MSG_CONFIRM_COUNTRY' | sed -e "s/{file}/$country_name/" -e "s/{version}/$display_name ($lang_code, $country_code)/")"; then
             # **複数のタイムゾーンがある場合**
