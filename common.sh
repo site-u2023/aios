@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-00026"
+COMMON_VERSION="2025.02.08-00027"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -255,7 +255,7 @@ download_script() {
 }
 
 #########################################################################
-# select_country: 国とタイムゾーンの選択（完全新設）
+# select_country: 国とタイムゾーンの選択
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -273,10 +273,10 @@ select_country() {
 
     # **国リストの表示**
     echo "$(color cyan "Available countries:")"
-    awk '{print $1, $2, $3, $4}' "$country_file"
+    awk '{print NR, $1, $2, $3, $4}' "$country_file"
 
     while true; do
-        echo -e "$(color cyan "Enter country name, code, or language (or press Enter to list all):")"
+        echo -e "$(color cyan "Enter country name, code, or language:")"
         read user_input
 
         # **完全一致検索**
@@ -370,6 +370,7 @@ select_country() {
     echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
     echo "$(color green "Language saved to language.ch: $lang_code")"
 }
+
 
 #########################################################################
 # normalize_country: `message.db` に対応する言語があるか確認し、セット
