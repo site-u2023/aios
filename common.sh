@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-11"
+COMMON_VERSION="2025.02.09-12"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -304,7 +304,7 @@ select_country() {
             read yn
             case "$yn" in
                 Y|y) break ;;
-                N|n) echo "$(color yellow "Invalid selection. Please try again.")"; continue ;;
+                N|n) continue ;;
                 *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
             esac
         else
@@ -314,10 +314,17 @@ select_country() {
                 echo "[$i] $line"
                 i=$((i + 1))
             done
+            echo "[0] Try again"
 
             while true; do
-                echo -e "$(color cyan "Enter the number of your choice:")"
+                echo -e "$(color cyan "Enter the number of your choice (or 0 to go back):")"
                 read choice
+
+                if [ "$choice" = "0" ]; then
+                    echo "$(color yellow "Returning to country selection.")"
+                    break
+                fi
+
                 selected_entry=$(echo "$found_entries" | awk "NR==$choice")
 
                 if [ -z "$selected_entry" ]; then
@@ -329,7 +336,7 @@ select_country() {
                 read yn
                 case "$yn" in
                     Y|y) break 2 ;;
-                    N|n) echo "$(color yellow "Invalid selection. Please try again.")"; continue ;;
+                    N|n) break ;;
                     *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
                 esac
             done
@@ -351,10 +358,17 @@ select_country() {
             echo "[$i] $tz"
             i=$((i + 1))
         done
+        echo "[0] Try again"
 
         while true; do
-            echo "Enter the number of your choice: "
+            echo "Enter the number of your choice (or 0 to go back): "
             read tz_choice
+
+            if [ "$tz_choice" = "0" ]; then
+                echo "$(color yellow "Returning to timezone selection.")"
+                break
+            fi
+
             selected_zone_name=$(echo "$tz_data" | tr ',' '\n' | awk "NR==$tz_choice")
             selected_timezone="$selected_zone_name"
 
@@ -367,7 +381,7 @@ select_country() {
             read tz_yn
             case "$tz_yn" in
                 Y|y) break ;;
-                N|n) echo "$(color yellow "Invalid selection. Please try again.")"; continue ;;
+                N|n) break ;;
                 *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
             esac
         done
