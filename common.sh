@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-29"
+COMMON_VERSION="2025.02.08-30"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -330,29 +330,36 @@ select_country() {
 
             # **YN確認の修正**
             while true; do
-                if confirm "$confirm_message"; then
-                    break
-                else
-                    echo "$(color yellow "Invalid selection. Please try again.")"
-                    continue
-                fi
+                read -p "$confirm_message " yn
+                case "$yn" in
+                    [Yy]*)
+                        break 2  # **確定**
+                        ;;
+                    [Nn]*)
+                        echo "$(color yellow "Invalid selection. Please try again.")"
+                        continue 2  # **ループに戻る**
+                        ;;
+                    *)
+                        echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
+                        ;;
+                esac
             done
 
             # **タイムゾーンの選択**
             if echo "$tz_data" | grep -q ","; then
                 echo "$(color cyan "Select a timezone for $country_name:")"
                 local i=1
-                tz_cities=$(echo "$tz_data" | cut -d';' -f1 | tr ',' '\n')
-                tz_offsets=$(echo "$tz_data" | cut -d';' -f2 | tr ',' '\n')
-
-                paste <(echo "$tz_cities") <(echo "$tz_offsets") | while read -r city offset; do
-                    echo "[$i] $city ($offset)"
-                    i=$((i+1))
-                done
-
+                echo "$tz_data" | awk -F',' '{for (i=1; i<=NF; i++) print "["i"] "$i}'
+                
                 while true; do
                     read -p "Enter the number of your choice: " tz_choice
-                    selected_timezone=$(paste <(echo "$tz_cities") <(echo "$tz_offsets") | sed -n "${tz_choice}p" | awk '{print $1}')
+                    selected_timezone=$(echo "$tz_data" | awk -F',' -v num="$tz_choice" '{print $num}')
+                    
+                    if [ -z "$selected_timezone" ]; then
+                        echo "$(color red "Invalid selection. Please enter a valid number.")"
+                        continue
+                    fi
+
                     confirm_message=$(get_message 'MSG_CONFIRM_TIMEZONE' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$selected_timezone/")
                     if confirm "$confirm_message"; then
                         break
