@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-12"
+COMMON_VERSION="2025.02.09-13"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -273,10 +273,10 @@ select_country() {
         return 1
     fi
 
-    # **最初にすべての国リストを表示**
-    awk '{print $1, $2, $3, $4}' "$country_file"
-
     while true; do
+        # **最初にすべての国リストを表示**
+        awk '{print $1, $2, $3, $4}' "$country_file"
+
         echo -e "$(color cyan "Enter country name, code, or language (or press Enter to list all):")"
         read user_input
 
@@ -308,21 +308,21 @@ select_country() {
                 *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
             esac
         else
-            echo "$(color yellow "Multiple matches found. Please select:")"
-            i=1
-            echo "$found_entries" | while read line; do
-                echo "[$i] $line"
-                i=$((i + 1))
-            done
-            echo "[0] Try again"
-
             while true; do
+                echo "$(color yellow "Multiple matches found. Please select:")"
+                i=1
+                echo "$found_entries" | while read line; do
+                    echo "[$i] $line"
+                    i=$((i + 1))
+                done
+                echo "[0] Try again"
+
                 echo -e "$(color cyan "Enter the number of your choice (or 0 to go back):")"
                 read choice
 
                 if [ "$choice" = "0" ]; then
                     echo "$(color yellow "Returning to country selection.")"
-                    break
+                    break  # **リストを再表示して最初からやり直し**
                 fi
 
                 selected_entry=$(echo "$found_entries" | awk "NR==$choice")
@@ -352,21 +352,21 @@ select_country() {
 
     # **ゾーンネーム＆タイムゾーン選択**
     if echo "$tz_data" | grep -q ","; then
-        echo "$(color cyan "Select a timezone for $country_name:")"
-        i=1
-        echo "$tz_data" | tr ',' '\n' | while read tz; do
-            echo "[$i] $tz"
-            i=$((i + 1))
-        done
-        echo "[0] Try again"
-
         while true; do
+            echo "$(color cyan "Select a timezone for $country_name:")"
+            i=1
+            echo "$tz_data" | tr ',' '\n' | while read tz; do
+                echo "[$i] $tz"
+                i=$((i + 1))
+            done
+            echo "[0] Try again"
+
             echo "Enter the number of your choice (or 0 to go back): "
             read tz_choice
 
             if [ "$tz_choice" = "0" ]; then
                 echo "$(color yellow "Returning to timezone selection.")"
-                break
+                continue  # **リストを再表示して最初からやり直し**
             fi
 
             selected_zone_name=$(echo "$tz_data" | tr ',' '\n' | awk "NR==$tz_choice")
