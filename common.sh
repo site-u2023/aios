@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-23"
+COMMON_VERSION="2025.02.08-24"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -261,7 +261,6 @@ select_country() {
     # **データベース存在確認**
     if [ ! -f "$country_file" ]; then
         echo "$(color red "Country database not found!")"
-        echo "Other Other en US UTC" > "$country_cache"
         return
     fi
 
@@ -269,20 +268,12 @@ select_country() {
         # **国リスト表示**
         echo -e "$(color cyan "Available countries:")"
         awk 'NF >= 5 {print "[" NR "]", $1, $2, $3, $4}' "$country_file"
-        echo "[0] その他 (Other)"
 
         # **ユーザー入力**
         echo -e "$(color cyan "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja', '日本語'):")"
         read -r user_input
 
-        # **ユーザーが `0` (その他) を選択した場合**
-        if [ "$user_input" = "0" ]; then
-            echo "Other Other en US UTC" > "$country_cache"
-            echo "$(color yellow "No country selected. Defaulting to 'その他 (Other)' with en-US timezone.")"
-            return
-        fi
-
-        # **完全一致検索 (国名 / 言語 / コード)**
+        # **完全一致検索**
         found_entries=$(awk -v query="$user_input" '
             tolower($1) == tolower(query) ||
             tolower($2) == tolower(query) ||
@@ -298,13 +289,18 @@ select_country() {
                 tolower($4) ~ tolower(query) {print NR, $0}' "$country_file")
         fi
 
+        # **検索結果の処理**
+        if [ -z "$found_entries" ]; then
+            echo "$(color yellow "No matching country found. Please try again.")"
+            continue
+        fi
+
         # **複数ヒット時の選択**
         if [ "$(echo "$found_entries" | wc -l)" -gt 1 ]; then
             echo "$(color yellow "Multiple matches found. Please select:")"
             echo "$found_entries" | while read -r entry; do
                 echo "$entry"
             done
-
             read -p "Enter the number of your choice: " choice
             selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
         else
@@ -357,8 +353,6 @@ select_country() {
             echo "$(color green "Country and timezone set: $country_name, $selected_timezone")"
             return
         fi
-
-        echo "$(color yellow "Invalid selection. Please try again.")"
     done
 }
 
