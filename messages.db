@@ -52,6 +52,7 @@ ja|MSG_SETTINGS_APPLIED=設定が適用されました。
 en|MSG_SETTINGS_APPLIED=Settings have been applied.
 
 # インストール確認プロンプト
+# パッケージ名付きインストール確認 (動的部分を {pkg} で置き換え)
 ja|MSG_INSTALL_PROMPT_PKG={pkg} をインストールしますか？ [Y/n]:
 en|MSG_INSTALL_PROMPT_PKG=Do you want to install {pkg}? [Y/n]:
 
@@ -94,10 +95,6 @@ en|MSG_INITIALIZE_ENV=Initialized aios environment.
 # インストールメッセージ
 ja|MSG_INSTALL_PROMPT=インストールを実行しますか？ [Y/n]:
 en|MSG_INSTALL_PROMPT=Do you want to proceed with the installation? [Y/n]:
-
-# パッケージ名付きインストール確認 (動的部分を {pkg} で置き換え)
-ja|MSG_INSTALL_PROMPT_PKG={pkg}をインストールしますか？ [Y/n]:
-en|MSG_INSTALL_PROMPT_PKG=Do you want to install {pkg}? [Y/n]:
 
 ja|MSG_INSTALL_SUCCESS=インストールが完了しました。
 en|MSG_INSTALL_SUCCESS=Installation completed successfully.
