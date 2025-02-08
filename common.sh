@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-00003"
+COMMON_VERSION="2025.02.08-00004"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -261,10 +261,9 @@ select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${BASE_DIR}/country.ch"
     local user_input=""
-    local found_entries=""
     local selected_entry=""
     local selected_timezone=""
-    
+
     # **データベース存在確認**
     if [ ! -f "$country_file" ]; then
         echo "$(color red "Country database not found!")"
@@ -313,43 +312,47 @@ select_country() {
             country_code=$(echo "$selected_entry" | awk '{print $4}')
             tz_data=$(echo "$selected_entry" | awk -F';' '{print $2}')
 
-            # ✅ Y/N 確認 (1回のみ実行)
-            confirm_message=$(get_message 'MSG_CONFIRM_COUNTRY' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$country_name/" -e "s/{version}/$display_name ($lang_code, $country_code)/")
-            if ! confirm "$confirm_message"; then
-                echo "$(color yellow "Invalid selection. Please try again.")"
+            # ✅ Y/N 確認 (ここで 1 回のみ)
+            echo -e "$(color cyan "Confirm country selection: $country_name ($display_name, $lang_code, $country_code)? [Y/n]:")"
+            read -r yn
+            case "$yn" in
+                [Yy]*) break ;;  # 確定
+                [Nn]*) echo "$(color yellow "Invalid selection. Please try again.")" ; continue ;;
+                *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
+            esac
+        fi
+    done
+
+    # ✅ タイムゾーン選択
+    if echo "$tz_data" | grep -q ","; then
+        echo "$(color cyan "Select a timezone for $country_name:")"
+        local i=1
+        echo "$tz_data" | awk -F',' '{for (i=1; i<=NF; i++) print "["i"] "$i}'
+
+        while true; do
+            read -p "Enter the number of your choice: " tz_choice
+            selected_timezone=$(echo "$tz_data" | awk -F',' -v num="$tz_choice" '{print $num}')
+
+            if [ -z "$selected_timezone" ]; then
+                echo "$(color red "Invalid selection. Please enter a valid number.")"
                 continue
             fi
 
-            # ✅ タイムゾーンが複数ある場合は選択させる
-            if echo "$tz_data" | grep -q ","; then
-                echo "$(color cyan "Select a timezone for $country_name:")"
-                local i=1
-                echo "$tz_data" | awk -F',' '{for (i=1; i<=NF; i++) print "["i"] "$i}'
-                
-                while true; do
-                    read -p "Enter the number of your choice: " tz_choice
-                    selected_timezone=$(echo "$tz_data" | awk -F',' -v num="$tz_choice" '{print $num}')
-                    
-                    if [ -z "$selected_timezone" ]; then
-                        echo "$(color red "Invalid selection. Please enter a valid number.")"
-                        continue
-                    fi
+            echo -e "$(color cyan "Confirm timezone selection: $selected_timezone? [Y/n]:")"
+            read -r tz_yn
+            case "$tz_yn" in
+                [Yy]*) break ;;
+                [Nn]*) echo "$(color yellow "Invalid selection. Please try again.")" ; continue ;;
+                *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
+            esac
+        done
+    else
+        selected_timezone="$tz_data"
+    fi
 
-                    confirm_message=$(get_message 'MSG_CONFIRM_TIMEZONE' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$selected_timezone/")
-                    if confirm "$confirm_message"; then
-                        break
-                    fi
-                done
-            else
-                selected_timezone="$tz_data"
-            fi
-
-            # ✅ `country.ch` に最終情報を保存
-            echo "$country_name $display_name $lang_code $country_code $selected_timezone" > "$country_cache"
-            echo "$(color green "Country and timezone set: $country_name, $selected_timezone")"
-            return
-        fi
-    done
+    # ✅ `country.ch` に最終情報を保存
+    echo "$country_name $display_name $lang_code $country_code $selected_timezone" > "$country_cache"
+    echo "$(color green "Country and timezone set: $country_name, $selected_timezone")"
 }
 
 #########################################################################
@@ -568,46 +571,40 @@ handle_exit() {
 
 #########################################################################
 # install_packages: パッケージをインストールし、インストール済みならスキップ
-# ✅ `yn` フラグがある場合のみ `confirm()` を実行
 #########################################################################
 install_packages() {
     local confirm_flag="$1"
     shift
     local package_list="$@"
     local packages_to_install=""
-    local installed_packages=""
 
     # インストール済みチェック
     for pkg in $package_list; do
         if command -v apk >/dev/null 2>&1; then
-            if apk list-installed | grep -q "^$pkg "; then
-                installed_packages="$installed_packages $pkg"
-            else
+            if ! apk list-installed | grep -q "^$pkg "; then
                 packages_to_install="$packages_to_install $pkg"
             fi
         elif command -v opkg >/dev/null 2>&1; then
-            if opkg list-installed | grep -q "^$pkg "; then
-                installed_packages="$installed_packages $pkg"
-            else
+            if ! opkg list-installed | grep -q "^$pkg "; then
                 packages_to_install="$packages_to_install $pkg"
             fi
         fi
     done
-
-    # すでにインストール済みのパッケージを表示
-    [ -n "$installed_packages" ] && echo "$(color cyan "Already installed:$installed_packages")"
 
     # インストール不要なら終了
     if [ -z "$packages_to_install" ]; then
         return 0
     fi
 
-    # ✅ `yn` フラグがある場合のみ `confirm()` を実行
+    # ✅ `yn` フラグがある場合のみ確認
     if [ "$confirm_flag" = "yn" ]; then
-        if ! confirm "MSG_INSTALL_PROMPT" "$packages_to_install"; then
-            echo "$(color yellow "Skipping installation of:$packages_to_install")"
-            return 1
-        fi
+        echo -e "$(color cyan "Do you want to install: $packages_to_install? [Y/n]:")"
+        read -r yn
+        case "$yn" in
+            [Yy]*) ;;
+            [Nn]*) echo "$(color yellow "Skipping installation.")" ; return 1 ;;
+            *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
+        esac
     fi
 
     # パッケージをインストール
@@ -618,7 +615,6 @@ install_packages() {
     fi
 
     echo "$(color green "Installed:$packages_to_install")"
-    return 0
 }
 
 #########################################################################
