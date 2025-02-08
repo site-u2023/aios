@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-03"
+COMMON_VERSION="2025.02.08-04"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -265,34 +265,25 @@ select_country() {
     local selected_entry=""
     local selected_timezone=""
 
-    # **データベース存在確認**
     if [ ! -f "$country_file" ]; then
         echo "$(color red "Country database not found!")"
         return
     fi
 
     while true; do
-        # **国リスト表示**
-        # echo -e "$(color cyan "Available countries:")"
         awk '{print "[" NR "]", $1, $2, $3, $4}' "$country_file"
-
-        # **ユーザー入力**
-        # echo -e "$(color cyan "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja', '日本語'):")"
         echo -e "$(color cyan "Enter number, country name, code, or language:")"
         read -r user_input
 
-        # **番号入力の処理**
         if echo "$user_input" | grep -qE '^[0-9]+$'; then
             selected_entry=$(awk -v num="$user_input" 'NR == num {print $0}' "$country_file")
         else
-            # **完全一致検索**
             found_entries=$(awk -v query="$user_input" '
                 tolower($1) == tolower(query) ||
                 tolower($2) == tolower(query) ||
                 tolower($3) == tolower(query) ||
                 tolower($4) == tolower(query) {printf "[%d] %s\n", NR, $0}' "$country_file")
 
-            # **曖昧検索**
             if [ -z "$found_entries" ]; then
                 found_entries=$(awk -v query="$user_input" '
                     tolower($1) ~ tolower(query) ||
@@ -301,13 +292,11 @@ select_country() {
                     tolower($4) ~ tolower(query) {printf "[%d] %s\n", NR, $0}' "$country_file")
             fi
 
-            # **検索結果の処理**
             if [ -z "$found_entries" ]; then
                 echo "$(color yellow "No matching country found. Please try again.")"
                 continue
             fi
 
-            # **複数ヒット時の選択**
             if [ "$(echo "$found_entries" | wc -l)" -gt 1 ]; then
                 echo "$(color yellow "Multiple matches found. Please select:")"
                 echo "$found_entries"
@@ -318,15 +307,12 @@ select_country() {
             fi
         fi
 
-        # **選択した国が正しいか `confirm()` で Y/N 判定**
         if [ -n "$selected_entry" ]; then
             local country_name
             local display_name
             local lang_code
             local country_code
             local tz_data
-            local tz_cities
-            local tz_offsets
 
             country_name=$(echo "$selected_entry" | awk '{print $1}')
             display_name=$(echo "$selected_entry" | awk '{print $2}')
@@ -336,60 +322,15 @@ select_country() {
 
             confirm_message=$(get_message 'MSG_CONFIRM_COUNTRY' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$country_name/" -e "s/{version}/$display_name ($lang_code, $country_code)/")
 
-            # **YN確認の修正**
-            while true; do
-                read -p "$confirm_message " yn
-                case "$yn" in
-                    [Yy]*)
-                        break 2  # **確定**
-                        ;;
-                    [Nn]*)
-                        echo "$(color yellow "Invalid selection. Please try again.")"
-                        continue 2  # **ループに戻る**
-                        ;;
-                    *)
-                        echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
-                        ;;
-                esac
-            done
-
-            # **タイムゾーンの選択**
-            if echo "$tz_data" | grep -q ","; then
-                echo "$(color cyan "Select a timezone for $country_name:")"
-                local i=1
-                echo "$tz_data" | awk -F',' '{for (i=1; i<=NF; i++) print "["i"] "$i}'
-                
-                while true; do
-                    read -p "Enter the number of your choice: " tz_choice
-                    selected_timezone=$(echo "$tz_data" | awk -F',' -v num="$tz_choice" '{print $num}')
-                    
-                    if [ -z "$selected_timezone" ]; then
-                        echo "$(color red "Invalid selection. Please enter a valid number.")"
-                        continue
-                    fi
-
-                    confirm_message=$(get_message 'MSG_CONFIRM_TIMEZONE' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$selected_timezone/")
-                    if confirm "$confirm_message"; then
-                        break
-                    fi
-                done
+            if confirm "$confirm_message"; then
+                echo "$country_name $display_name $lang_code $country_code $tz_data" > "$country_cache"
+                echo "$(color green "Country and timezone set: $country_name, $tz_data")"
+                return
             else
-                selected_timezone="$tz_data"
+                echo "$(color yellow "Invalid selection. Please try again.")"
             fi
-
-            # **キャッシュに保存**
-            echo "$country_name $display_name $lang_code $country_code $selected_timezone" > "$country_cache"
-            echo "$(color green "Country and timezone set: $country_name, $selected_timezone")"
-            return
         fi
     done
-
-    # **デバッグ情報**
-    if [ -f "$country_file" ]; then
-        echo "$(color cyan "DEBUG: country.ch contents: $(cat "$country_file")")"
-    else
-        echo "$(color red "DEBUG: country.ch was not created!")"
-    fi
 }
 
 #########################################################################
@@ -403,7 +344,8 @@ normalize_country() {
 
     # 言語キャッシュを確認
     if [ -f "$country_file" ]; then
-        SELECTED_LANGUAGE=$(cat "$country_file")
+        SELECTED_LANGUAGE=$(cat "$country_file" | awk '{print $3}')  # 言語コードを取得
+        echo "DEBUG: Loaded language from country.ch -> $SELECTED_LANGUAGE"
     else
         SELECTED_LANGUAGE="en"
     fi
@@ -417,12 +359,7 @@ normalize_country() {
         echo "$(color yellow "Language not found in messages.db. Using: en")"
     fi
 
-    # **デバッグ情報**
-    if [ -f "$country_file" ]; then
-        echo "$(color cyan "DEBUG: Final country.ch contents: $(cat "$country_file")")"
-    else
-        echo "$(color red "DEBUG: country.ch was not created after normalization!")"
-    fi
+    echo "DEBUG: Final language after normalization -> $SELECTED_LANGUAGE"
 }
 
 #########################################################################
@@ -496,7 +433,7 @@ check_country() {
     local INPUT_LANG="$1"
     local country_file="${BASE_DIR}/country.ch"
 
-    # 引数で言語指定があればそれを優先
+    # 言語指定があればそれを使用
     if [ -n "$INPUT_LANG" ]; then
         echo "$INPUT_LANG" > "$country_file"
         echo "$(color green "Language set to: $INPUT_LANG")"
@@ -504,25 +441,27 @@ check_country() {
         return
     fi
 
-    # キャッシュ (`country.ch`) がある場合はそれを使用
+    # キャッシュがある場合はそれを使用
     if [ -f "$country_file" ]; then
         SELECTED_LANGUAGE=$(cat "$country_file")
         echo "$(color green "Using cached language: $SELECTED_LANGUAGE")"
         return
     fi
 
-    # `select_country()` を呼び出し
+    # `select_country()` を実行
     select_country
 
     # `country.ch` が正常に作成されたか確認
     if [ -f "$country_file" ]; then
-        SELECTED_LANGUAGE=$(cat "$country_file")
+        SELECTED_LANGUAGE=$(cat "$country_file" | awk '{print $3}')  # 言語コードを取得
         echo "$(color green "Language selection confirmed: $SELECTED_LANGUAGE")"
     else
         echo "en" > "$country_file"
         SELECTED_LANGUAGE="en"
         echo "$(color yellow "Language not found. Defaulting to 'en'.")"
     fi
+
+    echo "DEBUG: Final country.ch contents: $(cat "$country_file")"
 }
 
 #########################################################################
