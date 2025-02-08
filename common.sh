@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-2"
+COMMON_VERSION="2025.02.08-3"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -12,6 +12,23 @@ BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 SUPPORTED_VERSIONS="${SUPPORTED_VERSIONS:-19.07 21.02 22.03 23.05 24.10.0 SNAPSHOT}"
 SUPPORTED_LANGUAGES="${SUPPORTED_LANGUAGES:-en ja zh-cn zh-tw id ko de ru}"
+
+#########################################################################
+# print_help: ヘルプメッセージを表示
+#########################################################################
+print_help() {
+    echo "Usage: aios.sh [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  -reset, --reset, -r     Reset all cached data"
+    echo "  -help, --help, -h       Show this help message"
+    echo "  ja, en, zh-cn, ...      Set language"
+    echo ""
+    echo "Examples:"
+    echo "  sh aios.sh --reset      # Reset cache"
+    echo "  sh aios.sh -ja          # Set language to Japanese"
+    echo "  sh aios.sh -ja --reset  # Set language to Japanese and reset cache"
+}
 
 #########################################################################
 # color: ANSI エスケープシーケンスを使って色付きメッセージを出力する関数
@@ -74,6 +91,53 @@ handle_error() {
 
     echo -e "$(color red "$error_message")"
     exit 1
+}
+
+#########################################################################
+# parse: コマンドライン引数を解析
+# - `--reset`, `-reset`, `-r` → キャッシュリセット
+# - `--help`, `-help`, `-h` → ヘルプ表示
+# - 言語 (`ja`, `en`, `zh-cn`, `zh-tw`, `id`, `ko`, `de`, `ru`) → 言語選択
+#########################################################################
+parse() {
+    RESET_CACHE=false
+    SHOW_HELP=false
+    SELECTED_LANGUAGE=""
+
+    for arg in "$@"; do
+        case "$arg" in
+            -reset|--reset|-r)
+                RESET_CACHE=true
+                ;;
+            -help|--help|-h)
+                SHOW_HELP=true
+                ;;
+            ja|en|zh-cn|zh-tw|id|ko|de|ru)
+                SELECTED_LANGUAGE="$arg"
+                ;;
+            *)
+                echo "$(color red "Unknown argument: $arg")"
+                return 1
+                ;;
+        esac
+    done
+
+    # ヘルプ表示
+    if [ "$SHOW_HELP" = true ]; then
+        print_help
+        exit 0
+    fi
+
+    # キャッシュリセット実行
+    if [ "$RESET_CACHE" = true ]; then
+        reset_cache
+    fi
+
+    # 言語設定
+    if [ -n "$SELECTED_LANGUAGE" ]; then
+        echo "$SELECTED_LANGUAGE" > "${BASE_DIR}/country.ch"
+        echo "$(color green "Language set to: $SELECTED_LANGUAGE")"
+    fi
 }
 
 #########################################################################
