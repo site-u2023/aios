@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-15"
+COMMON_VERSION="2025.02.09-16"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -281,7 +281,6 @@ select_country() {
         read user_input
 
         if [ -z "$user_input" ]; then
-            # **Enter のみ押された場合は全リスト再表示**
             awk '{print $1, $2, $3, $4}' "$country_file"
             continue
         fi
@@ -322,7 +321,7 @@ select_country() {
 
                 if [ "$choice" = "0" ]; then
                     echo "$(color yellow "Returning to country selection.")"
-                    break  # **リストを再表示して最初からやり直し**
+                    break  
                 fi
 
                 selected_entry=$(echo "$found_entries" | awk "NR==$choice")
@@ -366,7 +365,7 @@ select_country() {
 
             if [ "$tz_choice" = "0" ]; then
                 echo "$(color yellow "Returning to timezone selection.")"
-                continue  # **リストを再表示して最初からやり直し**
+                continue  
             fi
 
             selected_zone_name=$(echo "$tz_data" | tr ',' '\n' | awk "NR==$tz_choice")
@@ -377,24 +376,11 @@ select_country() {
                 continue
             fi
 
-            echo -e "$(color cyan "Confirm timezone selection: $selected_zone_name ($selected_timezone)? [Y/n]:")"
-            read tz_yn
-            case "$tz_yn" in
-                Y|y) break ;;
-                N|n) break ;;
-                *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
-            esac
+            break  
         done
     else
         selected_zone_name="$tz_data"
         selected_timezone="$tz_data"
-        echo -e "$(color cyan "Confirm timezone selection: $selected_zone_name ($selected_timezone)? [Y/n]:")"
-        read tz_yn
-        case "$tz_yn" in
-            Y|y) ;;
-            N|n) return ;;
-            *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
-        esac
     fi
 
     # **キャッシュへの保存**
