@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-00011"
+COMMON_VERSION="2025.02.08-00012"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -275,29 +275,40 @@ select_country() {
         echo -e "$(color cyan "Enter number, country name, code, or language:")"
         read user_input
 
+        # 番号入力の処理
         if echo "$user_input" | grep -qE '^[0-9]+$'; then
             selected_entry=$(awk -v num="$user_input" 'NR == num {print $0}' "$country_file")
         else
-            found_entries=$(grep -i "^$user_input " "$country_file" | awk '{print "[" NR "]", $1, $2, $3, $4}')
+            while true; do
+                found_entries=$(grep -i "^$user_input" "$country_file" | awk '{print "[" NR "]", $1, $2, $3, $4}')
 
-            if [ -z "$found_entries" ]; then
-                found_entries=$(grep -i "$user_input" "$country_file" | awk '{print "[" NR "]", $1, $2, $3, $4}')
-            fi
+                if [ -z "$found_entries" ]; then
+                    found_entries=$(grep -i "$user_input" "$country_file" | awk '{print "[" NR "]", $1, $2, $3, $4}')
+                fi
 
-            if [ -z "$found_entries" ]; then
-                echo "$(color yellow "No matching country found. Please try again.")"
-                continue
-            fi
+                if [ -z "$found_entries" ]; then
+                    echo "$(color yellow "No matching country found. Please try again.")"
+                    read -p "Enter a new search term: " user_input
+                    continue
+                fi
 
-            if [ "$(echo "$found_entries" | wc -l)" -gt 1 ]; then
-                echo "$(color yellow "Multiple matches found. Please select:")"
-                echo "$found_entries"
-                echo "Enter the number of your choice: "
-                read choice
-                selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
-            else
-                selected_entry=$(echo "$found_entries")
-            fi
+                if [ "$(echo "$found_entries" | wc -l)" -gt 1 ]; then
+                    echo "$(color yellow "Multiple matches found. Please select or enter another search term:")"
+                    echo "$found_entries"
+                    read -p "Enter the number of your choice or refine search: " choice
+
+                    if echo "$choice" | grep -qE '^[0-9]+$'; then
+                        selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
+                        break
+                    else
+                        user_input="$choice"
+                        continue
+                    fi
+                else
+                    selected_entry=$(echo "$found_entries")
+                    break
+                fi
+            done
         fi
 
         if [ -n "$selected_entry" ]; then
@@ -317,6 +328,7 @@ select_country() {
         fi
     done
 
+    # タイムゾーン選択処理
     if echo "$tz_data" | grep -q ","; then
         echo "$(color cyan "Select a timezone for $country_name:")"
         set -- $(echo "$tz_data" | tr ',' ' ')
