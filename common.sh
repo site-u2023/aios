@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-00004"
+COMMON_VERSION="2025.02.08-00006"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -323,32 +323,35 @@ select_country() {
         fi
     done
 
-    # ✅ タイムゾーン選択
-    if echo "$tz_data" | grep -q ","; then
-        echo "$(color cyan "Select a timezone for $country_name:")"
-        local i=1
-        echo "$tz_data" | awk -F',' '{for (i=1; i<=NF; i++) print "["i"] "$i}'
+# ✅ タイムゾーン選択
+if echo "$tz_data" | grep -q ","; then
+    echo "$(color cyan "Select a timezone for $country_name:")"
+    local i=1
 
-        while true; do
-            read -p "Enter the number of your choice: " tz_choice
-            selected_timezone=$(echo "$tz_data" | awk -F',' -v num="$tz_choice" '{print $num}')
+    # ゾーンネーム + タイムゾーンの表示
+    echo "$tz_data" | awk -F',' '{for (i=1; i<=NF; i++) print "["i"] "$i}'
 
-            if [ -z "$selected_timezone" ]; then
-                echo "$(color red "Invalid selection. Please enter a valid number.")"
-                continue
-            fi
+    while true; do
+        read -p "Enter the number of your choice: " tz_choice
+        selected_timezone=$(echo "$tz_data" | awk -F',' -v num="$tz_choice" '{print $num}')
 
-            echo -e "$(color cyan "Confirm timezone selection: $selected_timezone? [Y/n]:")"
-            read -r tz_yn
-            case "$tz_yn" in
-                [Yy]*) break ;;
-                [Nn]*) echo "$(color yellow "Invalid selection. Please try again.")" ; continue ;;
-                *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
-            esac
-        done
-    else
-        selected_timezone="$tz_data"
-    fi
+        if [ -z "$selected_timezone" ]; then
+            echo "$(color red "Invalid selection. Please enter a valid number.")"
+            continue
+        fi
+
+        # ✅ ゾーンネームとタイムゾーンを合わせて確認メッセージを修正
+        echo -e "$(color cyan "Confirm timezone selection: $selected_timezone? [Y/n]:")"
+        read -r tz_yn
+        case "$tz_yn" in
+            [Yy]*) break ;;
+            [Nn]*) echo "$(color yellow "Invalid selection. Please try again.")" ; continue ;;
+            *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
+        esac
+    done
+else
+    selected_timezone="$tz_data"
+fi
 
     # ✅ `country.ch` に最終情報を保存
     echo "$country_name $display_name $lang_code $country_code $selected_timezone" > "$country_cache"
