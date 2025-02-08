@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-01"
+COMMON_VERSION="2025.02.08-02"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -386,25 +386,27 @@ select_country() {
 }
 
 #########################################################################
-# normalize_country: `message.db` に対応する言語があるか確認
-# - `message.db` に `$SELECT_COUNTRY` があればそのまま使用
-# - 無ければ `message.db` にあるデフォルト言語 (`SELECT_COUNTRY=en` など) を使用
+# normalize_country: `message.db` に対応する言語があるか確認し、セット
+# - `message.db` に `$SELECTED_LANGUAGE` があればそれを使用
+# - 無ければ `en` にフォールバックし、キャッシュ (`country.ch`) を更新
 #########################################################################
 normalize_country() {
     local country_file="${BASE_DIR}/country.ch"
     local message_db="${BASE_DIR}/messages.db"
 
-    # `country.ch` を読み込む
+    # 言語キャッシュを確認
     if [ -f "$country_file" ]; then
-        SELECT_COUNTRY=$(cat "$country_file")
+        SELECTED_LANGUAGE=$(cat "$country_file")
     else
-        SELECT_COUNTRY="en"
+        SELECTED_LANGUAGE="en"
     fi
 
-    if grep -q "^$SELECT_COUNTRY|" "$message_db"; then
-        echo "$(color green "Using message database language: $SELECT_COUNTRY")"
+    # `message.db` に `SELECTED_LANGUAGE` があるか確認
+    if grep -q "^$SELECTED_LANGUAGE|" "$message_db"; then
+        echo "$(color green "Using message database language: $SELECTED_LANGUAGE")"
     else
         echo "en" > "$country_file"
+        SELECTED_LANGUAGE="en"
         echo "$(color yellow "Language not found in messages.db. Using: en")"
     fi
 }
@@ -477,22 +479,36 @@ confirm() {
 # - すべて失敗したら `en` をセット
 #########################################################################
 check_country() {
-    local SELECT_COUNTRY="$1"
+    local INPUT_LANG="$1"
     local country_file="${BASE_DIR}/country.ch"
 
-    if [ -n "$SELECT_COUNTRY" ]; then
-        echo "$SELECT_COUNTRY" > "$country_file"
-        echo "$(color green "Language set to: $SELECT_COUNTRY")"
+    # 引数で言語指定があればそれを優先
+    if [ -n "$INPUT_LANG" ]; then
+        echo "$INPUT_LANG" > "$country_file"
+        echo "$(color green "Language set to: $INPUT_LANG")"
+        SELECTED_LANGUAGE="$INPUT_LANG"
         return
     fi
 
+    # キャッシュ (`country.ch`) がある場合はそれを使用
     if [ -f "$country_file" ]; then
-        SELECT_COUNTRY=$(cat "$country_file")
-        echo "$(color green "Using cached country: $SELECT_COUNTRY")"
+        SELECTED_LANGUAGE=$(cat "$country_file")
+        echo "$(color green "Using cached language: $SELECTED_LANGUAGE")"
         return
     fi
 
+    # `select_country()` を呼び出し
     select_country
+
+    # `country.ch` が正常に作成されたか確認
+    if [ -f "$country_file" ]; then
+        SELECTED_LANGUAGE=$(cat "$country_file")
+        echo "$(color green "Language selection confirmed: $SELECTED_LANGUAGE")"
+    else
+        echo "en" > "$country_file"
+        SELECTED_LANGUAGE="en"
+        echo "$(color yellow "Language not found. Defaulting to 'en'.")"
+    fi
 }
 
 #########################################################################
@@ -725,7 +741,6 @@ check_common() {
     local RESET_CACHE=false
     local SHOW_HELP=false
     local INPUT_LANG=""
-    local SELECT_COUNTRY=""
 
     # 引数解析
     for arg in "$@"; do
