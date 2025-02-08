@@ -102,7 +102,7 @@ download_script() {
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
     
-    # `aios` の場合は `/usr/bin/aios` に配置
+    # `aios` の場合は `/usr/bin` に配置
     if [ "$file_name" = "aios" ]; then
         install_path="${AIOS_DIR}/${file_name}"
     fi
@@ -110,7 +110,7 @@ download_script() {
     # ファイルが存在しない場合はダウンロード
     if [ ! -f "$install_path" ]; then
         echo -e "$(color yellow "$(get_message 'MSG_DOWNLOADING_MISSING_FILE' "$SELECTED_LANGUAGE" | sed "s/{file}/$file_name/")")"
-        if ! wget --quiet -O "$install_path" "$remote_url"; then
+        if ! ${BASE_WGET} "$install_path" "$remote_url"; then
             echo -e "$(color red "Failed to download: $file_name")"
             return 1
         fi
@@ -152,7 +152,7 @@ download_script() {
     # バージョンチェック: 最新があればダウンロード
     if [ -n "$remote_version" ] && [ "$current_version" != "$remote_version" ]; then
         echo -e "$(color cyan "$(get_message 'MSG_UPDATING_SCRIPT' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{old_version}/$current_version/" -e "s/{new_version}/$remote_version/")")"
-        if ! wget --quiet -O "$install_path" "$remote_url"; then
+        if ! ${BASE_WGET} "$install_path" "$remote_url"; then
             echo -e "$(color red "Failed to download: $file_name")"
             return 1
         fi
@@ -209,7 +209,7 @@ XXXXX_messages_db() {
 messages_db() {
     if [ ! -f "${BASE_DIR}/messages.db" ]; then
         echo -e "$(color yellow "Downloading messages.db...")"
-        if ! wget --quiet -O "${BASE_DIR}/messages.db" "${BASE_URL}/messages.db"; then
+        if ! ${BASE_WGET} "${BASE_DIR}/messages.db" "${BASE_URL}/messages.db"; then
             echo -e "$(color red "Failed to download messages.db")"
             return 1  # `handle_error` を使わず `return 1` に変更
         fi
@@ -248,7 +248,7 @@ download_script() {
     fi
 
     echo "$(color yellow "Downloading latest version of $file_name")"
-    wget --quiet -O "$install_path" "$remote_url"
+    ${BASE_WGET} "$install_path" "$remote_url"
 
     local new_version=$(grep "^version=" "$install_path" | cut -d'=' -f2)
     echo "$file_name=$new_version" >> "$script_cache"
