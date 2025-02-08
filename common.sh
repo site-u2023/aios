@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-13"
+COMMON_VERSION="2025.02.08-14"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -249,8 +249,8 @@ download_script() {
 
 #########################################################################
 # select_country: `country.db` から国・タイムゾーンを検索し、Y/N 判定
-# - `country.db` のデータを適切に取得しリスト表示
-# - **最初に [1] Japan 日本語 ja JP の形式で全リスト表示**
+# - **`country.db` のデータを適切に取得しリスト表示**
+# - **最初に `[1] Japan 日本語 ja JP` の形式で全リスト表示**
 # - **ユーザー入力で完全一致・曖昧検索**
 # - **複数のタイムゾーンがある場合は、国選択後にゾーンネームを選択**
 # - `confirm()` による Y/N 選択後に `country.ch` に保存
@@ -270,21 +270,27 @@ select_country() {
         return
     fi
 
-    # **全リスト表示 (コメントや関数定義を除外)**
+    # **全リスト表示 (スクリプトコードを除外)**
     echo -e "$(color cyan "Available countries:")"
     local i=1
-    awk 'NF >= 4 {print "[" i "] " $1, $2, $3, $4; i++}' "$country_file"
+    awk 'NF >= 4 && $1 !~ /^#/ && $1 !~ /echo/ && $1 !~ /=/ {print "[" i "] " $1, $2, $3, $4; i++}' "$country_file"
 
-    # ユーザー入力
+    # **ユーザー入力**
     echo -e "$(color cyan "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja', '日本語'):")"
     read -r user_input
 
     # **完全一致検索**
-    found_entries=$(awk -v query="$user_input" 'tolower($1) == tolower(query) || tolower($3) == tolower(query) || tolower($4) == tolower(query) {print $0}' "$country_file")
+    found_entries=$(awk -v query="$user_input" '
+        tolower($1) == tolower(query) ||
+        tolower($3) == tolower(query) ||
+        tolower($4) == tolower(query) {print $0}' "$country_file")
 
     # **曖昧検索**
     if [ -z "$found_entries" ]; then
-        found_entries=$(awk -v query="$user_input" 'tolower($1) ~ tolower(query) || tolower($3) ~ tolower(query) || tolower($4) ~ tolower(query) {print $0}' "$country_file")
+        found_entries=$(awk -v query="$user_input" '
+            tolower($1) ~ tolower(query) ||
+            tolower($3) ~ tolower(query) ||
+            tolower($4) ~ tolower(query) {print $0}' "$country_file")
     fi
 
     # **複数ヒット時の選択**
