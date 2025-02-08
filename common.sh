@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-25"
+COMMON_VERSION="2025.02.08-26"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -282,7 +282,7 @@ select_country() {
                 tolower($1) == tolower(query) ||
                 tolower($2) == tolower(query) ||
                 tolower($3) == tolower(query) ||
-                tolower($4) == tolower(query) {print NR, $0}' "$country_file")
+                tolower($4) == tolower(query) {printf "[%d] %s\n", NR, $0}' "$country_file")
 
             # **曖昧検索**
             if [ -z "$found_entries" ]; then
@@ -290,7 +290,7 @@ select_country() {
                     tolower($1) ~ tolower(query) ||
                     tolower($2) ~ tolower(query) ||
                     tolower($3) ~ tolower(query) ||
-                    tolower($4) ~ tolower(query) {print NR, $0}' "$country_file")
+                    tolower($4) ~ tolower(query) {printf "[%d] %s\n", NR, $0}' "$country_file")
             fi
 
             # **検索結果の処理**
@@ -302,9 +302,7 @@ select_country() {
             # **複数ヒット時の選択**
             if [ "$(echo "$found_entries" | wc -l)" -gt 1 ]; then
                 echo "$(color yellow "Multiple matches found. Please select:")"
-                echo "$found_entries" | while read -r entry; do
-                    echo "$entry"
-                done
+                echo "$found_entries"
                 read -p "Enter the number of your choice: " choice
                 selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
             else
@@ -330,10 +328,14 @@ select_country() {
 
             confirm_message=$(get_message 'MSG_CONFIRM_COUNTRY' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$country_name/" -e "s/{version}/$display_name ($lang_code, $country_code)/")
 
-            if ! confirm "$confirm_message"; then
-                echo "$(color yellow "Invalid selection. Please try again.")"
-                continue
-            fi
+            # **YN確認の修正**
+            while true; do
+                if confirm "$confirm_message"; then
+                    break
+                else
+                    echo "$(color yellow "Invalid selection. Please try again.")"
+                fi
+            done
 
             # **タイムゾーンの選択**
             if echo "$tz_data" | grep -q ","; then
@@ -347,8 +349,14 @@ select_country() {
                     i=$((i+1))
                 done
 
-                read -p "Enter the number of your choice: " tz_choice
-                selected_timezone=$(paste <(echo "$tz_cities") <(echo "$tz_offsets") | sed -n "${tz_choice}p" | awk '{print $1}')
+                while true; do
+                    read -p "Enter the number of your choice: " tz_choice
+                    selected_timezone=$(paste <(echo "$tz_cities") <(echo "$tz_offsets") | sed -n "${tz_choice}p" | awk '{print $1}')
+                    confirm_message=$(get_message 'MSG_CONFIRM_TIMEZONE' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$selected_timezone/")
+                    if confirm "$confirm_message"; then
+                        break
+                    fi
+                done
             else
                 selected_timezone="$tz_data"
             fi
@@ -360,7 +368,6 @@ select_country() {
         fi
     done
 }
-
 
 #########################################################################
 # normalize_country: `message.db` に対応する言語があるか確認
