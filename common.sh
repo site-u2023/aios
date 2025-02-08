@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-28"
+COMMON_VERSION="2025.02.09-29"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -273,7 +273,6 @@ select_country() {
     fi
 
     while true; do
-        # **すべての国リストを表示**
         echo "$(color cyan "Available countries:")"
         awk '{print $1, $2, $3, $4}' "$country_file"
 
@@ -281,12 +280,10 @@ select_country() {
         read user_input
 
         if [ -z "$user_input" ]; then
-            # **Enter のみ押された場合は全リスト再表示**
             awk '{print $1, $2, $3, $4}' "$country_file"
             continue
         fi
 
-        # **曖昧検索**
         found_entries=$(awk -v query="$user_input" '
             tolower($1) ~ tolower(query) ||
             tolower($2) ~ tolower(query) ||
@@ -343,14 +340,12 @@ select_country() {
         fi
     done
 
-    # **選択した国の処理**
     country_name=$(echo "$selected_entry" | awk '{print $1}')
     display_name=$(echo "$selected_entry" | awk '{print $2}')
     lang_code=$(echo "$selected_entry" | awk '{print $3}')
     country_code=$(echo "$selected_entry" | awk '{print $4}')
     tz_data=$(grep "^$country_name" "$country_file" | awk -F';' '{print $2}')
 
-    # **ゾーンネーム＆タイムゾーン選択**
     if echo "$tz_data" | grep -q ","; then
         while true; do
             echo "$(color cyan "Select a timezone for $country_name:")"
@@ -386,15 +381,12 @@ select_country() {
         selected_timezone=$(echo "$tz_data" | awk '{print $2}')
     fi
 
-    # **表示修正**
     echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
     echo "$(color green "Language saved to language.ch: $lang_code")"
 
-    # **キャッシュ書き込み**
     echo "$country_name $display_name $lang_code $country_code $selected_zone_name $selected_timezone" > "$country_cache"
     echo "$lang_code" > "$language_cache"
 }
-
 
 #########################################################################
 # normalize_country: `message.db` に対応する言語があるか確認し、セット
