@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-00012"
+COMMON_VERSION="2025.02.08-00013"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -292,16 +292,20 @@ select_country() {
                     continue
                 fi
 
-                if [ "$(echo "$found_entries" | wc -l)" -gt 1 ]; then
+                MIN_CHOICE=1
+                MAX_CHOICE=$(echo "$found_entries" | wc -l)
+
+                if [ "$MAX_CHOICE" -gt 1 ]; then
                     echo "$(color yellow "Multiple matches found. Please select or enter another search term:")"
                     echo "$found_entries"
                     read -p "Enter the number of your choice or refine search: " choice
 
-                    if echo "$choice" | grep -qE '^[0-9]+$'; then
-                        selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
+                    # **番号が表示されたリスト内であることを確認**
+                    if echo "$choice" | grep -qE '^[0-9]+$' && [ "$choice" -ge "$MIN_CHOICE" ] && [ "$choice" -le "$MAX_CHOICE" ]; then
+                        selected_entry=$(echo "$found_entries" | awk -v num="$choice" 'NR == num {print $0}')
                         break
                     else
-                        user_input="$choice"
+                        echo "$(color red "Invalid selection. Please choose a number from the displayed list.")"
                         continue
                     fi
                 else
