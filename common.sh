@@ -541,7 +541,7 @@ install_packages() {
     local package_list="$*"
 
     if [ "$confirm_flag" = "yn" ] && [ -z "${CONFIRMATION_DONE:-}" ]; then
-        local formatted_package_list=$(echo "$package_list" | sed 's/  */, /g')  # 複数パッケージをカンマ区切りに整形
+        local formatted_package_list=$(echo "$package_list" | sed 's/  */, /g')
 
         echo "DEBUG: Package list for confirmation -> [$formatted_package_list]"
 
@@ -553,7 +553,14 @@ install_packages() {
     fi
 
     for pkg in $package_list; do
+        # 言語コード (`ja`, `en` など) は `install_language_pack()` で処理しない
+        if echo "$pkg" | grep -qE '^(en|ja|zh-cn|zh-tw|id|ko|de|ru)$'; then
+            echo "DEBUG: Skipping package installation for language code: $pkg"
+            continue
+        fi
+
         attempt_package_install "$pkg"
+        install_language_pack "$pkg"  # 言語パックをインストール
     done
 }
 
