@@ -1,7 +1,7 @@
 #!/bin/sh
 # aios.sh (初期エントリースクリプト)
 # License: CC0
-AIOS_VERSION="2025.02.06-9"
+AIOS_VERSION="2025.02.08-1"
 echo "aios.sh Last update: $AIOS_VERSION"
 
 BASE_WGET="wget -O" # テスト用
@@ -47,7 +47,7 @@ download_common() {
 # インストール
 #################################
 packages() {
-    install_packages yn ttyd luci-app-ttyd uci  # `yn` を一括で適用
+    install_packages yn ttyd luci-app-ttyd uci
 }
 
 #################################
