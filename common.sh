@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-11"
+COMMON_VERSION="2025.02.08-12"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -249,7 +249,7 @@ download_script() {
 
 #########################################################################
 # select_country: `country.db` から国・タイムゾーンを検索し、Y/N 判定
-# - `country.db` のデータを `get_country_info()` を用いて正しく取得
+# - `country.db` のデータを適切に取得しリスト表示
 # - **最初に [1] Japan 日本語 ja JP の形式で全リスト表示**
 # - **ユーザー入力で完全一致・曖昧検索**
 # - **複数のタイムゾーンがある場合は、国選択後にゾーンネームを選択**
@@ -263,40 +263,42 @@ select_country() {
     local selected_entry=""
     local selected_timezone=""
 
+    # `country.db` の存在チェック
     if [ ! -f "$country_file" ]; then
         echo "$(color red "Country database not found!")"
         echo "Unknown Unknown en XX UTC" > "$country_cache"
         return
     fi
 
+    # **全リスト表示**
     echo -e "$(color cyan "Available countries:")"
     local i=1
-    while IFS= read -r entry; do
+    cat "$country_file" | grep -v '^#' | while read -r entry; do
         local country_name=$(echo "$entry" | awk '{print $1}')
         local display_name=$(echo "$entry" | awk '{print $2}')
         local lang_code=$(echo "$entry" | awk '{print $3}')
         local country_code=$(echo "$entry" | awk '{print $4}')
         echo "[$i] $country_name $display_name $lang_code $country_code"
         i=$((i+1))
-    done < <(get_country_info "" "all")
+    done
 
     # ユーザー入力
     echo -e "$(color cyan "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja', '日本語'):")"
     read -r user_input
 
-    # `get_country_info()` を用いて検索
-    found_entries=$(get_country_info "$user_input" "all")
+    # **完全一致検索**
+    found_entries=$(grep -i -w "$user_input" "$country_file" | grep -v '^#')
 
-    # 曖昧検索
+    # **曖昧検索**
     if [ -z "$found_entries" ]; then
-        found_entries=$(get_country_info "$user_input" "all")
+        found_entries=$(grep -i "$user_input" "$country_file" | grep -v '^#')
     fi
 
     # **複数ヒット時の選択**
     if [ "$(echo "$found_entries" | wc -l)" -gt 1 ]; then
         echo "$(color yellow "Multiple matches found. Please select:")"
         local i=1
-        echo "$found_entries" | while IFS= read -r entry; do
+        echo "$found_entries" | while read -r entry; do
             local country_name=$(echo "$entry" | awk '{print $1}')
             local display_name=$(echo "$entry" | awk '{print $2}')
             local lang_code=$(echo "$entry" | awk '{print $3}')
@@ -323,14 +325,14 @@ select_country() {
         display_name=$(echo "$selected_entry" | awk '{print $2}')
         lang_code=$(echo "$selected_entry" | awk '{print $3}')
         country_code=$(echo "$selected_entry" | awk '{print $4}')
-        timezones=$(get_country_info "$country_name" "cities")
+        timezones=$(echo "$selected_entry" | awk -F';' '{print $2}')
 
         if confirm "$(get_message 'MSG_CONFIRM_COUNTRY' | sed -e "s/{file}/$country_name/" -e "s/{version}/$display_name ($lang_code, $country_code)/")"; then
             # **複数のタイムゾーンがある場合**
             if echo "$timezones" | grep -q ","; then
                 echo "$(color cyan "Select a timezone for $country_name:")"
                 local i=1
-                echo "$timezones" | tr ',' '\n' | while IFS= read -r tz; do
+                echo "$timezones" | tr ',' '\n' | while read -r tz; do
                     echo "[$i] $tz"
                     i=$((i+1))
                 done
@@ -341,14 +343,14 @@ select_country() {
                 selected_timezone="$timezones"
             fi
 
-            # `country.ch` に保存
+            # **`country.ch` に保存**
             echo "$country_name $display_name $lang_code $country_code $selected_timezone" > "$country_cache"
             echo "$(color green "Country and timezone set: $country_name, $selected_timezone")"
             return
         fi
     fi
 
-    # すべて失敗したらデフォルト `en` + `UTC` をセット
+    # **すべて失敗したらデフォルト `en` + `UTC` をセット**
     echo "Unknown Unknown en XX UTC" > "$country_cache"
     echo "$(color yellow "No valid country found. Defaulting to English (en) and UTC.")"
 }
