@@ -577,41 +577,66 @@ handle_exit() {
 }
 
 #########################################################################
-# install_packages: パッケージをインストールし、言語パックも適用
+# install_packages: パッケージをインストールし、インストール済みならスキップ
+# 引数:
+#   $1: 'yn' を指定すると Y/N 確認を行う
+#   $2 以降: インストールするパッケージ名 (複数指定可)
 #########################################################################
 install_packages() {
     local confirm_flag="$1"
-    shift
-    local package_list="$*"
-    local package_manager_file="${BASE_DIR}/downloader.ch"
+    shift  # 最初の引数 (`yn` など) を削除
+    local package_list="$@"  # 残りの引数を取得
 
-    # キャッシュが存在する場合は利用
-    if [ -f "$package_manager_file" ]; then
-        PACKAGE_MANAGER=$(cat "$package_manager_file")
-    else
+    local packages_to_install=""
+    local installed_packages=""
+
+    # インストール済みのパッケージをチェック
+    for pkg in $package_list; do
         if command -v apk >/dev/null 2>&1; then
-            PACKAGE_MANAGER="apk"
+            if apk list-installed | grep -q "^$pkg "; then
+                installed_packages="$installed_packages $pkg"
+            else
+                packages_to_install="$packages_to_install $pkg"
+            fi
         elif command -v opkg >/dev/null 2>&1; then
-            PACKAGE_MANAGER="opkg"
-        else
-            handle_error "No valid package manager found."
+            if opkg list-installed | grep -q "^$pkg "; then
+                installed_packages="$installed_packages $pkg"
+            else
+                packages_to_install="$packages_to_install $pkg"
+            fi
         fi
-        echo "$PACKAGE_MANAGER" > "$package_manager_file"
+    done
+
+    # すでにインストール済みのパッケージを表示
+    if [ -n "$installed_packages" ]; then
+        echo "$(color cyan "Already installed: $installed_packages")"
     fi
 
-    if [ "$confirm_flag" = "yn" ] && [ -z "${CONFIRMATION_DONE:-}" ]; then
-        local formatted_package_list=$(echo "$package_list" | sed 's/  */, /g')
+    # インストールが必要なパッケージがない場合は終了
+    if [ -z "$packages_to_install" ]; then
+        return 0
+    fi
 
-        if ! confirm "MSG_INSTALL_PROMPT_PKG" "$formatted_package_list"; then
-            echo "$(color yellow "Skipping installation of: $formatted_package_list")"
+    # `yn` フラグがある場合、確認メッセージを出す
+    if [ "$confirm_flag" = "yn" ]; then
+        local confirm_msg=$(get_message "MSG_INSTALL_PROMPT_PKG" "$SELECTED_LANGUAGE")
+        confirm_msg=$(echo "$confirm_msg" | sed "s/{pkg}/$packages_to_install/")
+
+        if ! confirm "$confirm_msg"; then
+            echo "$(color yellow "Skipping installation of: $packages_to_install")"
             return 1
         fi
-        CONFIRMATION_DONE=1
     fi
 
-    for pkg in $package_list; do
-        attempt_package_install "$pkg"
-    done
+    # 必要なパッケージをインストール
+    if command -v apk >/dev/null 2>&1; then
+        apk add $packages_to_install
+    elif command -v opkg >/dev/null 2>&1; then
+        opkg install $packages_to_install
+    fi
+
+    echo "$(color green "Installed: $packages_to_install")"
+    return 0
 }
 
 #########################################################################
