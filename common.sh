@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-15"
+COMMON_VERSION="2025.02.08-16"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -273,7 +273,7 @@ select_country() {
     # **全リスト表示 (スクリプトコードを除外)**
     echo -e "$(color cyan "Available countries:")"
     local i=1
-    awk 'NF >= 4 && $1 !~ /^#/ && $1 !~ /echo/ && $1 !~ /=/ && $1 !~ /\(/ && $1 !~ /if/ {print "[" i "] " $1, $2, $3, $4; i++}' "$country_file"
+    awk 'NF >= 4 && $1 !~ /^#/ && $1 !~ /echo/ && $1 !~ /=/ && $1 !~ /\(/ && $1 !~ /\|/ && $1 !~ /case/ {print "[" i "] " $1, $2, $3, $4; i++}' "$country_file"
 
     # **ユーザー入力**
     echo -e "$(color cyan "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja', '日本語'):")"
