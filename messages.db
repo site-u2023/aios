@@ -5,8 +5,8 @@ MESSAGE_VERSION="2025.02.06-3"
 echo "message.db Last update: $MESSAGE_VERSION"
 
 # 追加--------------------------------------------
-ja|MSG_CONFIRM_COUNTRY=この国を選択しますか？ {file} ({version})?
-en|MSG_CONFIRM_COUNTRY=Confirm country selection: {file} ({version})?
+ja|MSG_CONFIRM_COUNTRY={file} ({version}) を選択しますか？ [Y/n]:
+en|MSG_CONFIRM_COUNTRY=Confirm country selection: {file} ({version})? [Y/n]:
 
 # 追加--------------------------------------------
 # バージョン情報メッセージ
