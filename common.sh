@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.05-31"
+COMMON_VERSION="2025.02.08-1"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -589,7 +589,13 @@ install_language_pack() {
     local base_pkg="$1"
     local lang_pkg="luci-i18n-${base_pkg#luci-app-}-${SELECTED_LANGUAGE}"
 
-    # `packages.db` からパッケージリストを取得
+    # 言語コード (`ja`, `en` など) をダウンロードしないよう防ぐ
+    if echo "$base_pkg" | grep -qE '^(en|ja|zh-cn|zh-tw|id|ko|de|ru)$'; then
+        echo "DEBUG: Skipping language pack installation for language code: $base_pkg"
+        return
+    fi
+
+    # `packages.db` から言語パッケージがあるか確認
     if grep -q "^packages=" "${BASE_DIR}/packages.db"; then
         local available_pkgs
         available_pkgs=$(grep "^packages=" "${BASE_DIR}/packages.db" | cut -d'=' -f2)
