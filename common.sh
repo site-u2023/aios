@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-00017"
+COMMON_VERSION="2025.02.08-00018"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -254,7 +254,7 @@ download_script() {
     echo "$file_name=$new_version" >> "$script_cache"
 }
 
-select_country() {
+XXXXX_select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${BASE_DIR}/country.ch"
     local user_input=""
@@ -353,7 +353,7 @@ select_country() {
     echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
 }
 
-XXXXX_select_country() {
+select_country() {
     country_file="${BASE_DIR}/country.db"
     country_cache="${BASE_DIR}/country.ch"
     user_input=""
