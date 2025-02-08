@@ -269,3 +269,154 @@ INPUT_LANG="$1"
 - 関数名の変更は、要件定義のアップデートと全スクリプトへの反映を伴う事を最大限留意する。
 - 新規関数追加時も要件定義への追加が必須。
 - 要件定義に対し不明また矛盾点は、すみやかに報告、連絡、相談、指摘する。
+
+  ## 言語キャッシュの管理 (`language.ch` の導入)
+
+### **1. 言語キャッシュ (`language.ch`) の新設**
+- `language.ch` には、**スクリプトが参照する言語情報のみ** を保存する (`ja`, `en` など)。
+- `country.ch` には、**選択した国情報** (`Japan 日本語 ja JP JST-9`) を保存し、言語コードも含めるが、スクリプトの言語参照には使わない。
+
+### **2. `check_language()` の新設**
+- `check_language()` では、**言語キャッシュ (`language.ch`) の存在を確認し、適切にセットする処理を行う。**
+- `message.db` にその言語が存在しない場合でも、**`language.ch` には書き込まず、スクリプト内の変数 (`SELECTED_LANGUAGE`) で一時的に`en`を代用する。**
+
+```sh
+#########################################################################
+# check_language: 言語キャッシュの確認および設定
+# - `language.ch` に言語があるか確認し、無ければ `check_country()` を参照
+# - `message.db` にその言語があるか確認し、無ければスクリプト内で `en` を代用
+#########################################################################
+check_language() {
+    local language_cache="${BASE_DIR}/language.ch"
+    local country_cache="${BASE_DIR}/country.ch"
+
+    # 言語キャッシュがある場合はそれを使用
+    if [ -f "$language_cache" ]; then
+        SELECTED_LANGUAGE=$(cat "$language_cache")
+        echo "$(color green "Using cached language: $SELECTED_LANGUAGE")"
+    else
+        # `country.ch` から言語コードを取得し、`language.ch` に保存
+        if [ -f "$country_cache" ]; then
+            SELECTED_LANGUAGE=$(awk '{print $3}' "$country_cache")
+            echo "$SELECTED_LANGUAGE" > "$language_cache"
+            echo "$(color green "Language set from country.ch: $SELECTED_LANGUAGE")"
+        else
+            SELECTED_LANGUAGE="en"
+            echo "$SELECTED_LANGUAGE" > "$language_cache"
+            echo "$(color yellow "No language found. Defaulting to 'en'.")"
+        fi
+    fi
+}
+```
+
+### **3. `normalize_country()` の修正**
+- `normalize_country()` は `language.ch` を変更しない。
+- `message.db` に言語があるかどうかを確認し、無ければスクリプト変数 (`SELECTED_LANGUAGE`) に `en` を設定するだけ。
+
+```sh
+#########################################################################
+# normalize_country: `message.db` に対応する言語があるか確認し、セット
+# - `message.db` に `$SELECTED_LANGUAGE` があればそのまま使用
+# - 無ければ **スクリプト内の `SELECTED_LANGUAGE` のみ** `en` にする（`language.ch` は変更しない）
+#########################################################################
+normalize_country() {
+    local message_db="${BASE_DIR}/messages.db"
+    local language_cache="${BASE_DIR}/language.ch"
+
+    # `language.ch` から言語コードを取得
+    if [ -f "$language_cache" ]; then
+        SELECTED_LANGUAGE=$(cat "$language_cache")
+        echo "DEBUG: Loaded language from language.ch -> $SELECTED_LANGUAGE"
+    else
+        SELECTED_LANGUAGE="en"
+        echo "DEBUG: No language.ch found, defaulting to 'en'"
+    fi
+
+    # `message.db` に `SELECTED_LANGUAGE` があるか確認
+    if grep -q "^$SELECTED_LANGUAGE|" "$message_db"; then
+        echo "$(color green "Using message database language: $SELECTED_LANGUAGE")"
+    else
+        SELECTED_LANGUAGE="en"
+        echo "$(color yellow "Language not found in messages.db. Using: en")"
+    fi
+
+    echo "DEBUG: Final language after normalization -> $SELECTED_LANGUAGE"
+}
+```
+
+### **4. `check_country()` の修正**
+- `check_country()` で `country.ch` を確認し、**選択した言語を `language.ch` にも保存**
+
+```sh
+#########################################################################
+# check_country: 国情報の確認および設定
+# - `country.ch` を参照し、無ければ `select_country()` で選択
+# - 選択した言語を **`language.ch` にも保存**
+#########################################################################
+check_country() {
+    local country_cache="${BASE_DIR}/country.ch"
+
+    # `country.ch` が存在する場合
+    if [ -f "$country_cache" ]; then
+        echo "$(color green "Using cached country information.")"
+        return
+    fi
+
+    # `select_country()` を実行して新しい `country.ch` を作成
+    select_country
+
+    # `country.ch` の言語を `language.ch` にも保存
+    if [ -f "$country_cache" ]; then
+        local lang_code=$(awk '{print $3}' "$country_cache")
+        echo "$lang_code" > "${BASE_DIR}/language.ch"
+        echo "$(color green "Language saved to language.ch: $lang_code")"
+    fi
+}
+```
+
+### **5. `check_common()` の修正**
+
+```sh
+#########################################################################
+# check_common: 初期化処理
+# - `full` モードでは `message.db` などをダウンロード
+# - `light` モードでは最低限のチェックのみ
+#########################################################################
+check_common() {
+    local mode="$1"
+    shift
+
+    case "$mode" in
+        full)
+            download_script messages.db
+            download_script country.db
+            download_script openwrt.db
+            check_openwrt
+            check_country
+            check_language
+            normalize_country  
+            ;;
+        light)
+            check_openwrt
+            check_country
+            check_language
+            normalize_country  
+            ;;
+        *)
+            check_openwrt
+            check_country
+            check_language
+            normalize_country  
+            ;;
+    esac
+}
+```
+
+### **最終的な改善点まとめ**
+✅ `language.ch` を新設し、**スクリプトの言語選択用** に使用。  
+✅ `check_language()` を新設し、言語キャッシュの管理を専用化。  
+✅ `normalize_country()` では `language.ch` を **変更せず**、スクリプト内で `en` にフォールバック。  
+✅ `check_country()` で `country.ch` を確認し、**選択した言語を `language.ch` にも保存**。  
+
+これにより、言語の処理が明確化され、`ja` を選択したのに `en` になる問題が解決される。
+
