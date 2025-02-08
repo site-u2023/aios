@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-01"
+COMMON_VERSION="2025.02.08-02"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -616,7 +616,7 @@ install_packages() {
 
     # すでにインストール済みのパッケージを表示
     if [ -n "$installed_packages" ]; then
-        echo "$(color cyan "Already installed: $installed_packages")"
+        echo "$(color cyan "Already installed:$installed_packages")"
     fi
 
     # インストールが必要なパッケージがない場合は終了
@@ -624,13 +624,13 @@ install_packages() {
         return 0
     fi
 
-    # `yn` フラグがある場合、確認メッセージを出す
+    # `yn` フラグがある場合、確認メッセージを出す（ここで1回のみ）
     if [ "$confirm_flag" = "yn" ]; then
         local confirm_msg=$(get_message "MSG_INSTALL_PROMPT_PKG" "$SELECTED_LANGUAGE")
         confirm_msg=$(echo "$confirm_msg" | sed "s/{pkg}/$packages_to_install/")
 
         if ! confirm "$confirm_msg"; then
-            echo "$(color yellow "Skipping installation of: $packages_to_install")"
+            echo "$(color yellow "Skipping installation of:$packages_to_install")"
             return 1
         fi
     fi
@@ -642,7 +642,7 @@ install_packages() {
         opkg install $packages_to_install
     fi
 
-    echo "$(color green "Installed: $packages_to_install")"
+    echo "$(color green "Installed:$packages_to_install")"
     return 0
 }
 
