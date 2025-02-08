@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-8"
+COMMON_VERSION="2025.02.09-9"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -266,6 +266,7 @@ select_country() {
     local selected_zone_name=""
     local selected_timezone=""
     local matches_found=""
+    local found_entries=""
 
     # **データベース存在チェック**
     if [ ! -f "$country_file" ]; then
@@ -274,7 +275,7 @@ select_country() {
     fi
 
     while true; do
-        # **全リストを表示（番号なし）**
+        # **全リストを表示**
         echo "$(color cyan "Available countries:")"
         awk '{print $1, $2, $3, $4}' "$country_file"
 
@@ -312,7 +313,7 @@ select_country() {
             tolower($1) ~ tolower(query) ||
             tolower($2) ~ tolower(query) ||
             tolower($3) ~ tolower(query) ||
-            tolower($4) ~ tolower(query) {print $0}' "$country_file")
+            tolower($4) ~ tolower(query) {print "[" NR "]", $0}' "$country_file")
 
         matches_found=$(echo "$found_entries" | wc -l)
 
@@ -320,7 +321,7 @@ select_country() {
             echo "$(color yellow "No matching country found. Please try again.")"
             continue
         elif [ "$matches_found" -eq 1 ]; then
-            selected_entry="$found_entries"
+            selected_entry=$(echo "$found_entries" | sed -E 's/\[[0-9]+\] //')
             echo -e "$(color cyan "Confirm country selection: $(echo "$selected_entry" | awk '{print $1, $2, $3, $4}')? [Y/n]:")"
             read yn
             case "$yn" in
@@ -330,11 +331,11 @@ select_country() {
             esac
         else
             echo "$(color yellow "Multiple matches found. Please select:")"
-            echo "$found_entries" | awk '{print "[" NR "]", $1, $2, $3, $4}'
+            echo "$found_entries"
 
             echo -e "$(color cyan "Enter the number of your choice:")"
             read choice
-            selected_entry=$(echo "$found_entries" | awk -v num="$choice" 'NR == num {print $0}')
+            selected_entry=$(echo "$found_entries" | awk -v num="$choice" 'NR == num {print $0}' | sed -E 's/\[[0-9]+\] //')
 
             if [ -z "$selected_entry" ]; then
                 echo "$(color red "Invalid selection. Please choose a valid number.")"
@@ -397,6 +398,7 @@ select_country() {
     echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
     echo "$(color green "Language saved to language.ch: $lang_code")"
 }
+
 
 #########################################################################
 # normalize_country: `message.db` に対応する言語があるか確認し、セット
