@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-17"
+COMMON_VERSION="2025.02.08-18"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -249,10 +249,9 @@ download_script() {
 
 #########################################################################
 # select_country: `country.db` から国・タイムゾーンを検索し、Y/N 判定
-# - **全リストを `[1] Japan 日本語 ja JP` の形式で表示**
-# - **ユーザー入力をもとに完全一致・曖昧検索**
-# - **複数タイムゾーンがある場合は、国選択後にゾーンネームを選択**
-# - `confirm()` による Y/N 選択後に `country.ch` に保存
+# - **データベース形式を簡略化**
+# - **ユーザーが `ja` や `Japan` を入力すると検索**
+# - **リスト形式で `[1] Japan 日本語 ja JP` で出力**
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -269,10 +268,9 @@ select_country() {
         return
     fi
 
-    # **`awk` を使用してスクリプトの行を除外し、データ部分のみを取得**
-    local i=1
+    # **`awk` でスクリプトの行を除外し、データ部分のみを取得**
     echo -e "$(color cyan "Available countries:")"
-    awk 'NF >= 4 && $1 !~ /^#/ && $1 !~ /=/ && $1 !~ /echo/ && $1 !~ /\(/ && $1 !~ /\|/ {print "[" i "] " $1, $2, $3, $4; i++}' "$country_file"
+    awk 'NF >= 5 {print "[" NR "]", $1, $2, $3, $4}' "$country_file"
 
     # **ユーザー入力**
     echo -e "$(color cyan "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja', '日本語'):")"
@@ -282,14 +280,14 @@ select_country() {
     found_entries=$(awk -v query="$user_input" '
         tolower($1) == tolower(query) ||
         tolower($3) == tolower(query) ||
-        tolower($4) == tolower(query) {print $1, $2, $3, $4}' "$country_file")
+        tolower($4) == tolower(query) {print $0}' "$country_file")
 
     # **曖昧検索**
     if [ -z "$found_entries" ]; then
         found_entries=$(awk -v query="$user_input" '
             tolower($1) ~ tolower(query) ||
             tolower($3) ~ tolower(query) ||
-            tolower($4) ~ tolower(query) {print $1, $2, $3, $4}' "$country_file")
+            tolower($4) ~ tolower(query) {print $0}' "$country_file")
     fi
 
     # **複数ヒット時の選択**
