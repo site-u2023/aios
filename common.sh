@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-00000"
+COMMON_VERSION="2025.02.08-00001"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -406,12 +406,10 @@ confirm() {
 
         case "$confirm" in
             ""|"y"|"yes")
-                echo "$(color green "Settings applied successfully.")"
-                return 0
+                return 0  # YES を返す
                 ;;
             "n"|"no")
-                echo "$(color yellow "Settings were not applied.")"
-                return 1
+                return 1  # NO を返す
                 ;;
             *)
                 echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
@@ -419,7 +417,6 @@ confirm() {
         esac
     done
 }
-
 
 #########################################################################
 # check_country: 国情報の確認および設定
@@ -616,7 +613,7 @@ install_packages() {
         return 0
     fi
 
-    # `yn` フラグがある場合、確認メッセージを出す（ここで1回のみ）
+    # `yn` フラグがある場合、1回のみ確認メッセージを出す
     if [ "$confirm_flag" = "yn" ]; then
         if ! confirm "MSG_INSTALL_PROMPT" "$packages_to_install"; then
             echo "$(color yellow "Skipping installation of:$packages_to_install")"
