@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-22"
+COMMON_VERSION="2025.02.08-23"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -248,7 +248,7 @@ download_script() {
 }
 
 #########################################################################
-# select_country: `country.db` から国・タイムゾーンを検索し、Y/N 判定
+# select_country: `country.db` から国・タイムゾーンを検索し、ユーザーに選択させる
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -327,7 +327,6 @@ select_country() {
             country_code=$(echo "$selected_entry" | awk '{print $5}')
             tz_data=$(echo "$selected_entry" | awk -F';' '{print $2}')
 
-            # **`messages.db` に "MSG_CONFIRM_COUNTRY" を追加**
             confirm_message=$(get_message 'MSG_CONFIRM_COUNTRY' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$country_name/" -e "s/{version}/$display_name ($lang_code, $country_code)/")
 
             if ! confirm "$confirm_message"; then
@@ -361,6 +360,7 @@ select_country() {
 
         echo "$(color yellow "Invalid selection. Please try again.")"
     done
+}
 }
 
 #########################################################################
