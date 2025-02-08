@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-00022"
+COMMON_VERSION="2025.02.08-00023"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -275,36 +275,38 @@ select_country() {
         echo -e "$(color cyan "Enter number, country name, code, or language:")"
         read user_input
 
+        # **番号で選択**
         if echo "$user_input" | grep -qE '^[0-9]+$'; then
             selected_entry=$(awk -v num="$user_input" 'NR == num {print $0}' "$country_file")
         else
             while true; do
                 found_entries=$(grep -i "$user_input" "$country_file" | awk '{print "[" NR "]", $1, $2, $3, $4}')
-                
+
                 if [ -z "$found_entries" ]; then
                     echo "$(color yellow "No matching country found. Please try again.")"
                     read -p "Enter a new search term: " user_input
                     continue
                 fi
 
+                # 絞り込み後の選択リスト
                 echo "$found_entries"
-                echo -e "$(color cyan "Enter the number of your choice or refine search:")"
-                read -r choice
-
-                # 入力が番号でなかった場合は、再度検索可能にする
-                if ! echo "$choice" | grep -qE '^[0-9]+$'; then
-                    user_input="$choice"
-                    continue
-                fi
-
-                # 選択範囲外の番号を防ぐ
+                MIN_CHOICE=1
                 MAX_CHOICE=$(echo "$found_entries" | wc -l)
-                if [ "$choice" -ge 1 ] && [ "$choice" -le "$MAX_CHOICE" ]; then
-                    selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
-                    break
+
+                if [ "$MAX_CHOICE" -gt 1 ]; then
+                    echo -e "$(color cyan "Enter the number of your choice or refine search:")"
+                    read -r choice
+
+                    if echo "$choice" | grep -qE '^[0-9]+$' && [ "$choice" -ge "$MIN_CHOICE" ] && [ "$choice" -le "$MAX_CHOICE" ]; then
+                        selected_entry=$(echo "$found_entries" | awk -v num="$choice" 'NR == num {print $2, $3, $4, $5}')
+                        break
+                    else
+                        echo "$(color red "Invalid selection. Please choose a number from the displayed list.")"
+                        continue
+                    fi
                 else
-                    echo "$(color red "Invalid selection. Please choose a number from the displayed list.")"
-                    continue
+                    selected_entry=$(echo "$found_entries" | awk '{print $2, $3, $4, $5}')
+                    break
                 fi
             done
         fi
@@ -332,7 +334,7 @@ select_country() {
         set -- $(echo "$tz_data" | tr ',' ' ')
         i=1
         for tz in "$@"; do
-            echo "[$i] $tz"
+            echo "[$i] $country_name ($tz)"
             i=$((i + 1))
         done
 
@@ -361,7 +363,7 @@ select_country() {
     fi
 
     # **キャッシュへの保存**
-    grep -i "^$country_name" "$country_file" > "$country_cache"
+    echo "$country_name $display_name $lang_code $country_code $selected_zone_name $selected_timezone" > "$country_cache"
     echo "$lang_code" > "$language_cache"
     echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
     echo "$(color green "Language saved to language.ch: $lang_code")"
