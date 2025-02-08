@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08"
+COMMON_VERSION="2025.02.08-06"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -101,8 +101,8 @@ download_script() {
     local file_name="$1"
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
-
-    # `aios` の場合は `/usr/bin` に配置
+    
+    # `aios` の場合は `/usr/bin/aios` に配置
     if [ "$file_name" = "aios" ]; then
         install_path="${AIOS_DIR}/${file_name}"
     fi
@@ -110,7 +110,7 @@ download_script() {
     # ファイルが存在しない場合はダウンロード
     if [ ! -f "$install_path" ]; then
         echo -e "$(color yellow "$(get_message 'MSG_DOWNLOADING_MISSING_FILE' "$SELECTED_LANGUAGE" | sed "s/{file}/$file_name/")")"
-        if ! ${BASE_WGET} "$install_path" "$remote_url"; then
+        if ! wget --quiet -O "$install_path" "$remote_url"; then
             echo -e "$(color red "Failed to download: $file_name")"
             return 1
         fi
@@ -152,7 +152,7 @@ download_script() {
     # バージョンチェック: 最新があればダウンロード
     if [ -n "$remote_version" ] && [ "$current_version" != "$remote_version" ]; then
         echo -e "$(color cyan "$(get_message 'MSG_UPDATING_SCRIPT' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{old_version}/$current_version/" -e "s/{new_version}/$remote_version/")")"
-        if ! ${BASE_WGET} "$install_path" "$remote_url"; then
+        if ! wget --quiet -O "$install_path" "$remote_url"; then
             echo -e "$(color red "Failed to download: $file_name")"
             return 1
         fi
@@ -209,7 +209,7 @@ XXXXX_messages_db() {
 messages_db() {
     if [ ! -f "${BASE_DIR}/messages.db" ]; then
         echo -e "$(color yellow "Downloading messages.db...")"
-        if ! ${BASE_WGET} "${BASE_DIR}/messages.db" "${BASE_URL}/messages.db"; then
+        if ! wget --quiet -O "${BASE_DIR}/messages.db" "${BASE_URL}/messages.db"; then
             echo -e "$(color red "Failed to download messages.db")"
             return 1  # `handle_error` を使わず `return 1` に変更
         fi
@@ -248,7 +248,7 @@ download_script() {
     fi
 
     echo "$(color yellow "Downloading latest version of $file_name")"
-    ${BASE_WGET} "$install_path" "$remote_url"
+    wget --quiet -O "$install_path" "$remote_url"
 
     local new_version=$(grep "^version=" "$install_path" | cut -d'=' -f2)
     echo "$file_name=$new_version" >> "$script_cache"
@@ -410,42 +410,55 @@ normalize_country() {
 }
 
 #########################################################################
-# confirm: Y/N 確認関数 (グローバル対応, OpenWrt `ash` 最適化)
+# confirm: Y/N 確認関数
 # 引数1: 確認メッセージキー（多言語対応）
-# 使用例: confirm 'MSG_INSTALL_PROMPT'
+# 引数2: 置換パラメータ1（オプション）
+# 引数3: 置換パラメータ2（オプション）
+# 使用例: confirm "MSG_INSTALL_PROMPT" "ttyd"
 #########################################################################
 confirm() {
     local key="$1"
-    local replace_param="$2"
+    local replace_param1="$2"
+    local replace_param2="$3"
     local prompt_message
     prompt_message=$(get_message "$key" "$SELECTED_LANGUAGE")
 
-    # {pkg} の置換処理
-    if [ -n "$replace_param" ]; then
-        prompt_message=$(echo "$prompt_message" | sed "s/{pkg}/$replace_param/")
+    # メッセージが見つからない場合、デフォルトメッセージを使用
+    if [ -z "$prompt_message" ]; then
+        case "$key" in
+            "MSG_INSTALL_PROMPT")
+                prompt_message="Do you want to install {pkg}? [Y/n]:"
+                ;;
+            *)
+                prompt_message="Confirm action? [Y/n]:"
+                ;;
+        esac
     fi
 
-    # **デバッグ: 確認メッセージの出力**
-    echo "$(color cyan "DEBUG: Confirm message -> [$prompt_message]")"
+    # {pkg}, {file}, {version} の置換処理
+    if [ -n "$replace_param1" ]; then
+        prompt_message=$(echo "$prompt_message" | sed "s/{pkg}/$replace_param1/g")
+        prompt_message=$(echo "$prompt_message" | sed "s/{file}/$replace_param1/g")
+    fi
+    if [ -n "$replace_param2" ]; then
+        prompt_message=$(echo "$prompt_message" | sed "s/{version}/$replace_param2/g")
+    fi
+
+    # デバッグ: 確認メッセージの出力
+    echo "DEBUG: Confirm message -> [$prompt_message]"
 
     while true; do
-        read -rp "$prompt_message " confirm
-
-        # **受け取った入力のデバッグ表示**
-        echo "$(color yellow "DEBUG: Received input -> [$confirm]")"
-
-        # **小文字変換**
-        confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')
-        confirm=${confirm:-"y"}  # **デフォルト Y**
+        read -r -p "$prompt_message " confirm
+        confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')  # 小文字変換
 
         case "$confirm" in
-            y|yes)
+            ""|"y"|"yes")
                 echo "$(color green "Settings applied successfully.")"
-                return 0  # **成功**
+                return 0
                 ;;
-            n|no)
+            "n"|"no")
                 echo "$(color yellow "Settings were not applied.")"
-                return 1  # **キャンセル**
+                return 1
                 ;;
             *)
                 echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
@@ -454,19 +467,32 @@ confirm() {
     done
 }
 
+
 #########################################################################
-# check_country: 言語と国のキャッシュを設定
+# check_country: 言語キャッシュの確認および設定
+# - `$1` (`SELECT_COUNTRY`) があればそれを優先
+# - それが無ければ `country.ch` を参照
+# - さらに無ければ `select_country()` で `country.db` を検索し完全一致 → 曖昧検索
+# - 見つからなかった場合は `confirm()` による Y/N 選択
+# - すべて失敗したら `en` をセット
 #########################################################################
 check_country() {
-    local selected_country
-    if [ -f "${BASE_DIR}/country.ch" ]; then
-        selected_country=$(cat "${BASE_DIR}/country.ch")
-    else
-        selected_country=$(select_country)
-        echo "$selected_country" > "${BASE_DIR}/country.ch"
+    local SELECT_COUNTRY="$1"
+    local country_file="${BASE_DIR}/country.ch"
+
+    if [ -n "$SELECT_COUNTRY" ]; then
+        echo "$SELECT_COUNTRY" > "$country_file"
+        echo "$(color green "Language set to: $SELECT_COUNTRY")"
+        return
     fi
 
-    echo "$(color green "Using country: $selected_country")"
+    if [ -f "$country_file" ]; then
+        SELECT_COUNTRY=$(cat "$country_file")
+        echo "$(color green "Using cached country: $SELECT_COUNTRY")"
+        return
+    fi
+
+    select_country
 }
 
 #########################################################################
@@ -604,7 +630,7 @@ install_packages() {
 
     # すでにインストール済みのパッケージを表示
     if [ -n "$installed_packages" ]; then
-        echo "$(color cyan "Already installed: $installed_packages")"
+        echo "$(color cyan "Already installed:$installed_packages")"
     fi
 
     # インストールが必要なパッケージがない場合は終了
@@ -612,13 +638,10 @@ install_packages() {
         return 0
     fi
 
-    # `yn` フラグがある場合、確認メッセージを出す
+    # `yn` フラグがある場合、確認メッセージを出す（ここで1回のみ）
     if [ "$confirm_flag" = "yn" ]; then
-        local confirm_msg=$(get_message "MSG_INSTALL_PROMPT_PKG" "$SELECTED_LANGUAGE")
-        confirm_msg=$(echo "$confirm_msg" | sed "s/{pkg}/$packages_to_install/")
-
-        if ! confirm "$confirm_msg"; then
-            echo "$(color yellow "Skipping installation of: $packages_to_install")"
+        if ! confirm "MSG_INSTALL_PROMPT" "$packages_to_install"; then
+            echo "$(color yellow "Skipping installation of:$packages_to_install")"
             return 1
         fi
     fi
@@ -630,7 +653,7 @@ install_packages() {
         opkg install $packages_to_install
     fi
 
-    echo "$(color green "Installed: $packages_to_install")"
+    echo "$(color green "Installed:$packages_to_install")"
     return 0
 }
 
