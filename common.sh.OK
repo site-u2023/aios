@@ -103,7 +103,7 @@ download_script() {
 
     # `aios` の場合は `/usr/bin` に配置
     if [ "$file_name" = "aios" ]; then
-        install_path="${BASE_DIR}"
+        install_path="${AIOS_DIR}/${file_name}"
     fi
 
     # ファイルが存在しない場合はダウンロード
