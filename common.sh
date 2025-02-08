@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-00010"
+COMMON_VERSION="2025.02.08-00011"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -278,10 +278,10 @@ select_country() {
         if echo "$user_input" | grep -qE '^[0-9]+$'; then
             selected_entry=$(awk -v num="$user_input" 'NR == num {print $0}' "$country_file")
         else
-            found_entries=$(grep -i "^$user_input " "$country_file")
+            found_entries=$(grep -i "^$user_input " "$country_file" | awk '{print "[" NR "]", $1, $2, $3, $4}')
 
             if [ -z "$found_entries" ]; then
-                found_entries=$(grep -i "$user_input" "$country_file")
+                found_entries=$(grep -i "$user_input" "$country_file" | awk '{print "[" NR "]", $1, $2, $3, $4}')
             fi
 
             if [ -z "$found_entries" ]; then
@@ -291,10 +291,10 @@ select_country() {
 
             if [ "$(echo "$found_entries" | wc -l)" -gt 1 ]; then
                 echo "$(color yellow "Multiple matches found. Please select:")"
-                echo "$found_entries" | awk '{print "[" NR "]", $0}'
+                echo "$found_entries"
                 echo "Enter the number of your choice: "
                 read choice
-                selected_entry=$(echo "$found_entries" | awk -v num="$choice" 'NR == num {print $0}')
+                selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
             else
                 selected_entry=$(echo "$found_entries")
             fi
@@ -322,7 +322,7 @@ select_country() {
         set -- $(echo "$tz_data" | tr ',' ' ')
         i=1
         for tz in "$@"; do
-            echo "[$i] $tz"
+            echo "[$i] $country_name ($tz)"
             i=$((i + 1))
         done
 
@@ -337,7 +337,7 @@ select_country() {
                 continue
             fi
 
-            echo -e "$(color cyan "Confirm timezone selection: $selected_zone_name ($selected_timezone)? [Y/n]:")"
+            echo -e "$(color cyan "Confirm timezone selection: $country_name ($selected_zone_name, $selected_timezone)? [Y/n]:")"
             read tz_yn
             case "$tz_yn" in
                 Y|y) break ;;
