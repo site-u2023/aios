@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-1"
+COMMON_VERSION="2025.02.09-2"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -255,7 +255,7 @@ download_script() {
 }
 
 #########################################################################
-# select_country: 国とタイムゾーンの選択 (100% ash 対応)
+# select_country: 国とタイムゾーンの選択（100% ash 対応）
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -272,20 +272,13 @@ select_country() {
         return 1
     fi
 
-    # **最初に全リストを表示（番号なし）**
-    echo "$(color cyan "Available countries:")"
-    awk '{print $1, $2, $3, $4}' "$country_file"
-
     while true; do
+        # **全リストを表示（番号なし）**
+        echo "$(color cyan "Available countries:")"
+        awk '{print $1, $2, $3, $4}' "$country_file"
+
         echo -e "$(color cyan "Enter country name, code, or language:")"
         read user_input
-
-        # **空入力なら、全リストを再表示**
-        if [ -z "$user_input" ]; then
-            echo "$(color cyan "Available countries:")"
-            awk '{print $1, $2, $3, $4}' "$country_file"
-            continue
-        fi
 
         # **完全一致検索**
         selected_entry=$(awk -v query="$user_input" '
@@ -316,16 +309,38 @@ select_country() {
             continue
         fi
 
-        # **曖昧検索で複数ヒットした場合**
-        echo "$(color yellow "Multiple matches found. Please select:")"
-        awk -v query="$user_input" '
-            tolower($1) ~ tolower(query) ||
-            tolower($2) ~ tolower(query) ||
-            tolower($3) ~ tolower(query) ||
-            tolower($4) ~ tolower(query) {print $1, $2, $3, $4}' "$country_file"
+        # **1件だけならYN確認**
+        if [ "$(echo "$found_entries" | wc -l)" -eq 1 ]; then
+            selected_entry="$found_entries"
+            echo -e "$(color cyan "Confirm country selection: $(echo "$selected_entry" | awk '{print $1, $2, $3, $4}')? [Y/n]:")"
+            read yn
+            case "$yn" in
+                Y|y) break ;;
+                N|n) echo "$(color yellow "Invalid selection. Please try again.")"; continue ;;
+                *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
+            esac
+        fi
 
-        echo -e "$(color cyan "Enter the country name again to refine search:")"
-        read user_input
+        # **複数ヒットした場合、選択を求める**
+        echo "$(color yellow "Multiple matches found. Please select:")"
+        echo "$found_entries" | awk '{print "[" NR "]", $1, $2, $3, $4}'
+
+        echo -e "$(color cyan "Enter the number of your choice:")"
+        read choice
+        selected_entry=$(echo "$found_entries" | awk -v num="$choice" 'NR == num {print $0}')
+
+        if [ -z "$selected_entry" ]; then
+            echo "$(color red "Invalid selection. Please choose a valid number.")"
+            continue
+        fi
+
+        echo -e "$(color cyan "Confirm country selection: $(echo "$selected_entry" | awk '{print $1, $2, $3, $4}')? [Y/n]:")"
+        read yn
+        case "$yn" in
+            Y|y) break ;;
+            N|n) echo "$(color yellow "Invalid selection. Please try again.")"; continue ;;
+            *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
+        esac
     done
 
     # **選択した国の処理**
