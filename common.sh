@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-12"
+COMMON_VERSION="2025.02.08-13"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -270,28 +270,21 @@ select_country() {
         return
     fi
 
-    # **全リスト表示**
+    # **全リスト表示 (コメントや関数定義を除外)**
     echo -e "$(color cyan "Available countries:")"
     local i=1
-    cat "$country_file" | grep -v '^#' | while read -r entry; do
-        local country_name=$(echo "$entry" | awk '{print $1}')
-        local display_name=$(echo "$entry" | awk '{print $2}')
-        local lang_code=$(echo "$entry" | awk '{print $3}')
-        local country_code=$(echo "$entry" | awk '{print $4}')
-        echo "[$i] $country_name $display_name $lang_code $country_code"
-        i=$((i+1))
-    done
+    awk 'NF >= 4 {print "[" i "] " $1, $2, $3, $4; i++}' "$country_file"
 
     # ユーザー入力
     echo -e "$(color cyan "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja', '日本語'):")"
     read -r user_input
 
     # **完全一致検索**
-    found_entries=$(grep -i -w "$user_input" "$country_file" | grep -v '^#')
+    found_entries=$(awk -v query="$user_input" 'tolower($1) == tolower(query) || tolower($3) == tolower(query) || tolower($4) == tolower(query) {print $0}' "$country_file")
 
     # **曖昧検索**
     if [ -z "$found_entries" ]; then
-        found_entries=$(grep -i "$user_input" "$country_file" | grep -v '^#')
+        found_entries=$(awk -v query="$user_input" 'tolower($1) ~ tolower(query) || tolower($3) ~ tolower(query) || tolower($4) ~ tolower(query) {print $0}' "$country_file")
     fi
 
     # **複数ヒット時の選択**
