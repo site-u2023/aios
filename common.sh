@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-00019"
+COMMON_VERSION="2025.02.08-00020"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -397,14 +397,14 @@ select_country() {
                     read -r choice
 
                     if echo "$choice" | grep -qE '^[0-9]+$' && [ "$choice" -ge "$MIN_CHOICE" ] && [ "$choice" -le "$MAX_CHOICE" ]; then
-                        selected_entry=$(echo "$found_entries" | awk -v num="$choice" 'NR == num {print $2, $3, $4, $5}')
+                        selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
                         break
                     else
                         echo "$(color red "Invalid selection. Please choose a number from the displayed list.")"
                         continue
                     fi
                 else
-                    selected_entry=$(echo "$found_entries" | awk '{print $2, $3, $4, $5}')
+                    selected_entry=$(grep -i "$user_input" "$country_file")
                     break
                 fi
             done
@@ -462,11 +462,12 @@ select_country() {
     fi
 
     # **キャッシュへの保存**
-    echo "$country_name $display_name $lang_code $country_code $selected_zone_name $selected_timezone" > "$country_cache"
+    grep -i "^$country_name" "$country_file" > "$country_cache"
     echo "$lang_code" > "$language_cache"
     echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
     echo "$(color green "Language saved to language.ch: $lang_code")"
 }
+
 
 #########################################################################
 # normalize_country: `message.db` に対応する言語があるか確認し、セット
