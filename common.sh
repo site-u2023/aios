@@ -2,7 +2,7 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-16"
+COMMON_VERSION="2025.02.08-17"
 echo "common.sh Last update: $COMMON_VERSION"
 
 # === 基本定数の設定 ===
@@ -249,10 +249,9 @@ download_script() {
 
 #########################################################################
 # select_country: `country.db` から国・タイムゾーンを検索し、Y/N 判定
-# - `country.db` のデータを適切に取得しリスト表示
-# - **最初に `[1] Japan 日本語 ja JP` の形式で全リスト表示**
-# - **ユーザー入力で完全一致・曖昧検索**
-# - **複数のタイムゾーンがある場合は、国選択後にゾーンネームを選択**
+# - **全リストを `[1] Japan 日本語 ja JP` の形式で表示**
+# - **ユーザー入力をもとに完全一致・曖昧検索**
+# - **複数タイムゾーンがある場合は、国選択後にゾーンネームを選択**
 # - `confirm()` による Y/N 選択後に `country.ch` に保存
 #########################################################################
 select_country() {
@@ -263,17 +262,17 @@ select_country() {
     local selected_entry=""
     local selected_timezone=""
 
-    # `country.db` の存在チェック
+    # **`country.db` の存在チェック**
     if [ ! -f "$country_file" ]; then
         echo "$(color red "Country database not found!")"
         echo "Unknown Unknown en XX UTC" > "$country_cache"
         return
     fi
 
-    # **全リスト表示 (スクリプトコードを除外)**
-    echo -e "$(color cyan "Available countries:")"
+    # **`awk` を使用してスクリプトの行を除外し、データ部分のみを取得**
     local i=1
-    awk 'NF >= 4 && $1 !~ /^#/ && $1 !~ /echo/ && $1 !~ /=/ && $1 !~ /\(/ && $1 !~ /\|/ && $1 !~ /case/ {print "[" i "] " $1, $2, $3, $4; i++}' "$country_file"
+    echo -e "$(color cyan "Available countries:")"
+    awk 'NF >= 4 && $1 !~ /^#/ && $1 !~ /=/ && $1 !~ /echo/ && $1 !~ /\(/ && $1 !~ /\|/ {print "[" i "] " $1, $2, $3, $4; i++}' "$country_file"
 
     # **ユーザー入力**
     echo -e "$(color cyan "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja', '日本語'):")"
@@ -298,11 +297,7 @@ select_country() {
         echo "$(color yellow "Multiple matches found. Please select:")"
         local i=1
         echo "$found_entries" | while read -r entry; do
-            local country_name=$(echo "$entry" | awk '{print $1}')
-            local display_name=$(echo "$entry" | awk '{print $2}')
-            local lang_code=$(echo "$entry" | awk '{print $3}')
-            local country_code=$(echo "$entry" | awk '{print $4}')
-            echo "[$i] $country_name $display_name $lang_code $country_code"
+            echo "[$i] $entry"
             i=$((i+1))
         done
 
@@ -312,7 +307,7 @@ select_country() {
         selected_entry="$found_entries"
     fi
 
-    # **`confirm()` で Y/N 判定**
+    # **選択した国が正しいか `confirm()` で Y/N 判定**
     if [ -n "$selected_entry" ]; then
         local country_name
         local display_name
@@ -342,7 +337,7 @@ select_country() {
                 selected_timezone="$timezones"
             fi
 
-            # **`country.ch` に保存**
+            # **キャッシュに保存**
             echo "$country_name $display_name $lang_code $country_code $selected_timezone" > "$country_cache"
             echo "$(color green "Country and timezone set: $country_name, $selected_timezone")"
             return
