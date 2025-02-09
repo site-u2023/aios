@@ -33,13 +33,21 @@ fi
 test_country_search() {
     local test_input="$1"
     echo "`color cyan "TEST: Searching for country with input '$test_input'"`"
+    if [ ! -f "${BASE_DIR}/country.db" ]; then
+        echo "`color red "ERROR: country.db not found at ${BASE_DIR}/country.db"`"
+        return 1
+    fi
     awk -v query="$test_input" '{if ($0 ~ query) print NR, $2, $3, $4}' "${BASE_DIR}/country.db"
 }
 
 test_timezone_search() {
     local test_country="$1"
     echo "`color cyan "TEST: Searching for timezones of country '$test_country'"`"
-    awk -v country="$test_country" -v code="$selected_entry_code" '$2 == country || $4 == code {print NR, $5, $6}' "${BASE_DIR}/country.db"
+    if [ ! -f "${BASE_DIR}/country.db" ]; then
+        echo "`color red "ERROR: country.db not found at ${BASE_DIR}/country.db"`"
+        return 1
+    fi
+    awk -v country="$test_country" '$2 == country || $4 == country {print NR, $5, $6}' "${BASE_DIR}/country.db"
 }
 
 test_cache_contents() {
@@ -61,12 +69,11 @@ select_country() {
     local timezone_tmp="${BASE_DIR}/timezone_tmp.ch"
     local user_input=""
     local selected_entry=""
-    local selected_entry_code=""
     local selected_zone=""
     local selected_timezone=""
 
     if [ ! -f "$country_file" ]; then
-        echo "`color red "Country database not found!"`"
+        echo "`color red "Country database not found at $country_file"`"
         return 1
     fi
 
@@ -156,7 +163,6 @@ select_country() {
                         echo "$selected_entry $selected_zone" > "$country_cache"
                         echo "$selected_zone" > "$language_cache"
                         echo "$selected_timezone" > "$timezone_cache"
-                        echo "`color green "Saved to cache: country.ch=$selected_entry $selected_zone, language.ch=$selected_zone, timezone.ch=$selected_timezone"`"
                         return
                         ;;
                     [Nn]*)
@@ -171,6 +177,7 @@ select_country() {
         done
     done
 }
+
 
 #########################################################################
 # select_country: アップロードされた common.sh & country.sh OKバージョン
