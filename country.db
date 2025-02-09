@@ -1,52 +1,90 @@
-Bulgaria български bg BG Europe/Sofia EET-2,EEST-3
-Canada English ca CA America/Halifax NST-3:30NDT-2:30, America/Toronto EST-5EDT-4, America/Winnipeg CST-6CDT-5, America/Edmonton MST-7MDT-6, America/Vancouver PST-8PDT-7
-Czech_Republic Čeština cs CZ Europe/Prague CET-1,CEST-2
-Germany Deutsch de DE Europe/Berlin CET-1,CEST-2
-Greece Ελληνικά el GR Europe/Athens EET-2,EEST-3
-United_States English en US America/New_York EST-5EDT-4, America/Chicago CST-6CDT-5, America/Denver MST-7MDT-6, America/Los_Angeles PST-8PDT-7, America/Anchorage AKST-9AKDT-8, America/Honolulu HST-10
-Spain Español es ES Europe/Madrid CET-1,CEST-2
-France Français fr FR Europe/Paris CET-1,CEST-2
-Israel עִבְרִית he IL Asia/Jerusalem IST-2,IDT-3
-India हिंदी hi IN Asia/Kolkata IST-5:30
-Hungary Magyar hu HU Europe/Budapest CET-1,CEST-2
-Italy Italiano it IT Europe/Rome CET-1,CEST-2
-Japan 日本語 ja JP Asia/Tokyo JST-9
-Republic_of_Korea 한국어 ko KR Asia/Seoul KST-9
-Malaysia Bahasa_Melayu ms MY Asia/Kuala_Lumpur Asia/Kuala_Lumpur
-Norway Norsk no NO Europe/Oslo CET-1,CEST-2
-Poland Polski pl PL Europe/Warsaw CET-1,CEST-2
-Portugal Português pt PT Europe/Lisbon WET-0,WEST-1
-Brazil Português_do_Brasil pt-br BR America/Sao_Paulo BRT-3,BRST-2, America/Manaus AMT-4,ACT-4:30
-Romania Română ro RO Europe/Bucharest EET-2,EEST-3
-Russia Русский ru RU Europe/Moscow MSK-3, Asia/Krasnoyarsk SAMT-4, Asia/Yekaterinburg YEKT-5, Asia/Irkutsk OMST-6, Asia/Vladivostok KRAT-7,IRKT-8,YAKT-9,VLAT-10,MAGT-11
-Slovak_Republic Slovenčina sk SK Europe/Bratislava CET-1,CEST-2
-Sweden Svenska sv SE Europe/Stockholm CET-1,CEST-2
-Turkey Türkçe tr TR Europe/Istanbul TRT-3
-Ukraine Українська uk UA Europe/Kiev EET-2,EEST-3
-Vietnam Tiếng_Việt vi VN Asia/Ho_Chi_Minh ICT-7
-China 简体中文 zh-cn CN Asia/Shanghai CST-8
-Taiwan 繁體中文 zh-tw TW Asia/Taipei CST-8
-Saudi_Arabia العربية ar SA Asia/Riyadh AST-3
-Denmark Dansk da DK Europe/Copenhagen CET-1,CEST-2
-Netherlands Nederlands nl NL Europe/Amsterdam CET-1,CEST-2
-Luxembourg Luxembourgish xx LU Europe/Luxembourg CET-1,CEST-2
-Switzerland Swiss_German xx CH Europe/Zurich CET-1,CEST-2
-United_Kingdom English xx GB Europe/London GMT0,BST-1
-Singapore English xx SG Asia/Singapore SGT-8
-Argentina Spanish xx AR America/Argentina/Buenos_Aires ART-3
-Australia English xx AU Australia/Perth AWST-8, Australia/Adelaide ACST-9:30, Australia/Sydney AEST-10, Australia/Lord_Howe LHST-10:30, Australia/Hobart NFT-11
-Austria German xx AT Europe/Vienna CET-1,CEST-2
-Mexico Spanish xx MX America/Mexico_City CST-6, America/Tijuana PST-8,PDT-7
-New_Zealand English xx NZ Pacific/Auckland NZST-12,NZDT-13, Pacific/Chatham CHAST-12:45,CHADT-13:45
-Puerto_Rico Spanish xx PR America/Puerto_Rico AST-4
-Thailand Thai xx TH Asia/Bangkok ICT-7
-Egypt Arabic xx EG Africa/Cairo EET-2
-Colombia Spanish xx CO America/Bogota COT-5
-Indonesia Indonesian xx ID Asia/Jakarta WIB-7, Asia/Bali WITA-8, Asia/Makassar WIT-9
-Peru Spanish xx PE America/Lima PET-5
-Philippines Filipino xx PH Asia/Manila PHT-8
-Sri_Lanka Sinhala xx LK Asia/Colombo IST-5:30
-Pakistan Urdu xx PK Asia/Karachi PKT-5
-Qatar Arabic xx QA Asia/Qatar AST-3
-Algeria Arabic xx DZ Africa/Algiers CET-1
-Other Other xx XX Etc/UTC UTC-0
+Bulgaria български bg BG Europe/Sofia,EET-2,EEST-3
+Canada English ca CA America/Halifax,NST-3:30NDT-2:30 America/Toronto,AST-4ADT-3 America/Winnipeg,EST-5EDT-4 America/Edmonton,CST-6CDT-5 America/Vancouver,MST-7MDT-6 PST-8PDT-7
+Czech_Republic Čeština cs CZ Europe/Prague,CET-1,CEST-2
+Germany Deutsch de DE Europe/Berlin,CET-1,CEST-2
+Greece Ελληνικά el GR Europe/Athens,EET-2,EEST-3
+United_States English en US America/New_York,EST-5EDT-4 America/Chicago,CST-6CDT-5 America/Denver,MST-7MDT-6 America/Los_Angeles,PST-8PDT-7 America/Anchorage,AKST-9AKDT-8 America/Honolulu,HST-10
+Spain Español es ES Europe/Madrid,CET-1,CEST-2
+Catalan Català ca ES Europe/Madrid,CET-1,CEST-2
+France Français fr FR Europe/Paris,CET-1,CEST-2
+Israel עִבְרִית he IL Asia/Jerusalem,IST-2,IDT-3
+India हिंदी hi IN Asia/Kolkata,IST-5:30
+Hungary Magyar hu HU Europe/Budapest,CET-1,CEST-2
+Italy Italiano it IT Europe/Rome,CET-1,CEST-2
+Japan 日本語 ja JP Asia/Tokyo,JST-9
+Republic_of_Korea 한국어 ko KR Asia/Seoul,KST-9
+Marathi मराठी mr IN Asia/Kolkata,IST-5:30
+Malaysia Bahasa_Melayu ms MY Asia/Kuala_Lumpur,SGT-8
+Norway Norsk no NO Europe/Oslo,CET-1,CEST-2
+Poland Polski pl PL Europe/Warsaw,CET-1,CEST-2
+Portugal Português pt PT Europe/Lisbon,AZOT-1,AZOST-0 WET-0,WEST-1
+Brazil Português_do_Brasil pt-br BR America/Sao_Paulo,BRT-3,BRST-2 America/Manaus,AMT-4,ACT-4:30
+Romania Română ro RO Europe/Bucharest,EET-2,EEST-3
+Russia Русский ru RU Europe/Moscow,MSK-3 Asia/Krasnoyarsk,SAMT-4 Asia/Yekaterinburg,YEKT-5 Asia/Irkutsk,OMST-6 Asia/Vladivostok,KRAT-7 IRKT-8,YAKT-9,VLAT-10,MAGT-11
+Slovak_Republic Slovenčina sk SK Europe/Bratislava,CET-1,CEST-2
+Sweden Svenska sv SE Europe/Stockholm,CET-1,CEST-2
+Turkey Türkçe tr TR Europe/Istanbul,TRT-3
+Ukraine Українська uk UA Europe/Kiev,EET-2,EEST-3
+Vietnam Tiếng_Việt vi VN Asia/Ho_Chi_Minh,ICT-7
+China 简体中文 zh-cn CN Asia/Shanghai,CST-8
+Taiwan 繁體中文 zh-tw TW Asia/Taipei,CST-8
+Saudi_Arabia العربية ar SA Asia/Riyadh,AST-3
+Bangladesh বাংলা bn BD Asia/Dhaka,BST-6
+Denmark Dansk da DK Europe/Copenhagen,CET-1,CEST-2
+Finland Suomi fi FI Europe/Helsinki,EET-2,EEST-3
+Netherlands Nederlands nl NL Europe/Amsterdam,CET-1,CEST-2
+Luxembourg Luxembourgish xx LU Europe/Luxembourg,CET-1,CEST-2
+Switzerland Swiss_German xx CH Europe/Zurich,CET-1,CEST-2
+United_Kingdom English xx GB Europe/London,GMT-0,BST-1
+Hong_Kong Cantonese xx HK Asia/Hong_Kong,HKT-8
+Singapore English xx SG Asia/Singapore,SGT-8
+United_Arab_Emirates Arabic xx AE Asia/Dubai,GST-4
+South_Africa English xx ZA Africa/Johannesburg,SAST-2
+Argentina Spanish xx AR America/Argentina/Buenos_Aires,ART-3
+Australia English xx AU Australia/Perth,AWST-8 Australia/Adelaide,ACST-9:30 Australia/Sydney,AEST-10 Australia/Lord_Howe,LHST-10:30 Australia/Hobart,NFT-11
+Austria German xx AT Europe/Vienna,CET-1,CEST-2
+Bolivia Spanish xx BO America/La_Paz,BOT-4
+Chile Spanish xx CL Chile/Continental,CLT-4,CLST-3 Chile/Island,CLT-4,CLST-3
+Iceland Icelandic xx IS Atlantic/Reykjavik,GMT-0
+Ireland Irish xx IE Europe/Dublin,GMT-0,IST-1
+Kuwait Arabic xx KW Asia/Kuwait,AST-3
+Liechtenstein German xx LI Europe/Vaduz,CET-1,CEST-2
+Lithuania Lithuanian xx LT Europe/Vilnius,EET-2,EEST-3
+Mexico Spanish xx MX America/Mexico_City,CST-6,CDT-5 America/Tijuana,MST-7,MDT-6 America/Monterrey,PST-8,PDT-7
+Morocco Arabic xx MA Africa/Casablanca,WET-0,WEST-1
+New_Zealand English xx NZ Pacific/Auckland,NZST-12,NZDT-13 Pacific/Chatham,CHAST-12:45,CHADT-13:45
+Puerto_Rico Spanish xx PR America/Puerto_Rico,AST-4
+Slovenia Slovenian xx SI Europe/Ljubljana,CET-1,CEST-2
+Thailand Thai xx TH Asia/Bangkok,ICT-7
+Uruguay Spanish xx UY America/Montevideo,UYT-3
+Panama Spanish xx PA America/Panama,EST-5
+Egypt Arabic xx EG Africa/Cairo,EET-2
+Trinidad_and_Tobago English xx TT America/Port_of_Spain,AST-4
+Costa_Rica Spanish xx CR America/Costa_Rica,CST-6
+Ecuador Spanish xx EC America/Guayaquil,ECT-5
+Honduras Spanish xx HN America/Tegucigalpa,CST-6
+Kenya Swahili xx KE Africa/Nairobi,EAT-3
+Cyprus Greek xx CY Asia/Nicosia,EET-2,EEST-3
+Estonia Estonian xx EE Europe/Tallinn,EET-2,EEST-3
+Mauritius English xx MU Indian/Mauritius,MUT+4
+Serbia Serbian xx RS Europe/Belgrade,CET-1,CEST-2
+Montenegro Montenegrin xx ME Europe/Podgorica,CET-1,CEST-2
+Indonesia Indonesian xx ID Asia/Jakarta,WIB-7 Asia/Bali,WITA-8 Asia/Makassar,WIT-9
+Peru Spanish xx PE America/Lima,PET-5
+Venezuela Spanish xx VE America/Caracas,VET-4:30
+Jamaica English xx JM America/Jamaica,EST-5
+Bahrain Arabic xx BH Asia/Bahrain,AST-3
+Oman Arabic xx OM Asia/Muscat,GST-4
+Jordan Arabic xx JO Asia/Amman,EET-2
+Bermuda English xx BM Atlantic/Bermuda,AST-4
+Colombia Spanish xx CO America/Bogota,COT-5
+Dominican_Republic Spanish xx DO America/Santo_Domingo,AST-4
+Guatemala Spanish xx GT America/Guatemala,CST-6
+Philippines Filipino xx PH Asia/Manila,PHT-8
+Sri_Lanka Sinhala xx LK Asia/Colombo,IST-5:30
+El_Salvador Spanish xx SV America/El_Salvador,CST-6
+Tunisia Arabic xx TN Africa/Tunis,CET-1
+Pakistan Urdu xx PK Asia/Karachi,PKT-5
+Qatar Arabic xx QA Asia/Qatar,AST-3
+Algeria Arabic xx DZ Africa/Algiers,CET-1
+Other Other xx XX Etc/UTC,UTC-0
