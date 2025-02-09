@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-11"
+COMMON_VERSION="2025.02.10-12"
 echo "common.sh Last update: 🔴 $COMMON_VERSION 🔴"
 
 # 基本定数の設定
@@ -34,7 +34,7 @@ select_country() {
     local selected_entry=""
 
     if [ ! -f "$country_file" ]; then
-        echo "$(color red \"Country database not found!\")"
+        echo "`color red "Country database not found!"`"
         return 1
     fi
 
@@ -48,13 +48,13 @@ select_country() {
     fi
 
     while true; do
-        echo "$(color cyan \"Fuzzy search: Enter a country name, code, or language.\")"
-        echo -n `color cyan "Enter the number of your choice (or 0 to retry): "`
+        echo "`color cyan "Fuzzy search: Enter a country name, code, or language."`"
+        echo -n "`color cyan "Please input: "`"
         read user_input
         user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]' | sed -E 's/[\/,_]+/ /g')
 
         if [ -z "$user_input" ]; then
-            echo "$(color yellow \"Invalid input. Please enter a valid country name, code, or language.\")"
+            echo "`color yellow "Invalid input. Please enter a valid country name, code, or language."`"
             continue
         fi
 
@@ -67,14 +67,14 @@ select_country() {
         fi
 
         if [ -z "$found_entries" ]; then
-            echo "$(color yellow \"No matching country found. Please try again.\")"
+            echo "`color yellow "No matching country found. Please try again."`"
             continue
         fi
 
-        echo "$(color cyan \"DEBUG: Search results:\")"
+        echo "`color cyan "DEBUG: Search results:"`"
         echo "$found_entries"
 
-        echo "$(color yellow \"Select a country:")"
+        echo "`color yellow "Select a country:"`"
         i=1
         echo "$found_entries" | while read -r index country_name lang_code country_code; do
             echo "[$i] $country_name ($lang_code)"
@@ -84,27 +84,28 @@ select_country() {
         echo "[0] Try again"
 
         while true; do
-            echo -n `color cyan "Enter the number of your choice (or 0 to retry): "`
+            echo -n "`color cyan "Enter the number of your choice (or 0 to retry): "`"
             read choice
             if [ "$choice" = "0" ]; then
-                echo "$(color yellow \"Returning to country selection.\")"
+                echo "`color yellow "Returning to country selection."`"
                 break
             fi
 
             selected_entry=$(awk -v num="$choice" '$1 == num {print $2, $3, $4}' /tmp/country_selection.tmp)
 
             if [ -z "$selected_entry" ]; then
-                echo "$(color red \"Invalid selection. Please choose a valid number.\")"
+                echo "`color red "Invalid selection. Please choose a valid number."`"
                 continue
             fi
 
-            echo "$(color green \"Final selection: $selected_entry\")"
+            echo "`color green "Final selection: $selected_entry"`"
             echo "$selected_entry" > "$country_cache"
             echo "$(echo "$selected_entry" | awk '{print $2}')" > "$language_cache"
             return
         done
     done
 }
+
 
 
 
