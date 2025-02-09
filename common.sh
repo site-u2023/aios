@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-15"
+COMMON_VERSION="2025.02.10-16"
 
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -19,7 +19,7 @@ INPUT_LANG="$1"
 script_update() (
 COMMON_CACHE="${BASE_DIR}/common_version.ch"
 # **キャッシュが存在しない、またはバージョンが異なる場合にアラートを表示**
-if [ ! -f "$COMMON_CACHE" ] || [ "$(cat "$COMMON_CACHE")" != "$COMMON_VERSION" ]; then
+if [ ! -f "$COMMON_CACHE" ] || [ "$(cat "$COMMON_CACHE" | tr -d '\r\n')" != "$COMMON_VERSION" ]; then
     echo "`color green "Updated to version 🔴 $COMMON_VERSION 🔴"`"
     echo "$COMMON_VERSION" > "$COMMON_CACHE"
 fi
@@ -30,7 +30,7 @@ fi
 # select_country: 国と言語、タイムゾーンを選択（データベース全文曖昧検索）
 #########################################################################
 #########################################################################
-# select_country (元の動作する方法1)
+# select_country (元の動作する方法1 - ゾーン表示復元)
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -38,6 +38,7 @@ select_country() {
     local language_cache="${BASE_DIR}/language.ch"
     local user_input=""
     local selected_entry=""
+    local selected_zone=""
 
     if [ ! -f "$country_file" ]; then
         echo "`color red "Country database not found!"`"
@@ -48,7 +49,7 @@ select_country() {
         echo "`color cyan "Fuzzy search: Enter a country name, code, or language."`"
         echo -n "`color cyan "Please input: "`"
         read user_input
-        user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]' | sed -E 's/[\/,_]+/ /g')
+        user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]' | sed -E 's/[/,_]+/ /g')
 
         if [ -z "$user_input" ]; then
             echo "`color yellow "Invalid input. Please enter a valid country name, code, or language."`"
@@ -83,15 +84,16 @@ select_country() {
             fi
 
             selected_entry=$(awk -v num="$choice" '$1 == num {print $2, $3, $4}' /tmp/country_selection.tmp)
+            selected_zone=$(awk -v num="$choice" '$1 == num {print $5}' /tmp/country_selection.tmp)
 
             if [ -z "$selected_entry" ]; then
                 echo "`color red "Invalid selection. Please choose a valid number."`"
                 continue
             fi
 
-            echo "`color green "Final selection: $selected_entry"`"
+            echo "`color green "Final selection: $selected_entry (Timezone: $selected_zone)"`"
             echo "$selected_entry" > "$country_cache"
-            echo "$(echo "$selected_entry" | awk '{print $2}')" > "$language_cache"
+            echo "$selected_zone" > "$language_cache"
             return
         done
     done
