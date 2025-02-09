@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-005"
+COMMON_VERSION="2025.02.10-006"
 
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -34,6 +34,8 @@ select_country() {
     local country_cache="${BASE_DIR}/country.ch"
     local language_cache="${BASE_DIR}/language.ch"
     local timezone_cache="${BASE_DIR}/timezone.ch"
+    local country_tmp="${BASE_DIR}/country_tmp.ch"
+    local timezone_tmp="${BASE_DIR}/timezone_tmp.ch"
     local user_input=""
     local selected_entry=""
     local selected_zone=""
@@ -43,6 +45,10 @@ select_country() {
         echo "`color red "Country database not found!"`"
         return 1
     fi
+
+    # `country_tmp.ch` の初期化
+    : > "$country_tmp"
+    : > "$timezone_tmp"
 
     while true; do
         echo "`color cyan "Enter country name, code, or language to set language and retrieve timezone."`"
@@ -64,10 +70,9 @@ select_country() {
 
         echo "`color cyan "Select a country:"`"
         i=1
-        > ${BASE_DIR}/timezone_tmp.ch
         echo "$found_entries" | while read -r index country_name lang_code country_code; do
             echo "[$i] $country_name ($lang_code)"
-            echo "$i $country_name $lang_code $country_code" >> ${BASE_DIR}/timezone_tmp.ch
+            echo "$i $country_name $lang_code $country_code" >> "$country_tmp"
             i=$((i + 1))
         done
         echo "[0] Try again"
@@ -80,7 +85,7 @@ select_country() {
                 break
             fi
 
-            selected_entry=$(awk -v num="$choice" '$1 == num {print $2, $3, $4}' ${BASE_DIR}/country_tmp.ch)
+            selected_entry=$(awk -v num="$choice" '$1 == num {print $2, $3, $4}' "$country_tmp")
 
             if [ -z "$selected_entry" ]; then
                 echo "`color red "Invalid selection. Please choose a valid number."`"
@@ -89,27 +94,24 @@ select_country() {
 
             echo "`color cyan "Select a timezone for $selected_entry:"`"
             i=1
-            > ${BASE_DIR}/country_tmp.ch
             awk -v country="$selected_entry" '$2 == country {print NR, $5, $6}' "$country_file" | while read -r index zone_name tz; do
                 if [ -n "$zone_name" ] && [ -n "$tz" ]; then
                     echo "[$i] $zone_name ($tz)"
-                    echo "$i $zone_name $tz" >> ${BASE_DIR}/country_tmp.ch
+                    echo "$i $zone_name $tz" >> "$timezone_tmp"
                     i=$((i + 1))
                 fi
             done
             echo "[0] Try again"
             
             while true; do
-                echo "`color yellow "DEBUG: Checking timezone data in ${BASE_DIR}/timezone_tmp.ch"`"
-                cat ${BASE_DIR}/timezone_tmp.ch
                 echo -n "`color cyan "Enter the number of your timezone choice (or 0 to retry): "`"
                 read tz_choice
                 if [ "$tz_choice" = "0" ]; then
                     echo "`color yellow "Returning to timezone selection."`"
                     break
                 fi
-                selected_zone=$(awk -v num="$tz_choice" '$1 == num {print $2}' ${BASE_DIR}/timezone_tmp.ch)
-                selected_timezone=$(awk -v num="$tz_choice" '$1 == num {print $3}' ${BASE_DIR}/timezone_tmp.ch)
+                selected_zone=$(awk -v num="$tz_choice" '$1 == num {print $2}' "$timezone_tmp")
+                selected_timezone=$(awk -v num="$tz_choice" '$1 == num {print $3}' "$timezone_tmp")
                 if [ -z "$selected_zone" ] || [ -z "$selected_timezone" ]; then
                     echo "`color red "Invalid selection. Please choose a valid number."`"
                     continue
@@ -137,6 +139,7 @@ select_country() {
         done
     done
 }
+
 
 #########################################################################
 # select_country: アップロードされた common.sh & country.sh OKバージョン
