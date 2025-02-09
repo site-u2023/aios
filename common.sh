@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-000１"
+COMMON_VERSION="2025.02.10-001"
 
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -117,10 +117,10 @@ select_country() {
                 case "$yn" in
                     [Yy]*)
                         echo "`color green "Final selection: $selected_entry (Zone: [$tz_choice] $selected_zone, Timezone: $selected_timezone)"`"
-                        echo "$selected_entry" > "$country_cache"
+                        echo "$selected_entry $selected_zone" > "$country_cache"
                         echo "$selected_zone" > "$language_cache"
                         echo "$selected_timezone" > "$timezone_cache"
-                        echo "`color green "Saved to cache: country.ch=$selected_entry, language.ch=$selected_zone, timezone.ch=$selected_timezone"`"
+                        echo "`color green "Saved to cache: country.ch=$selected_entry $selected_zone, language.ch=$selected_zone, timezone.ch=$selected_timezone"`"
                         return
                         ;;
                     [Nn]*)
