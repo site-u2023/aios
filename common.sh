@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-0010"
+COMMON_VERSION="2025.02.10-0011"
 
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -26,6 +26,29 @@ fi
 )
 
 # -------------------------------------------------------------------------------------------------------------------------------------------
+#########################################################################
+# テスト用関数: データ取得を個別に確認
+#########################################################################
+
+test_country_search() {
+    local test_input="$1"
+    echo "`color cyan "TEST: Searching for country with input '$test_input'"`"
+    awk -v query="$test_input" '{if ($0 ~ query) print NR, $2, $3, $4}' "${BASE_DIR}/country.db"
+}
+
+test_timezone_search() {
+    local test_country="$1"
+    echo "`color cyan "TEST: Searching for timezones of country '$test_country'"`"
+    awk -v country="$test_country" -v code="$selected_entry_code" '$2 == country || $4 == code {print NR, $5, $6}' "${BASE_DIR}/country.db"
+}
+
+test_cache_contents() {
+    echo "`color yellow "DEBUG: country_tmp.ch content:"`"
+    cat "${BASE_DIR}/country_tmp.ch"
+    echo "`color yellow "DEBUG: timezone_tmp.ch content:"`"
+    cat "${BASE_DIR}/timezone_tmp.ch"
+}
+
 #########################################################################
 # select_country: 国選択後、正しくゾーンネームとタイムゾーンを取得・表示する修正
 #########################################################################
@@ -78,8 +101,7 @@ select_country() {
             i=$((i + 1))
         done
         echo "[0] Try again"
-        echo "`color yellow "DEBUG: country_tmp.ch content:"`"
-        cat "$country_tmp"
+        test_cache_contents
 
         while true; do
             echo -n "`color cyan "Enter the number of your choice (or 0 to retry): "`"
@@ -90,7 +112,6 @@ select_country() {
             fi
 
             selected_entry=$(awk -v num="$choice" '$1 == num {print $2, $3, $4}' "$country_tmp")
-            selected_entry_code=$(awk -v num="$choice" '$1 == num {print $4}' "$country_tmp")
 
             if [ -z "$selected_entry" ]; then
                 echo "`color red "Invalid selection. Please choose a valid number."`"
@@ -99,7 +120,7 @@ select_country() {
 
             echo "`color cyan "Select a timezone for $selected_entry:"`"
             i=1
-            awk -v country="$selected_entry" '$2 == country {print NR, $5, $6}' "$country_file" | tee "$timezone_tmp" | tee "$timezone_tmp" | while read -r index zone_name tz; do
+            test_timezone_search "$selected_entry" | tee "$timezone_tmp" | while read -r index zone_name tz; do
                 if [ -n "$zone_name" ] && [ -n "$tz" ]; then
                     echo "[$i] $zone_name ($tz)"
                     echo "$i $zone_name $tz" >> "$timezone_tmp"
@@ -107,8 +128,7 @@ select_country() {
                 fi
             done
             echo "[0] Try again"
-            echo "`color yellow "DEBUG: timezone_tmp.ch content:"`"
-            cat "$timezone_tmp"
+            test_cache_contents
 
             if [ ! -s "$timezone_tmp" ]; then
                 echo "`color red "ERROR: No timezone data found. Check your database or search criteria."`"
@@ -151,7 +171,6 @@ select_country() {
         done
     done
 }
-
 
 #########################################################################
 # select_country: アップロードされた common.sh & country.sh OKバージョン
