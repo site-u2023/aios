@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-25"
+COMMON_VERSION="2025.02.09-26"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
 echo "☆☆☆ Important!　OpenWrt OS only works with ash scripts, not bash scripts. ☆☆☆"
 
@@ -34,13 +34,15 @@ select_country() {
 
     # **データベース存在確認**
     if [ ! -f "$country_file" ]; then
-        echo "$(color red "Country database not found!")"
+        echo "Error: Country database not found!"
         return 1
     fi
 
     while true; do
-        # **ユーザーに曖昧検索を促す**
-        echo -e "$(color cyan "曖昧検索：国名などを入力してください (例: Japan, 日本, JP, ja):")"
+        # **言語・ゾーン設定の説明を表示**
+        echo ""
+        echo "Set country, language, zone name, and time zone."
+        echo "Fuzzy search: Enter a country name or code (e.g., Japan, 日本, JP, ja):"
         read user_input
 
         # **検索が空なら再入力**
@@ -48,28 +50,47 @@ select_country() {
             continue
         fi
 
-        # **曖昧検索のみ**
+        # **曖昧検索**
         found_entries=$(awk -v query="$user_input" '
             tolower($1) ~ tolower(query) ||
             tolower($2) ~ tolower(query) ||
             tolower($3) ~ tolower(query) ||
-            tolower($4) ~ tolower(query) {printf "[%d] %s\n", NR, $0}' "$country_file")
+            tolower($4) ~ tolower(query) {print $0}' "$country_file")
 
         # **検索結果の処理**
         if [ -z "$found_entries" ]; then
-            echo "$(color yellow "一致する国が見つかりませんでした。もう一度入力してください。")"
+            echo "No matching country found. Please try again."
             continue
         fi
 
         # **検索結果が1件なら即確定**
         if [ "$(echo "$found_entries" | wc -l)" -eq 1 ]; then
-            selected_entry=$(echo "$found_entries" | sed -E 's/\[[0-9]+\] //')
+            selected_entry="$found_entries"
         else
-            # **リスト表示**
-            echo "$(color yellow "候補が複数見つかりました。番号で選択してください:")"
-            echo "$found_entries"
-            read -p "Enter the number of your choice: " choice
-            selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
+            # **リスト表示（番号を振り直し）**
+            echo "Multiple matches found. Please select:"
+            local i=1
+            echo "$found_entries" | while read line; do
+                local country_data=$(echo "$line" | awk '{print $1, $2, $3, $4}')
+                echo "[$i] $country_data"
+                i=$((i + 1))
+            done
+            echo "[0] Try again"
+
+            while true; do
+                read -p "Enter the number of your choice (or 0 to go back): " choice
+                if [ "$choice" = "0" ]; then
+                    echo "Returning to country selection."
+                    continue 2
+                fi
+
+                selected_entry=$(echo "$found_entries" | awk -v num="$choice" 'NR == num')
+                if [ -z "$selected_entry" ]; then
+                    echo "Invalid selection. Please choose a valid number."
+                    continue
+                fi
+                break
+            done
         fi
 
         # **選択した国を確認**
@@ -80,45 +101,59 @@ select_country() {
             local country_code=$(echo "$selected_entry" | awk '{print $4}')
             local tz_data=$(echo "$selected_entry" | cut -d' ' -f5-)
 
-            echo -e "$(color cyan "この国でよろしいですか？: $country_name ($display_name, $lang_code, $country_code)? [Y/n]:")"
+            echo "Confirm country selection: $country_name ($display_name, $lang_code, $country_code)? [Y/n]:"
             read yn
             case "$yn" in
                 Y|y) break ;;
-                N|n) echo "$(color yellow "もう一度検索してください。")" ; continue ;;
-                *) echo "$(color red "Y または N を入力してください。")" ;;
+                N|n) echo "Please try again."; continue ;;
+                *) echo "Invalid input. Please enter 'Y' or 'N'." ;;
             esac
         fi
     done
 
     # **タイムゾーン選択**
     while true; do
-        echo "$(color cyan "$country_name のタイムゾーンを選択してください:")"
+        echo "$country_name: Select a timezone."
         local i=1
-        echo "$tz_data" | awk -F',' '{for (i=1; i<=NF; i++) print "["i"] "$i}'
+        echo "$tz_data" | awk -F',' '{for (i=1; i<=NF; i+=2) print "["i/2+1"] "$i, $(i+1)}'
+        echo "[0] Try again"
 
-        read -p "Enter the number of your choice: " tz_choice
-        selected_zonename=$(echo "$tz_data" | awk -F',' -v num="$tz_choice" '{print $num}')
-
-        if [ -z "$selected_zonename" ]; then
-            echo "$(color red "無効な選択です。正しい番号を入力してください。")"
+        read -p "Enter the number of your choice (or 0 to go back): " tz_choice
+        if [ "$tz_choice" = "0" ]; then
+            echo "Returning to timezone selection."
             continue
         fi
 
-        echo -e "$(color cyan "このタイムゾーンでよろしいですか？: $selected_zonename? [Y/n]:")"
+        selected_zonename=$(echo "$tz_data" | awk -F',' -v num="$tz_choice" '{print $num}')
+        selected_timezone=$(echo "$tz_data" | awk -F',' -v num="$tz_choice" '{print $(num+1)}')
+
+        if [ -z "$selected_zonename" ] || [ -z "$selected_timezone" ]; then
+            echo "Invalid selection. Please enter a valid number."
+            continue
+        fi
+
+        echo "Confirm timezone selection: $selected_zonename, $selected_timezone? [Y/n]:"
         read tz_yn
         case "$tz_yn" in
             Y|y) break ;;
-            N|n) echo "$(color yellow "もう一度選択してください。")" ; continue ;;
-            *) echo "$(color red "Y または N を入力してください。")" ;;
+            N|n) echo "Please try again."; continue ;;
+            *) echo "Invalid input. Please enter 'Y' or 'N'." ;;
         esac
     done
 
     # **キャッシュに保存**
-    echo "$country_name $display_name $lang_code $country_code $selected_zonename" > "$country_cache"
+    echo "$country_name $display_name $lang_code $country_code $selected_zonename $selected_timezone" > "$country_cache"
     echo "$lang_code" > "$language_cache"
-    echo "$selected_zonename" > "$zone_cache"
-    echo "$(color green "国とタイムゾーンが設定されました: $country_name, $selected_zonename")"
+    echo "$selected_zonename $selected_timezone" > "$zone_cache"
+    echo "Country, language, and timezone set: $country_name, $selected_zonename, $selected_timezone"
 }
+
+
+
+
+
+
+
 
 #########################################################################
 # print_help: ヘルプメッセージを表示
