@@ -2,8 +2,8 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-02"
-echo "★★★ common.sh Last update: $COMMON_VERSION★★★"
+COMMON_VERSION="2025.02.09-03"
+echo "★★★ common.sh Last update: $COMMON_VERSION ★★★"
 
 # === 基本定数の設定 ===
 # BASE_WGET="wget -O"
@@ -260,6 +260,7 @@ download_script() {
 select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${BASE_DIR}/country.ch"
+    local zone_cache="${BASE_DIR}/zone.ch"
     local language_cache="${BASE_DIR}/language.ch"
     local user_input=""
     local selected_entry=""
@@ -354,8 +355,10 @@ select_country() {
             i=1
             echo "$tz_data" | awk '{
                 for (j=1; j<=NF; j+=2) {
-                    print "["i"]", $j, $(j+1);
-                    i++;
+                    if ($(j+1) != "") {
+                        print "["i"]", $j, $(j+1);
+                        i++;
+                    }
                 }
             }'
             echo "[0] Try again"
@@ -368,8 +371,20 @@ select_country() {
                 continue
             fi
 
-            selected_zone_name=$(echo "$tz_data" | awk -v num="$tz_choice" '{for (j=1; j<=NF; j+=2) if (i==num) print $j; i++}')
-            selected_timezone=$(echo "$tz_data" | awk -v num="$tz_choice" '{for (j=1; j<=NF; j+=2) if (i==num) print $(j+1); i++}')
+            selected_zone_name=$(echo "$tz_data" | awk -v num="$tz_choice" '{
+                i=1;
+                for (j=1; j<=NF; j+=2) {
+                    if (i==num) { print $j; break; }
+                    i++;
+                }
+            }')
+            selected_timezone=$(echo "$tz_data" | awk -v num="$tz_choice" '{
+                i=1;
+                for (j=1; j<=NF; j+=2) {
+                    if (i==num) { print $(j+1); break; }
+                    i++;
+                }
+            }')
 
             if [ -z "$selected_zone_name" ] || [ -z "$selected_timezone" ]; then
                 echo "$(color red "Invalid selection. Please enter a valid number.")"
@@ -385,7 +400,9 @@ select_country() {
         echo "$(color green "Selected timezone: $selected_zone_name, $selected_timezone")"
     fi
 
-    echo "$country_name $display_name $lang_code $country_code $selected_zone_name $selected_timezone" > "$country_cache"
+    # **キャッシュへの書き込み**
+    echo "$country_name $display_name $lang_code $country_code" > "$country_cache"
+    echo "$selected_zone_name $selected_timezone" > "$zone_cache"
     echo "$lang_code" > "$language_cache"
 }
 
