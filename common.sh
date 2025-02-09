@@ -1173,6 +1173,15 @@ check_common() {
 
     case "$mode" in
         full)
+            # TEST
+            test_country_search "US"
+            test_country_search "Japan"
+            test_timezone_search "United_States"
+            test_timezone_search "Japan"
+            test_cache_contents
+
+
+            
             script_update
             download_script messages.db
             download_script country.db
