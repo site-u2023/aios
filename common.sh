@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-1"
+COMMON_VERSION="2025.02.10-2"
 echo "common.sh Last update: 🔴 $COMMON_VERSION 🔴"
 
 # 基本定数の設定
@@ -21,13 +21,12 @@ INPUT_LANG="$1"
 # select_country: 国と言語、タイムゾーンを選択（データベース全文曖昧検索）
 #########################################################################
 #########################################################################
-# select_country: 国と言語、タイムゾーンを選択（検索と表示を `country_tmp.ch` に統一）
+# select_country: 国と言語、タイムゾーンを選択（検索・表示を `country.db` に統一）
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${BASE_DIR}/country.ch"
     local language_cache="${BASE_DIR}/language.ch"
-    local country_tmp="${BASE_DIR}/country_tmp.ch"  # 検索と表示に使用する統一キャッシュ
     local user_input=""
     local selected_entry=""
     local selected_zonename=""
@@ -38,28 +37,25 @@ select_country() {
         return 1
     fi
 
-    # **検索と表示の統一キャッシュを作成（`/`, `,`, 空白を `_` に統一）**
-    if [ ! -f "$country_tmp" ]; then
-        awk '{gsub(/[\/, ]+/, "_"); print tolower($0)}' "$country_file" > "$country_tmp"
-    fi
-
     while true; do
         echo "$(color cyan "Fuzzy search: Enter a country name, code, or timezone.")"
         echo -n "$(color cyan "Please input: ")"
         read user_input
-        user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]' | sed -E 's/[\/, ]+/_/g')
+        user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]' | sed -E 's/[\/,_]+/ /g')
 
         if [ -z "$user_input" ]; then
             echo "$(color yellow "Invalid input. Please enter a country name, code, or city.")"
             continue
         fi
 
-        # **検索と表示の統一処理（`country_tmp.ch` を使用）**
+        # **検索は `country.db` を直接使用し、`/`, `,`, `_` を除去**
         found_entries=$(awk -v query="$user_input" '
             {
-                if ($0 ~ query) 
-                    print NR, $0  # 出力は行番号とそのままのデータ
-            }' "$country_tmp")
+                line = tolower($0);
+                gsub(/[\/,_]+/, " ", line);  # 検索対象から / , _ を削除
+                if (line ~ query) 
+                    print NR, $0  # 出力は行番号とデータ
+            }' "$country_file")
 
         echo "$(color cyan "DEBUG: Search results:")"
         echo "$found_entries"
@@ -70,7 +66,7 @@ select_country() {
             echo "$(color yellow "No matching country found. Please try again.")"
             continue
         elif [ "$matches_found" -eq 1 ]; then
-            selected_entry=$(echo "$found_entries" | awk '{print substr($0, index($0, $2))}')  # 行番号を除外
+            selected_entry=$(echo "$found_entries" | awk '{$1=""; print substr($0,2)}')  # 行番号を除外
             echo -e "$(color cyan "Confirm country selection: \"$selected_entry\"? [Y/n]:")"
             read yn
             case "$yn" in
@@ -82,8 +78,9 @@ select_country() {
             echo "$(color yellow "Multiple matches found. Please select:")"
             i=1
             echo "$found_entries" | while read -r index country_info; do
-                echo "[$i] $country_info"
-                echo "$i $country_info" >> /tmp/country_selection.tmp
+                formatted_entry=$(echo "$country_info" | awk '{$1=""; print substr($0,2)}')
+                echo "[$i] $formatted_entry"
+                echo "$i $formatted_entry" >> /tmp/country_selection.tmp
                 i=$((i + 1))
             done
             echo "[0] Try again"
