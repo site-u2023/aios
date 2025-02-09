@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-14"
+COMMON_VERSION="2025.02.09-15"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
 
 # === 基本定数の設定 ===
@@ -281,10 +281,7 @@ select_country() {
 
     # **全リスト表示**
     index=1
-    while read -r line; do
-        echo "[$index] $line"
-        index=$((index + 1))
-    done < <(awk '{print $1, $2, $3, $4}' "$country_file")
+    awk '{print "[" NR "]", $1, $2, $3, $4}' "$country_file"
 
     while true; do
         echo -e "$(color cyan "Enter country name, code, or language (or press Enter to list all):")"
@@ -292,10 +289,7 @@ select_country() {
 
         if [ -z "$user_input" ]; then
             index=1
-            while read -r line; do
-                echo "[$index] $line"
-                index=$((index + 1))
-            done < <(awk '{print $1, $2, $3, $4}' "$country_file")
+            awk '{print "[" NR "]", $1, $2, $3, $4}' "$country_file"
             continue
         fi
 
@@ -318,11 +312,11 @@ select_country() {
         else
             index=1
             numbered_entries=""
-            while read -r line; do
+            echo "$found_entries" | while read line; do
                 echo "[$index] $line"
                 numbered_entries="$numbered_entries\n$index $line"
                 index=$((index + 1))
-            done <<< "$found_entries"
+            done
             echo "[0] Try again"
 
             while true; do
@@ -358,13 +352,13 @@ select_country() {
     if echo "$tz_data" | grep -q ","; then
         index=1
         numbered_zones=""
-        while read -r tz_pair; do
+        echo "$tz_data" | tr ' ' '\n' | while read tz_pair; do
             zonename=$(echo "$tz_pair" | cut -d',' -f1)
             timezone=$(echo "$tz_pair" | cut -d',' -f2)
             echo "[$index] $zonename $timezone"
             numbered_zones="$numbered_zones\n$index $zonename $timezone"
             index=$((index + 1))
-        done <<< "$(echo "$tz_data" | tr ' ' '\n')"
+        done
         echo "[0] Try again"
 
         while true; do
