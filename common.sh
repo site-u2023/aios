@@ -5,7 +5,7 @@
 ################################################################################
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 ################################################################################
-COMMON_VERSION="2025.02.09-002"
+COMMON_VERSION="2025.02.09-003"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
 echo "☆☆☆ Important!　OpenWrt OS only works with Almquist Shells, not Bourne-again shell. ☆☆☆"
 
