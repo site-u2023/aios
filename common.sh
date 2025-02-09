@@ -650,7 +650,7 @@ check_openwrt() {
         PACKAGE_MANAGER=$(echo "$db_entry" | cut -d'|' -f1)
         VERSION_STATUS=$(echo "$db_entry" | cut -d'|' -f2)
 
-        echo -e "$(color green "バージョン $CURRENT_VERSION はサポートされています ($VERSION_STATUS)")"
+        echo -e "$(color green "Version $CURRENT_VERSION is supported ($VERSION_STATUS)")"
     else
         handle_error "Unsupported OpenWrt version: $CURRENT_VERSION"
     fi
