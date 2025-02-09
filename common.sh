@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-7"
+COMMON_VERSION="2025.02.10-8"
 echo "common.sh Last update: 🔴 $COMMON_VERSION 🔴"
 
 # 基本定数の設定
@@ -120,10 +120,10 @@ select_country() {
 
     # **正規化キャッシュ作成**
     if [ ! -f "$country_tmp" ]; then
-        awk '{
+        awk 'BEGIN {OFS=" "} {
             line = tolower($0);
             gsub(/[\/,_]+/, " ", line);
-            print $2, $3, $4, substr(line, index(line, $5));
+            print NR, $2, $3, $4, substr(line, index(line, $5));
         }' "$country_file" > "$country_tmp"
     fi
 
@@ -138,7 +138,7 @@ select_country() {
             continue
         fi
 
-        found_entries=$(awk -v query="$user_input" '{if ($0 ~ query) print NR, $0}' "$country_tmp")
+        found_entries=$(awk -v query="$user_input" '{if ($0 ~ query) print $1, $2, $3, $4}' "$country_tmp")
 
         if [ -z "$found_entries" ]; then
             echo "$(color yellow \"No matching country found. Please try again.\")"
@@ -150,7 +150,7 @@ select_country() {
 
         echo "$(color yellow \"Select a country:\")"
         i=1
-        echo "$found_entries" | while read -r index country_name lang_code country_code rest; do
+        echo "$found_entries" | while read -r index country_name lang_code country_code; do
             echo "[$i] $country_name ($lang_code)"
             echo "$i $country_name $lang_code $country_code" >> /tmp/country_selection.tmp
             i=$((i + 1))
@@ -158,7 +158,7 @@ select_country() {
         echo "[0] Try again"
 
         while true; do
-            echo -n "`color cyan \"Enter the number of your choice (or 0 to retry): \"`"
+            echo -n "$(color cyan \"Enter the number of your choice (or 0 to retry): \")"
             read choice
             if [ "$choice" = "0" ]; then
                 echo "$(color yellow \"Returning to country selection.\")"
@@ -179,6 +179,7 @@ select_country() {
         done
     done
 }
+
 
 
 
