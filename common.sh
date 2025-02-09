@@ -5,23 +5,6 @@
 ################################################################################
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 ################################################################################
-COMMON_VERSION="2025.02.09-004"
-echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
-echo "☆☆☆ Important!　OpenWrt OS only works with Almquist Shells, not Bourne-again shell. ☆☆☆"
-
-# === 基本定数の設定 ===
-# BASE_WGET="wget -O"
-BASE_WGET="wget --quiet -O"
-BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
-AIOS_DIR="/usr/bin"
-BASE_DIR="${BASE_DIR:-/tmp/aios}"
-SUPPORTED_VERSIONS="${SUPPORTED_VERSIONS:-19.07 21.02 22.03 23.05 24.10.0 SNAPSHOT}"
-SUPPORTED_LANGUAGES="${SUPPORTED_LANGUAGES:-en ja zh-cn zh-tw id ko de ru}"
-
-# テスト領域 ---------------------------------------------------------------------------------------------
-#########################################################################
-# select_country: 国とタイムゾーンの選択（100% ash 対応）
-#########################################################################
 #########################################################################
 # select_country: 国とタイムゾーンの選択（100% ash 対応）
 #########################################################################
@@ -41,13 +24,13 @@ select_country() {
 
     while true; do
         echo "$(color cyan "Available countries:")"
-        awk '{print $1, $2, $3, $4}' "$country_file"
+        awk '{print NR, $1, $2, $3}' "$country_file"
 
         echo -e "$(color cyan "Enter country name, code, or language (or press Enter to list all):")"
         read user_input
 
         if [ -z "$user_input" ]; then
-            awk '{print $1, $2, $3, $4}' "$country_file"
+            awk '{print NR, $1, $2, $3}' "$country_file"
             continue
         fi
 
@@ -55,8 +38,7 @@ select_country() {
         found_entries=$(awk -v query="$user_input" '
             tolower($1) ~ tolower(query) ||
             tolower($2) ~ tolower(query) ||
-            tolower($3) ~ tolower(query) ||
-            tolower($4) ~ tolower(query) {print NR, $1, $2, $3, $4}' "$country_file")
+            tolower($3) ~ tolower(query) {print NR, $1, $2, $3, $4}' "$country_file")
 
         matches_found=$(echo "$found_entries" | wc -l)
 
@@ -109,14 +91,14 @@ select_country() {
     display_name=$(echo "$selected_entry" | awk '{print $2}')
     lang_code=$(echo "$selected_entry" | awk '{print $3}')
     country_code=$(echo "$selected_entry" | awk '{print $4}')
-    tz_data=$(grep "^$country_name " "$country_file" | awk '{for(i=6;i<=NF;i++) print $i}')
+    tz_data=$(grep "^$country_name " "$country_file" | cut -d' ' -f6-)
 
     # **ゾーンネーム＆タイムゾーン選択**
-    if [ "$(echo "$tz_data" | wc -l)" -gt 1 ]; then
+    if [ "$(echo "$tz_data" | wc -w)" -gt 2 ]; then
         while true; do
             echo "$(color cyan "Select a timezone for $country_name:")"
             i=1
-            echo "$tz_data" | while read -r tz_pair; do
+            echo "$tz_data" | tr ' ' '\n' | while read -r tz_pair; do
                 echo "[$i] $tz_pair"
                 i=$((i + 1))
             done
@@ -130,8 +112,8 @@ select_country() {
                 continue
             fi
 
-            selected_zone_name=$(echo "$tz_data" | awk -v num="$tz_choice" 'NR==num {print $1}')
-            selected_timezone=$(echo "$tz_data" | awk -v num="$tz_choice" 'NR==num {print $2}')
+            selected_zone_name=$(echo "$tz_data" | tr ' ' '\n' | awk -v num="$tz_choice" 'NR==num {print $1}')
+            selected_timezone=$(echo "$tz_data" | tr ' ' '\n' | awk -v num="$tz_choice" 'NR==num {print $2}')
 
             if [ -z "$selected_zone_name" ] || [ -z "$selected_timezone" ]; then
                 echo "$(color red "Invalid selection. Please enter a valid number.")"
