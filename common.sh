@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-30"
+COMMON_VERSION="2025.02.09-31"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
 echo "☆☆☆ Important!　OpenWrt OS only works with ash scripts, not bash scripts. ☆☆☆"
 
@@ -19,6 +19,9 @@ SUPPORTED_VERSIONS="${SUPPORTED_VERSIONS:-19.07 21.02 22.03 23.05 24.10.0 SNAPSH
 SUPPORTED_LANGUAGES="${SUPPORTED_LANGUAGES:-en ja zh-cn zh-tw id ko de ru}"
 
 # テスト領域 ---------------------------------------------------------------------------------------------
+#########################################################################
+# select_country: 国とタイムゾーンの選択（100% ash 対応）
+#########################################################################
 #########################################################################
 # select_country: 国とタイムゾーンの選択（100% ash 対応）
 #########################################################################
@@ -106,7 +109,7 @@ select_country() {
     country_code=$(echo "$selected_entry" | awk '{print $5}')
     
     # **ゾーンデータを正しく取得**
-    tz_data=$(grep "^$country_name" "$country_file" | awk '{for(i=6;i<=NF;i++) print $i}')
+    tz_data=$(grep "^$country_name" "$country_file" | awk '{for(i=6;i<=NF;i+=2) print $i, $(i+1)}')
 
     # **ゾーンデータをキャッシュに保存**
     echo "$tz_data" > "$zone_cache"
@@ -159,11 +162,6 @@ select_country() {
     echo "$(color green "Country, language, and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
     echo "$(color green "Language saved to language.ch: $lang_code")"
 }
-
-
-
-
-
 
 
 
