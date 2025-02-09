@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-005"
+COMMON_VERSION="2025.02.10-0001"
 
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -27,7 +27,7 @@ fi
 
 # -------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
-# select_country: 言語を設定し、ゾーンネームとタイムゾーンを取得する関数（ゾーン選択を番号付き+YN判定）
+# select_country: アップロードされた common.sh & country.sh に基づく正確な関数
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -110,14 +110,15 @@ select_country() {
                     echo "`color red "Invalid selection. Please choose a valid number."`"
                     continue
                 fi
-                echo "`color cyan "Confirm selection: $selected_entry (Zone: $selected_zone, Timezone: $selected_timezone)? [Y/n]:"`"
+                echo "`color cyan "Confirm selection: [$tz_choice] $selected_zone ($selected_timezone)? [Y/n]"`"
                 read yn
                 case "$yn" in
                     [Yy]*)
-                        echo "`color green "Final selection: $selected_entry (Zone: $selected_zone, Timezone: $selected_timezone)"`"
+                        echo "`color green "Final selection: $selected_entry (Zone: [$tz_choice] $selected_zone, Timezone: $selected_timezone)"`"
                         echo "$selected_entry" > "$country_cache"
                         echo "$selected_zone" > "$language_cache"
                         echo "$selected_timezone" > "$timezone_cache"
+                        echo "`color green "Saved to cache: country.ch=$selected_entry, language.ch=$selected_zone, timezone.ch=$selected_timezone"`"
                         return
                         ;;
                     [Nn]*)
@@ -132,6 +133,10 @@ select_country() {
         done
     done
 }
+
+
+
+ 
 
 #########################################################################
 # select_country: 国と言語、タイムゾーンを選択（検索・表示を `country.db` に統一）
