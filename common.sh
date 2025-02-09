@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-29"
+COMMON_VERSION="2025.02.09-30"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
 echo "☆☆☆ Important!　OpenWrt OS only works with ash scripts, not bash scripts. ☆☆☆"
 
@@ -22,9 +22,6 @@ SUPPORTED_LANGUAGES="${SUPPORTED_LANGUAGES:-en ja zh-cn zh-tw id ko de ru}"
 #########################################################################
 # select_country: 国とタイムゾーンの選択（100% ash 対応）
 #########################################################################
-#########################################################################
-# select_country: 国とタイムゾーンの選択（100% ash 対応）
-#########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${BASE_DIR}/country.ch"
@@ -34,7 +31,7 @@ select_country() {
     local selected_entry=""
     local selected_zone_name=""
     local selected_timezone=""
-    
+
     if [ ! -f "$country_file" ]; then
         echo "$(color red "Country database not found!")"
         return
@@ -107,10 +104,14 @@ select_country() {
     display_name=$(echo "$selected_entry" | awk '{print $3}')
     lang_code=$(echo "$selected_entry" | awk '{print $4}')
     country_code=$(echo "$selected_entry" | awk '{print $5}')
+    
+    # **ゾーンデータを正しく取得**
     tz_data=$(grep "^$country_name" "$country_file" | awk '{for(i=6;i<=NF;i++) print $i}')
 
+    # **ゾーンデータをキャッシュに保存**
     echo "$tz_data" > "$zone_cache"
 
+    # **ゾーンが1つしかない場合はYNのみ**
     if [ $(echo "$tz_data" | wc -l) -eq 1 ]; then
         selected_zone_name=$(echo "$tz_data" | awk '{print $1}')
         selected_timezone=$(echo "$tz_data" | awk '{print $2}')
@@ -158,6 +159,7 @@ select_country() {
     echo "$(color green "Country, language, and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
     echo "$(color green "Language saved to language.ch: $lang_code")"
 }
+
 
 
 
