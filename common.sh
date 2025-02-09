@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-001"
+COMMON_VERSION="2025.02.10-002"
 
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -33,9 +33,11 @@ select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${BASE_DIR}/country.ch"
     local language_cache="${BASE_DIR}/language.ch"
+    local timezone_cache="${BASE_DIR}/timezone.ch"
     local user_input=""
     local selected_entry=""
     local selected_zone=""
+    local selected_timezone=""
 
     if [ ! -f "$country_file" ]; then
         echo "`color red "Country database not found!"`"
@@ -53,7 +55,7 @@ select_country() {
             continue
         fi
 
-        found_entries=$(awk -v query="$user_input" '{if ($0 ~ query) print NR, $2, $3, $4, $6}' "$country_file")
+        found_entries=$(awk -v query="$user_input" '{if ($0 ~ query) print NR, $2, $3, $4, $6, $7}' "$country_file")
 
         if [ -z "$found_entries" ]; then
             echo "`color yellow "No matching country found. Please try again."`"
@@ -66,9 +68,9 @@ select_country() {
         echo "`color yellow "Select a country:"`"
         i=1
         > /tmp/country_selection.tmp
-        echo "$found_entries" | while read -r index country_name lang_code country_code timezone; do
+        echo "$found_entries" | while read -r index country_name lang_code country_code zone_name timezone; do
             echo "[$i] $country_name ($lang_code)"
-            echo "$i $country_name $lang_code $country_code $timezone" >> /tmp/country_selection.tmp
+            echo "$i $country_name $lang_code $country_code $zone_name $timezone" >> /tmp/country_selection.tmp
             i=$((i + 1))
         done
         echo "[0] Try again"
@@ -83,15 +85,17 @@ select_country() {
 
             selected_entry=$(awk -v num="$choice" '$1 == num {print $2, $3, $4}' /tmp/country_selection.tmp)
             selected_zone=$(awk -v num="$choice" '$1 == num {print $5}' /tmp/country_selection.tmp)
+            selected_timezone=$(awk -v num="$choice" '$1 == num {print $6}' /tmp/country_selection.tmp)
 
             if [ -z "$selected_entry" ]; then
                 echo "`color red "Invalid selection. Please choose a valid number."`"
                 continue
             fi
 
-            echo "`color green "Final selection: $selected_entry (Timezone: $selected_zone)"`"
+            echo "`color green "Final selection: $selected_entry (Zone: $selected_zone, Timezone: $selected_timezone)"`"
             echo "$selected_entry" > "$country_cache"
             echo "$selected_zone" | tr -d '\n' > "$language_cache"
+            echo "$selected_timezone" | tr -d '\n' > "$timezone_cache"
             return
         done
     done
