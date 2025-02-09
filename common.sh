@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.09-004"
+COMMON_VERSION="2025.02.09-005"
 echo "common.sh Last update: $COMMON_VERSION ★★★"
 
 # 基本定数の設定
@@ -37,24 +37,21 @@ select_country() {
     while true; do
         echo "$(color cyan "Set country, language, zone name, and time zone.")"
         echo "$(color cyan "Fuzzy search: Enter a country name or code.")"
-        echo "$(color cyan "(e.g., United States, English, US, en)")"
+        echo "$(color cyan "(e.g., United States, English, US, en, Tokyo)")"
         echo -n "$(color cyan "Please input: ")"
         read user_input
 
         if [ -z "$user_input" ]; then
-            echo "$(color yellow "Invalid input. Please enter a country name or code.")"
+            echo "$(color yellow "Invalid input. Please enter a country name, code, or city.")"
             continue
         fi
 
-        # **曖昧検索のみ（大文字小文字区別なし）**
+        # **全文検索（大文字小文字区別なし）**
         found_entries=$(awk -v query="$(echo "$user_input" | tr '[:upper:]' '[:lower:]')" '
             {
-                low_country = tolower($1);
-                low_lang = tolower($2);
-                low_code = tolower($3);
-                low_short = tolower($4);
-                if (low_country ~ query || low_lang ~ query || low_code ~ query || low_short ~ query)
-                    print $2, $3, $4
+                line = tolower($0);
+                if (line ~ query)
+                    print NR, $2, $3, $4
             }' "$country_file")
 
         matches_found=$(echo "$found_entries" | wc -l)
@@ -63,7 +60,7 @@ select_country() {
             echo "$(color yellow "No matching country found. Please try again.")"
             continue
         elif [ "$matches_found" -eq 1 ]; then
-            selected_entry=$(echo "$found_entries" | awk '{print $1, $2, $3}')
+            selected_entry=$(echo "$found_entries" | awk '{print $2, $3, $4}')
             echo -e "$(color cyan "Confirm country selection: $selected_entry? [Y/n]:")"
             read yn
             case "$yn" in
@@ -74,7 +71,7 @@ select_country() {
         else
             echo "$(color yellow "Multiple matches found. Please select:")"
             i=1
-            echo "$found_entries" | while read -r display_name lang_code country_code; do
+            echo "$found_entries" | while read -r index display_name lang_code country_code; do
                 echo "[$i] $display_name ($lang_code)"
                 i=$((i + 1))
             done
@@ -88,7 +85,7 @@ select_country() {
                     break
                 fi
 
-                selected_entry=$(echo "$found_entries" | awk -v num="$choice" 'NR==num {print $1, $2, $3}')
+                selected_entry=$(echo "$found_entries" | awk -v num="$choice" 'NR==num {print $2, $3, $4}')
                 if [ -z "$selected_entry" ]; then
                     echo "$(color red "Invalid selection. Please choose a valid number.")"
                     continue
@@ -158,6 +155,7 @@ select_country() {
     echo "$(color green "Zone Name: $selected_zonename")"
     echo "$(color green "Time Zone: $selected_timezone")"
 }
+
 
 
 
