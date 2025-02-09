@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-19"
+COMMON_VERSION="2025.02.09-20"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
 echo "☆☆☆ Important!　OpenWrt OS only works with ash scripts, not bash scripts. ☆☆☆"
 
@@ -293,9 +293,9 @@ select_country() {
             continue
         fi
 
-        # **数字入力の場合、該当する国を選択**
+        # **数字入力の場合**
         if echo "$user_input" | grep -qE '^[0-9]+$'; then
-            selected_entry=$(awk -v num="$user_input" 'NR == num {print $1, $2, $3, $4}' "$country_file")
+            selected_entry=$(awk -v num="$user_input" 'NR == num {print $1, $2, $3, $4}' "$country_file" 2>/dev/null)
             if [ -z "$selected_entry" ]; then
                 echo "$(color red "Invalid selection. Please choose a valid number.")"
                 continue
@@ -310,50 +310,44 @@ select_country() {
             continue
         fi
 
-        # **曖昧検索（小文字変換）**
-        index=1
-        found_entries=$(awk -v query="$(echo "$user_input" | tr '[:upper:]' '[:lower:]')" '
-            tolower($1) ~ query ||
-            tolower($2) ~ query ||
-            tolower($3) ~ query ||
-            tolower($4) ~ query {print "[" index++ "]", $1, $2, $3, $4}' "$country_file")
+        # **曖昧検索**
+        found_entries=$(awk -v query="$user_input" '
+            tolower($1) ~ tolower(query) ||
+            tolower($2) ~ tolower(query) ||
+            tolower($3) ~ tolower(query) ||
+            tolower($4) ~ tolower(query) {print "[" NR "]", $1, $2, $3, $4}' "$country_file" 2>/dev/null)
 
         if [ -z "$found_entries" ]; then
             echo "$(color yellow "No matching country found. Please try again.")"
             continue
         fi
 
-        matches_found=$(echo "$found_entries" | wc -l)
-        if [ "$matches_found" -eq 1 ]; then
-            selected_entry="$found_entries"
-        else
-            echo "$found_entries"
-            echo "[0] Try again"
+        echo "$found_entries"
+        echo "[0] Try again"
 
-            while true; do
-                echo -e "$(color cyan "Enter the number of your choice (or 0 to go back):")"
-                read choice
+        while true; do
+            echo -e "$(color cyan "Enter the number of your choice (or 0 to go back):")"
+            read choice
 
-                if [ "$choice" = "0" ]; then
-                    echo "$(color yellow "Returning to country selection.")"
-                    break
-                fi
+            if [ "$choice" = "0" ]; then
+                echo "$(color yellow "Returning to country selection.")"
+                break
+            fi
 
-                selected_entry=$(awk -v num="$choice" 'NR == num {print $1, $2, $3, $4}' "$country_file")
-                if [ -z "$selected_entry" ]; then
-                    echo "$(color red "Invalid selection. Please choose a valid number.")"
-                    continue
-                fi
+            selected_entry=$(awk -v num="$choice" 'NR == num {print $1, $2, $3, $4}' "$country_file" 2>/dev/null)
+            if [ -z "$selected_entry" ]; then
+                echo "$(color red "Invalid selection. Please choose a valid number.")"
+                continue
+            fi
 
-                echo -e "$(color cyan "Confirm country selection: $(echo "$selected_entry" | awk '{print $1, $2, $3, $4}')? [Y/n]:")"
-                read yn
-                case "$yn" in
-                    Y|y) break 2 ;;
-                    N|n) break ;;
-                    *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
-                esac
-            done
-        fi
+            echo -e "$(color cyan "Confirm country selection: $(echo "$selected_entry" | awk '{print $1, $2, $3, $4}')? [Y/n]:")"
+            read yn
+            case "$yn" in
+                Y|y) break 2 ;;
+                N|n) break ;;
+                *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
+            esac
+        done
 
         [ -n "$selected_entry" ] && break
     done
@@ -382,8 +376,8 @@ select_country() {
             continue
         fi
 
-        selected_zonename=$(echo "$tz_data" | awk -v num="$tz_choice" 'NR == num {print $1}')
-        selected_timezone=$(echo "$tz_data" | awk -v num="$tz_choice" 'NR == num {print $2}')
+        selected_zonename=$(echo "$tz_data" | awk -F' ' -v num="$tz_choice" 'NR == num {print $1}')
+        selected_timezone=$(echo "$tz_data" | awk -F' ' -v num="$tz_choice" 'NR == num {print $2}')
 
         if [ -z "$selected_zonename" ] || [ -z "$selected_timezone" ]; then
             echo "$(color red "Invalid selection. Please enter a valid number.")"
