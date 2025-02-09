@@ -5,8 +5,9 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-17"
+COMMON_VERSION="2025.02.09-19"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
+echo "☆☆☆ Important!　OpenWrt OS only works with ash scripts, not bash scripts. ☆☆☆"
 
 # === 基本定数の設定 ===
 # BASE_WGET="wget -O"
@@ -270,7 +271,6 @@ select_country() {
     local selected_zonename=""
     local selected_timezone=""
     local found_entries=""
-    local numbered_entries=""
     local index=1
 
     # **データベース存在チェック**
@@ -281,7 +281,7 @@ select_country() {
 
     # **全リスト表示**
     index=1
-    awk '{print "[" NR "]", $1, $2, $3, $4}' "$country_file"
+    awk '{print "[" index++ "]", $1, $2, $3, $4}' "$country_file"
 
     while true; do
         echo -e "$(color cyan "Enter country name, code, or language (or press Enter to list all):")"
@@ -289,7 +289,7 @@ select_country() {
 
         if [ -z "$user_input" ]; then
             index=1
-            awk '{print "[" NR "]", $1, $2, $3, $4}' "$country_file"
+            awk '{print "[" index++ "]", $1, $2, $3, $4}' "$country_file"
             continue
         fi
 
@@ -316,7 +316,7 @@ select_country() {
             tolower($1) ~ query ||
             tolower($2) ~ query ||
             tolower($3) ~ query ||
-            tolower($4) ~ query {print "[" NR "]", $1, $2, $3, $4}' "$country_file")
+            tolower($4) ~ query {print "[" index++ "]", $1, $2, $3, $4}' "$country_file")
 
         if [ -z "$found_entries" ]; then
             echo "$(color yellow "No matching country found. Please try again.")"
@@ -382,8 +382,8 @@ select_country() {
             continue
         fi
 
-        selected_zonename=$(awk -v num="$tz_choice" 'NR == num {print $1}' <<< "$tz_data")
-        selected_timezone=$(awk -v num="$tz_choice" 'NR == num {print $2}' <<< "$tz_data")
+        selected_zonename=$(echo "$tz_data" | awk -v num="$tz_choice" 'NR == num {print $1}')
+        selected_timezone=$(echo "$tz_data" | awk -v num="$tz_choice" 'NR == num {print $2}')
 
         if [ -z "$selected_zonename" ] || [ -z "$selected_timezone" ]; then
             echo "$(color red "Invalid selection. Please enter a valid number.")"
