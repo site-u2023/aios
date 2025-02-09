@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-24"
+COMMON_VERSION="2025.02.09-25"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
 echo "☆☆☆ Important!　OpenWrt OS only works with ash scripts, not bash scripts. ☆☆☆"
 
@@ -39,57 +39,40 @@ select_country() {
     fi
 
     while true; do
-        # **全リストを最初に表示**
-        echo -e "$(color cyan "Available countries:")"
-        awk '{print "[" NR "]", $1, $2, $3, $4}' "$country_file"
-
-        # **ユーザー入力**
-        echo -e "$(color cyan "Enter country name, code, or language (or press Enter to list all):")"
+        # **ユーザーに曖昧検索を促す**
+        echo -e "$(color cyan "曖昧検索：国名などを入力してください (例: Japan, 日本, JP, ja):")"
         read user_input
 
-        # **空入力ならリストを再表示**
+        # **検索が空なら再入力**
         if [ -z "$user_input" ]; then
             continue
         fi
 
-        # **番号入力の処理**
-        if echo "$user_input" | grep -qE '^[0-9]+$'; then
-            selected_entry=$(awk -v num="$user_input" 'NR == num {print $0}' "$country_file")
-        else
-            # **完全一致検索**
-            found_entries=$(awk -v query="$user_input" '
-                tolower($1) == tolower(query) ||
-                tolower($2) == tolower(query) ||
-                tolower($3) == tolower(query) ||
-                tolower($4) == tolower(query) {printf "[%d] %s\n", NR, $0}' "$country_file")
+        # **曖昧検索のみ**
+        found_entries=$(awk -v query="$user_input" '
+            tolower($1) ~ tolower(query) ||
+            tolower($2) ~ tolower(query) ||
+            tolower($3) ~ tolower(query) ||
+            tolower($4) ~ tolower(query) {printf "[%d] %s\n", NR, $0}' "$country_file")
 
-            # **曖昧検索**
-            if [ -z "$found_entries" ]; then
-                found_entries=$(awk -v query="$user_input" '
-                    tolower($1) ~ tolower(query) ||
-                    tolower($2) ~ tolower(query) ||
-                    tolower($3) ~ tolower(query) ||
-                    tolower($4) ~ tolower(query) {printf "[%d] %s\n", NR, $0}' "$country_file")
-            fi
-
-            # **検索結果の処理**
-            if [ -z "$found_entries" ]; then
-                echo "$(color yellow "No matching country found. Please try again.")"
-                continue
-            fi
-
-            # **複数ヒット時の選択**
-            if [ "$(echo "$found_entries" | wc -l)" -gt 1 ]; then
-                echo "$(color yellow "Multiple matches found. Please select:")"
-                echo "$found_entries"
-                read -p "Enter the number of your choice: " choice
-                selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
-            else
-                selected_entry=$(echo "$found_entries" | sed -E 's/\[[0-9]+\] //')
-            fi
+        # **検索結果の処理**
+        if [ -z "$found_entries" ]; then
+            echo "$(color yellow "一致する国が見つかりませんでした。もう一度入力してください。")"
+            continue
         fi
 
-        # **選択した国が正しいか確認**
+        # **検索結果が1件なら即確定**
+        if [ "$(echo "$found_entries" | wc -l)" -eq 1 ]; then
+            selected_entry=$(echo "$found_entries" | sed -E 's/\[[0-9]+\] //')
+        else
+            # **リスト表示**
+            echo "$(color yellow "候補が複数見つかりました。番号で選択してください:")"
+            echo "$found_entries"
+            read -p "Enter the number of your choice: " choice
+            selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
+        fi
+
+        # **選択した国を確認**
         if [ -n "$selected_entry" ]; then
             local country_name=$(echo "$selected_entry" | awk '{print $1}')
             local display_name=$(echo "$selected_entry" | awk '{print $2}')
@@ -97,15 +80,44 @@ select_country() {
             local country_code=$(echo "$selected_entry" | awk '{print $4}')
             local tz_data=$(echo "$selected_entry" | cut -d' ' -f5-)
 
-            echo -e "$(color cyan "Confirm country selection: $country_name ($display_name, $lang_code, $country_code)? [Y/n]:")"
+            echo -e "$(color cyan "この国でよろしいですか？: $country_name ($display_name, $lang_code, $country_code)? [Y/n]:")"
             read yn
             case "$yn" in
                 Y|y) break ;;
-                N|n) echo "$(color yellow "Invalid selection. Please try again.")" ; continue ;;
-                *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
+                N|n) echo "$(color yellow "もう一度検索してください。")" ; continue ;;
+                *) echo "$(color red "Y または N を入力してください。")" ;;
             esac
         fi
     done
+
+    # **タイムゾーン選択**
+    while true; do
+        echo "$(color cyan "$country_name のタイムゾーンを選択してください:")"
+        local i=1
+        echo "$tz_data" | awk -F',' '{for (i=1; i<=NF; i++) print "["i"] "$i}'
+
+        read -p "Enter the number of your choice: " tz_choice
+        selected_zonename=$(echo "$tz_data" | awk -F',' -v num="$tz_choice" '{print $num}')
+
+        if [ -z "$selected_zonename" ]; then
+            echo "$(color red "無効な選択です。正しい番号を入力してください。")"
+            continue
+        fi
+
+        echo -e "$(color cyan "このタイムゾーンでよろしいですか？: $selected_zonename? [Y/n]:")"
+        read tz_yn
+        case "$tz_yn" in
+            Y|y) break ;;
+            N|n) echo "$(color yellow "もう一度選択してください。")" ; continue ;;
+            *) echo "$(color red "Y または N を入力してください。")" ;;
+        esac
+    done
+
+    # **キャッシュに保存**
+    echo "$country_name $display_name $lang_code $country_code $selected_zonename" > "$country_cache"
+    echo "$lang_code" > "$language_cache"
+    echo "$selected_zonename" > "$zone_cache"
+    echo "$(color green "国とタイムゾーンが設定されました: $country_name, $selected_zonename")"
 }
 
 #########################################################################
