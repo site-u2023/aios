@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.09-008"
+COMMON_VERSION="2025.02.09-009"
 echo "common.sh Last update: 🔴 $COMMON_VERSION 🔴"
 
 # 基本定数の設定
@@ -22,8 +22,12 @@ INPUT_LANG="$1"
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
+    local country_cache="${BASE_DIR}/country.ch"
+    local language_cache="${BASE_DIR}/language.ch"
     local user_input=""
-    local found_entries=""
+    local selected_entry=""
+    local selected_zonename=""
+    local selected_timezone=""
 
     if [ ! -f "$country_file" ]; then
         echo "$(color red "Country database not found!")"
@@ -54,7 +58,11 @@ select_country() {
             echo "$(color yellow "No matching country found. Please try again.")"
             continue
         elif [ "$matches_found" -eq 1 ]; then
-            local selected_entry=$(echo "$found_entries" | awk '{print $2, $3, $4}')
+            selected_entry=$(echo "$found_entries" | awk '{print $2, $3, $4}')
+            if [ -z "$selected_entry" ]; then
+                echo "$(color red "Error: Invalid country selection. Returning to search.")"
+                continue
+            fi
             echo -e "$(color cyan "Confirm country selection: \"$selected_entry\"? [Y/n]:")"
             read yn
             case "$yn" in
@@ -85,7 +93,7 @@ select_country() {
                     continue
                 fi
 
-                echo -e "$(color cyan "Confirm country selection: \"$selected_entry\"? [Y/n]:")"　
+                echo -e "$(color cyan "Confirm country selection: \"$selected_entry\"? [Y/n]:")"
                 read yn
                 case "$yn" in
                     [Yy]*) break 2 ;;
@@ -97,11 +105,64 @@ select_country() {
     done
 
     # **選択した国の処理**
+    display_name=$(echo "$selected_entry" | awk '{print $1}')
+    lang_code=$(echo "$selected_entry" | awk '{print $2}')
+    country_code=$(echo "$selected_entry" | awk '{print $3}')
+    if [ -z "$display_name" ] || [ -z "$lang_code" ] || [ -z "$country_code" ]; then
+        echo "$(color red "Error: Invalid country selection. Returning to search.")"
+        continue
+    fi
+
+    tz_data=$(grep "$display_name" "$country_file" | cut -d' ' -f6-)
+
+    # **ゾーンネーム＆タイムゾーン選択**
+    if [ "$(echo "$tz_data" | wc -w)" -gt 2 ]; then
+        while true; do
+            echo "$(color cyan "Select a timezone for $display_name:")"
+            i=1
+            echo "$tz_data" | tr ' ' '\n' | while read -r tz_pair; do
+                echo "[$i] $tz_pair"
+                i=$((i + 1))
+            done
+            echo "[0] Try again"
+
+            echo -n "$(color cyan "Enter the number of your choice (or 0 to retry): ")"
+            read tz_choice
+
+            if [ "$tz_choice" = "0" ]; then
+                echo "$(color yellow "Returning to timezone selection.")"
+                continue
+            fi
+
+            selected_zonename=$(echo "$tz_data" | tr ' ' '\n' | awk -v num="$tz_choice" 'NR==num {print $1}')
+            selected_timezone=$(echo "$tz_data" | tr ' ' '\n' | awk -v num="$tz_choice" 'NR==num {print $2}')
+
+            if [ -z "$selected_zonename" ] || [ -z "$selected_timezone" ]; then
+                echo "$(color red "Invalid selection. Please enter a valid number.")"
+                continue
+            fi
+
+            echo "$(color green "Selected timezone: $selected_zonename, $selected_timezone")"
+            break
+        done
+    else
+        selected_zonename=$(echo "$tz_data" | awk '{print $1}')
+        selected_timezone=$(echo "$tz_data" | awk '{print $2}')
+        echo "$(color green "Selected timezone: $selected_zonename, $selected_timezone")"
+    fi
+
+    # **キャッシュへの保存**
+    echo "$display_name $lang_code $country_code $selected_zonename $selected_timezone" > "$country_cache"
+    echo "$lang_code" > "$language_cache"
+
+    # **デバッグ**
     echo "$(color green "Final selection:")"
-    echo "$(color green "Country: $(echo "$selected_entry" | awk '{print $1}')")"
-    echo "$(color green "Language: $(echo "$selected_entry" | awk '{print $2}')")"
-    echo "$(color green "Country Code: $(echo "$selected_entry" | awk '{print $3}')")"
+    echo "$(color green "Country: $display_name")"
+    echo "$(color green "Language: $lang_code")"
+    echo "$(color green "Zone Name: $selected_zonename")"
+    echo "$(color green "Time Zone: $selected_timezone")"
 }
+
 
 
 
