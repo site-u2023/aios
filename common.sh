@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-27"
+COMMON_VERSION="2025.02.09-28"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
 echo "☆☆☆ Important!　OpenWrt OS only works with ash scripts, not bash scripts. ☆☆☆"
 
@@ -18,6 +18,7 @@ BASE_DIR="${BASE_DIR:-/tmp/aios}"
 SUPPORTED_VERSIONS="${SUPPORTED_VERSIONS:-19.07 21.02 22.03 23.05 24.10.0 SNAPSHOT}"
 SUPPORTED_LANGUAGES="${SUPPORTED_LANGUAGES:-en ja zh-cn zh-tw id ko de ru}"
 
+# テスト領域 ---------------------------------------------------------------------------------------------
 #########################################################################
 # select_country: `country.db` から国を検索し、ユーザーに選択させる
 #########################################################################
@@ -43,7 +44,7 @@ select_country() {
         echo ""
         echo "Set country, language, zone name, and time zone."
         echo "Fuzzy search: Enter a country name or code."
-        echo "(e.g., Japan, 日本, JP, ja):"
+        echo -n "(e.g., Japan, 日本, JP, ja): "  # カーソル位置を合わせる
         read user_input
 
         # **検索が空なら再入力**
@@ -102,7 +103,7 @@ select_country() {
             local country_code=$(echo "$selected_entry" | awk '{print $4}')
             local tz_data=$(echo "$selected_entry" | cut -d' ' -f5-)
 
-            echo "Confirm country selection: $country_name ($display_name, $lang_code, $country_code)? [Y/n]:"
+            echo -n "Confirm country selection: $country_name ($display_name, $lang_code, $country_code)? [Y/n]: "
             read yn
             case "$yn" in
                 Y|y) break ;;
@@ -134,7 +135,7 @@ select_country() {
                 continue
             fi
 
-            echo "Confirm timezone selection: $selected_zonename, $selected_timezone? [Y/n]:"
+            echo -n "Confirm timezone selection: $selected_zonename, $selected_timezone? [Y/n]: "
             read tz_yn
             case "$tz_yn" in
                 Y|y) break ;;
@@ -146,7 +147,7 @@ select_country() {
         selected_zonename=$(echo "$tz_data" | awk '{print $1}')
         selected_timezone=$(echo "$tz_data" | awk '{print $2}')
 
-        echo "Confirm timezone selection: $selected_zonename, $selected_timezone? [Y/n]:"
+        echo -n "Confirm timezone selection: $selected_zonename, $selected_timezone? [Y/n]: "
         read tz_yn
         case "$tz_yn" in
             Y|y) ;;
@@ -169,6 +170,11 @@ select_country() {
 
 
 
+
+
+
+
+# -------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
 # print_help: ヘルプメッセージを表示
