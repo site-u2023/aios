@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.09-001"
+COMMON_VERSION="2025.02.09-002"
 echo "common.sh Last update: $COMMON_VERSION ★★★"
 
 # 基本定数の設定
@@ -51,7 +51,7 @@ select_country() {
             tolower($1) ~ tolower(query) ||
             tolower($2) ~ tolower(query) ||
             tolower($3) ~ tolower(query) ||
-            tolower($4) ~ tolower(query) {print NR, $1, $2, $3, $4}' "$country_file")
+            tolower($4) ~ tolower(query) {print $1, $2, $3, $4}' "$country_file")
 
         matches_found=$(echo "$found_entries" | wc -l)
 
@@ -59,7 +59,7 @@ select_country() {
             echo "$(color yellow "No matching country found. Please try again.")"
             continue
         elif [ "$matches_found" -eq 1 ]; then
-            selected_entry=$(echo "$found_entries" | awk '{print $2, $3, $4, $5}')
+            selected_entry=$(echo "$found_entries" | awk '{print $1, $2, $3, $4}')
             echo -e "$(color cyan "Confirm country selection: $selected_entry? [Y/n]:")"
             read yn
             case "$yn" in
@@ -69,8 +69,10 @@ select_country() {
             esac
         else
             echo "$(color yellow "Multiple matches found. Please select:")"
-            echo "$found_entries" | while read -r index country_name display_name lang_code country_code; do
-                echo "[$index] $country_name $display_name ($lang_code)"
+            i=1
+            echo "$found_entries" | while read -r country_name display_name lang_code country_code; do
+                echo "[$i] $country_name $display_name ($lang_code)"
+                i=$((i + 1))
             done
             echo "[0] Try again"
 
@@ -82,7 +84,7 @@ select_country() {
                     break
                 fi
 
-                selected_entry=$(echo "$found_entries" | awk -v num="$choice" 'NR==num {print $2, $3, $4, $5}')
+                selected_entry=$(echo "$found_entries" | awk -v num="$choice" 'NR==num {print $1, $2, $3, $4}')
                 if [ -z "$selected_entry" ]; then
                     echo "$(color red "Invalid selection. Please choose a valid number.")"
                     continue
@@ -150,6 +152,7 @@ select_country() {
     echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
     echo "$(color green "Language saved to language.ch: $lang_code")"
 }
+
 
 
 
