@@ -17,9 +17,8 @@ SUPPORTED_LANGUAGES="${SUPPORTED_LANGUAGES:-en ja"
 INPUT_LANG="$1"
 
 # -------------------------------------------------------------------------------------------------------------------------------------------
-
 #########################################################################
-# select_country: 国とタイムゾーンの選択（100% ash 対応）
+# select_country: 国と言語、タイムゾーンを選択（100% ash 対応）
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -36,14 +35,14 @@ select_country() {
     fi
 
     while true; do
-        echo "$(color cyan "Available countries:")"
-        awk '{print NR, $1, $2, $3}' "$country_file"
-
-        echo -e "$(color cyan "Enter country name, code, or language (or press Enter to list all):")"
+        echo "$(color cyan "Set country, language, zone name, and time zone.")"
+        echo "$(color cyan "Fuzzy search: Enter a country name or code.")"
+        echo "$(color cyan "(e.g., United States, English, US, en)")"
+        echo -n "$(color cyan "Please input: ")"
         read user_input
 
         if [ -z "$user_input" ]; then
-            awk '{print NR, $1, $2, $3}' "$country_file"
+            echo "$(color yellow "Invalid input. Please enter a country name or code.")"
             continue
         fi
 
@@ -51,7 +50,8 @@ select_country() {
         found_entries=$(awk -v query="$user_input" '
             tolower($1) ~ tolower(query) ||
             tolower($2) ~ tolower(query) ||
-            tolower($3) ~ tolower(query) {print NR, $1, $2, $3, $4}' "$country_file")
+            tolower($3) ~ tolower(query) ||
+            tolower($4) ~ tolower(query) {print NR, $1, $2, $3, $4}' "$country_file")
 
         matches_found=$(echo "$found_entries" | wc -l)
 
@@ -75,7 +75,7 @@ select_country() {
             echo "[0] Try again"
 
             while true; do
-                echo -e "$(color cyan "Enter the number of your choice (or 0 to go back):")"
+                echo -n "$(color cyan "Enter the number of your choice (or 0 to retry): ")"
                 read choice
                 if [ "$choice" = "0" ]; then
                     echo "$(color yellow "Returning to country selection.")"
@@ -117,7 +117,7 @@ select_country() {
             done
             echo "[0] Try again"
 
-            echo "Enter the number of your choice (or 0 to go back): "
+            echo -n "$(color cyan "Enter the number of your choice (or 0 to retry): ")"
             read tz_choice
 
             if [ "$tz_choice" = "0" ]; then
@@ -150,6 +150,7 @@ select_country() {
     echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
     echo "$(color green "Language saved to language.ch: $lang_code")"
 }
+
 
 
 
