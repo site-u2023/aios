@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.09-0013"
+COMMON_VERSION="2025.02.09-0014"
 echo "common.sh Last update: 🔴 $COMMON_VERSION 🔴"
 
 # 基本定数の設定
@@ -27,6 +27,7 @@ select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${BASE_DIR}/country.ch"
     local language_cache="${BASE_DIR}/language.ch"
+    local country_tmp="${BASE_DIR}/country_tmp.ch"  # 小文字化したデータ用キャッシュ
     local user_input=""
     local selected_entry=""
     local selected_zonename=""
@@ -35,6 +36,11 @@ select_country() {
     if [ ! -f "$country_file" ]; then
         echo "$(color red "Country database not found!")"
         return 1
+    fi
+
+    # **小文字化したキャッシュを作成**
+    if [ ! -f "$country_tmp" ]; then
+        awk '{print tolower($0)}' "$country_file" > "$country_tmp"
     fi
 
     while true; do
@@ -47,13 +53,12 @@ select_country() {
             continue
         fi
 
-        # **全文検索（大文字小文字を区別せず、すべてのフィールドを対象にする）**
+        # **全文検索（`country_tmp.ch` を対象にする）**
         found_entries=$(awk -v query="$(echo "$user_input" | tr '[:upper:]' '[:lower:]')" '
             {
-                line = tolower($0);
-                if (line ~ query) 
+                if ($0 ~ query) 
                     print NR, $2, $3, $4  # 出力は 国名, 言語, 国コード
-            }' "$country_file")
+            }' "$country_tmp")
 
         matches_found=$(echo "$found_entries" | wc -l)
 
@@ -108,10 +113,11 @@ select_country() {
         fi
     done
 
-    # **選択した国の処理**
-    display_name=$(echo "$selected_entry" | awk '{print $1}')
-    lang_code=$(echo "$selected_entry" | awk '{print $2}')
-    country_code=$(echo "$selected_entry" | awk '{print $3}')
+    # **選択した国のデータを `country.db` から直接取得**
+    display_name=$(grep -i "^$(echo "$selected_entry" | awk '{print $1}')" "$country_file" | awk '{print $2}')
+    lang_code=$(grep -i "^$(echo "$selected_entry" | awk '{print $1}')" "$country_file" | awk '{print $3}')
+    country_code=$(grep -i "^$(echo "$selected_entry" | awk '{print $1}')" "$country_file" | awk '{print $4}')
+
     if [ -z "$display_name" ] || [ -z "$lang_code" ] || [ -z "$country_code" ]; then
         echo "$(color red "Error: Invalid country selection. Returning to search.")"
         continue
@@ -119,7 +125,7 @@ select_country() {
 
     echo "$(color cyan "DEBUG: Selected Country: $display_name ($lang_code, $country_code)")"
 
-    tz_data=$(grep "$display_name" "$country_file" | cut -d' ' -f6-)
+    tz_data=$(grep -i "$display_name" "$country_file" | cut -d' ' -f6-)
 
     # **タイムゾーンの選択**
     if [ "$(echo "$tz_data" | wc -w)" -gt 2 ]; then
@@ -159,6 +165,8 @@ select_country() {
 
     echo "$(color green "Final selection: $display_name ($lang_code, $country_code) with timezone $selected_zonename ($selected_timezone)")"
 }
+
+
 
 
 
