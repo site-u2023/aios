@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-31"
+COMMON_VERSION="2025.02.09-32"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
 echo "☆☆☆ Important!　OpenWrt OS only works with ash scripts, not bash scripts. ☆☆☆"
 
@@ -109,7 +109,7 @@ select_country() {
     country_code=$(echo "$selected_entry" | awk '{print $5}')
     
     # **ゾーンデータを正しく取得**
-    tz_data=$(grep "^$country_name" "$country_file" | awk '{for(i=6;i<=NF;i+=2) print $i, $(i+1)}')
+    tz_data=$(awk -v country="$country_name" '$2 == country {for(i=6;i<=NF;i++) print $i}' "$country_file")
 
     # **ゾーンデータをキャッシュに保存**
     echo "$tz_data" > "$zone_cache"
@@ -162,6 +162,20 @@ select_country() {
     echo "$(color green "Country, language, and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
     echo "$(color green "Language saved to language.ch: $lang_code")"
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
