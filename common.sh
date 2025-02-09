@@ -4,15 +4,15 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.09-001"
+COMMON_VERSION="2025.02.09-000"
 echo "common.sh Last update: $COMMON_VERSION ★★★"
 
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
 BASE_WGET="wget --quiet -O"
-BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/test/main}"
+BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
-# SUPPORTED_VERSIONS="${SUPPORTED_VERSIONS:-19.07 21.02 22.03 23.05 24.10.0 SNAPSHOT}"
+SUPPORTED_VERSIONS="${SUPPORTED_VERSIONS:-19.07 21.02 22.03 23.05 24.10.0 SNAPSHOT}"
 SUPPORTED_LANGUAGES="${SUPPORTED_LANGUAGES:-en ja"
 INPUT_LANG="$1"
 
