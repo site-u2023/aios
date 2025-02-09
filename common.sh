@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-25"
+COMMON_VERSION="2025.02.09-26"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
 echo "☆☆☆ Important!　OpenWrt OS only works with ash scripts, not bash scripts. ☆☆☆"
 
@@ -28,6 +28,7 @@ select_country() {
     local language_cache="${BASE_DIR}/language.ch"
     local zone_cache="${BASE_DIR}/zone.ch"
     local selected_country=""
+    local selected_display=""
     local selected_lang_code=""
     local selected_country_code=""
     local selected_zonename=""
@@ -60,10 +61,11 @@ select_country() {
             echo "$(color yellow "No matching country found. Please try again.")"
             continue
         elif [ "$matches_found" -eq 1 ]; then
-            selected_country=$(echo "$found_entries" | awk '{print $2, $3, $4, $5}')
+            selected_country=$(echo "$found_entries" | awk '{print $2}')
+            selected_display=$(echo "$found_entries" | awk '{print $3}')
             selected_lang_code=$(echo "$found_entries" | awk '{print $4}')
             selected_country_code=$(echo "$found_entries" | awk '{print $5}')
-            echo -e "$(color cyan "Confirm country selection: $selected_country? [Y/n]:")"
+            echo -e "$(color cyan "Confirm country selection: $selected_country ($selected_display, $selected_lang_code, $selected_country_code)? [Y/n]:")"
             read -r yn
             case "$yn" in
                 [Yy]*) break ;;
@@ -86,10 +88,11 @@ select_country() {
                 continue
             fi
 
-            selected_country=$(awk -v num="$choice" 'NR == num {print $2, $3, $4, $5}' "$country_file")
+            selected_country=$(awk -v num="$choice" 'NR == num {print $2}' "$country_file")
+            selected_display=$(awk -v num="$choice" 'NR == num {print $3}' "$country_file")
             selected_lang_code=$(awk -v num="$choice" 'NR == num {print $4}' "$country_file")
             selected_country_code=$(awk -v num="$choice" 'NR == num {print $5}' "$country_file")
-            echo -e "$(color cyan "Confirm country selection: $selected_country? [Y/n]:")"
+            echo -e "$(color cyan "Confirm country selection: $selected_country ($selected_display, $selected_lang_code, $selected_country_code)? [Y/n]:")"
             read -r yn
             case "$yn" in
                 [Yy]*) break ;;
@@ -148,7 +151,7 @@ select_country() {
     fi
 
     # **キャッシュ書き込み**
-    echo "$selected_country $selected_zonename $selected_timezone" > "$country_cache"
+    echo "$selected_country $selected_display $selected_lang_code $selected_country_code $selected_zonename $selected_timezone" > "$country_cache"
     echo "$selected_lang_code" > "$language_cache"
     echo "$(color green "Country, language, and timezone set: $selected_country, $selected_zonename, $selected_timezone")"
 }
