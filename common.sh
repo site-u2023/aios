@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-002"
+COMMON_VERSION="2025.02.10-003"
 
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -96,10 +96,38 @@ select_country() {
             echo "$selected_entry" > "$country_cache"
             echo "$selected_zone" | tr -d '\n' > "$language_cache"
             echo "$selected_timezone" | tr -d '\n' > "$timezone_cache"
-            return
+        
+            # **ゾーンの選択を追加**
+            echo "`color yellow "Select a timezone for $selected_entry:"`"
+            i=1
+            > /tmp/timezone_selection.tmp
+            awk -v country="$selected_entry" '$2 == country {print NR, $6}' "$country_file" | while read -r index tz; do
+                echo "[$i] $tz"
+                echo "$i $tz" >> /tmp/timezone_selection.tmp
+                i=$((i + 1))
+            done
+            echo "[0] Try again"
+            
+            while true; do
+                echo -n "`color cyan "Enter the number of your timezone choice (or 0 to retry): "`"
+                read tz_choice
+                if [ "$tz_choice" = "0" ]; then
+                    echo "`color yellow "Returning to timezone selection."`"
+                    break
+                fi
+                selected_timezone=$(awk -v num="$tz_choice" '$1 == num {print $2}' /tmp/timezone_selection.tmp)
+                if [ -z "$selected_timezone" ]; then
+                    echo "`color red "Invalid selection. Please choose a valid number."`"
+                    continue
+                fi
+                echo "`color green "Final selection: $selected_entry (Zone: $selected_zone, Timezone: $selected_timezone)"`"
+                echo "$selected_timezone" > "$timezone_cache"
+                return
+            done
         done
     done
 }
+
 
 #########################################################################
 # select_country: 国と言語、タイムゾーンを選択（検索・表示を `country.db` に統一）
