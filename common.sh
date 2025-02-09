@@ -5,7 +5,7 @@
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
 COMMON_VERSION="2025.02.09-006"
-echo "common.sh Last update: $COMMON_VERSION ★★★"
+echo "common.sh Last update: 🔴🔴🔴$COMMON_VERSION 🔴🔴🔴"
 
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
