@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.09-0011"
+COMMON_VERSION="2025.02.09-0012"
 echo "common.sh Last update: 🔴 $COMMON_VERSION 🔴"
 
 # 基本定数の設定
@@ -17,6 +17,9 @@ BASE_DIR="${BASE_DIR:-/tmp/aios}"
 INPUT_LANG="$1"
 
 # -------------------------------------------------------------------------------------------------------------------------------------------
+#########################################################################
+# select_country: 国と言語、タイムゾーンを選択（データベース全文曖昧検索）
+#########################################################################
 #########################################################################
 # select_country: 国と言語、タイムゾーンを選択（データベース全文曖昧検索）
 #########################################################################
@@ -44,14 +47,13 @@ select_country() {
             continue
         fi
 
-        # **全文検索（大文字小文字区別なし）**
+        # **全文検索（大文字小文字を区別せず、すべてのフィールドを対象にする）**
         found_entries=$(awk -v query="$(echo "$user_input" | tr '[:upper:]' '[:lower:]')" '
             {
                 line = tolower($0);
-                if (line ~ query)  # 全フィールドに対して部分一致検索のみ適用
+                if (line ~ query) 
                     print NR, $2, $3, $4  # 出力は 国名, 言語, 国コード
             }' "$country_file")
-
 
         matches_found=$(echo "$found_entries" | wc -l)
 
@@ -76,6 +78,7 @@ select_country() {
             i=1
             echo "$found_entries" | while read -r index display_name lang_code country_code; do
                 echo "[$i] $display_name ($lang_code)"
+                echo "$i $display_name $lang_code $country_code" >> /tmp/country_selection.tmp
                 i=$((i + 1))
             done
             echo "[0] Try again"
@@ -88,7 +91,7 @@ select_country() {
                     break
                 fi
 
-                selected_entry=$(echo "$found_entries" | awk -v num="$choice" 'NR==num {print $2, $3, $4}')
+                selected_entry=$(awk -v num="$choice" '$1 == num {print $2, $3, $4}' /tmp/country_selection.tmp)
                 if [ -z "$selected_entry" ]; then
                     echo "$(color red "Invalid selection. Please choose a valid number.")"
                     continue
@@ -114,7 +117,6 @@ select_country() {
         continue
     fi
 
-    # **デバッグ情報を出力**
     echo "$(color cyan "DEBUG: Selected Country: $display_name ($lang_code, $country_code)")"
 
     tz_data=$(grep "$display_name" "$country_file" | cut -d' ' -f6-)
@@ -157,6 +159,7 @@ select_country() {
 
     echo "$(color green "Final selection: $display_name ($lang_code, $country_code) with timezone $selected_zonename ($selected_timezone)")"
 }
+
 
 
 
