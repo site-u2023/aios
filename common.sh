@@ -79,7 +79,7 @@ XXXXX_select_country() {
         echo "[0] Try again"
 
         while true; do
-            echo -n "$(color cyan \"Enter the number of your choice (or 0 to retry): \")"
+            echo -n "`color cyan \"Enter the number of your choice (or 0 to retry): \"`"
             read choice
             if [ "$choice" = "0" ]; then
                 echo "$(color yellow \"Returning to country selection.\")"
