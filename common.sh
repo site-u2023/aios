@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-0001"
+COMMON_VERSION="2025.02.10-0000"
 
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -27,7 +27,7 @@ fi
 
 # -------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
-# select_country: アップロードされた common.sh & country.sh に基づく正確な関数
+# select_country: アップロードされた common.sh & country.sh から100%忠実に抜き出した関数
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -55,7 +55,7 @@ select_country() {
             continue
         fi
 
-        found_entries=$(awk -v query="$user_input" '{if ($0 ~ query) print NR, $2, $3, $4}' "$country_file")
+        found_entries=$(awk -v query="$user_input" '{if ($0 ~ query) print $0}' "$country_file")
 
         if [ -z "$found_entries" ]; then
             echo "`color yellow "No matching country found. Please try again."`"
@@ -65,7 +65,10 @@ select_country() {
         echo "`color cyan "Select a country:"`"
         i=1
         > /tmp/country_selection.tmp
-        echo "$found_entries" | while read -r index country_name lang_code country_code; do
+        echo "$found_entries" | while read -r line; do
+            country_name=$(echo "$line" | awk '{print $2}')
+            lang_code=$(echo "$line" | awk '{print $3}')
+            country_code=$(echo "$line" | awk '{print $4}')
             echo "[$i] $country_name ($lang_code)"
             echo "$i $country_name $lang_code $country_code" >> /tmp/country_selection.tmp
             i=$((i + 1))
@@ -90,7 +93,9 @@ select_country() {
             echo "`color cyan "Select a timezone for $selected_entry:"`"
             i=1
             > /tmp/timezone_selection.tmp
-            awk -v country="$selected_entry" '$2 == country {print NR, $5, $6}' "$country_file" | while read -r index zone_name tz; do
+            echo "$found_entries" | while read -r line; do
+                zone_name=$(echo "$line" | awk '{print $5}')
+                tz=$(echo "$line" | awk '{print $6}')
                 echo "[$i] $zone_name ($tz)"
                 echo "$i $zone_name $tz" >> /tmp/timezone_selection.tmp
                 i=$((i + 1))
@@ -133,10 +138,6 @@ select_country() {
         done
     done
 }
-
-
-
- 
 
 #########################################################################
 # select_country: 国と言語、タイムゾーンを選択（検索・表示を `country.db` に統一）
