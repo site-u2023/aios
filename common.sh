@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-003"
+COMMON_VERSION="2025.02.10-004"
 
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -27,7 +27,7 @@ fi
 
 # -------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
-# select_country: 言語を設定し、ゾーンネームとタイムゾーンを取得するシンプルな関数
+# select_country: 言語を設定し、ゾーンネームとタイムゾーンを取得する関数（ゾーン選択を番号付きに修正）
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -97,13 +97,13 @@ select_country() {
             echo "$selected_zone" | tr -d '\n' > "$language_cache"
             echo "$selected_timezone" | tr -d '\n' > "$timezone_cache"
         
-            # **ゾーンの選択を追加**
+            # **ゾーンの選択を追加（番号付き）**
             echo "`color yellow "Select a timezone for $selected_entry:"`"
             i=1
             > /tmp/timezone_selection.tmp
-            awk -v country="$selected_entry" '$2 == country {print NR, $6}' "$country_file" | while read -r index tz; do
-                echo "[$i] $tz"
-                echo "$i $tz" >> /tmp/timezone_selection.tmp
+            awk -v country="$selected_entry" '$2 == country {print NR, $5, $6}' "$country_file" | while read -r index zone_name tz; do
+                echo "[$i] $zone_name ($tz)"
+                echo "$i $zone_name $tz" >> /tmp/timezone_selection.tmp
                 i=$((i + 1))
             done
             echo "[0] Try again"
@@ -115,7 +115,7 @@ select_country() {
                     echo "`color yellow "Returning to timezone selection."`"
                     break
                 fi
-                selected_timezone=$(awk -v num="$tz_choice" '$1 == num {print $2}' /tmp/timezone_selection.tmp)
+                selected_timezone=$(awk -v num="$tz_choice" '$1 == num {print $2, $3}' /tmp/timezone_selection.tmp)
                 if [ -z "$selected_timezone" ]; then
                     echo "`color red "Invalid selection. Please choose a valid number."`"
                     continue
