@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-009"
+COMMON_VERSION="2025.02.10-0010"
 
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -99,7 +99,7 @@ select_country() {
 
             echo "`color cyan "Select a timezone for $selected_entry:"`"
             i=1
-            awk -v country="$selected_entry" -v code="$selected_entry_code" '$2 == country && $4 == code {print NR, $5, $6}' "$country_file" | tee "$timezone_tmp" | while read -r index zone_name tz; do
+            awk -v country="$selected_entry" '$2 == country {print NR, $5, $6}' "$country_file" | tee "$timezone_tmp" | tee "$timezone_tmp" | while read -r index zone_name tz; do
                 if [ -n "$zone_name" ] && [ -n "$tz" ]; then
                     echo "[$i] $zone_name ($tz)"
                     echo "$i $zone_name $tz" >> "$timezone_tmp"
@@ -151,6 +151,7 @@ select_country() {
         done
     done
 }
+
 
 #########################################################################
 # select_country: アップロードされた common.sh & country.sh OKバージョン
