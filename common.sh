@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-26"
+COMMON_VERSION="2025.02.09-27"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
 echo "☆☆☆ Important!　OpenWrt OS only works with ash scripts, not bash scripts. ☆☆☆"
 
@@ -42,7 +42,8 @@ select_country() {
         # **言語・ゾーン設定の説明を表示**
         echo ""
         echo "Set country, language, zone name, and time zone."
-        echo "Fuzzy search: Enter a country name or code (e.g., Japan, 日本, JP, ja):"
+        echo "Fuzzy search: Enter a country name or code."
+        echo "(e.g., Japan, 日本, JP, ja):"
         read user_input
 
         # **検索が空なら再入力**
@@ -112,34 +113,47 @@ select_country() {
     done
 
     # **タイムゾーン選択**
-    while true; do
-        echo "$country_name: Select a timezone."
-        local i=1
-        echo "$tz_data" | awk -F',' '{for (i=1; i<=NF; i+=2) print "["i/2+1"] "$i, $(i+1)}'
-        echo "[0] Try again"
+    if echo "$tz_data" | grep -q ","; then
+        while true; do
+            echo "$country_name: Select a timezone."
+            local i=1
+            echo "$tz_data" | awk -F',' '{for (i=1; i<=NF; i+=2) print "["i/2+1"] "$i, $(i+1)}'
+            echo "[0] Try again"
 
-        read -p "Enter the number of your choice (or 0 to go back): " tz_choice
-        if [ "$tz_choice" = "0" ]; then
-            echo "Returning to timezone selection."
-            continue
-        fi
+            read -p "Enter the number of your choice (or 0 to go back): " tz_choice
+            if [ "$tz_choice" = "0" ]; then
+                echo "Returning to timezone selection."
+                continue
+            fi
 
-        selected_zonename=$(echo "$tz_data" | awk -F',' -v num="$tz_choice" '{print $num}')
-        selected_timezone=$(echo "$tz_data" | awk -F',' -v num="$tz_choice" '{print $(num+1)}')
+            selected_zonename=$(echo "$tz_data" | awk -F',' -v num="$tz_choice" '{print $num}')
+            selected_timezone=$(echo "$tz_data" | awk -F',' -v num="$tz_choice" '{print $(num+1)}')
 
-        if [ -z "$selected_zonename" ] || [ -z "$selected_timezone" ]; then
-            echo "Invalid selection. Please enter a valid number."
-            continue
-        fi
+            if [ -z "$selected_zonename" ] || [ -z "$selected_timezone" ]; then
+                echo "Invalid selection. Please enter a valid number."
+                continue
+            fi
+
+            echo "Confirm timezone selection: $selected_zonename, $selected_timezone? [Y/n]:"
+            read tz_yn
+            case "$tz_yn" in
+                Y|y) break ;;
+                N|n) echo "Please try again."; continue ;;
+                *) echo "Invalid input. Please enter 'Y' or 'N'." ;;
+            esac
+        done
+    else
+        selected_zonename=$(echo "$tz_data" | awk '{print $1}')
+        selected_timezone=$(echo "$tz_data" | awk '{print $2}')
 
         echo "Confirm timezone selection: $selected_zonename, $selected_timezone? [Y/n]:"
         read tz_yn
         case "$tz_yn" in
-            Y|y) break ;;
-            N|n) echo "Please try again."; continue ;;
+            Y|y) ;;
+            N|n) echo "Please try again."; continue 2 ;;
             *) echo "Invalid input. Please enter 'Y' or 'N'." ;;
         esac
-    done
+    fi
 
     # **キャッシュに保存**
     echo "$country_name $display_name $lang_code $country_code $selected_zonename $selected_timezone" > "$country_cache"
@@ -147,6 +161,7 @@ select_country() {
     echo "$selected_zonename $selected_timezone" > "$zone_cache"
     echo "Country, language, and timezone set: $country_name, $selected_zonename, $selected_timezone"
 }
+
 
 
 
