@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-11"
+COMMON_VERSION="2025.02.09-12"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★"
 
 # === 基本定数の設定 ===
@@ -314,11 +314,11 @@ select_country() {
             local index=1
             local numbered_entries=""
             echo "$(color yellow "Multiple matches found. Please select:")"
-            while read -r line; do
+            echo "$found_entries" | while read -r line; do
                 echo "[$index] $line"
                 numbered_entries="$numbered_entries\n$index $line"
                 index=$((index + 1))
-            done <<< "$found_entries"
+            done
             echo "[0] Try again"
 
             while true; do
