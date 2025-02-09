@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-18"
+COMMON_VERSION="2025.02.10-19"
 
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -26,9 +26,6 @@ fi
 )
 
 # -------------------------------------------------------------------------------------------------------------------------------------------
-#########################################################################
-# select_country: 国と言語、タイムゾーンを選択（データベース全文曖昧検索）
-#########################################################################
 #########################################################################
 # select_country: 国と言語、タイムゾーンを選択（検索・表示を `country.db` に統一）
 #########################################################################
@@ -68,6 +65,7 @@ select_country() {
 
         echo "`color yellow "Select a country:"`"
         i=1
+        > /tmp/country_selection.tmp  # ファイルを初期化
         echo "$found_entries" | while read -r index country_name lang_code country_code timezone; do
             echo "[$i] $country_name ($lang_code)"
             echo "$i $country_name $lang_code $country_code $timezone" >> /tmp/country_selection.tmp
@@ -93,11 +91,12 @@ select_country() {
 
             echo "`color green "Final selection: $selected_entry (Timezone: $selected_zone)"`"
             echo "$selected_entry" > "$country_cache"
-            echo "$selected_zone" > "$language_cache"
+            echo "$selected_zone" | tr -d '\n' > "$language_cache"  # 改行を削除
             return
         done
     done
 }
+
 
 #########################################################################
 # select_country (元の動作する方法1 - 正常な状態に復元)
