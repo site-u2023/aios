@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.09-0018"
+COMMON_VERSION="2025.02.09-0019"
 echo "common.sh Last update: 🔴 $COMMON_VERSION 🔴"
 
 # 基本定数の設定
@@ -38,9 +38,9 @@ select_country() {
         return 1
     fi
 
-    # **検索専用の小文字化キャッシュを作成（`/`, `,`, 空白を `_` に統一）**
+    # **検索専用の小文字化キャッシュを作成（`/`, `,`, 空白を `_` に統一し、国名をキーとして保存）**
     if [ ! -f "$country_tmp" ]; then
-        awk '{print tolower($0)}' "$country_file" | sed -E 's/[\/, ]+/_/g' > "$country_tmp"
+        awk '{print tolower($2), tolower($0)}' "$country_file" | sed -E 's/[\/, ]+/_/g' > "$country_tmp"
     fi
 
     while true; do
@@ -54,14 +54,14 @@ select_country() {
             continue
         fi
 
-        # **検索は `country_tmp.ch` を使用**
+        # **検索は `country_tmp.ch` を使用（国名をキーにして検索）**
         found_entries=$(awk -v query="$user_input" '
             {
-                if (tolower($0) ~ query) 
-                    print NR, $1  # 出力は行番号, 一意のキー（元の `country.db` の行番号）
+                if ($0 ~ query) 
+                    print $1  # 出力は国名（元の `country.db` のキー）
             }' "$country_tmp")
 
-        echo "$(color cyan "DEBUG: Search results (IDs only):")"
+        echo "$(color cyan "DEBUG: Search results (Country Names):")"
         echo "$found_entries"
 
         matches_found=$(echo "$found_entries" | wc -l)
@@ -70,8 +70,7 @@ select_country() {
             echo "$(color yellow "No matching country found. Please try again.")"
             continue
         elif [ "$matches_found" -eq 1 ]; then
-            selected_id=$(echo "$found_entries" | awk '{print $2}')
-            selected_entry=$(awk -v id="$selected_id" 'NR==id {print $2, $3, $4}' "$country_file")
+            selected_entry=$(grep -i "^$(echo "$found_entries")" "$country_file" | awk '{print $2, $3, $4}')
 
             echo -e "$(color cyan "Confirm country selection: \"$selected_entry\"? [Y/n]:")"
             read yn
@@ -83,10 +82,10 @@ select_country() {
         else
             echo "$(color yellow "Multiple matches found. Please select:")"
             i=1
-            echo "$found_entries" | while read -r index country_id; do
-                country_info=$(awk -v id="$country_id" 'NR==id {print $2, $3, $4}' "$country_file")
+            echo "$found_entries" | while read -r country_name; do
+                country_info=$(grep -i "^$country_name" "$country_file" | awk '{print $2, $3, $4}')
                 echo "[$i] $country_info"
-                echo "$i $country_id" >> /tmp/country_selection.tmp
+                echo "$i $country_name" >> /tmp/country_selection.tmp
                 i=$((i + 1))
             done
             echo "[0] Try again"
@@ -99,8 +98,8 @@ select_country() {
                     break
                 fi
 
-                selected_id=$(awk -v num="$choice" '$1 == num {print $2}' /tmp/country_selection.tmp)
-                selected_entry=$(awk -v id="$selected_id" 'NR==id {print $2, $3, $4}' "$country_file")
+                selected_country=$(awk -v num="$choice" '$1 == num {print $2}' /tmp/country_selection.tmp)
+                selected_entry=$(grep -i "^$selected_country" "$country_file" | awk '{print $2, $3, $4}')
 
                 if [ -z "$selected_entry" ]; then
                     echo "$(color red "Invalid selection. Please choose a valid number.")"
@@ -127,6 +126,7 @@ select_country() {
 
     echo "$(color green "Final selection: $selected_entry")"
 }
+
 
 
 
