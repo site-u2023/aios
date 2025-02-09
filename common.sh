@@ -140,15 +140,17 @@ select_country() {
 }
 
 #########################################################################
-# select_country: 国と言語、タイムゾーンを選択（検索・表示を `country.db` に統一）
+# select_country: アップロードされた common.sh & country.sh OKバージョン
 #########################################################################
-XXX_select_country() {
+OK_select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${BASE_DIR}/country.ch"
     local language_cache="${BASE_DIR}/language.ch"
+    local timezone_cache="${BASE_DIR}/timezone.ch"
     local user_input=""
     local selected_entry=""
     local selected_zone=""
+    local selected_timezone=""
 
     if [ ! -f "$country_file" ]; then
         echo "`color red "Country database not found!"`"
@@ -156,7 +158,7 @@ XXX_select_country() {
     fi
 
     while true; do
-        echo "`color cyan "Fuzzy search: Enter a country name, code, or language."`"
+        echo "`color cyan "Enter country name, code, or language to set language and retrieve timezone."`"
         echo -n "`color cyan "Please input: "`"
         read user_input
         user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]' | sed -E 's/[\/,_]+/ /g')
@@ -166,22 +168,22 @@ XXX_select_country() {
             continue
         fi
 
-        found_entries=$(awk -v query="$user_input" '{if ($0 ~ query) print $1, $2, $3, $4, $6}' "$country_file")
+        found_entries=$(awk -v query="$user_input" '{if ($0 ~ query) print $0}' "$country_file")
 
         if [ -z "$found_entries" ]; then
             echo "`color yellow "No matching country found. Please try again."`"
             continue
         fi
 
-        echo "`color cyan "DEBUG: Search results:"`"
-        echo "$found_entries"
-
-        echo "`color yellow "Select a country:"`"
+        echo "`color cyan "Select a country:"`"
         i=1
-        > /tmp/country_selection.tmp  # ファイルを初期化
-        echo "$found_entries" | while read -r index country_name lang_code country_code timezone; do
+        > /tmp/country_selection.tmp
+        echo "$found_entries" | while read -r line; do
+            country_name=$(echo "$line" | awk '{print $2}')
+            lang_code=$(echo "$line" | awk '{print $3}')
+            country_code=$(echo "$line" | awk '{print $4}')
             echo "[$i] $country_name ($lang_code)"
-            echo "$i $country_name $lang_code $country_code $timezone" >> /tmp/country_selection.tmp
+            echo "$i $country_name $lang_code $country_code" >> /tmp/country_selection.tmp
             i=$((i + 1))
         done
         echo "[0] Try again"
@@ -195,92 +197,60 @@ XXX_select_country() {
             fi
 
             selected_entry=$(awk -v num="$choice" '$1 == num {print $2, $3, $4}' /tmp/country_selection.tmp)
-            selected_zone=$(awk -v num="$choice" '$1 == num {print $5}' /tmp/country_selection.tmp)
 
             if [ -z "$selected_entry" ]; then
                 echo "`color red "Invalid selection. Please choose a valid number."`"
                 continue
             fi
 
-            echo "`color green "Final selection: $selected_entry (Timezone: $selected_zone)"`"
-            echo "$selected_entry" > "$country_cache"
-            echo "$selected_zone" | tr -d '\n' > "$language_cache"  # 改行を削除
-            return
+            echo "`color cyan "Select a timezone for $selected_entry:"`"
+            i=1
+            > /tmp/timezone_selection.tmp
+            echo "$found_entries" | while read -r line; do
+                zone_name=$(echo "$line" | awk '{print $5}')
+                tz=$(echo "$line" | awk '{print $6}')
+                echo "[$i] $zone_name ($tz)"
+                echo "$i $zone_name $tz" >> /tmp/timezone_selection.tmp
+                i=$((i + 1))
+            done
+            echo "[0] Try again"
+            
+            while true; do
+                echo -n "`color cyan "Enter the number of your timezone choice (or 0 to retry): "`"
+                read tz_choice
+                if [ "$tz_choice" = "0" ]; then
+                    echo "`color yellow "Returning to timezone selection."`"
+                    break
+                fi
+                selected_zone=$(awk -v num="$tz_choice" '$1 == num {print $2}' /tmp/timezone_selection.tmp)
+                selected_timezone=$(awk -v num="$tz_choice" '$1 == num {print $3}' /tmp/timezone_selection.tmp)
+                if [ -z "$selected_zone" ] || [ -z "$selected_timezone" ]; then
+                    echo "`color red "Invalid selection. Please choose a valid number."`"
+                    continue
+                fi
+                echo "`color cyan "Confirm selection: [$tz_choice] $selected_zone ($selected_timezone)? [Y/n]"`"
+                read yn
+                case "$yn" in
+                    [Yy]*)
+                        echo "`color green "Final selection: $selected_entry (Zone: [$tz_choice] $selected_zone, Timezone: $selected_timezone)"`"
+                        echo "$selected_entry" > "$country_cache"
+                        echo "$selected_zone" > "$language_cache"
+                        echo "$selected_timezone" > "$timezone_cache"
+                        echo "`color green "Saved to cache: country.ch=$selected_entry, language.ch=$selected_zone, timezone.ch=$selected_timezone"`"
+                        return
+                        ;;
+                    [Nn]*)
+                        echo "`color yellow "Returning to timezone selection."`"
+                        break
+                        ;;
+                    *)
+                        echo "`color red "Invalid input. Please enter 'Y' or 'N'."`"
+                        ;;
+                esac
+            done
         done
     done
 }
-
-
-#########################################################################
-# select_country (元の動作する方法1 - 正常な状態に復元)
-#########################################################################
-XXXXX_select_country() {
-    local country_file="${BASE_DIR}/country.db"
-    local country_cache="${BASE_DIR}/country.ch"
-    local language_cache="${BASE_DIR}/language.ch"
-    local user_input=""
-    local selected_entry=""
-    local selected_zone=""
-
-    if [ ! -f "$country_file" ]; then
-        echo "`color red "Country database not found!"`"
-        return 1
-    fi
-
-    while true; do
-        echo "`color cyan "Fuzzy search: Enter a country name, code, or language."`"
-        echo -n "`color cyan "Please input: "`"
-        read user_input
-        user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]' | sed -E 's/[/,_]+/ /g')
-
-        if [ -z "$user_input" ]; then
-            echo "`color yellow "Invalid input. Please enter a valid country name, code, or language."`"
-            continue
-        fi
-
-        found_entries=$(awk -v query="$user_input" '{if ($0 ~ query) print $1, $2, $3, $4, $5}' "$country_file")
-
-        if [ -z "$found_entries" ]; then
-            echo "`color yellow "No matching country found. Please try again."`"
-            continue
-        fi
-
-        echo "`color cyan "DEBUG: Search results:"`"
-        echo "$found_entries"
-
-        echo "`color yellow "Select a country:"`"
-        i=1
-        echo "$found_entries" | while read -r index country_name lang_code country_code timezone; do
-            echo "[$i] $country_name ($lang_code)"
-            echo "$i $country_name $lang_code $country_code $timezone" >> /tmp/country_selection.tmp
-            i=$((i + 1))
-        done
-        echo "[0] Try again"
-
-        while true; do
-            echo -n "`color cyan "Enter the number of your choice (or 0 to retry): "`"
-            read choice
-            if [ "$choice" = "0" ]; then
-                echo "`color yellow "Returning to country selection."`"
-                break
-            fi
-
-            selected_entry=$(awk -v num="$choice" '$1 == num {print $2, $3, $4}' /tmp/country_selection.tmp)
-            selected_zone=$(awk -v num="$choice" '$1 == num {print $5}' /tmp/country_selection.tmp)
-
-            if [ -z "$selected_entry" ]; then
-                echo "`color red "Invalid selection. Please choose a valid number."`"
-                continue
-            fi
-
-            echo "`color green "Final selection: $selected_entry"`"
-            echo "$selected_entry" > "$country_cache"
-            echo "$selected_zone" > "$language_cache"
-            return
-        done
-    done
-}
-
 
 
 
