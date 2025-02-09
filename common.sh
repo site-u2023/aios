@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-24"
+COMMON_VERSION="2025.02.09-25"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
 echo "☆☆☆ Important!　OpenWrt OS only works with ash scripts, not bash scripts. ☆☆☆"
 
@@ -26,11 +26,12 @@ select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${BASE_DIR}/country.ch"
     local language_cache="${BASE_DIR}/language.ch"
+    local zone_cache="${BASE_DIR}/zone.ch"
     local selected_country=""
-    local selected_zonename=""
-    local selected_timezone=""
     local selected_lang_code=""
     local selected_country_code=""
+    local selected_zonename=""
+    local selected_timezone=""
 
     # **データベース確認**
     if [ ! -f "$country_file" ]; then
@@ -98,8 +99,11 @@ select_country() {
         fi
     done
 
-    # **ゾーンネームとタイムゾーン取得**
+    # **ゾーン情報の取得と整理**
     local tz_data=$(grep -w "$selected_country_code" "$country_file" | awk '{$1=$2=$3=$4=""; print substr($0,5)}' | tr -s ' ' '\n')
+
+    # **すべてのゾーンを zone.ch に保存**
+    echo "$tz_data" > "$zone_cache"
 
     # **ゾーンが一つのみの場合はYNで確定**
     if [ "$(echo "$tz_data" | wc -l)" -eq 2 ]; then
@@ -148,6 +152,7 @@ select_country() {
     echo "$selected_lang_code" > "$language_cache"
     echo "$(color green "Country, language, and timezone set: $selected_country, $selected_zonename, $selected_timezone")"
 }
+
 
 
 
