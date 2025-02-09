@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-004"
+COMMON_VERSION="2025.02.10-005"
 
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -27,7 +27,7 @@ fi
 
 # -------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
-# select_country: 言語を設定し、ゾーンネームとタイムゾーンを取得する関数（ゾーン選択を番号付きに修正）
+# select_country: 言語を設定し、ゾーンネームとタイムゾーンを取得する関数（ゾーン選択を番号付き+YN判定）
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -55,22 +55,19 @@ select_country() {
             continue
         fi
 
-        found_entries=$(awk -v query="$user_input" '{if ($0 ~ query) print NR, $2, $3, $4, $6, $7}' "$country_file")
+        found_entries=$(awk -v query="$user_input" '{if ($0 ~ query) print NR, $2, $3, $4}' "$country_file")
 
         if [ -z "$found_entries" ]; then
             echo "`color yellow "No matching country found. Please try again."`"
             continue
         fi
 
-        echo "`color cyan "DEBUG: Search results:"`"
-        echo "$found_entries"
-
-        echo "`color yellow "Select a country:"`"
+        echo "`color cyan "Select a country:"`"
         i=1
         > /tmp/country_selection.tmp
-        echo "$found_entries" | while read -r index country_name lang_code country_code zone_name timezone; do
+        echo "$found_entries" | while read -r index country_name lang_code country_code; do
             echo "[$i] $country_name ($lang_code)"
-            echo "$i $country_name $lang_code $country_code $zone_name $timezone" >> /tmp/country_selection.tmp
+            echo "$i $country_name $lang_code $country_code" >> /tmp/country_selection.tmp
             i=$((i + 1))
         done
         echo "[0] Try again"
@@ -84,21 +81,13 @@ select_country() {
             fi
 
             selected_entry=$(awk -v num="$choice" '$1 == num {print $2, $3, $4}' /tmp/country_selection.tmp)
-            selected_zone=$(awk -v num="$choice" '$1 == num {print $5}' /tmp/country_selection.tmp)
-            selected_timezone=$(awk -v num="$choice" '$1 == num {print $6}' /tmp/country_selection.tmp)
 
             if [ -z "$selected_entry" ]; then
                 echo "`color red "Invalid selection. Please choose a valid number."`"
                 continue
             fi
 
-            echo "`color green "Final selection: $selected_entry (Zone: $selected_zone, Timezone: $selected_timezone)"`"
-            echo "$selected_entry" > "$country_cache"
-            echo "$selected_zone" | tr -d '\n' > "$language_cache"
-            echo "$selected_timezone" | tr -d '\n' > "$timezone_cache"
-        
-            # **ゾーンの選択を追加（番号付き）**
-            echo "`color yellow "Select a timezone for $selected_entry:"`"
+            echo "`color cyan "Select a timezone for $selected_entry:"`"
             i=1
             > /tmp/timezone_selection.tmp
             awk -v country="$selected_entry" '$2 == country {print NR, $5, $6}' "$country_file" | while read -r index zone_name tz; do
@@ -115,19 +104,34 @@ select_country() {
                     echo "`color yellow "Returning to timezone selection."`"
                     break
                 fi
-                selected_timezone=$(awk -v num="$tz_choice" '$1 == num {print $2, $3}' /tmp/timezone_selection.tmp)
-                if [ -z "$selected_timezone" ]; then
+                selected_zone=$(awk -v num="$tz_choice" '$1 == num {print $2}' /tmp/timezone_selection.tmp)
+                selected_timezone=$(awk -v num="$tz_choice" '$1 == num {print $3}' /tmp/timezone_selection.tmp)
+                if [ -z "$selected_zone" ] || [ -z "$selected_timezone" ]; then
                     echo "`color red "Invalid selection. Please choose a valid number."`"
                     continue
                 fi
-                echo "`color green "Final selection: $selected_entry (Zone: $selected_zone, Timezone: $selected_timezone)"`"
-                echo "$selected_timezone" > "$timezone_cache"
-                return
+                echo "`color cyan "Confirm selection: $selected_entry (Zone: $selected_zone, Timezone: $selected_timezone)? [Y/n]:"`"
+                read yn
+                case "$yn" in
+                    [Yy]*)
+                        echo "`color green "Final selection: $selected_entry (Zone: $selected_zone, Timezone: $selected_timezone)"`"
+                        echo "$selected_entry" > "$country_cache"
+                        echo "$selected_zone" > "$language_cache"
+                        echo "$selected_timezone" > "$timezone_cache"
+                        return
+                        ;;
+                    [Nn]*)
+                        echo "`color yellow "Returning to timezone selection."`"
+                        break
+                        ;;
+                    *)
+                        echo "`color red "Invalid input. Please enter 'Y' or 'N'."`"
+                        ;;
+                esac
             done
         done
     done
 }
-
 
 #########################################################################
 # select_country: 国と言語、タイムゾーンを選択（検索・表示を `country.db` に統一）
