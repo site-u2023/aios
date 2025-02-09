@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-08"
+COMMON_VERSION="2025.02.09-09"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★"
 
 # === 基本定数の設定 ===
@@ -265,6 +265,7 @@ select_country() {
     local country_cache="${BASE_DIR}/country.ch"
     local zone_cache="${BASE_DIR}/zone.ch"
     local language_cache="${BASE_DIR}/language.ch"
+    local tmp_file="${BASE_DIR}/tmp.ch"
     local user_input=""
     local selected_entry=""
     local selected_zone_name=""
@@ -344,24 +345,20 @@ select_country() {
         fi
     done
 
-    # **選択した国の処理**
-    country_name=$(echo "$selected_entry" | awk '{print $1}')
-    display_name=$(echo "$selected_entry" | awk '{print $2}')
-    lang_code=$(echo "$selected_entry" | awk '{print $3}')
-    country_code=$(echo "$selected_entry" | awk '{print $4}')
-    tz_data=$(grep "^$country_name" "$country_file" | cut -d' ' -f5-)
+    # **選択した国のデータを抽出**
+    grep "^$country_name" "$country_file" > "$tmp_file"
+
+    # **country.ch に基本情報を保存**
+    cut -d' ' -f1-4 "$tmp_file" > "$country_cache"
+
+    # **zone.ch にタイムゾーンを保存**
+    cut -d' ' -f5- "$tmp_file" | tr ',' '\n' | awk 'NR%2==1 {zone=$0} NR%2==0 {print zone, $0}' > "$zone_cache"
 
     # **ゾーンネーム＆タイムゾーン選択**
-    if [ $(echo "$tz_data" | wc -w) -gt 1 ]; then
+    if [ $(wc -l < "$zone_cache") -gt 1 ]; then
         while true; do
             echo "$(color cyan "Select a timezone for $country_name:")"
-            i=1
-            echo "$tz_data" | awk -F', ' '{
-                for (j=1; j<=NF; j+=2) {
-                    print "["i"]", $j, $(j+1);
-                    i++;
-                }
-            }' | sed '/^\[\] /d'  # **空の `[]` を削除**
+            awk '{print "["NR"]", $0}' "$zone_cache"
             echo "[0] Try again"
 
             echo "Enter the number of your choice (or 0 to go back): "
@@ -372,20 +369,8 @@ select_country() {
                 continue
             fi
 
-            selected_zone_name=$(echo "$tz_data" | awk -F', ' -v num="$tz_choice" '{
-                i=1;
-                for (j=1; j<=NF; j+=2) {
-                    if (i==num) { print $j; break; }
-                    i++;
-                }
-            }')
-            selected_timezone=$(echo "$tz_data" | awk -F', ' -v num="$tz_choice" '{
-                i=1;
-                for (j=1; j<=NF; j+=2) {
-                    if (i==num) { print $(j+1); break; }
-                    i++;
-                }
-            }')
+            selected_zone_name=$(awk -v num="$tz_choice" 'NR==num {print $1}' "$zone_cache")
+            selected_timezone=$(awk -v num="$tz_choice" 'NR==num {print $2}' "$zone_cache")
 
             if [ -z "$selected_zone_name" ] || [ -z "$selected_timezone" ]; then
                 echo "$(color red "Invalid selection. Please enter a valid number.")"
@@ -402,13 +387,12 @@ select_country() {
             esac
         done
     else
-        selected_zone_name=$(echo "$tz_data" | awk '{print $1}')
-        selected_timezone=$(echo "$tz_data" | awk '{print $2}')
+        selected_zone_name=$(awk '{print $1}' "$zone_cache")
+        selected_timezone=$(awk '{print $2}' "$zone_cache")
         echo "$(color green "Selected timezone: $selected_zone_name $selected_timezone")"
     fi
 
     # **キャッシュへの書き込み**
-    echo "$country_name $display_name $lang_code $country_code" > "$country_cache"
     echo "$selected_zone_name $selected_timezone" > "$zone_cache"
     echo "$lang_code" > "$language_cache"
 }
