@@ -48,9 +48,10 @@ select_country() {
         found_entries=$(awk -v query="$(echo "$user_input" | tr '[:upper:]' '[:lower:]')" '
             {
                 line = tolower($0);
-                if (line ~ query || tolower($4) == query)  # 国コードは完全一致
+                if (line ~ query)  # 全フィールドに対して部分一致検索のみ適用
                     print NR, $2, $3, $4  # 出力は 国名, 言語, 国コード
             }' "$country_file")
+
 
         matches_found=$(echo "$found_entries" | wc -l)
 
