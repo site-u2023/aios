@@ -2,7 +2,10 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-03"
+#######################################################################
+# Important!　OpenWrt OS only works with ash scripts, not bash scripts.
+#######################################################################
+COMMON_VERSION="2025.02.09-04"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★"
 
 # === 基本定数の設定 ===
