@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-07"
+COMMON_VERSION="2025.02.09-08"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★"
 
 # === 基本定数の設定 ===
@@ -361,7 +361,7 @@ select_country() {
                     print "["i"]", $j, $(j+1);
                     i++;
                 }
-            }' | grep -v "^[] " # **空白の `[]` を削除**
+            }' | sed '/^\[\] /d'  # **空の `[]` を削除**
             echo "[0] Try again"
 
             echo "Enter the number of your choice (or 0 to go back): "
