@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-21"
+COMMON_VERSION="2025.02.09-22"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
 echo "☆☆☆ Important!　OpenWrt OS only works with ash scripts, not bash scripts. ☆☆☆"
 
@@ -258,9 +258,6 @@ download_script() {
     echo "$file_name=$new_version" >> "$script_cache"
 }
 
-#########################################################################
-# select_country: 国とタイムゾーンの選択（100% ash 対応）
-#########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${BASE_DIR}/country.ch"
@@ -280,9 +277,9 @@ select_country() {
     fi
 
     while true; do
-        # **国リスト表示**
+        # **国リスト表示（1 から順に番号を振る）**
         index=1
-        awk '{print "[" index++ "]", $1, $2, $3, $4}' "$country_file"
+        awk '{printf "[%d] %s %s %s %s\n", index++, $1, $2, $3, $4}' "$country_file"
 
         # **ユーザー入力**
         echo -e "$(color cyan "Enter country name, code, or language (or press Enter to list all):")"
@@ -347,13 +344,7 @@ select_country() {
     if echo "$tz_data" | grep -q ","; then
         echo "$(color cyan "Select a timezone for $country_name:")"
         index=1
-        echo "$tz_data" | tr ' ' '\n' | while read tz_pair; do
-            zonename=$(echo "$tz_pair" | cut -d',' -f1)
-            timezone=$(echo "$tz_pair" | cut -d',' -f2)
-            echo "[$index] $zonename $timezone"
-            index=$((index + 1))
-        done
-        echo "[0] Try again"
+        echo "$tz_data" | awk -F' ' '{for (i=1; i<=NF; i++) print "[" i "] " $i}'
 
         while true; do
             echo "Enter the number of your choice (or 0 to go back): "
