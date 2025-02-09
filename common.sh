@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.09-0017"
+COMMON_VERSION="2025.02.09-0018"
 echo "common.sh Last update: 🔴 $COMMON_VERSION 🔴"
 
 # 基本定数の設定
@@ -21,13 +21,13 @@ INPUT_LANG="$1"
 # select_country: 国と言語、タイムゾーンを選択（データベース全文曖昧検索）
 #########################################################################
 #########################################################################
-# select_country: 国と言語、タイムゾーンを選択（全文小文字化、検索時の区切り統一）
+# select_country: 国と言語、タイムゾーンを選択（検索は `country_tmp.ch`、表示は `country.db`）
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${BASE_DIR}/country.ch"
     local language_cache="${BASE_DIR}/language.ch"
-    local country_tmp="${BASE_DIR}/country_tmp.ch"  # 小文字化・区切り統一したデータ用キャッシュ
+    local country_tmp="${BASE_DIR}/country_tmp.ch"  # 小文字化・区切り統一した検索専用キャッシュ
     local user_input=""
     local selected_entry=""
     local selected_zonename=""
@@ -38,7 +38,7 @@ select_country() {
         return 1
     fi
 
-    # **小文字化したキャッシュを作成（`/`, `,`, 空白を `_` に統一）**
+    # **検索専用の小文字化キャッシュを作成（`/`, `,`, 空白を `_` に統一）**
     if [ ! -f "$country_tmp" ]; then
         awk '{print tolower($0)}' "$country_file" | sed -E 's/[\/, ]+/_/g' > "$country_tmp"
     fi
@@ -54,14 +54,14 @@ select_country() {
             continue
         fi
 
-        # **全文検索（完全一致なし、すべてのフィールドを対象に部分一致検索）**
+        # **検索は `country_tmp.ch` を使用**
         found_entries=$(awk -v query="$user_input" '
             {
                 if (tolower($0) ~ query) 
-                    print NR, $2, $3, $4  # 出力は 国名, 言語, 国コード
+                    print NR, $1  # 出力は行番号, 一意のキー（元の `country.db` の行番号）
             }' "$country_tmp")
 
-        echo "$(color cyan "DEBUG: Search results:")"
+        echo "$(color cyan "DEBUG: Search results (IDs only):")"
         echo "$found_entries"
 
         matches_found=$(echo "$found_entries" | wc -l)
@@ -70,7 +70,9 @@ select_country() {
             echo "$(color yellow "No matching country found. Please try again.")"
             continue
         elif [ "$matches_found" -eq 1 ]; then
-            selected_entry=$(echo "$found_entries" | awk '{print $2, $3, $4}')
+            selected_id=$(echo "$found_entries" | awk '{print $2}')
+            selected_entry=$(awk -v id="$selected_id" 'NR==id {print $2, $3, $4}' "$country_file")
+
             echo -e "$(color cyan "Confirm country selection: \"$selected_entry\"? [Y/n]:")"
             read yn
             case "$yn" in
@@ -81,9 +83,10 @@ select_country() {
         else
             echo "$(color yellow "Multiple matches found. Please select:")"
             i=1
-            echo "$found_entries" | while read -r index display_name lang_code country_code; do
-                echo "[$i] $display_name ($lang_code)"
-                echo "$i $display_name $lang_code $country_code" >> /tmp/country_selection.tmp
+            echo "$found_entries" | while read -r index country_id; do
+                country_info=$(awk -v id="$country_id" 'NR==id {print $2, $3, $4}' "$country_file")
+                echo "[$i] $country_info"
+                echo "$i $country_id" >> /tmp/country_selection.tmp
                 i=$((i + 1))
             done
             echo "[0] Try again"
@@ -96,7 +99,9 @@ select_country() {
                     break
                 fi
 
-                selected_entry=$(awk -v num="$choice" '$1 == num {print $2, $3, $4}' /tmp/country_selection.tmp)
+                selected_id=$(awk -v num="$choice" '$1 == num {print $2}' /tmp/country_selection.tmp)
+                selected_entry=$(awk -v id="$selected_id" 'NR==id {print $2, $3, $4}' "$country_file")
+
                 if [ -z "$selected_entry" ]; then
                     echo "$(color red "Invalid selection. Please choose a valid number.")"
                     continue
@@ -122,6 +127,7 @@ select_country() {
 
     echo "$(color green "Final selection: $selected_entry")"
 }
+
 
 
 
