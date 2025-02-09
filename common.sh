@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-003"
+COMMON_VERSION="2025.02.10-004"
 
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -64,7 +64,7 @@ select_country() {
 
         echo "`color cyan "Select a country:"`"
         i=1
-        > ${BASE_DIR}/country_tmp.ch
+        > ${BASE_DIR}/timezone_tmp.ch
         echo "$found_entries" | while read -r index country_name lang_code country_code; do
             echo "[$i] $country_name ($lang_code)"
             echo "$i $country_name $lang_code $country_code" >> ${BASE_DIR}/country_tmp.ch
@@ -90,7 +90,7 @@ select_country() {
             echo "`color cyan "Select a timezone for $selected_entry:"`"
             i=1
             > ${BASE_DIR}/country_tmp.ch
-            awk -v country="$selected_entry" '$2 == country {print NR, $5, $6}' "$country_file" | while read -r index zone_name tz; do
+            awk -v country="$selected_entry" -v code="$selected_entry_code" '$2 == country && $4 == code {print NR, $5, $6}' "$country_file" | while read -r index zone_name tz; do
                 if [ -n "$zone_name" ] && [ -n "$tz" ]; then
                     echo "[$i] $zone_name ($tz)"
                     echo "$i $zone_name $tz" >> ${BASE_DIR}/country_tmp.ch
@@ -106,8 +106,8 @@ select_country() {
                     echo "`color yellow "Returning to timezone selection."`"
                     break
                 fi
-                selected_zone=$(awk -v num="$tz_choice" '$1 == num {print $2}' ${BASE_DIR}/country_tmp.ch)
-                selected_timezone=$(awk -v num="$tz_choice" '$1 == num {print $3}' ${BASE_DIR}/country_tmp.ch)
+                selected_zone=$(awk -v num="$tz_choice" '$1 == num {print $2}' ${BASE_DIR}/timezone_tmp.ch)
+                selected_timezone=$(awk -v num="$tz_choice" '$1 == num {print $3}' ${BASE_DIR}/timezone_tmp.ch)
                 if [ -z "$selected_zone" ] || [ -z "$selected_timezone" ]; then
                     echo "`color red "Invalid selection. Please choose a valid number."`"
                     continue
