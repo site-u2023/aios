@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.09-0019"
+COMMON_VERSION="2025.02.09-0020"
 echo "common.sh Last update: 🔴 $COMMON_VERSION 🔴"
 
 # 基本定数の設定
@@ -38,9 +38,9 @@ select_country() {
         return 1
     fi
 
-    # **検索専用の小文字化キャッシュを作成（`/`, `,`, 空白を `_` に統一し、国名をキーとして保存）**
+    # **検索専用の小文字化キャッシュを作成（`/`, `,`, 空白を `_` に統一し、DBの情報を正確に保存）**
     if [ ! -f "$country_tmp" ]; then
-        awk '{print tolower($2), tolower($0)}' "$country_file" | sed -E 's/[\/, ]+/_/g' > "$country_tmp"
+        awk '{gsub(/[\/, ]+/, "_"); print tolower($0)}' "$country_file" > "$country_tmp"
     fi
 
     while true; do
@@ -58,7 +58,7 @@ select_country() {
         found_entries=$(awk -v query="$user_input" '
             {
                 if ($0 ~ query) 
-                    print $1  # 出力は国名（元の `country.db` のキー）
+                    print $1  # 出力は元の `country.db` のキー
             }' "$country_tmp")
 
         echo "$(color cyan "DEBUG: Search results (Country Names):")"
@@ -70,7 +70,7 @@ select_country() {
             echo "$(color yellow "No matching country found. Please try again.")"
             continue
         elif [ "$matches_found" -eq 1 ]; then
-            selected_entry=$(grep -i "^$(echo "$found_entries")" "$country_file" | awk '{print $2, $3, $4}')
+            selected_entry=$(grep -i "^$(echo "$found_entries")" "$country_file" | awk '{gsub(/[\/, ]+/, "_"); print $2, $3, $4}')
 
             echo -e "$(color cyan "Confirm country selection: \"$selected_entry\"? [Y/n]:")"
             read yn
@@ -83,7 +83,7 @@ select_country() {
             echo "$(color yellow "Multiple matches found. Please select:")"
             i=1
             echo "$found_entries" | while read -r country_name; do
-                country_info=$(grep -i "^$country_name" "$country_file" | awk '{print $2, $3, $4}')
+                country_info=$(grep -i "^$country_name" "$country_file" | awk '{gsub(/[\/, ]+/, "_"); print $2, $3, $4}')
                 echo "[$i] $country_info"
                 echo "$i $country_name" >> /tmp/country_selection.tmp
                 i=$((i + 1))
@@ -99,7 +99,7 @@ select_country() {
                 fi
 
                 selected_country=$(awk -v num="$choice" '$1 == num {print $2}' /tmp/country_selection.tmp)
-                selected_entry=$(grep -i "^$selected_country" "$country_file" | awk '{print $2, $3, $4}')
+                selected_entry=$(grep -i "^$selected_country" "$country_file" | awk '{gsub(/[\/, ]+/, "_"); print $2, $3, $4}')
 
                 if [ -z "$selected_entry" ]; then
                     echo "$(color red "Invalid selection. Please choose a valid number.")"
@@ -126,6 +126,7 @@ select_country() {
 
     echo "$(color green "Final selection: $selected_entry")"
 }
+
 
 
 
