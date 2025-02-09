@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-15"
+COMMON_VERSION="2025.02.09-16"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
 
 # === 基本定数の設定 ===
@@ -293,13 +293,23 @@ select_country() {
             continue
         fi
 
-        # **曖昧検索**
+        # **数字入力の場合、該当する国を選択**
+        if echo "$user_input" | grep -qE '^[0-9]+$'; then
+            selected_entry=$(awk -v num="$user_input" 'NR == num {print $1, $2, $3, $4}' "$country_file")
+            if [ -z "$selected_entry" ]; then
+                echo "$(color red "Invalid selection. Please choose a valid number.")"
+                continue
+            fi
+            break
+        fi
+
+        # **曖昧検索（小文字変換）**
         index=1
-        found_entries=$(awk -v query="$user_input" '
-            tolower($1) ~ tolower(query) ||
-            tolower($2) ~ tolower(query) ||
-            tolower($3) ~ tolower(query) ||
-            tolower($4) ~ tolower(query) {print $1, $2, $3, $4}' "$country_file")
+        found_entries=$(awk -v query="$(echo "$user_input" | tr '[:upper:]' '[:lower:]')" '
+            tolower($1) ~ query ||
+            tolower($2) ~ query ||
+            tolower($3) ~ query ||
+            tolower($4) ~ query {print $1, $2, $3, $4}' "$country_file")
 
         if [ -z "$found_entries" ]; then
             echo "$(color yellow "No matching country found. Please try again.")"
