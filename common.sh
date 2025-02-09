@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-22"
+COMMON_VERSION="2025.02.09-23"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
 echo "☆☆☆ Important!　OpenWrt OS only works with ash scripts, not bash scripts. ☆☆☆"
 
@@ -29,6 +29,7 @@ select_country() {
     local selected_country=""
     local selected_zonename=""
     local selected_timezone=""
+    local selected_lang_code=""
 
     # **データベース確認**
     if [ ! -f "$country_file" ]; then
@@ -49,7 +50,7 @@ select_country() {
             tolower($1) ~ tolower(query) ||
             tolower($2) ~ tolower(query) ||
             tolower($3) ~ tolower(query) ||
-            tolower($4) ~ tolower(query) {print NR, $0}' "$country_file")
+            tolower($4) ~ tolower(query) {print NR, $1, $2, $3, $4}' "$country_file")
 
         local matches_found=$(echo "$found_entries" | wc -l)
 
@@ -58,6 +59,7 @@ select_country() {
             continue
         elif [ "$matches_found" -eq 1 ]; then
             selected_country=$(echo "$found_entries" | awk '{print $2, $3, $4, $5}')
+            selected_lang_code=$(echo "$found_entries" | awk '{print $4}')
             echo -e "$(color cyan "Confirm country selection: $selected_country? [Y/n]:")"
             read -r yn
             case "$yn" in
@@ -82,6 +84,7 @@ select_country() {
             fi
 
             selected_country=$(awk -v num="$choice" 'NR == num {print $2, $3, $4, $5}' "$country_file")
+            selected_lang_code=$(awk -v num="$choice" 'NR == num {print $4}' "$country_file")
             echo -e "$(color cyan "Confirm country selection: $selected_country? [Y/n]:")"
             read -r yn
             case "$yn" in
@@ -139,7 +142,7 @@ select_country() {
 
     # **キャッシュ書き込み**
     echo "$selected_country $selected_zonename $selected_timezone" > "$country_cache"
-    echo "$selected_zonename $selected_timezone" > "$language_cache"
+    echo "$selected_lang_code" > "$language_cache"
     echo "$(color green "Country, language, and timezone set: $selected_country, $selected_zonename, $selected_timezone")"
 }
 
