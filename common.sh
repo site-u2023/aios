@@ -30,7 +30,7 @@ fi
 # select_country: 国と言語、タイムゾーンを選択（データベース全文曖昧検索）
 #########################################################################
 #########################################################################
-# select_country (元の動作する方法1 - ゾーン表示復元)
+# select_country (元の動作する方法1 - 正常な状態に復元)
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -56,7 +56,7 @@ select_country() {
             continue
         fi
 
-        found_entries=$(awk -v query="$user_input" '{if ($0 ~ query) print $1, $2, $3, $4}' "$country_file")
+        found_entries=$(awk -v query="$user_input" '{if ($0 ~ query) print $1, $2, $3, $4, $5}' "$country_file")
 
         if [ -z "$found_entries" ]; then
             echo "`color yellow "No matching country found. Please try again."`"
@@ -68,9 +68,9 @@ select_country() {
 
         echo "`color yellow "Select a country:"`"
         i=1
-        echo "$found_entries" | while read -r index country_name lang_code country_code; do
+        echo "$found_entries" | while read -r index country_name lang_code country_code timezone; do
             echo "[$i] $country_name ($lang_code)"
-            echo "$i $country_name $lang_code $country_code" >> /tmp/country_selection.tmp
+            echo "$i $country_name $lang_code $country_code $timezone" >> /tmp/country_selection.tmp
             i=$((i + 1))
         done
         echo "[0] Try again"
@@ -91,13 +91,16 @@ select_country() {
                 continue
             fi
 
-            echo "`color green "Final selection: $selected_entry (Timezone: $selected_zone)"`"
+            echo "`color green "Final selection: $selected_entry"`"
             echo "$selected_entry" > "$country_cache"
             echo "$selected_zone" > "$language_cache"
             return
         done
     done
 }
+
+
+
 
 #########################################################################
 # select_country: 国と言語、タイムゾーンを選択（検索・表示を `country.db` に統一）
