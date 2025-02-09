@@ -5,8 +5,8 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-12"
-echo "★★★ common.sh Last update: $COMMON_VERSION ★★★"
+COMMON_VERSION="2025.02.09-13"
+echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
 
 # === 基本定数の設定 ===
 # BASE_WGET="wget -O"
@@ -267,7 +267,7 @@ select_country() {
     local zone_cache="${BASE_DIR}/zone.ch"
     local user_input=""
     local selected_entry=""
-    local selected_zone_name=""
+    local selected_zonename=""
     local selected_timezone=""
     local found_entries=""
 
@@ -278,23 +278,25 @@ select_country() {
     fi
 
     while true; do
-        # **全リスト表示**
-        awk '{print $1, $2, $3, $4}' "$country_file"
+        # **全リスト表示（番号を1から順に）**
+        local index=1
+        awk '{print "[" index "]", $1, $2, $3, $4; index++}' "$country_file"
 
         echo -e "$(color cyan "Enter country name, code, or language (or press Enter to list all):")"
         read user_input
 
         if [ -z "$user_input" ]; then
-            awk '{print $1, $2, $3, $4}' "$country_file"
+            awk '{print "[" index "]", $1, $2, $3, $4; index++}' "$country_file"
             continue
         fi
 
         # **曖昧検索**
+        local index=1
         found_entries=$(awk -v query="$user_input" '
             tolower($1) ~ tolower(query) ||
             tolower($2) ~ tolower(query) ||
             tolower($3) ~ tolower(query) ||
-            tolower($4) ~ tolower(query) {print $1, $2, $3, $4}' "$country_file")
+            tolower($4) ~ tolower(query) {print "[" index "]", $1, $2, $3, $4; index++}' "$country_file")
 
         matches_found=$(echo "$found_entries" | wc -l)
 
@@ -302,7 +304,7 @@ select_country() {
             echo "$(color yellow "No matching country found. Please try again.")"
             continue
         elif [ "$matches_found" -eq 1 ]; then
-            selected_entry="$found_entries"
+            selected_entry=$(echo "$found_entries" | cut -d' ' -f2-)
             echo -e "$(color cyan "Confirm country selection: $selected_entry? [Y/n]:")"
             read yn
             case "$yn" in
@@ -315,7 +317,7 @@ select_country() {
             local numbered_entries=""
             echo "$(color yellow "Multiple matches found. Please select:")"
             echo "$found_entries" | while read -r line; do
-                echo "[$index] $line"
+                echo "$line"
                 numbered_entries="$numbered_entries\n$index $line"
                 index=$((index + 1))
             done
@@ -359,13 +361,13 @@ select_country() {
     if echo "$tz_data" | grep -q ","; then
         while true; do
             echo "$(color cyan "Select a timezone for $country_name:")"
-            index=1
+            local index=1
             local numbered_zones=""
             echo "$tz_data" | tr ' ' '\n' | while read -r tz_pair; do
-                zone_name=$(echo "$tz_pair" | cut -d',' -f1)
+                zonename=$(echo "$tz_pair" | cut -d',' -f1)
                 timezone=$(echo "$tz_pair" | cut -d',' -f2)
-                echo "[$index] $zone_name $timezone"
-                numbered_zones="$numbered_zones\n$index $zone_name $timezone"
+                echo "[$index] $zonename $timezone"
+                numbered_zones="$numbered_zones\n$index $zonename $timezone"
                 index=$((index + 1))
             done
             echo "[0] Try again"
@@ -378,15 +380,15 @@ select_country() {
                 continue
             fi
 
-            selected_zone_name=$(echo -e "$numbered_zones" | awk -v num="$tz_choice" '$1 == num {print substr($0, index($0,$2))}')
-            selected_timezone=$(echo "$selected_zone_name" | awk '{print $2}')
+            selected_zonename=$(echo -e "$numbered_zones" | awk -v num="$tz_choice" '$1 == num {print substr($0, index($0,$2))}')
+            selected_timezone=$(echo "$selected_zonename" | awk '{print $2}')
 
-            if [ -z "$selected_zone_name" ] || [ -z "$selected_timezone" ]; then
+            if [ -z "$selected_zonename" ] || [ -z "$selected_timezone" ]; then
                 echo "$(color red "Invalid selection. Please enter a valid number.")"
                 continue
             fi
 
-            echo -e "$(color cyan "Confirm timezone selection: $selected_zone_name, $selected_timezone? [Y/n]:")"
+            echo -e "$(color cyan "Confirm timezone selection: $selected_zonename, $selected_timezone? [Y/n]:")"
             read tz_yn
             case "$tz_yn" in
                 Y|y) break ;;
@@ -395,17 +397,17 @@ select_country() {
             esac
         done
     else
-        selected_zone_name=$(echo "$tz_data" | cut -d',' -f1)
+        selected_zonename=$(echo "$tz_data" | cut -d',' -f1)
         selected_timezone=$(echo "$tz_data" | cut -d',' -f2)
     fi
 
     # **表示修正**
-    echo "$(color green "Country and timezone set: $country_name, $selected_zone_name, $selected_timezone")"
+    echo "$(color green "Country and timezone set: $country_name, $selected_zonename, $selected_timezone")"
     echo "$(color green "Language saved to language.ch: $lang_code")"
 
     # **キャッシュ書き込み**
     echo "$country_name $display_name $lang_code $country_code" > "$country_cache"
-    echo "$selected_zone_name $selected_timezone" > "$zone_cache"
+    echo "$selected_zonename $selected_timezone" > "$zone_cache"
     echo "$lang_code" > "$language_cache"
 }
 
