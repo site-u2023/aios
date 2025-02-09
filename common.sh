@@ -2,8 +2,8 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.09-01"
-echo "★ common.sh Last update: $COMMON_VERSION ★"
+COMMON_VERSION="2025.02.09-02"
+echo "★★★ common.sh Last update: $COMMON_VERSION★★★"
 
 # === 基本定数の設定 ===
 # BASE_WGET="wget -O"
@@ -345,17 +345,19 @@ select_country() {
     display_name=$(echo "$selected_entry" | awk '{print $2}')
     lang_code=$(echo "$selected_entry" | awk '{print $3}')
     country_code=$(echo "$selected_entry" | awk '{print $4}')
-    tz_data=$(grep "^$country_name " "$country_file" | awk '{for(i=6;i<=NF;i++) print $i}')
+    tz_data=$(grep "^$country_name" "$country_file" | cut -d' ' -f5-)
 
     # **ゾーンネーム＆タイムゾーン選択**
-    if [ $(echo "$tz_data" | wc -l) -gt 1 ]; then
+    if [ $(echo "$tz_data" | wc -w) -gt 1 ]; then
         while true; do
             echo "$(color cyan "Select a timezone for $country_name:")"
             i=1
-            echo "$tz_data" | while read tz_pair; do
-                echo "[$i] $tz_pair"
-                i=$((i + 1))
-            done
+            echo "$tz_data" | awk '{
+                for (j=1; j<=NF; j+=2) {
+                    print "["i"]", $j, $(j+1);
+                    i++;
+                }
+            }'
             echo "[0] Try again"
 
             echo "Enter the number of your choice (or 0 to go back): "
@@ -366,8 +368,13 @@ select_country() {
                 continue
             fi
 
-            selected_zone_name=$(echo "$tz_data" | awk -v num="$tz_choice" 'NR==num {print $1}')
-            selected_timezone=$(echo "$tz_data" | awk -v num="$tz_choice" 'NR==num {print $2}')
+            selected_zone_name=$(echo "$tz_data" | awk -v num="$tz_choice" '{for (j=1; j<=NF; j+=2) if (i==num) print $j; i++}')
+            selected_timezone=$(echo "$tz_data" | awk -v num="$tz_choice" '{for (j=1; j<=NF; j+=2) if (i==num) print $(j+1); i++}')
+
+            if [ -z "$selected_zone_name" ] || [ -z "$selected_timezone" ]; then
+                echo "$(color red "Invalid selection. Please enter a valid number.")"
+                continue
+            fi
 
             echo "$(color green "Selected timezone: $selected_zone_name, $selected_timezone")"
             break
