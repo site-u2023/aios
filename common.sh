@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-17"
+COMMON_VERSION="2025.02.10-18"
 
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -29,6 +29,76 @@ fi
 #########################################################################
 # select_country: 国と言語、タイムゾーンを選択（データベース全文曖昧検索）
 #########################################################################
+#########################################################################
+# select_country: 国と言語、タイムゾーンを選択（検索・表示を `country.db` に統一）
+#########################################################################
+select_country() {
+    local country_file="${BASE_DIR}/country.db"
+    local country_cache="${BASE_DIR}/country.ch"
+    local language_cache="${BASE_DIR}/language.ch"
+    local user_input=""
+    local selected_entry=""
+    local selected_zone=""
+
+    if [ ! -f "$country_file" ]; then
+        echo "`color red "Country database not found!"`"
+        return 1
+    fi
+
+    while true; do
+        echo "`color cyan "Fuzzy search: Enter a country name, code, or language."`"
+        echo -n "`color cyan "Please input: "`"
+        read user_input
+        user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]' | sed -E 's/[\/,_]+/ /g')
+
+        if [ -z "$user_input" ]; then
+            echo "`color yellow "Invalid input. Please enter a valid country name, code, or language."`"
+            continue
+        fi
+
+        found_entries=$(awk -v query="$user_input" '{if ($0 ~ query) print $1, $2, $3, $4, $5}' "$country_file")
+
+        if [ -z "$found_entries" ]; then
+            echo "`color yellow "No matching country found. Please try again."`"
+            continue
+        fi
+
+        echo "`color cyan "DEBUG: Search results:"`"
+        echo "$found_entries"
+
+        echo "`color yellow "Select a country:"`"
+        i=1
+        echo "$found_entries" | while read -r index country_name lang_code country_code timezone; do
+            echo "[$i] $country_name ($lang_code)"
+            echo "$i $country_name $lang_code $country_code $timezone" >> /tmp/country_selection.tmp
+            i=$((i + 1))
+        done
+        echo "[0] Try again"
+
+        while true; do
+            echo -n "`color cyan "Enter the number of your choice (or 0 to retry): "`"
+            read choice
+            if [ "$choice" = "0" ]; then
+                echo "`color yellow "Returning to country selection."`"
+                break
+            fi
+
+            selected_entry=$(awk -v num="$choice" '$1 == num {print $2, $3, $4}' /tmp/country_selection.tmp)
+            selected_zone=$(awk -v num="$choice" '$1 == num {print $5}' /tmp/country_selection.tmp)
+
+            if [ -z "$selected_entry" ]; then
+                echo "`color red "Invalid selection. Please choose a valid number."`"
+                continue
+            fi
+
+            echo "`color green "Final selection: $selected_entry (Timezone: $selected_zone)"`"
+            echo "$selected_entry" > "$country_cache"
+            echo "$selected_zone" > "$language_cache"
+            return
+        done
+    done
+}
+
 #########################################################################
 # select_country (元の動作する方法1 - 正常な状態に復元)
 #########################################################################
@@ -105,7 +175,7 @@ XXXXX_select_country() {
 #########################################################################
 # select_country: 国と言語、タイムゾーンを選択（検索・表示を `country.db` に統一）
 #########################################################################
-select_country() {
+OK_BASE_select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${BASE_DIR}/country.ch"
     local language_cache="${BASE_DIR}/language.ch"
