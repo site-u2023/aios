@@ -85,7 +85,7 @@ search_country() {
                     continue
                 fi
 
-                echo -e "$(color cyan "Confirm country selection: \"$selected_entry\"? [Y/n]:")"
+                echo -e "$(color cyan "Confirm country selection: \"$selected_entry\"? [Y/n]:")"　
                 read yn
                 case "$yn" in
                     [Yy]*) break 2 ;;
