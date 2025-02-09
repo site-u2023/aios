@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-05"
+COMMON_VERSION="2025.02.09-06"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★"
 
 # === 基本定数の設定 ===
@@ -392,8 +392,14 @@ select_country() {
                 continue
             fi
 
-            echo "$(color green "Selected timezone: $selected_zone_name $selected_timezone")"
-            break
+            # **選択後にYN確認**
+            echo -e "$(color cyan "Confirm timezone selection: $selected_zone_name $selected_timezone? [Y/n]:")"
+            read tz_yn
+            case "$tz_yn" in
+                Y|y) break ;;
+                N|n) continue ;;
+                *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
+            esac
         done
     else
         selected_zone_name=$(echo "$tz_data" | awk '{print $1}')
