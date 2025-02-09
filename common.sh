@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-21"
+COMMON_VERSION="2025.02.09-22"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
 echo "☆☆☆ Important!　OpenWrt OS only works with ash scripts, not bash scripts. ☆☆☆"
 
@@ -41,6 +41,7 @@ select_country() {
         echo -e "\n$(color cyan "Set country, language, zone name, and time zone.")"
         echo -e "$(color cyan "Fuzzy search: Enter a country name or code.")"
         echo -e "$(color cyan "(e.g., United States, English, US, en)")"
+        echo -n "$(color cyan "Please input: ")"
         read -r user_input
 
         # **曖昧検索**
@@ -66,7 +67,11 @@ select_country() {
             esac
         else
             echo "$(color yellow "Multiple matches found. Please select:")"
-            echo "$found_entries" | awk '{print "[" $1 "]", $2, $3, $4, $5}'
+            local i=1
+            echo "$found_entries" | while read -r line; do
+                echo "[$i] $(echo "$line" | awk '{$1=""; print $0}')"
+                i=$((i + 1))
+            done
             echo "[0] Try again"
             echo -e "$(color cyan "Enter the number of your choice (or 0 to go back):")"
             read choice
@@ -88,12 +93,12 @@ select_country() {
     done
 
     # **ゾーンネームとタイムゾーン取得**
-    local tz_data=$(grep -w "$selected_country" "$country_file" | awk '{$1=$2=$3=$4=""; print substr($0,5)}')
+    local tz_data=$(grep -w "$selected_country" "$country_file" | awk '{$1=$2=$3=$4=""; print substr($0,5)}' | tr -s ' ' '\n')
 
     # **ゾーンが一つのみの場合はYNで確定**
-    if [ "$(echo "$tz_data" | wc -w)" -eq 2 ]; then
-        selected_zonename=$(echo "$tz_data" | awk '{print $1}')
-        selected_timezone=$(echo "$tz_data" | awk '{print $2}')
+    if [ "$(echo "$tz_data" | wc -l)" -eq 2 ]; then
+        selected_zonename=$(echo "$tz_data" | awk 'NR==1')
+        selected_timezone=$(echo "$tz_data" | awk 'NR==2')
         echo -e "$(color cyan "Confirm timezone selection: $selected_zonename, $selected_timezone? [Y/n]:")"
         read -r yn
         case "$yn" in
@@ -105,7 +110,12 @@ select_country() {
         # **ゾーン選択**
         echo "$(color cyan "$selected_country: Select a timezone.")"
         local i=1
-        echo "$tz_data" | awk '{print "[" i "]", $1, $2; i++}'
+        echo "$tz_data" | while read -r tz; do
+            if [ -n "$tz" ]; then
+                echo "[$i] $tz"
+                i=$((i + 1))
+            fi
+        done
         echo "[0] Try again"
         echo -e "$(color cyan "Enter the number of your choice (or 0 to go back):")"
         read tz_choice
