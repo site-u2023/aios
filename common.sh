@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-2"
+COMMON_VERSION="2025.02.10-3"
 echo "common.sh Last update: 🔴 $COMMON_VERSION 🔴"
 
 # 基本定数の設定
@@ -29,8 +29,6 @@ select_country() {
     local language_cache="${BASE_DIR}/language.ch"
     local user_input=""
     local selected_entry=""
-    local selected_zonename=""
-    local selected_timezone=""
 
     if [ ! -f "$country_file" ]; then
         echo "$(color red "Country database not found!")"
@@ -38,35 +36,37 @@ select_country() {
     fi
 
     while true; do
-        echo "$(color cyan "Fuzzy search: Enter a country name, code, or timezone.")"
+        echo "$(color cyan "Fuzzy search: Enter a country name, code, or language.")"
         echo -n "$(color cyan "Please input: ")"
         read user_input
         user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]' | sed -E 's/[\/,_]+/ /g')
 
         if [ -z "$user_input" ]; then
-            echo "$(color yellow "Invalid input. Please enter a country name, code, or city.")"
+            echo "$(color yellow "Invalid input. Please enter a valid country name, code, or language.")"
             continue
         fi
 
-        # **検索は `country.db` を直接使用し、`/`, `,`, `_` を除去**
+        # **検索は `country.db` を直接使用（ゾーン情報は除外）**
         found_entries=$(awk -v query="$user_input" '
             {
                 line = tolower($0);
                 gsub(/[\/,_]+/, " ", line);  # 検索対象から / , _ を削除
                 if (line ~ query) 
-                    print NR, $0  # 出力は行番号とデータ
+                    print NR, $2, $3, $4  # 出力は行番号, 国名, 言語, 国コード（ゾーン情報は除外）
             }' "$country_file")
+
+        if [ -z "$found_entries" ]; then
+            echo "$(color yellow "No matching country found. Please try again.")"
+            continue
+        fi
 
         echo "$(color cyan "DEBUG: Search results:")"
         echo "$found_entries"
 
         matches_found=$(echo "$found_entries" | wc -l)
 
-        if [ "$matches_found" -eq 0 ]; then
-            echo "$(color yellow "No matching country found. Please try again.")"
-            continue
-        elif [ "$matches_found" -eq 1 ]; then
-            selected_entry=$(echo "$found_entries" | awk '{$1=""; print substr($0,2)}')  # 行番号を除外
+        if [ "$matches_found" -eq 1 ]; then
+            selected_entry=$(echo "$found_entries" | awk '{print $2, $3, $4}')
             echo -e "$(color cyan "Confirm country selection: \"$selected_entry\"? [Y/n]:")"
             read yn
             case "$yn" in
@@ -77,10 +77,9 @@ select_country() {
         else
             echo "$(color yellow "Multiple matches found. Please select:")"
             i=1
-            echo "$found_entries" | while read -r index country_info; do
-                formatted_entry=$(echo "$country_info" | awk '{$1=""; print substr($0,2)}')
-                echo "[$i] $formatted_entry"
-                echo "$i $formatted_entry" >> /tmp/country_selection.tmp
+            echo "$found_entries" | while read -r index country_name lang_code country_code; do
+                echo "[$i] $country_name ($lang_code)"
+                echo "$i $country_name $lang_code $country_code" >> /tmp/country_selection.tmp
                 i=$((i + 1))
             done
             echo "[0] Try again"
@@ -93,7 +92,7 @@ select_country() {
                     break
                 fi
 
-                selected_entry=$(awk -v num="$choice" '$1 == num {print substr($0, index($0, $2))}' /tmp/country_selection.tmp)
+                selected_entry=$(awk -v num="$choice" '$1 == num {print $2, $3, $4}' /tmp/country_selection.tmp)
 
                 if [ -z "$selected_entry" ]; then
                     echo "$(color red "Invalid selection. Please choose a valid number.")"
@@ -116,10 +115,11 @@ select_country() {
 
     # **キャッシュへの保存**
     echo "$selected_entry" > "$country_cache"
-    echo "$(echo "$selected_entry" | awk '{print $3}')" > "$language_cache"
+    echo "$(echo "$selected_entry" | awk '{print $2}')" > "$language_cache"
 
     echo "$(color green "Final selection: $selected_entry")"
 }
+
 
 
 
