@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.09-003"
+COMMON_VERSION="2025.02.09-004"
 echo "common.sh Last update: $COMMON_VERSION ★★★"
 
 # 基本定数の設定
@@ -38,7 +38,7 @@ select_country() {
         echo "$(color cyan "Set country, language, zone name, and time zone.")"
         echo "$(color cyan "Fuzzy search: Enter a country name or code.")"
         echo "$(color cyan "(e.g., United States, English, US, en)")"
-        echo -n "$(color white "Please input: ")"
+        echo -n "$(color cyan "Please input: ")"
         read user_input
 
         if [ -z "$user_input" ]; then
@@ -46,14 +46,14 @@ select_country() {
             continue
         fi
 
-        # **曖昧検索（大文字小文字区別なし）**
+        # **曖昧検索のみ（大文字小文字区別なし）**
         found_entries=$(awk -v query="$(echo "$user_input" | tr '[:upper:]' '[:lower:]')" '
-            { 
+            {
                 low_country = tolower($1);
                 low_lang = tolower($2);
                 low_code = tolower($3);
                 low_short = tolower($4);
-                if (low_country ~ query || low_lang ~ query || low_code ~ query || low_short ~ query) 
+                if (low_country ~ query || low_lang ~ query || low_code ~ query || low_short ~ query)
                     print $2, $3, $4
             }' "$country_file")
 
@@ -152,8 +152,11 @@ select_country() {
     echo "$lang_code" > "$language_cache"
 
     # **デバッグ**
-    echo "$(color green "Country and timezone set: $display_name, $selected_zonename, $selected_timezone")"
-    echo "$(color green "Language saved to language.ch: $lang_code")"
+    echo "$(color green "Final selection:")"
+    echo "$(color green "Country: $display_name")"
+    echo "$(color green "Language: $lang_code")"
+    echo "$(color green "Zone Name: $selected_zonename")"
+    echo "$(color green "Time Zone: $selected_timezone")"
 }
 
 
