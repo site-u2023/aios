@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-04"
+COMMON_VERSION="2025.02.09-05"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★"
 
 # === 基本定数の設定 ===
@@ -356,12 +356,10 @@ select_country() {
         while true; do
             echo "$(color cyan "Select a timezone for $country_name:")"
             i=1
-            echo "$tz_data" | awk '{
+            echo "$tz_data" | awk -F', ' '{
                 for (j=1; j<=NF; j+=2) {
-                    if ($(j+1) != "") {
-                        print "["i"]", $j, $(j+1);
-                        i++;
-                    }
+                    print "["i"]", $j, $(j+1);
+                    i++;
                 }
             }'
             echo "[0] Try again"
@@ -374,14 +372,14 @@ select_country() {
                 continue
             fi
 
-            selected_zone_name=$(echo "$tz_data" | awk -v num="$tz_choice" '{
+            selected_zone_name=$(echo "$tz_data" | awk -F', ' -v num="$tz_choice" '{
                 i=1;
                 for (j=1; j<=NF; j+=2) {
                     if (i==num) { print $j; break; }
                     i++;
                 }
             }')
-            selected_timezone=$(echo "$tz_data" | awk -v num="$tz_choice" '{
+            selected_timezone=$(echo "$tz_data" | awk -F', ' -v num="$tz_choice" '{
                 i=1;
                 for (j=1; j<=NF; j+=2) {
                     if (i==num) { print $(j+1); break; }
@@ -394,13 +392,13 @@ select_country() {
                 continue
             fi
 
-            echo "$(color green "Selected timezone: $selected_zone_name, $selected_timezone")"
+            echo "$(color green "Selected timezone: $selected_zone_name $selected_timezone")"
             break
         done
     else
         selected_zone_name=$(echo "$tz_data" | awk '{print $1}')
         selected_timezone=$(echo "$tz_data" | awk '{print $2}')
-        echo "$(color green "Selected timezone: $selected_zone_name, $selected_timezone")"
+        echo "$(color green "Selected timezone: $selected_zone_name $selected_timezone")"
     fi
 
     # **キャッシュへの書き込み**
