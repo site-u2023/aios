@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.09-0016"
+COMMON_VERSION="2025.02.09-0017"
 echo "common.sh Last update: 🔴 $COMMON_VERSION 🔴"
 
 # 基本定数の設定
@@ -21,13 +21,13 @@ INPUT_LANG="$1"
 # select_country: 国と言語、タイムゾーンを選択（データベース全文曖昧検索）
 #########################################################################
 #########################################################################
-# select_country: 国と言語、タイムゾーンを選択（完全一致なし、全文小文字検索）
+# select_country: 国と言語、タイムゾーンを選択（全文小文字化、検索時の区切り統一）
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${BASE_DIR}/country.ch"
     local language_cache="${BASE_DIR}/language.ch"
-    local country_tmp="${BASE_DIR}/country_tmp.ch"  # 小文字化したデータ用キャッシュ
+    local country_tmp="${BASE_DIR}/country_tmp.ch"  # 小文字化・区切り統一したデータ用キャッシュ
     local user_input=""
     local selected_entry=""
     local selected_zonename=""
@@ -38,16 +38,16 @@ select_country() {
         return 1
     fi
 
-    # **小文字化したキャッシュを作成**
+    # **小文字化したキャッシュを作成（`/`, `,`, 空白を `_` に統一）**
     if [ ! -f "$country_tmp" ]; then
-        awk '{print tolower($0)}' "$country_file" > "$country_tmp"
+        awk '{print tolower($0)}' "$country_file" | sed -E 's/[\/, ]+/_/g' > "$country_tmp"
     fi
 
     while true; do
         echo "$(color cyan "Fuzzy search: Enter a country name, code, or timezone.")"
         echo -n "$(color cyan "Please input: ")"
         read user_input
-        user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]')
+        user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]' | sed -E 's/[\/, ]+/_/g')
 
         if [ -z "$user_input" ]; then
             echo "$(color yellow "Invalid input. Please enter a country name, code, or city.")"
@@ -122,6 +122,7 @@ select_country() {
 
     echo "$(color green "Final selection: $selected_entry")"
 }
+
 
 
 
