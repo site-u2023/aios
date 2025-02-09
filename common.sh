@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-3"
+COMMON_VERSION="2025.02.10-4"
 echo "common.sh Last update: 🔴 $COMMON_VERSION 🔴"
 
 # 基本定数の設定
@@ -21,7 +21,9 @@ INPUT_LANG="$1"
 # select_country: 国と言語、タイムゾーンを選択（データベース全文曖昧検索）
 #########################################################################
 #########################################################################
-# select_country: 国と言語、タイムゾーンを選択（検索・表示を `country.db` に統一）
+# select_country (方法1: `$5` 以降を単語ごとに検索)
+# - `JP`, `US` などの単独コードが確実にヒットする
+# - `/`, `,`, `_` を削除し、単語ごとに検索
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -29,96 +31,155 @@ select_country() {
     local language_cache="${BASE_DIR}/language.ch"
     local user_input=""
     local selected_entry=""
-
+    
     if [ ! -f "$country_file" ]; then
-        echo "$(color red "Country database not found!")"
+        echo "$(color red \"Country database not found!\")"
         return 1
     fi
 
     while true; do
-        echo "$(color cyan "Fuzzy search: Enter a country name, code, or language.")"
-        echo -n "$(color cyan "Please input: ")"
+        echo "$(color cyan \"Fuzzy search: Enter a country name, code, or language.\")"
+        echo -n "$(color cyan \"Please input: \")"
         read user_input
         user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]' | sed -E 's/[\/,_]+/ /g')
 
         if [ -z "$user_input" ]; then
-            echo "$(color yellow "Invalid input. Please enter a valid country name, code, or language.")"
+            echo "$(color yellow \"Invalid input. Please enter a valid country name, code, or language.\")"
             continue
         fi
 
-        # **検索は `country.db` を直接使用（ゾーン情報は除外）**
         found_entries=$(awk -v query="$user_input" '
             {
                 line = tolower($0);
-                gsub(/[\/,_]+/, " ", line);  # 検索対象から / , _ を削除
-                if (line ~ query) 
-                    print NR, $2, $3, $4  # 出力は行番号, 国名, 言語, 国コード（ゾーン情報は除外）
+                gsub(/[\/,_]+/, " ", line);  # /, _, , を削除
+                split(line, words, " ");  # スペースで単語に分割
+                for (i in words) {
+                    if (words[i] ~ query) {
+                        print NR, $2, $3, $4;  # 行番号, 国名, 言語, 国コード
+                        break;
+                    }
+                }
             }' "$country_file")
 
         if [ -z "$found_entries" ]; then
-            echo "$(color yellow "No matching country found. Please try again.")"
+            echo "$(color yellow \"No matching country found. Please try again.\")"
             continue
         fi
 
-        echo "$(color cyan "DEBUG: Search results:")"
+        echo "$(color cyan \"DEBUG: Search results:\")"
         echo "$found_entries"
 
-        matches_found=$(echo "$found_entries" | wc -l)
+        echo "$(color yellow \"Select a country:\")"
+        i=1
+        echo "$found_entries" | while read -r index country_name lang_code country_code; do
+            echo "[$i] $country_name ($lang_code)"
+            echo "$i $country_name $lang_code $country_code" >> /tmp/country_selection.tmp
+            i=$((i + 1))
+        done
+        echo "[0] Try again"
 
-        if [ "$matches_found" -eq 1 ]; then
-            selected_entry=$(echo "$found_entries" | awk '{print $2, $3, $4}')
-            echo -e "$(color cyan "Confirm country selection: \"$selected_entry\"? [Y/n]:")"
-            read yn
-            case "$yn" in
-                [Yy]*) break ;;
-                [Nn]*) continue ;;
-                *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
-            esac
-        else
-            echo "$(color yellow "Multiple matches found. Please select:")"
-            i=1
-            echo "$found_entries" | while read -r index country_name lang_code country_code; do
-                echo "[$i] $country_name ($lang_code)"
-                echo "$i $country_name $lang_code $country_code" >> /tmp/country_selection.tmp
-                i=$((i + 1))
-            done
-            echo "[0] Try again"
+        while true; do
+            echo -n "$(color cyan \"Enter the number of your choice (or 0 to retry): \")"
+            read choice
+            if [ "$choice" = "0" ]; then
+                echo "$(color yellow \"Returning to country selection.\")"
+                break
+            fi
 
-            while true; do
-                echo -n "$(color cyan "Enter the number of your choice (or 0 to retry): ")"
-                read choice
-                if [ "$choice" = "0" ]; then
-                    echo "$(color yellow "Returning to country selection.")"
-                    break
-                fi
+            selected_entry=$(awk -v num="$choice" '$1 == num {print $2, $3, $4}' /tmp/country_selection.tmp)
 
-                selected_entry=$(awk -v num="$choice" '$1 == num {print $2, $3, $4}' /tmp/country_selection.tmp)
+            if [ -z "$selected_entry" ]; then
+                echo "$(color red \"Invalid selection. Please choose a valid number.\")"
+                continue
+            fi
 
-                if [ -z "$selected_entry" ]; then
-                    echo "$(color red "Invalid selection. Please choose a valid number.")"
-                    continue
-                fi
-
-                echo -e "$(color cyan "Confirm country selection: \"$selected_entry\"? [Y/n]:")"
-                read yn
-                case "$yn" in
-                    [Yy]*) break 2 ;;
-                    [Nn]*) break ;;
-                    *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
-                esac
-            done
-        fi
+            echo "$(color green \"Final selection: $selected_entry\")"
+            echo "$selected_entry" > "$country_cache"
+            echo "$(echo "$selected_entry" | awk '{print $2}')" > "$language_cache"
+            return
+        done
     done
-
-    # **デバッグ情報**
-    echo "$(color cyan "DEBUG: Selected Country: $selected_entry")"
-
-    # **キャッシュへの保存**
-    echo "$selected_entry" > "$country_cache"
-    echo "$(echo "$selected_entry" | awk '{print $2}')" > "$language_cache"
-
-    echo "$(color green "Final selection: $selected_entry")"
 }
+
+#########################################################################
+# select_country (方法2: `$5` 以降のデータを事前に正規化)
+# - `JP`, `US` などを確実にヒットさせるため、検索しやすい形式で保存
+#########################################################################
+XXXXX_select_country() {
+    local country_file="${BASE_DIR}/country.db"
+    local country_cache="${BASE_DIR}/country.ch"
+    local language_cache="${BASE_DIR}/language.ch"
+    local country_tmp="${BASE_DIR}/country_tmp.ch"  # 正規化キャッシュ
+    local user_input=""
+    local selected_entry=""
+
+    if [ ! -f "$country_file" ]; then
+        echo "$(color red \"Country database not found!\")"
+        return 1
+    fi
+
+    # **正規化キャッシュ作成**
+    if [ ! -f "$country_tmp" ]; then
+        awk '{
+            line = tolower($0);
+            gsub(/[\/,_]+/, " ", line);
+            print $2, $3, $4, substr(line, index(line, $5));
+        }' "$country_file" > "$country_tmp"
+    fi
+
+    while true; do
+        echo "$(color cyan \"Fuzzy search: Enter a country name, code, or language.\")"
+        echo -n "$(color cyan \"Please input: \")"
+        read user_input
+        user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]' | sed -E 's/[\/,_]+/ /g')
+
+        if [ -z "$user_input" ]; then
+            echo "$(color yellow \"Invalid input. Please enter a valid country name, code, or language.\")"
+            continue
+        fi
+
+        found_entries=$(awk -v query="$user_input" '{if ($0 ~ query) print NR, $0}' "$country_tmp")
+
+        if [ -z "$found_entries" ]; then
+            echo "$(color yellow \"No matching country found. Please try again.\")"
+            continue
+        fi
+
+        echo "$(color cyan \"DEBUG: Search results:\")"
+        echo "$found_entries"
+
+        echo "$(color yellow \"Select a country:\")"
+        i=1
+        echo "$found_entries" | while read -r index country_name lang_code country_code rest; do
+            echo "[$i] $country_name ($lang_code)"
+            echo "$i $country_name $lang_code $country_code" >> /tmp/country_selection.tmp
+            i=$((i + 1))
+        done
+        echo "[0] Try again"
+
+        while true; do
+            echo -n "$(color cyan \"Enter the number of your choice (or 0 to retry): \")"
+            read choice
+            if [ "$choice" = "0" ]; then
+                echo "$(color yellow \"Returning to country selection.\")"
+                break
+            fi
+
+            selected_entry=$(awk -v num="$choice" '$1 == num {print $2, $3, $4}' /tmp/country_selection.tmp)
+
+            if [ -z "$selected_entry" ]; then
+                echo "$(color red \"Invalid selection. Please choose a valid number.\")"
+                continue
+            fi
+
+            echo "$(color green \"Final selection: $selected_entry\")"
+            echo "$selected_entry" > "$country_cache"
+            echo "$(echo "$selected_entry" | awk '{print $2}')" > "$language_cache"
+            return
+        done
+    done
+}
+
 
 
 
