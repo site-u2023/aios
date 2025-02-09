@@ -20,7 +20,7 @@ INPUT_LANG="$1"
 #########################################################################
 # select_country: 国と言語、タイムゾーンを選択（データベース全文曖昧検索）
 #########################################################################
-search_country() {
+select_country() {
     local country_file="${BASE_DIR}/country.db"
     local user_input=""
     local found_entries=""
