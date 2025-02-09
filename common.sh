@@ -20,9 +20,6 @@ INPUT_LANG="$1"
 #########################################################################
 # select_country: 国と言語、タイムゾーンを選択（100% ash 対応）
 #########################################################################
-#########################################################################
-# select_country: 国と言語、タイムゾーンを選択（100% ash 対応）
-#########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${BASE_DIR}/country.ch"
@@ -41,7 +38,7 @@ select_country() {
         echo "$(color cyan "Set country, language, zone name, and time zone.")"
         echo "$(color cyan "Fuzzy search: Enter a country name or code.")"
         echo "$(color cyan "(e.g., United States, English, US, en)")"
-        echo -n "$(color cyan "Please input: ")"
+        echo -n "$(color white "Please input: ")"
         read user_input
 
         if [ -z "$user_input" ]; then
