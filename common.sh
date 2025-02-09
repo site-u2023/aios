@@ -2,10 +2,10 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-#######################################################################
-# Important!　OpenWrt OS only works with ash scripts, not bash scripts.
-#######################################################################
-COMMON_VERSION="2025.02.09-34"
+################################################################################
+# Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
+################################################################################
+COMMON_VERSION="2025.02.09-35"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
 echo "☆☆☆ Important!　OpenWrt OS only works with ash scripts, not bash scripts. ☆☆☆"
 
@@ -23,19 +23,21 @@ SUPPORTED_LANGUAGES="${SUPPORTED_LANGUAGES:-en ja zh-cn zh-tw id ko de ru}"
 # select_country: 国とタイムゾーンの選択（100% ash 対応）
 #########################################################################
 select_country() {
-    local country_file="/mnt/data/country.db"
-    local country_cache="/mnt/data/country.ch"
-    local zone_cache="/mnt/data/zone.ch"
-    local language_cache="/mnt/data/language.ch"
+    local BASE_DIR="/tmp/aios"
+    local country_file="$BASE_DIR/country.db"
+    local country_cache="$BASE_DIR/country.ch"
+    local zone_cache="$BASE_DIR/zone.ch"
+    local language_cache="$BASE_DIR/language.ch"
     local user_input=""
     local selected_country=""
     local selected_zonename=""
     local selected_timezone=""
     local found_entries=""
+    local i=1
 
     # **データベース存在確認**
     if [ ! -f "$country_file" ]; then
-        echo "$(color red \"Country database not found!\")"
+        echo "$(color red "Country database not found!")"
         return 1
     fi
 
@@ -47,11 +49,12 @@ select_country() {
         read user_input
 
         # **曖昧検索**
-        found_entries=$(awk -v query="$user_input" '$2 ~ query || $3 ~ query || $4 ~ query {print NR " " $1, $2, $3, $4}' "$country_file")
+        found_entries=$(awk -v query="$user_input" '$2 ~ query || $3 ~ query || $4 ~ query {print NR " " $1, $2, $3, $4}' "$country_file" | nl -w2 -s' ')
+
         matches_found=$(echo "$found_entries" | wc -l)
 
         if [ "$matches_found" -eq 0 ]; then
-            echo "$(color yellow \"No matching country found. Please try again.\")"
+            echo "$(color yellow "No matching country found. Please try again.")"
             continue
         elif [ "$matches_found" -eq 1 ]; then
             selected_country=$(echo "$found_entries" | awk '{print $2, $3, $4, $5}')
@@ -73,12 +76,12 @@ select_country() {
     done
 
     # **ゾーン情報の取得と格納**
-    tz_data=$(grep "$selected_country" "$country_file" | cut -d' ' -f5-)
+    tz_data=$(grep "^$selected_country" "$country_file" | cut -d' ' -f5-)
     echo "$selected_country" > "$country_cache"
     echo "$tz_data" > "$zone_cache"
 
     # **タイムゾーン選択**
-    tz_count=$(echo "$tz_data" | awk -F' ' '{print NF}')
+    tz_count=$(echo "$tz_data" | awk '{print NF}')
     if [ "$tz_count" -eq 1 ]; then
         selected_zonename=$(echo "$tz_data" | awk '{print $1}')
         selected_timezone=$(echo "$tz_data" | awk '{print $2}')
@@ -87,7 +90,8 @@ select_country() {
         [ "$yn" = "y" ] || [ "$yn" = "Y" ] && echo "$selected_zonename $selected_timezone" > "$zone_cache"
     else
         echo "$selected_country: Select a timezone."
-        echo "$tz_data" | awk '{print "["NR"] " $1, $2}'
+        i=1
+        echo "$tz_data" | awk '{print "[" i "] " $1, $2; i++}'
         echo "[0] Try again"
         echo -n "Enter the number of your choice (or 0 to go back): "
         read tz_choice
@@ -103,6 +107,7 @@ select_country() {
     echo "Country, language, and timezone set: $selected_country, $selected_zonename, $selected_timezone"
     echo "$selected_country" > "$language_cache"
 }
+
 
 
 
