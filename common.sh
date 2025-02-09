@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.09-0014"
+COMMON_VERSION="2025.02.09-0015"
 echo "common.sh Last update: 🔴 $COMMON_VERSION 🔴"
 
 # 基本定数の設定
@@ -38,27 +38,31 @@ select_country() {
         return 1
     fi
 
-    # **小文字化したキャッシュを作成**
+    # **小文字化キャッシュ作成（$4 はそのまま保持）**
     if [ ! -f "$country_tmp" ]; then
-        awk '{print tolower($0)}' "$country_file" > "$country_tmp"
+        awk '{$1=tolower($1); $2=tolower($2); $3=tolower($3); print}' "$country_file" > "$country_tmp"
     fi
 
     while true; do
         echo "$(color cyan "Fuzzy search: Enter a country name, code, or timezone.")"
         echo -n "$(color cyan "Please input: ")"
         read user_input
+        user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]')
 
         if [ -z "$user_input" ]; then
             echo "$(color yellow "Invalid input. Please enter a country name, code, or city.")"
             continue
         fi
 
-        # **全文検索（`country_tmp.ch` を対象にする）**
-        found_entries=$(awk -v query="$(echo "$user_input" | tr '[:upper:]' '[:lower:]')" '
+        # **全文検索（$4 の国コードは完全一致、それ以外は部分一致）**
+        found_entries=$(awk -v query="$user_input" '
             {
-                if ($0 ~ query) 
+                if (tolower($0) ~ query || $4 == query) 
                     print NR, $2, $3, $4  # 出力は 国名, 言語, 国コード
             }' "$country_tmp")
+
+        echo "$(color cyan "DEBUG: Search results:")"
+        echo "$found_entries"
 
         matches_found=$(echo "$found_entries" | wc -l)
 
@@ -67,10 +71,6 @@ select_country() {
             continue
         elif [ "$matches_found" -eq 1 ]; then
             selected_entry=$(echo "$found_entries" | awk '{print $2, $3, $4}')
-            if [ -z "$selected_entry" ]; then
-                echo "$(color red "Error: Invalid country selection. Returning to search.")"
-                continue
-            fi
             echo -e "$(color cyan "Confirm country selection: \"$selected_entry\"? [Y/n]:")"
             read yn
             case "$yn" in
@@ -113,58 +113,16 @@ select_country() {
         fi
     done
 
-    # **選択した国のデータを `country.db` から直接取得**
-    display_name=$(grep -i "^$(echo "$selected_entry" | awk '{print $1}')" "$country_file" | awk '{print $2}')
-    lang_code=$(grep -i "^$(echo "$selected_entry" | awk '{print $1}')" "$country_file" | awk '{print $3}')
-    country_code=$(grep -i "^$(echo "$selected_entry" | awk '{print $1}')" "$country_file" | awk '{print $4}')
-
-    if [ -z "$display_name" ] || [ -z "$lang_code" ] || [ -z "$country_code" ]; then
-        echo "$(color red "Error: Invalid country selection. Returning to search.")"
-        continue
-    fi
-
-    echo "$(color cyan "DEBUG: Selected Country: $display_name ($lang_code, $country_code)")"
-
-    tz_data=$(grep -i "$display_name" "$country_file" | cut -d' ' -f6-)
-
-    # **タイムゾーンの選択**
-    if [ "$(echo "$tz_data" | wc -w)" -gt 2 ]; then
-        while true; do
-            echo "$(color cyan "Select a timezone for $display_name:")"
-            i=1
-            echo "$tz_data" | tr ' ' '\n' | while read -r tz_pair; do
-                echo "[$i] $tz_pair"
-                i=$((i + 1))
-            done
-            echo "[0] Try again"
-
-            echo -n "$(color cyan "Enter the number of your choice (or 0 to retry): ")"
-            read tz_choice
-
-            if [ "$tz_choice" = "0" ]; then
-                echo "$(color yellow "Returning to timezone selection.")"
-                continue
-            fi
-
-            selected_zonename=$(echo "$tz_data" | tr ' ' '\n' | awk -v num="$tz_choice" 'NR==num {print $1}')
-            selected_timezone=$(echo "$tz_data" | tr ' ' '\n' | awk -v num="$tz_choice" 'NR==num {print $2}')
-
-            if [ -z "$selected_zonename" ] || [ -z "$selected_timezone" ]; then
-                echo "$(color red "Invalid selection. Please enter a valid number.")"
-                continue
-            fi
-
-            echo "$(color green "Selected timezone: $selected_zonename, $selected_timezone")"
-            break
-        done
-    fi
+    # **デバッグ情報**
+    echo "$(color cyan "DEBUG: Selected Country: $selected_entry")"
 
     # **キャッシュへの保存**
-    echo "$display_name $lang_code $country_code $selected_zonename $selected_timezone" > "$country_cache"
-    echo "$lang_code" > "$language_cache"
+    echo "$selected_entry" > "$country_cache"
+    echo "$(echo "$selected_entry" | awk '{print $2}')" > "$language_cache"
 
-    echo "$(color green "Final selection: $display_name ($lang_code, $country_code) with timezone $selected_zonename ($selected_timezone)")"
+    echo "$(color green "Final selection: $selected_entry")"
 }
+
 
 
 
