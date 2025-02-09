@@ -12,8 +12,8 @@ echo "common.sh Last update: $COMMON_VERSION ★★★"
 BASE_WGET="wget --quiet -O"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
-SUPPORTED_VERSIONS="${SUPPORTED_VERSIONS:-19.07 21.02 22.03 23.05 24.10.0 SNAPSHOT}"
-SUPPORTED_LANGUAGES="${SUPPORTED_LANGUAGES:-en ja"
+#SUPPORTED_VERSIONS="${SUPPORTED_VERSIONS:-19.07 21.02 22.03 23.05 24.10.0 SNAPSHOT}"
+#SUPPORTED_LANGUAGES="${SUPPORTED_LANGUAGES:-en ja"
 INPUT_LANG="$1"
 
 # -------------------------------------------------------------------------------------------------------------------------------------------
