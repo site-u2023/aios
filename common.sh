@@ -5,7 +5,7 @@
 #######################################################################
 # Important!　OpenWrt OS only works with ash scripts, not bash scripts.
 #######################################################################
-COMMON_VERSION="2025.02.09-23"
+COMMON_VERSION="2025.02.09-24"
 echo "★★★ common.sh Last update: $COMMON_VERSION ★★★ コモンスクリプト"
 echo "☆☆☆ Important!　OpenWrt OS only works with ash scripts, not bash scripts. ☆☆☆"
 
@@ -31,7 +31,6 @@ select_country() {
     local selected_entry=""
     local selected_zonename=""
     local selected_timezone=""
-    local index=1
 
     # **データベース存在確認**
     if [ ! -f "$country_file" ]; then
@@ -40,16 +39,15 @@ select_country() {
     fi
 
     while true; do
-        # **国リストを最初に表示**
-        index=1
+        # **全リストを最初に表示**
         echo -e "$(color cyan "Available countries:")"
-        awk '{printf "[%d] %s %s %s %s\n", index++, $1, $2, $3, $4}' "$country_file"
+        awk '{print "[" NR "]", $1, $2, $3, $4}' "$country_file"
 
         # **ユーザー入力**
         echo -e "$(color cyan "Enter country name, code, or language (or press Enter to list all):")"
         read user_input
 
-        # **空入力でもリストを再表示**
+        # **空入力ならリストを再表示**
         if [ -z "$user_input" ]; then
             continue
         fi
@@ -58,7 +56,7 @@ select_country() {
         if echo "$user_input" | grep -qE '^[0-9]+$'; then
             selected_entry=$(awk -v num="$user_input" 'NR == num {print $0}' "$country_file")
         else
-            # **検索処理**
+            # **完全一致検索**
             found_entries=$(awk -v query="$user_input" '
                 tolower($1) == tolower(query) ||
                 tolower($2) == tolower(query) ||
