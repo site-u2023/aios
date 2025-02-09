@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-16"
+COMMON_VERSION="2025.02.10-17"
 
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -32,7 +32,7 @@ fi
 #########################################################################
 # select_country (元の動作する方法1 - 正常な状態に復元)
 #########################################################################
-select_country() {
+XXXXX_select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${BASE_DIR}/country.ch"
     local language_cache="${BASE_DIR}/language.ch"
@@ -105,7 +105,7 @@ select_country() {
 #########################################################################
 # select_country: 国と言語、タイムゾーンを選択（検索・表示を `country.db` に統一）
 #########################################################################
-XXXXX_select_country() {
+select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${BASE_DIR}/country.ch"
     local language_cache="${BASE_DIR}/language.ch"
