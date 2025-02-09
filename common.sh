@@ -19,6 +19,98 @@ SUPPORTED_VERSIONS="${SUPPORTED_VERSIONS:-19.07 21.02 22.03 23.05 24.10.0 SNAPSH
 SUPPORTED_LANGUAGES="${SUPPORTED_LANGUAGES:-en ja zh-cn zh-tw id ko de ru}"
 
 #########################################################################
+# select_country: `country.db` から国を検索し、ユーザーに選択させる
+#########################################################################
+select_country() {
+    local country_file="${BASE_DIR}/country.db"
+    local country_cache="${BASE_DIR}/country.ch"
+    local language_cache="${BASE_DIR}/language.ch"
+    local zone_cache="${BASE_DIR}/zone.ch"
+    local user_input=""
+    local found_entries=""
+    local selected_entry=""
+    local selected_zonename=""
+    local selected_timezone=""
+    local index=1
+
+    # **データベース存在確認**
+    if [ ! -f "$country_file" ]; then
+        echo "$(color red "Country database not found!")"
+        return 1
+    fi
+
+    while true; do
+        # **国リストを最初に表示**
+        index=1
+        echo -e "$(color cyan "Available countries:")"
+        awk '{printf "[%d] %s %s %s %s\n", index++, $1, $2, $3, $4}' "$country_file"
+
+        # **ユーザー入力**
+        echo -e "$(color cyan "Enter country name, code, or language (or press Enter to list all):")"
+        read user_input
+
+        # **空入力でもリストを再表示**
+        if [ -z "$user_input" ]; then
+            continue
+        fi
+
+        # **番号入力の処理**
+        if echo "$user_input" | grep -qE '^[0-9]+$'; then
+            selected_entry=$(awk -v num="$user_input" 'NR == num {print $0}' "$country_file")
+        else
+            # **検索処理**
+            found_entries=$(awk -v query="$user_input" '
+                tolower($1) == tolower(query) ||
+                tolower($2) == tolower(query) ||
+                tolower($3) == tolower(query) ||
+                tolower($4) == tolower(query) {printf "[%d] %s\n", NR, $0}' "$country_file")
+
+            # **曖昧検索**
+            if [ -z "$found_entries" ]; then
+                found_entries=$(awk -v query="$user_input" '
+                    tolower($1) ~ tolower(query) ||
+                    tolower($2) ~ tolower(query) ||
+                    tolower($3) ~ tolower(query) ||
+                    tolower($4) ~ tolower(query) {printf "[%d] %s\n", NR, $0}' "$country_file")
+            fi
+
+            # **検索結果の処理**
+            if [ -z "$found_entries" ]; then
+                echo "$(color yellow "No matching country found. Please try again.")"
+                continue
+            fi
+
+            # **複数ヒット時の選択**
+            if [ "$(echo "$found_entries" | wc -l)" -gt 1 ]; then
+                echo "$(color yellow "Multiple matches found. Please select:")"
+                echo "$found_entries"
+                read -p "Enter the number of your choice: " choice
+                selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
+            else
+                selected_entry=$(echo "$found_entries" | sed -E 's/\[[0-9]+\] //')
+            fi
+        fi
+
+        # **選択した国が正しいか確認**
+        if [ -n "$selected_entry" ]; then
+            local country_name=$(echo "$selected_entry" | awk '{print $1}')
+            local display_name=$(echo "$selected_entry" | awk '{print $2}')
+            local lang_code=$(echo "$selected_entry" | awk '{print $3}')
+            local country_code=$(echo "$selected_entry" | awk '{print $4}')
+            local tz_data=$(echo "$selected_entry" | cut -d' ' -f5-)
+
+            echo -e "$(color cyan "Confirm country selection: $country_name ($display_name, $lang_code, $country_code)? [Y/n]:")"
+            read yn
+            case "$yn" in
+                Y|y) break ;;
+                N|n) echo "$(color yellow "Invalid selection. Please try again.")" ; continue ;;
+                *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
+            esac
+        fi
+    done
+}
+
+#########################################################################
 # print_help: ヘルプメッセージを表示
 #########################################################################
 print_help() {
@@ -258,7 +350,10 @@ download_script() {
     echo "$file_name=$new_version" >> "$script_cache"
 }
 
-select_country() {
+#########################################################################
+# select_country: `country.db` から国を検索し、ユーザーに選択させる
+#########################################################################
+XXXXX_select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${BASE_DIR}/country.ch"
     local language_cache="${BASE_DIR}/language.ch"
