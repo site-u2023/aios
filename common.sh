@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.09-009"
+COMMON_VERSION="2025.02.09-0010"
 echo "common.sh Last update: 🔴 $COMMON_VERSION 🔴"
 
 # 基本定数の設定
@@ -44,11 +44,11 @@ select_country() {
             continue
         fi
 
-        # **全文検索（DBの全フィールドを検索対象にする）**
+        # **全文検索（大文字小文字区別なし）**
         found_entries=$(awk -v query="$(echo "$user_input" | tr '[:upper:]' '[:lower:]')" '
             {
                 line = tolower($0);
-                if (line ~ query)
+                if (line ~ query || tolower($4) == query)  # 国コードは完全一致
                     print NR, $2, $3, $4  # 出力は 国名, 言語, 国コード
             }' "$country_file")
 
@@ -113,9 +113,12 @@ select_country() {
         continue
     fi
 
+    # **デバッグ情報を出力**
+    echo "$(color cyan "DEBUG: Selected Country: $display_name ($lang_code, $country_code)")"
+
     tz_data=$(grep "$display_name" "$country_file" | cut -d' ' -f6-)
 
-    # **ゾーンネーム＆タイムゾーン選択**
+    # **タイムゾーンの選択**
     if [ "$(echo "$tz_data" | wc -w)" -gt 2 ]; then
         while true; do
             echo "$(color cyan "Select a timezone for $display_name:")"
@@ -145,22 +148,13 @@ select_country() {
             echo "$(color green "Selected timezone: $selected_zonename, $selected_timezone")"
             break
         done
-    else
-        selected_zonename=$(echo "$tz_data" | awk '{print $1}')
-        selected_timezone=$(echo "$tz_data" | awk '{print $2}')
-        echo "$(color green "Selected timezone: $selected_zonename, $selected_timezone")"
     fi
 
     # **キャッシュへの保存**
     echo "$display_name $lang_code $country_code $selected_zonename $selected_timezone" > "$country_cache"
     echo "$lang_code" > "$language_cache"
 
-    # **デバッグ**
-    echo "$(color green "Final selection:")"
-    echo "$(color green "Country: $display_name")"
-    echo "$(color green "Language: $lang_code")"
-    echo "$(color green "Zone Name: $selected_zonename")"
-    echo "$(color green "Time Zone: $selected_timezone")"
+    echo "$(color green "Final selection: $display_name ($lang_code, $country_code) with timezone $selected_zonename ($selected_timezone)")"
 }
 
 
