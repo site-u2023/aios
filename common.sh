@@ -17,7 +17,7 @@ INPUT_LANG="$1"
 
 
 script_update() (
-COMMON_CACHE="${BASE_DIR=}/common_version.ch"
+COMMON_CACHE="${BASE_DIR}/common_version.ch"
 # **キャッシュが存在しない、またはバージョンが異なる場合にアラートを表示**
 if [ ! -f "$COMMON_CACHE" ] || [ "$(cat "$COMMON_CACHE")" != "$COMMON_VERSION" ]; then
     echo "`color green "Updated to version 🔴 $COMMON_VERSION 🔴"`"
