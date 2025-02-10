@@ -892,9 +892,12 @@ XXXXX_select_country() {
 #########################################################################
 # normalize_country
 #########################################################################
+#########################################################################
+# normalize_country: 言語設定の正規化
+#########################################################################
 normalize_country() {
     local message_db="${BASE_DIR}/messages.db"
-    local language_cache="${BASE_DIR}/luci.ch"
+    local language_cache="${CACHE_DIR}/luci.ch"
     local selected_language="en"
 
     # `luci.ch` から言語コードを取得
@@ -902,16 +905,15 @@ normalize_country() {
         selected_language=$(cat "$language_cache")
         debug_log "Loaded language from luci.ch -> $selected_language"
     else
-        selected_language="en"
         debug_log "No luci.ch found, defaulting to 'en'"
     fi
 
     # `message.db` に `selected_language` があるか確認
     if grep -q "^$selected_language|" "$message_db"; then
-        echo "Using message database language: $selected_language"
+        debug_log "Using message database language: $selected_language"
     else
         selected_language="en"
-        echo "Language not found in messages.db. Using: en"
+        debug_log "Language not found in messages.db. Using: en"
     fi
 
     debug_log "Final language after normalization -> $selected_language"
