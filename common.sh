@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-1-40"
+COMMON_VERSION="2025.02.10-1-41"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -1247,7 +1247,7 @@ check_common() {
     local RESET_CACHE=false
     local SHOW_HELP=false
     local INPUT_LANG="$INPUT_LANG"  # 環境変数を初期値に設定（$1があれば上書き）
-    
+
     # 引数解析
     while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -1310,3 +1310,4 @@ check_common() {
             ;;
     esac
 }
+
