@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-1-13"
+COMMON_VERSION="2025.02.10-1-14"
  
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -65,12 +65,6 @@ test_cache_contents() {
 }
 
 #########################################################################
-# check_language: 言語キャッシュの確認および設定
-# - `luci.ch` を参照し、適切な言語コード (ja, en, etc.) を取得
-# - 存在しない場合、 `country.ch` から取得し、 `luci.ch` に保存
-# - `message.db` に対応する言語があるか確認し、 `SELECTED_LANGUAGE` にセット
-#########################################################################
-#########################################################################
 # check_language: 言語のチェックと `luci.ch` への書き込み
 #########################################################################
 check_language() {
@@ -80,6 +74,7 @@ check_language() {
     # `luci.ch` が既に存在する場合はそのまま使用
     if [ -s "$CACHE_DIR/luci.ch" ]; then
         lang_code=$(cat "$CACHE_DIR/luci.ch")
+        echo "DEBUG: Using cached language from luci.ch -> $lang_code" | tee -a "$LOG_DIR/debug.log"
     else
         # `country.db` からデフォルトの言語コードを取得
         lang_code=$(awk -F ' ' '{print $3}' "$BASE_DIR/country.db" | grep -m 1 '^[a-z][a-z]$')
@@ -105,7 +100,6 @@ check_language() {
         echo "en" > "$CACHE_DIR/luci.ch"
     fi
 }
-
 
 #########################################################################
 # select_country: 国と言語、タイムゾーンを選択（検索・表示を `country.db` に統一）
