@@ -78,11 +78,18 @@ check_language() {
     # `luci.ch` が存在する場合、それを使用
     if [ -f "$luci_cache" ]; then
         SELECTED_LANGUAGE=$(cat "$luci_cache")
+        if [ -z "$SELECTED_LANGUAGE" ]; then
+            SELECTED_LANGUAGE="en"
+            echo "$SELECTED_LANGUAGE" > "$luci_cache"
+        fi
         echo "DEBUG: Using cached language from luci.ch -> $SELECTED_LANGUAGE"
     else
         # `country.ch` から **言語コード (3列目)** を取得し、`luci.ch` に保存
         if [ -f "$country_cache" ]; then
             SELECTED_LANGUAGE=$(awk 'NR==1 {print $3}' "$country_cache")  # 最初の1件のみ取得
+            if [ -z "$SELECTED_LANGUAGE" ]; then
+                SELECTED_LANGUAGE="en"
+            fi
             echo "$SELECTED_LANGUAGE" > "$luci_cache"
             echo "DEBUG: Language set from country.ch -> $SELECTED_LANGUAGE"
         else
@@ -969,6 +976,9 @@ check_country() {
     
     # **短縮国名を取得**
     local short_code=$(echo "$found_entries" | awk 'NR==1 {print $4}')  # 最初の1件のみ取得
+    if [ -z "$short_code" ]; then
+        short_code="US"  # デフォルトは US
+    fi
     echo "$short_code" > "$language_cache"
 
     # **ゾーンネームとタイムゾーンを取得**
