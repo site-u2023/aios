@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-2-4"
+COMMON_VERSION="2025.02.10-2-5"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -951,16 +951,13 @@ confirm() {
 }
 
 #########################################################################
-# 
-#########################################################################
-#########################################################################
 # check_country: 国データの取得とキャッシュ保存
 #########################################################################
 check_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${CACHE_DIR}/country.ch"
-    local luci_cache="${CACHE_DIR}/luci.ch"  # 💡 追加
-    local lang_code="$1"
+    local luci_cache="${CACHE_DIR}/luci.ch"
+    local lang_code="${1:-$INPUT_LANG}"
 
     debug_log "check_country received lang_code: '$lang_code'"
 
@@ -978,9 +975,9 @@ check_country() {
     fi
 
     echo "$country_data" > "$country_cache"
-    echo "$lang_code" > "$luci_cache"  # 💡 言語コードを `luci.ch` に保存
+    echo "$lang_code" > "$luci_cache"  # ✅ 言語コードを `luci.ch` に保存
     debug_log "Country data saved to $country_cache -> $country_data"
-    debug_log "Language saved to $luci_cache -> $lang_code"  # 💡 追加
+    debug_log "Language saved to $luci_cache -> $lang_code"  # ✅ 追加
 }
 
 #########################################################################
