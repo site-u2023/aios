@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-2-1"
+COMMON_VERSION="2025.02.10-2-2"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -960,7 +960,7 @@ check_country() {
         debug_log "No language found, defaulting to '$lang_code'"
     fi
 
-    # country.db に `lang_code` が含まれているかをチェック
+    # `country.db` に `lang_code` が含まれているかをチェック
     local country_entry
     country_entry=$(awk -F '[ \t]+' -v lang="$lang_code" '$3 == lang || $4 == lang {print $0}' "$BASE_DIR/country.db" 2>/dev/null)
 
