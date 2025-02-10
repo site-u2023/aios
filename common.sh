@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-1-27"
+COMMON_VERSION="2025.02.10-1-28"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -32,6 +32,21 @@ fi
 #########################################################################
 # テスト用関数: データ取得を個別に確認
 #########################################################################
+test_debug() {
+    if [ "$DEBUG_MODE" = true ]; then
+        echo "DEBUG: Running debug tests..." | tee -a "$LOG_DIR/debug.log"
+
+        test_country_search "US"
+        test_country_search "Japan"
+        test_timezone_search "US"
+        test_timezone_search "JP"
+        test_cache_contents
+
+        echo "DEBUG: luci.ch content: $(cat "$CACHE_DIR/luci.ch" 2>/dev/null || echo 'Not Found')" | tee -a "$LOG_DIR/debug.log"
+        echo "DEBUG: country.ch content: $(cat "$CACHE_DIR/country.ch" 2>/dev/null || echo 'Not Found')" | tee -a "$LOG_DIR/debug.log"
+        echo "DEBUG: language.ch content: $(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo 'Not Found')" | tee -a "$LOG_DIR/debug.log")
+    fi
+}
 
 # 国検索テスト
 test_country_search() {
@@ -71,23 +86,25 @@ test_cache_contents() {
 check_language() {
     local lang_code="$1"
 
-    echo "DEBUG: check_language received lang_code: '$lang_code'" | tee -a "$LOG_DIR/debug.log"
+    if [ "$DEBUG_MODE" = true ]; then
+        echo "DEBUG: check_language received lang_code: '$lang_code'" | tee -a "$LOG_DIR/debug.log"
+    fi
 
     if [ -z "$lang_code" ]; then
-        echo "DEBUG: No language provided, defaulting to 'en'" | tee -a "$LOG_DIR/debug.log"
         lang_code="en"
+        [ "$DEBUG_MODE" = true ] && echo "DEBUG: No language provided, defaulting to 'en'" | tee -a "$LOG_DIR/debug.log"
     fi
 
     if grep -q "^$lang_code" "$CACHE_DIR/luci.ch"; then
-        echo "DEBUG: Language '$lang_code' found in luci.ch" | tee -a "$LOG_DIR/debug.log"
+        [ "$DEBUG_MODE" = true ] && echo "DEBUG: Language '$lang_code' found in luci.ch" | tee -a "$LOG_DIR/debug.log"
         return
     fi
 
     if grep -q "\b$lang_code\b" "$BASE_DIR/country.db"; then
-        echo "DEBUG: Language '$lang_code' found in country.db" | tee -a "$LOG_DIR/debug.log"
+        [ "$DEBUG_MODE" = true ] && echo "DEBUG: Language '$lang_code' found in country.db" | tee -a "$LOG_DIR/debug.log"
         echo "$lang_code" > "$CACHE_DIR/luci.ch"
     else
-        echo "DEBUG: No matching language in country.db, defaulting to 'en'" | tee -a "$LOG_DIR/debug.log"
+        [ "$DEBUG_MODE" = true ] && echo "DEBUG: No matching language in country.db, defaulting to 'en'" | tee -a "$LOG_DIR/debug.log"
         echo "en" > "$CACHE_DIR/luci.ch"
     fi
 }
@@ -928,21 +945,21 @@ confirm() {
 check_country() {
     local lang_code="$1"
 
-    echo "DEBUG: check_country received lang_code: '$lang_code'" | tee -a "$LOG_DIR/debug.log"
+    [ "$DEBUG_MODE" = true ] && echo "DEBUG: check_country received lang_code: '$lang_code'" | tee -a "$LOG_DIR/debug.log"
 
     if [ -z "$lang_code" ]; then
-        echo "DEBUG: No language found, defaulting to 'en'" | tee -a "$LOG_DIR/debug.log"
         lang_code="en"
+        [ "$DEBUG_MODE" = true ] && echo "DEBUG: No language found, defaulting to 'en'" | tee -a "$LOG_DIR/debug.log"
     fi
 
     local country_match
     country_match=$(awk -v lang="$lang_code" '$3 == lang {print $0}' "$BASE_DIR/country.db")
 
     if [ -n "$country_match" ]; then
-        echo "DEBUG: Found country for language '$lang_code': $country_match" | tee -a "$LOG_DIR/debug.log"
+        [ "$DEBUG_MODE" = true ] && echo "DEBUG: Found country for language '$lang_code': $country_match" | tee -a "$LOG_DIR/debug.log"
         echo "$country_match" > "$CACHE_DIR/country.ch"
     else
-        echo "DEBUG: No matching country found for language: $lang_code" | tee -a "$LOG_DIR/debug.log"
+        [ "$DEBUG_MODE" = true ] && echo "DEBUG: No matching country found for language: $lang_code" | tee -a "$LOG_DIR/debug.log"
     fi
 }
 
@@ -1227,8 +1244,6 @@ check_common() {
         INPUT_LANG="$1"
     fi
 
-    echo "DEBUG: check_common received INPUT_LANG: '$INPUT_LANG'" | tee -a "$LOG_DIR/debug.log"
-
     for arg in "$@"; do
         case "$arg" in
             -reset|--reset|-r)
@@ -1243,8 +1258,9 @@ check_common() {
         esac
     done
 
-    if [ "$DEBUG" = true ]; then
-        echo "DEBUG: INPUT_LANG at debug mode start: '$INPUT_LANG'" | tee -a "$LOG_DIR/debug.log"
+    # DEBUG_MODE の確認
+    if [ "$DEBUG_MODE" = true ]; then
+        echo "DEBUG: Debug mode activated" | tee -a "$LOG_DIR/debug.log"
     fi
 
     case "$mode" in
