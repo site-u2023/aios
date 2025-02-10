@@ -592,19 +592,10 @@ handle_error() {
     local error_message
     error_message=$(get_message "$message_key")
 
-    # メッセージが取得できない場合のデフォルト
-    if [ -z "$error_message" ]; then
-        error_message="An error occurred: $message_key"
-    fi
-
-    # {file} や {version} の置換処理
     error_message=$(echo "$error_message" | sed -e "s/{file}/$file/" -e "s/{version}/$version/")
 
-    # **エラー発生時もデバッグログに残す**
-    debug_log "ERROR: $error_message"
-
     echo -e "$(color red "$error_message")"
-    exit 1
+    return 1  # `exit 1` → `return 1` に変更
 }
 
 #########################################################################
