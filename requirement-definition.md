@@ -280,6 +280,7 @@ mkdir -p "$CACHE_DIR" "$LOG_DIR"
 | **downloader.ch**   | パッケージマネージャー（apk、opkg）※削除しない | `${CACHE_DIR}/downloader.ch` |
 | **script.ch**       | スクリプトファイルバージョンのキャッシュ ※削除しない | `${CACHE_DIR}/script.ch` |
 | **language.ch**     | 最終選択した短縮国名 ※削除しない | `${CACHE_DIR}/language.ch` |
+| **luci.ch**         | `ja`, `en` などの LUI 言語キャッシュ ※削除しない | `${CACHE_DIR}/luci.ch` |
 | **country_tmp.ch**  | 検索時の一時国リスト（スクリプト終了時削除） | `${CACHE_DIR}/country_tmp.ch` |
 | **zone_tmp.ch**     | 検索時の一時ゾーンリスト（スクリプト終了時削除） | `${CACHE_DIR}/zone_tmp.ch` |
 | **language_tmp.ch** | 言語キャッシュ（スクリプト終了時削除） | `${CACHE_DIR}/language_tmp.ch` |
