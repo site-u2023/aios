@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-1-9"
+COMMON_VERSION="2025.02.10-1-10"
  
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -65,54 +65,40 @@ test_cache_contents() {
 }
 
 #########################################################################
-# check_country: country.ch のデータを取得し、luci.ch, language.ch, zone.ch に正しく分配
+# check_language: 言語キャッシュの確認および設定
+# - `luci.ch` を参照し、適切な言語コード (ja, en, etc.) を取得
+# - 存在しない場合、 `country.ch` から取得し、 `luci.ch` に保存
+# - `message.db` に対応する言語があるか確認し、 `SELECTED_LANGUAGE` にセット
 #########################################################################
-check_country() {
-    local country_db="${BASE_DIR}/country.db"
-    local country_cache="${CACHE_DIR}/country.ch"
-    local language_cache="${CACHE_DIR}/language.ch"
+check_language() {
     local luci_cache="${CACHE_DIR}/luci.ch"
-    local zone_cache="${CACHE_DIR}/zone.ch"
+    local country_cache="${CACHE_DIR}/country.ch"
+    local message_db="${BASE_DIR}/messages.db"
 
-    # **キャッシュのクリア**
-    > "$country_cache"
-    > "$language_cache"
-    > "$luci_cache"
-    > "$zone_cache"
-
-    # **country.db が無い場合はエラー**
-    if [ ! -f "$country_db" ]; then
-        echo "DEBUG: ERROR: country.db not found at $country_db"
-        return 1
+    # `luci.ch` が存在する場合、それを使用
+    if [ -f "$luci_cache" ]; then
+        SELECTED_LANGUAGE=$(cat "$luci_cache")
+        echo "DEBUG: Using cached language from luci.ch -> $SELECTED_LANGUAGE"
+    else
+        # `country.ch` から **言語コード (3列目)** を取得し、`luci.ch` に保存
+        if [ -f "$country_cache" ]; then
+            SELECTED_LANGUAGE=$(awk 'NR==1 {print $3}' "$country_cache")  # 最初の1件のみ取得
+            echo "$SELECTED_LANGUAGE" > "$luci_cache"
+            echo "DEBUG: Language set from country.ch -> $SELECTED_LANGUAGE"
+        else
+            SELECTED_LANGUAGE="en"
+            echo "$SELECTED_LANGUAGE" > "$luci_cache"
+            echo "DEBUG: No language found. Defaulting to 'en'."
+        fi
     fi
 
-    # **現在の言語設定を取得**
-    local selected_lang=$(cat "$luci_cache" 2>/dev/null || echo "en")
-    
-    # **言語リストから対応する言語を取得**
-    local found_entries=$(awk -v lang="$selected_lang" '$3 == lang {print NR, $2, $3, $4, $5, $6, $7}' "$country_db")
-
-    if [ -z "$found_entries" ]; then
-        echo "DEBUG: No matching country found for language: $selected_lang"
-        return 1
+    # `message.db` に `SELECTED_LANGUAGE` があるか確認
+    if grep -q "^$SELECTED_LANGUAGE|" "$message_db"; then
+        echo "DEBUG: Using message database language -> $SELECTED_LANGUAGE"
+    else
+        SELECTED_LANGUAGE="en"
+        echo "DEBUG: Language not found in messages.db. Using: en"
     fi
-
-    # **キャッシュへ保存**
-    echo "$found_entries" > "$country_cache"
-    
-    # **短縮国名を取得**
-    local short_code=$(echo "$found_entries" | awk '{print $4}')
-    echo "$short_code" > "$language_cache"
-
-    # **ゾーンネームとタイムゾーンを取得**
-    local zone_name=$(echo "$found_entries" | awk '{print $5}')
-    local timezone=$(echo "$found_entries" | awk '{print $6}')
-    echo "$zone_name $timezone" > "$zone_cache"
-
-    # **デバッグ情報**
-    echo "DEBUG: Country data saved to country.ch -> $(cat "$country_cache")"
-    echo "DEBUG: Short country code saved to language.ch -> $(cat "$language_cache")"
-    echo "DEBUG: Timezone data saved to zone.ch -> $(cat "$zone_cache")"
 }
 
 #########################################################################
@@ -946,29 +932,54 @@ confirm() {
 }
 
 #########################################################################
-# check_country
+# check_country: country.ch のデータを取得し、luci.ch, language.ch, zone.ch に正しく分配
 #########################################################################
 check_country() {
-    local country_code="$1"
-    echo "DEBUG: Checking country: $country_code"
+    local country_db="${BASE_DIR}/country.db"
+    local country_cache="${CACHE_DIR}/country.ch"
+    local language_cache="${CACHE_DIR}/language.ch"
+    local luci_cache="${CACHE_DIR}/luci.ch"
+    local zone_cache="${CACHE_DIR}/zone.ch"
 
-    # Search for the country in country.db
-    local found_entry
-    found_entry=$(grep -i "\b$country_code\b" "$BASE_DIR/country.db")
+    # **キャッシュのクリア**
+    > "$country_cache"
+    > "$language_cache"
+    > "$luci_cache"
+    > "$zone_cache"
 
-    if [ -n "$found_entry" ]; then
-        echo "$found_entry" > "$CACHE_DIR/country.ch"
-        echo "DEBUG: Country data saved to country.ch: $found_entry"
-
-        # Extract short country code ($4) and save to language.ch
-        local short_code
-        short_code=$(echo "$found_entry" | awk '{print $4}')
-        echo "$short_code" > "$CACHE_DIR/language.ch"
-        echo "DEBUG: Short country code $short_code saved to language.ch"
-
-    else
-        echo "DEBUG: No match found for country: $country_code"
+    # **country.db が無い場合はエラー**
+    if [ ! -f "$country_db" ]; then
+        echo "DEBUG: ERROR: country.db not found at $country_db"
+        return 1
     fi
+
+    # **現在の言語設定を取得**
+    local selected_lang=$(cat "$luci_cache" 2>/dev/null || echo "en")
+    
+    # **言語リストから対応する国を検索**
+    local found_entries=$(awk -v lang="$selected_lang" '$3 == lang {print NR, $2, $3, $4, $5, $6, $7}' "$country_db")
+
+    if [ -z "$found_entries" ]; then
+        echo "DEBUG: No matching country found for language: $selected_lang"
+        return 1
+    fi
+
+    # **キャッシュへ保存**
+    echo "$found_entries" > "$country_cache"
+    
+    # **短縮国名を取得**
+    local short_code=$(echo "$found_entries" | awk 'NR==1 {print $4}')  # 最初の1件のみ取得
+    echo "$short_code" > "$language_cache"
+
+    # **ゾーンネームとタイムゾーンを取得**
+    local zone_name=$(echo "$found_entries" | awk 'NR==1 {print $5}')
+    local timezone=$(echo "$found_entries" | awk 'NR==1 {print $6}')
+    echo "$zone_name $timezone" > "$zone_cache"
+
+    # **デバッグ情報**
+    echo "DEBUG: Country data saved to country.ch -> $(cat "$country_cache")"
+    echo "DEBUG: Short country code saved to language.ch -> $(cat "$language_cache")"
+    echo "DEBUG: Timezone data saved to zone.ch -> $(cat "$zone_cache")"
 }
 
 #########################################################################
