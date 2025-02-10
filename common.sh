@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-1-28"
+COMMON_VERSION="2025.02.10-1-29"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -44,7 +44,7 @@ test_debug() {
 
         echo "DEBUG: luci.ch content: $(cat "$CACHE_DIR/luci.ch" 2>/dev/null || echo 'Not Found')" | tee -a "$LOG_DIR/debug.log"
         echo "DEBUG: country.ch content: $(cat "$CACHE_DIR/country.ch" 2>/dev/null || echo 'Not Found')" | tee -a "$LOG_DIR/debug.log"
-        echo "DEBUG: language.ch content: $(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo 'Not Found')" | tee -a "$LOG_DIR/debug.log")
+        echo "DEBUG: language.ch content: $(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo 'Not Found')" | tee -a "$LOG_DIR/debug.log"
     fi
 }
 
