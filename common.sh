@@ -593,6 +593,11 @@ handle_error() {
     local error_message
     error_message=$(get_message "$message_key")
 
+    # メッセージが取得できない場合のデフォルト
+    if [ -z "$error_message" ]; then
+        error_message="An error occurred: $message_key"
+    fi
+
     # {file} や {version} の置換処理
     error_message=$(echo "$error_message" | sed -e "s/{file}/$file/" -e "s/{version}/$version/")
 
@@ -602,7 +607,6 @@ handle_error() {
     echo -e "$(color red "$error_message")"
     exit 1
 }
-
 
 #########################################################################
 # download_script: 指定されたスクリプト・データベースのバージョン確認とダウンロード
