@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-0-4"
+COMMON_VERSION="2025.02.10-0-5"
  
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -120,7 +120,7 @@ select_country() {
         echo "[0] Try again"
 
         while true; do
-            echo -n "$(color cyan \"Enter the number of your choice (or 0 to retry): \")"
+            echo -n "`color cyan \"Enter the number of your choice (or 0 to retry): \"`"
             read choice
             if [ "$choice" = "0" ]; then
                 echo "$(color yellow \"Returning to country selection.\")"
