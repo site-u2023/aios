@@ -19,7 +19,7 @@ script_update() (
 COMMON_CACHE="${CACHE_DIR}/common_version.ch"
 # **キャッシュが存在しない、またはバージョンが異なる場合にアラートを表示**
 if [ ! -f "$COMMON_CACHE" ] || [ "$(cat "$COMMON_CACHE" | tr -d '\r\n')" != "$COMMON_VERSION" ]; then
-    echo "`color white_black "Updated to version $COMMON_VERSION"`"
+    echo -e "`color white_black "common.sh Updated to version $COMMON_VERSION"`"
     echo "$COMMON_VERSION" > "$COMMON_CACHE"
 fi
 )
