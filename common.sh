@@ -10,8 +10,9 @@ COMMON_VERSION="2025.02.10-1-29"
 BASE_WGET="wget --quiet -O"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
-CACHE_DIR="${CACHE_DIR:-${BASE_DIR}/cache}"; mkdir -p "$CACHE_DIR"
-LOG_DIR="${LOG_DIR:-${BASE_DIR}/logs}"; mkdir -p "$LOG_DIR"
+CACHE_DIR="${CACHE_DIR:-${BASE_DIR}/cache}"
+LOG_DIR="${LOG_DIR:-${BASE_DIR}/logs}"
+mkdir -p "$CACHE_DIR" "$LOG_DIR"
 
 # 環境変数 INPUT_LANG のチェック (デフォルト 'en')
 INPUT_LANG="${INPUT_LANG:-en}"
