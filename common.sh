@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-2-6"
+COMMON_VERSION="2025.02.10-2-7"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -957,7 +957,7 @@ check_country() {
     debug_log "check_country received lang_code: '$lang_code'"
 
     if [ -z "$lang_code" ]; then
-        debug_log "No language found, defaulting to 'en'"
+        debug_log "No language provided, defaulting to 'en'"
         lang_code="en"
     fi
 
@@ -970,7 +970,7 @@ check_country() {
     fi
 
     echo "$country_data" > "$country_cache"
-    echo "$lang_code" > "$luci_cache"  # ✅ 言語コードを `luci.ch` に保存
+    echo "$lang_code" > "$luci_cache"  # ✅ `luci.ch` にも言語コードを保存
     debug_log "Country data saved to $country_cache -> $country_data"
     debug_log "Language saved to $luci_cache -> $lang_code"  # ✅ 追加
 }
@@ -979,9 +979,8 @@ check_country() {
 # check_zone: 選択された国のゾーン情報を取得して zone.ch に保存
 #########################################################################
 check_zone() {
-    local language_cache="${CACHE_DIR}/language.ch"
-    local zone_cache="${CACHE_DIR}/zone.ch"
     local country_cache="${CACHE_DIR}/country.ch"
+    local zone_cache="${CACHE_DIR}/zone.ch"
     
     local country_code
     country_code=$(awk '{print $4}' "$country_cache" 2>/dev/null | head -n 1)
@@ -1003,7 +1002,6 @@ check_zone() {
     echo "$zone_info" > "$zone_cache"
     debug_log "Timezone data saved to $zone_cache -> $zone_info"
 }
-
 
 #########################################################################
 # update_country_cache
