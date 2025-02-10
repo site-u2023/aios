@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-3-0"
+COMMON_VERSION="2025.02.10-3-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -976,10 +976,63 @@ check_country() {
     debug_log "Language saved to $luci_cache -> $lang_code"
 }
 
+OK_0210_check_country() {
+    local country_file="${BASE_DIR}/country.db"
+    local country_cache="${CACHE_DIR}/country.ch"
+    local luci_cache="${CACHE_DIR}/luci.ch"
+    local lang_code="${1:-$INPUT_LANG}"
+
+    debug_log "check_country received lang_code: '$lang_code'"
+
+    if [ -z "$lang_code" ]; then
+        debug_log "No language provided, defaulting to 'en'"
+        lang_code="en"
+    fi
+
+    # `country.db` から `$4` の言語コードが一致する行を取得
+    local country_data
+    country_data=$(awk -v lang="$lang_code" '$4 == lang {print $0}' "$country_file")
+
+    if [ -z "$country_data" ]; then
+        debug_log "No matching country found for language: $lang_code"
+        return
+    fi
+
+    echo "$country_data" > "$country_cache"
+    echo "$lang_code" > "$luci_cache"
+    debug_log "Country data saved to $country_cache -> $country_data"
+    debug_log "Language saved to $luci_cache -> $lang_code"
+}
+０
 #########################################################################
 # check_zone: 選択された国のゾーン情報を取得して zone.ch に保存
 #########################################################################
 check_zone() {
+    local country_cache="${CACHE_DIR}/country.ch"
+    local zone_cache="${CACHE_DIR}/zone.ch"
+    
+    local country_code
+    country_code=$(awk '{print $4}' "$country_cache" 2>/dev/null | head -n 1)
+
+    if [ -z "$country_code" ]; then
+        debug_log "No country code found in country.ch, defaulting to 'US'"
+        country_code="US"
+    fi
+
+    # `country.db` からゾーン情報を取得
+    local zone_info
+    zone_info=$(awk -v code="$country_code" '$4 == code {print $5, $6}' "${BASE_DIR}/country.db")
+
+    if [ -z "$zone_info" ]; then
+        debug_log "No timezone found for country: $country_code"
+        return
+    fi
+
+    echo "$zone_info" > "$zone_cache"
+    debug_log "Timezone data saved to $zone_cache -> $zone_info"
+}
+
+OK_0210_check_zone() {
     local country_cache="${CACHE_DIR}/country.ch"
     local zone_cache="${CACHE_DIR}/zone.ch"
     
