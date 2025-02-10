@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-2-3"
+COMMON_VERSION="2025.02.10-2-4"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -951,27 +951,34 @@ confirm() {
 #########################################################################
 # 
 #########################################################################
+#########################################################################
+# check_country: 国データの取得とキャッシュ保存
+#########################################################################
 check_country() {
-    local lang_code="$INPUT_LANG"
+    local country_file="${BASE_DIR}/country.db"
+    local country_cache="${CACHE_DIR}/country.ch"
+    local luci_cache="${CACHE_DIR}/luci.ch"  # 💡 追加
+    local lang_code="$1"
+
     debug_log "check_country received lang_code: '$lang_code'"
 
     if [ -z "$lang_code" ]; then
+        debug_log "No language found, defaulting to 'en'"
         lang_code="en"
-        debug_log "No language found, defaulting to '$lang_code'"
     fi
 
-    # `country.db` に `lang_code` が含まれているかをチェック
-    local country_entry
-    country_entry=$(awk -F '[ \t]+' -v lang="$lang_code" '$3 == lang || $4 == lang {print $0}' "$BASE_DIR/country.db" 2>/dev/null)
+    local country_data
+    country_data=$(awk -v lang="$lang_code" '$3 == lang {print $0}' "$country_file")
 
-    if [ -z "$country_entry" ]; then
+    if [ -z "$country_data" ]; then
         debug_log "No matching country found for language: $lang_code"
-        handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
-        return 1
+        return
     fi
 
-    echo "$country_entry" > "$CACHE_DIR/country.ch"
-    debug_log "Country data saved to country.ch -> $country_entry"
+    echo "$country_data" > "$country_cache"
+    echo "$lang_code" > "$luci_cache"  # 💡 言語コードを `luci.ch` に保存
+    debug_log "Country data saved to $country_cache -> $country_data"
+    debug_log "Language saved to $luci_cache -> $lang_code"  # 💡 追加
 }
 
 #########################################################################
