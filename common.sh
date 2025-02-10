@@ -32,6 +32,7 @@ fi
 # テスト用関数: データ取得を個別に確認
 #########################################################################
 
+# 国検索テスト
 test_country_search() {
     local test_input="$1"
     echo "`color cyan "TEST: Searching for country with input '$test_input'"`"
@@ -39,9 +40,11 @@ test_country_search() {
         echo "`color red "ERROR: country.db not found at ${BASE_DIR}/country.db"`"
         return 1
     fi
-    awk -v query="$test_input" '{if ($0 ~ query) print NR, $2, $3, $4}' "${BASE_DIR}/country.db"
+    awk -v query="$test_input" '
+        $2 ~ query || $3 ~ query || $4 ~ query || $5 ~ query {print NR, $2, $3, $4, $5, $6, $7, $8, $9}' "${BASE_DIR}/country.db"
 }
 
+# タイムゾーン検索テスト
 test_timezone_search() {
     local test_country="$1"
     echo "`color cyan "TEST: Searching for timezones of country '$test_country'"`"
@@ -49,14 +52,16 @@ test_timezone_search() {
         echo "`color red "ERROR: country.db not found at ${BASE_DIR}/country.db"`"
         return 1
     fi
-    awk -v country="$test_country" '$2 == country || $4 == country {print NR, $5, $6}' "${BASE_DIR}/country.db"
+    awk -v country="$test_country" '
+        $2 == country || $4 == country || $5 == country {print NR, $5, $6, $7, $8, $9, $10, $11}' "${BASE_DIR}/country.db"
 }
 
+# キャッシュ内容確認テスト
 test_cache_contents() {
     echo "`color yellow "DEBUG: country_tmp.ch content:"`"
     cat "${CACHE_DIR}/country_tmp.ch"
-    echo "`color yellow "DEBUG: timezone_tmp.ch content:"`"
-    cat "${CACHE_DIR}/timezone_tmp.ch"
+    echo "`color yellow "DEBUG: zone_tmp.ch content:"`"
+    cat "${CACHE_DIR}/zone_tmp.ch"
 }
 
 #########################################################################
@@ -1285,9 +1290,10 @@ check_common() {
         # TEST 
         test_country_search "US"
         test_country_search "Japan"
-        test_timezone_search "United_States"
-        test_timezone_search "Japan"
+        test_timezone_search "US"  # "United_States" → "US"
+        test_timezone_search "JP"  # "Japan" → "JP"
         test_cache_contents
+
         
         # **キャッシュデータの出力**
         echo "DEBUG: luci.ch content: $(cat "$CACHE_DIR/luci.ch")" | tee -a "$LOG_DIR/debug.log"
