@@ -54,9 +54,9 @@ test_timezone_search() {
 
 test_cache_contents() {
     echo "`color yellow "DEBUG: country_tmp.ch content:"`"
-    cat "${BASE_DIR}/country_tmp.ch"
+    cat "${CACHE_DIR}/country_tmp.ch"
     echo "`color yellow "DEBUG: timezone_tmp.ch content:"`"
-    cat "${BASE_DIR}/timezone_tmp.ch"
+    cat "${CACHE_DIR}/timezone_tmp.ch"
 }
 
 #########################################################################
