@@ -1018,7 +1018,7 @@ update_country_cache() {
 # check_openwrt: OpenWrtのバージョンを確認し、サポートされているか検証する
 #########################################################################
 check_openwrt() {
-    local version_file="${BASE_DIR}/openwrt.ch"
+    local version_file="${CACHE_DIR}/openwrt.ch"
 
     # キャッシュが存在する場合は利用
     if [ -f "$version_file" ]; then
