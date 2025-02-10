@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-1-24"
+COMMON_VERSION="2025.02.10-1-25"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -1243,16 +1243,18 @@ install_language_pack() {
 #########################################################################
 check_common() {
     local mode="$1"
-    shift  # 最初の引数 (モード) を削除
-
+    shift  # `$1` (mode) を削除して `$2` 以降を `$@` に設定
+    
     local RESET_CACHE=false
     local SHOW_HELP=false
     local DEBUG=false
 
-    # **環境変数から INPUT_LANG を取得**
-    local LANG_SELECTED="${INPUT_LANG}"
+    # `$INPUT_LANG` に `$1` の値を設定
+    INPUT_LANG="${1:-$INPUT_LANG}"
 
-    # 引数解析
+    echo "DEBUG: check_common received INPUT_LANG: '$INPUT_LANG'" | tee -a "$LOG_DIR/debug.log"
+
+    # **引数解析**
     for arg in "$@"; do
         case "$arg" in
             -reset|--reset|-r)
@@ -1266,8 +1268,6 @@ check_common() {
                 ;;
         esac
     done
-
-    echo "DEBUG: check_common received INPUT_LANG: '$LANG_SELECTED'" | tee -a "$LOG_DIR/debug.log"
 
     # キャッシュリセット処理
     if [ "$RESET_CACHE" = true ]; then
