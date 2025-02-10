@@ -90,28 +90,33 @@ check_country() {
     local selected_lang=$(cat "$luci_cache" 2>/dev/null || echo "en")
     
     # **言語リストから対応する言語を取得**
-    local found_entries=$(awk -v lang="$selected_lang" '$3 == lang {print NR, $2, $3, $4, $5, $6, $7}' "$country_db")
+    local found_entry=$(awk -v lang="$selected_lang" '$3 == lang {print NR, $2, $3, $4, $5, $6, $7}' "$country_db" | head -n 1)
 
-    if [ -z "$found_entries" ]; then
+    if [ -z "$found_entry" ]; then
         echo "`color yellow \"No matching country found for language: $selected_lang\"`"
         return 1
     fi
 
     # **キャッシュへ保存**
-    echo "$found_entries" > "$country_cache"
+    echo "$found_entry" > "$country_cache"
     
     # **短縮国名を取得**
-    local short_code=$(echo "$found_entries" | awk '{print $4}')
+    local short_code=$(echo "$found_entry" | awk '{print $4}')
     echo "$short_code" > "$language_cache"
 
+    # **選択された言語のみ `luci.ch` に保存**
+    local luci_lang=$(echo "$found_entry" | awk '{print $3}')
+    echo "$luci_lang" > "$luci_cache"
+
     # **ゾーンネームとタイムゾーンを取得**
-    local zone_name=$(echo "$found_entries" | awk '{print $5}')
-    local timezone=$(echo "$found_entries" | awk '{print $6}')
+    local zone_name=$(echo "$found_entry" | awk '{print $5}')
+    local timezone=$(echo "$found_entry" | awk '{print $6}')
     echo "$zone_name $timezone" > "$zone_cache"
 
     # **デバッグ情報**
     echo "`color cyan \"DEBUG: Country data saved to country.ch -> $(cat "$country_cache")\"`"
     echo "`color cyan \"DEBUG: Short country code saved to language.ch -> $(cat "$language_cache")\"`"
+    echo "`color cyan \"DEBUG: Selected language saved to luci.ch -> $(cat "$luci_cache")\"`"
     echo "`color cyan \"DEBUG: Timezone data saved to zone.ch -> $(cat "$zone_cache")\"`"
 }
 
