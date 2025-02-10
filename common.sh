@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-0-1"
+COMMON_VERSION="2025.02.11-0-2"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -139,6 +139,7 @@ select_country() {
         echo "$(color cyan "Enter country name, code, or language to set language and retrieve timezone.")"
         echo -n "$(color cyan "Please input: ")"
         read user_input
+        debug_log "User input: '$user_input'"
         user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]' | sed -E 's/[\/,_]+/ /g')
 
         if [ "$user_input" = "/back" ]; then
@@ -1461,18 +1462,21 @@ check_common() {
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
             check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
             check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
+            select_country
             normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
         light)
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
             check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
             check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
+            select_country
             normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
         *)
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
             check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
             check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
+            select_country
             normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
     esac
