@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-2-7"
+COMMON_VERSION="2025.02.10-3-0"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -961,8 +961,9 @@ check_country() {
         lang_code="en"
     fi
 
+    # `country.db` から `$4` の言語コードが一致する行を取得
     local country_data
-    country_data=$(awk -v lang="$lang_code" '$3 == lang {print $0}' "$country_file")
+    country_data=$(awk -v lang="$lang_code" '$4 == lang {print $0}' "$country_file")
 
     if [ -z "$country_data" ]; then
         debug_log "No matching country found for language: $lang_code"
@@ -970,9 +971,9 @@ check_country() {
     fi
 
     echo "$country_data" > "$country_cache"
-    echo "$lang_code" > "$luci_cache"  # ✅ `luci.ch` にも言語コードを保存
+    echo "$lang_code" > "$luci_cache"
     debug_log "Country data saved to $country_cache -> $country_data"
-    debug_log "Language saved to $luci_cache -> $lang_code"  # ✅ 追加
+    debug_log "Language saved to $luci_cache -> $lang_code"
 }
 
 #########################################################################
