@@ -1224,8 +1224,10 @@ check_common() {
         exit 0
     fi
 
-    # デバッグ用
+    # **デバッグモード**
     if [ "$DEBUG" = true ]; then
+        echo "DEBUG: Running in debug mode..." | tee -a "$LOG_DIR/debug.log"
+
         check_language "ja"
         check_country "JP"
         check_zone "JP"
@@ -1237,11 +1239,11 @@ check_common() {
         test_timezone_search "Japan"
         test_cache_contents
         
-         # **デバッグ出力**
-        echo "DEBUG: luci.ch content: $(cat "$CACHE_DIR/luci.ch")"
-        echo "DEBUG: country.ch content: $(cat "$CACHE_DIR/country.ch")"
-        echo "DEBUG: language.ch content: $(cat "$CACHE_DIR/language.ch")"
-        echo "DEBUG: zone.ch content: $(cat "$CACHE_DIR/zone.ch")"
+        # **キャッシュデータの出力**
+        echo "DEBUG: luci.ch content: $(cat "$CACHE_DIR/luci.ch")" | tee -a "$LOG_DIR/debug.log"
+        echo "DEBUG: country.ch content: $(cat "$CACHE_DIR/country.ch")" | tee -a "$LOG_DIR/debug.log"
+        echo "DEBUG: language.ch content: $(cat "$CACHE_DIR/language.ch")" | tee -a "$LOG_DIR/debug.log"
+        echo "DEBUG: zone.ch content: $(cat "$CACHE_DIR/zone.ch")" | tee -a "$LOG_DIR/debug.log"
         exit 0
     fi
     
@@ -1253,18 +1255,21 @@ check_common() {
             download_script openwrt.db
             check_openwrt
             check_country
+            check_zone "$(cat "$CACHE_DIR/language.ch")"
             check_language
             normalize_country  
             ;;
         light)
             check_openwrt
             check_country
+            check_zone "$(cat "$CACHE_DIR/language.ch")"
             check_language
             normalize_country  
             ;;
         *)
             check_openwrt
             check_country
+            check_zone "$(cat "$CACHE_DIR/language.ch")"
             check_language
             normalize_country  
             ;;
