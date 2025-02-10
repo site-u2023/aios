@@ -68,11 +68,16 @@ test_cache_contents() {
 # check_language: 言語のチェックと `luci.ch` への書き込み
 #########################################################################
 check_language() {
-    local lang_code=""
+    local lang_code="$1"
     local default_lang="en"
     local messages_db="$BASE_DIR/messages.db"
 
-    # **luci.ch の確認**
+    # **引数が空ならデフォルト値をセット**
+    if [ -z "$lang_code" ]; then
+        lang_code=$(cat "$CACHE_DIR/luci.ch" 2>/dev/null || echo "$default_lang")
+    fi
+
+    # **luci.ch にキャッシュがある場合は優先**
     if [ -s "$CACHE_DIR/luci.ch" ]; then
         lang_code=$(cat "$CACHE_DIR/luci.ch")
         echo "DEBUG: Using cached language from luci.ch -> $lang_code" | tee -a "$LOG_DIR/debug.log"
@@ -1283,12 +1288,11 @@ check_common() {
     if [ "$DEBUG" = true ]; then
         echo "DEBUG: Running in debug mode..." | tee -a "$LOG_DIR/debug.log"
 
-        # **デバッグ用テスト**
-        check_language "ja"
+        check_language "$INPUT_LANG"
         check_country "JP"
         check_zone "JP"
 
-        # TEST
+        # TEST 
         test_country_search "US"
         test_country_search "Japan"
         test_timezone_search "US"
@@ -1308,27 +1312,26 @@ check_common() {
         full)
             script_update
             download_script messages.db
-            sleep 1  # 確実にダウンロードが終わるまで待つ
-            ls -l "$BASE_DIR/messages.db"  # 確認用
+            sleep 1
             download_script country.db
             download_script openwrt.db
             check_openwrt
             check_country
-            check_language  # 🔴 ここで言語を確定
+            check_language "$INPUT_LANG"
             check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
             normalize_country  
             ;;
         light)
             check_openwrt
             check_country
-            check_language
+            check_language "$INPUT_LANG"
             check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
             normalize_country  
             ;;
         *)
             check_openwrt
             check_country
-            check_language
+            check_language "$INPUT_LANG"
             check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
             normalize_country  
             ;;
