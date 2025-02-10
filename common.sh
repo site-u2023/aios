@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-1-25"
+COMMON_VERSION="2025.02.10-1-26"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -70,45 +70,24 @@ test_cache_contents() {
 #########################################################################
 check_language() {
     local lang_code="$1"
-    local default_lang="en"
-    local messages_db="$BASE_DIR/messages.db"
 
-    echo "DEBUG: check_language received lang_code: $lang_code"
+    echo "DEBUG: check_language received lang_code: '$lang_code'" | tee -a "$LOG_DIR/debug.log"
 
-    # **引数が空ならデフォルト値をセット**
     if [ -z "$lang_code" ]; then
-        lang_code=$(cat "$CACHE_DIR/luci.ch" 2>/dev/null || echo "$default_lang")
+        echo "DEBUG: No language provided, defaulting to 'en'" | tee -a "$LOG_DIR/debug.log"
+        lang_code="en"
     fi
 
-    # **luci.ch にキャッシュがある場合は優先**
-    if [ -s "$CACHE_DIR/luci.ch" ]; then
-        lang_code=$(cat "$CACHE_DIR/luci.ch")
-        echo "DEBUG: Using cached language from luci.ch -> $lang_code" | tee -a "$LOG_DIR/debug.log"
-    else
-        # **country.ch から言語コードを取得**
-        if [ -s "$CACHE_DIR/country.ch" ]; then
-            lang_code=$(awk '{print $3}' "$CACHE_DIR/country.ch" | grep -m 1 '^[a-z][a-z]$')
-        fi
+    if grep -q "^$lang_code" "$CACHE_DIR/luci.ch"; then
+        echo "DEBUG: Language '$lang_code' found in luci.ch" | tee -a "$LOG_DIR/debug.log"
+        return
+    fi
 
-        # **取得できない場合デフォルト `en`**
-        if [ -z "$lang_code" ]; then
-            lang_code="$default_lang"
-            echo "DEBUG: No language found in country.ch, defaulting to '$lang_code'." | tee -a "$LOG_DIR/debug.log"
-        fi
-
+    if grep -q "\b$lang_code\b" "$BASE_DIR/country.db"; then
+        echo "DEBUG: Language '$lang_code' found in country.db" | tee -a "$LOG_DIR/debug.log"
         echo "$lang_code" > "$CACHE_DIR/luci.ch"
-    fi
-
-    # **messages.db の存在確認**
-    if [ ! -f "$messages_db" ]; then
-        echo "DEBUG: messages.db not found! Downloading..." | tee -a "$LOG_DIR/debug.log"
-        download_script messages.db
-        sleep 1
-    fi
-
-    # **messages.db の言語チェック**
-    if ! grep -q "^$lang_code|" "$messages_db"; then
-        echo "DEBUG: Language '$lang_code' not found in messages.db. Using default 'en'." | tee -a "$LOG_DIR/debug.log"
+    else
+        echo "DEBUG: No matching language in country.db, defaulting to 'en'" | tee -a "$LOG_DIR/debug.log"
         echo "en" > "$CACHE_DIR/luci.ch"
     fi
 }
@@ -947,30 +926,24 @@ confirm() {
 # check_country: 国コードを `language.ch` に書き込む
 #########################################################################
 check_country() {
-    local country_cache="${CACHE_DIR}/country.ch"
-    local language_cache="${CACHE_DIR}/language.ch"
-    local luci_cache="${CACHE_DIR}/luci.ch"
-    
-    # 既存のキャッシュをチェック
-    if [ -s "$country_cache" ]; then
-        echo "DEBUG: Using cached country from $country_cache" | tee -a "$LOG_DIR/debug.log"
-        return
+    local lang_code="$1"
+
+    echo "DEBUG: check_country received lang_code: '$lang_code'" | tee -a "$LOG_DIR/debug.log"
+
+    if [ -z "$lang_code" ]; then
+        echo "DEBUG: No language found, defaulting to 'en'" | tee -a "$LOG_DIR/debug.log"
+        lang_code="en"
     fi
 
-    # `INPUT_LANG` から `country.db` を検索
-    local found_country
-    found_country=$(awk -v lang="$INPUT_LANG" '$3 == lang {print $2, $3, $4}' "${BASE_DIR}/country.db")
+    local country_match
+    country_match=$(awk -v lang="$lang_code" '$3 == lang {print $0}' "$BASE_DIR/country.db")
 
-    if [ -z "$found_country" ]; then
-        echo "DEBUG: No matching country found for language: $INPUT_LANG" | tee -a "$LOG_DIR/debug.log"
-        return
+    if [ -n "$country_match" ]; then
+        echo "DEBUG: Found country for language '$lang_code': $country_match" | tee -a "$LOG_DIR/debug.log"
+        echo "$country_match" > "$CACHE_DIR/country.ch"
+    else
+        echo "DEBUG: No matching country found for language: $lang_code" | tee -a "$LOG_DIR/debug.log"
     fi
-
-    echo "$found_country" > "$country_cache"
-    echo "$found_country" | awk '{print $3}' > "$language_cache"
-    echo "$INPUT_LANG" > "$luci_cache"
-    
-    echo "DEBUG: Country data saved to $country_cache -> $found_country" | tee -a "$LOG_DIR/debug.log"
 }
 
 #########################################################################
@@ -1243,18 +1216,19 @@ install_language_pack() {
 #########################################################################
 check_common() {
     local mode="$1"
-    shift  # `$1` (mode) を削除して `$2` 以降を `$@` に設定
-    
+    shift  
+
     local RESET_CACHE=false
     local SHOW_HELP=false
     local DEBUG=false
 
-    # `$INPUT_LANG` に `$1` の値を設定
-    INPUT_LANG="${1:-$INPUT_LANG}"
+    # `$1` があれば `INPUT_LANG` を更新
+    if [ -n "$1" ]; then
+        INPUT_LANG="$1"
+    fi
 
     echo "DEBUG: check_common received INPUT_LANG: '$INPUT_LANG'" | tee -a "$LOG_DIR/debug.log"
 
-    # **引数解析**
     for arg in "$@"; do
         case "$arg" in
             -reset|--reset|-r)
@@ -1269,39 +1243,33 @@ check_common() {
         esac
     done
 
-    # キャッシュリセット処理
-    if [ "$RESET_CACHE" = true ]; then
-        reset_cache
-    fi
-
-    # ヘルプ表示
-    if [ "$SHOW_HELP" = true ]; then
-        print_help
-        exit 0
+    if [ "$DEBUG" = true ]; then
+        echo "DEBUG: INPUT_LANG at debug mode start: '$INPUT_LANG'" | tee -a "$LOG_DIR/debug.log"
     fi
 
     case "$mode" in
-        full)      
+        full)
             script_update
             download_script messages.db
             download_script country.db
             download_script openwrt.db
             check_openwrt
-            check_country
+            check_country "$INPUT_LANG"
             check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
             normalize_country  
             ;;
         light)
             check_openwrt
-            check_country
+            check_country "$INPUT_LANG"
             check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
             normalize_country  
             ;;
         *)
             check_openwrt
-            check_country
+            check_country "$INPUT_LANG"
             check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
             normalize_country  
             ;;
     esac
 }
+
