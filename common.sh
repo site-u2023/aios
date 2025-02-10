@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-1-14"
+COMMON_VERSION="2025.02.10-1-15"
  
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -70,32 +70,36 @@ test_cache_contents() {
 check_language() {
     local lang_code=""
     local default_lang="en"
+    local messages_db="$BASE_DIR/messages.db"
 
-    # `luci.ch` が既に存在する場合はそのまま使用
+    # **`luci.ch` の確認**
     if [ -s "$CACHE_DIR/luci.ch" ]; then
         lang_code=$(cat "$CACHE_DIR/luci.ch")
         echo "DEBUG: Using cached language from luci.ch -> $lang_code" | tee -a "$LOG_DIR/debug.log"
     else
-        # `country.db` からデフォルトの言語コードを取得
-        lang_code=$(awk -F ' ' '{print $3}' "$BASE_DIR/country.db" | grep -m 1 '^[a-z][a-z]$')
+        # **country.ch から言語コードを取得**
+        if [ -s "$CACHE_DIR/country.ch" ]; then
+            lang_code=$(awk '{print $3}' "$CACHE_DIR/country.ch" | grep -m 1 '^[a-z][a-z]$')
+        fi
 
-        # 言語コードが取得できなかった場合、`en` をデフォルトに設定
+        # **取得できない場合デフォルト `en`**
         if [ -z "$lang_code" ]; then
             lang_code="$default_lang"
+            echo "DEBUG: No language found in country.ch, defaulting to '$lang_code'." | tee -a "$LOG_DIR/debug.log"
         fi
 
         echo "$lang_code" > "$CACHE_DIR/luci.ch"
-        echo "DEBUG: No language found. Setting default to '$lang_code'." | tee -a "$LOG_DIR/debug.log"
     fi
 
-    # `messages.db` の存在確認とダウンロード
-    if [ ! -f "$BASE_DIR/messages.db" ]; then
-        echo "DEBUG: messages.db not found. Downloading..." | tee -a "$LOG_DIR/debug.log"
+    # **`messages.db` の存在確認**
+    if [ ! -f "$messages_db" ]; then
+        echo "DEBUG: messages.db not found! Downloading..." | tee -a "$LOG_DIR/debug.log"
         download_script messages.db
+        sleep 1  # 確実にダウンロードが終わるまで待つ
     fi
 
-    # `messages.db` から対応する言語があるか確認
-    if ! grep -q "^$lang_code|" "$BASE_DIR/messages.db"; then
+    # **messages.db の言語チェック**
+    if ! grep -q "^$lang_code|" "$messages_db"; then
         echo "DEBUG: Language '$lang_code' not found in messages.db. Using default 'en'." | tee -a "$LOG_DIR/debug.log"
         echo "en" > "$CACHE_DIR/luci.ch"
     fi
@@ -1304,28 +1308,32 @@ check_common() {
         exit 0
     fi
     
-    case "$mode" in
-        full)      
-            script_update
-            download_script messages.db
-            download_script country.db
-            download_script openwrt.db
-            check_openwrt
-            check_country
-            check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
-            normalize_country  
-            ;;
-        light)
-            check_openwrt
-            check_country
-            check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
-            normalize_country  
-            ;;
-        *)
-            check_openwrt
-            check_country
-            check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
-            normalize_country  
-            ;;
-    esac
+   case "$mode" in
+    full)      
+        script_update
+        download_script messages.db
+        download_script country.db
+        download_script openwrt.db
+        check_openwrt
+        check_country
+        check_language  # 🔴 修正： 言語チェックの位置を修正
+        check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
+        normalize_country  
+        ;;
+    light)
+        check_openwrt
+        check_country
+        check_language  # 🔴 修正
+        check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
+        normalize_country  
+        ;;
+    *)
+        check_openwrt
+        check_country
+        check_language  # 🔴 修正
+        check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
+        normalize_country  
+        ;;
+esac
+
 }
