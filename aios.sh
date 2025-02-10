@@ -9,6 +9,8 @@ BASE_WGET="wget --quiet -O"
 BASE_URL="https://raw.githubusercontent.com/site-u2023/aios/main"
 BASE_DIR="/tmp/aios"
 INPUT_LANG="$1"
+export INPUT_LANG
+echo "DEBUG: aios.sh received INPUT_LANG: '$INPUT_LANG'" | tee -a "$BASE_DIR/debug.log"
 
 #########################################################################
 # delete_aios: 既存の aios 関連ファイルおよびディレクトリを削除して初期化する
@@ -56,6 +58,6 @@ packages() {
 delete_aios
 make_directory
 download_common
-check_common "full" "$INPUT_LANG"
+check_common "full"
 packages
 download_script aios
