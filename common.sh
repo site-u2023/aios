@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-1-38"
+COMMON_VERSION="2025.02.10-1-39"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -1245,11 +1245,11 @@ check_common() {
 
     local RESET_CACHE=false
     local SHOW_HELP=false
-    local INPUT_LANG="${1:-$INPUT_LANG}"  # `$1` があればそれを使用、無ければ `INPUT_LANG`
+    local INPUT_LANG="$INPUT_LANG"  # 環境変数を初期値に設定（$1があれば上書き）
     
     # 引数解析
-    for arg in "$@"; do
-        case "$arg" in
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
             -reset|--reset|-r)
                 RESET_CACHE=true
                 ;;
@@ -1259,22 +1259,30 @@ check_common() {
             -debug|--debug|-d)
                 DEBUG_MODE=true
                 ;;
+            *)
+                INPUT_LANG="$1"  # `-d` 以外の引数を言語として認識
+                ;;
         esac
+        shift
     done
 
-    # DEBUG_MODE が有効ならメッセージを表示
-    if $DEBUG_MODE; then
-        echo "DEBUG: check_common received INPUT_LANG: '$INPUT_LANG'" | tee -a "$LOG_DIR/debug.log"
-    fi
+    # デバッグログ
+    debug_log "check_common received INPUT_LANG: '$INPUT_LANG'"
 
+    # キャッシュリセット処理
     if [ "$RESET_CACHE" = true ]; then
         reset_cache
     fi
 
+    # ヘルプ表示
     if [ "$SHOW_HELP" = true ]; then
         print_help
         exit 0
     fi
+
+    # 言語キャッシュの取得
+    local LANGUAGE_CACHE
+    LANGUAGE_CACHE="$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
 
     case "$mode" in
         full)      
@@ -1284,19 +1292,19 @@ check_common() {
             download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
             check_country || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
-            check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
+            check_zone "$LANGUAGE_CACHE"
             normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
         light)
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
             check_country || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
-            check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
+            check_zone "$LANGUAGE_CACHE"
             normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
         *)
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
             check_country || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
-            check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
+            check_zone "$LANGUAGE_CACHE"
             normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
     esac
