@@ -4,6 +4,9 @@
 MESSAGE_VERSION="2025.02.06-5"
 echo "message.db Last update: $MESSAGE_VERSION"
 
+ERR_COUNTRY_CHECK=Country check failed. Please ensure the country database is correctly loaded.
+
+
 # 追加--------------------------------------------
 ja|MSG_CONFIRM_COUNTRY={file} ({version}) を選択しますか？ [Y/n]:
 en|MSG_CONFIRM_COUNTRY=Confirm country selection: {file} ({version})? [Y/n]:
