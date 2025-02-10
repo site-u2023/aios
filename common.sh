@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-0019"
+COMMON_VERSION="2025.02.10-0020"
 
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -96,19 +96,25 @@ select_country() {
         echo "`color yellow "DEBUG: Searching country in ${BASE_DIR}/country.db with query '$user_input'"`"
         
         found_entries=$(awk -v query="$user_input" '
-            $3 == query || $4 == query || $5 == query {print NR, $2, $3, $4, $5; found=1}
+            $5 == query {print NR, $2, $3, $4, $5; found=1}
             END { if (!found) exit 1 }
         ' "$country_file")
 
         if [ $? -ne 0 ]; then
             found_entries=$(awk -v query="^"query '
-                { for (i=1; i<=NF; i++) if ($i ~ query) print NR, $2, $3, $4, $5 }
+                $0 ~ query {print NR, $2, $3, $4, $5}
+            ' "$country_file")
+        fi
+
+        if [ -z "$found_entries" ]; then
+            found_entries=$(awk -v query=query"$" '
+                $0 ~ query {print NR, $2, $3, $4, $5}
             ' "$country_file")
         fi
 
         if [ -z "$found_entries" ]; then
             found_entries=$(awk -v query="$user_input" '
-                { for (i=1; i<=NF; i++) if ($i ~ query) print NR, $2, $3, $4, $5 }
+                $0 ~ query {print NR, $2, $3, $4, $5}
             ' "$country_file")
         fi
 
