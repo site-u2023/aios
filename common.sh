@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-1-0"
+COMMON_VERSION="2025.02.10-1-1"
  
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -1192,8 +1192,9 @@ check_common() {
 
     local RESET_CACHE=false
     local SHOW_HELP=false
+    local DEBUG=false
     local INPUT_LANG=""
-
+    
     # 引数解析
     for arg in "$@"; do
         case "$arg" in
@@ -1202,6 +1203,9 @@ check_common() {
                 ;;
             -help|--help|-h)
                 SHOW_HELP=true
+                ;;
+            -debug|--debug|-d)
+                DEBUG=true
                 ;;
             *)
                 INPUT_LANG="$arg"
@@ -1220,6 +1224,27 @@ check_common() {
         exit 0
     fi
 
+    # デバッグ用
+    if [ "$DEBUG" = true ]; then
+        check_language "ja"
+        check_country "JP"
+        check_zone "JP"
+
+        # TEST 
+        test_country_search "US"
+        test_country_search "Japan"
+        test_timezone_search "United_States"
+        test_timezone_search "Japan"
+        test_cache_contents
+        
+         # **デバッグ出力**
+        echo "DEBUG: luci.ch content: $(cat "$CACHE_DIR/luci.ch")"
+        echo "DEBUG: country.ch content: $(cat "$CACHE_DIR/country.ch")"
+        echo "DEBUG: language.ch content: $(cat "$CACHE_DIR/language.ch")"
+        echo "DEBUG: zone.ch content: $(cat "$CACHE_DIR/zone.ch")"
+        exit 0
+    fi
+    
     case "$mode" in
         full)      
             script_update
@@ -1230,13 +1255,6 @@ check_common() {
             check_country
             check_language
             normalize_country  
-            
-            # TEST 
-            test_country_search "US"
-            test_country_search "Japan"
-            test_timezone_search "United_States"
-            test_timezone_search "Japan"
-            test_cache_contents
             ;;
         light)
             check_openwrt
