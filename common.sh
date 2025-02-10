@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-1-11"
+COMMON_VERSION="2025.02.10-1-12"
  
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -1315,6 +1315,9 @@ check_common() {
         exit 0
     fi
 
+    # **`luci.ch` のチェックを先に行う**
+    check_language
+
     # **デバッグモード**
     if [ "$DEBUG" = true ]; then
         echo "DEBUG: Running in debug mode..." | tee -a "$LOG_DIR/debug.log"
@@ -1334,10 +1337,10 @@ check_common() {
 
         
         # **キャッシュデータの出力**
-        echo "DEBUG: luci.ch content: $(cat "$CACHE_DIR/luci.ch")" | tee -a "$LOG_DIR/debug.log"
-        echo "DEBUG: country.ch content: $(cat "$CACHE_DIR/country.ch")" | tee -a "$LOG_DIR/debug.log"
-        echo "DEBUG: language.ch content: $(cat "$CACHE_DIR/language.ch")" | tee -a "$LOG_DIR/debug.log"
-        echo "DEBUG: zone.ch content: $(cat "$CACHE_DIR/zone.ch")" | tee -a "$LOG_DIR/debug.log"
+        echo "DEBUG: luci.ch content: $(cat "$CACHE_DIR/luci.ch" 2>/dev/null || echo "en")" | tee -a "$LOG_DIR/debug.log"
+        echo "DEBUG: country.ch content: $(cat "$CACHE_DIR/country.ch" 2>/dev/null || echo "No country data")" | tee -a "$LOG_DIR/debug.log"
+        echo "DEBUG: language.ch content: $(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "No language data")" | tee -a "$LOG_DIR/debug.log"
+        echo "DEBUG: zone.ch content: $(cat "$CACHE_DIR/zone.ch" 2>/dev/null || echo "No zone data")" | tee -a "$LOG_DIR/debug.log"
         exit 0
     fi
     
@@ -1349,22 +1352,19 @@ check_common() {
             download_script openwrt.db
             check_openwrt
             check_country
-            check_zone "$(cat "$CACHE_DIR/language.ch")"
-            check_language
+            check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
             normalize_country  
             ;;
         light)
             check_openwrt
             check_country
-            check_zone "$(cat "$CACHE_DIR/language.ch")"
-            check_language
+            check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
             normalize_country  
             ;;
         *)
             check_openwrt
             check_country
-            check_zone "$(cat "$CACHE_DIR/language.ch")"
-            check_language
+            check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
             normalize_country  
             ;;
     esac
