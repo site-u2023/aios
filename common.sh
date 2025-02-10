@@ -901,43 +901,53 @@ confirm() {
     done
 }
 
+#########################################################################
+# check_country
+#########################################################################
 check_country() {
     local country_cache="${CACHE_DIR}/country.ch"
     local language_cache="${CACHE_DIR}/language.ch"
     local luci_cache="${CACHE_DIR}/luci.ch"
     local zone_cache="${CACHE_DIR}/zone.ch"
 
-    # `country.ch` が存在する場合、それを使用
-    if [ -f "$country_cache" ]; then
-        local country_info=$(cat "$country_cache")
-        local lang_code=$(echo "$country_info" | awk '{print $3}') # LuCI 言語コード
-        local short_code=$(echo "$country_info" | awk '{print $4}') # 短縮国名
-        local zone_info=$(echo "$country_info" | cut -d' ' -f5-) # ゾーン情報
+    # `luci.ch` に基づいて `country.ch` を検索
+    if [ -f "$luci_cache" ]; then
+        local luci_lang=$(cat "$luci_cache")
+        local country_info=$(grep -i " $luci_lang " "$country_cache")
 
-        echo "$lang_code" > "$luci_cache"
-        echo "$short_code" > "$language_cache"
-        echo "$zone_info" > "$zone_cache"
-
-        [ "$DEBUG_MODE" = "true" ] && echo "`color green "Using cached country information."`"
-        return
+        if [ -n "$country_info" ]; then
+            echo "`color green "Country data found in cache. Updating related caches..."`"
+            update_country_cache "$country_info"
+            return
+        fi
     fi
 
-    # `select_country()` を実行し、選択内容を `country.ch` に保存
-    select_country
-
-    # `country.ch` のデータを `language.ch`, `luci.ch`, `zone.ch` に適切に反映
-    if [ -f "$country_cache" ]; then
-        local country_info=$(cat "$country_cache")
-        local lang_code=$(echo "$country_info" | awk '{print $3}')
-        local short_code=$(echo "$country_info" | awk '{print $4}')
-        local zone_info=$(echo "$country_info" | cut -d' ' -f5-)
-
-        echo "$lang_code" > "$luci_cache"
-        echo "$short_code" > "$language_cache"
-        echo "$zone_info" > "$zone_cache"
-
-        [ "$DEBUG_MODE" = "true" ] && echo "`color green "Country selection updated."`"
+    # `country.ch` が空なら `select_country()` を実行
+    if [ ! -s "$country_cache" ]; then
+        echo "`color yellow "Country cache is empty. Running select_country()."`"
+        select_country
     fi
+}
+
+#########################################################################
+# update_country_cache
+#########################################################################
+update_country_cache() {
+    local country_info="$1"
+    local country_cache="${CACHE_DIR}/country.ch"
+    local language_cache="${CACHE_DIR}/language.ch"
+    local zone_cache="${CACHE_DIR}/zone.ch"
+
+    local short_code=$(echo "$country_info" | awk '{print $4}')
+    local zone_info=$(echo "$country_info" | cut -d' ' -f5-)
+
+    echo "$country_info" > "$country_cache"
+    echo "$short_code" > "$language_cache"
+    echo "$zone_info" > "$zone_cache"
+
+    echo "`color green "Country cache updated: $country_info"`"
+    echo "`color green "Language set: $short_code"`"
+    echo "`color green "Zone data set: $zone_info"`"
 }
 
 #########################################################################
@@ -965,29 +975,34 @@ check_openwrt() {
     fi
 }
 
+#########################################################################
+# check_language
+#########################################################################
 check_language() {
     local luci_cache="${CACHE_DIR}/luci.ch"
     local language_cache="${CACHE_DIR}/language.ch"
+    local country_db="${BASE_DIR}/country.db"
 
-    # `luci.ch` が存在する場合は、それを使用
+    # $1 の識別子がある場合、country.db で検証
+    if [ -n "$1" ]; then
+        local valid_lang=$(awk -v lang="$1" '$3 == lang {print $3}' "$country_db")
+
+        if [ -n "$valid_lang" ]; then
+            echo "$valid_lang" > "$luci_cache"
+            echo "`color green "Language set from script argument: $valid_lang"`"
+        else
+            echo "`color red "Invalid language identifier: $1"`"
+            return 1
+        fi
+    fi
+
+    # `luci.ch` のキャッシュがあれば使用
     if [ -f "$luci_cache" ]; then
         SELECTED_LANGUAGE=$(cat "$luci_cache")
         echo "`color green "Using cached language: $SELECTED_LANGUAGE"`"
-        return
+    else
+        check_country
     fi
-
-    # `language.ch` から `短縮国名` を取得し、`luci.ch` にも保存
-    if [ -f "$language_cache" ]; then
-        SELECTED_LANGUAGE=$(cat "$language_cache")
-        echo "$SELECTED_LANGUAGE" > "$luci_cache"
-        echo "`color green "Language set from language.ch: $SELECTED_LANGUAGE"`"
-        return
-    fi
-
-    # デフォルト `en` を設定
-    SELECTED_LANGUAGE="en"
-    echo "$SELECTED_LANGUAGE" > "$luci_cache"
-    echo "`color yellow "No language found. Defaulting to 'en'."`"
 }
 
 #########################################################################
