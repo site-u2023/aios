@@ -211,6 +211,7 @@ mkdir -p "$CACHE_DIR" "$LOG_DIR"
 | **attempt_package_install**        | 個別パッケージのインストールおよび言語パック適用                    | 全スクリプト                         |
 | **install_language_pack**        | 言語パッケージの存在確認とインストール                 | 全スクリプト                         |
 | **check_common**        | 初期化処理                           | 全スクリプト                         |
+| **update_country_cache**        |                          | 全スクリプト                         |
 ```
 
 ### ローカル関数
