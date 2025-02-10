@@ -2,7 +2,7 @@
 # aios.sh (初期エントリースクリプト)
 # License: CC0
 AIOS_VERSION="2025.02.10-1"
-echo -e "\033[30;47m aios.sh Updated to version $AIOS_VERSION \033[0m"
+echo -e "\033[7;40maios.sh Updated to version $AIOS_VERSION \033[0m"
 
 DEBUG_MODE=false
 INPUT_LANG=""
