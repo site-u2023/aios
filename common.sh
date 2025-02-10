@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-1-3"
+COMMON_VERSION="2025.02.10-1-4"
  
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -69,7 +69,7 @@ check_country() {
     local language_cache="${CACHE_DIR}/language.ch"
     local zone_cache="${CACHE_DIR}/zone.ch"
 
-    # **country.ch が無い場合は生成**
+    # **country.ch が無い場合は select_country を実行**
     if [ ! -f "$country_cache" ]; then
         echo "DEBUG: country.ch not found. Running select_country()."
         select_country
@@ -987,21 +987,10 @@ check_zone() {
 # update_country_cache
 #########################################################################
 update_country_cache() {
-    local country_info="$1"
-    local country_cache="${CACHE_DIR}/country.ch"
-    local language_cache="${CACHE_DIR}/language.ch"
-    local zone_cache="${CACHE_DIR}/zone.ch"
-
-    local short_code=$(echo "$country_info" | awk '{print $4}')
-    local zone_info=$(echo "$country_info" | cut -d' ' -f5-)
-
-    echo "$country_info" > "$country_cache"
-    echo "$short_code" > "$language_cache"
-    echo "$zone_info" > "$zone_cache"
-
-    echo "`color green "Country cache updated: $country_info"`"
-    echo "`color green "Language set: $short_code"`"
-    echo "`color green "Zone data set: $zone_info"`"
+    echo "$selected_entry" > "$CACHE_DIR/country.ch"
+    echo "$selected_zonename" > "$CACHE_DIR/luci.ch"
+    echo "$selected_timezone" > "$CACHE_DIR/language.ch"
+    echo "$selected_zonename $selected_timezone" > "$CACHE_DIR/zone.ch"
 }
 
 #########################################################################
@@ -1035,7 +1024,6 @@ check_openwrt() {
 check_language() {
     local country_file="${BASE_DIR}/country.db"
     local luci_cache="${CACHE_DIR}/luci.ch"
-    local language_cache="${CACHE_DIR}/language.ch"
 
     # **luci.ch に保存された言語コードを取得**
     if [ -f "$luci_cache" ]; then
@@ -1057,8 +1045,8 @@ check_language() {
         return
     fi
 
-    # **luci.ch に保存**
-    echo "$lang_code" > "$luci_cache"
+    # **言語コードを1行に整形**
+    echo "$lang_code" | tr '\n' ' ' > "$luci_cache"
     echo "DEBUG: luci.ch updated -> $(cat "$luci_cache")"
 }
 
