@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-0018"
+COMMON_VERSION="2025.02.10-0019"
 
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -94,7 +94,23 @@ select_country() {
         fi
 
         echo "`color yellow "DEBUG: Searching country in ${BASE_DIR}/country.db with query '$user_input'"`"
-        found_entries=$(awk -v query="$user_input" '{if ($0 ~ query) print NR, $2, $3, $4}' "$country_file")
+        
+        found_entries=$(awk -v query="$user_input" '
+            $3 == query || $4 == query || $5 == query {print NR, $2, $3, $4, $5; found=1}
+            END { if (!found) exit 1 }
+        ' "$country_file")
+
+        if [ $? -ne 0 ]; then
+            found_entries=$(awk -v query="^"query '
+                { for (i=1; i<=NF; i++) if ($i ~ query) print NR, $2, $3, $4, $5 }
+            ' "$country_file")
+        fi
+
+        if [ -z "$found_entries" ]; then
+            found_entries=$(awk -v query="$user_input" '
+                { for (i=1; i<=NF; i++) if ($i ~ query) print NR, $2, $3, $4, $5 }
+            ' "$country_file")
+        fi
 
         if [ -z "$found_entries" ]; then
             echo "`color yellow "No matching country found. Please try again."`"
@@ -129,7 +145,7 @@ select_country() {
 
             echo "`color cyan "DEBUG: Searching for timezones of '$selected_entry' ($selected_entry_code)"`"
             i=1
-            awk -v country="$selected_entry" -v code="$selected_entry_code" '$2 == country || $4 == code {for (i=5; i<=NF; i++) print NR, $i}' "$country_file" | tee "$timezone_tmp" | while read -r index zone_name; do
+            awk -v country="$selected_entry" -v code="$selected_entry_code" '$2 == country || $4 == code {for (i=5; i<=NF; i++) print i-4, $i}' "$country_file" | tee "$timezone_tmp" | while read -r index zone_name; do
                 if [ -n "$zone_name" ]; then
                     echo "[$i] $zone_name"
                     echo "$i $zone_name" >> "$timezone_tmp"
@@ -178,7 +194,6 @@ select_country() {
         done
     done
 }
-
 
 #########################################################################
 # select_country: アップロードされた common.sh & country.sh OKバージョン
