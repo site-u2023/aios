@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-1-12"
+COMMON_VERSION="2025.02.10-1-13"
  
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -70,43 +70,42 @@ test_cache_contents() {
 # - 存在しない場合、 `country.ch` から取得し、 `luci.ch` に保存
 # - `message.db` に対応する言語があるか確認し、 `SELECTED_LANGUAGE` にセット
 #########################################################################
+#########################################################################
+# check_language: 言語のチェックと `luci.ch` への書き込み
+#########################################################################
 check_language() {
-    local luci_cache="${CACHE_DIR}/luci.ch"
-    local country_cache="${CACHE_DIR}/country.ch"
-    local message_db="${BASE_DIR}/messages.db"
+    local lang_code=""
+    local default_lang="en"
 
-    # `luci.ch` が存在する場合、それを使用
-    if [ -f "$luci_cache" ]; then
-        SELECTED_LANGUAGE=$(cat "$luci_cache")
-        if [ -z "$SELECTED_LANGUAGE" ]; then
-            SELECTED_LANGUAGE="en"
-            echo "$SELECTED_LANGUAGE" > "$luci_cache"
-        fi
-        echo "DEBUG: Using cached language from luci.ch -> $SELECTED_LANGUAGE"
+    # `luci.ch` が既に存在する場合はそのまま使用
+    if [ -s "$CACHE_DIR/luci.ch" ]; then
+        lang_code=$(cat "$CACHE_DIR/luci.ch")
     else
-        # `country.ch` から **言語コード (3列目)** を取得し、`luci.ch` に保存
-        if [ -f "$country_cache" ]; then
-            SELECTED_LANGUAGE=$(awk 'NR==1 {print $3}' "$country_cache")  # 最初の1件のみ取得
-            if [ -z "$SELECTED_LANGUAGE" ]; then
-                SELECTED_LANGUAGE="en"
-            fi
-            echo "$SELECTED_LANGUAGE" > "$luci_cache"
-            echo "DEBUG: Language set from country.ch -> $SELECTED_LANGUAGE"
-        else
-            SELECTED_LANGUAGE="en"
-            echo "$SELECTED_LANGUAGE" > "$luci_cache"
-            echo "DEBUG: No language found. Defaulting to 'en'."
+        # `country.db` からデフォルトの言語コードを取得
+        lang_code=$(awk -F ' ' '{print $3}' "$BASE_DIR/country.db" | grep -m 1 '^[a-z][a-z]$')
+
+        # 言語コードが取得できなかった場合、`en` をデフォルトに設定
+        if [ -z "$lang_code" ]; then
+            lang_code="$default_lang"
         fi
+
+        echo "$lang_code" > "$CACHE_DIR/luci.ch"
+        echo "DEBUG: No language found. Setting default to '$lang_code'." | tee -a "$LOG_DIR/debug.log"
     fi
 
-    # `message.db` に `SELECTED_LANGUAGE` があるか確認
-    if grep -q "^$SELECTED_LANGUAGE|" "$message_db"; then
-        echo "DEBUG: Using message database language -> $SELECTED_LANGUAGE"
-    else
-        SELECTED_LANGUAGE="en"
-        echo "DEBUG: Language not found in messages.db. Using: en"
+    # `messages.db` の存在確認とダウンロード
+    if [ ! -f "$BASE_DIR/messages.db" ]; then
+        echo "DEBUG: messages.db not found. Downloading..." | tee -a "$LOG_DIR/debug.log"
+        download_script messages.db
+    fi
+
+    # `messages.db` から対応する言語があるか確認
+    if ! grep -q "^$lang_code|" "$BASE_DIR/messages.db"; then
+        echo "DEBUG: Language '$lang_code' not found in messages.db. Using default 'en'." | tee -a "$LOG_DIR/debug.log"
+        echo "en" > "$CACHE_DIR/luci.ch"
     fi
 }
+
 
 #########################################################################
 # select_country: 国と言語、タイムゾーンを選択（検索・表示を `country.db` に統一）
@@ -939,57 +938,24 @@ confirm() {
 }
 
 #########################################################################
-# check_country: country.ch のデータを取得し、luci.ch, language.ch, zone.ch に正しく分配
+# check_country: 国コードを `language.ch` に書き込む
 #########################################################################
 check_country() {
-    local country_db="${BASE_DIR}/country.db"
-    local country_cache="${CACHE_DIR}/country.ch"
-    local language_cache="${CACHE_DIR}/language.ch"
-    local luci_cache="${CACHE_DIR}/luci.ch"
-    local zone_cache="${CACHE_DIR}/zone.ch"
+    local country_code=""
 
-    # **キャッシュのクリア**
-    > "$country_cache"
-    > "$language_cache"
-    > "$luci_cache"
-    > "$zone_cache"
-
-    # **country.db が無い場合はエラー**
-    if [ ! -f "$country_db" ]; then
-        echo "DEBUG: ERROR: country.db not found at $country_db"
-        return 1
+    if [ -s "$CACHE_DIR/country.ch" ]; then
+        country_code=$(awk '{print $4}' "$CACHE_DIR/country.ch" | head -n 1)
+    else
+        country_code=$(awk '{print $4}' "$BASE_DIR/country.db" | grep -m 1 '^[A-Z][A-Z]$')
     fi
 
-    # **現在の言語設定を取得**
-    local selected_lang=$(cat "$luci_cache" 2>/dev/null || echo "en")
-    
-    # **言語リストから対応する国を検索**
-    local found_entries=$(awk -v lang="$selected_lang" '$3 == lang {print NR, $2, $3, $4, $5, $6, $7}' "$country_db")
-
-    if [ -z "$found_entries" ]; then
-        echo "DEBUG: No matching country found for language: $selected_lang"
-        return 1
+    if [ -n "$country_code" ]; then
+        echo "$country_code" > "$CACHE_DIR/language.ch"
+        echo "DEBUG: Country code set to '$country_code'." | tee -a "$LOG_DIR/debug.log"
+    else
+        echo "DEBUG: No valid country code found, defaulting to 'US'." | tee -a "$LOG_DIR/debug.log"
+        echo "US" > "$CACHE_DIR/language.ch"
     fi
-
-    # **キャッシュへ保存**
-    echo "$found_entries" > "$country_cache"
-    
-    # **短縮国名を取得**
-    local short_code=$(echo "$found_entries" | awk 'NR==1 {print $4}')  # 最初の1件のみ取得
-    if [ -z "$short_code" ]; then
-        short_code="US"  # デフォルトは US
-    fi
-    echo "$short_code" > "$language_cache"
-
-    # **ゾーンネームとタイムゾーンを取得**
-    local zone_name=$(echo "$found_entries" | awk 'NR==1 {print $5}')
-    local timezone=$(echo "$found_entries" | awk 'NR==1 {print $6}')
-    echo "$zone_name $timezone" > "$zone_cache"
-
-    # **デバッグ情報**
-    echo "DEBUG: Country data saved to country.ch -> $(cat "$country_cache")"
-    echo "DEBUG: Short country code saved to language.ch -> $(cat "$language_cache")"
-    echo "DEBUG: Timezone data saved to zone.ch -> $(cat "$zone_cache")"
 }
 
 #########################################################################
