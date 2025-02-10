@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-1-18"
+COMMON_VERSION="2025.02.10-1-19"
  
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -68,6 +68,50 @@ test_cache_contents() {
 # check_language: 言語のチェックと `luci.ch` への書き込み
 #########################################################################
 check_language() {
+    local lang_code="$1"
+    local default_lang="en"
+    local messages_db="$BASE_DIR/messages.db"
+
+    echo "DEBUG: check_language received lang_code: $lang_code"
+
+    # **引数が空ならデフォルト値をセット**
+    if [ -z "$lang_code" ]; then
+        lang_code=$(cat "$CACHE_DIR/luci.ch" 2>/dev/null || echo "$default_lang")
+    fi
+
+    # **luci.ch にキャッシュがある場合は優先**
+    if [ -s "$CACHE_DIR/luci.ch" ]; then
+        lang_code=$(cat "$CACHE_DIR/luci.ch")
+        echo "DEBUG: Using cached language from luci.ch -> $lang_code" | tee -a "$LOG_DIR/debug.log"
+    else
+        # **country.ch から言語コードを取得**
+        if [ -s "$CACHE_DIR/country.ch" ]; then
+            lang_code=$(awk '{print $3}' "$CACHE_DIR/country.ch" | grep -m 1 '^[a-z][a-z]$')
+        fi
+
+        # **取得できない場合デフォルト `en`**
+        if [ -z "$lang_code" ]; then
+            lang_code="$default_lang"
+            echo "DEBUG: No language found in country.ch, defaulting to '$lang_code'." | tee -a "$LOG_DIR/debug.log"
+        fi
+
+        echo "$lang_code" > "$CACHE_DIR/luci.ch"
+    fi
+
+    # **messages.db の存在確認**
+    if [ ! -f "$messages_db" ]; then
+        echo "DEBUG: messages.db not found! Downloading..." | tee -a "$LOG_DIR/debug.log"
+        download_script messages.db
+        sleep 1
+    fi
+
+    # **messages.db の言語チェック**
+    if ! grep -q "^$lang_code|" "$messages_db"; then
+        echo "DEBUG: Language '$lang_code' not found in messages.db. Using default 'en'." | tee -a "$LOG_DIR/debug.log"
+        echo "en" > "$CACHE_DIR/luci.ch"
+    fi
+}
+
 #########################################################################
 # select_country: 国と言語、タイムゾーンを選択（検索・表示を `country.db` に統一）
 #########################################################################
