@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-0-0"
+COMMON_VERSION="2025.02.10-0-1"
  
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -844,29 +844,27 @@ XXXXX_select_country() {
 }
 
 #########################################################################
-# normalize_country: `message.db` に対応する言語があるか確認し、セット
-# - `message.db` に `$SELECTED_LANGUAGE` があればそのまま使用
-# - 無ければ **スクリプト内の `SELECTED_LANGUAGE` のみ** `en` にする（`language.ch` は変更しない）
+# normalize_country
 #########################################################################
 normalize_country() {
     local message_db="${BASE_DIR}/messages.db"
-    local language_cache="${BASE_DIR}/language.ch"
+    local language_cache="${BASE_DIR}/luci.ch"
 
-    # `language.ch` から言語コードを取得
+    # `luci.ch` から言語コードを取得
     if [ -f "$language_cache" ]; then
         SELECTED_LANGUAGE=$(cat "$language_cache")
-        echo "DEBUG: Loaded language from language.ch -> $SELECTED_LANGUAGE"
+        echo "DEBUG: Loaded language from luci.ch -> $SELECTED_LANGUAGE"
     else
         SELECTED_LANGUAGE="en"
-        echo "DEBUG: No language.ch found, defaulting to 'en'"
+        echo "DEBUG: No luci.ch found, defaulting to 'en'"
     fi
 
     # `message.db` に `SELECTED_LANGUAGE` があるか確認
     if grep -q "^$SELECTED_LANGUAGE|" "$message_db"; then
-        echo "$(color green "Using message database language: $SELECTED_LANGUAGE")"
+        echo "`color green "Using message database language: $SELECTED_LANGUAGE"`"
     else
         SELECTED_LANGUAGE="en"
-        echo "$(color yellow "Language not found in messages.db. Using: en")"
+        echo "`color yellow "Language not found in messages.db. Using: en"`"
     fi
 
     echo "DEBUG: Final language after normalization -> $SELECTED_LANGUAGE"
@@ -903,26 +901,18 @@ confirm() {
     done
 }
 
-#########################################################################
-# check_country: 国情報の確認および設定
-# - `country.ch` を参照し、無ければ `select_country()` で選択
-# - 選択した国情報を `language.ch`, `luci.ch`, `zone.ch` にも適切に反映
-#########################################################################
 check_country() {
     local country_cache="${CACHE_DIR}/country.ch"
     local language_cache="${CACHE_DIR}/language.ch"
     local luci_cache="${CACHE_DIR}/luci.ch"
     local zone_cache="${CACHE_DIR}/zone.ch"
 
-    # デバッグ用
-    [ "$DEBUG_MODE" = "true" ] && echo "`color cyan "DEBUG: Checking country cache..."`"
-
-    # `country.ch` が存在する場合、内容をチェックして `language.ch`, `luci.ch`, `zone.ch` に反映
+    # `country.ch` が存在する場合、それを使用
     if [ -f "$country_cache" ]; then
         local country_info=$(cat "$country_cache")
-        local lang_code=$(echo "$country_info" | awk '{print $3}')
-        local short_code=$(echo "$country_info" | awk '{print $4}')
-        local zone_info=$(echo "$country_info" | cut -d' ' -f5-)
+        local lang_code=$(echo "$country_info" | awk '{print $3}') # LuCI 言語コード
+        local short_code=$(echo "$country_info" | awk '{print $4}') # 短縮国名
+        local zone_info=$(echo "$country_info" | cut -d' ' -f5-) # ゾーン情報
 
         echo "$lang_code" > "$luci_cache"
         echo "$short_code" > "$language_cache"
@@ -932,10 +922,10 @@ check_country() {
         return
     fi
 
-    # `select_country()` を実行して `country.ch` を作成
+    # `select_country()` を実行し、選択内容を `country.ch` に保存
     select_country
 
-    # `country.ch` からデータ取得
+    # `country.ch` のデータを `language.ch`, `luci.ch`, `zone.ch` に適切に反映
     if [ -f "$country_cache" ]; then
         local country_info=$(cat "$country_cache")
         local lang_code=$(echo "$country_info" | awk '{print $3}')
@@ -948,6 +938,7 @@ check_country() {
 
         [ "$DEBUG_MODE" = "true" ] && echo "`color green "Country selection updated."`"
     fi
+}
 
 #########################################################################
 # check_openwrt: OpenWrtのバージョンを確認し、サポートされているか検証する
@@ -974,26 +965,18 @@ check_openwrt() {
     fi
 }
 
-#########################################################################
-# check_language: 言語キャッシュの確認および設定
-# - `luci.ch` から `ja`, `en` などの言語識別子を取得し、適切に設定
-# - `language.ch` には **短縮国名（JP, US, DE など）** を格納
-#########################################################################
 check_language() {
     local luci_cache="${CACHE_DIR}/luci.ch"
     local language_cache="${CACHE_DIR}/language.ch"
 
-    # デバッグ用
-    [ "$DEBUG_MODE" = "true" ] && echo "`color cyan "DEBUG: Checking language cache..."`"
-
-    # `luci.ch` が存在する場合はそのまま使用
+    # `luci.ch` が存在する場合は、それを使用
     if [ -f "$luci_cache" ]; then
         SELECTED_LANGUAGE=$(cat "$luci_cache")
         echo "`color green "Using cached language: $SELECTED_LANGUAGE"`"
         return
     fi
 
-    # `language.ch` から `短縮国名` を取得し `luci.ch` に反映
+    # `language.ch` から `短縮国名` を取得し、`luci.ch` にも保存
     if [ -f "$language_cache" ]; then
         SELECTED_LANGUAGE=$(cat "$language_cache")
         echo "$SELECTED_LANGUAGE" > "$luci_cache"
@@ -1006,6 +989,7 @@ check_language() {
     echo "$SELECTED_LANGUAGE" > "$luci_cache"
     echo "`color yellow "No language found. Defaulting to 'en'."`"
 }
+
 #########################################################################
 # 選択された国と言語の詳細情報を表示
 #########################################################################
