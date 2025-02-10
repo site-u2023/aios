@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-0015"
+COMMON_VERSION="2025.02.10-0016"
 
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -129,10 +129,10 @@ select_country() {
 
             echo "`color cyan "DEBUG: Searching for timezones of '$selected_entry' ($selected_entry_code)"`"
             i=1
-            awk -v country="$selected_entry" -v code="$selected_entry_code" '$2 == country || $4 == code {for (i=5; i<=NF; i++) print $i}' "$country_file" | tee "$timezone_tmp" | while read -r index zone_name tz; do
-                if [ -n "$zone_name" ] && [ -n "$tz" ]; then
-                    echo "[$i] $zone_name ($tz)"
-                    echo "$i $zone_name $tz" >> "$timezone_tmp"
+            awk -v country="$selected_entry" -v code="$selected_entry_code" '$2 == country || $4 == code {for (i=5; i<=NF; i++) print NR, $i}' "$country_file" | tee "$timezone_tmp" | while read -r index zone_name; do
+                if [ -n "$zone_name" ]; then
+                    echo "[$i] $zone_name"
+                    echo "$i $zone_name" >> "$timezone_tmp"
                     i=$((i + 1))
                 fi
             done
@@ -152,19 +152,18 @@ select_country() {
                     break
                 fi
                 selected_zone=$(awk -v num="$tz_choice" '$1 == num {print $2}' "$timezone_tmp")
-                selected_timezone=$(awk -v num="$tz_choice" '$1 == num {print $3}' "$timezone_tmp")
-                if [ -z "$selected_zone" ] || [ -z "$selected_timezone" ]; then
+                if [ -z "$selected_zone" ]; then
                     echo "`color red "Invalid selection. Please choose a valid number."`"
                     continue
                 fi
-                echo "`color cyan "Confirm selection: [$tz_choice] $selected_zone ($selected_timezone)? [Y/n]"`"
+                echo "`color cyan "Confirm selection: [$tz_choice] $selected_zone? [Y/n]"`"
                 read yn
                 case "$yn" in
                     [Yy]*)
-                        echo "`color green "Final selection: $selected_entry (Zone: [$tz_choice] $selected_zone, Timezone: $selected_timezone)"`"
+                        echo "`color green "Final selection: $selected_entry (Zone: [$tz_choice] $selected_zone)"`"
                         echo "$selected_entry $selected_zone" > "$country_cache"
                         echo "$selected_entry_code" > "$language_cache"
-                        echo "$selected_timezone" > "$timezone_cache"
+                        echo "$selected_zone" > "$timezone_cache"
                         return
                         ;;
                     [Nn]*)
