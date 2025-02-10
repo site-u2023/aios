@@ -1256,9 +1256,9 @@ check_common() {
     local RESET_CACHE=false
     local SHOW_HELP=false
     local DEBUG=false
-    local INPUT_LANG="$1"
 
-    echo "DEBUG: check_common received INPUT_LANG: $INPUT_LANG"
+    # **環境変数から INPUT_LANG を取得**
+    local LANG_SELECTED="${INPUT_LANG}"
 
     # 引数解析
     for arg in "$@"; do
@@ -1272,11 +1272,10 @@ check_common() {
             -debug|--debug|-d)
                 DEBUG=true
                 ;;
-            *)
-                INPUT_LANG="$arg"
-                ;;
         esac
     done
+
+    echo "DEBUG: check_common received INPUT_LANG: '$LANG_SELECTED'" | tee -a "$LOG_DIR/debug.log"
 
     # キャッシュリセット処理
     if [ "$RESET_CACHE" = true ]; then
@@ -1289,55 +1288,28 @@ check_common() {
         exit 0
     fi
 
-    # **デバッグモード**
-    if [ "$DEBUG" = true ]; then
-        echo "DEBUG: Running in debug mode..." | tee -a "$LOG_DIR/debug.log"
-
-        check_language "$INPUT_LANG"
-        check_country "JP"
-        check_zone "JP"
-
-        test_country_search "US"
-        test_country_search "Japan"
-        test_timezone_search "US"
-        test_timezone_search "JP"
-        test_cache_contents
-
-        echo "DEBUG: luci.ch content: $(cat "$CACHE_DIR/luci.ch" 2>/dev/null || echo "Not Found")" | tee -a "$LOG_DIR/debug.log"
-        echo "DEBUG: country.ch content: $(cat "$CACHE_DIR/country.ch" 2>/dev/null || echo "Not Found")" | tee -a "$LOG_DIR/debug.log"
-        echo "DEBUG: language.ch content: $(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "Not Found")" | tee -a "$LOG_DIR/debug.log"
-        echo "DEBUG: zone.ch content: $(cat "$CACHE_DIR/zone.ch" 2>/dev/null || echo "Not Found")" | tee -a "$LOG_DIR/debug.log"
-        exit 0
-    fi
-
-    # **通常モード**
     case "$mode" in
-        full)
+        full)      
             script_update
             download_script messages.db
-            sleep 1
             download_script country.db
             download_script openwrt.db
             check_openwrt
             check_country
-            check_language "$INPUT_LANG"
             check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
             normalize_country  
             ;;
         light)
             check_openwrt
             check_country
-            check_language "$INPUT_LANG"
             check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
             normalize_country  
             ;;
         *)
             check_openwrt
             check_country
-            check_language "$INPUT_LANG"
             check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
             normalize_country  
             ;;
     esac
 }
-
