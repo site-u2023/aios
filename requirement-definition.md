@@ -70,7 +70,8 @@ aios.sh                           ← 初回エントリーポイント
 ```sh
 #!/bin/sh
 # License: CC0
-# OpenWrt >= 19.07
+# OpenWrt >= 19.07, Compatible with 24.10.0
+# Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 
 COMMON_VERSION="2025.02.05"
 echo "comon Last update: $COMMON_VERSION"
@@ -80,6 +81,8 @@ echo "comon Last update: $COMMON_VERSION"
 BASE_WGET="${BASE_WGET:-"wget --quiet -O}"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
+CACHE_DIR="${CACHE_DIR:-${BASE_DIR}/cache}"; mkdir -p "$CACHE_DIR"
+LOG_DIR="${LOG_DIR:-${BASE_DIR}/logs}"; mkdir -p "$LOG_DIR"
 SUPPORTED_VERSIONS="${SUPPORTED_VERSIONS:-19 21 22 23 24 SN}"
 SUPPORTED_LANGUAGES="${SUPPORTED_LANGUAGES:-en}"
 ```
@@ -89,7 +92,8 @@ SUPPORTED_LANGUAGES="${SUPPORTED_LANGUAGES:-en}"
 ```sh
 #!/bin/sh
 # License: CC0
-# OpenWrt >= 19.07
+# OpenWrt >= 19.07, Compatible with 24.10.0
+# Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 
 AIOS_VERSION="2025.02.05"
 echo "aios Last update: $AIOS_VERSION"
@@ -98,6 +102,8 @@ echo "aios Last update: $AIOS_VERSION"
 BASE_WGET="wget --quiet -O"
 BASE_URL="https://raw.githubusercontent.com/site-u2023/aios/main"
 BASE_DIR="/tmp/aios"
+CASHE_DIR="${BASE_DIR}/cache"
+LOG_DIR="${BASE_DIR}/logs"
 SUPPORTED_VERSIONS="19 21 22 23 24 SN"  # ファイルごとに異なる可能性あり
 SUPPORTED_LANGUAGES="en ja zh-cn zh-tw id ko de ru"  # ファイルごとに異なる可能性あり
 INPUT_LANG="$1"
@@ -159,7 +165,17 @@ INPUT_LANG="$1"
 - `print_`: 表示・出力系の関数（例: `print_banner`, `print_help`, `print_colored_message`）
 ```
 
+
+
 ## 8. 関数一覧
+
+### ディレクトリ定義
+
+```
+BASE_DIR="/tmp/aios"
+CACHE_DIR="${BASE_DIR}/cache"
+LOG_DIR="${BASE_DIR}/logs"
+```
 
 ### 共通関数: common.sh
 
@@ -252,25 +268,38 @@ INPUT_LANG="$1"
 | **package.db**             | [ttyd]                                | ${BASE_DIR}/package.db`      |
 ```
 
-## 10.キャッシュファイルの定義
+### キャッシュファイルの定義
 ```
-# キャッシュファイル定義
-
 | キャッシュファイル名  | 説明                                           | 保存先                      |
 |----------------------|--------------------------------|--------------------------|
-| **openwrt.ch**      | OpenWrtバージョンのキャッシュ            | `${BASE_DIR}/openwrt.ch` |
-| **country.ch**      | 選択されたカントリーのキャッシュ         | `${BASE_DIR}/country.ch` |
-| **downloader.ch**   | パッケージマネージャー（apk / opkg）の判定キャッシュ | `${BASE_DIR}/downloader.ch` |
-| **script.ch**       | スクリプトファイルバージョンのキャッシュ | `${BASE_DIR}/script.ch` |
+| **openwrt.ch**      | OpenWrtバージョンのキャッシュ （OpenWrtバージョン）※削除しない | `${CACHE_DIR}/openwrt.ch` |
+| **country.ch**      | 選択されたカントリーのキャッシュ（国名、母国語、言語パッケージ、短縮国名、ゾーンネーム、タイムゾーン）※削除しない | `${CACHE_DIR}/country.ch` |
+| **zone.ch**      | 最終選択したゾーン　(ゾーンネーム、タイムゾーン）   ※削除しない    | `${CACHE_DIR}//zone.ch` |
+| **downloader.ch**   | パッケージマネージャー（apk、opkg）※削除しない | `${CACHE_DIR}/downloader.ch` |
+| **script.ch**       | スクリプトファイルバージョンのキャッシュ ※削除しない | `${CACHE_DIR}/script.ch` |
+| **language.ch**      | 最終選択した短縮国名 ※削除しない | `${CACHE_DIR}/language.ch` |
+| **country_tmp.ch**         | 検索時の一時国リスト            | `${CACHE_DIR}/country_tmp.ch` |
+| **zone_tmp.ch**        | 検索時の一時ゾーンリスト        | `${CACHE_DIR}/zone_tmp.ch` |
+| **language_tmp.ch**        | 言語キャッシュ                  | `${CACHE_DIR}/language_tmp.ch` |
+| **code_tmp.ch**            | 国コードキャッシュ              | `${CACHE_DIR}/code_tmp.ch` |
 ```
 
-## 11. 方針
+### 11.ログディレクトリの定義
+```
+| **ログ名**          | **用途**                        | **保存先**                     |
+|----------------------------|--------------------------------|------------------------------|
+| **debug.log**       | デバッグ情報を保存              | `${LOG_DIR}/debug.log`  |
+```
+
+## 12. 方針
 - 関数はむやみに増やさず、コモン関数は可能な限り汎用的とし、役割に応じ階層的関数を別途用意する。
 - 関数名の変更は、要件定義のアップデートと全スクリプトへの反映を伴う事を最大限留意する。
 - 新規関数追加時も要件定義への追加が必須。
 - 要件定義に対し不明また矛盾点は、すみやかに報告、連絡、相談、指摘する。
 
-  ## 言語キャッシュの管理 (`language.ch` の導入)
+
+
+## 言語キャッシュの管理 (`language.ch` の導入)
 
 ### **1. 言語キャッシュ (`language.ch`) の新設**
 - `language.ch` には、**スクリプトが参照する言語情報のみ** を保存する (`ja`, `en` など)。
