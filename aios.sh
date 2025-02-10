@@ -5,6 +5,8 @@ AIOS_VERSION="2025.02.10-1"
 echo -e "\033[7;40maios.sh Updated to version $AIOS_VERSION \033[0m"
 
 DEBUG_MODE=false
+RESET_CACHE=false
+SHOW_HELP=false
 INPUT_LANG=""
 
 # オプション解析
@@ -71,9 +73,18 @@ delete_aios() {
     echo "Initialized aios"
 }
 
+if [ "$SHOW_HELP" = true ]; then
+    print_help
+    exit 0
+fi
+
+if [ "$RESET_CACHE" = true ]; then
+    reset_cache
+fi
+
 delete_aios
 mkdir -p "$BASE_DIR"
 download_common
-check_common "full"
+check_common "full" "$INPUT_LANG"
 packages
 download_script aios
