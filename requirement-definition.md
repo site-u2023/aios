@@ -102,8 +102,8 @@ echo "aios Last update: $AIOS_VERSION"
 BASE_WGET="wget --quiet -O"
 BASE_URL="https://raw.githubusercontent.com/site-u2023/aios/main"
 BASE_DIR="/tmp/aios"
-CASHE_DIR="${BASE_DIR}/cache"
-LOG_DIR="${BASE_DIR}/logs"
+CASHE_DIR="${BASE_DIR}/cache"; mkdir -p "$CACHE_DIR"
+LOG_DIR="${BASE_DIR}/logs"; mkdir -p "$LOG_DIR"
 SUPPORTED_VERSIONS="19 21 22 23 24 SN"  # ファイルごとに異なる可能性あり
 SUPPORTED_LANGUAGES="en ja zh-cn zh-tw id ko de ru"  # ファイルごとに異なる可能性あり
 INPUT_LANG="$1"
@@ -175,6 +175,7 @@ INPUT_LANG="$1"
 BASE_DIR="/tmp/aios"
 CACHE_DIR="${BASE_DIR}/cache"
 LOG_DIR="${BASE_DIR}/logs"
+mkdir -p "$CACHE_DIR" "$LOG_DIR"
 ```
 
 ### 共通関数: common.sh
@@ -269,19 +270,20 @@ LOG_DIR="${BASE_DIR}/logs"
 ```
 
 ### キャッシュファイルの定義
-```
-| キャッシュファイル名  | 説明                                           | 保存先                      |
-|----------------------|--------------------------------|--------------------------|
+
+```plaintext
+| キャッシュファイル名      | 説明                                                   | 保存先                       |
+|----------------------|--------------------------------------------------|--------------------------|
 | **openwrt.ch**      | OpenWrtバージョンのキャッシュ （OpenWrtバージョン）※削除しない | `${CACHE_DIR}/openwrt.ch` |
 | **country.ch**      | 選択されたカントリーのキャッシュ（国名、母国語、言語パッケージ、短縮国名、ゾーンネーム、タイムゾーン）※削除しない | `${CACHE_DIR}/country.ch` |
-| **zone.ch**      | 最終選択したゾーン　(ゾーンネーム、タイムゾーン）   ※削除しない    | `${CACHE_DIR}//zone.ch` |
+| **zone.ch**         | 最終選択したゾーン (ゾーンネーム、タイムゾーン) ※削除しない | `${CACHE_DIR}/zone.ch` |
 | **downloader.ch**   | パッケージマネージャー（apk、opkg）※削除しない | `${CACHE_DIR}/downloader.ch` |
 | **script.ch**       | スクリプトファイルバージョンのキャッシュ ※削除しない | `${CACHE_DIR}/script.ch` |
-| **language.ch**      | 最終選択した短縮国名 ※削除しない | `${CACHE_DIR}/language.ch` |
-| **country_tmp.ch**         | 検索時の一時国リスト            | `${CACHE_DIR}/country_tmp.ch` |
-| **zone_tmp.ch**        | 検索時の一時ゾーンリスト        | `${CACHE_DIR}/zone_tmp.ch` |
-| **language_tmp.ch**        | 言語キャッシュ                  | `${CACHE_DIR}/language_tmp.ch` |
-| **code_tmp.ch**            | 国コードキャッシュ              | `${CACHE_DIR}/code_tmp.ch` |
+| **language.ch**     | 最終選択した短縮国名 ※削除しない | `${CACHE_DIR}/language.ch` |
+| **country_tmp.ch**  | 検索時の一時国リスト（スクリプト終了時削除） | `${CACHE_DIR}/country_tmp.ch` |
+| **zone_tmp.ch**     | 検索時の一時ゾーンリスト（スクリプト終了時削除） | `${CACHE_DIR}/zone_tmp.ch` |
+| **language_tmp.ch** | 言語キャッシュ（スクリプト終了時削除） | `${CACHE_DIR}/language_tmp.ch` |
+| **code_tmp.ch**     | 国コードキャッシュ（スクリプト終了時削除） | `${CACHE_DIR}/code_tmp.ch` |
 ```
 
 ### 11.ログディレクトリの定義
