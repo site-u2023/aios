@@ -4,7 +4,7 @@
 # Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-0-9"
+COMMON_VERSION="2025.02.10-1-0"
  
 # 基本定数の設定
 # BASE_WGET="wget -O" # テスト用
@@ -893,27 +893,44 @@ confirm() {
 # check_country
 #########################################################################
 check_country() {
-    local country_cache="${CACHE_DIR}/country.ch"
-    local language_cache="${CACHE_DIR}/language.ch"
-    local luci_cache="${CACHE_DIR}/luci.ch"
-    local zone_cache="${CACHE_DIR}/zone.ch"
+    local country_code="$1"
+    echo "DEBUG: Checking country: $country_code"
 
-    # `luci.ch` に基づいて `country.ch` を検索
-    if [ -f "$luci_cache" ]; then
-        local luci_lang=$(cat "$luci_cache")
-        local country_info=$(grep -i " $luci_lang " "$country_cache")
+    # Search for the country in country.db
+    local found_entry
+    found_entry=$(grep -i "\b$country_code\b" "$BASE_DIR/country.db")
 
-        if [ -n "$country_info" ]; then
-            echo "`color green "Country data found in cache. Updating related caches..."`"
-            update_country_cache "$country_info"
-            return
-        fi
+    if [ -n "$found_entry" ]; then
+        echo "$found_entry" > "$CACHE_DIR/country.ch"
+        echo "DEBUG: Country data saved to country.ch: $found_entry"
+
+        # Extract short country code ($4) and save to language.ch
+        local short_code
+        short_code=$(echo "$found_entry" | awk '{print $4}')
+        echo "$short_code" > "$CACHE_DIR/language.ch"
+        echo "DEBUG: Short country code $short_code saved to language.ch"
+
+    else
+        echo "DEBUG: No match found for country: $country_code"
     fi
+}
 
-    # `country.ch` が空なら `select_country()` を実行
-    if [ ! -s "$country_cache" ]; then
-        echo "`color yellow "Country cache is empty. Running select_country()."`"
-        select_country
+#########################################################################
+# check_zone
+#########################################################################
+check_zone() {
+    local country_code="$1"
+    echo "DEBUG: Checking timezone for country: $country_code"
+
+    # Extract all timezone-related fields ($6 以降) from country.db
+    local found_zones
+    found_zones=$(awk -v code="$country_code" '$4 == code {for (i=6; i<=NF; i++) print $i}' "$BASE_DIR/country.db")
+
+    if [ -n "$found_zones" ]; then
+        echo "$found_zones" | tr '\n' ' ' > "$CACHE_DIR/zone.ch"
+        echo "DEBUG: Zone data saved to zone.ch: $found_zones"
+    else
+        echo "DEBUG: No timezone found for country: $country_code"
     fi
 }
 
@@ -967,29 +984,19 @@ check_openwrt() {
 # check_language
 #########################################################################
 check_language() {
-    local luci_cache="${CACHE_DIR}/luci.ch"
-    local language_cache="${CACHE_DIR}/language.ch"
-    local country_db="${BASE_DIR}/country.db"
+    local input_lang="$1"
+    echo "DEBUG: Checking language: $input_lang"
 
-    # $1 の識別子がある場合、country.db で検証
-    if [ -n "$1" ]; then
-        local valid_lang=$(awk -v lang="$1" '$3 == lang {print $3}' "$country_db")
+    # Look for the language in country.db and extract LuCI language identifier ($3)
+    local found_lang
+    found_lang=$(awk -v lang="$input_lang" '$3 == lang {print $3}' "$BASE_DIR/country.db" | head -n1)
 
-        if [ -n "$valid_lang" ]; then
-            echo "$valid_lang" > "$luci_cache"
-            echo "`color green "Language set from script argument: $valid_lang"`"
-        else
-            echo "`color red "Invalid language identifier: $1"`"
-            return 1
-        fi
-    fi
-
-    # `luci.ch` のキャッシュがあれば使用
-    if [ -f "$luci_cache" ]; then
-        SELECTED_LANGUAGE=$(cat "$luci_cache")
-        echo "`color green "Using cached language: $SELECTED_LANGUAGE"`"
+    if [ -n "$found_lang" ]; then
+        echo "$found_lang" > "$CACHE_DIR/luci.ch"
+        echo "DEBUG: Language $found_lang saved to luci.ch"
     else
-        check_country
+        echo "DEBUG: Language $input_lang not found in country.db, defaulting to 'en'"
+        echo "en" > "$CACHE_DIR/luci.ch"
     fi
 }
 
