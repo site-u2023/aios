@@ -20,7 +20,7 @@ echo "DEBUG: common.sh received INPUT_LANG: '$INPUT_LANG'" | tee -a "$LOG_DIR/de
 
 
 script_update() (
-COMMON_CACHE="${BASE_DIR}/common_version.ch"
+COMMON_CACHE="${CACHE_DIR}/common_version.ch"
 # **キャッシュが存在しない、またはバージョンが異なる場合にアラートを表示**
 if [ ! -f "$COMMON_CACHE" ] || [ "$(cat "$COMMON_CACHE" | tr -d '\r\n')" != "$COMMON_VERSION" ]; then
     echo "`color white_black "Updated to version $COMMON_VERSION"`"
