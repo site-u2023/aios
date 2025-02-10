@@ -1024,8 +1024,8 @@ country_info() {
 # パッケージマネージャー判定関数（apk / opkg 対応）
 #########################################################################
 get_package_manager() {
-    if [ -f "${BASE_DIR}/downloader_cache" ]; then
-        PACKAGE_MANAGER=$(cat "${BASE_DIR}/downloader_cache")
+    if [ -f "${BASE_DIR}/downloader_ch" ]; then
+        PACKAGE_MANAGER=$(cat "${BASE_DIR}/downloader_ch")
     else
         # パッケージマネージャーの存在確認のみ
         if command -v apk >/dev/null 2>&1; then
@@ -1035,7 +1035,7 @@ get_package_manager() {
         else
             handle_error "$(get_message 'no_package_manager_found' "$SELECTED_LANGUAGE")"
         fi
-        echo "$PACKAGE_MANAGER" > "${BASE_DIR}/downloader_cache"
+        echo "$PACKAGE_MANAGER" > "${BASE_DIR}/downloader_ch"
     fi
     echo -e "\033[1;32m$(get_message 'detected_package_manager' "$SELECTED_LANGUAGE"): $PACKAGE_MANAGER\033[0m"
 }
