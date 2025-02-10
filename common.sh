@@ -72,7 +72,7 @@ check_language() {
     local default_lang="en"
     local messages_db="$BASE_DIR/messages.db"
 
-    # **`luci.ch` の確認**
+    # **luci.ch の確認**
     if [ -s "$CACHE_DIR/luci.ch" ]; then
         lang_code=$(cat "$CACHE_DIR/luci.ch")
         echo "DEBUG: Using cached language from luci.ch -> $lang_code" | tee -a "$LOG_DIR/debug.log"
@@ -91,11 +91,11 @@ check_language() {
         echo "$lang_code" > "$CACHE_DIR/luci.ch"
     fi
 
-    # **`messages.db` の存在確認**
+    # **messages.db の存在確認**
     if [ ! -f "$messages_db" ]; then
         echo "DEBUG: messages.db not found! Downloading..." | tee -a "$LOG_DIR/debug.log"
         download_script messages.db
-        sleep 1  # 確実にダウンロードが終わるまで待つ
+        sleep 1
     fi
 
     # **messages.db の言語チェック**
@@ -1249,7 +1249,7 @@ check_common() {
     local SHOW_HELP=false
     local DEBUG=false
     local INPUT_LANG=""
-    
+
     # 引数解析
     for arg in "$@"; do
         case "$arg" in
@@ -1279,61 +1279,58 @@ check_common() {
         exit 0
     fi
 
-    # **`luci.ch` のチェックを先に行う**
-    check_language
-
     # **デバッグモード**
     if [ "$DEBUG" = true ]; then
         echo "DEBUG: Running in debug mode..." | tee -a "$LOG_DIR/debug.log"
 
-        read -p "何かキーを押してください"
-        
+        # **デバッグ用テスト**
         check_language "ja"
         check_country "JP"
         check_zone "JP"
 
-        # TEST 
+        # TEST
         test_country_search "US"
         test_country_search "Japan"
-        test_timezone_search "US"  # "United_States" → "US"
-        test_timezone_search "JP"  # "Japan" → "JP"
+        test_timezone_search "US"
+        test_timezone_search "JP"
         test_cache_contents
 
-        
         # **キャッシュデータの出力**
-        echo "DEBUG: luci.ch content: $(cat "$CACHE_DIR/luci.ch" 2>/dev/null || echo "en")" | tee -a "$LOG_DIR/debug.log"
-        echo "DEBUG: country.ch content: $(cat "$CACHE_DIR/country.ch" 2>/dev/null || echo "No country data")" | tee -a "$LOG_DIR/debug.log"
-        echo "DEBUG: language.ch content: $(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "No language data")" | tee -a "$LOG_DIR/debug.log"
-        echo "DEBUG: zone.ch content: $(cat "$CACHE_DIR/zone.ch" 2>/dev/null || echo "No zone data")" | tee -a "$LOG_DIR/debug.log"
+        echo "DEBUG: luci.ch content: $(cat "$CACHE_DIR/luci.ch" 2>/dev/null || echo "Not Found")" | tee -a "$LOG_DIR/debug.log"
+        echo "DEBUG: country.ch content: $(cat "$CACHE_DIR/country.ch" 2>/dev/null || echo "Not Found")" | tee -a "$LOG_DIR/debug.log"
+        echo "DEBUG: language.ch content: $(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "Not Found")" | tee -a "$LOG_DIR/debug.log"
+        echo "DEBUG: zone.ch content: $(cat "$CACHE_DIR/zone.ch" 2>/dev/null || echo "Not Found")" | tee -a "$LOG_DIR/debug.log"
         exit 0
     fi
-    
-   case "$mode" in
-    full)      
-        script_update
-        download_script messages.db
-        download_script country.db
-        download_script openwrt.db
-        check_openwrt
-        check_country
-        check_language  # 🔴 修正： 言語チェックの位置を修正
-        check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
-        normalize_country  
-        ;;
-    light)
-        check_openwrt
-        check_country
-        check_language  # 🔴 修正
-        check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
-        normalize_country  
-        ;;
-    *)
-        check_openwrt
-        check_country
-        check_language  # 🔴 修正
-        check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
-        normalize_country  
-        ;;
-esac
 
+    # **通常モード**
+    case "$mode" in
+        full)
+            script_update
+            download_script messages.db
+            sleep 1  # 確実にダウンロードが終わるまで待つ
+            ls -l "$BASE_DIR/messages.db"  # 確認用
+            download_script country.db
+            download_script openwrt.db
+            check_openwrt
+            check_country
+            check_language  # 🔴 ここで言語を確定
+            check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
+            normalize_country  
+            ;;
+        light)
+            check_openwrt
+            check_country
+            check_language
+            check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
+            normalize_country  
+            ;;
+        *)
+            check_openwrt
+            check_country
+            check_language
+            check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
+            normalize_country  
+            ;;
+    esac
 }
