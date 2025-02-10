@@ -1,21 +1,22 @@
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-# Important!　OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
+# Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-1-19"
- 
+COMMON_VERSION="2025.02.10-1-20"
+
 # 基本定数の設定
-# BASE_WGET="wget -O" # テスト用
 BASE_WGET="wget --quiet -O"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-${BASE_DIR}/cache}"; mkdir -p "$CACHE_DIR"
 LOG_DIR="${LOG_DIR:-${BASE_DIR}/logs}"; mkdir -p "$LOG_DIR"
-#SUPPORTED_VERSIONS="${SUPPORTED_VERSIONS:-19.07 21.02 22.03 23.05 24.10.0 SNAPSHOT}"
-#SUPPORTED_LANGUAGES="${SUPPORTED_LANGUAGES:-en ja"
-INPUT_LANG="$1"
+
+# 環境変数 INPUT_LANG のチェック (デフォルト 'en')
+INPUT_LANG="${INPUT_LANG:-en}"
+echo "DEBUG: common.sh received INPUT_LANG: '$INPUT_LANG'" | tee -a "$LOG_DIR/debug.log"
+
 
 
 script_update() (
