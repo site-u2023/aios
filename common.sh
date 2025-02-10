@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-3-1"
+COMMON_VERSION="2025.02.11-0-0"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -24,7 +24,6 @@ if [ ! -f "$COMMON_CACHE" ] || [ "$(cat "$COMMON_CACHE" | tr -d '\r\n')" != "$CO
 fi
 )
 
-# -------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
 # テスト用関数: データ取得を個別に確認
 #########################################################################
@@ -104,6 +103,115 @@ check_language() {
         echo "en" > "$CACHE_DIR/luci.ch"
     fi
 }
+
+
+# -------------------------------------------------------------------------------------------------------------------------------------------
+#########################################################################
+# select_country: 国と言語、タイムゾーンを選択（検索・表示を `country.db` に統一）
+#########################################################################
+select_country() {
+    local country_file="${BASE_DIR}/country.db"
+    local country_cache="${CACHE_DIR}/country.ch"
+    local language_cache="${CACHE_DIR}/luci.ch"
+    local zone_cache="${CACHE_DIR}/zone.ch"
+    local country_tmp="${CACHE_DIR}/country_tmp.ch"
+    local zone_tmp="${CACHE_DIR}/zone_tmp.ch"
+    local user_input=""
+    local found_entries=""
+    local selected_entry=""
+    local selected_zonename=""
+    local selected_timezone=""
+    local index=1
+    local max_display=10  # 一度に表示する最大件数
+    
+    # **キャッシュの初期化**
+    > "$country_tmp"
+    > "$zone_tmp"
+
+    # **データベース存在確認**
+    if [ ! -f "$country_file" ]; then
+        echo "$(color red \"Country database not found!\")"
+        return 1
+    fi
+
+    while true; do
+        echo "$(color cyan \"Enter country name, code, or language to set language and retrieve timezone.\")"
+        echo -n "$(color cyan \"Please input: \")"
+        read user_input
+        user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]' | sed -E 's/[\/,_]+/ /g')
+
+        if [ -z "$user_input" ]; then
+            echo "$(color yellow \"Invalid input. Please enter a valid country name, code, or language.\")"
+            continue
+        fi
+
+        # **検索処理: 完全一致 → 前方一致 → 後方一致 → 部分一致**
+        found_entries=$(awk -v query="$user_input" '$4 == query {print NR, $2, $3, $4, $5, $6, $7}' "$country_file")
+
+        if [ -z "$found_entries" ]; then
+            found_entries=$(awk -v query="^"query '$0 ~ query {print NR, $2, $3, $4, $5, $6, $7}' "$country_file")
+        fi
+
+        if [ -z "$found_entries" ]; then
+            found_entries=$(awk -v query=query"$" '$0 ~ query {print NR, $2, $3, $4, $5, $6, $7}' "$country_file")
+        fi
+
+        if [ -z "$found_entries" ]; then
+            found_entries=$(awk -v query="$user_input" '$0 ~ query {print NR, $2, $3, $4, $5, $6, $7}' "$country_file")
+        fi
+
+        if [ -z "$found_entries" ]; then
+            echo "$(color yellow \"No matching country found. Please try again.\")"
+            continue
+        fi
+
+        echo "$(color cyan \"Select a country (max $max_display at a time, type 'more' to show more):\")"
+        i=1
+        echo "$found_entries" | head -n $max_display | while read -r index country_name lang_code country_code zonename timezone; do
+            echo "[$i] $country_name ($lang_code)"
+            echo "$i $country_name $lang_code $country_code $zonename $timezone" >> "$country_tmp"
+            i=$((i + 1))
+        done
+        echo "[0] Cancel / /back to return"
+
+        while true; do
+            echo -n "$(color cyan \"Enter the number of your choice (or 0 to retry): \")"
+            read choice
+            if [ "$choice" = "0" ]; then
+                echo "$(color yellow \"Returning to country selection.\")"
+                break
+            fi
+
+            selected_entry=$(awk -v num="$choice" '$1 == num {print $2, $3, $4, $5}' "$country_tmp")
+
+            if [ -z "$selected_entry" ]; then
+                echo "$(color red \"Invalid selection. Please choose a valid number.\")"
+                continue
+            fi
+
+            echo "$(color cyan \"Confirm selection: [$choice] $selected_entry (Y/n)?\")"
+            read yn
+            case "$yn" in
+                [Yy]*)
+                    echo "$(color green \"Final selection: $selected_entry\")"
+                    echo "$selected_entry" > "$country_cache"
+                    return
+                    ;;
+                [Nn]*)
+                    echo "$(color yellow \"Returning to country selection.\")"
+                    break
+                    ;;
+                *)
+                    echo "$(color red \"Invalid input. Please enter 'Y' or 'N'.\")"
+                    ;;
+            esac
+        done
+    done
+}
+
+
+
+
 
 #########################################################################
 # select_country: 国と言語、タイムゾーンを選択（検索・表示を `country.db` に統一）
