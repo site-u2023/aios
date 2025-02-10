@@ -1003,7 +1003,7 @@ OK_0210_check_country() {
     debug_log "Country data saved to $country_cache -> $country_data"
     debug_log "Language saved to $luci_cache -> $lang_code"
 }
-０
+
 #########################################################################
 # check_zone: 選択された国のゾーン情報を取得して zone.ch に保存
 #########################################################################
