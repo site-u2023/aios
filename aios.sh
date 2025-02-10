@@ -10,7 +10,12 @@ BASE_URL="https://raw.githubusercontent.com/site-u2023/aios/main"
 BASE_DIR="/tmp/aios"
 INPUT_LANG="$1"
 export INPUT_LANG
-echo "DEBUG: aios.sh received INPUT_LANG: '$INPUT_LANG'" | tee -a "$BASE_DIR/debug.log"
+DEBUG_MODE=false
+for arg in "$@"; do
+    if [ "$arg" = "-d" ] || [ "$arg" = "--debug" ]; then
+        DEBUG_MODE=true
+    fi
+done
 
 #################################
 # 
@@ -21,15 +26,6 @@ debug_log() {
     fi
 }
 
-# `-d` オプションがある場合のみ `DEBUG_MODE` を有効化
-DEBUG_MODE=false
-for arg in "$@"; do
-    if [ "$arg" = "-d" ] || [ "$arg" = "--debug" ]; then
-        DEBUG_MODE=true
-    fi
-done
-
-# `-d` 付きのときだけ表示
 debug_log "aios.sh received INPUT_LANG: '$INPUT_LANG'"
 
 #########################################################################
