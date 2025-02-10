@@ -1,7 +1,7 @@
 #!/bin/sh
 # aios.sh (初期エントリースクリプト)
 # License: CC0
-AIOS_VERSION="2025.02.08-2"
+AIOS_VERSION="2025.02.10-0"
 echo "aios.sh Last update: $AIOS_VERSION"
 
 # BASE_WGET="wget -O" # テスト用
@@ -11,6 +11,26 @@ BASE_DIR="/tmp/aios"
 INPUT_LANG="$1"
 export INPUT_LANG
 echo "DEBUG: aios.sh received INPUT_LANG: '$INPUT_LANG'" | tee -a "$BASE_DIR/debug.log"
+
+#################################
+# 
+#################################
+debug_log() {
+    if $DEBUG_MODE; then
+        echo "DEBUG: $*" | tee -a "$BASE_DIR/debug.log"
+    fi
+}
+
+# `-d` オプションがある場合のみ `DEBUG_MODE` を有効化
+DEBUG_MODE=false
+for arg in "$@"; do
+    if [ "$arg" = "-d" ] || [ "$arg" = "--debug" ]; then
+        DEBUG_MODE=true
+    fi
+done
+
+# `-d` 付きのときだけ表示
+debug_log "aios.sh received INPUT_LANG: '$INPUT_LANG'"
 
 #########################################################################
 # delete_aios: 既存の aios 関連ファイルおよびディレクトリを削除して初期化する
