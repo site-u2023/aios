@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-1-39"
+COMMON_VERSION="2025.02.10-1-40"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -895,25 +895,26 @@ XXXXX_select_country() {
 normalize_country() {
     local message_db="${BASE_DIR}/messages.db"
     local language_cache="${BASE_DIR}/luci.ch"
+    local selected_language="en"
 
     # `luci.ch` から言語コードを取得
     if [ -f "$language_cache" ]; then
-        SELECTED_LANGUAGE=$(cat "$language_cache")
-        echo "DEBUG: Loaded language from luci.ch -> $SELECTED_LANGUAGE"
+        selected_language=$(cat "$language_cache")
+        debug_log "Loaded language from luci.ch -> $selected_language"
     else
-        SELECTED_LANGUAGE="en"
-        echo "DEBUG: No luci.ch found, defaulting to 'en'"
+        selected_language="en"
+        debug_log "No luci.ch found, defaulting to 'en'"
     fi
 
-    # `message.db` に `SELECTED_LANGUAGE` があるか確認
-    if grep -q "^$SELECTED_LANGUAGE|" "$message_db"; then
-        echo "`color green "Using message database language: $SELECTED_LANGUAGE"`"
+    # `message.db` に `selected_language` があるか確認
+    if grep -q "^$selected_language|" "$message_db"; then
+        echo "Using message database language: $selected_language"
     else
-        SELECTED_LANGUAGE="en"
-        echo "`color yellow "Language not found in messages.db. Using: en"`"
+        selected_language="en"
+        echo "Language not found in messages.db. Using: en"
     fi
 
-    echo "DEBUG: Final language after normalization -> $SELECTED_LANGUAGE"
+    debug_log "Final language after normalization -> $selected_language"
 }
 
 #########################################################################
@@ -982,7 +983,7 @@ check_zone() {
     country_code=$(cat "$language_cache" 2>/dev/null)
 
     if [ -z "$country_code" ]; then
-        echo "DEBUG: No country code provided to check_zone()" | tee -a "$LOG_DIR/debug.log"
+        debug_log "No country code provided to check_zone()"
         return
     fi
 
@@ -991,12 +992,12 @@ check_zone() {
     zone_info=$(awk -v code="$country_code" '$4 == code {print $5, $6}' "${BASE_DIR}/country.db")
 
     if [ -z "$zone_info" ]; then
-        echo "DEBUG: No timezone found for country: $country_code" | tee -a "$LOG_DIR/debug.log"
+        debug_log "No timezone found for country: $country_code"
         return
     fi
 
     echo "$zone_info" > "$zone_cache"
-    echo "DEBUG: Timezone data saved to $zone_cache -> $zone_info" | tee -a "$LOG_DIR/debug.log"
+    debug_log "Timezone data saved to $zone_cache -> $zone_info"
 }
 
 #########################################################################
