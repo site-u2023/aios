@@ -1293,6 +1293,8 @@ check_common() {
     if [ "$DEBUG" = true ]; then
         echo "DEBUG: Running in debug mode..." | tee -a "$LOG_DIR/debug.log"
 
+        read -p "何かキーを押してください"
+        
         check_language "ja"
         check_country "JP"
         check_zone "JP"
