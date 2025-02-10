@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-1-29"
+COMMON_VERSION="2025.02.10-1-30"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -577,6 +577,14 @@ color_code_map() {
 #########################################################################
 # handle_error: 汎用エラーハンドリング関数
 #########################################################################
+# **デバッグ出力関数**
+debug_log() {
+    if [ "$DEBUG_MODE" = true ]; then
+        echo "DEBUG: $1" | tee -a "$LOG_DIR/debug.log"
+    fi
+}
+
+# **エラーハンドリング + デバッグログ**
 handle_error() {
     local message_key="$1"
     local file="$2"
@@ -588,9 +596,13 @@ handle_error() {
     # {file} や {version} の置換処理
     error_message=$(echo "$error_message" | sed -e "s/{file}/$file/" -e "s/{version}/$version/")
 
+    # **エラー発生時もデバッグログに残す**
+    debug_log "ERROR: $error_message"
+
     echo -e "$(color red "$error_message")"
     exit 1
 }
+
 
 #########################################################################
 # download_script: 指定されたスクリプト・データベースのバージョン確認とダウンロード
@@ -1234,17 +1246,13 @@ install_language_pack() {
 #########################################################################
 check_common() {
     local mode="$1"
-    shift  
-
+    shift  # 最初の引数 (モード) を削除
+    
     local RESET_CACHE=false
     local SHOW_HELP=false
-    local DEBUG=false
+    local INPUT_LANG="${1:-$INPUT_LANG}"  # `$1` があればそれを使用、無ければ `INPUT_LANG`
 
-    # `$1` があれば `INPUT_LANG` を更新
-    if [ -n "$1" ]; then
-        INPUT_LANG="$1"
-    fi
-
+    # 引数解析
     for arg in "$@"; do
         case "$arg" in
             -reset|--reset|-r)
@@ -1254,38 +1262,44 @@ check_common() {
                 SHOW_HELP=true
                 ;;
             -debug|--debug|-d)
-                DEBUG=true
+                DEBUG_MODE=true
                 ;;
         esac
     done
 
-    # DEBUG_MODE の確認
-    if [ "$DEBUG_MODE" = true ]; then
-        echo "DEBUG: Debug mode activated" | tee -a "$LOG_DIR/debug.log"
+    debug_log "check_common received INPUT_LANG: '$INPUT_LANG'"
+
+    if [ "$RESET_CACHE" = true ]; then
+        reset_cache
+    fi
+
+    if [ "$SHOW_HELP" = true ]; then
+        print_help
+        exit 0
     fi
 
     case "$mode" in
-        full)
-            script_update
-            download_script messages.db
-            download_script country.db
-            download_script openwrt.db
-            check_openwrt
-            check_country "$INPUT_LANG"
+        full)      
+            script_update || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
+            download_script messages.db || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
+            download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
+            download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
+            check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
+            check_country || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
             check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
-            normalize_country  
+            normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
         light)
-            check_openwrt
-            check_country "$INPUT_LANG"
+            check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
+            check_country || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
             check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
-            normalize_country  
+            normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
         *)
-            check_openwrt
-            check_country "$INPUT_LANG"
+            check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
+            check_country || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
             check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
-            normalize_country  
+            normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
     esac
 }
