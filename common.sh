@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.10-2-2"
+COMMON_VERSION="2025.02.10-2-3"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -980,13 +980,14 @@ check_country() {
 check_zone() {
     local language_cache="${CACHE_DIR}/language.ch"
     local zone_cache="${CACHE_DIR}/zone.ch"
+    local country_cache="${CACHE_DIR}/country.ch"
     
     local country_code
-    country_code=$(cat "$language_cache" 2>/dev/null)
+    country_code=$(awk '{print $4}' "$country_cache" 2>/dev/null | head -n 1)
 
     if [ -z "$country_code" ]; then
-        debug_log "No country code provided to check_zone()"
-        return
+        debug_log "No country code found in country.ch, defaulting to 'US'"
+        country_code="US"
     fi
 
     # `country.db` からゾーン情報を取得
@@ -1001,6 +1002,7 @@ check_zone() {
     echo "$zone_info" > "$zone_cache"
     debug_log "Timezone data saved to $zone_cache -> $zone_info"
 }
+
 
 #########################################################################
 # update_country_cache
