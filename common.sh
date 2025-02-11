@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-2-1"
+COMMON_VERSION="2025.02.11-4-0"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -80,6 +80,116 @@ test_cache_contents() {
 
 
 # 🔴　ランゲージ系　🔴 🔵　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
+#########################################################################
+# selection_list: 汎用リスト選択関数（国・ゾーン選択に適用可能）
+#########################################################################
+selection_list() {
+    local list_file="$1"   # 一時キャッシュファイル
+    local prompt="$2"   # プロンプトメッセージ
+    local selected_value=""
+    local choice=""
+    local i=1
+
+    if [ ! -s "$list_file" ]; then
+        echo "$(color red \"No valid options available. Please try again.\")"
+        return 1
+    fi
+
+    while true; do
+        echo "$(color cyan \"$prompt\")"
+        while read -r line; do
+            echo "[$i] $line"
+            i=$((i + 1))
+        done < "$list_file"
+        echo "[0] Cancel / /back to return"
+
+        echo -n "$(color cyan \"Enter the number of your choice (or 0 to retry): \")"
+        read choice
+
+        if [ "$choice" = "0" ]; then
+            echo "$(color yellow \"Returning to selection.\")"
+            return 1
+        fi
+
+        selected_value=$(awk -v num="$choice" 'NR == num {print $0}' "$list_file")
+
+        if [ -z "$selected_value" ]; then
+            echo "$(color red \"Invalid selection. Please choose a valid number.\")"
+            continue
+        fi
+
+        echo "$(color cyan \"Confirm selection: [$choice] $selected_value (Y/n)?\")"
+        read yn
+        case "$yn" in
+            [Yy]*)
+                echo "$(color green \"Final selection: $selected_value\")"
+                echo "$selected_value" > "$list_file"  # 選択結果をファイルに保存
+                return 0
+                ;;
+            [Nn]*)
+                echo "$(color yellow \"Returning to selection.\")"
+                ;;
+            *)
+                echo "$(color red \"Invalid input. Please enter 'Y' or 'N'.\")"
+                ;;
+        esac
+    done
+}
+
+#########################################################################
+# select_country: 国と言語を選択（検索・表示を `country.db` に統一）
+#########################################################################
+select_country() {
+    local country_file="${BASE_DIR}/country.db"
+    local country_cache="${CACHE_DIR}/country.ch"
+    local language_cache="${CACHE_DIR}/luci.ch"
+    local country_tmp="${CACHE_DIR}/country_tmp.ch"
+    local user_input=""
+
+    > "$country_tmp"  # 一時キャッシュを初期化
+
+    if [ ! -f "$country_file" ]; then
+        echo "$(color red \"Country database not found!\")"
+        return 1
+    fi
+
+    while true; do
+        echo "$(color cyan \"Enter country name, code, or language to select your country.\")"
+        echo -n "$(color cyan \"Please input: \")"
+        read user_input
+        user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]' | sed -E 's/[\/,_]+/ /g')
+
+        if [ -z "$user_input" ]; then
+            echo "$(color yellow \"Invalid input. Please enter a valid country name, code, or language.\")"
+            continue
+        fi
+
+        # **検索処理: 完全一致 → 前方一致 → 後方一致 → 部分一致**
+        awk -v query="$user_input" '$4 == query {print $2, $3, $4, $5, $6}' "$country_file" > "$country_tmp"
+        if [ ! -s "$country_tmp" ]; then
+            awk -v query="^"query '$0 ~ query {print $2, $3, $4, $5, $6}' "$country_file" > "$country_tmp"
+        fi
+        if [ ! -s "$country_tmp" ]; then
+            awk -v query=query"$" '$0 ~ query {print $2, $3, $4, $5, $6}' "$country_file" > "$country_tmp"
+        fi
+        if [ ! -s "$country_tmp" ]; then
+            awk -v query="$user_input" '$0 ~ query {print $2, $3, $4, $5, $6}' "$country_file" > "$country_tmp"
+        fi
+
+        if [ ! -s "$country_tmp" ]; then
+            echo "$(color yellow \"No matching country found. Please try again.\")"
+            continue
+        fi
+
+        selection_list "$country_tmp" "Select a country:"
+        if [ $? -eq 0 ]; then
+            mv "$country_tmp" "$country_cache"
+            mv "$country_cache" "$language_cache"
+            return 0
+        fi
+    done
+}
+
 #########################################################################
 # select_language: 言語選択を担当し、`search_country()` で検索後 `country_write()` へ
 #########################################################################
@@ -217,39 +327,22 @@ country_write() {
 }
 
 #########################################################################
-# select_zone: `country.ch` からゾーン情報を取得し、ユーザーに選択させる
+# select_zone: タイムゾーンを選択
 #########################################################################
 select_zone() {
-    local country_cache="${CACHE_DIR}/country.ch"
+    local zone_file="${CACHE_DIR}/zone_tmp.ch"
     local zone_cache="${CACHE_DIR}/zone.ch"
 
-    if [ ! -f "$country_cache" ]; then
-        debug_log "ERROR: country.ch not found. Cannot proceed with zone selection."
-        echo "$(color red "ERROR: country data not found. Please reselect your country.")"
-        select_language
-        return
+    if [ ! -s "$zone_file" ]; then
+        echo "$(color red \"No timezone options available.\")"
+        return 1
     fi
 
-    local zones
-    zones=$(awk '{for (i=6; i<=NF; i++) print $i}' "$country_cache")
-
-    if [ -z "$zones" ]; then
-        debug_log "ERROR: No zones found for selected country."
-        echo "$(color red "ERROR: No timezone data found. Please reselect your country.")"
-        select_language
-        return
+    selection_list "$zone_file" "Select your timezone from the following options:"
+    if [ $? -eq 0 ]; then
+        mv "$zone_file" "$zone_cache"
+        return 0
     fi
-
-    echo "$(color cyan "Select your timezone from the following options:")"
-    echo "$zones"
-
-    echo -n "$(color cyan "Please select a timezone: ")"
-    read selected_zone
-
-    echo "$selected_zone" > "$zone_cache"
-    debug_log "User selected timezone: $selected_zone"
-
-    normalize_country
 }
 
 #########################################################################
