@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-6-6"
+COMMON_VERSION="2025.02.11-7-2"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -86,18 +86,18 @@ test_cache_contents() {
 selection_list() {
     local input_data="$1"
     local output_file="$2"
-    local mode="$3"  # "country" or "zone"
+    local mode="$3"  # "country" または "zone"
     local list_file="${CACHE_DIR}/tmp_list.ch"
     local i=1
 
     echo -n "" > "$list_file"
 
-    # デバッグ用：入力データ確認
+    # デバッグ用ログ
     debug_log "DEBUG: input_data='$input_data'"
 
     echo "[0] Cancel / back to return"
 
-    if [ "$mode" = "country" ]; then 
+    if [ "$mode" = "country" ]; then
         # 国選択時は $2 $3 $4 $5 のみを表示
         echo "$input_data" | while IFS= read -r line; do
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
@@ -108,8 +108,9 @@ selection_list() {
             fi
         done
     elif [ "$mode" = "zone" ]; then
-        # ゾーン選択時は $6 以降を個別リスト化
-        echo "$input_data" | while IFS=, read -r _ _ _ _ _ zones; do
+        # ゾーン選択時は $6 以降をリスト化
+        echo "$input_data" | while IFS= read -r line; do
+            local zones=$(echo "$line" | awk '{for (i=6; i<=NF; i++) printf "%s ", $i}')
             for zone in $zones; do
                 echo "[$i] $zone"
                 echo "$i $zone" >> "$list_file"
@@ -118,7 +119,7 @@ selection_list() {
         done
     fi
 
-    # デバッグ用：リスト内容を出力
+    # デバッグ用リスト確認
     debug_log "DEBUG: Generated selection list:"
     cat "$list_file"
 
@@ -146,7 +147,7 @@ selection_list() {
         read yn
         case "$yn" in
             [Yy]*)
-                echo "$selected_value" > "$output_file"  # **選択した1行だけを出力**
+                echo "$selected_value" > "$output_file"  # **選択したデータのみ出力**
                 debug_log "Final selection: $selected_value"
                 return
                 ;;
@@ -253,7 +254,7 @@ select_zone() {
 
     # ゾーン選択
     echo "$(color cyan "Select your timezone from the following options:")"
-    selection_list "$zone_info" "$cache_zone"
+    selection_list "$zone_info" "$cache_zone" "zone"
 
     # 選択結果を表示
     if [ -s "$cache_zone" ]; then
