@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-1-2"
+COMMON_VERSION="2025.02.11-1-4"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -31,15 +31,18 @@ test_debug() {
     if [ "$DEBUG_MODE" = true ]; then
         echo "DEBUG: Running debug tests..." | tee -a "$LOG_DIR/debug.log"
 
+        # データベース存在確認
+        if [ ! -f "${BASE_DIR}/country.db" ]; then
+            echo "DEBUG: ERROR - country.db not found!" | tee -a "$LOG_DIR/debug.log"
+        else
+            echo "DEBUG: country.db found at ${BASE_DIR}/country.db" | tee -a "$LOG_DIR/debug.log"
+        fi
+
         test_country_search "US"
         test_country_search "Japan"
         test_timezone_search "US"
         test_timezone_search "JP"
         test_cache_contents
-
-        echo "DEBUG: luci.ch content: $(cat "$CACHE_DIR/luci.ch" 2>/dev/null || echo 'Not Found')" | tee -a "$LOG_DIR/debug.log"
-        echo "DEBUG: country.ch content: $(cat "$CACHE_DIR/country.ch" 2>/dev/null || echo 'Not Found')" | tee -a "$LOG_DIR/debug.log"
-        echo "DEBUG: language.ch content: $(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo 'Not Found')" | tee -a "$LOG_DIR/debug.log"
     fi
 }
 
@@ -113,17 +116,32 @@ check_country() {
     local zone_cache="${CACHE_DIR}/zone.ch"
     local lang_cache="${CACHE_DIR}/language.ch"
 
+    # `country.db` の存在確認
+    if [ ! -f "$country_file" ]; then
+        debug_log "ERROR: country.db not found at $country_file"
+        echo "$(color red "ERROR: country database not found! Please ensure country.db is correctly loaded.")"
+        return 1
+    fi
+
     local short_country
     short_country=$(cat "$lang_cache" 2>/dev/null)
 
     debug_log "check_country received short_country: '$short_country'"
+
+    # `language.ch` が空の場合はエラーを出力
+    if [ -z "$short_country" ]; then
+        debug_log "ERROR: language.ch is empty. Country lookup failed."
+        echo "$(color red "ERROR: language.ch is empty. Please set a valid country short name.")"
+        return 1
+    fi
 
     # `country.db` から `$5`（短縮国名）が一致する行を検索
     local country_data
     country_data=$(awk -v lang="$short_country" 'toupper($5) == lang {print $0}' "$country_file")
 
     if [ -z "$country_data" ]; then
-        debug_log "No matching country found for language.ch: $short_country"
+        debug_log "ERROR: No matching country found for short name: $short_country"
+        echo "$(color red "ERROR: No matching country found for $short_country. Please check country.db.")"
         return 1
     fi
 
@@ -142,6 +160,13 @@ select_country() {
     local language_cache="${CACHE_DIR}/language.ch"
     local luci_cache="${CACHE_DIR}/luci.ch"
     local zone_cache="${CACHE_DIR}/zone.ch"
+
+    # `country.db` の存在確認
+    if [ ! -f "$country_file" ]; then
+        debug_log "ERROR: country.db not found at $country_file"
+        echo "$(color red "ERROR: country database not found! Please ensure country.db is correctly loaded.")"
+        return 1
+    fi
 
     # 既に `language.ch` が設定されている場合はスキップ
     if [ -f "$language_cache" ]; then
