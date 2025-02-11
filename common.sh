@@ -79,7 +79,10 @@ test_cache_contents() {
 # 🔴　ランゲージ系　🔴 🔵　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
-# check_language: 言語のチェックと `luci.ch` への書き込み
+# check_language: 言語キャッシュの確認および設定
+# - `luci.ch` を参照し、適切な言語コード (ja, en, etc.) を取得
+# - 存在しない場合、 `country.ch` から取得し、 `luci.ch` に保存
+# - `message.db` に対応する言語があるか確認し、 `SELECTED_LANGUAGE` にセット
 #########################################################################
 check_language() {
     local lang_code="$1"
@@ -105,26 +108,6 @@ check_language() {
         [ "$DEBUG_MODE" = true ] && echo "DEBUG: No matching language in country.db, defaulting to 'en'" | tee -a "$LOG_DIR/debug.log"
         echo "en" > "$CACHE_DIR/luci.ch"
     fi
-}
-
-
-#########################################################################
-# check_language: 言語キャッシュの確認および設定
-# - `luci.ch` を参照し、適切な言語コード (ja, en, etc.) を取得
-# - 存在しない場合、 `country.ch` から取得し、 `luci.ch` に保存
-# - `message.db` に対応する言語があるか確認し、 `SELECTED_LANGUAGE` にセット
-#########################################################################
-check_language() {
-    local luci_cache="${CACHE_DIR}/luci.ch"
-
-    if [ -s "$luci_cache" ]; then
-        echo "DEBUG: Using cached language from luci.ch -> $(cat $luci_cache)" | tee -a "$LOG_DIR/debug.log"
-        return
-    fi
-
-    # `INPUT_LANG` を `luci.ch` に保存
-    echo "$INPUT_LANG" > "$luci_cache"
-    echo "DEBUG: Saved INPUT_LANG to luci.ch -> $INPUT_LANG" | tee -a "$LOG_DIR/debug.log"
 }
 
 #########################################################################
