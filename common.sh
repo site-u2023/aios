@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-7-6"
+COMMON_VERSION="2025.02.11-7-7"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -106,7 +106,7 @@ selection_list() {
             fi
         done
     elif [ "$mode" = "zone" ]; then
-        echo "$input_data" | tr ',' '\n' | while read -r zone; do
+        echo "$input_data" | tr ',' '\n' | sort -u | while read -r zone; do
             if [ -n "$zone" ]; then
                 echo "[$i] $zone"
                 echo "$i $zone" >> "$list_file"
@@ -227,7 +227,8 @@ select_zone() {
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_zone="${CACHE_DIR}/zone.ch"
 
-    local zone_info=$(awk '{for(i=6; i<=NF; i++) printf "%s,", $i; print ""}' "$cache_country" | sed 's/,$//')
+    # タイムゾーンリストを抽出し、重複を削除
+    local zone_info=$(awk '{for(i=6; i<=NF; i++) printf "%s,", $i; print ""}' "$cache_country" | sed 's/,$//' | tr ',' '\n' | sort -u)
 
     if [ -z "$zone_info" ]; then
         echo "$(color red "ERROR: No timezone data found. Please reselect your country.")"
