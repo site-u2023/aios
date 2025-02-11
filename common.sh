@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-1-20"
+COMMON_VERSION="2025.02.11-1-21"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -188,67 +188,52 @@ XXXXX_check_language() {
 }
 
 #########################################################################
-# select_country: 国を選択し、ゾーン情報を設定
+# select_country: ユーザーに国を選択させ、ゾーン情報を設定
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${CACHE_DIR}/country.ch"
     local language_cache="${CACHE_DIR}/language.ch"
+    local luci_cache="${CACHE_DIR}/luci.ch"
     local zone_cache="${CACHE_DIR}/zone.ch"
+    local user_input=""
 
-    # `language.ch` が無い場合は国を検索・選択
-    if [ ! -f "$language_cache" ]; then
-        debug_log "language.ch not found, prompting user for country selection"
+    debug_log "language.ch not found, prompting user for country selection"
 
-        echo "$(color cyan "Enter country name, code, or language to select your country.")"
-        echo -n "$(color cyan "Please input: ")"
-        read user_input
-        debug_log "User input: '$user_input'"
+    echo "$(color cyan "Enter country name, code, or language to select your country.")"
+    echo -n "$(color cyan "Please input: ")"
+    read user_input
 
-        user_input="${user_input^^}"  # 大文字変換
+    debug_log "User input: '$user_input'"
 
-        # `country.db` から完全一致、前方一致、後方一致、部分一致で検索
-        local country_data
-        country_data=$(awk -v query="$user_input" '
-            $2 == query || $3 == query || $4 == query || $5 == query {print $0}
-        ' "$country_file")
-
-        if [ -z "$country_data" ]; then
-            echo "$(color red "No matching country found. Please try again.")"
-            return
-        fi
-
-        # `language.ch` に短縮国名 `$5` を保存
-        local short_country
-        short_country=$(echo "$country_data" | awk '{print $5}')
-        echo "$short_country" > "$language_cache"
-
-        # `country.ch` に該当データを保存
-        echo "$country_data" > "$country_cache"
-        debug_log "User selected: language.ch='$short_country', country.ch='$country_data'"
+    # 入力が空の場合は再入力を促す
+    if [ -z "$user_input" ]; then
+        debug_log "No user input received, re-prompting user."
+        select_country
+        return
     fi
 
-    # `country.ch` からゾーン情報を取得し、選択を促す
-    if [ -f "$country_cache" ]; then
-        debug_log "Retrieving zone information from country.ch"
-        local zones
-        zones=$(awk '{for (i=6; i<=NF; i++) print $i}' "$country_cache")
+    # `country.db` から大文字小文字を区別せず検索
+    local country_data=""
+    country_data=$(awk -v query="$user_input" 'toupper($5) == toupper(query) {print $0}' "$country_file")
 
-        echo "$(color cyan "Select your timezone from the following options:")"
-        echo "$zones"
-
-        echo -n "$(color cyan "Please select a timezone: ")"
-        read selected_zone
-
-        echo "$selected_zone" > "$zone_cache"
-        debug_log "Selected timezone: $selected_zone"
+    if [ -z "$country_data" ]; then
+        echo "$(color red "No matching country found. Please try again.")"
+        return
     fi
 
-    # どのケースでも `normalize_country()` に移動
-    normalize_country
+    # `language.ch`, `luci.ch`, `country.ch` に保存
+    local short_country
+    short_country=$(echo "$country_data" | awk '{print $5}')
+    local luci_lang
+    luci_lang=$(echo "$country_data" | awk '{print $4}')
+
+    echo "$short_country" > "$language_cache"
+    echo "$luci_lang" > "$luci_cache"
+    echo "$country_data" > "$country_cache"
+
+    debug_log "User selected: language.ch='$short_country', luci.ch='$luci_lang', country.ch='$country_data'"
 }
-
-
 
 NG_0211_select_country() {
     local country_file="${BASE_DIR}/country.db"
