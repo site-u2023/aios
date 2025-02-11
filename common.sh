@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-5-0"
+COMMON_VERSION="2025.02.11-5-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -140,7 +140,7 @@ selection_list() {
 }
 
 #########################################################################
-# select_country: 国選択の入口（`selection_list()` を利用）
+# select_country: 国選択（`selection_list()` を利用）
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -148,10 +148,10 @@ select_country() {
 
     debug_log "=== Entering select_country() ==="
 
-    # `country.db` から国名・コード・言語で検索しリスト作成
-    awk '{print $5, $2, "(" $4 ")"}' "$country_file" > "$tmp_country_list"
+    # `country.db` から $2 $3 $4 $5 を取得しリスト作成
+    awk '{print $2, $3, $4, $5}' "$country_file" > "$tmp_country_list"
 
-    debug_log "Extracted countries: $(cat "$tmp_country_list")"
+    debug_log "Extracted country list: $(cat "$tmp_country_list")"
 
     if [ ! -s "$tmp_country_list" ]; then
         debug_log "ERROR: No countries available."
@@ -217,7 +217,7 @@ select_zone() {
     fi
 
     # `$6` 以降のデータを取得し、一時キャッシュに保存（カンマを空白に変換）
-    awk '{for (i=6; i<=NF; i++) print $i}' "$country_cache" | tr ',' ' ' > "$tmp_zone_list"
+    awk '{for (i=6; i<=NF; i++) print $i}' "$country_cache" > "$tmp_zone_list"
 
     debug_log "Extracted zones: $(cat "$tmp_zone_list")"
 
