@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-1-29"
+COMMON_VERSION="2025.02.11-1-31"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -90,19 +90,21 @@ check_language() {
     local language_cache="${CACHE_DIR}/language.ch"
     local luci_cache="${CACHE_DIR}/luci.ch"
 
+    debug_log "=== Entering check_language() ==="
     debug_log "check_language received lang_code: '$1'"
 
     # `language.ch` と `luci.ch` の両方が存在する場合は処理を終了
     if [ -f "$language_cache" ] && [ -f "$luci_cache" ]; then
-        debug_log "Both language.ch and luci.ch exist. Exiting check_language()."
+        debug_log "Cache found: language.ch='$(cat "$language_cache")', luci.ch='$(cat "$luci_cache")'. Skipping language selection."
         return
     fi
 
     # `$1` が空または "en" の場合、手動入力を強制
     if [ -z "$1" ] || [ "$1" = "en" ]; then
-        debug_log "No language code provided or ambiguous language code ('en'). Forcing manual selection."
+        debug_log "No language code provided or ambiguous language code ('$1'). Forcing manual selection."
         language_selection "manual"
     else
+        debug_log "Proceeding with automatic language selection for input: '$1'"
         language_selection "$1"
     fi
 }
@@ -119,6 +121,7 @@ language_selection() {
     local country_data=""
     local user_input=""
 
+    debug_log "=== Entering language_selection() ==="
     debug_log "Processing language selection. Input source: '$input_source'"
 
     # `country.db` の存在確認
@@ -126,6 +129,12 @@ language_selection() {
         debug_log "ERROR: country.db not found at $country_file"
         echo "$(color red "ERROR: country database not found! Please ensure country.db is correctly loaded.")"
         return 1
+    fi
+
+    # `$1` が "manual" の場合は強制的にユーザー入力
+    if [ "$input_source" = "manual" ]; then
+        debug_log "Forcing manual input mode."
+        input_source=""
     fi
 
     # `$1` が空なら手動入力モードへ
@@ -145,19 +154,23 @@ language_selection() {
         toupper($4) == toupper(query) || toupper($5) == toupper(query) {print NR " " $0}
     ' "$country_file")
 
+    local result_count
+    result_count=$(echo "$country_data" | wc -l)
+
+    debug_log "Search results count for '$input_source': $result_count"
+
     if [ -z "$country_data" ]; then
-        debug_log "No matching country found for '$input_source'."
+        debug_log "No matching country found for '$input_source'. Prompting for re-input."
         echo "$(color red "No matching country found. Please try again.")"
-        language_selection  # 再入力を促す
+        language_selection
         return
     fi
 
     # 検索結果が1件なら即確定
-    local result_count
-    result_count=$(echo "$country_data" | wc -l)
     if [ "$result_count" -eq 1 ]; then
         local selected_country
         selected_country=$(echo "$country_data" | awk '{for (i=2; i<=NF; i++) printf "%s ", $i; print ""}')
+        debug_log "Auto-selected country: '$selected_country'"
         finalize_country_selection "$selected_country"
         return
     fi
@@ -171,6 +184,7 @@ language_selection() {
     read selection
 
     if ! echo "$selection" | grep -qE '^[0-9]+$'; then
+        debug_log "Invalid selection: '$selection'. Prompting again."
         echo "$(color red "Invalid selection. Please enter a number from the list.")"
         language_selection
         return
@@ -181,11 +195,13 @@ language_selection() {
     selected_country=$(echo "$country_data" | awk -v num="$selection" '$1 == num {for (i=2; i<=NF; i++) printf "%s ", $i; print ""}')
 
     if [ -z "$selected_country" ]; then
+        debug_log "Invalid selection number: '$selection'. Prompting again."
         echo "$(color red "Invalid selection. Please enter a valid number.")"
         language_selection
         return
     fi
 
+    debug_log "User selected country: '$selected_country'"
     finalize_country_selection "$selected_country"
 }
 
