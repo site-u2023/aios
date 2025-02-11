@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-7-8"
+COMMON_VERSION="2025.02.11-7-9"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -92,6 +92,8 @@ selection_list() {
     local i=1
 
     echo -n "" > "$list_file"
+
+    # デバッグ用: 入力データ確認
     debug_log "DEBUG: input_data='$input_data'"
 
     echo "[0] Cancel / back to return"
@@ -101,7 +103,7 @@ selection_list() {
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
             if [ -n "$extracted" ]; then
                 echo "[$i] $extracted"
-                echo "$i $line" >> "$list_file"  # **全データを保存**
+                echo "$i $line" >> "$list_file"
                 i=$((i + 1))
             fi
         done
@@ -115,8 +117,8 @@ selection_list() {
         done
     fi
 
-    debug_log "DEBUG: Generated selection list:"
-    cat "$list_file"
+    # **不要な二重表示を削除**
+    # cat "$list_file" を削除して、リストが1回しか表示されないようにする
 
     local choice=""
     while true; do
@@ -140,7 +142,7 @@ selection_list() {
         read yn
         case "$yn" in
             [Yy]*)
-                echo "$selected_value" > "$output_file"  # **全データを保存**
+                echo "$selected_value" > "$output_file"
                 debug_log "Final selection: $selected_value"
                 return
                 ;;
