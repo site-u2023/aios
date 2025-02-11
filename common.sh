@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-0-2"
+COMMON_VERSION="2025.02.12-0-3"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -165,14 +165,17 @@ select_country() {
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_language="${CACHE_DIR}/luci.ch"
 
-    # **優先順位の処理**
+    # **キャッシュが存在する場合はそれを使う（何もせず終了）**
+    if [ -f "$cache_country" ] && [ -f "$cache_language" ]; then
+        debug_log "Using cached country and language. Skipping selection."
+        return
+    fi
+
+    # **$1がある場合は最優先**
     if [ -n "$1" ]; then
-        local input="$1"  # `$1` があれば最優先
-    elif [ -f "$cache_country" ] && [ -f "$cache_language" ]; then
-        debug_log "Using cached country and language."
-        return  # キャッシュがある場合は何もしない
+        local input="$1"
     else
-        local input=""  # `$1` もキャッシュも無い場合は手動入力モード
+        local input=""  # `$1` もキャッシュも無い場合は、完全手動選択
     fi
 
     echo "$(color cyan "Enter country name, code, or language to search:")"
