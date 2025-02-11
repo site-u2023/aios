@@ -97,7 +97,7 @@ selection_list() {
 
     echo "[0] Cancel / back to return"
 
-    if [ "$mode" = "country" ]; then
+    if [ "$mode" = "country" ]; then 
         # 国選択時は $2 $3 $4 $5 のみを表示
         echo "$input_data" | while IFS= read -r line; do
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
