@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-1-17"
+COMMON_VERSION="2025.02.11-1-19"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -87,16 +87,13 @@ check_language() {
     CACHE_DIR="$BASE_DIR/cache"
     mkdir -p "$CACHE_DIR"
 
-    local lang_code country_data
+    local country_data
     local country_file="${BASE_DIR}/country.db"
     local language_cache="${CACHE_DIR}/language.ch"
     local luci_cache="${CACHE_DIR}/luci.ch"
     local country_cache="${CACHE_DIR}/country.ch"
 
-    # `ash` 互換の大文字変換
-    lang_code=$(echo "$1" | tr '[:lower:]' '[:upper:]')
-
-    debug_log "check_language received lang_code: '$lang_code'"
+    debug_log "check_language received lang_code: '$1'"
 
     # `country.db` の存在確認
     if [ ! -f "$country_file" ]; then
@@ -111,12 +108,12 @@ check_language() {
         return
     fi
 
-    # `country.db` から `$5`（短縮国名）が一致する行を検索
-    country_data=$(awk -v lang="$lang_code" 'toupper($5) == lang {print $0}' "$country_file")
+    # `country.db` から `$5`（短縮国名）を大文字小文字区別せず検索
+    country_data=$(awk -v lang="$1" 'toupper($5) == toupper(lang) {print $0}' "$country_file")
 
     if [ -n "$country_data" ]; then
         local short_country luci_lang
-        short_country=$(echo "$country_data" | awk '{print $5}')  # 短縮国名 (JP, US)
+        short_country=$(echo "$country_data" | awk '{print $5}')  # 短縮国名 (JP, US) ※DBのフォーマットそのまま
         luci_lang=$(echo "$country_data" | awk '{print $4}')  # LuCI 言語 (ja, en)
 
         echo "$short_country" > "$language_cache"
@@ -129,7 +126,7 @@ check_language() {
     fi
 
     # どちらも無ければ `select_country()` へ
-    debug_log "No matching country found for '$lang_code', proceeding to select_country()"
+    debug_log "No matching country found for '$1', proceeding to select_country()"
     select_country
 }
 
