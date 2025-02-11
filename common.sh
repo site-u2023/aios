@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-1-26"
+COMMON_VERSION="2025.02.11-1-28"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -98,8 +98,13 @@ check_language() {
         return
     fi
 
-    # `language_selection()` を実行
-    language_selection "$1"
+    # `$1` が空の場合は手動入力を必須とする
+    if [ -z "$1" ]; then
+        debug_log "No language code provided. Forcing manual selection."
+        language_selection "manual"
+    else
+        language_selection "$1"
+    fi
 }
 
 #########################################################################
@@ -110,7 +115,7 @@ language_selection() {
     local country_cache="${CACHE_DIR}/country.ch"
     local language_cache="${CACHE_DIR}/language.ch"
     local luci_cache="${CACHE_DIR}/luci.ch"
-    local input_source="$1"  # $1 が `aios $1` か手動入力かを判別
+    local input_source="$1"
     local country_data=""
     local user_input=""
 
@@ -121,6 +126,12 @@ language_selection() {
         debug_log "ERROR: country.db not found at $country_file"
         echo "$(color red "ERROR: country database not found! Please ensure country.db is correctly loaded.")"
         return 1
+    fi
+
+    # `$1` が "manual" の場合は強制的にユーザー入力
+    if [ "$input_source" = "manual" ]; then
+        debug_log "Forcing manual input mode."
+        input_source=""
     fi
 
     # `$1` が空なら手動入力モードへ
@@ -143,7 +154,7 @@ language_selection() {
     if [ -z "$country_data" ]; then
         debug_log "No matching country found for '$input_source'."
         echo "$(color red "No matching country found. Please try again.")"
-        language_selection  # 再入力を促す
+        language_selection
         return
     fi
 
@@ -165,7 +176,6 @@ language_selection() {
     echo -n "$(color cyan "Please select a number: ")"
     read selection
 
-    # 入力が数値でない場合は再入力を促す
     if ! echo "$selection" | grep -qE '^[0-9]+$'; then
         echo "$(color red "Invalid selection. Please enter a number from the list.")"
         language_selection
@@ -182,7 +192,6 @@ language_selection() {
         return
     fi
 
-    # 最終確定処理へ
     finalize_country_selection "$selected_country"
 }
 
