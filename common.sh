@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-5-11"
+COMMON_VERSION="2025.02.11-5-12"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -202,13 +202,15 @@ country_write() {
     short_country=$(echo "$country_data" | awk '{print $5}')
     local luci_lang
     luci_lang=$(echo "$country_data" | awk '{print $4}')
+    local full_data
+    full_data=$(echo "$country_data")
 
     debug_log "DEBUG: Full country_data -> '$country_data'"
     debug_log "DEBUG: Extracted short_country='$short_country', luci_lang='$luci_lang'"
 
     echo "$short_country" > "$language_cache"
     echo "$luci_lang" > "$luci_cache"
-    echo "$country_data" > "$country_cache"
+    echo "$full_data" > "$country_cache"
 
     # `country.ch` の内容をデバッグログに出力
     debug_log "DEBUG: Written to country.ch -> $(cat "$country_cache")"
