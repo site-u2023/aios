@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-6-3"
+COMMON_VERSION="2025.02.11-6-4"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -86,19 +86,32 @@ test_cache_contents() {
 selection_list() {
     local input_data="$1"
     local output_file="$2"
+    local mode="$3"  # "country" or "zone"
     local list_file="${CACHE_DIR}/tmp_list.ch"
     local i=1
 
     echo -n "" > "$list_file"
 
     echo "[0] Cancel / back to return"
-    echo "$input_data" | while IFS= read -r line; do
-        # ゾーン選択時に複数のデータが一緒にならないように1行ずつ処理
-        local formatted_line=$(echo "$line" | awk '{print "[" NR "]", $1, $2}')
-        echo "$formatted_line"
-        echo "$i $line" >> "$list_file"
-        i=$((i + 1))
-    done
+
+    if [ "$mode" = "country" ]; then
+        # 国選択時は $2 $3 $4 $5 のみを表示
+        echo "$input_data" | while IFS= read -r line; do
+            local formatted_line=$(echo "$line" | awk '{print "[" NR "]", $2, $3, $4, $5}')
+            echo "$formatted_line"
+            echo "$i $line" >> "$list_file"
+            i=$((i + 1))
+        done
+    elif [ "$mode" = "zone" ]; then
+        # ゾーン選択時は $6 以降を個別リスト化
+        echo "$input_data" | while IFS=, read -r _ _ _ _ _ zones; do
+            for zone in $zones; do
+                echo "[$i] $zone"
+                echo "$i $zone" >> "$list_file"
+                i=$((i + 1))
+            done
+        done
+    fi
 
     # 選択入力を受け取る
     local choice=""
@@ -124,7 +137,7 @@ selection_list() {
         read yn
         case "$yn" in
             [Yy]*)
-                echo "$selected_value" > "$output_file"  # **選択した1行だけを zone.ch に書き込む**
+                echo "$selected_value" > "$output_file"  # **選択した1行だけを出力**
                 debug_log "Final selection: $selected_value"
                 return
                 ;;
