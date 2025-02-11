@@ -91,46 +91,49 @@ selection_list() {
     local i=1
 
     if [ ! -s "$list_file" ]; then
-        echo "$(color red \"No valid options available. Please try again.\")"
+        echo "`color red \"No valid options available. Please try again.\"`"
         return 1
     fi
 
     while true; do
-        echo "$(color cyan \"$prompt\")"
-        while read -r line; do
+        echo "`color cyan \"$prompt\"`"
+        i=1  # 番号リセット
+        while IFS= read -r line; do
             echo "[$i] $line"
+            echo "$i $line" >> "$list_file.tmp"
             i=$((i + 1))
         done < "$list_file"
         echo "[0] Cancel / /back to return"
 
-        echo -n "$(color cyan \"Enter the number of your choice (or 0 to retry): \")"
+        echo -n "`color cyan \"Enter the number of your choice (or 0 to retry): \"`"
         read choice
 
         if [ "$choice" = "0" ]; then
-            echo "$(color yellow \"Returning to selection.\")"
+            echo "`color yellow \"Returning to selection.\"`"
             return 1
         fi
 
-        selected_value=$(awk -v num="$choice" 'NR == num {print $0}' "$list_file")
+        selected_value=$(awk -v num="$choice" '$1 == num {for(i=2; i<=NF; i++) printf "%s ", $i; print ""}' "$list_file.tmp")
 
         if [ -z "$selected_value" ]; then
-            echo "$(color red \"Invalid selection. Please choose a valid number.\")"
+            echo "`color red \"Invalid selection. Please choose a valid number.\"`"
             continue
         fi
 
-        echo "$(color cyan \"Confirm selection: [$choice] $selected_value (Y/n)?\")"
+        echo "`color cyan \"Confirm selection: [$choice] $selected_value (Y/n)?\"`"
         read yn
         case "$yn" in
             [Yy]*)
-                echo "$(color green \"Final selection: $selected_value\")"
+                echo "`color green \"Final selection: $selected_value\"`"
                 echo "$selected_value" > "$list_file"  # 選択結果をファイルに保存
+                rm -f "$list_file.tmp"
                 return 0
                 ;;
             [Nn]*)
-                echo "$(color yellow \"Returning to selection.\")"
+                echo "`color yellow \"Returning to selection.\"`"
                 ;;
             *)
-                echo "$(color red \"Invalid input. Please enter 'Y' or 'N'.\")"
+                echo "`color red \"Invalid input. Please enter 'Y' or 'N'.\"`"
                 ;;
         esac
     done
