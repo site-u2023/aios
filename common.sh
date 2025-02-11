@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-1-21"
+COMMON_VERSION="2025.02.11-1-22"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -88,6 +88,158 @@ check_language() {
     mkdir -p "$CACHE_DIR"
 
     local country_file="${BASE_DIR}/country.db"
+    local language_cache="${CACHE_DIR}/language.ch"
+    local luci_cache="${CACHE_DIR}/luci.ch"
+
+    debug_log "check_language received lang_code: '$1'"
+
+    # `country.db` の存在確認
+    if [ ! -f "$country_file" ]; then
+        debug_log "ERROR: country.db not found at $country_file"
+        echo "$(color red "ERROR: country database not found! Please ensure country.db is correctly loaded.")"
+        return 1
+    fi
+
+    # `language.ch` と `luci.ch` の両方が存在する場合は処理を終了
+    if [ -f "$language_cache" ] && [ -f "$luci_cache" ]; then
+        debug_log "Both language.ch and luci.ch exist. Exiting check_language()."
+        return
+    fi
+
+    # `check_country()` を実行
+    check_country "$1"
+}
+
+#########################################################################
+# check_country: `country.db` から情報を取得し、キャッシュに保存
+#########################################################################
+check_country() {
+    local country_file="${BASE_DIR}/country.db"
+    local country_cache="${CACHE_DIR}/country.ch"
+    local language_cache="${CACHE_DIR}/language.ch"
+    local luci_cache="${CACHE_DIR}/luci.ch"
+
+    local country_data=""
+    country_data=$(awk -v lang="$1" 'toupper($5) == toupper(lang) {print $0}' "$country_file")
+
+    if [ -n "$country_data" ]; then
+        local short_country luci_lang
+        short_country=$(echo "$country_data" | awk '{print $5}')
+        luci_lang=$(echo "$country_data" | awk '{print $4}')
+
+        echo "$short_country" > "$language_cache"
+        echo "$luci_lang" > "$luci_cache"
+        echo "$country_data" > "$country_cache"
+
+        debug_log "Country data set: language.ch='$short_country', luci.ch='$luci_lang', country.ch='$country_data'"
+
+        select_zone
+        return
+    fi
+
+    debug_log "No matching country found for '$1', proceeding to select_country()"
+    select_country
+}
+
+#########################################################################
+# select_country: ユーザー入力で国を検索し、キャッシュに保存
+#########################################################################
+select_country() {
+    local country_file="${BASE_DIR}/country.db"
+    local country_cache="${CACHE_DIR}/country.ch"
+    local language_cache="${CACHE_DIR}/language.ch"
+    local luci_cache="${CACHE_DIR}/luci.ch"
+    local user_input=""
+
+    debug_log "language.ch not found, prompting user for country selection"
+
+    echo "$(color cyan "Enter country name, code, or language to select your country.")"
+    echo -n "$(color cyan "Please input: ")"
+    read user_input
+
+    debug_log "User input: '$user_input'"
+
+    # 入力が空の場合は再入力を促す
+    if [ -z "$user_input" ]; then
+        debug_log "No user input received, re-prompting user."
+        select_country
+        return
+    fi
+
+    # `check_country()` を呼び出し
+    check_country "$user_input"
+}
+
+#########################################################################
+# select_zone: `country.ch` からゾーン情報を取得し、ユーザーに選択させる
+#########################################################################
+select_zone() {
+    local country_cache="${CACHE_DIR}/country.ch"
+    local zone_cache="${CACHE_DIR}/zone.ch"
+
+    if [ ! -f "$country_cache" ]; then
+        debug_log "ERROR: country.ch not found. Cannot proceed with zone selection."
+        echo "$(color red "ERROR: country data not found. Please reselect your country.")"
+        select_country
+        return
+    fi
+
+    local zones
+    zones=$(awk '{for (i=6; i<=NF; i++) print $i}' "$country_cache")
+
+    if [ -z "$zones" ]; then
+        debug_log "ERROR: No zones found for selected country."
+        echo "$(color red "ERROR: No timezone data found. Please reselect your country.")"
+        select_country
+        return
+    fi
+
+    echo "$(color cyan "Select your timezone from the following options:")"
+    echo "$zones"
+
+    echo -n "$(color cyan "Please select a timezone: ")"
+    read selected_zone
+
+    echo "$selected_zone" > "$zone_cache"
+    debug_log "User selected timezone: $selected_zone"
+
+    normalize_country
+}
+
+#########################################################################
+# normalize_country: 言語設定の正規化
+#########################################################################
+normalize_country() {
+    local message_db="${BASE_DIR}/messages.db"
+    local language_cache="${CACHE_DIR}/luci.ch"
+    local selected_language="en"
+
+    if [ -f "$language_cache" ]; then
+        selected_language=$(cat "$language_cache")
+        debug_log "Loaded language from luci.ch -> $selected_language"
+    else
+        debug_log "No luci.ch found, defaulting to 'en'"
+    fi
+
+    if grep -q "^$selected_language|" "$message_db"; then
+        debug_log "Using message database language: $selected_language"
+    else
+        selected_language="en"
+        debug_log "Language not found in messages.db. Using: en"
+    fi
+
+    debug_log "Final language after normalization -> $selected_language"
+}
+
+# 🔴　旧ランゲージ系（バックアップ） 🔵　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
+#########################################################################
+# check_language: 言語キャッシュの確認および設定
+#########################################################################
+XXXXX_check_language() {
+    CACHE_DIR="$BASE_DIR/cache"
+    mkdir -p "$CACHE_DIR"
+
+    local country_file="${BASE_DIR}/country.db"
     local country_cache language_cache luci_cache country_data short_country luci_lang
 
     country_cache="${CACHE_DIR}/country.ch"
@@ -138,59 +290,9 @@ check_language() {
 }
 
 #########################################################################
-# check_language: 言語キャッシュの確認および設定
-#########################################################################
-XXXXX_check_language() {
-    CACHE_DIR="$BASE_DIR/cache"
-    mkdir -p "$CACHE_DIR"
-
-    local country_data
-    local country_file="${BASE_DIR}/country.db"
-    local language_cache="${CACHE_DIR}/language.ch"
-    local luci_cache="${CACHE_DIR}/luci.ch"
-    local country_cache="${CACHE_DIR}/country.ch"
-
-    debug_log "check_language received lang_code: '$1'"
-
-    # `country.db` の存在確認
-    if [ ! -f "$country_file" ]; then
-        debug_log "ERROR: country.db not found at $country_file"
-        echo "$(color red "ERROR: country database not found! Please ensure country.db is correctly loaded.")"
-        return 1
-    fi
-
-    # `language.ch` と `luci.ch` の両方が存在する場合は処理を終了
-    if [ -f "$language_cache" ] && [ -f "$luci_cache" ]; then
-        debug_log "Both language.ch and luci.ch exist: language.ch='$(cat "$language_cache")', luci.ch='$(cat "$luci_cache")'. Exiting check_language()."
-        return
-    fi
-
-    # `country.db` から `$5`（短縮国名）を大文字小文字区別せず検索
-    country_data=$(awk -v lang="$1" 'toupper($5) == toupper(lang) {print $0}' "$country_file")
-
-    if [ -n "$country_data" ]; then
-        local short_country luci_lang
-        short_country=$(echo "$country_data" | awk '{print $5}')  # 短縮国名 (JP, US) ※DBのフォーマットそのまま
-        luci_lang=$(echo "$country_data" | awk '{print $4}')  # LuCI 言語 (ja, en)
-
-        echo "$short_country" > "$language_cache"
-        echo "$luci_lang" > "$luci_cache"
-        echo "$country_data" > "$country_cache"  # 該当行すべてを country.ch に保存
-
-        debug_log "Language set: language.ch='$short_country', luci.ch='$luci_lang', country.ch='$country_data'"
-
-        return
-    fi
-
-    # どちらも無ければ `select_country()` へ
-    debug_log "No matching country found for '$1', proceeding to select_country()"
-    select_country
-}
-
-#########################################################################
 # select_country: ユーザーに国を選択させ、ゾーン情報を設定
 #########################################################################
-select_country() {
+XXXXX_select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${CACHE_DIR}/country.ch"
     local language_cache="${CACHE_DIR}/language.ch"
@@ -234,145 +336,6 @@ select_country() {
 
     debug_log "User selected: language.ch='$short_country', luci.ch='$luci_lang', country.ch='$country_data'"
 }
-
-NG_0211_select_country() {
-    local country_file="${BASE_DIR}/country.db"
-    local country_cache="${CACHE_DIR}/country.ch"
-    local language_cache="${CACHE_DIR}/luci.ch"
-    local zone_cache="${CACHE_DIR}/zone.ch"
-    local country_tmp="${CACHE_DIR}/country_tmp.ch"
-    local zone_tmp="${CACHE_DIR}/zone_tmp.ch"
-    local user_input=""
-    local found_entries=""
-    local selected_entry=""
-    local selected_zonename=""
-    local selected_timezone=""
-    local index=1
-    local max_display=10  # 一度に表示する最大件数
-    local start_line=1  # `more` での開始位置
-
-    # **キャッシュの初期化**
-    > "$country_tmp"
-    > "$zone_tmp"
-
-    # **データベース存在確認**
-    if [ ! -f "$country_file" ]; then
-        echo "$(color red "Country database not found!")"
-        return 1
-    fi
-
-    while true; do
-        echo "$(color cyan "Enter country name, code, or language to set language and retrieve timezone.")"
-        echo -n "$(color cyan "Please input: ")"
-        read user_input
-        debug_log "User input: '$user_input'"
-        user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]' | sed -E 's/[\/,_]+/ /g')
-
-        if [ "$user_input" = "/back" ]; then
-            echo "$(color yellow "Returning to the previous menu.")"
-            return
-        fi
-
-        if [ -z "$user_input" ]; then
-            echo "$(color yellow "Invalid input. Please enter a valid country name, code, or language.")"
-            continue
-        fi
-
-        # **検索処理: 完全一致 → 前方一致 → 後方一致 → 部分一致**
-        found_entries=$(awk -v query="$user_input" '$4 == query {print NR, $2, $3, $4, $5, $6, $7}' "$country_file")
-
-        if [ -z "$found_entries" ]; then
-            found_entries=$(awk -v query="^"query '$0 ~ query {print NR, $2, $3, $4, $5, $6, $7}' "$country_file")
-        fi
-
-        if [ -z "$found_entries" ]; then
-            found_entries=$(awk -v query=query"$" '$0 ~ query {print NR, $2, $3, $4, $5, $6, $7}' "$country_file")
-        fi
-
-        if [ -z "$found_entries" ]; then
-            found_entries=$(awk -v query="$user_input" '$0 ~ query {print NR, $2, $3, $4, $5, $6, $7}' "$country_file")
-        fi
-
-        if [ -z "$found_entries" ]; then
-            echo "$(color yellow "No matching country found. Please try again.")"
-            continue
-        fi
-
-        echo "$(color cyan "Select a country (max $max_display at a time, type 'more' to show more, /back to return):")"
-        index=1
-        echo "$found_entries" | tail -n +$start_line | head -n $max_display | while read -r line; do
-            echo "[$index] $line"
-            echo "$index $line" >> "$country_tmp"
-            index=$((index + 1))
-        done
-        echo "[0] Cancel / 'more' for next results"
-
-        while true; do
-            echo -n "$(color cyan "Enter the number of your choice (or 0 to retry): ")"
-            read choice
-
-            if [ "$choice" = "0" ]; then
-                echo "$(color yellow "Returning to country selection.")"
-                break
-            fi
-
-            if [ "$choice" = "more" ]; then
-                start_line=$((start_line + max_display))
-                break
-            fi
-
-            selected_entry=$(awk -v num="$choice" '$1 == num {print $2, $3, $4, $5, $6, $7}' "$country_tmp")
-
-            if [ -z "$selected_entry" ]; then
-                echo "$(color red "Invalid selection. Please choose a valid number.")"
-                continue
-            fi
-
-            echo "$(color cyan "Confirm selection: [$choice] $selected_entry (Y/n)?")"
-            read yn
-            case "$yn" in
-                [Yy]*)
-                    echo "$(color green "Final selection: $selected_entry")"
-                    echo "$selected_entry" > "$country_cache"
-                    return
-                    ;;
-                [Nn]*)
-                    echo "$(color yellow "Returning to country selection.")"
-                    break
-                    ;;
-                *)
-                    echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
-                    ;;
-            esac
-        done
-    done
-}
-
-#########################################################################
-# normalize_country: 言語設定の正規化
-#########################################################################
-normalize_country() {
-    local message_db="${BASE_DIR}/messages.db"
-    local language_cache="${CACHE_DIR}/luci.ch"
-    local selected_language="en"
-
-    if [ -f "$language_cache" ]; then
-        selected_language=$(cat "$language_cache")
-        debug_log "Loaded language from luci.ch -> $selected_language"
-    else
-        debug_log "No luci.ch found, defaulting to 'en'"
-    fi
-
-    if grep -q "^$selected_language|" "$message_db"; then
-        debug_log "Using message database language: $selected_language"
-    else
-        selected_language="en"
-        debug_log "Language not found in messages.db. Using: en"
-    fi
-
-    debug_log "Final language after normalization -> $selected_language"
-}
-
 
 # 🔴　ランゲージ系　🔴 🔵　ここまで　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 
