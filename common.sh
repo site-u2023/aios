@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-1-4"
+COMMON_VERSION="2025.02.11-1-5"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -84,23 +84,24 @@ test_cache_contents() {
 # check_language: 言語キャッシュの確認および設定
 #########################################################################
 check_language() {
-    local lang_code="${1^^}"  # 大文字変換
+    local lang_code="${1,,}"  # 小文字変換
     local country_file="${BASE_DIR}/country.db"
 
     debug_log "check_language received lang_code: '$lang_code'"
 
-    # `country.db` から `$5`（短縮国名）が一致する行を検索
+    # `country.db` から `$4`（LuCI 言語）が一致する行を検索
     local country_data
-    country_data=$(awk -v lang="$lang_code" 'toupper($5) == lang {print $0}' "$country_file")
+    country_data=$(awk -v lang="$lang_code" 'tolower($4) == lang {print $0}' "$country_file")
 
     if [ -z "$country_data" ]; then
-        debug_log "No matching country found for short name: $lang_code"
+        debug_log "ERROR: No matching country found for LuCI language: $lang_code"
+        echo "$(color red "ERROR: No matching country found for LuCI language: $lang_code. Please check country.db.")"
         return 1
     fi
 
     # 言語・国データをキャッシュに保存
-    local luci_lang=$(echo "$country_data" | awk '{print $4}')
-    local short_country=$(echo "$country_data" | awk '{print $5}')
+    local luci_lang=$(echo "$country_data" | awk '{print $4}')  # LuCI 言語
+    local short_country=$(echo "$country_data" | awk '{print $5}')  # 短縮国名 (JP, US)
 
     echo "$short_country" > "$CACHE_DIR/language.ch"
     echo "$luci_lang" > "$CACHE_DIR/luci.ch"
@@ -126,14 +127,13 @@ check_country() {
     local short_country
     short_country=$(cat "$lang_cache" 2>/dev/null)
 
-    debug_log "check_country received short_country: '$short_country'"
-
-    # `language.ch` が空の場合はエラーを出力
     if [ -z "$short_country" ]; then
         debug_log "ERROR: language.ch is empty. Country lookup failed."
         echo "$(color red "ERROR: language.ch is empty. Please set a valid country short name.")"
         return 1
     fi
+
+    debug_log "check_country received short_country: '$short_country'"
 
     # `country.db` から `$5`（短縮国名）が一致する行を検索
     local country_data
@@ -201,6 +201,7 @@ select_country() {
 
     debug_log "User selected: language.ch='$short_country', luci.ch='$luci_lang', country.ch='$country_data', zone.ch='$(cat "$zone_cache")'"
 }
+
 
 NG_0211_select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -313,44 +314,6 @@ NG_0211_select_country() {
             esac
         done
     done
-}
-
-#########################################################################
-# check_zone: 選択された国のゾーン情報を取得して zone.ch に保存
-#########################################################################
-check_zone() {
-    local country_cache="${CACHE_DIR}/country.ch"
-    local zone_cache="${CACHE_DIR}/zone.ch"
-    
-    local country_code
-    country_code=$(awk '{print $4}' "$country_cache" 2>/dev/null | head -n 1)
-
-    if [ -z "$country_code" ]; then
-        debug_log "No country code found in country.ch, defaulting to 'US'"
-        country_code="US"
-    fi
-
-    # `country.db` からゾーン情報を取得
-    local zone_info
-    zone_info=$(awk -v code="$country_code" '$4 == code {print $5, $6}' "${BASE_DIR}/country.db")
-
-    if [ -z "$zone_info" ]; then
-        debug_log "No timezone found for country: $country_code"
-        return
-    fi
-
-    echo "$zone_info" > "$zone_cache"
-    debug_log "Timezone data saved to $zone_cache -> $zone_info"
-}
-
-#########################################################################
-# update_country_cache
-#########################################################################
-update_country_cache() {
-    echo "$selected_entry" > "$CACHE_DIR/country.ch"
-    echo "$selected_zonename" > "$CACHE_DIR/luci.ch"
-    echo "$selected_timezone" > "$CACHE_DIR/language.ch"
-    echo "$selected_zonename $selected_timezone" > "$CACHE_DIR/zone.ch"
 }
 
 #########################################################################
