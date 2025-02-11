@@ -163,7 +163,7 @@ select_country() {
         user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]' | sed -E 's/[\/,_]+/ /g')
 
         if [ -z "$user_input" ]; then
-            echo "$(color yellow \"Invalid input. Please enter a valid country name, code, or language.\")"
+            echo "$(color yellow "Invalid input. Please enter a valid country name, code, or language.")"
             continue
         fi
 
