@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-7-11"
+COMMON_VERSION="2025.02.12-0-0"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -96,29 +96,30 @@ selection_list() {
     # デバッグ用: 入力データ確認
     debug_log "DEBUG: input_data='$input_data'"
 
-    echo "[0] Cancel / back to return"
+    local list_content=""
 
     if [ "$mode" = "country" ]; then
         echo "$input_data" | while IFS= read -r line; do
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
             if [ -n "$extracted" ]; then
-                echo "[$i] $extracted"
-                echo "$i $line" >> "$list_file"
+                list_content="${list_content}[$i] $extracted\n"
+                echo "$i $extracted" >> "$list_file"
                 i=$((i + 1))
             fi
         done
     elif [ "$mode" = "zone" ]; then
         echo "$input_data" | tr ',' '\n' | sort -u | while read -r zone; do
             if [ -n "$zone" ]; then
-                echo "[$i] $zone"
+                list_content="${list_content}[$i] $zone\n"
                 echo "$i $zone" >> "$list_file"
                 i=$((i + 1))
             fi
         done
     fi
 
-    # **不要な二重表示を削除**
-    # cat "$list_file" を削除して、リストが1回しか表示されないようにする
+    # **[0] をリストの最後に追加**
+    echo -e "$list_content"
+    echo "[0] Cancel / back to return"
 
     local choice=""
     while true; do
@@ -130,7 +131,8 @@ selection_list() {
             return
         fi
 
-        local selected_value=$(awk -v num="$choice" '$1 == num {for(i=2; i<=NF; i++) printf "%s ", $i; print ""}' "$list_file")
+        # **選択後のデータを$2~$5だけ取得**
+        local selected_value=$(awk -v num="$choice" '$1 == num {print $2, $3, $4, $5}' "$list_file")
 
         if [ -z "$selected_value" ]; then
             echo "$(color red "Invalid selection. Please choose a valid number.")"
