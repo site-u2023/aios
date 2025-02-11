@@ -177,7 +177,7 @@ select_country() {
     debug_log "User selected: language.ch='$short_country', luci.ch='$luci_lang', country.ch='$country_data', zone.ch='$(cat "$zone_cache")'"
 }
 
-0211_select_country() {
+NG_0211_select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${CACHE_DIR}/country.ch"
     local language_cache="${CACHE_DIR}/luci.ch"
