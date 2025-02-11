@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-4-3"
+COMMON_VERSION="2025.02.11-4-4"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -336,6 +336,8 @@ select_zone() {
     local country_cache="${CACHE_DIR}/country.ch"
     local zone_cache="${CACHE_DIR}/zone.ch"
 
+    debug_log "=== Entering select_zone() ==="
+
     if [ ! -f "$country_cache" ]; then
         debug_log "ERROR: country.ch not found. Cannot proceed with zone selection."
         echo "$(color red "ERROR: country data not found. Please reselect your country.")"
@@ -343,8 +345,11 @@ select_zone() {
         return
     fi
 
+    # `$6` 以降のデータを取得し、カンマを改行に変換
     local zones
     zones=$(awk '{for (i=6; i<=NF; i++) print $i}' "$country_cache" | tr ',' '\n')
+
+    debug_log "Extracted zones: $(echo "$zones" | tr '\n' ', ')"
 
     if [ -z "$zones" ]; then
         debug_log "ERROR: No zones found for selected country."
@@ -354,12 +359,14 @@ select_zone() {
     fi
 
     echo "$(color cyan "Select your timezone from the following options:")"
-    echo "$zones" | nl -w2 -s') '  # リストを番号付きで表示
+    echo "$zones" | awk '{printf "%d) %s\n", NR, $0}'
 
     echo -n "$(color cyan "Please select a timezone by number: ")"
     read selected_number
 
-    selected_zone=$(echo "$zones" | sed -n "${selected_number}p")
+    debug_log "User selected number: $selected_number"
+
+    selected_zone=$(echo "$zones" | awk -v num="$selected_number" 'NR == num')
 
     if [ -z "$selected_zone" ]; then
         debug_log "Invalid timezone selection: '$selected_number'."
@@ -368,8 +375,8 @@ select_zone() {
         return
     fi
 
-    echo "$selected_zone" > "$zone_cache"
     debug_log "User selected timezone: $selected_zone"
+    echo "$selected_zone" > "$zone_cache"
 
     normalize_country
 }
