@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-5-3"
+COMMON_VERSION="2025.02.11-5-4"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -97,19 +97,19 @@ selection_list() {
 
     while true; do
         echo "`color cyan \"$prompt\"`"
+        echo "[0] Cancel / back to return"
         i=1  # 番号リセット
         while IFS= read -r line; do
             echo "[$i] $line"
             echo "$i $line" >> "$list_file.tmp"
             i=$((i + 1))
         done < "$list_file"
-        echo "[0] Cancel / /back to return"
 
         echo -n "`color cyan \"Enter the number of your choice (or 0 to retry): \"`"
         read choice
 
         if [ "$choice" = "0" ]; then
-            echo "`color yellow \"Returning to selection.\"`"
+            echo "`color yellow \"Returning to previous menu.\"`"
             return 1
         fi
 
@@ -125,7 +125,7 @@ selection_list() {
         case "$yn" in
             [Yy]*)
                 echo "`color green \"Final selection: $selected_value\"`"
-                echo "$selected_value" > "$list_file"  # 選択結果をファイルに保存
+                echo "$selected_value" > "$list_file"
                 rm -f "$list_file.tmp"
                 return 0
                 ;;
@@ -163,8 +163,8 @@ select_country() {
     selection_list "$tmp_country_list" "Select your country from the following options:"
 
     if [ "$?" -eq 1 ]; then
-        echo "$(color yellow "Returning to the initial setup.")"
-        return  # `[0]` を選択した場合、何もしない
+        echo "`color yellow \"Returning to the initial setup.\"`"
+        return
     fi
 
     local selected_country
@@ -211,7 +211,7 @@ select_zone() {
 
     if [ ! -f "$country_cache" ]; then
         debug_log "ERROR: country.ch not found. Cannot proceed with zone selection."
-        echo "$(color red "ERROR: country data not found. Please reselect your country.")"
+        echo "`color red \"ERROR: country data not found. Please reselect your country.\"`"
         select_country
         return
     fi
@@ -223,7 +223,7 @@ select_zone() {
 
     if [ ! -s "$tmp_zone_list" ]; then
         debug_log "ERROR: No zones found for selected country."
-        echo "$(color red "ERROR: No timezone data found. Please reselect your country.")"
+        echo "`color red \"ERROR: No timezone data found. Please reselect your country.\"`"
         select_country
         return
     fi
