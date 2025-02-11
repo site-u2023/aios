@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-6-1"
+COMMON_VERSION="2025.02.11-6-2"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -92,11 +92,11 @@ selection_list() {
     echo -n "" > "$list_file"
 
     echo "[0] Cancel / back to return"
-    while IFS= read -r line; do
+    echo "$input_data" | while IFS= read -r line; do
         echo "[$i] $line"
         echo "$i $line" >> "$list_file"
         i=$((i + 1))
-    done <<< "$input_data"
+    done
 
     # 選択入力を受け取る
     local choice=""
