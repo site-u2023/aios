@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-4-4"
+COMMON_VERSION="2025.02.11-4-5"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -329,58 +329,7 @@ country_write() {
     select_zone
 }
 
-#########################################################################
-# select_zone: `country.ch` からゾーン情報を取得し、ユーザーに選択させる
-#########################################################################
 select_zone() {
-    local country_cache="${CACHE_DIR}/country.ch"
-    local zone_cache="${CACHE_DIR}/zone.ch"
-
-    debug_log "=== Entering select_zone() ==="
-
-    if [ ! -f "$country_cache" ]; then
-        debug_log "ERROR: country.ch not found. Cannot proceed with zone selection."
-        echo "$(color red "ERROR: country data not found. Please reselect your country.")"
-        select_language
-        return
-    fi
-
-    # `$6` 以降のデータを取得し、カンマを改行に変換
-    local zones
-    zones=$(awk '{for (i=6; i<=NF; i++) print $i}' "$country_cache" | tr ',' '\n')
-
-    debug_log "Extracted zones: $(echo "$zones" | tr '\n' ', ')"
-
-    if [ -z "$zones" ]; then
-        debug_log "ERROR: No zones found for selected country."
-        echo "$(color red "ERROR: No timezone data found. Please reselect your country.")"
-        select_language
-        return
-    fi
-
-    echo "$(color cyan "Select your timezone from the following options:")"
-    echo "$zones" | awk '{printf "%d) %s\n", NR, $0}'
-
-    echo -n "$(color cyan "Please select a timezone by number: ")"
-    read selected_number
-
-    debug_log "User selected number: $selected_number"
-
-    selected_zone=$(echo "$zones" | awk -v num="$selected_number" 'NR == num')
-
-    if [ -z "$selected_zone" ]; then
-        debug_log "Invalid timezone selection: '$selected_number'."
-        echo "$(color red "Invalid selection. Please choose a valid number.")"
-        select_zone
-        return
-    fi
-
-    debug_log "User selected timezone: $selected_zone"
-    echo "$selected_zone" > "$zone_cache"
-
-    normalize_country
-}
-
 #########################################################################
 # normalize_country: 言語設定の正規化
 #########################################################################
@@ -404,112 +353,6 @@ normalize_country() {
     fi
 
     debug_log "Final language after normalization -> $selected_language"
-}
-
-# 🔴　旧ランゲージ系（バックアップ） 🔵　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
-#########################################################################
-# check_language: 言語キャッシュの確認および設定
-#########################################################################
-XXXXX_check_language() {
-    CACHE_DIR="$BASE_DIR/cache"
-    mkdir -p "$CACHE_DIR"
-
-    local country_file="${BASE_DIR}/country.db"
-    local country_cache language_cache luci_cache country_data short_country luci_lang
-
-    country_cache="${CACHE_DIR}/country.ch"
-    language_cache="${CACHE_DIR}/language.ch"
-    luci_cache="${CACHE_DIR}/luci.ch"
-
-    debug_log "check_language received lang_code: '$1'"
-
-    # `country.db` の存在確認
-    if [ ! -f "$country_file" ]; then
-        debug_log "ERROR: country.db not found at $country_file"
-        echo "$(color red "ERROR: country database not found! Please ensure country.db is correctly loaded.")"
-        return 1
-    fi
-
-    # `$1` が空なら `select_country()` に移行
-    if [ -z "$1" ]; then
-        debug_log "No language code provided, proceeding to select_country()"
-        select_country
-        return
-    fi
-
-    # `language.ch` と `luci.ch` の両方が存在する場合は処理を終了
-    if [ -f "$language_cache" ] && [ -f "$luci_cache" ]; then
-        debug_log "Both language.ch and luci.ch exist. Exiting check_language()."
-        return
-    fi
-
-    # `country.db` から `$5`（短縮国名）が一致する行を検索（大文字小文字区別せず検索）
-    country_data=$(awk -v lang="$1" 'toupper($5) == toupper(lang) {print $0}' "$country_file")
-
-    # 一致するデータがある場合はキャッシュに書き込み
-    if [ -n "$country_data" ]; then
-        short_country=$(echo "$country_data" | awk '{print $5}')  # 短縮国名 (JP, US)
-        luci_lang=$(echo "$country_data" | awk '{print $4}')  # LuCI 言語 (ja, en)
-
-        echo "$country_data" > "$country_cache"  # 該当行すべてを country.ch に保存
-        echo "$short_country" > "$language_cache"
-        echo "$luci_lang" > "$luci_cache"
-
-        debug_log "Language set: language.ch='$short_country', luci.ch='$luci_lang', country.ch='$country_data'"
-        return
-    fi
-
-    # どちらも無ければ `select_country()` へ
-    debug_log "No matching country found for '$1', proceeding to select_country()"
-    select_country
-}
-
-#########################################################################
-# select_country: ユーザーに国を選択させ、ゾーン情報を設定
-#########################################################################
-XXXXX_select_country() {
-    local country_file="${BASE_DIR}/country.db"
-    local country_cache="${CACHE_DIR}/country.ch"
-    local language_cache="${CACHE_DIR}/language.ch"
-    local luci_cache="${CACHE_DIR}/luci.ch"
-    local zone_cache="${CACHE_DIR}/zone.ch"
-    local user_input=""
-
-    debug_log "language.ch not found, prompting user for country selection"
-
-    echo "$(color cyan "Enter country name, code, or language to select your country.")"
-    echo -n "$(color cyan "Please input: ")"
-    read user_input
-
-    debug_log "User input: '$user_input'"
-
-    # 入力が空の場合は再入力を促す
-    if [ -z "$user_input" ]; then
-        debug_log "No user input received, re-prompting user."
-        select_country
-        return
-    fi
-
-    # `country.db` から大文字小文字を区別せず検索
-    local country_data=""
-    country_data=$(awk -v query="$user_input" 'toupper($5) == toupper(query) {print $0}' "$country_file")
-
-    if [ -z "$country_data" ]; then
-        echo "$(color red "No matching country found. Please try again.")"
-        return
-    fi
-
-    # `language.ch`, `luci.ch`, `country.ch` に保存
-    local short_country
-    short_country=$(echo "$country_data" | awk '{print $5}')
-    local luci_lang
-    luci_lang=$(echo "$country_data" | awk '{print $4}')
-
-    echo "$short_country" > "$language_cache"
-    echo "$luci_lang" > "$luci_cache"
-    echo "$country_data" > "$country_cache"
-
-    debug_log "User selected: language.ch='$short_country', luci.ch='$luci_lang', country.ch='$country_data'"
 }
 
 # 🔴　ランゲージ系　🔴 🔵　ここまで　🔵-------------------------------------------------------------------------------------------------------------------------------------------
