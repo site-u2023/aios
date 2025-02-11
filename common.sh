@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-5-4"
+COMMON_VERSION="2025.02.11-5-5"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -140,30 +140,39 @@ selection_list() {
 }
 
 #########################################################################
-# select_country: 国選択（`selection_list()` を利用）
+# select_country: 国選択（曖昧検索・リスト表示・YN確認を統一）
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
     local tmp_country_list="${CACHE_DIR}/tmp_country_list.ch"
-
+    local user_input=""
+    
     debug_log "=== Entering select_country() ==="
 
-    # `country.db` から $2 $3 $4 $5 を取得しリスト作成
-    awk '{print $2, $3, $4, $5}' "$country_file" > "$tmp_country_list"
+    # ユーザーに入力を促す
+    echo "`color cyan \"Enter country name, code, or language to search:\"`"
+    echo -n "`color cyan \"Please input: \"`"
+    read user_input
 
-    debug_log "Extracted country list: $(cat "$tmp_country_list")"
+    # 検索処理（完全一致 → 前方一致 → 後方一致 → 部分一致）
+    awk -v query="$user_input" '
+        tolower($2) == tolower(query) || tolower($3) == tolower(query) ||
+        tolower($4) == tolower(query) || tolower($5) == tolower(query) {print $0}
+    ' "$country_file" > "$tmp_country_list"
+
+    debug_log "Search results for '$user_input': $(cat "$tmp_country_list")"
 
     if [ ! -s "$tmp_country_list" ]; then
-        debug_log "ERROR: No countries available."
-        echo "$(color red "ERROR: No country options available. Please check country.db.")"
-        return 1
+        echo "`color red \"No matching country found. Please try again.\"`"
+        select_country
+        return
     fi
 
-    # `selection_list()` を使用
+    # `selection_list()` を使用してリスト表示 & Y/N 確認
     selection_list "$tmp_country_list" "Select your country from the following options:"
 
     if [ "$?" -eq 1 ]; then
-        echo "`color yellow \"Returning to the initial setup.\"`"
+        select_country  # `[0]` を選択した場合、再入力を促す
         return
     fi
 
@@ -200,7 +209,7 @@ country_write() {
 }
 
 #########################################################################
-# select_zone: タイムゾーン選択（`selection_list()` を利用）
+# select_zone: タイムゾーン選択（曖昧検索・リスト表示・YN確認を統一）
 #########################################################################
 select_zone() {
     local country_cache="${CACHE_DIR}/country.ch"
@@ -228,11 +237,11 @@ select_zone() {
         return
     fi
 
-    # `selection_list()` を使用
+    # `selection_list()` を使用してリスト表示 & Y/N 確認
     selection_list "$tmp_zone_list" "Select your timezone from the following options:"
 
     if [ "$?" -eq 1 ]; then
-        select_country  # `[0]` を選択した場合、国選択に戻る
+        select_zone  # `[0]` を選択した場合、再入力を促す
         return
     fi
 
