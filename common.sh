@@ -96,30 +96,29 @@ selection_list() {
     # デバッグ用: 入力データ確認
     debug_log "DEBUG: input_data='$input_data'"
 
-    local list_content=""
+    echo "[0] Cancel / back to return"
 
     if [ "$mode" = "country" ]; then
         echo "$input_data" | while IFS= read -r line; do
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
             if [ -n "$extracted" ]; then
-                list_content="${list_content}[$i] $extracted\n"
-                echo "$i $extracted" >> "$list_file"
+                echo "[$i] $extracted"
+                echo "$i $line" >> "$list_file"
                 i=$((i + 1))
             fi
         done
     elif [ "$mode" = "zone" ]; then
         echo "$input_data" | tr ',' '\n' | sort -u | while read -r zone; do
             if [ -n "$zone" ]; then
-                list_content="${list_content}[$i] $zone\n"
+                echo "[$i] $zone"
                 echo "$i $zone" >> "$list_file"
                 i=$((i + 1))
             fi
         done
     fi
 
-    # **[0] をリストの最後に追加**
-    echo -e "$list_content"
-    echo "[0] Cancel / back to return"
+    # **不要な二重表示を削除**
+    # cat "$list_file" を削除して、リストが1回しか表示されないようにする
 
     local choice=""
     while true; do
@@ -131,8 +130,7 @@ selection_list() {
             return
         fi
 
-        # **選択後のデータを$2~$5だけ取得**
-        local selected_value=$(awk -v num="$choice" '$1 == num {print $2, $3, $4, $5}' "$list_file")
+        local selected_value=$(awk -v num="$choice" '$1 == num {for(i=2; i<=NF; i++) printf "%s ", $i; print ""}' "$list_file")
 
         if [ -z "$selected_value" ]; then
             echo "$(color red "Invalid selection. Please choose a valid number.")"
