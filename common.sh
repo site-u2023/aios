@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-1-7"
+COMMON_VERSION="2025.02.11-1-8"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -15,6 +15,9 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 mkdir -p "$CACHE_DIR" "$LOG_DIR"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
+language_cache="${CACHE_DIR}/language.ch"
+luci_cache="${CACHE_DIR}/luci.ch"
+    
 script_update() (
 COMMON_CACHE="${CACHE_DIR}/common_version.ch"
 # **キャッシュが存在しない、またはバージョンが異なる場合にアラートを表示**
