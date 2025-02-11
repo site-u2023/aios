@@ -140,7 +140,7 @@ selection_list() {
 }
 
 #########################################################################
-# select_country: 国選択（曖昧検索・リスト表示・YN確認を統一）
+# select_country: 国選択（`selection_list()` を利用）
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -209,7 +209,7 @@ country_write() {
 }
 
 #########################################################################
-# select_zone: タイムゾーン選択（曖昧検索・リスト表示・YN確認を統一）
+# select_zone: タイムゾーン選択（`selection_list()` を利用）
 #########################################################################
 select_zone() {
     local country_cache="${CACHE_DIR}/country.ch"
@@ -225,7 +225,7 @@ select_zone() {
         return
     fi
 
-    # `$6` 以降のデータを取得し、一時キャッシュに保存（カンマを空白に変換）
+    # `$6` 以降のデータを取得し、一時キャッシュに保存
     awk '{for (i=6; i<=NF; i++) print $i}' "$country_cache" > "$tmp_zone_list"
 
     debug_log "Extracted zones: $(cat "$tmp_zone_list")"
@@ -237,11 +237,11 @@ select_zone() {
         return
     fi
 
-    # `selection_list()` を使用してリスト表示 & Y/N 確認
+    # `selection_list()` を使用
     selection_list "$tmp_zone_list" "Select your timezone from the following options:"
 
     if [ "$?" -eq 1 ]; then
-        select_zone  # `[0]` を選択した場合、再入力を促す
+        select_country  # `[0]` を選択した場合、国選択に戻る
         return
     fi
 
