@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-1-19"
+COMMON_VERSION="2025.02.11-1-20"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -84,6 +84,63 @@ test_cache_contents() {
 # check_language: 言語キャッシュの確認および設定
 #########################################################################
 check_language() {
+    CACHE_DIR="$BASE_DIR/cache"
+    mkdir -p "$CACHE_DIR"
+
+    local country_file="${BASE_DIR}/country.db"
+    local country_cache language_cache luci_cache country_data short_country luci_lang
+
+    country_cache="${CACHE_DIR}/country.ch"
+    language_cache="${CACHE_DIR}/language.ch"
+    luci_cache="${CACHE_DIR}/luci.ch"
+
+    debug_log "check_language received lang_code: '$1'"
+
+    # `country.db` の存在確認
+    if [ ! -f "$country_file" ]; then
+        debug_log "ERROR: country.db not found at $country_file"
+        echo "$(color red "ERROR: country database not found! Please ensure country.db is correctly loaded.")"
+        return 1
+    fi
+
+    # `$1` が空なら `select_country()` に移行
+    if [ -z "$1" ]; then
+        debug_log "No language code provided, proceeding to select_country()"
+        select_country
+        return
+    fi
+
+    # `language.ch` と `luci.ch` の両方が存在する場合は処理を終了
+    if [ -f "$language_cache" ] && [ -f "$luci_cache" ]; then
+        debug_log "Both language.ch and luci.ch exist. Exiting check_language()."
+        return
+    fi
+
+    # `country.db` から `$5`（短縮国名）が一致する行を検索（大文字小文字区別せず検索）
+    country_data=$(awk -v lang="$1" 'toupper($5) == toupper(lang) {print $0}' "$country_file")
+
+    # 一致するデータがある場合はキャッシュに書き込み
+    if [ -n "$country_data" ]; then
+        short_country=$(echo "$country_data" | awk '{print $5}')  # 短縮国名 (JP, US)
+        luci_lang=$(echo "$country_data" | awk '{print $4}')  # LuCI 言語 (ja, en)
+
+        echo "$country_data" > "$country_cache"  # 該当行すべてを country.ch に保存
+        echo "$short_country" > "$language_cache"
+        echo "$luci_lang" > "$luci_cache"
+
+        debug_log "Language set: language.ch='$short_country', luci.ch='$luci_lang', country.ch='$country_data'"
+        return
+    fi
+
+    # どちらも無ければ `select_country()` へ
+    debug_log "No matching country found for '$1', proceeding to select_country()"
+    select_country
+}
+
+#########################################################################
+# check_language: 言語キャッシュの確認および設定
+#########################################################################
+XXXXX_check_language() {
     CACHE_DIR="$BASE_DIR/cache"
     mkdir -p "$CACHE_DIR"
 
