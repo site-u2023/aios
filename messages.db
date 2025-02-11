@@ -1,6 +1,8 @@
 # メッセージデータベース (多言語対応)
 # フォーマット: 言語コード|メッセージキー=メッセージ
 
+SUPPORTED_LANGUAGES="en ja"　　　　　　　　　　　　　　　　      　　　　　 
+
 MESSAGE_VERSION="2025.02.06-5"
 echo "message.db Last update: $MESSAGE_VERSION"
 
