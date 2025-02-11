@@ -77,37 +77,31 @@ test_cache_contents() {
 
 
 # 🔴　ランゲージ系　🔴 🔵　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
-
 #########################################################################
 # check_language: 言語キャッシュの確認および設定
-# - `luci.ch` を参照し、適切な言語コード (ja, en, etc.) を取得
-# - 存在しない場合、 `country.ch` から取得し、 `luci.ch` に保存
-# - `message.db` に対応する言語があるか確認し、 `SELECTED_LANGUAGE` にセット
 #########################################################################
 check_language() {
-    local lang_code="$1"
+    local lang_code="${1^^}"  # 大文字変換
+    local country_file="${BASE_DIR}/country.db"
 
-    if [ "$DEBUG_MODE" = true ]; then
-        echo "DEBUG: check_language received lang_code: '$lang_code'" | tee -a "$LOG_DIR/debug.log"
+    debug_log "check_language received lang_code: '$lang_code'"
+
+    # `country.db` から `$5`（短縮国名）が一致する行を検索
+    local country_data
+    country_data=$(awk -v lang="$lang_code" 'toupper($5) == lang {print $0}' "$country_file")
+
+    if [ -z "$country_data" ]; then
+        debug_log "No matching country found for short name: $lang_code"
+        return 1
     fi
 
-    if [ -z "$lang_code" ]; then
-        lang_code="en"
-        [ "$DEBUG_MODE" = true ] && echo "DEBUG: No language provided, defaulting to 'en'" | tee -a "$LOG_DIR/debug.log"
-    fi
+    # 言語・国データをキャッシュに保存
+    local luci_lang=$(echo "$country_data" | awk '{print $4}')
+    local short_country=$(echo "$country_data" | awk '{print $5}')
 
-    if grep -q "^$lang_code" "$CACHE_DIR/luci.ch"; then
-        [ "$DEBUG_MODE" = true ] && echo "DEBUG: Language '$lang_code' found in luci.ch" | tee -a "$LOG_DIR/debug.log"
-        return
-    fi
-
-    if grep -q "\b$lang_code\b" "$BASE_DIR/country.db"; then
-        [ "$DEBUG_MODE" = true ] && echo "DEBUG: Language '$lang_code' found in country.db" | tee -a "$LOG_DIR/debug.log"
-        echo "$lang_code" > "$CACHE_DIR/luci.ch"
-    else
-        [ "$DEBUG_MODE" = true ] && echo "DEBUG: No matching language in country.db, defaulting to 'en'" | tee -a "$LOG_DIR/debug.log"
-        echo "en" > "$CACHE_DIR/luci.ch"
-    fi
+    echo "$short_country" > "$CACHE_DIR/language.ch"
+    echo "$luci_lang" > "$CACHE_DIR/luci.ch"
+    debug_log "Language set: language.ch='$short_country', luci.ch='$luci_lang'"
 }
 
 #########################################################################
@@ -116,35 +110,74 @@ check_language() {
 check_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${CACHE_DIR}/country.ch"
-    local luci_cache="${CACHE_DIR}/luci.ch"
-    local lang_code="${1:-$INPUT_LANG}"
+    local zone_cache="${CACHE_DIR}/zone.ch"
+    local lang_cache="${CACHE_DIR}/language.ch"
 
-    debug_log "check_country received lang_code: '$lang_code'"
+    local short_country
+    short_country=$(cat "$lang_cache" 2>/dev/null)
 
-    if [ -z "$lang_code" ]; then
-        debug_log "No language provided, defaulting to 'en'"
-        lang_code="en"
-    fi
+    debug_log "check_country received short_country: '$short_country'"
 
-    # `country.db` から `$4` の言語コードが一致する行を取得
+    # `country.db` から `$5`（短縮国名）が一致する行を検索
     local country_data
-    country_data=$(awk -v lang="$lang_code" '$4 == lang {print $0}' "$country_file")
+    country_data=$(awk -v lang="$short_country" 'toupper($5) == lang {print $0}' "$country_file")
 
     if [ -z "$country_data" ]; then
-        debug_log "No matching country found for language: $lang_code"
-        return
+        debug_log "No matching country found for language.ch: $short_country"
+        return 1
     fi
 
+    # 国データ・ゾーンデータを保存
     echo "$country_data" > "$country_cache"
-    echo "$lang_code" > "$luci_cache"
-    debug_log "Country data saved to $country_cache -> $country_data"
-    debug_log "Language saved to $luci_cache -> $lang_code"
+    echo "$(echo "$country_data" | cut -d' ' -f6-)" > "$zone_cache"
+    debug_log "Country data saved to $country_cache, zone data saved to $zone_cache"
 }
 
 #########################################################################
-# select_country: 国と言語、タイムゾーンを選択（検索・表示を `country.db` に統一）
+# select_country: ユーザーに国を選択させ、`language.ch` をセット
 #########################################################################
 select_country() {
+    local country_file="${BASE_DIR}/country.db"
+    local country_cache="${CACHE_DIR}/country.ch"
+    local language_cache="${CACHE_DIR}/language.ch"
+    local luci_cache="${CACHE_DIR}/luci.ch"
+    local zone_cache="${CACHE_DIR}/zone.ch"
+
+    # 既に `language.ch` が設定されている場合はスキップ
+    if [ -f "$language_cache" ]; then
+        debug_log "Skipping select_country() because language.ch exists"
+        return
+    fi
+
+    echo "$(color cyan "Enter country short name (e.g., US, JP) to set language and retrieve timezone.")"
+    echo -n "$(color cyan "Please input: ")"
+    read user_input
+    debug_log "User input: '$user_input'"
+
+    user_input="${user_input^^}"  # 大文字変換
+
+    # `country.db` から `$5`（短縮国名）が一致する行を検索
+    local country_data
+    country_data=$(awk -v lang="$user_input" 'toupper($5) == lang {print $0}' "$country_file")
+
+    if [ -z "$country_data" ]; then
+        echo "$(color red "No matching country found. Please try again.")"
+        return
+    fi
+
+    # 言語・国データをキャッシュに保存
+    local luci_lang=$(echo "$country_data" | awk '{print $4}')
+    local short_country=$(echo "$country_data" | awk '{print $5}')
+
+    echo "$short_country" > "$language_cache"
+    echo "$luci_lang" > "$luci_cache"
+    echo "$country_data" > "$country_cache"
+    echo "$(echo "$country_data" | cut -d' ' -f6-)" > "$zone_cache"
+
+    debug_log "User selected: language.ch='$short_country', luci.ch='$luci_lang', country.ch='$country_data', zone.ch='$(cat "$zone_cache")'"
+}
+
+0211_select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${CACHE_DIR}/country.ch"
     local language_cache="${CACHE_DIR}/luci.ch"
