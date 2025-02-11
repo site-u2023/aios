@@ -84,6 +84,11 @@ test_cache_contents() {
 # check_language: 言語キャッシュの確認および設定
 #########################################################################
 check_language() {
+    BASE_DIR="${BASE_DIR:-/tmp/aios}"
+    CACHE_DIR="$BASE_DIR/cache"
+    LOG_DIR="$BASE_DIR/logs"
+    mkdir -p "$CACHE_DIR" "$LOG_DIR"
+
     local lang_code country_data
     local country_file="${BASE_DIR}/country.db"
     local language_cache="${CACHE_DIR}/language.ch"
