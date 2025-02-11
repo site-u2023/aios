@@ -868,7 +868,7 @@ check_common() {
             download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
             download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
-             check_language "$lang_code"
+            check_language #"$lang_code"
             
             #check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
             #select_country
