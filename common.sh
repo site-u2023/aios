@@ -4,11 +4,12 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-7-4"
+COMMON_VERSION="2025.02.11-7-6"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
-BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
+BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/a
+ios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
@@ -80,6 +81,9 @@ test_cache_contents() {
 
 
 # 🔵　ランゲージ系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
+#########################################################################
+# 
+#########################################################################
 selection_list() {
     local input_data="$1"
     local output_file="$2"
@@ -97,7 +101,7 @@ selection_list() {
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
             if [ -n "$extracted" ]; then
                 echo "[$i] $extracted"
-                echo "$i $extracted" >> "$list_file"
+                echo "$i $line" >> "$list_file"  # **全データを保存**
                 i=$((i + 1))
             fi
         done
@@ -124,7 +128,7 @@ selection_list() {
             return
         fi
 
-        local selected_value=$(awk -v num="$choice" '$1 == num {print $2}' "$list_file")
+        local selected_value=$(awk -v num="$choice" '$1 == num {for(i=2; i<=NF; i++) printf "%s ", $i; print ""}' "$list_file")
 
         if [ -z "$selected_value" ]; then
             echo "$(color red "Invalid selection. Please choose a valid number.")"
@@ -136,7 +140,7 @@ selection_list() {
         read yn
         case "$yn" in
             [Yy]*)
-                echo "$selected_value" > "$output_file"
+                echo "$selected_value" > "$output_file"  # **全データを保存**
                 debug_log "Final selection: $selected_value"
                 return
                 ;;
@@ -159,21 +163,16 @@ select_country() {
     local input=""
     local search_results=""
     local cache_country="${CACHE_DIR}/country.ch"
-    local cache_language="${CACHE_DIR}/language.ch"
-    local cache_luci="${CACHE_DIR}/luci.ch"
 
-    # 言語入力を促す
     echo "$(color cyan "Enter country name, code, or language to search:")"
     echo -n "Please input: "
     read input
 
-    # 入力が空ならリトライ
     if [ -z "$input" ]; then
         select_country
         return
     fi
 
-    # 検索実行
     search_results=$(awk -v search="$input" '
         BEGIN {IGNORECASE=1}
         $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}
@@ -185,11 +184,9 @@ select_country() {
         return
     fi
 
-    # 検索結果のリストを表示
     echo "$(color cyan "Select your country from the following options:")"
     selection_list "$search_results" "$cache_country" "country"
 
-    # 選択されたデータを処理
     if [ -s "$cache_country" ]; then
         country_write "$(cat "$cache_country")"
     else
