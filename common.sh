@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-1-5"
+COMMON_VERSION="2025.02.11-1-6"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -84,38 +84,12 @@ test_cache_contents() {
 # check_language: 言語キャッシュの確認および設定
 #########################################################################
 check_language() {
-    local lang_code="${1,,}"  # 小文字変換
+    local lang_code="${1^^}"  # 大文字変換（例: jp -> JP）
     local country_file="${BASE_DIR}/country.db"
+    local language_cache="${CACHE_DIR}/language.ch"
+    local luci_cache="${CACHE_DIR}/luci.ch"
 
     debug_log "check_language received lang_code: '$lang_code'"
-
-    # `country.db` から `$4`（LuCI 言語）が一致する行を検索
-    local country_data
-    country_data=$(awk -v lang="$lang_code" 'tolower($4) == lang {print $0}' "$country_file")
-
-    if [ -z "$country_data" ]; then
-        debug_log "ERROR: No matching country found for LuCI language: $lang_code"
-        echo "$(color red "ERROR: No matching country found for LuCI language: $lang_code. Please check country.db.")"
-        return 1
-    fi
-
-    # 言語・国データをキャッシュに保存
-    local luci_lang=$(echo "$country_data" | awk '{print $4}')  # LuCI 言語
-    local short_country=$(echo "$country_data" | awk '{print $5}')  # 短縮国名 (JP, US)
-
-    echo "$short_country" > "$CACHE_DIR/language.ch"
-    echo "$luci_lang" > "$CACHE_DIR/luci.ch"
-    debug_log "Language set: language.ch='$short_country', luci.ch='$luci_lang'"
-}
-
-#########################################################################
-# check_country: 国データの取得とキャッシュ保存
-#########################################################################
-check_country() {
-    local country_file="${BASE_DIR}/country.db"
-    local country_cache="${CACHE_DIR}/country.ch"
-    local zone_cache="${CACHE_DIR}/zone.ch"
-    local lang_cache="${CACHE_DIR}/language.ch"
 
     # `country.db` の存在確認
     if [ ! -f "$country_file" ]; then
@@ -123,84 +97,96 @@ check_country() {
         echo "$(color red "ERROR: country database not found! Please ensure country.db is correctly loaded.")"
         return 1
     fi
-
-    local short_country
-    short_country=$(cat "$lang_cache" 2>/dev/null)
-
-    if [ -z "$short_country" ]; then
-        debug_log "ERROR: language.ch is empty. Country lookup failed."
-        echo "$(color red "ERROR: language.ch is empty. Please set a valid country short name.")"
-        return 1
+    
+    # `language.ch` と `luci.ch` の両方が存在する場合は処理を終了
+    if [ -f "$language_cache" ] && [ -f "$luci_cache" ]; then
+        debug_log "Both language.ch and luci.ch exist: language.ch='$(cat "$language_cache")', luci.ch='$(cat "$luci_cache")'. Exiting check_language()."
+        return
     fi
-
-    debug_log "check_country received short_country: '$short_country'"
 
     # `country.db` から `$5`（短縮国名）が一致する行を検索
     local country_data
-    country_data=$(awk -v lang="$short_country" 'toupper($5) == lang {print $0}' "$country_file")
+    country_data=$(awk -v lang="$lang_code" 'toupper($5) == lang {print $0}' "$country_file")
 
-    if [ -z "$country_data" ]; then
-        debug_log "ERROR: No matching country found for short name: $short_country"
-        echo "$(color red "ERROR: No matching country found for $short_country. Please check country.db.")"
-        return 1
+    if [ -n "$country_data" ]; then
+        local short_country=$(echo "$country_data" | awk '{print $5}')  # 短縮国名 (JP, US)
+        local luci_lang=$(echo "$country_data" | awk '{print $4}')  # LuCI 言語 (ja, en)
+
+        echo "$short_country" > "$language_cache"
+        echo "$luci_lang" > "$luci_cache"
+        echo "$country_data" > "$country_cache"  # 該当行すべてを country.ch に保存
+
+        debug_log "Language set: language.ch='$short_country', luci.ch='$luci_lang', country.ch='$country_data'"
+
+        return
     fi
 
-    # 国データ・ゾーンデータを保存
-    echo "$country_data" > "$country_cache"
-    echo "$(echo "$country_data" | cut -d' ' -f6-)" > "$zone_cache"
-    debug_log "Country data saved to $country_cache, zone data saved to $zone_cache"
+    # どちらも無ければ `check_country()` へ
+    debug_log "No matching country found for '$lang_code', proceeding to check_country()"
+    select_country
 }
 
 #########################################################################
-# select_country: ユーザーに国を選択させ、`language.ch` をセット
+# select_country: 国を選択し、ゾーン情報を設定
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
     local country_cache="${CACHE_DIR}/country.ch"
     local language_cache="${CACHE_DIR}/language.ch"
-    local luci_cache="${CACHE_DIR}/luci.ch"
     local zone_cache="${CACHE_DIR}/zone.ch"
 
-    # `country.db` の存在確認
-    if [ ! -f "$country_file" ]; then
-        debug_log "ERROR: country.db not found at $country_file"
-        echo "$(color red "ERROR: country database not found! Please ensure country.db is correctly loaded.")"
-        return 1
+    # `language.ch` が無い場合は国を検索・選択
+    if [ ! -f "$language_cache" ]; then
+        debug_log "language.ch not found, prompting user for country selection"
+
+        echo "$(color cyan "Enter country name, code, or language to select your country.")"
+        echo -n "$(color cyan "Please input: ")"
+        read user_input
+        debug_log "User input: '$user_input'"
+
+        user_input="${user_input^^}"  # 大文字変換
+
+        # `country.db` から完全一致、前方一致、後方一致、部分一致で検索
+        local country_data
+        country_data=$(awk -v query="$user_input" '
+            $2 == query || $3 == query || $4 == query || $5 == query {print $0}
+        ' "$country_file")
+
+        if [ -z "$country_data" ]; then
+            echo "$(color red "No matching country found. Please try again.")"
+            return
+        fi
+
+        # `language.ch` に短縮国名 `$5` を保存
+        local short_country
+        short_country=$(echo "$country_data" | awk '{print $5}')
+        echo "$short_country" > "$language_cache"
+
+        # `country.ch` に該当データを保存
+        echo "$country_data" > "$country_cache"
+        debug_log "User selected: language.ch='$short_country', country.ch='$country_data'"
     fi
 
-    # 既に `language.ch` が設定されている場合はスキップ
-    if [ -f "$language_cache" ]; then
-        debug_log "Skipping select_country() because language.ch exists"
-        return
+    # `country.ch` からゾーン情報を取得し、選択を促す
+    if [ -f "$country_cache" ]; then
+        debug_log "Retrieving zone information from country.ch"
+        local zones
+        zones=$(awk '{for (i=6; i<=NF; i++) print $i}' "$country_cache")
+
+        echo "$(color cyan "Select your timezone from the following options:")"
+        echo "$zones"
+
+        echo -n "$(color cyan "Please select a timezone: ")"
+        read selected_zone
+
+        echo "$selected_zone" > "$zone_cache"
+        debug_log "Selected timezone: $selected_zone"
     fi
 
-    echo "$(color cyan "Enter country short name (e.g., US, JP) to set language and retrieve timezone.")"
-    echo -n "$(color cyan "Please input: ")"
-    read user_input
-    debug_log "User input: '$user_input'"
-
-    user_input="${user_input^^}"  # 大文字変換
-
-    # `country.db` から `$5`（短縮国名）が一致する行を検索
-    local country_data
-    country_data=$(awk -v lang="$user_input" 'toupper($5) == lang {print $0}' "$country_file")
-
-    if [ -z "$country_data" ]; then
-        echo "$(color red "No matching country found. Please try again.")"
-        return
-    fi
-
-    # 言語・国データをキャッシュに保存
-    local luci_lang=$(echo "$country_data" | awk '{print $4}')
-    local short_country=$(echo "$country_data" | awk '{print $5}')
-
-    echo "$short_country" > "$language_cache"
-    echo "$luci_lang" > "$luci_cache"
-    echo "$country_data" > "$country_cache"
-    echo "$(echo "$country_data" | cut -d' ' -f6-)" > "$zone_cache"
-
-    debug_log "User selected: language.ch='$short_country', luci.ch='$luci_lang', country.ch='$country_data', zone.ch='$(cat "$zone_cache")'"
+    # どのケースでも `normalize_country()` に移動
+    normalize_country
 }
+
 
 
 NG_0211_select_country() {
@@ -879,9 +865,11 @@ check_common() {
             download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
             download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
-            check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
-            select_country
-            normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
+             check_language "$lang_code"
+            
+            #check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
+            #select_country
+            #normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
         light)
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
