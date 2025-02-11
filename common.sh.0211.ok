@@ -1,18 +1,344 @@
-
 #!/bin/sh
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
-COMMON_VERSION="2025.02.08-06"
-echo "common.sh Last update: $COMMON_VERSION"
+# Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
+# 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-# === 基本定数の設定 ===
-BASE_WGET="wget -O"
-# BASE_WGET="wget --quiet -O"
+COMMON_VERSION="2025.02.11-1-0"
+
+# 基本定数の設定
+BASE_WGET="wget --quiet -O"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
-AIOS_DIR="/usr/bin"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
-SUPPORTED_VERSIONS="${SUPPORTED_VERSIONS:-19.07 21.02 22.03 23.05 24.10.0 SNAPSHOT}"
-SUPPORTED_LANGUAGES="${SUPPORTED_LANGUAGES:-en ja zh-cn zh-tw id ko de ru}"
+CACHE_DIR="${CACHE_DIR:-${BASE_DIR}/cache}"
+LOG_DIR="${LOG_DIR:-${BASE_DIR}/logs}"
+mkdir -p "$CACHE_DIR" "$LOG_DIR"
+DEBUG_MODE="${DEBUG_MODE:-false}"
+
+script_update() (
+COMMON_CACHE="${CACHE_DIR}/common_version.ch"
+# **キャッシュが存在しない、またはバージョンが異なる場合にアラートを表示**
+if [ ! -f "$COMMON_CACHE" ] || [ "$(cat "$COMMON_CACHE" | tr -d '\r\n')" != "$COMMON_VERSION" ]; then
+    echo -e "`color white_black "common.sh Updated to version $COMMON_VERSION"`"
+    echo "$COMMON_VERSION" > "$COMMON_CACHE"
+fi
+)
+
+#########################################################################
+# テスト用関数: データ取得を個別に確認
+#########################################################################
+test_debug() {
+    if [ "$DEBUG_MODE" = true ]; then
+        echo "DEBUG: Running debug tests..." | tee -a "$LOG_DIR/debug.log"
+
+        test_country_search "US"
+        test_country_search "Japan"
+        test_timezone_search "US"
+        test_timezone_search "JP"
+        test_cache_contents
+
+        echo "DEBUG: luci.ch content: $(cat "$CACHE_DIR/luci.ch" 2>/dev/null || echo 'Not Found')" | tee -a "$LOG_DIR/debug.log"
+        echo "DEBUG: country.ch content: $(cat "$CACHE_DIR/country.ch" 2>/dev/null || echo 'Not Found')" | tee -a "$LOG_DIR/debug.log"
+        echo "DEBUG: language.ch content: $(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo 'Not Found')" | tee -a "$LOG_DIR/debug.log"
+    fi
+}
+
+# 国検索テスト
+test_country_search() {
+    local test_input="$1"
+    echo "`color cyan "TEST: Searching for country with input '$test_input'"`"
+    if [ ! -f "${BASE_DIR}/country.db" ]; then
+        echo "`color red "ERROR: country.db not found at ${BASE_DIR}/country.db"`"
+        return 1
+    fi
+    awk -v query="$test_input" '
+        $2 ~ query || $3 ~ query || $4 ~ query || $5 ~ query {print NR, $2, $3, $4, $5, $6, $7, $8, $9}' "${BASE_DIR}/country.db"
+}
+
+# タイムゾーン検索テスト
+test_timezone_search() {
+    local test_country="$1"
+    echo "`color cyan "TEST: Searching for timezones of country '$test_country'"`"
+    if [ ! -f "${BASE_DIR}/country.db" ]; then
+        echo "`color red "ERROR: country.db not found at ${BASE_DIR}/country.db"`"
+        return 1
+    fi
+    awk -v country="$test_country" '
+        $2 == country || $4 == country || $5 == country {print NR, $5, $6, $7, $8, $9, $10, $11}' "${BASE_DIR}/country.db"
+}
+
+# キャッシュ内容確認テスト
+test_cache_contents() {
+    echo "`color yellow "DEBUG: country_tmp.ch content:"`"
+    cat "${CACHE_DIR}/country_tmp.ch"
+    echo "`color yellow "DEBUG: zone_tmp.ch content:"`"
+    cat "${CACHE_DIR}/zone_tmp.ch"
+}
+
+
+# 🔴　ランゲージ系　🔴 🔵　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
+
+#########################################################################
+# check_language: 言語のチェックと `luci.ch` への書き込み
+#########################################################################
+check_language() {
+    local lang_code="$1"
+
+    if [ "$DEBUG_MODE" = true ]; then
+        echo "DEBUG: check_language received lang_code: '$lang_code'" | tee -a "$LOG_DIR/debug.log"
+    fi
+
+    if [ -z "$lang_code" ]; then
+        lang_code="en"
+        [ "$DEBUG_MODE" = true ] && echo "DEBUG: No language provided, defaulting to 'en'" | tee -a "$LOG_DIR/debug.log"
+    fi
+
+    if grep -q "^$lang_code" "$CACHE_DIR/luci.ch"; then
+        [ "$DEBUG_MODE" = true ] && echo "DEBUG: Language '$lang_code' found in luci.ch" | tee -a "$LOG_DIR/debug.log"
+        return
+    fi
+
+    if grep -q "\b$lang_code\b" "$BASE_DIR/country.db"; then
+        [ "$DEBUG_MODE" = true ] && echo "DEBUG: Language '$lang_code' found in country.db" | tee -a "$LOG_DIR/debug.log"
+        echo "$lang_code" > "$CACHE_DIR/luci.ch"
+    else
+        [ "$DEBUG_MODE" = true ] && echo "DEBUG: No matching language in country.db, defaulting to 'en'" | tee -a "$LOG_DIR/debug.log"
+        echo "en" > "$CACHE_DIR/luci.ch"
+    fi
+}
+
+
+#########################################################################
+# check_language: 言語キャッシュの確認および設定
+# - `luci.ch` を参照し、適切な言語コード (ja, en, etc.) を取得
+# - 存在しない場合、 `country.ch` から取得し、 `luci.ch` に保存
+# - `message.db` に対応する言語があるか確認し、 `SELECTED_LANGUAGE` にセット
+#########################################################################
+check_language() {
+    local luci_cache="${CACHE_DIR}/luci.ch"
+
+    if [ -s "$luci_cache" ]; then
+        echo "DEBUG: Using cached language from luci.ch -> $(cat $luci_cache)" | tee -a "$LOG_DIR/debug.log"
+        return
+    fi
+
+    # `INPUT_LANG` を `luci.ch` に保存
+    echo "$INPUT_LANG" > "$luci_cache"
+    echo "DEBUG: Saved INPUT_LANG to luci.ch -> $INPUT_LANG" | tee -a "$LOG_DIR/debug.log"
+}
+
+#########################################################################
+# check_country: 国データの取得とキャッシュ保存
+#########################################################################
+check_country() {
+    local country_file="${BASE_DIR}/country.db"
+    local country_cache="${CACHE_DIR}/country.ch"
+    local luci_cache="${CACHE_DIR}/luci.ch"
+    local lang_code="${1:-$INPUT_LANG}"
+
+    debug_log "check_country received lang_code: '$lang_code'"
+
+    if [ -z "$lang_code" ]; then
+        debug_log "No language provided, defaulting to 'en'"
+        lang_code="en"
+    fi
+
+    # `country.db` から `$4` の言語コードが一致する行を取得
+    local country_data
+    country_data=$(awk -v lang="$lang_code" '$4 == lang {print $0}' "$country_file")
+
+    if [ -z "$country_data" ]; then
+        debug_log "No matching country found for language: $lang_code"
+        return
+    fi
+
+    echo "$country_data" > "$country_cache"
+    echo "$lang_code" > "$luci_cache"
+    debug_log "Country data saved to $country_cache -> $country_data"
+    debug_log "Language saved to $luci_cache -> $lang_code"
+}
+
+#########################################################################
+# select_country: 国と言語、タイムゾーンを選択（検索・表示を `country.db` に統一）
+#########################################################################
+select_country() {
+    local country_file="${BASE_DIR}/country.db"
+    local country_cache="${CACHE_DIR}/country.ch"
+    local language_cache="${CACHE_DIR}/luci.ch"
+    local zone_cache="${CACHE_DIR}/zone.ch"
+    local country_tmp="${CACHE_DIR}/country_tmp.ch"
+    local zone_tmp="${CACHE_DIR}/zone_tmp.ch"
+    local user_input=""
+    local found_entries=""
+    local selected_entry=""
+    local selected_zonename=""
+    local selected_timezone=""
+    local index=1
+    local max_display=10  # 一度に表示する最大件数
+    local start_line=1  # `more` での開始位置
+
+    # **キャッシュの初期化**
+    > "$country_tmp"
+    > "$zone_tmp"
+
+    # **データベース存在確認**
+    if [ ! -f "$country_file" ]; then
+        echo "$(color red "Country database not found!")"
+        return 1
+    fi
+
+    while true; do
+        echo "$(color cyan "Enter country name, code, or language to set language and retrieve timezone.")"
+        echo -n "$(color cyan "Please input: ")"
+        read user_input
+        debug_log "User input: '$user_input'"
+        user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]' | sed -E 's/[\/,_]+/ /g')
+
+        if [ "$user_input" = "/back" ]; then
+            echo "$(color yellow "Returning to the previous menu.")"
+            return
+        fi
+
+        if [ -z "$user_input" ]; then
+            echo "$(color yellow "Invalid input. Please enter a valid country name, code, or language.")"
+            continue
+        fi
+
+        # **検索処理: 完全一致 → 前方一致 → 後方一致 → 部分一致**
+        found_entries=$(awk -v query="$user_input" '$4 == query {print NR, $2, $3, $4, $5, $6, $7}' "$country_file")
+
+        if [ -z "$found_entries" ]; then
+            found_entries=$(awk -v query="^"query '$0 ~ query {print NR, $2, $3, $4, $5, $6, $7}' "$country_file")
+        fi
+
+        if [ -z "$found_entries" ]; then
+            found_entries=$(awk -v query=query"$" '$0 ~ query {print NR, $2, $3, $4, $5, $6, $7}' "$country_file")
+        fi
+
+        if [ -z "$found_entries" ]; then
+            found_entries=$(awk -v query="$user_input" '$0 ~ query {print NR, $2, $3, $4, $5, $6, $7}' "$country_file")
+        fi
+
+        if [ -z "$found_entries" ]; then
+            echo "$(color yellow "No matching country found. Please try again.")"
+            continue
+        fi
+
+        echo "$(color cyan "Select a country (max $max_display at a time, type 'more' to show more, /back to return):")"
+        index=1
+        echo "$found_entries" | tail -n +$start_line | head -n $max_display | while read -r line; do
+            echo "[$index] $line"
+            echo "$index $line" >> "$country_tmp"
+            index=$((index + 1))
+        done
+        echo "[0] Cancel / 'more' for next results"
+
+        while true; do
+            echo -n "$(color cyan "Enter the number of your choice (or 0 to retry): ")"
+            read choice
+
+            if [ "$choice" = "0" ]; then
+                echo "$(color yellow "Returning to country selection.")"
+                break
+            fi
+
+            if [ "$choice" = "more" ]; then
+                start_line=$((start_line + max_display))
+                break
+            fi
+
+            selected_entry=$(awk -v num="$choice" '$1 == num {print $2, $3, $4, $5, $6, $7}' "$country_tmp")
+
+            if [ -z "$selected_entry" ]; then
+                echo "$(color red "Invalid selection. Please choose a valid number.")"
+                continue
+            fi
+
+            echo "$(color cyan "Confirm selection: [$choice] $selected_entry (Y/n)?")"
+            read yn
+            case "$yn" in
+                [Yy]*)
+                    echo "$(color green "Final selection: $selected_entry")"
+                    echo "$selected_entry" > "$country_cache"
+                    return
+                    ;;
+                [Nn]*)
+                    echo "$(color yellow "Returning to country selection.")"
+                    break
+                    ;;
+                *)
+                    echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
+                    ;;
+            esac
+        done
+    done
+}
+
+#########################################################################
+# check_zone: 選択された国のゾーン情報を取得して zone.ch に保存
+#########################################################################
+check_zone() {
+    local country_cache="${CACHE_DIR}/country.ch"
+    local zone_cache="${CACHE_DIR}/zone.ch"
+    
+    local country_code
+    country_code=$(awk '{print $4}' "$country_cache" 2>/dev/null | head -n 1)
+
+    if [ -z "$country_code" ]; then
+        debug_log "No country code found in country.ch, defaulting to 'US'"
+        country_code="US"
+    fi
+
+    # `country.db` からゾーン情報を取得
+    local zone_info
+    zone_info=$(awk -v code="$country_code" '$4 == code {print $5, $6}' "${BASE_DIR}/country.db")
+
+    if [ -z "$zone_info" ]; then
+        debug_log "No timezone found for country: $country_code"
+        return
+    fi
+
+    echo "$zone_info" > "$zone_cache"
+    debug_log "Timezone data saved to $zone_cache -> $zone_info"
+}
+
+#########################################################################
+# update_country_cache
+#########################################################################
+update_country_cache() {
+    echo "$selected_entry" > "$CACHE_DIR/country.ch"
+    echo "$selected_zonename" > "$CACHE_DIR/luci.ch"
+    echo "$selected_timezone" > "$CACHE_DIR/language.ch"
+    echo "$selected_zonename $selected_timezone" > "$CACHE_DIR/zone.ch"
+}
+
+#########################################################################
+# normalize_country: 言語設定の正規化
+#########################################################################
+normalize_country() {
+    local message_db="${BASE_DIR}/messages.db"
+    local language_cache="${CACHE_DIR}/luci.ch"
+    local selected_language="en"
+
+    if [ -f "$language_cache" ]; then
+        selected_language=$(cat "$language_cache")
+        debug_log "Loaded language from luci.ch -> $selected_language"
+    else
+        debug_log "No luci.ch found, defaulting to 'en'"
+    fi
+
+    if grep -q "^$selected_language|" "$message_db"; then
+        debug_log "Using message database language: $selected_language"
+    else
+        selected_language="en"
+        debug_log "Language not found in messages.db. Using: en"
+    fi
+
+    debug_log "Final language after normalization -> $selected_language"
+}
+
+
+# 🔴　ランゲージ系　🔴 🔵　ここまで　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
 # print_help: ヘルプメッセージを表示
@@ -79,6 +405,19 @@ color_code_map() {
 #########################################################################
 # handle_error: 汎用エラーハンドリング関数
 #########################################################################
+# **デバッグ出力関数**
+debug_log() {
+    local message="$1"
+    if [ "$DEBUG_MODE" = true ]; then
+        echo "DEBUG: $message" | tee -a "$LOG_DIR/debug.log"
+    fi
+}
+
+# 環境変数 INPUT_LANG のチェック (デフォルト 'en')
+INPUT_LANG="${INPUT_LANG:-en}"
+debug_log "common.sh received INPUT_LANG: '$INPUT_LANG'"
+
+# **エラーハンドリング + デバッグログ**
 handle_error() {
     local message_key="$1"
     local file="$2"
@@ -87,11 +426,10 @@ handle_error() {
     local error_message
     error_message=$(get_message "$message_key")
 
-    # {file} や {version} の置換処理
     error_message=$(echo "$error_message" | sed -e "s/{file}/$file/" -e "s/{version}/$version/")
 
     echo -e "$(color red "$error_message")"
-    exit 1
+    return 1  # `exit 1` → `return 1` に変更
 }
 
 #########################################################################
@@ -255,166 +593,8 @@ download_script() {
 }
 
 #########################################################################
-# select_country: `country.db` から国を検索し、ユーザーに選択させる
-#########################################################################
-select_country() {
-    local country_file="${BASE_DIR}/country.db"
-    local country_cache="${BASE_DIR}/country.ch"
-    local user_input=""
-    local found_entries=""
-    local selected_entry=""
-    local selected_timezone=""
-
-    # **データベース存在確認**
-    if [ ! -f "$country_file" ]; then
-        echo "$(color red "Country database not found!")"
-        return
-    fi
-
-    while true; do
-        # **国リスト表示**
-        # echo -e "$(color cyan "Available countries:")"
-        awk '{print "[" NR "]", $1, $2, $3, $4}' "$country_file"
-
-        # **ユーザー入力**
-        # echo -e "$(color cyan "Enter country name, code, or language (e.g., 'Japan', 'JP', 'ja', '日本語'):")"
-        echo -e "$(color cyan "Enter number, country name, code, or language:")"
-        read -r user_input
-
-        # **番号入力の処理**
-        if echo "$user_input" | grep -qE '^[0-9]+$'; then
-            selected_entry=$(awk -v num="$user_input" 'NR == num {print $0}' "$country_file")
-        else
-            # **完全一致検索**
-            found_entries=$(awk -v query="$user_input" '
-                tolower($1) == tolower(query) ||
-                tolower($2) == tolower(query) ||
-                tolower($3) == tolower(query) ||
-                tolower($4) == tolower(query) {printf "[%d] %s\n", NR, $0}' "$country_file")
-
-            # **曖昧検索**
-            if [ -z "$found_entries" ]; then
-                found_entries=$(awk -v query="$user_input" '
-                    tolower($1) ~ tolower(query) ||
-                    tolower($2) ~ tolower(query) ||
-                    tolower($3) ~ tolower(query) ||
-                    tolower($4) ~ tolower(query) {printf "[%d] %s\n", NR, $0}' "$country_file")
-            fi
-
-            # **検索結果の処理**
-            if [ -z "$found_entries" ]; then
-                echo "$(color yellow "No matching country found. Please try again.")"
-                continue
-            fi
-
-            # **複数ヒット時の選択**
-            if [ "$(echo "$found_entries" | wc -l)" -gt 1 ]; then
-                echo "$(color yellow "Multiple matches found. Please select:")"
-                echo "$found_entries"
-                read -p "Enter the number of your choice: " choice
-                selected_entry=$(awk -v num="$choice" 'NR == num {print $0}' "$country_file")
-            else
-                selected_entry=$(echo "$found_entries" | sed -E 's/\[[0-9]+\] //')
-            fi
-        fi
-
-        # **選択した国が正しいか `confirm()` で Y/N 判定**
-        if [ -n "$selected_entry" ]; then
-            local country_name
-            local display_name
-            local lang_code
-            local country_code
-            local tz_data
-            local tz_cities
-            local tz_offsets
-
-            country_name=$(echo "$selected_entry" | awk '{print $1}')
-            display_name=$(echo "$selected_entry" | awk '{print $2}')
-            lang_code=$(echo "$selected_entry" | awk '{print $3}')
-            country_code=$(echo "$selected_entry" | awk '{print $4}')
-            tz_data=$(echo "$selected_entry" | awk -F';' '{print $2}')
-
-            confirm_message=$(get_message 'MSG_CONFIRM_COUNTRY' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$country_name/" -e "s/{version}/$display_name ($lang_code, $country_code)/")
-
-            # **YN確認の修正**
-            while true; do
-                read -p "$confirm_message " yn
-                case "$yn" in
-                    [Yy]*)
-                        break 2  # **確定**
-                        ;;
-                    [Nn]*)
-                        echo "$(color yellow "Invalid selection. Please try again.")"
-                        continue 2  # **ループに戻る**
-                        ;;
-                    *)
-                        echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
-                        ;;
-                esac
-            done
-
-            # **タイムゾーンの選択**
-            if echo "$tz_data" | grep -q ","; then
-                echo "$(color cyan "Select a timezone for $country_name:")"
-                local i=1
-                echo "$tz_data" | awk -F',' '{for (i=1; i<=NF; i++) print "["i"] "$i}'
-                
-                while true; do
-                    read -p "Enter the number of your choice: " tz_choice
-                    selected_timezone=$(echo "$tz_data" | awk -F',' -v num="$tz_choice" '{print $num}')
-                    
-                    if [ -z "$selected_timezone" ]; then
-                        echo "$(color red "Invalid selection. Please enter a valid number.")"
-                        continue
-                    fi
-
-                    confirm_message=$(get_message 'MSG_CONFIRM_TIMEZONE' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$selected_timezone/")
-                    if confirm "$confirm_message"; then
-                        break
-                    fi
-                done
-            else
-                selected_timezone="$tz_data"
-            fi
-
-            # **キャッシュに保存**
-            echo "$country_name $display_name $lang_code $country_code $selected_timezone" > "$country_cache"
-            echo "$(color green "Country and timezone set: $country_name, $selected_timezone")"
-            return
-        fi
-    done
-}
-
-#########################################################################
-# normalize_country: `message.db` に対応する言語があるか確認
-# - `message.db` に `$SELECT_COUNTRY` があればそのまま使用
-# - 無ければ `message.db` にあるデフォルト言語 (`SELECT_COUNTRY=en` など) を使用
-#########################################################################
-normalize_country() {
-    local country_file="${BASE_DIR}/country.ch"
-    local message_db="${BASE_DIR}/messages.db"
-
-    # `country.ch` を読み込む
-    if [ -f "$country_file" ]; then
-        SELECT_COUNTRY=$(cat "$country_file")
-    else
-        SELECT_COUNTRY="en"
-    fi
-
-    if grep -q "^$SELECT_COUNTRY|" "$message_db"; then
-        echo "$(color green "Using message database language: $SELECT_COUNTRY")"
-    else
-        echo "en" > "$country_file"
-        echo "$(color yellow "Language not found in messages.db. Using: en")"
-    fi
-}
-
-#########################################################################
 # confirm: Y/N 確認関数
-# 引数1: 確認メッセージキー（多言語対応）
-# 引数2: 置換パラメータ1（オプション）
-# 引数3: 置換パラメータ2（オプション）
-# 使用例: confirm "MSG_INSTALL_PROMPT" "ttyd"
+# ✅ 1回だけ実行されるように修正
 #########################################################################
 confirm() {
     local key="$1"
@@ -423,83 +603,31 @@ confirm() {
     local prompt_message
     prompt_message=$(get_message "$key" "$SELECTED_LANGUAGE")
 
-    # メッセージが見つからない場合、デフォルトメッセージを使用
-    if [ -z "$prompt_message" ]; then
-        case "$key" in
-            "MSG_INSTALL_PROMPT")
-                prompt_message="Do you want to install {pkg}? [Y/n]:"
-                ;;
-            *)
-                prompt_message="Confirm action? [Y/n]:"
-                ;;
-        esac
-    fi
+    # 置換処理
+    [ -n "$replace_param1" ] && prompt_message=$(echo "$prompt_message" | sed "s/{pkg}/$replace_param1/g")
+    [ -n "$replace_param2" ] && prompt_message=$(echo "$prompt_message" | sed "s/{version}/$replace_param2/g")
 
-    # {pkg}, {file}, {version} の置換処理
-    if [ -n "$replace_param1" ]; then
-        prompt_message=$(echo "$prompt_message" | sed "s/{pkg}/$replace_param1/g")
-        prompt_message=$(echo "$prompt_message" | sed "s/{file}/$replace_param1/g")
-    fi
-    if [ -n "$replace_param2" ]; then
-        prompt_message=$(echo "$prompt_message" | sed "s/{version}/$replace_param2/g")
-    fi
-
-    # デバッグ: 確認メッセージの出力
+    # デバッグログ
     echo "DEBUG: Confirm message -> [$prompt_message]"
 
+    # ユーザー入力待ち
     while true; do
         read -r -p "$prompt_message " confirm
         confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')  # 小文字変換
 
         case "$confirm" in
-            ""|"y"|"yes")
-                echo "$(color green "Settings applied successfully.")"
-                return 0
-                ;;
-            "n"|"no")
-                echo "$(color yellow "Settings were not applied.")"
-                return 1
-                ;;
-            *)
-                echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
-                ;;
+            ""|"y"|"yes") return 0  ;;  # YES
+            "n"|"no") return 1  ;;  # NO
+            *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
         esac
     done
-}
-
-
-#########################################################################
-# check_country: 言語キャッシュの確認および設定
-# - `$1` (`SELECT_COUNTRY`) があればそれを優先
-# - それが無ければ `country.ch` を参照
-# - さらに無ければ `select_country()` で `country.db` を検索し完全一致 → 曖昧検索
-# - 見つからなかった場合は `confirm()` による Y/N 選択
-# - すべて失敗したら `en` をセット
-#########################################################################
-check_country() {
-    local SELECT_COUNTRY="$1"
-    local country_file="${BASE_DIR}/country.ch"
-
-    if [ -n "$SELECT_COUNTRY" ]; then
-        echo "$SELECT_COUNTRY" > "$country_file"
-        echo "$(color green "Language set to: $SELECT_COUNTRY")"
-        return
-    fi
-
-    if [ -f "$country_file" ]; then
-        SELECT_COUNTRY=$(cat "$country_file")
-        echo "$(color green "Using cached country: $SELECT_COUNTRY")"
-        return
-    fi
-
-    select_country
 }
 
 #########################################################################
 # check_openwrt: OpenWrtのバージョンを確認し、サポートされているか検証する
 #########################################################################
 check_openwrt() {
-    local version_file="${BASE_DIR}/openwrt.ch"
+    local version_file="${CACHE_DIR}/openwrt.ch"
 
     # キャッシュが存在する場合は利用
     if [ -f "$version_file" ]; then
@@ -514,7 +642,7 @@ check_openwrt() {
         PACKAGE_MANAGER=$(echo "$db_entry" | cut -d'|' -f1)
         VERSION_STATUS=$(echo "$db_entry" | cut -d'|' -f2)
 
-        echo -e "$(color green "バージョン $CURRENT_VERSION はサポートされています ($VERSION_STATUS)")"
+        echo -e "$(color green "Version $CURRENT_VERSION is supported ($VERSION_STATUS)")"
     else
         handle_error "Unsupported OpenWrt version: $CURRENT_VERSION"
     fi
@@ -538,8 +666,8 @@ country_info() {
 # パッケージマネージャー判定関数（apk / opkg 対応）
 #########################################################################
 get_package_manager() {
-    if [ -f "${BASE_DIR}/downloader_cache" ]; then
-        PACKAGE_MANAGER=$(cat "${BASE_DIR}/downloader_cache")
+    if [ -f "${BASE_DIR}/downloader_ch" ]; then
+        PACKAGE_MANAGER=$(cat "${BASE_DIR}/downloader_ch")
     else
         # パッケージマネージャーの存在確認のみ
         if command -v apk >/dev/null 2>&1; then
@@ -549,7 +677,7 @@ get_package_manager() {
         else
             handle_error "$(get_message 'no_package_manager_found' "$SELECTED_LANGUAGE")"
         fi
-        echo "$PACKAGE_MANAGER" > "${BASE_DIR}/downloader_cache"
+        echo "$PACKAGE_MANAGER" > "${BASE_DIR}/downloader_ch"
     fi
     echo -e "\033[1;32m$(get_message 'detected_package_manager' "$SELECTED_LANGUAGE"): $PACKAGE_MANAGER\033[0m"
 }
@@ -599,54 +727,43 @@ handle_exit() {
 
 #########################################################################
 # install_packages: パッケージをインストールし、インストール済みならスキップ
-# 引数:
-#   $1: 'yn' を指定すると Y/N 確認を行う
-#   $2 以降: インストールするパッケージ名 (複数指定可)
 #########################################################################
 install_packages() {
     local confirm_flag="$1"
-    shift  # 最初の引数 (`yn` など) を削除
-    local package_list="$@"  # 残りの引数を取得
-
+    shift
+    local package_list="$@"
     local packages_to_install=""
-    local installed_packages=""
 
-    # インストール済みのパッケージをチェック
+    # インストール済みチェック
     for pkg in $package_list; do
         if command -v apk >/dev/null 2>&1; then
-            if apk list-installed | grep -q "^$pkg "; then
-                installed_packages="$installed_packages $pkg"
-            else
+            if ! apk list-installed | grep -q "^$pkg "; then
                 packages_to_install="$packages_to_install $pkg"
             fi
         elif command -v opkg >/dev/null 2>&1; then
-            if opkg list-installed | grep -q "^$pkg "; then
-                installed_packages="$installed_packages $pkg"
-            else
+            if ! opkg list-installed | grep -q "^$pkg "; then
                 packages_to_install="$packages_to_install $pkg"
             fi
         fi
     done
 
-    # すでにインストール済みのパッケージを表示
-    if [ -n "$installed_packages" ]; then
-        echo "$(color cyan "Already installed:$installed_packages")"
-    fi
-
-    # インストールが必要なパッケージがない場合は終了
+    # インストール不要なら終了
     if [ -z "$packages_to_install" ]; then
         return 0
     fi
 
-    # `yn` フラグがある場合、確認メッセージを出す（ここで1回のみ）
+    # ✅ `yn` フラグがある場合のみ確認
     if [ "$confirm_flag" = "yn" ]; then
-        if ! confirm "MSG_INSTALL_PROMPT" "$packages_to_install"; then
-            echo "$(color yellow "Skipping installation of:$packages_to_install")"
-            return 1
-        fi
+        echo -e "$(color cyan "Do you want to install: $packages_to_install? [Y/n]:")"
+        read -r yn
+        case "$yn" in
+            [Yy]*) ;;
+            [Nn]*) echo "$(color yellow "Skipping installation.")" ; return 1 ;;
+            *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
+        esac
     fi
 
-    # 必要なパッケージをインストール
+    # パッケージをインストール
     if command -v apk >/dev/null 2>&1; then
         apk add $packages_to_install
     elif command -v opkg >/dev/null 2>&1; then
@@ -654,7 +771,6 @@ install_packages() {
     fi
 
     echo "$(color green "Installed:$packages_to_install")"
-    return 0
 }
 
 #########################################################################
@@ -724,8 +840,9 @@ check_common() {
 
     local RESET_CACHE=false
     local SHOW_HELP=false
-    local INPUT_LANG=""
-    local SELECT_COUNTRY=""
+    local lang_code="${1:-$INPUT_LANG}"  # ✅ $1 があれば使用、なければ環境変数 INPUT_LANG を使う
+
+    debug_log "check_common received lang_code: '$lang_code'"
 
     # 引数解析
     for arg in "$@"; do
@@ -736,41 +853,46 @@ check_common() {
             -help|--help|-h)
                 SHOW_HELP=true
                 ;;
-            *)
-                INPUT_LANG="$arg"
+            -debug|--debug|-d)
+                DEBUG_MODE=true
                 ;;
         esac
     done
 
-    # キャッシュリセット処理
     if [ "$RESET_CACHE" = true ]; then
         reset_cache
     fi
 
-    # ヘルプ表示
     if [ "$SHOW_HELP" = true ]; then
         print_help
         exit 0
     fi
 
     case "$mode" in
-        full)
-            download_script messages.db
-            download_script country.db
-            download_script openwrt.db
-            check_openwrt
-            check_country "$INPUT_LANG"
-            normalize_country  
+        full)      
+            script_update || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
+            download_script messages.db || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
+            download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
+            download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
+            check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
+            check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
+            check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
+            select_country
+            normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
         light)
-            check_openwrt
-            check_country "$INPUT_LANG"
-            normalize_country  
+            check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
+            check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
+            check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
+            select_country
+            normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
         *)
-            check_openwrt
-            check_country "$INPUT_LANG"
-            normalize_country  
+            check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
+            check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
+            check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
+            select_country
+            normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
     esac
 }
