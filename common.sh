@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-4-6"
+COMMON_VERSION="2025.02.11-4-7"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -259,6 +259,7 @@ search_country() {
     result_count=$(echo "$country_data" | wc -l)
 
     debug_log "Search results count for '$user_input': $result_count"
+    debug_log "Search results: $(echo "$country_data" | tr '\n' ', ')"
 
     if [ -z "$country_data" ]; then
         debug_log "No matching country found for '$user_input'. Prompting for re-input."
@@ -320,11 +321,11 @@ country_write() {
     local luci_lang
     luci_lang=$(echo "$country_data" | awk '{print $4}')
 
+    debug_log "Writing country data to cache: language.ch='$short_country', luci.ch='$luci_lang', country.ch='$country_data'"
+
     echo "$short_country" > "$language_cache"
     echo "$luci_lang" > "$luci_cache"
     echo "$country_data" > "$country_cache"
-
-    debug_log "Country selection finalized: language.ch='$short_country', luci.ch='$luci_lang', country.ch='$country_data'"
 
     select_zone
 }
