@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-5-17"
+COMMON_VERSION="2025.02.11-5-18"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -81,66 +81,65 @@ test_cache_contents() {
 
 # 🔴　ランゲージ系　🔴 🔵　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
-# selection_list: 汎用リスト選択関数（国・ゾーン選択に適用可能）
+# country_write: 選択された国をキャッシュに保存（デバッグ強化）
 #########################################################################
-selection_list() {
-    local list_file="$1"   # 一時キャッシュファイル
-    local prompt="$2"   # プロンプトメッセージ
-    local selected_value=""
-    local choice=""
-    local i=1
+country_write() {
+    local country_data="$1"
+    local country_cache="${CACHE_DIR}/country.ch"
+    local language_cache="${CACHE_DIR}/language.ch"
+    local luci_cache="${CACHE_DIR}/luci.ch"
 
-    if [ ! -s "$list_file" ]; then
-        echo "`color red \"No valid options available. Please try again.\"`"
+    debug_log "DEBUG: Entering country_write()"
+    debug_log "DEBUG: Received country_data -> '$country_data'"
+
+    if [ -z "$country_data" ]; then
+        debug_log "ERROR: country_data is empty! Cannot proceed."
         return 1
     fi
 
-    while true; do
-        echo "`color cyan \"$prompt\"`"
-        i=1  # 番号リセット
-        while IFS= read -r line; do
-            # $2 $3 $4 $5 のみを表示
-            formatted_line=$(echo "$line" | awk '{print $2, $3, $4, $5}')
-            echo "[$i] $formatted_line"
-            echo "$i $formatted_line" >> "$list_file.tmp"
-            i=$((i + 1))
-        done < "$list_file"
-        echo "[0] Cancel / back to return"  # [0] はリストの最後に固定
+    # $5（短縮国コード）を取得
+    local short_country
+    short_country=$(echo "$country_data" | awk '{print $5}')
+    debug_log "DEBUG: Extracted short_country -> '$short_country'"
 
-        echo -n "`color cyan \"Enter the number of your choice: \"`"  # (or 0 to retry) を削除
-        read choice
+    # $4（言語コード）を取得
+    local luci_lang
+    luci_lang=$(echo "$country_data" | awk '{print $4}')
+    debug_log "DEBUG: Extracted luci_lang -> '$luci_lang'"
 
-        if [ "$choice" = "0" ]; then
-            echo "`color yellow \"Returning to previous menu.\"`"
-            return 1
-        fi
+    if [ -z "$short_country" ]; then
+        debug_log "ERROR: Extracted short_country is empty! This will cause missing language.ch"
+    fi
 
-        selected_value=$(awk -v num="$choice" '$1 == num {for(i=2; i<=NF; i++) printf "%s ", $i; print ""}' "$list_file.tmp")
+    if [ -z "$luci_lang" ]; then
+        debug_log "ERROR: Extracted luci_lang is empty! This will cause missing luci.ch"
+    fi
 
-        if [ -z "$selected_value" ]; then
-            echo "`color red \"Invalid selection. Please choose a valid number.\"`"
-            continue
-        fi
+    # キャッシュディレクトリが存在しない場合は作成
+    mkdir -p "$CACHE_DIR"
 
-        # 確認メッセージのフォーマット修正
-        echo "`color cyan \"Confirm selection: [$choice] $selected_value\"`"
-        echo -n "`color cyan \"(Y/n)?: \"`"
-        read yn
-        case "$yn" in
-            [Yy]*)
-                echo "`color green \"Final selection: $selected_value\"`"
-                echo "$selected_value" > "$list_file"
-                rm -f "$list_file.tmp"
-                return 0
-                ;;
-            [Nn]*)
-                echo "`color yellow \"Returning to selection.\"`"
-                ;;
-            *)
-                echo "`color red \"Invalid input. Please enter 'Y' or 'N'.\"`"
-                ;;
-        esac
-    done
+    # キャッシュファイルに書き込み
+    echo "$short_country" > "$language_cache"
+    echo "$luci_lang" > "$luci_cache"
+    echo "$country_data" > "$country_cache"
+
+    # キャッシュの状態を確認
+    debug_log "DEBUG: Written to language.ch -> '$(cat "$language_cache" 2>/dev/null)'"
+    debug_log "DEBUG: Written to luci.ch -> '$(cat "$luci_cache" 2>/dev/null)'"
+    debug_log "DEBUG: Written to country.ch -> '$(cat "$country_cache" 2>/dev/null)'"
+
+    # キャッシュが作成されているかチェック
+    if [ ! -s "$language_cache" ]; then
+        debug_log "ERROR: language.ch was not written properly!"
+    fi
+    if [ ! -s "$luci_cache" ]; then
+        debug_log "ERROR: luci.ch was not written properly!"
+    fi
+    if [ ! -s "$country_cache" ]; then
+        debug_log "ERROR: country.ch was not written properly!"
+    fi
+
+    select_zone
 }
 
 #########################################################################
@@ -196,7 +195,7 @@ select_country() {
 }
 
 #########################################################################
-# country_write: 選択された国をキャッシュに保存（`[0]` で戻った場合、再書き込み可能）
+# country_write: 選択された国をキャッシュに保存（デバッグ強化）
 #########################################################################
 country_write() {
     local country_data="$1"
@@ -204,25 +203,55 @@ country_write() {
     local language_cache="${CACHE_DIR}/language.ch"
     local luci_cache="${CACHE_DIR}/luci.ch"
 
-    debug_log "DEBUG: Full country_data -> '$country_data'"
+    debug_log "DEBUG: Entering country_write()"
+    debug_log "DEBUG: Received country_data -> '$country_data'"
+
+    if [ -z "$country_data" ]; then
+        debug_log "ERROR: country_data is empty! Cannot proceed."
+        return 1
+    fi
 
     # $5（短縮国コード）を取得
     local short_country
     short_country=$(echo "$country_data" | awk '{print $5}')
-    
-    # $4（LuCI 言語コード）を取得
+    debug_log "DEBUG: Extracted short_country -> '$short_country'"
+
+    # $4（言語コード）を取得
     local luci_lang
     luci_lang=$(echo "$country_data" | awk '{print $4}')
+    debug_log "DEBUG: Extracted luci_lang -> '$luci_lang'"
 
-    # `language.ch`, `luci.ch`, `country.ch` は `[0]` でクリアされるので、再度書き込める
+    if [ -z "$short_country" ]; then
+        debug_log "ERROR: Extracted short_country is empty! This will cause missing language.ch"
+    fi
+
+    if [ -z "$luci_lang" ]; then
+        debug_log "ERROR: Extracted luci_lang is empty! This will cause missing luci.ch"
+    fi
+
+    # キャッシュディレクトリが存在しない場合は作成
+    mkdir -p "$CACHE_DIR"
+
+    # キャッシュファイルに書き込み
     echo "$short_country" > "$language_cache"
-    debug_log "DEBUG: Written to language.ch -> $short_country"
-
     echo "$luci_lang" > "$luci_cache"
-    debug_log "DEBUG: Written to luci.ch -> $luci_lang"
-
     echo "$country_data" > "$country_cache"
-    debug_log "DEBUG: Written to country.ch -> $country_data"
+
+    # キャッシュの状態を確認
+    debug_log "DEBUG: Written to language.ch -> '$(cat "$language_cache" 2>/dev/null)'"
+    debug_log "DEBUG: Written to luci.ch -> '$(cat "$luci_cache" 2>/dev/null)'"
+    debug_log "DEBUG: Written to country.ch -> '$(cat "$country_cache" 2>/dev/null)'"
+
+    # キャッシュが作成されているかチェック
+    if [ ! -s "$language_cache" ]; then
+        debug_log "ERROR: language.ch was not written properly!"
+    fi
+    if [ ! -s "$luci_cache" ]; then
+        debug_log "ERROR: luci.ch was not written properly!"
+    fi
+    if [ ! -s "$country_cache" ]; then
+        debug_log "ERROR: country.ch was not written properly!"
+    fi
 
     select_zone
 }
