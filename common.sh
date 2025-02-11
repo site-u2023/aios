@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-1-31"
+COMMON_VERSION="2025.02.11-2-0"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -81,48 +81,45 @@ test_cache_contents() {
 
 # 🔴　ランゲージ系　🔴 🔵　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
-# check_language: 言語キャッシュを確認し、必要なら `language_selection()` を実行
+# select_language: 言語選択を担当し、`search_country()` で検索後 `country_write()` へ
 #########################################################################
-check_language() {
+select_language() {
     CACHE_DIR="$BASE_DIR/cache"
     mkdir -p "$CACHE_DIR"
 
     local language_cache="${CACHE_DIR}/language.ch"
     local luci_cache="${CACHE_DIR}/luci.ch"
 
-    debug_log "=== Entering check_language() ==="
-    debug_log "check_language received lang_code: '$1'"
+    debug_log "=== Entering select_language() ==="
+    debug_log "Received language input: '$1'"
 
-    # `language.ch` と `luci.ch` の両方が存在する場合は処理を終了
+    # キャッシュがある場合はスキップ
     if [ -f "$language_cache" ] && [ -f "$luci_cache" ]; then
         debug_log "Cache found: language.ch='$(cat "$language_cache")', luci.ch='$(cat "$luci_cache")'. Skipping language selection."
+        select_zone
         return
     fi
 
-    # `$1` が空または "en" の場合、手動入力を強制
+    # `$1` が空または曖昧な言語コードなら手動入力
     if [ -z "$1" ] || [ "$1" = "en" ]; then
-        debug_log "No language code provided or ambiguous language code ('$1'). Forcing manual selection."
-        language_selection "manual"
+        debug_log "No valid language code provided. Forcing manual selection."
+        search_country "manual"
     else
         debug_log "Proceeding with automatic language selection for input: '$1'"
-        language_selection "$1"
+        search_country "$1"
     fi
 }
 
 #########################################################################
-# language_selection: `aios $1` または手動入力から国を検索
+# search_country: `country.db` を検索し、結果を `country_write()` に渡す
 #########################################################################
-language_selection() {
+search_country() {
     local country_file="${BASE_DIR}/country.db"
-    local country_cache="${CACHE_DIR}/country.ch"
-    local language_cache="${CACHE_DIR}/language.ch"
-    local luci_cache="${CACHE_DIR}/luci.ch"
-    local input_source="$1"
+    local user_input="$1"
     local country_data=""
-    local user_input=""
 
-    debug_log "=== Entering language_selection() ==="
-    debug_log "Processing language selection. Input source: '$input_source'"
+    debug_log "=== Entering search_country() ==="
+    debug_log "Searching country.db for input: '$user_input'"
 
     # `country.db` の存在確認
     if [ ! -f "$country_file" ]; then
@@ -131,25 +128,16 @@ language_selection() {
         return 1
     fi
 
-    # `$1` が "manual" の場合は強制的にユーザー入力
-    if [ "$input_source" = "manual" ]; then
+    # `$1` が "manual" の場合は手動入力を強制
+    if [ "$user_input" = "manual" ]; then
         debug_log "Forcing manual input mode."
-        input_source=""
-    fi
-
-    # `$1` が空なら手動入力モードへ
-    if [ -z "$input_source" ]; then
-        debug_log "No language code provided, prompting user input."
         echo "$(color cyan "Enter country name, code, or language to select your country.")"
         echo -n "$(color cyan "Please input: ")"
         read user_input
-        input_source="$user_input"
     fi
 
-    debug_log "Searching country.db for '$input_source'"
-
     # `country.db` から完全一致 → 前方一致 → 部分一致 の順で検索
-    country_data=$(awk -v query="$input_source" '
+    country_data=$(awk -v query="$user_input" '
         toupper($2) == toupper(query) || toupper($3) == toupper(query) ||
         toupper($4) == toupper(query) || toupper($5) == toupper(query) {print NR " " $0}
     ' "$country_file")
@@ -157,12 +145,12 @@ language_selection() {
     local result_count
     result_count=$(echo "$country_data" | wc -l)
 
-    debug_log "Search results count for '$input_source': $result_count"
+    debug_log "Search results count for '$user_input': $result_count"
 
     if [ -z "$country_data" ]; then
-        debug_log "No matching country found for '$input_source'. Prompting for re-input."
+        debug_log "No matching country found for '$user_input'. Prompting for re-input."
         echo "$(color red "No matching country found. Please try again.")"
-        language_selection
+        search_country "manual"
         return
     fi
 
@@ -171,7 +159,7 @@ language_selection() {
         local selected_country
         selected_country=$(echo "$country_data" | awk '{for (i=2; i<=NF; i++) printf "%s ", $i; print ""}')
         debug_log "Auto-selected country: '$selected_country'"
-        finalize_country_selection "$selected_country"
+        country_write "$selected_country"
         return
     fi
 
@@ -186,7 +174,7 @@ language_selection() {
     if ! echo "$selection" | grep -qE '^[0-9]+$'; then
         debug_log "Invalid selection: '$selection'. Prompting again."
         echo "$(color red "Invalid selection. Please enter a number from the list.")"
-        language_selection
+        search_country "manual"
         return
     fi
 
@@ -197,18 +185,18 @@ language_selection() {
     if [ -z "$selected_country" ]; then
         debug_log "Invalid selection number: '$selection'. Prompting again."
         echo "$(color red "Invalid selection. Please enter a valid number.")"
-        language_selection
+        search_country "manual"
         return
     fi
 
     debug_log "User selected country: '$selected_country'"
-    finalize_country_selection "$selected_country"
+    country_write "$selected_country"
 }
 
 #########################################################################
-# finalize_country_selection: 選択された国をキャッシュに保存
+# country_write: 選択された国をキャッシュに保存
 #########################################################################
-finalize_country_selection() {
+country_write() {
     local country_data="$1"
     local country_cache="${CACHE_DIR}/country.ch"
     local language_cache="${CACHE_DIR}/language.ch"
@@ -238,7 +226,7 @@ select_zone() {
     if [ ! -f "$country_cache" ]; then
         debug_log "ERROR: country.ch not found. Cannot proceed with zone selection."
         echo "$(color red "ERROR: country data not found. Please reselect your country.")"
-        select_country
+        select_language
         return
     fi
 
@@ -248,7 +236,7 @@ select_zone() {
     if [ -z "$zones" ]; then
         debug_log "ERROR: No zones found for selected country."
         echo "$(color red "ERROR: No timezone data found. Please reselect your country.")"
-        select_country
+        select_language
         return
     fi
 
