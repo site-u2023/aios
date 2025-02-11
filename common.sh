@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-5-9"
+COMMON_VERSION="2025.02.11-5-11"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -190,7 +190,7 @@ select_country() {
 }
 
 #########################################################################
-# country_write: 選択された国をキャッシュに保存
+# country_write: 選択された国をキャッシュに保存（デバッグ強化）
 #########################################################################
 country_write() {
     local country_data="$1"
@@ -203,17 +203,21 @@ country_write() {
     local luci_lang
     luci_lang=$(echo "$country_data" | awk '{print $4}')
 
-    debug_log "Writing country data to cache: language.ch='$short_country', luci.ch='$luci_lang', country.ch='$country_data'"
+    debug_log "DEBUG: Full country_data -> '$country_data'"
+    debug_log "DEBUG: Extracted short_country='$short_country', luci_lang='$luci_lang'"
 
     echo "$short_country" > "$language_cache"
     echo "$luci_lang" > "$luci_cache"
     echo "$country_data" > "$country_cache"
 
+    # `country.ch` の内容をデバッグログに出力
+    debug_log "DEBUG: Written to country.ch -> $(cat "$country_cache")"
+
     select_zone
 }
 
 #########################################################################
-# select_zone: タイムゾーン選択（`selection_list()` を利用）
+# select_zone: タイムゾーン選択（デバッグ強化）
 #########################################################################
 select_zone() {
     local country_cache="${CACHE_DIR}/country.ch"
@@ -229,10 +233,13 @@ select_zone() {
         return
     fi
 
+    # `country.ch` の内容をデバッグログに出力
+    debug_log "DEBUG: Current country.ch content -> $(cat "$country_cache")"
+
     # `$6` 以降のデータを取得し、一時キャッシュに保存
     awk '{for (i=6; i<=NF; i++) print $i}' "$country_cache" > "$tmp_zone_list"
 
-    debug_log "Extracted zones: $(cat "$tmp_zone_list")"
+    debug_log "DEBUG: Extracted zones -> $(cat "$tmp_zone_list")"
 
     if [ ! -s "$tmp_zone_list" ]; then
         debug_log "ERROR: No zones found for selected country."
@@ -241,7 +248,6 @@ select_zone() {
         return
     fi
 
-    # `selection_list()` を使用
     selection_list "$tmp_zone_list" "Select your timezone from the following options:"
 
     if [ "$?" -eq 1 ]; then
@@ -249,12 +255,11 @@ select_zone() {
         return
     fi
 
-    local selected_zone 
+    local selected_zone
     selected_zone=$(cat "$tmp_zone_list")
 
     debug_log "User selected timezone: $selected_zone"
 
-    # `zone.ch` に書き込む
     echo "$selected_zone" > "$zone_cache"
 
     normalize_country
