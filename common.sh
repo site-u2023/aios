@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-1-22"
+COMMON_VERSION="2025.02.11-1-24"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -81,15 +81,18 @@ test_cache_contents() {
 
 # 🔴　ランゲージ系　🔴 🔵　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
-# check_language: 言語キャッシュの確認および設定
+# check_language: フリー検索を統合し、キャッシュを設定
 #########################################################################
 check_language() {
     CACHE_DIR="$BASE_DIR/cache"
     mkdir -p "$CACHE_DIR"
 
     local country_file="${BASE_DIR}/country.db"
-    local language_cache="${CACHE_DIR}/language.ch"
-    local luci_cache="${CACHE_DIR}/luci.ch"
+    local country_cache language_cache luci_cache country_data short_country luci_lang
+
+    country_cache="${CACHE_DIR}/country.ch"
+    language_cache="${CACHE_DIR}/language.ch"
+    luci_cache="${CACHE_DIR}/luci.ch"
 
     debug_log "check_language received lang_code: '$1'"
 
@@ -100,14 +103,60 @@ check_language() {
         return 1
     fi
 
-    # `language.ch` と `luci.ch` の両方が存在する場合は処理を終了
-    if [ -f "$language_cache" ] && [ -f "$luci_cache" ]; then
-        debug_log "Both language.ch and luci.ch exist. Exiting check_language()."
+    # `$1` が空なら `select_country()` に移行
+    if [ -z "$1" ]; then
+        debug_log "No language code provided, proceeding to select_country()"
+        select_country
         return
     fi
 
-    # `check_country()` を実行
-    check_country "$1"
+    # `country.db` から完全一致 → 前方一致 → 部分一致 の順で検索
+    country_data=$(awk -v query="$1" '
+        toupper($2) == toupper(query) || toupper($3) == toupper(query) ||
+        toupper($4) == toupper(query) || toupper($5) == toupper(query) {print NR " " $0}
+    ' "$country_file")
+
+    if [ -z "$country_data" ]; then
+        debug_log "No matching country found for '$1', proceeding to select_country()"
+        select_country
+        return
+    fi
+
+    # 検索結果が1件なら即確定
+    local result_count
+    result_count=$(echo "$country_data" | wc -l)
+    if [ "$result_count" -eq 1 ]; then
+        local selected_country
+        selected_country=$(echo "$country_data" | awk '{for (i=2; i<=NF; i++) printf "%s ", $i; print ""}')
+        finalize_country_selection "$selected_country"
+        return
+    fi
+
+    # 検索結果を番号付きで表示
+    echo "$(color cyan "Multiple matches found. Please select a country by number:")"
+    echo "$country_data" | awk '{print $1 ") " $2 " (" $5 ")"}'
+
+    # ユーザーの選択を受け取る
+    echo -n "$(color cyan "Please select a number: ")"
+    read selection
+
+    # 入力が数値でない場合は再入力を促す
+    if ! echo "$selection" | grep -qE '^[0-9]+$'; then
+        echo "$(color red "Invalid selection. Please enter a number from the list.")"
+        return
+    fi
+
+    # 選択した番号のデータを取得
+    local selected_country
+    selected_country=$(echo "$country_data" | awk -v num="$selection" '$1 == num {for (i=2; i<=NF; i++) printf "%s ", $i; print ""}')
+
+    if [ -z "$selected_country" ]; then
+        echo "$(color red "Invalid selection. Please enter a valid number.")"
+        return
+    fi
+
+    # 最終確定処理へ
+    finalize_country_selection "$selected_country"
 }
 
 #########################################################################
@@ -142,7 +191,7 @@ check_country() {
 }
 
 #########################################################################
-# select_country: ユーザー入力で国を検索し、キャッシュに保存
+# select_country: フリー検索を実施し、ユーザーに選択を促す
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
@@ -150,24 +199,95 @@ select_country() {
     local language_cache="${CACHE_DIR}/language.ch"
     local luci_cache="${CACHE_DIR}/luci.ch"
     local user_input=""
+    local search_results=""
+    
+    debug_log "Prompting user for country selection"
 
-    debug_log "language.ch not found, prompting user for country selection"
+    while true; do
+        echo "$(color cyan "Enter country name, code, or language to select your country.")"
+        echo -n "$(color cyan "Please input: ")"
+        read user_input
 
-    echo "$(color cyan "Enter country name, code, or language to select your country.")"
-    echo -n "$(color cyan "Please input: ")"
-    read user_input
+        debug_log "User input: '$user_input'"
 
-    debug_log "User input: '$user_input'"
+        # 入力が空なら再入力を促す
+        if [ -z "$user_input" ]; then
+            debug_log "No input received, re-prompting user."
+            continue
+        fi
 
-    # 入力が空の場合は再入力を促す
-    if [ -z "$user_input" ]; then
-        debug_log "No user input received, re-prompting user."
-        select_country
+        # `country.db` から検索（完全一致 → 前方一致 → 部分一致）
+        search_results=$(awk -v query="$user_input" '
+            toupper($2) == toupper(query) || toupper($3) == toupper(query) ||
+            toupper($4) == toupper(query) || toupper($5) == toupper(query) {print NR " " $0}
+        ' "$country_file")
+
+        if [ -z "$search_results" ]; then
+            echo "$(color red "No matching country found. Please try again.")"
+            debug_log "No matching country found for '$user_input'. Re-prompting user."
+            continue
+        fi
+
+        # 検索結果が1件なら即確定
+        local result_count
+        result_count=$(echo "$search_results" | wc -l)
+        if [ "$result_count" -eq 1 ]; then
+            local country_data
+            country_data=$(echo "$search_results" | awk '{for (i=2; i<=NF; i++) printf "%s ", $i; print ""}')
+            finalize_country_selection "$country_data"
+            return
+        fi
+
+        # 検索結果を番号付きで表示
+        echo "$(color cyan "Multiple matches found. Please select a country by number:")"
+        echo "$search_results" | awk '{print $1 ") " $2 " (" $5 ")"}'
+
+        # ユーザーの選択を受け取る
+        echo -n "$(color cyan "Please select a number: ")"
+        read selection
+
+        # 入力が数値でない場合は再入力を促す
+        if ! echo "$selection" | grep -qE '^[0-9]+$'; then
+            echo "$(color red "Invalid selection. Please enter a number from the list.")"
+            continue
+        fi
+
+        # 選択した番号のデータを取得
+        local selected_country
+        selected_country=$(echo "$search_results" | awk -v num="$selection" '$1 == num {for (i=2; i<=NF; i++) printf "%s ", $i; print ""}')
+
+        if [ -z "$selected_country" ]; then
+            echo "$(color red "Invalid selection. Please enter a valid number.")"
+            continue
+        fi
+
+        # 最終確定処理へ
+        finalize_country_selection "$selected_country"
         return
-    fi
+    done
+}
 
-    # `check_country()` を呼び出し
-    check_country "$user_input"
+#########################################################################
+# finalize_country_selection: 選択された国をキャッシュに保存
+#########################################################################
+finalize_country_selection() {
+    local country_data="$1"
+    local country_cache="${CACHE_DIR}/country.ch"
+    local language_cache="${CACHE_DIR}/language.ch"
+    local luci_cache="${CACHE_DIR}/luci.ch"
+
+    local short_country
+    short_country=$(echo "$country_data" | awk '{print $5}')
+    local luci_lang
+    luci_lang=$(echo "$country_data" | awk '{print $4}')
+
+    echo "$short_country" > "$language_cache"
+    echo "$luci_lang" > "$luci_cache"
+    echo "$country_data" > "$country_cache"
+
+    debug_log "Country selection finalized: language.ch='$short_country', luci.ch='$luci_lang', country.ch='$country_data'"
+
+    select_zone
 }
 
 #########################################################################
