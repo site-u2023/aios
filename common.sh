@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-4-8"
+COMMON_VERSION="2025.02.11-4-9"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -346,7 +346,7 @@ select_zone() {
         return
     fi
 
-    # `$6` 以降のデータを取得し、カンマを空白に変換
+    # `$1` から `$5` を除外し、それ以降のデータを取得（カンマを空白に変換）
     local zones
     zones=$(awk '{for (i=6; i<=NF; i++) printf "%s ", $i; print ""}' "$country_cache" | tr ',' ' ')
 
@@ -359,7 +359,7 @@ select_zone() {
         return
     fi
 
-    # ゾーンリストを表示
+    # ゾーンリストを表示（番号 `[1] [2]` 形式）
     echo "$(color cyan "Select your timezone from the following options:")"
     echo "$zones" | awk '{printf "[%d] %s\n", NR, $0}'
 
