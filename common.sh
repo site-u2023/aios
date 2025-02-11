@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-4-7"
+COMMON_VERSION="2025.02.11-4-8"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -152,12 +152,12 @@ select_country() {
     > "$country_tmp"  # 一時キャッシュを初期化
 
     if [ ! -f "$country_file" ]; then
-        echo "$(color red \"Country database not found!\")"
+        echo "$(color red "Country database not found!")"
         return 1
     fi
 
     while true; do
-        echo "$(color cyan \"Enter country name, code, or language to select your country.\")"
+        echo "$(color cyan "Enter country name, code, or language to select your country.")"
         echo -n "$(color cyan \"Please input: \")"
         read user_input
         user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]' | sed -E 's/[\/,_]+/ /g')
@@ -728,7 +728,7 @@ country_info() {
     if [ -f "$country_info_file" ]; then
         grep -w "$selected_language_code" "$country_info_file"
     else
-        echo -e "$(color red "Country information not found.")"
+        printf "%s\n" "$(color red "Country information not found.")"
     fi
 }
 
