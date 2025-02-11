@@ -249,7 +249,7 @@ select_zone() {
         return
     fi
 
-    local selected_zone
+    local selected_zone 
     selected_zone=$(cat "$tmp_zone_list")
 
     debug_log "User selected timezone: $selected_zone"
