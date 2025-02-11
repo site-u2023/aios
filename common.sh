@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-5-14"
+COMMON_VERSION="2025.02.11-5-17"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -144,14 +144,19 @@ selection_list() {
 }
 
 #########################################################################
-# select_country: 国選択（`selection_list()` を利用）
+# select_country: 国選択（`[0]` で言語選択に戻った場合 `ch` をクリア）
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
     local tmp_country_list="${CACHE_DIR}/tmp_country_list.ch"
-    local user_input=""
-    
+
     debug_log "=== Entering select_country() ==="
+
+    # 言語選択に戻る場合（[0] を選択した場合）はキャッシュをクリア
+    if [ -f "$language_cache" ] || [ -f "$luci_cache" ] || [ -f "$country_cache" ]; then
+        debug_log "DEBUG: Clearing previous country selection due to [0] input"
+        rm -f "$language_cache" "$luci_cache" "$country_cache"
+    fi
 
     # ユーザーに入力を促す
     echo "`color cyan \"Enter country name, code, or language to search:\"`"
@@ -176,7 +181,8 @@ select_country() {
     selection_list "$tmp_country_list" "Select your country from the following options:"
 
     if [ "$?" -eq 1 ]; then
-        select_country  # `[0]` を選択した場合、再入力を促す
+        debug_log "DEBUG: User selected [0], resetting language selection"
+        select_country  # `[0]` を選択した場合、リセットして再度選択
         return
     fi
 
@@ -190,7 +196,7 @@ select_country() {
 }
 
 #########################################################################
-# country_write: 選択された国をキャッシュに保存（確定処理）
+# country_write: 選択された国をキャッシュに保存（`[0]` で戻った場合、再書き込み可能）
 #########################################################################
 country_write() {
     local country_data="$1"
@@ -198,28 +204,26 @@ country_write() {
     local language_cache="${CACHE_DIR}/language.ch"
     local luci_cache="${CACHE_DIR}/luci.ch"
 
-    # データの整合性を確認
     debug_log "DEBUG: Full country_data -> '$country_data'"
 
-    # $5（短縮国コード）を取得して `language.ch` に保存
+    # $5（短縮国コード）を取得
     local short_country
     short_country=$(echo "$country_data" | awk '{print $5}')
-    echo "$short_country" > "$language_cache"
-
-    # $4（LuCI 言語コード）を取得して `luci.ch` に保存
+    
+    # $4（LuCI 言語コード）を取得
     local luci_lang
     luci_lang=$(echo "$country_data" | awk '{print $4}')
+
+    # `language.ch`, `luci.ch`, `country.ch` は `[0]` でクリアされるので、再度書き込める
+    echo "$short_country" > "$language_cache"
+    debug_log "DEBUG: Written to language.ch -> $short_country"
+
     echo "$luci_lang" > "$luci_cache"
+    debug_log "DEBUG: Written to luci.ch -> $luci_lang"
 
-    # `country.ch` に選択した国の全データを保存
     echo "$country_data" > "$country_cache"
+    debug_log "DEBUG: Written to country.ch -> $country_data"
 
-    # デバッグログを強化
-    debug_log "DEBUG: Written to language.ch -> $(cat "$language_cache")"
-    debug_log "DEBUG: Written to luci.ch -> $(cat "$luci_cache")"
-    debug_log "DEBUG: Written to country.ch -> $(cat "$country_cache")"
-
-    # キャッシュが確定したら `select_zone()` に渡す
     select_zone
 }
 
