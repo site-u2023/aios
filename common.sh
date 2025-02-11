@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-2-0"
+COMMON_VERSION="2025.02.11-2-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -920,7 +920,7 @@ check_common() {
             download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
             download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
-            check_language  "$lang_code"
+            select_language  "$lang_code"
             
             #check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
             #select_country
@@ -929,13 +929,13 @@ check_common() {
         light)
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
             check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
-            select_country
+            select_language
             normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
         *)
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
             check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
-            select_country
+            select_language
             normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
     esac
