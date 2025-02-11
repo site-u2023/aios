@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-5-7"
+COMMON_VERSION="2025.02.11-5-8"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -99,8 +99,10 @@ selection_list() {
         echo "`color cyan \"$prompt\"`"
         i=1  # 番号リセット
         while IFS= read -r line; do
-            echo "[$i] $line"
-            echo "$i $line" >> "$list_file.tmp"
+            # $2 $3 $4 $5 のみを表示
+            formatted_line=$(echo "$line" | awk '{print $2, $3, $4, $5}')
+            echo "[$i] $formatted_line"
+            echo "$i $formatted_line" >> "$list_file.tmp"
             i=$((i + 1))
         done < "$list_file"
         echo "[0] Cancel / back to return"  # [0] はリストの最後に固定
