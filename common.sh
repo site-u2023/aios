@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-4-1"
+COMMON_VERSION="2025.02.11-4-2"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -330,22 +330,48 @@ country_write() {
 }
 
 #########################################################################
-# select_zone: タイムゾーンを選択
+# select_zone: `country.ch` からゾーン情報を取得し、ユーザーに選択させる
 #########################################################################
 select_zone() {
-    local zone_file="${CACHE_DIR}/zone_tmp.ch"
+    local country_cache="${CACHE_DIR}/country.ch"
     local zone_cache="${CACHE_DIR}/zone.ch"
 
-    if [ ! -s "$zone_file" ]; then
-        echo "$(color red \"No timezone options available.\")"
-        return 1
+    if [ ! -f "$country_cache" ]; then
+        debug_log "ERROR: country.ch not found. Cannot proceed with zone selection."
+        echo "$(color red "ERROR: country data not found. Please reselect your country.")"
+        select_language
+        return
     fi
 
-    selection_list "$zone_file" "Select your timezone from the following options:"
-    if [ $? -eq 0 ]; then
-        mv "$zone_file" "$zone_cache"
-        return 0
+    local zones
+    zones=$(awk '{for (i=6; i<=NF; i++) print $i}' "$country_cache" | tr ',' '\n')
+
+    if [ -z "$zones" ]; then
+        debug_log "ERROR: No zones found for selected country."
+        echo "$(color red "ERROR: No timezone data found. Please reselect your country.")"
+        select_language
+        return
     fi
+
+    echo "$(color cyan "Select your timezone from the following options:")"
+    echo "$zones" | nl -w2 -s') '  # リストを番号付きで表示
+
+    echo -n "$(color cyan "Please select a timezone by number: ")"
+    read selected_number
+
+    selected_zone=$(echo "$zones" | sed -n "${selected_number}p")
+
+    if [ -z "$selected_zone" ]; then
+        debug_log "Invalid timezone selection: '$selected_number'."
+        echo "$(color red "Invalid selection. Please choose a valid number.")"
+        select_zone
+        return
+    fi
+
+    echo "$selected_zone" > "$zone_cache"
+    debug_log "User selected timezone: $selected_zone"
+
+    normalize_country
 }
 
 #########################################################################
