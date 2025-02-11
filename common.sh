@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-1-15"
+COMMON_VERSION="2025.02.11-1-16"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -84,6 +84,56 @@ test_cache_contents() {
 # check_language: 言語キャッシュの確認および設定
 #########################################################################
 check_language() {
+    local lang_code country_data
+    local country_file="${BASE_DIR}/country.db"
+    local language_cache="${CACHE_DIR}/language.ch"
+    local luci_cache="${CACHE_DIR}/luci.ch"
+    local country_cache="${CACHE_DIR}/country.ch"
+
+    # `ash` 互換の大文字変換
+    lang_code=$(echo "$1" | tr '[:lower:]' '[:upper:]')
+
+    debug_log "check_language received lang_code: '$lang_code'"
+
+    # `country.db` の存在確認
+    if [ ! -f "$country_file" ]; then
+        debug_log "ERROR: country.db not found at $country_file"
+        echo "$(color red "ERROR: country database not found! Please ensure country.db is correctly loaded.")"
+        return 1
+    fi
+
+    # `language.ch` と `luci.ch` の両方が存在する場合は処理を終了
+    if [ -f "$language_cache" ] && [ -f "$luci_cache" ]; then
+        debug_log "Both language.ch and luci.ch exist: language.ch='$(cat "$language_cache")', luci.ch='$(cat "$luci_cache")'. Exiting check_language()."
+        return
+    fi
+
+    # `country.db` から `$5`（短縮国名）が一致する行を検索
+    country_data=$(awk -v lang="$lang_code" 'toupper($5) == lang {print $0}' "$country_file")
+
+    if [ -n "$country_data" ]; then
+        local short_country luci_lang
+        short_country=$(echo "$country_data" | awk '{print $5}')  # 短縮国名 (JP, US)
+        luci_lang=$(echo "$country_data" | awk '{print $4}')  # LuCI 言語 (ja, en)
+
+        echo "$short_country" > "$language_cache"
+        echo "$luci_lang" > "$luci_cache"
+        echo "$country_data" > "$country_cache"  # 該当行すべてを country.ch に保存
+
+        debug_log "Language set: language.ch='$short_country', luci.ch='$luci_lang', country.ch='$country_data'"
+
+        return
+    fi
+
+    # どちらも無ければ `select_country()` へ
+    debug_log "No matching country found for '$lang_code', proceeding to select_country()"
+    select_country
+}
+
+#########################################################################
+# check_language: 言語キャッシュの確認および設定
+#########################################################################
+XXXXX_check_language() {
     local lang_code="${1^^}"  # 大文字変換（例: jp -> JP）
     local country_file="${BASE_DIR}/country.db"
 
@@ -863,7 +913,7 @@ check_common() {
             download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
             download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
-            check_language # "$lang_code"
+            check_language  "$lang_code"
             
             #check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
             #select_country
