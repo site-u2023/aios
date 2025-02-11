@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-1-16"
+COMMON_VERSION="2025.02.11-1-17"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -84,10 +84,8 @@ test_cache_contents() {
 # check_language: 言語キャッシュの確認および設定
 #########################################################################
 check_language() {
-    BASE_DIR="${BASE_DIR:-/tmp/aios}"
     CACHE_DIR="$BASE_DIR/cache"
-    LOG_DIR="$BASE_DIR/logs"
-    mkdir -p "$CACHE_DIR" "$LOG_DIR"
+    mkdir -p "$CACHE_DIR"
 
     local lang_code country_data
     local country_file="${BASE_DIR}/country.db"
