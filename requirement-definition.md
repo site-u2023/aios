@@ -1,5 +1,5 @@
 # 要件定義 (AIOS - All in One Script)
-**Last update:** 2025-02-11
+**Last update:** 2025-02-11-1
 
 ---
 
@@ -276,12 +276,12 @@ mkdir -p "$CACHE_DIR" "$LOG_DIR"
 | キャッシュファイル名      | 説明                                                   | 保存先                       |
 |----------------------|--------------------------------------------------|--------------------------|
 | **openwrt.ch**      | OpenWrtバージョンのキャッシュ （OpenWrtバージョン）※削除しない | `${CACHE_DIR}/openwrt.ch` |
-| **country.ch**      | 選択されたカントリーのキャッシュ（国名、母国語、言語パッケージ、短縮国名、ゾーンネーム、タイムゾーン）※削除しない | `${CACHE_DIR}/country.ch` |
-| **zone.ch**         | 最終選択したゾーン (ゾーンネーム、タイムゾーン) ※削除しない | `${CACHE_DIR}/zone.ch` |
+| **language.ch**     | 最終選択した短縮国名（短縮国名：country.dbの$5） ※削除しない | `${CACHE_DIR}/language.ch` |
+| **luci.ch**         | LUI 言語キャッシュ (luci言語：country.dbの$4)※削除しない | `${CACHE_DIR}/luci.ch` |
+| **country.ch**      | 選択されたカントリーのキャッシュ（国名、母国語、言語パッケージ、短縮国名、ゾーンネーム、タイムゾーン:country.dbの該当行$の全て）※削除しない | `${CACHE_DIR}/country.ch` |
+| **zone.ch**         | 最終選択したゾーン (ゾーンネーム、タイムゾーン：country.dbの$6～全て) ※削除しない | `${CACHE_DIR}/zone.ch` |
 | **downloader.ch**   | パッケージマネージャー（apk、opkg）※削除しない | `${CACHE_DIR}/downloader.ch` |
 | **script.ch**       | スクリプトファイルバージョンのキャッシュ ※削除しない | `${CACHE_DIR}/script.ch` |
-| **language.ch**     | 最終選択した短縮国名 ※削除しない | `${CACHE_DIR}/language.ch` |
-| **luci.ch**         | `ja`, `en` などの LUI 言語キャッシュ ※削除しない | `${CACHE_DIR}/luci.ch` |
 | **country_tmp.ch**  | 検索時の一時国リスト（スクリプト終了時削除） | `${CACHE_DIR}/country_tmp.ch` |
 | **zone_tmp.ch**     | 検索時の一時ゾーンリスト（スクリプト終了時削除） | `${CACHE_DIR}/zone_tmp.ch` |
 | **language_tmp.ch** | 言語キャッシュ（スクリプト終了時削除） | `${CACHE_DIR}/language_tmp.ch` |
