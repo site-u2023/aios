@@ -880,21 +880,18 @@ check_common() {
             download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
             check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
-            check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
             select_country
             normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
         light)
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
             check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
-            check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
             select_country
             normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
         *)
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
             check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
-            check_zone "$(cat "$CACHE_DIR/language.ch" 2>/dev/null || echo "US")"
             select_country
             normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
