@@ -103,14 +103,6 @@ check_language() {
 }
 
 #########################################################################
-# select_country: 手動入力で `language_selection()` を実行
-#########################################################################
-select_country() {
-    debug_log "No matching country found, prompting user for manual selection."
-    language_selection ""
-}
-
-#########################################################################
 # language_selection: `aios $1` または手動入力から国を検索
 #########################################################################
 language_selection() {
