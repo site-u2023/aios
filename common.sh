@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-4-10"
+COMMON_VERSION="2025.02.11-5-0"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -140,87 +140,40 @@ selection_list() {
 }
 
 #########################################################################
-# select_country: 国と言語を選択（検索・表示を `country.db` に統一）
+# select_country: 国選択（`selection_list()` を利用）
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
-    local country_cache="${CACHE_DIR}/country.ch"
-    local language_cache="${CACHE_DIR}/luci.ch"
-    local country_tmp="${CACHE_DIR}/country_tmp.ch"
-    local user_input=""
+    local tmp_country_list="${CACHE_DIR}/tmp_country_list.ch"
+    
+    debug_log "=== Entering select_country() ==="
 
-    > "$country_tmp"  # 一時キャッシュを初期化
+    # `country.db` から国名・コード・言語で検索
+    awk '{print $5, $2, "(" $4 ")"}' "$country_file" > "$tmp_country_list"
 
-    if [ ! -f "$country_file" ]; then
-        echo "$(color red "Country database not found!")"
+    debug_log "Extracted countries: $(cat "$tmp_country_list")"
+
+    if [ ! -s "$tmp_country_list" ]; then
+        debug_log "ERROR: No countries available."
+        echo "$(color red "ERROR: No country options available. Please check country.db.")"
         return 1
     fi
 
-    while true; do
-        echo "$(color cyan "Enter country name, code, or language to select your country.")"
-        echo -n "$(color cyan \"Please input: \")"
-        read user_input
-        user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]' | sed -E 's/[\/,_]+/ /g')
+    # `selection_list()` を使用
+    selection_list "$tmp_country_list" "Select your country from the following options:"
 
-        if [ -z "$user_input" ]; then
-            echo "$(color yellow "Invalid input. Please enter a valid country name, code, or language.")"
-            continue
-        fi
-
-        # **検索処理: 完全一致 → 前方一致 → 後方一致 → 部分一致**
-        awk -v query="$user_input" '$4 == query {print $2, $3, $4, $5, $6}' "$country_file" > "$country_tmp"
-        if [ ! -s "$country_tmp" ]; then
-            awk -v query="^"query '$0 ~ query {print $2, $3, $4, $5, $6}' "$country_file" > "$country_tmp"
-        fi
-        if [ ! -s "$country_tmp" ]; then
-            awk -v query=query"$" '$0 ~ query {print $2, $3, $4, $5, $6}' "$country_file" > "$country_tmp"
-        fi
-        if [ ! -s "$country_tmp" ]; then
-            awk -v query="$user_input" '$0 ~ query {print $2, $3, $4, $5, $6}' "$country_file" > "$country_tmp"
-        fi
-
-        if [ ! -s "$country_tmp" ]; then
-            echo "$(color yellow \"No matching country found. Please try again.\")"
-            continue
-        fi
-
-        selection_list "$country_tmp" "Select a country:"
-        if [ $? -eq 0 ]; then
-            mv "$country_tmp" "$country_cache"
-            mv "$country_cache" "$language_cache"
-            return 0
-        fi
-    done
-}
-
-#########################################################################
-# select_language: 言語選択を担当し、`search_country()` で検索後 `country_write()` へ
-#########################################################################
-select_language() {
-    CACHE_DIR="$BASE_DIR/cache"
-    mkdir -p "$CACHE_DIR"
-
-    local language_cache="${CACHE_DIR}/language.ch"
-    local luci_cache="${CACHE_DIR}/luci.ch"
-
-    debug_log "=== Entering select_language() ==="
-    debug_log "Received language input: '$1'"
-
-    # キャッシュがある場合はスキップ
-    if [ -f "$language_cache" ] && [ -f "$luci_cache" ]; then
-        debug_log "Cache found: language.ch='$(cat "$language_cache")', luci.ch='$(cat "$luci_cache")'. Skipping language selection."
-        select_zone
+    if [ "$?" -eq 1 ]; then
+        select_language  # `[0]` を選択した場合、言語選択に戻る
         return
     fi
 
-    # `$1` が空または曖昧な言語コードなら手動入力
-    if [ -z "$1" ] || [ "$1" = "en" ]; then
-        debug_log "No valid language code provided. Forcing manual selection."
-        search_country "manual"
-    else
-        debug_log "Proceeding with automatic language selection for input: '$1'"
-        search_country "$1"
-    fi
+    local selected_country
+    selected_country=$(cat "$tmp_country_list")
+
+    debug_log "User selected country: $selected_country"
+
+    # `country_write()` へ渡す
+    country_write "$selected_country"
 }
 
 #########################################################################
@@ -331,56 +284,49 @@ country_write() {
 }
 
 #########################################################################
-# select_zone: `country.ch` からゾーン情報を取得し、ユーザーに選択させる
+# select_zone: タイムゾーン選択（`selection_list()` を利用）
 #########################################################################
 select_zone() {
     local country_cache="${CACHE_DIR}/country.ch"
-    local zone_cache="${CACHE_DIR}/zone.ch"
     local tmp_zone_list="${CACHE_DIR}/tmp_zone_list.ch"
+    local zone_cache="${CACHE_DIR}/zone.ch"
 
     debug_log "=== Entering select_zone() ==="
 
     if [ ! -f "$country_cache" ]; then
         debug_log "ERROR: country.ch not found. Cannot proceed with zone selection."
         echo "$(color red "ERROR: country data not found. Please reselect your country.")"
-        select_language
+        select_country
         return
     fi
 
-    # `$6` 以降のデータを取得し、tmpキャッシュへ保存
-    awk '{for (i=6; i<=NF; i++) print $i}' "$country_cache" > "$tmp_zone_list"
+    # `$6` 以降のデータを取得し、一時キャッシュに保存（カンマを空白に変換）
+    awk '{for (i=6; i<=NF; i++) print $i}' "$country_cache" | tr ',' ' ' > "$tmp_zone_list"
 
-    debug_log "Extracted zones (raw): $(cat "$tmp_zone_list")"
+    debug_log "Extracted zones: $(cat "$tmp_zone_list")"
 
     if [ ! -s "$tmp_zone_list" ]; then
         debug_log "ERROR: No zones found for selected country."
         echo "$(color red "ERROR: No timezone data found. Please reselect your country.")"
-        select_language
+        select_country
         return
     fi
 
-    # ゾーンリストを表示（番号 `[1] America/New_York,EST-5EDT-4` の形式）
-    echo "$(color cyan "Select your timezone from the following options:")"
-    awk -F',' '{printf "[%d] %s\n", NR, $0}' "$tmp_zone_list"
+    # `selection_list()` を使用
+    selection_list "$tmp_zone_list" "Select your timezone from the following options:"
 
-    echo -n "$(color cyan "Please select a timezone by number: ")"
-    read selected_number
-
-    debug_log "User selected number: $selected_number"
-
-    selected_zone=$(awk -F',' -v num="$selected_number" 'NR == num' "$tmp_zone_list")
-
-    if [ -z "$selected_zone" ]; then
-        debug_log "Invalid timezone selection: '$selected_number'."
-        echo "$(color red "Invalid selection. Please choose a valid number.")"
-        select_zone
+    if [ "$?" -eq 1 ]; then
+        select_country  # `[0]` を選択した場合、国選択に戻る
         return
     fi
 
-    # `zone.ch` に書き込む際にカンマ `,` を空白 ` ` に変換
-    selected_zone_cleaned=$(echo "$selected_zone" | tr ',' ' ')
-    debug_log "User selected timezone (formatted): $selected_zone_cleaned"
-    echo "$selected_zone_cleaned" > "$zone_cache"
+    local selected_zone
+    selected_zone=$(cat "$tmp_zone_list")
+
+    debug_log "User selected timezone: $selected_zone"
+
+    # `zone.ch` に書き込む
+    echo "$selected_zone" > "$zone_cache"
 
     normalize_country
 }
