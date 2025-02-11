@@ -140,15 +140,15 @@ selection_list() {
 }
 
 #########################################################################
-# select_country: 国選択（`selection_list()` を利用）
+# select_country: 国選択の入口（`selection_list()` を利用）
 #########################################################################
 select_country() {
     local country_file="${BASE_DIR}/country.db"
     local tmp_country_list="${CACHE_DIR}/tmp_country_list.ch"
-    
+
     debug_log "=== Entering select_country() ==="
 
-    # `country.db` から国名・コード・言語で検索
+    # `country.db` から国名・コード・言語で検索しリスト作成
     awk '{print $5, $2, "(" $4 ")"}' "$country_file" > "$tmp_country_list"
 
     debug_log "Extracted countries: $(cat "$tmp_country_list")"
@@ -163,8 +163,8 @@ select_country() {
     selection_list "$tmp_country_list" "Select your country from the following options:"
 
     if [ "$?" -eq 1 ]; then
-        select_language  # `[0]` を選択した場合、言語選択に戻る
-        return
+        echo "$(color yellow "Returning to the initial setup.")"
+        return  # `[0]` を選択した場合、何もしない
     fi
 
     local selected_country
