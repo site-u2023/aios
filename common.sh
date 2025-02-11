@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-5-13"
+COMMON_VERSION="2025.02.11-5-14"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -190,7 +190,7 @@ select_country() {
 }
 
 #########################################################################
-# country_write: 選択された国をキャッシュに保存（デバッグ強化）
+# country_write: 選択された国をキャッシュに保存（確定処理）
 #########################################################################
 country_write() {
     local country_data="$1"
@@ -198,29 +198,33 @@ country_write() {
     local language_cache="${CACHE_DIR}/language.ch"
     local luci_cache="${CACHE_DIR}/luci.ch"
 
+    # データの整合性を確認
+    debug_log "DEBUG: Full country_data -> '$country_data'"
+
+    # $5（短縮国コード）を取得して `language.ch` に保存
     local short_country
     short_country=$(echo "$country_data" | awk '{print $5}')
+    echo "$short_country" > "$language_cache"
+
+    # $4（LuCI 言語コード）を取得して `luci.ch` に保存
     local luci_lang
     luci_lang=$(echo "$country_data" | awk '{print $4}')
-    local zone_info
-    zone_info=$(echo "$country_data" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i; print ""}')
-
-    debug_log "DEBUG: Full country_data -> '$country_data'"
-    debug_log "DEBUG: Extracted short_country='$short_country', luci_lang='$luci_lang'"
-    debug_log "DEBUG: Extracted zone_info='$zone_info'"
-
-    echo "$short_country" > "$language_cache"
     echo "$luci_lang" > "$luci_cache"
+
+    # `country.ch` に選択した国の全データを保存
     echo "$country_data" > "$country_cache"
 
-    # `country.ch` の内容をデバッグログに出力
+    # デバッグログを強化
+    debug_log "DEBUG: Written to language.ch -> $(cat "$language_cache")"
+    debug_log "DEBUG: Written to luci.ch -> $(cat "$luci_cache")"
     debug_log "DEBUG: Written to country.ch -> $(cat "$country_cache")"
 
+    # キャッシュが確定したら `select_zone()` に渡す
     select_zone
 }
 
 #########################################################################
-# select_zone: タイムゾーン選択（デバッグ強化）
+# select_zone: タイムゾーン選択（`country.ch` のデータを利用）
 #########################################################################
 select_zone() {
     local country_cache="${CACHE_DIR}/country.ch"
@@ -236,10 +240,7 @@ select_zone() {
         return
     fi
 
-    # `country.ch` の内容をデバッグログに出力
-    debug_log "DEBUG: Current country.ch content -> $(cat "$country_cache")"
-
-    # `$6` 以降のデータを取得し、一時キャッシュに保存
+    # `country.ch` から `$6` 以降のデータを取得し、一時キャッシュに保存
     awk '{for (i=6; i<=NF; i++) print $i}' "$country_cache" > "$tmp_zone_list"
 
     debug_log "DEBUG: Extracted zones -> $(cat "$tmp_zone_list")"
@@ -251,6 +252,7 @@ select_zone() {
         return
     fi
 
+    # `selection_list()` を使用してゾーンを選択
     selection_list "$tmp_zone_list" "Select your timezone from the following options:"
 
     if [ "$?" -eq 1 ]; then
@@ -263,6 +265,7 @@ select_zone() {
 
     debug_log "User selected timezone: $selected_zone"
 
+    # `zone.ch` に書き込む（`country.ch` は変更しない）
     echo "$selected_zone" > "$zone_cache"
 
     normalize_country
