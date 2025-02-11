@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.11-4-9"
+COMMON_VERSION="2025.02.11-4-10"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -336,6 +336,7 @@ country_write() {
 select_zone() {
     local country_cache="${CACHE_DIR}/country.ch"
     local zone_cache="${CACHE_DIR}/zone.ch"
+    local tmp_zone_list="${CACHE_DIR}/tmp_zone_list.ch"
 
     debug_log "=== Entering select_zone() ==="
 
@@ -346,29 +347,28 @@ select_zone() {
         return
     fi
 
-    # `$1` から `$5` を除外し、それ以降のデータを取得（カンマを空白に変換）
-    local zones
-    zones=$(awk '{for (i=6; i<=NF; i++) printf "%s ", $i; print ""}' "$country_cache" | tr ',' ' ')
+    # `$6` 以降のデータを取得し、tmpキャッシュへ保存
+    awk '{for (i=6; i<=NF; i++) print $i}' "$country_cache" > "$tmp_zone_list"
 
-    debug_log "Extracted zones: $(echo "$zones")"
+    debug_log "Extracted zones (raw): $(cat "$tmp_zone_list")"
 
-    if [ -z "$zones" ]; then
+    if [ ! -s "$tmp_zone_list" ]; then
         debug_log "ERROR: No zones found for selected country."
         echo "$(color red "ERROR: No timezone data found. Please reselect your country.")"
         select_language
         return
     fi
 
-    # ゾーンリストを表示（番号 `[1] [2]` 形式）
+    # ゾーンリストを表示（番号 `[1] America/New_York,EST-5EDT-4` の形式）
     echo "$(color cyan "Select your timezone from the following options:")"
-    echo "$zones" | awk '{printf "[%d] %s\n", NR, $0}'
+    awk -F',' '{printf "[%d] %s\n", NR, $0}' "$tmp_zone_list"
 
     echo -n "$(color cyan "Please select a timezone by number: ")"
     read selected_number
 
     debug_log "User selected number: $selected_number"
 
-    selected_zone=$(echo "$zones" | awk -v num="$selected_number" 'NR == num')
+    selected_zone=$(awk -F',' -v num="$selected_number" 'NR == num' "$tmp_zone_list")
 
     if [ -z "$selected_zone" ]; then
         debug_log "Invalid timezone selection: '$selected_number'."
@@ -377,8 +377,10 @@ select_zone() {
         return
     fi
 
-    debug_log "User selected timezone: $selected_zone"
-    echo "$selected_zone" > "$zone_cache"
+    # `zone.ch` に書き込む際にカンマ `,` を空白 ` ` に変換
+    selected_zone_cleaned=$(echo "$selected_zone" | tr ',' ' ')
+    debug_log "User selected timezone (formatted): $selected_zone_cleaned"
+    echo "$selected_zone_cleaned" > "$zone_cache"
 
     normalize_country
 }
