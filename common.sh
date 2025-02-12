@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-8-2"
+COMMON_VERSION="2025.02.13-0-0"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -856,14 +856,7 @@ install_language_pack() {
 check_common() {
     local mode="$1"
     shift  # `$1` を削除し `$2` を取得
-    local lang_code="${1:-}"  # `$1` をそのまま適用（フォールバックなし）
-
-    debug_log "check_common received lang_code: '$lang_code'"
-
-    SELECTED_LANGUAGE="$lang_code"
-    INPUT_LANG="$lang_code"  # `INPUT_LANG` に `$1` を適用（フォールバックなし）
-
-    debug_log "common.sh received INPUT_LANG: '$INPUT_LANG'"
+    local lang_code=""
 
     # オプション解析
     local RESET_CACHE=false
@@ -873,9 +866,22 @@ check_common() {
             -reset|--reset|-r) RESET_CACHE=true ;;
             -help|--help|-h) SHOW_HELP=true ;;
             -debug|--debug|-d) DEBUG_MODE=true ;;
+            *)
+                # 言語コードとして処理（最初の未定義引数を言語コードとみなす）
+                if [ -z "$lang_code" ]; then
+                    lang_code="$1"
+                fi
+                ;;
         esac
         shift
     done
+
+    debug_log "check_common received lang_code: '$lang_code'"
+
+    SELECTED_LANGUAGE="$lang_code"
+    INPUT_LANG="$lang_code"  # 言語コードを `INPUT_LANG` に適用
+
+    debug_log "common.sh received INPUT_LANG: '$INPUT_LANG'"
 
     # キャッシュリセット処理
     $RESET_CACHE && reset_cache
