@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-6-2"
+COMMON_VERSION="2025.02.12-6-3"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -263,7 +263,7 @@ country_write() {
     local cache_language="${CACHE_DIR}/language.ch"
     local cache_luci="${CACHE_DIR}/luci.ch"
 
-    # ✅ `country_tmp.ch` の内容から `country.db` を検索し、完全なデータを取得（修正）
+    # ✅ `country_tmp.ch` の内容から `country.db` を検索し、完全なデータを取得
     local country_data=$(grep "^$(awk '{print $1, $2, $3, $4, $5}' "$CACHE_DIR/country_tmp.ch")" "$BASE_DIR/country.db")
 
     debug_log "DEBUG: Received country_data -> '$country_data'"
@@ -273,39 +273,19 @@ country_write() {
 
     debug_log "DEBUG: Extracted short_country='$short_country', luci_lang='$luci_lang'"
 
-    # ✅ 言語設定が確定した時点で `language.ch` に保存
     echo "$short_country" > "$cache_language"
     echo "$luci_lang" > "$cache_luci"
 
-    # ✅ `country.ch` にデータを正しく保存（修正）
+    # ✅ `country.ch` にデータを正しく保存
     echo "$country_data" > "$cache_country"
 
     debug_log "DEBUG: country.ch content AFTER write ->"
-
-    # ✅ `DEBUG_MODE` のときのみ `cat "$cache_country"` を実行
     if [ "$DEBUG_MODE" = "true" ]; then
         cat "$cache_country"
     fi
 
-    # ✅ `message.db` からメッセージを取得できるかデバッグ出力
-    debug_log "DEBUG: Attempting to get message for 'MSG_COUNTRY_SUCCESS'"
-
-    # ✅ `language.ch` をセットした後に `message.db` を参照して `get_message()` を実行
-    local success_message
-    success_message="$(get_message 'MSG_COUNTRY_SUCCESS')"
-
-    # ✅ `success_message` の中身をデバッグログに出力
-    debug_log "DEBUG: Fetched success_message='$success_message'"
-
-    # ✅ `success_message` が空ならエラーログを出力
-    if [ -z "$success_message" ]; then
-        debug_log "ERROR: MSG_COUNTRY_SUCCESS not found in message.db!"
-    else
-        # ✅ メッセージを設定言語で表示（明らかにセットされたと分かる！）
-        echo "$(color green "$success_message")"
-    fi
-
-    select_zone
+    # ✅ 言語を正規化し、多言語対応メッセージをセット
+    normalize_country
 }
 
 #########################################################################
@@ -366,31 +346,34 @@ normalize_country() {
     local message_db="${BASE_DIR}/messages.db"
     local language_cache="${CACHE_DIR}/language.ch"
     local message_cache="${CACHE_DIR}/message.ch"
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
     local selected_language=""
 
-    if [ -f "$language_cache" ]; then
-        selected_language=$(cat "$language_cache")
-        debug_log "DEBUG: Loaded language from language.ch -> '$selected_language'"
+    if [ -f "$tmp_country" ]; then
+        selected_language=$(awk '{print $4}' "$tmp_country")
+        debug_log "Loaded language from country_tmp.ch -> $selected_language"
     else
-        debug_log "ERROR: language.ch not found! Selecting manually."
+        debug_log "No country_tmp.ch found. Selecting manually."
         select_country
         return
     fi
 
-    debug_log "DEBUG: Selected language before validation -> '$selected_language'"
+    debug_log "DEBUG: Selected language before validation -> $selected_language"
 
-    local supported_languages
-    supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
+    local supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
 
     if echo "$supported_languages" | grep -qw "$selected_language"; then
-        debug_log "DEBUG: Language '$selected_language' is supported. Setting message.ch..."
+        debug_log "Using message database language: $selected_language"
         echo "$selected_language" > "$message_cache"
     else
-        debug_log "WARNING: Language '$selected_language' not found in messages.db. Falling back to 'en'."
+        debug_log "Language '$selected_language' not found in messages.db. Using 'en' for system messages."
         echo "en" > "$message_cache"
     fi
 
-    debug_log "DEBUG: Final system message language -> '$(cat "$message_cache")'"
+    debug_log "Final system message language -> $(cat "$message_cache")"
+
+    # ✅ 言語設定完了メッセージを表示
+    echo "$(get_message 'MSG_COUNTRY_SUCCESS')"
 }
 
 # 🔴　ランゲージ系　ここまで　-------------------------------------------------------------------------------------------------------------------------------------------
