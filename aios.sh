@@ -19,7 +19,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-export INPUT_LANG
+export INPUT_LANG="${1:-}"  # `$1` があれば設定、なければ空白
 
 # BASE_WGET="wget -O" # テスト用
 BASE_WGET="wget --quiet -O"
