@@ -15,8 +15,10 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 mkdir -p "$CACHE_DIR" "$LOG_DIR"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
-INPUT_LANG="${INPUT_LANG:-$1}"  # `aios.sh` からの `$1` を最優先
-debug_log "common.sh received INPUT_LANG: '$INPUT_LANG'"
+DEBUG_MODE=false
+RESET_CACHE=false
+SHOW_HELP=false
+INPUT_LANG=""
 
 script_update() (
     COMMON_CACHE="${CACHE_DIR}/common_version.ch"
@@ -26,6 +28,7 @@ script_update() (
         echo "$COMMON_VERSION" > "$COMMON_CACHE"
     fi
 )
+
 
 #########################################################################
 # debug_log: デバッグ出力関数
@@ -883,33 +886,10 @@ arguments() {
 #########################################################################
 check_common() {
     local mode="$1"
-    shift  # `$1` を削除し `$2` を取得
-    local lang_code=""
+    shift  # `$1` を削除し `$2` 以降を解析
+    arguments "$@"  # `arguments()` で引数を解析
 
-    # オプション解析
-    local RESET_CACHE=false
-    local SHOW_HELP=false
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            -reset|--reset|-r) RESET_CACHE=true ;;
-            -help|--help|-h) SHOW_HELP=true ;;
-            -debug|--debug|-d) DEBUG_MODE=true ;;
-            *)
-                # 言語コードとして処理（最初の未定義引数を言語コードとみなす）
-                if [ -z "$lang_code" ]; then
-                    lang_code="$1"
-                fi
-                ;;
-        esac
-        shift
-    done
-
-    debug_log "check_common received lang_code: '$lang_code'"
-
-    SELECTED_LANGUAGE="$lang_code"
-    INPUT_LANG="$lang_code"  # 言語コードを `INPUT_LANG` に適用
-
-    debug_log "common.sh received INPUT_LANG: '$INPUT_LANG'"
+    debug_log "check_common received INPUT_LANG: '$INPUT_LANG'"
 
     # キャッシュリセット処理
     $RESET_CACHE && reset_cache
@@ -925,18 +905,18 @@ check_common() {
             download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
             download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
-            select_country "$lang_code"
+            select_country "$INPUT_LANG"
             ;;
         light)
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
-            check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
-            select_country "$lang_code"
+            check_country "$INPUT_LANG" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
+            select_country "$INPUT_LANG"
             normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
         *)
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
-            check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
-            select_country "$lang_code"
+            check_country "$INPUT_LANG" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
+            select_country "$INPUT_LANG"
             normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
     esac
