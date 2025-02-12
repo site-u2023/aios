@@ -556,30 +556,6 @@ packages_db() {
 }
 
 #########################################################################
-# download_script (再定義): 指定されたスクリプト・データベースのバージョン確認とダウンロード
-#########################################################################
-XXXXX_download_script() {
-    local file_name="$1"
-    local script_cache="${BASE_DIR}/script.ch"
-    local install_path="${BASE_DIR}/${file_name}"
-    local remote_url="${BASE_URL}/${file_name}"
-
-    if [ -f "$script_cache" ] && grep -q "^$file_name=" "$script_cache"; then
-        local cached_version=$(grep "^$file_name=" "$script_cache" | cut -d'=' -f2)
-        local remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2)
-        if [ "$cached_version" = "$remote_version" ]; then
-            echo "$(color green "$file_name is up-to-date ($cached_version). Skipping download.")"
-            return
-        fi
-    fi
-
-    echo "$(color yellow "Downloading latest version of $file_name")"
-    ${BASE_WGET} "$install_path" "$remote_url"
-    local new_version=$(grep "^version=" "$install_path" | cut -d'=' -f2)
-    echo "$file_name=$new_version" >> "$script_cache"
-}
-
-#########################################################################
 # confirm: Y/N 確認関数
 #########################################################################
 confirm() {
