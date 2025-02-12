@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-2-6"
+COMMON_VERSION="2025.02.12-2-7"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -229,8 +229,8 @@ XXX_selection_list() {
 }
 
 #########################################################################
-# Last Update: 2025-02-12 14:35:26 (JST) 🚀
-# "Precision in code, clarity in purpose. Every update refines the path." 
+# Last Update: 2025-02-12 16:55:42 (JST) 🚀
+# "Precision in code, clarity in purpose. Every update refines the path."
 # select_country: ユーザーに国の選択を促す（検索機能付き）
 #
 # 【要件】
@@ -262,6 +262,7 @@ select_country() {
 
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_language="${CACHE_DIR}/luci.ch"
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
 
     # ✅ **キャッシュがあるなら、それを使用し処理を終了**
     if [ -f "$cache_country" ] && [ -f "$cache_language" ]; then
@@ -303,16 +304,18 @@ select_country() {
     fi
 
     echo "$(color cyan "Select your country from the following options:")"
-    selection_list "$search_results" "$cache_country" "country"
+    selection_list "$search_results" "$tmp_country" "country"
 
-    if [ -s "$cache_country" ]; then
-        country_write "$(cat "$cache_country")"
+    if [ -s "$tmp_country" ]; then
+        country_write "$(cat "$tmp_country")"
     else
         select_country
     fi
 }
 
 #########################################################################
+# Last Update: 2025-02-12 16:55:42 (JST) 🚀
+# "Precision in code, clarity in purpose. Every update refines the path."
 # country_write: 選択された国をキャッシュに保存
 #########################################################################
 country_write() {
@@ -336,13 +339,18 @@ country_write() {
 }
 
 #########################################################################
+# Last Update: 2025-02-12 16:55:42 (JST) 🚀
+# "Precision in code, clarity in purpose. Every update refines the path."
 # select_zone: 選択した国に対応するタイムゾーンを選択
 #########################################################################
 select_zone() {
     debug_log "=== Entering select_zone() ==="
     local cache_country="${CACHE_DIR}/country.ch"
-    local cache_zone="${CACHE_DIR}/zone.ch"
+    local cache_zone="${CACHE_DIR}/zone_tmp.ch"
+
+    # ✅ `country.ch` から `$6` 以降を取得して `zone_tmp.ch` に保存
     local zone_info=$(awk '{for(i=6; i<=NF; i++) print $i}' "$cache_country" | tr ',' '\n' | grep -E '^[A-Za-z]+/' | sort -u)
+    echo "$zone_info" > "$cache_zone"
 
     if [ -z "$zone_info" ]; then
         echo "$(color red "ERROR: No timezone data found. Please reselect your country.")"
@@ -362,8 +370,8 @@ select_zone() {
 }
 
 #########################################################################
-# Last Update: 2025-02-12 14:35:26 (JST) 🚀
-# "Precision in code, clarity in purpose. Every update refines the path." 
+# Last Update: 2025-02-12 16:55:42 (JST) 🚀
+# "Precision in code, clarity in purpose. Every update refines the path."
 # normalize_country: 言語設定の正規化
 #
 # 【要件】
@@ -389,14 +397,15 @@ normalize_country() {
     local message_db="${BASE_DIR}/messages.db"
     local language_cache="${CACHE_DIR}/language.ch"
     local message_cache="${CACHE_DIR}/message.ch"
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
     local selected_language=""
 
-    # ✅ `language.ch` に設定があるなら、そのまま使用（変更しない）
-    if [ -f "$language_cache" ]; then
-        selected_language=$(cat "$language_cache")
-        debug_log "Loaded language from language.ch -> $selected_language"
+    # ✅ `country_tmp.ch` から `$4`（言語コード）を取得
+    if [ -f "$tmp_country" ]; then
+        selected_language=$(awk '{print $4}' "$tmp_country")
+        debug_log "Loaded language from country_tmp.ch -> $selected_language"
     else
-        debug_log "No language.ch found. Selecting manually."
+        debug_log "No country_tmp.ch found. Selecting manually."
         select_country
         return
     fi
@@ -404,12 +413,11 @@ normalize_country() {
     # ✅ `message.db` から `SUPPORTED_LANGUAGES` を取得
     local supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
 
-    # ✅ 選択された言語が `SUPPORTED_LANGUAGES` にあるかチェック
+    # ✅ 言語が `SUPPORTED_LANGUAGES` にあるかチェック
     if echo "$supported_languages" | grep -qw "$selected_language"; then
         debug_log "Using message database language: $selected_language"
-        echo "$selected_language" > "$message_cache"  # ✅ `message.ch` に保存
+        echo "$selected_language" > "$message_cache"
     else
-        # ✅ メッセージの言語のみ `en` にフォールバック
         debug_log "Language '$selected_language' not found in messages.db. Using 'en' for system messages."
         echo "en" > "$message_cache"
     fi
