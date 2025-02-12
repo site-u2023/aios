@@ -89,6 +89,79 @@ test_cache_contents() {
 }
 
 
+
+#########################################################################
+# print_help: ヘルプメッセージを表示
+#########################################################################
+print_help() {
+    echo "Usage: aios.sh [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  -reset, --reset, -r     Reset all cached data"
+    echo "  -help, --help, -h       Show this help message"
+    echo "  ja, en, zh-cn, ...      Set language"
+    echo ""
+    echo "Examples:"
+    echo "  sh aios.sh full ja       # Run in full mode with language set to Japanese"
+    echo "  sh aios.sh full          # If language cache exists, use it; otherwise, prompt for language"
+}
+
+#########################################################################
+# color: ANSI エスケープシーケンスを使って色付きメッセージを出力する関数
+#########################################################################
+color() {
+    local color_code
+    color_code=$(color_code_map "$1")
+    shift
+    echo -e "${color_code}$*$(color_code_map "reset")"
+}
+
+#########################################################################
+# color_code_map: カラー名から ANSI エスケープシーケンスを返す関数
+#########################################################################
+color_code_map() {
+    local color="$1"
+    case "$color" in
+        "red") echo "\033[1;31m" ;;
+        "green") echo "\033[1;32m" ;;
+        "yellow") echo "\033[1;33m" ;;
+        "blue") echo "\033[1;34m" ;;
+        "magenta") echo "\033[1;35m" ;;
+        "cyan") echo "\033[1;36m" ;;
+        "white") echo "\033[1;37m" ;;
+        "red_underline") echo "\033[4;31m" ;;
+        "green_underline") echo "\033[4;32m" ;;
+        "yellow_underline") echo "\033[4;33m" ;;
+        "blue_underline") echo "\033[4;34m" ;;
+        "magenta_underline") echo "\033[4;35m" ;;
+        "cyan_underline") echo "\033[4;36m" ;;
+        "white_underline") echo "\033[4;37m" ;;
+        "red_white") echo "\033[1;41m" ;;
+        "green_white") echo "\033[1;42m" ;;
+        "yellow_white") echo "\033[1;43m" ;;
+        "blue_white") echo "\033[1;44m" ;;
+        "magenta_white") echo "\033[1;45m" ;;
+        "cyan_white") echo "\033[1;46m" ;;
+        "white_black") echo "\033[7;40m" ;;
+        "reset") echo "\033[0;39m" ;;
+        *) echo "\033[0;39m" ;;  # デフォルトでリセット
+    esac
+}
+
+#########################################################################
+# handle_error: 汎用エラーハンドリング関数
+#########################################################################
+handle_error() {
+    local message_key="$1"
+    local file="$2"
+    local version="$3"
+    local error_message
+    error_message=$(get_message "$message_key")
+    error_message=$(echo "$error_message" | sed -e "s/{file}/$file/" -e "s/{version}/$version/")
+    echo -e "$(color red "$error_message")"
+    return 1
+}
+
 # 🔵　ランゲージ系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
 # Last Update: 2025-02-12 16:12:39 (JST) 🚀
@@ -385,78 +458,6 @@ normalize_country() {
 }
 
 # 🔴　ランゲージ系　ここまで　-------------------------------------------------------------------------------------------------------------------------------------------
-
-#########################################################################
-# print_help: ヘルプメッセージを表示
-#########################################################################
-print_help() {
-    echo "Usage: aios.sh [OPTIONS]"
-    echo ""
-    echo "Options:"
-    echo "  -reset, --reset, -r     Reset all cached data"
-    echo "  -help, --help, -h       Show this help message"
-    echo "  ja, en, zh-cn, ...      Set language"
-    echo ""
-    echo "Examples:"
-    echo "  sh aios.sh full ja       # Run in full mode with language set to Japanese"
-    echo "  sh aios.sh full          # If language cache exists, use it; otherwise, prompt for language"
-}
-
-#########################################################################
-# color: ANSI エスケープシーケンスを使って色付きメッセージを出力する関数
-#########################################################################
-color() {
-    local color_code
-    color_code=$(color_code_map "$1")
-    shift
-    echo -e "${color_code}$*$(color_code_map "reset")"
-}
-
-#########################################################################
-# color_code_map: カラー名から ANSI エスケープシーケンスを返す関数
-#########################################################################
-color_code_map() {
-    local color="$1"
-    case "$color" in
-        "red") echo "\033[1;31m" ;;
-        "green") echo "\033[1;32m" ;;
-        "yellow") echo "\033[1;33m" ;;
-        "blue") echo "\033[1;34m" ;;
-        "magenta") echo "\033[1;35m" ;;
-        "cyan") echo "\033[1;36m" ;;
-        "white") echo "\033[1;37m" ;;
-        "red_underline") echo "\033[4;31m" ;;
-        "green_underline") echo "\033[4;32m" ;;
-        "yellow_underline") echo "\033[4;33m" ;;
-        "blue_underline") echo "\033[4;34m" ;;
-        "magenta_underline") echo "\033[4;35m" ;;
-        "cyan_underline") echo "\033[4;36m" ;;
-        "white_underline") echo "\033[4;37m" ;;
-        "red_white") echo "\033[1;41m" ;;
-        "green_white") echo "\033[1;42m" ;;
-        "yellow_white") echo "\033[1;43m" ;;
-        "blue_white") echo "\033[1;44m" ;;
-        "magenta_white") echo "\033[1;45m" ;;
-        "cyan_white") echo "\033[1;46m" ;;
-        "white_black") echo "\033[7;40m" ;;
-        "reset") echo "\033[0;39m" ;;
-        *) echo "\033[0;39m" ;;  # デフォルトでリセット
-    esac
-}
-
-#########################################################################
-# handle_error: 汎用エラーハンドリング関数
-#########################################################################
-handle_error() {
-    local message_key="$1"
-    local file="$2"
-    local version="$3"
-    local error_message
-    error_message=$(get_message "$message_key")
-    error_message=$(echo "$error_message" | sed -e "s/{file}/$file/" -e "s/{version}/$version/")
-    echo -e "$(color red "$error_message")"
-    return 1
-}
 
 #########################################################################
 # download_script: 指定されたスクリプト・データベースのバージョン確認とダウンロード
