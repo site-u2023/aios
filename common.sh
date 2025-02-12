@@ -79,9 +79,93 @@ test_cache_contents() {
 
 # 🔵　ランゲージ系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
-# selection_list: リストから選択させる処理
+# Last Update: 2025-02-12 16:12:39 (JST) 🚀
+# "Precision in code, clarity in purpose. Every update refines the path."
+#########################################################################
+# selection_list()
+# 選択リストを作成し、選択結果をファイルに保存する関数。
+#
+# 【要件】
+# 1. `mode=country`:
+#     - 国リストを `$2 $3 $4 $5`（国名・言語・言語コード・国コード）で表示
+#     - `$6` 以降（ゾーンネーム・タイムゾーン）は **`full_list_tmp.ch` に保存**
+# 2. `mode=zone`:
+#     - ゾーンリストを表示
+#     - **ゾーン情報の保存は `select_zone()` に任せる**
+# 3. その他:
+#     - 入力データが空ならエラーを返す
+#     - 選択後に `Y/N` で確認
 #########################################################################
 selection_list() {
+    local input_data="$1"
+    local output_file="$2"
+    local mode="$3"
+    local list_file="${CACHE_DIR}/list_tmp.ch"
+    local full_list="${CACHE_DIR}/full_list_tmp.ch"
+    local i=1
+
+    echo -n "" > "$list_file"
+    echo -n "" > "$full_list"
+    debug_log "DEBUG: input_data='$input_data'"
+
+    echo "[0] Cancel / back to return"
+    if [ "$mode" = "country" ]; then
+        echo "$input_data" | while IFS= read -r line; do
+            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')  # 表示用
+            if [ -n "$extracted" ]; then
+                echo "[$i] $extracted"
+                echo "$i $extracted" >> "$list_file"  # ✅ 表示用のデータを保存
+                echo "$i $line" >> "$full_list"  # ✅ 内部処理用の完全データを保存
+                i=$((i + 1))
+            fi
+        done
+
+    elif [ "$mode" = "zone" ]; then
+        echo "$input_data" | tr ',' '\n' | sort -u | while read -r zone; do
+            if [ -n "$zone" ]; then
+                echo "[$i] $zone"
+                echo "$i $zone" >> "$list_file"
+                i=$((i + 1))
+            fi
+        done
+    fi
+
+    local choice=""
+    while true; do
+        echo -n "$(color cyan "Enter the number of your choice: ")"
+        read choice
+        if [ "$choice" = "0" ]; then
+            echo "$(color yellow "Returning to previous menu.")"
+            return
+        fi
+        local selected_value=$(awk -v num="$choice" '$1 == num {print substr($0, index($0,$2))}' "$list_file")
+        if [ -z "$selected_value" ]; then
+            echo "$(color red "Invalid selection. Please choose a valid number.")"
+            continue
+        fi
+        echo "$(color cyan "Confirm selection: [$choice] $selected_value")"
+        echo -n "(Y/n)?: "
+        read yn
+        case "$yn" in
+            [Yy]*)
+                echo "$selected_value" > "$output_file"
+                debug_log "Final selection: $selected_value"
+                return
+                ;;
+            [Nn]*)
+                echo "$(color yellow "Returning to selection.")"
+                ;;
+            *)
+                echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
+                ;;
+        esac
+    done
+}
+
+#########################################################################
+# selection_list: リストから選択させる処理
+#########################################################################
+XXX_selection_list() {
     local input_data="$1"
     local output_file="$2"
     local mode="$3"
