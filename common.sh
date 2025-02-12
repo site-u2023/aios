@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-3-1"
+COMMON_VERSION="2025.02.12-3-2"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -355,7 +355,8 @@ select_zone() {
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_zone="${CACHE_DIR}/zone_tmp.ch"
 
-    local zone_info=$(awk '{for(i=6; i<=NF; i++) print $i}' "$cache_country" | tr ',' '\n' | grep -E '^[A-Za-z]+/' | sort -u)
+    # local zone_info=$(awk '{for(i=6; i<=NF; i++) print $i}' "$cache_country" | tr ',' '\n' | grep -E '^[A-Za-z]+/' | sort -u)
+    local zone_info=$(grep "^$(awk '{print $1, $2, $3, $4, $5}' "$cache_country")" "$BASE_DIR/country.db" | awk '{for(i=6; i<=NF; i++) print $i}' | tr ',' '\n' | grep -E '^[A-Za-z]+/') # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
     echo "$zone_info" > "$cache_zone"
 
     debug_log "DEBUG: zone_tmp.ch content AFTER extraction ->"
