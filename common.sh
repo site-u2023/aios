@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-6-1"
+COMMON_VERSION="2025.02.12-6-2"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -273,6 +273,7 @@ country_write() {
 
     debug_log "DEBUG: Extracted short_country='$short_country', luci_lang='$luci_lang'"
 
+    # ✅ 言語設定が確定した時点で `language.ch` に保存
     echo "$short_country" > "$cache_language"
     echo "$luci_lang" > "$cache_luci"
 
@@ -286,8 +287,12 @@ country_write() {
         cat "$cache_country"
     fi
 
-    # ✅ 言語設定完了メッセージを `message.db` から取得して表示
-    echo "$(color green "$(get_message 'MSG_COUNTRY_SUCCESS')")"
+    # ✅ `language.ch` をセットした後に `message.db` を参照することで、選択言語の成功メッセージを取得
+    local success_message
+    success_message="$(get_message 'MSG_COUNTRY_SUCCESS')"
+
+    # ✅ メッセージを設定言語で表示（明らかにセットされたと分かる！）
+    echo "$(color green "$success_message")"
 
     select_zone
 }
