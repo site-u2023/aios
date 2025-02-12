@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-3-3"
+COMMON_VERSION="2025.02.12-3-5"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -114,13 +114,19 @@ selection_list() {
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')  # 表示用
             if [ -n "$extracted" ]; then
                 echo "[$i] $extracted"
-                #echo "$i $extracted" >> "$list_file"  # ✅ 表示用のデータを保存
-                
-                echo "$i $line" >> "$list_file"  # `$6` 以降も含める <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-                
-                echo "$i $line" >> "$full_list"  # ✅ 内部処理用の完全データを保存
+                # ✅ `zone_tmp.ch` には `$6` 以降だけを保存
+                echo "$i $(echo "$line" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i; print ""}')" >> "$list_file"
+                debug_log "DEBUG: selection_list() - list_file content AFTER writing:"
+                cat "$list_file"
+                # ✅ `zone_list_tmp.ch` には `$1-$5` のデータのみを保存
+                echo "$i $(echo "$line" | awk '{print $1, $2, $3, $4, $5}')" >> "$full_list"
                 i=$((i + 1))
             fi
+        done
+    fi
+
+        done
+    fi
         done
 
     elif [ "$mode" = "zone" ]; then
@@ -337,8 +343,9 @@ country_write() {
 
     echo "$short_country" > "$cache_language"
     echo "$luci_lang" > "$cache_luci"
-    echo "$country_data" > "$cache_country"
-
+    # echo "$country_data" > "$cache_country"
+    echo "$country_data" | awk '{$6=gensub(",", " ", "g", $6); print}' > "$cache_country"               # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+ 
     debug_log "DEBUG: country.ch content AFTER write ->"
     cat "$cache_country"
 
@@ -357,7 +364,8 @@ select_zone() {
 
     # local zone_info=$(awk '{for(i=6; i<=NF; i++) print $i}' "$cache_country" | tr ',' '\n' | grep -E '^[A-Za-z]+/' | sort -u)
     # local zone_info=$(grep "^$(awk '{print $1, $2, $3, $4, $5}' "$cache_country")" "$BASE_DIR/country.db" | awk '{for(i=6; i<=NF; i++) print $i}' | tr ',' '\n' | grep -E '^[A-Za-z]+/') # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-    local zone_info=$(awk '{for(i=6; i<=NF; i++) print $i}' "$CACHE_DIR/country.ch" | tr ',' '\n' | grep -E '^[A-Za-z]+/[A-Za-z]+')
+    # local zone_info=$(awk '{for(i=6; i<=NF; i++) print $i}' "$CACHE_DIR/country.ch" | tr ',' '\n' | grep -E '^[A-Za-z]+/[A-Za-z]+')
+    local zone_info=$(awk '{for(i=6; i<=NF; i++) print $i}' "$CACHE_DIR/country.ch")
     # echo "$zone_info" > "$cache_zone"
     printf "%s\n" "$zone_info" > "$CACHE_DIR/zone_tmp.ch"
     
