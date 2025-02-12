@@ -1,13 +1,16 @@
 #!/bin/sh
 # aios.sh (初期エントリースクリプト)
 # License: CC0
-AIOS_VERSION="2025.02.12-1"
+AIOS_VERSION="2025.02.12-2"
 echo -e "\033[7;40maios.sh Updated to version $AIOS_VERSION \033[0m"
 
 DEBUG_MODE=false
 RESET_CACHE=false
 SHOW_HELP=false
-INPUT_LANG=""
+INPUT_LANG="${1:-}"  # `$1` をそのままセット（デフォルトなし）
+
+# デバッグモード設定
+[ "$2" = "-d" ] && DEBUG_MODE=true
 
 # オプション解析
 while [ $# -gt 0 ]; do
@@ -19,9 +22,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-INPUT_LANG="$1"  # `$1` があれば設定、なければ空白のまま
-export INPUT_LANG  # 環境変数として渡す
-check_common "full" "$INPUT_LANG"
+export DEBUG_MODE INPUT_LANG  # 環境変数として渡す
 
 # BASE_WGET="wget -O" # テスト用
 BASE_WGET="wget --quiet -O"
