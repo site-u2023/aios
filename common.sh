@@ -152,10 +152,10 @@ selection_list() {
             continue
         fi
         
-        #local confirm_text=$(echo "$selected_value" | awk '{print $2, $3, $4, $5}')
-        #echo "$(color cyan "Confirm selection: [$choice] $confirm_text")"
+        local confirm_text=$(echo "$selected_value" | awk '{print $2, $3, $4, $5}')
+        echo "$(color cyan "Confirm selection: [$choice] $confirm_text")"
         
-        echo "$(color cyan "Confirm selection: [$choice] $selected_value")"  #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        #echo "$(color cyan "Confirm selection: [$choice] $selected_value")"  #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
         echo -n "(Y/n)?: "
         read yn
