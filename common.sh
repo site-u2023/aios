@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-4-0"
+COMMON_VERSION="2025.02.12-4-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -96,66 +96,7 @@ test_cache_contents() {
 #     - 入力データが空ならエラーを返す
 #     - 選択後に `Y/N` で確認
 #########################################################################
-select_country() {
-    debug_log "=== Entering select_country() ==="
-
-    local cache_country="${CACHE_DIR}/country.ch"
-    local cache_language="${CACHE_DIR}/luci.ch"
-    local tmp_country="${CACHE_DIR}/country_tmp.ch"
-
-    if [ -f "$cache_country" ] && [ -f "$cache_language" ]; then
-        debug_log "Using cached country and language. Skipping selection."
-        return
-    fi
-
-    if [ -n "$1" ]; then
-        local input="$1"
-    else
-        local input=""
-    fi
-
-    echo "$(color cyan "Enter country name, code, or language to search:")"
-    if [ -n "$input" ]; then
-        echo "$(color yellow "Auto-selecting based on input: $input")"
-    else
-        echo -n "Please input: "
-        read input
-    fi
-
-    if [ -z "$input" ]; then
-        echo "$(color red "No input provided. Please enter a country code or name.")"
-        select_country
-        return
-    fi
-
-    search_results=$(awk -v search="$input" '
-        BEGIN {IGNORECASE=1}
-        $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}
-    ' "$BASE_DIR/country.db")
-
-    if [ -z "$search_results" ]; then
-        echo "$(color red "No matching country found. Please try again.")"
-        select_country
-        return
-    fi
-
-    echo "$(color cyan "Select your country from the following options:")"
-    selection_list "$search_results" "$tmp_country" "country"
-
-    # ✅ `DEBUG_MODE` のときのみ `cat "$tmp_country"` を実行
-    if [ "$DEBUG_MODE" = "true" ]; then
-        debug_log "DEBUG: country_tmp.ch content AFTER selection ->"
-        cat "$tmp_country"
-    fi
-
-    if [ -s "$tmp_country" ]; then
-        country_write "$(grep "^$(cat "$tmp_country")" "$BASE_DIR/country.db")"
-    else
-        select_country
-    fi
-}
-
-XXX_selection_list() {
+selection_list() {
     local input_data="$1"
     local output_file="$2"
     local mode="$3"
@@ -307,7 +248,6 @@ select_country() {
         select_country
     fi
 }
-
 
 #########################################################################
 # Last Update: 2025-02-12 17:25:00 (JST) 🚀
