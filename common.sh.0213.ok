@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-6-2"
+COMMON_VERSION="2025.02.13-0-0"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -250,7 +250,17 @@ select_country() {
     echo "$(color cyan "Select your country from the following options:")"
     selection_list "$search_results" "$tmp_country" "country"
 
+    # デバッグログ: `tmp_country` に選択結果があるか確認
     debug_log "DEBUG: country_tmp.ch content AFTER selection -> $(cat "$tmp_country" 2>/dev/null)"
+
+    # `tmp_country` が存在し、サイズが0以上なら `country_write()` を呼び出す
+    if [ -s "$tmp_country" ]; then
+        debug_log "DEBUG: Calling country_write() with selected country"
+        country_write
+    else
+        debug_log "DEBUG: tmp_country is empty! Retrying select_country()"
+        select_country
+    fi
 }
 
 #########################################################################
