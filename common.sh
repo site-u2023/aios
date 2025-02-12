@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-8-1"
+COMMON_VERSION="2025.02.12-8-2"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -857,42 +857,33 @@ check_common() {
     local mode="$1"
     shift  # `$1` を削除し `$2` を取得
     local lang_code="${1:-}"  # `$1` をそのまま適用（フォールバックなし）
-     
-    echo "DEBUG: check_common received lang_code: '$lang_code'"
+
+    debug_log "check_common received lang_code: '$lang_code'"
 
     SELECTED_LANGUAGE="$lang_code"
+    INPUT_LANG="$lang_code"  # `INPUT_LANG` に `$1` を適用（フォールバックなし）
 
-    # ✅ `INPUT_LANG` に `$1` を反映させる
-    INPUT_LANG="${INPUT_LANG:-$SELECTED_LANGUAGE}"
-    
-    debug_log "check_common received lang_code: '$SELECTED_LANGUAGE'"
     debug_log "common.sh received INPUT_LANG: '$INPUT_LANG'"
 
+    # オプション解析
     local RESET_CACHE=false
     local SHOW_HELP=false
-    for arg in "$@"; do
-        case "$arg" in
-            -reset|--reset|-r)
-                RESET_CACHE=true
-                ;;
-            -help|--help|-h)
-                SHOW_HELP=true
-                ;;
-            -debug|--debug|-d)
-                DEBUG_MODE=true
-                ;;
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -reset|--reset|-r) RESET_CACHE=true ;;
+            -help|--help|-h) SHOW_HELP=true ;;
+            -debug|--debug|-d) DEBUG_MODE=true ;;
         esac
+        shift
     done
 
-    if [ "$RESET_CACHE" = true ]; then
-        reset_cache
-    fi
+    # キャッシュリセット処理
+    $RESET_CACHE && reset_cache
 
-    if [ "$SHOW_HELP" = true ]; then
-        print_help
-        exit 0
-    fi
+    # ヘルプ表示処理
+    $SHOW_HELP && print_help && exit 0
 
+    # メイン処理
     case "$mode" in
         full)
             script_update || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
@@ -916,4 +907,3 @@ check_common() {
             ;;
     esac
 }
-
