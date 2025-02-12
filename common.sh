@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-0-8"
+COMMON_VERSION="2025.02.12-6-2"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -14,7 +14,7 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 mkdir -p "$CACHE_DIR" "$LOG_DIR"
 DEBUG_MODE="${DEBUG_MODE:-false}"
-
+   
 script_update() (
     COMMON_CACHE="${CACHE_DIR}/common_version.ch"
     # キャッシュが存在しない、またはバージョンが異なる場合にアラートを表示
@@ -31,6 +31,10 @@ debug_log() {
     local message="$1"
     [ "$DEBUG_MODE" = true ] && echo "DEBUG: $message" | tee -a "$LOG_DIR/debug.log"
 }
+
+# 環境変数 INPUT_LANG のチェック（デフォルト 'ja' とする）
+INPUT_LANG="${INPUT_LANG:-ja}"
+debug_log "common.sh received INPUT_LANG: '$INPUT_LANG'"
 
 #########################################################################
 # テスト用関数: データ取得を個別に確認
@@ -148,13 +152,17 @@ selection_list() {
             continue
         fi
         
-        echo "$(color cyan "Confirm selection: [$choice] $selected_value")" 
+        #local confirm_text=$(echo "$selected_value" | awk '{print $2, $3, $4, $5}')
+        #echo "$(color cyan "Confirm selection: [$choice] $confirm_text")"
+        
+        echo "$(color cyan "Confirm selection: [$choice] $selected_value")"  #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
         echo -n "(Y/n)?: "
         read yn
         case "$yn" in
             [Yy]*)
-                printf "%s\n" "$selected_value" > "$output_file" 
-                #echo "$selected_value" > "$output_file"
+                printf "%s\n" "$selected_value" > "$output_file"
+                debug_log "DEBUG: zone_tmp.ch content AFTER extraction -> $(cat "$cache_zone" 2>/dev/null)"
                 return
                 ;;
             [Nn]*)
@@ -210,13 +218,14 @@ select_country() {
 
     if [ -n "$1" ]; then
         local input="$1"
-        debug_log "DEBUG: Using provided input: '$input'"
     else
         local input=""
     fi
 
     echo "$(color cyan "Enter country name, code, or language to search:")"
-    if [ -z "$input" ]; then
+    if [ -n "$input" ]; then
+        echo "$(color yellow "Auto-selecting based on input: $input")"
+    else
         echo -n "Please input: "
         read input
     fi
@@ -238,22 +247,10 @@ select_country() {
         return
     fi
 
-    # ✅ **デバッグ出力を改行防止しながら見やすくする**
-    debug_log "DEBUG: search_results content -> $(echo "$search_results" | tr '\n' ';')"
-
     echo "$(color cyan "Select your country from the following options:")"
     selection_list "$search_results" "$tmp_country" "country"
 
     debug_log "DEBUG: country_tmp.ch content AFTER selection -> $(cat "$tmp_country" 2>/dev/null)"
-
-    # ✅ `tmp_country` にデータがある場合のみ `country_write()` を実行
-    if [ -s "$tmp_country" ]; then
-        debug_log "DEBUG: Calling country_write() with selected country"
-        country_write
-    else
-        debug_log "DEBUG: tmp_country is empty! Retrying select_country()"
-        select_country
-    fi
 }
 
 #########################################################################
@@ -266,40 +263,49 @@ country_write() {
     local cache_language="${CACHE_DIR}/language.ch"
     local cache_luci="${CACHE_DIR}/luci.ch"
 
-    # ✅ `tmp_country` からデータを取得する前にデバッグ出力
-    debug_log "DEBUG: Entering country_write()"
-    debug_log "DEBUG: tmp_country content -> $(cat "$CACHE_DIR/country_tmp.ch" 2>/dev/null)"
-
-    # ✅ `country_tmp.ch` の内容から `country.db` を検索し、完全なデータを取得
+    # ✅ `country_tmp.ch` の内容から `country.db` を検索し、完全なデータを取得（修正）
     local country_data=$(grep "^$(awk '{print $1, $2, $3, $4, $5}' "$CACHE_DIR/country_tmp.ch")" "$BASE_DIR/country.db")
 
     debug_log "DEBUG: Received country_data -> '$country_data'"
-
-    if [ -z "$country_data" ]; then
-        debug_log "ERROR: country_data is empty! Something went wrong in country_write()"
-        return
-    fi
 
     local short_country=$(echo "$country_data" | awk '{print $5}')
     local luci_lang=$(echo "$country_data" | awk '{print $4}')
 
     debug_log "DEBUG: Extracted short_country='$short_country', luci_lang='$luci_lang'"
 
-    # ✅ キャッシュに書き込む前にデバッグ
-    debug_log "DEBUG: Writing to cache_language='$cache_language'"
-    debug_log "DEBUG: Writing to cache_luci='$cache_luci'"
-    debug_log "DEBUG: Writing to cache_country='$cache_country'"
-
+    # ✅ 言語設定が確定した時点で `language.ch` に保存
     echo "$short_country" > "$cache_language"
     echo "$luci_lang" > "$cache_luci"
+
+    # ✅ `country.ch` にデータを正しく保存（修正）
     echo "$country_data" > "$cache_country"
 
-    debug_log "DEBUG: country.ch content AFTER write -> $(cat "$cache_country" 2>/dev/null)"
-    debug_log "DEBUG: language.ch content AFTER write -> $(cat "$cache_language" 2>/dev/null)"
-    debug_log "DEBUG: luci.ch content AFTER write -> $(cat "$cache_luci" 2>/dev/null)"
+    debug_log "DEBUG: country.ch content AFTER write ->"
 
-    debug_log "DEBUG: Calling normalize_country()..."
-    normalize_country
+    # ✅ `DEBUG_MODE` のときのみ `cat "$cache_country"` を実行
+    if [ "$DEBUG_MODE" = "true" ]; then
+        cat "$cache_country"
+    fi
+
+    # ✅ `message.db` からメッセージを取得できるかデバッグ出力
+    debug_log "DEBUG: Attempting to get message for 'MSG_COUNTRY_SUCCESS'"
+
+    # ✅ `language.ch` をセットした後に `message.db` を参照して `get_message()` を実行
+    local success_message
+    success_message="$(get_message 'MSG_COUNTRY_SUCCESS')"
+
+    # ✅ `success_message` の中身をデバッグログに出力
+    debug_log "DEBUG: Fetched success_message='$success_message'"
+
+    # ✅ `success_message` が空ならエラーログを出力
+    if [ -z "$success_message" ]; then
+        debug_log "ERROR: MSG_COUNTRY_SUCCESS not found in message.db!"
+    else
+        # ✅ メッセージを設定言語で表示（明らかにセットされたと分かる！）
+        echo "$(color green "$success_message")"
+    fi
+
+    select_zone
 }
 
 #########################################################################
@@ -385,15 +391,6 @@ normalize_country() {
     fi
 
     debug_log "Final system message language -> $(cat "$message_cache")"
-
-    # ✅ デバッグログ強化
-    debug_log "DEBUG: Retrieving MSG_COUNTRY_SUCCESS message..."
-    local success_message
-    success_message=$(get_message 'MSG_COUNTRY_SUCCESS')
-    debug_log "DEBUG: MSG_COUNTRY_SUCCESS -> $success_message"
-
-    # ✅ 言語選択完了メッセージを表示
-    echo "$success_message"
 }
 
 # 🔴　ランゲージ系　ここまで　-------------------------------------------------------------------------------------------------------------------------------------------
@@ -821,7 +818,6 @@ install_language_pack() {
         echo "$(color yellow "packages.db not found or invalid. Skipping language pack installation.")"
     fi
 }
-
 
 #########################################################################
 # Last Update: 2025-02-12 14:35:26 (JST) 🚀
