@@ -366,31 +366,31 @@ normalize_country() {
     local message_db="${BASE_DIR}/messages.db"
     local language_cache="${CACHE_DIR}/language.ch"
     local message_cache="${CACHE_DIR}/message.ch"
-    local tmp_country="${CACHE_DIR}/country_tmp.ch"
     local selected_language=""
 
-    if [ -f "$tmp_country" ]; then
-        selected_language=$(awk '{print $4}' "$tmp_country")
-        debug_log "Loaded language from country_tmp.ch -> $selected_language"
+    if [ -f "$language_cache" ]; then
+        selected_language=$(cat "$language_cache")
+        debug_log "DEBUG: Loaded language from language.ch -> '$selected_language'"
     else
-        debug_log "No country_tmp.ch found. Selecting manually."
+        debug_log "ERROR: language.ch not found! Selecting manually."
         select_country
         return
     fi
 
-    debug_log "DEBUG: Selected language before validation -> $selected_language"
+    debug_log "DEBUG: Selected language before validation -> '$selected_language'"
 
-    local supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
+    local supported_languages
+    supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
 
     if echo "$supported_languages" | grep -qw "$selected_language"; then
-        debug_log "Using message database language: $selected_language"
+        debug_log "DEBUG: Language '$selected_language' is supported. Setting message.ch..."
         echo "$selected_language" > "$message_cache"
     else
-        debug_log "Language '$selected_language' not found in messages.db. Using 'en' for system messages."
+        debug_log "WARNING: Language '$selected_language' not found in messages.db. Falling back to 'en'."
         echo "en" > "$message_cache"
     fi
 
-    debug_log "Final system message language -> $(cat "$message_cache")"
+    debug_log "DEBUG: Final system message language -> '$(cat "$message_cache")'"
 }
 
 # 🔴　ランゲージ系　ここまで　-------------------------------------------------------------------------------------------------------------------------------------------
