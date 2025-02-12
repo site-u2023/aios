@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-1-3"
+COMMON_VERSION="2025.02.12-2-0"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -148,19 +148,21 @@ selection_list() {
 #########################################################################
 select_country() {
     debug_log "=== Entering select_country() ==="
+
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_language="${CACHE_DIR}/luci.ch"
 
-    # キャッシュがあれば選択済みと判断
+    # ✅ **キャッシュがあるなら、それを使用し処理を終了**
     if [ -f "$cache_country" ] && [ -f "$cache_language" ]; then
         debug_log "Using cached country and language. Skipping selection."
         return
     fi
 
+    # ✅ **$1（言語コード）がある場合は最優先で使用**
     if [ -n "$1" ]; then
         local input="$1"
     else
-        local input=""
+        local input=""  # **何も指定が無ければ完全手動モード**
     fi
 
     echo "$(color cyan "Enter country name, code, or language to search:")"
@@ -171,6 +173,7 @@ select_country() {
         read input
     fi
 
+    # ✅ **入力がない場合、手動選択を強制**
     if [ -z "$input" ]; then
         echo "$(color red "No input provided. Please enter a country code or name.")"
         select_country
@@ -190,6 +193,7 @@ select_country() {
 
     echo "$(color cyan "Select your country from the following options:")"
     selection_list "$search_results" "$cache_country" "country"
+
     if [ -s "$cache_country" ]; then
         country_write "$(cat "$cache_country")"
     else
@@ -248,28 +252,58 @@ select_zone() {
 
 #########################################################################
 # normalize_country: 言語設定の正規化
+#
+# 【要件】
+# 1. 言語の決定:
+#    - `language.ch` を最優先で参照（変更不可）
+#    - `language.ch` が無い場合は `select_country()` を実行し、手動選択
+#
+# 2. システムメッセージの言語 (`message.ch`) の確定:
+#    - `message.db` の `SUPPORTED_LANGUAGES` を確認
+#    - `language.ch` に記録された言語が `SUPPORTED_LANGUAGES` にあれば、それを `message.ch` に保存
+#    - `SUPPORTED_LANGUAGES` に無い場合、`message.ch` に `en` を設定
+#
+# 3. `language.ch` との関係:
+#    - `language.ch` はデバイス設定用（変更不可）
+#    - `message.ch` はシステムメッセージ表示用（フォールバック可能）
+#
+# 4. メンテナンス:
+#    - `language.ch` はどのような場合でも変更しない
+#    - `message.ch` のみフォールバックを適用し、システムメッセージの一貫性を維持
+#    - 言語設定に影響を与えず、メッセージの表示のみを制御する
 #########################################################################
 normalize_country() {
     local message_db="${BASE_DIR}/messages.db"
-    local language_cache="${CACHE_DIR}/luci.ch"
-    local selected_language="ja"  # デフォルトは日本語
+    local language_cache="${CACHE_DIR}/language.ch"
+    local message_cache="${CACHE_DIR}/message.ch"
+    local selected_language=""
 
+    # ✅ `language.ch` に設定があるなら、そのまま使用（変更しない）
     if [ -f "$language_cache" ]; then
         selected_language=$(cat "$language_cache")
-        debug_log "Loaded language from luci.ch -> $selected_language"
+        debug_log "Loaded language from language.ch -> $selected_language"
     else
-        debug_log "No luci.ch found, defaulting to 'ja'"
+        debug_log "No language.ch found. Selecting manually."
+        select_country
+        return
     fi
 
-    if grep -q "^$selected_language|" "$message_db"; then
+    # ✅ `message.db` から `SUPPORTED_LANGUAGES` を取得
+    local supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
+
+    # ✅ 選択された言語が `SUPPORTED_LANGUAGES` にあるかチェック
+    if echo "$supported_languages" | grep -qw "$selected_language"; then
         debug_log "Using message database language: $selected_language"
+        echo "$selected_language" > "$message_cache"  # ✅ `message.ch` に保存
     else
-        selected_language="ja"
-        debug_log "Language not found in messages.db. Using: ja"
+        # ✅ メッセージの言語のみ `en` にフォールバック
+        debug_log "Language '$selected_language' not found in messages.db. Using 'en' for system messages."
+        echo "en" > "$message_cache"
     fi
 
-    debug_log "Final language after normalization -> $selected_language"
-    SELECTED_LANGUAGE="$selected_language"
+    debug_log "Final system message language -> $(cat "$message_cache")"
+}
+
 }
 # 🔴　ランゲージ系　ここまで　-------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -570,23 +604,49 @@ get_package_manager() {
 
 #########################################################################
 # get_message: 多言語対応メッセージ取得関数
+#
+# 【要件】
+# 1. 言語の決定:
+#    - `message.ch` を最優先で参照する（normalize_country() により確定）
+#    - `message.ch` が無ければデフォルト `en`
+#
+# 2. メッセージ取得の流れ:
+#    - `messages.db` から `message.ch` に記録された言語のメッセージを取得
+#    - 該当するメッセージが `messages.db` に無い場合、`en` にフォールバック
+#    - `en` にも無い場合は、キー（`$1`）をそのまま返す
+#
+# 3. `language.ch` との関係:
+#    - `language.ch` はデバイス設定用（変更不可）
+#    - `message.ch` はシステムメッセージ表示用（フォールバック可能）
+#
+# 4. メンテナンス:
+#    - 言語設定に影響を与えず、メッセージのみ `message.ch` で管理
+#    - `normalize_country()` で `message.ch` が決定されるため、変更は `normalize_country()` 側で行う
 #########################################################################
 get_message() {
     local key="$1"
-    local lang="${SELECTED_LANGUAGE:-ja}"
-    local message_db="${BASE_DIR}/messages.db"
-    if [ ! -f "$message_db" ]; then
-        echo -e "$(color red "Message database not found. Defaulting to key: $key")"
-        return
+    local message_cache="${CACHE_DIR}/message.ch"
+    local lang="en"  # デフォルト `en` にするが `message.ch` を優先
+
+    # ✅ `message.ch` があれば、それを使用
+    if [ -f "$message_cache" ]; then
+        lang=$(cat "$message_cache")
     fi
+
+    local message_db="${BASE_DIR}/messages.db"
+
+    # ✅ `messages.db` から `lang` に対応するメッセージを取得
     local message
     message=$(grep "^${lang}|${key}=" "$message_db" | cut -d'=' -f2-)
-    [ -z "$message" ] && message=$(grep "^ja|${key}=" "$message_db" | cut -d'=' -f2-)
-    if [ -n "$2" ]; then message=$(echo "$message" | sed -e "s/{file}/$2/"); fi
-    if [ -n "$3" ]; then message=$(echo "$message" | sed -e "s/{version}/$3/"); fi
-    if [ -n "$4" ]; then message=$(echo "$message" | sed -e "s/{status}/$4/"); fi
+
+    # ✅ `lang` に該当するメッセージが無い場合は `en` を参照
     if [ -z "$message" ]; then
-        echo -e "$(color yellow "Message key not found in database: $key")"
+        message=$(grep "^en|${key}=" "$message_db" | cut -d'=' -f2-)
+    fi
+
+    # ✅ `message.db` にも無い場合はキーをそのまま返す
+    if [ -z "$message" ]; then
+        debug_log "Message key '$key' not found in messages.db."
         echo "$key"
     else
         echo "$message"
