@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-6-16"
+COMMON_VERSION="2025.02.12-7-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -152,21 +152,13 @@ selection_list() {
             continue
         fi
         
-        #local confirm_text=$(echo "$selected_value" | awk '{print $2, $3, $4, $5}')
-        #echo "$(color cyan "Confirm selection: [$choice] $confirm_text")"
-        
-        echo "$(color cyan "Confirm selection: [$choice] $selected_value")"  #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-
+        echo "$(color cyan "Confirm selection: [$choice] $selected_value")" 
         echo -n "(Y/n)?: "
         read yn
         case "$yn" in
             [Yy]*)
-                #mkdir -p "$CACHE_DIR" "$LOG_DIR"
-                mkdir -p /tmp/aios/cache
-                # printf "%s\n" "$selected_value" > "$output_file" # #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-                echo "$selected_value" > "$output_file"
-                [ -s "$output_file" ] && debug_log "DEBUG: tmp_country written -> $(cat "$output_file")"     #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-                debug_log "DEBUG: zone_tmp.ch content AFTER extraction -> $(cat "$cache_zone" 2>/dev/null)"
+                printf "%s\n" "$selected_value" > "$output_file" 
+                #echo "$selected_value" > "$output_file"
                 return
                 ;;
             [Nn]*)
@@ -214,56 +206,60 @@ select_country() {
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_language="${CACHE_DIR}/luci.ch"
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
+    local input=""
 
+    # ✅ 既にキャッシュがある場合はスキップ
     if [ -f "$cache_country" ] && [ -f "$cache_language" ]; then
         debug_log "Using cached country and language. Skipping selection."
         return
     fi
 
+    # ✅ $1 が指定されていれば使用、なければ手動入力
     if [ -n "$1" ]; then
-        local input="$1"
+        input="$1"
+        debug_log "Using provided input: '$input'"
     else
-        local input=""
-    fi
-
-    echo "$(color cyan "Enter country name, code, or language to search:")"
-    if [ -n "$input" ]; then
-        echo "$(color yellow "Auto-selecting based on input: $input")"
-    else
+        echo "$(color cyan "Enter country name, code, or language to search:")"
         echo -n "Please input: "
         read input
     fi
 
+    # ✅ 入力が空なら再試行
     if [ -z "$input" ]; then
         echo "$(color red "No input provided. Please enter a country code or name.")"
         select_country
         return
     fi
 
+    # ✅ `country.db` から入力に一致するデータを検索
     search_results=$(awk -v search="$input" '
         BEGIN {IGNORECASE=1}
         $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}
     ' "$BASE_DIR/country.db")
 
+    debug_log "DEBUG: search_results content -> $(echo "$search_results" | tr '\n' '; ')"
+
+    # ✅ 検索結果がない場合はエラー表示し再試行
     if [ -z "$search_results" ]; then
         echo "$(color red "No matching country found. Please try again.")"
         select_country
         return
     fi
 
+    # ✅ ユーザーに選択を促す
     echo "$(color cyan "Select your country from the following options:")"
     selection_list "$search_results" "$tmp_country" "country"
 
     debug_log "DEBUG: country_tmp.ch content AFTER selection -> $(cat "$tmp_country" 2>/dev/null)"
 
-    # ✅ `tmp_country` にデータがある場合、`country_write()` を呼び出す
-if [ -s "$tmp_country" ]; then
-    debug_log "DEBUG: Calling country_write() with selected country"
-    country_write
-else
-    debug_log "DEBUG: tmp_country is empty! Retrying select_country()"
-    select_country
-fi
+    # ✅ `tmp_country` にデータがある場合のみ `country_write()` を実行
+    if [ -s "$tmp_country" ]; then
+        debug_log "DEBUG: Calling country_write() with selected country"
+        country_write
+    else
+        debug_log "DEBUG: tmp_country is empty! Retrying select_country()"
+        select_country
+    fi
 }
 
 #########################################################################
