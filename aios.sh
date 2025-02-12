@@ -17,7 +17,7 @@ while [ $# -gt 0 ]; do
         -help|--help|-h) SHOW_HELP=true ;;
         *)
             if [ -z "$INPUT_LANG" ]; then
-                INPUT_LANG="$1"  # 最初の非オプション引数を言語コードとして扱う
+                INPUT_LANG="manual"  # 最初の非オプション引数を言語コードとして扱う
             fi
             ;;
     esac
@@ -66,13 +66,22 @@ packages() {
 }
 
 #################################
-# メイン処理
+# delete_aios
 #################################
 delete_aios() {
     rm -rf "${BASE_DIR}" /usr/bin/aios
     echo "Initialized aios"
 }
 
+#################################
+# mkdir_aios
+#################################
+mkdir_aios() {
+    mkdir -p "$BASE_DIR"
+}
+#################################
+# メイン処理
+#################################
 if [ "$SHOW_HELP" = true ]; then
     print_help
     exit 0
@@ -83,7 +92,7 @@ if [ "$RESET_CACHE" = true ]; then
 fi
 
 delete_aios
-mkdir -p "$BASE_DIR"
+mkdir_aios
 download_common
 check_common "full" "$INPUT_LANG"
 packages
