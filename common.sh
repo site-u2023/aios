@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-5-1"
+COMMON_VERSION="2025.02.12-6-0"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -23,6 +23,18 @@ script_update() (
         echo "$COMMON_VERSION" > "$COMMON_CACHE"
     fi
 )
+
+#########################################################################
+# debug_log: デバッグ出力関数
+#########################################################################
+debug_log() {
+    local message="$1"
+    [ "$DEBUG_MODE" = true ] && echo "DEBUG: $message" | tee -a "$LOG_DIR/debug.log"
+}
+
+# 環境変数 INPUT_LANG のチェック（デフォルト 'ja' とする）
+INPUT_LANG="${INPUT_LANG:-ja}"
+debug_log "common.sh received INPUT_LANG: '$INPUT_LANG'"
 
 #########################################################################
 # テスト用関数: データ取得を個別に確認
@@ -139,17 +151,18 @@ selection_list() {
             echo "$(color red "Invalid selection. Please choose a valid number.")"
             continue
         fi
-        local confirm_text=$(echo "$selected_value" | awk '{print $2, $3, $4, $5}')
-        echo "$(color cyan "Confirm selection: [$choice] $confirm_text")"
+        
+        #local confirm_text=$(echo "$selected_value" | awk '{print $2, $3, $4, $5}')
+        #echo "$(color cyan "Confirm selection: [$choice] $confirm_text")"
+        
+        echo "$(color cyan "Confirm selection: [$choice] $selected_value")"  #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
         echo -n "(Y/n)?: "
         read yn
         case "$yn" in
             [Yy]*)
                 printf "%s\n" "$selected_value" > "$output_file"
-                # ✅ `DEBUG_MODE=true` のときだけ `test test` を出力
-                if [ "$DEBUG_MODE" = "true" ]; then
-                    debug_log "Final selection: $selected_value"
-                fi
+                debug_log "DEBUG: zone_tmp.ch content AFTER extraction -> $(cat "$cache_zone" 2>/dev/null)"
                 return
                 ;;
             [Nn]*)
@@ -237,18 +250,7 @@ select_country() {
     echo "$(color cyan "Select your country from the following options:")"
     selection_list "$search_results" "$tmp_country" "country"
 
-    debug_log "DEBUG: country_tmp.ch content AFTER selection ->"
-    
-    # ✅ `DEBUG_MODE` のときのみ `cat "$tmp_country"` を実行
-    if [ "$DEBUG_MODE" = "true" ]; then
-        cat "$tmp_country"
-    fi
-
-    if [ -s "$tmp_country" ]; then
-        country_write "$(grep "^$(cat "$tmp_country")" "$BASE_DIR/country.db")"
-    else
-        select_country
-    fi
+    debug_log "DEBUG: country_tmp.ch content AFTER selection -> $(cat "$tmp_country" 2>/dev/null)"
 }
 
 #########################################################################
@@ -262,7 +264,8 @@ country_write() {
     local cache_luci="${CACHE_DIR}/luci.ch"
 
     # ✅ `country_tmp.ch` の内容から `country.db` を検索し、完全なデータを取得（修正）
-    local country_data=$(grep "^$(awk '{print $1, $2, $3, $4, $5}' "$CACHE_DIR/country_tmp.ch")" "$BASE_DIR/country.db")
+    # local country_data=$(grep "^$(awk '{print $1, $2, $3, $4, $5}' "$CACHE_DIR/country_tmp.ch")" "$BASE_DIR/country.db")
+    local country_data=$(grep -m1 "^$(awk '{print $1, $2, $3, $4, $5}' "$CACHE_DIR/country_tmp.ch")" "$BASE_DIR/country.db") #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
     debug_log "DEBUG: Received country_data -> '$country_data'"
 
@@ -277,12 +280,7 @@ country_write() {
     # ✅ `country.ch` にデータを正しく保存（修正）
     echo "$country_data" > "$cache_country"
 
-    debug_log "DEBUG: country.ch content AFTER write ->"
-    
-    # ✅ `DEBUG_MODE` のときのみ `cat "$cache_country"` を実行
-    if [ "$DEBUG_MODE" = "true" ]; then
-        cat "$cache_country"
-    fi
+    debug_log "DEBUG: country.ch content AFTER write -> $(cat "$cache_country" 2>/dev/null)"
 
     select_zone
 }
@@ -431,20 +429,6 @@ color_code_map() {
         *) echo "\033[0;39m" ;;  # デフォルトでリセット
     esac
 }
-
-#########################################################################
-# debug_log: デバッグ出力関数
-#########################################################################
-debug_log() {
-    local message="$1"
-    if [ "$DEBUG_MODE" = true ]; then
-        echo "DEBUG: $message" | tee -a "$LOG_DIR/debug.log"
-    fi
-}
-
-# 環境変数 INPUT_LANG のチェック（デフォルト 'ja' とする）
-INPUT_LANG="${INPUT_LANG:-ja}"
-debug_log "common.sh received INPUT_LANG: '$INPUT_LANG'"
 
 #########################################################################
 # handle_error: 汎用エラーハンドリング関数
