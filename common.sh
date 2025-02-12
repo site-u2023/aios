@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-2-3"
+COMMON_VERSION="2025.02.12-2-5"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -94,13 +94,14 @@ selection_list() {
     echo "[0] Cancel / back to return"
     if [ "$mode" = "country" ]; then
         echo "$input_data" | while IFS= read -r line; do
-            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
+            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')  # 表示用
             if [ -n "$extracted" ]; then
-                echo "[$i] $extracted"
-                echo "$i $extracted" >> "$list_file"
+                echo "[$i] $extracted"  # ✅ ユーザーには `$2 $3 $4 $5` まで表示
+                echo "$i $line" >> "$list_file"  # ✅ 内部データには `$6` 以降も含めて保存
                 i=$((i + 1))
             fi
         done
+       
     elif [ "$mode" = "zone" ]; then
         echo "$input_data" | tr ',' '\n' | sort -u | while read -r zone; do
             if [ -n "$zone" ]; then
