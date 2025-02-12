@@ -819,11 +819,6 @@ install_language_pack() {
 check_common() {
     local mode="$1"
     shift  # 最初の引数 (モード) を削除
-
-    # ✅ どのモードでも確実に `country.db` をダウンロード
-    debug_log "DEBUG: Attempting to download country.db"
-    download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
-    debug_log "DEBUG: Finished downloading country.db"
     
     local lang_code="${2:-}"
 
