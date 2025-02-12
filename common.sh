@@ -558,7 +558,7 @@ packages_db() {
 #########################################################################
 # download_script (再定義): 指定されたスクリプト・データベースのバージョン確認とダウンロード
 #########################################################################
-download_script() {
+XXXXX_download_script() {
     local file_name="$1"
     local script_cache="${BASE_DIR}/script.ch"
     local install_path="${BASE_DIR}/${file_name}"
