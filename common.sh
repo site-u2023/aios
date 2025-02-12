@@ -926,4 +926,27 @@ check_common() {
         debug_log "No lang_code provided, running select_country() normally"
         select_country
     fi
+
+    case "$mode" in
+        full)
+            script_update || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
+            download_script messages.db || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
+            download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
+            download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
+            check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
+            select_country "$lang_code"
+            ;;
+        light)
+            check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
+            check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
+            select_country
+            normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
+            ;;
+        *)
+            check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
+            check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
+            select_country
+            normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
+            ;;
+    esac
 }
