@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-7-4"
+COMMON_VERSION="2025.02.12-8-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -15,7 +15,7 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 mkdir -p "$CACHE_DIR" "$LOG_DIR"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
-INPUT_LANG="${INPUT_LANG:-$1}"  # `aios.sh` からの `$1` を優先
+INPUT_LANG="${INPUT_LANG:-$1}"  # `aios.sh` からの `$1` を最優先
 debug_log "common.sh received INPUT_LANG: '$INPUT_LANG'"
 
 script_update() (
@@ -855,14 +855,18 @@ install_language_pack() {
 #########################################################################
 check_common() {
     local mode="$1"
-    shift  # 最初の引数 (モード) を削除
+    shift  # `$1` を削除し `$2` を取得
+    local lang_code="${1:-}"  # `$1` をそのまま適用（フォールバックなし）
+     
+    echo "DEBUG: check_common received lang_code: '$lang_code'"
 
-    echo "DEBUG: Received args -> $@"  # 追加
-
-    local lang_code="${1:-}"  # ここで $1 を再取得
     SELECTED_LANGUAGE="$lang_code"
 
-    debug_log "check_common received lang_code: '$lang_code'"
+    # ✅ `INPUT_LANG` に `$1` を反映させる
+    INPUT_LANG="${INPUT_LANG:-$SELECTED_LANGUAGE}"
+    
+    debug_log "check_common received lang_code: '$SELECTED_LANGUAGE'"
+    debug_log "common.sh received INPUT_LANG: '$INPUT_LANG'"
 
     local RESET_CACHE=false
     local SHOW_HELP=false
