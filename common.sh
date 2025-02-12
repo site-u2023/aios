@@ -146,23 +146,18 @@ selection_list() {
             echo "$(color yellow "Returning to previous menu.")"
             return
         fi
-        local selected_value=$(awk -v num="$choice" '$1 == num {print substr($0, index($0,$2))}' "$list_file")
+        local selected_value=$(awk -v num="$choice" '$1 == num {print $2, $3, $4, $5}' "$list_file")  # ✅ `$2-$5` のみ取得
         if [ -z "$selected_value" ]; then
             echo "$(color red "Invalid selection. Please choose a valid number.")"
             continue
         fi
         
-        local confirm_text=$(echo "$selected_value" | awk '{print $2, $3, $4, $5}')
-        echo "$(color cyan "Confirm selection: [$choice] $confirm_text")"
-        
-        #echo "$(color cyan "Confirm selection: [$choice] $selected_value")"  #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-
+        echo "$(color cyan "Confirm selection: [$choice] $selected_value")" 
         echo -n "(Y/n)?: "
         read yn
         case "$yn" in
             [Yy]*)
-                printf "%s\n" "$selected_value" > "$output_file"
-                debug_log "DEBUG: zone_tmp.ch content AFTER extraction -> $(cat "$cache_zone" 2>/dev/null)"
+                printf "%s\n" "$selected_value" > "$output_file" 
                 return
                 ;;
             [Nn]*)
