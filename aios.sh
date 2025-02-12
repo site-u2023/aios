@@ -4,14 +4,10 @@
 AIOS_VERSION="2025.02.13-1"
 echo -e "\033[7;40maios.sh Updated to version $AIOS_VERSION \033[0m"
 
-# 初期設定
 DEBUG_MODE=false
 RESET_CACHE=false
 SHOW_HELP=false
-INPUT_LANG="${1:-}"  # `$1` をそのままセット（デフォルトなし）
-
-# デバッグモード設定
-[ "$2" = "-d" ] && DEBUG_MODE=true
+INPUT_LANG="${1:-}"
 
 # オプション解析
 while [ $# -gt 0 ]; do
