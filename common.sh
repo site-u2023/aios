@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-2-0"
+COMMON_VERSION="2025.02.12-2-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -144,7 +144,33 @@ selection_list() {
 }
 
 #########################################################################
+# Last Update: 2025-02-12 14:35:26 (JST) 🚀
+# "Precision in code, clarity in purpose. Every update refines the path." 
 # select_country: ユーザーに国の選択を促す（検索機能付き）
+#
+# 【要件】
+# 1. 役割:
+#    - 言語処理の入口として `$1` または `language.ch` を判定
+#    - `$1` が指定されている場合は最優先で処理
+#    - キャッシュ (`language.ch`) がある場合は、それを使用
+#    - どちらも無い場合、手動で選択させる
+#
+# 2. キャッシュ処理:
+#    - `language.ch` が存在する場合、それを使用し `normalize_country()` へ
+#    - キャッシュが無い場合、手動入力を求める
+#
+# 3. 言語コードの処理:
+#    - `$1` が `SUPPORTED_LANGUAGES` に含まれているかを確認
+#    - 含まれていなければ、手動で言語を選択させる
+#    - 選択後、キャッシュ (`language.ch`) に保存
+#
+# 4. フロー:
+#    - 言語の決定 → `normalize_country()` に進む
+#
+# 5. メンテナンス:
+#    - `language.ch` は一度書き込んだら変更しない
+#    - 言語の決定はすべて `select_country()` 内で完結させる
+#    - `normalize_country()` ではキャッシュを上書きしない
 #########################################################################
 select_country() {
     debug_log "=== Entering select_country() ==="
@@ -251,6 +277,8 @@ select_zone() {
 }
 
 #########################################################################
+# Last Update: 2025-02-12 14:35:26 (JST) 🚀
+# "Precision in code, clarity in purpose. Every update refines the path." 
 # normalize_country: 言語設定の正規化
 #
 # 【要件】
@@ -603,6 +631,8 @@ get_package_manager() {
 }
 
 #########################################################################
+# Last Update: 2025-02-12 14:35:26 (JST) 🚀
+# "Precision in code, clarity in purpose. Every update refines the path." 
 # get_message: 多言語対応メッセージ取得関数
 #
 # 【要件】
@@ -744,14 +774,32 @@ install_language_pack() {
 }
 
 #########################################################################
-# check_common: 初期化処理
+# Last Update: 2025-02-12 14:35:26 (JST) 🚀
+# "Precision in code, clarity in purpose. Every update refines the path." 
+# check_common: 共通処理の初期化
 #
-# 【仕様】
-# ・第一引数は動作モード（例: full, light）
-# ・引数がある場合、その次の引数を言語コードとして使用する
-# ・引数が無い場合、キャッシュ（$CACHE_DIR/luci.ch）があればその値を使用
-# ・引数が無くキャッシュも無ければ、ユーザーに言語選択を促す（デフォルトは INPUT_LANG）
+# 【要件】
+# 1. 役割:
+#    - `common.sh` のフロー制御を行う
+#    - `select_country()` に言語処理を委ねる（言語処理はここでは行わない）
 #
+# 2. フロー:
+#    - 第一引数 (`$1`) は動作モード（例: full, light）
+#    - 第二引数 (`$2`) は言語コード（あれば `select_country()` に渡す）
+#    - `$2` が無い場合、`select_country()` によって処理を継続
+#
+# 3. キャッシュ処理:
+#    - 言語キャッシュ (`language.ch`) の有無を `select_country()` に判定させる
+#    - キャッシュがある場合は `normalize_country()` に進む
+#
+# 4. 追加オプション処理:
+#    - `-reset` フラグが指定された場合、キャッシュをリセット
+#    - `-help` フラグが指定された場合、ヘルプメッセージを表示して終了
+#
+# 5. メンテナンス:
+#    - `check_common()` は **フロー制御のみ** を行う
+#    - 言語の選択やキャッシュ管理は **`select_country()` に委ねる**
+#    - 将来的にフローが変更される場合は、ここを修正する
 #########################################################################
 check_common() {
     local mode="$1"
