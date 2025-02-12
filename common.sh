@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-6-10"
+COMMON_VERSION="2025.02.12-6-12"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -264,16 +264,17 @@ country_write() {
     local cache_language="${CACHE_DIR}/language.ch"
     local cache_luci="${CACHE_DIR}/luci.ch"
 
-    debug_log "DEBUG: Checking country_tmp.ch before processing..."
-    cat "$CACHE_DIR/country_tmp.ch" 2>/dev/null
+    # ✅ `tmp_country` からデータを取得する前にデバッグ出力
+    debug_log "DEBUG: Entering country_write()"
+    debug_log "DEBUG: tmp_country content -> $(cat "$CACHE_DIR/country_tmp.ch" 2>/dev/null)"
 
-    country_data=$(grep "^$(awk '{print $1, $2, $3, $4, $5}' "$CACHE_DIR/country_tmp.ch")" "$BASE_DIR/country.db")
+    # ✅ `country_tmp.ch` の内容から `country.db` を検索し、完全なデータを取得
+    local country_data=$(grep "^$(awk '{print $1, $2, $3, $4, $5}' "$CACHE_DIR/country_tmp.ch")" "$BASE_DIR/country.db")
 
-    debug_log "DEBUG: Retrieved country_data -> '$country_data'"
+    debug_log "DEBUG: Received country_data -> '$country_data'"
 
     if [ -z "$country_data" ]; then
-        debug_log "ERROR: No matching entry found in country.db! Retrying select_country()"
-        select_country
+        debug_log "ERROR: country_data is empty! Something went wrong in country_write()"
         return
     fi
 
@@ -282,26 +283,20 @@ country_write() {
 
     debug_log "DEBUG: Extracted short_country='$short_country', luci_lang='$luci_lang'"
 
-    # 📌 **書き込むデータを事前にログ出力**
-    debug_log "DEBUG: Writing to language.ch -> '$short_country'"
-    debug_log "DEBUG: Writing to luci.ch -> '$luci_lang'"
-    debug_log "DEBUG: Writing to country.ch -> '$country_data'"
+    # ✅ キャッシュに書き込む前にデバッグ
+    debug_log "DEBUG: Writing to cache_language='$cache_language'"
+    debug_log "DEBUG: Writing to cache_luci='$cache_luci'"
+    debug_log "DEBUG: Writing to cache_country='$cache_country'"
 
     echo "$short_country" > "$cache_language"
     echo "$luci_lang" > "$cache_luci"
     echo "$country_data" > "$cache_country"
 
-    # 📌 **書き込んだ直後のデバッグ出力**
-    debug_log "DEBUG: country.ch content AFTER write:"
-    cat "$cache_country" 2>/dev/null
+    debug_log "DEBUG: country.ch content AFTER write -> $(cat "$cache_country" 2>/dev/null)"
+    debug_log "DEBUG: language.ch content AFTER write -> $(cat "$cache_language" 2>/dev/null)"
+    debug_log "DEBUG: luci.ch content AFTER write -> $(cat "$cache_luci" 2>/dev/null)"
 
-    debug_log "DEBUG: language.ch content AFTER write:"
-    cat "$cache_language" 2>/dev/null
-
-    debug_log "DEBUG: luci.ch content AFTER write:"
-    cat "$cache_luci" 2>/dev/null
-
-    debug_log "DEBUG: Calling normalize_country() with selected language: '$(cat "$cache_language" 2>/dev/null)'"
+    debug_log "DEBUG: Calling normalize_country()..."
     normalize_country
 }
 
