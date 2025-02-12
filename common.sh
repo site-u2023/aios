@@ -332,7 +332,7 @@ country_write() {
     echo "$country_data" > "$cache_country"
 
     debug_log "DEBUG: country.ch content AFTER write ->"
-    cat "$cache_country"
+    # cat "$cache_country"    <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
     select_zone
 }
