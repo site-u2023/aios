@@ -213,14 +213,13 @@ select_country() {
 
     if [ -n "$1" ]; then
         local input="$1"
+        debug_log "DEBUG: Using provided input: '$input'"
     else
         local input=""
     fi
 
     echo "$(color cyan "Enter country name, code, or language to search:")"
-    if [ -n "$input" ]; then
-        echo "$(color yellow "Auto-selecting based on input: $input")"
-    else
+    if [ -z "$input" ]; then
         echo -n "Please input: "
         read input
     fi
@@ -242,16 +241,20 @@ select_country() {
         return
     fi
 
+    debug_log "DEBUG: search_results content -> $(echo "$search_results" | tr '\n' ';')"
+
     echo "$(color cyan "Select your country from the following options:")"
     selection_list "$search_results" "$tmp_country" "country"
 
-    # デバッグログ: `tmp_country` に選択結果があるか確認
     debug_log "DEBUG: country_tmp.ch content AFTER selection -> $(cat "$tmp_country" 2>/dev/null)"
 
-    # `tmp_country` が存在し、サイズが0以上なら `country_write()` を呼び出す
     if [ -s "$tmp_country" ]; then
-        debug_log "DEBUG: Calling country_write() with selected country"
-        country_write
+        # ✅ `$2-$5` だけを抽出して表示・保存
+        local selected_country_info=$(awk '{print $2, $3, $4, $5}' "$tmp_country")
+        echo "$(color cyan "Confirm selection: $selected_country_info")"
+        echo "$selected_country_info" > "$cache_country"
+
+        debug_log "DEBUG: country.ch updated with -> $selected_country_info"
     else
         debug_log "DEBUG: tmp_country is empty! Retrying select_country()"
         select_country
@@ -340,7 +343,12 @@ select_zone() {
     echo "$(color cyan "Select your timezone from the following options:")"
     selection_list "$zone_info" "$cache_zone" "zone"
 
-    debug_log "Final selection: $(cat "$cache_zone")"
+    if [ -s "$cache_zone" ]; then
+        local selected_zone=$(cat "$cache_zone")
+        echo "$(color cyan "Confirm selection: $selected_zone")"
+    fi
+
+    debug_log "DEBUG: Final selection -> $(cat "$cache_zone")"
 }
 
 #########################################################################
