@@ -310,7 +310,8 @@ select_country() {
     cat "$tmp_country"
 
     if [ -s "$tmp_country" ]; then
-        country_write "$(cat "$tmp_country")"
+        #country_write "$(cat "$tmp_country")"
+        country_write "$(grep "^$(cat "$tmp_country")" "$BASE_DIR/country.db")"  # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
     else
         select_country
     fi
