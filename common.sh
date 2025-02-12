@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-1-1"
+COMMON_VERSION="2025.02.13-1-2"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -843,6 +843,11 @@ check_common() {
     local mode="$1"
     shift  # 最初の引数 (モード) を削除
 
+    # ✅ どのモードでも確実に `country.db` をダウンロード
+    debug_log "DEBUG: Attempting to download country.db"
+    download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
+    debug_log "DEBUG: Finished downloading country.db"
+    
     local lang_code="${2:-}"
 
     SELECTED_LANGUAGE="$lang_code"
