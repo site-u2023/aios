@@ -249,15 +249,20 @@ select_country() {
     debug_log "DEBUG: country_tmp.ch content AFTER selection -> $(cat "$tmp_country" 2>/dev/null)"
 
 if [ -s "$tmp_country" ]; then
-    # ✅ `$2-$5` だけを抽出して表示・保存
-    local selected_country_info=$(awk '{print $2, $3, $4, $5}' "$tmp_country")
+    # ✅ 選択した行全体を取得
+    local selected_line=$(cat "$tmp_country")
+
+    debug_log "DEBUG: selected_line -> $selected_line"
+
+    # ✅ `$2-$5` だけを抽出して保存
+    local selected_country_info=$(echo "$selected_line" | awk '{print $2, $3, $4, $5}')
     echo "$(color cyan "Confirm selection: $selected_country_info")"
     echo "$selected_country_info" > "$cache_country"
 
     debug_log "DEBUG: country.ch updated with -> $selected_country_info"
 
-    # ✅ `$1` を除外し、$6 以降（ゾーン情報）を取得して保存
-    local selected_zone_info=$(awk '{$1=""; print substr($0, index($0,$6))}' "$tmp_country")
+    # ✅ `$6` 以降（ゾーン情報）を抽出して保存
+    local selected_zone_info=$(echo "$selected_line" | cut -d' ' -f6-)
     echo "$selected_zone_info" > "$CACHE_DIR/zone_tmp.ch"
 
     debug_log "DEBUG: zone_tmp.ch updated with -> $(cat "$CACHE_DIR/zone_tmp.ch" 2>/dev/null)"
