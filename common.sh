@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-0-6"
+COMMON_VERSION="2025.02.13-1-0"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -203,7 +203,7 @@ select_country() {
     debug_log "=== Entering select_country() ==="
 
     local cache_country="${CACHE_DIR}/country.ch"
-    local cache_language="${CACHE_DIR}/luci.ch"
+    local cache_language="${CACHE_DIR}/language.ch"
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
 
     if [ -f "$cache_country" ] && [ -f "$cache_language" ]; then
@@ -211,18 +211,8 @@ select_country() {
         return
     fi
 
-    if [ -n "$1" ]; then
-        local input="$1"
-        debug_log "DEBUG: Using provided input: '$input'"
-    else
-        local input=""
-    fi
-
     echo "$(color cyan "Enter country name, code, or language to search:")"
-    if [ -z "$input" ]; then
-        echo -n "Please input: "
-        read input
-    fi
+    read input
 
     if [ -z "$input" ]; then
         echo "$(color red "No input provided. Please enter a country code or name.")"
@@ -248,36 +238,13 @@ select_country() {
 
     debug_log "DEBUG: country_tmp.ch content AFTER selection -> $(cat "$tmp_country" 2>/dev/null)"
 
-if [ -s "$tmp_country" ]; then
-    # ✅ 選択した行全体を取得
-    local selected_line=$(cat "$tmp_country")
-
-    debug_log "DEBUG: selected_line -> $selected_line"
-
-    # ✅ `$2-$5` だけを抽出して保存
-    local selected_country_info=$(echo "$selected_line" | awk '{print $2, $3, $4, $5}')
-    echo "$(color cyan "Confirm selection: $selected_country_info")"
-    echo "$selected_country_info" > "$cache_country"
-
-    debug_log "DEBUG: country.ch updated with -> $selected_country_info"
-
-    # ✅ `$6` 以降（ゾーン情報）を抽出して保存
-    local selected_zone_info=$(echo "$selected_line" | cut -d' ' -f6-)
-    echo "$selected_zone_info" > "$CACHE_DIR/zone_tmp.ch"
-
-    debug_log "DEBUG: zone_tmp.ch updated with -> $(cat "$CACHE_DIR/zone_tmp.ch" 2>/dev/null)"
-
-    # ✅ ゾーン情報が存在する場合のみ `select_zone()` を実行
-    if [ -s "$CACHE_DIR/zone_tmp.ch" ] && grep -q '[^[:space:]]' "$CACHE_DIR/zone_tmp.ch"; then
-        select_zone
+    # ✅ `country_tmp.ch` のデータを `country_write()` に渡す
+    if [ -s "$tmp_country" ]; then
+        country_write "$(cat "$tmp_country")"
     else
-        echo "$(color red "No timezone data found for this country.")"
-        debug_log "ERROR: No timezone data found for selected country."
+        debug_log "DEBUG: tmp_country is empty! Retrying select_country()"
+        select_country
     fi
-else
-    debug_log "DEBUG: tmp_country is empty! Retrying select_country()"
-    select_country
-fi
 }
 
 #########################################################################
@@ -286,54 +253,46 @@ fi
 # country_write: 選択された国をキャッシュに保存
 #########################################################################
 country_write() {
-    local cache_country="${CACHE_DIR}/country.ch"
-    local cache_language="${CACHE_DIR}/language.ch"
-    local cache_luci="${CACHE_DIR}/luci.ch"
+    local selected_line="$1"
 
-    # ✅ `country_tmp.ch` の内容から `country.db` を検索し、完全なデータを取得（修正）
-    local country_data=$(grep "^$(awk '{print $1, $2, $3, $4, $5}' "$CACHE_DIR/country_tmp.ch")" "$BASE_DIR/country.db")
+    debug_log "DEBUG: country_write() received line -> $selected_line"
 
-    debug_log "DEBUG: Received country_data -> '$country_data'"
+    # ✅ `country.ch` に該当行を **丸ごと** 保存（データの基準）
+    echo "$selected_line" > "$CACHE_DIR/country.ch"
+    debug_log "DEBUG: country.ch updated with -> $(cat "$CACHE_DIR/country.ch" 2>/dev/null)"
 
-    local short_country=$(echo "$country_data" | awk '{print $5}')
-    local luci_lang=$(echo "$country_data" | awk '{print $4}')
+    # ✅ `language.ch` に `$5`（国コード）を保存
+    echo "$selected_line" | awk '{print $5}' > "$CACHE_DIR/language.ch"
+    debug_log "DEBUG: language.ch updated -> $(cat "$CACHE_DIR/language.ch" 2>/dev/null)"
 
-    debug_log "DEBUG: Extracted short_country='$short_country', luci_lang='$luci_lang'"
+    # ✅ `luci.ch` に `$4`（言語コード）を保存
+    echo "$selected_line" | awk '{print $4}' > "$CACHE_DIR/luci.ch"
+    debug_log "DEBUG: luci.ch updated -> $(cat "$CACHE_DIR/luci.ch" 2>/dev/null)"
 
-    # ✅ 言語設定が確定した時点で `language.ch` に保存
-    echo "$short_country" > "$cache_language"
-    echo "$luci_lang" > "$cache_luci"
+    # ✅ `country_tmp.ch`（国情報）を作成（$1-$5）
+    echo "$selected_line" | awk '{print $1, $2, $3, $4, $5}' > "$CACHE_DIR/country_tmp.ch"
+    debug_log "DEBUG: country_tmp.ch created -> $(cat "$CACHE_DIR/country_tmp.ch" 2>/dev/null)"
 
-    # ✅ `country.ch` にデータを正しく保存（修正）
-    echo "$country_data" > "$cache_country"
+    # ✅ `zone_tmp.ch`（ゾーン情報）を作成（$6-）
+    echo "$selected_line" | awk '{$1=$2=$3=$4=$5=""; print substr($0,6)}' > "$CACHE_DIR/zone_tmp.ch"
+    debug_log "DEBUG: zone_tmp.ch created -> $(cat "$CACHE_DIR/zone_tmp.ch" 2>/dev/null)"
 
-    debug_log "DEBUG: country.ch content AFTER write ->"
-
-    # ✅ `DEBUG_MODE` のときのみ `cat "$cache_country"` を実行
-    if [ "$DEBUG_MODE" = "true" ]; then
-        cat "$cache_country"
-    fi
-
-    # ✅ `message.db` からメッセージを取得できるかデバッグ出力
-    debug_log "DEBUG: Attempting to get message for 'MSG_COUNTRY_SUCCESS'"
-
-    # ✅ `language.ch` をセットした後に `message.db` を参照して `get_message()` を実行
-    local success_message
-    success_message="$(get_message 'MSG_COUNTRY_SUCCESS')"
-
-    # ✅ `success_message` の中身をデバッグログに出力
-    debug_log "DEBUG: Fetched success_message='$success_message'"
-
-    # ✅ `success_message` が空ならエラーログを出力
-    if [ -z "$success_message" ]; then
-        debug_log "ERROR: MSG_COUNTRY_SUCCESS not found in message.db!"
+    # ✅ `zone_tmp.ch` にデータがあれば `select_zone()` に進む
+    if [ -s "$CACHE_DIR/zone_tmp.ch" ] && grep -q '[^[:space:]]' "$CACHE_DIR/zone_tmp.ch"; then
+        select_zone
     else
-        # ✅ メッセージを設定言語で表示（明らかにセットされたと分かる！）
-        echo "$(color green "$success_message")"
+        echo "$(color red "No timezone data found for this country.")"
+        debug_log "ERROR: No timezone data found for selected country."
     fi
-
-    select_zone
 }
+
+# ✅ `select_country()` で国を確定したら `country_write()` にデータを渡す
+if [ -s "$tmp_country" ]; then
+    country_write "$(cat "$tmp_country")"
+else
+    debug_log "DEBUG: tmp_country is empty! Retrying select_country()"
+    select_country
+fi
 
 #########################################################################
 # Last Update: 2025-02-12 17:25:00 (JST) 🚀
