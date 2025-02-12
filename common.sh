@@ -148,19 +148,7 @@ color_code_map() {
     esac
 }
 
-#########################################################################
-# handle_error: 汎用エラーハンドリング関数
-#########################################################################
-handle_error() {
-    local message_key="$1"
-    local file="$2"
-    local version="$3"
-    local error_message
-    error_message=$(get_message "$message_key")
-    error_message=$(echo "$error_message" | sed -e "s/{file}/$file/" -e "s/{version}/$version/")
-    echo -e "$(color red "$error_message")"
-    return 1
-}
+
 
 # 🔵　ランゲージ系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
@@ -719,6 +707,20 @@ get_message() {
     else
         echo "$message"
     fi
+}
+
+#########################################################################
+# handle_error: 汎用エラーハンドリング関数
+#########################################################################
+handle_error() {
+    local message_key="$1"
+    local file="$2"
+    local version="$3"
+    local error_message
+    error_message=$(get_message "$message_key")
+    error_message=$(echo "$error_message" | sed -e "s/{file}/$file/" -e "s/{version}/$version/")
+    echo -e "$(color red "$error_message")"
+    return 1
 }
 
 #########################################################################
