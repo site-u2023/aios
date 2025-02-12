@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-0-2"
+COMMON_VERSION="2025.02.13-0-3"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -256,11 +256,14 @@ if [ -s "$tmp_country" ]; then
 
     debug_log "DEBUG: country.ch updated with -> $selected_country_info"
 
-    # ✅ ゾーン情報を取得してキャッシュに保存
-    awk '{for(i=6; i<=NF; i++) print $i}' "$tmp_country" > "$CACHE_DIR/zone_tmp.ch"
+    # ✅ `$6` 以降（ゾーン情報）を取得して保存
+    local selected_zone_info=$(awk '{for(i=6; i<=NF; i++) print $i}' "$tmp_country")
+    echo "$selected_zone_info" > "$CACHE_DIR/zone_tmp.ch"
 
-    # ✅ ゾーン情報がある場合のみ `select_zone()` を実行
-    if [ -s "$CACHE_DIR/zone_tmp.ch" ]; then
+    debug_log "DEBUG: zone_tmp.ch updated with -> $selected_zone_info"
+
+    # ✅ ゾーン情報が存在する場合のみ `select_zone()` を実行
+    if [ -s "$CACHE_DIR/zone_tmp.ch" ] && grep -q '[^[:space:]]' "$CACHE_DIR/zone_tmp.ch"; then
         select_zone
     else
         echo "$(color red "No timezone data found for this country.")"
@@ -270,6 +273,7 @@ else
     debug_log "DEBUG: tmp_country is empty! Retrying select_country()"
     select_country
 fi
+
 }
 
 #########################################################################
