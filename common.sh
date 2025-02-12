@@ -125,10 +125,6 @@ selection_list() {
         done
     fi
 
-        done
-    fi
-        done
-
     elif [ "$mode" = "zone" ]; then
         echo "$input_data" | tr ',' '\n' | sort -u | while read -r zone; do
             if [ -n "$zone" ]; then
