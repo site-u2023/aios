@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-6-5"
+COMMON_VERSION="2025.02.12-6-6"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -263,10 +263,17 @@ country_write() {
     local cache_language="${CACHE_DIR}/language.ch"
     local cache_luci="${CACHE_DIR}/luci.ch"
 
-    # ✅ `country_tmp.ch` の内容から `country.db` を検索し、完全なデータを取得
-    local country_data=$(grep "^$(awk '{print $1, $2, $3, $4, $5}' "$CACHE_DIR/country_tmp.ch")" "$BASE_DIR/country.db")
+    debug_log "DEBUG: Checking country_tmp.ch before processing..."
+    cat "$CACHE_DIR/country_tmp.ch" 2>/dev/null
 
-    debug_log "DEBUG: Received country_data -> '$country_data'"
+    country_data=$(grep "^$(awk '{print $1, $2, $3, $4, $5}' "$CACHE_DIR/country_tmp.ch")" "$BASE_DIR/country.db")
+
+    debug_log "DEBUG: Retrieved country_data -> '$country_data'"
+
+    if [ -z "$country_data" ]; then
+        debug_log "ERROR: No matching entry found in country.db!"
+        return
+    fi
 
     local short_country=$(echo "$country_data" | awk '{print $5}')
     local luci_lang=$(echo "$country_data" | awk '{print $4}')
@@ -275,17 +282,13 @@ country_write() {
 
     echo "$short_country" > "$cache_language"
     echo "$luci_lang" > "$cache_luci"
-
-    # ✅ `country.ch` にデータを正しく保存
     echo "$country_data" > "$cache_country"
 
-    debug_log "DEBUG: country.ch content AFTER write ->"
-    if [ "$DEBUG_MODE" = "true" ]; then
-        cat "$cache_country"
-    fi
+    debug_log "DEBUG: country.ch content AFTER write -> $(cat "$cache_country" 2>/dev/null)"
+    debug_log "DEBUG: language.ch content AFTER write -> $(cat "$cache_language" 2>/dev/null)"
+    debug_log "DEBUG: luci.ch content AFTER write -> $(cat "$cache_luci" 2>/dev/null)"
 
-    # ✅ `normalize_country()` を呼び出す前にデバッグログを追加
-    debug_log "DEBUG: Calling normalize_country()..."
+    debug_log "DEBUG: Calling normalize_country() with selected language: '$(cat "$cache_language" 2>/dev/null)'"
     normalize_country
 }
 
