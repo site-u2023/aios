@@ -15,11 +15,6 @@ while [ $# -gt 0 ]; do
         -d|--debug|-debug) DEBUG_MODE=true ;;
         -reset|--reset|-r) RESET_CACHE=true ;;
         -help|--help|-h) SHOW_HELP=true ;;
-        *)
-            if [ -z "$INPUT_LANG" ]; then
-                INPUT_LANG="manual"  # 最初の非オプション引数を言語コードとして扱う
-            fi
-            ;;
     esac
     shift
 done
