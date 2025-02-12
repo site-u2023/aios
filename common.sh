@@ -281,18 +281,29 @@ country_write() {
     echo "$country_data" > "$cache_country"
 
     debug_log "DEBUG: country.ch content AFTER write ->"
-    
+
     # ✅ `DEBUG_MODE` のときのみ `cat "$cache_country"` を実行
     if [ "$DEBUG_MODE" = "true" ]; then
         cat "$cache_country"
     fi
 
-    # ✅ `language.ch` をセットした後に `message.db` を参照することで、選択言語の成功メッセージを取得
+    # ✅ `message.db` からメッセージを取得できるかデバッグ出力
+    debug_log "DEBUG: Attempting to get message for 'MSG_COUNTRY_SUCCESS'"
+
+    # ✅ `language.ch` をセットした後に `message.db` を参照して `get_message()` を実行
     local success_message
     success_message="$(get_message 'MSG_COUNTRY_SUCCESS')"
 
-    # ✅ メッセージを設定言語で表示（明らかにセットされたと分かる！）
-    echo "$(color green "$success_message")"
+    # ✅ `success_message` の中身をデバッグログに出力
+    debug_log "DEBUG: Fetched success_message='$success_message'"
+
+    # ✅ `success_message` が空ならエラーログを出力
+    if [ -z "$success_message" ]; then
+        debug_log "ERROR: MSG_COUNTRY_SUCCESS not found in message.db!"
+    else
+        # ✅ メッセージを設定言語で表示（明らかにセットされたと分かる！）
+        echo "$(color green "$success_message")"
+    fi
 
     select_zone
 }
