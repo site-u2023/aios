@@ -3,8 +3,14 @@
 
 SUPPORTED_LANGUAGES="en ja"　　　　　　　　　　　　　　　　      　　　　　 
 
-MESSAGE_VERSION="2025.02.06-5"
+MESSAGE_VERSION="2025.02.12-0"
 echo "message.db Last update: $MESSAGE_VERSION"
+
+# 追加--------------------------------------------
+en|MSG_COUNTRY_SUCCESS=✅ Country and language selection completed successfully!
+en|MSG_TIMEZONE_SUCCESS=✅ Timezone selection completed successfully!
+ja|MSG_COUNTRY_SUCCESS=✅ 国と言語の選択が完了しました！
+ja|MSG_TIMEZONE_SUCCESS=✅ タイムゾーンの選択が完了しました！
 
 # 追加--------------------------------------------
 ja|ERR_COUNTRY_CHECK=国の確認に失敗しました。国データベースが正しくロードされていることを確認してください。
