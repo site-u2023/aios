@@ -229,7 +229,7 @@ XXX_selection_list() {
 }
 
 #########################################################################
-# Last Update: 2025-02-12 16:55:42 (JST) 🚀
+# Last Update: 2025-02-12 17:10:05 (JST) 🚀
 # "Precision in code, clarity in purpose. Every update refines the path."
 # select_country: ユーザーに国の選択を促す（検索機能付き）
 #
@@ -274,7 +274,7 @@ select_country() {
     if [ -n "$1" ]; then
         local input="$1"
     else
-        local input=""  # **何も指定が無ければ完全手動モード**
+        local input=""
     fi
 
     echo "$(color cyan "Enter country name, code, or language to search:")"
@@ -285,7 +285,6 @@ select_country() {
         read input
     fi
 
-    # ✅ **入力がない場合、手動選択を強制**
     if [ -z "$input" ]; then
         echo "$(color red "No input provided. Please enter a country code or name.")"
         select_country
@@ -306,6 +305,8 @@ select_country() {
     echo "$(color cyan "Select your country from the following options:")"
     selection_list "$search_results" "$tmp_country" "country"
 
+    debug_log "DEBUG: country_tmp.ch content -> $(cat "$tmp_country")"
+
     if [ -s "$tmp_country" ]; then
         country_write "$(cat "$tmp_country")"
     else
@@ -314,7 +315,7 @@ select_country() {
 }
 
 #########################################################################
-# Last Update: 2025-02-12 16:55:42 (JST) 🚀
+# Last Update: 2025-02-12 17:10:05 (JST) 🚀
 # "Precision in code, clarity in purpose. Every update refines the path."
 # country_write: 選択された国をキャッシュに保存
 #########################################################################
@@ -324,10 +325,11 @@ country_write() {
     local cache_language="${CACHE_DIR}/language.ch"
     local cache_luci="${CACHE_DIR}/luci.ch"
 
+    debug_log "DEBUG: Received country_data -> '$country_data'"
+
     local short_country=$(echo "$country_data" | awk '{print $5}')
     local luci_lang=$(echo "$country_data" | awk '{print $4}')
 
-    debug_log "DEBUG: Full country_data -> '$country_data'"
     debug_log "DEBUG: Extracted short_country='$short_country', luci_lang='$luci_lang'"
 
     echo "$short_country" > "$cache_language"
@@ -339,7 +341,7 @@ country_write() {
 }
 
 #########################################################################
-# Last Update: 2025-02-12 16:55:42 (JST) 🚀
+# Last Update: 2025-02-12 17:10:05 (JST) 🚀
 # "Precision in code, clarity in purpose. Every update refines the path."
 # select_zone: 選択した国に対応するタイムゾーンを選択
 #########################################################################
@@ -348,9 +350,10 @@ select_zone() {
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_zone="${CACHE_DIR}/zone_tmp.ch"
 
-    # ✅ `country.ch` から `$6` 以降を取得して `zone_tmp.ch` に保存
     local zone_info=$(awk '{for(i=6; i<=NF; i++) print $i}' "$cache_country" | tr ',' '\n' | grep -E '^[A-Za-z]+/' | sort -u)
     echo "$zone_info" > "$cache_zone"
+
+    debug_log "DEBUG: Extracted zones -> $(cat "$cache_zone")"
 
     if [ -z "$zone_info" ]; then
         echo "$(color red "ERROR: No timezone data found. Please reselect your country.")"
@@ -358,7 +361,6 @@ select_zone() {
         return
     fi
 
-    debug_log "DEBUG: Extracted zones -> $zone_info"
     echo "$(color cyan "Select your timezone from the following options:")"
     selection_list "$zone_info" "$cache_zone" "zone"
 
@@ -370,7 +372,7 @@ select_zone() {
 }
 
 #########################################################################
-# Last Update: 2025-02-12 16:55:42 (JST) 🚀
+# Last Update: 2025-02-12 17:10:05 (JST) 🚀
 # "Precision in code, clarity in purpose. Every update refines the path."
 # normalize_country: 言語設定の正規化
 #
@@ -400,7 +402,6 @@ normalize_country() {
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
     local selected_language=""
 
-    # ✅ `country_tmp.ch` から `$4`（言語コード）を取得
     if [ -f "$tmp_country" ]; then
         selected_language=$(awk '{print $4}' "$tmp_country")
         debug_log "Loaded language from country_tmp.ch -> $selected_language"
@@ -410,10 +411,10 @@ normalize_country() {
         return
     fi
 
-    # ✅ `message.db` から `SUPPORTED_LANGUAGES` を取得
+    debug_log "DEBUG: Selected language before validation -> $selected_language"
+
     local supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
 
-    # ✅ 言語が `SUPPORTED_LANGUAGES` にあるかチェック
     if echo "$supported_languages" | grep -qw "$selected_language"; then
         debug_log "Using message database language: $selected_language"
         echo "$selected_language" > "$message_cache"
