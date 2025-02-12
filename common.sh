@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-3-13"
+COMMON_VERSION="2025.02.12-3-14"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -139,79 +139,13 @@ selection_list() {
             echo "$(color red "Invalid selection. Please choose a valid number.")"
             continue
         fi
-
-        # ✅ `Confirm selection:` の表示を `$2-$5` のみ
-        local confirm_text=$(echo "$selected_value" | awk '{print $2, $3, $4, $5}')
-        echo "$(color cyan "Confirm selection: [$choice] $confirm_text")"
-
-        echo -n "(Y/n)?: "
-        read yn
-        case "$yn" in
-            [Yy]*)
-                echo "$selected_value" > "$output_file"
-                debug_log "Final selection: $selected_value"
-                return
-                ;;
-            [Nn]*)
-                echo "$(color yellow "Returning to selection.")"
-                ;;
-            *)
-                echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
-                ;;
-        esac
-    done
-}
-
-XXX_selection_list() {
-    local input_data="$1"
-    local output_file="$2"
-    local mode="$3"
-    local list_file="${CACHE_DIR}/zone_tmp.ch"
-    local i=1
-
-    echo -n "" > "$list_file"
-    debug_log "DEBUG: input_data='$input_data'"
-
-    echo "[0] Cancel / back to return"
-    if [ "$mode" = "country" ]; then
-        echo "$input_data" | while IFS= read -r line; do
-            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')  # ✅ `$2-$5` のみ表示
-            if [ -n "$extracted" ]; then
-                echo "[$i] $extracted"
-                echo "$i $line" >> "$list_file"
-                i=$((i + 1))
-            fi
-        done
-    elif [ "$mode" = "zone" ]; then
-        echo "$input_data" | while IFS= read -r zone; do
-            if [ -n "$zone" ]; then
-                echo "[$i] $zone"
-                echo "$i $zone" >> "$list_file"
-                i=$((i + 1))
-            fi
-        done
-    fi
-
-    local choice=""
-    while true; do
-        echo -n "$(color cyan "Enter the number of your choice: ")"
-        read choice
-        if [ "$choice" = "0" ]; then
-            echo "$(color yellow "Returning to previous menu.")"
-            return
-        fi
-        local selected_value=$(awk -v num="$choice" '$1 == num {print substr($0, index($0,$2))}' "$list_file")
-        if [ -z "$selected_value" ]; then
-            echo "$(color red "Invalid selection. Please choose a valid number.")"
-            continue
-        fi
         local confirm_text=$(echo "$selected_value" | awk '{print $2, $3, $4, $5}')
         echo "$(color cyan "Confirm selection: [$choice] $confirm_text")"
         echo -n "(Y/n)?: "
         read yn
         case "$yn" in
             [Yy]*)
-                # echo "$selected_value" > "$output_file"        <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+                echo "$selected_value" > "$output_file"        <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                 echo test test               
                 #debug_log "Final selection: $selected_value"   <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                 return
