@@ -1,16 +1,14 @@
 #!/bin/sh
 # aios.sh (初期エントリースクリプト)
 # License: CC0
-AIOS_VERSION="2025.02.12-2"
+AIOS_VERSION="2025.02.12-3"
 echo -e "\033[7;40maios.sh Updated to version $AIOS_VERSION \033[0m"
 
+# 初期設定
 DEBUG_MODE=false
 RESET_CACHE=false
 SHOW_HELP=false
 INPUT_LANG="${1:-}"  # `$1` をそのままセット（デフォルトなし）
-
-# デバッグモード設定
-[ "$2" = "-d" ] && DEBUG_MODE=true
 
 # オプション解析
 while [ $# -gt 0 ]; do
@@ -24,7 +22,7 @@ done
 
 export DEBUG_MODE INPUT_LANG  # 環境変数として渡す
 
-# BASE_WGET="wget -O" # テスト用
+# 定数設定
 BASE_WGET="wget --quiet -O"
 BASE_URL="https://raw.githubusercontent.com/site-u2023/aios/main"
 BASE_DIR="/tmp/aios"
@@ -33,9 +31,7 @@ BASE_DIR="/tmp/aios"
 # デバッグログ出力関数
 #################################
 debug_log() {
-    if $DEBUG_MODE; then
-        echo "DEBUG: $*" | tee -a "$BASE_DIR/debug.log"
-    fi
+    $DEBUG_MODE && echo "DEBUG: $*" | tee -a "$BASE_DIR/debug.log"
 }
 
 debug_log "aios.sh received INPUT_LANG: '$INPUT_LANG' and DEBUG_MODE: '$DEBUG_MODE'"
@@ -50,8 +46,8 @@ download_common() {
             exit 1
         }
     fi
-    source "${BASE_DIR}/common.sh" || {
-        echo "Failed to source common.sh"
+    . "${BASE_DIR}/common.sh" || {
+        echo "Failed to load common.sh"
         exit 1
     }
 }
@@ -64,7 +60,7 @@ packages() {
 }
 
 #################################
-# delete_aios
+# aios の削除
 #################################
 delete_aios() {
     rm -rf "${BASE_DIR}" /usr/bin/aios
@@ -72,20 +68,21 @@ delete_aios() {
 }
 
 #################################
-# mkdir_aios
+# 必要なディレクトリの作成
 #################################
 mkdir_aios() {
     mkdir -p "$BASE_DIR"
 }
+
 #################################
 # メイン処理
 #################################
-if [ "$SHOW_HELP" = true ]; then
+if $SHOW_HELP; then
     print_help
     exit 0
 fi
 
-if [ "$RESET_CACHE" = true ]; then
+if $RESET_CACHE; then
     reset_cache
 fi
 
