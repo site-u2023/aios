@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-3-10"
+COMMON_VERSION="2025.02.12-3-11"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -113,11 +113,6 @@ selection_list() {
             if [ -n "$extracted" ]; then
                 echo "[$i] $extracted"
                 echo "$i $line" >> "$list_file"
-                # ✅ デバッグ用の `cat` を `DEBUG_MODE` のみ実行
-                if [ "$DEBUG_MODE" = "true" ]; then
-                    debug_log "DEBUG: selection_list() - list_file content AFTER writing:"
-                    cat "$list_file"
-                fi
                 i=$((i + 1))
             fi
         done
@@ -294,7 +289,6 @@ select_zone() {
     local zone_info=$(awk '{for(i=6; i<=NF; i++) print $i}' "$cache_country")
     echo "$zone_info" > "$cache_zone"
 
-    # ✅ デバッグ用の `cat` を `DEBUG_MODE` のみに制限
     if [ "$DEBUG_MODE" = "true" ]; then
         debug_log "DEBUG: zone_tmp.ch content AFTER extraction ->"
         cat "$cache_zone"
@@ -315,6 +309,7 @@ select_zone() {
         select_zone
     fi
 }
+
 
 #########################################################################
 # Last Update: 2025-02-12 17:10:05 (JST) 🚀
