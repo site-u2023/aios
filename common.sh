@@ -15,11 +15,6 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 mkdir -p "$CACHE_DIR" "$LOG_DIR"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
-DEBUG_MODE=false
-RESET_CACHE=false
-SHOW_HELP=false
-INPUT_LANG=""
-
 script_update() (
     COMMON_CACHE="${CACHE_DIR}/common_version.ch"
     # キャッシュが存在しない、またはバージョンが異なる場合にアラートを表示
@@ -28,7 +23,6 @@ script_update() (
         echo "$COMMON_VERSION" > "$COMMON_CACHE"
     fi
 )
-
 
 #########################################################################
 # debug_log: デバッグ出力関数
