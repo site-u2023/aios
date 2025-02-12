@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-3-7"
+COMMON_VERSION="2025.02.12-3-8"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -114,24 +114,24 @@ selection_list() {
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')  # 表示用
             if [ -n "$extracted" ]; then
                 echo "[$i] $extracted"
-                # ✅ `zone_tmp.ch` には `$6` 以降だけを保存
-                echo "$i $(echo "$line" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i; print ""}')" >> "$list_file"
+                # ✅ `zone_tmp.ch` には `$1-$6` をそのまま保存（修正）
+                echo "$i $line" >> "$list_file"
                 debug_log "DEBUG: selection_list() - list_file content AFTER writing:"
                 cat "$list_file"
-                # ✅ `zone_list_tmp.ch` には `$1-$5` のデータのみを保存
+                # ✅ `zone_list_tmp.ch` にも `$1-$5` を保存
                 echo "$i $(echo "$line" | awk '{print $1, $2, $3, $4, $5}')" >> "$full_list"
                 i=$((i + 1))
             fi
         done
     elif [ "$mode" = "zone" ]; then  # 🔄 修正: `elif` を `if` の内部に配置
-        echo "$input_data" | tr ',' '\n' | sort -u | while read -r zone; do
+        echo "$input_data" | while IFS= read -r zone; do
             if [ -n "$zone" ]; then
                 echo "[$i] $zone"
                 echo "$i $zone" >> "$list_file"
                 i=$((i + 1))
             fi
         done
-    fi
+    fi  # ✅ `if` を正しく閉じる
 
     local choice=""
     while true; do
@@ -323,10 +323,12 @@ select_country() {
 # country_write: 選択された国をキャッシュに保存
 #########################################################################
 country_write() {
-    local country_data="$1"
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_language="${CACHE_DIR}/language.ch"
     local cache_luci="${CACHE_DIR}/luci.ch"
+
+    # ✅ `country_tmp.ch` の内容から `country.db` を検索し、完全なデータを取得（修正）
+    local country_data=$(grep "^$(awk '{print $1, $2, $3, $4, $5}' "$CACHE_DIR/country_tmp.ch")" "$BASE_DIR/country.db")
 
     debug_log "DEBUG: Received country_data -> '$country_data'"
 
@@ -337,9 +339,10 @@ country_write() {
 
     echo "$short_country" > "$cache_language"
     echo "$luci_lang" > "$cache_luci"
-    # echo "$country_data" > "$cache_country"
-    echo "$country_data" | awk '{$6=gensub(",", " ", "g", $6); print}' > "$cache_country"               # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
- 
+
+    # ✅ `country.ch` にデータを正しく保存（修正）
+    echo "$country_data" > "$cache_country"
+
     debug_log "DEBUG: country.ch content AFTER write ->"
     cat "$cache_country"
 
