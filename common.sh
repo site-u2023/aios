@@ -822,33 +822,6 @@ install_language_pack() {
     fi
 }
 
-#################################
-# 引数解析関数（修正）
-#################################
-arguments() {
-    local lang_code=""
-
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            -d|--debug|-debug) DEBUG_MODE=true ;;
-            -reset|--reset|-r) RESET_CACHE=true ;;
-            -help|--help|-h) SHOW_HELP=true ;;
-            *)
-                # 言語コードとして処理（最初の未定義引数を言語コードとみなす）
-                if [ -z "$lang_code" ]; then
-                    lang_code="$1"
-                fi
-                ;;
-        esac
-        shift
-    done
-
-    INPUT_LANG="$lang_code"
-
-    export DEBUG_MODE RESET_CACHE SHOW_HELP INPUT_LANG
-
-    debug_log "Parsed arguments -> INPUT_LANG: '$INPUT_LANG', DEBUG_MODE: '$DEBUG_MODE', RESET_CACHE: '$RESET_CACHE', SHOW_HELP: '$SHOW_HELP'"
-}
 
 #########################################################################
 # Last Update: 2025-02-12 14:35:26 (JST) 🚀
