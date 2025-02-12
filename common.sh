@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-6-0"
+COMMON_VERSION="2025.02.12-6-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -264,8 +264,7 @@ country_write() {
     local cache_luci="${CACHE_DIR}/luci.ch"
 
     # ✅ `country_tmp.ch` の内容から `country.db` を検索し、完全なデータを取得（修正）
-    # local country_data=$(grep "^$(awk '{print $1, $2, $3, $4, $5}' "$CACHE_DIR/country_tmp.ch")" "$BASE_DIR/country.db")
-    local country_data=$(grep -m1 "^$(awk '{print $1, $2, $3, $4, $5}' "$CACHE_DIR/country_tmp.ch")" "$BASE_DIR/country.db") #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    local country_data=$(grep "^$(awk '{print $1, $2, $3, $4, $5}' "$CACHE_DIR/country_tmp.ch")" "$BASE_DIR/country.db")
 
     debug_log "DEBUG: Received country_data -> '$country_data'"
 
@@ -280,7 +279,15 @@ country_write() {
     # ✅ `country.ch` にデータを正しく保存（修正）
     echo "$country_data" > "$cache_country"
 
-    debug_log "DEBUG: country.ch content AFTER write -> $(cat "$cache_country" 2>/dev/null)"
+    debug_log "DEBUG: country.ch content AFTER write ->"
+    
+    # ✅ `DEBUG_MODE` のときのみ `cat "$cache_country"` を実行
+    if [ "$DEBUG_MODE" = "true" ]; then
+        cat "$cache_country"
+    fi
+
+    # ✅ 言語設定完了メッセージを `message.db` から取得して表示
+    echo "$(color green "$(get_message 'MSG_COUNTRY_SUCCESS')")"
 
     select_zone
 }
