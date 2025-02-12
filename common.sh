@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-3-8"
+COMMON_VERSION="2025.02.12-3-10"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -101,96 +101,28 @@ selection_list() {
     local output_file="$2"
     local mode="$3"
     local list_file="${CACHE_DIR}/zone_tmp.ch"
-    local full_list="${CACHE_DIR}/zone_list_tmp.ch"
     local i=1
 
     echo -n "" > "$list_file"
-    echo -n "" > "$full_list"
     debug_log "DEBUG: input_data='$input_data'"
 
     echo "[0] Cancel / back to return"
     if [ "$mode" = "country" ]; then
         echo "$input_data" | while IFS= read -r line; do
-            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')  # 表示用
+            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')  # ✅ `$2-$5` のみ表示
             if [ -n "$extracted" ]; then
                 echo "[$i] $extracted"
-                # ✅ `zone_tmp.ch` には `$1-$6` をそのまま保存（修正）
                 echo "$i $line" >> "$list_file"
-                debug_log "DEBUG: selection_list() - list_file content AFTER writing:"
-                cat "$list_file"
-                # ✅ `zone_list_tmp.ch` にも `$1-$5` を保存
-                echo "$i $(echo "$line" | awk '{print $1, $2, $3, $4, $5}')" >> "$full_list"
+                # ✅ デバッグ用の `cat` を `DEBUG_MODE` のみ実行
+                if [ "$DEBUG_MODE" = "true" ]; then
+                    debug_log "DEBUG: selection_list() - list_file content AFTER writing:"
+                    cat "$list_file"
+                fi
                 i=$((i + 1))
             fi
         done
-    elif [ "$mode" = "zone" ]; then  # 🔄 修正: `elif` を `if` の内部に配置
-        echo "$input_data" | while IFS= read -r zone; do
-            if [ -n "$zone" ]; then
-                echo "[$i] $zone"
-                echo "$i $zone" >> "$list_file"
-                i=$((i + 1))
-            fi
-        done
-    fi  # ✅ `if` を正しく閉じる
-
-    local choice=""
-    while true; do
-        echo -n "$(color cyan "Enter the number of your choice: ")"
-        read choice
-        if [ "$choice" = "0" ]; then
-            echo "$(color yellow "Returning to previous menu.")"
-            return
-        fi
-        local selected_value=$(awk -v num="$choice" '$1 == num {print substr($0, index($0,$2))}' "$list_file")
-        if [ -z "$selected_value" ]; then
-            echo "$(color red "Invalid selection. Please choose a valid number.")"
-            continue
-        fi
-        echo "$(color cyan "Confirm selection: [$choice] $selected_value")"
-        echo -n "(Y/n)?: "
-        read yn
-        case "$yn" in
-            [Yy]*)
-                echo "$selected_value" > "$output_file"
-                debug_log "Final selection: $selected_value"
-                return
-                ;;
-            [Nn]*)
-                echo "$(color yellow "Returning to selection.")"
-                ;;
-            *)
-                echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
-                ;;
-        esac
-    done
-}
-
-#########################################################################
-# selection_list: リストから選択させる処理
-#########################################################################
-XXX_selection_list() {
-    local input_data="$1"
-    local output_file="$2"
-    local mode="$3"
-    local list_file="${CACHE_DIR}/tmp_list.ch"
-    local i=1
-
-    echo -n "" > "$list_file"
-    debug_log "DEBUG: input_data='$input_data'"
-
-    echo "[0] Cancel / back to return"
-    if [ "$mode" = "country" ]; then
-        echo "$input_data" | while IFS= read -r line; do
-            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')  # 表示用
-            if [ -n "$extracted" ]; then
-                echo "[$i] $extracted"  # ✅ ユーザーには `$2 $3 $4 $5` まで表示
-                echo "$i $line" >> "$list_file"  # ✅ 内部データには `$6` 以降も含めて保存
-                i=$((i + 1))
-            fi
-        done
-       
     elif [ "$mode" = "zone" ]; then
-        echo "$input_data" | tr ',' '\n' | sort -u | while read -r zone; do
+        echo "$input_data" | while IFS= read -r zone; do
             if [ -n "$zone" ]; then
                 echo "[$i] $zone"
                 echo "$i $zone" >> "$list_file"
@@ -207,7 +139,7 @@ XXX_selection_list() {
             echo "$(color yellow "Returning to previous menu.")"
             return
         fi
-        local selected_value=$(awk -v num="$choice" '$1 == num {for(i=2; i<=NF; i++) printf "%s ", $i; print ""}' "$list_file")
+        local selected_value=$(awk -v num="$choice" '$1 == num {print substr($0, index($0,$2))}' "$list_file")
         if [ -z "$selected_value" ]; then
             echo "$(color red "Invalid selection. Please choose a valid number.")"
             continue
@@ -359,15 +291,14 @@ select_zone() {
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_zone="${CACHE_DIR}/zone_tmp.ch"
 
-    # local zone_info=$(awk '{for(i=6; i<=NF; i++) print $i}' "$cache_country" | tr ',' '\n' | grep -E '^[A-Za-z]+/' | sort -u)
-    # local zone_info=$(grep "^$(awk '{print $1, $2, $3, $4, $5}' "$cache_country")" "$BASE_DIR/country.db" | awk '{for(i=6; i<=NF; i++) print $i}' | tr ',' '\n' | grep -E '^[A-Za-z]+/') # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-    # local zone_info=$(awk '{for(i=6; i<=NF; i++) print $i}' "$CACHE_DIR/country.ch" | tr ',' '\n' | grep -E '^[A-Za-z]+/[A-Za-z]+')
-    local zone_info=$(awk '{for(i=6; i<=NF; i++) print $i}' "$CACHE_DIR/country.ch")
-    # echo "$zone_info" > "$cache_zone"
-    printf "%s\n" "$zone_info" > "$CACHE_DIR/zone_tmp.ch"
-    
-    debug_log "DEBUG: zone_tmp.ch content AFTER extraction ->"
-    cat "$cache_zone"
+    local zone_info=$(awk '{for(i=6; i<=NF; i++) print $i}' "$cache_country")
+    echo "$zone_info" > "$cache_zone"
+
+    # ✅ デバッグ用の `cat` を `DEBUG_MODE` のみに制限
+    if [ "$DEBUG_MODE" = "true" ]; then
+        debug_log "DEBUG: zone_tmp.ch content AFTER extraction ->"
+        cat "$cache_zone"
+    fi
 
     if [ -z "$zone_info" ]; then
         echo "$(color red "ERROR: No timezone data found. Please reselect your country.")"
@@ -376,8 +307,7 @@ select_zone() {
     fi
 
     echo "$(color cyan "Select your timezone from the following options:")"
-    # selection_list "$zone_info" "$cache_zone" "zone"
-    selection_list "$(cat "$CACHE_DIR/zone_tmp.ch")" "$cache_zone" "zone"   # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    selection_list "$zone_info" "$cache_zone" "zone"
 
     if [ -s "$cache_zone" ]; then
         debug_log "Final selection: $(cat "$cache_zone")"
