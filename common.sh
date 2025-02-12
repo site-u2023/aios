@@ -161,6 +161,8 @@ selection_list() {
         read yn
         case "$yn" in
             [Yy]*)
+                #mkdir -p "$CACHE_DIR" "$LOG_DIR"
+                mkdir -p /tmp/aios/cache
                 # printf "%s\n" "$selected_value" > "$output_file" # #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                 echo "$selected_value" > "$output_file"
                 [ -s "$output_file" ] && debug_log "DEBUG: tmp_country written -> $(cat "$output_file")"     #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
