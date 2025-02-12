@@ -345,7 +345,6 @@ country_write() {
         echo "$(color red "No timezone data found for this country.")"
         debug_log "ERROR: No timezone data found for selected country."
     fi
-}
 
 # ✅ `select_country()` で国を確定したら `country_write()` にデータを渡す
 if [ -s "$tmp_country" ]; then
@@ -354,7 +353,7 @@ else
     debug_log "DEBUG: tmp_country is empty! Retrying select_country()"
     select_country
 fi
-
+}
 #########################################################################
 # Last Update: 2025-02-12 17:25:00 (JST) 🚀
 # "Precision in code, clarity in purpose. Every update refines the path.""
