@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-6-6"
+COMMON_VERSION="2025.02.12-6-7"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -271,7 +271,8 @@ country_write() {
     debug_log "DEBUG: Retrieved country_data -> '$country_data'"
 
     if [ -z "$country_data" ]; then
-        debug_log "ERROR: No matching entry found in country.db!"
+        debug_log "ERROR: No matching entry found in country.db! Retrying select_country()"
+        select_country
         return
     fi
 
