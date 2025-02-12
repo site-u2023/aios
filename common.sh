@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-1-3"
+COMMON_VERSION="2025.02.13-1-4"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -451,56 +451,23 @@ normalize_country() {
 #########################################################################
 download_script() {
     local file_name="$1"
+    local script_cache="${BASE_DIR}/script.ch"
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
-    
-    if [ "$file_name" = "aios" ]; then
-        install_path="${AIOS_DIR}/${file_name}"
-    fi
 
-    if [ ! -f "$install_path" ]; then
-        echo -e "$(color yellow "$(get_message 'MSG_DOWNLOADING_MISSING_FILE' "$SELECTED_LANGUAGE" | sed "s/{file}/$file_name/")")"
-        if ! ${BASE_WGET} "$install_path" "$remote_url"; then
-            echo -e "$(color red "Failed to download: $file_name")"
-            return 1
-        fi
-        echo -e "$(color green "Successfully downloaded: $file_name")"
-        if [ "$file_name" = "aios" ]; then
-            chmod +x "$install_path"
-            echo -e "$(color cyan "Applied execute permissions to: $install_path")"
+    if [ -f "$script_cache" ] && grep -q "^$file_name=" "$script_cache"; then
+        local cached_version=$(grep "^$file_name=" "$script_cache" | cut -d'=' -f2)
+        local remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2)
+        if [ "$cached_version" = "$remote_version" ]; then
+            echo "$(color green "$file_name is up-to-date ($cached_version). Skipping download.")"
+            return
         fi
     fi
 
-    local current_version="N/A"
-    local remote_version="N/A"
-
-    if test -s "$install_path"; then
-        current_version=$(grep "^version=" "$install_path" | cut -d'=' -f2 | tr -d '"\r')
-        [ -z "$current_version" ] && current_version="N/A"
-    fi
-
-    local current_version=""
-    if [ -f "$install_path" ]; then
-        current_version=$(grep "^version=" "$install_path" | cut -d'=' -f2 | tr -d '"\r')
-    fi
-
-    local remote_version=""
-    remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2 | tr -d '"\r')
-    if [ -z "$current_version" ]; then current_version="N/A"; fi
-    if [ -z "$remote_version" ]; then remote_version="N/A"; fi
-
-    echo -e "$(color cyan "DEBUG: Checking version for $file_name | Local: [$current_version], Remote: [$remote_version]")"
-
-    if [ -n "$remote_version" ] && [ "$current_version" != "$remote_version" ]; then
-        echo -e "$(color cyan "$(get_message 'MSG_UPDATING_SCRIPT' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{old_version}/$current_version/" -e "s/{new_version}/$remote_version/")")"
-        if ! ${BASE_WGET} "$install_path" "$remote_url"; then
-            echo -e "$(color red "Failed to download: $file_name")"
-            return 1
-        fi
-        echo -e "$(color green "Successfully downloaded: $file_name")"
-    else
-        echo -e "$(color green "$(get_message 'MSG_NO_UPDATE_NEEDED' "$SELECTED_LANGUAGE" | sed -e "s/{file}/$file_name/" -e "s/{version}/$current_version/")")"
-    fi
+    echo "$(color yellow "Downloading latest version of $file_name")"
+    ${BASE_WGET} "$install_path" "$remote_url"
+    local new_version=$(grep "^version=" "$install_path" | cut -d'=' -f2)
+    echo "$file_name=$new_version" >> "$script_cache"
 }
 
 #########################################################################
