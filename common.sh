@@ -255,6 +255,7 @@ select_country() {
         echo "$selected_country_info" > "$cache_country"
 
         debug_log "DEBUG: country.ch updated with -> $selected_country_info"
+        select_zone
     else
         debug_log "DEBUG: tmp_country is empty! Retrying select_country()"
         select_country
