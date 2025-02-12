@@ -1,7 +1,7 @@
 #!/bin/sh
 # aios.sh (初期エントリースクリプト)
 # License: CC0
-AIOS_VERSION="2025.02.12-0"
+AIOS_VERSION="2025.02.12-1"
 echo -e "\033[7;40maios.sh Updated to version $AIOS_VERSION \033[0m"
 
 DEBUG_MODE=false
@@ -19,7 +19,9 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-export INPUT_LANG="${1:-}"  # `$1` があれば設定、なければ空白
+INPUT_LANG="$1"  # `$1` があれば設定、なければ空白のまま
+export INPUT_LANG  # 環境変数として渡す
+check_common "full" "$INPUT_LANG"
 
 # BASE_WGET="wget -O" # テスト用
 BASE_WGET="wget --quiet -O"
