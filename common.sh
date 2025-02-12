@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-7-2"
+COMMON_VERSION="2025.02.12-7-3"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -206,47 +206,45 @@ select_country() {
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_language="${CACHE_DIR}/luci.ch"
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
-    local input=""
 
-    # ✅ 既にキャッシュがある場合はスキップ
     if [ -f "$cache_country" ] && [ -f "$cache_language" ]; then
         debug_log "Using cached country and language. Skipping selection."
         return
     fi
 
-    # ✅ $1 が指定されていれば使用、なければ手動入力
     if [ -n "$1" ]; then
-        input="$1"
-        debug_log "Using provided input: '$input'"
+        local input="$1"
+        debug_log "DEBUG: Using provided input: '$input'"
     else
-        echo "$(color cyan "Enter country name, code, or language to search:")"
+        local input=""
+    fi
+
+    echo "$(color cyan "Enter country name, code, or language to search:")"
+    if [ -z "$input" ]; then
         echo -n "Please input: "
         read input
     fi
 
-    # ✅ 入力が空なら再試行
     if [ -z "$input" ]; then
         echo "$(color red "No input provided. Please enter a country code or name.")"
         select_country
         return
     fi
 
-    # ✅ `country.db` から入力に一致するデータを検索
     search_results=$(awk -v search="$input" '
         BEGIN {IGNORECASE=1}
         $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}
     ' "$BASE_DIR/country.db")
 
-    debug_log "DEBUG: search_results content -> $(echo "$search_results" | tr '\n' '; ')"
-
-    # ✅ 検索結果がない場合はエラー表示し再試行
     if [ -z "$search_results" ]; then
         echo "$(color red "No matching country found. Please try again.")"
         select_country
         return
     fi
 
-    # ✅ ユーザーに選択を促す
+    # ✅ **デバッグ出力を改行防止しながら見やすくする**
+    debug_log "DEBUG: search_results content -> $(echo "$search_results" | tr '\n' ';')"
+
     echo "$(color cyan "Select your country from the following options:")"
     selection_list "$search_results" "$tmp_country" "country"
 
