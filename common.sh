@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-2-5"
+COMMON_VERSION="2025.02.12-2-6"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -88,7 +88,7 @@ test_cache_contents() {
 # 【要件】
 # 1. `mode=country`:
 #     - 国リストを `$2 $3 $4 $5`（国名・言語・言語コード・国コード）で表示
-#     - `$6` 以降（ゾーンネーム・タイムゾーン）は **`full_list_tmp.ch` に保存**
+#     - `$6` 以降（ゾーンネーム・タイムゾーン）は **`zone_list_tmp.ch` に保存**
 # 2. `mode=zone`:
 #     - ゾーンリストを表示
 #     - **ゾーン情報の保存は `select_zone()` に任せる**
@@ -100,8 +100,8 @@ selection_list() {
     local input_data="$1"
     local output_file="$2"
     local mode="$3"
-    local list_file="${CACHE_DIR}/list_tmp.ch"
-    local full_list="${CACHE_DIR}/full_list_tmp.ch"
+    local list_file="${CACHE_DIR}/zone_tmp.ch"
+    local full_list="${CACHE_DIR}/zone_list_tmp.ch"
     local i=1
 
     echo -n "" > "$list_file"
