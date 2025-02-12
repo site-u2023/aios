@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-0-4"
+COMMON_VERSION="2025.02.13-0-5"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -886,18 +886,43 @@ arguments() {
 #########################################################################
 check_common() {
     local mode="$1"
-    shift  # `$1` を削除し `$2` 以降を解析
-    arguments "$@"  # `arguments()` で引数を解析
+    shift  # `$1` を削除し `$2` を取得
 
-    debug_log "check_common received INPUT_LANG: '$INPUT_LANG'"
+    local lang_code="${1:-}"  # **$2 をそのまま使用**
+    SELECTED_LANGUAGE="$lang_code"
+    
+    debug_log "check_common received lang_code: '$lang_code'"
 
-    # キャッシュリセット処理
-    $RESET_CACHE && reset_cache
+    local RESET_CACHE=false
+    local SHOW_HELP=false
 
-    # ヘルプ表示処理
-    $SHOW_HELP && print_help && exit 0
+    # **オプションを解析**
+    for arg in "$@"; do
+        case "$arg" in
+            -reset|--reset|-r)
+                RESET_CACHE=true
+                ;;
+            -help|--help|-h)
+                SHOW_HELP=true
+                ;;
+            -debug|--debug|-d)
+                DEBUG_MODE=true
+                ;;
+        esac
+    done
 
-    # メイン処理（変更なし）
+    # **キャッシュリセット処理**
+    if [ "$RESET_CACHE" = true ]; then
+        reset_cache
+    fi
+
+    # **ヘルプ表示処理**
+    if [ "$SHOW_HELP" = true ]; then
+        print_help
+        exit 0
+    fi
+
+    # **アップロードされた `check_common()` の処理順を維持**
     case "$mode" in
         full)
             script_update || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
@@ -905,16 +930,19 @@ check_common() {
             download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
             download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
-            debug_log "Executing select_country() with INPUT_LANG: '$INPUT_LANG'"
-            select_country "$INPUT_LANG"
+            select_country "$lang_code"
             ;;
         light)
-            #
-            #
+            check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
+            check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
+            select_country
+            normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
         *)
-            #
-            #
+            check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
+            check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
+            select_country
+            normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
             ;;
     esac
 }
