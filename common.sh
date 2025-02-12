@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-2-8"
+COMMON_VERSION="2025.02.12-2-9"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -229,7 +229,7 @@ XXX_selection_list() {
 }
 
 #########################################################################
-# Last Update: 2025-02-12 17:10:05 (JST) 🚀
+# Last Update: 2025-02-12 17:25:00 (JST) 🚀
 # "Precision in code, clarity in purpose. Every update refines the path."
 # select_country: ユーザーに国の選択を促す（検索機能付き）
 #
@@ -264,13 +264,11 @@ select_country() {
     local cache_language="${CACHE_DIR}/luci.ch"
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
 
-    # ✅ **キャッシュがあるなら、それを使用し処理を終了**
     if [ -f "$cache_country" ] && [ -f "$cache_language" ]; then
         debug_log "Using cached country and language. Skipping selection."
         return
     fi
 
-    # ✅ **$1（言語コード）がある場合は最優先で使用**
     if [ -n "$1" ]; then
         local input="$1"
     else
@@ -305,7 +303,8 @@ select_country() {
     echo "$(color cyan "Select your country from the following options:")"
     selection_list "$search_results" "$tmp_country" "country"
 
-    debug_log "DEBUG: country_tmp.ch content -> $(cat "$tmp_country")"
+    debug_log "DEBUG: country_tmp.ch content AFTER selection ->"
+    cat "$tmp_country"
 
     if [ -s "$tmp_country" ]; then
         country_write "$(cat "$tmp_country")"
@@ -315,7 +314,7 @@ select_country() {
 }
 
 #########################################################################
-# Last Update: 2025-02-12 17:10:05 (JST) 🚀
+# Last Update: 2025-02-12 17:25:00 (JST) 🚀
 # "Precision in code, clarity in purpose. Every update refines the path."
 # country_write: 選択された国をキャッシュに保存
 #########################################################################
@@ -336,13 +335,15 @@ country_write() {
     echo "$luci_lang" > "$cache_luci"
     echo "$country_data" > "$cache_country"
 
-    debug_log "DEBUG: Written to country.ch -> $(cat "$cache_country")"
+    debug_log "DEBUG: country.ch content AFTER write ->"
+    cat "$cache_country"
+
     select_zone
 }
 
 #########################################################################
-# Last Update: 2025-02-12 17:10:05 (JST) 🚀
-# "Precision in code, clarity in purpose. Every update refines the path."
+# Last Update: 2025-02-12 17:25:00 (JST) 🚀
+# "Precision in code, clarity in purpose. Every update refines the path.""
 # select_zone: 選択した国に対応するタイムゾーンを選択
 #########################################################################
 select_zone() {
@@ -353,7 +354,8 @@ select_zone() {
     local zone_info=$(awk '{for(i=6; i<=NF; i++) print $i}' "$cache_country" | tr ',' '\n' | grep -E '^[A-Za-z]+/' | sort -u)
     echo "$zone_info" > "$cache_zone"
 
-    debug_log "DEBUG: Extracted zones -> $(cat "$cache_zone")"
+    debug_log "DEBUG: zone_tmp.ch content AFTER extraction ->"
+    cat "$cache_zone"
 
     if [ -z "$zone_info" ]; then
         echo "$(color red "ERROR: No timezone data found. Please reselect your country.")"
