@@ -888,15 +888,13 @@ check_common() {
     local mode="$1"
     shift  # `$1` を削除し `$2` を取得
 
-    local lang_code="${1:-}"  # **$2 をそのまま使用**
+    local lang_code="${1:-}"  # `$2` をそのまま使用
     SELECTED_LANGUAGE="$lang_code"
-    
-    debug_log "check_common received lang_code: '$lang_code'"
+
+    debug_log "check_common received lang_code: '$lang_code' (from \$2)"
 
     local RESET_CACHE=false
     local SHOW_HELP=false
-
-    # **オプションを解析**
     for arg in "$@"; do
         case "$arg" in
             -reset|--reset|-r)
@@ -911,38 +909,21 @@ check_common() {
         esac
     done
 
-    # **キャッシュリセット処理**
     if [ "$RESET_CACHE" = true ]; then
         reset_cache
     fi
 
-    # **ヘルプ表示処理**
     if [ "$SHOW_HELP" = true ]; then
         print_help
         exit 0
     fi
 
-    # **アップロードされた `check_common()` の処理順を維持**
-    case "$mode" in
-        full)
-            script_update || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
-            download_script messages.db || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
-            download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
-            download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
-            check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
-            select_country "$lang_code"
-            ;;
-        light)
-            check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
-            check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
-            select_country
-            normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
-            ;;
-        *)
-            check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
-            check_country "$lang_code" || handle_error "ERR_COUNTRY_CHECK" "check_country" "latest"
-            select_country
-            normalize_country || handle_error "ERR_NORMALIZE" "normalize_country" "latest"
-            ;;
-    esac
+    # `$2` がある場合は `select_country` にそのまま渡す
+    if [ -n "$lang_code" ]; then
+        debug_log "Passing lang_code='$lang_code' to select_country()"
+        select_country "$lang_code"
+    else
+        debug_log "No lang_code provided, running select_country() normally"
+        select_country
+    fi
 }
