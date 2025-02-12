@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-1-1"
+COMMON_VERSION="2025.02.12-1-2"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -695,23 +695,15 @@ install_language_pack() {
 #########################################################################
 check_common() {
     local mode="$1"
-    shift  # モードを取り除く
-    local lang_code
+    shift  # 最初の引数 (モード) を削除
 
-    if [ $# -gt 0 ] && [ "${1:0:1}" != "-" ]; then
-        lang_code="$1"
-        shift
-    elif [ -f "$CACHE_DIR/luci.ch" ]; then
-        lang_code=$(cat "$CACHE_DIR/luci.ch")
-    else
-        # ユーザー入力が必須になるようにループする
-        while [ -z "$lang_code" ]; do
-            echo "言語を選択してください (例: ja, en, zh-cn, ...):"
-            read lang_code
-            if [ -z "$lang_code" ]; then
-                echo "入力がありません。必ず入力してください。"
-            fi
-        done
+    local lang_code="${2:-$INPUT_LANG}"
+
+    # **"manual" の場合、強制的に手動選択にする**
+    if [ "$lang_code" = "manual" ]; then
+        debug_log "Manual language selection triggered."
+        select_country
+        return
     fi
 
     SELECTED_LANGUAGE="$lang_code"
