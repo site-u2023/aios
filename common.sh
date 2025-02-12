@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.12-3-15"
+COMMON_VERSION="2025.02.12-3-16"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -307,7 +307,8 @@ select_zone() {
     selection_list "$zone_info" "$cache_zone" "zone"
 
     if [ -s "$cache_zone" ]; then
-        debug_log "Final selection: $(cat "$cache_zone")"
+        # debug_log "Final selection: $(cat "$cache_zone")"
+        echo test2 test 2
     else
         select_zone
     fi
