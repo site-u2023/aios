@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-4-2"
+COMMON_VERSION="2025.02.13-4-3"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -402,27 +402,41 @@ country_write() {
 # [4] zonename.ch, timezone.ch を書き込み禁止にする
 #[5] → normalize_country()
 #########################################################################
-#########################################################################
-# select_zone(): ユーザーがゾーンを選択し、確定する
-#########################################################################
 select_zone() {
+    debug_log "=== Entering select_zone() ==="
+
     local cache_zone="${CACHE_DIR}/zone.ch"
+    local cache_zone_tmp="${CACHE_DIR}/zone_tmp.ch"
     local cache_zonename="${CACHE_DIR}/zonename.ch"
     local cache_timezone="${CACHE_DIR}/timezone.ch"
-    local cache_zone_tmp="${CACHE_DIR}/zone_tmp.ch"
 
+    # ✅ `zone.ch` からデータを取得
     local zone_data=$(cat "$cache_zone" 2>/dev/null)
     if [ -z "$zone_data" ]; then
         debug_log "ERROR: select_zone() received empty zone_data!"
         return
     fi
 
-    local zonename=$(echo "$zone_data" | cut -d ',' -f1)
-    local timezone=$(echo "$zone_data" | cut -d ',' -f2)
+    # ✅ `zone.ch` のデータを `selection_list()` で選択
+    echo "$(color cyan "Select your timezone from the following options:")"
+    selection_list "$zone_data" "$cache_zone_tmp" "zone"
 
+    # ✅ `zone_tmp.ch` からユーザーが選択したゾーンを取得
+    local selected_zone=$(cat "$cache_zone_tmp" 2>/dev/null)
+    if [ -z "$selected_zone" ]; then
+        debug_log "ERROR: No zone selected!"
+        return
+    fi
+
+    # ✅ `selected_zone` を `zonename.ch` & `timezone.ch` に分割
+    local zonename=$(echo "$selected_zone" | cut -d ',' -f1)
+    local timezone=$(echo "$selected_zone" | cut -d ',' -f2)
+
+    # ✅ `zonename.ch` & `timezone.ch` に書き込み
     echo "$zonename" > "$cache_zonename"
     echo "$timezone" > "$cache_timezone"
 
+    # ✅ 書き込み禁止 (`rm` でのみ削除可能)
     chmod 444 "$cache_zonename" "$cache_timezone"
 
     debug_log "DEBUG: zonename.ch updated -> $(cat "$cache_zonename" 2>/dev/null)"
