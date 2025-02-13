@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-3-14"
+COMMON_VERSION="2025.02.13-3-15"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -198,31 +198,26 @@ selection_list() {
 
     # ✅ リストを表示する変数
     local display_list=""
-    local cache_list=""
     
-    # ✅ `input_data` を行ごとに処理
-    echo "$input_data" | while IFS= read -r line; do
+    # ✅ `input_data` を行ごとに処理し、直接ファイルに書き込む
+    while IFS= read -r line; do
         if [ "$mode" = "country" ]; then
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
             if [ -n "$extracted" ]; then
-                printf -v display_list "%s[%d] %s\n" "$display_list" "$i" "$extracted"
-                printf -v cache_list "%s%s\n" "$cache_list" "$line"
+                printf "[%d] %s\n" "$i" "$extracted"
+                echo "$i $line" >> "$list_file"
                 i=$((i + 1))
             fi
         elif [ "$mode" = "zone" ]; then
             if [ -n "$line" ]; then
-                printf -v display_list "%s[%d] %s\n" "$display_list" "$i" "$line"
-                printf -v cache_list "%s%d %s\n" "$cache_list" "$i" "$line"
+                printf "[%d] %s\n" "$i" "$line"
+                echo "$i $line" >> "$list_file"
                 i=$((i + 1))
             fi
         fi
-    done
+    done <<< "$input_data"
     
-    # ✅ 画面にリストを表示
-    printf "%b" "$display_list" | sed '/^$/d'
-    
-    # ✅ キャッシュに保存
-    printf "%b" "$cache_list" > "$list_file"
+    # ✅ `list_file` の内容をデバッグログに出力
     debug_log "DEBUG: $list_file content after writing -> $(cat "$list_file" 2>/dev/null)"
 
     # ✅ 選択処理
