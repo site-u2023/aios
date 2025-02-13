@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-2-8"
+COMMON_VERSION="2025.02.13-2-9"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -345,40 +345,55 @@ select_country() {
 #     - `zone_tmp.ch` が **空だったら、`select_country()` に戻る**
 #     - `zone_tmp.ch` の **`NO_TIMEZONE` は許可しない**
 #########################################################################
+#########################################################################
+# country_write: 選択された国情報をキャッシュに保存
+#
+# 【要件】
+# - `country.ch` に **該当行を丸ごと保存**（データの基準）
+# - `language.ch` に **$3（言語名）** を保存
+# - `luci.ch` に **$4（言語コード）** を保存
+# - `country_tmp.ch`（$1-$5）を作成
+# - `zone_tmp.ch`（$6-）を作成（ゾーン情報がない場合は `NO_TIMEZONE` を記録）
+# - `zonename.ch`、`timezone.ch` は `select_zone()` で作成
+#########################################################################
 country_write() {
     local selected_line="$1"
-
     debug_log "DEBUG: country_write() received line -> $selected_line"
 
-    # ✅ `country.ch` に該当行を **そのまま** 保存（最上位の基準）
+    # ✅ `country.ch` に該当行を **丸ごと** 保存（データの基準）
     echo "$selected_line" > "$CACHE_DIR/country.ch"
-    chattr +i "$CACHE_DIR/country.ch"  # 上書き禁止
-    sync
+    chmod 444 "$CACHE_DIR/country.ch"
     debug_log "DEBUG: country.ch updated -> $(cat "$CACHE_DIR/country.ch" 2>/dev/null)"
 
     # ✅ `language.ch` に `$3`（言語名）を保存
     echo "$selected_line" | awk '{print $3}' > "$CACHE_DIR/language.ch"
-    chattr +i "$CACHE_DIR/language.ch"  # 上書き禁止
+    chmod 444 "$CACHE_DIR/language.ch"
     debug_log "DEBUG: language.ch updated -> $(cat "$CACHE_DIR/language.ch" 2>/dev/null)"
 
     # ✅ `luci.ch` に `$4`（言語コード）を保存
     echo "$selected_line" | awk '{print $4}' > "$CACHE_DIR/luci.ch"
-    chattr +i "$CACHE_DIR/luci.ch"  # 上書き禁止
+    chmod 444 "$CACHE_DIR/luci.ch"
     debug_log "DEBUG: luci.ch updated -> $(cat "$CACHE_DIR/luci.ch" 2>/dev/null)"
 
     # ✅ `country_tmp.ch`（国情報）を作成（$1-$5）
     echo "$selected_line" | awk '{print $1, $2, $3, $4, $5}' > "$CACHE_DIR/country_tmp.ch"
     debug_log "DEBUG: country_tmp.ch created -> $(cat "$CACHE_DIR/country_tmp.ch" 2>/dev/null)"
 
-    # ✅ `zone_tmp.ch`（ゾーン情報）を作成（$6 以降、カンマ区切りのまま）
-    zone_info=$(echo "$selected_line" | cut -d' ' -f6-)
+    # ✅ `zone_tmp.ch`（ゾーン情報）を作成（$6-）
+    zone_info=$(echo "$selected_line" | awk '{$1=$2=$3=$4=$5=""; print substr($0,6)}')
     if [ -z "$zone_info" ]; then
-        debug_log "DEBUG: No timezone data found for this country. Returning to select_country()"
-        select_country
+        echo "NO_TIMEZONE" > "$CACHE_DIR/zone_tmp.ch"
     else
         echo "$zone_info" > "$CACHE_DIR/zone_tmp.ch"
-        debug_log "DEBUG: zone_tmp.ch created -> $(cat "$CACHE_DIR/zone_tmp.ch" 2>/dev/null)"
+    fi
+    debug_log "DEBUG: zone_tmp.ch content -> $(cat "$CACHE_DIR/zone_tmp.ch" 2>/dev/null)"
+
+    # ✅ `select_zone()` でゾーンを選択（ゾーン情報がある場合のみ）
+    if [ "$zone_info" != "NO_TIMEZONE" ]; then
         select_zone
+    else
+        debug_log "DEBUG: No timezone data found for this country. Returning to select_country()"
+        select_country
     fi
 }
 
