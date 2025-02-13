@@ -296,6 +296,8 @@ selection_list() {
             continue
         fi
 
+        local confirm_info=$(awk '{print $2, $3, $4, $5}' "$CACHE_DIR/country.ch" 2>/dev/null)
+        
         printf "%s\n" "$(color cyan "Confirm selection: [$choice] $selected_value")"
         printf "%s" "(Y/n)?: "
         read -r yn
