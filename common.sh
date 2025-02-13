@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-3-3"
+COMMON_VERSION="2025.02.13-3-5"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -173,60 +173,82 @@ selection_list() {
     local input_data="$1"
     local output_file="$2"
     local mode="$3"
-    local list_file="${CACHE_DIR}/zone_tmp.ch"
+    local list_file=""
     local i=1
+
+    # ✅ mode に応じて書き出し先を変更
+    if [ "$mode" = "country" ]; then
+        list_file="${CACHE_DIR}/country_tmp.ch"
+    elif [ "$mode" = "zone" ]; then
+        list_file="${CACHE_DIR}/zone_tmp.ch"
+    else
+        debug_log "ERROR: Invalid mode in selection_list() -> $mode"
+        return 1
+    fi
 
     echo -n "" > "$list_file"
     debug_log "DEBUG: input_data='$input_data'"
 
     echo "[0] Cancel / back to return"
-    if [ "$mode" = "country" ]; then
-        echo "$input_data" | while IFS= read -r line; do
-            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')  # ✅ `$2-$5` のみ表示
+    local display_list=""
+    local cache_list=""
+    
+    echo "$input_data" | while IFS= read -r line; do
+        if [ "$mode" = "country" ]; then
+            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
             if [ -n "$extracted" ]; then
-                echo "[$i] $extracted"
-                echo "$i $line" >> "$list_file"
+                display_list+="[$i] $extracted\n"
+                cache_list+="$line\n"
                 i=$((i + 1))
             fi
-        done
-    elif [ "$mode" = "zone" ]; then
-        echo "$input_data" | while IFS= read -r zone; do
-            if [ -n "$zone" ]; then
-                echo "[$i] $zone"
-                echo "$i $zone" >> "$list_file"
+        elif [ "$mode" = "zone" ]; then
+            if [ -n "$line" ]; then
+                display_list+="[$i] $line\n"
+                cache_list+="$i $line\n"
                 i=$((i + 1))
             fi
-        done
-    fi
+        fi
+    done
+    
+    # ✅ 画面にリストを表示
+    echo -e "$display_list"
+    
+    # ✅ キャッシュに保存
+    echo -e "$cache_list" > "$list_file"
+    debug_log "DEBUG: $list_file created -> $(cat "$list_file" 2>/dev/null)"
 
+    # ✅ 選択処理
     local choice=""
     while true; do
-        echo -n "$(color cyan "Enter the number of your choice: ")"
+        echo -n "$(color cyan \"Enter the number of your choice: \")"
         read choice
         if [ "$choice" = "0" ]; then
-            echo "$(color yellow "Returning to previous menu.")"
+            echo "$(color yellow \"Returning to previous menu.\")"
             return
         fi
-        selected_value=$(awk -v num="$choice" '$1 == num {print $2, $3, $4, $5}' "$list_file")
-        debug_log "DEBUG: selected_value -> $selected_value"
+        local selected_value=$(awk -v num="$choice" '$1 == num {print substr($0, index($0,$2))}' "$list_file")
         if [ -z "$selected_value" ]; then
-            echo "$(color red "Invalid selection. Please choose a valid number.")"
+            echo "$(color red \"Invalid selection. Please choose a valid number.\")"
             continue
         fi
-        
-        echo "$(color cyan "Confirm selection: [$choice] $selected_value")" 
+
+        echo "$(color cyan \"Confirm selection: [$choice] $selected_value\")"
         echo -n "(Y/n)?: "
         read yn
         case "$yn" in
             [Yy]*)
-                printf "%s\n" "$selected_value" > "$output_file" 
+                if [ "$mode" = "country" ]; then
+                    country_write "$selected_value"
+                elif [ "$mode" = "zone" ]; then
+                    zone_write "$selected_value"
+                fi
                 return
                 ;;
             [Nn]*)
-                echo "$(color yellow "Returning to selection.")"
+                echo "$(color yellow \"Returning to selection.\")"
                 ;;
             *)
-                echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
+                echo "$(color red \"Invalid input. Please enter 'Y' or 'N'.\")"
                 ;;
         esac
     done
@@ -260,7 +282,7 @@ selection_list() {
 #    - `language.ch` は一度書き込んだら変更しない
 #    - 言語の決定はすべて `select_country()` 内で完結させる
 #    - `normalize_country()` ではキャッシュを上書きしない
-#########################################################################
+########################################################################
 select_country() {
     debug_log "=== Entering select_country() ==="
 
@@ -369,30 +391,25 @@ country_write() {
 
     debug_log "DEBUG: country_write() received line -> '$selected_line'"
 
-    # ✅ country.ch に **該当行を丸ごと保存**（ゾーン情報含む）
-    echo "$selected_line" > "${CACHE_DIR}/country.ch"
-    debug_log "DEBUG: country.ch updated -> $(cat "${CACHE_DIR}/country.ch")"
+    # ✅ `country.ch` に該当行を **丸ごと** 保存（データの基準）
+    echo "$selected_line" > "$CACHE_DIR/country.ch"
+    debug_log "DEBUG: country.ch updated -> $(cat "$CACHE_DIR/country.ch" 2>/dev/null)"
 
-    # ✅ `$selected_line` から `$5` 以降のデータを取得
-    local country_code=$(echo "$selected_line" | awk '{print $5}')
-    local zone_data=$(echo "$selected_line" | awk '{$1=$2=$3=$4=$5=""; print substr($0,6)}')
+    # ✅ `language.ch` に `$5`（国コード）を保存
+    echo "$selected_line" | awk '{print $5}' > "$CACHE_DIR/language.ch"
+    debug_log "DEBUG: language.ch updated -> $(cat "$CACHE_DIR/language.ch" 2>/dev/null)"
 
-    # ✅ `language.ch` に **国コード ($5) を保存**
-    echo "$country_code" > "${CACHE_DIR}/language.ch"
-    debug_log "DEBUG: language.ch updated -> $(cat "${CACHE_DIR}/language.ch")"
-
-    # ✅ `luci.ch` に **言語コード ($4) を保存**
-    echo "$selected_line" | awk '{print $4}' > "${CACHE_DIR}/luci.ch"
-    debug_log "DEBUG: zone_tmp.ch created -> $(cat "${CACHE_DIR}/zone_tmp.ch")"
-
+    # ✅ `luci.ch` に `$4`（言語コード）を保存
+    echo "$selected_line" | awk '{print $4}' > "$CACHE_DIR/luci.ch"
+    debug_log "DEBUG: luci.ch updated -> $(cat "$CACHE_DIR/luci.ch" 2>/dev/null)"
 
     # ✅ `country_tmp.ch` に **$1-$5（基本情報）を保存**
     echo "$selected_line" | awk '{print $1, $2, $3, $4, $5}' > "${CACHE_DIR}/country_tmp.ch"
     debug_log "DEBUG: country_tmp.ch created -> $(cat "${CACHE_DIR}/country_tmp.ch")"
 
-    # ✅ `zone_tmp.ch` に **$6-（ゾーン情報）を保存**
-    echo "$zone_data" > "${CACHE_DIR}/zone_tmp.ch"
-    debug_log "DEBUG: zone_tmp.ch created -> $(cat "${CACHE_DIR}/zone_tmp.ch")"
+    # ✅ `zone_tmp.ch`（ゾーン情報）を作成（$6-）
+    echo "$selected_line" | awk '{$1=$2=$3=$4=$5=""; print substr($0,6)}' > "$CACHE_DIR/zone_tmp.ch"
+    debug_log "DEBUG: zone_tmp.ch created -> $(cat "$CACHE_DIR/zone_tmp.ch" 2>/dev/null)"
 
     # ✅ **デバッグ情報を詳細に追加**
     debug_log "DEBUG: Extracted country_code -> '$country_code'"
@@ -404,11 +421,10 @@ country_write() {
     chattr +i "${CACHE_DIR}/luci.ch" 2>/dev/null
 
     # ✅ `zone_tmp.ch` にデータがあれば `select_zone()` に進む
-    if [ -s "${CACHE_DIR}/zone_tmp.ch" ] && grep -q '[^[:space:]]' "${CACHE_DIR}/zone_tmp.ch"; then
+    if [ -s "$CACHE_DIR/zone_tmp.ch" ] && grep -q '[^[:space:]]' "$CACHE_DIR/zone_tmp.ch"; then
         select_zone
     else
         debug_log "ERROR: No timezone data found. Please reselect your country."
-        select_country
     fi
 }
 
