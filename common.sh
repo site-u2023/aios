@@ -297,16 +297,24 @@ select_country() {
 
     echo "$(color cyan "Select your country from the following options:")"
     selection_list "$search_results" "$tmp_country" "country"
+selected_value=$(cat "$tmp_country")
 
-    debug_log "DEBUG: country_tmp.ch content AFTER selection -> $(cat "$tmp_country" 2>/dev/null)"
+# ✅ `$selected_value` が空ならエラーを出して処理を中断
+if [ -z "$selected_value" ]; then
+    debug_log "ERROR: selected_value is empty!"
+    return 1
+fi
 
-    # ✅ `country_tmp.ch` のデータを `country_write()` に渡す
-    if [ -s "$tmp_country" ]; then
-        country_write "$(cat "$tmp_country")"
-    else
-        debug_log "DEBUG: tmp_country is empty! Retrying select_country()"
-        select_country
-    fi
+# ✅ `$5` 以降があるかチェック
+if ! echo "$selected_value" | awk '{print $5}'; then
+    debug_log "ERROR: selected_value missing expected fields!"
+    return 1
+fi
+
+# ✅ `country_write()` に渡す
+debug_log "DEBUG: Passing to country_write -> '$selected_value'"
+country_write "$selected_value"
+
 }
 
 #########################################################################
