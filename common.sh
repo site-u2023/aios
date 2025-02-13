@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-5-12"
+COMMON_VERSION="2025.02.13-5-13"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -242,7 +242,7 @@ select_country() {
 #     - 選択後に `Y/N` で確認
 #########################################################################
 #########################################################################
-# selection_list(): `[1]` をリスト表示時のみ追加し、データには含めない
+# selection_list(): `[1]` をリスト表示時にのみ追加し、データは生のまま保存
 #########################################################################
 selection_list() {
     local input_data="$1"
@@ -268,13 +268,13 @@ selection_list() {
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
             if [ -n "$extracted" ]; then
                 printf "[%d] %s\n" "$i" "$extracted"  # ✅ `[1]` を表示時のみ追加
-                echo "$line" >> "$list_file"  # ✅ データには `[1]` を含めない
+                echo "$line" >> "$list_file"  # ✅ `zone_tmp.ch` には `[1]` を付けずにそのまま保存
                 i=$((i + 1))
             fi
         elif [ "$mode" = "zone" ]; then
             if [ -n "$line" ]; then
-                printf "[%d] %s\n" "$i" "$line"  # ✅ `[1]` を表示時のみ追加
-                echo "$line" >> "$list_file"  # ✅ データには `[1]` を含めない
+                echo "$line" >> "$list_file"  # ✅ データは生のまま保存
+                printf "[%d] %s\n" "$i" "$line"  # ✅ `[1]` を表示の直前で追加
                 i=$((i + 1))
             fi
         fi
