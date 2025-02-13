@@ -375,7 +375,8 @@ country_write() {
 
     # ✅ `luci.ch` に **言語コード ($4) を保存**
     echo "$selected_line" | awk '{print $4}' > "${CACHE_DIR}/luci.ch"
-    debug_log "DEBUG: luci.ch updated -> $(cat "${CACHE_DIR}/luci.ch")")
+    debug_log "DEBUG: zone_tmp.ch created -> $(cat "${CACHE_DIR}/zone_tmp.ch")"
+
 
     # ✅ `country_tmp.ch` に **$1-$5（基本情報）を保存**
     echo "$selected_line" | awk '{print $1, $2, $3, $4, $5}' > "${CACHE_DIR}/country_tmp.ch"
