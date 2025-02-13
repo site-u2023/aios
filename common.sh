@@ -261,11 +261,23 @@ selection_list() {
     echo "[0] Cancel / back to return"
 
     echo "$input_data" | while IFS= read -r line; do
-        printf "[%d] %s\n" "$i" "$line"
-        echo "$i $line" >> "$list_file"
-        i=$((i + 1))
+        if [ "$mode" = "country" ]; then
+            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
+            if [ -n "$extracted" ]; then
+                printf "[%d] %s\n" "$i" "$extracted"
+                echo "$i $line" >> "$list_file"
+                i=$((i + 1))
+            fi
+        elif [ "$mode" = "zone" ]; then
+            if [ -n "$line" ]; then
+                printf "[%d] %s\n" "$i" "$line"
+                echo "$i $line" >> "$list_file"
+                i=$((i + 1))
+            fi
+        fi
     done
 
+    # ✅ 選択処理 (`YN 確認` & `[0] Cancel` を追加)
     local choice=""
     while true; do
         printf "%s" "$(color cyan "Enter the number of your choice: ")"
@@ -284,15 +296,11 @@ selection_list() {
             continue
         fi
 
-        # ✅ `Confirm selection:` に適切な情報を表示
-        local confirm_info=""
-        if [ "$mode" = "country" ]; then
-            confirm_info=$(cat "$CACHE_DIR/country.ch")
-        elif [ "$mode" = "zone" ]; then
-            confirm_info="$selected_value"
+        if [ -f "$CACHE_DIR/country.ch" ]; then
+            local country_info=$(awk '{print $2, $3, $4, $5}' "$CACHE_DIR/country.ch")
         fi
 
-        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info")"
+        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $country_info")"
         printf "%s" "(Y/n)?: "
         read -r yn
         case "$yn" in
@@ -362,13 +370,11 @@ country_write() {
         return
     fi
 
-    # ✅ `$1` を除外し `$2~$5` のみ `country.ch` に保存
-    local country_info=$(echo "$country_data" | awk '{print $2, $3, $4, $5}')
     local short_code=$(echo "$country_data" | awk '{print $5}')
     local luci_code=$(echo "$country_data" | awk '{print $4}')
     local zone_data=$(echo "$country_data" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i; print ""}')
 
-    echo "$country_info" > "$cache_country"
+    echo "$country_data" > "$cache_country"
     echo "$short_code" > "$cache_language"
     echo "$luci_code" > "$cache_luci"
     echo "$zone_data" > "$cache_zone"
@@ -387,6 +393,9 @@ country_write() {
 # [4] zonename.ch, timezone.ch を書き込み禁止にする
 #[5] → normalize_country()
 #########################################################################
+#########################################################################
+# select_zone(): ユーザーがゾーンを選択し、確定する
+#########################################################################
 select_zone() {
     local cache_zone="${CACHE_DIR}/zone.ch"
     local cache_zone_tmp="${CACHE_DIR}/zone_tmp.ch"
@@ -399,11 +408,11 @@ select_zone() {
         return
     fi
 
-    # ✅ `awk gsub()` でカンマを空白に変換し、偶数セットでリスト化しつつ `zonetemp.ch` に保存
-    awk '{gsub(",", " "); for (i=1; i<=NF; i+=2) print $i, $(i+1)}' "$cache_zone" > "$cache_zone_tmp"
+    # ✅ `awk gsub()` でカンマを空白に変換し、偶数セットでリスト化
+    local formatted_zone_list=$(awk '{gsub(",", " "); for (i=1; i<=NF; i+=2) print "["int(i/2+1)"]", $i, $(i+1)}' "$cache_zone")
 
     # ✅ `selection_list()` でゾーンを選択
-    selection_list "$(cat "$cache_zone_tmp")" "$cache_zone_tmp" "zone"
+    selection_list "$formatted_zone_list" "$cache_zone_tmp" "zone"
 
     # ✅ `zone_tmp.ch` からユーザーが選択したゾーンを取得
     local selected_zone=$(cat "$cache_zone_tmp" 2>/dev/null)
@@ -411,9 +420,13 @@ select_zone() {
         return
     fi
 
+    # ✅ `selected_zone` から `[1]` のリスト番号を削除し、ゾーンネームとタイムゾーンを取得
+    local zonename=$(echo "$selected_zone" | awk '{print $2}')
+    local timezone=$(echo "$selected_zone" | awk '{print $3}')
+
     # ✅ `zonename.ch` & `timezone.ch` に書き込み
-    echo "$selected_zone" | awk '{print $1}' > "$cache_zonename"
-    echo "$selected_zone" | awk '{print $2}' > "$cache_timezone"
+    echo "$zonename" > "$cache_zonename"
+    echo "$timezone" > "$cache_timezone"
 
     # ✅ 書き込み禁止 (`rm` でのみ削除可能)
     chmod 444 "$cache_zonename" "$cache_timezone"
