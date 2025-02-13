@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-3-6"
+COMMON_VERSION="2025.02.14-3-7"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -285,16 +285,16 @@ selection_list() {
         printf "%s" "$(color cyan "Enter the number of your choice: ")"
         read -r choice
 
-        # ✅ `choice` が無効ならリセットして再入力を促す
-        if ! echo "$choice" | grep -qE '^[0-9]+$'; then
-            choice=""
-            printf "%s\n" "$(color red "Invalid input. Please enter a valid number.")"
-            continue
-        fi
-
+        # ✅ `choice` が 0 の場合は `select_country()` に戻る
         if [ "$choice" = "0" ]; then
             printf "%s\n" "$(color yellow "Returning to previous menu.")"
-            return
+            return 1
+        fi
+
+        # ✅ 無効な入力を防ぐ
+        if ! echo "$choice" | grep -qE '^[0-9]+$'; then
+            printf "%s\n" "$(color red "Invalid input. Please enter a valid number.")"
+            continue
         fi
 
         local selected_value
@@ -316,11 +316,12 @@ selection_list() {
         read -r yn
         case "$yn" in
             [Yy]*) printf "%s\n" "$selected_value" > "$output_file"; return ;;
-            [Nn]*) printf "%s\n" "$(color yellow "Returning to selection.")" ;;
+            [Nn]*) printf "%s\n" "$(color yellow "Returning to selection.")"; return 1 ;;
             *) printf "%s\n" "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
         esac
     done
 }
+
 
 OK_0214_selection_list() {
     local input_data="$1"
