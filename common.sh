@@ -335,8 +335,8 @@ country_write() {
     debug_log "DEBUG: country_tmp.ch created -> $(cat "$CACHE_DIR/country_tmp.ch" 2>/dev/null)"
 
     # ✅ `zone_tmp.ch`（ゾーン情報）を作成（$6-）
-    echo "$selected_line" | awk '{$1=$2=$3=$4=$5=""; print substr($0,6)}' > "$CACHE_DIR/zone_tmp.ch"
-    debug_log "DEBUG: zone_tmp.ch created -> $(cat "$CACHE_DIR/zone_tmp.ch" 2>/dev/null)"
+    echo "$selected_line" | cut -d' ' -f6- > "$CACHE_DIR/zone_tmp.ch"
+    debug_log "DEBUG: zone_tmp.ch content AFTER extraction -> $(cat "$CACHE_DIR/zone_tmp.ch" 2>/dev/null)"
 
     # ✅ `zone_tmp.ch` にデータがあれば `select_zone()` に進む
     if [ -s "$CACHE_DIR/zone_tmp.ch" ] && grep -q '[^[:space:]]' "$CACHE_DIR/zone_tmp.ch"; then
