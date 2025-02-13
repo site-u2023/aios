@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-4-0"
+COMMON_VERSION="2025.02.13-4-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -196,7 +196,6 @@ select_country() {
 
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
 
-    # ✅ 言語の選択
     echo "$(color cyan "Enter country name, code, or language to search:")"
     printf "%s" "Please input: "
     read -r input
@@ -217,10 +216,10 @@ select_country() {
     # ✅ `selection_list()` で選択
     selection_list "$search_results" "$tmp_country" "country"
 
-    # ✅ `country_write()` で `country.ch`, `language.ch`, `luci.ch`, `zone.ch` を確定
+    # ✅ `country_write()` でキャッシュに確定
     country_write
 
-    # ✅ `select_zone()` で `zonename.ch`, `timezone.ch` を確定
+    # ✅ `select_zone()` を実行
     select_zone
 }
 
@@ -284,6 +283,35 @@ selection_list() {
 
     # ✅ デバッグログ
     debug_log "DEBUG: $list_file content after writing -> $(cat "$list_file" 2>/dev/null)"
+
+    # ✅ 選択処理
+    local choice=""
+    while true; do
+        printf "%s" "$(color cyan "Enter the number of your choice: ")"
+        read -r choice
+
+        if [ "$choice" = "0" ]; then
+            printf "%s\n" "$(color yellow "Returning to previous menu.")"
+            return
+        fi
+
+        local selected_value
+        selected_value=$(awk -v num="$choice" '$1 == num {print substr($0, index($0,$2))}' "$list_file")
+
+        if [ -z "$selected_value" ]; then
+            printf "%s\n" "$(color red "Invalid selection. Please choose a valid number.")"
+            continue
+        fi
+
+        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $selected_value")"
+        printf "%s" "(Y/n)?: "
+        read -r yn
+        case "$yn" in
+            [Yy]*) printf "%s\n" "$selected_value" > "$output_file"; return ;;
+            [Nn]*) printf "%s\n" "$(color yellow "Returning to selection.")" ;;
+            *) printf "%s\n" "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
+        esac
+    done
 }
 
 #########################################################################
@@ -333,6 +361,9 @@ selection_list() {
 # - `zone_tmp.ch`（$6-）を作成（ゾーン情報がない場合は `NO_TIMEZONE` を記録）
 # - `zonename.ch`、`timezone.ch` は `select_zone()` で作成
 #########################################################################
+#########################################################################
+# country_write(): 国の情報を確定し、書き込み禁止にする
+#########################################################################
 country_write() {
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
     local cache_country="${CACHE_DIR}/country.ch"
@@ -340,25 +371,21 @@ country_write() {
     local cache_luci="${CACHE_DIR}/luci.ch"
     local cache_zone="${CACHE_DIR}/zone.ch"
 
-    # ✅ `country_tmp.ch` からデータを取得
     local country_data=$(cat "$tmp_country" 2>/dev/null)
     if [ -z "$country_data" ]; then
         debug_log "ERROR: country_write() received empty country_data!"
         return
     fi
 
-    # ✅ 変数でデータを分割
     local short_code=$(echo "$country_data" | awk '{print $5}')
     local luci_code=$(echo "$country_data" | awk '{print $4}')
     local zone_data=$(echo "$country_data" | cut -d ' ' -f6-)
 
-    # ✅ キャッシュファイルへ書き込み
     echo "$country_data" > "$cache_country"
     echo "$short_code" > "$cache_language"
     echo "$luci_code" > "$cache_luci"
     echo "$zone_data" > "$cache_zone"
 
-    # ✅ 書き込み禁止 (`rm` でのみ削除可能)
     chmod 444 "$cache_country" "$cache_language" "$cache_luci" "$cache_zone"
 
     debug_log "DEBUG: country.ch updated -> $(cat "$cache_country" 2>/dev/null)"
@@ -375,28 +402,27 @@ country_write() {
 # [4] zonename.ch, timezone.ch を書き込み禁止にする
 #[5] → normalize_country()
 #########################################################################
+#########################################################################
+# select_zone(): ユーザーがゾーンを選択し、確定する
+#########################################################################
 select_zone() {
     local cache_zone="${CACHE_DIR}/zone.ch"
     local cache_zonename="${CACHE_DIR}/zonename.ch"
     local cache_timezone="${CACHE_DIR}/timezone.ch"
     local cache_zone_tmp="${CACHE_DIR}/zone_tmp.ch"
 
-    # ✅ `zone.ch` からデータを取得
     local zone_data=$(cat "$cache_zone" 2>/dev/null)
     if [ -z "$zone_data" ]; then
         debug_log "ERROR: select_zone() received empty zone_data!"
         return
     fi
 
-    # ✅ ゾーン名 & タイムゾーンを分離
     local zonename=$(echo "$zone_data" | cut -d ',' -f1)
     local timezone=$(echo "$zone_data" | cut -d ',' -f2)
 
-    # ✅ `zonename.ch` & `timezone.ch` に書き込み
     echo "$zonename" > "$cache_zonename"
     echo "$timezone" > "$cache_timezone"
 
-    # ✅ 書き込み禁止 (`rm` でのみ削除可能)
     chmod 444 "$cache_zonename" "$cache_timezone"
 
     debug_log "DEBUG: zonename.ch updated -> $(cat "$cache_zonename" 2>/dev/null)"
