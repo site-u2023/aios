@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-3-16"
+COMMON_VERSION="2025.02.13-3-18"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -390,45 +390,46 @@ select_country() {
 # - `zonename.ch`、`timezone.ch` は `select_zone()` で作成
 #########################################################################
 country_write() {
-    local selected_line="$1"
+    local cache_country="${CACHE_DIR}/country.ch"
+    local cache_language="${CACHE_DIR}/language.ch"
+    local cache_luci="${CACHE_DIR}/luci.ch"
+    local cache_zone="${CACHE_DIR}/zone.ch"
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
 
-    debug_log "DEBUG: country_write() received line -> '$selected_line'"
+    local country_data=$(cat "$tmp_country" 2>/dev/null)
 
-    # ✅ `country.ch` に該当行を **丸ごと** 保存（データの基準）
-    echo "$selected_line" > "$CACHE_DIR/country.ch"
-    debug_log "DEBUG: country.ch updated -> $(cat "$CACHE_DIR/country.ch" 2>/dev/null)"
+    debug_log "DEBUG: country_write() received line -> '$country_data'"
 
-    # ✅ `language.ch` に `$5`（国コード）を保存
-    echo "$selected_line" | awk '{print $5}' > "$CACHE_DIR/language.ch"
-    debug_log "DEBUG: language.ch updated -> $(cat "$CACHE_DIR/language.ch" 2>/dev/null)"
-
-    # ✅ `luci.ch` に `$4`（言語コード）を保存
-    echo "$selected_line" | awk '{print $4}' > "$CACHE_DIR/luci.ch"
-    debug_log "DEBUG: luci.ch updated -> $(cat "$CACHE_DIR/luci.ch" 2>/dev/null)"
-
-    # ✅ `country_tmp.ch` に **$1-$5（基本情報）を保存**
-    echo "$selected_line" | awk '{print $1, $2, $3, $4, $5}' > "${CACHE_DIR}/country_tmp.ch"
-    debug_log "DEBUG: country_tmp.ch created -> $(cat "${CACHE_DIR}/country_tmp.ch")"
-
-    # ✅ `zone_tmp.ch`（ゾーン情報）を作成（$6-）
-    echo "$selected_line" | awk '{$1=$2=$3=$4=$5=""; print substr($0,6)}' > "$CACHE_DIR/zone_tmp.ch"
-    debug_log "DEBUG: zone_tmp.ch created -> $(cat "$CACHE_DIR/zone_tmp.ch" 2>/dev/null)"
-
-    # ✅ **デバッグ情報を詳細に追加**
-    debug_log "DEBUG: Extracted country_code -> '$country_code'"
-    debug_log "DEBUG: Extracted zone_data -> '$zone_data'"
-
-    # ✅ `country.ch`, `language.ch`, `luci.ch` を **上書き禁止**
-    chattr +i "${CACHE_DIR}/country.ch" 2>/dev/null
-    chattr +i "${CACHE_DIR}/language.ch" 2>/dev/null
-    chattr +i "${CACHE_DIR}/luci.ch" 2>/dev/null
-
-    # ✅ `zone_tmp.ch` にデータがあれば `select_zone()` に進む
-    if [ -s "$CACHE_DIR/zone_tmp.ch" ] && grep -q '[^[:space:]]' "$CACHE_DIR/zone_tmp.ch"; then
-        select_zone
-    else
-        debug_log "ERROR: No timezone data found. Please reselect your country."
+    if [ -z "$country_data" ]; then
+        debug_log "ERROR: country_write() received empty country_data!"
+        return
     fi
+
+    # ✅ `country.ch` に全情報を保存
+    echo "$country_data" > "$cache_country"
+    chmod 444 "$cache_country"  # 書き込み禁止（rm は可能）
+    debug_log "DEBUG: country.ch updated -> $(cat "$cache_country" 2>/dev/null)"
+
+    # ✅ 言語コードを `language.ch` に保存
+    local lang_code=$(echo "$country_data" | awk '{print $4}')
+    echo "$lang_code" > "$cache_language"
+    chmod 444 "$cache_language"
+    debug_log "DEBUG: language.ch updated -> $lang_code"
+
+    # ✅ LuCI 言語コードを `luci.ch` に保存
+    local luci_lang=$(echo "$country_data" | awk '{print $3}')
+    echo "$luci_lang" > "$cache_luci"
+    chmod 444 "$cache_luci"
+    debug_log "DEBUG: luci.ch updated -> $luci_lang"
+
+    # ✅ タイムゾーン情報を `zone.ch` に分離
+    local zone_data=$(echo "$country_data" | cut -d ' ' -f6-)
+    echo "$zone_data" > "$cache_zone"
+    chmod 444 "$cache_zone"
+    debug_log "DEBUG: zone.ch created -> $(cat "$cache_zone" 2>/dev/null)"
+
+    # ✅ `select_zone()` に進む
+    select_zone
 }
 
 #########################################################################
@@ -438,11 +439,19 @@ country_write() {
 #########################################################################
 select_zone() {
     debug_log "=== Entering select_zone() ==="
-    local cache_zone="${CACHE_DIR}/zone_tmp.ch"
 
-    local zone_info=$(cat "$cache_zone")
-    if [ -z "$zone_info" ] || [ "$zone_info" = "NO_TIMEZONE" ]; then
-        echo "$(color red "ERROR: No timezone data found. Please reselect your country.")"
+    local cache_country="${CACHE_DIR}/country.ch"
+    local cache_zone="${CACHE_DIR}/zone_tmp.ch"
+    local cache_timezone="${CACHE_DIR}/timezone.ch"
+    local cache_zonename="${CACHE_DIR}/zonename.ch"
+
+    # ✅ `country.ch` からタイムゾーン情報を取得
+    local zone_info=$(awk '{for(i=6; i<=NF; i++) print $i}' "$cache_country")
+    echo "$zone_info" > "$cache_zone"
+    debug_log "DEBUG: zone_tmp.ch created -> $(cat "$cache_zone" 2>/dev/null)"
+
+    if [ -z "$zone_info" ]; then
+        debug_log "ERROR: No timezone data found. Please reselect your country."
         select_country
         return
     fi
@@ -450,25 +459,18 @@ select_zone() {
     echo "$(color cyan "Select your timezone from the following options:")"
     selection_list "$zone_info" "$cache_zone" "zone"
 
-    if [ -s "$cache_zone" ]; then
-        local selected_zone
-        selected_zone=$(cat "$cache_zone")
-        debug_log "DEBUG: selected_value -> $selected_zone"
+    # ✅ `zone_tmp.ch` からタイムゾーンとゾーンネームを分離して保存
+    local selected_zone=$(cat "$cache_zone")
+    local timezone=$(echo "$selected_zone" | awk '{print $2}')
+    local zonename=$(echo "$selected_zone" | awk '{print $1}')
 
-        # ✅ `zonename.ch` にゾーンネームを保存
-        echo "$selected_zone" | awk -F',' '{print $1}' > "$CACHE_DIR/zonename.ch"
-        chattr +i "$CACHE_DIR/zonename.ch" 2>/dev/null
-        debug_log "DEBUG: zonename.ch updated -> $(cat "$CACHE_DIR/zonename.ch" 2>/dev/null)"
+    echo "$timezone" > "$cache_timezone"
+    chmod 444 "$cache_timezone"
+    debug_log "DEBUG: timezone.ch updated -> $timezone"
 
-        # ✅ `timezone.ch` にタイムゾーンを保存
-        echo "$selected_zone" | awk -F',' '{print $2}' > "$CACHE_DIR/timezone.ch"
-        chattr +i "$CACHE_DIR/timezone.ch" 2>/dev/null
-        debug_log "DEBUG: timezone.ch updated -> $(cat "$CACHE_DIR/timezone.ch" 2>/dev/null)"
-
-        echo "$(color cyan "Confirm selection: $selected_zone")"
-    fi
-
-    debug_log "DEBUG: Final selection -> $(cat "$CACHE_DIR/timezone.ch")"
+    echo "$zonename" > "$cache_zonename"
+    chmod 444 "$cache_zonename"
+    debug_log "DEBUG: zonename.ch updated -> $zonename"
 }
 
 #########################################################################
