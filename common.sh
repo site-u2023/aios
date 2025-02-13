@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-2-4"
+COMMON_VERSION="2025.02.13-2-5"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -338,18 +338,21 @@ country_write() {
     debug_log "DEBUG: country_tmp.ch created -> $(cat "$CACHE_DIR/country_tmp.ch" 2>/dev/null)"
 
     # ✅ `zone_tmp.ch`（ゾーン情報）を作成（$6-）
-    zone_info=$(echo "$selected_line" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i}')
+    zone_info=$(echo "$selected_line" | cut -d' ' -f6-)
+    [ -z "$zone_info" ] && zone_info=$(echo "$selected_line" | awk -F',' '{for(i=6; i<=NF; i++) printf "%s ", $i}')
     [ -z "$zone_info" ] && zone_info="NO_TIMEZONE"
     echo "$zone_info" > "$CACHE_DIR/zone_tmp.ch"
     debug_log "DEBUG: zone_tmp.ch content AFTER extraction -> $(cat "$CACHE_DIR/zone_tmp.ch" 2>/dev/null)"
 
-    if [ -s "$CACHE_DIR/zone_tmp.ch" ] && grep -q '[^[:space:]]' "$CACHE_DIR/zone_tmp.ch"; then
+    zone_content=$(cat "$CACHE_DIR/zone_tmp.ch" 2>/dev/null)
+
+    if [ -s "$CACHE_DIR/zone_tmp.ch" ] && [ "$zone_content" != "NO_TIMEZONE" ]; then
         select_zone
     else
-        echo "$(color red "No timezone data found for this country. Returning to country selection.")"
+        echo "$(color red "No timezone data found for this country. Please reselect your country.")"
         debug_log "ERROR: No timezone data found for selected country."
         rm -f "$CACHE_DIR/country.ch"  # キャッシュをクリア
-        select_country  # ✅ ゾーンが無ければ国の選択に戻る
+        select_country
     fi
 }
 #########################################################################
