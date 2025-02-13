@@ -241,9 +241,6 @@ select_country() {
 #     - 入力データが空ならエラーを返す
 #     - 選択後に `Y/N` で確認
 #########################################################################
-#########################################################################
-# selection_list(): `[1]` をリスト表示時にのみ追加し、データは生のまま保存
-#########################################################################
 selection_list() {
     local input_data="$1"
     local output_file="$2"
@@ -263,17 +260,18 @@ selection_list() {
 
     echo "[0] Cancel / back to return"
 
+    # ✅ `[1]` をデータに含めず、生のまま `zone_tmp.ch` に保存
     echo "$input_data" | while IFS= read -r line; do
         if [ "$mode" = "country" ]; then
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
             if [ -n "$extracted" ]; then
                 printf "[%d] %s\n" "$i" "$extracted"  # ✅ `[1]` を表示時のみ追加
-                echo "$line" >> "$list_file"  # ✅ `zone_tmp.ch` には `[1]` を付けずにそのまま保存
+                echo "$line" >> "$list_file"  # ✅ `zone_tmp.ch` には `[1]` を含めず生のまま保存
                 i=$((i + 1))
             fi
         elif [ "$mode" = "zone" ]; then
             if [ -n "$line" ]; then
-                echo "$line" >> "$list_file"  # ✅ データは生のまま保存
+                echo "$line" >> "$list_file"  # ✅ `zone_tmp.ch` には `[1]` を含めず生のまま保存
                 printf "[%d] %s\n" "$i" "$line"  # ✅ `[1]` を表示の直前で追加
                 i=$((i + 1))
             fi
