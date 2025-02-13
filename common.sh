@@ -247,7 +247,6 @@ selection_list() {
     local mode="$3"
     local list_file=""
     local i=1
-    local display_list=""
 
     if [ "$mode" = "country" ]; then
         list_file="${CACHE_DIR}/country_tmp.ch"
@@ -257,35 +256,26 @@ selection_list() {
         return 1
     fi
 
-    # ✅ 無効な入力を防ぐ
-    while [ -z "$input_data" ]; do
-        printf "%s\n" "$(color red "Invalid input. Please enter a valid country or zone.")"
-        printf "%s" "$(color cyan "Please input again: ")"
-        read -r input_data
-    done
-
     : > "$list_file"
+
+    echo "[0] Cancel / back to return"
 
     echo "$input_data" | while IFS= read -r line; do
         if [ "$mode" = "country" ]; then
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
             if [ -n "$extracted" ]; then
-                display_list="${display_list}$(printf "[%d] %s\n" "$i" "$extracted")"
+                printf "[%d] %s\n" "$i" "$extracted"
                 echo "$line" >> "$list_file"
                 i=$((i + 1))
             fi
         elif [ "$mode" = "zone" ]; then
             if [ -n "$line" ]; then
                 echo "$line" >> "$list_file"
-                display_list="${display_list}$(printf "[%d] %s\n" "$i" "$line")"
+                printf "[%d] %s\n" "$i" "$line"
                 i=$((i + 1))
             fi
         fi
     done
-
-    # ✅ `[0] Cancel / back to return` をリストの最後に表示
-    printf "%s\n" "$display_list"
-    printf "[0] Cancel / back to return\n"
 
     local choice=""
     while true; do
@@ -321,6 +311,7 @@ selection_list() {
         esac
     done
 }
+
 
 #########################################################################
 # Last Update: 2025-02-13 14:18:00 (JST) 🚀
