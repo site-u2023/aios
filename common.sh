@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-4-6"
+COMMON_VERSION="2025.02.13-4-7"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -241,6 +241,9 @@ select_country() {
 #     - 入力データが空ならエラーを返す
 #     - 選択後に `Y/N` で確認
 #########################################################################
+#########################################################################
+# selection_list(): ユーザーがリストから選択し、一時キャッシュに保存
+#########################################################################
 selection_list() {
     local input_data="$1"
     local output_file="$2"
@@ -254,33 +257,23 @@ selection_list() {
     elif [ "$mode" = "zone" ]; then
         list_file="${CACHE_DIR}/zone_tmp.ch"
     else
-        debug_log "ERROR: Invalid mode in selection_list() -> $mode"
         return 1
     fi
 
     # ✅ キャッシュをクリア
     : > "$list_file"
-    debug_log "DEBUG: Cleared $list_file"
 
     echo "[0] Cancel / back to return"
 
-    # ✅ IFS=" " で空白区切りを処理（改行を保持）
-    echo "$input_data" | while IFS= read -r line; do
-        if [ "$mode" = "country" ]; then
-            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
-            if [ -n "$extracted" ]; then
-                printf "[%d] %s\n" "$i" "$extracted"
-                echo "$i $line" >> "$list_file"
-                i=$((i + 1))
-            fi
-        elif [ "$mode" = "zone" ]; then
-            if [ -n "$line" ]; then
-                printf "[%d] %s\n" "$i" "$line"
-                echo "$i $line" >> "$list_file"
-                i=$((i + 1))
-            fi
-        fi
+    # ✅ 空白区切りをそのまま利用してリスト化
+    IFS=" "
+    set -- $input_data
+    for item in "$@"; do
+        printf "[%d] %s\n" "$i" "$item"
+        echo "$i $item" >> "$list_file"
+        i=$((i + 1))
     done
+    unset IFS
 
     # ✅ 選択処理
     local choice=""
@@ -301,10 +294,9 @@ selection_list() {
             continue
         fi
 
+        local country_info=""
         if [ -f "$CACHE_DIR/country.ch" ]; then
-            local country_info=$(awk '{print $2, $3, $4, $5}' "$CACHE_DIR/country.ch")
-        else
-            local country_info="Unknown"
+            country_info=$(awk '{print $2, $3, $4, $5}' "$CACHE_DIR/country.ch")
         fi
 
         printf "%s\n" "$(color cyan "Confirm selection: [$choice] $country_info")"
@@ -406,9 +398,10 @@ country_write() {
 # [4] zonename.ch, timezone.ch を書き込み禁止にする
 #[5] → normalize_country()
 #########################################################################
+#########################################################################
+# select_zone(): ユーザーがゾーンを選択し、確定する
+#########################################################################
 select_zone() {
-    debug_log "=== Entering select_zone() ==="
-
     local cache_zone="${CACHE_DIR}/zone.ch"
     local cache_zone_tmp="${CACHE_DIR}/zone_tmp.ch"
     local cache_zonename="${CACHE_DIR}/zonename.ch"
@@ -417,7 +410,6 @@ select_zone() {
     # ✅ `zone.ch` からデータを取得
     local zone_data=$(cat "$cache_zone" 2>/dev/null)
     if [ -z "$zone_data" ]; then
-        debug_log "ERROR: select_zone() received empty zone_data!"
         return
     fi
 
@@ -427,13 +419,12 @@ select_zone() {
     # ✅ `zone_tmp.ch` からユーザーが選択したゾーンを取得
     local selected_zone=$(cat "$cache_zone_tmp" 2>/dev/null)
     if [ -z "$selected_zone" ]; then
-        debug_log "ERROR: No zone selected!"
         return
     fi
 
     # ✅ `selected_zone` を `zonename.ch` & `timezone.ch` に分割
-    local zonename=$(echo "$selected_zone" | awk '{print $1}')
-    local timezone=$(echo "$selected_zone" | awk '{print substr($0, index($0,$2))}')
+    local zonename=$(echo "$selected_zone" | awk -F ',' '{print $1}')
+    local timezone=$(echo "$selected_zone" | awk -F ',' '{print $2}')
 
     # ✅ `zonename.ch` & `timezone.ch` に書き込み
     echo "$zonename" > "$cache_zonename"
@@ -441,9 +432,6 @@ select_zone() {
 
     # ✅ 書き込み禁止 (`rm` でのみ削除可能)
     chmod 444 "$cache_zonename" "$cache_timezone"
-
-    debug_log "DEBUG: zonename.ch updated -> $(cat "$cache_zonename" 2>/dev/null)"
-    debug_log "DEBUG: timezone.ch updated -> $(cat "$cache_timezone" 2>/dev/null)"
 }
 
 #########################################################################
