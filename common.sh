@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-4-3"
+COMMON_VERSION="2025.02.13-4-4"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -303,7 +303,10 @@ selection_list() {
             continue
         fi
 
-        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $selected_value")"
+        # ✅ `country.ch` から $2 $3 $4 $5 を取得
+        local country_info=$(awk '{print $2, $3, $4, $5}' "$CACHE_DIR/country.ch")
+
+        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $country_info")"
         printf "%s" "(Y/n)?: "
         read -r yn
         case "$yn" in
@@ -417,20 +420,32 @@ select_zone() {
         return
     fi
 
-    # ✅ `zone.ch` のデータを `selection_list()` で選択
-    echo "$(color cyan "Select your timezone from the following options:")"
+    # ✅ カンマで分割し、リスト形式に整える
+    local formatted_zone_list=""
+    local i=1
+    echo "[0] Cancel / back to return"
+
+    echo "$zone_data" | awk -F ',' '{for (i=1; i<=NF; i++) print $i}' | while IFS= read -r line; do
+        if [ -n "$line" ]; then
+            printf "[%d] %s\n" "$i" "$line"
+            echo "$i $line" >> "$cache_zone_tmp"
+            i=$((i + 1))
+        fi
+    done
+
+    # ✅ `selection_list()` でゾーンを選択
     selection_list "$zone_data" "$cache_zone_tmp" "zone"
 
     # ✅ `zone_tmp.ch` からユーザーが選択したゾーンを取得
-    local selected_zone=$(cat "$cache_zone_tmp" 2>/dev/null)
+    local selected_zone=$(awk '{print substr($0, index($0,$2))}' "$cache_zone_tmp")
     if [ -z "$selected_zone" ]; then
         debug_log "ERROR: No zone selected!"
         return
     fi
 
     # ✅ `selected_zone` を `zonename.ch` & `timezone.ch` に分割
-    local zonename=$(echo "$selected_zone" | cut -d ',' -f1)
-    local timezone=$(echo "$selected_zone" | cut -d ',' -f2)
+    local zonename=$(echo "$selected_zone" | awk '{print $1}')
+    local timezone=$(echo "$selected_zone" | awk '{print $2}')
 
     # ✅ `zonename.ch` & `timezone.ch` に書き込み
     echo "$zonename" > "$cache_zonename"
