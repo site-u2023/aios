@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-5-9"
+COMMON_VERSION="2025.02.13-5-10"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -241,6 +241,9 @@ select_country() {
 #     - 入力データが空ならエラーを返す
 #     - 選択後に `Y/N` で確認
 #########################################################################
+#########################################################################
+# selection_list(): ユーザーがリストから選択し、一時キャッシュに保存
+#########################################################################
 selection_list() {
     local input_data="$1"
     local output_file="$2"
@@ -262,6 +265,7 @@ selection_list() {
 
     echo "$input_data" | while IFS= read -r line; do
         if [ "$mode" = "country" ]; then
+            # ✅ `$2~$5` のみ取得
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
             if [ -n "$extracted" ]; then
                 printf "[%d] %s\n" "$i" "$extracted"
@@ -270,13 +274,14 @@ selection_list() {
             fi
         elif [ "$mode" = "zone" ]; then
             if [ -n "$line" ]; then
-                echo "$line" >> "$list_file"  # ✅ `[1]` を付けずにそのまま保存
                 printf "[%d] %s\n" "$i" "$line"
+                echo "$i $line" >> "$list_file"
                 i=$((i + 1))
             fi
         fi
     done
 
+    # ✅ 選択処理 (`YN 確認` & `[0] Cancel` を追加)
     local choice=""
     while true; do
         printf "%s" "$(color cyan "Enter the number of your choice: ")"
@@ -295,8 +300,10 @@ selection_list() {
             continue
         fi
 
-        # ✅ `zonetemp.ch` のデータをそのまま `Confirm selection:` に表示
-        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $selected_value")"
+        # ✅ `Confirm selection:` のデータを `country_tmp.ch` から取得
+        local confirm_info=$(cat "$CACHE_DIR/country_tmp.ch" 2>/dev/null)
+
+        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info")"
         printf "%s" "(Y/n)?: "
         read -r yn
         case "$yn" in
