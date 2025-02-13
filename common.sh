@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-3-13"
+COMMON_VERSION="2025.02.13-3-14"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -205,7 +205,6 @@ selection_list() {
         if [ "$mode" = "country" ]; then
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
             if [ -n "$extracted" ]; then
-                # ✅ `printf` に変更
                 printf -v display_list "%s[%d] %s\n" "$display_list" "$i" "$extracted"
                 printf -v cache_list "%s%s\n" "$cache_list" "$line"
                 i=$((i + 1))
@@ -264,7 +263,6 @@ selection_list() {
     done
 }
 
-
 #########################################################################
 # Last Update: 2025-02-12 17:25:00 (JST) 🚀
 # "Precision in code, clarity in purpose. Every update refines the path."
@@ -301,24 +299,16 @@ select_country() {
     local cache_language="${CACHE_DIR}/luci.ch"
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
 
+    # ✅ すでにキャッシュが存在する場合はスキップ
     if [ -f "$cache_country" ] && [ -f "$cache_language" ]; then
         debug_log "Using cached country and language. Skipping selection."
         return
     fi
 
-    if [ -n "$1" ]; then
-        local input="$1"
-    else
-        local input=""
-    fi
-
+    local input=""
     echo "$(color cyan "Enter country name, code, or language to search:")"
-    if [ -n "$input" ]; then
-        echo "$(color yellow "Auto-selecting based on input: $input")"
-    else
-        echo -n "Please input: "
-        read input
-    fi
+    printf "%s" "Please input: "
+    read -r input
 
     if [ -z "$input" ]; then
         echo "$(color red "No input provided. Please enter a country code or name.")"
@@ -326,10 +316,12 @@ select_country() {
         return
     fi
 
-    search_results=$(awk -v search="$input" '
-        BEGIN {IGNORECASE=1}
-        $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}
-    ' "$BASE_DIR/country.db")
+    # ✅ `grep` を使用して部分一致検索
+    local search_results
+    search_results=$(grep -iE "\b$input\b" "$BASE_DIR/country.db")
+
+    # ✅ デバッグログ: 検索結果の確認
+    debug_log "DEBUG: search_results content -> $(echo "$search_results" | tr '\n' ';')"
 
     if [ -z "$search_results" ]; then
         echo "$(color red "No matching country found. Please try again.")"
@@ -338,19 +330,21 @@ select_country() {
     fi
 
     echo "$(color cyan "Select your country from the following options:")"
+
+    # ✅ `selection_list()` を修正後のものに変更
     selection_list "$search_results" "$tmp_country" "country"
 
-    # デバッグログ: `tmp_country` に選択結果があるか確認
+    # ✅ `country_tmp.ch` にデータがあるか確認
+    if [ ! -s "$tmp_country" ]; then
+        debug_log "ERROR: country_tmp.ch is empty! Retrying select_country()"
+        select_country
+        return
+    fi
+
     debug_log "DEBUG: country_tmp.ch content AFTER selection -> $(cat "$tmp_country" 2>/dev/null)"
 
-    # `tmp_country` が存在し、サイズが0以上なら `country_write()` を呼び出す
-    if [ -s "$tmp_country" ]; then
-        debug_log "DEBUG: Calling country_write() with selected country"
-        country_write
-    else
-        debug_log "DEBUG: tmp_country is empty! Retrying select_country()"
-        select_country
-    fi
+    # ✅ 正しく選択できた場合は `country_write()` を実行
+    country_write
 }
 
 #########################################################################
