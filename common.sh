@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-4-4"
+COMMON_VERSION="2025.02.13-4-5"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -264,25 +264,15 @@ selection_list() {
 
     echo "[0] Cancel / back to return"
 
-    echo "$input_data" | while IFS= read -r line; do
-        if [ "$mode" = "country" ]; then
-            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
-            if [ -n "$extracted" ]; then
-                printf "[%d] %s\n" "$i" "$extracted"
-                echo "$i $line" >> "$list_file"
-                i=$((i + 1))
-            fi
-        elif [ "$mode" = "zone" ]; then
-            if [ -n "$line" ]; then
-                printf "[%d] %s\n" "$i" "$line"
-                echo "$i $line" >> "$list_file"
-                i=$((i + 1))
-            fi
-        fi
+    # ✅ IFS=" " を設定して、空白区切りでリスト化
+    IFS=" "
+    set -- $input_data
+    for item in "$@"; do
+        printf "[%d] %s\n" "$i" "$item"
+        echo "$i $item" >> "$list_file"
+        i=$((i + 1))
     done
-
-    # ✅ デバッグログ
-    debug_log "DEBUG: $list_file content after writing -> $(cat "$list_file" 2>/dev/null)"
+    unset IFS
 
     # ✅ 選択処理
     local choice=""
@@ -303,7 +293,6 @@ selection_list() {
             continue
         fi
 
-        # ✅ `country.ch` から $2 $3 $4 $5 を取得
         local country_info=$(awk '{print $2, $3, $4, $5}' "$CACHE_DIR/country.ch")
 
         printf "%s\n" "$(color cyan "Confirm selection: [$choice] $country_info")"
@@ -405,6 +394,9 @@ country_write() {
 # [4] zonename.ch, timezone.ch を書き込み禁止にする
 #[5] → normalize_country()
 #########################################################################
+#########################################################################
+# select_zone(): ユーザーがゾーンを選択し、確定する
+#########################################################################
 select_zone() {
     debug_log "=== Entering select_zone() ==="
 
@@ -420,24 +412,11 @@ select_zone() {
         return
     fi
 
-    # ✅ カンマで分割し、リスト形式に整える
-    local formatted_zone_list=""
-    local i=1
-    echo "[0] Cancel / back to return"
-
-    echo "$zone_data" | awk -F ',' '{for (i=1; i<=NF; i++) print $i}' | while IFS= read -r line; do
-        if [ -n "$line" ]; then
-            printf "[%d] %s\n" "$i" "$line"
-            echo "$i $line" >> "$cache_zone_tmp"
-            i=$((i + 1))
-        fi
-    done
-
     # ✅ `selection_list()` でゾーンを選択
     selection_list "$zone_data" "$cache_zone_tmp" "zone"
 
     # ✅ `zone_tmp.ch` からユーザーが選択したゾーンを取得
-    local selected_zone=$(awk '{print substr($0, index($0,$2))}' "$cache_zone_tmp")
+    local selected_zone=$(cat "$cache_zone_tmp" 2>/dev/null)
     if [ -z "$selected_zone" ]; then
         debug_log "ERROR: No zone selected!"
         return
@@ -445,7 +424,7 @@ select_zone() {
 
     # ✅ `selected_zone` を `zonename.ch` & `timezone.ch` に分割
     local zonename=$(echo "$selected_zone" | awk '{print $1}')
-    local timezone=$(echo "$selected_zone" | awk '{print $2}')
+    local timezone=$(echo "$selected_zone" | awk '{print substr($0, index($0,$2))}')
 
     # ✅ `zonename.ch` & `timezone.ch` に書き込み
     echo "$zonename" > "$cache_zonename"
