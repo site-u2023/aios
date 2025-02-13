@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-3-10"
+COMMON_VERSION="2025.02.13-3-11"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -169,90 +169,51 @@ color_code_map() {
 #     - 入力データが空ならエラーを返す
 #     - 選択後に `Y/N` で確認
 #########################################################################
+# Fix: 2025-02-13 16:50
+
 selection_list() {
     local input_data="$1"
     local output_file="$2"
     local mode="$3"
-    local list_file=""
+    local list_file="${CACHE_DIR}/zone_tmp.ch"
+    local display_list=""
+    local cache_list=""
     local i=1
 
-    # ✅ mode に応じて書き出し先を変更
-    if [ "$mode" = "country" ]; then
-        list_file="${CACHE_DIR}/country_tmp.ch"
-    elif [ "$mode" = "zone" ]; then
-        list_file="${CACHE_DIR}/zone_tmp.ch"
-    else
-        debug_log "ERROR: Invalid mode in selection_list() -> $mode"
-        return 1
-    fi
-
-    echo -n "" > "$list_file"
+    > "$list_file"
     debug_log "DEBUG: input_data='$input_data'"
 
     echo "[0] Cancel / back to return"
-    local display_list=""
-    local cache_list=""
-    
-    echo "$input_data" | while IFS= read -r line; do
-        if [ "$mode" = "country" ]; then
+    if [ "$mode" = "country" ]; then
+        while IFS= read -r line; do
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
             if [ -n "$extracted" ]; then
-                display_list="$display_list[$i] $extracted\n"
-                cache_list="$cache_list$line\n"
+                display_list+="[$i] $extracted\n"
+                cache_list+="$i $line\n"
                 i=$((i + 1))
             fi
-        elif [ "$mode" = "zone" ]; then
-            if [ -n "$line" ]; then
-                display_list="$display_list[$i] $line\n"
-                cache_list="$cache_list$i $line\n"
-                i=$((i + 1))
-            fi
-        fi
-    done
-    
-    # ✅ 画面にリストを表示
+        done <<< "$input_data"
+    fi
+
     printf "%b" "$display_list"
-    
-    # ✅ キャッシュに保存
-    printf "%b" "$cache_list" > "$list_file"
-    debug_log "DEBUG: $list_file created -> $(cat "$list_file" 2>/dev/null)"
+    printf "%b" "$cache_list" > "$output_file"
 
-    # ✅ 選択処理
-    local choice=""
-    while true; do
-        printf "$(color cyan \"Enter the number of your choice: \")"
-        read choice
-        if [ "$choice" = "0" ]; then
-            echo "$(color yellow \"Returning to previous menu.\")"
-            return
-        fi
-        local selected_value=$(awk -v num="$choice" '$1 == num {print substr($0, index($0,$2))}' "$list_file")
-        if [ -z "$selected_value" ]; then
-            echo "$(color red \"Invalid selection. Please choose a valid number.\")"
-            continue
-        fi
+    debug_log "DEBUG: $output_file created -> $(cat "$output_file")"
 
-        echo "$(color cyan \"Confirm selection: [$choice] $selected_value\")"
-        echo -n "(Y/n)?: "
-        read yn
-        case "$yn" in
-            [Yy]*)
-                if [ "$mode" = "country" ]; then
-                    country_write "$selected_value"
-                elif [ "$mode" = "zone" ]; then
-                    zone_write "$selected_value"
-                fi
-                return
-                ;;
-            [Nn]*)
-                echo "$(color yellow \"Returning to selection.\")"
-                ;;
-            *)
-                echo "$(color red \"Invalid input. Please enter 'Y' or 'N'.\")"
-                ;;
-        esac
-    done
+    # Confirm selection
+    echo -n "Confirm selection (Y/n)?: "
+    read -r confirm_choice
+    case "$confirm_choice" in
+        [Nn]*)
+            echo "Selection cancelled. Returning to menu."
+            return 1
+            ;;
+        *)
+            echo "Selection confirmed. Proceeding."
+            ;;
+    esac
 }
+
 
 #########################################################################
 # Last Update: 2025-02-12 17:25:00 (JST) 🚀
