@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-3-11"
+COMMON_VERSION="2025.02.13-3-12"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -169,49 +169,99 @@ color_code_map() {
 #     - 入力データが空ならエラーを返す
 #     - 選択後に `Y/N` で確認
 #########################################################################
-# Fix: 2025-02-13 16:50
-
 selection_list() {
     local input_data="$1"
     local output_file="$2"
     local mode="$3"
-    local list_file="${CACHE_DIR}/zone_tmp.ch"
-    local display_list=""
-    local cache_list=""
+    local list_file=""
     local i=1
 
-    > "$list_file"
-    debug_log "DEBUG: input_data='$input_data'"
-
-    echo "[0] Cancel / back to return"
+    # ✅ mode に応じて書き出し先を変更
     if [ "$mode" = "country" ]; then
-        while IFS= read -r line; do
-            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
-            if [ -n "$extracted" ]; then
-                display_list+="[$i] $extracted\n"
-                cache_list+="$i $line\n"
-                i=$((i + 1))
-            fi
-        done <<< "$input_data"
+        list_file="${CACHE_DIR}/country_tmp.ch"
+    elif [ "$mode" = "zone" ]; then
+        list_file="${CACHE_DIR}/zone_tmp.ch"
+    else
+        debug_log "ERROR: Invalid mode in selection_list() -> $mode"
+        return 1
     fi
 
-    printf "%b" "$display_list"
-    printf "%b" "$cache_list" > "$output_file"
+    # ✅ `input_data` が空ならエラー
+    if [ -z "$input_data" ]; then
+        debug_log "ERROR: input_data is empty in selection_list()"
+        return 1
+    fi
 
-    debug_log "DEBUG: $output_file created -> $(cat "$output_file")"
+    # ✅ キャッシュファイルをクリア
+    : > "$list_file"
+    debug_log "DEBUG: Cleared $list_file"
 
-    # Confirm selection
-    echo -n "Confirm selection (Y/n)?: "
-    read -r confirm_choice
-    case "$confirm_choice" in
-        [Nn]*)
-            echo "Selection cancelled. Returning to menu."
-            return 1
-            ;;
-        *)
-            echo "Selection confirmed. Proceeding."
-            ;;
-    esac
+    # ✅ リストを表示する変数
+    local display_list=""
+    local cache_list=""
+    
+    # ✅ `input_data` を行ごとに処理
+    echo "$input_data" | while IFS= read -r line; do
+        if [ "$mode" = "country" ]; then
+            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
+            if [ -n "$extracted" ]; then
+                # ✅ `printf` に変更
+                printf -v display_list "%s[%d] %s\n" "$display_list" "$i" "$extracted"
+                printf -v cache_list "%s%s\n" "$cache_list" "$line"
+                i=$((i + 1))
+            fi
+        elif [ "$mode" = "zone" ]; then
+            if [ -n "$line" ]; then
+                printf -v display_list "%s[%d] %s\n" "$display_list" "$i" "$line"
+                printf -v cache_list "%s%d %s\n" "$cache_list" "$i" "$line"
+                i=$((i + 1))
+            fi
+        fi
+    done
+    
+    # ✅ 画面にリストを表示
+    printf "%b" "$display_list" | sed '/^$/d'
+    
+    # ✅ キャッシュに保存
+    printf "%b" "$cache_list" > "$list_file"
+    debug_log "DEBUG: $list_file content after writing -> $(cat "$list_file" 2>/dev/null)"
+
+    # ✅ 選択処理
+    local choice=""
+    while true; do
+        printf "%s" "$(color cyan "Enter the number of your choice: ")"
+        read -r choice
+        if [ "$choice" = "0" ]; then
+            printf "%s\n" "$(color yellow "Returning to previous menu.")"
+            return
+        fi
+        local selected_value
+        selected_value=$(awk -v num="$choice" '$1 == num {print substr($0, index($0,$2))}' "$list_file")
+        if [ -z "$selected_value" ]; then
+            printf "%s\n" "$(color red "Invalid selection. Please choose a valid number.")"
+            continue
+        fi
+
+        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $selected_value")"
+        printf "%s" "(Y/n)?: "
+        read -r yn
+        case "$yn" in
+            [Yy]*)
+                if [ "$mode" = "country" ]; then
+                    country_write "$selected_value"
+                elif [ "$mode" = "zone" ]; then
+                    zone_write "$selected_value"
+                fi
+                return
+                ;;
+            [Nn]*)
+                printf "%s\n" "$(color yellow "Returning to selection.")"
+                ;;
+            *)
+                printf "%s\n" "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
+                ;;
+        esac
+    done
 }
 
 
@@ -244,60 +294,66 @@ selection_list() {
 #    - 言語の決定はすべて `select_country()` 内で完結させる
 #    - `normalize_country()` ではキャッシュを上書きしない
 ########################################################################
-select_country() {
-    debug_log "=== Entering select_country() ==="
+selection_list() {
+    local input_data="$1"
+    local output_file="$2"
+    local mode="$3"
+    local list_file="${CACHE_DIR}/zone_tmp.ch"
+    local i=1
 
-    local cache_country="${CACHE_DIR}/country.ch"
-    local cache_language="${CACHE_DIR}/language.ch"
-    local tmp_country="${CACHE_DIR}/country_tmp.ch"
+    echo -n "" > "$list_file"
+    debug_log "DEBUG: input_data='$input_data'"
 
-    if [ -f "$cache_country" ] && [ -f "$cache_language" ]; then
-        debug_log "Using cached country and language. Skipping selection."
-        return
+    echo "[0] Cancel / back to return"
+    if [ "$mode" = "country" ]; then
+        echo "$input_data" | while IFS= read -r line; do
+            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')  # ✅ `$2-$5` のみ表示
+            if [ -n "$extracted" ]; then
+                echo "[$i] $extracted"
+                echo "$i $line" >> "$list_file"
+                i=$((i + 1))
+            fi
+        done
+    elif [ "$mode" = "zone" ]; then
+        echo "$input_data" | while IFS= read -r zone; do
+            if [ -n "$zone" ]; then
+                echo "[$i] $zone"
+                echo "$i $zone" >> "$list_file"
+                i=$((i + 1))
+            fi
+        done
     fi
 
-    echo "$(color cyan "Enter country name, code, or language to search:")"
-    read input
-
-    if [ -z "$input" ]; then
-        echo "$(color red "No input provided. Please enter a country code or name.")"
-        select_country
-        return
-    fi
-
-    search_results=$(awk -v search="$input" '
-        BEGIN {IGNORECASE=1}
-        $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}
-    ' "$BASE_DIR/country.db")
-
-    if [ -z "$search_results" ]; then
-        echo "$(color red "No matching country found. Please try again.")"
-        select_country
-        return
-    fi
-
-    debug_log "DEBUG: search_results content -> $(echo "$search_results" | tr '\n' ';')"
-
-    echo "$(color cyan "Select your country from the following options:")"
-    selection_list "$search_results" "$tmp_country" "country"
-selected_value=$(cat "$tmp_country")
-
-# ✅ `$selected_value` が空ならエラーを出して処理を中断
-if [ -z "$selected_value" ]; then
-    debug_log "ERROR: selected_value is empty!"
-    return 1
-fi
-
-# ✅ `$5` 以降があるかチェック
-if ! echo "$selected_value" | awk '{print $5}'; then
-    debug_log "ERROR: selected_value missing expected fields!"
-    return 1
-fi
-
-# ✅ `country_write()` に渡す
-debug_log "DEBUG: Passing to country_write -> '$selected_value'"
-country_write "$selected_value"
-
+    local choice=""
+    while true; do
+        echo -n "$(color cyan "Enter the number of your choice: ")"
+        read choice
+        if [ "$choice" = "0" ]; then
+            echo "$(color yellow "Returning to previous menu.")"
+            return
+        fi
+        local selected_value=$(awk -v num="$choice" '$1 == num {print substr($0, index($0,$2))}' "$list_file")
+        if [ -z "$selected_value" ]; then
+            echo "$(color red "Invalid selection. Please choose a valid number.")"
+            continue
+        fi
+        
+        echo "$(color cyan "Confirm selection: [$choice] $selected_value")" 
+        echo -n "(Y/n)?: "
+        read yn
+        case "$yn" in
+            [Yy]*)
+                printf "%s\n" "$selected_value" > "$output_file" 
+                return
+                ;;
+            [Nn]*)
+                echo "$(color yellow "Returning to selection.")"
+                ;;
+            *)
+                echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
+                ;;
+        esac
+    done
 }
 
 #########################################################################
