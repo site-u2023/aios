@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-4-9"
+COMMON_VERSION="2025.02.13-4-10"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -396,9 +396,6 @@ country_write() {
 # [4] zonename.ch, timezone.ch を書き込み禁止にする
 #[5] → normalize_country()
 #########################################################################
-#########################################################################
-# select_zone(): ユーザーがゾーンを選択し、確定する
-#########################################################################
 select_zone() {
     local cache_zone="${CACHE_DIR}/zone.ch"
     local cache_zone_tmp="${CACHE_DIR}/zone_tmp.ch"
@@ -411,8 +408,11 @@ select_zone() {
         return
     fi
 
+    # ✅ `awk gsub()` でカンマを空白に変換し、偶数セットでリスト化
+    local formatted_zone_list=$(awk '{gsub(",", " "); for (i=1; i<=NF; i+=2) print "["(i+1)/2"]", $i, $(i+1)}' "$cache_zone")
+
     # ✅ `selection_list()` でゾーンを選択
-    selection_list "$zone_data" "$cache_zone_tmp" "zone"
+    selection_list "$formatted_zone_list" "$cache_zone_tmp" "zone"
 
     # ✅ `zone_tmp.ch` からユーザーが選択したゾーンを取得
     local selected_zone=$(cat "$cache_zone_tmp" 2>/dev/null)
@@ -421,8 +421,8 @@ select_zone() {
     fi
 
     # ✅ `selected_zone` を `zonename.ch` & `timezone.ch` に分割
-    local zonename=$(echo "$selected_zone" | awk -F ',' '{print $1}')
-    local timezone=$(echo "$selected_zone" | awk -F ',' '{print $2}')
+    local zonename=$(echo "$selected_zone" | awk '{print $1}')
+    local timezone=$(echo "$selected_zone" | awk '{print $2}')
 
     # ✅ `zonename.ch` & `timezone.ch` に書き込み
     echo "$zonename" > "$cache_zonename"
