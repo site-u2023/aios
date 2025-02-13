@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-2-5"
+COMMON_VERSION="2025.02.13-2-6"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -319,14 +319,13 @@ country_write() {
 
     debug_log "DEBUG: country_write() received line -> $selected_line"
 
-    # ✅ `country.ch` に該当行を **丸ごと** 保存（データの基準）
+    # ✅ `country.ch` に該当行を **そのまま** 保存
     echo "$selected_line" > "$CACHE_DIR/country.ch"
+    sync
     debug_log "DEBUG: country.ch updated with -> $(cat "$CACHE_DIR/country.ch" 2>/dev/null)"
 
-    # ✅ `language.ch` に `$5`（国コード）を保存
-    lang_code=$(echo "$selected_line" | awk '{print $(NF-1)}')  # ✅ 後ろから2番目を取得
-    [ -z "$lang_code" ] && lang_code="UNKNOWN"
-    echo "$lang_code" > "$CACHE_DIR/language.ch"
+    # ✅ `language.ch` に `$3`（言語名）を保存
+    echo "$selected_line" | awk '{print $3}' > "$CACHE_DIR/language.ch"
     debug_log "DEBUG: language.ch updated -> $(cat "$CACHE_DIR/language.ch" 2>/dev/null)"
 
     # ✅ `luci.ch` に `$4`（言語コード）を保存
@@ -338,23 +337,28 @@ country_write() {
     debug_log "DEBUG: country_tmp.ch created -> $(cat "$CACHE_DIR/country_tmp.ch" 2>/dev/null)"
 
     # ✅ `zone_tmp.ch`（ゾーン情報）を作成（$6-）
-    zone_info=$(echo "$selected_line" | cut -d' ' -f6-)
-    [ -z "$zone_info" ] && zone_info=$(echo "$selected_line" | awk -F',' '{for(i=6; i<=NF; i++) printf "%s ", $i}')
+    zone_info=$(echo "$selected_line" | cut -d' ' -f6- | sed 's/,/ /g')
     [ -z "$zone_info" ] && zone_info="NO_TIMEZONE"
     echo "$zone_info" > "$CACHE_DIR/zone_tmp.ch"
+    sync
     debug_log "DEBUG: zone_tmp.ch content AFTER extraction -> $(cat "$CACHE_DIR/zone_tmp.ch" 2>/dev/null)"
 
-    zone_content=$(cat "$CACHE_DIR/zone_tmp.ch" 2>/dev/null)
+    # ✅ `zone_tmp.ch` が存在することを保証
+    if [ ! -s "$CACHE_DIR/zone_tmp.ch" ]; then
+        debug_log "DEBUG: zone_tmp.ch is empty. Creating placeholder file."
+        touch "$CACHE_DIR/zone_tmp.ch"
+    fi
 
-    if [ -s "$CACHE_DIR/zone_tmp.ch" ] && [ "$zone_content" != "NO_TIMEZONE" ]; then
+    # ✅ `zone_tmp.ch` にデータがあれば `select_zone()` に進む
+    if [ -s "$CACHE_DIR/zone_tmp.ch" ] && grep -q '[^[:space:]]' "$CACHE_DIR/zone_tmp.ch"; then
         select_zone
     else
         echo "$(color red "No timezone data found for this country. Please reselect your country.")"
         debug_log "ERROR: No timezone data found for selected country."
-        rm -f "$CACHE_DIR/country.ch"  # キャッシュをクリア
         select_country
     fi
 }
+
 #########################################################################
 # Last Update: 2025-02-12 17:25:00 (JST) 🚀
 # "Precision in code, clarity in purpose. Every update refines the path.""
