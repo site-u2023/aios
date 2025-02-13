@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-5-3"
+COMMON_VERSION="2025.02.13-5-5"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -241,6 +241,9 @@ select_country() {
 #     - 入力データが空ならエラーを返す
 #     - 選択後に `Y/N` で確認
 #########################################################################
+#########################################################################
+# selection_list(): ユーザーがリストから選択し、一時キャッシュに保存
+#########################################################################
 selection_list() {
     local input_data="$1"
     local output_file="$2"
@@ -284,15 +287,8 @@ selection_list() {
             continue
         fi
 
-        # ✅ `Confirm selection:` に `country_tmp.ch` を適用
-        local confirm_info=""
-        if [ "$mode" = "country" ]; then
-            confirm_info=$(cat "$CACHE_DIR/country_tmp.ch" 2>/dev/null)
-        elif [ "$mode" = "zone" ]; then
-            confirm_info="$selected_value"
-        fi
-
-        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info")"
+        # ✅ `Confirm selection:` の表示方法を元に戻す
+        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $selected_value")"
         printf "%s" "(Y/n)?: "
         read -r yn
         case "$yn" in
