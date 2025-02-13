@@ -474,9 +474,8 @@ select_zone() {
         return
     fi
 
-    # ✅ `[1]` を除去し、生データのまま `zone_tmp.ch` に保存
+    # ✅ 生データのまま `zone_tmp.ch` に保存
     local formatted_zone_list=$(awk '{gsub(",", " "); for (i=1; i<=NF; i+=2) print $i, $(i+1)}' "$cache_zone")
-    # local formatted_zone_list=$(awk '{gsub(",", " "); for (i=1; i<=NF; i+=2) print "["int(i/2+1)"]", $i, $(i+1)}' "$cache_zone")
     
     # ✅ `selection_list()` でゾーンを選択
     selection_list "$formatted_zone_list" "$cache_zone_tmp" "zone"
