@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-3-12"
+COMMON_VERSION="2025.02.13-3-13"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -294,66 +294,63 @@ selection_list() {
 #    - 言語の決定はすべて `select_country()` 内で完結させる
 #    - `normalize_country()` ではキャッシュを上書きしない
 ########################################################################
-selection_list() {
-    local input_data="$1"
-    local output_file="$2"
-    local mode="$3"
-    local list_file="${CACHE_DIR}/zone_tmp.ch"
-    local i=1
+select_country() {
+    debug_log "=== Entering select_country() ==="
 
-    echo -n "" > "$list_file"
-    debug_log "DEBUG: input_data='$input_data'"
+    local cache_country="${CACHE_DIR}/country.ch"
+    local cache_language="${CACHE_DIR}/luci.ch"
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
 
-    echo "[0] Cancel / back to return"
-    if [ "$mode" = "country" ]; then
-        echo "$input_data" | while IFS= read -r line; do
-            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')  # ✅ `$2-$5` のみ表示
-            if [ -n "$extracted" ]; then
-                echo "[$i] $extracted"
-                echo "$i $line" >> "$list_file"
-                i=$((i + 1))
-            fi
-        done
-    elif [ "$mode" = "zone" ]; then
-        echo "$input_data" | while IFS= read -r zone; do
-            if [ -n "$zone" ]; then
-                echo "[$i] $zone"
-                echo "$i $zone" >> "$list_file"
-                i=$((i + 1))
-            fi
-        done
+    if [ -f "$cache_country" ] && [ -f "$cache_language" ]; then
+        debug_log "Using cached country and language. Skipping selection."
+        return
     fi
 
-    local choice=""
-    while true; do
-        echo -n "$(color cyan "Enter the number of your choice: ")"
-        read choice
-        if [ "$choice" = "0" ]; then
-            echo "$(color yellow "Returning to previous menu.")"
-            return
-        fi
-        local selected_value=$(awk -v num="$choice" '$1 == num {print substr($0, index($0,$2))}' "$list_file")
-        if [ -z "$selected_value" ]; then
-            echo "$(color red "Invalid selection. Please choose a valid number.")"
-            continue
-        fi
-        
-        echo "$(color cyan "Confirm selection: [$choice] $selected_value")" 
-        echo -n "(Y/n)?: "
-        read yn
-        case "$yn" in
-            [Yy]*)
-                printf "%s\n" "$selected_value" > "$output_file" 
-                return
-                ;;
-            [Nn]*)
-                echo "$(color yellow "Returning to selection.")"
-                ;;
-            *)
-                echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
-                ;;
-        esac
-    done
+    if [ -n "$1" ]; then
+        local input="$1"
+    else
+        local input=""
+    fi
+
+    echo "$(color cyan "Enter country name, code, or language to search:")"
+    if [ -n "$input" ]; then
+        echo "$(color yellow "Auto-selecting based on input: $input")"
+    else
+        echo -n "Please input: "
+        read input
+    fi
+
+    if [ -z "$input" ]; then
+        echo "$(color red "No input provided. Please enter a country code or name.")"
+        select_country
+        return
+    fi
+
+    search_results=$(awk -v search="$input" '
+        BEGIN {IGNORECASE=1}
+        $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}
+    ' "$BASE_DIR/country.db")
+
+    if [ -z "$search_results" ]; then
+        echo "$(color red "No matching country found. Please try again.")"
+        select_country
+        return
+    fi
+
+    echo "$(color cyan "Select your country from the following options:")"
+    selection_list "$search_results" "$tmp_country" "country"
+
+    # デバッグログ: `tmp_country` に選択結果があるか確認
+    debug_log "DEBUG: country_tmp.ch content AFTER selection -> $(cat "$tmp_country" 2>/dev/null)"
+
+    # `tmp_country` が存在し、サイズが0以上なら `country_write()` を呼び出す
+    if [ -s "$tmp_country" ]; then
+        debug_log "DEBUG: Calling country_write() with selected country"
+        country_write
+    else
+        debug_log "DEBUG: tmp_country is empty! Retrying select_country()"
+        select_country
+    fi
 }
 
 #########################################################################
