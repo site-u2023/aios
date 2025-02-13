@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-2-2"
+COMMON_VERSION="2025.02.13-2-3"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -207,7 +207,8 @@ selection_list() {
             echo "$(color yellow "Returning to previous menu.")"
             return
         fi
-        local selected_value=$(awk -v num="$choice" '$1 == num {print $2, $3, $4, $5}' "$list_file")  # ✅ `$2-$5` のみ取得
+        selected_value=$(awk -F' ' -v num="$choice" '$1 == num {print $2, $3, $4, $5}' "$list_file")
+        debug_log "DEBUG: selected_value -> $selected_value" # ✅ `$2-$5` のみ取得
         if [ -z "$selected_value" ]; then
             echo "$(color red "Invalid selection. Please choose a valid number.")"
             continue
@@ -323,8 +324,9 @@ country_write() {
     debug_log "DEBUG: country.ch updated with -> $(cat "$CACHE_DIR/country.ch" 2>/dev/null)"
 
     # ✅ `language.ch` に `$5`（国コード）を保存
-    lang_code=$(echo "$selected_line" | awk '{print $5}')
-    [ -z "$lang_code" ] && lang_code="UNKNOWN"  # デフォルト値を設定
+    lang_code=$(echo "$selected_line" | awk -F' ' '{print $5}')
+    [ -z "$lang_code" ] && lang_code=$(echo "$selected_line" | awk -F',' '{print $5}')  # `,` 区切りも試す
+    [ -z "$lang_code" ] && lang_code="UNKNOWN"
     echo "$lang_code" > "$CACHE_DIR/language.ch"
     debug_log "DEBUG: language.ch updated -> $(cat "$CACHE_DIR/language.ch" 2>/dev/null)"
 
@@ -337,7 +339,9 @@ country_write() {
     debug_log "DEBUG: country_tmp.ch created -> $(cat "$CACHE_DIR/country_tmp.ch" 2>/dev/null)"
 
     # ✅ `zone_tmp.ch`（ゾーン情報）を作成（$6-）
-    echo "$selected_line" | cut -d' ' -f6- > "$CACHE_DIR/zone_tmp.ch"
+    zone_info=$(echo "$selected_line" | cut -d' ' -f6-)
+    [ -z "$zone_info" ] && zone_info=$(echo "$selected_line" | awk -F',' '{print $6}')
+    echo "$zone_info" > "$CACHE_DIR/zone_tmp.ch"
     debug_log "DEBUG: zone_tmp.ch content AFTER extraction -> $(cat "$CACHE_DIR/zone_tmp.ch" 2>/dev/null)"
 
     if [ -s "$CACHE_DIR/zone_tmp.ch" ] && grep -q '[^[:space:]]' "$CACHE_DIR/zone_tmp.ch"; then
