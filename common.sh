@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-4-5"
+COMMON_VERSION="2025.02.13-4-6"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -264,15 +264,23 @@ selection_list() {
 
     echo "[0] Cancel / back to return"
 
-    # ✅ IFS=" " を設定して、空白区切りでリスト化
-    IFS=" "
-    set -- $input_data
-    for item in "$@"; do
-        printf "[%d] %s\n" "$i" "$item"
-        echo "$i $item" >> "$list_file"
-        i=$((i + 1))
+    # ✅ IFS=" " で空白区切りを処理（改行を保持）
+    echo "$input_data" | while IFS= read -r line; do
+        if [ "$mode" = "country" ]; then
+            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
+            if [ -n "$extracted" ]; then
+                printf "[%d] %s\n" "$i" "$extracted"
+                echo "$i $line" >> "$list_file"
+                i=$((i + 1))
+            fi
+        elif [ "$mode" = "zone" ]; then
+            if [ -n "$line" ]; then
+                printf "[%d] %s\n" "$i" "$line"
+                echo "$i $line" >> "$list_file"
+                i=$((i + 1))
+            fi
+        fi
     done
-    unset IFS
 
     # ✅ 選択処理
     local choice=""
@@ -293,7 +301,11 @@ selection_list() {
             continue
         fi
 
-        local country_info=$(awk '{print $2, $3, $4, $5}' "$CACHE_DIR/country.ch")
+        if [ -f "$CACHE_DIR/country.ch" ]; then
+            local country_info=$(awk '{print $2, $3, $4, $5}' "$CACHE_DIR/country.ch")
+        else
+            local country_info="Unknown"
+        fi
 
         printf "%s\n" "$(color cyan "Confirm selection: [$choice] $country_info")"
         printf "%s" "(Y/n)?: "
@@ -393,9 +405,6 @@ country_write() {
 # [3] zone.ch から zonename.ch, timezone.ch を分離
 # [4] zonename.ch, timezone.ch を書き込み禁止にする
 #[5] → normalize_country()
-#########################################################################
-#########################################################################
-# select_zone(): ユーザーがゾーンを選択し、確定する
 #########################################################################
 select_zone() {
     debug_log "=== Entering select_zone() ==="
