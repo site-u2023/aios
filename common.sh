@@ -297,7 +297,9 @@ selection_list() {
         fi
 
         local confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $2, $3, $4, $5}')
-        
+        echo "=== DEBUG: confirm_info の内容 ==="
+        echo "$confirm_info"
+
         printf "%s\n" "$(color cyan "Confirm selection: [$choice] $selected_value")"
         printf "%s" "(Y/n)?: "
         read -r yn
