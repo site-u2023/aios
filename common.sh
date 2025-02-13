@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-3-8"
+COMMON_VERSION="2025.02.13-3-9"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -186,28 +186,25 @@ selection_list() {
         return 1
     fi
 
-    # ✅ ファイルをクリア
-    : > "$list_file"
+    echo -n "" > "$list_file"
     debug_log "DEBUG: input_data='$input_data'"
 
-    # ✅ リストを表示する変数
+    echo "[0] Cancel / back to return"
     local display_list=""
     local cache_list=""
     
-    # ✅ `input_data` を行ごとに処理
     echo "$input_data" | while IFS= read -r line; do
         if [ "$mode" = "country" ]; then
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
             if [ -n "$extracted" ]; then
-                # ✅ `printf` に変更
-                printf -v display_list "%s[%d] %s\n" "$display_list" "$i" "$extracted"
-                printf -v cache_list "%s%s\n" "$cache_list" "$line"
+                display_list="$display_list[$i] $extracted\n"
+                cache_list="$cache_list$line\n"
                 i=$((i + 1))
             fi
         elif [ "$mode" = "zone" ]; then
             if [ -n "$line" ]; then
-                printf -v display_list "%s[%d] %s\n" "$display_list" "$i" "$line"
-                printf -v cache_list "%s%d %s\n" "$cache_list" "$i" "$line"
+                display_list="$display_list[$i] $line\n"
+                cache_list="$cache_list$i $line\n"
                 i=$((i + 1))
             fi
         fi
@@ -218,26 +215,25 @@ selection_list() {
     
     # ✅ キャッシュに保存
     printf "%b" "$cache_list" > "$list_file"
-    debug_log "DEBUG: $list_file content after writing -> $(cat "$list_file" 2>/dev/null)"
+    debug_log "DEBUG: $list_file created -> $(cat "$list_file" 2>/dev/null)"
 
     # ✅ 選択処理
     local choice=""
     while true; do
-        printf "%s" "$(color cyan "Enter the number of your choice: ")"
+        printf "$(color cyan \"Enter the number of your choice: \")"
         read choice
         if [ "$choice" = "0" ]; then
-            printf "%s\n" "$(color yellow "Returning to previous menu.")"
+            echo "$(color yellow \"Returning to previous menu.\")"
             return
         fi
-        local selected_value
-        selected_value=$(awk -v num="$choice" '$1 == num {print substr($0, index($0,$2))}' "$list_file")
+        local selected_value=$(awk -v num="$choice" '$1 == num {print substr($0, index($0,$2))}' "$list_file")
         if [ -z "$selected_value" ]; then
-            printf "%s\n" "$(color red "Invalid selection. Please choose a valid number.")"
+            echo "$(color red \"Invalid selection. Please choose a valid number.\")"
             continue
         fi
 
-        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $selected_value")"
-        printf "%s" "(Y/n)?: "
+        echo "$(color cyan \"Confirm selection: [$choice] $selected_value\")"
+        echo -n "(Y/n)?: "
         read yn
         case "$yn" in
             [Yy]*)
@@ -249,15 +245,14 @@ selection_list() {
                 return
                 ;;
             [Nn]*)
-                printf "%s\n" "$(color yellow "Returning to selection.")"
+                echo "$(color yellow \"Returning to selection.\")"
                 ;;
             *)
-                printf "%s\n" "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
+                echo "$(color red \"Invalid input. Please enter 'Y' or 'N'.\")"
                 ;;
         esac
     done
 }
-
 
 #########################################################################
 # Last Update: 2025-02-12 17:25:00 (JST) 🚀
