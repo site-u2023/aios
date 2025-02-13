@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-1-5"
+COMMON_VERSION="2025.02.13-2-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -342,8 +342,9 @@ country_write() {
     if [ -s "$CACHE_DIR/zone_tmp.ch" ] && grep -q '[^[:space:]]' "$CACHE_DIR/zone_tmp.ch"; then
         select_zone
     else
-        echo "$(color red "No timezone data found for this country.")"
+        echo "$(color red "No timezone data found for this country. Returning to country selection.")"
         debug_log "ERROR: No timezone data found for selected country."
+        select_country  # ✅ ゾーンが無ければ国の選択に戻る
     fi
 }
 #########################################################################
