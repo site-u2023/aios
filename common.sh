@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-4-8"
+COMMON_VERSION="2025.02.13-4-9"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -241,9 +241,6 @@ select_country() {
 #     - 入力データが空ならエラーを返す
 #     - 選択後に `Y/N` で確認
 #########################################################################
-#########################################################################
-# selection_list(): ユーザーがリストから選択し、一時キャッシュに保存
-#########################################################################
 selection_list() {
     local input_data="$1"
     local output_file="$2"
@@ -251,7 +248,6 @@ selection_list() {
     local list_file=""
     local i=1
 
-    # ✅ mode に応じて書き出し先を変更
     if [ "$mode" = "country" ]; then
         list_file="${CACHE_DIR}/country_tmp.ch"
     elif [ "$mode" = "zone" ]; then
@@ -260,22 +256,28 @@ selection_list() {
         return 1
     fi
 
-    # ✅ キャッシュをクリア
     : > "$list_file"
 
     echo "[0] Cancel / back to return"
 
-    # ✅ 空白区切りをそのまま利用してリスト化
-    IFS=" "
-    set -- $input_data
-    for item in "$@"; do
-        printf "[%d] %s\n" "$i" "$item"
-        echo "$i $item" >> "$list_file"
-        i=$((i + 1))
+    echo "$input_data" | while IFS= read -r line; do
+        if [ "$mode" = "country" ]; then
+            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
+            if [ -n "$extracted" ]; then
+                printf "[%d] %s\n" "$i" "$extracted"
+                echo "$i $line" >> "$list_file"
+                i=$((i + 1))
+            fi
+        elif [ "$mode" = "zone" ]; then
+            if [ -n "$line" ]; then
+                printf "[%d] %s\n" "$i" "$line"
+                echo "$i $line" >> "$list_file"
+                i=$((i + 1))
+            fi
+        fi
     done
-    unset IFS
 
-    # ✅ 選択処理
+    # ✅ 選択処理 (`YN 確認` & `[0] Cancel` を追加)
     local choice=""
     while true; do
         printf "%s" "$(color cyan "Enter the number of your choice: ")"
@@ -294,9 +296,8 @@ selection_list() {
             continue
         fi
 
-        local country_info=""
         if [ -f "$CACHE_DIR/country.ch" ]; then
-            country_info=$(awk '{print $2, $3, $4, $5}' "$CACHE_DIR/country.ch")
+            local country_info=$(awk '{print $2, $3, $4, $5}' "$CACHE_DIR/country.ch")
         fi
 
         printf "%s\n" "$(color cyan "Confirm selection: [$choice] $country_info")"
@@ -358,7 +359,7 @@ selection_list() {
 # - `zonename.ch`、`timezone.ch` は `select_zone()` で作成
 #########################################################################
 #########################################################################
-# country_write(): 国の情報を確定し、書き込み禁止にする
+# country_write(): 国の情報を確定し、書き込み禁止にする（元の正常な動作に戻す）
 #########################################################################
 country_write() {
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
@@ -367,28 +368,21 @@ country_write() {
     local cache_luci="${CACHE_DIR}/luci.ch"
     local cache_zone="${CACHE_DIR}/zone.ch"
 
-    # ✅ `country_tmp.ch` からデータを取得
     local country_data=$(cat "$tmp_country" 2>/dev/null)
     if [ -z "$country_data" ]; then
-        debug_log "ERROR: country_write() received empty country_data!"
         return
     fi
 
-    # ✅ 変数でデータを分割
     local short_code=$(echo "$country_data" | awk '{print $5}')
     local luci_code=$(echo "$country_data" | awk '{print $4}')
-    local zone_data=$(echo "$country_data" | awk '{print substr($0, index($0, $6))}')
+    local zone_data=$(echo "$country_data" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i; print ""}')
 
-    # ✅ キャッシュファイルへ書き込み
     echo "$country_data" > "$cache_country"
     echo "$short_code" > "$cache_language"
     echo "$luci_code" > "$cache_luci"
     echo "$zone_data" > "$cache_zone"
 
-    # ✅ 書き込み禁止 (`rm` でのみ削除可能)
     chmod 444 "$cache_country" "$cache_language" "$cache_luci" "$cache_zone"
-
-    debug_log "DEBUG: country.ch updated -> $(cat "$cache_country" 2>/dev/null)"
 }
 
 #########################################################################
