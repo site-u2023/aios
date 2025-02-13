@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-3-1"
+COMMON_VERSION="2025.02.13-3-2"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -359,27 +359,35 @@ select_country() {
 country_write() {
     local selected_line="$1"
 
-    debug_log "DEBUG: country_write() received line -> $selected_line"
+    debug_log "DEBUG: country_write() received line -> '$selected_line'"
 
     # ✅ country.ch に **該当行を丸ごと保存**（ゾーン情報含む）
     echo "$selected_line" > "${CACHE_DIR}/country.ch"
     debug_log "DEBUG: country.ch updated -> $(cat "${CACHE_DIR}/country.ch")"
 
-    # ✅ `language.ch` に **$5（国コード）を保存**
-    echo "$selected_line" | awk '{print $5}' > "${CACHE_DIR}/language.ch"
+    # ✅ `$selected_line` から `$5` 以降のデータを取得
+    local country_code=$(echo "$selected_line" | awk '{print $5}')
+    local zone_data=$(echo "$selected_line" | awk '{$1=$2=$3=$4=$5=""; print substr($0,6)}')
+
+    # ✅ `language.ch` に **国コード ($5) を保存**
+    echo "$country_code" > "${CACHE_DIR}/language.ch"
     debug_log "DEBUG: language.ch updated -> $(cat "${CACHE_DIR}/language.ch")"
 
-    # ✅ `luci.ch` に **$4（言語コード）を保存**
+    # ✅ `luci.ch` に **言語コード ($4) を保存**
     echo "$selected_line" | awk '{print $4}' > "${CACHE_DIR}/luci.ch"
-    debug_log "DEBUG: luci.ch updated -> $(cat "${CACHE_DIR}/luci.ch")"
+    debug_log "DEBUG: luci.ch updated -> $(cat "${CACHE_DIR}/luci.ch")")
 
     # ✅ `country_tmp.ch` に **$1-$5（基本情報）を保存**
     echo "$selected_line" | awk '{print $1, $2, $3, $4, $5}' > "${CACHE_DIR}/country_tmp.ch"
     debug_log "DEBUG: country_tmp.ch created -> $(cat "${CACHE_DIR}/country_tmp.ch")"
 
     # ✅ `zone_tmp.ch` に **$6-（ゾーン情報）を保存**
-    echo "$selected_line" | awk '{$1=$2=$3=$4=$5=""; print substr($0,6)}' > "${CACHE_DIR}/zone_tmp.ch"
-    debug_log "DEBUG: zone_tmp.ch created -> $(cat "${CACHE_DIR}/zone_tmp.ch")")
+    echo "$zone_data" > "${CACHE_DIR}/zone_tmp.ch"
+    debug_log "DEBUG: zone_tmp.ch created -> $(cat "${CACHE_DIR}/zone_tmp.ch")"
+
+    # ✅ **デバッグ情報を詳細に追加**
+    debug_log "DEBUG: Extracted country_code -> '$country_code'"
+    debug_log "DEBUG: Extracted zone_data -> '$zone_data'"
 
     # ✅ `country.ch`, `language.ch`, `luci.ch` を **上書き禁止**
     chattr +i "${CACHE_DIR}/country.ch" 2>/dev/null
