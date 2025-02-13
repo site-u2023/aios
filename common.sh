@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-3-3"
+COMMON_VERSION="2025.02.14-3-4"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -247,6 +247,7 @@ selection_list() {
     local mode="$3"
     local list_file=""
     local i=1
+    local display_list=""
 
     if [ "$mode" = "country" ]; then
         list_file="${CACHE_DIR}/country_tmp.ch"
@@ -265,24 +266,26 @@ selection_list() {
 
     : > "$list_file"
 
-    echo "[0] Cancel / back to return"
-
     echo "$input_data" | while IFS= read -r line; do
         if [ "$mode" = "country" ]; then
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
             if [ -n "$extracted" ]; then
-                printf "[%d] %s\n" "$i" "$extracted"
+                display_list+=$(printf "[%d] %s\n" "$i" "$extracted")
                 echo "$line" >> "$list_file"
                 i=$((i + 1))
             fi
         elif [ "$mode" = "zone" ]; then
             if [ -n "$line" ]; then
                 echo "$line" >> "$list_file"
-                printf "[%d] %s\n" "$i" "$line"
+                display_list+=$(printf "[%d] %s\n" "$i" "$line")
                 i=$((i + 1))
             fi
         fi
     done
+
+    # ✅ `[0] Cancel / back to return` をリストの一番下に表示
+    printf "%s\n" "$display_list"
+    printf "[0] Cancel / back to return\n"
 
     local choice=""
     while true; do
