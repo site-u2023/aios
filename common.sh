@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-5-16"
+COMMON_VERSION="2025.02.13-5-18"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -474,8 +474,8 @@ select_zone() {
         return
     fi
 
-    # ✅ `awk gsub()` でカンマを空白に変換し、偶数セットでリスト化
-    local formatted_zone_list=$(awk '{gsub(",", " "); for (i=1; i<=NF; i+=2) print "["int(i/2+1)"]", $i, $(i+1)}' "$cache_zone")
+    # ✅ `[1]` を除去し、生データのまま `zone_tmp.ch` に保存
+    awk '{gsub(",", " "); for (i=1; i<=NF; i+=2) print $i, $(i+1)}' "$cache_zone" > "$cache_zone_tmp"
 
     # ✅ `selection_list()` でゾーンを選択
     selection_list "$formatted_zone_list" "$cache_zone_tmp" "zone"
