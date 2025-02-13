@@ -260,18 +260,19 @@ selection_list() {
 
     echo "[0] Cancel / back to return"
 
+    # ✅ `[1]` をデータに含めず、生のまま `zone_tmp.ch` に保存
     echo "$input_data" | while IFS= read -r line; do
         if [ "$mode" = "country" ]; then
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
             if [ -n "$extracted" ]; then
-                display_list "$i" "$extracted"  # ✅ `[1]` を表示時のみ追加
-                save_to_tmp "$line" "$list_file"  # ✅ `zone_tmp.ch` には `[1]` を含めず生のまま保存
+                printf "[%d] %s\n" "$i" "$extracted"  # ✅ `[1]` を表示時のみ追加
+                echo "$line" >> "$list_file"  # ✅ `zone_tmp.ch` には `[1]` を含めず生のまま保存
                 i=$((i + 1))
             fi
         elif [ "$mode" = "zone" ]; then
             if [ -n "$line" ]; then
-                save_to_tmp "$line" "$list_file"  # ✅ `zone_tmp.ch` には `[1]` を含めず生のまま保存
-                display_list "$i" "$line"  # ✅ `[1]` を表示の直前で追加
+                echo "$line" >> "$list_file"  # ✅ `zone_tmp.ch` には `[1]` を含めず生のまま保存
+                printf "[%d] %s\n" "$i" "$line"  # ✅ `[1]` を表示の直前で追加
                 i=$((i + 1))
             fi
         fi
