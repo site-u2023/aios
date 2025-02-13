@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-4-7"
+COMMON_VERSION="2025.02.13-4-8"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -367,21 +367,25 @@ country_write() {
     local cache_luci="${CACHE_DIR}/luci.ch"
     local cache_zone="${CACHE_DIR}/zone.ch"
 
+    # ✅ `country_tmp.ch` からデータを取得
     local country_data=$(cat "$tmp_country" 2>/dev/null)
     if [ -z "$country_data" ]; then
         debug_log "ERROR: country_write() received empty country_data!"
         return
     fi
 
+    # ✅ 変数でデータを分割
     local short_code=$(echo "$country_data" | awk '{print $5}')
     local luci_code=$(echo "$country_data" | awk '{print $4}')
-    local zone_data=$(echo "$country_data" | cut -d ' ' -f6-)
+    local zone_data=$(echo "$country_data" | awk '{print substr($0, index($0, $6))}')
 
+    # ✅ キャッシュファイルへ書き込み
     echo "$country_data" > "$cache_country"
     echo "$short_code" > "$cache_language"
     echo "$luci_code" > "$cache_luci"
     echo "$zone_data" > "$cache_zone"
 
+    # ✅ 書き込み禁止 (`rm` でのみ削除可能)
     chmod 444 "$cache_country" "$cache_language" "$cache_luci" "$cache_zone"
 
     debug_log "DEBUG: country.ch updated -> $(cat "$cache_country" 2>/dev/null)"
