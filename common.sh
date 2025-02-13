@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-3-18"
+COMMON_VERSION="2025.02.13-4-0"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -152,6 +152,79 @@ color_code_map() {
 
 # 🔵　ランゲージ系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
+# Last Update: 2025-02-12 17:25:00 (JST) 🚀
+# "Precision in code, clarity in purpose. Every update refines the path."
+# select_country: ユーザーに国の選択を促す（検索機能付き）
+#
+# 【要件】
+# 1. 役割:
+#    - 言語処理の入口として `$1` または `language.ch` を判定
+#    - `$1` が指定されている場合は最優先で処理
+#    - キャッシュ (`language.ch`) がある場合は、それを使用
+#    - どちらも無い場合、手動で選択させる
+#
+# 2. キャッシュ処理:
+#    - `language.ch` が存在する場合、それを使用し `normalize_country()` へ
+#    - キャッシュが無い場合、手動入力を求める
+#
+# 3. 言語コードの処理:
+#    - `$1` が `SUPPORTED_LANGUAGES` に含まれているかを確認
+#    - 含まれていなければ、手動で言語を選択させる
+#    - 選択後、キャッシュ (`language.ch`) に保存
+#
+# 4. フロー:
+#    - 言語の決定 → `normalize_country()` に進む
+#
+# 5. メンテナンス:
+#    - `language.ch` は一度書き込んだら変更しない
+#    - 言語の決定はすべて `select_country()` 内で完結させる
+#    - `normalize_country()` ではキャッシュを上書きしない
+# 
+# select_country()
+# ├── selection_list()  → 選択結果を country_tmp.ch に保存
+# ├── country_write()   → country.ch, language.ch, luci.ch, zone.ch に確定
+# └── select_zone()     → zone.ch から zonename.ch, timezone.ch に確定
+#
+# [1] ユーザーが国を選択 → selection_list()
+# [2] 一時キャッシュに保存 (country_tmp.ch)
+# [3] country_write() を実行
+# [4] 確定キャッシュを作成（country.ch, language.ch, luci.ch, zone.ch）→ 書き込み禁止にする
+# [5] select_zone() を実行
+#########################################################################
+select_country() {
+    debug_log "=== Entering select_country() ==="
+
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
+
+    # ✅ 言語の選択
+    echo "$(color cyan "Enter country name, code, or language to search:")"
+    printf "%s" "Please input: "
+    read -r input
+
+    if [ -z "$input" ]; then
+        debug_log "ERROR: No input provided. Please enter a country code or name."
+        return
+    fi
+
+    # ✅ `country.db` から検索
+    local search_results=$(awk -v search="$input" 'BEGIN {IGNORECASE=1} $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}' "$BASE_DIR/country.db")
+
+    if [ -z "$search_results" ]; then
+        debug_log "ERROR: No matching country found."
+        return
+    fi
+
+    # ✅ `selection_list()` で選択
+    selection_list "$search_results" "$tmp_country" "country"
+
+    # ✅ `country_write()` で `country.ch`, `language.ch`, `luci.ch`, `zone.ch` を確定
+    country_write
+
+    # ✅ `select_zone()` で `zonename.ch`, `timezone.ch` を確定
+    select_zone
+}
+
+#########################################################################
 # Last Update: 2025-02-12 16:12:39 (JST) 🚀
 # "Precision in code, clarity in purpose. Every update refines the path."
 #########################################################################
@@ -186,20 +259,12 @@ selection_list() {
         return 1
     fi
 
-    # ✅ `input_data` が空ならエラー
-    if [ -z "$input_data" ]; then
-        debug_log "ERROR: input_data is empty in selection_list()"
-        return 1
-    fi
-
-    # ✅ キャッシュファイルをクリア
+    # ✅ キャッシュをクリア
     : > "$list_file"
     debug_log "DEBUG: Cleared $list_file"
 
-    # ✅ リストを表示する
     echo "[0] Cancel / back to return"
 
-    # ✅ `input_data` を処理
     echo "$input_data" | while IFS= read -r line; do
         if [ "$mode" = "country" ]; then
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
@@ -217,129 +282,8 @@ selection_list() {
         fi
     done
 
-    # ✅ `list_file` の内容をデバッグログに出力
+    # ✅ デバッグログ
     debug_log "DEBUG: $list_file content after writing -> $(cat "$list_file" 2>/dev/null)"
-
-    # ✅ 選択処理
-    local choice=""
-    while true; do
-        printf "%s" "$(color cyan "Enter the number of your choice: ")"
-        read -r choice
-        if [ "$choice" = "0" ]; then
-            printf "%s\n" "$(color yellow "Returning to previous menu.")"
-            return
-        fi
-        local selected_value
-        selected_value=$(awk -v num="$choice" '$1 == num {print substr($0, index($0,$2))}' "$list_file")
-        if [ -z "$selected_value" ]; then
-            printf "%s\n" "$(color red "Invalid selection. Please choose a valid number.")"
-            continue
-        fi
-
-        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $selected_value")"
-        printf "%s" "(Y/n)?: "
-        read -r yn
-        case "$yn" in
-            [Yy]*)
-                if [ "$mode" = "country" ]; then
-                    country_write "$selected_value"
-                elif [ "$mode" = "zone" ]; then
-                    zone_write "$selected_value"
-                fi
-                return
-                ;;
-            [Nn]*)
-                printf "%s\n" "$(color yellow "Returning to selection.")"
-                ;;
-            *)
-                printf "%s\n" "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
-                ;;
-        esac
-    done
-}
-
-#########################################################################
-# Last Update: 2025-02-12 17:25:00 (JST) 🚀
-# "Precision in code, clarity in purpose. Every update refines the path."
-# select_country: ユーザーに国の選択を促す（検索機能付き）
-#
-# 【要件】
-# 1. 役割:
-#    - 言語処理の入口として `$1` または `language.ch` を判定
-#    - `$1` が指定されている場合は最優先で処理
-#    - キャッシュ (`language.ch`) がある場合は、それを使用
-#    - どちらも無い場合、手動で選択させる
-#
-# 2. キャッシュ処理:
-#    - `language.ch` が存在する場合、それを使用し `normalize_country()` へ
-#    - キャッシュが無い場合、手動入力を求める
-#
-# 3. 言語コードの処理:
-#    - `$1` が `SUPPORTED_LANGUAGES` に含まれているかを確認
-#    - 含まれていなければ、手動で言語を選択させる
-#    - 選択後、キャッシュ (`language.ch`) に保存
-#
-# 4. フロー:
-#    - 言語の決定 → `normalize_country()` に進む
-#
-# 5. メンテナンス:
-#    - `language.ch` は一度書き込んだら変更しない
-#    - 言語の決定はすべて `select_country()` 内で完結させる
-#    - `normalize_country()` ではキャッシュを上書きしない
-########################################################################
-select_country() {
-    debug_log "=== Entering select_country() ==="
-
-    local cache_country="${CACHE_DIR}/country.ch"
-    local cache_language="${CACHE_DIR}/luci.ch"
-    local tmp_country="${CACHE_DIR}/country_tmp.ch"
-
-    # ✅ すでにキャッシュが存在する場合はスキップ
-    if [ -f "$cache_country" ] && [ -f "$cache_language" ]; then
-        debug_log "Using cached country and language. Skipping selection."
-        return
-    fi
-
-    local input=""
-    echo "$(color cyan "Enter country name, code, or language to search:")"
-    printf "%s" "Please input: "
-    read -r input
-
-    if [ -z "$input" ]; then
-        echo "$(color red "No input provided. Please enter a country code or name.")"
-        select_country
-        return
-    fi
-
-    # ✅ `grep` を使用して部分一致検索
-    local search_results
-    search_results=$(grep -iE "\b$input\b" "$BASE_DIR/country.db")
-
-    # ✅ デバッグログ: 検索結果の確認
-    debug_log "DEBUG: search_results content -> $(echo "$search_results" | tr '\n' ';')"
-
-    if [ -z "$search_results" ]; then
-        echo "$(color red "No matching country found. Please try again.")"
-        select_country
-        return
-    fi
-
-    echo "$(color cyan "Select your country from the following options:")"
-
-    # ✅ `selection_list()` を修正後のものに変更
-    selection_list "$search_results" "$tmp_country" "country"
-
-    # ✅ `country_tmp.ch` にデータがあるか確認
-    if [ ! -s "$tmp_country" ]; then
-        debug_log "ERROR: country_tmp.ch is empty! Retrying select_country()"
-        select_country
-        return
-    fi
-
-    debug_log "DEBUG: country_tmp.ch content AFTER selection -> $(cat "$tmp_country" 2>/dev/null)"
-
-    # ✅ 正しく選択できた場合は `country_write()` を実行
-    country_write
 }
 
 #########################################################################
@@ -390,87 +334,73 @@ select_country() {
 # - `zonename.ch`、`timezone.ch` は `select_zone()` で作成
 #########################################################################
 country_write() {
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_language="${CACHE_DIR}/language.ch"
     local cache_luci="${CACHE_DIR}/luci.ch"
     local cache_zone="${CACHE_DIR}/zone.ch"
-    local tmp_country="${CACHE_DIR}/country_tmp.ch"
 
+    # ✅ `country_tmp.ch` からデータを取得
     local country_data=$(cat "$tmp_country" 2>/dev/null)
-
-    debug_log "DEBUG: country_write() received line -> '$country_data'"
-
     if [ -z "$country_data" ]; then
         debug_log "ERROR: country_write() received empty country_data!"
         return
     fi
 
-    # ✅ `country.ch` に全情報を保存
-    echo "$country_data" > "$cache_country"
-    chmod 444 "$cache_country"  # 書き込み禁止（rm は可能）
-    debug_log "DEBUG: country.ch updated -> $(cat "$cache_country" 2>/dev/null)"
-
-    # ✅ 言語コードを `language.ch` に保存
-    local lang_code=$(echo "$country_data" | awk '{print $4}')
-    echo "$lang_code" > "$cache_language"
-    chmod 444 "$cache_language"
-    debug_log "DEBUG: language.ch updated -> $lang_code"
-
-    # ✅ LuCI 言語コードを `luci.ch` に保存
-    local luci_lang=$(echo "$country_data" | awk '{print $3}')
-    echo "$luci_lang" > "$cache_luci"
-    chmod 444 "$cache_luci"
-    debug_log "DEBUG: luci.ch updated -> $luci_lang"
-
-    # ✅ タイムゾーン情報を `zone.ch` に分離
+    # ✅ 変数でデータを分割
+    local short_code=$(echo "$country_data" | awk '{print $5}')
+    local luci_code=$(echo "$country_data" | awk '{print $4}')
     local zone_data=$(echo "$country_data" | cut -d ' ' -f6-)
-    echo "$zone_data" > "$cache_zone"
-    chmod 444 "$cache_zone"
-    debug_log "DEBUG: zone.ch created -> $(cat "$cache_zone" 2>/dev/null)"
 
-    # ✅ `select_zone()` に進む
-    select_zone
+    # ✅ キャッシュファイルへ書き込み
+    echo "$country_data" > "$cache_country"
+    echo "$short_code" > "$cache_language"
+    echo "$luci_code" > "$cache_luci"
+    echo "$zone_data" > "$cache_zone"
+
+    # ✅ 書き込み禁止 (`rm` でのみ削除可能)
+    chmod 444 "$cache_country" "$cache_language" "$cache_luci" "$cache_zone"
+
+    debug_log "DEBUG: country.ch updated -> $(cat "$cache_country" 2>/dev/null)"
 }
 
 #########################################################################
 # Last Update: 2025-02-12 17:25:00 (JST) 🚀
 # "Precision in code, clarity in purpose. Every update refines the path.""
 # select_zone: 選択した国に対応するタイムゾーンを選択
+#
+# [1] ユーザーがゾーンを選択 ← zone.ch
+# [2] 一時キャッシュに保存 (zone_tmp.ch)
+# [3] zone.ch から zonename.ch, timezone.ch を分離
+# [4] zonename.ch, timezone.ch を書き込み禁止にする
+#[5] → normalize_country()
 #########################################################################
 select_zone() {
-    debug_log "=== Entering select_zone() ==="
-
-    local cache_country="${CACHE_DIR}/country.ch"
-    local cache_zone="${CACHE_DIR}/zone_tmp.ch"
-    local cache_timezone="${CACHE_DIR}/timezone.ch"
+    local cache_zone="${CACHE_DIR}/zone.ch"
     local cache_zonename="${CACHE_DIR}/zonename.ch"
+    local cache_timezone="${CACHE_DIR}/timezone.ch"
+    local cache_zone_tmp="${CACHE_DIR}/zone_tmp.ch"
 
-    # ✅ `country.ch` からタイムゾーン情報を取得
-    local zone_info=$(awk '{for(i=6; i<=NF; i++) print $i}' "$cache_country")
-    echo "$zone_info" > "$cache_zone"
-    debug_log "DEBUG: zone_tmp.ch created -> $(cat "$cache_zone" 2>/dev/null)"
-
-    if [ -z "$zone_info" ]; then
-        debug_log "ERROR: No timezone data found. Please reselect your country."
-        select_country
+    # ✅ `zone.ch` からデータを取得
+    local zone_data=$(cat "$cache_zone" 2>/dev/null)
+    if [ -z "$zone_data" ]; then
+        debug_log "ERROR: select_zone() received empty zone_data!"
         return
     fi
 
-    echo "$(color cyan "Select your timezone from the following options:")"
-    selection_list "$zone_info" "$cache_zone" "zone"
+    # ✅ ゾーン名 & タイムゾーンを分離
+    local zonename=$(echo "$zone_data" | cut -d ',' -f1)
+    local timezone=$(echo "$zone_data" | cut -d ',' -f2)
 
-    # ✅ `zone_tmp.ch` からタイムゾーンとゾーンネームを分離して保存
-    local selected_zone=$(cat "$cache_zone")
-    local timezone=$(echo "$selected_zone" | awk '{print $2}')
-    local zonename=$(echo "$selected_zone" | awk '{print $1}')
-
-    echo "$timezone" > "$cache_timezone"
-    chmod 444 "$cache_timezone"
-    debug_log "DEBUG: timezone.ch updated -> $timezone"
-
+    # ✅ `zonename.ch` & `timezone.ch` に書き込み
     echo "$zonename" > "$cache_zonename"
-    chmod 444 "$cache_zonename"
-    debug_log "DEBUG: zonename.ch updated -> $zonename"
+    echo "$timezone" > "$cache_timezone"
+
+    # ✅ 書き込み禁止 (`rm` でのみ削除可能)
+    chmod 444 "$cache_zonename" "$cache_timezone"
+
+    debug_log "DEBUG: zonename.ch updated -> $(cat "$cache_zonename" 2>/dev/null)"
+    debug_log "DEBUG: timezone.ch updated -> $(cat "$cache_timezone" 2>/dev/null)"
 }
 
 #########################################################################
