@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.13-5-5"
+COMMON_VERSION="2025.02.13-5-6"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -241,9 +241,6 @@ select_country() {
 #     - 入力データが空ならエラーを返す
 #     - 選択後に `Y/N` で確認
 #########################################################################
-#########################################################################
-# selection_list(): ユーザーがリストから選択し、一時キャッシュに保存
-#########################################################################
 selection_list() {
     local input_data="$1"
     local output_file="$2"
@@ -287,8 +284,15 @@ selection_list() {
             continue
         fi
 
-        # ✅ `Confirm selection:` の表示方法を元に戻す
-        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $selected_value")"
+        # ✅ `Confirm selection:` に適切な情報を表示
+        local confirm_info=""
+        if [ "$mode" = "country" ]; then
+            confirm_info=$(cat "$CACHE_DIR/country.ch")
+        elif [ "$mode" = "zone" ]; then
+            confirm_info="$selected_value"
+        fi
+
+        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info")"
         printf "%s" "(Y/n)?: "
         read -r yn
         case "$yn" in
@@ -345,12 +349,6 @@ selection_list() {
 # - `country_tmp.ch`（$1-$5）を作成
 # - `zone_tmp.ch`（$6-）を作成（ゾーン情報がない場合は `NO_TIMEZONE` を記録）
 # - `zonename.ch`、`timezone.ch` は `select_zone()` で作成
-#########################################################################
-#########################################################################
-# country_write(): 国の情報を確定し、書き込み禁止にする（元の正常な動作に戻す）
-#########################################################################
-#########################################################################
-# country_write(): 国の情報を確定し、書き込み禁止にする
 #########################################################################
 country_write() {
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
