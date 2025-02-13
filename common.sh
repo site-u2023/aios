@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-3-1"
+COMMON_VERSION="2025.02.14-3-2"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -253,6 +253,12 @@ selection_list() {
     elif [ "$mode" = "zone" ]; then
         list_file="${CACHE_DIR}/zone_tmp.ch"
     else
+        return 1
+    fi
+
+    # ✅ `input_data` が空の場合、無効な入力として再入力を促す
+    if [ -z "$input_data" ]; then
+        printf "%s\n" "$(color red "Invalid input. Please enter a valid country or zone.")"
         return 1
     fi
 
