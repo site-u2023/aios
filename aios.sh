@@ -4,6 +4,8 @@
 AIOS_VERSION="2025.02.15-0"
 echo -e "\033[7;40maios.sh Updated to version $AIOS_VERSION \033[0m"
 
+INPUT_LANG="${1:-}"
+
 BASE_WGET="wget --quiet -O"
 BASE_URL="https://raw.githubusercontent.com/site-u2023/aios/main"
 BASE_DIR="/tmp/aios"
