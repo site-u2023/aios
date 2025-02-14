@@ -216,6 +216,8 @@ select_country() {
     local lang_code="$1"
 
     # ✅ `$1`（言語コード）の真偽確認（common.sh の関数を使用）
+    debug_log "DEBUG: Checking if language is valid -> $lang_code"
+    
     if [ -n "$lang_code" ] && existing_language_check "$lang_code"; then
         debug_log "INFO: Valid language code detected -> $lang_code"
 
@@ -230,9 +232,14 @@ select_country() {
             country_write
 
             # ✅ 直接 `select_zone()` へ
+            debug_log "INFO: Skipping selection_list(), going to select_zone()"
             select_zone
             return
+        else
+            debug_log "ERROR: No matching country found in country.db for $lang_code"
         fi
+    else
+        debug_log "ERROR: Invalid language code -> $lang_code"
     fi
 
     # ✅ `$1` が無効なら、`country.ch`（キャッシュ）を確認
@@ -264,14 +271,18 @@ select_country() {
     fi
 
     # ✅ `selection_list()` で選択
+    debug_log "INFO: Calling selection_list() with search_results"
     selection_list "$search_results" "$tmp_country" "country"
 
     # ✅ `country_write()` でキャッシュに確定
+    debug_log "INFO: Calling country_write()"
     country_write
 
     # ✅ `select_zone()` を実行
+    debug_log "INFO: Calling select_zone()"
     select_zone
 }
+
 
 XXX_select_country() {
     debug_log "=== Entering select_country() ==="
