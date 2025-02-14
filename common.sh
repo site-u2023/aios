@@ -425,6 +425,8 @@ country_write() {
     echo "$zone_data" > "$cache_zone"
 
     chmod 444 "$cache_country" "$cache_language" "$cache_luci" "$cache_zone"
+
+    normalize_country
 }
 
 #########################################################################
@@ -495,33 +497,35 @@ select_zone() {
 #########################################################################
 normalize_country() {
     local message_db="${BASE_DIR}/messages.db"
-    local language_cache="${CACHE_DIR}/country.ch"
+    local country_cache="${CACHE_DIR}/country.ch"  # 主（真）データ
     local message_cache="${CACHE_DIR}/message.ch"
-    local tmp_country="${CACHE_DIR}/country_tmp.ch"
     local selected_language=""
 
-    if [ -f "$tmp_country" ]; then
-        selected_language=$(awk '{print $4}' "$tmp_country")
-        debug_log "Loaded language from country_tmp.ch -> $selected_language"
-    else
-        debug_log "No country_tmp.ch found. Selecting manually."
-        select_country
+    # ✅ `country.ch` が存在しない場合、エラーを返して終了
+    if [ ! -f "$country_cache" ]; then
+        debug_log "ERROR: country.ch not found. Cannot determine language."
         return
     fi
 
-    debug_log "DEBUG: Selected language before validation -> $selected_language"
+    # ✅ `country.ch` の $5（国コード）を取得
+    selected_language=$(awk '{print $5}' "$country_cache")
 
-    local supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
+    debug_log "DEBUG: Selected language extracted from country.ch -> $selected_language"
 
+    # ✅ `messages.db` からサポートされている言語を取得
+    local supported_languages
+    supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
+
+    # ✅ `selected_language` が `messages.db` にある場合、それを `message.ch` に設定
     if echo "$supported_languages" | grep -qw "$selected_language"; then
-        debug_log "Using message database language: $selected_language"
+        debug_log "INFO: Using message database language: $selected_language"
         echo "$selected_language" > "$message_cache"
     else
-        debug_log "Language '$selected_language' not found in messages.db. Using 'en' for system messages."
-        echo "en" > "$message_cache"
+        debug_log "WARNING: Language '$selected_language' not found in messages.db. Using 'en' as fallback."
+        echo "US" > "$message_cache"
     fi
 
-    debug_log "Final system message language -> $(cat "$message_cache")"
+    debug_log "INFO: Final system message language -> $(cat "$message_cache")"
 }
 
 # 🔴　ランゲージ（言語・ゾーン）系　ここまで　-------------------------------------------------------------------------------------------------------------------------------------------
