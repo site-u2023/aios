@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-3-10"
+COMMON_VERSION="2025.02.14-3-11"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -277,7 +277,7 @@ selection_list() {
         fi
     done
 
-    # ✅ デバッグでリスト内容を確認
+    # ✅ `list_file` の内容をデバッグ
     debug_log "DEBUG: $list_file content -> $(cat "$list_file" 2>/dev/null)"
 
     if [ -z "$display_list" ]; then
@@ -305,8 +305,8 @@ selection_list() {
         local selected_value
         selected_value=$(awk -v num="$choice" 'NR == num {print $0}' "$list_file")
 
-        # ✅ `selected_value` が空の場合のデバッグ出力
-        debug_log "DEBUG: selected_value after choice -> $selected_value"
+        # ✅ `selected_value` のデバッグ
+        debug_log "DEBUG: selected_value -> $selected_value"
 
         if [ -z "$selected_value" ]; then
             printf "%s\n" "$(color red "ERROR: Selected value is empty. Please select again.")"
@@ -315,10 +315,13 @@ selection_list() {
 
         local confirm_info=""
         if [ "$mode" = "country" ]; then
-            confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $2, $3, $4, $5}')
+            confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $2, $3, $4, $5; exit}')
         elif [ "$mode" = "zone" ]; then
             confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $1, $2}')
         fi
+
+        # ✅ `confirm_info` のデバッグ
+        debug_log "DEBUG: confirm_info -> $confirm_info"
 
         if [ -z "$confirm_info" ]; then
             printf "%s\n" "$(color red "Selection error. Please try again.")"
@@ -329,12 +332,22 @@ selection_list() {
         printf "%s" "(Y/n)?: "
         read -r yn
         case "$yn" in
-            [Yy]*) printf "%s\n" "$selected_value" > "$output_file"; return ;;
-            [Nn]*) printf "%s\n" "$(color yellow "Returning to selection.")"; return 1 ;;
-            *) printf "%s\n" "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
+            [Yy]*) 
+                printf "%s\n" "$selected_value" > "$output_file"
+                debug_log "DEBUG: Saved to $output_file -> $(cat "$output_file" 2>/dev/null)"
+                return 
+                ;;
+            [Nn]*) 
+                printf "%s\n" "$(color yellow "Returning to selection.")"
+                return 1 
+                ;;
+            *) 
+                printf "%s\n" "$(color red "Invalid input. Please enter 'Y' or 'N'.")" 
+                ;;
         esac
     done
 }
+
 
 
 OK_0214_selection_list() {
