@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-5-6"
+COMMON_VERSION="2025.02.14-5-7"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -196,18 +196,19 @@ color_code_map() {
 select_country() {
     debug_log "INFO" "Entering select_country() with arg: '$1'"
 
-    local cache_country="/tmp/aios/cache/country.ch"
+    local cache_country="${CACHE_DIR}/country.ch"
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
 
     # ✅ `$1` がある場合、`country.db` で検索
     if [ -n "$1" ]; then
         debug_log "INFO" "Processing input: $1"
 
         local predefined_country=$(awk -v search="$1" 'BEGIN {IGNORECASE=1} 
-            $2 == search || $3 == search || $4 == search || $5 == search {print $0}' "/tmp/aios/country.db")
+            $2 == search || $3 == search || $4 == search || $5 == search {print $0}' "$BASE_DIR/country.db")
 
         if [ -n "$predefined_country" ]; then
             debug_log "INFO" "Found country entry: $predefined_country"
-            echo "$predefined_country" > "/tmp/aios/cache/country_tmp.ch"
+            echo "$predefined_country" > "$tmp_country"
             country_write
             select_zone  # ✅ `$1` が `country.db` にあるならゾーン選択へ
             return
@@ -219,10 +220,10 @@ select_country() {
     # ✅ `$1` が `country.db` にない場合、`country.ch` を確認
     if [ -f "$cache_country" ]; then
         debug_log "INFO" "Country cache found. Language-related processing is complete."
-        return  # ✅ `country_write()` は不要、以降の処理なし
+        return  # ✅ 言語処理はすべて終了（以降の処理なし）
     fi
 
-    # ✅ `# 🔵 ランゲージ系 ここから 🔵` に基づき、言語選択を実行
+    # ✅ `$1` も `country.ch` も無い場合 → 言語選択モード
     echo "$(color cyan "Enter country name, code, or language to search:")"
     printf "%s" "Please input: "
     read -r input
@@ -232,17 +233,22 @@ select_country() {
         return
     fi
 
-    local predefined_country=$(awk -v search="$input" 'BEGIN {IGNORECASE=1} 
-        $2 == search || $3 == search || $4 == search || $5 == search {print $0}' "/tmp/aios/country.db")
+    # ✅ `country.db` から検索
+    local search_results=$(awk -v search="$input" 'BEGIN {IGNORECASE=1} 
+        $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}' "$BASE_DIR/country.db")
 
-    if [ -n "$predefined_country" ]; then
-        debug_log "INFO" "Found country entry: $predefined_country"
-        echo "$predefined_country" > "/tmp/aios/cache/country_tmp.ch"
-        country_write
-        select_zone
-    else
-        debug_log "WARNING" "Invalid country selected. Returning to main menu."
+    if [ -z "$search_results" ]; then
+        debug_log "ERROR" "No matching country found."
+        return
     fi
+
+    # ✅ `selection_list()` で選択
+    selection_list "$search_results" "$tmp_country" "country"
+
+    # ✅ `country_write()` でキャッシュに確定
+    country_write
+
+    # ✅ `select_zone()` は不要（言語系終了）
 }
 
 XXX_select_country() {
