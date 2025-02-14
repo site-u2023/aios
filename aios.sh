@@ -20,11 +20,21 @@ echo "Initialized aios"
 mkdir -p "$BASE_DIR" "$CACHE_DIR" "$LOG_DIR"
 
 # 環境変数の確認
-echo "aios.sh received INPUT_LANG: '$INPUT_LANG' and DEBUG_MODE: '$DEBUG_MODE'"
+if [ -f "$COMMON_SH" ]; then
+    . "$COMMON_SH"
+else
+    echo "ERROR: Failed to load common.sh"
+    exit 1
+fi
 
 # `common.sh` のダウンロード
 echo "Downloading latest version of common.sh"
 ${BASE_WGET} "$COMMON_SH" "$BASE_URL/common.sh"
+
+# `check_common` の実行
+check_common "$INPUT_LANG"
+
+debug_log "INFO" "aios.sh received INPUT_LANG: '$INPUT_LANG' and DEBUG_MODE: '$DEBUG_MODE'"
 
 # `common.sh` の読み込み
 if [ -f "$COMMON_SH" ]; then
@@ -45,5 +55,4 @@ echo "Installing aios command to /usr/bin/aios"
 ${BASE_WGET} "$BIN_PATH" "$BASE_URL/aios"
 chmod +x "$BIN_PATH"
 
-# `check_common` の実行
-check_common "$INPUT_LANG"
+
