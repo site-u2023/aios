@@ -14,7 +14,11 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 mkdir -p "$CACHE_DIR" "$LOG_DIR"
 DEBUG_MODE="${DEBUG_MODE:-false}"
-   
+
+# 環境変数 INPUT_LANG のチェック（デフォルト 'ja' とする）
+INPUT_LANG="${INPUT_LANG:-ja}"
+debug_log "common.sh received INPUT_LANG: '$INPUT_LANG'"
+
 script_update() (
     COMMON_CACHE="${CACHE_DIR}/common_version.ch"
     # キャッシュが存在しない、またはバージョンが異なる場合にアラートを表示
@@ -31,10 +35,6 @@ debug_log() {
     local message="$1"
     [ "$DEBUG_MODE" = true ] && echo "DEBUG: $message" | tee -a "$LOG_DIR/debug.log"
 }
-
-# 環境変数 INPUT_LANG のチェック（デフォルト 'ja' とする）
-INPUT_LANG="${INPUT_LANG:-ja}"
-debug_log "common.sh received INPUT_LANG: '$INPUT_LANG'"
 
 #########################################################################
 # テスト用関数: データ取得を個別に確認
