@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-5-11"
+COMMON_VERSION="2025.02.14-5-12"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -330,10 +330,11 @@ selection_list() {
     local display_list=""
     local cache_list=""
 
+    # ✅ `input_data` を処理
     echo "$input_data" | while IFS= read -r line; do
         if [ -n "$line" ]; then
-            printf -v display_list "%s[%d] %s\n" "$display_list" "$i" "$line"
-            printf -v cache_list "%s%d %s\n" "$cache_list" "$i" "$line"
+            display_list="${display_list}[$i] $line\n"
+            cache_list="${cache_list}$i $line\n"
             i=$((i + 1))
         fi
     done
@@ -361,8 +362,9 @@ selection_list() {
             return
         fi
 
+        # ✅ `awk` の `-v` を使わず `grep` で `choice` を検索
         local selected_value
-        selected_value=$(awk -v num="$choice" '$1 == num {print substr($0, index($0,$2))}' "$list_file")
+        selected_value=$(grep "^$choice " "$list_file" | sed "s/^$choice //")
 
         if [ -z "$selected_value" ]; then
             printf "%s\n" "$(color red "Invalid selection. Please choose a valid number.")"
@@ -386,6 +388,7 @@ selection_list() {
         esac
     done
 }
+
 
 XXX_2014_03_selection_list() {
     local input_data="$1"
