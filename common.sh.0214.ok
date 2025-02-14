@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-3-1"
+COMMON_VERSION="2025.02.14-11-2"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -14,7 +14,11 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 mkdir -p "$CACHE_DIR" "$LOG_DIR"
 DEBUG_MODE="${DEBUG_MODE:-false}"
-   
+
+# 環境変数 INPUT_LANG のチェック（デフォルト 'ja' とする）
+# INPUT_LANG="${INPUT_LANG:-ja}"
+debug_log "common.sh received INPUT_LANG: '$INPUT_LANG'"
+
 script_update() (
     COMMON_CACHE="${CACHE_DIR}/common_version.ch"
     # キャッシュが存在しない、またはバージョンが異なる場合にアラートを表示
@@ -25,34 +29,50 @@ script_update() (
 )
 
 #########################################################################
-# debug_log: デバッグ出力関数
+# デバッグモードの制御 (コマンドライン引数対応)
+#########################################################################
+DEBUG_MODE=false
+DEBUG_LEVEL="INFO"  # デフォルトは INFO 以上のログを出力
+
+# コマンドライン引数のチェック
+for arg in "$@"; do
+    case "$arg" in
+        -d|--debug|-debug)
+            DEBUG_MODE=true
+            DEBUG_LEVEL="DEBUG"
+            ;;
+    esac
+done
+
+#########################################################################
+# debug_log: デバッグ出力関数 (改良版)
 #########################################################################
 debug_log() {
-    local message="$1"
-    [ "$DEBUG_MODE" = true ] && echo "DEBUG: $message" | tee -a "$LOG_DIR/debug.log"
-}
+    local level="$1"  # デバッグレベル (INFO, WARN, ERROR, DEBUG)
+    local message="$2"
+    
+    # デバッグレベルの優先度
+    case "$DEBUG_LEVEL" in
+        DEBUG)    allowed_levels="DEBUG INFO WARN ERROR" ;;
+        INFO)     allowed_levels="INFO WARN ERROR" ;;
+        WARN)     allowed_levels="WARN ERROR" ;;
+        ERROR)    allowed_levels="ERROR" ;;
+        *)        allowed_levels="" ;;
+    esac
 
-# 環境変数 INPUT_LANG のチェック（デフォルト 'ja' とする）
-INPUT_LANG="${INPUT_LANG:-ja}"
-debug_log "common.sh received INPUT_LANG: '$INPUT_LANG'"
+    # 指定されたログレベルが有効な場合のみ出力
+    if echo "$allowed_levels" | grep -q "$level"; then
+        local timestamp
+        timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+        local log_message="[$timestamp] $level: $message"
 
-#########################################################################
-# テスト用関数: データ取得を個別に確認
-#########################################################################
-test_debug() {
-    if [ "$DEBUG_MODE" = true ]; then
-        echo "DEBUG: Running debug tests..." | tee -a "$LOG_DIR/debug.log"
-        if [ ! -f "${BASE_DIR}/country.db" ]; then
-            echo "DEBUG: ERROR - country.db not found!" | tee -a "$LOG_DIR/debug.log"
-        else
-            echo "DEBUG: country.db found at ${BASE_DIR}/country.db" | tee -a "$LOG_DIR/debug.log"
+        if [ "$DEBUG_MODE" = true ]; then
+            echo "$log_message"
         fi
 
-        test_country_search "US"
-        test_country_search "Japan"
-        test_timezone_search "US"
-        test_timezone_search "JP"
-        test_cache_contents
+        if [ -n "$LOG_DIR" ]; then
+            echo "$log_message" >> "$LOG_DIR/debug.log"
+        fi
     fi
 }
 
@@ -87,8 +107,6 @@ test_cache_contents() {
     echo "`color yellow "DEBUG: zone_tmp.ch content:"`"
     cat "${CACHE_DIR}/zone_tmp.ch"
 }
-
-
 
 #########################################################################
 # print_help: ヘルプメッセージを表示
@@ -150,36 +168,12 @@ color_code_map() {
 
 
 
-# 🔵　ランゲージ系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
+# 🔵　ランゲージ（言語・ゾーン）系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
 # Last Update: 2025-02-12 17:25:00 (JST) 🚀
 # "Precision in code, clarity in purpose. Every update refines the path."
 # select_country: ユーザーに国の選択を促す（検索機能付き）
 #
-# 【要件】
-# 1. 役割:
-#    - 言語処理の入口として `$1` または `language.ch` を判定
-#    - `$1` が指定されている場合は最優先で処理
-#    - キャッシュ (`language.ch`) がある場合は、それを使用
-#    - どちらも無い場合、手動で選択させる
-#
-# 2. キャッシュ処理:
-#    - `language.ch` が存在する場合、それを使用し `normalize_country()` へ
-#    - キャッシュが無い場合、手動入力を求める
-#
-# 3. 言語コードの処理:
-#    - `$1` が `SUPPORTED_LANGUAGES` に含まれているかを確認
-#    - 含まれていなければ、手動で言語を選択させる
-#    - 選択後、キャッシュ (`language.ch`) に保存
-#
-# 4. フロー:
-#    - 言語の決定 → `normalize_country()` に進む
-#
-# 5. メンテナンス:
-#    - `language.ch` は一度書き込んだら変更しない
-#    - 言語の決定はすべて `select_country()` 内で完結させる
-#    - `normalize_country()` ではキャッシュを上書きしない
-# 
 # select_country()
 # ├── selection_list()  → 選択結果を country_tmp.ch に保存
 # ├── country_write()   → country.ch, language.ch, luci.ch, zone.ch に確定
@@ -190,8 +184,133 @@ color_code_map() {
 # [3] country_write() を実行
 # [4] 確定キャッシュを作成（country.ch, language.ch, luci.ch, zone.ch）→ 書き込み禁止にする
 # [5] select_zone() を実行
+#
+# #️⃣ `$1` の存在確認
+#   ├─ あり → `country.db` で検索
+#   |    ├─ 見つかる → `select_zone()`（ゾーン選択へ）
+#   |    ├─ 見つからない → 言語選択を実行
+#   ├─ なし → `country.ch` を確認
+#        ├─ あり → 言語系終了（以降の処理なし）
+#        ├─ なし → 言語選択を実行
 #########################################################################
 select_country() {
+    debug_log "INFO" "Entering select_country() with arg: '$1'"
+
+    local cache_country="${CACHE_DIR}/country.ch"
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
+
+    if [ -n "$1" ]; then
+        debug_log "INFO" "Processing input: $1"
+        local predefined_country=$(awk -v search="$1" 'BEGIN {IGNORECASE=1} 
+            $2 == search || $3 == search || $4 == search || $5 == search {print $0}' "$BASE_DIR/country.db")
+
+        if [ -n "$predefined_country" ]; then
+            debug_log "INFO" "Found country entry: $predefined_country"
+            echo "$predefined_country" > "$tmp_country"
+            country_write
+            select_zone  
+            return
+        else
+            debug_log "ERROR" "Invalid input '$1' is not a valid country."
+            echo "$(color red "Error: '$1' is not a recognized country name or code.")"
+            echo "$(color yellow "Switching to language selection.")"
+            set --  
+        fi
+    fi
+
+    if [ -f "$cache_country" ]; then
+        debug_log "INFO" "Country cache found. Skipping selection."
+        select_zone
+        return
+    fi
+
+    while true; do
+        echo "$(color cyan "Enter country name, code, or language to search:")"
+        printf "%s" "Please input: "
+        read -r input
+
+        local search_results=$(awk -v search="$input" 'BEGIN {IGNORECASE=1} 
+            $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}' "$BASE_DIR/country.db")
+
+        if [ -z "$search_results" ]; then
+            echo "$(color red "Error: No matching country found for '$input'. Please try again.")"
+            continue
+        fi
+
+        selection_list "$search_results" "$tmp_country" "country"
+        country_write
+        select_zone
+        return
+    done
+}
+
+XX_0214_1845_select_country() {
+    debug_log "INFO" "Entering select_country() with arg: '$1'"
+
+    local cache_country="${CACHE_DIR}/country.ch"
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
+
+    # ✅ `$1` がある場合、`country.db` で検索
+    if [ -n "$1" ]; then
+        debug_log "INFO" "Processing input: $1"
+
+        local predefined_country=$(awk -v search="$1" 'BEGIN {IGNORECASE=1} 
+            $2 == search || $3 == search || $4 == search || $5 == search {print $0}' "$BASE_DIR/country.db")
+
+        if [ -n "$predefined_country" ]; then
+            debug_log "INFO" "Found country entry: $predefined_country"
+            echo "$predefined_country" > "$tmp_country"
+            country_write
+            select_zone  # ✅ `$1` が `country.db` にあるならゾーン選択へ
+            return
+        else
+            debug_log "ERROR" "Invalid input '$1' is not a valid country."
+            echo "$(color red "Error: '$1' is not a recognized country name or code.")"
+            echo "$(color yellow "Switching to language selection.")"
+            # ✅ 無効な $1 の場合、通常の言語選択へ
+            set --  # `$1` をクリア
+        fi
+    fi
+
+    # ✅ `$1` が `country.db` にない場合、`country.ch` を確認
+    if [ -f "$cache_country" ]; then
+        debug_log "INFO" "Country cache found. Language-related processing is complete."
+        select_zone  # ✅ 言語選択が完了しているので `select_zone()` を実行
+        return
+    fi
+
+    # ✅ `$1` も `country.ch` も無い場合 → 言語選択モード
+    echo "$(color cyan "Enter country name, code, or language to search:")"
+    printf "%s" "Please input: "
+    read -r input
+
+    if [ -z "$input" ]; then
+        debug_log "ERROR" "No input provided."
+        return
+    fi
+
+    # ✅ `country.db` から検索
+    local search_results=$(awk -v search="$input" 'BEGIN {IGNORECASE=1} 
+        $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}' "$BASE_DIR/country.db")
+
+    if [ -z "$search_results" ]; then
+        debug_log "ERROR" "No matching country found."
+        echo "$(color red "Error: No matching country found for '$input'. Please try again.")"
+        select_country  # ❗ 無効なら、もう一度言語選択へ
+        return
+    fi
+
+    # ✅ `selection_list()` で選択
+    selection_list "$search_results" "$tmp_country" "country"
+
+    # ✅ `country_write()` でキャッシュに確定
+    country_write
+
+    # ✅ `select_zone()` に進む
+    select_zone
+}
+
+XXX_select_country() {
     debug_log "=== Entering select_country() ==="
 
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
@@ -258,21 +377,371 @@ selection_list() {
 
     : > "$list_file"
 
-    echo "[0] Cancel / back to return"
-
-    # ✅ `[1]` をデータに含めず、生のまま `zone_tmp.ch` に保存
     echo "$input_data" | while IFS= read -r line; do
         if [ "$mode" = "country" ]; then
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
             if [ -n "$extracted" ]; then
-                printf "[%d] %s\n" "$i" "$extracted"  # ✅ `[1]` を表示時のみ追加
-                echo "$line" >> "$list_file"  # ✅ `zone_tmp.ch` には `[1]` を含めず生のまま保存
+                printf "[%d] %s\n" "$i" "$extracted"
+                echo "$line" >> "$list_file"
                 i=$((i + 1))
             fi
         elif [ "$mode" = "zone" ]; then
             if [ -n "$line" ]; then
-                echo "$line" >> "$list_file"  # ✅ `zone_tmp.ch` には `[1]` を含めず生のまま保存
-                printf "[%d] %s\n" "$i" "$line"  # ✅ `[1]` を表示の直前で追加
+                echo "$line" >> "$list_file"
+                printf "[%d] %s\n" "$i" "$line"
+                i=$((i + 1))
+            fi
+        fi
+    done
+
+    while true; do
+        printf "%s" "$(color cyan \"Enter the number of your choice: \")"
+        read -r choice
+
+        if [ "$choice" = "R" ] || [ "$choice" = "r" ]; then
+            debug_log "INFO" "User selected R: Returning to language selection start."
+            check_common
+            return
+        fi
+
+        local selected_value
+        selected_value=$(awk -v num="$choice" 'NR == num {print $0}' "$list_file")
+
+        if [ -z "$selected_value" ]; then
+            printf "%s\n" "$(color red \"Invalid selection. Please choose a valid number.\")"
+            continue
+        fi
+
+        if [ "$mode" = "country" ]; then
+            local confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $2, $3, $4, $5}')
+        elif [ "$mode" = "zone" ]; then
+            local confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $1, $2}')
+        fi
+
+        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info")"
+        printf "%s" "(Y/N/R)?: "
+        read -r yn
+
+        case "$yn" in
+            [Yy]*) printf "%s\n" "$selected_value" > "$output_file"; return ;;
+            [Nn]*) printf "%s\n" "$(color yellow \"Returning to selection.\")"
+                   selection_list "$input_data" "$output_file" "$mode"  # ✅ もう一度リスト表示
+                   continue  # ✅ そのままループを継続
+                   ;;
+            [Rr]*) check_common; return ;;
+            *) printf "%s\n" "$(color red \"Invalid input. Please enter 'Y', 'N', or 'R'.\")" ;;
+        esac
+    done
+}
+
+XXX_2014_03_selection_list() {
+    local input_data="$1"
+    local output_file="$2"
+    local mode="$3"
+    local list_file=""
+    local i=1
+    local display_list=""
+    
+    display_list_file="${CACHE_DIR}/display_list_tmp.ch"
+
+    debug_log "DEBUG: Entering selection_list()"
+    debug_log "DEBUG: input_data -> $input_data"
+    debug_log "DEBUG: output_file -> $output_file"
+    debug_log "DEBUG: mode -> $mode"
+
+    if [ "$mode" = "country" ]; then
+        list_file="${CACHE_DIR}/country_tmp.ch"
+    elif [ "$mode" = "zone" ]; then
+        list_file="${CACHE_DIR}/zone_tmp.ch"
+    else
+        debug_log "DEBUG: Invalid mode -> $mode"
+        return 1
+    fi
+
+    debug_log "DEBUG: list_file -> $list_file"
+    
+    : > "$list_file"
+    : > "$display_list_file"  # ✅ `$CACHE_DIR/display_list_tmp.ch` を初期化
+    debug_log "DEBUG: Cleared $list_file and $display_list_file"
+
+    echo "$input_data" | while IFS= read -r line; do
+        debug_log "DEBUG: Processing line -> $line"
+
+        if [ "$mode" = "country" ]; then
+            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
+            debug_log "DEBUG: extracted -> $extracted"
+
+            if [ -n "$extracted" ]; then
+                debug_log "DEBUG: Before adding to display_list -> $(cat "$display_list_file")"
+                echo "[${i}] ${extracted}" >> "$display_list_file"
+                echo "$line" >> "$list_file"
+                i=$((i + 1))
+                debug_log "DEBUG: After adding to display_list -> $(cat "$display_list_file")"
+            fi
+        elif [ "$mode" = "zone" ]; then
+            if [ -n "$line" ]; then
+                echo "$line" >> "$list_file"
+                debug_log "DEBUG: Before adding to display_list -> $(cat "$display_list_file")"
+                echo "[${i}] ${line}" >> "$display_list_file"
+                i=$((i + 1))
+                debug_log "DEBUG: After adding to display_list -> $(cat "$display_list_file")"
+            fi
+        fi
+    done
+
+    display_list=$(cat "$display_list_file")
+
+    debug_log "DEBUG: display_list -> $display_list"
+    debug_log "DEBUG: $list_file content after writing -> $(cat "$list_file" 2>/dev/null)"
+
+    if [ -z "$display_list" ]; then
+        debug_log "DEBUG: display_list is EMPTY!"
+        printf "[0] Cancel / back to return\n"
+    else
+        printf "%s\n" "$display_list"
+        printf "[0] Cancel / back to return\n"
+    fi
+
+    local choice=""
+    while true; do
+        printf "%s" "$(color cyan "Enter the number of your choice: ")"
+        read -r choice
+
+        debug_log "DEBUG: choice -> $choice"
+
+        if ! echo "$choice" | grep -qE '^[0-9]+$'; then
+            debug_log "DEBUG: Invalid choice (not a number) -> $choice"
+            printf "%s\n" "$(color red "Invalid input. Please enter a valid number.")"
+            continue
+        fi
+
+        if [ "$choice" = "0" ]; then
+            debug_log "DEBUG: User chose to return"
+            printf "%s\n" "$(color yellow "Returning to previous menu.")"
+            return 1
+        fi
+
+        local selected_value
+        selected_value=$(awk -v num="$choice" 'NR == num {print $0}' "$list_file")
+
+        debug_log "DEBUG: selected_value -> $selected_value"
+
+        if [ -z "$selected_value" ]; then
+            debug_log "DEBUG: selected_value is EMPTY!"
+            printf "%s\n" "$(color red "ERROR: Selected value is empty. Please select again.")"
+            continue
+        fi
+
+        local confirm_info=""
+        if [ "$mode" = "country" ]; then
+            confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $2, $3, $4, $5; exit}')
+        elif [ "$mode" = "zone" ]; then
+            confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $1, $2}')
+        fi
+
+        debug_log "DEBUG: confirm_info -> $confirm_info"
+
+        if [ -z "$confirm_info" ]; then
+            debug_log "DEBUG: confirm_info is EMPTY!"
+            printf "%s\n" "$(color red "Selection error. Please try again.")"
+            continue
+        fi
+
+        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info")"
+        printf "%s" "(Y/n)?: "
+        read -r yn
+
+        debug_log "DEBUG: User confirmation -> $yn"
+
+        case "$yn" in
+            [Yy]*) 
+                printf "%s\n" "$selected_value" > "$output_file"
+                debug_log "DEBUG: Saved to $output_file -> $(cat "$output_file" 2>/dev/null)"
+                return 
+                ;;
+            [Nn]*) 
+                debug_log "DEBUG: User canceled selection"
+                printf "%s\n" "$(color yellow "Returning to selection.")"
+                return 1 
+                ;;
+            *) 
+                debug_log "DEBUG: Invalid confirmation input -> $yn"
+                printf "%s\n" "$(color red "Invalid input. Please enter 'Y' or 'N'.")" 
+                ;;
+        esac
+    done
+}
+
+OK_0214_2_selection_list() {
+    local input_data="$1"
+    local output_file="$2"
+    local mode="$3"
+    local list_file=""
+    local i=1
+    local display_list=""
+    
+    display_list_file="${CACHE_DIR}/display_list_tmp.ch"
+
+    debug_log "DEBUG: Entering selection_list()"
+    debug_log "DEBUG: input_data -> $input_data"
+    debug_log "DEBUG: output_file -> $output_file"
+    debug_log "DEBUG: mode -> $mode"
+
+    if [ "$mode" = "country" ]; then
+        list_file="${CACHE_DIR}/country_tmp.ch"
+    elif [ "$mode" = "zone" ]; then
+        list_file="${CACHE_DIR}/zone_tmp.ch"
+    else
+        debug_log "DEBUG: Invalid mode -> $mode"
+        return 1
+    fi
+
+    debug_log "DEBUG: list_file -> $list_file"
+    
+    : > "$list_file"
+    : > "$display_list_file"  # ✅ `$CACHE_DIR/display_list_tmp.ch` を初期化
+    debug_log "DEBUG: Cleared $list_file and $display_list_file"
+
+    echo "$input_data" | while IFS= read -r line; do
+        debug_log "DEBUG: Processing line -> $line"
+
+        if [ "$mode" = "country" ]; then
+            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
+            debug_log "DEBUG: extracted -> $extracted"
+
+            if [ -n "$extracted" ]; then
+                debug_log "DEBUG: Before adding to display_list -> $(cat "$display_list_file")"
+                echo "[${i}] ${extracted}" >> "$display_list_file"
+                echo "$line" >> "$list_file"
+                i=$((i + 1))
+                debug_log "DEBUG: After adding to display_list -> $(cat "$display_list_file")"
+            fi
+        elif [ "$mode" = "zone" ]; then
+            if [ -n "$line" ]; then
+                echo "$line" >> "$list_file"
+                debug_log "DEBUG: Before adding to display_list -> $(cat "$display_list_file")"
+                echo "[${i}] ${line}" >> "$display_list_file"
+                i=$((i + 1))
+                debug_log "DEBUG: After adding to display_list -> $(cat "$display_list_file")"
+            fi
+        fi
+    done
+
+    display_list=$(cat "$display_list_file")
+
+    debug_log "DEBUG: display_list -> $display_list"
+    debug_log "DEBUG: $list_file content after writing -> $(cat "$list_file" 2>/dev/null)"
+
+    if [ -z "$display_list" ]; then
+        debug_log "DEBUG: display_list is EMPTY!"
+        printf "[0] Cancel / back to return\n"
+    else
+        printf "%s\n" "$display_list"
+        printf "[0] Cancel / back to return\n"
+    fi
+
+    local choice=""
+    while true; do
+        printf "%s" "$(color cyan "Enter the number of your choice: ")"
+        read -r choice
+
+        debug_log "DEBUG: choice -> $choice"
+
+        if ! echo "$choice" | grep -qE '^[0-9]+$'; then
+            debug_log "DEBUG: Invalid choice (not a number) -> $choice"
+            printf "%s\n" "$(color red "Invalid input. Please enter a valid number.")"
+            continue
+        fi
+
+        if [ "$choice" = "0" ]; then
+            debug_log "DEBUG: User chose to return"
+            printf "%s\n" "$(color yellow "Returning to previous menu.")"
+            return 1
+        fi
+
+        local selected_value
+        selected_value=$(awk -v num="$choice" 'NR == num {print $0}' "$list_file")
+
+        debug_log "DEBUG: selected_value -> $selected_value"
+
+        if [ -z "$selected_value" ]; then
+            debug_log "DEBUG: selected_value is EMPTY!"
+            printf "%s\n" "$(color red "ERROR: Selected value is empty. Please select again.")"
+            continue
+        fi
+
+        local confirm_info=""
+        if [ "$mode" = "country" ]; then
+            confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $2, $3, $4, $5; exit}')
+        elif [ "$mode" = "zone" ]; then
+            confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $1, $2}')
+        fi
+
+        debug_log "DEBUG: confirm_info -> $confirm_info"
+
+        if [ -z "$confirm_info" ]; then
+            debug_log "DEBUG: confirm_info is EMPTY!"
+            printf "%s\n" "$(color red "Selection error. Please try again.")"
+            continue
+        fi
+
+        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info")"
+        printf "%s" "(Y/n)?: "
+        read -r yn
+
+        debug_log "DEBUG: User confirmation -> $yn"
+
+        case "$yn" in
+            [Yy]*) 
+                printf "%s\n" "$selected_value" > "$output_file"
+                debug_log "DEBUG: Saved to $output_file -> $(cat "$output_file" 2>/dev/null)"
+                return 
+                ;;
+            [Nn]*) 
+                debug_log "DEBUG: User canceled selection"
+                printf "%s\n" "$(color yellow "Returning to selection.")"
+                return 1 
+                ;;
+            *) 
+                debug_log "DEBUG: Invalid confirmation input -> $yn"
+                printf "%s\n" "$(color red "Invalid input. Please enter 'Y' or 'N'.")" 
+                ;;
+        esac
+    done
+}
+
+
+OK_0214_selection_list() {
+    local input_data="$1"
+    local output_file="$2"
+    local mode="$3"
+    local list_file=""
+    local i=1
+
+    if [ "$mode" = "country" ]; then
+        list_file="${CACHE_DIR}/country_tmp.ch"
+    elif [ "$mode" = "zone" ]; then
+        list_file="${CACHE_DIR}/zone_tmp.ch"
+    else
+        return 1
+    fi
+
+    : > "$list_file"
+
+    echo "[0] Cancel / back to return"
+
+    echo "$input_data" | while IFS= read -r line; do
+        if [ "$mode" = "country" ]; then
+            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
+            if [ -n "$extracted" ]; then
+                printf "[%d] %s\n" "$i" "$extracted"
+                echo "$line" >> "$list_file"
+                i=$((i + 1))
+            fi
+        elif [ "$mode" = "zone" ]; then
+            if [ -n "$line" ]; then
+                echo "$line" >> "$list_file"
+                printf "[%d] %s\n" "$i" "$line"
                 i=$((i + 1))
             fi
         fi
@@ -296,14 +765,12 @@ selection_list() {
             continue
         fi
 
-        # ✅ 言語の `Confirm selection:` の表示
         if [ "$mode" = "country" ]; then
             local confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $2, $3, $4, $5}')
         elif [ "$mode" = "zone" ]; then
             local confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $1, $2}')
         fi
 
-        # ✅ ゾーンの`Confirm selection:` の表示
         printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info")"
         printf "%s" "(Y/n)?: "
         read -r yn
@@ -314,6 +781,7 @@ selection_list() {
         esac
     done
 }
+
 
 #########################################################################
 # Last Update: 2025-02-13 14:18:00 (JST) 🚀
@@ -397,10 +865,38 @@ country_write() {
 # [4] zonename.ch, timezone.ch を書き込み禁止にする
 #[5] → normalize_country()
 #########################################################################
-#########################################################################
-# select_zone(): ユーザーがゾーンを選択し、確定する
-#########################################################################
 select_zone() {
+    local cache_zone="${CACHE_DIR}/zone.ch"
+    local cache_zone_tmp="${CACHE_DIR}/zone_tmp.ch"
+    local cache_zonename="${CACHE_DIR}/zonename.ch"
+    local cache_timezone="${CACHE_DIR}/timezone.ch"
+
+    local zone_data=$(cat "$cache_zone" 2>/dev/null)
+    if [ -z "$zone_data" ]; then
+        return
+    fi
+
+    local formatted_zone_list=$(awk '{gsub(",", " "); for (i=1; i<=NF; i+=2) print $i, $(i+1)}' "$cache_zone")
+
+    selection_list "$formatted_zone_list" "$cache_zone_tmp" "zone"
+
+    local selected_zone=$(cat "$cache_zone_tmp" 2>/dev/null)
+    if [ -z "$selected_zone" ]; then
+        return
+    fi
+
+    local zonename=$(echo "$selected_zone" | awk '{print $1}')
+    local timezone=$(echo "$selected_zone" | awk '{print $2}')
+
+    echo "$zonename" > "$cache_zonename"
+    echo "$timezone" > "$cache_timezone"
+
+    chmod 444 "$cache_zonename" "$cache_timezone"
+
+    echo "$(get_message "MSG_TIMEZONE_SUCCESS")"
+}
+
+XX_0214_1846select_zone() {
     local cache_zone="${CACHE_DIR}/zone.ch"
     local cache_zone_tmp="${CACHE_DIR}/zone_tmp.ch"
     local cache_zonename="${CACHE_DIR}/zonename.ch"
@@ -494,7 +990,7 @@ normalize_country() {
     debug_log "Final system message language -> $(cat "$message_cache")"
 }
 
-# 🔴　ランゲージ系　ここまで　-------------------------------------------------------------------------------------------------------------------------------------------
+# 🔴　ランゲージ（言語・ゾーン）系　ここまで　-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
 # download_script: 指定されたスクリプト・データベースのバージョン確認とダウンロード
@@ -834,38 +1330,24 @@ install_language_pack() {
 #    - 将来的にフローが変更される場合は、ここを修正する
 #########################################################################
 check_common() {
-    local mode="$1"
-    shift  # 最初の引数 (モード) を削除
+    local lang_code="$1"
     
-    local lang_code="${2:-}"
+    debug_log "INFO" "check_common called with lang_code: '$lang_code'"
+    script_update || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
+    download_script messages.db || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
+    download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
+    download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
+    check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
+    select_country "$lang_code"
+}
 
-    SELECTED_LANGUAGE="$lang_code"
+XXX_check_common() {
+    local mode="$1"
+    local lang_code="$2"  # ✅ `$1` は mode、`$2` は言語情報
+    
+    local lang_code="${1:-}"  # ✅ `$1` を `lang_code` にセット
+    #SELECTED_LANGUAGE="$lang_code"
     debug_log "check_common received lang_code: '$lang_code'"
-
-    local RESET_CACHE=false
-    local SHOW_HELP=false
-    for arg in "$@"; do
-        case "$arg" in
-            -reset|--reset|-r)
-                RESET_CACHE=true
-                ;;
-            -help|--help|-h)
-                SHOW_HELP=true
-                ;;
-            -debug|--debug|-d)
-                DEBUG_MODE=true
-                ;;
-        esac
-    done
-
-    if [ "$RESET_CACHE" = true ]; then
-        reset_cache
-    fi
-
-    if [ "$SHOW_HELP" = true ]; then
-        print_help
-        exit 0
-    fi
 
     case "$mode" in
         full)
