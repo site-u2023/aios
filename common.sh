@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-3-11"
+COMMON_VERSION="2025.02.14-3-12"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -249,20 +249,32 @@ selection_list() {
     local i=1
     local display_list=""
 
+    debug_log "DEBUG: Entering selection_list()"
+    debug_log "DEBUG: input_data -> $input_data"
+    debug_log "DEBUG: output_file -> $output_file"
+    debug_log "DEBUG: mode -> $mode"
+
     if [ "$mode" = "country" ]; then
         list_file="${CACHE_DIR}/country_tmp.ch"
     elif [ "$mode" = "zone" ]; then
         list_file="${CACHE_DIR}/zone_tmp.ch"
     else
+        debug_log "DEBUG: Invalid mode -> $mode"
         return 1
     fi
 
+    debug_log "DEBUG: list_file -> $list_file"
+    
     : > "$list_file"
     debug_log "DEBUG: Cleared $list_file"
 
     echo "$input_data" | while IFS= read -r line; do
+        debug_log "DEBUG: Processing line -> $line"
+
         if [ "$mode" = "country" ]; then
             local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
+            debug_log "DEBUG: extracted -> $extracted"
+
             if [ -n "$extracted" ]; then
                 display_list="${display_list}$(printf "[%d] %s\n" "$i" "$extracted")"
                 echo "$line" >> "$list_file"
@@ -277,10 +289,11 @@ selection_list() {
         fi
     done
 
-    # ✅ `list_file` の内容をデバッグ
-    debug_log "DEBUG: $list_file content -> $(cat "$list_file" 2>/dev/null)"
+    debug_log "DEBUG: display_list -> $display_list"
+    debug_log "DEBUG: $list_file content after writing -> $(cat "$list_file" 2>/dev/null)"
 
     if [ -z "$display_list" ]; then
+        debug_log "DEBUG: display_list is EMPTY!"
         printf "[0] Cancel / back to return\n"
     else
         printf "%s\n" "$display_list"
@@ -292,12 +305,16 @@ selection_list() {
         printf "%s" "$(color cyan "Enter the number of your choice: ")"
         read -r choice
 
+        debug_log "DEBUG: choice -> $choice"
+
         if ! echo "$choice" | grep -qE '^[0-9]+$'; then
+            debug_log "DEBUG: Invalid choice (not a number) -> $choice"
             printf "%s\n" "$(color red "Invalid input. Please enter a valid number.")"
             continue
         fi
 
         if [ "$choice" = "0" ]; then
+            debug_log "DEBUG: User chose to return"
             printf "%s\n" "$(color yellow "Returning to previous menu.")"
             return 1
         fi
@@ -305,10 +322,10 @@ selection_list() {
         local selected_value
         selected_value=$(awk -v num="$choice" 'NR == num {print $0}' "$list_file")
 
-        # ✅ `selected_value` のデバッグ
         debug_log "DEBUG: selected_value -> $selected_value"
 
         if [ -z "$selected_value" ]; then
+            debug_log "DEBUG: selected_value is EMPTY!"
             printf "%s\n" "$(color red "ERROR: Selected value is empty. Please select again.")"
             continue
         fi
@@ -320,10 +337,10 @@ selection_list() {
             confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $1, $2}')
         fi
 
-        # ✅ `confirm_info` のデバッグ
         debug_log "DEBUG: confirm_info -> $confirm_info"
 
         if [ -z "$confirm_info" ]; then
+            debug_log "DEBUG: confirm_info is EMPTY!"
             printf "%s\n" "$(color red "Selection error. Please try again.")"
             continue
         fi
@@ -331,6 +348,9 @@ selection_list() {
         printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info")"
         printf "%s" "(Y/n)?: "
         read -r yn
+
+        debug_log "DEBUG: User confirmation -> $yn"
+
         case "$yn" in
             [Yy]*) 
                 printf "%s\n" "$selected_value" > "$output_file"
@@ -338,15 +358,18 @@ selection_list() {
                 return 
                 ;;
             [Nn]*) 
+                debug_log "DEBUG: User canceled selection"
                 printf "%s\n" "$(color yellow "Returning to selection.")"
                 return 1 
                 ;;
             *) 
+                debug_log "DEBUG: Invalid confirmation input -> $yn"
                 printf "%s\n" "$(color red "Invalid input. Please enter 'Y' or 'N'.")" 
                 ;;
         esac
     done
 }
+
 
 
 
