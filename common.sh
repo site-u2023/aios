@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-0-1"
+COMMON_VERSION="2025.02.15-0-2"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -235,8 +235,11 @@ select_country() {
 
         # 完全一致を優先
         local search_results
-        search_results=$(awk -v search="^$cleaned_input$" 'BEGIN {IGNORECASE=1} 
-            { for (i=2; i<=NF; i++) if ($i ~ search) print $0 }' "$BASE_DIR/country.db")
+        #search_results=$(awk -v search="^$cleaned_input$" 'BEGIN {IGNORECASE=1} 
+        #    { for (i=2; i<=NF; i++) if ($i ~ search) print $0 }' "$BASE_DIR/country.db")
+        search_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} 
+            { key = $2" "$3" "$4" "$5; if ($0 ~ search && !seen[key]++) print $0 }' "$BASE_DIR/country.db")
+
 
         # 完全一致がない場合、部分一致を検索
         if [ -z "$search_results" ]; then
