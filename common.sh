@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-4-5"
+COMMON_VERSION="2025.02.14-4-6"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -215,34 +215,37 @@ select_country() {
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
     local lang_code="$1"
 
+    debug_log "DEBUG: Initial \$1 -> '$lang_code'"
+    debug_log "DEBUG: Initial \$2 -> '$2'"
+
     # ✅ `$1` が `-d` または `--debug` なら、`$2` を `$1` にセット
     if [ "$lang_code" = "-d" ] || [ "$lang_code" = "--debug" ]; then
         lang_code="$2"
+        debug_log "DEBUG: Adjusted \$1 -> '$lang_code'"
     fi
 
-    debug_log "DEBUG: Final language code -> '$lang_code'"
+    # ✅ `$1` の値を確認
+    if [ -z "$lang_code" ]; then
+        debug_log "ERROR: \$1 is empty!"
+    fi
 
-    # ✅ `$1`（言語コード）の真偽確認
-    if [ -n "$lang_code" ]; then
-        debug_log "DEBUG: Checking if language is valid -> $lang_code"
+    # ✅ `country.db` から `$1` に対応する国を取得
+    debug_log "DEBUG: Checking if language is valid -> $lang_code"
+    local country_data=$(awk -v lang="$lang_code" 'BEGIN {IGNORECASE=1} tolower($4) == tolower(lang) || tolower($5) == tolower(lang) || tolower($2) == tolower(lang) {print $0}' "$BASE_DIR/country.db")
 
-        # ✅ `country.db` から `$1` に対応する国を取得
-        local country_data=$(awk -v lang="$lang_code" 'BEGIN {IGNORECASE=1} tolower($4) == tolower(lang) || tolower($5) == tolower(lang) {print $0}' "$BASE_DIR/country.db")
+    if [ -n "$country_data" ]; then
+        debug_log "INFO: Auto-selecting country -> $country_data"
 
-        if [ -n "$country_data" ]; then
-            debug_log "INFO: Auto-selecting country -> $country_data"
+        # ✅ `country_write()` にデータを渡して確定
+        echo "$country_data" > "$tmp_country"
+        country_write
 
-            # ✅ `country_write()` にデータを渡して確定
-            echo "$country_data" > "$tmp_country"
-            country_write
-
-            # ✅ 直接 `select_zone()` へ
-            debug_log "INFO: Skipping selection_list(), going to select_zone()"
-            select_zone
-            return
-        else
-            debug_log "ERROR: No matching country found in country.db for $lang_code"
-        fi
+        # ✅ 直接 `select_zone()` へ
+        debug_log "INFO: Skipping selection_list(), going to select_zone()"
+        select_zone
+        return
+    else
+        debug_log "ERROR: No matching country found in country.db for $lang_code"
     fi
 
     # ✅ `$1` が無効なら、`country.ch`（キャッシュ）を確認
@@ -285,6 +288,7 @@ select_country() {
     debug_log "INFO: Calling select_zone()"
     select_zone
 }
+
 
 
 XXX_select_country() {
