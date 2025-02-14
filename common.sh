@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-8-2"
+COMMON_VERSION="2025.02.14-8-3"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -406,16 +406,11 @@ selection_list() {
         printf "%s" "$(color cyan "Enter the number of your choice: ")"
         read -r choice
 
-        # ✅ `R` が押されたら前の選択に戻る
+        # ✅ `R` が押されたら `check_common()` に戻る
         if [ "$choice" = "R" ] || [ "$choice" = "r" ]; then
-            debug_log "INFO" "User selected R: Returning to previous selection."
-            if [ "$mode" = "zone" ]; then
-                select_country  # ✅ ゾーン選択なら `select_country()` に戻る
-                return
-            else
-                check_common  # ✅ 言語選択なら `check_common()` に戻る
-                return
-            fi
+            debug_log "INFO" "User selected R: Returning to language selection start."
+            check_common
+            return
         fi
 
         local selected_value
@@ -433,19 +428,11 @@ selection_list() {
         case "$yn" in
             [Yy]*) printf "%s\n" "$selected_value" > "$output_file"; return ;;
             [Nn]*) printf "%s\n" "$(color yellow "Returning to selection.")" ;;
-            [Rr]*) 
-                if [ "$mode" = "zone" ]; then
-                    select_country  # ✅ ゾーン選択なら `select_country()` に戻る
-                else
-                    check_common  # ✅ 言語選択なら `check_common()` に戻る
-                fi
-                return
-                ;;
+            [Rr]*) check_common; return ;;
             *) printf "%s\n" "$(color red "Invalid input. Please enter 'Y', 'N', or 'R'.")" ;;
         esac
     done
 }
-
 
 XXX_2014_03_selection_list() {
     local input_data="$1"
@@ -898,10 +885,10 @@ select_zone() {
         return
     fi
 
-    # ✅ `R` が押されたら `select_country()` に戻る
+    # ✅ `R` が押されたら `check_common()` に戻る
     if [ "$selected_zone" = "R" ] || [ "$selected_zone" = "r" ]; then
-        debug_log "INFO" "User selected R: Returning to country selection."
-        select_country
+        debug_log "INFO" "User selected R: Returning to language selection start."
+        check_common
         return
     fi
 
