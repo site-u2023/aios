@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-5-0"
+COMMON_VERSION="2025.02.14-5-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -208,7 +208,7 @@ select_country() {
             debug_log "INFO" "Found country entry: $predefined_country"
             echo "$predefined_country" > "/tmp/aios/cache/country_tmp.ch"
             country_write
-            select_country
+            selection_list
             return
         else
             debug_log "WARNING" "$1 is not a valid country. Switching to language selection."
@@ -218,7 +218,7 @@ select_country() {
     # ✅ `country.ch` のキャッシュ確認
     if [ -f "$cache_country" ]; then
         debug_log "INFO" "Using cached country from country.ch"
-        select_country
+        selection_list
         return
     fi
 
