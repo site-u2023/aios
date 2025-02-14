@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-7-3"
+COMMON_VERSION="2025.02.14-8-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -193,7 +193,66 @@ color_code_map() {
 #        ├─ あり → 言語系終了（以降の処理なし）
 #        ├─ なし → 言語選択を実行
 #########################################################################
-select_country() 
+select_country() {
+    debug_log "INFO" "Entering select_country() with arg: '$1'"
+
+    local cache_country="${CACHE_DIR}/country.ch"
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
+
+    if [ -n "$1" ]; then
+        debug_log "INFO" "Processing input: $1"
+
+        local predefined_country=$(awk -v search="$1" 'BEGIN {IGNORECASE=1} 
+            $2 == search || $3 == search || $4 == search || $5 == search {print $0}' "$BASE_DIR/country.db")
+
+        if [ -n "$predefined_country" ]; then
+            debug_log "INFO" "Found country entry: $predefined_country"
+            echo "$predefined_country" > "$tmp_country"
+            country_write
+            select_zone  # ✅ `$1` が `country.db` にあるならゾーン選択へ
+            return
+        else
+            debug_log "ERROR" "Invalid input '$1' is not a valid country."
+            echo "$(color red "Error: '$1' is not a recognized country name or code.")"
+            echo "$(color yellow "Switching to language selection.")"
+            set --  # `$1` をクリア
+        fi
+    fi
+
+    if [ -f "$cache_country" ]; then
+        debug_log "INFO" "Country cache found. Language-related processing is complete."
+        select_zone
+        return
+    fi
+
+    while true; do
+        echo "$(color cyan "Enter country name, code, or language to search:")"
+        printf "%s" "Please input: "
+        read -r input
+
+        # ✅ `R` が押されたら `check_common()` に戻る
+        if [ "$input" = "R" ] || [ "$input" = "r" ]; then
+            debug_log "INFO" "User selected R: Returning to language selection start."
+            check_common
+            return
+        fi
+
+        local search_results=$(awk -v search="$input" 'BEGIN {IGNORECASE=1} 
+            $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}' "$BASE_DIR/country.db")
+
+        if [ -z "$search_results" ]; then
+            echo "$(color red "Error: No matching country found for '$input'. Please try again.")"
+            continue
+        fi
+
+        selection_list "$search_results" "$tmp_country" "country"
+
+        country_write
+        select_zone
+        return
+    done
+}
+
 XX_0214_1845_select_country() {
     debug_log "INFO" "Entering select_country() with arg: '$1'"
 
@@ -348,14 +407,16 @@ selection_list() {
         printf "%s" "$(color cyan "Enter the number of your choice: ")"
         read -r choice
 
+        # ✅ `R` が押されたら前の選択に戻る
         if [ "$choice" = "R" ] || [ "$choice" = "r" ]; then
             debug_log "INFO" "User selected R: Returning to previous selection."
             if [ "$mode" = "zone" ]; then
-                select_country  # ✅ 言語選択に戻る
+                select_country  # ✅ ゾーン選択なら `select_country()` に戻る
+                return
             else
-                check_common  # ✅ 言語選択の最初に戻る
+                check_common  # ✅ 言語選択なら `check_common()` に戻る
+                return
             fi
-            return
         fi
 
         local selected_value
@@ -375,9 +436,9 @@ selection_list() {
             [Nn]*) printf "%s\n" "$(color yellow "Returning to selection.")" ;;
             [Rr]*) 
                 if [ "$mode" = "zone" ]; then
-                    select_country  # ✅ 言語選択に戻る
+                    select_country  # ✅ ゾーン選択なら `select_country()` に戻る
                 else
-                    check_common  # ✅ 言語選択の最初に戻る
+                    check_common  # ✅ 言語選択なら `check_common()` に戻る
                 fi
                 return
                 ;;
@@ -834,6 +895,13 @@ select_zone() {
 
     local selected_zone=$(cat "$cache_zone_tmp" 2>/dev/null)
     if [ -z "$selected_zone" ]; then
+        return
+    fi
+
+    # ✅ `R` が押されたら `select_country()` に戻る
+    if [ "$selected_zone" = "R" ] || [ "$selected_zone" = "r" ]; then
+        debug_log "INFO" "User selected R: Returning to country selection."
+        select_country
         return
     fi
 
