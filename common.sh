@@ -418,7 +418,7 @@ selection_list() {
             local confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $1, $2}')
         fi
 
-        printf "%s\n" "$(color cyan \"Confirm selection: [$choice] $confirm_info (Y/N/R)?\")"
+        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info (Y/N/R)?")"
         printf "%s" "(Y/N/R)?: "
         read -r yn
 
