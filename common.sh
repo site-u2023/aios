@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-4-7"
+COMMON_VERSION="2025.02.14-4-8"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -1211,8 +1211,7 @@ check_common() {
     local mode="$1"
     shift  # 最初の引数 (モード) を削除
     
-    local lang_code="${2:-}"
-
+    local lang_code="${1:-}"  # ✅ `$1` を `lang_code` にセット
     SELECTED_LANGUAGE="$lang_code"
     debug_log "check_common received lang_code: '$lang_code'"
 
@@ -1228,6 +1227,9 @@ check_common() {
                 ;;
             -debug|--debug|-d)
                 DEBUG_MODE=true
+                shift  # ✅ `-d` を削除
+                SELECTED_LANGUAGE="$1"  # ✅ `$1` を `SELECTED_LANGUAGE` にセット
+                debug_log "check_common adjusted lang_code: '$SELECTED_LANGUAGE'"
                 ;;
         esac
     done
