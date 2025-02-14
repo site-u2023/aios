@@ -233,7 +233,7 @@ select_country() {
             $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}' "$BASE_DIR/country.db")
 
         if [ -z "$search_results" ]; then
-            printf  "$(color red "Error: No matching country found for '$input'. Please try again.")"
+            printf "%s\n" "$(color red "Error: No matching country found for '$input'. Please try again.")"
             continue
         fi
 
