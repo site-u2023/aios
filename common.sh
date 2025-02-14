@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-4-4"
+COMMON_VERSION="2025.02.14-4-5"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -215,14 +215,19 @@ select_country() {
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
     local lang_code="$1"
 
-    debug_log "DEBUG: Received \$1 -> $lang_code"
+    # ✅ `$1` が `-d` または `--debug` なら、`$2` を `$1` にセット
+    if [ "$lang_code" = "-d" ] || [ "$lang_code" = "--debug" ]; then
+        lang_code="$2"
+    fi
+
+    debug_log "DEBUG: Final language code -> '$lang_code'"
 
     # ✅ `$1`（言語コード）の真偽確認
     if [ -n "$lang_code" ]; then
         debug_log "DEBUG: Checking if language is valid -> $lang_code"
 
         # ✅ `country.db` から `$1` に対応する国を取得
-        local country_data=$(awk -v lang="$lang_code" 'BEGIN {IGNORECASE=1} $4 == lang || $5 == lang {print $0}' "$BASE_DIR/country.db")
+        local country_data=$(awk -v lang="$lang_code" 'BEGIN {IGNORECASE=1} tolower($4) == tolower(lang) || tolower($5) == tolower(lang) {print $0}' "$BASE_DIR/country.db")
 
         if [ -n "$country_data" ]; then
             debug_log "INFO: Auto-selecting country -> $country_data"
@@ -280,6 +285,7 @@ select_country() {
     debug_log "INFO: Calling select_zone()"
     select_zone
 }
+
 
 XXX_select_country() {
     debug_log "=== Entering select_country() ==="
