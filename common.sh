@@ -29,6 +29,20 @@ script_update() (
 )
 
 #########################################################################
+# handle_error: 汎用エラーハンドリング関数
+#########################################################################
+handle_error() {
+    local message_key="$1"
+    local file="$2"
+    local version="$3"
+    local error_message
+    error_message=$(get_message "$message_key")
+    error_message=$(echo "$error_message" | sed -e "s/{file}/$file/" -e "s/{version}/$version/")
+    echo -e "$(color red "$error_message")"
+    return 1
+}
+
+#########################################################################
 # デバッグモードの制御 (コマンドライン引数対応)
 #########################################################################
 DEBUG_MODE=false
@@ -166,7 +180,59 @@ color_code_map() {
     esac
 }
 
+#########################################################################
+# openwrt_db: バージョンデータベースのダウンロード
+#########################################################################
+openwrt_db() {
+    if [ ! -f "${BASE_DIR}/openwrt.db" ]; then
+        ${BASE_WGET} "${BASE_DIR}/openwrt.db" "${BASE_URL}/openwrt.db" || handle_error "Failed to download openwrt.db"
+    fi
+}
 
+#########################################################################
+# messages_db: メッセージデータベースのダウンロード
+#########################################################################
+messages_db() {
+    if [ ! -f "${BASE_DIR}/messages.db" ]; then
+        echo -e "$(color yellow "Downloading messages.db...")"
+        if ! ${BASE_WGET} "${BASE_DIR}/messages.db" "${BASE_URL}/messages.db"; then
+            echo -e "$(color red "Failed to download messages.db")"
+            return 1
+        fi
+        echo -e "$(color green "Successfully downloaded messages.db")"
+    fi
+}
+
+#########################################################################
+# packages_db: 選択されたパッケージファイルをダウンロード
+#########################################################################
+packages_db() {
+    if [ ! -f "${BASE_DIR}/packages.db" ]; then
+        ${BASE_WGET} "${BASE_DIR}/packages.db" "${BASE_URL}/packages.db" || handle_error "Failed to download packages.db"
+    fi
+}
+
+#########################################################################
+# check_openwrt: OpenWrtのバージョン確認・検証
+#########################################################################
+check_openwrt() {
+    local version_file="${CACHE_DIR}/openwrt.ch"
+    if [ -f "$version_file" ]; then
+        CURRENT_VERSION=$(cat "$version_file")
+    else
+        CURRENT_VERSION=$(awk -F"'" '/DISTRIB_RELEASE/ {print $2}' /etc/openwrt_release | cut -d'-' -f1)
+        echo "$CURRENT_VERSION" > "$version_file"
+    fi
+
+    if grep -q "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db"; then
+        local db_entry=$(grep "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db" | cut -d'=' -f2)
+        PACKAGE_MANAGER=$(echo "$db_entry" | cut -d'|' -f1)
+        VERSION_STATUS=$(echo "$db_entry" | cut -d'|' -f2)
+        echo -e "$(color green "Version $CURRENT_VERSION is supported ($VERSION_STATUS)")"
+    else
+        handle_error "Unsupported OpenWrt version: $CURRENT_VERSION"
+    fi
+}
 
 # 🔵　ランゲージ（言語・ゾーン）系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
@@ -528,160 +594,6 @@ normalize_country() {
     debug_log "INFO: Final system message language -> $(cat "$message_cache")"
 }
 
-# 🔴　ランゲージ（言語・ゾーン）系　ここまで　-------------------------------------------------------------------------------------------------------------------------------------------
-
-#########################################################################
-# download_script: 指定されたスクリプト・データベースのバージョン確認とダウンロード
-#########################################################################
-download_script() {
-    local file_name="$1"
-    local script_cache="${BASE_DIR}/script.ch"
-    local install_path="${BASE_DIR}/${file_name}"
-    local remote_url="${BASE_URL}/${file_name}"
-
-    if [ -f "$script_cache" ] && grep -q "^$file_name=" "$script_cache"; then
-        local cached_version=$(grep "^$file_name=" "$script_cache" | cut -d'=' -f2)
-        local remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2)
-        if [ "$cached_version" = "$remote_version" ]; then
-            echo "$(color green "$file_name is up-to-date ($cached_version). Skipping download.")"
-            return
-        fi
-    fi
-
-    echo "$(color yellow "Downloading latest version of $file_name")"
-    ${BASE_WGET} "$install_path" "$remote_url"
-    local new_version=$(grep "^version=" "$install_path" | cut -d'=' -f2)
-    echo "$file_name=$new_version" >> "$script_cache"
-}
-
-#########################################################################
-# download: 汎用ファイルダウンロード関数
-#########################################################################
-download() {
-    local file_url="$1"
-    local destination="$2"
-    if ! confirm "MSG_DOWNLOAD_CONFIRM" "$file_url"; then
-        echo -e "$(color yellow "Skipping download of $file_url")"
-        return 0
-    fi
-    ${BASE_WGET} "$destination" "${file_url}?cache_bust=$(date +%s)"
-    if [ $? -eq 0 ]; then
-        echo -e "$(color green "Downloaded: $file_url")"
-    else
-        echo -e "$(color red "Failed to download: $file_url")"
-        exit 1
-    fi
-}
-
-#########################################################################
-# openwrt_db: バージョンデータベースのダウンロード
-#########################################################################
-openwrt_db() {
-    if [ ! -f "${BASE_DIR}/openwrt.db" ]; then
-        ${BASE_WGET} "${BASE_DIR}/openwrt.db" "${BASE_URL}/openwrt.db" || handle_error "Failed to download openwrt.db"
-    fi
-}
-
-#########################################################################
-# messages_db: メッセージデータベースのダウンロード
-#########################################################################
-messages_db() {
-    if [ ! -f "${BASE_DIR}/messages.db" ]; then
-        echo -e "$(color yellow "Downloading messages.db...")"
-        if ! ${BASE_WGET} "${BASE_DIR}/messages.db" "${BASE_URL}/messages.db"; then
-            echo -e "$(color red "Failed to download messages.db")"
-            return 1
-        fi
-        echo -e "$(color green "Successfully downloaded messages.db")"
-    fi
-}
-
-#########################################################################
-# packages_db: 選択されたパッケージファイルをダウンロード
-#########################################################################
-packages_db() {
-    if [ ! -f "${BASE_DIR}/packages.db" ]; then
-        ${BASE_WGET} "${BASE_DIR}/packages.db" "${BASE_URL}/packages.db" || handle_error "Failed to download packages.db"
-    fi
-}
-
-#########################################################################
-# confirm: Y/N 確認関数
-#########################################################################
-confirm() {
-    local key="$1"
-    local replace_param1="$2"
-    local replace_param2="$3"
-    local prompt_message
-    prompt_message=$(get_message "$key" "$SELECTED_LANGUAGE")
-    [ -n "$replace_param1" ] && prompt_message=$(echo "$prompt_message" | sed "s/{pkg}/$replace_param1/g")
-    [ -n "$replace_param2" ] && prompt_message=$(echo "$prompt_message" | sed "s/{version}/$replace_param2/g")
-    echo "DEBUG: Confirm message -> [$prompt_message]"
-    while true; do
-        read -r -p "$prompt_message " confirm
-        confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')
-        case "$confirm" in
-            ""|"y"|"yes") return 0 ;;
-            "n"|"no") return 1 ;;
-            *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
-        esac
-    done
-}
-
-#########################################################################
-# check_openwrt: OpenWrtのバージョン確認・検証
-#########################################################################
-check_openwrt() {
-    local version_file="${CACHE_DIR}/openwrt.ch"
-    if [ -f "$version_file" ]; then
-        CURRENT_VERSION=$(cat "$version_file")
-    else
-        CURRENT_VERSION=$(awk -F"'" '/DISTRIB_RELEASE/ {print $2}' /etc/openwrt_release | cut -d'-' -f1)
-        echo "$CURRENT_VERSION" > "$version_file"
-    fi
-
-    if grep -q "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db"; then
-        local db_entry=$(grep "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db" | cut -d'=' -f2)
-        PACKAGE_MANAGER=$(echo "$db_entry" | cut -d'|' -f1)
-        VERSION_STATUS=$(echo "$db_entry" | cut -d'|' -f2)
-        echo -e "$(color green "Version $CURRENT_VERSION is supported ($VERSION_STATUS)")"
-    else
-        handle_error "Unsupported OpenWrt version: $CURRENT_VERSION"
-    fi
-}
-
-#########################################################################
-# country_info: 選択された国と言語の詳細情報を表示
-#########################################################################
-country_info() {
-    local country_info_file="${BASE_DIR}/country.ch"
-    local selected_language_code=$(cat "${BASE_DIR}/check_country")
-    if [ -f "$country_info_file" ]; then
-        grep -w "$selected_language_code" "$country_info_file"
-    else
-        printf "%s\n" "$(color red "Country information not found.")"
-    fi
-}
-
-#########################################################################
-# get_package_manager: パッケージマネージャー判定（apk / opkg 対応）
-#########################################################################
-get_package_manager() {
-    if [ -f "${BASE_DIR}/downloader_ch" ]; then
-        PACKAGE_MANAGER=$(cat "${BASE_DIR}/downloader_ch")
-    else
-        if command -v apk >/dev/null 2>&1; then
-            PACKAGE_MANAGER="apk"
-        elif command -v opkg >/dev/null 2>&1; then
-            PACKAGE_MANAGER="opkg"
-        else
-            handle_error "$(get_message 'no_package_manager_found' "$SELECTED_LANGUAGE")"
-        fi
-        echo "$PACKAGE_MANAGER" > "${BASE_DIR}/downloader_ch"
-    fi
-    echo -e "\033[1;32m$(get_message 'detected_package_manager' "$SELECTED_LANGUAGE"): $PACKAGE_MANAGER\033[0m"
-}
-
 #########################################################################
 # Last Update: 2025-02-12 14:35:26 (JST) 🚀
 # "Precision in code, clarity in purpose. Every update refines the path." 
@@ -734,28 +646,49 @@ get_message() {
         echo "$message"
     fi
 }
+# 🔴　ランゲージ（言語・ゾーン）系　ここまで　-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
-# handle_error: 汎用エラーハンドリング関数
+# confirm: Y/N 確認関数
 #########################################################################
-handle_error() {
-    local message_key="$1"
-    local file="$2"
-    local version="$3"
-    local error_message
-    error_message=$(get_message "$message_key")
-    error_message=$(echo "$error_message" | sed -e "s/{file}/$file/" -e "s/{version}/$version/")
-    echo -e "$(color red "$error_message")"
-    return 1
+confirm() {
+    local key="$1"
+    local replace_param1="$2"
+    local replace_param2="$3"
+    local prompt_message
+    prompt_message=$(get_message "$key" "$SELECTED_LANGUAGE")
+    [ -n "$replace_param1" ] && prompt_message=$(echo "$prompt_message" | sed "s/{pkg}/$replace_param1/g")
+    [ -n "$replace_param2" ] && prompt_message=$(echo "$prompt_message" | sed "s/{version}/$replace_param2/g")
+    echo "DEBUG: Confirm message -> [$prompt_message]"
+    while true; do
+        read -r -p "$prompt_message " confirm
+        confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')
+        case "$confirm" in
+            ""|"y"|"yes") return 0 ;;
+            "n"|"no") return 1 ;;
+            *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
+        esac
+    done
 }
 
+# 🔵　パッケージ系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
-# handle_exit: 正常終了メッセージを表示して終了
+# get_package_manager: パッケージマネージャー判定（apk / opkg 対応）
 #########################################################################
-handle_exit() {
-    local message="$1"
-    color yellow "$message"
-    exit 0
+get_package_manager() {
+    if [ -f "${BASE_DIR}/downloader_ch" ]; then
+        PACKAGE_MANAGER=$(cat "${BASE_DIR}/downloader_ch")
+    else
+        if command -v apk >/dev/null 2>&1; then
+            PACKAGE_MANAGER="apk"
+        elif command -v opkg >/dev/null 2>&1; then
+            PACKAGE_MANAGER="opkg"
+        else
+            handle_error "$(get_message 'no_package_manager_found' "$SELECTED_LANGUAGE")"
+        fi
+        echo "$PACKAGE_MANAGER" > "${BASE_DIR}/downloader_ch"
+    fi
+    echo -e "\033[1;32m$(get_message 'detected_package_manager' "$SELECTED_LANGUAGE"): $PACKAGE_MANAGER\033[0m"
 }
 
 #########################################################################
@@ -847,7 +780,73 @@ install_language_pack() {
         debug_log "INFO" "Package $base_pkg is not a LuCI package. Skipping language pack check."
     fi
 }
+# 🔴　パッケージ系　ここまで　-------------------------------------------------------------------------------------------------------------------------------------------
 
+
+#########################################################################
+# download_script: 指定されたスクリプト・データベースのバージョン確認とダウンロード
+#########################################################################
+download_script() {
+    local file_name="$1"
+    local script_cache="${BASE_DIR}/script.ch"
+    local install_path="${BASE_DIR}/${file_name}"
+    local remote_url="${BASE_URL}/${file_name}"
+
+    if [ -f "$script_cache" ] && grep -q "^$file_name=" "$script_cache"; then
+        local cached_version=$(grep "^$file_name=" "$script_cache" | cut -d'=' -f2)
+        local remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2)
+        if [ "$cached_version" = "$remote_version" ]; then
+            echo "$(color green "$file_name is up-to-date ($cached_version). Skipping download.")"
+            return
+        fi
+    fi
+
+    echo "$(color yellow "Downloading latest version of $file_name")"
+    ${BASE_WGET} "$install_path" "$remote_url"
+    local new_version=$(grep "^version=" "$install_path" | cut -d'=' -f2)
+    echo "$file_name=$new_version" >> "$script_cache"
+}
+
+#########################################################################
+# download: 汎用ファイルダウンロード関数
+#########################################################################
+download() {
+    local file_url="$1"
+    local destination="$2"
+    if ! confirm "MSG_DOWNLOAD_CONFIRM" "$file_url"; then
+        echo -e "$(color yellow "Skipping download of $file_url")"
+        return 0
+    fi
+    ${BASE_WGET} "$destination" "${file_url}?cache_bust=$(date +%s)"
+    if [ $? -eq 0 ]; then
+        echo -e "$(color green "Downloaded: $file_url")"
+    else
+        echo -e "$(color red "Failed to download: $file_url")"
+        exit 1
+    fi
+}
+
+#########################################################################
+# country_info: 選択された国と言語の詳細情報を表示
+#########################################################################
+country_info() {
+    local country_info_file="${BASE_DIR}/country.ch"
+    local selected_language_code=$(cat "${BASE_DIR}/check_country")
+    if [ -f "$country_info_file" ]; then
+        grep -w "$selected_language_code" "$country_info_file"
+    else
+        printf "%s\n" "$(color red "Country information not found.")"
+    fi
+}
+
+#########################################################################
+# handle_exit: 正常終了メッセージを表示して終了
+#########################################################################
+handle_exit() {
+    local message="$1"
+    color yellow "$message"
+    exit 0
+}
 
 #########################################################################
 # Last Update: 2025-02-12 14:35:26 (JST) 🚀
