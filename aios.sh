@@ -1,7 +1,7 @@
 #!/bin/sh
 # aios.sh (初期エントリースクリプト)
 # License: CC0
-AIOS_VERSION="2025.02.14-0"
+AIOS_VERSION="2025.02.14-1"
 echo -e "\033[7;40maios.sh Updated to version $AIOS_VERSION \033[0m"
 
 INPUT_LANG="${1:-}"  # ✅ `$1` は言語情報のみ受け付ける
@@ -50,16 +50,7 @@ mkdir_aios() {
     mkdir -p "$BASE_DIR"
 }
 
-if $SHOW_HELP; then
-    print_help
-    exit 0
-fi
-
-if $RESET_CACHE; then
-    reset_cache
-fi
-
 delete_aios
 mkdir_aios
 download_common
-check_common "full" "$INPUT_LANG"
+check_common "$INPUT_LANG"
