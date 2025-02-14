@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-7-0"
+COMMON_VERSION="2025.02.14-7-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -199,7 +199,6 @@ select_country() {
     local cache_country="${CACHE_DIR}/country.ch"
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
 
-    # ✅ `$1` がある場合、`country.db` で検索
     if [ -n "$1" ]; then
         debug_log "INFO" "Processing input: $1"
 
@@ -220,14 +219,12 @@ select_country() {
         fi
     fi
 
-    # ✅ `$1` が `country.db` にない場合、`country.ch` を確認
     if [ -f "$cache_country" ]; then
         debug_log "INFO" "Country cache found. Language-related processing is complete."
-        select_zone  # ✅ 言語選択が完了しているので `select_zone()` を実行
+        select_zone
         return
     fi
 
-    # ✅ `$1` も `country.ch` も無い場合 → 言語選択モード
     while true; do
         echo "$(color cyan "Enter country name, code, or language to search:")"
         printf "%s" "Please input: "
@@ -235,7 +232,8 @@ select_country() {
 
         if [ "$input" = "R" ] || [ "$input" = "r" ]; then
             debug_log "INFO" "User selected R: Returning to language selection start."
-            return 2  # ✅ 言語選択の最初に戻る
+            check_common
+            return
         fi
 
         if [ -z "$input" ]; then
@@ -253,11 +251,6 @@ select_country() {
         fi
 
         selection_list "$search_results" "$tmp_country" "country"
-
-        # ✅ `selection_list()` からの戻り値を確認
-        case $? in
-            2) return 2 ;;  # 言語選択の最初に戻る
-        esac
 
         country_write
         select_zone
@@ -421,7 +414,12 @@ selection_list() {
 
         if [ "$choice" = "R" ] || [ "$choice" = "r" ]; then
             debug_log "INFO" "User selected R: Returning to previous selection."
-            return 2
+            if [ "$mode" = "zone" ]; then
+                select_country  # ✅ 言語選択に戻る
+            else
+                check_common  # ✅ 言語選択の最初に戻る
+            fi
+            return
         fi
 
         local selected_value
@@ -439,7 +437,14 @@ selection_list() {
         case "$yn" in
             [Yy]*) printf "%s\n" "$selected_value" > "$output_file"; return ;;
             [Nn]*) printf "%s\n" "$(color yellow "Returning to selection.")" ;;
-            [Rr]*) return 2 ;;  # 言語選択に戻る
+            [Rr]*) 
+                if [ "$mode" = "zone" ]; then
+                    select_country  # ✅ 言語選択に戻る
+                else
+                    check_common  # ✅ 言語選択の最初に戻る
+                fi
+                return
+                ;;
             *) printf "%s\n" "$(color red "Invalid input. Please enter 'Y', 'N', or 'R'.")" ;;
         esac
     done
@@ -890,14 +895,6 @@ select_zone() {
     local formatted_zone_list=$(awk '{gsub(",", " "); for (i=1; i<=NF; i+=2) print $i, $(i+1)}' "$cache_zone")
 
     selection_list "$formatted_zone_list" "$cache_zone_tmp" "zone"
-
-    case $? in
-        2) 
-            debug_log "INFO" "User selected R in zone selection: Returning to language selection."
-            select_country
-            return
-            ;;
-    esac
 
     local selected_zone=$(cat "$cache_zone_tmp" 2>/dev/null)
     if [ -z "$selected_zone" ]; then
