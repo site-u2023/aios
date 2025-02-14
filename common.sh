@@ -235,8 +235,6 @@ select_country() {
 
         # 完全一致を優先
         local search_results
-        #search_results=$(awk -v search="^$cleaned_input$" 'BEGIN {IGNORECASE=1} 
-        #    { for (i=2; i<=NF; i++) if ($i ~ search) print $0 }' "$BASE_DIR/country.db")
         search_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} 
             { key = $2" "$3" "$4" "$5; if ($0 ~ search && !seen[key]++) print $0 }' "$BASE_DIR/country.db")
 
