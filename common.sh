@@ -326,13 +326,18 @@ selection_list() {
         read -r yn
 
         case "$yn" in
-            [Yy]*) printf "%s\n" "$selected_value" > "$output_file"; return ;;
+            [Yy]*) printf "%s\n" "$selected_value" > "$output_file"
+                   return
+                   ;;
             [Nn]*) printf "%s\n" "$(color yellow "Returning to selection.")"
                    selection_list "$input_data" "$output_file" "$mode"
                    continue
                    ;;
             [Rr]*) check_common; return ;;
-            *) printf "%s\n" $(color red "Invalid input. Please enter 'Y', 'N', or 'R'.") ;;
+            *)     printf "%s\n" $(color red "Invalid input. Please enter 'Y', 'N', or 'R'.")
+                   selection_list "$input_data" "$output_file" "$mode"
+                   continue
+                   ;;
         esac
     done
 }
