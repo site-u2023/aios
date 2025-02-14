@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-3-8"
+COMMON_VERSION="2025.02.14-3-9"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -257,12 +257,6 @@ selection_list() {
         return 1
     fi
 
-    # ✅ 入力データが空の場合はエラーを出して終了
-    if [ -z "$input_data" ]; then
-        printf "%s\n" "$(color red "No results found. Please enter a valid country name or code.")"
-        return 1
-    fi
-
     : > "$list_file"
 
     echo "$input_data" | while IFS= read -r line; do
@@ -282,16 +276,19 @@ selection_list() {
         fi
     done
 
-    # ✅ `[0] Cancel / back to return` をリストの最後に表示
-    printf "%s\n" "$display_list"
-    printf "[0] Cancel / back to return\n"
+    # ✅ `display_list` が空 (`""`) なら `[0] Cancel / back to return` だけを表示
+    if [ -z "$display_list" ]; then
+        printf "[0] Cancel / back to return\n"
+    else
+        printf "%s\n" "$display_list"
+        printf "[0] Cancel / back to return\n"
+    fi
 
     local choice=""
     while true; do
         printf "%s" "$(color cyan "Enter the number of your choice: ")"
         read -r choice
 
-        # ✅ `choice` が無効な場合は再入力を促す
         if ! echo "$choice" | grep -qE '^[0-9]+$'; then
             printf "%s\n" "$(color red "Invalid input. Please enter a valid number.")"
             continue
@@ -306,7 +303,7 @@ selection_list() {
         selected_value=$(awk -v num="$choice" 'NR == num {print $0}' "$list_file")
 
         if [ -z "$selected_value" ]; then
-            printf "%s\n" "$(color red "Invalid selection. Please choose a valid number.")"
+            printf "%s\n" "$(color red "ERROR: Selected value is empty. Please select again.")"
             continue
         fi
 
@@ -317,7 +314,6 @@ selection_list() {
             confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $1, $2}')
         fi
 
-        # ✅ `confirm_info` が空なら無効な選択として処理
         if [ -z "$confirm_info" ]; then
             printf "%s\n" "$(color red "Selection error. Please try again.")"
             continue
