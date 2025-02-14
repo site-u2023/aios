@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-4-11"
+COMMON_VERSION="2025.02.14-4-12"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -1154,7 +1154,13 @@ install_language_pack() {
 #########################################################################
 check_common() {
     local lang_code="$1"
+    
     debug_log "INFO" "check_common called with lang_code: '$lang_code'"
+    script_update || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
+    download_script messages.db || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
+    download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
+    download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
+    check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
     select_country "$lang_code"
 }
 
