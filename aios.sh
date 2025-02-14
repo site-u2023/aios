@@ -1,7 +1,7 @@
 #!/bin/sh
 # aios.sh (初期エントリースクリプト)
 # License: CC0
-AIOS_VERSION="2025.02.13-1"
+AIOS_VERSION="2025.02.13-2"
 echo -e "\033[7;40maios.sh Updated to version $AIOS_VERSION \033[0m"
 
 DEBUG_MODE=false
@@ -12,12 +12,19 @@ INPUT_LANG="${1:-}"
 # オプション解析
 while [ $# -gt 0 ]; do
     case "$1" in
-        -d|--debug|-debug) DEBUG_MODE=true ;;
-        -reset|--reset|-r) RESET_CACHE=true ;;
-        -help|--help|-h) SHOW_HELP=true ;;
+        -d|--debug|-debug) DEBUG_MODE=true; shift ;;
+        -reset|--reset|-r) RESET_CACHE=true; shift ;;
+        -help|--help|-h) SHOW_HELP=true; shift ;;
+        *)
+            # ✅ 最初に見つかった有効な引数を `INPUT_LANG` にセット
+            if [ -z "$INPUT_LANG" ]; then
+                INPUT_LANG="$1"
+            fi
+            shift
+            ;;
     esac
-    shift
 done
+
 
 export DEBUG_MODE INPUT_LANG  # 環境変数として渡す
 
