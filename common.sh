@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-5-9"
+COMMON_VERSION="2025.02.14-5-10"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -193,72 +193,83 @@ color_code_map() {
 #        ├─ あり → 言語系終了（以降の処理なし）
 #        ├─ なし → 言語選択を実行
 #########################################################################
-select_country() {
-    debug_log "INFO" "Entering select_country() with arg: '$1'"
+selection_list() {
+    local input_data="$1"
+    local output_file="$2"
+    local mode="$3"
+    local list_file=""
+    local i=1
 
-    local cache_country="${CACHE_DIR}/country.ch"
-    local tmp_country="${CACHE_DIR}/country_tmp.ch"
+    if [ "$mode" = "country" ]; then
+        list_file="${CACHE_DIR}/country_tmp.ch"
+    elif [ "$mode" = "zone" ]; then
+        list_file="${CACHE_DIR}/zone_tmp.ch"
+    else
+        debug_log "ERROR" "Invalid mode in selection_list: $mode"
+        return 1
+    fi
 
-    # ✅ `$1` がある場合、`country.db` で検索
-    if [ -n "$1" ]; then
-        debug_log "INFO" "Processing input: $1"
+    : > "$list_file"
 
-        local predefined_country=$(awk -v search="$1" 'BEGIN {IGNORECASE=1} 
-            $2 == search || $3 == search || $4 == search || $5 == search {print $0}' "$BASE_DIR/country.db")
+    local display_list=""
+    local cache_list=""
 
-        if [ -n "$predefined_country" ]; then
-            debug_log "INFO" "Found country entry: $predefined_country"
-            echo "$predefined_country" > "$tmp_country"
-            country_write
-            select_zone  # ✅ `$1` が `country.db` にあるならゾーン選択へ
-            return
-        else
-            debug_log "ERROR" "Invalid input '$1' is not a valid country."
-            echo "$(color red "Error: '$1' is not a recognized country name or code.")"
-            echo "$(color yellow "Switching to language selection.")"
-            # ✅ 無効な $1 の場合、通常の言語選択へ
-            set --  # `$1` をクリア
+    echo "$input_data" | while IFS= read -r line; do
+        if [ -n "$line" ]; then
+            printf -v display_list "%s[%d] %s\n" "$display_list" "$i" "$line"
+            printf -v cache_list "%s%d %s\n" "$cache_list" "$i" "$line"
+            i=$((i + 1))
         fi
-    fi
+    done
 
-    # ✅ `$1` が `country.db` にない場合、`country.ch` を確認
-    if [ -f "$cache_country" ]; then
-        debug_log "INFO" "Country cache found. Language-related processing is complete."
-        select_zone  # ✅ 言語選択が完了しているので `select_zone()` を実行
-        return
-    fi
+    # ✅ 画面にリストを表示
+    printf "%b\n" "$display_list"
+    echo "[0] Cancel / back to return"
 
-    # ✅ `$1` も `country.ch` も無い場合 → 言語選択モード
-    echo "$(color cyan "Enter country name, code, or language to search:")"
-    printf "%s" "Please input: "
-    read -r input
+    # ✅ キャッシュに保存
+    printf "%b" "$cache_list" > "$list_file"
 
-    if [ -z "$input" ]; then
-        debug_log "ERROR" "No input provided."
-        return
-    fi
+    local choice=""
+    while true; do
+        printf "%s" "$(color cyan "Enter the number of your choice: ")"
+        read choice
 
-    # ✅ `country.db` から検索
-    local search_results=$(awk -v search="$input" 'BEGIN {IGNORECASE=1} 
-        $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}' "$BASE_DIR/country.db")
+        if [ "$choice" = "0" ]; then
+            if [ "$mode" = "country" ]; then
+                printf "%s\n" "$(color yellow "Returning to country selection.")"
+                select_country  # ✅ 言語選択に戻る
+            elif [ "$mode" = "zone" ]; then
+                printf "%s\n" "$(color yellow "Canceling selection.")"
+                return  # ✅ ゾーン選択をキャンセル
+            fi
+            return
+        fi
 
-    if [ -z "$search_results" ]; then
-        debug_log "ERROR" "No matching country found."
-        echo "$(color red "Error: No matching country found for '$input'. Please try again.")"
-        select_country  # ❗ 無効なら、もう一度言語選択へ
-        return
-    fi
+        local selected_value
+        selected_value=$(awk -v num="$choice" '$1 == num {print substr($0, index($0,$2))}' "$list_file")
 
-    # ✅ `selection_list()` で選択
-    selection_list "$search_results" "$tmp_country" "country"
+        if [ -z "$selected_value" ]; then
+            printf "%s\n" "$(color red "Invalid selection. Please choose a valid number.")"
+            continue
+        fi
 
-    # ✅ `country_write()` でキャッシュに確定
-    country_write
-
-    # ✅ `select_zone()` に進む
-    select_zone
+        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $selected_value")"
+        printf "%s" "(Y/n)?: "
+        read yn
+        case "$yn" in
+            [Yy]*)
+                printf "%s\n" "$selected_value" > "$output_file"
+                return
+                ;;
+            [Nn]*)
+                printf "%s\n" "$(color yellow "Returning to selection.")"
+                ;;
+            *)
+                printf "%s\n" "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
+                ;;
+        esac
+    done
 }
-
 
 XXX_select_country() {
     debug_log "=== Entering select_country() ==="
