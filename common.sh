@@ -306,7 +306,7 @@ selection_list() {
         selected_value=$(awk -v num="$choice" 'NR == num {print $0}' "$list_file")
 
         if [ -z "$selected_value" ]; then
-            printf "%s\n" "$(color red "Invalid selection. Please choose a valid number.")"
+            printf "%s\n" "$(color red "Invalid selection.)"
             continue
         fi
 
@@ -318,7 +318,7 @@ selection_list() {
         fi
 
         printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info")"
-        printf "Confirm (Y=Yes / N=No / R=Restart): "
+        printf "Confirm (Y/N/R): "
         read -r yn
 
         case "$yn" in
@@ -336,8 +336,8 @@ selection_list() {
                 return
                 ;;
             *) 
-                printf "%s\n" "$(color red "Invalid input. Please enter 'Y', 'N', or 'R'.")"
-                printf "%s" "Confirm (Y=Yes / N=No / R=Restart): "
+                printf "%s\n" "$(color red "Invalid input.")"
+                printf "%s" "Confirm (Y/N/R): "
                 read -r yn
                 ;;
         esac
