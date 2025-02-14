@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-0-0"
+COMMON_VERSION="2025.02.15-0-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -225,12 +225,26 @@ select_country() {
     fi
 
     while true; do
+
+    while true; do
         printf "%s\n" "$(color cyan "Enter country name, code, or language to search.")"
         printf "%s" "Search (Keyword/Code): "
         read -r input
 
-        local search_results=$(awk -v search="$input" 'BEGIN {IGNORECASE=1} 
-            $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}' "$BASE_DIR/country.db")
+        # 入力の正規化: "/", ",", "_" をスペースに置き換え
+        local cleaned_input
+        cleaned_input=$(echo "$input" | sed 's/[\/,_]/ /g')
+
+        # 完全一致を優先
+        local search_results
+        search_results=$(awk -v search="^$cleaned_input$" 'BEGIN {IGNORECASE=1} 
+            { for (i=2; i<=NF; i++) if ($i ~ search) print $0 }' "$BASE_DIR/country.db")
+
+        # 完全一致がない場合、部分一致を検索
+        if [ -z "$search_results" ]; then
+            search_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} 
+                { for (i=2; i<=NF; i++) if ($i ~ search) print $0 }' "$BASE_DIR/country.db")
+        fi
 
         if [ -z "$search_results" ]; then
             printf "%s\n" "$(color red "Error: No matching country found for '$input'. Please try again.")"
