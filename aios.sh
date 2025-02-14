@@ -34,7 +34,7 @@ fi
 # `check_common` の実行
 check_common "$INPUT_LANG"
 
-debug_log "INFO" "aios.sh received INPUT_LANG: '$INPUT_LANG' and DEBUG_MODE: '$DEBUG_MODE'"
+#debug_log "INFO" "aios.sh received INPUT_LANG: '$INPUT_LANG' and DEBUG_MODE: '$DEBUG_MODE'"
 
 # `ttyd` のインストール
 install_packages yn ttyd
