@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-6-1"
+COMMON_VERSION="2025.02.14-6-2"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -375,26 +375,12 @@ selection_list() {
         printf "%s\n" "$display_list"
     fi
 
-    printf "[r] Return to previous selection\n"
-
     local choice=""
     while true; do
-        printf "%s" "$(color cyan "Enter the number of your choice (or 'r' to return): ")"
+        printf "%s" "$(color cyan "Enter the number of your choice: ")"
         read -r choice
 
         debug_log "DEBUG: choice -> $choice"
-
-        if [ "$choice" = "r" ]; then
-            if [ "$mode" = "country" ]; then
-                debug_log "DEBUG: User chose to return to previous language selection"
-                printf "%s\n" "$(color yellow "Returning to language selection.")"
-                return 2  # 言語選択前に戻る
-            elif [ "$mode" = "zone" ]; then
-                debug_log "DEBUG: User chose to return to country selection"
-                printf "%s\n" "$(color yellow "Returning to country selection.")"
-                return 3  # 言語選択に戻る
-            fi
-        fi
 
         if ! echo "$choice" | grep -qE '^[0-9]+$'; then
             debug_log "DEBUG: Invalid choice (not a number) -> $choice"
@@ -446,13 +432,13 @@ selection_list() {
                 ;;
             [Rr]*) 
                 if [ "$mode" = "country" ]; then
-                    debug_log "DEBUG: User chose to return to previous language selection"
-                    printf "%s\n" "$(color yellow "Returning to language selection.")"
-                    return 2
+                    debug_log "DEBUG: User chose to return to language selection start (Please input:)"
+                    printf "%s\n" "$(color yellow "Returning to language selection start.")"
+                    return 2  # 言語選択前の状態に戻る
                 elif [ "$mode" = "zone" ]; then
                     debug_log "DEBUG: User chose to return to country selection"
                     printf "%s\n" "$(color yellow "Returning to country selection.")"
-                    return 3
+                    return 3  # 言語選択に戻る
                 fi
                 ;;
             *) 
