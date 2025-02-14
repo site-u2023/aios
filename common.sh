@@ -298,7 +298,8 @@ selection_list() {
     done
 
     while true; do
-        printf "%s" "$(color cyan "Enter the number of your choice: ")"
+        printf "%s\n" "$(color cyan "Enter the number of your choice.")"
+        printf "(No)?: "
         read -r choice
 
         local selected_value
@@ -317,7 +318,7 @@ selection_list() {
         fi
 
         printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info")"
-        printf "%s" "(Y/N/R)?: "
+        printf "(Y/N/R)?: "
         read -r yn
 
         case "$yn" in
@@ -340,6 +341,7 @@ selection_list() {
         esac
     done
 }
+
 
 XXX_selection_list() {
     local input_data="$1"
