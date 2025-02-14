@@ -314,6 +314,7 @@ selection_list() {
     local output_file="$2"
     local mode="$3"
     local list_file=""
+    local display_list_file="${CACHE_DIR}/display_list_tmp.ch"
     local i=1
 
     if [ "$mode" = "country" ]; then
@@ -325,26 +326,25 @@ selection_list() {
         return 1
     fi
 
+    # ✅ キャッシュクリア
     : > "$list_file"
+    : > "$display_list_file"
 
     local display_list=""
     local cache_list=""
 
-    # ✅ `input_data` を処理
+    # ✅ `input_data` を処理し、キャッシュに保存
     echo "$input_data" | while IFS= read -r line; do
         if [ -n "$line" ]; then
-            display_list="${display_list}[$i] $line\n"
-            cache_list="${cache_list}$i $line\n"
+            printf "[%d] %s\n" "$i" "$line" >> "$display_list_file"
+            echo "$i $line" >> "$list_file"
             i=$((i + 1))
         fi
     done
 
     # ✅ 画面にリストを表示
-    printf "%b\n" "$display_list"
+    cat "$display_list_file"
     echo "[0] Cancel / back to return"
-
-    # ✅ キャッシュに保存
-    printf "%b" "$cache_list" > "$list_file"
 
     local choice=""
     while true; do
@@ -362,7 +362,7 @@ selection_list() {
             return
         fi
 
-        # ✅ `awk` の `-v` を使わず `grep` で `choice` を検索
+        # ✅ `-v` を使わず `grep` で `choice` を検索
         local selected_value
         selected_value=$(grep "^$choice " "$list_file" | sed "s/^$choice //")
 
@@ -388,7 +388,6 @@ selection_list() {
         esac
     done
 }
-
 
 XXX_2014_03_selection_list() {
     local input_data="$1"
