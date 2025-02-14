@@ -6,7 +6,7 @@ echo -e "\033[7;40maios.sh Updated to version $AIOS_VERSION \033[0m"
 
 INPUT_LANG="${1:-}"  # ✅ `$1` は言語情報のみ受け付ける
 
-export INPUT_LANG  # 環境変数として渡す
+#export INPUT_LANG  # 環境変数として渡す
 
 # 定数設定
 BASE_WGET="wget --quiet -O"
