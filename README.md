@@ -30,6 +30,16 @@ wget --quiet -O /tmp/aios.sh "https://raw.githubusercontent.com/site-u2023/aios/
 wget --quiet -O /tmp/aios.sh "https://raw.githubusercontent.com/site-u2023/aios/main/aios.sh?cache_bust=$(date +%s)"; sh /tmp/aios.sh JP
 ```
 
+- 日本語
+```sh
+wget --quiet -O /tmp/aios.sh "https://raw.githubusercontent.com/site-u2023/aios/main/aios.sh?cache_bust=$(date +%s)"; sh /tmp/aios.sh 日本語
+```
+
+- 日本
+```sh
+wget --quiet -O /tmp/aios.sh "https://raw.githubusercontent.com/site-u2023/aios/main/aios.sh?cache_bust=$(date +%s)"; sh /tmp/aios.sh 日本
+```
+
 ## 要件定義書
 
 https://github.com/site-u2023/aios/blob/main/requirement-definition.md
