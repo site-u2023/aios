@@ -17,7 +17,7 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 
 # 環境変数 INPUT_LANG のチェック（デフォルト 'ja' とする）
 # INPUT_LANG="${INPUT_LANG:-ja}"
-debug_log "common.sh received INPUT_LANG: '$INPUT_LANG'"
+# debug_log "common.sh received INPUT_LANG: '$INPUT_LANG'"
 
 script_update() (
     COMMON_CACHE="${CACHE_DIR}/common_version.ch"
