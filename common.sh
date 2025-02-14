@@ -397,7 +397,7 @@ selection_list() {
 #
 # 【要件】
 # - `country.ch` に **該当行を丸ごと保存**（データの基準）
-# - `country.ch` に **$3（言語名）** を保存
+# - `language.ch` に **$5（言語名）** を保存
 # - `luci.ch` に **$4（言語コード）** を保存
 # - `country_tmp.ch`（$1-$5）を作成
 # - `zone_tmp.ch`（$6-）を作成（ゾーン情報がない場合は `NO_TIMEZONE` を記録）
@@ -406,7 +406,7 @@ selection_list() {
 country_write() {
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
     local cache_country="${CACHE_DIR}/country.ch"
-    local cache_language="${CACHE_DIR}/country.ch"
+    local cache_language="${CACHE_DIR}/language.ch"
     local cache_luci="${CACHE_DIR}/luci.ch"
     local cache_zone="${CACHE_DIR}/zone.ch"
 
