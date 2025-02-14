@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-13-17"
+COMMON_VERSION="2025.02.15-0-0"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -212,8 +212,8 @@ select_country() {
             return
         else
             debug_log "ERROR" "Invalid input '$1' is not a valid country."
-            printf  "$(color red "Error: '$1' is not a recognized country name or code.")"
-            printf  "$(color yellow "Switching to language selection.")"
+            printf "%s\n" "$(color red "Error: '$1' is not a recognized country name or code.")"
+            printf "%s\n" "$(color yellow "Switching to language selection.")"
             set --  
         fi
     fi
