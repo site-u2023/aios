@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-4-10"
+COMMON_VERSION="2025.02.14-4-11"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -174,30 +174,6 @@ color_code_map() {
 # "Precision in code, clarity in purpose. Every update refines the path."
 # select_country: ユーザーに国の選択を促す（検索機能付き）
 #
-# 【要件】
-# 1. 役割:
-#    - 言語処理の入口として `$1` または `language.ch` を判定
-#    - `$1` が指定されている場合は最優先で処理
-#    - キャッシュ (`language.ch`) がある場合は、それを使用
-#    - どちらも無い場合、手動で選択させる
-#
-# 2. キャッシュ処理:
-#    - `language.ch` が存在する場合、それを使用し `normalize_country()` へ
-#    - キャッシュが無い場合、手動入力を求める
-#
-# 3. 言語コードの処理:
-#    - `$1` が `SUPPORTED_LANGUAGES` に含まれているかを確認
-#    - 含まれていなければ、手動で言語を選択させる
-#    - 選択後、キャッシュ (`language.ch`) に保存
-#
-# 4. フロー:
-#    - 言語の決定 → `normalize_country()` に進む
-#
-# 5. メンテナンス:
-#    - `language.ch` は一度書き込んだら変更しない
-#    - 言語の決定はすべて `select_country()` 内で完結させる
-#    - `normalize_country()` ではキャッシュを上書きしない
-# 
 # select_country()
 # ├── selection_list()  → 選択結果を country_tmp.ch に保存
 # ├── country_write()   → country.ch, language.ch, luci.ch, zone.ch に確定
@@ -208,60 +184,56 @@ color_code_map() {
 # [3] country_write() を実行
 # [4] 確定キャッシュを作成（country.ch, language.ch, luci.ch, zone.ch）→ 書き込み禁止にする
 # [5] select_zone() を実行
+
+# 1️⃣ `$1` の存在確認  
+#  ├─ あり → `country.db` で検索  
+#  |    ├─ 見つかる → `select_zone()`（ゾーン選択へ） 
+#  |    ├─ 見つからない → `select_country()`（言語選択へ）
+#  ├─ なし → `country.ch` のキャッシュを確認  
+#       ├─ あり → 言語系チェック終了  
+#       ├─ なし → `select_country()`（言語選択へ）
 #########################################################################
 select_country() {
-    debug_log "=== Entering select_country() ==="
+    debug_log "INFO" "Entering select_country()"
 
-    local tmp_country="${CACHE_DIR}/country_tmp.ch"
-
+    local cache_country="/tmp/aios/cache/country.ch"
+    
     if [ -n "$1" ]; then
-        debug_log "Checking for predefined country input: $1"
+        debug_log "INFO" "Processing input: $1"
 
-        # `country.db` から $1 に該当する行を取得
-        local predefined_country=$(awk -v search="$1" 'BEGIN {IGNORECASE=1} $2 == search || $3 == search || $4 == search || $5 == search {print $0}' "$BASE_DIR/country.db")
+        # ✅ `country.db` から `$1` を検索
+        local predefined_country=$(awk -v search="$1" 'BEGIN {IGNORECASE=1} $2 == search || $3 == search || $4 == search || $5 == search {print $0}' "/tmp/aios/country.db")
 
         if [ -n "$predefined_country" ]; then
-            debug_log "Found country entry: $predefined_country"
-            echo "$predefined_country" > "$tmp_country"
-
-            # `country_write()` で確定キャッシュを作成
+            debug_log "INFO" "Found country entry: $predefined_country"
+            echo "$predefined_country" > "/tmp/aios/cache/country_tmp.ch"
             country_write
-
-            # すぐに `select_zone()` に移行
             select_zone
             return
         else
-            debug_log "Predefined country not found. Proceeding with manual selection."
+            debug_log "WARNING" "$1 is not a valid country. Switching to language selection."
         fi
     fi
 
+    # ✅ `country.ch` のキャッシュ確認
+    if [ -f "$cache_country" ]; then
+        debug_log "INFO" "Using cached country from country.ch"
+        select_zone
+        return
+    fi
+
+    # ✅ 言語選択モード
     echo "$(color cyan "Enter country name, code, or language to search:")"
     printf "%s" "Please input: "
     read -r input
 
     if [ -z "$input" ]; then
-        debug_log "ERROR: No input provided. Please enter a country code or name."
+        debug_log "ERROR" "No input provided."
         return
     fi
 
-    # ✅ `country.db` から検索
-    local search_results=$(awk -v search="$input" 'BEGIN {IGNORECASE=1} $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}' "$BASE_DIR/country.db")
-
-    if [ -z "$search_results" ]; then
-        debug_log "ERROR: No matching country found."
-        return
-    fi
-
-    # ✅ `selection_list()` で選択
-    selection_list "$search_results" "$tmp_country" "country"
-
-    # ✅ `country_write()` でキャッシュに確定
-    country_write
-
-    # ✅ `select_zone()` を実行
-    select_zone
+    select_country "$input"
 }
-
 
 XXX_select_country() {
     debug_log "=== Entering select_country() ==="
