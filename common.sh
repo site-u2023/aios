@@ -553,7 +553,6 @@ select_zone() {
 
     chmod 444 "$cache_zonename" "$cache_timezone"
 
-    echo "$(get_message "MSG_COUNTRY_SUCCESS")" 
     echo "$(get_message "MSG_TIMEZONE_SUCCESS")"
 }
 
@@ -612,6 +611,7 @@ normalize_country() {
     fi
 
     debug_log "INFO: Final system message language -> $(cat "$message_cache")"
+    echo "$(get_message "MSG_COUNTRY_SUCCESS")" 
 }
 
 #########################################################################
