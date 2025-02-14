@@ -225,8 +225,6 @@ select_country() {
     fi
 
     while true; do
-
-    while true; do
         printf "%s\n" "$(color cyan "Enter country name, code, or language to search.")"
         printf "%s" "Search (Keyword/Code): "
         read -r input
