@@ -281,7 +281,8 @@ selection_list() {
 
     echo "$input_data" | while IFS= read -r line; do
         if [ "$mode" = "country" ]; then
-            local extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
+            local extracted
+            extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
             if [ -n "$extracted" ]; then
                 printf "[%d] %s\n" "$i" "$extracted"
                 echo "$line" >> "$list_file"
@@ -297,8 +298,7 @@ selection_list() {
     done
 
     while true; do
-        printf "%s" "$(color cyan "Enter the number of your choice.")"
-        printf "%s" "No: 
+        printf "%s" "$(color cyan "Enter the number of your choice: ")"
         read -r choice
 
         local selected_value
@@ -306,15 +306,14 @@ selection_list() {
 
         if [ -z "$selected_value" ]; then
             printf "%s\n" "$(color red "Invalid selection. Please choose a valid number.")"
-            selection_list "$input_data" "$output_file" "$mode"
-            # printf "%s\n" "$display_list"
             continue
         fi
-        
+
+        local confirm_info=""
         if [ "$mode" = "country" ]; then
-            local confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $2, $3, $4, $5}')
+            confirm_info=$(echo "$selected_value" | awk '{print $2, $3, $4, $5}')
         elif [ "$mode" = "zone" ]; then
-            local confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $1, $2}')
+            confirm_info=$(echo "$selected_value" | awk '{print $1, $2}')
         fi
 
         printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info")"
@@ -322,19 +321,22 @@ selection_list() {
         read -r yn
 
         case "$yn" in
-            [Yy]*) printf "%s\n" "$selected_value" > "$output_file"
-                   return
-                   ;;
-            [Nn]*) printf "%s\n" "$(color yellow "Returning to selection.")"
-                   selection_list "$input_data" "$output_file" "$mode"
-                   continue
-                   ;;
-            [Rr]*) check_common
-                   return
-                   ;;
-            *)     printf "%s\n" "$(color red "Invalid input. Please enter 'Y', 'N', or 'R'.")"
-                   continue
-                   ;;
+            [Yy]*) 
+                printf "%s\n" "$selected_value" > "$output_file"
+                return
+                ;;
+            [Nn]*) 
+                printf "%s\n" "$(color yellow "Returning to selection.")"
+                continue
+                ;;
+            [Rr]*) 
+                check_common
+                return
+                ;;
+            *) 
+                printf "%s\n" "$(color red "Invalid input. Please enter 'Y', 'N', or 'R'.")"
+                continue
+                ;;
         esac
     done
 }
