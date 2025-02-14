@@ -176,13 +176,13 @@ color_code_map() {
 #
 # select_country()
 # ├── selection_list()  → 選択結果を country_tmp.ch に保存
-# ├── country_write()   → country.ch, language.ch, luci.ch, zone.ch に確定
+# ├── country_write()   → country.ch, country.ch, luci.ch, zone.ch に確定
 # └── select_zone()     → zone.ch から zonename.ch, timezone.ch に確定
 #
 # [1] ユーザーが国を選択 → selection_list()
 # [2] 一時キャッシュに保存 (country_tmp.ch)
 # [3] country_write() を実行
-# [4] 確定キャッシュを作成（country.ch, language.ch, luci.ch, zone.ch）→ 書き込み禁止にする
+# [4] 確定キャッシュを作成（country.ch, country.ch, luci.ch, zone.ch）→ 書き込み禁止にする
 # [5] select_zone() を実行
 #
 # #️⃣ `$1` の存在確認
@@ -367,7 +367,7 @@ selection_list() {
 #     - `country.ch` が存在しないと `zone()` や `country()` は動作しない
 #     - `country.ch` 作成時に **即 `chattr +i` で上書き禁止**
 #     - **country.ch のデータを元に、以下の `ch` ファイルも作成**
-#       - `language.ch` (`$3`: 言語名)
+#       - `country.ch` (`$3`: 言語名)
 #       - `luci.ch` (`$4`: 言語コード)
 #
 # 2. `zone_tmp.ch` は **カンマ区切りのまま保存**
@@ -379,7 +379,7 @@ selection_list() {
 # 3. 上書き禁止 (`ch` ファイル)
 #     - `country.ch`
 #     - `luci.ch`
-#     - `language.ch`
+#     - `country.ch`
 #     - `zonename.ch`
 #     - `timezone.ch`
 #
@@ -397,7 +397,7 @@ selection_list() {
 #
 # 【要件】
 # - `country.ch` に **該当行を丸ごと保存**（データの基準）
-# - `language.ch` に **$3（言語名）** を保存
+# - `country.ch` に **$3（言語名）** を保存
 # - `luci.ch` に **$4（言語コード）** を保存
 # - `country_tmp.ch`（$1-$5）を作成
 # - `zone_tmp.ch`（$6-）を作成（ゾーン情報がない場合は `NO_TIMEZONE` を記録）
@@ -406,7 +406,7 @@ selection_list() {
 country_write() {
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
     local cache_country="${CACHE_DIR}/country.ch"
-    local cache_language="${CACHE_DIR}/language.ch"
+    local cache_language="${CACHE_DIR}/country.ch"
     local cache_luci="${CACHE_DIR}/luci.ch"
     local cache_zone="${CACHE_DIR}/zone.ch"
 
@@ -476,26 +476,26 @@ select_zone() {
 #
 # 【要件】
 # 1. 言語の決定:
-#    - `language.ch` を最優先で参照（変更不可）
-#    - `language.ch` が無い場合は `select_country()` を実行し、手動選択
+#    - `country.ch` を最優先で参照（変更不可）
+#    - `country.ch` が無い場合は `select_country()` を実行し、手動選択
 #
 # 2. システムメッセージの言語 (`message.ch`) の確定:
 #    - `message.db` の `SUPPORTED_LANGUAGES` を確認
-#    - `language.ch` に記録された言語が `SUPPORTED_LANGUAGES` にあれば、それを `message.ch` に保存
+#    - `country.ch` に記録された言語が `SUPPORTED_LANGUAGES` にあれば、それを `message.ch` に保存
 #    - `SUPPORTED_LANGUAGES` に無い場合、`message.ch` に `en` を設定
 #
-# 3. `language.ch` との関係:
-#    - `language.ch` はデバイス設定用（変更不可）
+# 3. `country.ch` との関係:
+#    - `country.ch` はデバイス設定用（変更不可）
 #    - `message.ch` はシステムメッセージ表示用（フォールバック可能）
 #
 # 4. メンテナンス:
-#    - `language.ch` はどのような場合でも変更しない
+#    - `country.ch` はどのような場合でも変更しない
 #    - `message.ch` のみフォールバックを適用し、システムメッセージの一貫性を維持
 #    - 言語設定に影響を与えず、メッセージの表示のみを制御する
 #########################################################################
 normalize_country() {
     local message_db="${BASE_DIR}/messages.db"
-    local language_cache="${CACHE_DIR}/language.ch"
+    local language_cache="${CACHE_DIR}/country.ch"
     local message_cache="${CACHE_DIR}/message.ch"
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
     local selected_language=""
@@ -693,8 +693,8 @@ get_package_manager() {
 #    - 該当するメッセージが `messages.db` に無い場合、`en` にフォールバック
 #    - `en` にも無い場合は、キー（`$1`）をそのまま返す
 #
-# 3. `language.ch` との関係:
-#    - `language.ch` はデバイス設定用（変更不可）
+# 3. `country.ch` との関係:
+#    - `country.ch` はデバイス設定用（変更不可）
 #    - `message.ch` はシステムメッセージ表示用（フォールバック可能）
 #
 # 4. メンテナンス:
@@ -851,7 +851,7 @@ install_language_pack() {
 #    - `$2` が無い場合、`select_country()` によって処理を継続
 #
 # 3. キャッシュ処理:
-#    - 言語キャッシュ (`language.ch`) の有無を `select_country()` に判定させる
+#    - 言語キャッシュ (`country.ch`) の有無を `select_country()` に判定させる
 #    - キャッシュがある場合は `normalize_country()` に進む
 #
 # 4. 追加オプション処理:
