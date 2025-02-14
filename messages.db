@@ -1,217 +1,50 @@
 # メッセージデータベース (多言語対応)
 # フォーマット: 言語コード|メッセージキー=メッセージ
 
-SUPPORTED_LANGUAGES="en ja"　　　　　　　　　　　　　　　　      　　　　　 
+SUPPORTED_LANGUAGES="US JP" 
 
 MESSAGE_VERSION="2025.02.12-0"
 echo "message.db Last update: $MESSAGE_VERSION"
 
 # 追加--------------------------------------------
-en|MSG_COUNTRY_SUCCESS=✅ Country and language selection completed successfully!
-en|MSG_TIMEZONE_SUCCESS=✅ Timezone selection completed successfully!
-ja|MSG_COUNTRY_SUCCESS=✅ 国と言語の選択が完了しました！
-ja|MSG_TIMEZONE_SUCCESS=✅ タイムゾーンの選択が完了しました！
+US|MSG_COUNTRY_SUCCESS=✅ Country and language selection completed successfully!
+US|MSG_TIMEZONE_SUCCESS=✅ Timezone selection completed successfully!
+JP|MSG_COUNTRY_SUCCESS=✅ 国と言語の選択が完了しました！
+JP|MSG_TIMEZONE_SUCCESS=✅ タイムゾーンの選択が完了しました！
 
 # 追加--------------------------------------------
-ja|ERR_COUNTRY_CHECK=国の確認に失敗しました。国データベースが正しくロードされていることを確認してください。
-en|ERR_COUNTRY_CHECK=Country check failed. Please ensure the country database is correctly loaded.
+JP|ERR_COUNTRY_CHECK=国の確認に失敗しました。国データベースが正しくロードされていることを確認してください。
+US|ERR_COUNTRY_CHECK=Country check failed. Please ensure the country database is correctly loaded.
 
 # 追加--------------------------------------------
-ja|MSG_CONFIRM_COUNTRY={file} ({version}) を選択しますか？ [Y/n]:
-en|MSG_CONFIRM_COUNTRY=Confirm country selection: {file} ({version})? [Y/n]:
+JP|MSG_CONFIRM_COUNTRY={file} ({version}) を選択しますか？ [Y/n]:
+US|MSG_CONFIRM_COUNTRY=Confirm country selection: {file} ({version})? [Y/n]:
 
 # 追加--------------------------------------------
 # バージョン情報メッセージ
-ja|version_supported=バージョン {version} はサポートされています ({status})。
-en|version_supported=Version {version} is supported ({status}).
+JP|version_supported=バージョン {version} はサポートされています ({status})。
+US|version_supported=Version {version} is supported ({status}).
 
 # 追加--------------------------------------------
 # ダウンロード関連メッセージ
-ja|MSG_DOWNLOADING_MISSING_FILE={file} をダウンロード中...
-en|MSG_DOWNLOADING_MISSING_FILE=Downloading {file}...
+JP|MSG_DOWNLOADING_MISSING_FILE={file} をダウンロード中...
+US|MSG_DOWNLOADING_MISSING_FILE=Downloading {file}...
 
-ja|MSG_DOWNLOAD_CONFIRM={file} をダウンロードしますか？ [Y/n]
-en|MSG_DOWNLOAD_CONFIRM=Do you want to download {file}? [Y/n]
+JP|MSG_DOWNLOAD_CONFIRM={file} をダウンロードしますか？ [Y/n]
+US|MSG_DOWNLOAD_CONFIRM=Do you want to download {file}? [Y/n]
 
-ja|MSG_EXECUTE_AIOS_FAIL=aios の実行に失敗しました。
-en|MSG_EXECUTE_AIOS_FAIL=Failed to execute aios.
-
-# エラーメッセージ
-ja|MSG_ERROR_OCCURRED=エラーが発生しました。
-en|MSG_ERROR_OCCURRED=An error occurred.
-
-ja|MSG_VERSION_UNSUPPORTED={file} のバージョンがサポート外です ({version})。
-en|MSG_VERSION_UNSUPPORTED={file} is unsupported ({version}).
-
-# 追加--------------------------------------------
-# ファイル更新メッセージ
-ja|MSG_UPDATING_SCRIPT={file} を更新しました ({old_version} → {new_version})
-en|MSG_UPDATING_SCRIPT=Updated {file} ({old_version} → {new_version})
-
-ja|MSG_NO_UPDATE_NEEDED={file} の更新はありません ({version})
-en|MSG_NO_UPDATE_NEEDED={file} is up-to-date ({version})
-
-ja|MSG_DOWNLOADING_MISSING_FILE={file} が見つかりません。ダウンロードします。
-en|MSG_DOWNLOADING_MISSING_FILE={file} not found. Downloading now.
-
-
-
-# 追加--------------------------------------------
-# Yes/No メッセージ
-ja|y=はい
-ja|n=いいえ
-en|y=Yes
-en|n=No
-
-# 設定適用メッセージ
-ja|MSG_SETTINGS_APPLIED=設定が適用されました。
-en|MSG_SETTINGS_APPLIED=Settings have been applied.
-
-# インストール確認プロンプト
-# パッケージ名付きインストール確認 (動的部分を {pkg} で置き換え)
-ja|MSG_INSTALL_PROMPT_PKG={pkg} をインストールしますか？ [Y/n]:
-en|MSG_INSTALL_PROMPT_PKG=Do you want to install {pkg}? [Y/n]:
-
-# ダウンロード失敗
-ja|MSG_FILE_NOT_FOUND_WARNING=ファイルが見つかりません: {pkg}
-en|MSG_FILE_NOT_FOUND_WARNING=File not found: {pkg}
+JP|MSG_EXECUTE_AIOS_FAIL=aios の実行に失敗しました。
+US|MSG_EXECUTE_AIOS_FAIL=Failed to execute aios.
 
 # エラーメッセージ
-ja|MSG_ERROR_OCCURRED=エラーが発生しました。
-en|MSG_ERROR_OCCURRED=An error occurred.
+JP|MSG_ERROR_OCCURRED=エラーが発生しました。
+US|MSG_ERROR_OCCURRED=An error occurred.
 
-# バージョン不一致警告
-ja|MSG_VERSION_MISMATCH_WARNING=バージョンが一致しません: {pkg}
-en|MSG_VERSION_MISMATCH_WARNING=Version mismatch: {pkg}
-
-# ダウンロード確認メッセージ
-ja|MSG_DOWNLOAD_CONFIRM={pkg} をダウンロードしますか？ [Y/n]:
-en|MSG_DOWNLOAD_CONFIRM=Do you want to download {pkg}? [Y/n]:
-
-# スクリプト削除確認
-ja|MSG_DELETE_SCRIPT_CONFIRM=スクリプトを削除して終了しますか？ [Y/n]:
-en|MSG_DELETE_SCRIPT_CONFIRM=Do you want to delete the script and exit? [Y/n]:
-
-# スクリプト終了確認
-ja|MSG_EXIT_SCRIPT_CONFIRM=スクリプトを終了しますか？ [Y/n]:
-en|MSG_EXIT_SCRIPT_CONFIRM=Do you want to exit the script? [Y/n]:
-
+JP|MSG_VERSION_UNSUPPORTED={file} のバージョンがサポート外です ({version})。
+US|MSG_VERSION_UNSUPPORTED={file} is unsupported ({version}).
 
 # 既存デフォ----------------------------------------------------
 
 # バナー用メッセージ
-ja|MSG_BANNER=オープンダブルアールティー専用設定ソフトウェア\nオールインワンスクリプト\n免責事項: 本スクリプトは自己責任でご使用下さい
-zh-cn|MSG_BANNER=欧鹏达布里阿尔提封装配置软件\n全面集成脚本\n声明: 使用本脚本风险自承
-en|MSG_BANNER=Dedicated configuration software for OpenWrt\nAll-in-One Scripts\nDisclaimer: Use this script at your own risk
-
-# 環境初期化
-ja|MSG_INITIALIZE_ENV=aios 環境を初期化しました。
-en|MSG_INITIALIZE_ENV=Initialized aios environment.
-
-# インストールメッセージ
-ja|MSG_INSTALL_PROMPT=インストールを実行しますか？ [Y/n]:
-en|MSG_INSTALL_PROMPT=Do you want to proceed with the installation? [Y/n]:
-
-ja|MSG_INSTALL_SUCCESS=インストールが完了しました。
-en|MSG_INSTALL_SUCCESS=Installation completed successfully.
-
-ja|MSG_INSTALL_CANCEL=インストールがキャンセルされました。
-en|MSG_INSTALL_CANCEL=Installation was canceled.
-
-# ダウンロードメッセージ
-ja|MSG_DOWNLOAD_START=ダウンロードを開始します...
-en|MSG_DOWNLOAD_START=Starting download...
-
-ja|MSG_DOWNLOAD_SUCCESS=ダウンロードが完了しました。
-en|MSG_DOWNLOAD_SUCCESS=Download completed successfully.
-
-ja|MSG_DOWNLOAD_FAIL=ダウンロードに失敗しました。
-en|MSG_DOWNLOAD_FAIL=Download failed.
-
-# バージョン確認関連
-ja|MSG_VERSION_UNSUPPORTED=サポートされていない OpenWrt バージョンです。
-en|MSG_VERSION_UNSUPPORTED=Unsupported OpenWrt version.
-
-ja|MSG_VERSION_SUPPORTED=OpenWrtバージョンはサポートされています。
-en|MSG_VERSION_SUPPORTED=OpenWrt version is supported.
-
-# 設定確認メッセージ
-ja|MSG_CONFIRM_SETTINGS=これらの設定を適用しますか？ [Y/n]:
-en|MSG_CONFIRM_SETTINGS=Do you want to apply these settings? [Y/n]:
-
-ja|MSG_SETTINGS_APPLIED=設定が正常に適用されました。
-en|MSG_SETTINGS_APPLIED=Settings applied successfully.
-
-ja|MSG_SETTINGS_CANCEL=設定は適用されませんでした。
-en|MSG_SETTINGS_CANCEL=Settings were not applied.
-
-# エラーメッセージ
-ja|MSG_ERROR_OCCURRED=エラーが発生しました。
-en|MSG_ERROR_OCCURRED=An error has occurred.
-
-# パッケージマネージャー関連
-ja|MSG_NO_PACKAGE_MANAGER_FOUND=対応するパッケージマネージャー（apk または opkg）が見つかりません。
-en|MSG_NO_PACKAGE_MANAGER_FOUND=No supported package manager (apk or opkg) found.
-
-ja|MSG_DETECTED_PACKAGE_MANAGER=検出されたパッケージマネージャー:
-en|MSG_DETECTED_PACKAGE_MANAGER=Detected package manager:
-
-ja|MSG_ERROR_UNSUPPORTED_PACKAGE_MANAGER=サポートされていないパッケージマネージャーです。
-en|MSG_ERROR_UNSUPPORTED_PACKAGE_MANAGER=Unsupported package manager.
-
-# 共通関数関連
-ja|MSG_DOWNLOAD_COMMON_START=共通関数ファイルのダウンロードを開始します...
-en|MSG_DOWNLOAD_COMMON_START=Starting download of common functions...
-
-ja|MSG_DOWNLOAD_COMMON_SUCCESS=共通関数ファイルのダウンロードが完了しました。
-en|MSG_DOWNLOAD_COMMON_SUCCESS=Common functions downloaded successfully.
-
-ja|MSG_DOWNLOAD_COMMON_FAIL=共通関数ファイルのダウンロードに失敗しました。
-en|MSG_DOWNLOAD_COMMON_FAIL=Failed to download common functions.
-
-# スクリプト関連
-ja|MSG_DOWNLOAD_AIOS_START=aios スクリプトのダウンロードを開始します...
-en|MSG_DOWNLOAD_AIOS_START=Starting download of aios script...
-
-ja|MSG_DOWNLOAD_AIOS_SUCCESS=aios スクリプトのダウンロードが完了しました。
-en|MSG_DOWNLOAD_AIOS_SUCCESS=aios script downloaded successfully.
-
-ja|MSG_EXECUTE_AIOS_START=aios スクリプトを実行します...
-en|MSG_EXECUTE_AIOS_START=Executing aios script...
-
-ja|MSG_EXECUTE_AIOS_SUCCESS=aios スクリプトの実行が完了しました。
-en|MSG_EXECUTE_AIOS_SUCCESS=aios script executed successfully.
-
-ja|MSG_EXECUTE_AIOS_FAIL=aios スクリプトの実行に失敗しました。
-en|MSG_EXECUTE_AIOS_FAIL=Failed to execute aios script.
-
-# Y/N 判定関連メッセージ
-ja|MSG_INVALID_SELECTION=無効な選択です。もう一度入力してください。
-en|MSG_INVALID_SELECTION=Invalid selection. Please try again.
-
-# 警告メッセージ (Warning Messages)
-ja|MSG_VERSION_MISMATCH_WARNING=バージョンの不一致が検出されました。継続しますが、問題が発生する可能性があります。
-en|MSG_VERSION_MISMATCH_WARNING=Version mismatch detected. Continuing, but issues may occur.
-
-ja|MSG_FILE_NOT_FOUND_WARNING=必要なファイルが見つかりません。ダウンロードを試みます...
-en|MSG_FILE_NOT_FOUND_WARNING=Required file not found. Attempting to download...
-
-ja|MSG_FILE_UPDATE_AVAILABLE=新しいバージョンのファイルが利用可能です。更新を推奨します。
-en|MSG_FILE_UPDATE_AVAILABLE=A newer version of the file is available. Update is recommended.
-
-ja|MSG_OPERATION_COMPLETED_WITH_WARNINGS=操作は完了しましたが、いくつかの警告が発生しました。
-en|MSG_OPERATION_COMPLETED_WITH_WARNINGS=Operation completed with some warnings.
-
-# 情報メッセージ (Info Messages)
-ja|MSG_NO_UPDATES_AVAILABLE=全てのファイルは最新です。
-en|MSG_NO_UPDATES_AVAILABLE=All files are up-to-date.
-
-ja|MSG_UPDATING_FILES=ファイルの更新を開始します...
-en|MSG_UPDATING_FILES=Starting file update...
-
-# 汎用インストールメッセージ
-ja|MSG_GENERIC_INSTALL_SUCCESS=インストールが正常に完了しました。
-en|MSG_GENERIC_INSTALL_SUCCESS=Installation completed successfully.
-
-ja|MSG_GENERIC_INSTALL_FAILED=インストールに失敗しました。
-en|MSG_GENERIC_INSTALL_FAILED=Installation failed.
+JP|MSG_BANNER=オープンダブルアールティー専用設定ソフトウェア\nオールインワンスクリプト\n免責事項: 本スクリプトは自己責任でご使用下さい
+US|MSG_BANNER=Dedicated configuration software for OpenWrt\nAll-in-One Scripts\nDisclaimer: Use this script at your own risk
