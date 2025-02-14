@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-9-2"
+COMMON_VERSION="2025.02.14-10-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -229,12 +229,6 @@ select_country() {
         printf "%s" "Please input: "
         read -r input
 
-        if [ "$input" = "R" ] || [ "$input" = "r" ]; then
-            debug_log "INFO" "User selected R: Returning to language selection start."
-            check_common
-            return
-        fi
-
         local search_results=$(awk -v search="$input" 'BEGIN {IGNORECASE=1} 
             $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}' "$BASE_DIR/country.db")
 
@@ -401,11 +395,11 @@ selection_list() {
     done
 
     while true; do
-        printf "%s" "$(color cyan "Enter the number of your choice: ")"
+        printf "%s" "$(color cyan \"Enter the number of your choice: \")"
         read -r choice
 
         if [ "$choice" = "R" ] || [ "$choice" = "r" ]; then
-            debug_log "INFO" "User selected R: Restarting process."
+            debug_log "INFO" "User selected R: Returning to language selection start."
             check_common
             return
         fi
@@ -414,19 +408,25 @@ selection_list() {
         selected_value=$(awk -v num="$choice" 'NR == num {print $0}' "$list_file")
 
         if [ -z "$selected_value" ]; then
-            printf "%s\n" "$(color red "Invalid selection. Please choose a valid number.")"
+            printf "%s\n" "$(color red \"Invalid selection. Please choose a valid number.\")"
             continue
         fi
 
-        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $selected_value (Y/N/R)?")"
+        if [ "$mode" = "country" ]; then
+            local confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $2, $3, $4, $5}')
+        elif [ "$mode" = "zone" ]; then
+            local confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $1, $2}')
+        fi
+
+        printf "%s\n" "$(color cyan \"Confirm selection: [$choice] $confirm_info (Y/N/R)?\")"
         printf "%s" "(Y/N/R)?: "
         read -r yn
 
         case "$yn" in
             [Yy]*) printf "%s\n" "$selected_value" > "$output_file"; return ;;
-            [Nn]*) printf "%s\n" "$(color yellow "Returning to selection.")" ;;
+            [Nn]*) printf "%s\n" "$(color yellow \"Returning to selection.\")" ;;
             [Rr]*) check_common; return ;;
-            *) printf "%s\n" "$(color red "Invalid input. Please enter 'Y', 'N', or 'R'.")" ;;
+            *) printf "%s\n" "$(color red \"Invalid input. Please enter 'Y', 'N', or 'R'.\")" ;;
         esac
     done
 }
@@ -879,12 +879,6 @@ select_zone() {
 
     local selected_zone=$(cat "$cache_zone_tmp" 2>/dev/null)
     if [ -z "$selected_zone" ]; then
-        return
-    fi
-
-    if [ "$selected_zone" = "R" ] || [ "$selected_zone" = "r" ]; then
-        debug_log "INFO" "User selected R: Returning to language selection start."
-        check_common
         return
     fi
 
