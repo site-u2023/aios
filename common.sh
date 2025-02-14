@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-5-10"
+COMMON_VERSION="2025.02.14-5-11"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -193,6 +193,122 @@ color_code_map() {
 #        ├─ あり → 言語系終了（以降の処理なし）
 #        ├─ なし → 言語選択を実行
 #########################################################################
+select_country() {
+    debug_log "INFO" "Entering select_country() with arg: '$1'"
+
+    local cache_country="${CACHE_DIR}/country.ch"
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
+
+    # ✅ `$1` がある場合、`country.db` で検索
+    if [ -n "$1" ]; then
+        debug_log "INFO" "Processing input: $1"
+
+        local predefined_country=$(awk -v search="$1" 'BEGIN {IGNORECASE=1} 
+            $2 == search || $3 == search || $4 == search || $5 == search {print $0}' "$BASE_DIR/country.db")
+
+        if [ -n "$predefined_country" ]; then
+            debug_log "INFO" "Found country entry: $predefined_country"
+            echo "$predefined_country" > "$tmp_country"
+            country_write
+            select_zone  # ✅ `$1` が `country.db` にあるならゾーン選択へ
+            return
+        else
+            debug_log "ERROR" "Invalid input '$1' is not a valid country."
+            echo "$(color red "Error: '$1' is not a recognized country name or code.")"
+            echo "$(color yellow "Switching to language selection.")"
+            # ✅ 無効な $1 の場合、通常の言語選択へ
+            set --  # `$1` をクリア
+        fi
+    fi
+
+    # ✅ `$1` が `country.db` にない場合、`country.ch` を確認
+    if [ -f "$cache_country" ]; then
+        debug_log "INFO" "Country cache found. Language-related processing is complete."
+        select_zone  # ✅ 言語選択が完了しているので `select_zone()` を実行
+        return
+    fi
+
+    # ✅ `$1` も `country.ch` も無い場合 → 言語選択モード
+    echo "$(color cyan "Enter country name, code, or language to search:")"
+    printf "%s" "Please input: "
+    read -r input
+
+    if [ -z "$input" ]; then
+        debug_log "ERROR" "No input provided."
+        return
+    fi
+
+    # ✅ `country.db` から検索
+    local search_results=$(awk -v search="$input" 'BEGIN {IGNORECASE=1} 
+        $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}' "$BASE_DIR/country.db")
+
+    if [ -z "$search_results" ]; then
+        debug_log "ERROR" "No matching country found."
+        echo "$(color red "Error: No matching country found for '$input'. Please try again.")"
+        select_country  # ❗ 無効なら、もう一度言語選択へ
+        return
+    fi
+
+    # ✅ `selection_list()` で選択
+    selection_list "$search_results" "$tmp_country" "country"
+
+    # ✅ `country_write()` でキャッシュに確定
+    country_write
+
+    # ✅ `select_zone()` に進む
+    select_zone
+}
+
+XXX_select_country() {
+    debug_log "=== Entering select_country() ==="
+
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
+
+    echo "$(color cyan "Enter country name, code, or language to search:")"
+    printf "%s" "Please input: "
+    read -r input
+
+    if [ -z "$input" ]; then
+        debug_log "ERROR: No input provided. Please enter a country code or name."
+        return
+    fi
+
+    # ✅ `country.db` から検索
+    local search_results=$(awk -v search="$input" 'BEGIN {IGNORECASE=1} $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}' "$BASE_DIR/country.db")
+
+    if [ -z "$search_results" ]; then
+        debug_log "ERROR: No matching country found."
+        return
+    fi
+
+    # ✅ `selection_list()` で選択
+    selection_list "$search_results" "$tmp_country" "country"
+
+    # ✅ `country_write()` でキャッシュに確定
+    country_write
+
+    # ✅ `select_zone()` を実行
+    select_zone
+}
+
+#########################################################################
+# Last Update: 2025-02-12 16:12:39 (JST) 🚀
+# "Precision in code, clarity in purpose. Every update refines the path."
+#########################################################################
+# selection_list()
+# 選択リストを作成し、選択結果をファイルに保存する関数。
+#
+# 【要件】
+# 1. `mode=country`:
+#     - 国リストを `$2 $3 $4 $5`（国名・言語・言語コード・国コード）で表示
+#     - `$6` 以降（ゾーンネーム・タイムゾーン）は **`zone_list_tmp.ch` に保存**
+# 2. `mode=zone`:
+#     - ゾーンリストを表示
+#     - **ゾーン情報の保存は `select_zone()` に任せる**
+# 3. その他:
+#     - 入力データが空ならエラーを返す
+#     - 選択後に `Y/N` で確認
+#########################################################################
 selection_list() {
     local input_data="$1"
     local output_file="$2"
@@ -271,57 +387,7 @@ selection_list() {
     done
 }
 
-XXX_select_country() {
-    debug_log "=== Entering select_country() ==="
-
-    local tmp_country="${CACHE_DIR}/country_tmp.ch"
-
-    echo "$(color cyan "Enter country name, code, or language to search:")"
-    printf "%s" "Please input: "
-    read -r input
-
-    if [ -z "$input" ]; then
-        debug_log "ERROR: No input provided. Please enter a country code or name."
-        return
-    fi
-
-    # ✅ `country.db` から検索
-    local search_results=$(awk -v search="$input" 'BEGIN {IGNORECASE=1} $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}' "$BASE_DIR/country.db")
-
-    if [ -z "$search_results" ]; then
-        debug_log "ERROR: No matching country found."
-        return
-    fi
-
-    # ✅ `selection_list()` で選択
-    selection_list "$search_results" "$tmp_country" "country"
-
-    # ✅ `country_write()` でキャッシュに確定
-    country_write
-
-    # ✅ `select_zone()` を実行
-    select_zone
-}
-
-#########################################################################
-# Last Update: 2025-02-12 16:12:39 (JST) 🚀
-# "Precision in code, clarity in purpose. Every update refines the path."
-#########################################################################
-# selection_list()
-# 選択リストを作成し、選択結果をファイルに保存する関数。
-#
-# 【要件】
-# 1. `mode=country`:
-#     - 国リストを `$2 $3 $4 $5`（国名・言語・言語コード・国コード）で表示
-#     - `$6` 以降（ゾーンネーム・タイムゾーン）は **`zone_list_tmp.ch` に保存**
-# 2. `mode=zone`:
-#     - ゾーンリストを表示
-#     - **ゾーン情報の保存は `select_zone()` に任せる**
-# 3. その他:
-#     - 入力データが空ならエラーを返す
-#     - 選択後に `Y/N` で確認
-#########################################################################
-selection_list() {
+XXX_2014_03_selection_list() {
     local input_data="$1"
     local output_file="$2"
     local mode="$3"
