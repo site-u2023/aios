@@ -425,8 +425,9 @@ selection_list() {
         case "$yn" in
             [Yy]*) printf "%s\n" "$selected_value" > "$output_file"; return ;;
             [Nn]*) printf "%s\n" "$(color yellow \"Returning to selection.\")"
-            continue 
-            ;;
+                   selection_list "$input_data" "$output_file" "$mode"  # ✅ もう一度リスト表示
+                   continue  # ✅ そのままループを継続
+                   ;;
             [Rr]*) check_common; return ;;
             *) printf "%s\n" "$(color red \"Invalid input. Please enter 'Y', 'N', or 'R'.\")" ;;
         esac
