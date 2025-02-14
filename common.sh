@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-7-1"
+COMMON_VERSION="2025.02.14-7-3"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -193,71 +193,7 @@ color_code_map() {
 #        ├─ あり → 言語系終了（以降の処理なし）
 #        ├─ なし → 言語選択を実行
 #########################################################################
-select_country() {
-    debug_log "INFO" "Entering select_country() with arg: '$1'"
-
-    local cache_country="${CACHE_DIR}/country.ch"
-    local tmp_country="${CACHE_DIR}/country_tmp.ch"
-
-    if [ -n "$1" ]; then
-        debug_log "INFO" "Processing input: $1"
-
-        local predefined_country=$(awk -v search="$1" 'BEGIN {IGNORECASE=1} 
-            $2 == search || $3 == search || $4 == search || $5 == search {print $0}' "$BASE_DIR/country.db")
-
-        if [ -n "$predefined_country" ]; then
-            debug_log "INFO" "Found country entry: $predefined_country"
-            echo "$predefined_country" > "$tmp_country"
-            country_write
-            select_zone  # ✅ `$1` が `country.db` にあるならゾーン選択へ
-            return
-        else
-            debug_log "ERROR" "Invalid input '$1' is not a valid country."
-            echo "$(color red "Error: '$1' is not a recognized country name or code.")"
-            echo "$(color yellow "Switching to language selection.")"
-            set --  # `$1` をクリア
-        fi
-    fi
-
-    if [ -f "$cache_country" ]; then
-        debug_log "INFO" "Country cache found. Language-related processing is complete."
-        select_zone
-        return
-    fi
-
-    while true; do
-        echo "$(color cyan "Enter country name, code, or language to search:")"
-        printf "%s" "Please input: "
-        read -r input
-
-        if [ "$input" = "R" ] || [ "$input" = "r" ]; then
-            debug_log "INFO" "User selected R: Returning to language selection start."
-            check_common
-            return
-        fi
-
-        if [ -z "$input" ]; then
-            debug_log "ERROR" "No input provided."
-            return
-        fi
-
-        local search_results=$(awk -v search="$input" 'BEGIN {IGNORECASE=1} 
-            $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}' "$BASE_DIR/country.db")
-
-        if [ -z "$search_results" ]; then
-            debug_log "ERROR" "No matching country found."
-            echo "$(color red "Error: No matching country found for '$input'. Please try again.")"
-            continue
-        fi
-
-        selection_list "$search_results" "$tmp_country" "country"
-
-        country_write
-        select_zone
-        return
-    done
-}
-
+select_country() 
 XX_0214_1845_select_country() {
     debug_log "INFO" "Entering select_country() with arg: '$1'"
 
