@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-5-2"
+COMMON_VERSION="2025.02.14-5-3"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -185,13 +185,13 @@ color_code_map() {
 # [4] 確定キャッシュを作成（country.ch, language.ch, luci.ch, zone.ch）→ 書き込み禁止にする
 # [5] select_zone() を実行
 #
-# 1️⃣ `$1` の存在確認  
-#  ├─ あり → `country.db` で検索  
-#  |    ├─ 見つかる → `select_zone()`（ゾーン選択へ） 
-#  |    ├─ 見つからない → 言語選択を実行
-#  ├─ なし → `country.ch` を確認  
-#       ├─ あり → 終了
-#       ├─ なし → 言語選択を実行
+# #️⃣ `$1` の存在確認
+#   ├─ あり → `country.db` で検索
+#   |    ├─ 見つかる → `select_zone()`（ゾーン選択へ）
+#   |    ├─ 見つからない → 言語選択を実行
+#   ├─ なし → `country.ch` を確認
+#        ├─ あり → 言語系終了（以降の処理なし）
+#        ├─ なし → 言語選択を実行
 #########################################################################
 select_country() {
     debug_log "INFO" "Entering select_country() with arg: '$1'"
