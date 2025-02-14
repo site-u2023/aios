@@ -194,36 +194,41 @@ color_code_map() {
 #        ├─ なし → 言語選択を実行
 #########################################################################
 select_country() {
-    debug_log "INFO" "Entering select_country()"
+    debug_log "INFO" "Entering select_country() with arg: '$1'"
 
-    local tmp_country="${CACHE_DIR}/country_tmp.ch"
     local cache_country="${CACHE_DIR}/country.ch"
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
 
-    # ✅ `$1` の処理: 直接渡された場合は `country.db` で検索
+    # ✅ `$1` がある場合、`country.db` で検索
     if [ -n "$1" ]; then
-        debug_log "INFO" "Processing input argument: $1"
+        debug_log "INFO" "Processing input: $1"
 
-        local predefined_country=$(awk -v search="$1" 'BEGIN {IGNORECASE=1} $2 == search || $3 == search || $4 == search || $5 == search {print $0}' "$BASE_DIR/country.db")
+        local predefined_country=$(awk -v search="$1" 'BEGIN {IGNORECASE=1} 
+            $2 == search || $3 == search || $4 == search || $5 == search {print $0}' "$BASE_DIR/country.db")
 
         if [ -n "$predefined_country" ]; then
             debug_log "INFO" "Found country entry: $predefined_country"
             echo "$predefined_country" > "$tmp_country"
             country_write
-            select_zone
+            select_zone  # ✅ `$1` が `country.db` にあるならゾーン選択へ
             return
         else
-            debug_log "WARNING" "$1 is not a valid country. Switching to manual selection."
+            debug_log "ERROR" "Invalid input '$1' is not a valid country."
+            echo "$(color red "Error: '$1' is not a recognized country name or code.")"
+            echo "$(color yellow "Switching to language selection.")"
+            # ✅ 無効な $1 の場合、通常の言語選択へ
+            set --  # `$1` をクリア
         fi
     fi
 
-    # ✅ `country.ch` にキャッシュがあるか確認（キャッシュがあるなら、言語系終了）
+    # ✅ `$1` が `country.db` にない場合、`country.ch` を確認
     if [ -f "$cache_country" ]; then
-        debug_log "INFO" "Using cached country from country.ch"
-        select_zone
+        debug_log "INFO" "Country cache found. Language-related processing is complete."
+        select_zone  # ✅ 言語選択が完了しているので `select_zone()` を実行
         return
     fi
 
-    # ✅ 言語選択フェーズ
+    # ✅ `$1` も `country.ch` も無い場合 → 言語選択モード
     echo "$(color cyan "Enter country name, code, or language to search:")"
     printf "%s" "Please input: "
     read -r input
@@ -234,30 +239,24 @@ select_country() {
     fi
 
     # ✅ `country.db` から検索
-    local search_results=$(awk -v search="$input" 'BEGIN {IGNORECASE=1} $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}' "$BASE_DIR/country.db")
+    local search_results=$(awk -v search="$input" 'BEGIN {IGNORECASE=1} 
+        $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}' "$BASE_DIR/country.db")
 
     if [ -z "$search_results" ]; then
         debug_log "ERROR" "No matching country found."
+        echo "$(color red "Error: No matching country found for '$input'. Please try again.")"
+        select_country  # ❗ 無効なら、もう一度言語選択へ
         return
     fi
 
-    # ✅ `selection_list()` を呼び出して、選択結果を取得
+    # ✅ `selection_list()` で選択
     selection_list "$search_results" "$tmp_country" "country"
-    case $? in
-        0)  debug_log "INFO" "Country confirmed. Proceeding to zone selection."
-            country_write
-            select_zone
-            ;;
-        1)  debug_log "INFO" "User canceled selection. Returning to country selection."
-            select_country
-            ;;
-        2)  debug_log "INFO" "User chose to return to language selection."
-            return
-            ;;
-        *)  debug_log "ERROR" "Unexpected return value from selection_list()."
-            return
-            ;;
-    esac
+
+    # ✅ `country_write()` でキャッシュに確定
+    country_write
+
+    # ✅ `select_zone()` に進む
+    select_zone
 }
 
 XXX_select_country() {
@@ -881,43 +880,7 @@ country_write() {
 # [4] zonename.ch, timezone.ch を書き込み禁止にする
 #[5] → normalize_country()
 #########################################################################
-#########################################################################
-# select_zone(): ユーザーがゾーンを選択し、確定する
-#########################################################################
-#########################################################################
-# select_zone: ユーザーにゾーンの選択を促す
-#########################################################################
 select_zone() {
-    debug_log "INFO" "Entering select_zone()"
-
-    local tmp_zone="${CACHE_DIR}/zone_tmp.ch"
-
-    # ✅ `zone.ch` からゾーンリストを取得
-    local zone_list=$(cat "${CACHE_DIR}/zone.ch")
-    
-    if [ -z "$zone_list" ]; then
-        debug_log "ERROR" "No zones found."
-        return
-    fi
-
-    # ✅ `selection_list()` を呼び出して、ゾーンを選択
-    selection_list "$zone_list" "$tmp_zone" "zone"
-    case $? in
-        0)  debug_log "INFO" "Zone confirmed. Proceeding."
-            ;;
-        1)  debug_log "INFO" "User canceled zone selection. Returning to select_zone."
-            select_zone
-            ;;
-        2)  debug_log "INFO" "User chose to return to country selection."
-            select_country
-            ;;
-        *)  debug_log "ERROR" "Unexpected return value from selection_list()."
-            return
-            ;;
-    esac
-}
-
-XXX_select_zone() {
     local cache_zone="${CACHE_DIR}/zone.ch"
     local cache_zone_tmp="${CACHE_DIR}/zone_tmp.ch"
     local cache_zonename="${CACHE_DIR}/zonename.ch"
