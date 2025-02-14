@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-4-6"
+COMMON_VERSION="2025.02.14-4-7"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -217,14 +217,15 @@ select_country() {
 
     debug_log "DEBUG: Initial \$1 -> '$lang_code'"
     debug_log "DEBUG: Initial \$2 -> '$2'"
+    debug_log "DEBUG: Initial \$3 -> '$3'"
 
-    # ✅ `$1` が `-d` または `--debug` なら、`$2` を `$1` にセット
+    # ✅ `$1` が `-d` または `--debug` なら `$2` を `$1` にセット
     if [ "$lang_code" = "-d" ] || [ "$lang_code" = "--debug" ]; then
         lang_code="$2"
         debug_log "DEBUG: Adjusted \$1 -> '$lang_code'"
     fi
 
-    # ✅ `$1` の値を確認
+    # ✅ `$1` が空の場合、エラーメッセージを出力
     if [ -z "$lang_code" ]; then
         debug_log "ERROR: \$1 is empty!"
     fi
@@ -288,8 +289,6 @@ select_country() {
     debug_log "INFO: Calling select_zone()"
     select_zone
 }
-
-
 
 XXX_select_country() {
     debug_log "=== Entering select_country() ==="
