@@ -438,9 +438,7 @@ selection_list() {
                 continue
                 ;;
         esac
-    done
-
-    echo "$(get_message "MSG_COUNTRY_SUCCESS")"   
+    done  
 }
 
 #########################################################################
@@ -555,6 +553,7 @@ select_zone() {
 
     chmod 444 "$cache_zonename" "$cache_timezone"
 
+    echo "$(get_message "MSG_COUNTRY_SUCCESS")" 
     echo "$(get_message "MSG_TIMEZONE_SUCCESS")"
 }
 
