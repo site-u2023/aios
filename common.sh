@@ -820,24 +820,34 @@ attempt_package_install() {
 #########################################################################
 install_language_pack() {
     local base_pkg="$1"
-    local lang_pkg="luci-i18n-${base_pkg#luci-app-}-${SELECTED_LANGUAGE}"
-    if echo "$base_pkg" | grep -qE '^(en|ja|zh-cn|zh-tw|id|ko|de|ru)$'; then
-        echo "DEBUG: Skipping language pack installation for language code: $base_pkg"
+    local lang_cache="${CACHE_DIR}/luci.ch"
+    
+    # ✅ `luci.ch` から現在の言語コードを取得
+    local selected_language=""
+    if [ -f "$lang_cache" ]; then
+        selected_language=$(cat "$lang_cache")
+        debug_log "INFO" "Detected language for luci: $selected_language"
+    else
+        debug_log "WARNING" "luci.ch not found. Skipping language pack installation."
         return
     fi
-    if grep -q "^packages=" "${BASE_DIR}/packages.db"; then
-        local available_pkgs
-        available_pkgs=$(grep "^packages=" "${BASE_DIR}/packages.db" | cut -d'=' -f2)
-        if echo "$available_pkgs" | grep -qw "$lang_pkg"; then
-            $PACKAGE_MANAGER install "$lang_pkg"
+
+    # ✅ `luci-app-*` のパッケージのみ対応
+    if echo "$base_pkg" | grep -qE '^luci-app-'; then
+        local lang_pkg="luci-i18n-${base_pkg#luci-app-}-$selected_language"
+
+        # ✅ `packages.db` に言語パックがあるか確認
+        if grep -q "^$lang_pkg$" "${BASE_DIR}/packages.db"; then
+            install_packages "$lang_pkg"
             echo "$(color green "Installed language pack: $lang_pkg")"
         else
             echo "$(color yellow "Language pack not available in packages.db: $lang_pkg")"
         fi
     else
-        echo "$(color yellow "packages.db not found or invalid. Skipping language pack installation.")"
+        debug_log "INFO" "Package $base_pkg is not a LuCI package. Skipping language pack check."
     fi
 }
+
 
 #########################################################################
 # Last Update: 2025-02-12 14:35:26 (JST) 🚀
