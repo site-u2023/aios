@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-3-9"
+COMMON_VERSION="2025.02.14-3-10"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -258,6 +258,7 @@ selection_list() {
     fi
 
     : > "$list_file"
+    debug_log "DEBUG: Cleared $list_file"
 
     echo "$input_data" | while IFS= read -r line; do
         if [ "$mode" = "country" ]; then
@@ -276,7 +277,9 @@ selection_list() {
         fi
     done
 
-    # ✅ `display_list` が空 (`""`) なら `[0] Cancel / back to return` だけを表示
+    # ✅ デバッグでリスト内容を確認
+    debug_log "DEBUG: $list_file content -> $(cat "$list_file" 2>/dev/null)"
+
     if [ -z "$display_list" ]; then
         printf "[0] Cancel / back to return\n"
     else
@@ -301,6 +304,9 @@ selection_list() {
 
         local selected_value
         selected_value=$(awk -v num="$choice" 'NR == num {print $0}' "$list_file")
+
+        # ✅ `selected_value` が空の場合のデバッグ出力
+        debug_log "DEBUG: selected_value after choice -> $selected_value"
 
         if [ -z "$selected_value" ]; then
             printf "%s\n" "$(color red "ERROR: Selected value is empty. Please select again.")"
