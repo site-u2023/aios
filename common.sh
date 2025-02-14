@@ -225,7 +225,7 @@ select_country() {
     fi
 
     while true; do
-        echo "$(color cyan "Enter country name, code, or language to search:")"
+        echo "$(color cyan "Enter country name, code, or language to search.")"
         printf "%s" "Please input: "
         read -r input
 
