@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-3-12"
+COMMON_VERSION="2025.02.14-3-13"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -266,6 +266,7 @@ selection_list() {
     debug_log "DEBUG: list_file -> $list_file"
     
     : > "$list_file"
+    : > /tmp/temp_display_list.txt
     debug_log "DEBUG: Cleared $list_file"
 
     echo "$input_data" | while IFS= read -r line; do
@@ -276,18 +277,25 @@ selection_list() {
             debug_log "DEBUG: extracted -> $extracted"
 
             if [ -n "$extracted" ]; then
-                display_list="${display_list}$(printf "[%d] %s\n" "$i" "$extracted")"
+                debug_log "DEBUG: Before adding to display_list -> $(cat /tmp/temp_display_list.txt)"
+                echo "[${i}] ${extracted}" >> /tmp/temp_display_list.txt
                 echo "$line" >> "$list_file"
                 i=$((i + 1))
+                debug_log "DEBUG: After adding to display_list -> $(cat /tmp/temp_display_list.txt)"
             fi
         elif [ "$mode" = "zone" ]; then
             if [ -n "$line" ]; then
                 echo "$line" >> "$list_file"
-                display_list="${display_list}$(printf "[%d] %s\n" "$i" "$line")"
+                debug_log "DEBUG: Before adding to display_list -> $(cat /tmp/temp_display_list.txt)"
+                echo "[${i}] ${line}" >> /tmp/temp_display_list.txt
                 i=$((i + 1))
+                debug_log "DEBUG: After adding to display_list -> $(cat /tmp/temp_display_list.txt)"
             fi
         fi
     done
+
+    display_list=$(cat /tmp/temp_display_list.txt)
+    rm /tmp/temp_display_list.txt
 
     debug_log "DEBUG: display_list -> $display_list"
     debug_log "DEBUG: $list_file content after writing -> $(cat "$list_file" 2>/dev/null)"
@@ -369,8 +377,6 @@ selection_list() {
         esac
     done
 }
-
-
 
 
 OK_0214_selection_list() {
