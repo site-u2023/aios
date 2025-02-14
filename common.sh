@@ -330,8 +330,7 @@ selection_list() {
             [Rr]*) check_common
                    return
                    ;;
-                *) printf "%s\n" $(color red "Invalid input. Please enter 'Y', 'N', or 'R'.")
-                   continue
+            *)     printf "%s\n" $(color red "Invalid input. Please enter 'Y', 'N', or 'R'.")
                    ;;
         esac
     done
