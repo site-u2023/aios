@@ -1,90 +1,45 @@
 #!/bin/sh
-# aios.sh (エントリースクリプト)
-# License: CC0
-AIOS_VERSION="2025.02.15-5"
-echo -e "\033[7;40maios.sh Updated to version $AIOS_VERSION \033[0m"
+# OpenWrt All-in-One Script Initializer
+# Version: 2025.02.15-1-0
 
-DEBUG_MODE=false
-INPUT_LANG="${1:-}"
+BASE_URL="https://raw.githubusercontent.com/site-u2023/aios/main"
+BASE_DIR="/tmp/aios"
+COMMON_SH="$BASE_DIR/common.sh"
+BIN_PATH="/usr/bin/aios"
+CACHE_DIR="$BASE_DIR/cache"
+LOG_DIR="$BASE_DIR/logs"
+mkdir -p "$CACHE_DIR" "$LOG_DIR"
 
-# ✅ `common.sh` をダウンロード
-download_common() {
-    download_script common.sh || {
-        echo "❌ Failed to download common.sh"
-        exit 1
-    }
-    . "${BASE_DIR}/common.sh" || {
-        echo "❌ Failed to load common.sh"
-        exit 1
-    }
-}
+# 環境変数の確認
+echo "aios.sh received INPUT_LANG: '$INPUT_LANG' and DEBUG_MODE: '$DEBUG_MODE'"
 
-# ✅ `aios` を `/usr/bin/aios` に配置
-install_aios() {
-    local aios_path="/usr/bin/aios"
-    local script_path="${BASE_DIR}/aios"
+# `/usr/bin/aios` を削除して再インストール
+if [ -f "$BIN_PATH" ]; then
+    rm -f "$BIN_PATH"
+fi
 
-    cp "$script_path" "$aios_path"
-    chmod +x "$aios_path"
+# `common.sh` のダウンロード
+echo "Downloading latest version of common.sh"
+wget --quiet -O "$COMMON_SH" "$BASE_URL/common.sh"
 
-    if [ -f "$aios_path" ] && [ -x "$aios_path" ]; then
-        echo "✅ aios installed successfully at $aios_path"
-    else
-        echo "❌ Failed to install aios. Check permissions."
-    fi
-}
+# `common.sh` の読み込み
+if [ -f "$COMMON_SH" ]; then
+    . "$COMMON_SH"
+else
+    echo "ERROR: Failed to load common.sh"
+    exit 1
+fi
 
-# ✅ `packages.db` からパッケージを読み込んでインストール
-install_from_db() {
-    local db_file="${BASE_DIR}/packages.db"
+# `ttyd` のインストール
+install_packages yn ttyd
 
-    # ✅ `packages.db` が存在しない場合はスキップ
-    if [ ! -f "$db_file" ]; then
-        echo "❌ packages.db not found. Skipping package installation."
-        return
-    fi
+# `luci-app-ttyd` と言語パックのインストール
+attempt_package_install luci-app-ttyd
 
-    # ✅ `packages.db` のリストを取得し、インストール確認
-    while IFS= read -r package_name; do
-        if confirm "MSG_INSTALL_PROMPT_PKG" "$package_name"; then
-            echo "Installing $package_name..."
-            install_packages "$package_name" || {
-                echo "❌ Failed to install $package_name."
-                exit 1
-            }
+# `aios` を /usr/bin に配置
+echo "Installing aios command to /usr/bin/aios"
+wget --quiet -O "$BIN_PATH" "$BASE_URL/aios"
+chmod +x "$BIN_PATH"
 
-            # ✅ 言語パックもインストール
-            install_language_pack "$package_name"
-        else
-            echo "Skipping $package_name installation."
-        fi
-    done < "$db_file"
-
-    echo "✅ All requested packages have been processed!"
-}
-
-# ✅ `aios` の初期化関数
-delete_aios() {
-    rm -rf "${BASE_DIR}" /usr/bin/aios
-    echo "Initialized aios"
-}
-
-# ✅ `aios` のディレクトリ作成
-mkdir_aios() {
-    mkdir -p "$BASE_DIR"
-}
-
-# ✅ `common.sh` のダウンロードを実行
-download_common
-
-# ✅ `パッケージマネージャー` を確認
-get_package_manager
-
-# ✅ `aios` コマンドのセットアップ
-install_aios
-
-# ✅ `packages.db` に基づいてパッケージをインストール
-install_from_db
-
-# ✅ `check_common()` を実行
+# `check_common` の実行
 check_common "$INPUT_LANG"
