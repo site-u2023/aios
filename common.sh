@@ -318,7 +318,8 @@ selection_list() {
         fi
 
         printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info")"
-        printf "%s" "[$choice] $confirm_info(Y/N/R)?: "
+        printf "%s\n" "$(color cyan "[$choice] $confirm_info (Y/N/R)?:")"
+        printf "%s" "(Y/N/R)?: "
         read -r yn
 
         case "$yn" in
