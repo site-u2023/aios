@@ -306,7 +306,7 @@ selection_list() {
         selected_value=$(awk -v num="$choice" 'NR == num {print $0}' "$list_file")
 
         if [ -z "$selected_value" ]; then
-            printf "%s\n" "$(color red "Invalid selection.)"
+            printf "%s\n" "$(color red "Invalid selection.")"
             continue
         fi
 
