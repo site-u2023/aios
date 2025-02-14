@@ -333,7 +333,9 @@ selection_list() {
                    selection_list "$input_data" "$output_file" "$mode"
                    continue
                    ;;
-            [Rr]*) check_common; return ;;
+            [Rr]*) check_common
+                   return
+                   ;;
             *)     printf "%s\n" $(color red "Invalid input. Please enter 'Y', 'N', or 'R'.")
                    selection_list "$input_data" "$output_file" "$mode"
                    continue
