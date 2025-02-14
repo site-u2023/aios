@@ -206,7 +206,7 @@ select_country() {
 
         if [ -n "$predefined_country" ]; then
             debug_log "INFO" "Found country entry: $predefined_country"
-            printf  "$predefined_country" > "$tmp_country"
+            echo  "$predefined_country" > "$tmp_country"
             country_write
             select_zone  
             return
