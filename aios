@@ -68,7 +68,7 @@ print_banner() {
 # インストール (不要なら削除可)
 #################################
 packages() {
-    # ここに必要なパッケージ処理を書く
+echo "ここに必要なパッケージ処理を書く"
 }
 
 #################################
@@ -78,5 +78,5 @@ make_directory
 download_common
 check_common "$INPUT_LANG"
 print_banner
-# packages # 必要に応じて
+packages # 必要に応じて
 download_script openwrt-config.sh
