@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-12-3"
+COMMON_VERSION="2025.02.14-12-4"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -366,6 +366,7 @@ selection_list() {
     local mode="$3"
     local list_file=""
     local i=1
+    local display_list=""
 
     if [ "$mode" = "country" ]; then
         list_file="${CACHE_DIR}/country_tmp.ch"
@@ -394,7 +395,10 @@ selection_list() {
         fi
     done
 
+    display_list=$(cat "$list_file")
+
     while true; do
+        printf "%s\n" "$display_list"  # ✅ すべての選択肢を再表示
         printf "%s" "$(color cyan "Enter the number of your choice: ")"
         read -r choice
 
@@ -409,7 +413,7 @@ selection_list() {
 
         if [ -z "$selected_value" ]; then
             printf "%s\n" "$(color red "Invalid selection. Please choose a valid number.")"
-            continue
+            continue  # ✅ リストを再表示
         fi
 
         if [ "$mode" = "country" ]; then
@@ -418,26 +422,29 @@ selection_list() {
             local confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $1, $2}')
         fi
 
-        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info")"
-        printf "%s" "(Y/N/R)?: "
-        read -r yn
+        while true; do
+            printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info")"
+            printf "%s" "(Y/N/R)?: "
+            read -r yn
 
-        case "$yn" in
-            [Yy]*) 
-                printf "%s\n" "$selected_value" > "$output_file"
-                return ;;
-            [Nn]*) 
-                printf "%s\n" "$(color yellow "Returning to selection.")"
-                continue ;;
-            [Rr]*) 
-                check_common
-                return ;;
-            *) 
-                printf "%s\n" "$(color red "Invalid input. Please enter 'Y', 'N', or 'R'.")"
-                continue ;;
-        esac
+            case "$yn" in
+                [Yy]*) 
+                    printf "%s\n" "$selected_value" > "$output_file"
+                    return ;;
+                [Nn]*) 
+                    printf "%s\n" "$(color yellow "Returning to selection.")"
+                    break ;;  # ✅ `while true` ループを抜けてリストを再表示
+                [Rr]*) 
+                    check_common
+                    return ;;
+                *) 
+                    printf "%s\n" "$(color red "Invalid input. Please enter 'Y', 'N', or 'R'.")"
+                    continue ;;  # ✅ 無効な入力の場合は再試行
+            esac
+        done
     done
 }
+
 
 XXX_0214_2105_selection_list() {
     local input_data="$1"
