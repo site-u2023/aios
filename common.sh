@@ -297,14 +297,14 @@ selection_list() {
             local extracted
             extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
             if [ -n "$extracted" ]; then
-                printf "[%d] %s\n" "$i" "$extracted"
+                printf "[%02d] %s\n" "$i" "$extracted"
                 echo "$line" >> "$list_file"
                 i=$((i + 1))
             fi
         elif [ "$mode" = "zone" ]; then
             if [ -n "$line" ]; then
                 echo "$line" >> "$list_file"
-                printf "[%d] %s\n" "$i" "$line"
+                printf "[%02d] %s\n" "$i" "$line"
                 i=$((i + 1))
             fi
         fi
