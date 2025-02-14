@@ -74,6 +74,7 @@ echo "ここに必要なパッケージ処理を書く"
 #################################
 # メイン処理
 #################################
+delete_aios
 make_directory
 download_common
 check_common "$INPUT_LANG"
