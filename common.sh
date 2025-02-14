@@ -331,9 +331,7 @@ selection_list() {
     : > "$display_list_file"
 
     local display_list=""
-    local cache_list=""
-
-    # ✅ `input_data` を処理し、キャッシュに保存
+    
     echo "$input_data" | while IFS= read -r line; do
         if [ -n "$line" ]; then
             printf "[%d] %s\n" "$i" "$line" >> "$display_list_file"
@@ -344,7 +342,7 @@ selection_list() {
 
     # ✅ 画面にリストを表示
     cat "$display_list_file"
-    echo "[0] Cancel / back to return"
+    echo "[0] Cancel / back to previous selection"
 
     local choice=""
     while true; do
@@ -354,15 +352,14 @@ selection_list() {
         if [ "$choice" = "0" ]; then
             if [ "$mode" = "country" ]; then
                 printf "%s\n" "$(color yellow "Returning to country selection.")"
-                select_country  # ✅ 言語選択に戻る
+                return 1  # ✅ 言語選択画面に戻る
             elif [ "$mode" = "zone" ]; then
-                printf "%s\n" "$(color yellow "Canceling selection.")"
-                return  # ✅ ゾーン選択をキャンセル
+                printf "%s\n" "$(color yellow "Returning to zone selection.")"
+                return 1  # ✅ ゾーン選択画面に戻る
             fi
-            return
         fi
 
-        # ✅ `-v` を使わず `grep` で `choice` を検索
+        # ✅ `grep` を使用して `choice` を検索
         local selected_value
         selected_value=$(grep "^$choice " "$list_file" | sed "s/^$choice //")
 
@@ -377,7 +374,7 @@ selection_list() {
         case "$yn" in
             [Yy]*)
                 printf "%s\n" "$selected_value" > "$output_file"
-                return
+                return 0
                 ;;
             [Nn]*)
                 printf "%s\n" "$(color yellow "Returning to selection.")"
