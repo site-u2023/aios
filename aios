@@ -2,15 +2,15 @@
 # License: CC0
 # OpenWrt >= 19.07
 
-AIOS_VERSION="2025.02.06-10"
+AIOS_VERSION="2025.02.15-0"
 echo "aios Last update: $AIOS_VERSION"
 
+INPUT_LANG="${1:-}"  # ✅ `$1` は言語情報のみ受け付ける
 BASE_WGET="wget -O" # テスト用
 # BASE_WGET="wget --quiet -O"
 BASE_URL="https://raw.githubusercontent.com/site-u2023/aios/main"
 BASE_DIR="/tmp/aios"
-SUPPORTED_LANGUAGES="en ja"
-INPUT_LANG="$1"
+
 
 #########################################################################
 # delete_aios: 既存の aios 関連ファイルおよびディレクトリを削除して初期化する
@@ -76,7 +76,7 @@ packages() {
 #################################
 make_directory
 download_common
-check_common full
+check_common "$INPUT_LANG"
 print_banner
 # packages # 必要に応じて
 download_script openwrt-config.sh
