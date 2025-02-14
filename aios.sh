@@ -1,7 +1,7 @@
 #!/bin/sh
 # aios.sh (初期エントリースクリプト)
 # License: CC0
-AIOS_VERSION="2025.02.14-1"
+AIOS_VERSION="2025.02.15-0"
 echo -e "\033[7;40maios.sh Updated to version $AIOS_VERSION \033[0m"
 
 BASE_WGET="wget --quiet -O"
@@ -23,7 +23,7 @@ fi
 
 # `common.sh` のダウンロード
 echo "Downloading latest version of common.sh"
-wget --quiet -O "$COMMON_SH" "$BASE_URL/common.sh"
+${BASE_WGET} "$COMMON_SH" "$BASE_URL/common.sh"
 
 # `common.sh` の読み込み
 if [ -f "$COMMON_SH" ]; then
@@ -41,7 +41,7 @@ attempt_package_install luci-app-ttyd
 
 # `aios` を /usr/bin に配置
 echo "Installing aios command to /usr/bin/aios"
-wget --quiet -O "$BIN_PATH" "$BASE_URL/aios"
+${BASE_WGET} "$BIN_PATH" "$BASE_URL/aios"
 chmod +x "$BIN_PATH"
 
 # `check_common` の実行
