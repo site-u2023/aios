@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-4-1"
+COMMON_VERSION="2025.02.14-4-2"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -29,30 +29,50 @@ script_update() (
 )
 
 #########################################################################
-# debug_log: デバッグ出力関数
+# デバッグモードの制御 (コマンドライン引数対応)
+#########################################################################
+DEBUG_MODE=false
+DEBUG_LEVEL="INFO"  # デフォルトは INFO 以上のログを出力
+
+# コマンドライン引数のチェック
+for arg in "$@"; do
+    case "$arg" in
+        -d|--debug|-debug)
+            DEBUG_MODE=true
+            DEBUG_LEVEL="DEBUG"
+            ;;
+    esac
+done
+
+#########################################################################
+# debug_log: デバッグ出力関数 (改良版)
 #########################################################################
 debug_log() {
-    local message="$1"
-    [ "$DEBUG_MODE" = true ] && echo "DEBUG: $message" | tee -a "$LOG_DIR/debug.log"
-}
+    local level="$1"  # デバッグレベル (INFO, WARN, ERROR, DEBUG)
+    local message="$2"
+    
+    # デバッグレベルの優先度
+    case "$DEBUG_LEVEL" in
+        DEBUG)    allowed_levels="DEBUG INFO WARN ERROR" ;;
+        INFO)     allowed_levels="INFO WARN ERROR" ;;
+        WARN)     allowed_levels="WARN ERROR" ;;
+        ERROR)    allowed_levels="ERROR" ;;
+        *)        allowed_levels="" ;;
+    esac
 
-#########################################################################
-# テスト用関数: データ取得を個別に確認
-#########################################################################
-test_debug() {
-    if [ "$DEBUG_MODE" = true ]; then
-        echo "DEBUG: Running debug tests..." | tee -a "$LOG_DIR/debug.log"
-        if [ ! -f "${BASE_DIR}/country.db" ]; then
-            echo "DEBUG: ERROR - country.db not found!" | tee -a "$LOG_DIR/debug.log"
-        else
-            echo "DEBUG: country.db found at ${BASE_DIR}/country.db" | tee -a "$LOG_DIR/debug.log"
+    # 指定されたログレベルが有効な場合のみ出力
+    if echo "$allowed_levels" | grep -q "$level"; then
+        local timestamp
+        timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+        local log_message="[$timestamp] $level: $message"
+
+        if [ "$DEBUG_MODE" = true ]; then
+            echo "$log_message"
         fi
 
-        test_country_search "US"
-        test_country_search "Japan"
-        test_timezone_search "US"
-        test_timezone_search "JP"
-        test_cache_contents
+        if [ -n "$LOG_DIR" ]; then
+            echo "$log_message" >> "$LOG_DIR/debug.log"
+        fi
     fi
 }
 
@@ -87,8 +107,6 @@ test_cache_contents() {
     echo "`color yellow "DEBUG: zone_tmp.ch content:"`"
     cat "${CACHE_DIR}/zone_tmp.ch"
 }
-
-
 
 #########################################################################
 # print_help: ヘルプメッセージを表示
@@ -192,6 +210,70 @@ color_code_map() {
 # [5] select_zone() を実行
 #########################################################################
 select_country() {
+    debug_log "=== Entering select_country() ==="
+
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
+    local lang_code="$1"
+
+    # ✅ `$1`（言語コード）の真偽確認（common.sh の関数を使用）
+    if [ -n "$lang_code" ] && existing_language_check "$lang_code"; then
+        debug_log "INFO: Valid language code detected -> $lang_code"
+
+        # ✅ `country.db` から該当する国データを取得
+        local country_data=$(awk -v lang="$lang_code" 'BEGIN {IGNORECASE=1} $4 == lang || $5 == lang {print $0}' "$BASE_DIR/country.db")
+
+        if [ -n "$country_data" ]; then
+            debug_log "INFO: Auto-selecting country -> $country_data"
+
+            # ✅ `country_write()` にデータを渡して確定
+            echo "$country_data" > "$tmp_country"
+            country_write
+
+            # ✅ 直接 `select_zone()` へ
+            select_zone
+            return
+        fi
+    fi
+
+    # ✅ `$1` が無効なら、`country.ch`（キャッシュ）を確認
+    if [ -z "$lang_code" ] && [ -f "${CACHE_DIR}/country.ch" ]; then
+        lang_code=$(awk '{print $4}' "${CACHE_DIR}/country.ch")  # `country.ch` の $4 (LUCI 言語コード) を取得
+        debug_log "INFO: Using cached language from country.ch -> $lang_code"
+    fi
+
+    # ✅ 言語コードが確定しない場合は手動選択
+    if [ -z "$lang_code" ]; then
+        echo "$(color cyan "Enter country name, code, or language to search:")"
+        printf "%s" "Please input: "
+        read -r input
+
+        if [ -z "$input" ]; then
+            debug_log "ERROR: No input provided. Please enter a country code or name."
+            return
+        fi
+
+        lang_code="$input"
+    fi
+
+    # ✅ `country.db` から検索
+    local search_results=$(awk -v search="$lang_code" 'BEGIN {IGNORECASE=1} $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}' "$BASE_DIR/country.db")
+
+    if [ -z "$search_results" ]; then
+        debug_log "ERROR: No matching country found."
+        return
+    fi
+
+    # ✅ `selection_list()` で選択
+    selection_list "$search_results" "$tmp_country" "country"
+
+    # ✅ `country_write()` でキャッシュに確定
+    country_write
+
+    # ✅ `select_zone()` を実行
+    select_zone
+}
+
+XXX_select_country() {
     debug_log "=== Entering select_country() ==="
 
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
