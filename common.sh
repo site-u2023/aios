@@ -206,14 +206,14 @@ select_country() {
 
         if [ -n "$predefined_country" ]; then
             debug_log "INFO" "Found country entry: $predefined_country"
-            echo "$predefined_country" > "$tmp_country"
+            printf  "$predefined_country" > "$tmp_country"
             country_write
             select_zone  
             return
         else
             debug_log "ERROR" "Invalid input '$1' is not a valid country."
-            echo "$(color red "Error: '$1' is not a recognized country name or code.")"
-            echo "$(color yellow "Switching to language selection.")"
+            printf  "$(color red "Error: '$1' is not a recognized country name or code.")"
+            printf  "$(color yellow "Switching to language selection.")"
             set --  
         fi
     fi
@@ -225,15 +225,15 @@ select_country() {
     fi
 
     while true; do
-        echo "$(color cyan "Enter country name, code, or language to search.")"
-        printf "%s" "Please input: "
+        printf  "$(color cyan "Enter country name, code, or language to search.")"
+        printf "%s" "Search (Keyword/Code): "
         read -r input
 
         local search_results=$(awk -v search="$input" 'BEGIN {IGNORECASE=1} 
             $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}' "$BASE_DIR/country.db")
 
         if [ -z "$search_results" ]; then
-            echo "$(color red "Error: No matching country found for '$input'. Please try again.")"
+            printf  "$(color red "Error: No matching country found for '$input'. Please try again.")"
             continue
         fi
 
@@ -299,7 +299,7 @@ selection_list() {
 
     while true; do
         printf "%s\n" "$(color cyan "Enter the number of your choice.")"
-        printf "(No)?: "
+        printf "Select Number: "
         read -r choice
 
         local selected_value
@@ -318,7 +318,7 @@ selection_list() {
         fi
 
         printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info")"
-        printf "(Y/N/R)?: "
+        printf "Confirm (Y=Yes / N=No / R=Restart): "
         read -r yn
 
         case "$yn" in
