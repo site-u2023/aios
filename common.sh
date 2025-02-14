@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-12-0"
+COMMON_VERSION="2025.02.14-12-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -408,10 +408,11 @@ selection_list() {
         selected_value=$(awk -v num="$choice" 'NR == num {print $0}' "$list_file")
 
         if [ -z "$selected_value" ]; then
-            printf "%s\n" "$(color red \"Invalid selection. Please choose a valid number.\")"
+            printf "%s\n" "$(color red "Invalid selection. Please choose a valid number.")"
+            printf "%s\n" "$display_list"
             continue
         fi
-
+        
         if [ "$mode" = "country" ]; then
             local confirm_info=$(printf "%s\n" "$selected_value" | awk '{print $2, $3, $4, $5}')
         elif [ "$mode" = "zone" ]; then
