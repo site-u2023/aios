@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-4-3"
+COMMON_VERSION="2025.02.14-4-4"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -215,13 +215,13 @@ select_country() {
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
     local lang_code="$1"
 
-    # ✅ `$1`（言語コード）の真偽確認（common.sh の関数を使用）
-    debug_log "DEBUG: Checking if language is valid -> $lang_code"
-    
-    if [ -n "$lang_code" ] && existing_language_check "$lang_code"; then
-        debug_log "INFO: Valid language code detected -> $lang_code"
+    debug_log "DEBUG: Received \$1 -> $lang_code"
 
-        # ✅ `country.db` から該当する国データを取得
+    # ✅ `$1`（言語コード）の真偽確認
+    if [ -n "$lang_code" ]; then
+        debug_log "DEBUG: Checking if language is valid -> $lang_code"
+
+        # ✅ `country.db` から `$1` に対応する国を取得
         local country_data=$(awk -v lang="$lang_code" 'BEGIN {IGNORECASE=1} $4 == lang || $5 == lang {print $0}' "$BASE_DIR/country.db")
 
         if [ -n "$country_data" ]; then
@@ -238,8 +238,6 @@ select_country() {
         else
             debug_log "ERROR: No matching country found in country.db for $lang_code"
         fi
-    else
-        debug_log "ERROR: Invalid language code -> $lang_code"
     fi
 
     # ✅ `$1` が無効なら、`country.ch`（キャッシュ）を確認
@@ -282,7 +280,6 @@ select_country() {
     debug_log "INFO: Calling select_zone()"
     select_zone
 }
-
 
 XXX_select_country() {
     debug_log "=== Entering select_country() ==="
