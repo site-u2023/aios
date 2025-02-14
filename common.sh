@@ -213,64 +213,39 @@ select_country() {
     debug_log "=== Entering select_country() ==="
 
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
-    local lang_code="$1"
 
-    debug_log "DEBUG: Initial \$1 -> '$lang_code'"
-    debug_log "DEBUG: Initial \$2 -> '$2'"
-    debug_log "DEBUG: Initial \$3 -> '$3'"
+    if [ -n "$1" ]; then
+        debug_log "Checking for predefined country input: $1"
 
-    # ✅ `$1` が `-d` または `--debug` なら `$2` を `$1` にセット
-    if [ "$lang_code" = "-d" ] || [ "$lang_code" = "--debug" ]; then
-        lang_code="$2"
-        debug_log "DEBUG: Adjusted \$1 -> '$lang_code'"
-    fi
+        # `country.db` から $1 に該当する行を取得
+        local predefined_country=$(awk -v search="$1" 'BEGIN {IGNORECASE=1} $2 == search || $3 == search || $4 == search || $5 == search {print $0}' "$BASE_DIR/country.db")
 
-    # ✅ `$1` が空の場合、エラーメッセージを出力
-    if [ -z "$lang_code" ]; then
-        debug_log "ERROR: \$1 is empty!"
-    fi
+        if [ -n "$predefined_country" ]; then
+            debug_log "Found country entry: $predefined_country"
+            echo "$predefined_country" > "$tmp_country"
 
-    # ✅ `country.db` から `$1` に対応する国を取得
-    debug_log "DEBUG: Checking if language is valid -> $lang_code"
-    local country_data=$(awk -v lang="$lang_code" 'BEGIN {IGNORECASE=1} tolower($4) == tolower(lang) || tolower($5) == tolower(lang) || tolower($2) == tolower(lang) {print $0}' "$BASE_DIR/country.db")
+            # `country_write()` で確定キャッシュを作成
+            country_write
 
-    if [ -n "$country_data" ]; then
-        debug_log "INFO: Auto-selecting country -> $country_data"
-
-        # ✅ `country_write()` にデータを渡して確定
-        echo "$country_data" > "$tmp_country"
-        country_write
-
-        # ✅ 直接 `select_zone()` へ
-        debug_log "INFO: Skipping selection_list(), going to select_zone()"
-        select_zone
-        return
-    else
-        debug_log "ERROR: No matching country found in country.db for $lang_code"
-    fi
-
-    # ✅ `$1` が無効なら、`country.ch`（キャッシュ）を確認
-    if [ -z "$lang_code" ] && [ -f "${CACHE_DIR}/country.ch" ]; then
-        lang_code=$(awk '{print $4}' "${CACHE_DIR}/country.ch")  # `country.ch` の $4 (LUCI 言語コード) を取得
-        debug_log "INFO: Using cached language from country.ch -> $lang_code"
-    fi
-
-    # ✅ 言語コードが確定しない場合は手動選択
-    if [ -z "$lang_code" ]; then
-        echo "$(color cyan "Enter country name, code, or language to search:")"
-        printf "%s" "Please input: "
-        read -r input
-
-        if [ -z "$input" ]; then
-            debug_log "ERROR: No input provided. Please enter a country code or name."
+            # すぐに `select_zone()` に移行
+            select_zone
             return
+        else
+            debug_log "Predefined country not found. Proceeding with manual selection."
         fi
+    fi
 
-        lang_code="$input"
+    echo "$(color cyan "Enter country name, code, or language to search:")"
+    printf "%s" "Please input: "
+    read -r input
+
+    if [ -z "$input" ]; then
+        debug_log "ERROR: No input provided. Please enter a country code or name."
+        return
     fi
 
     # ✅ `country.db` から検索
-    local search_results=$(awk -v search="$lang_code" 'BEGIN {IGNORECASE=1} $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}' "$BASE_DIR/country.db")
+    local search_results=$(awk -v search="$input" 'BEGIN {IGNORECASE=1} $2 ~ search || $3 ~ search || $4 ~ search || $5 ~ search {print $0}' "$BASE_DIR/country.db")
 
     if [ -z "$search_results" ]; then
         debug_log "ERROR: No matching country found."
@@ -278,17 +253,15 @@ select_country() {
     fi
 
     # ✅ `selection_list()` で選択
-    debug_log "INFO: Calling selection_list() with search_results"
     selection_list "$search_results" "$tmp_country" "country"
 
     # ✅ `country_write()` でキャッシュに確定
-    debug_log "INFO: Calling country_write()"
     country_write
 
     # ✅ `select_zone()` を実行
-    debug_log "INFO: Calling select_zone()"
     select_zone
 }
+
 
 XXX_select_country() {
     debug_log "=== Entering select_country() ==="
@@ -1212,7 +1185,7 @@ check_common() {
     shift  # 最初の引数 (モード) を削除
     
     local lang_code="${1:-}"  # ✅ `$1` を `lang_code` にセット
-    SELECTED_LANGUAGE="$lang_code"
+    #SELECTED_LANGUAGE="$lang_code"
     debug_log "check_common received lang_code: '$lang_code'"
 
     local RESET_CACHE=false
