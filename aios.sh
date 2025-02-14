@@ -13,15 +13,14 @@ COMMON_SH="$BASE_DIR/common.sh"
 BIN_PATH="/usr/bin/aios"
 CACHE_DIR="$BASE_DIR/cache"
 LOG_DIR="$BASE_DIR/logs"
-mkdir -p "$CACHE_DIR" "$LOG_DIR"
+
+rm -rf "${BASE_DIR}" "$BIN_PATH"
+echo "Initialized aios"
+
+mkdir -p "$BASE_DIR" "$CACHE_DIR" "$LOG_DIR"
 
 # 環境変数の確認
 echo "aios.sh received INPUT_LANG: '$INPUT_LANG' and DEBUG_MODE: '$DEBUG_MODE'"
-
-# `/usr/bin/aios` を削除して再インストール
-if [ -f "$BIN_PATH" ]; then
-    rm -f "$BIN_PATH"
-fi
 
 # `common.sh` のダウンロード
 echo "Downloading latest version of common.sh"
