@@ -249,7 +249,6 @@ selection_list() {
     local i=1
     local display_list=""
     
-    # ✅ 統一された表記
     display_list_file="${CACHE_DIR}/display_list_tmp.ch"
 
     debug_log "DEBUG: Entering selection_list()"
