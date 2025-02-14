@@ -439,6 +439,8 @@ selection_list() {
                 ;;
         esac
     done
+
+    echo "$(get_message "MSG_COUNTRY_SUCCESS")"   
 }
 
 #########################################################################
@@ -610,7 +612,6 @@ normalize_country() {
         echo "US" > "$message_cache"
     fi
 
-    echo "$(get_message "MSG_COUNTRY_SUCCESS")"
     debug_log "INFO: Final system message language -> $(cat "$message_cache")"
 }
 
