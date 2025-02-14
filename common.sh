@@ -230,6 +230,7 @@ select_country() {
         printf "%s" "Please input: "
         read -r input
 
+        # ✅ `R` が押されたら `check_common()` に戻る
         if [ "$input" = "R" ] || [ "$input" = "r" ]; then
             debug_log "INFO" "User selected R: Returning to language selection start."
             check_common
