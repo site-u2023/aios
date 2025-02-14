@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.14-6-0"
+COMMON_VERSION="2025.02.14-6-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -375,26 +375,25 @@ selection_list() {
         printf "%s\n" "$display_list"
     fi
 
-    if [ "$mode" = "zone" ]; then
-        printf "[r] Return to language selection\n"
-    fi
+    printf "[r] Return to previous selection\n"
 
     local choice=""
     while true; do
-        if [ "$mode" = "zone" ]; then
-            printf "%s" "$(color cyan "Enter the number of your choice (or 'r' to return): ")"
-        else
-            printf "%s" "$(color cyan "Enter the number of your choice: ")"
-        fi
-
+        printf "%s" "$(color cyan "Enter the number of your choice (or 'r' to return): ")"
         read -r choice
 
         debug_log "DEBUG: choice -> $choice"
 
-        if [ "$mode" = "zone" ] && [ "$choice" = "r" ]; then
-            debug_log "DEBUG: User chose to return to language selection"
-            printf "%s\n" "$(color yellow "Returning to language selection.")"
-            return 2  # 言語選択に戻る
+        if [ "$choice" = "r" ]; then
+            if [ "$mode" = "country" ]; then
+                debug_log "DEBUG: User chose to return to previous language selection"
+                printf "%s\n" "$(color yellow "Returning to language selection.")"
+                return 2  # 言語選択前に戻る
+            elif [ "$mode" = "zone" ]; then
+                debug_log "DEBUG: User chose to return to country selection"
+                printf "%s\n" "$(color yellow "Returning to country selection.")"
+                return 3  # 言語選択に戻る
+            fi
         fi
 
         if ! echo "$choice" | grep -qE '^[0-9]+$'; then
@@ -429,13 +428,8 @@ selection_list() {
             continue
         fi
 
-        if [ "$mode" = "zone" ]; then
-            printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info (Y/N/R)?")"
-        else
-            printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info (Y/N)?")"
-        fi
-
-        printf "%s" "(Y/N)?: "
+        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info (Y/N/R)?")"
+        printf "%s" "(Y/N/R)?: "
         read -r yn
 
         debug_log "DEBUG: User confirmation -> $yn"
@@ -451,17 +445,19 @@ selection_list() {
                 printf "%s\n" "$(color yellow "Returning to selection.")"
                 ;;
             [Rr]*) 
-                if [ "$mode" = "zone" ]; then
-                    debug_log "DEBUG: User chose to return to language selection"
+                if [ "$mode" = "country" ]; then
+                    debug_log "DEBUG: User chose to return to previous language selection"
                     printf "%s\n" "$(color yellow "Returning to language selection.")"
                     return 2
-                else
-                    printf "%s\n" "$(color red "Invalid input. Please enter 'Y' or 'N'.")"
+                elif [ "$mode" = "zone" ]; then
+                    debug_log "DEBUG: User chose to return to country selection"
+                    printf "%s\n" "$(color yellow "Returning to country selection.")"
+                    return 3
                 fi
                 ;;
             *) 
                 debug_log "DEBUG: Invalid confirmation input -> $yn"
-                printf "%s\n" "$(color red "Invalid input. Please enter 'Y' or 'N'.")" 
+                printf "%s\n" "$(color red "Invalid input. Please enter 'Y', 'N', or 'R'.")" 
                 ;;
         esac
     done
