@@ -510,7 +510,7 @@ country_write() {
     echo "$zone_data" > "$cache_zone"
 
     chmod 444 "$cache_country" "$cache_language" "$cache_luci" "$cache_zone"
-
+    
     normalize_country
 }
 
@@ -610,6 +610,7 @@ normalize_country() {
         echo "US" > "$message_cache"
     fi
 
+    echo "$(get_message "MSG_COUNTRY_SUCCESS")"
     debug_log "INFO: Final system message language -> $(cat "$message_cache")"
 }
 
