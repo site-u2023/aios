@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-4-0"
+COMMON_VERSION="2025.02.15-4-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -747,7 +747,7 @@ confirm() {
 # - `install_package ttyd yn dont disabled` → ttyd をインストール（確認あり、言語パックなし、設定を `disabled` にする）
 #########################################################################
 #########################################################################
-# install_package: パッケージのインストール処理 (OpenWrt / Alpine Linux)
+# install_package()
 #########################################################################
 install_package() {
     local package_name="$1"
@@ -837,21 +837,6 @@ install_package() {
     fi
     echo "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")"
 
-    # 言語パッケージの適用 (`dont` オプションがない場合)
-    if [ "$skip_lang_pack" = "no" ] && echo "$package_name" | grep -qE '^luci-app-'; then
-        local lang_code=""
-        if [ -f "${CACHE_DIR}/luci.ch" ]; then
-            lang_code=$(cat "${CACHE_DIR}/luci.ch")
-        fi
-        local lang_package="luci-i18n-${package_name#luci-app-}-$lang_code"
-        if grep -q "^$lang_package$" "${BASE_DIR}/packages.db"; then
-            install_package "$lang_package"
-            echo "$(get_message "MSG_LUCI_LANGUAGE_PACK_INSTALLED" | sed "s/{pkg}/$lang_package/")"
-        else
-            echo "$(get_message "MSG_LUCI_LANGUAGE_PACK_NOT_FOUND" | sed "s/{pkg}/$lang_package/")"
-        fi
-    fi
-
     # package.db の適用 (`notset` オプションがない場合)
     if [ "$skip_package_db" = "no" ]; then
         if grep -q "^$package_name=" "${BASE_DIR}/package.db"; then
@@ -859,9 +844,7 @@ install_package() {
             package_config=$(grep "^$package_name=" "${BASE_DIR}/package.db" | cut -d'=' -f2-)
 
             # パッケージ設定を適用
-            for config_cmd in $package_config; do
-                eval "$config_cmd"  # 設定コマンドを実行
-            done
+            package_config "$package_name" "$package_config"
 
             echo "$(get_message "MSG_PACKAGE_DB_APPLIED" | sed "s/{pkg}/$package_name/")"
         fi
@@ -884,6 +867,54 @@ install_package() {
         /etc/init.d/rpcd start
     fi
 }
+
+#########################################################################
+# package_config
+#########################################################################
+package_config() {
+    local package_name="$1"  # パッケージ名
+    local config_file="$2"   # 設定ファイル（package.db）
+
+    # config形式をuci形式に変換して適用
+    if grep -q "^config" "$config_file"; then
+        echo "Converting config format to uci format for $package_name"
+        
+        # configセクションとoptionを変換して処理
+        awk '
+        /^config/ {
+            section=$2
+            index=""
+            if ($3 ~ /^[0-9]+$/) {
+                index=$3  # インデックスが指定されている場合、インデックスを保持
+            }
+            print "# Config Section: " section " " index
+        }
+        /^option/ {
+            # インデックスを含めた場合の処理
+            if (index != "") {
+                print "uci set " section "@" section "[" index "]" "." $2 "=" $3
+            } else {
+                print "uci set " section "." $2 "=" $3
+            }
+        }
+        /^list/ {
+            # インデックスを含めた場合の処理
+            if (index != "") {
+                print "uci add_list " section "@" section "[" index "]" "." $2 "=" $3
+            } else {
+                print "uci add_list " section "." $2 "=" $3
+            }
+        }
+        ' "$config_file" | while read line; do
+            eval "$line"  # uci コマンドを実行
+        done
+    fi
+
+    # 設定を反映させる
+    uci commit $package_name
+    /etc/init.d/network restart  # 必要に応じて再起動
+}
+
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
