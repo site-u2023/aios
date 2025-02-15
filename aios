@@ -3,7 +3,7 @@
 # OpenWrt >= 19.07
 
 AIOS_VERSION="2025.02.16-1"
-echo "aios Last update: $AIOS_VERSION"
+echo -e "\033[7;40maios Updated to version $AIOS_VERSION \033[0m"
 
 INPUT_LANG="${1:-}"  # ✅ `$1` は言語情報のみ受け付ける
 BASE_WGET="${BASE_WGET:-wget -q -O}"
