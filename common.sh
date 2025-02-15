@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-3-1"
+COMMON_VERSION="2025.02.15-4-0"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -852,13 +852,18 @@ install_package() {
             echo "$(get_message "MSG_LUCI_LANGUAGE_PACK_NOT_FOUND" | sed "s/{pkg}/$lang_package/")"
         fi
     fi
-    
+
     # package.db の適用 (`notset` オプションがない場合)
     if [ "$skip_package_db" = "no" ]; then
         if grep -q "^$package_name=" "${BASE_DIR}/package.db"; then
             local package_config
             package_config=$(grep "^$package_name=" "${BASE_DIR}/package.db" | cut -d'=' -f2-)
-            eval "$package_config"
+
+            # パッケージ設定を適用
+            for config_cmd in $package_config; do
+                eval "$config_cmd"  # 設定コマンドを実行
+            done
+
             echo "$(get_message "MSG_PACKAGE_DB_APPLIED" | sed "s/{pkg}/$package_name/")"
         fi
     fi
@@ -874,12 +879,6 @@ install_package() {
         echo "$(get_message "MSG_PACKAGE_ENABLED" | sed "s/{pkg}/$package_name/")"
     fi
 }
-
-
-
-
-
-
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
