@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-5-0"
+COMMON_VERSION="2025.02.15-6-0"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -761,60 +761,25 @@ install_package() {
         return 1
     fi
 
-    # `update` オプションが指定されている場合、リポジトリを更新する
-    if echo "$@" | grep -q "update"; then
-        echo "$(get_message "MSG_RUNNING_UPDATE")"
-        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            opkg update
-        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            apk update
-        else
-            echo "$(get_message "MSG_INVALID_PACKAGE_MANAGER")"
-            return 1
-        fi
-    fi
-
-    # オプションの初期値
+    # オプション解析
     local confirm_install="no"
     local skip_lang_pack="no"
     local skip_package_db="no"
     local set_disabled="no"
 
-    # オプションを順不同で解析
     for arg in "$@"; do
         case "$arg" in
-            yn) confirm_install="yes" ;;  # インストール確認あり
-            dont) skip_lang_pack="yes" ;;  # 言語パック適用なし
-            notset) skip_package_db="yes" ;;  # package.db の適用なし
-            disabled) set_disabled="yes" ;;  # 設定を `disabled` にする
-            *) echo "$(get_message "MSG_INVALID_OPTION") [$arg]" ;;
+            yn) confirm_install="yes" ;;
+            dont) skip_lang_pack="yes" ;;
+            notset) skip_package_db="yes" ;;
+            disabled) set_disabled="yes" ;;
         esac
     done
 
-    # すでにインストール済みか確認
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if opkg list-installed | grep -q "^$package_name "; then
-            echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
-            return 0
-        fi
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if apk list-installed | grep -q "^$package_name "; then
-            echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
-            return 0
-        fi
-    fi
-
-    # パッケージがリポジトリに存在するか確認
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if ! opkg list | grep -q "^$package_name "; then
-            echo "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")"
-            return 1
-        fi
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if ! apk list | grep -q "^$package_name "; then
-            echo "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")"
-            return 1
-        fi
+    # パッケージのリポジトリ確認
+    if ! $PACKAGE_MANAGER list | grep -q "^$package_name "; then
+        echo "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")"
+        return 1
     fi
 
     # インストール確認 (`yn` オプションが指定された場合)
@@ -822,73 +787,51 @@ install_package() {
         echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
         read -r yn
         case "$yn" in
-            [Yy]*) ;;
             [Nn]*) echo "$(get_message "MSG_INSTALL_ABORTED")" ; return 1 ;;
-            *) echo "$(get_message "MSG_INVALID_INPUT_YN")" ; return 1 ;;
         esac
     fi
 
     # パッケージのインストール
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        opkg install "$package_name"
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        apk add "$package_name"
+    $PACKAGE_MANAGER install "$package_name"
+
+    # `package.db` の適用 (`notset` オプションがない場合)
+    if [ "$skip_package_db" = "no" ] && grep -q "^$package_name=" "${BASE_DIR}/packages.db"; then
+        eval "$(grep "^$package_name=" "${BASE_DIR}/packages.db" | cut -d'=' -f2-)"
     fi
-    echo "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")"
 
-    # package.db の適用 (`notset` オプションがない場合)
+    # 設定の有効化/無効化
     if [ "$skip_package_db" = "no" ]; then
-        if grep -q "^$package_name=" "${BASE_DIR}/package.db"; then
-            local package_config
-            package_config=$(grep "^$package_name=" "${BASE_DIR}/package.db" | cut -d'=' -f2-)
+        if [ "$set_disabled" = "yes" ]; then
+            uci set "$package_name.@$package_name[0].enabled=0"
+        else
+            uci set "$package_name.@$package_name[0].enabled=1"
+        fi
+        uci commit "$package_name"
+    fi
 
-            # パッケージ設定を適用
-            package_config "$package_name" "$package_config"
-
-            echo "$(get_message "MSG_PACKAGE_DB_APPLIED" | sed "s/{pkg}/$package_name/")"
+    # 言語パッケージの適用 (`dont` オプションがない場合)
+    if [ "$skip_lang_pack" = "no" ] && echo "$package_name" | grep -qE '^luci-app-'; then
+        local lang_code="$(cat "${CACHE_DIR}/luci.ch")"
+        local lang_package="luci-i18n-${package_name#luci-app-}-$lang_code"
+        
+        if $PACKAGE_MANAGER list | grep -q "^$lang_package "; then
+            install_package "$lang_package"
+        else
+            if [ "$lang_code" = "xx" ]; then
+                if $PACKAGE_MANAGER list | grep -q "^luci-i18n-${package_name#luci-app-}-en "; then
+                    install_package "luci-i18n-${package_name#luci-app-}-en"
+                else
+                    install_package "luci-i18n-${package_name#luci-app-}"
+                fi
+            fi
         fi
     fi
 
-    # 設定の有効化 (デフォルト `enabled`、`disabled` オプションで無効化)
-    if [ "$skip_package_db" = "no" ] && [ "$set_disabled" = "yes" ]; then
-        uci set "$package_name.@$package_name[0].enabled=0"
-        uci commit "$package_name"
-        echo "$(get_message "MSG_PACKAGE_DISABLED" | sed "s/{pkg}/$package_name/")"
-    elif [ "$skip_package_db" = "no" ]; then
-        uci set "$package_name.@$package_name[0].enabled=1"
-        uci commit "$package_name"
-        echo "$(get_message "MSG_PACKAGE_ENABLED" | sed "s/{pkg}/$package_name/")"
-    fi
-
     # サービスの有効化/開始
-    if [ "$set_disabled" = "no" ]; then
-        # サービスがサービス型かどうか判定
-        is_service_package "$package_name" && {
-            echo "Enabling and starting service for package: $package_name"
-            /etc/init.d/$package_name enable
-            /etc/init.d/$package_name start
-        } || {
-            echo "Skipping enable/start for non-service package: $package_name"
-        }
+    if [ "$set_disabled" = "no" ] && ! echo "$package_name" | grep -qE '^(lib|luci)$'; then
+        /etc/init.d/$package_name enable
+        /etc/init.d/$package_name start
     fi
-}
-
-# サービス型かどうかを判定する関数
-is_service_package() {
-    local package_name="$1"
-    
-    # `luci-app-` などのサービス型パッケージを判定
-    if [[ "$package_name" =~ ^luci-app- || "$package_name" =~ -service$ ]]; then
-        return 0  # サービス型パッケージ
-    fi
-    
-    # ライブラリや `luci` 関連のパッケージはサービスではない
-    if [[ "$package_name" =~ ^luci-i18n- || "$package_name" =~ ^lib- ]]; then
-        return 1  # サービスではない
-    fi
-    
-    # デフォルトはサービス型とみなす
-    return 0
 }
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
