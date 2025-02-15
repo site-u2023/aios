@@ -878,6 +878,12 @@ install_package() {
         uci commit "$package_name"
         echo "$(get_message "MSG_PACKAGE_ENABLED" | sed "s/{pkg}/$package_name/")"
     fi
+
+    # サービスの有効化/開始
+    if [ "$set_disabled" = "no" ]; then
+        /etc/init.d/$package_name enable
+        /etc/init.d/rpcd start
+    fi
 }
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
