@@ -6,8 +6,9 @@
 
 COMMON_VERSION="2025.02.15-7-2"
 
-# 基本定数の設定
-BASE_WGET="wget --quiet -O"
+# 基本定数の設定 
+BASE_WGET="${BASE_WGET:-wget -q -O}"
+# BASE_WGET="${BASE_WGET:-wget -O}"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
