@@ -6,7 +6,7 @@
 
 COMMON_VERSION="2025.02.15-8-1"
 
-DEV_NULL="${DEV_NULL:-on)"
+DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
 # export DEV_NULL="on"
 # 通常モード
