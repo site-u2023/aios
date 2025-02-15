@@ -36,6 +36,10 @@ JP|MSG_INVALID_INPUT_YNR=❌ 無効な入力です。「Y」「N」「R」を入
 
 # install_package()
 
+US|MSG_CONFIRM_ONLY_YN=🔄 Confirm (Y=Yes / N=No): 
+JP|MSG_CONFIRM_ONLY_YN=🔄 確認 (Y=はい / N=いいえ):
+
+
 # パッケージマネージャ関連
 JP|MSG_PACKAGE_MANAGER_NOT_FOUND=パッケージマネージャが見つかりません。
 US|MSG_PACKAGE_MANAGER_NOT_FOUND=Package manager not found.
