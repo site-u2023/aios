@@ -761,19 +761,18 @@ install_package() {
         return 1
     fi
 
-    # `update` オプションの場合、パッケージリストを更新
-    if [ "$package_name" = "update" ]; then
+    # `update` オプションが指定されている場合、リポジトリを更新する
+    if echo "$@" | grep -q "update"; then
+        # リポジトリを更新（opkg または apk の対応）
+        echo "$(get_message "MSG_RUNNING_UPDATE")"
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            echo "$(get_message "MSG_RUNNING_UPDATE")"
             opkg update
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            echo "$(get_message "MSG_RUNNING_UPDATE")"
             apk update
         else
             echo "$(get_message "MSG_INVALID_PACKAGE_MANAGER")"
             return 1
         fi
-        return 0
     fi
 
     # オプションの初期値
