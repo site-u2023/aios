@@ -310,8 +310,8 @@ select_country() {
     fi
 
     while true; do
-        printf "%s\n" "$(color cyan "Enter country name, code, or language to search.")"
-        printf "%s" "Search (Keyword/Code): "
+        printf "%s" "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
+        printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_COUNTRY")")"
         read -r input
 
         # 入力の正規化: "/", ",", "_" をスペースに置き換え
@@ -396,8 +396,8 @@ selection_list() {
     done
 
     while true; do
-        printf "%s\n" "$(color cyan "Enter the number of your choice.")"
-        printf "Select Number: "
+        printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_NUMBER_CHOICE")")"
+        printf "%s" "$(get_message "MSG_SELECT_NUMBER")"
         read -r choice
 
         local selected_value
@@ -415,8 +415,8 @@ selection_list() {
             confirm_info=$(echo "$selected_value" | awk '{print $1, $2}')
         fi
 
-        printf "%s\n" "$(color cyan "Confirm selection: [$choice] $confirm_info")"
-        printf "Confirm (Y/N/R): "
+        printf "%s\n" "$(color cyan "$(get_message "MSG_CONFIRM_SELECTION") [$choice] $confirm_info")"
+        printf "%s" "$(get_message "MSG_CONFIRM_YNR")"
         read -r yn
 
         case "$yn" in
