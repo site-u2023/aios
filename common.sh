@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-6-2"
+COMMON_VERSION="2025.02.15-6-3"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -782,13 +782,25 @@ install_package() {
         return 1
     fi
 
+    # `apk` の場合、依存関係のチェック
+    if [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if ! apk info --depends "$package_name" >/dev/null 2>&1; then
+            echo "Dependency check failed: $package_name has missing dependencies."
+            return 1
+        fi
+    fi
+
     # インストール確認 (`yn` オプションが指定された場合)
     if [ "$confirm_install" = "yes" ]; then
-        echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
-        read -r yn
-        case "$yn" in
-            [Nn]*) echo "$(get_message "MSG_INSTALL_ABORTED")" ; return 1 ;;
-        esac
+        while true; do
+            echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/") [Y/N]: "
+            read -r yn
+            case "$yn" in
+                [Yy]*) break ;;
+                [Nn]*) echo "$(get_message "MSG_INSTALL_ABORTED")" ; return 1 ;;
+                *) echo "Invalid input. Please enter Y or N." ;;
+            esac
+        done
     fi
 
     # パッケージのインストール
