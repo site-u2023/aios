@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-8-8"
+COMMON_VERSION="2025.02.15-8-9"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -506,7 +506,9 @@ selection_list() {
                 "$CACHE_DIR/luci.ch" \
                 "$CACHE_DIR/zone.ch" \
                 "$CACHE_DIR/zonename.ch" \
-                "$CACHE_DIR/timezone.ch"
+                "$CACHE_DIR/timezone.ch" \
+                "$CACHE_DIR/country_success_done" \
+                "$CACHE_DIR/timezone_success_done"
                 select_country
                 return
                 ;;
@@ -607,7 +609,8 @@ select_zone() {
     local cache_zone_tmp="${CACHE_DIR}/zone_tmp.ch"
     local cache_zonename="${CACHE_DIR}/zonename.ch"
     local cache_timezone="${CACHE_DIR}/timezone.ch"
-
+    local flag_zone="${CACHE_DIR}/timezone_success_done"
+    
     if [ -s "$cache_zonename" ] && [ -s "$cache_timezone" ]; then
         debug_log "INFO" "Timezone is already set. Skipping select_zone()."
         return
@@ -635,7 +638,10 @@ select_zone() {
 
     chmod 444 "$cache_zonename" "$cache_timezone"
 
-    echo "$(get_message "MSG_TIMEZONE_SUCCESS")"
+    if [ ! -f "$flag_zone" ]; then
+        echo "$(get_message "MSG_TIMEZONE_SUCCESS")"
+        touch "$flag_zone"
+    fi
 }
 
 #########################################################################
@@ -667,6 +673,13 @@ normalize_country() {
     local country_cache="${CACHE_DIR}/country.ch"  # 主（真）データ
     local message_cache="${CACHE_DIR}/message.ch"
     local selected_language=""
+    local flag_file="${CACHE_DIR}/country_success_done"
+
+    # もし既に「国と言語設定完了」を示すフラグファイルがあれば、何もしない
+    if [ -f "$flag_file" ]; then
+        debug_log "INFO" "normalize_country() already done. Skipping repeated success message."
+        return
+    fi
 
     # ✅ `country.ch` が存在しない場合、エラーを返して終了
     if [ ! -f "$country_cache" ]; then
@@ -694,6 +707,7 @@ normalize_country() {
 
     debug_log "INFO: Final system message language -> $(cat "$message_cache")"
     echo "$(get_message "MSG_COUNTRY_SUCCESS")"
+    touch "$flag_file"    
 }
 
 # 🔴　ランゲージ（言語・ゾーン）系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
