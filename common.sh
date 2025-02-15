@@ -4,9 +4,12 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-7-2"
+COMMON_VERSION="2025.02.15-8-0"
 
 # 基本定数の設定 
+#DEV_NULL="> /dev/null 2>&1"
+DEV_NULL="${DEV_NULL:-}"
+export DEV_NULL="> /dev/null 2>&1"
 BASE_WGET="${BASE_WGET:-wget -q -O}"
 # BASE_WGET="${BASE_WGET:-wget -O}"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
@@ -804,8 +807,8 @@ install_package() {
         done
     fi
 
-    # パッケージのインストール
-    $PACKAGE_MANAGER install "$package_name"
+    # パッケージのインストール（ここで $DEV_NULL を適用）
+    $PACKAGE_MANAGER install "$package_name" $DEV_NULL
 
     # `package.db` の適用 (`notset` オプションがない場合)
     if [ "$skip_package_db" = "no" ] && grep -q "^$package_name=" "${BASE_DIR}/packages.db"; then
@@ -829,13 +832,14 @@ install_package() {
         local lang_code="$(cat "${CACHE_DIR}/luci.ch" 2>/dev/null || echo "en")"
         local lang_package="luci-i18n-${package_name#luci-app-}-$lang_code"
         
-        if $PACKAGE_MANAGER list | grep -q "^$lang_package "; then
+        # list の結果をシステムに表示したくなければ、ここにも $DEV_NULL を付ける
+        if $PACKAGE_MANAGER list $DEV_NULL | grep -q "^$lang_package "; then
             install_package "$lang_package"
         else
             if [ "$lang_code" = "xx" ]; then
-                if $PACKAGE_MANAGER list | grep -q "^luci-i18n-${package_name#luci-app-}-en "; then
+                if $PACKAGE_MANAGER list $DEV_NULL | grep -q "^luci-i18n-${package_name#luci-app-}-en "; then
                     install_package "luci-i18n-${package_name#luci-app-}-en"
-                elif $PACKAGE_MANAGER list | grep -q "^luci-i18n-${package_name#luci-app-} "; then
+                elif $PACKAGE_MANAGER list $DEV_NULL | grep -q "^luci-i18n-${package_name#luci-app-} "; then
                     install_package "luci-i18n-${package_name#luci-app-}"
                 fi
             fi
