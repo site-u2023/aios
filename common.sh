@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-8-5"
+COMMON_VERSION="2025.02.15-8-6"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -395,10 +395,13 @@ select_country() {
         printf "%s" "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
         read -r input
 
+        # 全角→半角変換
+        input=$(halfwidth "$input")
+        
         # 入力の正規化: "/", ",", "_" をスペースに置き換え
         local cleaned_input
         cleaned_input=$(echo "$input" | sed 's/[\/,_]/ /g')
-
+        
         # 完全一致を優先
         local search_results
         search_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} 
