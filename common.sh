@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-8-7"
+COMMON_VERSION="2025.02.15-8-8"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -186,91 +186,6 @@ color_code_map() {
         *) echo "\033[0;39m" ;;  # デフォルトでリセット
     esac
 }
-
-#########################################################################
-# halfwidth()
-#  - BusyBox環境向け。全角英数字・スペースを半角に変換する。
-#  - sedの 'y///' は多バイト文字未対応なので使わず、バイト列の置換を連続で行う。
-#  - 全角→半角に対応するバイト列 (UTF-8) をひとつずつ書くため、行が多くなります。
-# 【使い方例】
-# read -r input
-# hw_input="$(halfwidth_alnum "$input")"
-# echo "変換結果: [$hw_input]"
-#########################################################################
-halfwidth() {
-    # 引数をパイプで sed に通す（複数の -e で連続置換）
-    # \xEF\xBC\x90 (全角０, U+FF10) → '0'
-    # \xEF\xBC\x91 (全角１, U+FF11) → '1'
-    # ... 以下同様に全角A～Z, a～z, スペース(U+3000)も置換
-    echo "$1" \
-    | sed -e 's/\xEF\xBC\x90/0/g' \
-          -e 's/\xEF\xBC\x91/1/g' \
-          -e 's/\xEF\xBC\x92/2/g' \
-          -e 's/\xEF\xBC\x93/3/g' \
-          -e 's/\xEF\xBC\x94/4/g' \
-          -e 's/\xEF\xBC\x95/5/g' \
-          -e 's/\xEF\xBC\x96/6/g' \
-          -e 's/\xEF\xBC\x97/7/g' \
-          -e 's/\xEF\xBC\x98/8/g' \
-          -e 's/\xEF\xBC\x99/9/g' \
-          \
-          -e 's/\xEF\xBC\xA1/A/g' \
-          -e 's/\xEF\xBC\xA2/B/g' \
-          -e 's/\xEF\xBC\xA3/C/g' \
-          -e 's/\xEF\xBC\xA4/D/g' \
-          -e 's/\xEF\xBC\xA5/E/g' \
-          -e 's/\xEF\xBC\xA6/F/g' \
-          -e 's/\xEF\xBC\xA7/G/g' \
-          -e 's/\xEF\xBC\xA8/H/g' \
-          -e 's/\xEF\xBC\xA9/I/g' \
-          -e 's/\xEF\xBC\xAA/J/g' \
-          -e 's/\xEF\xBC\xAB/K/g' \
-          -e 's/\xEF\xBC\xAC/L/g' \
-          -e 's/\xEF\xBC\xAD/M/g' \
-          -e 's/\xEF\xBC\xAE/N/g' \
-          -e 's/\xEF\xBC\xAF/O/g' \
-          -e 's/\xEF\xBC\xB0/P/g' \
-          -e 's/\xEF\xBC\xB1/Q/g' \
-          -e 's/\xEF\xBC\xB2/R/g' \
-          -e 's/\xEF\xBC\xB3/S/g' \
-          -e 's/\xEF\xBC\xB4/T/g' \
-          -e 's/\xEF\xBC\xB5/U/g' \
-          -e 's/\xEF\xBC\xB6/V/g' \
-          -e 's/\xEF\xBC\xB7/W/g' \
-          -e 's/\xEF\xBC\xB8/X/g' \
-          -e 's/\xEF\xBC\xB9/Y/g' \
-          -e 's/\xEF\xBC\xBA/Z/g' \
-          \
-          -e 's/\xEF\xBD\x81/a/g' \
-          -e 's/\xEF\xBD\x82/b/g' \
-          -e 's/\xEF\xBD\x83/c/g' \
-          -e 's/\xEF\xBD\x84/d/g' \
-          -e 's/\xEF\xBD\x85/e/g' \
-          -e 's/\xEF\xBD\x86/f/g' \
-          -e 's/\xEF\xBD\x87/g/g' \
-          -e 's/\xEF\xBD\x88/h/g' \
-          -e 's/\xEF\xBD\x89/i/g' \
-          -e 's/\xEF\xBD\x8A/j/g' \
-          -e 's/\xEF\xBD\x8B/k/g' \
-          -e 's/\xEF\xBD\x8C/l/g' \
-          -e 's/\xEF\xBD\x8D/m/g' \
-          -e 's/\xEF\xBD\x8E/n/g' \
-          -e 's/\xEF\xBD\x8F/o/g' \
-          -e 's/\xEF\xBD\x90/p/g' \
-          -e 's/\xEF\xBD\x91/q/g' \
-          -e 's/\xEF\xBD\x92/r/g' \
-          -e 's/\xEF\xBD\x93/s/g' \
-          -e 's/\xEF\xBD\x94/t/g' \
-          -e 's/\xEF\xBD\x95/u/g' \
-          -e 's/\xEF\xBD\x96/v/g' \
-          -e 's/\xEF\xBD\x97/w/g' \
-          -e 's/\xEF\xBD\x98/x/g' \
-          -e 's/\xEF\xBD\x99/y/g' \
-          -e 's/\xEF\xBD\x9A/z/g' \
-          \
-          -e 's/\xE3\x80\x80/ /g'
-}
-
 
 #########################################################################
 # openwrt_db: バージョンデータベースのダウンロード
@@ -470,9 +385,6 @@ select_country() {
         printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_COUNTRY")")"
         printf "%s" "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
         read -r input
-
-        # 全角→半角変換
-        input=$(halfwidth "$input")
         
         # 入力の正規化: "/", ",", "_" をスペースに置き換え
         local cleaned_input
@@ -559,7 +471,6 @@ selection_list() {
         printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_NUMBER_CHOICE")")"
         printf "%s" "$(get_message "MSG_SELECT_NUMBER")"
         read -r choice
-        choice=$(halfwidth "$choice")
         local selected_value
         selected_value=$(awk -v num="$choice" 'NR == num {print $0}' "$list_file")
 
@@ -578,7 +489,6 @@ selection_list() {
         printf "%s\n" "$(color cyan "$(get_message "MSG_CONFIRM_SELECTION") [$choice] $confirm_info")"
         printf "%s" "$(get_message "MSG_CONFIRM_YNR")"
         read -r yn
-        yn=$(halfwidth "$yn" | tr '[:upper:]' '[:lower:]')
         
         case "$yn" in
             [Yy]*) 
@@ -901,7 +811,6 @@ install_package() {
             echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
             echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
             read -r yn
-            yn=$(halfwidth "$yn" | tr '[:upper:]' '[:lower:]')
             case "$yn" in
                 [Yy]*) break ;;
                 [Nn]*) echo "$(get_message "MSG_INSTALL_ABORTED")"; return 1 ;;
