@@ -87,3 +87,4 @@ check_common "$INPUT_LANG"
 print_banner
 packages # 必要に応じて
 download_script openwrt-config.sh
+sh ${BASE_DIR}/openwrt-config.sh
