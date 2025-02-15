@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-2-1"
+COMMON_VERSION="2025.02.15-3-0"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -281,25 +281,32 @@ get_message() {
     local message_cache="${CACHE_DIR}/message.ch"
     local lang="en"  # デフォルト `en`
 
-    # ✅ `message.db` が無い場合、デフォルト言語メッセージを返す
-    local message_db="${BASE_DIR}/messages.db"
-    if [ ! -f "$message_db" ]; then
-        echo "$key"  # そのままキーを返す（デフォルト）
-        return
-    fi
-
-    # ✅ `message.ch` があれば、それを使用
-    if [ -f "$message_cache" ]; then
+    # ✅ `message.ch` が無い場合は、country.ch から言語コードを取得
+    if [ ! -f "$message_cache" ]; then
+        if [ -f "${CACHE_DIR}/country.ch" ]; then
+            lang=$(awk '{print $5}' "${CACHE_DIR}/country.ch")  # `$5` に国コード
+        fi
+        # ✅ `lang` が空なら `en` をセット
+        [ -z "$lang" ] && lang="en"
+    else
         lang=$(cat "$message_cache")
     fi
 
-    # ✅ `messages.db` から `lang` に対応するメッセージを取得
+    local message_db="${BASE_DIR}/messages.db"
+
+    # ✅ `messages.db` が無い場合、デフォルトの英語メッセージを返す
+    if [ ! -f "$message_db" ]; then
+        echo "$key"
+        return
+    fi
+
+    # ✅ `messages.db` から該当言語のメッセージを取得
     local message
     message=$(grep "^${lang}|${key}=" "$message_db" | cut -d'=' -f2-)
 
-    # ✅ `lang` に該当するメッセージが無い場合は `en` を参照
+    # ✅ `lang` に該当するメッセージが無い場合は `US`（英語）を参照
     if [ -z "$message" ]; then
-        message=$(grep "^en|${key}=" "$message_db" | cut -d'=' -f2-)
+        message=$(grep "^US|${key}=" "$message_db" | cut -d'=' -f2-)
     fi
 
     # ✅ `message.db` にも無い場合はキーをそのまま返す
