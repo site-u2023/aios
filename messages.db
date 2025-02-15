@@ -37,46 +37,32 @@ JP|MSG_INVALID_INPUT_YNR=❌ 無効な入力です。「Y」「N」「R」を入
 # install_package()
 JP|MSG_PACKAGE_MANAGER_NOT_FOUND=パッケージマネージャが見つかりません。
 US|MSG_PACKAGE_MANAGER_NOT_FOUND=Package manager not found.
-
 JP|MSG_RUNNING_UPDATE=パッケージリストを更新中...
 US|MSG_RUNNING_UPDATE=Updating package list...
-
 JP|MSG_INVALID_PACKAGE_MANAGER=無効なパッケージマネージャです。
 US|MSG_INVALID_PACKAGE_MANAGER=Invalid package manager.
-
 JP|MSG_INVALID_OPTION=無効なオプションが指定されました:
 US|MSG_INVALID_OPTION=Invalid option specified:
-
 JP|MSG_PACKAGE_ALREADY_INSTALLED=パッケージ {pkg} はすでにインストールされています。
 US|MSG_PACKAGE_ALREADY_INSTALLED=Package {pkg} is already installed.
-
 JP|MSG_PACKAGE_NOT_FOUND=パッケージ {pkg} が見つかりません。
 US|MSG_PACKAGE_NOT_FOUND=Package {pkg} not found.
-
 JP|MSG_CONFIRM_INSTALL=パッケージ {pkg} をインストールしますか？ [Y/n]:
 US|MSG_CONFIRM_INSTALL=Do you want to install {pkg}? [Y/n]:
-
 JP|MSG_INSTALL_ABORTED=インストールがキャンセルされました。
 US|MSG_INSTALL_ABORTED=Installation aborted.
-
 JP|MSG_INVALID_INPUT_YN=無効な入力です。Y または N を入力してください。
 US|MSG_INVALID_INPUT_YN=Invalid input. Please enter Y or N.
-
 JP|MSG_PACKAGE_INSTALLED=パッケージ {pkg} のインストールが完了しました。
 US|MSG_PACKAGE_INSTALLED=Installation of {pkg} completed.
-
 JP|MSG_LANGUAGE_PACK_INSTALLED=言語パッケージ {pkg} がインストールされました。
 US|MSG_LANGUAGE_PACK_INSTALLED=Language package {pkg} installed.
-
 JP|MSG_LANGUAGE_PACK_NOT_FOUND=言語パッケージ {pkg} は見つかりませんでした。
 US|MSG_LANGUAGE_PACK_NOT_FOUND=Language package {pkg} not found.
-
 JP|MSG_PACKAGE_DB_APPLIED=パッケージ {pkg} の設定が適用されました。
 US|MSG_PACKAGE_DB_APPLIED=Configuration for {pkg} applied.
-
 JP|MSG_PACKAGE_DISABLED=パッケージ {pkg} は無効化されました。
 US|MSG_PACKAGE_DISABLED=Package {pkg} has been disabled.
-
 JP|MSG_PACKAGE_ENABLED=パッケージ {pkg} は有効化されました。
 US|MSG_PACKAGE_ENABLED=Package {pkg} has been enabled.
 
