@@ -61,7 +61,7 @@ download_common() {
 #########################################################################
 print_banner() {
     local msg
-    msg=$(color red_white get_message 'MSG_BANNER' "$SELECTED_LANGUAGE")
+    msg="$(color white "$(get_message "MSG_BANNER")")"
 
     echo
     echo -e "\033[1;35m                    ii i                              \033[0m"
