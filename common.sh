@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-6-0"
+COMMON_VERSION="2025.02.15-6-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -799,14 +799,18 @@ install_package() {
         eval "$(grep "^$package_name=" "${BASE_DIR}/packages.db" | cut -d'=' -f2-)"
     fi
 
-    # 設定の有効化/無効化
+    # 設定の有効化/無効化を適用
     if [ "$skip_package_db" = "no" ]; then
-        if [ "$set_disabled" = "yes" ]; then
-            uci set "$package_name.@$package_name[0].enabled=0"
+        if uci get "$package_name.@$package_name[0].enabled" >/dev/null 2>&1; then
+            if [ "$set_disabled" = "yes" ]; then
+                uci set "$package_name.@$package_name[0].enabled=0"
+            else
+                uci set "$package_name.@$package_name[0].enabled=1"
+            fi
+            uci commit "$package_name"
         else
-            uci set "$package_name.@$package_name[0].enabled=1"
+            echo "Skipping uci set: $package_name.@$package_name[0].enabled not found"
         fi
-        uci commit "$package_name"
     fi
 
     # 言語パッケージの適用 (`dont` オプションがない場合)
