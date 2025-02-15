@@ -3,7 +3,7 @@
 
 SUPPORTED_LANGUAGES="US JP" 
 
-MESSAGE_VERSION="2025.02.15-0"
+MESSAGE_VERSION="2025.02.15-1"
 echo "message.db Last update: $MESSAGE_VERSION"
 
 # 😃 🤣 🤩 🤪 🫥 🤢 🥵 🥶 😱 💀 🤡 👹 👺 👻 👽 👾 🤖 💯 💢 💥 💬 💤
@@ -29,6 +29,10 @@ US|MSG_COUNTRY_SUCCESS=✅ Country and language selection completed successfully
 US|MSG_TIMEZONE_SUCCESS=✅ Timezone selection completed successfully!
 JP|MSG_COUNTRY_SUCCESS=✅ 国と言語の選択が完了しました！
 JP|MSG_TIMEZONE_SUCCESS=✅ タイムゾーンの選択が完了しました！
+US|MSG_INVALID_SELECTION=❌ Invalid selection. Please choose a valid number.
+JP|MSG_INVALID_SELECTION=❌ 無効な選択です。有効な番号を入力してください。
+US|MSG_INVALID_INPUT_YNR=❌ Invalid input. Please enter 'Y', 'N', or 'R'.
+JP|MSG_INVALID_INPUT_YNR=❌ 無効な入力です。「Y」「N」「R」を入力してください。
 
 # 追加--------------------------------------------
 JP|ERR_COUNTRY_CHECK=国の確認に失敗しました。国データベースが正しくロードされていることを確認してください。
