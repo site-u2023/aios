@@ -1,5 +1,5 @@
 # AIOS 設計方針と要件定義  
-**Last Update: 2025-02-12 14:35:26 (JST) 🚀**  
+**Last Update: 2025-02-15 14:06:00 (JST) 🚀**  
 *"Precision in code, clarity in purpose. Every update refines the path."*  
 
 ---
@@ -492,6 +492,65 @@ awk なら「複数フィールドの部分一致」が可能
 ✅ `normalize_country()` は `message.ch` を管理し、フォールバック適用  
 ✅ `get_message()` は `message.ch` のみを参照し、`language.ch` には影響を与えない  
 
+# **install_package: パッケージインストール関数 (OpenWrt / Alpine Linux)**
+
+## **📌 概要**
+この関数は OpenWrt (opkg) / Alpine Linux (apk) のパッケージをインストールし、  
+オプションに応じて言語パック適用や `package.db` の設定適用を行う。  
+また、システムのパッケージリストを更新する機能 (`update`) もサポート。
+
+---
+
+## **🚀 フロー**
+1. `install_package update` を実行すると `opkg update` または `apk update` を実行
+2. デバイスにパッケージがインストール済みか確認
+3. パッケージがリポジトリに存在するか確認
+4. インストール確認 (`yn` オプションが指定された場合)
+5. パッケージをインストール
+6. 言語パッケージの適用 (`dont` オプションがない場合)
+7. `package.db` の設定適用 (`notset` オプションがない場合)
+8. 設定の有効化 (デフォルト `enabled`、`disabled` オプションで無効化)
+
+---
+
+## **⚙️ オプション**
+| オプション  | 説明 | デフォルト動作 |
+|------------|----------------------------------------|----------------|
+| `yn`       | インストール前に確認を求める          | **確認なし**  |
+| `dont`     | 言語パッケージの適用をスキップ        | **適用する**  |
+| `notset`   | `package.db` の適用をスキップ         | **適用する**  |
+| `disabled` | 設定を `disabled` にする              | **enabled**  |
+| `update`   | `opkg update` または `apk update` を実行 | **他では実行しない** |
+
+---
+
+## **📌 仕様**
+- `downloader_ch` から `opkg` または `apk` を取得し、適切なパッケージ管理ツールを使用する。
+- `messages.db` を参照し、すべてのメッセージを取得 (`JP/US` の言語対応)。
+- `package.db` の設定がある場合、`uci set` を実行して適用 (`notset` オプションでスキップ可能)。
+- 言語パッケージは `luci-app-xxx` 形式を対象に適用 (`dont` オプションでスキップ可能)。
+- 設定の有効化は **デフォルト `enabled`**、`disabled` オプション指定時のみ `disabled` にする。
+- `update` は **`install_package update` で明示的に実行** (パッケージインストール時には自動実行しない)。
+
+---
+
+## **🛠 使用例**
+| コマンド | 説明 |
+|---------|------|
+| `install_package update` | パッケージリストを更新 |
+| `install_package ttyd` | `ttyd` をインストール（確認なし、`package.db` 適用、言語パック適用） |
+| `install_package ttyd yn` | `ttyd` をインストール（確認あり） |
+| `install_package ttyd dont` | `ttyd` をインストール（言語パック適用なし） |
+| `install_package ttyd notset` | `ttyd` をインストール（`package.db` の適用なし） |
+| `install_package ttyd disabled` | `ttyd` をインストール（設定を `disabled` にする） |
+| `install_package ttyd yn dont disabled` | `ttyd` をインストール（確認あり、言語パックなし、設定を `disabled` にする） |
+
+---
+
+## **📜 備考**
+- **`update` を実行する場合、必ず `install_package update` を最初に記述すること。**
+- **オプションは順不同で指定可能。**
+- **すべての `echo` メッセージは `messages.db` から取得するため、国際化対応が可能。**
 
 
 
