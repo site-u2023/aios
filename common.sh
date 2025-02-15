@@ -375,8 +375,8 @@ select_country() {
     fi
 
     while true; do
-        printf "%s" "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
         printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_COUNTRY")")"
+        printf "%s" "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
         read -r input
 
         # 入力の正規化: "/", ",", "_" をスペースに置き換え
