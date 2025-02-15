@@ -89,7 +89,8 @@ US|MSG_PACKAGE_DISABLED=Package {pkg} has been disabled.
 JP|MSG_PACKAGE_ENABLED=パッケージ {pkg} は有効化されました。
 US|MSG_PACKAGE_ENABLED=Package {pkg} has been enabled.
 
-
+MSG_PACKAGE_DEPENDENCY_ERROR="{pkg} の依存関係が不足しているため、インストールできません。"
+MSG_PACKAGE_DEPENDENCY_ERROR="Dependency check failed: {pkg} has missing dependencies."
 
 # 追加--------------------------------------------
 JP|ERR_COUNTRY_CHECK=国の確認に失敗しました。国データベースが正しくロードされていることを確認してください。
