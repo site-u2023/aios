@@ -894,7 +894,7 @@ package_config() {
             if (index != "") {
                 print "uci set " section "@" section "[" index "]" "." $2 "=" $3
             } else {
-                print "uci set " section "." $2 "=" $3
+                print "uci set " section "." $2 "=" $3 
             }
         }
         /^list/ {
