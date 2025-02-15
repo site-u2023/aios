@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-6-1"
+COMMON_VERSION="2025.02.15-6-2"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -799,7 +799,7 @@ install_package() {
         eval "$(grep "^$package_name=" "${BASE_DIR}/packages.db" | cut -d'=' -f2-)"
     fi
 
-    # 設定の有効化/無効化を適用
+    # 設定の有効化/無効化
     if [ "$skip_package_db" = "no" ]; then
         if uci get "$package_name.@$package_name[0].enabled" >/dev/null 2>&1; then
             if [ "$set_disabled" = "yes" ]; then
@@ -808,14 +808,12 @@ install_package() {
                 uci set "$package_name.@$package_name[0].enabled=1"
             fi
             uci commit "$package_name"
-        else
-            echo "Skipping uci set: $package_name.@$package_name[0].enabled not found"
         fi
     fi
 
     # 言語パッケージの適用 (`dont` オプションがない場合)
     if [ "$skip_lang_pack" = "no" ] && echo "$package_name" | grep -qE '^luci-app-'; then
-        local lang_code="$(cat "${CACHE_DIR}/luci.ch")"
+        local lang_code="$(cat "${CACHE_DIR}/luci.ch" 2>/dev/null || echo "en")"
         local lang_package="luci-i18n-${package_name#luci-app-}-$lang_code"
         
         if $PACKAGE_MANAGER list | grep -q "^$lang_package "; then
@@ -824,7 +822,7 @@ install_package() {
             if [ "$lang_code" = "xx" ]; then
                 if $PACKAGE_MANAGER list | grep -q "^luci-i18n-${package_name#luci-app-}-en "; then
                     install_package "luci-i18n-${package_name#luci-app-}-en"
-                else
+                elif $PACKAGE_MANAGER list | grep -q "^luci-i18n-${package_name#luci-app-} "; then
                     install_package "luci-i18n-${package_name#luci-app-}"
                 fi
             fi
@@ -833,8 +831,10 @@ install_package() {
 
     # サービスの有効化/開始
     if [ "$set_disabled" = "no" ] && ! echo "$package_name" | grep -qE '^(lib|luci)$'; then
-        /etc/init.d/$package_name enable
-        /etc/init.d/$package_name start
+        if [ -f "/etc/init.d/$package_name" ]; then
+            /etc/init.d/$package_name enable
+            /etc/init.d/$package_name start
+        fi
     fi
 }
 
