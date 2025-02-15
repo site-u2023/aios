@@ -746,103 +746,141 @@ confirm() {
 # - `install_package ttyd disabled`         → ttyd をインストール（設定を `disabled` にする）
 # - `install_package ttyd yn dont disabled` → ttyd をインストール（確認あり、言語パックなし、設定を `disabled` にする）
 #########################################################################
+#########################################################################
+# install_package: パッケージのインストール処理 (OpenWrt / Alpine Linux)
+#########################################################################
 install_package() {
-    # 関数の実装はここに記述
-}
+    local package_name="$1"
+    shift  # 最初の引数 (パッケージ名) を取得し、残りをオプションとして処理
 
+    # `downloader_ch` からパッケージマネージャーを取得
+    if [ -f "${BASE_DIR}/downloader_ch" ]; then
+        PACKAGE_MANAGER=$(cat "${BASE_DIR}/downloader_ch")
+    else
+        echo "$(get_message "MSG_PACKAGE_MANAGER_NOT_FOUND")"
+        return 1
+    fi
 
-
-
-
-#########################################################################
-# install_packages: パッケージのインストール（既にインストール済みならスキップ）
-#########################################################################
-XXX_install_packages() {
-    local confirm_flag="$1"
-    shift
-    local package_list="$@"
-    local packages_to_install=""
-    for pkg in $package_list; do
-        if command -v apk >/dev/null 2>&1; then
-            if ! apk list-installed | grep -q "^$pkg "; then
-                packages_to_install="$packages_to_install $pkg"
-            fi
-        elif command -v opkg >/dev/null 2>&1; then
-            if ! opkg list-installed | grep -q "^$pkg "; then
-                packages_to_install="$packages_to_install $pkg"
-            fi
+    # `update` オプションの場合、パッケージリストを更新
+    if [ "$package_name" = "update" ]; then
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            echo "$(get_message "MSG_RUNNING_UPDATE")"
+            opkg update
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            echo "$(get_message "MSG_RUNNING_UPDATE")"
+            apk update
+        else
+            echo "$(get_message "MSG_INVALID_PACKAGE_MANAGER")"
+            return 1
         fi
-    done
-    if [ -z "$packages_to_install" ]; then
         return 0
     fi
-    if [ "$confirm_flag" = "yn" ]; then
-        echo -e "$(color cyan "Do you want to install: $packages_to_install? [Y/n]:")"
+
+    # オプションの初期値
+    local confirm_install="no"
+    local skip_lang_pack="no"
+    local skip_package_db="no"
+    local set_disabled="no"
+
+    # オプションを順不同で解析
+    for arg in "$@"; do
+        case "$arg" in
+            yn) confirm_install="yes" ;;  # 確認あり
+            dont) skip_lang_pack="yes" ;;  # 言語パック適用なし
+            notset) skip_package_db="yes" ;;  # package.db の適用なし
+            disabled) set_disabled="yes" ;;  # 設定を `disabled` にする
+            *) echo "$(get_message "MSG_INVALID_OPTION") [$arg]" ;;
+        esac
+    done
+
+    # すでにインストール済みか確認
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if opkg list-installed | grep -q "^$package_name "; then
+            echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
+            return 0
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if apk list-installed | grep -q "^$package_name "; then
+            echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
+            return 0
+        fi
+    fi
+
+    # パッケージがリポジトリに存在するか確認
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if ! opkg list | grep -q "^$package_name "; then
+            echo "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")"
+            return 1
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if ! apk list | grep -q "^$package_name "; then
+            echo "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")"
+            return 1
+        fi
+    fi
+
+    # インストール確認 (`yn` オプションが指定された場合)
+    if [ "$confirm_install" = "yes" ]; then
+        echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
         read -r yn
         case "$yn" in
             [Yy]*) ;;
-            [Nn]*) echo "$(color yellow "Skipping installation.")" ; return 1 ;;
-            *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
+            [Nn]*) echo "$(get_message "MSG_INSTALL_ABORTED")" ; return 1 ;;
+            *) echo "$(get_message "MSG_INVALID_INPUT_YN")" ; return 1 ;;
         esac
     fi
-    if command -v apk >/dev/null 2>&1; then
-        apk add $packages_to_install
-    elif command -v opkg >/dev/null 2>&1; then
-        opkg install $packages_to_install
-    fi
-    echo "$(color green "Installed:$packages_to_install")"
-}
 
-#########################################################################
-# attempt_package_install: 個別パッケージのインストールと、言語パック適用
-#########################################################################
-XXX_attempt_package_install() {
-    local package_name="$1"
-    if $PACKAGE_MANAGER list-installed | grep -q "^$package_name "; then
-        echo -e "$(color cyan "$package_name is already installed. Skipping...")"
-        return
+    # パッケージのインストール
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        opkg install "$package_name"
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        apk add "$package_name"
     fi
-    if $PACKAGE_MANAGER list | grep -q "^$package_name - "; then
-        $PACKAGE_MANAGER install $package_name && echo -e "$(color green "Successfully installed: $package_name")" || \
-        echo -e "$(color yellow "Failed to install: $package_name. Continuing...")"
-        install_language_pack "$package_name"
-    else
-        echo -e "$(color yellow "Package not found: $package_name. Skipping...")"
-    fi
-}
+    echo "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")"
 
-#########################################################################
-# install_language_pack: 言語パッケージの確認とインストール
-#########################################################################
-XXX_install_language_pack() {
-    local base_pkg="$1"
-    local lang_cache="${CACHE_DIR}/luci.ch"
-    
-    # ✅ `luci.ch` から現在の言語コードを取得
-    local selected_language=""
-    if [ -f "$lang_cache" ]; then
-        selected_language=$(cat "$lang_cache")
-        debug_log "INFO" "Detected language for luci: $selected_language"
-    else
-        debug_log "WARNING" "luci.ch not found. Skipping language pack installation."
-        return
-    fi
-
-    # ✅ `luci-app-*` のパッケージのみ対応
-    if echo "$base_pkg" | grep -qE '^luci-app-'; then
-        local lang_pkg="luci-i18n-${base_pkg#luci-app-}-$selected_language"
-
-        # ✅ `packages.db` に言語パックがあるか確認
-        if grep -q "^$lang_pkg$" "${BASE_DIR}/packages.db"; then
-            install_packages "$lang_pkg"
-            echo "$(color green "Installed language pack: $lang_pkg")"
-        else
-            echo "$(color yellow "Language pack not available in packages.db: $lang_pkg")"
+    # 言語パッケージの適用 (`dont` オプションがない場合)
+    if [ "$skip_lang_pack" = "no" ] && echo "$package_name" | grep -qE '^luci-app-'; then
+        local lang_code=""
+        if [ -f "${CACHE_DIR}/luci.ch" ]; then
+            lang_code=$(cat "${CACHE_DIR}/luci.ch")
         fi
-    else
-        debug_log "INFO" "Package $base_pkg is not a LuCI package. Skipping language pack check."
+        local lang_package="luci-i18n-${package_name#luci-app-}-$lang_code"
+        if grep -q "^$lang_package$" "${BASE_DIR}/packages.db"; then
+            install_package "$lang_package"
+            echo "$(get_message "MSG_LUCI_LANGUAGE_PACK_INSTALLED" | sed "s/{pkg}/$lang_package/")"
+        else
+            echo "$(get_message "MSG_LUCI_LANGUAGE_PACK_NOT_FOUND" | sed "s/{pkg}/$lang_package/")"
+        fi
+    fi
+    
+    # package.db の適用 (`notset` オプションがない場合)
+    if [ "$skip_package_db" = "no" ]; then
+        if grep -q "^$package_name=" "${BASE_DIR}/package.db"; then
+            local package_config
+            package_config=$(grep "^$package_name=" "${BASE_DIR}/package.db" | cut -d'=' -f2-)
+            eval "$package_config"
+            echo "$(get_message "MSG_PACKAGE_DB_APPLIED" | sed "s/{pkg}/$package_name/")"
+        fi
+    fi
+
+    # 設定の有効化 (デフォルト `enabled`、`disabled` オプションで無効化)
+    if [ "$skip_package_db" = "no" ] && [ "$set_disabled" = "yes" ]; then
+        uci set "$package_name.@$package_name[0].enabled=0"
+        uci commit "$package_name"
+        echo "$(get_message "MSG_PACKAGE_DISABLED" | sed "s/{pkg}/$package_name/")"
+    elif [ "$skip_package_db" = "no" ]; then
+        uci set "$package_name.@$package_name[0].enabled=1"
+        uci commit "$package_name"
+        echo "$(get_message "MSG_PACKAGE_ENABLED" | sed "s/{pkg}/$package_name/")"
     fi
 }
+
+
+
+
+
+
+
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 
