@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-8-2"
+COMMON_VERSION="2025.02.15-8-3"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -185,6 +185,15 @@ color_code_map() {
         "reset") echo "\033[0;39m" ;;
         *) echo "\033[0;39m" ;;  # デフォルトでリセット
     esac
+}
+
+#########################################################################
+# 全角数字を半角数字に変換
+#########################################################################
+to_halfwidth_alnum() {
+    # ０１２３４５６７８９ａ-ｚＡ-Ｚ を
+    # 0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ に変換
+    echo "$1" | sed 'y/０１２３４５６７８９ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ　/0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ /'
 }
 
 #########################################################################
@@ -471,7 +480,7 @@ selection_list() {
         printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_NUMBER_CHOICE")")"
         printf "%s" "$(get_message "MSG_SELECT_NUMBER")"
         read -r choice
-
+        choice=$(to_halfwidth_digits "$choice")
         local selected_value
         selected_value=$(awk -v num="$choice" 'NR == num {print $0}' "$list_file")
 
@@ -490,7 +499,8 @@ selection_list() {
         printf "%s\n" "$(color cyan "$(get_message "MSG_CONFIRM_SELECTION") [$choice] $confirm_info")"
         printf "%s" "$(get_message "MSG_CONFIRM_YNR")"
         read -r yn
-
+        yn=$(to_halfwidth_digits "$yn" | tr '[:upper:]' '[:lower:]')
+        
         case "$yn" in
             [Yy]*) 
                 printf "%s\n" "$selected_value" > "$output_file"
@@ -501,8 +511,13 @@ selection_list() {
                 selection_list "$input_data" "$output_file" "$mode"
                 return
                 ;;
-            [Rr]*) 
-                rm -f "$CACHE_DIR/country.ch" "$CACHE_DIR/language.ch" "$CACHE_DIR/zone.ch"
+            [Rr]*)                
+                rm -f "$CACHE_DIR/country.ch" \
+                "$CACHE_DIR/language.ch" \
+                "$CACHE_DIR/luci.ch" \
+                "$CACHE_DIR/zone.ch" \
+                "$CACHE_DIR/zonename.ch" \
+                "$CACHE_DIR/timezone.ch"
                 select_country
                 return
                 ;;
@@ -604,6 +619,11 @@ select_zone() {
     local cache_zonename="${CACHE_DIR}/zonename.ch"
     local cache_timezone="${CACHE_DIR}/timezone.ch"
 
+    if [ -s "$cache_zonename" ] && [ -s "$cache_timezone" ]; then
+        debug_log "INFO" "Timezone is already set. Skipping select_zone()."
+        return
+    fi
+    
     local zone_data=$(cat "$cache_zone" 2>/dev/null)
     if [ -z "$zone_data" ]; then
         return
@@ -756,9 +776,6 @@ confirm() {
 #########################################################################
 # install_package()
 #########################################################################
-#########################################################################
-# install_package()
-#########################################################################
 install_package() {
     local package_name="$1"
     shift  # 最初の引数 (パッケージ名) を取得し、残りをオプションとして処理
@@ -805,6 +822,7 @@ install_package() {
             echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
             echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
             read -r yn
+            yn=$(to_halfwidth_digits "$yn" | tr '[:upper:]' '[:lower:]')
             case "$yn" in
                 [Yy]*) break ;;
                 [Nn]*) echo "$(get_message "MSG_INSTALL_ABORTED")"; return 1 ;;
