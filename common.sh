@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-7-1"
+COMMON_VERSION="2025.02.15-7-2"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -776,17 +776,16 @@ install_package() {
         esac
     done
 
-    # パッケージのリポジトリ確認
-    if ! $PACKAGE_MANAGER list | grep -q "^$package_name "; then
-        echo "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")"
-        return 1
-    fi
-
-    # `apk` の場合、依存関係のチェック
-    if [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if ! apk info --depends "$package_name" >/dev/null 2>&1; then
-            echo "$(get_message "MSG_PACKAGE_DEPENDENCY_ERROR" | sed "s/{pkg}/$package_name/")"
-            return 1
+    # すでにインストール済みか確認
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if opkg list-installed | grep -q "^$package_name "; then
+            echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
+            return 0
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if apk list-installed | grep -q "^$package_name "; then
+            echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
+            return 0
         fi
     fi
 
@@ -798,7 +797,7 @@ install_package() {
             read -r yn
             case "$yn" in
                 [Yy]*) break ;;
-                [Nn]*) echo "$(get_message "MSG_INSTALL_ABORTED")" ; return 1 ;;
+                [Nn]*) echo "$(get_message "MSG_INSTALL_ABORTED")"; return 1 ;;
                 *) echo "Invalid input. Please enter Y or N." ;;
             esac
         done
