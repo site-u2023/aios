@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-4-2"
+COMMON_VERSION="2025.02.15-4-3"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -880,6 +880,268 @@ install_package() {
     fi
 }
 
+XXX_install_package() {
+    local package_name="$1"
+    shift  # 最初の引数 (パッケージ名) を取得し、残りをオプションとして処理
+
+    # デバッグ用メッセージ
+    debugecho "Starting installation for package: $package_name"
+
+    # `downloader_ch` からパッケージマネージャーを取得
+    if [ -f "${BASE_DIR}/downloader_ch" ]; then
+        PACKAGE_MANAGER=$(cat "${BASE_DIR}/downloader_ch")
+        debugecho "Package manager detected: $PACKAGE_MANAGER"
+    else
+        debugecho "$(get_message "MSG_PACKAGE_MANAGER_NOT_FOUND")"
+        return 1
+    fi
+
+    # `update` オプションが指定されている場合、リポジトリを更新する
+    if echo "$@" | grep -q "update"; then
+        debugecho "Running update for package manager: $PACKAGE_MANAGER"
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            opkg update
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            apk update
+        else
+            debugecho "$(get_message "MSG_INVALID_PACKAGE_MANAGER")"
+            return 1
+        fi
+    fi
+
+    # オプションの初期値
+    local confirm_install="no"
+    local skip_lang_pack="no"
+    local skip_package_db="no"
+    local set_disabled="no"
+
+    # オプションを順不同で解析
+    for arg in "$@"; do
+        debugecho "Processing option: $arg"
+        case "$arg" in
+            yn) confirm_install="yes" ;;  # 確認あり
+            dont) skip_lang_pack="yes" ;;  # 言語パック適用なし
+            notset) skip_package_db="yes" ;;  # package.db の適用なし
+            disabled) set_disabled="yes" ;;  # 設定を `disabled` にする
+            *) debugecho "$(get_message "MSG_INVALID_OPTION") [$arg]" ;;
+        esac
+    done
+
+    # すでにインストール済みか確認
+    debugecho "Checking if package $package_name is already installed"
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if opkg list-installed | grep -q "^$package_name "; then
+            debugecho "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
+            return 0
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if apk list-installed | grep -q "^$package_name "; then
+            debugecho "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
+            return 0
+        fi
+    fi
+
+    # パッケージがリポジトリに存在するか確認
+    debugecho "Checking if package $package_name exists in repository"
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if ! opkg list | grep -q "^$package_name "; then
+            debugecho "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")"
+            return 1
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if ! apk list | grep -q "^$package_name "; then
+            debugecho "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")"
+            return 1
+        fi
+    fi
+
+    # インストール確認 (`yn` オプションが指定された場合)
+    if [ "$confirm_install" = "yes" ]; then
+        debugecho "Asking for confirmation before installing $package_name"
+        echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
+        read -r yn
+        case "$yn" in
+            [Yy]*) ;;
+            [Nn]*) debugecho "$(get_message "MSG_INSTALL_ABORTED")" ; return 1 ;;
+            *) debugecho "$(get_message "MSG_INVALID_INPUT_YN")" ; return 1 ;;
+        esac
+    fi
+
+    # パッケージのインストール
+    debugecho "Installing package: $package_name"
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        opkg install "$package_name"
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        apk add "$package_name"
+    fi
+    debugecho "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")"
+
+    # package.db の適用 (`notset` オプションがない場合)
+    if [ "$skip_package_db" = "no" ]; then
+        debugecho "Applying settings from package.db for $package_name"
+        if grep -q "^$package_name=" "${BASE_DIR}/package.db"; then
+            local package_config
+            package_config=$(grep "^$package_name=" "${BASE_DIR}/package.db" | cut -d'=' -f2-)
+
+            # パッケージ設定を適用
+            package_config "$package_name" "$package_config"
+
+            debugecho "$(get_message "MSG_PACKAGE_DB_APPLIED" | sed "s/{pkg}/$package_name/")"
+        fi
+    fi
+
+    # 設定の有効化 (デフォルト `enabled`、`disabled` オプションで無効化)
+    if [ "$skip_package_db" = "no" ] && [ "$set_disabled" = "yes" ]; then
+        debugecho "Disabling package: $package_name"
+        uci set "$package_name.@$package_name[0].enabled=0"
+        uci commit "$package_name"
+        debugecho "$(get_message "MSG_PACKAGE_DISABLED" | sed "s/{pkg}/$package_name/")"
+    elif [ "$skip_package_db" = "no" ]; then
+        debugecho "Enabling package: $package_name"
+        uci set "$package_name.@$package_name[0].enabled=1"
+        uci commit "$package_name"
+        debugecho "$(get_message "MSG_PACKAGE_ENABLED" | sed "s/{pkg}/$package_name/")"
+    fi
+
+    # サービスの有効化/開始
+    if [ "$set_disabled" = "no" ]; then
+        debugecho "Enabling and starting service for package: $package_name"
+        /etc/init.d/$package_name enable
+        /etc/init.d/rpcd start
+    fi
+}
+
+XXX_install_package() {
+    local package_name="$1"
+    shift  # 最初の引数 (パッケージ名) を取得し、残りをオプションとして処理
+
+    # デバッグ用メッセージ
+    debugecho "Starting installation for package: $package_name"
+
+    # `downloader_ch` からパッケージマネージャーを取得
+    if [ -f "${BASE_DIR}/downloader_ch" ]; then
+        PACKAGE_MANAGER=$(cat "${BASE_DIR}/downloader_ch")
+        debugecho "Package manager detected: $PACKAGE_MANAGER"
+    else
+        debugecho "$(get_message "MSG_PACKAGE_MANAGER_NOT_FOUND")"
+        return 1
+    fi
+
+    # `update` オプションが指定されている場合、リポジトリを更新する
+    if echo "$@" | grep -q "update"; then
+        debugecho "Running update for package manager: $PACKAGE_MANAGER"
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            opkg update
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            apk update
+        else
+            debugecho "$(get_message "MSG_INVALID_PACKAGE_MANAGER")"
+            return 1
+        fi
+    fi
+
+    # オプションの初期値
+    local confirm_install="no"
+    local skip_lang_pack="no"
+    local skip_package_db="no"
+    local set_disabled="no"
+
+    # オプションを順不同で解析
+    for arg in "$@"; do
+        debugecho "Processing option: $arg"
+        case "$arg" in
+            yn) confirm_install="yes" ;;  # 確認あり
+            dont) skip_lang_pack="yes" ;;  # 言語パック適用なし
+            notset) skip_package_db="yes" ;;  # package.db の適用なし
+            disabled) set_disabled="yes" ;;  # 設定を `disabled` にする
+            *) debugecho "$(get_message "MSG_INVALID_OPTION") [$arg]" ;;
+        esac
+    done
+
+    # すでにインストール済みか確認
+    debugecho "Checking if package $package_name is already installed"
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if opkg list-installed | grep -q "^$package_name "; then
+            debugecho "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
+            return 0
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if apk list-installed | grep -q "^$package_name "; then
+            debugecho "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
+            return 0
+        fi
+    fi
+
+    # パッケージがリポジトリに存在するか確認
+    debugecho "Checking if package $package_name exists in repository"
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if ! opkg list | grep -q "^$package_name "; then
+            debugecho "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")"
+            return 1
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if ! apk list | grep -q "^$package_name "; then
+            debugecho "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")"
+            return 1
+        fi
+    fi
+
+    # インストール確認 (`yn` オプションが指定された場合)
+    if [ "$confirm_install" = "yes" ]; then
+        debugecho "Asking for confirmation before installing $package_name"
+        echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
+        read -r yn
+        case "$yn" in
+            [Yy]*) ;;
+            [Nn]*) debugecho "$(get_message "MSG_INSTALL_ABORTED")" ; return 1 ;;
+            *) debugecho "$(get_message "MSG_INVALID_INPUT_YN")" ; return 1 ;;
+        esac
+    fi
+
+    # パッケージのインストール
+    debugecho "Installing package: $package_name"
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        opkg install "$package_name"
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        apk add "$package_name"
+    fi
+    debugecho "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")"
+
+    # package.db の適用 (`notset` オプションがない場合)
+    if [ "$skip_package_db" = "no" ]; then
+        debugecho "Applying settings from package.db for $package_name"
+        if grep -q "^$package_name=" "${BASE_DIR}/package.db"; then
+            local package_config
+            package_config=$(grep "^$package_name=" "${BASE_DIR}/package.db" | cut -d'=' -f2-)
+
+            # パッケージ設定を適用
+            package_config "$package_name" "$package_config"
+
+            debugecho "$(get_message "MSG_PACKAGE_DB_APPLIED" | sed "s/{pkg}/$package_name/")"
+        fi
+    fi
+
+    # 設定の有効化 (デフォルト `enabled`、`disabled` オプションで無効化)
+    if [ "$skip_package_db" = "no" ] && [ "$set_disabled" = "yes" ]; then
+        debugecho "Disabling package: $package_name"
+        uci set "$package_name.@$package_name[0].enabled=0"
+        uci commit "$package_name"
+        debugecho "$(get_message "MSG_PACKAGE_DISABLED" | sed "s/{pkg}/$package_name/")"
+    elif [ "$skip_package_db" = "no" ]; then
+        debugecho "Enabling package: $package_name"
+        uci set "$package_name.@$package_name[0].enabled=1"
+        uci commit "$package_name"
+        debugecho "$(get_message "MSG_PACKAGE_ENABLED" | sed "s/{pkg}/$package_name/")"
+    fi
+
+    # サービスの有効化/開始
+    if [ "$set_disabled" = "no" ]; then
+        debugecho "Enabling and starting service for package: $package_name"
+        /etc/init.d/$package_name enable
+        /etc/init.d/rpcd start
+    fi
+}
+
 # debugecho関数を定義
 debugecho() {
     echo "[DEBUG] $1"
@@ -1008,6 +1270,58 @@ XXX_install_package() {
 # package_config
 #########################################################################
 package_config() {
+    local package_name="$1"  # パッケージ名
+    local config_file="$2"   # 設定ファイル（package.db）
+
+    # デバッグ用メッセージ
+    debugecho "Starting configuration for package: $package_name"
+
+    # config形式をuci形式に変換して適用
+    if grep -q "^config" "$config_file"; then
+        debugecho "Converting config format to uci format for $package_name"
+        
+        # configセクションとoptionを変換して処理
+        awk '
+        /^config/ {
+            section=$2
+            index=""
+            if ($3 ~ /^[0-9]+$/) {
+                index=$3  # インデックスが指定されている場合、インデックスを保持
+            }
+            print "# Config Section: " section " " index
+        }
+        /^option/ {
+            # インデックスを含めた場合の処理
+            if (index != "") {
+                print "uci set " section "@" section "[" index "]" "." $2 "=" $3
+            } else {
+                print "uci set " section "." $2 "=" $3 
+            }
+        }
+        /^list/ {
+            # インデックスを含めた場合の処理
+            if (index != "") {
+                print "uci add_list " section "@" section "[" index "]" "." $2 "=" $3
+            } else {
+                print "uci add_list " section "." $2 "=" $3
+            }
+        }
+        ' "$config_file" | while read line; do
+            debugecho "Running uci command: $line"
+            eval "$line"  # uci コマンドを実行
+        done
+    fi
+
+    # 設定を反映させる
+    debugecho "Committing uci changes for package: $package_name"
+    uci commit $package_name
+
+    # ネットワーク再起動
+    debugecho "Restarting network service"
+    /etc/init.d/network restart  # 必要に応じて再起動
+}
+
+XXX_package_config() {
     local package_name="$1"  # パッケージ名
     local config_file="$2"   # 設定ファイル（package.db）
 
