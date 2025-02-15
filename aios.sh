@@ -41,7 +41,7 @@ install_package ttyd yn
 install_package luci-app-ttyd
 
 # openssh-sftp-server
-install_package yn openssh-sftp-server
+install_package openssh-sftp-server yn 
 
 # `aios` を /usr/bin に配置
 echo "Installing aios command to /usr/bin/aios"
