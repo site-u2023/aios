@@ -730,9 +730,9 @@ ruleprefix38_20_data='
 604279720604=153,156,144
 '
 
+# 連想配列取得関数（十進数のキーで検索）
 get_ruleprefix31() {
-  # $1= hexkey (ex. "0x240b0012")
-  # return value = "14,8" etc. or ""
+  # $1 = decimal key (例："604700688")
   echo "$ruleprefix31_data" | grep "^$1=" | cut -d'=' -f2
 }
 get_ruleprefix38() {
@@ -746,21 +746,19 @@ get_ruleprefix38_20() {
 # 3) check ip6_prefix_tmp / parse
 # ---------------------------------------------------------------------
 
-# もし `::` だけだと grep が失敗する場合があるので補正
+# "::" だけだと grep が失敗する場合があるので補正
 ip6_prefix_tmp=$(echo "$new_ip6_prefix" | sed 's/::/:0::/')
 
-# Bash の =~ を使わずに grep -E でチェック
+# Bash の =~ の代わりに grep -E でチェック
 if echo "$ip6_prefix_tmp" | grep -Eq '^([0-9A-Fa-f]{1,4}:){3}[0-9A-Fa-f]{0,4}'; then
-  # 前の 4フィールドを : で分割
+  # ":" で分割して prefix_parts に格納
   prefix_parts=$(echo "$ip6_prefix_tmp" | sed 's/:/ /g')
-  # tmp_0, tmp_1, tmp_2, tmp_3 に格納
   i=0
   for t in $prefix_parts; do
     eval "tmp_$i=\"\$t\""
     i=$((i+1))
     [ "$i" -ge 4 ] && break
   done
-  # 足りない部分は0で埋める
   [ -z "$tmp_0" ] && tmp_0=0
   [ -z "$tmp_1" ] && tmp_1=0
   [ -z "$tmp_2" ] && tmp_2=0
@@ -780,71 +778,55 @@ fi
 # ---------------------------------------------------------------------
 # 4) prefix31 と prefix38 を計算
 # ---------------------------------------------------------------------
-prefix31=$(( (hextet_0 * 0x10000) + (hextet_1 & 0xfffe) ))
-prefix38=$(( (hextet_0 * 0x1000000) + (hextet_1 * 0x100) + ((hextet_2 & 0xfc00) >> 8) ))
+# ※下記計算結果はすでに10進数となる
+prefix31=$(( (hextet_0 * 65536) + (hextet_1 & 0xfffe) ))
+prefix38=$(( (hextet_0 * 16777216) + (hextet_1 * 256) + ((hextet_2 & 0xfc00) >> 8) ))
 
 offset=6
 rfc=false
 
-# キーを 0xHEX 形式に
-prefix31_hex=$(printf "0x%x" "$prefix31")
-prefix38_hex=$(printf "0x%x" "$prefix38")
+# ※ここでは、すでに十進数になっているのでそのまま使用
+prefix31_dec="$prefix31"
+prefix38_dec="$prefix38"
 
-ruleval31=""
-ruleval38=""
-ruleval38_20=""
-
-ruleval31=$(get_ruleprefix31 "$prefix31_hex")
-ruleval38=$(get_ruleprefix38 "$prefix38_hex")
-ruleval38_20=$(get_ruleprefix38_20 "$prefix38_hex")
+ruleval31=$(get_ruleprefix31 "$prefix31_dec")
+ruleval38=$(get_ruleprefix38 "$prefix38_dec")
+ruleval38_20=$(get_ruleprefix38_20 "$prefix38_dec")
 
 ip6prefixlen=""
 psidlen=""
 
 # ---------------------------------------------------------------------
-# 5) Bash の if [ -n "${assoc[xxx]}" ] 相当を文字列チェックへ
+# 5) 各ルールに応じた処理
 # ---------------------------------------------------------------------
 if [ -n "$ruleval38" ]; then
   # 例: ruleval38="125,196,208"
-  # ここでPSID計算 (ip6prefixlen=38, psidlen=8 のロジック)
   octet_0=$(echo "$ruleval38" | cut -d',' -f1)
   octet_1=$(echo "$ruleval38" | cut -d',' -f2)
   octet_2=$(echo "$ruleval38" | cut -d',' -f3)
-
-  # 2に hextet_2 & 0x0300 を反映
   tmpval=$(( (hextet_2 & 0x0300) >> 8 ))
   octet_2=$(( octet_2 | tmpval ))
-  # 3は hextet_2 & 0x00ff
   octet_3=$(( hextet_2 & 0x00ff ))
-
   ip6prefixlen=38
   psidlen=8
   offset=4
-
 elif [ -n "$ruleval31" ]; then
   # 例: ruleval31="106,72"
   octet_0=$(echo "$ruleval31" | cut -d',' -f1)
   octet_1=$(echo "$ruleval31" | cut -d',' -f2)
-
-  # shift
   octet_1=$(( octet_1 | (hextet_1 & 0x1) ))
   octet_2=$(( (hextet_2 & 0xff00) >> 8 ))
   octet_3=$(( hextet_2 & 0x00ff ))
-
   ip6prefixlen=31
   psidlen=8
   offset=4
-
 elif [ -n "$ruleval38_20" ]; then
   # 例: ruleval38_20="153,240,0"
   octet_0=$(echo "$ruleval38_20" | cut -d',' -f1)
   octet_1=$(echo "$ruleval38_20" | cut -d',' -f2)
   octet_2=$(echo "$ruleval38_20" | cut -d',' -f3)
-
-  # 2 に hextet_2 & 0x03c0 を反映
   tmpval=$(( (hextet_2 & 0x03c0) >> 6 ))
   octet_2=$(( octet_2 | tmpval ))
-  # 3 = (( (hextet_2 & 0x003f ) << 2 ) | ...
   octet_3=$(( ((hextet_2 & 0x003f) << 2) | ((hextet_3 & 0xc000) >> 14) ))
   ip6prefixlen=38
   psidlen=6
@@ -865,22 +847,14 @@ fi
 
 # offset 分のポート計算
 Amax=$(( (1 << offset) - 1 ))
-
-# 下記ループは簡略化
-# for A in 1..Amax:
-#   port = ...
-#   ports+="$port-$((port + ...))"
-#   3で区切りなど
 ports=""
 A=1
 while [ "$A" -le "$Amax" ]; do
-  port=$(( (A << (16-offset)) | (psid << (16-offset-psidlen)) ))
-  port2=$(( port + ((1 << (16-offset-psidlen)) - 1) ))
-  # portsに追加
+  port=$(( (A << (16 - offset)) | (psid << (16 - offset - psidlen)) ))
+  port2=$(( port + ((1 << (16 - offset - psidlen)) - 1) ))
   if [ -z "$ports" ]; then
     ports="${port}-${port2}"
   else
-    # 3つごとに改行
     mod=$(( A % 3 ))
     if [ "$mod" -eq 0 ]; then
       ports="$ports\n${port}-${port2}"
@@ -888,43 +862,36 @@ while [ "$A" -le "$Amax" ]; do
       ports="$ports ${port}-${port2}"
     fi
   fi
-  A=$(( A+1 ))
+  A=$((A+1))
 done
 
 # ---------------------------------------------------------------------
 # 7) CE アドレス計算
-# hextet[3] を 0xff クリア
 # ---------------------------------------------------------------------
-if [ $((hextet_3 & 0xff)) -ne 0 ]; then
+if [ $(( hextet_3 & 0xff )) -ne 0 ]; then
   echo "入力値とCEとで/64が異なる"
 fi
 
 hextet_3=$(( hextet_3 & 0xff00 ))
-
-# rfc は false のまま
 hextet_4=0
 hextet_5=0
 hextet_6=0
 hextet_7=0
 
-# rfc=falseの場合の計算
 hextet_4=$octet_0
 hextet_5=$(( (octet_1 << 8) | octet_2 ))
 hextet_6=$(( octet_3 << 8 ))
 hextet_7=$(( psid << 8 ))
 
-# CE prefix 4つ
 ce_0=$(printf "%x" "$hextet_0")
 ce_1=$(printf "%x" "$hextet_1")
 ce_2=$(printf "%x" "$hextet_2")
 ce_3=$(printf "%x" "$hextet_3")
-
 CE="${ce_0}:${ce_1}:${ce_2}:${ce_3}"
 
 ealen=$(( 56 - ip6prefixlen ))
 ip4prefixlen=$(( 32 - ( ealen - psidlen ) ))
 
-# ip6prefix (最初の部分だけ)
 hextet2_0=""
 hextet2_1=""
 hextet2_2=""
@@ -944,19 +911,33 @@ ip6prefix_1=$(printf "%x" "$hextet2_1")
 ip6prefix_2=""
 [ -n "$hextet2_2" ] && ip6prefix_2=$(printf "%x" "$hextet2_2")
 
-# peeraddr 設定(一部例示)
-peeraddr=""
-if [ "$prefix31_hex" -ge "0x24047a80" ] && [ "$prefix31_hex" -lt "0x24047a84" ]; then
+# ---------------------------------------------------------------------
+# 8) peeraddr 設定（10進数キーで比較）
+# ---------------------------------------------------------------------
+# 例: 0x24047a80=604273280, 0x24047a84=604273284, 0x240b0010=604700688, 0x240b0014=604700692,
+#      0x240b0250=604701264, 0x240b0254=604701268
+if [ "$prefix31_dec" -ge 604273280 ] && [ "$prefix31_dec" -lt 604273284 ]; then
   peeraddr="2001:260:700:1::1:275"
-elif [ "$prefix31_hex" -ge "0x24047a84" ] && [ "$prefix31_hex" -lt "0x24047a88" ]; then
+elif [ "$prefix31_dec" -ge 604273284 ] && [ "$prefix31_dec" -lt 604273288 ]; then
   peeraddr="2001:260:700:1::1:276"
-elif [ "$prefix31_hex" -ge "0x240b0010" ] && [ "$prefix31_hex" -lt "0x240b0014" ]; then
+elif [ "$prefix31_dec" -ge 604700688 ] && [ "$prefix31_dec" -lt 604700692 ]; then
   peeraddr="2404:9200:225:100::64"
-elif [ "$prefix31_hex" -ge "0x240b0250" ] && [ "$prefix31_hex" -lt "0x240b0254" ]; then
+elif [ "$prefix31_dec" -ge 604701264 ] && [ "$prefix31_dec" -lt 604701268 ]; then
   peeraddr="2404:9200:225:100::64"
 elif [ -n "$ruleval38_20" ]; then
   peeraddr="2001:380:a120::9"
+else
+  peeraddr=""
 fi
+
+ipaddr=(${ipaddr//,/ })
+ip4a="$(IFS="."; echo "${ipaddr[*]}")"
+ip6pfx="$(IFS=":"; echo "${ip6prefix[*]}")"
+PFX="$new_ip6_prefix"
+CE="$(IFS=":"; echo "${ce[*]}")"
+IPV4=${octet[0]}.${octet[1]}.${octet[2]}.${octet[3]}
+PSID=$psid
+BR=$peeraddr
 
 # ip4
 # octet_0..octet_3 すでにあり
