@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-7-0"
+COMMON_VERSION="2025.02.15-7-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -793,7 +793,8 @@ install_package() {
     # インストール確認 (`yn` オプションが指定された場合)
     if [ "$confirm_install" = "yes" ]; then
         while true; do
-            echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/") [Y/N]: "
+            echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
+            echo -n "🔄 Confirm (Y=Yes / N=No): "
             read -r yn
             case "$yn" in
                 [Yy]*) break ;;
