@@ -4,44 +4,40 @@
 
 ### キャッシュフリー
 ```sh
-wget --quiet -O /tmp/aios.sh "https://raw.githubusercontent.com/site-u2023/aios/main/aios.sh?cache_bust=$(date +%s)"; sh /tmp/aios.sh
-```
-
-```sh
-wget wget -qO- /tmp/aios.sh "https://raw.githubusercontent.com/site-u2023/aios/main/aios.sh?cache_bust=$(date +%s)"; sh /tmp/aios.sh
+wget -q -O /tmp/aios.sh "https://raw.githubusercontent.com/site-u2023/aios/main/aios.sh?cache_bust=$(date +%s)"; sh /tmp/aios.sh
 ```
 
 ### デバッグ用
 
 ```sh
-wget --quiet -O /tmp/aios.sh "https://raw.githubusercontent.com/site-u2023/aios/main/aios.sh?cache_bust=$(date +%s)"; sh /tmp/aios.sh -d
+wget -q -O /tmp/aios.sh "https://raw.githubusercontent.com/site-u2023/aios/main/aios.sh?cache_bust=$(date +%s)"; sh /tmp/aios.sh -d
 ```
 
 - 日本
 ```sh
-wget --quiet -O /tmp/aios.sh "https://raw.githubusercontent.com/site-u2023/aios/main/aios.sh?cache_bust=$(date +%s)"; sh /tmp/aios.sh -d 日本
+wget -q -O /tmp/aios.sh "https://raw.githubusercontent.com/site-u2023/aios/main/aios.sh?cache_bust=$(date +%s)"; sh /tmp/aios.sh -d 日本
 ```
 
 - us
 ```sh
-wget --quiet -O /tmp/aios.sh "https://raw.githubusercontent.com/site-u2023/aios/main/aios.sh?cache_bust=$(date +%s)"; sh /tmp/aios.sh -d us
+wget -q -O /tmp/aios.sh "https://raw.githubusercontent.com/site-u2023/aios/main/aios.sh?cache_bust=$(date +%s)"; sh /tmp/aios.sh -d us
 ```
 
 ### 言語付
 
 - JP
 ```sh
-wget --quiet -O /tmp/aios.sh "https://raw.githubusercontent.com/site-u2023/aios/main/aios.sh?cache_bust=$(date +%s)"; sh /tmp/aios.sh JP
+wget -q -O /tmp/aios.sh "https://raw.githubusercontent.com/site-u2023/aios/main/aios.sh?cache_bust=$(date +%s)"; sh /tmp/aios.sh JP
 ```
 
 - 日本語
 ```sh
-wget --quiet -O /tmp/aios.sh "https://raw.githubusercontent.com/site-u2023/aios/main/aios.sh?cache_bust=$(date +%s)"; sh /tmp/aios.sh 日本語
+wget -q -O /tmp/aios.sh "https://raw.githubusercontent.com/site-u2023/aios/main/aios.sh?cache_bust=$(date +%s)"; sh /tmp/aios.sh 日本語
 ```
 
 - 日本
 ```sh
-wget --quiet -O /tmp/aios.sh "https://raw.githubusercontent.com/site-u2023/aios/main/aios.sh?cache_bust=$(date +%s)"; sh /tmp/aios.sh 日本
+wget -q -O /tmp/aios.sh "https://raw.githubusercontent.com/site-u2023/aios/main/aios.sh?cache_bust=$(date +%s)"; sh /tmp/aios.sh 日本
 ```
 
 ## 要件定義書
