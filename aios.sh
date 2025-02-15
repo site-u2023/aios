@@ -37,10 +37,9 @@ check_common "$INPUT_LANG"
 debug_log "INFO" "aios.sh received INPUT_LANG: '$INPUT_LANG' and DEBUG_MODE: '$DEBUG_MODE'"
 
 # `ttyd` のインストール
-install_packages yn ttyd
-
-# `luci-app-ttyd` と言語パックのインストール
-attempt_package_install luci-app-ttyd
+install_package update
+install_package ttyd yn 
+install_package luci-app-ttyd
 
 # `aios` を /usr/bin に配置
 echo "Installing aios command to /usr/bin/aios"
