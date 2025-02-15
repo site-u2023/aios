@@ -794,7 +794,7 @@ install_package() {
     if [ "$confirm_install" = "yes" ]; then
         while true; do
             echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
-            echo -n "🔄 Confirm (Y=Yes / N=No): "
+            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
             read -r yn
             case "$yn" in
                 [Yy]*) break ;;
