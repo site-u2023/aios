@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-2-0"
+COMMON_VERSION="2025.02.15-2-1"
 
 # 基本定数の設定
 BASE_WGET="wget --quiet -O"
@@ -251,6 +251,64 @@ get_package_manager() {
         echo "$PACKAGE_MANAGER" > "${BASE_DIR}/downloader_ch"
     fi
     echo -e "\033[1;32m$(get_message 'detected_package_manager' "$SELECTED_LANGUAGE"): $PACKAGE_MANAGER\033[0m"
+}
+
+#########################################################################
+# Last Update: 2025-02-12 14:35:26 (JST) 🚀
+# "Precision in code, clarity in purpose. Every update refines the path." 
+# get_message: 多言語対応メッセージ取得関数
+#
+# 【要件】
+# 1. 言語の決定:
+#    - `message.ch` を最優先で参照する（normalize_country() により確定）
+#    - `message.ch` が無ければデフォルト `en`
+#
+# 2. メッセージ取得の流れ:
+#    - `messages.db` から `message.ch` に記録された言語のメッセージを取得
+#    - 該当するメッセージが `messages.db` に無い場合、`en` にフォールバック
+#    - `en` にも無い場合は、キー（`$1`）をそのまま返す
+#
+# 3. `country.ch` との関係:
+#    - `country.ch` はデバイス設定用（変更不可）
+#    - `message.ch` はシステムメッセージ表示用（フォールバック可能）
+#
+# 4. メンテナンス:
+#    - 言語設定に影響を与えず、メッセージのみ `message.ch` で管理
+#    - `normalize_country()` で `message.ch` が決定されるため、変更は `normalize_country()` 側で行う
+#########################################################################
+get_message() {
+    local key="$1"
+    local message_cache="${CACHE_DIR}/message.ch"
+    local lang="en"  # デフォルト `en`
+
+    # ✅ `message.db` が無い場合、デフォルト言語メッセージを返す
+    local message_db="${BASE_DIR}/messages.db"
+    if [ ! -f "$message_db" ]; then
+        echo "$key"  # そのままキーを返す（デフォルト）
+        return
+    fi
+
+    # ✅ `message.ch` があれば、それを使用
+    if [ -f "$message_cache" ]; then
+        lang=$(cat "$message_cache")
+    fi
+
+    # ✅ `messages.db` から `lang` に対応するメッセージを取得
+    local message
+    message=$(grep "^${lang}|${key}=" "$message_db" | cut -d'=' -f2-)
+
+    # ✅ `lang` に該当するメッセージが無い場合は `en` を参照
+    if [ -z "$message" ]; then
+        message=$(grep "^en|${key}=" "$message_db" | cut -d'=' -f2-)
+    fi
+
+    # ✅ `message.db` にも無い場合はキーをそのまま返す
+    if [ -z "$message" ]; then
+        debug_log "Message key '$key' not found in messages.db."
+        echo "$key"
+    else
+        echo "$message"
+    fi
 }
 
 # 🔵　ランゲージ（言語・ゾーン）系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
@@ -615,58 +673,6 @@ normalize_country() {
     echo "$(get_message "MSG_COUNTRY_SUCCESS")"
 }
 
-#########################################################################
-# Last Update: 2025-02-12 14:35:26 (JST) 🚀
-# "Precision in code, clarity in purpose. Every update refines the path." 
-# get_message: 多言語対応メッセージ取得関数
-#
-# 【要件】
-# 1. 言語の決定:
-#    - `message.ch` を最優先で参照する（normalize_country() により確定）
-#    - `message.ch` が無ければデフォルト `en`
-#
-# 2. メッセージ取得の流れ:
-#    - `messages.db` から `message.ch` に記録された言語のメッセージを取得
-#    - 該当するメッセージが `messages.db` に無い場合、`en` にフォールバック
-#    - `en` にも無い場合は、キー（`$1`）をそのまま返す
-#
-# 3. `country.ch` との関係:
-#    - `country.ch` はデバイス設定用（変更不可）
-#    - `message.ch` はシステムメッセージ表示用（フォールバック可能）
-#
-# 4. メンテナンス:
-#    - 言語設定に影響を与えず、メッセージのみ `message.ch` で管理
-#    - `normalize_country()` で `message.ch` が決定されるため、変更は `normalize_country()` 側で行う
-#########################################################################
-get_message() {
-    local key="$1"
-    local message_cache="${CACHE_DIR}/message.ch"
-    local lang="en"  # デフォルト `en` にするが `message.ch` を優先
-
-    # ✅ `message.ch` があれば、それを使用
-    if [ -f "$message_cache" ]; then
-        lang=$(cat "$message_cache")
-    fi
-
-    local message_db="${BASE_DIR}/messages.db"
-
-    # ✅ `messages.db` から `lang` に対応するメッセージを取得
-    local message
-    message=$(grep "^${lang}|${key}=" "$message_db" | cut -d'=' -f2-)
-
-    # ✅ `lang` に該当するメッセージが無い場合は `en` を参照
-    if [ -z "$message" ]; then
-        message=$(grep "^en|${key}=" "$message_db" | cut -d'=' -f2-)
-    fi
-
-    # ✅ `message.db` にも無い場合はキーをそのまま返す
-    if [ -z "$message" ]; then
-        debug_log "Message key '$key' not found in messages.db."
-        echo "$key"
-    else
-        echo "$message"
-    fi
-}
 # 🔴　ランゲージ（言語・ゾーン）系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
