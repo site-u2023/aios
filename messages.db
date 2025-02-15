@@ -6,6 +6,12 @@ SUPPORTED_LANGUAGES="US JP"
 MESSAGE_VERSION="2025.02.12-0"
 echo "message.db Last update: $MESSAGE_VERSION"
 
+# 😃 🤣 🤩 🤪 🫥 🤢 🥵 🥶 😱 💀 🤡 👹 👺 👻 👽 👾 🤖 💯 💢 💥 💬 💤
+
+# debug test -------------------------------------
+JP|MSG_UNDER_TEST👽 Under test
+JP|MSG_UNDER_TEST👹 試験中
+
 # 追加--------------------------------------------
 US|MSG_COUNTRY_SUCCESS=✅ Country and language selection completed successfully!
 US|MSG_TIMEZONE_SUCCESS=✅ Timezone selection completed successfully!
