@@ -43,7 +43,9 @@ install_package luci-app-ttyd
 
 # `aios` を /usr/bin に配置
 echo "Installing aios command to /usr/bin/aios"
-${BASE_WGET} "$BIN_PATH" "$BASE_URL/aios"
-chmod +x "$BIN_PATH"
+${BASE_WGET} "$BIN_PATH" "$BASE_URL/aios"  # aios をダウンロード
+chmod +x "$BIN_PATH"  # aios に実行権限を付与
 
-
+# aios を実行 (必要な場合)
+echo "Running aios..."
+/usr/bin/aios  # ダウンロードした aios を実行
