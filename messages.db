@@ -3,7 +3,7 @@
 
 SUPPORTED_LANGUAGES="US JP" 
 
-MESSAGE_VERSION="2025.02.12-0"
+MESSAGE_VERSION="2025.02.15-0"
 echo "message.db Last update: $MESSAGE_VERSION"
 
 # 😃 🤣 🤩 🤪 🫥 🤢 🥵 🥶 😱 💀 🤡 👹 👺 👻 👽 👾 🤖 💯 💢 💥 💬 💤
