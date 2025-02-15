@@ -38,11 +38,11 @@ check_common "$INPUT_LANG"
 debug_log "INFO" "aios.sh received INPUT_LANG: '$INPUT_LANG' and DEBUG_MODE: '$DEBUG_MODE'"
 
 # ttyd
-install_package ttyd yn 
-install_package luci-app-ttyd
+# install_package ttyd yn 
+# install_package luci-app-ttyd
 
 # openssh-sftp-server
-install_package openssh-sftp-server yn 
+# install_package openssh-sftp-server yn 
 
 # `aios` を /usr/bin に配置
 echo "Installing aios command to /usr/bin/aios"
