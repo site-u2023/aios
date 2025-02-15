@@ -2,7 +2,7 @@
 # License: CC0
 # OpenWrt >= 19.07
 
-AIOS_VERSION="2025.02.16-0"
+AIOS_VERSION="2025.02.16-1"
 echo "aios Last update: $AIOS_VERSION"
 
 INPUT_LANG="${1:-}"  # ✅ `$1` は言語情報のみ受け付ける
@@ -27,8 +27,7 @@ chmod +x "$BIN_PATH"  # aios に実行権限を付与
 # 必要に応じて
 #########################################################################
 delete_aios() {
-    rm -rf "${BASE_DIR}" /usr/bin/aios
-    echo "Initialized aios"
+    rm -rf "${BASE_DIR}"
 }
 
 #########################################################################
