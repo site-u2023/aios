@@ -9,10 +9,22 @@ echo "message.db Last update: $MESSAGE_VERSION"
 # 😃 🤣 🤩 🤪 🫥 🤢 🥵 🥶 😱 💀 🤡 👹 👺 👻 👽 👾 🤖 💯 💢 💥 💬 💤
 
 # debug test -------------------------------------
-JP|MSG_UNDER_TEST👽 Under test
-JP|MSG_UNDER_TEST👹 試験中
+US|MSG_UNDER_TEST=👽 Under test
+JP|MSG_UNDER_TEST=👹 試験中
 
-# 追加--------------------------------------------
+# common.sh
+US|MSG_ENTER_COUNTRY=🌎 Enter country name, code, or language to search.
+JP|MSG_ENTER_COUNTRY=🌏 国名、コード、または言語を入力してください。
+US|MSG_SEARCH_KEYWORD=🔍 Search (Keyword/Code): 
+JP|MSG_SEARCH_KEYWORD=🔍 検索（キーワード/コード）:
+US|MSG_ENTER_NUMBER_CHOICE=🔢 Enter the number of your choice.
+JP|MSG_ENTER_NUMBER_CHOICE=🔢 選択する番号を入力してください。
+US|MSG_SELECT_NUMBER=📌 Select Number: 
+JP|MSG_SELECT_NUMBER=📌 番号を選択: 
+US|MSG_CONFIRM_SELECTION=✅ Confirm selection:
+JP|MSG_CONFIRM_SELECTION=✅ 選択を確認:
+US|MSG_CONFIRM_YNR=🔄 Confirm (Y=Yes / N=No / R=Restart): 
+JP|MSG_CONFIRM_YNR=🔄 確認 (Y=はい / N=いいえ / R=再選択): 
 US|MSG_COUNTRY_SUCCESS=✅ Country and language selection completed successfully!
 US|MSG_TIMEZONE_SUCCESS=✅ Timezone selection completed successfully!
 JP|MSG_COUNTRY_SUCCESS=✅ 国と言語の選択が完了しました！
