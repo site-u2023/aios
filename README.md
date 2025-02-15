@@ -42,7 +42,7 @@ wget -q -O /tmp/aios.sh "https://raw.githubusercontent.com/site-u2023/aios/main/
 
 - aios
 ```sh
-wget -q -O /usr/bin/aios "https://raw.githubusercontent.com/site-u2023/aios/main/aios?cache_bust=$(date +%s)"; sh /usr/bin/aios
+wget -q -O /usr/bin/aios "https://raw.githubusercontent.com/site-u2023/aios/main/aios?cache_bust=$(date +%s)"; sh /usr/bin/aios 日本語
 ```
 
 ## 要件定義書
