@@ -1,7 +1,7 @@
 #!/bin/sh
 # aios.sh (初期エントリースクリプト)
 # License: CC0
-AIOS_VERSION="2025.02.15-0"
+AIOS_VERSION="2025.02.15-1"
 echo -e "\033[7;40maios.sh Updated to version $AIOS_VERSION \033[0m"
 
 INPUT_LANG="${1:-}"
@@ -36,9 +36,12 @@ check_common "$INPUT_LANG"
 
 debug_log "INFO" "aios.sh received INPUT_LANG: '$INPUT_LANG' and DEBUG_MODE: '$DEBUG_MODE'"
 
-# `ttyd` のインストール
+# ttyd
 install_package ttyd yn 
 install_package luci-app-ttyd
+
+# openssh-sftp-server
+install_package yn openssh-sftp-server
 
 # `aios` を /usr/bin に配置
 echo "Installing aios command to /usr/bin/aios"
