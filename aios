@@ -6,8 +6,8 @@ AIOS_VERSION="2025.02.15-0"
 echo "aios Last update: $AIOS_VERSION"
 
 INPUT_LANG="${1:-}"  # ✅ `$1` は言語情報のみ受け付ける
-BASE_WGET="wget -O" # テスト用
-# BASE_WGET="wget --quiet -O"
+BASE_WGET="${BASE_WGET:-wget -q -O}"
+# BASE_WGET="${BASE_WGET:-wget -O}"
 BASE_URL="https://raw.githubusercontent.com/site-u2023/aios/main"
 BASE_DIR="/tmp/aios"
 
