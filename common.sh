@@ -368,6 +368,7 @@ get_package_manager() {
         echo "$PACKAGE_MANAGER" > "${BASE_DIR}/downloader_ch"
     fi
     echo -e "\033[1;32m$(get_message 'detected_package_manager' "$SELECTED_LANGUAGE"): $PACKAGE_MANAGER\033[0m"
+    return 0 
 }
 
 #########################################################################
