@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-00-04"
+SCRIPT_VERSION="2025.02.16-00-05"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -185,31 +185,49 @@ script_update() {
     local remote_version
     remote_version=$(wget -qO- "${BASE_URL}/${file_name}" | grep "^SCRIPT_VERSION=" | cut -d'=' -f2)
 
+    # **バージョン情報が取得できなかった場合は無条件にダウンロード**
     if [ -z "$remote_version" ]; then
         get_message "MSG_VERSION_FETCH_FAIL" "$file_name"
-        return 1
+        download "$file_name" "script"
+        
+        # キャッシュを更新
+        sed -i "/^$file_name=/d" "$cache_file"
+        echo "$file_name=unknown" >> "$cache_file"
+        return 0
     fi
 
     # **バージョン比較 (`ash` 互換)**
     set -- $(echo "$version" | sed 's/[-.]/ /g')
-    i=1
-    while [ $i -le 5 ]; do
-        eval "v1_part$i=\${$i:-0}"
-        i=$((i + 1))
-    done
+    v1_part1="${1:-0}"
+    v1_part2="${2:-0}"
+    v1_part3="${3:-0}"
+    v1_part4="${4:-0}"
+    v1_part5="${5:-0}"
 
     set -- $(echo "$remote_version" | sed 's/[-.]/ /g')
-    i=1
-    while [ $i -le 5 ]; do
-        eval "v2_part$i=\${$i:-0}"
-        i=$((i + 1))
-    done
+    v2_part1="${1:-0}"
+    v2_part2="${2:-0}"
+    v2_part3="${3:-0}"
+    v2_part4="${4:-0}"
+    v2_part5="${5:-0}"
 
-    # 比較ループ
+    # **比較ループ**
     i=1
     while [ $i -le 5 ]; do
         eval "num_v1=\${v1_part$i:-0}"
         eval "num_v2=\${v2_part$i:-0}"
+
+        # **先頭の 0 を削除**
+        num_v1=$(echo "$num_v1" | sed 's/^0*//')
+        num_v2=$(echo "$num_v2" | sed 's/^0*//')
+
+        # **数値以外の文字を削除**
+        num_v1=$(echo "$num_v1" | sed 's/[^0-9]//g')
+        num_v2=$(echo "$num_v2" | sed 's/[^0-9]//g')
+
+        # **空の値は 0 にする**
+        [ -z "$num_v1" ] && num_v1=0
+        [ -z "$num_v2" ] && num_v2=0
 
         if [ "$num_v1" -lt "$num_v2" ]; then
             get_message "MSG_UPDATE_SUCCESS" "$file_name" "$version" "$remote_version"
