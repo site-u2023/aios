@@ -178,14 +178,9 @@ test_debug_functions() {
 # 5. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
 #########################################################################
 script_update() {
-    local file_name="$1"
-    if [ -z "$file_name" ]; then
-        echo "WARNING: script_update called without file_name"
-        return 1
-    fi
-
+    local version="$1"  # 渡されたバージョン情報
+    local file_name=$(basename "$0")  # 実行中のスクリプトのファイル名
     local cache_file="${CACHE_DIR}/script.ch"
-    local install_path="${BASE_DIR}/${file_name}"
 
     # キャッシュファイルがない場合、新規作成
     if [ ! -f "$cache_file" ]; then
@@ -193,21 +188,12 @@ script_update() {
         touch "$cache_file"
     fi
 
-    # ローカルのバージョンを取得
-    local local_version=""
-    local_version=$(grep "^SCRIPT_VERSION=" "${BASE_DIR}/${file_name}" | cut -d'=' -f2)
-
-    if [ -z "$local_version" ]; then
-        echo "WARNING: Local version not found for $file_name"
-        return 1
-    fi
-
     # キャッシュに現在のバージョンを記録
     if ! grep -q "^$file_name=" "$cache_file"; then
-        echo "$file_name=$local_version" >> "$cache_file"
+        echo "$file_name=$version" >> "$cache_file"
     fi
 
-    # リモートのバージョンを取得
+    # GitHub からリモートのバージョンを取得
     local remote_version=""
     remote_version=$(wget -qO- "${BASE_URL}/${file_name}" | grep "^SCRIPT_VERSION=" | cut -d'=' -f2)
 
@@ -217,14 +203,14 @@ script_update() {
     fi
 
     # バージョン比較
-    if [ "$local_version" = "$remote_version" ]; then
-        echo "INFO: $file_name is up to date ($local_version)"
+    if [ "$version" = "$remote_version" ]; then
+        echo "INFO: $file_name is up to date ($version)"
         return 0
     fi
 
     # バージョンが異なる場合、ファイルを更新
-    echo "Updating $file_name from $local_version to $remote_version"
-    wget -q -O "$install_path" "${BASE_URL}/${file_name}"
+    echo "Updating $file_name from $version to $remote_version"
+    wget -q -O "${BASE_DIR}/${file_name}" "${BASE_URL}/${file_name}"
 
     # キャッシュを更新
     sed -i "/^$file_name=/d" "$cache_file"
