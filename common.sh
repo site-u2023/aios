@@ -6,7 +6,6 @@
 
 SCRIPT_VERSION="2025.02.16-00-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
-script_update "$SCRIPT_VERSION"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -1217,8 +1216,7 @@ check_common() {
     local lang_code="$SELECTED_LANGUAGE"
     
     debug_log "INFO" "check_common called with lang_code: '$lang_code' and MODE: '$MODE'"
-
-    script_update || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
+    script_update "$SCRIPT_VERSION" || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
     download "openwrt.db" "db" || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
     download "messages.db" "db" || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
     download "country.db" "db" || handle_error "ERR_DOWNLOAD" "country.db" "latest"
