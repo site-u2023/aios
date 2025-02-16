@@ -107,6 +107,64 @@ debug_log() {
 }
 
 #########################################################################
+# Last Update: 2025-02-16 17:30:00 (JST) 🚀
+# "Debug with clarity, test with precision. Every log tells a story."
+#
+# 【要件】
+# 1. `test_country_search()`, `test_timezone_search()`, `test_cache_contents()` を統合。
+# 2. `debug_log()` を使用し、メッセージを `message.db` から取得。
+# 3. `country.db` の検索結果が適切に出力されるか確認できるようにする。
+# 4. 影響範囲: `common.sh` のみ（`aios` には影響なし）。
+#########################################################################
+test_debug_functions() {
+    local test_type="$1"
+    local test_input="$2"
+
+    case "$test_type" in
+        country)
+            debug_log "INFO" "MSG_TEST_COUNTRY_SEARCH" "$test_input"
+            if [ ! -f "${BASE_DIR}/country.db" ]; then
+                handle_error "ERR_FILE_NOT_FOUND" "country.db"
+                return 1
+            fi
+            awk -v query="$test_input" '
+                $2 ~ query || $3 ~ query || $4 ~ query || $5 ~ query {
+                    print NR, $2, $3, $4, $5, $6, $7, $8, $9
+                }' "${BASE_DIR}/country.db"
+            ;;
+
+        timezone)
+            debug_log "INFO" "MSG_TEST_TIMEZONE_SEARCH" "$test_input"
+            if [ ! -f "${BASE_DIR}/country.db" ]; then
+                handle_error "ERR_FILE_NOT_FOUND" "country.db"
+                return 1
+            fi
+            awk -v country="$test_input" '
+                $2 == country || $4 == country || $5 == country {
+                    print NR, $5, $6, $7, $8, $9, $10, $11
+                }' "${BASE_DIR}/country.db"
+            ;;
+
+        cache)
+            debug_log "INFO" "MSG_TEST_CACHE_CONTENTS"
+            for cache_file in "country_tmp.ch" "zone_tmp.ch"; do
+                if [ -f "${CACHE_DIR}/$cache_file" ]; then
+                    debug_log "INFO" "MSG_CACHE_CONTENTS" "$cache_file"
+                    cat "${CACHE_DIR}/$cache_file"
+                else
+                    debug_log "WARN" "MSG_CACHE_NOT_FOUND" "$cache_file"
+                fi
+            done
+            ;;
+        
+        *)
+            debug_log "ERROR" "ERR_INVALID_ARGUMENT" "$test_type"
+            return 1
+            ;;
+    esac
+}
+
+#########################################################################
 # Last Update: 2025-02-16 16:20:00 (JST) 🚀
 # "Efficiency in updates, precision in versions. Every script matters."
 #
@@ -211,37 +269,6 @@ color_code_map() {
     esac
 }
 
-#########################################################################
-# openwrt_db: バージョンデータベースのダウンロード
-#########################################################################
-openwrt_db() {
-    if [ ! -f "${BASE_DIR}/openwrt.db" ]; then
-        ${BASE_WGET} "${BASE_DIR}/openwrt.db" "${BASE_URL}/openwrt.db" || handle_error "Failed to download openwrt.db"
-    fi
-}
-
-#########################################################################
-# messages_db: メッセージデータベースのダウンロード
-#########################################################################
-messages_db() {
-    if [ ! -f "${BASE_DIR}/messages.db" ]; then
-        echo -e "$(color yellow "Downloading messages.db...")"
-        if ! ${BASE_WGET} "${BASE_DIR}/messages.db" "${BASE_URL}/messages.db"; then
-            echo -e "$(color red "Failed to download messages.db")"
-            return 1
-        fi
-        echo -e "$(color green "Successfully downloaded messages.db")"
-    fi
-}
-
-#########################################################################
-# packages_db: 選択されたパッケージファイルをダウンロード
-#########################################################################
-packages_db() {
-    if [ ! -f "${BASE_DIR}/packages.db" ]; then
-        ${BASE_WGET} "${BASE_DIR}/packages.db" "${BASE_URL}/packages.db" || handle_error "Failed to download packages.db"
-    fi
-}
 
 #########################################################################
 # check_openwrt: OpenWrtのバージョン確認・検証
