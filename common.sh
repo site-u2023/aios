@@ -5,7 +5,8 @@
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
 SCRIPT_VERSION="2025.02.16-00-00"
-echo -e "\033[7;40mUpdated to version $AIOS_VERSION aios \033[0m"
+echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
+script_update github "$SCRIPT_VERSION"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -178,37 +179,59 @@ test_debug_functions() {
 #########################################################################
 script_update() {
     local file_name="$1"
-    local cache_file="${CACHE_DIR}/script.ch"
-    local install_path="${BASE_DIR}/${file_name}"
-
-    # 現在のバージョンを取得（キャッシュから）
-    local cached_version=""
-    if [ -f "$cache_file" ] && grep -q "^$file_name=" "$cache_file"; then
-        cached_version=$(grep "^$file_name=" "$cache_file" | cut -d'=' -f2)
-    fi
-
-    # リモートのバージョンを取得
-    local remote_version
-    remote_version=$(wget -qO- "${BASE_URL}/${file_name}" | grep "^version=" | cut -d'=' -f2)
-
-    # `remote_version` が取得できなかった場合の処理を追加
-    if [ -z "$remote_version" ]; then
-        echo "ERROR: Failed to fetch remote version for $file_name"
+    if [ -z "$file_name" ]; then
+        echo "WARNING: script_update called without file_name"
         return 1
     fi
 
-    # 既存バージョンと同じならスキップ
-    if [ "$cached_version" = "$remote_version" ] && [ -n "$cached_version" ]; then
+    local cache_file="${CACHE_DIR}/script.ch"
+    local install_path="${BASE_DIR}/${file_name}"
+
+    # キャッシュファイルがない場合、新規作成
+    if [ ! -f "$cache_file" ]; then
+        echo "Creating new cache file: $cache_file"
+        touch "$cache_file"
+    fi
+
+    # ローカルのバージョンを取得
+    local local_version=""
+    local_version=$(grep "^SCRIPT_VERSION=" "${BASE_DIR}/${file_name}" | cut -d'=' -f2)
+
+    if [ -z "$local_version" ]; then
+        echo "WARNING: Local version not found for $file_name"
+        return 1
+    fi
+
+    # キャッシュに現在のバージョンを記録
+    if ! grep -q "^$file_name=" "$cache_file"; then
+        echo "$file_name=$local_version" >> "$cache_file"
+    fi
+
+    # リモートのバージョンを取得
+    local remote_version=""
+    remote_version=$(wget -qO- "${BASE_URL}/${file_name}" | grep "^SCRIPT_VERSION=" | cut -d'=' -f2)
+
+    if [ -z "$remote_version" ]; then
+        echo "WARNING: Failed to fetch remote version for $file_name, skipping update check."
+        return 1
+    fi
+
+    # バージョン比較
+    if [ "$local_version" = "$remote_version" ]; then
+        echo "INFO: $file_name is up to date ($local_version)"
         return 0
     fi
 
-    # 新しいバージョンをキャッシュに保存
-    echo "$file_name=$remote_version" > "$cache_file"
+    # バージョンが異なる場合、ファイルを更新
+    echo "Updating $file_name from $local_version to $remote_version"
+    wget -q -O "$install_path" "${BASE_URL}/${file_name}"
+
+    # キャッシュを更新
+    sed -i "/^$file_name=/d" "$cache_file"
+    echo "$file_name=$remote_version" >> "$cache_file"
 
     return 0
 }
-
-
 
 # 🔴　エラー・デバッグ・アップデート系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
 
