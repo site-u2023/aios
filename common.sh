@@ -1142,12 +1142,12 @@ check_common() {
     
     debug_log "INFO" "check_common called with lang_code: '$lang_code' and MODE: '$MODE'"
     script_update || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
-    download openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
-    download messages.db || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
-    download country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
-    download packages.db || handle_error "ERR_DOWNLOAD" "packages.db" "latest"
+    download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
+    download_script messages.db || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
+    download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
+    download_script packages.db || handle_error "ERR_DOWNLOAD" "packages.db" "latest"
     check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
-    get_package_manager
+   # get_package_manager
     select_country
 
     # MODE に応じた処理の振り分け
