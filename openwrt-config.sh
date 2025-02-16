@@ -11,8 +11,10 @@
 # ・共通関数 (common-functions.sh) のダウンロードと読み込み
 # ・システム情報の取得と表示
 # ・メインメニューの表示とユーザーによる各種オプションの選択
-OPENWRT_CONFIG_VERSION="2025.02.15-0-0"
-echo -e "\033[7;40mopenwrt-config.sh Updated to version $OPENWRT_CONFIG_VERSION \033[0m"
+
+SCRIPT_VERSION="2025.02.16-00-00"
+echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION openwrt-config.sh \033[0m"
+script_update "$SCRIPT_VERSION"
 
 INPUT_LANG="${1:-}"
 
