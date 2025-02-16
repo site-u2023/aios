@@ -80,7 +80,7 @@ print_banner() {
     echo -e "\033[1;31m         aaaaa     iiii      oooo     ssssss          \033[0m"
     echo
 
-　　color magenta "                    ii i"
+    color magenta "                    ii i"
     color blue    "         aaaa      iii       oooo      sssss"
     color cyan    "            aa      ii      oo  oo    ss"
     color green   "         aaaaa      ii      oo  oo     sssss"
