@@ -743,8 +743,9 @@ confirm() {
 
 # 🔵　パッケージ系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
+# Last Update: 2025-02-15 10:00:00 (JST) 🚀
 # install_package: パッケージのインストール処理 (OpenWrt / Alpine Linux)
-#########################################################################
+#
 # 【概要】
 # 指定されたパッケージをインストールし、オプションに応じて以下の処理を実行する。
 #
@@ -759,35 +760,51 @@ confirm() {
 # 8️⃣ 設定の有効化（デフォルト enabled、disabled オプションで無効化）
 #
 # 【オプション】
-# - `yn`       : インストール前に確認する（デフォルト: 確認なし）
-# - `dont`     : 言語パッケージの適用をスキップ（デフォルト: 適用する）
-# - `notset`   : `package.db` での設定適用をスキップ（デフォルト: 適用する）
-# - `disabled` : 設定を `disabled` にする（デフォルト: `enabled`）
-# - `update`   : `opkg update` または `apk update` を実行（他の場所では update しない）
+# - yn         : インストール前に確認する（デフォルト: 確認なし）
+# - dont       : 言語パッケージの適用をスキップ（デフォルト: 適用する）
+# - notset     : package.db での設定適用をスキップ（デフォルト: 適用する）
+# - disabled   : 設定を disabled にする（デフォルト: enabled）
+# - update     : opkg update または apk update を実行（他の場所では update しない）
+# - hidden     : 既にインストール済みの場合のメッセージを非表示にする
 #
 # 【仕様】
-# - `downloader_ch` から `opkg` または `apk` を取得し、適切なパッケージ管理ツールを使用
-# - `messages.db` を参照し、すべてのメッセージを取得（JP/US対応）
-# - `package.db` の設定がある場合、`uci set` を実行し適用（`notset` オプションで無効化可能）
-# - 言語パッケージは `luci-app-xxx` 形式を対象に適用（`dont` オプションで無効化可能）
-# - 設定の有効化はデフォルト `enabled`、`disabled` オプション指定時のみ `disabled`
-# - `update` は明示的に `install_package update` で実行（パッケージインストール時には自動実行しない）
+# - downloader_ch から opkg または apk を取得し、適切なパッケージ管理ツールを使用
+# - messages.db を参照し、すべてのメッセージを取得（JP/US 対応）
+# - package.db の設定がある場合、uci set を実行し適用（notset オプションで無効化可能）
+# - 言語パッケージは luci-app-xxx 形式を対象に適用（dont オプションで無効化可能）
+# - 設定の有効化はデフォルト enabled、disabled オプション指定時のみ disabled
+# - update は明示的に install_package update で実行（パッケージインストール時には自動実行しない）
 #
 # 【使用例】
-# - `install_package update`                → パッケージリストを更新
-# - `install_package ttyd`                  → ttyd をインストール（確認なし、package.db 適用、言語パック適用）
-# - `install_package ttyd yn`               → ttyd をインストール（確認あり）
-# - `install_package ttyd dont`             → ttyd をインストール（言語パック適用なし）
-# - `install_package ttyd notset`           → ttyd をインストール（package.db の適用なし）
-# - `install_package ttyd disabled`         → ttyd をインストール（設定を `disabled` にする）
-# - `install_package ttyd yn dont disabled` → ttyd をインストール（確認あり、言語パックなし、設定を `disabled` にする）
-#########################################################################
-#########################################################################
-# install_package()
+# - install_package update                → パッケージリストを更新
+# - install_package ttyd                  → ttyd をインストール（確認なし、package.db 適用、言語パック適用）
+# - install_package ttyd yn               → ttyd をインストール（確認あり）
+# - install_package ttyd dont             → ttyd をインストール（言語パック適用なし）
+# - install_package ttyd notset           → ttyd をインストール（package.db の適用なし）
+# - install_package ttyd disabled         → ttyd をインストール（設定を disabled にする）
+# - install_package ttyd yn dont disabled hidden
+#   → ttyd をインストール（確認あり、言語パック適用なし、設定を disabled にし、既にインストール済みのメッセージは非表示）
 #########################################################################
 install_package() {
     local package_name="$1"
     shift  # 最初の引数 (パッケージ名) を取得し、残りをオプションとして処理
+
+    # オプション解析
+    local confirm_install="no"
+    local skip_lang_pack="no"
+    local skip_package_db="no"
+    local set_disabled="no"
+    local hidden="no"   # hidden オプション（"yes" の場合、既にインストール済みのメッセージ等の出力を抑制する）
+
+    for arg in "$@"; do
+        case "$arg" in
+            yn) confirm_install="yes" ;;
+            dont) skip_lang_pack="yes" ;;
+            notset) skip_package_db="yes" ;;
+            disabled) set_disabled="yes" ;;
+            hidden) hidden="yes" ;;
+        esac
+    done
 
     # `downloader_ch` からパッケージマネージャーを取得
     if [ -f "${BASE_DIR}/downloader_ch" ]; then
@@ -797,30 +814,19 @@ install_package() {
         return 1
     fi
 
-    # オプション解析
-    local confirm_install="no"
-    local skip_lang_pack="no"
-    local skip_package_db="no"
-    local set_disabled="no"
-
-    for arg in "$@"; do
-        case "$arg" in
-            yn) confirm_install="yes" ;;
-            dont) skip_lang_pack="yes" ;;
-            notset) skip_package_db="yes" ;;
-            disabled) set_disabled="yes" ;;
-        esac
-    done
-
     # すでにインストール済みか確認
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if opkg list-installed | grep -q "^$package_name "; then
-            echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
+            if [ "$hidden" != "yes" ]; then
+                echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
+            fi
             return 0
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         if apk list-installed | grep -q "^$package_name "; then
-            echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
+            if [ "$hidden" != "yes" ]; then
+                echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
+            fi
             return 0
         fi
     fi
@@ -867,19 +873,20 @@ install_package() {
 
     # 言語パッケージの適用 (`dont` オプションがない場合)
     if [ "$skip_lang_pack" = "no" ] && echo "$package_name" | grep -qE '^luci-app-'; then
-        local lang_code="$(cat "${CACHE_DIR}/luci.ch" 2>/dev/null || echo "en")"
+        local lang_code
+        lang_code=$(cat "${CACHE_DIR}/luci.ch" 2>/dev/null || echo "en")
         local lang_package="luci-i18n-${package_name#luci-app-}-$lang_code"
 
         if [ "$DEV_NULL" = "on" ]; then
             # サイレントで list を確認
             if $PACKAGE_MANAGER list > /dev/null 2>&1 | grep -q "^$lang_package "; then
-                install_package "$lang_package"
+                install_package "$lang_package" hidden
             else
                 if [ "$lang_code" = "xx" ]; then
                     if $PACKAGE_MANAGER list > /dev/null 2>&1 | grep -q "^luci-i18n-${package_name#luci-app-}-en "; then
-                        install_package "luci-i18n-${package_name#luci-app-}-en"
+                        install_package "luci-i18n-${package_name#luci-app-}-en" hidden
                     elif $PACKAGE_MANAGER list > /dev/null 2>&1 | grep -q "^luci-i18n-${package_name#luci-app-} "; then
-                        install_package "luci-i18n-${package_name#luci-app-}"
+                        install_package "luci-i18n-${package_name#luci-app-}" hidden
                     fi
                 fi
             fi
