@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-00-05"
+SCRIPT_VERSION="2025.02.16-00-06"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -181,13 +181,27 @@ script_update() {
     local file_name=$(basename "$0")  # 実行中のスクリプトのファイル名
     local cache_file="${CACHE_DIR}/script.ch"
 
-    # GitHub からリモートのバージョンを取得
+    # **messages.db の存在確認**
+    if [ ! -f "${BASE_DIR}/messages.db" ]; then
+        echo "⚠️ Warning: messages.db not found. Using default English messages."
+        
+        # **暫定的な英語メッセージを設定**
+        MSG_VERSION_FETCH_FAIL="Error: Failed to fetch remote version."
+        MSG_UPDATE_SUCCESS="Updated to version {version} of {file}."
+        MSG_SKIPPING_DOWNLOAD="Skipping download: {file} is up-to-date."
+    fi
+
+    # **GitHub からリモートのバージョンを取得**
     local remote_version
     remote_version=$(wget -qO- "${BASE_URL}/${file_name}" | grep "^SCRIPT_VERSION=" | cut -d'=' -f2)
 
     # **バージョン情報が取得できなかった場合は無条件にダウンロード**
     if [ -z "$remote_version" ]; then
-        get_message "MSG_VERSION_FETCH_FAIL" "$file_name"
+        if [ -f "${BASE_DIR}/messages.db" ]; then
+            echo "$(get_message "MSG_VERSION_FETCH_FAIL" "$file_name")"
+        else
+            echo "$MSG_VERSION_FETCH_FAIL"
+        fi
         download "$file_name" "script"
         
         # キャッシュを更新
@@ -230,7 +244,11 @@ script_update() {
         [ -z "$num_v2" ] && num_v2=0
 
         if [ "$num_v1" -lt "$num_v2" ]; then
-            get_message "MSG_UPDATE_SUCCESS" "$file_name" "$version" "$remote_version"
+            if [ -f "${BASE_DIR}/messages.db" ]; then
+                echo "$(get_message "MSG_UPDATE_SUCCESS" "$file_name" "$remote_version")"
+            else
+                echo "$MSG_UPDATE_SUCCESS" | sed -e "s/{file}/$file_name/g" -e "s/{version}/$remote_version/g"
+            fi
             download "$file_name" "script"
 
             # キャッシュを更新
@@ -242,7 +260,11 @@ script_update() {
         i=$((i + 1))
     done
 
-    get_message "MSG_SKIPPING_DOWNLOAD" "$file_name" "$version"
+    if [ -f "${BASE_DIR}/messages.db" ]; then
+        echo "$(get_message "MSG_SKIPPING_DOWNLOAD" "$file_name" "$version")"
+    else
+        echo "$MSG_SKIPPING_DOWNLOAD" | sed -e "s/{file}/$file_name/g" -e "s/{version}/$version/g"
+    fi
     return 0
 }
 
