@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-01-01"
+COMMON_VERSION="2025.02.15-01-02"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -1174,35 +1174,26 @@ check_option() {
 }
 
 #########################################################################
-# Last Update: 2025-02-15 10:00:00 (JST) 🚀
-# check_common: 共通処理の初期化
+# Last Update: 2025-02-16 21:30:00 (JST) 🚀
+# "Ensuring seamless updates, one script at a time."
 #
 # 【要件】
-# 1. 役割:
-#    - common.sh のフロー制御および初期化処理を行う。
-#    - check_option() で解析されたオプションに基づき、後続処理（主に言語選択）を実施する。
-#
-# 2. フロー:
-#    - 必要なスクリプトやデータベース（openwrt.db, messages.db, country.db, packages.db）の更新を実施。
-#    - OpenWrt バージョンの確認を実施。
-#    - MODE の値に応じた処理を行う：
-#         - reset: キャッシュファイルを削除して「MSG_RESET_COMPLETE」を表示し終了。
-#         - full: select_country() を呼び出す。
-#         - light: country.ch キャッシュが存在すれば国選択をスキップ、なければ select_country() を呼び出す。
-#         - debug: full モードの処理に加えて、追加のデバッグ出力を行い、debug() での内部チェックも実施する。
-#
-# 【仕様】
-# - 言語選択は、check_option() で確定された SELECTED_LANGUAGE を、そのまま select_country() に $1 として渡す。
+# 1. `download_script()` を `download()` に置き換え、統合を適用。
+# 2. `download()` の `debug_log()` を適用し、ダウンロード状況を詳細に記録。
+# 3. ダウンロードに失敗した場合は `handle_error()` でエラーハンドリング。
+# 4. `openwrt.db`, `messages.db`, `country.db`, `packages.db` を適切にダウンロード。
+# 5. 影響範囲: `common.sh`（矛盾なく適用）。
 #########################################################################
+
 check_common() {
     local lang_code="$SELECTED_LANGUAGE"
     
     debug_log "INFO" "check_common called with lang_code: '$lang_code' and MODE: '$MODE'"
     script_update || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
-    download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
-    download_script messages.db || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
-    download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
-    download_script packages.db || handle_error "ERR_DOWNLOAD" "packages.db" "latest"
+    download "openwrt.db" "db" || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
+    download "messages.db" "db" || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
+    download "country.db" "db" || handle_error "ERR_DOWNLOAD" "country.db" "latest"
+    download "packages.db" "db" || handle_error "ERR_DOWNLOAD" "packages.db" "latest"
     check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
 
     case "$MODE" in
@@ -1232,7 +1223,6 @@ check_common() {
         debug)
             debug_log "DEBUG" "Running in debug mode: Additional debug output enabled."
             select_country "$lang_code"
-            # ここで必要に応じ debug() を呼び出して内部チェックも実施する
             debug "DEBUG" "Post country selection debug info..."
             ;;
         *)
