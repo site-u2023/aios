@@ -113,7 +113,7 @@ chmod_aios
 delete_aios
 make_directory
 download_common
-check_common "$INPUT_LANG"
+check_option "$INPUT_LANG"
 print_banner
 packages # 必要に応じて
 download openwrt-config.sh
