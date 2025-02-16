@@ -1147,13 +1147,13 @@ check_common() {
     download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
     download_script packages.db || handle_error "ERR_DOWNLOAD" "packages.db" "latest"
     check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
-   # get_package_manager
     select_country
 
     # MODE に応じた処理の振り分け
     case "$MODE" in
         full)
             common_full "$lang_code"
+            select_country
             ;;
         light)
             common_light "$lang_code"
