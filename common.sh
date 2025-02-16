@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-00-00"
+SCRIPT_VERSION="2025.02.16-00-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 script_update "$SCRIPT_VERSION"
 
@@ -178,43 +178,33 @@ test_debug_functions() {
 # 5. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
 #########################################################################
 script_update() {
-    local version="$1"  # 渡されたバージョン情報
+    local version="$1"  # 渡されたローカルのバージョン情報
     local file_name=$(basename "$0")  # 実行中のスクリプトのファイル名
     local cache_file="${CACHE_DIR}/script.ch"
-
-    # キャッシュファイルがない場合、新規作成
-    if [ ! -f "$cache_file" ]; then
-        echo "Creating new cache file: $cache_file"
-        touch "$cache_file"
-    fi
-
-    # キャッシュに現在のバージョンを記録
-    if ! grep -q "^$file_name=" "$cache_file"; then
-        echo "$file_name=$version" >> "$cache_file"
-    fi
 
     # GitHub からリモートのバージョンを取得
     local remote_version=""
     remote_version=$(wget -qO- "${BASE_URL}/${file_name}" | grep "^SCRIPT_VERSION=" | cut -d'=' -f2)
 
     if [ -z "$remote_version" ]; then
-        echo "WARNING: Failed to fetch remote version for $file_name, skipping update check."
+        get_message "MSG_VERSION_FETCH_FAIL" "$file_name"
         return 1
     fi
 
     # バージョン比較
-    if [ "$version" = "$remote_version" ]; then
-        echo "INFO: $file_name is up to date ($version)"
-        return 0
+    compare_versions_ash "$version" "$remote_version"
+    if [ $? -eq 1 ]; then
+        get_message "MSG_UPDATE_SUCCESS" "$file_name" "$version" "$remote_version"
+        
+        # `download()` 関数を呼び出して更新
+        download "$file_name" "script"
+
+        # キャッシュを更新
+        sed -i "/^$file_name=/d" "$cache_file"
+        echo "$file_name=$remote_version" >> "$cache_file"
+    else
+        get_message "MSG_SKIPPING_DOWNLOAD" "$file_name" "$version"
     fi
-
-    # バージョンが異なる場合、ファイルを更新
-    echo "Updating $file_name from $version to $remote_version"
-    wget -q -O "${BASE_DIR}/${file_name}" "${BASE_URL}/${file_name}"
-
-    # キャッシュを更新
-    sed -i "/^$file_name=/d" "$cache_file"
-    echo "$file_name=$remote_version" >> "$cache_file"
 
     return 0
 }
