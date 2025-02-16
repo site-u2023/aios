@@ -3,7 +3,7 @@
 
 SUPPORTED_LANGUAGES="US JP" 
 
-MESSAGE_VERSION="2025.02.15-1"
+MESSAGE_VERSION="2025.02.16-0"
 echo "message.db Last update: $MESSAGE_VERSION"
 
 # 😃 🤣 🤩 🤪 🫥 🤢 🥵 🥶 😱 💀 🤡 👹 👺 👻 👽 👾 🤖 💯 💢 💥 💬 💤
@@ -13,11 +13,34 @@ US|MSG_UNDER_TEST=👽 Under test
 JP|MSG_UNDER_TEST=👹 試験中
 
 # -----------------------
+# 🔍 デバッグ用メッセージ
+# -----------------------
+US|MSG_TEST_COUNTRY_SEARCH=Testing country search with input: {file}
+JP|MSG_TEST_COUNTRY_SEARCH=国検索のテストを実行中: {file}
+
+US|MSG_TEST_TIMEZONE_SEARCH=Testing timezone search with input: {file}
+JP|MSG_TEST_TIMEZONE_SEARCH=タイムゾーン検索のテストを実行中: {file}
+
+US|MSG_TEST_CACHE_CONTENTS=Checking cache file contents...
+JP|MSG_TEST_CACHE_CONTENTS=キャッシュファイルの内容を確認中...
+
+US|MSG_CACHE_CONTENTS=Cache file {file} contents:
+JP|MSG_CACHE_CONTENTS=キャッシュファイル {file} の内容:
+
+US|MSG_CACHE_NOT_FOUND=Cache file {file} not found.
+JP|MSG_CACHE_NOT_FOUND=キャッシュファイル {file} が見つかりません。
+
+# -----------------------
 # 🚨 エラーメッセージ (追加)
 # -----------------------
 US|ERR_DOWNLOAD=Download failed: {file}.
 JP|ERR_DOWNLOAD={file} のダウンロードに失敗しました。
 
+JP|MSG_ERROR_OCCURRED=エラーが発生しました。
+US|MSG_ERROR_OCCURRED=An error occurred.
+
+JP|MSG_VERSION_UNSUPPORTED={file} のバージョンがサポート外です ({version})。
+US|MSG_VERSION_UNSUPPORTED={file} is unsupported ({version}).
 # -----------------------
 # ℹ️ 情報メッセージ (追加)
 # -----------------------
@@ -138,13 +161,6 @@ US|MSG_DOWNLOAD_CONFIRM=Do you want to download {file}? [Y/n]
 
 JP|MSG_EXECUTE_AIOS_FAIL=aios の実行に失敗しました。
 US|MSG_EXECUTE_AIOS_FAIL=Failed to execute aios.
-
-# エラーメッセージ
-JP|MSG_ERROR_OCCURRED=エラーが発生しました。
-US|MSG_ERROR_OCCURRED=An error occurred.
-
-JP|MSG_VERSION_UNSUPPORTED={file} のバージョンがサポート外です ({version})。
-US|MSG_VERSION_UNSUPPORTED={file} is unsupported ({version}).
 
 # 既存デフォ----------------------------------------------------
 
