@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-01-08"
+COMMON_VERSION="2025.02.15-01-09"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -952,16 +952,18 @@ install_package() {
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
-# Last Update: 2025-02-16 23:45:00 (JST) 🚀
-# "Any version depth, any number size, precision remains intact."
+# Last Update: 2025-02-17 00:00:00 (JST) 🚀
+# "Ensuring OpenWrt ash compatibility, one function at a time."
 #
 # 【要件】
-# 1. **`2025.02.15-111111111-1-5555-2` のような超長いバージョンも対応可能。**
-# 2. **`YYYY.MM.DD` を基本として、その後の `-XX-XX-XX...` をすべて順に比較する。**
-# 3. **ファイルが存在しない場合、無条件でダウンロード。**
-# 4. **バージョンが異なる場合のみダウンロードを実行。**
-# 5. 影響範囲: `common.sh` の `download()` のみ（新規関数なし）。
+# 1. **`ash` 互換のため、配列 `()` や `${#array[@]}` を使わない。**
+# 2. **`YYYY.MM.DD-XX-XX-XX...` のような長いバージョンも比較可能。**
+# 3. **`for ((...))` の代わりに `while` ループを使用（`ash` 互換）。**
+# 4. **ファイルが存在しない場合、無条件でダウンロード。**
+# 5. **バージョンが異なる場合のみダウンロードを実行。**
+# 6. 影響範囲: `common.sh` の `download()` のみ（新規関数なし）。
 #########################################################################
+
 download() {
     local file_name="$1"
     local mode="$2"  # "script" or "db"
@@ -1001,16 +1003,19 @@ download() {
         return 1
     fi
 
-    # **バージョン比較**
-    local parts_v1=($(echo "$current_version" | tr '-' ' '))
-    local parts_v2=($(echo "$remote_version" | tr '-' ' '))
-    local len_v1=${#parts_v1[@]}
-    local len_v2=${#parts_v2[@]}
-    local max_len=$((len_v1 > len_v2 ? len_v1 : len_v2))
+    # **バージョン比較（ash 互換）**
+    local v1_part_count=$(echo "$current_version" | awk -F'-' '{print NF}')
+    local v2_part_count=$(echo "$remote_version" | awk -F'-' '{print NF}')
+    local max_len=$(( v1_part_count > v2_part_count ? v1_part_count : v2_part_count ))
 
-    for ((i=0; i<max_len; i++)); do
-        local num_v1=${parts_v1[$i]:-0}  # 足りない部分は `0` 扱い
-        local num_v2=${parts_v2[$i]:-0}
+    i=1
+    while [ $i -le "$max_len" ]; do
+        num_v1=$(echo "$current_version" | cut -d'-' -f"$i")
+        num_v2=$(echo "$remote_version" | cut -d'-' -f"$i")
+
+        # 空のフィールドは 0 とする
+        [ -z "$num_v1" ] && num_v1=0
+        [ -z "$num_v2" ] && num_v2=0
 
         if [ "$num_v1" -gt "$num_v2" ]; then
             debug_log "INFO" "MSG_NEWER_VERSION" "$remote_version"
@@ -1019,6 +1024,8 @@ download() {
             debug_log "INFO" "MSG_OLDER_VERSION" "$remote_version"
             return 0
         fi
+
+        i=$((i + 1))
     done
 
     # **ダウンロード試行（最大3回）**
