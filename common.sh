@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-01-18"
+COMMON_VERSION="2025.02.15-01-11"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
