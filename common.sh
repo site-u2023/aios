@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-01-17"
+COMMON_VERSION="2025.02.15-01-18"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -963,67 +963,40 @@ install_package() {
 #########################################################################
 download() {
     local file_name="$1"
-    local mode="$2"
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
-
-    debug_log "INFO" "MSG_DOWNLOAD_START" "$file_name"
-
-    # **`wget` のエラーメッセージを `LOG_DIR` に保存**
     local wget_log_file="${LOG_DIR}/wget_error.log"
 
     if [ ! -f "$install_path" ]; then
-        debug_log "INFO" "MSG_FILE_NOT_FOUND" "$file_name"
+        $BASE_WGET "$install_path" "$remote_url" 2>"$wget_log_file"
+        local wget_status=$?
 
-        if ! $BASE_WGET "$install_path" "$remote_url" 2>"$wget_log_file"; then
-            debug_log "ERROR" "ERR_DOWNLOAD (wget failed)" "$file_name"
-            if [ "$DEBUG_MODE" = "true" ]; then
-                debug_log "DEBUG" "WGET_ERROR LOG START:"
-                cat "$wget_log_file" | while read -r line; do
-                    debug_log "DEBUG" "$line"
-                done
-                debug_log "DEBUG" "WGET_ERROR LOG END"
-            fi
+        if [ $wget_status -ne 0 ]; then
             handle_error "ERR_DOWNLOAD" "$file_name" "wget failed"
             return 1
         fi
 
-        # **ダウンロード後のファイルサイズを確認**
         if [ ! -s "$install_path" ]; then
-            debug_log "ERROR" "ERR_EMPTY_DOWNLOAD" "$file_name"
-            ls -lh "$install_path" | debug_log "DEBUG"
             handle_error "ERR_EMPTY_DOWNLOAD" "$file_name" "empty file"
             return 1
         fi
 
-        debug_log "INFO" "MSG_DOWNLOAD_SUCCESS" "$file_name"
         return 0
     fi
 
-    # **現在のバージョンを取得**
     local current_version=""
     if [ -f "$install_path" ]; then
         current_version=$(sed -n 's/^version=\([0-9.-]\+\)$/\1/p' "$install_path")
     fi
 
-    # **リモートのバージョンを取得**
     local remote_version
     remote_version=$(wget -qO- "$remote_url" 2>"$wget_log_file" | sed -n 's/^version=\([0-9.-]\+\)$/\1/p')
 
     if [ -z "$remote_version" ]; then
-        debug_log "ERROR" "ERR_VERSION_FETCH (wget failed to get version)" "$file_name"
-        if [ "$DEBUG_MODE" = "true" ]; then
-            debug_log "DEBUG" "WGET_ERROR LOG START:"
-            cat "$wget_log_file" | while read -r line; do
-                debug_log "DEBUG" "$line"
-            done
-            debug_log "DEBUG" "WGET_ERROR LOG END"
-        fi
         handle_error "ERR_VERSION_FETCH" "$file_name" "version fetch failed"
         return 1
     fi
 
-    # **バージョン比較**
     local v1_part_count=$(echo "$current_version" | awk -F'-' '{print NF}')
     local v2_part_count=$(echo "$remote_version" | awk -F'-' '{print NF}')
     local max_len=$(( v1_part_count > v2_part_count ? v1_part_count : v2_part_count ))
@@ -1037,46 +1010,33 @@ download() {
         [ -z "$num_v2" ] && num_v2=0
 
         if [ "$num_v1" -gt "$num_v2" ]; then
-            debug_log "INFO" "MSG_NEWER_VERSION" "$remote_version"
             break
         elif [ "$num_v1" -lt "$num_v2" ]; then
-            debug_log "INFO" "MSG_OLDER_VERSION" "$remote_version"
             return 0
         fi
 
         i=$((i + 1))
     done
 
-    # **ダウンロード試行（最大3回）**
     local attempt=1
     local success=0
     while [ $attempt -le 3 ]; do
-        debug_log "INFO" "MSG_DOWNLOAD_ATTEMPT" "$file_name" "$attempt"
+        $BASE_WGET "$install_path" "$remote_url" 2>"$wget_log_file"
+        local wget_status=$?
 
-        if $BASE_WGET "$install_path" "$remote_url" 2>"$wget_log_file"; then
+        if [ $wget_status -eq 0 ]; then
             success=1
             break
-        else
-            debug_log "WARN" "MSG_DOWNLOAD_RETRY" "$file_name" "$attempt"
-            if [ "$DEBUG_MODE" = "true" ]; then
-                debug_log "DEBUG" "WGET_ERROR: Attempt $attempt failed for $file_name"
-                debug_log "DEBUG" "WGET_ERROR LOG START:"
-                cat "$wget_log_file" | while read -r line; do
-                    debug_log "DEBUG" "$line"
-                done
-                debug_log "DEBUG" "WGET_ERROR LOG END"
-            fi
-            attempt=$((attempt + 1))
-            sleep 1
         fi
+        attempt=$((attempt + 1))
+        sleep 1
     done
 
-    # **成功判定**
     if [ $success -eq 1 ]; then
-        debug_log "INFO" "MSG_UPDATE_SUCCESS" "$file_name" "$remote_version"
+        return 0
     else
-        debug_log "ERROR" "ERR_DOWNLOAD (failed after retries)" "$file_name"
         handle_error "ERR_DOWNLOAD" "$file_name" "$remote_version"
+        return 1
     fi
 }
 
