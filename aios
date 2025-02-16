@@ -35,7 +35,7 @@ delete_aios() {
 # make_directory: 必要なディレクトリ (BASE_DIR) を作成する
 #########################################################################
 make_directory() {
-    mkdir -p "$BASE_DIR"
+    mkdir -p "$BASE_DIR" "$CACHE_DIR" "$LOG_DIR"
 }
 
 #################################
