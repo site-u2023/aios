@@ -1065,3 +1065,146 @@ XXX_check_common() {
             ;;
     esac
 }
+
+#########################################################################
+# Last Update: 2025-02-15 10:00:00 (JST) 🚀
+# check_option: コマンドラインオプション解析関数
+#
+# 【概要】
+# この関数は、aios の起動時に渡されたコマンドライン引数を解析し、以下のグローバルオプションを
+# 設定するためのものです。これにより、後続の処理（check_common() など）は常に統一された
+# オプション設定に基づいて実行され、言語選択やデバッグ、動作モード、ログ出力先、強制実行、
+# ドライラン、キャッシュリセット、ヘルプ表示などの処理を柔軟に制御できます。
+#
+# 【対応オプション】
+# - -h, --help              : ヘルプメッセージを表示して終了
+# - -v, --version           : スクリプトのバージョン情報を表示して終了
+# - -d, --debug, --debug1   : デバッグモードを有効にし、詳細なログ出力を行う (DEBUG_LEVEL="DEBUG")
+# - --debug2                : さらに詳細なデバッグレベル (DEBUG_LEVEL="DEBUG2")
+# - --debug3                : 最高詳細なデバッグレベル (DEBUG_LEVEL="DEBUG3")
+# - -m, --mode <mode>       : 動作モードを指定（例: full, light, debug）; 指定がなければデフォルトは full
+# - -l, --logfile <path>    : ログ出力先のパスを指定
+# - -f, --force             : 強制実行モード。確認プロンプトをスキップして処理を実行
+# - --dry-run               : ドライランモード。実際の変更を行わず、実行されるコマンドをシミュレーション表示
+# - --reset                 : キャッシュ（country.ch、luci.ch、zone.ch 等）をリセットする
+#
+# また、短縮形（例: -ja, -en など）もサポートし、オプションの位置は自由です。"-" および
+# "--" の両方の形式が有効です。
+#
+# 【仕様】
+# 1. この関数は、渡された引数を解析し、グローバル変数
+#      SELECTED_LANGUAGE, DEBUG_MODE, DEBUG_LEVEL, MODE, DRY_RUN, LOGFILE, FORCE, RESET, HELP
+#    にそれぞれの値を設定します。
+#
+# 2. 言語に関するオプションは、引数としても指定可能であり、指定がない場合は後続の select_country()
+#    でユーザーに選択させる流れになります。
+#
+# 3. check_common() への引数としては、この関数で設定されたグローバル変数をそのまま利用できるため、
+#    各種オプションによる環境設定の整合性が保たれます。
+#
+# 【使用例】
+#  sh aios.sh -d --mode light -l /var/log/aios.log en
+#    → 言語 "en" を選択、デバッグモード有効 (DEBUG_LEVEL="DEBUG")、動作モード light、
+#       ログ出力先 /var/log/aios.log が設定され、その他のオプションはデフォルト値となる。
+#########################################################################
+check_option() {
+    # デフォルト値の設定
+    SELECTED_LANGUAGE=""     # 言語が指定されなければ select_country() で選択
+    DEBUG_MODE="false"
+    DEBUG_LEVEL="INFO"
+    MODE="full"              # デフォルトは common_full
+    DRY_RUN="false"
+    LOGFILE=""               # ログ出力先 (指定がなければ、共通LOG_DIR/log.debug などを利用)
+    FORCE="false"
+    RESET="false"
+    HELP="false"
+
+    # 引数解析
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            -h|--help)
+                HELP="true"
+                shift
+                ;;
+            -v|--version)
+                echo "AIOS version: $AIOS_VERSION"
+                exit 0
+                ;;
+            -d|--debug|-debug|--debug1)
+                DEBUG_MODE="true"
+                DEBUG_LEVEL="DEBUG"
+                shift
+                ;;
+            --debug2)
+                DEBUG_MODE="true"
+                DEBUG_LEVEL="DEBUG2"
+                shift
+                ;;
+            --debug3)
+                DEBUG_MODE="true"
+                DEBUG_LEVEL="DEBUG3"
+                shift
+                ;;
+            -m|--mode)
+                if [ -n "$2" ]; then
+                    MODE="$2"
+                    shift 2
+                else
+                    echo "Error: --mode requires an argument (full, light, debug)"
+                    exit 1
+                fi
+                ;;
+            -l|--logfile)
+                if [ -n "$2" ]; then
+                    LOGFILE="$2"
+                    shift 2
+                else
+                    echo "Error: --logfile requires a path argument"
+                    exit 1
+                fi
+                ;;
+            -f|--force)
+                FORCE="true"
+                shift
+                ;;
+            --dry-run)
+                DRY_RUN="true"
+                shift
+                ;;
+            --reset)
+                RESET="true"
+                shift
+                ;;
+            # オプション以外のもの
+            -*)
+                # ここで短縮形の言語指定をサポート（例: -ja, -en など）
+                case "$1" in
+                    -ja|--ja)
+                        SELECTED_LANGUAGE="ja"
+                        ;;
+                    -en|--en)
+                        SELECTED_LANGUAGE="en"
+                        ;;
+                    *)
+                        # 不明なオプションは警告しつつ無視
+                        echo "Warning: Unknown option: $1" >&2
+                        ;;
+                esac
+                shift
+                ;;
+            *)
+                # オプションでない引数は、最初に見つかったものを言語とする
+                if [ -z "$SELECTED_LANGUAGE" ]; then
+                    SELECTED_LANGUAGE="$1"
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    # 結果の確認（必要に応じて debug_log() で出力）
+    debug_log "DEBUG" "check_option: SELECTED_LANGUAGE='$SELECTED_LANGUAGE', DEBUG_MODE='$DEBUG_MODE', DEBUG_LEVEL='$DEBUG_LEVEL', MODE='$MODE', DRY_RUN='$DRY_RUN', LOGFILE='$LOGFILE', FORCE='$FORCE', RESET='$RESET', HELP='$HELP'"
+    
+    # グローバル変数としてエクスポート（必要に応じて）
+    export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET HELP
+}
