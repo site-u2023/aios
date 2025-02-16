@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-01-14"
+COMMON_VERSION="2025.02.15-01-15"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -965,7 +965,7 @@ download() {
     local file_name="$1"
     local mode="$2"  # "script" or "db"
     local install_path="${BASE_DIR}/${file_name}"
-    local remote_url="${BASE_URL}/${file_name}"
+    local remote_url="https://raw.githubusercontent.com/site-u2023/aios/main/$file_name"
 
     debug_log "INFO" "MSG_DOWNLOAD_START" "$file_name"
 
@@ -975,10 +975,11 @@ download() {
         if ! wget -q -O "$install_path" "$remote_url" 2>/tmp/wget_error.log; then
             debug_log "ERROR" "ERR_DOWNLOAD (wget failed)" "$file_name"
             if [ "$DEBUG_MODE" = "true" ]; then
-                debug_log "DEBUG" "WGET_ERROR LOG:"
+                debug_log "DEBUG" "WGET_ERROR LOG START:"
                 cat /tmp/wget_error.log | while read -r line; do
                     debug_log "DEBUG" "$line"
                 done
+                debug_log "DEBUG" "WGET_ERROR LOG END"
             fi
             handle_error "ERR_DOWNLOAD" "$file_name" "wget failed"
             return 1
@@ -1009,10 +1010,11 @@ download() {
     if [ -z "$remote_version" ]; then
         debug_log "ERROR" "ERR_VERSION_FETCH (wget failed to get version)" "$file_name"
         if [ "$DEBUG_MODE" = "true" ]; then
-            debug_log "DEBUG" "WGET_ERROR LOG:"
+            debug_log "DEBUG" "WGET_ERROR LOG START:"
             cat /tmp/wget_error.log | while read -r line; do
                 debug_log "DEBUG" "$line"
             done
+            debug_log "DEBUG" "WGET_ERROR LOG END"
         fi
         handle_error "ERR_VERSION_FETCH" "$file_name" "version fetch failed"
         return 1
@@ -1055,6 +1057,11 @@ download() {
             debug_log "WARN" "MSG_DOWNLOAD_RETRY" "$file_name" "$attempt"
             if [ "$DEBUG_MODE" = "true" ]; then
                 debug_log "DEBUG" "WGET_ERROR: Attempt $attempt failed for $file_name"
+                debug_log "DEBUG" "WGET_ERROR LOG START:"
+                cat /tmp/wget_error.log | while read -r line; do
+                    debug_log "DEBUG" "$line"
+                done
+                debug_log "DEBUG" "WGET_ERROR LOG END"
             fi
             attempt=$((attempt + 1))
             sleep 1
@@ -1069,6 +1076,7 @@ download() {
         handle_error "ERR_DOWNLOAD" "$file_name" "$remote_version"
     fi
 }
+
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
