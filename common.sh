@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-01-09"
+COMMON_VERSION="2025.02.15-01-10"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -952,18 +952,15 @@ install_package() {
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
-# Last Update: 2025-02-17 00:00:00 (JST) 🚀
-# "Ensuring OpenWrt ash compatibility, one function at a time."
+# Last Update: 2025-02-17 00:45:00 (JST) 🚀
+# "Unified debugging, clear error handling."
 #
 # 【要件】
-# 1. **`ash` 互換のため、配列 `()` や `${#array[@]}` を使わない。**
-# 2. **`YYYY.MM.DD-XX-XX-XX...` のような長いバージョンも比較可能。**
-# 3. **`for ((...))` の代わりに `while` ループを使用（`ash` 互換）。**
-# 4. **ファイルが存在しない場合、無条件でダウンロード。**
-# 5. **バージョンが異なる場合のみダウンロードを実行。**
-# 6. 影響範囲: `common.sh` の `download()` のみ（新規関数なし）。
+# 1. **`debug_log()` を活用し、すべてのログ出力を統一する。**
+# 2. **`DEBUG_MODE` が `true` の場合のみ `wget` のエラーメッセージを出力する。**
+# 3. **エラーログ `/tmp/wget_error.log` は不要、`debug_log()` で直接出力する。**
+# 4. **影響範囲: `common.sh` の `download()` のみ（新規関数なし）。**
 #########################################################################
-
 download() {
     local file_name="$1"
     local mode="$2"  # "script" or "db"
@@ -975,10 +972,11 @@ download() {
     # **ファイルがない場合、無条件でダウンロード**
     if [ ! -f "$install_path" ]; then
         debug_log "INFO" "MSG_FILE_NOT_FOUND" "$file_name"
-        wget --max-redirect=0 -q -O "$install_path" "$remote_url" 2>/tmp/wget_error.log
-
-        if [ $? -ne 0 ]; then
+        if ! wget --max-redirect=0 -q -O "$install_path" "$remote_url"; then
             debug_log "ERROR" "ERR_DOWNLOAD" "$file_name"
+            if [ "$DEBUG_MODE" = "true" ]; then
+                debug_log "DEBUG" "WGET_ERROR: Failed to download $file_name from $remote_url"
+            fi
             handle_error "ERR_DOWNLOAD" "$file_name" "unknown"
             return 1
         fi
@@ -999,6 +997,9 @@ download() {
 
     if [ -z "$remote_version" ]; then
         debug_log "ERROR" "ERR_VERSION_FETCH" "$file_name"
+        if [ "$DEBUG_MODE" = "true" ]; then
+            debug_log "DEBUG" "WGET_ERROR: Failed to fetch version info for $file_name from $remote_url"
+        fi
         handle_error "ERR_VERSION_FETCH" "$file_name" "unknown"
         return 1
     fi
@@ -1034,16 +1035,14 @@ download() {
     while [ $attempt -le 3 ]; do
         debug_log "INFO" "MSG_DOWNLOAD_ATTEMPT" "$file_name" "$attempt"
 
-        wget --max-redirect=0 -q -O "$install_path" "$remote_url" 2>/tmp/wget_error.log
-
-        if [ $? -eq 0 ]; then
+        if wget --max-redirect=0 -q -O "$install_path" "$remote_url"; then
             success=1
             break
         else
             debug_log "WARN" "MSG_DOWNLOAD_RETRY" "$file_name" "$attempt"
-            cat /tmp/wget_error.log | while read -r line; do
-                debug_log "WARN" "WGET ERROR: $line"
-            done
+            if [ "$DEBUG_MODE" = "true" ]; then
+                debug_log "DEBUG" "WGET_ERROR: Attempt $attempt failed for $file_name"
+            fi
             attempt=$((attempt + 1))
             sleep 1
         fi
