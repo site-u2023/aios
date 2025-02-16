@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-8-9"
+COMMON_VERSION="2025.02.15-9-0"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -261,65 +261,71 @@ get_package_manager() {
 }
 
 #########################################################################
-# Last Update: 2025-02-12 14:35:26 (JST) 🚀
-# "Precision in code, clarity in purpose. Every update refines the path." 
+# Last Update: 2025-02-16 13:40:00 (JST) 🚀
+# "Precision in code, clarity in purpose. Every update refines the path."
+#
 # get_message: 多言語対応メッセージ取得関数
 #
 # 【要件】
 # 1. 言語の決定:
-#    - `message.ch` を最優先で参照する（normalize_country() により確定）
-#    - `message.ch` が無ければデフォルト `en`
+#    - 'message.ch' を最優先で参照する（normalize_country() により確定）
+#    - 'message.ch' が無ければ、'country.ch' から国コードを取得し、デフォルトを "en" に設定
 #
 # 2. メッセージ取得の流れ:
-#    - `messages.db` から `message.ch` に記録された言語のメッセージを取得
-#    - 該当するメッセージが `messages.db` に無い場合、`en` にフォールバック
-#    - `en` にも無い場合は、キー（`$1`）をそのまま返す
+#    - messages.db から、言語コード (例: "en", "US", "ja" 等) に対応するメッセージを取得
+#    - 該当メッセージが無い場合、"US"（英語）をフォールバック
+#    - それでも見つからなければ、キー ($1) をそのまま返す
 #
-# 3. `country.ch` との関係:
-#    - `country.ch` はデバイス設定用（変更不可）
-#    - `message.ch` はシステムメッセージ表示用（フォールバック可能）
+# 3. country.ch との関係:
+#    - country.ch はデバイス設定用（変更不可）で、ここから言語コードが取得される
+#    - message.ch はシステムメッセージ表示用（フォールバック可能）で、通常は normalize_country() により決定
 #
 # 4. メンテナンス:
-#    - 言語設定に影響を与えず、メッセージのみ `message.ch` で管理
-#    - `normalize_country()` で `message.ch` が決定されるため、変更は `normalize_country()` 側で行う
+#    - 言語設定に影響を与えず、メッセージのみ message.ch で管理する
+#    - normalize_country() によって message.ch が決定されるため、変更は normalize_country() 側で行う
+#
+# 5. オプション (quiet):
+#    - 第二引数に "quiet" を指定すると、取得したメッセージを echo せず、出力を抑制する
+#      （例: get_message "MSG_CONFIRM_INSTALL" quiet ）
 #########################################################################
 get_message() {
     local key="$1"
+    local quiet_flag="$2"
     local message_cache="${CACHE_DIR}/message.ch"
-    local lang="en"  # デフォルト `en`
+    local lang="en"  # デフォルトは "en"
 
-    # ✅ `message.ch` が無い場合は、country.ch から言語コードを取得
+    # message.ch が無い場合、country.ch から言語コードを取得
     if [ ! -f "$message_cache" ]; then
         if [ -f "${CACHE_DIR}/country.ch" ]; then
-            lang=$(awk '{print $5}' "${CACHE_DIR}/country.ch")  # `$5` に国コード
+            lang=$(awk '{print $5}' "${CACHE_DIR}/country.ch")
         fi
-        # ✅ `lang` が空なら `en` をセット
         [ -z "$lang" ] && lang="en"
     else
         lang=$(cat "$message_cache")
     fi
 
     local message_db="${BASE_DIR}/messages.db"
+    local message=""
 
-    # ✅ `messages.db` が無い場合、デフォルトの英語メッセージを返す
+    # messages.db が無い場合は、キーそのままを返す
     if [ ! -f "$message_db" ]; then
-        echo "$key"
-        return
+        message="$key"
+    else
+        message=$(grep "^${lang}|${key}=" "$message_db" | cut -d'=' -f2-)
+        # 該当メッセージが無ければ、US をフォールバック
+        if [ -z "$message" ]; then
+            message=$(grep "^US|${key}=" "$message_db" | cut -d'=' -f2-)
+        fi
+        # それでも見つからなければ、キーそのままとし、デバッグログを出す
+        if [ -z "$message" ]; then
+            debug_log "Message key '$key' not found in messages.db."
+            message="$key"
+        fi
     fi
 
-    # ✅ `messages.db` から該当言語のメッセージを取得
-    local message
-    message=$(grep "^${lang}|${key}=" "$message_db" | cut -d'=' -f2-)
-
-    # ✅ `lang` に該当するメッセージが無い場合は `US`（英語）を参照
-    if [ -z "$message" ]; then
-        message=$(grep "^US|${key}=" "$message_db" | cut -d'=' -f2-)
-    fi
-
-    # ✅ `message.db` にも無い場合はキーをそのまま返す
-    if [ -z "$message" ]; then
-        debug_log "Message key '$key' not found in messages.db."
-        echo "$key"
+    # quiet オプションが指定された場合は出力せず終了
+    if [ "$quiet_flag" = "quiet" ]; then
+        return 0
     else
         echo "$message"
     fi
