@@ -183,7 +183,7 @@ script_update() {
 
     # **messages.db の存在確認**
     if [ ! -f "${BASE_DIR}/messages.db" ]; then
-        echo "⚠️ Warning: messages.db not found. Using default English messages."
+        #echo "⚠️ Warning: messages.db not found. Using default English messages."
         
         # **暫定的な英語メッセージを設定**
         MSG_VERSION_FETCH_FAIL="Error: Failed to fetch remote version."
