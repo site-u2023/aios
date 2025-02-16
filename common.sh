@@ -190,23 +190,23 @@ script_update() {
     local remote_version
     remote_version=$(wget -qO- "${BASE_URL}/${file_name}" | grep "^version=" | cut -d'=' -f2)
 
+    # `remote_version` が取得できなかった場合の処理を追加
+    if [ -z "$remote_version" ]; then
+        echo "ERROR: Failed to fetch remote version for $file_name"
+        return 1
+    fi
+
     # 既存バージョンと同じならスキップ
     if [ "$cached_version" = "$remote_version" ] && [ -n "$cached_version" ]; then
-        debug_log "INFO" "MSG_SKIPPING_DOWNLOAD" "$file_name" "$cached_version"
         return 0
     fi
 
-    # ダウンロード実行
-    debug_log "INFO" "MSG_DOWNLOAD_START" "$file_name"
-    download "$file_name" "script"
+    # 新しいバージョンをキャッシュに保存
+    echo "$file_name=$remote_version" > "$cache_file"
 
-    if [ $? -eq 0 ]; then
-        echo "$file_name=$remote_version" >> "$cache_file"
-        debug_log "INFO" "MSG_UPDATE_SUCCESS" "$file_name" "$remote_version"
-    else
-        handle_error "ERR_DOWNLOAD" "$file_name" "$remote_version"
-    fi
+    return 0
 }
+
 
 
 # 🔴　エラー・デバッグ・アップデート系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
