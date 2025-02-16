@@ -80,12 +80,14 @@ print_banner() {
     echo -e "\033[1;31m         aaaaa     iiii      oooo     ssssss          \033[0m"
     echo
 
+    echo
     color magenta "                    ii i"
     color blue    "         aaaa      iii       oooo      sssss"
     color cyan    "            aa      ii      oo  oo    ss"
     color green   "         aaaaa      ii      oo  oo     sssss"
     color yellow  "        aa  aa      ii      oo  oo         ss"
     color red     "         aaaaa     iiii      oooo     ssssss"
+    echo
 
     printf "%s\n" "$(color white "$(get_message "MSG_BANNER_DECCRIPTION")")"
     printf "%s\n" "$(color white "$(get_message "MSG_BANNER_NAME")")"
