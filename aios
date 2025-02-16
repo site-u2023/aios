@@ -113,7 +113,6 @@ chmod_aios
 delete_aios
 make_directory
 download_common
-script_update "$SCRIPT_VERSION"
 check_common "$INPUT_LANG"
 print_banner
 packages # 必要に応じて
