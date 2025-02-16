@@ -1265,7 +1265,8 @@ check_common() {
     download "packages.db" "db" || handle_error "ERR_DOWNLOAD" "packages.db" "latest"
 
     check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
-
+    get_package_manager
+    
     case "$MODE" in
         reset)
             debug_log "INFO" "Reset mode: Clearing all cache files."
