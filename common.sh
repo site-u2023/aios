@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-01-15"
+COMMON_VERSION="2025.02.15-01-17"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -963,20 +963,23 @@ install_package() {
 #########################################################################
 download() {
     local file_name="$1"
-    local mode="$2"  # "script" or "db"
+    local mode="$2"
     local install_path="${BASE_DIR}/${file_name}"
-    local remote_url="https://raw.githubusercontent.com/site-u2023/aios/main/$file_name"
+    local remote_url="${BASE_URL}/${file_name}"
 
     debug_log "INFO" "MSG_DOWNLOAD_START" "$file_name"
 
-    # **ファイルがない場合、無条件でダウンロード**
+    # **`wget` のエラーメッセージを `LOG_DIR` に保存**
+    local wget_log_file="${LOG_DIR}/wget_error.log"
+
     if [ ! -f "$install_path" ]; then
         debug_log "INFO" "MSG_FILE_NOT_FOUND" "$file_name"
-        if ! wget -q -O "$install_path" "$remote_url" 2>/tmp/wget_error.log; then
+
+        if ! $BASE_WGET "$install_path" "$remote_url" 2>"$wget_log_file"; then
             debug_log "ERROR" "ERR_DOWNLOAD (wget failed)" "$file_name"
             if [ "$DEBUG_MODE" = "true" ]; then
                 debug_log "DEBUG" "WGET_ERROR LOG START:"
-                cat /tmp/wget_error.log | while read -r line; do
+                cat "$wget_log_file" | while read -r line; do
                     debug_log "DEBUG" "$line"
                 done
                 debug_log "DEBUG" "WGET_ERROR LOG END"
@@ -1005,13 +1008,13 @@ download() {
 
     # **リモートのバージョンを取得**
     local remote_version
-    remote_version=$(wget -qO- "$remote_url" 2>/tmp/wget_error.log | sed -n 's/^version=\([0-9.-]\+\)$/\1/p')
+    remote_version=$(wget -qO- "$remote_url" 2>"$wget_log_file" | sed -n 's/^version=\([0-9.-]\+\)$/\1/p')
 
     if [ -z "$remote_version" ]; then
         debug_log "ERROR" "ERR_VERSION_FETCH (wget failed to get version)" "$file_name"
         if [ "$DEBUG_MODE" = "true" ]; then
             debug_log "DEBUG" "WGET_ERROR LOG START:"
-            cat /tmp/wget_error.log | while read -r line; do
+            cat "$wget_log_file" | while read -r line; do
                 debug_log "DEBUG" "$line"
             done
             debug_log "DEBUG" "WGET_ERROR LOG END"
@@ -1050,7 +1053,7 @@ download() {
     while [ $attempt -le 3 ]; do
         debug_log "INFO" "MSG_DOWNLOAD_ATTEMPT" "$file_name" "$attempt"
 
-        if wget -q -O "$install_path" "$remote_url" 2>/tmp/wget_error.log; then
+        if $BASE_WGET "$install_path" "$remote_url" 2>"$wget_log_file"; then
             success=1
             break
         else
@@ -1058,7 +1061,7 @@ download() {
             if [ "$DEBUG_MODE" = "true" ]; then
                 debug_log "DEBUG" "WGET_ERROR: Attempt $attempt failed for $file_name"
                 debug_log "DEBUG" "WGET_ERROR LOG START:"
-                cat /tmp/wget_error.log | while read -r line; do
+                cat "$wget_log_file" | while read -r line; do
                     debug_log "DEBUG" "$line"
                 done
                 debug_log "DEBUG" "WGET_ERROR LOG END"
@@ -1076,7 +1079,6 @@ download() {
         handle_error "ERR_DOWNLOAD" "$file_name" "$remote_version"
     fi
 }
-
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
