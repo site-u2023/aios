@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-01-00"
+COMMON_VERSION="2025.02.15-01-01"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -922,49 +922,69 @@ install_package() {
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
+# 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
-# download_script: 指定されたスクリプト・データベースのバージョン確認とダウンロード
-#########################################################################
-download_script() {
-    local file_name="$1"
-    local script_cache="${CACHE_DIR}/script.ch"
-    local install_path="${BASE_DIR}/${file_name}"
-    local remote_url="${BASE_URL}/${file_name}"
-
-    if [ -f "$script_cache" ] && grep -q "^$file_name=" "$script_cache"; then
-        local cached_version=$(grep "^$file_name=" "$script_cache" | cut -d'=' -f2)
-        local remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2)
-        if [ "$cached_version" = "$remote_version" ]; then
-            echo "$(color green "$file_name is up-to-date ($cached_version). Skipping download.")"
-            return
-        fi
-    fi
-
-    echo "$(color yellow "Downloading latest version of $file_name")"
-    ${BASE_WGET} "$install_path" "$remote_url"
-    local new_version=$(grep "^version=" "$install_path" | cut -d'=' -f2)
-    echo "$file_name=$new_version" >> "$script_cache"
-}
-
-#########################################################################
-# download: 汎用ファイルダウンロード関数
+# Last Update: 2025-02-16 17:00:00 (JST) 🚀
+# "Smart downloads, efficient updates. Precision in every byte."
+#
+# 【要件】
+# 1. `.sh` (スクリプト) と `.db` (データベース) を統一的に管理する。
+# 2. `script.ch` にバージョンをキャッシュし、変更がある場合のみダウンロード。
+# 3. `debug_log()` を使用し、ダウンロードの進行を `message.db` で管理。
+# 4. 失敗時は3回までリトライし、それでもダメなら `handle_error()` を実行。
+# 5. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
 #########################################################################
 download() {
-    local file_url="$1"
-    local destination="$2"
-    if ! confirm "MSG_DOWNLOAD_CONFIRM" "$file_url"; then
-        echo -e "$(color yellow "Skipping download of $file_url")"
+    local file_name="$1"
+    local mode="$2"  # "script" or "db"
+    local install_path="${BASE_DIR}/${file_name}"
+    local remote_url="${BASE_URL}/${file_name}"
+    local cache_file="${CACHE_DIR}/script.ch"
+
+    # 現在のバージョンを取得（キャッシュから）
+    local cached_version=""
+    if [ -f "$cache_file" ] && grep -q "^$file_name=" "$cache_file"; then
+        cached_version=$(grep "^$file_name=" "$cache_file" | cut -d'=' -f2)
+    fi
+
+    # リモートのバージョンを取得
+    local remote_version
+    remote_version=$(wget -qO- "$remote_url" | grep "^version=" | cut -d'=' -f2)
+
+    # 既存バージョンと同じならスキップ
+    if [ "$cached_version" = "$remote_version" ] && [ -n "$cached_version" ]; then
+        debug_log "INFO" "MSG_SKIPPING_DOWNLOAD" "$file_name" "$cached_version"
         return 0
     fi
-    ${BASE_WGET} "$destination" "${file_url}?cache_bust=$(date +%s)"
-    if [ $? -eq 0 ]; then
-        echo -e "$(color green "Downloaded: $file_url")"
+
+    # ダウンロード試行（最大3回）
+    local attempt=1
+    local success=0
+    while [ $attempt -le 3 ]; do
+        debug_log "INFO" "MSG_DOWNLOAD_START" "$file_name"
+        wget -q -O "$install_path" "$remote_url"
+
+        if [ $? -eq 0 ]; then
+            success=1
+            break
+        else
+            debug_log "WARN" "MSG_DOWNLOAD_RETRY" "$file_name" "$attempt"
+            attempt=$((attempt + 1))
+            sleep 1
+        fi
+    done
+
+    # 成功判定
+    if [ $success -eq 1 ]; then
+        echo "$file_name=$remote_version" >> "$cache_file"
+        debug_log "INFO" "MSG_UPDATE_SUCCESS" "$file_name" "$remote_version"
     else
-        echo -e "$(color red "Failed to download: $file_url")"
-        exit 1
+        handle_error "ERR_DOWNLOAD" "$file_name" "$remote_version"
     fi
 }
+
+# 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
 # country_info: 選択された国と言語の詳細情報を表示
