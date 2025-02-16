@@ -22,112 +22,136 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 mkdir -p "$CACHE_DIR" "$LOG_DIR"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
-# 環境変数 INPUT_LANG のチェック（デフォルト 'ja' とする）
-# INPUT_LANG="${INPUT_LANG:-ja}"
-# debug_log "common.sh received INPUT_LANG: '$INPUT_LANG'"
-
-script_update() (
-    COMMON_CACHE="${CACHE_DIR}/common_version.ch"
-    # キャッシュが存在しない、またはバージョンが異なる場合にアラートを表示
-    if [ ! -f "$COMMON_CACHE" ] || [ "$(cat "$COMMON_CACHE" | tr -d '\r\n')" != "$COMMON_VERSION" ]; then
-        echo -e "`color white_black "Updated to version $COMMON_VERSION common.sh "`"
-        echo "$COMMON_VERSION" > "$COMMON_CACHE"
-    fi
-)
-
+# 🔵　エラー・デバッグ・アップデート系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
-# handle_error: 汎用エラーハンドリング関数
+# Last Update: 2025-02-16 16:00:00 (JST) 🚀
+# "Clarity in errors, precision in handling. Every function must be robust."
+#
+# 【要件】
+# 1. すべてのエラーメッセージを `messages.db` で管理し、多言語対応する。
+# 2. `debug_log("ERROR", message)` も `message.db` を使用する。
+# 3. `{file}`, `{version}` などの変数を動的に置換。
+# 4. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
 #########################################################################
 handle_error() {
-    local message_key="$1"
+    local error_key="$1"
     local file="$2"
     local version="$3"
+    local exit_required="${4:-no}"
+
     local error_message
-    error_message=$(get_message "$message_key")
-    error_message=$(echo "$error_message" | sed -e "s/{file}/$file/" -e "s/{version}/$version/")
+    error_message=$(get_message "$error_key")
+
+    # 変数を置換
+    error_message=$(echo "$error_message" | sed -e "s/{file}/$file/g" -e "s/{version}/$version/g")
+
+    # ログ記録 & 表示
+    debug_log "ERROR" "$error_message"
     echo -e "$(color red "$error_message")"
-    return 1
+
+    if [ "$exit_required" = "yes" ]; then
+        exit 1
+    else
+        return 1
+    fi
 }
 
 #########################################################################
-# デバッグモードの制御 (コマンドライン引数対応)
-#########################################################################
-DEBUG_MODE=false
-DEBUG_LEVEL="INFO"  # デフォルトは INFO 以上のログを出力
-
-# コマンドライン引数のチェック
-for arg in "$@"; do
-    case "$arg" in
-        -d|--debug|-debug)
-            DEBUG_MODE=true
-            DEBUG_LEVEL="DEBUG"
-            ;;
-    esac
-done
-
-#########################################################################
-# debug_log: デバッグ出力関数 (改良版)
+# Last Update: 2025-02-16 16:10:00 (JST) 🚀
+# "Logging with clarity, debugging with precision."
+#
+# 【要件】
+# 1. すべてのログメッセージを `messages.db` で管理し、多言語対応する。
+# 2. `{file}`, `{version}` などの変数を `sed` で動的に置換する。
+# 3. `DEBUG_MODE` の設定に応じて `DEBUG`, `INFO`, `WARN`, `ERROR` を管理する。
+# 4. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
 #########################################################################
 debug_log() {
-    local level="$1"  # デバッグレベル (INFO, WARN, ERROR, DEBUG)
-    local message="$2"
-    
-    # デバッグレベルの優先度
+    local level="$1"
+    local message_key="$2"
+    local file="$3"
+    local version="$4"
+
+    # メッセージ取得
+    local message
+    message=$(get_message "$message_key")
+
+    # 変数を置換
+    message=$(echo "$message" | sed -e "s/{file}/$file/g" -e "s/{version}/$version/g")
+
+    # ログレベル制御
     case "$DEBUG_LEVEL" in
         DEBUG)    allowed_levels="DEBUG INFO WARN ERROR" ;;
         INFO)     allowed_levels="INFO WARN ERROR" ;;
         WARN)     allowed_levels="WARN ERROR" ;;
         ERROR)    allowed_levels="ERROR" ;;
-        *)        allowed_levels="" ;;
+        *)        allowed_levels="ERROR" ;;
     esac
 
-    # 指定されたログレベルが有効な場合のみ出力
     if echo "$allowed_levels" | grep -q "$level"; then
         local timestamp
         timestamp=$(date '+%Y-%m-%d %H:%M:%S')
         local log_message="[$timestamp] $level: $message"
 
-        if [ "$DEBUG_MODE" = true ]; then
-            echo "$log_message"
-        fi
+        # カラー表示
+        case "$level" in
+            "ERROR") echo -e "$(color red "$log_message")" ;;
+            "WARN") echo -e "$(color yellow "$log_message")" ;;
+            "INFO") echo -e "$(color cyan "$log_message")" ;;
+            "DEBUG") echo -e "$(color white "$log_message")" ;;
+        esac
 
-        if [ -n "$LOG_DIR" ]; then
-            echo "$log_message" >> "$LOG_DIR/debug.log"
-        fi
+        # ログファイルに記録
+        echo "$log_message" >> "$LOG_DIR/debug.log"
     fi
 }
 
-# 国検索テスト
-test_country_search() {
-    local test_input="$1"
-    echo "`color cyan "TEST: Searching for country with input '$test_input'"`"
-    if [ ! -f "${BASE_DIR}/country.db" ]; then
-        echo "`color red "ERROR: country.db not found at ${BASE_DIR}/country.db"`"
-        return 1
+#########################################################################
+# Last Update: 2025-02-16 16:20:00 (JST) 🚀
+# "Efficiency in updates, precision in versions. Every script matters."
+#
+# 【要件】
+# 1. `messages.db` を使用し、すべてのメッセージを多言語対応する。
+# 2. `debug_log()` を使用し、ログを `messages.db` で統一する。
+# 3. `script.ch` にバージョンをキャッシュし、変更がある場合のみダウンロード。
+# 4. `download()` を活用し、スクリプト & DB の取得を統一。
+# 5. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
+#########################################################################
+script_update() {
+    local file_name="$1"
+    local cache_file="${CACHE_DIR}/script.ch"
+    local install_path="${BASE_DIR}/${file_name}"
+
+    # 現在のバージョンを取得（キャッシュから）
+    local cached_version=""
+    if [ -f "$cache_file" ] && grep -q "^$file_name=" "$cache_file"; then
+        cached_version=$(grep "^$file_name=" "$cache_file" | cut -d'=' -f2)
     fi
-    awk -v query="$test_input" '
-        $2 ~ query || $3 ~ query || $4 ~ query || $5 ~ query {print NR, $2, $3, $4, $5, $6, $7, $8, $9}' "${BASE_DIR}/country.db"
+
+    # リモートのバージョンを取得
+    local remote_version
+    remote_version=$(wget -qO- "${BASE_URL}/${file_name}" | grep "^version=" | cut -d'=' -f2)
+
+    # 既存バージョンと同じならスキップ
+    if [ "$cached_version" = "$remote_version" ] && [ -n "$cached_version" ]; then
+        debug_log "INFO" "MSG_SKIPPING_DOWNLOAD" "$file_name" "$cached_version"
+        return 0
+    fi
+
+    # ダウンロード実行
+    debug_log "INFO" "MSG_DOWNLOAD_START" "$file_name"
+    download "$file_name" "script"
+
+    if [ $? -eq 0 ]; then
+        echo "$file_name=$remote_version" >> "$cache_file"
+        debug_log "INFO" "MSG_UPDATE_SUCCESS" "$file_name" "$remote_version"
+    else
+        handle_error "ERR_DOWNLOAD" "$file_name" "$remote_version"
+    fi
 }
 
-# タイムゾーン検索テスト
-test_timezone_search() {
-    local test_country="$1"
-    echo "`color cyan "TEST: Searching for timezones of country '$test_country'"`"
-    if [ ! -f "${BASE_DIR}/country.db" ]; then
-        echo "`color red "ERROR: country.db not found at ${BASE_DIR}/country.db"`"
-        return 1
-    fi
-    awk -v country="$test_country" '
-        $2 == country || $4 == country || $5 == country {print NR, $5, $6, $7, $8, $9, $10, $11}' "${BASE_DIR}/country.db"
-}
 
-# キャッシュ内容確認テスト
-test_cache_contents() {
-    echo "`color yellow "DEBUG: country_tmp.ch content:"`"
-    cat "${CACHE_DIR}/country_tmp.ch"
-    echo "`color yellow "DEBUG: zone_tmp.ch content:"`"
-    cat "${CACHE_DIR}/zone_tmp.ch"
-}
+# 🔴　エラー・デバッグ・アップデート系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
 # print_help: ヘルプメッセージを表示
@@ -717,29 +741,6 @@ normalize_country() {
 }
 
 # 🔴　ランゲージ（言語・ゾーン）系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
-
-#########################################################################
-# confirm: Y/N 確認関数
-#########################################################################
-confirm() {
-    local key="$1"
-    local replace_param1="$2"
-    local replace_param2="$3"
-    local prompt_message
-    prompt_message=$(get_message "$key" "$SELECTED_LANGUAGE")
-    [ -n "$replace_param1" ] && prompt_message=$(echo "$prompt_message" | sed "s/{pkg}/$replace_param1/g")
-    [ -n "$replace_param2" ] && prompt_message=$(echo "$prompt_message" | sed "s/{version}/$replace_param2/g")
-    echo "DEBUG: Confirm message -> [$prompt_message]"
-    while true; do
-        read -r -p "$prompt_message " confirm
-        confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')
-        case "$confirm" in
-            ""|"y"|"yes") return 0 ;;
-            "n"|"no") return 1 ;;
-            *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
-        esac
-    done
-}
 
 # 🔵　パッケージ系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
