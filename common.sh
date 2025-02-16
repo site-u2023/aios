@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-01-04"
+COMMON_VERSION="2025.02.15-01-06"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -952,14 +952,14 @@ install_package() {
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
-# Last Update: 2025-02-16 22:30:00 (JST) 🚀
-# "If it exists, check; if it doesn’t, fetch."
+# Last Update: 2025-02-16 23:15:00 (JST) 🚀
+# "Compare inline, keep it simple."
 #
 # 【要件】
-# 1. **ファイルが存在しない場合、無条件でダウンロード。**
-# 2. **ファイルが存在する場合、バージョンチェックを行い、異なる場合のみダウンロード。**
-# 3. **ダウンロードに失敗した場合、`handle_error()` で適切な処理を実施。**
-# 4. **影響範囲: `common.sh` の `download()`（矛盾なく適用）。**
+# 1. **`compare_version()` を作らず、`download()` 内でバージョン比較を処理。**
+# 2. **`YYYY.MM.DD` の比較 → `-XX-XX-XX...` の比較 を順に行う。**
+# 3. **ファイルが存在しない場合、無条件でダウンロード。**
+# 4. 影響範囲: `common.sh` の `download()` のみ（新規関数なし）。
 #########################################################################
 download() {
     local file_name="$1"
@@ -987,12 +987,12 @@ download() {
     # **現在のバージョンを取得**
     local current_version=""
     if [ -f "$install_path" ]; then
-        current_version=$(grep "^version=" "$install_path" | cut -d'=' -f2)
+        current_version=$(sed -n 's/^version=\([0-9.-]\+\)$/\1/p' "$install_path")
     fi
 
     # **リモートのバージョンを取得**
     local remote_version
-    remote_version=$(wget --max-redirect=0 -qO- "$remote_url" | grep "^version=" | cut -d'=' -f2)
+    remote_version=$(wget --max-redirect=0 -qO- "$remote_url" | sed -n 's/^version=\([0-9.-]\+\)$/\1/p')
 
     if [ -z "$remote_version" ]; then
         debug_log "ERROR" "ERR_VERSION_FETCH" "$file_name"
@@ -1000,11 +1000,25 @@ download() {
         return 1
     fi
 
-    # **バージョン比較：同じならスキップ**
-    if [ "$current_version" = "$remote_version" ] && [ -n "$current_version" ]; then
-        debug_log "INFO" "MSG_SKIPPING_DOWNLOAD" "$file_name" "$current_version"
-        return 0
-    fi
+    # **バージョン比較**
+    local parts_v1=($(echo "$current_version" | tr '-' ' '))
+    local parts_v2=($(echo "$remote_version" | tr '-' ' '))
+    local len_v1=${#parts_v1[@]}
+    local len_v2=${#parts_v2[@]}
+    local max_len=$((len_v1 > len_v2 ? len_v1 : len_v2))
+
+    for ((i=0; i<max_len; i++)); do
+        local num_v1=${parts_v1[$i]:-0}  # 足りない部分は `0` 扱い
+        local num_v2=${parts_v2[$i]:-0}
+
+        if [ "$num_v1" -gt "$num_v2" ]; then
+            debug_log "INFO" "MSG_NEWER_VERSION" "$remote_version"
+            break
+        elif [ "$num_v1" -lt "$num_v2" ]; then
+            debug_log "INFO" "MSG_OLDER_VERSION" "$remote_version"
+            return 0
+        fi
+    done
 
     # **ダウンロード試行（最大3回）**
     local attempt=1
