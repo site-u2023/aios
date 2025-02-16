@@ -988,85 +988,6 @@ handle_exit() {
 }
 
 #########################################################################
-# Last Update: 2025-02-12 14:35:26 (JST) 🚀
-# "Precision in code, clarity in purpose. Every update refines the path." 
-# check_common: 共通処理の初期化
-#
-# 【要件】
-# 1. 役割:
-#    - `common.sh` のフロー制御を行う
-#    - `select_country()` に言語処理を委ねる（言語処理はここでは行わない）
-#
-# 2. フロー:
-#    - 第一引数 (`$1`) は動作モード（例: full, light）
-#    - 第二引数 (`$2`) は言語コード（あれば `select_country()` に渡す）
-#    - `$2` が無い場合、`select_country()` によって処理を継続
-#
-# 3. キャッシュ処理:
-#    - 言語キャッシュ (`country.ch`) の有無を `select_country()` に判定させる
-#    - キャッシュがある場合は `normalize_country()` に進む
-#
-# 4. 追加オプション処理:
-#    - `-reset` フラグが指定された場合、キャッシュをリセット
-#    - `-help` フラグが指定された場合、ヘルプメッセージを表示して終了
-#
-# 5. メンテナンス:
-#    - `check_common()` は **フロー制御のみ** を行う
-#    - 言語の選択やキャッシュ管理は **`select_country()` に委ねる**
-#    - 将来的にフローが変更される場合は、ここを修正する
-#########################################################################
-check_common() {
-    local lang_code="$1"
-    
-    debug_log "INFO" "check_common called with lang_code: '$lang_code'"
-    script_update || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
-    download_script messages.db || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
-    download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
-    download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
-    download_script packages.db || handle_error "ERR_DOWNLOAD" "packages.db" "latest"
-    check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
-    get_package_manager
-    select_country "$lang_code"
-}
-
-XXX_check_common() {
-    local mode="$1"
-    local lang_code="$2"  # ✅ `$1` は mode、`$2` は言語情報
-    
-    local lang_code="${1:-}"  # ✅ `$1` を `lang_code` にセット
-    #SELECTED_LANGUAGE="$lang_code"
-    debug_log "check_common received lang_code: '$lang_code'"
-
-    case "$mode" in
-        full)
-            script_update || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
-            download_script messages.db || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
-            download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
-            download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
-            download_script packages.db || handle_error "ERR_DOWNLOAD" "packages.db" "latest"
-            check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
-            select_country "$lang_code"
-            ;;
-        light)
-            script_update || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
-            download_script messages.db || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
-            download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
-            download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
-            check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
-            select_country "$lang_code"
-            ;;
-        *)
-            script_update || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
-            download_script messages.db || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
-            download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
-            download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
-            check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
-            select_country "$lang_code"
-            ;;
-    esac
-}
-
-#########################################################################
 # Last Update: 2025-02-15 10:00:00 (JST) 🚀
 # check_option: コマンドラインオプション解析関数
 #
@@ -1187,3 +1108,62 @@ check_option() {
 
     debug_log "DEBUG" "check_option: SELECTED_LANGUAGE='$SELECTED_LANGUAGE', DEBUG_MODE='$DEBUG_MODE', DEBUG_LEVEL='$DEBUG_LEVEL', MODE='$MODE', DRY_RUN='$DRY_RUN', LOGFILE='$LOGFILE', FORCE='$FORCE', RESET='$RESET', HELP='$HELP'"
 }
+
+#########################################################################
+# Last Update: 2025-02-12 14:35:26 (JST) 🚀
+# "Precision in code, clarity in purpose. Every update refines the path." 
+# check_common: 共通処理の初期化
+#
+# 【要件】
+# 1. 役割:
+#    - `common.sh` のフロー制御を行う
+#    - `select_country()` に言語処理を委ねる（言語処理はここでは行わない）
+#
+# 2. フロー:
+#    - 第一引数 (`$1`) は動作モード（例: full, light）
+#    - 第二引数 (`$2`) は言語コード（あれば `select_country()` に渡す）
+#    - `$2` が無い場合、`select_country()` によって処理を継続
+#
+# 3. キャッシュ処理:
+#    - 言語キャッシュ (`country.ch`) の有無を `select_country()` に判定させる
+#    - キャッシュがある場合は `normalize_country()` に進む
+#
+# 4. 追加オプション処理:
+#    - `-reset` フラグが指定された場合、キャッシュをリセット
+#    - `-help` フラグが指定された場合、ヘルプメッセージを表示して終了
+#
+# 5. メンテナンス:
+#    - `check_common()` は **フロー制御のみ** を行う
+#    - 言語の選択やキャッシュ管理は **`select_country()` に委ねる**
+#    - 将来的にフローが変更される場合は、ここを修正する
+#########################################################################
+check_common() {
+    local lang_code="$SELECTED_LANGUAGE"
+    
+    debug_log "INFO" "check_common called with lang_code: '$lang_code' and MODE: '$MODE'"
+    script_update || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
+    download openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
+    download messages.db || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
+    download country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
+    download packages.db || handle_error "ERR_DOWNLOAD" "packages.db" "latest"
+    check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
+    select_country
+    #get_package_manager
+
+    # MODE に応じた処理の振り分け
+    case "$MODE" in
+        full)
+            common_full "$lang_code"
+            ;;
+        light)
+            common_light "$lang_code"
+            ;;
+        debug)
+            common_debug "$lang_code"
+            ;;
+        *)
+            common_full "$lang_code"
+            ;;
+    esac
+}
+
