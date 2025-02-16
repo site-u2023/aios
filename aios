@@ -116,4 +116,4 @@ download_common
 check_common "$INPUT_LANG"
 print_banner
 packages # 必要に応じて
-download_script openwrt-config.sh
+download openwrt-config.sh
