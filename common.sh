@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-01-10"
+COMMON_VERSION="2025.02.15-01-11"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -952,15 +952,15 @@ install_package() {
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
-# Last Update: 2025-02-17 00:45:00 (JST) 🚀
-# "Unified debugging, clear error handling."
+# Last Update: 2025-02-17 01:00:00 (JST) 🚀
+# "Ensuring compatibility with busybox-wget."
 #
 # 【要件】
-# 1. **`debug_log()` を活用し、すべてのログ出力を統一する。**
-# 2. **`DEBUG_MODE` が `true` の場合のみ `wget` のエラーメッセージを出力する。**
-# 3. **エラーログ `/tmp/wget_error.log` は不要、`debug_log()` で直接出力する。**
-# 4. **影響範囲: `common.sh` の `download()` のみ（新規関数なし）。**
+# 1. **`busybox-wget` 互換のため、`--max-redirect=0` を削除。**
+# 2. **`wget` の実行結果を正しく判定し、エラー時の詳細を記録。**
+# 3. **影響範囲: `common.sh` の `download()` のみ。**
 #########################################################################
+
 download() {
     local file_name="$1"
     local mode="$2"  # "script" or "db"
@@ -972,7 +972,7 @@ download() {
     # **ファイルがない場合、無条件でダウンロード**
     if [ ! -f "$install_path" ]; then
         debug_log "INFO" "MSG_FILE_NOT_FOUND" "$file_name"
-        if ! wget --max-redirect=0 -q -O "$install_path" "$remote_url"; then
+        if ! wget -q -O "$install_path" "$remote_url"; then
             debug_log "ERROR" "ERR_DOWNLOAD" "$file_name"
             if [ "$DEBUG_MODE" = "true" ]; then
                 debug_log "DEBUG" "WGET_ERROR: Failed to download $file_name from $remote_url"
@@ -993,7 +993,7 @@ download() {
 
     # **リモートのバージョンを取得**
     local remote_version
-    remote_version=$(wget --max-redirect=0 -qO- "$remote_url" | sed -n 's/^version=\([0-9.-]\+\)$/\1/p')
+    remote_version=$(wget -qO- "$remote_url" | sed -n 's/^version=\([0-9.-]\+\)$/\1/p')
 
     if [ -z "$remote_version" ]; then
         debug_log "ERROR" "ERR_VERSION_FETCH" "$file_name"
@@ -1035,7 +1035,7 @@ download() {
     while [ $attempt -le 3 ]; do
         debug_log "INFO" "MSG_DOWNLOAD_ATTEMPT" "$file_name" "$attempt"
 
-        if wget --max-redirect=0 -q -O "$install_path" "$remote_url"; then
+        if wget -q -O "$install_path" "$remote_url"; then
             success=1
             break
         else
