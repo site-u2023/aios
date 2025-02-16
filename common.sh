@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-00-06"
+SCRIPT_VERSION="2025.02.16-00-07"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1284,6 +1284,7 @@ check_common() {
 
     check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
     get_package_manager
+    return 0 
     
     case "$MODE" in
         reset)
