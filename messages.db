@@ -131,8 +131,8 @@ US|MSG_VERSION_UNSUPPORTED={file} is unsupported ({version}).
 
 # print_banner()
 
-JP|MSG_BANNER=オープンダブルアールティー専用設定ソフトウェア
-US|MSG_BANNER=Dedicated configuration software for OpenWrt
+JP|MSG_BANNER_DECCRIPTION=オープンダブルアールティー専用設定ソフトウェア
+US|MSG_BANNER_DECCRIPTION=Dedicated configuration software for OpenWrt
 
 JP|MSG_BANNER_NAME=オールインワンスクリプト
 US|MSG_BANNER_NAME=All-in-One Scripts
