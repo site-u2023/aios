@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-9-0"
+COMMON_VERSION="2025.02.15-00-00"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -30,7 +30,7 @@ script_update() (
     COMMON_CACHE="${CACHE_DIR}/common_version.ch"
     # キャッシュが存在しない、またはバージョンが異なる場合にアラートを表示
     if [ ! -f "$COMMON_CACHE" ] || [ "$(cat "$COMMON_CACHE" | tr -d '\r\n')" != "$COMMON_VERSION" ]; then
-        echo -e "`color white_black "common.sh Updated to version $COMMON_VERSION"`"
+        echo -e "`color white_black "Updated to version $COMMON_VERSION common.sh "`"
         echo "$COMMON_VERSION" > "$COMMON_CACHE"
     fi
 )
