@@ -927,7 +927,7 @@ install_package() {
 #########################################################################
 download_script() {
     local file_name="$1"
-    local script_cache="${BASE_DIR}/script.ch"
+    local script_cache="${CACHE_DIR}/script.ch"
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
 
