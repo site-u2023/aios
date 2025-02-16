@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-00-07"
+SCRIPT_VERSION="2025.02.16-00-08"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1276,15 +1276,6 @@ check_option() {
 check_common() {
     local lang_code="$SELECTED_LANGUAGE"
     
-    debug_log "INFO" "check_common called with lang_code: '$lang_code' and MODE: '$MODE'"
-    script_update "$SCRIPT_VERSION" || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
-    download "openwrt.db" "db" || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
-    download "messages.db" "db" || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
-    download "country.db" "db" || handle_error "ERR_DOWNLOAD" "country.db" "latest"
-    download "packages.db" "db" || handle_error "ERR_DOWNLOAD" "packages.db" "latest"
-
-    check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
-    #get_package_manager
     return 0 
     
     case "$MODE" in
@@ -1302,7 +1293,16 @@ check_common() {
             exit 0
             ;;
         full)
+            debug_log "INFO" "check_common called with lang_code: '$lang_code' and MODE: '$MODE'"
+            script_update "$SCRIPT_VERSION" || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
+            download "openwrt.db" "db" || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
+            download "messages.db" "db" || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
+            download "country.db" "db" || handle_error "ERR_DOWNLOAD" "country.db" "latest"
+            download "packages.db" "db" || handle_error "ERR_DOWNLOAD" "packages.db" "latest"
+
+            check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
             select_country "$lang_code"
+            get_package_manager
             ;;
         light)
             if [ -f "${CACHE_DIR}/country.ch" ]; then
