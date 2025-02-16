@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-00-03"
+SCRIPT_VERSION="2025.02.16-00-04"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -177,12 +177,12 @@ test_debug_functions() {
 # 5. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
 #########################################################################
 script_update() {
-    local version="$1"  # 渡されたローカルのバージョン情報
+    local version="$1"  # ローカルのバージョン情報
     local file_name=$(basename "$0")  # 実行中のスクリプトのファイル名
     local cache_file="${CACHE_DIR}/script.ch"
 
     # GitHub からリモートのバージョンを取得
-    local remote_version=""
+    local remote_version
     remote_version=$(wget -qO- "${BASE_URL}/${file_name}" | grep "^SCRIPT_VERSION=" | cut -d'=' -f2)
 
     if [ -z "$remote_version" ]; then
@@ -190,17 +190,26 @@ script_update() {
         return 1
     fi
 
-    # **バージョン比較処理 (`ash` 互換)**
+    # **バージョン比較 (`ash` 互換)**
     set -- $(echo "$version" | sed 's/[-.]/ /g')
-    local v1_parts=("$@")
+    i=1
+    while [ $i -le 5 ]; do
+        eval "v1_part$i=\${$i:-0}"
+        i=$((i + 1))
+    done
 
     set -- $(echo "$remote_version" | sed 's/[-.]/ /g')
-    local v2_parts=("$@")
+    i=1
+    while [ $i -le 5 ]; do
+        eval "v2_part$i=\${$i:-0}"
+        i=$((i + 1))
+    done
 
-    local i=0
-    while [ $i -lt ${#v1_parts[@]} ] || [ $i -lt ${#v2_parts[@]} ]; do
-        local num_v1="${v1_parts[i]:-0}"
-        local num_v2="${v2_parts[i]:-0}"
+    # 比較ループ
+    i=1
+    while [ $i -le 5 ]; do
+        eval "num_v1=\${v1_part$i:-0}"
+        eval "num_v2=\${v2_part$i:-0}"
 
         if [ "$num_v1" -lt "$num_v2" ]; then
             get_message "MSG_UPDATE_SUCCESS" "$file_name" "$version" "$remote_version"
