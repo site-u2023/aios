@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-01-02"
+COMMON_VERSION="2025.02.15-01-03"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -952,22 +952,24 @@ install_package() {
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
-# Last Update: 2025-02-16 17:00:00 (JST) 🚀
-# "Smart downloads, efficient updates. Precision in every byte."
+# Last Update: 2025-02-16 21:50:00 (JST) 🚀
+# "Precision in every byte, clarity in every log."
 #
 # 【要件】
-# 1. `.sh` (スクリプト) と `.db` (データベース) を統一的に管理する。
-# 2. `script.ch` にバージョンをキャッシュし、変更がある場合のみダウンロード。
-# 3. `debug_log()` を使用し、ダウンロードの進行を `message.db` で管理。
-# 4. 失敗時は3回までリトライし、それでもダメなら `handle_error()` を実行。
-# 5. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
+# 1. `debug_log()` を強化し、ダウンロード処理の詳細を記録する。
+# 2. ダウンロード失敗時に `handle_error()` で適切な処理を実施。
+# 3. `openwrt.db`, `country.db` などのファイルが存在しない場合、適切なメッセージを出力。
+# 4. 影響範囲: `common.sh` の `download()`（矛盾なく適用）。
 #########################################################################
+
 download() {
     local file_name="$1"
     local mode="$2"  # "script" or "db"
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
     local cache_file="${CACHE_DIR}/script.ch"
+
+    debug_log "INFO" "MSG_DOWNLOAD_START" "$file_name"
 
     # 現在のバージョンを取得（キャッシュから）
     local cached_version=""
@@ -979,6 +981,12 @@ download() {
     local remote_version
     remote_version=$(wget -qO- "$remote_url" | grep "^version=" | cut -d'=' -f2)
 
+    if [ -z "$remote_version" ]; then
+        debug_log "ERROR" "ERR_VERSION_FETCH" "$file_name"
+        handle_error "ERR_VERSION_FETCH" "$file_name" "unknown"
+        return 1
+    fi
+
     # 既存バージョンと同じならスキップ
     if [ "$cached_version" = "$remote_version" ] && [ -n "$cached_version" ]; then
         debug_log "INFO" "MSG_SKIPPING_DOWNLOAD" "$file_name" "$cached_version"
@@ -989,7 +997,7 @@ download() {
     local attempt=1
     local success=0
     while [ $attempt -le 3 ]; do
-        debug_log "INFO" "MSG_DOWNLOAD_START" "$file_name"
+        debug_log "INFO" "MSG_DOWNLOAD_ATTEMPT" "$file_name" "$attempt"
         wget -q -O "$install_path" "$remote_url"
 
         if [ $? -eq 0 ]; then
@@ -1174,26 +1182,27 @@ check_option() {
 }
 
 #########################################################################
-# Last Update: 2025-02-16 21:30:00 (JST) 🚀
+# Last Update: 2025-02-16 21:45:00 (JST) 🚀
 # "Ensuring seamless updates, one script at a time."
 #
 # 【要件】
-# 1. `download_script()` を `download()` に置き換え、統合を適用。
-# 2. `download()` の `debug_log()` を適用し、ダウンロード状況を詳細に記録。
-# 3. ダウンロードに失敗した場合は `handle_error()` でエラーハンドリング。
+# 1. `download_script()` を `download()` に統合し、一貫性を確保する。
+# 2. `debug_log()` を強化し、ダウンロード状況を詳細に記録。
+# 3. `download()` のエラーハンドリングを見直し、失敗時の挙動を改善。
 # 4. `openwrt.db`, `messages.db`, `country.db`, `packages.db` を適切にダウンロード。
 # 5. 影響範囲: `common.sh`（矛盾なく適用）。
 #########################################################################
-
 check_common() {
     local lang_code="$SELECTED_LANGUAGE"
     
     debug_log "INFO" "check_common called with lang_code: '$lang_code' and MODE: '$MODE'"
+
     script_update || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
     download "openwrt.db" "db" || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
     download "messages.db" "db" || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
     download "country.db" "db" || handle_error "ERR_DOWNLOAD" "country.db" "latest"
     download "packages.db" "db" || handle_error "ERR_DOWNLOAD" "packages.db" "latest"
+
     check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
 
     case "$MODE" in
@@ -1230,3 +1239,4 @@ check_common() {
             ;;
     esac
 }
+
