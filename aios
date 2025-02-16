@@ -88,8 +88,8 @@ print_banner() {
     color red     "         aaaaa     iiii      oooo     ssssss"
 
     printf "%s\n" "$(color white "$(get_message "MSG_BANNER_DECCRIPTION")")"
-    printf "%s\n" "$(color white "$(get_message "MSG_BANNER_DECCRIPTION")")"
-    printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DECCRIPTION")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_BANNER_NAME")")"
+    printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DISCLAIMER")")"
 }
 
 #################################
