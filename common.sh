@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-01-11"
+COMMON_VERSION="2025.02.15-01-13"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -952,15 +952,15 @@ install_package() {
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
-# Last Update: 2025-02-17 01:00:00 (JST) 🚀
-# "Ensuring compatibility with busybox-wget."
+# Last Update: 2025-02-17 01:15:00 (JST) 🚀
+# "Enhanced debugging for precise issue tracking."
 #
 # 【要件】
-# 1. **`busybox-wget` 互換のため、`--max-redirect=0` を削除。**
-# 2. **`wget` の実行結果を正しく判定し、エラー時の詳細を記録。**
-# 3. **影響範囲: `common.sh` の `download()` のみ。**
+# 1. **`wget` のエラーメッセージを `debug_log()` で記録する。**
+# 2. **ダウンロード後にファイルが存在するかをチェックし、詳細なデバッグログを記録する。**
+# 3. **リモートのバージョン情報 (`remote_version`) が取得できない場合のエラーハンドリングを改善。**
+# 4. **影響範囲: `common.sh` の `download()` のみ（他の関数には影響なし）。**
 #########################################################################
-
 download() {
     local file_name="$1"
     local mode="$2"  # "script" or "db"
@@ -978,6 +978,12 @@ download() {
                 debug_log "DEBUG" "WGET_ERROR: Failed to download $file_name from $remote_url"
             fi
             handle_error "ERR_DOWNLOAD" "$file_name" "unknown"
+            return 1
+        fi
+
+        if [ ! -s "$install_path" ]; then
+            debug_log "ERROR" "ERR_EMPTY_DOWNLOAD" "$file_name"
+            handle_error "ERR_EMPTY_DOWNLOAD" "$file_name" "unknown"
             return 1
         fi
 
@@ -1014,7 +1020,6 @@ download() {
         num_v1=$(echo "$current_version" | cut -d'-' -f"$i")
         num_v2=$(echo "$remote_version" | cut -d'-' -f"$i")
 
-        # 空のフィールドは 0 とする
         [ -z "$num_v1" ] && num_v1=0
         [ -z "$num_v2" ] && num_v2=0
 
