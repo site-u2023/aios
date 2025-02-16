@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-00-00"
+COMMON_VERSION="2025.02.15-00-01"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -1147,7 +1147,6 @@ check_common() {
     download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
     download_script packages.db || handle_error "ERR_DOWNLOAD" "packages.db" "latest"
     check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
-    select_country
 
     # MODE に応じた処理の振り分け
     case "$MODE" in
