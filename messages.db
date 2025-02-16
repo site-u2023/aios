@@ -129,7 +129,7 @@ US|MSG_VERSION_UNSUPPORTED={file} is unsupported ({version}).
 
 # 既存デフォ----------------------------------------------------
 
-# バナー用メッセージ
+# print_banner()
 
 JP|MSG_BANNER=オープンダブルアールティー専用設定ソフトウェア
 US|MSG_BANNER=Dedicated configuration software for OpenWrt
