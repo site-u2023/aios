@@ -1147,8 +1147,8 @@ check_common() {
     download country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
     download packages.db || handle_error "ERR_DOWNLOAD" "packages.db" "latest"
     check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
+    get_package_manager
     select_country
-    #get_package_manager
 
     # MODE に応じた処理の振り分け
     case "$MODE" in
