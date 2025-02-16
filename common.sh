@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-00-01"
+COMMON_VERSION="2025.02.15-01-00"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -989,45 +989,51 @@ handle_exit() {
 
 #########################################################################
 # Last Update: 2025-02-15 10:00:00 (JST) 🚀
-# check_option: コマンドラインオプション解析関数
+# check_option: コマンドラインオプション解析・正規化関数
 #
 # 【概要】
-# この関数は、aios 起動時に渡されたコマンドライン引数を解析し、以下のグローバルオプションを設定します。
+# この関数は、aios 起動時に渡されたコマンドライン引数を解析し、
+# ダッシュ付きの引数はオプションとして解析、非ダッシュ引数はすべて
+# 言語オプションとして扱い、最初に見つかった値を SELECTED_LANGUAGE に設定します。
+#
+# ※ MODE の指定は必ずダッシュ付きで行い、以下の各パターンを受け付けます。
+#     common_full  : -cf, --cf, -common_full, --common_full  → MODE="full"
+#     common_light : -cl, --cl, -ocommon_light, --ocommon_light → MODE="light"
+#     common_debug : -cd, --cd, -common_debug, --common_debug, --ocommon_debug → MODE="debug"
+#     reset        : -r, --r, -reset, --reset, -resrt, --resrt → MODE="reset" および RESET="true"
 #
 # 【対応オプション】
-#  - -h, --help              : ヘルプメッセージを表示して終了
-#  - -v, --version           : スクリプトのバージョン情報を表示して終了
-#  - -d, --debug, --debug1   : デバッグモードを有効にし、DEBUG_LEVEL を "DEBUG" に設定
-#  - --debug2                : DEBUG_LEVEL を "DEBUG2" に設定
-#  - --debug3                : DEBUG_LEVEL を "DEBUG3" に設定
-#  - -m, --mode <mode>       : 動作モードを指定 (full, light, debug)。指定がなければデフォルトは full
-#  - -l, --logfile <path>    : ログ出力先のパスを指定
-#  - -f, --force             : 強制実行モード。確認プロンプトをスキップして処理を実行
-#  - --dry-run               : ドライランモード。実際の変更を行わず、処理内容をシミュレーション表示
-#  - --reset                 : キャッシュ（country.ch、luci.ch、zone.ch など）をリセットする
-#
-# なお、言語オプションは、オプションとして "-" や "--" を付けずに、非オプション引数として
-# 渡され、最初に見つかったものが SELECTED_LANGUAGE に設定されます。
+#  - ヘルプ:         -h, --h, -help, --help, -?, --?  
+#  - バージョン:     -v, --v, -version, --version  
+#  - デバッグ:       -d, --d, -debug, --debug, -d1, --d1  
+#                     → DEBUG_MODE="true", DEBUG_LEVEL="DEBUG"
+#                   -d2, --d2, -debug2, --debug2  
+#                     → DEBUG_MODE="true", DEBUG_LEVEL="DEBUG2"
+#  - モード指定:
+#       - full:       -cf, --cf, -common_full, --common_full  → MODE="full"
+#       - light:      -cl, --cl, -ocommon_light, --ocommon_light → MODE="light"
+#       - debug:      -cd, --cd, -common_debug, --common_debug, --ocommon_debug → MODE="debug"
+#       - reset:      -r, --r, -reset, --reset, -resrt, --resrt → MODE="reset", RESET="true"
+#  - 強制実行:       -f, --f, -force, --force  → FORCE="true"
+#  - ドライラン:     -dr, --dr, -dry-run, --dry-run  → DRY_RUN="true"
+#  - ログ出力先:     -l, --l, -logfile, --logfile <path>  → LOGFILE に指定パス
 #
 # 【仕様】
-# 1. この関数は、渡された引数を解析し、以下のグローバル変数を設定します：
-#      SELECTED_LANGUAGE, DEBUG_MODE, DEBUG_LEVEL, MODE, DRY_RUN, LOGFILE, FORCE, RESET, HELP
-#
-# 2. オプションの位置は自由で、"-" および "--" の両形式が認識されます。
-#
-# 3. チェック後、グローバル変数はエクスポートされ、check_common() や select_country() などで利用されます。
+# 1. ダッシュ付きの引数はオプションとして解析し、非ダッシュ引数はすべて SELECTED_LANGUAGE として扱います。
+# 2. 解析結果はグローバル変数 SELECTED_LANGUAGE, DEBUG_MODE, DEBUG_LEVEL, MODE, DRY_RUN, LOGFILE, FORCE, RESET, HELP としてエクスポートされ、
+#    後続の check_common(), select_country(), debug(), script_version() などに正規化された値として渡されます。
 #
 # 【使用例】
-#   sh aios.sh -d --mode light -l /var/log/aios.log -f --dry-run --reset en
-#    → 言語 "en" が指定され、デバッグモード有効 (DEBUG_LEVEL="DEBUG")、モードは light、
-#       ログ出力先は /var/log/aios.log、強制実行、ドライラン、キャッシュリセットが有効になる。
+#   sh aios.sh -d --dry-run --reset -l /var/log/aios.log -f -cf en
+#    → 言語 "en" が SELECTED_LANGUAGE に設定され、MODE は "full"（-cf等で指定）、デバッグモード有効、
+#       キャッシュリセット、ドライラン、ログ出力先 /var/log/aios.log、強制実行が有効になる。
 #########################################################################
 check_option() {
     # デフォルト値の設定
     SELECTED_LANGUAGE=""
+    MODE="full"   # 内部的 MODE は "full", "light", "debug", "reset"
     DEBUG_MODE="false"
     DEBUG_LEVEL="INFO"
-    MODE="full"
     DRY_RUN="false"
     LOGFILE=""
     FORCE="false"
@@ -1036,39 +1042,62 @@ check_option() {
 
     while [ "$#" -gt 0 ]; do
         case "$1" in
-            -h|--help)
+            # ヘルプ
+            -h|--h|-help|--help|-\?|--\?)
                 HELP="true"
-                shift
-                ;;
-            -v|--version)
-                echo "AIOS version: $AIOS_VERSION"
+                print_help
                 exit 0
                 ;;
-            -d|--debug|-debug|--debug1)
+            # バージョン
+            -v|--v|-version|--version)
+                script_version
+                exit 0
+                ;;
+            # デバッグ（レベル DEBUG）
+            -d|--d|-debug|--debug|-d1|--d1)
                 DEBUG_MODE="true"
                 DEBUG_LEVEL="DEBUG"
                 shift
                 ;;
-            --debug2)
+            # デバッグ（レベル DEBUG2）
+            -d2|--d2|-debug2|--debug2)
                 DEBUG_MODE="true"
                 DEBUG_LEVEL="DEBUG2"
                 shift
                 ;;
-            --debug3)
-                DEBUG_MODE="true"
-                DEBUG_LEVEL="DEBUG3"
+            # モード指定：full
+            -cf|--cf|-common_full|--common_full)
+                MODE="full"
                 shift
                 ;;
-            -m|--mode)
-                if [ -n "$2" ]; then
-                    MODE="$2"
-                    shift 2
-                else
-                    echo "Error: --mode requires an argument (full, light, debug)"
-                    exit 1
-                fi
+            # モード指定：light
+            -cl|--cl|-ocommon_light|--ocommon_light)
+                MODE="light"
+                shift
                 ;;
-            -l|--logfile)
+            # モード指定：debug
+            -cd|--cd|-common_debug|--common_debug|--ocommon_debug)
+                MODE="debug"
+                shift
+                ;;
+            # モード指定：reset
+            -r|--r|-reset|--reset|-resrt|--resrt)
+                MODE="reset"
+                RESET="true"
+                shift
+                ;;
+            # 強制実行
+            -f|--f|-force|--force)
+                FORCE="true"
+                shift
+                ;;
+            # ドライラン
+            -dr|--dr|-dry-run|--dry-run)
+                DRY_RUN="true"
+                shift
+                ;;
+            # ログ出力先
+            -l|--l|-logfile|--logfile)
                 if [ -n "$2" ]; then
                     LOGFILE="$2"
                     shift 2
@@ -1077,25 +1106,12 @@ check_option() {
                     exit 1
                 fi
                 ;;
-            -f|--force)
-                FORCE="true"
-                shift
-                ;;
-            --dry-run)
-                DRY_RUN="true"
-                shift
-                ;;
-            --reset)
-                RESET="true"
-                shift
-                ;;
             -*)
-                # 未知のオプションについては警告して無視
                 echo "Warning: Unknown option: $1" >&2
                 shift
                 ;;
             *)
-                # オプションでない引数は、最初に見つかったものを言語として設定
+                # 非ダッシュ引数はすべて SELECTED_LANGUAGE として扱う
                 if [ -z "$SELECTED_LANGUAGE" ]; then
                     SELECTED_LANGUAGE="$1"
                 fi
@@ -1106,36 +1122,29 @@ check_option() {
 
     export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET HELP
 
-    debug_log "DEBUG" "check_option: SELECTED_LANGUAGE='$SELECTED_LANGUAGE', DEBUG_MODE='$DEBUG_MODE', DEBUG_LEVEL='$DEBUG_LEVEL', MODE='$MODE', DRY_RUN='$DRY_RUN', LOGFILE='$LOGFILE', FORCE='$FORCE', RESET='$RESET', HELP='$HELP'"
+    debug_log "DEBUG" "check_option: SELECTED_LANGUAGE='$SELECTED_LANGUAGE', MODE='$MODE', DEBUG_MODE='$DEBUG_MODE', DEBUG_LEVEL='$DEBUG_LEVEL', DRY_RUN='$DRY_RUN', LOGFILE='$LOGFILE', FORCE='$FORCE', RESET='$RESET', HELP='$HELP'"
 }
 
 #########################################################################
-# Last Update: 2025-02-12 14:35:26 (JST) 🚀
-# "Precision in code, clarity in purpose. Every update refines the path." 
+# Last Update: 2025-02-15 10:00:00 (JST) 🚀
 # check_common: 共通処理の初期化
 #
 # 【要件】
 # 1. 役割:
-#    - `common.sh` のフロー制御を行う
-#    - `select_country()` に言語処理を委ねる（言語処理はここでは行わない）
+#    - common.sh のフロー制御および初期化処理を行う。
+#    - check_option() で解析されたオプションに基づき、後続処理（主に言語選択）を実施する。
 #
 # 2. フロー:
-#    - 第一引数 (`$1`) は動作モード（例: full, light）
-#    - 第二引数 (`$2`) は言語コード（あれば `select_country()` に渡す）
-#    - `$2` が無い場合、`select_country()` によって処理を継続
+#    - 必要なスクリプトやデータベース（openwrt.db, messages.db, country.db, packages.db）の更新を実施。
+#    - OpenWrt バージョンの確認を実施。
+#    - MODE の値に応じた処理を行う：
+#         - reset: キャッシュファイルを削除して「MSG_RESET_COMPLETE」を表示し終了。
+#         - full: select_country() を呼び出す。
+#         - light: country.ch キャッシュが存在すれば国選択をスキップ、なければ select_country() を呼び出す。
+#         - debug: full モードの処理に加えて、追加のデバッグ出力を行い、debug() での内部チェックも実施する。
 #
-# 3. キャッシュ処理:
-#    - 言語キャッシュ (`country.ch`) の有無を `select_country()` に判定させる
-#    - キャッシュがある場合は `normalize_country()` に進む
-#
-# 4. 追加オプション処理:
-#    - `-reset` フラグが指定された場合、キャッシュをリセット
-#    - `-help` フラグが指定された場合、ヘルプメッセージを表示して終了
-#
-# 5. メンテナンス:
-#    - `check_common()` は **フロー制御のみ** を行う
-#    - 言語の選択やキャッシュ管理は **`select_country()` に委ねる**
-#    - 将来的にフローが変更される場合は、ここを修正する
+# 【仕様】
+# - 言語選択は、check_option() で確定された SELECTED_LANGUAGE を、そのまま select_country() に $1 として渡す。
 #########################################################################
 check_common() {
     local lang_code="$SELECTED_LANGUAGE"
@@ -1148,21 +1157,38 @@ check_common() {
     download_script packages.db || handle_error "ERR_DOWNLOAD" "packages.db" "latest"
     check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
 
-    # MODE に応じた処理の振り分け
     case "$MODE" in
+        reset)
+            debug_log "INFO" "Reset mode: Clearing all cache files."
+            rm -f "${CACHE_DIR}/country.ch" \
+                  "${CACHE_DIR}/language.ch" \
+                  "${CACHE_DIR}/luci.ch" \
+                  "${CACHE_DIR}/zone.ch" \
+                  "${CACHE_DIR}/zonename.ch" \
+                  "${CACHE_DIR}/timezone.ch" \
+                  "${CACHE_DIR}/country_success_done" \
+                  "${CACHE_DIR}/timezone_success_done"
+            echo "$(get_message "MSG_RESET_COMPLETE")"
+            exit 0
+            ;;
         full)
-            common_full "$lang_code"
-            select_country
+            select_country "$lang_code"
             ;;
         light)
-            common_light "$lang_code"
+            if [ -f "${CACHE_DIR}/country.ch" ]; then
+                debug_log "INFO" "Country cache found; skipping country selection."
+            else
+                select_country "$lang_code"
+            fi
             ;;
         debug)
-            common_debug "$lang_code"
+            debug_log "DEBUG" "Running in debug mode: Additional debug output enabled."
+            select_country "$lang_code"
+            # ここで必要に応じ debug() を呼び出して内部チェックも実施する
+            debug "DEBUG" "Post country selection debug info..."
             ;;
         *)
-            common_full "$lang_code"
+            select_country "$lang_code"
             ;;
     esac
 }
-
