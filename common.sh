@@ -765,7 +765,7 @@ confirm() {
 # - notset     : package.db での設定適用をスキップ（デフォルト: 適用する）
 # - disabled   : 設定を disabled にする（デフォルト: enabled）
 # - update     : opkg update または apk update を実行（他の場所では update しない）
-# - hidden     : 既にインストール済みの場合のメッセージを非表示にする
+# - hidden     : 既にインストール済みの場合、"パッケージ xxx はすでにインストールされています" のメッセージを非表示にする
 #
 # 【仕様】
 # - downloader_ch から opkg または apk を取得し、適切なパッケージ管理ツールを使用
@@ -783,7 +783,8 @@ confirm() {
 # - install_package ttyd notset           → ttyd をインストール（package.db の適用なし）
 # - install_package ttyd disabled         → ttyd をインストール（設定を disabled にする）
 # - install_package ttyd yn dont disabled hidden
-#   → ttyd をインストール（確認あり、言語パック適用なし、設定を disabled にし、既にインストール済みのメッセージは非表示）
+#   → ttyd をインストール（確認あり、言語パック適用なし、設定を disabled にし、
+#      既にインストール済みの場合のメッセージは非表示）
 #########################################################################
 install_package() {
     local package_name="$1"
@@ -794,7 +795,7 @@ install_package() {
     local skip_lang_pack="no"
     local skip_package_db="no"
     local set_disabled="no"
-    local hidden="no"   # hidden オプション（"yes" の場合、既にインストール済みのメッセージ等の出力を抑制する）
+    local hidden="no"   # hidden オプション：既にインストール済みの場合のメッセージを抑制
 
     for arg in "$@"; do
         case "$arg" in
@@ -802,11 +803,18 @@ install_package() {
             dont) skip_lang_pack="yes" ;;
             notset) skip_package_db="yes" ;;
             disabled) set_disabled="yes" ;;
+            update) 
+                if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+                    opkg update
+                elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+                    apk update
+                fi
+                ;;
             hidden) hidden="yes" ;;
         esac
     done
 
-    # `downloader_ch` からパッケージマネージャーを取得
+    # downloader_ch からパッケージマネージャーを取得
     if [ -f "${BASE_DIR}/downloader_ch" ]; then
         PACKAGE_MANAGER=$(cat "${BASE_DIR}/downloader_ch")
     else
@@ -831,7 +839,7 @@ install_package() {
         fi
     fi
 
-    # インストール確認 (`yn` オプションが指定された場合)
+    # インストール確認 (yn オプションが指定された場合)
     if [ "$confirm_install" = "yes" ]; then
         while true; do
             echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
@@ -845,16 +853,14 @@ install_package() {
         done
     fi
 
-    # パッケージのインストール（if 文でリダイレクトを切り替え）
+    # パッケージのインストール (DEV_NULL に応じて出力制御)
     if [ "$DEV_NULL" = "on" ]; then
-        # サイレントモード
         $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1
     else
-        # 通常モード
         $PACKAGE_MANAGER install "$package_name"
     fi
 
-    # `package.db` の適用 (`notset` オプションがない場合)
+    # package.db の適用 (notset オプションがない場合)
     if [ "$skip_package_db" = "no" ] && grep -q "^$package_name=" "${BASE_DIR}/packages.db"; then
         eval "$(grep "^$package_name=" "${BASE_DIR}/packages.db" | cut -d'=' -f2-)"
     fi
@@ -871,14 +877,13 @@ install_package() {
         fi
     fi
 
-    # 言語パッケージの適用 (`dont` オプションがない場合)
+    # 言語パッケージの適用 (dont オプションがない場合)
     if [ "$skip_lang_pack" = "no" ] && echo "$package_name" | grep -qE '^luci-app-'; then
         local lang_code
         lang_code=$(cat "${CACHE_DIR}/luci.ch" 2>/dev/null || echo "en")
         local lang_package="luci-i18n-${package_name#luci-app-}-$lang_code"
 
         if [ "$DEV_NULL" = "on" ]; then
-            # サイレントで list を確認
             if $PACKAGE_MANAGER list > /dev/null 2>&1 | grep -q "^$lang_package "; then
                 install_package "$lang_package" hidden
             else
@@ -891,7 +896,6 @@ install_package() {
                 fi
             fi
         else
-            # 通常モード
             if $PACKAGE_MANAGER list | grep -q "^$lang_package "; then
                 install_package "$lang_package"
             else
