@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-01-03"
+COMMON_VERSION="2025.02.15-01-04"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -952,34 +952,47 @@ install_package() {
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
-# Last Update: 2025-02-16 21:50:00 (JST) 🚀
-# "Precision in every byte, clarity in every log."
+# Last Update: 2025-02-16 22:30:00 (JST) 🚀
+# "If it exists, check; if it doesn’t, fetch."
 #
 # 【要件】
-# 1. `debug_log()` を強化し、ダウンロード処理の詳細を記録する。
-# 2. ダウンロード失敗時に `handle_error()` で適切な処理を実施。
-# 3. `openwrt.db`, `country.db` などのファイルが存在しない場合、適切なメッセージを出力。
-# 4. 影響範囲: `common.sh` の `download()`（矛盾なく適用）。
+# 1. **ファイルが存在しない場合、無条件でダウンロード。**
+# 2. **ファイルが存在する場合、バージョンチェックを行い、異なる場合のみダウンロード。**
+# 3. **ダウンロードに失敗した場合、`handle_error()` で適切な処理を実施。**
+# 4. **影響範囲: `common.sh` の `download()`（矛盾なく適用）。**
 #########################################################################
-
 download() {
     local file_name="$1"
     local mode="$2"  # "script" or "db"
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
-    local cache_file="${CACHE_DIR}/script.ch"
 
     debug_log "INFO" "MSG_DOWNLOAD_START" "$file_name"
 
-    # 現在のバージョンを取得（キャッシュから）
-    local cached_version=""
-    if [ -f "$cache_file" ] && grep -q "^$file_name=" "$cache_file"; then
-        cached_version=$(grep "^$file_name=" "$cache_file" | cut -d'=' -f2)
+    # **ファイルがない場合、無条件でダウンロード**
+    if [ ! -f "$install_path" ]; then
+        debug_log "INFO" "MSG_FILE_NOT_FOUND" "$file_name"
+        wget --max-redirect=0 -q -O "$install_path" "$remote_url" 2>/tmp/wget_error.log
+
+        if [ $? -ne 0 ]; then
+            debug_log "ERROR" "ERR_DOWNLOAD" "$file_name"
+            handle_error "ERR_DOWNLOAD" "$file_name" "unknown"
+            return 1
+        fi
+
+        debug_log "INFO" "MSG_DOWNLOAD_SUCCESS" "$file_name"
+        return 0
     fi
 
-    # リモートのバージョンを取得
+    # **現在のバージョンを取得**
+    local current_version=""
+    if [ -f "$install_path" ]; then
+        current_version=$(grep "^version=" "$install_path" | cut -d'=' -f2)
+    fi
+
+    # **リモートのバージョンを取得**
     local remote_version
-    remote_version=$(wget -qO- "$remote_url" | grep "^version=" | cut -d'=' -f2)
+    remote_version=$(wget --max-redirect=0 -qO- "$remote_url" | grep "^version=" | cut -d'=' -f2)
 
     if [ -z "$remote_version" ]; then
         debug_log "ERROR" "ERR_VERSION_FETCH" "$file_name"
@@ -987,32 +1000,35 @@ download() {
         return 1
     fi
 
-    # 既存バージョンと同じならスキップ
-    if [ "$cached_version" = "$remote_version" ] && [ -n "$cached_version" ]; then
-        debug_log "INFO" "MSG_SKIPPING_DOWNLOAD" "$file_name" "$cached_version"
+    # **バージョン比較：同じならスキップ**
+    if [ "$current_version" = "$remote_version" ] && [ -n "$current_version" ]; then
+        debug_log "INFO" "MSG_SKIPPING_DOWNLOAD" "$file_name" "$current_version"
         return 0
     fi
 
-    # ダウンロード試行（最大3回）
+    # **ダウンロード試行（最大3回）**
     local attempt=1
     local success=0
     while [ $attempt -le 3 ]; do
         debug_log "INFO" "MSG_DOWNLOAD_ATTEMPT" "$file_name" "$attempt"
-        wget -q -O "$install_path" "$remote_url"
+
+        wget --max-redirect=0 -q -O "$install_path" "$remote_url" 2>/tmp/wget_error.log
 
         if [ $? -eq 0 ]; then
             success=1
             break
         else
             debug_log "WARN" "MSG_DOWNLOAD_RETRY" "$file_name" "$attempt"
+            cat /tmp/wget_error.log | while read -r line; do
+                debug_log "WARN" "WGET ERROR: $line"
+            done
             attempt=$((attempt + 1))
             sleep 1
         fi
     done
 
-    # 成功判定
+    # **成功判定**
     if [ $success -eq 1 ]; then
-        echo "$file_name=$remote_version" >> "$cache_file"
         debug_log "INFO" "MSG_UPDATE_SUCCESS" "$file_name" "$remote_version"
     else
         handle_error "ERR_DOWNLOAD" "$file_name" "$remote_version"
