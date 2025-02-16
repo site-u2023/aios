@@ -3,7 +3,7 @@
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
 
-AIOS_VERSION="2025.02.16-2"
+AIOS_VERSION="2025.02.16-3"
 echo -e "\033[7;40maios Updated to version $AIOS_VERSION \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -99,11 +99,11 @@ print_banner() {
 #################################
 packages() {
 # ttyd
-install_package ttyd yn 
-install_package luci-app-ttyd yn
+install_package ttyd yn hidden
+install_package luci-app-ttyd yn hidden
 
 # openssh-sftp-server
-install_package openssh-sftp-server yn 
+install_package openssh-sftp-server yn hidden
 }
 
 #################################
