@@ -190,21 +190,32 @@ script_update() {
         return 1
     fi
 
-    # バージョン比較
-    compare_versions_ash "$version" "$remote_version"
-    if [ $? -eq 1 ]; then
-        get_message "MSG_UPDATE_SUCCESS" "$file_name" "$version" "$remote_version"
-        
-        # `download()` 関数を呼び出して更新
-        download "$file_name" "script"
+    # **バージョン比較処理 (`ash` 互換)**
+    set -- $(echo "$version" | sed 's/[-.]/ /g')
+    local v1_parts=("$@")
 
-        # キャッシュを更新
-        sed -i "/^$file_name=/d" "$cache_file"
-        echo "$file_name=$remote_version" >> "$cache_file"
-    else
-        get_message "MSG_SKIPPING_DOWNLOAD" "$file_name" "$version"
-    fi
+    set -- $(echo "$remote_version" | sed 's/[-.]/ /g')
+    local v2_parts=("$@")
 
+    local i=0
+    while [ $i -lt ${#v1_parts[@]} ] || [ $i -lt ${#v2_parts[@]} ]; do
+        local num_v1="${v1_parts[i]:-0}"
+        local num_v2="${v2_parts[i]:-0}"
+
+        if [ "$num_v1" -lt "$num_v2" ]; then
+            get_message "MSG_UPDATE_SUCCESS" "$file_name" "$version" "$remote_version"
+            download "$file_name" "script"
+
+            # キャッシュを更新
+            sed -i "/^$file_name=/d" "$cache_file"
+            echo "$file_name=$remote_version" >> "$cache_file"
+            return 0
+        fi
+
+        i=$((i + 1))
+    done
+
+    get_message "MSG_SKIPPING_DOWNLOAD" "$file_name" "$version"
     return 0
 }
 
