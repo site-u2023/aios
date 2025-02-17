@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-02-03"
+SCRIPT_VERSION="2025.02.16-02-05"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1272,6 +1272,7 @@ handle_exit() {
 #       キャッシュリセット、ドライラン、ログ出力先 /var/log/aios.log、強制実行が有効になる。
 #########################################################################
 check_option() {
+    debug_log "DEBUG" "check_option received before args: $*"
     # デフォルト値の設定
     SELECTED_LANGUAGE=""
     MODE="full"   # 内部的 MODE は "full", "light", "debug", "reset"
@@ -1283,6 +1284,8 @@ check_option() {
     RESET="false"
     HELP="false"
 
+    debug_log "DEBUG" "check_option received after args: $*"
+    
     while [ "$#" -gt 0 ]; do
         case "$1" in
             # ヘルプ
@@ -1412,6 +1415,7 @@ check_common() {
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
             get_package_manager
             debug_log "DEBUG" "About to call select_country() with lang_code: '$lang_code'"
+            debug_log "DEBUG" "select_country() call: lang_code='$lang_code'"
             select_country "$lang_code"
             debug_log "DEBUG" "Returned from select_country()"
             ;;
