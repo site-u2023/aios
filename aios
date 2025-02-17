@@ -77,7 +77,7 @@ make_directory
 download_common
 
 # **引数を整理**
-check_option "$@"
+check_common "$@"
 
 # バナー & インストール
 print_banner
