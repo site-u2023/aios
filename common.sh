@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-02-10"
+SCRIPT_VERSION="2025.02.16-02-11"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1272,10 +1272,8 @@ handle_exit() {
 #       キャッシュリセット、ドライラン、ログ出力先 /var/log/aios.log、強制実行が有効になる。
 #########################################################################
 check_option() {
-    debug_log "DEBUG" "check_option received before args: $*"
+    debug_log DEBUG "check_option received before args: $*"
 
-    check_common "${@:-}"
-    
     # デフォルト値の設定
     SELECTED_LANGUAGE=""
     MODE="full"
@@ -1287,6 +1285,11 @@ check_option() {
     RESET="false"
     HELP="false"
 
+    # 一時変数
+    local positional_args=()  # 言語などの非オプション引数を格納
+    local options_args=()     # オプション引数を格納
+
+    # 引数を分類する（順不同対応）
     while [ "$#" -gt 0 ]; do
         case "$1" in
             -h|--h|-help|--help|-\?|--\?)
@@ -1301,50 +1304,43 @@ check_option() {
             -d|--d|-debug|--debug|-d1|--d1)
                 DEBUG_MODE="true"
                 DEBUG_LEVEL="DEBUG"
-                shift
-                if [ -n "$1" ] && ! echo "$1" | grep -q "^-"; then
-                    SELECTED_LANGUAGE="$1"
-                    shift
-                fi
+                options_args+=("$1")
                 ;;
             -d2|--d2|-debug2|--debug2)
                 DEBUG_MODE="true"
                 DEBUG_LEVEL="DEBUG2"
-                shift
-                if [ -n "$1" ] && ! echo "$1" | grep -q "^-"; then
-                    SELECTED_LANGUAGE="$1"
-                    shift
-                fi
+                options_args+=("$1")
                 ;;
             -cf|--cf|-common_full|--common_full)
                 MODE="full"
-                shift
+                options_args+=("$1")
                 ;;
             -cl|--cl|-ocommon_light|--ocommon_light)
                 MODE="light"
-                shift
+                options_args+=("$1")
                 ;;
             -cd|--cd|-common_debug|--common_debug|--ocommon_debug)
                 MODE="debug"
-                shift
+                options_args+=("$1")
                 ;;
             -r|--r|-reset|--reset|-resrt|--resrt)
                 MODE="reset"
                 RESET="true"
-                shift
+                options_args+=("$1")
                 ;;
             -f|--f|-force|--force)
                 FORCE="true"
-                shift
+                options_args+=("$1")
                 ;;
             -dr|--dr|-dry-run|--dry-run)
                 DRY_RUN="true"
-                shift
+                options_args+=("$1")
                 ;;
             -l|--l|-logfile|--logfile)
-                if [ -n "$2" ]; then
+                if [ -n "$2" ] && ! echo "$2" | grep -q "^-"; then
                     LOGFILE="$2"
-                    shift 2
+                    options_args+=("$1" "$2")
+                    shift
                 else
                     echo "Error: --logfile requires a path argument"
                     exit 1
@@ -1352,21 +1348,27 @@ check_option() {
                 ;;
             -*)
                 echo "Warning: Unknown option: $1" >&2
-                shift
+                options_args+=("$1")
                 ;;
             *)
-                if [ -z "$SELECTED_LANGUAGE" ]; then
-                    SELECTED_LANGUAGE="$1"
-                fi
-                shift
+                positional_args+=("$1")  # 言語コードなどの通常引数
                 ;;
         esac
+        shift
     done
 
+    # SELECTED_LANGUAGEを確定（最初の非オプション引数）
+    if [ "${#positional_args[@]}" -gt 0 ]; then
+        SELECTED_LANGUAGE="${positional_args[0]}"
+    fi
+
+    # 確定した設定を環境変数にエクスポート
     export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET HELP
 
-    debug_log "DEBUG" "check_option: SELECTED_LANGUAGE='$SELECTED_LANGUAGE', MODE='$MODE', DEBUG_MODE='$DEBUG_MODE', DEBUG_LEVEL='$DEBUG_LEVEL', DRY_RUN='$DRY_RUN', LOGFILE='$LOGFILE', FORCE='$FORCE', RESET='$RESET', HELP='$HELP'"
+    # デバッグログ出力
+    debug_log DEBUG "check_option: SELECTED_LANGUAGE='$SELECTED_LANGUAGE', MODE='$MODE', DEBUG_MODE='$DEBUG_MODE', DEBUG_LEVEL='$DEBUG_LEVEL', DRY_RUN='$DRY_RUN', LOGFILE='$LOGFILE', FORCE='$FORCE', RESET='$RESET', HELP='$HELP'"
 
+    # check_common() に渡す
     check_common "$SELECTED_LANGUAGE"
 }
 
