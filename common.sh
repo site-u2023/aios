@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-01-05"
+SCRIPT_VERSION="2025.02.16-01-07"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -428,7 +428,7 @@ get_message() {
         fi
         # それでも見つからなければ、キーそのままとし、デバッグログを出す
         if [ -z "$message" ]; then
-            debug_log "Message key '$key' not found in messages.db."
+            debug_log "INFO" "Message key '$key' not found in messages.db."
             message="$key"
         fi
     fi
@@ -467,8 +467,7 @@ get_message() {
 #        ├─ なし → 言語選択を実行
 #########################################################################
 select_country() {
-    debug_log "INFO" "Entering select_country() with arg: '$1'"
-    echo "DEBUG: select_country called with lang_code: '$1'"
+    debug_log "DEBUG" "Entering select_country() with arg: '$1'"
     
     local cache_country="${CACHE_DIR}/country.ch"
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
