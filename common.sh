@@ -1291,12 +1291,11 @@ check_common() {
             ;;
         full)
             debug_log "INFO" "check_common called with lang_code: '$lang_code' and MODE: '$MODE'"
-            script_update "$SCRIPT_VERSION" || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
-            download "messages.db" "db" || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
+            script_update "$SCRIPT_VERSION" || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"  
             download "openwrt.db" "db" || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
             download "country.db" "db" || handle_error "ERR_DOWNLOAD" "country.db" "latest"
             download "packages.db" "db" || handle_error "ERR_DOWNLOAD" "packages.db" "latest"
-
+            download "messages.db" "db" || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
             get_package_manager
             debug_log "DEBUG" "Calling select_country() with lang_code: '$lang_code'"
