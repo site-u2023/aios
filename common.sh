@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-02-00"
+SCRIPT_VERSION="2025.02.16-02-02"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -493,6 +493,52 @@ get_message() {
 #        ├─ なし → 言語選択を実行
 #########################################################################
 select_country() {
+    debug_log "DEBUG" "Entering select_country() with arg: '$1'"
+    
+    local cache_country="${CACHE_DIR}/country.ch"
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
+
+
+    if [ -f "$cache_country" ]; then
+        debug_log "INFO" "Country cache found. Skipping selection."
+        select_zone
+        return
+    fi
+
+    while true; do
+        printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_COUNTRY")")"
+        printf "%s" "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
+        read -r input
+        
+        # 入力の正規化: "/", ",", "_" をスペースに置き換え
+        local cleaned_input
+        cleaned_input=$(echo "$input" | sed 's/[\/,_]/ /g')
+        
+        # 完全一致を優先
+        local search_results
+        search_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} 
+            { key = $2" "$3" "$4" "$5; if ($0 ~ search && !seen[key]++) print $0 }' "$BASE_DIR/country.db")
+
+
+        # 完全一致がない場合、部分一致を検索
+        if [ -z "$search_results" ]; then
+            search_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} 
+                { for (i=2; i<=NF; i++) if ($i ~ search) print $0 }' "$BASE_DIR/country.db")
+        fi
+
+        if [ -z "$search_results" ]; then
+            printf "%s\n" "$(color red "Error: No matching country found for '$input'. Please try again.")"
+            continue
+        fi
+
+        selection_list "$search_results" "$tmp_country" "country"
+        country_write
+        select_zone
+        return
+    done
+}
+
+BAK_select_country() {
     debug_log "DEBUG" "Entering select_country() with arg: '$1'"
     
     local cache_country="${CACHE_DIR}/country.ch"
@@ -1366,6 +1412,7 @@ check_common() {
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
             get_package_manager
             select_country "$lang_code"
+            debug_log "DEBUG" "Calling select_country() with lang_code: '$lang_code'"
             ;;
         light)
             if [ -f "${CACHE_DIR}/country.ch" ]; then
