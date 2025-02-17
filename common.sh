@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-02-20"
+SCRIPT_VERSION="2025.02.16-02-21"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -214,14 +214,15 @@ script_update() {
         MSG_SKIPPING_DOWNLOAD="Skipping download: {file} is up-to-date."
     fi
 
-    # GitHub からリモートのバージョンを取得
+    # GitHub からリモートのバージョンを取得（`cut` の代わりに `awk` を使用）
     local remote_version
-    remote_version=$(wget -qO- "${BASE_URL}/${file_name}" | grep "^SCRIPT_VERSION=" | cut -d'=' -f2)
+    remote_version=$(wget -qO- "${BASE_URL}/${file_name}" | awk -F'=' '/^SCRIPT_VERSION=/ {print $2}')
 
-    if [ $? -ne 0 ] || [ -z "$remote_version" ]; then
-        debug_log "ERROR" "Failed to fetch remote version of $file_name. Downloading latest version."
+    # 取得失敗時の処理
+    if [ -z "$remote_version" ]; then
+        debug_log "ERROR" "Version information for $file_name not found. Proceeding with download."
         download "$file_name" "script"
-        sed -i "/^$file_name=/d" "$cache_file"
+        grep -v "^$file_name=" "$cache_file" > "${cache_file}.tmp" && mv "${cache_file}.tmp" "$cache_file"
         echo "$file_name=unknown" >> "$cache_file"
         return 0
     fi
@@ -252,7 +253,7 @@ script_update() {
         if [ "$num_v1" -lt "$num_v2" ]; then
             debug_log "INFO" "Updating $file_name to version $remote_version."
             download "$file_name" "script"
-            sed -i "/^$file_name=/d" "$cache_file"
+            grep -v "^$file_name=" "$cache_file" > "${cache_file}.tmp" && mv "${cache_file}.tmp" "$cache_file"
             echo "$file_name=$remote_version" >> "$cache_file"
             return 0
         fi
