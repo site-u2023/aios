@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-02-11"
+SCRIPT_VERSION="2025.02.16-02-12"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1285,11 +1285,7 @@ check_option() {
     RESET="false"
     HELP="false"
 
-    # 一時変数
-    local positional_args=()  # 言語などの非オプション引数を格納
-    local options_args=()     # オプション引数を格納
-
-    # 引数を分類する（順不同対応）
+    # 言語およびオプション引数の処理
     while [ "$#" -gt 0 ]; do
         case "$1" in
             -h|--h|-help|--help|-\?|--\?)
@@ -1304,42 +1300,33 @@ check_option() {
             -d|--d|-debug|--debug|-d1|--d1)
                 DEBUG_MODE="true"
                 DEBUG_LEVEL="DEBUG"
-                options_args+=("$1")
                 ;;
             -d2|--d2|-debug2|--debug2)
                 DEBUG_MODE="true"
                 DEBUG_LEVEL="DEBUG2"
-                options_args+=("$1")
                 ;;
             -cf|--cf|-common_full|--common_full)
                 MODE="full"
-                options_args+=("$1")
                 ;;
             -cl|--cl|-ocommon_light|--ocommon_light)
                 MODE="light"
-                options_args+=("$1")
                 ;;
             -cd|--cd|-common_debug|--common_debug|--ocommon_debug)
                 MODE="debug"
-                options_args+=("$1")
                 ;;
             -r|--r|-reset|--reset|-resrt|--resrt)
                 MODE="reset"
                 RESET="true"
-                options_args+=("$1")
                 ;;
             -f|--f|-force|--force)
                 FORCE="true"
-                options_args+=("$1")
                 ;;
             -dr|--dr|-dry-run|--dry-run)
                 DRY_RUN="true"
-                options_args+=("$1")
                 ;;
             -l|--l|-logfile|--logfile)
-                if [ -n "$2" ] && ! echo "$2" | grep -q "^-"; then
+                if [ -n "$2" ] && [ "${2#-}" != "$2" ]; then
                     LOGFILE="$2"
-                    options_args+=("$1" "$2")
                     shift
                 else
                     echo "Error: --logfile requires a path argument"
@@ -1348,27 +1335,23 @@ check_option() {
                 ;;
             -*)
                 echo "Warning: Unknown option: $1" >&2
-                options_args+=("$1")
                 ;;
             *)
-                positional_args+=("$1")  # 言語コードなどの通常引数
+                if [ -z "$SELECTED_LANGUAGE" ]; then
+                    SELECTED_LANGUAGE="$1"
+                fi
                 ;;
         esac
         shift
     done
 
-    # SELECTED_LANGUAGEを確定（最初の非オプション引数）
-    if [ "${#positional_args[@]}" -gt 0 ]; then
-        SELECTED_LANGUAGE="${positional_args[0]}"
-    fi
-
-    # 確定した設定を環境変数にエクスポート
+    # 環境変数として設定
     export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET HELP
 
-    # デバッグログ出力
+    # デバッグ情報を出力
     debug_log DEBUG "check_option: SELECTED_LANGUAGE='$SELECTED_LANGUAGE', MODE='$MODE', DEBUG_MODE='$DEBUG_MODE', DEBUG_LEVEL='$DEBUG_LEVEL', DRY_RUN='$DRY_RUN', LOGFILE='$LOGFILE', FORCE='$FORCE', RESET='$RESET', HELP='$HELP'"
 
-    # check_common() に渡す
+    # 設定された言語を `check_common()` に渡す
     check_common "$SELECTED_LANGUAGE"
 }
 
@@ -1386,9 +1369,9 @@ check_option() {
 check_common() {
     local lang_code="$1"
     local mode="${2:-full}" 
-    
+
     echo "🔍 MODE: $MODE"
-    
+
     case "$MODE" in
         reset)
             debug_log "INFO" "Reset mode: Clearing all cache files."
@@ -1413,8 +1396,7 @@ check_common() {
 
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
             get_package_manager
-            debug_log "DEBUG" "About to call select_country() with lang_code: '$lang_code'"
-            debug_log "DEBUG" "select_country() call: lang_code='$lang_code'"
+            debug_log "DEBUG" "Calling select_country() with lang_code: '$lang_code'"
             select_country "$lang_code"
             debug_log "DEBUG" "Returned from select_country()"
             ;;
@@ -1428,11 +1410,10 @@ check_common() {
         debug)
             debug_log "DEBUG" "Running in debug mode: Additional debug output enabled."
             select_country "$lang_code"
-            debug "DEBUG" "Post country selection debug info..."
+            debug_log "DEBUG" "Post country selection debug info..."
             ;;
         *)
             select_country "$lang_code"
             ;;
     esac
 }
-
