@@ -1191,12 +1191,12 @@ check_common() {
             exit 0
             ;;
         full)
-            check_openwrt
-            check_downloader
             download "openwrt.db"
             download "country.db"
             download "packages.db"
             download "messages.db"
+            check_openwrt
+            check_downloader
             select_country "$lang_code"
             ;;
         light)
