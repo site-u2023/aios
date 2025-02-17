@@ -1,10 +1,10 @@
 # メッセージデータベース (多言語対応)
 # フォーマット: 言語コード|メッセージキー=メッセージ
 
-SCRIPT_VERSION="2025.02.16-02-20"
-echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION messages.db \033[0m"
+# SCRIPT_VERSION="2025.02.16-02-20"
+# echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION messages.db \033[0m"
 
-SUPPORTED_LANGUAGES="US JP" 
+# SUPPORTED_LANGUAGES="US JP" 
 
 # 😃 🤣 🤩 🤪 🫥 🤢 🥵 🥶 😱 💀 🤡 👹 👺 👻 👽 👾 🤖 💯 💢 💥 💬 💤
 
