@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-01-07"
+SCRIPT_VERSION="2025.02.16-01-08"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -72,6 +72,25 @@ debug_log() {
     local message_key="$2"
     local file="$3"
     local version="$4"
+
+    # もし `$1` にログレベル (DEBUG/INFO/WARN/ERROR) が含まれていなかったら、デフォルトで DEBUG にする
+    case "$level" in
+        "DEBUG"|"INFO"|"WARN"|"ERROR") ;;  # 何もしない (正しいログレベル)
+        "")
+            # `$1` が空なら `$2` をメッセージとして扱い、デフォルトを DEBUG にする
+            level="DEBUG"
+            message_key="$1"
+            file="$2"
+            version="$3"
+            ;;
+        *)
+            # `$1` にログレベルが指定されていなかった場合、デフォルトを DEBUG にする
+            message_key="$1"
+            file="$2"
+            version="$3"
+            level="DEBUG"
+            ;;
+    esac
 
     # メッセージ取得
     local message
