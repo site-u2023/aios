@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-02-15"
+SCRIPT_VERSION="2025.02.16-02-16"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1097,36 +1097,30 @@ download() {
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
 
-    # ログ出力関数 (デバッグモード時のみ)
-    log_debug() {
-        if [ "$DEBUG_MODE" = "true" ]; then
-            local message="$1"
-            echo "[DEBUG] $(date '+%Y-%m-%d %H:%M:%S') - $message" | tee -a "$LOG_DIR/debug.log"
-        fi
-    }
-
-    # ダウンロード開始 (デバッグモード時のみ出力)
-    log_debug "Starting download of ${file_name} from ${remote_url}"
+    # ダウンロード開始ログ
+    debug_log "DEBUG" "Starting download of ${file_name} from ${remote_url}"
 
     # `wget` でダウンロード実行
     wget -q -O "$install_path" "$remote_url"
-    WGET_STATUS=$?
+    local wget_status=$?
 
     # `wget` の成功/失敗をログに記録
-    if [ "$WGET_STATUS" -eq 0 ]; then
-        log_debug "Download successful: ${file_name}"
+    if [ "$wget_status" -eq 0 ]; then
+        debug_log "DEBUG" "Download successful: ${file_name}"
     else
-        log_debug "Download failed: ${file_name} (wget exit code: $WGET_STATUS)"
+        debug_log "ERROR" "Download failed: ${file_name} (wget exit code: $wget_status)"
+        return 1  # 失敗時は return 1
     fi
 
     # ダウンロードしたファイルのサイズ確認
     if [ ! -s "$install_path" ]; then
-        log_debug "Download failed: ${file_name} is empty."
-    else
-        log_debug "Download completed: ${file_name} is valid."
+        debug_log "ERROR" "Download failed: ${file_name} is empty."
+        return 1  # 空ファイルだった場合も return 1
     fi
-}
 
+    debug_log "INFO" "Download completed: ${file_name} is valid."
+    return 0
+}
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
