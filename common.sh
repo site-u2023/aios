@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-03-05"
+SCRIPT_VERSION="2025.02.16-03-06"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -212,33 +212,32 @@ script_update() {
     local file_name="$2"
     local cache_file="${CACHE_DIR}/script.ch"
 
-    # キャッシュディレクトリの作成
+    # キャッシュディレクトリを作成
     mkdir -p "${CACHE_DIR}"
 
-    # デフォルトの仮バージョンを設定
+    # デフォルトの仮バージョン
     local default_version="2020.01.01-00-00"
 
-    # リモートのバージョンを取得
+    # `wget` を使用して直接 `SCRIPT_VERSION` を取得
     local remote_version
     remote_version=$(wget -qO- --no-check-certificate "${BASE_URL}/${file_name}" | grep "^SCRIPT_VERSION=" | cut -d'=' -f2 | tr -d '"')
 
-    # `wget` 失敗時の処理
-    if [ $? -ne 0 ]; then
-        debug_log "ERROR" "Failed to fetch remote version for $file_name. Skipping update check."
-        return 0
-    fi
-
-    # `SCRIPT_VERSION` が見つからなかった場合の処理
+    # `wget` 失敗時または `SCRIPT_VERSION` が取得できなかった場合
     if [ -z "$remote_version" ]; then
         debug_log "WARN" "SCRIPT_VERSION not found in $file_name. Using default version ($default_version)."
         remote_version="$default_version"
     fi
 
-    # バージョン情報のデバッグログ
+    # **キャッシュ (`script.ch`) に書き込み**
+    sed -i "/^$file_name=/d" "$cache_file" 2>/dev/null
+    echo "$file_name=$remote_version" >> "$cache_file"
+
+    # **デバッグログ**
     debug_log "DEBUG" "Local version: $version"
     debug_log "DEBUG" "Remote version: $remote_version"
+    debug_log "DEBUG" "Cached version for $file_name: $remote_version"
 
-    # バージョン比較（仮のバージョンを持つ場合でも通常処理）
+    # **バージョン比較**
     local v1_parts v2_parts
     v1_parts=$(echo "$version" | sed 's/[-.]/ /g')
     v2_parts=$(echo "$remote_version" | sed 's/[-.]/ /g')
