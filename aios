@@ -13,7 +13,7 @@ DEV_NULL="${DEV_NULL:-on}"
 # unset DEV_NULL
 
 # 基本定数の設定 
-INPUT_LANG="${1:-}"
+INPUT_LANG="${@:-}"
 BASE_WGET="${BASE_WGET:-wget -q -O}"
 # BASE_WGET="${BASE_WGET:-wget -O}"
 BIN_PATH="/usr/bin/aios"
