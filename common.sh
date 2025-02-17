@@ -1208,7 +1208,7 @@ check_common() {
             download "openwrt.db"
             download "country.db"
             download "packages.db"
-            #download "messages.db"
+            download "messages.db"
             check_openwrt
             check_downloader
             echo "${lang_code}"
