@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-03-03"
+SCRIPT_VERSION="2025.02.16-03-04"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -212,37 +212,37 @@ script_update() {
     local file_name="$2"
     local cache_file="${CACHE_DIR}/script.ch"
 
-    # メッセージデータベースの存在確認
-    if [ ! -f "${BASE_DIR}/messages.db" ]; then
-        MSG_VERSION_FETCH_FAIL="Error: Failed to fetch remote version."
-        MSG_UPDATE_SUCCESS="Updated to version {version} of {file}."
-        MSG_SKIPPING_DOWNLOAD="Skipping download: {file} is up-to-date."
-    fi
+    # キャッシュディレクトリが存在しない場合は作成
+    mkdir -p "${CACHE_DIR}"
 
-    # GitHub からリモートのバージョンを取得
+    # リモートのバージョンを取得
     local remote_version
     remote_version=$(wget -qO- --no-check-certificate "${BASE_URL}/${file_name}" | grep "^SCRIPT_VERSION=" | cut -d'=' -f2 | tr -d '"')
 
-    # `wget` が失敗した場合
+    # `wget` 失敗時の処理
     if [ $? -ne 0 ]; then
-        debug_log "ERROR" "Failed to fetch remote version for $file_name. Downloading latest version."
-        download "$file_name" "script"
+        debug_log "ERROR" "Failed to fetch remote version for $file_name. Skipping update check."
         return 0
     fi
 
-    # 取得失敗時の処理
+    # `SCRIPT_VERSION` が見つからなかった場合の処理
     if [ -z "$remote_version" ]; then
-        debug_log "ERROR" "Version information for $file_name not found. Proceeding with forced download."
-        download "$file_name" "script"
-        echo "$file_name=unknown" >> "$cache_file"
-        return 0
+        debug_log "WARN" "SCRIPT_VERSION not found in $file_name. Marking as 'unknown'."
+        remote_version="unknown"
     fi
 
-    # **バージョン情報のデバッグログ**
+    # バージョン情報のデバッグログ
     debug_log "DEBUG" "Local version: $version"
     debug_log "DEBUG" "Remote version: $remote_version"
 
-    # **バージョン比較 (`ash` 互換)**
+    # バージョン比較
+    if [ "$version" = "unknown" ] || [ "$remote_version" = "unknown" ]; then
+        debug_log "INFO" "Skipping version check for $file_name (no valid version information)."
+        echo "$file_name=$remote_version" >> "$cache_file"
+        return 0
+    fi
+
+    # バージョンの分割処理
     local v1_parts v2_parts
     v1_parts=$(echo "$version" | sed 's/[-.]/ /g')
     v2_parts=$(echo "$remote_version" | sed 's/[-.]/ /g')
