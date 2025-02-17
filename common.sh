@@ -313,9 +313,9 @@ check_openwrt() {
 }
 
 #########################################################################
-# get_package_manager: パッケージマネージャー判定（apk / opkg 対応）
+# check_downloader: パッケージマネージャー判定（apk / opkg 対応）
 #########################################################################
-get_package_manager() {
+check_downloader() {
     if [ -f "${BASE_DIR}/downloader_ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
     else
@@ -1196,7 +1196,7 @@ check_common() {
             download "packages.db"
             download "messages.db"
             check_openwrt
-            get_package_manager
+            check_downloader
             select_country "$lang_code"
             ;;
         light)
