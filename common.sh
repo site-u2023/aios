@@ -356,7 +356,7 @@ check_openwrt() {
 #########################################################################
 get_package_manager() {
     if [ -f "${BASE_DIR}/downloader_ch" ]; then
-        PACKAGE_MANAGER=$(cat "${BASE_DIR}/downloader_ch")
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
     else
         if command -v apk >/dev/null 2>&1; then
             PACKAGE_MANAGER="apk"
@@ -365,7 +365,7 @@ get_package_manager() {
         else
             PACKAGE_MANAGER="opkg"  # デフォルトをセット
         fi
-        echo "$PACKAGE_MANAGER" > "${BASE_DIR}/downloader_ch"
+        echo "$PACKAGE_MANAGER" > "${CACHE_DIR}/downloader_ch"
     fi
 }
 
