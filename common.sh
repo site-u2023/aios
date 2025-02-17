@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-02-12"
+SCRIPT_VERSION="2025.02.16-02-13"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1096,113 +1096,32 @@ download() {
     local file_name="$1"
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
-    local wget_log_file="${LOG_DIR}/wget_error.log"
 
-    if [ "$DEBUG_MODE" = "true" ]; then
-        debug_log "DEBUG" "Starting download of $file_name from $remote_url"
-    fi
+    # ログ出力関数
+    log_debug() {
+        local message="$1"
+        echo "[DEBUG] $(date '+%Y-%m-%d %H:%M:%S') - $message" | tee -a "$LOG_DIR/debug.log"
+    }
 
-    if [ ! -f "$install_path" ]; then
-        $BASE_WGET "$install_path" "$remote_url" 2>"$wget_log_file"
-        local wget_status=$?
+    # ダウンロード開始
+    log_debug "Starting download of ${file_name} from ${remote_url}"
 
-        if [ "$DEBUG_MODE" = "true" ]; then
-            debug_log "DEBUG" "wget status for $file_name: $wget_status"
-        fi
+    # `wget` でダウンロード実行
+    wget -q -O "$install_path" "$remote_url"
+    WGET_STATUS=$?
 
-        if [ $wget_status -ne 0 ]; then
-            handle_error "ERR_DOWNLOAD" "$file_name" "wget failed"
-            return 1
-        fi
-
-        if [ ! -s "$install_path" ]; then
-            handle_error "ERR_EMPTY_DOWNLOAD" "$file_name" "empty file"
-            return 1
-        fi
-
-        if [ "$DEBUG_MODE" = "true" ]; then
-            debug_log "DEBUG" "Successfully downloaded $file_name (new file)"
-        fi
-        return 0
-    fi
-
-    local current_version=""
-    if [ -f "$install_path" ]; then
-        current_version=$(sed -n 's/^version=\([0-9.-]\+\)$/\1/p' "$install_path")
-    fi
-
-    local remote_version
-    remote_version=$(wget -qO- "$remote_url" 2>"$wget_log_file" | sed -n 's/^version=\([0-9.-]\+\)$/\1/p')
-
-    if [ "$DEBUG_MODE" = "true" ]; then
-        debug_log "DEBUG" "Current version: $current_version, Remote version: $remote_version"
-    fi
-
-    if [ -z "$remote_version" ]; then
-        handle_error "ERR_VERSION_FETCH" "$file_name" "version fetch failed"
-        return 1
-    fi
-
-    local v1_part_count=$(echo "$current_version" | awk -F'-' '{print NF}')
-    local v2_part_count=$(echo "$remote_version" | awk -F'-' '{print NF}')
-    local max_len=$(( v1_part_count > v2_part_count ? v1_part_count : v2_part_count ))
-
-    if [ "$DEBUG_MODE" = "true" ]; then
-        debug_log "DEBUG" "Comparing version parts (max length: $max_len)"
-    fi
-
-    i=1
-    while [ $i -le "$max_len" ]; do
-        num_v1=$(echo "$current_version" | cut -d'-' -f"$i")
-        num_v2=$(echo "$remote_version" | cut -d'-' -f"$i")
-
-        [ -z "$num_v1" ] && num_v1=0
-        [ -z "$num_v2" ] && num_v2=0
-
-        if [ "$DEBUG_MODE" = "true" ]; then
-            debug_log "DEBUG" "Comparing $num_v1 with $num_v2 (part $i)"
-        fi
-
-        if [ "$num_v1" -gt "$num_v2" ]; then
-            if [ "$DEBUG_MODE" = "true" ]; then
-                debug_log "DEBUG" "Skipping download: $file_name (current version is newer or same)"
-            fi
-            break
-        elif [ "$num_v1" -lt "$num_v2" ]; then
-            if [ "$DEBUG_MODE" = "true" ]; then
-                debug_log "DEBUG" "Downloading $file_name (newer version available)"
-            fi
-            return 0
-        fi
-
-        i=$((i + 1))
-    done
-
-    local attempt=1
-    local success=0
-    while [ $attempt -le 3 ]; do
-        if [ "$DEBUG_MODE" = "true" ]; then
-            debug_log "DEBUG" "Attempt $attempt: Downloading $file_name"
-        fi
-        $BASE_WGET "$install_path" "$remote_url" 2>"$wget_log_file"
-        local wget_status=$?
-
-        if [ $wget_status -eq 0 ]; then
-            success=1
-            break
-        fi
-        attempt=$((attempt + 1))
-        sleep 1
-    done
-
-    if [ $success -eq 1 ]; then
-        if [ "$DEBUG_MODE" = "true" ]; then
-            debug_log "DEBUG" "Successfully downloaded $file_name"
-        fi
-        return 0
+    # `wget` の成功/失敗をログに記録
+    if [ "$WGET_STATUS" -eq 0 ]; then
+        log_debug "Download successful: ${file_name}"
     else
-        handle_error "ERR_DOWNLOAD" "$file_name" "$remote_version"
-        return 1
+        log_debug "Download failed: ${file_name} (wget exit code: $WGET_STATUS)"
+    fi
+
+    # ダウンロードしたファイルのサイズ確認
+    if [ ! -s "$install_path" ]; then
+        log_debug "Download failed: ${file_name} is empty."
+    else
+        log_debug "Download completed: ${file_name} is valid."
     fi
 }
 
