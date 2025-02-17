@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-02-19"
+SCRIPT_VERSION="2025.02.16-02-20"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -218,15 +218,10 @@ script_update() {
     local remote_version
     remote_version=$(wget -qO- "${BASE_URL}/${file_name}" | grep "^SCRIPT_VERSION=" | cut -d'=' -f2)
 
-    if [ $? -ne 0 ]; then
-        debug_log "ERROR" "Failed to fetch remote version of $file_name."
-    fi
-
-    # バージョン情報が取得できなかった場合の処理
-    if [ -z "$remote_version" ]; then
-        debug_log "ERROR" "Version information for $file_name not found. Proceeding with download."
+    if [ $? -ne 0 ] || [ -z "$remote_version" ]; then
+        debug_log "ERROR" "Failed to fetch remote version of $file_name. Downloading latest version."
         download "$file_name" "script"
-        grep -v "^$file_name=" "$cache_file" > "${cache_file}.tmp" && mv "${cache_file}.tmp" "$cache_file"
+        sed -i "/^$file_name=/d" "$cache_file"
         echo "$file_name=unknown" >> "$cache_file"
         return 0
     fi
@@ -236,41 +231,28 @@ script_update() {
     debug_log "DEBUG" "Remote version: $remote_version"
 
     # **バージョン比較 (`ash` 互換)**
-    local v1_part1 v1_part2 v1_part3 v1_part4 v1_part5
-    local v2_part1 v2_part2 v2_part3 v2_part4 v2_part5
-
-    v1_part1=$(echo "$version" | cut -d'.' -f1 | cut -d'-' -f1)
-    v1_part2=$(echo "$version" | cut -d'.' -f2 | cut -d'-' -f1)
-    v1_part3=$(echo "$version" | cut -d'.' -f3 | cut -d'-' -f1)
-    v1_part4=$(echo "$version" | cut -d'-' -f2)
-    v1_part5=$(echo "$version" | cut -d'-' -f3)
-
-    v2_part1=$(echo "$remote_version" | cut -d'.' -f1 | cut -d'-' -f1)
-    v2_part2=$(echo "$remote_version" | cut -d'.' -f2 | cut -d'-' -f1)
-    v2_part3=$(echo "$remote_version" | cut -d'.' -f3 | cut -d'-' -f1)
-    v2_part4=$(echo "$remote_version" | cut -d'-' -f2)
-    v2_part5=$(echo "$remote_version" | cut -d'-' -f3)
-
-    # **デフォルト値設定**
-    v1_part1=${v1_part1:-0} v1_part2=${v1_part2:-0} v1_part3=${v1_part3:-0} v1_part4=${v1_part4:-0} v1_part5=${v1_part5:-0}
-    v2_part1=${v2_part1:-0} v2_part2=${v2_part2:-0} v2_part3=${v2_part3:-0} v2_part4=${v2_part4:-0} v2_part5=${v2_part5:-0}
-
-    debug_log "DEBUG" "Parsed Local Version: $v1_part1.$v1_part2.$v1_part3-$v1_part4.$v1_part5"
-    debug_log "DEBUG" "Parsed Remote Version: $v2_part1.$v2_part2.$v2_part3-$v2_part4.$v2_part5"
+    local v1_parts v2_parts
+    v1_parts=$(echo "$version" | sed 's/[-.]/ /g')
+    v2_parts=$(echo "$remote_version" | sed 's/[-.]/ /g')
 
     local i=1
+    local num_v1 num_v2
     while [ $i -le 5 ]; do
-        eval "num_v1=\${v1_part$i:-0}"
-        eval "num_v2=\${v2_part$i:-0}"
+        num_v1=$(echo "$v1_parts" | awk '{print $'$i'}')
+        num_v2=$(echo "$v2_parts" | awk '{print $'$i'}')
 
-        # **数値判定のバグ修正**
+        # **空なら 0 を設定**
+        [ -z "$num_v1" ] && num_v1=0
+        [ -z "$num_v2" ] && num_v2=0
+
+        # **数値チェック**
         if ! echo "$num_v1" | grep -q '^[0-9]\+$'; then num_v1=0; fi
         if ! echo "$num_v2" | grep -q '^[0-9]\+$'; then num_v2=0; fi
 
         if [ "$num_v1" -lt "$num_v2" ]; then
             debug_log "INFO" "Updating $file_name to version $remote_version."
             download "$file_name" "script"
-            grep -v "^$file_name=" "$cache_file" > "${cache_file}.tmp" && mv "${cache_file}.tmp" "$cache_file"
+            sed -i "/^$file_name=/d" "$cache_file"
             echo "$file_name=$remote_version" >> "$cache_file"
             return 0
         fi
