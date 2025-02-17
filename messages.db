@@ -76,8 +76,7 @@ JP|MSG_INVALID_SELECTION=❌ 無効な選択です。有効な番号を入力し
 US|MSG_INVALID_INPUT_YNR=❌ Invalid input. Please enter 'Y', 'N', or 'R'.
 JP|MSG_INVALID_INPUT_YNR=❌ 無効な入力です。「Y」「N」「R」を入力してください。
 
-# install_package()
-
+# install_package
 US|MSG_CONFIRM_ONLY_YN=🔄 Confirm (Y=Yes / N=No): 
 JP|MSG_CONFIRM_ONLY_YN=🔄 確認 (Y=はい / N=いいえ):
 
