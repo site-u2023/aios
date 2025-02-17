@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-02-13"
+SCRIPT_VERSION="2025.02.16-02-15"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1097,13 +1097,15 @@ download() {
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
 
-    # ログ出力関数
+    # ログ出力関数 (デバッグモード時のみ)
     log_debug() {
-        local message="$1"
-        echo "[DEBUG] $(date '+%Y-%m-%d %H:%M:%S') - $message" | tee -a "$LOG_DIR/debug.log"
+        if [ "$DEBUG_MODE" = "true" ]; then
+            local message="$1"
+            echo "[DEBUG] $(date '+%Y-%m-%d %H:%M:%S') - $message" | tee -a "$LOG_DIR/debug.log"
+        fi
     }
 
-    # ダウンロード開始
+    # ダウンロード開始 (デバッグモード時のみ出力)
     log_debug "Starting download of ${file_name} from ${remote_url}"
 
     # `wget` でダウンロード実行
@@ -1124,6 +1126,7 @@ download() {
         log_debug "Download completed: ${file_name} is valid."
     fi
 }
+
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
