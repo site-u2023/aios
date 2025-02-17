@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-03-04"
+SCRIPT_VERSION="2025.02.16-03-05"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -212,8 +212,11 @@ script_update() {
     local file_name="$2"
     local cache_file="${CACHE_DIR}/script.ch"
 
-    # キャッシュディレクトリが存在しない場合は作成
+    # キャッシュディレクトリの作成
     mkdir -p "${CACHE_DIR}"
+
+    # デフォルトの仮バージョンを設定
+    local default_version="2020.01.01-00-00"
 
     # リモートのバージョンを取得
     local remote_version
@@ -227,22 +230,15 @@ script_update() {
 
     # `SCRIPT_VERSION` が見つからなかった場合の処理
     if [ -z "$remote_version" ]; then
-        debug_log "WARN" "SCRIPT_VERSION not found in $file_name. Marking as 'unknown'."
-        remote_version="unknown"
+        debug_log "WARN" "SCRIPT_VERSION not found in $file_name. Using default version ($default_version)."
+        remote_version="$default_version"
     fi
 
     # バージョン情報のデバッグログ
     debug_log "DEBUG" "Local version: $version"
     debug_log "DEBUG" "Remote version: $remote_version"
 
-    # バージョン比較
-    if [ "$version" = "unknown" ] || [ "$remote_version" = "unknown" ]; then
-        debug_log "INFO" "Skipping version check for $file_name (no valid version information)."
-        echo "$file_name=$remote_version" >> "$cache_file"
-        return 0
-    fi
-
-    # バージョンの分割処理
+    # バージョン比較（仮のバージョンを持つ場合でも通常処理）
     local v1_parts v2_parts
     v1_parts=$(echo "$version" | sed 's/[-.]/ /g')
     v2_parts=$(echo "$remote_version" | sed 's/[-.]/ /g')
@@ -310,14 +306,15 @@ download() {
     debug_log "INFO" "Download completed: $file_name is valid."
 
     # **バージョンチェックを実施**
+    local script_version
     if grep -q "^SCRIPT_VERSION=" "$install_path"; then
-        local script_version
         script_version=$(grep "^SCRIPT_VERSION=" "$install_path" | cut -d'=' -f2 | tr -d '"')
-        script_update "$script_version" "$file_name"
     else
-        debug_log "WARN" "SCRIPT_VERSION not found in $file_name. Marking as 'unknown'."
-        script_update "unknown" "$file_name"
+        debug_log "WARN" "SCRIPT_VERSION not found in $file_name. Using default version (2020.01.01-00-00)."
+        script_version="2020.01.01-00-00"
     fi
+
+    script_update "$script_version" "$file_name"
 
     return 0
 }
