@@ -1177,11 +1177,8 @@ check_common() {
     local lang_code="$1"
     local mode="${2:-full}" 
 
-    echo "🔍 MODE: $MODE"
-
     case "$MODE" in
         reset)
-            debug_log "INFO" "Reset mode: Clearing all cache files."
             rm -f "${CACHE_DIR}/country.ch" \
                   "${CACHE_DIR}/language.ch" \
                   "${CACHE_DIR}/luci.ch" \
@@ -1194,29 +1191,19 @@ check_common() {
             exit 0
             ;;
         full)
-            debug_log "INFO" "check_common called with lang_code: '$lang_code' and MODE: '$MODE'"
-            #script_update "$SCRIPT_VERSION" || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"  
-            download "openwrt.db" || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
-            download "country.db" || handle_error "ERR_DOWNLOAD" "country.db" "latest"
-            download "packages.db" || handle_error "ERR_DOWNLOAD" "packages.db" "latest"
-            download "messages.db" || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
-            check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
+            download "openwrt.db"
+            download "country.db"
+            download "packages.db"
+            download "messages.db"
+            check_openwrt
             get_package_manager
-            debug_log "DEBUG" "Calling select_country() with lang_code: '$lang_code'"
             select_country "$lang_code"
-            debug_log "DEBUG" "Returned from select_country()"
             ;;
         light)
-            if [ -f "${CACHE_DIR}/country.ch" ]; then
-                debug_log "INFO" "Country cache found; skipping country selection."
-            else
-                select_country "$lang_code"
-            fi
+            select_country "$lang_code"
             ;;
         debug)
-            debug_log "DEBUG" "Running in debug mode: Additional debug output enabled."
             select_country "$lang_code"
-            debug_log "DEBUG" "Post country selection debug info..."
             ;;
         *)
             select_country "$lang_code"
