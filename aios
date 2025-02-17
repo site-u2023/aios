@@ -3,7 +3,7 @@
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
 
-SCRIPT_VERSION="2025.02.18-00-00"
+SCRIPT_VERSION="2025.02.18-00-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -77,7 +77,7 @@ make_directory
 download_common
 
 # **引数を整理**
-check_common "$@"
+check_option "$@"
 
 # バナー & インストール
 print_banner
