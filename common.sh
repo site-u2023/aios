@@ -1276,10 +1276,13 @@ check_option() {
 # 5. 影響範囲: `common.sh`（矛盾なく適用）。
 #########################################################################
 check_common() {
-    local lang_code="$SELECTED_LANGUAGE"
+    local lang_code="$1"
+    local mode="$2"
     
     # `MODE` の実際の値を表示
     echo "🔍 MODE: $MODE"
+
+    return 0
     
     case "$MODE" in
         reset)
@@ -1305,7 +1308,7 @@ check_common() {
 
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
             select_country "$lang_code"
-            get_package_manager
+            #get_package_manager
             ;;
         light)
             if [ -f "${CACHE_DIR}/country.ch" ]; then
