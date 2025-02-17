@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-02-24"
+SCRIPT_VERSION="2025.02.16-02-25"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -207,17 +207,23 @@ script_update() {
     local file_name=$(basename "$0")
     local cache_file="${CACHE_DIR}/script.ch"
 
-    # メッセージデータベースの存在確認
+    # **キャッシュファイルの存在確認**
+    if [ ! -f "$cache_file" ]; then
+        touch "$cache_file"
+    fi
+
+    # **メッセージデータベースの存在確認**
     if [ ! -f "${BASE_DIR}/messages.db" ]; then
         MSG_VERSION_FETCH_FAIL="Error: Failed to fetch remote version."
         MSG_UPDATE_SUCCESS="Updated to version {version} of {file}."
         MSG_SKIPPING_DOWNLOAD="Skipping download: {file} is up-to-date."
     fi
 
-    # GitHub からリモートのバージョンを取得
+    # **GitHub からリモートのバージョンを取得**
     local remote_version
     remote_version=$(wget -qO- "${BASE_URL}/${file_name}" | grep "^SCRIPT_VERSION=" | cut -d'=' -f2 | tr -d '"')
 
+    # **バージョン情報取得失敗時**
     if [ -z "$remote_version" ]; then
         debug_log "ERROR" "Version information for $file_name not found. Proceeding with download."
         download "$file_name" "script"
