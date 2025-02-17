@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-02-16"
+SCRIPT_VERSION="2025.02.16-02-17"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -207,27 +207,25 @@ script_update() {
     local file_name=$(basename "$0")  # 実行中のスクリプトのファイル名
     local cache_file="${CACHE_DIR}/script.ch"
 
-    # **messages.db の存在確認**
+    # メッセージデータベースの存在確認
     if [ ! -f "${BASE_DIR}/messages.db" ]; then
-        #echo "⚠️ Warning: messages.db not found. Using default English messages."
-        
-        # **暫定的な英語メッセージを設定**
         MSG_VERSION_FETCH_FAIL="Error: Failed to fetch remote version."
         MSG_UPDATE_SUCCESS="Updated to version {version} of {file}."
         MSG_SKIPPING_DOWNLOAD="Skipping download: {file} is up-to-date."
     fi
 
-    # **GitHub からリモートのバージョンを取得**
+    # GitHub からリモートのバージョンを取得
     local remote_version
     remote_version=$(wget -qO- "${BASE_URL}/${file_name}" | grep "^SCRIPT_VERSION=" | cut -d'=' -f2)
 
-    # **バージョン情報が取得できなかった場合は無条件にダウンロード**
+    # `wget` のエラーログ記録
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "Failed to fetch remote version of $file_name."
+    fi
+
+    # バージョン情報が取得できなかった場合は無条件にダウンロード
     if [ -z "$remote_version" ]; then
-        if [ -f "${BASE_DIR}/messages.db" ]; then
-            echo "$(get_message "MSG_VERSION_FETCH_FAIL" "$file_name")"
-        else
-            echo "$MSG_VERSION_FETCH_FAIL"
-        fi
+        debug_log "ERROR" "Version information for $file_name not found. Proceeding with download."
         download "$file_name" "script"
         
         # キャッシュを更新
@@ -236,7 +234,7 @@ script_update() {
         return 0
     fi
 
-    # **バージョン比較 (`ash` 互換)**
+    # バージョン比較 (`ash` 互換)
     set -- $(echo "$version" | sed 's/[-.]/ /g')
     v1_part1="${1:-0}"
     v1_part2="${2:-0}"
@@ -251,30 +249,20 @@ script_update() {
     v2_part4="${4:-0}"
     v2_part5="${5:-0}"
 
-    # **比較ループ**
-    i=1
+    # バージョン比較ロジック
+    local i=1
     while [ $i -le 5 ]; do
         eval "num_v1=\${v1_part$i:-0}"
         eval "num_v2=\${v2_part$i:-0}"
 
-        # **先頭の 0 を削除**
         num_v1=$(echo "$num_v1" | sed 's/^0*//')
         num_v2=$(echo "$num_v2" | sed 's/^0*//')
 
-        # **数値以外の文字を削除**
-        num_v1=$(echo "$num_v1" | sed 's/[^0-9]//g')
-        num_v2=$(echo "$num_v2" | sed 's/[^0-9]//g')
-
-        # **空の値は 0 にする**
         [ -z "$num_v1" ] && num_v1=0
         [ -z "$num_v2" ] && num_v2=0
 
         if [ "$num_v1" -lt "$num_v2" ]; then
-            if [ -f "${BASE_DIR}/messages.db" ]; then
-                echo "$(get_message "MSG_UPDATE_SUCCESS" "$file_name" "$remote_version")"
-            else
-                echo "$MSG_UPDATE_SUCCESS" | sed -e "s/{file}/$file_name/g" -e "s/{version}/$remote_version/g"
-            fi
+            debug_log "INFO" "Updating $file_name to version $remote_version."
             download "$file_name" "script"
 
             # キャッシュを更新
@@ -286,13 +274,11 @@ script_update() {
         i=$((i + 1))
     done
 
-    if [ -f "${BASE_DIR}/messages.db" ]; then
-        echo "$(get_message "MSG_SKIPPING_DOWNLOAD" "$file_name" "$version")"
-    else
-        echo "$MSG_SKIPPING_DOWNLOAD" | sed -e "s/{file}/$file_name/g" -e "s/{version}/$version/g"
-    fi
+    # 更新不要な場合の処理
+    debug_log "INFO" "Skipping download: $file_name is up-to-date."
     return 0
 }
+
 
 # 🔴　エラー・デバッグ・アップデート系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
 
