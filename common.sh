@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.18-00-00"
+SCRIPT_VERSION="2025.02.18-00-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -231,15 +231,6 @@ download() {
     fi
 
     debug_log "INFO" "Download completed: $file_name is valid."
-
-    # **バージョンチェック（ログ目的のみ）**
-    local script_version="unknown"
-    if grep -q "^SCRIPT_VERSION=" "$install_path"; then
-        script_version=$(grep "^SCRIPT_VERSION=" "$install_path" | cut -d'=' -f2 | tr -d '"')
-        debug_log "INFO" "$file_name version: $script_version"
-    else
-        debug_log "WARN" "SCRIPT_VERSION not found in $file_name."
-    fi
 
     return 0
 }
