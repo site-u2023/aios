@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-03-07"
+SCRIPT_VERSION="2025.02.18-00-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -195,91 +195,16 @@ test_debug_functions() {
 
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
-
 #########################################################################
-# Last Update: 2025-02-16 16:20:00 (JST) 🚀
-# "Efficiency in updates, precision in versions. Every script matters."
+# Last Update: 2025-02-17 15:45:00 (JST) 🚀
+# "Simplified download logic with BASE_WGET support."
 #
 # 【要件】
-# 1. `messages.db` を使用し、すべてのメッセージを多言語対応する。
-# 2. `debug_log()` を使用し、ログを `messages.db` で統一する。
-# 3. `script.ch` にバージョンをキャッシュし、変更がある場合のみダウンロード。
-# 4. `download()` を活用し、スクリプト & DB の取得を統一。
-# 5. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
-#########################################################################
-script_update() {
-    local version="$1"
-    local file_name="$2"
-    local cache_file="${CACHE_DIR}/script.ch"
-    local download_path="${BASE_DIR}/${file_name}"
-    local default_version="2020.01.01-00-00"
-
-    # キャッシュディレクトリ作成
-    mkdir -p "${CACHE_DIR}"
-
-    # 既存のファイルを削除してから `download()` を使用
-    rm -f "$download_path"
-    download "$file_name" "script"
-
-    # `wget` によるダウンロードが成功したか確認
-    if [ ! -s "$download_path" ]; then
-        debug_log "ERROR" "Failed to download ${file_name}. Proceeding with default version."
-        echo "$file_name=$default_version" >> "$cache_file"
-        return 0
-    fi
-
-    # `SCRIPT_VERSION` の取得
-    local remote_version
-    remote_version=$(grep "^SCRIPT_VERSION=" "$download_path" | cut -d'=' -f2 | tr -d '"')
-
-    # バージョン情報が無い場合の処理
-    if [ -z "$remote_version" ]; then
-        debug_log "WARN" "SCRIPT_VERSION not found in $file_name. Using default version ($default_version)."
-        remote_version="$default_version"
-    fi
-
-    # バージョン情報をログに記録
-    debug_log "DEBUG" "Local version: $version"
-    debug_log "DEBUG" "Remote version: $remote_version"
-
-    # バージョン比較処理
-    local v1_parts v2_parts
-    v1_parts=$(echo "$version" | sed 's/[-.]/ /g')
-    v2_parts=$(echo "$remote_version" | sed 's/[-.]/ /g')
-
-    local i=1
-    local num_v1 num_v2
-    while [ $i -le 5 ]; do
-        num_v1=$(echo "$v1_parts" | awk '{print $'$i'}')
-        num_v2=$(echo "$v2_parts" | awk '{print $'$i'}')
-
-        [ -z "$num_v1" ] && num_v1=0
-        [ -z "$num_v2" ] && num_v2=0
-
-        if ! echo "$num_v1" | grep -q '^[0-9]\+$'; then num_v1=0; fi
-        if ! echo "$num_v2" | grep -q '^[0-9]\+$'; then num_v2=0; fi
-
-        if [ "$num_v1" -lt "$num_v2" ]; then
-            debug_log "INFO" "Updating $file_name to version $remote_version."
-            download "$file_name" "script"
-            return 0
-        fi
-        i=$((i + 1))
-    done
-
-    debug_log "INFO" "Skipping download: $file_name is up-to-date."
-    return 0
-}
-
-#########################################################################
-# Last Update: 2025-02-17 01:15:00 (JST) 🚀
-# "Enhanced debugging for precise issue tracking."
-#
-# 【要件】
-# 1. **`wget` のエラーメッセージを `debug_log()` で記録する。**
-# 2. **ダウンロード後にファイルが存在するかをチェックし、詳細なデバッグログを記録する。**
-# 3. **リモートのバージョン情報 (`remote_version`) が取得できない場合のエラーハンドリングを改善。**
-# 4. **影響範囲: `common.sh` の `download()` のみ（他の関数には影響なし）。**
+# 1. **`BASE_WGET` を適用し、統一されたダウンロード方式を採用**
+# 2. **バージョン管理 (`script_update()`) を完全撤廃**
+# 3. **ダウンロードの成功/失敗を `debug_log()` で詳細記録**
+# 4. **`SCRIPT_VERSION` の取得はログ出力のみ**
+# 5. **影響範囲: `common.sh` の `download()` のみ（他の関数には影響なし）**
 #########################################################################
 download() {
     local file_name="$1"
@@ -289,11 +214,11 @@ download() {
 
     debug_log "DEBUG" "Starting download of $file_name from $remote_url"
 
-    # `wget` でダウンロード
-    wget -q --no-check-certificate -O "$install_path" "$remote_url"
+    # `BASE_WGET` でダウンロード
+    $BASE_WGET "$install_path" "$remote_url"
     local wget_status=$?
 
-    # 成功・失敗を判定
+    # `wget` の結果を判定
     if [ $wget_status -ne 0 ]; then
         debug_log "ERROR" "Download failed: $file_name (wget exit code: $wget_status)"
         return 1
@@ -307,16 +232,14 @@ download() {
 
     debug_log "INFO" "Download completed: $file_name is valid."
 
-    # **バージョンチェックを実施**
-    local script_version
+    # **バージョンチェック（ログ目的のみ）**
+    local script_version="unknown"
     if grep -q "^SCRIPT_VERSION=" "$install_path"; then
         script_version=$(grep "^SCRIPT_VERSION=" "$install_path" | cut -d'=' -f2 | tr -d '"')
+        debug_log "INFO" "$file_name version: $script_version"
     else
-        debug_log "WARN" "SCRIPT_VERSION not found in $file_name. Using default version (2020.01.01-00-00)."
-        script_version="2020.01.01-00-00"
+        debug_log "WARN" "SCRIPT_VERSION not found in $file_name."
     fi
-
-    script_update "$script_version" "$file_name"
 
     return 0
 }
