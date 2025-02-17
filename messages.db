@@ -3,9 +3,6 @@
 
 SUPPORTED_LANGUAGES="US JP" 
 
-SCRIPT_VERSION="2025.02.16-00-00"
-echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION message.db \033[0m"
-
 # 😃 🤣 🤩 🤪 🫥 🤢 🥵 🥶 😱 💀 🤡 👹 👺 👻 👽 👾 🤖 💯 💢 💥 💬 💤
 
 # debug test -------------------------------------
