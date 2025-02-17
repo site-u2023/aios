@@ -1,5 +1,5 @@
-PACKAGE_VERSION="2025.02.06-1"
-echo "package.db Last update: $PACKAGE_VERSION"
+SCRIPT_VERSION="2025.02.16-00-00"
+echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION package.db \033[0m"
 
 [ttyd]
 
