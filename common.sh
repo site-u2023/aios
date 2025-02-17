@@ -1197,6 +1197,7 @@ check_common() {
             download "messages.db"
             check_openwrt
             check_downloader
+            echo "${lang_code}"
             select_country "$lang_code"
             ;;
         light)
