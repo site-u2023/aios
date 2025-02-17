@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-02-28"
+SCRIPT_VERSION="2025.02.16-03-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -191,6 +191,11 @@ test_debug_functions() {
     esac
 }
 
+# 🔴　エラー・デバッグ・アップデート系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
+
+# 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
+
+
 #########################################################################
 # Last Update: 2025-02-16 16:20:00 (JST) 🚀
 # "Efficiency in updates, precision in versions. Every script matters."
@@ -204,28 +209,23 @@ test_debug_functions() {
 #########################################################################
 script_update() {
     local version="$1"
-    local file_name=$(basename "$0")
+    local file_name="$2"
     local cache_file="${CACHE_DIR}/script.ch"
 
-    # **キャッシュファイルの存在確認**
-    if [ ! -f "$cache_file" ]; then
-        touch "$cache_file"
+    # メッセージデータベースの存在確認
+    if [ ! -f "${BASE_DIR}/messages.db" ]; then
+        MSG_VERSION_FETCH_FAIL="Error: Failed to fetch remote version."
+        MSG_UPDATE_SUCCESS="Updated to version {version} of {file}."
+        MSG_SKIPPING_DOWNLOAD="Skipping download: {file} is up-to-date."
     fi
 
-    # **GitHub からリモートのバージョンを取得**
+    # GitHub からリモートのバージョンを取得
     local remote_version
-    remote_version=$(wget -qO- "${BASE_URL}/${file_name}" | awk -F'=' '/^SCRIPT_VERSION=/ {gsub(/"/, "", $2); print $2}')
+    remote_version=$(wget -qO- "${BASE_URL}/${file_name}" | grep "^SCRIPT_VERSION=" | cut -d'=' -f2 | tr -d '"')
 
-    # **wget の終了コードをチェック**
-    local wget_status=$?
-    if [ $wget_status -ne 0 ]; then
-        debug_log "ERROR" "wget failed for $file_name (exit code: $wget_status). Proceeding with forced download."
-        remote_version=""
-    fi
-
-    # **バージョン情報取得失敗時**
-    if [ -z "$remote_version" ] || echo "$remote_version" | grep -q '^[[:space:]]*$'; then
-        debug_log "ERROR" "Version information for $file_name not found or invalid. Proceeding with forced download."
+    # 取得失敗時の処理
+    if [ -z "$remote_version" ]; then
+        debug_log "ERROR" "Version information for $file_name not found. Proceeding with download."
         download "$file_name" "script"
         grep -v "^$file_name=" "$cache_file" > "${cache_file}.tmp" && mv "${cache_file}.tmp" "$cache_file"
         echo "$file_name=unknown" >> "$cache_file"
@@ -237,15 +237,17 @@ script_update() {
     debug_log "DEBUG" "Remote version: $remote_version"
 
     # **バージョン比較 (`ash` 互換)**
-    local v1_parts v2_parts i num_v1 num_v2
+    local v1_parts v2_parts
     v1_parts=$(echo "$version" | sed 's/[-.]/ /g')
     v2_parts=$(echo "$remote_version" | sed 's/[-.]/ /g')
 
-    i=1
+    local i=1
+    local num_v1 num_v2
     while [ $i -le 5 ]; do
         num_v1=$(echo "$v1_parts" | awk '{print $'$i'}')
         num_v2=$(echo "$v2_parts" | awk '{print $'$i'}')
 
+        # **空なら 0 を設定**
         [ -z "$num_v1" ] && num_v1=0
         [ -z "$num_v2" ] && num_v2=0
 
@@ -263,16 +265,61 @@ script_update() {
         i=$((i + 1))
     done
 
-    debug_log "INFO" "Skipping download: $file_name is up-to-date."
-
-    # **`script.ch` に正しい情報を書き込む**
+    # **キャッシュを更新**
     grep -v "^$file_name=" "$cache_file" > "${cache_file}.tmp" && mv "${cache_file}.tmp" "$cache_file"
-    echo "$file_name=$remote_version" >> "$cache_file"
+    echo "$file_name=$version" >> "$cache_file"
+
+    debug_log "INFO" "Skipping download: $file_name is up-to-date."
+    return 0
+}
+
+#########################################################################
+# Last Update: 2025-02-17 01:15:00 (JST) 🚀
+# "Enhanced debugging for precise issue tracking."
+#
+# 【要件】
+# 1. **`wget` のエラーメッセージを `debug_log()` で記録する。**
+# 2. **ダウンロード後にファイルが存在するかをチェックし、詳細なデバッグログを記録する。**
+# 3. **リモートのバージョン情報 (`remote_version`) が取得できない場合のエラーハンドリングを改善。**
+# 4. **影響範囲: `common.sh` の `download()` のみ（他の関数には影響なし）。**
+#########################################################################
+download() {
+    local file_name="$1"
+    local type="$2"
+    local install_path="${BASE_DIR}/${file_name}"
+    local remote_url="${BASE_URL}/${file_name}"
+
+    debug_log "DEBUG" "Starting download of $file_name from $remote_url"
+
+    # `wget` でダウンロード
+    wget -q -O "$install_path" "$remote_url"
+    local wget_status=$?
+
+    # 成功・失敗を判定
+    if [ $wget_status -ne 0 ]; then
+        debug_log "ERROR" "Download failed: $file_name (wget exit code: $wget_status)"
+        return 1
+    fi
+
+    # 空ファイル対策
+    if [ ! -s "$install_path" ]; then
+        debug_log "ERROR" "Download failed: $file_name is empty."
+        return 1
+    fi
+
+    debug_log "INFO" "Download completed: $file_name is valid."
+
+    # **バージョンチェックを実施**
+    if grep -q "^SCRIPT_VERSION=" "$install_path"; then
+        local script_version
+        script_version=$(grep "^SCRIPT_VERSION=" "$install_path" | cut -d'=' -f2 | tr -d '"')
+        script_update "$script_version" "$file_name"
+    fi
 
     return 0
 }
 
-# 🔴　エラー・デバッグ・アップデート系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
+# 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
 # print_help: ヘルプメッセージを表示
@@ -1054,50 +1101,6 @@ install_package() {
             /etc/init.d/$package_name start
         fi
     fi
-}
-
-# 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
-
-# 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
-
-#########################################################################
-# Last Update: 2025-02-17 01:15:00 (JST) 🚀
-# "Enhanced debugging for precise issue tracking."
-#
-# 【要件】
-# 1. **`wget` のエラーメッセージを `debug_log()` で記録する。**
-# 2. **ダウンロード後にファイルが存在するかをチェックし、詳細なデバッグログを記録する。**
-# 3. **リモートのバージョン情報 (`remote_version`) が取得できない場合のエラーハンドリングを改善。**
-# 4. **影響範囲: `common.sh` の `download()` のみ（他の関数には影響なし）。**
-#########################################################################
-download() {
-    local file_name="$1"
-    local install_path="${BASE_DIR}/${file_name}"
-    local remote_url="${BASE_URL}/${file_name}"
-
-    # ダウンロード開始ログ
-    debug_log "DEBUG" "Starting download of ${file_name} from ${remote_url}"
-
-    # `wget` でダウンロード実行
-    wget -q -O "$install_path" "$remote_url"
-    local wget_status=$?
-
-    # `wget` の成功/失敗をログに記録
-    if [ "$wget_status" -eq 0 ]; then
-        debug_log "DEBUG" "Download successful: ${file_name}"
-    else
-        debug_log "ERROR" "Download failed: ${file_name} (wget exit code: $wget_status)"
-        return 1  # 失敗時は return 1
-    fi
-
-    # ダウンロードしたファイルのサイズ確認
-    if [ ! -s "$install_path" ]; then
-        debug_log "ERROR" "Download failed: ${file_name} is empty."
-        return 1  # 空ファイルだった場合も return 1
-    fi
-
-    debug_log "INFO" "Download completed: ${file_name} is valid."
-    return 0
 }
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
