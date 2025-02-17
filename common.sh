@@ -224,12 +224,6 @@ download() {
         return 1
     fi
 
-    # 空ファイル対策
-    if [ ! -s "$install_path" ]; then
-        debug_log "ERROR" "Download failed: $file_name is empty."
-        return 1
-    fi
-
     debug_log "INFO" "Download completed: $file_name is valid."
 
     return 0
