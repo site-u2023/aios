@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-02-21"
+SCRIPT_VERSION="2025.02.16-02-23"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -214,9 +214,9 @@ script_update() {
         MSG_SKIPPING_DOWNLOAD="Skipping download: {file} is up-to-date."
     fi
 
-    # GitHub からリモートのバージョンを取得（`cut` の代わりに `awk` を使用）
+    # GitHub からリモートのバージョンを取得
     local remote_version
-    remote_version=$(wget -qO- "${BASE_URL}/${file_name}" | awk -F'=' '/^SCRIPT_VERSION=/ {print $2}')
+    remote_version=$(wget -qO- "${BASE_URL}/${file_name}" | grep "^SCRIPT_VERSION=" | cut -d'=' -f2 | sed 's/"//g')
 
     # 取得失敗時の処理
     if [ -z "$remote_version" ]; then
@@ -232,21 +232,22 @@ script_update() {
     debug_log "DEBUG" "Remote version: $remote_version"
 
     # **バージョン比較 (`ash` 互換)**
-    local v1_parts v2_parts
-    v1_parts=$(echo "$version" | sed 's/[-.]/ /g')
-    v2_parts=$(echo "$remote_version" | sed 's/[-.]/ /g')
+    IFS='.-' read -r v1_part1 v1_part2 v1_part3 v1_part4 v1_part5 <<< "$version"
+    IFS='.-' read -r v2_part1 v2_part2 v2_part3 v2_part4 v2_part5 <<< "$remote_version"
+
+    # **デフォルト値設定**
+    v1_part1=${v1_part1:-0} v1_part2=${v1_part2:-0} v1_part3=${v1_part3:-0} v1_part4=${v1_part4:-0} v1_part5=${v1_part5:-0}
+    v2_part1=${v2_part1:-0} v2_part2=${v2_part2:-0} v2_part3=${v2_part3:-0} v2_part4=${v2_part4:-0} v2_part5=${v2_part5:-0}
+
+    debug_log "DEBUG" "Parsed Local Version: $v1_part1.$v1_part2.$v1_part3-$v1_part4.$v1_part5"
+    debug_log "DEBUG" "Parsed Remote Version: $v2_part1.$v2_part2.$v2_part3-$v2_part4.$v2_part5"
 
     local i=1
-    local num_v1 num_v2
     while [ $i -le 5 ]; do
-        num_v1=$(echo "$v1_parts" | awk '{print $'$i'}')
-        num_v2=$(echo "$v2_parts" | awk '{print $'$i'}')
+        eval "num_v1=\${v1_part$i:-0}"
+        eval "num_v2=\${v2_part$i:-0}"
 
-        # **空なら 0 を設定**
-        [ -z "$num_v1" ] && num_v1=0
-        [ -z "$num_v2" ] && num_v2=0
-
-        # **数値チェック**
+        # **数値判定のバグ修正**
         if ! echo "$num_v1" | grep -q '^[0-9]\+$'; then num_v1=0; fi
         if ! echo "$num_v2" | grep -q '^[0-9]\+$'; then num_v2=0; fi
 
