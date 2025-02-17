@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-02-05"
+SCRIPT_VERSION="2025.02.16-02-07"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1273,9 +1273,10 @@ handle_exit() {
 #########################################################################
 check_option() {
     debug_log "DEBUG" "check_option received before args: $*"
+    
     # デフォルト値の設定
     SELECTED_LANGUAGE=""
-    MODE="full"   # 内部的 MODE は "full", "light", "debug", "reset"
+    MODE="full"
     DEBUG_MODE="false"
     DEBUG_LEVEL="INFO"
     DRY_RUN="false"
@@ -1284,65 +1285,60 @@ check_option() {
     RESET="false"
     HELP="false"
 
-    debug_log "DEBUG" "check_option received after args: $*"
-    
     while [ "$#" -gt 0 ]; do
         case "$1" in
-            # ヘルプ
             -h|--h|-help|--help|-\?|--\?)
                 HELP="true"
                 print_help
                 exit 0
                 ;;
-            # バージョン
             -v|--v|-version|--version)
                 script_version
                 exit 0
                 ;;
-            # デバッグ（レベル DEBUG）
             -d|--d|-debug|--debug|-d1|--d1)
                 DEBUG_MODE="true"
                 DEBUG_LEVEL="DEBUG"
                 shift
+                if [ -n "$1" ] && ! echo "$1" | grep -q "^-"; then
+                    SELECTED_LANGUAGE="$1"
+                    shift
+                fi
                 ;;
-            # デバッグ（レベル DEBUG2）
             -d2|--d2|-debug2|--debug2)
                 DEBUG_MODE="true"
                 DEBUG_LEVEL="DEBUG2"
                 shift
+                if [ -n "$1" ] && ! echo "$1" | grep -q "^-"; then
+                    SELECTED_LANGUAGE="$1"
+                    shift
+                fi
                 ;;
-            # モード指定：full
             -cf|--cf|-common_full|--common_full)
                 MODE="full"
                 shift
                 ;;
-            # モード指定：light
             -cl|--cl|-ocommon_light|--ocommon_light)
                 MODE="light"
                 shift
                 ;;
-            # モード指定：debug
             -cd|--cd|-common_debug|--common_debug|--ocommon_debug)
                 MODE="debug"
                 shift
                 ;;
-            # モード指定：reset
             -r|--r|-reset|--reset|-resrt|--resrt)
                 MODE="reset"
                 RESET="true"
                 shift
                 ;;
-            # 強制実行
             -f|--f|-force|--force)
                 FORCE="true"
                 shift
                 ;;
-            # ドライラン
             -dr|--dr|-dry-run|--dry-run)
                 DRY_RUN="true"
                 shift
                 ;;
-            # ログ出力先
             -l|--l|-logfile|--logfile)
                 if [ -n "$2" ]; then
                     LOGFILE="$2"
@@ -1357,7 +1353,6 @@ check_option() {
                 shift
                 ;;
             *)
-                # 非ダッシュ引数はすべて SELECTED_LANGUAGE として扱う
                 if [ -z "$SELECTED_LANGUAGE" ]; then
                     SELECTED_LANGUAGE="$1"
                 fi
