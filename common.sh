@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-02-17"
+SCRIPT_VERSION="2025.02.16-02-18"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -203,8 +203,8 @@ test_debug_functions() {
 # 5. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
 #########################################################################
 script_update() {
-    local version="$1"  # ローカルのバージョン情報
-    local file_name=$(basename "$0")  # 実行中のスクリプトのファイル名
+    local version="$1"
+    local file_name=$(basename "$0")
     local cache_file="${CACHE_DIR}/script.ch"
 
     # メッセージデータベースの存在確認
@@ -218,67 +218,57 @@ script_update() {
     local remote_version
     remote_version=$(wget -qO- "${BASE_URL}/${file_name}" | grep "^SCRIPT_VERSION=" | cut -d'=' -f2)
 
-    # `wget` のエラーログ記録
     if [ $? -ne 0 ]; then
         debug_log "ERROR" "Failed to fetch remote version of $file_name."
     fi
 
-    # バージョン情報が取得できなかった場合は無条件にダウンロード
+    # バージョン情報が取得できなかった場合の処理
     if [ -z "$remote_version" ]; then
         debug_log "ERROR" "Version information for $file_name not found. Proceeding with download."
         download "$file_name" "script"
-        
-        # キャッシュを更新
         sed -i "/^$file_name=/d" "$cache_file"
         echo "$file_name=unknown" >> "$cache_file"
         return 0
     fi
 
-    # バージョン比較 (`ash` 互換)
-    set -- $(echo "$version" | sed 's/[-.]/ /g')
-    v1_part1="${1:-0}"
-    v1_part2="${2:-0}"
-    v1_part3="${3:-0}"
-    v1_part4="${4:-0}"
-    v1_part5="${5:-0}"
+    # **バージョン情報のデバッグログ**
+    debug_log "DEBUG" "Local version: $version"
+    debug_log "DEBUG" "Remote version: $remote_version"
 
-    set -- $(echo "$remote_version" | sed 's/[-.]/ /g')
-    v2_part1="${1:-0}"
-    v2_part2="${2:-0}"
-    v2_part3="${3:-0}"
-    v2_part4="${4:-0}"
-    v2_part5="${5:-0}"
+    # **バージョン比較 (`ash` 互換)**
+    local v1_part v2_part
+    IFS='.-' read -r v1_part1 v1_part2 v1_part3 v1_part4 v1_part5 <<< "$version"
+    IFS='.-' read -r v2_part1 v2_part2 v2_part3 v2_part4 v2_part5 <<< "$remote_version"
 
-    # バージョン比較ロジック
+    # **デフォルト値設定**
+    v1_part1=${v1_part1:-0} v1_part2=${v1_part2:-0} v1_part3=${v1_part3:-0} v1_part4=${v1_part4:-0} v1_part5=${v1_part5:-0}
+    v2_part1=${v2_part1:-0} v2_part2=${v2_part2:-0} v2_part3=${v2_part3:-0} v2_part4=${v2_part4:-0} v2_part5=${v2_part5:-0}
+
+    debug_log "DEBUG" "Parsed Local Version: $v1_part1.$v1_part2.$v1_part3-$v1_part4.$v1_part5"
+    debug_log "DEBUG" "Parsed Remote Version: $v2_part1.$v2_part2.$v2_part3-$v2_part4.$v2_part5"
+
     local i=1
     while [ $i -le 5 ]; do
         eval "num_v1=\${v1_part$i:-0}"
         eval "num_v2=\${v2_part$i:-0}"
 
-        num_v1=$(echo "$num_v1" | sed 's/^0*//')
-        num_v2=$(echo "$num_v2" | sed 's/^0*//')
-
-        [ -z "$num_v1" ] && num_v1=0
-        [ -z "$num_v2" ] && num_v2=0
+        # **数値判定のバグ修正**
+        if ! echo "$num_v1" | grep -q '^[0-9]\+$'; then num_v1=0; fi
+        if ! echo "$num_v2" | grep -q '^[0-9]\+$'; then num_v2=0; fi
 
         if [ "$num_v1" -lt "$num_v2" ]; then
             debug_log "INFO" "Updating $file_name to version $remote_version."
             download "$file_name" "script"
-
-            # キャッシュを更新
             sed -i "/^$file_name=/d" "$cache_file"
             echo "$file_name=$remote_version" >> "$cache_file"
             return 0
         fi
-
         i=$((i + 1))
     done
 
-    # 更新不要な場合の処理
     debug_log "INFO" "Skipping download: $file_name is up-to-date."
     return 0
 }
-
 
 # 🔴　エラー・デバッグ・アップデート系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
 
