@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-02-25"
+SCRIPT_VERSION="2025.02.16-02-27"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -223,9 +223,16 @@ script_update() {
     local remote_version
     remote_version=$(wget -qO- "${BASE_URL}/${file_name}" | grep "^SCRIPT_VERSION=" | cut -d'=' -f2 | tr -d '"')
 
+    # **wget の終了コードをチェック**
+    local wget_status=$?
+    if [ $wget_status -ne 0 ]; then
+        debug_log "ERROR" "wget failed for $file_name (exit code: $wget_status). Proceeding with forced download."
+        remote_version=""
+    fi
+
     # **バージョン情報取得失敗時**
-    if [ -z "$remote_version" ]; then
-        debug_log "ERROR" "Version information for $file_name not found. Proceeding with download."
+    if [ -z "$remote_version" ] || echo "$remote_version" | grep -q '^[[:space:]]*$'; then
+        debug_log "ERROR" "Version information for $file_name not found or invalid. Proceeding with forced download."
         download "$file_name" "script"
         grep -v "^$file_name=" "$cache_file" > "${cache_file}.tmp" && mv "${cache_file}.tmp" "$cache_file"
         echo "$file_name=unknown" >> "$cache_file"
@@ -264,6 +271,11 @@ script_update() {
     done
 
     debug_log "INFO" "Skipping download: $file_name is up-to-date."
+
+    # **`script.ch` に正しい情報を書き込む**
+    grep -v "^$file_name=" "$cache_file" > "${cache_file}.tmp" && mv "${cache_file}.tmp" "$cache_file"
+    echo "$file_name=$remote_version" >> "$cache_file"
+
     return 0
 }
 
