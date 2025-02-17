@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-00-09"
+SCRIPT_VERSION="2025.02.16-01-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1261,7 +1261,7 @@ check_option() {
 
     debug_log "DEBUG" "check_option: SELECTED_LANGUAGE='$SELECTED_LANGUAGE', MODE='$MODE', DEBUG_MODE='$DEBUG_MODE', DEBUG_LEVEL='$DEBUG_LEVEL', DRY_RUN='$DRY_RUN', LOGFILE='$LOGFILE', FORCE='$FORCE', RESET='$RESET', HELP='$HELP'"
 
-    check_common
+    check_common "$SELECTED_LANGUAGE"
 }
 
 #########################################################################
@@ -1277,9 +1277,8 @@ check_option() {
 #########################################################################
 check_common() {
     local lang_code="$1"
-    local mode="$2"
+    local mode="${2:-full}" 
     
-    # `MODE` の実際の値を表示
     echo "🔍 MODE: $MODE"
 
     return 0
