@@ -164,8 +164,6 @@ US|MSG_EXECUTE_AIOS_FAIL=Failed to execute aios.
 
 # 既存デフォ----------------------------------------------------
 
-# print_banner()
-
 JP|MSG_BANNER_DECCRIPTION=オープンダブルアールティー専用設定ソフトウェア
 US|MSG_BANNER_DECCRIPTION=Dedicated configuration software for OpenWrt
 
