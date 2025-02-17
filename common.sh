@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-03-06"
+SCRIPT_VERSION="2025.02.16-03-07"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -211,33 +211,38 @@ script_update() {
     local version="$1"
     local file_name="$2"
     local cache_file="${CACHE_DIR}/script.ch"
-
-    # キャッシュディレクトリを作成
-    mkdir -p "${CACHE_DIR}"
-
-    # デフォルトの仮バージョン
+    local download_path="${BASE_DIR}/${file_name}"
     local default_version="2020.01.01-00-00"
 
-    # `wget` を使用して直接 `SCRIPT_VERSION` を取得
-    local remote_version
-    remote_version=$(wget -qO- --no-check-certificate "${BASE_URL}/${file_name}" | grep "^SCRIPT_VERSION=" | cut -d'=' -f2 | tr -d '"')
+    # キャッシュディレクトリ作成
+    mkdir -p "${CACHE_DIR}"
 
-    # `wget` 失敗時または `SCRIPT_VERSION` が取得できなかった場合
+    # 既存のファイルを削除してから `download()` を使用
+    rm -f "$download_path"
+    download "$file_name" "script"
+
+    # `wget` によるダウンロードが成功したか確認
+    if [ ! -s "$download_path" ]; then
+        debug_log "ERROR" "Failed to download ${file_name}. Proceeding with default version."
+        echo "$file_name=$default_version" >> "$cache_file"
+        return 0
+    fi
+
+    # `SCRIPT_VERSION` の取得
+    local remote_version
+    remote_version=$(grep "^SCRIPT_VERSION=" "$download_path" | cut -d'=' -f2 | tr -d '"')
+
+    # バージョン情報が無い場合の処理
     if [ -z "$remote_version" ]; then
         debug_log "WARN" "SCRIPT_VERSION not found in $file_name. Using default version ($default_version)."
         remote_version="$default_version"
     fi
 
-    # **キャッシュ (`script.ch`) に書き込み**
-    sed -i "/^$file_name=/d" "$cache_file" 2>/dev/null
-    echo "$file_name=$remote_version" >> "$cache_file"
-
-    # **デバッグログ**
+    # バージョン情報をログに記録
     debug_log "DEBUG" "Local version: $version"
     debug_log "DEBUG" "Remote version: $remote_version"
-    debug_log "DEBUG" "Cached version for $file_name: $remote_version"
 
-    # **バージョン比較**
+    # バージョン比較処理
     local v1_parts v2_parts
     v1_parts=$(echo "$version" | sed 's/[-.]/ /g')
     v2_parts=$(echo "$remote_version" | sed 's/[-.]/ /g')
@@ -248,11 +253,9 @@ script_update() {
         num_v1=$(echo "$v1_parts" | awk '{print $'$i'}')
         num_v2=$(echo "$v2_parts" | awk '{print $'$i'}')
 
-        # **空なら 0 を設定**
         [ -z "$num_v1" ] && num_v1=0
         [ -z "$num_v2" ] && num_v2=0
 
-        # **数値チェック**
         if ! echo "$num_v1" | grep -q '^[0-9]\+$'; then num_v1=0; fi
         if ! echo "$num_v2" | grep -q '^[0-9]\+$'; then num_v2=0; fi
 
