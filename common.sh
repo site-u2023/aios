@@ -367,6 +367,7 @@ get_package_manager() {
         fi
         echo "$PACKAGE_MANAGER" > "${CACHE_DIR}/downloader_ch"
     fi
+    echo -e "$(color green "Downloader $PACKAGE_MANAGER")"
 }
 
 #########################################################################
