@@ -1,8 +1,9 @@
 #!/bin/sh
 # aios.sh (初期エントリースクリプト)
 # License: CC0
-AIOS_VERSION="2025.02.15-1"
-echo -e "\033[7;40maios.sh Updated to version $AIOS_VERSION \033[0m"
+
+SCRIPT_VERSION="2025.02.16-00-00"
+echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 INPUT_LANG="${1:-}"
 
