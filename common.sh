@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-02-18"
+SCRIPT_VERSION="2025.02.16-02-19"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -226,7 +226,7 @@ script_update() {
     if [ -z "$remote_version" ]; then
         debug_log "ERROR" "Version information for $file_name not found. Proceeding with download."
         download "$file_name" "script"
-        sed -i "/^$file_name=/d" "$cache_file"
+        grep -v "^$file_name=" "$cache_file" > "${cache_file}.tmp" && mv "${cache_file}.tmp" "$cache_file"
         echo "$file_name=unknown" >> "$cache_file"
         return 0
     fi
@@ -236,9 +236,20 @@ script_update() {
     debug_log "DEBUG" "Remote version: $remote_version"
 
     # **バージョン比較 (`ash` 互換)**
-    local v1_part v2_part
-    IFS='.-' read -r v1_part1 v1_part2 v1_part3 v1_part4 v1_part5 <<< "$version"
-    IFS='.-' read -r v2_part1 v2_part2 v2_part3 v2_part4 v2_part5 <<< "$remote_version"
+    local v1_part1 v1_part2 v1_part3 v1_part4 v1_part5
+    local v2_part1 v2_part2 v2_part3 v2_part4 v2_part5
+
+    v1_part1=$(echo "$version" | cut -d'.' -f1 | cut -d'-' -f1)
+    v1_part2=$(echo "$version" | cut -d'.' -f2 | cut -d'-' -f1)
+    v1_part3=$(echo "$version" | cut -d'.' -f3 | cut -d'-' -f1)
+    v1_part4=$(echo "$version" | cut -d'-' -f2)
+    v1_part5=$(echo "$version" | cut -d'-' -f3)
+
+    v2_part1=$(echo "$remote_version" | cut -d'.' -f1 | cut -d'-' -f1)
+    v2_part2=$(echo "$remote_version" | cut -d'.' -f2 | cut -d'-' -f1)
+    v2_part3=$(echo "$remote_version" | cut -d'.' -f3 | cut -d'-' -f1)
+    v2_part4=$(echo "$remote_version" | cut -d'-' -f2)
+    v2_part5=$(echo "$remote_version" | cut -d'-' -f3)
 
     # **デフォルト値設定**
     v1_part1=${v1_part1:-0} v1_part2=${v1_part2:-0} v1_part3=${v1_part3:-0} v1_part4=${v1_part4:-0} v1_part5=${v1_part5:-0}
@@ -259,7 +270,7 @@ script_update() {
         if [ "$num_v1" -lt "$num_v2" ]; then
             debug_log "INFO" "Updating $file_name to version $remote_version."
             download "$file_name" "script"
-            sed -i "/^$file_name=/d" "$cache_file"
+            grep -v "^$file_name=" "$cache_file" > "${cache_file}.tmp" && mv "${cache_file}.tmp" "$cache_file"
             echo "$file_name=$remote_version" >> "$cache_file"
             return 0
         fi
