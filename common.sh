@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.16-02-02"
+SCRIPT_VERSION="2025.02.16-02-03"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -493,8 +493,9 @@ get_message() {
 #        ├─ なし → 言語選択を実行
 #########################################################################
 select_country() {
+    echo "DEBUG: Entered select_country()"
     debug_log "DEBUG" "Entering select_country() with arg: '$1'"
-    
+
     local cache_country="${CACHE_DIR}/country.ch"
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
 
@@ -517,8 +518,7 @@ select_country() {
         # 完全一致を優先
         local search_results
         search_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} 
-            { key = $2" "$3" "$4" "$5; if ($0 ~ search && !seen[key]++) print $0 }' "$BASE_DIR/country.db")
-
+            { key = $2" "$3" "$4" "$5; if ($0 ~ search && !seen[key]++) print $0 }' "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
 
         # 完全一致がない場合、部分一致を検索
         if [ -z "$search_results" ]; then
@@ -1411,8 +1411,9 @@ check_common() {
 
             check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
             get_package_manager
+            debug_log "DEBUG" "About to call select_country() with lang_code: '$lang_code'"
             select_country "$lang_code"
-            debug_log "DEBUG" "Calling select_country() with lang_code: '$lang_code'"
+            debug_log "DEBUG" "Returned from select_country()"
             ;;
         light)
             if [ -f "${CACHE_DIR}/country.ch" ]; then
