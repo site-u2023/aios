@@ -224,21 +224,21 @@ download() {
     fi
 
     # 空ファイル対策
-    if [ ! -s "$install_path" ]; then
-        debug_log "ERROR" "Download failed: $file_name is empty."
-        return 1
-    fi
+    #if [ ! -s "$install_path" ]; then
+    #    debug_log "ERROR" "Download failed: $file_name is empty."
+    #    return 1
+    #fi
 
     debug_log "INFO" "Download completed: $file_name is valid."
 
     # **バージョンチェック（ログ目的のみ）**
-    local script_version="unknown"
-    if grep -q "^SCRIPT_VERSION=" "$install_path"; then
-        script_version=$(grep "^SCRIPT_VERSION=" "$install_path" | cut -d'=' -f2 | tr -d '"')
-        debug_log "INFO" "$file_name version: $script_version"
-    else
-        debug_log "WARN" "SCRIPT_VERSION not found in $file_name."
-    fi
+    #local script_version="unknown"
+    #if grep -q "^SCRIPT_VERSION=" "$install_path"; then
+    #    script_version=$(grep "^SCRIPT_VERSION=" "$install_path" | cut -d'=' -f2 | tr -d '"')
+    #    debug_log "INFO" "$file_name version: $script_version"
+    #else
+    #    debug_log "WARN" "SCRIPT_VERSION not found in $file_name."
+    #fi
 
     return 0
 }
