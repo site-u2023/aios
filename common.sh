@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.18-02-10"
+SCRIPT_VERSION="2025.02.18-02-11"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -623,8 +623,10 @@ select_list() {
     local list_file="${CACHE_DIR}/${mode}_tmp.ch"
     local i=1
 
+    # **リストファイルを初期化**
     : > "$list_file"
 
+    # **リストを表示**
     echo "$input_data" | while IFS= read -r line; do
         printf "[%d] %s\n" "$i" "$line"
         echo "$line" >> "$list_file"
@@ -636,17 +638,23 @@ select_list() {
         printf "%s" "$(get_message "MSG_SELECT_NUMBER")"
         read -r choice
 
+        # **入力を正規化（全角→半角）**
+        choice=$(normalize_input "$choice")
+
         local selected_value
         selected_value=$(awk -v num="$choice" 'NR == num {print $0}' "$list_file")
 
         if [ -z "$selected_value" ]; then
             printf "%s\n" "$(color red "$(get_message "MSG_INVALID_SELECTION")")"
+            debug_log "WARN" "Invalid selection: '$choice'. Available options: $(cat "$list_file")"
             continue
         fi
 
         printf "%s\n" "$(color cyan "$(get_message "MSG_CONFIRM_SELECTION")")"
         printf "%s" "$(get_message "MSG_CONFIRM_YNR")"
         read -r yn
+
+        # **確認用の入力も正規化**
         yn=$(normalize_input "$yn")
 
         if [ "$yn" = "Y" ] || [ "$yn" = "y" ]; then
