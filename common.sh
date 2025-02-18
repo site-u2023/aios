@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.18-01-02"
+SCRIPT_VERSION="2025.02.18-02-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -188,141 +188,6 @@ test_debug_functions() {
 
 # 🔴　エラー・デバッグ・アップデート系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
 
-# 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
-
-#########################################################################
-# Last Update: 2025-02-18 10:00:00 (JST) 🚀
-# "Flexible downloading with silent and hidden modes."
-#
-# 【要件】
-# 1. `BASE_WGET` を使用してファイルをダウンロードする。
-# 2. `hidden` オプション:
-#    - ダウンロードの成否ログを記録するが、既存ファイルがある場合の出力を抑制する。
-# 3. `quiet` オプション:
-#    - `check_option()` で設定された `QUIET_MODE` に従い、すべてのログを抑制する。
-# 4. **引数の順序は自由** (`hidden` `quiet` の順番は任意)。
-# 5. `wget` のエラーハンドリングを行い、失敗時の詳細を `debug_log()` に記録する。
-# 6. **影響範囲:** `common.sh` の `download()` のみ（他の関数には影響なし）。
-#########################################################################
-download() {
-    # スクリプトのバージョンを取得
-    local script_version=""
-    script_version=$(grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' "$0" | cut -d'=' -f2 | tr -d '"')
-
-    # バージョン情報を表示
-    echo "$(color cyan "Executing download function - Version: ${script_version}")"
-
-    local hidden_mode="false"
-    local quiet_mode="${QUIET_MODE:-false}"
-    local file_name=""
-    
-    # **引数解析（順不同対応）**
-    while [ "$#" -gt 0 ]; do
-        case "$1" in
-            hidden) hidden_mode="true" ;;
-            quiet) quiet_mode="true" ;;
-            *) file_name="$1" ;;  # 最初に見つかった非オプション引数をファイル名とする
-        esac
-        shift
-    done
-
-    local install_path="${BASE_DIR}/${file_name}"
-    local remote_url="${BASE_URL}/${file_name}"
-
-    # **既存ファイルがあり、hidden モードならスキップ**
-    if [ -f "$install_path" ]; then
-        if [ "$hidden_mode" = "true" ]; then
-            return 0
-        fi
-        if [ "$quiet_mode" != "true" ]; then
-            echo "$(color yellow "$file_name already exists. Skipping download.")"
-        fi
-        return 0
-    fi
-
-    # **ダウンロード開始**
-    debug_log "DEBUG" "Starting download of $file_name from $remote_url"
-    $BASE_WGET "$install_path" "$remote_url"
-    local wget_status=$?
-
-    # **ダウンロード失敗時の処理**
-    if [ $wget_status -ne 0 ]; then
-        debug_log "ERROR" "Download failed: $file_name (wget exit code: $wget_status)"
-        return 1
-    fi
-
-    # **空ファイル対策**
-    if [ ! -s "$install_path" ]; then
-        debug_log "ERROR" "Download failed: $file_name is empty."
-        return 1
-    fi
-
-    # **ダウンロード成功メッセージ（quiet でない場合のみ表示）**
-    if [ "$quiet_mode" != "true" ]; then
-        echo "$(color green "Download completed: $file_name")"
-    fi
-
-    debug_log "INFO" "Download completed: $file_name is valid."
-    return 0
-}
-
-XXX_download() {
-    local hidden_mode="false"
-    local quiet_mode="${QUIET_MODE:-false}"
-    local file_name=""
-    
-    # **引数解析（順不同対応）**
-    while [ "$#" -gt 0 ]; do
-        case "$1" in
-            hidden) hidden_mode="true" ;;
-            quiet) quiet_mode="true" ;;
-            *) file_name="$1" ;;  # 最初に見つかった非オプション引数をファイル名とする
-        esac
-        shift
-    done
-
-    local install_path="${BASE_DIR}/${file_name}"
-    local remote_url="${BASE_URL}/${file_name}"
-
-    # **既存ファイルがあり、hidden モードならスキップ**
-    if [ -f "$install_path" ]; then
-        if [ "$hidden_mode" = "true" ]; then
-            return 0
-        fi
-        if [ "$quiet_mode" != "true" ]; then
-            echo "$(color yellow "$file_name already exists. Skipping download.")"
-        fi
-        return 0
-    fi
-
-    # **ダウンロード開始**
-    debug_log "DEBUG" "Starting download of $file_name from $remote_url"
-    $BASE_WGET "$install_path" "$remote_url"
-    local wget_status=$?
-
-    # **ダウンロード失敗時の処理**
-    if [ $wget_status -ne 0 ]; then
-        debug_log "ERROR" "Download failed: $file_name (wget exit code: $wget_status)"
-        return 1
-    fi
-
-    # **空ファイル対策**
-    if [ ! -s "$install_path" ]; then
-        debug_log "ERROR" "Download failed: $file_name is empty."
-        return 1
-    fi
-
-    # **ダウンロード成功メッセージ（quiet でない場合のみ表示）**
-    if [ "$quiet_mode" != "true" ]; then
-        echo "$(color green "Download completed: $file_name")"
-    fi
-
-    debug_log "INFO" "Download completed: $file_name is valid."
-    return 0
-}
-
-# 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
-
 #########################################################################
 # print_help: ヘルプメッセージを表示
 #########################################################################
@@ -424,6 +289,58 @@ check_downloader() {
 }
 
 #########################################################################
+# Last Update: 2025-02-18 23:00:00 (JST) 🚀
+# "Standardizing version formatting for consistency."
+#
+# 【要件】
+# 1. **バージョン番号のフォーマットを統一**
+#    - `YYYY.MM.DD-自由形式`
+#    - `YYYYMMDDHHMMSS-自由形式`
+#    - 許可される区切り文字: `- . , ; : 空白`
+#
+# 2. **処理内容**
+#    - **許可された文字のみを抽出**
+#    - **先頭のゼロを削除（例: `02` → `2`）**
+#    - **前後の余計なスペースを削除**
+#
+# 3. **適用対象**
+#    - **`download()`**: **スクリプトバージョンの取得・比較**
+#    - **`compare_versions()`**: **バージョン比較時のフォーマット統一**
+#
+# 4. **適用しない対象**
+#    - **バージョン番号の解釈を変更しない（順番の入れ替えはしない）**
+#    - **日付以外の文字列は削除せず、フォーマットの標準化のみ行う**
+#
+# 5. **依存関係**
+#    - `normalize_input()` を使用し、iconv による処理を統一
+#
+# 6. **影響範囲**
+#    - `common.sh` に統合し、`download()` & `compare_versions()` で使用
+#########################################################################
+normalize_version() {
+    local input="$1"
+
+    # **二バイト → 一バイト変換（normalize_input を適用）**
+    input=$(normalize_input "$input")
+
+    # **許可された文字（数字, 区切り文字）のみ残す**
+    input=$(echo "$input" | sed 's/[^0-9.\-\/,;: ]//g')
+
+    # **先頭ゼロを削除（例: `02` → `2`）**
+    input=$(echo "$input" | awk -F'[.\-\/,;: ]' '{
+        for (i=1; i<=NF; i++) {
+            sub(/^0+/, "", $i)
+            printf (i<NF) ? $i FS : $i
+        }
+    }')
+
+    # **前後の余計なスペースを削除**
+    input=$(echo "$input" | sed 's/^ *//;s/ *$//')
+
+    echo "$input"
+}
+
+#########################################################################
 # Last Update: 2025-02-18 18:00:00 (JST) 🚀
 # "Efficiency in retrieval, clarity in communication."
 # get_message: システムメッセージを取得する関数
@@ -484,10 +401,130 @@ get_message() {
     fi
 }
 
+# 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
+
+#########################################################################
+# Last Update: 2025-02-18 23:30:00 (JST) 🚀
+# "Efficient downloading with precise versioning and silent modes."
+#
+# 【要件】
+# 1. `BASE_WGET` を使用してファイルをダウンロードする。
+# 2. `hidden` オプション:
+#    - ダウンロードの成否ログを記録するが、既存ファイルがある場合の出力を抑制する。
+# 3. `quiet` オプション:
+#    - `check_option()` で設定された `QUIET_MODE` に従い、すべてのログを抑制する。
+# 4. **引数の順序は自由** (`hidden` `quiet` の順番は任意)。
+# 5. `wget` のエラーハンドリングを行い、失敗時の詳細を `debug_log()` に記録する。
+# 6. **影響範囲:** `common.sh` の `download()` のみ（他の関数には影響なし）。
+#########################################################################
+download() {
+    # **スクリプトのバージョンを取得・正規化**
+    local script_version=""
+    script_version=$(grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' "$0" | cut -d'=' -f2 | tr -d '"')
+    script_version=$(normalize_version "$script_version")
+
+    # **バージョン情報を表示**
+    echo "$(color cyan "Executing download function - Version: ${script_version}")"
+
+    local hidden_mode="false"
+    local quiet_mode="${QUIET_MODE:-false}"
+    local file_name=""
+
+    # **引数解析（順不同対応）**
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            hidden) hidden_mode="true" ;;
+            quiet) quiet_mode="true" ;;
+            *) file_name="$1" ;;  # 最初に見つかった非オプション引数をファイル名とする
+        esac
+        shift
+    done
+
+    # **ファイル名の正規化**
+    file_name=$(normalize_input "$file_name")
+
+    local install_path="${BASE_DIR}/${file_name}"
+    local remote_url="${BASE_URL}/${file_name}"
+
+    # **既存ファイルがあり、hidden モードならスキップ**
+    if [ -f "$install_path" ]; then
+        if [ "$hidden_mode" = "true" ]; then
+            return 0
+        fi
+        if [ "$quiet_mode" != "true" ]; then
+            echo "$(color yellow "$file_name already exists. Skipping download.")"
+        fi
+        return 0
+    fi
+
+    # **ダウンロード開始**
+    debug_log "DEBUG" "Starting download of $file_name from $remote_url"
+    $BASE_WGET "$install_path" "$remote_url"
+    local wget_status=$?
+
+    # **ダウンロード失敗時の処理**
+    if [ $wget_status -ne 0 ]; then
+        debug_log "ERROR" "Download failed: $file_name (wget exit code: $wget_status)"
+        return 1
+    fi
+
+    # **空ファイル対策**
+    if [ ! -s "$install_path" ]; then
+        debug_log "ERROR" "Download failed: $file_name is empty."
+        return 1
+    fi
+
+    # **ダウンロード成功メッセージ（quiet でない場合のみ表示）**
+    if [ "$quiet_mode" != "true" ]; then
+        echo "$(color green "Download completed: $file_name")"
+    fi
+
+    debug_log "INFO" "Download completed: $file_name is valid."
+    return 0
+}
+
+# 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
+
 # 🔵　ランゲージ（言語・ゾーン）系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
-# Last Update: 2025-02-12 17:25:00 (JST) 🚀
-# "Precision in code, clarity in purpose. Every update refines the path."
+# Last Update: 2025-02-18 23:00:00 (JST) 🚀
+# "Ensuring consistent input handling and text normalization."
+#
+# 【要件】
+# 1. **入力テキストを正規化（Normalize Input）**
+#    - `iconv` が利用可能な場合、UTF-8 から ASCII//TRANSLIT に変換
+#    - `iconv` がない場合、元の入力をそのまま返す（スルー）
+#
+# 2. **適用対象**
+#    - **`select_country()`**: **Y/N 確認時のみ適用**
+#    - **`select_list()`**: **番号選択 & Y/N 確認時のみ適用**
+#    - **`download()`**: **ファイル名の正規化**
+#
+# 3. **適用しない対象**
+#    - **言語選択の曖昧検索には適用しない**（例: `日本語` → `ja` に変換しない）
+#    - **バージョンフォーマットの変更はしない**
+#
+# 4. **依存関係**
+#    - `iconv` が **ない場合は何もしない**
+#    - `sed` や `awk` を使わず `echo` ベースで処理
+#
+# 5. **影響範囲**
+#    - `common.sh` に統合し、全スクリプトで共通関数として利用
+#########################################################################
+normalize_input() {
+    local input="$1"
+
+    # iconv がある場合、二バイト文字を一バイトに変換
+    if command -v iconv >/dev/null 2>&1; then
+        input=$(echo "$input" | iconv -f UTF-8 -t ASCII//TRANSLIT")
+    fi
+
+    echo "$input"
+}
+
+#########################################################################
+# Last Update: 2025-02-18 23:30:00 (JST) 🚀
+# "Country selection with precise Y/N confirmation."
 # select_country: ユーザーに国の選択を促す（検索機能付き）
 #
 # select_country()
@@ -509,7 +546,48 @@ get_message() {
 #        ├─ あり → 言語系終了（以降の処理なし）
 #        ├─ なし → 言語選択を実行
 #########################################################################
+
 select_country() {
+    echo "DEBUG: Entered select_country()"
+    debug_log "DEBUG" "Entering select_country()"
+
+    local cache_country="${CACHE_DIR}/country.ch"
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
+
+    while true; do
+        printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_COUNTRY")")"
+        printf "%s" "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
+        read -r input
+
+        # **検索時は `normalize_input()` を適用しない**
+        local cleaned_input
+        cleaned_input=$(echo "$input" | sed 's/[\/,_]/ /g')
+
+        local search_results
+        search_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} 
+            { key = $2" "$3" "$4" "$5; if ($0 ~ search && !seen[key]++) print $0 }' "$BASE_DIR/country.db")
+
+        if [ -z "$search_results" ]; then
+            printf "%s\n" "$(color red "Error: No matching country found for '$input'. Please try again.")"
+            continue
+        fi
+
+        selection_list "$search_results" "$tmp_country" "country"
+
+        # **Y/N 確認時のみ `normalize_input()` を適用**
+        local yn
+        read -r yn
+        yn=$(normalize_input "$yn")
+
+        if [ "$yn" = "Y" ] || [ "$yn" = "y" ]; then
+            country_write
+            select_zone
+            return
+        fi
+    done
+}
+
+XXX_select_country() {
     debug_log "DEBUG" "Entering select_country() with arg: '$1'"
 
     local cache_country="${CACHE_DIR}/country.ch"
@@ -619,9 +697,8 @@ BAK_select_country() {
 }
 
 #########################################################################
-# Last Update: 2025-02-12 16:12:39 (JST) 🚀
-# "Precision in code, clarity in purpose. Every update refines the path."
-#########################################################################
+# Last Update: 2025-02-18 23:30:00 (JST) 🚀
+# "Handling numbered list selections with confirmation."
 # select_list()
 # 選択リストを作成し、選択結果をファイルに保存する関数。
 #
@@ -640,41 +717,22 @@ select_list() {
     local input_data="$1"
     local output_file="$2"
     local mode="$3"
-    local list_file=""
+    local list_file="${CACHE_DIR}/${mode}_tmp.ch"
     local i=1
-
-    if [ "$mode" = "country" ]; then
-        list_file="${CACHE_DIR}/country_tmp.ch"
-    elif [ "$mode" = "zone" ]; then
-        list_file="${CACHE_DIR}/zone_tmp.ch"
-    else
-        return 1
-    fi
 
     : > "$list_file"
 
     echo "$input_data" | while IFS= read -r line; do
-        if [ "$mode" = "country" ]; then
-            local extracted
-            extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
-            if [ -n "$extracted" ]; then
-                printf "[%d] %s\n" "$i" "$extracted"
-                echo "$line" >> "$list_file"
-                i=$((i + 1))
-            fi
-        elif [ "$mode" = "zone" ]; then
-            if [ -n "$line" ]; then
-                echo "$line" >> "$list_file"
-                printf "[%d] %s\n" "$i" "$line"
-                i=$((i + 1))
-            fi
-        fi
+        printf "[%d] %s\n" "$i" "$line"
+        echo "$line" >> "$list_file"
+        i=$((i + 1))
     done
 
     while true; do
         printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_NUMBER_CHOICE")")"
         printf "%s" "$(get_message "MSG_SELECT_NUMBER")"
         read -r choice
+
         local selected_value
         selected_value=$(awk -v num="$choice" 'NR == num {print $0}' "$list_file")
 
@@ -683,44 +741,15 @@ select_list() {
             continue
         fi
 
-        local confirm_info=""
-        if [ "$mode" = "country" ]; then
-            confirm_info=$(echo "$selected_value" | awk '{print $2, $3, $4, $5}')
-        elif [ "$mode" = "zone" ]; then
-            confirm_info=$(echo "$selected_value" | awk '{print $1, $2}')
-        fi
-
-        printf "%s\n" "$(color cyan "$(get_message "MSG_CONFIRM_SELECTION") [$choice] $confirm_info")"
+        printf "%s\n" "$(color cyan "$(get_message "MSG_CONFIRM_SELECTION")")"
         printf "%s" "$(get_message "MSG_CONFIRM_YNR")"
         read -r yn
-        
-        case "$yn" in
-            [Yy]*) 
-                printf "%s\n" "$selected_value" > "$output_file"
-                return
-                ;;
-            [Nn]*) 
-                printf "%s\n" "$(color yellow "Returning to selection.")"
-                select_list "$input_data" "$output_file" "$mode"
-                return
-                ;;
-            [Rr]*)                
-                rm -f "$CACHE_DIR/country.ch" \
-                "$CACHE_DIR/language.ch" \
-                "$CACHE_DIR/luci.ch" \
-                "$CACHE_DIR/zone.ch" \
-                "$CACHE_DIR/zonename.ch" \
-                "$CACHE_DIR/timezone.ch" \
-                "$CACHE_DIR/country_success_done" \
-                "$CACHE_DIR/timezone_success_done"
-                select_country
-                return
-                ;;
-            *)
-                printf "%s\n" "$(color red "$(get_message "MSG_INVALID_INPUT_YNR")")"
-                continue
-                ;;
-        esac
+        yn=$(normalize_input "$yn")
+
+        if [ "$yn" = "Y" ] || [ "$yn" = "y" ]; then
+            printf "%s\n" "$selected_value" > "$output_file"
+            return
+        fi
     done  
 }
 
