@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.18-02-06"
+SCRIPT_VERSION="2025.02.18-02-07"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -327,19 +327,27 @@ normalize_version() {
     # **許可された文字（数字, 記号）以外を削除**
     input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
 
-    # **余分な改行やスペースを削除**
+    # **不要な改行やスペースを削除**
     input=$(echo "$input" | tr -d '\n' | sed 's/ *$//')
 
     # **区切り文字を正しく処理**
-    input=$(echo "$input" | awk -F'[_-]' '{
+    input=$(echo "$input" | awk -F'[._-]' '{
         for (i=1; i<=NF; i++) {
-            if ($i ~ /^[0-9]+$/) sub(/^0+/, "", $i)
-            printf "%s%s", $i, (i<NF ? "." : "")
+            if ($i ~ /^[0-9]+$/) sub(/^0+/, "", $i)  # 先頭ゼロ削除（ただし区切りは保持）
+            printf "%s%s", $i, (i<NF ? (FS == "_" ? "-" : ".") : "")
         }
         print ""
     }')
 
     echo "$input"
+}
+
+get_script_version() {
+    local version=""
+    version=$(grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' "$0" | cut -d'=' -f2 | tr -d '"')
+    version=$(normalize_version "$version")
+
+    echo "$version"
 }
 
 #########################################################################
@@ -420,16 +428,9 @@ get_message() {
 # 6. **影響範囲:** `common.sh` の `download()` のみ（他の関数には影響なし）。
 #########################################################################
 download() {
-    # **スクリプトのバージョンを取得・正規化**
-    local script_version=""
-    script_version=$(grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' "$0" | cut -d'=' -f2 | tr -d '"')
-
-    # **バージョン情報のフォーマット統一**
-    script_version=$(normalize_version "$script_version")
-
-    # **バージョン情報を表示**
+    # **バージョン情報の表示**
     if [ "$QUIET_MODE" != "true" ]; then
-        echo -e "$(color cyan "Executing download function - Version: ${script_version}")"
+        echo -e "$(color cyan "Executing download function - Version: ${SCRIPT_VERSION}")"
     fi
 
     local hidden_mode="false"
@@ -484,7 +485,6 @@ download() {
     debug_log "INFO" "Download completed: $file_name is valid."
     return 0
 }
-
 
 # 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
