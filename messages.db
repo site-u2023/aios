@@ -98,11 +98,6 @@ JP|MSG_BUILD_SUCCESS=✅ ビルドが成功しました！
 US|MSG_BUILD_FAILURE=Build failed. Please check the logs for details.
 JP|MSG_BUILD_FAILURE=ビルドに失敗しました。詳細はログを確認してください。
 
-US|MSG_BUILD_START=
-JP|MSG_BUILD_START=
-US|MSG_BUILD_SUCCESS=
-JP|MSG_BUILD_SUCCESS=
-
 # オプション関連
 JP|MSG_INVALID_OPTION=無効なオプションが指定されました: {opt}
 US|MSG_INVALID_OPTION=Invalid option specified: {opt}
