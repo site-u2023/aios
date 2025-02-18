@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.18-00-12"
+SCRIPT_VERSION="2025.02.18-00-14"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -76,32 +76,26 @@ handle_error() {
 #########################################################################
 debug_log() {
     local level="$1"
-    local message_key="$2"
+    local message="$2"
     local file="$3"
     local version="$4"
 
-    # もし `$1` にログレベル (DEBUG/INFO/WARN/ERROR) が含まれていなかったら、デフォルトで DEBUG にする
+    # `$1` にログレベルが指定されていない場合、デフォルトを `DEBUG` にする
     case "$level" in
         "DEBUG"|"INFO"|"WARN"|"ERROR") ;;  # 何もしない (正しいログレベル)
         "")
-            # `$1` が空なら `$2` をメッセージとして扱い、デフォルトを DEBUG にする
             level="DEBUG"
-            message_key="$1"
+            message="$1"
             file="$2"
             version="$3"
             ;;
         *)
-            # `$1` にログレベルが指定されていなかった場合、デフォルトを DEBUG にする
-            message_key="$1"
+            message="$1"
             file="$2"
             version="$3"
             level="DEBUG"
             ;;
     esac
-
-    # メッセージ取得
-    local message
-    message=$(get_message "$message_key")
 
     # 変数を置換
     message=$(echo "$message" | sed -e "s/{file}/$file/g" -e "s/{version}/$version/g")
@@ -132,6 +126,7 @@ debug_log() {
         echo "$log_message" >> "$LOG_DIR/debug.log"
     fi
 }
+
 
 #########################################################################
 # Last Update: 2025-02-16 17:30:00 (JST) 🚀
@@ -367,44 +362,44 @@ get_message() {
     local key="$1"
     local quiet_flag="$2"
     local message_cache="${CACHE_DIR}/message.ch"
-    local lang="US"  # デフォルトを "US" に設定
+    local lang="en"  # デフォルトは "en"
 
-    # 言語コードの決定
+    # message.ch が無い場合、country.ch から言語コードを取得
     if [ ! -f "$message_cache" ]; then
         if [ -f "${CACHE_DIR}/country.ch" ]; then
             lang=$(awk '{print $5}' "${CACHE_DIR}/country.ch")
         fi
-        [ -z "$lang" ] && lang="US"
+        [ -z "$lang" ] && lang="en"
     else
         lang=$(cat "$message_cache")
     fi
 
     local message_db="${BASE_DIR}/messages.db"
+    local message=""
 
-    # **messages.db の存在確認**
-    if [ ! -s "$message_db" ]; then
-        debug_log "ERROR" "messages.db is missing or empty!"
-        return 1
+    # messages.db が無い場合は、`debug_log` を呼ばず、キーそのままを返す
+    if [ ! -f "$message_db" ]; then
+        echo "$key"
+        return 0
     fi
 
-    debug_log "DEBUG" "Searching messages.db for: ^${lang}|${key}="
-
-    # **`awk` で取得する**
-    local message
-    message=$(awk -F'=' -v key="$key" -v lang="$lang" '$1 == lang"|"key {print $2}' "$message_db")
-
-    # **US でフォールバック検索**
+    message=$(grep "^${lang}|${key}=" "$message_db" | cut -d'=' -f2-)
     if [ -z "$message" ]; then
-        message=$(awk -F'=' -v key="$key" '$1 == "US|"key {print $2}' "$message_db")
+        message=$(grep "^US|${key}=" "$message_db" | cut -d'=' -f2-)
     fi
 
-    # **見つからなければデバッグログを記録**
     if [ -z "$message" ]; then
-        debug_log "WARN" "Message key '$key' not found in messages.db."
-        message="$key"
+        # ここで `debug_log` を呼ばず、キーそのままを返す
+        echo "$key"
+        return 0
     fi
 
-    echo "$message"
+    # quiet オプションが指定された場合は出力せず終了
+    if [ "$quiet_flag" = "quiet" ]; then
+        return 0
+    else
+        echo "$message"
+    fi
 }
 
 XXX_get_message() {
