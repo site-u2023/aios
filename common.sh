@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.18-00-14"
+SCRIPT_VERSION="2025.02.18-00-16"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -331,119 +331,74 @@ check_downloader() {
 }
 
 #########################################################################
-# Last Update: 2025-02-16 13:40:00 (JST) 🚀
-# "Precision in code, clarity in purpose. Every update refines the path."
-#
-# get_message: 多言語対応メッセージ取得関数
+# Last Update: 2025-02-18 10:00:00 (JST) 🚀
+# "Flexible downloading with silent and hidden modes."
 #
 # 【要件】
-# 1. 言語の決定:
-#    - 'message.ch' を最優先で参照する（normalize_country() により確定）
-#    - 'message.ch' が無ければ、'country.ch' から国コードを取得し、デフォルトを "en" に設定
-#
-# 2. メッセージ取得の流れ:
-#    - messages.db から、言語コード (例: "en", "US", "ja" 等) に対応するメッセージを取得
-#    - 該当メッセージが無い場合、"US"（英語）をフォールバック
-#    - それでも見つからなければ、キー ($1) をそのまま返す
-#
-# 3. country.ch との関係:
-#    - country.ch はデバイス設定用（変更不可）で、ここから言語コードが取得される
-#    - message.ch はシステムメッセージ表示用（フォールバック可能）で、通常は normalize_country() により決定
-#
-# 4. メンテナンス:
-#    - 言語設定に影響を与えず、メッセージのみ message.ch で管理する
-#    - normalize_country() によって message.ch が決定されるため、変更は normalize_country() 側で行う
-#
-# 5. オプション (quiet):
-#    - 第二引数に "quiet" を指定すると、取得したメッセージを echo せず、出力を抑制する
-#      （例: get_message "MSG_CONFIRM_INSTALL" quiet ）
+# 1. `BASE_WGET` を使用してファイルをダウンロードする。
+# 2. `hidden` オプション:
+#    - ダウンロードの成否ログを記録するが、既存ファイルがある場合の出力を抑制する。
+# 3. `quiet` オプション:
+#    - `check_option()` で設定された `QUIET_MODE` に従い、すべてのログを抑制する。
+# 4. **引数の順序は自由** (`hidden` `quiet` の順番は任意)。
+# 5. `wget` のエラーハンドリングを行い、失敗時の詳細を `debug_log()` に記録する。
+# 6. **影響範囲:** `common.sh` の `download()` のみ（他の関数には影響なし）。
 #########################################################################
-get_message() {
-    local key="$1"
-    local quiet_flag="$2"
-    local message_cache="${CACHE_DIR}/message.ch"
-    local lang="en"  # デフォルトは "en"
+download() {
+    local hidden_mode="false"
+    local quiet_mode="${QUIET_MODE:-false}"
+    local file_name=""
+    
+    # **引数解析（順不同対応）**
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            hidden) hidden_mode="true" ;;
+            quiet) quiet_mode="true" ;;
+            *) file_name="$1" ;;  # 最初に見つかった非オプション引数をファイル名とする
+        esac
+        shift
+    done
 
-    # message.ch が無い場合、country.ch から言語コードを取得
-    if [ ! -f "$message_cache" ]; then
-        if [ -f "${CACHE_DIR}/country.ch" ]; then
-            lang=$(awk '{print $5}' "${CACHE_DIR}/country.ch")
+    local install_path="${BASE_DIR}/${file_name}"
+    local remote_url="${BASE_URL}/${file_name}"
+
+    # **既存ファイルがあり、hidden モードならスキップ**
+    if [ -f "$install_path" ]; then
+        if [ "$hidden_mode" = "true" ]; then
+            return 0
         fi
-        [ -z "$lang" ] && lang="en"
-    else
-        lang=$(cat "$message_cache")
-    fi
-
-    local message_db="${BASE_DIR}/messages.db"
-    local message=""
-
-    # messages.db が無い場合は、`debug_log` を呼ばず、キーそのままを返す
-    if [ ! -f "$message_db" ]; then
-        echo "$key"
+        if [ "$quiet_mode" != "true" ]; then
+            echo "$(color yellow "$file_name already exists. Skipping download.")"
+        fi
         return 0
     fi
 
-    message=$(grep "^${lang}|${key}=" "$message_db" | cut -d'=' -f2-)
-    if [ -z "$message" ]; then
-        message=$(grep "^US|${key}=" "$message_db" | cut -d'=' -f2-)
+    # **ダウンロード開始**
+    debug_log "DEBUG" "Starting download of $file_name from $remote_url"
+    $BASE_WGET "$install_path" "$remote_url"
+    local wget_status=$?
+
+    # **ダウンロード失敗時の処理**
+    if [ $wget_status -ne 0 ]; then
+        debug_log "ERROR" "Download failed: $file_name (wget exit code: $wget_status)"
+        return 1
     fi
 
-    if [ -z "$message" ]; then
-        # ここで `debug_log` を呼ばず、キーそのままを返す
-        echo "$key"
-        return 0
+    # **空ファイル対策**
+    if [ ! -s "$install_path" ]; then
+        debug_log "ERROR" "Download failed: $file_name is empty."
+        return 1
     fi
 
-    # quiet オプションが指定された場合は出力せず終了
-    if [ "$quiet_flag" = "quiet" ]; then
-        return 0
-    else
-        echo "$message"
+    # **ダウンロード成功メッセージ（quiet でない場合のみ表示）**
+    if [ "$quiet_mode" != "true" ]; then
+        echo "$(color green "Download completed: $file_name")"
     fi
+
+    debug_log "INFO" "Download completed: $file_name is valid."
+    return 0
 }
 
-XXX_get_message() {
-    local key="$1"
-    local quiet_flag="$2"
-    local message_cache="${CACHE_DIR}/message.ch"
-    local lang="en"  # デフォルトは "en"
-
-    # message.ch が無い場合、country.ch から言語コードを取得
-    if [ ! -f "$message_cache" ]; then
-        if [ -f "${CACHE_DIR}/country.ch" ]; then
-            lang=$(awk '{print $5}' "${CACHE_DIR}/country.ch")
-        fi
-        [ -z "$lang" ] && lang="en"
-    else
-        lang=$(cat "$message_cache")
-    fi
-
-    local message_db="${BASE_DIR}/messages.db"
-    local message=""
-
-    # messages.db が無い場合は、キーそのままを返す
-    if [ ! -f "$message_db" ]; then
-        message="$key"
-    else
-        message=$(grep "^${lang}|${key}=" "$message_db" | cut -d'=' -f2-)
-        # 該当メッセージが無ければ、US をフォールバック
-        if [ -z "$message" ]; then
-            message=$(grep "^US|${key}=" "$message_db" | cut -d'=' -f2-)
-        fi
-        # それでも見つからなければ、キーそのままとし、デバッグログを出す
-        if [ -z "$message" ]; then
-            debug_log "INFO" "Message key '$key' not found in messages.db."
-            message="$key"
-        fi
-    fi
-
-    # quiet オプションが指定された場合は出力せず終了
-    if [ "$quiet_flag" = "quiet" ]; then
-        return 0
-    else
-        echo "$message"
-    fi
-}
 
 # 🔵　ランゲージ（言語・ゾーン）系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
@@ -811,7 +766,7 @@ select_zone() {
 }
 
 #########################################################################
-# Last Update: 2025-02-12 17:10:05 (JST) 🚀
+# Last Update: 2025-02-18 11:00:00 (JST) 🚀
 # "Precision in code, clarity in purpose. Every update refines the path."
 # normalize_country: 言語設定の正規化
 #
@@ -821,20 +776,69 @@ select_zone() {
 #    - `country.ch` が無い場合は `select_country()` を実行し、手動選択
 #
 # 2. システムメッセージの言語 (`message.ch`) の確定:
-#    - `message.db` の `SUPPORTED_LANGUAGES` を確認
-#    - `country.ch` に記録された言語が `SUPPORTED_LANGUAGES` にあれば、それを `message.ch` に保存
-#    - `SUPPORTED_LANGUAGES` に無い場合、`message.ch` に `en` を設定
+#    - `messages.db` の `SUPPORTED_LANGUAGES` を確認
+#    - `country.ch` に記録された言語が `SUPPORTED_LANGUAGES` に含まれる場合、それを `message.ch` に保存
+#    - `SUPPORTED_LANGUAGES` に無い場合、`message.ch` に `US`（フォールバック）を設定
 #
 # 3. `country.ch` との関係:
 #    - `country.ch` はデバイス設定用（変更不可）
 #    - `message.ch` はシステムメッセージ表示用（フォールバック可能）
 #
-# 4. メンテナンス:
+# 4. `$ACTIVE_LANGUAGE` の管理:
+#    - `normalize_country()` 実行時に `$ACTIVE_LANGUAGE` を設定
+#    - `$ACTIVE_LANGUAGE` は `message.ch` の値を常に参照
+#    - `$ACTIVE_LANGUAGE` が未設定の場合、フォールバックで `US`
+#
+# 5. メンテナンス:
 #    - `country.ch` はどのような場合でも変更しない
 #    - `message.ch` のみフォールバックを適用し、システムメッセージの一貫性を維持
 #    - 言語設定に影響を与えず、メッセージの表示のみを制御する
 #########################################################################
 normalize_country() {
+    local message_db="${BASE_DIR}/messages.db"
+    local country_cache="${CACHE_DIR}/country.ch"  # 主（真）データ
+    local message_cache="${CACHE_DIR}/message.ch"
+    local selected_language=""
+    local flag_file="${CACHE_DIR}/country_success_done"
+
+    # もし既に「国と言語設定完了」を示すフラグファイルがあれば、何もしない
+    if [ -f "$flag_file" ]; then
+        debug_log "INFO" "normalize_country() already done. Skipping repeated success message."
+        return
+    fi
+
+    # ✅ `country.ch` が存在しない場合、エラーを返して終了
+    if [ ! -f "$country_cache" ]; then
+        debug_log "ERROR: country.ch not found. Cannot determine language."
+        return
+    fi
+
+    # ✅ `country.ch` の $5（国コード）を取得
+    selected_language=$(awk '{print $5}' "$country_cache")
+
+    debug_log "DEBUG: Selected language extracted from country.ch -> $selected_language"
+
+    # ✅ `messages.db` からサポートされている言語を取得
+    local supported_languages
+    supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
+
+    # ✅ `selected_language` が `messages.db` にある場合、それを `message.ch` に設定
+    if echo "$supported_languages" | grep -qw "$selected_language"; then
+        debug_log "INFO: Using message database language: $selected_language"
+        echo "$selected_language" > "$message_cache"
+        ACTIVE_LANGUAGE="$selected_language"  # ✅ `$ACTIVE_LANGUAGE` にも設定
+    else
+        debug_log "WARNING: Language '$selected_language' not found in messages.db. Using 'US' as fallback."
+        echo "US" > "$message_cache"
+        ACTIVE_LANGUAGE="US"  # ✅ フォールバック時も `$ACTIVE_LANGUAGE` に設定
+    fi
+
+    debug_log "INFO: Final system message language -> $ACTIVE_LANGUAGE"
+    echo "$(get_message "MSG_COUNTRY_SUCCESS")"
+    touch "$flag_file"    
+}
+
+XXX_normalize_country() {
     local message_db="${BASE_DIR}/messages.db"
     local country_cache="${CACHE_DIR}/country.ch"  # 主（真）データ
     local message_cache="${CACHE_DIR}/message.ch"
