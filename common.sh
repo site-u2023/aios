@@ -448,7 +448,6 @@ get_message() {
 #        ├─ なし → 言語選択を実行
 #########################################################################
 select_country() {
-    echo "DEBUG: Entered select_country()"
     debug_log "DEBUG" "Entering select_country() with arg: '$1'"
 
     local cache_country="${CACHE_DIR}/country.ch"
@@ -1260,13 +1259,12 @@ check_common() {
             exit 0
             ;;
         full)
-            download "openwrt.db"
-            download "country.db"
-            download "packages.db"
-            download "messages.db"
             check_openwrt
+            download "hidden" "openwrt.db"
+            download "hidden" "country.db"
+            download "hidden" "packages.db"
+            download "hidden" "messages.db"
             check_downloader
-            echo "${lang_code}"
             select_country "$lang_code"
             ;;
         light)
