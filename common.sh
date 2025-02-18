@@ -196,6 +196,20 @@ test_debug_functions() {
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
+# messages_db: メッセージデータベースのダウンロード
+#########################################################################
+messages_db() {
+    if [ ! -f "${BASE_DIR}/messages.db" ]; then
+        echo -e "$(color yellow "Downloading messages.db...")"
+        if ! ${BASE_WGET} "${BASE_DIR}/messages.db" "${BASE_URL}/messages.db"; then
+            echo -e "$(color red "Failed to download messages.db")"
+            return 1
+        fi
+        echo -e "$(color green "Successfully downloaded messages.db")"
+    fi
+}
+
+#########################################################################
 # Last Update: 2025-02-17 15:45:00 (JST) 🚀
 # "Simplified download logic with BASE_WGET support."
 #
@@ -1206,6 +1220,7 @@ check_common() {
             ;;
         full)
             download "openwrt.db"
+            messages_db 
             download "country.db"
             download "packages.db"
             download "messages.db"
