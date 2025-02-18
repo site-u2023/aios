@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.18-00-11"
+SCRIPT_VERSION="2025.02.18-00-12"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -225,10 +225,9 @@ download() {
 
     debug_log "INFO" "Download completed: $file_name is valid."
 
-    # **バージョンチェック（ログ目的のみ）**
+    # `messages.db` の場合のみ、デバッグログを出力（`get_message()` は呼ばない）
     if [ "$file_name" = "messages.db" ]; then
-        debug_log "DEBUG" "Running get_message() to confirm messages.db integrity."
-        get_message "MSG_TEST_CACHE_CONTENTS"
+        debug_log "DEBUG" "messages.db downloaded successfully. Skipping immediate get_message() call."
     fi
 
     return 0
@@ -368,9 +367,9 @@ get_message() {
     local key="$1"
     local quiet_flag="$2"
     local message_cache="${CACHE_DIR}/message.ch"
-    local lang="US"  # デフォルトを "US" に変更
+    local lang="US"  # デフォルトを "US" に設定
 
-    # `message.ch` が無ければ `country.ch` から言語を取得
+    # 言語コードの決定
     if [ ! -f "$message_cache" ]; then
         if [ -f "${CACHE_DIR}/country.ch" ]; then
             lang=$(awk '{print $5}' "${CACHE_DIR}/country.ch")
@@ -381,35 +380,32 @@ get_message() {
     fi
 
     local message_db="${BASE_DIR}/messages.db"
-    local message=""
 
-    # **messages.db のチェック**
+    # **messages.db の存在確認**
     if [ ! -s "$message_db" ]; then
         debug_log "ERROR" "messages.db is missing or empty!"
-        return 1  # 失敗時は即時リターン
+        return 1
     fi
 
     debug_log "DEBUG" "Searching messages.db for: ^${lang}|${key}="
-    
-    # **`tr -d '\r'` で `CRLF` の影響を削除**
-    message=$(grep "^${lang}|${key}=" "$message_db" | tr -d '\r' | cut -d'=' -f2-)
+
+    # **`awk` で取得する**
+    local message
+    message=$(awk -F'=' -v key="$key" -v lang="$lang" '$1 == lang"|"key {print $2}' "$message_db")
 
     # **US でフォールバック検索**
     if [ -z "$message" ]; then
-        message=$(grep "^US|${key}=" "$message_db" | tr -d '\r' | cut -d'=' -f2-)
+        message=$(awk -F'=' -v key="$key" '$1 == "US|"key {print $2}' "$message_db")
     fi
 
-    # **見つからなければ警告 & 既定値を返す**
+    # **見つからなければデバッグログを記録**
     if [ -z "$message" ]; then
-        if [ "$quiet_flag" != "quiet" ]; then
-            debug_log "WARN" "Message key '$key' not found in messages.db."
-        fi
+        debug_log "WARN" "Message key '$key' not found in messages.db."
         message="$key"
     fi
 
     echo "$message"
 }
-
 
 XXX_get_message() {
     local key="$1"
