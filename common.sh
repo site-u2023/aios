@@ -516,15 +516,10 @@ download() {
 #########################################################################
 normalize_input() {
     input="$1"
-
-    # **iconv は使わず sed で全角数字 → 半角数字に変換**
+    # **全角数字 → 半角数字**
     input=$(echo "$input" | sed 'y/０１２３４５６７８９/0123456789/')
 
-    # **カタカナの半角変換（必要なら追加）**
-    input=$(echo "$input" | sed -E 's/　/ /g' | sed -E 's/［/[/g; s/］/]/g')
-
-    debug_log "INFO" "normalize_input() processed input: $input"
-    
+    # **不要なログを削除（echo のみを使用）**
     echo "$input"
 }
 
