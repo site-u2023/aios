@@ -879,7 +879,7 @@ normalize_country() {
 # 【使用例】
 # - select_package "package_name" yn dont notset disabled
 #########################################################################
-select_package() {
+select_package() { 
     local package_name="$1"
     local confirm_install="$2"
     local skip_lang_pack="$3"
@@ -904,15 +904,7 @@ select_package() {
         esac
     done
 
-    # `custom_build_*` パッケージの判定
-    if [[ "$package_name" =~ ^custom_build_ ]]; then
-        debug_log "INFO" "Detected custom build package: $package_name"
-        # `YN` 確認なしで package_build() に渡す
-        package_build "$package_name" "$confirm_install" "$skip_lang_pack" "$skip_package_db" "$set_disabled" "$hidden"
-        return
-    fi
-
-    # 通常のパッケージの場合、YN確認を行う
+    # `YN` 確認を最初に一度だけ行う
     if [ "$confirm_install" = "yes" ]; then
         while true; do
             echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
@@ -926,7 +918,15 @@ select_package() {
         done
     fi
 
-    # インストール処理を進める（ビルド処理ではない場合）
+    # `custom_build_*` パッケージの判定
+    if [[ "$package_name" =~ ^custom_build_ ]]; then
+        debug_log "INFO" "Detected custom build package: $package_name"
+        # `YN` 確認後、package_build() に渡してビルド処理を実行
+        package_build "$package_name" "$confirm_install" "$skip_lang_pack" "$skip_package_db" "$set_disabled" "$hidden"
+        return
+    fi
+
+    # 通常のパッケージの場合、インストール処理を進める
     install_package "$package_name" "$skip_lang_pack" "$skip_package_db" "$set_disabled" "$hidden"
 }
 
