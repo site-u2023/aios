@@ -840,47 +840,6 @@ normalize_country() {
     touch "$flag_file"    
 }
 
-XXX_normalize_country() {
-    local message_db="${BASE_DIR}/messages.db"
-    local country_cache="${CACHE_DIR}/country.ch"  # 主（真）データ
-    local message_cache="${CACHE_DIR}/message.ch"
-    local selected_language=""
-    local flag_file="${CACHE_DIR}/country_success_done"
-
-    # もし既に「国と言語設定完了」を示すフラグファイルがあれば、何もしない
-    if [ -f "$flag_file" ]; then
-        debug_log "INFO" "normalize_country() already done. Skipping repeated success message."
-        return
-    fi
-
-    # ✅ `country.ch` が存在しない場合、エラーを返して終了
-    if [ ! -f "$country_cache" ]; then
-        debug_log "ERROR: country.ch not found. Cannot determine language."
-        return
-    fi
-
-    # ✅ `country.ch` の $5（国コード）を取得
-    selected_language=$(awk '{print $5}' "$country_cache")
-
-    debug_log "DEBUG: Selected language extracted from country.ch -> $selected_language"
-
-    # ✅ `messages.db` からサポートされている言語を取得
-    local supported_languages
-    supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
-
-    # ✅ `selected_language` が `messages.db` にある場合、それを `message.ch` に設定
-    if echo "$supported_languages" | grep -qw "$selected_language"; then
-        debug_log "INFO: Using message database language: $selected_language"
-        echo "$selected_language" > "$message_cache"
-    else
-        debug_log "WARNING: Language '$selected_language' not found in messages.db. Using 'en' as fallback."
-        echo "US" > "$message_cache"
-    fi
-
-    debug_log "INFO: Final system message language -> $(cat "$message_cache")"
-    echo "$(get_message "MSG_COUNTRY_SUCCESS")"
-    touch "$flag_file"    
-}
 
 # 🔴　ランゲージ（言語・ゾーン）系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
