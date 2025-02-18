@@ -1259,11 +1259,11 @@ check_common() {
             exit 0
             ;;
         full)
-            check_openwrt
             download "hidden" "openwrt.db"
             download "hidden" "country.db"
             download "hidden" "packages.db"
             download "hidden" "messages.db"
+            check_openwrt
             check_downloader
             select_country "$lang_code"
             ;;
