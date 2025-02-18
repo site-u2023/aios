@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-00-04"
+SCRIPT_VERSION="2025.02.19-00-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -945,7 +945,7 @@ install_package() {
         return 1
     fi
 
-    # すでにインストール済みか確認
+    # パッケージがすでにインストールされている場合
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if opkg list-installed | grep -q "^$package_name "; then
             if [ "$hidden" != "yes" ]; then
@@ -959,6 +959,26 @@ install_package() {
                 echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
             fi
             return 0
+        fi
+    fi
+
+    # `custom_build_*` の場合、インストール確認をスキップして package_build() に進む
+    if [[ "$package_name" =~ ^custom_build_ ]]; then
+        # すべてのオプションが適用された後で、package_build() を呼び出す
+        package_build "$package_name" "$confirm_install" "$skip_lang_pack" "$skip_package_db" "$set_disabled" "$hidden"
+        return
+    fi
+
+    # パッケージがリポジトリに存在するか確認
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if ! opkg list | grep -q "^$package_name "; then
+            echo "$(get_message "MSG_PACKAGE_NOT_FOUND_IN_REPOSITORY" | sed "s/{pkg}/$package_name/")"
+            return 1
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if ! apk search "$package_name" > /dev/null 2>&1; then
+            echo "$(get_message "MSG_PACKAGE_NOT_FOUND_IN_REPOSITORY" | sed "s/{pkg}/$package_name/")"
+            return 1
         fi
     fi
 
@@ -981,6 +1001,11 @@ install_package() {
         $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1
     else
         $PACKAGE_MANAGER install "$package_name"
+    fi
+
+    # `custom_build_*` の場合、package.db の適用をスキップ
+    if [[ "$package_name" =~ ^custom_build_ ]]; then
+        return
     fi
 
     # package.db の適用 (notset オプションがない場合)
