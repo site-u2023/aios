@@ -546,7 +546,6 @@ normalize_input() {
 #        ├─ あり → 言語系終了（以降の処理なし）
 #        ├─ なし → 言語選択を実行
 #########################################################################
-
 select_country() {
     echo "DEBUG: Entered select_country()"
     debug_log "DEBUG" "Entering select_country()"
@@ -613,70 +612,6 @@ XXX_select_country() {
         local search_results
         search_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} 
             { key = $2" "$3" "$4" "$5; if ($0 ~ search && !seen[key]++) print $0 }' "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
-
-        # 完全一致がない場合、部分一致を検索
-        if [ -z "$search_results" ]; then
-            search_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} 
-                { for (i=2; i<=NF; i++) if ($i ~ search) print $0 }' "$BASE_DIR/country.db")
-        fi
-
-        if [ -z "$search_results" ]; then
-            printf "%s\n" "$(color red "Error: No matching country found for '$input'. Please try again.")"
-            continue
-        fi
-
-        select_list "$search_results" "$tmp_country" "country"
-        country_write
-        select_zone
-        return
-    done
-}
-
-BAK_select_country() {
-    debug_log "DEBUG" "Entering select_country() with arg: '$1'"
-    
-    local cache_country="${CACHE_DIR}/country.ch"
-    local tmp_country="${CACHE_DIR}/country_tmp.ch"
-
-    if [ -n "$1" ]; then
-        debug_log "INFO" "Processing input: $1"
-        local predefined_country=$(awk -v search="$1" 'BEGIN {IGNORECASE=1} 
-            $2 == search || $3 == search || $4 == search || $5 == search {print $0}' "$BASE_DIR/country.db")
-
-        if [ -n "$predefined_country" ]; then
-            debug_log "INFO" "Found country entry: $predefined_country"
-            echo  "$predefined_country" > "$tmp_country"
-            country_write
-            select_zone  
-            return
-        else
-            debug_log "ERROR" "Invalid input '$1' is not a valid country."
-            printf "%s\n" "$(color red "Error: '$1' is not a recognized country name or code.")"
-            printf "%s\n" "$(color yellow "Switching to language selection.")"
-            set --  
-        fi
-    fi
-
-    if [ -f "$cache_country" ]; then
-        debug_log "INFO" "Country cache found. Skipping selection."
-        select_zone
-        return
-    fi
-
-    while true; do
-        printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_COUNTRY")")"
-        printf "%s" "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
-        read -r input
-        
-        # 入力の正規化: "/", ",", "_" をスペースに置き換え
-        local cleaned_input
-        cleaned_input=$(echo "$input" | sed 's/[\/,_]/ /g')
-        
-        # 完全一致を優先
-        local search_results
-        search_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} 
-            { key = $2" "$3" "$4" "$5; if ($0 ~ search && !seen[key]++) print $0 }' "$BASE_DIR/country.db")
-
 
         # 完全一致がない場合、部分一致を検索
         if [ -z "$search_results" ]; then
