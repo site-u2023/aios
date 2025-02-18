@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-00-03"
+SCRIPT_VERSION="2025.02.19-00-04"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -922,7 +922,7 @@ install_package() {
 
     for arg in "$@"; do
         case "$arg" in
-            yn) confirm_install="yes" ;;
+            yn) confirm_install="yes" ;;  # yn オプション
             dont) skip_lang_pack="yes" ;;
             notset) skip_package_db="yes" ;;
             disabled) set_disabled="yes" ;;
@@ -943,13 +943,6 @@ install_package() {
     else
         echo "$(get_message "MSG_PACKAGE_MANAGER_NOT_FOUND")"
         return 1
-    fi
-
-    # `custom_build_*` パッケージが渡された場合、package_build() を呼び出す
-    if [[ "$package_name" =~ ^custom_build_ ]]; then
-        debug_log "INFO" "Detected custom build package: $package_name"
-        package_build "$package_name" "$confirm_install" "$skip_lang_pack" "$skip_package_db" "$set_disabled" "$hidden"
-        return
     fi
 
     # すでにインストール済みか確認
@@ -976,9 +969,9 @@ install_package() {
             echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
             read -r yn
             case "$yn" in
-                [Yy]*) break ;;
-                [Nn]*) echo "$(get_message "MSG_INSTALL_ABORTED")"; return 1 ;;
-                *) echo "Invalid input. Please enter Y or N." ;;
+                [Yy]*) break ;;  # Yまたはyを入力すればインストールを続ける
+                [Nn]*) echo "$(get_message "MSG_INSTALL_ABORTED")"; return 1 ;;  # Nまたはnを入力すれば中止
+                *) echo "Invalid input. Please enter Y or N." ;;  # 無効な入力
             esac
         done
     fi
