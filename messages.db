@@ -52,7 +52,7 @@ JP|MSG_SKIPPING_DOWNLOAD={file} は最新バージョン ({version}) です。�
 US|MSG_UPDATE_SUCCESS=Updated to version {version} of {file}.
 JP|MSG_UPDATE_SUCCESS={file} をバージョン {version} に更新しました。
 
-# common.sh
+# コモン
 US|MSG_ENTER_COUNTRY=🌎 Enter country name, code, or language to search.
 JP|MSG_ENTER_COUNTRY=🌏 国名、コード、または言語を入力してください。
 US|MSG_SEARCH_KEYWORD=🔍 Search (Keyword/Code):
@@ -74,7 +74,7 @@ JP|MSG_INVALID_SELECTION=❌ 無効な選択です。有効な番号を入力し
 US|MSG_INVALID_INPUT_YNR=❌ Invalid input. Please enter 'Y', 'N', or 'R'.
 JP|MSG_INVALID_INPUT_YNR=❌ 無効な入力です。「Y」「N」「R」を入力してください。
 
-# install_package
+# インストールパッケージ
 US|MSG_CONFIRM_ONLY_YN=🔄 Confirm (Y=Yes / N=No):
 JP|MSG_CONFIRM_ONLY_YN=🔄 確認 (Y=はい / N=いいえ):
 
@@ -120,7 +120,7 @@ US|MSG_LUCI_LANGUAGE_PACK_INSTALLED=LuCI language package {pkg} installed.
 JP|MSG_LUCI_LANGUAGE_PACK_NOT_FOUND=LuCI 言語パッケージ {pkg} は見つかりませんでした。
 US|MSG_LUCI_LANGUAGE_PACK_NOT_FOUND=LuCI language package {pkg} not found.
 
-# package.db 設定の適用
+# パッケージDB 設定の適用
 JP|MSG_PACKAGE_DB_APPLIED=パッケージ {pkg} の設定が適用されました。
 US|MSG_PACKAGE_DB_APPLIED=Configuration for {pkg} applied.
 
