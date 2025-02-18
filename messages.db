@@ -1,7 +1,10 @@
 # メッセージデータベース (多言語対応)
 # フォーマット: 言語コード|メッセージキー=メッセージ
 
-SUPPORTED_LANGUAGES="US JP" 
+SCRIPT_VERSION="2025.02.16-02-20"
+echo "Updated to version $SCRIPT_VERSION messages.db"
+
+SUPPORTED_LANGUAGES="US JP"
 
 # debug test -------------------------------------
 US|MSG_UNDER_TEST=👽 Under test
@@ -36,6 +39,7 @@ US|MSG_ERROR_OCCURRED=An error occurred.
 
 JP|MSG_VERSION_UNSUPPORTED={file} のバージョンがサポート外です ({version})。
 US|MSG_VERSION_UNSUPPORTED={file} is unsupported ({version}).
+
 # -----------------------
 # ℹ️ 情報メッセージ (追加)
 # -----------------------
@@ -48,20 +52,19 @@ JP|MSG_SKIPPING_DOWNLOAD={file} は最新バージョン ({version}) です。�
 US|MSG_UPDATE_SUCCESS=Updated to version {version} of {file}.
 JP|MSG_UPDATE_SUCCESS={file} をバージョン {version} に更新しました。
 
-
 # common.sh
 US|MSG_ENTER_COUNTRY=🌎 Enter country name, code, or language to search.
 JP|MSG_ENTER_COUNTRY=🌏 国名、コード、または言語を入力してください。
-US|MSG_SEARCH_KEYWORD=🔍 Search (Keyword/Code): 
+US|MSG_SEARCH_KEYWORD=🔍 Search (Keyword/Code):
 JP|MSG_SEARCH_KEYWORD=🔍 検索（キーワード/コード）:
 US|MSG_ENTER_NUMBER_CHOICE=🔢 Enter the number of your choice.
 JP|MSG_ENTER_NUMBER_CHOICE=🔢 選択する番号を入力してください。
-US|MSG_SELECT_NUMBER=📌 Select Number: 
-JP|MSG_SELECT_NUMBER=📌 番号を選択: 
+US|MSG_SELECT_NUMBER=📌 Select Number:
+JP|MSG_SELECT_NUMBER=📌 番号を選択:
 US|MSG_CONFIRM_SELECTION=✅ Confirm selection:
 JP|MSG_CONFIRM_SELECTION=✅ 選択を確認:
-US|MSG_CONFIRM_YNR=🔄 Confirm (Y=Yes / N=No / R=Restart): 
-JP|MSG_CONFIRM_YNR=🔄 確認 (Y=はい / N=いいえ / R=再選択): 
+US|MSG_CONFIRM_YNR=🔄 Confirm (Y=Yes / N=No / R=Restart):
+JP|MSG_CONFIRM_YNR=🔄 確認 (Y=はい / N=いいえ / R=再選択):
 US|MSG_COUNTRY_SUCCESS=✅ Country and language selection completed successfully!
 US|MSG_TIMEZONE_SUCCESS=✅ Timezone selection completed successfully!
 JP|MSG_COUNTRY_SUCCESS=✅ 国と言語の選択が完了しました！
@@ -72,9 +75,8 @@ US|MSG_INVALID_INPUT_YNR=❌ Invalid input. Please enter 'Y', 'N', or 'R'.
 JP|MSG_INVALID_INPUT_YNR=❌ 無効な入力です。「Y」「N」「R」を入力してください。
 
 # install_package
-US|MSG_CONFIRM_ONLY_YN=🔄 Confirm (Y=Yes / N=No): 
+US|MSG_CONFIRM_ONLY_YN=🔄 Confirm (Y=Yes / N=No):
 JP|MSG_CONFIRM_ONLY_YN=🔄 確認 (Y=はい / N=いいえ):
-
 
 # パッケージマネージャ関連
 JP|MSG_PACKAGE_MANAGER_NOT_FOUND=パッケージマネージャが見つかりません。
@@ -132,20 +134,10 @@ US|MSG_PACKAGE_ENABLED=Package {pkg} has been enabled.
 MSG_PACKAGE_DEPENDENCY_ERROR="{pkg} の依存関係が不足しているため、インストールできません。"
 MSG_PACKAGE_DEPENDENCY_ERROR="Dependency check failed: {pkg} has missing dependencies."
 
-# 追加--------------------------------------------
-JP|ERR_COUNTRY_CHECK=国の確認に失敗しました。国データベースが正しくロードされていることを確認してください。
-US|ERR_COUNTRY_CHECK=Country check failed. Please ensure the country database is correctly loaded.
-
-# 追加--------------------------------------------
-JP|MSG_CONFIRM_COUNTRY={file} ({version}) を選択しますか？ [Y/n]:
-US|MSG_CONFIRM_COUNTRY=Confirm country selection: {file} ({version})? [Y/n]:
-
-# 追加--------------------------------------------
 # バージョン情報メッセージ
 JP|version_supported=バージョン {version} はサポートされています ({status})。
 US|version_supported=Version {version} is supported ({status}).
 
-# 追加--------------------------------------------
 # ダウンロード関連メッセージ
 JP|MSG_DOWNLOADING_MISSING_FILE={file} をダウンロード中...
 US|MSG_DOWNLOADING_MISSING_FILE=Downloading {file}...
@@ -155,14 +147,3 @@ US|MSG_DOWNLOAD_CONFIRM=Do you want to download {file}? [Y/n]
 
 JP|MSG_EXECUTE_AIOS_FAIL=aios の実行に失敗しました。
 US|MSG_EXECUTE_AIOS_FAIL=Failed to execute aios.
-
-# 既存デフォ----------------------------------------------------
-
-JP|MSG_BANNER_DECCRIPTION=オープンダブルアールティー専用設定ソフトウェア
-US|MSG_BANNER_DECCRIPTION=Dedicated configuration software for OpenWrt
-
-JP|MSG_BANNER_NAME=オールインワンスクリプト
-US|MSG_BANNER_NAME=All-in-One Scripts
-
-JP|MSG_BANNER_DISCLAIMER=免責事項: 本スクリプトは自己責任でご使用下さい
-US|MSG_BANNER_DISCLAIMER=Disclaimer: Use this script at your own risk
