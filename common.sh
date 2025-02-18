@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-00-03"
+SCRIPT_VERSION="2025.02.19-00-04"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -941,14 +941,17 @@ install_package() {
     if [ -f "${CACHE_DIR}/downloader_ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
     else
+        debug_log "ERROR" "Package manager not found"
         echo "$(get_message "MSG_PACKAGE_MANAGER_NOT_FOUND")"
         return 1
     fi
 
-    # パッケージがすでにインストールされている場合
+    # パッケージがすでにインストールされているか確認
+    debug_log "DEBUG" "Checking if package is already installed: $package_name"
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if opkg list-installed | grep -q "^$package_name "; then
             if [ "$hidden" != "yes" ]; then
+                debug_log "INFO" "$package_name is already installed."
                 echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
             fi
             return 0
@@ -956,6 +959,7 @@ install_package() {
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         if apk list-installed | grep -q "^$package_name "; then
             if [ "$hidden" != "yes" ]; then
+                debug_log "INFO" "$package_name is already installed."
                 echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
             fi
             return 0
@@ -964,19 +968,23 @@ install_package() {
 
     # `custom_build_*` の場合、インストール確認をスキップして package_build() に進む
     if [[ "$package_name" =~ ^custom_build_ ]]; then
+        debug_log "INFO" "Detected custom build package: $package_name"
         # すべてのオプションが適用された後で、package_build() を呼び出す
         package_build "$package_name" "$confirm_install" "$skip_lang_pack" "$skip_package_db" "$set_disabled" "$hidden"
         return
     fi
 
     # パッケージがリポジトリに存在するか確認
+    debug_log "DEBUG" "Checking if package exists in repository: $package_name"
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if ! opkg list | grep -q "^$package_name "; then
+            debug_log "ERROR" "$package_name not found in repository."
             echo "$(get_message "MSG_PACKAGE_NOT_FOUND_IN_REPOSITORY" | sed "s/{pkg}/$package_name/")"
             return 1
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         if ! apk search "$package_name" > /dev/null 2>&1; then
+            debug_log "ERROR" "$package_name not found in repository."
             echo "$(get_message "MSG_PACKAGE_NOT_FOUND_IN_REPOSITORY" | sed "s/{pkg}/$package_name/")"
             return 1
         fi
@@ -984,6 +992,7 @@ install_package() {
 
     # インストール確認 (yn オプションが指定された場合)
     if [ "$confirm_install" = "yes" ]; then
+        debug_log "DEBUG" "YN confirmation before install for package: $package_name"
         while true; do
             echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
             echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
@@ -997,6 +1006,7 @@ install_package() {
     fi
 
     # パッケージのインストール (DEV_NULL に応じて出力制御)
+    debug_log "DEBUG" "Installing package: $package_name"
     if [ "$DEV_NULL" = "on" ]; then
         $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1
     else
