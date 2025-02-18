@@ -1,0 +1,168 @@
+# メッセージデータベース (多言語対応)
+# フォーマット: 言語コード|メッセージキー=メッセージ
+
+# SUPPORTED_LANGUAGES="US JP" 
+
+# debug test -------------------------------------
+US|MSG_UNDER_TEST=👽 Under test
+JP|MSG_UNDER_TEST=👹 試験中
+
+# -----------------------
+# 🔍 デバッグ用メッセージ
+# -----------------------
+US|MSG_TEST_COUNTRY_SEARCH=Testing country search with input: {file}
+JP|MSG_TEST_COUNTRY_SEARCH=国検索のテストを実行中: {file}
+
+US|MSG_TEST_TIMEZONE_SEARCH=Testing timezone search with input: {file}
+JP|MSG_TEST_TIMEZONE_SEARCH=タイムゾーン検索のテストを実行中: {file}
+
+US|MSG_TEST_CACHE_CONTENTS=Checking cache file contents...
+JP|MSG_TEST_CACHE_CONTENTS=キャッシュファイルの内容を確認中...
+
+US|MSG_CACHE_CONTENTS=Cache file {file} contents:
+JP|MSG_CACHE_CONTENTS=キャッシュファイル {file} の内容:
+
+US|MSG_CACHE_NOT_FOUND=Cache file {file} not found.
+JP|MSG_CACHE_NOT_FOUND=キャッシュファイル {file} が見つかりません。
+
+# -----------------------
+# 🚨 エラーメッセージ (追加)
+# -----------------------
+US|ERR_DOWNLOAD=Download failed: {file}.
+JP|ERR_DOWNLOAD={file} のダウンロードに失敗しました。
+
+JP|MSG_ERROR_OCCURRED=エラーが発生しました。
+US|MSG_ERROR_OCCURRED=An error occurred.
+
+JP|MSG_VERSION_UNSUPPORTED={file} のバージョンがサポート外です ({version})。
+US|MSG_VERSION_UNSUPPORTED={file} is unsupported ({version}).
+# -----------------------
+# ℹ️ 情報メッセージ (追加)
+# -----------------------
+US|MSG_DOWNLOAD_START=Downloading latest version of {file}.
+JP|MSG_DOWNLOAD_START={file} の最新バージョンをダウンロード中...
+
+US|MSG_SKIPPING_DOWNLOAD={file} is up-to-date ({version}). Skipping download.
+JP|MSG_SKIPPING_DOWNLOAD={file} は最新バージョン ({version}) です。スキップします。
+
+US|MSG_UPDATE_SUCCESS=Updated to version {version} of {file}.
+JP|MSG_UPDATE_SUCCESS={file} をバージョン {version} に更新しました。
+
+
+# common.sh
+US|MSG_ENTER_COUNTRY=🌎 Enter country name, code, or language to search.
+JP|MSG_ENTER_COUNTRY=🌏 国名、コード、または言語を入力してください。
+US|MSG_SEARCH_KEYWORD=🔍 Search (Keyword/Code): 
+JP|MSG_SEARCH_KEYWORD=🔍 検索（キーワード/コード）:
+US|MSG_ENTER_NUMBER_CHOICE=🔢 Enter the number of your choice.
+JP|MSG_ENTER_NUMBER_CHOICE=🔢 選択する番号を入力してください。
+US|MSG_SELECT_NUMBER=📌 Select Number: 
+JP|MSG_SELECT_NUMBER=📌 番号を選択: 
+US|MSG_CONFIRM_SELECTION=✅ Confirm selection:
+JP|MSG_CONFIRM_SELECTION=✅ 選択を確認:
+US|MSG_CONFIRM_YNR=🔄 Confirm (Y=Yes / N=No / R=Restart): 
+JP|MSG_CONFIRM_YNR=🔄 確認 (Y=はい / N=いいえ / R=再選択): 
+US|MSG_COUNTRY_SUCCESS=✅ Country and language selection completed successfully!
+US|MSG_TIMEZONE_SUCCESS=✅ Timezone selection completed successfully!
+JP|MSG_COUNTRY_SUCCESS=✅ 国と言語の選択が完了しました！
+JP|MSG_TIMEZONE_SUCCESS=✅ タイムゾーンの選択が完了しました！
+US|MSG_INVALID_SELECTION=❌ Invalid selection. Please choose a valid number.
+JP|MSG_INVALID_SELECTION=❌ 無効な選択です。有効な番号を入力してください。
+US|MSG_INVALID_INPUT_YNR=❌ Invalid input. Please enter 'Y', 'N', or 'R'.
+JP|MSG_INVALID_INPUT_YNR=❌ 無効な入力です。「Y」「N」「R」を入力してください。
+
+# install_package
+US|MSG_CONFIRM_ONLY_YN=🔄 Confirm (Y=Yes / N=No): 
+JP|MSG_CONFIRM_ONLY_YN=🔄 確認 (Y=はい / N=いいえ):
+
+
+# パッケージマネージャ関連
+JP|MSG_PACKAGE_MANAGER_NOT_FOUND=パッケージマネージャが見つかりません。
+US|MSG_PACKAGE_MANAGER_NOT_FOUND=Package manager not found.
+
+JP|MSG_RUNNING_UPDATE=パッケージリストを更新中...
+US|MSG_RUNNING_UPDATE=Updating package list...
+
+JP|MSG_INVALID_PACKAGE_MANAGER=無効なパッケージマネージャです。
+US|MSG_INVALID_PACKAGE_MANAGER=Invalid package manager.
+
+# オプション関連
+JP|MSG_INVALID_OPTION=無効なオプションが指定されました: {opt}
+US|MSG_INVALID_OPTION=Invalid option specified: {opt}
+
+# パッケージの存在確認
+JP|MSG_PACKAGE_ALREADY_INSTALLED=パッケージ {pkg} はすでにインストールされています。
+US|MSG_PACKAGE_ALREADY_INSTALLED=Package {pkg} is already installed.
+
+JP|MSG_PACKAGE_NOT_FOUND=パッケージ {pkg} が見つかりません。
+US|MSG_PACKAGE_NOT_FOUND=Package {pkg} not found.
+
+# インストールの確認
+JP|MSG_CONFIRM_INSTALL=パッケージ {pkg} をインストールしますか？
+US|MSG_CONFIRM_INSTALL=Do you want to install {pkg}?
+
+JP|MSG_INSTALL_ABORTED=インストールがキャンセルされました。
+US|MSG_INSTALL_ABORTED=Installation aborted.
+
+JP|MSG_INVALID_INPUT_YN=無効な入力です。Y または N を入力してください。
+US|MSG_INVALID_INPUT_YN=Invalid input. Please enter Y or N.
+
+# パッケージのインストール結果
+JP|MSG_PACKAGE_INSTALLED=パッケージ {pkg} のインストールが完了しました。
+US|MSG_PACKAGE_INSTALLED=Installation of {pkg} completed.
+
+# LuCI 言語パッケージ関連 (適用対象: luci-app-xxx)
+JP|MSG_LUCI_LANGUAGE_PACK_INSTALLED=LuCI 言語パッケージ {pkg} がインストールされました。
+US|MSG_LUCI_LANGUAGE_PACK_INSTALLED=LuCI language package {pkg} installed.
+
+JP|MSG_LUCI_LANGUAGE_PACK_NOT_FOUND=LuCI 言語パッケージ {pkg} は見つかりませんでした。
+US|MSG_LUCI_LANGUAGE_PACK_NOT_FOUND=LuCI language package {pkg} not found.
+
+# package.db 設定の適用
+JP|MSG_PACKAGE_DB_APPLIED=パッケージ {pkg} の設定が適用されました。
+US|MSG_PACKAGE_DB_APPLIED=Configuration for {pkg} applied.
+
+# 設定の有効化/無効化
+JP|MSG_PACKAGE_DISABLED=パッケージ {pkg} は無効化されました。
+US|MSG_PACKAGE_DISABLED=Package {pkg} has been disabled.
+
+JP|MSG_PACKAGE_ENABLED=パッケージ {pkg} は有効化されました。
+US|MSG_PACKAGE_ENABLED=Package {pkg} has been enabled.
+
+MSG_PACKAGE_DEPENDENCY_ERROR="{pkg} の依存関係が不足しているため、インストールできません。"
+MSG_PACKAGE_DEPENDENCY_ERROR="Dependency check failed: {pkg} has missing dependencies."
+
+# 追加--------------------------------------------
+JP|ERR_COUNTRY_CHECK=国の確認に失敗しました。国データベースが正しくロードされていることを確認してください。
+US|ERR_COUNTRY_CHECK=Country check failed. Please ensure the country database is correctly loaded.
+
+# 追加--------------------------------------------
+JP|MSG_CONFIRM_COUNTRY={file} ({version}) を選択しますか？ [Y/n]:
+US|MSG_CONFIRM_COUNTRY=Confirm country selection: {file} ({version})? [Y/n]:
+
+# 追加--------------------------------------------
+# バージョン情報メッセージ
+JP|version_supported=バージョン {version} はサポートされています ({status})。
+US|version_supported=Version {version} is supported ({status}).
+
+# 追加--------------------------------------------
+# ダウンロード関連メッセージ
+JP|MSG_DOWNLOADING_MISSING_FILE={file} をダウンロード中...
+US|MSG_DOWNLOADING_MISSING_FILE=Downloading {file}...
+
+JP|MSG_DOWNLOAD_CONFIRM={file} をダウンロードしますか？ [Y/n]
+US|MSG_DOWNLOAD_CONFIRM=Do you want to download {file}? [Y/n]
+
+JP|MSG_EXECUTE_AIOS_FAIL=aios の実行に失敗しました。
+US|MSG_EXECUTE_AIOS_FAIL=Failed to execute aios.
+
+# 既存デフォ----------------------------------------------------
+
+JP|MSG_BANNER_DECCRIPTION=オープンダブルアールティー専用設定ソフトウェア
+US|MSG_BANNER_DECCRIPTION=Dedicated configuration software for OpenWrt
+
+JP|MSG_BANNER_NAME=オールインワンスクリプト
+US|MSG_BANNER_NAME=All-in-One Scripts
+
+JP|MSG_BANNER_DISCLAIMER=免責事項: 本スクリプトは自己責任でご使用下さい
+US|MSG_BANNER_DISCLAIMER=Disclaimer: Use this script at your own risk
