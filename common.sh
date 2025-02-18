@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.18-01-00"
+SCRIPT_VERSION="2025.02.18-01-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -429,11 +429,11 @@ get_message() {
 # select_country: ユーザーに国の選択を促す（検索機能付き）
 #
 # select_country()
-# ├── selection_list()  → 選択結果を country_tmp.ch に保存
+# ├── select_list()  → 選択結果を country_tmp.ch に保存
 # ├── country_write()   → country.ch, country.ch, luci.ch, zone.ch に確定
 # └── select_zone()     → zone.ch から zonename.ch, timezone.ch に確定
 #
-# [1] ユーザーが国を選択 → selection_list()
+# [1] ユーザーが国を選択 → select_list()
 # [2] 一時キャッシュに保存 (country_tmp.ch)
 # [3] country_write() を実行
 # [4] 確定キャッシュを作成（country.ch, country.ch, luci.ch, zone.ch）→ 書き込み禁止にする
@@ -485,7 +485,7 @@ select_country() {
             continue
         fi
 
-        selection_list "$search_results" "$tmp_country" "country"
+        select_list "$search_results" "$tmp_country" "country"
         country_write
         select_zone
         return
@@ -549,7 +549,7 @@ BAK_select_country() {
             continue
         fi
 
-        selection_list "$search_results" "$tmp_country" "country"
+        select_list "$search_results" "$tmp_country" "country"
         country_write
         select_zone
         return
@@ -560,7 +560,7 @@ BAK_select_country() {
 # Last Update: 2025-02-12 16:12:39 (JST) 🚀
 # "Precision in code, clarity in purpose. Every update refines the path."
 #########################################################################
-# selection_list()
+# select_list()
 # 選択リストを作成し、選択結果をファイルに保存する関数。
 #
 # 【要件】
@@ -574,7 +574,7 @@ BAK_select_country() {
 #     - 入力データが空ならエラーを返す
 #     - 選択後に `Y/N` で確認
 #########################################################################
-selection_list() {
+select_list() {
     local input_data="$1"
     local output_file="$2"
     local mode="$3"
@@ -639,7 +639,7 @@ selection_list() {
                 ;;
             [Nn]*) 
                 printf "%s\n" "$(color yellow "Returning to selection.")"
-                selection_list "$input_data" "$output_file" "$mode"
+                select_list "$input_data" "$output_file" "$mode"
                 return
                 ;;
             [Rr]*)                
@@ -765,7 +765,7 @@ select_zone() {
 
     local formatted_zone_list=$(awk '{gsub(",", " "); for (i=1; i<=NF; i+=2) print $i, $(i+1)}' "$cache_zone")
 
-    selection_list "$formatted_zone_list" "$cache_zone_tmp" "zone"
+    select_list "$formatted_zone_list" "$cache_zone_tmp" "zone"
 
     local selected_zone=$(cat "$cache_zone_tmp" 2>/dev/null)
     if [ -z "$selected_zone" ]; then
