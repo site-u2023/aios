@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-00-01"
+SCRIPT_VERSION="2025.02.19-00-02"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -948,7 +948,7 @@ install_package() {
     # `custom_build_*` パッケージが渡された場合、package_build() を呼び出す
     if [[ "$package_name" =~ ^custom_build_ ]]; then
         debug_log "INFO" "Detected custom build package: $package_name"
-        package_build "$package_name"
+        package_build "$package_name" "$confirm_install" "$skip_lang_pack" "$skip_package_db" "$set_disabled" "$hidden"
         return
     fi
 
@@ -1048,7 +1048,6 @@ install_package() {
         fi
     fi
 }
-
 
 #########################################################################
 # Last Update: 2025-02-18 (JST) 🚀
