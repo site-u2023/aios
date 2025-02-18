@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.18-02-07"
+SCRIPT_VERSION="2025.02.18-02-08"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -552,43 +552,54 @@ normalize_input() {
 #        ├─ なし → 言語選択を実行
 #########################################################################
 select_country() {
-    debug_log "DEBUG" "Entering select_country()"
+    debug_log "DEBUG" "Entering select_country() with arg: '$1'"
 
     local cache_country="${CACHE_DIR}/country.ch"
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
+
+    # **キャッシュがあればゾーン選択へスキップ**
+    if [ -f "$cache_country" ]; then
+        debug_log "INFO" "Country cache found. Skipping selection."
+        select_zone
+        return
+    fi
 
     while true; do
         printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_COUNTRY")")"
         printf "%s" "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
         read -r input
 
-        # **検索時は `normalize_input()` を適用しない**
+        # **入力の正規化: "/", ",", "_" をスペースに置き換え**
         local cleaned_input
         cleaned_input=$(echo "$input" | sed 's/[\/,_]/ /g')
 
+        # **完全一致を優先**
         local search_results
         search_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} 
-            { key = $2" "$3" "$4" "$5; if ($0 ~ search && !seen[key]++) print $0 }' "$BASE_DIR/country.db")
+            { key = $2" "$3" "$4" "$5; if ($0 ~ search && !seen[key]++) print $0 }' "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
 
+        # **完全一致がない場合、部分一致を検索**
+        if [ -z "$search_results" ]; then
+            search_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} 
+                { for (i=2; i<=NF; i++) if ($i ~ search) print $0 }' "$BASE_DIR/country.db")
+        fi
+
+        # **検索結果がない場合のエラーハンドリング**
         if [ -z "$search_results" ]; then
             printf "%s\n" "$(color red "Error: No matching country found for '$input'. Please try again.")"
             continue
         fi
 
-        select_list "$search_results" "$tmp_country" "country"
+        # **検索結果リストを表示**
+        selection_list "$search_results" "$tmp_country" "country"
 
-        # **Y/N 確認時のみ `normalize_input()` を適用**
-        local yn
-        read -r yn
-        yn=$(normalize_input "$yn")
+        # **選択結果をキャッシュへ書き込み**
+        country_write
 
-        if [ "$yn" = "Y" ] || [ "$yn" = "y" ]; then
-            country_write
-            debug_log "DEBUG" "Executing country_write() after country selection."
-            select_zone
-            debug_log "DEBUG" "country_write() completed. Now entering select_zone()."
-            return
-        fi
+        # **ゾーン選択へ進む**
+        debug_log "INFO" "Country selection completed. Proceeding to select_zone()."
+        select_zone
+        return
     done
 }
 
