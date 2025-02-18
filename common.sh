@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-06-00"
+SCRIPT_VERSION="2025.02.19-06-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -941,17 +941,16 @@ select_package() {
 # 【使用例】
 # - install_package "package_name" yn dont notset disabled
 #########################################################################
-
 install_package() {
     local package_name="$1"
-    shift  # パッケージ名とオプションを処理
+    shift  # 最初の引数 (パッケージ名) を取得し、残りをオプションとして処理
 
     # オプション解析
     local confirm_install="no"
     local skip_lang_pack="no"
     local skip_package_db="no"
     local set_disabled="no"
-    local hidden="no"
+    local hidden="no"   # hidden オプション：既にインストール済みの場合のメッセージを抑制
 
     for arg in "$@"; do
         case "$arg" in
@@ -963,9 +962,19 @@ install_package() {
         esac
     done
 
-    # `custom_build_*` パッケージの場合、package_build() に渡す
+    # downloader_ch からパッケージマネージャーを取得
+    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
+    else
+        debug_log "ERROR" "Package manager not found"
+        echo "$(get_message "MSG_PACKAGE_MANAGER_NOT_FOUND")"
+        return 1
+    fi
+
+    # `custom_build_*` パッケージの場合、インストール確認をスキップして package_build() に進む
     if [[ "$package_name" =~ ^custom_build_ ]]; then
         debug_log "INFO" "Detected custom build package: $package_name"
+        # すべてのオプションが適用された後で、package_build() を呼び出す
         package_build "$package_name" "$confirm_install" "$skip_lang_pack" "$skip_package_db" "$set_disabled" "$hidden"
         return
     fi
