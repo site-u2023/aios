@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.18-02-12"
+SCRIPT_VERSION="2025.02.18-03-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1040,6 +1040,90 @@ install_package() {
             /etc/init.d/$package_name start
         fi
     fi
+}
+
+#########################################################################
+# Last Update: 2025-02-18 (JST) 🚀
+# "Handles package installation and build for custom packages."
+#
+# 【要件】
+# 1. **汎用的なビルド依存関係のインストール**:
+#    - まず、**一般的なビルドツール（make, gcc, git など）**をインストールします。
+#    - これらのツールは多くのパッケージビルドに必要なため、最初にインストールします。
+#
+# 2. **個別パッケージの依存関係**:
+#    - その後、`packages.db` 内のパッケージ情報を元に、特定のパッケージやライブラリをインストールします。
+#    - `package_name` に対応するビルド依存パッケージは、`packages.db` で指定された内容に従ってインストールされます。
+#
+# 3. **デバッグおよびメッセージの出力**:
+#    - `debug_log()` を使用して、インストールの進行状況やエラーをログに記録します。
+#    - `get_message()` を使用して、ユーザー向けのメッセージを表示します。
+#
+# 4. **ビルド処理**:
+#    - 依存関係がインストールされた後、実際のビルド処理（例えば、`git clone` や `make`）を行います。
+#########################################################################
+
+package_build() {
+    package_name="$1"
+
+    # **汎用的なビルド依存パッケージをインストール**
+    debug_log "INFO" "Installing general build dependencies for $package_name..."
+
+    # 一般的なビルドパッケージ（必須ツール）
+    install_package make hidden
+    install_package gcc hidden
+    install_package git hidden
+    install_package libtool hidden
+    install_package automake hidden
+    install_package pkg-config hidden
+    install_package zlib-dev hidden
+    install_package libssl-dev hidden
+    install_package libicu-dev hidden
+    install_package ncurses-dev hidden
+    install_package libcurl4-openssl-dev hidden
+    install_package libxml2-dev hidden
+
+    # **`packages.db` からパッケージに必要な追加の依存関係をインストール**
+    debug_log "INFO" "Checking and installing package-specific dependencies for $package_name..."
+    dependencies=$(awk -v package_name="$package_name" '
+        BEGIN {FS="="}
+        $1 == package_name {print $2}
+    ' /etc/aios/packages.db)
+
+    if [ -n "$dependencies" ]; then
+        for dep in $dependencies; do
+            install_package "$dep" hidden
+        done
+    fi
+
+    # **ビルド開始のメッセージ**
+    message=$(get_message "MSG_BUILD_START")
+    echo "$(color green "$message")"
+
+    # **実際のビルド処理**
+    debug_log "INFO" "Starting build process for $package_name..."
+    
+    # 仮に `git clone` や `make` などのコマンドを使用してビルド処理
+    # (ここでは簡単な処理例として `git clone` を使っています)
+    echo "$(color cyan "Cloning repository for $package_name...")"
+    git clone https://example.com/repo/$package_name.git /tmp/$package_name
+    cd /tmp/$package_name
+    make && make install
+
+    # **ビルド成功のメッセージ**
+    message=$(get_message "MSG_BUILD_SUCCESS")
+    echo "$(color green "$message")"
+
+    # **エラーハンドリング**
+    if [ $? -ne 0 ]; then
+        message=$(get_message "MSG_BUILD_FAILURE")
+        echo "$(color red "$message")"
+        debug_log "ERROR" "Build failed for $package_name."
+        return 1
+    fi
+
+    debug_log "INFO" "$package_name built and installed successfully."
+    return 0
 }
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
