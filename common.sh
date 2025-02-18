@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-00-00"
+SCRIPT_VERSION="2025.02.19-00-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1078,18 +1078,18 @@ package_build() {
     debug_log "INFO" "Installing general build dependencies for $package_name..."
 
     # 一般的なビルドパッケージ（必須ツール）
-    install_package make hidden
-    install_package gcc hidden
-    install_package git hidden
-    install_package libtool hidden
-    install_package automake hidden
-    install_package pkg-config hidden
-    install_package zlib-dev hidden
-    install_package libssl-dev hidden
-    install_package libicu-dev hidden
-    install_package ncurses-dev hidden
-    install_package libcurl4-openssl-dev hidden
-    install_package libxml2-dev hidden
+    install_package make yn
+    install_package gcc yn
+    install_package git yn
+    install_package libtool
+    install_package automake
+    install_package pkg-config
+    install_package zlib-dev
+    install_package libssl-dev
+    install_package libicu-dev
+    install_package ncurses-dev
+    install_package libcurl4-openssl-dev
+    install_package libxml2-dev
 
     # **`packages.db` からパッケージに必要な追加の依存関係をインストール**
     debug_log "INFO" "Checking and installing package-specific dependencies for $package_name..."
