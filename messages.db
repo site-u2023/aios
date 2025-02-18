@@ -1,10 +1,10 @@
-SUPPORTED_LANGUAGES="US JP"
-
 # メッセージデータベース (多言語対応)
 # フォーマット: 言語コード|メッセージキー=メッセージ
 
 #SCRIPT_VERSION="2025.02.16-02-21"
 #echo "Updated to version $SCRIPT_VERSION messages.db"
+
+SUPPORTED_LANGUAGES="US JP"
 
 # デバッグテスト -------------------------------------
 US|MSG_UNDER_TEST=👽 Under test
