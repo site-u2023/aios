@@ -320,21 +320,23 @@ check_downloader() {
 normalize_version() {
     local input="$1"
 
-    # **二バイト → 一バイト変換（normalize_input を適用）**
+    # **二バイト → 一バイト変換**
     input=$(normalize_input "$input")
+    [ -z "$input" ] && { echo "Error: normalize_input() returned empty string"; return 1; }
 
-    # **許可された文字（数字, 区切り文字）のみ残す**
-    input=$(echo "$input" | sed 's/[^0-9.\-\/,;: ]//g')
+    # **許可された文字（数字, 記号）以外を削除**
+    input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
 
-    # **先頭ゼロを削除（例: `02` → `2`）**
-    input=$(echo "$input" | awk -F'[.\-\/,;: ]' '{
+    # **先頭ゼロを削除**
+    input=$(echo "$input" | awk -F'[._-]' '{
         for (i=1; i<=NF; i++) {
-            if ($i ~ /^[0-9]+$/) sub(/^0+/, "", $i)  # 数字のみのフィールドに適用
+            if ($i ~ /^[0-9]+$/) sub(/^0+/, "", $i)
             printf (i<NF) ? $i FS : $i
         }
+        print ""  # ←改行を強制
     }')
 
-    # **前後の余計なスペースを削除**
+    # **前後のスペースを削除**
     input=$(echo "$input" | sed 's/^ *//;s/ *$//')
 
     echo "$input"
@@ -581,7 +583,9 @@ select_country() {
 
         if [ "$yn" = "Y" ] || [ "$yn" = "y" ]; then
             country_write
+            debug_log "DEBUG" "Executing country_write() after country selection."
             select_zone
+            debug_log "DEBUG" "country_write() completed. Now entering select_zone()."
             return
         fi
     done
