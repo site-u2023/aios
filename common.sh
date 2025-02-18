@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.18-00-16"
+SCRIPT_VERSION="2025.02.18-01-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -191,40 +191,71 @@ test_debug_functions() {
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
-# Last Update: 2025-02-17 15:45:00 (JST) 🚀
-# "Simplified download logic with BASE_WGET support."
+# Last Update: 2025-02-18 10:00:00 (JST) 🚀
+# "Flexible downloading with silent and hidden modes."
 #
 # 【要件】
-# 1. **`BASE_WGET` を適用し、統一されたダウンロード方式を採用**
-# 2. **バージョン管理 (`script_update()`) を完全撤廃**
-# 3. **ダウンロードの成功/失敗を `debug_log()` で詳細記録**
-# 4. **`SCRIPT_VERSION` の取得はログ出力のみ**
-# 5. **影響範囲: `common.sh` の `download()` のみ（他の関数には影響なし）**
+# 1. `BASE_WGET` を使用してファイルをダウンロードする。
+# 2. `hidden` オプション:
+#    - ダウンロードの成否ログを記録するが、既存ファイルがある場合の出力を抑制する。
+# 3. `quiet` オプション:
+#    - `check_option()` で設定された `QUIET_MODE` に従い、すべてのログを抑制する。
+# 4. **引数の順序は自由** (`hidden` `quiet` の順番は任意)。
+# 5. `wget` のエラーハンドリングを行い、失敗時の詳細を `debug_log()` に記録する。
+# 6. **影響範囲:** `common.sh` の `download()` のみ（他の関数には影響なし）。
 #########################################################################
 download() {
-    local file_name="$1"
+    local hidden_mode="false"
+    local quiet_mode="${QUIET_MODE:-false}"
+    local file_name=""
+    
+    # **引数解析（順不同対応）**
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            hidden) hidden_mode="true" ;;
+            quiet) quiet_mode="true" ;;
+            *) file_name="$1" ;;  # 最初に見つかった非オプション引数をファイル名とする
+        esac
+        shift
+    done
+
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
 
-    debug_log "DEBUG" "Starting download of $file_name from $remote_url"
+    # **既存ファイルがあり、hidden モードならスキップ**
+    if [ -f "$install_path" ]; then
+        if [ "$hidden_mode" = "true" ]; then
+            return 0
+        fi
+        if [ "$quiet_mode" != "true" ]; then
+            echo "$(color yellow "$file_name already exists. Skipping download.")"
+        fi
+        return 0
+    fi
 
-    # `BASE_WGET` でダウンロード
+    # **ダウンロード開始**
+    debug_log "DEBUG" "Starting download of $file_name from $remote_url"
     $BASE_WGET "$install_path" "$remote_url"
     local wget_status=$?
 
-    # `wget` の結果を判定
+    # **ダウンロード失敗時の処理**
     if [ $wget_status -ne 0 ]; then
         debug_log "ERROR" "Download failed: $file_name (wget exit code: $wget_status)"
         return 1
     fi
 
-    debug_log "INFO" "Download completed: $file_name is valid."
-
-    # `messages.db` の場合のみ、デバッグログを出力（`get_message()` は呼ばない）
-    if [ "$file_name" = "messages.db" ]; then
-        debug_log "DEBUG" "messages.db downloaded successfully. Skipping immediate get_message() call."
+    # **空ファイル対策**
+    if [ ! -s "$install_path" ]; then
+        debug_log "ERROR" "Download failed: $file_name is empty."
+        return 1
     fi
 
+    # **ダウンロード成功メッセージ（quiet でない場合のみ表示）**
+    if [ "$quiet_mode" != "true" ]; then
+        echo "$(color green "Download completed: $file_name")"
+    fi
+
+    debug_log "INFO" "Download completed: $file_name is valid."
     return 0
 }
 
@@ -331,74 +362,65 @@ check_downloader() {
 }
 
 #########################################################################
-# Last Update: 2025-02-18 10:00:00 (JST) 🚀
-# "Flexible downloading with silent and hidden modes."
+# Last Update: 2025-02-18 18:00:00 (JST) 🚀
+# "Efficiency in retrieval, clarity in communication."
+# get_message: システムメッセージを取得する関数
 #
 # 【要件】
-# 1. `BASE_WGET` を使用してファイルをダウンロードする。
-# 2. `hidden` オプション:
-#    - ダウンロードの成否ログを記録するが、既存ファイルがある場合の出力を抑制する。
-# 3. `quiet` オプション:
-#    - `check_option()` で設定された `QUIET_MODE` に従い、すべてのログを抑制する。
-# 4. **引数の順序は自由** (`hidden` `quiet` の順番は任意)。
-# 5. `wget` のエラーハンドリングを行い、失敗時の詳細を `debug_log()` に記録する。
-# 6. **影響範囲:** `common.sh` の `download()` のみ（他の関数には影響なし）。
+# 1. **メッセージの取得ロジック**
+#    - `$ACTIVE_LANGUAGE` を最優先で使用（`normalize_country()` で設定）
+#    - `$ACTIVE_LANGUAGE` が未設定の場合は `US` をフォールバックとして使用
+#
+# 2. **メッセージ検索の順序**
+#    ① `$ACTIVE_LANGUAGE|キー=` で `messages.db` を検索
+#    ② `US|キー=` で `messages.db` を検索（フォールバック）
+#    ③ どちらにも該当しない場合、`キー` をそのまま返す
+#
+# 3. **動作の最適化**
+#    - `$ACTIVE_LANGUAGE` を直接参照し、キャッシュ (`message.ch`) には依存しない
+#    - `$quiet_flag` に `"quiet"` が指定された場合、出力せずに `return 0`
+#
+# 4. **メンテナンス**
+#    - 言語取得ロジックを `normalize_country()` に統一し、責務を分離
+#    - `get_message()` は「取得するだけ」に特化し、書き込み・設定は行わない
+#
+# 5. **影響範囲**
+#    - `common.sh` 内のメッセージ取得全般（`debug_log()` 含む）
+#    - `messages.db` のフォーマット変更時も `get_message()` の修正は不要
 #########################################################################
-download() {
-    local hidden_mode="false"
-    local quiet_mode="${QUIET_MODE:-false}"
-    local file_name=""
-    
-    # **引数解析（順不同対応）**
-    while [ "$#" -gt 0 ]; do
-        case "$1" in
-            hidden) hidden_mode="true" ;;
-            quiet) quiet_mode="true" ;;
-            *) file_name="$1" ;;  # 最初に見つかった非オプション引数をファイル名とする
-        esac
-        shift
-    done
+get_message() {
+    local key="$1"
+    local quiet_flag="$2"
+    local message_db="${BASE_DIR}/messages.db"
+    local lang="${ACTIVE_LANGUAGE:-US}"  # `ACTIVE_LANGUAGE` が未設定なら `US`
 
-    local install_path="${BASE_DIR}/${file_name}"
-    local remote_url="${BASE_URL}/${file_name}"
+    # `messages.db` が存在しない場合、キーそのままを返す
+    if [ ! -f "$message_db" ]; then
+        debug_log "WARN" "messages.db not found. Returning key as message."
+        message="$key"
+    else
+        # **言語優先検索**
+        message=$(grep "^${lang}|${key}=" "$message_db" | cut -d'=' -f2-)
 
-    # **既存ファイルがあり、hidden モードならスキップ**
-    if [ -f "$install_path" ]; then
-        if [ "$hidden_mode" = "true" ]; then
-            return 0
+        # **フォールバック検索**
+        if [ -z "$message" ]; then
+            message=$(grep "^US|${key}=" "$message_db" | cut -d'=' -f2-)
         fi
-        if [ "$quiet_mode" != "true" ]; then
-            echo "$(color yellow "$file_name already exists. Skipping download.")"
+
+        # **それでも見つからなければ、キーそのままを返す**
+        if [ -z "$message" ]; then
+            debug_log "WARN" "Message key '$key' not found in messages.db."
+            message="$key"
         fi
+    fi
+
+    # **quiet モード対応**
+    if [ "$quiet_flag" = "quiet" ]; then
         return 0
+    else
+        echo "$message"
     fi
-
-    # **ダウンロード開始**
-    debug_log "DEBUG" "Starting download of $file_name from $remote_url"
-    $BASE_WGET "$install_path" "$remote_url"
-    local wget_status=$?
-
-    # **ダウンロード失敗時の処理**
-    if [ $wget_status -ne 0 ]; then
-        debug_log "ERROR" "Download failed: $file_name (wget exit code: $wget_status)"
-        return 1
-    fi
-
-    # **空ファイル対策**
-    if [ ! -s "$install_path" ]; then
-        debug_log "ERROR" "Download failed: $file_name is empty."
-        return 1
-    fi
-
-    # **ダウンロード成功メッセージ（quiet でない場合のみ表示）**
-    if [ "$quiet_mode" != "true" ]; then
-        echo "$(color green "Download completed: $file_name")"
-    fi
-
-    debug_log "INFO" "Download completed: $file_name is valid."
-    return 0
 }
-
 
 # 🔵　ランゲージ（言語・ゾーン）系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
@@ -1239,7 +1261,6 @@ check_common() {
             ;;
         full)
             download "openwrt.db"
-            #messages_db 
             download "country.db"
             download "packages.db"
             download "messages.db"
