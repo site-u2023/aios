@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-00-02"
+SCRIPT_VERSION="2025.02.19-00-03"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -910,6 +910,164 @@ normalize_country() {
 #      既にインストール済みの場合のメッセージは非表示）
 #########################################################################
 install_package() {
+    local package_name="$1"
+    shift  # 最初の引数 (パッケージ名) を取得し、残りをオプションとして処理
+
+    # オプション解析
+    local confirm_install="no"
+    local skip_lang_pack="no"
+    local skip_package_db="no"
+    local set_disabled="no"
+    local hidden="no"   # hidden オプション：既にインストール済みの場合のメッセージを抑制
+
+    for arg in "$@"; do
+        case "$arg" in
+            yn) confirm_install="yes" ;;  # yn オプション
+            dont) skip_lang_pack="yes" ;;
+            notset) skip_package_db="yes" ;;
+            disabled) set_disabled="yes" ;;
+            update) 
+                if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+                    opkg update
+                elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+                    apk update
+                fi
+                ;;
+            hidden) hidden="yes" ;;
+        esac
+    done
+
+    # downloader_ch からパッケージマネージャーを取得
+    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
+    else
+        echo "$(get_message "MSG_PACKAGE_MANAGER_NOT_FOUND")"
+        return 1
+    fi
+
+    # パッケージがすでにインストールされている場合
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if opkg list-installed | grep -q "^$package_name "; then
+            if [ "$hidden" != "yes" ]; then
+                echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
+            fi
+            return 0
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if apk list-installed | grep -q "^$package_name "; then
+            if [ "$hidden" != "yes" ]; then
+                echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
+            fi
+            return 0
+        fi
+    fi
+
+    # `custom_build_*` の場合、インストール確認をスキップして package_build() に進む
+    if [[ "$package_name" =~ ^custom_build_ ]]; then
+        # すべてのオプションが適用された後で、package_build() を呼び出す
+        package_build "$package_name" "$confirm_install" "$skip_lang_pack" "$skip_package_db" "$set_disabled" "$hidden"
+        return
+    fi
+
+    # パッケージがリポジトリに存在するか確認
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if ! opkg list | grep -q "^$package_name "; then
+            echo "$(get_message "MSG_PACKAGE_NOT_FOUND_IN_REPOSITORY" | sed "s/{pkg}/$package_name/")"
+            return 1
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if ! apk search "$package_name" > /dev/null 2>&1; then
+            echo "$(get_message "MSG_PACKAGE_NOT_FOUND_IN_REPOSITORY" | sed "s/{pkg}/$package_name/")"
+            return 1
+        fi
+    fi
+
+    # インストール確認 (yn オプションが指定された場合)
+    if [ "$confirm_install" = "yes" ]; then
+        while true; do
+            echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
+            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
+            read -r yn
+            case "$yn" in
+                [Yy]*) break ;;  # Yまたはyを入力すればインストールを続ける
+                [Nn]*) echo "$(get_message "MSG_INSTALL_ABORTED")"; return 1 ;;  # Nまたはnを入力すれば中止
+                *) echo "Invalid input. Please enter Y or N." ;;  # 無効な入力
+            esac
+        done
+    fi
+
+    # パッケージのインストール (DEV_NULL に応じて出力制御)
+    if [ "$DEV_NULL" = "on" ]; then
+        $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1
+    else
+        $PACKAGE_MANAGER install "$package_name"
+    fi
+
+    # `custom_build_*` の場合、package.db の適用をスキップ
+    if [[ "$package_name" =~ ^custom_build_ ]]; then
+        return
+    fi
+
+    # package.db の適用 (notset オプションがない場合)
+    if [ "$skip_package_db" = "no" ] && grep -q "^$package_name=" "${BASE_DIR}/packages.db"; then
+        eval "$(grep "^$package_name=" "${BASE_DIR}/packages.db" | cut -d'=' -f2-)"
+    fi
+
+    # 設定の有効化/無効化
+    if [ "$skip_package_db" = "no" ]; then
+        if uci get "$package_name.@$package_name[0].enabled" >/dev/null 2>&1; then
+            if [ "$set_disabled" = "yes" ]; then
+                uci set "$package_name.@$package_name[0].enabled=0"
+            else
+                uci set "$package_name.@$package_name[0].enabled=1"
+            fi
+            uci commit "$package_name"
+        fi
+    fi
+
+    # 言語パッケージの適用 (dont オプションがない場合)
+    if [ "$skip_lang_pack" = "no" ] && echo "$package_name" | grep -qE '^luci-app-'; then
+        local lang_code
+        lang_code=$(cat "${CACHE_DIR}/luci.ch" 2>/dev/null || echo "en")
+        local lang_package="luci-i18n-${package_name#luci-app-}-$lang_code"
+
+        if [ "$DEV_NULL" = "on" ]; then
+            if $PACKAGE_MANAGER list > /dev/null 2>&1 | grep -q "^$lang_package "; then
+                install_package "$lang_package" hidden
+            else
+                if [ "$lang_code" = "xx" ]; then
+                    if $PACKAGE_MANAGER list > /dev/null 2>&1 | grep -q "^luci-i18n-${package_name#luci-app-}-en "; then
+                        install_package "luci-i18n-${package_name#luci-app-}-en" hidden
+                    elif $PACKAGE_MANAGER list > /dev/null 2>&1 | grep -q "^luci-i18n-${package_name#luci-app-} "; then
+                        install_package "luci-i18n-${package_name#luci-app-}" hidden
+                    fi
+                fi
+            fi
+        else
+            if $PACKAGE_MANAGER list | grep -q "^$lang_package "; then
+                install_package "$lang_package"
+            else
+                if [ "$lang_code" = "xx" ]; then
+                    if $PACKAGE_MANAGER list | grep -q "^luci-i18n-${package_name#luci-app-}-en "; then
+                        install_package "luci-i18n-${package_name#luci-app-}-en"
+                    elif $PACKAGE_MANAGER list | grep -q "^luci-i18n-${package_name#luci-app-} "; then
+                        install_package "luci-i18n-${package_name#luci-app-}"
+                    fi
+                fi
+            fi
+        fi
+    fi
+
+    # サービスの有効化/開始
+    if [ "$set_disabled" = "no" ] && ! echo "$package_name" | grep -qE '^(lib|luci)$'; then
+        if [ -f "/etc/init.d/$package_name" ]; then
+            /etc/init.d/$package_name enable
+            /etc/init.d/$package_name start
+        fi
+    fi
+}
+
+XXX_install_package() {
     local package_name="$1"
     shift  # 最初の引数 (パッケージ名) を取得し、残りをオプションとして処理
 
