@@ -88,6 +88,21 @@ US|MSG_RUNNING_UPDATE=Updating package list...
 JP|MSG_INVALID_PACKAGE_MANAGER=無効なパッケージマネージャです。
 US|MSG_INVALID_PACKAGE_MANAGER=Invalid package manager.
 
+# ビルド関係
+US|MSG_BUILD_START=🚀 Starting the build process...
+JP|MSG_BUILD_START=🚀 ビルドプロセスを開始します...
+
+US|MSG_BUILD_SUCCESS=✅ Build completed successfully!
+JP|MSG_BUILD_SUCCESS=✅ ビルドが成功しました！
+
+US|MSG_BUILD_FAILURE=Build failed. Please check the logs for details.
+JP|MSG_BUILD_FAILURE=ビルドに失敗しました。詳細はログを確認してください。
+
+US|MSG_BUILD_START=
+JP|MSG_BUILD_START=
+US|MSG_BUILD_SUCCESS=
+JP|MSG_BUILD_SUCCESS=
+
 # オプション関連
 JP|MSG_INVALID_OPTION=無効なオプションが指定されました: {opt}
 US|MSG_INVALID_OPTION=Invalid option specified: {opt}
