@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.18-01-01"
+SCRIPT_VERSION="2025.02.18-01-02"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -205,6 +205,68 @@ test_debug_functions() {
 # 6. **影響範囲:** `common.sh` の `download()` のみ（他の関数には影響なし）。
 #########################################################################
 download() {
+    # スクリプトのバージョンを取得
+    local script_version=""
+    script_version=$(grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' "$0" | cut -d'=' -f2 | tr -d '"')
+
+    # バージョン情報を表示
+    echo "$(color cyan "Executing download function - Version: ${script_version}")"
+
+    local hidden_mode="false"
+    local quiet_mode="${QUIET_MODE:-false}"
+    local file_name=""
+    
+    # **引数解析（順不同対応）**
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            hidden) hidden_mode="true" ;;
+            quiet) quiet_mode="true" ;;
+            *) file_name="$1" ;;  # 最初に見つかった非オプション引数をファイル名とする
+        esac
+        shift
+    done
+
+    local install_path="${BASE_DIR}/${file_name}"
+    local remote_url="${BASE_URL}/${file_name}"
+
+    # **既存ファイルがあり、hidden モードならスキップ**
+    if [ -f "$install_path" ]; then
+        if [ "$hidden_mode" = "true" ]; then
+            return 0
+        fi
+        if [ "$quiet_mode" != "true" ]; then
+            echo "$(color yellow "$file_name already exists. Skipping download.")"
+        fi
+        return 0
+    fi
+
+    # **ダウンロード開始**
+    debug_log "DEBUG" "Starting download of $file_name from $remote_url"
+    $BASE_WGET "$install_path" "$remote_url"
+    local wget_status=$?
+
+    # **ダウンロード失敗時の処理**
+    if [ $wget_status -ne 0 ]; then
+        debug_log "ERROR" "Download failed: $file_name (wget exit code: $wget_status)"
+        return 1
+    fi
+
+    # **空ファイル対策**
+    if [ ! -s "$install_path" ]; then
+        debug_log "ERROR" "Download failed: $file_name is empty."
+        return 1
+    fi
+
+    # **ダウンロード成功メッセージ（quiet でない場合のみ表示）**
+    if [ "$quiet_mode" != "true" ]; then
+        echo "$(color green "Download completed: $file_name")"
+    fi
+
+    debug_log "INFO" "Download completed: $file_name is valid."
+    return 0
+}
+
+XXX_download() {
     local hidden_mode="false"
     local quiet_mode="${QUIET_MODE:-false}"
     local file_name=""
