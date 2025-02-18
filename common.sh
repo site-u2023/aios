@@ -522,30 +522,7 @@ normalize_input() {
     echo "$input"
 }
 
-#########################################################################
-# Last Update: 2025-02-18 23:30:00 (JST) 🚀
-# "Country selection with precise Y/N confirmation."
-# select_country: ユーザーに国の選択を促す（検索機能付き）
-#
-# select_country()
-# ├── select_list()  → 選択結果を country_tmp.ch に保存
-# ├── country_write()   → country.ch, country.ch, luci.ch, zone.ch に確定
-# └── select_zone()     → zone.ch から zonename.ch, timezone.ch に確定
-#
-# [1] ユーザーが国を選択 → select_list()
-# [2] 一時キャッシュに保存 (country_tmp.ch)
-# [3] country_write() を実行
-# [4] 確定キャッシュを作成（country.ch, country.ch, luci.ch, zone.ch）→ 書き込み禁止にする
-# [5] select_zone() を実行
-#
-# #️⃣ `$1` の存在確認
-#   ├─ あり → `country.db` で検索
-#   |    ├─ 見つかる → `select_zone()`（ゾーン選択へ）
-#   |    ├─ 見つからない → 言語選択を実行
-#   ├─ なし → `country.ch` を確認
-#        ├─ あり → 言語系終了（以降の処理なし）
-#        ├─ なし → 言語選択を実行
-#########################################################################
+# --------------------------------------------------------------------------------------------------------------------------------------------
 select_country() {
     echo "DEBUG: Entered select_country()"
     debug_log "DEBUG" "Entering select_country()"
@@ -583,51 +560,6 @@ select_country() {
             select_zone
             return
         fi
-    done
-}
-
-XXX_select_country() {
-    debug_log "DEBUG" "Entering select_country() with arg: '$1'"
-
-    local cache_country="${CACHE_DIR}/country.ch"
-    local tmp_country="${CACHE_DIR}/country_tmp.ch"
-
-
-    if [ -f "$cache_country" ]; then
-        debug_log "INFO" "Country cache found. Skipping selection."
-        select_zone
-        return
-    fi
-
-    while true; do
-        printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_COUNTRY")")"
-        printf "%s" "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
-        read -r input
-        
-        # 入力の正規化: "/", ",", "_" をスペースに置き換え
-        local cleaned_input
-        cleaned_input=$(echo "$input" | sed 's/[\/,_]/ /g')
-        
-        # 完全一致を優先
-        local search_results
-        search_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} 
-            { key = $2" "$3" "$4" "$5; if ($0 ~ search && !seen[key]++) print $0 }' "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
-
-        # 完全一致がない場合、部分一致を検索
-        if [ -z "$search_results" ]; then
-            search_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} 
-                { for (i=2; i<=NF; i++) if ($i ~ search) print $0 }' "$BASE_DIR/country.db")
-        fi
-
-        if [ -z "$search_results" ]; then
-            printf "%s\n" "$(color red "Error: No matching country found for '$input'. Please try again.")"
-            continue
-        fi
-
-        select_list "$search_results" "$tmp_country" "country"
-        country_write
-        select_zone
-        return
     done
 }
 
