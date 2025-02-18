@@ -66,7 +66,7 @@ print_banner() {
 # パッケージのインストール (オプション)
 packages() {
     # uconv のインストール
-    install_package custom_build_uconv yn hidden
+    install_package custom_build_uconv yn
     # libunistring
     # uconv がインストールされている場合に languages.db をインストール
     if command -v uconv >/dev/null 2>&1; then
