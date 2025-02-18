@@ -4,7 +4,8 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-COMMON_VERSION="2025.02.15-01-00"
+SCRIPT_VERSION="2025.02.19-00-00"
+echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -22,112 +23,170 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 mkdir -p "$CACHE_DIR" "$LOG_DIR"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
-# 環境変数 INPUT_LANG のチェック（デフォルト 'ja' とする）
-# INPUT_LANG="${INPUT_LANG:-ja}"
-# debug_log "common.sh received INPUT_LANG: '$INPUT_LANG'"
-
-script_update() (
-    COMMON_CACHE="${CACHE_DIR}/common_version.ch"
-    # キャッシュが存在しない、またはバージョンが異なる場合にアラートを表示
-    if [ ! -f "$COMMON_CACHE" ] || [ "$(cat "$COMMON_CACHE" | tr -d '\r\n')" != "$COMMON_VERSION" ]; then
-        echo -e "`color white_black "Updated to version $COMMON_VERSION common.sh "`"
-        echo "$COMMON_VERSION" > "$COMMON_CACHE"
-    fi
-)
-
+# 🔵　エラー・デバッグ・アップデート系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
-# handle_error: 汎用エラーハンドリング関数
+# Last Update: 2025-02-16 16:00:00 (JST) 🚀
+# "Clarity in errors, precision in handling. Every function must be robust."
+#
+# 【要件】
+# 1. すべてのエラーメッセージを `messages.db` で管理し、多言語対応する。
+# 2. `debug_log("ERROR", message)` も `message.db` を使用する。
+# 3. `{file}`, `{version}` などの変数を動的に置換。
+# 4. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
 #########################################################################
 handle_error() {
-    local message_key="$1"
+    local error_key="$1"
     local file="$2"
     local version="$3"
+    local exit_required="${4:-no}"
+
     local error_message
-    error_message=$(get_message "$message_key")
-    error_message=$(echo "$error_message" | sed -e "s/{file}/$file/" -e "s/{version}/$version/")
+    error_message=$(get_message "$error_key")
+
+    # メッセージが取得できなかった場合のフォールバック
+    if [ -z "$error_message" ]; then
+        error_message="Unknown error occurred. Key: $error_key"
+    fi
+
+    # 変数を置換
+    error_message=$(echo "$error_message" | sed -e "s/{file}/$file/g" -e "s/{version}/$version/g")
+
+    # ログ記録 & 表示
+    debug_log "ERROR" "$error_message"
     echo -e "$(color red "$error_message")"
-    return 1
+
+    if [ "$exit_required" = "yes" ]; then
+        debug_log "ERROR" "Critical error occurred, exiting: $error_message"
+        exit 1
+    else
+        debug_log "WARN" "Non-critical error: $error_message"
+        return 1
+    fi
 }
 
 #########################################################################
-# デバッグモードの制御 (コマンドライン引数対応)
-#########################################################################
-DEBUG_MODE=false
-DEBUG_LEVEL="INFO"  # デフォルトは INFO 以上のログを出力
-
-# コマンドライン引数のチェック
-for arg in "$@"; do
-    case "$arg" in
-        -d|--debug|-debug)
-            DEBUG_MODE=true
-            DEBUG_LEVEL="DEBUG"
-            ;;
-    esac
-done
-
-#########################################################################
-# debug_log: デバッグ出力関数 (改良版)
+# Last Update: 2025-02-16 16:10:00 (JST) 🚀
+# "Logging with clarity, debugging with precision."
+#
+# 【要件】
+# 1. すべてのログメッセージを `messages.db` で管理し、多言語対応する。
+# 2. `{file}`, `{version}` などの変数を `sed` で動的に置換する。
+# 3. `DEBUG_MODE` の設定に応じて `DEBUG`, `INFO`, `WARN`, `ERROR` を管理する。
+# 4. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
 #########################################################################
 debug_log() {
-    local level="$1"  # デバッグレベル (INFO, WARN, ERROR, DEBUG)
+    local level="$1"
     local message="$2"
-    
-    # デバッグレベルの優先度
+    local file="$3"
+    local version="$4"
+
+    # `$1` にログレベルが指定されていない場合、デフォルトを `DEBUG` にする
+    case "$level" in
+        "DEBUG"|"INFO"|"WARN"|"ERROR") ;;  # 何もしない (正しいログレベル)
+        "")
+            level="DEBUG"
+            message="$1"
+            file="$2"
+            version="$3"
+            ;;
+        *)
+            message="$1"
+            file="$2"
+            version="$3"
+            level="DEBUG"
+            ;;
+    esac
+
+    # 変数を置換
+    message=$(echo "$message" | sed -e "s/{file}/$file/g" -e "s/{version}/$version/g")
+
+    # ログレベル制御
     case "$DEBUG_LEVEL" in
         DEBUG)    allowed_levels="DEBUG INFO WARN ERROR" ;;
         INFO)     allowed_levels="INFO WARN ERROR" ;;
         WARN)     allowed_levels="WARN ERROR" ;;
         ERROR)    allowed_levels="ERROR" ;;
-        *)        allowed_levels="" ;;
+        *)        allowed_levels="ERROR" ;;
     esac
 
-    # 指定されたログレベルが有効な場合のみ出力
     if echo "$allowed_levels" | grep -q "$level"; then
         local timestamp
         timestamp=$(date '+%Y-%m-%d %H:%M:%S')
         local log_message="[$timestamp] $level: $message"
 
-        if [ "$DEBUG_MODE" = true ]; then
-            echo "$log_message"
-        fi
+        # カラー表示
+        case "$level" in
+            "ERROR") echo -e "$(color red "$log_message")" ;;
+            "WARN") echo -e "$(color yellow "$log_message")" ;;
+            "INFO") echo -e "$(color cyan "$log_message")" ;;
+            "DEBUG") echo -e "$(color white "$log_message")" ;;
+        esac
 
-        if [ -n "$LOG_DIR" ]; then
-            echo "$log_message" >> "$LOG_DIR/debug.log"
-        fi
+        # ログファイルに記録
+        echo "$log_message" >> "$LOG_DIR/debug.log"
     fi
 }
 
-# 国検索テスト
-test_country_search() {
-    local test_input="$1"
-    echo "`color cyan "TEST: Searching for country with input '$test_input'"`"
-    if [ ! -f "${BASE_DIR}/country.db" ]; then
-        echo "`color red "ERROR: country.db not found at ${BASE_DIR}/country.db"`"
-        return 1
-    fi
-    awk -v query="$test_input" '
-        $2 ~ query || $3 ~ query || $4 ~ query || $5 ~ query {print NR, $2, $3, $4, $5, $6, $7, $8, $9}' "${BASE_DIR}/country.db"
+
+#########################################################################
+# Last Update: 2025-02-16 17:30:00 (JST) 🚀
+# "Debug with clarity, test with precision. Every log tells a story."
+#
+# 【要件】
+# 1. `test_country_search()`, `test_timezone_search()`, `test_cache_contents()` を統合。
+# 2. `debug_log()` を使用し、メッセージを `message.db` から取得。
+# 3. `country.db` の検索結果が適切に出力されるか確認できるようにする。
+# 4. 影響範囲: `common.sh` のみ（`aios` には影響なし）。
+#########################################################################
+test_debug_functions() {
+    local test_type="$1"
+    local test_input="$2"
+
+    case "$test_type" in
+        country)
+            debug_log "INFO" "MSG_TEST_COUNTRY_SEARCH" "$test_input"
+            if [ ! -f "${BASE_DIR}/country.db" ]; then
+                handle_error "ERR_FILE_NOT_FOUND" "country.db"
+                return 1
+            fi
+            awk -v query="$test_input" '
+                $2 ~ query || $3 ~ query || $4 ~ query || $5 ~ query {
+                    print NR, $2, $3, $4, $5, $6, $7, $8, $9
+                }' "${BASE_DIR}/country.db"
+            ;;
+
+        timezone)
+            debug_log "INFO" "MSG_TEST_TIMEZONE_SEARCH" "$test_input"
+            if [ ! -f "${BASE_DIR}/country.db" ]; then
+                handle_error "ERR_FILE_NOT_FOUND" "country.db"
+                return 1
+            fi
+            awk -v country="$test_input" '
+                $2 == country || $4 == country || $5 == country {
+                    print NR, $5, $6, $7, $8, $9, $10, $11
+                }' "${BASE_DIR}/country.db"
+            ;;
+
+        cache)
+            debug_log "INFO" "MSG_TEST_CACHE_CONTENTS"
+            for cache_file in "country_tmp.ch" "zone_tmp.ch"; do
+                if [ -f "${CACHE_DIR}/$cache_file" ]; then
+                    debug_log "INFO" "MSG_CACHE_CONTENTS" "$cache_file"
+                    cat "${CACHE_DIR}/$cache_file"
+                else
+                    debug_log "WARN" "MSG_CACHE_NOT_FOUND" "$cache_file"
+                fi
+            done
+            ;;
+        
+        *)
+            debug_log "ERROR" "ERR_INVALID_ARGUMENT" "$test_type"
+            return 1
+            ;;
+    esac
 }
 
-# タイムゾーン検索テスト
-test_timezone_search() {
-    local test_country="$1"
-    echo "`color cyan "TEST: Searching for timezones of country '$test_country'"`"
-    if [ ! -f "${BASE_DIR}/country.db" ]; then
-        echo "`color red "ERROR: country.db not found at ${BASE_DIR}/country.db"`"
-        return 1
-    fi
-    awk -v country="$test_country" '
-        $2 == country || $4 == country || $5 == country {print NR, $5, $6, $7, $8, $9, $10, $11}' "${BASE_DIR}/country.db"
-}
-
-# キャッシュ内容確認テスト
-test_cache_contents() {
-    echo "`color yellow "DEBUG: country_tmp.ch content:"`"
-    cat "${CACHE_DIR}/country_tmp.ch"
-    echo "`color yellow "DEBUG: zone_tmp.ch content:"`"
-    cat "${CACHE_DIR}/zone_tmp.ch"
-}
+# 🔴　エラー・デバッグ・アップデート系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
 # print_help: ヘルプメッセージを表示
@@ -187,37 +246,6 @@ color_code_map() {
     esac
 }
 
-#########################################################################
-# openwrt_db: バージョンデータベースのダウンロード
-#########################################################################
-openwrt_db() {
-    if [ ! -f "${BASE_DIR}/openwrt.db" ]; then
-        ${BASE_WGET} "${BASE_DIR}/openwrt.db" "${BASE_URL}/openwrt.db" || handle_error "Failed to download openwrt.db"
-    fi
-}
-
-#########################################################################
-# messages_db: メッセージデータベースのダウンロード
-#########################################################################
-messages_db() {
-    if [ ! -f "${BASE_DIR}/messages.db" ]; then
-        echo -e "$(color yellow "Downloading messages.db...")"
-        if ! ${BASE_WGET} "${BASE_DIR}/messages.db" "${BASE_URL}/messages.db"; then
-            echo -e "$(color red "Failed to download messages.db")"
-            return 1
-        fi
-        echo -e "$(color green "Successfully downloaded messages.db")"
-    fi
-}
-
-#########################################################################
-# packages_db: 選択されたパッケージファイルをダウンロード
-#########################################################################
-packages_db() {
-    if [ ! -f "${BASE_DIR}/packages.db" ]; then
-        ${BASE_WGET} "${BASE_DIR}/packages.db" "${BASE_URL}/packages.db" || handle_error "Failed to download packages.db"
-    fi
-}
 
 #########################################################################
 # check_openwrt: OpenWrtのバージョン確認・検証
@@ -242,88 +270,140 @@ check_openwrt() {
 }
 
 #########################################################################
-# get_package_manager: パッケージマネージャー判定（apk / opkg 対応）
+# check_downloader: パッケージマネージャー判定（apk / opkg 対応）
 #########################################################################
-get_package_manager() {
+check_downloader() {
     if [ -f "${BASE_DIR}/downloader_ch" ]; then
-        PACKAGE_MANAGER=$(cat "${BASE_DIR}/downloader_ch")
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
     else
         if command -v apk >/dev/null 2>&1; then
             PACKAGE_MANAGER="apk"
         elif command -v opkg >/dev/null 2>&1; then
             PACKAGE_MANAGER="opkg"
         else
-            handle_error "$(get_message 'no_package_manager_found' "$SELECTED_LANGUAGE")"
+            PACKAGE_MANAGER="opkg"  # デフォルトをセット
         fi
-        echo "$PACKAGE_MANAGER" > "${BASE_DIR}/downloader_ch"
+        echo "$PACKAGE_MANAGER" > "${CACHE_DIR}/downloader_ch"
     fi
-    echo -e "\033[1;32m$(get_message 'detected_package_manager' "$SELECTED_LANGUAGE"): $PACKAGE_MANAGER\033[0m"
+    echo -e "$(color green "Downloader $PACKAGE_MANAGER")"
 }
 
 #########################################################################
-# Last Update: 2025-02-16 13:40:00 (JST) 🚀
-# "Precision in code, clarity in purpose. Every update refines the path."
-#
-# get_message: 多言語対応メッセージ取得関数
+# Last Update: 2025-02-18 23:00:00 (JST) 🚀
+# "Standardizing version formatting for consistency."
 #
 # 【要件】
-# 1. 言語の決定:
-#    - 'message.ch' を最優先で参照する（normalize_country() により確定）
-#    - 'message.ch' が無ければ、'country.ch' から国コードを取得し、デフォルトを "en" に設定
+# 1. **バージョン番号のフォーマットを統一**
+#    - `YYYY.MM.DD-自由形式`
+#    - `YYYYMMDDHHMMSS-自由形式`
+#    - 許可される区切り文字: `- . , ; : 空白`
 #
-# 2. メッセージ取得の流れ:
-#    - messages.db から、言語コード (例: "en", "US", "ja" 等) に対応するメッセージを取得
-#    - 該当メッセージが無い場合、"US"（英語）をフォールバック
-#    - それでも見つからなければ、キー ($1) をそのまま返す
+# 2. **処理内容**
+#    - **許可された文字のみを抽出**
+#    - **先頭のゼロを削除（例: `02` → `2`）**
+#    - **前後の余計なスペースを削除**
 #
-# 3. country.ch との関係:
-#    - country.ch はデバイス設定用（変更不可）で、ここから言語コードが取得される
-#    - message.ch はシステムメッセージ表示用（フォールバック可能）で、通常は normalize_country() により決定
+# 3. **適用対象**
+#    - **`download()`**: **スクリプトバージョンの取得・比較**
+#    - **`compare_versions()`**: **バージョン比較時のフォーマット統一**
 #
-# 4. メンテナンス:
-#    - 言語設定に影響を与えず、メッセージのみ message.ch で管理する
-#    - normalize_country() によって message.ch が決定されるため、変更は normalize_country() 側で行う
+# 4. **適用しない対象**
+#    - **バージョン番号の解釈を変更しない（順番の入れ替えはしない）**
+#    - **日付以外の文字列は削除せず、フォーマットの標準化のみ行う**
 #
-# 5. オプション (quiet):
-#    - 第二引数に "quiet" を指定すると、取得したメッセージを echo せず、出力を抑制する
-#      （例: get_message "MSG_CONFIRM_INSTALL" quiet ）
+# 5. **依存関係**
+#    - `normalize_input()` を使用し、iconv による処理を統一
+#
+# 6. **影響範囲**
+#    - `common.sh` に統合し、`download()` & `compare_versions()` で使用
+#########################################################################
+normalize_version() {
+    input="$1"
+
+    # **二バイト → 一バイト変換**
+    input=$(normalize_input "$input")
+    [ -z "$input" ] && { echo "Error: normalize_input() returned empty string"; return 1; }
+
+    # **許可された文字（数字, 記号）以外を削除**
+    input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
+
+    # **不要な改行やスペースを削除**
+    input=$(echo "$input" | tr -d '\n' | sed 's/ *$//')
+
+    # **区切り文字を正しく処理**
+    input=$(echo "$input" | awk -F'[._-]' '{
+        for (i=1; i<=NF; i++) {
+            if ($i ~ /^[0-9]+$/) sub(/^0+/, "", $i)  # 先頭ゼロ削除（ただし区切りは保持）
+            printf "%s%s", $i, (i<NF ? (FS == "_" ? "-" : ".") : "")
+        }
+        print ""
+    }')
+
+    echo "$input"
+}
+
+get_script_version() {
+    local version=""
+    version=$(grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' "$0" | cut -d'=' -f2 | tr -d '"')
+    version=$(normalize_version "$version")
+
+    echo "$version"
+}
+
+#########################################################################
+# Last Update: 2025-02-18 18:00:00 (JST) 🚀
+# "Efficiency in retrieval, clarity in communication."
+# get_message: システムメッセージを取得する関数
+#
+# 【要件】
+# 1. **メッセージの取得ロジック**
+#    - `$ACTIVE_LANGUAGE` を最優先で使用（`normalize_country()` で設定）
+#    - `$ACTIVE_LANGUAGE` が未設定の場合は `US` をフォールバックとして使用
+#
+# 2. **メッセージ検索の順序**
+#    ① `$ACTIVE_LANGUAGE|キー=` で `messages.db` を検索
+#    ② `US|キー=` で `messages.db` を検索（フォールバック）
+#    ③ どちらにも該当しない場合、`キー` をそのまま返す
+#
+# 3. **動作の最適化**
+#    - `$ACTIVE_LANGUAGE` を直接参照し、キャッシュ (`message.ch`) には依存しない
+#    - `$quiet_flag` に `"quiet"` が指定された場合、出力せずに `return 0`
+#
+# 4. **メンテナンス**
+#    - 言語取得ロジックを `normalize_country()` に統一し、責務を分離
+#    - `get_message()` は「取得するだけ」に特化し、書き込み・設定は行わない
+#
+# 5. **影響範囲**
+#    - `common.sh` 内のメッセージ取得全般（`debug_log()` 含む）
+#    - `messages.db` のフォーマット変更時も `get_message()` の修正は不要
 #########################################################################
 get_message() {
     local key="$1"
     local quiet_flag="$2"
-    local message_cache="${CACHE_DIR}/message.ch"
-    local lang="en"  # デフォルトは "en"
-
-    # message.ch が無い場合、country.ch から言語コードを取得
-    if [ ! -f "$message_cache" ]; then
-        if [ -f "${CACHE_DIR}/country.ch" ]; then
-            lang=$(awk '{print $5}' "${CACHE_DIR}/country.ch")
-        fi
-        [ -z "$lang" ] && lang="en"
-    else
-        lang=$(cat "$message_cache")
-    fi
-
     local message_db="${BASE_DIR}/messages.db"
-    local message=""
+    local lang="${ACTIVE_LANGUAGE:-US}"  # `ACTIVE_LANGUAGE` が未設定なら `US`
 
-    # messages.db が無い場合は、キーそのままを返す
+    # `messages.db` が存在しない場合、キーそのままを返す
     if [ ! -f "$message_db" ]; then
+        debug_log "WARN" "messages.db not found. Returning key as message."
         message="$key"
     else
+        # **言語優先検索**
         message=$(grep "^${lang}|${key}=" "$message_db" | cut -d'=' -f2-)
-        # 該当メッセージが無ければ、US をフォールバック
+
+        # **フォールバック検索**
         if [ -z "$message" ]; then
             message=$(grep "^US|${key}=" "$message_db" | cut -d'=' -f2-)
         fi
-        # それでも見つからなければ、キーそのままとし、デバッグログを出す
+
+        # **それでも見つからなければ、キーそのままを返す**
         if [ -z "$message" ]; then
-            debug_log "Message key '$key' not found in messages.db."
+            debug_log "WARN" "Message key '$key' not found in messages.db."
             message="$key"
         fi
     fi
 
-    # quiet オプションが指定された場合は出力せず終了
+    # **quiet モード対応**
     if [ "$quiet_flag" = "quiet" ]; then
         return 0
     else
@@ -331,18 +411,129 @@ get_message() {
     fi
 }
 
+# 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
+
+#########################################################################
+# Last Update: 2025-02-18 23:30:00 (JST) 🚀
+# "Efficient downloading with precise versioning and silent modes."
+#
+# 【要件】
+# 1. `BASE_WGET` を使用してファイルをダウンロードする。
+# 2. `hidden` オプション:
+#    - ダウンロードの成否ログを記録するが、既存ファイルがある場合の出力を抑制する。
+# 3. `quiet` オプション:
+#    - `check_option()` で設定された `QUIET_MODE` に従い、すべてのログを抑制する。
+# 4. **引数の順序は自由** (`hidden` `quiet` の順番は任意)。
+# 5. `wget` のエラーハンドリングを行い、失敗時の詳細を `debug_log()` に記録する。
+# 6. **影響範囲:** `common.sh` の `download()` のみ（他の関数には影響なし）。
+#########################################################################
+download() {
+    # **バージョン情報の表示**
+    if [ "$QUIET_MODE" != "true" ]; then
+        echo -e "$(color cyan "Executing download function - Version: ${SCRIPT_VERSION}")"
+    fi
+
+    local hidden_mode="false"
+    local quiet_mode="${QUIET_MODE:-false}"
+    local file_name=""
+
+    # **引数解析（順不同対応）**
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            hidden) hidden_mode="true" ;;
+            quiet) quiet_mode="true" ;;
+            *) file_name="$1" ;;  # 最初に見つかった非オプション引数をファイル名とする
+        esac
+        shift
+    done
+
+    # **ファイル名の正規化**
+    file_name=$(normalize_input "$file_name")
+
+    local install_path="${BASE_DIR}/${file_name}"
+    local remote_url="${BASE_URL}/${file_name}"
+
+    # **既存ファイルのチェック**
+    if [ -f "$install_path" ]; then
+        if [ "$hidden_mode" = "true" ]; then
+            return 0
+        fi
+        if [ "$quiet_mode" != "true" ]; then
+            echo "$(color yellow "$file_name already exists. Skipping download.")"
+        fi
+        return 0
+    fi
+
+    # **ダウンロード開始**
+    debug_log "DEBUG" "Starting download of $file_name from $remote_url"
+    if ! $BASE_WGET "$install_path" "$remote_url"; then
+        debug_log "ERROR" "Download failed: $file_name"
+        return 1
+    fi
+
+    # **空ファイルチェック**
+    if [ ! -s "$install_path" ]; then
+        debug_log "ERROR" "Download failed: $file_name is empty."
+        return 1
+    fi
+
+    # **ダウンロード成功メッセージ**
+    if [ "$quiet_mode" != "true" ]; then
+        echo "$(color green "Download completed: $file_name")"
+    fi
+
+    debug_log "INFO" "Download completed: $file_name is valid."
+    return 0
+}
+
+# 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
+
 # 🔵　ランゲージ（言語・ゾーン）系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
-# Last Update: 2025-02-12 17:25:00 (JST) 🚀
-# "Precision in code, clarity in purpose. Every update refines the path."
+# Last Update: 2025-02-18 23:00:00 (JST) 🚀
+# "Ensuring consistent input handling and text normalization."
+#
+# 【要件】
+# 1. **入力テキストを正規化（Normalize Input）**
+#    - `iconv` が利用可能な場合、UTF-8 から ASCII//TRANSLIT に変換
+#    - `iconv` がない場合、元の入力をそのまま返す（スルー）
+#
+# 2. **適用対象**
+#    - **`select_country()`**: **Y/N 確認時のみ適用**
+#    - **`select_list()`**: **番号選択 & Y/N 確認時のみ適用**
+#    - **`download()`**: **ファイル名の正規化**
+#
+# 3. **適用しない対象**
+#    - **言語選択の曖昧検索には適用しない**（例: `日本語` → `ja` に変換しない）
+#    - **バージョンフォーマットの変更はしない**
+#
+# 4. **依存関係**
+#    - `iconv` が **ない場合は何もしない**
+#    - `sed` や `awk` を使わず `echo` ベースで処理
+#
+# 5. **影響範囲**
+#    - `common.sh` に統合し、全スクリプトで共通関数として利用
+#########################################################################
+normalize_input() {
+    input="$1"
+    # **全角数字 → 半角数字**
+    input=$(echo "$input" | sed 'y/０１２３４５６７８９/0123456789/')
+
+    # **不要なログを削除（echo のみを使用）**
+    echo "$input"
+}
+
+#########################################################################
+# Last Update: 2025-02-18 23:30:00 (JST) 🚀
+# "Country selection with precise Y/N confirmation."
 # select_country: ユーザーに国の選択を促す（検索機能付き）
 #
 # select_country()
-# ├── selection_list()  → 選択結果を country_tmp.ch に保存
+# ├── select_list()  → 選択結果を country_tmp.ch に保存
 # ├── country_write()   → country.ch, country.ch, luci.ch, zone.ch に確定
 # └── select_zone()     → zone.ch から zonename.ch, timezone.ch に確定
 #
-# [1] ユーザーが国を選択 → selection_list()
+# [1] ユーザーが国を選択 → select_list()
 # [2] 一時キャッシュに保存 (country_tmp.ch)
 # [3] country_write() を実行
 # [4] 確定キャッシュを作成（country.ch, country.ch, luci.ch, zone.ch）→ 書き込み禁止にする
@@ -357,30 +548,12 @@ get_message() {
 #        ├─ なし → 言語選択を実行
 #########################################################################
 select_country() {
-    debug_log "INFO" "Entering select_country() with arg: '$1'"
+    debug_log "DEBUG" "Entering select_country() with arg: '$1'"
 
     local cache_country="${CACHE_DIR}/country.ch"
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
 
-    if [ -n "$1" ]; then
-        debug_log "INFO" "Processing input: $1"
-        local predefined_country=$(awk -v search="$1" 'BEGIN {IGNORECASE=1} 
-            $2 == search || $3 == search || $4 == search || $5 == search {print $0}' "$BASE_DIR/country.db")
-
-        if [ -n "$predefined_country" ]; then
-            debug_log "INFO" "Found country entry: $predefined_country"
-            echo  "$predefined_country" > "$tmp_country"
-            country_write
-            select_zone  
-            return
-        else
-            debug_log "ERROR" "Invalid input '$1' is not a valid country."
-            printf "%s\n" "$(color red "Error: '$1' is not a recognized country name or code.")"
-            printf "%s\n" "$(color yellow "Switching to language selection.")"
-            set --  
-        fi
-    fi
-
+    # **キャッシュがあればゾーン選択へスキップ**
     if [ -f "$cache_country" ]; then
         debug_log "INFO" "Country cache found. Skipping selection."
         select_zone
@@ -391,40 +564,45 @@ select_country() {
         printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_COUNTRY")")"
         printf "%s" "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
         read -r input
-        
-        # 入力の正規化: "/", ",", "_" をスペースに置き換え
+
+        # **入力の正規化: "/", ",", "_" をスペースに置き換え**
         local cleaned_input
         cleaned_input=$(echo "$input" | sed 's/[\/,_]/ /g')
-        
-        # 完全一致を優先
+
+        # **完全一致を優先**
         local search_results
         search_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} 
-            { key = $2" "$3" "$4" "$5; if ($0 ~ search && !seen[key]++) print $0 }' "$BASE_DIR/country.db")
+            { key = $2" "$3" "$4" "$5; if ($0 ~ search && !seen[key]++) print $0 }' "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
 
-
-        # 完全一致がない場合、部分一致を検索
+        # **完全一致がない場合、部分一致を検索**
         if [ -z "$search_results" ]; then
             search_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} 
                 { for (i=2; i<=NF; i++) if ($i ~ search) print $0 }' "$BASE_DIR/country.db")
         fi
 
+        # **検索結果がない場合のエラーハンドリング**
         if [ -z "$search_results" ]; then
             printf "%s\n" "$(color red "Error: No matching country found for '$input'. Please try again.")"
             continue
         fi
 
-        selection_list "$search_results" "$tmp_country" "country"
+        # **検索結果リストを表示**
+        select_list "$search_results" "$tmp_country" "country"
+
+        # **選択結果をキャッシュへ書き込み**
         country_write
+
+        # **ゾーン選択へ進む**
+        debug_log "INFO" "Country selection completed. Proceeding to select_zone()."
         select_zone
         return
     done
 }
 
 #########################################################################
-# Last Update: 2025-02-12 16:12:39 (JST) 🚀
-# "Precision in code, clarity in purpose. Every update refines the path."
-#########################################################################
-# selection_list()
+# Last Update: 2025-02-18 23:30:00 (JST) 🚀
+# "Handling numbered list selections with confirmation."
+# select_list()
 # 選択リストを作成し、選択結果をファイルに保存する関数。
 #
 # 【要件】
@@ -438,91 +616,51 @@ select_country() {
 #     - 入力データが空ならエラーを返す
 #     - 選択後に `Y/N` で確認
 #########################################################################
-selection_list() {
+select_list() {
     local input_data="$1"
     local output_file="$2"
     local mode="$3"
-    local list_file=""
+    local list_file="${CACHE_DIR}/${mode}_tmp.ch"
     local i=1
 
-    if [ "$mode" = "country" ]; then
-        list_file="${CACHE_DIR}/country_tmp.ch"
-    elif [ "$mode" = "zone" ]; then
-        list_file="${CACHE_DIR}/zone_tmp.ch"
-    else
-        return 1
-    fi
-
+    # **リストファイルを初期化**
     : > "$list_file"
 
+    # **リストを表示**
     echo "$input_data" | while IFS= read -r line; do
-        if [ "$mode" = "country" ]; then
-            local extracted
-            extracted=$(echo "$line" | awk '{print $2, $3, $4, $5}')
-            if [ -n "$extracted" ]; then
-                printf "[%d] %s\n" "$i" "$extracted"
-                echo "$line" >> "$list_file"
-                i=$((i + 1))
-            fi
-        elif [ "$mode" = "zone" ]; then
-            if [ -n "$line" ]; then
-                echo "$line" >> "$list_file"
-                printf "[%d] %s\n" "$i" "$line"
-                i=$((i + 1))
-            fi
-        fi
+        printf "[%d] %s\n" "$i" "$line"
+        echo "$line" >> "$list_file"
+        i=$((i + 1))
     done
 
     while true; do
         printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_NUMBER_CHOICE")")"
         printf "%s" "$(get_message "MSG_SELECT_NUMBER")"
         read -r choice
+
+        # **入力を正規化（全角→半角）**
+        choice=$(normalize_input "$choice")
+
         local selected_value
         selected_value=$(awk -v num="$choice" 'NR == num {print $0}' "$list_file")
 
         if [ -z "$selected_value" ]; then
             printf "%s\n" "$(color red "$(get_message "MSG_INVALID_SELECTION")")"
+            debug_log "WARN" "Invalid selection: '$choice'. Available options: $(cat "$list_file")"
             continue
         fi
 
-        local confirm_info=""
-        if [ "$mode" = "country" ]; then
-            confirm_info=$(echo "$selected_value" | awk '{print $2, $3, $4, $5}')
-        elif [ "$mode" = "zone" ]; then
-            confirm_info=$(echo "$selected_value" | awk '{print $1, $2}')
-        fi
-
-        printf "%s\n" "$(color cyan "$(get_message "MSG_CONFIRM_SELECTION") [$choice] $confirm_info")"
+        printf "%s\n" "$(color cyan "$(get_message "MSG_CONFIRM_SELECTION")")"
         printf "%s" "$(get_message "MSG_CONFIRM_YNR")"
         read -r yn
-        
-        case "$yn" in
-            [Yy]*) 
-                printf "%s\n" "$selected_value" > "$output_file"
-                return
-                ;;
-            [Nn]*) 
-                printf "%s\n" "$(color yellow "Returning to selection.")"
-                selection_list "$input_data" "$output_file" "$mode"
-                return
-                ;;
-            [Rr]*)                
-                rm -f "$CACHE_DIR/country.ch" \
-                "$CACHE_DIR/language.ch" \
-                "$CACHE_DIR/luci.ch" \
-                "$CACHE_DIR/zone.ch" \
-                "$CACHE_DIR/zonename.ch" \
-                "$CACHE_DIR/timezone.ch" \
-                "$CACHE_DIR/country_success_done" \
-                "$CACHE_DIR/timezone_success_done"
-                select_country
-                return
-                ;;
-            *)
-                printf "%s\n" "$(color red "$(get_message "MSG_INVALID_INPUT_YNR")")"
-                continue
-                ;;
-        esac
+
+        # **確認用の入力も正規化**
+        yn=$(normalize_input "$yn")
+
+        if [ "$yn" = "Y" ] || [ "$yn" = "y" ]; then
+            printf "%s\n" "$selected_value" > "$output_file"
+            return
+        fi
     done  
 }
 
@@ -629,7 +767,7 @@ select_zone() {
 
     local formatted_zone_list=$(awk '{gsub(",", " "); for (i=1; i<=NF; i+=2) print $i, $(i+1)}' "$cache_zone")
 
-    selection_list "$formatted_zone_list" "$cache_zone_tmp" "zone"
+    select_list "$formatted_zone_list" "$cache_zone_tmp" "zone"
 
     local selected_zone=$(cat "$cache_zone_tmp" 2>/dev/null)
     if [ -z "$selected_zone" ]; then
@@ -651,7 +789,7 @@ select_zone() {
 }
 
 #########################################################################
-# Last Update: 2025-02-12 17:10:05 (JST) 🚀
+# Last Update: 2025-02-18 11:00:00 (JST) 🚀
 # "Precision in code, clarity in purpose. Every update refines the path."
 # normalize_country: 言語設定の正規化
 #
@@ -661,15 +799,20 @@ select_zone() {
 #    - `country.ch` が無い場合は `select_country()` を実行し、手動選択
 #
 # 2. システムメッセージの言語 (`message.ch`) の確定:
-#    - `message.db` の `SUPPORTED_LANGUAGES` を確認
-#    - `country.ch` に記録された言語が `SUPPORTED_LANGUAGES` にあれば、それを `message.ch` に保存
-#    - `SUPPORTED_LANGUAGES` に無い場合、`message.ch` に `en` を設定
+#    - `messages.db` の `SUPPORTED_LANGUAGES` を確認
+#    - `country.ch` に記録された言語が `SUPPORTED_LANGUAGES` に含まれる場合、それを `message.ch` に保存
+#    - `SUPPORTED_LANGUAGES` に無い場合、`message.ch` に `US`（フォールバック）を設定
 #
 # 3. `country.ch` との関係:
 #    - `country.ch` はデバイス設定用（変更不可）
 #    - `message.ch` はシステムメッセージ表示用（フォールバック可能）
 #
-# 4. メンテナンス:
+# 4. `$ACTIVE_LANGUAGE` の管理:
+#    - `normalize_country()` 実行時に `$ACTIVE_LANGUAGE` を設定
+#    - `$ACTIVE_LANGUAGE` は `message.ch` の値を常に参照
+#    - `$ACTIVE_LANGUAGE` が未設定の場合、フォールバックで `US`
+#
+# 5. メンテナンス:
 #    - `country.ch` はどのような場合でも変更しない
 #    - `message.ch` のみフォールバックを適用し、システムメッセージの一貫性を維持
 #    - 言語設定に影響を与えず、メッセージの表示のみを制御する
@@ -706,40 +849,20 @@ normalize_country() {
     if echo "$supported_languages" | grep -qw "$selected_language"; then
         debug_log "INFO: Using message database language: $selected_language"
         echo "$selected_language" > "$message_cache"
+        ACTIVE_LANGUAGE="$selected_language"  # ✅ `$ACTIVE_LANGUAGE` にも設定
     else
-        debug_log "WARNING: Language '$selected_language' not found in messages.db. Using 'en' as fallback."
+        debug_log "WARNING: Language '$selected_language' not found in messages.db. Using 'US' as fallback."
         echo "US" > "$message_cache"
+        ACTIVE_LANGUAGE="US"  # ✅ フォールバック時も `$ACTIVE_LANGUAGE` に設定
     fi
 
-    debug_log "INFO: Final system message language -> $(cat "$message_cache")"
+    debug_log "INFO: Final system message language -> $ACTIVE_LANGUAGE"
     echo "$(get_message "MSG_COUNTRY_SUCCESS")"
     touch "$flag_file"    
 }
 
-# 🔴　ランゲージ（言語・ゾーン）系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
-#########################################################################
-# confirm: Y/N 確認関数
-#########################################################################
-confirm() {
-    local key="$1"
-    local replace_param1="$2"
-    local replace_param2="$3"
-    local prompt_message
-    prompt_message=$(get_message "$key" "$SELECTED_LANGUAGE")
-    [ -n "$replace_param1" ] && prompt_message=$(echo "$prompt_message" | sed "s/{pkg}/$replace_param1/g")
-    [ -n "$replace_param2" ] && prompt_message=$(echo "$prompt_message" | sed "s/{version}/$replace_param2/g")
-    echo "DEBUG: Confirm message -> [$prompt_message]"
-    while true; do
-        read -r -p "$prompt_message " confirm
-        confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')
-        case "$confirm" in
-            ""|"y"|"yes") return 0 ;;
-            "n"|"no") return 1 ;;
-            *) echo "$(color red "Invalid input. Please enter 'Y' or 'N'.")" ;;
-        esac
-    done
-}
+# 🔴　ランゲージ（言語・ゾーン）系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # 🔵　パッケージ系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
@@ -815,8 +938,8 @@ install_package() {
     done
 
     # downloader_ch からパッケージマネージャーを取得
-    if [ -f "${BASE_DIR}/downloader_ch" ]; then
-        PACKAGE_MANAGER=$(cat "${BASE_DIR}/downloader_ch")
+    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
     else
         echo "$(get_message "MSG_PACKAGE_MANAGER_NOT_FOUND")"
         return 1
@@ -919,51 +1042,91 @@ install_package() {
     fi
 }
 
+#########################################################################
+# Last Update: 2025-02-18 (JST) 🚀
+# "Handles package installation and build for custom packages."
+#
+# 【要件】
+# 1. **汎用的なビルド依存関係のインストール**:
+#    - まず、**一般的なビルドツール（make, gcc, git など）**をインストールします。
+#    - これらのツールは多くのパッケージビルドに必要なため、最初にインストールします。
+#
+# 2. **個別パッケージの依存関係**:
+#    - その後、`packages.db` 内のパッケージ情報を元に、特定のパッケージやライブラリをインストールします。
+#    - `package_name` に対応するビルド依存パッケージは、`packages.db` で指定された内容に従ってインストールされます。
+#
+# 3. **デバッグおよびメッセージの出力**:
+#    - `debug_log()` を使用して、インストールの進行状況やエラーをログに記録します。
+#    - `get_message()` を使用して、ユーザー向けのメッセージを表示します。
+#
+# 4. **ビルド処理**:
+#    - 依存関係がインストールされた後、実際のビルド処理（例えば、`git clone` や `make`）を行います。
+#########################################################################
+
+package_build() {
+    package_name="$1"
+
+    # **汎用的なビルド依存パッケージをインストール**
+    debug_log "INFO" "Installing general build dependencies for $package_name..."
+
+    # 一般的なビルドパッケージ（必須ツール）
+    install_package make hidden
+    install_package gcc hidden
+    install_package git hidden
+    install_package libtool hidden
+    install_package automake hidden
+    install_package pkg-config hidden
+    install_package zlib-dev hidden
+    install_package libssl-dev hidden
+    install_package libicu-dev hidden
+    install_package ncurses-dev hidden
+    install_package libcurl4-openssl-dev hidden
+    install_package libxml2-dev hidden
+
+    # **`packages.db` からパッケージに必要な追加の依存関係をインストール**
+    debug_log "INFO" "Checking and installing package-specific dependencies for $package_name..."
+    dependencies=$(awk -v package_name="$package_name" '
+        BEGIN {FS="="}
+        $1 == package_name {print $2}
+    ' /etc/aios/packages.db)
+
+    if [ -n "$dependencies" ]; then
+        for dep in $dependencies; do
+            install_package "$dep" hidden
+        done
+    fi
+
+    # **ビルド開始のメッセージ**
+    message=$(get_message "MSG_BUILD_START")
+    echo "$(color green "$message")"
+
+    # **実際のビルド処理**
+    debug_log "INFO" "Starting build process for $package_name..."
+    
+    # 仮に `git clone` や `make` などのコマンドを使用してビルド処理
+    # (ここでは簡単な処理例として `git clone` を使っています)
+    echo "$(color cyan "Cloning repository for $package_name...")"
+    git clone https://example.com/repo/$package_name.git /tmp/$package_name
+    cd /tmp/$package_name
+    make && make install
+
+    # **ビルド成功のメッセージ**
+    message=$(get_message "MSG_BUILD_SUCCESS")
+    echo "$(color green "$message")"
+
+    # **エラーハンドリング**
+    if [ $? -ne 0 ]; then
+        message=$(get_message "MSG_BUILD_FAILURE")
+        echo "$(color red "$message")"
+        debug_log "ERROR" "Build failed for $package_name."
+        return 1
+    fi
+
+    debug_log "INFO" "$package_name built and installed successfully."
+    return 0
+}
+
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
-
-
-#########################################################################
-# download_script: 指定されたスクリプト・データベースのバージョン確認とダウンロード
-#########################################################################
-download_script() {
-    local file_name="$1"
-    local script_cache="${CACHE_DIR}/script.ch"
-    local install_path="${BASE_DIR}/${file_name}"
-    local remote_url="${BASE_URL}/${file_name}"
-
-    if [ -f "$script_cache" ] && grep -q "^$file_name=" "$script_cache"; then
-        local cached_version=$(grep "^$file_name=" "$script_cache" | cut -d'=' -f2)
-        local remote_version=$(wget -qO- "${remote_url}" | grep "^version=" | cut -d'=' -f2)
-        if [ "$cached_version" = "$remote_version" ]; then
-            echo "$(color green "$file_name is up-to-date ($cached_version). Skipping download.")"
-            return
-        fi
-    fi
-
-    echo "$(color yellow "Downloading latest version of $file_name")"
-    ${BASE_WGET} "$install_path" "$remote_url"
-    local new_version=$(grep "^version=" "$install_path" | cut -d'=' -f2)
-    echo "$file_name=$new_version" >> "$script_cache"
-}
-
-#########################################################################
-# download: 汎用ファイルダウンロード関数
-#########################################################################
-download() {
-    local file_url="$1"
-    local destination="$2"
-    if ! confirm "MSG_DOWNLOAD_CONFIRM" "$file_url"; then
-        echo -e "$(color yellow "Skipping download of $file_url")"
-        return 0
-    fi
-    ${BASE_WGET} "$destination" "${file_url}?cache_bust=$(date +%s)"
-    if [ $? -eq 0 ]; then
-        echo -e "$(color green "Downloaded: $file_url")"
-    else
-        echo -e "$(color red "Failed to download: $file_url")"
-        exit 1
-    fi
-}
 
 #########################################################################
 # country_info: 選択された国と言語の詳細情報を表示
@@ -1029,9 +1192,11 @@ handle_exit() {
 #       キャッシュリセット、ドライラン、ログ出力先 /var/log/aios.log、強制実行が有効になる。
 #########################################################################
 check_option() {
+    debug_log DEBUG "check_option received before args: $*"
+
     # デフォルト値の設定
     SELECTED_LANGUAGE=""
-    MODE="full"   # 内部的 MODE は "full", "light", "debug", "reset"
+    MODE="full"
     DEBUG_MODE="false"
     DEBUG_LEVEL="INFO"
     DRY_RUN="false"
@@ -1040,67 +1205,49 @@ check_option() {
     RESET="false"
     HELP="false"
 
+    # 言語およびオプション引数の処理
     while [ "$#" -gt 0 ]; do
         case "$1" in
-            # ヘルプ
             -h|--h|-help|--help|-\?|--\?)
                 HELP="true"
                 print_help
                 exit 0
                 ;;
-            # バージョン
             -v|--v|-version|--version)
                 script_version
                 exit 0
                 ;;
-            # デバッグ（レベル DEBUG）
             -d|--d|-debug|--debug|-d1|--d1)
                 DEBUG_MODE="true"
                 DEBUG_LEVEL="DEBUG"
-                shift
                 ;;
-            # デバッグ（レベル DEBUG2）
             -d2|--d2|-debug2|--debug2)
                 DEBUG_MODE="true"
                 DEBUG_LEVEL="DEBUG2"
-                shift
                 ;;
-            # モード指定：full
             -cf|--cf|-common_full|--common_full)
                 MODE="full"
-                shift
                 ;;
-            # モード指定：light
             -cl|--cl|-ocommon_light|--ocommon_light)
                 MODE="light"
-                shift
                 ;;
-            # モード指定：debug
             -cd|--cd|-common_debug|--common_debug|--ocommon_debug)
                 MODE="debug"
-                shift
                 ;;
-            # モード指定：reset
             -r|--r|-reset|--reset|-resrt|--resrt)
                 MODE="reset"
                 RESET="true"
-                shift
                 ;;
-            # 強制実行
             -f|--f|-force|--force)
                 FORCE="true"
-                shift
                 ;;
-            # ドライラン
             -dr|--dr|-dry-run|--dry-run)
                 DRY_RUN="true"
-                shift
                 ;;
-            # ログ出力先
             -l|--l|-logfile|--logfile)
-                if [ -n "$2" ]; then
+                if [ -n "$2" ] && [ "${2#-}" != "$2" ]; then
                     LOGFILE="$2"
-                    shift 2
+                    shift
                 else
                     echo "Error: --logfile requires a path argument"
                     exit 1
@@ -1108,58 +1255,43 @@ check_option() {
                 ;;
             -*)
                 echo "Warning: Unknown option: $1" >&2
-                shift
                 ;;
             *)
-                # 非ダッシュ引数はすべて SELECTED_LANGUAGE として扱う
                 if [ -z "$SELECTED_LANGUAGE" ]; then
                     SELECTED_LANGUAGE="$1"
                 fi
-                shift
                 ;;
         esac
+        shift
     done
 
+    # 環境変数として設定
     export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET HELP
 
-    debug_log "DEBUG" "check_option: SELECTED_LANGUAGE='$SELECTED_LANGUAGE', MODE='$MODE', DEBUG_MODE='$DEBUG_MODE', DEBUG_LEVEL='$DEBUG_LEVEL', DRY_RUN='$DRY_RUN', LOGFILE='$LOGFILE', FORCE='$FORCE', RESET='$RESET', HELP='$HELP'"
+    # デバッグ情報を出力
+    debug_log DEBUG "check_option: SELECTED_LANGUAGE='$SELECTED_LANGUAGE', MODE='$MODE', DEBUG_MODE='$DEBUG_MODE', DEBUG_LEVEL='$DEBUG_LEVEL', DRY_RUN='$DRY_RUN', LOGFILE='$LOGFILE', FORCE='$FORCE', RESET='$RESET', HELP='$HELP'"
+
+    # 設定された言語を `check_common()` に渡す
+    check_common "$SELECTED_LANGUAGE"
 }
 
 #########################################################################
-# Last Update: 2025-02-15 10:00:00 (JST) 🚀
-# check_common: 共通処理の初期化
+# Last Update: 2025-02-16 21:45:00 (JST) 🚀
+# "Ensuring seamless updates, one script at a time."
 #
 # 【要件】
-# 1. 役割:
-#    - common.sh のフロー制御および初期化処理を行う。
-#    - check_option() で解析されたオプションに基づき、後続処理（主に言語選択）を実施する。
-#
-# 2. フロー:
-#    - 必要なスクリプトやデータベース（openwrt.db, messages.db, country.db, packages.db）の更新を実施。
-#    - OpenWrt バージョンの確認を実施。
-#    - MODE の値に応じた処理を行う：
-#         - reset: キャッシュファイルを削除して「MSG_RESET_COMPLETE」を表示し終了。
-#         - full: select_country() を呼び出す。
-#         - light: country.ch キャッシュが存在すれば国選択をスキップ、なければ select_country() を呼び出す。
-#         - debug: full モードの処理に加えて、追加のデバッグ出力を行い、debug() での内部チェックも実施する。
-#
-# 【仕様】
-# - 言語選択は、check_option() で確定された SELECTED_LANGUAGE を、そのまま select_country() に $1 として渡す。
+# 1. `download_script()` を `download()` に統合し、一貫性を確保する。
+# 2. `debug_log()` を強化し、ダウンロード状況を詳細に記録。
+# 3. `download()` のエラーハンドリングを見直し、失敗時の挙動を改善。
+# 4. `openwrt.db`, `messages.db`, `country.db`, `packages.db` を適切にダウンロード。
+# 5. 影響範囲: `common.sh`（矛盾なく適用）。
 #########################################################################
 check_common() {
-    local lang_code="$SELECTED_LANGUAGE"
-    
-    debug_log "INFO" "check_common called with lang_code: '$lang_code' and MODE: '$MODE'"
-    script_update || handle_error "ERR_SCRIPT_UPDATE" "script_update" "latest"
-    download_script openwrt.db || handle_error "ERR_DOWNLOAD" "openwrt.db" "latest"
-    download_script messages.db || handle_error "ERR_DOWNLOAD" "messages.db" "latest"
-    download_script country.db || handle_error "ERR_DOWNLOAD" "country.db" "latest"
-    download_script packages.db || handle_error "ERR_DOWNLOAD" "packages.db" "latest"
-    check_openwrt || handle_error "ERR_OPENWRT_VERSION" "check_openwrt" "latest"
+    local lang_code="$1"
+    local mode="${2:-full}" 
 
     case "$MODE" in
         reset)
-            debug_log "INFO" "Reset mode: Clearing all cache files."
             rm -f "${CACHE_DIR}/country.ch" \
                   "${CACHE_DIR}/language.ch" \
                   "${CACHE_DIR}/luci.ch" \
@@ -1172,20 +1304,19 @@ check_common() {
             exit 0
             ;;
         full)
+            download "hidden" "openwrt.db"
+            download "hidden" "country.db"
+            download "hidden" "packages.db"
+            download "hidden" "messages.db"
+            check_openwrt
+            check_downloader
             select_country "$lang_code"
             ;;
         light)
-            if [ -f "${CACHE_DIR}/country.ch" ]; then
-                debug_log "INFO" "Country cache found; skipping country selection."
-            else
-                select_country "$lang_code"
-            fi
+            select_country "$lang_code"
             ;;
         debug)
-            debug_log "DEBUG" "Running in debug mode: Additional debug output enabled."
             select_country "$lang_code"
-            # ここで必要に応じ debug() を呼び出して内部チェックも実施する
-            debug "DEBUG" "Post country selection debug info..."
             ;;
         *)
             select_country "$lang_code"
