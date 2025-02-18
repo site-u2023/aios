@@ -329,7 +329,7 @@ normalize_version() {
     # **先頭ゼロを削除（例: `02` → `2`）**
     input=$(echo "$input" | awk -F'[.\-\/,;: ]' '{
         for (i=1; i<=NF; i++) {
-            sub(/^0+/, "", $i)
+            if ($i ~ /^[0-9]+$/) sub(/^0+/, "", $i)  # 数字のみのフィールドに適用
             printf (i<NF) ? $i FS : $i
         }
     }')
@@ -516,7 +516,9 @@ normalize_input() {
 
     # iconv がある場合、二バイト文字を一バイトに変換
     if command -v iconv >/dev/null 2>&1; then
-        input=$(echo "$input" | iconv -f UTF-8 -t ASCII//TRANSLIT")
+        input=$(echo "$input" | iconv -f UTF-8 -t ASCII//TRANSLIT" 2>/dev/null") || {
+            debug_log "WARN" "iconv failed to process input. Returning original value."
+        }
     fi
 
     echo "$input"
