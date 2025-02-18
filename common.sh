@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-06-01"
+SCRIPT_VERSION="2025.02.19-07-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -879,10 +879,13 @@ normalize_country() {
 # 【使用例】
 # - select_package "package_name" yn dont notset disabled
 #########################################################################
-
 select_package() {
     local package_name="$1"
-    shift  # パッケージ名とオプションを処理
+    local confirm_install="$2"
+    local skip_lang_pack="$3"
+    local skip_package_db="$4"
+    local set_disabled="$5"
+    local hidden="$6"
 
     # オプション解析
     local confirm_install="no"
@@ -1119,6 +1122,11 @@ install_package() {
 #########################################################################
 package_build() {
     package_name="$1"
+    confirm_install="$2"
+    skip_lang_pack="$3"
+    skip_package_db="$4"
+    set_disabled="$5"
+    hidden="$6"
 
     # **汎用的なビルド依存パッケージをインストール**
     debug_log "INFO" "Installing general build dependencies for $package_name..."
