@@ -591,7 +591,7 @@ select_country() {
         fi
 
         # **検索結果リストを表示**
-        selection_list "$search_results" "$tmp_country" "country"
+        select_list "$search_results" "$tmp_country" "country"
 
         # **選択結果をキャッシュへ書き込み**
         country_write
