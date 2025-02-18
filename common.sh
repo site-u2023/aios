@@ -515,15 +515,16 @@ download() {
 #    - `common.sh` に統合し、全スクリプトで共通関数として利用
 #########################################################################
 normalize_input() {
-    local input="$1"
+    input="$1"
 
-    # iconv がある場合、二バイト文字を一バイトに変換
-    if command -v iconv >/dev/null 2>&1; then
-        input=$(echo "$input" | iconv -f UTF-8 -t ASCII//TRANSLIT" 2>/dev/null") || {
-            debug_log "WARN" "iconv failed to process input. Returning original value."
-        }
-    fi
+    # **iconv は使わず sed で全角数字 → 半角数字に変換**
+    input=$(echo "$input" | sed 'y/０１２３４５６７８９/0123456789/')
 
+    # **カタカナの半角変換（必要なら追加）**
+    input=$(echo "$input" | sed -E 's/　/ /g' | sed -E 's/［/[/g; s/］/]/g')
+
+    debug_log "INFO" "normalize_input() processed input: $input"
+    
     echo "$input"
 }
 
