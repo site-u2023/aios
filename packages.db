@@ -1,13 +1,19 @@
 SCRIPT_VERSION="2025.02.16-00-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION package.db \033[0m"
 
-[ttyd]
+[custom_build_uconv]
+# uconv のビルドに必要なパッケージ
+dependencies="make gcc git libtool automake pkg-config zlib-dev libssl-dev libicu-dev ncurses-dev"
 
+# uconv のビルド手順
+[custom_build_uconv_build]
+build_command="./configure && make -j$(nproc) && make install"
+
+[ttyd]
 uci del_list ttyd.@ttyd[0].client_option='theme={"background": "black"}'
 uci del_list ttyd.@ttyd[0].client_option='titleFixed=ttyd'
 uci del_list ttyd.ttyd.client_option='theme={"background": "blue"}'
 uci del_list ttyd.ttyd.client_option='titleFixed=config-software'
-
 uci set ttyd.@ttyd[0]=ttyd
 uci set ttyd.@ttyd[0].interface='@lan'
 uci set ttyd.@ttyd[0].command='/bin/login -f root'
@@ -21,7 +27,6 @@ uci set ttyd.ttyd.ipv6='1'
 uci set ttyd.ttyd.command='confsoft'
 uci add_list ttyd.ttyd.client_option='theme={"background": "blue"}'
 uci add_list ttyd.ttyd.client_option='titleFixed=config-software'
-
 uci commit ttyd
 /etc/init.d/ttyd enable
 /etc/init.d/rpcd start
