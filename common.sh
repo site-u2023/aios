@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.18-00-09"
+SCRIPT_VERSION="2025.02.18-00-10"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -393,7 +393,7 @@ get_message() {
     local message_cache="${CACHE_DIR}/message.ch"
     local lang="en"  # デフォルトは "en"
 
-    # message.ch が無い場合、country.ch から言語コードを取得
+    # `message.ch` が無ければ `country.ch` から言語を取得
     if [ ! -f "$message_cache" ]; then
         if [ -f "${CACHE_DIR}/country.ch" ]; then
             lang=$(awk '{print $5}' "${CACHE_DIR}/country.ch")
@@ -406,34 +406,31 @@ get_message() {
     local message_db="${BASE_DIR}/messages.db"
     local message=""
 
-    # messages.db が存在しない、または 0 バイトならエラー
+    # **messages.db のチェック**
     if [ ! -s "$message_db" ]; then
         debug_log "ERROR" "messages.db is missing or empty!"
+        return 1  # 失敗時は即時リターン
+    fi
+
+    debug_log "DEBUG" "Searching messages.db for: ^${lang}|${key}="
+    
+    # **`tr -d '\r'` で `CRLF` の影響を削除**
+    message=$(grep "^${lang}|${key}=" "$message_db" | tr -d '\r' | cut -d'=' -f2-)
+
+    # **US でフォールバック検索**
+    if [ -z "$message" ]; then
+        message=$(grep "^US|${key}=" "$message_db" | tr -d '\r' | cut -d'=' -f2-)
+    fi
+
+    # **見つからなければ警告 & 既定値を返す**
+    if [ -z "$message" ]; then
+        if [ "$quiet_flag" != "quiet" ]; then
+            debug_log "WARN" "Message key '$key' not found in messages.db."
+        fi
         message="$key"
-    else
-        debug_log "DEBUG" "Searching messages.db for: ^${lang}|${key}="
-        
-        # `tr -d '\r'` で `CRLF` の影響を削除
-        message=$(grep "^${lang}|${key}=" "$message_db" | tr -d '\r' | cut -d'=' -f2-)
-
-        # 該当メッセージが無ければ `US` をフォールバック
-        if [ -z "$message" ]; then
-            message=$(grep "^US|${key}=" "$message_db" | tr -d '\r' | cut -d'=' -f2-)
-        fi
-
-        # それでも見つからなければ、デバッグログを出し、キーそのままを返す
-        if [ -z "$message" ]; then
-            [ "$quiet_flag" != "quiet" ] && debug_log "WARN" "Message key '$key' not found in messages.db."
-            message="$key"
-        fi
     fi
 
-    # quiet オプションが指定された場合は出力せず終了
-    if [ "$quiet_flag" = "quiet" ]; then
-        return 0
-    else
-        echo "$message"
-    fi
+    echo "$message"
 }
 
 XXX_get_message() {
