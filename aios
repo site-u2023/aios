@@ -67,7 +67,7 @@ print_banner() {
 packages() {
     # iconv のインストール
     install_package iconv yn hidden
-
+    # libunistring
     # iconv がインストールされている場合に languages.db をインストール
     if command -v iconv >/dev/null 2>&1; then
         echo "iconv is installed. Installing languages.db..."
