@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.18-02-04"
+SCRIPT_VERSION="2025.02.18-02-06"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -318,7 +318,7 @@ check_downloader() {
 #    - `common.sh` に統合し、`download()` & `compare_versions()` で使用
 #########################################################################
 normalize_version() {
-    local input="$1"
+    input="$1"
 
     # **二バイト → 一バイト変換**
     input=$(normalize_input "$input")
@@ -327,17 +327,17 @@ normalize_version() {
     # **許可された文字（数字, 記号）以外を削除**
     input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
 
-    # **先頭ゼロを削除**
-    input=$(echo "$input" | awk -F'[._-]' '{
+    # **余分な改行やスペースを削除**
+    input=$(echo "$input" | tr -d '\n' | sed 's/ *$//')
+
+    # **区切り文字を正しく処理**
+    input=$(echo "$input" | awk -F'[_-]' '{
         for (i=1; i<=NF; i++) {
             if ($i ~ /^[0-9]+$/) sub(/^0+/, "", $i)
-            printf (i<NF) ? $i FS : $i
+            printf "%s%s", $i, (i<NF ? "." : "")
         }
-        print ""  # ←改行を強制
+        print ""
     }')
-
-    # **前後のスペースを削除**
-    input=$(echo "$input" | sed 's/^ *//;s/ *$//')
 
     echo "$input"
 }
@@ -484,6 +484,7 @@ download() {
     debug_log "INFO" "Download completed: $file_name is valid."
     return 0
 }
+
 
 # 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
