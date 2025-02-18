@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.18-00-10"
+SCRIPT_VERSION="2025.02.18-00-11"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -196,20 +196,6 @@ test_debug_functions() {
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
-# messages_db: メッセージデータベースのダウンロード
-#########################################################################
-messages_db() {
-    if [ ! -f "${BASE_DIR}/messages.db" ]; then
-        echo -e "$(color yellow "Downloading messages.db...")"
-        if ! ${BASE_WGET} "${BASE_DIR}/messages.db" "${BASE_URL}/messages.db"; then
-            echo -e "$(color red "Failed to download messages.db")"
-            return 1
-        fi
-        echo -e "$(color green "Successfully downloaded messages.db")"
-    fi
-}
-
-#########################################################################
 # Last Update: 2025-02-17 15:45:00 (JST) 🚀
 # "Simplified download logic with BASE_WGET support."
 #
@@ -237,22 +223,13 @@ download() {
         return 1
     fi
 
-    # 空ファイル対策
-    #if [ ! -s "$install_path" ]; then
-    #    debug_log "ERROR" "Download failed: $file_name is empty."
-    #    return 1
-    #fi
-
     debug_log "INFO" "Download completed: $file_name is valid."
 
     # **バージョンチェック（ログ目的のみ）**
-    #local script_version="unknown"
-    #if grep -q "^SCRIPT_VERSION=" "$install_path"; then
-    #    script_version=$(grep "^SCRIPT_VERSION=" "$install_path" | cut -d'=' -f2 | tr -d '"')
-    #    debug_log "INFO" "$file_name version: $script_version"
-    #else
-    #    debug_log "WARN" "SCRIPT_VERSION not found in $file_name."
-    #fi
+    if [ "$file_name" = "messages.db" ]; then
+        debug_log "DEBUG" "Running get_message() to confirm messages.db integrity."
+        get_message "MSG_TEST_CACHE_CONTENTS"
+    fi
 
     return 0
 }
@@ -391,14 +368,14 @@ get_message() {
     local key="$1"
     local quiet_flag="$2"
     local message_cache="${CACHE_DIR}/message.ch"
-    local lang="en"  # デフォルトは "en"
+    local lang="US"  # デフォルトを "US" に変更
 
     # `message.ch` が無ければ `country.ch` から言語を取得
     if [ ! -f "$message_cache" ]; then
         if [ -f "${CACHE_DIR}/country.ch" ]; then
             lang=$(awk '{print $5}' "${CACHE_DIR}/country.ch")
         fi
-        [ -z "$lang" ] && lang="en"
+        [ -z "$lang" ] && lang="US"
     else
         lang=$(cat "$message_cache")
     fi
@@ -432,6 +409,7 @@ get_message() {
 
     echo "$message"
 }
+
 
 XXX_get_message() {
     local key="$1"
