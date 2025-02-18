@@ -3,7 +3,7 @@
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
 
-SCRIPT_VERSION="2025.02.18-00-01"
+SCRIPT_VERSION="2025.02.18-01-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -65,6 +65,7 @@ print_banner() {
 
 # パッケージのインストール (オプション)
 packages() {
+    install_package iconv yn hidden
     install_package ttyd yn hidden
     install_package luci-app-ttyd yn hidden
     install_package openssh-sftp-server yn hidden
