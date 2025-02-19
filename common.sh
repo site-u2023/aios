@@ -1108,14 +1108,14 @@ install_build() {
     fi
 
     # ビルド用の汎用パッケージをインストール
-    install_package "make"
-    install_package "gcc"
-    install_package "binutils"
-    install_package "libc-dev"
-    install_package "pkg-config"
-    install_package "automake"
-    install_package "autoconf"
-    install_package "cmake"
+    install_package make yn
+    install_package gcc yn
+    install_package binutils yn
+    install_package libc-dev yn
+    install_package pkg-config yn
+    install_package automake yn
+    install_package autoconf yn
+    install_package cmake yn
     
     # ビルド前のパッケージ名を取得
     local built_package="${package_name#build_}"
