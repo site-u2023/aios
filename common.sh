@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-09-01"
+SCRIPT_VERSION="2025.02.19-09-02"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -954,15 +954,15 @@ install_package() {
     done
 
     if [ -z "$package_name" ]; then
-        echo "Error: No package specified." >&2
+        echo "$(get_message "MSG_ERROR_NO_PACKAGE")" >&2
         return 1
     fi
 
-    # パッケージマネージャーの確認（download.ch のキャッシュを参照）
-    if [ -f "${CACHE_DIR}/download.ch" ]; then
-        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/download.ch")
+    # パッケージマネージャーの確認（downloader_ch のキャッシュを参照）
+    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
     else
-        echo "Error: No package manager information found in cache (download.ch)." >&2
+        echo "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")" >&2
         return 1
     fi
 
@@ -1014,28 +1014,6 @@ install_package() {
         $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1
     else
         $PACKAGE_MANAGER install "$package_name"
-    fi
-
-    if [ "$skip_lang_pack" = "no" ] && echo "$package_name" | grep -qE '^luci-app-'; then
-        local lang_code=$(cat "${CACHE_DIR}/luci.ch" 2>/dev/null || echo "en")
-        local lang_package="luci-i18n-${package_name#luci-app-}-$lang_code"
-        install_package "$lang_package" hidden
-    fi
-
-    if [ "$skip_package_db" = "no" ] && grep -q "^$package_name=" "${BASE_DIR}/packages.db"; then
-        eval "$(grep "^$package_name=" "${BASE_DIR}/packages.db" | cut -d'=' -f2-)"
-    fi
-
-    if [ "$skip_package_db" = "no" ]; then
-        if uci get "$package_name.@$package_name[0].enabled" >/dev/null 2>&1; then
-            uci set "$package_name.@$package_name[0].enabled=$([ "$set_disabled" = "yes" ] && echo "0" || echo "1")"
-            uci commit "$package_name"
-        fi
-    fi
-
-    if [ "$set_disabled" = "no" ] && [ -f "/etc/init.d/$package_name" ]; then
-        /etc/init.d/$package_name enable
-        /etc/init.d/$package_name start
     fi
 }
 
