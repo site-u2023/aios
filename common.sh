@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-10-00"
+SCRIPT_VERSION="2025.02.19-10-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1459,6 +1459,44 @@ check_common() {
     local lang_code="$1"
     local mode="${2:-full}" 
 
+    # コマンドラインで言語が指定されている場合は、対話的な国選択をスキップ
+    if [ -n "$lang_code" ]; then
+        lang_code=$(normalize_input "$lang_code")
+        # messages.db から指定言語がサポートされているかチェック（大文字小文字無視）
+        if grep -qi "^${lang_code}|" "${BASE_DIR}/messages.db"; then
+            ACTIVE_LANGUAGE="$lang_code"
+        else
+            ACTIVE_LANGUAGE="US"
+        fi
+        echo "$ACTIVE_LANGUAGE" > "${CACHE_DIR}/message.ch"
+        debug_log "INFO" "Language specified via command line: $ACTIVE_LANGUAGE"
+        
+        # モードに応じた初期処理（対話的な国選択はスキップ）
+        case "$mode" in
+            full)
+                download "hidden" "openwrt.db"
+                download "hidden" "country.db"
+                download "hidden" "packages.db"
+                download "hidden" "messages.db"
+                check_openwrt
+                check_downloader
+                ;;
+            light|debug)
+                # light や debug モードの場合も、必要なファイルのみダウンロード
+                download "hidden" "openwrt.db"
+                download "hidden" "country.db"
+                download "hidden" "packages.db"
+                download "hidden" "messages.db"
+                check_openwrt
+                check_downloader
+                ;;
+            *)
+                ;;
+        esac
+        return
+    fi
+
+    # 言語が指定されていない場合は、従来の対話的国選択に移行
     case "$MODE" in
         reset)
             rm -f "${CACHE_DIR}/country.ch" \
