@@ -489,27 +489,6 @@ download() {
 # 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # 🔵　ランゲージ（言語・ゾーン）系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
-#########################################################################
-# Last Update: 2025-02-18 23:00:00 (JST) 🚀
-# "Ensuring consistent input handling and text normalization."
-#########################################################################
-normalize_country() {
-    local lang_code="$1"  # 引数として渡された言語コード
-
-    # 引数が空でもエラーにせず、そのまま処理を終了
-    if [ -z "$lang_code" ]; then
-        debug_log "INFO" "No language code provided. Skipping language setup."
-        return 0  # 空の場合は何もしない
-    fi
-
-    # 言語コードをそのまま利用
-    debug_log "INFO" "Received language code: $lang_code"
-
-    # 引き渡された言語コードをそのまま ACTIVE_LANGUAGE に設定
-    ACTIVE_LANGUAGE="$lang_code"
-
-    debug_log "INFO" "Language set to: $ACTIVE_LANGUAGE"
-}
 
 #########################################################################
 # Last Update: 2025-02-18 23:00:00 (JST) 🚀
@@ -1548,7 +1527,7 @@ check_common() {
             download "hidden" "packages.db"
             check_openwrt
             check_downloader
-            normalize_country "$lang_code"
+            select_country "$lang_code"
             ;;
         light|debug)
             download "messages.db"
@@ -1557,7 +1536,7 @@ check_common() {
             download "packages.db"
             check_openwrt
             check_downloader
-            normalize_country "$lang_code"
+            select_country "$lang_code"
             ;;
         *)
             ;;
