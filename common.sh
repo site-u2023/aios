@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-10-06"
+SCRIPT_VERSION="2025.02.19-10-07"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -496,21 +496,52 @@ download() {
 normalize_country() {
     local lang_code="$1"
     local message_db="${BASE_DIR}/messages.db"
+    local country_cache="${CACHE_DIR}/country.ch"
+    local message_cache="${CACHE_DIR}/message.ch"
+    local selected_language=""
+    local flag_file="${CACHE_DIR}/country_success_done"
 
-    if [ ! -f "$message_db" ]; then
-        download "hidden" "messages.db"
+    # フラグがあれば、再実行しない
+    if [ -f "$flag_file" ]; then
+        debug_log "INFO" "normalize_country() already done. Skipping repeated success message."
+        return 0
     fi
 
-    lang_code=$(normalize_input "$lang_code")
+    # country.ch が存在しない場合はエラー
+    if [ ! -f "$country_cache" ]; then
+        debug_log "ERROR" "country.ch not found. Cannot determine language."
+        return 1
+    fi
 
-    if grep -qi "^${lang_code}|" "$message_db"; then
-        ACTIVE_LANGUAGE="$lang_code"
+    # country.ch から言語コードを抽出（必要なら修正）
+    local field_count
+    field_count=$(awk '{print NF}' "$country_cache")
+
+    if [ "$field_count" -ge 5 ]; then
+        selected_language=$(awk '{print $5}' "$country_cache")  # 言語コード（5列目）
     else
+        selected_language=$(awk '{print $2}' "$country_cache")  # 短縮対応（例: 日本語 -> ja）
+    fi
+
+    debug_log "DEBUG" "Selected language extracted from country.ch -> $selected_language"
+
+    # messages.db からサポートされている言語か確認
+    local supported_languages
+    supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
+
+    if echo "$supported_languages" | grep -qw "$selected_language"; then
+        debug_log "INFO" "Using message database language: $selected_language"
+        echo "$selected_language" > "$message_cache"
+        ACTIVE_LANGUAGE="$selected_language"
+    else
+        debug_log "WARNING" "Language '$selected_language' not found in messages.db. Using 'US' as fallback."
+        echo "US" > "$message_cache"
         ACTIVE_LANGUAGE="US"
     fi
 
-    echo "$ACTIVE_LANGUAGE" > "${CACHE_DIR}/message.ch"
-    debug_log "INFO" "Language set to: $ACTIVE_LANGUAGE"
+    debug_log "INFO" "Final system message language -> $ACTIVE_LANGUAGE"
+    echo "$(get_message "MSG_COUNTRY_SUCCESS")"
+    touch "$flag_file"
 }
 
 #########################################################################
@@ -1528,23 +1559,7 @@ check_option() {
 check_common() {
     local lang_code="$1"
     local mode="${2:-full}" 
-
-    download "messages.db"
-    download "openwrt.db"
-    download "country.db"
-    download "packages.db"
-    check_openwrt
-    check_downloader
-
-    # 言語設定を一度の処理で行う
-    if [ -n "$lang_code" ]; then
-        # 言語が指定されていれば、normalize_language() を呼び出して設定
-        normalize_language "$lang_code"
-    else
-        # 言語が指定されていなければ、対話的に国選択を実行
-        select_country
-    fi
-    
+ 
     # モードごとの処理
     case "$mode" in
         reset)
@@ -1560,20 +1575,22 @@ check_common() {
             exit 0
             ;;
         full)
-            #download "hidden" "messages.db"
-            #download "hidden" "openwrt.db"
-            #download "hidden" "country.db"
-            #download "hidden" "packages.db"
-            #check_openwrt
-            #check_downloader
+            download "hidden" "messages.db"
+            download "hidden" "openwrt.db"
+            download "hidden" "country.db"
+            download "hidden" "packages.db"
+            check_openwrt
+            check_downloader
+            normalize_country "$lang_code"
             ;;
         light|debug)
-            #download "messages.db"
-            #download "openwrt.db"
-            #download "country.db"
-            #download "packages.db"
-            #check_openwrt
-            #check_downloader
+            download "messages.db"
+            download "openwrt.db"
+            download "country.db"
+            download "packages.db"
+            check_openwrt
+            check_downloader
+            normalize_country "$lang_code"
             ;;
         *)
             ;;
