@@ -1580,10 +1580,10 @@ check_common() {
             check_downloader
             ;;
         light|debug)
-            download "hidden" "messages.db"
-            download "hidden" "openwrt.db"
-            download "hidden" "country.db"
-            download "hidden" "packages.db"
+            download "messages.db"
+            download "openwrt.db"
+            download "country.db"
+            download "packages.db"
             check_openwrt
             check_downloader
             ;;
