@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-10-05"
+SCRIPT_VERSION="2025.02.20-10-07"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -562,7 +562,7 @@ select_country() {
     fi
 
     while true; do
-        # 🔹 `$1` がある場合は read せず、直接 `input_lang` を使う
+        # `$1` がある場合は read せず、直接 `input_lang` を使う
         if [ -z "$input_lang" ]; then
             printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_COUNTRY")")"
             printf "%s" "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
@@ -573,9 +573,9 @@ select_country() {
         local cleaned_input
         cleaned_input=$(echo "$input_lang" | sed 's/[\/,_]/ /g')
 
-        # 国データベースから、検索キーワードを含む全行（フルライン）を抽出
+        # 🔹 `country.db` から検索（フルライン取得）
         local full_results
-        full_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} { if ($0 ~ search) print $0 }' "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
+        full_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} { if ($0 ~ search) print NR, $0 }' "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
 
         if [ -z "$full_results" ]; then
             printf "%s\n" "$(color red "Error: No matching country found for '$input_lang'. Please try again.")"
@@ -583,11 +583,38 @@ select_country() {
             continue
         fi
 
-        # 🔹 検索結果を `tmp_country` に保存し、選択リストを表示
-        echo "$full_results" > "$tmp_country"
-        select_list "$full_results" "$tmp_country" "country"
+        debug_log "DEBUG" "Country found for '$input_lang'. Presenting selection list."
 
-        # 🔹 ユーザーが選択したデータを `country_write()` に渡す
+        # 🔹 表示用リスト作成（`$2 $3` のみ）
+        local display_results
+        display_results=$(echo "$full_results" | awk '{print "["$1"]", $3, $4}')
+
+        # 🔹 選択リスト表示（番号付き）
+        echo "$display_results" > "$tmp_country"
+        select_list "$display_results" "$tmp_country" "country"
+
+        # 🔹 ユーザー選択番号を取得
+        local selected_number
+        selected_number=$(awk 'END {print NR}' "$tmp_country")
+
+        if [ -z "$selected_number" ]; then
+            printf "%s\n" "$(color red "Error: No selection made. Please try again.")"
+            continue
+        fi
+
+        # 🔹 `full_results` から該当行のフルデータを取得
+        local selected_full
+        selected_full=$(echo "$full_results" | awk -v num="$selected_number" 'NR == num {print substr($0, index($0, $2))}')
+
+        if [ -z "$selected_full" ]; then
+            printf "%s\n" "$(color red "Error: Failed to retrieve full country information. Please try again.")"
+            continue
+        fi
+
+        # 🔹 フルラインを `tmp_country` に保存
+        echo "$selected_full" > "$tmp_country"
+
+        # 🔹 `country_write()` に渡す（キャッシュ書き込み）
         country_write
 
         # 🔹 ゾーン選択へ進む
