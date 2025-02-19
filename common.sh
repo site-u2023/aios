@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-07-02"
+SCRIPT_VERSION="2025.02.19-07-03"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -866,28 +866,31 @@ normalize_country() {
 
 # 🔵　パッケージ系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
-# Last Update: 2025-02-15 10:00:00 (JST) 🚀
+# Last Update: 2025-02-19 14:00:00 (JST) 🚀
 # install_package: パッケージのインストール処理 (OpenWrt / Alpine Linux)
 #
 # 【概要】
 # 指定されたパッケージをインストールし、オプションに応じて以下の処理を実行する。
 #
 # 【フロー】
-# 1️⃣ install_package update が実行された場合、opkg update / apk update を実行
 # 2️⃣ デバイスにパッケージがインストール済みか確認
+# 1️⃣ update は初回に一回のみ、opkg update / apk update を実行
 # 3️⃣ パッケージがリポジトリに存在するか確認
 # 4️⃣ インストール確認（yn オプションが指定された場合）
 # 5️⃣ インストールの実行
-# 6️⃣ 言語パッケージの適用（dont オプションがない場合）
-# 7️⃣ package.db の適用（notset オプションがない場合）
+# 6️⃣ 言語パッケージの適用（lang オプションがない場合）
+# 7️⃣ package.db の適用（notpack オプションがない場合）
 # 8️⃣ 設定の有効化（デフォルト enabled、disabled オプションで無効化）
+#
+# 【グローバルオプション】
+# DEV_NULL
+# DEBUG : 要所にセット
 #
 # 【オプション】
 # - yn         : インストール前に確認する（デフォルト: 確認なし）
-# - dont       : 言語パッケージの適用をスキップ（デフォルト: 適用する）
-# - notset     : package.db での設定適用をスキップ（デフォルト: 適用する）
+# - nolang     : 言語パッケージの適用をスキップ（デフォルト: 適用する）
+# - notpack    : package.db での設定適用をスキップ（デフォルト: 適用する）
 # - disabled   : 設定を disabled にする（デフォルト: enabled）
-# - update     : opkg update または apk update を実行（他の場所では update しない）
 # - hidden     : 既にインストール済みの場合、"パッケージ xxx はすでにインストールされています" のメッセージを非表示にする
 #
 # 【仕様】
@@ -902,10 +905,10 @@ normalize_country() {
 # - install_package update                → パッケージリストを更新
 # - install_package ttyd                  → ttyd をインストール（確認なし、package.db 適用、言語パック適用）
 # - install_package ttyd yn               → ttyd をインストール（確認あり）
-# - install_package ttyd dont             → ttyd をインストール（言語パック適用なし）
-# - install_package ttyd notset           → ttyd をインストール（package.db の適用なし）
+# - install_package ttyd nolang           → ttyd をインストール（言語パック適用なし）
+# - install_package ttyd notpack          → ttyd をインストール（package.db の適用なし）
 # - install_package ttyd disabled         → ttyd をインストール（設定を disabled にする）
-# - install_package ttyd yn dont disabled hidden
+# - install_package ttyd yn nolang disabled hidden
 #   → ttyd をインストール（確認あり、言語パック適用なし、設定を disabled にし、
 #      既にインストール済みの場合のメッセージは非表示）
 #########################################################################
