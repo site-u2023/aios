@@ -552,6 +552,56 @@ select_country() {
 
     local cache_country="${CACHE_DIR}/country.ch"
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
+    local input_lang="$1"  # 引数として渡された言語コード（無ければ後で入力）
+
+    # キャッシュがあればゾーン選択へスキップ
+    if [ -f "$cache_country" ]; then
+        debug_log "DEBUG" "Country cache found. Skipping selection."
+        select_zone
+        return
+    fi
+
+    while true; do
+        # 🔹 `$1` がある場合は read せず、直接 `input_lang` を使う
+        if [ -z "$input_lang" ]; then
+            printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_COUNTRY")")"
+            printf "%s" "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
+            read -r input_lang
+        fi
+
+        # 入力の正規化: "/", ",", "_" をスペースに置き換え
+        local cleaned_input
+        cleaned_input=$(echo "$input_lang" | sed 's/[\/,_]/ /g')
+
+        # 国データベースから、検索キーワードを含む全行（フルライン）を抽出
+        local full_results
+        full_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} { if ($0 ~ search) print $0 }' "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
+
+        if [ -z "$full_results" ]; then
+            printf "%s\n" "$(color red "Error: No matching country found for '$input_lang'. Please try again.")"
+            input_lang=""  # 🔹 エラー時はリセットして再入力
+            continue
+        fi
+
+        # 🔹 検索結果を `tmp_country` に保存し、選択リストを表示
+        echo "$full_results" > "$tmp_country"
+        select_list "$full_results" "$tmp_country" "country"
+
+        # 🔹 ユーザーが選択したデータを `country_write()` に渡す
+        country_write
+
+        # 🔹 ゾーン選択へ進む
+        debug_log "DEBUG" "Proceeding to select_zone."
+        select_zone
+        return
+    done
+}
+
+XXX_select_country() {
+    debug_log "DEBUG" "Entering select_country() with arg: '$1'"
+
+    local cache_country="${CACHE_DIR}/country.ch"
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
     local lang_code="$1"  # 引数として渡された言語コード
 
     # `$1` が渡された場合、country.db で検索
