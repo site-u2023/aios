@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-08-13"
+SCRIPT_VERSION="2025.02.19-09-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -958,12 +958,20 @@ install_package() {
         return 1
     fi
 
-    # まず、パッケージがすでにインストールされているか確認（testモード時はスキップ）
+    # パッケージマネージャーの確認（download.ch のキャッシュを参照）
+    if [ -f "${CACHE_DIR}/download.ch" ]; then
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/download.ch")
+    else
+        echo "Error: No package manager information found in cache (download.ch)." >&2
+        return 1
+    fi
+
+    # すでにインストールされているか確認（testモード時はスキップ）
     if [ "$test_mode" = "no" ]; then
         if [ "$PACKAGE_MANAGER" = "opkg" ] && opkg list-installed | grep -q "^$package_name "; then
             [ "$hidden" != "yes" ] && echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
             return 0
-        elif [ "$PACKAGE_MANAGER" = "apk" ] && apk list-installed | grep -q "^$package_name "; then
+        elif [ "$PACKAGE_MANAGER" = "apk" ] && apk info -e "$package_name" >/dev/null 2>&1; then
             [ "$hidden" != "yes" ] && echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
             return 0
         fi
