@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-10-03"
+SCRIPT_VERSION="2025.02.19-10-04"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -493,26 +493,22 @@ download() {
 # Last Update: 2025-02-18 23:00:00 (JST) 🚀
 # "Ensuring consistent input handling and text normalization."
 #########################################################################
-normalize_language()
+normalize_country() {
     local lang_code="$1"
     local message_db="${BASE_DIR}/messages.db"
 
-    # 言語データベースがなければダウンロード
     if [ ! -f "$message_db" ]; then
         download "hidden" "messages.db"
     fi
 
-    # 入力言語を正規化
     lang_code=$(normalize_input "$lang_code")
 
-    # 言語が messages.db に存在するかチェック
     if grep -qi "^${lang_code}|" "$message_db"; then
         ACTIVE_LANGUAGE="$lang_code"
     else
         ACTIVE_LANGUAGE="US"
     fi
 
-    # 設定をキャッシュに保存
     echo "$ACTIVE_LANGUAGE" > "${CACHE_DIR}/message.ch"
     debug_log "INFO" "Language set to: $ACTIVE_LANGUAGE"
 }
@@ -1534,10 +1530,11 @@ download_language_db() {
 
     # すでに messages.db が存在する場合は何もしない
     if [ -f "$message_db" ]; then
-        debug_log "INFO" "messages.db already exists, skipping download."
-        return
+        grep -qi "^${lang_code}|" "$message_db"
+    else
+        debug_log "ERROR" "messages.db not found."
     fi
-
+    
     # messages.db をダウンロード
     debug_log "INFO" "Downloading messages.db..."
     download "hidden" "messages.db"
