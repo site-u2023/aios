@@ -481,7 +481,7 @@ download() {
         echo "$(color green "Download completed: $file_name")"
     fi
 
-    debug_log "INFO" "Download completed: $file_name is valid."
+    debug_log "DEBUG" "Download completed: $file_name is valid."
     return 0
 }
 
