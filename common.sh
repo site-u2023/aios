@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-10-08"
+SCRIPT_VERSION="2025.02.20-10-09"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -781,6 +781,11 @@ select_list() {
         if [ "$yn" = "Y" ] || [ "$yn" = "y" ]; then
             printf "%s\n" "$selected_value" > "$output_file"
             return
+        elif [ "$yn" = "R" ] || [ "$yn" = "r" ]; then
+            debug_log "DEBUG" "User chose to restart selection."
+            select_country
+            return
+            #continue  # **選択をリスタート**
         fi
     done  
 }
