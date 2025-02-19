@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-08-09"
+SCRIPT_VERSION="2025.02.19-08-11"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1032,7 +1032,7 @@ install_package() {
 }
 
 #########################################################################
-# Last Update: 2025-02-19 20:10:00 (JST) 🚀
+# Last Update: 2025-02-19 20:15:00 (JST) 🚀
 # install_build: パッケージのビルド処理 (OpenWrt / Alpine Linux)
 #
 # 【概要】
@@ -1045,12 +1045,11 @@ install_package() {
 #
 # 【フロー】
 # 2️⃣ デバイスにパッケージがインストール済みか確認（ビルド後のパッケージ名で確認）
-# 1️⃣ update は初回に一回のみ、opkg update / apk update を実行（ビルドで追加アップデートが必要な場合は、packages.dbに記述し制御）
 # 4️⃣ インストール確認（yn オプションが指定された場合）
 # 4️⃣ ビルド用汎用パッケージ（例：make, gcc）をインストール ※install_package()利用
 # 4️⃣ ビルド作業
 # 7️⃣ package.db の適用（ビルド用設定：DBの記述に従う）
-# 5️⃣ インストールの実行
+# 5️⃣ インストールの実行（install_package()利用）
 # 7️⃣ package.db の適用（ビルド後の設定適用がある場合：DBの記述に従う）
 #
 # 【グローバルオプション】
@@ -1059,21 +1058,17 @@ install_package() {
 #
 # 【オプション】※順不同で適用可
 # - yn         : インストール前に確認する（デフォルト: 確認なし）
-# - disabled   : 設定を disabled にする（デフォルト: enabled）
 # - hidden     : 既にインストール済みの場合、"パッケージ xxx はすでにインストールされています" のメッセージを非表示にする
 #
 # 【仕様】
-# - update.ch を書き出し、updateを管理する（${CACHE_DIR}/update.ch）
 # - downloader_ch から opkg または apk を取得し、適切なパッケージ管理ツールを使用
 # - package.db の設定がある場合、該当パッケージの記述 を実行し適用
 # - messages.db を参照し、すべてのメッセージを取得（JP/US 対応）
-# - 設定の有効化はデフォルト enabled、disabled オプション指定時のみ disabled
 #
 # 【使用例】
 # - install_build build_uconv                  → uconv をビルド後インストール（確認なし）
 # - install_build build_uconv yn               → uconv をビルド後インストール（確認あり）
 # - install_build build_uconv yn hidden        → uconv をビルド後インストール（確認あり、既にインストール済みの場合のメッセージは非表示）
-# - install_build build_uconv disabled hidden  → uconv をビルド後インストール（設定を disabled にして、既にインストール済みのメッセージ非表示）
 # - install_build make                         → ビルド環境用のパッケージ（例：make, gcc）をインストール
 #
 # 【messages.dbの記述例】
@@ -1082,15 +1077,13 @@ install_package() {
 #########################################################################
 install_build() {
     local confirm_install="no"
-    local set_disabled="no"
     local hidden="no"
     local package_name=""
-    
+
     # オプションの処理
     for arg in "$@"; do
         case "$arg" in
             yn) confirm_install="yes" ;;
-            disabled) set_disabled="yes" ;;
             hidden) hidden="yes" ;;
             *)
                 if [ -z "$package_name" ]; then
@@ -1101,50 +1094,27 @@ install_build() {
                 ;;
         esac
     done
-    
+
     if [ -z "$package_name" ]; then
         echo "Error: No package specified." >&2
         return 1
     fi
 
     # ビルド用の汎用パッケージをインストール
-    install_package make yn
-    install_package gcc yn
-    install_package binutils yn
-    install_package libc-dev yn
-    install_package pkg-config yn
-    install_package automake yn
-    install_package autoconf yn
-    install_package cmake yn
-    
+    for build_pkg in make gcc binutils libc-dev pkg-config automake autoconf cmake; do
+        install_package "$build_pkg" yn
+    done
+
     # ビルド前のパッケージ名を取得
     local built_package="${package_name#build_}"
-    
-    # まず、ビルド後のパッケージがすでにインストールされているか確認
+
+    # すでにインストールされているか確認
     if opkg list-installed | grep -q "^$built_package "; then
         [ "$hidden" != "yes" ] && echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$built_package/")"
         return 0
     fi
-    
-    # 最初の実行時に一度だけ update を実行
-    if [ ! -f "${CACHE_DIR}/update.ch" ]; then
-        debug_log "INFO" "Running package manager update..."
-        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            if opkg update > /dev/null 2>&1; then
-                debug_log "INFO" "opkg update completed successfully."
-            else
-                debug_log "ERROR" "opkg update failed."
-            fi
-        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            if apk update > /dev/null 2>&1; then
-                debug_log "INFO" "apk update completed successfully."
-            else
-                debug_log "ERROR" "apk update failed."
-            fi
-        fi
-        touch "${CACHE_DIR}/update.ch"
-    fi
-    
+
+    # インストールの確認が必要か
     if [ "$confirm_install" = "yes" ]; then
         while true; do
             echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$built_package/")"
@@ -1157,48 +1127,24 @@ install_build() {
             esac
         done
     fi
-    
+
     # ビルド用パッケージのインストール（install_package() を利用）
     install_package "$package_name"
-    
+
     # ビルド作業
     debug_log "INFO" "Building package: $built_package"
     if ! build_package "$package_name"; then
         debug_log "ERROR" "Build failed for package: $built_package"
         return 1
     fi
-    
+
     # package.db の適用（ビルド用設定）
-    if grep -q "^\[$package_name\]" "${BASE_DIR}/packages.db"; then
-        eval "$(grep "^\[$package_name\]" "${BASE_DIR}/packages.db" | cut -d'=' -f2-)"
+    if grep -q "^$package_name=" "${BASE_DIR}/packages.db"; then
+        eval "$(grep "^$package_name=" "${BASE_DIR}/packages.db" | cut -d'=' -f2-)"
     fi
-    
-    # インストールの実行
-    debug_log "INFO" "Installing built package: $built_package"
-    if [ "$DEV_NULL" = "on" ]; then
-        $PACKAGE_MANAGER install "$built_package" > /dev/null 2>&1
-    else
-        $PACKAGE_MANAGER install "$built_package"
-    fi
-    
-    # package.db の適用（ビルド後の設定）
-    if grep -q "^\[$built_package\]" "${BASE_DIR}/packages.db"; then
-        eval "$(grep "^\[$built_package\]" "${BASE_DIR}/packages.db" | cut -d'=' -f2-)"
-    fi
-    
-    # 設定の有効化/無効化
-    if [ "$set_disabled" = "yes" ]; then
-        uci set "$built_package.@$built_package[0].enabled=0"
-    else
-        uci set "$built_package.@$built_package[0].enabled=1"
-    fi
-    uci commit "$built_package"
-    
-    # サービスの有効化/開始
-    if [ -f "/etc/init.d/$built_package" ]; then
-        /etc/init.d/$built_package enable
-        /etc/init.d/$built_package start
-    fi
+
+    # ビルド後のパッケージのインストールを install_package() に依頼
+    install_package "$built_package"
 }
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
