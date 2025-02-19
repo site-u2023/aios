@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-09-02"
+SCRIPT_VERSION="2025.02.19-09-03"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1094,33 +1094,47 @@ install_build() {
         return 1
     fi
 
-    # 該当パッケージマネージャー用のビルドツールをインストール
+    # インストールの確認が必要か
+    if [ "$confirm_install" = "yes" ]; then
+        while true; do
+            echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
+            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
+            read -r yn
+            case "$yn" in
+                [Yy]*) break ;;
+                [Nn]*) echo "$(get_message "MSG_INSTALL_ABORTED")"; return 1 ;;
+                *) echo "Invalid input. Please enter Y or N." ;;
+            esac
+        done
+    fi
+
+    # ビルド用の汎用パッケージをインストール（hidden で確認なし）
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        install_package make yn
-        install_package gcc yn
-        install_package git yn
-        install_package libtool
-        install_package automake
-        install_package pkg-config
-        install_package zlib-dev
-        install_package libssl-dev
-        install_package libicu-dev
-        install_package ncurses-dev
-        install_package libcurl4-openssl-dev
-        install_package libxml2-dev
+        install_package make hidden
+        install_package gcc hidden
+        install_package git hidden
+        install_package libtool hidden
+        install_package automake hidden
+        install_package pkg-config hidden
+        install_package zlib-dev hidden
+        install_package libssl-dev hidden
+        install_package libicu-dev hidden
+        install_package ncurses-dev hidden
+        install_package libcurl4-openssl-dev hidden
+        install_package libxml2-dev hidden
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        install_package build-base yn
-        install_package gcc yn
-        install_package musl-dev
-        install_package libtool
-        install_package automake
-        install_package pkgconfig
-        install_package zlib-dev
-        install_package openssl-dev
-        install_package icu-dev
-        install_package ncurses-dev
-        install_package curl-dev
-        install_package libxml2-dev
+        install_package build-base hidden
+        install_package gcc hidden
+        install_package musl-dev hidden
+        install_package libtool hidden
+        install_package automake hidden
+        install_package pkgconfig hidden
+        install_package zlib-dev hidden
+        install_package openssl-dev hidden
+        install_package icu-dev hidden
+        install_package ncurses-dev hidden
+        install_package curl-dev hidden
+        install_package libxml2-dev hidden
     else
         echo "Error: Unsupported package manager '$PACKAGE_MANAGER'." >&2
         return 1
@@ -1140,20 +1154,6 @@ install_build() {
             [ "$hidden" != "yes" ] && echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$built_package/")"
             return 0
         fi
-    fi
-
-    # インストールの確認が必要か
-    if [ "$confirm_install" = "yes" ]; then
-        while true; do
-            echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$built_package/")"
-            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
-            read -r yn
-            case "$yn" in
-                [Yy]*) break ;;
-                [Nn]*) echo "$(get_message "MSG_INSTALL_ABORTED")"; return 1 ;;
-                *) echo "Invalid input. Please enter Y or N." ;;
-            esac
-        done
     fi
 
     # ビルド開始メッセージ
