@@ -973,9 +973,9 @@ install_package() {
     if [ ! -f "${CACHE_DIR}/update.ch" ]; then
         debug_log "INFO" "Running package manager update..."
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            opkg update
+            opkg update > /dev/null 2>&1
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            apk update
+            apk update > /dev/null 2>&1
         fi
         touch "${CACHE_DIR}/update.ch"
     fi
