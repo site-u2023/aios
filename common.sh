@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-10-03"
+SCRIPT_VERSION="2025.02.20-10-04"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -559,12 +559,17 @@ select_country() {
         # `country.db` を検索して該当する国を抽出
         local full_results
         full_results=$(awk -v search="$lang_code" 'BEGIN {IGNORECASE=1} { if ($0 ~ search) print $0 }' "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
-        
+
         if [ -n "$full_results" ]; then
-            # 見つかった場合、ゾーン選択へ進む
-            debug_log "DEBUG" "Country found for '$lang_code'. Proceeding to select_zone."
+            debug_log "DEBUG" "Country found for '$lang_code'. Presenting selection list."
+
+            # 🔹 検索結果を `tmp_country` に保存し、選択リストを表示
             echo "$full_results" > "$tmp_country"
+            select_list "$full_results" "$tmp_country" "country"
+
+            # 🔹 ユーザーが選択したデータを `country_write()` に渡す
             country_write 
+
             debug_log "DEBUG" "Proceeding to select_zone."
             select_zone
             return
