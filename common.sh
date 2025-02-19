@@ -1535,16 +1535,16 @@ check_common() {
     download "packages.db"
     check_openwrt
     check_downloader
-    # 言語設定を専用関数に分離
-    if [ -n "$lang_code" ]; then
-        normalize_language "$lang_code"
-    fi
 
-    # 言語が指定されていなければ、対話的な国選択を実行
-    if [ -z "$lang_code" ]; then
+    # 言語設定を一度の処理で行う
+    if [ -n "$lang_code" ]; then
+        # 言語が指定されていれば、normalize_language() を呼び出して設定
+        normalize_language "$lang_code"
+    else
+        # 言語が指定されていなければ、対話的に国選択を実行
         select_country
     fi
-
+    
     # モードごとの処理
     case "$mode" in
         reset)
