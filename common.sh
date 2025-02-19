@@ -357,7 +357,7 @@ get_script_version() {
 #
 # 【要件】
 # 1. **メッセージの取得ロジック**
-#    - `$ACTIVE_LANGUAGE` を最優先で使用（`normalize_country()` で設定）
+#    - `$ACTIVE_LANGUAGE` を最優先で使用（`normalize_language()` で設定）
 #    - `$ACTIVE_LANGUAGE` が未設定の場合は `US` をフォールバックとして使用
 #
 # 2. **メッセージ検索の順序**
@@ -370,7 +370,7 @@ get_script_version() {
 #    - `$quiet_flag` に `"quiet"` が指定された場合、出力せずに `return 0`
 #
 # 4. **メンテナンス**
-#    - 言語取得ロジックを `normalize_country()` に統一し、責務を分離
+#    - 言語取得ロジックを `normalize_language()` に統一し、責務を分離
 #    - `get_message()` は「取得するだけ」に特化し、書き込み・設定は行わない
 #
 # 5. **影響範囲**
@@ -791,7 +791,7 @@ country_write() {
 
     chmod 444 "$cache_country" "$cache_language" "$cache_luci" "$cache_zone"
 
-    normalize_country
+    normalize_language
 }
 
 XXX_country_write() {
@@ -817,7 +817,7 @@ XXX_country_write() {
 
     chmod 444 "$cache_country" "$cache_language" "$cache_luci" "$cache_zone"
     
-    normalize_country
+    normalize_language
 }
 
 #########################################################################
@@ -829,7 +829,7 @@ XXX_country_write() {
 # [2] 一時キャッシュに保存 (zone_tmp.ch)
 # [3] zone.ch から zonename.ch, timezone.ch を分離
 # [4] zonename.ch, timezone.ch を書き込み禁止にする
-#[5] → normalize_country()
+#[5] → normalize_language()
 #########################################################################
 select_zone() {
     local cache_zone="${CACHE_DIR}/zone.ch"
@@ -874,7 +874,7 @@ select_zone() {
 #########################################################################
 # Last Update: 2025-02-18 11:00:00 (JST) 🚀
 # "Precision in code, clarity in purpose. Every update refines the path."
-# normalize_country: 言語設定の正規化
+# normalize_language: 言語設定の正規化
 #
 # 【要件】
 # 1. 言語の決定:
@@ -891,7 +891,7 @@ select_zone() {
 #    - `message.ch` はシステムメッセージ表示用（フォールバック可能）
 #
 # 4. `$ACTIVE_LANGUAGE` の管理:
-#    - `normalize_country()` 実行時に `$ACTIVE_LANGUAGE` を設定
+#    - `normalize_language()` 実行時に `$ACTIVE_LANGUAGE` を設定
 #    - `$ACTIVE_LANGUAGE` は `message.ch` の値を常に参照
 #    - `$ACTIVE_LANGUAGE` が未設定の場合、フォールバックで `US`
 #
@@ -946,7 +946,7 @@ normalize_language() {
     touch "$flag_file"
 }
 
-XXX_normalize_country() {
+XXX_normalize_language() {
     local message_db="${BASE_DIR}/messages.db"
     local country_cache="${CACHE_DIR}/country.ch"
     local message_cache="${CACHE_DIR}/message.ch"
@@ -954,7 +954,7 @@ XXX_normalize_country() {
     local flag_file="${CACHE_DIR}/country_success_done"
 
     if [ -f "$flag_file" ]; then
-        debug_log "INFO" "normalize_country() already done. Skipping repeated success message."
+        debug_log "INFO" "normalize_language() already done. Skipping repeated success message."
         return 0
     fi
 
@@ -994,7 +994,7 @@ XXX_normalize_country() {
     touch "$flag_file"
 }
 
-XXX_normalize_country() {
+XXX_normalize_language() {
     local message_db="${BASE_DIR}/messages.db"
     local country_cache="${CACHE_DIR}/country.ch"  # 主（真）データ
     local message_cache="${CACHE_DIR}/message.ch"
@@ -1003,7 +1003,7 @@ XXX_normalize_country() {
 
     # もし既に「国と言語設定完了」を示すフラグファイルがあれば、何もしない
     if [ -f "$flag_file" ]; then
-        debug_log "INFO" "normalize_country() already done. Skipping repeated success message."
+        debug_log "INFO" "normalize_language() already done. Skipping repeated success message."
         return
     fi
 
