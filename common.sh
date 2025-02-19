@@ -1545,7 +1545,7 @@ check_common() {
     local mode="${2:-full}" 
 
     # 言語データベースのダウンロードを専用関数で実行
-    #download_language_db
+    download "messages.db"
 
     # 言語設定を専用関数に分離
     if [ -n "$lang_code" ]; then
@@ -1572,7 +1572,7 @@ check_common() {
             exit 0
             ;;
         full)
-            download "hidden" "messages.db"
+            #download "hidden" "messages.db"
             download "hidden" "openwrt.db"
             download "hidden" "country.db"
             download "hidden" "packages.db"
@@ -1580,7 +1580,7 @@ check_common() {
             check_downloader
             ;;
         light|debug)
-            download "messages.db"
+            #download "messages.db"
             download "openwrt.db"
             download "country.db"
             download "packages.db"
