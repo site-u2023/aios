@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-10-08"
+SCRIPT_VERSION="2025.02.19-10-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -494,22 +494,21 @@ download() {
 # "Ensuring consistent input handling and text normalization."
 #########################################################################
 normalize_country() {
-    local lang_code="$1"
+    local lang_code="$1"  # 引数として渡された言語コード
 
-    # 言語コードが空でないか確認
+    # 引数が空でもエラーにせず、そのまま処理を終了
     if [ -z "$lang_code" ]; then
-        debug_log "ERROR" "No language code provided."
-        return 1
+        debug_log "INFO" "No language code provided. Skipping language setup."
+        return 0  # 空の場合は何もしない
     fi
 
-    # 入力された言語コードを正規化（例: 全角→半角）
-    lang_code=$(normalize_input "$lang_code")
+    # 言語コードをそのまま利用
+    debug_log "INFO" "Received language code: $lang_code"
 
-    # 正規化された言語コードをそのまま渡す
-    debug_log "INFO" "Normalized language code: $lang_code"
+    # 引き渡された言語コードをそのまま ACTIVE_LANGUAGE に設定
+    ACTIVE_LANGUAGE="$lang_code"
 
-    # `select_country()` に引き渡すだけ
-    # 他の処理は一切行わない
+    debug_log "INFO" "Language set to: $ACTIVE_LANGUAGE"
 }
 
 #########################################################################
