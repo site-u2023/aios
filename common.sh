@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-10-10"
+SCRIPT_VERSION="2025.02.20-10-11"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -624,102 +624,6 @@ select_country() {
     done
 }
 
-XXX_select_country() {
-    debug_log "DEBUG" "Entering select_country() with arg: '$1'"
-
-    local cache_country="${CACHE_DIR}/country.ch"
-    local tmp_country="${CACHE_DIR}/country_tmp.ch"
-    local lang_code="$1"  # 引数として渡された言語コード
-
-    # `$1` が渡された場合、country.db で検索
-    if [ -n "$lang_code" ]; then
-        # `country.db` を検索して該当する国を抽出
-        local full_results
-        full_results=$(awk -v search="$lang_code" 'BEGIN {IGNORECASE=1} { if ($0 ~ search) print $0 }' "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
-
-        if [ -n "$full_results" ]; then
-            debug_log "DEBUG" "Country found for '$lang_code'. Presenting selection list."
-
-            # 🔹 検索結果を `tmp_country` に保存し、選択リストを表示
-            echo "$full_results" > "$tmp_country"
-            select_list "$full_results" "$tmp_country" "country"
-
-            # 🔹 ユーザーが選択したデータを `country_write()` に渡す
-            country_write 
-
-            debug_log "DEBUG" "Proceeding to select_zone."
-            select_zone
-            return
-        else
-            # 見つからなければ、言語選択を実行
-            debug_log "DEBUG" "No matching country found for '$lang_code'. Proceeding with language selection."
-        fi
-    fi
-
-    # `$1` が渡されていない場合、country.ch を確認
-    if [ -f "$cache_country" ]; then
-        # キャッシュがあれば言語選択をスキップしてゾーン選択へ進む
-        debug_log "DEBUG" "Country cache found. Skipping selection."
-        select_zone
-    else
-        # キャッシュがなければ言語選択を実行
-        debug_log "DEBUG" "No country cache found. Proceeding with language selection."
-    fi
-
-    while true; do
-        printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_COUNTRY")")"
-        printf "%s" "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
-        read -r input
-
-        # 入力の正規化: "/", ",", "_" をスペースに置き換え
-        local cleaned_input
-        cleaned_input=$(echo "$input" | sed 's/[\/,_]/ /g')
-
-        # 国データベースから、検索キーワードを含む全行（フルライン）を抽出
-        local full_results
-        full_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} { if ($0 ~ search) print $0 }' "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
-        if [ -z "$full_results" ]; then
-            printf "%s\n" "$(color red "Error: No matching country found for '$input'. Please try again.")"
-            continue
-        fi
-
-        # 表示用には、フルラインから $2 と $3（例：国名と表示用言語）だけを抜粋
-        local display_results
-        display_results=$(echo "$full_results" | awk '{print $2, $3}')
-
-        # ユーザーに表示用リストを選択させる
-        select_list "$display_results" "$tmp_country" "country"
-
-        # select_list() により、ユーザーが選択した表示用行が tmp_country に保存されるが、
-        # その行番号を用いて full_results から対応するフル情報を取り出す
-        local selected_line_number
-        selected_line_number=$(awk 'END {print NR}' "$tmp_country")
-        if [ -z "$selected_line_number" ]; then
-            printf "%s\n" "$(color red "Error: No selection made. Please try again.")"
-            continue
-        fi
-
-        # full_results のうち、選択された行番号のフルラインを抽出
-        local selected_full
-        selected_full=$(echo "$full_results" | sed -n "${selected_line_number}p")
-        if [ -z "$selected_full" ]; then
-            printf "%s\n" "$(color red "Error: Failed to retrieve full country information. Please try again.")"
-            continue
-        fi
-
-        # tmp_country にはフルライン（必要なフィールド $2～$5 を含む）を保存する
-        echo "$selected_full" > "$tmp_country"
-
-        # 選択結果をキャッシュに書き込む（country_write() は tmp_country の内容を利用）
-        country_write
-
-        # ゾーン選択へ進む
-        debug_log "DEBUG" "Country selection completed. Proceeding to select_zone()."
-        select_zone
-        return
-    done
-}
-
 #########################################################################
 # Last Update: 2025-02-18 23:30:00 (JST) 🚀
 # "Handling numbered list selections with confirmation."
@@ -783,7 +687,8 @@ select_list() {
             return
         elif [ "$yn" = "R" ] || [ "$yn" = "r" ]; then
             debug_log "DEBUG" "User chose to restart selection."
-            select_country return
+            rm -f "${CACHE_DIR}/country.ch"  # **キャッシュ削除で完全リセット**
+            select_country
             return
             #continue  # **選択をリスタート**
         fi
