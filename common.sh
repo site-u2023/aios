@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-08-11"
+SCRIPT_VERSION="2025.02.19-08-13"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1079,7 +1079,7 @@ install_build() {
     local confirm_install="no"
     local hidden="no"
     local package_name=""
-
+    
     # オプションの処理
     for arg in "$@"; do
         case "$arg" in
@@ -1100,18 +1100,60 @@ install_build() {
         return 1
     fi
 
-    # ビルド用の汎用パッケージをインストール
-    for build_pkg in make gcc binutils libc-dev pkg-config automake autoconf cmake; do
-        install_package "$build_pkg" yn
-    done
+    # パッケージマネージャーの確認（downloader_ch のキャッシュを参照）
+    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
+    else
+        echo "Error: No package manager information found in cache." >&2
+        return 1
+    fi
+
+    # 該当パッケージマネージャー用のビルドツールをインストール
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        install_package make yn
+        install_package gcc yn
+        install_package git yn
+        install_package libtool
+        install_package automake
+        install_package pkg-config
+        install_package zlib-dev
+        install_package libssl-dev
+        install_package libicu-dev
+        install_package ncurses-dev
+        install_package libcurl4-openssl-dev
+        install_package libxml2-dev
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        install_package build-base yn
+        install_package gcc yn
+        install_package musl-dev
+        install_package libtool
+        install_package automake
+        install_package pkgconfig
+        install_package zlib-dev
+        install_package openssl-dev
+        install_package icu-dev
+        install_package ncurses-dev
+        install_package curl-dev
+        install_package libxml2-dev
+    else
+        echo "Error: Unsupported package manager '$PACKAGE_MANAGER'." >&2
+        return 1
+    fi
 
     # ビルド前のパッケージ名を取得
     local built_package="${package_name#build_}"
 
-    # すでにインストールされているか確認
-    if opkg list-installed | grep -q "^$built_package "; then
-        [ "$hidden" != "yes" ] && echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$built_package/")"
-        return 0
+    # すでにインストールされているか確認（opkg または apk に対応）
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if opkg list-installed | grep -q "^$built_package "; then
+            [ "$hidden" != "yes" ] && echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$built_package/")"
+            return 0
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if apk info -e "$built_package" >/dev/null 2>&1; then
+            [ "$hidden" != "yes" ] && echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$built_package/")"
+            return 0
+        fi
     fi
 
     # インストールの確認が必要か
@@ -1128,15 +1170,24 @@ install_build() {
         done
     fi
 
+    # ビルド開始メッセージ
+    echo "$(get_message "MSG_BUILD_START" | sed "s/{pkg}/$built_package/")"
+
     # ビルド用パッケージのインストール（install_package() を利用）
     install_package "$package_name"
 
-    # ビルド作業
+    # ビルド作業の開始時間を記録
+    local start_time=$(date +%s)
     debug_log "INFO" "Building package: $built_package"
     if ! build_package "$package_name"; then
+        echo "$(get_message "MSG_BUILD_FAIL" | sed "s/{pkg}/$built_package/")"
         debug_log "ERROR" "Build failed for package: $built_package"
         return 1
     fi
+    local end_time=$(date +%s)
+    local build_time=$((end_time - start_time))
+    echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$built_package/" | sed "s/{time}/$build_time/")"
+    debug_log "INFO" "Build time for $built_package: $build_time seconds"
 
     # package.db の適用（ビルド用設定）
     if grep -q "^$package_name=" "${BASE_DIR}/packages.db"; then
@@ -1145,6 +1196,8 @@ install_build() {
 
     # ビルド後のパッケージのインストールを install_package() に依頼
     install_package "$built_package"
+    echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$built_package/")"
+    debug_log "INFO" "Successfully built and installed package: $built_package"
 }
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
