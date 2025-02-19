@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-10-01"
+SCRIPT_VERSION="2025.02.20-10-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -245,7 +245,6 @@ color_code_map() {
         *) echo "\033[0;39m" ;;  # デフォルトでリセット
     esac
 }
-
 
 #########################################################################
 # check_openwrt: OpenWrtのバージョン確認・検証
@@ -794,32 +793,6 @@ country_write() {
     normalize_language
 }
 
-XXX_country_write() {
-    local tmp_country="${CACHE_DIR}/country_tmp.ch"
-    local cache_country="${CACHE_DIR}/country.ch"
-    local cache_language="${CACHE_DIR}/language.ch"
-    local cache_luci="${CACHE_DIR}/luci.ch"
-    local cache_zone="${CACHE_DIR}/zone.ch"
-
-    local country_data=$(cat "$tmp_country" 2>/dev/null)
-    if [ -z "$country_data" ]; then
-        return
-    fi
-
-    local short_code=$(echo "$country_data" | awk '{print $5}')
-    local luci_code=$(echo "$country_data" | awk '{print $4}')
-    local zone_data=$(echo "$country_data" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i; print ""}')
-
-    echo "$country_data" > "$cache_country"
-    echo "$short_code" > "$cache_language"
-    echo "$luci_code" > "$cache_luci"
-    echo "$zone_data" > "$cache_zone"
-
-    chmod 444 "$cache_country" "$cache_language" "$cache_luci" "$cache_zone"
-    
-    normalize_language
-}
-
 #########################################################################
 # Last Update: 2025-02-12 17:25:00 (JST) 🚀
 # "Precision in code, clarity in purpose. Every update refines the path.""
@@ -944,98 +917,6 @@ normalize_language() {
     debug_log "INFO" "Final system message language -> $ACTIVE_LANGUAGE"
     echo "$(get_message "MSG_COUNTRY_SUCCESS")"
     touch "$flag_file"
-}
-
-XXX_normalize_language() {
-    local message_db="${BASE_DIR}/messages.db"
-    local country_cache="${CACHE_DIR}/country.ch"
-    local message_cache="${CACHE_DIR}/message.ch"
-    local selected_language=""
-    local flag_file="${CACHE_DIR}/country_success_done"
-
-    if [ -f "$flag_file" ]; then
-        debug_log "INFO" "normalize_language() already done. Skipping repeated success message."
-        return 0
-    fi
-
-    if [ ! -f "$country_cache" ]; then
-        debug_log "ERROR" "country.ch not found. Cannot determine language."
-        return 1
-    fi
-
-    local field_count
-    field_count=$(awk '{print NF}' "$country_cache")
-
-    if [ "$field_count" -ge 5 ]; then
-        # フルラインに十分なフィールドがある場合は、言語名は第5フィールド
-        selected_language=$(awk '{print $5}' "$country_cache")
-    else
-        # そうでなければ、表示用として抽出された2フィールドの場合、言語名は第2フィールド
-        selected_language=$(awk '{print $2}' "$country_cache")
-    fi
-
-    debug_log "DEBUG" "Selected language extracted from country.ch -> $selected_language"
-
-    local supported_languages
-    supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
-
-    if echo "$supported_languages" | grep -qw "$selected_language"; then
-        debug_log "INFO" "Using message database language: $selected_language"
-        echo "$selected_language" > "$message_cache"
-        ACTIVE_LANGUAGE="$selected_language"
-    else
-        debug_log "WARNING" "Language '$selected_language' not found in messages.db. Using 'US' as fallback."
-        echo "US" > "$message_cache"
-        ACTIVE_LANGUAGE="US"
-    fi
-
-    debug_log "INFO" "Final system message language -> $ACTIVE_LANGUAGE"
-    echo "$(get_message "MSG_COUNTRY_SUCCESS")"
-    touch "$flag_file"
-}
-
-XXX_normalize_language() {
-    local message_db="${BASE_DIR}/messages.db"
-    local country_cache="${CACHE_DIR}/country.ch"  # 主（真）データ
-    local message_cache="${CACHE_DIR}/message.ch"
-    local selected_language=""
-    local flag_file="${CACHE_DIR}/country_success_done"
-
-    # もし既に「国と言語設定完了」を示すフラグファイルがあれば、何もしない
-    if [ -f "$flag_file" ]; then
-        debug_log "INFO" "normalize_language() already done. Skipping repeated success message."
-        return
-    fi
-
-    # ✅ `country.ch` が存在しない場合、エラーを返して終了
-    if [ ! -f "$country_cache" ]; then
-        debug_log "ERROR: country.ch not found. Cannot determine language."
-        return
-    fi
-
-    # ✅ `country.ch` の $5（国コード）を取得
-    selected_language=$(awk '{print $5}' "$country_cache")
-
-    debug_log "DEBUG: Selected language extracted from country.ch -> $selected_language"
-
-    # ✅ `messages.db` からサポートされている言語を取得
-    local supported_languages
-    supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
-
-    # ✅ `selected_language` が `messages.db` にある場合、それを `message.ch` に設定
-    if echo "$supported_languages" | grep -qw "$selected_language"; then
-        debug_log "INFO: Using message database language: $selected_language"
-        echo "$selected_language" > "$message_cache"
-        ACTIVE_LANGUAGE="$selected_language"  # ✅ `$ACTIVE_LANGUAGE` にも設定
-    else
-        debug_log "WARNING: Language '$selected_language' not found in messages.db. Using 'US' as fallback."
-        echo "US" > "$message_cache"
-        ACTIVE_LANGUAGE="US"  # ✅ フォールバック時も `$ACTIVE_LANGUAGE` に設定
-    fi
-
-    debug_log "INFO: Final system message language -> $ACTIVE_LANGUAGE"
-    echo "$(get_message "MSG_COUNTRY_SUCCESS")"
-    touch "$flag_file"    
 }
 
 
