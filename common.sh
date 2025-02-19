@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-07-04"
+SCRIPT_VERSION="2025.02.19-08-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -865,61 +865,8 @@ normalize_country() {
 # 🔴　ランゲージ（言語・ゾーン）系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # 🔵　パッケージ系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
+
 #########################################################################
-# Last Update: 2025-02-19 15:14:00 (JST) 🚀
-# install_package: パッケージのインストール処理 (OpenWrt / Alpine Linux)
-#
-# 【概要】
-# 指定されたパッケージをインストールし、オプションに応じて以下の処理を実行する。
-#
-# 【フロー】
-# 2️⃣ デバイスにパッケージがインストール済みか確認
-# 1️⃣ update は初回に一回のみ、opkg update / apk update を実行
-# 3️⃣ パッケージがリポジトリに存在するか確認
-# 4️⃣ インストール確認（yn オプションが指定された場合）
-# 5️⃣ インストールの実行
-# 6️⃣ 言語パッケージの適用（lang オプションがない場合）
-# 7️⃣ package.db の適用（notpack オプションがない場合）
-# 8️⃣ 設定の有効化（デフォルト enabled、disabled オプションで無効化）
-#
-# 【グローバルオプション】
-# DEV_NULL
-# DEBUG : 要所にセット
-#
-# 【オプション】
-# - yn         : インストール前に確認する（デフォルト: 確認なし）
-# - nolang     : 言語パッケージの適用をスキップ（デフォルト: 適用する）
-# - notpack    : package.db での設定適用をスキップ（デフォルト: 適用する）
-# - disabled   : 設定を disabled にする（デフォルト: enabled）
-# - hidden     : 既にインストール済みの場合、"パッケージ xxx はすでにインストールされています" のメッセージを非表示にする
-#
-# 【仕様】
-# - update.ch を書き出し、updateを管理する
-# - downloader_ch から opkg または apk を取得し、適切なパッケージ管理ツールを使用
-# - messages.db を参照し、すべてのメッセージを取得（JP/US 対応）
-# - package.db の設定がある場合、uci set を実行し適用（notset オプションで無効化可能）
-# - 言語パッケージは luci-app-xxx 形式を対象に適用（dont オプションで無効化可能）
-# - 設定の有効化はデフォルト enabled、disabled オプション指定時のみ disabled
-# - update は明示的に install_package update で実行（パッケージインストール時には自動実行しない）
-#
-# 【使用例】
-# - install_package ttyd                  → ttyd をインストール（確認なし、package.db 適用、言語パック適用）
-# - install_package ttyd yn               → ttyd をインストール（確認あり）
-# - install_package ttyd nolang           → ttyd をインストール（言語パック適用なし）
-# - install_package ttyd notpack          → ttyd をインストール（package.db の適用なし）
-# - install_package ttyd disabled         → ttyd をインストール（設定を disabled にする）
-# - install_package ttyd yn nolang disabled hidden
-#   → ttyd をインストール（確認あり、言語パック適用なし、設定を disabled にし、
-#      既にインストール済みの場合のメッセージは非表示）
-#
-# 【messages.dbの記述例】
-# [ttyd]
-# opkg update
-# uci commit ttyd
-# initd/ttyd/restat
-# [ttyd] opkg update; uci commit ttyd; initd/ttyd/restat
-#########################################################################
-ins#########################################################################
 # Last Update: 2025-02-19 15:14:00 (JST) 🚀
 # install_package: パッケージのインストール処理 (OpenWrt / Alpine Linux)
 #
@@ -974,63 +921,56 @@ ins#########################################################################
 # [ttyd] opkg update; uci commit ttyd; initd/ttyd/restat
 #########################################################################
 install_package() {
-    local package_name="$1"
-    shift  # 最初の引数 (パッケージ名) を取得し、残りをオプションとして処理
-
-    # オプション解析
     local confirm_install="no"
     local skip_lang_pack="no"
     local skip_package_db="no"
     local set_disabled="no"
-    local hidden="no"   # hidden オプション：既にインストール済みの場合のメッセージを抑制
+    local hidden="no"
+    local package_name=""
 
+    # オプションの処理
     for arg in "$@"; do
         case "$arg" in
             yn) confirm_install="yes" ;;
-            dont) skip_lang_pack="yes" ;;
-            notset) skip_package_db="yes" ;;
+            nolang) skip_lang_pack="yes" ;;
+            notpack) skip_package_db="yes" ;;
             disabled) set_disabled="yes" ;;
-            update) 
-                # updateは最初のインストール時にのみ実行
-                if [ ! -f "${CACHE_DIR}/update.ch" ]; then
-                    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-                        opkg update
-                    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-                        apk update
-                    fi
-                    touch "${CACHE_DIR}/update.ch"  # update済みフラグを設定
+            hidden) hidden="yes" ;;
+            *)
+                if [ -z "$package_name" ]; then
+                    package_name="$arg"
+                else
+                    debug_log "WARN" "Unknown option: $arg"
                 fi
                 ;;
-            hidden) hidden="yes" ;;
         esac
     done
 
-    # downloader_ch からパッケージマネージャーを取得
-    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
-        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
-    else
-        echo "$(get_message "MSG_PACKAGE_MANAGER_NOT_FOUND")"
+    if [ -z "$package_name" ]; then
+        echo "Error: No package specified." >&2
         return 1
     fi
 
-    # すでにインストール済みか確認
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if opkg list-installed | grep -q "^$package_name "; then
-            if [ "$hidden" != "yes" ]; then
-                echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
-            fi
-            return 0
-        fi
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if apk list-installed | grep -q "^$package_name "; then
-            if [ "$hidden" != "yes" ]; then
-                echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
-            fi
-            return 0
-        fi
+    # まず、パッケージがすでにインストールされているか確認
+    if [ "$PACKAGE_MANAGER" = "opkg" ] && opkg list-installed | grep -q "^$package_name "; then
+        [ "$hidden" != "yes" ] && echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
+        return 0
+    elif [ "$PACKAGE_MANAGER" = "apk" ] && apk list-installed | grep -q "^$package_name "; then
+        [ "$hidden" != "yes" ] && echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
+        return 0
     fi
 
-    # インストール確認 (yn オプションが指定された場合)
+    # 最初の実行時に一度だけ update を実行
+    if [ ! -f "${CACHE_DIR}/update.ch" ]; then
+        debug_log "INFO" "Running package manager update..."
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            opkg update
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            apk update
+        fi
+        touch "${CACHE_DIR}/update.ch"
+    fi
+
     if [ "$confirm_install" = "yes" ]; then
         while true; do
             echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
@@ -1044,71 +984,36 @@ install_package() {
         done
     fi
 
-    # パッケージのインストール (DEV_NULL に応じて出力制御)
+    debug_log "INFO" "Installing package: $package_name"
     if [ "$DEV_NULL" = "on" ]; then
         $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1
     else
         $PACKAGE_MANAGER install "$package_name"
     fi
 
-    # package.db の適用
+    if [ "$skip_lang_pack" = "no" ] && echo "$package_name" | grep -qE '^luci-app-'; then
+        local lang_code=$(cat "${CACHE_DIR}/luci.ch" 2>/dev/null || echo "en")
+        local lang_package="luci-i18n-${package_name#luci-app-}-$lang_code"
+        install_package "$lang_package" hidden
+    fi
+
     if [ "$skip_package_db" = "no" ] && grep -q "^$package_name=" "${BASE_DIR}/packages.db"; then
         eval "$(grep "^$package_name=" "${BASE_DIR}/packages.db" | cut -d'=' -f2-)"
     fi
 
-    # 設定の有効化/無効化
     if [ "$skip_package_db" = "no" ]; then
         if uci get "$package_name.@$package_name[0].enabled" >/dev/null 2>&1; then
-            if [ "$set_disabled" = "yes" ]; then
-                uci set "$package_name.@$package_name[0].enabled=0"
-            else
-                uci set "$package_name.@$package_name[0].enabled=1"
-            fi
+            uci set "$package_name.@$package_name[0].enabled=$([ "$set_disabled" = "yes" ] && echo "0" || echo "1")"
             uci commit "$package_name"
         fi
     fi
 
-    # 言語パッケージの適用
-    if [ "$skip_lang_pack" = "no" ] && echo "$package_name" | grep -qE '^luci-app-'; then
-        local lang_code
-        lang_code=$(cat "${CACHE_DIR}/luci.ch" 2>/dev/null || echo "en")
-        local lang_package="luci-i18n-${package_name#luci-app-}-$lang_code"
-
-        if [ "$DEV_NULL" = "on" ]; then
-            if $PACKAGE_MANAGER list > /dev/null 2>&1 | grep -q "^$lang_package "; then
-                install_package "$lang_package" hidden
-            else
-                if [ "$lang_code" = "xx" ]; then
-                    if $PACKAGE_MANAGER list > /dev/null 2>&1 | grep -q "^luci-i18n-${package_name#luci-app-}-en "; then
-                        install_package "luci-i18n-${package_name#luci-app-}-en" hidden
-                    elif $PACKAGE_MANAGER list > /dev/null 2>&1 | grep -q "^luci-i18n-${package_name#luci-app-} "; then
-                        install_package "luci-i18n-${package_name#luci-app-}" hidden
-                    fi
-                fi
-            fi
-        else
-            if $PACKAGE_MANAGER list | grep -q "^$lang_package "; then
-                install_package "$lang_package"
-            else
-                if [ "$lang_code" = "xx" ]; then
-                    if $PACKAGE_MANAGER list | grep -q "^luci-i18n-${package_name#luci-app-}-en "; then
-                        install_package "luci-i18n-${package_name#luci-app-}-en"
-                    elif $PACKAGE_MANAGER list | grep -q "^luci-i18n-${package_name#luci-app-} "; then
-                        install_package "luci-i18n-${package_name#luci-app-}"
-                    fi
-                fi
-            fi
-        fi
-    fi
-
-    # サービスの有効化/開始
-    if [ "$set_disabled" = "no" ] && ! echo "$package_name" | grep -qE '^(lib|luci)$'; then
-        if [ -f "/etc/init.d/$package_name" ]; then
-            /etc/init.d/$package_name enable
-            /etc/init.d/$package_name start
-        fi
+    if [ "$set_disabled" = "no" ] && [ -f "/etc/init.d/$package_name" ]; then
+        /etc/init.d/$package_name enable
+        /etc/init.d/$package_name start
     fi
 }
+
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
