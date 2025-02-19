@@ -553,12 +553,33 @@ select_country() {
 
     local cache_country="${CACHE_DIR}/country.ch"
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
+    local lang_code="$1"  # 引数として渡された言語コード
 
-    # キャッシュがあればゾーン選択へスキップ
+    # `$1` が渡された場合、country.db で検索
+    if [ -n "$lang_code" ]; then
+        # `country.db` を検索して該当する国を抽出
+        local full_results
+        full_results=$(awk -v search="$lang_code" 'BEGIN {IGNORECASE=1} { if ($0 ~ search) print $0 }' "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
+        
+        if [ -n "$full_results" ]; then
+            # 見つかった場合、ゾーン選択へ進む
+            debug_log "INFO" "Country found for '$lang_code'. Proceeding to select_zone."
+            select_zone
+            return
+        else
+            # 見つからなければ、言語選択を実行
+            debug_log "INFO" "No matching country found for '$lang_code'. Proceeding with language selection."
+        fi
+    fi
+
+    # `$1` が渡されていない場合、country.ch を確認
     if [ -f "$cache_country" ]; then
+        # キャッシュがあれば言語選択をスキップしてゾーン選択へ進む
         debug_log "INFO" "Country cache found. Skipping selection."
         select_zone
-        return
+    else
+        # キャッシュがなければ言語選択を実行
+        debug_log "INFO" "No country cache found. Proceeding with language selection."
     fi
 
     while true; do
