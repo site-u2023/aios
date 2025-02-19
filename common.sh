@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-10-05"
+SCRIPT_VERSION="2025.02.19-10-06"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1544,9 +1544,12 @@ check_common() {
     local lang_code="$1"
     local mode="${2:-full}" 
 
-    # 言語データベースのダウンロードを専用関数で実行
     download "messages.db"
-
+    download "openwrt.db"
+    download "country.db"
+    download "packages.db"
+    check_openwrt
+    check_downloader
     # 言語設定を専用関数に分離
     if [ -n "$lang_code" ]; then
         normalize_language "$lang_code"
@@ -1573,19 +1576,19 @@ check_common() {
             ;;
         full)
             #download "hidden" "messages.db"
-            download "hidden" "openwrt.db"
-            download "hidden" "country.db"
-            download "hidden" "packages.db"
-            check_openwrt
-            check_downloader
+            #download "hidden" "openwrt.db"
+            #download "hidden" "country.db"
+            #download "hidden" "packages.db"
+            #check_openwrt
+            #check_downloader
             ;;
         light|debug)
             #download "messages.db"
-            download "openwrt.db"
-            download "country.db"
-            download "packages.db"
-            check_openwrt
-            check_downloader
+            #download "openwrt.db"
+            #download "country.db"
+            #download "packages.db"
+            #check_openwrt
+            #check_downloader
             ;;
         *)
             ;;
