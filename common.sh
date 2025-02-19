@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-08-04"
+SCRIPT_VERSION="2025.02.19-08-05"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -569,15 +569,15 @@ select_country() {
         local cleaned_input
         cleaned_input=$(echo "$input" | sed 's/[\/,_]/ /g')
 
-        # **完全一致を優先**
+        # **完全一致を優先（$2, $3, $4, $5 で検索）**
         local search_results
         search_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} 
-            { key = $2" "$3" "$4" "$5; if ($0 ~ search && !seen[key]++) print NR, $2, $3, $4, $5 }' "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
+            { key = $2" "$3" "$4" "$5; if ($0 ~ search && !seen[key]++) print $2, $3 }' "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
 
         # **完全一致がない場合、部分一致を検索**
         if [ -z "$search_results" ]; then
             search_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} 
-                { for (i=2; i<=NF; i++) if ($i ~ search) print NR, $2, $3, $4, $5 }' "$BASE_DIR/country.db")
+                { for (i=2; i<=NF; i++) if ($i ~ search) print $2, $3 }' "$BASE_DIR/country.db")
         fi
 
         # **検索結果がない場合のエラーハンドリング**
@@ -586,7 +586,7 @@ select_country() {
             continue
         fi
 
-        # **検索結果リストを表示（$2, $3, $4, $5 のみ）**
+        # **検索結果リストを表示（$2, $3 のみ）**
         select_list "$search_results" "$tmp_country" "country"
 
         # **選択結果をキャッシュへ書き込み**
