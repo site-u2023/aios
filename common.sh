@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-08-01"
+SCRIPT_VERSION="2025.02.19-08-02"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -893,9 +893,12 @@ normalize_country() {
 # - notpack    : package.db での設定適用をスキップ（デフォルト: 適用する）
 # - disabled   : 設定を disabled にする（デフォルト: enabled）
 # - hidden     : 既にインストール済みの場合、"パッケージ xxx はすでにインストールされています" のメッセージを非表示にする
+# - test       : インストール済みのパッケージであっても、インストール処理を実行する
+# - update     : opkg update / apk update を強制的に実行し、update.ch のキャッシュを無視する
 #
 # 【仕様】
 # - update.ch を書き出し、updateを管理する（${CACHE_DIR}/update.ch）
+# - update オプションが指定された場合、update.ch のキャッシュを無視して強制的に update を実行
 # - downloader_ch から opkg または apk を取得し、適切なパッケージ管理ツールを使用
 # - messages.db を参照し、すべてのメッセージを取得（JP/US 対応）
 # - package.db の設定がある場合、uci set を実行し適用（notset オプションで無効化可能）
@@ -912,6 +915,8 @@ normalize_country() {
 # - install_package ttyd yn nolang disabled hidden
 #   → ttyd をインストール（確認あり、言語パック適用なし、設定を disabled にし、
 #      既にインストール済みの場合のメッセージは非表示）
+# - install_package ttyd test             → ttyd をインストール（インストール済みでも強制インストール）
+# - install_package ttyd update           → ttyd をインストール（opkg update / apk update を強制実行）
 #
 # 【messages.dbの記述例】
 # [ttyd]
