@@ -1525,21 +1525,6 @@ check_option() {
 # 4. `openwrt.db`, `messages.db`, `country.db`, `packages.db` を適切にダウンロード。
 # 5. 影響範囲: `common.sh`（矛盾なく適用）。
 #########################################################################
-download_language_db() {
-    local message_db="${BASE_DIR}/messages.db"
-
-    # すでに messages.db が存在する場合は何もしない
-    if [ -f "$message_db" ]; then
-        grep -qi "^${lang_code}|" "$message_db"
-    else
-        debug_log "ERROR" "messages.db not found."
-    fi
-    
-    # messages.db をダウンロード
-    debug_log "INFO" "Downloading messages.db..."
-    download "hidden" "messages.db"
-}
-
 check_common() {
     local lang_code="$1"
     local mode="${2:-full}" 
