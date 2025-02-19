@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-09-05"
+SCRIPT_VERSION="2025.02.19-09-06"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -569,57 +569,42 @@ select_country() {
         local cleaned_input
         cleaned_input=$(echo "$input" | sed 's/[\/,_]/ /g')
 
-        # country.db の全行から、検索キーワードを含む行（フルライン）を抽出
+        # 国データベースから、検索キーワードを含む全行（フルライン）を抽出
         local full_results
         full_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} { if ($0 ~ search) print $0 }' "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
-
-        # 完全一致がない場合、部分一致でも抽出（フルライン）
-        if [ -z "$full_results" ]; then
-            full_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} { for (i=2; i<=NF; i++) if ($i ~ search) print $0 }' "$BASE_DIR/country.db")
-        fi
-
-        # 検索結果がない場合のエラーハンドリング
         if [ -z "$full_results" ]; then
             printf "%s\n" "$(color red "Error: No matching country found for '$input'. Please try again.")"
             continue
         fi
 
-        # 表示用リスト：フルラインから $2 と $3 を抽出して表示
+        # 表示用には、フルラインから $2 と $3（例：国名と表示用言語）だけを抜粋
         local display_results
         display_results=$(echo "$full_results" | awk '{print $2, $3}')
 
-        # 表示用リストを select_list() でユーザーに選択させる
+        # ユーザーに表示用リストを選択させる
         select_list "$display_results" "$tmp_country" "country"
 
-        # select_list() により、ユーザーが選んだ表示用行（$2, $3のみ）が tmp_country に保存される
-        local selected_display
-        selected_display=$(cat "$tmp_country")
-        if [ -z "$selected_display" ]; then
+        # select_list() により、ユーザーが選択した表示用行が tmp_country に保存されるが、
+        # その行番号を用いて full_results から対応するフル情報を取り出す
+        local selected_line_number
+        selected_line_number=$(awk 'END {print NR}' "$tmp_country")
+        if [ -z "$selected_line_number" ]; then
             printf "%s\n" "$(color red "Error: No selection made. Please try again.")"
             continue
         fi
 
-        # 表示用リストとフルリストは行順が一致する前提で、
-        # 選択された行番号を求める
-        local selected_index
-        selected_index=$(echo "$display_results" | grep -nxF "$selected_display" | cut -d: -f1)
-        if [ -z "$selected_index" ]; then
-            printf "%s\n" "$(color red "Error: Could not map selection to full data. Please try again.")"
-            continue
-        fi
-
-        # 選択された行番号に対応するフルラインを抽出（必要なフィールドは $2～$5）
+        # full_results のうち、選択された行番号のフルラインを抽出
         local selected_full
-        selected_full=$(echo "$full_results" | sed -n "${selected_index}p" | awk '{print $2, $3, $4, $5}')
+        selected_full=$(echo "$full_results" | sed -n "${selected_line_number}p")
         if [ -z "$selected_full" ]; then
             printf "%s\n" "$(color red "Error: Failed to retrieve full country information. Please try again.")"
             continue
         fi
 
-        # tmp_country にフル情報（$2～$5）を保存する
+        # tmp_country にはフルライン（必要なフィールド $2～$5 を含む）を保存する
         echo "$selected_full" > "$tmp_country"
 
-        # 選択結果をキャッシュへ書き込み（country_write() は tmp_country の内容を利用）
+        # 選択結果をキャッシュに書き込む（country_write() は tmp_country の内容を利用）
         country_write
 
         # ゾーン選択へ進む
