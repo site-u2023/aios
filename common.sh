@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-10-07"
+SCRIPT_VERSION="2025.02.19-10-08"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -495,53 +495,21 @@ download() {
 #########################################################################
 normalize_country() {
     local lang_code="$1"
-    local message_db="${BASE_DIR}/messages.db"
-    local country_cache="${CACHE_DIR}/country.ch"
-    local message_cache="${CACHE_DIR}/message.ch"
-    local selected_language=""
-    local flag_file="${CACHE_DIR}/country_success_done"
 
-    # フラグがあれば、再実行しない
-    if [ -f "$flag_file" ]; then
-        debug_log "INFO" "normalize_country() already done. Skipping repeated success message."
-        return 0
-    fi
-
-    # country.ch が存在しない場合はエラー
-    if [ ! -f "$country_cache" ]; then
-        debug_log "ERROR" "country.ch not found. Cannot determine language."
+    # 言語コードが空でないか確認
+    if [ -z "$lang_code" ]; then
+        debug_log "ERROR" "No language code provided."
         return 1
     fi
 
-    # country.ch から言語コードを抽出（必要なら修正）
-    local field_count
-    field_count=$(awk '{print NF}' "$country_cache")
+    # 入力された言語コードを正規化（例: 全角→半角）
+    lang_code=$(normalize_input "$lang_code")
 
-    if [ "$field_count" -ge 5 ]; then
-        selected_language=$(awk '{print $5}' "$country_cache")  # 言語コード（5列目）
-    else
-        selected_language=$(awk '{print $2}' "$country_cache")  # 短縮対応（例: 日本語 -> ja）
-    fi
+    # 正規化された言語コードをそのまま渡す
+    debug_log "INFO" "Normalized language code: $lang_code"
 
-    debug_log "DEBUG" "Selected language extracted from country.ch -> $selected_language"
-
-    # messages.db からサポートされている言語か確認
-    local supported_languages
-    supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
-
-    if echo "$supported_languages" | grep -qw "$selected_language"; then
-        debug_log "INFO" "Using message database language: $selected_language"
-        echo "$selected_language" > "$message_cache"
-        ACTIVE_LANGUAGE="$selected_language"
-    else
-        debug_log "WARNING" "Language '$selected_language' not found in messages.db. Using 'US' as fallback."
-        echo "US" > "$message_cache"
-        ACTIVE_LANGUAGE="US"
-    fi
-
-    debug_log "INFO" "Final system message language -> $ACTIVE_LANGUAGE"
-    echo "$(get_message "MSG_COUNTRY_SUCCESS")"
-    touch "$flag_file"
+    # `select_country()` に引き渡すだけ
+    # 他の処理は一切行わない
 }
 
 #########################################################################
