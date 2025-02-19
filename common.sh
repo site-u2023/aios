@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-08-07"
+SCRIPT_VERSION="2025.02.19-08-08"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1032,7 +1032,7 @@ install_package() {
 }
 
 #########################################################################
-# Last Update: 2025-02-19 20:00:00 (JST) 🚀
+# Last Update: 2025-02-19 20:10:00 (JST) 🚀
 # install_build: パッケージのビルド処理 (OpenWrt / Alpine Linux)
 #
 # 【概要】
@@ -1047,7 +1047,7 @@ install_package() {
 # 2️⃣ デバイスにパッケージがインストール済みか確認（ビルド後のパッケージ名で確認）
 # 1️⃣ update は初回に一回のみ、opkg update / apk update を実行（ビルドで追加アップデートが必要な場合は、packages.dbに記述し制御）
 # 4️⃣ インストール確認（yn オプションが指定された場合）
-# 4️⃣ ビルド用汎用パッケージインストール ※install_package()利用
+# 4️⃣ ビルド用汎用パッケージ（例：make, gcc）をインストール ※install_package()利用
 # 4️⃣ ビルド作業
 # 7️⃣ package.db の適用（ビルド用設定：DBの記述に従う）
 # 5️⃣ インストールの実行
@@ -1074,6 +1074,7 @@ install_package() {
 # - install_build build_uconv yn               → uconv をビルド後インストール（確認あり）
 # - install_build build_uconv yn hidden        → uconv をビルド後インストール（確認あり、既にインストール済みの場合のメッセージは非表示）
 # - install_build build_uconv disabled hidden  → uconv をビルド後インストール（設定を disabled にして、既にインストール済みのメッセージ非表示）
+# - install_build make                         → ビルド環境用のパッケージ（例：make, gcc）をインストール
 #
 # 【messages.dbの記述例】
 # [build_uconv]　※行、列問わず記述可
@@ -1105,6 +1106,16 @@ install_build() {
         echo "Error: No package specified." >&2
         return 1
     fi
+
+    # ビルド用の汎用パッケージをインストール
+    install_package "make"
+    install_package "gcc"
+    install_package "binutils"
+    install_package "libc-dev"
+    install_package "pkg-config"
+    install_package "automake"
+    install_package "autoconf"
+    install_package "cmake"
     
     # ビルド前のパッケージ名を取得
     local built_package="${package_name#build_}"
