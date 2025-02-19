@@ -562,7 +562,7 @@ select_country() {
         
         if [ -n "$full_results" ]; then
             # 見つかった場合、ゾーン選択へ進む
-            debug_log "INFO" "Country found for '$lang_code'. Proceeding to select_zone."
+            debug_log "DEBUG" "Country found for '$lang_code'. Proceeding to select_zone."
             echo "$full_results" > "$tmp_country"
             country_write 
             debug_log "DEBUG" "Proceeding to select_zone."
@@ -570,18 +570,18 @@ select_country() {
             return
         else
             # 見つからなければ、言語選択を実行
-            debug_log "INFO" "No matching country found for '$lang_code'. Proceeding with language selection."
+            debug_log "DEBUG" "No matching country found for '$lang_code'. Proceeding with language selection."
         fi
     fi
 
     # `$1` が渡されていない場合、country.ch を確認
     if [ -f "$cache_country" ]; then
         # キャッシュがあれば言語選択をスキップしてゾーン選択へ進む
-        debug_log "INFO" "Country cache found. Skipping selection."
+        debug_log "DEBUG" "Country cache found. Skipping selection."
         select_zone
     else
         # キャッシュがなければ言語選択を実行
-        debug_log "INFO" "No country cache found. Proceeding with language selection."
+        debug_log "DEBUG" "No country cache found. Proceeding with language selection."
     fi
 
     while true; do
@@ -632,7 +632,7 @@ select_country() {
         country_write
 
         # ゾーン選択へ進む
-        debug_log "INFO" "Country selection completed. Proceeding to select_zone()."
+        debug_log "DEBUG" "Country selection completed. Proceeding to select_zone()."
         select_zone
         return
     done
