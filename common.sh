@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-09-06"
+SCRIPT_VERSION="2025.02.19-10-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -733,6 +733,52 @@ country_write() {
     local cache_luci="${CACHE_DIR}/luci.ch"
     local cache_zone="${CACHE_DIR}/zone.ch"
 
+    local country_data
+    country_data=$(cat "$tmp_country" 2>/dev/null)
+    if [ -z "$country_data" ]; then
+        debug_log "ERROR" "No country data found in tmp_country."
+        return 1
+    fi
+
+    local field_count
+    field_count=$(echo "$country_data" | awk '{print NF}')
+
+    local language_name=""
+    local luci_code=""
+    local zone_data=""
+
+    if [ "$field_count" -ge 5 ]; then
+        # フルラインに必要なフィールドが存在する場合:
+        # $1: 国名, $2: 何か, $3: 何か, $4: 言語コード, $5: 言語名, $6～: ゾーン情報
+        luci_code=$(echo "$country_data" | awk '{print $4}')
+        language_name=$(echo "$country_data" | awk '{print $5}')
+        zone_data=$(echo "$country_data" | awk '{for(i=6;i<=NF;i++) printf "%s ", $i; print ""}')
+    else
+        # もしフィールド数が2の場合（表示用として country.db から抽出されたケース）
+        # 想定: $1: 国名, $2: 言語名
+        luci_code="default"  # デフォルト値
+        language_name=$(echo "$country_data" | awk '{print $2}')
+        zone_data="NO_TIMEZONE"
+    fi
+
+    # キャッシュファイルへ書き込み
+    echo "$country_data" > "$cache_country"
+    echo "$language_name" > "$cache_language"
+    echo "$luci_code" > "$cache_luci"
+    echo "$zone_data" > "$cache_zone"
+
+    chmod 444 "$cache_country" "$cache_language" "$cache_luci" "$cache_zone"
+
+    normalize_country
+}
+
+XXX_country_write() {
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
+    local cache_country="${CACHE_DIR}/country.ch"
+    local cache_language="${CACHE_DIR}/language.ch"
+    local cache_luci="${CACHE_DIR}/luci.ch"
+    local cache_zone="${CACHE_DIR}/zone.ch"
+
     local country_data=$(cat "$tmp_country" 2>/dev/null)
     if [ -z "$country_data" ]; then
         return
@@ -833,6 +879,54 @@ select_zone() {
 #    - 言語設定に影響を与えず、メッセージの表示のみを制御する
 #########################################################################
 normalize_country() {
+    local message_db="${BASE_DIR}/messages.db"
+    local country_cache="${CACHE_DIR}/country.ch"
+    local message_cache="${CACHE_DIR}/message.ch"
+    local selected_language=""
+    local flag_file="${CACHE_DIR}/country_success_done"
+
+    if [ -f "$flag_file" ]; then
+        debug_log "INFO" "normalize_country() already done. Skipping repeated success message."
+        return 0
+    fi
+
+    if [ ! -f "$country_cache" ]; then
+        debug_log "ERROR" "country.ch not found. Cannot determine language."
+        return 1
+    fi
+
+    local field_count
+    field_count=$(awk '{print NF}' "$country_cache")
+
+    if [ "$field_count" -ge 5 ]; then
+        # フルラインに十分なフィールドがある場合は、言語名は第5フィールド
+        selected_language=$(awk '{print $5}' "$country_cache")
+    else
+        # そうでなければ、表示用として抽出された2フィールドの場合、言語名は第2フィールド
+        selected_language=$(awk '{print $2}' "$country_cache")
+    fi
+
+    debug_log "DEBUG" "Selected language extracted from country.ch -> $selected_language"
+
+    local supported_languages
+    supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
+
+    if echo "$supported_languages" | grep -qw "$selected_language"; then
+        debug_log "INFO" "Using message database language: $selected_language"
+        echo "$selected_language" > "$message_cache"
+        ACTIVE_LANGUAGE="$selected_language"
+    else
+        debug_log "WARNING" "Language '$selected_language' not found in messages.db. Using 'US' as fallback."
+        echo "US" > "$message_cache"
+        ACTIVE_LANGUAGE="US"
+    fi
+
+    debug_log "INFO" "Final system message language -> $ACTIVE_LANGUAGE"
+    echo "$(get_message "MSG_COUNTRY_SUCCESS")"
+    touch "$flag_file"
+}
+
+XXX_normalize_country() {
     local message_db="${BASE_DIR}/messages.db"
     local country_cache="${CACHE_DIR}/country.ch"  # 主（真）データ
     local message_cache="${CACHE_DIR}/message.ch"
