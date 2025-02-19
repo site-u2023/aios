@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.19-07-01"
+SCRIPT_VERSION="2025.02.19-07-02"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -865,84 +865,49 @@ normalize_country() {
 # 🔴　ランゲージ（言語・ゾーン）系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # 🔵　パッケージ系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
-######################################################################### 
-# Last Update: 2025-02-19 00:00:00 (JST) 🚀
-# select_package: パッケージの選択を処理する関数
-#
-# 【要件】
-# 1. パッケージインストールの際、YNオプションを含めたパッケージの確認を行う。
-# 2. `custom_build_*` パッケージ名が渡された場合、インストール確認をスキップし、
-#    直接 package_build() に渡してビルド処理を行う。
-# 3. 通常のパッケージの場合、インストール確認（YN）を行い、ユーザーが 'Y' を選択した場合にインストール処理を進める。
-# 4. すべてのオプション（`yn`, `dont`, `notset`, `disabled`）は正しく処理され、必要なタイミングで適用される。
-#
-# 【使用例】
-# - select_package "package_name" yn dont notset disabled
 #########################################################################
-select_package() { 
-    local package_name="$1"
-    local confirm_install="$2"
-    local skip_lang_pack="$3"
-    local skip_package_db="$4"
-    local set_disabled="$5"
-    local hidden="$6"
-
-    # オプション解析
-    local confirm_install="no"
-    local skip_lang_pack="no"
-    local skip_package_db="no"
-    local set_disabled="no"
-    local hidden="no"
-
-    for arg in "$@"; do
-        case "$arg" in
-            yn) confirm_install="yes" ;;  # yn オプション
-            dont) skip_lang_pack="yes" ;;
-            notset) skip_package_db="yes" ;;
-            disabled) set_disabled="yes" ;;
-            hidden) hidden="yes" ;;
-        esac
-    done
-
-    # `YN` 確認を最初に一度だけ行う
-    if [ "$confirm_install" = "yes" ]; then
-        while true; do
-            echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
-            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
-            read -r yn
-            case "$yn" in
-                [Yy]*) break ;;  # Yまたはyを入力すればインストールを続ける
-                [Nn]*) echo "$(get_message "MSG_INSTALL_ABORTED")"; return 1 ;;  # Nまたはnを入力すれば中止
-                *) echo "Invalid input. Please enter Y or N." ;;  # 無効な入力
-            esac
-        done
-    fi
-
-    # `custom_build_*` パッケージの判定
-    if [[ "$package_name" =~ ^custom_build_ ]]; then
-        debug_log "INFO" "Detected custom build package: $package_name"
-        # `YN` 確認後、package_build() に渡してビルド処理を実行
-        package_build "$package_name" "$confirm_install" "$skip_lang_pack" "$skip_package_db" "$set_disabled" "$hidden"
-        return
-    fi
-
-    # 通常のパッケージの場合、インストール処理を進める
-    install_package "$package_name" "$skip_lang_pack" "$skip_package_db" "$set_disabled" "$hidden"
-}
-
-######################################################################### 
-# Last Update: 2025-02-19 00:00:00 (JST) 🚀
-# install_package: パッケージのインストールを行う関数
+# Last Update: 2025-02-15 10:00:00 (JST) 🚀
+# install_package: パッケージのインストール処理 (OpenWrt / Alpine Linux)
 #
-# 【要件】
-# 1. `yn` オプションがあればインストール前に確認を行う。
-# 2. `custom_build_*` パッケージの場合、インストール確認をスキップし、ビルド処理に進む。
-# 3. パッケージのインストールは、`DEV_NULL` による制御で表示を管理。
-# 4. `package.db` での設定を適用するかどうかを判定。
-# 5. 言語パッケージの適用やサービスの有効化なども適切に処理する。
+# 【概要】
+# 指定されたパッケージをインストールし、オプションに応じて以下の処理を実行する。
+#
+# 【フロー】
+# 1️⃣ install_package update が実行された場合、opkg update / apk update を実行
+# 2️⃣ デバイスにパッケージがインストール済みか確認
+# 3️⃣ パッケージがリポジトリに存在するか確認
+# 4️⃣ インストール確認（yn オプションが指定された場合）
+# 5️⃣ インストールの実行
+# 6️⃣ 言語パッケージの適用（dont オプションがない場合）
+# 7️⃣ package.db の適用（notset オプションがない場合）
+# 8️⃣ 設定の有効化（デフォルト enabled、disabled オプションで無効化）
+#
+# 【オプション】
+# - yn         : インストール前に確認する（デフォルト: 確認なし）
+# - dont       : 言語パッケージの適用をスキップ（デフォルト: 適用する）
+# - notset     : package.db での設定適用をスキップ（デフォルト: 適用する）
+# - disabled   : 設定を disabled にする（デフォルト: enabled）
+# - update     : opkg update または apk update を実行（他の場所では update しない）
+# - hidden     : 既にインストール済みの場合、"パッケージ xxx はすでにインストールされています" のメッセージを非表示にする
+#
+# 【仕様】
+# - downloader_ch から opkg または apk を取得し、適切なパッケージ管理ツールを使用
+# - messages.db を参照し、すべてのメッセージを取得（JP/US 対応）
+# - package.db の設定がある場合、uci set を実行し適用（notset オプションで無効化可能）
+# - 言語パッケージは luci-app-xxx 形式を対象に適用（dont オプションで無効化可能）
+# - 設定の有効化はデフォルト enabled、disabled オプション指定時のみ disabled
+# - update は明示的に install_package update で実行（パッケージインストール時には自動実行しない）
 #
 # 【使用例】
-# - install_package "package_name" yn dont notset disabled
+# - install_package update                → パッケージリストを更新
+# - install_package ttyd                  → ttyd をインストール（確認なし、package.db 適用、言語パック適用）
+# - install_package ttyd yn               → ttyd をインストール（確認あり）
+# - install_package ttyd dont             → ttyd をインストール（言語パック適用なし）
+# - install_package ttyd notset           → ttyd をインストール（package.db の適用なし）
+# - install_package ttyd disabled         → ttyd をインストール（設定を disabled にする）
+# - install_package ttyd yn dont disabled hidden
+#   → ttyd をインストール（確認あり、言語パック適用なし、設定を disabled にし、
+#      既にインストール済みの場合のメッセージは非表示）
 #########################################################################
 install_package() {
     local package_name="$1"
@@ -957,10 +922,17 @@ install_package() {
 
     for arg in "$@"; do
         case "$arg" in
-            yn) confirm_install="yes" ;;  # yn オプション
+            yn) confirm_install="yes" ;;
             dont) skip_lang_pack="yes" ;;
             notset) skip_package_db="yes" ;;
             disabled) set_disabled="yes" ;;
+            update) 
+                if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+                    opkg update
+                elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+                    apk update
+                fi
+                ;;
             hidden) hidden="yes" ;;
         esac
     done
@@ -969,25 +941,14 @@ install_package() {
     if [ -f "${CACHE_DIR}/downloader_ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
     else
-        debug_log "ERROR" "Package manager not found"
         echo "$(get_message "MSG_PACKAGE_MANAGER_NOT_FOUND")"
         return 1
     fi
 
-    # `custom_build_*` パッケージの場合、インストール確認をスキップして package_build() に進む
-    if [[ "$package_name" =~ ^custom_build_ ]]; then
-        debug_log "INFO" "Detected custom build package: $package_name"
-        # すべてのオプションが適用された後で、package_build() を呼び出す
-        package_build "$package_name" "$confirm_install" "$skip_lang_pack" "$skip_package_db" "$set_disabled" "$hidden"
-        return
-    fi
-
-    # パッケージがすでにインストールされているか確認
-    debug_log "DEBUG" "Checking if package is already installed: $package_name"
+    # すでにインストール済みか確認
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if opkg list-installed | grep -q "^$package_name "; then
             if [ "$hidden" != "yes" ]; then
-                debug_log "INFO" "$package_name is already installed."
                 echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
             fi
             return 0
@@ -995,46 +956,27 @@ install_package() {
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         if apk list-installed | grep -q "^$package_name "; then
             if [ "$hidden" != "yes" ]; then
-                debug_log "INFO" "$package_name is already installed."
                 echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
             fi
             return 0
         fi
     fi
 
-    # パッケージがリポジトリに存在するか確認
-    debug_log "DEBUG" "Checking if package exists in repository: $package_name"
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if ! opkg list | grep -q "^$package_name "; then
-            debug_log "ERROR" "$package_name not found in repository."
-            echo "$(get_message "MSG_PACKAGE_NOT_FOUND_IN_REPOSITORY" | sed "s/{pkg}/$package_name/")"
-            return 1
-        fi
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if ! apk search "$package_name" > /dev/null 2>&1; then
-            debug_log "ERROR" "$package_name not found in repository."
-            echo "$(get_message "MSG_PACKAGE_NOT_FOUND_IN_REPOSITORY" | sed "s/{pkg}/$package_name/")"
-            return 1
-        fi
-    fi
-
     # インストール確認 (yn オプションが指定された場合)
     if [ "$confirm_install" = "yes" ]; then
-        debug_log "DEBUG" "YN confirmation before install for package: $package_name"
         while true; do
             echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
             echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
             read -r yn
             case "$yn" in
-                [Yy]*) break ;;  # Yまたはyを入力すればインストールを続ける
-                [Nn]*) echo "$(get_message "MSG_INSTALL_ABORTED")"; return 1 ;;  # Nまたはnを入力すれば中止
-                *) echo "Invalid input. Please enter Y or N." ;;  # 無効な入力
+                [Yy]*) break ;;
+                [Nn]*) echo "$(get_message "MSG_INSTALL_ABORTED")"; return 1 ;;
+                *) echo "Invalid input. Please enter Y or N." ;;
             esac
         done
     fi
 
     # パッケージのインストール (DEV_NULL に応じて出力制御)
-    debug_log "DEBUG" "Installing package: $package_name"
     if [ "$DEV_NULL" = "on" ]; then
         $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1
     else
@@ -1098,94 +1040,6 @@ install_package() {
             /etc/init.d/$package_name start
         fi
     fi
-}
-
-#########################################################################
-# Last Update: 2025-02-18 (JST) 🚀
-# "Handles package installation and build for custom packages."
-#
-# 【要件】
-# 1. **汎用的なビルド依存関係のインストール**:
-#    - まず、**一般的なビルドツール（make, gcc, git など）**をインストールします。
-#    - これらのツールは多くのパッケージビルドに必要なため、最初にインストールします。
-#
-# 2. **個別パッケージの依存関係**:
-#    - その後、`packages.db` 内のパッケージ情報を元に、特定のパッケージやライブラリをインストールします。
-#    - `package_name` に対応するビルド依存パッケージは、`packages.db` で指定された内容に従ってインストールされます。
-#
-# 3. **デバッグおよびメッセージの出力**:
-#    - `debug_log()` を使用して、インストールの進行状況やエラーをログに記録します。
-#    - `get_message()` を使用して、ユーザー向けのメッセージを表示します。
-#
-# 4. **ビルド処理**:
-#    - 依存関係がインストールされた後、実際のビルド処理（例えば、`git clone` や `make`）を行います。
-#########################################################################
-package_build() {
-    package_name="$1"
-    confirm_install="$2"
-    skip_lang_pack="$3"
-    skip_package_db="$4"
-    set_disabled="$5"
-    hidden="$6"
-
-    # **汎用的なビルド依存パッケージをインストール**
-    debug_log "INFO" "Installing general build dependencies for $package_name..."
-
-    # 一般的なビルドパッケージ（必須ツール）
-    install_package make yn
-    install_package gcc yn
-    install_package git yn
-    install_package libtool
-    install_package automake
-    install_package pkg-config
-    install_package zlib-dev
-    install_package libssl-dev
-    install_package libicu-dev
-    install_package ncurses-dev
-    install_package libcurl4-openssl-dev
-    install_package libxml2-dev
-
-    # **`packages.db` からパッケージに必要な追加の依存関係をインストール**
-    debug_log "INFO" "Checking and installing package-specific dependencies for $package_name..."
-    dependencies=$(awk -v package_name="$package_name" '
-        BEGIN {FS="="}
-        $1 == package_name {print $2}
-    ' /etc/aios/packages.db)
-
-    if [ -n "$dependencies" ]; then
-        for dep in $dependencies; do
-            install_package "$dep" hidden
-        done
-    fi
-
-    # **ビルド開始のメッセージ**
-    message=$(get_message "MSG_BUILD_START")
-    echo "$(color green "$message")"
-
-    # **実際のビルド処理**
-    debug_log "INFO" "Starting build process for $package_name..."
-    
-    # 仮に `git clone` や `make` などのコマンドを使用してビルド処理
-    # (ここでは簡単な処理例として `git clone` を使っています)
-    echo "$(color cyan "Cloning repository for $package_name...")"
-    git clone https://example.com/repo/$package_name.git /tmp/$package_name
-    cd /tmp/$package_name
-    make && make install
-
-    # **ビルド成功のメッセージ**
-    message=$(get_message "MSG_BUILD_SUCCESS")
-    echo "$(color green "$message")"
-
-    # **エラーハンドリング**
-    if [ $? -ne 0 ]; then
-        message=$(get_message "MSG_BUILD_FAILURE")
-        echo "$(color red "$message")"
-        debug_log "ERROR" "Build failed for $package_name."
-        return 1
-    fi
-
-    debug_log "INFO" "$package_name built and installed successfully."
-    return 0
 }
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
