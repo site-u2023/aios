@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-14-03"
+SCRIPT_VERSION="2025.02.20-14-04"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1265,17 +1265,7 @@ install_build() {
     local confirm_install="no"
     local hidden="no"
     local package_name=""
-    local arch=""
-
-    # **アーキテクチャ判別**
-    arch=$(uname -m)
-    case "$arch" in
-        armv7l|armv8l|aarch64) arch="arm" ;;
-        i386|i686|x86_64) arch="x86" ;;
-        mips|mips64) arch="mips" ;;
-        *) arch="unknown" ;;
-    esac
-
+    
     # **オプションの処理**
     for arg in "$@"; do
         case "$arg" in
@@ -1304,23 +1294,23 @@ install_build() {
         return 1
     fi
 
-    # **インストール確認**
-    if [ "$confirm_install" = "yes" ]; then
-        while true; do
-            echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
-            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
-            read -r yn
-            case "$yn" in
-                [Yy]*) break ;;
-                [Nn]*) return 1 ;;
-                *) echo "Invalid input. Please enter Y or N." ;;
-            esac
+    # **ビルド後のパッケージ名を取得**
+    local built_package="${package_name#build_}"
+
+    # **アーキテクチャを取得**
+    local arch=$(uname -m)
+    debug_log "INFO" "Detected architecture: $arch"
+
+    # **`custom-package.db` からビルドに必要な `dependencies` を取得**
+    local dependencies=$(jq -r --arg pkg "$package_name" '.[$pkg].dependencies // empty' "$CUSTOM_PACKAGE_DB" 2>/dev/null)
+    if [ -n "$dependencies" ]; then
+        debug_log "INFO" "Installing dependencies: $dependencies"
+        for dep in $dependencies; do
+            install_package "$dep" hidden
         done
     fi
 
-    # **ビルド用のパッケージをアーキテクチャに応じてインストール**
-    debug_log "INFO" "🔧 Installing build dependencies for architecture: $arch"
-
+    # **ビルド環境の準備**
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         install_package make hidden
         install_package gcc hidden
@@ -1334,7 +1324,6 @@ install_build() {
         install_package ncurses-dev hidden
         install_package libcurl4-openssl-dev hidden
         install_package libxml2-dev hidden
-        [ "$arch" = "arm" ] && install_package gcc-arm-linux-gnueabihf hidden
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         install_package build-base hidden
         install_package gcc hidden
@@ -1348,56 +1337,43 @@ install_build() {
         install_package ncurses-dev hidden
         install_package curl-dev hidden
         install_package libxml2-dev hidden
-        [ "$arch" = "arm" ] && install_package gcc-arm-none-eabi hidden
     else
         echo "Error: Unsupported package manager '$PACKAGE_MANAGER'." >&2
         return 1
     fi
 
-    # **ビルド前のパッケージ名を取得**
-    local built_package="${package_name#build_}"
+    # **ビルド開始メッセージ**
+    echo "$(get_message "MSG_BUILD_START" | sed "s/{pkg}/$built_package/")"
 
-    # **すでにインストールされているか確認**
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if opkg list-installed | grep -q "^$built_package "; then
-            [ "$hidden" != "yes" ] && echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$built_package/")"
-            return 0
-        fi
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if apk info -e "$built_package" >/dev/null 2>&1; then
-            [ "$hidden" != "yes" ] && echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$built_package/")"
-            return 0
-        fi
+    # **`custom-package.db` からアーキテクチャに対応する `build_command` を取得**
+    local build_command=$(jq -r --arg pkg "$package_name" --arg arch "$arch" '.[$pkg].build_commands[$arch] // empty' "$CUSTOM_PACKAGE_DB" 2>/dev/null)
+    
+    if [ -z "$build_command" ]; then
+        debug_log "ERROR" "No build command found for $package_name on architecture $arch."
+        echo "$(get_message "MSG_BUILD_FAIL" | sed "s/{pkg}/$built_package/")"
+        return 1
     fi
 
-    # **ビルド開始**
-    debug_log "INFO" "⚙️ Building package: $built_package"
+    debug_log "INFO" "Executing build command: $build_command"
+    
+    # **ビルド実行**
     local start_time=$(date +%s)
-
-    if ! build_package "$package_name"; then
+    if ! eval "$build_command"; then
         echo "$(get_message "MSG_BUILD_FAIL" | sed "s/{pkg}/$built_package/")"
         debug_log "ERROR" "Build failed for package: $built_package"
         return 1
     fi
-
     local end_time=$(date +%s)
     local build_time=$((end_time - start_time))
+    
     echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$built_package/" | sed "s/{time}/$build_time/")"
     debug_log "INFO" "Build time for $built_package: $build_time seconds"
 
-    # **package.db の適用（ビルド用設定）**
-    if jq -e --arg pkg "$built_package" '.[$pkg]?' "$custom_package_db" >/dev/null 2>&1; then
-        build_commands=$(jq -r --arg pkg "$built_package" '.[$pkg].build_commands[]?' "$custom_package_db")
-        if [ -n "$build_commands" ] && [ "$build_commands" != "null" ]; then
-            debug_log "INFO" "📜 Applying custom build configuration"
-            eval "$build_commands"
-        fi
-    fi
-
-    # **ビルド後のパッケージのインストール**
+    # **ビルド完了後、`install_package()` を実行**
     install_package "$built_package"
+    
     echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$built_package/")"
-    debug_log "INFO" "✅ Successfully built and installed package: $built_package"
+    debug_log "INFO" "Successfully built and installed package: $built_package"
 }
 
 ##################################################################################################
