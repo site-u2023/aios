@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-14-00"
+SCRIPT_VERSION="2025.02.20-14-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1073,13 +1073,12 @@ install_package() {
     local test_mode="no"
     local force_install="no"
     local update_mode="no"
-    local use_custom="no"
-    local use_custom_only="no"
-    local ignore_dependencies="no"
+    local custom_mode=0  # 0: なし, 1: custom1, 2: custom2
+    local dependencies_mode=1  # 1: 自動インストール, 0: 依存関係無視
     local package_name=""
     
     local package_db_remote="${BASE_URL}/custom-package.db"
-    local package_db_local="${CACHE_DIR}/custom-package.db"
+    local package_db_cache="${CACHE_DIR}/custom-package.db"
     local update_cache="${CACHE_DIR}/update.ch"
 
     # **オプションの処理**
@@ -1093,9 +1092,9 @@ install_package() {
             test) test_mode="yes" ;;
             force) force_install="yes" ;;
             update) update_mode="yes" ;;
-            custom1) use_custom_only="yes" ;;
-            custom2) use_custom="yes" ;;
-            dependencies) ignore_dependencies="yes" ;;
+            custom1) custom_mode=1 ;;
+            custom2) custom_mode=2 ;;
+            dependencies) dependencies_mode=0 ;;
             *)
                 if [ -z "$package_name" ]; then
                     package_name="$arg"
@@ -1119,82 +1118,103 @@ install_package() {
         return 1
     fi
 
-    # **GitHub から custom-package.db をダウンロード**
-    if [ "$use_custom" = "yes" ] || [ "$use_custom_only" = "yes" ]; then
-        debug_log "INFO" "🌐 custom-package.db を GitHub から取得中..."
-        if wget -q -O "$package_db_local.tmp" "$package_db_remote"; then
-            mv "$package_db_local.tmp" "$package_db_local"
-            debug_log "INFO" "✅ 最新の custom-package.db を取得しました。"
-        else
-            debug_log "WARN" "⚠️ custom-package.db の取得に失敗しました。スキップします。"
-            use_custom="no"
-            use_custom_only="no"
+    # **GitHub から `custom-package.db` を取得**
+    download_custom_package_db() {
+        if [ ! -f "$package_db_cache" ]; then
+            debug_log "INFO" "🌐 custom-package.db を GitHub から取得中..."
+            if wget -q -O "$package_db_cache.tmp" "$package_db_remote"; then
+                mv "$package_db_cache.tmp" "$package_db_cache"
+                debug_log "INFO" "✅ custom-package.db を取得しました。"
+            else
+                debug_log "WARN" "⚠️ custom-package.db の取得に失敗しました。"
+                rm -f "$package_db_cache.tmp"
+            fi
         fi
+    }
+    [ "$custom_mode" -ne 0 ] && download_custom_package_db
+
+    # **jq のエラーハンドリング**
+    if [ "$custom_mode" -ne 0 ] && ! command -v jq >/dev/null 2>&1; then
+        debug_log "WARN" "⚠️ jq が見つかりません。custom-package.db の適用をスキップします。"
+        custom_mode=0
     fi
 
-    # **jq の存在確認**
-    if [ "$use_custom" = "yes" ] || [ "$use_custom_only" = "yes" ]; then
-        if ! command -v jq >/dev/null 2>&1; then
-            debug_log "WARN" "⚠️ jq が見つかりません。custom-package.db は使用できません。"
-            use_custom="no"
-            use_custom_only="no"
-        fi
-    fi
+    # **update の管理**
+    local current_date=$(date '+%Y-%m-%d')
 
-    # **custom-package.db の検索**
-    local custom_pkg_info=""
-    if [ "$use_custom" = "yes" ] || [ "$use_custom_only" = "yes" ]; then
-        if [ -f "$package_db_local" ]; then
-            custom_pkg_info=$(jq -r --arg pkg "$package_name" '.packages[] | select(.name==$pkg)' "$package_db_local" 2>/dev/null)
-        fi
-    fi
+    if [ "$update_mode" = "yes" ] || [ ! -f "$update_cache" ] || ! grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
+        debug_log "DEBUG" "$(get_message "MSG_RUNNING_UPDATE")"
 
-    # **custom-package.db で見つかった場合**
-    if [ -n "$custom_pkg_info" ]; then
-        local pkg_url
-        local pkg_dependencies
+        echo -en "\r$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")") "
 
-        pkg_url=$(echo "$custom_pkg_info" | jq -r '.url')
-        pkg_dependencies=$(echo "$custom_pkg_info" | jq -r '.dependencies[]?')
-
-        debug_log "INFO" "📦 $package_name を custom-package.db からインストール"
-
-        # **依存関係の処理**
-        if [ "$ignore_dependencies" != "yes" ] && [ -n "$pkg_dependencies" ]; then
-            debug_log "INFO" "🔗 依存関係: $pkg_dependencies"
-            for dep in $pkg_dependencies; do
-                install_package custom1 "$dep"
+        # **スピナー**
+        spin() {
+            local spin_chars='-\|/'
+            local i=0
+            while true; do
+                printf "\r%s %s" "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")" "${spin_chars:i++%4:1}"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep 200000
+                else
+                    for _ in $(seq 1 10); do sleep 0; done
+                fi
             done
+        }
+
+        echo -ne "\e[?25l"
+        spin &  
+        SPINNER_PID=$!
+
+        cleanup_spinner() {
+            if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
+                kill "$SPINNER_PID" >/dev/null 2>&1
+                sleep 1
+                kill -9 "$SPINNER_PID" >/dev/null 2>&1
+            fi
+            unset SPINNER_PID
+        }
+
+        trap cleanup_spinner EXIT INT TERM
+
+        # **update 実行**
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            opkg update > "${LOG_DIR}/opkg_update.log" 2>&1
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            apk update > "${LOG_DIR}/apk_update.log" 2>&1
         fi
 
-        # **パッケージのダウンロード & インストール**
-        if wget -q -O "/tmp/$package_name.ipk" "$pkg_url"; then
-            debug_log "INFO" "✅ $package_name をダウンロード完了"
-            opkg install "/tmp/$package_name.ipk"
-            rm "/tmp/$package_name.ipk"
-        else
-            debug_log "ERROR" "❌ $package_name のダウンロードに失敗"
-            return 1
-        fi
+        cleanup_spinner
+        echo -ne "\e[?25h"
+        printf "\r%-50s\r" ""
 
-        return 0
+        echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
+        printf "\r%s\n" "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
+        trap - EXIT
+    fi
+    
+    # **インストール前の確認**
+    if [ "$confirm_install" = "yes" ]; then
+        while true; do
+            echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
+            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
+            read -r yn
+            case "$yn" in
+                [Yy]*) break ;;
+                [Nn]*) return 1 ;;
+                *) echo "Invalid input. Please enter Y or N." ;;
+            esac
+        done
     fi
 
-    # **custom1 の場合、ここで終了**
-    if [ "$use_custom_only" = "yes" ]; then
-        debug_log "ERROR" "❌ $package_name は custom-package.db に存在しません"
-        return 1
+    debug_log "DEBUG" "Installing package: $package_name"
+    if [ "$DEV_NULL" = "on" ]; then
+        $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1
+    else
+        $PACKAGE_MANAGER install "$package_name"
     fi
 
-    # **通常の opkg / apk インストール**
-    debug_log "INFO" "📦 $package_name を $PACKAGE_MANAGER からインストール"
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        opkg install "$package_name"
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        apk add "$package_name"
-    fi
-
-    return 0
+    echo "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")"
+    debug_log "DEBUG" "Successfully installed package: $package_name"
 }
 
 #########################################################################
