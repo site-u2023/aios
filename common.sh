@@ -1148,10 +1148,10 @@ install_package() {
 
         # **実際の update コマンド**
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            opkg update > /tmp/aios/opkg_update.log 2>&1
+            opkg update > ${LOG_DIR}/opkg_update.log 2>&1
             UPDATE_STATUS=$?
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            apk update > /tmp/aios/apk_update.log 2>&1
+            apk update > ${LOG_DIR}/apk_update.log 2>&1
             UPDATE_STATUS=$?
         fi
 
