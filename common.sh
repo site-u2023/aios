@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-11-28"
+SCRIPT_VERSION="2025.02.20-11-29"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1167,28 +1167,11 @@ install_package() {
 	# **エラーハンドリング**
 	if [ "$UPDATE_STATUS" -ne 0 ]; then
     	    debug_log "ERROR" "$(get_message "MSG_UPDATE_FAILED")"
-    	    echo "$(get_message "MSG_UPDATE_FAILED")"
+	    printf "\r%s %s" "$(color red "$(get_message "MSG_UPDATE_FAILED")")            " # `\r` で行を上書き
     	    return 1
 	else
-    	    echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
-
-    	    # **パッケージ名とバージョンを取得**
-    	    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        	file_name="$package_name"
-        	file_version=$(opkg info "$package_name" 2>/dev/null | grep -m1 "Version:" | awk '{print $2}')
-    	    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        	file_name="$package_name"
-        	file_version=$(apk info "$package_name" 2>/dev/null | grep -m1 "$package_name-" | cut -d'-' -f2)
-    	    fi
-
             # **アップデート完了メッセージ**
-	    printf "\r%s %s" "$(color cyan "$(get_message "MSG_UPDATE_SUCCESS")")            " # `\r` で行を上書き
-	    #echo -e "\r$(get_message "MSG_UPDATE_COMPLETE")            "  # `\r` で行を上書き
-     
-    	    # **パッケージが更新された場合のみ表示**
-    	    if [ -n "$file_name" ] && [ -n "$file_version" ]; then
-        	echo "$(get_message "MSG_UPDATE_COMPLETE" | sed "s/{file}/$file_name/g" | sed "s/{version}/$file_version/g")"
-    	    fi
+	    printf "\r%s %s" "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")            " # `\r` で行を上書き
 	fi
 
         # **トラップ解除**
