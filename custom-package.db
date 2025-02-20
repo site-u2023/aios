@@ -1,10 +1,21 @@
 {
-  "luci-app-cpu-status": {
-    "fetch_latest": "https://github.com/gSpotx2f/packages-openwrt/raw/master/current/",
-    "extract_rule": {
-      "start": "current/luci-app-cpu-status",
-      "end": ".ipk"
+  "uconv": {
+    "description": "Unicode conversion tool for OpenWrt",
+    "source": "https://github.com/example/uconv",
+    "version": "latest",
+    "arch": ["mips", "arm", "x86_64"],
+    "dependencies": ["libiconv", "libintl", "zlib"],
+    "install": {
+      "method": "opkg",
+      "url": "https://github.com/example/uconv/releases/latest/download/uconv_{arch}.ipk"
     },
-    "dependencies": ["luci-base"]
+    "build": {
+      "dependencies": ["make", "gcc", "git", "libtool", "automake", "pkg-config", "zlib-dev", "libssl-dev", "libicu-dev", "ncurses-dev"],
+      "commands": [
+        "./configure --prefix=/usr",
+        "make -j$(nproc)",
+        "make install"
+      ]
+    }
   }
 }
