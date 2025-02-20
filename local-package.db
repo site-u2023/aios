@@ -1,13 +1,10 @@
 SCRIPT_VERSION="2025.02.20-00-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION package.db \033[0m"
 
-[custom_build_uconv]
-# uconv のビルドに必要なパッケージ
-dependencies="make gcc git libtool automake pkg-config zlib-dev libssl-dev libicu-dev ncurses-dev"
-
-# uconv のビルド手順
-[custom_build_uconv_build]
-build_command="./configure && make -j$(nproc) && make install"
+[uconv]
+uci set uconv.@settings[0].enabled=1
+uci commit uconv
+/etc/init.d/uconv restart
 
 [ttyd]
 uci del_list ttyd.@ttyd[0].client_option='theme={"background": "black"}'
