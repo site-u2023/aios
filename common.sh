@@ -1169,7 +1169,7 @@ install_package() {
         fi
     fi
 
-    echo "$(get_message "MSG_PACKAGE_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")"
+    echo "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")"
     debug_log "INFO" "Successfully installed package: $package_name"
 }
 
