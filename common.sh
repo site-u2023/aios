@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-11-07"
+SCRIPT_VERSION="2025.02.20-11-08"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1062,9 +1062,14 @@ install_package() {
     local set_disabled="no"
     local hidden="no"
     local test_mode="no"
+    local force_install="no"
+    local update_mode="no"
     local package_name=""
+    local package_db_remote="${BASE_URL}/packages.db"
+    local package_db_local="${CACHE_DIR}/local-package.db"
+    local update_cache="${CACHE_DIR}/update.ch"
 
-    # オプションの処理
+    # **オプションの処理**
     for arg in "$@"; do
         case "$arg" in
             yn) confirm_install="yes" ;;
@@ -1073,6 +1078,8 @@ install_package() {
             disabled) set_disabled="yes" ;;
             hidden) hidden="yes" ;;
             test) test_mode="yes" ;;
+            force) force_install="yes" ;;
+            update) update_mode="yes" ;;
             *)
                 if [ -z "$package_name" ]; then
                     package_name="$arg"
@@ -1088,7 +1095,7 @@ install_package() {
         return 1
     fi
 
-    # パッケージマネージャーの確認（downloader_ch のキャッシュを参照）
+    # **パッケージマネージャーの確認**
     if [ -f "${CACHE_DIR}/downloader_ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
     else
@@ -1096,8 +1103,8 @@ install_package() {
         return 1
     fi
 
-    # すでにインストールされているか確認（testモード時はスキップ）
-    if [ "$test_mode" = "no" ]; then
+    # **パッケージのインストール済みチェック**
+    if [ "$test_mode" = "no" ] && [ "$force_install" = "no" ]; then
         if [ "$PACKAGE_MANAGER" = "opkg" ] && opkg list-installed | grep -q "^$package_name "; then
             [ "$hidden" != "yes" ] && echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
             return 0
@@ -1107,25 +1114,20 @@ install_package() {
         fi
     fi
 
-    # 最初の実行時に一度だけ update を実行
-    if [ ! -f "${CACHE_DIR}/update.ch" ]; then
+    # **update の管理**
+    local current_date
+    current_date=$(date '+%Y-%m-%d')
+
+    if [ "$update_mode" = "yes" ] || [ ! -f "$update_cache" ] || ! grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
         debug_log "INFO" "Running package manager update..."
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            if opkg update > /dev/null 2>&1; then
-                debug_log "INFO" "opkg update completed successfully."
-            else
-                debug_log "ERROR" "opkg update failed."
-            fi
+            opkg update && echo "LAST_UPDATE=$current_date" > "$update_cache"
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            if apk update > /dev/null 2>&1; then
-                debug_log "INFO" "apk update completed successfully."
-            else
-                debug_log "ERROR" "apk update failed."
-            fi
+            apk update && echo "LAST_UPDATE=$current_date" > "$update_cache"
         fi
-        touch "${CACHE_DIR}/update.ch"
     fi
 
+    # **インストール前の確認**
     if [ "$confirm_install" = "yes" ]; then
         while true; do
             echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
@@ -1145,6 +1147,30 @@ install_package() {
     else
         $PACKAGE_MANAGER install "$package_name"
     fi
+
+    # **package.db（ローカル）適用**
+    if [ "$skip_package_db" = "no" ] && [ -f "$package_db_local" ]; then
+        if grep -q "^$package_name=" "$package_db_local"; then
+            eval "$(grep "^$package_name=" "$package_db_local" | cut -d'=' -f2-)"
+        fi
+    fi
+
+    # **言語パッケージ適用**
+    if [ "$skip_lang_pack" = "no" ] && [ -f "$package_db_local" ]; then
+        if grep -q "^$package_name-lang=" "$package_db_local"; then
+            eval "$(grep "^$package_name-lang=" "$package_db_local" | cut -d'=' -f2-)"
+        fi
+    fi
+
+    # **設定の有効化**
+    if [ "$set_disabled" = "no" ]; then
+        if [ -f "$package_db_local" ] && grep -q "^$package_name-enable=" "$package_db_local"; then
+            eval "$(grep "^$package_name-enable=" "$package_db_local" | cut -d'=' -f2-)"
+        fi
+    fi
+
+    echo "$(get_message "MSG_PACKAGE_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")"
+    debug_log "INFO" "Successfully installed package: $package_name"
 }
 
 #########################################################################
@@ -1498,7 +1524,7 @@ check_common() {
             download "hidden" "messages.db"
             download "hidden" "openwrt.db"
             download "hidden" "country.db"
-            download "hidden" "packages.db"
+            download "hidden" "local-package.db"
             check_openwrt
             check_downloader
             select_country "$lang_code"
@@ -1507,7 +1533,7 @@ check_common() {
             download "messages.db"
             download "openwrt.db"
             download "country.db"
-            download "packages.db"
+            download "local-package.db"
             check_openwrt
             check_downloader
             select_country "$lang_code"
