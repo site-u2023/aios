@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-11-00"
+SCRIPT_VERSION="2025.02.20-11-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -436,6 +436,7 @@ download() {
         case "$1" in
             hidden) hidden_mode="true" ;;
             quiet) quiet_mode="true" ;;
+            debug) DEBUG_MODE="true" ;;
             *) file_name="$1" ;;  # 最初に見つかった非オプション引数をファイル名とする
         esac
         shift
@@ -467,13 +468,16 @@ download() {
         remote_version="2025.01.01-00-00"
     fi
 
+    # **hidden モード時、ローカルファイルがあるなら即リターン**
+    if [ "$hidden_mode" = "true" ] && [ -f "$install_path" ]; then
+        debug_log "INFO" "hidden mode enabled - Skipping download for $file_name"
+        return 0
+    fi
+
     # **バージョンチェック**
     if [ -z "$local_version" ]; then
         debug_log "INFO" "No local version found for $file_name. Downloading..."
     elif [ "$local_version" = "$remote_version" ]; then
-        if [ "$hidden_mode" = "true" ]; then
-            return 0
-        fi
         if [ "$quiet_mode" != "true" ]; then
             echo "$(color yellow "$file_name is already up-to-date. (Version: $local_version)")"
         fi
@@ -512,7 +516,6 @@ download() {
 
     return 0
 }
-
 
 #######################################################################
 get_script_version() {
