@@ -1124,7 +1124,7 @@ install_package() {
         debug_log "DEBUG" "$(get_message "MSG_RUNNING_UPDATE")"
 
         # **アップデートの開始メッセージ（hidden でも必ず表示）**
-        echo -n "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")"
+        echo -ne "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")"
 
         # **スピナー表示を開始（バックグラウンド）**
 	    spin() {
