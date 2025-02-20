@@ -1171,13 +1171,9 @@ install_package() {
     	    return 1
 	else
     	    echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
-
-            # **アップデート完了メッセージ**
-	    printf "\r%s %s" "$(color cyan "$(get_message "MSG_UPDATE_COMPLETE")")            " # `\r` で行を上書き
-	    #echo -e "\r$(get_message "MSG_UPDATE_COMPLETE")            "  # `\r` で行を上書き
  
     	    # **opkg update / apk update の完了メッセージ**
-    	    echo "$(get_message "MSG_UPDATE_SUCCESS")"
+    	    #echo "$(get_message "MSG_UPDATE_SUCCESS")"
 
     	    # **パッケージ名とバージョンを取得**
     	    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
@@ -1188,6 +1184,10 @@ install_package() {
         	file_version=$(apk info "$package_name" 2>/dev/null | grep -m1 "$package_name-" | cut -d'-' -f2)
     	    fi
 
+            # **アップデート完了メッセージ**
+	    printf "\r%s %s" "$(color cyan "$(get_message "MSG_UPDATE_SUCCESS")")            " # `\r` で行を上書き
+	    #echo -e "\r$(get_message "MSG_UPDATE_COMPLETE")            "  # `\r` で行を上書き
+     
     	    # **パッケージが更新された場合のみ表示**
     	    if [ -n "$file_name" ] && [ -n "$file_version" ]; then
         	echo "$(get_message "MSG_UPDATE_COMPLETE" | sed "s/{file}/$file_name/g" | sed "s/{version}/$file_version/g")"
