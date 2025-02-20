@@ -269,24 +269,23 @@ check_openwrt() {
 }
 
 #########################################################################
-# check_architecture
-#########################################################################
-#########################################################################
 # check_architecture: OpenWrtのアーキテクチャを確認・キャッシュ
 #########################################################################
 check_architecture() {
     local arch_file="${CACHE_DIR}/architecture.ch"
 
-    # 既にキャッシュがある場合は再取得しない
+    # **キャッシュがあれば再取得しない**
     if [ -f "$arch_file" ]; then
+        arch=$(cat "$arch_file" | tr -d '\r')
+        debug_log "INFO" "Using cached architecture: $arch"
         return 0
     fi
 
-    # **アーキテクチャの取得**
+    # **アーキテクチャを取得**
     local arch=$(uname -m)
 
-    # **キャッシュに保存**
-    echo "ARCHITECTURE=$arch" > "$arch_file"
+    # **キャッシュに保存（アーキテクチャ名のみ）**
+    echo "$arch" > "$arch_file"
 
     debug_log "INFO" "Architecture detected: $arch"
 }
@@ -1330,12 +1329,21 @@ install_build() {
     # **ビルド後のパッケージ名を取得**
     local built_package="${package_name#build_}"
 
-    # ** 取得したバージョン & アーキテクチャを変数に代入 **
+    # ** 取得したバージョンを変数に代入 **
     if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
         openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
         if [ -z "$openwrt_version" ]; then
             openwrt_version=$(check_openwrt)
             echo "$openwrt_version" > "${CACHE_DIR}/openwrt.ch"  # キャッシュを更新
+        fi
+    fi
+
+    # ** 取得したアーキテクチャを変数に代入 **
+    if [ -f "${CACHE_DIR}/architecture.ch" ]; then
+        arch=$(cat "${CACHE_DIR}/architecture.ch")
+        if [ -z "$arch" ]; then
+            arch=$(check_architecture)
+            echo "$arch" > "${CACHE_DIR}/architecture.ch"  # キャッシュを更新
         fi
     fi
 
