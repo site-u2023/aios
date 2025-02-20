@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-13-01"
+SCRIPT_VERSION="2025.02.20-14-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1002,89 +1002,68 @@ normalize_language() {
 #
 # 【概要】
 # 指定されたパッケージをインストールし、オプションに応じて以下の処理を実行する。
-#　GitHub の package.db のリモート管理　　＜＜＜　追加要件
+# ✅ GitHub の `custom-package.db` をリモート管理し、オプションにより適用可能
+# ✅ OpenWrt / Alpine の `opkg update` / `apk update` を適用（条件付き）
+# ✅ 言語パッケージ・設定ファイル (`local-package.db`) の適用
 #
 # 【フロー】
-# 2️⃣ デバイスにパッケージがインストール済みか確認
-# 1️⃣ update は初回に一回後最適な管理（２４時間で更新）、opkg update / apk update を実行
-# 3️⃣ パッケージがリポジトリに存在するか確認
+# 1️⃣ デバイスにパッケージがインストール済みか確認
+# 2️⃣ `update.ch` のキャッシュをチェックし、`opkg update / apk update` を実行
+# 3️⃣ GitHub の `custom-package.db` を取得・適用（オプションにより制御）
 # 4️⃣ インストール確認（yn オプションが指定された場合）
-# 5️⃣ インストールの実行
-# 6️⃣ 言語パッケージの適用（lang オプションがない場合）
-# 7️⃣ local-package.db の適用（notpack オプションがない場合）
+# 5️⃣ パッケージのインストールを実行
+# 6️⃣ 言語パッケージの適用（nolang オプションでスキップ可能）
+# 7️⃣ `local-package.db` の適用（notpack オプションでスキップ可能）
 # 8️⃣ 設定の有効化（デフォルト enabled、disabled オプションで無効化）
 #
 # 【グローバルオプション】
-# DEV_NULL
-# DEBUG : 要所にセット
+# DEV_NULL : 標準出力の制御
+# DEBUG    : デバッグモード（詳細ログ出力）
 #
 # 【オプション】
-# - yn         : インストール前に確認する（デフォルト: 確認なし）
+# - yn         : インストール前に確認（デフォルト: 確認なし）
 # - nolang     : 言語パッケージの適用をスキップ（デフォルト: 適用する）
-# - force      : 強制インストール （デフォルト: 適用しない）
-# - notpack    : package.db での設定適用をスキップ（デフォルト: 適用する）
+# - force      : 強制インストール（デフォルト: 適用しない）
+# - notpack    : `local-package.db` での設定適用をスキップ（デフォルト: 適用する）
 # - disabled   : 設定を disabled にする（デフォルト: enabled）
-# - hidden     : 既にインストール済みの場合、"パッケージ xxx はすでにインストールされています" のメッセージを非表示にする
-# - test       : インストール済みのパッケージであっても、インストール処理を実行する
-# - update     : opkg update / apk update を強制的に実行し、update.ch のキャッシュを無視する
+# - hidden     : 既にインストール済みの場合のメッセージを非表示
+# - test       : インストール済みのパッケージでも処理を実行
+# - update     : `opkg update` / `apk update` を強制実行（`update.ch` のキャッシュ無視）
+# - custom1    : GitHub の `custom-package.db` のみ適用し、通常の `opkg / apk` は実行しない
+# - custom2    : `custom-package.db` 適用後に `opkg / apk` も実行する
+# - dependencies : `custom-package.db` で依存関係のパッケージも自動インストール（デフォルト: 適用）
 #
 # 【仕様】
-# - update.ch を書き出し、updateを管理する（${CACHE_DIR}/update.ch）
-# - update オプションが指定された場合、update.ch のキャッシュを無視して強制的に update を実行
-# - downloader_ch から opkg または apk を取得し、適切なパッケージ管理ツールを使用
-# - messages.db を参照し、すべてのメッセージを取得（JP/US 対応）
-# - local-package.db の設定がある場合、uci set を実行し適用（notset オプションで無効化可能）
-# - 言語パッケージは luci-app-xxx 形式を対象に適用（dont オプションで無効化可能）
-# - 設定の有効化はデフォルト enabled、disabled オプション指定時のみ disabled
-# - update は明示的に install_package update で実行（パッケージインストール時には自動実行しない）
+# - `update.ch` を書き出し、`opkg update / apk update` の実行管理
+# - `downloader_ch` から `opkg` または `apk` を判定し、適切なパッケージ管理ツールを使用
+# - `custom-package.db` を JSON 形式で解析し、オプションにより適用
+# - `jq` がない場合は自動でインストールせず、`custom-package.db` の適用をスキップ
+# - `local-package.db` の設定がある場合、`uci set` を実行し適用（notpack オプションでスキップ可能）
+# - 言語パッケージの適用対象は `luci-app-*`（nolang オプションでスキップ可能）
+# - 設定の有効化はデフォルト enabled、disabled オプションで無効化可能
+# - `update` は明示的に `install_package update` で実行（インストール時には自動実行しない）
 #
 # 【使用例】
-# - install_package ttyd                  → ttyd をインストール（確認なし、package.db 適用、言語パック適用）
-# - install_package ttyd yn               → ttyd をインストール（確認あり）
-# - install_package ttyd nolang           → ttyd をインストール（言語パック適用なし）
-# - install_package ttyd notpack          → ttyd をインストール（package.db の適用なし）
-# - install_package ttyd disabled         → ttyd をインストール（設定を disabled にする）
+# - install_package ttyd                  → `ttyd` をインストール（確認なし、package.db 適用、言語パック適用）
+# - install_package ttyd yn               → `ttyd` をインストール（確認あり）
+# - install_package ttyd nolang           → `ttyd` をインストール（言語パック適用なし）
+# - install_package ttyd notpack          → `ttyd` をインストール（`package.db` の適用なし）
+# - install_package ttyd disabled         → `ttyd` をインストール（設定を disabled にする）
 # - install_package ttyd yn nolang disabled hidden
-#   → ttyd をインストール（確認あり、言語パック適用なし、設定を disabled にし、
-#      既にインストール済みの場合のメッセージは非表示）
-# - install_package ttyd test             → ttyd をインストール（インストール済みでも強制インストール）
-# - install_package ttyd update           → ttyd をインストール（opkg update / apk update を強制実行）
+#   → `ttyd` をインストール（確認あり、言語パック適用なし、設定を disabled にし、
+#      既にインストール済みの場合のメッセージを非表示）
+# - install_package ttyd test             → `ttyd` をインストール（インストール済みでも強制インストール）
+# - install_package ttyd update           → `ttyd` をインストール（`opkg update / apk update` を強制実行）
+# - install_package ttyd custom1          → `custom-package.db` のみ適用し、通常の `opkg / apk` は実行しない
+# - install_package ttyd custom2          → `custom-package.db` 適用後に `opkg / apk` も実行
 #
-# 【messages.dbの記述例】
+# 【messages.db の記述例】
 # [ttyd]
 # opkg update
 # uci commit ttyd
-# initd/ttyd/restat
-# [ttyd] opkg update; uci commit ttyd; initd/ttyd/restat
+# initd/ttyd/restart
+# [ttyd] opkg update; uci commit ttyd; initd/ttyd/restart
 #########################################################################
-download_package_db() {
-    local package_db_temp="${package_db_local}.tmp"
-
-    debug_log "INFO" "🌐 package.db を GitHub から取得中..."
-    
-    # `wget` で `package.db` を取得（成功した場合のみ適用）
-    if wget -q -O "$package_db_temp" "$package_db_remote"; then
-        mv "$package_db_temp" "$package_db_local"
-        debug_log "INFO" "✅ package.db を取得し、ローカルに保存しました。"
-    else
-        debug_log "WARN" "⚠️ package.db の取得に失敗しました。ローカルのデータを使用します。"
-        rm -f "$package_db_temp"  # 不完全なファイルを削除
-    fi
-}
-
-handle_package_db() {
-    # **ローカルに package.db がない場合、または `update_mode=yes` の場合にのみ取得**
-    if [ ! -f "$package_db_local" ] || [ "$update_mode" = "yes" ]; then
-        download_package_db
-    fi
-
-    # **取得に失敗した場合のフォールバック処理**
-    if [ ! -f "$package_db_local" ]; then
-        debug_log "ERROR" "❌ package.db が見つかりません。デフォルト設定で続行します。"
-        return 1
-    fi
-}
-
 install_package() {
     local confirm_install="no"
     local skip_lang_pack="no"
@@ -1094,9 +1073,13 @@ install_package() {
     local test_mode="no"
     local force_install="no"
     local update_mode="no"
+    local use_custom="no"
+    local use_custom_only="no"
+    local ignore_dependencies="no"
     local package_name=""
-    local package_db_remote="${BASE_URL}/package.db"
-    local package_db_local="${CACHE_DIR}/package.db"
+    
+    local package_db_remote="${BASE_URL}/custom-package.db"
+    local package_db_local="${CACHE_DIR}/custom-package.db"
     local update_cache="${CACHE_DIR}/update.ch"
 
     # **オプションの処理**
@@ -1110,6 +1093,9 @@ install_package() {
             test) test_mode="yes" ;;
             force) force_install="yes" ;;
             update) update_mode="yes" ;;
+            custom1) use_custom_only="yes" ;;
+            custom2) use_custom="yes" ;;
+            dependencies) ignore_dependencies="yes" ;;
             *)
                 if [ -z "$package_name" ]; then
                     package_name="$arg"
@@ -1133,120 +1119,82 @@ install_package() {
         return 1
     fi
 
-    # **GitHub から package.db をダウンロード**
-    download_package_db() {
-        if [ -f "$package_db_local" ] && [ "$update_mode" = "no" ]; then
-            debug_log "INFO" "🟢 package.db は既にローカルに存在します。"
-            return 0
-        fi
-
-        debug_log "INFO" "🌐 package.db を GitHub から取得中..."
+    # **GitHub から custom-package.db をダウンロード**
+    if [ "$use_custom" = "yes" ] || [ "$use_custom_only" = "yes" ]; then
+        debug_log "INFO" "🌐 custom-package.db を GitHub から取得中..."
         if wget -q -O "$package_db_local.tmp" "$package_db_remote"; then
             mv "$package_db_local.tmp" "$package_db_local"
-            debug_log "INFO" "✅ 最新の package.db を取得しました。"
+            debug_log "INFO" "✅ 最新の custom-package.db を取得しました。"
         else
-            debug_log "WARN" "⚠️ package.db の取得に失敗しました。ローカルのデータを使用します。"
-            rm -f "$package_db_local.tmp"  # 取得失敗時にゴミファイルを削除
+            debug_log "WARN" "⚠️ custom-package.db の取得に失敗しました。スキップします。"
+            use_custom="no"
+            use_custom_only="no"
         fi
-    }
-    download_package_db
+    fi
 
-    # **update の管理**
-    local current_date
-    current_date=$(date '+%Y-%m-%d')
+    # **jq の存在確認**
+    if [ "$use_custom" = "yes" ] || [ "$use_custom_only" = "yes" ]; then
+        if ! command -v jq >/dev/null 2>&1; then
+            debug_log "WARN" "⚠️ jq が見つかりません。custom-package.db は使用できません。"
+            use_custom="no"
+            use_custom_only="no"
+        fi
+    fi
 
-    if [ "$update_mode" = "yes" ] || [ ! -f "$update_cache" ] || ! grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
-        debug_log "DEBUG" "$(get_message "MSG_RUNNING_UPDATE")"
+    # **custom-package.db の検索**
+    local custom_pkg_info=""
+    if [ "$use_custom" = "yes" ] || [ "$use_custom_only" = "yes" ]; then
+        if [ -f "$package_db_local" ]; then
+            custom_pkg_info=$(jq -r --arg pkg "$package_name" '.packages[] | select(.name==$pkg)' "$package_db_local" 2>/dev/null)
+        fi
+    fi
 
-        # **アップデートの開始メッセージ**
-        echo -en "\r$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")") "
+    # **custom-package.db で見つかった場合**
+    if [ -n "$custom_pkg_info" ]; then
+        local pkg_url
+        local pkg_dependencies
 
-        # **スピナー表示を開始（バックグラウンド）**
-        spin() {
-            local spin_chars='-\|/'
-            local i=0
-            while true; do
-                printf "\r%s %s" "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")" "${spin_chars:i++%4:1}"
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep 200000  # `usleep` がある場合（0.2秒）
-                else
-                    for _ in $(seq 1 10); do sleep 0; done  # `usleep` がない場合の代替（約0.1秒）
-                fi
+        pkg_url=$(echo "$custom_pkg_info" | jq -r '.url')
+        pkg_dependencies=$(echo "$custom_pkg_info" | jq -r '.dependencies[]?')
+
+        debug_log "INFO" "📦 $package_name を custom-package.db からインストール"
+
+        # **依存関係の処理**
+        if [ "$ignore_dependencies" != "yes" ] && [ -n "$pkg_dependencies" ]; then
+            debug_log "INFO" "🔗 依存関係: $pkg_dependencies"
+            for dep in $pkg_dependencies; do
+                install_package custom1 "$dep"
             done
-        }
-
-        # **カーソルを隠す**
-        echo -ne "\e[?25l"
-
-        # スピナーをバックグラウンドで実行し、プロセスIDを保存
-        spin &  
-        SPINNER_PID=$!
-
-        # **スピナー停止処理**
-        cleanup_spinner() {
-            if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
-                kill "$SPINNER_PID" >/dev/null 2>&1
-                sleep 1
-                kill -9 "$SPINNER_PID" >/dev/null 2>&1
-            fi
-            unset SPINNER_PID
-        }
-
-        trap cleanup_spinner EXIT INT TERM
-
-        # **実際の update コマンド**
-        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            opkg update > "${LOG_DIR}/opkg_update.log" 2>&1
-            UPDATE_STATUS=$?
-        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            apk update > "${LOG_DIR}/apk_update.log" 2>&1
-            UPDATE_STATUS=$?
         fi
 
-        # **スピナーを停止**
-        cleanup_spinner
-        echo -ne "\e[?25h"  # カーソルを再表示
-
-        # ✅ **スピナー行の完全消去**
-        printf "\r%-50s\r" ""
-
-        # ✅ **エラーハンドリング**
-        if [ "$UPDATE_STATUS" -ne 0 ]; then
-            debug_log "ERROR" "$(get_message "MSG_UPDATE_FAILED")"
-            printf "\r%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
-            return 1
+        # **パッケージのダウンロード & インストール**
+        if wget -q -O "/tmp/$package_name.ipk" "$pkg_url"; then
+            debug_log "INFO" "✅ $package_name をダウンロード完了"
+            opkg install "/tmp/$package_name.ipk"
+            rm "/tmp/$package_name.ipk"
         else
-            echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
-            printf "\r%s\n" "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
+            debug_log "ERROR" "❌ $package_name のダウンロードに失敗"
+            return 1
         fi
 
-        # **トラップ解除**
-        trap - EXIT
-    fi
-    
-    # **インストール前の確認**
-    if [ "$confirm_install" = "yes" ]; then
-        while true; do
-            echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
-            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
-            read -r yn
-            case "$yn" in
-                [Yy]*) break ;;
-                [Nn]*) return 1 ;;
-                *) echo "Invalid input. Please enter Y or N." ;;
-            esac
-        done
+        return 0
     fi
 
-    debug_log "DEBUG" "Installing package: $package_name"
-    if [ "$DEV_NULL" = "on" ]; then
-        $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1
-    else
-        $PACKAGE_MANAGER install "$package_name"
+    # **custom1 の場合、ここで終了**
+    if [ "$use_custom_only" = "yes" ]; then
+        debug_log "ERROR" "❌ $package_name は custom-package.db に存在しません"
+        return 1
     fi
 
-    echo "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")"
-    debug_log "DEBUG" "Successfully installed package: $package_name"
+    # **通常の opkg / apk インストール**
+    debug_log "INFO" "📦 $package_name を $PACKAGE_MANAGER からインストール"
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        opkg install "$package_name"
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        apk add "$package_name"
+    fi
+
+    return 0
 }
 
 #########################################################################
