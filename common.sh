@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-14-06"
+SCRIPT_VERSION="2025.02.20-14-08"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1329,24 +1329,20 @@ install_build() {
     # **ビルド後のパッケージ名を取得**
     local built_package="${package_name#build_}"
 
-    # ** 取得したバージョンを変数に代入 **
+    # ** キャッシュからバージョンとアーキテクチャを取得 **
     if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
         openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
     fi
-
-    # ** 取得したアーキテクチャを変数に代入 **
     if [ -f "${CACHE_DIR}/architecture.ch" ]; then
         arch=$(cat "${CACHE_DIR}/architecture.ch")
     fi
 
-    echo "OpenWrt Version: $openwrt_version"
-    echo "Architecture: $arch"
-
-    debug_log "INFO" "Using architecture: $arch"
-    debug_log "INFO" "Using OpenWrt version: $openwrt_version"
+    debug_log "DEBUG" "Using architecture: $arch"
+    debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
 
     # **`custom-package.db` からビルドに必要な `dependencies` を取得**
-    local dependencies=$(jq -r --arg pkg "$package_name" '.[$pkg].dependencies // empty' "$CUSTOM_PACKAGE_DB" 2>/dev/null)
+    local dependencies=$(jq -r --arg arch "$arch" '.[$package_name].build.dependencies.opkg // empty | join(" ")' /tmp/cache/custom-package.db 2>/dev/null)
+  
     if [ -n "$dependencies" ]; then
         debug_log "INFO" "Installing dependencies: $dependencies"
         for dep in $dependencies; do
@@ -1357,7 +1353,8 @@ install_build() {
     fi
 
     # **ビルド環境の準備**
-    install_package make hidden
+    install_package jq yn hidden
+    install_package make yn hidden
     install_package gcc hidden
     install_package git hidden
     install_package libtool hidden
