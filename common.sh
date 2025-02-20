@@ -1332,18 +1332,11 @@ install_build() {
     # ** 取得したバージョンを変数に代入 **
     if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
         openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
-        if [ -z "$openwrt_version" ]; then
-            openwrt_version=$(check_openwrt)
-            echo "$openwrt_version" > "${CACHE_DIR}/openwrt.ch"  # キャッシュを更新
-        fi
     fi
 
     # ** 取得したアーキテクチャを変数に代入 **
     if [ -f "${CACHE_DIR}/architecture.ch" ]; then
         arch=$(cat "${CACHE_DIR}/architecture.ch")
-        if [ -z "$arch" ]; then
-            arch=$(check_architecture)
-            echo "$arch" > "${CACHE_DIR}/architecture.ch"  # キャッシュを更新
         fi
     fi
 
