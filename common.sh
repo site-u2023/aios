@@ -1091,7 +1091,7 @@ install_package() {
     done
 
     if [ -z "$package_name" ]; then
-        echo "$(get_message "MSG_ERROR_NO_PACKAGE")" >&2
+        echo "$(get_message "MSG_INSTALL_ABORTED")" >&2
         return 1
     fi
 
