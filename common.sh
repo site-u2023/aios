@@ -1100,7 +1100,7 @@ install_package() {
     # **パッケージマネージャーの確認**
     if [ -f "${CACHE_DIR}/downloader_ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
-    else
+    else 
         echo "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")" >&2
         return 1
     fi
