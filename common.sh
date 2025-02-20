@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-10-18"
+SCRIPT_VERSION="2025.02.20-11-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -429,6 +429,7 @@ download() {
     local file_name=""
     local local_version=""
     local remote_version=""
+    local script_db="${CACHE_DIR}/script.ch"
 
     # **引数解析（順不同対応）**
     while [ "$#" -gt 0 ]; do
@@ -446,24 +447,33 @@ download() {
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
 
-    # **ローカルバージョンの取得**
-    if [ -f "$install_path" ]; then
-        local_version=$(get_script_version "$install_path" 2>/dev/null)
+    # **script.ch がなければ作成**
+    if [ ! -f "$script_db" ]; then
+        touch "$script_db"
+    fi
+
+    # **ローカルバージョンの取得（script.ch を参照）**
+    if grep -q "^${file_name}=" "$script_db"; then
+        local_version=$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)
     fi
 
     # **リモートバージョンの取得**
+    remote_version=""
     remote_version=$(wget -qO- "$remote_url" | grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' | cut -d'=' -f2 | tr -d '"')
 
-    # **バージョン情報がない場合（country.db など）**
+    # **リモートバージョンが取得できない場合は仮のバージョンを設定**
     if [ -z "$remote_version" ]; then
         debug_log "INFO" "No version information found for $file_name. Skipping version check and proceeding with download."
-        local_version=""  # バージョン比較を無効化
+        remote_version="2025.01.01-00-00"
     fi
 
-    # **ローカルのバージョンがない場合 or 異なる場合はダウンロード**
+    # **バージョンチェック**
     if [ -z "$local_version" ]; then
         debug_log "INFO" "No local version found for $file_name. Downloading..."
-    elif [ -n "$remote_version" ] && [ "$local_version" = "$remote_version" ]; then
+    elif [ "$local_version" = "$remote_version" ]; then
+        if [ "$hidden_mode" = "true" ]; then
+            return 0
+        fi
         if [ "$quiet_mode" != "true" ]; then
             echo "$(color yellow "$file_name is already up-to-date. (Version: $local_version)")"
         fi
@@ -486,12 +496,23 @@ download() {
 
     # **ダウンロード成功メッセージ**
     if [ "$quiet_mode" != "true" ]; then
-        echo "$(color green "Download completed: $file_name")"
+        echo "$(color green "Download completed: $file_name (Version: $remote_version)")"
     fi
 
     debug_log "DEBUG" "Download completed: $file_name is valid."
+
+    # **script.ch にバージョン情報を更新**
+    if grep -q "^${file_name}=" "$script_db"; then
+        sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_db"
+    else
+        echo "${file_name}=${remote_version}" >> "$script_db"
+    fi
+
+    debug_log "INFO" "Updated script.ch: ${file_name}=${remote_version}"
+
     return 0
 }
+
 
 #######################################################################
 get_script_version() {
