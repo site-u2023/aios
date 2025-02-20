@@ -748,7 +748,7 @@ select_list() {
 
         if [ -z "$selected_value" ]; then
             printf "%s\n" "$(color red "$(get_message "MSG_INVALID_SELECTION")")"
-            debug_log "WARN" "Invalid selection: '$choice'. Available options: $(cat "$list_file")"
+            debug_log "DEBUG" "Invalid selection: '$choice'. Available options: $(cat "$list_file")"
             continue
         fi
 
