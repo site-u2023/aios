@@ -1124,13 +1124,14 @@ install_package() {
         debug_log "DEBUG" "$(get_message "MSG_RUNNING_UPDATE")"
 
         # **アップデートの開始メッセージ（hidden でも必ず表示）**
-        printf "%s" "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")"
+        echo -en "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")"
 
         # **スピナー表示を開始（バックグラウンド）**
 	spin() {
     	while true; do
         	for s in '-' '\\' '|' '/'; do
-            	printf "%s %s" "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")" "$s"
+            	echo -en "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")") $s"
+
             	if command -v usleep >/dev/null 2>&1; then
                 	usleep 200000
             	else
@@ -1144,7 +1145,7 @@ install_package() {
         SPINNER_PID=$!
 
         # **トラップを設定し、エラー時にスピナーを止める**
-        trap 'kill $SPINNER_PID >/dev/null 2>&1' EXIT
+        trap 'kill "$SPINNER_PID" >/dev/null 2>&1; wait "$SPINNER_PID" 2>/dev/null || true' EXIT
 
         # **実際の update コマンド**
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
