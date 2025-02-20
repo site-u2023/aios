@@ -458,6 +458,8 @@ download() {
     local hidden_mode="false"
     local quiet_mode="${QUIET_MODE:-false}"
     local file_name=""
+    local local_version=""
+    local remote_version=""
 
     # **引数解析（順不同対応）**
     while [ "$#" -gt 0 ]; do
@@ -475,19 +477,30 @@ download() {
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
 
-    # **既存ファイルのチェック**
+    # **ローカルバージョンの取得**
     if [ -f "$install_path" ]; then
-        if [ "$hidden_mode" = "true" ]; then
-            return 0
-        fi
+        local_version=$(get_script_version "$install_path" 2>/dev/null)
+    fi
+
+    # **リモートバージョンの取得**
+    remote_version=$(wget -qO- "$remote_url" | grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' | cut -d'=' -f2 | tr -d '"')
+
+    # **リモートバージョンの取得に失敗した場合の処理**
+    if [ -z "$remote_version" ]; then
+        debug_log "ERROR" "Failed to retrieve remote version for $file_name"
+        return 1
+    fi
+
+    # **バージョンチェック & ダウンロード判断**
+    if [ -n "$local_version" ] && [ "$local_version" = "$remote_version" ]; then
         if [ "$quiet_mode" != "true" ]; then
-            echo "$(color yellow "$file_name already exists. Skipping download.")"
+            echo "$(color yellow "$file_name is already up-to-date. (Version: $local_version)")"
         fi
         return 0
     fi
 
     # **ダウンロード開始**
-    debug_log "DEBUG" "Starting download of $file_name from $remote_url"
+    debug_log "DEBUG" "Updating $file_name (Local: $local_version, Remote: $remote_version)"
     if ! $BASE_WGET "$install_path" "$remote_url"; then
         debug_log "ERROR" "Download failed: $file_name"
         return 1
@@ -501,7 +514,7 @@ download() {
 
     # **ダウンロード成功メッセージ**
     if [ "$quiet_mode" != "true" ]; then
-        echo "$(color green "Download completed: $file_name")"
+        echo "$(color green "Download completed: $file_name (Version: $remote_version)")"
     fi
 
     debug_log "DEBUG" "Download completed: $file_name is valid."
