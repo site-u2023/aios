@@ -1330,10 +1330,17 @@ install_build() {
     # **ビルド後のパッケージ名を取得**
     local built_package="${package_name#build_}"
 
-    # **アーキテクチャ & バージョン情報をキャッシュから取得**
-    check_architecture
-    local arch=$(grep "ARCHITECTURE=" "${CACHE_DIR}/architecture.ch" | cut -d'=' -f2)
-    local openwrt_version=$(grep "OPENWRT_VERSION=" "${CACHE_DIR}/architecture.ch" | cut -d'=' -f2)
+    # ** 取得したバージョン & アーキテクチャを変数に代入 **
+    if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
+        openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
+        if [ -z "$openwrt_version" ]; then
+            openwrt_version=$(check_openwrt)
+            echo "$openwrt_version" > "${CACHE_DIR}/openwrt.ch"  # キャッシュを更新
+        fi
+    fi
+
+    echo "OpenWrt Version: $openwrt_version"
+    echo "Architecture: $arch"
 
     debug_log "INFO" "Using architecture: $arch"
     debug_log "INFO" "Using OpenWrt version: $openwrt_version"
