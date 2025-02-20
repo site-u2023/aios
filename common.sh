@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-12-04"
+SCRIPT_VERSION="2025.02.20-12-05"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1123,65 +1123,65 @@ install_package() {
     if [ "$update_mode" = "yes" ] || [ ! -f "$update_cache" ] || ! grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
         debug_log "DEBUG" "$(get_message "MSG_RUNNING_UPDATE")"
 
-    # **アップデートの開始メッセージ（hidden でも必ず表示）**
-    echo -en "\r$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")") "
+        # **アップデートの開始メッセージ（hidden でも必ず表示）**
+        echo -en "\r$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")") "
 
-    # **スピナー表示を開始（バックグラウンド）**
-    spin() {
-        local delay=0.1  # スピナーの更新間隔
-        local spin_chars='-\|/'  # スピナーの回転パターン
-        local i=0
+        # **スピナー表示を開始（バックグラウンド）**
+        spin() {
+            local delay=0.1  # スピナーの更新間隔
+            local spin_chars='-\|/'  # スピナーの回転パターン
+            local i=0
 
-        while true; do
-            # スピナーの表示
-            printf "\r%s %s" "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")" "${spin_chars:i++%4:1}"
-        
-            # `usleep` があれば精密な待機、それ以外は `sleep`
-            if command -v usleep >/dev/null 2>&1; then
-                usleep 100000  # 0.2秒 = 200,000マイクロ秒
-            else
-                sleep "$delay"
+            while true; do
+                # スピナーの表示
+                printf "\r%s %s" "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")" "${spin_chars:i++%4:1}"
+            
+                # `usleep` があれば精密な待機、それ以外は `sleep`
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep 100000  # 0.1秒 = 100,000マイクロ秒
+                else
+                    sleep "$delay"
+                fi
+            done
+        }
+
+        # スピナーをバックグラウンドで実行し、プロセスIDを保存
+        spin &  
+        SPINNER_PID=$!
+
+        # **トラップを設定し、スクリプト終了時にスピナーを確実に停止**
+        cleanup_spinner() {
+            if kill "$SPINNER_PID" >/dev/null 2>&1; then
+                wait "$SPINNER_PID" 2>/dev/null
             fi
-        done
-    }
+        }
+        trap cleanup_spinner EXIT
 
-    # スピナーをバックグラウンドで実行し、プロセスIDを保存
-    spin &  
-    SPINNER_PID=$!
-
-    # **トラップを設定し、スクリプト終了時にスピナーを確実に停止**
-    cleanup_spinner() {
-        if kill "$SPINNER_PID" >/dev/null 2>&1; then
-            wait "$SPINNER_PID" 2>/dev/null
+        # **実際の update コマンド**
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            opkg update > "${LOG_DIR}/opkg_update.log" 2>&1
+            UPDATE_STATUS=$?
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            apk update > "${LOG_DIR}/apk_update.log" 2>&1
+            UPDATE_STATUS=$?
         fi
-    }
-    trap cleanup_spinner EXIT
 
-    # **実際の update コマンド**
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        opkg update > "${LOG_DIR}/opkg_update.log" 2>&1
-        UPDATE_STATUS=$?
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        apk update > "${LOG_DIR}/apk_update.log" 2>&1
-        UPDATE_STATUS=$?
+        # **スピナーを停止**
+        cleanup_spinner
+
+        # **エラーハンドリング**
+        if [ "$UPDATE_STATUS" -ne 0 ]; then
+            debug_log "ERROR" "$(get_message "MSG_UPDATE_FAILED")"
+            printf "\r%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"  # `\r` で行を上書き + `\n` で改行
+            return 1
+        else
+            echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
+            printf "\r%s\n" "$(color green "$(get_message "MSG_UPDATE_COMPLETE")")"  # ✅ 修正
+        fi
+
+        # **トラップ解除**
+        trap - EXIT
     fi
-
-    # **スピナーを停止**
-    cleanup_spinner
-
-    # **エラーハンドリング**
-    if [ "$UPDATE_STATUS" -ne 0 ]; then
-        debug_log "ERROR" "$(get_message "MSG_UPDATE_FAILED")"
-        printf "\r%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")    "  # `\r` で行を上書き + `\n` で改行
-        return 1
-    else
-        # **アップデート完了メッセージ**
-        printf "\r%s\n" "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")    "  # `\r` で行を上書き + `\n` で改行
-    fi
-
-    # **トラップ解除（不要なループを防止）**
-    trap - EXIT
-   fi
     
     # **インストール前の確認**
     if [ "$confirm_install" = "yes" ]; then
@@ -1197,36 +1197,15 @@ install_package() {
         done
     fi
 
-    debug_log "INFO" "Installing package: $package_name"
+    debug_log "DEBUG" "Installing package: $package_name"
     if [ "$DEV_NULL" = "on" ]; then
         $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1
     else
         $PACKAGE_MANAGER install "$package_name"
     fi
 
-    # **package.db（ローカル）適用**
-    if [ "$skip_package_db" = "no" ] && [ -f "$package_db_local" ]; then
-        if grep -q "^$package_name=" "$package_db_local"; then
-            eval "$(grep "^$package_name=" "$package_db_local" | cut -d'=' -f2-)"
-        fi
-    fi
-
-    # **言語パッケージ適用**
-    if [ "$skip_lang_pack" = "no" ] && [ -f "$package_db_local" ]; then
-        if grep -q "^$package_name-lang=" "$package_db_local"; then
-            eval "$(grep "^$package_name-lang=" "$package_db_local" | cut -d'=' -f2-)"
-        fi
-    fi
-
-    # **設定の有効化**
-    if [ "$set_disabled" = "no" ]; then
-        if [ -f "$package_db_local" ] && grep -q "^$package_name-enable=" "$package_db_local"; then
-            eval "$(grep "^$package_name-enable=" "$package_db_local" | cut -d'=' -f2-)"
-        fi
-    fi
-
     echo "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")"
-    debug_log "INFO" "Successfully installed package: $package_name"
+    debug_log "DEBUG" "Successfully installed package: $package_name"
 }
 
 #########################################################################
