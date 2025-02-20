@@ -1,1 +1,19 @@
-test
+{
+  "luci-app-cpu-status": {
+    "package": "luci-app-cpu-status",
+    "version": "1.2.3",
+    "description": "CPU の使用状況をリアルタイムで表示する LuCI アプリ",
+    "repository": "https://github.com/gSpotx2f/luci-app-cpu-status",
+    "download_url": "https://github.com/gSpotx2f/luci-app-cpu-status/releases/latest/download/luci-app-cpu-status.ipk",
+    "dependencies": [
+      "luci-base",
+      "luci-lib-ip",
+      "luci-lib-nixio"
+    ],
+    "install_commands": [
+      "opkg install luci-app-cpu-status.ipk",
+      "uci commit luci-app-cpu-status",
+      "/etc/init.d/luci-app-cpu-status restart"
+    ]
+  }
+}
