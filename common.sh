@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-10-17"
+SCRIPT_VERSION="2025.02.20-10-18"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -454,16 +454,16 @@ download() {
     # **リモートバージョンの取得**
     remote_version=$(wget -qO- "$remote_url" | grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' | cut -d'=' -f2 | tr -d '"')
 
-    # **リモートバージョンの取得に失敗した場合の処理**
+    # **バージョン情報がない場合（country.db など）**
     if [ -z "$remote_version" ]; then
-        debug_log "ERROR" "Failed to retrieve remote version for $file_name"
-        return 1
+        debug_log "INFO" "No version information found for $file_name. Skipping version check and proceeding with download."
+        local_version=""  # バージョン比較を無効化
     fi
 
     # **ローカルのバージョンがない場合 or 異なる場合はダウンロード**
     if [ -z "$local_version" ]; then
         debug_log "INFO" "No local version found for $file_name. Downloading..."
-    elif [ "$local_version" = "$remote_version" ]; then
+    elif [ -n "$remote_version" ] && [ "$local_version" = "$remote_version" ]; then
         if [ "$quiet_mode" != "true" ]; then
             echo "$(color yellow "$file_name is already up-to-date. (Version: $local_version)")"
         fi
@@ -486,13 +486,14 @@ download() {
 
     # **ダウンロード成功メッセージ**
     if [ "$quiet_mode" != "true" ]; then
-        echo "$(color green "Download completed: $file_name (Version: $remote_version)")"
+        echo "$(color green "Download completed: $file_name")"
     fi
 
     debug_log "DEBUG" "Download completed: $file_name is valid."
     return 0
 }
 
+#######################################################################
 get_script_version() {
     local script_file="$1"
     local script_db="${CACHE_DIR}/script.ch"
