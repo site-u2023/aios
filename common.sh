@@ -1189,7 +1189,7 @@ install_package() {
 
     	    # **パッケージが更新された場合のみ表示**
     	    if [ -n "$file_name" ] && [ -n "$file_version" ]; then
-        	echo "$(get_message "MSG_FILE_UPDATED" | sed "s/{file}/$file_name/g" | sed "s/{version}/$file_version/g")"
+        	echo "$(get_message "MSG_UPDATE_COMPLETE" | sed "s/{file}/$file_name/g" | sed "s/{version}/$file_version/g")"
     	    fi
 	fi
 
