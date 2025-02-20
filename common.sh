@@ -1385,6 +1385,46 @@ install_build() {
     debug_log "INFO" "Successfully built and installed package: $built_package"
 }
 
+custom_feed() {
+# GitHub から `pacage_list` を取得
+PACKAGE_LIST_URL=$(jq -r --arg pkg "$package_name" '.[$pkg].fetch_latest' "$custom_package_db")
+PACKAGE_LIST_PATH="/tmp/config-software/package_list"
+
+if [ -n "$PACKAGE_LIST_URL" ] && [ "$PACKAGE_LIST_URL" != "null" ]; then
+    debug_log "INFO" "🌐 Fetching latest package list for $package_name..."
+    mkdir -p /tmp/config-software
+    wget --no-check-certificate -q -O "$PACKAGE_LIST_PATH" "$PACKAGE_LIST_URL"
+
+    if [ $? -ne 0 ]; then
+        debug_log "WARN" "⚠️ Failed to fetch package list. Skipping latest version detection."
+    else
+        # `extract_rule` に基づいて `luci-app-cpu-status` の最新バージョンを抽出
+        START_PATTERN=$(jq -r --arg pkg "$package_name" '.[$pkg].extract_rule.start' "$custom_package_db")
+        END_PATTERN=$(jq -r --arg pkg "$package_name" '.[$pkg].extract_rule.end' "$custom_package_db")
+
+        if [ -n "$START_PATTERN" ] && [ -n "$END_PATTERN" ]; then
+            CPU_STATUS=$(grep -o "${START_PATTERN}.*${END_PATTERN}" "$PACKAGE_LIST_PATH" | head -n 1)
+
+            if [ -n "$CPU_STATUS" ]; then
+                PACKAGE_URL="https://github.com/gSpotx2f/packages-openwrt/raw/master/${CPU_STATUS}.ipk"
+                debug_log "INFO" "🔄 Latest package detected: $PACKAGE_URL"
+            else
+                debug_log "WARN" "⚠️ No matching package found in package list."
+            fi
+        fi
+    fi
+fi
+
+# `PACKAGE_URL` が見つかった場合のみダウンロード＆インストール
+if [ -n "$PACKAGE_URL" ]; then
+    wget --no-check-certificate -q -O "/tmp/$package_name.ipk" "$PACKAGE_URL"
+    opkg install "/tmp/$package_name.ipk"
+    rm "/tmp/$package_name.ipk"
+else
+    debug_log "ERROR" "❌ Could not determine package URL for $package_name."
+fi
+}
+
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
