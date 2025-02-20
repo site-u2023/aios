@@ -1145,11 +1145,17 @@ install_package() {
         done
     }
 
-    spin &  # スピナーをバックグラウンドで実行
+    # スピナーをバックグラウンドで実行し、プロセスIDを保存
+    spin &  
     SPINNER_PID=$!
 
-    # **トラップを設定し、エラー時・終了時にスピナーを確実に止める**
-    trap 'kill $SPINNER_PID >/dev/null 2>&1; wait $SPINNER_PID 2>/dev/null || true' EXIT
+    # **トラップを設定し、スクリプト終了時にスピナーを確実に停止**
+    cleanup_spinner() {
+        if kill "$SPINNER_PID" >/dev/null 2>&1; then
+            wait "$SPINNER_PID" 2>/dev/null
+        fi
+    }
+    trap cleanup_spinner EXIT
 
     # **実際の update コマンド**
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
@@ -1161,8 +1167,7 @@ install_package() {
     fi
 
     # **スピナーを停止**
-    kill "$SPINNER_PID" >/dev/null 2>&1
-    wait "$SPINNER_PID" 2>/dev/null || true
+    cleanup_spinner
 
     # **エラーハンドリング**
     if [ "$UPDATE_STATUS" -ne 0 ]; then
@@ -1176,7 +1181,7 @@ install_package() {
 
     # **トラップ解除（不要なループを防止）**
     trap - EXIT
-    fi
+   fi
     
     # **インストール前の確認**
     if [ "$confirm_install" = "yes" ]; then
