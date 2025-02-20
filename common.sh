@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-10-13"
+SCRIPT_VERSION="2025.02.20-10-14"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -491,16 +491,19 @@ download() {
         return 1
     fi
 
-    # **バージョンチェック & ダウンロード判断**
-    if [ -n "$local_version" ] && [ "$local_version" = "$remote_version" ]; then
+    # **ローカルのバージョンがない場合 or 異なる場合はダウンロード**
+    if [ -z "$local_version" ]; then
+        debug_log "INFO" "No local version found for $file_name. Downloading..."
+    elif [ "$local_version" = "$remote_version" ]; then
         if [ "$quiet_mode" != "true" ]; then
             echo "$(color yellow "$file_name is already up-to-date. (Version: $local_version)")"
         fi
         return 0
+    else
+        debug_log "DEBUG" "Updating $file_name (Local: $local_version, Remote: $remote_version)"
     fi
 
     # **ダウンロード開始**
-    debug_log "DEBUG" "Updating $file_name (Local: $local_version, Remote: $remote_version)"
     if ! $BASE_WGET "$install_path" "$remote_url"; then
         debug_log "ERROR" "Download failed: $file_name"
         return 1
