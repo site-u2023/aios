@@ -1121,7 +1121,7 @@ install_package() {
     current_date=$(date '+%Y-%m-%d')
 
     if [ "$update_mode" = "yes" ] || [ ! -f "$update_cache" ] || ! grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
-        debug_log "INFO" "$(get_message "MSG_RUNNING_UPDATE")"
+        debug_log "DEBUG" "$(get_message "MSG_RUNNING_UPDATE")"
 
         # **アップデートの開始メッセージ（hidden でも必ず表示）**
         echo -n "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")"
