@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-13-00"
+SCRIPT_VERSION="2025.02.20-13-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1058,21 +1058,30 @@ normalize_language() {
 # [ttyd] opkg update; uci commit ttyd; initd/ttyd/restat
 #########################################################################
 download_package_db() {
-    local package_db_remote="${BASE_URL}/package.db"
-    local package_db_local="${CACHE_DIR}/package.db"
+    local package_db_temp="${package_db_local}.tmp"
 
-    # すでにローカルに存在する場合は取得しない（初回のみダウンロード）
-    if [ -f "$package_db_local" ]; then
-        debug_log "DEBUG" "🟢 package.db は既にダウンロード済みです。"
-        return 0
+    debug_log "INFO" "🌐 package.db を GitHub から取得中..."
+    
+    # `wget` で `package.db` を取得（成功した場合のみ適用）
+    if wget -q -O "$package_db_temp" "$package_db_remote"; then
+        mv "$package_db_temp" "$package_db_local"
+        debug_log "INFO" "✅ package.db を取得し、ローカルに保存しました。"
+    else
+        debug_log "WARN" "⚠️ package.db の取得に失敗しました。ローカルのデータを使用します。"
+        rm -f "$package_db_temp"  # 不完全なファイルを削除
+    fi
+}
+
+handle_package_db() {
+    # **ローカルに package.db がない場合、または `update_mode=yes` の場合にのみ取得**
+    if [ ! -f "$package_db_local" ] || [ "$update_mode" = "yes" ]; then
+        download_package_db
     fi
 
-    debug_log "DEBUG" "🌐 package.db を GitHub から取得中..."
-    if wget -q -O "$package_db_local.tmp" "$package_db_remote"; then
-        mv "$package_db_local.tmp" "$package_db_local"
-        debug_log "DEBUG" "✅ 最新の package.db を取得しました。"
-    else
-        debug_log "DEBUG" "⚠️ package.db の取得に失敗しました。ローカルのデータを使用します。"
+    # **取得に失敗した場合のフォールバック処理**
+    if [ ! -f "$package_db_local" ]; then
+        debug_log "ERROR" "❌ package.db が見つかりません。デフォルト設定で続行します。"
+        return 1
     fi
 }
 
@@ -1124,21 +1133,10 @@ install_package() {
         return 1
     fi
 
-    # **パッケージのインストール済みチェック**
-    if [ "$test_mode" = "no" ] && [ "$force_install" = "no" ]; then
-        if [ "$PACKAGE_MANAGER" = "opkg" ] && opkg list-installed | grep -q "^$package_name "; then
-            [ "$hidden" != "yes" ] && echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
-            return 0
-        elif [ "$PACKAGE_MANAGER" = "apk" ] && apk info -e "$package_name" >/dev/null 2>&1; then
-            [ "$hidden" != "yes" ] && echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
-            return 0
-        fi
-    fi
-
-    # **GitHub から package.db をダウンロードする（初回のみ）**
+    # **GitHub から package.db をダウンロード**
     download_package_db() {
-        if [ -f "$package_db_local" ]; then
-            debug_log "INFO" "🟢 package.db は既にダウンロード済みです。"
+        if [ -f "$package_db_local" ] && [ "$update_mode" = "no" ]; then
+            debug_log "INFO" "🟢 package.db は既にローカルに存在します。"
             return 0
         fi
 
@@ -1148,6 +1146,7 @@ install_package() {
             debug_log "INFO" "✅ 最新の package.db を取得しました。"
         else
             debug_log "WARN" "⚠️ package.db の取得に失敗しました。ローカルのデータを使用します。"
+            rm -f "$package_db_local.tmp"  # 取得失敗時にゴミファイルを削除
         fi
     }
     download_package_db
