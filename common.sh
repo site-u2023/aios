@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-11-01"
+SCRIPT_VERSION="2025.02.20-11-02"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -464,19 +464,19 @@ download() {
 
     # **リモートバージョンが取得できない場合は仮のバージョンを設定**
     if [ -z "$remote_version" ]; then
-        debug_log "INFO" "No version information found for $file_name. Skipping version check and proceeding with download."
+        debug_log "DEBUG" "No version information found for $file_name. Skipping version check and proceeding with download."
         remote_version="2025.01.01-00-00"
     fi
 
     # **hidden モード時、ローカルファイルがあるなら即リターン**
     if [ "$hidden_mode" = "true" ] && [ -f "$install_path" ]; then
-        debug_log "INFO" "hidden mode enabled - Skipping download for $file_name"
+        debug_log "DEBUG" "hidden mode enabled - Skipping download for $file_name"
         return 0
     fi
 
     # **バージョンチェック**
     if [ -z "$local_version" ]; then
-        debug_log "INFO" "No local version found for $file_name. Downloading..."
+        debug_log "DEBUG" "No local version found for $file_name. Downloading..."
     elif [ "$local_version" = "$remote_version" ]; then
         if [ "$quiet_mode" != "true" ]; then
             echo "$(color yellow "$file_name is already up-to-date. (Version: $local_version)")"
@@ -498,10 +498,8 @@ download() {
         return 1
     fi
 
-    # **ダウンロード成功メッセージ**
-    if [ "$quiet_mode" != "true" ]; then
-        echo "$(color green "Download completed: $file_name (Version: $remote_version)")"
-    fi
+    # **ダウンロード成功メッセージ（hidden でも常に表示）**
+    echo "$(color green "Download completed: $file_name (Version: $remote_version)")"
 
     debug_log "DEBUG" "Download completed: $file_name is valid."
 
@@ -512,7 +510,7 @@ download() {
         echo "${file_name}=${remote_version}" >> "$script_db"
     fi
 
-    debug_log "INFO" "Updated script.ch: ${file_name}=${remote_version}"
+    debug_log "DEBUG" "Updated script.ch: ${file_name}=${remote_version}"
 
     return 0
 }
