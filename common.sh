@@ -1127,18 +1127,18 @@ install_package() {
         printf "%s" "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")"
 
         # **スピナー表示を開始（バックグラウンド）**
-	    spin() {
-	            while true; do
-	                for s in '-' '\\' '|' '/'; do
-	                    printf "%s" "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")" $s"
-	                    if command -v usleep >/dev/null 2>&1; then
-	                        usleep 200000
-	                    else
-	                        sleep 1
-	                    fi
-	                done
-	            done
-	    }
+	spin() {
+    	while true; do
+        	for s in '-' '\\' '|' '/'; do
+            	printf "%s %s" "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")" "$s"
+            	if command -v usleep >/dev/null 2>&1; then
+                	usleep 200000
+            	else
+                	sleep 1
+            	fi
+        	done
+    	done
+	}
 
         spin &
         SPINNER_PID=$!
