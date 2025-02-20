@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-12-10"
+SCRIPT_VERSION="2025.02.20-12-11"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1143,6 +1143,7 @@ install_package() {
         }
 
         # スピナーをバックグラウンドで実行し、プロセスIDを保存
+        echo -ne "\e[?25l"  # カーソルを隠す
         spin &  
         SPINNER_PID=$!
 
@@ -1169,6 +1170,7 @@ install_package() {
 
         # **スピナーを停止**
         cleanup_spinner
+        echo -ne "\e[?25h"  # カーソルを再表示
 
         # ✅ **スピナー行の完全消去**
         printf "\r%-50s\r" ""
