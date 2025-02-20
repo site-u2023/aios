@@ -1128,7 +1128,7 @@ install_package() {
 
     # **スピナー表示を開始（バックグラウンド）**
     spin() {
-        local delay=0.2  # スピナーの更新間隔
+        local delay=0.1  # スピナーの更新間隔
         local spin_chars='-\|/'  # スピナーの回転パターン
         local i=0
 
@@ -1138,7 +1138,7 @@ install_package() {
         
             # `usleep` があれば精密な待機、それ以外は `sleep`
             if command -v usleep >/dev/null 2>&1; then
-                usleep 200000  # 0.2秒 = 200,000マイクロ秒
+                usleep 100000  # 0.2秒 = 200,000マイクロ秒
             else
                 sleep "$delay"
             fi
@@ -1172,11 +1172,11 @@ install_package() {
     # **エラーハンドリング**
     if [ "$UPDATE_STATUS" -ne 0 ]; then
         debug_log "ERROR" "$(get_message "MSG_UPDATE_FAILED")"
-        printf "\r%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"  # `\r` で行を上書き + `\n` で改行
+        printf "\r%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")    "  # `\r` で行を上書き + `\n` で改行
         return 1
     else
         # **アップデート完了メッセージ**
-        printf "\r%s\n" "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"  # `\r` で行を上書き + `\n` で改行
+        printf "\r%s\n" "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")    "  # `\r` で行を上書き + `\n` で改行
     fi
 
     # **トラップ解除（不要なループを防止）**
