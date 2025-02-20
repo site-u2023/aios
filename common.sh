@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-10-14"
+SCRIPT_VERSION="2025.02.20-10-16"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -343,6 +343,7 @@ normalize_version() {
 
 get_script_version() {
     local script_file="$1"
+    local script_db="${CACHE_DIR}/script.ch"
 
     # スクリプトファイルが指定されていない場合はエラー
     if [ -z "$script_file" ]; then
@@ -357,7 +358,7 @@ get_script_version() {
     fi
 
     local version=""
-    
+
     # `SCRIPT_VERSION="..."` の値を取得
     version=$(grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' "$script_file" | cut -d'=' -f2 | tr -d '"')
 
@@ -368,6 +369,16 @@ get_script_version() {
         echo "Error: Could not extract SCRIPT_VERSION from $script_file" >&2
         return 1
     fi
+
+    # **script.ch に書き込み**
+    if [ ! -f "$script_db" ]; then
+        touch "$script_db"
+    fi
+
+    # **すでに script.ch にエントリがある場合は上書き、なければ追加**
+    grep -q "^${script_file}=" "$script_db" && \
+        sed -i "s|^${script_file}=.*|${script_file}=${version}|" "$script_db" || \
+        echo "${script_file}=${version}" >> "$script_db"
 
     echo "$version"
 }
