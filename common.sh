@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-11-23"
+SCRIPT_VERSION="2025.02.20-11-24"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1163,9 +1163,9 @@ install_package() {
         # **スピナーを停止**
 	kill "$SPINNER_PID" >/dev/null 2>&1
 	wait "$SPINNER_PID" 2>/dev/null || true
- 
-        # **アップデート完了メッセージ**
-        echo -e "\r$(get_message "MSG_UPDATE_COMPLETE")      "  # `\r` で行を上書き
+
+ 	# **アップデート完了メッセージ**
+	echo -e "\r$(get_message "MSG_UPDATE_COMPLETE")      "  # `\r` で行を上書き
 
         # **エラーハンドリング**
         if [ "$UPDATE_STATUS" -ne 0 ]; then
@@ -1180,7 +1180,7 @@ install_package() {
                 echo "$(get_message "MSG_FILE_UPDATED" | sed "s/{file}/$file_name/g" | sed "s/{version}/$file_version/g")"
             fi
 	    
-	    echo "$(get_message "MSG_UPDATE_SUCCESS")"
+            echo "$(get_message "MSG_UPDATE_SUCCESS" | sed "s/{file}/$file_name/g" | sed "s/{version}/$file_version/g")"
         fi
 
         # **トラップ解除**
