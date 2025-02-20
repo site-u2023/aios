@@ -49,8 +49,8 @@ JP|MSG_DOWNLOAD_START={file} の最新バージョンをダウンロード中...
 US|MSG_SKIPPING_DOWNLOAD={file} is up-to-date ({version}). Skipping download.
 JP|MSG_SKIPPING_DOWNLOAD={file} は最新バージョン ({version}) です。スキップします。
 
-US|MSG_UPDATE_SUCCESS=Updated to version {version} of {file}.
-JP|MSG_UPDATE_SUCCESS={file} をバージョン {version} に更新しました。
+US|MSG_DOWNLOAD_SUCCESS=Updated to version {version} of {file}.
+JP|MSG_DOWNLOAD_SUCCESS={file} をバージョン {version} に更新しました。
 
 # コモン
 US|MSG_ENTER_COUNTRY=🌎 Enter country name, code, or language to search.
