@@ -3,7 +3,7 @@
 # License: CC0
 # OpenWrt >= 19.07, Compatible with 24.10.0
 
-SCRIPT_VERSION="2025.02.19-00-03"
+SCRIPT_VERSION="2025.02.19-00-04"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -66,6 +66,7 @@ print_banner() {
 # パッケージのインストール (オプション)
 packages() {
     # uconv のインストール
+    install_package jq yn hidden
     install_build build_uconv yn
     # uconv がインストールされている場合に languages.db をインストール
     if command -v uconv >/dev/null 2>&1; then
