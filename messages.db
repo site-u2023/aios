@@ -1,7 +1,7 @@
 # メッセージデータベース (多言語対応)
 # フォーマット: 言語コード|メッセージキー=メッセージ
 
-SCRIPT_VERSION="2025.02.18-00-00"
+SCRIPT_VERSION="2025.02.18-00-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION messages.db \033[0m"
 
 SUPPORTED_LANGUAGES="US JP"
@@ -73,6 +73,22 @@ US|MSG_INVALID_SELECTION=❌ Invalid selection. Please choose a valid number.
 JP|MSG_INVALID_SELECTION=❌ 無効な選択です。有効な番号を入力してください。
 US|MSG_INVALID_INPUT_YNR=❌ Invalid input. Please enter 'Y', 'N', or 'R'.
 JP|MSG_INVALID_INPUT_YNR=❌ 無効な入力です。「Y」「N」「R」を入力してください。
+
+# アップデート
+US|MSG_UPDATE_RUNNING=📡 Running package manager update...
+JP|MSG_UPDATE_RUNNING=📡 パッケージマネージャーの更新を実行中...
+
+US|MSG_UPDATE_IN_PROGRESS=🔄 Updating...
+JP|MSG_UPDATE_IN_PROGRESS=🔄 アップデート中...
+
+US|MSG_UPDATE_COMPLETE=✅ Update complete.
+JP|MSG_UPDATE_COMPLETE=✅ アップデート完了。
+
+US|MSG_UPDATE_FAILED=⚠️ Update failed. See log:
+JP|MSG_UPDATE_FAILED=⚠️ アップデートに失敗しました。詳細ログ:
+
+US|MSG_UPDATE_SUCCESS=✅ Package list is up-to-date.
+JP|MSG_UPDATE_SUCCESS=✅ パッケージリストは最新です。
 
 # インストールパッケージ
 US|MSG_CONFIRM_ONLY_YN=🔄 Confirm (Y=Yes / N=No):
