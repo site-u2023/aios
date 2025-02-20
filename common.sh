@@ -1167,11 +1167,11 @@ install_package() {
 	# **エラーハンドリング**
 	if [ "$UPDATE_STATUS" -ne 0 ]; then
     	    debug_log "ERROR" "$(get_message "MSG_UPDATE_FAILED")"
-	    printf "\r%s %s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")            " # `\r` で行を上書き
+	    printf "\r%s %s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")" # `\r` で行を上書き
     	    return 1
 	else
             # **アップデート完了メッセージ**
-	    printf "\r%s %s\n" "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")            " # `\r` で行を上書き
+	    printf "\r%s %s\n" "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")" # `\r` で行を上書き
 	fi
 
         # **トラップ解除**
