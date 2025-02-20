@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-11-08"
+SCRIPT_VERSION="2025.02.20-11-09"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -977,7 +977,7 @@ normalize_language() {
     supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
 
     if echo "$supported_languages" | grep -qw "$selected_language"; then
-        debug_log "INFO" "Using message database language: $selected_language"
+        debug_log "DEBUG" "Using message database language: $selected_language"
         echo "$selected_language" > "$message_cache"
         ACTIVE_LANGUAGE="$selected_language"
     else
@@ -986,7 +986,7 @@ normalize_language() {
         ACTIVE_LANGUAGE="US"
     fi
 
-    debug_log "INFO" "Final system message language -> $ACTIVE_LANGUAGE"
+    debug_log "DEBUG" "Final system message language -> $ACTIVE_LANGUAGE"
     echo "$(get_message "MSG_COUNTRY_SUCCESS")"
     touch "$flag_file"
 }
