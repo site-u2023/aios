@@ -12,6 +12,9 @@ MAP_E_CONFIG="/etc/config/map-e"
 MAP_E_TUNNEL_INTERFACE="map-e0"
 MAP_E_RULE="map-rule"
 
+NET_ADDR6=$(ip -6 addr show dev wan | grep "inet6" | grep "global" | awk '{print $2}' | cut -d'/' -f1)
+CE=$(echo "$NET_ADDR6" | cut -d':' -f1-4)
+
 RULE_PREFIX31="
 hex_240b0010="106,72"
 hex_240b0012="14,8"
@@ -712,24 +715,36 @@ hex_240041529c="153,156,144"
 "
 
 ##########################################################################
-
-# ** デバッグ出力（必要なら "1" にする）**
-DEBUG=0
-
-debug_log() {
-    [ "$DEBUG" -eq 1 ] && echo "[DEBUG] $1"
+lookup_map_e_settings() {
+    case "$CE" in
+        "2404:9200"*)
+            peeraddr="xxx.xxx.xxx.xxx"
+            ip4a="xxx.xxx.xxx.xxx"
+            ip4prefixlen="32"
+            ip6pfx="$CE"
+            ip6prefixlen="56"
+            ealen="8"
+            psidlen="6"
+            offset="16"
+            ;;
+        "2404:9280"*)
+            peeraddr="yyy.yyy.yyy.yyy"
+            ip4a="yyy.yyy.yyy.yyy"
+            ip4prefixlen="32"
+            ip6pfx="$CE"
+            ip6prefixlen="56"
+            ealen="8"
+            psidlen="6"
+            offset="16"
+            ;;
+        *)
+            echo "対応する MAP-E 設定が見つかりませんでした。" >&2
+            exit 1
+            ;;
+    esac
 }
 
-# ** 設定を保存する関数 **
-save_config() {
-    uci commit network
-}
-
-# ** 設定をリロードする関数 **
-reload_network() {
-    /etc/init.d/network restart
-}
-
+##############################################################################
 # ** 既存の MAP-E 設定を削除する関数 **
 remove_map_e_config() {
     debug_log "Removing existing MAP-E configuration..."
@@ -739,9 +754,15 @@ remove_map_e_config() {
     save_config
 }
 
-# ** MAP-E の設定を追加する関数 **
 add_map_e_config() {
     debug_log "Adding new MAP-E configuration..."
+
+    # IPv6 プレフィックス取得
+    NET_ADDR6=$(ip -6 addr show dev wan | grep "inet6" | grep "global" | awk '{print $2}' | cut -d'/' -f1)
+    CE=$(echo "$NET_ADDR6" | cut -d':' -f1-4)
+
+    # MAP-E 設定値をデータベースから取得
+    lookup_map_e_settings
 
 # network backup
 cp /etc/config/network /etc/config/network.map-e.old
@@ -818,6 +839,43 @@ echo -e "\033[1;32m ${WANMAPE} offset: \033[0;39m"${offset}
     debug_log "MAP-E 設定が完了しました。"
 }
 
+
+#############################################################
+apply_rules() {
+    for prefix in RULE_PREFIX31 RULE_PREFIX38 RULE_PREFIX38_20; do
+        eval "data=\$$prefix"
+        debug_log "Applying $prefix rules..."
+
+        IFS=$'\n'
+        for line in $data; do
+            key=$(echo "$line" | cut -d'=' -f1 | tr -d '"')
+            value=$(echo "$line" | cut -d'=' -f2 | tr -d '"')
+            debug_log "Setting rule: $prefix -> $key=$value"
+            uci set network.$MAP_E_SECTION.${prefix,,}_$key="$value"
+        done
+    done
+
+    save_config
+}
+
+#####################################################################################
+# ** デバッグ出力（必要なら "1" にする）**
+DEBUG=0
+
+debug_log() {
+    [ "$DEBUG" -eq 1 ] && echo "[DEBUG] $1"
+}
+
+# ** 設定を保存する関数 **
+save_config() {
+    uci commit network
+}
+
+# ** 設定をリロードする関数 **
+reload_network() {
+    /etc/init.d/network restart
+}
+
 # ** ルールを適用する関数 **
 apply_rules() {
     for prefix in RULE_PREFIX31 RULE_PREFIX38 RULE_PREFIX38_20; do
@@ -846,7 +904,6 @@ check_wan_interface() {
 # ** スクリプトの実行 **
 main() {
     check_wan_interface
-    remove_map_e_config
     add_map_e_config
     apply_rules
     reload_network
