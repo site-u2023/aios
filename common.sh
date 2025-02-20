@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-10-11"
+SCRIPT_VERSION="2025.02.20-10-13"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -342,9 +342,32 @@ normalize_version() {
 }
 
 get_script_version() {
+    local script_file="$1"
+
+    # スクリプトファイルが指定されていない場合はエラー
+    if [ -z "$script_file" ]; then
+        echo "Error: No script file specified." >&2
+        return 1
+    fi
+
+    # 指定されたスクリプトが存在しない場合はエラー
+    if [ ! -f "$script_file" ]; then
+        echo "Error: Script file not found: $script_file" >&2
+        return 1
+    fi
+
     local version=""
-    version=$(grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' "$0" | cut -d'=' -f2 | tr -d '"')
+    
+    # `SCRIPT_VERSION="..."` の値を取得
+    version=$(grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' "$script_file" | cut -d'=' -f2 | tr -d '"')
+
+    # バージョンの正規化
     version=$(normalize_version "$version")
+
+    if [ -z "$version" ]; then
+        echo "Error: Could not extract SCRIPT_VERSION from $script_file" >&2
+        return 1
+    fi
 
     echo "$version"
 }
