@@ -1165,7 +1165,7 @@ install_package() {
 	wait "$SPINNER_PID" 2>/dev/null || true
 
  	# **アップデート完了メッセージ**
-	echo -e "\r$(get_message "MSG_UPDATE_COMPLETE")      "  # `\r` で行を上書き
+	#echo -e "\r$(get_message "MSG_UPDATE_COMPLETE")      "  # `\r` で行を上書き
 
 	# **エラーハンドリング**
 	if [ "$UPDATE_STATUS" -ne 0 ]; then
