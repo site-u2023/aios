@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-11-21"
+SCRIPT_VERSION="2025.02.20-11-22"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1128,19 +1128,23 @@ install_package() {
 
         # **スピナー表示を開始（バックグラウンド）**
 	spin() {
-    	while true; do
-        	for s in '-' '\\' '|' '/'; do
-            	echo -en "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")") $s"
+    	local delay=1  # スピナーの更新間隔
+    	local spin_chars='-\|/'  # スピナーの回転パターン
+    	local i=0
 
-            	if command -v usleep >/dev/null 2>&1; then
-                	usleep 200000
-            	else
-                	sleep 1
-            	fi
-        	done
+    	while true; do
+        	# スピナーの表示
+        	printf "\r%s %s" "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")" "${spin_chars:i++%4:1}"
+        
+        	# `usleep` があれば精密な待機、それ以外は `sleep`
+        	if command -v usleep >/dev/null 2>&1; then
+            	usleep 200000  # 0.2秒 = 200,000マイクロ秒
+        	else
+            	sleep "$delay"
+        	fi
     	done
 	}
-
+ 
         spin &
         SPINNER_PID=$!
 
