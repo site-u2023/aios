@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-12-05"
+SCRIPT_VERSION="2025.02.20-12-06"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1151,11 +1151,24 @@ install_package() {
 
         # **トラップを設定し、スクリプト終了時にスピナーを確実に停止**
         cleanup_spinner() {
-            if kill "$SPINNER_PID" >/dev/null 2>&1; then
-                wait "$SPINNER_PID" 2>/dev/null
+            if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
+                kill "$SPINNER_PID" >/dev/null 2>&1
+                sleep 0.1  # プロセス終了待機
+                kill -9 "$SPINNER_PID" >/dev/null 2>&1
             fi
+            unset SPINNER_PID  # `wait` のエラーを防ぐ
         }
-        trap cleanup_spinner EXIT
+
+        XXX_cleanup_spinner() {
+            if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
+                kill "$SPINNER_PID" >/dev/null 2>&1
+                sleep 0.1
+                kill -9 "$SPINNER_PID" >/dev/null 2>&1
+            fi
+            unset SPINNER_PID
+        }
+
+        trap cleanup_spinner EXIT INT TERM
 
         # **実際の update コマンド**
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
