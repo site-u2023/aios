@@ -1,21 +1,24 @@
 {
   "uconv": {
-    "description": "Unicode conversion tool for OpenWrt",
+    "description": "Unicode conversion tool for OpenWrt & Alpine Linux",
     "source": "https://github.com/example/uconv",
     "version": "latest",
     "arch": ["mips", "arm", "x86_64"],
-    "dependencies": ["libiconv", "libintl", "zlib"],
+    "dependencies": {
+      "opkg": ["libiconv", "libintl", "zlib"],
+      "apk": ["libiconv", "gettext", "zlib"]
+    },
     "install": {
-      "method": "opkg",
-      "url": "https://github.com/example/uconv/releases/latest/download/uconv_{arch}.ipk"
+      "method": ["opkg", "apk"],
+      "opkg_url": "https://github.com/example/uconv/releases/latest/download/uconv_{arch}.ipk",
+      "apk_url": "https://github.com/example/uconv/releases/latest/download/uconv-{arch}.apk"
     },
     "build": {
-      "dependencies": ["make", "gcc", "git", "libtool", "automake", "pkg-config", "zlib-dev", "libssl-dev", "libicu-dev", "ncurses-dev"],
+      "dependencies": {
+        "opkg": ["make", "gcc", "git", "libtool", "automake", "pkg-config", "zlib-dev", "libssl-dev", "libicu-dev", "ncurses-dev"],
+        "apk": ["build-base", "gcc", "git", "libtool", "automake", "pkgconfig", "zlib-dev", "openssl-dev", "icu-dev", "ncurses-dev"]
+      },
       "commands": [
         "./configure --prefix=/usr",
         "make -j$(nproc)",
-        "make install"
-      ]
-    }
-  }
-}
+        "make inst
