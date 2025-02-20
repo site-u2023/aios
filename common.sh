@@ -1123,52 +1123,53 @@ install_package() {
     if [ "$update_mode" = "yes" ] || [ ! -f "$update_cache" ] || ! grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
         debug_log "INFO" "$(get_message "MSG_UPDATE_RUNNING")"
 
-    # **アップデートの開始メッセージ（hidden でも必ず表示）**
-    echo -n "$(get_message "MSG_UPDATE_IN_PROGRESS")"
+        # **アップデートの開始メッセージ（hidden でも必ず表示）**
+        echo -n "$(get_message "MSG_UPDATE_IN_PROGRESS")"
 
-    # **スピナー表示を開始（バックグラウンド）**
-    spin() {
-        while true; do
-            for s in '-' '\\' '|' '/'; do
-                echo -ne "\r$(get_message "MSG_UPDATE_IN_PROGRESS") $s"
-                sleep 0.2
+        # **スピナー表示を開始（バックグラウンド）**
+        spin() {
+            while true; do
+                for s in '-' '\\' '|' '/'; do
+                    echo -ne "\r$(get_message "MSG_UPDATE_IN_PROGRESS") $s"
+                    sleep 0.2
+                done
             done
-        done
-    }
-    spin &
-    SPINNER_PID=$!
+        }
+        spin &
+        SPINNER_PID=$!
 
-    # **トラップを設定し、エラー時にスピナーを止める**
-    trap 'kill $SPINNER_PID >/dev/null 2>&1' EXIT
+        # **トラップを設定し、エラー時にスピナーを止める**
+        trap 'kill $SPINNER_PID >/dev/null 2>&1' EXIT
 
-    # **実際の update コマンド**
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        opkg update > /tmp/aios/opkg_update.log 2>&1
-        UPDATE_STATUS=$?
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        apk update > /tmp/aios/apk_update.log 2>&1
-        UPDATE_STATUS=$?
+        # **実際の update コマンド**
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            opkg update > /tmp/aios/opkg_update.log 2>&1
+            UPDATE_STATUS=$?
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            apk update > /tmp/aios/apk_update.log 2>&1
+            UPDATE_STATUS=$?
+        fi
+
+        # **スピナーを停止**
+        kill "$SPINNER_PID" >/dev/null 2>&1
+        wait "$SPINNER_PID" 2>/dev/null
+
+        # **アップデート完了メッセージ**
+        echo -e "\r$(get_message "MSG_UPDATE_COMPLETE")      "  # `\r` で行を上書き
+
+        # **エラーハンドリング**
+        if [ "$UPDATE_STATUS" -ne 0 ]; then
+            debug_log "ERROR" "$(get_message "MSG_UPDATE_FAILED")"
+            echo "$(get_message "MSG_UPDATE_FAILED")"
+            return 1
+        else
+            echo "$(get_message "MSG_UPDATE_SUCCESS")"
+            echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
+        fi
+
+        # **トラップ解除**
+        trap - EXIT
     fi
-
-    # **スピナーを停止**
-    kill "$SPINNER_PID" >/dev/null 2>&1
-    wait "$SPINNER_PID" 2>/dev/null
-
-    # **アップデート完了メッセージ**
-    echo -e "\r$(get_message "MSG_UPDATE_COMPLETE")      "  # `\r` で行を上書き
-
-    # **エラーハンドリング**
-    if [ "$UPDATE_STATUS" -ne 0 ]; then
-        debug_log "ERROR" "$(get_message "MSG_UPDATE_FAILED")"
-        echo "$(get_message "MSG_UPDATE_FAILED")"
-        return 1
-    else
-        echo "$(get_message "MSG_UPDATE_SUCCESS")"
-        echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
-    fi
-
-    # **トラップ解除**
-    trap - EXIT
 
     # **インストール前の確認**
     if [ "$confirm_install" = "yes" ]; then
@@ -1183,7 +1184,7 @@ install_package() {
             esac
         done
     fi
-    
+
     debug_log "INFO" "Installing package: $package_name"
     if [ "$DEV_NULL" = "on" ]; then
         $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1
