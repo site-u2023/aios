@@ -1168,14 +1168,14 @@ install_package() {
             echo "$(get_message "MSG_UPDATE_FAILED")"
             return 1
         else
-            echo "$(get_message "MSG_UPDATE_SUCCESS")"
-            
+            echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
+	    
             # パッケージが更新された場合のみ表示
             if [ -n "$file_name" ] && [ -n "$file_version" ]; then
                 echo "$(get_message "MSG_FILE_UPDATED" | sed "s/{file}/$file_name/g" | sed "s/{version}/$file_version/g")"
             fi
-
-            echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
+	    
+	    echo "$(get_message "MSG_UPDATE_SUCCESS")"
         fi
 
         # **トラップ解除**
