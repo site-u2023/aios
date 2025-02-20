@@ -1124,13 +1124,13 @@ install_package() {
         debug_log "INFO" "$(get_message "MSG_RUNNING_UPDATE")"
 
         # **アップデートの開始メッセージ（hidden でも必ず表示）**
-        echo -n "$(get_message "MSG_UPDATE_IN_PROGRESS")"
+        echo -n "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")"
 
         # **スピナー表示を開始（バックグラウンド）**
 	    spin() {
 	            while true; do
 	                for s in '-' '\\' '|' '/'; do
-	                    echo -ne "\r$(get_message "MSG_UPDATE_IN_PROGRESS") $s"
+	                    echo -ne "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")" $s"
 	                    if command -v usleep >/dev/null 2>&1; then
 	                        usleep 200000
 	                    else
