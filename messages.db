@@ -109,6 +109,9 @@ US|MSG_PACKAGE_ALREADY_INSTALLED=Package {pkg} is already installed.
 JP|MSG_PACKAGE_NOT_FOUND=パッケージ {pkg} が見つかりません。
 US|MSG_PACKAGE_NOT_FOUND=Package {pkg} not found.
 
+US|MSG_ERROR_NO_PACKAGE=Error: No package specified.
+JP|MSG_ERROR_NO_PACKAGE=エラー: パッケージが指定されていません。
+
 # インストールの確認
 JP|MSG_CONFIRM_INSTALL=パッケージ {pkg} をインストールしますか？
 US|MSG_CONFIRM_INSTALL=Do you want to install {pkg}?
