@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-12-11"
+SCRIPT_VERSION="2025.02.20-13-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1057,6 +1057,25 @@ normalize_language() {
 # initd/ttyd/restat
 # [ttyd] opkg update; uci commit ttyd; initd/ttyd/restat
 #########################################################################
+download_package_db() {
+    local package_db_remote="${BASE_URL}/package.db"
+    local package_db_local="${CACHE_DIR}/package.db"
+
+    # すでにローカルに存在する場合は取得しない（初回のみダウンロード）
+    if [ -f "$package_db_local" ]; then
+        debug_log "DEBUG" "🟢 package.db は既にダウンロード済みです。"
+        return 0
+    fi
+
+    debug_log "DEBUG" "🌐 package.db を GitHub から取得中..."
+    if wget -q -O "$package_db_local.tmp" "$package_db_remote"; then
+        mv "$package_db_local.tmp" "$package_db_local"
+        debug_log "DEBUG" "✅ 最新の package.db を取得しました。"
+    else
+        debug_log "DEBUG" "⚠️ package.db の取得に失敗しました。ローカルのデータを使用します。"
+    fi
+}
+
 install_package() {
     local confirm_install="no"
     local skip_lang_pack="no"
@@ -1067,8 +1086,8 @@ install_package() {
     local force_install="no"
     local update_mode="no"
     local package_name=""
-    local package_db_remote="${BASE_URL}/packages.db"
-    local package_db_local="${CACHE_DIR}/local-package.db"
+    local package_db_remote="${BASE_URL}/package.db"
+    local package_db_local="${CACHE_DIR}/package.db"
     local update_cache="${CACHE_DIR}/update.ch"
 
     # **オプションの処理**
@@ -1116,6 +1135,23 @@ install_package() {
         fi
     fi
 
+    # **GitHub から package.db をダウンロードする（初回のみ）**
+    download_package_db() {
+        if [ -f "$package_db_local" ]; then
+            debug_log "INFO" "🟢 package.db は既にダウンロード済みです。"
+            return 0
+        fi
+
+        debug_log "INFO" "🌐 package.db を GitHub から取得中..."
+        if wget -q -O "$package_db_local.tmp" "$package_db_remote"; then
+            mv "$package_db_local.tmp" "$package_db_local"
+            debug_log "INFO" "✅ 最新の package.db を取得しました。"
+        else
+            debug_log "WARN" "⚠️ package.db の取得に失敗しました。ローカルのデータを使用します。"
+        fi
+    }
+    download_package_db
+
     # **update の管理**
     local current_date
     current_date=$(date '+%Y-%m-%d')
@@ -1123,17 +1159,15 @@ install_package() {
     if [ "$update_mode" = "yes" ] || [ ! -f "$update_cache" ] || ! grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
         debug_log "DEBUG" "$(get_message "MSG_RUNNING_UPDATE")"
 
-        # **アップデートの開始メッセージ（hidden でも必ず表示）**
+        # **アップデートの開始メッセージ**
         echo -en "\r$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")") "
 
         # **スピナー表示を開始（バックグラウンド）**
         spin() {
-            local spin_chars='-\|/'  
+            local spin_chars='-\|/'
             local i=0
-
             while true; do
                 printf "\r%s %s" "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")" "${spin_chars:i++%4:1}"
-
                 if command -v usleep >/dev/null 2>&1; then
                     usleep 200000  # `usleep` がある場合（0.2秒）
                 else
@@ -1142,16 +1176,18 @@ install_package() {
             done
         }
 
+        # **カーソルを隠す**
+        echo -ne "\e[?25l"
+
         # スピナーをバックグラウンドで実行し、プロセスIDを保存
-        echo -ne "\e[?25l"  # カーソルを隠す
         spin &  
         SPINNER_PID=$!
 
-        # **トラップを設定し、スクリプト終了時にスピナーを確実に停止**
+        # **スピナー停止処理**
         cleanup_spinner() {
             if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
                 kill "$SPINNER_PID" >/dev/null 2>&1
-                sleep 1  # 確実にプロセスを終わらせる
+                sleep 1
                 kill -9 "$SPINNER_PID" >/dev/null 2>&1
             fi
             unset SPINNER_PID
@@ -1178,12 +1214,10 @@ install_package() {
         # ✅ **エラーハンドリング**
         if [ "$UPDATE_STATUS" -ne 0 ]; then
             debug_log "ERROR" "$(get_message "MSG_UPDATE_FAILED")"
-            printf "\r%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"  
+            printf "\r%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
             return 1
         else
             echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
-
-            # ✅ **成功メッセージは1回だけ**
             printf "\r%s\n" "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
         fi
 
