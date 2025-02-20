@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-10-16"
+SCRIPT_VERSION="2025.02.20-10-17"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -341,48 +341,6 @@ normalize_version() {
     echo "$input"
 }
 
-get_script_version() {
-    local script_file="$1"
-    local script_db="${CACHE_DIR}/script.ch"
-
-    # スクリプトファイルが指定されていない場合はエラー
-    if [ -z "$script_file" ]; then
-        echo "Error: No script file specified." >&2
-        return 1
-    fi
-
-    # 指定されたスクリプトが存在しない場合はエラー
-    if [ ! -f "$script_file" ]; then
-        echo "Error: Script file not found: $script_file" >&2
-        return 1
-    fi
-
-    local version=""
-
-    # `SCRIPT_VERSION="..."` の値を取得
-    version=$(grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' "$script_file" | cut -d'=' -f2 | tr -d '"')
-
-    # バージョンの正規化
-    version=$(normalize_version "$version")
-
-    if [ -z "$version" ]; then
-        echo "Error: Could not extract SCRIPT_VERSION from $script_file" >&2
-        return 1
-    fi
-
-    # **script.ch に書き込み**
-    if [ ! -f "$script_db" ]; then
-        touch "$script_db"
-    fi
-
-    # **すでに script.ch にエントリがある場合は上書き、なければ追加**
-    grep -q "^${script_file}=" "$script_db" && \
-        sed -i "s|^${script_file}=.*|${script_file}=${version}|" "$script_db" || \
-        echo "${script_file}=${version}" >> "$script_db"
-
-    echo "$version"
-}
-
 #########################################################################
 # Last Update: 2025-02-18 18:00:00 (JST) 🚀
 # "Efficiency in retrieval, clarity in communication."
@@ -533,6 +491,54 @@ download() {
 
     debug_log "DEBUG" "Download completed: $file_name is valid."
     return 0
+}
+
+get_script_version() {
+    local script_file="$1"
+    local script_db="${CACHE_DIR}/script.ch"
+
+    # **スクリプトファイルが指定されていない場合はエラー**
+    if [ -z "$script_file" ]; then
+        echo "Error: No script file specified." >&2
+        return 1
+    fi
+
+    # **スクリプトが存在しない場合はエラー**
+    if [ ! -f "$script_file" ]; then
+        echo "Error: Script file not found: $script_file" >&2
+        return 1
+    fi
+
+    local version=""
+    
+    # **`SCRIPT_VERSION="..."` の値を取得**
+    version=$(grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' "$script_file" | cut -d'=' -f2 | tr -d '"')
+
+    # **バージョンの正規化**
+    version=$(normalize_version "$version")
+
+    # **バージョン取得に失敗した場合はエラー**
+    if [ -z "$version" ]; then
+        echo "Error: Could not extract SCRIPT_VERSION from $script_file" >&2
+        return 1
+    fi
+
+    # **script.ch がなければ作成**
+    if [ ! -f "$script_db" ]; then
+        touch "$script_db"
+    fi
+
+    # **script.ch への書き込み**
+    if grep -q "^${script_file}=" "$script_db"; then
+        sed -i "s|^${script_file}=.*|${script_file}=${version}|" "$script_db"
+    else
+        echo "${script_file}=${version}" >> "$script_db"
+    fi
+
+    # **デバッグログに記録**
+    debug_log "INFO" "Updated script.ch: ${script_file}=${version}"
+
+    echo "$version"
 }
 
 # 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
