@@ -1123,46 +1123,52 @@ install_package() {
     if [ "$update_mode" = "yes" ] || [ ! -f "$update_cache" ] || ! grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
         debug_log "INFO" "$(get_message "MSG_UPDATE_RUNNING")"
 
-        # **アップデートの開始メッセージ（hidden でも必ず表示）**
-        echo -n "$(get_message "MSG_UPDATE_IN_PROGRESS")"
+    # **アップデートの開始メッセージ（hidden でも必ず表示）**
+    echo -n "$(get_message "MSG_UPDATE_IN_PROGRESS")"
 
-        # **スピナー表示を開始**
-        local pid
-        ( while true; do for s in '-' '\\' '|' '/'; do echo -ne "\r$(get_message "MSG_UPDATE_IN_PROGRESS") $s"; sleep 0.2; done; done ) &
-        pid=$!
+    # **スピナー表示を開始（バックグラウンド）**
+    spin() {
+        while true; do
+            for s in '-' '\\' '|' '/'; do
+                echo -ne "\r$(get_message "MSG_UPDATE_IN_PROGRESS") $s"
+                sleep 0.2
+            done
+        done
+    }
+    spin &
+    SPINNER_PID=$!
 
-        # **実際の update コマンド**
-        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            if [ "$DEBUG_MODE" = "true" ]; then
-                opkg update  # デバッグ時は通常の出力を表示
-            else
-                opkg update > /tmp/aios/opkg_update.log 2>&1
-            fi
-        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            if [ "$DEBUG_MODE" = "true" ]; then
-                apk update
-            else
-                apk update > /tmp/aios/apk_update.log 2>&1
-            fi
-        fi
+    # **トラップを設定し、エラー時にスピナーを止める**
+    trap 'kill $SPINNER_PID >/dev/null 2>&1' EXIT
 
-        # **スピナーを停止**
-        kill "$pid" >/dev/null 2>&1
-        wait "$pid" 2>/dev/null
-
-        # **アップデート完了メッセージ**
-        echo -e "\r$(get_message "MSG_UPDATE_COMPLETE")      "  # `\r` で行を上書き
-
-        # **エラーがあれば表示**
-        if [ "$PACKAGE_MANAGER" = "opkg" ] && grep -q "failed" /tmp/aios/opkg_update.log; then
-            echo "$(get_message "MSG_UPDATE_FAILED") /tmp/aios/opkg_update.log"
-        elif [ "$PACKAGE_MANAGER" = "apk" ] && grep -q "ERROR" /tmp/aios/apk_update.log; then
-            echo "$(get_message "MSG_UPDATE_FAILED") /tmp/aios/apk_update.log"
-        else
-            echo "$(get_message "MSG_UPDATE_SUCCESS")"
-            echo "LAST_UPDATE=$current_date" > "$update_cache"
-        fi
+    # **実際の update コマンド**
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        opkg update > /tmp/aios/opkg_update.log 2>&1
+        UPDATE_STATUS=$?
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        apk update > /tmp/aios/apk_update.log 2>&1
+        UPDATE_STATUS=$?
     fi
+
+    # **スピナーを停止**
+    kill "$SPINNER_PID" >/dev/null 2>&1
+    wait "$SPINNER_PID" 2>/dev/null
+
+    # **アップデート完了メッセージ**
+    echo -e "\r$(get_message "MSG_UPDATE_COMPLETE")      "  # `\r` で行を上書き
+
+    # **エラーハンドリング**
+    if [ "$UPDATE_STATUS" -ne 0 ]; then
+        debug_log "ERROR" "$(get_message "MSG_UPDATE_FAILED")"
+        echo "$(get_message "MSG_UPDATE_FAILED")"
+        return 1
+    else
+        echo "$(get_message "MSG_UPDATE_SUCCESS")"
+        echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
+    fi
+
+    # **トラップ解除**
+    trap - EXIT
 
     # **インストール前の確認**
     if [ "$confirm_install" = "yes" ]; then
