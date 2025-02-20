@@ -1337,7 +1337,6 @@ install_build() {
     # ** 取得したアーキテクチャを変数に代入 **
     if [ -f "${CACHE_DIR}/architecture.ch" ]; then
         arch=$(cat "${CACHE_DIR}/architecture.ch")
-        fi
     fi
 
     echo "OpenWrt Version: $openwrt_version"
