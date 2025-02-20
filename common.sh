@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-11-26"
+SCRIPT_VERSION="2025.02.20-11-27"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1173,7 +1173,8 @@ install_package() {
     	    echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
 
             # **アップデート完了メッセージ**
-	    echo -e "\r$(get_message "MSG_UPDATE_COMPLETE")      "  # `\r` で行を上書き
+	    printf "\r%s %s" "$(color cyan "$(get_message "MSG_UPDATE_COMPLETE")")            " # `\r` で行を上書き
+	    #echo -e "\r$(get_message "MSG_UPDATE_COMPLETE")            "  # `\r` で行を上書き
  
     	    # **opkg update / apk update の完了メッセージ**
     	    echo "$(get_message "MSG_UPDATE_SUCCESS")"
