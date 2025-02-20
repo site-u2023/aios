@@ -1156,9 +1156,9 @@ install_package() {
         fi
 
         # **スピナーを停止**
-        kill "$SPINNER_PID" >/dev/null 2>&1
-        wait "$SPINNER_PID" 2>/dev/null
-
+	kill "$SPINNER_PID" >/dev/null 2>&1
+	wait "$SPINNER_PID" 2>/dev/null || true
+ 
         # **アップデート完了メッセージ**
         echo -e "\r$(get_message "MSG_UPDATE_COMPLETE")      "  # `\r` で行を上書き
 
