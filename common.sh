@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-11-13"
+SCRIPT_VERSION="2025.02.20-11-14"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -997,20 +997,21 @@ normalize_language() {
 # 🔵　パッケージ系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
-# Last Update: 2025-02-19 15:14:00 (JST) 🚀
+# Last Update: 2025-02-20 16:22:00 (JST) 🚀
 # install_package: パッケージのインストール処理 (OpenWrt / Alpine Linux)
 #
 # 【概要】
 # 指定されたパッケージをインストールし、オプションに応じて以下の処理を実行する。
+#　GitHub の package.db のリモート管理　　＜＜＜　追加要件
 #
 # 【フロー】
 # 2️⃣ デバイスにパッケージがインストール済みか確認
-# 1️⃣ update は初回に一回のみ、opkg update / apk update を実行
+# 1️⃣ update は初回に一回後最適な管理（２４時間で更新）、opkg update / apk update を実行
 # 3️⃣ パッケージがリポジトリに存在するか確認
 # 4️⃣ インストール確認（yn オプションが指定された場合）
 # 5️⃣ インストールの実行
 # 6️⃣ 言語パッケージの適用（lang オプションがない場合）
-# 7️⃣ package.db の適用（notpack オプションがない場合）
+# 7️⃣ local-package.db の適用（notpack オプションがない場合）
 # 8️⃣ 設定の有効化（デフォルト enabled、disabled オプションで無効化）
 #
 # 【グローバルオプション】
@@ -1020,6 +1021,7 @@ normalize_language() {
 # 【オプション】
 # - yn         : インストール前に確認する（デフォルト: 確認なし）
 # - nolang     : 言語パッケージの適用をスキップ（デフォルト: 適用する）
+# - force      : 強制インストール （デフォルト: 適用しない）
 # - notpack    : package.db での設定適用をスキップ（デフォルト: 適用する）
 # - disabled   : 設定を disabled にする（デフォルト: enabled）
 # - hidden     : 既にインストール済みの場合、"パッケージ xxx はすでにインストールされています" のメッセージを非表示にする
@@ -1031,7 +1033,7 @@ normalize_language() {
 # - update オプションが指定された場合、update.ch のキャッシュを無視して強制的に update を実行
 # - downloader_ch から opkg または apk を取得し、適切なパッケージ管理ツールを使用
 # - messages.db を参照し、すべてのメッセージを取得（JP/US 対応）
-# - package.db の設定がある場合、uci set を実行し適用（notset オプションで無効化可能）
+# - local-package.db の設定がある場合、uci set を実行し適用（notset オプションで無効化可能）
 # - 言語パッケージは luci-app-xxx 形式を対象に適用（dont オプションで無効化可能）
 # - 設定の有効化はデフォルト enabled、disabled オプション指定時のみ disabled
 # - update は明示的に install_package update で実行（パッケージインストール時には自動実行しない）
@@ -1119,11 +1121,46 @@ install_package() {
     current_date=$(date '+%Y-%m-%d')
 
     if [ "$update_mode" = "yes" ] || [ ! -f "$update_cache" ] || ! grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
-        debug_log "INFO" "Running package manager update..."
+        debug_log "INFO" "$(get_message "MSG_UPDATE_RUNNING")"
+
+        # **アップデートの開始メッセージ（hidden でも必ず表示）**
+        echo -n "$(get_message "MSG_UPDATE_IN_PROGRESS")"
+
+        # **スピナー表示を開始**
+        local pid
+        ( while true; do for s in '-' '\\' '|' '/'; do echo -ne "\r$(get_message "MSG_UPDATE_IN_PROGRESS") $s"; sleep 0.2; done; done ) &
+        pid=$!
+
+        # **実際の update コマンド**
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            opkg update && echo "LAST_UPDATE=$current_date" > "$update_cache"
+            if [ "$DEBUG_MODE" = "true" ]; then
+                opkg update  # デバッグ時は通常の出力を表示
+            else
+                opkg update > /tmp/aios/opkg_update.log 2>&1
+            fi
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            apk update && echo "LAST_UPDATE=$current_date" > "$update_cache"
+            if [ "$DEBUG_MODE" = "true" ]; then
+                apk update
+            else
+                apk update > /tmp/aios/apk_update.log 2>&1
+            fi
+        fi
+
+        # **スピナーを停止**
+        kill "$pid" >/dev/null 2>&1
+        wait "$pid" 2>/dev/null
+
+        # **アップデート完了メッセージ**
+        echo -e "\r$(get_message "MSG_UPDATE_COMPLETE")      "  # `\r` で行を上書き
+
+        # **エラーがあれば表示**
+        if [ "$PACKAGE_MANAGER" = "opkg" ] && grep -q "failed" /tmp/aios/opkg_update.log; then
+            echo "$(get_message "MSG_UPDATE_FAILED") /tmp/aios/opkg_update.log"
+        elif [ "$PACKAGE_MANAGER" = "apk" ] && grep -q "ERROR" /tmp/aios/apk_update.log; then
+            echo "$(get_message "MSG_UPDATE_FAILED") /tmp/aios/apk_update.log"
+        else
+            echo "$(get_message "MSG_UPDATE_SUCCESS")"
+            echo "LAST_UPDATE=$current_date" > "$update_cache"
         fi
     fi
 
