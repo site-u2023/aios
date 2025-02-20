@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-11-11"
+SCRIPT_VERSION="2025.02.20-11-12"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1250,7 +1250,6 @@ install_build() {
         return 1
     fi
 
-    # インストールの確認が必要か
     if [ "$confirm_install" = "yes" ]; then
         while true; do
             echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
@@ -1258,7 +1257,9 @@ install_build() {
             read -r yn
             case "$yn" in
                 [Yy]*) break ;;
-                [Nn]*) return 1 ;;
+                [Nn]*) 
+                    echo "$(get_message "MSG_INSTALL_ABORTED")"  # ← ここでキャンセルメッセージを出す
+                    return 1 ;;
                 *) echo "Invalid input. Please enter Y or N." ;;
             esac
         done
