@@ -1,7 +1,7 @@
 # メッセージデータベース (多言語対応)
 # フォーマット: 言語コード|メッセージキー=メッセージ
 
-SCRIPT_VERSION="2025.02.18-00-01"
+SCRIPT_VERSION="2025.02.18-00-02"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION messages.db \033[0m"
 
 SUPPORTED_LANGUAGES="US JP"
@@ -81,8 +81,8 @@ JP|MSG_UPDATE_IN_PROGRESS=📡 パッケージマネージャーの更新を実�
 US|MSG_UPDATE_COMPLETE=✅ Update complete.
 JP|MSG_UPDATE_COMPLETE=✅ アップデート完了。
 
-US|MSG_UPDATE_SUCCESS=✅ Package list is up to date.
-JP|MSG_UPDATE_SUCCESS=✅ パッケージリストは最新です。
+US|MSG_UPDATE_SUCCESS=✅ Package list has been updated to the latest version.
+JP|MSG_UPDATE_SUCCESS=✅ パッケージリストは最新に更新しました。
 
 US|MSG_UPDATE_FAILED=❌ Update failed. Check the logs for details.
 JP|MSG_UPDATE_FAILED=❌ アップデートに失敗しました。詳細はログを確認してください。
