@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-12-01"
+SCRIPT_VERSION="2025.02.20-12-02"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1123,61 +1123,61 @@ install_package() {
     if [ "$update_mode" = "yes" ] || [ ! -f "$update_cache" ] || ! grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
         debug_log "DEBUG" "$(get_message "MSG_RUNNING_UPDATE")"
 
-        # **アップデートの開始メッセージ（hidden でも必ず表示）**
-	echo -en "\r$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")") "
+    # **アップデートの開始メッセージ（hidden でも必ず表示）**
+    echo -en "\r$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")") "
 
-        # **スピナー表示を開始（バックグラウンド）**
-	spin() {
-    	local delay=0.2  # スピナーの更新間隔
-    	local spin_chars='-\|/'  # スピナーの回転パターン
-    	local i=0
+    # **スピナー表示を開始（バックグラウンド）**
+    spin() {
+        local delay=0.2  # スピナーの更新間隔
+        local spin_chars='-\|/'  # スピナーの回転パターン
+        local i=0
 
-    	while true; do
-        	# スピナーの表示
-	 	printf "\r%s %s" "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")" "${spin_chars:i++%4:1}"
+        while true; do
+            # スピナーの表示
+            printf "\r%s %s" "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")" "${spin_chars:i++%4:1}"
         
-        	# `usleep` があれば精密な待機、それ以外は `sleep`
-        	if command -v usleep >/dev/null 2>&1; then
-            	usleep 200000  # 0.2秒 = 200,000マイクロ秒
-        	else
-            	sleep "$delay"
-        	fi
-    	done
-	}
- 
-        spin &
-        SPINNER_PID=$!
+            # `usleep` があれば精密な待機、それ以外は `sleep`
+            if command -v usleep >/dev/null 2>&1; then
+                usleep 200000  # 0.2秒 = 200,000マイクロ秒
+            else
+                sleep "$delay"
+            fi
+        done
+    }
 
-        # **トラップを設定し、エラー時にスピナーを止める**
-        trap 'kill "$SPINNER_PID" >/dev/null 2>&1; wait "$SPINNER_PID" 2>/dev/null || true' EXIT
+    spin &  # スピナーをバックグラウンドで実行
+    SPINNER_PID=$!
 
-        # **実際の update コマンド**
-        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            opkg update > ${LOG_DIR}/opkg_update.log 2>&1
-            UPDATE_STATUS=$?
-        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            apk update > ${LOG_DIR}/apk_update.log 2>&1
-            UPDATE_STATUS=$?
-        fi
+    # **トラップを設定し、エラー時・終了時にスピナーを確実に止める**
+    trap 'kill $SPINNER_PID >/dev/null 2>&1; wait $SPINNER_PID 2>/dev/null || true' EXIT
 
-        # **スピナーを停止**
-	kill "$SPINNER_PID" >/dev/null 2>&1
-	wait "$SPINNER_PID" 2>/dev/null || true
-
-	# **エラーハンドリング**
-	if [ "$UPDATE_STATUS" -ne 0 ]; then
-    	    debug_log "ERROR" "$(get_message "MSG_UPDATE_FAILED")"
-	    printf "\r%s %s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")" # `\r` で行を上書き
-    	    return 1
-	else
-            # **アップデート完了メッセージ**
-	    printf "\r%s %s\n" "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")" # `\r` で行を上書き
-	fi
-
-        # **トラップ解除**
-        trap - EXIT
+    # **実際の update コマンド**
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        opkg update > "${LOG_DIR}/opkg_update.log" 2>&1
+        UPDATE_STATUS=$?
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        apk update > "${LOG_DIR}/apk_update.log" 2>&1
+        UPDATE_STATUS=$?
     fi
 
+    # **スピナーを停止**
+    kill "$SPINNER_PID" >/dev/null 2>&1
+    wait "$SPINNER_PID" 2>/dev/null || true
+
+    # **エラーハンドリング**
+    if [ "$UPDATE_STATUS" -ne 0 ]; then
+        debug_log "ERROR" "$(get_message "MSG_UPDATE_FAILED")"
+        printf "\r%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"  # `\r` で行を上書き + `\n` で改行
+        return 1
+    else
+        # **アップデート完了メッセージ**
+        printf "\r%s\n" "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"  # `\r` で行を上書き + `\n` で改行
+    fi
+
+    # **トラップ解除（不要なループを防止）**
+    trap - EXIT
+    fi
+    
     # **インストール前の確認**
     if [ "$confirm_install" = "yes" ]; then
         while true; do
