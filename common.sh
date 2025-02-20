@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-12-09"
+SCRIPT_VERSION="2025.02.20-12-10"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1167,19 +1167,22 @@ install_package() {
             UPDATE_STATUS=$?
         fi
 
-        # スピナー終了後、メッセージをリセットして `MSG_UPDATE_SUCCESS` を表示
+        # **スピナーを停止**
         cleanup_spinner
-        printf "\r%-50s\n" ""  # `%-50s` でスペースを50個入れて上書き消去
-        printf "\r%s\n" "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
 
-        # **エラーハンドリング**
+        # ✅ **スピナー行の完全消去**
+        printf "\r%-50s\r" ""
+
+        # ✅ **エラーハンドリング**
         if [ "$UPDATE_STATUS" -ne 0 ]; then
             debug_log "ERROR" "$(get_message "MSG_UPDATE_FAILED")"
-            printf "\r%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"  # `\r` で行を上書き + `\n` で改行
+            printf "\r%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"  
             return 1
         else
             echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
-            printf "\r%s\n" "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"  # ✅ 修正
+
+            # ✅ **成功メッセージは1回だけ**
+            printf "\r%s\n" "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
         fi
 
         # **トラップ解除**
