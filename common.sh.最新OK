@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-10-02"
+SCRIPT_VERSION="2025.02.20-11-14"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -341,14 +341,6 @@ normalize_version() {
     echo "$input"
 }
 
-get_script_version() {
-    local version=""
-    version=$(grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' "$0" | cut -d'=' -f2 | tr -d '"')
-    version=$(normalize_version "$version")
-
-    echo "$version"
-}
-
 #########################################################################
 # Last Update: 2025-02-18 18:00:00 (JST) 🚀
 # "Efficiency in retrieval, clarity in communication."
@@ -427,20 +419,19 @@ get_message() {
 # 6. **影響範囲:** `common.sh` の `download()` のみ（他の関数には影響なし）。
 #########################################################################
 download() {
-    # **バージョン情報の表示**
-    if [ "$QUIET_MODE" != "true" ]; then
-        echo -e "$(color cyan "Executing download function - Version: ${SCRIPT_VERSION}")"
-    fi
-
     local hidden_mode="false"
     local quiet_mode="${QUIET_MODE:-false}"
     local file_name=""
+    local local_version=""
+    local remote_version=""
+    local script_db="${CACHE_DIR}/script.ch"
 
     # **引数解析（順不同対応）**
     while [ "$#" -gt 0 ]; do
         case "$1" in
             hidden) hidden_mode="true" ;;
             quiet) quiet_mode="true" ;;
+            debug) DEBUG_MODE="true" ;;
             *) file_name="$1" ;;  # 最初に見つかった非オプション引数をファイル名とする
         esac
         shift
@@ -452,19 +443,48 @@ download() {
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
 
-    # **既存ファイルのチェック**
-    if [ -f "$install_path" ]; then
-        if [ "$hidden_mode" = "true" ]; then
-            return 0
-        fi
-        if [ "$quiet_mode" != "true" ]; then
-            echo "$(color yellow "$file_name already exists. Skipping download.")"
-        fi
+    # **script.ch がなければ作成**
+    if [ ! -f "$script_db" ]; then
+        touch "$script_db"
+    fi
+
+    # **ローカルバージョンの取得（script.ch を参照）**
+    if grep -q "^${file_name}=" "$script_db"; then
+        local_version=$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)
+    fi
+
+    # **リモートバージョンの取得**
+    remote_version=""
+    remote_version=$(wget -qO- "$remote_url" | grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' | cut -d'=' -f2 | tr -d '"')
+
+    # **リモートバージョンが取得できない場合は仮のバージョンを設定**
+    if [ -z "$remote_version" ]; then
+        debug_log "DEBUG" "No version information found for $file_name. Skipping version check and proceeding with download."
+        remote_version="2025.01.01-00-00"
+    fi
+
+    # **デバッグモード時のみ、バージョン情報を記録**
+    debug_log "DEBUG" "Download function executed - Target Version: $remote_version"
+
+    # **hidden モード時、ローカルファイルがあるなら即リターン**
+    if [ "$hidden_mode" = "true" ] && [ -f "$install_path" ]; then
+        debug_log "DEBUG" "hidden mode enabled - Skipping download for $file_name"
         return 0
     fi
 
+    # **バージョンチェック**
+    if [ -z "$local_version" ]; then
+        debug_log "DEBUG" "No local version found for $file_name. Downloading..."
+    elif [ "$local_version" = "$remote_version" ]; then
+        if [ "$quiet_mode" != "true" ]; then
+            echo "$(color yellow "$file_name is already up-to-date. (Version: $local_version)")"
+        fi
+        return 0
+    else
+        debug_log "DEBUG" "Updating $file_name (Local: $local_version, Remote: $remote_version)"
+    fi
+
     # **ダウンロード開始**
-    debug_log "DEBUG" "Starting download of $file_name from $remote_url"
     if ! $BASE_WGET "$install_path" "$remote_url"; then
         debug_log "ERROR" "Download failed: $file_name"
         return 1
@@ -476,13 +496,70 @@ download() {
         return 1
     fi
 
-    # **ダウンロード成功メッセージ**
-    if [ "$quiet_mode" != "true" ]; then
-        echo "$(color green "Download completed: $file_name")"
+    # **ダウンロード成功メッセージ（hidden でも常に表示）**
+    echo "$(color green "Download completed: $file_name - Version: $remote_version")"
+
+    debug_log "DEBUG" "Download completed: $file_name is valid."
+
+    # **script.ch にバージョン情報を更新**
+    if grep -q "^${file_name}=" "$script_db"; then
+        sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_db"
+    else
+        echo "${file_name}=${remote_version}" >> "$script_db"
     fi
 
-    debug_log "INFO" "Download completed: $file_name is valid."
+    debug_log "DEBUG" "Updated script.ch: ${file_name}=${remote_version}"
+
     return 0
+}
+
+#######################################################################
+get_script_version() {
+    local script_file="$1"
+    local script_db="${CACHE_DIR}/script.ch"
+
+    # **スクリプトファイルが指定されていない場合はエラー**
+    if [ -z "$script_file" ]; then
+        echo "Error: No script file specified." >&2
+        return 1
+    fi
+
+    # **スクリプトが存在しない場合はエラー**
+    if [ ! -f "$script_file" ]; then
+        echo "Error: Script file not found: $script_file" >&2
+        return 1
+    fi
+
+    local version=""
+    
+    # **`SCRIPT_VERSION="..."` の値を取得**
+    version=$(grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' "$script_file" | cut -d'=' -f2 | tr -d '"')
+
+    # **バージョンの正規化**
+    version=$(normalize_version "$version")
+
+    # **バージョン取得に失敗した場合はエラー**
+    if [ -z "$version" ]; then
+        echo "Error: Could not extract SCRIPT_VERSION from $script_file" >&2
+        return 1
+    fi
+
+    # **script.ch がなければ作成**
+    if [ ! -f "$script_db" ]; then
+        touch "$script_db"
+    fi
+
+    # **script.ch への書き込み**
+    if grep -q "^${script_file}=" "$script_db"; then
+        sed -i "s|^${script_file}=.*|${script_file}=${version}|" "$script_db"
+    else
+        echo "${script_file}=${version}" >> "$script_db"
+    fi
+
+    # **デバッグログに記録**
+    debug_log "INFO" "Updated script.ch: ${script_file}=${version}"
+
+    echo "$version"
 }
 
 # 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
@@ -552,87 +629,73 @@ select_country() {
 
     local cache_country="${CACHE_DIR}/country.ch"
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
-    local lang_code="$1"  # 引数として渡された言語コード
+    local input_lang="$1"  # 引数として渡された言語コード（無ければ後で入力）
 
-    # `$1` が渡された場合、country.db で検索
-    if [ -n "$lang_code" ]; then
-        # `country.db` を検索して該当する国を抽出
-        local full_results
-        full_results=$(awk -v search="$lang_code" 'BEGIN {IGNORECASE=1} { if ($0 ~ search) print $0 }' "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
-        
-        if [ -n "$full_results" ]; then
-            # 見つかった場合、ゾーン選択へ進む
-            debug_log "INFO" "Country found for '$lang_code'. Proceeding to select_zone."
-            echo "$full_results" > "$tmp_country"
-            country_write 
-            debug_log "DEBUG" "Proceeding to select_zone."
-            select_zone
-            return
-        else
-            # 見つからなければ、言語選択を実行
-            debug_log "INFO" "No matching country found for '$lang_code'. Proceeding with language selection."
-        fi
-    fi
-
-    # `$1` が渡されていない場合、country.ch を確認
+    # キャッシュがあればゾーン選択へスキップ
     if [ -f "$cache_country" ]; then
-        # キャッシュがあれば言語選択をスキップしてゾーン選択へ進む
-        debug_log "INFO" "Country cache found. Skipping selection."
+        debug_log "DEBUG" "Country cache found. Skipping selection."
         select_zone
-    else
-        # キャッシュがなければ言語選択を実行
-        debug_log "INFO" "No country cache found. Proceeding with language selection."
+        return
     fi
 
     while true; do
-        printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_COUNTRY")")"
-        printf "%s" "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
-        read -r input
+        # `$1` がある場合は read せず、直接 `input_lang` を使う
+        if [ -z "$input_lang" ]; then
+            printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_COUNTRY")")"
+            printf "%s" "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
+            read -r input_lang
+        fi
 
         # 入力の正規化: "/", ",", "_" をスペースに置き換え
         local cleaned_input
-        cleaned_input=$(echo "$input" | sed 's/[\/,_]/ /g')
+        cleaned_input=$(echo "$input_lang" | sed 's/[\/,_]/ /g')
 
-        # 国データベースから、検索キーワードを含む全行（フルライン）を抽出
+        # 🔹 `country.db` から検索（フルライン取得）
         local full_results
         full_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} { if ($0 ~ search) print $0 }' "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
+
         if [ -z "$full_results" ]; then
-            printf "%s\n" "$(color red "Error: No matching country found for '$input'. Please try again.")"
+            printf "%s\n" "$(color red "Error: No matching country found for '$input_lang'. Please try again.")"
+            input_lang=""  # 🔹 エラー時はリセットして再入力
             continue
         fi
 
-        # 表示用には、フルラインから $2 と $3（例：国名と表示用言語）だけを抜粋
+        debug_log "DEBUG" "Country found for '$input_lang'. Presenting selection list."
+
+        # 🔹 表示用リスト作成（`$2 $3` のみを抽出してリスト表示）
         local display_results
         display_results=$(echo "$full_results" | awk '{print $2, $3}')
 
-        # ユーザーに表示用リストを選択させる
+        # 🔹 選択リスト表示（番号付き）
+        echo "$display_results" > "$tmp_country"
         select_list "$display_results" "$tmp_country" "country"
 
-        # select_list() により、ユーザーが選択した表示用行が tmp_country に保存されるが、
-        # その行番号を用いて full_results から対応するフル情報を取り出す
-        local selected_line_number
-        selected_line_number=$(awk 'END {print NR}' "$tmp_country")
-        if [ -z "$selected_line_number" ]; then
+        # 🔹 ユーザー選択番号を取得
+        local selected_number
+        selected_number=$(awk 'END {print NR}' "$tmp_country")
+
+        if [ -z "$selected_number" ]; then
             printf "%s\n" "$(color red "Error: No selection made. Please try again.")"
             continue
         fi
 
-        # full_results のうち、選択された行番号のフルラインを抽出
+        # 🔹 `full_results` から該当行のフルデータを取得
         local selected_full
-        selected_full=$(echo "$full_results" | sed -n "${selected_line_number}p")
+        selected_full=$(echo "$full_results" | sed -n "${selected_number}p")
+
         if [ -z "$selected_full" ]; then
             printf "%s\n" "$(color red "Error: Failed to retrieve full country information. Please try again.")"
             continue
         fi
 
-        # tmp_country にはフルライン（必要なフィールド $2～$5 を含む）を保存する
+        # 🔹 フルラインを `tmp_country` に保存
         echo "$selected_full" > "$tmp_country"
 
-        # 選択結果をキャッシュに書き込む（country_write() は tmp_country の内容を利用）
+        # 🔹 `country_write()` に渡す（キャッシュ書き込み）
         country_write
 
-        # ゾーン選択へ進む
-        debug_log "INFO" "Country selection completed. Proceeding to select_zone()."
+        # 🔹 ゾーン選択へ進む
+        debug_log "DEBUG" "Country selection completed. Proceeding to select_zone()."
         select_zone
         return
     done
@@ -699,6 +762,12 @@ select_list() {
         if [ "$yn" = "Y" ] || [ "$yn" = "y" ]; then
             printf "%s\n" "$selected_value" > "$output_file"
             return
+        elif [ "$yn" = "R" ] || [ "$yn" = "r" ]; then
+            debug_log "DEBUG" "User chose to restart selection."
+            rm -f "${CACHE_DIR}/country.ch"  # **キャッシュ削除で完全リセット**
+            select_country
+            return
+            #continue  # **選択をリスタート**
         fi
     done  
 }
@@ -908,7 +977,7 @@ normalize_language() {
     supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
 
     if echo "$supported_languages" | grep -qw "$selected_language"; then
-        debug_log "INFO" "Using message database language: $selected_language"
+        debug_log "DEBUG" "Using message database language: $selected_language"
         echo "$selected_language" > "$message_cache"
         ACTIVE_LANGUAGE="$selected_language"
     else
@@ -917,7 +986,7 @@ normalize_language() {
         ACTIVE_LANGUAGE="US"
     fi
 
-    debug_log "INFO" "Final system message language -> $ACTIVE_LANGUAGE"
+    debug_log "DEBUG" "Final system message language -> $ACTIVE_LANGUAGE"
     echo "$(get_message "MSG_COUNTRY_SUCCESS")"
     touch "$flag_file"
 }
@@ -928,20 +997,21 @@ normalize_language() {
 # 🔵　パッケージ系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
-# Last Update: 2025-02-19 15:14:00 (JST) 🚀
+# Last Update: 2025-02-20 16:22:00 (JST) 🚀
 # install_package: パッケージのインストール処理 (OpenWrt / Alpine Linux)
 #
 # 【概要】
 # 指定されたパッケージをインストールし、オプションに応じて以下の処理を実行する。
+#　GitHub の package.db のリモート管理　　＜＜＜　追加要件
 #
 # 【フロー】
 # 2️⃣ デバイスにパッケージがインストール済みか確認
-# 1️⃣ update は初回に一回のみ、opkg update / apk update を実行
+# 1️⃣ update は初回に一回後最適な管理（２４時間で更新）、opkg update / apk update を実行
 # 3️⃣ パッケージがリポジトリに存在するか確認
 # 4️⃣ インストール確認（yn オプションが指定された場合）
 # 5️⃣ インストールの実行
 # 6️⃣ 言語パッケージの適用（lang オプションがない場合）
-# 7️⃣ package.db の適用（notpack オプションがない場合）
+# 7️⃣ local-package.db の適用（notpack オプションがない場合）
 # 8️⃣ 設定の有効化（デフォルト enabled、disabled オプションで無効化）
 #
 # 【グローバルオプション】
@@ -951,6 +1021,7 @@ normalize_language() {
 # 【オプション】
 # - yn         : インストール前に確認する（デフォルト: 確認なし）
 # - nolang     : 言語パッケージの適用をスキップ（デフォルト: 適用する）
+# - force      : 強制インストール （デフォルト: 適用しない）
 # - notpack    : package.db での設定適用をスキップ（デフォルト: 適用する）
 # - disabled   : 設定を disabled にする（デフォルト: enabled）
 # - hidden     : 既にインストール済みの場合、"パッケージ xxx はすでにインストールされています" のメッセージを非表示にする
@@ -962,7 +1033,7 @@ normalize_language() {
 # - update オプションが指定された場合、update.ch のキャッシュを無視して強制的に update を実行
 # - downloader_ch から opkg または apk を取得し、適切なパッケージ管理ツールを使用
 # - messages.db を参照し、すべてのメッセージを取得（JP/US 対応）
-# - package.db の設定がある場合、uci set を実行し適用（notset オプションで無効化可能）
+# - local-package.db の設定がある場合、uci set を実行し適用（notset オプションで無効化可能）
 # - 言語パッケージは luci-app-xxx 形式を対象に適用（dont オプションで無効化可能）
 # - 設定の有効化はデフォルト enabled、disabled オプション指定時のみ disabled
 # - update は明示的に install_package update で実行（パッケージインストール時には自動実行しない）
@@ -993,9 +1064,14 @@ install_package() {
     local set_disabled="no"
     local hidden="no"
     local test_mode="no"
+    local force_install="no"
+    local update_mode="no"
     local package_name=""
+    local package_db_remote="${BASE_URL}/packages.db"
+    local package_db_local="${CACHE_DIR}/local-package.db"
+    local update_cache="${CACHE_DIR}/update.ch"
 
-    # オプションの処理
+    # **オプションの処理**
     for arg in "$@"; do
         case "$arg" in
             yn) confirm_install="yes" ;;
@@ -1004,6 +1080,8 @@ install_package() {
             disabled) set_disabled="yes" ;;
             hidden) hidden="yes" ;;
             test) test_mode="yes" ;;
+            force) force_install="yes" ;;
+            update) update_mode="yes" ;;
             *)
                 if [ -z "$package_name" ]; then
                     package_name="$arg"
@@ -1015,11 +1093,11 @@ install_package() {
     done
 
     if [ -z "$package_name" ]; then
-        echo "$(get_message "MSG_ERROR_NO_PACKAGE")" >&2
+        echo "$(get_message "MSG_INSTALL_ABORTED")" >&2
         return 1
     fi
 
-    # パッケージマネージャーの確認（downloader_ch のキャッシュを参照）
+    # **パッケージマネージャーの確認**
     if [ -f "${CACHE_DIR}/downloader_ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
     else
@@ -1027,8 +1105,8 @@ install_package() {
         return 1
     fi
 
-    # すでにインストールされているか確認（testモード時はスキップ）
-    if [ "$test_mode" = "no" ]; then
+    # **パッケージのインストール済みチェック**
+    if [ "$test_mode" = "no" ] && [ "$force_install" = "no" ]; then
         if [ "$PACKAGE_MANAGER" = "opkg" ] && opkg list-installed | grep -q "^$package_name "; then
             [ "$hidden" != "yes" ] && echo "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")"
             return 0
@@ -1038,25 +1116,67 @@ install_package() {
         fi
     fi
 
-    # 最初の実行時に一度だけ update を実行
-    if [ ! -f "${CACHE_DIR}/update.ch" ]; then
-        debug_log "INFO" "Running package manager update..."
+    # **update の管理**
+    local current_date
+    current_date=$(date '+%Y-%m-%d')
+
+    if [ "$update_mode" = "yes" ] || [ ! -f "$update_cache" ] || ! grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
+        debug_log "INFO" "$(get_message "MSG_UPDATE_RUNNING")"
+
+        # **アップデートの開始メッセージ（hidden でも必ず表示）**
+        echo -n "$(get_message "MSG_UPDATE_IN_PROGRESS")"
+
+        # **スピナー表示を開始（バックグラウンド）**
+	    spin() {
+	            while true; do
+	                for s in '-' '\\' '|' '/'; do
+	                    echo -ne "\r$(get_message "MSG_UPDATE_IN_PROGRESS") $s"
+	                    if command -v usleep >/dev/null 2>&1; then
+	                        usleep 200000
+	                    else
+	                        sleep 1
+	                    fi
+	                done
+	            done
+	    }
+
+        spin &
+        SPINNER_PID=$!
+
+        # **トラップを設定し、エラー時にスピナーを止める**
+        trap 'kill $SPINNER_PID >/dev/null 2>&1' EXIT
+
+        # **実際の update コマンド**
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            if opkg update > /dev/null 2>&1; then
-                debug_log "INFO" "opkg update completed successfully."
-            else
-                debug_log "ERROR" "opkg update failed."
-            fi
+            opkg update > /tmp/aios/opkg_update.log 2>&1
+            UPDATE_STATUS=$?
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            if apk update > /dev/null 2>&1; then
-                debug_log "INFO" "apk update completed successfully."
-            else
-                debug_log "ERROR" "apk update failed."
-            fi
+            apk update > /tmp/aios/apk_update.log 2>&1
+            UPDATE_STATUS=$?
         fi
-        touch "${CACHE_DIR}/update.ch"
+
+        # **スピナーを停止**
+        kill "$SPINNER_PID" >/dev/null 2>&1
+        wait "$SPINNER_PID" 2>/dev/null
+
+        # **アップデート完了メッセージ**
+        echo -e "\r$(get_message "MSG_UPDATE_COMPLETE")      "  # `\r` で行を上書き
+
+        # **エラーハンドリング**
+        if [ "$UPDATE_STATUS" -ne 0 ]; then
+            debug_log "ERROR" "$(get_message "MSG_UPDATE_FAILED")"
+            echo "$(get_message "MSG_UPDATE_FAILED")"
+            return 1
+        else
+            echo "$(get_message "MSG_UPDATE_SUCCESS")"
+            echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
+        fi
+
+        # **トラップ解除**
+        trap - EXIT
     fi
 
+    # **インストール前の確認**
     if [ "$confirm_install" = "yes" ]; then
         while true; do
             echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
@@ -1064,7 +1184,7 @@ install_package() {
             read -r yn
             case "$yn" in
                 [Yy]*) break ;;
-                [Nn]*) echo "$(get_message "MSG_INSTALL_ABORTED")"; return 1 ;;
+                [Nn]*) return 1 ;;
                 *) echo "Invalid input. Please enter Y or N." ;;
             esac
         done
@@ -1076,6 +1196,30 @@ install_package() {
     else
         $PACKAGE_MANAGER install "$package_name"
     fi
+
+    # **package.db（ローカル）適用**
+    if [ "$skip_package_db" = "no" ] && [ -f "$package_db_local" ]; then
+        if grep -q "^$package_name=" "$package_db_local"; then
+            eval "$(grep "^$package_name=" "$package_db_local" | cut -d'=' -f2-)"
+        fi
+    fi
+
+    # **言語パッケージ適用**
+    if [ "$skip_lang_pack" = "no" ] && [ -f "$package_db_local" ]; then
+        if grep -q "^$package_name-lang=" "$package_db_local"; then
+            eval "$(grep "^$package_name-lang=" "$package_db_local" | cut -d'=' -f2-)"
+        fi
+    fi
+
+    # **設定の有効化**
+    if [ "$set_disabled" = "no" ]; then
+        if [ -f "$package_db_local" ] && grep -q "^$package_name-enable=" "$package_db_local"; then
+            eval "$(grep "^$package_name-enable=" "$package_db_local" | cut -d'=' -f2-)"
+        fi
+    fi
+
+    echo "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")"
+    debug_log "INFO" "Successfully installed package: $package_name"
 }
 
 #########################################################################
@@ -1155,7 +1299,6 @@ install_build() {
         return 1
     fi
 
-    # インストールの確認が必要か
     if [ "$confirm_install" = "yes" ]; then
         while true; do
             echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
@@ -1163,7 +1306,7 @@ install_build() {
             read -r yn
             case "$yn" in
                 [Yy]*) break ;;
-                [Nn]*) echo "$(get_message "MSG_INSTALL_ABORTED")"; return 1 ;;
+                [Nn]*) return 1 ;;
                 *) echo "Invalid input. Please enter Y or N." ;;
             esac
         done
@@ -1429,7 +1572,7 @@ check_common() {
             download "hidden" "messages.db"
             download "hidden" "openwrt.db"
             download "hidden" "country.db"
-            download "hidden" "packages.db"
+            download "hidden" "local-package.db"
             check_openwrt
             check_downloader
             select_country "$lang_code"
@@ -1438,10 +1581,21 @@ check_common() {
             download "messages.db"
             download "openwrt.db"
             download "country.db"
-            download "packages.db"
+            download "local-package.db"
             check_openwrt
             check_downloader
             select_country "$lang_code"
+            ;;
+        return)
+            rm -f "${CACHE_DIR}/country.ch" \
+                  "${CACHE_DIR}/language.ch" \
+                  "${CACHE_DIR}/luci.ch" \
+                  "${CACHE_DIR}/zone.ch" \
+                  "${CACHE_DIR}/zonename.ch" \
+                  "${CACHE_DIR}/timezone.ch" \
+                  "${CACHE_DIR}/country_success_done" \
+                  "${CACHE_DIR}/timezone_success_done"
+            select_country
             ;;
         *)
             ;;
