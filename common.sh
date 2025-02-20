@@ -1167,21 +1167,31 @@ install_package() {
  	# **アップデート完了メッセージ**
 	echo -e "\r$(get_message "MSG_UPDATE_COMPLETE")      "  # `\r` で行を上書き
 
-        # **エラーハンドリング**
-        if [ "$UPDATE_STATUS" -ne 0 ]; then
-            debug_log "ERROR" "$(get_message "MSG_UPDATE_FAILED")"
-            echo "$(get_message "MSG_UPDATE_FAILED")"
-            return 1
-        else
-            echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
-	    
-            # パッケージが更新された場合のみ表示
-            if [ -n "$file_name" ] && [ -n "$file_version" ]; then
-                echo "$(get_message "MSG_FILE_UPDATED" | sed "s/{file}/$file_name/g" | sed "s/{version}/$file_version/g")"
-            fi
-	    
-            echo "$(get_message "MSG_UPDATE_SUCCESS" | sed "s/{file}/$file_name/g" | sed "s/{version}/$file_version/g")"
-        fi
+	# **エラーハンドリング**
+	if [ "$UPDATE_STATUS" -ne 0 ]; then
+    	    debug_log "ERROR" "$(get_message "MSG_UPDATE_FAILED")"
+    	    echo "$(get_message "MSG_UPDATE_FAILED")"
+    	    return 1
+	else
+    	    echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
+
+    	    # **opkg update / apk update の完了メッセージ**
+    	    echo "$(get_message "MSG_UPDATE_SUCCESS")"
+
+    	    # **パッケージ名とバージョンを取得**
+    	    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        	file_name="$package_name"
+        	file_version=$(opkg info "$package_name" 2>/dev/null | grep -m1 "Version:" | awk '{print $2}')
+    	    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        	file_name="$package_name"
+        	file_version=$(apk info "$package_name" 2>/dev/null | grep -m1 "$package_name-" | cut -d'-' -f2)
+    	    fi
+
+    	    # **パッケージが更新された場合のみ表示**
+    	    if [ -n "$file_name" ] && [ -n "$file_version" ]; then
+        	echo "$(get_message "MSG_FILE_UPDATED" | sed "s/{file}/$file_name/g" | sed "s/{version}/$file_version/g")"
+    	    fi
+	fi
 
         # **トラップ解除**
         trap - EXIT
