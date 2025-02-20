@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-14-04"
+SCRIPT_VERSION="2025.02.20-14-05"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -266,6 +266,29 @@ check_openwrt() {
     else
         handle_error "Unsupported OpenWrt version: $CURRENT_VERSION"
     fi
+}
+
+#########################################################################
+# check_architecture
+#########################################################################
+#########################################################################
+# check_architecture: OpenWrtのアーキテクチャを確認・キャッシュ
+#########################################################################
+check_architecture() {
+    local arch_file="${CACHE_DIR}/architecture.ch"
+
+    # 既にキャッシュがある場合は再取得しない
+    if [ -f "$arch_file" ]; then
+        return 0
+    fi
+
+    # **アーキテクチャの取得**
+    local arch=$(uname -m)
+
+    # **キャッシュに保存**
+    echo "ARCHITECTURE=$arch" > "$arch_file"
+
+    debug_log "INFO" "Architecture detected: $arch"
 }
 
 #########################################################################
@@ -1265,7 +1288,7 @@ install_build() {
     local confirm_install="no"
     local hidden="no"
     local package_name=""
-    
+
     # **オプションの処理**
     for arg in "$@"; do
         case "$arg" in
@@ -1297,9 +1320,13 @@ install_build() {
     # **ビルド後のパッケージ名を取得**
     local built_package="${package_name#build_}"
 
-    # **アーキテクチャを取得**
-    local arch=$(uname -m)
-    debug_log "INFO" "Detected architecture: $arch"
+    # **アーキテクチャ & バージョン情報をキャッシュから取得**
+    check_architecture
+    local arch=$(grep "ARCHITECTURE=" "${CACHE_DIR}/architecture.ch" | cut -d'=' -f2)
+    local openwrt_version=$(grep "OPENWRT_VERSION=" "${CACHE_DIR}/architecture.ch" | cut -d'=' -f2)
+
+    debug_log "INFO" "Using architecture: $arch"
+    debug_log "INFO" "Using OpenWrt version: $openwrt_version"
 
     # **`custom-package.db` からビルドに必要な `dependencies` を取得**
     local dependencies=$(jq -r --arg pkg "$package_name" '.[$pkg].dependencies // empty' "$CUSTOM_PACKAGE_DB" 2>/dev/null)
@@ -1308,54 +1335,42 @@ install_build() {
         for dep in $dependencies; do
             install_package "$dep" hidden
         done
+    else
+        debug_log "WARN" "No dependencies found for $package_name."
     fi
 
     # **ビルド環境の準備**
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        install_package make hidden
-        install_package gcc hidden
-        install_package git hidden
-        install_package libtool hidden
-        install_package automake hidden
-        install_package pkg-config hidden
-        install_package zlib-dev hidden
-        install_package libssl-dev hidden
-        install_package libicu-dev hidden
-        install_package ncurses-dev hidden
-        install_package libcurl4-openssl-dev hidden
-        install_package libxml2-dev hidden
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        install_package build-base hidden
-        install_package gcc hidden
-        install_package musl-dev hidden
-        install_package libtool hidden
-        install_package automake hidden
-        install_package pkgconfig hidden
-        install_package zlib-dev hidden
-        install_package openssl-dev hidden
-        install_package icu-dev hidden
-        install_package ncurses-dev hidden
-        install_package curl-dev hidden
-        install_package libxml2-dev hidden
-    else
-        echo "Error: Unsupported package manager '$PACKAGE_MANAGER'." >&2
-        return 1
-    fi
+    install_package make hidden
+    install_package gcc hidden
+    install_package git hidden
+    install_package libtool hidden
+    install_package automake hidden
+    install_package pkg-config hidden
+    install_package zlib-dev hidden
+    install_package libssl-dev hidden
+    install_package libicu-dev hidden
+    install_package ncurses-dev hidden
+    install_package curl-dev hidden
+    install_package libxml2-dev hidden
 
-    # **ビルド開始メッセージ**
-    echo "$(get_message "MSG_BUILD_START" | sed "s/{pkg}/$built_package/")"
+    # **`custom-package.db` からバージョン & アーキテクチャごとの `build_command` を取得**
+    local build_command=$(jq -r --arg pkg "$package_name" --arg arch "$arch" --arg ver "$openwrt_version" '
+        .[$pkg].build_commands[$ver][$arch] // 
+        .[$pkg].build_commands[$ver].default // 
+        .[$pkg].build_commands.default[$arch] // 
+        .[$pkg].build_commands.default.default // empty' "$CUSTOM_PACKAGE_DB" 2>/dev/null)
 
-    # **`custom-package.db` からアーキテクチャに対応する `build_command` を取得**
-    local build_command=$(jq -r --arg pkg "$package_name" --arg arch "$arch" '.[$pkg].build_commands[$arch] // empty' "$CUSTOM_PACKAGE_DB" 2>/dev/null)
-    
     if [ -z "$build_command" ]; then
-        debug_log "ERROR" "No build command found for $package_name on architecture $arch."
-        echo "$(get_message "MSG_BUILD_FAIL" | sed "s/{pkg}/$built_package/")"
+        debug_log "ERROR" "No build command found for $package_name (Arch: $arch, Version: $openwrt_version)."
+        echo "⚠️ パッケージ $built_package のビルド情報が見つかりませんでした。" >&2
         return 1
     fi
 
     debug_log "INFO" "Executing build command: $build_command"
-    
+
+    # **ビルド開始メッセージ**
+    echo "$(get_message "MSG_BUILD_START" | sed "s/{pkg}/$built_package/")"
+
     # **ビルド実行**
     local start_time=$(date +%s)
     if ! eval "$build_command"; then
@@ -1365,7 +1380,7 @@ install_build() {
     fi
     local end_time=$(date +%s)
     local build_time=$((end_time - start_time))
-    
+
     echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$built_package/" | sed "s/{time}/$build_time/")"
     debug_log "INFO" "Build time for $built_package: $build_time seconds"
 
@@ -1601,6 +1616,7 @@ check_common() {
             download "hidden" "country.db"
             download "hidden" "local-package.db"
             check_openwrt
+            check_architecture
             check_downloader
             select_country "$lang_code"
             ;;
@@ -1610,6 +1626,7 @@ check_common() {
             download "country.db"
             download "local-package.db"
             check_openwrt
+            check_architecture
             check_downloader
             select_country "$lang_code"
             ;;
