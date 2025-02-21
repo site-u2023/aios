@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-01-04"
+SCRIPT_VERSION="2025.02.21-01-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1138,13 +1138,15 @@ normalize_language() {
 # **GitHub から `custom-package.db` を取得**
 download_custom_package_db() {
     if [ ! -f "$package_db_cache" ]; then
-        debug_log "INFO" "🌐 custom-package.db を GitHub から取得中..."
+        debug_log "INFO" "$(get_message "MSG_FETCHING_CUSTOM_DB")"
+
         if wget -q -O "$package_db_cache.tmp" "$package_db_remote"; then
             mv "$package_db_cache.tmp" "$package_db_cache"
-            debug_log "INFO" "✅ custom-package.db を取得しました。"
+            debug_log "INFO" "$(get_message "MSG_CUSTOM_DB_FETCH_SUCCESS")"
         else
-            debug_log "WARN" "⚠️ custom-package.db の取得に失敗しました。"
+            debug_log "WARN" "$(get_message "MSG_CUSTOM_DB_FETCH_FAIL")"
             rm -f "$package_db_cache.tmp"
+            handle_error "MSG_CUSTOM_DB_FETCH_FAIL"
         fi
     fi
 }
@@ -1191,7 +1193,7 @@ install_package() {
     done
 
     if [ -z "$package_name" ]; then
-        echo "$(get_message "MSG_INSTALL_ABORTED")" >&2
+        debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")"
         return 1
     fi
 
@@ -1199,7 +1201,7 @@ install_package() {
     if [ -f "${CACHE_DIR}/downloader_ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
     else 
-        echo "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")" >&2
+        debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")"
         return 1
     fi
 
@@ -1207,7 +1209,7 @@ install_package() {
 
     # **jq のエラーハンドリング**
     if [ "$custom_mode" -ne 0 ] && ! command -v jq >/dev/null 2>&1; then
-        debug_log "WARN" "⚠️ jq が見つかりません。custom-package.db の適用をスキップします。"
+        debug_log "WARN" "$(get_message "MSG_ERROR_JQ_NOT_FOUND")"
         custom_mode=0
     fi
 
@@ -1225,9 +1227,17 @@ install_package() {
 
         # **update 実行**
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            opkg update > "${LOG_DIR}/opkg_update.log" 2>&1
+            opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
+                debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+                stop_spinner
+                return 1
+            }
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            apk update > "${LOG_DIR}/apk_update.log" 2>&1
+            apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
+                debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+                stop_spinner
+                return 1
+            }
         fi
 
         stop_spinner  # スピナー停止
@@ -1256,13 +1266,21 @@ install_package() {
     # **インストール処理 (スピナー付き)**
     debug_log "DEBUG" "Installing package: $package_name"
     
-    spin "Installing $package_name..." 150000 &
+    spin "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")" 150000 &
     SPINNER_PID=$!
 
     if [ "$DEV_NULL" = "on" ]; then
-        $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1 || return 1
+        $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1 || {
+            stop_spinner
+            debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
+            return 1
+        }
     else
-        $PACKAGE_MANAGER install "$package_name" || return 1
+        $PACKAGE_MANAGER install "$package_name" || {
+            stop_spinner
+            debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
+            return 1
+        }
     fi
 
     stop_spinner  # スピナー停止
@@ -1437,43 +1455,55 @@ XXX_install_package() {
 # [uconv]　※行、列問わず記述可
 #########################################################################
 custom_feed() {
-# GitHub から `pacage_list` を取得
-PACKAGE_LIST_URL=$(jq -r --arg pkg "$package_name" '.[$pkg].fetch_latest' "$custom_package_db")
-PACKAGE_LIST_PATH="/tmp/config-software/package_list"
+    # GitHub から `package_list` を取得
+    local PACKAGE_LIST_URL=$(jq -r --arg pkg "$package_name" '.[$pkg].fetch_latest' "$custom_package_db")
+    local PACKAGE_LIST_PATH="/tmp/config-software/package_list"
 
-if [ -n "$PACKAGE_LIST_URL" ] && [ "$PACKAGE_LIST_URL" != "null" ]; then
-    debug_log "INFO" "🌐 Fetching latest package list for $package_name..."
-    mkdir -p /tmp/config-software
-    wget --no-check-certificate -q -O "$PACKAGE_LIST_PATH" "$PACKAGE_LIST_URL"
+    if [ -n "$PACKAGE_LIST_URL" ] && [ "$PACKAGE_LIST_URL" != "null" ]; then
+        debug_log "INFO" "🌐 $(get_message "MSG_FETCHING_PACKAGE_LIST" | sed "s/{pkg}/$package_name/")"
+        mkdir -p /tmp/config-software
 
-    if [ $? -ne 0 ]; then
-        debug_log "WARN" "⚠️ Failed to fetch package list. Skipping latest version detection."
-    else
-        # `extract_rule` に基づいて `luci-app-cpu-status` の最新バージョンを抽出
-        START_PATTERN=$(jq -r --arg pkg "$package_name" '.[$pkg].extract_rule.start' "$custom_package_db")
-        END_PATTERN=$(jq -r --arg pkg "$package_name" '.[$pkg].extract_rule.end' "$custom_package_db")
+        if ! wget --no-check-certificate -q -O "$PACKAGE_LIST_PATH" "$PACKAGE_LIST_URL"; then
+            debug_log "ERROR" "$(get_message "MSG_ERROR_PACKAGE_LIST_FETCH_FAILED" | sed "s/{pkg}/$package_name/")"
+            return 1
+        fi
+
+        # `extract_rule` に基づいて最新バージョンを抽出
+        local START_PATTERN=$(jq -r --arg pkg "$package_name" '.[$pkg].extract_rule.start' "$custom_package_db")
+        local END_PATTERN=$(jq -r --arg pkg "$package_name" '.[$pkg].extract_rule.end' "$custom_package_db")
 
         if [ -n "$START_PATTERN" ] && [ -n "$END_PATTERN" ]; then
-            CPU_STATUS=$(grep -o "${START_PATTERN}.*${END_PATTERN}" "$PACKAGE_LIST_PATH" | head -n 1)
+            local CPU_STATUS=$(grep -o "${START_PATTERN}.*${END_PATTERN}" "$PACKAGE_LIST_PATH" | head -n 1)
 
             if [ -n "$CPU_STATUS" ]; then
                 PACKAGE_URL="https://github.com/gSpotx2f/packages-openwrt/raw/master/${CPU_STATUS}.ipk"
-                debug_log "INFO" "🔄 Latest package detected: $PACKAGE_URL"
+                debug_log "INFO" "🔄 $(get_message "MSG_LATEST_PACKAGE_DETECTED" | sed "s/{url}/$PACKAGE_URL/")"
             else
-                debug_log "WARN" "⚠️ No matching package found in package list."
+                debug_log "WARN" "$(get_message "MSG_ERROR_NO_MATCHING_PACKAGE")"
             fi
         fi
+    else
+        debug_log "WARN" "$(get_message "MSG_ERROR_PACKAGE_LIST_URL_NOT_FOUND" | sed "s/{pkg}/$package_name/")"
+        return 1
     fi
-fi
 
-# `PACKAGE_URL` が見つかった場合のみダウンロード＆インストール
-if [ -n "$PACKAGE_URL" ]; then
-    wget --no-check-certificate -q -O "/tmp/$package_name.ipk" "$PACKAGE_URL"
-    opkg install "/tmp/$package_name.ipk"
-    rm "/tmp/$package_name.ipk"
-else
-    debug_log "ERROR" "❌ Could not determine package URL for $package_name."
-fi
+    # `PACKAGE_URL` が見つかった場合のみダウンロード＆インストール
+    if [ -n "$PACKAGE_URL" ]; then
+        if ! wget --no-check-certificate -q -O "/tmp/$package_name.ipk" "$PACKAGE_URL"; then
+            debug_log "ERROR" "$(get_message "MSG_ERROR_PACKAGE_DOWNLOAD_FAILED" | sed "s/{pkg}/$package_name/")"
+            return 1
+        fi
+
+        if ! opkg install "/tmp/$package_name.ipk"; then
+            debug_log "ERROR" "$(get_message "MSG_ERROR_PACKAGE_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
+            return 1
+        fi
+
+        rm "/tmp/$package_name.ipk"
+    else
+        debug_log "ERROR" "$(get_message "MSG_ERROR_PACKAGE_URL_NOT_FOUND" | sed "s/{pkg}/$package_name/")"
+        return 1
+    fi
 }
 
 install_build() {
@@ -1490,7 +1520,7 @@ install_build() {
                 if [ -z "$package_name" ]; then
                     package_name="$arg"
                 else
-                    debug_log "WARN" "Unknown option: $arg"
+                    debug_log "WARN" "$(get_message "MSG_UNKNOWN_OPTION" | sed "s/{option}/$arg/")"
                 fi
                 ;;
         esac
@@ -1499,7 +1529,7 @@ install_build() {
     # **パッケージ名が指定されているか確認**
     if [ -z "$package_name" ]; then
         debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")"
-        echo "Error: No package specified." >&2
+        echo "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")" >&2
         return 1
     fi
 
@@ -1508,7 +1538,7 @@ install_build() {
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
     else
         debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")"
-        echo "Error: No package manager information found in cache." >&2
+        echo "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")" >&2
         return 1
     fi
 
@@ -1521,7 +1551,7 @@ install_build() {
             case "$yn" in
                 [Yy]*) break ;;
                 [Nn]*) return 1 ;;
-                *) echo "Invalid input. Please enter Y or N." ;;
+                *) echo "$(get_message "MSG_INVALID_INPUT")" ;;
             esac
         done
     fi
@@ -1530,7 +1560,7 @@ install_build() {
     install_package jq
     build_tools="make gcc git libtool automake pkg-config zlib-dev libssl-dev libicu-dev ncurses-dev curl-dev libxml2-dev"
     
-    for tool in "${build_tools[@]}"; do
+    for tool in $build_tools; do
         install_package "$tool" hidden
     done
 
@@ -1552,12 +1582,12 @@ install_build() {
     local dependencies=$(jq -r --arg arch "$arch" '.[$package_name].build.dependencies.opkg // [] | join(" ")' "$CACHE_DIR/custom-package.db" 2>/dev/null)
     
     if [ -n "$dependencies" ]; then
-        debug_log "INFO" "Installing dependencies: $dependencies"
+        debug_log "INFO" "$(get_message "MSG_INSTALLING_DEPENDENCIES" | sed "s/{pkg}/$package_name/" | sed "s/{deps}/$dependencies/")"
         for dep in $dependencies; do
             install_package "$dep" hidden
         done
     else
-        debug_log "WARN" "No dependencies found for $package_name."
+        debug_log "WARN" "$(get_message "MSG_ERROR_MISSING_DEPENDENCIES" | sed "s/{pkg}/$package_name/")"
     fi
 
     # **`custom-package.db` からバージョン & アーキテクチャごとの `build_command` を取得**
@@ -1568,12 +1598,12 @@ install_build() {
         .[$pkg].build.commands.default.default // empty' "$CACHE_DIR/custom-package.db" 2>/dev/null)
 
     if [ -z "$build_command" ]; then
-        debug_log "ERROR" "No build command found for $package_name (Arch: $arch, Version: $openwrt_version)."
-        echo "⚠️ パッケージ $built_package のビルド情報が見つかりませんでした。" >&2
+        debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_COMMAND_NOT_FOUND" | sed "s/{pkg}/$package_name/" | sed "s/{arch}/$arch/" | sed "s/{ver}/$openwrt_version/")"
+        echo "$(get_message "MSG_ERROR_BUILD_COMMAND_NOT_FOUND" | sed "s/{pkg}/$built_package/" | sed "s/{arch}/$arch/" | sed "s/{ver}/$openwrt_version/")" >&2
         return 1
     fi
 
-    debug_log "INFO" "Executing build command: $build_command"
+    debug_log "INFO" "$(get_message "MSG_EXECUTING_BUILD_COMMAND" | sed "s/{cmd}/$build_command/")"
 
     # **ビルド開始メッセージ**
     echo "$(get_message "MSG_BUILD_START" | sed "s/{pkg}/$built_package/")"
@@ -1582,20 +1612,20 @@ install_build() {
     local start_time=$(date +%s)
     if ! eval "$build_command"; then
         echo "$(get_message "MSG_BUILD_FAIL" | sed "s/{pkg}/$built_package/")"
-        debug_log "ERROR" "Build failed for package: $built_package"
+        debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_FAILED" | sed "s/{pkg}/$built_package/")"
         return 1
     fi
     local end_time=$(date +%s)
     local build_time=$((end_time - start_time))
 
     echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$built_package/" | sed "s/{time}/$build_time/")"
-    debug_log "INFO" "Build time for $built_package: $build_time seconds"
+    debug_log "INFO" "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$built_package/" | sed "s/{time}/$build_time/")"
 
     # **ビルド完了後、`install_package()` を実行**
     install_package "$built_package" "$confirm_install"
 
     echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$built_package/")"
-    debug_log "INFO" "Successfully built and installed package: $built_package"
+    debug_log "INFO" "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$built_package/")"
 }
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
