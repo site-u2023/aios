@@ -1045,7 +1045,6 @@ normalize_language() {
 #
 # 【概要】
 # 指定されたパッケージをインストールし、オプションに応じて以下の処理を実行する。
-# ✅ GitHub の `custom-package.db` をリモート管理し、オプションにより適用可能
 # ✅ OpenWrt / Alpine の `opkg update` / `apk update` を適用（条件付き）
 # ✅ 言語パッケージ・設定ファイル (`local-package.db`) の適用
 #
