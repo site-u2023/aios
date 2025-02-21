@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-00-02"
+SCRIPT_VERSION="2025.02.22-00-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1100,86 +1100,86 @@ normalize_language() {
 # initd/ttyd/restart
 # [ttyd] opkg update; uci commit ttyd; initd/ttyd/restart
 #########################################################################
-# **GitHub から `custom-package.db` を取得**
-download_custom_package_db() {
-    if [ ! -f "$package_db_cache" ]; then
-        debug_log "INFO" "$(get_message "MSG_FETCHING_CUSTOM_DB")"
-
-        if wget -q -O "$package_db_cache.tmp" "$package_db_remote"; then
-            mv "$package_db_cache.tmp" "$package_db_cache"
-            debug_log "INFO" "$(get_message "MSG_CUSTOM_DB_FETCH_SUCCESS")"
-        else
-            debug_log "WARN" "$(get_message "MSG_CUSTOM_DB_FETCH_FAIL")"
-            rm -f "$package_db_cache.tmp"
-            handle_error "MSG_CUSTOM_DB_FETCH_FAIL"
-        fi
-    fi
-}
-
-# **スピナー開始関数**
 start_spinner() {
+    local message="$1"
+    SPINNER_MESSAGE="$message"  # 停止時のメッセージ保持
     spinner_chars='-\|/'
     i=0
 
-    echo -en "\e[?25l"
+    echo -en "\e[?25l"  # カーソルを非表示にする
     
     while true; do
-        printf "\r📡 %s %s" "$(color yellow "$(get_message 'MSG_UPDATE_RUNNING')")" "${spinner_chars:i++%6:1}"
-        if command -v usleep >/dev/null 2>&1; then
-            usleep 200000
-        else
-            sleep 1
-        fi
+        printf "\r📡 %s %s" "$(color yellow "$SPINNER_MESSAGE")" "${spinner_chars:i++%4:1}"
+        sleep 0.2
     done &
     SPINNER_PID=$!
 }
 
-# **スピナー停止関数**
 stop_spinner() {
-    if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
-        kill "$SPINNER_PID" >/dev/null 2>&1
+    if [ -n "$SPINNER_PID" ] && ps -p "$SPINNER_PID" > /dev/null 2>&1; then
+        kill "$SPINNER_PID" > /dev/null 2>&1
         printf "\r\033[K"  # 行をクリア
-        echo "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
+        echo "$(color green "✅ $SPINNER_MESSAGE $(get_message "MSG_UPDATE_SUCCESS")")"
     else
         printf "\r\033[K"
-        echo "$(color red "$(get_message 'MSG_UPDATE_FAILED')")"
+        echo "$(color red "❌ $SPINNER_MESSAGE $(get_message 'MSG_UPDATE_FAILED')")"
     fi
-    unset SPINNER_PID
-
-    echo -en "\e[?25h"
+    unset SPINNER_PID SPINNER_MESSAGE
+    echo -en "\e[?25h"  # カーソルを表示に戻す
 }
+
 
 update_package_list() {
     local update_cache="${CACHE_DIR}/update.ch"
     local current_date=$(date '+%Y-%m-%d')
+    local max_retries=3
+    local attempt=1
 
-    # すでに今日の更新がされていればスキップ
-    if [ -f "$update_cache" ] && grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
+    # **キャッシュディレクトリの作成**
+    mkdir -p "$CACHE_DIR"
+
+    # **キャッシュが最新ならスキップ**
+    if [ "$update_mode" != "yes" ] && [ -f "$update_cache" ] && grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
         debug_log "INFO" "パッケージリストは既に最新です。更新をスキップします。"
-        return
+        return 0
     fi
 
-    # スピナー開始
-    start_spinner "$(get_message "MSG_UPDATE_RUNNING")"
+    # **スピナー開始**
+    start_spinner "$(get_message "MSG_UPDATING_REPO")"
 
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
-            stop_spinner
-            debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
-            return 1
-        }
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
-            stop_spinner
-            debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
-            return 1
-        }
-    fi
+    while [ "$attempt" -le "$max_retries" ]; do
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            if opkg update > "${LOG_DIR}/opkg_update.log" 2>&1; then
+                break
+            fi
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            if apk update > "${LOG_DIR}/apk_update.log" 2>&1; then
+                break
+            fi
+        fi
 
-    # スピナー停止
+        debug_log "WARN" "$(color yellow "$(get_message "MSG_RETRYING_UPDATE")" | sed "s/{attempt}/$attempt/;s/{max_retries}/$max_retries/")"
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+
+    # **スピナー停止**
     stop_spinner
-    echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
+
+    if [ "$attempt" -gt "$max_retries" ]; then
+        debug_log "ERROR" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+        return 1
+    fi
+
+    # **キャッシュを更新**
+    if ! echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"; then
+        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_WRITE_CACHE")")"
+        return 1
+    fi
+
+    return 0
 }
+
 
 install_package() {
     local confirm_install="no"
@@ -1246,30 +1246,8 @@ install_package() {
         fi
     fi
 
-    # **アップデートが必要か確認 (`update.ch` を使用)**
-    local current_date=$(date '+%Y-%m-%d')
-    if [ "$update_mode" = "yes" ] || [ ! -f "$update_cache" ] || ! grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
-        rm -f "$update_cache"
-        debug_log "DEBUG" "$(get_message "MSG_RUNNING_UPDATE")"
-        start_spinner "$(get_message "MSG_UPDATING_REPO")"
-
-        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
-                stop_spinner
-                debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
-                return 1
-            }
-        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
-                stop_spinner
-                debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
-                return 1
-            }
-        fi
-
-        stop_spinner
-        echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
-    fi
+    # **アップデートが必要か確認 (`update_package_list()` を使用)**
+    update_package_list
 
     # **インストール前の確認**
     if [ "$confirm_install" = "yes" ]; then
@@ -1364,6 +1342,22 @@ install_package() {
 # [build_uconv]　※行、列問わず記述可
 # [uconv]　※行、列問わず記述可
 #########################################################################
+# **GitHub から `custom-package.db` を取得**
+download_custom_package_db() {
+    if [ ! -f "$package_db_cache" ]; then
+        debug_log "INFO" "$(get_message "MSG_FETCHING_CUSTOM_DB")"
+
+        if wget -q -O "$package_db_cache.tmp" "$package_db_remote"; then
+            mv "$package_db_cache.tmp" "$package_db_cache"
+            debug_log "INFO" "$(get_message "MSG_CUSTOM_DB_FETCH_SUCCESS")"
+        else
+            debug_log "WARN" "$(get_message "MSG_CUSTOM_DB_FETCH_FAIL")"
+            rm -f "$package_db_cache.tmp"
+            handle_error "MSG_CUSTOM_DB_FETCH_FAIL"
+        fi
+    fi
+}
+
 custom_feed() {
     # GitHub から `package_list` を取得
     local PACKAGE_LIST_URL=$(jq -r --arg pkg "$package_name" '.[$pkg].fetch_latest' "$custom_package_db")
