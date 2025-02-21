@@ -1118,7 +1118,7 @@ download_custom_package_db() {
 }
 
 # **スピナー開始関数**
-spinner() {
+start_spinner() {
     spinner_chars='-\|/'
     i=0
 
@@ -1264,7 +1264,7 @@ install_package() {
     # **インストール処理**
     debug_log "DEBUG" "Installing package: $package_name"
 
-    spinner "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")"
+    start_spinner "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")"
 
     if [ "$DEV_NULL" = "on" ]; then
         $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1 || {
