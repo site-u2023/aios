@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-00-08"
+SCRIPT_VERSION="2025.02.22-00-09"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1251,6 +1251,25 @@ install_package() {
 
     # **アップデートが必要か確認 (`update_package_list()` を使用)**
     update_package_list
+
+	# **リポジトリ存在チェック**
+	if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+		if ! opkg list-available "$package_name" 2>/dev/null | grep -q "^$package_name "; then
+			echo "$(color yellow "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
+			debug_log "WARN" "Package $package_name not found in repository."
+			return 0
+		fi
+	elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+		if ! apk search "^$package_name$" 2>/dev/null | grep -q "^$package_name$"; then
+			echo "$(color yellow "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
+			debug_log "WARN" "Package $package_name not found in repository."
+			return 0
+		fi
+	else
+		debug_log "WARN" "Unknown package manager: $PACKAGE_MANAGER"
+		return 0
+	fi
+	return 0
 
     # **インストール前の確認**
     if [ "$confirm_install" = "yes" ]; then
