@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-00-01"
+SCRIPT_VERSION="2025.02.22-00-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1192,6 +1192,8 @@ install_package() {
     local update_mode="no"
     local package_name=""
     local update_cache="${CACHE_DIR}/update.ch"
+    local max_retries=3
+    local attempt=1
 
     # **オプションの処理**
     for arg in "$@"; do
@@ -1204,43 +1206,69 @@ install_package() {
             test) test_mode="yes" ;;
             force) force_install="yes" ;;
             update) update_mode="yes" ;;
-            custom1) custom_mode=1 ;;
-            custom2) custom_mode=2 ;;
-            dependencies) dependencies_mode=0 ;;
             *)
                 if [ -z "$package_name" ]; then
                     package_name="$arg"
                 else
-                    debug_log "WARN" "Unknown option: $arg"
+                    debug_log "WARN" "$(color yellow "$(get_message "MSG_UNKNOWN_OPTION" | sed "s/{option}/$arg/")")"
                 fi
                 ;;
         esac
     done
 
     if [ -z "$package_name" ]; then
-        debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")"
+        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")")"
         return 1
     fi
 
-    # **パッケージマネージャーの確認**
+    # **パッケージマネージャーの確認 (キャッシュから取得)**
     if [ -f "${CACHE_DIR}/downloader_ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
     else 
-        debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")"
+        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")")"
         return 1
     fi
 
+    # **パッケージのインストール済みチェック**
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if opkg list-installed | grep -q "^$package_name "; then
+            if [ "$hidden" != "yes" ]; then
+                echo "$(color green "$(get_message "MSG_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+            fi
+            return 0
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if apk info | grep -q "^$package_name$"; then
+            if [ "$hidden" != "yes" ]; then
+                echo "$(color green "$(get_message "MSG_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+            fi
+            return 0
+        fi
+    fi
 
-    # **update の管理**
+    # **アップデートが必要か確認 (`update.ch` を使用)**
     local current_date=$(date '+%Y-%m-%d')
-
     if [ "$update_mode" = "yes" ] || [ ! -f "$update_cache" ] || ! grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
         rm -f "$update_cache"
-        
         debug_log "DEBUG" "$(get_message "MSG_RUNNING_UPDATE")"
+        start_spinner "$(get_message "MSG_UPDATING_REPO")"
 
-        update_package_list
-        
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
+                stop_spinner
+                debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+                return 1
+            }
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
+                stop_spinner
+                debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+                return 1
+            }
+        fi
+
+        stop_spinner
+        echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
     fi
 
     # **インストール前の確認**
@@ -1255,32 +1283,39 @@ install_package() {
             case "$yn" in
                 [Yy]*) break ;;
                 [Nn]*) return 1 ;;
-                *) echo "Invalid input. Please enter Y or N." ;;
+                *) echo "$(color red "Invalid input. Please enter Y or N.")" ;;
             esac
         done
     fi
 
-    # **インストール処理**
+    # **インストール処理 (リトライ付き)**
     debug_log "DEBUG" "Installing package: $package_name"
-
     start_spinner "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")"
 
-    if [ "$DEV_NULL" = "on" ]; then
-        $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1 || {
-            stop_spinner
-            debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
-            return 1
-        }
-    else
-        $PACKAGE_MANAGER install "$package_name" || {
-            stop_spinner
-            debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
-            return 1
-        }
-    fi
+    while [ "$attempt" -le "$max_retries" ]; do
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            if opkg install "$package_name" > /dev/null 2>&1; then
+                break
+            fi
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            if apk add "$package_name" > /dev/null 2>&1; then
+                break
+            fi
+        fi
+
+        debug_log "WARN" "$(color yellow "$(get_message "MSG_RETRYING_INSTALL")" | sed "s/{pkg}/$package_name/;s/{attempt}/$attempt/;s/{max_retries}/$max_retries/")"
+        sleep 2
+        attempt=$((attempt + 1))
+    done
 
     stop_spinner
-    echo "$(color green "✅ Installed: $package_name")"
+
+    if [ "$attempt" -gt "$max_retries" ]; then
+        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED")" | sed "s/{pkg}/$package_name/")"
+        return 1
+    fi
+
+    echo "$(color green "✅ $(get_message "MSG_INSTALLED" | sed "s/{pkg}/$package_name/")")"
     debug_log "DEBUG" "Successfully installed package: $package_name"
 }
 
