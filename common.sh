@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-01-06"
+SCRIPT_VERSION="2025.02.21-01-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1237,17 +1237,17 @@ install_package() {
 
         # **update 実行**
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
-                debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+            if ! opkg update > "${LOG_DIR}/opkg_update.log" 2>&1; then
                 stop_spinner
+                debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
                 return 1
-            }
+            fi
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
-                debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+            if ! apk update > "${LOG_DIR}/apk_update.log" 2>&1; then
                 stop_spinner
+                debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
                 return 1
-            }
+            fi
         fi
 
         stop_spinner  # スピナー停止
@@ -1280,17 +1280,17 @@ install_package() {
     SPINNER_PID=$!
 
     if [ "$DEV_NULL" = "on" ]; then
-        $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1 || {
+        if ! $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1; then
             stop_spinner
             debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
             return 1
-        }
+        fi
     else
-        $PACKAGE_MANAGER install "$package_name" || {
+        if ! $PACKAGE_MANAGER install "$package_name"; then
             stop_spinner
             debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
             return 1
-        }
+        fi
     fi
 
     stop_spinner  # スピナー停止
