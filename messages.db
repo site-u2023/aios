@@ -92,6 +92,27 @@ JP|MSG_UPDATE_FAILED=❌ アップデートに失敗しました。詳細はロ�
 US|MSG_CONFIRM_ONLY_YN=🔄 Confirm (Y=Yes / N=No):
 JP|MSG_CONFIRM_ONLY_YN=🔄 確認 (Y=はい / N=いいえ):
 
+US|MSG_UNKNOWN_OPTION=⚠️ Unknown option: {option}
+JP|MSG_UNKNOWN_OPTION=⚠️ 不明なオプション: {option}
+
+US|MSG_INSTALLING_DEPENDENCIES=✅ Installing dependencies for {pkg}: {deps}
+JP|MSG_INSTALLING_DEPENDENCIES=✅ {pkg} に必要な依存パッケージをインストール中: {deps}
+
+US|MSG_EXECUTING_BUILD_COMMAND=🔧 Executing build command: {cmd}
+JP|MSG_EXECUTING_BUILD_COMMAND=🔧 ビルドコマンドを実行中: {cmd}
+
+US|MSG_BUILD_START=🚀 Starting build process for {pkg}...
+JP|MSG_BUILD_START=🚀 {pkg} のビルドを開始します...
+
+US|MSG_BUILD_FAIL=❌ Build failed for {pkg}.
+JP|MSG_BUILD_FAIL=❌ {pkg} のビルドに失敗しました。
+
+US|MSG_BUILD_TIME=⏳ Build completed for {pkg} in {time} seconds.
+JP|MSG_BUILD_TIME=⏳ {pkg} のビルドが {time} 秒で完了しました。
+
+US|MSG_BUILD_SUCCESS=✅ Successfully built and installed {pkg}.
+JP|MSG_BUILD_SUCCESS=✅ {pkg} のビルドとインストールが完了しました。
+
 # パッケージマネージャ関連
 US|MSG_ERROR_NO_PACKAGE_NAME=🚨 No package name specified.
 JP|MSG_ERROR_NO_PACKAGE_NAME=🚨 パッケージ名が指定されていません。
