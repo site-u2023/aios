@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-04-01"
+SCRIPT_VERSION="2025.02.21-04-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1439,10 +1439,10 @@ install_build() {
         done
     fi
 
-    # **ビルド環境の準備 (yn判定直後)**
+    # **ビルド環境の準備**
     install_package jq
     local build_tools="make gcc git libtool automake pkg-config zlib-dev libssl-dev libicu-dev ncurses-dev curl-dev libxml2-dev"
-    
+
     for tool in $build_tools; do
         install_package "$tool" hidden
     done
@@ -1463,7 +1463,7 @@ install_build() {
 
     # **`custom-package.db` からビルドに必要な `dependencies` を取得**
     local dependencies=$(jq -r --arg arch "$arch" '.[$package_name].build.dependencies.opkg // [] | join(" ")' "$CACHE_DIR/custom-package.db" 2>/dev/null)
-    
+
     if [ -n "$dependencies" ]; then
         debug_log "INFO" "Installing dependencies: $dependencies"
         for dep in $dependencies; do
@@ -1474,20 +1474,9 @@ install_build() {
     fi
 
     # **スピナー開始**
-    spinner_chars='-\|/'
-    i=0
-    spinner &
-    SPINNER_PID=$!
+    start_spinner "$(get_message 'MSG_UPDATE_RUNNING')"
 
-    # **5秒後にスピナーを止める**
-    sleep 5
-    kill "$SPINNER_PID"
-    printf "\r%-50s\r" ""  # 画面を消去
-    echo "✅ スピナー停止完了"
-
-
-
-    # **`custom-package.db` からバージョン & アーキテクチャごとの `build_command` を取得**
+    # **`custom-package.db` からビルドに必要な `build_command` を取得**
     local build_command=$(jq -r --arg pkg "$package_name" --arg arch "$arch" --arg ver "$openwrt_version" '
         .[$pkg].build.commands[$ver][$arch] // 
         .[$pkg].build.commands[$ver].default // 
