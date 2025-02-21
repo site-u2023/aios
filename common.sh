@@ -1188,7 +1188,8 @@ update_package_list() {
 
     # **スピナー停止 (成功メッセージ)**
     stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
-
+    sleep 1
+    
     # **キャッシュを更新**
     if ! echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"; then
         debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_WRITE_CACHE")")"
