@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-02-10"
+SCRIPT_VERSION="2025.02.21-02-11"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1123,35 +1123,42 @@ download_custom_package_db() {
     fi
 }
 
-# **スピナー開始関数**
-spin() {
-    local message="$1"
-    local delay=200000  # `usleep` 用 (デフォルト: 0.2秒)
-    local spin_chars='-\|/'
-    local i=0
+{
+    # `usleep` の有無をチェック
+    if command -v usleep >/dev/null 2>&1; then
+        USE_USLEEP="yes"
+        echo "✅ usleep が見つかりました。"
+    else
+        USE_USLEEP="no"
+        echo "⚠️ usleep が見つかりません。sleep 1 にフォールバックします。"
+    fi
 
-    debug_log "DEBUG" "📡 スピナー開始: $message"
+    echo -ne "\r📡 パッケージマネージャーの更新を実行中... "  # スピナーを開始
     
-    # `trap` を設定 (エラー時にもスピナーを確実に停止)
-    trap 'stop_spinner' INT TERM EXIT
+    spin_chars='-\|/'
+    i=0
+    start_time=$(date +%s)
 
     while true; do
-        printf "\r%s %s" "$(color cyan "$message")" "${spin_chars:i++%4:1}"
+        printf "\r📡 パッケージマネージャーの更新を実行中... %s" "${spin_chars:i++%4:1}"
 
-        if command -v usleep >/dev/null 2>&1; then
-            usleep "$delay"
+        if [ "$USE_USLEEP" = "yes" ]; then
+            usleep 200000  # `usleep` がある場合は 0.2秒
         else
             sleep 1  # `usleep` がない場合は 1秒
         fi
-    done &
-    
-    SPINNER_PID=$!
-    if [ -z "$SPINNER_PID" ]; then
-        debug_log "ERROR" "スピナーのPID取得に失敗"
-    else
-        debug_log "DEBUG" "SPINNER_PID=$SPINNER_PID"
-    fi
+
+        # 5秒経過したら終了
+        current_time=$(date +%s)
+        if [ $((current_time - start_time)) -ge 5 ]; then
+            break
+        fi
+    done
+
+    printf "\r%-50s\r" ""  # スピナーを完全消去
+    echo "✅ テスト完了"
 }
+
 
 # **スピナー停止関数**
 stop_spinner() {
