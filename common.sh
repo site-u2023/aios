@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-03-01"
+SCRIPT_VERSION="2025.02.21-03-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1123,15 +1123,15 @@ download_custom_package_db() {
     fi
 }
 
-
 # **スピナー開始関数**
 spionner() {
-    spionner_chars='-\|/'
+    spionner_chars='⠋⠙⠸⠴⠦⠇'
     i=0
     SPINNER_PID=""
 
+    echo -e "\e[36m🔄 $(get_message 'MSG_UPDATE_RUNNING')\e[0m"  # Cyan 表示
     while true; do
-        printf "\r📡 パッケージマネージャーの更新を実行中... %s" "${spionner_chars:i++%4:1}"
+        printf "\r📡 %s %s" "$(get_message 'MSG_UPDATE_RUNNING')" "${spionner_chars:i++%4:1}"
         if command -v usleep >/dev/null 2>&1; then
             usleep 200000
         else
@@ -1143,10 +1143,17 @@ spionner() {
 
 # **スピナー停止関数**
 stop_spionner() {
-    kill "$SPINNER_PID" >/dev/null 2>&1
-    printf "\r%-50s\r" ""  # **行全体をクリア**
-    echo "✅ スピナー停止完了"
+    if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
+        kill "$SPINNER_PID" >/dev/null 2>&1
+        printf "\r\033[K"  # 行をクリア
+        echo -e "\e[32m✅ $(get_message 'MSG_UPDATE_SUCCESS')\e[0m"  # Green 表示
+    else
+        printf "\r\033[K"
+        echo -e "\e[31m❌ $(get_message 'MSG_UPDATE_FAILED')\e[0m"  # Red 表示
+    fi
+    unset SPINNER_PID
 }
+
 
 install_package() {
     local confirm_install="no"
