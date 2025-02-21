@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-01-03"
+SCRIPT_VERSION="2025.02.21-01-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1498,7 +1498,7 @@ install_build() {
 
     # **パッケージ名が指定されているか確認**
     if [ -z "$package_name" ]; then
-        debug_log "ERROR" "No package name specified."
+        debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")"
         echo "Error: No package specified." >&2
         return 1
     fi
@@ -1507,7 +1507,7 @@ install_build() {
     if [ -f "${CACHE_DIR}/downloader_ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
     else
-        debug_log "ERROR" "Package manager not found."
+        debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")"
         echo "Error: No package manager information found in cache." >&2
         return 1
     fi
