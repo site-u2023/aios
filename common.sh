@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-03-02"
+SCRIPT_VERSION="2025.02.21-03-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1127,9 +1127,7 @@ download_custom_package_db() {
 spionner() {
     spionner_chars='⠋⠙⠸⠴⠦⠇'
     i=0
-    SPINNER_PID=""
 
-    echo -e "\e[36m🔄 $(get_message 'MSG_UPDATE_RUNNING')\e[0m"  # Cyan 表示
     while true; do
         printf "\r📡 %s %s" "$(get_message 'MSG_UPDATE_RUNNING')" "${spionner_chars:i++%4:1}"
         if command -v usleep >/dev/null 2>&1; then
@@ -1146,7 +1144,7 @@ stop_spionner() {
     if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
         kill "$SPINNER_PID" >/dev/null 2>&1
         printf "\r\033[K"  # 行をクリア
-        echo -e "\e[32m✅ $(get_message 'MSG_UPDATE_SUCCESS')\e[0m"  # Green 表示
+        echo "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
     else
         printf "\r\033[K"
         echo -e "\e[31m❌ $(get_message 'MSG_UPDATE_FAILED')\e[0m"  # Red 表示
@@ -1245,7 +1243,6 @@ install_package() {
 
         # スピナー停止
         stop_spionner
-        echo "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
 
         echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
     fi
