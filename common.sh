@@ -1123,7 +1123,7 @@ download_custom_package_db() {
     fi
 }
 
-# **スピナー関数 (汎用)**
+# **スピナー関数 (汎用)** 
 spin() {
     local message="$1"  # スピナーと一緒に表示するメッセージ
     local delay="${2:-200000}"  # `usleep` のマイクロ秒 (デフォルト: 0.2秒)
