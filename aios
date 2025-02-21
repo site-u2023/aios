@@ -179,8 +179,8 @@ packages() {
     install_build build_uconv yn
 
     # 他のパッケージのインストール
-    install_package luci-app-cpu-status custom1 yn
-    install_package ttyd custom test yn hidden
+    install_package luci-app-cpu-status yn
+    install_package ttyd test yn hidden
     install_package luci-app-ttyd yn hidden test
     install_package test openssh-sftp-server yn hidden
     install_package update
