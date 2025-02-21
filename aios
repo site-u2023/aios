@@ -85,21 +85,23 @@ print_banner() {
 
 print_banner_matrix() {
     clear
-    local banner_text=(
-        "                    ii i"
-        "         aaaa      iii       oooo      sssss"
-        "            aa      ii      oo  oo    ss"
-        "         aaaaa      ii      oo  oo     sssss"
-        "        aa  aa      ii      oo  oo         ss"
-        "         aaaaa     iiii      oooo     ssssss"
-    )
+    local banner_text="
+                    ii i
+         aaaa      iii       oooo      sssss
+            aa      ii      oo  oo    ss
+         aaaaa      ii      oo  oo     sssss
+        aa  aa      ii      oo  oo         ss
+         aaaaa     iiii      oooo     ssssss
+    "
     
     local delay=0.05  # 文字が落ちる速度
+    local i=0
 
-    for ((i = 0; i < ${#banner_text[@]}; i++)); do
-        tput cup $((i + 3)) 10  # 画面の適当な位置から開始
-        echo -e "$(color green "${banner_text[$i]}")"
+    echo "$banner_text" | while IFS= read -r line; do
+        tput cup $(expr $i + 3) 10  # 画面の適当な位置から開始
+        echo -e "$(color green "$line")"
         sleep $delay
+        i=$(expr $i + 1)
     done
 
     echo
@@ -179,7 +181,7 @@ make_directory
 download_common
 check_option "$@"
 print_banner
-#print_banner_matrix
+print_banner_matrix
 print_banner_wave
 print_banner_fadein
 packages
