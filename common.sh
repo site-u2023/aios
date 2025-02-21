@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-02-14"
+SCRIPT_VERSION="2025.02.21-02-15"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1130,12 +1130,12 @@ spin() {
     local i=0
 
     # カーソルを非表示
-    echo -ne "\e[?25l"
+    tput civis
 
     echo "✅ スピナー開始: PID=$$"
     while true; do
-        printf "\r%s %s" "$(color cyan "$message")" "${spin_chars:i++%4:1}"
-        
+        printf "\r%-50s\r%s %s" "" "$(color cyan "$message")" "${spin_chars:i++%4:1}"
+
         if command -v usleep >/dev/null 2>&1; then
             usleep 200000
         else
@@ -1149,18 +1149,24 @@ stop_spinner() {
     if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
         echo "🛑 スピナー停止処理開始 (SPINNER_PID=$SPINNER_PID)"
         kill "$SPINNER_PID" >/dev/null 2>&1
-        sleep 0.5
+        if command -v usleep >/dev/null 2>&1; then
+            usleep 500000
+        else
+            sleep 1
+        fi
         kill -9 "$SPINNER_PID" >/dev/null 2>&1
         unset SPINNER_PID
-        printf "\r%-50s\r" ""  # スピナーの出力を消去
+        printf "\r%-50s\r" ""  # 上書きを確実に実行
+        printf "\r%-50s\r" ""  # 2回実行してリセット
         echo "✅ スピナー停止完了"
     else
         echo "⚠️ スピナーがすでに停止している、またはプロセスが見つからない"
     fi
 
-    # カーソルを表示
-    echo -ne "\e[?25h"
+    # カーソルを再表示
+    tput cnorm
 }
+
 
 install_package() {
     local confirm_install="no"
@@ -1235,8 +1241,12 @@ install_package() {
         # スピナー開始
         spin "$(get_message "MSG_UPDATE_IN_PROGRESS")" &
         SPINNER_PID=$!
-        sleep 0.1  # PID取得を確実化
-
+        if command -v usleep >/dev/null 2>&1; then
+            usleep 100000
+        else
+            sleep 1
+        fi  # PID取得を確実化
+        
         # **update 実行**
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
             opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
