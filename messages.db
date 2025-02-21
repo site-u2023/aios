@@ -129,6 +129,31 @@ JP|MSG_INSTALLING_PACKAGE=📦 パッケージ {pkg} をインストール中...
 US|MSG_INSTALL_ABORTED=🚫 Installation aborted.
 JP|MSG_INSTALL_ABORTED=🚫 インストールが中止されました。
 #========================================================================================================================
+
+US|MSG_FETCHING_PACKAGE_LIST=🌐 Fetching latest package list for {pkg}...
+JP|MSG_FETCHING_PACKAGE_LIST=🌐 {pkg} の最新パッケージリストを取得中...
+
+US|MSG_ERROR_PACKAGE_LIST_FETCH_FAILED=❌ Failed to fetch package list for {pkg}.
+JP|MSG_ERROR_PACKAGE_LIST_FETCH_FAILED=❌ {pkg} のパッケージリストの取得に失敗しました。
+
+US|MSG_LATEST_PACKAGE_DETECTED=✅ Latest package detected: {url}
+JP|MSG_LATEST_PACKAGE_DETECTED=✅ 最新のパッケージが検出されました: {url}
+
+US|MSG_ERROR_NO_MATCHING_PACKAGE=⚠️ No matching package found in package list.
+JP|MSG_ERROR_NO_MATCHING_PACKAGE=⚠️ パッケージリスト内に一致するパッケージが見つかりませんでした。
+
+US|MSG_ERROR_PACKAGE_LIST_URL_NOT_FOUND=⚠️ Package list URL not found for {pkg}.
+JP|MSG_ERROR_PACKAGE_LIST_URL_NOT_FOUND=⚠️ {pkg} のパッケージリストURLが見つかりませんでした。
+
+US|MSG_ERROR_PACKAGE_DOWNLOAD_FAILED=❌ Failed to download package {pkg}.
+JP|MSG_ERROR_PACKAGE_DOWNLOAD_FAILED=❌ {pkg} のダウンロードに失敗しました。
+
+US|MSG_ERROR_PACKAGE_INSTALL_FAILED=🚨 Installation failed for package {pkg}.
+JP|MSG_ERROR_PACKAGE_INSTALL_FAILED=🚨 パッケージ {pkg} のインストールに失敗しました。
+
+US|MSG_ERROR_PACKAGE_URL_NOT_FOUND=❌ Could not determine package URL for {pkg}.
+JP|MSG_ERROR_PACKAGE_URL_NOT_FOUND=❌ {pkg} のパッケージURLを特定できませんでした。
+
 US|MSG_ERROR_BUILD_COMMAND_NOT_FOUND=❌ No build command found for {pkg} (Arch: {arch}, Version: {ver}).
 JP|MSG_ERROR_BUILD_COMMAND_NOT_FOUND=❌ {pkg} のビルド情報が見つかりません (Arch: {arch}, Version: {ver})。
 
