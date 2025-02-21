@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.21-00-03"
+SCRIPT_VERSION="2025.02.21-00-04"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1291,6 +1291,30 @@ install_package() {
 # [build_uconv]　※行、列問わず記述可
 # [uconv]　※行、列問わず記述可
 #########################################################################
+install_jq() {
+    # **jq がインストールされているか確認**
+    if ! command -v jq >/dev/null 2>&1; then
+        echo "📦 jq not found. Installing..."
+
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            opkg update && opkg install jq
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            apk update && apk add jq
+        else
+            echo "❌ ERROR: Unsupported package manager ($PACKAGE_MANAGER). Exiting..."
+            exit 1
+        fi
+
+        # **インストール後の確認**
+        if ! command -v jq >/dev/null 2>&1; then
+            echo "🚨 ERROR: Failed to install jq. Exiting..."
+            exit 1
+        fi
+
+        echo "✅ jq successfully installed."
+    fi
+}
+
 custom_feed() {
 # GitHub から `pacage_list` を取得
 PACKAGE_LIST_URL=$(jq -r --arg pkg "$package_name" '.[$pkg].fetch_latest' "$custom_package_db")
@@ -1331,38 +1355,6 @@ else
 fi
 }
 
-install_jq() {
-    # **`downloader_ch` から `opkg` or `apk` を判定**
-    if [ -f "${BASE_DIR}/downloader_ch" ]; then
-        PACKAGE_MANAGER=$(cat "${BASE_DIR}/downloader_ch")
-    else
-        echo "⚠️ ERROR: downloader_ch not found! Exiting..."
-        exit 1
-    fi
-
-    # **jq がインストールされているか確認**
-    if ! command -v jq >/dev/null 2>&1; then
-        echo "📦 jq not found. Installing..."
-
-        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            opkg update && opkg install jq
-        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            apk update && apk add jq
-        else
-            echo "❌ ERROR: Unsupported package manager ($PACKAGE_MANAGER). Exiting..."
-            exit 1
-        fi
-
-        # **インストール後の確認**
-        if ! command -v jq >/dev/null 2>&1; then
-            echo "🚨 ERROR: Failed to install jq. Exiting..."
-            exit 1
-        fi
-
-        echo "✅ jq successfully installed."
-    fi
-}
-
 install_build() {
     local confirm_install="no"
     local hidden="no"
@@ -1383,28 +1375,14 @@ install_build() {
         esac
     done
 
-    # **ビルド環境の準備**
-    install_jq
-    install_package make hidden
-    install_package gcc hidden
-    install_package git hidden
-    install_package libtool hidden
-    install_package automake hidden
-    install_package pkg-config hidden
-    install_package zlib-dev hidden
-    install_package libssl-dev hidden
-    install_package libicu-dev hidden
-    install_package ncurses-dev hidden
-    install_package curl-dev hidden
-    install_package libxml2-dev hidden
-    
+    # **パッケージ名が指定されているか確認**
     if [ -z "$package_name" ]; then
         debug_log "ERROR" "No package name specified."
         echo "Error: No package specified." >&2
         return 1
     fi
 
-    # **パッケージマネージャーの確認**
+    # **downloader_ch から `opkg` or `apk` を取得**
     if [ -f "${CACHE_DIR}/downloader_ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
     else
@@ -1412,6 +1390,19 @@ install_build() {
         echo "Error: No package manager information found in cache." >&2
         return 1
     fi
+
+    # **jq がインストールされているか確認 & インストール**
+    install_jq
+
+    # **ビルド環境の準備 (事前に `install_package()` を使用)**
+    local build_tools=(
+        make gcc git libtool automake pkg-config
+        zlib-dev libssl-dev libicu-dev ncurses-dev curl-dev libxml2-dev
+    )
+    
+    for tool in "${build_tools[@]}"; do
+        install_package "$tool" hidden
+    done
 
     # **ビルド後のパッケージ名を取得**
     local built_package="${package_name#build_}"
@@ -1428,8 +1419,8 @@ install_build() {
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
 
     # **`custom-package.db` からビルドに必要な `dependencies` を取得**
-    local dependencies=$(jq -r --arg arch "$arch" '.[$package_name].build.dependencies.opkg // empty | join(" ")' /tmp/cache/custom-package.db 2>/dev/null)
-  
+    local dependencies=$(jq -r --arg arch "$arch" '.[$package_name].build.dependencies.opkg // [] | join(" ")' "$CACHE_DIR/custom-package.db" 2>/dev/null)
+    
     if [ -n "$dependencies" ]; then
         debug_log "INFO" "Installing dependencies: $dependencies"
         for dep in $dependencies; do
@@ -1439,12 +1430,26 @@ install_build() {
         debug_log "WARN" "No dependencies found for $package_name."
     fi
 
+    # **インストール前の確認**
+    if [ "$confirm_install" = "yes" ]; then
+        while true; do
+            echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$built_package/")"
+            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
+            read -r yn
+            case "$yn" in
+                [Yy]*) break ;;
+                [Nn]*) return 1 ;;
+                *) echo "Invalid input. Please enter Y or N." ;;
+            esac
+        done
+    fi
+
     # **`custom-package.db` からバージョン & アーキテクチャごとの `build_command` を取得**
     local build_command=$(jq -r --arg pkg "$package_name" --arg arch "$arch" --arg ver "$openwrt_version" '
-        .[$pkg].build_commands[$ver][$arch] // 
-        .[$pkg].build_commands[$ver].default // 
-        .[$pkg].build_commands.default[$arch] // 
-        .[$pkg].build_commands.default.default // empty' "$CUSTOM_PACKAGE_DB" 2>/dev/null)
+        .[$pkg].build.commands[$ver][$arch] // 
+        .[$pkg].build.commands[$ver].default // 
+        .[$pkg].build.commands.default[$arch] // 
+        .[$pkg].build.commands.default.default // empty' "$CACHE_DIR/custom-package.db" 2>/dev/null)
 
     if [ -z "$build_command" ]; then
         debug_log "ERROR" "No build command found for $package_name (Arch: $arch, Version: $openwrt_version)."
@@ -1471,12 +1476,11 @@ install_build() {
     debug_log "INFO" "Build time for $built_package: $build_time seconds"
 
     # **ビルド完了後、`install_package()` を実行**
-    install_package "$built_package"
-    
+    install_package "$built_package" "$confirm_install"
+
     echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$built_package/")"
     debug_log "INFO" "Successfully built and installed package: $built_package"
 }
-
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
