@@ -1125,7 +1125,7 @@ download_custom_package_db() {
 
 # **スピナー開始関数**
 spinner() {
-    spinner_chars='-|/'
+    spinner_chars='-\|/'
     i=0
 
     echo -en "\e[?25l"
