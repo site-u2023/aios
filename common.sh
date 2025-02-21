@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-01-08"
+SCRIPT_VERSION="2025.02.21-01-09"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -273,31 +273,39 @@ spin() {
     local delay="${2:-200000}"  # `usleep` のマイクロ秒 (デフォルト: 0.2秒)
     local spin_chars='-\|/'  # スピナーの回転アニメーション
 
-    # **既にスピナーが動いている場合は、新しく起動しない**
+    # **スピナーが既に動作中なら、何もしない**
     if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
         return
     fi
 
     local i=0
-    while true; do
-        printf "\r%s %s" "$(color cyan "$message")" "${spin_chars:i++%4:1}"
-        if command -v usleep >/dev/null 2>&1; then
-            usleep "$delay"
-        else
-            for _ in $(seq 1 10); do sleep 0; done  # POSIX準拠の `sleep 0` ループ
-        fi
-    done &
+    (
+        while true; do
+            printf "\r%s %s" "$(color cyan "$message")" "${spin_chars:i++%4:1}"
+            if command -v usleep >/dev/null 2>&1; then
+                usleep "$delay"
+            else
+                for _ in $(seq 1 10); do sleep 0; done  # POSIX準拠の `sleep 0` ループ
+            fi
+        done
+    ) &
     SPINNER_PID=$!
+    SPINNER_PIDS="$SPINNER_PIDS $SPINNER_PID"  # スピナーリストに追加
 }
 
 # **スピナー停止関数**
 stop_spinner() {
-    if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
-        kill "$SPINNER_PID" >/dev/null 2>&1
-        sleep 0.1
-        kill -9 "$SPINNER_PID" >/dev/null 2>&1
+    if [ -n "$SPINNER_PIDS" ]; then
+        for pid in $SPINNER_PIDS; do
+            if kill -0 "$pid" 2>/dev/null; then
+                kill "$pid" >/dev/null 2>&1
+                sleep 0.1
+                kill -9 "$pid" >/dev/null 2>&1
+            fi
+        done
     fi
     unset SPINNER_PID
+    unset SPINNER_PIDS
     printf "\r%-50s\r" ""  # スピナーの出力を消去
 }
 
@@ -1495,126 +1503,99 @@ custom_feed() {
     fi
 }
 
-install_build() {
+install_package() {
     local confirm_install="no"
+    local skip_lang_pack="no"
+    local skip_package_db="no"
+    local set_disabled="no"
     local hidden="no"
+    local test_mode="no"
+    local force_install="no"
+    local update_mode="no"
+    local custom_mode=0  # 0: なし, 1: custom1, 2: custom2
+    local dependencies_mode=1  # 1: 自動インストール, 0: 依存関係無視
     local package_name=""
+
+    local package_db_remote="${BASE_URL}/custom-package.db"
+    local package_db_cache="${CACHE_DIR}/custom-package.db"
+    local update_cache="${CACHE_DIR}/update.ch"
 
     # **オプションの処理**
     for arg in "$@"; do
         case "$arg" in
             yn) confirm_install="yes" ;;
+            nolang) skip_lang_pack="yes" ;;
+            notpack) skip_package_db="yes" ;;
+            disabled) set_disabled="yes" ;;
             hidden) hidden="yes" ;;
+            test) test_mode="yes" ;;
+            force) force_install="yes" ;;
+            update) update_mode="yes" ;;
+            custom1) custom_mode=1 ;;
+            custom2) custom_mode=2 ;;
+            dependencies) dependencies_mode=0 ;;
             *)
                 if [ -z "$package_name" ]; then
                     package_name="$arg"
                 else
-                    debug_log "WARN" "$(get_message "MSG_UNKNOWN_OPTION" | sed "s/{option}/$arg/")"
+                    debug_log "WARN" "Unknown option: $arg"
                 fi
                 ;;
         esac
     done
 
-    # **パッケージ名が指定されているか確認**
     if [ -z "$package_name" ]; then
         debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")"
-        echo "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")" >&2
         return 1
     fi
 
-    # **downloader_ch から `opkg` or `apk` を取得**
+    # **パッケージマネージャーの確認**
     if [ -f "${CACHE_DIR}/downloader_ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
-    else
+    else 
         debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")"
-        echo "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")" >&2
         return 1
     fi
 
-    # **インストール前の確認**
-    if [ "$confirm_install" = "yes" ]; then
-        while true; do
-            echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
-            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
-            read -r yn
-            case "$yn" in
-                [Yy]*) break ;;
-                [Nn]*) return 1 ;;
-                *) echo "$(get_message "MSG_INVALID_INPUT")" ;;
-            esac
-        done
+    [ "$custom_mode" -ne 0 ] && download_custom_package_db
+
+    # **jq のエラーハンドリング**
+    if [ "$custom_mode" -ne 0 ] && ! command -v jq >/dev/null 2>&1; then
+        debug_log "WARN" "$(get_message "MSG_ERROR_JQ_NOT_FOUND")"
+        custom_mode=0
     fi
 
-    # **ビルド環境の準備 (yn判定直後)**
-    install_package jq
-    build_tools="make gcc git libtool automake pkg-config zlib-dev libssl-dev libicu-dev ncurses-dev curl-dev libxml2-dev"
-    
-    for tool in $build_tools; do
-        install_package "$tool" hidden
-    done
+    # **update の管理**
+    local current_date=$(date '+%Y-%m-%d')
 
-    # **ビルド後のパッケージ名を取得**
-    local built_package="${package_name#build_}"
+    if [ "$update_mode" = "yes" ] || [ ! -f "$update_cache" ] || ! grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
+        rm -f "$update_cache"
+        
+        debug_log "DEBUG" "$(get_message "MSG_RUNNING_UPDATE")"
 
-    # ** キャッシュからバージョンとアーキテクチャを取得 **
-    if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
-        openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
+        # **スピナー開始**
+        spin "$(get_message "MSG_UPDATE_IN_PROGRESS")" 200000 &
+
+        # **update 実行**
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            if ! opkg update > "${LOG_DIR}/opkg_update.log" 2>&1; then
+                stop_spinner
+                debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+                return 1
+            fi
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            if ! apk update > "${LOG_DIR}/apk_update.log" 2>&1; then
+                stop_spinner
+                debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+                return 1
+            fi
+        fi
+
+        stop_spinner  # スピナー停止
+        echo "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
+
+        echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
     fi
-    if [ -f "${CACHE_DIR}/architecture.ch" ]; then
-        arch=$(cat "${CACHE_DIR}/architecture.ch")
-    fi
-
-    debug_log "DEBUG" "Using architecture: $arch"
-    debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
-
-    # **`custom-package.db` からビルドに必要な `dependencies` を取得**
-    local dependencies=$(jq -r --arg arch "$arch" '.[$package_name].build.dependencies.opkg // [] | join(" ")' "$CACHE_DIR/custom-package.db" 2>/dev/null)
-    
-    if [ -n "$dependencies" ]; then
-        debug_log "INFO" "$(get_message "MSG_INSTALLING_DEPENDENCIES" | sed "s/{pkg}/$package_name/" | sed "s/{deps}/$dependencies/")"
-        for dep in $dependencies; do
-            install_package "$dep" hidden
-        done
-    else
-        debug_log "WARN" "$(get_message "MSG_ERROR_MISSING_DEPENDENCIES" | sed "s/{pkg}/$package_name/")"
-    fi
-
-    # **`custom-package.db` からバージョン & アーキテクチャごとの `build_command` を取得**
-    local build_command=$(jq -r --arg pkg "$package_name" --arg arch "$arch" --arg ver "$openwrt_version" '
-        .[$pkg].build.commands[$ver][$arch] // 
-        .[$pkg].build.commands[$ver].default // 
-        .[$pkg].build.commands.default[$arch] // 
-        .[$pkg].build.commands.default.default // empty' "$CACHE_DIR/custom-package.db" 2>/dev/null)
-
-    if [ -z "$build_command" ]; then
-        debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_COMMAND_NOT_FOUND" | sed "s/{pkg}/$package_name/" | sed "s/{arch}/$arch/" | sed "s/{ver}/$openwrt_version/")"
-        echo "$(get_message "MSG_ERROR_BUILD_COMMAND_NOT_FOUND" | sed "s/{pkg}/$built_package/" | sed "s/{arch}/$arch/" | sed "s/{ver}/$openwrt_version/")" >&2
-        return 1
-    fi
-
-    debug_log "INFO" "$(get_message "MSG_EXECUTING_BUILD_COMMAND" | sed "s/{cmd}/$build_command/")"
-
-    # **ビルド開始メッセージ**
-    echo "$(get_message "MSG_BUILD_START" | sed "s/{pkg}/$built_package/")"
-
-    # **ビルド実行**
-    local start_time=$(date +%s)
-    if ! eval "$build_command"; then
-        echo "$(get_message "MSG_BUILD_FAIL" | sed "s/{pkg}/$built_package/")"
-        debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_FAILED" | sed "s/{pkg}/$built_package/")"
-        return 1
-    fi
-    local end_time=$(date +%s)
-    local build_time=$((end_time - start_time))
-
-    echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$built_package/" | sed "s/{time}/$build_time/")"
-    debug_log "INFO" "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$built_package/" | sed "s/{time}/$build_time/")"
-
-    # **ビルド完了後、`install_package()` を実行**
-    install_package "$built_package" "$confirm_install"
-
-    echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$built_package/")"
-    debug_log "INFO" "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$built_package/")"
 }
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
