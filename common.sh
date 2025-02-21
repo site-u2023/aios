@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-02-09"
+SCRIPT_VERSION="2025.02.21-02-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1132,22 +1132,44 @@ spin() {
 
     debug_log "DEBUG" "📡 スピナー開始: $message"
     
-    # `trap` を設定 (Ctrl+C やエラー時にスピナーを確実に停止)
+    # `trap` を設定 (エラー時にもスピナーを確実に停止)
     trap 'stop_spinner' INT TERM EXIT
 
     while true; do
         printf "\r%s %s" "$(color cyan "$message")" "${spin_chars:i++%4:1}"
 
-        # `usleep` の存在チェックを最適化
         if command -v usleep >/dev/null 2>&1; then
             usleep "$delay"
         else
-            sleep 1  # `sleep` の最小単位は 1秒
+            sleep 1  # `usleep` がない場合は 1秒
         fi
     done &
     
     SPINNER_PID=$!
+    if [ -z "$SPINNER_PID" ]; then
+        debug_log "ERROR" "スピナーのPID取得に失敗"
+    else
+        debug_log "DEBUG" "SPINNER_PID=$SPINNER_PID"
+    fi
 }
+
+# **スピナー停止関数**
+stop_spinner() {
+    if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
+        debug_log "DEBUG" "スピナー停止中 (PID: $SPINNER_PID)..."
+        kill "$SPINNER_PID" >/dev/null 2>&1
+        sleep 0.1
+        kill -9 "$SPINNER_PID" >/dev/null 2>&1
+        unset SPINNER_PID
+        printf "\r%-50s\r" ""  # スピナーの出力を消去
+        echo -ne "\e[?25h"  # カーソルを再表示
+        trap - EXIT
+        debug_log "DEBUG" "✅ スピナー停止完了"
+    else
+        debug_log "WARN" "スピナー停止に失敗 (PID: $SPINNER_PID 不明)"
+    fi
+}
+
 
 # **スピナー停止関数**
 stop_spinner() {
