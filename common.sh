@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-02-01"
+SCRIPT_VERSION="2025.02.21-02-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1201,7 +1201,7 @@ install_package() {
             local i=0
             while true; do
                 printf "\r%s %s" "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")" "${spin_chars:i++%4:1}"
-                sleep 0.2  # POSIX準拠
+                usleep 200000  # OpenWrt `ash` で動作する `usleep`
             done
         }
 
@@ -1211,7 +1211,7 @@ install_package() {
         stop_update_spinner() {
             if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
                 kill "$SPINNER_PID" >/dev/null 2>&1
-                sleep 0.1
+                usleep 100000
                 kill -9 "$SPINNER_PID" >/dev/null 2>&1
             fi
             unset SPINNER_PID
@@ -1269,7 +1269,7 @@ install_package() {
         local i=0
         while true; do
             printf "\r%s %s" "$(color green "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")" "${spin_chars:i++%4:1}"
-            sleep 0.2  # POSIX準拠
+            usleep 200000  # OpenWrt `ash` で動作する `usleep`
         done
     }
 
@@ -1279,7 +1279,7 @@ install_package() {
     stop_install_spinner() {
         if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
             kill "$SPINNER_PID" >/dev/null 2>&1
-            sleep 0.1
+            usleep 100000
             kill -9 "$SPINNER_PID" >/dev/null 2>&1
         fi
         unset SPINNER_PID
