@@ -1153,24 +1153,24 @@ update_package_list() {
     fi
 
     # **スピナー開始 (適切なメッセージを `message.db` から取得)**
-    start_spinner "$(get_message "MSG_UPDATING_REPO")"
+    start_spinner "$(color yellow "$(get_message "MSG_UPDATING_REPO")")"
 
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
-            stop_spinner "$(get_message "MSG_UPDATE_FAILED")"  # **エラー時もスピナーを止める**
+            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"  # **エラー時もスピナーを止める**
             debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
             return 1
         }
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
-            stop_spinner "$(get_message "MSG_UPDATE_FAILED")"  # **エラー時もスピナーを止める**
+            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"  # **エラー時もスピナーを止める**
             debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
             return 1
         }
     fi
 
     # **スピナー停止 (成功メッセージ)**
-    stop_spinner "$(get_message "MSG_UPDATE_SUCCESS")"
+    stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
 
     # **キャッシュを更新**
     if ! echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"; then
@@ -1265,24 +1265,25 @@ install_package() {
     fi
 
     # **スピナー開始 (`message.db` から取得)**
-    start_spinner "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")"
+    start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
+
 
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         opkg install "$package_name" > /dev/null 2>&1 || {
-            stop_spinner "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"  # **エラー時もスピナーを止める**
+            stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"  # **エラー時もスピナーを止める**
             debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
             return 1
         }
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         apk add "$package_name" > /dev/null 2>&1 || {
-            stop_spinner "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"  # **エラー時もスピナーを止める**
+            stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"  # **エラー時もスピナーを止める**
             debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
             return 1
         }
     fi
 
     # **スピナー停止 (`message.db` から取得)**
-    stop_spinner "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")"
+    stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
 
     echo "$(color green "✅ $(get_message "MSG_INSTALLED" | sed "s/{pkg}/$package_name/")")"
     debug_log "DEBUG" "Successfully installed package: $package_name"
