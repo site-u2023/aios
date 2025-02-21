@@ -1307,7 +1307,7 @@ install_package() {
     # **スピナー停止 (成功メッセージ)**
     stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
 
-    echo "$(color green "✅ $(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+    echo "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
     debug_log "DEBUG" "Successfully installed package: $package_name"
 }
 
