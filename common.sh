@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-00-15"
+SCRIPT_VERSION="2025.02.22-00-16"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1141,6 +1141,24 @@ start_spinner() {
 stop_spinner() {
     local message="$1"
 
+    if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
+        kill "$SPINNER_PID" >/dev/null 2>&1
+        wait "$SPINNER_PID" 2>/dev/null
+        printf "\r\033[K"  # 行をクリア
+        echo "$(color green "$message")"
+    else
+        printf "\r\033[K"
+        echo "$(color red "$message")"
+    fi
+    unset SPINNER_PID
+
+    echo -en "\e[?25h"
+}
+
+# **スピナー停止関数**
+XXX_stop_spinner() {
+    local message="$1"
+
     if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
         kill "$SPINNER_PID" >/dev/null 2>&1
         printf "\r\033[K"  # 行をクリア
@@ -1188,7 +1206,6 @@ update_package_list() {
 
     # **スピナー停止 (成功メッセージ)**
     stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
-    sleep 1
     
     # **キャッシュを更新**
     if ! echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"; then
