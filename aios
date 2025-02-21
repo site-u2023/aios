@@ -183,4 +183,4 @@ print_banner
 print_banner_wave
 print_banner_fadein
 packages
-download openwrt-config.sh
+# download openwrt-config.sh
