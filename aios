@@ -66,7 +66,6 @@ print_banner() {
 # パッケージのインストール (オプション)
 packages() {
     # uconv のインストール
-    install_package jq yn hidden
     install_build build_uconv yn
     # uconv がインストールされている場合に languages.db をインストール
     if command -v uconv >/dev/null 2>&1; then
