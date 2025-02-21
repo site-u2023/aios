@@ -1052,7 +1052,6 @@ normalize_language() {
 # 【フロー】
 # 1️⃣ デバイスにパッケージがインストール済みか確認
 # 2️⃣ `update.ch` のキャッシュをチェックし、`opkg update / apk update` を実行
-# 3️⃣ GitHub の `custom-package.db` を取得・適用（オプションにより制御）
 # 4️⃣ インストール確認（yn オプションが指定された場合）
 # 5️⃣ パッケージのインストールを実行
 # 6️⃣ 言語パッケージの適用（nolang オプションでスキップ可能）
@@ -1072,9 +1071,6 @@ normalize_language() {
 # - hidden     : 既にインストール済みの場合のメッセージを非表示
 # - test       : インストール済みのパッケージでも処理を実行
 # - update     : `opkg update` / `apk update` を強制実行（`update.ch` のキャッシュ無視）
-# - custom1    : GitHub の `custom-package.db` のみ適用し、通常の `opkg / apk` は実行しない
-# - custom2    : `custom-package.db` 適用後に `opkg / apk` も実行する
-# - dependencies : `custom-package.db` で依存関係のパッケージも自動インストール（デフォルト: 適用）
 #
 # 【仕様】
 # - `update.ch` を書き出し、`opkg update / apk update` の実行管理
@@ -1097,8 +1093,6 @@ normalize_language() {
 #      既にインストール済みの場合のメッセージを非表示）
 # - install_package ttyd test             → `ttyd` をインストール（インストール済みでも強制インストール）
 # - install_package ttyd update           → `ttyd` をインストール（`opkg update / apk update` を強制実行）
-# - install_package ttyd custom1          → `custom-package.db` のみ適用し、通常の `opkg / apk` は実行しない
-# - install_package ttyd custom2          → `custom-package.db` 適用後に `opkg / apk` も実行
 #
 # 【messages.db の記述例】
 # [ttyd]
@@ -1156,6 +1150,37 @@ stop_spinner() {
     echo -en "\e[?25h"
 }
 
+update_package_list() {
+    local update_cache="${CACHE_DIR}/update.ch"
+    local current_date=$(date '+%Y-%m-%d')
+
+    # すでに今日の更新がされていればスキップ
+    if [ -f "$update_cache" ] && grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
+        debug_log "INFO" "パッケージリストは既に最新です。更新をスキップします。"
+        return
+    fi
+
+    # スピナー開始
+    start_spinner "$(get_message "MSG_UPDATE_RUNNING")"
+
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
+            stop_spinner
+            debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+            return 1
+        }
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
+            stop_spinner
+            debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+            return 1
+        }
+    fi
+
+    # スピナー停止
+    stop_spinner
+    echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
+}
 
 install_package() {
     local confirm_install="no"
@@ -1166,12 +1191,7 @@ install_package() {
     local test_mode="no"
     local force_install="no"
     local update_mode="no"
-    local custom_mode=0  # 0: なし, 1: custom1, 2: custom2
-    local dependencies_mode=1  # 1: 自動インストール, 0: 依存関係無視
     local package_name=""
-    
-    local package_db_remote="${BASE_URL}/custom-package.db"
-    local package_db_cache="${CACHE_DIR}/custom-package.db"
     local update_cache="${CACHE_DIR}/update.ch"
 
     # **オプションの処理**
@@ -1211,13 +1231,6 @@ install_package() {
         return 1
     fi
 
-    [ "$custom_mode" -ne 0 ] && download_custom_package_db
-
-    # **jq のエラーハンドリング**
-    if [ "$custom_mode" -ne 0 ] && ! command -v jq >/dev/null 2>&1; then
-        debug_log "WARN" "⚠️ jq が見つかりません。custom-package.db の適用をスキップします。"
-        custom_mode=0
-    fi
 
     # **update の管理**
     local current_date=$(date '+%Y-%m-%d')
@@ -1227,28 +1240,8 @@ install_package() {
         
         debug_log "DEBUG" "$(get_message "MSG_RUNNING_UPDATE")"
 
-        # スピナー開始
-        spinner
+        update_package_list
         
-        # **update 実行**
-        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
-                stop_spinner
-                debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
-                return 1
-            }
-        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
-                stop_spinner
-                debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
-                return 1
-            }
-        fi
-
-        # スピナー停止
-        stop_spinner
-
-        echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
     fi
 
     # **インストール前の確認**
