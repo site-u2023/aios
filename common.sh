@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-00-04"
+SCRIPT_VERSION="2025.02.22-00-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1100,32 +1100,41 @@ normalize_language() {
 # initd/ttyd/restart
 # [ttyd] opkg update; uci commit ttyd; initd/ttyd/restart
 #########################################################################
+# **スピナー開始関数**
 start_spinner() {
     local message="$1"
     SPINNER_MESSAGE="$message"  # 停止時のメッセージ保持
     spinner_chars='-\|/'
     i=0
-
-    echo -en "\e[?25l"  # カーソルを非表示にする
+    
+    echo -en "\e[?25l"
     
     while true; do
         printf "\r📡 %s %s" "$(color yellow "$SPINNER_MESSAGE")" "${spinner_chars:i++%4:1}"
-        sleep 0.2
+        if command -v usleep >/dev/null 2>&1; then
+            usleep 200000
+        else
+            sleep 1
+        fi
     done &
     SPINNER_PID=$!
 }
 
+# **スピナー停止関数**
 stop_spinner() {
-    if [ -n "$SPINNER_PID" ] && ps -p "$SPINNER_PID" > /dev/null 2>&1; then
-        kill "$SPINNER_PID" > /dev/null 2>&1
+    local message="$1"
+
+    if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
+        kill "$SPINNER_PID" >/dev/null 2>&1
         printf "\r\033[K"  # 行をクリア
-        echo "$(color green "✅ $SPINNER_MESSAGE $(get_message "MSG_UPDATE_SUCCESS")")"
+        echo "$(color green "✅ $message")"
     else
         printf "\r\033[K"
-        echo "$(color red "❌ $SPINNER_MESSAGE $(get_message 'MSG_UPDATE_FAILED')")"
+        echo "$(color red "❌ $message")"
     fi
-    unset SPINNER_PID SPINNER_MESSAGE
-    echo -en "\e[?25h"  # カーソルを表示に戻す
+    unset SPINNER_PID
+
+    echo -en "\e[?25h"
 }
 
 update_package_list() {
@@ -1143,25 +1152,25 @@ update_package_list() {
         return 0
     fi
 
-    # **スピナー開始 (元のまま)**
+    # **スピナー開始 (適切なメッセージを `message.db` から取得)**
     start_spinner "$(get_message "MSG_UPDATING_REPO")"
 
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
-            stop_spinner  # **エラー時もスピナーを止める**
+            stop_spinner "$(get_message "MSG_UPDATE_FAILED")"  # **エラー時もスピナーを止める**
             debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
             return 1
         }
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
-            stop_spinner  # **エラー時もスピナーを止める**
+            stop_spinner "$(get_message "MSG_UPDATE_FAILED")"  # **エラー時もスピナーを止める**
             debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
             return 1
         }
     fi
 
-    # **スピナー停止 (元のまま)**
-    stop_spinner
+    # **スピナー停止 (成功メッセージ)**
+    stop_spinner "$(get_message "MSG_UPDATE_SUCCESS")"
 
     # **キャッシュを更新**
     if ! echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"; then
@@ -1171,7 +1180,6 @@ update_package_list() {
 
     return 0
 }
-
 
 install_package() {
     local confirm_install="no"
@@ -1256,25 +1264,25 @@ install_package() {
         done
     fi
 
-    # **スピナー開始 (元のまま)**
+    # **スピナー開始 (`message.db` から取得)**
     start_spinner "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")"
 
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         opkg install "$package_name" > /dev/null 2>&1 || {
-            stop_spinner  # **エラー時もスピナーを止める**
+            stop_spinner "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"  # **エラー時もスピナーを止める**
             debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
             return 1
         }
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         apk add "$package_name" > /dev/null 2>&1 || {
-            stop_spinner  # **エラー時もスピナーを止める**
+            stop_spinner "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"  # **エラー時もスピナーを止める**
             debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
             return 1
         }
     fi
 
-    # **スピナー停止 (元のまま)**
-    stop_spinner
+    # **スピナー停止 (`message.db` から取得)**
+    stop_spinner "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")"
 
     echo "$(color green "✅ $(get_message "MSG_INSTALLED" | sed "s/{pkg}/$package_name/")")"
     debug_log "DEBUG" "Successfully installed package: $package_name"
