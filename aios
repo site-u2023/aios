@@ -23,7 +23,7 @@
 # =========================================================
 # aios (エントリースクリプト)
 
-SCRIPT_VERSION="2025.02.21-00-03"
+SCRIPT_VERSION="2025.02.21-00-04"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -147,20 +147,23 @@ print_banner_wave() {
 
 
 print_banner_fadein() {
-    local banner_text=(
-        "                    ii i"
-        "         aaaa      iii       oooo      sssss"
-        "            aa      ii      oo  oo    ss"
-        "         aaaaa      ii      oo  oo     sssss"
-        "        aa  aa      ii      oo  oo         ss"
-        "         aaaaa     iiii      oooo     ssssss"
-    )
-    
-    local delay=0.1  # フェードインの間隔
+    clear
+    local banner_text="
+                    ii i
+         aaaa      iii       oooo      sssss
+            aa      ii      oo  oo    ss
+         aaaaa      ii      oo  oo     sssss
+        aa  aa      ii      oo  oo         ss
+         aaaaa     iiii      oooo     ssssss
+    "
 
-    for ((i = 0; i < ${#banner_text[@]}; i++)); do
-        sleep $delay
-        echo -e "$(color cyan "${banner_text[$i]}")"
+    local delay=0.1  # フェードインの間隔
+    local i=0
+
+    echo "$banner_text" | while IFS= read -r line; do
+        sleep "$delay"
+        echo "$(color cyan "$line")"
+        i=$(expr "$i" + 1)
     done
 
     echo
