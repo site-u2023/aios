@@ -1382,7 +1382,8 @@ install_build() {
     fi
 
     # **ビルド環境の準備 (yn判定直後)**
-    local build_tools=(jq make gcc git libtool automake pkg-config zlib-dev libssl-dev libicu-dev ncurses-dev curl-dev libxml2-dev)
+    install_package jq
+    local build_tools=(make gcc git libtool automake pkg-config zlib-dev libssl-dev libicu-dev ncurses-dev curl-dev libxml2-dev)
     
     for tool in "${build_tools[@]}"; do
         install_package "$tool" hidden
