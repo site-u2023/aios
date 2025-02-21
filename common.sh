@@ -1,7 +1,26 @@
 #!/bin/sh
-# License: CC0
-# OpenWrt >= 19.07, Compatible with 24.10.0
-# Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
+# =========================================================
+# 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
+# 🚀 Last Update: 2025-02-21
+#
+# 🏷️ License: CC0 (Public Domain)
+# 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
+#
+# ⚠️ IMPORTANT NOTICE:
+# OpenWrt OS exclusively uses **Almquist Shell (ash)** and
+# is **NOT** compatible with Bourne-Again Shell (bash).
+#
+# 📢 POSIX Compliance Guidelines:
+# ✅ Use `[` instead of `[[` for conditions
+# ✅ Use `$(command)` instead of backticks `` `command` ``
+# ✅ Use `$(( ))` for arithmetic instead of `let`
+# ✅ Define functions as `func_name() {}` (no `function` keyword)
+# ✅ No associative arrays (`declare -A` is NOT supported)
+# ✅ No here-strings (`<<<` is NOT supported)
+# ✅ No `-v` flag in `test` or `[[`
+#
+# 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
+# =========================================================
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
 SCRIPT_VERSION="2025.02.21-01-01"
