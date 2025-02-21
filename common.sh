@@ -1123,49 +1123,49 @@ download_custom_package_db() {
     fi
 }
 
-{
-    # `usleep` の有無をチェック
+# **スピナー開始関数**
+spin() {
+    local message="$1"
+    local delay=200000  # `usleep` 用 (デフォルト: 0.2秒)
+    local spin_chars='-\|/'
+    local i=0
+
+    debug_log "DEBUG" "📡 スピナー開始: $message"
+
+    # `trap` を設定 (エラー時にもスピナーを確実に停止)
+    trap 'stop_spinner' INT TERM EXIT
+
+    # **usleep の有無を事前に判定**
     if command -v usleep >/dev/null 2>&1; then
         USE_USLEEP="yes"
-        echo "✅ usleep が見つかりました。"
     else
         USE_USLEEP="no"
-        echo "⚠️ usleep が見つかりません。sleep 1 にフォールバックします。"
     fi
 
-    echo -ne "\r📡 パッケージマネージャーの更新を実行中... "  # スピナーを開始
-    
-    spin_chars='-\|/'
-    i=0
-    start_time=$(date +%s)
-
     while true; do
-        printf "\r📡 パッケージマネージャーの更新を実行中... %s" "${spin_chars:i++%4:1}"
+        printf "\r%s %s" "$(color cyan "$message")" "${spin_chars:i++%4:1}"
 
         if [ "$USE_USLEEP" = "yes" ]; then
-            usleep 200000  # `usleep` がある場合は 0.2秒
+            usleep "$delay"
         else
-            sleep 1  # `usleep` がない場合は 1秒
+            sleep 1  # `usleep` がない場合は整数の 1秒にフォールバック
         fi
-
-        # 5秒経過したら終了
-        current_time=$(date +%s)
-        if [ $((current_time - start_time)) -ge 5 ]; then
-            break
-        fi
-    done
-
-    printf "\r%-50s\r" ""  # スピナーを完全消去
-    echo "✅ テスト完了"
+    done &
+    
+    SPINNER_PID=$!
+    if [ -z "$SPINNER_PID" ]; then
+        debug_log "ERROR" "スピナーのPID取得に失敗"
+    else
+        debug_log "DEBUG" "SPINNER_PID=$SPINNER_PID"
+    fi
 }
-
 
 # **スピナー停止関数**
 stop_spinner() {
     if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
         debug_log "DEBUG" "スピナー停止中 (PID: $SPINNER_PID)..."
         kill "$SPINNER_PID" >/dev/null 2>&1
-        sleep 0.1
+        sleep 1  # `0.1` ではなく `1` にする
         kill -9 "$SPINNER_PID" >/dev/null 2>&1
         unset SPINNER_PID
         printf "\r%-50s\r" ""  # スピナーの出力を消去
@@ -1177,20 +1177,6 @@ stop_spinner() {
     fi
 }
 
-
-# **スピナー停止関数**
-stop_spinner() {
-    if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
-        kill "$SPINNER_PID" >/dev/null 2>&1
-        sleep 0.1
-        kill -9 "$SPINNER_PID" >/dev/null 2>&1
-    fi
-    unset SPINNER_PID
-    printf "\r%-50s\r" ""  # スピナーの出力を消去
-    echo -ne "\e[?25h"  # カーソルを再表示
-
-    debug_log "DEBUG" "✅ スピナー停止完了"
-}
 
 install_package() {
     local confirm_install="no"
