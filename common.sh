@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-02-13"
+SCRIPT_VERSION="2025.02.21-02-14"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1232,8 +1232,10 @@ install_package() {
         
         debug_log "DEBUG" "$(get_message "MSG_RUNNING_UPDATE")"
 
-        # **スピナー開始**
-        spin "$(get_message "MSG_UPDATE_IN_PROGRESS")"
+        # スピナー開始
+        spin "$(get_message "MSG_UPDATE_IN_PROGRESS")" &
+        SPINNER_PID=$!
+        sleep 0.1  # PID取得を確実化
 
         # **update 実行**
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
@@ -1250,7 +1252,7 @@ install_package() {
             }
         fi
 
-        # **スピナー停止**
+        # スピナー停止
         stop_spinner
         echo "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
 
