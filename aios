@@ -23,7 +23,7 @@
 # =========================================================
 # aios (エントリースクリプト)
 
-SCRIPT_VERSION="2025.02.21-00-02"
+SCRIPT_VERSION="2025.02.21-00-03"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -111,25 +111,32 @@ print_banner_matrix() {
 }
 
 print_banner_wave() {
-    local banner_text=(
-        "                    ii i"
-        "         aaaa      iii       oooo      sssss"
-        "            aa      ii      oo  oo    ss"
-        "         aaaaa      ii      oo  oo     sssss"
-        "        aa  aa      ii      oo  oo         ss"
-        "         aaaaa     iiii      oooo     ssssss"
-    )
-    
-    local delay=0.07  # 揺れるスピード
+    clear
+    local banner_text="
+                    ii i
+         aaaa      iii       oooo      sssss
+            aa      ii      oo  oo    ss
+         aaaaa      ii      oo  oo     sssss
+        aa  aa      ii      oo  oo         ss
+         aaaaa     iiii      oooo     ssssss
+    "
 
-    for ((wave = 0; wave < 3; wave++)); do  # 3回揺らす
+    local delay=0.07  # 揺れるスピード
+    local wave=0
+
+    while [ "$wave" -lt 3 ]; do  # 3回揺らす
         clear
-        for ((i = 0; i < ${#banner_text[@]}; i++)); do
-            local offset=$(( (wave % 2) * 2 ))  # 偶数回は右、奇数回は左にズラす
-            tput cup $((i + 3)) $((10 + offset))
-            echo -e "$(color blue "${banner_text[$i]}")"
+        local i=0
+        local offset=$(expr \( "$wave" % 2 \) \* 2)  # 偶数回は右、奇数回は左にズラす
+
+        echo "$banner_text" | while IFS= read -r line; do
+            tput cup $(expr "$i" + 3) $(expr 10 + "$offset")
+            echo "$(color blue "$line")"
+            i=$(expr "$i" + 1)
         done
+
         sleep $delay
+        wave=$(expr "$wave" + 1)
     done
 
     echo
@@ -137,6 +144,7 @@ print_banner_wave() {
     printf "%s\n" "$(color white "$(get_message "MSG_BANNER_NAME")")"
     printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DISCLAIMER")")"
 }
+
 
 print_banner_fadein() {
     local banner_text=(
