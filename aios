@@ -87,11 +87,6 @@ print_banner() {
 packages() {
     # uconv のインストール
     install_build build_uconv yn
-    # uconv がインストールされている場合に languages.db をインストール
-    if command -v uconv >/dev/null 2>&1; then
-        echo "uconv is installed. Installing languages.db..."
-        download languages.db
-    fi
 
     # 他のパッケージのインストール
     install_package luci-app-cpu-status custom1 yn
