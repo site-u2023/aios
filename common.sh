@@ -1131,10 +1131,10 @@ stop_spinner() {
     if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
         kill "$SPINNER_PID" >/dev/null 2>&1
         printf "\r\033[K"  # 行をクリア
-        echo "$(color green "✅ $message")"
+        echo "$(color green "$message")"
     else
         printf "\r\033[K"
-        echo "$(color red "❌ $message")"
+        echo "$(color red "$message")"
     fi
     unset SPINNER_PID
 
