@@ -1498,7 +1498,7 @@ install_build() {
     local build_tools="make gcc git libtool-bin automake pkg-config zlib-dev libncurses-dev curl libxml2 libxml2-dev autoconf automake bison flex perl patch wget wget-ssl tar unzip"
                       
     for tool in $build_tools; do
-        install_package "$tool" hidden
+        install_package "$tool" # hidden # TEST <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
     done
 
     # **ビルド後のパッケージ名を取得**
