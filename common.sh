@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-02-05"
+SCRIPT_VERSION="2025.02.21-02-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1123,12 +1123,17 @@ download_custom_package_db() {
     fi
 }
 
-# **スピナー開始関数 (Install_package専用)**
+# **スピナー開始関数 (完全委任)**
 spin() {
     local message="$1"
     local delay=200000
     local spin_chars='-\|/'
     local i=0
+
+    debug_log "DEBUG" "📡 スピナー開始: $message"
+    
+    # `trap` をここで設定 (Ctrl+C やエラー時にスピナーを確実に停止)
+    trap 'stop_spinner' INT TERM
 
     while true; do
         printf "\r%s %s" "$(color cyan "$message")" "${spin_chars:i++%4:1}"
@@ -1150,6 +1155,8 @@ stop_spinner() {
     fi
     unset SPINNER_PID
     printf "\r%-50s\r" ""  # スピナーの出力を消去
+
+    debug_log "DEBUG" "✅ スピナー停止完了"
 }
 
 install_package() {
@@ -1225,8 +1232,6 @@ install_package() {
         # **スピナー開始**
         spin "$(get_message "MSG_UPDATE_IN_PROGRESS")" &
         SPINNER_PID=$!
-
-        trap stop_spinner INT TERM
 
         # **update 実行**
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
