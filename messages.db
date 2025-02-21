@@ -10,6 +10,7 @@ SUPPORTED_LANGUAGES="US JP"
 US|MSG_UNDER_TEST=👽 Under test
 JP|MSG_UNDER_TEST=👹 試験中
 
+
 # -----------------------
 # 🔍 デバッグ用メッセージ
 # -----------------------
@@ -92,6 +93,33 @@ US|MSG_CONFIRM_ONLY_YN=🔄 Confirm (Y=Yes / N=No):
 JP|MSG_CONFIRM_ONLY_YN=🔄 確認 (Y=はい / N=いいえ):
 
 # パッケージマネージャ関連
+US|MSG_ERROR_NO_PACKAGE_NAME=🚨 No package name specified.
+JP|MSG_ERROR_NO_PACKAGE_NAME=🚨 パッケージ名が指定されていません。
+
+US|MSG_ERROR_NO_PACKAGE_MANAGER=⚠️ No package manager found in cache.
+JP|MSG_ERROR_NO_PACKAGE_MANAGER=⚠️ パッケージマネージャーが見つかりません。
+
+US|MSG_ERROR_UPDATE_FAILED=❌ Failed to update package list.
+JP|MSG_ERROR_UPDATE_FAILED=❌ パッケージリストの更新に失敗しました。
+
+US|MSG_ERROR_PACKAGE_NOT_FOUND=⚠️ Package {pkg} not found in repository.
+JP|MSG_ERROR_PACKAGE_NOT_FOUND=⚠️ パッケージ {pkg} がリポジトリに見つかりません。
+
+US|MSG_ERROR_INSTALL_FAILED=🚨 Installation failed for package {pkg}.
+JP|MSG_ERROR_INSTALL_FAILED=🚨 パッケージ {pkg} のインストールに失敗しました。
+
+US|MSG_ERROR_MISSING_DEPENDENCIES=⚠️ Missing dependencies for {pkg}.
+JP|MSG_ERROR_MISSING_DEPENDENCIES=⚠️ {pkg} に必要な依存パッケージが見つかりません。
+
+US|MSG_ERROR_JQ_NOT_FOUND=⚠️ jq not found. Skipping custom-package.db processing.
+JP|MSG_ERROR_JQ_NOT_FOUND=⚠️ jq が見つかりません。custom-package.db の適用をスキップします。
+
+US|MSG_ERROR_BUILD_COMMAND_NOT_FOUND=❌ No build command found for {pkg} (Arch: {arch}, Version: {ver}).
+JP|MSG_ERROR_BUILD_COMMAND_NOT_FOUND=❌ {pkg} のビルド情報が見つかりません (Arch: {arch}, Version: {ver})。
+
+US|MSG_ERROR_BUILD_FAILED=🚨 Build failed for package {pkg}.
+JP|MSG_ERROR_BUILD_FAILED=🚨 パッケージ {pkg} のビルドに失敗しました。
+
 JP|MSG_PACKAGE_MANAGER_NOT_FOUND=パッケージマネージャが見つかりません。
 US|MSG_PACKAGE_MANAGER_NOT_FOUND=Package manager not found.
 
