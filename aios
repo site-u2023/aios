@@ -1,7 +1,27 @@
 #!/bin/sh
+# =========================================================
+# 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
+# 🚀 Last Update: 2025-02-21
+#
+# 🏷️ License: CC0 (Public Domain)
+# 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
+#
+# ⚠️ IMPORTANT NOTICE:
+# OpenWrt OS exclusively uses **Almquist Shell (ash)** and
+# is **NOT** compatible with Bourne-Again Shell (bash).
+#
+# 📢 POSIX Compliance Guidelines:
+# ✅ Use `[` instead of `[[` for conditions
+# ✅ Use `$(command)` instead of backticks `` `command` ``
+# ✅ Use `$(( ))` for arithmetic instead of `let`
+# ✅ Define functions as `func_name() {}` (no `function` keyword)
+# ✅ No associative arrays (`declare -A` is NOT supported)
+# ✅ No here-strings (`<<<` is NOT supported)
+# ✅ No `-v` flag in `test` or `[[`
+#
+# 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
+# =========================================================
 # aios (エントリースクリプト)
-# License: CC0
-# OpenWrt >= 19.07, Compatible with 24.10.0
 
 SCRIPT_VERSION="2025.02.19-00-04"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
