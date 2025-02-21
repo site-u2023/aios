@@ -114,6 +114,9 @@ US|MSG_BUILD_SUCCESS=✅ Successfully built and installed {pkg}.
 JP|MSG_BUILD_SUCCESS=✅ {pkg} のビルドとインストールが完了しました。
 
 # パッケージマネージャ関連
+US|MSG_COMMAND_AVAILABLE=Command {pkg} is available on the system.
+JP|MSG_COMMAND_AVAILABLE=コマンド {pkg} はシステム上で利用可能です.
+
 US|MSG_ERROR_NO_PACKAGE_NAME=🚨 No package name specified.
 JP|MSG_ERROR_NO_PACKAGE_NAME=🚨 パッケージ名が指定されていません。
 
