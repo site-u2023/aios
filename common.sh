@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.21-00-04"
+SCRIPT_VERSION="2025.02.21-00-05"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1248,7 +1248,7 @@ install_package() {
 }
 
 #########################################################################
-# Last Update: 2025-02-19 20:15:00 (JST) 🚀
+# Last Update: 2025-02-21 14:19:00 (JST) 🚀
 # install_build: パッケージのビルド処理 (OpenWrt / Alpine Linux)
 #
 # 【概要】
@@ -1295,15 +1295,6 @@ install_jq() {
     # **jq がインストールされているか確認**
     if ! command -v jq >/dev/null 2>&1; then
         echo "📦 jq not found. Installing..."
-
-        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            opkg update && opkg install jq
-        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            apk update && apk add jq
-        else
-            echo "❌ ERROR: Unsupported package manager ($PACKAGE_MANAGER). Exiting..."
-            exit 1
-        fi
 
         # **インストール後の確認**
         if ! command -v jq >/dev/null 2>&1; then
@@ -1355,6 +1346,28 @@ else
 fi
 }
 
+#########################################################################
+# Last Update: 2025-02-21 20:00:00 (JST) 🚀
+# install_build: パッケージのビルド処理 (OpenWrt / Alpine Linux)
+#
+# 【概要】
+# 指定されたパッケージをビルド後インストールし、オプションに応じて以下の処理を実行する。
+# 1回の動作で１つのビルドのみパッケージを作りインストール作業
+# DEV_NULL に応じて出力制御
+# DEBUG に応じて出力制御（要所にセット）
+# package名は、ビルド前は build_*, ビルド後は *
+# 例：build_uconv　>>>　uconv
+#
+# 【フロー】
+# 2️⃣ デバイスにパッケージがインストール済みか確認（ビルド後のパッケージ名で確認）
+# 4️⃣ インストール確認（yn オプションが指定された場合）
+# 4️⃣ ビルド用汎用パッケージ（例：make, gcc）をインストール ※install_package()利用
+# 4️⃣ ビルド作業
+# 7️⃣ package.db の適用（ビルド用設定：DBの記述に従う）
+# 5️⃣ インストールの実行（install_package()利用）
+# 7️⃣ package.db の適用（ビルド後の設定適用がある場合：DBの記述に従う）
+#########################################################################
+
 install_build() {
     local confirm_install="no"
     local hidden="no"
@@ -1394,12 +1407,11 @@ install_build() {
     # **jq がインストールされているか確認 & インストール**
     install_jq
 
-    # **ビルド環境の準備 (事前に `install_package()` を使用)**
+    # **ビルド環境の準備**
     local build_tools=(
         make gcc git libtool automake pkg-config
         zlib-dev libssl-dev libicu-dev ncurses-dev curl-dev libxml2-dev
     )
-    
     for tool in "${build_tools[@]}"; do
         install_package "$tool" hidden
     done
@@ -1420,7 +1432,7 @@ install_build() {
 
     # **`custom-package.db` からビルドに必要な `dependencies` を取得**
     local dependencies=$(jq -r --arg arch "$arch" '.[$package_name].build.dependencies.opkg // [] | join(" ")' "$CACHE_DIR/custom-package.db" 2>/dev/null)
-    
+
     if [ -n "$dependencies" ]; then
         debug_log "INFO" "Installing dependencies: $dependencies"
         for dep in $dependencies; do
@@ -1444,12 +1456,12 @@ install_build() {
         done
     fi
 
-    # **`custom-package.db` からバージョン & アーキテクチャごとの `build_command` を取得**
+    # **`custom-package.db` から `build_command` を取得**
     local build_command=$(jq -r --arg pkg "$package_name" --arg arch "$arch" --arg ver "$openwrt_version" '
         .[$pkg].build.commands[$ver][$arch] // 
         .[$pkg].build.commands[$ver].default // 
         .[$pkg].build.commands.default[$arch] // 
-        .[$pkg].build.commands.default.default // empty' "$CACHE_DIR/custom-package.db" 2>/dev/null)
+        .[$pkg].build.commands.default.default // ""' "$CACHE_DIR/custom-package.db" 2>/dev/null)
 
     if [ -z "$build_command" ]; then
         debug_log "ERROR" "No build command found for $package_name (Arch: $arch, Version: $openwrt_version)."
@@ -1459,26 +1471,20 @@ install_build() {
 
     debug_log "INFO" "Executing build command: $build_command"
 
-    # **ビルド開始メッセージ**
-    echo "$(get_message "MSG_BUILD_START" | sed "s/{pkg}/$built_package/")"
-
     # **ビルド実行**
     local start_time=$(date +%s)
     if ! eval "$build_command"; then
-        echo "$(get_message "MSG_BUILD_FAIL" | sed "s/{pkg}/$built_package/")"
         debug_log "ERROR" "Build failed for package: $built_package"
         return 1
     fi
     local end_time=$(date +%s)
     local build_time=$((end_time - start_time))
 
-    echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$built_package/" | sed "s/{time}/$build_time/")"
     debug_log "INFO" "Build time for $built_package: $build_time seconds"
 
     # **ビルド完了後、`install_package()` を実行**
-    install_package "$built_package" "$confirm_install"
+    install_package "$built_package" $( [ "$confirm_install" = "yes" ] && echo "yn" )
 
-    echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$built_package/")"
     debug_log "INFO" "Successfully built and installed package: $built_package"
 }
 
