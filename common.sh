@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-00-10"
+SCRIPT_VERSION="2025.02.22-00-12"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1200,14 +1200,14 @@ install_package() {
     # **オプションの処理**
     for arg in "$@"; do
         case "$arg" in
-            yn) confirm_install="yes" ;;
-            nolang) skip_lang_pack="yes" ;;
-            notpack) skip_package_db="yes" ;;
-            disabled) set_disabled="yes" ;;
-            hidden) hidden="yes" ;;
-            test) test_mode="yes" ;;
-            force) force_install="yes" ;;
-            update) update_mode="yes" ;;
+            yn)         confirm_install="yes" ;;
+            nolang)     skip_lang_pack="yes" ;;
+            notpack)    skip_package_db="yes" ;;
+            disabled)   set_disabled="yes" ;;
+            hidden)     hidden="yes" ;;
+            test)       test_mode="yes" ;;
+            force)      force_install="yes" ;;
+            update)     update_mode="yes" ;;
             *)
                 if [ -z "$package_name" ]; then
                     package_name="$arg"
@@ -1233,43 +1233,42 @@ install_package() {
 
     # **パッケージのインストール済みチェック**
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-	# パッケージ名の後にスペース、ハイフン、またはアンダースコアが続く場合にマッチさせる
-	if opkg list-installed | grep -E "^$package_name([[:space:]]|-|_)" >/dev/null 2>&1; then
-		if [ "$hidden" != "yes" ]; then
-			echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-		fi
-		return 0
-	fi
+        # パッケージ名の後にスペース、ハイフン、またはアンダースコアが続く場合にマッチさせる
+        if opkg list-installed | grep -E "^$package_name([[:space:]]|-|_)" >/dev/null 2>&1; then
+            if [ "$hidden" != "yes" ]; then
+                echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+            fi
+            return 0
+        fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-	if apk info | grep -q "^$package_name$"; then
-		if [ "$hidden" != "yes" ]; then
-			echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-		fi
-		return 0
-	fi
+        if apk info | grep -q "^$package_name$"; then
+            if [ "$hidden" != "yes" ]; then
+                echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+            fi
+            return 0
+        fi
     fi
 
     # **アップデートが必要か確認 (`update_package_list()` を使用)**
     update_package_list
 
-	# **リポジトリ存在チェック**
-	if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-		if ! opkg list-available "$package_name" 2>/dev/null | grep -q "^$package_name "; then
-			echo "$(color yellow "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
-			debug_log "WARN" "Package $package_name not found in repository."
-			return 0
-		fi
-	elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-		if ! apk search "^$package_name$" 2>/dev/null | grep -q "^$package_name$"; then
-			echo "$(color yellow "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
-			debug_log "WARN" "Package $package_name not found in repository."
-			return 0
-		fi
-	else
-		debug_log "WARN" "Unknown package manager: $PACKAGE_MANAGER"
-		return 0
-	fi
-	return 0
+    # **リポジトリ存在チェック**
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if ! opkg list | grep -E "^$package_name([[:space:]]|-|_)" >/dev/null 2>&1; then
+            echo "$(color yellow "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
+            debug_log "WARN" "Package $package_name not found in repository."
+            return 0
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if ! apk search "^$package_name$" 2>/dev/null | grep -q "^$package_name$"; then
+            echo "$(color yellow "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
+            debug_log "WARN" "Package $package_name not found in repository."
+            return 0
+        fi
+    else
+        debug_log "WARN" "Unknown package manager: $PACKAGE_MANAGER"
+        return 0
+    fi
 
     # **インストール前の確認**
     if [ "$confirm_install" = "yes" ]; then
@@ -1293,13 +1292,13 @@ install_package() {
 
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         opkg install "$package_name" > /dev/null 2>&1 || {
-            stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"  # エラー時もスピナーを止める
+            stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
             debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
             return 1
         }
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         apk add "$package_name" > /dev/null 2>&1 || {
-            stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"  # エラー時もスピナーを止める
+            stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
             debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
             return 1
         }
@@ -1311,7 +1310,6 @@ install_package() {
     echo "$(color green "✅ $(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
     debug_log "DEBUG" "Successfully installed package: $package_name"
 }
-
 
 #########################################################################
 # Last Update: 2025-02-21 14:19:00 (JST) 🚀
