@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-02-15"
+SCRIPT_VERSION="2025.02.21-02-16"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1124,18 +1124,9 @@ download_custom_package_db() {
 }
 
 # **スピナー開始関数**
-spin() {
-    local message="$1"
-    local spin_chars='-\|/'
-    local i=0
-
-    # カーソルを非表示
-    tput civis
-
-    echo "✅ スピナー開始: PID=$$"
+spionner() {
     while true; do
-        printf "\r%-50s\r%s %s" "" "$(color cyan "$message")" "${spin_chars:i++%4:1}"
-
+        printf "\r📡 パッケージマネージャーの更新を実行中... %s" "${spionner_chars:i++%4:1}"
         if command -v usleep >/dev/null 2>&1; then
             usleep 200000
         else
@@ -1492,8 +1483,18 @@ install_build() {
     fi
 
     # **スピナー開始**
-    spin "$(get_message "MSG_BUILDING_PACKAGE" | sed "s/{pkg}/$built_package/")" 150000 &
+    spionner_chars='-\|/'
+    i=0
+    spionner &
     SPINNER_PID=$!
+
+    # **5秒後にスピナーを止める**
+    sleep 5
+    kill "$SPINNER_PID"
+    printf "\r%-50s\r" ""  # 画面を消去
+    echo "✅ スピナー停止完了"
+
+
 
     # **`custom-package.db` からバージョン & アーキテクチャごとの `build_command` を取得**
     local build_command=$(jq -r --arg pkg "$package_name" --arg arch "$arch" --arg ver "$openwrt_version" '
