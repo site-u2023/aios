@@ -1201,7 +1201,11 @@ install_package() {
             local i=0
             while true; do
                 printf "\r%s %s" "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")" "${spin_chars:i++%4:1}"
-                usleep 200000  # OpenWrt `ash` で動作する `usleep`
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep 200000
+                else
+                    for _ in $(seq 1 10); do sleep 0; done
+                fi
             done
         }
 
@@ -1211,7 +1215,7 @@ install_package() {
         stop_update_spinner() {
             if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
                 kill "$SPINNER_PID" >/dev/null 2>&1
-                usleep 100000
+                sleep 0.1
                 kill -9 "$SPINNER_PID" >/dev/null 2>&1
             fi
             unset SPINNER_PID
@@ -1269,7 +1273,11 @@ install_package() {
         local i=0
         while true; do
             printf "\r%s %s" "$(color green "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")" "${spin_chars:i++%4:1}"
-            usleep 200000  # OpenWrt `ash` で動作する `usleep`
+            if command -v usleep >/dev/null 2>&1; then
+                usleep 200000
+            else
+                for _ in $(seq 1 10); do sleep 0; done
+            fi
         done
     }
 
@@ -1279,7 +1287,7 @@ install_package() {
     stop_install_spinner() {
         if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
             kill "$SPINNER_PID" >/dev/null 2>&1
-            usleep 100000
+            sleep 0.1
             kill -9 "$SPINNER_PID" >/dev/null 2>&1
         fi
         unset SPINNER_PID
@@ -1306,7 +1314,6 @@ install_package() {
     echo "$(color green "✅ Installed: $package_name")"
     debug_log "DEBUG" "Successfully installed package: $package_name"
 }
-
 
 XXX_install_package() {
     local confirm_install="no"
