@@ -114,6 +114,21 @@ JP|MSG_ERROR_MISSING_DEPENDENCIES=⚠️ {pkg} に必要な依存パッケージ
 US|MSG_ERROR_JQ_NOT_FOUND=⚠️ jq not found. Skipping custom-package.db processing.
 JP|MSG_ERROR_JQ_NOT_FOUND=⚠️ jq が見つかりません。custom-package.db の適用をスキップします。
 
+US|MSG_RUNNING_UPDATE=🔄 Updating package list...
+JP|MSG_RUNNING_UPDATE=🔄 パッケージリストを更新中...
+
+US|MSG_UPDATE_IN_PROGRESS=🔄 Running update...
+JP|MSG_UPDATE_IN_PROGRESS=🔄 アップデートを実行中...
+
+US|MSG_UPDATE_SUCCESS=✅ Package list updated successfully.
+JP|MSG_UPDATE_SUCCESS=✅ パッケージリストの更新が完了しました。
+
+US|MSG_INSTALLING_PACKAGE=📦 Installing package {pkg}...
+JP|MSG_INSTALLING_PACKAGE=📦 パッケージ {pkg} をインストール中...
+
+US|MSG_INSTALL_ABORTED=🚫 Installation aborted.
+JP|MSG_INSTALL_ABORTED=🚫 インストールが中止されました。
+#========================================================================================================================
 US|MSG_ERROR_BUILD_COMMAND_NOT_FOUND=❌ No build command found for {pkg} (Arch: {arch}, Version: {ver}).
 JP|MSG_ERROR_BUILD_COMMAND_NOT_FOUND=❌ {pkg} のビルド情報が見つかりません (Arch: {arch}, Version: {ver})。
 
