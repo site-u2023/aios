@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-00-07"
+SCRIPT_VERSION="2025.02.22-00-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1156,8 +1156,8 @@ update_package_list() {
         return 0
     fi
 
-    # **スピナー開始 (適切なメッセージを `message.db` から取得)**
-    start_spinner "$(color yellow "$(get_message "MSG_UPDATING_REPO")")"
+    # **スピナー開始 (キーを MSG_RUNNING_UPDATE に修正)**
+    start_spinner "$(color yellow "$(get_message "MSG_RUNNING_UPDATE")")"
 
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
@@ -1184,6 +1184,7 @@ update_package_list() {
 
     return 0
 }
+
 
 install_package() {
     local confirm_install="no"
@@ -1235,14 +1236,14 @@ install_package() {
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if opkg list-installed | grep -q "^$package_name "; then
             if [ "$hidden" != "yes" ]; then
-                echo "$(color green "$(get_message "MSG_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+                echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
             fi
             return 0
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         if apk info | grep -q "^$package_name$"; then
             if [ "$hidden" != "yes" ]; then
-                echo "$(color green "$(get_message "MSG_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+                echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
             fi
             return 0
         fi
@@ -1268,29 +1269,30 @@ install_package() {
         done
     fi
 
-    # **スピナー開始 (`message.db` から取得)**
+    # **スピナー開始 (インストール中のメッセージ)**
     start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
 
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         opkg install "$package_name" > /dev/null 2>&1 || {
-            stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"  # エラー時もスピナーを止める
+            stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"  # エラー時もスピナーを止める
             debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
             return 1
         }
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         apk add "$package_name" > /dev/null 2>&1 || {
-            stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"  # エラー時もスピナーを止める
+            stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"  # エラー時もスピナーを止める
             debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
             return 1
         }
     fi
 
-    # **スピナー停止 (`message.db` から取得)**
-    stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
+    # **スピナー停止 (成功メッセージ)**
+    stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
 
-    echo "$(color green "✅ $(get_message "MSG_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+    echo "$(color green "✅ $(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
     debug_log "DEBUG" "Successfully installed package: $package_name"
 }
+
 
 #########################################################################
 # Last Update: 2025-02-21 14:19:00 (JST) 🚀
