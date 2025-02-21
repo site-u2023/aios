@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-02-12"
+SCRIPT_VERSION="2025.02.21-02-13"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1123,49 +1123,43 @@ download_custom_package_db() {
     fi
 }
 
-# **スピナー関数 (POSIX準拠)**
+# **スピナー開始関数**
 spin() {
-    local message="${1:-Loading...}"  # スピナーと一緒に表示するメッセージ
-    local delay="${2:-0.2}"  # `sleep` の秒数 (デフォルト: 0.2秒)
-    local spin_chars="-\|/"  # スピナーの回転パターン
+    local message="$1"
+    local spin_chars='-\|/'
     local i=0
 
-    # **カーソルを非表示**
-    printf "\e[?25l"
+    # カーソルを非表示
+    echo -ne "\e[?25l"
 
-    # **usleep があるか確認**
-    if command -v usleep >/dev/null 2>&1; then
-        use_usleep="yes"
-        delay_usleep=$(awk "BEGIN {print $delay * 1000000}")  # 秒→マイクロ秒
-    else
-        use_usleep="no"
-    fi
-
+    echo "✅ スピナー開始: PID=$$"
     while true; do
         printf "\r%s %s" "$(color cyan "$message")" "${spin_chars:i++%4:1}"
-
-        if [ "$use_usleep" = "yes" ]; then
-            usleep "$delay_usleep"
+        
+        if command -v usleep >/dev/null 2>&1; then
+            usleep 200000
         else
-            sleep "$delay"
+            sleep 1
         fi
     done
 }
 
 # **スピナー停止関数**
 stop_spinner() {
-    if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
+    if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
+        echo "🛑 スピナー停止処理開始 (SPINNER_PID=$SPINNER_PID)"
         kill "$SPINNER_PID" >/dev/null 2>&1
-        sleep 0.1
+        sleep 0.5
         kill -9 "$SPINNER_PID" >/dev/null 2>&1
+        unset SPINNER_PID
+        printf "\r%-50s\r" ""  # スピナーの出力を消去
+        echo "✅ スピナー停止完了"
+    else
+        echo "⚠️ スピナーがすでに停止している、またはプロセスが見つからない"
     fi
-    unset SPINNER_PID
 
-    # **カーソルを表示**
-    printf "\e[?25h"
-
-    # **スピナーの出力を消去**
-    printf "\r%-50s\r" ""
+    # カーソルを表示
+    echo -ne "\e[?25h"
 }
 
 install_package() {
