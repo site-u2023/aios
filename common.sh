@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-01-07"
+SCRIPT_VERSION="2025.02.21-01-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -269,37 +269,33 @@ color_code_map() {
 
 # **汎用スピナー関数 (POSIX準拠)**
 spin() {
-    # **既にスピナーが動作している場合は再実行しない**
+    local message="${1:-Loading...}"  # スピナーと一緒に表示するメッセージ
+    local delay="${2:-200000}"  # `usleep` のマイクロ秒 (デフォルト: 0.2秒)
+    local spin_chars='-\|/'  # スピナーの回転アニメーション
+
+    # **既にスピナーが動いている場合は、新しく起動しない**
     if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
         return
     fi
 
-    local message="${1:-Loading...}"  # スピナーと一緒に表示するメッセージ
-    local delay="${2:-200000}"  # `usleep` のマイクロ秒 (デフォルト: 0.2秒)
-    local spin_chars="${3:-'\|/-'}"  # カスタムスピナー (デフォルト: 回転)
-
     local i=0
-    (
-        trap "exit 0" INT TERM
-        while true; do
-            printf "\r%s %s" "$(color cyan "$message")" "${spin_chars:i++%${#spin_chars}:1}"
-            if command -v usleep >/dev/null 2>&1; then
-                usleep "$delay"
-            else
-                for _ in $(seq 1 10); do sleep 0; done  # POSIX準拠の `sleep 0` ループ
-            fi
-        done
-    ) &
-
+    while true; do
+        printf "\r%s %s" "$(color cyan "$message")" "${spin_chars:i++%4:1}"
+        if command -v usleep >/dev/null 2>&1; then
+            usleep "$delay"
+        else
+            for _ in $(seq 1 10); do sleep 0; done  # POSIX準拠の `sleep 0` ループ
+        fi
+    done &
     SPINNER_PID=$!
-    disown "$SPINNER_PID"  # スピナーをバックグラウンドで動作させ続ける
 }
 
 # **スピナー停止関数**
 stop_spinner() {
     if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
         kill "$SPINNER_PID" >/dev/null 2>&1
-        wait "$SPINNER_PID" 2>/dev/null
+        sleep 0.1
+        kill -9 "$SPINNER_PID" >/dev/null 2>&1
     fi
     unset SPINNER_PID
     printf "\r%-50s\r" ""  # スピナーの出力を消去
@@ -1173,7 +1169,7 @@ install_package() {
     local custom_mode=0  # 0: なし, 1: custom1, 2: custom2
     local dependencies_mode=1  # 1: 自動インストール, 0: 依存関係無視
     local package_name=""
-    
+
     local package_db_remote="${BASE_URL}/custom-package.db"
     local package_db_cache="${CACHE_DIR}/custom-package.db"
     local update_cache="${CACHE_DIR}/update.ch"
@@ -1254,23 +1250,6 @@ install_package() {
         echo "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
 
         echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
-    fi
-
-    # **インストール前の確認**
-    if [ "$confirm_install" = "yes" ]; then
-        while true; do
-            local msg=$(get_message "MSG_CONFIRM_INSTALL")
-            msg="${msg//\{pkg\}/$package_name}"
-            echo "$msg"
-    
-            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
-            read -r yn
-            case "$yn" in
-                [Yy]*) break ;;
-                [Nn]*) return 1 ;;
-                *) echo "Invalid input. Please enter Y or N." ;;
-            esac
-        done
     fi
 
     # **インストール処理 (スピナー付き)**
