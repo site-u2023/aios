@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-02-11"
+SCRIPT_VERSION="2025.02.21-02-12"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1123,60 +1123,50 @@ download_custom_package_db() {
     fi
 }
 
-# **スピナー開始関数**
+# **スピナー関数 (POSIX準拠)**
 spin() {
-    local message="$1"
-    local delay=200000  # `usleep` 用 (デフォルト: 0.2秒)
-    local spin_chars='-\|/'
+    local message="${1:-Loading...}"  # スピナーと一緒に表示するメッセージ
+    local delay="${2:-0.2}"  # `sleep` の秒数 (デフォルト: 0.2秒)
+    local spin_chars="-\|/"  # スピナーの回転パターン
     local i=0
 
-    debug_log "DEBUG" "📡 スピナー開始: $message"
+    # **カーソルを非表示**
+    printf "\e[?25l"
 
-    # `trap` を設定 (エラー時にもスピナーを確実に停止)
-    trap 'stop_spinner' INT TERM EXIT
-
-    # **usleep の有無を事前に判定**
+    # **usleep があるか確認**
     if command -v usleep >/dev/null 2>&1; then
-        USE_USLEEP="yes"
+        use_usleep="yes"
+        delay_usleep=$(awk "BEGIN {print $delay * 1000000}")  # 秒→マイクロ秒
     else
-        USE_USLEEP="no"
+        use_usleep="no"
     fi
 
     while true; do
         printf "\r%s %s" "$(color cyan "$message")" "${spin_chars:i++%4:1}"
 
-        if [ "$USE_USLEEP" = "yes" ]; then
-            usleep "$delay"
+        if [ "$use_usleep" = "yes" ]; then
+            usleep "$delay_usleep"
         else
-            sleep 1  # `usleep` がない場合は整数の 1秒にフォールバック
+            sleep "$delay"
         fi
-    done &
-    
-    SPINNER_PID=$!
-    if [ -z "$SPINNER_PID" ]; then
-        debug_log "ERROR" "スピナーのPID取得に失敗"
-    else
-        debug_log "DEBUG" "SPINNER_PID=$SPINNER_PID"
-    fi
+    done
 }
 
 # **スピナー停止関数**
 stop_spinner() {
     if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
-        debug_log "DEBUG" "スピナー停止中 (PID: $SPINNER_PID)..."
         kill "$SPINNER_PID" >/dev/null 2>&1
-        sleep 1  # `0.1` ではなく `1` にする
+        sleep 0.1
         kill -9 "$SPINNER_PID" >/dev/null 2>&1
-        unset SPINNER_PID
-        printf "\r%-50s\r" ""  # スピナーの出力を消去
-        echo -ne "\e[?25h"  # カーソルを再表示
-        trap - EXIT
-        debug_log "DEBUG" "✅ スピナー停止完了"
-    else
-        debug_log "WARN" "スピナー停止に失敗 (PID: $SPINNER_PID 不明)"
     fi
-}
+    unset SPINNER_PID
 
+    # **カーソルを表示**
+    printf "\e[?25h"
+
+    # **スピナーの出力を消去**
+    printf "\r%-50s\r" ""
+}
 
 install_package() {
     local confirm_install="no"
