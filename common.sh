@@ -23,7 +23,7 @@
 # =========================================================
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.21-01-01"
+SCRIPT_VERSION="2025.02.21-01-02"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -263,6 +263,35 @@ color_code_map() {
         "reset") echo "\033[0;39m" ;;
         *) echo "\033[0;39m" ;;  # デフォルトでリセット
     esac
+}
+
+# **スピナー関数 (汎用)**
+spin() {
+    local message="$1"  # スピナーと一緒に表示するメッセージ
+    local delay="${2:-200000}"  # `usleep` のマイクロ秒 (デフォルト: 0.2秒)
+    local spin_chars='-\|/'
+    local i=0
+
+    while true; do
+        printf "\r%s %s" "$(color cyan "$message")" "${spin_chars:i++%4:1}"
+        
+        if command -v usleep >/dev/null 2>&1; then
+            usleep "$delay"
+        else
+            for _ in $(seq 1 10); do sleep 0; done  # POSIX準拠の `sleep 0` ループ
+        fi
+    done
+}
+
+# **スピナー停止関数 (統一)**
+stop_spinner() {
+    if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
+        kill "$SPINNER_PID" >/dev/null 2>&1
+        sleep 1
+        kill -9 "$SPINNER_PID" >/dev/null 2>&1
+    fi
+    unset SPINNER_PID
+    echo -ne "\e[?25h"  # カーソルを表示
 }
 
 #########################################################################
@@ -1185,42 +1214,16 @@ install_package() {
     local current_date=$(date '+%Y-%m-%d')
 
     if [ "$update_mode" = "yes" ] || [ ! -f "$update_cache" ] || ! grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
-       
         rm -f "$update_cache"
         
         debug_log "DEBUG" "$(get_message "MSG_RUNNING_UPDATE")"
 
+        # **スピナー開始**
         echo -en "\r$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")") "
-
-        # **スピナー**
-        spin() {
-            local spin_chars='-\|/'
-            local i=0
-            while true; do
-                printf "\r%s %s" "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")" "${spin_chars:i++%4:1}"
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep 200000
-                else
-                    for _ in $(seq 1 10); do sleep 0; done
-                fi
-            done
-        }
-
-        echo -ne "\e[?25l"
-        spin &  
+        spin "$(get_message "MSG_UPDATE_IN_PROGRESS")" &
         SPINNER_PID=$!
 
-        cleanup_spinner() {
-            if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
-            # if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
-                kill "$SPINNER_PID" >/dev/null 2>&1
-                sleep 1
-                kill -9 "$SPINNER_PID" >/dev/null 2>&1
-            fi
-            unset SPINNER_PID
-        }
-
-        trap cleanup_spinner EXIT INT TERM
+        trap stop_spinner EXIT INT TERM
 
         # **update 実行**
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
@@ -1229,8 +1232,8 @@ install_package() {
             apk update > "${LOG_DIR}/apk_update.log" 2>&1
         fi
 
-        cleanup_spinner
-        echo -ne "\e[?25h"
+        # **スピナー停止**
+        stop_spinner
         printf "\r%-50s\r" ""
 
         echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
@@ -1265,6 +1268,7 @@ install_package() {
     echo "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")"
     debug_log "DEBUG" "Successfully installed package: $package_name"
 }
+
 
 #########################################################################
 # Last Update: 2025-02-21 14:19:00 (JST) 🚀
