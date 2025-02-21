@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-01-05"
+SCRIPT_VERSION="2025.02.21-01-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -269,27 +269,37 @@ color_code_map() {
 
 # **汎用スピナー関数 (POSIX準拠)**
 spin() {
+    # **既にスピナーが動作している場合は再実行しない**
+    if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
+        return
+    fi
+
     local message="${1:-Loading...}"  # スピナーと一緒に表示するメッセージ
     local delay="${2:-200000}"  # `usleep` のマイクロ秒 (デフォルト: 0.2秒)
     local spin_chars="${3:-'\|/-'}"  # カスタムスピナー (デフォルト: 回転)
 
     local i=0
-    while true; do
-        printf "\r%s %s" "$(color cyan "$message")" "${spin_chars:i++%${#spin_chars}:1}"
-        if command -v usleep >/dev/null 2>&1; then
-            usleep "$delay"
-        else
-            for _ in $(seq 1 10); do sleep 0; done  # POSIX準拠の `sleep 0` ループ
-        fi
-    done
+    (
+        trap "exit 0" INT TERM
+        while true; do
+            printf "\r%s %s" "$(color cyan "$message")" "${spin_chars:i++%${#spin_chars}:1}"
+            if command -v usleep >/dev/null 2>&1; then
+                usleep "$delay"
+            else
+                for _ in $(seq 1 10); do sleep 0; done  # POSIX準拠の `sleep 0` ループ
+            fi
+        done
+    ) &
+
+    SPINNER_PID=$!
+    disown "$SPINNER_PID"  # スピナーをバックグラウンドで動作させ続ける
 }
 
 # **スピナー停止関数**
 stop_spinner() {
     if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
         kill "$SPINNER_PID" >/dev/null 2>&1
-        sleep 0.1
-        kill -9 "$SPINNER_PID" >/dev/null 2>&1
+        wait "$SPINNER_PID" 2>/dev/null
     fi
     unset SPINNER_PID
     printf "\r%-50s\r" ""  # スピナーの出力を消去
