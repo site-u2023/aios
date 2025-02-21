@@ -1125,7 +1125,7 @@ download_custom_package_db() {
 
 # **スピナー開始関数**
 spionner() {
-    spionner_chars='▁▃▄▆▇█'
+    spionner_chars='-|/'
     i=0
 
     while true; do
