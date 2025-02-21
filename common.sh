@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-01-10"
+SCRIPT_VERSION="2025.02.21-02-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -265,48 +265,6 @@ color_code_map() {
         "reset") echo "\033[0;39m" ;;
         *) echo "\033[0;39m" ;;  # デフォルトでリセット
     esac
-}
-
-# **汎用スピナー関数 (POSIX準拠)**
-spin() {
-    local message="${1:-Loading...}"  # スピナーと一緒に表示するメッセージ
-    local delay="${2:-200000}"  # `usleep` のマイクロ秒 (デフォルト: 0.2秒)
-    local spin_chars='-\|/'  # スピナーの回転アニメーション
-
-    # **スピナーが既に動作中なら、何もしない**
-    if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
-        return
-    fi
-
-    local i=0
-    (
-        while true; do
-            printf "\r%s %s" "$(color cyan "$message")" "${spin_chars:i++%4:1}"
-            if command -v usleep >/dev/null 2>&1; then
-                usleep "$delay"
-            else
-                for _ in $(seq 1 10); do sleep 0; done  # POSIX準拠の `sleep 0` ループ
-            fi
-        done
-    ) &
-    SPINNER_PID=$!
-    SPINNER_PIDS="$SPINNER_PIDS $SPINNER_PID"  # スピナーリストに追加
-}
-
-# **スピナー停止関数**
-stop_spinner() {
-    if [ -n "$SPINNER_PIDS" ]; then
-        for pid in $SPINNER_PIDS; do
-            if kill -0 "$pid" 2>/dev/null; then
-                kill "$pid" >/dev/null 2>&1
-                sleep 0.1
-                kill -9 "$pid" >/dev/null 2>&1
-            fi
-        done
-    fi
-    unset SPINNER_PID
-    unset SPINNER_PIDS
-    printf "\r%-50s\r" ""  # スピナーの出力を消去
 }
 
 #########################################################################
@@ -1177,7 +1135,7 @@ install_package() {
     local custom_mode=0  # 0: なし, 1: custom1, 2: custom2
     local dependencies_mode=1  # 1: 自動インストール, 0: 依存関係無視
     local package_name=""
-
+    
     local package_db_remote="${BASE_URL}/custom-package.db"
     local package_db_cache="${CACHE_DIR}/custom-package.db"
     local update_cache="${CACHE_DIR}/update.ch"
@@ -1235,29 +1193,128 @@ install_package() {
         
         debug_log "DEBUG" "$(get_message "MSG_RUNNING_UPDATE")"
 
-        # **スピナー開始**
-        spin "$(get_message "MSG_UPDATE_IN_PROGRESS")" 200000 &
+        echo -en "\r$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")") "
+
+        # **スピナー**
+        spin_update() {
+            local spin_chars='-\|/'
+            local i=0
+            while true; do
+                printf "\r%s %s" "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")" "${spin_chars:i++%4:1}"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep 200000
+                else
+                    for _ in $(seq 1 10); do sleep 0; done
+                fi
+            done
+        }
+
+        echo -ne "\e[?25l"
+        spin_update &  
+        SPINNER_PID=$!
+
+        stop_update_spinner() {
+            if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
+                kill "$SPINNER_PID" >/dev/null 2>&1
+                sleep 0.1
+                kill -9 "$SPINNER_PID" >/dev/null 2>&1
+            fi
+            unset SPINNER_PID
+            printf "\r%-50s\r" ""  # スピナーの出力を消去
+        }
+
+        trap stop_update_spinner EXIT INT TERM
 
         # **update 実行**
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            if ! opkg update > "${LOG_DIR}/opkg_update.log" 2>&1; then
-                stop_spinner
+            opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
                 debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+                stop_update_spinner
                 return 1
-            fi
+            }
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            if ! apk update > "${LOG_DIR}/apk_update.log" 2>&1; then
-                stop_spinner
+            apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
                 debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+                stop_update_spinner
                 return 1
-            fi
+            }
         fi
 
-        stop_spinner  # スピナー停止
+        stop_update_spinner  # スピナー停止
         echo "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
 
         echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
     fi
+
+    # **インストール前の確認**
+    if [ "$confirm_install" = "yes" ]; then
+        while true; do
+            local msg=$(get_message "MSG_CONFIRM_INSTALL")
+            msg="${msg//\{pkg\}/$package_name}"
+            echo "$msg"
+    
+            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
+            read -r yn
+            case "$yn" in
+                [Yy]*) break ;;
+                [Nn]*) return 1 ;;
+                *) echo "Invalid input. Please enter Y or N." ;;
+            esac
+        done
+    fi
+
+    # **インストール処理 (スピナー付き)**
+    debug_log "DEBUG" "Installing package: $package_name"
+    
+    echo -en "\r$(color green "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")") "
+
+    # **スピナー**
+    spin_install() {
+        local spin_chars='-\|/'
+        local i=0
+        while true; do
+            printf "\r%s %s" "$(color green "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")" "${spin_chars:i++%4:1}"
+            if command -v usleep >/dev/null 2>&1; then
+                usleep 200000
+            else
+                for _ in $(seq 1 10); do sleep 0; done
+            fi
+        done
+    }
+
+    echo -ne "\e[?25l"
+    spin_install &  
+    SPINNER_PID=$!
+
+    stop_install_spinner() {
+        if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
+            kill "$SPINNER_PID" >/dev/null 2>&1
+            sleep 0.1
+            kill -9 "$SPINNER_PID" >/dev/null 2>&1
+        fi
+        unset SPINNER_PID
+        printf "\r%-50s\r" ""  # スピナーの出力を消去
+    }
+
+    trap stop_install_spinner EXIT INT TERM
+
+    if [ "$DEV_NULL" = "on" ]; then
+        $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1 || {
+            stop_install_spinner
+            debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
+            return 1
+        }
+    else
+        $PACKAGE_MANAGER install "$package_name" || {
+            stop_install_spinner
+            debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
+            return 1
+        }
+    fi
+
+    stop_install_spinner  # スピナー停止
+    echo "$(color green "✅ Installed: $package_name")"
+    debug_log "DEBUG" "Successfully installed package: $package_name"
 }
 
 XXX_install_package() {
