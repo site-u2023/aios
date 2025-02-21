@@ -23,7 +23,7 @@
 # =========================================================
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.21-01-02"
+SCRIPT_VERSION="2025.02.21-01-03"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -265,16 +265,15 @@ color_code_map() {
     esac
 }
 
-# **スピナー関数 (汎用)**
+# **汎用スピナー関数 (POSIX準拠)**
 spin() {
-    local message="$1"  # スピナーと一緒に表示するメッセージ
+    local message="${1:-Loading...}"  # スピナーと一緒に表示するメッセージ
     local delay="${2:-200000}"  # `usleep` のマイクロ秒 (デフォルト: 0.2秒)
-    local spin_chars='-\|/'
-    local i=0
+    local spin_chars="${3:-'\|/-'}"  # カスタムスピナー (デフォルト: 回転)
 
+    local i=0
     while true; do
-        printf "\r%s %s" "$(color cyan "$message")" "${spin_chars:i++%4:1}"
-        
+        printf "\r%s %s" "$(color cyan "$message")" "${spin_chars:i++%${#spin_chars}:1}"
         if command -v usleep >/dev/null 2>&1; then
             usleep "$delay"
         else
@@ -283,15 +282,15 @@ spin() {
     done
 }
 
-# **スピナー停止関数 (統一)**
+# **スピナー停止関数**
 stop_spinner() {
-    if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
+    if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
         kill "$SPINNER_PID" >/dev/null 2>&1
-        sleep 1
+        sleep 0.1
         kill -9 "$SPINNER_PID" >/dev/null 2>&1
     fi
     unset SPINNER_PID
-    echo -ne "\e[?25h"  # カーソルを表示
+    printf "\r%-50s\r" ""  # スピナーの出力を消去
 }
 
 #########################################################################
@@ -1149,6 +1148,127 @@ download_custom_package_db() {
 }
 
 install_package() {
+    local confirm_install="no"
+    local skip_lang_pack="no"
+    local skip_package_db="no"
+    local set_disabled="no"
+    local hidden="no"
+    local test_mode="no"
+    local force_install="no"
+    local update_mode="no"
+    local custom_mode=0  # 0: なし, 1: custom1, 2: custom2
+    local dependencies_mode=1  # 1: 自動インストール, 0: 依存関係無視
+    local package_name=""
+    
+    local package_db_remote="${BASE_URL}/custom-package.db"
+    local package_db_cache="${CACHE_DIR}/custom-package.db"
+    local update_cache="${CACHE_DIR}/update.ch"
+
+    # **オプションの処理**
+    for arg in "$@"; do
+        case "$arg" in
+            yn) confirm_install="yes" ;;
+            nolang) skip_lang_pack="yes" ;;
+            notpack) skip_package_db="yes" ;;
+            disabled) set_disabled="yes" ;;
+            hidden) hidden="yes" ;;
+            test) test_mode="yes" ;;
+            force) force_install="yes" ;;
+            update) update_mode="yes" ;;
+            custom1) custom_mode=1 ;;
+            custom2) custom_mode=2 ;;
+            dependencies) dependencies_mode=0 ;;
+            *)
+                if [ -z "$package_name" ]; then
+                    package_name="$arg"
+                else
+                    debug_log "WARN" "Unknown option: $arg"
+                fi
+                ;;
+        esac
+    done
+
+    if [ -z "$package_name" ]; then
+        echo "$(get_message "MSG_INSTALL_ABORTED")" >&2
+        return 1
+    fi
+
+    # **パッケージマネージャーの確認**
+    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
+    else 
+        echo "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")" >&2
+        return 1
+    fi
+
+    [ "$custom_mode" -ne 0 ] && download_custom_package_db
+
+    # **jq のエラーハンドリング**
+    if [ "$custom_mode" -ne 0 ] && ! command -v jq >/dev/null 2>&1; then
+        debug_log "WARN" "⚠️ jq が見つかりません。custom-package.db の適用をスキップします。"
+        custom_mode=0
+    fi
+
+    # **update の管理**
+    local current_date=$(date '+%Y-%m-%d')
+
+    if [ "$update_mode" = "yes" ] || [ ! -f "$update_cache" ] || ! grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
+        rm -f "$update_cache"
+        
+        debug_log "DEBUG" "$(get_message "MSG_RUNNING_UPDATE")"
+
+        # **スピナー開始**
+        spin "$(get_message "MSG_UPDATE_IN_PROGRESS")" 200000 &
+        SPINNER_PID=$!
+
+        # **update 実行**
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            opkg update > "${LOG_DIR}/opkg_update.log" 2>&1
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            apk update > "${LOG_DIR}/apk_update.log" 2>&1
+        fi
+
+        stop_spinner  # スピナー停止
+        echo "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
+
+        echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
+    fi
+
+    # **インストール前の確認**
+    if [ "$confirm_install" = "yes" ]; then
+        while true; do
+            local msg=$(get_message "MSG_CONFIRM_INSTALL")
+            msg="${msg//\{pkg\}/$package_name}"
+            echo "$msg"
+    
+            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
+            read -r yn
+            case "$yn" in
+                [Yy]*) break ;;
+                [Nn]*) return 1 ;;
+                *) echo "Invalid input. Please enter Y or N." ;;
+            esac
+        done
+    fi
+
+    # **インストール処理 (スピナー付き)**
+    debug_log "DEBUG" "Installing package: $package_name"
+    
+    spin "Installing $package_name..." 150000 &
+    SPINNER_PID=$!
+
+    if [ "$DEV_NULL" = "on" ]; then
+        $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1 || return 1
+    else
+        $PACKAGE_MANAGER install "$package_name" || return 1
+    fi
+
+    stop_spinner  # スピナー停止
+    echo "$(color green "✅ Installed: $package_name")"
+    debug_log "DEBUG" "Successfully installed package: $package_name"
+}
+
+XXX_install_package() {
     local confirm_install="no"
     local skip_lang_pack="no"
     local skip_package_db="no"
