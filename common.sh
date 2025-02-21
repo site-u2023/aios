@@ -1129,7 +1129,7 @@ spionner() {
     i=0
 
     while true; do
-        printf "\r📡 %s %s" "$(get_message 'MSG_UPDATE_RUNNING')" "${spionner_chars:i++%4:1}"
+        printf "\r📡 %s %s" "$(color cyan "$(get_message 'MSG_UPDATE_RUNNING')")" "${spionner_chars:i++%6:1}"
         if command -v usleep >/dev/null 2>&1; then
             usleep 200000
         else
@@ -1147,7 +1147,7 @@ stop_spionner() {
         echo "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
     else
         printf "\r\033[K"
-        echo -e "\e[31m❌ $(get_message 'MSG_UPDATE_FAILED')\e[0m"  # Red 表示
+        echo "$(color red "$(get_message 'MSG_UPDATE_FAILED')")"
     fi
     unset SPINNER_PID
 }
