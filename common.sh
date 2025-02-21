@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-01-09"
+SCRIPT_VERSION="2025.02.21-01-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1237,7 +1237,6 @@ install_package() {
 
         # **スピナー開始**
         spin "$(get_message "MSG_UPDATE_IN_PROGRESS")" 200000 &
-        SPINNER_PID=$!
 
         # **update 実行**
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
@@ -1259,30 +1258,6 @@ install_package() {
 
         echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
     fi
-
-    # **インストール処理 (スピナー付き)**
-    debug_log "DEBUG" "Installing package: $package_name"
-    
-    spin "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")" 150000 &
-    SPINNER_PID=$!
-
-    if [ "$DEV_NULL" = "on" ]; then
-        if ! $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1; then
-            stop_spinner
-            debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
-            return 1
-        fi
-    else
-        if ! $PACKAGE_MANAGER install "$package_name"; then
-            stop_spinner
-            debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
-            return 1
-        fi
-    fi
-
-    stop_spinner  # スピナー停止
-    echo "$(color green "✅ Installed: $package_name")"
-    debug_log "DEBUG" "Successfully installed package: $package_name"
 }
 
 XXX_install_package() {
@@ -1503,37 +1478,16 @@ custom_feed() {
     fi
 }
 
-install_package() {
+install_build() {
     local confirm_install="no"
-    local skip_lang_pack="no"
-    local skip_package_db="no"
-    local set_disabled="no"
     local hidden="no"
-    local test_mode="no"
-    local force_install="no"
-    local update_mode="no"
-    local custom_mode=0  # 0: なし, 1: custom1, 2: custom2
-    local dependencies_mode=1  # 1: 自動インストール, 0: 依存関係無視
     local package_name=""
-
-    local package_db_remote="${BASE_URL}/custom-package.db"
-    local package_db_cache="${CACHE_DIR}/custom-package.db"
-    local update_cache="${CACHE_DIR}/update.ch"
 
     # **オプションの処理**
     for arg in "$@"; do
         case "$arg" in
             yn) confirm_install="yes" ;;
-            nolang) skip_lang_pack="yes" ;;
-            notpack) skip_package_db="yes" ;;
-            disabled) set_disabled="yes" ;;
             hidden) hidden="yes" ;;
-            test) test_mode="yes" ;;
-            force) force_install="yes" ;;
-            update) update_mode="yes" ;;
-            custom1) custom_mode=1 ;;
-            custom2) custom_mode=2 ;;
-            dependencies) dependencies_mode=0 ;;
             *)
                 if [ -z "$package_name" ]; then
                     package_name="$arg"
@@ -1544,58 +1498,112 @@ install_package() {
         esac
     done
 
+    # **パッケージ名が指定されているか確認**
     if [ -z "$package_name" ]; then
         debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")"
         return 1
     fi
 
-    # **パッケージマネージャーの確認**
+    # **downloader_ch から `opkg` or `apk` を取得**
     if [ -f "${CACHE_DIR}/downloader_ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
-    else 
+    else
         debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")"
         return 1
     fi
 
-    [ "$custom_mode" -ne 0 ] && download_custom_package_db
-
-    # **jq のエラーハンドリング**
-    if [ "$custom_mode" -ne 0 ] && ! command -v jq >/dev/null 2>&1; then
-        debug_log "WARN" "$(get_message "MSG_ERROR_JQ_NOT_FOUND")"
-        custom_mode=0
+    # **インストール前の確認**
+    if [ "$confirm_install" = "yes" ]; then
+        while true; do
+            local msg=$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")
+            echo "$msg"
+    
+            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
+            read -r yn
+            case "$yn" in
+                [Yy]*) break ;;
+                [Nn]*) return 1 ;;
+                *) echo "Invalid input. Please enter Y or N." ;;
+            esac
+        done
     fi
 
-    # **update の管理**
-    local current_date=$(date '+%Y-%m-%d')
+    # **ビルド環境の準備 (yn判定直後)**
+    install_package jq
+    local build_tools="make gcc git libtool automake pkg-config zlib-dev libssl-dev libicu-dev ncurses-dev curl-dev libxml2-dev"
+    
+    for tool in $build_tools; do
+        install_package "$tool" hidden
+    done
 
-    if [ "$update_mode" = "yes" ] || [ ! -f "$update_cache" ] || ! grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
-        rm -f "$update_cache"
-        
-        debug_log "DEBUG" "$(get_message "MSG_RUNNING_UPDATE")"
+    # **ビルド後のパッケージ名を取得**
+    local built_package="${package_name#build_}"
 
-        # **スピナー開始**
-        spin "$(get_message "MSG_UPDATE_IN_PROGRESS")" 200000 &
-
-        # **update 実行**
-        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            if ! opkg update > "${LOG_DIR}/opkg_update.log" 2>&1; then
-                stop_spinner
-                debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
-                return 1
-            fi
-        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            if ! apk update > "${LOG_DIR}/apk_update.log" 2>&1; then
-                stop_spinner
-                debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
-                return 1
-            fi
-        fi
-
-        stop_spinner  # スピナー停止
-        echo "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
-
-        echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"
+    # ** キャッシュからバージョンとアーキテクチャを取得 **
+    if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
+        openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
     fi
+    if [ -f "${CACHE_DIR}/architecture.ch" ]; then
+        arch=$(cat "${CACHE_DIR}/architecture.ch")
+    fi
+
+    debug_log "DEBUG" "Using architecture: $arch"
+    debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
+
+    # **`custom-package.db` からビルドに必要な `dependencies` を取得**
+    local dependencies=$(jq -r --arg arch "$arch" '.[$package_name].build.dependencies.opkg // [] | join(" ")' "$CACHE_DIR/custom-package.db" 2>/dev/null)
+    
+    if [ -n "$dependencies" ]; then
+        debug_log "INFO" "Installing dependencies: $dependencies"
+        for dep in $dependencies; do
+            install_package "$dep" hidden
+        done
+    else
+        debug_log "WARN" "No dependencies found for $package_name."
+    fi
+
+    # **スピナー開始**
+    spin "$(get_message "MSG_BUILDING_PACKAGE" | sed "s/{pkg}/$built_package/")" 150000 &
+    SPINNER_PID=$!
+
+    # **`custom-package.db` からバージョン & アーキテクチャごとの `build_command` を取得**
+    local build_command=$(jq -r --arg pkg "$package_name" --arg arch "$arch" --arg ver "$openwrt_version" '
+        .[$pkg].build.commands[$ver][$arch] // 
+        .[$pkg].build.commands[$ver].default // 
+        .[$pkg].build.commands.default[$arch] // 
+        .[$pkg].build.commands.default.default // empty' "$CACHE_DIR/custom-package.db" 2>/dev/null)
+
+    if [ -z "$build_command" ]; then
+        debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_COMMAND_NOT_FOUND" | sed "s/{pkg}/$built_package/" | sed "s/{arch}/$arch/" | sed "s/{ver}/$openwrt_version/")"
+        stop_spinner
+        return 1
+    fi
+
+    debug_log "INFO" "Executing build command: $build_command"
+
+    # **ビルド開始メッセージ**
+    echo "$(get_message "MSG_BUILD_START" | sed "s/{pkg}/$built_package/")"
+
+    # **ビルド実行**
+    local start_time=$(date +%s)
+    if ! eval "$build_command"; then
+        echo "$(get_message "MSG_BUILD_FAIL" | sed "s/{pkg}/$built_package/")"
+        debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_FAILED" | sed "s/{pkg}/$built_package/")"
+        stop_spinner
+        return 1
+    fi
+    local end_time=$(date +%s)
+    local build_time=$((end_time - start_time))
+
+    stop_spinner  # スピナー停止
+    echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$built_package/" | sed "s/{time}/$build_time/")"
+    debug_log "INFO" "Build time for $built_package: $build_time seconds"
+
+    # **ビルド完了後、`install_package()` を実行**
+    install_package "$built_package" "$confirm_install"
+
+    echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$built_package/")"
+    debug_log "INFO" "Successfully built and installed package: $built_package"
 }
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
