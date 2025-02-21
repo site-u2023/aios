@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-02-07"
+SCRIPT_VERSION="2025.02.21-02-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1123,7 +1123,7 @@ download_custom_package_db() {
     fi
 }
 
-# **スピナー開始関数 (完全委任)**
+# **スピナー開始関数**
 spin() {
     local message="$1"
     local delay=200000
@@ -1132,8 +1132,8 @@ spin() {
 
     debug_log "DEBUG" "📡 スピナー開始: $message"
     
-    # `trap` をここで設定 (Ctrl+C やエラー時にスピナーを確実に停止)
-    trap 'stop_spinner' INT TERM
+    # `trap` を設定 (Ctrl+C やエラー時にスピナーを確実に停止)
+    trap 'stop_spinner' INT TERM EXIT
 
     while true; do
         printf "\r%s %s" "$(color cyan "$message")" "${spin_chars:i++%4:1}"
@@ -1141,9 +1141,11 @@ spin() {
         if command -v usleep >/dev/null 2>&1; then
             usleep "$delay"
         else
-            sleep 1  # `usleep` がない場合
+            sleep 0.1  # `usleep` がない場合の最適な代替
         fi
-    done
+    done &
+    
+    SPINNER_PID=$!
 }
 
 # **スピナー停止関数**
@@ -1155,6 +1157,7 @@ stop_spinner() {
     fi
     unset SPINNER_PID
     printf "\r%-50s\r" ""  # スピナーの出力を消去
+    echo -ne "\e[?25h"  # カーソルを再表示
 
     debug_log "DEBUG" "✅ スピナー停止完了"
 }
@@ -1230,8 +1233,7 @@ install_package() {
         debug_log "DEBUG" "$(get_message "MSG_RUNNING_UPDATE")"
 
         # **スピナー開始**
-        spin "$(get_message "MSG_UPDATE_IN_PROGRESS")" &
-        SPINNER_PID=$!
+        spin "$(get_message "MSG_UPDATE_IN_PROGRESS")"
 
         # **update 実行**
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
@@ -1275,8 +1277,7 @@ install_package() {
     # **インストール処理**
     debug_log "DEBUG" "Installing package: $package_name"
 
-    spin "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")" &
-    SPINNER_PID=$!
+    spin "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")"
 
     if [ "$DEV_NULL" = "on" ]; then
         $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1 || {
@@ -1296,6 +1297,7 @@ install_package() {
     echo "$(color green "✅ Installed: $package_name")"
     debug_log "DEBUG" "Successfully installed package: $package_name"
 }
+
 
 #########################################################################
 # Last Update: 2025-02-21 14:19:00 (JST) 🚀
