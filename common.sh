@@ -1126,7 +1126,7 @@ download_custom_package_db() {
 # **スピナー開始関数**
 spin() {
     local message="$1"
-    local delay=200000
+    local delay=200000  # `usleep` 用 (デフォルト: 0.2秒)
     local spin_chars='-\|/'
     local i=0
 
@@ -1138,10 +1138,11 @@ spin() {
     while true; do
         printf "\r%s %s" "$(color cyan "$message")" "${spin_chars:i++%4:1}"
 
+        # `usleep` の存在チェックを最適化
         if command -v usleep >/dev/null 2>&1; then
             usleep "$delay"
         else
-            sleep 0.1  # `usleep` がない場合の最適な代替
+            sleep 1  # `sleep` の最小単位は 1秒
         fi
     done &
     
