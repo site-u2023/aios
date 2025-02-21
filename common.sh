@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.21-00-02"
+SCRIPT_VERSION="2025.02.21-00-03"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1291,6 +1291,78 @@ install_package() {
 # [build_uconv]　※行、列問わず記述可
 # [uconv]　※行、列問わず記述可
 #########################################################################
+custom_feed() {
+# GitHub から `pacage_list` を取得
+PACKAGE_LIST_URL=$(jq -r --arg pkg "$package_name" '.[$pkg].fetch_latest' "$custom_package_db")
+PACKAGE_LIST_PATH="/tmp/config-software/package_list"
+
+if [ -n "$PACKAGE_LIST_URL" ] && [ "$PACKAGE_LIST_URL" != "null" ]; then
+    debug_log "INFO" "🌐 Fetching latest package list for $package_name..."
+    mkdir -p /tmp/config-software
+    wget --no-check-certificate -q -O "$PACKAGE_LIST_PATH" "$PACKAGE_LIST_URL"
+
+    if [ $? -ne 0 ]; then
+        debug_log "WARN" "⚠️ Failed to fetch package list. Skipping latest version detection."
+    else
+        # `extract_rule` に基づいて `luci-app-cpu-status` の最新バージョンを抽出
+        START_PATTERN=$(jq -r --arg pkg "$package_name" '.[$pkg].extract_rule.start' "$custom_package_db")
+        END_PATTERN=$(jq -r --arg pkg "$package_name" '.[$pkg].extract_rule.end' "$custom_package_db")
+
+        if [ -n "$START_PATTERN" ] && [ -n "$END_PATTERN" ]; then
+            CPU_STATUS=$(grep -o "${START_PATTERN}.*${END_PATTERN}" "$PACKAGE_LIST_PATH" | head -n 1)
+
+            if [ -n "$CPU_STATUS" ]; then
+                PACKAGE_URL="https://github.com/gSpotx2f/packages-openwrt/raw/master/${CPU_STATUS}.ipk"
+                debug_log "INFO" "🔄 Latest package detected: $PACKAGE_URL"
+            else
+                debug_log "WARN" "⚠️ No matching package found in package list."
+            fi
+        fi
+    fi
+fi
+
+# `PACKAGE_URL` が見つかった場合のみダウンロード＆インストール
+if [ -n "$PACKAGE_URL" ]; then
+    wget --no-check-certificate -q -O "/tmp/$package_name.ipk" "$PACKAGE_URL"
+    opkg install "/tmp/$package_name.ipk"
+    rm "/tmp/$package_name.ipk"
+else
+    debug_log "ERROR" "❌ Could not determine package URL for $package_name."
+fi
+}
+
+install_jq() {
+    # **`downloader_ch` から `opkg` or `apk` を判定**
+    if [ -f "${BASE_DIR}/downloader_ch" ]; then
+        PACKAGE_MANAGER=$(cat "${BASE_DIR}/downloader_ch")
+    else
+        echo "⚠️ ERROR: downloader_ch not found! Exiting..."
+        exit 1
+    fi
+
+    # **jq がインストールされているか確認**
+    if ! command -v jq >/dev/null 2>&1; then
+        echo "📦 jq not found. Installing..."
+
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            opkg update && opkg install jq
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            apk update && apk add jq
+        else
+            echo "❌ ERROR: Unsupported package manager ($PACKAGE_MANAGER). Exiting..."
+            exit 1
+        fi
+
+        # **インストール後の確認**
+        if ! command -v jq >/dev/null 2>&1; then
+            echo "🚨 ERROR: Failed to install jq. Exiting..."
+            exit 1
+        fi
+
+        echo "✅ jq successfully installed."
+    fi
+}
+
 install_build() {
     local confirm_install="no"
     local hidden="no"
@@ -1311,6 +1383,21 @@ install_build() {
         esac
     done
 
+    # **ビルド環境の準備**
+    install_jq
+    install_package make hidden
+    install_package gcc hidden
+    install_package git hidden
+    install_package libtool hidden
+    install_package automake hidden
+    install_package pkg-config hidden
+    install_package zlib-dev hidden
+    install_package libssl-dev hidden
+    install_package libicu-dev hidden
+    install_package ncurses-dev hidden
+    install_package curl-dev hidden
+    install_package libxml2-dev hidden
+    
     if [ -z "$package_name" ]; then
         debug_log "ERROR" "No package name specified."
         echo "Error: No package specified." >&2
@@ -1352,21 +1439,6 @@ install_build() {
         debug_log "WARN" "No dependencies found for $package_name."
     fi
 
-    # **ビルド環境の準備**
-    install_package jq yn hidden
-    install_package make yn hidden
-    install_package gcc hidden
-    install_package git hidden
-    install_package libtool hidden
-    install_package automake hidden
-    install_package pkg-config hidden
-    install_package zlib-dev hidden
-    install_package libssl-dev hidden
-    install_package libicu-dev hidden
-    install_package ncurses-dev hidden
-    install_package curl-dev hidden
-    install_package libxml2-dev hidden
-
     # **`custom-package.db` からバージョン & アーキテクチャごとの `build_command` を取得**
     local build_command=$(jq -r --arg pkg "$package_name" --arg arch "$arch" --arg ver "$openwrt_version" '
         .[$pkg].build_commands[$ver][$arch] // 
@@ -1405,46 +1477,6 @@ install_build() {
     debug_log "INFO" "Successfully built and installed package: $built_package"
 }
 
-##################################################################################################
-custom_feed() {
-# GitHub から `pacage_list` を取得
-PACKAGE_LIST_URL=$(jq -r --arg pkg "$package_name" '.[$pkg].fetch_latest' "$custom_package_db")
-PACKAGE_LIST_PATH="/tmp/config-software/package_list"
-
-if [ -n "$PACKAGE_LIST_URL" ] && [ "$PACKAGE_LIST_URL" != "null" ]; then
-    debug_log "INFO" "🌐 Fetching latest package list for $package_name..."
-    mkdir -p /tmp/config-software
-    wget --no-check-certificate -q -O "$PACKAGE_LIST_PATH" "$PACKAGE_LIST_URL"
-
-    if [ $? -ne 0 ]; then
-        debug_log "WARN" "⚠️ Failed to fetch package list. Skipping latest version detection."
-    else
-        # `extract_rule` に基づいて `luci-app-cpu-status` の最新バージョンを抽出
-        START_PATTERN=$(jq -r --arg pkg "$package_name" '.[$pkg].extract_rule.start' "$custom_package_db")
-        END_PATTERN=$(jq -r --arg pkg "$package_name" '.[$pkg].extract_rule.end' "$custom_package_db")
-
-        if [ -n "$START_PATTERN" ] && [ -n "$END_PATTERN" ]; then
-            CPU_STATUS=$(grep -o "${START_PATTERN}.*${END_PATTERN}" "$PACKAGE_LIST_PATH" | head -n 1)
-
-            if [ -n "$CPU_STATUS" ]; then
-                PACKAGE_URL="https://github.com/gSpotx2f/packages-openwrt/raw/master/${CPU_STATUS}.ipk"
-                debug_log "INFO" "🔄 Latest package detected: $PACKAGE_URL"
-            else
-                debug_log "WARN" "⚠️ No matching package found in package list."
-            fi
-        fi
-    fi
-fi
-
-# `PACKAGE_URL` が見つかった場合のみダウンロード＆インストール
-if [ -n "$PACKAGE_URL" ]; then
-    wget --no-check-certificate -q -O "/tmp/$package_name.ipk" "$PACKAGE_URL"
-    opkg install "/tmp/$package_name.ipk"
-    rm "/tmp/$package_name.ipk"
-else
-    debug_log "ERROR" "❌ Could not determine package URL for $package_name."
-fi
-}
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
