@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.21-00-00"
+SCRIPT_VERSION="2025.02.21-00-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1130,7 +1130,7 @@ install_package() {
             update) update_mode="yes" ;;
             custom1) custom_mode=1 ;;
             custom2) custom_mode=2 ;;
-            dependencies) dependencies_mode=1 ;;
+            dependencies) dependencies_mode=0 ;;
             *)
                 if [ -z "$package_name" ]; then
                     package_name="$arg"
@@ -1192,7 +1192,8 @@ install_package() {
         SPINNER_PID=$!
 
         cleanup_spinner() {
-            if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
+            if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
+            # if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
                 kill "$SPINNER_PID" >/dev/null 2>&1
                 sleep 1
                 kill -9 "$SPINNER_PID" >/dev/null 2>&1
@@ -1237,9 +1238,9 @@ install_package() {
 
     debug_log "DEBUG" "Installing package: $package_name"
     if [ "$DEV_NULL" = "on" ]; then
-        $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1
+        $PACKAGE_MANAGER install "$package_name" > /dev/null 2>&1 || return 1
     else
-        $PACKAGE_MANAGER install "$package_name"
+        $PACKAGE_MANAGER install "$package_name" || return 1
     fi
 
     echo "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")"
@@ -1311,6 +1312,7 @@ install_build() {
     done
 
     if [ -z "$package_name" ]; then
+        debug_log "ERROR" "No package name specified."
         echo "Error: No package specified." >&2
         return 1
     fi
@@ -1319,6 +1321,7 @@ install_build() {
     if [ -f "${CACHE_DIR}/downloader_ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
     else
+        debug_log "ERROR" "Package manager not found."
         echo "Error: No package manager information found in cache." >&2
         return 1
     fi
