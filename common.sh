@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.21-02-00"
+SCRIPT_VERSION="2025.02.21-02-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1195,21 +1195,16 @@ install_package() {
 
         echo -en "\r$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")") "
 
-        # **スピナー**
+        # **スピナー開始 (専用関数)**
         spin_update() {
             local spin_chars='-\|/'
             local i=0
             while true; do
                 printf "\r%s %s" "$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")")" "${spin_chars:i++%4:1}"
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep 200000
-                else
-                    for _ in $(seq 1 10); do sleep 0; done
-                fi
+                sleep 0.2  # POSIX準拠
             done
         }
 
-        echo -ne "\e[?25l"
         spin_update &  
         SPINNER_PID=$!
 
@@ -1263,26 +1258,21 @@ install_package() {
         done
     fi
 
-    # **インストール処理 (スピナー付き)**
+    # **インストール処理**
     debug_log "DEBUG" "Installing package: $package_name"
-    
+
     echo -en "\r$(color green "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")") "
 
-    # **スピナー**
+    # **スピナー開始**
     spin_install() {
         local spin_chars='-\|/'
         local i=0
         while true; do
             printf "\r%s %s" "$(color green "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")" "${spin_chars:i++%4:1}"
-            if command -v usleep >/dev/null 2>&1; then
-                usleep 200000
-            else
-                for _ in $(seq 1 10); do sleep 0; done
-            fi
+            sleep 0.2  # POSIX準拠
         done
     }
 
-    echo -ne "\e[?25l"
     spin_install &  
     SPINNER_PID=$!
 
@@ -1316,6 +1306,7 @@ install_package() {
     echo "$(color green "✅ Installed: $package_name")"
     debug_log "DEBUG" "Successfully installed package: $package_name"
 }
+
 
 XXX_install_package() {
     local confirm_install="no"
