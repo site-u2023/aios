@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-00-14"
+SCRIPT_VERSION="2025.02.22-00-15"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -80,7 +80,7 @@ handle_error() {
         debug_log "ERROR" "Critical error occurred, exiting: $error_message"
         exit 1
     else
-        debug_log "WARN" "Non-critical error: $error_message"
+        debug_log "DEBUG" "Non-critical error: $error_message"
         return 1
     fi
 }
@@ -103,7 +103,7 @@ debug_log() {
 
     # `$1` にログレベルが指定されていない場合、デフォルトを `DEBUG` にする
     case "$level" in
-        "DEBUG"|"INFO"|"WARN"|"ERROR") ;;  # 何もしない (正しいログレベル)
+        "DEBUG"|"DEBUG"|"DEBUG"|"ERROR") ;;  # 何もしない (正しいログレベル)
         "")
             level="DEBUG"
             message="$1"
@@ -123,9 +123,9 @@ debug_log() {
 
     # ログレベル制御
     case "$DEBUG_LEVEL" in
-        DEBUG)    allowed_levels="DEBUG INFO WARN ERROR" ;;
-        INFO)     allowed_levels="INFO WARN ERROR" ;;
-        WARN)     allowed_levels="WARN ERROR" ;;
+        DEBUG)    allowed_levels="DEBUG DEBUG DEBUG ERROR" ;;
+        DEBUG)     allowed_levels="DEBUG DEBUG ERROR" ;;
+        DEBUG)     allowed_levels="DEBUG ERROR" ;;
         ERROR)    allowed_levels="ERROR" ;;
         *)        allowed_levels="ERROR" ;;
     esac
@@ -138,8 +138,8 @@ debug_log() {
         # カラー表示
         case "$level" in
             "ERROR") echo -e "$(color red "$log_message")" ;;
-            "WARN") echo -e "$(color yellow "$log_message")" ;;
-            "INFO") echo -e "$(color cyan "$log_message")" ;;
+            "DEBUG") echo -e "$(color yellow "$log_message")" ;;
+            "DEBUG") echo -e "$(color cyan "$log_message")" ;;
             "DEBUG") echo -e "$(color white "$log_message")" ;;
         esac
 
@@ -165,7 +165,7 @@ test_debug_functions() {
 
     case "$test_type" in
         country)
-            debug_log "INFO" "MSG_TEST_COUNTRY_SEARCH" "$test_input"
+            debug_log "DEBUG" "MSG_TEST_COUNTRY_SEARCH" "$test_input"
             if [ ! -f "${BASE_DIR}/country.db" ]; then
                 handle_error "ERR_FILE_NOT_FOUND" "country.db"
                 return 1
@@ -177,7 +177,7 @@ test_debug_functions() {
             ;;
 
         timezone)
-            debug_log "INFO" "MSG_TEST_TIMEZONE_SEARCH" "$test_input"
+            debug_log "DEBUG" "MSG_TEST_TIMEZONE_SEARCH" "$test_input"
             if [ ! -f "${BASE_DIR}/country.db" ]; then
                 handle_error "ERR_FILE_NOT_FOUND" "country.db"
                 return 1
@@ -189,13 +189,13 @@ test_debug_functions() {
             ;;
 
         cache)
-            debug_log "INFO" "MSG_TEST_CACHE_CONTENTS"
+            debug_log "DEBUG" "MSG_TEST_CACHE_CONTENTS"
             for cache_file in "country_tmp.ch" "zone_tmp.ch"; do
                 if [ -f "${CACHE_DIR}/$cache_file" ]; then
-                    debug_log "INFO" "MSG_CACHE_CONTENTS" "$cache_file"
+                    debug_log "DEBUG" "MSG_CACHE_CONTENTS" "$cache_file"
                     cat "${CACHE_DIR}/$cache_file"
                 else
-                    debug_log "WARN" "MSG_CACHE_NOT_FOUND" "$cache_file"
+                    debug_log "DEBUG" "MSG_CACHE_NOT_FOUND" "$cache_file"
                 fi
             done
             ;;
@@ -298,7 +298,7 @@ check_architecture() {
     # **キャッシュがあれば再取得しない**
     if [ -f "$arch_file" ]; then
         arch=$(cat "$arch_file" | tr -d '\r')
-        debug_log "INFO" "Using cached architecture: $arch"
+        debug_log "DEBUG" "Using cached architecture: $arch"
         return 0
     fi
 
@@ -308,7 +308,7 @@ check_architecture() {
     # **キャッシュに保存（アーキテクチャ名のみ）**
     echo "$arch" > "$arch_file"
 
-    debug_log "INFO" "Architecture detected: $arch"
+    debug_log "DEBUG" "Architecture detected: $arch"
 }
 
 #########################################################################
@@ -419,7 +419,7 @@ get_message() {
 
     # `messages.db` が存在しない場合、キーそのままを返す
     if [ ! -f "$message_db" ]; then
-        debug_log "WARN" "messages.db not found. Returning key as message."
+        debug_log "DEBUG" "messages.db not found. Returning key as message."
         message="$key"
     else
         # **言語優先検索**
@@ -432,7 +432,7 @@ get_message() {
 
         # **それでも見つからなければ、キーそのままを返す**
         if [ -z "$message" ]; then
-            debug_log "WARN" "Message key '$key' not found in messages.db."
+            debug_log "DEBUG" "Message key '$key' not found in messages.db."
             message="$key"
         fi
     fi
@@ -502,7 +502,7 @@ download() {
 
     # **リモートバージョンが取得できない場合は仮のバージョンを設定**
     if [ -z "$remote_version" ]; then
-        debug_log "DEBUG" "No version information found for $file_name. Skipping version check and proceeding with download."
+        debug_log "DEBUG" "No version DEBUGrmation found for $file_name. Skipping version check and proceeding with download."
         remote_version="2025.01.01-00-00"
     fi
 
@@ -600,7 +600,7 @@ get_script_version() {
     fi
 
     # **デバッグログに記録**
-    debug_log "INFO" "Updated script.ch: ${script_file}=${version}"
+    debug_log "DEBUG" "Updated script.ch: ${script_file}=${version}"
 
     echo "$version"
 }
@@ -727,7 +727,7 @@ select_country() {
         selected_full=$(echo "$full_results" | sed -n "${selected_number}p")
 
         if [ -z "$selected_full" ]; then
-            printf "%s\n" "$(color red "Error: Failed to retrieve full country information. Please try again.")"
+            printf "%s\n" "$(color red "Error: Failed to retrieve full country DEBUGrmation. Please try again.")"
             continue
         fi
 
@@ -927,7 +927,7 @@ select_zone() {
     local flag_zone="${CACHE_DIR}/timezone_success_done"
     
     if [ -s "$cache_zonename" ] && [ -s "$cache_timezone" ]; then
-        debug_log "INFO" "Timezone is already set. Skipping select_zone()."
+        debug_log "DEBUG" "Timezone is already set. Skipping select_zone()."
         return
     fi
     
@@ -996,7 +996,7 @@ normalize_language() {
     local flag_file="${CACHE_DIR}/country_success_done"
 
     if [ -f "$flag_file" ]; then
-        debug_log "INFO" "normalize_language() already done. Skipping repeated success message."
+        debug_log "DEBUG" "normalize_language() already done. Skipping repeated success message."
         return 0
     fi
 
@@ -1024,7 +1024,7 @@ normalize_language() {
         echo "$selected_language" > "$message_cache"
         ACTIVE_LANGUAGE="$selected_language"
     else
-        debug_log "WARNING" "Language '$selected_language' not found in messages.db. Using 'US' as fallback."
+        debug_log "DEBUGING" "Language '$selected_language' not found in messages.db. Using 'US' as fallback."
         echo "US" > "$message_cache"
         ACTIVE_LANGUAGE="US"
     fi
@@ -1152,7 +1152,7 @@ update_package_list() {
 
     # **キャッシュが最新ならスキップ**
     if [ "$update_mode" != "yes" ] && [ -f "$update_cache" ] && grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
-        debug_log "INFO" "パッケージリストは既に最新です。更新をスキップします。"
+        debug_log "DEBUG" "パッケージリストは既に最新です。更新をスキップします。"
         return 0
     fi
 
@@ -1212,7 +1212,7 @@ install_package() {
                 if [ -z "$package_name" ]; then
                     package_name="$arg"
                 else
-                    debug_log "WARN" "$(color yellow "$(get_message "MSG_UNKNOWN_OPTION" | sed "s/{option}/$arg/")")"
+                    debug_log "DEBUG" "$(color yellow "$(get_message "MSG_UNKNOWN_OPTION" | sed "s/{option}/$arg/")")"
                 fi
                 ;;
         esac
@@ -1241,7 +1241,7 @@ install_package() {
             return 0
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if apk info | grep -q "^$package_name$"; then
+        if apk DEBUG | grep -q "^$package_name$"; then
             if [ "$hidden" != "yes" ]; then
                 echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
             fi
@@ -1252,7 +1252,7 @@ install_package() {
     # **システムコマンド存在チェック**
     if command -v "$package_name" >/dev/null 2>&1; then
         echo "$(color green "$(get_message "MSG_COMMAND_AVAILABLE" | sed "s/{pkg}/$package_name/")")"
-        debug_log "INFO" "Command $package_name exists in system."
+        debug_log "DEBUG" "Command $package_name exists in system."
         return 0
     fi
 
@@ -1263,17 +1263,17 @@ install_package() {
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if ! opkg list | grep -E "^$package_name([[:space:]]|-|_)" >/dev/null 2>&1; then
             echo "$(color yellow "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
-            debug_log "WARN" "Package $package_name not found in repository."
+            debug_log "DEBUG" "Package $package_name not found in repository."
             return 0
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         if ! apk search "^$package_name$" 2>/dev/null | grep -q "^$package_name$"; then
             echo "$(color yellow "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
-            debug_log "WARN" "Package $package_name not found in repository."
+            debug_log "DEBUG" "Package $package_name not found in repository."
             return 0
         fi
     else
-        debug_log "WARN" "Unknown package manager: $PACKAGE_MANAGER"
+        debug_log "DEBUG" "Unknown package manager: $PACKAGE_MANAGER"
         return 0
     fi
 
@@ -1365,13 +1365,13 @@ install_package() {
 # **GitHub から `custom-package.db` を取得**
 download_custom_package_db() {
     if [ ! -f "$package_db_cache" ]; then
-        debug_log "INFO" "$(get_message "MSG_FETCHING_CUSTOM_DB")"
+        debug_log "DEBUG" "$(get_message "MSG_FETCHING_CUSTOM_DB")"
 
         if wget -q -O "$package_db_cache.tmp" "$package_db_remote"; then
             mv "$package_db_cache.tmp" "$package_db_cache"
-            debug_log "INFO" "$(get_message "MSG_CUSTOM_DB_FETCH_SUCCESS")"
+            debug_log "DEBUG" "$(get_message "MSG_CUSTOM_DB_FETCH_SUCCESS")"
         else
-            debug_log "WARN" "$(get_message "MSG_CUSTOM_DB_FETCH_FAIL")"
+            debug_log "DEBUG" "$(get_message "MSG_CUSTOM_DB_FETCH_FAIL")"
             rm -f "$package_db_cache.tmp"
             handle_error "MSG_CUSTOM_DB_FETCH_FAIL"
         fi
@@ -1384,7 +1384,7 @@ custom_feed() {
     local PACKAGE_LIST_PATH="/tmp/config-software/package_list"
 
     if [ -n "$PACKAGE_LIST_URL" ] && [ "$PACKAGE_LIST_URL" != "null" ]; then
-        debug_log "INFO" "🌐 $(get_message "MSG_FETCHING_PACKAGE_LIST" | sed "s/{pkg}/$package_name/")"
+        debug_log "DEBUG" "🌐 $(get_message "MSG_FETCHING_PACKAGE_LIST" | sed "s/{pkg}/$package_name/")"
         mkdir -p /tmp/config-software
 
         if ! wget --no-check-certificate -q -O "$PACKAGE_LIST_PATH" "$PACKAGE_LIST_URL"; then
@@ -1401,13 +1401,13 @@ custom_feed() {
 
             if [ -n "$CPU_STATUS" ]; then
                 PACKAGE_URL="https://github.com/gSpotx2f/packages-openwrt/raw/master/${CPU_STATUS}.ipk"
-                debug_log "INFO" "🔄 $(get_message "MSG_LATEST_PACKAGE_DETECTED" | sed "s/{url}/$PACKAGE_URL/")"
+                debug_log "DEBUG" "🔄 $(get_message "MSG_LATEST_PACKAGE_DETECTED" | sed "s/{url}/$PACKAGE_URL/")"
             else
-                debug_log "WARN" "$(get_message "MSG_ERROR_NO_MATCHING_PACKAGE")"
+                debug_log "DEBUG" "$(get_message "MSG_ERROR_NO_MATCHING_PACKAGE")"
             fi
         fi
     else
-        debug_log "WARN" "$(get_message "MSG_ERROR_PACKAGE_LIST_URL_NOT_FOUND" | sed "s/{pkg}/$package_name/")"
+        debug_log "DEBUG" "$(get_message "MSG_ERROR_PACKAGE_LIST_URL_NOT_FOUND" | sed "s/{pkg}/$package_name/")"
         return 1
     fi
 
@@ -1444,7 +1444,7 @@ install_build() {
                 if [ -z "$package_name" ]; then
                     package_name="$arg"
                 else
-                    debug_log "WARN" "Unknown option: $arg"
+                    debug_log "DEBUG" "Unknown option: $arg"
                 fi
                 ;;
         esac
@@ -1506,12 +1506,12 @@ install_build() {
     local dependencies=$(jq -r --arg arch "$arch" '.[$package_name].build.dependencies.opkg // [] | join(" ")' "$CACHE_DIR/custom-package.db" 2>/dev/null)
 
     if [ -n "$dependencies" ]; then
-        debug_log "INFO" "Installing dependencies: $dependencies"
+        debug_log "DEBUG" "Installing dependencies: $dependencies"
         for dep in $dependencies; do
             install_package "$dep" hidden
         done
     else
-        debug_log "WARN" "No dependencies found for $package_name."
+        debug_log "DEBUG" "No dependencies found for $package_name."
     fi
 
     # **スピナー開始**
@@ -1530,7 +1530,7 @@ install_build() {
         return 1
     fi
 
-    debug_log "INFO" "Executing build command: $build_command"
+    debug_log "DEBUG" "Executing build command: $build_command"
 
     # **ビルド開始メッセージ**
     echo "$(get_message "MSG_BUILD_START" | sed "s/{pkg}/$built_package/")"
@@ -1548,27 +1548,27 @@ install_build() {
 
     stop_spinner  # スピナー停止
     echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$built_package/" | sed "s/{time}/$build_time/")"
-    debug_log "INFO" "Build time for $built_package: $build_time seconds"
+    debug_log "DEBUG" "Build time for $built_package: $build_time seconds"
 
     # **ビルド完了後、`install_package()` を実行**
     install_package "$built_package" "$confirm_install"
 
     echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$built_package/")"
-    debug_log "INFO" "Successfully built and installed package: $built_package"
+    debug_log "DEBUG" "Successfully built and installed package: $built_package"
 }
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
-# country_info: 選択された国と言語の詳細情報を表示
+# country_DEBUG: 選択された国と言語の詳細情報を表示
 #########################################################################
-country_info() {
-    local country_info_file="${BASE_DIR}/country.ch"
+country_DEBUG() {
+    local country_DEBUG_file="${BASE_DIR}/country.ch"
     local selected_language_code=$(cat "${BASE_DIR}/check_country")
-    if [ -f "$country_info_file" ]; then
-        grep -w "$selected_language_code" "$country_info_file"
+    if [ -f "$country_DEBUG_file" ]; then
+        grep -w "$selected_language_code" "$country_DEBUG_file"
     else
-        printf "%s\n" "$(color red "Country information not found.")"
+        printf "%s\n" "$(color red "Country DEBUGrmation not found.")"
     fi
 }
 
@@ -1629,7 +1629,7 @@ check_option() {
     SELECTED_LANGUAGE=""
     MODE="full"
     DEBUG_MODE="false"
-    DEBUG_LEVEL="INFO"
+    DEBUG_LEVEL="DEBUG"
     DRY_RUN="false"
     LOGFILE=""
     FORCE="false"
@@ -1685,7 +1685,7 @@ check_option() {
                 fi
                 ;;
             -*)
-                echo "Warning: Unknown option: $1" >&2
+                echo "DEBUGing: Unknown option: $1" >&2
                 ;;
             *)
                 if [ -z "$SELECTED_LANGUAGE" ]; then
