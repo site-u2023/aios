@@ -1129,7 +1129,7 @@ spionner() {
     i=0
 
     while true; do
-        printf "\r📡 %s %s" "$(color cyan "$(get_message 'MSG_UPDATE_RUNNING')")" "${spionner_chars:i++%6:1}"
+        printf "\r📡 %s %s" "$(color yellow "$(get_message 'MSG_UPDATE_RUNNING')")" "${spionner_chars:i++%6:1}"
         if command -v usleep >/dev/null 2>&1; then
             usleep 200000
         else
