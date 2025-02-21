@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.20-14-08"
+SCRIPT_VERSION="2025.02.21-00-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1086,6 +1086,20 @@ normalize_language() {
 # initd/ttyd/restart
 # [ttyd] opkg update; uci commit ttyd; initd/ttyd/restart
 #########################################################################
+# **GitHub から `custom-package.db` を取得**
+download_custom_package_db() {
+    if [ ! -f "$package_db_cache" ]; then
+        debug_log "INFO" "🌐 custom-package.db を GitHub から取得中..."
+        if wget -q -O "$package_db_cache.tmp" "$package_db_remote"; then
+            mv "$package_db_cache.tmp" "$package_db_cache"
+            debug_log "INFO" "✅ custom-package.db を取得しました。"
+        else
+            debug_log "WARN" "⚠️ custom-package.db の取得に失敗しました。"
+            rm -f "$package_db_cache.tmp"
+        fi
+    fi
+}
+
 install_package() {
     local confirm_install="no"
     local skip_lang_pack="no"
@@ -1116,7 +1130,7 @@ install_package() {
             update) update_mode="yes" ;;
             custom1) custom_mode=1 ;;
             custom2) custom_mode=2 ;;
-            dependencies) dependencies_mode=0 ;;
+            dependencies) dependencies_mode=1 ;;
             *)
                 if [ -z "$package_name" ]; then
                     package_name="$arg"
@@ -1140,19 +1154,6 @@ install_package() {
         return 1
     fi
 
-    # **GitHub から `custom-package.db` を取得**
-    download_custom_package_db() {
-        if [ ! -f "$package_db_cache" ]; then
-            debug_log "INFO" "🌐 custom-package.db を GitHub から取得中..."
-            if wget -q -O "$package_db_cache.tmp" "$package_db_remote"; then
-                mv "$package_db_cache.tmp" "$package_db_cache"
-                debug_log "INFO" "✅ custom-package.db を取得しました。"
-            else
-                debug_log "WARN" "⚠️ custom-package.db の取得に失敗しました。"
-                rm -f "$package_db_cache.tmp"
-            fi
-        fi
-    }
     [ "$custom_mode" -ne 0 ] && download_custom_package_db
 
     # **jq のエラーハンドリング**
@@ -1165,6 +1166,9 @@ install_package() {
     local current_date=$(date '+%Y-%m-%d')
 
     if [ "$update_mode" = "yes" ] || [ ! -f "$update_cache" ] || ! grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
+       
+        rm -f "$update_cache"
+        
         debug_log "DEBUG" "$(get_message "MSG_RUNNING_UPDATE")"
 
         echo -en "\r$(color cyan "$(get_message "MSG_UPDATE_IN_PROGRESS")") "
@@ -1214,20 +1218,13 @@ install_package() {
         trap - EXIT
     fi
 
-    echo "yn = $yn"
-
-    if [ -z "$yn" ]; then
-        read -p "パッケージをインストールしますか？ (y/n): " yn
-    fi
-    if [[ "$yn" != "y" && "$yn" != "n" ]]; then
-        echo "無効な入力です。終了します。"
-        exit 1
-    fi
-
     # **インストール前の確認**
     if [ "$confirm_install" = "yes" ]; then
         while true; do
-            echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
+            local msg=$(get_message "MSG_CONFIRM_INSTALL")
+            msg="${msg//{pkg}/$package_name}"
+            echo "$msg"
+    
             echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
             read -r yn
             case "$yn" in
