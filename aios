@@ -193,8 +193,8 @@ make_directory
 download_common
 check_option "$@"
 print_banner
-print_banner_matrix
-print_banner_wave
-print_banner_fadein
+#print_banner_matrix
+#print_banner_wave
+#print_banner_fadein
 packages
 # download openwrt-config.sh
