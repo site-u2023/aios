@@ -1126,6 +1126,10 @@ download_custom_package_db() {
 
 # **スピナー開始関数**
 spionner() {
+    spionner_chars='-\|/'
+    i=0
+    SPINNER_PID=""
+
     while true; do
         printf "\r📡 パッケージマネージャーの更新を実行中... %s" "${spionner_chars:i++%4:1}"
         if command -v usleep >/dev/null 2>&1; then
