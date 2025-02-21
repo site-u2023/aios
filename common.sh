@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-00-03"
+SCRIPT_VERSION="2025.02.22-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1128,7 +1128,6 @@ stop_spinner() {
     echo -en "\e[?25h"  # カーソルを表示に戻す
 }
 
-
 update_package_list() {
     local update_cache="${CACHE_DIR}/update.ch"
     local current_date=$(date '+%Y-%m-%d')
@@ -1144,32 +1143,25 @@ update_package_list() {
         return 0
     fi
 
-    # **スピナー開始**
+    # **スピナー開始 (元のまま)**
     start_spinner "$(get_message "MSG_UPDATING_REPO")"
 
-    while [ "$attempt" -le "$max_retries" ]; do
-        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            if opkg update > "${LOG_DIR}/opkg_update.log" 2>&1; then
-                break
-            fi
-        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            if apk update > "${LOG_DIR}/apk_update.log" 2>&1; then
-                break
-            fi
-        fi
-
-        debug_log "WARN" "$(color yellow "$(get_message "MSG_RETRYING_UPDATE")" | sed "s/{attempt}/$attempt/;s/{max_retries}/$max_retries/")"
-        sleep 2
-        attempt=$((attempt + 1))
-    done
-
-    # **スピナー停止**
-    stop_spinner
-
-    if [ "$attempt" -gt "$max_retries" ]; then
-        debug_log "ERROR" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
-        return 1
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
+            stop_spinner  # **エラー時もスピナーを止める**
+            debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+            return 1
+        }
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
+            stop_spinner  # **エラー時もスピナーを止める**
+            debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+            return 1
+        }
     fi
+
+    # **スピナー停止 (元のまま)**
+    stop_spinner
 
     # **キャッシュを更新**
     if ! echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"; then
@@ -1192,8 +1184,6 @@ install_package() {
     local update_mode="no"
     local package_name=""
     local update_cache="${CACHE_DIR}/update.ch"
-    local max_retries=3
-    local attempt=1
 
     # **オプションの処理**
     for arg in "$@"; do
@@ -1266,32 +1256,25 @@ install_package() {
         done
     fi
 
-    # **インストール処理 (リトライ付き)**
-    debug_log "DEBUG" "Installing package: $package_name"
+    # **スピナー開始 (元のまま)**
     start_spinner "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")"
 
-    while [ "$attempt" -le "$max_retries" ]; do
-        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            if opkg install "$package_name" > /dev/null 2>&1; then
-                break
-            fi
-        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            if apk add "$package_name" > /dev/null 2>&1; then
-                break
-            fi
-        fi
-
-        debug_log "WARN" "$(color yellow "$(get_message "MSG_RETRYING_INSTALL")" | sed "s/{pkg}/$package_name/;s/{attempt}/$attempt/;s/{max_retries}/$max_retries/")"
-        sleep 2
-        attempt=$((attempt + 1))
-    done
-
-    stop_spinner
-
-    if [ "$attempt" -gt "$max_retries" ]; then
-        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED")" | sed "s/{pkg}/$package_name/")"
-        return 1
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        opkg install "$package_name" > /dev/null 2>&1 || {
+            stop_spinner  # **エラー時もスピナーを止める**
+            debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
+            return 1
+        }
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        apk add "$package_name" > /dev/null 2>&1 || {
+            stop_spinner  # **エラー時もスピナーを止める**
+            debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
+            return 1
+        }
     fi
+
+    # **スピナー停止 (元のまま)**
+    stop_spinner
 
     echo "$(color green "✅ $(get_message "MSG_INSTALLED" | sed "s/{pkg}/$package_name/")")"
     debug_log "DEBUG" "Successfully installed package: $package_name"
