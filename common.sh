@@ -4,7 +4,7 @@
 # Important! OpenWrt OS only works with Almquist Shell, not Bourne-again shell.
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
-SCRIPT_VERSION="2025.02.21-00-05"
+SCRIPT_VERSION="2025.02.21-00-06"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -1367,13 +1367,23 @@ install_build() {
         return 1
     fi
 
-    install_package jq hidden
+    # **インストール前の確認**
+    if [ "$confirm_install" = "yes" ]; then
+        while true; do
+            echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")"
+            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
+            read -r yn
+            case "$yn" in
+                [Yy]*) break ;;
+                [Nn]*) return 1 ;;
+                *) echo "Invalid input. Please enter Y or N." ;;
+            esac
+        done
+    fi
 
-    # **ビルド環境の準備**
-    local build_tools=(
-        make gcc git libtool automake pkg-config
-        zlib-dev libssl-dev libicu-dev ncurses-dev curl-dev libxml2-dev
-    )
+    # **ビルド環境の準備 (yn判定直後)**
+    local build_tools=(jq make gcc git libtool automake pkg-config zlib-dev libssl-dev libicu-dev ncurses-dev curl-dev libxml2-dev)
+    
     for tool in "${build_tools[@]}"; do
         install_package "$tool" hidden
     done
@@ -1394,7 +1404,7 @@ install_build() {
 
     # **`custom-package.db` からビルドに必要な `dependencies` を取得**
     local dependencies=$(jq -r --arg arch "$arch" '.[$package_name].build.dependencies.opkg // [] | join(" ")' "$CACHE_DIR/custom-package.db" 2>/dev/null)
-
+    
     if [ -n "$dependencies" ]; then
         debug_log "INFO" "Installing dependencies: $dependencies"
         for dep in $dependencies; do
@@ -1404,26 +1414,12 @@ install_build() {
         debug_log "WARN" "No dependencies found for $package_name."
     fi
 
-    # **インストール前の確認**
-    if [ "$confirm_install" = "yes" ]; then
-        while true; do
-            echo "$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$built_package/")"
-            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
-            read -r yn
-            case "$yn" in
-                [Yy]*) break ;;
-                [Nn]*) return 1 ;;
-                *) echo "Invalid input. Please enter Y or N." ;;
-            esac
-        done
-    fi
-
-    # **`custom-package.db` から `build_command` を取得**
+    # **`custom-package.db` からバージョン & アーキテクチャごとの `build_command` を取得**
     local build_command=$(jq -r --arg pkg "$package_name" --arg arch "$arch" --arg ver "$openwrt_version" '
         .[$pkg].build.commands[$ver][$arch] // 
         .[$pkg].build.commands[$ver].default // 
         .[$pkg].build.commands.default[$arch] // 
-        .[$pkg].build.commands.default.default // ""' "$CACHE_DIR/custom-package.db" 2>/dev/null)
+        .[$pkg].build.commands.default.default // empty' "$CACHE_DIR/custom-package.db" 2>/dev/null)
 
     if [ -z "$build_command" ]; then
         debug_log "ERROR" "No build command found for $package_name (Arch: $arch, Version: $openwrt_version)."
@@ -1433,20 +1429,26 @@ install_build() {
 
     debug_log "INFO" "Executing build command: $build_command"
 
+    # **ビルド開始メッセージ**
+    echo "$(get_message "MSG_BUILD_START" | sed "s/{pkg}/$built_package/")"
+
     # **ビルド実行**
     local start_time=$(date +%s)
     if ! eval "$build_command"; then
+        echo "$(get_message "MSG_BUILD_FAIL" | sed "s/{pkg}/$built_package/")"
         debug_log "ERROR" "Build failed for package: $built_package"
         return 1
     fi
     local end_time=$(date +%s)
     local build_time=$((end_time - start_time))
 
+    echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$built_package/" | sed "s/{time}/$build_time/")"
     debug_log "INFO" "Build time for $built_package: $build_time seconds"
 
     # **ビルド完了後、`install_package()` を実行**
-    install_package "$built_package" $( [ "$confirm_install" = "yes" ] && echo "yn" )
+    install_package "$built_package" "$confirm_install"
 
+    echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$built_package/")"
     debug_log "INFO" "Successfully built and installed package: $built_package"
 }
 
