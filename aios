@@ -83,6 +83,82 @@ print_banner() {
     printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DISCLAIMER")")"
 }
 
+print_banner_matrix() {
+    clear
+    local banner_text=(
+        "                    ii i"
+        "         aaaa      iii       oooo      sssss"
+        "            aa      ii      oo  oo    ss"
+        "         aaaaa      ii      oo  oo     sssss"
+        "        aa  aa      ii      oo  oo         ss"
+        "         aaaaa     iiii      oooo     ssssss"
+    )
+    
+    local delay=0.05  # 文字が落ちる速度
+
+    for ((i = 0; i < ${#banner_text[@]}; i++)); do
+        tput cup $((i + 3)) 10  # 画面の適当な位置から開始
+        echo -e "$(color green "${banner_text[$i]}")"
+        sleep $delay
+    done
+
+    echo
+    printf "%s\n" "$(color white "$(get_message "MSG_BANNER_DECCRIPTION")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_BANNER_NAME")")"
+    printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DISCLAIMER")")"
+}
+
+print_banner_wave() {
+    local banner_text=(
+        "                    ii i"
+        "         aaaa      iii       oooo      sssss"
+        "            aa      ii      oo  oo    ss"
+        "         aaaaa      ii      oo  oo     sssss"
+        "        aa  aa      ii      oo  oo         ss"
+        "         aaaaa     iiii      oooo     ssssss"
+    )
+    
+    local delay=0.07  # 揺れるスピード
+
+    for ((wave = 0; wave < 3; wave++)); do  # 3回揺らす
+        clear
+        for ((i = 0; i < ${#banner_text[@]}; i++)); do
+            local offset=$(( (wave % 2) * 2 ))  # 偶数回は右、奇数回は左にズラす
+            tput cup $((i + 3)) $((10 + offset))
+            echo -e "$(color blue "${banner_text[$i]}")"
+        done
+        sleep $delay
+    done
+
+    echo
+    printf "%s\n" "$(color white "$(get_message "MSG_BANNER_DECCRIPTION")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_BANNER_NAME")")"
+    printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DISCLAIMER")")"
+}
+
+print_banner_fadein() {
+    local banner_text=(
+        "                    ii i"
+        "         aaaa      iii       oooo      sssss"
+        "            aa      ii      oo  oo    ss"
+        "         aaaaa      ii      oo  oo     sssss"
+        "        aa  aa      ii      oo  oo         ss"
+        "         aaaaa     iiii      oooo     ssssss"
+    )
+    
+    local delay=0.1  # フェードインの間隔
+
+    for ((i = 0; i < ${#banner_text[@]}; i++)); do
+        sleep $delay
+        echo -e "$(color cyan "${banner_text[$i]}")"
+    done
+
+    echo
+    printf "%s\n" "$(color white "$(get_message "MSG_BANNER_DECCRIPTION")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_BANNER_NAME")")"
+    printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DISCLAIMER")")"
+}
+
 # パッケージのインストール (オプション)
 packages() {
     # uconv のインストール
@@ -103,5 +179,8 @@ make_directory
 download_common
 check_option "$@"
 print_banner
+print_banner_matrix
+print_banner_wave
+print_banner_fadein
 packages
 download openwrt-config.sh
