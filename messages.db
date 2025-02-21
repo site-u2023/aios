@@ -139,6 +139,16 @@ JP|MSG_BUILD_SUCCESS=✅ ビルドが成功しました！
 US|MSG_BUILD_FAILURE=Build failed. Please check the logs for details.
 JP|MSG_BUILD_FAILURE=ビルドに失敗しました。詳細はログを確認してください。
 
+download_custom_package_db(
+US|MSG_FETCHING_CUSTOM_DB=🌐 Fetching custom-package.db from GitHub...
+JP|MSG_FETCHING_CUSTOM_DB=🌐 GitHub から custom-package.db を取得中...
+
+US|MSG_CUSTOM_DB_FETCH_SUCCESS=✅ Successfully fetched custom-package.db.
+JP|MSG_CUSTOM_DB_FETCH_SUCCESS=✅ custom-package.db の取得に成功しました。
+
+US|MSG_CUSTOM_DB_FETCH_FAIL=⚠️ Failed to fetch custom-package.db.
+JP|MSG_CUSTOM_DB_FETCH_FAIL=⚠️ custom-package.db の取得に失敗しました。
+
 # オプション関連
 JP|MSG_INVALID_OPTION=無効なオプションが指定されました: {opt}
 US|MSG_INVALID_OPTION=Invalid option specified: {opt}
