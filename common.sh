@@ -1291,21 +1291,6 @@ install_package() {
 # [build_uconv]　※行、列問わず記述可
 # [uconv]　※行、列問わず記述可
 #########################################################################
-install_jq() {
-    # **jq がインストールされているか確認**
-    if ! command -v jq >/dev/null 2>&1; then
-        echo "📦 jq not found. Installing..."
-
-        # **インストール後の確認**
-        if ! command -v jq >/dev/null 2>&1; then
-            echo "🚨 ERROR: Failed to install jq. Exiting..."
-            exit 1
-        fi
-
-        echo "✅ jq successfully installed."
-    fi
-}
-
 custom_feed() {
 # GitHub から `pacage_list` を取得
 PACKAGE_LIST_URL=$(jq -r --arg pkg "$package_name" '.[$pkg].fetch_latest' "$custom_package_db")
@@ -1346,28 +1331,6 @@ else
 fi
 }
 
-#########################################################################
-# Last Update: 2025-02-21 20:00:00 (JST) 🚀
-# install_build: パッケージのビルド処理 (OpenWrt / Alpine Linux)
-#
-# 【概要】
-# 指定されたパッケージをビルド後インストールし、オプションに応じて以下の処理を実行する。
-# 1回の動作で１つのビルドのみパッケージを作りインストール作業
-# DEV_NULL に応じて出力制御
-# DEBUG に応じて出力制御（要所にセット）
-# package名は、ビルド前は build_*, ビルド後は *
-# 例：build_uconv　>>>　uconv
-#
-# 【フロー】
-# 2️⃣ デバイスにパッケージがインストール済みか確認（ビルド後のパッケージ名で確認）
-# 4️⃣ インストール確認（yn オプションが指定された場合）
-# 4️⃣ ビルド用汎用パッケージ（例：make, gcc）をインストール ※install_package()利用
-# 4️⃣ ビルド作業
-# 7️⃣ package.db の適用（ビルド用設定：DBの記述に従う）
-# 5️⃣ インストールの実行（install_package()利用）
-# 7️⃣ package.db の適用（ビルド後の設定適用がある場合：DBの記述に従う）
-#########################################################################
-
 install_build() {
     local confirm_install="no"
     local hidden="no"
@@ -1404,8 +1367,7 @@ install_build() {
         return 1
     fi
 
-    # **jq がインストールされているか確認 & インストール**
-    install_jq
+    install_package jq hidden
 
     # **ビルド環境の準備**
     local build_tools=(
