@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-00-12"
+SCRIPT_VERSION="2025.02.22-00-13"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1249,6 +1249,13 @@ install_package() {
         fi
     fi
 
+    # **システムコマンド存在チェック**
+    if command -v "$package_name" >/dev/null 2>&1; then
+        echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+        debug_log "INFO" "Command $package_name exists in system."
+        return 0
+    fi
+
     # **アップデートが必要か確認 (`update_package_list()` を使用)**
     update_package_list
 
@@ -1307,7 +1314,7 @@ install_package() {
     # **スピナー停止 (成功メッセージ)**
     stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
 
-    echo "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+    echo "$(color green "✅ $(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
     debug_log "DEBUG" "Successfully installed package: $package_name"
 }
 
