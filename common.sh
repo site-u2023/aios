@@ -101,19 +101,14 @@ debug_log() {
     local file="$3"
     local version="$4"
 
-    # `$1` にログレベルが指定されていない場合、デフォルトを `DEBUG` にする
+    # 指定されたログレベルが有効か確認、無効または未指定の場合はデフォルトを DEBUG にする
     case "$level" in
-        "DEBUG"|"DEBUG"|"DEBUG"|"ERROR") ;;  # 何もしない (正しいログレベル)
+        DEBUG|INFO|WARN|ERROR)
+            ;;  # そのまま利用
         "")
             level="DEBUG"
-            message="$1"
-            file="$2"
-            version="$3"
             ;;
         *)
-            message="$1"
-            file="$2"
-            version="$3"
             level="DEBUG"
             ;;
     esac
@@ -121,33 +116,51 @@ debug_log() {
     # 変数を置換
     message=$(echo "$message" | sed -e "s/{file}/$file/g" -e "s/{version}/$version/g")
 
-    # ログレベル制御
-    case "$DEBUG_LEVEL" in
-        DEBUG)    allowed_levels="DEBUG DEBUG DEBUG ERROR" ;;
-        DEBUG)     allowed_levels="DEBUG DEBUG ERROR" ;;
-        DEBUG)     allowed_levels="DEBUG ERROR" ;;
-        ERROR)    allowed_levels="ERROR" ;;
-        *)        allowed_levels="ERROR" ;;
+    # DEBUG_MODE に応じた許可レベルの設定
+    case "$DEBUG_MODE" in
+        DEBUG)
+            allowed_levels="DEBUG INFO WARN ERROR"
+            ;;
+        INFO)
+            allowed_levels="INFO WARN ERROR"
+            ;;
+        WARN)
+            allowed_levels="WARN ERROR"
+            ;;
+        ERROR)
+            allowed_levels="ERROR"
+            ;;
+        *)
+            allowed_levels="ERROR"
+            ;;
     esac
 
-    if echo "$allowed_levels" | grep -q "$level"; then
+    # 許可レベルに含まれているか確認（単語単位でチェック）
+    if echo "$allowed_levels" | grep -wq "$level"; then
         local timestamp
         timestamp=$(date '+%Y-%m-%d %H:%M:%S')
         local log_message="[$timestamp] $level: $message"
 
-        # カラー表示
+        # カラー表示（レベルに応じた色設定）
         case "$level" in
-            "ERROR") echo -e "$(color red "$log_message")" ;;
-            "DEBUG") echo -e "$(color yellow "$log_message")" ;;
-            "DEBUG") echo -e "$(color cyan "$log_message")" ;;
-            "DEBUG") echo -e "$(color white "$log_message")" ;;
+            ERROR)
+                echo -e "$(color red "$log_message")"
+                ;;
+            WARN)
+                echo -e "$(color yellow "$log_message")"
+                ;;
+            INFO)
+                echo -e "$(color cyan "$log_message")"
+                ;;
+            DEBUG)
+                echo -e "$(color white "$log_message")"
+                ;;
         esac
 
         # ログファイルに記録
         echo "$log_message" >> "$LOG_DIR/debug.log"
     fi
 }
-
 
 #########################################################################
 # Last Update: 2025-02-16 17:30:00 (JST) 🚀
