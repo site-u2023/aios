@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-00-09"
+SCRIPT_VERSION="2025.02.22-00-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1185,7 +1185,6 @@ update_package_list() {
     return 0
 }
 
-
 install_package() {
     local confirm_install="no"
     local skip_lang_pack="no"
@@ -1234,19 +1233,20 @@ install_package() {
 
     # **パッケージのインストール済みチェック**
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if opkg list-installed | grep -q "^$package_name "; then
-            if [ "$hidden" != "yes" ]; then
-                echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-            fi
-            return 0
-        fi
+	# パッケージ名の後にスペース、ハイフン、またはアンダースコアが続く場合にマッチさせる
+	if opkg list-installed | grep -E "^$package_name([[:space:]]|-|_)" >/dev/null 2>&1; then
+		if [ "$hidden" != "yes" ]; then
+			echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+		fi
+		return 0
+	fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if apk info | grep -q "^$package_name$"; then
-            if [ "$hidden" != "yes" ]; then
-                echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-            fi
-            return 0
-        fi
+	if apk info | grep -q "^$package_name$"; then
+		if [ "$hidden" != "yes" ]; then
+			echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+		fi
+		return 0
+	fi
     fi
 
     # **アップデートが必要か確認 (`update_package_list()` を使用)**
