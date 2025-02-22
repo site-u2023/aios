@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-02-03"
+SCRIPT_VERSION="2025.02.22-02-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1397,6 +1397,13 @@ install_package() {
         return 1
     fi
 
+    # **テストモードなら、インストールをスキップ**
+    if [ "$test_mode" = "yes" ]; then
+        debug_log "DEBUG" "Test mode enabled: Skipping actual installation for $package_name"
+        echo "$(color yellow "Test mode: Package installation skipped for $package_name")"
+        return 0
+    fi
+
     # **インストール前の確認**
     if [ "$confirm_install" = "yes" ]; then
         while true; do
@@ -1435,24 +1442,6 @@ install_package() {
     # **スピナー停止 (成功メッセージ)**
     stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
     debug_log "DEBUG" "Successfully installed package: $package_name"
-
-    # **local-package.db の適用**
-    if [ "$skip_package_db" != "yes" ] && [ -f "${BASE_DIR}/local-package.db" ]; then
-        pkg_settings=$(awk -v pkg="\\[$package_name\\]" '
-            BEGIN { flag=0 }
-            $0 ~ pkg { sub(/^\[[^]]*\]/, "", $0); if (length($0) > 0) print $0; flag=1; next }
-            flag && $0 !~ /^\[/ { print }
-            $0 ~ /^\[/ { flag=0 }
-        ' "${BASE_DIR}/local-package.db")
-
-        if [ -n "$pkg_settings" ]; then
-            debug_log "DEBUG" "Applying local package settings for $package_name"
-            echo "$pkg_settings" | while IFS= read -r cmd; do
-                debug_log "DEBUG" "Executing local package setting command: $cmd"
-                eval "$cmd"
-            done
-        fi
-    fi
 
     # **サービスの有効化**
     if [ "$set_disabled" != "yes" ] && [ -x "/etc/init.d/$package_name" ]; then
