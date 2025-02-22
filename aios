@@ -94,7 +94,6 @@ packages() {
 
     # uconv のインストール
     install_build uconv yn
-    install_build luci-app-cpu-status yn
 }
 
 # メイン処理
