@@ -1,55 +1,7 @@
 {
-  "default": {
-    "dependencies": {
-      "opkg": [
-        "jq",
-        "make",
-        "gcc",
-        "libtool-bin",
-        "automake",
-        "pkg-config",
-        "zlib-dev",
-        "libncurses-dev",
-        "curl",
-        "libxml2",
-        "libxml2-dev",
-        "autoconf",
-        "bison",
-        "flex",
-        "perl",
-        "patch",
-        "wget",
-        "wget-ssl",
-        "tar",
-        "unzip"
-      ],
-      "apk": [
-        "jq",
-        "build-base",
-        "gcc",
-        "make",
-        "libtool",
-        "automake",
-        "pkgconf",
-        "zlib-dev",
-        "ncurses-dev",
-        "curl-dev",
-        "libxml2-dev",
-        "autoconf",
-        "bison",
-        "flex",
-        "perl",
-        "patch",
-        "wget",
-        "tar",
-        "unzip"
-      ],
-      "default": ["make", "gcc", "tar", "wget"]
-    }
-  },
-  "luci-app-log-viewer": {
+  "luci-app-cpu-perf": {
     "source": {
-      "url": "https://github.com/gSpotx2f/luci-app-log-viewer.git"
+      "url": "https://github.com/gSpotx2f/luci-app-cpu-perf.git"
     },
     "build": {
       "dependencies": {
@@ -84,10 +36,10 @@
       },
       "commands": {
         "default": {
-          "x86_64": "make package/luci-app-log-viewer/compile",
-          "armv7l": "make package/luci-app-log-viewer/compile",
-          "mipsel": "make package/luci-app-log-viewer/compile",
-          "mips": "make package/luci-app-log-viewer/compile"
+          "x86_64": "make package/luci-app-cpu-perf/compile",
+          "armv7l": "make package/luci-app-cpu-perf/compile",
+          "mipsel": "make package/luci-app-cpu-perf/compile",
+          "mips": "make package/luci-app-cpu-perf/compile"
         }
       }
     }
