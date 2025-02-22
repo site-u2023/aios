@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-02-05"
+SCRIPT_VERSION="2025.02.22-02-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1325,8 +1325,8 @@ install_package() {
     local update_cache="${CACHE_DIR}/update.ch"
 
     # **オプションの処理**
-    for arg in "$@"; do
-        case "$arg" in
+    while [ $# -gt 0 ]; do
+        case "$1" in
             yn)         confirm_install="yes" ;;
             nolang)     skip_lang_pack="yes" ;;
             notpack)    skip_package_db="yes" ;;
@@ -1334,15 +1334,16 @@ install_package() {
             hidden)     hidden="yes" ;;
             test)       test_mode="yes" ;;
             force)      force_install="yes" ;;
-            update)     update_mode="yes" ;;
+            update)     update_mode="yes"; shift; continue ;;  # `update` をパッケージ扱いしない
             *)
                 if [ -z "$package_name" ]; then
-                    package_name="$arg"
+                    package_name="$1"
                 else
-                    debug_log "DEBUG" "$(color yellow "$(get_message "MSG_UNKNOWN_OPTION" | sed "s/{option}/$arg/")")"
+                    debug_log "DEBUG" "$(color yellow "$(get_message "MSG_UNKNOWN_OPTION" | sed "s/{option}/$1/")")"
                 fi
                 ;;
         esac
+        shift
     done
 
     if [ -z "$package_name" ]; then
@@ -1390,14 +1391,14 @@ install_package() {
         fi
     fi
 
-    # **システムコマンド存在チェック (testオプションでは無視して継続)**
+    # **システムコマンド存在チェック (`test` モードなら無視)**
     if [ "$test_mode" != "yes" ] && command -v "$package_name" >/dev/null 2>&1; then
         echo "$(color green "$(get_message "MSG_COMMAND_AVAILABLE" | sed "s/{pkg}/$package_name/")")"
         debug_log "DEBUG" "Command $package_name exists in system."
         return 0
     fi
 
-    # **テストモードなら、ここでシミュレーションを実行**
+    # **テストモードなら、シミュレーションを実行**
     if [ "$test_mode" = "yes" ]; then
         debug_log "DEBUG" "Test mode enabled: Simulating installation for $package_name"
         echo "$(color yellow "Test mode: Simulated package installation for $package_name")"
