@@ -1503,9 +1503,6 @@ install_build() {
         debug_log "DEBUG" "Created build directory: $BUILD_DIR"
     fi
 
-    # 【ビルドディレクトリへ移動】
-    cd "$BUILD_DIR" || { debug_log "ERROR" "Failed to enter build directory"; return 1; }
-
     # 【ソースコードのダウンロード URL を取得】
     local source_url
     source_url=$(jq -r --arg pkg "$package_name" '.[$pkg].source.url // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
@@ -1518,13 +1515,30 @@ install_build() {
 
     # 【リポジトリの取得・更新】
     if [ -d "$BUILD_DIR/$package_name" ]; then
-        debug_log "DEBUG" "Repository already exists. Pulling latest changes."
-        cd "$BUILD_DIR/$package_name" && git pull
-    else
-        debug_log "DEBUG" "Cloning repository: $source_url"
-        git clone "$source_url" "$BUILD_DIR/$package_name"
-        cd "$BUILD_DIR/$package_name" || { debug_log "ERROR" "Failed to enter repository directory"; return 1; }
+        debug_log "DEBUG" "Removing existing repository and cloning fresh copy."
+        rm -rf "$BUILD_DIR/$package_name"
     fi
+
+    debug_log "DEBUG" "Cloning repository: $source_url"
+    git clone "$source_url" "$BUILD_DIR/$package_name"
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "Git clone failed for $package_name"
+        return 1
+    fi
+
+    cd "$BUILD_DIR/$package_name" || { debug_log "ERROR" "Failed to enter repository directory"; return 1; }
+
+    # 【OpenWrt feeds のセットアップ】
+    if [ ! -d "$BUILD_DIR/openwrt" ]; then
+        debug_log "DEBUG" "Cloning OpenWrt source for feeds setup."
+        git clone https://git.openwrt.org/openwrt/openwrt.git "$BUILD_DIR/openwrt"
+    fi
+
+    cd "$BUILD_DIR/openwrt"
+    ./scripts/feeds update -a
+    ./scripts/feeds install -a
+
+    cd "$BUILD_DIR/$package_name"
 
     # 【custom-package.db からビルドコマンドの取得】
     local build_command
