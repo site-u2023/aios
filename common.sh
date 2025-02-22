@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-01-00"
+SCRIPT_VERSION="2025.02.22-01-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1434,6 +1434,7 @@ install_package() {
 # 【messages.dbの記述例】
 # [uconv]　※行、列問わず記述可
 #########################################################################
+install_build() {
     # 【キャッシュから OpenWrt バージョンとアーキテクチャの取得】
     local openwrt_version=""
     local arch=""
@@ -1541,6 +1542,7 @@ install_package() {
 
     echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$package_name/")"
     debug_log "DEBUG" "Successfully built and installed package: $package_name"
+}
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
