@@ -1142,6 +1142,29 @@ stop_spinner() {
     local message="$1"
 
     if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
+        # spinner プロセスを終了させる
+        kill "$SPINNER_PID" >/dev/null 2>&1
+        # spinner プロセスが終了するまでループで待機する
+        while kill -0 "$SPINNER_PID" 2>/dev/null; do
+            sleep 1
+        done
+        # spinner の出力行をクリア
+        printf "\r\033[K"
+        echo "$(color green "$message")"
+    else
+        printf "\r\033[K"
+        echo "$(color red "$message")"
+    fi
+
+    # 変数をクリア（プロセスは既に終了しているはず）
+    SPINNER_PID=""
+    echo -en "\e[?25h"
+}
+
+XXXX_stop_spinner() {
+    local message="$1"
+
+    if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
         kill "$SPINNER_PID" >/dev/null 2>&1
         wait "$SPINNER_PID" 2>/dev/null
         printf "\r\033[K"  # 行をクリア
