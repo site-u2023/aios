@@ -1450,33 +1450,34 @@ setup_swap() {
     fi
 }
 
-    # 【INIファイルから値を取得する関数】
-    get_ini_value() {
-        local section="$1"
-        local key="$2"
-        awk -F'=' -v s="[$section]" -v k="$key" '
-            $0 ~ s {flag=1; next} /^\[/{flag=0}
-            flag && $1==k {print $2; exit}
-        ' "$DB_FILE"
-    }
+# 【INIファイルから値を取得する関数】
+get_ini_value() {
+    local section="$1"
+    local key="$2"
+    awk -F'=' -v s="[$section]" -v k="$key" '
+        $0 ~ s {flag=1; next} /^\[/{flag=0}
+        flag && $1==k {print $2; exit}
+    ' "$DB_FILE"
+}
 
-    # 【セクションから値を取得（デフォルト値を含める）】
-    get_value_with_fallback() {
-        local section="$1"
-        local key="$2"
-        local value
-        value=$(get_ini_value "$section" "$key")
-        if [ -z "$value" ]; then
-            value=$(get_ini_value "default" "$key")
-        fi
-        echo "$value"
-    }
+# 【セクションから値を取得（デフォルト値を含める）】
+get_value_with_fallback() {
+    local section="$1"
+    local key="$2"
+    local value
+    value=$(get_ini_value "$section" "$key")
+    if [ -z "$value" ]; then
+        value=$(get_ini_value "default" "$key")
+    fi
+    echo "$value"
+}
 
 install_build() {
     local package_name=""
     local confirm_install="no"
     local hidden="no"
-    local DB_FILE="/tmp/aios/custom-package.db"  # INIデータベースファイル
+    local DB_FILE="/tmp/aios/custom-package.ini"  # INIデータベースファイル
+    local CACHE_DIR="/tmp/aios/cache"
 
     # 【オプションの処理】
     for arg in "$@"; do
@@ -1495,22 +1496,37 @@ install_build() {
 
     setup_swap  # スワップのセットアップ
 
-    # 【必要なパラメータを取得】
-    PACKAGE_MANAGER=$(get_value_with_fallback "$package_name" "package_manager")
-    source_url=$(get_value_with_fallback "$package_name" "source.url")
-    build_dependencies=$(get_value_with_fallback "$package_name" "build.dependencies")
-    build_command=$(get_value_with_fallback "$package_name" "build.command")
-    BUILD_DIR=$(get_value_with_fallback "default" "build_dir")
-    OPENWRT_REPO=$(get_value_with_fallback "default" "openwrt_repo")
+    # 【OpenWrt バージョンの取得】
+    local openwrt_version=""
+    if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
+        openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
+    else
+        debug_log "ERROR" "OpenWrt バージョン情報が取得できません！"
+        return 1
+    fi
+    debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
 
-    debug_log "DEBUG" "Package Manager: $PACKAGE_MANAGER"
+    # 【必要なパラメータを取得】
+    local source_url build_dependencies build_command BUILD_DIR OPENWRT_REPO
+
+    source_url=$(get_ini_value "$package_name" "source_url")
+    build_dependencies=$(get_ini_value "$package_name" "build_dependencies")
+    BUILD_DIR=$(get_ini_value "default" "build_dir")
+    OPENWRT_REPO=$(get_ini_value "default" "openwrt_repo")
+
+    # 【バージョンごとのビルドコマンド取得】
+    build_command=$(get_ini_value "$package_name" "$openwrt_version")
+    if [ -z "$build_command" ]; then
+        build_command=$(get_ini_value "$package_name" "default")
+    fi
+
     debug_log "DEBUG" "Source URL: $source_url"
     debug_log "DEBUG" "Build Dependencies: $build_dependencies"
     debug_log "DEBUG" "Build Command: $build_command"
     debug_log "DEBUG" "Build Directory: $BUILD_DIR"
     debug_log "DEBUG" "OpenWrt Repo: $OPENWRT_REPO"
 
-    # 【パッケージのインストール確認】
+    # 【パッケージのインストール確認（YNオプション）】
     if [ "$confirm_install" = "yes" ]; then
         echo "📢 ${package_name} をインストールしますか？ (Y/n)"
         read -r answer
@@ -1572,6 +1588,9 @@ install_build() {
 
     debug_log "DEBUG" "Executing build command: $build_command"
 
+    # **スピナー開始**
+    # start_spinner "$(get_message 'MSG_UPDATE_RUNNING')"
+    
     # 【ビルド実行】
     local start_time end_time build_time
     start_time=$(date +%s)
@@ -1584,8 +1603,8 @@ install_build() {
     end_time=$(date +%s)
     build_time=$((end_time - start_time))
 
-    stop_spinner
-    echo "✅ ${package_name} のビルド完了（所要時間: ${build_time}秒）"
+    # stop_spinner
+    # echo "✅ ${package_name} のビルド完了（所要時間: ${build_time}秒）"
     debug_log "DEBUG" "Build time: $build_time seconds"
 }
 
