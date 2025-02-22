@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-01-07"
+SCRIPT_VERSION="2025.02.22-01-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1449,12 +1449,6 @@ install_build() {
         esac
     done
 
-    # 【jq がインストールされているか確認】
-    if ! command -v jq > /dev/null 2>&1; then
-        debug_log "DEBUG" "jq is not installed. Installing jq..."
-        install_package "jq" hidden
-    fi
-
     # 【パッケージ名が指定されているか確認】
     if [ -z "$package_name" ]; then
         debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")"
@@ -1486,9 +1480,12 @@ install_build() {
     # 【ビルド用依存パッケージのインストール】
     local build_dependencies
     build_dependencies=$(jq -r --arg pkg "$package_name" --arg pm "$PACKAGE_MANAGER" '
-        .[$pkg].build.dependencies[$pm] // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
+        .[$pkg].build.dependencies[$pm] // 
+        .[$pkg].build.dependencies.opkg // 
+        .default.build.dependencies[$pm] // 
+        .default.build.dependencies.opkg // [] | join(" ")' "${BASE_DIR}/custom-package.db" 2>/dev/null)
 
-    if [ -n "$build_dependencies" ] && [ "$build_dependencies" != "empty" ]; then
+    if [ -n "$build_dependencies" ]; then
         debug_log "DEBUG" "Installing build dependencies for $package_name: $build_dependencies"
         for dep in $build_dependencies; do
             install_package "$dep" hidden
@@ -1509,50 +1506,46 @@ install_build() {
     # 【ビルドディレクトリへ移動】
     cd "$BUILD_DIR" || { debug_log "ERROR" "Failed to enter build directory"; return 1; }
 
-    # 【ソースコードのダウンロード URL を取得（custom-package.db）】
+    # 【ソースコードのダウンロード URL を取得】
     local source_url
     source_url=$(jq -r --arg pkg "$package_name" '.[$pkg].source.url // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
 
-    # **データがない場合はエラーメッセージを出して終了**
     if [ -z "$source_url" ] || [ "$source_url" = "empty" ]; then
-        echo "❌ $package_name のソースコード情報が custom-package.db にありません。"
-        debug_log "ERROR" "$package_name のソースコード情報が見つかりません。"
+        debug_log "ERROR" "$(get_message "MSG_ERROR_NO_SOURCE" | sed "s/{pkg}/$package_name/")"
         stop_spinner
         return 1
     fi
 
-    # 【ソースコードのダウンロード＆展開】
-    wget -O source.tar.gz "$source_url"
-    tar -xzf source.tar.gz
-    cd "$(tar -tzf source.tar.gz | head -1 | cut -f1 -d"/")" || { debug_log "ERROR" "Failed to enter extracted directory"; return 1; }
-
-    debug_log "DEBUG" "Source code downloaded and extracted."
-
-    # 【Makefile の存在をチェック】
-    if [ ! -f "Makefile" ]; then
-        debug_log "ERROR" "Makefile still not found after downloading source."
-        stop_spinner
-        return 1
+    # 【リポジトリの取得・更新】
+    if [ -d "$BUILD_DIR/$package_name" ]; then
+        debug_log "DEBUG" "Repository already exists. Pulling latest changes."
+        cd "$BUILD_DIR/$package_name" && git pull
+    else
+        debug_log "DEBUG" "Cloning repository: $source_url"
+        git clone "$source_url" "$BUILD_DIR/$package_name"
+        cd "$BUILD_DIR/$package_name" || { debug_log "ERROR" "Failed to enter repository directory"; return 1; }
     fi
 
     # 【custom-package.db からビルドコマンドの取得】
     local build_command
     build_command=$(jq -r --arg pkg "$package_name" --arg arch "$arch" --arg ver "$openwrt_version" '
-        .[$pkg].build.commands[$ver][$arch] // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
+        .[$pkg].build.commands[$ver][$arch] // 
+        .[$pkg].build.commands[$ver].default // 
+        .[$pkg].build.commands.default[$arch] // 
+        .[$pkg].build.commands.default.default // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
 
-    # **データがない場合はエラーメッセージを出して終了**
     if [ -z "$build_command" ] || [ "$build_command" = "empty" ]; then
-        echo "❌ $package_name のビルドコマンドが custom-package.db にありません。"
-        debug_log "ERROR" "$package_name のビルドコマンドが見つかりません。"
+        debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_COMMAND_NOT_FOUND" | sed "s/{pkg}/$package_name/")"
         stop_spinner
         return 1
     fi
+
+    debug_log "DEBUG" "Executing build command for $package_name: $build_command"
 
     # 【ビルド実行】
     local start_time end_time build_time
     start_time=$(date +%s)
     if ! eval "$build_command"; then
-        echo "$(get_message "MSG_BUILD_FAIL" | sed "s/{pkg}/$package_name/")"
         debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_FAILED" | sed "s/{pkg}/$package_name/")"
         stop_spinner
         return 1
@@ -1560,9 +1553,6 @@ install_build() {
 
     end_time=$(date +%s)
     build_time=$((end_time - start_time))
-
-    # 【元のディレクトリに戻る】
-    cd - > /dev/null
 
     stop_spinner
     echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$package_name/" | sed "s/{time}/$build_time/")"
