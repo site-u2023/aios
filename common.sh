@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-00-10"
+SCRIPT_VERSION="2025.02.22-01-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1434,66 +1434,25 @@ install_package() {
 # 【messages.dbの記述例】
 # [uconv]　※行、列問わず記述可
 #########################################################################
-install_build() {
-    local confirm_install="no"
-    local hidden="no"
-    local package_name=""
+    # 【キャッシュから OpenWrt バージョンとアーキテクチャの取得】
+    local openwrt_version=""
+    local arch=""
+    local alt_arch=""
 
-    # 【オプションの処理】
-    for arg in "$@"; do
-        case "$arg" in
-            yn)
-                confirm_install="yes"
-                ;;
-            hidden)
-                hidden="yes"
-                ;;
-            *)
-                if [ -z "$package_name" ]; then
-                    package_name="$arg"
-                else
-                    debug_log "DEBUG" "Unknown option: $arg"
-                fi
-                ;;
-        esac
-    done
-
-    # パッケージ名が指定されているか確認
-    if [ -z "$package_name" ]; then
-        debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")"
-        return 1
+    if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
+        openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
+    fi
+    if [ -f "${CACHE_DIR}/architecture.ch" ]; then
+        arch=$(cat "${CACHE_DIR}/architecture.ch")
     fi
 
-    # 【ダウンローダーの取得】 (${CACHE_DIR}/downloader_ch を使用)
-    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
-        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
-    else
-        debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")"
-        return 1
+    # `armv7l` の場合は `arm71` も試す
+    if [ "$arch" = "armv7l" ]; then
+        alt_arch="arm71"
     fi
 
-    # 【インストール前の確認】
-    if [ "$confirm_install" = "yes" ]; then
-        while true; do
-            local msg
-            msg=$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")
-            echo "$msg"
-
-            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
-            read -r yn
-            case "$yn" in
-                [Yy]*)
-                    break
-                    ;;
-                [Nn]*)
-                    return 1
-                    ;;
-                *)
-                    echo "$(color red "Invalid input. Please enter Y or N.")"
-                    ;;
-            esac
-        done
-    fi
+    debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
+    debug_log "DEBUG" "Using architecture: $arch (alt: $alt_arch)"
 
     # 【ビルド用依存パッケージのインストール】
     local build_dependencies
@@ -1503,18 +1462,8 @@ install_build() {
         .default.build.dependencies[$pm] // 
         .default.build.dependencies.opkg // [] | join(" ")' "${BASE_DIR}/custom-package.db" 2>/dev/null)
 
-    if [ -n "$build_dependencies" ]; then
-        debug_log "DEBUG" "Installing build dependencies for $package_name using $PACKAGE_MANAGER: $build_dependencies"
-        for dep in $build_dependencies; do
-            install_package "$dep" hidden
-        done
-    else
-        debug_log "DEBUG" "No build dependencies found for $package_name."
-    fi
-
-    # フォールバック処理 (デフォルト設定を使用)
     if [ -z "$build_dependencies" ]; then
-        debug_log "DEBUG" "No build dependencies found for $package_name. Checking default settings."
+        debug_log "DEBUG" "No specific build dependencies found. Checking default settings."
         build_dependencies=$(jq -r '.default.build.dependencies.opkg // [] | join(" ")' "${BASE_DIR}/custom-package.db" 2>/dev/null)
     fi
 
@@ -1525,24 +1474,6 @@ install_build() {
         done
     else
         debug_log "DEBUG" "No build dependencies found for $package_name."
-    fi
-
-    # 【キャッシュから OpenWrt バージョンとアーキテクチャの取得】
-    local openwrt_version=""
-    local arch=""
-    if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
-        openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
-    fi
-    if [ -f "${CACHE_DIR}/architecture.ch" ]; then
-        arch=$(cat "${CACHE_DIR}/architecture.ch")
-    fi
-    debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
-    debug_log "DEBUG" "Using architecture: $arch"
-
-    # 【バージョンの正規化】
-    if [ "$(echo "$openwrt_version" | awk -F. '{print NF}')" -eq 2 ]; then
-        openwrt_version="${openwrt_version}.0"
-        debug_log "DEBUG" "Normalized OpenWrt version to: $openwrt_version"
     fi
 
     # 【custom-package.db からビルドコマンドの取得】
@@ -1610,7 +1541,6 @@ install_build() {
 
     echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$package_name/")"
     debug_log "DEBUG" "Successfully built and installed package: $package_name"
-}
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
