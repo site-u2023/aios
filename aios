@@ -92,8 +92,7 @@ packages() {
     install_package luci-app-ttyd yn hidden
     install_package openssh-sftp-server yn hidden
 
-    # uconv のインストール
-    install_build uconv yn
+    install_build luci-app-log-viewer yn
 }
 
 # メイン処理
