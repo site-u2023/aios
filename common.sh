@@ -1329,7 +1329,51 @@ install_package() {
 
     echo "$(color green "✅ $(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
     debug_log "DEBUG" "Successfully installed package: $package_name"
-}
+
+    # **スピナー停止 (成功メッセージ)**
+    stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+
+    echo "$(color green "✅ $(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+    debug_log "DEBUG" "Successfully installed package: $package_name"
+
+    # local-package.db の設定適用処理（notpack オプションが指定されていなければ実行）
+    if [ "$skip_package_db" != "yes" ]; then
+        if [ -f "${BASE_DIR}/local-package.db" ]; then
+            # 対象パッケージの設定ブロックを抽出
+            pkg_settings=$(awk -v pkg="\\[$package_name\\]" '
+                BEGIN { flag=0 }
+                # 同一行に設定コマンドがある場合（例: [ttyd] opkg update; uci commit ttyd; initd/ttyd/restart）
+                $0 ~ pkg {
+                    sub(/^\[[^]]*\]/, "", $0)
+                    if (length($0) > 0) {
+                        print $0
+                    }
+                    flag=1
+                    next
+                }
+                # 次行以降、ブロックが継続している場合（行頭が [ で始まらなければ）
+                flag && $0 !~ /^\[/ { print }
+                $0 ~ /^\[/ { flag=0 }
+            ' "${BASE_DIR}/local-package.db")
+            if [ -n "$pkg_settings" ]; then
+                debug_log "DEBUG" "Applying local package settings for $package_name"
+                # コメント行（# で始まる）および空行を除外
+                pkg_settings=$(echo "$pkg_settings" | sed '/^[[:space:]]*#/d; /^[[:space:]]*$/d')
+                # 各行のコマンドを順次実行
+                echo "$pkg_settings" | while IFS= read -r cmd; do
+                    debug_log "DEBUG" "Executing local package setting command: $cmd"
+                    eval "$cmd"
+                done
+            else
+                debug_log "DEBUG" "No local package settings found for $package_name in local-package.db"
+            fi
+        else
+            debug_log "DEBUG" "local-package.db not found; skipping local package settings"
+        fi
+    else
+        debug_log "DEBUG" "Skipping local package settings due to notpack option"
+    fi
+    }
 
 #########################################################################
 # Last Update: 2025-02-21 14:19:00 (JST) 🚀
