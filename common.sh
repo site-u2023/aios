@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-01-06"
+SCRIPT_VERSION="2025.02.22-01-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1466,7 +1466,6 @@ install_build() {
     # 【キャッシュから OpenWrt バージョンとアーキテクチャの取得】
     local openwrt_version=""
     local arch=""
-    local alt_arch=""
 
     if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
         openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
@@ -1476,17 +1475,14 @@ install_build() {
     fi
 
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
-    debug_log "DEBUG" "Using architecture: $arch (alt: $alt_arch)"
+    debug_log "DEBUG" "Using architecture: $arch"
 
     # 【ビルド用依存パッケージのインストール】
     local build_dependencies
     build_dependencies=$(jq -r --arg pkg "$package_name" --arg pm "$PACKAGE_MANAGER" '
-        .[$pkg].build.dependencies[$pm] // 
-        .[$pkg].build.dependencies.opkg // 
-        .default.build.dependencies[$pm] // 
-        .default.build.dependencies.opkg // [] | join(" ")' "${BASE_DIR}/custom-package.db" 2>/dev/null)
+        .[$pkg].build.dependencies[$pm] // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
 
-    if [ -n "$build_dependencies" ]; then
+    if [ -n "$build_dependencies" ] && [ "$build_dependencies" != "empty" ]; then
         debug_log "DEBUG" "Installing build dependencies for $package_name: $build_dependencies"
         for dep in $build_dependencies; do
             install_package "$dep" hidden
@@ -1507,16 +1503,14 @@ install_build() {
     # 【ビルドディレクトリへ移動】
     cd "$BUILD_DIR" || { debug_log "ERROR" "Failed to enter build directory"; return 1; }
 
-    # 【ソースコードのダウンロード URL を取得（custom-package.db or デフォルト）】
+    # 【ソースコードのダウンロード URL を取得（custom-package.db）】
     local source_url
-    source_url=$(jq -r --arg pkg "$package_name" '
-        .[$pkg].source.url // 
-        .default.source.default[$pkg] // 
-        .default.source.fallback // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
+    source_url=$(jq -r --arg pkg "$package_name" '.[$pkg].source.url // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
 
-    # **フォールバック処理（デフォルトのソース URL を適用）**
+    # **データがない場合はエラーメッセージを出して終了**
     if [ -z "$source_url" ] || [ "$source_url" = "empty" ]; then
-        debug_log "ERROR" "No source URL found for $package_name, and no default URL is set."
+        echo "❌ $package_name のソースコード情報が custom-package.db にありません。"
+        debug_log "ERROR" "$package_name のソースコード情報が見つかりません。"
         stop_spinner
         return 1
     fi
@@ -1537,24 +1531,15 @@ install_build() {
 
     # 【custom-package.db からビルドコマンドの取得】
     local build_command
-    build_command=$(jq -r --arg pkg "$package_name" --arg arch "$arch" --arg alt_arch "$alt_arch" --arg ver "$openwrt_version" --arg pm "$PACKAGE_MANAGER" '
-        .[$pkg].build.commands[$ver][$arch][$pm] // 
-        .[$pkg].build.commands[$ver][$arch] // 
-        .[$pkg].build.commands[$ver][$alt_arch][$pm] // 
-        .[$pkg].build.commands[$ver][$alt_arch] // 
-        .[$pkg].build.commands[$ver].default[$pm] // 
-        .[$pkg].build.commands[$ver].default // 
-        .[$pkg].build.commands.default[$arch][$pm] // 
-        .[$pkg].build.commands.default[$arch] // 
-        .[$pkg].build.commands.default[$alt_arch][$pm] // 
-        .[$pkg].build.commands.default[$alt_arch] // 
-        .[$pkg].build.commands.default.default[$pm] // 
-        .[$pkg].build.commands.default.default // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
+    build_command=$(jq -r --arg pkg "$package_name" --arg arch "$arch" --arg ver "$openwrt_version" '
+        .[$pkg].build.commands[$ver][$arch] // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
 
-    # **フォールバック処理 (必ず適用)**
+    # **データがない場合はエラーメッセージを出して終了**
     if [ -z "$build_command" ] || [ "$build_command" = "empty" ]; then
-        debug_log "DEBUG" "No build command found in custom-package.db, using internal defaults."
-        build_command="make && make install"
+        echo "❌ $package_name のビルドコマンドが custom-package.db にありません。"
+        debug_log "ERROR" "$package_name のビルドコマンドが見つかりません。"
+        stop_spinner
+        return 1
     fi
 
     # 【ビルド実行】
