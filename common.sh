@@ -1270,7 +1270,7 @@ XXX_install_package() {
                 return 0
             fi
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            if ! apk search "^$package_name$" 2>/dev/null | grep -q "^$package_name$"; then
+            if ! apk search "$package_name" 2>/dev/null | grep -q "^$package_name$"; then
                 debug_log "DEBUG" "Package $package_name not found in repository."
                 return 0
             fi
@@ -1362,7 +1362,7 @@ install_package() {
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         # パッケージ名の後にスペース、ハイフン、またはアンダースコアが続く場合にマッチさせる
         #if opkg list-installed | grep -E "^$package_name([[:space:]]|-|_)" >/dev/null 2>&1; then
-        if opkg list-installed | grep -qE "^$package_name "; >/dev/null 2>&1; then
+        if opkg list-installed | grep -qE "^$package_name "; then
             if [ "$hidden" != "yes" ]; then
                 echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
             fi
@@ -1396,7 +1396,7 @@ install_package() {
             return 0
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if ! apk search "^$package_name$" 2>/dev/null | grep -q "^$package_name$"; then
+        if ! apk search "$package_name" 2>/dev/null | grep -q "^$package_name$"; then
             echo "$(color yellow "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
             debug_log "DEBUG" "Package $package_name not found in repository."
             return 0
