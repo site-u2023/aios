@@ -85,94 +85,6 @@ print_banner() {
     printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DISCLAIMER")")"
 }
 
-print_banner_matrix() {
-    clear
-    local banner_text="
-                    ii i
-         aaaa      iii       oooo      sssss
-            aa      ii      oo  oo    ss
-         aaaaa      ii      oo  oo     sssss
-        aa  aa      ii      oo  oo         ss
-         aaaaa     iiii      oooo     ssssss
-    "
-
-    local delay=200000  # 文字が落ちる速度 (usleep の単位: マイクロ秒)
-    local i=0
-
-    echo "$banner_text" | while IFS= read -r line; do
-        tput cup $(expr "$i" + 3) 10  # 画面の適当な位置から開始
-        echo "$(color green "$line")"
-        usleep "$delay"
-        i=$(expr "$i" + 1)
-    done
-
-    echo
-    printf "%s\n" "$(color white "$(get_message "MSG_BANNER_DECCRIPTION")")"
-    printf "%s\n" "$(color white "$(get_message "MSG_BANNER_NAME")")"
-    printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DISCLAIMER")")"
-}
-
-print_banner_wave() {
-    clear
-    local banner_text="
-                    ii i
-         aaaa      iii       oooo      sssss
-            aa      ii      oo  oo    ss
-         aaaaa      ii      oo  oo     sssss
-        aa  aa      ii      oo  oo         ss
-         aaaaa     iiii      oooo     ssssss
-    "
-
-    local delay=200000  # 揺れるスピード (usleep の単位: マイクロ秒)
-    local wave=0
-
-    while [ "$wave" -lt 3 ]; do  # 3回揺らす
-        clear
-        local i=0
-        local offset=$(expr \( "$wave" % 2 \) \* 2)  # 偶数回は右、奇数回は左にズラす
-
-        echo "$banner_text" | while IFS= read -r line; do
-            tput cup $(expr "$i" + 3) $(expr 10 + "$offset")
-            echo "$(color blue "$line")"
-            i=$(expr "$i" + 1)
-        done
-
-        usleep "$delay"
-        wave=$(expr "$wave" + 1)
-    done
-
-    echo
-    printf "%s\n" "$(color white "$(get_message "MSG_BANNER_DECCRIPTION")")"
-    printf "%s\n" "$(color white "$(get_message "MSG_BANNER_NAME")")"
-    printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DISCLAIMER")")"
-}
-
-print_banner_fadein() {
-    clear
-    local banner_text="
-                    ii i
-         aaaa      iii       oooo      sssss
-            aa      ii      oo  oo    ss
-         aaaaa      ii      oo  oo     sssss
-        aa  aa      ii      oo  oo         ss
-         aaaaa     iiii      oooo     ssssss
-    "
-
-    local delay=200000  # フェードインの間隔 (usleep の単位: マイクロ秒)
-    local i=0
-
-    echo "$banner_text" | while IFS= read -r line; do
-        usleep "$delay"
-        echo "$(color cyan "$line")"
-        i=$(expr "$i" + 1)
-    done
-
-    echo
-    printf "%s\n" "$(color white "$(get_message "MSG_BANNER_DECCRIPTION")")"
-    printf "%s\n" "$(color white "$(get_message "MSG_BANNER_NAME")")"
-    printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DISCLAIMER")")"
-}
-
 # パッケージのインストール (オプション)
 packages() {
     # 他のパッケージのインストール
@@ -192,8 +104,5 @@ make_directory
 download_common
 check_option "$@"
 print_banner
-#print_banner_matrix
-#print_banner_wave
-#print_banner_fadein
 packages
 # download openwrt-config.sh
