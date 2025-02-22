@@ -1,5 +1,6 @@
     "dependencies": {
       "opkg": [
+        "jq",
         "make",
         "gcc",
         "libtool-bin",
@@ -21,6 +22,7 @@
         "unzip"
       ],
       "apk": [
+        "jq",
         "build-base",
         "gcc",
         "make",
