@@ -88,10 +88,10 @@ print_banner() {
 # パッケージのインストール (オプション)
 packages() {
     # パッケージのインストール
-    #install_package update
     install_package ttyd yn
     install_package luci-app-ttyd yn
     install_package openssh-sftp-server yn
+    install_package update
 
     #install_build luci-app-cpu-perf yn
 }
