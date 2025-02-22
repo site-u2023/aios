@@ -1390,28 +1390,29 @@ install_package() {
     }
 
 #########################################################################
-# Last Update: 2025-02-21 14:19:00 (JST) 🚀
+# Last Update: 2025-02-22 15:35:00 (JST) 🚀
 # install_build: パッケージのビルド処理 (OpenWrt / Alpine Linux)
 #
 # 【概要】
-# 指定されたパッケージをビルド後インストールし、オプションに応じて以下の処理を実行する。
+# 指定されたパッケージをビルドし、オプションに応じて以下の処理を実行する。
 # 1回の動作で１つのビルドのみパッケージを作りインストール作業
-# DEV_NULL に応じて出力制御
 # DEBUG に応じて出力制御（要所にセット）
-# package名は、ビルド前は build_*, ビルド後は *
-# 例：build_uconv　>>>　uconv
 #
 # 【フロー】
-# 2️⃣ デバイスにパッケージがインストール済みか確認（ビルド後のパッケージ名で確認）
+# 2️⃣ デバイスにパッケージがインストール済みか確認
 # 4️⃣ インストール確認（yn オプションが指定された場合）
 # 4️⃣ ビルド用汎用パッケージ（例：make, gcc）をインストール ※install_package()利用
 # 4️⃣ ビルド作業
-# 7️⃣ package.db の適用（ビルド用設定：DBの記述に従う）
+# 7️⃣ custom-package.db の適用（ビルド用設定：DBの記述に従う）
 # 5️⃣ インストールの実行（install_package()利用）
 # 7️⃣ package.db の適用（ビルド後の設定適用がある場合：DBの記述に従う）
 #
+# 【ビルド用汎用パッケージ】
+# install_package jq
+# install_package = 以下
+# {make gcc git libtool-bin automake pkg-config zlib-dev libncurses-dev curl libxml2 libxml2-dev autoconf automake bison flex perl patch wget wget-ssl tar unzip) hidden
+#
 # 【グローバルオプション】
-# DEV_NULL
 # DEBUG : 要所にセット
 #
 # 【オプション】※順不同で適用可
@@ -1419,18 +1420,18 @@ install_package() {
 # - hidden     : 既にインストール済みの場合、"パッケージ xxx はすでにインストールされています" のメッセージを非表示にする
 #
 # 【仕様】
-# - downloader_ch から opkg または apk を取得し、適切なパッケージ管理ツールを使用
-# - package.db の設定がある場合、該当パッケージの記述 を実行し適用
+# - ${CACHE_DIR}/downloader.ch から取得、フォーマット：opkg もしくは apk
+# - ${CACHE_DIR}/openwrt.ch　から取得、フォーマット例：24.10.0 や　23.05.4　など
+# - ${CACHE_DIR}/architecture.ch　から取得、フォーマット例：armv7l　など
+# - custom-package.db の設定がある場合、該当パッケージの記述 を実行し適用
 # - messages.db を参照し、すべてのメッセージを取得（JP/US 対応）
 #
 # 【使用例】
-# - install_build build_uconv                  → uconv をビルド後インストール（確認なし）
-# - install_build build_uconv yn               → uconv をビルド後インストール（確認あり）
-# - install_build build_uconv yn hidden        → uconv をビルド後インストール（確認あり、既にインストール済みの場合のメッセージは非表示）
-# - install_build make                         → ビルド環境用のパッケージ（例：make, gcc）をインストール
+# - install_build uconv                  → インストール（確認なし）
+# - install_build uconv yn               → インストール（確認あり）
+# - install_build uconv yn hidden        → インストール（確認あり、既にインストール済みの場合のメッセージは非表示）
 #
 # 【messages.dbの記述例】
-# [build_uconv]　※行、列問わず記述可
 # [uconv]　※行、列問わず記述可
 #########################################################################
 install_build() {
