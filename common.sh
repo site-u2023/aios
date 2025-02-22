@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-00-02"
+SCRIPT_VERSION="2025.02.22-00-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1496,7 +1496,7 @@ install_build() {
 
     # 【ビルド用依存パッケージのインストール】
     local build_dependencies
-    build_dependencies=$(jq -r --arg pkg "$package_name" '.[$pkg].build.dependencies.opkg // [] | join(" ")' "${CACHE_DIR}/custom-package.db" 2>/dev/null)
+    build_dependencies=$(jq -r --arg pkg "$package_name" '.[$pkg].build.dependencies.opkg // [] | join(" ")' "${BASE_DIR}/custom-package.db" 2>/dev/null)
     if [ -n "$build_dependencies" ]; then
         debug_log "DEBUG" "Installing build dependencies for $package_name: $build_dependencies"
         for dep in $build_dependencies; do
@@ -1524,7 +1524,7 @@ install_build() {
         .[$pkg].build.commands[$ver][$arch] // 
         .[$pkg].build.commands[$ver].default // 
         .[$pkg].build.commands.default[$arch] // 
-        .[$pkg].build.commands.default.default // empty' "${CACHE_DIR}/custom-package.db" 2>/dev/null)
+        .[$pkg].build.commands.default.default // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
     if [ -z "$build_command" ]; then
         debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_COMMAND_NOT_FOUND" | sed "s/{pkg}/$package_name/" | sed "s/{arch}/$arch/" | sed "s/{ver}/$openwrt_version/")"
         stop_spinner
