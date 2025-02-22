@@ -1,46 +1,32 @@
-{
-  "luci-app-cpu-perf": {
-    "source": {
-      "url": "https://github.com/gSpotx2f/luci-app-cpu-perf.git"
+"luci-app-cpu-perf": {
+  "source": {
+    "url": "https://github.com/gSpotx2f/luci-app-cpu-perf.git"
+  },
+  "build": {
+    "dependencies": {
+      "opkg": [
+        "git",
+        "make",
+        "gcc",
+        "pkg-config",
+        "libtool",
+        "automake",
+        "autoconf",
+        "gettext",
+        "lua",
+        "wget",
+        "tar",
+        "unzip",
+        "perl",
+        "perlbase-findbin"
+      ]
     },
-    "build": {
-      "dependencies": {
-        "opkg": [
-          "git",
-          "make",
-          "gcc",
-          "pkg-config",
-          "libtool",
-          "automake",
-          "autoconf",
-          "gettext",
-          "lua",
-          "wget",
-          "tar",
-          "unzip"
-        ],
-        "apk": [
-          "git",
-          "build-base",
-          "gcc",
-          "pkgconf",
-          "libtool",
-          "automake",
-          "autoconf",
-          "gettext",
-          "lua",
-          "wget",
-          "tar",
-          "unzip"
-        ]
-      },
-      "commands": {
-        "default": {
-          "x86_64": "mkdir -p openwrt && cd openwrt && git clone https://git.openwrt.org/openwrt/openwrt.git . && ./scripts/feeds update -a && ./scripts/feeds install -a && cd /tmp/aios/build/luci-app-cpu-perf && make package/luci-app-cpu-perf/compile",
-          "armv7l": "mkdir -p openwrt && cd openwrt && git clone https://git.openwrt.org/openwrt/openwrt.git . && ./scripts/feeds update -a && ./scripts/feeds install -a && cd /tmp/aios/build/luci-app-cpu-perf && make package/luci-app-cpu-perf/compile",
-          "mipsel": "mkdir -p openwrt && cd openwrt && git clone https://git.openwrt.org/openwrt/openwrt.git . && ./scripts/feeds update -a && ./scripts/feeds install -a && cd /tmp/aios/build/luci-app-cpu-perf && make package/luci-app-cpu-perf/compile",
-          "mips": "mkdir -p openwrt && cd openwrt && git clone https://git.openwrt.org/openwrt/openwrt.git . && ./scripts/feeds update -a && ./scripts/feeds install -a && cd /tmp/aios/build/luci-app-cpu-perf && make package/luci-app-cpu-perf/compile"
-        }
+    "commands": {
+      "default": {
+        "x86_64": "make package/luci-app-cpu-perf/compile",
+        "armv7l": "make package/luci-app-cpu-perf/compile",
+        "mipsel": "make package/luci-app-cpu-perf/compile",
+        "mips": "make package/luci-app-cpu-perf/compile"
       }
     }
   }
