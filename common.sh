@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-00-20"
+SCRIPT_VERSION="2025.02.22-00-21"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1113,170 +1113,42 @@ normalize_language() {
 # initd/ttyd/restart
 # [ttyd] opkg update; uci commit ttyd; initd/ttyd/restart
 #########################################################################
-# **進捗カウンター開始ルーチン**
-start_progress_counter() {
-    progress_counter=0
-    # カウンター表示をバックグラウンドで実行
-    while true; do
-        progress_counter=$((progress_counter + 1))
-        # \r で行先頭に戻し、更新中の秒数を表示する
-        printf "\r更新中… %d 秒経過" "$progress_counter"
-        sleep 1
-    done &
-    PROGRESS_PID=$!
-}
-
-# **進捗カウンター停止ルーチン**
-stop_progress_counter() {
-    if [ -n "$PROGRESS_PID" ]; then
-        kill "$PROGRESS_PID" >/dev/null 2>&1
-        wait "$PROGRESS_PID" 2>/dev/null
-        # 行をクリアしてから改行
-        printf "\r\033[K\n"
-        unset PROGRESS_PID
-    fi
-}
-
-# **スピナー開始関数（改良版）**
-start_spinner() {
-    local message="$1"
-    SPINNER_MESSAGE="$message"  # 停止時のメッセージ保持
-    spinner_chars='-\|/'
-    i=0
-    SPINNER_STOP=0   # ループ停止フラグの初期化
-
-    echo -en "\e[?25l"
-
-    while [ "$SPINNER_STOP" -eq 0 ]; do
-        # POSIX 準拠の方法でインデックス計算し、1文字抽出
-        local index=$(( i % 4 ))
-        local spinner_char=$(expr substr "$spinner_chars" $(( index + 1 )) 1)
-        printf "\r📡 %s %s" "$(color yellow "$SPINNER_MESSAGE")" "$spinner_char"
-        sleep 1  # ashでは整数秒のみ
-        i=$(( i + 1 ))
-    done &
-    SPINNER_PID=$!
-}
-
-# **スピナー停止関数**
-stop_spinner() {
-    local message="$1"
-
-    if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
-        # spinner プロセスを終了させる
-        kill "$SPINNER_PID" >/dev/null 2>&1
-        # spinner プロセスが終了するまでループで待機する
-        while kill -0 "$SPINNER_PID" 2>/dev/null; do
-            sleep 1
-        done
-        # spinner の出力行をクリア
-        printf "\r\033[K"
-        echo "$(color green "$message")"
-    else
-        printf "\r\033[K"
-        echo "$(color red "$message")"
-    fi
-
-    # 変数をクリア（プロセスは既に終了しているはず）
-    SPINNER_PID=""
-    echo -en "\e[?25h"
-}
-
-XXXX_stop_spinner() {
-    local message="$1"
-
-    if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
-        kill "$SPINNER_PID" >/dev/null 2>&1
-        wait "$SPINNER_PID" 2>/dev/null
-        printf "\r\033[K"  # 行をクリア
-        echo "$(color green "$message")"
-    else
-        printf "\r\033[K"
-        echo "$(color red "$message")"
-    fi
-    unset SPINNER_PID
-
-    echo -en "\e[?25h"
-}
-
-# **スピナー停止関数**
-XXX_stop_spinner() {
-    local message="$1"
-
-    if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
-        kill "$SPINNER_PID" >/dev/null 2>&1
-        printf "\r\033[K"  # 行をクリア
-        echo "$(color green "$message")"
-    else
-        printf "\r\033[K"
-        echo "$(color red "$message")"
-    fi
-    unset SPINNER_PID
-
-    echo -en "\e[?25h"
-}
-
-# **進捗カウンター開始ルーチン**
-start_progress_counter() {
-    progress_counter=0
-    # カウンター表示をバックグラウンドで実行
-    while true; do
-        progress_counter=$((progress_counter + 1))
-        # \r で行先頭に戻し、更新中の秒数を表示する
-        printf "\r更新中… %d 秒経過" "$progress_counter"
-        sleep 1
-    done &
-    PROGRESS_PID=$!
-}
-
-# **進捗カウンター停止ルーチン**
-stop_progress_counter() {
-    if [ -n "$PROGRESS_PID" ]; then
-        kill "$PROGRESS_PID" >/dev/null 2>&1
-        wait "$PROGRESS_PID" 2>/dev/null
-        # 行をクリアしてから改行
-        printf "\r\033[K\n"
-        unset PROGRESS_PID
-    fi
-}
-
 update_package_list() {
     local update_cache="${CACHE_DIR}/update.ch"
-    local current_date=$(date '+%Y-%m-%d')
-    local max_retries=3
-    local attempt=1
+    local current_date
+    current_date=$(date '+%Y-%m-%d')
 
-    # **キャッシュディレクトリの作成**
+    # キャッシュディレクトリの作成
     mkdir -p "$CACHE_DIR"
 
-    # **キャッシュが最新ならスキップ**
+    # キャッシュが最新ならスキップ
     if [ "$update_mode" != "yes" ] && [ -f "$update_cache" ] && grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
         debug_log "DEBUG" "パッケージリストは既に最新です。更新をスキップします。"
         return 0
     fi
 
-    # **スピナー開始 (キーを MSG_RUNNING_UPDATE に修正)**
-    start_spinner "$(color yellow "$(get_message "MSG_RUNNING_UPDATE")")"
+    # アップデート開始メッセージ
+    echo "$(color yellow "パッケージリストを更新中…")"
 
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
-            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"  # エラー時もスピナーを止める
+            echo "$(color red "パッケージリストの更新に失敗しました。")"
             debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
             return 1
         }
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
-            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"  # エラー時もスピナーを止める
+            echo "$(color red "パッケージリストの更新に失敗しました。")"
             debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
             return 1
         }
     fi
 
-    # **スピナー停止 (成功メッセージ)**
-    stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
-    
-    # **キャッシュを更新**
-    if ! echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"; then
+    # アップデート完了メッセージ
+    echo "$(color green "パッケージリストは最新に更新しました。")"
+
+    # キャッシュ更新
+    if ! echo "LAST_UPDATE=$current_date" > "$update_cache"; then
         debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_WRITE_CACHE")")"
         return 1
     fi
@@ -1296,7 +1168,7 @@ install_package() {
     local package_name=""
     local update_cache="${CACHE_DIR}/update.ch"
 
-    # **オプションの処理**
+    # オプションの処理
     for arg in "$@"; do
         case "$arg" in
             yn)         confirm_install="yes" ;;
@@ -1322,7 +1194,7 @@ install_package() {
         return 1
     fi
 
-    # **パッケージマネージャーの確認 (キャッシュから取得)**
+    # パッケージマネージャーの確認（キャッシュから取得）
     if [ -f "${CACHE_DIR}/downloader_ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
     else 
@@ -1330,9 +1202,8 @@ install_package() {
         return 1
     fi
 
-    # **パッケージのインストール済みチェック**
+    # パッケージのインストール済みチェック
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        # パッケージ名の後にスペース、ハイフン、またはアンダースコアが続く場合にマッチ
         if opkg list-installed | grep -E "^$package_name([[:space:]]|-|_)" >/dev/null 2>&1; then
             if [ "$hidden" != "yes" ]; then
                 echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
@@ -1348,17 +1219,17 @@ install_package() {
         fi
     fi
 
-    # **システムコマンド存在チェック**
+    # システムコマンド存在チェック（パッケージ名と同名のコマンドがあれば、利用可能とみなす）
     if command -v "$package_name" >/dev/null 2>&1; then
         echo "$(color green "$(get_message "MSG_COMMAND_AVAILABLE" | sed "s/{pkg}/$package_name/")")"
         debug_log "DEBUG" "Command $package_name exists in system."
         return 0
     fi
 
-    # **アップデートが必要か確認 (`update_package_list()` を使用)**
+    # アップデートが必要か確認
     update_package_list
 
-    # **リポジトリ存在チェック**
+    # リポジトリ存在チェック
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if ! opkg list | grep -E "^$package_name([[:space:]]|-|_)" >/dev/null 2>&1; then
             echo "$(color yellow "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
@@ -1376,7 +1247,7 @@ install_package() {
         return 0
     fi
 
-    # **インストール前の確認**
+    # インストール前の確認
     if [ "$confirm_install" = "yes" ]; then
         while true; do
             local msg
@@ -1394,173 +1265,22 @@ install_package() {
         done
     fi
 
-    # **スピナー開始 (インストール中のメッセージ)**
-    start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
+    # インストール中のメッセージを出力
+    echo "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
 
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         opkg install "$package_name" > /dev/null 2>&1 || {
-            SPINNER_STOP=1
-            wait "$SPINNER_PID" 2>/dev/null
-            stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+            echo "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
             debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
             return 1
         }
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         apk add "$package_name" > /dev/null 2>&1 || {
-            SPINNER_STOP=1
-            wait "$SPINNER_PID" 2>/dev/null
-            stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+            echo "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
             debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
             return 1
         }
     fi
-
-    # インストール成功の場合も spinner を終了させる
-    SPINNER_STOP=1
-    wait "$SPINNER_PID" 2>/dev/null
-    stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-
-    echo "$(color green "✅ $(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-    debug_log "DEBUG" "Successfully installed package: $package_name"
-}
-
-XXX_install_package() {
-    local confirm_install="no"
-    local skip_lang_pack="no"
-    local skip_package_db="no"
-    local set_disabled="no"
-    local hidden="no"
-    local test_mode="no"
-    local force_install="no"
-    local update_mode="no"
-    local package_name=""
-    local update_cache="${CACHE_DIR}/update.ch"
-
-    # **オプションの処理**
-    for arg in "$@"; do
-        case "$arg" in
-            yn)         confirm_install="yes" ;;
-            nolang)     skip_lang_pack="yes" ;;
-            notpack)    skip_package_db="yes" ;;
-            disabled)   set_disabled="yes" ;;
-            hidden)     hidden="yes" ;;
-            test)       test_mode="yes" ;;
-            force)      force_install="yes" ;;
-            update)     update_mode="yes" ;;
-            *)
-                if [ -z "$package_name" ]; then
-                    package_name="$arg"
-                else
-                    debug_log "DEBUG" "$(color yellow "$(get_message "MSG_UNKNOWN_OPTION" | sed "s/{option}/$arg/")")"
-                fi
-                ;;
-        esac
-    done
-
-    if [ -z "$package_name" ]; then
-        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")")"
-        return 1
-    fi
-
-    # **パッケージマネージャーの確認 (キャッシュから取得)**
-    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
-        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
-    else 
-        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")")"
-        return 1
-    fi
-
-    # **パッケージのインストール済みチェック**
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        # パッケージ名の後にスペース、ハイフン、またはアンダースコアが続く場合にマッチさせる
-        if opkg list-installed | grep -E "^$package_name([[:space:]]|-|_)" >/dev/null 2>&1; then
-            if [ "$hidden" != "yes" ]; then
-                echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-            fi
-            return 0
-        fi
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if apk DEBUG | grep -q "^$package_name$"; then
-            if [ "$hidden" != "yes" ]; then
-                echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-            fi
-            return 0
-        fi
-    fi
-
-    # **システムコマンド存在チェック**
-    if command -v "$package_name" >/dev/null 2>&1; then
-        echo "$(color green "$(get_message "MSG_COMMAND_AVAILABLE" | sed "s/{pkg}/$package_name/")")"
-        debug_log "DEBUG" "Command $package_name exists in system."
-        return 0
-    fi
-
-    # **アップデートが必要か確認 (`update_package_list()` を使用)**
-    update_package_list
-
-    # **リポジトリ存在チェック**
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if ! opkg list | grep -E "^$package_name([[:space:]]|-|_)" >/dev/null 2>&1; then
-            echo "$(color yellow "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
-            debug_log "DEBUG" "Package $package_name not found in repository."
-            return 0
-        fi
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if ! apk search "^$package_name$" 2>/dev/null | grep -q "^$package_name$"; then
-            echo "$(color yellow "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
-            debug_log "DEBUG" "Package $package_name not found in repository."
-            return 0
-        fi
-    else
-        debug_log "DEBUG" "Unknown package manager: $PACKAGE_MANAGER"
-        return 0
-    fi
-
-    # **インストール前の確認**
-    if [ "$confirm_install" = "yes" ]; then
-        while true; do
-            local msg=$(get_message "MSG_CONFIRM_INSTALL")
-            msg="${msg//\{pkg\}/$package_name}"
-            echo "$msg"
-    
-            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
-            read -r yn
-            case "$yn" in
-                [Yy]*) break ;;
-                [Nn]*) return 1 ;;
-                *) echo "$(color red "Invalid input. Please enter Y or N.")" ;;
-            esac
-        done
-    fi
-
-    # **スピナー開始 (インストール中のメッセージ)**
-    # **スピナー開始 (インストール中のメッセージ)**
-start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
-
-if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-    opkg install "$package_name" > /dev/null 2>&1 || {
-        # インストール処理が終わったら、spinner 停止フラグをセットし、spinner プロセスの終了を待つ
-        SPINNER_STOP=1
-        wait "$SPINNER_PID" 2>/dev/null
-        stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
-        debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
-        return 1
-    }
-elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-    apk add "$package_name" > /dev/null 2>&1 || {
-        SPINNER_STOP=1
-        wait "$SPINNER_PID" 2>/dev/null
-        stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
-        debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
-        return 1
-    }
-fi
-
-# インストール成功の場合も spinner を終了させる
-SPINNER_STOP=1
-wait "$SPINNER_PID" 2>/dev/null
-stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-
 
     echo "$(color green "✅ $(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
     debug_log "DEBUG" "Successfully installed package: $package_name"
