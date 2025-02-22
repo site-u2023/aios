@@ -1,73 +1,44 @@
-{
-  "uconv": {
-    "source": {
-      "19.07": "https://example.com/path/to/uconv-19.07.tar.gz",
-      "22.03": "https://example.com/path/to/uconv-22.03.tar.gz",
-      "24.10.0": "https://example.com/path/to/uconv-24.10.0.tar.gz",
-      "snapshot": "https://downloads.openwrt.org/snapshots/sources/uconv.tar.gz",
-      "default": "https://example.com/path/to/uconv-latest.tar.gz"
-    },
-    "build": {
-      "dependencies": {
-        "opkg": [
-          "make",
-          "gcc",
-          "libtool-bin",
-          "automake",
-          "pkg-config",
-          "zlib-dev",
-          "libncurses-dev",
-          "curl",
-          "libxml2",
-          "libxml2-dev",
-          "autoconf",
-          "bison",
-          "flex",
-          "perl",
-          "patch",
-          "wget",
-          "wget-ssl",
-          "tar",
-          "unzip"
-        ],
-        "apk": [
-          "build-base",
-          "gcc",
-          "make",
-          "libtool",
-          "automake",
-          "pkgconf",
-          "zlib-dev",
-          "ncurses-dev",
-          "curl-dev",
-          "libxml2-dev",
-          "autoconf",
-          "bison",
-          "flex",
-          "perl",
-          "patch",
-          "wget",
-          "tar",
-          "unzip"
-        ]
-      },
-      "commands": {
-        "24.10.0": {
-          "default": "make && make install"
-        },
-        "22.03": {
-          "default": "make && make install"
-        },
-        "19.07": {
-          "default": "make && make install"
-        },
-        "snapshot": {
-          "default": "make && make install"
-        },
-        "default": {
-          "default": "make && make install"
-        }
-      }
+    "dependencies": {
+      "opkg": [
+        "make",
+        "gcc",
+        "libtool-bin",
+        "automake",
+        "pkg-config",
+        "zlib-dev",
+        "libncurses-dev",
+        "curl",
+        "libxml2",
+        "libxml2-dev",
+        "autoconf",
+        "bison",
+        "flex",
+        "perl",
+        "patch",
+        "wget",
+        "wget-ssl",
+        "tar",
+        "unzip"
+      ],
+      "apk": [
+        "build-base",
+        "gcc",
+        "make",
+        "libtool",
+        "automake",
+        "pkgconf",
+        "zlib-dev",
+        "ncurses-dev",
+        "curl-dev",
+        "libxml2-dev",
+        "autoconf",
+        "bison",
+        "flex",
+        "perl",
+        "patch",
+        "wget",
+        "tar",
+        "unzip"
+      ],
+      "default": [ "make", "gcc", "tar", "wget" ]
     }
-  }
-}
