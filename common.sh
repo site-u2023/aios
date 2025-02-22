@@ -1487,14 +1487,12 @@ if [ "$confirm_install" = "yes" ]; then
 fi
 
 # ビルド環境の準備
-install_package jq
+install_package jq hidden
 local build_tools="make gcc git libtool-bin automake pkg-config zlib-dev libncurses-dev curl libxml2 libxml2-dev autoconf automake bison flex perl patch wget wget-ssl tar unzip"
 for tool in $build_tools; do
     install_package "$tool" hidden
 done
 
-# ※ パッケージ名称変換ルーチンの排除：
-#     ここでは、引数として与えられた package_name（例：uconv）をそのまま使用する
 local built_package="$package_name"
 
 # キャッシュから OpenWrt バージョンとアーキテクチャを取得
