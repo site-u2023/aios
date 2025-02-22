@@ -8,17 +8,24 @@ openwrt_repo = https://git.openwrt.org/openwrt/openwrt.git
 
 [luci-app-temp-status]
 source_url = https://github.com/gSpotx2f/luci-app-temp-status.git
-build_dependencies = lua luci-lib-nixio luci-lib-jsonc
 
-# OpenWrt 21.02 以降のビルドコマンド
-21.02 = wget --no-check-certificate -O /tmp/luci-app-temp-status_0.4.1-r1_all.ipk https://github.com/gSpotx2f/packages-openwrt/raw/master/current/luci-app-temp-status_0.4.1-r1_all.ipk && opkg install /tmp/luci-app-temp-status_0.4.1-r1_all.ipk && rm /tmp/luci-app-temp-status_0.4.1-r1_all.ipk && /etc/init.d/rpcd reload
+# 依存パッケージは install_package() でインストール
+install_package = make gcc libtool autoconf automake lua luci-lib-nixio luci-lib-jsonc
 
-# OpenWrt 19.07 のビルドコマンド
-19.07 = wget --no-check-certificate -O /tmp/luci-app-temp-status_0.3-3_all.ipk https://github.com/gSpotx2f/packages-openwrt/raw/master/19.07/luci-app-temp-status_0.3-3_all.ipk && opkg install /tmp/luci-app-temp-status_0.3-3_all.ipk && rm /tmp/luci-app-temp-status_0.3-3_all.ipk && /etc/init.d/rpcd reload
+# OpenWrt 21.02 以降のビルド
+21.02 = make package/luci-app-temp-status/compile
+
+# OpenWrt 19.07 のビルド
+19.07 = make package/luci-app-temp-status/compile V=99
 
 [luci-app-cpu-perf]
 source_url = https://github.com/gSpotx2f/luci-app-cpu-perf.git
-build_dependencies = lua luci-lib-nixio luci-lib-jsonc
 
-# OpenWrt 19.07.5 以降のビルドコマンド
-19.07.5 = wget --no-check-certificate -O /tmp/luci-app-cpu-perf_0.4.0-r1_all.ipk https://github.com/gSpotx2f/packages-openwrt/raw/master/current/luci-app-cpu-perf_0.4.0-r1_all.ipk && opkg install /tmp/luci-app-cpu-perf_0.4.0-r1_all.ipk && rm /tmp/luci-app-cpu-perf_0.4.0-r1_all.ipk && /etc/init.d/rpcd restart && /etc/init.d/cpu-perf start
+# 依存パッケージ
+install_package = make gcc libtool autoconf automake lua luci-lib-nixio luci-lib-jsonc
+
+# OpenWrt 21.02 以降のビルド
+21.02 = make package/luci-app-cpu-perf/compile
+
+# OpenWrt 19.07 のビルド
+19.07 = make package/luci-app-cpu-perf/compile V=99
