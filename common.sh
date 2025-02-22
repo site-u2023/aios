@@ -1449,6 +1449,12 @@ install_build() {
         esac
     done
 
+    # 【jq がインストールされているか確認】
+    if ! command -v jq > /dev/null 2>&1; then
+        debug_log "DEBUG" "jq is not installed. Installing jq..."
+        install_package "jq" hidden
+    fi
+
     # 【パッケージ名が指定されているか確認】
     if [ -z "$package_name" ]; then
         debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")"
