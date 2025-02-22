@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-01-04"
+SCRIPT_VERSION="2025.02.22-01-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1439,7 +1439,14 @@ install_build() {
     local openwrt_version=""
     local arch=""
     local alt_arch=""
+    BUILD_DIR="/tmp/aios/build"
 
+    # 【ビルドディレクトリがなければ作成】
+    if [ ! -d "$BUILD_DIR" ]; then
+        mkdir -p "$BUILD_DIR"
+        debug_log "DEBUG" "Created build directory: $BUILD_DIR"
+    fi
+    
     if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
         openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
     fi
@@ -1502,12 +1509,19 @@ install_build() {
     fi
     debug_log "DEBUG" "Executing build command for $package_name: $build_command"
 
-# 【ビルド実行前に Makefile の存在をチェック】
+
+# 【ビルドディレクトリへ移動】
+cd "$BUILD_DIR" || { debug_log "ERROR" "Failed to enter build directory"; return 1; }
+
+# 【Makefile の存在をチェック】
 if [ ! -f "Makefile" ]; then
-    debug_log "ERROR" "No Makefile found. Ensure the source code is downloaded and extracted."
+    debug_log "ERROR" "No Makefile found in $BUILD_DIR. Ensure the source code is downloaded and extracted."
     stop_spinner
     return 1
 fi
+
+    # 【ビルド開始のメッセージ】
+    echo "$(get_message "MSG_BUILD_START" | sed "s/{pkg}/$package_name/")"
 
 # 【ビルド実行】
 local start_time end_time build_time
@@ -1519,20 +1533,12 @@ if ! eval "$build_command"; then
     return 1
 fi
 
-    # 【ビルド開始のメッセージ】
-    echo "$(get_message "MSG_BUILD_START" | sed "s/{pkg}/$package_name/")"
-
-    # 【ビルド実行】
-    local start_time end_time build_time
-    start_time=$(date +%s)
-    if ! eval "$build_command"; then
-        echo "$(get_message "MSG_BUILD_FAIL" | sed "s/{pkg}/$package_name/")"
-        debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_FAILED" | sed "s/{pkg}/$package_name/")"
-        stop_spinner
-        return 1
-    fi
     end_time=$(date +%s)
     build_time=$((end_time - start_time))
+
+# 【元のディレクトリに戻る】
+cd - > /dev/null
+
 
     stop_spinner
     echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$package_name/" | sed "s/{time}/$build_time/")"
