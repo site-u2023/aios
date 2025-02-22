@@ -1157,43 +1157,48 @@ stop_spinner() {
 
 update_package_list() {
     local update_cache="${CACHE_DIR}/update.ch"
-    local current_date
-    current_date=$(date '+%Y-%m-%d')
+    local current_time
+    current_time=$(date '+%s')  # 現在のUNIXタイムスタンプ取得
+    local cache_time=0
+    local max_age=$((24 * 60 * 60))  # 24時間 (86400秒)
 
     # **キャッシュディレクトリの作成**
     mkdir -p "$CACHE_DIR"
 
-    # **キャッシュが存在しない場合は、即 `opkg update` を実行**
-    if [ ! -f "$update_cache" ]; then
-        debug_log "DEBUG" "キャッシュが存在しないため、パッケージリストを更新します。"
-    elif grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
-        debug_log "DEBUG" "パッケージリストは既に最新です。更新をスキップします。"
+    # **キャッシュが存在する場合、最終更新時刻を取得**
+    if [ -f "$update_cache" ]; then
+        cache_time=$(stat -c %Y "$update_cache" 2>/dev/null || echo 0)
+    fi
+
+    # **キャッシュが最新なら `opkg update` をスキップ**
+    if [ $((current_time - cache_time)) -lt $max_age ]; then
+        debug_log "DEBUG" "パッケージリストは24時間以内に更新されています。スキップします。"
         return 0
     fi
 
-    # **スピナー開始 (アップデートメッセージを表示)**
+    # **スピナー開始**
     start_spinner "$(color yellow "$(get_message "MSG_RUNNING_UPDATE")")"
 
     # **パッケージリストの更新**
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if ! opkg update > "${LOG_DIR}/opkg_update.log" 2>&1; then
+        opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
             stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
             debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
             return 1
-        fi
+        }
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if ! apk update > "${LOG_DIR}/apk_update.log" 2>&1; then
+        apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
             stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
             debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
             return 1
-        fi
+        }
     fi
 
     # **スピナー停止 (成功メッセージを表示)**
     stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
 
-    # **キャッシュを更新**
-    echo "LAST_UPDATE=$current_date" > "$update_cache" || {
+    # **キャッシュのタイムスタンプを更新**
+    touch "$update_cache" || {
         debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_WRITE_CACHE")")"
         return 1
     }
@@ -1368,7 +1373,6 @@ install_package() {
     local force_install="no"
     local update_mode="no"
     local package_name=""
-    local update_cache="${CACHE_DIR}/update.ch"
 
     # **オプションの処理**
     while [ $# -gt 0 ]; do
@@ -1380,7 +1384,7 @@ install_package() {
             hidden)     hidden="yes" ;;
             test)       test_mode="yes" ;;
             force)      force_install="yes" ;;
-            update)     update_mode="yes"; shift; continue ;;  # `update` をパッケージ扱いしない
+            update)     update_mode="yes"; shift; continue ;;
             *)
                 if [ -z "$package_name" ]; then
                     package_name="$1"
@@ -1392,18 +1396,7 @@ install_package() {
         shift
     done
 
-    # **update オプションのみの場合、パッケージリストを更新して終了**
-    if [ "$update_mode" = "yes" ] && [ -z "$package_name" ]; then
-        update_package_list
-        return 0
-    fi
-
-    if [ -z "$package_name" ]; then
-        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")")"
-        return 1
-    fi
-
-    # **パッケージマネージャーの確認 (キャッシュから取得)**
+    # **パッケージマネージャーの確認**
     if [ -f "${CACHE_DIR}/downloader_ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
     else 
@@ -1411,9 +1404,17 @@ install_package() {
         return 1
     fi
 
-    # **アップデートオプションが有効なら、パッケージリストを更新**
-    if [ "$update_mode" = "yes" ]; then
-        update_package_list
+    # **関数が呼ばれるたびに `opkg update` を確認 (24時間以内ならスキップ)**
+    update_package_list
+
+    # **update オプションのみの場合、アップデートして終了**
+    if [ "$update_mode" = "yes" ] && [ -z "$package_name" ]; then
+        return 0
+    fi
+
+    if [ -z "$package_name" ]; then
+        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")")"
+        return 1
     fi
 
     # **パッケージのインストール済みチェック**
@@ -1469,7 +1470,6 @@ install_package() {
         }
     fi
 
-    # **スピナー停止 (成功メッセージ)**
     stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
 
     # **サービスの有効化**
