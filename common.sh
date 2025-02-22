@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-01-05"
+SCRIPT_VERSION="2025.02.22-01-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -41,7 +41,8 @@ BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
-mkdir -p "$CACHE_DIR" "$LOG_DIR"
+BUILD_DIR="${BUILD_DIR:-$BASE_DIR//build}"
+mkdir -p "$CACHE_DIR" "$LOG_DIR" "BUILD_DIR"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
 # 🔵　エラー・デバッグ・アップデート系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
@@ -1435,18 +1436,38 @@ install_package() {
 # [uconv]　※行、列問わず記述可
 #########################################################################
 install_build() {
+    local confirm_install="no"
+    local hidden="no"
+    local package_name=""
+
+    # 【オプションの処理】
+    for arg in "$@"; do
+        case "$arg" in
+            yn) confirm_install="yes" ;;
+            hidden) hidden="yes" ;;
+            *) if [ -z "$package_name" ]; then package_name="$arg"; else debug_log "DEBUG" "Unknown option: $arg"; fi ;;
+        esac
+    done
+
+    # 【パッケージ名が指定されているか確認】
+    if [ -z "$package_name" ]; then
+        debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")"
+        return 1
+    fi
+
+    # 【ダウンローダーの取得】 (${CACHE_DIR}/downloader_ch を使用)
+    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
+    else
+        debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")"
+        return 1
+    fi
+
     # 【キャッシュから OpenWrt バージョンとアーキテクチャの取得】
     local openwrt_version=""
     local arch=""
     local alt_arch=""
-    BUILD_DIR="/tmp/aios/build"
 
-    # 【ビルドディレクトリがなければ作成】
-    if [ ! -d "$BUILD_DIR" ]; then
-        mkdir -p "$BUILD_DIR"
-        debug_log "DEBUG" "Created build directory: $BUILD_DIR"
-    fi
-    
     if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
         openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
     fi
@@ -1465,11 +1486,6 @@ install_build() {
         .default.build.dependencies[$pm] // 
         .default.build.dependencies.opkg // [] | join(" ")' "${BASE_DIR}/custom-package.db" 2>/dev/null)
 
-    if [ -z "$build_dependencies" ]; then
-        debug_log "DEBUG" "No specific build dependencies found. Checking default settings."
-        build_dependencies=$(jq -r '.default.build.dependencies.opkg // [] | join(" ")' "${BASE_DIR}/custom-package.db" 2>/dev/null)
-    fi
-
     if [ -n "$build_dependencies" ]; then
         debug_log "DEBUG" "Installing build dependencies for $package_name: $build_dependencies"
         for dep in $build_dependencies; do
@@ -1477,6 +1493,47 @@ install_build() {
         done
     else
         debug_log "DEBUG" "No build dependencies found for $package_name."
+    fi
+
+    # 【ビルドディレクトリを設定】
+    BUILD_DIR="${BASE_DIR}/build"
+
+    # 【ビルドディレクトリがなければ作成】
+    if [ ! -d "$BUILD_DIR" ]; then
+        mkdir -p "$BUILD_DIR"
+        debug_log "DEBUG" "Created build directory: $BUILD_DIR"
+    fi
+
+    # 【ビルドディレクトリへ移動】
+    cd "$BUILD_DIR" || { debug_log "ERROR" "Failed to enter build directory"; return 1; }
+
+    # 【Makefile の存在をチェック → ない場合はソースコードを取得】
+    if [ ! -f "Makefile" ]; then
+        debug_log "DEBUG" "No Makefile found. Attempting to download source code."
+
+        # ソースコードのダウンロード URL を取得（custom-package.db に記載）
+        local source_url
+        source_url=$(jq -r --arg pkg "$package_name" '.[$pkg].source.url // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
+
+        if [ -z "$source_url" ] || [ "$source_url" = "empty" ]; then
+            debug_log "ERROR" "No source URL found for $package_name in custom-package.db."
+            stop_spinner
+            return 1
+        fi
+
+        # ソースコードをダウンロード＆展開
+        wget -O source.tar.gz "$source_url"
+        tar -xzf source.tar.gz
+        cd "$(tar -tzf source.tar.gz | head -1 | cut -f1 -d"/")" || { debug_log "ERROR" "Failed to enter extracted directory"; return 1; }
+
+        debug_log "DEBUG" "Source code downloaded and extracted."
+    fi
+
+    # 【再度 Makefile の確認】
+    if [ ! -f "Makefile" ]; then
+        debug_log "ERROR" "Makefile still not found after downloading source."
+        stop_spinner
+        return 1
     fi
 
     # 【custom-package.db からビルドコマンドの取得】
@@ -1495,60 +1552,31 @@ install_build() {
         .[$pkg].build.commands.default.default[$pm] // 
         .[$pkg].build.commands.default.default // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
 
+    # **フォールバック処理 (必ず適用)**
     if [ -z "$build_command" ] || [ "$build_command" = "empty" ]; then
-        debug_log "DEBUG" "No build command found for $package_name. Checking default settings."
-            
-        # 絶対にフォールバックするようにデフォルト値を設定
+        debug_log "DEBUG" "No build command found in custom-package.db, using internal defaults."
         build_command="make && make install"
     fi
 
-    if [ -z "$build_command" ]; then
-        debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_COMMAND_NOT_FOUND" | sed "s/{pkg}/$package_name/" | sed "s/{arch}/$arch/" | sed "s/{ver}/$openwrt_version/")"
+    # 【ビルド実行】
+    local start_time end_time build_time
+    start_time=$(date +%s)
+    if ! eval "$build_command"; then
+        echo "$(get_message "MSG_BUILD_FAIL" | sed "s/{pkg}/$package_name/")"
+        debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_FAILED" | sed "s/{pkg}/$package_name/")"
         stop_spinner
         return 1
     fi
-    debug_log "DEBUG" "Executing build command for $package_name: $build_command"
-
-
-# 【ビルドディレクトリへ移動】
-cd "$BUILD_DIR" || { debug_log "ERROR" "Failed to enter build directory"; return 1; }
-
-# 【Makefile の存在をチェック】
-if [ ! -f "Makefile" ]; then
-    debug_log "ERROR" "No Makefile found in $BUILD_DIR. Ensure the source code is downloaded and extracted."
-    stop_spinner
-    return 1
-fi
-
-    # 【ビルド開始のメッセージ】
-    echo "$(get_message "MSG_BUILD_START" | sed "s/{pkg}/$package_name/")"
-
-# 【ビルド実行】
-local start_time end_time build_time
-start_time=$(date +%s)
-if ! eval "$build_command"; then
-    echo "$(get_message "MSG_BUILD_FAIL" | sed "s/{pkg}/$package_name/")"
-    debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_FAILED" | sed "s/{pkg}/$package_name/")"
-    stop_spinner
-    return 1
-fi
 
     end_time=$(date +%s)
     build_time=$((end_time - start_time))
 
-# 【元のディレクトリに戻る】
-cd - > /dev/null
-
+    # 【元のディレクトリに戻る】
+    cd - > /dev/null
 
     stop_spinner
     echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$package_name/" | sed "s/{time}/$build_time/")"
     debug_log "DEBUG" "Build time for $package_name: $build_time seconds"
-
-    # 【ビルド完了後、インストールの実行】
-    install_package "$package_name" "$confirm_install"
-
-    echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$package_name/")"
-    debug_log "DEBUG" "Successfully built and installed package: $package_name"
 }
 
 # 🔴　パッケージ系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
