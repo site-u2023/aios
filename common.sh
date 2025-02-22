@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-02-02"
+SCRIPT_VERSION="2025.02.22-02-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1360,19 +1360,13 @@ install_package() {
 
     # **パッケージのインストール済みチェック**
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        # パッケージ名の後にスペース、ハイフン、またはアンダースコアが続く場合にマッチさせる
-        #if opkg list-installed | grep -E "^$package_name([[:space:]]|-|_)" >/dev/null 2>&1; then
         if opkg list-installed | grep -qE "^$package_name "; then
-            if [ "$hidden" != "yes" ]; then
-                echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-            fi
+            [ "$hidden" != "yes" ] && echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
             return 0
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         if apk info | grep -q "^$package_name$"; then
-            if [ "$hidden" != "yes" ]; then
-                echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-            fi
+            [ "$hidden" != "yes" ] && echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
             return 0
         fi
     fi
@@ -1389,21 +1383,18 @@ install_package() {
 
     # **リポジトリ存在チェック**
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        #if ! opkg list | grep -E "^$package_name([[:space:]]|-|_)" >/dev/null 2>&1; then
         if ! opkg list | grep -qE "^$package_name "; then
-            echo "$(color yellow "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
             debug_log "DEBUG" "Package $package_name not found in repository."
-            return 0
+            return 1
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if ! apk search "$package_name" 2>/dev/null | grep -q "^$package_name$"; then
-            echo "$(color yellow "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
+        if ! apk search "$package_name" 2>/dev/null | grep -q "^$package_name"; then
             debug_log "DEBUG" "Package $package_name not found in repository."
-            return 0
+            return 1
         fi
     else
         debug_log "DEBUG" "Unknown package manager: $PACKAGE_MANAGER"
-        return 0
+        return 1
     fi
 
     # **インストール前の確認**
@@ -1412,9 +1403,10 @@ install_package() {
             local msg=$(get_message "MSG_CONFIRM_INSTALL")
             msg="${msg//\{pkg\}/$package_name}"
             echo "$msg"
-    
-            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
-            read -r yn
+
+            printf "%s " "$(get_message "MSG_CONFIRM_ONLY_YN")"
+            read -r yn || return 1  # Ctrl+D の場合は中止
+
             case "$yn" in
                 [Yy]*) break ;;
                 [Nn]*) return 1 ;;
@@ -1442,69 +1434,32 @@ install_package() {
 
     # **スピナー停止 (成功メッセージ)**
     stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-
-    echo "$(color green "✅ $(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
     debug_log "DEBUG" "Successfully installed package: $package_name"
 
-    # local-package.db の設定適用処理（notpack オプションが指定されていなければ実行）
-    if [ "$skip_package_db" != "yes" ]; then
-        if [ -f "${BASE_DIR}/local-package.db" ]; then
-            # 対象パッケージの設定ブロックを抽出
-            pkg_settings=$(awk -v pkg="\\[$package_name\\]" '
-                BEGIN { flag=0 }
-                # 同一行に設定コマンドがある場合（例: [ttyd] opkg update; uci commit ttyd; initd/ttyd/restart）
-                $0 ~ pkg {
-                    sub(/^\[[^]]*\]/, "", $0)
-                    if (length($0) > 0) {
-                        print $0
-                    }
-                    flag=1
-                    next
-                }
-                # 次行以降、ブロックが継続している場合（行頭が [ で始まらなければ）
-                flag && $0 !~ /^\[/ { print }
-                $0 ~ /^\[/ { flag=0 }
-            ' "${BASE_DIR}/local-package.db")
-            if [ -n "$pkg_settings" ]; then
-                debug_log "DEBUG" "Applying local package settings for $package_name"
-                # コメント行（# で始まる）および空行を除外
-                pkg_settings=$(echo "$pkg_settings" | sed '/^[[:space:]]*#/d; /^[[:space:]]*$/d')
-                # 各行のコマンドを順次実行
-                if [ -n "$pkg_settings" ]; then
-                echo "$pkg_settings" | while IFS= read -r cmd; do
-                    debug_log "DEBUG" "Executing local package setting command: $cmd"
-                    eval "$cmd"
-                done
-            else
-                debug_log "DEBUG" "No local package settings found for $package_name in local-package.db"
-            fi
-        else
-            debug_log "DEBUG" "local-package.db not found; skipping local package settings"
+    # **local-package.db の適用**
+    if [ "$skip_package_db" != "yes" ] && [ -f "${BASE_DIR}/local-package.db" ]; then
+        pkg_settings=$(awk -v pkg="\\[$package_name\\]" '
+            BEGIN { flag=0 }
+            $0 ~ pkg { sub(/^\[[^]]*\]/, "", $0); if (length($0) > 0) print $0; flag=1; next }
+            flag && $0 !~ /^\[/ { print }
+            $0 ~ /^\[/ { flag=0 }
+        ' "${BASE_DIR}/local-package.db")
+
+        if [ -n "$pkg_settings" ]; then
+            debug_log "DEBUG" "Applying local package settings for $package_name"
+            echo "$pkg_settings" | while IFS= read -r cmd; do
+                debug_log "DEBUG" "Executing local package setting command: $cmd"
+                eval "$cmd"
+            done
         fi
-    else
-        debug_log "DEBUG" "Skipping local package settings due to notpack option"
     fi
 
-    # サービスの有効化および起動処理
-    # 「disabled」オプションが指定されていなければ、/etc/init.d/<package_name> が存在する場合に enable および restart を実行する
-    if [ "$set_disabled" != "yes" ]; then
-        if [ -x "/etc/init.d/$package_name" ]; then
-            debug_log "DEBUG" "Enabling and starting service for $package_name"
-            if /etc/init.d/"$package_name" enable && /etc/init.d/"$package_name" restart; then
-                debug_log "DEBUG" "Service $package_name enabled and restarted successfully."
-            else
-                debug_log "ERROR" "Failed to enable or restart service $package_name."
-            fi
-
-            #/etc/init.d/"$package_name" enable
-            #/etc/init.d/"$package_name" restart
-        else
-            debug_log "DEBUG" "No init script found for $package_name; skipping service enable/start"
-        fi
-    else
-        debug_log "DEBUG" "Disabled option set; not enabling or starting service for $package_name"
+    # **サービスの有効化**
+    if [ "$set_disabled" != "yes" ] && [ -x "/etc/init.d/$package_name" ]; then
+        debug_log "DEBUG" "Enabling and starting service for $package_name"
+        /etc/init.d/"$package_name" enable && /etc/init.d/"$package_name" restart
     fi
-    }
+}
 
 #########################################################################
 # Last Update: 2025-02-22 15:35:00 (JST) 🚀
