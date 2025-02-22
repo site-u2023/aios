@@ -1373,6 +1373,20 @@ install_package() {
     else
         debug_log "DEBUG" "Skipping local package settings due to notpack option"
     fi
+
+    # サービスの有効化および起動処理
+    # 「disabled」オプションが指定されていなければ、/etc/init.d/<package_name> が存在する場合に enable および restart を実行する
+    if [ "$set_disabled" != "yes" ]; then
+        if [ -x "/etc/init.d/$package_name" ]; then
+            debug_log "DEBUG" "Enabling and starting service for $package_name"
+            /etc/init.d/"$package_name" enable
+            /etc/init.d/"$package_name" restart
+        else
+            debug_log "DEBUG" "No init script found for $package_name; skipping service enable/start"
+        fi
+    else
+        debug_log "DEBUG" "Disabled option set; not enabling or starting service for $package_name"
+    fi
     }
 
 #########################################################################
