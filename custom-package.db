@@ -60,6 +60,13 @@
           "mips": "make && make install"
         }
       }
+    },
+    "source": {
+      "default": {
+        "uconv": "https://example.com/path/to/uconv-source.tar.gz",
+        "coreutils": "https://example.com/path/to/coreutils-source.tar.gz"
+      },
+      "fallback": "https://downloads.openwrt.org/sources/default-package.tar.gz"
     }
   }
 }
