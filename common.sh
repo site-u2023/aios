@@ -1535,6 +1535,7 @@ install_build() {
     local build_command
     build_command=$(jq -r --arg pkg "$package_name" --arg arch "$arch" --arg ver "$openwrt_version" '
         .[$pkg].build.commands[$ver][$arch] // 
+        .[$pkg].build.commands[$ver][$alt_arch] // 
         .[$pkg].build.commands[$ver].default // 
         .[$pkg].build.commands.default[$arch] // 
         .[$pkg].build.commands.default.default // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
@@ -1544,6 +1545,7 @@ install_build() {
         debug_log "DEBUG" "No build command found for $package_name. Checking default settings."
         build_command=$(jq -r --arg arch "$arch" --arg ver "$openwrt_version" '
             .default.build.commands[$ver][$arch] // 
+            .[$pkg].build.commands[$ver][$alt_arch] // 
             .default.build.commands[$ver].default // 
             .default.build.commands.default[$arch] // 
             .default.build.commands.default.default // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
