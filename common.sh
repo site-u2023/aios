@@ -1396,6 +1396,12 @@ install_package() {
         shift
     done
 
+    # **update オプションのみの場合、パッケージリストを更新して終了**
+    if [ "$update_mode" = "yes" ] && [ -z "$package_name" ]; then
+        update_package_list
+        return 0
+    fi
+
     if [ -z "$package_name" ]; then
         debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")")"
         return 1
@@ -1409,43 +1415,22 @@ install_package() {
         return 1
     fi
 
-    # **アップデートオプション (スピナー内で強制実行)**
+    # **アップデートオプションが有効なら、パッケージリストを更新**
     if [ "$update_mode" = "yes" ]; then
-        start_spinner "$(color yellow "Updating package list...")"
-        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            opkg update > /dev/null 2>&1
-        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            apk update > /dev/null 2>&1
-        fi
-        stop_spinner "$(color green "Package list updated successfully.")"
+        update_package_list
     fi
 
     # **パッケージのインストール済みチェック**
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if opkg list-installed | grep -qE "^$package_name "; then
-            if [ "$hidden" != "yes" ]; then
-                echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-            fi
-            if [ "$test_mode" != "yes" ]; then
-                return 0
-            fi
+            [ "$hidden" != "yes" ] && echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+            return 0
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         if apk info | grep -q "^$package_name$"; then
-            if [ "$hidden" != "yes" ]; then
-                echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-            fi
-            if [ "$test_mode" != "yes" ]; then
-                return 0
-            fi
+            [ "$hidden" != "yes" ] && echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+            return 0
         fi
-    fi
-
-    # **システムコマンド存在チェック (`test` モードなら無視)**
-    if [ "$test_mode" != "yes" ] && command -v "$package_name" >/dev/null 2>&1; then
-        echo "$(color green "$(get_message "MSG_COMMAND_AVAILABLE" | sed "s/{pkg}/$package_name/")")"
-        debug_log "DEBUG" "Command $package_name exists in system."
-        return 0
     fi
 
     # **テストモードなら、シミュレーションを実行**
@@ -1478,13 +1463,11 @@ install_package() {
 
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         opkg install "$package_name" > /dev/null 2>&1 || {
-            debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
             stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
             return 1
         }
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         apk add "$package_name" > /dev/null 2>&1 || {
-            debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
             stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
             return 1
         }
@@ -1492,11 +1475,9 @@ install_package() {
 
     # **スピナー停止 (成功メッセージ)**
     stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-    debug_log "DEBUG" "Successfully installed package: $package_name"
 
     # **サービスの有効化**
     if [ "$set_disabled" != "yes" ] && [ -x "/etc/init.d/$package_name" ]; then
-        debug_log "DEBUG" "Enabling and starting service for $package_name"
         /etc/init.d/"$package_name" enable && /etc/init.d/"$package_name" restart
     fi
 }
