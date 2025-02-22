@@ -1,41 +1,18 @@
-{
-  "default": {
-    "dependencies": {
-      "opkg": ["make", "gcc", "wget"]
-    }
-  },
-  "luci-app-cpu-perf": {
-    "source": {
-      "url": "https://github.com/gSpotx2f/luci-app-cpu-perf.git"
-    },
-    "build": {
-      "dependencies": {
-        "opkg": [
-          "git",
-          "make",
-          "gcc",
-          "pkg-config",
-          "libtool",
-          "automake",
-          "autoconf",
-          "gettext",
-          "lua",
-          "wget",
-          "tar",
-          "unzip",
-          "perl",
-          "perlbase-findbin",
-          "perlbase-file"
-        ]
-      },
-      "commands": {
-        "default": {
-          "x86_64": "cd ../../ && ./scripts/feeds update -a && ./scripts/feeds install -a && cd package/luci-app-cpu-perf && make package/luci-app-cpu-perf/compile",
-          "armv7l": "cd ../../ && ./scripts/feeds update -a && ./scripts/feeds install -a && cd package/luci-app-cpu-perf && make package/luci-app-cpu-perf/compile",
-          "mipsel": "cd ../../ && ./scripts/feeds update -a && ./scripts/feeds install -a && cd package/luci-app-cpu-perf && make package/luci-app-cpu-perf/compile",
-          "mips": "cd ../../ && ./scripts/feeds update -a && ./scripts/feeds install -a && cd package/luci-app-cpu-perf && make package/luci-app-cpu-perf/compile"
-        }
-      }
-    }
-  }
-}
+#!/bin/sh
+
+SCRIPT_VERSION="2025.02.23-00-00"
+
+[default]
+package_manager=opkg
+build.dependencies=make gcc wget jq git
+build.command=make package/{package}/compile
+confirm_install=no
+hidden=no
+cache_dir=/tmp/aios/cache
+build_dir=/tmp/aios/build
+openwrt_repo=https://git.openwrt.org/openwrt/openwrt.git
+
+[luci-app-cpu-perf]
+source.url=https://github.com/gSpotx2f/luci-app-cpu-perf.git
+build.dependencies=git make gcc pkg-config libtool automake autoconf gettext lua wget tar unzip perl perlbase-findbin
+build.command=make package/luci-app-cpu-perf/compile
