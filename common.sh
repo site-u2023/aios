@@ -1163,13 +1163,10 @@ update_package_list() {
     # **キャッシュディレクトリの作成**
     mkdir -p "$CACHE_DIR"
 
-    # **update_mode が未定義なら初期化**
-    if [ -z "$update_mode" ]; then
-        update_mode="no"
-    fi
-
-    # **キャッシュチェック: updateオプションがない場合はスキップ判定**
-    if [ "$update_mode" != "yes" ] && [ -f "$update_cache" ] && grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
+    # **キャッシュが存在しない場合は、即 `opkg update` を実行**
+    if [ ! -f "$update_cache" ]; then
+        debug_log "DEBUG" "キャッシュが存在しないため、パッケージリストを更新します。"
+    elif grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
         debug_log "DEBUG" "パッケージリストは既に最新です。更新をスキップします。"
         return 0
     fi
@@ -1203,7 +1200,6 @@ update_package_list() {
 
     return 0
 }
-
 
 XXX_update_package_list() {
     local update_cache="${CACHE_DIR}/update.ch"
