@@ -1,3 +1,5 @@
+{
+  "default": {
     "dependencies": {
       "opkg": [
         "jq",
@@ -42,10 +44,9 @@
         "tar",
         "unzip"
       ],
-      "default": [ "make", "gcc", "tar", "wget" ]
+      "default": ["make", "gcc", "tar", "wget"]
     }
-
-{
+  },
   "luci-app-log-viewer": {
     "source": {
       "url": "https://github.com/gSpotx2f/luci-app-log-viewer.git"
@@ -80,7 +81,6 @@
           "tar",
           "unzip"
         ]
-
       },
       "commands": {
         "default": {
