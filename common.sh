@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-01-03"
+SCRIPT_VERSION="2025.02.22-01-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1501,6 +1501,23 @@ install_build() {
         return 1
     fi
     debug_log "DEBUG" "Executing build command for $package_name: $build_command"
+
+# 【ビルド実行前に Makefile の存在をチェック】
+if [ ! -f "Makefile" ]; then
+    debug_log "ERROR" "No Makefile found. Ensure the source code is downloaded and extracted."
+    stop_spinner
+    return 1
+fi
+
+# 【ビルド実行】
+local start_time end_time build_time
+start_time=$(date +%s)
+if ! eval "$build_command"; then
+    echo "$(get_message "MSG_BUILD_FAIL" | sed "s/{pkg}/$package_name/")"
+    debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_FAILED" | sed "s/{pkg}/$package_name/")"
+    stop_spinner
+    return 1
+fi
 
     # 【ビルド開始のメッセージ】
     echo "$(get_message "MSG_BUILD_START" | sed "s/{pkg}/$package_name/")"
