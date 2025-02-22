@@ -1596,8 +1596,8 @@ install_build() {
     # 【オプションの処理】
     for arg in "$@"; do
         case "$arg" in
-            yn) confirm_install="yes" ;;   # 確認を入れるフラグ
-            hidden) hidden="yes" ;;        # 非表示でインストールするフラグ
+            yn) confirm_install="yes" ;;
+            hidden) hidden="yes" ;;
             *) if [ -z "$package_name" ]; then package_name="$arg"; else debug_log "DEBUG" "Unknown option: $arg"; fi ;;
         esac
     done
@@ -1621,12 +1621,27 @@ install_build() {
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
 
     # 【必要なパラメータを取得】
-    local source_url build_dependencies build_command BUILD_DIR OPENWRT_REPO
+    local source_url build_dependencies build_command BUILD_DIR OPENWRT_REPO install_packages
 
     source_url=$(get_ini_value "$package_name" "source_url")
     build_dependencies=$(get_ini_value "$package_name" "build_dependencies")
     BUILD_DIR=$(get_ini_value "default" "build_dir")
     OPENWRT_REPO=$(get_ini_value "default" "openwrt_repo")
+
+    # **install_package を取得してインストール**
+    install_packages=$(awk -F'=' -v section="[$package_name]" '
+        $0 ~ section {flag=1; next} /^\[/{flag=0}
+        flag && $1 ~ /install_package/ {print $2}
+    ' "$DB_FILE")
+
+    if [ -n "$install_packages" ]; then
+        debug_log "DEBUG" "Installing required packages for $package_name: $install_packages"
+        for pkg in $install_packages; do
+            install_package "$pkg" "$hidden"
+        done
+    else
+        debug_log "DEBUG" "No additional install_package found for $package_name."
+    fi
 
     # 【バージョンごとのビルドコマンド取得】
     build_command=$(get_ini_value "$package_name" "$openwrt_version")
@@ -1648,16 +1663,6 @@ install_build() {
             debug_log "INFO" "インストールをキャンセルしました。"
             return 0
         fi
-    fi
-
-    # 【ビルド用依存パッケージのインストール】
-    if [ -n "$build_dependencies" ]; then
-        debug_log "DEBUG" "Installing build dependencies for $package_name: $build_dependencies"
-        for dep in $build_dependencies; do
-            install_package "$dep" "$hidden"
-        done
-    else
-        debug_log "DEBUG" "No build dependencies found for $package_name."
     fi
 
     # 【ビルドディレクトリがなければ作成】
@@ -1703,7 +1708,7 @@ install_build() {
     debug_log "DEBUG" "Executing build command: $build_command"
 
     # **スピナー開始**
-    #start_spinner "$(get_message 'MSG_BUILD_RUNNING')"
+    start_spinner "$(get_message 'MSG_BUILD_RUNNING')"
 
     # 【ビルド実行】
     local start_time end_time build_time
@@ -1717,8 +1722,8 @@ install_build() {
     end_time=$(date +%s)
     build_time=$((end_time - start_time))
 
-    #stop_spinner
-    #echo "✅ ${package_name} のビルド完了（所要時間: ${build_time}秒）"
+    stop_spinner
+    echo "✅ ${package_name} のビルド完了（所要時間: ${build_time}秒）"
     debug_log "DEBUG" "Build time: $build_time seconds"
 
     # **ビルド後の `.ipk` の検索**
