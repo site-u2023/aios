@@ -1,24 +1,47 @@
 {
-  "uconv": {
-    "description": "Unicode conversion tool for OpenWrt & Alpine Linux",
-    "source": "https://github.com/example/uconv",
-    "version": "latest",
-    "arch": ["mips", "arm", "x86_64"],
-    "dependencies": {
-      "opkg": ["libiconv", "libintl", "zlib"],
-      "apk": ["libiconv", "gettext", "zlib"]
-    },
-    "install": {
-      "method": ["opkg", "apk"],
-      "opkg_url": "https://github.com/example/uconv/releases/latest/download/uconv_{arch}.ipk",
-      "apk_url": "https://github.com/example/uconv/releases/latest/download/uconv-{arch}.apk"
-    },
+  "default": {
     "build": {
       "dependencies": {
-        "opkg": ["make", "gcc", "git", "libtool", "automake", "pkg-config", "zlib-dev", "libssl-dev", "libicu-dev", "ncurses-dev"],
-        "apk": ["build-base", "gcc", "git", "libtool", "automake", "pkgconfig", "zlib-dev", "openssl-dev", "icu-dev", "ncurses-dev"]
+        "opkg": [
+          "make",
+          "gcc",
+          "git",
+          "libtool-bin",
+          "automake",
+          "pkg-config",
+          "zlib-dev",
+          "libncurses-dev",
+          "curl",
+          "libxml2",
+          "libxml2-dev",
+          "autoconf",
+          "bison",
+          "flex",
+          "perl",
+          "patch",
+          "wget",
+          "wget-ssl",
+          "tar",
+          "unzip"
+        ]
       },
-      "commands": [
-        "./configure --prefix=/usr",
-        "make -j$(nproc)",
-        "make inst
+      "commands": {
+        "default": {
+          "default": "cd /tmp/build && make clean && make && cp output.ipk /tmp && echo 'Default build complete'"
+        }
+      }
+    }
+  },
+  "uconv": {
+    "build": {
+      "commands": {
+        "24.10.0": {
+          "armv7l": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on armv7l for 24.10.0'"
+        },
+        "default": {
+          "default": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv default build complete'"
+        }
+      }
+    }
+  }
+}
