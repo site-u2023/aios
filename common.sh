@@ -1435,6 +1435,21 @@ install_package() {
 # 【messages.dbの記述例】
 # [uconv]　※行、列問わず記述可
 #########################################################################
+setup_swap() {
+    SWAP_FILE="/overlay/swapfile"
+    SWAP_SIZE_MB=512  # スワップのサイズ（MB単位）
+
+    if [ ! -f "$SWAP_FILE" ]; then
+        debug_log "INFO" "Creating swap file (${SWAP_SIZE_MB}MB)..."
+        dd if=/dev/zero of=$SWAP_FILE bs=1M count=$SWAP_SIZE_MB
+        mkswap $SWAP_FILE
+        swapon $SWAP_FILE
+    else
+        debug_log "INFO" "Swap file already exists."
+        swapon $SWAP_FILE
+    fi
+}
+
 install_build() {
     local confirm_install="no"
     local hidden="no"
@@ -1443,8 +1458,8 @@ install_build() {
     # 【オプションの処理】
     for arg in "$@"; do
         case "$arg" in
-            yn) confirm_install="yes" ;;
-            hidden) hidden="yes" ;;
+            yn) confirm_install="yes" ;;   # 確認を入れるフラグ
+            hidden) hidden="yes" ;;        # 非表示でインストールするフラグ
             *) if [ -z "$package_name" ]; then package_name="$arg"; else debug_log "DEBUG" "Unknown option: $arg"; fi ;;
         esac
     done
@@ -1454,6 +1469,8 @@ install_build() {
         debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")"
         return 1
     fi
+
+    setup_swap  # スワップのセットアップ
 
     # 【ダウンローダーの取得】 (${CACHE_DIR}/downloader_ch を使用)
     if [ -f "${CACHE_DIR}/downloader_ch" ]; then
@@ -1477,6 +1494,16 @@ install_build() {
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
     debug_log "DEBUG" "Using architecture: $arch"
 
+    # 【インストール確認】
+    if [ "$confirm_install" = "yes" ]; then
+        echo "📢 ${package_name} をインストールしますか？ (Y/n)"
+        read -r answer
+        if [ "$answer" != "Y" ] && [ "$answer" != "y" ]; then
+            debug_log "INFO" "インストールをキャンセルしました。"
+            return 0
+        fi
+    fi
+
     # 【ビルド用依存パッケージのインストール】
     local build_dependencies
     build_dependencies=$(jq -r --arg pkg "$package_name" --arg pm "$PACKAGE_MANAGER" '
@@ -1488,7 +1515,7 @@ install_build() {
     if [ -n "$build_dependencies" ]; then
         debug_log "DEBUG" "Installing build dependencies for $package_name: $build_dependencies"
         for dep in $build_dependencies; do
-            install_package "$dep" hidden
+            install_package "$dep" "$hidden"
         done
     else
         debug_log "DEBUG" "No build dependencies found for $package_name."
