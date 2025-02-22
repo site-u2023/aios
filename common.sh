@@ -1209,6 +1209,119 @@ install_package() {
     local force_install="no"
     local update_mode="no"
     local package_name=""
+    local is_local_ipk="no"
+
+    # **オプションの処理**
+    for arg in "$@"; do
+        case "$arg" in
+            yn)         confirm_install="yes" ;;
+            nolang)     skip_lang_pack="yes" ;;
+            notpack)    skip_package_db="yes" ;;
+            disabled)   set_disabled="yes" ;;
+            hidden)     hidden="yes" ;;
+            test)       test_mode="yes" ;;
+            force)      force_install="yes" ;;
+            update)     update_mode="yes" ;;
+            *.ipk)      is_local_ipk="yes"; package_name="$arg" ;;  # `.ipk` の場合
+            *)
+                if [ -z "$package_name" ]; then
+                    package_name="$arg"
+                else
+                    debug_log "DEBUG" "$(color yellow "$(get_message "MSG_UNKNOWN_OPTION" | sed "s/{option}/$arg/")")"
+                fi
+                ;;
+        esac
+    done
+
+    # **パッケージ名が指定されているか確認**
+    if [ -z "$package_name" ]; then
+        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")")"
+        return 1
+    fi
+
+    # **ローカル `.ipk` の場合、直接インストール**
+    if [ "$is_local_ipk" = "yes" ]; then
+        if [ ! -f "$package_name" ]; then
+            debug_log "ERROR" "File not found: $package_name"
+            return 1
+        fi
+        debug_log "INFO" "Installing local package: $package_name"
+        start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
+        opkg install "$package_name" > /dev/null 2>&1
+        if [ $? -ne 0 ]; then
+            stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+            return 1
+        fi
+        stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+    else
+        # **通常のパッケージインストール**
+        if [ -f "${CACHE_DIR}/downloader_ch" ]; then
+            PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
+        else 
+            debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")")"
+            return 1
+        fi
+
+        update_package_list
+
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            if ! opkg list | grep -E "^$package_name([[:space:]]|-|_)" >/dev/null 2>&1; then
+                debug_log "DEBUG" "Package $package_name not found in repository."
+                return 0
+            fi
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            if ! apk search "^$package_name$" 2>/dev/null | grep -q "^$package_name$"; then
+                debug_log "DEBUG" "Package $package_name not found in repository."
+                return 0
+            fi
+        else
+            debug_log "DEBUG" "Unknown package manager: $PACKAGE_MANAGER"
+            return 0
+        fi
+
+        start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            opkg install "$package_name" > /dev/null 2>&1
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            apk add "$package_name" > /dev/null 2>&1
+        fi
+        if [ $? -ne 0 ]; then
+            stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+            return 1
+        fi
+        stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+    fi
+
+    # **設定適用 (`local-package.db` を使用)**
+    if [ "$skip_package_db" != "yes" ] && [ -f "${BASE_DIR}/local-package.db" ]; then
+        pkg_settings=$(awk -v pkg="\\[$package_name\\]" '
+            BEGIN { flag=0 }
+            $0 ~ pkg { sub(/^\[[^]]*\]/, "", $0); flag=1; next }
+            flag && $0 !~ /^\[/ { print }
+            $0 ~ /^\[/ { flag=0 }
+        ' "${BASE_DIR}/local-package.db")
+        if [ -n "$pkg_settings" ]; then
+            echo "$pkg_settings" | while IFS= read -r cmd; do eval "$cmd"; done
+        fi
+    fi
+
+    # **サービス有効化と起動**
+    if [ "$set_disabled" != "yes" ] && [ -x "/etc/init.d/$package_name" ]; then
+        /etc/init.d/"$package_name" enable
+        /etc/init.d/"$package_name" restart
+    fi
+}
+
+XXX_install_package() {
+    local confirm_install="no"
+    local skip_lang_pack="no"
+    local skip_package_db="no"
+    local set_disabled="no"
+    local hidden="no"
+    local test_mode="no"
+    local force_install="no"
+    local update_mode="no"
+    local package_name=""
     local update_cache="${CACHE_DIR}/update.ch"
 
     # **オプションの処理**
@@ -1473,6 +1586,158 @@ get_value_with_fallback() {
 }
 
 install_build() {
+    local package_name=""
+    local confirm_install="no"
+    local hidden="no"
+    local DB_FILE="/tmp/aios/custom-package.ini"  # INIデータベースファイル
+    local CACHE_DIR="/tmp/aios/cache"
+    local output_ipk=""
+
+    # 【オプションの処理】
+    for arg in "$@"; do
+        case "$arg" in
+            yn) confirm_install="yes" ;;   # 確認を入れるフラグ
+            hidden) hidden="yes" ;;        # 非表示でインストールするフラグ
+            *) if [ -z "$package_name" ]; then package_name="$arg"; else debug_log "DEBUG" "Unknown option: $arg"; fi ;;
+        esac
+    done
+
+    # 【パッケージ名が指定されているか確認】
+    if [ -z "$package_name" ]; then
+        debug_log "ERROR" "パッケージ名が指定されていません！"
+        return 1
+    fi
+
+    setup_swap  # スワップのセットアップ
+
+    # 【OpenWrt バージョンの取得】
+    local openwrt_version=""
+    if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
+        openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
+    else
+        debug_log "ERROR" "OpenWrt バージョン情報が取得できません！"
+        return 1
+    fi
+    debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
+
+    # 【必要なパラメータを取得】
+    local source_url build_dependencies build_command BUILD_DIR OPENWRT_REPO
+
+    source_url=$(get_ini_value "$package_name" "source_url")
+    build_dependencies=$(get_ini_value "$package_name" "build_dependencies")
+    BUILD_DIR=$(get_ini_value "default" "build_dir")
+    OPENWRT_REPO=$(get_ini_value "default" "openwrt_repo")
+
+    # 【バージョンごとのビルドコマンド取得】
+    build_command=$(get_ini_value "$package_name" "$openwrt_version")
+    if [ -z "$build_command" ]; then
+        build_command=$(get_ini_value "$package_name" "default")
+    fi
+
+    debug_log "DEBUG" "Source URL: $source_url"
+    debug_log "DEBUG" "Build Dependencies: $build_dependencies"
+    debug_log "DEBUG" "Build Command: $build_command"
+    debug_log "DEBUG" "Build Directory: $BUILD_DIR"
+    debug_log "DEBUG" "OpenWrt Repo: $OPENWRT_REPO"
+
+    # 【パッケージのインストール確認（YNオプション）】
+    if [ "$confirm_install" = "yes" ]; then
+        echo "📢 ${package_name} をインストールしますか？ (Y/n)"
+        read -r answer
+        if [ "$answer" != "Y" ] && [ "$answer" != "y" ]; then
+            debug_log "INFO" "インストールをキャンセルしました。"
+            return 0
+        fi
+    fi
+
+    # 【ビルド用依存パッケージのインストール】
+    if [ -n "$build_dependencies" ]; then
+        debug_log "DEBUG" "Installing build dependencies for $package_name: $build_dependencies"
+        for dep in $build_dependencies; do
+            install_package "$dep" "$hidden"
+        done
+    else
+        debug_log "DEBUG" "No build dependencies found for $package_name."
+    fi
+
+    # 【ビルドディレクトリがなければ作成】
+    if [ ! -d "$BUILD_DIR" ]; then
+        mkdir -p "$BUILD_DIR"
+        debug_log "DEBUG" "Created build directory: $BUILD_DIR"
+    fi
+
+    # 【リポジトリの取得・更新】
+    if [ -d "$BUILD_DIR/$package_name" ]; then
+        debug_log "DEBUG" "Removing existing repository and cloning fresh copy."
+        rm -rf "$BUILD_DIR/$package_name"
+    fi
+
+    debug_log "DEBUG" "Cloning repository: $source_url"
+    git clone "$source_url" "$BUILD_DIR/$package_name"
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "Git clone failed for $package_name"
+        return 1
+    fi
+
+    cd "$BUILD_DIR/$package_name" || { debug_log "ERROR" "Failed to enter repository directory"; return 1; }
+
+    # 【OpenWrt feeds のセットアップ】
+    if [ ! -d "$BUILD_DIR/openwrt" ]; then
+        debug_log "DEBUG" "Cloning OpenWrt source for feeds setup."
+        git clone "$OPENWRT_REPO" "$BUILD_DIR/openwrt"
+    fi
+
+    cd "$BUILD_DIR/openwrt"
+    ./scripts/feeds update -a
+    ./scripts/feeds install -a
+
+    cd "$BUILD_DIR/$package_name"
+
+    # 【ビルドコマンドの確認】
+    if [ -z "$build_command" ]; then
+        debug_log "ERROR" "ビルドコマンドが見つかりません！"
+        stop_spinner
+        return 1
+    fi
+
+    debug_log "DEBUG" "Executing build command: $build_command"
+
+    # **スピナー開始**
+    #start_spinner "$(get_message 'MSG_BUILD_RUNNING')"
+
+    # 【ビルド実行】
+    local start_time end_time build_time
+    start_time=$(date +%s)
+    if ! eval "$build_command"; then
+        debug_log "ERROR" "ビルド失敗: $package_name"
+        stop_spinner
+        return 1
+    fi
+
+    end_time=$(date +%s)
+    build_time=$((end_time - start_time))
+
+    #stop_spinner
+    #echo "✅ ${package_name} のビルド完了（所要時間: ${build_time}秒）"
+    debug_log "DEBUG" "Build time: $build_time seconds"
+
+    # **ビルド後の `.ipk` の検索**
+    output_ipk=$(find "$BUILD_DIR/bin/packages" -type f -name "*.ipk" | head -n 1)
+    if [ -z "$output_ipk" ]; then
+        debug_log "ERROR" "ビルドされた .ipk ファイルが見つかりません！"
+        return 1
+    fi
+
+    debug_log "DEBUG" "Built .ipk package: $output_ipk"
+
+    # **`.ipk` を `install_package()` でインストール**
+    debug_log "DEBUG" "Installing built package: $output_ipk"
+    install_package "$output_ipk"
+
+    return 0
+}
+
+XXX_install_build() {
     local package_name=""
     local confirm_install="no"
     local hidden="no"
