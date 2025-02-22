@@ -1361,14 +1361,15 @@ install_package() {
     # **パッケージのインストール済みチェック**
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         # パッケージ名の後にスペース、ハイフン、またはアンダースコアが続く場合にマッチさせる
-        if opkg list-installed | grep -E "^$package_name([[:space:]]|-|_)" >/dev/null 2>&1; then
+        #if opkg list-installed | grep -E "^$package_name([[:space:]]|-|_)" >/dev/null 2>&1; then
+        if opkg list-installed | grep -qE "^$package_name "; >/dev/null 2>&1; then
             if [ "$hidden" != "yes" ]; then
                 echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
             fi
             return 0
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if apk DEBUG | grep -q "^$package_name$"; then
+        if apk info | grep -q "^$package_name$"; then
             if [ "$hidden" != "yes" ]; then
                 echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
             fi
@@ -1388,7 +1389,8 @@ install_package() {
 
     # **リポジトリ存在チェック**
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if ! opkg list | grep -E "^$package_name([[:space:]]|-|_)" >/dev/null 2>&1; then
+        #if ! opkg list | grep -E "^$package_name([[:space:]]|-|_)" >/dev/null 2>&1; then
+        if ! opkg list | grep -qE "^$package_name "; then
             echo "$(color yellow "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
             debug_log "DEBUG" "Package $package_name not found in repository."
             return 0
@@ -1426,23 +1428,17 @@ install_package() {
 
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         opkg install "$package_name" > /dev/null 2>&1 || {
-            stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
             debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
+            stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
             return 1
         }
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         apk add "$package_name" > /dev/null 2>&1 || {
-            stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
             debug_log "ERROR" "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")"
+            stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
             return 1
         }
     fi
-
-    # **スピナー停止 (成功メッセージ)**
-    stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-
-    echo "$(color green "✅ $(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-    debug_log "DEBUG" "Successfully installed package: $package_name"
 
     # **スピナー停止 (成功メッセージ)**
     stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
@@ -1474,6 +1470,7 @@ install_package() {
                 # コメント行（# で始まる）および空行を除外
                 pkg_settings=$(echo "$pkg_settings" | sed '/^[[:space:]]*#/d; /^[[:space:]]*$/d')
                 # 各行のコマンドを順次実行
+                if [ -n "$pkg_settings" ]; then
                 echo "$pkg_settings" | while IFS= read -r cmd; do
                     debug_log "DEBUG" "Executing local package setting command: $cmd"
                     eval "$cmd"
@@ -1493,8 +1490,14 @@ install_package() {
     if [ "$set_disabled" != "yes" ]; then
         if [ -x "/etc/init.d/$package_name" ]; then
             debug_log "DEBUG" "Enabling and starting service for $package_name"
-            /etc/init.d/"$package_name" enable
-            /etc/init.d/"$package_name" restart
+            if /etc/init.d/"$package_name" enable && /etc/init.d/"$package_name" restart; then
+                debug_log "DEBUG" "Service $package_name enabled and restarted successfully."
+            else
+                debug_log "ERROR" "Failed to enable or restart service $package_name."
+            fi
+
+            #/etc/init.d/"$package_name" enable
+            #/etc/init.d/"$package_name" restart
         else
             debug_log "DEBUG" "No init script found for $package_name; skipping service enable/start"
         fi
