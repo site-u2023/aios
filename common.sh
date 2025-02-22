@@ -1493,22 +1493,11 @@ install_build() {
         .[$pkg].build.commands.default.default[$pm] // 
         .[$pkg].build.commands.default.default // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
 
-    # フォールバック処理 (デフォルト設定を使用)
-    if [ -z "$build_command" ]; then
+    if [ -z "$build_command" ] || [ "$build_command" = "empty" ]; then
         debug_log "DEBUG" "No build command found for $package_name. Checking default settings."
-        build_command=$(jq -r --arg arch "$arch" --arg alt_arch "$alt_arch" --arg ver "$openwrt_version" --arg pm "$PACKAGE_MANAGER" '
-            .default.build.commands[$ver][$arch][$pm] // 
-            .default.build.commands[$ver][$arch] // 
-            .default.build.commands[$ver][$alt_arch][$pm] // 
-            .default.build.commands[$ver][$alt_arch] // 
-            .default.build.commands[$ver].default[$pm] // 
-            .default.build.commands[$ver].default // 
-            .default.build.commands.default[$arch][$pm] // 
-            .default.build.commands.default[$arch] // 
-            .default.build.commands.default[$alt_arch][$pm] // 
-            .default.build.commands.default[$alt_arch] // 
-            .default.build.commands.default.default[$pm] // 
-            .default.build.commands.default.default // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
+            
+        # 絶対にフォールバックするようにデフォルト値を設定
+        build_command="make && make install"
     fi
 
     if [ -z "$build_command" ]; then
