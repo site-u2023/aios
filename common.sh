@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-02-04"
+SCRIPT_VERSION="2025.02.22-02-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1358,49 +1358,49 @@ install_package() {
         return 1
     fi
 
+    # **アップデートオプション (スピナー内で強制実行)**
+    if [ "$update_mode" = "yes" ]; then
+        start_spinner "$(color yellow "Updating package list...")"
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            opkg update > /dev/null 2>&1
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            apk update > /dev/null 2>&1
+        fi
+        stop_spinner "$(color green "Package list updated successfully.")"
+    fi
+
     # **パッケージのインストール済みチェック**
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if opkg list-installed | grep -qE "^$package_name "; then
-            [ "$hidden" != "yes" ] && echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-            return 0
+            if [ "$hidden" != "yes" ]; then
+                echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+            fi
+            if [ "$test_mode" != "yes" ]; then
+                return 0
+            fi
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         if apk info | grep -q "^$package_name$"; then
-            [ "$hidden" != "yes" ] && echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-            return 0
+            if [ "$hidden" != "yes" ]; then
+                echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+            fi
+            if [ "$test_mode" != "yes" ]; then
+                return 0
+            fi
         fi
     fi
 
-    # **システムコマンド存在チェック**
-    if command -v "$package_name" >/dev/null 2>&1; then
+    # **システムコマンド存在チェック (testオプションでは無視して継続)**
+    if [ "$test_mode" != "yes" ] && command -v "$package_name" >/dev/null 2>&1; then
         echo "$(color green "$(get_message "MSG_COMMAND_AVAILABLE" | sed "s/{pkg}/$package_name/")")"
         debug_log "DEBUG" "Command $package_name exists in system."
         return 0
     fi
 
-    # **アップデートが必要か確認 (`update_package_list()` を使用)**
-    update_package_list
-
-    # **リポジトリ存在チェック**
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if ! opkg list | grep -qE "^$package_name "; then
-            debug_log "DEBUG" "Package $package_name not found in repository."
-            return 1
-        fi
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if ! apk search "$package_name" 2>/dev/null | grep -q "^$package_name"; then
-            debug_log "DEBUG" "Package $package_name not found in repository."
-            return 1
-        fi
-    else
-        debug_log "DEBUG" "Unknown package manager: $PACKAGE_MANAGER"
-        return 1
-    fi
-
-    # **テストモードなら、インストールをスキップ**
+    # **テストモードなら、ここでシミュレーションを実行**
     if [ "$test_mode" = "yes" ]; then
-        debug_log "DEBUG" "Test mode enabled: Skipping actual installation for $package_name"
-        echo "$(color yellow "Test mode: Package installation skipped for $package_name")"
+        debug_log "DEBUG" "Test mode enabled: Simulating installation for $package_name"
+        echo "$(color yellow "Test mode: Simulated package installation for $package_name")"
         return 0
     fi
 
