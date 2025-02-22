@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-00-04"
+SCRIPT_VERSION="2025.02.22-00-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1463,9 +1463,9 @@ install_build() {
         return 1
     fi
 
-    # 【ダウンローダーの取得】 (${CACHE_DIR}/downloader_ch により opkg/apk を判断)
-    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
-        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
+    # 【ダウンローダーの取得】 (${BASE_DIR}/downloader.db を使用)
+    if [ -f "${BASE_DIR}/downloader.db" ]; then
+        PACKAGE_MANAGER=$(cat "${BASE_DIR}/downloader.db")
     else
         debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")"
         return 1
@@ -1517,6 +1517,13 @@ install_build() {
     fi
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
     debug_log "DEBUG" "Using architecture: $arch"
+
+    # 【バージョンの正規化】
+    # 例: "19.07" なら ".0" を付加して "19.07.0" とする
+    if [ "$(echo "$openwrt_version" | awk -F. '{print NF}')" -eq 2 ]; then
+        openwrt_version="${openwrt_version}.0"
+        debug_log "DEBUG" "Normalized OpenWrt version to: $openwrt_version"
+    fi
 
     # 【custom-package.db からビルドコマンドの取得】
     local build_command
