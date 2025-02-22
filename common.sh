@@ -1199,7 +1199,7 @@ update_package_list() {
     return 0
 }
 
-install_package() {
+XXX_install_package() {
     local confirm_install="no"
     local skip_lang_pack="no"
     local skip_package_db="no"
@@ -1312,7 +1312,7 @@ install_package() {
     fi
 }
 
-XXX_install_package() {
+install_package() {
     local confirm_install="no"
     local skip_lang_pack="no"
     local skip_package_db="no"
