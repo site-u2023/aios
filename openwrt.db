@@ -17,7 +17,6 @@ echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION openwrt.db \033[0m"
 18.06.9=opkg|eol
 
 # OpenWrt 19.x 系列
-19.07=opkg|stable
 19.07.0=opkg|stable
 19.07.1=opkg|stable
 19.07.2=opkg|stable
