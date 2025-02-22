@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-02-10"
+SCRIPT_VERSION="2025.02.22-02-11"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1405,7 +1405,43 @@ install_package() {
         return 1
     fi
 
-    # **パッケージがすでにインストールされているか確認**
+    # **update オプションのみの場合、アップデートして終了**
+    if [ "$update_mode" = "yes" ] && [ -z "$package_name" ]; then
+        update_package_list
+        return 0
+    fi
+
+    if [ -z "$package_name" ]; then
+        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")")"
+        return 1
+    fi
+
+    # **インストール前の確認**
+    if [ "$confirm_install" = "yes" ]; then
+        while true; do
+            local msg=$(get_message "MSG_CONFIRM_INSTALL")
+            msg="${msg//\{pkg\}/$package_name}"
+            echo "$msg"
+
+            printf "%s " "$(get_message "MSG_CONFIRM_ONLY_YN")"
+            read -r yn || return 1  # Ctrl+D の場合は中止
+
+            case "$yn" in
+                [Yy]*)  
+                    # **確認後に `update_package_list()` を実行**
+                    update_package_list
+                    break
+                    ;;
+                [Nn]*) return 1 ;;
+                *) echo "$(color red "Invalid input. Please enter Y or N.")" ;;
+            esac
+        done
+    else
+        # **確認が不要な場合は、先に `update_package_list()` を実行**
+        update_package_list
+    fi
+
+    # **パッケージのインストール済みチェック**
     local is_installed="no"
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if opkg list-installed | grep -qE "^$package_name "; then
@@ -1423,38 +1459,11 @@ install_package() {
         return 0
     fi
 
-    # **update オプションのみの場合、アップデートして終了**
-    if [ "$update_mode" = "yes" ] && [ -z "$package_name" ]; then
-        update_package_list
-        return 0
-    fi
-
-    # **アップデートが必要なら `opkg update` を実行**
-    update_package_list
-
     # **テストモードなら、シミュレーションを実行**
     if [ "$test_mode" = "yes" ]; then
         debug_log "DEBUG" "Test mode enabled: Simulating installation for $package_name"
         echo "$(color yellow "Test mode: Simulated package installation for $package_name")"
         return 0
-    fi
-
-    # **インストール前の確認**
-    if [ "$confirm_install" = "yes" ]; then
-        while true; do
-            local msg=$(get_message "MSG_CONFIRM_INSTALL")
-            msg="${msg//\{pkg\}/$package_name}"
-            echo "$msg"
-
-            printf "%s " "$(get_message "MSG_CONFIRM_ONLY_YN")"
-            read -r yn || return 1  # Ctrl+D の場合は中止
-
-            case "$yn" in
-                [Yy]*) break ;;
-                [Nn]*) return 1 ;;
-                *) echo "$(color red "Invalid input. Please enter Y or N.")" ;;
-            esac
-        done
     fi
 
     # **スピナー開始 (インストール中のメッセージ)**
