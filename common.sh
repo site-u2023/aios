@@ -1696,6 +1696,7 @@ check_common() {
             download "openwrt.db"
             download "country.db"
             download "local-package.db"
+            download "custom-package.db"
             check_openwrt
             check_architecture
             check_downloader
