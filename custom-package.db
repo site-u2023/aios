@@ -36,10 +36,10 @@
       },
       "commands": {
         "default": {
-          "x86_64": "make package/luci-app-cpu-perf/compile",
-          "armv7l": "make package/luci-app-cpu-perf/compile",
-          "mipsel": "make package/luci-app-cpu-perf/compile",
-          "mips": "make package/luci-app-cpu-perf/compile"
+          "x86_64": "cd /tmp/aios/build/luci-app-cpu-perf && ./scripts/feeds update -a && ./scripts/feeds install -a && make package/luci-app-cpu-perf/compile",
+          "armv7l": "cd /tmp/aios/build/luci-app-cpu-perf && ./scripts/feeds update -a && ./scripts/feeds install -a && make package/luci-app-cpu-perf/compile",
+          "mipsel": "cd /tmp/aios/build/luci-app-cpu-perf && ./scripts/feeds update -a && ./scripts/feeds install -a && make package/luci-app-cpu-perf/compile",
+          "mips": "cd /tmp/aios/build/luci-app-cpu-perf && ./scripts/feeds update -a && ./scripts/feeds install -a && make package/luci-app-cpu-perf/compile"
         }
       }
     }
