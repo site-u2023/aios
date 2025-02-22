@@ -1447,11 +1447,6 @@ install_build() {
         arch=$(cat "${CACHE_DIR}/architecture.ch")
     fi
 
-    # `armv7l` の場合は `arm71` も試す
-    if [ "$arch" = "armv7l" ]; then
-        alt_arch="arm71"
-    fi
-
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
     debug_log "DEBUG" "Using architecture: $arch (alt: $alt_arch)"
 
