@@ -5,7 +5,6 @@
         "opkg": [
           "make",
           "gcc",
-          "git",
           "libtool-bin",
           "automake",
           "pkg-config",
@@ -25,16 +24,15 @@
           "unzip"
         ],
         "apk": [
-          "make",
+          "build-base",
           "gcc",
-          "git",
-          "libtool-bin",
+          "make",
+          "libtool",
           "automake",
-          "pkg-config",
+          "pkgconf",
           "zlib-dev",
-          "libncurses-dev",
-          "curl",
-          "libxml2",
+          "ncurses-dev",
+          "curl-dev",
           "libxml2-dev",
           "autoconf",
           "bison",
@@ -42,63 +40,24 @@
           "perl",
           "patch",
           "wget",
-          "wget-ssl",
           "tar",
           "unzip"
         ]
       },
       "commands": {
-        "default": {
-          "default": "cd /tmp/build && make clean && make && cp output.ipk /tmp && echo 'Default build complete'"
-        }
-      }
-    }
-  },
-  "uconv": {
-    "build": {
-      "dependencies": {
-        "opkg": [],
-        "apk": []
-      },
-      "commands": {
         "24.10.0": {
-          "armv7l": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on armv7l for 24.10.0'",
-          "aarch64": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on aarch64 for 24.10.0'",
-          "mips": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on mips for 24.10.0'",
-          "mipsel": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on mipsel for 24.10.0'",
-          "x86": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on x86 for 24.10.0'",
-          "x86_64": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on x86_64 for 24.10.0'",
-          "default": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete for 24.10.0 (default arch)'"
-        },
-        "23.05.4": {
-          "armv7l": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on armv7l for 23.05.4'",
-          "aarch64": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on aarch64 for 23.05.4'",
-          "mips": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on mips for 23.05.4'",
-          "mipsel": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on mipsel for 23.05.4'",
-          "x86": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on x86 for 23.05.4'",
-          "x86_64": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on x86_64 for 23.05.4'",
-          "default": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete for 23.05.4 (default arch)'"
+          "armv7l": "make && make install",
+          "x86_64": "make && make install"
         },
         "19.07": {
-          "armv7l": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on armv7l for 19.07'",
-          "aarch64": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on aarch64 for 19.07'",
-          "mips": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on mips for 19.07'",
-          "mipsel": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on mipsel for 19.07'",
-          "x86": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on x86 for 19.07'",
-          "x86_64": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on x86_64 for 19.07'",
-          "default": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete for 19.07 (default arch)'"
-        },
-        "SNAPSHOT": {
-          "armv7l": "cd /tmp/uconv && make clean && make SNAPSHOT=1 && cp uconv.ipk /tmp && echo 'uconv SNAPSHOT build complete on armv7l'",
-          "aarch64": "cd /tmp/uconv && make clean && make SNAPSHOT=1 && cp uconv.ipk /tmp && echo 'uconv SNAPSHOT build complete on aarch64'",
-          "mips": "cd /tmp/uconv && make clean && make SNAPSHOT=1 && cp uconv.ipk /tmp && echo 'uconv SNAPSHOT build complete on mips'",
-          "mipsel": "cd /tmp/uconv && make clean && make SNAPSHOT=1 && cp uconv.ipk /tmp && echo 'uconv SNAPSHOT build complete on mipsel'",
-          "x86": "cd /tmp/uconv && make clean && make SNAPSHOT=1 && cp uconv.ipk /tmp && echo 'uconv SNAPSHOT build complete on x86'",
-          "x86_64": "cd /tmp/uconv && make clean && make SNAPSHOT=1 && cp uconv.ipk /tmp && echo 'uconv SNAPSHOT build complete on x86_64'",
-          "default": "cd /tmp/uconv && make clean && make SNAPSHOT=1 && cp uconv.ipk /tmp && echo 'uconv SNAPSHOT build complete (default arch)'"
+          "armv7l": "make && make install",
+          "x86_64": "make && make install"
         },
         "default": {
-          "default": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv default build complete'"
+          "armv7l": "make && make install",
+          "x86_64": "make && make install",
+          "mipsel": "make && make install",
+          "mips": "make && make install"
         }
       }
     }
