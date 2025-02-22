@@ -1210,6 +1210,122 @@ install_package() {
     local package_name=""
     local update_cache="${CACHE_DIR}/update.ch"
 
+    for arg in "$@"; do
+        case "$arg" in
+            yn) confirm_install="yes" ;;
+            nolang) skip_lang_pack="yes" ;;
+            notpack) skip_package_db="yes" ;;
+            disabled) set_disabled="yes" ;;
+            hidden) hidden="yes" ;;
+            test) test_mode="yes" ;;
+            force) force_install="yes" ;;
+            update) update_mode="yes" ;;
+            *)
+                if [ -z "$package_name" ]; then
+                    package_name="$arg"
+                else
+                    debug_log "DEBUG" "$(color yellow "$(get_message "MSG_UNKNOWN_OPTION" | sed "s/{option}/$arg/")")"
+                fi
+                ;;
+        esac
+    done
+
+    if [ -z "$package_name" ]; then
+        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")")"
+        return 1
+    fi
+
+    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
+    else 
+        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")")"
+        return 1
+    fi
+
+    # **パッケージのインストール済みチェック**
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if opkg list-installed | cut -d' ' -f1 | grep -q "^$package_name$"; then
+            [ "$hidden" != "yes" ] && echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+            return 0
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if apk info | grep -q "^$package_name$"; then
+            [ "$hidden" != "yes" ] && echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+            return 0
+        fi
+    fi
+
+    # **コマンドが既に存在するかチェック**
+    if command -v "$package_name" >/dev/null 2>&1; then
+        echo "$(color green "$(get_message "MSG_COMMAND_AVAILABLE" | sed "s/{pkg}/$package_name/")")"
+        debug_log "DEBUG" "Command $package_name exists in system."
+        return 0
+    fi
+
+    update_package_list
+
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if ! opkg list | cut -d' ' -f1 | grep -q "^$package_name$"; then
+            echo "$(color yellow "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
+            debug_log "DEBUG" "Package $package_name not found in repository."
+            return 0
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if ! apk search "^$package_name$" 2>/dev/null | grep -q "^$package_name$"; then
+            echo "$(color yellow "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
+            debug_log "DEBUG" "Package $package_name not found in repository."
+            return 0
+        fi
+    else
+        debug_log "DEBUG" "Unknown package manager: $PACKAGE_MANAGER"
+        return 0
+    fi
+
+    if [ "$confirm_install" = "yes" ]; then
+        while true; do
+            local msg=$(get_message "MSG_CONFIRM_INSTALL")
+            msg="${msg//\{pkg\}/$package_name}"
+            echo "$msg"
+    
+            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
+            read -r yn
+            case "$yn" in
+                [Yy]*) break ;;
+                [Nn]*) return 1 ;;
+                *) echo "$(color red "Invalid input. Please enter Y or N.")" ;;
+            esac
+        done
+    fi
+
+    start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
+
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        opkg install "$package_name" > /dev/null 2>&1 || {
+            stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+            return 1
+        }
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        apk add "$package_name" > /dev/null 2>&1 || {
+            stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+            return 1
+        }
+    fi
+
+    stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+}
+
+XXX_install_package() {
+    local confirm_install="no"
+    local skip_lang_pack="no"
+    local skip_package_db="no"
+    local set_disabled="no"
+    local hidden="no"
+    local test_mode="no"
+    local force_install="no"
+    local update_mode="no"
+    local package_name=""
+    local update_cache="${CACHE_DIR}/update.ch"
+
     # **オプションの処理**
     for arg in "$@"; do
         case "$arg" in
