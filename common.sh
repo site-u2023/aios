@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-02-09"
+SCRIPT_VERSION="2025.02.22-02-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1206,6 +1206,7 @@ update_package_list() {
     return 0
 }
 
+
 XXX_update_package_list() {
     local update_cache="${CACHE_DIR}/update.ch"
     local current_date=$(date '+%Y-%m-%d')
@@ -1404,31 +1405,32 @@ install_package() {
         return 1
     fi
 
-    # **関数が呼ばれるたびに `opkg update` を確認 (24時間以内ならスキップ)**
-    update_package_list
-
-    # **update オプションのみの場合、アップデートして終了**
-    if [ "$update_mode" = "yes" ] && [ -z "$package_name" ]; then
-        return 0
-    fi
-
-    if [ -z "$package_name" ]; then
-        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")")"
-        return 1
-    fi
-
-    # **パッケージのインストール済みチェック**
+    # **パッケージがすでにインストールされているか確認**
+    local is_installed="no"
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if opkg list-installed | grep -qE "^$package_name "; then
-            [ "$hidden" != "yes" ] && echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-            return 0
+            is_installed="yes"
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         if apk info | grep -q "^$package_name$"; then
-            [ "$hidden" != "yes" ] && echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-            return 0
+            is_installed="yes"
         fi
     fi
+
+    # **インストール済みならスキップ**
+    if [ "$is_installed" = "yes" ]; then
+        [ "$hidden" != "yes" ] && echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+        return 0
+    fi
+
+    # **update オプションのみの場合、アップデートして終了**
+    if [ "$update_mode" = "yes" ] && [ -z "$package_name" ]; then
+        update_package_list
+        return 0
+    fi
+
+    # **アップデートが必要なら `opkg update` を実行**
+    update_package_list
 
     # **テストモードなら、シミュレーションを実行**
     if [ "$test_mode" = "yes" ]; then
