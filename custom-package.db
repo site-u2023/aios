@@ -36,10 +36,10 @@
       },
       "commands": {
         "default": {
-          "x86_64": "cd /tmp/aios/build/luci-app-cpu-perf && ./scripts/feeds update -a && ./scripts/feeds install -a && make package/luci-app-cpu-perf/compile",
-          "armv7l": "cd /tmp/aios/build/luci-app-cpu-perf && ./scripts/feeds update -a && ./scripts/feeds install -a && make package/luci-app-cpu-perf/compile",
-          "mipsel": "cd /tmp/aios/build/luci-app-cpu-perf && ./scripts/feeds update -a && ./scripts/feeds install -a && make package/luci-app-cpu-perf/compile",
-          "mips": "cd /tmp/aios/build/luci-app-cpu-perf && ./scripts/feeds update -a && ./scripts/feeds install -a && make package/luci-app-cpu-perf/compile"
+          "x86_64": "mkdir -p openwrt && cd openwrt && git clone https://git.openwrt.org/openwrt/openwrt.git . && ./scripts/feeds update -a && ./scripts/feeds install -a && cd /tmp/aios/build/luci-app-cpu-perf && make package/luci-app-cpu-perf/compile",
+          "armv7l": "mkdir -p openwrt && cd openwrt && git clone https://git.openwrt.org/openwrt/openwrt.git . && ./scripts/feeds update -a && ./scripts/feeds install -a && cd /tmp/aios/build/luci-app-cpu-perf && make package/luci-app-cpu-perf/compile",
+          "mipsel": "mkdir -p openwrt && cd openwrt && git clone https://git.openwrt.org/openwrt/openwrt.git . && ./scripts/feeds update -a && ./scripts/feeds install -a && cd /tmp/aios/build/luci-app-cpu-perf && make package/luci-app-cpu-perf/compile",
+          "mips": "mkdir -p openwrt && cd openwrt && git clone https://git.openwrt.org/openwrt/openwrt.git . && ./scripts/feeds update -a && ./scripts/feeds install -a && cd /tmp/aios/build/luci-app-cpu-perf && make package/luci-app-cpu-perf/compile"
         }
       }
     }
