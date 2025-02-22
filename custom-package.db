@@ -1,12 +1,34 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-00-00"
+SCRIPT_VERSION="2025.02.22-00-01"
 
 {
   "default": {
     "build": {
       "dependencies": {
         "opkg": [
+          "make",
+          "gcc",
+          "git",
+          "libtool-bin",
+          "automake",
+          "pkg-config",
+          "zlib-dev",
+          "libncurses-dev",
+          "curl",
+          "libxml2",
+          "libxml2-dev",
+          "autoconf",
+          "bison",
+          "flex",
+          "perl",
+          "patch",
+          "wget",
+          "wget-ssl",
+          "tar",
+          "unzip"
+        ],
+        "apk": [
           "make",
           "gcc",
           "git",
@@ -38,9 +60,37 @@ SCRIPT_VERSION="2025.02.22-00-00"
   },
   "uconv": {
     "build": {
+      "dependencies": {
+        "opkg": [],
+        "apk": []
+      },
       "commands": {
         "24.10.0": {
-          "armv7l": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on armv7l for 24.10.0'"
+          "armv7l": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on armv7l for 24.10.0'",
+          "aarch64": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on aarch64 for 24.10.0'",
+          "mips": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on mips for 24.10.0'",
+          "mipsel": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on mipsel for 24.10.0'",
+          "x86": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on x86 for 24.10.0'",
+          "x86_64": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on x86_64 for 24.10.0'",
+          "default": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete for 24.10.0 (default arch)'"
+        },
+        "23.05.4": {
+          "armv7l": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on armv7l for 23.05.4'",
+          "aarch64": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on aarch64 for 23.05.4'",
+          "mips": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on mips for 23.05.4'",
+          "mipsel": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on mipsel for 23.05.4'",
+          "x86": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on x86 for 23.05.4'",
+          "x86_64": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on x86_64 for 23.05.4'",
+          "default": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete for 23.05.4 (default arch)'"
+        },
+        "19.07.0": {
+          "armv7l": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on armv7l for 19.07.0'",
+          "aarch64": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on aarch64 for 19.07.0'",
+          "mips": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on mips for 19.07.0'",
+          "mipsel": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on mipsel for 19.07.0'",
+          "x86": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on x86 for 19.07.0'",
+          "x86_64": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete on x86_64 for 19.07.0'",
+          "default": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv build complete for 19.07.0 (default arch)'"
         },
         "default": {
           "default": "cd /tmp/uconv && make clean && make && cp uconv.ipk /tmp && echo 'uconv default build complete'"
