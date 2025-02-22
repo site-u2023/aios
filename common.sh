@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-02-06"
+SCRIPT_VERSION="2025.02.22-02-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1156,6 +1156,56 @@ stop_spinner() {
 }
 
 update_package_list() {
+    local update_cache="${CACHE_DIR}/update.ch"
+    local current_date
+    current_date=$(date '+%Y-%m-%d')
+
+    # **キャッシュディレクトリの作成**
+    mkdir -p "$CACHE_DIR"
+
+    # **update_mode が未定義なら初期化**
+    if [ -z "$update_mode" ]; then
+        update_mode="no"
+    fi
+
+    # **キャッシュチェック: updateオプションがない場合はスキップ判定**
+    if [ "$update_mode" != "yes" ] && [ -f "$update_cache" ] && grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
+        debug_log "DEBUG" "パッケージリストは既に最新です。更新をスキップします。"
+        return 0
+    fi
+
+    # **スピナー開始 (アップデートメッセージを表示)**
+    start_spinner "$(color yellow "$(get_message "MSG_RUNNING_UPDATE")")"
+
+    # **パッケージリストの更新**
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if ! opkg update > "${LOG_DIR}/opkg_update.log" 2>&1; then
+            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+            return 1
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if ! apk update > "${LOG_DIR}/apk_update.log" 2>&1; then
+            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+            return 1
+        fi
+    fi
+
+    # **スピナー停止 (成功メッセージを表示)**
+    stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
+
+    # **キャッシュを更新**
+    echo "LAST_UPDATE=$current_date" > "$update_cache" || {
+        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_WRITE_CACHE")")"
+        return 1
+    }
+
+    return 0
+}
+
+
+XXX_update_package_list() {
     local update_cache="${CACHE_DIR}/update.ch"
     local current_date=$(date '+%Y-%m-%d')
     local max_retries=3
