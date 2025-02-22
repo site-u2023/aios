@@ -3,16 +3,18 @@
 SCRIPT_VERSION="2025.02.23-00-00"
 
 [default]
-package_manager=opkg
-build.dependencies=make gcc wget jq git
-build.command=make package/{package}/compile
-confirm_install=no
-hidden=no
-cache_dir=/tmp/aios/cache
-build_dir=/tmp/aios/build
-openwrt_repo=https://git.openwrt.org/openwrt/openwrt.git
+build_dir = /tmp/aios/build
+openwrt_repo = https://git.openwrt.org/openwrt/openwrt.git
 
-[luci-app-cpu-perf]
-source.url=https://github.com/gSpotx2f/luci-app-cpu-perf.git
-build.dependencies=git make gcc pkg-config libtool automake autoconf gettext lua wget tar unzip perl perlbase-findbin
-build.command=make package/luci-app-cpu-perf/compile
+[luci-app-example]
+source_url = https://github.com/example/luci-app-example.git
+build_dependencies = make gcc libtool autoconf automake
+yn = yes  # デフォルトでインストール確認をする
+hidden = no # デフォルトで非表示インストールしない
+
+[build-commands]
+23.05.4 = make package/luci-app-example/compile V=s
+22.03.3 = make package/luci-app-example/compile -j$(nproc)
+19.07 = make package/luci-app-example/compile
+default = make package/luci-app-example/compile
+
