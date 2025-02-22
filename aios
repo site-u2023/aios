@@ -175,14 +175,13 @@ print_banner_fadein() {
 
 # パッケージのインストール (オプション)
 packages() {
-    # uconv のインストール
-    install_build build_uconv yn
-
     # 他のパッケージのインストール
     install_package ttyd test yn hidden
     install_package luci-app-ttyd yn hidden test
     install_package test openssh-sftp-server yn hidden
-    install_package update
+    #install_package update
+    # uconv のインストール
+    install_build build_uconv yn
     install_build luci-app-cpu-status yn
 }
 
