@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-00-06"
+SCRIPT_VERSION="2025.02.22-00-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1497,6 +1497,13 @@ install_build() {
     # 【ビルド用依存パッケージのインストール】
     local build_dependencies
     build_dependencies=$(jq -r --arg pkg "$package_name" '.[$pkg].build.dependencies.opkg // [] | join(" ")' "${BASE_DIR}/custom-package.db" 2>/dev/null)
+    
+    # フォールバック処理 (デフォルト設定を使用)
+    if [ -z "$build_dependencies" ]; then
+        debug_log "DEBUG" "No build dependencies found for $package_name. Checking default settings."
+        build_dependencies=$(jq -r '.default.build.dependencies.opkg // [] | join(" ")' "${BASE_DIR}/custom-package.db" 2>/dev/null)
+    fi
+
     if [ -n "$build_dependencies" ]; then
         debug_log "DEBUG" "Installing build dependencies for $package_name: $build_dependencies"
         for dep in $build_dependencies; do
@@ -1519,7 +1526,6 @@ install_build() {
     debug_log "DEBUG" "Using architecture: $arch"
 
     # 【バージョンの正規化】
-    # 例: "19.07" → "19.07.0" (フィールド数が2の場合)
     if [ "$(echo "$openwrt_version" | awk -F. '{print NF}')" -eq 2 ]; then
         openwrt_version="${openwrt_version}.0"
         debug_log "DEBUG" "Normalized OpenWrt version to: $openwrt_version"
@@ -1532,6 +1538,17 @@ install_build() {
         .[$pkg].build.commands[$ver].default // 
         .[$pkg].build.commands.default[$arch] // 
         .[$pkg].build.commands.default.default // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
+
+    # フォールバック処理 (デフォルト設定を使用)
+    if [ -z "$build_command" ]; then
+        debug_log "DEBUG" "No build command found for $package_name. Checking default settings."
+        build_command=$(jq -r --arg arch "$arch" --arg ver "$openwrt_version" '
+            .default.build.commands[$ver][$arch] // 
+            .default.build.commands[$ver].default // 
+            .default.build.commands.default[$arch] // 
+            .default.build.commands.default.default // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
+    fi
+
     if [ -z "$build_command" ]; then
         debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_COMMAND_NOT_FOUND" | sed "s/{pkg}/$package_name/" | sed "s/{arch}/$arch/" | sed "s/{ver}/$openwrt_version/")"
         stop_spinner
