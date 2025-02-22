@@ -92,18 +92,7 @@ packages() {
     install_package luci-app-ttyd yn hidden
     install_package openssh-sftp-server yn hidden
 
-    cd /tmp/aios/build/luci-app-cpu-perf
-
-    # OpenWrt の feeds システムを初期化
-    mkdir -p openwrt
-    cd openwrt
-    git clone https://git.openwrt.org/openwrt/openwrt.git .   
-    ./scripts/feeds update -a
-    ./scripts/feeds install -a
-
-    cd /tmp/aios/build/luci-app-cpu-perf
-
-    install_build luci-app-cpu-perf yn
+    #install_build luci-app-cpu-perf yn
 }
 
 # メイン処理
