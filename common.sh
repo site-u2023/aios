@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-02-11"
+SCRIPT_VERSION="2025.02.22-02-13"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1416,32 +1416,7 @@ install_package() {
         return 1
     fi
 
-    # **インストール前の確認**
-    if [ "$confirm_install" = "yes" ]; then
-        while true; do
-            local msg=$(get_message "MSG_CONFIRM_INSTALL")
-            msg="${msg//\{pkg\}/$package_name}"
-            echo "$msg"
-
-            printf "%s " "$(get_message "MSG_CONFIRM_ONLY_YN")"
-            read -r yn || return 1  # Ctrl+D の場合は中止
-
-            case "$yn" in
-                [Yy]*)  
-                    # **確認後に `update_package_list()` を実行**
-                    update_package_list
-                    break
-                    ;;
-                [Nn]*) return 1 ;;
-                *) echo "$(color red "Invalid input. Please enter Y or N.")" ;;
-            esac
-        done
-    else
-        # **確認が不要な場合は、先に `update_package_list()` を実行**
-        update_package_list
-    fi
-
-    # **パッケージのインストール済みチェック**
+    # **デバイスにパッケージがすでにインストールされているかチェック**
     local is_installed="no"
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if opkg list-installed | grep -qE "^$package_name "; then
@@ -1453,10 +1428,51 @@ install_package() {
         fi
     fi
 
-    # **インストール済みならスキップ**
+    # **インストール済みなら終了**
     if [ "$is_installed" = "yes" ]; then
         [ "$hidden" != "yes" ] && echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
         return 0
+    fi
+
+    # **リポジトリにパッケージがあるか確認**
+    local package_exists="no"
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if opkg list | grep -qE "^$package_name "; then
+            package_exists="yes"
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if apk search "$package_name" 2>/dev/null | grep -q "^$package_name$"; then
+            package_exists="yes"
+        fi
+    fi
+
+    # **リポジトリにパッケージがない場合はエラー**
+    if [ "$package_exists" = "no" ]; then
+        debug_log "ERROR" "$(color red "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
+        return 1
+    fi
+
+    # **YN 確認が必要なら、ここで確認**
+    if [ "$confirm_install" = "yes" ]; then
+        while true; do
+            local msg=$(get_message "MSG_CONFIRM_INSTALL")
+            msg="${msg//\{pkg\}/$package_name}"
+            echo "$msg"
+
+            printf "%s " "$(get_message "MSG_CONFIRM_ONLY_YN")"
+            read -r yn || return 1  # Ctrl+D の場合は中止
+
+            case "$yn" in
+                [Yy]*)  
+                    update_package_list  # **確認後に `opkg update` を実行**
+                    break
+                    ;;
+                [Nn]*) return 1 ;;
+                *) echo "$(color red "Invalid input. Please enter Y or N.")" ;;
+            esac
+        done
+    else
+        update_package_list  # **YN 指定なしならキャッシュ確認しつつ `opkg update` を実行**
     fi
 
     # **テストモードなら、シミュレーションを実行**
@@ -1488,6 +1504,7 @@ install_package() {
         /etc/init.d/"$package_name" enable && /etc/init.d/"$package_name" restart
     fi
 }
+
 
 #########################################################################
 # Last Update: 2025-02-22 15:35:00 (JST) 🚀
