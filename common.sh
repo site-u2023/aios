@@ -1507,29 +1507,28 @@ install_build() {
     # 【ビルドディレクトリへ移動】
     cd "$BUILD_DIR" || { debug_log "ERROR" "Failed to enter build directory"; return 1; }
 
-    # 【Makefile の存在をチェック → ない場合はソースコードを取得】
-    if [ ! -f "Makefile" ]; then
-        debug_log "DEBUG" "No Makefile found. Attempting to download source code."
+    # 【ソースコードのダウンロード URL を取得（custom-package.db or デフォルト）】
+    local source_url
+    source_url=$(jq -r --arg pkg "$package_name" '
+        .[$pkg].source.url // 
+        .default.source.default[$pkg] // 
+        .default.source.fallback // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
 
-        # ソースコードのダウンロード URL を取得（custom-package.db に記載）
-        local source_url
-        source_url=$(jq -r --arg pkg "$package_name" '.[$pkg].source.url // empty' "${BASE_DIR}/custom-package.db" 2>/dev/null)
-
-        if [ -z "$source_url" ] || [ "$source_url" = "empty" ]; then
-            debug_log "ERROR" "No source URL found for $package_name in custom-package.db."
-            stop_spinner
-            return 1
-        fi
-
-        # ソースコードをダウンロード＆展開
-        wget -O source.tar.gz "$source_url"
-        tar -xzf source.tar.gz
-        cd "$(tar -tzf source.tar.gz | head -1 | cut -f1 -d"/")" || { debug_log "ERROR" "Failed to enter extracted directory"; return 1; }
-
-        debug_log "DEBUG" "Source code downloaded and extracted."
+    # **フォールバック処理（デフォルトのソース URL を適用）**
+    if [ -z "$source_url" ] || [ "$source_url" = "empty" ]; then
+        debug_log "ERROR" "No source URL found for $package_name, and no default URL is set."
+        stop_spinner
+        return 1
     fi
 
-    # 【再度 Makefile の確認】
+    # 【ソースコードのダウンロード＆展開】
+    wget -O source.tar.gz "$source_url"
+    tar -xzf source.tar.gz
+    cd "$(tar -tzf source.tar.gz | head -1 | cut -f1 -d"/")" || { debug_log "ERROR" "Failed to enter extracted directory"; return 1; }
+
+    debug_log "DEBUG" "Source code downloaded and extracted."
+
+    # 【Makefile の存在をチェック】
     if [ ! -f "Makefile" ]; then
         debug_log "ERROR" "Makefile still not found after downloading source."
         stop_spinner
