@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-00-01"
+SCRIPT_VERSION="2025.02.22-00-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1741,6 +1741,7 @@ check_common() {
             download "hidden" "openwrt.db"
             download "hidden" "country.db"
             download "hidden" "local-package.db"
+            download "hidden" "custom-package.db"
             check_openwrt
             check_architecture
             check_downloader
