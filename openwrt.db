@@ -27,7 +27,6 @@ echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION openwrt.db \033[0m"
 19.07.7=opkg|stable
 19.07.8=opkg|stable
 19.07.9=opkg|stable
-19.07-SNAPSHOT=apk|snapshot
 
 # OpenWrt 21.x 系列
 21.02.0=opkg|stable
@@ -37,7 +36,6 @@ echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION openwrt.db \033[0m"
 21.02.4=opkg|stable
 21.02.5=opkg|stable
 21.02.6=opkg|stable
-21.02-SNAPSHOT=apk|snapshot
 
 # OpenWrt 22.x 系列
 22.03.0=opkg|stable
@@ -47,7 +45,6 @@ echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION openwrt.db \033[0m"
 22.03.4=opkg|stable
 22.03.5=opkg|stable
 22.03.6=opkg|stable
-22.03-SNAPSHOT=apk|snapshot
 
 # OpenWrt 23.x 系列
 23.05.0=opkg|stable
@@ -55,11 +52,9 @@ echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION openwrt.db \033[0m"
 23.05.2=opkg|stable
 23.05.3=opkg|stable
 23.05.4=opkg|stable
-23.05-SNAPSHOT=apk|snapshot
 
 # OpenWrt 24.x 系列
 24.10.0=opkg|stable
-24.10-SNAPSHOT=apk|snapshot
 
 # 常に最新の開発版
 SNAPSHOT=apk|snapshot
