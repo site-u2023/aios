@@ -2005,6 +2005,90 @@ check_option() {
     SELECTED_LANGUAGE=""
     MODE="full"
     DEBUG_MODE="false"
+    DEBUG_LEVEL="INFO"
+    DRY_RUN="false"
+    LOGFILE=""
+    FORCE="false"
+    RESET="false"
+    HELP="false"
+
+    # 言語およびオプション引数の処理
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            -h|--h|-help|--help|-\?|--\?)
+                HELP="true"
+                print_help
+                exit 0
+                ;;
+            -v|--v|-version|--version)
+                script_version
+                exit 0
+                ;;
+            -d|--d|-debug|--debug|-d1|--d1)
+                DEBUG_MODE="true"
+                DEBUG_LEVEL="DEBUG"
+                ;;
+            -d2|--d2|-debug2|--debug2)
+                DEBUG_MODE="true"
+                DEBUG_LEVEL="DEBUG2"
+                ;;
+            -cf|--cf|-common_full|--common_full)
+                MODE="full"
+                ;;
+            -cl|--cl|-ocommon_light|--ocommon_light)
+                MODE="light"
+                ;;
+            -cd|--cd|-common_debug|--common_debug|--ocommon_debug)
+                MODE="debug"
+                ;;
+            -r|--r|-reset|--reset|-resrt|--resrt)
+                MODE="reset"
+                RESET="true"
+                ;;
+            -f|--f|-force|--force)
+                FORCE="true"
+                ;;
+            -dr|--dr|-dry-run|--dry-run)
+                DRY_RUN="true"
+                ;;
+            -l|--l|-logfile|--logfile)
+                if [ -n "$2" ] && [ "${2#-}" != "$2" ]; then
+                    LOGFILE="$2"
+                    shift
+                else
+                    echo "Error: --logfile requires a path argument"
+                    exit 1
+                fi
+                ;;
+            -*)
+                echo "Warning: Unknown option: $1" >&2
+                ;;
+            *)
+                if [ -z "$SELECTED_LANGUAGE" ]; then
+                    SELECTED_LANGUAGE="$1"
+                fi
+                ;;
+        esac
+        shift
+    done
+
+    # 環境変数として設定
+    export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET HELP
+
+    # デバッグ情報を出力
+    debug_log DEBUG "check_option: SELECTED_LANGUAGE='$SELECTED_LANGUAGE', MODE='$MODE', DEBUG_MODE='$DEBUG_MODE', DEBUG_LEVEL='$DEBUG_LEVEL', DRY_RUN='$DRY_RUN', LOGFILE='$LOGFILE', FORCE='$FORCE', RESET='$RESET', HELP='$HELP'"
+
+    # 設定された言語を `check_common()` に渡す
+    check_common "$SELECTED_LANGUAGE"
+}
+
+XXX_check_option() {
+    debug_log DEBUG "check_option received before args: $*"
+
+    # デフォルト値の設定
+    SELECTED_LANGUAGE=""
+    MODE="full"
+    DEBUG_MODE="false"
     DEBUG_LEVEL="DEBUG"
     DRY_RUN="false"
     LOGFILE=""
