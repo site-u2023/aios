@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-02-14"
+SCRIPT_VERSION="2025.02.22-03-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -97,6 +97,59 @@ handle_error() {
 # 4. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
 #########################################################################
 debug_log() {
+    local level="$1"
+    local message="$2"
+    local file="$3"
+    local version="$4"
+
+    # `$1` にログレベルが指定されていない場合、デフォルトを `DEBUG` にする
+    case "$level" in
+        "DEBUG"|"INFO"|"WARN"|"ERROR") ;;  # 何もしない (正しいログレベル)
+        "")
+            level="DEBUG"
+            message="$1"
+            file="$2"
+            version="$3"
+            ;;
+        *)
+            message="$1"
+            file="$2"
+            version="$3"
+            level="DEBUG"
+            ;;
+    esac
+
+    # 変数を置換
+    message=$(echo "$message" | sed -e "s/{file}/$file/g" -e "s/{version}/$version/g")
+
+    # ログレベル制御
+    case "$DEBUG_LEVEL" in
+        DEBUG)    allowed_levels="DEBUG INFO WARN ERROR" ;;
+        INFO)     allowed_levels="INFO WARN ERROR" ;;
+        WARN)     allowed_levels="WARN ERROR" ;;
+        ERROR)    allowed_levels="ERROR" ;;
+        *)        allowed_levels="ERROR" ;;
+    esac
+
+    if echo "$allowed_levels" | grep -q "$level"; then
+        local timestamp
+        timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+        local log_message="[$timestamp] $level: $message"
+
+        # カラー表示
+        case "$level" in
+            "ERROR") echo -e "$(color red "$log_message")" ;;
+            "WARN") echo -e "$(color yellow "$log_message")" ;;
+            "INFO") echo -e "$(color cyan "$log_message")" ;;
+            "DEBUG") echo -e "$(color white "$log_message")" ;;
+        esac
+
+        # ログファイルに記録
+        echo "$log_message" >> "$LOG_DIR/debug.log"
+    fi
+}
+
+XXX_debug_log() {
     local level="$1"
     local message="$2"
     local file="$3"
