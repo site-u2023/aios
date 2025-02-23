@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-03-00"
+SCRIPT_VERSION="2025.02.22-03-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -337,7 +337,45 @@ color_code_map() {
 #########################################################################
 # check_openwrt: OpenWrtのバージョン確認・検証
 #########################################################################
+#########################################################################
+# check_openwrt: OpenWrtのバージョン確認・検証
+#########################################################################
 check_openwrt() {
+    local version_file="${CACHE_DIR}/openwrt.ch"
+
+    # バージョン桁数を統一する関数
+    normalize_version() {
+        local version="$1"
+        local count=$(echo "$version" | tr -cd '.' | wc -c)
+
+        case "$count" in
+            1) echo "${version}.0" ;;  # `19.07` → `19.07.0`
+            2) echo "$version" ;;       # `24.10.0` などはそのまま
+            *) echo "0.0.0" ;;          # 想定外のフォーマット回避
+        esac
+    }
+
+    # キャッシュからバージョン取得 or `/etc/openwrt_release` から取得
+    if [ -f "$version_file" ]; then
+        CURRENT_VERSION=$(cat "$version_file")
+    else
+        raw_version=$(awk -F"'" '/DISTRIB_RELEASE/ {print $2}' /etc/openwrt_release | cut -d'-' -f1)
+        CURRENT_VERSION=$(normalize_version "$raw_version")
+        echo "$CURRENT_VERSION" > "$version_file"
+    fi
+
+    # `openwrt.db` に対応バージョンがあるかチェック
+    if grep -q "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db"; then
+        local db_entry=$(grep "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db" | cut -d'=' -f2)
+        PACKAGE_MANAGER=$(echo "$db_entry" | cut -d'|' -f1)
+        VERSION_STATUS=$(echo "$db_entry" | cut -d'|' -f2)
+        echo -e "$(color green "Version $CURRENT_VERSION is supported ($VERSION_STATUS)")"
+    else
+        handle_error "Unsupported OpenWrt version: $CURRENT_VERSION"
+    fi
+}
+
+XXX_check_openwrt() {
     local version_file="${CACHE_DIR}/openwrt.ch"
     if [ -f "$version_file" ]; then
         CURRENT_VERSION=$(cat "$version_file")
