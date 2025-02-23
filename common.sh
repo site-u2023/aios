@@ -1314,7 +1314,7 @@ install_package() {
     # **特定パッケージのみの `opkg update` に対応**
     if [ "$update_mode" = "yes" ]; then
         if [ -n "$package_to_update" ]; then
-            debug_log "INFO" "Updating package list for $package_to_update"
+            debug_log "DEBUG" "Updating package list for $package_to_update"
             opkg list | grep -qE "^$package_to_update " && update_package_list
         else
             update_package_list
