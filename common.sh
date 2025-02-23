@@ -337,42 +337,48 @@ color_code_map() {
 #########################################################################
 # check_openwrt: OpenWrtのバージョン確認・管理のみを担当
 #########################################################################
-check_openwrt() {
+XXX_check_openwrt() {
     local version_file="${CACHE_DIR}/openwrt.ch"
 
     # **キャッシュがあれば使用**
     if [ -f "$version_file" ]; then
         CURRENT_VERSION=$(cat "$version_file")
     else
-        raw_version=$(awk -F"'" '/DISTRIB_RELEASE/ {print $2}' /etc/openwrt_release)
+        local raw_version=""
+        local distrib_id=""
 
-        # **SNAPSHOT の場合は固定値を適用**
-        if [[ "$raw_version" =~ SNAPSHOT ]]; then
-            CURRENT_VERSION="SNAPSHOT"
-        else
-            # **バージョンのフォーマットを正規化（小数点統一）**
-            CURRENT_VERSION=$(echo "$raw_version" | tr '-' '.')
+        # **① /etc/openwrt_release から取得（最優先）**
+        if [ -f "/etc/openwrt_release" ]; then
+            distrib_id=$(awk -F"'" '/DISTRIB_ID/ {print $2}' /etc/openwrt_release)
+            
+            # **GL.iNet カスタム版は弾く**
+            if [ "$distrib_id" != "OpenWrt" ]; then
+                handle_error "Unsupported OpenWrt version: $distrib_id (Only OpenWrt is supported)"
+            fi
+
+            if grep -q "DISTRIB_RELEASE=" /etc/openwrt_release; then
+                raw_version=$(awk -F"'" '/DISTRIB_RELEASE/ {print $2}' /etc/openwrt_release)
+            fi
         fi
 
-        # **キャッシュに書き出し、書き込み禁止に設定**
+        # **② /etc/openwrt_version が存在すれば使用**
+        if [ -z "$raw_version" ] && [ -f "/etc/openwrt_version" ]; then
+            raw_version=$(cat /etc/openwrt_version)
+        fi
+
+        # **③ バージョン表記の統一**
+        CURRENT_VERSION=$(echo "$raw_version" | tr '-' '.')
+
+        # **④ キャッシュに書き出し**
         echo "$CURRENT_VERSION" > "$version_file"
-        chmod 444 "$version_file"  # 読み取り専用に設定
+        chmod 444 "$version_file"  # 読み取り専用
     fi
 
-    # **SNAPSHOT の場合、DBエントリをチェック**
-    if [ "$CURRENT_VERSION" = "SNAPSHOT" ]; then
-        if grep -q "^SNAPSHOT=" "${BASE_DIR}/openwrt.db"; then
-            VERSION_STATUS="snapshot"
-            echo -e "$(color yellow "Using latest SNAPSHOT build")"
-            return 0
-        else
-            handle_error "SNAPSHOT is not defined in openwrt.db"
-        fi
-    fi
-
-    # **データベースにバージョンがあるか確認**
+    # **⑤ データベースにバージョンがあるか確認**
     if grep -q "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db"; then
-        VERSION_STATUS="stable"
+        local db_entry=$(grep "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db" | cut -d'=' -f2)
+        PACKAGE_MANAGER=$(echo "$db_entry" | cut -d'|' -f1)
+        VERSION_STATUS=$(echo "$db_entry" | cut -d'|' -f2)
         echo -e "$(color green "Version $CURRENT_VERSION is supported ($VERSION_STATUS)")"
     else
         handle_error "Unsupported OpenWrt version: $CURRENT_VERSION"
