@@ -89,9 +89,9 @@ print_banner() {
 packages() {
     # パッケージのインストール
     install_package ttyd yn hidden
-    install_package luci-app-ttyd yn
-    install_package openssh-sftp-server
-    install_package yn update ttyd
+    install_package luci-app-ttyd yn hidden
+    install_package openssh-sftp-server yn hidden
+    install_package yn update ttyd test
 
     #install_build luci-app-cpu-perf yn
 }
