@@ -337,6 +337,9 @@ color_code_map() {
 #########################################################################
 # check_openwrt: OpenWrtのバージョン確認・管理のみを担当
 #########################################################################
+#########################################################################
+# check_openwrt: OpenWrtのバージョン確認・管理（GL.iNetのOpenWrtのみ対応）
+#########################################################################
 check_openwrt() {
     local version_file="${CACHE_DIR}/openwrt.ch"
 
@@ -354,6 +357,7 @@ check_openwrt() {
             # **GL.iNet カスタム版は弾く**
             if [ "$distrib_id" != "OpenWrt" ]; then
                 handle_error "Unsupported OpenWrt version: $distrib_id (Only OpenWrt is supported)"
+                exit 1  # 🚨 スクリプト全体を終了
             fi
 
             if grep -q "DISTRIB_RELEASE=" /etc/openwrt_release; then
@@ -366,15 +370,21 @@ check_openwrt() {
             raw_version=$(cat /etc/openwrt_version)
         fi
 
-        # **③ バージョン表記の統一**
+        # **③ バージョンが取得できなければスクリプト全体を終了**
+        if [ -z "$raw_version" ]; then
+            handle_error "Could not determine OpenWrt version. Check system files."
+            exit 1  # 🚨 スクリプト全体を終了
+        fi
+
+        # **④ バージョン表記の統一**
         CURRENT_VERSION=$(echo "$raw_version" | tr '-' '.')
 
-        # **④ キャッシュに書き出し**
+        # **⑤ キャッシュに書き出し**
         echo "$CURRENT_VERSION" > "$version_file"
         chmod 444 "$version_file"  # 読み取り専用
     fi
 
-    # **⑤ データベースにバージョンがあるか確認**
+    # **⑥ データベースにバージョンがあるか確認**
     if grep -q "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db"; then
         local db_entry=$(grep "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db" | cut -d'=' -f2)
         PACKAGE_MANAGER=$(echo "$db_entry" | cut -d'|' -f1)
@@ -382,6 +392,7 @@ check_openwrt() {
         echo -e "$(color green "Version $CURRENT_VERSION is supported ($VERSION_STATUS)")"
     else
         handle_error "Unsupported OpenWrt version: $CURRENT_VERSION"
+        exit 1  # 🚨 スクリプト全体を終了
     fi
 }
 
