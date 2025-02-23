@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-03-01"
+SCRIPT_VERSION="2025.02.22-03-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -335,40 +335,44 @@ color_code_map() {
 }
 
 #########################################################################
-# check_openwrt: OpenWrtのバージョン確認・検証
-#########################################################################
-#########################################################################
-# check_openwrt: OpenWrtのバージョン確認・検証
+# check_openwrt: OpenWrtのバージョン確認・管理のみを担当
 #########################################################################
 check_openwrt() {
     local version_file="${CACHE_DIR}/openwrt.ch"
 
-    # バージョン桁数を統一する関数
-    normalize_version() {
-        local version="$1"
-        local count=$(echo "$version" | tr -cd '.' | wc -c)
-
-        case "$count" in
-            1) echo "${version}.0" ;;  # `19.07` → `19.07.0`
-            2) echo "$version" ;;       # `24.10.0` などはそのまま
-            *) echo "0.0.0" ;;          # 想定外のフォーマット回避
-        esac
-    }
-
-    # キャッシュからバージョン取得 or `/etc/openwrt_release` から取得
+    # **キャッシュがあれば使用**
     if [ -f "$version_file" ]; then
         CURRENT_VERSION=$(cat "$version_file")
     else
-        raw_version=$(awk -F"'" '/DISTRIB_RELEASE/ {print $2}' /etc/openwrt_release | cut -d'-' -f1)
-        CURRENT_VERSION=$(normalize_version "$raw_version")
+        raw_version=$(awk -F"'" '/DISTRIB_RELEASE/ {print $2}' /etc/openwrt_release)
+
+        # **SNAPSHOT の場合は固定値を適用**
+        if [[ "$raw_version" =~ SNAPSHOT ]]; then
+            CURRENT_VERSION="SNAPSHOT"
+        else
+            # **バージョンのフォーマットを正規化（小数点統一）**
+            CURRENT_VERSION=$(echo "$raw_version" | tr '-' '.')
+        fi
+
+        # **キャッシュに書き出し、書き込み禁止に設定**
         echo "$CURRENT_VERSION" > "$version_file"
+        chmod 444 "$version_file"  # 読み取り専用に設定
     fi
 
-    # `openwrt.db` に対応バージョンがあるかチェック
+    # **SNAPSHOT の場合、DBエントリをチェック**
+    if [ "$CURRENT_VERSION" = "SNAPSHOT" ]; then
+        if grep -q "^SNAPSHOT=" "${BASE_DIR}/openwrt.db"; then
+            VERSION_STATUS="snapshot"
+            echo -e "$(color yellow "Using latest SNAPSHOT build")"
+            return 0
+        else
+            handle_error "SNAPSHOT is not defined in openwrt.db"
+        fi
+    fi
+
+    # **データベースにバージョンがあるか確認**
     if grep -q "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db"; then
-        local db_entry=$(grep "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db" | cut -d'=' -f2)
-        PACKAGE_MANAGER=$(echo "$db_entry" | cut -d'|' -f1)
-        VERSION_STATUS=$(echo "$db_entry" | cut -d'|' -f2)
+        VERSION_STATUS="stable"
         echo -e "$(color green "Version $CURRENT_VERSION is supported ($VERSION_STATUS)")"
     else
         handle_error "Unsupported OpenWrt version: $CURRENT_VERSION"
