@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.22-03-07"
+SCRIPT_VERSION="2025.02.22-03-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1737,7 +1737,7 @@ else
 fi
 }
 
-# 【INIファイルから値を取得する関数】
+# 【DBファイルから値を取得する関数】
 get_ini_value() {
     local section="$1"
     local key="$2"
@@ -1763,8 +1763,7 @@ install_build() {
     local package_name=""
     local confirm_install="no"
     local hidden="no"
-    local DB_FILE="/tmp/aios/custom-package.ini"  # INIデータベースファイル
-    local CACHE_DIR="/tmp/aios/cache"
+    local DB_FILE="${BASE_DIR}/custom-package.db"  # INIデータベースファイル
     local output_ipk=""
 
     # 【オプションの処理】
