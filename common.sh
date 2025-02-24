@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.25-00-00"
+SCRIPT_VERSION="2025.02.25-00-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1339,8 +1339,9 @@ apply_local_package_db() {
         debug_log "DEBUG" "local-package.db の適用をスキップします。"
         return 0
     fi
+
     # local-package.db が存在しない場合は何もしない
-    if [ ! -f local-package.db ]; then
+    if [ ! -f "local-package.db" ]; then
         debug_log "DEBUG" "local-package.db が存在しません。"
         return 0
     fi
@@ -1348,33 +1349,10 @@ apply_local_package_db() {
     # local-package.db から対象パッケージの設定を抽出
     local cmds
     cmds=$(awk -v pkg="$package_name" '
-        # セクションヘッダーを処理
-        /^\[.*\]$/ {
-            if (section) { 
-                # 現在のセクションを終了し、コマンドを保存
-                print_cmds()
-            }
-            section = $0
-            next
-        }
-        # セクションが一致する場合のみコマンドを保持
-        $0 ~ "^\\[" pkg "\\]" {flag=1}
-        # セクションを離れたらフラグを下げる
+        $0 ~ "^\\[" pkg "\\]" {flag=1; next}
         $0 ~ "^\\[" {flag=0}
-        flag {
-            # コメントを除去し、コマンドとして処理
-            if ($0 !~ /^#/ && $0 != "") {
-                cmds[section] = cmds[section] $0 "\n"
-            }
-        }
-        # 保存されたコマンドを出力
-        function print_cmds() {
-            if (cmds[section]) {
-                print cmds[section]
-                cmds[section] = ""
-            }
-        }
-    ' local-package.db)
+        flag {print}
+    ' "local-package.db")
 
     if [ -z "$cmds" ]; then
         debug_log "DEBUG" "local-package.db に $package_name の設定がありません。"
@@ -1387,12 +1365,19 @@ apply_local_package_db() {
         # 空行やコメントは無視
         [ -z "$line" ] && continue
         case "$line" in
-            \#*) continue ;;  # コメント行をスキップ
+            \#*) continue ;;
         esac
         debug_log "DEBUG" "実行: $line"
         eval "$line"
     done
 }
+
+# **設定の有効化**
+if [ "$set_disabled" = "no" ]; then
+    if [ -f "local-package.db" ] && grep -q "^$package_name-enable=" "local-package.db"; then
+        eval "$(grep "^$package_name-enable=" "local-package.db" | cut -d'=' -f2-)"
+    fi
+fi
 
 install_package() {
     local confirm_install="no"
