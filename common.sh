@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-01-09"
+SCRIPT_VERSION="2025.02.24-01-11"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1773,12 +1773,25 @@ setup_swap() {
     /etc/init.d/zram restart
 
     # **スワップの確認**
-    if free -m | awk '/Swap:/ {exit $2 == 0}'; then
-        echo "[ERROR] zram-swap failed to start."
+    local SWAP_TOTAL_MB
+    SWAP_TOTAL_MB=$(free -m | awk '/Swap:/ {print $2}')
+
+    if [ -z "$SWAP_TOTAL_MB" ] || [ "$SWAP_TOTAL_MB" -lt 256 ]; then
+        echo "[ERROR] Insufficient swap size: ${SWAP_TOTAL_MB}MB. At least 256MB required."
         return 1
     fi
 
-    echo "[INFO] zram-swap is successfully enabled."
+    # **メモリ + スワップの合計を計算**
+    local TOTAL_MEMORY_MB=$((RAM_TOTAL_MB + SWAP_TOTAL_MB))
+    echo "[INFO] Total available memory (RAM + Swap): ${TOTAL_MEMORY_MB}MB"
+
+    # **ビルドに必要な最低メモリ条件を満たしているか確認**
+    if [ "$TOTAL_MEMORY_MB" -lt 1024 ]; then
+        echo "[ERROR] Insufficient memory for build: ${TOTAL_MEMORY_MB}MB available, 1024MB required."
+        return 1
+    fi
+
+    echo "[INFO] zram-swap is successfully enabled (${SWAP_TOTAL_MB}MB)."
     free -m
     swapon -s  # スワップの状況を表示
 
@@ -1791,7 +1804,10 @@ setup_swap() {
         free -m
         swapon -s
     ' EXIT
+
+    return 0
 }
+
 
 XXX_setup_swap() {
     local SWAPFILE="/overlay/swapfile"
@@ -1951,15 +1967,21 @@ install_build() {
     local package_name=""
     local confirm_install="no"
     local hidden="no"
-    local DB_FILE="${BASE_DIR}/custom-package.db"
-    local output_ipk=""
+    local DB_FILE="/tmp/aios/custom-package.ini"  # INIデータベースファイル
+    local CACHE_DIR="/tmp/aios/cache"
 
     # 【オプションの処理】
     for arg in "$@"; do
         case "$arg" in
-            yn) confirm_install="yes" ;;
-            hidden) hidden="yes" ;;
-            *) if [ -z "$package_name" ]; then package_name="$arg"; else debug_log "DEBUG" "Unknown option: $arg"; fi ;;
+            yn) confirm_install="yes" ;;   # 確認を入れるフラグ
+            hidden) hidden="yes" ;;        # 非表示でインストールするフラグ
+            *) 
+                if [ -z "$package_name" ]; then 
+                    package_name="$arg"
+                else 
+                    debug_log "DEBUG" "Unknown option: $arg"
+                fi
+                ;;
         esac
     done
 
@@ -1969,10 +1991,14 @@ install_build() {
         return 1
     fi
 
-    # **zram-swap のセットアップ**
-    setup_swap
-    if [ $? -ne 0 ]; then
-        debug_log "WARNING" "zram-swap setup failed, but continuing installation."
+    # 【インストール確認ダイアログ (YNオプション)】
+    if [ "$confirm_install" = "yes" ]; then
+        echo "📢 ${package_name} をインストールしますか？ (Y/n)"
+        read -r answer
+        if [ "$answer" != "Y" ] && [ "$answer" != "y" ]; then
+            debug_log "INFO" "インストールをキャンセルしました。"
+            return 0
+        fi
     fi
 
     # 【OpenWrt バージョンの取得】
@@ -1986,52 +2012,42 @@ install_build() {
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
 
     # 【必要なパラメータを取得】
-    local source_url build_command BUILD_DIR OPENWRT_REPO install_packages
+    local source_url build_dependencies build_command BUILD_DIR OPENWRT_REPO
 
     source_url=$(get_ini_value "$package_name" "source_url")
+    build_dependencies=$(get_ini_value "$package_name" "build_dependencies")
     BUILD_DIR=$(get_ini_value "default" "build_dir")
     OPENWRT_REPO=$(get_ini_value "default" "openwrt_repo")
 
-    # **バージョンごとの `install_package` を取得**
-    install_packages=$(get_value_with_fallback "$package_name" "install_package")
-
-    if [ -n "$install_packages" ]; then
-        debug_log "DEBUG" "Retrieved install_packages: $install_packages"
-
-        # **パッケージリストを処理**
-        echo "$install_packages" | tr ',' '\n' | while read -r pkg; do
-            if [ -n "$pkg" ]; then
-                debug_log "INFO" "Checking if package exists in repository: $pkg"
-                if opkg list | grep -qE "^$pkg "; then
-                    debug_log "INFO" "Installing package: $pkg"
-                    opkg install "$pkg"
-                    if [ $? -ne 0 ]; then
-                        debug_log "ERROR" "Failed to install package: $pkg"
-                    fi
-                else
-                    debug_log "ERROR" "Package not found in repository: $pkg"
-                fi
-            fi
-        done
-    else
-        debug_log "DEBUG" "No additional install_package found for $package_name."
+    # 【バージョンごとのビルドコマンド取得】
+    build_command=$(get_ini_value "$package_name" "$openwrt_version")
+    if [ -z "$build_command" ]; then
+        build_command=$(get_ini_value "$package_name" "default")
     fi
 
-    # 【バージョンごとのビルドコマンド取得】
-    build_command=$(get_value_with_fallback "$package_name" "build_command")
-
     debug_log "DEBUG" "Source URL: $source_url"
+    debug_log "DEBUG" "Build Dependencies: $build_dependencies"
     debug_log "DEBUG" "Build Command: $build_command"
     debug_log "DEBUG" "Build Directory: $BUILD_DIR"
     debug_log "DEBUG" "OpenWrt Repo: $OPENWRT_REPO"
 
-    # **ビルドディレクトリの作成**
+    # 【ビルド用依存パッケージのインストール】
+    if [ -n "$build_dependencies" ]; then
+        debug_log "DEBUG" "Installing build dependencies for $package_name: $build_dependencies"
+        for dep in $build_dependencies; do
+            install_package "$dep" "$hidden"
+        done
+    else
+        debug_log "DEBUG" "No build dependencies found for $package_name."
+    fi
+
+    # 【ビルドディレクトリがなければ作成】
     if [ ! -d "$BUILD_DIR" ]; then
         mkdir -p "$BUILD_DIR"
         debug_log "DEBUG" "Created build directory: $BUILD_DIR"
     fi
 
-    # **リポジトリの取得**
+    # 【リポジトリの取得・更新】
     if [ -d "$BUILD_DIR/$package_name" ]; then
         debug_log "DEBUG" "Removing existing repository and cloning fresh copy."
         rm -rf "$BUILD_DIR/$package_name"
@@ -2046,15 +2062,52 @@ install_build() {
 
     cd "$BUILD_DIR/$package_name" || { debug_log "ERROR" "Failed to enter repository directory"; return 1; }
 
-    debug_log "DEBUG" "Executing build command: $build_command"
-    if ! eval "$build_command"; then
-        debug_log "ERROR" "Build failed: $package_name"
+    # 【OpenWrt feeds のセットアップ】
+    if [ ! -d "$BUILD_DIR/openwrt" ]; then
+        debug_log "DEBUG" "Cloning OpenWrt source for feeds setup."
+        git clone "$OPENWRT_REPO" "$BUILD_DIR/openwrt"
+    fi
+
+    cd "$BUILD_DIR/openwrt"
+    ./scripts/feeds update -a
+    ./scripts/feeds install -a
+
+    cd "$BUILD_DIR/$package_name"
+
+    # 【ビルドコマンドの確認】
+    if [ -z "$build_command" ]; then
+        debug_log "ERROR" "ビルドコマンドが見つかりません！"
+        stop_spinner
         return 1
     fi
 
-    debug_log "INFO" "Build completed successfully."
+    debug_log "DEBUG" "Executing build command: $build_command"
+
+    # **スピナー開始**
+    start_spinner "Building ${package_name}..."
+
+    # 【ビルド実行】
+    local start_time end_time build_time
+    start_time=$(date +%s)
+
+    if ! eval "$build_command"; then
+        debug_log "ERROR" "ビルド失敗: $package_name"
+        stop_spinner
+        return 1
+    fi
+
+    end_time=$(date +%s)
+    build_time=$((end_time - start_time))
+
+    # **スピナー停止**
+    stop_spinner
+
+    echo "✅ ${package_name} のビルド完了（所要時間: ${build_time}秒）"
+    debug_log "DEBUG" "Build time: $build_time seconds"
+
     return 0
 }
+
 
 XXX_install_build() {
     local package_name=""
