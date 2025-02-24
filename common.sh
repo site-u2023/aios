@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-02-00"
+SCRIPT_VERSION="2025.02.24-02-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1747,6 +1747,15 @@ setup_swap() {
 
     debug_log "INFO" "RAM: ${RAM_TOTAL_MB}MB, Setting zram size to ${ZRAM_SIZE_MB}MB"
 
+    # **空き容量を確認**
+    local STORAGE_FREE_MB
+    STORAGE_FREE_MB=$(df -m /overlay | awk 'NR==2 {print $4}')  # MB単位の空き容量
+
+    if [ -z "$STORAGE_FREE_MB" ] || [ "$STORAGE_FREE_MB" -lt 50 ]; then
+        debug_log "ERROR" "Insufficient storage for swap (${STORAGE_FREE_MB}MB free). Skipping swap setup."
+        return 1  # **ストレージ不足なら即終了**
+    fi
+
     # **zswap (zram-swap) のインストール**
     install_package zram-swap hidden
 
@@ -1759,7 +1768,7 @@ setup_swap() {
         uci commit system
     else
         debug_log "ERROR" "zswap configuration not found in UCI. Skipping swap setup."
-        return 1
+        return 1  # **設定が見つからない場合も即終了**
     fi
 
     # **zram-swap の有効化**
@@ -1773,7 +1782,7 @@ setup_swap() {
         debug_log "INFO" "zram-swap is successfully enabled."
     else
         debug_log "ERROR" "Failed to enable zram-swap."
-        return 1
+        return 1  # **有効化に失敗したら即終了**
     fi
 
     # **現在のメモリとスワップ状況を表示**
