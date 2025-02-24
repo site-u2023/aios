@@ -18,7 +18,7 @@ build_command = make package/luci-app-temp-status/compile V=99
 [luci-app-cpu-perf]
 source_url = https://github.com/gSpotx2f/luci-app-cpu-perf.git
 (21.02)
-install_package = make, gcc, autoconf, automake, lua, luci-lib-nixio, luci-lib-jsonc, libtool, kmod-swap  # `kmod-swap` を追加（19.07 ではインストールされない）
+install_package = make, gcc, autoconf, automake, lua, luci-lib-nixio, luci-lib-jsonc, libtool  
 build_command = make package/luci-app-cpu-perf/compile
 
 (19.07)
