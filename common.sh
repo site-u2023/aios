@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-01-12"
+SCRIPT_VERSION="2025.02.24-01-14"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1732,82 +1732,48 @@ OK_install_package() {
 # [uconv]　※行、列問わず記述可
 #########################################################################
 setup_swap() {
-    local ZRAM_CONF="/etc/config/zram"
-    local SWAP_ACTIVE="off"
-
-    echo "[INFO] Checking if zram-swap is available..."
-
-    # **zram-swap のインストールを確認**
-    if ! opkg list-installed | grep -q "^zram-swap "; then
-        echo "[INFO] zram-swap is not installed. Installing now..."
-        opkg update && opkg install zram-swap
-        if [ $? -ne 0 ]; then
-            echo "[ERROR] Failed to install zram-swap. Exiting swap setup."
-            return 1
-        fi
-    fi
-
-    # **物理メモリ (RAM) の総量を取得**
+    local ZRAM_SIZE_MB
     local RAM_TOTAL_MB
     RAM_TOTAL_MB=$(awk '/MemTotal/ {print int($2 / 1024)}' /proc/meminfo)
 
-    # **zram に割り当てるスワップサイズを RAM の量に応じて自動設定**
-    local ZRAM_SIZE_MB
+    # **スワップサイズを RAM に応じて自動調整**
     if [ "$RAM_TOTAL_MB" -lt 512 ]; then
-        ZRAM_SIZE_MB=256  # RAM が 512MB 未満なら 256MB の zram
+        ZRAM_SIZE_MB=512
     elif [ "$RAM_TOTAL_MB" -lt 1024 ]; then
-        ZRAM_SIZE_MB=512  # RAM が 512MB 以上 1GB 未満なら 512MB
+        ZRAM_SIZE_MB=256
     else
-        ZRAM_SIZE_MB=1024  # RAM が 1GB 以上なら 1GB
+        ZRAM_SIZE_MB=128
     fi
 
-    echo "[INFO] RAM: ${RAM_TOTAL_MB}MB, Setting zram size to ${ZRAM_SIZE_MB}MB"
+    debug_log "INFO" "RAM: ${RAM_TOTAL_MB}MB, Setting zram size to ${ZRAM_SIZE_MB}MB"
 
-    # **zram 設定を変更**
-    uci set zram.@zram[0].enabled='1'
-    uci set zram.@zram[0].size="${ZRAM_SIZE_MB}M"
-    uci commit zram
+    # **zram-swap のインストール確認**
+    if ! opkg list-installed | grep -q '^zram-swap'; then
+        debug_log "INFO" "zram-swap is not installed. Installing now..."
+        opkg update
+        opkg install zram-swap
+    fi
 
-    # **zram-swap を有効化**
-    echo "[INFO] Enabling zram-swap..."
-    /etc/init.d/zram restart
+    # **zram-swap の有効化**
+    debug_log "INFO" "Enabling zram-swap..."
+    zram_reset
+    zram_start "$ZRAM_SIZE_MB"
 
-    # **スワップの確認**
-    local SWAP_TOTAL_MB
-    SWAP_TOTAL_MB=$(free -m | awk '/Swap:/ {print $2}')
+    sleep 2  # **スワップが確実に有効化されるまで待機**
 
-    if [ -z "$SWAP_TOTAL_MB" ] || [ "$SWAP_TOTAL_MB" -lt 256 ]; then
-        echo "[ERROR] Insufficient swap size: ${SWAP_TOTAL_MB}MB. At least 256MB required."
+    # **スワップが有効になったか確認**
+    if [ -f /proc/swaps ] && grep -q 'zram' /proc/swaps; then
+        debug_log "INFO" "zram-swap is successfully enabled."
+    else
+        debug_log "ERROR" "Failed to enable zram-swap."
         return 1
     fi
 
-    # **メモリ + スワップの合計を計算**
-    local TOTAL_MEMORY_MB=$((RAM_TOTAL_MB + SWAP_TOTAL_MB))
-    echo "[INFO] Total available memory (RAM + Swap): ${TOTAL_MEMORY_MB}MB"
-
-    # **ビルドに必要な最低メモリ条件を満たしているか確認**
-    if [ "$TOTAL_MEMORY_MB" -lt 1024 ]; then
-        echo "[ERROR] Insufficient memory for build: ${TOTAL_MEMORY_MB}MB available, 1024MB required."
-        return 1
-    fi
-
-    echo "[INFO] zram-swap is successfully enabled (${SWAP_TOTAL_MB}MB)."
+    # **現在のメモリとスワップ状況を表示**
+    debug_log "INFO" "Memory and Swap Status:"
     free -m
-    swapon -s  # スワップの状況を表示
-
-    # **スワップをクリーンアップするトラップ**
-    trap '
-        echo "[INFO] Cleaning up zram-swap..."
-        /etc/init.d/zram stop
-
-        echo "[INFO] Final swap status:"
-        free -m
-        swapon -s
-    ' EXIT
-
-    return 0
+    cat /proc/swaps
 }
-
 
 XXX_setup_swap() {
     local SWAPFILE="/overlay/swapfile"
@@ -1996,29 +1962,16 @@ install_build() {
         return 1
     fi
 
-    # **downloader_ch から `opkg` or `apk` を取得**
-    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
-        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
-    else
-        debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")"
-        return 1
+    # **スピナー開始**
+    start_spinner "$(get_message 'MSG_UPDATE_RUNNING')"
+
+    # **OpenWrt バージョン取得**
+    local openwrt_version
+    if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
+        openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
     fi
 
-    # **インストール前の確認**
-    if [ "$confirm_install" = "yes" ]; then
-        while true; do
-            local msg=$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")
-            echo "$msg"
-    
-            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
-            read -r yn
-            case "$yn" in
-                [Yy]*) break ;;
-                [Nn]*) return 1 ;;
-                *) echo "Invalid input. Please enter Y or N." ;;
-            esac
-        done
-    fi
+    debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
 
     # **ビルド環境の準備**
     install_package jq
@@ -2028,44 +1981,13 @@ install_build() {
         install_package "$tool" hidden
     done
 
-    # **ビルド後のパッケージ名を取得**
-    local built_package="${package_name#build_}"
-
-    # ** キャッシュからバージョンとアーキテクチャを取得 **  
-    if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
-        openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
-    fi
-    if [ -f "${CACHE_DIR}/architecture.ch" ]; then
-        arch=$(cat "${CACHE_DIR}/architecture.ch")
-    fi
-
-    debug_log "DEBUG" "Using architecture: $arch"
-    debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
-
-    # **`custom-package.db` からビルドに必要な `dependencies` を取得**
-    local dependencies=$(jq -r --arg arch "$arch" '.[$package_name].build.dependencies.opkg // [] | join(" ")' "$CACHE_DIR/custom-package.db" 2>/dev/null)
-
-    if [ -n "$dependencies" ]; then
-        debug_log "DEBUG" "Installing dependencies: $dependencies"
-        for dep in $dependencies; do
-            install_package "$dep" hidden
-        done
-    else
-        debug_log "DEBUG" "No dependencies found for $package_name."
-    fi
-
-    # **スピナー開始**
-    start_spinner "$(get_message 'MSG_UPDATE_RUNNING')"
-
-    # **`custom-package.db` からビルドに必要な `build_command` を取得**
-    local build_command=$(jq -r --arg pkg "$package_name" --arg arch "$arch" --arg ver "$openwrt_version" '
-        .[$pkg].build.commands[$ver][$arch] // 
-        .[$pkg].build.commands[$ver].default // 
-        .[$pkg].build.commands.default[$arch] // 
-        .[$pkg].build.commands.default.default // empty' "$CACHE_DIR/custom-package.db" 2>/dev/null)
+    # **`custom-package.db` からビルドコマンドを取得**
+    local build_command=$(jq -r --arg pkg "$package_name" --arg ver "$openwrt_version" '
+        .[$pkg].build.commands[$ver] // 
+        .[$pkg].build.commands.default // empty' "$CACHE_DIR/custom-package.db" 2>/dev/null)
 
     if [ -z "$build_command" ]; then
-        debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_COMMAND_NOT_FOUND" | sed "s/{pkg}/$built_package/" | sed "s/{arch}/$arch/" | sed "s/{ver}/$openwrt_version/")"
+        debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_COMMAND_NOT_FOUND" | sed "s/{pkg}/$package_name/" | sed "s/{ver}/$openwrt_version/")"
         stop_spinner
         return 1
     fi
@@ -2073,13 +1995,13 @@ install_build() {
     debug_log "DEBUG" "Executing build command: $build_command"
 
     # **ビルド開始メッセージ**
-    echo "$(get_message "MSG_BUILD_START" | sed "s/{pkg}/$built_package/")"
+    echo "$(get_message "MSG_BUILD_START" | sed "s/{pkg}/$package_name/")"
 
     # **ビルド実行**
     local start_time=$(date +%s)
     if ! eval "$build_command"; then
-        echo "$(get_message "MSG_BUILD_FAIL" | sed "s/{pkg}/$built_package/")"
-        debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_FAILED" | sed "s/{pkg}/$built_package/")"
+        echo "$(get_message "MSG_BUILD_FAIL" | sed "s/{pkg}/$package_name/")"
+        debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_FAILED" | sed "s/{pkg}/$package_name/")"
         stop_spinner
         return 1
     fi
@@ -2087,16 +2009,13 @@ install_build() {
     local build_time=$((end_time - start_time))
 
     stop_spinner  # スピナー停止
-    echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$built_package/" | sed "s/{time}/$build_time/")"
-    debug_log "DEBUG" "Build time for $built_package: $build_time seconds"
+    echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$package_name/" | sed "s/{time}/$build_time/")"
+    debug_log "DEBUG" "Build time for $package_name: $build_time seconds"
 
-    # **ビルド完了後、`install_package()` を実行**
-    install_package "$built_package" "$confirm_install"
-
-    echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$built_package/")"
-    debug_log "DEBUG" "Successfully built and installed package: $built_package"
+    # **ビルド完了後のメッセージ**
+    echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$package_name/")"
+    debug_log "DEBUG" "Successfully built and installed package: $package_name"
 }
-
 
 XXX_install_build() {
     local package_name=""
