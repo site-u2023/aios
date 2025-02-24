@@ -1,29 +1,25 @@
-[meta]
-SCRIPT_VERSION="2025.02.24-00-06"
+SCRIPT_VERSION="2025.02.24-00-02"
 
 [default]
 build_dir = /tmp/build
 openwrt_repo = https://git.openwrt.org/openwrt/openwrt.git
 
 [luci-app-temp-status]
-install_package = make, gcc, libtool, autoconf, automake, lua, luci-lib-nixio, luci-lib-jsonc
 source_url = https://github.com/gSpotx2f/luci-app-temp-status.git
+(21.02)
+install_package = make, gcc, autoconf, automake, lua, luci-lib-nixio, luci-lib-jsonc
 build_command = make package/luci-app-temp-status/compile
 
-    (21.02)
-    install_package = make, gcc, libtool-bin, autoconf, automake, lua, luci-lib-nixio, luci-lib-jsonc
-
-    (19.07)
-    install_package = make, gcc, libtool, autoconf, automake, lua, luci-lib-nixio, luci-lib-jsonc
-    build_command = make package/luci-app-temp-status/compile V=99
+(19.07)
+install_package = make, gcc, autoconf, automake, lua, luci-lib-nixio
+build_command = make package/luci-app-temp-status/compile V=99
 
 [luci-app-cpu-perf]
-install_package = make, gcc, libtool, autoconf, automake, lua, luci-lib-nixio, luci-lib-jsonc
 source_url = https://github.com/gSpotx2f/luci-app-cpu-perf.git
+(21.02)
+install_package = make, gcc, autoconf, automake, lua, luci-lib-nixio, luci-lib-jsonc, libtool
 build_command = make package/luci-app-cpu-perf/compile
 
-    (21.02)
-    install_package = make, gcc, libtool-bin, autoconf, automake, lua, luci-lib-nixio, luci-lib-jsonc
-
-    (19.07)
-    install_package = make, gcc, libtool, autoconf, automake, lua, luci-lib-nixio, luci-lib-jsonc
+(19.07)
+install_package = make, gcc, autoconf, automake, lua, luci-lib-nixio, libtool-bin
+build_command = make package/luci-app-cpu-perf/compile V=99
