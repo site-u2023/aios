@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-00-08"
+SCRIPT_VERSION="2025.02.24-00-09"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1874,7 +1874,7 @@ install_build() {
     OPENWRT_REPO=$(get_ini_value "default" "openwrt_repo")
 
     # **install_package を取得してインストール**
-    install_packages=$(awk -F'=' -v section="[$package_name]" '
+    install_packages=$(awk -F'=' -v section="$package_name" '
         $0 ~ section {flag=1; next} /^\[/{flag=0}
         flag && $1 ~ /install_package/ {print $2}
     ' "$DB_FILE")
