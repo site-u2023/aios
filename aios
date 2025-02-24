@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-00-00"
+SCRIPT_VERSION="2025.02.24-00-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -92,7 +92,7 @@ packages() {
     install_package luci-app-ttyd yn hidden
     install_package openssh-sftp-server yn hidden
 
-    install_build luci-app-cpu-perf yn
+    #install_build luci-app-cpu-perf yn
 }
 
 # メイン処理
