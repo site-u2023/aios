@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.25-00-06"
+SCRIPT_VERSION="2025.02.25-00-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1448,7 +1448,7 @@ install_package() {
             test)       test_mode="no" ;;
             force)      force_install="no" ;;
             unforce)    unforce="no" ;;  # 強制インストールを解除
-            update)     update_mode="no"
+            update)     update_mode="yes"
             
                 shift
                 if [ $# -gt 0 ]; then
