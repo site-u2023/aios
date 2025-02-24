@@ -1748,11 +1748,8 @@ setup_swap() {
     debug_log "INFO" "RAM: ${RAM_TOTAL_MB}MB, Setting zram size to ${ZRAM_SIZE_MB}MB"
 
     # **zram-swap のインストール確認**
-    if ! opkg list-installed | grep -q '^zram-swap'; then
-        debug_log "INFO" "zram-swap is not installed. Installing now..."
-        opkg update
-        opkg install zram-swap
-    fi
+    install_package update
+    install_package zram-swap
 
     # **zram-swap の有効化**
     debug_log "INFO" "Enabling zram-swap..."
@@ -1956,14 +1953,10 @@ install_build() {
     fi
 
     # **スワップの動作チェック**
-    setup_swap
-    if [ $? -ne 0 ]; then
+    if ! setup_swap; then
         debug_log "ERROR" "$(get_message 'MSG_ERR_INSUFFICIENT_SWAP')"
         return 1
     fi
-
-    # **スピナー開始**
-    start_spinner "$(get_message 'MSG_UPDATE_RUNNING')"
 
     # **OpenWrt バージョン取得**
     local openwrt_version
@@ -1988,7 +1981,6 @@ install_build() {
 
     if [ -z "$build_command" ]; then
         debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_COMMAND_NOT_FOUND" | sed "s/{pkg}/$package_name/" | sed "s/{ver}/$openwrt_version/")"
-        stop_spinner
         return 1
     fi
 
@@ -1997,18 +1989,19 @@ install_build() {
     # **ビルド開始メッセージ**
     echo "$(get_message "MSG_BUILD_START" | sed "s/{pkg}/$package_name/")"
 
-    # **ビルド実行**
+    # **ビルド実行（スピナー開始）**
+    start_spinner "$(get_message 'MSG_BUILD_RUNNING')"
     local start_time=$(date +%s)
     if ! eval "$build_command"; then
+        stop_spinner
         echo "$(get_message "MSG_BUILD_FAIL" | sed "s/{pkg}/$package_name/")"
         debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_FAILED" | sed "s/{pkg}/$package_name/")"
-        stop_spinner
         return 1
     fi
     local end_time=$(date +%s)
     local build_time=$((end_time - start_time))
-
     stop_spinner  # スピナー停止
+
     echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$package_name/" | sed "s/{time}/$build_time/")"
     debug_log "DEBUG" "Build time for $package_name: $build_time seconds"
 
@@ -2016,6 +2009,7 @@ install_build() {
     echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$package_name/")"
     debug_log "DEBUG" "Successfully built and installed package: $package_name"
 }
+
 
 XXX_install_build() {
     local package_name=""
