@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.25-00-02"
+SCRIPT_VERSION="2025.02.25-00-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1335,7 +1335,7 @@ update_package_list() {
 # **local-package.db の適用関数**
 apply_local_package_db() {
     # notpack オプションでスキップされている場合は処理しない
-    if [ "$skip_package_db" = "yes" ]; then
+    if [ "$skip_package_db" = "no" ]; then
         debug_log "DEBUG" "local-package.db の適用をスキップします。"
         return 0
     fi
@@ -1397,7 +1397,7 @@ install_package() {
         case "$1" in
             yn)         confirm_install="yes" ;;
             nolang)     skip_lang_pack="yes" ;;
-            notpack)    skip_package_db="yes" ;;
+            notpack)    skip_package_db="no" ;;
             disabled)   set_disabled="yes" ;;
             hidden)     hidden="yes" ;;
             test)       test_mode="yes" ;;
