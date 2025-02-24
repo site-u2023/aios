@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-01-15"
+SCRIPT_VERSION="2025.02.24-01-17"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1747,14 +1747,17 @@ setup_swap() {
 
     debug_log "INFO" "RAM: ${RAM_TOTAL_MB}MB, Setting zram size to ${ZRAM_SIZE_MB}MB"
 
-    # **zram-swap のインストール確認**
-    install_package update
-    install_package zram-swap
-
     # **zram-swap の有効化**
     debug_log "INFO" "Enabling zram-swap..."
-    zram_reset
-    zram_start "$ZRAM_SIZE_MB"
+    if command -v zram_reset >/dev/null 2>&1; then
+        zram_reset
+    fi
+    if command -v zram_start >/dev/null 2>&1; then
+        zram_start "$ZRAM_SIZE_MB"
+    else
+        debug_log "ERROR" "zram_start command not found. Skipping swap setup."
+        return 1
+    fi
 
     sleep 2  # **スワップが確実に有効化されるまで待機**
 
@@ -1951,6 +1954,13 @@ install_build() {
         debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")"
         return 1
     fi
+
+    # **スピナー開始**
+    start_spinner "$(get_message 'MSG_UPDATE_RUNNING')"
+    install_package update
+    stop_spinner
+
+    install_package zram-swap
 
     # **スワップの動作チェック**
     if ! setup_swap; then
