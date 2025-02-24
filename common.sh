@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-02-03"
+SCRIPT_VERSION="2025.02.25-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1348,9 +1348,32 @@ apply_local_package_db() {
     # local-package.db から対象パッケージの設定を抽出
     local cmds
     cmds=$(awk -v pkg="$package_name" '
-        $0 ~ "^\\[" pkg "\\]" {flag=1; next}
+        # セクションヘッダーを処理
+        /^\[.*\]$/ {
+            if (section) { 
+                # 現在のセクションを終了し、コマンドを保存
+                print_cmds()
+            }
+            section = $0
+            next
+        }
+        # セクションが一致する場合のみコマンドを保持
+        $0 ~ "^\\[" pkg "\\]" {flag=1}
+        # セクションを離れたらフラグを下げる
         $0 ~ "^\\[" {flag=0}
-        flag {print}
+        flag {
+            # コメントを除去し、コマンドとして処理
+            if ($0 !~ /^#/ && $0 != "") {
+                cmds[section] = cmds[section] $0 "\n"
+            }
+        }
+        # 保存されたコマンドを出力
+        function print_cmds() {
+            if (cmds[section]) {
+                print cmds[section]
+                cmds[section] = ""
+            }
+        }
     ' local-package.db)
 
     if [ -z "$cmds" ]; then
@@ -1364,7 +1387,7 @@ apply_local_package_db() {
         # 空行やコメントは無視
         [ -z "$line" ] && continue
         case "$line" in
-            \#*) continue ;;
+            \#*) continue ;;  # コメント行をスキップ
         esac
         debug_log "DEBUG" "実行: $line"
         eval "$line"
