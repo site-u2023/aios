@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-01-06"
+SCRIPT_VERSION="2025.02.24-01-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1733,13 +1733,44 @@ OK_install_package() {
 #########################################################################
 setup_swap() {
     local SWAPFILE="/overlay/swapfile"
-    local SWAP_SIZE_MB=192  # 一時的なスワップサイズ（MB）
     local SWAP_ACTIVE="off"
 
-    echo "[INFO] Checking if swap is supported by the kernel..."
+    # **物理メモリ (RAM) の総量を取得**
+    local RAM_TOTAL_MB
+    RAM_TOTAL_MB=$(awk '/MemTotal/ {print int($2 / 1024)}' /proc/meminfo)
+
+    # **ストレージの空き容量を取得**
+    local STORAGE_FREE_MB
+    STORAGE_FREE_MB=$(df -m /overlay | awk 'NR==2 {print $4}')  # MB単位の空き容量
+
+    # **スワップサイズを RAM の量に応じて自動設定**
+    local SWAP_SIZE_MB
+    if [ "$RAM_TOTAL_MB" -lt 512 ]; then
+        SWAP_SIZE_MB=512  # RAM が 512MB 未満なら 512MB のスワップ
+    elif [ "$RAM_TOTAL_MB" -lt 1024 ]; then
+        SWAP_SIZE_MB=256  # RAM が 512MB 以上 1GB 未満なら 256MB
+    else
+        SWAP_SIZE_MB=128  # RAM が 1GB 以上なら 128MB
+    fi
+
+    echo "[INFO] RAM: ${RAM_TOTAL_MB}MB, Available Storage: ${STORAGE_FREE_MB}MB, Setting swap size to ${SWAP_SIZE_MB}MB"
+
+    # **カーネルが swap をサポートしているか確認**
     if ! grep -q swap /proc/filesystems; then
         echo "[INFO] Swap is not supported by this kernel. Skipping setup."
-        return 0  # **カーネルが swap 未対応なら即スキップ**
+        return 0
+    fi
+
+    # **ストレージの空き容量が足りない場合はスワップをスキップ**
+    if [ "$STORAGE_FREE_MB" -lt 50 ]; then
+        echo "[ERROR] Not enough free space for swap (Only ${STORAGE_FREE_MB}MB available). Skipping swap setup."
+        return 0  # **スワップなしで処理を続行**
+    fi
+
+    # **スワップサイズが空き容量より大きい場合は調整**
+    if [ "$SWAP_SIZE_MB" -gt "$STORAGE_FREE_MB" ]; then
+        SWAP_SIZE_MB=$((STORAGE_FREE_MB - 10))  # **空き容量の 10MB を残してスワップサイズを調整**
+        echo "[WARNING] Not enough space for full swap. Adjusting swap size to ${SWAP_SIZE_MB}MB"
     fi
 
     echo "[INFO] Checking current swap status..."
@@ -1755,7 +1786,7 @@ setup_swap() {
         echo "[INFO] /proc/swaps is missing, but swap is supported. Proceeding with setup."
     fi
 
-    # 既存のスワップファイルがある場合は削除
+    # **既存のスワップファイルがある場合は削除**
     if [ -f "$SWAPFILE" ]; then
         echo "[INFO] Removing existing swap file..."
         swapoff "$SWAPFILE" 2>/dev/null
@@ -1764,13 +1795,13 @@ setup_swap() {
         rm -f "$SWAPFILE"
     fi
 
-    echo "[INFO] Creating temporary swap file at $SWAPFILE..."
+    echo "[INFO] Creating temporary swap file at $SWAPFILE (${SWAP_SIZE_MB}MB)..."
     dd if=/dev/zero of="$SWAPFILE" bs=1M count="$SWAP_SIZE_MB" status=none
     chmod 600 "$SWAPFILE"
     sync
     sleep 1  # **書き込み競合を防ぐための待機**
 
-    # スワップファイルの確認
+    # **スワップファイルの確認**
     ls -lh "$SWAPFILE"
     if [ ! -f "$SWAPFILE" ]; then
         echo "[ERROR] Swap file creation failed. Checking storage..."
@@ -1781,34 +1812,34 @@ setup_swap() {
     echo "[INFO] Checking file contents..."
     hexdump -C "$SWAPFILE" | head
 
-    # スワップの初期化
+    # **スワップの初期化**
     echo "[INFO] Running mkswap..."
     if ! mkswap "$SWAPFILE" > /dev/null 2>&1; then
         echo "[ERROR] mkswap failed. Swap setup aborted."
-        return 1  # **スワップ作成に失敗した場合、即終了**
+        return 1
     fi
 
-    # スワップの有効化
+    # **スワップの有効化**
     echo "[INFO] Running swapon..."
     if ! swapon "$SWAPFILE" > /dev/null 2>&1; then
         echo "[ERROR] swapon failed. Swap setup aborted."
-        return 1  # **swapon が失敗した場合も即終了**
+        return 1
     fi
 
-    # スワップの成功を確認
+    # **スワップの成功を確認**
     if [ -f /proc/swaps ] && grep -q "$SWAPFILE" /proc/swaps; then
         echo "[INFO] Temporary swap enabled successfully."
     else
         echo "[ERROR] Failed to enable temporary swap. Dumping debug info..."
         ls -lh "$SWAPFILE"
-        dmesg | tail -20  # **カーネルログの最後の20行を表示**
-        cat /proc/swaps 2>/dev/null  # **/proc/swaps がない場合もエラーを防ぐ**
-        return 1  # **スワップが正常に有効化されなかった場合はエラー**
+        dmesg | tail -20
+        cat /proc/swaps 2>/dev/null
+        return 1
     fi
 
     echo "[INFO] Swap setup completed successfully."
     free -m
-    cat /proc/swaps 2>/dev/null  # **/proc/swaps がない場合のエラー回避**
+    cat /proc/swaps 2>/dev/null
 
     # **スワップをクリーンアップするトラップ**
     trap '
