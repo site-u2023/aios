@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-00-02"
+SCRIPT_VERSION="2025.02.24-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1715,15 +1715,15 @@ OK_install_package() {
 # 【messages.dbの記述例】
 # [uconv]　※行、列問わず記述可
 #########################################################################
-temporary_swap_setup() {
+setup_swap() {
     local swapfile="/overlay/swapfile"
     local swap_size_mb=192  # 一時的なスワップサイズ（MB）
     local original_swap_state=""
-    
+
     echo "[INFO] Checking current swap status..."
-    
-    # 現在のスワップ状態を取得（BusyBoxのswaponに--summaryがないため、freeで確認）
-    if free | grep -q "Swap: *0 *0 *0"; then
+
+    # `free` コマンドで現在のスワップの状態を確認
+    if free | awk '/Swap:/ {exit $2 == 0}'; then
         echo "[INFO] No active swap detected. Creating a temporary swap file..."
         original_swap_state="off"
     else
@@ -1732,40 +1732,42 @@ temporary_swap_setup() {
         original_swap_state="on"
     fi
 
-    # スワップファイルの作成
-    echo "[INFO] Creating temporary swap file at $swapfile..."
-    dd if=/dev/zero of="$swapfile" bs=1M count="$swap_size_mb" status=none
-    mkswap "$swapfile"
-    swapon "$swapfile"
+    # **既存のスワップファイルが存在する場合は削除**
+    if [ -f "$swapfile" ]; then
+        echo "[INFO] Removing existing swap file..."
+        rm -f "$swapfile"
+    fi
 
-    # スワップが有効になったか確認
-    if free | grep -q "Swap: *0 *0 *0"; then
+    echo "[INFO] Creating temporary swap file at $swapfile..."
+
+    # **BusyBox の `dd` に適合するコマンド**
+    dd if=/dev/zero of="$swapfile" bs=1k count=$((swap_size_mb * 1024)) 2>/dev/null
+
+    chmod 600 "$swapfile"
+    sync
+    mkswap "$swapfile" && swapon "$swapfile"
+
+    # **スワップが有効になったか確認**
+    if ! swapon | grep -q "$swapfile"; then
         echo "[ERROR] Failed to enable temporary swap. Exiting..."
+        rm -f "$swapfile"
         return 1
     fi
 
     echo "[INFO] Temporary swap enabled successfully."
 
-    # シグナルハンドリング（終了時にスワップを元に戻す）
-    trap 'cleanup_swap "$original_swap_state" "$swapfile"' EXIT
+    # **スクリプト終了時にスワップを元に戻す**
+    trap '
+        echo "[INFO] Cleaning up temporary swap..."
+        swapoff "$swapfile"
+        rm -f "$swapfile"
+        if [ "$original_swap_state" = "on" ]; then
+            echo "[INFO] Re-enabling original swap..."
+            swapon -a
+        fi
+        echo "[INFO] Swap cleanup completed."
+    ' EXIT
 }
-
-cleanup_swap() {
-    local original_state="$1"
-    local swapfile="$2"
-
-    echo "[INFO] Cleaning up temporary swap..."
-    swapoff "$swapfile"
-    rm -f "$swapfile"
-
-    if [ "$original_state" = "on" ]; then
-        echo "[INFO] Re-enabling original swap..."
-        swapon -a
-    fi
-
-    echo "[INFO] Swap cleanup completed."
-}
-
 
 # 【DBファイルから値を取得する関数】
 get_ini_value() {
@@ -1795,9 +1797,6 @@ install_build() {
     local hidden="no"
     local DB_FILE="${BASE_DIR}/custom-package.db"  # INIデータベースファイル
     local output_ipk=""
-    local swapfile="/overlay/swapfile"
-    local swap_size_mb=192  # 一時的なスワップサイズ（MB）
-    local original_swap_state=""
 
     # 【オプションの処理】
     for arg in "$@"; do
@@ -1814,39 +1813,7 @@ install_build() {
         return 1
     fi
 
-    # **スワップのセットアップ**
-    echo "[INFO] Checking current swap status..."
-    if free | awk '/Swap:/ {exit $2 == 0}'; then
-        echo "[INFO] No active swap detected. Creating a temporary swap file..."
-        original_swap_state="off"
-    else
-        echo "[INFO] Swap is already enabled. Disabling temporarily..."
-        swapoff "$swapfile" 2>/dev/null
-        original_swap_state="on"
-    fi
-
-    echo "[INFO] Creating temporary swap file at $swapfile..."
-    dd if=/dev/zero of="$swapfile" bs=1M count="$swap_size_mb" status=none
-    mkswap "$swapfile"
-    swapon "$swapfile"
-
-    if free | awk '/Swap:/ {exit $2 == 0}'; then
-        echo "[ERROR] Failed to enable temporary swap. Exiting..."
-        return 1
-    fi
-    echo "[INFO] Temporary swap enabled successfully."
-
-    # **スクリプト終了時にスワップを元に戻す**
-    trap '
-        echo "[INFO] Cleaning up temporary swap..."
-        swapoff "$swapfile"
-        rm -f "$swapfile"
-        if [ "$original_swap_state" = "on" ]; then
-            echo "[INFO] Re-enabling original swap..."
-            swapon -a
-        fi
-        echo "[INFO] Swap cleanup completed."
-    ' EXIT
+    setup_swap  # **スワップのセットアップ**
 
     # 【OpenWrt バージョンの取得】
     local openwrt_version=""
@@ -1903,13 +1870,13 @@ install_build() {
         fi
     fi
 
-    # 【ビルドディレクトリがなければ作成】
+    # **ビルドディレクトリがなければ作成**
     if [ ! -d "$BUILD_DIR" ]; then
         mkdir -p "$BUILD_DIR"
         debug_log "DEBUG" "Created build directory: $BUILD_DIR"
     fi
 
-    # 【リポジトリの取得・更新】
+    # **リポジトリの取得・更新**
     if [ -d "$BUILD_DIR/$package_name" ]; then
         debug_log "DEBUG" "Removing existing repository and cloning fresh copy."
         rm -rf "$BUILD_DIR/$package_name"
@@ -1924,7 +1891,7 @@ install_build() {
 
     cd "$BUILD_DIR/$package_name" || { debug_log "ERROR" "Failed to enter repository directory"; return 1; }
 
-    # 【OpenWrt feeds のセットアップ】
+    # **OpenWrt feeds のセットアップ**
     if [ ! -d "$BUILD_DIR/openwrt" ]; then
         debug_log "DEBUG" "Cloning OpenWrt source for feeds setup."
         git clone "$OPENWRT_REPO" "$BUILD_DIR/openwrt"
@@ -1936,7 +1903,7 @@ install_build() {
 
     cd "$BUILD_DIR/$package_name"
 
-    # 【ビルドコマンドの確認】
+    # **ビルドコマンドの確認**
     if [ -z "$build_command" ]; then
         debug_log "ERROR" "ビルドコマンドが見つかりません！"
         stop_spinner
@@ -1948,7 +1915,7 @@ install_build() {
     # **スピナー開始**
     start_spinner "$(get_message 'MSG_BUILD_RUNNING')"
 
-    # 【ビルド実行】
+    # **ビルド実行**
     local start_time end_time build_time
     start_time=$(date +%s)
     if ! eval "$build_command"; then
@@ -1964,21 +1931,9 @@ install_build() {
     echo "✅ ${package_name} のビルド完了（所要時間: ${build_time}秒）"
     debug_log "DEBUG" "Build time: $build_time seconds"
 
-    # **ビルド後の `.ipk` の検索**
-    output_ipk=$(find "$BUILD_DIR/bin/packages" -type f -name "*.ipk" | head -n 1)
-    if [ -z "$output_ipk" ]; then
-        debug_log "ERROR" "ビルドされた .ipk ファイルが見つかりません！"
-        return 1
-    fi
-
-    debug_log "DEBUG" "Built .ipk package: $output_ipk"
-
-    # **`.ipk` を `install_package()` でインストール**
-    debug_log "DEBUG" "Installing built package: $output_ipk"
-    install_package "$output_ipk"
-
     return 0
 }
+
 
 XXX_install_build() {
     local package_name=""
