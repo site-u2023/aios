@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-00-17"
+SCRIPT_VERSION="2025.02.24-01-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1886,10 +1886,15 @@ install_build() {
     BUILD_DIR=$(get_ini_value "default" "build_dir")
     OPENWRT_REPO=$(get_ini_value "default" "openwrt_repo")
 
-    # **install_package を取得してインストール**
-    install_packages=$(awk -F'=' -v section="$package_name" '
+    # **バージョンごとの `install_package` を取得**
+    install_packages=$(awk -F'=' -v section="$package_name" -v version="$openwrt_version" '
         /^\[/{section_name=$0; next}
-        section_name == "[" section "]" && $1 ~ /install_package/ {gsub(/[ ]+/,"",$2); print $2}
+        section_name == "[" section "]" && $1 ~ /install_package/ {default_pkg=$2; gsub(/[ ]+/,"",default_pkg)}
+        section_name == "[" section " (" version ") ]" && $1 ~ /install_package/ {specific_pkg=$2; gsub(/[ ]+/,"",specific_pkg)}
+        END {
+            if (specific_pkg) print specific_pkg;
+            else print default_pkg;
+        }
     ' "$DB_FILE")
 
     if [ -n "$install_packages" ]; then
@@ -1897,7 +1902,7 @@ install_build() {
         
         echo "$install_packages" | tr ',' '\n' | while read -r pkg; do
             if [ -n "$pkg" ]; then
-                # **libtool の存在確認**
+                # **libtool の存在確認（バージョンごとに異なる可能性あり）**
                 if [ "$pkg" = "libtool" ]; then
                     if ! opkg list | grep -E "^libtool" >/dev/null 2>&1; then
                         debug_log "WARN" "libtool が見つかりません。libtool-bin に変更します。"
@@ -1918,10 +1923,14 @@ install_build() {
     fi
 
     # 【バージョンごとのビルドコマンド取得】
-    build_command=$(get_ini_value "$package_name" "$openwrt_version")
-    if [ -z "$build_command" ]; then
-        build_command=$(get_ini_value "$package_name" "default")
-    fi
+    build_command=$(awk -F'=' -v section="$package_name" -v version="$openwrt_version" '
+        /^\[/{section_name=$0; next}
+        section_name == "[" section " (" version ") ]" && $1 ~ /build_command/ {print $2}
+        section_name == "[" section "]" && $1 ~ /build_command/ {default_cmd=$2}
+        END {
+            if (default_cmd) print default_cmd;
+        }
+    ' "$DB_FILE")
 
     debug_log "DEBUG" "Source URL: $source_url"
     debug_log "DEBUG" "Build Command: $build_command"
@@ -2001,6 +2010,7 @@ install_build() {
 
     return 0
 }
+
 
 XXX_install_build() {
     local package_name=""
