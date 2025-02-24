@@ -1,10 +1,5 @@
-SCRIPT_VERSION="2025.02.20-00-00"
+SCRIPT_VERSION="2025.02.24-00-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION package.db \033[0m"
-
-[uconv]
-uci set uconv.@settings[0].enabled=1
-uci commit uconv
-/etc/init.d/uconv restart
 
 [ttyd]
 uci del_list ttyd.@ttyd[0].client_option='theme={"background": "black"}'
@@ -27,3 +22,9 @@ uci add_list ttyd.ttyd.client_option='titleFixed=config-software'
 uci commit ttyd
 /etc/init.d/ttyd enable
 /etc/init.d/rpcd start
+
+
+[zswap]
+uci set system.@swap[0].enabled='1'
+uci set system.@swap[0].priority='100'
+uci commit system
