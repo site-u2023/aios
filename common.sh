@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-00-07"
+SCRIPT_VERSION="2025.02.24-00-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1719,6 +1719,7 @@ setup_swap() {
     local swapfile="/overlay/swapfile"
     local swap_size_mb=192  # 一時的なスワップサイズ（MB）
     local original_swap_state=""
+    local original_swappiness=""
 
     echo "[INFO] Checking current swap status..."
     free -m
@@ -1765,6 +1766,13 @@ setup_swap() {
     mkswap "$swapfile"
     swapon "$swapfile"
 
+    # **swappiness を一時的に変更**
+    if [ -f "/proc/sys/vm/swappiness" ]; then
+        original_swappiness=$(cat /proc/sys/vm/swappiness)
+        echo 10 > /proc/sys/vm/swappiness
+        echo "[INFO] Adjusted swappiness to 10 (favor RAM usage)"
+    fi
+
     # **スワップが有効になったか確認**
     if ! free -m | awk '/Swap:/ {exit $2 == 0}'; then
         echo "[INFO] Temporary swap enabled successfully."
@@ -1787,6 +1795,12 @@ setup_swap() {
         if [ "$original_swap_state" = "on" ]; then
             echo "[INFO] Re-enabling original swap..."
             swapon -a
+        fi
+
+        # **swappiness を元に戻す**
+        if [ -n "$original_swappiness" ]; then
+            echo "$original_swappiness" > /proc/sys/vm/swappiness
+            echo "[INFO] Restored original swappiness to $original_swappiness"
         fi
 
         echo "[INFO] Final swap status:"
