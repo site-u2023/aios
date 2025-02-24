@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.25-00-03"
+SCRIPT_VERSION="2025.02.25-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1281,7 +1281,59 @@ stop_spinner() {
     echo -en "\e[?25h"
 }
 
+# パッケージリストの更新
 update_package_list() {
+    local update_cache="${CACHE_DIR}/update.ch"
+    local current_time
+    current_time=$(date '+%s')  # 現在のUNIXタイムスタンプ取得
+    local cache_time=0
+    local max_age=$((24 * 60 * 60))  # 24時間 (86400秒)
+
+    # **キャッシュディレクトリの作成**
+    mkdir -p "$CACHE_DIR"
+
+    # **キャッシュが存在する場合、最終更新時刻を取得**
+    if [ -f "$update_cache" ]; then
+        cache_time=$(stat -c %Y "$update_cache" 2>/dev/null || echo 0)
+    fi
+
+    # **キャッシュが最新なら `opkg update` をスキップ**
+    if [ $((current_time - cache_time)) -lt $max_age ]; then
+        debug_log "DEBUG" "パッケージリストは24時間以内に更新されています。スキップします。"
+        return 0
+    fi
+
+    # **スピナー開始**
+    start_spinner "$(color yellow "$(get_message "MSG_RUNNING_UPDATE")")"
+
+    # **パッケージリストの更新**
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
+            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+            return 1
+        }
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
+            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+            return 1
+        }
+    fi
+
+    # **スピナー停止 (成功メッセージを表示)**
+    stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
+
+    # **キャッシュのタイムスタンプを更新**
+    touch "$update_cache" || {
+        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_WRITE_CACHE")")"
+        return 1
+    }
+
+    return 0
+}
+
+XXXXX_update_package_list() {
     local update_cache="${CACHE_DIR}/update.ch"
     local current_time
     current_time=$(date '+%s')  # 現在のUNIXタイムスタンプ取得
@@ -1371,13 +1423,6 @@ apply_local_package_db() {
         eval "$line"
     done
 }
-
-# **設定の有効化**
-if [ "$set_disabled" = "no" ]; then
-    if [ -f "local-package.db" ] && grep -q "^$package_name-enable=" "local-package.db"; then
-        eval "$(grep "^$package_name-enable=" "local-package.db" | cut -d'=' -f2-)"
-    fi
-fi
 
 install_package() {
     local confirm_install="no"
@@ -1611,6 +1656,13 @@ install_package() {
     # **local-package.db の適用**
     if [ "$skip_package_db" != "yes" ]; then
         apply_local_package_db
+    fi
+
+    # **設定の有効化**
+    if [ "$set_disabled" = "no" ]; then
+        if [ -f "local-package.db" ] && grep -q "^$package_name-enable=" "local-package.db"; then
+            eval "$(grep "^$package_name-enable=" "local-package.db" | cut -d'=' -f2-)"
+        fi
     fi
 
     # **サービスの有効化**
