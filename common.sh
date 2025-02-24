@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-01-11"
+SCRIPT_VERSION="2025.02.24-01-12"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1964,148 +1964,137 @@ get_value_with_fallback() {
 }
 
 install_build() {
-    local package_name=""
     local confirm_install="no"
     local hidden="no"
-    local DB_FILE="/tmp/aios/custom-package.ini"  # INIデータベースファイル
-    local CACHE_DIR="/tmp/aios/cache"
+    local package_name=""
 
-    # 【オプションの処理】
+    # **オプションの処理**
     for arg in "$@"; do
         case "$arg" in
-            yn) confirm_install="yes" ;;   # 確認を入れるフラグ
-            hidden) hidden="yes" ;;        # 非表示でインストールするフラグ
-            *) 
-                if [ -z "$package_name" ]; then 
+            yn) confirm_install="yes" ;;
+            hidden) hidden="yes" ;;
+            *)
+                if [ -z "$package_name" ]; then
                     package_name="$arg"
-                else 
+                else
                     debug_log "DEBUG" "Unknown option: $arg"
                 fi
                 ;;
         esac
     done
 
-    # 【パッケージ名が指定されているか確認】
+    # **パッケージ名が指定されているか確認**
     if [ -z "$package_name" ]; then
-        debug_log "ERROR" "パッケージ名が指定されていません！"
+        debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")"
         return 1
     fi
 
-    # 【インストール確認ダイアログ (YNオプション)】
-    if [ "$confirm_install" = "yes" ]; then
-        echo "📢 ${package_name} をインストールしますか？ (Y/n)"
-        read -r answer
-        if [ "$answer" != "Y" ] && [ "$answer" != "y" ]; then
-            debug_log "INFO" "インストールをキャンセルしました。"
-            return 0
-        fi
+    # **スワップの動作チェック**
+    setup_swap
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "$(get_message 'MSG_ERR_INSUFFICIENT_SWAP')"
+        return 1
     fi
 
-    # 【OpenWrt バージョンの取得】
-    local openwrt_version=""
+    # **downloader_ch から `opkg` or `apk` を取得**
+    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
+    else
+        debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")"
+        return 1
+    fi
+
+    # **インストール前の確認**
+    if [ "$confirm_install" = "yes" ]; then
+        while true; do
+            local msg=$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")
+            echo "$msg"
+    
+            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
+            read -r yn
+            case "$yn" in
+                [Yy]*) break ;;
+                [Nn]*) return 1 ;;
+                *) echo "Invalid input. Please enter Y or N." ;;
+            esac
+        done
+    fi
+
+    # **ビルド環境の準備**
+    install_package jq
+    local build_tools="make gcc git libtool-bin automake pkg-config zlib-dev libncurses-dev curl libxml2 libxml2-dev autoconf automake bison flex perl patch wget wget-ssl tar unzip"
+                      
+    for tool in $build_tools; do
+        install_package "$tool" hidden
+    done
+
+    # **ビルド後のパッケージ名を取得**
+    local built_package="${package_name#build_}"
+
+    # ** キャッシュからバージョンとアーキテクチャを取得 **  
     if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
         openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
-    else
-        debug_log "ERROR" "OpenWrt バージョン情報が取得できません！"
-        return 1
     fi
+    if [ -f "${CACHE_DIR}/architecture.ch" ]; then
+        arch=$(cat "${CACHE_DIR}/architecture.ch")
+    fi
+
+    debug_log "DEBUG" "Using architecture: $arch"
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
 
-    # 【必要なパラメータを取得】
-    local source_url build_dependencies build_command BUILD_DIR OPENWRT_REPO
+    # **`custom-package.db` からビルドに必要な `dependencies` を取得**
+    local dependencies=$(jq -r --arg arch "$arch" '.[$package_name].build.dependencies.opkg // [] | join(" ")' "$CACHE_DIR/custom-package.db" 2>/dev/null)
 
-    source_url=$(get_ini_value "$package_name" "source_url")
-    build_dependencies=$(get_ini_value "$package_name" "build_dependencies")
-    BUILD_DIR=$(get_ini_value "default" "build_dir")
-    OPENWRT_REPO=$(get_ini_value "default" "openwrt_repo")
-
-    # 【バージョンごとのビルドコマンド取得】
-    build_command=$(get_ini_value "$package_name" "$openwrt_version")
-    if [ -z "$build_command" ]; then
-        build_command=$(get_ini_value "$package_name" "default")
-    fi
-
-    debug_log "DEBUG" "Source URL: $source_url"
-    debug_log "DEBUG" "Build Dependencies: $build_dependencies"
-    debug_log "DEBUG" "Build Command: $build_command"
-    debug_log "DEBUG" "Build Directory: $BUILD_DIR"
-    debug_log "DEBUG" "OpenWrt Repo: $OPENWRT_REPO"
-
-    # 【ビルド用依存パッケージのインストール】
-    if [ -n "$build_dependencies" ]; then
-        debug_log "DEBUG" "Installing build dependencies for $package_name: $build_dependencies"
-        for dep in $build_dependencies; do
-            install_package "$dep" "$hidden"
+    if [ -n "$dependencies" ]; then
+        debug_log "DEBUG" "Installing dependencies: $dependencies"
+        for dep in $dependencies; do
+            install_package "$dep" hidden
         done
     else
-        debug_log "DEBUG" "No build dependencies found for $package_name."
+        debug_log "DEBUG" "No dependencies found for $package_name."
     fi
 
-    # 【ビルドディレクトリがなければ作成】
-    if [ ! -d "$BUILD_DIR" ]; then
-        mkdir -p "$BUILD_DIR"
-        debug_log "DEBUG" "Created build directory: $BUILD_DIR"
-    fi
+    # **スピナー開始**
+    start_spinner "$(get_message 'MSG_UPDATE_RUNNING')"
 
-    # 【リポジトリの取得・更新】
-    if [ -d "$BUILD_DIR/$package_name" ]; then
-        debug_log "DEBUG" "Removing existing repository and cloning fresh copy."
-        rm -rf "$BUILD_DIR/$package_name"
-    fi
+    # **`custom-package.db` からビルドに必要な `build_command` を取得**
+    local build_command=$(jq -r --arg pkg "$package_name" --arg arch "$arch" --arg ver "$openwrt_version" '
+        .[$pkg].build.commands[$ver][$arch] // 
+        .[$pkg].build.commands[$ver].default // 
+        .[$pkg].build.commands.default[$arch] // 
+        .[$pkg].build.commands.default.default // empty' "$CACHE_DIR/custom-package.db" 2>/dev/null)
 
-    debug_log "DEBUG" "Cloning repository: $source_url"
-    git clone "$source_url" "$BUILD_DIR/$package_name"
-    if [ $? -ne 0 ]; then
-        debug_log "ERROR" "Git clone failed for $package_name"
-        return 1
-    fi
-
-    cd "$BUILD_DIR/$package_name" || { debug_log "ERROR" "Failed to enter repository directory"; return 1; }
-
-    # 【OpenWrt feeds のセットアップ】
-    if [ ! -d "$BUILD_DIR/openwrt" ]; then
-        debug_log "DEBUG" "Cloning OpenWrt source for feeds setup."
-        git clone "$OPENWRT_REPO" "$BUILD_DIR/openwrt"
-    fi
-
-    cd "$BUILD_DIR/openwrt"
-    ./scripts/feeds update -a
-    ./scripts/feeds install -a
-
-    cd "$BUILD_DIR/$package_name"
-
-    # 【ビルドコマンドの確認】
     if [ -z "$build_command" ]; then
-        debug_log "ERROR" "ビルドコマンドが見つかりません！"
+        debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_COMMAND_NOT_FOUND" | sed "s/{pkg}/$built_package/" | sed "s/{arch}/$arch/" | sed "s/{ver}/$openwrt_version/")"
         stop_spinner
         return 1
     fi
 
     debug_log "DEBUG" "Executing build command: $build_command"
 
-    # **スピナー開始**
-    start_spinner "Building ${package_name}..."
+    # **ビルド開始メッセージ**
+    echo "$(get_message "MSG_BUILD_START" | sed "s/{pkg}/$built_package/")"
 
-    # 【ビルド実行】
-    local start_time end_time build_time
-    start_time=$(date +%s)
-
+    # **ビルド実行**
+    local start_time=$(date +%s)
     if ! eval "$build_command"; then
-        debug_log "ERROR" "ビルド失敗: $package_name"
+        echo "$(get_message "MSG_BUILD_FAIL" | sed "s/{pkg}/$built_package/")"
+        debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_FAILED" | sed "s/{pkg}/$built_package/")"
         stop_spinner
         return 1
     fi
+    local end_time=$(date +%s)
+    local build_time=$((end_time - start_time))
 
-    end_time=$(date +%s)
-    build_time=$((end_time - start_time))
+    stop_spinner  # スピナー停止
+    echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$built_package/" | sed "s/{time}/$build_time/")"
+    debug_log "DEBUG" "Build time for $built_package: $build_time seconds"
 
-    # **スピナー停止**
-    stop_spinner
+    # **ビルド完了後、`install_package()` を実行**
+    install_package "$built_package" "$confirm_install"
 
-    echo "✅ ${package_name} のビルド完了（所要時間: ${build_time}秒）"
-    debug_log "DEBUG" "Build time: $build_time seconds"
-
-    return 0
+    echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$built_package/")"
+    debug_log "DEBUG" "Successfully built and installed package: $built_package"
 }
 
 
