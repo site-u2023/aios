@@ -1335,7 +1335,7 @@ update_package_list() {
 # **local-package.db の適用関数**
 apply_local_package_db() {
     # notpack オプションでスキップされている場合は処理しない
-    if [ "$skip_package_db" = "no" ]; then
+    if [ "$skip_package_db" = "yes" ]; then
         debug_log "DEBUG" "local-package.db の適用をスキップします。"
         return 0
     fi
@@ -1398,13 +1398,13 @@ install_package() {
             yn)         confirm_install="yes" ;;
             nolang)     skip_lang_pack="yes" ;;
             notpack)    skip_package_db="no" ;;
-            disabled)   set_disabled="yes" ;;
+            disabled)   set_disabled="no" ;;
             hidden)     hidden="yes" ;;
-            test)       test_mode="yes" ;;
-            force)      force_install="yes" ;;
-            unforce)    unforce="yes" ;;  # 強制インストールを解除
-            update)
-                update_mode="yes"
+            test)       test_mode="no" ;;
+            force)      force_install="no" ;;
+            unforce)    unforce="no" ;;  # 強制インストールを解除
+            update)     update_mode="no"
+            
                 shift
                 if [ $# -gt 0 ]; then
                     package_to_update="$1"  # `update some_package` に対応
