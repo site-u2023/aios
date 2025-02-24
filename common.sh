@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-01-04"
+SCRIPT_VERSION="2025.02.24-01-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1903,22 +1903,19 @@ install_build() {
 
     if [ -n "$install_packages" ]; then
         debug_log "DEBUG" "Retrieved install_packages: $install_packages"
-        
+
+        # **パッケージリストを処理**
         echo "$install_packages" | tr ',' '\n' | while read -r pkg; do
             if [ -n "$pkg" ]; then
-                # **libtool の存在確認（バージョンごとに異なる可能性あり）**
-                if [ "$pkg" = "libtool" ]; then
-                    if ! opkg list | grep -E "^libtool" >/dev/null 2>&1; then
-                        debug_log "WARN" "libtool が見つかりません。libtool-bin に変更します。"
-                        pkg="libtool-bin"
+                debug_log "INFO" "Checking if package exists in repository: $pkg"
+                if opkg list | grep -qE "^$pkg "; then
+                    debug_log "INFO" "Installing package: $pkg"
+                    install_package "$pkg" "$hidden"
+                    if [ $? -ne 0 ]; then
+                        debug_log "ERROR" "Failed to install package: $pkg"
                     fi
-                fi
-
-                debug_log "DEBUG" "Installing package: $pkg"
-                install_package "$pkg" "$hidden"
-                
-                if [ $? -ne 0 ]; then
-                    debug_log "ERROR" "Failed to install package: $pkg"
+                else
+                    debug_log "ERROR" "Package not found in repository: $pkg"
                 fi
             fi
         done
@@ -1974,12 +1971,47 @@ install_build() {
         return 1
     fi
 
+    cd "$BUILD_DIR/$package_name" || { debug_log "ERROR" "Failed to enter repository directory"; return 1; }
+
+    # **OpenWrt feeds のセットアップ**
+    if [ ! -d "$BUILD_DIR/openwrt" ]; then
+        debug_log "DEBUG" "Cloning OpenWrt source for feeds setup."
+        git clone "$OPENWRT_REPO" "$BUILD_DIR/openwrt"
+    fi
+
+    cd "$BUILD_DIR/openwrt"
+    ./scripts/feeds update -a
+    ./scripts/feeds install -a
+
     cd "$BUILD_DIR/$package_name"
 
-    # **ビルドコマンドの実行**
+    # **ビルドコマンドの確認**
+    if [ -z "$build_command" ]; then
+        debug_log "ERROR" "ビルドコマンドが見つかりません！"
+        stop_spinner
+        return 1
+    fi
+
+    debug_log "DEBUG" "Executing build command: $build_command"
+
+    # **スピナー開始**
     start_spinner "$(get_message 'MSG_BUILD_RUNNING')"
-    eval "$build_command"
+
+    # **ビルド実行**
+    local start_time end_time build_time
+    start_time=$(date +%s)
+    if ! eval "$build_command"; then
+        debug_log "ERROR" "ビルド失敗: $package_name"
+        stop_spinner
+        return 1
+    fi
+
+    end_time=$(date +%s)
+    build_time=$((end_time - start_time))
+
     stop_spinner
+    echo "✅ ${package_name} のビルド完了（所要時間: ${build_time}秒）"
+    debug_log "DEBUG" "Build time: $build_time seconds"
 
     return 0
 }
