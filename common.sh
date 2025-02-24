@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-00-16"
+SCRIPT_VERSION="2025.02.24-00-17"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1849,7 +1849,7 @@ install_build() {
     local package_name=""
     local confirm_install="no"
     local hidden="no"
-    local DB_FILE="${BASE_DIR}/custom-package.db"  # INIデータベースファイル
+    local DB_FILE="${BASE_DIR}/custom-package.db"
     local output_ipk=""
 
     # 【オプションの処理】
@@ -1893,10 +1893,21 @@ install_build() {
     ' "$DB_FILE")
 
     if [ -n "$install_packages" ]; then
-        debug_log "DEBUG" "Installing required packages for $package_name: $install_packages"
+        debug_log "DEBUG" "Retrieved install_packages: $install_packages"
+        
         echo "$install_packages" | tr ',' '\n' | while read -r pkg; do
             if [ -n "$pkg" ]; then
+                # **libtool の存在確認**
+                if [ "$pkg" = "libtool" ]; then
+                    if ! opkg list | grep -E "^libtool" >/dev/null 2>&1; then
+                        debug_log "WARN" "libtool が見つかりません。libtool-bin に変更します。"
+                        pkg="libtool-bin"
+                    fi
+                fi
+
+                debug_log "DEBUG" "Installing package: $pkg"
                 install_package "$pkg" "$hidden"
+                
                 if [ $? -ne 0 ]; then
                     debug_log "ERROR" "Failed to install package: $pkg"
                 fi
