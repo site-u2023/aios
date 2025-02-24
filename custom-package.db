@@ -5,6 +5,7 @@ SCRIPT_VERSION="2025.02.20-00-00"
 [default]
 build_dir = /tmp/build
 openwrt_repo = https://git.openwrt.org/openwrt/openwrt.git
+install_package = make, gcc, libtool, autoconf, automake, lua, luci-lib-nixio, luci-lib-jsonc
 
 [luci-app-temp-status]
 install_package=make gcc libtool autoconf automake lua luci-lib-nixio
