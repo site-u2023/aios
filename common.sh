@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-00-06"
+SCRIPT_VERSION="2025.02.24-00-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1721,58 +1721,79 @@ setup_swap() {
     local original_swap_state=""
 
     echo "[INFO] Checking current swap status..."
+    free -m
 
-    # `free` コマンドで現在のスワップの状態を確認
+    # `swapon` が BusyBox か確認
+    if swapon --help 2>&1 | grep -q "unrecognized option"; then
+        echo "[INFO] Using BusyBox version of swapon."
+    else
+        echo "[INFO] Full version of swapon available."
+    fi
+
+    # 既存のスワップ状態を取得
     if free | awk '/Swap:/ {exit $2 == 0}'; then
-        echo "[INFO] No active swap detected. Creating a temporary swap file..."
+        echo "[INFO] No active swap detected."
         original_swap_state="off"
     else
-        echo "[INFO] Swap is already enabled. Disabling temporarily..."
+        echo "[INFO] Swap is currently active. Disabling it..."
         swapoff -a 2>/dev/null
+        sync
+        sleep 2
         original_swap_state="on"
     fi
 
-    # **既存のスワップファイルが存在する場合は削除**
+    # 既存のスワップファイルが存在する場合は削除
     if [ -f "$swapfile" ]; then
         echo "[INFO] Removing existing swap file..."
-        chattr -i "$swapfile" 2>/dev/null
-        rm -f "$swapfile"
+        swapoff "$swapfile" 2>/dev/null
+        sync
+        sleep 2
+        rm -f "$swapfile" 2>/dev/null
     fi
 
     echo "[INFO] Creating temporary swap file at $swapfile..."
 
-    # **BusyBox の `dd` に適合するコマンド**
+    # BusyBox `dd` でスワップファイルを作成
     dd if=/dev/zero of="$swapfile" bs=1k count=$((swap_size_mb * 1024)) 2>/dev/null
 
-    # **スワップファイルの権限を設定**
+    # スワップファイルの権限を設定
     chmod 600 "$swapfile"
     sync
+    sleep 1  # 書き込みの競合を防ぐ
 
-    # **スワップの初期化と有効化**
+    # スワップの初期化と有効化
     mkswap "$swapfile"
     swapon "$swapfile"
 
     # **スワップが有効になったか確認**
-    if ! swapon | grep -q "$swapfile"; then
-        echo "[ERROR] Failed to enable temporary swap. Exiting..."
-        rm -f "$swapfile"
-        return 1
+    if ! free -m | awk '/Swap:/ {exit $2 == 0}'; then
+        echo "[INFO] Temporary swap enabled successfully."
+    else
+        echo "[ERROR] Failed to enable temporary swap."
     fi
 
-    echo "[INFO] Temporary swap enabled successfully."
+    # **スワップの状態を再確認**
+    free -m
 
     # **スクリプト終了時にスワップを元に戻す**
     trap '
         echo "[INFO] Cleaning up temporary swap..."
         swapoff "$swapfile"
+        sync
+        sleep 2
         rm -f "$swapfile"
+
+        # もともとスワップが有効だった場合、再度有効化
         if [ "$original_swap_state" = "on" ]; then
             echo "[INFO] Re-enabling original swap..."
             swapon -a
         fi
-        echo "[INFO] Swap cleanup completed."
+
+        echo "[INFO] Final swap status:"
+        free -m
     ' EXIT
 }
+
 
 # 【DBファイルから値を取得する関数】
 get_ini_value() {
