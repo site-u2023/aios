@@ -58,7 +58,7 @@ BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build}"
-mkdir -p "$CACHE_DIR" "$LOG_DIR" "BUILD_DIR"
+mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
 # 🔵　エラー・デバッグ・アップデート系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
