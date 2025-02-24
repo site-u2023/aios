@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-01-20"
+SCRIPT_VERSION="2025.02.24-01-21"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1966,7 +1966,7 @@ install_build() {
         while true; do
             local msg=$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")
             echo "$msg"
-    
+
             echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
             read -r yn
             case "$yn" in
@@ -1978,11 +1978,10 @@ install_build() {
     fi
 
     # **OpenWrt バージョン取得**
-    local openwrt_version
+    local openwrt_version=""
     if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
         openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
     fi
-
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
 
     # **ビルド環境の準備**
@@ -2028,6 +2027,7 @@ install_build() {
     echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$package_name/")"
     debug_log "DEBUG" "Successfully built and installed package: $package_name"
 }
+
 
 XXX_install_build() {
     local package_name=""
