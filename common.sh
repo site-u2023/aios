@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-01-02"
+SCRIPT_VERSION="2025.02.24-01-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1852,7 +1852,7 @@ install_build() {
     local DB_FILE="${BASE_DIR}/custom-package.db"
     local output_ipk=""
 
-    # **オプションの処理**
+    # 【オプションの処理】
     for arg in "$@"; do
         case "$arg" in
             yn) confirm_install="yes" ;;
@@ -1861,7 +1861,7 @@ install_build() {
         esac
     done
 
-    # **パッケージ名が指定されているか確認**
+    # 【パッケージ名が指定されているか確認】
     if [ -z "$package_name" ]; then
         debug_log "ERROR" "パッケージ名が指定されていません！"
         return 1
@@ -1869,7 +1869,7 @@ install_build() {
 
     setup_swap  # **スワップのセットアップ**
 
-    # **OpenWrt バージョンの取得**
+    # 【OpenWrt バージョンの取得】
     local openwrt_version=""
     if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
         openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
@@ -1879,7 +1879,7 @@ install_build() {
     fi
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
 
-    # **必要なパラメータを取得**
+    # 【必要なパラメータを取得】
     local source_url build_command BUILD_DIR OPENWRT_REPO install_packages
 
     source_url=$(get_ini_value "$package_name" "source_url")
@@ -1888,9 +1888,9 @@ install_build() {
 
     # **バージョンごとの `install_package` を取得**
     install_packages=$(awk -F'=' -v section="$package_name" -v version="$openwrt_version" '
-        /^\[/{section_name=$0; next}
-        section_name == "[" section "]" && $1 ~ /install_package/ {default_pkg=$2; gsub(/[ ]+/,"",default_pkg)}
-        section_name == "[" section " (" version ") ]" && $1 ~ /install_package/ {specific_pkg=$2; gsub(/[ ]+/,"",specific_pkg)}
+        /^\[/{gsub(/\[|\]/, "", $0); section_name=$0; next}
+        section_name == section && $1 ~ /install_package/ {default_pkg=$2; gsub(/[ ]+/,"",default_pkg)}
+        section_name == section " (" version ")" && $1 ~ /install_package/ {specific_pkg=$2; gsub(/[ ]+/,"",specific_pkg)}
         END {
             if (specific_pkg) print specific_pkg;
             else print default_pkg;
@@ -1899,7 +1899,7 @@ install_build() {
 
     if [ -n "$install_packages" ]; then
         debug_log "DEBUG" "Retrieved install_packages: $install_packages"
-        
+
         echo "$install_packages" | tr ',' '\n' | while read -r pkg; do
             if [ -n "$pkg" ]; then
                 # **libtool の存在確認（バージョンごとに異なる可能性あり）**
@@ -1912,7 +1912,7 @@ install_build() {
 
                 debug_log "DEBUG" "Installing package: $pkg"
                 install_package "$pkg" "$hidden"
-                
+
                 if [ $? -ne 0 ]; then
                     debug_log "ERROR" "Failed to install package: $pkg"
                 fi
@@ -1922,27 +1922,22 @@ install_build() {
         debug_log "DEBUG" "No additional install_package found for $package_name."
     fi
 
-    # **バージョンごとのビルドコマンド取得**
+    # 【バージョンごとのビルドコマンド取得】
     build_command=$(awk -F'=' -v section="$package_name" -v version="$openwrt_version" '
-        /^\[/{section_name=$0; next}
-        section_name == "[" section " (" version ") ]" && $1 ~ /build_command/ {print $2}
-        section_name == "[" section "]" && $1 ~ /build_command/ {default_cmd=$2}
+        /^\[/{gsub(/\[|\]/, "", $0); section_name=$0; next}
+        section_name == section " (" version ")" && $1 ~ /build_command/ {print $2}
+        section_name == section && $1 ~ /build_command/ {default_cmd=$2}
         END {
             if (default_cmd) print default_cmd;
         }
     ' "$DB_FILE")
-
-    if [ -z "$build_command" ]; then
-        debug_log "ERROR" "ビルドコマンドが見つかりません！"
-        return 1
-    fi
 
     debug_log "DEBUG" "Source URL: $source_url"
     debug_log "DEBUG" "Build Command: $build_command"
     debug_log "DEBUG" "Build Directory: $BUILD_DIR"
     debug_log "DEBUG" "OpenWrt Repo: $OPENWRT_REPO"
 
-    # **パッケージのインストール確認（YNオプション）**
+    # 【パッケージのインストール確認（YNオプション）】
     if [ "$confirm_install" = "yes" ]; then
         echo "📢 ${package_name} をインストールしますか？ (Y/n)"
         read -r answer
