@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-00-10"
+SCRIPT_VERSION="2025.02.24-00-11"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1888,15 +1888,19 @@ install_build() {
     OPENWRT_REPO=$(get_ini_value "default" "openwrt_repo")
 
     # **install_package を取得してインストール**
-    install_packages=$(awk -F'=' -v section="$package_name" '
+    install_packages=$(awk -F'=' -v section="\[$package_name\]" '
         $0 ~ section {flag=1; next} /^\[/{flag=0}
-        flag && $1 ~ /install_package/ {print $2}
-    ' "$DB_FILE")
+        flag && $1 == "install_package" {print $2}
+    ' "$DB_FILE" | tr -d ' ')
 
     if [ -n "$install_packages" ]; then
         debug_log "DEBUG" "Installing required packages for $package_name: $install_packages"
-        for pkg in $install_packages; do
+        IFS=',' read -ra package_array <<< "$install_packages"
+        for pkg in "${package_array[@]}"; do
             install_package "$pkg" "$hidden"
+            if [ $? -ne 0 ]; then
+                debug_log "ERROR" "Failed to install package: $pkg"
+            fi
         done
     else
         debug_log "DEBUG" "No additional install_package found for $package_name."
@@ -1987,8 +1991,6 @@ install_build() {
 
     return 0
 }
-
-
 
 XXX_install_build() {
     local package_name=""
