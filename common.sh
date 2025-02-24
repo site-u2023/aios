@@ -1718,16 +1718,23 @@ OK_install_package() {
 setup_swap() {
     SWAP_FILE="/overlay/swapfile"
     SWAP_SIZE_MB=512  # スワップのサイズ（MB単位）
-
-    if [ ! -f "$SWAP_FILE" ]; then
-        debug_log "INFO" "Creating swap file (${SWAP_SIZE_MB}MB)..."
-        dd if=/dev/zero of=$SWAP_FILE bs=1M count=$SWAP_SIZE_MB
-        mkswap $SWAP_FILE
-        swapon $SWAP_FILE
+	
+if [ ! -f "$SWAP_FILE" ]; then
+    debug_log "INFO" "Creating swap file (${SWAP_SIZE_MB}MB)..."
+    dd if=/dev/zero of="$SWAP_FILE" bs=1M count=$SWAP_SIZE_MB
+    mkswap "$SWAP_FILE"
+    swapon "$SWAP_FILE"
+else
+    debug_log "INFO" "Swap file already exists. Verifying swap file..."
+    swapon "$SWAP_FILE" 2>/dev/null
+    if [ $? -ne 0 ]; then
+        debug_log "INFO" "Swap file is invalid. Reinitializing swap file..."
+        mkswap "$SWAP_FILE"
+        swapon "$SWAP_FILE"
     else
-        debug_log "INFO" "Swap file already exists."
-        swapon $SWAP_FILE
+        debug_log "INFO" "Swap file is valid."
     fi
+fi
 }
 
 # 【INIファイルから値を取得する関数】
