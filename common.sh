@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-00-00"
+SCRIPT_VERSION="2025.02.24-00-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1715,27 +1715,57 @@ OK_install_package() {
 # 【messages.dbの記述例】
 # [uconv]　※行、列問わず記述可
 #########################################################################
-setup_swap() {
-    SWAP_FILE="/overlay/swapfile"
-    SWAP_SIZE_MB=512  # スワップのサイズ（MB単位）
-	
-if [ ! -f "$SWAP_FILE" ]; then
-    debug_log "INFO" "Creating swap file (${SWAP_SIZE_MB}MB)..."
-    dd if=/dev/zero of="$SWAP_FILE" bs=1M count=$SWAP_SIZE_MB
-    mkswap "$SWAP_FILE"
-    swapon "$SWAP_FILE"
-else
-    debug_log "INFO" "Swap file already exists. Verifying swap file..."
-    swapon "$SWAP_FILE" 2>/dev/null
-    if [ $? -ne 0 ]; then
-        debug_log "INFO" "Swap file is invalid. Reinitializing swap file..."
-        mkswap "$SWAP_FILE"
-        swapon "$SWAP_FILE"
+temporary_swap_setup() {
+    local swapfile="/overlay/swapfile"
+    local swap_size_mb=192  # 一時的なスワップサイズ（MB）
+    local original_swap_state=""
+    
+    echo "[INFO] Checking current swap status..."
+    
+    # 現在のスワップ状態を取得（BusyBoxのswaponに--summaryがないため、freeで確認）
+    if free | grep -q "Swap: *0 *0 *0"; then
+        echo "[INFO] No active swap detected. Creating a temporary swap file..."
+        original_swap_state="off"
     else
-        debug_log "INFO" "Swap file is valid."
+        echo "[INFO] Swap is already enabled. Disabling temporarily..."
+        swapoff "$swapfile" 2>/dev/null
+        original_swap_state="on"
     fi
-fi
+
+    # スワップファイルの作成
+    echo "[INFO] Creating temporary swap file at $swapfile..."
+    dd if=/dev/zero of="$swapfile" bs=1M count="$swap_size_mb" status=none
+    mkswap "$swapfile"
+    swapon "$swapfile"
+
+    # スワップが有効になったか確認
+    if free | grep -q "Swap: *0 *0 *0"; then
+        echo "[ERROR] Failed to enable temporary swap. Exiting..."
+        return 1
+    fi
+
+    echo "[INFO] Temporary swap enabled successfully."
+
+    # シグナルハンドリング（終了時にスワップを元に戻す）
+    trap 'cleanup_swap "$original_swap_state" "$swapfile"' EXIT
 }
+
+cleanup_swap() {
+    local original_state="$1"
+    local swapfile="$2"
+
+    echo "[INFO] Cleaning up temporary swap..."
+    swapoff "$swapfile"
+    rm -f "$swapfile"
+
+    if [ "$original_state" = "on" ]; then
+        echo "[INFO] Re-enabling original swap..."
+        swapon -a
+    fi
+
+    echo "[INFO] Swap cleanup completed."
+}
+
 
 # 【DBファイルから値を取得する関数】
 get_ini_value() {
@@ -1765,6 +1795,9 @@ install_build() {
     local hidden="no"
     local DB_FILE="${BASE_DIR}/custom-package.db"  # INIデータベースファイル
     local output_ipk=""
+    local swapfile="/overlay/swapfile"
+    local swap_size_mb=192  # 一時的なスワップサイズ（MB）
+    local original_swap_state=""
 
     # 【オプションの処理】
     for arg in "$@"; do
@@ -1781,7 +1814,39 @@ install_build() {
         return 1
     fi
 
-    setup_swap  # スワップのセットアップ
+    # **スワップのセットアップ**
+    echo "[INFO] Checking current swap status..."
+    if free | awk '/Swap:/ {exit $2 == 0}'; then
+        echo "[INFO] No active swap detected. Creating a temporary swap file..."
+        original_swap_state="off"
+    else
+        echo "[INFO] Swap is already enabled. Disabling temporarily..."
+        swapoff "$swapfile" 2>/dev/null
+        original_swap_state="on"
+    fi
+
+    echo "[INFO] Creating temporary swap file at $swapfile..."
+    dd if=/dev/zero of="$swapfile" bs=1M count="$swap_size_mb" status=none
+    mkswap "$swapfile"
+    swapon "$swapfile"
+
+    if free | awk '/Swap:/ {exit $2 == 0}'; then
+        echo "[ERROR] Failed to enable temporary swap. Exiting..."
+        return 1
+    fi
+    echo "[INFO] Temporary swap enabled successfully."
+
+    # **スクリプト終了時にスワップを元に戻す**
+    trap '
+        echo "[INFO] Cleaning up temporary swap..."
+        swapoff "$swapfile"
+        rm -f "$swapfile"
+        if [ "$original_swap_state" = "on" ]; then
+            echo "[INFO] Re-enabling original swap..."
+            swapon -a
+        fi
+        echo "[INFO] Swap cleanup completed."
+    ' EXIT
 
     # 【OpenWrt バージョンの取得】
     local openwrt_version=""
