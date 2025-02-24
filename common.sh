@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-00-04"
+SCRIPT_VERSION="2025.02.24-00-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1728,13 +1728,14 @@ setup_swap() {
         original_swap_state="off"
     else
         echo "[INFO] Swap is already enabled. Disabling temporarily..."
-        swapoff "$swapfile" 2>/dev/null
+        swapoff -a 2>/dev/null
         original_swap_state="on"
     fi
 
     # **既存のスワップファイルが存在する場合は削除**
     if [ -f "$swapfile" ]; then
         echo "[INFO] Removing existing swap file..."
+        chattr -i "$swapfile" 2>/dev/null
         rm -f "$swapfile"
     fi
 
@@ -1743,9 +1744,13 @@ setup_swap() {
     # **BusyBox の `dd` に適合するコマンド**
     dd if=/dev/zero of="$swapfile" bs=1k count=$((swap_size_mb * 1024)) 2>/dev/null
 
+    # **スワップファイルの権限を設定**
     chmod 600 "$swapfile"
     sync
-    mkswap "$swapfile" && swapon "$swapfile"
+
+    # **スワップの初期化と有効化**
+    mkswap "$swapfile"
+    swapon "$swapfile"
 
     # **スワップが有効になったか確認**
     if ! swapon | grep -q "$swapfile"; then
@@ -1933,6 +1938,7 @@ install_build() {
 
     return 0
 }
+
 
 
 XXX_install_build() {
