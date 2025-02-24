@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-00-12"
+SCRIPT_VERSION="2025.02.24-00-13"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1857,7 +1857,13 @@ install_build() {
         case "$arg" in
             yn) confirm_install="yes" ;;
             hidden) hidden="yes" ;;
-            *) if [ -z "$package_name" ]; then package_name="$arg"; else debug_log "DEBUG" "Unknown option: $arg"; fi ;;
+            *) 
+                if [ -z "$package_name" ]; then 
+                    package_name="$arg"
+                else 
+                    debug_log "DEBUG" "Unknown option: $arg"
+                fi
+            ;;
         esac
     done
 
@@ -1888,17 +1894,23 @@ install_build() {
     OPENWRT_REPO=$(get_ini_value "default" "openwrt_repo")
 
     # **install_package を取得してインストール**
-    install_packages=$(awk -F'=' -v section="\[$package_name\]" '
-        $0 ~ section {flag=1; next} /^\[/{flag=0}
+    install_packages=$(awk -F'=' -v section="[$package_name]" '
+        /^\[/ {
+            sub(/^\[/, "", $0); sub(/\]$/, "", $0);  # [ ] を削除
+            flag=($0 == section)  # 一致するセクションなら flag=1
+            next
+        }
         flag && $1 == "install_package" {print $2}
     ' "$DB_FILE" | tr -d ' ')
 
     if [ -n "$install_packages" ]; then
         debug_log "DEBUG" "Installing required packages for $package_name: $install_packages"
         echo "$install_packages" | tr ',' '\n' | while read -r pkg; do
-            install_package "$pkg" "$hidden"
-            if [ $? -ne 0 ]; then
-                debug_log "ERROR" "Failed to install package: $pkg"
+            if [ -n "$pkg" ]; then
+                install_package "$pkg" "$hidden"
+                if [ $? -ne 0 ]; then
+                    debug_log "ERROR" "Failed to install package: $pkg"
+                fi
             fi
         done
     else
