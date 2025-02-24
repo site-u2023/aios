@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-01-17"
+SCRIPT_VERSION="2025.02.24-01-19"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1955,17 +1955,27 @@ install_build() {
         return 1
     fi
 
-    # **スピナー開始**
-    start_spinner "$(get_message 'MSG_UPDATE_RUNNING')"
-    install_package update
-    stop_spinner
-
-    install_package zram-swap
-
     # **スワップの動作チェック**
-    if ! setup_swap; then
+    setup_swap
+    if [ $? -ne 0 ]; then
         debug_log "ERROR" "$(get_message 'MSG_ERR_INSUFFICIENT_SWAP')"
         return 1
+    fi
+
+    # **インストールの確認 (YNオプションが有効な場合のみ)**
+    if [ "$confirm_install" = "yes" ]; then
+        while true; do
+            local msg=$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")
+            echo "$msg"
+    
+            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
+            read -r yn
+            case "$yn" in
+                [Yy]*) break ;;  # Yes → インストール続行
+                [Nn]*) return 1 ;; # No → キャンセル
+                *) echo "Invalid input. Please enter Y or N." ;;
+            esac
+        done
     fi
 
     # **OpenWrt バージョン取得**
@@ -2019,7 +2029,6 @@ install_build() {
     echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$package_name/")"
     debug_log "DEBUG" "Successfully built and installed package: $package_name"
 }
-
 
 XXX_install_build() {
     local package_name=""
