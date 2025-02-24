@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-01-07"
+SCRIPT_VERSION="2025.02.24-01-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1732,6 +1732,68 @@ OK_install_package() {
 # [uconv]　※行、列問わず記述可
 #########################################################################
 setup_swap() {
+    local ZRAM_CONF="/etc/config/zram"
+    local SWAP_ACTIVE="off"
+
+    echo "[INFO] Checking if zram-swap is available..."
+
+    # **zram-swap のインストールを確認**
+    if ! opkg list-installed | grep -q "^zram-swap "; then
+        echo "[INFO] zram-swap is not installed. Installing now..."
+        opkg update && opkg install zram-swap
+        if [ $? -ne 0 ]; then
+            echo "[ERROR] Failed to install zram-swap. Exiting swap setup."
+            return 1
+        fi
+    fi
+
+    # **物理メモリ (RAM) の総量を取得**
+    local RAM_TOTAL_MB
+    RAM_TOTAL_MB=$(awk '/MemTotal/ {print int($2 / 1024)}' /proc/meminfo)
+
+    # **zram に割り当てるスワップサイズを RAM の量に応じて自動設定**
+    local ZRAM_SIZE_MB
+    if [ "$RAM_TOTAL_MB" -lt 512 ]; then
+        ZRAM_SIZE_MB=256  # RAM が 512MB 未満なら 256MB の zram
+    elif [ "$RAM_TOTAL_MB" -lt 1024 ]; then
+        ZRAM_SIZE_MB=512  # RAM が 512MB 以上 1GB 未満なら 512MB
+    else
+        ZRAM_SIZE_MB=1024  # RAM が 1GB 以上なら 1GB
+    fi
+
+    echo "[INFO] RAM: ${RAM_TOTAL_MB}MB, Setting zram size to ${ZRAM_SIZE_MB}MB"
+
+    # **zram 設定を変更**
+    uci set zram.@zram[0].enabled='1'
+    uci set zram.@zram[0].size="${ZRAM_SIZE_MB}M"
+    uci commit zram
+
+    # **zram-swap を有効化**
+    echo "[INFO] Enabling zram-swap..."
+    /etc/init.d/zram restart
+
+    # **スワップの確認**
+    if free -m | awk '/Swap:/ {exit $2 == 0}'; then
+        echo "[ERROR] zram-swap failed to start."
+        return 1
+    fi
+
+    echo "[INFO] zram-swap is successfully enabled."
+    free -m
+    swapon -s  # スワップの状況を表示
+
+    # **スワップをクリーンアップするトラップ**
+    trap '
+        echo "[INFO] Cleaning up zram-swap..."
+        /etc/init.d/zram stop
+
+        echo "[INFO] Final swap status:"
+        free -m
+        swapon -s
+    ' EXIT
+}
+
+XXX_setup_swap() {
     local SWAPFILE="/overlay/swapfile"
     local SWAP_ACTIVE="off"
 
@@ -1886,6 +1948,115 @@ get_value_with_fallback() {
 }
 
 install_build() {
+    local package_name=""
+    local confirm_install="no"
+    local hidden="no"
+    local DB_FILE="${BASE_DIR}/custom-package.db"
+    local output_ipk=""
+
+    # 【オプションの処理】
+    for arg in "$@"; do
+        case "$arg" in
+            yn) confirm_install="yes" ;;
+            hidden) hidden="yes" ;;
+            *) if [ -z "$package_name" ]; then package_name="$arg"; else debug_log "DEBUG" "Unknown option: $arg"; fi ;;
+        esac
+    done
+
+    # 【パッケージ名が指定されているか確認】
+    if [ -z "$package_name" ]; then
+        debug_log "ERROR" "パッケージ名が指定されていません！"
+        return 1
+    fi
+
+    # **zram-swap のセットアップ**
+    setup_swap
+    if [ $? -ne 0 ]; then
+        debug_log "WARNING" "zram-swap setup failed, but continuing installation."
+    fi
+
+    # 【OpenWrt バージョンの取得】
+    local openwrt_version=""
+    if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
+        openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
+    else
+        debug_log "ERROR" "OpenWrt バージョン情報が取得できません！"
+        return 1
+    fi
+    debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
+
+    # 【必要なパラメータを取得】
+    local source_url build_command BUILD_DIR OPENWRT_REPO install_packages
+
+    source_url=$(get_ini_value "$package_name" "source_url")
+    BUILD_DIR=$(get_ini_value "default" "build_dir")
+    OPENWRT_REPO=$(get_ini_value "default" "openwrt_repo")
+
+    # **バージョンごとの `install_package` を取得**
+    install_packages=$(get_value_with_fallback "$package_name" "install_package")
+
+    if [ -n "$install_packages" ]; then
+        debug_log "DEBUG" "Retrieved install_packages: $install_packages"
+
+        # **パッケージリストを処理**
+        echo "$install_packages" | tr ',' '\n' | while read -r pkg; do
+            if [ -n "$pkg" ]; then
+                debug_log "INFO" "Checking if package exists in repository: $pkg"
+                if opkg list | grep -qE "^$pkg "; then
+                    debug_log "INFO" "Installing package: $pkg"
+                    opkg install "$pkg"
+                    if [ $? -ne 0 ]; then
+                        debug_log "ERROR" "Failed to install package: $pkg"
+                    fi
+                else
+                    debug_log "ERROR" "Package not found in repository: $pkg"
+                fi
+            fi
+        done
+    else
+        debug_log "DEBUG" "No additional install_package found for $package_name."
+    fi
+
+    # 【バージョンごとのビルドコマンド取得】
+    build_command=$(get_value_with_fallback "$package_name" "build_command")
+
+    debug_log "DEBUG" "Source URL: $source_url"
+    debug_log "DEBUG" "Build Command: $build_command"
+    debug_log "DEBUG" "Build Directory: $BUILD_DIR"
+    debug_log "DEBUG" "OpenWrt Repo: $OPENWRT_REPO"
+
+    # **ビルドディレクトリの作成**
+    if [ ! -d "$BUILD_DIR" ]; then
+        mkdir -p "$BUILD_DIR"
+        debug_log "DEBUG" "Created build directory: $BUILD_DIR"
+    fi
+
+    # **リポジトリの取得**
+    if [ -d "$BUILD_DIR/$package_name" ]; then
+        debug_log "DEBUG" "Removing existing repository and cloning fresh copy."
+        rm -rf "$BUILD_DIR/$package_name"
+    fi
+
+    debug_log "DEBUG" "Cloning repository: $source_url"
+    git clone "$source_url" "$BUILD_DIR/$package_name"
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "Git clone failed for $package_name"
+        return 1
+    fi
+
+    cd "$BUILD_DIR/$package_name" || { debug_log "ERROR" "Failed to enter repository directory"; return 1; }
+
+    debug_log "DEBUG" "Executing build command: $build_command"
+    if ! eval "$build_command"; then
+        debug_log "ERROR" "Build failed: $package_name"
+        return 1
+    fi
+
+    debug_log "INFO" "Build completed successfully."
+    return 0
+}
+
+XXX_install_build() {
     local package_name=""
     local confirm_install="no"
     local hidden="no"
