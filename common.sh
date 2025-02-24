@@ -24,6 +24,22 @@ SCRIPT_VERSION="2025.02.24-00-09"
 #
 # 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
 # =========================================================
+### =========================================================
+### 📌 AI Assistance Request: Bug Fixing Procedure
+### 
+### When debugging or fixing errors in this script, follow these steps:
+### 
+### 1️⃣ Create a minimal test script to identify the bug.
+### 2️⃣ Execute the test and verify the reproducibility of the error.
+### 3️⃣ Fix the error and re-run the test to confirm the solution.
+### 4️⃣ Apply the corrected code to the production environment.
+### 
+### ⚠️ DO NOT modify the main script without first confirming the fix 
+###     through a dedicated test script.
+### 
+### 🛠️ Keep the debugging process structured, efficient, and reliable.
+### =========================================================
+
 # 各種共通処理（ヘルプ表示、カラー出力、システム情報確認、言語選択、確認・通知メッセージの多言語対応など）を提供する。
 
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION common.sh \033[0m"
