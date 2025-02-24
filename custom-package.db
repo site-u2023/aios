@@ -3,7 +3,7 @@ SCRIPT_VERSION="2025.02.24-00-04"
 [default]
 build_dir = /tmp/build
 openwrt_repo = https://git.openwrt.org/openwrt/openwrt.git
-setup_swap = enable  # 追加: swap を有効化
+setup_swap = enable  # 19.07 ではカーネルが対応していないためスキップされる
 
 [luci-app-temp-status]
 source_url = https://github.com/gSpotx2f/luci-app-temp-status.git
@@ -18,7 +18,7 @@ build_command = make package/luci-app-temp-status/compile V=99
 [luci-app-cpu-perf]
 source_url = https://github.com/gSpotx2f/luci-app-cpu-perf.git
 (21.02)
-install_package = make, gcc, autoconf, automake, lua, luci-lib-nixio, luci-lib-jsonc, libtool, kmod-swap  # `kmod-swap` を追加
+install_package = make, gcc, autoconf, automake, lua, luci-lib-nixio, luci-lib-jsonc, libtool, kmod-swap  # `kmod-swap` を追加（19.07 ではインストールされない）
 build_command = make package/luci-app-cpu-perf/compile
 
 (19.07)
