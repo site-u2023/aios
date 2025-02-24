@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-01-05"
+SCRIPT_VERSION="2025.02.24-01-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1735,20 +1735,24 @@ setup_swap() {
     local SWAPFILE="/overlay/swapfile"
     local SWAP_SIZE_MB=192  # 一時的なスワップサイズ（MB）
     local SWAP_ACTIVE="off"
-    
-    echo "[INFO] Checking current swap status..."
-    free -m
 
-    # 既存のスワップを確認
-    if free | awk '/Swap:/ {exit $2 == 0}'; then
-        echo "[INFO] No active swap detected. Creating a temporary swap file..."
-        SWAP_ACTIVE="off"
+    echo "[INFO] Checking if swap is supported by the kernel..."
+    if ! grep -q swap /proc/filesystems; then
+        echo "[INFO] Swap is not supported by this kernel. Skipping setup."
+        return 0  # **カーネルが swap 未対応なら即スキップ**
+    fi
+
+    echo "[INFO] Checking current swap status..."
+    if [ -f /proc/swaps ]; then
+        free -m
+        if free | awk '/Swap:/ {exit $2 == 0}'; then
+            echo "[INFO] No active swap detected. Creating a temporary swap file..."
+        else
+            echo "[INFO] Swap is already enabled. Skipping setup."
+            return 0  # **スワップが有効ならスキップ**
+        fi
     else
-        echo "[INFO] Swap is already enabled. Disabling temporarily..."
-        swapoff -a 2>/dev/null
-        sync
-        sleep 2
-        SWAP_ACTIVE="on"
+        echo "[INFO] /proc/swaps is missing, but swap is supported. Proceeding with setup."
     fi
 
     # 既存のスワップファイルがある場合は削除
@@ -1761,52 +1765,55 @@ setup_swap() {
     fi
 
     echo "[INFO] Creating temporary swap file at $SWAPFILE..."
+    dd if=/dev/zero of="$SWAPFILE" bs=1M count="$SWAP_SIZE_MB" status=none
+    chmod 600 "$SWAPFILE"
+    sync
+    sleep 1  # **書き込み競合を防ぐための待機**
 
-    # スワップファイルの作成
-    dd if=/dev/zero of="$SWAPFILE" bs=1k count=$((SWAP_SIZE_MB * 1024)) 2>/dev/null
-
-    # 作成したファイルの確認
+    # スワップファイルの確認
     ls -lh "$SWAPFILE"
     if [ ! -f "$SWAPFILE" ]; then
         echo "[ERROR] Swap file creation failed. Checking storage..."
         df -h /overlay
+        return 1  # **スワップファイルが作成できなかった場合、処理中断**
     fi
 
-    # スワップファイルの内容を確認
     echo "[INFO] Checking file contents..."
     hexdump -C "$SWAPFILE" | head
 
-    # スワップファイルの権限を設定
-    chmod 600 "$SWAPFILE"
-    sync
-    sleep 1  # 書き込みの競合を防ぐ
-
     # スワップの初期化
     echo "[INFO] Running mkswap..."
-    mkswap "$SWAPFILE"
+    if ! mkswap "$SWAPFILE" > /dev/null 2>&1; then
+        echo "[ERROR] mkswap failed. Swap setup aborted."
+        return 1  # **スワップ作成に失敗した場合、即終了**
+    fi
 
     # スワップの有効化
     echo "[INFO] Running swapon..."
-    swapon "$SWAPFILE"
+    if ! swapon "$SWAPFILE" > /dev/null 2>&1; then
+        echo "[ERROR] swapon failed. Swap setup aborted."
+        return 1  # **swapon が失敗した場合も即終了**
+    fi
 
     # スワップの成功を確認
-    if grep -q "$SWAPFILE" /proc/swaps; then
+    if [ -f /proc/swaps ] && grep -q "$SWAPFILE" /proc/swaps; then
         echo "[INFO] Temporary swap enabled successfully."
     else
         echo "[ERROR] Failed to enable temporary swap. Dumping debug info..."
         ls -lh "$SWAPFILE"
-        dmesg | tail -20  # カーネルログの最後の20行を表示
-        cat /proc/swaps  # 現在のスワップ状況を表示
+        dmesg | tail -20  # **カーネルログの最後の20行を表示**
+        cat /proc/swaps 2>/dev/null  # **/proc/swaps がない場合もエラーを防ぐ**
+        return 1  # **スワップが正常に有効化されなかった場合はエラー**
     fi
 
-    # スワップの状態を再確認
+    echo "[INFO] Swap setup completed successfully."
     free -m
-    cat /proc/swaps
+    cat /proc/swaps 2>/dev/null  # **/proc/swaps がない場合のエラー回避**
 
     # **スワップをクリーンアップするトラップ**
     trap '
         echo "[INFO] Cleaning up temporary swap..."
-        swapoff "$SWAPFILE"
+        swapoff "$SWAPFILE" 2>/dev/null
         sync
         sleep 2
         rm -f "$SWAPFILE"
@@ -1819,8 +1826,10 @@ setup_swap() {
 
         echo "[INFO] Final swap status:"
         free -m
-        cat /proc/swaps
+        cat /proc/swaps 2>/dev/null
     ' EXIT
+
+    return 0
 }
 
 # 【DBファイルから値を取得する関数】
