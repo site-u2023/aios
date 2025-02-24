@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-00-11"
+SCRIPT_VERSION="2025.02.24-00-12"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1895,8 +1895,7 @@ install_build() {
 
     if [ -n "$install_packages" ]; then
         debug_log "DEBUG" "Installing required packages for $package_name: $install_packages"
-        IFS=',' read -ra package_array <<< "$install_packages"
-        for pkg in "${package_array[@]}"; do
+        echo "$install_packages" | tr ',' '\n' | while read -r pkg; do
             install_package "$pkg" "$hidden"
             if [ $? -ne 0 ]; then
                 debug_log "ERROR" "Failed to install package: $pkg"
