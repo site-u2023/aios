@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-00-09"
+SCRIPT_VERSION="2025.02.24-00-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1732,98 +1732,96 @@ OK_install_package() {
 # [uconv]　※行、列問わず記述可
 #########################################################################
 setup_swap() {
-    local swapfile="/overlay/swapfile"
-    local swap_size_mb=192  # 一時的なスワップサイズ（MB）
-    local original_swap_state=""
-    local original_swappiness=""
-
+    local SWAPFILE="/overlay/swapfile"
+    local SWAP_SIZE_MB=192  # 一時的なスワップサイズ（MB）
+    local SWAP_ACTIVE="off"
+    
     echo "[INFO] Checking current swap status..."
     free -m
 
-    # `swapon` が BusyBox か確認
-    if swapon --help 2>&1 | grep -q "unrecognized option"; then
-        echo "[INFO] Using BusyBox version of swapon."
-    else
-        echo "[INFO] Full version of swapon available."
-    fi
-
-    # 既存のスワップ状態を取得
+    # 既存のスワップを確認
     if free | awk '/Swap:/ {exit $2 == 0}'; then
-        echo "[INFO] No active swap detected."
-        original_swap_state="off"
+        echo "[INFO] No active swap detected. Creating a temporary swap file..."
+        SWAP_ACTIVE="off"
     else
-        echo "[INFO] Swap is currently active. Disabling it..."
+        echo "[INFO] Swap is already enabled. Disabling temporarily..."
         swapoff -a 2>/dev/null
         sync
         sleep 2
-        original_swap_state="on"
+        SWAP_ACTIVE="on"
     fi
 
-    # 既存のスワップファイルが存在する場合は削除
-    if [ -f "$swapfile" ]; then
+    # 既存のスワップファイルがある場合は削除
+    if [ -f "$SWAPFILE" ]; then
         echo "[INFO] Removing existing swap file..."
-        swapoff "$swapfile" 2>/dev/null
+        swapoff "$SWAPFILE" 2>/dev/null
         sync
         sleep 2
-        rm -f "$swapfile" 2>/dev/null
+        rm -f "$SWAPFILE"
     fi
 
-    echo "[INFO] Creating temporary swap file at $swapfile..."
+    echo "[INFO] Creating temporary swap file at $SWAPFILE..."
 
-    # BusyBox `dd` でスワップファイルを作成
-    dd if=/dev/zero of="$swapfile" bs=1k count=$((swap_size_mb * 1024)) 2>/dev/null
+    # スワップファイルの作成
+    dd if=/dev/zero of="$SWAPFILE" bs=1k count=$((SWAP_SIZE_MB * 1024)) 2>/dev/null
+
+    # 作成したファイルの確認
+    ls -lh "$SWAPFILE"
+    if [ ! -f "$SWAPFILE" ]; then
+        echo "[ERROR] Swap file creation failed. Checking storage..."
+        df -h /overlay
+    fi
+
+    # スワップファイルの内容を確認
+    echo "[INFO] Checking file contents..."
+    hexdump -C "$SWAPFILE" | head
 
     # スワップファイルの権限を設定
-    chmod 600 "$swapfile"
+    chmod 600 "$SWAPFILE"
     sync
     sleep 1  # 書き込みの競合を防ぐ
 
-    # スワップの初期化と有効化
-    mkswap "$swapfile"
-    swapon "$swapfile"
+    # スワップの初期化
+    echo "[INFO] Running mkswap..."
+    mkswap "$SWAPFILE"
 
-    # **swappiness を一時的に変更**
-    if [ -f "/proc/sys/vm/swappiness" ]; then
-        original_swappiness=$(cat /proc/sys/vm/swappiness)
-        echo 10 > /proc/sys/vm/swappiness
-        echo "[INFO] Adjusted swappiness to 10 (favor RAM usage)"
-    fi
+    # スワップの有効化
+    echo "[INFO] Running swapon..."
+    swapon "$SWAPFILE"
 
-    # **スワップが有効になったか確認**
-    if ! free -m | awk '/Swap:/ {exit $2 == 0}'; then
+    # スワップの成功を確認
+    if grep -q "$SWAPFILE" /proc/swaps; then
         echo "[INFO] Temporary swap enabled successfully."
     else
-        echo "[ERROR] Failed to enable temporary swap."
+        echo "[ERROR] Failed to enable temporary swap. Dumping debug info..."
+        ls -lh "$SWAPFILE"
+        dmesg | tail -20  # カーネルログの最後の20行を表示
+        cat /proc/swaps  # 現在のスワップ状況を表示
     fi
 
-    # **スワップの状態を再確認**
+    # スワップの状態を再確認
     free -m
+    cat /proc/swaps
 
-    # **スクリプト終了時にスワップを元に戻す**
+    # **スワップをクリーンアップするトラップ**
     trap '
         echo "[INFO] Cleaning up temporary swap..."
-        swapoff "$swapfile"
+        swapoff "$SWAPFILE"
         sync
         sleep 2
-        rm -f "$swapfile"
+        rm -f "$SWAPFILE"
 
         # もともとスワップが有効だった場合、再度有効化
-        if [ "$original_swap_state" = "on" ]; then
+        if [ "$SWAP_ACTIVE" = "on" ]; then
             echo "[INFO] Re-enabling original swap..."
             swapon -a
         fi
 
-        # **swappiness を元に戻す**
-        if [ -n "$original_swappiness" ]; then
-            echo "$original_swappiness" > /proc/sys/vm/swappiness
-            echo "[INFO] Restored original swappiness to $original_swappiness"
-        fi
-
         echo "[INFO] Final swap status:"
         free -m
+        cat /proc/swaps
     ' EXIT
 }
-
 
 # 【DBファイルから値を取得する関数】
 get_ini_value() {
