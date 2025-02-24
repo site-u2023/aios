@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.25-00-07"
+SCRIPT_VERSION="2025.02.25-00-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1282,7 +1282,7 @@ stop_spinner() {
 }
 
 # パッケージリストの更新
-update_package_list() {
+XXXXX_update_package_list() {
     local update_cache="${CACHE_DIR}/update.ch"
     local current_time
     current_time=$(date '+%s')  # 現在のUNIXタイムスタンプ取得
@@ -1333,7 +1333,7 @@ update_package_list() {
     return 0
 }
 
-XXXXX_update_package_list() {
+update_package_list() {
     local update_cache="${CACHE_DIR}/update.ch"
     local current_time
     current_time=$(date '+%s')  # 現在のUNIXタイムスタンプ取得
