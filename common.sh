@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-02-02"
+SCRIPT_VERSION="2025.02.24-02-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1537,56 +1537,68 @@ install_package() {
             local cache_lang=""
             local lang_pkg=""
             if [ -f "${CACHE_DIR}/luci.ch" ]; then
-                # キャッシュファイル内の先頭の値を言語コードとして取得（例："ja"）
+                # キャッシュファイル内の先頭行から言語コードを取得（例："ja"）
                 cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
                 lang_pkg="${base}-${cache_lang}"
+
+                # -- opkg または apk でインストール --
                 if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+                    echo "$(color cyan "Trying to install $lang_pkg ...")"
                     opkg install "$lang_pkg" > /dev/null 2>&1
                     if [ $? -ne 0 ]; then
-                        # キャッシュ内の値でのインストールに失敗 → "en" にフォールバック
+                        echo "$(color red "$lang_pkg のインストールに失敗しました。フォールバックを試みます。")"
+                        # "en" を試す
                         lang_pkg="${base}-en"
+                        echo "$(color cyan "Trying to install $lang_pkg ...")"
                         opkg install "$lang_pkg" > /dev/null 2>&1
                         if [ $? -ne 0 ]; then
-                            # "en" でも失敗 → 言語コードなしで試行
+                            echo "$(color red "$lang_pkg のインストールに失敗しました。さらにフォールバックします。")"
+                            # コードなしで試す
                             lang_pkg="${base}"
+                            echo "$(color cyan "Trying to install $lang_pkg ...")"
                             opkg install "$lang_pkg" > /dev/null 2>&1
                             if [ $? -ne 0 ]; then
-                                echo "$(color red "$lang_pkg のインストールに失敗しました。言語パッケージはありません。")"
+                                echo "$(color red "$lang_pkg のインストールにも失敗しました。言語パッケージはありません。")"
                             else
-                                echo "$(color yellow "$lang_pkg の言語パッケージを適用します。")"
+                                echo "$(color yellow "成功: $lang_pkg をインストールしました。")"
                             fi
                         else
-                            echo "$(color yellow "$lang_pkg の言語パッケージを適用します。")"
+                            echo "$(color yellow "成功: $lang_pkg をインストールしました。")"
                         fi
                     else
-                        echo "$(color yellow "$lang_pkg の言語パッケージを適用します。")"
+                        echo "$(color yellow "成功: $lang_pkg をインストールしました。")"
                     fi
+
                 elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+                    echo "$(color cyan "Trying to install $lang_pkg ...")"
                     apk add "$lang_pkg" > /dev/null 2>&1
                     if [ $? -ne 0 ]; then
+                        echo "$(color red "$lang_pkg のインストールに失敗しました。フォールバックを試みます。")"
                         lang_pkg="${base}-en"
+                        echo "$(color cyan "Trying to install $lang_pkg ...")"
                         apk add "$lang_pkg" > /dev/null 2>&1
                         if [ $? -ne 0 ]; then
+                            echo "$(color red "$lang_pkg のインストールに失敗しました。さらにフォールバックします。")"
                             lang_pkg="${base}"
+                            echo "$(color cyan "Trying to install $lang_pkg ...")"
                             apk add "$lang_pkg" > /dev/null 2>&1
                             if [ $? -ne 0 ]; then
-                                echo "$(color red "$lang_pkg のインストールに失敗しました。言語パッケージはありません。")"
+                                echo "$(color red "$lang_pkg のインストールにも失敗しました。言語パッケージはありません。")"
                             else
-                                echo "$(color yellow "$lang_pkg の言語パッケージを適用します。")"
+                                echo "$(color yellow "成功: $lang_pkg をインストールしました。")"
                             fi
                         else
-                            echo "$(color yellow "$lang_pkg の言語パッケージを適用します。")"
+                            echo "$(color yellow "成功: $lang_pkg をインストールしました。")"
                         fi
                     else
-                        echo "$(color yellow "$lang_pkg の言語パッケージを適用します。")"
+                        echo "$(color yellow "成功: $lang_pkg をインストールしました。")"
                     fi
                 fi
             else
-                echo "$(color red "${CACHE_DIR}/luci.ch が存在しません。")"
+                echo "$(color red "${CACHE_DIR}/luci.ch が存在しません。言語パッケージ情報が得られません。")"
             fi
         fi
     fi
-
 
     # **local-package.db の適用**
     if [ "$skip_package_db" != "yes" ]; then
