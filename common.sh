@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.24-02-01"
+SCRIPT_VERSION="2025.02.24-02-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1180,9 +1180,8 @@ normalize_language() {
 # 🔴　ランゲージ（言語・ゾーン）系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # 🔵　パッケージ系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
-
 #########################################################################
-# Last Update: 2025-02-20 16:22:00 (JST) 🚀
+# Last Update: 2025-02-24 21:16:00 (JST) 🚀
 # install_package: パッケージのインストール処理 (OpenWrt / Alpine Linux)
 #
 # 【概要】
@@ -1217,17 +1216,16 @@ normalize_language() {
 # - `update.ch` を書き出し、`opkg update / apk update` の実行管理
 # - `downloader_ch` から `opkg` または `apk` を判定し、適切なパッケージ管理ツールを使用
 # - `local-package.db` を オプションにより適用
-# - `jq` がない場合は自動でインストールせず、`custom-package.db` の適用をスキップ
 # - `local-package.db` の設定がある場合、`uci set` を実行し適用（notpack オプションでスキップ可能）
 # - 言語パッケージの適用対象は `luci-app-*`（nolang オプションでスキップ可能）
 # - 設定の有効化はデフォルト enabled、disabled オプションで無効化可能
 # - `update` は明示的に `install_package update` で実行（インストール時には自動実行しない）
 #
 # 【使用例】
-# - install_package ttyd                  → `ttyd` をインストール（確認なし、package.db 適用、言語パック適用）
+# - install_package ttyd                  → `ttyd` をインストール（確認なし、local-package.db 適用、言語パック適用）
 # - install_package ttyd yn               → `ttyd` をインストール（確認あり）
 # - install_package ttyd nolang           → `ttyd` をインストール（言語パック適用なし）
-# - install_package ttyd notpack          → `ttyd` をインストール（`package.db` の適用なし）
+# - install_package ttyd notpack          → `ttyd` をインストール（local-package.db の適用なし）
 # - install_package ttyd disabled         → `ttyd` をインストール（設定を disabled にする）
 # - install_package ttyd yn nolang disabled hidden
 #   → `ttyd` をインストール（確認あり、言語パック適用なし、設定を disabled にし、
@@ -1334,6 +1332,45 @@ update_package_list() {
     return 0
 }
 
+# **local-package.db の適用関数**
+apply_local_package_db() {
+    # notpack オプションでスキップされている場合は処理しない
+    if [ "$skip_package_db" = "yes" ]; then
+        debug_log "DEBUG" "local-package.db の適用をスキップします。"
+        return 0
+    fi
+    # local-package.db が存在しない場合は何もしない
+    if [ ! -f local-package.db ]; then
+        debug_log "DEBUG" "local-package.db が存在しません。"
+        return 0
+    fi
+
+    # local-package.db から対象パッケージの設定を抽出
+    local cmds
+    cmds=$(awk -v pkg="$package_name" '
+        $0 ~ "^\\[" pkg "\\]" {flag=1; next}
+        $0 ~ "^\\[" {flag=0}
+        flag {print}
+    ' local-package.db)
+
+    if [ -z "$cmds" ]; then
+        debug_log "DEBUG" "local-package.db に $package_name の設定がありません。"
+        return 0
+    fi
+
+    echo "$(color green "$package_name 用の local-package.db 設定を適用します。")"
+    # 設定内容を実行（複数行の場合は各行を実行）
+    echo "$cmds" | while IFS= read -r line; do
+        # 空行やコメントは無視
+        [ -z "$line" ] && continue
+        case "$line" in
+            \#*) continue ;;
+        esac
+        debug_log "DEBUG" "実行: $line"
+        eval "$line"
+    done
+}
+
 install_package() {
     local confirm_install="no"
     local skip_lang_pack="no"
@@ -1342,7 +1379,7 @@ install_package() {
     local hidden="no"
     local test_mode="no"
     local force_install="no"
-    local unforce="no"  # デフォルトは「破損していたら再インストール」
+    local unforce="no"  # デフォルトは「強制インストールしない」
     local update_mode="no"
     local package_name=""
     local package_to_update=""
@@ -1357,8 +1394,8 @@ install_package() {
             hidden)     hidden="yes" ;;
             test)       test_mode="yes" ;;
             force)      force_install="yes" ;;
-            unforce)    unforce="yes" ;;  # 破損していても再インストールしない
-            update)     
+            unforce)    unforce="yes" ;;  # 強制インストールを解除
+            update)
                 update_mode="yes"
                 shift
                 if [ $# -gt 0 ]; then
@@ -1449,7 +1486,7 @@ install_package() {
             read -r yn || return 1  # Ctrl+D の場合は中止
 
             case "$yn" in
-                [Yy]*)  
+                [Yy]*)
                     update_package_list  # **確認後に `opkg update` を実行**
                     break
                     ;;
@@ -1472,18 +1509,19 @@ install_package() {
     start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
 
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if [ "$unforce" = "yes" ]; then
-            opkg install "$package_name" > /dev/null 2>&1 || {
+        if [ "$force_install" = "yes" ] && [ "$unforce" != "yes" ]; then
+            opkg install --force-reinstall "$package_name" > /dev/null 2>&1 || {
                 stop_spinner "$(color red "❌ パッケージ $package_name のインストールに失敗しました。")"
                 return 1
             }
         else
-            opkg install --force-reinstall "$package_name" > /dev/null 2>&1 || {
+            opkg install "$package_name" > /dev/null 2>&1 || {
                 stop_spinner "$(color red "❌ パッケージ $package_name のインストールに失敗しました。")"
                 return 1
             }
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        # apk では force_reinstall 相当のオプションがないため、通常のインストールを実行
         apk add "$package_name" > /dev/null 2>&1 || {
             stop_spinner "$(color red "❌ パッケージ $package_name のインストールに失敗しました。")"
             return 1
@@ -1492,9 +1530,77 @@ install_package() {
 
     stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
 
+    # **言語パッケージの適用（nolang オプションが指定されていない場合）**
+    if [ "$skip_lang_pack" != "yes" ]; then
+        if echo "$package_name" | grep -q "^luci-app-"; then
+            local base="luci-i18n-${package_name#luci-app-}"
+            local cache_lang=""
+            local lang_pkg=""
+            if [ -f "${CACHE_DIR}/luci.ch" ]; then
+                # キャッシュファイル内の先頭の値を言語コードとして取得（例："ja"）
+                cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
+                lang_pkg="${base}-${cache_lang}"
+                if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+                    opkg install "$lang_pkg" > /dev/null 2>&1
+                    if [ $? -ne 0 ]; then
+                        # キャッシュ内の値でのインストールに失敗 → "en" にフォールバック
+                        lang_pkg="${base}-en"
+                        opkg install "$lang_pkg" > /dev/null 2>&1
+                        if [ $? -ne 0 ]; then
+                            # "en" でも失敗 → 言語コードなしで試行
+                            lang_pkg="${base}"
+                            opkg install "$lang_pkg" > /dev/null 2>&1
+                            if [ $? -ne 0 ]; then
+                                echo "$(color red "$lang_pkg のインストールに失敗しました。言語パッケージはありません。")"
+                            else
+                                echo "$(color yellow "$lang_pkg の言語パッケージを適用します。")"
+                            fi
+                        else
+                            echo "$(color yellow "$lang_pkg の言語パッケージを適用します。")"
+                        fi
+                    else
+                        echo "$(color yellow "$lang_pkg の言語パッケージを適用します。")"
+                    fi
+                elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+                    apk add "$lang_pkg" > /dev/null 2>&1
+                    if [ $? -ne 0 ]; then
+                        lang_pkg="${base}-en"
+                        apk add "$lang_pkg" > /dev/null 2>&1
+                        if [ $? -ne 0 ]; then
+                            lang_pkg="${base}"
+                            apk add "$lang_pkg" > /dev/null 2>&1
+                            if [ $? -ne 0 ]; then
+                                echo "$(color red "$lang_pkg のインストールに失敗しました。言語パッケージはありません。")"
+                            else
+                                echo "$(color yellow "$lang_pkg の言語パッケージを適用します。")"
+                            fi
+                        else
+                            echo "$(color yellow "$lang_pkg の言語パッケージを適用します。")"
+                        fi
+                    else
+                        echo "$(color yellow "$lang_pkg の言語パッケージを適用します。")"
+                    fi
+                fi
+            else
+                echo "$(color red "${CACHE_DIR}/luci.ch が存在しません。")"
+            fi
+        fi
+    fi
+
+
+    # **local-package.db の適用**
+    if [ "$skip_package_db" != "yes" ]; then
+        apply_local_package_db
+    fi
+
     # **サービスの有効化**
-    if [ "$set_disabled" != "yes" ] && [ -x "/etc/init.d/$package_name" ]; then
-        /etc/init.d/"$package_name" enable && /etc/init.d/"$package_name" restart
+    if [ "$set_disabled" != "yes" ]; then
+        if [ -x "/etc/init.d/$package_name" ]; then
+            /etc/init.d/"$package_name" enable && /etc/init.d/"$package_name" restart
+        fi
+        if [ -x "/etc/init.d/rpcd" ]; then
+            /etc/init.d/rpcd start
+        fi
     fi
 }
 
