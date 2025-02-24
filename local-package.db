@@ -25,6 +25,9 @@ uci commit ttyd
 
 
 [zswap]
-uci set system.@swap[0].enabled='1'
-uci set system.@swap[0].priority='100'
+uci set system.@zram[0].enabled='1'
+uci set system.@zram[0].size='256'  # MB単位で指定
+uci set system.@zram[0].comp_algorithm='zstd'  # 圧縮アルゴリズムを zstd に設定
 uci commit system
+/etc/init.d/zram restart
+
