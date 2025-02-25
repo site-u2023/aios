@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.25-01-01"
+SCRIPT_VERSION="2025.02.25-01-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1342,8 +1342,8 @@ apply_local_package_db() {
         echo "[$level] $message"
     }
 
-    # パッケージ名
-    package_name="ttyd"  # ここでテストしたいパッケージ名を設定
+    # パッケージ名（引数として渡せるように変更）
+    package_name=$1  # ここでパッケージ名を引数として受け取る
 
     # notpack オプションでスキップされている場合は処理しない
     if [ "$skip_package_db" = "yes" ]; then
@@ -1395,7 +1395,7 @@ apply_local_package_db() {
             debug_log "INFO" "UCI コマンド実行: uci set $package_name.$key=$value"
             uci set "$package_name.$key=$value" || {
                 debug_log "ERROR" "UCI 設定失敗: $key=$value"
-                continue
+                return 1  # エラー発生時に処理を停止
             }
         else
             debug_log "ERROR" "無効な設定行: $line"
