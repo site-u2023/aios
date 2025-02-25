@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.25-00-09"
+SCRIPT_VERSION="2025.02.25-00-11"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1289,24 +1289,24 @@ update_package_list() {
     local cache_time=0
     local max_age=$((24 * 60 * 60))  # 24時間 (86400秒)
 
-    # **キャッシュディレクトリの作成**
+    # キャッシュディレクトリの作成
     mkdir -p "$CACHE_DIR"
 
-    # **キャッシュが存在する場合、最終更新時刻を取得**
+    # キャッシュが存在する場合、最終更新時刻を取得
     if [ -f "$update_cache" ]; then
-        cache_time=$(stat -c %Y "$update_cache" 2>/dev/null || echo 0)
+        cache_time=$(date -r "$update_cache" '+%s' 2>/dev/null || echo 0)
     fi
 
-    # **キャッシュが最新なら `opkg update` をスキップ**
+    # キャッシュが最新なら `opkg update` をスキップ
     if [ $((current_time - cache_time)) -lt $max_age ]; then
         debug_log "DEBUG" "パッケージリストは24時間以内に更新されています。スキップします。"
         return 0
     fi
 
-    # **スピナー開始**
+    # スピナー開始
     start_spinner "$(color yellow "$(get_message "MSG_RUNNING_UPDATE")")"
 
-    # **パッケージリストの更新**
+    # パッケージリストの更新
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
             stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
@@ -1321,10 +1321,10 @@ update_package_list() {
         }
     fi
 
-    # **スピナー停止 (成功メッセージを表示)**
+    # スピナー停止 (成功メッセージを表示)
     stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
 
-    # **キャッシュのタイムスタンプを更新**
+    # キャッシュのタイムスタンプを更新
     touch "$update_cache" || {
         debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_WRITE_CACHE")")"
         return 1
@@ -1425,37 +1425,74 @@ apply_local_package_db() {
 }
 
 install_package() {
-    local confirm_install="no"
-    local skip_lang_pack="no"
-    local skip_package_db="no"
-    local set_disabled="no"
-    local hidden="no"
-    local test_mode="no"
-    local force_install="no"
-    local unforce="no"  # デフォルトは「強制インストールしない」
-    local update_mode="no"
+    if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+        echo "Usage: install_package [OPTIONS] <PACKAGE_NAME>"
+        echo ""
+        echo "Options:"
+        echo "  -y, --yes           Confirm installation without prompting (auto-yes)"
+        echo "      --no-lang       Skip language pack installation"
+        echo "      --no-pack       Skip local-package.db settings"
+        echo "      --disable       Disable the service after installation"
+        echo "  -H, --hidden        Hide 'already installed' messages"
+        echo "      --test          Dry-run mode (no actual install)"
+        echo "      --force         Force re-install even if installed"
+        echo "  -u, --update [PKG]  Run 'opkg update' or 'apk update'; optionally update specific PKG"
+        echo ""
+        return 0
+    fi
+
+    # 変数初期化（デフォルト動作）
+    local confirm_install="no"    # デフォルト: 確認なし（ynオプション指定で「yes」に）
+    local skip_lang_pack="no"      # デフォルト: 言語パック適用する（nolang指定で「yes」）
+    local force_install="no"       # デフォルト: 強制インストールしない（force指定で「yes」）
+    local skip_package_db="no"     # デフォルト: local-package.db の設定適用する（notpack指定で「yes」）
+    local set_disabled="no"        # デフォルト: サービスは enabled（disabled指定で「yes」にして無効化）
+    local hidden="no"              # デフォルト: インストール済みの場合はメッセージ表示する（hidden指定でメッセージ非表示）
+    local test_mode="no"           # デフォルト: インストール済みなら処理を中断（test指定で処理実行）
+    local update_mode="no"         # デフォルト: updateはキャッシュ処理に従う（update指定でキャッシュ無視・強制更新）
+    local unforce="no"             # デフォルト: 強制インストールを解除しない（unforce指定で「yes」に）
     local package_name=""
     local package_to_update=""
 
-    # **オプションの処理**
+    # オプションの解析（元ソースの各処理要素を忠実に再現）
     while [ $# -gt 0 ]; do
         case "$1" in
-            yn)         confirm_install="yes" ;;
-            nolang)     skip_lang_pack="yes" ;;
-            notpack)    skip_package_db="no" ;;
-            disabled)   set_disabled="no" ;;
-            hidden)     hidden="yes" ;;
-            test)       test_mode="no" ;;
-            force)      force_install="no" ;;
-            unforce)    unforce="no" ;;  # 強制インストールを解除
-            update)     update_mode="yes"
-            
+            yn)
+                confirm_install="yes"
+                ;;
+            nolang)
+                skip_lang_pack="yes"
+                ;;
+            force)
+                force_install="yes"
+                ;;
+            notpack)
+                skip_package_db="yes"
+                ;;
+            disabled)
+                set_disabled="yes"
+                ;;
+            hidden)
+                hidden="yes"
+                ;;
+            test)
+                test_mode="yes"
+                ;;
+            update)
+                update_mode="yes"
                 shift
                 if [ $# -gt 0 ]; then
                     package_to_update="$1"  # `update some_package` に対応
                     shift
                 fi
                 continue
+                ;;
+            unforce)
+                unforce="yes"
+                ;;
+            -*)
+                echo "Unknown option: $1"
+                return 1
                 ;;
             *)
                 if [ -z "$package_name" ]; then
@@ -1468,15 +1505,7 @@ install_package() {
         shift
     done
 
-    # **パッケージマネージャーの確認**
-    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
-        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
-    else 
-        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")")"
-        return 1
-    fi
-
-    # **特定パッケージのみの `opkg update` に対応**
+    # update オプション指定時は、キャッシュ無視で強制的にリポジトリ更新し、以降の処理は行わない
     if [ "$update_mode" = "yes" ]; then
         if [ -n "$package_to_update" ]; then
             debug_log "DEBUG" "Updating package list for $package_to_update"
@@ -1487,12 +1516,18 @@ install_package() {
         return 0
     fi
 
-    if [ -z "$package_name" ]; then
-        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")")"
+    # パッケージマネージャーの確認（キャッシュに保存済みとする）
+    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
+    else 
+        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")")"
         return 1
     fi
 
-    # **デバイスにパッケージがすでにインストールされているかチェック**
+    # **パッケージインストールの前にリポジトリの確認**
+    update_package_list || return 1
+
+    # **インストール済み確認**
     local is_installed="no"
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if opkg list-installed | grep -qE "^$package_name "; then
@@ -1504,28 +1539,14 @@ install_package() {
         fi
     fi
 
-    # **インストール済みなら終了**
     if [ "$is_installed" = "yes" ]; then
-        [ "$hidden" != "yes" ] && echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-        return 0
-    fi
-
-    # **リポジトリにパッケージがあるか確認**
-    local package_exists="no"
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if opkg list | grep -qE "^$package_name "; then
-            package_exists="yes"
+        if [ "$hidden" != "yes" ]; then
+            echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
         fi
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if apk search "$package_name" 2>/dev/null | grep -q "^$package_name$"; then
-            package_exists="yes"
+        # test モードの場合は、インストール済みでも処理を続行
+        if [ "$test_mode" != "yes" ]; then
+            return 0
         fi
-    fi
-
-    # **リポジトリにパッケージがない場合はエラー**
-    if [ "$package_exists" = "no" ]; then
-        debug_log "ERROR" "$(color red "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
-        return 1
     fi
 
     # **YN 確認が必要なら、ここで確認**
@@ -1534,21 +1555,16 @@ install_package() {
             local msg=$(get_message "MSG_CONFIRM_INSTALL")
             msg="${msg//\{pkg\}/$package_name}"
             echo "$msg"
-
             printf "%s " "$(get_message "MSG_CONFIRM_ONLY_YN")"
-            read -r yn || return 1  # Ctrl+D の場合は中止
-
+            read -r yn || return 1
             case "$yn" in
                 [Yy]*)
-                    update_package_list  # **確認後に `opkg update` を実行**
                     break
                     ;;
                 [Nn]*) return 1 ;;
                 *) echo "$(color red "Invalid input. Please enter Y or N.")" ;;
             esac
         done
-    else
-        update_package_list  # **YN 指定なしならキャッシュ確認しつつ `opkg update` を実行**
     fi
 
     # **テストモードなら、シミュレーションを実行**
@@ -1562,7 +1578,7 @@ install_package() {
     start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
 
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if [ "$force_install" = "yes" ] && [ "$unforce" != "yes" ]; then
+        if [ "$force_install" = "yes" ]; then
             opkg install --force-reinstall "$package_name" > /dev/null 2>&1 || {
                 stop_spinner "$(color red "❌ パッケージ $package_name のインストールに失敗しました。")"
                 return 1
