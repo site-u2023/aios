@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.25-01-00"
+SCRIPT_VERSION="2025.02.25-01-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1335,6 +1335,16 @@ update_package_list() {
 
 # **local-package.db の適用関数**
 apply_local_package_db() {
+    # デバッグ用関数
+    debug_log() {
+        level=$1
+        message=$2
+        echo "[$level] $message"
+    }
+
+    # パッケージ名
+    package_name="ttyd"  # ここでテストしたいパッケージ名を設定
+
     # notpack オプションでスキップされている場合は処理しない
     if [ "$skip_package_db" = "yes" ]; then
         debug_log "DEBUG" "local-package.db の適用をスキップします。"
@@ -1376,13 +1386,13 @@ apply_local_package_db() {
         
         # 設定項目の処理
         # ここでは設定項目を "key=value" として分けて、uciコマンドに渡す
-        # 設定形式が "key=value" の場合を想定
         key=$(echo "$line" | cut -d'=' -f1)
         value=$(echo "$line" | cut -d'=' -f2-)
 
         # key と value が両方存在する場合
         if [ -n "$key" ] && [ -n "$value" ]; then
             # uci で設定を行う
+            debug_log "INFO" "UCI コマンド実行: uci set $package_name.$key=$value"
             uci set "$package_name.$key=$value" || {
                 debug_log "ERROR" "UCI 設定失敗: $key=$value"
                 continue
@@ -1393,6 +1403,7 @@ apply_local_package_db() {
     done <<< "$cmds"
 
     # 設定を適用
+    debug_log "INFO" "UCI コミット: uci commit $package_name"
     uci commit "$package_name" || {
         debug_log "ERROR" "UCI コミット失敗: $package_name"
         return 1
