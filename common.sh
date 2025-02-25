@@ -1374,6 +1374,10 @@ apply_local_package_db() {
 
     echo "$(color green "$package_name 用の local-package.db 設定を適用します。")"
     
+    # cmdsの内容を一時ファイルに保存
+    temp_file=$(mktemp)
+    echo "$cmds" > "$temp_file"
+
     # 設定内容を実行（複数行の場合は各行を実行）
     while IFS= read -r line; do
         # 空行やコメント行は無視
@@ -1400,7 +1404,10 @@ apply_local_package_db() {
         else
             debug_log "ERROR" "無効な設定行: $line"
         fi
-    done <<< "$cmds"
+    done < "$temp_file"
+
+    # 一時ファイルを削除
+    rm -f "$temp_file"
 
     # 設定を適用
     debug_log "INFO" "UCI コミット: uci commit $package_name"
