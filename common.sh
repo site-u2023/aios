@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.25-00-11"
+SCRIPT_VERSION="2025.02.25-00-12"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1333,57 +1333,6 @@ update_package_list() {
     return 0
 }
 
-XXX_update_package_list() {
-    local update_cache="${CACHE_DIR}/update.ch"
-    local current_time
-    current_time=$(date '+%s')  # 現在のUNIXタイムスタンプ取得
-    local cache_time=0
-    local max_age=$((24 * 60 * 60))  # 24時間 (86400秒)
-
-    # **キャッシュディレクトリの作成**
-    mkdir -p "$CACHE_DIR"
-
-    # **キャッシュが存在する場合、最終更新時刻を取得**
-    if [ -f "$update_cache" ]; then
-        cache_time=$(stat -c %Y "$update_cache" 2>/dev/null || echo 0)
-    fi
-
-    # **キャッシュが最新なら `opkg update` をスキップ**
-    if [ $((current_time - cache_time)) -lt $max_age ]; then
-        debug_log "DEBUG" "パッケージリストは24時間以内に更新されています。スキップします。"
-        return 0
-    fi
-
-    # **スピナー開始**
-    start_spinner "$(color yellow "$(get_message "MSG_RUNNING_UPDATE")")"
-
-    # **パッケージリストの更新**
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
-            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
-            debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
-            return 1
-        }
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
-            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
-            debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
-            return 1
-        }
-    fi
-
-    # **スピナー停止 (成功メッセージを表示)**
-    stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
-
-    # **キャッシュのタイムスタンプを更新**
-    touch "$update_cache" || {
-        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_WRITE_CACHE")")"
-        return 1
-    }
-
-    return 0
-}
-
 # **local-package.db の適用関数**
 apply_local_package_db() {
     # notpack オプションでスキップされている場合は処理しない
@@ -1401,8 +1350,11 @@ apply_local_package_db() {
     # local-package.db から対象パッケージの設定を抽出
     local cmds
     cmds=$(awk -v pkg="$package_name" '
-        $0 ~ "^\\[" pkg "\\]" {flag=1; next}
-        $0 ~ "^\\[" {flag=0}
+        # パッケージセクションに一致したらflagをセット
+        $0 ~ "^\[" pkg "\]" {flag=1; next}
+        # 次のセクションに移ったらflagをリセット
+        $0 ~ "^\[" {flag=0}
+        # flagが立っているときに設定を抽出
         flag {print}
     ' "local-package.db")
 
@@ -1412,16 +1364,41 @@ apply_local_package_db() {
     fi
 
     echo "$(color green "$package_name 用の local-package.db 設定を適用します。")"
+    
     # 設定内容を実行（複数行の場合は各行を実行）
-    echo "$cmds" | while IFS= read -r line; do
-        # 空行やコメントは無視
+    while IFS= read -r line; do
+        # 空行やコメント行は無視
         [ -z "$line" ] && continue
         case "$line" in
-            \#*) continue ;;
+            \#*) continue ;;  # コメント行を無視
         esac
+        
         debug_log "DEBUG" "実行: $line"
-        eval "$line"
-    done
+        
+        # 設定項目の処理
+        # ここでは設定項目を "key=value" として分けて、uciコマンドに渡す
+        # 設定形式が "key=value" の場合を想定
+        IFS='=' read -r key value <<< "$line"
+        
+        # key と value が両方存在する場合
+        if [ -n "$key" ] && [ -n "$value" ]; then
+            # uci で設定を行う
+            uci set "$package_name.$key=$value" || {
+                debug_log "ERROR" "UCI 設定失敗: $key=$value"
+                continue
+            }
+        else
+            debug_log "ERROR" "無効な設定行: $line"
+        fi
+    done <<< "$cmds"
+
+    # 設定を適用
+    uci commit "$package_name" || {
+        debug_log "ERROR" "UCI コミット失敗: $package_name"
+        return 1
+    }
+
+    debug_log "DEBUG" "$package_name の設定を適用しました。"
 }
 
 install_package() {
