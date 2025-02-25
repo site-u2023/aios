@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.25-00-12"
+SCRIPT_VERSION="2025.02.25-01-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1348,7 +1348,6 @@ apply_local_package_db() {
     fi
 
     # local-package.db から対象パッケージの設定を抽出
-    local cmds
     cmds=$(awk -v pkg="$package_name" '
         # パッケージセクションに一致したらflagをセット
         $0 ~ "^\[" pkg "\]" {flag=1; next}
@@ -1378,8 +1377,9 @@ apply_local_package_db() {
         # 設定項目の処理
         # ここでは設定項目を "key=value" として分けて、uciコマンドに渡す
         # 設定形式が "key=value" の場合を想定
-        IFS='=' read -r key value <<< "$line"
-        
+        key=$(echo "$line" | cut -d'=' -f1)
+        value=$(echo "$line" | cut -d'=' -f2-)
+
         # key と value が両方存在する場合
         if [ -n "$key" ] && [ -n "$value" ]; then
             # uci で設定を行う
