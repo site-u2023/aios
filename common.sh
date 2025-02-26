@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.26-00-06"
+SCRIPT_VERSION="2025.02.26-00-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1345,12 +1345,6 @@ apply_local_package_db() {
         return 0
     fi
 
-    # local-package.db が存在しない場合は何もしない
-    if [ ! -f "$package_db_local" ]; then
-        debug_log "ERROR" "local-package.db が存在しません。" "$0" "$SCRIPT_VERSION"
-        return 0
-    fi
-
     debug_log "DEBUG" "local-package.db ファイルが見つかりました。" "$0" "$SCRIPT_VERSION"
 
     # local-package.dbから指定されたセクションを抽出
@@ -1360,7 +1354,7 @@ apply_local_package_db() {
             $0 ~ "^\\[" pkg "\\]" {flag=1; next}  # [****]セクションに到達
             $0 ~ "^\\[" {flag=0}                  # 次のセクションが始まったらflagをリセット
             flag && $0 !~ "^#" {print}             # コメント行（#）を除外
-        ' "$package_db_local"
+            '      
     }
 
     # コマンドを実行する関数
@@ -1638,7 +1632,7 @@ install_package() {
 
     # local-package.db の適用
     if [ "$skip_package_db" != "yes" ]; then
-        apply_local_package_db "$package_name" "$package_db_local"  # 正しい引数を渡す
+        apply_local_package_db "$package_name" # 正しい引数を渡す
     fi
     
     # **設定の有効化**
