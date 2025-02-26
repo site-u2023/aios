@@ -1244,7 +1244,6 @@ normalize_language() {
 start_spinner() {
     local message="$1"
     SPINNER_MESSAGE="$message"  # 停止時のメッセージ保持
-    #spinner_chars='-\|/'
     spinner_chars='* - + |'
     i=0
 
