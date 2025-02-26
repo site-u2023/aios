@@ -1647,11 +1647,14 @@ install_package() {
 
     # **サービスの有効化**
     if [ "$set_disabled" != "yes" ]; then
-        if [ -x "/etc/init.d/$package_name" ]; then
-            /etc/init.d/"$package_name" enable && /etc/init.d/"$package_name" restart
+        # $package_name サービスの有効化
+        if [ -f "/etc/init.d/$package_name" ]; then
+            sh /etc/init.d/"$package_name" enable && sh /etc/init.d/"$package_name" restart
         fi
-        if [ -x "/etc/init.d/rpcd" ]; then
-            /etc/init.d/rpcd start
+
+        # rpcd サービスの開始
+        if [ -f "/etc/init.d/rpcd" ]; then
+            sh /etc/init.d/rpcd start
         fi
     fi
 }
