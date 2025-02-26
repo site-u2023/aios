@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-16"
+SCRIPT_VERSION="2025.02.27-00-18"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1402,7 +1402,7 @@ install_language_package() {
         # **リポジトリ内の存在確認**
         local package_exists="no"
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            if opkg list | grep -qE "^$lang_pkg "; then
+            if opkg list-installed | grep -qE "^$lang_pkg "; then
                 package_exists="yes"
             fi
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
@@ -1410,7 +1410,7 @@ install_language_package() {
                 package_exists="yes"
             fi
         fi
-
+    
         # パッケージがリポジトリに存在する場合、YN確認
         if [ "$package_exists" = "yes" ]; then
             debug_log "DEBUG" "Package $lang_pkg found in repository"
