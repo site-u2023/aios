@@ -1,4 +1,4 @@
-SCRIPT_VERSION="2025.02.26-00-01"
+SCRIPT_VERSION="2025.02.27-00-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION package.db \033[0m"
 
 # ttyd設定
@@ -11,43 +11,42 @@ uci delete ttyd.@ttyd[-1] 2>/dev/null
 uci commit ttyd
 
 # 最初のセクション設定（@ttyd）
-uci set ttyd.ttyd=ttyd
-uci set ttyd.ttyd.port="7681"
-uci set ttyd.ttyd.interface="@lan"
-uci set ttyd.ttyd.ipv6="1"
-uci set ttyd.ttyd.command="/bin/login -f root"
-uci set ttyd.ttyd.debug="7"
+uci set ttyd.ttyd='ttyd'
+uci set ttyd.ttyd.port='7681'
+uci set ttyd.ttyd.interface='@lan'
+uci set ttyd.ttyd.ipv6='1'
+uci set ttyd.ttyd.command='/bin/login -f root'
+uci set ttyd.ttyd.debug='7'
 
 # `client_option` をクリアしてからリストを追加
 uci del ttyd.ttyd.client_option 2>/dev/null
-uci add_list ttyd.ttyd.client_option="theme={\"background\": \"black\"}"
-uci add_list ttyd.ttyd.client_option="titleFixed=ttyd"
+uci add_list ttyd.ttyd.client_option='theme={"background": "black"}'
+uci add_list ttyd.ttyd.client_option='titleFixed=ttyd'
 
 # 最初のセクションをコミット
 uci commit ttyd
 
 # 次のセクション設定（@ttyd[-1]）
 uci add ttyd ttyd  # 新しいセクションを作成
-uci set ttyd.@ttyd[-1].port="8888"
-uci set ttyd.@ttyd[-1].interface="@lan"
-uci set ttyd.@ttyd[-1].ipv6="1"
-uci set ttyd.@ttyd[-1].debug="7"
-uci set ttyd.@ttyd[-1].command="/bin/login -f root"
+uci set ttyd.@ttyd[-1].port='8888'
+uci set ttyd.@ttyd[-1].interface='@lan'
+uci set ttyd.@ttyd[-1].ipv6='1'
+uci set ttyd.@ttyd[-1].debug='7'
+uci set ttyd.@ttyd[-1].command='/bin/login -f root'
 
 # `client_option` をクリアしてからリストを追加
 uci del ttyd.@ttyd[-1].client_option 2>/dev/null
-uci add_list ttyd.@ttyd[-1].client_option="theme={\"background\": \"blue\"}"
-uci add_list ttyd.@ttyd[-1].client_option="titleFixed=aios"
+uci add_list ttyd.@ttyd[-1].client_option='theme={"background": "blue"}'
+uci add_list ttyd.@ttyd[-1].client_option='titleFixed=aios'
 
 # 追加セクションの設定をコミット
 uci commit ttyd
 
 # サービスを再起動
 /etc/init.d/ttyd enable
-/etc/init.d/ttyd stop
-sleep 1
-/etc/init.d/ttyd start
-/etc/init.d/rpcd start
+/etc/init.d/ttyd restart
+/etc/init.d/rpcd restart
+
 
 # zswap設定
 [zswap]
