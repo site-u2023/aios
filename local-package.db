@@ -13,7 +13,7 @@ uci set ttyd.ttyd.debug="7"
 
 # `client_option` をクリアしてからリストを追加
 uci del ttyd.ttyd.client_option 2>/dev/null
-uci add_list ttyd.ttyd.client_option="theme={\"background\": \"black"}"
+uci add_list ttyd.ttyd.client_option="theme={\"background\": \"black\"}"
 uci add_list ttyd.ttyd.client_option="titleFixed=ttyd"
 
 # 最初のセクションをコミット
@@ -25,7 +25,7 @@ uci set ttyd.@ttyd[-1].port="8888"
 uci set ttyd.@ttyd[-1].interface="@lan"
 uci set ttyd.@ttyd[-1].ipv6="1"
 uci set ttyd.@ttyd[-1].debug="7"
-uci set ttyd.@ttyd[-1].command="aios"
+uci set ttyd.@ttyd[-1].command="/bin/login -f root"
 
 # `client_option` をクリアしてからリストを追加
 uci del ttyd.@ttyd[-1].client_option 2>/dev/null
