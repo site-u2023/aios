@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-06"
+SCRIPT_VERSION="2025.02.27-00-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1396,80 +1396,76 @@ confirm_installation() {
     done
 }
 
+# **インストール処理を共通化する関数**
+install_package_func() {
+    local package_name="$1"
+    local force_install="$2"
+
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if [ "$force_install" = "yes" ]; then
+            opkg install --force-reinstall "$package_name" > /dev/null 2>&1 || {
+                stop_spinner "$(color red "$(get_message "MSG_PACKAGE_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+                return 1
+            }
+        else
+            opkg install "$package_name" > /dev/null 2>&1 || {
+                stop_spinner "$(color red "$(get_message "MSG_PACKAGE_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+                return 1
+            }
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if [ "$force_install" = "yes" ]; then
+            apk add --force "$package_name" > /dev/null 2>&1 || {
+                stop_spinner "$(color red "$(get_message "MSG_PACKAGE_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+                return 1
+            }
+        else
+            apk add "$package_name" > /dev/null 2>&1 || {
+                stop_spinner "$(color red "$(get_message "MSG_PACKAGE_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+                return 1
+            }
+        fi
+    fi
+    stop_spinner "$(color yellow "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+}
+
 # **言語パッケージのインストール**
 install_language_package() {
-    # 言語パッケージがスキップされていない場合に処理
-    if [ "$skip_lang_pack" != "yes" ]; then
-        # luci-app- で始まるパッケージ名の確認
-        if echo "$package_name" | grep -q "^luci-app-"; then
-            local base="luci-i18n-${package_name#luci-app-}"
-            local cache_lang=""
-            local lang_pkg=""
+    local package_name="$1"
+    local base="luci-i18n-${package_name#luci-app-}"
+    local cache_lang=""
+    local lang_pkg=""
 
-            # 言語コードをキャッシュファイルから取得
-            if [ -f "${CACHE_DIR}/luci.ch" ]; then
-                cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
-                lang_pkg="${base}-${cache_lang}"
+    if [ -f "${CACHE_DIR}/luci.ch" ]; then
+        # キャッシュファイル内の先頭行から言語コードを取得（例："ja"）
+        cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
+        lang_pkg="${base}-${cache_lang}"
 
-                # リポジトリにパッケージが存在するか確認
-                local package_exists="no"
-                if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-                    if opkg list | grep -qE "^$lang_pkg "; then
-                        package_exists="yes"
-                    fi
-                elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-                    if apk search "$lang_pkg" | grep -q "^$lang_pkg$"; then
-                        package_exists="yes"
-                    fi
-                fi
-
-                # 言語パッケージがリポジトリに存在しない場合、フォールバック処理を実施
-                if [ "$package_exists" = "yes" ]; then
-                    # **YN確認を行う**
-                    confirm_installation "$lang_pkg" || return 1
-
-                    # インストール試行
-                    echo "$(color cyan "Trying to install $lang_pkg ...")"
-                    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-                        opkg install "$lang_pkg" > /dev/null 2>&1 || {
-                            echo "$(color red "$lang_pkg のインストールに失敗しました。")"
-                            return 1
-                        }
-                    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-                        apk add "$lang_pkg" > /dev/null 2>&1 || {
-                            echo "$(color red "$lang_pkg のインストールに失敗しました。")"
-                            return 1
-                        }
-                    fi
-                    echo "$(color yellow "成功: $lang_pkg をインストールしました。")"
-
-                else
-                    echo "$(color red "$lang_pkg はリポジトリに存在しません。")"
-                    # フォールバックで英語を試す
-                    lang_pkg="${base}-en"
-                    echo "$(color cyan "Trying to install $lang_pkg ...")"
-                    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-                        opkg install "$lang_pkg" > /dev/null 2>&1 || {
-                            echo "$(color red "$lang_pkg のインストールに失敗しました。")"
-                            return 1
-                        }
-                    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-                        apk add "$lang_pkg" > /dev/null 2>&1 || {
-                            echo "$(color red "$lang_pkg のインストールに失敗しました。")"
-                            return 1
-                        }
-                    fi
-                    echo "$(color yellow "成功: $lang_pkg をインストールしました。")"
-                fi
-            else
-                echo "$(color red "${CACHE_DIR}/luci.ch が存在しません。")"
-                return 1
+        # **リポジトリ内の存在確認**
+        local package_exists="no"
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            if opkg list | grep -qE "^$lang_pkg "; then
+                package_exists="yes"
+            fi
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            if apk search "$lang_pkg" | grep -q "^$lang_pkg$"; then
+                package_exists="yes"
             fi
         fi
+
+        # パッケージがリポジトリに存在する場合、YN確認
+        if [ "$package_exists" = "yes" ]; then
+            confirm_installation "$lang_pkg" || return 1
+            install_package_func "$lang_pkg" "$force_install"
+        else
+            debug_log "DEBUG" "$(color red "$lang_pkg はリポジトリに存在しません。スキップします。")"
+        fi
+    else
+        echo "$(color red "${CACHE_DIR}/luci.ch が存在しません。言語パッケージ情報が得られません。")"
     fi
 }
 
-# **パッケージをインストールする関数**
+# **パッケージインストール関数**
 install_package() {
     # 変数初期化
     local confirm_install="no"
@@ -1499,7 +1495,7 @@ install_package() {
                 update_mode="yes"
                 shift
                 if [ $# -gt 0 ]; then
-                    package_to_update="$1"  # `update some_package` に対応
+                    package_to_update="$1"
                     shift
                 fi
                 continue
@@ -1540,7 +1536,7 @@ install_package() {
         return 0
     fi
 
-    # **YN 確認**
+    # **YN確認**
     confirm_installation "$package_name" || return 1
 
     # **インストール済み確認**
@@ -1553,23 +1549,9 @@ install_package() {
 
     # **スピナー開始**
     start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
-    #start_spinner "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")"
 
-    # **パッケージインストール**
-    if [ "$force_install" = "yes" ]; then
-        opkg install --force-reinstall "$package_name" > /dev/null 2>&1 || {
-            stop_spinner "$(color red "❌ パッケージ $package_name のインストールに失敗しました。")"
-            return 1
-        }
-    else
-        opkg install "$package_name" > /dev/null 2>&1 || {
-            stop_spinner "$(color red "❌ パッケージ $package_name のインストールに失敗しました。")"
-            return 1
-        }
-    fi
-
-    # **スピナー停止**
-    stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+    # **通常パッケージのインストール**
+    install_package_func "$package_name" "$force_install"
 
     # **言語パッケージのインストール**
     if [ "$skip_lang_pack" != "yes" ]; then
