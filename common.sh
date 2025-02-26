@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-12"
+SCRIPT_VERSION="2025.02.27-00-13"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1356,6 +1356,7 @@ install_package_func() {
                 return 1
             fi
         fi
+    # パッケージマネージャーが apk の場合
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         debug_log "DEBUG" "Running apk add for $package_name"
 
@@ -1406,13 +1407,15 @@ install_language_package() {
         local package_exists="no"
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
             debug_log "DEBUG" "Checking for $lang_pkg in opkg repository"
-            if opkg list | grep -qE "^$lang_pkg "; then
+            opkg list | grep -qE "^$lang_pkg "
+            if [ $? -eq 0 ]; then
                 package_exists="yes"
                 debug_log "INFO" "Package $lang_pkg found in opkg repository"
             fi
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
             debug_log "DEBUG" "Checking for $lang_pkg in apk repository"
-            if apk search "$lang_pkg" | grep -q "^$lang_pkg$"; then
+            apk search "$lang_pkg" | grep -q "^$lang_pkg$"
+            if [ $? -eq 0 ]; then
                 package_exists="yes"
                 debug_log "INFO" "Package $lang_pkg found in apk repository"
             fi
@@ -1444,7 +1447,6 @@ install_language_package() {
         echo "$(color red "${CACHE_DIR}/luci.ch が存在しません。言語パッケージ情報が得られません。")"
     fi
 }
-
 
 # **インストール関数**
 install_package() {
