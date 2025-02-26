@@ -1,30 +1,30 @@
-SCRIPT_VERSION="2025.02.24-00-03"
+SCRIPT_VERSION="2025.02.26-00-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION package.db \033[0m"
 
 # ttyd設定（19.07バージョン）
 [ttyd]
 (19.07)
 # 以前の設定を削除
-uci del_list ttyd.@ttyd[0].client_option='theme={"background": "black"}'
-uci del_list ttyd.@ttyd[0].client_option='titleFixed=ttyd'
-uci del_list ttyd.ttyd.client_option='theme={"background": "blue"}'
-uci del_list ttyd.ttyd.client_option='titleFixed=config-software'
+uci del_list ttyd.@ttyd[0].client_option="theme={\"background\": \"black\"}"
+uci del_list ttyd.@ttyd[0].client_option="titleFixed=ttyd"
+uci del_list ttyd.ttyd.client_option="theme={\"background\": \"blue\"}"
+uci del_list ttyd.ttyd.client_option="titleFixed=config-software"
 
 # 新しい設定を追加
 uci set ttyd.@ttyd[0]=ttyd
-uci set ttyd.@ttyd[0].interface='@lan'
-uci set ttyd.@ttyd[0].command='/bin/login -f root'
-uci set ttyd.@ttyd[0].ipv6='1'
-uci add_list ttyd.@ttyd[0].client_option='theme={"background": "black"}'
-uci add_list ttyd.@ttyd[0].client_option='titleFixed=ttyd'
+uci set ttyd.@ttyd[0].interface="@lan"
+uci set ttyd.@ttyd[0].command="/bin/login -f root"
+uci set ttyd.@ttyd[0].ipv6="1"
+uci add_list ttyd.@ttyd[0].client_option="theme={\"background\": \"black\"}"
+uci add_list ttyd.@ttyd[0].client_option="titleFixed=ttyd"
 
 uci set ttyd.ttyd=ttyd
-uci set ttyd.ttyd.port='8888'
-uci set ttyd.ttyd.interface='@lan'
-uci set ttyd.ttyd.ipv6='1'
-uci set ttyd.ttyd.command='confsoft'
-uci add_list ttyd.ttyd.client_option='theme={"background": "blue"}'
-uci add_list ttyd.ttyd.client_option='titleFixed=config-software'
+uci set ttyd.ttyd.port="8888"
+uci set ttyd.ttyd.interface="@lan"
+uci set ttyd.ttyd.ipv6="1"
+uci set ttyd.ttyd.command="confsoft"
+uci add_list ttyd.ttyd.client_option="theme={\"background\": \"blue\"}"
+uci add_list ttyd.ttyd.client_option="titleFixed=config-software"
 uci commit ttyd
 /etc/init.d/ttyd enable
 /etc/init.d/rpcd start
@@ -33,26 +33,26 @@ uci commit ttyd
 # ttyd設定（21.02バージョン）
 (21.02)
 # 以前の設定を削除
-uci del_list ttyd.@ttyd[0].client_option='theme={"background": "black"}'
-uci del_list ttyd.@ttyd[0].client_option='titleFixed=ttyd'
-uci del_list ttyd.ttyd.client_option='theme={"background": "blue"}'
-uci del_list ttyd.ttyd.client_option='titleFixed=config-software'
+uci del_list ttyd.@ttyd[0].client_option="theme={\"background\": \"black\"}"
+uci del_list ttyd.@ttyd[0].client_option="titleFixed=ttyd"
+uci del_list ttyd.ttyd.client_option="theme={\"background\": \"blue\"}"
+uci del_list ttyd.ttyd.client_option="titleFixed=config-software"
 
 # 新しい設定を追加
 uci set ttyd.@ttyd[0]=ttyd
-uci set ttyd.@ttyd[0].interface='@eth0'
-uci set ttyd.@ttyd[0].command='/bin/login -f root'
-uci set ttyd.@ttyd[0].ipv6='1'
-uci add_list ttyd.@ttyd[0].client_option='theme={"background": "black"}'
-uci add_list ttyd.@ttyd[0].client_option='titleFixed=ttyd'
+uci set ttyd.@ttyd[0].interface="@eth0"
+uci set ttyd.@ttyd[0].command="/bin/login -f root"
+uci set ttyd.@ttyd[0].ipv6="1"
+uci add_list ttyd.@ttyd[0].client_option="theme={\"background\": \"black\"}"
+uci add_list ttyd.@ttyd[0].client_option="titleFixed=ttyd"
 
 uci set ttyd.ttyd=ttyd
-uci set ttyd.ttyd.port='8888'
-uci set ttyd.ttyd.interface='@eth0'
-uci set ttyd.ttyd.ipv6='1'
-uci set ttyd.ttyd.command='confsoft'
-uci add_list ttyd.ttyd.client_option='theme={"background": "blue"}'
-uci add_list ttyd.ttyd.client_option='titleFixed=config-software'
+uci set ttyd.ttyd.port="8888"
+uci set ttyd.ttyd.interface="@eth0"
+uci set ttyd.ttyd.ipv6="1"
+uci set ttyd.ttyd.command="confsoft"
+uci add_list ttyd.ttyd.client_option="theme={\"background\": \"blue\"}"
+uci add_list ttyd.ttyd.client_option="titleFixed=config-software"
 uci commit ttyd
 /etc/init.d/ttyd enable
 /etc/init.d/rpcd start
@@ -60,8 +60,8 @@ uci commit ttyd
 
 # zswap設定
 [zswap]
-uci set system.@zram[0].enabled='1'
-uci set system.@zram[0].size='256'  # MB単位で指定
-uci set system.@zram[0].comp_algorithm='zstd'  # 圧縮アルゴリズムを zstd に設定
+uci set system.@zram[0].enabled="1"
+uci set system.@zram[0].size="256"  # MB単位で指定
+uci set system.@zram[0].comp_algorithm="zstd"  # 圧縮アルゴリズムを zstd に設定
 uci commit system
 /etc/init.d/zram restart
