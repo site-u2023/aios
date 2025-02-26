@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-08"
+SCRIPT_VERSION="2025.02.27-00-09"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1396,37 +1396,29 @@ confirm_installation() {
     done
 }
 
-# **インストール処理を共通化する関数**
+# **パッケージインストール処理**
 install_package_func() {
     local package_name="$1"
     local force_install="$2"
 
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if [ "$force_install" = "yes" ]; then
-            opkg install --force-reinstall "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "$(get_message "MSG_PACKAGE_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
-                return 1
-            }
-        else
-            opkg install "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "$(get_message "MSG_PACKAGE_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
-                return 1
-            }
-        fi
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if [ "$force_install" = "yes" ]; then
-            apk add --force "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "$(get_message "MSG_PACKAGE_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
-                return 1
-            }
-        else
-            apk add "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "$(get_message "MSG_PACKAGE_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
-                return 1
-            }
-        fi
+    # **スピナー開始**
+    start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
+
+    # インストール処理
+    if [ "$force_install" = "yes" ]; then
+        opkg install --force-reinstall "$package_name" > /dev/null 2>&1 || {
+            stop_spinner "$(color red "❌ パッケージ $package_name のインストールに失敗しました。")"
+            return 1
+        }
+    else
+        opkg install "$package_name" > /dev/null 2>&1 || {
+            stop_spinner "$(color red "❌ パッケージ $package_name のインストールに失敗しました。")"
+            return 1
+        }
     fi
-    stop_spinner "$(color yellow "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+
+    # **スピナー停止**
+    stop_spinner "$(color yellow "成功: $package_name をインストールしました。")"
 }
 
 # **言語パッケージのインストール**
@@ -1476,7 +1468,7 @@ install_language_package() {
     fi
 }
 
-# **パッケージインストール関数**
+# **インストール関数**
 install_package() {
     # 変数初期化
     local confirm_install="no"
@@ -1557,9 +1549,6 @@ install_package() {
         fi
         return 0
     fi
-
-    # **スピナー開始**
-    start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
 
     # **通常パッケージのインストール**
     install_package_func "$package_name" "$force_install"
