@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-19"
+SCRIPT_VERSION="2025.02.27-00-20"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1340,34 +1340,34 @@ install_package_func() {
     # パッケージマネージャーが opkg の場合
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if [ "$force_install" = "yes" ]; then
-            opkg install --force-reinstall "$package_name" > /tmp/install_log.txt 2>&1
+            opkg install --force-reinstall "$package_name" > "${CACHE_DIR}/install_log.ch" 2>&1
             if [ $? -ne 0 ]; then
                 stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
-                cat /tmp/install_log.txt  # ログの内容を表示
+                cat "${CACHE_DIR}/install_log.ch"  # ログの内容を表示
                 return 1
             fi
         else
-            opkg install "$package_name" > /tmp/install_log.txt 2>&1
+            opkg install "$package_name" > "${CACHE_DIR}/install_log.ch" 2>&1
             if [ $? -ne 0 ]; then
                 stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
-                cat /tmp/install_log.txt  # ログの内容を表示
+                cat "${CACHE_DIR}/install_log.ch"  # ログの内容を表示
                 return 1
             fi
         fi
     # パッケージマネージャーが apk の場合
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         if [ "$force_install" = "yes" ]; then
-            apk add --force-reinstall "$package_name" > /tmp/install_log.txt 2>&1
+            apk add --force-reinstall "$package_name" > "${CACHE_DIR}/install_log.ch" 2>&1
             if [ $? -ne 0 ]; then
                 stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
-                cat /tmp/install_log.txt  # ログの内容を表示
+                cat "${CACHE_DIR}/install_log.ch"  # ログの内容を表示
                 return 1
             fi
         else
-            apk add "$package_name" > /tmp/install_log.txt 2>&1
+            apk add "$package_name" > "${CACHE_DIR}/install_log.ch" 2>&1
             if [ $? -ne 0 ]; then
                 stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
-                cat /tmp/install_log.txt  # ログの内容を表示
+                cat "${CACHE_DIR}/install_log.ch"  # ログの内容を表示
                 return 1
             fi
         fi
@@ -1430,7 +1430,6 @@ install_language_package() {
         echo "$(color red "${CACHE_DIR}/luci.ch が存在しません。言語パッケージ情報が得られません。")"
     fi
 }
-
 
 # **インストール関数**
 install_package() {
