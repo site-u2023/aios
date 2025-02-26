@@ -1349,8 +1349,6 @@ extract_commands() {
     ' "${BASE_DIR}/local-package.db"
 }
 
-# コマンドを実行する関数
-execute_commands() {
     local cmds
     cmds=$(extract_commands)  # コマンドを取得
 
@@ -1372,9 +1370,6 @@ execute_commands() {
     uci show "$package_name"  # デバッグ用に現在の設定を表示
 
     echo "All commands executed successfully."
-}
-# メイン処理
-execute_commands
 }
 
 install_package() {
