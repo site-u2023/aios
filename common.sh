@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.25-01-02"
+SCRIPT_VERSION="2025.02.26-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1333,10 +1333,8 @@ update_package_list() {
     return 0
 }
 
-# **local-package.db の適用関数**
+# パッケージ名（引数として渡せるように変更）
 apply_local_package_db() {
-
-    # パッケージ名（引数として渡せるように変更）
     package_name=$1  # ここでパッケージ名を引数として受け取る
 
     # notpack オプションでスキップされている場合は処理しない
@@ -1346,71 +1344,48 @@ apply_local_package_db() {
     fi
 
     # local-package.db が存在しない場合は何もしない
-    if [ ! -f "local-package.db" ]; then
+    if [ ! -f "$package_db_local" ]; then
         debug_log "DEBUG" "local-package.db が存在しません。"
         return 0
     fi
 
-    # local-package.db から対象パッケージの設定を抽出
-    cmds=$(awk -v pkg="$package_name" '
-        # パッケージセクションに一致したらflagをセット
-        $0 ~ "^\[" pkg "\]" {flag=1; next}
-        # 次のセクションに移ったらflagをリセット
-        $0 ~ "^\[" {flag=0}
-        # flagが立っているときに設定を抽出
-        flag {print}
-    ' "local-package.db")
-
-    if [ -z "$cmds" ]; then
-        debug_log "DEBUG" "local-package.db に $package_name の設定がありません。"
-        return 0
-    fi
-
-    echo "$(color green "$package_name 用の local-package.db 設定を適用します。")"
-    
-    # cmdsの内容を一時ファイルに保存
-    temp_file=$(mktemp)
-    echo "$cmds" > "$temp_file"
-
-    # 設定内容を実行（複数行の場合は各行を実行）
-    while IFS= read -r line; do
-        # 空行やコメント行は無視
-        [ -z "$line" ] && continue
-        case "$line" in
-            \#*) continue ;;  # コメント行を無視
-        esac
-        
-        debug_log "DEBUG" "実行: $line"
-        
-        # 設定項目の処理
-        # ここでは設定項目を "key=value" として分けて、uciコマンドに渡す
-        key=$(echo "$line" | cut -d'=' -f1)
-        value=$(echo "$line" | cut -d'=' -f2-)
-
-        # key と value が両方存在する場合
-        if [ -n "$key" ] && [ -n "$value" ]; then
-            # uci で設定を行う
-            debug_log "INFO" "UCI コマンド実行: uci set $package_name.$key=$value"
-            uci set "$package_name.$key=$value" || {
-                debug_log "ERROR" "UCI 設定失敗: $key=$value"
-                return 1  # エラー発生時に処理を停止
-            }
-        else
-            debug_log "ERROR" "無効な設定行: $line"
-        fi
-    done < "$temp_file"
-
-    # 一時ファイルを削除
-    rm -f "$temp_file"
-
-    # 設定を適用
-    debug_log "INFO" "UCI コミット: uci commit $package_name"
-    uci commit "$package_name" || {
-        debug_log "ERROR" "UCI コミット失敗: $package_name"
-        return 1
+    # local-package.dbから指定されたセクションを抽出
+    extract_commands() {
+        # [package_name] をエスケープして検索、コメント行は無視
+        awk -v pkg="$package_name" '
+            $0 ~ "^\\[" pkg "\\]" {flag=1; next}  # [****]セクションに到達
+            $0 ~ "^\\[" {flag=0}                  # 次のセクションが始まったらflagをリセット
+            flag && $0 !~ "^#" {print}             # コメント行（#）を除外
+        ' "$package_db_local"
     }
 
-    debug_log "DEBUG" "$package_name の設定を適用しました。"
+    # コマンドを実行する関数
+    execute_commands() {
+        local cmds
+        cmds=$(extract_commands)  # コマンドを取得
+
+        if [ -z "$cmds" ]; then
+            echo "No commands found for package: $package_name"
+            return 1
+        fi
+
+        echo "Executing commands for $package_name..."
+        # コマンドを一時ファイルに書き出し
+        echo "$cmds" > ${CACHE_DIR}/commands.ch
+
+        # ここで一括でコマンドを実行
+        # chファイルに書き出したコマンドを実行する
+        . ${CACHE_DIR}/commands.ch  # chファイル内のコマンドをそのまま実行
+
+        # 最後に設定を確認（デバッグ用）
+        echo "Displaying current configuration for $package_name:"
+        uci show "$package_name"  # デバッグ用に現在の設定を表示
+
+        echo "All commands executed successfully."
+    }
+
+    # メイン処理
+    execute_commands
 }
 
 install_package() {
