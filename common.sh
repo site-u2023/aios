@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.26-00-02"
+SCRIPT_VERSION="2025.02.26-00-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1333,7 +1333,41 @@ update_package_list() {
     return 0
 }
 
-# パッケージ名（引数として渡せるように変更）
+# グローバルスコープにextract_commandsを移動
+extract_commands() {
+    # [package_name] をエスケープして検索、コメント行は無視
+    awk -v pkg="$1" '
+        $0 ~ "^\\[" pkg "\\]" {flag=1; next}  # [****]セクションに到達
+        $0 ~ "^\\[" {flag=0}                  # 次のセクションが始まったらflagをリセット
+        flag && $0 !~ "^#" {print}             # コメント行（#）を除外
+    ' "$2"  # 第1引数: パッケージ名, 第2引数: DBファイル
+}
+
+# コマンドを実行する関数
+execute_commands() {
+    local cmds
+    cmds=$(extract_commands "$1" "$2")  # コマンドを取得
+
+    if [ -z "$cmds" ]; then
+        echo "No commands found for package: $1"
+        return 1
+    fi
+
+    echo "Executing commands for $1..."
+    # コマンドを一時ファイルに書き出し
+    echo "$cmds" > ${CACHE_DIR}/commands.ch
+
+    # ここで一括でコマンドを実行
+    sh ${CACHE_DIR}/commands.ch  # chファイル内のコマンドをそのまま実行
+
+    # 最後に設定を確認（デバッグ用）
+    echo "Displaying current configuration for $1:"
+    uci show "$1"  # デバッグ用に現在の設定を表示
+
+    echo "All commands executed successfully."
+}
+
+# apply_local_package_dbの修正
 apply_local_package_db() {
     package_name=$1  # ここでパッケージ名を引数として受け取る
 
@@ -1349,43 +1383,8 @@ apply_local_package_db() {
         return 0
     fi
 
-    # local-package.dbから指定されたセクションを抽出
-    extract_commands() {
-        # [package_name] をエスケープして検索、コメント行は無視
-        awk -v pkg="$package_name" '
-            $0 ~ "^\\[" pkg "\\]" {flag=1; next}  # [****]セクションに到達
-            $0 ~ "^\\[" {flag=0}                  # 次のセクションが始まったらflagをリセット
-            flag && $0 !~ "^#" {print}             # コメント行（#）を除外
-        ' "$package_db_local"
-    }
-
-    # コマンドを実行する関数
-    execute_commands() {
-        local cmds
-        cmds=$(extract_commands)  # コマンドを取得
-
-        if [ -z "$cmds" ]; then
-            echo "No commands found for package: $package_name"
-            return 1
-        fi
-
-        echo "Executing commands for $package_name..."
-        # コマンドを一時ファイルに書き出し
-        echo "$cmds" > ${CACHE_DIR}/commands.ch
-
-        # ここで一括でコマンドを実行
-        # chファイルに書き出したコマンドを実行する
-        sh ${CACHE_DIR}/commands.ch  # chファイル内のコマンドをそのまま実行
-
-        # 最後に設定を確認（デバッグ用）
-        echo "Displaying current configuration for $package_name:"
-        uci show "$package_name"  # デバッグ用に現在の設定を表示
-
-        echo "All commands executed successfully."
-    }
-
-    # メイン処理
-    execute_commands
+    # コマンドを実行
+    execute_commands "$package_name" "$package_db_local"
 }
 
 install_package() {
