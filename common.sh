@@ -1245,7 +1245,7 @@ start_spinner() {
     local message="$1"
     SPINNER_MESSAGE="$message"  # 停止時のメッセージ保持
     #spinner_chars='-\|/'
-    spinner_chars='* + x |'
+    spinner_chars='* - + |'
     i=0
 
     echo -en "\e[?25l"
@@ -1305,8 +1305,8 @@ update_package_list() {
     fi
 
     # スピナー開始
-    # start_spinner "$(color yellow "$(get_message "MSG_RUNNING_UPDATE")")"
-    start_spinner "$(get_message "MSG_RUNNING_UPDATE" | sed "s/{pkg}/$package_name/")"
+    start_spinner "$(color yellow "$(get_message "MSG_RUNNING_UPDATE")")"
+    #start_spinner "$(get_message "MSG_RUNNING_UPDATE" | sed "s/{pkg}/$package_name/")"
 
     # パッケージリストの更新
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
@@ -1324,8 +1324,8 @@ update_package_list() {
     fi
 
     # スピナー停止 (成功メッセージを表示)
-    #stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
-    stop_spinner "$(get_message "MSG_UPDATE_SUCCESS" | sed "s/{pkg}/$package_name/")"
+    stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
+    #stop_spinner "$(get_message "MSG_UPDATE_SUCCESS" | sed "s/{pkg}/$package_name/")"
 
     # キャッシュのタイムスタンプを更新
     touch "$update_cache" || {
@@ -1527,8 +1527,8 @@ install_package() {
     fi
 
     # **スピナー開始 (インストール中のメッセージ)**
-    #start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
-    start_spinner "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")"
+    start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
+    #start_spinner "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")"
 
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if [ "$force_install" = "yes" ]; then
@@ -1551,8 +1551,8 @@ install_package() {
     fi
 
     # スピナー停止 (インストール後のメッセージ)
-    #stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-    stop_spinner "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")"
+    stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+    #stop_spinner "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")"
 
     # **言語パッケージの適用（nolang オプションが指定されていない場合）**
     if [ "$skip_lang_pack" != "yes" ]; then
