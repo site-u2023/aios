@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-11"
+SCRIPT_VERSION="2025.02.27-00-12"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1337,10 +1337,10 @@ install_package_func() {
     # スピナーの開始
     start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
 
-    debug_log "DEBUG" "Attempting to install package: $package_name"
-
     # パッケージマネージャーが opkg の場合
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        debug_log "DEBUG" "Running opkg install for $package_name"
+
         if [ "$force_install" = "yes" ]; then
             opkg install --force-reinstall "$package_name" > /dev/null 2>&1
             if [ $? -ne 0 ]; then
@@ -1356,8 +1356,9 @@ install_package_func() {
                 return 1
             fi
         fi
-    # パッケージマネージャーが apk の場合
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        debug_log "DEBUG" "Running apk add for $package_name"
+
         if [ "$force_install" = "yes" ]; then
             apk add --force-reinstall "$package_name" > /dev/null 2>&1
             if [ $? -ne 0 ]; then
@@ -1398,19 +1399,22 @@ install_language_package() {
         cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
         lang_pkg="${base}-${cache_lang}"
 
+        debug_log "DEBUG" "Cache language set to: $cache_lang"
+        debug_log "DEBUG" "Language package: $lang_pkg"
+
         # **リポジトリ内の存在確認**
         local package_exists="no"
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
             debug_log "DEBUG" "Checking for $lang_pkg in opkg repository"
             if opkg list | grep -qE "^$lang_pkg "; then
                 package_exists="yes"
-                debug_log "INFO" "Package $lang_pkg found in repository"
+                debug_log "INFO" "Package $lang_pkg found in opkg repository"
             fi
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
             debug_log "DEBUG" "Checking for $lang_pkg in apk repository"
             if apk search "$lang_pkg" | grep -q "^$lang_pkg$"; then
                 package_exists="yes"
-                debug_log "INFO" "Package $lang_pkg found in repository"
+                debug_log "INFO" "Package $lang_pkg found in apk repository"
             fi
         fi
 
@@ -1419,7 +1423,6 @@ install_language_package() {
             confirm_installation "$lang_pkg" || return 1
             install_package_func "$lang_pkg" "$force_install"  # インストール
         else
-            # パッケージがリポジトリにない場合はフォールバック
             debug_log "WARN" "$lang_pkg is not found in repository. Attempting fallback to English package."
 
             # フォールバック: "en"（英語）を試す
@@ -1441,6 +1444,7 @@ install_language_package() {
         echo "$(color red "${CACHE_DIR}/luci.ch が存在しません。言語パッケージ情報が得られません。")"
     fi
 }
+
 
 # **インストール関数**
 install_package() {
