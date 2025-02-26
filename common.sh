@@ -1366,8 +1366,7 @@ extract_commands() {
     . ${CACHE_DIR}/commands.ch  # chファイル内のコマンドをそのまま実行
 
     # 最後に設定を確認（デバッグ用）
-    echo "Displaying current configuration for $package_name:"
-    uci show "$package_name"  # デバッグ用に現在の設定を表示
+    debug_log "DEBUG" "Displaying current configuration for $package_name: $(uci show "$package_name")"
 
     echo "All commands executed successfully."
 }
