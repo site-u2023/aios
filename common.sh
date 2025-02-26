@@ -1244,49 +1244,8 @@ normalize_language() {
 start_spinner() {
     local message="$1"
     SPINNER_MESSAGE="$message"  # 停止時のメッセージ保持
-    #spinner_chars='-\/|'
-    #spinner_chars='◜ ◝ ◞ ◟' 
+    #spinner_chars='-\|/'
     spinner_chars='* + x |'
-    i=0
-
-    echo -en "\e[?25l"  # カーソル非表示
-
-    while true; do
-        # POSIX準拠の方法でインデックスを計算し、1文字抽出
-        local index=$(( i % 4 ))
-        local spinner_char="${spinner_chars:index:1}"
-        printf "\r📡 %s %s" "$(color yellow "$SPINNER_MESSAGE")" "$spinner_char"
-        if command -v usleep >/dev/null 2>&1; then
-            usleep 200000
-        else
-            sleep 1
-        fi
-        i=$(( i + 1 ))
-    done &
-    SPINNER_PID=$!
-}
-
-# **スピナー停止関数**
-stop_spinner() {
-    local message="$1"
-
-    if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
-        kill "$SPINNER_PID" >/dev/null 2>&1
-        printf "\r\033[K"  # 行をクリア
-        echo "$(color green "$message")"
-    else
-        printf "\r\033[K"
-        echo "$(color red "$message")"
-    fi
-    unset SPINNER_PID
-
-    echo -en "\e[?25h"  # カーソル表示
-}
-
-OK_start_spinner() {
-    local message="$1"
-    SPINNER_MESSAGE="$message"  # 停止時のメッセージ保持
-    spinner_chars='-\|/'
     i=0
 
     echo -en "\e[?25l"
@@ -1306,7 +1265,8 @@ OK_start_spinner() {
     SPINNER_PID=$!
 }
 
-OK_stop_spinner() {
+# **スピナー停止関数**
+stop_spinner() {
     local message="$1"
 
     if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
