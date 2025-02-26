@@ -1635,7 +1635,7 @@ install_package() {
 
     # **local-package.db の適用**
     if [ "$skip_package_db" != "yes" ]; then
-        apply_local_package_db
+        apply_local_package_db "$package_name"
     fi
 
     # **設定の有効化**
