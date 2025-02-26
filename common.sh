@@ -1245,6 +1245,46 @@ start_spinner() {
     local message="$1"
     SPINNER_MESSAGE="$message"  # 停止時のメッセージ保持
     spinner_chars='-\|/'
+
+    i=0
+    echo -en "\e[?25l"  # カーソル非表示
+
+    while true; do
+        # POSIX 準拠の方法でインデックスを計算し、1文字抽出
+        local index=$(( i % 4 ))
+        local spinner_char=$(expr substr "$spinner_chars" $(( index + 1 )) 1)
+        printf "\r📡 %s %s" "$SPINNER_MESSAGE" "$spinner_char"
+        if command -v usleep >/dev/null 2>&1; then
+            usleep 200000
+        else
+            sleep 1
+        fi
+        i=$(( i + 1 ))
+    done &  # バックグラウンドで実行
+    SPINNER_PID=$!
+}
+
+# **スピナー停止関数**
+stop_spinner() {
+    local message="$1"
+
+    if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
+        kill "$SPINNER_PID" >/dev/null 2>&1
+        printf "\r\033[K"  # 行をクリア
+        echo "$(color green "$message")"
+    else
+        printf "\r\033[K"
+        echo "$(color red "$message")"
+    fi
+    unset SPINNER_PID
+
+    echo -en "\e[?25h"  # カーソル表示
+}
+
+OK_start_spinner() {
+    local message="$1"
+    SPINNER_MESSAGE="$message"  # 停止時のメッセージ保持
+    spinner_chars='-\|/'
     i=0
 
     echo -en "\e[?25l"
@@ -1264,8 +1304,7 @@ start_spinner() {
     SPINNER_PID=$!
 }
 
-# **スピナー停止関数**
-stop_spinner() {
+OK_stop_spinner() {
     local message="$1"
 
     if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
@@ -1304,7 +1343,8 @@ update_package_list() {
     fi
 
     # スピナー開始
-    start_spinner "$(color yellow "$(get_message "MSG_RUNNING_UPDATE")")"
+    # start_spinner "$(color yellow "$(get_message "MSG_RUNNING_UPDATE")")"
+    start_spinner "$(get_message "MSG_RUNNING_UPDATE" | sed "s/{pkg}/$package_name/")"
 
     # パッケージリストの更新
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
@@ -1322,7 +1362,8 @@ update_package_list() {
     fi
 
     # スピナー停止 (成功メッセージを表示)
-    stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
+    #stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
+    stop_spinner "$(get_message "MSG_UPDATE_SUCCESS" | sed "s/{pkg}/$package_name/")"
 
     # キャッシュのタイムスタンプを更新
     touch "$update_cache" || {
@@ -1524,7 +1565,8 @@ install_package() {
     fi
 
     # **スピナー開始 (インストール中のメッセージ)**
-    start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
+    #start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
+    start_spinner "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")"
 
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if [ "$force_install" = "yes" ]; then
@@ -1546,7 +1588,9 @@ install_package() {
         }
     fi
 
-    stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+    # スピナー停止 (インストール後のメッセージ)
+    #stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+    stop_spinner "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")"
 
     # **言語パッケージの適用（nolang オプションが指定されていない場合）**
     if [ "$skip_lang_pack" != "yes" ]; then
