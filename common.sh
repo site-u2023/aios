@@ -1396,18 +1396,19 @@ confirm_installation() {
     done
 }
 
-# **言語パッケージをインストールする関数**
+# **言語パッケージのインストール処理**
 install_language_package() {
     local package_name="$1"
-    local lang_pkg=""
     local base="luci-i18n-${package_name#luci-app-}"
-
-    # 言語コードをキャッシュファイルから取得
+    local cache_lang=""
+    local lang_pkg=""
+    
     if [ -f "${CACHE_DIR}/luci.ch" ]; then
-        local cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
+        # キャッシュファイル内の先頭行から言語コードを取得（例："ja"）
+        cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
         lang_pkg="${base}-${cache_lang}"
 
-        # 言語パッケージがリポジトリに存在するか確認
+        # **リポジトリ内の存在確認**
         local package_exists="no"
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
             if opkg list | grep -qE "^$lang_pkg "; then
@@ -1420,26 +1421,62 @@ install_language_package() {
         fi
 
         if [ "$package_exists" = "yes" ]; then
-            # YN確認を行う
+            # **YN 確認**
             confirm_installation "$lang_pkg" || return 1
 
-            # インストール
-            echo "$(color cyan "Trying to install $lang_pkg ...")"
+            # -- opkg または apk でインストール --
             if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+                echo "$(color cyan "Trying to install $lang_pkg ...")"
                 opkg install "$lang_pkg" > /dev/null 2>&1
-            elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-                apk add "$lang_pkg" > /dev/null 2>&1
-            fi
+                if [ $? -ne 0 ]; then
+                    echo "$(color red "$lang_pkg のインストールに失敗しました。フォールバックを試みます。")"
+                    lang_pkg="${base}-en"
+                    echo "$(color cyan "Trying to install $lang_pkg ...")"
+                    opkg install "$lang_pkg" > /dev/null 2>&1
+                    if [ $? -ne 0 ]; then
+                        echo "$(color red "$lang_pkg のインストールに失敗しました。さらにフォールバックします。")"
+                        lang_pkg="${base}"
+                        echo "$(color cyan "Trying to install $lang_pkg ...")"
+                        opkg install "$lang_pkg" > /dev/null 2>&1
+                        if [ $? -ne 0 ]; then
+                            echo "$(color red "$lang_pkg のインストールにも失敗しました。言語パッケージはありません。")"
+                        else
+                            echo "$(color yellow "成功: $lang_pkg をインストールしました。")"
+                        fi
+                    else
+                        echo "$(color yellow "成功: $lang_pkg をインストールしました。")"
+                    fi
+                else
+                    echo "$(color yellow "成功: $lang_pkg をインストールしました。")"
+                fi
 
-            if [ $? -ne 0 ]; then
-                echo "$(color red "$lang_pkg のインストールに失敗しました。フォールバックを試みます。")"
-                lang_pkg="${base}-en"
-                install_language_package "$package_name" "$lang_pkg"
-            else
-                echo "$(color yellow "成功: $lang_pkg をインストールしました。")"
+            elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+                echo "$(color cyan "Trying to install $lang_pkg ...")"
+                apk add "$lang_pkg" > /dev/null 2>&1
+                if [ $? -ne 0 ]; then
+                    echo "$(color red "$lang_pkg のインストールに失敗しました。フォールバックを試みます。")"
+                    lang_pkg="${base}-en"
+                    echo "$(color cyan "Trying to install $lang_pkg ...")"
+                    apk add "$lang_pkg" > /dev/null 2>&1
+                    if [ $? -ne 0 ]; then
+                        echo "$(color red "$lang_pkg のインストールに失敗しました。さらにフォールバックします。")"
+                        lang_pkg="${base}"
+                        echo "$(color cyan "Trying to install $lang_pkg ...")"
+                        apk add "$lang_pkg" > /dev/null 2>&1
+                        if [ $? -ne 0 ]; then
+                            echo "$(color red "$lang_pkg のインストールにも失敗しました。言語パッケージはありません。")"
+                        else
+                            echo "$(color yellow "成功: $lang_pkg をインストールしました。")"
+                        fi
+                    else
+                        echo "$(color yellow "成功: $lang_pkg をインストールしました。")"
+                    fi
+                else
+                    echo "$(color yellow "成功: $lang_pkg をインストールしました。")"
+                fi
             fi
         else
-            echo "$(color red "$lang_pkg はリポジトリに存在しません。スキップします。")"
+            debug_log "DEBUG" "$(color red "$lang_pkg はリポジトリに存在しません。スキップします。")"
         fi
     else
         echo "$(color red "${CACHE_DIR}/luci.ch が存在しません。言語パッケージ情報が得られません。")"
@@ -1476,7 +1513,7 @@ install_package() {
                 update_mode="yes"
                 shift
                 if [ $# -gt 0 ]; then
-                    package_to_update="$1"
+                    package_to_update="$1"  # `update some_package` に対応
                     shift
                 fi
                 continue
@@ -1517,7 +1554,7 @@ install_package() {
         return 0
     fi
 
-    # **YN 確認をここで実施**
+    # **YN 確認**
     confirm_installation "$package_name" || return 1
 
     # **インストール済み確認**
@@ -1530,6 +1567,7 @@ install_package() {
 
     # **スピナー開始**
     start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
+    #start_spinner "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")"
 
     # **パッケージインストール**
     if [ "$force_install" = "yes" ]; then
