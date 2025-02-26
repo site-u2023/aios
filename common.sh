@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-14"
+SCRIPT_VERSION="2025.02.27-00-15"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1338,40 +1338,38 @@ install_package_func() {
     start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
 
     # パッケージマネージャーが opkg の場合
+    debug_log "DEBUG" "Attempting to install $package_name using opkg"
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        debug_log "DEBUG" "Running opkg install for $package_name"
-
         if [ "$force_install" = "yes" ]; then
             opkg install --force-reinstall "$package_name" > /dev/null 2>&1
             if [ $? -ne 0 ]; then
-                debug_log "ERROR" "Failed to install package $package_name with opkg"
                 stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+                debug_log "ERROR" "opkg failed to install $package_name"
                 return 1
             fi
         else
             opkg install "$package_name" > /dev/null 2>&1
             if [ $? -ne 0 ]; then
-                debug_log "ERROR" "Failed to install package $package_name with opkg"
                 stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+                debug_log "ERROR" "opkg failed to install $package_name"
                 return 1
             fi
         fi
     # パッケージマネージャーが apk の場合
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        debug_log "DEBUG" "Running apk add for $package_name"
-
+        debug_log "DEBUG" "Attempting to install $package_name using apk"
         if [ "$force_install" = "yes" ]; then
             apk add --force-reinstall "$package_name" > /dev/null 2>&1
             if [ $? -ne 0 ]; then
-                debug_log "ERROR" "Failed to install package $package_name with apk"
                 stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+                debug_log "ERROR" "apk failed to install $package_name"
                 return 1
             fi
         else
             apk add "$package_name" > /dev/null 2>&1
             if [ $? -ne 0 ]; then
-                debug_log "ERROR" "Failed to install package $package_name with apk"
                 stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+                debug_log "ERROR" "apk failed to install $package_name"
                 return 1
             fi
         fi
@@ -1393,27 +1391,27 @@ install_language_package() {
     local cache_lang=""
     local lang_pkg=""
 
-    debug_log "DEBUG" "Starting installation of language package for $package_name"
+    debug_log "DEBUG" "Starting language package installation for $package_name"
 
     # キャッシュファイルが存在する場合、言語コードを取得
     if [ -f "${CACHE_DIR}/luci.ch" ]; then
         cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
         lang_pkg="${base}-${cache_lang}"
 
-        debug_log "DEBUG" "Cache language set to: $cache_lang"
-        debug_log "DEBUG" "Language package: $lang_pkg"
+        debug_log "DEBUG" "Cache language: $cache_lang"
+        debug_log "DEBUG" "Language package to install: $lang_pkg"
 
         # **リポジトリ内の存在確認**
         local package_exists="no"
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            debug_log "DEBUG" "Checking for $lang_pkg in opkg repository"
+            debug_log "DEBUG" "Checking if $lang_pkg exists in opkg repository"
             opkg list | grep -qE "^$lang_pkg "
             if [ $? -eq 0 ]; then
                 package_exists="yes"
                 debug_log "INFO" "Package $lang_pkg found in opkg repository"
             fi
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            debug_log "DEBUG" "Checking for $lang_pkg in apk repository"
+            debug_log "DEBUG" "Checking if $lang_pkg exists in apk repository"
             apk search "$lang_pkg" | grep -q "^$lang_pkg$"
             if [ $? -eq 0 ]; then
                 package_exists="yes"
@@ -1423,10 +1421,11 @@ install_language_package() {
 
         # パッケージがリポジトリに存在する場合、YN確認
         if [ "$package_exists" = "yes" ]; then
+            debug_log "INFO" "Package $lang_pkg exists in repository, proceeding with installation"
             confirm_installation "$lang_pkg" || return 1
             install_package_func "$lang_pkg" "$force_install"  # インストール
         else
-            debug_log "WARN" "$lang_pkg is not found in repository. Attempting fallback to English package."
+            debug_log "WARN" "$lang_pkg is not found in repository. Trying fallback."
 
             # フォールバック: "en"（英語）を試す
             lang_pkg="${base}-en"
@@ -1505,6 +1504,7 @@ install_package() {
     # パッケージマネージャー確認
     if [ -f "${CACHE_DIR}/downloader_ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
+        debug_log "DEBUG" "Package manager found: $PACKAGE_MANAGER"
     else 
         debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")")"
         return 1
@@ -1514,6 +1514,7 @@ install_package() {
     update_package_list || return 1
 
     # **リポジトリにパッケージが存在するか確認**
+    debug_log "DEBUG" "Checking for package $package_name in the repository"
     if ! opkg list | grep -qE "^$package_name "; then
         debug_log "DEBUG" "Skipping installation: $package_name not found in repository."
         return 0
@@ -1524,6 +1525,7 @@ install_package() {
 
     # **インストール済み確認**
     if opkg list-installed | grep -qE "^$package_name "; then
+        debug_log "INFO" "$package_name is already installed"
         if [ "$hidden" != "yes" ]; then
             echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
         fi
