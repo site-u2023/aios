@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.26-00-04"
+SCRIPT_VERSION="2025.02.26-00-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1633,11 +1633,11 @@ install_package() {
         fi
     fi
 
-    # **local-package.db の適用**
+    # local-package.db の適用
     if [ "$skip_package_db" != "yes" ]; then
-        apply_local_package_db "$package_name"
+        apply_local_package_db "$package_name" "$package_db_local"  # 正しい引数を渡す
     fi
-
+    
     # **設定の有効化**
     if [ "$set_disabled" = "no" ]; then
         if [ -f "local-package.db" ] && grep -q "^$package_name-enable=" "local-package.db"; then
@@ -1658,194 +1658,6 @@ install_package() {
         fi
     fi
 }
-
-XXX_update_package_list() {
-    local update_cache="${CACHE_DIR}/update.ch"
-    local current_date=$(date '+%Y-%m-%d')
-    local max_retries=3
-    local attempt=1
-
-    # **キャッシュディレクトリの作成**
-    mkdir -p "$CACHE_DIR"
-
-    # **キャッシュが最新ならスキップ**
-    if [ "$update_mode" != "yes" ] && [ -f "$update_cache" ] && grep -q "LAST_UPDATE=$current_date" "$update_cache"; then
-        debug_log "DEBUG" "パッケージリストは既に最新です。更新をスキップします。"
-        return 0
-    fi
-
-    # **スピナー開始 (キーを MSG_RUNNING_UPDATE に修正)**
-    start_spinner "$(color yellow "$(get_message "MSG_RUNNING_UPDATE")")"
-
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
-            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"  # エラー時もスピナーを止める
-            debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
-            return 1
-        }
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
-            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"  # エラー時もスピナーを止める
-            debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
-            return 1
-        }
-    fi
-
-    # **スピナー停止 (成功メッセージ)**
-    stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
-
-    # **キャッシュを更新**
-    if ! echo "LAST_UPDATE=$(date '+%Y-%m-%d')" > "$update_cache"; then
-        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_WRITE_CACHE")")"
-        return 1
-    fi
-
-    return 0
-}
-
-
-
-OK_install_package() {
-    local confirm_install="no"
-    local skip_lang_pack="no"
-    local skip_package_db="no"
-    local set_disabled="no"
-    local hidden="no"
-    local test_mode="no"
-    local force_install="no"
-    local update_mode="no"
-    local package_name=""
-
-    # **オプションの処理**
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            yn)         confirm_install="yes" ;;
-            nolang)     skip_lang_pack="yes" ;;
-            notpack)    skip_package_db="yes" ;;
-            disabled)   set_disabled="yes" ;;
-            hidden)     hidden="yes" ;;
-            test)       test_mode="yes" ;;
-            force)      force_install="yes" ;;
-            update)     update_mode="yes"; shift; continue ;;
-            *)
-                if [ -z "$package_name" ]; then
-                    package_name="$1"
-                else
-                    debug_log "DEBUG" "$(color yellow "$(get_message "MSG_UNKNOWN_OPTION" | sed "s/{option}/$1/")")"
-                fi
-                ;;
-        esac
-        shift
-    done
-
-    # **パッケージマネージャーの確認**
-    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
-        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
-    else 
-        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")")"
-        return 1
-    fi
-
-    # **update オプションのみの場合、アップデートして終了**
-    if [ "$update_mode" = "yes" ] && [ -z "$package_name" ]; then
-        update_package_list
-        return 0
-    fi
-
-    if [ -z "$package_name" ]; then
-        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")")"
-        return 1
-    fi
-
-    # **デバイスにパッケージがすでにインストールされているかチェック**
-    local is_installed="no"
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if opkg list-installed | grep -qE "^$package_name "; then
-            is_installed="yes"
-        fi
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if apk info | grep -q "^$package_name$"; then
-            is_installed="yes"
-        fi
-    fi
-
-    # **インストール済みなら終了**
-    if [ "$is_installed" = "yes" ]; then
-        [ "$hidden" != "yes" ] && echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-        return 0
-    fi
-
-    # **リポジトリにパッケージがあるか確認**
-    local package_exists="no"
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if opkg list | grep -qE "^$package_name "; then
-            package_exists="yes"
-        fi
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if apk search "$package_name" 2>/dev/null | grep -q "^$package_name$"; then
-            package_exists="yes"
-        fi
-    fi
-
-    # **リポジトリにパッケージがない場合はエラー**
-    if [ "$package_exists" = "no" ]; then
-        debug_log "ERROR" "$(color red "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
-        return 1
-    fi
-
-    # **YN 確認が必要なら、ここで確認**
-    if [ "$confirm_install" = "yes" ]; then
-        while true; do
-            local msg=$(get_message "MSG_CONFIRM_INSTALL")
-            msg="${msg//\{pkg\}/$package_name}"
-            echo "$msg"
-
-            printf "%s " "$(get_message "MSG_CONFIRM_ONLY_YN")"
-            read -r yn || return 1  # Ctrl+D の場合は中止
-
-            case "$yn" in
-                [Yy]*)  
-                    update_package_list  # **確認後に `opkg update` を実行**
-                    break
-                    ;;
-                [Nn]*) return 1 ;;
-                *) echo "$(color red "Invalid input. Please enter Y or N.")" ;;
-            esac
-        done
-    else
-        update_package_list  # **YN 指定なしならキャッシュ確認しつつ `opkg update` を実行**
-    fi
-
-    # **テストモードなら、シミュレーションを実行**
-    if [ "$test_mode" = "yes" ]; then
-        debug_log "DEBUG" "Test mode enabled: Simulating installation for $package_name"
-        echo "$(color yellow "Test mode: Simulated package installation for $package_name")"
-        return 0
-    fi
-
-    # **スピナー開始 (インストール中のメッセージ)**
-    start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
-
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        opkg install "$package_name" > /dev/null 2>&1 || {
-            stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
-            return 1
-        }
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        apk add "$package_name" > /dev/null 2>&1 || {
-            stop_spinner "$(color red "$(get_message "MSG_ERROR_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
-            return 1
-        }
-    fi
-
-    stop_spinner "$(color green "$(get_message "MSG_PACKAGE_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-
-    # **サービスの有効化**
-    if [ "$set_disabled" != "yes" ] && [ -x "/etc/init.d/$package_name" ]; then
-        /etc/init.d/"$package_name" enable && /etc/init.d/"$package_name" restart
-    fi
-}
-
 
 #########################################################################
 # Last Update: 2025-02-22 15:35:00 (JST) 🚀
