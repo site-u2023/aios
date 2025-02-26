@@ -44,6 +44,8 @@ uci commit ttyd
 
 # サービスを再起動
 /etc/init.d/ttyd enable
+/etc/init.d/ttyd stop
+/etc/init.d/ttyd start
 /etc/init.d/rpcd start
 
 # zswap設定
