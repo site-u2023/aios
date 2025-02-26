@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-10"
+SCRIPT_VERSION="2025.02.27-00-11"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -158,73 +158,6 @@ debug_log() {
             "WARN") echo -e "$(color yellow "$log_message")" ;;
             "INFO") echo -e "$(color cyan "$log_message")" ;;
             "DEBUG") echo -e "$(color white "$log_message")" ;;
-        esac
-
-        # ログファイルに記録
-        echo "$log_message" >> "$LOG_DIR/debug.log"
-    fi
-}
-
-XXX_debug_log() {
-    local level="$1"
-    local message="$2"
-    local file="$3"
-    local version="$4"
-
-    # 指定されたログレベルが有効か確認、無効または未指定の場合はデフォルトを DEBUG にする
-    case "$level" in
-        DEBUG|INFO|WARN|ERROR)
-            ;;  # そのまま利用
-        "")
-            level="DEBUG"
-            ;;
-        *)
-            level="DEBUG"
-            ;;
-    esac
-
-    # 変数を置換
-    message=$(echo "$message" | sed -e "s/{file}/$file/g" -e "s/{version}/$version/g")
-
-    # DEBUG_MODE に応じた許可レベルの設定
-    case "$DEBUG_MODE" in
-        DEBUG)
-            allowed_levels="DEBUG INFO WARN ERROR"
-            ;;
-        INFO)
-            allowed_levels="INFO WARN ERROR"
-            ;;
-        WARN)
-            allowed_levels="WARN ERROR"
-            ;;
-        ERROR)
-            allowed_levels="ERROR"
-            ;;
-        *)
-            allowed_levels="ERROR"
-            ;;
-    esac
-
-    # 許可レベルに含まれているか確認（単語単位でチェック）
-    if echo "$allowed_levels" | grep -wq "$level"; then
-        local timestamp
-        timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-        local log_message="[$timestamp] $level: $message"
-
-        # カラー表示（レベルに応じた色設定）
-        case "$level" in
-            ERROR)
-                echo -e "$(color red "$log_message")"
-                ;;
-            WARN)
-                echo -e "$(color yellow "$log_message")"
-                ;;
-            INFO)
-                echo -e "$(color cyan "$log_message")"
-                ;;
-            DEBUG)
-                echo -e "$(color white "$log_message")"
-                ;;
         esac
 
         # ログファイルに記録
@@ -1404,17 +1337,21 @@ install_package_func() {
     # スピナーの開始
     start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
 
+    debug_log "DEBUG" "Attempting to install package: $package_name"
+
     # パッケージマネージャーが opkg の場合
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if [ "$force_install" = "yes" ]; then
             opkg install --force-reinstall "$package_name" > /dev/null 2>&1
             if [ $? -ne 0 ]; then
+                debug_log "ERROR" "Failed to install package $package_name with opkg"
                 stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
                 return 1
             fi
         else
             opkg install "$package_name" > /dev/null 2>&1
             if [ $? -ne 0 ]; then
+                debug_log "ERROR" "Failed to install package $package_name with opkg"
                 stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
                 return 1
             fi
@@ -1424,23 +1361,27 @@ install_package_func() {
         if [ "$force_install" = "yes" ]; then
             apk add --force-reinstall "$package_name" > /dev/null 2>&1
             if [ $? -ne 0 ]; then
+                debug_log "ERROR" "Failed to install package $package_name with apk"
                 stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
                 return 1
             fi
         else
             apk add "$package_name" > /dev/null 2>&1
             if [ $? -ne 0 ]; then
+                debug_log "ERROR" "Failed to install package $package_name with apk"
                 stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
                 return 1
             fi
         fi
     else
         stop_spinner "$(color red "Unsupported package manager: $PACKAGE_MANAGER")"
+        debug_log "ERROR" "Unsupported package manager: $PACKAGE_MANAGER"
         return 1
     fi
 
     # スピナーを止める
     stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
+    debug_log "INFO" "Successfully installed $package_name"
 }
 
 # **言語パッケージのインストール**
@@ -1450,6 +1391,8 @@ install_language_package() {
     local cache_lang=""
     local lang_pkg=""
 
+    debug_log "DEBUG" "Starting installation of language package for $package_name"
+
     # キャッシュファイルが存在する場合、言語コードを取得
     if [ -f "${CACHE_DIR}/luci.ch" ]; then
         cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
@@ -1458,12 +1401,16 @@ install_language_package() {
         # **リポジトリ内の存在確認**
         local package_exists="no"
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            debug_log "DEBUG" "Checking for $lang_pkg in opkg repository"
             if opkg list | grep -qE "^$lang_pkg "; then
                 package_exists="yes"
+                debug_log "INFO" "Package $lang_pkg found in repository"
             fi
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            debug_log "DEBUG" "Checking for $lang_pkg in apk repository"
             if apk search "$lang_pkg" | grep -q "^$lang_pkg$"; then
                 package_exists="yes"
+                debug_log "INFO" "Package $lang_pkg found in repository"
             fi
         fi
 
@@ -1473,21 +1420,24 @@ install_language_package() {
             install_package_func "$lang_pkg" "$force_install"  # インストール
         else
             # パッケージがリポジトリにない場合はフォールバック
-            echo "$(color red "$lang_pkg はリポジトリに存在しません。スキップします。")"
-            
+            debug_log "WARN" "$lang_pkg is not found in repository. Attempting fallback to English package."
+
             # フォールバック: "en"（英語）を試す
             lang_pkg="${base}-en"
+            debug_log "DEBUG" "Attempting to install $lang_pkg"
             echo "$(color cyan "Trying to install $lang_pkg ...")"
             install_package_func "$lang_pkg" "$force_install"  # フォールバックインストール
 
             # それでもダメなら、コードなしのパッケージを試す
             if [ $? -ne 0 ]; then
                 lang_pkg="${base}"
+                debug_log "DEBUG" "Attempting to install $lang_pkg without language code"
                 echo "$(color cyan "Trying to install $lang_pkg ...")"
                 install_package_func "$lang_pkg" "$force_install"  # 最後の試行
             fi
         fi
     else
+        debug_log "ERROR" "${CACHE_DIR}/luci.ch not found. Cannot proceed with language package installation."
         echo "$(color red "${CACHE_DIR}/luci.ch が存在しません。言語パッケージ情報が得られません。")"
     fi
 }
