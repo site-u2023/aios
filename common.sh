@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.26-00-05"
+SCRIPT_VERSION="2025.02.26-00-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1333,21 +1333,25 @@ update_package_list() {
     return 0
 }
 
+# パッケージ名（引数として渡せるように変更）
 apply_local_package_db() {
-    package_name=$1  # パッケージ名を引数として受け取る
-    package_db_local=$2  # パッケージのDBファイルを引数として受け取る
+    package_name=$1  # ここでパッケージ名を引数として受け取る
+
+    debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name" "$0" "$SCRIPT_VERSION"
 
     # notpack オプションでスキップされている場合は処理しない
     if [ "$skip_package_db" = "yes" ]; then
-        debug_log "DEBUG" "local-package.db の適用をスキップします。"
+        debug_log "DEBUG" "local-package.db の適用をスキップします。" "$0" "$SCRIPT_VERSION"
         return 0
     fi
 
     # local-package.db が存在しない場合は何もしない
     if [ ! -f "$package_db_local" ]; then
-        debug_log "DEBUG" "local-package.db が存在しません。"
+        debug_log "ERROR" "local-package.db が存在しません。" "$0" "$SCRIPT_VERSION"
         return 0
     fi
+
+    debug_log "DEBUG" "local-package.db ファイルが見つかりました。" "$0" "$SCRIPT_VERSION"
 
     # local-package.dbから指定されたセクションを抽出
     extract_commands() {
@@ -1355,7 +1359,7 @@ apply_local_package_db() {
         awk -v pkg="$package_name" '
             $0 ~ "^\\[" pkg "\\]" {flag=1; next}  # [****]セクションに到達
             $0 ~ "^\\[" {flag=0}                  # 次のセクションが始まったらflagをリセット
-            flag && $0 !~ "^#" {print}             # コメント行（#）は除外
+            flag && $0 !~ "^#" {print}             # コメント行（#）を除外
         ' "$package_db_local"
     }
 
@@ -1365,23 +1369,22 @@ apply_local_package_db() {
         cmds=$(extract_commands)  # コマンドを取得
 
         if [ -z "$cmds" ]; then
-            echo "No commands found for package: $package_name"
+            debug_log "ERROR" "No commands found for package: $package_name" "$0" "$SCRIPT_VERSION"
             return 1
         fi
 
-        echo "Executing commands for $package_name..."
+        debug_log "DEBUG" "Commands extracted for package $package_name: $cmds" "$0" "$SCRIPT_VERSION"
         # コマンドを一時ファイルに書き出し
         echo "$cmds" > ${CACHE_DIR}/commands.ch
 
         # ここで一括でコマンドを実行
-        # chファイルに書き出したコマンドを実行する
         sh ${CACHE_DIR}/commands.ch  # chファイル内のコマンドをそのまま実行
+        debug_log "DEBUG" "Executed commands for package $package_name" "$0" "$SCRIPT_VERSION"
 
         # 最後に設定を確認（デバッグ用）
-        echo "Displaying current configuration for $package_name:"
+        debug_log "DEBUG" "Displaying current configuration for $package_name:" "$0" "$SCRIPT_VERSION"
         uci show "$package_name"  # デバッグ用に現在の設定を表示
-
-        echo "All commands executed successfully."
+        debug_log "DEBUG" "All commands executed successfully for $package_name" "$0" "$SCRIPT_VERSION"
     }
 
     # メイン処理
