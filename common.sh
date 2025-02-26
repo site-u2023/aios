@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.26-00-21"
+SCRIPT_VERSION="2025.02.26-00-22"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1405,6 +1405,8 @@ install_package() {
     local package_name=""
     local package_to_update=""
 
+    local package_db_local="${BASE_DIR}/local-package.db"
+
     # オプションの解析（元ソースの各処理要素を忠実に再現）
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -1626,6 +1628,7 @@ install_package() {
     # local-package.db の適用
     if [ ! -f "$package_db_local" ]; then
         debug_log "DEBUG" "local-package.db does not exist."
+        return 0  # 早期終了
     elif [ "$skip_package_db" != "yes" ]; then
         apply_local_package_db "$package_name"
     fi
