@@ -1,41 +1,43 @@
-SCRIPT_VERSION="2025.02.26-00-00"
+SCRIPT_VERSION="2025.02.26-00-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION package.db \033[0m"
 
 # ttyd設定
-[ttyd]
-# 以前の設定を削除
-uci del_list ttyd.@ttyd[0].client_option="theme={\"background\": \"black\"}"
-uci del_list ttyd.@ttyd[0].client_option="titleFixed=ttyd"
-uci del_list ttyd.ttyd.client_option="theme={\"background\": \"blue\"}"
-uci del_list ttyd.ttyd.client_option="titleFixed=config-software"
+# [ttyd]
+# 最初のセクション設定（@ttyd）
+uci set ttyd.ttyd=ttyd
+uci set ttyd.ttyd.port="7681"
+uci set ttyd.ttyd.interface="@lan"
+uci set ttyd.ttyd.ipv6="1"
+uci set ttyd.ttyd.command="/bin/login -f root"
+uci set ttyd.ttyd.debug="7"
 
-# 新しい設定を追加 (インデックス付きセクション @ttyd[0])
-uci set ttyd.@ttyd[0]=ttyd
-uci set ttyd.@ttyd[0].port="8888"
-uci set ttyd.@ttyd[0].interface="@lan"
-uci set ttyd.@ttyd[0].ipv6="1"
-uci set ttyd.@ttyd[0].command="/bin/login -f root"
-uci set ttyd.@ttyd[0].debug="7"
-uci add_list ttyd.@ttyd[0].client_option="theme={\"background\": \"blue\"}"
-uci add_list ttyd.@ttyd[0].client_option="titleFixed=config-software"
+# `client_option` をクリアしてからリストを追加
+uci del ttyd.ttyd.client_option 2>/dev/null
+uci add_list ttyd.ttyd.client_option="theme={\"background\": \"black"}"
+uci add_list ttyd.ttyd.client_option="titleFixed=ttyd"
 
-# インデックス付きセクション @ttyd[1]
-uci set ttyd.@ttyd[1]=ttyd
-uci set ttyd.@ttyd[1].port="7681"
-uci set ttyd.@ttyd[1].interface="@lan"
-uci set ttyd.@ttyd[1].ipv6="1"
-uci set ttyd.@ttyd[1].debug="7"
-uci set ttyd.@ttyd[1].command="/bin/login -f root"
-uci add_list ttyd.@ttyd[1].client_option="theme={\"background\": \"black\"}"
-uci add_list ttyd.@ttyd[1].client_option="titleFixed=ttyd"
+# 最初のセクションをコミット
+uci commit ttyd
 
-# 設定をコミット
+# 次のセクション設定（@ttyd[-1]）
+uci add ttyd ttyd  # 新しいセクションを作成
+uci set ttyd.@ttyd[-1].port="8888"
+uci set ttyd.@ttyd[-1].interface="@lan"
+uci set ttyd.@ttyd[-1].ipv6="1"
+uci set ttyd.@ttyd[-1].debug="7"
+uci set ttyd.@ttyd[-1].command="aios"
+
+# `client_option` をクリアしてからリストを追加
+uci del ttyd.@ttyd[-1].client_option 2>/dev/null
+uci add_list ttyd.@ttyd[-1].client_option="theme={\"background\": \"blue\"}"
+uci add_list ttyd.@ttyd[-1].client_option="titleFixed=aios"
+
+# 追加セクションの設定をコミット
 uci commit ttyd
 
 # サービスを再起動
 /etc/init.d/ttyd enable
 /etc/init.d/rpcd start
-
 
 # zswap設定
 [zswap]
