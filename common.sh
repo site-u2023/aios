@@ -1619,10 +1619,12 @@ install_package() {
     fi
 
     # local-package.db の適用
-    if [ "$skip_package_db" != "yes" ]; then
-        apply_local_package_db "$package_name" # 正しい引数を渡す
+    if [ ! -f "$package_db_local" ]; then
+        debug_log "DEBUG" "local-package.db が存在しません。"
+    elif [ "$skip_package_db" != "yes" ]; then
+        apply_local_package_db "$package_name"
     fi
-    
+
     # **設定の有効化**
     if [ "$set_disabled" = "no" ]; then
         if [ -f "local-package.db" ] && grep -q "^$package_name-enable=" "local-package.db"; then
