@@ -65,7 +65,7 @@ download_common() {
     fi
 
     # ダウンロードが成功した場合に実行権限を付与
-    # chmod +x "${BASE_DIR}/common.sh"
+    chmod +x "${BASE_DIR}/common.sh"
 
     # common.sh を読み込む
     . "${BASE_DIR}/common.sh" || {
