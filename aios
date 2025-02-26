@@ -63,6 +63,11 @@ download_common() {
             exit 1
         }
     fi
+
+    # ダウンロードが成功した場合に実行権限を付与
+    chmod +x "${BASE_DIR}/common.sh"
+
+    # common.sh を読み込む
     . "${BASE_DIR}/common.sh" || {
         echo "Failed to source common.sh"
         exit 1
