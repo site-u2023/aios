@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.26-00-11"
+SCRIPT_VERSION="2025.02.26-00-13"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1244,23 +1244,23 @@ normalize_language() {
 start_spinner() {
     local message="$1"
     SPINNER_MESSAGE="$message"  # 停止時のメッセージ保持
-    spinner_chars='-\|/'
-
+    spinner_chars='-\/|'
     i=0
+
     echo -en "\e[?25l"  # カーソル非表示
 
     while true; do
-        # POSIX 準拠の方法でインデックスを計算し、1文字抽出
+        # POSIX準拠の方法でインデックスを計算し、1文字抽出
         local index=$(( i % 4 ))
-        local spinner_char=$(expr substr "$spinner_chars" $(( index + 1 )) 1)
-        printf "\r📡 %s %s" "$SPINNER_MESSAGE" "$spinner_char"
+        local spinner_char="${spinner_chars:index:1}"
+        printf "\r📡 %s %s" "$(color yellow "$SPINNER_MESSAGE")" "$spinner_char"
         if command -v usleep >/dev/null 2>&1; then
             usleep 200000
         else
             sleep 1
         fi
         i=$(( i + 1 ))
-    done &  # バックグラウンドで実行
+    done &
     SPINNER_PID=$!
 }
 
