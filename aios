@@ -63,7 +63,7 @@ download_common() {
             exit 1
         }
     fi
-    source "${BASE_DIR}/common.sh" || {
+    . "${BASE_DIR}/common.sh" || {
         echo "Failed to source common.sh"
         exit 1
     }
