@@ -1620,7 +1620,7 @@ install_package() {
 
     # local-package.db の適用
     if [ ! -f "$package_db_local" ]; then
-        debug_log "DEBUG" "local-package.db が存在しません。"
+        debug_log "DEBUG" "local-package.db does not exist."
     elif [ "$skip_package_db" != "yes" ]; then
         apply_local_package_db "$package_name"
     fi
