@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.26-00-14"
+SCRIPT_VERSION="2025.02.26-00-15"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1245,7 +1245,8 @@ start_spinner() {
     local message="$1"
     SPINNER_MESSAGE="$message"  # 停止時のメッセージ保持
     #spinner_chars='-\/|'
-    spinner_chars='◜ ◝ ◞ ◟' 
+    #spinner_chars='◜ ◝ ◞ ◟' 
+    spinner_chars='* + x |'
     i=0
 
     echo -en "\e[?25l"  # カーソル非表示
