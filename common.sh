@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.26-00-09"
+SCRIPT_VERSION="2025.02.26-00-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1339,19 +1339,21 @@ apply_local_package_db() {
 
     debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name" "$0" "$SCRIPT_VERSION"
 
-# local-package.dbから指定されたセクションを抽出
-extract_commands() {
-    # [PACKAGE] をエスケープして検索、コメント行は無視
-    awk -v pkg="$package_name" '
-        $0 ~ "^\\[" pkg "\\]" {flag=1; next}  # [****]セクションに到達
-        $0 ~ "^\\[" {flag=0}                  # 次のセクションが始まったらflagをリセット
-        flag && $0 !~ "^#" {print}             # コメント行（#）を除外
-    ' "${BASE_DIR}/local-package.db"
-}
+    # local-package.dbから指定されたセクションを抽出
+    extract_commands() {
+        # [PACKAGE] をエスケープして検索、コメント行は無視
+        awk -v pkg="$package_name" '
+            $0 ~ "^\\[" pkg "\\]" {flag=1; next}  # [****]セクションに到達
+            $0 ~ "^\\[" {flag=0}                  # 次のセクションが始まったらflagをリセット
+            flag && $0 !~ "^#" {print}             # コメント行（#）を除外
+        ' "${BASE_DIR}/local-package.db"
+    }
 
+    # コマンドを実行するために抽出したコマンドを格納
     local cmds
     cmds=$(extract_commands)  # コマンドを取得
 
+    # コマンドが見つからない場合、エラーメッセージを表示して終了
     if [ -z "$cmds" ]; then
         echo "No commands found for package: $package_name"
         return 1
@@ -1362,7 +1364,7 @@ extract_commands() {
     echo "$cmds" > ${CACHE_DIR}/commands.ch
 
     # ここで一括でコマンドを実行
-    # chファイルに書き出したコマンドを実行する
+    # chファイルに書き出したコマンドをそのまま実行する
     . ${CACHE_DIR}/commands.ch  # chファイル内のコマンドをそのまま実行
 
     # 最後に設定を確認（デバッグ用）
