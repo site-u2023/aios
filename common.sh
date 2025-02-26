@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-09"
+SCRIPT_VERSION="2025.02.27-00-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1396,29 +1396,51 @@ confirm_installation() {
     done
 }
 
-# **パッケージインストール処理**
+# **インストール処理を共通化する関数**
 install_package_func() {
     local package_name="$1"
     local force_install="$2"
 
-    # **スピナー開始**
+    # スピナーの開始
     start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
 
-    # インストール処理
-    if [ "$force_install" = "yes" ]; then
-        opkg install --force-reinstall "$package_name" > /dev/null 2>&1 || {
-            stop_spinner "$(color red "❌ パッケージ $package_name のインストールに失敗しました。")"
-            return 1
-        }
+    # パッケージマネージャーが opkg の場合
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if [ "$force_install" = "yes" ]; then
+            opkg install --force-reinstall "$package_name" > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+                stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+                return 1
+            fi
+        else
+            opkg install "$package_name" > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+                stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+                return 1
+            fi
+        fi
+    # パッケージマネージャーが apk の場合
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if [ "$force_install" = "yes" ]; then
+            apk add --force-reinstall "$package_name" > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+                stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+                return 1
+            fi
+        else
+            apk add "$package_name" > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+                stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+                return 1
+            fi
+        fi
     else
-        opkg install "$package_name" > /dev/null 2>&1 || {
-            stop_spinner "$(color red "❌ パッケージ $package_name のインストールに失敗しました。")"
-            return 1
-        }
+        stop_spinner "$(color red "Unsupported package manager: $PACKAGE_MANAGER")"
+        return 1
     fi
 
-    # **スピナー停止**
-    stop_spinner "$(color yellow "成功: $package_name をインストールしました。")"
+    # スピナーを止める
+    stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
 }
 
 # **言語パッケージのインストール**
@@ -1428,8 +1450,8 @@ install_language_package() {
     local cache_lang=""
     local lang_pkg=""
 
+    # キャッシュファイルが存在する場合、言語コードを取得
     if [ -f "${CACHE_DIR}/luci.ch" ]; then
-        # キャッシュファイル内の先頭行から言語コードを取得（例："ja"）
         cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
         lang_pkg="${base}-${cache_lang}"
 
@@ -1448,19 +1470,21 @@ install_language_package() {
         # パッケージがリポジトリに存在する場合、YN確認
         if [ "$package_exists" = "yes" ]; then
             confirm_installation "$lang_pkg" || return 1
-            install_package_func "$lang_pkg" "$force_install"  # install_package_func を利用
+            install_package_func "$lang_pkg" "$force_install"  # インストール
         else
+            # パッケージがリポジトリにない場合はフォールバック
             echo "$(color red "$lang_pkg はリポジトリに存在しません。スキップします。")"
-            # **フォールバック処理**: "en"（英語）を試す
+            
+            # フォールバック: "en"（英語）を試す
             lang_pkg="${base}-en"
             echo "$(color cyan "Trying to install $lang_pkg ...")"
-            install_package_func "$lang_pkg" "$force_install"  # install_package_func を利用
+            install_package_func "$lang_pkg" "$force_install"  # フォールバックインストール
 
-            # フォールバックしてもダメなら、コードなしのパッケージを試す
+            # それでもダメなら、コードなしのパッケージを試す
             if [ $? -ne 0 ]; then
                 lang_pkg="${base}"
                 echo "$(color cyan "Trying to install $lang_pkg ...")"
-                install_package_func "$lang_pkg" "$force_install"  # 最後にコードなしのパッケージを試す
+                install_package_func "$lang_pkg" "$force_install"  # 最後の試行
             fi
         fi
     else
