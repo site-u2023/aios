@@ -44,7 +44,7 @@ uci commit ttyd
 /etc/init.d/rpcd start
 
 # zswap設定
-[zswap]
+# [zswap]
 uci set system.@zram[0].enabled="1"
 uci set system.@zram[0].size="256"  # MB単位で指定
 uci set system.@zram[0].comp_algorithm="zstd"  # 圧縮アルゴリズムを zstd に設定
