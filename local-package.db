@@ -16,7 +16,7 @@ uci set ttyd.ttyd.port='7681'
 uci set ttyd.ttyd.interface='@lan'
 uci set ttyd.ttyd.ipv6='1'
 uci set ttyd.ttyd.command='/bin/login -f root'
-uci set ttyd.ttyd.debug='7'
+#uci set ttyd.ttyd.debug='7'
 
 # `client_option` をクリアしてからリストを追加
 uci del ttyd.ttyd.client_option 2>/dev/null
@@ -31,7 +31,7 @@ uci add ttyd ttyd  # 新しいセクションを作成
 uci set ttyd.@ttyd[-1].port='8888'
 uci set ttyd.@ttyd[-1].interface='@lan'
 uci set ttyd.@ttyd[-1].ipv6='1'
-uci set ttyd.@ttyd[-1].debug='7'
+#uci set ttyd.@ttyd[-1].debug='7'
 uci set ttyd.@ttyd[-1].command='/bin/login -f root'
 
 # `client_option` をクリアしてからリストを追加
