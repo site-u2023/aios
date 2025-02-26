@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.26-00-00"
+SCRIPT_VERSION="2025.02.26-00-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1375,7 +1375,7 @@ apply_local_package_db() {
 
         # ここで一括でコマンドを実行
         # chファイルに書き出したコマンドを実行する
-        . ${CACHE_DIR}/commands.ch  # chファイル内のコマンドをそのまま実行
+        sh ${CACHE_DIR}/commands.ch  # chファイル内のコマンドをそのまま実行
 
         # 最後に設定を確認（デバッグ用）
         echo "Displaying current configuration for $package_name:"
