@@ -11,23 +11,24 @@ uci del_list ttyd.ttyd.client_option="titleFixed=config-software"
 
 # 新しい設定を追加
 uci set ttyd.ttyd=ttyd
-uci set ttyd.ttyd.port='8888'
-uci set ttyd.ttyd.interface='@lan'
-uci set ttyd.ttyd.ipv6='1'
-uci set ttyd.ttyd.command='/bin/login -f root'
-uci set ttyd.ttyd.debug='7'
+uci set ttyd.ttyd.port="8888"
+uci set ttyd.ttyd.interface="@lan"
+uci set ttyd.ttyd.ipv6="1"
+uci set ttyd.ttyd.command="/bin/login -f root"
+uci set ttyd.ttyd.debug="7"
 uci add_list ttyd.ttyd.client_option="theme={\"background\": \"blue\"}"
 uci add_list ttyd.ttyd.client_option="titleFixed=config-software"
 
 # インデックス付きセクション（@ttyd[1]）
 uci set ttyd.@ttyd[1]=ttyd
-uci set ttyd.@ttyd[1].port='7681'
-uci set ttyd.@ttyd[1].interface='@lan'
-uci set ttyd.@ttyd[1].ipv6='1'
-uci set ttyd.@ttyd[1].debug='7'
-uci set ttyd.@ttyd[1].command='/bin/login -f root'
+uci set ttyd.@ttyd[1].port="7681"
+uci set ttyd.@ttyd[1].interface="@lan"
+uci set ttyd.@ttyd[1].ipv6="1"
+uci set ttyd.@ttyd[1].debug="7"
+uci set ttyd.@ttyd[1].command="/bin/login -f root"
 uci add_list ttyd.@ttyd[1].client_option="theme={\"background\": \"black\"}"
 uci add_list ttyd.@ttyd[1].client_option="titleFixed=ttyd"
+
 
 # 設定をコミット
 uci commit ttyd
