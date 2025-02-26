@@ -45,6 +45,7 @@ uci commit ttyd
 # サービスを再起動
 /etc/init.d/ttyd enable
 /etc/init.d/ttyd stop
+sleep 1
 /etc/init.d/ttyd start
 /etc/init.d/rpcd start
 
