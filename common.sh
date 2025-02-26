@@ -1335,12 +1335,6 @@ update_package_list() {
 
 # **local-package.db の適用関数**
 apply_local_package_db() {
-    # デバッグ用関数
-    debug_log() {
-        level=$1
-        message=$2
-        echo "[$level] $message"
-    }
 
     # パッケージ名（引数として渡せるように変更）
     package_name=$1  # ここでパッケージ名を引数として受け取る
