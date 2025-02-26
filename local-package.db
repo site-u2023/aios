@@ -3,6 +3,10 @@ echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION package.db \033[0m"
 
 # ttyd設定
 # [ttyd]
+
+# 既存の ttyd 設定をすべて削除
+uci delete ttyd 2>/dev/null
+
 # 最初のセクション設定（@ttyd）
 uci set ttyd.ttyd=ttyd
 uci set ttyd.ttyd.port="7681"
