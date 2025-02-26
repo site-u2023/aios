@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-03"
+SCRIPT_VERSION="2025.02.27-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1399,63 +1399,50 @@ confirm_installation() {
 # **言語パッケージをインストールする関数**
 install_language_package() {
     local package_name="$1"
-    local base="luci-i18n-${package_name#luci-app-}"
-    local cache_lang=""
     local lang_pkg=""
+    local base="luci-i18n-${package_name#luci-app-}"
 
-    if [ ! -f "${CACHE_DIR}/luci.ch" ]; then
-        echo "$(color red "${CACHE_DIR}/luci.ch が存在しません。言語パッケージ情報が得られません。")"
-        return 1
-    fi
+    # 言語コードをキャッシュファイルから取得
+    if [ -f "${CACHE_DIR}/luci.ch" ]; then
+        local cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
+        lang_pkg="${base}-${cache_lang}"
 
-    # キャッシュファイル内の先頭行から言語コードを取得（例："ja"）
-    cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
-    lang_pkg="${base}-${cache_lang}"
-
-    # **リポジトリ内の存在確認**
-    local package_exists="no"
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if opkg list | grep -qE "^$lang_pkg "; then
-            package_exists="yes"
-        fi
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if apk search "$lang_pkg" | grep -q "^$lang_pkg$"; then
-            package_exists="yes"
-        fi
-    fi
-
-    if [ "$package_exists" = "yes" ]; then
-        confirm_installation "$lang_pkg" || return 1
-
-        # -- opkg または apk でインストール --
+        # 言語パッケージがリポジトリに存在するか確認
+        local package_exists="no"
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            opkg install "$lang_pkg" > /dev/null 2>&1 || {
-                echo "$(color red "$lang_pkg のインストールに失敗しました。フォールバックを試みます。")"
-                lang_pkg="${base}-en"
-                opkg install "$lang_pkg" > /dev/null 2>&1 || {
-                    lang_pkg="${base}"
-                    opkg install "$lang_pkg" > /dev/null 2>&1 || {
-                        echo "$(color red "$lang_pkg のインストールにも失敗しました。言語パッケージはありません。")"
-                        return 1
-                    }
-                }
-            }
+            if opkg list | grep -qE "^$lang_pkg "; then
+                package_exists="yes"
+            fi
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            apk add "$lang_pkg" > /dev/null 2>&1 || {
+            if apk search "$lang_pkg" | grep -q "^$lang_pkg$"; then
+                package_exists="yes"
+            fi
+        fi
+
+        if [ "$package_exists" = "yes" ]; then
+            # YN確認を行う
+            confirm_installation "$lang_pkg" || return 1
+
+            # インストール
+            echo "$(color cyan "Trying to install $lang_pkg ...")"
+            if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+                opkg install "$lang_pkg" > /dev/null 2>&1
+            elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+                apk add "$lang_pkg" > /dev/null 2>&1
+            fi
+
+            if [ $? -ne 0 ]; then
                 echo "$(color red "$lang_pkg のインストールに失敗しました。フォールバックを試みます。")"
                 lang_pkg="${base}-en"
-                apk add "$lang_pkg" > /dev/null 2>&1 || {
-                    lang_pkg="${base}"
-                    apk add "$lang_pkg" > /dev/null 2>&1 || {
-                        echo "$(color red "$lang_pkg のインストールにも失敗しました。言語パッケージはありません。")"
-                        return 1
-                    }
-                }
-            }
+                install_language_package "$package_name" "$lang_pkg"
+            else
+                echo "$(color yellow "成功: $lang_pkg をインストールしました。")"
+            fi
+        else
+            echo "$(color red "$lang_pkg はリポジトリに存在しません。スキップします。")"
         fi
-        echo "$(color yellow "成功: $lang_pkg をインストールしました。")"
     else
-        debug_log "DEBUG" "$(color red "$lang_pkg はリポジトリに存在しません。スキップします。")"
+        echo "$(color red "${CACHE_DIR}/luci.ch が存在しません。言語パッケージ情報が得られません。")"
     fi
 }
 
@@ -1530,7 +1517,7 @@ install_package() {
         return 0
     fi
 
-    # **YN 確認**
+    # **YN 確認をここで実施**
     confirm_installation "$package_name" || return 1
 
     # **インストール済み確認**
