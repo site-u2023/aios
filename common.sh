@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-07"
+SCRIPT_VERSION="2025.02.27-00-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1456,9 +1456,20 @@ install_language_package() {
         # パッケージがリポジトリに存在する場合、YN確認
         if [ "$package_exists" = "yes" ]; then
             confirm_installation "$lang_pkg" || return 1
-            install_package_func "$lang_pkg" "$force_install"
+            install_package_func "$lang_pkg" "$force_install"  # install_package_func を利用
         else
-            debug_log "DEBUG" "$(color red "$lang_pkg はリポジトリに存在しません。スキップします。")"
+            echo "$(color red "$lang_pkg はリポジトリに存在しません。スキップします。")"
+            # **フォールバック処理**: "en"（英語）を試す
+            lang_pkg="${base}-en"
+            echo "$(color cyan "Trying to install $lang_pkg ...")"
+            install_package_func "$lang_pkg" "$force_install"  # install_package_func を利用
+
+            # フォールバックしてもダメなら、コードなしのパッケージを試す
+            if [ $? -ne 0 ]; then
+                lang_pkg="${base}"
+                echo "$(color cyan "Trying to install $lang_pkg ...")"
+                install_package_func "$lang_pkg" "$force_install"  # 最後にコードなしのパッケージを試す
+            fi
         fi
     else
         echo "$(color red "${CACHE_DIR}/luci.ch が存在しません。言語パッケージ情報が得られません。")"
