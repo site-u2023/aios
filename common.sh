@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.26-00-22"
+SCRIPT_VERSION="2025.02.27-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1174,6 +1174,10 @@ normalize_language() {
     debug_log "DEBUG" "Final system message language -> $ACTIVE_LANGUAGE"
     echo "$(get_message "MSG_COUNTRY_SUCCESS")"
     touch "$flag_file"
+    
+    install_package luci-i18n-base yn hidden
+    install_package luci-i18n-opkg yn hidden
+    install_package luci-i18n-firewall yn hidden
 }
 
 
