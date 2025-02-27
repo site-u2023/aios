@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-23"
+SCRIPT_VERSION="2025.02.27-01-25"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -331,13 +331,13 @@ check_package_pre_install() {
         package_name="${package_name}-${lang_code}"
 
         # **フォールバック処理 (`ja` → `en`)**
-        if ! grep -q "^$package_name " "$package_cache"; then
+        if ! opkg list-installed "$package_name" >/dev/null 2>&1 && ! grep -q "^$package_name " "$package_cache"; then
             debug_log "WARN" "Package $package_name not found. Falling back to English (en)."
-            package_name="${package_name%-*}-en"
+            package_name="${base_package%-*}-en"  # 日本語パッケージがなければ英語パッケージに切り替え
         fi
 
         # **`en` も無かったらエラーで終了**
-        if ! grep -q "^$package_name " "$package_cache"; then
+        if ! opkg list-installed "$package_name" >/dev/null 2>&1 && ! grep -q "^$package_name " "$package_cache"; then
             debug_log "ERROR" "Package $package_name not found. No fallback available."
             return 1
         fi
@@ -345,7 +345,7 @@ check_package_pre_install() {
 
     # **デバイス内パッケージ確認**
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if opkg list-installed | grep -q "^$package_name "; then
+        if opkg list-installed "$package_name" >/dev/null 2>&1; then
             debug_log "DEBUG" "Package $package_name is already installed on the device."
             return 0  # ここで終了！ → インストール確認を出さない！
         fi
@@ -383,7 +383,7 @@ install_package_func() {
 
     debug_log "DEBUG" "Starting installation process for: $package_name"
 
-    # **言語パッケージの場合は適切な言語コードを取得**
+    # 言語パッケージの場合は適切な言語コードを取得
     if echo "$package_name" | grep -q "^luci-i18n-"; then
         base="${package_name%-*}"  # "luci-i18n-base" の "base" を取得
         debug_log "DEBUG" "Detected language package base: $base"
@@ -396,25 +396,26 @@ install_package_func() {
 
         debug_log "DEBUG" "Language detected from cache: $cache_lang"
 
-        package_name="${base}-${cache_lang}"  # 言語コードを付け加える
+        # 言語コードを付け加える
+        package_name="${base}-${cache_lang}"
         debug_log "DEBUG" "Final package name set to: $package_name"
 
-        # **フォールバックチェック**: package_list.ch で確認
-        if ! opkg list-installed | grep -q "^$package_name "; then
+        # フォールバックチェック
+        if ! opkg list-installed "$package_name" >/dev/null 2>&1; then
             debug_log "WARN" "Package $package_name not found, falling back to English"
             package_name="${base}-en"
         fi
 
-        if ! opkg list-installed | grep -q "^$package_name "; then
+        if ! opkg list-installed "$package_name" >/dev/null 2>&1; then
             debug_log "ERROR" "Neither $package_name nor its English fallback exists. Aborting."
             return 1
         fi
     fi
 
-    # **スピナー開始**
+    # スピナー開始
     start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
 
-    # **パッケージのインストール**
+    # パッケージのインストール
     if [ "$force_install" = "yes" ]; then
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
             opkg install --force-reinstall "$package_name" > /dev/null 2>&1 || {
@@ -441,7 +442,7 @@ install_package_func() {
         fi
     fi
 
-    # **スピナー停止**
+    # スピナー停止
     stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
 }
 
