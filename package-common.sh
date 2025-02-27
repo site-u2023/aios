@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-05"
+SCRIPT_VERSION="2025.02.27-00-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -335,23 +335,29 @@ check_package_pre_install() {
     fi
 
     local package_found="no"
+    local package_search_list=("$package_name")
 
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        grep -qE "^$package_name " "$package_cache" && package_found="yes"
-        debug_log "DEBUG" "opkg package check result: $(grep "^$package_name " "$package_cache")"
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        grep -q "^$package_name$" "$package_cache" && package_found="yes"
-        debug_log "DEBUG" "apk package check result: $(grep "^$package_name$" "$package_cache")"
+    # 言語パッケージの特別処理
+    if echo "$package_name" | grep -q "^luci-i18n-"; then
+        if [ -f "${CACHE_DIR}/luci.ch" ]; then
+            local lang_code
+            lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
+            package_search_list+=("${package_name}-${lang_code}")
+        fi
+        package_search_list+=("${package_name}-en")
+        package_search_list+=("$package_name")
     fi
 
-    # **パッケージがリポジトリにあるかどうかを判定**
-    if [ "$package_found" = "yes" ]; then
-        debug_log "DEBUG" "Package $package_name found in repository."
-        return 0  # パッケージが存在するのでOK
-    else
-        debug_log "ERROR" "Package $package_name not found in repository."
-        return 1  # パッケージが見つからなかった
-    fi
+    # **リポジトリ検索**
+    for pkg in "${package_search_list[@]}"; do
+        if grep -qE "^$pkg " "$package_cache"; then
+            debug_log "DEBUG" "Package $pkg found in repository."
+            return 0  # パッケージが存在するのでOK
+        fi
+    done
+
+    debug_log "ERROR" "Package $package_name not found in repository."
+    return 1  # パッケージが見つからなかった
 }
 
 # **インストール処理 (実際のインストールを行う)**
@@ -426,50 +432,37 @@ install_language_package() {
     local base="luci-i18n-${package_name#luci-app-}"
     local cache_lang=""
     local lang_pkg=""
+    local package_cache="${CACHE_DIR}/package_list.ch"
 
     # キャッシュファイルが存在する場合、言語コードを取得
     if [ -f "${CACHE_DIR}/luci.ch" ]; then
         cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
-        lang_pkg="${base}-${cache_lang}"
-
-        # **リポジトリ内の存在確認**
-        local package_exists="no"
-        debug_log "DEBUG" "Checking for package $lang_pkg in repository"
-        
-        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            if opkg list | grep -qE "^$lang_pkg "; then
-                package_exists="yes"
-            fi
-        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            if apk search "$lang_pkg" | grep -q "^$lang_pkg$"; then
-                package_exists="yes"
-            fi
-        fi
-
-        # パッケージがリポジトリに存在する場合、YN確認
-        if [ "$package_exists" = "yes" ]; then
-            debug_log "DEBUG" "Found $lang_pkg in repository"
-            confirm_installation "$lang_pkg" || return 1
-            install_package_func "$lang_pkg" "$force_install"  # インストール
-        else
-            # パッケージがリポジトリにない場合はフォールバック
-            debug_log "DEBUG" "$lang_pkg はリポジトリに存在しません。スキップします。"
-            
-            # フォールバック: "en"（英語）を試す
-            lang_pkg="${base}-en"
-            debug_log "DEBUG" "Trying to install $lang_pkg"
-            install_package_func "$lang_pkg" "$force_install"  # フォールバックインストール
-
-            # それでもダメなら、コードなしのパッケージを試す
-            if [ $? -ne 0 ]; then
-                lang_pkg="${base}"
-                debug_log "DEBUG" "Trying to install $lang_pkg without language code"
-                install_package_func "$lang_pkg" "$force_install"  # 最後の試行
-            fi
-        fi
-    else
-        echo "$(color red "${CACHE_DIR}/luci.ch が存在しません。言語パッケージ情報が得られません。")"
     fi
+
+    local package_search_list=("${base}-${cache_lang}" "${base}-en" "$base")
+
+    # **リポジトリ内の存在確認**
+    local package_found="no"
+    for pkg in "${package_search_list[@]}"; do
+        if grep -qE "^$pkg " "$package_cache"; then
+            lang_pkg="$pkg"
+            package_found="yes"
+            break
+        fi
+    done
+
+    # **パッケージが見つからない場合はスキップ**
+    if [ "$package_found" != "yes" ]; then
+        debug_log "DEBUG" "$base はリポジトリに存在しません。スキップします。"
+        return 1
+    fi
+
+    # **YN確認**
+    debug_log "DEBUG" "Found $lang_pkg in repository"
+    confirm_installation "$lang_pkg" || return 1
+
+    # **インストール**
+    install_package_func "$lang_pkg" "$force_install"
 }
 
 install_package() {
