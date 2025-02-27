@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-00-07"
+SCRIPT_VERSION="2025.02.28-00-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -311,6 +311,8 @@ confirm_installation() {
 package_pre_install() {
     local package_name="$1"
     local package_cache="${CACHE_DIR}/package_list.ch"
+
+    debug_log "DEBUG" "Checking package: $package_name"
     
     # デバイス内パッケージ確認
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
