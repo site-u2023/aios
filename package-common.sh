@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-03"
+SCRIPT_VERSION="2025.02.27-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -464,7 +464,6 @@ install_language_package() {
     fi
 }
 
-# **インストール関数**
 install_package() {
     # 変数初期化
     local confirm_install="no"
@@ -530,9 +529,12 @@ install_package() {
     update_package_list || return 1
 
     # **インストール前確認 (デバイス内パッケージ確認 + リポジトリ確認)**
-    check_package_pre_install "$package_name" || return 1
+    if ! check_package_pre_install "$package_name"; then
+        debug_log "ERROR" "$(color red "❌ Package $package_name is either already installed or not found in repository.")"
+        return 1
+    fi
 
-    # **YN確認**: インストールの確認を行う
+    # **YN確認 (オプションで有効時のみ)**
     if [ "$confirm_install" = "yes" ]; then
         confirm_installation "$package_name" || return 1
     fi
@@ -540,7 +542,7 @@ install_package() {
     # **通常パッケージのインストール**
     install_package_func "$package_name" "$force_install"
 
-    # **ローカルパッケージDBの適用**
+    # **ローカルパッケージDBの適用 (インストール成功後に実行)**
     if [ "$skip_package_db" != "yes" ]; then
         apply_local_package_db "$package_name"
     fi
