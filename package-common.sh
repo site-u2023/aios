@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-08"
+SCRIPT_VERSION="2025.02.27-00-09"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -279,32 +279,42 @@ install_language_package() {
     local cache_lang=""
     local lang_pkg=""
 
-    # キャッシュファイルが存在する場合、言語コードを取得
+    # 言語キャッシュの取得
     if [ -f "${CACHE_DIR}/luci.ch" ]; then
         cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
-        lang_pkg="${base}-${cache_lang}"
-
-        # **インストール処理を共通化した関数で存在確認・インストールを行う**
-        debug_log "DEBUG" "Checking for package $lang_pkg in repository using install_package_func"
-        
-        # install_package_funcがリポジトリの存在確認も担当する
-        install_package_func "$lang_pkg" "$force_install" || {
-            # インストールに失敗した場合、フォールバックを試みる
-            debug_log "DEBUG" "$lang_pkg はリポジトリに存在しません。スキップします。"
-            
-            # フォールバック: "en"（英語）を試す
-            lang_pkg="${base}-en"
-            debug_log "DEBUG" "Trying to install $lang_pkg"
-            install_package_func "$lang_pkg" "$force_install" || {
-                # それでもダメなら、コードなしのパッケージを試す
-                lang_pkg="${base}"
-                debug_log "DEBUG" "Trying to install $lang_pkg without language code"
-                install_package_func "$lang_pkg" "$force_install"  # 最後の試行
-            }
-        }
     else
-        echo "$(color red "${CACHE_DIR}/luci.ch が存在しません。言語パッケージ情報が得られません。")"
+        cache_lang="en"
     fi
+
+    # 言語パッケージの検索順リスト
+    local package_search_list="${base}-${cache_lang} ${base}-en $base"
+
+    debug_log "DEBUG" "Checking for package variations in repository: $package_search_list"
+
+    local package_found="no"
+    for pkg in $package_search_list; do
+        # **インストール済みチェック**
+        if opkg list-installed | grep -qE "^$pkg "; then
+            debug_log "DEBUG" "Package $pkg is already installed. Skipping installation."
+            return 0
+        fi
+
+        # **リポジトリ検索**
+        if grep -qE "^$pkg " "${CACHE_DIR}/package_list.ch"; then
+            lang_pkg="$pkg"
+            package_found="yes"
+            break
+        fi
+    done
+
+    if [ "$package_found" = "no" ]; then
+        debug_log "ERROR" "No suitable language package found for $package_name."
+        return 1
+    fi
+
+    debug_log "DEBUG" "Found $lang_pkg in repository"
+    confirm_installation "$lang_pkg" || return 1
+    install_package_func "$lang_pkg" "$force_install"
 }
 
 # **インストール前確認 (デバイス内パッケージ確認 + リポジトリ確認)**
@@ -363,6 +373,20 @@ check_package_pre_install() {
 install_package_func() {
     local package_name="$1"
     local force_install="$2"
+    local base=""
+    local cache_lang=""
+    local lang_pkg=""
+
+    # **言語パッケージの場合は適切な言語コードを取得**
+    if echo "$package_name" | grep -q "^luci-i18n-"; then
+        base="${package_name%-*}"  # "luci-i18n-base" の "base" を取得
+        if [ -f "${CACHE_DIR}/luci.ch" ]; then
+            cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
+        else
+            cache_lang="en"
+        fi
+        package_name="${base}-${cache_lang}"
+    fi
 
     # **パッケージがすでにインストールされているか確認**
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
@@ -378,17 +402,20 @@ install_package_func() {
     fi
 
     # **リポジトリにパッケージがあるか確認**
-    debug_log "DEBUG" "Checking for package $package_name in the repository ($PACKAGE_MANAGER)"
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if ! opkg list | grep -qE "^$package_name "; then
-            debug_log "ERROR" "$(color red "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
-            return 1
+    debug_log "DEBUG" "Checking for package variations in repository: $package_name"
+
+    local package_found="no"
+    for pkg in "$package_name" "${base}-en" "$base"; do
+        if grep -qE "^$pkg " "${CACHE_DIR}/package_list.ch"; then
+            package_name="$pkg"
+            package_found="yes"
+            break
         fi
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if ! apk search "$package_name" | grep -q "^$package_name$"; then
-            debug_log "ERROR" "$(color red "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
-            return 1
-        fi
+    done
+
+    if [ "$package_found" = "no" ]; then
+        debug_log "ERROR" "$(color red "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
+        return 1
     fi
 
     # **スピナー開始**
