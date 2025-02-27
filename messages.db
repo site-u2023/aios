@@ -90,8 +90,8 @@ JP|MSG_UPDATE_FAILED=❌ アップデートに失敗しました。詳細はロ�
 
 # インストールパッケージ
 
-US|MSG_INSTALL_SUCCESS=✅ Installation completed successfully.
-JP|MSG_INSTALL_SUCCESS=✅ インストールは完了しました。
+US|MSG_INSTALL_SUCCESS=Installation completed successfully.
+JP|MSG_INSTALL_SUCCESS= のインストールは完了しました。
 
 US|MSG_CONFIRM_ONLY_YN=🔄 Confirm (Y=Yes / N=No):
 JP|MSG_CONFIRM_ONLY_YN=🔄 確認 (Y=はい / N=いいえ):
