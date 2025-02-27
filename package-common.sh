@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-03"
+SCRIPT_VERSION="2025.02.27-01-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -272,12 +272,11 @@ confirm_installation() {
     done
 }
 
-# **インストール前確認 (デバイス内パッケージ確認 + リポジトリ確認)**
 check_package_pre_install() {
     local package_name="$1"
     local package_cache="${CACHE_DIR}/package_list.ch"
 
-    # **デバイス内パッケージ確認**
+    # デバイス内パッケージ確認
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if opkg list-installed | grep -qE "^$package_name "; then
             debug_log "DEBUG" "Package $package_name is already installed on the device."
@@ -290,17 +289,17 @@ check_package_pre_install() {
         fi
     fi
 
-    # **リポジトリ内パッケージ確認**
+    # リポジトリ内パッケージ確認
     debug_log "DEBUG" "Checking repository for package: $package_name"
 
-    # **キャッシュファイルがない場合はエラー**
+    # キャッシュファイルがない場合はエラー
     if [ ! -f "$package_cache" ]; then
         debug_log "ERROR" "Package cache not found! Run update_package_list() first."
         return 1
     fi
 
     local package_found="no"
-    local package_search_list="$package_name"  # 修正: スペース区切りのリスト
+    local package_search_list="$package_name"  # スペース区切りのリスト
 
     # 言語パッケージの特別処理
     if echo "$package_name" | grep -q "^luci-i18n-"; then
@@ -312,7 +311,8 @@ check_package_pre_install() {
         package_search_list="$package_search_list ${package_name}-en ${package_name}"
     fi
 
-    # **リポジトリ検索**
+    # リポジトリ検索
+    debug_log "DEBUG" "Searching for the following packages in repository: $package_search_list"
     for pkg in $package_search_list; do
         if grep -qE "^$pkg " "$package_cache"; then
             debug_log "DEBUG" "Package $pkg found in repository."
