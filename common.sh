@@ -368,8 +368,8 @@ check_architecture() {
 # check_downloader: パッケージマネージャー判定（apk / opkg 対応）
 #########################################################################
 check_downloader() {
-    if [ -f "${BASE_DIR}/ownloader.ch" ]; then
-        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/ownloader.ch")
+    if [ -f "${BASE_DIR}/downloader.ch" ]; then
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader.ch")
     else
         if command -v apk >/dev/null 2>&1; then
             PACKAGE_MANAGER="apk"
@@ -378,7 +378,7 @@ check_downloader() {
         else
             PACKAGE_MANAGER="opkg"  # デフォルトをセット
         fi
-        echo "$PACKAGE_MANAGER" > "${CACHE_DIR}/ownloader.ch"
+        echo "$PACKAGE_MANAGER" > "${CACHE_DIR}/downloader.ch"
     fi
     echo -e "$(color green "Downloader $PACKAGE_MANAGER")"
 }
