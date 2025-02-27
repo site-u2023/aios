@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-00-03"
+SCRIPT_VERSION="2025.02.28-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -529,7 +529,7 @@ install_package() {
     # **パッケージリスト更新**
     update_package_list || return 1
 
-    # 言語コードの取得とpackage_nameの変更
+    # 言語コードの取得
     if [ -f "${CACHE_DIR}/luci.ch" ]; then
         lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
 
@@ -537,13 +537,16 @@ install_package() {
         if [ "$lang_code" == "xx" ]; then
             lang_code="en"
         fi
-
-        package_name="${package_name}-${lang_code}"
     else
         lang_code="en"  # デフォルトで英語
+    fi
+
+    # 言語パッケージか通常パッケージかを判別
+    if [[ "$package_name" == luci-i18n-* ]]; then
+        # 言語パッケージの場合、package_name に言語コードを追加
         package_name="${package_name}-${lang_code}"
     fi
-    
+ 
     # **インストール前確認 (デバイス内パッケージ確認 + リポジトリ確認)**
     if ! package_pre_install "$package_name"; then
         debug_log "ERROR" "$(color red "❌ Package $package_name is either already installed or not found in repository.")"
@@ -554,14 +557,14 @@ install_package() {
     if [ "$confirm_install" = "yes" ]; then
         confirm_installation "$package_name" || return 1
     fi
-    
+
     # 言語パッケージか通常パッケージかを判別
     if [[ "$package_name" == luci-i18n-* ]]; then
         install_language_package "$package_name" || return 1
     else
         install_normal_package "$package_name" "$force_install" || return 1
     fi
-    
+
     # **ローカルパッケージDBの適用 (インストール成功後に実行)**
     if [ "$skip_package_db" != "yes" ]; then
         apply_local_package_db "$package_name"
