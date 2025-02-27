@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-21"
+SCRIPT_VERSION="2025.02.27-01-22"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -293,10 +293,8 @@ confirm_installation() {
 
     # 言語コードが正しくついているかチェック
     if echo "$package" | grep -q "^luci-i18n-"; then
-        if ! echo "$package" | grep -q "-[a-z]{2,3}$"; then
-            debug_log "ERROR" "Invalid package name detected: $package (missing language code)"
-            return 1  # 言語コードなしならエラー
-        fi
+        debug_log "ERROR" "Invalid package name detected: $package (missing language code)"
+        return 1  # 言語コードなしならエラー
     fi
 
     while true; do
