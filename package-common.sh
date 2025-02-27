@@ -318,6 +318,7 @@ package_pre_install() {
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if opkg list-installed "$package_name" >/dev/null 2>&1; then
             debug_log "DEBUG" "Package $package_name is already installed on the device."
+            echo 1
             return 1  # 既にインストールされている場合は何もしない
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
@@ -326,21 +327,26 @@ package_pre_install() {
             return 1  # 既にインストールされている場合は何もしない
         fi
     fi
+
+  echo 2
   
     # リポジトリ内パッケージ確認
     debug_log "DEBUG" "Checking repository for package: $package_name"
 
     if [ ! -f "$package_cache" ]; then
         debug_log "ERROR" "Package cache not found! Run update_package_list() first."
+        echo 3
         return 1
     fi
 
     if grep -q "^$package_name " "$package_cache"; then
         debug_log "DEBUG" "Package $package_name found in repository."
+        echo 4
         return 0  # パッケージが存在するのでOK
     fi
 
     debug_log "ERROR" "Package $package_name not found in repository."
+    echo 5
     return 1  # パッケージが見つからなかった
 }
 
