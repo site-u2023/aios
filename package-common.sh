@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-25"
+SCRIPT_VERSION="2025.02.27-01-26"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -468,27 +468,27 @@ install_language_package() {
     local package_found="no"
     for pkg in $package_search_list; do
         # **インストール済みチェック**
-        if opkg list-installed | grep -q "^$pkg "; then
+        if opkg list-installed "$pkg" >/dev/null 2>&1; then
             debug_log "DEBUG" "Package $pkg is already installed. Skipping installation."
-            return 0
+            return 0  # インストール済みなら何もしない
         fi
 
         # **リポジトリ検索**
         if grep -q "^$pkg " "${CACHE_DIR}/package_list.ch"; then
             lang_pkg="$pkg"
             package_found="yes"
-            break
+            break  # 見つかったパッケージでループを終了
         fi
     done
 
     if [ "$package_found" = "no" ]; then
         debug_log "ERROR" "No suitable language package found for $package_name."
-        return 1
+        return 1  # 見つからなければエラー
     fi
 
     debug_log "DEBUG" "Found $lang_pkg in repository"
-    confirm_installation "$lang_pkg" || return 1
-    install_package_func "$lang_pkg" "$force_install"
+    confirm_installation "$lang_pkg" || return 1  # インストール確認
+    install_package_func "$lang_pkg" "$force_install"  # 実際にインストール
 }
 
 # **インストール関数**
