@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-00-01"
+SCRIPT_VERSION="2025.02.28-00-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -308,7 +308,6 @@ confirm_installation() {
     done
 }
 
-
 package_pre_install() {
     local package_name="$1"
     local package_cache="${CACHE_DIR}/package_list.ch"
@@ -320,7 +319,7 @@ package_pre_install() {
             return 0  # 既にインストールされている場合は何もしない
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if apk info | grep -q "^$package_name$"; then
+        if apk info "$package_name" >/dev/null 2>&1; then
             debug_log "DEBUG" "Package $package_name is already installed on the device."
             return 0  # 既にインストールされている場合は何もしない
         fi
@@ -530,6 +529,21 @@ install_package() {
     # **パッケージリスト更新**
     update_package_list || return 1
 
+    # 言語コードの取得とpackage_nameの変更
+    if [ -f "${CACHE_DIR}/luci.ch" ]; then
+        lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
+
+        # luci.ch で指定されている言語コードが "xx" なら "en" に変更
+        if [ "$lang_code" == "xx" ]; then
+            lang_code="en"
+        fi
+
+        package_name="${package_name}-${lang_code}"
+    else
+        lang_code="en"  # デフォルトで英語
+        package_name="${package_name}-${lang_code}"
+    fi
+    
     # **インストール前確認 (デバイス内パッケージ確認 + リポジトリ確認)**
     if ! package_pre_install "$package_name"; then
         debug_log "ERROR" "$(color red "❌ Package $package_name is either already installed or not found in repository.")"
@@ -540,7 +554,7 @@ install_package() {
     if [ "$confirm_install" = "yes" ]; then
         confirm_installation "$package_name" || return 1
     fi
-
+    
     # 言語パッケージか通常パッケージかを判別
     if [[ "$package_name" == luci-i18n-* ]]; then
         install_language_package "$package_name" || return 1
