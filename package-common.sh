@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-16"
+SCRIPT_VERSION="2025.02.27-01-17"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -381,10 +381,11 @@ install_package_func() {
     local force_install="$2"
     local base=""
     local cache_lang=""
+    local lang_pkg=""
 
     debug_log "DEBUG" "Starting installation process for: $package_name"
 
-    # **言語パッケージの処理**
+    # **言語パッケージの場合は適切な言語コードを取得**
     if echo "$package_name" | grep -q "^luci-i18n-"; then
         base="${package_name%-*}"  # "luci-i18n-base" の "base" を取得
         debug_log "DEBUG" "Detected language package base: $base"
@@ -397,17 +398,16 @@ install_package_func() {
 
         debug_log "DEBUG" "Language detected from cache: $cache_lang"
 
-        # 言語コードを付け加える（ここで `package_name` を更新）
-        package_name="${base}-${cache_lang}"
+        package_name="${base}-${cache_lang}"  # 言語コードを付け加える
         debug_log "DEBUG" "Final package name set to: $package_name"
 
         # **フォールバックチェック**
-        if ! grep "^$package_name " "${CACHE_DIR}/package_list.ch" >/dev/null 2>&1; then
+        if ! opkg list-installed | grep -q "^$package_name "; then
             debug_log "WARN" "Package $package_name not found, falling back to English"
             package_name="${base}-en"
         fi
 
-        if ! grep "^$package_name " "${CACHE_DIR}/package_list.ch" >/dev/null 2>&1; then
+        if ! opkg list-installed | grep -q "^$package_name "; then
             debug_log "ERROR" "Neither $package_name nor its English fallback exists. Aborting."
             return 1
         fi
@@ -446,6 +446,7 @@ install_package_func() {
     # **スピナー停止**
     stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
 }
+
 
 # **言語パッケージのインストール**
 install_language_package() {
