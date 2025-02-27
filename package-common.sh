@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-00"
+SCRIPT_VERSION="2025.02.27-01-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -344,15 +344,17 @@ check_package_pre_install() {
         return 1
     fi
 
-    local package_search_list="$package_name"
+    local package_found="no"
+    local package_search_list="$package_name"  # 修正: スペース区切りのリスト
 
-    # **言語パッケージの特別処理**
+    # 言語パッケージの特別処理
     if echo "$package_name" | grep -q "^luci-i18n-"; then
         if [ -f "${CACHE_DIR}/luci.ch" ]; then
             local lang_code
             lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
-            package_search_list="${package_name}-${lang_code} ${package_name}-en ${package_name}"
+            package_search_list="$package_search_list ${package_name}-${lang_code}"
         fi
+        package_search_list="$package_search_list ${package_name}-en ${package_name}"
     fi
 
     # **リポジトリ検索**
@@ -377,30 +379,13 @@ install_package_func() {
 
     # **言語パッケージの場合は適切な言語コードを取得**
     if echo "$package_name" | grep -q "^luci-i18n-"; then
-        base="$package_name"
+        base="${package_name%-*}"  # "luci-i18n-base" の "base" を取得
         if [ -f "${CACHE_DIR}/luci.ch" ]; then
             cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
         else
             cache_lang="en"
         fi
-        package_name="${base}-${cache_lang}"
-    fi
-
-    # **リポジトリにパッケージがあるか確認**
-    debug_log "DEBUG" "Checking for package variations in repository: $package_name"
-
-    local package_found="no"
-    for pkg in "$package_name" "${base}-en" "$base"; do
-        if grep -qE "^$pkg " "${CACHE_DIR}/package_list.ch"; then
-            package_name="$pkg"
-            package_found="yes"
-            break
-        fi
-    done
-
-    if [ "$package_found" = "no" ]; then
-        debug_log "ERROR" "$(color red "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
-        return 1
+        package_name="${base}-${cache_lang}"  # 言語コードを付け加える
     fi
 
     # **スピナー開始**
@@ -475,6 +460,7 @@ install_language_package() {
     install_package_func "$lang_pkg" "$force_install"
 }
 
+# **インストール関数**
 install_package() {
     # 変数初期化
     local confirm_install="no"
@@ -487,8 +473,6 @@ install_package() {
     local update_mode="no"
     local unforce="no"
     local package_name=""
-    local package_to_update=""
-    local package_db_local="${BASE_DIR}/local-package.db"
 
     # オプション解析
     while [ $# -gt 0 ]; do
@@ -531,7 +515,7 @@ install_package() {
     # パッケージマネージャー確認
     if [ -f "${CACHE_DIR}/downloader_ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
-    else 
+    else
         debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")")"
         return 1
     fi
