@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-01"
+SCRIPT_VERSION="2025.02.27-01-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1403,41 +1403,24 @@ install_language_package() {
         cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
         lang_pkg="${base}-${cache_lang}"
 
-        # **リポジトリ内の存在確認**
-        local package_exists="no"
-        debug_log "DEBUG" "Checking for package $lang_pkg in repository"
+        # **インストール処理を共通化した関数で存在確認・インストールを行う**
+        debug_log "DEBUG" "Checking for package $lang_pkg in repository using install_package_func"
         
-        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            if opkg list | grep -qE "^$lang_pkg "; then
-                package_exists="yes"
-            fi
-        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            if apk search "$lang_pkg" | grep -q "^$lang_pkg$"; then
-                package_exists="yes"
-            fi
-        fi
-
-        # パッケージがリポジトリに存在する場合、YN確認
-        if [ "$package_exists" = "yes" ]; then
-            debug_log "DEBUG" "Found $lang_pkg in repository"
-            confirm_installation "$lang_pkg" || return 1
-            install_package_func "$lang_pkg" "$force_install"  # インストール
-        else
-            # パッケージがリポジトリにない場合はフォールバック
+        # install_package_funcがリポジトリの存在確認も担当する
+        install_package_func "$lang_pkg" "$force_install" || {
+            # インストールに失敗した場合、フォールバックを試みる
             debug_log "DEBUG" "$lang_pkg はリポジトリに存在しません。スキップします。"
             
             # フォールバック: "en"（英語）を試す
             lang_pkg="${base}-en"
             debug_log "DEBUG" "Trying to install $lang_pkg"
-            install_package_func "$lang_pkg" "$force_install"  # フォールバックインストール
-
-            # それでもダメなら、コードなしのパッケージを試す
-            if [ $? -ne 0 ]; then
+            install_package_func "$lang_pkg" "$force_install" || {
+                # それでもダメなら、コードなしのパッケージを試す
                 lang_pkg="${base}"
                 debug_log "DEBUG" "Trying to install $lang_pkg without language code"
                 install_package_func "$lang_pkg" "$force_install"  # 最後の試行
-            fi
-        fi
+            }
+        }
     else
         echo "$(color red "${CACHE_DIR}/luci.ch が存在しません。言語パッケージ情報が得られません。")"
     fi
