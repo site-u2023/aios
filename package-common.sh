@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-28"
+SCRIPT_VERSION="2025.02.28-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -309,54 +309,26 @@ confirm_installation() {
 }
 
 
-check_package_pre_install() {
+package_pre_install() {
     local package_name="$1"
     local package_cache="${CACHE_DIR}/package_list.ch"
-    local lang_code=""
-    local base_package="$package_name"  # デフォルトでは変更なし
-
-    # 言語パッケージの特別処理
-    if [[ "$package_name" == luci-i18n-* ]]; then
-        # キャッシュから言語コードを取得
-        if [ -f "${CACHE_DIR}/luci.ch" ]; then
-            lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
-        else
-            lang_code="en"  # デフォルトで英語
-        fi
-
-        # 言語付きのパッケージ名を作成
-        package_name="${package_name}-${lang_code}"
-
-        # **フォールバック処理 (`ja` → `en`)**
-        if ! opkg list-installed "$package_name" >/dev/null 2>&1 && ! grep -q "^$package_name " "$package_cache"; then
-            debug_log "WARN" "Package $package_name not found. Falling back to English (en)."
-            package_name="${package_name%-*}-en"
-        fi
-
-        # **`en` も無かったらエラーで終了**
-        if ! opkg list-installed "$package_name" >/dev/null 2>&1 && ! grep -q "^$package_name " "$package_cache"; then
-            debug_log "ERROR" "Package $package_name not found. No fallback available."
-            return 1
-        fi
-    fi
-
-    # **デバイス内パッケージ確認**
+    
+    # デバイス内パッケージ確認
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if opkg list-installed "$package_name" >/dev/null 2>&1; then
             debug_log "DEBUG" "Package $package_name is already installed on the device."
-            return 0  # ここで終了！ → インストール確認を出さない！
+            return 0  # 既にインストールされている場合は何もしない
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         if apk info | grep -q "^$package_name$"; then
             debug_log "DEBUG" "Package $package_name is already installed on the device."
-            return 0  # ここで終了！ → インストール確認を出さない！
+            return 0  # 既にインストールされている場合は何もしない
         fi
     fi
 
-    # **リポジトリ内パッケージ確認**
+    # リポジトリ内パッケージ確認
     debug_log "DEBUG" "Checking repository for package: $package_name"
 
-    # キャッシュファイルがない場合はエラー
     if [ ! -f "$package_cache" ]; then
         debug_log "ERROR" "Package cache not found! Run update_package_list() first."
         return 1
@@ -416,49 +388,41 @@ install_language_package() {
     install_package_func "$lang_pkg" "$force_install"  # 実際にインストール
 }
 
-install_package_func() {
+install_normal_package() {
     local package_name="$1"
     local force_install="$2"
-    local lang_pkg=""
 
     debug_log "DEBUG" "Starting installation process for: $package_name"
 
-    # 言語コードに関わる処理は不要なので、パッケージ名をそのまま使用
-    lang_pkg="$package_name"
-    debug_log "DEBUG" "Final package name set to: $lang_pkg"
+    start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
 
-    # スピナー開始
-    start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$lang_pkg/")")"
-
-    # パッケージのインストール
     if [ "$force_install" = "yes" ]; then
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            opkg install --force-reinstall "$lang_pkg" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "❌ Failed to install package $lang_pkg")"
+            opkg install --force-reinstall "$package_name" > /dev/null 2>&1 || {
+                stop_spinner "$(color red "❌ Failed to install package $package_name")"
                 return 1
             }
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            apk add --force-reinstall "$lang_pkg" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "❌ Failed to install package $lang_pkg")"
+            apk add --force-reinstall "$package_name" > /dev/null 2>&1 || {
+                stop_spinner "$(color red "❌ Failed to install package $package_name")"
                 return 1
             }
         fi
     else
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            opkg install "$lang_pkg" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "❌ Failed to install package $lang_pkg")"
+            opkg install "$package_name" > /dev/null 2>&1 || {
+                stop_spinner "$(color red "❌ Failed to install package $package_name")"
                 return 1
             }
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            apk add "$lang_pkg" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "❌ Failed to install package $lang_pkg")"
+            apk add "$package_name" > /dev/null 2>&1 || {
+                stop_spinner "$(color red "❌ Failed to install package $package_name")"
                 return 1
             }
         fi
     fi
 
-    # スピナー停止
-    stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$lang_pkg/")")"
+    stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
 }
 
 # **言語パッケージのインストール**
@@ -476,34 +440,31 @@ install_language_package() {
     fi
 
     # 言語パッケージの検索順リスト
-    local package_search_list="${base}-${cache_lang} ${base}-en $base"
+    local package_search_list="${base}-${cache_lang} ${base}-en"
 
     debug_log "DEBUG" "Checking for package variations in repository: $package_search_list"
 
-    local package_found="no"
+    # インストール済みチェックとリポジトリ検索
     for pkg in $package_search_list; do
-        # **インストール済みチェック**
         if opkg list-installed "$pkg" >/dev/null 2>&1; then
             debug_log "DEBUG" "Package $pkg is already installed. Skipping installation."
-            return 0  # インストール済みなら何もしない
+            return 0
         fi
 
-        # **リポジトリ検索**
         if grep -q "^$pkg " "${CACHE_DIR}/package_list.ch"; then
             lang_pkg="$pkg"
-            package_found="yes"
-            break  # 見つかったパッケージでループを終了
+            debug_log "DEBUG" "Found $pkg in repository"
+            break
         fi
     done
 
-    if [ "$package_found" = "no" ]; then
+    if [ -z "$lang_pkg" ]; then
         debug_log "ERROR" "No suitable language package found for $package_name."
-        return 1  # 見つからなければエラー
+        return 1
     fi
 
-    debug_log "DEBUG" "Found $lang_pkg in repository"
-    confirm_installation "$lang_pkg" || return 1  # インストール確認
-    install_package_func "$lang_pkg" "$force_install"  # 実際にインストール
+    confirm_installation "$lang_pkg" || return 1
+    install_package_func "$lang_pkg" "$force_install"
 }
 
 # **インストール関数**
@@ -580,17 +541,16 @@ install_package() {
         confirm_installation "$package_name" || return 1
     fi
 
-    # **通常パッケージのインストール**
-    install_package_func "$package_name" "$force_install"
-
+    # 言語パッケージか通常パッケージかを判別
+    if [[ "$package_name" == luci-i18n-* ]]; then
+        install_language_package "$package_name" || return 1
+    else
+        install_normal_package "$package_name" "$force_install" || return 1
+    fi
+    
     # **ローカルパッケージDBの適用 (インストール成功後に実行)**
     if [ "$skip_package_db" != "yes" ]; then
         apply_local_package_db "$package_name"
-    fi
-
-    # **言語パッケージのインストール**
-    if [ "$skip_lang_pack" != "yes" ]; then
-        install_language_package "$package_name"
     fi
 }
 
