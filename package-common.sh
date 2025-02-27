@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-02"
+SCRIPT_VERSION="2025.02.27-00-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -351,10 +351,37 @@ install_package_func() {
     local package_name="$1"
     local force_install="$2"
 
-    # スピナーの開始
+    # **パッケージがすでにインストールされているか確認**
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if opkg list-installed | grep -qE "^$package_name "; then
+            debug_log "INFO" "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+            return 0
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if apk info | grep -q "^$package_name$"; then
+            debug_log "INFO" "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+            return 0
+        fi
+    fi
+
+    # **リポジトリにパッケージがあるか確認**
+    debug_log "DEBUG" "Checking for package $package_name in the repository ($PACKAGE_MANAGER)"
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if ! opkg list | grep -qE "^$package_name "; then
+            debug_log "ERROR" "$(color red "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
+            return 1
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if ! apk search "$package_name" | grep -q "^$package_name$"; then
+            debug_log "ERROR" "$(color red "$(get_message "MSG_PACKAGE_NOT_FOUND" | sed "s/{pkg}/$package_name/")")"
+            return 1
+        fi
+    fi
+
+    # **スピナー開始**
     start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
 
-    # パッケージのインストール処理
+    # **パッケージのインストール**
     if [ "$force_install" = "yes" ]; then
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
             opkg install --force-reinstall "$package_name" > /dev/null 2>&1 || {
@@ -381,7 +408,7 @@ install_package_func() {
         fi
     fi
 
-    # スピナーを停止
+    # **スピナー停止**
     stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
 }
 
