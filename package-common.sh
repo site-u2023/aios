@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-01-00"
+SCRIPT_VERSION="2025.02.28-01-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -425,8 +425,10 @@ install_normal_package() {
         fi
     fi
 
-    safe_pkg=$(printf '%s\n' "$package_name" | sed 's/[&/\]/\\&/g')
-    stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s|{pkg}|$safe_pkg|")")"
+    stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$(printf '%s' "$package_name" | sed 's/-/\\-/g')/")")"
+    #stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
+    #safe_pkg=$(printf '%s\n' "$package_name" | sed 's/[&/\]/\\&/g')
+    #stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s|{pkg}|$safe_pkg|")")"
 }
 
 # **言語パッケージのインストール**
