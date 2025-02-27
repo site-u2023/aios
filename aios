@@ -74,6 +74,44 @@ download_common() {
     }
 }
 
+# `country-common.sh` のダウンロード & 読み込み
+download_country-common() {
+    if [ ! -f "${BASE_DIR}/country-common.sh" ]; then
+        ${BASE_WGET} "${BASE_DIR}/country-common.sh" "${BASE_URL}/country-common.sh" || {
+            echo "Failed to download country-common.sh"
+            exit 1
+        }
+    fi
+
+    # ダウンロードが成功した場合に実行権限を付与
+    chmod +x "${BASE_DIR}/country-common.sh"
+
+    # common.sh を読み込む
+    . "${BASE_DIR}/country-common.sh" || {
+        echo "Failed to source country-common.sh"
+        exit 1
+    }
+}
+
+# `package-common.sh` のダウンロード & 読み込み
+download_package-common() {
+    if [ ! -f "${BASE_DIR}/package-common.sh" ]; then
+        ${BASE_WGET} "${BASE_DIR}/package-common.sh" "${BASE_URL}/package-common.sh" || {
+            echo "Failed to download package-common.sh"
+            exit 1
+        }
+    fi
+
+    # ダウンロードが成功した場合に実行権限を付与
+    chmod +x "${BASE_DIR}/package-common.sh"
+
+    # common.sh を読み込む
+    . "${BASE_DIR}/package-common.sh" || {
+        echo "Failed to source package-common.sh"
+        exit 1
+    }
+}
+
 # バナー表示
 print_banner() {
     echo
@@ -105,6 +143,8 @@ chmod_aios
 delete_aios
 make_directory
 download_common
+download_country-common
+download_package-common
 check_option "$@"
 print_banner
 packages
