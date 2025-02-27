@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-00-06"
+SCRIPT_VERSION="2025.02.28-00-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -519,8 +519,8 @@ install_package() {
     fi
 
     # パッケージマネージャー確認
-    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
-        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
+    if [ -f "${CACHE_DIR}/downloader.ch" ]; then
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader.ch")
     else
         debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")")"
         return 1
