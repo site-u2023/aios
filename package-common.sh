@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-20"
+SCRIPT_VERSION="2025.02.27-01-21"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -293,7 +293,7 @@ confirm_installation() {
 
     # 言語コードが正しくついているかチェック
     if echo "$package" | grep -q "^luci-i18n-"; then
-        if ! echo "$package" | grep -q -E "-[a-z]{2,3}$"; then
+        if ! echo "$package" | grep -q "-[a-z]{2,3}$"; then
             debug_log "ERROR" "Invalid package name detected: $package (missing language code)"
             return 1  # 言語コードなしならエラー
         fi
@@ -347,7 +347,7 @@ check_package_pre_install() {
 
     # **デバイス内パッケージ確認**
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if opkg list-installed | grep -q -E "^$package_name "; then
+        if opkg list-installed | grep -q "^$package_name "; then
             debug_log "DEBUG" "Package $package_name is already installed on the device."
             return 0  # ここで終了！ → インストール確認を出さない！
         fi
@@ -470,13 +470,13 @@ install_language_package() {
     local package_found="no"
     for pkg in $package_search_list; do
         # **インストール済みチェック**
-        if opkg list-installed | grep -q -E "^$pkg "; then
+        if opkg list-installed | grep -q "^$pkg "; then
             debug_log "DEBUG" "Package $pkg is already installed. Skipping installation."
             return 0
         fi
 
         # **リポジトリ検索**
-        if grep -q -E "^$pkg " "${CACHE_DIR}/package_list.ch"; then
+        if grep -q "^$pkg " "${CACHE_DIR}/package_list.ch"; then
             lang_pkg="$pkg"
             package_found="yes"
             break
