@@ -318,7 +318,6 @@ package_pre_install() {
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if opkg list-installed "$package_name" >/dev/null 2>&1; then
             debug_log "DEBUG" "Package $package_name is already installed on the device."
-            echo OK
             return 0  # 既にインストールされている場合は何もしない
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
@@ -327,8 +326,6 @@ package_pre_install() {
             return 0  # 既にインストールされている場合は何もしない
         fi
     fi
-
-  echo NG
   
     # リポジトリ内パッケージ確認
     debug_log "DEBUG" "Checking repository for package: $package_name"
@@ -552,12 +549,8 @@ install_package() {
         package_name="${package_name}-${lang_code}"
     fi
 
-    # **インストール前確認 (デバイス内パッケージ確認 + リポジトリ確認)**
-    if ! package_pre_install "$package_name"; then
-        debug_log "ERROR" "$(color red "❌ Package $package_name is either already installed or not found in repository.")"
-        return 1
-    fi
-
+    package_pre_install "$package_name" || return 1
+    
     # **YN確認 (オプションで有効時のみ)**
     if [ "$confirm_install" = "yes" ]; then
         confirm_installation "$package_name" || return 1
