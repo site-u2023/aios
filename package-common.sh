@@ -93,7 +93,7 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 #
 # 【仕様】
 # - `update.ch` を書き出し、`opkg update / apk update` の実行管理
-# - `downloader_ch` から `opkg` または `apk` を判定し、適切なパッケージ管理ツールを使用
+# - `downloader.ch` から `opkg` または `apk` を判定し、適切なパッケージ管理ツールを使用
 # - `local-package.db` を オプションにより適用
 # - `local-package.db` の設定がある場合、`uci set` を実行し適用（notpack オプションでスキップ可能）
 # - 言語パッケージの適用対象は `luci-app-*`（nolang オプションでスキップ可能）
