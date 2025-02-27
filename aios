@@ -102,6 +102,7 @@ packages() {
     # パッケージのインストール
     install_package ttyd yn hidden
     install_package luci-app-ttyd yn hidden
+    install_package luci-i18n-ttyd yn hidden
     install_package openssh-sftp-server yn hidden
 
     #install_build luci-app-cpu-perf yn
