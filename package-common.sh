@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-13"
+SCRIPT_VERSION="2025.02.27-01-15"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -286,16 +286,22 @@ OK_confirm_installation() {
     esac
 }
 
-# **YN 確認を行う関数**
 confirm_installation() {
     local package="$1"
 
-    # デバッグログに表示
     debug_log "DEBUG" "Confirming installation for package: $package"
+
+    # 言語コードが正しくついているかチェック
+    if echo "$package" | grep -q "^luci-i18n-"; then
+        if ! echo "$package" | grep -qE "-[a-z]{2,3}$"; then
+            debug_log "ERROR" "Invalid package name detected: $package (missing language code)"
+            return 1  # 言語コードなしならエラー
+        fi
+    fi
 
     while true; do
         local msg=$(get_message "MSG_CONFIRM_INSTALL")
-        msg="${msg//\{pkg\}/$package}"  # 変数が正しく置換されるか確認
+        msg="${msg//\{pkg\}/$package}"
         echo "$msg"
         printf "%s " "$(get_message "MSG_CONFIRM_ONLY_YN")"
         read -r yn || return 1
@@ -370,7 +376,6 @@ check_package_pre_install() {
     return 1  # パッケージが見つからなかった
 }
 
-# **インストール処理 (実際のインストールを行う)**
 install_package_func() {
     local package_name="$1"
     local force_install="$2"
@@ -378,15 +383,34 @@ install_package_func() {
     local cache_lang=""
     local lang_pkg=""
 
+    debug_log "DEBUG" "Starting installation process for: $package_name"
+
     # **言語パッケージの場合は適切な言語コードを取得**
     if echo "$package_name" | grep -q "^luci-i18n-"; then
         base="${package_name%-*}"  # "luci-i18n-base" の "base" を取得
+        debug_log "DEBUG" "Detected language package base: $base"
+
         if [ -f "${CACHE_DIR}/luci.ch" ]; then
             cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
         else
             cache_lang="en"
         fi
+
+        debug_log "DEBUG" "Language detected from cache: $cache_lang"
+
         package_name="${base}-${cache_lang}"  # 言語コードを付け加える
+        debug_log "DEBUG" "Final package name set to: $package_name"
+
+        # **フォールバックチェック**
+        if ! grep -q "^$package_name " "${CACHE_DIR}/package_list.ch"; then
+            debug_log "WARN" "Package $package_name not found, falling back to English"
+            package_name="${base}-en"
+        fi
+
+        if ! grep -q "^$package_name " "${CACHE_DIR}/package_list.ch"; then
+            debug_log "ERROR" "Neither $package_name nor its English fallback exists. Aborting."
+            return 1
+        fi
     fi
 
     # **スピナー開始**
