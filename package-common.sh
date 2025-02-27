@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-22"
+SCRIPT_VERSION="2025.02.27-01-23"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -396,8 +396,7 @@ install_package_func() {
 
         debug_log "DEBUG" "Language detected from cache: $cache_lang"
 
-        # 言語コードを付け加える
-        package_name="${base}-${cache_lang}"
+        package_name="${base}-${cache_lang}"  # 言語コードを付け加える
         debug_log "DEBUG" "Final package name set to: $package_name"
 
         # **フォールバックチェック**: package_list.ch で確認
