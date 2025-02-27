@@ -1,0 +1,1331 @@
+#!/bin/sh
+
+SCRIPT_VERSION="2025.02.27-00-00"
+
+# =========================================================
+# 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
+# 🚀 Last Update: 2025-02-21
+#
+# 🏷️ License: CC0 (Public Domain)
+# 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
+#
+# ⚠️ IMPORTANT NOTICE:
+# OpenWrt OS exclusively uses **Almquist Shell (ash)** and
+# is **NOT** compatible with Bourne-Again Shell (bash).
+#
+# 📢 POSIX Compliance Guidelines:
+# ✅ Use `[` instead of `[[` for conditions
+# ✅ Use `$(command)` instead of backticks `` `command` ``
+# ✅ Use `$(( ))` for arithmetic instead of `let`
+# ✅ Define functions as `func_name() {}` (no `function` keyword)
+# ✅ No associative arrays (`declare -A` is NOT supported)
+# ✅ No here-strings (`<<<` is NOT supported)
+# ✅ No `-v` flag in `test` or `[[`
+#
+# 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
+# =========================================================
+### =========================================================
+### 📌 AI Assistance Request: Bug Fixing Procedure
+### 
+### When debugging or fixing errors in this script, follow these steps:
+### 
+### 1️⃣ Create a minimal test script to identify the bug.
+### 2️⃣ Execute the test and verify the reproducibility of the error.
+### 3️⃣ Fix the error and re-run the test to confirm the solution.
+### 4️⃣ Apply the corrected code to the production environment.
+### 
+### ⚠️ DO NOT modify the main script without first confirming the fix 
+###     through a dedicated test script.
+### 
+### 🛠️ Keep the debugging process structured, efficient, and reliable.
+### =========================================================
+
+echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION package-common.sh \033[0m"
+
+DEV_NULL="${DEV_NULL:-on}"
+# サイレントモード
+# export DEV_NULL="on"
+# 通常モード
+# unset DEV_NULL
+
+# 基本定数の設定 
+BASE_WGET="${BASE_WGET:-wget -q -O}"
+# BASE_WGET="${BASE_WGET:-wget -O}"
+BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
+BASE_DIR="${BASE_DIR:-/tmp/aios}"
+CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
+LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
+BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build}"
+mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR"
+DEBUG_MODE="${DEBUG_MODE:-false}"
+
+#########################################################################
+# Last Update: 2025-02-24 21:16:00 (JST) 🚀
+# install_package: パッケージのインストール処理 (OpenWrt / Alpine Linux)
+#
+# 【概要】
+# 指定されたパッケージをインストールし、オプションに応じて以下の処理を実行する。
+# ✅ OpenWrt / Alpine の `opkg update` / `apk update` を適用（条件付き）
+# ✅ 言語パッケージ・設定ファイル (`local-package.db`) の適用
+#
+# 【フロー】
+# 1️⃣ デバイスにパッケージがインストール済みか確認
+# 2️⃣ `update.ch` のキャッシュをチェックし、`opkg update / apk update` を実行
+# 4️⃣ インストール確認（yn オプションが指定された場合）
+# 5️⃣ パッケージのインストールを実行
+# 6️⃣ 言語パッケージの適用（nolang オプションでスキップ可能）
+# 7️⃣ `local-package.db` の適用（notpack オプションでスキップ可能）
+# 8️⃣ 設定の有効化（デフォルト enabled、disabled オプションで無効化）
+#
+# 【グローバルオプション】
+# DEV_NULL : 標準出力の制御
+# DEBUG    : デバッグモード（詳細ログ出力）
+#
+# 【オプション】
+# - yn         : インストール前に確認（デフォルト: 確認なし）
+# - nolang     : 言語パッケージの適用をスキップ（デフォルト: 適用する）
+# - force      : 強制インストール（デフォルト: 適用しない）
+# - notpack    : `local-package.db` での設定適用をスキップ（デフォルト: 適用する）
+# - disabled   : 設定を disabled にする（デフォルト: enabled）
+# - hidden     : 既にインストール済みの場合のメッセージを非表示
+# - test       : インストール済みのパッケージでも処理を実行
+# - update     : `opkg update` / `apk update` を強制実行（`update.ch` のキャッシュ無視）
+#
+# 【仕様】
+# - `update.ch` を書き出し、`opkg update / apk update` の実行管理
+# - `downloader_ch` から `opkg` または `apk` を判定し、適切なパッケージ管理ツールを使用
+# - `local-package.db` を オプションにより適用
+# - `local-package.db` の設定がある場合、`uci set` を実行し適用（notpack オプションでスキップ可能）
+# - 言語パッケージの適用対象は `luci-app-*`（nolang オプションでスキップ可能）
+# - 設定の有効化はデフォルト enabled、disabled オプションで無効化可能
+# - `update` は明示的に `install_package update` で実行（インストール時には自動実行しない）
+#
+# 【使用例】
+# - install_package ttyd                  → `ttyd` をインストール（確認なし、local-package.db 適用、言語パック適用）
+# - install_package ttyd yn               → `ttyd` をインストール（確認あり）
+# - install_package ttyd nolang           → `ttyd` をインストール（言語パック適用なし）
+# - install_package ttyd notpack          → `ttyd` をインストール（local-package.db の適用なし）
+# - install_package ttyd disabled         → `ttyd` をインストール（設定を disabled にする）
+# - install_package ttyd yn nolang disabled hidden
+#   → `ttyd` をインストール（確認あり、言語パック適用なし、設定を disabled にし、
+#      既にインストール済みの場合のメッセージを非表示）
+# - install_package ttyd test             → `ttyd` をインストール（インストール済みでも強制インストール）
+# - install_package ttyd update           → `ttyd` をインストール（`opkg update / apk update` を強制実行）
+#
+# 【messages.db の記述例】
+# [ttyd]
+# opkg update
+# uci commit ttyd
+# initd/ttyd/restart
+# [ttyd] opkg update; uci commit ttyd; initd/ttyd/restart
+#########################################################################
+# **スピナー開始関数**
+start_spinner() {
+    local message="$1"
+    SPINNER_MESSAGE="$message"  # 停止時のメッセージ保持
+    spinner_chars='| / - \\'
+    i=0
+
+    echo -en "\e[?25l"
+
+    while true; do
+        # POSIX 準拠の方法でインデックスを計算し、1文字抽出
+        local index=$(( i % 4 ))
+        local spinner_char=$(expr substr "$spinner_chars" $(( index + 1 )) 1)
+        printf "\r📡 %s %s" "$(color yellow "$SPINNER_MESSAGE")" "$spinner_char"
+        if command -v usleep >/dev/null 2>&1; then
+            usleep 200000
+        else
+            sleep 1
+        fi
+        i=$(( i + 1 ))
+    done &
+    SPINNER_PID=$!
+}
+
+# **スピナー停止関数**
+stop_spinner() {
+    local message="$1"
+
+    if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
+        kill "$SPINNER_PID" >/dev/null 2>&1
+        printf "\r\033[K"  # 行をクリア
+        echo "$(color green "$message")"
+    else
+        printf "\r\033[K"
+        echo "$(color red "$message")"
+    fi
+    unset SPINNER_PID
+
+    echo -en "\e[?25h"
+}
+
+# パッケージリストの更新
+update_package_list() {
+    local update_cache="${CACHE_DIR}/update.ch"
+    local current_time
+    current_time=$(date '+%s')  # 現在のUNIXタイムスタンプ取得
+    local cache_time=0
+    local max_age=$((24 * 60 * 60))  # 24時間 (86400秒)
+
+    # キャッシュディレクトリの作成
+    mkdir -p "$CACHE_DIR"
+
+    # キャッシュが存在する場合、最終更新時刻を取得
+    if [ -f "$update_cache" ]; then
+        cache_time=$(date -r "$update_cache" '+%s' 2>/dev/null || echo 0)
+    fi
+
+    # キャッシュが最新なら `opkg update` をスキップ
+    if [ $((current_time - cache_time)) -lt $max_age ]; then
+        debug_log "DEBUG" "パッケージリストは24時間以内に更新されています。スキップします。"
+        return 0
+    fi
+
+    # スピナー開始
+    start_spinner "$(color yellow "$(get_message "MSG_RUNNING_UPDATE")")"
+    #start_spinner "$(get_message "MSG_RUNNING_UPDATE" | sed "s/{pkg}/$package_name/")"
+
+    # パッケージリストの更新
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
+            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+            return 1
+        }
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
+            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+            return 1
+        }
+    fi
+
+    # スピナー停止 (成功メッセージを表示)
+    stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
+    #stop_spinner "$(get_message "MSG_UPDATE_SUCCESS" | sed "s/{pkg}/$package_name/")"
+
+    # キャッシュのタイムスタンプを更新
+    touch "$update_cache" || {
+        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_WRITE_CACHE")")"
+        return 1
+    }
+
+    return 0
+}
+
+# パッケージ名（引数として渡せるように変更）
+apply_local_package_db() {
+    package_name=$1  # ここでパッケージ名を引数として受け取る
+
+    debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name" "$0" "$SCRIPT_VERSION"
+
+    # local-package.dbから指定されたセクションを抽出
+    extract_commands() {
+        # [PACKAGE] をエスケープして検索、コメント行は無視
+        awk -v pkg="$package_name" '
+            $0 ~ "^\\[" pkg "\\]" {flag=1; next}  # [****]セクションに到達
+            $0 ~ "^\\[" {flag=0}                  # 次のセクションが始まったらflagをリセット
+            flag && $0 !~ "^#" {print}             # コメント行（#）を除外
+        ' "${BASE_DIR}/local-package.db"
+    }
+
+    # コマンドを実行するために抽出したコマンドを格納
+    local cmds
+    cmds=$(extract_commands)  # コマンドを取得
+
+    # コマンドが見つからない場合、エラーメッセージを表示して終了
+    if [ -z "$cmds" ]; then
+        echo "No commands found for package: $package_name"
+        return 1
+    fi
+
+    echo "Executing commands for $package_name..."
+    # コマンドを一時ファイルに書き出し
+    echo "$cmds" > ${CACHE_DIR}/commands.ch
+
+    # ここで一括でコマンドを実行
+    # chファイルに書き出したコマンドをそのまま実行する
+    . ${CACHE_DIR}/commands.ch  # chファイル内のコマンドをそのまま実行
+
+    # 最後に設定を確認（デバッグ用）
+    debug_log "DEBUG" "Displaying current configuration for $package_name: $(uci show "$package_name")"
+
+    echo "All commands executed successfully."
+}
+
+# **YN 確認を行う関数**
+confirm_installation() {
+    local package="$1"
+    while true; do
+        local msg=$(get_message "MSG_CONFIRM_INSTALL")
+        msg="${msg//\{pkg\}/$package}"
+        echo "$msg"
+        printf "%s " "$(get_message "MSG_CONFIRM_ONLY_YN")"
+        read -r yn || return 1
+        case "$yn" in
+            [Yy]*) return 0 ;;  # 継続
+            [Nn]*) return 1 ;;  # キャンセル
+            *) echo "$(color red "Invalid input. Please enter Y or N.")" ;;
+        esac
+    done
+}
+
+# **インストール前確認 (デバイス内パッケージ確認 + リポジトリ確認)**
+check_package_pre_install() {
+    local package_name="$1"
+    
+    # パッケージマネージャーの確認
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        # opkgの場合のパッケージ確認
+        debug_log "DEBUG" "Checking for package $package_name in the repository (opkg)"
+        if opkg list-installed | grep -qE "^$package_name "; then
+            echo "$(color green "$package_name is already installed.")"
+            return 0
+        fi
+
+        if ! opkg list | grep -qE "^$package_name "; then
+            debug_log "DEBUG" "Skipping installation: $package_name not found in opkg repository."
+            stop_spinner "$(color red "❌ Package $package_name not found in repository.")"
+            return 0
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        # apkの場合のパッケージ確認
+        debug_log "DEBUG" "Checking for package $package_name in the repository (apk)"
+        if apk info | grep -q "^$package_name$"; then
+            echo "$(color green "$package_name is already installed.")"
+            return 0
+        fi
+
+        if ! apk search "$package_name" | grep -q "^$package_name$"; then
+            debug_log "DEBUG" "Skipping installation: $package_name not found in apk repository."
+            stop_spinner "$(color red "❌ Package $package_name not found in repository.")"
+            return 0
+        fi
+    else
+        debug_log "ERROR" "$(color red "Unsupported package manager: $PACKAGE_MANAGER")"
+        stop_spinner "$(color red "❌ Unsupported package manager: $PACKAGE_MANAGER")"
+        return 1
+    fi
+
+    return 1  # 問題なしならインストール処理へ進む
+}
+
+# **言語パッケージのインストール**
+install_language_package() {
+    local package_name="$1"
+    local base="luci-i18n-${package_name#luci-app-}"
+    local cache_lang=""
+    local lang_pkg=""
+
+    # キャッシュファイルが存在する場合、言語コードを取得
+    if [ -f "${CACHE_DIR}/luci.ch" ]; then
+        cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
+        lang_pkg="${base}-${cache_lang}"
+
+        # **インストール処理を共通化した関数で存在確認・インストールを行う**
+        debug_log "DEBUG" "Checking for package $lang_pkg in repository using install_package_func"
+        
+        # install_package_funcがリポジトリの存在確認も担当する
+        install_package_func "$lang_pkg" "$force_install" || {
+            # インストールに失敗した場合、フォールバックを試みる
+            debug_log "DEBUG" "$lang_pkg はリポジトリに存在しません。スキップします。"
+            
+            # フォールバック: "en"（英語）を試す
+            lang_pkg="${base}-en"
+            debug_log "DEBUG" "Trying to install $lang_pkg"
+            install_package_func "$lang_pkg" "$force_install" || {
+                # それでもダメなら、コードなしのパッケージを試す
+                lang_pkg="${base}"
+                debug_log "DEBUG" "Trying to install $lang_pkg without language code"
+                install_package_func "$lang_pkg" "$force_install"  # 最後の試行
+            }
+        }
+    else
+        echo "$(color red "${CACHE_DIR}/luci.ch が存在しません。言語パッケージ情報が得られません。")"
+    fi
+}
+
+# **インストール処理 (実際のインストールを行う)**
+install_package_func() {
+    local package_name="$1"
+    local force_install="$2"
+
+    # スピナーの開始
+    start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
+
+    # パッケージのインストール処理
+    if [ "$force_install" = "yes" ]; then
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            opkg install --force-reinstall "$package_name" > /dev/null 2>&1 || {
+                stop_spinner "$(color red "❌ Failed to install package $package_name")"
+                return 1
+            }
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            apk add --force-reinstall "$package_name" > /dev/null 2>&1 || {
+                stop_spinner "$(color red "❌ Failed to install package $package_name")"
+                return 1
+            }
+        fi
+    else
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            opkg install "$package_name" > /dev/null 2>&1 || {
+                stop_spinner "$(color red "❌ Failed to install package $package_name")"
+                return 1
+            }
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            apk add "$package_name" > /dev/null 2>&1 || {
+                stop_spinner "$(color red "❌ Failed to install package $package_name")"
+                return 1
+            }
+        fi
+    fi
+
+    # スピナーを停止
+    stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
+}
+
+# **インストール関数**
+install_package() {
+    # 変数初期化
+    local confirm_install="no"
+    local skip_lang_pack="no"
+    local force_install="no"
+    local skip_package_db="no"
+    local set_disabled="no"
+    local hidden="no"
+    local test_mode="no"
+    local update_mode="no"
+    local unforce="no"
+    local package_name=""
+    local package_to_update=""
+    local package_db_local="${BASE_DIR}/local-package.db"
+
+    # オプション解析
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            yn) confirm_install="yes" ;;
+            nolang) skip_lang_pack="yes" ;;
+            force) force_install="yes" ;;
+            notpack) skip_package_db="yes" ;;
+            disabled) set_disabled="yes" ;;
+            hidden) hidden="yes" ;;
+            test) test_mode="yes" ;;
+            update)
+                update_mode="yes"
+                shift
+                if [ $# -gt 0 ]; then
+                    package_to_update="$1"
+                    shift
+                fi
+                continue
+                ;;
+            unforce) unforce="yes" ;;
+            -*) echo "Unknown option: $1"; return 1 ;;
+            *)
+                if [ -z "$package_name" ]; then
+                    package_name="$1"
+                else
+                    debug_log "DEBUG" "$(color yellow "$(get_message "MSG_UNKNOWN_OPTION" | sed "s/{option}/$1/")")"
+                fi
+                ;;
+        esac
+        shift
+    done
+
+    # update オプション処理
+    if [ "$update_mode" = "yes" ]; then
+        update_package_list
+        return 0
+    fi
+
+    # パッケージマネージャー確認
+    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
+    else 
+        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")")"
+        return 1
+    fi
+
+    # **パッケージリスト更新**
+    update_package_list || return 1
+
+    # **インストール前確認 (デバイス内パッケージ確認 + リポジトリ確認)**
+    check_package_pre_install "$package_name" || return 1
+
+    # **YN確認**: インストールの確認を行う
+    if [ "$confirm_install" = "yes" ]; then
+        confirm_installation "$package_name" || return 1
+    fi
+
+    # **通常パッケージのインストール**
+    install_package_func "$package_name" "$force_install"
+
+    # **ローカルパッケージDBの適用**
+    if [ "$skip_package_db" != "yes" ]; then
+        apply_local_package_db "$package_name"
+    fi
+
+    # **言語パッケージのインストール**
+    if [ "$skip_lang_pack" != "yes" ]; then
+        install_language_package "$package_name"
+    fi
+}
+
+# **インストール処理を共通化する関数**
+OK_install_package_func() {
+    local package_name="$1"
+    local force_install="$2"
+
+    # スピナーの開始
+    start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
+
+    # パッケージマネージャーが opkg の場合
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if [ "$force_install" = "yes" ]; then
+            opkg install --force-reinstall "$package_name" > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+                stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+                return 1
+            fi
+        else
+            opkg install "$package_name" > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+                stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+                return 1
+            fi
+        fi
+    # パッケージマネージャーが apk の場合
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if [ "$force_install" = "yes" ]; then
+            apk add --force-reinstall "$package_name" > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+                stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+                return 1
+            fi
+        else
+            apk add "$package_name" > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+                stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
+                return 1
+            fi
+        fi
+    else
+        stop_spinner "$(color red "Unsupported package manager: $PACKAGE_MANAGER")"
+        return 1
+    fi
+
+    # スピナーを止める
+    stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
+}
+
+# **言語パッケージのインストール**
+install_language_package() {
+    local package_name="$1"
+    local base="luci-i18n-${package_name#luci-app-}"
+    local cache_lang=""
+    local lang_pkg=""
+
+    # キャッシュファイルが存在する場合、言語コードを取得
+    if [ -f "${CACHE_DIR}/luci.ch" ]; then
+        cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
+        lang_pkg="${base}-${cache_lang}"
+
+        # **リポジトリ内の存在確認**
+        local package_exists="no"
+        debug_log "DEBUG" "Checking for package $lang_pkg in repository"
+        
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            if opkg list | grep -qE "^$lang_pkg "; then
+                package_exists="yes"
+            fi
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            if apk search "$lang_pkg" | grep -q "^$lang_pkg$"; then
+                package_exists="yes"
+            fi
+        fi
+
+        # パッケージがリポジトリに存在する場合、YN確認
+        if [ "$package_exists" = "yes" ]; then
+            debug_log "DEBUG" "Found $lang_pkg in repository"
+            confirm_installation "$lang_pkg" || return 1
+            install_package_func "$lang_pkg" "$force_install"  # インストール
+        else
+            # パッケージがリポジトリにない場合はフォールバック
+            debug_log "DEBUG" "$lang_pkg はリポジトリに存在しません。スキップします。"
+            
+            # フォールバック: "en"（英語）を試す
+            lang_pkg="${base}-en"
+            debug_log "DEBUG" "Trying to install $lang_pkg"
+            install_package_func "$lang_pkg" "$force_install"  # フォールバックインストール
+
+            # それでもダメなら、コードなしのパッケージを試す
+            if [ $? -ne 0 ]; then
+                lang_pkg="${base}"
+                debug_log "DEBUG" "Trying to install $lang_pkg without language code"
+                install_package_func "$lang_pkg" "$force_install"  # 最後の試行
+            fi
+        fi
+    else
+        echo "$(color red "${CACHE_DIR}/luci.ch が存在しません。言語パッケージ情報が得られません。")"
+    fi
+}
+
+# **インストール関数**
+install_package() {
+    # 変数初期化
+    local confirm_install="no"
+    local skip_lang_pack="no"
+    local force_install="no"
+    local skip_package_db="no"
+    local set_disabled="no"
+    local hidden="no"
+    local test_mode="no"
+    local update_mode="no"
+    local unforce="no"
+    local package_name=""
+    local package_to_update=""
+    local package_db_local="${BASE_DIR}/local-package.db"
+
+    # オプション解析
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            yn) confirm_install="yes" ;;
+            nolang) skip_lang_pack="yes" ;;
+            force) force_install="yes" ;;
+            notpack) skip_package_db="yes" ;;
+            disabled) set_disabled="yes" ;;
+            hidden) hidden="yes" ;;
+            test) test_mode="yes" ;;
+            update)
+                update_mode="yes"
+                shift
+                if [ $# -gt 0 ]; then
+                    package_to_update="$1"
+                    shift
+                fi
+                continue
+                ;;
+            unforce) unforce="yes" ;;
+            -*) echo "Unknown option: $1"; return 1 ;;
+            *)
+                if [ -z "$package_name" ]; then
+                    package_name="$1"
+                else
+                    debug_log "DEBUG" "$(color yellow "$(get_message "MSG_UNKNOWN_OPTION" | sed "s/{option}/$1/")")"
+                fi
+                ;;
+        esac
+        shift
+    done
+
+    # update オプション処理
+    if [ "$update_mode" = "yes" ]; then
+        update_package_list
+        return 0
+    fi
+
+    # パッケージマネージャー確認
+    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
+    else 
+        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")")"
+        return 1
+    fi
+
+    # **パッケージリスト更新**
+    update_package_list || return 1
+
+    # **リポジトリにパッケージが存在するか確認**
+    debug_log "DEBUG" "Checking for package $package_name in the repository"
+    if ! opkg list | grep -qE "^$package_name "; then
+        debug_log "DEBUG" "Skipping installation: $package_name not found in repository."
+        return 0
+    fi
+
+    # **YN確認**
+    confirm_installation "$package_name" || return 1
+
+    # **インストール済み確認**
+    if opkg list-installed | grep -qE "^$package_name "; then
+        if [ "$hidden" != "yes" ]; then
+            echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
+        fi
+        return 0
+    fi
+
+    # **通常パッケージのインストール**
+    install_package_func "$package_name" "$force_install"
+
+    # **言語パッケージのインストール**
+    if [ "$skip_lang_pack" != "yes" ]; then
+        install_language_package "$package_name"
+    fi
+}
+
+#########################################################################
+# Last Update: 2025-02-22 15:35:00 (JST) 🚀
+# install_build: パッケージのビルド処理 (OpenWrt / Alpine Linux)
+#
+# 【概要】
+# 指定されたパッケージをビルドし、オプションに応じて以下の処理を実行する。
+# 1回の動作で１つのビルドのみパッケージを作りインストール作業
+# DEBUG に応じて出力制御（要所にセット）
+#
+# 【フロー】
+# 2️⃣ デバイスにパッケージがインストール済みか確認
+# 4️⃣ インストール確認（yn オプションが指定された場合）
+# 4️⃣ ビルド用汎用パッケージ（例：make, gcc）をインストール ※install_package()利用
+# 4️⃣ ビルド作業
+# 7️⃣ custom-package.db の適用（ビルド用設定：DBの記述に従う）
+# 5️⃣ インストールの実行（install_package()利用）
+# 7️⃣ package.db の適用（ビルド後の設定適用がある場合：DBの記述に従う）
+#
+# 【ビルド用汎用パッケージ】
+# install_package jq
+# install_package = 以下
+# {make gcc git libtool-bin automake pkg-config zlib-dev libncurses-dev curl libxml2 libxml2-dev autoconf automake bison flex perl patch wget wget-ssl tar unzip) hidden
+#
+# 【グローバルオプション】
+# DEBUG : 要所にセット
+#
+# 【オプション】※順不同で適用可
+# - yn         : インストール前に確認する（デフォルト: 確認なし）
+# - hidden     : 既にインストール済みの場合、"パッケージ xxx はすでにインストールされています" のメッセージを非表示にする
+#
+# 【仕様】
+# - ${CACHE_DIR}/downloader.ch から取得、フォーマット：opkg もしくは apk
+# - ${CACHE_DIR}/openwrt.ch　から取得、フォーマット例：24.10.0 や　23.05.4　など
+# - ${CACHE_DIR}/architecture.ch　から取得、フォーマット例：armv7l　など
+# - custom-package.db の設定がある場合、該当パッケージの記述 を実行し適用
+# - messages.db を参照し、すべてのメッセージを取得（JP/US 対応）
+#
+# 【使用例】
+# - install_build uconv                  → インストール（確認なし）
+# - install_build uconv yn               → インストール（確認あり）
+# - install_build uconv yn hidden        → インストール（確認あり、既にインストール済みの場合のメッセージは非表示）
+#
+# 【messages.dbの記述例】
+# [uconv]　※行、列問わず記述可
+#########################################################################
+setup_swap() {
+    local ZRAM_SIZE_MB
+    local RAM_TOTAL_MB
+    RAM_TOTAL_MB=$(awk '/MemTotal/ {print int($2 / 1024)}' /proc/meminfo)
+
+    # **スワップサイズを RAM に応じて自動調整**
+    if [ "$RAM_TOTAL_MB" -lt 512 ]; then
+        ZRAM_SIZE_MB=512
+    elif [ "$RAM_TOTAL_MB" -lt 1024 ]; then
+        ZRAM_SIZE_MB=256
+    else
+        ZRAM_SIZE_MB=128
+    fi
+
+    debug_log "INFO" "RAM: ${RAM_TOTAL_MB}MB, Setting zram size to ${ZRAM_SIZE_MB}MB"
+
+    # **空き容量を確認**
+    local STORAGE_FREE_MB
+    STORAGE_FREE_MB=$(df -m /overlay | awk 'NR==2 {print $4}')  # MB単位の空き容量
+
+    if [ -z "$STORAGE_FREE_MB" ] || [ "$STORAGE_FREE_MB" -lt 50 ]; then
+        debug_log "ERROR" "Insufficient storage for swap (${STORAGE_FREE_MB}MB free). Skipping swap setup."
+        return 1  # **ストレージ不足なら即終了**
+    fi
+
+    # **zswap (zram-swap) のインストール**
+    install_package zram-swap hidden
+
+    # **zswap の設定適用**
+    if uci get system.@zram[0] &>/dev/null; then
+        debug_log "INFO" "Applying zswap settings from local-package.db..."
+        uci set system.@zram[0].enabled='1'
+        uci set system.@zram[0].size="${ZRAM_SIZE_MB}"
+        uci set system.@zram[0].comp_algorithm='zstd'
+        uci commit system
+    else
+        debug_log "ERROR" "zswap configuration not found in UCI. Skipping swap setup."
+        return 1  # **設定が見つからない場合も即終了**
+    fi
+
+    # **zram-swap の有効化**
+    debug_log "INFO" "Enabling zram-swap..."
+    /etc/init.d/zram restart
+
+    sleep 2  # **スワップが確実に有効化されるまで待機**
+
+    # **スワップが有効になったか確認**
+    if [ -f /proc/swaps ] && grep -q 'zram' /proc/swaps; then
+        debug_log "INFO" "zram-swap is successfully enabled."
+    else
+        debug_log "ERROR" "Failed to enable zram-swap."
+        return 1  # **有効化に失敗したら即終了**
+    fi
+
+    # **現在のメモリとスワップ状況を表示**
+    debug_log "INFO" "Memory and Swap Status:"
+    free -m
+    cat /proc/swaps
+}
+
+XXX_setup_swap() {
+    local SWAPFILE="/overlay/swapfile"
+    local SWAP_ACTIVE="off"
+
+    # **物理メモリ (RAM) の総量を取得**
+    local RAM_TOTAL_MB
+    RAM_TOTAL_MB=$(awk '/MemTotal/ {print int($2 / 1024)}' /proc/meminfo)
+
+    # **ストレージの空き容量を取得**
+    local STORAGE_FREE_MB
+    STORAGE_FREE_MB=$(df -m /overlay | awk 'NR==2 {print $4}')  # MB単位の空き容量
+
+    # **スワップサイズを RAM の量に応じて自動設定**
+    local SWAP_SIZE_MB
+    if [ "$RAM_TOTAL_MB" -lt 512 ]; then
+        SWAP_SIZE_MB=512  # RAM が 512MB 未満なら 512MB のスワップ
+    elif [ "$RAM_TOTAL_MB" -lt 1024 ]; then
+        SWAP_SIZE_MB=256  # RAM が 512MB 以上 1GB 未満なら 256MB
+    else
+        SWAP_SIZE_MB=128  # RAM が 1GB 以上なら 128MB
+    fi
+
+    echo "[INFO] RAM: ${RAM_TOTAL_MB}MB, Available Storage: ${STORAGE_FREE_MB}MB, Setting swap size to ${SWAP_SIZE_MB}MB"
+
+    # **カーネルが swap をサポートしているか確認**
+    if ! grep -q swap /proc/filesystems; then
+        echo "[INFO] Swap is not supported by this kernel. Skipping setup."
+        return 0
+    fi
+
+    # **ストレージの空き容量が足りない場合はスワップをスキップ**
+    if [ "$STORAGE_FREE_MB" -lt 50 ]; then
+        echo "[ERROR] Not enough free space for swap (Only ${STORAGE_FREE_MB}MB available). Skipping swap setup."
+        return 0  # **スワップなしで処理を続行**
+    fi
+
+    # **スワップサイズが空き容量より大きい場合は調整**
+    if [ "$SWAP_SIZE_MB" -gt "$STORAGE_FREE_MB" ]; then
+        SWAP_SIZE_MB=$((STORAGE_FREE_MB - 10))  # **空き容量の 10MB を残してスワップサイズを調整**
+        echo "[WARNING] Not enough space for full swap. Adjusting swap size to ${SWAP_SIZE_MB}MB"
+    fi
+
+    echo "[INFO] Checking current swap status..."
+    if [ -f /proc/swaps ]; then
+        free -m
+        if free | awk '/Swap:/ {exit $2 == 0}'; then
+            echo "[INFO] No active swap detected. Creating a temporary swap file..."
+        else
+            echo "[INFO] Swap is already enabled. Skipping setup."
+            return 0  # **スワップが有効ならスキップ**
+        fi
+    else
+        echo "[INFO] /proc/swaps is missing, but swap is supported. Proceeding with setup."
+    fi
+
+    # **既存のスワップファイルがある場合は削除**
+    if [ -f "$SWAPFILE" ]; then
+        echo "[INFO] Removing existing swap file..."
+        swapoff "$SWAPFILE" 2>/dev/null
+        sync
+        sleep 2
+        rm -f "$SWAPFILE"
+    fi
+
+    echo "[INFO] Creating temporary swap file at $SWAPFILE (${SWAP_SIZE_MB}MB)..."
+    dd if=/dev/zero of="$SWAPFILE" bs=1M count="$SWAP_SIZE_MB" status=none
+    chmod 600 "$SWAPFILE"
+    sync
+    sleep 1  # **書き込み競合を防ぐための待機**
+
+    # **スワップファイルの確認**
+    ls -lh "$SWAPFILE"
+    if [ ! -f "$SWAPFILE" ]; then
+        echo "[ERROR] Swap file creation failed. Checking storage..."
+        df -h /overlay
+        return 1  # **スワップファイルが作成できなかった場合、処理中断**
+    fi
+
+    echo "[INFO] Checking file contents..."
+    hexdump -C "$SWAPFILE" | head
+
+    # **スワップの初期化**
+    echo "[INFO] Running mkswap..."
+    if ! mkswap "$SWAPFILE" > /dev/null 2>&1; then
+        echo "[ERROR] mkswap failed. Swap setup aborted."
+        return 1
+    fi
+
+    # **スワップの有効化**
+    echo "[INFO] Running swapon..."
+    if ! swapon "$SWAPFILE" > /dev/null 2>&1; then
+        echo "[ERROR] swapon failed. Swap setup aborted."
+        return 1
+    fi
+
+    # **スワップの成功を確認**
+    if [ -f /proc/swaps ] && grep -q "$SWAPFILE" /proc/swaps; then
+        echo "[INFO] Temporary swap enabled successfully."
+    else
+        echo "[ERROR] Failed to enable temporary swap. Dumping debug info..."
+        ls -lh "$SWAPFILE"
+        dmesg | tail -20
+        cat /proc/swaps 2>/dev/null
+        return 1
+    fi
+
+    echo "[INFO] Swap setup completed successfully."
+    free -m
+    cat /proc/swaps 2>/dev/null
+
+    # **スワップをクリーンアップするトラップ**
+    trap '
+        echo "[INFO] Cleaning up temporary swap..."
+        swapoff "$SWAPFILE" 2>/dev/null
+        sync
+        sleep 2
+        rm -f "$SWAPFILE"
+
+        # もともとスワップが有効だった場合、再度有効化
+        if [ "$SWAP_ACTIVE" = "on" ]; then
+            echo "[INFO] Re-enabling original swap..."
+            swapon -a
+        fi
+
+        echo "[INFO] Final swap status:"
+        free -m
+        cat /proc/swaps 2>/dev/null
+    ' EXIT
+
+    return 0
+}
+
+# 【DBファイルから値を取得する関数】
+get_ini_value() {
+    local section="$1"
+    local key="$2"
+    awk -F'=' -v s="[$section]" -v k="$key" '
+        $0 ~ s {flag=1; next} /^\[/{flag=0}
+        flag && $1==k {print $2; exit}
+    ' "$DB_FILE"
+}
+
+# 【セクションから値を取得（デフォルト値を含める）】
+get_value_with_fallback() {
+    local section="$1"
+    local key="$2"
+    local value
+    value=$(get_ini_value "$section" "$key")
+    if [ -z "$value" ]; then
+        value=$(get_ini_value "default" "$key")
+    fi
+    echo "$value"
+}
+
+install_build() {
+    local confirm_install="no"
+    local hidden="no"
+    local package_name=""
+
+    # **オプションの処理**
+    for arg in "$@"; do
+        case "$arg" in
+            yn) confirm_install="yes" ;;
+            hidden) hidden="yes" ;;
+            *)
+                if [ -z "$package_name" ]; then
+                    package_name="$arg"
+                else
+                    debug_log "DEBUG" "Unknown option: $arg"
+                fi
+                ;;
+        esac
+    done
+
+    # **パッケージ名が指定されているか確認**
+    if [ -z "$package_name" ]; then
+        debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")"
+        return 1
+    fi
+
+    # **スワップの動作チェック**
+    setup_swap
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "$(get_message 'MSG_ERR_INSUFFICIENT_SWAP')"
+        return 1
+    fi
+
+    # **インストールの確認 (YNオプションが有効な場合のみ)**
+    if [ "$confirm_install" = "yes" ]; then
+        while true; do
+            local msg=$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")
+            echo "$msg"
+
+            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
+            read -r yn
+            case "$yn" in
+                [Yy]*) break ;;  # Yes → インストール続行
+                [Nn]*) return 1 ;; # No → キャンセル
+                *) echo "Invalid input. Please enter Y or N." ;;
+            esac
+        done
+    fi
+
+    # **OpenWrt バージョン取得**
+    local openwrt_version=""
+    if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
+        openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
+    fi
+    debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
+
+    # **ビルド環境の準備**
+    install_package jq
+    local build_tools="make gcc git libtool-bin automake pkg-config zlib-dev libncurses-dev curl libxml2 libxml2-dev autoconf automake bison flex perl patch wget wget-ssl tar unzip"
+                      
+    for tool in $build_tools; do
+        install_package "$tool" hidden
+    done
+
+    # **`custom-package.db` からビルドコマンドを取得**
+    local build_command=$(jq -r --arg pkg "$package_name" --arg ver "$openwrt_version" '
+        .[$pkg].build.commands[$ver] // 
+        .[$pkg].build.commands.default // empty' "$CACHE_DIR/custom-package.db" 2>/dev/null)
+
+    if [ -z "$build_command" ]; then
+        debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_COMMAND_NOT_FOUND" | sed "s/{pkg}/$package_name/" | sed "s/{ver}/$openwrt_version/")"
+        return 1
+    fi
+
+    debug_log "DEBUG" "Executing build command: $build_command"
+
+    # **ビルド開始メッセージ**
+    echo "$(get_message "MSG_BUILD_START" | sed "s/{pkg}/$package_name/")"
+
+    # **ビルド実行（スピナー開始）**
+    start_spinner "$(get_message 'MSG_BUILD_RUNNING')"
+    local start_time=$(date +%s)
+    if ! eval "$build_command"; then
+        stop_spinner
+        echo "$(get_message "MSG_BUILD_FAIL" | sed "s/{pkg}/$package_name/")"
+        debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_FAILED" | sed "s/{pkg}/$package_name/")"
+        return 1
+    fi
+    local end_time=$(date +%s)
+    local build_time=$((end_time - start_time))
+    stop_spinner  # スピナー停止
+
+    echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$package_name/" | sed "s/{time}/$build_time/")"
+    debug_log "DEBUG" "Build time for $package_name: $build_time seconds"
+
+    # **ビルド完了後のメッセージ**
+    echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$package_name/")"
+    debug_log "DEBUG" "Successfully built and installed package: $package_name"
+}
+
+
+XXX_install_build() {
+    local package_name=""
+    local confirm_install="no"
+    local hidden="no"
+    local DB_FILE="${BASE_DIR}/custom-package.db"
+    local output_ipk=""
+
+    # 【オプションの処理】
+    for arg in "$@"; do
+        case "$arg" in
+            yn) confirm_install="yes" ;;
+            hidden) hidden="yes" ;;
+            *) if [ -z "$package_name" ]; then package_name="$arg"; else debug_log "DEBUG" "Unknown option: $arg"; fi ;;
+        esac
+    done
+
+    # 【パッケージ名が指定されているか確認】
+    if [ -z "$package_name" ]; then
+        debug_log "ERROR" "パッケージ名が指定されていません！"
+        return 1
+    fi
+
+    setup_swap  # **スワップのセットアップ**
+
+    # 【OpenWrt バージョンの取得】
+    local openwrt_version=""
+    if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
+        openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
+    else
+        debug_log "ERROR" "OpenWrt バージョン情報が取得できません！"
+        return 1
+    fi
+    debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
+
+    # 【必要なパラメータを取得】
+    local source_url build_command BUILD_DIR OPENWRT_REPO install_packages
+
+    source_url=$(get_ini_value "$package_name" "source_url")
+    BUILD_DIR=$(get_ini_value "default" "build_dir")
+    OPENWRT_REPO=$(get_ini_value "default" "openwrt_repo")
+
+    # **バージョンごとの `install_package` を取得**
+    install_packages=$(awk -F'=' -v section="$package_name" -v version="$openwrt_version" '
+        /^\[/ {
+            section_name=$0;
+            gsub(/^\[|\]$/, "", section_name);  # **[ ] を削除**
+            next;
+        }
+        section_name == section && $1 ~ /install_package/ {default_pkg=$2; gsub(/[ ]+/,"",default_pkg)}
+        section_name == section " (" version ")" && $1 ~ /install_package/ {specific_pkg=$2; gsub(/[ ]+/,"",specific_pkg)}
+        END {
+            if (specific_pkg) print specific_pkg;
+            else print default_pkg;
+        }
+    ' "$DB_FILE")
+
+    if [ -n "$install_packages" ]; then
+        debug_log "DEBUG" "Retrieved install_packages: $install_packages"
+
+        # **パッケージリストを処理**
+        echo "$install_packages" | tr ',' '\n' | while read -r pkg; do
+            if [ -n "$pkg" ]; then
+                debug_log "INFO" "Checking if package exists in repository: $pkg"
+                if opkg list | grep -qE "^$pkg "; then
+                    debug_log "INFO" "Installing package: $pkg"
+                    install_package "$pkg" "$hidden"
+                    if [ $? -ne 0 ]; then
+                        debug_log "ERROR" "Failed to install package: $pkg"
+                    fi
+                else
+                    debug_log "ERROR" "Package not found in repository: $pkg"
+                fi
+            fi
+        done
+    else
+        debug_log "DEBUG" "No additional install_package found for $package_name."
+    fi
+
+    # 【バージョンごとのビルドコマンド取得】
+    build_command=$(awk -F'=' -v section="$package_name" -v version="$openwrt_version" '
+        /^\[/ {
+            section_name=$0;
+            gsub(/^\[|\]$/, "", section_name);  # **[ ] を削除**
+            next;
+        }
+        section_name == section " (" version ")" && $1 ~ /build_command/ {print $2}
+        section_name == section && $1 ~ /build_command/ {default_cmd=$2}
+        END {
+            if (default_cmd) print default_cmd;
+        }
+    ' "$DB_FILE")
+
+    debug_log "DEBUG" "Source URL: $source_url"
+    debug_log "DEBUG" "Build Command: $build_command"
+    debug_log "DEBUG" "Build Directory: $BUILD_DIR"
+    debug_log "DEBUG" "OpenWrt Repo: $OPENWRT_REPO"
+
+    # 【パッケージのインストール確認（YNオプション）】
+    if [ "$confirm_install" = "yes" ]; then
+        echo "📢 ${package_name} をインストールしますか？ (Y/n)"
+        read -r answer
+        if [ "$answer" != "Y" ] && [ "$answer" != "y" ]; then
+            debug_log "INFO" "インストールをキャンセルしました。"
+            return 0
+        fi
+    fi
+
+    # **ビルドディレクトリがなければ作成**
+    if [ ! -d "$BUILD_DIR" ]; then
+        mkdir -p "$BUILD_DIR"
+        debug_log "DEBUG" "Created build directory: $BUILD_DIR"
+    fi
+
+    # **リポジトリの取得・更新**
+    if [ -d "$BUILD_DIR/$package_name" ]; then
+        debug_log "DEBUG" "Removing existing repository and cloning fresh copy."
+        rm -rf "$BUILD_DIR/$package_name"
+    fi
+
+    debug_log "DEBUG" "Cloning repository: $source_url"
+    git clone "$source_url" "$BUILD_DIR/$package_name"
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "Git clone failed for $package_name"
+        return 1
+    fi
+
+    cd "$BUILD_DIR/$package_name" || { debug_log "ERROR" "Failed to enter repository directory"; return 1; }
+
+    # **OpenWrt feeds のセットアップ**
+    if [ ! -d "$BUILD_DIR/openwrt" ]; then
+        debug_log "DEBUG" "Cloning OpenWrt source for feeds setup."
+        git clone "$OPENWRT_REPO" "$BUILD_DIR/openwrt"
+    fi
+
+    cd "$BUILD_DIR/openwrt"
+    ./scripts/feeds update -a
+    ./scripts/feeds install -a
+
+    cd "$BUILD_DIR/$package_name"
+
+    # **ビルドコマンドの確認**
+    if [ -z "$build_command" ]; then
+        debug_log "ERROR" "ビルドコマンドが見つかりません！"
+        stop_spinner
+        return 1
+    fi
+
+    debug_log "DEBUG" "Executing build command: $build_command"
+
+    # **スピナー開始**
+    start_spinner "$(get_message 'MSG_BUILD_RUNNING')"
+
+    # **ビルド実行**
+    local start_time end_time build_time
+    start_time=$(date +%s)
+    if ! eval "$build_command"; then
+        debug_log "ERROR" "ビルド失敗: $package_name"
+        stop_spinner
+        return 1
+    fi
+
+    end_time=$(date +%s)
+    build_time=$((end_time - start_time))
+
+    stop_spinner
+    echo "✅ ${package_name} のビルド完了（所要時間: ${build_time}秒）"
+    debug_log "DEBUG" "Build time: $build_time seconds"
+
+    return 0
+}
+
+XXX_install_build() {
+    local package_name=""
+    local confirm_install="no"
+    local hidden="no"
+    local DB_FILE="/tmp/aios/custom-package.ini"  # INIデータベースファイル
+    local CACHE_DIR="/tmp/aios/cache"
+
+    # 【オプションの処理】
+    for arg in "$@"; do
+        case "$arg" in
+            yn) confirm_install="yes" ;;   # 確認を入れるフラグ
+            hidden) hidden="yes" ;;        # 非表示でインストールするフラグ
+            *) if [ -z "$package_name" ]; then package_name="$arg"; else debug_log "DEBUG" "Unknown option: $arg"; fi ;;
+        esac
+    done
+
+    # 【パッケージ名が指定されているか確認】
+    if [ -z "$package_name" ]; then
+        debug_log "ERROR" "パッケージ名が指定されていません！"
+        return 1
+    fi
+
+    setup_swap  # スワップのセットアップ
+
+    # 【OpenWrt バージョンの取得】
+    local openwrt_version=""
+    if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
+        openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
+    else
+        debug_log "ERROR" "OpenWrt バージョン情報が取得できません！"
+        return 1
+    fi
+    debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
+
+    # 【必要なパラメータを取得】
+    local source_url build_dependencies build_command BUILD_DIR OPENWRT_REPO
+
+    source_url=$(get_ini_value "$package_name" "source_url")
+    build_dependencies=$(get_ini_value "$package_name" "build_dependencies")
+    BUILD_DIR=$(get_ini_value "default" "build_dir")
+    OPENWRT_REPO=$(get_ini_value "default" "openwrt_repo")
+
+    # 【バージョンごとのビルドコマンド取得】
+    build_command=$(get_ini_value "$package_name" "$openwrt_version")
+    if [ -z "$build_command" ]; then
+        build_command=$(get_ini_value "$package_name" "default")
+    fi
+
+    debug_log "DEBUG" "Source URL: $source_url"
+    debug_log "DEBUG" "Build Dependencies: $build_dependencies"
+    debug_log "DEBUG" "Build Command: $build_command"
+    debug_log "DEBUG" "Build Directory: $BUILD_DIR"
+    debug_log "DEBUG" "OpenWrt Repo: $OPENWRT_REPO"
+
+    # 【パッケージのインストール確認（YNオプション）】
+    if [ "$confirm_install" = "yes" ]; then
+        echo "📢 ${package_name} をインストールしますか？ (Y/n)"
+        read -r answer
+        if [ "$answer" != "Y" ] && [ "$answer" != "y" ]; then
+            debug_log "INFO" "インストールをキャンセルしました。"
+            return 0
+        fi
+    fi
+
+    # 【ビルド用依存パッケージのインストール】
+    if [ -n "$build_dependencies" ]; then
+        debug_log "DEBUG" "Installing build dependencies for $package_name: $build_dependencies"
+        for dep in $build_dependencies; do
+            install_package "$dep" "$hidden"
+        done
+    else
+        debug_log "DEBUG" "No build dependencies found for $package_name."
+    fi
+
+    # 【ビルドディレクトリがなければ作成】
+    if [ ! -d "$BUILD_DIR" ]; then
+        mkdir -p "$BUILD_DIR"
+        debug_log "DEBUG" "Created build directory: $BUILD_DIR"
+    fi
+
+    # 【リポジトリの取得・更新】
+    if [ -d "$BUILD_DIR/$package_name" ]; then
+        debug_log "DEBUG" "Removing existing repository and cloning fresh copy."
+        rm -rf "$BUILD_DIR/$package_name"
+    fi
+
+    debug_log "DEBUG" "Cloning repository: $source_url"
+    git clone "$source_url" "$BUILD_DIR/$package_name"
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "Git clone failed for $package_name"
+        return 1
+    fi
+
+    cd "$BUILD_DIR/$package_name" || { debug_log "ERROR" "Failed to enter repository directory"; return 1; }
+
+    # 【OpenWrt feeds のセットアップ】
+    if [ ! -d "$BUILD_DIR/openwrt" ]; then
+        debug_log "DEBUG" "Cloning OpenWrt source for feeds setup."
+        git clone "$OPENWRT_REPO" "$BUILD_DIR/openwrt"
+    fi
+
+    cd "$BUILD_DIR/openwrt"
+    ./scripts/feeds update -a
+    ./scripts/feeds install -a
+
+    cd "$BUILD_DIR/$package_name"
+
+    # 【ビルドコマンドの確認】
+    if [ -z "$build_command" ]; then
+        debug_log "ERROR" "ビルドコマンドが見つかりません！"
+        stop_spinner
+        return 1
+    fi
+
+    debug_log "DEBUG" "Executing build command: $build_command"
+
+    # **スピナー開始**
+    # start_spinner "$(get_message 'MSG_UPDATE_RUNNING')"
+    
+    # 【ビルド実行】
+    local start_time end_time build_time
+    start_time=$(date +%s)
+    if ! eval "$build_command"; then
+        debug_log "ERROR" "ビルド失敗: $package_name"
+        stop_spinner
+        return 1
+    fi
+
+    end_time=$(date +%s)
+    build_time=$((end_time - start_time))
+
+    # stop_spinner
+    # echo "✅ ${package_name} のビルド完了（所要時間: ${build_time}秒）"
+    debug_log "DEBUG" "Build time: $build_time seconds"
+}
