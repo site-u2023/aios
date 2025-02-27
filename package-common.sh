@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-07"
+SCRIPT_VERSION="2025.02.27-01-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -309,11 +309,15 @@ check_package_pre_install() {
     local package_name="$1"
     local package_cache="${CACHE_DIR}/package_list.ch"
     local lang_code=""
-    local base_package=""
+    local base_package="$package_name"  # デフォルトでは変更なし
 
     # 言語パッケージの特別処理
     if echo "$package_name" | grep -q "^luci-i18n-"; then
-        base_package="${package_name%-*}"  # "luci-i18n-base" の "base" を取得
+        # "luci-i18n-base" の場合は "base" を維持
+        if echo "$package_name" | grep -q "^luci-i18n-base$"; then
+            base_package="luci-i18n-base"
+        fi
+
         # キャッシュから言語コードを取得
         if [ -f "${CACHE_DIR}/luci.ch" ]; then
             lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
@@ -360,7 +364,6 @@ check_package_pre_install() {
     debug_log "ERROR" "Package $package_name not found in repository."
     return 1  # パッケージが見つからなかった
 }
-
 
 # **インストール処理 (実際のインストールを行う)**
 install_package_func() {
