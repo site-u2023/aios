@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-00"
+SCRIPT_VERSION="2025.02.27-01-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1337,42 +1337,57 @@ install_package_func() {
     # スピナーの開始
     start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
 
-    # パッケージマネージャーが opkg の場合
+    # パッケージマネージャーの確認
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if [ "$force_install" = "yes" ]; then
-            opkg install --force-reinstall "$package_name" > /dev/null 2>&1
-            if [ $? -ne 0 ]; then
-                stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
-                return 1
-            fi
-        else
-            opkg install "$package_name" > /dev/null 2>&1
-            if [ $? -ne 0 ]; then
-                stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
-                return 1
-            fi
+        # opkgの場合のパッケージ確認
+        debug_log "DEBUG" "Checking for package $package_name in the repository (opkg)"
+        if ! opkg list | grep -qE "^$package_name "; then
+            debug_log "DEBUG" "Skipping installation: $package_name not found in opkg repository."
+            stop_spinner "$(color red "❌ Package $package_name not found in repository.")"
+            return 0
         fi
-    # パッケージマネージャーが apk の場合
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if [ "$force_install" = "yes" ]; then
-            apk add --force-reinstall "$package_name" > /dev/null 2>&1
-            if [ $? -ne 0 ]; then
-                stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
-                return 1
-            fi
-        else
-            apk add "$package_name" > /dev/null 2>&1
-            if [ $? -ne 0 ]; then
-                stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
-                return 1
-            fi
+        # apkの場合のパッケージ確認
+        debug_log "DEBUG" "Checking for package $package_name in the repository (apk)"
+        if ! apk search "$package_name" | grep -q "^$package_name$"; then
+            debug_log "DEBUG" "Skipping installation: $package_name not found in apk repository."
+            stop_spinner "$(color red "❌ Package $package_name not found in repository.")"
+            return 0
         fi
     else
-        stop_spinner "$(color red "Unsupported package manager: $PACKAGE_MANAGER")"
+        debug_log "ERROR" "$(color red "Unsupported package manager: $PACKAGE_MANAGER")"
+        stop_spinner "$(color red "❌ Unsupported package manager: $PACKAGE_MANAGER")"
         return 1
     fi
 
-    # スピナーを止める
+    # パッケージのインストール処理
+    if [ "$force_install" = "yes" ]; then
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            opkg install --force-reinstall "$package_name" > /dev/null 2>&1 || {
+                stop_spinner "$(color red "❌ Failed to install package $package_name")"
+                return 1
+            }
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            apk add --force-reinstall "$package_name" > /dev/null 2>&1 || {
+                stop_spinner "$(color red "❌ Failed to install package $package_name")"
+                return 1
+            }
+        fi
+    else
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            opkg install "$package_name" > /dev/null 2>&1 || {
+                stop_spinner "$(color red "❌ Failed to install package $package_name")"
+                return 1
+            }
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            apk add "$package_name" > /dev/null 2>&1 || {
+                stop_spinner "$(color red "❌ Failed to install package $package_name")"
+                return 1
+            }
+        fi
+    fi
+
+    # スピナーを停止
     stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
 }
 
@@ -1492,27 +1507,17 @@ install_package() {
 
     # **パッケージリスト更新**
     update_package_list || return 1
-
-    # **リポジトリにパッケージが存在するか確認**
-    debug_log "DEBUG" "Checking for package $package_name in the repository"
-    if ! opkg list | grep -qE "^$package_name "; then
-        debug_log "DEBUG" "Skipping installation: $package_name not found in repository."
-        return 0
-    fi
-
+    
     # **YN確認**
     confirm_installation "$package_name" || return 1
 
-    # **インストール済み確認**
-    if opkg list-installed | grep -qE "^$package_name "; then
-        if [ "$hidden" != "yes" ]; then
-            echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-        fi
-        return 0
-    fi
-
     # **通常パッケージのインストール**
     install_package_func "$package_name" "$force_install"
+
+     # ローカルパッケージDBの適用
+    if [ "$skip_package_db" != "yes" ]; then
+        apply_local_package_db "$package_name"
+    fi
 
     # **言語パッケージのインストール**
     if [ "$skip_lang_pack" != "yes" ]; then
@@ -1520,8 +1525,8 @@ install_package() {
     fi
 }
 
-OK_# **インストール処理を共通化する関数**
-install_package_func() {
+# **インストール処理を共通化する関数**
+OK_install_package_func() {
     local package_name="$1"
     local force_install="$2"
 
