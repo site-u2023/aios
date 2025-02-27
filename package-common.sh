@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-08"
+SCRIPT_VERSION="2025.02.27-01-09"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -313,31 +313,33 @@ check_package_pre_install() {
 
     # 言語パッケージの特別処理
     if echo "$package_name" | grep -q "^luci-i18n-"; then
-        # "luci-i18n-base" の場合は "base" を維持
-        if echo "$package_name" | grep -q "^luci-i18n-base$"; then
-            base_package="luci-i18n-base"
-        fi
-
         # キャッシュから言語コードを取得
         if [ -f "${CACHE_DIR}/luci.ch" ]; then
             lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
         else
             lang_code="en"  # デフォルトで英語
         fi
+
         # 言語付きのパッケージ名を作成
-        package_name="${base_package}-${lang_code}"
+        package_name="${package_name}-${lang_code}"
+
+        # **フォールバック処理**
+        if ! grep -q "^$package_name " "$package_cache"; then
+            debug_log "WARN" "Package $package_name not found. Falling back to English (en)."
+            package_name="${package_name%-*}-en"
+        fi
     fi
 
     # **デバイス内パッケージ確認**
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if opkg list-installed | grep -qE "^$package_name "; then
             debug_log "DEBUG" "Package $package_name is already installed on the device."
-            return 1  # 既にインストール済みなので終了
+            return 0  # 既にインストール済みなので問題なし
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         if apk info | grep -q "^$package_name$"; then
             debug_log "DEBUG" "Package $package_name is already installed on the device."
-            return 1  # 既にインストール済みなので終了
+            return 0  # 既にインストール済みなので問題なし
         fi
     fi
 
@@ -350,16 +352,10 @@ check_package_pre_install() {
         return 1
     fi
 
-    local package_found="no"
-    local package_search_list="$package_name"  # スペース区切りのリスト
-
-    # リポジトリ検索
-    for pkg in $package_search_list; do
-        if grep -qE "^$pkg " "$package_cache"; then
-            debug_log "DEBUG" "Package $pkg found in repository."
-            return 0  # パッケージが存在するのでOK
-        fi
-    done
+    if grep -qE "^$package_name " "$package_cache"; then
+        debug_log "DEBUG" "Package $package_name found in repository."
+        return 0  # パッケージが存在するのでOK
+    fi
 
     debug_log "ERROR" "Package $package_name not found in repository."
     return 1  # パッケージが見つからなかった
