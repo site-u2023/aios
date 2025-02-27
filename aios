@@ -55,59 +55,28 @@ make_directory() {
     mkdir -p "$BASE_DIR" "$CACHE_DIR" "$LOG_DIR"
 }
 
-# `common.sh` のダウンロード & 読み込み
+# 共通ダウンロード関数
 download_common() {
-    if [ ! -f "${BASE_DIR}/common.sh" ]; then
-        ${BASE_WGET} "${BASE_DIR}/common.sh" "${BASE_URL}/common.sh" || {
-            echo "Failed to download common.sh"
+    local file_name="$1"  # ファイル名を引数として受け取る
+
+    # ダウンロード対象のファイルパスを決定
+    local file_path="${BASE_DIR}/${file_name}"
+    local file_url="${BASE_URL}/${file_name}"
+
+    # ファイルが存在しない場合にダウンロード
+    if [ ! -f "$file_path" ]; then
+        ${BASE_WGET} "$file_path" "$file_url" || {
+            echo "Failed to download $file_name"
             exit 1
         }
     fi
 
-    # ダウンロードが成功した場合に実行権限を付与
-    chmod +x "${BASE_DIR}/common.sh"
+    # ダウンロード成功後に実行権限を付与
+    chmod +x "$file_path"
 
-    # common.sh を読み込む
-    . "${BASE_DIR}/common.sh" || {
-        echo "Failed to source common.sh"
-        exit 1
-    }
-}
-
-# `country-common.sh` のダウンロード & 読み込み
-download_country_common() {
-    if [ ! -f "${BASE_DIR}/country-common.sh" ]; then
-        ${BASE_WGET} "${BASE_DIR}/country-common.sh" "${BASE_URL}/country-common.sh" || {
-            echo "Failed to download country-common.sh"
-            exit 1
-        }
-    fi
-
-    # ダウンロードが成功した場合に実行権限を付与
-    chmod +x "${BASE_DIR}/country-common.sh"
-
-    # common.sh を読み込む
-    . "${BASE_DIR}/country-common.sh" || {
-        echo "Failed to source country-common.sh"
-        exit 1
-    }
-}
-
-# `package-common.sh` のダウンロード & 読み込み
-download_package_common() {
-    if [ ! -f "${BASE_DIR}/package-common.sh" ]; then
-        ${BASE_WGET} "${BASE_DIR}/package-common.sh" "${BASE_URL}/package-common.sh" || {
-            echo "Failed to download package-common.sh"
-            exit 1
-        }
-    fi
-
-    # ダウンロードが成功した場合に実行権限を付与
-    chmod +x "${BASE_DIR}/package-common.sh"
-
-    # common.sh を読み込む
-    . "${BASE_DIR}/package-common.sh" || {
-        echo "Failed to source package-common.sh"
+    # ファイルを読み込む
+    . "$file_path" || {
+        echo "Failed to source $file_name"
         exit 1
     }
 }
@@ -142,9 +111,9 @@ packages() {
 chmod_aios
 delete_aios
 make_directory
-download_common
-download_country_common
-download_package_common
+download_common "common.sh"
+download_common "country-common.sh"
+download_common "package-common.sh"
 check_option "$@"
 print_banner
 packages
