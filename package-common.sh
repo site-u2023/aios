@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-18"
+SCRIPT_VERSION="2025.02.27-01-19"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -367,7 +367,7 @@ check_package_pre_install() {
         return 1
     fi
 
-    if grep -qE "^$package_name " "$package_cache"; then
+    if grep -q "^$package_name " "$package_cache"; then
         debug_log "DEBUG" "Package $package_name found in repository."
         return 0  # パッケージが存在するのでOK
     fi
