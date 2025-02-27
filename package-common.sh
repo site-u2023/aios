@@ -520,7 +520,7 @@ install_package() {
 
     # パッケージマネージャー確認
     if [ -f "${CACHE_DIR}/downloader_ch" ]; then
-        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
+        PACKAGE_MANAGER="${CACHE_DIR}/downloader.ch"
     else
         debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")")"
         return 1
@@ -531,7 +531,7 @@ install_package() {
 
     # 言語コードの取得
     if [ -f "${CACHE_DIR}/luci.ch" ]; then
-        lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
+        lang_code="${CACHE_DIR}/luci.ch"
 
         # luci.ch で指定されている言語コードが "xx" なら "en" に変更
         if [ "$lang_code" == "xx" ]; then
