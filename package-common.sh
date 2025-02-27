@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-01-03"
+SCRIPT_VERSION="2025.02.28-01-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -352,7 +352,8 @@ install_normal_package() {
 
     debug_log "DEBUG" "Starting installation process for: $package_name"
 
-    start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
+    start_spinner "$(color yellow "$package_name $(get_message "MSG_INSTALLING_PACKAGE")")"
+    #start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
 
     if [ "$force_install" = "yes" ]; then
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
@@ -380,8 +381,9 @@ install_normal_package() {
         fi
     fi
 
+    stop_spinner "$(color green "$package_name $(get_message "MSG_INSTALL_SUCCESS")")"
     #stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$(printf '%s' "$package_name" | sed 's/-/\\-/g')/")")"
-    stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
+    #stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
     #safe_pkg=$(printf '%s\n' "$package_name" | sed 's/[&/\]/\\&/g')
     #stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s|{pkg}|$safe_pkg|")")"
 }
