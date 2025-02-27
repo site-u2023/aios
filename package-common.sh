@@ -291,11 +291,8 @@ confirm_installation() {
 
     debug_log "DEBUG" "Confirming installation for package: $package"
 
-    # 言語コードが正しくついているかチェック
-    if echo "$package" | grep -q "^luci-i18n-"; then
-        debug_log "ERROR" "Invalid package name detected: $package (missing language code)"
-        return 1  # 言語コードなしならエラー
-    fi
+    # 言語コードの確認を削除
+    # すでにpackage名が適切な形式だと仮定し、チェックしない
 
     while true; do
         local msg=$(get_message "MSG_CONFIRM_INSTALL")
@@ -311,6 +308,7 @@ confirm_installation() {
     done
 }
 
+
 check_package_pre_install() {
     local package_name="$1"
     local package_cache="${CACHE_DIR}/package_list.ch"
@@ -318,7 +316,7 @@ check_package_pre_install() {
     local base_package="$package_name"  # デフォルトでは変更なし
 
     # 言語パッケージの特別処理
-    if echo "$package_name" | grep -q "^luci-i18n-"; then
+    if [[ "$package_name" == luci-i18n-* ]]; then
         # キャッシュから言語コードを取得
         if [ -f "${CACHE_DIR}/luci.ch" ]; then
             lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
@@ -421,73 +419,46 @@ install_language_package() {
 install_package_func() {
     local package_name="$1"
     local force_install="$2"
-    local base=""
-    local cache_lang=""
     local lang_pkg=""
 
     debug_log "DEBUG" "Starting installation process for: $package_name"
 
-    # 言語パッケージの場合は適切な言語コードを取得
-    if echo "$package_name" | grep -q "^luci-i18n-"; then
-        base="${package_name%-*}"  # "luci-i18n-base" の "base" を取得
-        debug_log "DEBUG" "Detected language package base: $base"
-
-        if [ -f "${CACHE_DIR}/luci.ch" ]; then
-            cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
-        else
-            cache_lang="en"  # フォールバックは英語
-        fi
-
-        debug_log "DEBUG" "Language detected from cache: $cache_lang"
-
-        # 言語コードを付け加える
-        package_name="${base}-${cache_lang}"
-        debug_log "DEBUG" "Final package name set to: $package_name"
-
-        # フォールバックチェック
-        if ! opkg list-installed "$package_name" >/dev/null 2>&1; then
-            debug_log "WARN" "Package $package_name not found, falling back to English"
-            package_name="${base}-en"
-        fi
-
-        if ! opkg list-installed "$package_name" >/dev/null 2>&1; then
-            debug_log "ERROR" "Neither $package_name nor its English fallback exists. Aborting."
-            return 1
-        fi
-    fi
+    # 言語コードに関わる処理は不要なので、パッケージ名をそのまま使用
+    lang_pkg="$package_name"
+    debug_log "DEBUG" "Final package name set to: $lang_pkg"
 
     # スピナー開始
-    start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
+    start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$lang_pkg/")")"
 
     # パッケージのインストール
     if [ "$force_install" = "yes" ]; then
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            opkg install --force-reinstall "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "❌ Failed to install package $package_name")"
+            opkg install --force-reinstall "$lang_pkg" > /dev/null 2>&1 || {
+                stop_spinner "$(color red "❌ Failed to install package $lang_pkg")"
                 return 1
             }
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            apk add --force-reinstall "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "❌ Failed to install package $package_name")"
+            apk add --force-reinstall "$lang_pkg" > /dev/null 2>&1 || {
+                stop_spinner "$(color red "❌ Failed to install package $lang_pkg")"
                 return 1
             }
         fi
     else
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            opkg install "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "❌ Failed to install package $package_name")"
+            opkg install "$lang_pkg" > /dev/null 2>&1 || {
+                stop_spinner "$(color red "❌ Failed to install package $lang_pkg")"
                 return 1
             }
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            apk add "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "❌ Failed to install package $package_name")"
+            apk add "$lang_pkg" > /dev/null 2>&1 || {
+                stop_spinner "$(color red "❌ Failed to install package $lang_pkg")"
                 return 1
             }
         fi
     fi
 
     # スピナー停止
-    stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
+    stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$lang_pkg/")")"
 }
 
 # **言語パッケージのインストール**
