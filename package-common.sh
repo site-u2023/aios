@@ -532,11 +532,8 @@ install_package() {
     # 言語コードの取得
     if [ -f "${CACHE_DIR}/luci.ch" ]; then
         lang_code="${CACHE_DIR}/luci.ch"
-
-        # luci.ch で指定されている言語コードが "xx" なら "en" に変更
-        if [ "$lang_code" == "xx" ]; then
-            lang_code="en"
-        fi
+    elif [ "$lang_code" == "xx" ]; then
+        lang_code="en"
     else
         lang_code="en"  # デフォルトで英語
     fi
