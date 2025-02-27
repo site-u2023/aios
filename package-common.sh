@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-12"
+SCRIPT_VERSION="2025.02.27-01-13"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -256,7 +256,7 @@ apply_local_package_db() {
 }
 
 # **YN 確認を行う関数**
-confirm_installation() {
+OK_confirm_installation() {
     local package="$1"
     local package_with_lang="$package"  # デフォルトではそのままのパッケージ名
 
@@ -287,12 +287,15 @@ confirm_installation() {
 }
 
 # **YN 確認を行う関数**
-OK_confirm_installation() {
+confirm_installation() {
     local package="$1"
-     
+
+    # デバッグログに表示
+    debug_log "DEBUG" "Confirming installation for package: $package"
+
     while true; do
         local msg=$(get_message "MSG_CONFIRM_INSTALL")
-        msg="${msg//\{pkg\}/$package}"
+        msg="${msg//\{pkg\}/$package}"  # 変数が正しく置換されるか確認
         echo "$msg"
         printf "%s " "$(get_message "MSG_CONFIRM_ONLY_YN")"
         read -r yn || return 1
