@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-10"
+SCRIPT_VERSION="2025.02.27-01-11"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -340,12 +340,12 @@ check_package_pre_install() {
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         if opkg list-installed | grep -qE "^$package_name "; then
             debug_log "DEBUG" "Package $package_name is already installed on the device."
-            return 0  # 既にインストール済みなので問題なし
+            return 0  # 既にインストール済みなので終了（ここで絶対に止まる）
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         if apk info | grep -q "^$package_name$"; then
             debug_log "DEBUG" "Package $package_name is already installed on the device."
-            return 0  # 既にインストール済みなので問題なし
+            return 0  # 既にインストール済みなので終了（ここで絶対に止まる）
         fi
     fi
 
