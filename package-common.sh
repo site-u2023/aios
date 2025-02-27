@@ -531,7 +531,7 @@ install_package() {
     update_package_list || return 1
 
     # **インストール前確認 (デバイス内パッケージ確認 + リポジトリ確認)**
-    if ! check_package_pre_install "$package_name"; then
+    if ! package_pre_install "$package_name"; then
         debug_log "ERROR" "$(color red "❌ Package $package_name is either already installed or not found in repository.")"
         return 1
     fi
