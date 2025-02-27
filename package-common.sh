@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-02"
+SCRIPT_VERSION="2025.02.27-01-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -272,51 +272,6 @@ confirm_installation() {
     done
 }
 
-# **言語パッケージのインストール**
-install_language_package() {
-    local package_name="$1"
-    local base="luci-i18n-${package_name#luci-app-}"
-    local cache_lang=""
-    local lang_pkg=""
-
-    # 言語キャッシュの取得
-    if [ -f "${CACHE_DIR}/luci.ch" ]; then
-        cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
-    else
-        cache_lang="en"
-    fi
-
-    # 言語パッケージの検索順リスト
-    local package_search_list="${base}-${cache_lang} ${base}-en $base"
-
-    debug_log "DEBUG" "Checking for package variations in repository: $package_search_list"
-
-    local package_found="no"
-    for pkg in $package_search_list; do
-        # **インストール済みチェック**
-        if opkg list-installed | grep -qE "^$pkg "; then
-            debug_log "DEBUG" "Package $pkg is already installed. Skipping installation."
-            return 0
-        fi
-
-        # **リポジトリ検索**
-        if grep -qE "^$pkg " "${CACHE_DIR}/package_list.ch"; then
-            lang_pkg="$pkg"
-            package_found="yes"
-            break
-        fi
-    done
-
-    if [ "$package_found" = "no" ]; then
-        debug_log "ERROR" "No suitable language package found for $package_name."
-        return 1
-    fi
-
-    debug_log "DEBUG" "Found $lang_pkg in repository"
-    confirm_installation "$lang_pkg" || return 1
-    install_package_func "$lang_pkg" "$force_install"
-}
-
 # **インストール前確認 (デバイス内パッケージ確認 + リポジトリ確認)**
 check_package_pre_install() {
     local package_name="$1"
@@ -428,21 +383,28 @@ install_language_package() {
     local base="luci-i18n-${package_name#luci-app-}"
     local cache_lang=""
     local lang_pkg=""
-    
-    # キャッシュファイルが存在する場合、言語コードを取得
+
+    # 言語キャッシュの取得
     if [ -f "${CACHE_DIR}/luci.ch" ]; then
         cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
     else
-        cache_lang="en"  # デフォルトで英語
+        cache_lang="en"
     fi
 
-    # **言語パッケージの検索順リスト**
+    # 言語パッケージの検索順リスト
     local package_search_list="${base}-${cache_lang} ${base}-en $base"
 
     debug_log "DEBUG" "Checking for package variations in repository: $package_search_list"
 
     local package_found="no"
     for pkg in $package_search_list; do
+        # **インストール済みチェック**
+        if opkg list-installed | grep -qE "^$pkg "; then
+            debug_log "DEBUG" "Package $pkg is already installed. Skipping installation."
+            return 0
+        fi
+
+        # **リポジトリ検索**
         if grep -qE "^$pkg " "${CACHE_DIR}/package_list.ch"; then
             lang_pkg="$pkg"
             package_found="yes"
