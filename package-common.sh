@@ -237,7 +237,7 @@ apply_local_package_db() {
 
     # コマンドが見つからない場合、エラーメッセージを表示して終了
     if [ -z "$cmds" ]; then
-        echo "No commands found for package: $package_name"
+        debug_log "DEBUG" "No commands found for package: $package_name"
         return 1
     fi
 
