@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-26"
+SCRIPT_VERSION="2025.02.27-01-27"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -311,67 +311,49 @@ confirm_installation() {
     done
 }
 
-# **インストール前確認 (デバイス内パッケージ確認 + リポジトリ確認)**
-check_package_pre_install() {
+# **言語パッケージのインストール**
+install_language_package() {
     local package_name="$1"
-    local package_cache="${CACHE_DIR}/package_list.ch"
-    local lang_code=""
-    local base_package="$package_name"  # デフォルトでは変更なし
+    local base="luci-i18n-${package_name#luci-app-}"
+    local cache_lang=""
+    local lang_pkg=""
 
-    # 言語パッケージの特別処理
-    if echo "$package_name" | grep -q "^luci-i18n-"; then
-        # キャッシュから言語コードを取得
-        if [ -f "${CACHE_DIR}/luci.ch" ]; then
-            lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
-        else
-            lang_code="en"  # デフォルトで英語
-        fi
-
-        # 言語付きのパッケージ名を作成
-        package_name="${package_name}-${lang_code}"
-
-        # **フォールバック処理 (`ja` → `en`)**
-        if ! opkg list-installed "$package_name" >/dev/null 2>&1 && ! grep -q "^$package_name " "$package_cache"; then
-            debug_log "WARN" "Package $package_name not found. Falling back to English (en)."
-            package_name="${base_package%-*}-en"  # 日本語パッケージがなければ英語パッケージに切り替え
-        fi
-
-        # **`en` も無かったらエラーで終了**
-        if ! opkg list-installed "$package_name" >/dev/null 2>&1 && ! grep -q "^$package_name " "$package_cache"; then
-            debug_log "ERROR" "Package $package_name not found. No fallback available."
-            return 1
-        fi
+    # 言語キャッシュの取得
+    if [ -f "${CACHE_DIR}/luci.ch" ]; then
+        cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
+    else
+        cache_lang="en"
     fi
 
-    # **デバイス内パッケージ確認**
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if opkg list-installed "$package_name" >/dev/null 2>&1; then
-            debug_log "DEBUG" "Package $package_name is already installed on the device."
-            return 0  # ここで終了！ → インストール確認を出さない！
+    # 言語パッケージの検索順リスト
+    local package_search_list="${base}-${cache_lang} ${base}-en"
+
+    debug_log "DEBUG" "Checking for package variations in repository: $package_search_list"
+
+    local package_found="no"
+    for pkg in $package_search_list; do
+        # **インストール済みチェック**
+        if opkg list-installed "$pkg" >/dev/null 2>&1; then
+            debug_log "DEBUG" "Package $pkg is already installed. Skipping installation."
+            return 0  # インストール済みなら何もしない
         fi
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if apk info | grep -q "^$package_name$"; then
-            debug_log "DEBUG" "Package $package_name is already installed on the device."
-            return 0  # ここで終了！ → インストール確認を出さない！
+
+        # **リポジトリ検索**
+        if grep -q "^$pkg " "${CACHE_DIR}/package_list.ch"; then
+            lang_pkg="$pkg"
+            package_found="yes"
+            break  # 見つかったパッケージでループを終了
         fi
+    done
+
+    if [ "$package_found" = "no" ]; then
+        debug_log "ERROR" "No suitable language package found for $package_name."
+        return 1  # 見つからなければエラー
     fi
 
-    # **リポジトリ内パッケージ確認**
-    debug_log "DEBUG" "Checking repository for package: $package_name"
-
-    # キャッシュファイルがない場合はエラー
-    if [ ! -f "$package_cache" ]; then
-        debug_log "ERROR" "Package cache not found! Run update_package_list() first."
-        return 1
-    fi
-
-    if grep -q "^$package_name " "$package_cache"; then
-        debug_log "DEBUG" "Package $package_name found in repository."
-        return 0  # パッケージが存在するのでOK
-    fi
-
-    debug_log "ERROR" "Package $package_name not found in repository."
-    return 1  # パッケージが見つからなかった
+    debug_log "DEBUG" "Found $lang_pkg in repository"
+    confirm_installation "$lang_pkg" || return 1  # インストール確認
+    install_package_func "$lang_pkg" "$force_install"  # 実際にインストール
 }
 
 install_package_func() {
