@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-00"
+SCRIPT_VERSION="2025.02.27-00-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -271,6 +271,41 @@ confirm_installation() {
     done
 }
 
+# **言語パッケージのインストール**
+install_language_package() {
+    local package_name="$1"
+    local base="luci-i18n-${package_name#luci-app-}"
+    local cache_lang=""
+    local lang_pkg=""
+
+    # キャッシュファイルが存在する場合、言語コードを取得
+    if [ -f "${CACHE_DIR}/luci.ch" ]; then
+        cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
+        lang_pkg="${base}-${cache_lang}"
+
+        # **インストール処理を共通化した関数で存在確認・インストールを行う**
+        debug_log "DEBUG" "Checking for package $lang_pkg in repository using install_package_func"
+        
+        # install_package_funcがリポジトリの存在確認も担当する
+        install_package_func "$lang_pkg" "$force_install" || {
+            # インストールに失敗した場合、フォールバックを試みる
+            debug_log "DEBUG" "$lang_pkg はリポジトリに存在しません。スキップします。"
+            
+            # フォールバック: "en"（英語）を試す
+            lang_pkg="${base}-en"
+            debug_log "DEBUG" "Trying to install $lang_pkg"
+            install_package_func "$lang_pkg" "$force_install" || {
+                # それでもダメなら、コードなしのパッケージを試す
+                lang_pkg="${base}"
+                debug_log "DEBUG" "Trying to install $lang_pkg without language code"
+                install_package_func "$lang_pkg" "$force_install"  # 最後の試行
+            }
+        }
+    else
+        echo "$(color red "${CACHE_DIR}/luci.ch が存在しません。言語パッケージ情報が得られません。")"
+    fi
+}
+
 # **インストール前確認 (デバイス内パッケージ確認 + リポジトリ確認)**
 check_package_pre_install() {
     local package_name="$1"
@@ -311,41 +346,6 @@ check_package_pre_install() {
     return 1  # 問題なしならインストール処理へ進む
 }
 
-# **言語パッケージのインストール**
-install_language_package() {
-    local package_name="$1"
-    local base="luci-i18n-${package_name#luci-app-}"
-    local cache_lang=""
-    local lang_pkg=""
-
-    # キャッシュファイルが存在する場合、言語コードを取得
-    if [ -f "${CACHE_DIR}/luci.ch" ]; then
-        cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
-        lang_pkg="${base}-${cache_lang}"
-
-        # **インストール処理を共通化した関数で存在確認・インストールを行う**
-        debug_log "DEBUG" "Checking for package $lang_pkg in repository using install_package_func"
-        
-        # install_package_funcがリポジトリの存在確認も担当する
-        install_package_func "$lang_pkg" "$force_install" || {
-            # インストールに失敗した場合、フォールバックを試みる
-            debug_log "DEBUG" "$lang_pkg はリポジトリに存在しません。スキップします。"
-            
-            # フォールバック: "en"（英語）を試す
-            lang_pkg="${base}-en"
-            debug_log "DEBUG" "Trying to install $lang_pkg"
-            install_package_func "$lang_pkg" "$force_install" || {
-                # それでもダメなら、コードなしのパッケージを試す
-                lang_pkg="${base}"
-                debug_log "DEBUG" "Trying to install $lang_pkg without language code"
-                install_package_func "$lang_pkg" "$force_install"  # 最後の試行
-            }
-        }
-    else
-        echo "$(color red "${CACHE_DIR}/luci.ch が存在しません。言語パッケージ情報が得られません。")"
-    fi
-}
-
 # **インストール処理 (実際のインストールを行う)**
 install_package_func() {
     local package_name="$1"
@@ -382,140 +382,6 @@ install_package_func() {
     fi
 
     # スピナーを停止
-    stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
-}
-
-# **インストール関数**
-install_package() {
-    # 変数初期化
-    local confirm_install="no"
-    local skip_lang_pack="no"
-    local force_install="no"
-    local skip_package_db="no"
-    local set_disabled="no"
-    local hidden="no"
-    local test_mode="no"
-    local update_mode="no"
-    local unforce="no"
-    local package_name=""
-    local package_to_update=""
-    local package_db_local="${BASE_DIR}/local-package.db"
-
-    # オプション解析
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            yn) confirm_install="yes" ;;
-            nolang) skip_lang_pack="yes" ;;
-            force) force_install="yes" ;;
-            notpack) skip_package_db="yes" ;;
-            disabled) set_disabled="yes" ;;
-            hidden) hidden="yes" ;;
-            test) test_mode="yes" ;;
-            update)
-                update_mode="yes"
-                shift
-                if [ $# -gt 0 ]; then
-                    package_to_update="$1"
-                    shift
-                fi
-                continue
-                ;;
-            unforce) unforce="yes" ;;
-            -*) echo "Unknown option: $1"; return 1 ;;
-            *)
-                if [ -z "$package_name" ]; then
-                    package_name="$1"
-                else
-                    debug_log "DEBUG" "$(color yellow "$(get_message "MSG_UNKNOWN_OPTION" | sed "s/{option}/$1/")")"
-                fi
-                ;;
-        esac
-        shift
-    done
-
-    # update オプション処理
-    if [ "$update_mode" = "yes" ]; then
-        update_package_list
-        return 0
-    fi
-
-    # パッケージマネージャー確認
-    if [ -f "${CACHE_DIR}/downloader_ch" ]; then
-        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
-    else 
-        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")")"
-        return 1
-    fi
-
-    # **パッケージリスト更新**
-    update_package_list || return 1
-
-    # **インストール前確認 (デバイス内パッケージ確認 + リポジトリ確認)**
-    check_package_pre_install "$package_name" || return 1
-
-    # **YN確認**: インストールの確認を行う
-    if [ "$confirm_install" = "yes" ]; then
-        confirm_installation "$package_name" || return 1
-    fi
-
-    # **通常パッケージのインストール**
-    install_package_func "$package_name" "$force_install"
-
-    # **ローカルパッケージDBの適用**
-    if [ "$skip_package_db" != "yes" ]; then
-        apply_local_package_db "$package_name"
-    fi
-
-    # **言語パッケージのインストール**
-    if [ "$skip_lang_pack" != "yes" ]; then
-        install_language_package "$package_name"
-    fi
-}
-
-# **インストール処理を共通化する関数**
-OK_install_package_func() {
-    local package_name="$1"
-    local force_install="$2"
-
-    # スピナーの開始
-    start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
-
-    # パッケージマネージャーが opkg の場合
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if [ "$force_install" = "yes" ]; then
-            opkg install --force-reinstall "$package_name" > /dev/null 2>&1
-            if [ $? -ne 0 ]; then
-                stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
-                return 1
-            fi
-        else
-            opkg install "$package_name" > /dev/null 2>&1
-            if [ $? -ne 0 ]; then
-                stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
-                return 1
-            fi
-        fi
-    # パッケージマネージャーが apk の場合
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if [ "$force_install" = "yes" ]; then
-            apk add --force-reinstall "$package_name" > /dev/null 2>&1
-            if [ $? -ne 0 ]; then
-                stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
-                return 1
-            fi
-        else
-            apk add "$package_name" > /dev/null 2>&1
-            if [ $? -ne 0 ]; then
-                stop_spinner "$(color red "$(get_message "MSG_INSTALL_FAILED" | sed "s/{pkg}/$package_name/")")"
-                return 1
-            fi
-        fi
-    else
-        stop_spinner "$(color red "Unsupported package manager: $PACKAGE_MANAGER")"
-        return 1
-    fi
-
-    # スピナーを止める
     stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
 }
 
@@ -636,26 +502,21 @@ install_package() {
     # **パッケージリスト更新**
     update_package_list || return 1
 
-    # **リポジトリにパッケージが存在するか確認**
-    debug_log "DEBUG" "Checking for package $package_name in the repository"
-    if ! opkg list | grep -qE "^$package_name "; then
-        debug_log "DEBUG" "Skipping installation: $package_name not found in repository."
-        return 0
-    fi
+    # **インストール前確認 (デバイス内パッケージ確認 + リポジトリ確認)**
+    check_package_pre_install "$package_name" || return 1
 
-    # **YN確認**
-    confirm_installation "$package_name" || return 1
-
-    # **インストール済み確認**
-    if opkg list-installed | grep -qE "^$package_name "; then
-        if [ "$hidden" != "yes" ]; then
-            echo "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-        fi
-        return 0
+    # **YN確認**: インストールの確認を行う
+    if [ "$confirm_install" = "yes" ]; then
+        confirm_installation "$package_name" || return 1
     fi
 
     # **通常パッケージのインストール**
     install_package_func "$package_name" "$force_install"
+
+    # **ローカルパッケージDBの適用**
+    if [ "$skip_package_db" != "yes" ]; then
+        apply_local_package_db "$package_name"
+    fi
 
     # **言語パッケージのインストール**
     if [ "$skip_lang_pack" != "yes" ]; then
@@ -766,138 +627,6 @@ setup_swap() {
     debug_log "INFO" "Memory and Swap Status:"
     free -m
     cat /proc/swaps
-}
-
-XXX_setup_swap() {
-    local SWAPFILE="/overlay/swapfile"
-    local SWAP_ACTIVE="off"
-
-    # **物理メモリ (RAM) の総量を取得**
-    local RAM_TOTAL_MB
-    RAM_TOTAL_MB=$(awk '/MemTotal/ {print int($2 / 1024)}' /proc/meminfo)
-
-    # **ストレージの空き容量を取得**
-    local STORAGE_FREE_MB
-    STORAGE_FREE_MB=$(df -m /overlay | awk 'NR==2 {print $4}')  # MB単位の空き容量
-
-    # **スワップサイズを RAM の量に応じて自動設定**
-    local SWAP_SIZE_MB
-    if [ "$RAM_TOTAL_MB" -lt 512 ]; then
-        SWAP_SIZE_MB=512  # RAM が 512MB 未満なら 512MB のスワップ
-    elif [ "$RAM_TOTAL_MB" -lt 1024 ]; then
-        SWAP_SIZE_MB=256  # RAM が 512MB 以上 1GB 未満なら 256MB
-    else
-        SWAP_SIZE_MB=128  # RAM が 1GB 以上なら 128MB
-    fi
-
-    echo "[INFO] RAM: ${RAM_TOTAL_MB}MB, Available Storage: ${STORAGE_FREE_MB}MB, Setting swap size to ${SWAP_SIZE_MB}MB"
-
-    # **カーネルが swap をサポートしているか確認**
-    if ! grep -q swap /proc/filesystems; then
-        echo "[INFO] Swap is not supported by this kernel. Skipping setup."
-        return 0
-    fi
-
-    # **ストレージの空き容量が足りない場合はスワップをスキップ**
-    if [ "$STORAGE_FREE_MB" -lt 50 ]; then
-        echo "[ERROR] Not enough free space for swap (Only ${STORAGE_FREE_MB}MB available). Skipping swap setup."
-        return 0  # **スワップなしで処理を続行**
-    fi
-
-    # **スワップサイズが空き容量より大きい場合は調整**
-    if [ "$SWAP_SIZE_MB" -gt "$STORAGE_FREE_MB" ]; then
-        SWAP_SIZE_MB=$((STORAGE_FREE_MB - 10))  # **空き容量の 10MB を残してスワップサイズを調整**
-        echo "[WARNING] Not enough space for full swap. Adjusting swap size to ${SWAP_SIZE_MB}MB"
-    fi
-
-    echo "[INFO] Checking current swap status..."
-    if [ -f /proc/swaps ]; then
-        free -m
-        if free | awk '/Swap:/ {exit $2 == 0}'; then
-            echo "[INFO] No active swap detected. Creating a temporary swap file..."
-        else
-            echo "[INFO] Swap is already enabled. Skipping setup."
-            return 0  # **スワップが有効ならスキップ**
-        fi
-    else
-        echo "[INFO] /proc/swaps is missing, but swap is supported. Proceeding with setup."
-    fi
-
-    # **既存のスワップファイルがある場合は削除**
-    if [ -f "$SWAPFILE" ]; then
-        echo "[INFO] Removing existing swap file..."
-        swapoff "$SWAPFILE" 2>/dev/null
-        sync
-        sleep 2
-        rm -f "$SWAPFILE"
-    fi
-
-    echo "[INFO] Creating temporary swap file at $SWAPFILE (${SWAP_SIZE_MB}MB)..."
-    dd if=/dev/zero of="$SWAPFILE" bs=1M count="$SWAP_SIZE_MB" status=none
-    chmod 600 "$SWAPFILE"
-    sync
-    sleep 1  # **書き込み競合を防ぐための待機**
-
-    # **スワップファイルの確認**
-    ls -lh "$SWAPFILE"
-    if [ ! -f "$SWAPFILE" ]; then
-        echo "[ERROR] Swap file creation failed. Checking storage..."
-        df -h /overlay
-        return 1  # **スワップファイルが作成できなかった場合、処理中断**
-    fi
-
-    echo "[INFO] Checking file contents..."
-    hexdump -C "$SWAPFILE" | head
-
-    # **スワップの初期化**
-    echo "[INFO] Running mkswap..."
-    if ! mkswap "$SWAPFILE" > /dev/null 2>&1; then
-        echo "[ERROR] mkswap failed. Swap setup aborted."
-        return 1
-    fi
-
-    # **スワップの有効化**
-    echo "[INFO] Running swapon..."
-    if ! swapon "$SWAPFILE" > /dev/null 2>&1; then
-        echo "[ERROR] swapon failed. Swap setup aborted."
-        return 1
-    fi
-
-    # **スワップの成功を確認**
-    if [ -f /proc/swaps ] && grep -q "$SWAPFILE" /proc/swaps; then
-        echo "[INFO] Temporary swap enabled successfully."
-    else
-        echo "[ERROR] Failed to enable temporary swap. Dumping debug info..."
-        ls -lh "$SWAPFILE"
-        dmesg | tail -20
-        cat /proc/swaps 2>/dev/null
-        return 1
-    fi
-
-    echo "[INFO] Swap setup completed successfully."
-    free -m
-    cat /proc/swaps 2>/dev/null
-
-    # **スワップをクリーンアップするトラップ**
-    trap '
-        echo "[INFO] Cleaning up temporary swap..."
-        swapoff "$SWAPFILE" 2>/dev/null
-        sync
-        sleep 2
-        rm -f "$SWAPFILE"
-
-        # もともとスワップが有効だった場合、再度有効化
-        if [ "$SWAP_ACTIVE" = "on" ]; then
-            echo "[INFO] Re-enabling original swap..."
-            swapon -a
-        fi
-
-        echo "[INFO] Final swap status:"
-        free -m
-        cat /proc/swaps 2>/dev/null
-    ' EXIT
-
-    return 0
 }
 
 # 【DBファイルから値を取得する関数】
@@ -1022,310 +751,3 @@ install_build() {
     debug_log "DEBUG" "Successfully built and installed package: $package_name"
 }
 
-
-XXX_install_build() {
-    local package_name=""
-    local confirm_install="no"
-    local hidden="no"
-    local DB_FILE="${BASE_DIR}/custom-package.db"
-    local output_ipk=""
-
-    # 【オプションの処理】
-    for arg in "$@"; do
-        case "$arg" in
-            yn) confirm_install="yes" ;;
-            hidden) hidden="yes" ;;
-            *) if [ -z "$package_name" ]; then package_name="$arg"; else debug_log "DEBUG" "Unknown option: $arg"; fi ;;
-        esac
-    done
-
-    # 【パッケージ名が指定されているか確認】
-    if [ -z "$package_name" ]; then
-        debug_log "ERROR" "パッケージ名が指定されていません！"
-        return 1
-    fi
-
-    setup_swap  # **スワップのセットアップ**
-
-    # 【OpenWrt バージョンの取得】
-    local openwrt_version=""
-    if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
-        openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
-    else
-        debug_log "ERROR" "OpenWrt バージョン情報が取得できません！"
-        return 1
-    fi
-    debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
-
-    # 【必要なパラメータを取得】
-    local source_url build_command BUILD_DIR OPENWRT_REPO install_packages
-
-    source_url=$(get_ini_value "$package_name" "source_url")
-    BUILD_DIR=$(get_ini_value "default" "build_dir")
-    OPENWRT_REPO=$(get_ini_value "default" "openwrt_repo")
-
-    # **バージョンごとの `install_package` を取得**
-    install_packages=$(awk -F'=' -v section="$package_name" -v version="$openwrt_version" '
-        /^\[/ {
-            section_name=$0;
-            gsub(/^\[|\]$/, "", section_name);  # **[ ] を削除**
-            next;
-        }
-        section_name == section && $1 ~ /install_package/ {default_pkg=$2; gsub(/[ ]+/,"",default_pkg)}
-        section_name == section " (" version ")" && $1 ~ /install_package/ {specific_pkg=$2; gsub(/[ ]+/,"",specific_pkg)}
-        END {
-            if (specific_pkg) print specific_pkg;
-            else print default_pkg;
-        }
-    ' "$DB_FILE")
-
-    if [ -n "$install_packages" ]; then
-        debug_log "DEBUG" "Retrieved install_packages: $install_packages"
-
-        # **パッケージリストを処理**
-        echo "$install_packages" | tr ',' '\n' | while read -r pkg; do
-            if [ -n "$pkg" ]; then
-                debug_log "INFO" "Checking if package exists in repository: $pkg"
-                if opkg list | grep -qE "^$pkg "; then
-                    debug_log "INFO" "Installing package: $pkg"
-                    install_package "$pkg" "$hidden"
-                    if [ $? -ne 0 ]; then
-                        debug_log "ERROR" "Failed to install package: $pkg"
-                    fi
-                else
-                    debug_log "ERROR" "Package not found in repository: $pkg"
-                fi
-            fi
-        done
-    else
-        debug_log "DEBUG" "No additional install_package found for $package_name."
-    fi
-
-    # 【バージョンごとのビルドコマンド取得】
-    build_command=$(awk -F'=' -v section="$package_name" -v version="$openwrt_version" '
-        /^\[/ {
-            section_name=$0;
-            gsub(/^\[|\]$/, "", section_name);  # **[ ] を削除**
-            next;
-        }
-        section_name == section " (" version ")" && $1 ~ /build_command/ {print $2}
-        section_name == section && $1 ~ /build_command/ {default_cmd=$2}
-        END {
-            if (default_cmd) print default_cmd;
-        }
-    ' "$DB_FILE")
-
-    debug_log "DEBUG" "Source URL: $source_url"
-    debug_log "DEBUG" "Build Command: $build_command"
-    debug_log "DEBUG" "Build Directory: $BUILD_DIR"
-    debug_log "DEBUG" "OpenWrt Repo: $OPENWRT_REPO"
-
-    # 【パッケージのインストール確認（YNオプション）】
-    if [ "$confirm_install" = "yes" ]; then
-        echo "📢 ${package_name} をインストールしますか？ (Y/n)"
-        read -r answer
-        if [ "$answer" != "Y" ] && [ "$answer" != "y" ]; then
-            debug_log "INFO" "インストールをキャンセルしました。"
-            return 0
-        fi
-    fi
-
-    # **ビルドディレクトリがなければ作成**
-    if [ ! -d "$BUILD_DIR" ]; then
-        mkdir -p "$BUILD_DIR"
-        debug_log "DEBUG" "Created build directory: $BUILD_DIR"
-    fi
-
-    # **リポジトリの取得・更新**
-    if [ -d "$BUILD_DIR/$package_name" ]; then
-        debug_log "DEBUG" "Removing existing repository and cloning fresh copy."
-        rm -rf "$BUILD_DIR/$package_name"
-    fi
-
-    debug_log "DEBUG" "Cloning repository: $source_url"
-    git clone "$source_url" "$BUILD_DIR/$package_name"
-    if [ $? -ne 0 ]; then
-        debug_log "ERROR" "Git clone failed for $package_name"
-        return 1
-    fi
-
-    cd "$BUILD_DIR/$package_name" || { debug_log "ERROR" "Failed to enter repository directory"; return 1; }
-
-    # **OpenWrt feeds のセットアップ**
-    if [ ! -d "$BUILD_DIR/openwrt" ]; then
-        debug_log "DEBUG" "Cloning OpenWrt source for feeds setup."
-        git clone "$OPENWRT_REPO" "$BUILD_DIR/openwrt"
-    fi
-
-    cd "$BUILD_DIR/openwrt"
-    ./scripts/feeds update -a
-    ./scripts/feeds install -a
-
-    cd "$BUILD_DIR/$package_name"
-
-    # **ビルドコマンドの確認**
-    if [ -z "$build_command" ]; then
-        debug_log "ERROR" "ビルドコマンドが見つかりません！"
-        stop_spinner
-        return 1
-    fi
-
-    debug_log "DEBUG" "Executing build command: $build_command"
-
-    # **スピナー開始**
-    start_spinner "$(get_message 'MSG_BUILD_RUNNING')"
-
-    # **ビルド実行**
-    local start_time end_time build_time
-    start_time=$(date +%s)
-    if ! eval "$build_command"; then
-        debug_log "ERROR" "ビルド失敗: $package_name"
-        stop_spinner
-        return 1
-    fi
-
-    end_time=$(date +%s)
-    build_time=$((end_time - start_time))
-
-    stop_spinner
-    echo "✅ ${package_name} のビルド完了（所要時間: ${build_time}秒）"
-    debug_log "DEBUG" "Build time: $build_time seconds"
-
-    return 0
-}
-
-XXX_install_build() {
-    local package_name=""
-    local confirm_install="no"
-    local hidden="no"
-    local DB_FILE="/tmp/aios/custom-package.ini"  # INIデータベースファイル
-    local CACHE_DIR="/tmp/aios/cache"
-
-    # 【オプションの処理】
-    for arg in "$@"; do
-        case "$arg" in
-            yn) confirm_install="yes" ;;   # 確認を入れるフラグ
-            hidden) hidden="yes" ;;        # 非表示でインストールするフラグ
-            *) if [ -z "$package_name" ]; then package_name="$arg"; else debug_log "DEBUG" "Unknown option: $arg"; fi ;;
-        esac
-    done
-
-    # 【パッケージ名が指定されているか確認】
-    if [ -z "$package_name" ]; then
-        debug_log "ERROR" "パッケージ名が指定されていません！"
-        return 1
-    fi
-
-    setup_swap  # スワップのセットアップ
-
-    # 【OpenWrt バージョンの取得】
-    local openwrt_version=""
-    if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
-        openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
-    else
-        debug_log "ERROR" "OpenWrt バージョン情報が取得できません！"
-        return 1
-    fi
-    debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
-
-    # 【必要なパラメータを取得】
-    local source_url build_dependencies build_command BUILD_DIR OPENWRT_REPO
-
-    source_url=$(get_ini_value "$package_name" "source_url")
-    build_dependencies=$(get_ini_value "$package_name" "build_dependencies")
-    BUILD_DIR=$(get_ini_value "default" "build_dir")
-    OPENWRT_REPO=$(get_ini_value "default" "openwrt_repo")
-
-    # 【バージョンごとのビルドコマンド取得】
-    build_command=$(get_ini_value "$package_name" "$openwrt_version")
-    if [ -z "$build_command" ]; then
-        build_command=$(get_ini_value "$package_name" "default")
-    fi
-
-    debug_log "DEBUG" "Source URL: $source_url"
-    debug_log "DEBUG" "Build Dependencies: $build_dependencies"
-    debug_log "DEBUG" "Build Command: $build_command"
-    debug_log "DEBUG" "Build Directory: $BUILD_DIR"
-    debug_log "DEBUG" "OpenWrt Repo: $OPENWRT_REPO"
-
-    # 【パッケージのインストール確認（YNオプション）】
-    if [ "$confirm_install" = "yes" ]; then
-        echo "📢 ${package_name} をインストールしますか？ (Y/n)"
-        read -r answer
-        if [ "$answer" != "Y" ] && [ "$answer" != "y" ]; then
-            debug_log "INFO" "インストールをキャンセルしました。"
-            return 0
-        fi
-    fi
-
-    # 【ビルド用依存パッケージのインストール】
-    if [ -n "$build_dependencies" ]; then
-        debug_log "DEBUG" "Installing build dependencies for $package_name: $build_dependencies"
-        for dep in $build_dependencies; do
-            install_package "$dep" "$hidden"
-        done
-    else
-        debug_log "DEBUG" "No build dependencies found for $package_name."
-    fi
-
-    # 【ビルドディレクトリがなければ作成】
-    if [ ! -d "$BUILD_DIR" ]; then
-        mkdir -p "$BUILD_DIR"
-        debug_log "DEBUG" "Created build directory: $BUILD_DIR"
-    fi
-
-    # 【リポジトリの取得・更新】
-    if [ -d "$BUILD_DIR/$package_name" ]; then
-        debug_log "DEBUG" "Removing existing repository and cloning fresh copy."
-        rm -rf "$BUILD_DIR/$package_name"
-    fi
-
-    debug_log "DEBUG" "Cloning repository: $source_url"
-    git clone "$source_url" "$BUILD_DIR/$package_name"
-    if [ $? -ne 0 ]; then
-        debug_log "ERROR" "Git clone failed for $package_name"
-        return 1
-    fi
-
-    cd "$BUILD_DIR/$package_name" || { debug_log "ERROR" "Failed to enter repository directory"; return 1; }
-
-    # 【OpenWrt feeds のセットアップ】
-    if [ ! -d "$BUILD_DIR/openwrt" ]; then
-        debug_log "DEBUG" "Cloning OpenWrt source for feeds setup."
-        git clone "$OPENWRT_REPO" "$BUILD_DIR/openwrt"
-    fi
-
-    cd "$BUILD_DIR/openwrt"
-    ./scripts/feeds update -a
-    ./scripts/feeds install -a
-
-    cd "$BUILD_DIR/$package_name"
-
-    # 【ビルドコマンドの確認】
-    if [ -z "$build_command" ]; then
-        debug_log "ERROR" "ビルドコマンドが見つかりません！"
-        stop_spinner
-        return 1
-    fi
-
-    debug_log "DEBUG" "Executing build command: $build_command"
-
-    # **スピナー開始**
-    # start_spinner "$(get_message 'MSG_UPDATE_RUNNING')"
-    
-    # 【ビルド実行】
-    local start_time end_time build_time
-    start_time=$(date +%s)
-    if ! eval "$build_command"; then
-        debug_log "ERROR" "ビルド失敗: $package_name"
-        stop_spinner
-        return 1
-    fi
-
-    end_time=$(date +%s)
-    build_time=$((end_time - start_time))
-
-    # stop_spinner
-    # echo "✅ ${package_name} のビルド完了（所要時間: ${build_time}秒）"
-    debug_log "DEBUG" "Build time: $build_time seconds"
-}
