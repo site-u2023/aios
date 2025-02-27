@@ -75,7 +75,7 @@ download_common() {
 }
 
 # `country-common.sh` のダウンロード & 読み込み
-download_country-common() {
+download_country_common() {
     if [ ! -f "${BASE_DIR}/country-common.sh" ]; then
         ${BASE_WGET} "${BASE_DIR}/country-common.sh" "${BASE_URL}/country-common.sh" || {
             echo "Failed to download country-common.sh"
@@ -94,7 +94,7 @@ download_country-common() {
 }
 
 # `package-common.sh` のダウンロード & 読み込み
-download_package-common() {
+download_package_common() {
     if [ ! -f "${BASE_DIR}/package-common.sh" ]; then
         ${BASE_WGET} "${BASE_DIR}/package-common.sh" "${BASE_URL}/package-common.sh" || {
             echo "Failed to download package-common.sh"
@@ -143,8 +143,8 @@ chmod_aios
 delete_aios
 make_directory
 download_common
-download_country-common
-download_package-common
+download_country_common
+download_package_common
 check_option "$@"
 print_banner
 packages
