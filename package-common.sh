@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-04"
+SCRIPT_VERSION="2025.02.27-00-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -163,6 +163,7 @@ stop_spinner() {
 # パッケージリストの更新
 update_package_list() {
     local update_cache="${CACHE_DIR}/update.ch"
+    local package_cache="${CACHE_DIR}/package_list.ch"
     local current_time
     current_time=$(date '+%s')  # 現在のUNIXタイムスタンプ取得
     local cache_time=0
@@ -184,26 +185,26 @@ update_package_list() {
 
     # スピナー開始
     start_spinner "$(color yellow "$(get_message "MSG_RUNNING_UPDATE")")"
-    #start_spinner "$(get_message "MSG_RUNNING_UPDATE" | sed "s/{pkg}/$package_name/")"
 
-    # パッケージリストの更新
+    # **パッケージリストの取得 & 保存**
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
             stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
             debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
             return 1
         }
+        opkg list > "$package_cache" 2>/dev/null
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
             stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
             debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
             return 1
         }
+        apk search > "$package_cache" 2>/dev/null
     fi
 
     # スピナー停止 (成功メッセージを表示)
     stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
-    #stop_spinner "$(get_message "MSG_UPDATE_SUCCESS" | sed "s/{pkg}/$package_name/")"
 
     # キャッシュのタイムスタンプを更新
     touch "$update_cache" || {
@@ -309,41 +310,48 @@ install_language_package() {
 # **インストール前確認 (デバイス内パッケージ確認 + リポジトリ確認)**
 check_package_pre_install() {
     local package_name="$1"
-    
-    # パッケージマネージャーの確認
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        # opkgの場合のパッケージ確認
-        debug_log "DEBUG" "Checking for package $package_name in the repository (opkg)"
-        if opkg list-installed | grep -qE "^$package_name "; then
-            echo "$(color green "$package_name is already installed.")"
-            return 0
-        fi
+    local package_cache="${CACHE_DIR}/package_list.ch"
 
-        if ! opkg list | grep -qE "^$package_name "; then
-            debug_log "DEBUG" "Skipping installation: $package_name not found in opkg repository."
-            stop_spinner "$(color red "❌ Package $package_name not found in repository.")"
-            return 0
+    # **デバイス内パッケージ確認**
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if opkg list-installed | grep -qE "^$package_name "; then
+            debug_log "DEBUG" "Package $package_name is already installed on the device."
+            return 1  # 既にインストール済みなので終了
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        # apkの場合のパッケージ確認
-        debug_log "DEBUG" "Checking for package $package_name in the repository (apk)"
         if apk info | grep -q "^$package_name$"; then
-            echo "$(color green "$package_name is already installed.")"
-            return 0
+            debug_log "DEBUG" "Package $package_name is already installed on the device."
+            return 1  # 既にインストール済みなので終了
         fi
+    fi
 
-        if ! apk search "$package_name" | grep -q "^$package_name$"; then
-            debug_log "DEBUG" "Skipping installation: $package_name not found in apk repository."
-            stop_spinner "$(color red "❌ Package $package_name not found in repository.")"
-            return 0
-        fi
-    else
-        debug_log "ERROR" "$(color red "Unsupported package manager: $PACKAGE_MANAGER")"
-        stop_spinner "$(color red "❌ Unsupported package manager: $PACKAGE_MANAGER")"
+    # **リポジトリ内パッケージ確認**
+    debug_log "DEBUG" "Checking repository for package: $package_name"
+
+    # **キャッシュファイルがない場合はエラー**
+    if [ ! -f "$package_cache" ]; then
+        debug_log "ERROR" "Package cache not found! Run update_package_list() first."
         return 1
     fi
 
-    return 1  # 問題なしならインストール処理へ進む
+    local package_found="no"
+
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        grep -qE "^$package_name " "$package_cache" && package_found="yes"
+        debug_log "DEBUG" "opkg package check result: $(grep "^$package_name " "$package_cache")"
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        grep -q "^$package_name$" "$package_cache" && package_found="yes"
+        debug_log "DEBUG" "apk package check result: $(grep "^$package_name$" "$package_cache")"
+    fi
+
+    # **パッケージがリポジトリにあるかどうかを判定**
+    if [ "$package_found" = "yes" ]; then
+        debug_log "DEBUG" "Package $package_name found in repository."
+        return 0  # パッケージが存在するのでOK
+    else
+        debug_log "ERROR" "Package $package_name not found in repository."
+        return 1  # パッケージが見つからなかった
+    fi
 }
 
 # **インストール処理 (実際のインストールを行う)**
