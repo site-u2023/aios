@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-06"
+SCRIPT_VERSION="2025.02.27-00-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -335,21 +335,20 @@ check_package_pre_install() {
     fi
 
     local package_found="no"
-    local package_search_list=("$package_name")
+    local package_search_list="$package_name"  # 修正: スペース区切りのリスト
 
     # 言語パッケージの特別処理
     if echo "$package_name" | grep -q "^luci-i18n-"; then
         if [ -f "${CACHE_DIR}/luci.ch" ]; then
             local lang_code
             lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
-            package_search_list+=("${package_name}-${lang_code}")
+            package_search_list="$package_search_list ${package_name}-${lang_code}"
         fi
-        package_search_list+=("${package_name}-en")
-        package_search_list+=("$package_name")
+        package_search_list="$package_search_list ${package_name}-en ${package_name}"
     fi
 
     # **リポジトリ検索**
-    for pkg in "${package_search_list[@]}"; do
+    for pkg in $package_search_list; do
         if grep -qE "^$pkg " "$package_cache"; then
             debug_log "DEBUG" "Package $pkg found in repository."
             return 0  # パッケージが存在するのでOK
