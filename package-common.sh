@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-05"
+SCRIPT_VERSION="2025.02.27-01-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -258,6 +258,38 @@ apply_local_package_db() {
 # **YN 確認を行う関数**
 confirm_installation() {
     local package="$1"
+    local package_with_lang="$package"  # デフォルトではそのままのパッケージ名
+
+    # 言語パッケージがある場合は言語コードを付け加える
+    if echo "$package" | grep -q "luci-i18n-"; then
+        if [ -f "${CACHE_DIR}/luci.ch" ]; then
+            local lang_code
+            lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
+            package_with_lang="${package}-${lang_code}"  # 言語コードを追加
+        else
+            package_with_lang="${package}-en"  # 言語コードがなければ、英語パッケージを使用
+        fi
+    fi
+
+    # メッセージにパッケージ名を差し込む
+    local msg=$(get_message "MSG_CONFIRM_INSTALL")
+    msg="${msg//\{pkg\}/$package_with_lang}"  # パッケージ名を適切に置き換える
+    echo "$msg"
+    printf "%s " "$(get_message "MSG_CONFIRM_ONLY_YN")"
+
+    # ユーザー入力待機
+    read -r yn || return 1
+    case "$yn" in
+        [Yy]*) return 0 ;;  # 継続
+        [Nn]*) return 1 ;;  # キャンセル
+        *) echo "$(color red "Invalid input. Please enter Y or N.")" ;;  # 無効な入力
+    esac
+}
+
+# **YN 確認を行う関数**
+OK_confirm_installation() {
+    local package="$1"
+     
     while true; do
         local msg=$(get_message "MSG_CONFIRM_INSTALL")
         msg="${msg//\{pkg\}/$package}"
