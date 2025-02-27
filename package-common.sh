@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-17"
+SCRIPT_VERSION="2025.02.27-01-18"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -393,15 +393,16 @@ install_package_func() {
         if [ -f "${CACHE_DIR}/luci.ch" ]; then
             cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
         else
-            cache_lang="en"
+            cache_lang="en"  # フォールバックは英語
         fi
 
         debug_log "DEBUG" "Language detected from cache: $cache_lang"
 
-        package_name="${base}-${cache_lang}"  # 言語コードを付け加える
+        # 言語コードを付け加える
+        package_name="${base}-${cache_lang}"
         debug_log "DEBUG" "Final package name set to: $package_name"
 
-        # **フォールバックチェック**
+        # **フォールバックチェック**: package_list.ch で確認
         if ! opkg list-installed | grep -q "^$package_name "; then
             debug_log "WARN" "Package $package_name not found, falling back to English"
             package_name="${base}-en"
@@ -446,7 +447,6 @@ install_package_func() {
     # **スピナー停止**
     stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
 }
-
 
 # **言語パッケージのインストール**
 install_language_package() {
