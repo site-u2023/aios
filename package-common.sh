@@ -308,7 +308,7 @@ package_pre_install() {
         return 0  # パッケージが存在するのでOK
     fi
 
-    debug_log "ERROR" "Package $package_name not found in repository."
+    debug_log "DEBUG" "Package $package_name not found in repository."
     return 1  # パッケージが見つからなかった
 }
 
