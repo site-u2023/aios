@@ -311,6 +311,68 @@ confirm_installation() {
     done
 }
 
+check_package_pre_install() {
+    local package_name="$1"
+    local package_cache="${CACHE_DIR}/package_list.ch"
+    local lang_code=""
+    local base_package="$package_name"  # デフォルトでは変更なし
+
+    # 言語パッケージの特別処理
+    if echo "$package_name" | grep -q "^luci-i18n-"; then
+        # キャッシュから言語コードを取得
+        if [ -f "${CACHE_DIR}/luci.ch" ]; then
+            lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
+        else
+            lang_code="en"  # デフォルトで英語
+        fi
+
+        # 言語付きのパッケージ名を作成
+        package_name="${package_name}-${lang_code}"
+
+        # **フォールバック処理 (`ja` → `en`)**
+        if ! opkg list-installed "$package_name" >/dev/null 2>&1 && ! grep -q "^$package_name " "$package_cache"; then
+            debug_log "WARN" "Package $package_name not found. Falling back to English (en)."
+            package_name="${package_name%-*}-en"
+        fi
+
+        # **`en` も無かったらエラーで終了**
+        if ! opkg list-installed "$package_name" >/dev/null 2>&1 && ! grep -q "^$package_name " "$package_cache"; then
+            debug_log "ERROR" "Package $package_name not found. No fallback available."
+            return 1
+        fi
+    fi
+
+    # **デバイス内パッケージ確認**
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        if opkg list-installed "$package_name" >/dev/null 2>&1; then
+            debug_log "DEBUG" "Package $package_name is already installed on the device."
+            return 0  # ここで終了！ → インストール確認を出さない！
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        if apk info | grep -q "^$package_name$"; then
+            debug_log "DEBUG" "Package $package_name is already installed on the device."
+            return 0  # ここで終了！ → インストール確認を出さない！
+        fi
+    fi
+
+    # **リポジトリ内パッケージ確認**
+    debug_log "DEBUG" "Checking repository for package: $package_name"
+
+    # キャッシュファイルがない場合はエラー
+    if [ ! -f "$package_cache" ]; then
+        debug_log "ERROR" "Package cache not found! Run update_package_list() first."
+        return 1
+    fi
+
+    if grep -q "^$package_name " "$package_cache"; then
+        debug_log "DEBUG" "Package $package_name found in repository."
+        return 0  # パッケージが存在するのでOK
+    fi
+
+    debug_log "ERROR" "Package $package_name not found in repository."
+    return 1  # パッケージが見つからなかった
+}
+
 # **言語パッケージのインストール**
 install_language_package() {
     local package_name="$1"
