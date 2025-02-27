@@ -346,51 +346,6 @@ package_pre_install() {
     return 1  # パッケージが見つからなかった
 }
 
-# **言語パッケージのインストール**
-install_language_package() {
-    local package_name="$1"
-    local base="luci-i18n-${package_name#luci-app-}"
-    local cache_lang=""
-    local lang_pkg=""
-
-    # 言語キャッシュの取得
-    if [ -f "${CACHE_DIR}/luci.ch" ]; then
-        cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
-    else
-        cache_lang="en"
-    fi
-
-    # 言語パッケージの検索順リスト
-    local package_search_list="${base}-${cache_lang} ${base}-en"
-
-    debug_log "DEBUG" "Checking for package variations in repository: $package_search_list"
-
-    local package_found="no"
-    for pkg in $package_search_list; do
-        # **インストール済みチェック**
-        if opkg list-installed "$pkg" >/dev/null 2>&1; then
-            debug_log "DEBUG" "Package $pkg is already installed. Skipping installation."
-            return 0  # インストール済みなら何もしない
-        fi
-
-        # **リポジトリ検索**
-        if grep -q "^$pkg " "${CACHE_DIR}/package_list.ch"; then
-            lang_pkg="$pkg"
-            package_found="yes"
-            break  # 見つかったパッケージでループを終了
-        fi
-    done
-
-    if [ "$package_found" = "no" ]; then
-        debug_log "ERROR" "No suitable language package found for $package_name."
-        return 1  # 見つからなければエラー
-    fi
-
-    debug_log "DEBUG" "Found $lang_pkg in repository"
-    confirm_installation "$lang_pkg" || return 1  # インストール確認
-    install_package_func "$lang_pkg" "$force_install"  # 実際にインストール
-}
-
 install_normal_package() {
     local package_name="$1"
     local force_install="$2"
@@ -425,52 +380,10 @@ install_normal_package() {
         fi
     fi
 
-    stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$(printf '%s' "$package_name" | sed 's/-/\\-/g')/")")"
-    #stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
+    #stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$(printf '%s' "$package_name" | sed 's/-/\\-/g')/")")"
+    stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
     #safe_pkg=$(printf '%s\n' "$package_name" | sed 's/[&/\]/\\&/g')
     #stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s|{pkg}|$safe_pkg|")")"
-}
-
-# **言語パッケージのインストール**
-install_language_package() {
-    local package_name="$1"
-    local base="luci-i18n-${package_name#luci-app-}"
-    local cache_lang=""
-    local lang_pkg=""
-
-    # 言語キャッシュの取得
-    if [ -f "${CACHE_DIR}/luci.ch" ]; then
-        cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
-    else
-        cache_lang="en"
-    fi
-
-    # 言語パッケージの検索順リスト
-    local package_search_list="${base}-${cache_lang} ${base}-en"
-
-    debug_log "DEBUG" "Checking for package variations in repository: $package_search_list"
-
-    # インストール済みチェックとリポジトリ検索
-    for pkg in $package_search_list; do
-        if opkg list-installed "$pkg" >/dev/null 2>&1; then
-            debug_log "DEBUG" "Package $pkg is already installed. Skipping installation."
-            return 0
-        fi
-
-        if grep -q "^$pkg " "${CACHE_DIR}/package_list.ch"; then
-            lang_pkg="$pkg"
-            debug_log "DEBUG" "Found $pkg in repository"
-            break
-        fi
-    done
-
-    if [ -z "$lang_pkg" ]; then
-        debug_log "ERROR" "No suitable language package found for $package_name."
-        return 1
-    fi
-
-    confirm_installation "$lang_pkg" || return 1
-    install_package_func "$lang_pkg" "$force_install"
 }
 
 # **インストール関数**
@@ -560,20 +473,14 @@ install_package() {
     if [ "$confirm_install" = "yes" ]; then
         confirm_installation "$package_name" || return 1
     fi
-
-    # 言語パッケージか通常パッケージかを判別
-    if [[ "$package_name" == luci-i18n-* ]]; then
-        install_language_package "$package_name" || return 1
-    else
-        install_normal_package "$package_name" "$force_install" || return 1
-    fi
+    
+    install_normal_package "$package_name" "$force_install" || return 1
 
     # **ローカルパッケージDBの適用 (インストール成功後に実行)**
     if [ "$skip_package_db" != "yes" ]; then
         apply_local_package_db "$package_name"
     fi
 }
-
 
 #########################################################################
 # Last Update: 2025-02-22 15:35:00 (JST) 🚀
