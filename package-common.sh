@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-07"
+SCRIPT_VERSION="2025.02.27-00-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -431,36 +431,35 @@ install_language_package() {
     local base="luci-i18n-${package_name#luci-app-}"
     local cache_lang=""
     local lang_pkg=""
-    local package_cache="${CACHE_DIR}/package_list.ch"
-
+    
     # キャッシュファイルが存在する場合、言語コードを取得
     if [ -f "${CACHE_DIR}/luci.ch" ]; then
         cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
+    else
+        cache_lang="en"  # デフォルトで英語
     fi
 
-    local package_search_list=("${base}-${cache_lang}" "${base}-en" "$base")
+    # **言語パッケージの検索順リスト**
+    local package_search_list="${base}-${cache_lang} ${base}-en $base"
 
-    # **リポジトリ内の存在確認**
+    debug_log "DEBUG" "Checking for package variations in repository: $package_search_list"
+
     local package_found="no"
-    for pkg in "${package_search_list[@]}"; do
-        if grep -qE "^$pkg " "$package_cache"; then
+    for pkg in $package_search_list; do
+        if grep -qE "^$pkg " "${CACHE_DIR}/package_list.ch"; then
             lang_pkg="$pkg"
             package_found="yes"
             break
         fi
     done
 
-    # **パッケージが見つからない場合はスキップ**
-    if [ "$package_found" != "yes" ]; then
-        debug_log "DEBUG" "$base はリポジトリに存在しません。スキップします。"
+    if [ "$package_found" = "no" ]; then
+        debug_log "ERROR" "No suitable language package found for $package_name."
         return 1
     fi
 
-    # **YN確認**
     debug_log "DEBUG" "Found $lang_pkg in repository"
     confirm_installation "$lang_pkg" || return 1
-
-    # **インストール**
     install_package_func "$lang_pkg" "$force_install"
 }
 
