@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-09"
+SCRIPT_VERSION="2025.02.27-01-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -344,17 +344,15 @@ check_package_pre_install() {
         return 1
     fi
 
-    local package_found="no"
-    local package_search_list="$package_name"  # 修正: スペース区切りのリスト
+    local package_search_list="$package_name"
 
-    # 言語パッケージの特別処理
+    # **言語パッケージの特別処理**
     if echo "$package_name" | grep -q "^luci-i18n-"; then
         if [ -f "${CACHE_DIR}/luci.ch" ]; then
             local lang_code
             lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
-            package_search_list="$package_search_list ${package_name}-${lang_code}"
+            package_search_list="${package_name}-${lang_code} ${package_name}-en ${package_name}"
         fi
-        package_search_list="$package_search_list ${package_name}-en ${package_name}"
     fi
 
     # **リポジトリ検索**
@@ -379,26 +377,13 @@ install_package_func() {
 
     # **言語パッケージの場合は適切な言語コードを取得**
     if echo "$package_name" | grep -q "^luci-i18n-"; then
-        base="${package_name%-*}"  # "luci-i18n-base" の "base" を取得
+        base="$package_name"
         if [ -f "${CACHE_DIR}/luci.ch" ]; then
             cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
         else
             cache_lang="en"
         fi
         package_name="${base}-${cache_lang}"
-    fi
-
-    # **パッケージがすでにインストールされているか確認**
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        if opkg list-installed | grep -qE "^$package_name "; then
-            debug_log "INFO" "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-            return 0
-        fi
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        if apk info | grep -q "^$package_name$"; then
-            debug_log "INFO" "$(color green "$(get_message "MSG_PACKAGE_ALREADY_INSTALLED" | sed "s/{pkg}/$package_name/")")"
-            return 0
-        fi
     fi
 
     # **リポジトリにパッケージがあるか確認**
