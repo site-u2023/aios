@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-09"
+SCRIPT_VERSION="2025.02.27-01-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -323,10 +323,16 @@ check_package_pre_install() {
         # 言語付きのパッケージ名を作成
         package_name="${package_name}-${lang_code}"
 
-        # **フォールバック処理**
+        # **フォールバック処理 (`ja` → `en`)**
         if ! grep -q "^$package_name " "$package_cache"; then
             debug_log "WARN" "Package $package_name not found. Falling back to English (en)."
             package_name="${package_name%-*}-en"
+        fi
+
+        # **`en` も無かったらエラーで終了**
+        if ! grep -q "^$package_name " "$package_cache"; then
+            debug_log "ERROR" "Package $package_name not found. No fallback available."
+            return 1
         fi
     fi
 
