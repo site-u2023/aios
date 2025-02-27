@@ -308,25 +308,20 @@ OK_confirm_installation() {
 check_package_pre_install() {
     local package_name="$1"
     local package_cache="${CACHE_DIR}/package_list.ch"
-
-    # 言語パッケージの特別処理（短縮形は使わない）
     local lang_code=""
+    local base_package=""
+
+    # 言語パッケージの特別処理
     if echo "$package_name" | grep -q "^luci-i18n-"; then
+        base_package="${package_name%-*}"  # "luci-i18n-base" の "base" を取得
+        # キャッシュから言語コードを取得
         if [ -f "${CACHE_DIR}/luci.ch" ]; then
             lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
         else
-            lang_code="en"  # デフォルトで英語パッケージを使用
+            lang_code="en"  # デフォルトで英語
         fi
-
-        # `luci-i18n-<アプリ名>-<言語コード>` の形式のパッケージがあるか検索
-        local matched_package=$(grep "^luci-i18n-.*-${lang_code}" "$package_cache" | head -n 1)
-
-        if [ -n "$matched_package" ]; then
-            package_name=$(echo "$matched_package" | awk '{print $1}')
-        else
-            debug_log "ERROR" "No matching luci-i18n package found for language: $lang_code"
-            return 1
-        fi
+        # 言語付きのパッケージ名を作成
+        package_name="${base_package}-${lang_code}"
     fi
 
     # **デバイス内パッケージ確認**
@@ -351,14 +346,21 @@ check_package_pre_install() {
         return 1
     fi
 
-    if grep -qE "^$package_name " "$package_cache"; then
-        debug_log "DEBUG" "Package $package_name found in repository."
-        return 0  # パッケージが存在するのでOK
-    fi
+    local package_found="no"
+    local package_search_list="$package_name"  # スペース区切りのリスト
+
+    # リポジトリ検索
+    for pkg in $package_search_list; do
+        if grep -qE "^$pkg " "$package_cache"; then
+            debug_log "DEBUG" "Package $pkg found in repository."
+            return 0  # パッケージが存在するのでOK
+        fi
+    done
 
     debug_log "ERROR" "Package $package_name not found in repository."
     return 1  # パッケージが見つからなかった
 }
+
 
 # **インストール処理 (実際のインストールを行う)**
 install_package_func() {
