@@ -319,7 +319,6 @@ package_pre_install() {
         if opkg list-installed "$package_name" >/dev/null 2>&1; then
             debug_log "DEBUG" "Package $package_name is already installed on the device."
             echo OK
-            read -p
             return 0  # 既にインストールされている場合は何もしない
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
