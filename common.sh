@@ -286,9 +286,6 @@ color_code_map() {
 #########################################################################
 # check_openwrt: OpenWrtのバージョン確認・管理のみを担当
 #########################################################################
-#########################################################################
-# check_openwrt: OpenWrtのバージョン確認・管理（GL.iNetのOpenWrtのみ対応）
-#########################################################################
 check_openwrt() {
     local version_file="${CACHE_DIR}/openwrt.ch"
 
@@ -342,25 +339,6 @@ check_openwrt() {
     else
         handle_error "Unsupported OpenWrt version: $CURRENT_VERSION"
         exit 1  # 🚨 スクリプト全体を終了
-    fi
-}
-
-XXX_check_openwrt() {
-    local version_file="${CACHE_DIR}/openwrt.ch"
-    if [ -f "$version_file" ]; then
-        CURRENT_VERSION=$(cat "$version_file")
-    else
-        CURRENT_VERSION=$(awk -F"'" '/DISTRIB_RELEASE/ {print $2}' /etc/openwrt_release | cut -d'-' -f1)
-        echo "$CURRENT_VERSION" > "$version_file"
-    fi
-
-    if grep -q "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db"; then
-        local db_entry=$(grep "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db" | cut -d'=' -f2)
-        PACKAGE_MANAGER=$(echo "$db_entry" | cut -d'|' -f1)
-        VERSION_STATUS=$(echo "$db_entry" | cut -d'|' -f2)
-        echo -e "$(color green "Version $CURRENT_VERSION is supported ($VERSION_STATUS)")"
-    else
-        handle_error "Unsupported OpenWrt version: $CURRENT_VERSION"
     fi
 }
 
