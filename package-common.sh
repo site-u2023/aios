@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-00-05"
+SCRIPT_VERSION="2025.02.28-00-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -520,7 +520,7 @@ install_package() {
 
     # パッケージマネージャー確認
     if [ -f "${CACHE_DIR}/downloader_ch" ]; then
-        PACKAGE_MANAGER="${CACHE_DIR}/downloader.ch"
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader_ch")
     else
         debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")")"
         return 1
@@ -531,9 +531,12 @@ install_package() {
 
     # 言語コードの取得
     if [ -f "${CACHE_DIR}/luci.ch" ]; then
-        lang_code="${CACHE_DIR}/luci.ch"
-    elif [ "$lang_code" == "xx" ]; then
-        lang_code="en"
+        lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
+
+        # luci.ch で指定されている言語コードが "xx" なら "en" に変更
+        if [ "$lang_code" == "xx" ]; then
+            lang_code="en"
+        fi
     else
         lang_code="en"  # デフォルトで英語
     fi
@@ -543,7 +546,7 @@ install_package() {
         # 言語パッケージの場合、package_name に言語コードを追加
         package_name="${package_name}-${lang_code}"
     fi
- 
+
     # **インストール前確認 (デバイス内パッケージ確認 + リポジトリ確認)**
     if ! package_pre_install "$package_name"; then
         debug_log "ERROR" "$(color red "❌ Package $package_name is either already installed or not found in repository.")"
@@ -567,6 +570,7 @@ install_package() {
         apply_local_package_db "$package_name"
     fi
 }
+
 
 #########################################################################
 # Last Update: 2025-02-22 15:35:00 (JST) 🚀
