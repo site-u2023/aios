@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-01-06"
+SCRIPT_VERSION="2025.02.27-01-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -309,14 +309,23 @@ check_package_pre_install() {
     local package_name="$1"
     local package_cache="${CACHE_DIR}/package_list.ch"
 
-    # 言語パッケージの特別処理
+    # 言語パッケージの特別処理（短縮形は使わない）
     local lang_code=""
     if echo "$package_name" | grep -q "^luci-i18n-"; then
         if [ -f "${CACHE_DIR}/luci.ch" ]; then
             lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
-            package_name="${package_name}-${lang_code}"  # 言語コードを追加
         else
-            package_name="${package_name}-en"  # デフォルトで英語パッケージを使用
+            lang_code="en"  # デフォルトで英語パッケージを使用
+        fi
+
+        # `luci-i18n-<アプリ名>-<言語コード>` の形式のパッケージがあるか検索
+        local matched_package=$(grep "^luci-i18n-.*-${lang_code}" "$package_cache" | head -n 1)
+
+        if [ -n "$matched_package" ]; then
+            package_name=$(echo "$matched_package" | awk '{print $1}')
+        else
+            debug_log "ERROR" "No matching luci-i18n package found for language: $lang_code"
+            return 1
         fi
     fi
 
@@ -342,16 +351,10 @@ check_package_pre_install() {
         return 1
     fi
 
-    local package_found="no"
-    local package_search_list="$package_name"  # スペース区切りのリスト
-
-    # リポジトリ検索
-    for pkg in $package_search_list; do
-        if grep -qE "^$pkg " "$package_cache"; then
-            debug_log "DEBUG" "Package $pkg found in repository."
-            return 0  # パッケージが存在するのでOK
-        fi
-    done
+    if grep -qE "^$package_name " "$package_cache"; then
+        debug_log "DEBUG" "Package $package_name found in repository."
+        return 0  # パッケージが存在するのでOK
+    fi
 
     debug_log "ERROR" "Package $package_name not found in repository."
     return 1  # パッケージが見つからなかった
