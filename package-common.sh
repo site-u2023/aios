@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-04-06"
+SCRIPT_VERSION="2025.02.28-04-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -635,11 +635,7 @@ build_package_db() {
     local package_name="$1"
     local openwrt_version=""
 
-    # **HTTPSの無効化設定**
-    git config --global url."git://".insteadOf https://
-    git config --global http.sslVerify false  # SSL検証を無効化
-
-    # **OpenWrtバージョンの取得**
+    # OpenWrtバージョンの取得
     if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
         openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
     else
@@ -648,6 +644,15 @@ build_package_db() {
     fi
 
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version for package: $package_name"
+
+    # **パッケージ名を正規化（"-"を削除）**
+    local normalized_name
+    normalized_name=$(echo "$package_name" | sed 's/-//g')
+
+    # **HTTPSの無効化設定 & `git://` を優先**
+    git config --global url."git://".insteadOf https://
+    git config --global http.sslVerify false  # SSL検証を無効化
+    export GIT_CURL_VERBOSE=1  # Gitの詳細ログを表示
 
     # **パッケージセクションをキャッシュへ保存**
     local package_section_cache="${CACHE_DIR}/package_section.ch"
@@ -658,7 +663,7 @@ build_package_db() {
     ' "${BASE_DIR}/custom-package.db" > "$package_section_cache"
 
     if [ ! -s "$package_section_cache" ]; then
-        debug_log "ERROR" "Package not found in database: $package_name"
+        debug_log "ERROR" "Package not found in database: $package_name ($normalized_name)"
         return 1
     fi
 
@@ -678,8 +683,9 @@ build_package_db() {
     # **最も近い下位互換バージョンを探す**
     local target_version=""
     while read -r version; do
-        if [ -z "$target_version" ] || [ "$(echo -e "$version\n$target_version" | sort -Vr | head -n1)" = "$version" ]; then
+        if [ "$(echo -e "$version\n$openwrt_version" | sort -Vr | head -n1)" = "$openwrt_version" ]; then
             target_version="$version"
+            break
         fi
     done < "$version_list_cache"
 
@@ -690,7 +696,7 @@ build_package_db() {
 
     debug_log "DEBUG" "Using version: $target_version"
 
-    # **ソースコードのダウンロード**
+    # **ビルドに必要なソースURLを取得**
     local source_url
     source_url=$(awk -F '=' '/^source_url/ {print $2}' "$package_section_cache" | tr -d ' ')
 
@@ -699,22 +705,25 @@ build_package_db() {
         return 1
     fi
 
-    debug_log "INFO" "Cloning source from: $source_url"
+    debug_log "DEBUG" "Cloning source from: $source_url"
 
-    # **クローン先のディレクトリを設定**
-    local build_dir="/tmp/aios/build/$package_name"
+    # **GitHubのHTTPSをGitプロトコルに変換**
+    source_url=$(echo "$source_url" | sed 's|https://github.com/|git://github.com/|')
+
+    # **ビルドディレクトリの準備**
+    local build_dir="${CACHE_DIR}/build/$package_name"
     mkdir -p "$build_dir"
 
-    if [ ! -d "$build_dir/.git" ]; then
-        git clone --depth=1 "$source_url" "$build_dir"
-        if [ $? -ne 0 ]; then
-            debug_log "ERROR" "Failed to clone repository: $source_url"
-            return 1
-        fi
-    else
-        debug_log "INFO" "Repository already cloned, pulling latest changes..."
-        (cd "$build_dir" && git pull)
+    # **`git clone` でソース取得（既存ディレクトリがあれば削除）**
+    rm -rf "$build_dir"
+    git clone "$source_url" "$build_dir"
+
+    if [ ! -d "$build_dir" ]; then
+        debug_log "ERROR" "Failed to clone repository: $source_url"
+        return 1
     fi
+
+    debug_log "DEBUG" "Source cloned to: $build_dir"
 
     # **ビルドコマンドを取得**
     local build_command=""
@@ -727,7 +736,7 @@ build_package_db() {
 
     debug_log "INFO" "Build command found: $build_command"
 
-    # **ビルドディレクトリに移動して実行**
+    # **ビルドコマンドをキャッシュに保存**
     echo "cd $build_dir && $build_command" > "${CACHE_DIR}/build_command.ch"
     chmod +x "${CACHE_DIR}/build_command.ch"
 
