@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-03-00"
+SCRIPT_VERSION="2025.02.28-03-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -216,15 +216,16 @@ update_package_list() {
 }
 
 local_package_db() {
-    package_name=$1  # パッケージ名を引数として受け取る
+    package_name=$1  # どんなパッケージ名でも受け取れる
+
     debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name"
 
-    # local-package.db から指定されたセクションを抽出
+    # `local-package.db` から `$package_name` に該当するセクションを抽出
     extract_commands() {
         awk -v pkg="$package_name" '
-            $0 ~ "^\\[" pkg "\\]" {flag=1; next}  # [PACKAGE] セクションに到達
-            $0 ~ "^\\[" {flag=0}                  # 次のセクションが始まったら flag をリセット
-            flag && $0 !~ "^#" {print}             # コメント行（#）を除外
+            $0 ~ "^\\[" pkg "\\]" {flag=1; next}
+            $0 ~ "^\\[" {flag=0}
+            flag && $0 !~ "^#" {print}
         ' "${BASE_DIR}/local-package.db"
     }
 
@@ -232,47 +233,30 @@ local_package_db() {
     local cmds
     cmds=$(extract_commands)
 
-    # コマンドが見つからない場合はエラーメッセージを出力して終了
     if [ -z "$cmds" ]; then
         debug_log "DEBUG" "No commands found for package: $package_name"
         return 1
     fi
 
-    # コマンドを一時ファイルに書き出し（変数展開前）
+    # **変数の置換**
     echo "$cmds" > "${CACHE_DIR}/commands.ch"
 
-    # `commands.ch` の内容を `DEBUG` ログに記録（置換前）
-    debug_log "DEBUG" "Before substitution:\n$(cat "${CACHE_DIR}/commands.ch")"
-
-    # 環境変数 `CUSTOM*` のリストを作成
-    CUSTOM_VARS=$(env | grep "^CUSTOM" | awk -F= '{print $1}')
-    debug_log "DEBUG" "Detected CUSTOM variables: $CUSTOM_VARS"
-
-    # `sed` で変数を動的に置換
+    # **環境変数 `CUSTOM_*` を自動検出して置換**
+    CUSTOM_VARS=$(env | grep "^CUSTOM_" | awk -F= '{print $1}')
     for var_name in $CUSTOM_VARS; do
-        eval var_value=\$$var_name  # `CUSTOM*` の値を取得
-        debug_log "DEBUG" "Processing: $var_name -> [$var_value]"
-
+        eval var_value=\$$var_name
         if [ -n "$var_value" ]; then
-            # 変数が定義されている場合はその値に置換
-            sed "s|\\\${$var_name}|$var_value|g" "${CACHE_DIR}/commands.ch" > "${CACHE_DIR}/commands.tmp"
-            mv "${CACHE_DIR}/commands.tmp" "${CACHE_DIR}/commands.ch"
+            sed -i "s|\\\${$var_name}|$var_value|g" "${CACHE_DIR}/commands.ch"
             debug_log "DEBUG" "Substituted: $var_name -> $var_value"
         else
-            # 未定義の変数は `# UNDEFINED:` にコメントアウト
+            sed -i "s|.*\\\${$var_name}.*|# UNDEFINED: \0|g" "${CACHE_DIR}/commands.ch"
             debug_log "DEBUG" "Undefined variable: $var_name"
-            sed "s|.*\\\${$var_name}.*|# UNDEFINED: \0|g" "${CACHE_DIR}/commands.ch" > "${CACHE_DIR}/commands.tmp"
-            mv "${CACHE_DIR}/commands.tmp" "${CACHE_DIR}/commands.ch"
         fi
     done
 
-    # `commands.ch` の内容を `DEBUG` ログに記録（置換後）
-    debug_log "DEBUG" "After substitution:\n$(cat "${CACHE_DIR}/commands.ch")"
-
-    # ch ファイル内のコマンドを実行
+    # **設定を適用**
     . "${CACHE_DIR}/commands.ch"
 }
-
 
 # パッケージ名（引数として渡せるように変更）
 XXX_local_package_db() {
@@ -578,10 +562,12 @@ setup_swap() {
         ZRAM_SIZE_MB=512
     fi
 
-    export ZRAM_SIZE_MB  # `local_package_db()` に渡すためエクスポート
     debug_log "INFO" "RAM: ${RAM_TOTAL_MB}MB, Setting zram size to ${ZRAM_SIZE_MB}MB"
 
+   # **環境変数を登録 (`CUSTOM_*` に統一)**
+    export CUSTOM_ZRAM_SIZE="$ZRAM_SIZE_MB"
 
+    debug_log "INFO" "Exported: CUSTOM_ZRAM_SIZE=${CUSTOM_ZRAM_SIZE}, CUSTOM_ZRAM_ALGO=${CUSTOM_ZRAM_ALGO}"
 
     if [ -z "$STORAGE_FREE_MB" ] || [ "$STORAGE_FREE_MB" -lt 50 ]; then
         debug_log "ERROR" "Insufficient storage for swap (${STORAGE_FREE_MB}MB free). Skipping swap setup."
@@ -655,8 +641,9 @@ install_build() {
         return 1
     fi
 
-    # **スワップの動作チェック**
     setup_swap
+    
+    # **スワップの動作チェック**
     if [ $? -ne 0 ]; then
         debug_log "ERROR" "$(get_message 'MSG_ERR_INSUFFICIENT_SWAP')"
         return 1
