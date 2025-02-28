@@ -519,22 +519,6 @@ setup_swap() {
     # **zswap (zram-swap) のインストール**
     install_package zram-swap yn hidden
 
-    # **zswap の設定適用**
-    if uci get system.@zram[0] &>/dev/null; then
-        debug_log "INFO" "Applying zswap settings from local-package.db..."
-        uci set system.@zram[0].enabled='1'
-        uci set system.@zram[0].size="${ZRAM_SIZE_MB}"
-        uci set system.@zram[0].comp_algorithm='zstd'
-        uci commit system
-    else
-        debug_log "ERROR" "zswap configuration not found in UCI. Skipping swap setup."
-        return 1  # **設定が見つからない場合も即終了**
-    fi
-
-    # **zram-swap の有効化**
-    debug_log "INFO" "Enabling zram-swap..."
-    /etc/init.d/zram restart
-
     sleep 2  # **スワップが確実に有効化されるまで待機**
 
     # **スワップが有効になったか確認**
