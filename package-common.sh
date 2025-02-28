@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-04-05"
+SCRIPT_VERSION="2025.02.28-04-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -707,6 +707,10 @@ build_package_db() {
 
     if [ ! -d "$build_dir/.git" ]; then
         git clone --depth=1 "$source_url" "$build_dir"
+        if [ $? -ne 0 ]; then
+            debug_log "ERROR" "Failed to clone repository: $source_url"
+            return 1
+        fi
     else
         debug_log "INFO" "Repository already cloned, pulling latest changes..."
         (cd "$build_dir" && git pull)
@@ -725,6 +729,7 @@ build_package_db() {
 
     # **ビルドディレクトリに移動して実行**
     echo "cd $build_dir && $build_command" > "${CACHE_DIR}/build_command.ch"
+    chmod +x "${CACHE_DIR}/build_command.ch"
 
     # **デバッグログ: 置換後のビルドコマンド**
     debug_log "DEBUG" "Final build command: $(cat "${CACHE_DIR}/build_command.ch")"
