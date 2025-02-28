@@ -513,7 +513,7 @@ setup_swap() {
 
     if [ -z "$STORAGE_FREE_MB" ] || [ "$STORAGE_FREE_MB" -lt 50 ]; then
         debug_log "ERROR" "Insufficient storage for swap (${STORAGE_FREE_MB}MB free). Skipping swap setup."
-        return 1  # **ストレージ不足なら即終了**
+        return 1  # **ストレージ不足なら即終了** 
     fi
 
     # **zswap (zram-swap) のインストール**
