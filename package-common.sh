@@ -493,17 +493,16 @@ install_package() {
 # [uconv]　※行、列問わず記述可
 #########################################################################
 setup_swap() {
-    local ZRAM_SIZE_MB
     local RAM_TOTAL_MB
     RAM_TOTAL_MB=$(awk '/MemTotal/ {print int($2 / 1024)}' /proc/meminfo)
 
     # **スワップサイズを RAM に応じて自動調整**
     if [ "$RAM_TOTAL_MB" -lt 512 ]; then
-        ZRAM_SIZE_MB=512
+        export ZRAM_SIZE_MB=512
     elif [ "$RAM_TOTAL_MB" -lt 1024 ]; then
-        ZRAM_SIZE_MB=256
+        export ZRAM_SIZE_MB=256
     else
-        ZRAM_SIZE_MB=128
+        export ZRAM_SIZE_MB=128
     fi
 
     debug_log "INFO" "RAM: ${RAM_TOTAL_MB}MB, Setting zram size to ${ZRAM_SIZE_MB}MB"
