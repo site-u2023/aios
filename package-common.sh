@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-10"
+SCRIPT_VERSION="2025.03.01-00-11"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -667,6 +667,9 @@ build_package_db() {
         return 1
     fi
 
+    # **`/` を含むターゲットの修正**
+    target=$(echo "$target" | tr '/' '-')
+
     debug_log "DEBUG" "Detected OpenWrt target: $target, SDK Arch: $sdk_arch"
 
     # **SDK のセットアップ**
@@ -674,7 +677,7 @@ build_package_db() {
         debug_log "WARN" "OpenWrt SDK not found. Attempting to set up..."
 
         local sdk_base_url="https://downloads.openwrt.org/releases/${openwrt_version}/targets/${target}"
-        local sdk_filename="openwrt-sdk-${openwrt_version}-${target}_gcc-12.3.0_musl.Linux-${sdk_arch}.tar.xz"
+        local sdk_filename="openwrt-sdk-${openwrt_version}-${target}_gcc-12.3.0_musl.Linux-x86_64.tar.xz"
         local sdk_url="${sdk_base_url}/${sdk_filename}"
         local sdk_dir="/tmp/openwrt-sdk"
 
@@ -752,7 +755,6 @@ build_package_db() {
 
     return 0
 }
-
 
 install_build() {
     local confirm_install="no"
