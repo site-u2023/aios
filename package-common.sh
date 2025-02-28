@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-03-08"
+SCRIPT_VERSION="2025.02.28-03-09"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -645,75 +645,72 @@ build_package_db() {
 
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version for package: $package_name"
 
-    # **バージョン対応の `build_command` を取得**
-    local build_command=""
-    
-    # **指定バージョンの `build_command` を探す**
-    build_command=$(awk -F '=' -v pkg="[$package_name]" -v ver="($openwrt_version)" '
-        $0 ~ pkg {found=1; next}
-        found && $0 ~ ver {found_ver=1; next}
-        found_ver && $1 ~ "build_command" {print $2; exit}
-    ' "${BASE_DIR}/custom-package.db")
+    # **パッケージ名を正規化（"-"を削除）**
+    local normalized_name
+    normalized_name=$(echo "$package_name" | sed 's/-//g')
 
-    # **該当バージョンがない場合、最も近い下位互換バージョンを探す**
-    if [ -z "$build_command" ]; then
-        debug_log "DEBUG" "No exact match for OpenWrt version: $openwrt_version. Searching closest lower version..."
-        closest_version=""
-        closest_command=""
+    # **パッケージセクションをキャッシュへ保存**
+    local package_section_cache="${CACHE_DIR}/package_section.ch"
+    awk -v pkg="\\[$normalized_name\\]" '
+        $0 ~ pkg {flag=1; next}
+        flag && /^\[/ {flag=0}
+        flag {print}
+    ' "${BASE_DIR}/custom-package.db" > "$package_section_cache"
 
-        # **利用可能なバージョンを抽出**
-        available_versions=$(awk -v pkg="[$package_name]" '
-            $0 ~ pkg {found=1; next}
-            found && $0 ~ "\\(" {gsub(/[()]/, "", $1); print $1}
-        ' "${BASE_DIR}/custom-package.db" | sort -nr)  # 数値降順でソート
-
-        # **OSバージョンと比較して最も近い下位バージョンを選択**
-        for ver in $available_versions; do
-            if [ "$ver" -le "$openwrt_version" ]; then
-                closest_version="$ver"
-                break
-            fi
-        done
-
-        # **最も近い下位互換のバージョンが見つかった場合、その `build_command` を取得**
-        if [ -n "$closest_version" ]; then
-            build_command=$(awk -F '=' -v pkg="[$package_name]" -v ver="($closest_version)" '
-                $0 ~ pkg {found=1; next}
-                found && $0 ~ ver {found_ver=1; next}
-                found_ver && $1 ~ "build_command" {print $2; exit}
-            ' "${BASE_DIR}/custom-package.db")
-
-            debug_log "DEBUG" "Using closest lower version: $closest_version"
-        fi
-    fi
-
-    # **最終的な `build_command` が取得できない場合はエラー**
-    if [ -z "$build_command" ]; then
-        debug_log "ERROR" "No compatible build command found for $package_name on OpenWrt $openwrt_version."
+    if [ ! -s "$package_section_cache" ]; then
+        debug_log "ERROR" "Package not found in database: $package_name ($normalized_name)"
         return 1
     fi
 
+    debug_log "DEBUG" "Package section cached: $package_section_cache"
+
+    # **バージョンリストを取得**
+    local version_list_cache="${CACHE_DIR}/version_list.ch"
+    grep -o 'ver_[0-9.]*' "$package_section_cache" | sed 's/ver_//' | sort -Vr > "$version_list_cache"
+
+    if [ ! -s "$version_list_cache" ]; then
+        debug_log "ERROR" "No versions found for package: $package_name"
+        return 1
+    fi
+
+    debug_log "DEBUG" "Available versions cached: $version_list_cache"
+
+    # **最も近い下位互換バージョンを探す**
+    local target_version=""
+    while read -r version; do
+        if [ "$(echo -e "$version\n$openwrt_version" | sort -Vr | head -n1)" = "$openwrt_version" ]; then
+            target_version="$version"
+            break
+        fi
+    done < "$version_list_cache"
+
+    if [ -z "$target_version" ]; then
+        debug_log "ERROR" "No compatible version found for $package_name on OpenWrt $openwrt_version"
+        return 1
+    fi
+
+    debug_log "DEBUG" "Using version: $target_version"
+
+    # **ビルドコマンドを取得**
+    local build_command=""
+    build_command=$(awk -F '=' -v ver="ver_${target_version}.build_command" '$1 ~ ver {print $2}' "$package_section_cache")
+
+    if [ -z "$build_command" ]; then
+        debug_log "ERROR" "No build command found for package: $package_name (version: $target_version)"
+        return 1
+    fi
+
+    debug_log "INFO" "Build command found: $build_command"
+
     # **ビルドコマンドをキャッシュに保存**
     echo "$build_command" > "${CACHE_DIR}/build_command.ch"
-
-    # **環境変数 `CUSTOM_*` を自動検出して置換**
-    CUSTOM_VARS=$(env | grep "^CUSTOM_" | awk -F= '{print $1}')
-    for var_name in $CUSTOM_VARS; do
-        eval var_value=\$$var_name
-        if [ -n "$var_value" ]; then
-            sed -i "s|\\\${$var_name}|$var_value|g" "${CACHE_DIR}/build_command.ch"
-            debug_log "DEBUG" "Substituted: $var_name -> $var_value"
-        else
-            sed -i "s|.*\\\${$var_name}.*|# UNDEFINED: \0|g" "${CACHE_DIR}/build_command.ch"
-            debug_log "DEBUG" "Undefined variable: $var_name"
-        fi
-    done
 
     # **デバッグログ: 置換後のビルドコマンド**
     debug_log "DEBUG" "Final build command: $(cat "${CACHE_DIR}/build_command.ch")"
 
     return 0
 }
+
 
 install_build() {
     local confirm_install="no"
