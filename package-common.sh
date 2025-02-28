@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-02-01"
+SCRIPT_VERSION="2025.02.28-02-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -517,7 +517,7 @@ setup_swap() {
     fi
 
     # **zswap (zram-swap) のインストール**
-    #install_package zram-swap hidden
+    install_package zram-swap yn hidden
 
     # **zswap の設定適用**
     if uci get system.@zram[0] &>/dev/null; then
