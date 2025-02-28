@@ -226,6 +226,11 @@ local_package_db() {
     safe_pkg=$(printf '%s\n' "$package_name" | sed 's/[\/&]/\\&/g')
 
 
+echo "Current script: $0"
+
+debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name (Script: $0, Version: $SCRIPT_VERSION)"
+
+
     debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name" "$0" "$SCRIPT_VERSION"
 echo fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
     # local-package.dbから指定されたセクションを抽出
