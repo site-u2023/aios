@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-12"
+SCRIPT_VERSION="2025.03.01-01-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -638,8 +638,10 @@ get_value_with_fallback() {
 build_package_db() {
     local package_name="$1"
     local openwrt_version=""
+    local sdk_dir="${BASE_DIR}/sdk"
+    local build_dir="${BASE_DIR}/build/$package_name"
 
-    # **OpenWrt バージョンの取得**
+    # OpenWrtバージョンの取得
     if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
         openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
     else
@@ -649,102 +651,95 @@ build_package_db() {
 
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version for package: $package_name"
 
-    # **アーキテクチャとターゲットを取得**
+    # アーキテクチャの確認
     check_architecture
-    local arch=$(cat "${CACHE_DIR}/architecture.ch")
+    local arch=$(cat "${CACHE_DIR}/architecture.ch" | tr -d '\r')
+    debug_log "DEBUG" "Detected system architecture: $arch"
 
-    # **opkg.conf からターゲットとアーキテクチャを取得**
+    # OpenWrtのターゲット情報を取得
     local target=""
     local sdk_arch=""
-    
-    if grep -q "src/gz openwrt_core" /etc/opkg/distfeeds.conf; then
-        target=$(grep "src/gz openwrt_core" /etc/opkg/distfeeds.conf | awk '{print $3}' | sed 's|.*/targets/||; s|/packages||')
-        sdk_arch=$(grep "src/gz openwrt_base" /etc/opkg/distfeeds.conf | awk '{print $3}' | sed 's|.*/packages/||; s|/base||')
+    case "$arch" in
+        "armv7l")
+            target="ipq40xx/generic"
+            sdk_arch="arm_cortex-a7_neon-vfpv4"
+            ;;
+        "x86_64")
+            target="x86/64"
+            sdk_arch="x86_64"
+            ;;
+        *)
+            debug_log "ERROR" "Unsupported architecture: $arch"
+            return 1
+            ;;
+    esac
+
+    # SDKのダウンロードURLを構築
+    local sdk_url="https://downloads.openwrt.org/releases/${openwrt_version}/targets/${target}/openwrt-sdk-${openwrt_version}-${target}_gcc-12.3.0_musl.Linux-${sdk_arch}.tar.xz"
+
+    # SDKのセットアップ
+    if [ ! -d "$sdk_dir" ]; then
+        debug_log "WARN" "OpenWrt SDK not found. Attempting to set up..."
+        mkdir -p "$sdk_dir"
+        cd "$sdk_dir" || return 1
+        if ! wget "$sdk_url"; then
+            debug_log "ERROR" "Failed to download OpenWrt SDK from $sdk_url"
+            return 1
+        fi
+        tar -xf "$(basename "$sdk_url")" --strip-components=1 -C "$sdk_dir"
+        if [ $? -ne 0 ]; then
+            debug_log "ERROR" "Failed to extract OpenWrt SDK"
+            return 1
+        fi
+        debug_log "INFO" "OpenWrt SDK set up successfully at $sdk_dir"
     fi
 
-    if [ -z "$target" ] || [ -z "$sdk_arch" ]; then
-        debug_log "ERROR" "Failed to detect OpenWrt target or architecture from opkg settings!"
+    # パッケージソースのクローン
+    if [ -d "$build_dir" ]; then
+        rm -rf "$build_dir"
+    fi
+    mkdir -p "$build_dir"
+
+    local source_url
+    source_url=$(awk -F '=' '/^source_url/ {print $2}' "${BASE_DIR}/custom-package.db" | tr -d ' ')
+
+    if [ -z "$source_url" ]; then
+        debug_log "ERROR" "Source URL not found for package: $package_name"
         return 1
     fi
 
-    # **`/` を含むターゲットの修正**
-    target=$(echo "$target" | tr '/' '-')
-
-    debug_log "DEBUG" "Detected OpenWrt target: $target, SDK Arch: $sdk_arch"
-
-    # **SDK のセットアップ**
-    if [ -z "$STAGING_DIR" ] || [ ! -d "$STAGING_DIR" ]; then
-        debug_log "WARN" "OpenWrt SDK not found. Attempting to set up..."
-
-        local sdk_base_url="https://downloads.openwrt.org/releases/${openwrt_version}/targets/${target}"
-        local sdk_filename="openwrt-sdk-${openwrt_version}-${target}_gcc-12.3.0_musl.Linux-x86_64.tar.xz"
-        local sdk_url="${sdk_base_url}/${sdk_filename}"
-        local sdk_dir="/tmp/openwrt-sdk"
-
-        mkdir -p "$sdk_dir"
-        cd "$sdk_dir" || return 1
-
-        # **SDK の存在確認**
-        if ! wget --spider "$sdk_url" 2>/dev/null; then
-            debug_log "ERROR" "SDK not found at $sdk_url. Trying alternative naming..."
-            
-            # **フォールバック**
-            sdk_filename="openwrt-sdk-${openwrt_version}-${target}_gcc-12.3.0_musl.Linux-generic.tar.xz"
-            sdk_url="${sdk_base_url}/${sdk_filename}"
-            
-            if ! wget --spider "$sdk_url" 2>/dev/null; then
-                debug_log "ERROR" "Fallback SDK not found at $sdk_url. Cannot proceed!"
-                return 1
-            fi
-        fi
-
-        wget "$sdk_url" -O sdk.tar.xz || {
-            debug_log "ERROR" "Failed to download OpenWrt SDK ($sdk_url)"
-            return 1
-        }
-
-        tar -xJf sdk.tar.xz --strip-components=1 || {
-            debug_log "ERROR" "Failed to extract OpenWrt SDK"
-            return 1
-        }
-
-        export STAGING_DIR="$sdk_dir"
-        export PATH="$STAGING_DIR/bin:$PATH"
-
-        debug_log "INFO" "OpenWrt SDK set up successfully at $STAGING_DIR"
-    fi
-
-    # **ビルドディレクトリの作成**
-    local build_dir="${BASE_DIR}/build/$package_name"
-    mkdir -p "$build_dir"
-    rm -rf "$build_dir"
     git clone "$source_url" "$build_dir"
-
     if [ ! -d "$build_dir/.git" ]; then
         debug_log "ERROR" "Failed to clone repository: $source_url"
         return 1
     fi
-
     debug_log "DEBUG" "Source cloned to: $build_dir"
 
-    # **Makefile の修正**
-    if [ ! -f "$build_dir/Makefile" ]; then
-        debug_log "ERROR" "Makefile not found in $build_dir"
+    # SDKディレクトリに移動
+    cd "$sdk_dir" || return 1
+
+    # パッケージをSDK内にコピー
+    cp -r "$build_dir" "package/$package_name"
+
+    # ビルド環境のセットアップ
+    ./scripts/feeds update -a
+    ./scripts/feeds install -a
+
+    # `rules.mk`のパスを修正
+    if [ ! -f "include/rules.mk" ]; then
+        debug_log "ERROR" "Missing rules.mk in SDK"
         return 1
     fi
 
-    sed -i 's|^\s*include /rules.mk|include $(TOPDIR)/rules.mk|' "$build_dir/Makefile"
-
-    # **ビルド開始**
-    cd "$build_dir" || return 1
-    if ! make package/${package_name}/compile -j$(nproc); then
-        debug_log "ERROR" "Build command failed"
+    # ビルド実行
+    make package/$package_name/compile V=s
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "Failed to build package: $package_name"
         return 1
     fi
 
-    # **.ipk ファイルを探す**
-    local ipk_file
-    ipk_file=$(find "$build_dir/bin/packages/" "$build_dir/bin/targets/" -type f -name "*.ipk" 2>/dev/null | head -n 1)
+    # `bin/packages/` 配下の `.ipk` ファイルを確認
+    local ipk_file=$(find bin/packages/ bin/targets/ -type f -name "*.ipk" 2>/dev/null | head -n 1)
 
     if [ -z "$ipk_file" ]; then
         debug_log "ERROR" "Build completed but no .ipk file found!"
@@ -755,7 +750,6 @@ build_package_db() {
 
     return 0
 }
-
 
 install_build() {
     local confirm_install="no"
