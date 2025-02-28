@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-01-07"
+SCRIPT_VERSION="2025.02.28-02-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -219,16 +219,8 @@ update_package_list() {
 local_package_db() {
     package_name=$1  # ここでパッケージ名を引数として受け取る
 
-    debug_log "DEBUG" "Starting to apply local-package.db for package: '$package_name'"
-
     debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name"
-    
-    debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name (Script: $0, Version: $SCRIPT_VERSION)"
-
-    #debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name" "$0" "$SCRIPT_VERSION"
-    
-    echo OK
-    
+   
     # local-package.dbから指定されたセクションを抽出
     extract_commands() {
         # [PACKAGE] をエスケープして検索、コメント行は無視
