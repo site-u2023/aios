@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-04-03"
+SCRIPT_VERSION="2025.02.28-04-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -634,7 +634,7 @@ get_value_with_fallback() {
 build_package_db() {
     local package_name="$1"
     local openwrt_version=""
-    
+
     # **HTTPSの無効化設定**
     git config --global url."git://".insteadOf https://
     git config --global http.sslVerify false  # SSL検証を無効化
@@ -678,9 +678,8 @@ build_package_db() {
     # **最も近い下位互換バージョンを探す**
     local target_version=""
     while read -r version; do
-        if [ "$(echo -e "$version\n$openwrt_version" | sort -Vr | head -n1)" = "$openwrt_version" ]; then
+        if [ -z "$target_version" ] || [ "$(echo -e "$version\n$target_version" | sort -Vr | head -n1)" = "$version" ]; then
             target_version="$version"
-            break
         fi
     done < "$version_list_cache"
 
