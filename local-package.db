@@ -45,7 +45,6 @@ uci commit ttyd
 /etc/init.d/ttyd restart
 /etc/init.d/rpcd restart
 
-
 # zswap設定
 [zswap]
 uci add system zram
