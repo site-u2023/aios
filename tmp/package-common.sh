@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-01-00"
+SCRIPT_VERSION="2025.02.28-02-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -216,11 +216,11 @@ update_package_list() {
 }
 
 # パッケージ名（引数として渡せるように変更）
-apply_local_package_db() {
+local_package_db() {
     package_name=$1  # ここでパッケージ名を引数として受け取る
 
-    debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name" "$0" "$SCRIPT_VERSION"
-
+    debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name"
+   
     # local-package.dbから指定されたセクションを抽出
     extract_commands() {
         # [PACKAGE] をエスケープして検索、コメント行は無視
@@ -237,7 +237,7 @@ apply_local_package_db() {
 
     # コマンドが見つからない場合、エラーメッセージを表示して終了
     if [ -z "$cmds" ]; then
-        echo "No commands found for package: $package_name"
+        debug_log "DEBUG" "No commands found for package: $package_name"
         return 1
     fi
 
@@ -255,44 +255,10 @@ apply_local_package_db() {
     echo "All commands executed successfully."
 }
 
-# **YN 確認を行う関数**
-OK_confirm_installation() {
-    local package="$1"
-    local package_with_lang="$package"  # デフォルトではそのままのパッケージ名
-
-    # 言語パッケージがある場合は言語コードを付け加える
-    if echo "$package" | grep -q "luci-i18n-"; then
-        if [ -f "${CACHE_DIR}/luci.ch" ]; then
-            local lang_code
-            lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
-            package_with_lang="${package}-${lang_code}"  # 言語コードを追加
-        else
-            package_with_lang="${package}-en"  # 言語コードがなければ、英語パッケージを使用
-        fi
-    fi
-
-    # メッセージにパッケージ名を差し込む
-    local msg=$(get_message "MSG_CONFIRM_INSTALL")
-    msg="${msg//\{pkg\}/$package_with_lang}"  # パッケージ名を適切に置き換える
-    echo "$msg"
-    printf "%s " "$(get_message "MSG_CONFIRM_ONLY_YN")"
-
-    # ユーザー入力待機
-    read -r yn || return 1
-    case "$yn" in
-        [Yy]*) return 0 ;;  # 継続
-        [Nn]*) return 1 ;;  # キャンセル
-        *) echo "$(color red "Invalid input. Please enter Y or N.")" ;;  # 無効な入力
-    esac
-}
-
 confirm_installation() {
     local package="$1"
 
     debug_log "DEBUG" "Confirming installation for package: $package"
-
-    # 言語コードの確認を削除
-    # すでにpackage名が適切な形式だと仮定し、チェックしない
 
     while true; do
         local msg=$(get_message "MSG_CONFIRM_INSTALL")
@@ -342,53 +308,8 @@ package_pre_install() {
         return 0  # パッケージが存在するのでOK
     fi
 
-    debug_log "ERROR" "Package $package_name not found in repository."
+    debug_log "DEBUG" "Package $package_name not found in repository."
     return 1  # パッケージが見つからなかった
-}
-
-# **言語パッケージのインストール**
-install_language_package() {
-    local package_name="$1"
-    local base="luci-i18n-${package_name#luci-app-}"
-    local cache_lang=""
-    local lang_pkg=""
-
-    # 言語キャッシュの取得
-    if [ -f "${CACHE_DIR}/luci.ch" ]; then
-        cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
-    else
-        cache_lang="en"
-    fi
-
-    # 言語パッケージの検索順リスト
-    local package_search_list="${base}-${cache_lang} ${base}-en"
-
-    debug_log "DEBUG" "Checking for package variations in repository: $package_search_list"
-
-    local package_found="no"
-    for pkg in $package_search_list; do
-        # **インストール済みチェック**
-        if opkg list-installed "$pkg" >/dev/null 2>&1; then
-            debug_log "DEBUG" "Package $pkg is already installed. Skipping installation."
-            return 0  # インストール済みなら何もしない
-        fi
-
-        # **リポジトリ検索**
-        if grep -q "^$pkg " "${CACHE_DIR}/package_list.ch"; then
-            lang_pkg="$pkg"
-            package_found="yes"
-            break  # 見つかったパッケージでループを終了
-        fi
-    done
-
-    if [ "$package_found" = "no" ]; then
-        debug_log "ERROR" "No suitable language package found for $package_name."
-        return 1  # 見つからなければエラー
-    fi
-
-    debug_log "DEBUG" "Found $lang_pkg in repository"
-    confirm_installation "$lang_pkg" || return 1  # インストール確認
-    install_package_func "$lang_pkg" "$force_install"  # 実際にインストール
 }
 
 install_normal_package() {
@@ -397,7 +318,8 @@ install_normal_package() {
 
     debug_log "DEBUG" "Starting installation process for: $package_name"
 
-    start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
+    start_spinner "$(color yellow "$package_name $(get_message "MSG_INSTALLING_PACKAGE")")"
+    #start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
 
     if [ "$force_install" = "yes" ]; then
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
@@ -425,49 +347,7 @@ install_normal_package() {
         fi
     fi
 
-    stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
-}
-
-# **言語パッケージのインストール**
-install_language_package() {
-    local package_name="$1"
-    local base="luci-i18n-${package_name#luci-app-}"
-    local cache_lang=""
-    local lang_pkg=""
-
-    # 言語キャッシュの取得
-    if [ -f "${CACHE_DIR}/luci.ch" ]; then
-        cache_lang=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
-    else
-        cache_lang="en"
-    fi
-
-    # 言語パッケージの検索順リスト
-    local package_search_list="${base}-${cache_lang} ${base}-en"
-
-    debug_log "DEBUG" "Checking for package variations in repository: $package_search_list"
-
-    # インストール済みチェックとリポジトリ検索
-    for pkg in $package_search_list; do
-        if opkg list-installed "$pkg" >/dev/null 2>&1; then
-            debug_log "DEBUG" "Package $pkg is already installed. Skipping installation."
-            return 0
-        fi
-
-        if grep -q "^$pkg " "${CACHE_DIR}/package_list.ch"; then
-            lang_pkg="$pkg"
-            debug_log "DEBUG" "Found $pkg in repository"
-            break
-        fi
-    done
-
-    if [ -z "$lang_pkg" ]; then
-        debug_log "ERROR" "No suitable language package found for $package_name."
-        return 1
-    fi
-
-    confirm_installation "$lang_pkg" || return 1
-    install_package_func "$lang_pkg" "$force_install"
+    stop_spinner "$(color green "$package_name $(get_message "MSG_INSTALL_SUCCESS")")"
 }
 
 # **インストール関数**
@@ -557,20 +437,14 @@ install_package() {
     if [ "$confirm_install" = "yes" ]; then
         confirm_installation "$package_name" || return 1
     fi
-
-    # 言語パッケージか通常パッケージかを判別
-    if [[ "$package_name" == luci-i18n-* ]]; then
-        install_language_package "$package_name" || return 1
-    else
-        install_normal_package "$package_name" "$force_install" || return 1
-    fi
+    
+    install_normal_package "$package_name" "$force_install" || return 1
 
     # **ローカルパッケージDBの適用 (インストール成功後に実行)**
     if [ "$skip_package_db" != "yes" ]; then
-        apply_local_package_db "$package_name"
+        local_package_db "$package_name"
     fi
 }
-
 
 #########################################################################
 # Last Update: 2025-02-22 15:35:00 (JST) 🚀
