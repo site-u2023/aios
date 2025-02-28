@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-03-05"
+SCRIPT_VERSION="2025.02.28-03-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -631,6 +631,60 @@ get_value_with_fallback() {
     echo "$value"
 }
 
+build_package_db() {
+    local package_name="$1"
+    local openwrt_version=""
+    
+    # OpenWrtバージョンの取得
+    if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
+        openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
+    else
+        debug_log "ERROR" "OpenWrt version not found!"
+        return 1
+    fi
+
+    debug_log "DEBUG" "Using OpenWrt version: $openwrt_version for package: $package_name"
+
+    # **バージョン対応の `build_command` を取得**
+    extract_build_command() {
+        awk -F '=' -v pkg="[$package_name]" -v ver="($openwrt_version)" '
+            $0 ~ pkg {flag=1; next} 
+            /^\(/ && flag {if ($0 == ver) {flag=2} else {flag=0}} 
+            flag == 2 && /build_command/ {print $2; exit}
+        ' "${BASE_DIR}/custom-package.db"
+    }
+
+    # コマンドを取得
+    local build_command
+    build_command=$(extract_build_command)
+
+    if [ -z "$build_command" ]; then
+        debug_log "ERROR" "No build command found for $package_name on OpenWrt $openwrt_version."
+        return 1
+    fi
+
+    # **ビルドコマンドをキャッシュに保存**
+    echo "$build_command" > "${CACHE_DIR}/build_command.ch"
+
+    # **環境変数 `CUSTOM_*` を自動検出して置換**
+    CUSTOM_VARS=$(env | grep "^CUSTOM_" | awk -F= '{print $1}')
+    for var_name in $CUSTOM_VARS; do
+        eval var_value=\$$var_name
+        if [ -n "$var_value" ]; then
+            sed -i "s|\\\${$var_name}|$var_value|g" "${CACHE_DIR}/build_command.ch"
+            debug_log "DEBUG" "Substituted: $var_name -> $var_value"
+        else
+            sed -i "s|.*\\\${$var_name}.*|# UNDEFINED: \0|g" "${CACHE_DIR}/build_command.ch"
+            debug_log "DEBUG" "Undefined variable: $var_name"
+        fi
+    done
+
+    # **デバッグログ: 置換後のビルドコマンド**
+    debug_log "DEBUG" "Final build command: $(cat "${CACHE_DIR}/build_command.ch")"
+
+    return 0
+}
+
 install_build() {
     local confirm_install="no"
     local hidden="no"
@@ -685,24 +739,14 @@ install_build() {
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
 
     # **ビルド環境の準備**
-    install_package jq
     local build_tools="make gcc git libtool-bin automake pkg-config zlib-dev libncurses-dev curl libxml2 libxml2-dev autoconf automake bison flex perl patch wget wget-ssl tar unzip"
                       
     for tool in $build_tools; do
         install_package "$tool" hidden
     done
 
-    # **`custom-package.db` からビルドコマンドを取得**
-    jq -r --arg pkg "$package_name" --arg ver "$openwrt_version" '
-        .[$pkg].build.commands[$ver] // 
-        .[$pkg].build.commands.default // empty' "$BASE_DIR/custom-package.db" 2>/dev/null
-
-    # **ビルドコマンドのチェック (empty チェックを含む)**
-    if [ -z "$build_command" ] || [ "$build_command" = "empty" ]; then
-        debug_log "ERROR" "No build command found for $package_name."
-        return 1
-    fi
-
+    build_package_db "$package_name"
+    
     debug_log "DEBUG" "Executing build command: $build_command"
 
     # **ビルド開始メッセージ**
