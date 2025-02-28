@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-01-00"
+SCRIPT_VERSION="2025.03.01-01-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -642,40 +642,28 @@ build_package_db() {
     local build_dir="${BASE_DIR}/build/$package_name"
 
     # OpenWrtバージョンの取得
-    if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
-        openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
+    if [ -f "/etc/openwrt_release" ]; then
+        openwrt_version=$(grep "DISTRIB_RELEASE" /etc/openwrt_release | cut -d"'" -f2)
     else
-        debug_log "ERROR" "OpenWrt version not found!"
+        debug_log "ERROR" "Failed to detect OpenWrt version!"
         return 1
     fi
 
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version for package: $package_name"
 
-    # アーキテクチャの確認
-    check_architecture
-    local arch=$(cat "${CACHE_DIR}/architecture.ch" | tr -d '\r')
-    debug_log "DEBUG" "Detected system architecture: $arch"
+    # OpenWrtのターゲットとアーキテクチャを取得
+    local target=$(grep "DISTRIB_TARGET" /etc/openwrt_release | cut -d"'" -f2)
+    local arch=$(grep "DISTRIB_ARCH" /etc/openwrt_release | cut -d"'" -f2)
 
-    # OpenWrtのターゲット情報を取得
-    local target=""
-    local sdk_arch=""
-    case "$arch" in
-        "armv7l")
-            target="ipq40xx/generic"
-            sdk_arch="arm_cortex-a7_neon-vfpv4"
-            ;;
-        "x86_64")
-            target="x86/64"
-            sdk_arch="x86_64"
-            ;;
-        *)
-            debug_log "ERROR" "Unsupported architecture: $arch"
-            return 1
-            ;;
-    esac
+    if [ -z "$target" ] || [ -z "$arch" ]; then
+        debug_log "ERROR" "Failed to detect OpenWrt target or architecture!"
+        return 1
+    fi
 
-    # SDKのダウンロードURLを構築
-    local sdk_url="https://downloads.openwrt.org/releases/${openwrt_version}/targets/${target}/openwrt-sdk-${openwrt_version}-${target}_gcc-12.3.0_musl.Linux-${sdk_arch}.tar.xz"
+    debug_log "DEBUG" "Detected OpenWrt target: $target, SDK Arch: $arch"
+
+    # SDKのダウンロードURLを作成
+    local sdk_url="https://downloads.openwrt.org/releases/${openwrt_version}/targets/${target}/openwrt-sdk-${openwrt_version}-${target}_gcc-12.3.0_musl.Linux-${arch}.tar.xz"
 
     # SDKのセットアップ
     if [ ! -d "$sdk_dir" ]; then
