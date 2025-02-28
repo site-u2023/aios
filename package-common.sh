@@ -221,6 +221,11 @@ update_package_list() {
 local_package_db() {
     package_name=$1  # ここでパッケージ名を引数として受け取る
 
+    debug_log "DEBUG" "Starting to apply local-package.db for package: '$package_name'"
+
+    safe_pkg=$(printf '%s\n' "$package_name" | sed 's/[\/&]/\\&/g')
+
+
     debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name" "$0" "$SCRIPT_VERSION"
 echo fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
     # local-package.dbから指定されたセクションを抽出
