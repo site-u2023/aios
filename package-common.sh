@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-04-17"
+SCRIPT_VERSION="2025.02.28-04-18"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -649,7 +649,7 @@ build_package_db() {
 
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version for package: $package_name"
 
-    # **パッケージ名を正規化（"-"を削除）**
+    # **パッケージ名を正規化**
     local normalized_name
     normalized_name=$(echo "$package_name" | sed 's/-//g')
 
@@ -767,7 +767,7 @@ build_package_db() {
     # **ビルドコマンドを取得**
     local build_command=""
 
-    build_command=$(awk -F '=' -v ver="ver_${target_version}.build_command" '$1 ~ ver {print $2}' "$package_section_cache")
+    build_command=$(awk -F '=' -v ver="ver_${target_version}.build_command" '$1 == ver {print $2}' "$package_section_cache")
 
     if [ -z "$build_command" ]; then
         debug_log "ERROR" "No build command found for package: $package_name (version: $target_version)"
@@ -776,16 +776,32 @@ build_package_db() {
 
     debug_log "INFO" "Build command found: $build_command"
 
-    # **ビルドコマンドをキャッシュに保存**
-    echo "cd $build_dir && $build_command" > "${CACHE_DIR}/build_command.ch"
-    chmod +x "${CACHE_DIR}/build_command.ch"
+    # **ビルドディレクトリに移動**
+    if [ -f "$build_dir/Makefile" ]; then
+        cd "$build_dir"
+    elif [ -f "$build_dir/src/Makefile" ]; then
+        cd "$build_dir/src"
+    else
+        debug_log "ERROR" "No Makefile found in expected directories!"
+        return 1
+    fi
 
-    # **デバッグログ: 置換後のビルドコマンド**
-    debug_log "DEBUG" "Final build command: $(cat "${CACHE_DIR}/build_command.ch")"
+    # **ビルド開始**
+    if ! eval "$build_command"; then
+        debug_log "ERROR" "Build command failed: $build_command"
+        return 1
+    fi
 
-    # **クリーンアップ作業 (findコマンドの修正)**
-    find "$build_dir" -type d -exec rmdir {} \; 2>/dev/null
-    find "$build_dir" -type f -exec rm -f {} \; 2>/dev/null
+    # **ビルドされた `.ipk` を探す**
+    local ipk_file
+    ipk_file=$(find bin/packages/ bin/targets/ "$build_dir" -type f -name "*.ipk" 2>/dev/null | head -n 1)
+
+    if [ -z "$ipk_file" ]; then
+        debug_log "ERROR" "Build completed but no .ipk file found!"
+        return 1
+    fi
+
+    debug_log "INFO" "IPK package found: $ipk_file"
 
     return 0
 }
