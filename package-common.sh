@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-02-09"
+SCRIPT_VERSION="2025.02.28-02-11"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -215,8 +215,64 @@ update_package_list() {
     return 0
 }
 
-# パッケージ名（引数として渡せるように変更）
 local_package_db() {
+    package_name=$1  # パッケージ名を引数として受け取る
+    debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name"
+
+    # local-package.db から指定されたセクションを抽出
+    extract_commands() {
+        awk -v pkg="$package_name" '
+            $0 ~ "^\\[" pkg "\\]" {flag=1; next}  # [PACKAGE] セクションに到達
+            $0 ~ "^\\[" {flag=0}                  # 次のセクションが始まったら flag をリセット
+            flag && $0 !~ "^#" {print}             # コメント行（#）を除外
+        ' "${BASE_DIR}/local-package.db"
+    }
+
+    # コマンドを取得
+    local cmds
+    cmds=$(extract_commands)
+
+    # コマンドが見つからない場合はエラーメッセージを出力して終了
+    if [ -z "$cmds" ]; then
+        debug_log "DEBUG" "No commands found for package: $package_name"
+        return 1
+    fi
+
+    # コマンドを一時ファイルに書き出し（変数展開前）
+    echo "$cmds" > "${CACHE_DIR}/commands.ch"
+
+    # `commands.ch` の内容を `DEBUG` ログに記録（置換前）
+    debug_log "DEBUG" "Before substitution:\n$(cat "${CACHE_DIR}/commands.ch")"
+
+    # 環境変数 `CUSTOM*` のリストを作成
+    CUSTOM_VARS=$(env | grep "^CUSTOM" | awk -F= '{print $1}')
+
+    # `sed` で変数を動的に置換
+    for var_name in $CUSTOM_VARS; do
+        eval var_value=\$$var_name  # `CUSTOM*` の値を取得
+
+        if [ -n "$var_value" ]; then
+            # 変数が定義されている場合はその値に置換
+            sed "s|\\\${$var_name}|$var_value|g" "${CACHE_DIR}/commands.ch" > "${CACHE_DIR}/commands.tmp"
+            mv "${CACHE_DIR}/commands.tmp" "${CACHE_DIR}/commands.ch"
+            debug_log "DEBUG" "Substituted: $var_name -> $var_value"
+        else
+            # 未定義の変数は `# UNDEFINED:` にコメントアウト
+            debug_log "DEBUG" "Undefined variable: $var_name"
+            sed "s|.*\\\${$var_name}.*|# UNDEFINED: \0|g" "${CACHE_DIR}/commands.ch" > "${CACHE_DIR}/commands.tmp"
+            mv "${CACHE_DIR}/commands.tmp" "${CACHE_DIR}/commands.ch"
+        fi
+    done
+
+    # `commands.ch` の内容を `DEBUG` ログに記録（置換後）
+    debug_log "DEBUG" "After substitution:\n$(cat "${CACHE_DIR}/commands.ch")"
+
+    # ch ファイル内のコマンドを実行
+    . "${CACHE_DIR}/commands.ch"
+}
+
+# パッケージ名（引数として渡せるように変更）
+XXX_local_package_db() {
     package_name=$1  # ここでパッケージ名を引数として受け取る
 
     debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name"
@@ -245,16 +301,6 @@ local_package_db() {
 
     # コマンドを一時ファイルに書き出し
     echo "$cmds" > ${CACHE_DIR}/commands.ch
-
-    # `sed` を使って変数を動的に置換 (存在する場合のみ)
-    for i in 1 2 3 4 5; do
-        var_name="CUSTOM$i"
-        eval var_value=\$$var_name  # `CUSTOM*` の値を取得
-
-        if [ -n "$var_value" ]; then
-            sed -i "s|\${$var_name}|$var_value|g" "${CACHE_DIR}/commands.ch"
-        fi
-    done
 
     # ここで一括でコマンドを実行
     # chファイルに書き出したコマンドをそのまま実行する
