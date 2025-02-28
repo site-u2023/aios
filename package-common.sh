@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-04-14"
+SCRIPT_VERSION="2025.02.28-04-15"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -778,6 +778,10 @@ build_package_db() {
 
     # **デバッグログ: 置換後のビルドコマンド**
     debug_log "DEBUG" "Final build command: $(cat "${CACHE_DIR}/build_command.ch")"
+
+    # **クリーンアップ作業 (findコマンドの修正)**
+    find "$build_dir" -type d -exec rmdir {} \; 2>/dev/null
+    find "$build_dir" -type f -exec rm -f {} \; 2>/dev/null
 
     return 0
 }
