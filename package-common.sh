@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-04-11"
+SCRIPT_VERSION="2025.02.28-04-12"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -635,7 +635,7 @@ build_package_db() {
     local package_name="$1"
     local openwrt_version=""
 
-    # OpenWrtバージョンの取得
+    # OpenWrt バージョンの取得
     if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
         openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
     else
@@ -645,17 +645,21 @@ build_package_db() {
 
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version for package: $package_name"
 
-    # **パッケージ名を正規化（"-"を削除）**
-    local normalized_name
-    normalized_name=$(echo "$package_name" | sed 's/-//g')
-
-    # **Git の初期設定**
+    # **GitHub の接続設定**
     git config --global --unset url."git://".insteadOf
     git config --global url."https://github.com/".insteadOf git://github.com/
     git config --global http.sslVerify false  # SSL検証を無効化
-    export GIT_CURL_VERBOSE=1  # Gitの詳細ログを表示
+    export GIT_CURL_VERBOSE=1  # Git の詳細ログを表示
 
-    # **パッケージセクションをキャッシュへ保存**
+    # **SSH 設定 (GitHub 安定化)**
+    if ! grep -q "IPQoS cs1" ~/.ssh/config 2>/dev/null; then
+        mkdir -p ~/.ssh
+        echo -e "Host github.com\n  IPQoS cs1" >> ~/.ssh/config
+        chmod 600 ~/.ssh/config
+        debug_log "DEBUG" "Added IPQoS cs1 to SSH config for GitHub"
+    fi
+
+    # **パッケージ情報取得**
     local package_section_cache="${CACHE_DIR}/package_section.ch"
     awk -v pkg="[$package_name]" '
         $0 == pkg {flag=1; next}
@@ -664,13 +668,13 @@ build_package_db() {
     ' "${BASE_DIR}/custom-package.db" > "$package_section_cache"
 
     if [ ! -s "$package_section_cache" ]; then
-        debug_log "ERROR" "Package not found in database: $package_name ($normalized_name)"
+        debug_log "ERROR" "Package not found in database: $package_name"
         return 1
     fi
 
     debug_log "DEBUG" "Package section cached: $package_section_cache"
 
-    # **バージョンリストを取得**
+    # **バージョンリストの取得**
     local version_list_cache="${CACHE_DIR}/version_list.ch"
     grep -o 'ver_[0-9.]*' "$package_section_cache" | sed -E 's/ver_//; s/\.$//' | sort -Vr > "$version_list_cache"
 
@@ -681,7 +685,7 @@ build_package_db() {
 
     debug_log "DEBUG" "Available versions cached: $version_list_cache"
 
-    # **最も近い下位互換バージョンを探す**
+    # **互換性のあるバージョンを検索**
     local target_version=""
     while read -r version; do
         if [ "$(echo -e "$version\n$openwrt_version" | sort -Vr | head -n1)" = "$openwrt_version" ]; then
@@ -697,9 +701,9 @@ build_package_db() {
 
     debug_log "DEBUG" "Using version: $target_version"
 
-    # **ビルドに必要なソースURLを取得**
+    # **ソース URL の取得**
     local source_url
-    source_url=$(awk -F '=' '/^source_url/ {print $2}' "$package_section_cache" | tr -d ' ')
+    source_url=$(get_ini_value "$package_name" "source_url" | tr -d ' ')
 
     if [ -z "$source_url" ]; then
         debug_log "ERROR" "Source URL not found for package: $package_name"
@@ -726,7 +730,7 @@ build_package_db() {
         return 1
     fi
 
-    # **`git://` を優先してクローン**
+    # **Git プロトコル (git://) を優先**
     source_url=$(echo "$source_url" | sed 's|https://github.com/|git://github.com/|')
     rm -rf "$build_dir"
     git clone "$source_url" "$build_dir"
@@ -736,7 +740,7 @@ build_package_db() {
         git_fallback=true
     fi
 
-    # **`git://` が失敗した場合は `https://` に切り替え**
+    # **HTTPS にフォールバック**
     if [ "$git_fallback" = true ]; then
         source_url="$original_url"
         rm -rf "$build_dir"
@@ -750,19 +754,18 @@ build_package_db() {
 
     debug_log "DEBUG" "Source cloned to: $build_dir"
 
-    # **SSH の IPQoS 設定をフォールバック**
-    if [ "$git_fallback" = true ]; then
-        if ! grep -q "IPQoS cs1" ~/.ssh/config 2>/dev/null; then
-            mkdir -p ~/.ssh
-            echo -e "Host github.com\n  IPQoS cs1" >> ~/.ssh/config
-            chmod 600 ~/.ssh/config
-            debug_log "DEBUG" "Added IPQoS cs1 to SSH config for GitHub"
-        fi
+    # **OpenWrt ビルド環境の初期化**
+    cd "$build_dir"
+    if [ ! -f ".config" ]; then
+        debug_log "INFO" "Initializing OpenWrt build environment..."
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+        make defconfig
     fi
 
-    # **ビルドコマンドを取得**
+    # **ビルドコマンドの取得**
     local build_command=""
-    build_command=$(awk -F '=' -v ver="ver_${target_version}.build_command" '$1 ~ ver {print $2}' "$package_section_cache")
+    build_command=$(get_ini_value "$package_name" "ver_${target_version}.build_command")
 
     if [ -z "$build_command" ]; then
         debug_log "ERROR" "No build command found for package: $package_name (version: $target_version)"
