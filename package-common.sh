@@ -741,7 +741,7 @@ install_build() {
         return 1
     fi
 
-    setup_swap || { debug_log "ERROR" "$(get_message 'MSG_ERR_INSUFFICIENT_SWAP')"; return 1; }
+    #setup_swap || { debug_log "ERROR" "$(get_message 'MSG_ERR_INSUFFICIENT_SWAP')"; return 1; }
 
     # **インストールの確認 (YNオプションが有効な場合のみ)**
     if [ "$confirm_install" = "yes" ]; then
