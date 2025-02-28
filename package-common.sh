@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-03-04"
+SCRIPT_VERSION="2025.02.28-03-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -693,9 +693,9 @@ install_build() {
     done
 
     # **`custom-package.db` からビルドコマンドを取得**
-    local build_command=$(jq -r --arg pkg "$package_name" --arg ver "$openwrt_version" '
+    jq -r --arg pkg "$package_name" --arg ver "$openwrt_version" '
         .[$pkg].build.commands[$ver] // 
-        .[$pkg].build.commands.default // empty' "$CACHE_DIR/custom-package.db" 2>/dev/null)
+        .[$pkg].build.commands.default // empty' "$BASE_DIR/custom-package.db" 2>/dev/null
 
     # **ビルドコマンドのチェック (empty チェックを含む)**
     if [ -z "$build_command" ] || [ "$build_command" = "empty" ]; then
