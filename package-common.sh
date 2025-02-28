@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-04-07"
+SCRIPT_VERSION="2025.02.28-04-09"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -649,8 +649,9 @@ build_package_db() {
     local normalized_name
     normalized_name=$(echo "$package_name" | sed 's/-//g')
 
-    # **HTTPSの無効化設定 & `git://` を優先**
-    git config --global url."git://".insteadOf https://
+    # **Git の設定を初期化**
+    git config --global --unset url."git://".insteadOf
+    git config --global url."https://github.com/".insteadOf git://github.com/
     git config --global http.sslVerify false  # SSL検証を無効化
     export GIT_CURL_VERBOSE=1  # Gitの詳細ログを表示
 
@@ -707,20 +708,43 @@ build_package_db() {
 
     debug_log "DEBUG" "Cloning source from: $source_url"
 
-    # **GitHubのHTTPSをGitプロトコルに変換**
-    source_url=$(echo "$source_url" | sed 's|https://github.com/|git://github.com/|')
-
-    # **ビルドディレクトリの準備**
+    # **GitHubのプロトコルを切り替え**
+    local git_fallback=false
+    local original_url="$source_url"
     local build_dir="${CACHE_DIR}/build/$package_name"
     mkdir -p "$build_dir"
 
-    # **`git clone` でソース取得（既存ディレクトリがあれば削除）**
+    # **ネットワークテスト**
+    if ! ping -c 2 github.com >/dev/null 2>&1; then
+        debug_log "ERROR" "GitHub unreachable (ping failed)"
+        return 1
+    fi
+
+    if ! curl -Is https://github.com | grep -q "HTTP/"; then
+        debug_log "ERROR" "GitHub unreachable (curl failed)"
+        return 1
+    fi
+
+    # **`git://` を優先してクローン**
+    source_url=$(echo "$source_url" | sed 's|https://github.com/|git://github.com/|')
     rm -rf "$build_dir"
     git clone "$source_url" "$build_dir"
 
-    if [ ! -d "$build_dir" ]; then
-        debug_log "ERROR" "Failed to clone repository: $source_url"
-        return 1
+    if [ ! -d "$build_dir/.git" ]; then
+        debug_log "WARN" "Git protocol failed, falling back to HTTPS..."
+        git_fallback=true
+    fi
+
+    # **`git://` が失敗した場合は `https://` に切り替え**
+    if [ "$git_fallback" = true ]; then
+        source_url="$original_url"
+        rm -rf "$build_dir"
+        git clone "$source_url" "$build_dir"
+
+        if [ ! -d "$build_dir/.git" ]; then
+            debug_log "ERROR" "Failed to clone repository: $source_url"
+            return 1
+        fi
     fi
 
     debug_log "DEBUG" "Source cloned to: $build_dir"
