@@ -7,16 +7,16 @@ setup_swap = enable  # 19.07 ではカーネルが対応していないためス
 
 [luci-app-temp-status]
 source_url = https://github.com/gSpotx2f/luci-app-temp-status.git
-ver_21.02.install_package = make, gcc, autoconf, automake, lua, luci-lib-nixio, luci-lib-jsonc
+ver_21.02.install_package = git, make, gcc, autoconf, automake, lua, luci-lib-nixio, luci-lib-jsonc
 ver_21.02.build_command = make package/luci-app-temp-status/compile
 
-ver_19.07.install_package = make, gcc, autoconf, automake, lua, luci-lib-nixio
+ver_19.07.install_package = git, make, gcc, autoconf, automake, lua, luci-lib-nixio
 ver_19.07.build_command = make package/luci-app-temp-status/compile V=99
 
 [luci-app-cpu-perf]
 source_url = https://github.com/gSpotx2f/luci-app-cpu-perf.git
-ver_21.02.install_package = make, gcc, autoconf, automake, lua, luci-lib-nixio, luci-lib-jsonc, libtool  
+ver_21.02.install_package = git, make, gcc, autoconf, automake, lua, luci-lib-nixio, luci-lib-jsonc, libtool  
 ver_21.02.build_command = make package/luci-app-cpu-perf/compile
 
-ver_19.07.install_package = make, gcc, autoconf, automake, lua, luci-lib-nixio, libtool-bin
+ver_19.07.install_package = git, make, gcc, autoconf, automake, lua, luci-lib-nixio, libtool-bin
 ver_19.07.build_command = make package/luci-app-cpu-perf/compile V=99
