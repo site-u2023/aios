@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-00"
+SCRIPT_VERSION="2025.03.01-00-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -639,7 +639,7 @@ build_package_db() {
     local package_name="$1"
     local openwrt_version=""
 
-    # OpenWrtバージョンの取得
+    # OpenWrt バージョンの取得
     if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
         openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
     else
@@ -649,6 +649,33 @@ build_package_db() {
 
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version for package: $package_name"
 
+    # **OpenWrt SDK の確認**
+    if [ -z "$STAGING_DIR" ] || [ ! -d "$STAGING_DIR" ]; then
+        debug_log "WARN" "OpenWrt SDK not found. Attempting to set up..."
+        
+        local sdk_url="https://downloads.openwrt.org/releases/24.10-SNAPSHOT/targets/x86/64/openwrt-sdk-24.10-SNAPSHOT-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz"
+        local sdk_dir="/tmp/openwrt-sdk"
+
+        mkdir -p "$sdk_dir"
+        cd "$sdk_dir" || return 1
+
+        wget "$sdk_url" -O sdk.tar.xz || {
+            debug_log "ERROR" "Failed to download OpenWrt SDK"
+            return 1
+        }
+
+        tar -xJf sdk.tar.xz --strip-components=1 || {
+            debug_log "ERROR" "Failed to extract OpenWrt SDK"
+            return 1
+        }
+
+        export STAGING_DIR="$sdk_dir"
+        export PATH="$STAGING_DIR/bin:$PATH"
+
+        debug_log "INFO" "OpenWrt SDK set up successfully at $STAGING_DIR"
+    fi
+
+    # **パッケージセクションをキャッシュへ保存**
     local package_section_cache="${CACHE_DIR}/package_section.ch"
     awk -v pkg="[$package_name]" '
         $0 == pkg {flag=1; next}
@@ -663,6 +690,7 @@ build_package_db() {
 
     debug_log "DEBUG" "Package section cached: $package_section_cache"
 
+    # **バージョンリストを取得**
     local target_version=""
     target_version=$(grep -o 'ver_[0-9.]*' "$package_section_cache" | sed -E 's/ver_//; s/\.$//' | sort -Vr | head -n1)
 
@@ -673,6 +701,7 @@ build_package_db() {
 
     debug_log "DEBUG" "Using version: $target_version"
 
+    # **ビルドに必要なソースURLを取得**
     local source_url
     source_url=$(awk -F '=' '/^source_url/ {print $2}' "$package_section_cache" | tr -d ' ')
 
@@ -694,6 +723,14 @@ build_package_db() {
 
     debug_log "DEBUG" "Source cloned to: $build_dir"
 
+    # **Makefile の確認と修正**
+    if [ ! -f "$build_dir/Makefile" ]; then
+        debug_log "ERROR" "Makefile not found in $build_dir"
+        return 1
+    fi
+
+    sed -i 's|^\s*include /rules.mk|include $(TOPDIR)/rules.mk|' "$build_dir/Makefile"
+
     # **ビルドコマンドを取得**
     local build_command=""
     build_command=$(grep -m1 "ver_${target_version}.build_command" "$package_section_cache" | awk -F '=' '{print $2}')
@@ -706,7 +743,7 @@ build_package_db() {
         elif [ -f "$build_dir/src/Makefile" ]; then
             build_command="cd src && make"
         else
-            debug_log "ERROR" "No Makefile found, cannot proceed with build!"
+            debug_log "ERROR" "No valid Makefile found, cannot proceed with build!"
             return 1
         fi
     fi
@@ -714,15 +751,15 @@ build_package_db() {
     debug_log "INFO" "Build command found: $build_command"
 
     # **ビルド開始**
-    cd "$build_dir"
+    cd "$build_dir" || return 1
     if ! eval "$build_command"; then
         debug_log "ERROR" "Build command failed: $build_command"
         return 1
     fi
 
-    # **ビルドされた `.ipk` を探す**
+    # **.ipk ファイルを探す**
     local ipk_file
-    ipk_file=$(find bin/packages/ bin/targets/ "$build_dir" -type f -name "*.ipk" 2>/dev/null | head -n 1)
+    ipk_file=$(find "$build_dir/bin/packages/" "$build_dir/bin/targets/" -type f -name "*.ipk" 2>/dev/null | head -n 1)
 
     if [ -z "$ipk_file" ]; then
         debug_log "ERROR" "Build completed but no .ipk file found!"
@@ -733,6 +770,7 @@ build_package_db() {
 
     return 0
 }
+
 
 install_build() {
     local confirm_install="no"
