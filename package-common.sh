@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-04-00"
+SCRIPT_VERSION="2025.02.28-04-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -666,7 +666,7 @@ build_package_db() {
 
     # **バージョンリストを取得**
     local version_list_cache="${CACHE_DIR}/version_list.ch"
-    grep -o 'ver_[0-9.]*' "$package_section_cache" | sed -E 's/ver_([0-9]+)\.([0-9]+)/\1\2/' | sort -nr > "$version_list_cache"
+    grep -o 'ver_[0-9.]*' "$package_section_cache" | sed 's/ver_//' | sort -Vr > "$version_list_cache"
 
     if [ ! -s "$version_list_cache" ]; then
         debug_log "ERROR" "No versions found for package: $package_name"
@@ -678,9 +678,8 @@ build_package_db() {
     # **最も近い下位互換バージョンを探す**
     local target_version=""
     while read -r version; do
-        # OpenWrtのバージョンも正しく数値化して比較
-        device_version=$(echo "$openwrt_version" | sed -E 's/([0-9]+)\.([0-9]+)/\1\2/')
-        if [ "$version" -le "$device_version" ]; then
+        echo "🔍 [DEBUG] Checking version: $version"
+        if [ "$(echo -e "$version\n$openwrt_version" | sort -Vr | head -n1)" = "$openwrt_version" ]; then
             target_version="$version"
             break
         fi
@@ -691,15 +690,14 @@ build_package_db() {
         return 1
     fi
 
-    target_version_formatted=$(echo "$target_version" | sed -E 's/([0-9]{2})([0-9]{2})/\1.\2/')
-    debug_log "DEBUG" "Using version: $target_version_formatted"
+    debug_log "DEBUG" "Using version: $target_version"
 
     # **ビルドコマンドを取得**
     local build_command=""
-    build_command=$(awk -F '=' -v ver="ver_${target_version_formatted}.build_command" '$1 ~ ver {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' "$package_section_cache")
+    build_command=$(awk -F '=' -v ver="ver_${target_version}.build_command" '$1 ~ ver {print $2}' "$package_section_cache")
 
     if [ -z "$build_command" ]; then
-        debug_log "ERROR" "No build command found for package: $package_name (version: $target_version_formatted)"
+        debug_log "ERROR" "No build command found for package: $package_name (version: $target_version)"
         return 1
     fi
 
