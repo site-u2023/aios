@@ -242,9 +242,20 @@ local_package_db() {
     fi
 
     echo "Executing commands for $package_name..."
+
+    # `sed` を使って変数を動的に置換 (存在しない場合はそのまま)
+    sed_cmd="sed"
+    [ -n "$CUSTOM1" ] && sed_cmd="$sed_cmd -e 's|\${CUSTOM1}|$CUSTOM1|g'"
+    [ -n "$CUSTOM2" ] && sed_cmd="$sed_cmd -e 's|\${CUSTOM2}|$CUSTOM2|g'"
+    [ -n "$CUSTOM3" ] && sed_cmd="$sed_cmd -e 's|\${CUSTOM2}|$CUSTOM2|g'"
+    [ -n "$CUSTOM4" ] && sed_cmd="$sed_cmd -e 's|\${CUSTOM2}|$CUSTOM2|g'"
+    [ -n "$CUSTOM5" ] && sed_cmd="$sed_cmd -e 's|\${CUSTOM2}|$CUSTOM2|g'"
+
+    # 変換して一時ファイルに保存
+    eval "$sed_cmd" <<< "$cmds" > "${CACHE_DIR}/commands.ch"
+    
     # コマンドを一時ファイルに書き出し
     #echo "$cmds" > ${CACHE_DIR}/commands.ch
-    echo "$cmds" | envsubst > ${CACHE_DIR}/commands.ch
 
     # ここで一括でコマンドを実行
     # chファイルに書き出したコマンドをそのまま実行する
@@ -496,20 +507,30 @@ setup_swap() {
     local RAM_TOTAL_MB
     RAM_TOTAL_MB=$(awk '/MemTotal/ {print int($2 / 1024)}' /proc/meminfo)
 
-    # **スワップサイズを RAM に応じて自動調整**
-    if [ "$RAM_TOTAL_MB" -lt 512 ]; then
-        export ZRAM_SIZE_MB=512
-    elif [ "$RAM_TOTAL_MB" -lt 1024 ]; then
-        export ZRAM_SIZE_MB=256
-    else
-        export ZRAM_SIZE_MB=128
-    fi
-
-    debug_log "INFO" "RAM: ${RAM_TOTAL_MB}MB, Setting zram size to ${ZRAM_SIZE_MB}MB"
-
     # **空き容量を確認**
     local STORAGE_FREE_MB
     STORAGE_FREE_MB=$(df -m /overlay | awk 'NR==2 {print $4}')  # MB単位の空き容量
+    
+    # **スワップサイズを RAM とストレージの両方で決定**
+    if [ "$RAM_TOTAL_MB" -lt 512 ]; then
+        ZRAM_SIZE_MB=512
+    elif [ "$RAM_TOTAL_MB" -lt 1024 ]; then
+        ZRAM_SIZE_MB=256
+    else
+        ZRAM_SIZE_MB=128
+    fi
+
+    # **ストレージの空きが十分ならスワップサイズを最大 1024MB まで増やす**
+    if [ "$STORAGE_FREE_MB" -ge 1024 ]; then
+        ZRAM_SIZE_MB=1024
+    elif [ "$STORAGE_FREE_MB" -ge 512 ] && [ "$ZRAM_SIZE_MB" -lt 512 ]; then
+        ZRAM_SIZE_MB=512
+    fi
+
+    export ZRAM_SIZE_MB  # `local_package_db()` に渡すためエクスポート
+    debug_log "INFO" "RAM: ${RAM_TOTAL_MB}MB, Setting zram size to ${ZRAM_SIZE_MB}MB"
+
+
 
     if [ -z "$STORAGE_FREE_MB" ] || [ "$STORAGE_FREE_MB" -lt 50 ]; then
         debug_log "ERROR" "Insufficient storage for swap (${STORAGE_FREE_MB}MB free). Skipping swap setup."
