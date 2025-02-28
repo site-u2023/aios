@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-03-07"
+SCRIPT_VERSION="2025.02.28-03-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -634,7 +634,7 @@ get_value_with_fallback() {
 build_package_db() {
     local package_name="$1"
     local openwrt_version=""
-    
+
     # OpenWrtバージョンの取得
     if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
         openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
@@ -646,20 +646,50 @@ build_package_db() {
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version for package: $package_name"
 
     # **バージョン対応の `build_command` を取得**
-    extract_build_command() {
-        awk -F '=' -v pkg="[$package_name]" -v ver="($openwrt_version)" '
-            $0 ~ pkg {flag=1; next} 
-            /^\(/ && flag {if ($0 == ver) {flag=2} else {flag=0}} 
-            flag == 2 && /build_command/ {print $2; exit}
-        ' "${BASE_DIR}/custom-package.db"
-    }
+    local build_command=""
+    
+    # **指定バージョンの `build_command` を探す**
+    build_command=$(awk -F '=' -v pkg="[$package_name]" -v ver="($openwrt_version)" '
+        $0 ~ pkg {found=1; next}
+        found && $0 ~ ver {found_ver=1; next}
+        found_ver && $1 ~ "build_command" {print $2; exit}
+    ' "${BASE_DIR}/custom-package.db")
 
-    # コマンドを取得
-    local build_command
-    build_command=$(extract_build_command)
-
+    # **該当バージョンがない場合、最も近い下位互換バージョンを探す**
     if [ -z "$build_command" ]; then
-        debug_log "ERROR" "No build command found for $package_name on OpenWrt $openwrt_version."
+        debug_log "DEBUG" "No exact match for OpenWrt version: $openwrt_version. Searching closest lower version..."
+        closest_version=""
+        closest_command=""
+
+        # **利用可能なバージョンを抽出**
+        available_versions=$(awk -v pkg="[$package_name]" '
+            $0 ~ pkg {found=1; next}
+            found && $0 ~ "\\(" {gsub(/[()]/, "", $1); print $1}
+        ' "${BASE_DIR}/custom-package.db" | sort -nr)  # 数値降順でソート
+
+        # **OSバージョンと比較して最も近い下位バージョンを選択**
+        for ver in $available_versions; do
+            if [ "$ver" -le "$openwrt_version" ]; then
+                closest_version="$ver"
+                break
+            fi
+        done
+
+        # **最も近い下位互換のバージョンが見つかった場合、その `build_command` を取得**
+        if [ -n "$closest_version" ]; then
+            build_command=$(awk -F '=' -v pkg="[$package_name]" -v ver="($closest_version)" '
+                $0 ~ pkg {found=1; next}
+                found && $0 ~ ver {found_ver=1; next}
+                found_ver && $1 ~ "build_command" {print $2; exit}
+            ' "${BASE_DIR}/custom-package.db")
+
+            debug_log "DEBUG" "Using closest lower version: $closest_version"
+        fi
+    fi
+
+    # **最終的な `build_command` が取得できない場合はエラー**
+    if [ -z "$build_command" ]; then
+        debug_log "ERROR" "No compatible build command found for $package_name on OpenWrt $openwrt_version."
         return 1
     fi
 
