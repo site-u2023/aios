@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-04-18"
+SCRIPT_VERSION="2025.03.01-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -649,17 +649,6 @@ build_package_db() {
 
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version for package: $package_name"
 
-    # **パッケージ名を正規化**
-    local normalized_name
-    normalized_name=$(echo "$package_name" | sed 's/-//g')
-
-    # **Git の初期設定**
-    git config --global --unset url."git://".insteadOf
-    git config --global url."https://github.com/".insteadOf git://github.com/
-    git config --global http.sslVerify false  # SSL検証を無効化
-    export GIT_CURL_VERBOSE=1  # Gitの詳細ログを表示
-
-    # **パッケージセクションをキャッシュへ保存**
     local package_section_cache="${CACHE_DIR}/package_section.ch"
     awk -v pkg="[$package_name]" '
         $0 == pkg {flag=1; next}
@@ -668,40 +657,22 @@ build_package_db() {
     ' "${BASE_DIR}/custom-package.db" > "$package_section_cache"
 
     if [ ! -s "$package_section_cache" ]; then
-        debug_log "ERROR" "Package not found in database: $package_name ($normalized_name)"
+        debug_log "ERROR" "Package not found in database: $package_name"
         return 1
     fi
 
     debug_log "DEBUG" "Package section cached: $package_section_cache"
 
-    # **バージョンリストを取得**
-    local version_list_cache="${CACHE_DIR}/version_list.ch"
-    grep -o 'ver_[0-9.]*' "$package_section_cache" | sed -E 's/ver_//; s/\.$//' | sort -Vr > "$version_list_cache"
-
-    if [ ! -s "$version_list_cache" ]; then
-        debug_log "ERROR" "No versions found for package: $package_name"
-        return 1
-    fi
-
-    debug_log "DEBUG" "Available versions cached: $version_list_cache"
-
-    # **最も近い下位互換バージョンを探す**
     local target_version=""
-    while read -r version; do
-        if [ "$(echo -e "$version\n$openwrt_version" | sort -Vr | head -n1)" = "$openwrt_version" ]; then
-            target_version="$version"
-            break
-        fi
-    done < "$version_list_cache"
+    target_version=$(grep -o 'ver_[0-9.]*' "$package_section_cache" | sed -E 's/ver_//; s/\.$//' | sort -Vr | head -n1)
 
     if [ -z "$target_version" ]; then
-        debug_log "ERROR" "No compatible version found for $package_name on OpenWrt $openwrt_version"
+        debug_log "ERROR" "No compatible version found for $package_name"
         return 1
     fi
 
     debug_log "DEBUG" "Using version: $target_version"
 
-    # **ビルドに必要なソースURLを取得**
     local source_url
     source_url=$(awk -F '=' '/^source_url/ {print $2}' "$package_section_cache" | tr -d ' ')
 
@@ -711,82 +682,39 @@ build_package_db() {
     fi
 
     debug_log "DEBUG" "Cloning source from: $source_url"
-
-    # **GitHub のプロトコルを切り替え**
-    local git_fallback=false
-    local original_url="$source_url"
     local build_dir="${BASE_DIR}/build/$package_name"
     mkdir -p "$build_dir"
-
-    # **GitHub への接続テスト**
-    debug_log "DEBUG" "Testing GitHub connectivity..."
-    if ! ping -c 2 github.com >/dev/null 2>&1; then
-        debug_log "ERROR" "GitHub unreachable (ping failed)"
-        return 1
-    fi
-
-    if ! curl -Is https://github.com | grep -q "HTTP/"; then
-        debug_log "ERROR" "GitHub unreachable (curl failed)"
-        return 1
-    fi
-
-    # **`git://` を優先してクローン**
-    source_url=$(echo "$source_url" | sed 's|https://github.com/|git://github.com/|')
     rm -rf "$build_dir"
     git clone "$source_url" "$build_dir"
 
     if [ ! -d "$build_dir/.git" ]; then
-        debug_log "WARN" "Git protocol failed, falling back to HTTPS..."
-        git_fallback=true
-    fi
-
-    # **`git://` が失敗した場合は `https://` に切り替え**
-    if [ "$git_fallback" = true ]; then
-        source_url="$original_url"
-        rm -rf "$build_dir"
-        git clone "$source_url" "$build_dir"
-
-        if [ ! -d "$build_dir/.git" ]; then
-            debug_log "ERROR" "Failed to clone repository: $source_url"
-            return 1
-        fi
+        debug_log "ERROR" "Failed to clone repository: $source_url"
+        return 1
     fi
 
     debug_log "DEBUG" "Source cloned to: $build_dir"
 
-    # **SSH の IPQoS 設定をフォールバック**
-    if [ "$git_fallback" = true ]; then
-        if ! grep -q "IPQoS cs1" ~/.ssh/config 2>/dev/null; then
-            mkdir -p ~/.ssh
-            echo -e "Host github.com\n  IPQoS cs1" >> ~/.ssh/config
-            chmod 600 ~/.ssh/config
-            debug_log "DEBUG" "Added IPQoS cs1 to SSH config for GitHub"
-        fi
-    fi
-
     # **ビルドコマンドを取得**
     local build_command=""
-
-    build_command=$(awk -F '=' -v ver="ver_${target_version}.build_command" '$1 == ver {print $2}' "$package_section_cache")
+    build_command=$(grep -m1 "ver_${target_version}.build_command" "$package_section_cache" | awk -F '=' '{print $2}')
 
     if [ -z "$build_command" ]; then
-        debug_log "ERROR" "No build command found for package: $package_name (version: $target_version)"
-        return 1
+        debug_log "WARN" "No build command found, attempting default build method..."
+
+        if [ -f "$build_dir/Makefile" ]; then
+            build_command="make"
+        elif [ -f "$build_dir/src/Makefile" ]; then
+            build_command="cd src && make"
+        else
+            debug_log "ERROR" "No Makefile found, cannot proceed with build!"
+            return 1
+        fi
     fi
 
     debug_log "INFO" "Build command found: $build_command"
 
-    # **ビルドディレクトリに移動**
-    if [ -f "$build_dir/Makefile" ]; then
-        cd "$build_dir"
-    elif [ -f "$build_dir/src/Makefile" ]; then
-        cd "$build_dir/src"
-    else
-        debug_log "ERROR" "No Makefile found in expected directories!"
-        return 1
-    fi
-
     # **ビルド開始**
+    cd "$build_dir"
     if ! eval "$build_command"; then
         debug_log "ERROR" "Build command failed: $build_command"
         return 1
