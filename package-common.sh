@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-03-03"
+SCRIPT_VERSION="2025.02.28-03-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -523,9 +523,10 @@ setup_swap() {
    # **環境変数を登録 (`CUSTOM_*` に統一)**
     export CUSTOM_ZRAM_SIZE="$ZRAM_SIZE_MB"
 
-    debug_log "INFO" "Exported: CUSTOM_ZRAM_SIZE=${CUSTOM_ZRAM_SIZE}, CUSTOM_ZRAM_ALGO=${CUSTOM_ZRAM_ALGO}"
+    debug_log "INFO" "Exported: CUSTOM_ZRAM_SIZE=${CUSTOM_ZRAM_SIZE}"
 
-    if [ -z "$STORAGE_FREE_MB" ] || [ "$STORAGE_FREE_MB" -lt 50 ]; then
+    if ! echo "$STORAGE_FREE_MB" | grep -q '^[0-9]\+$'; then
+        STORAGE_FREE_MB=0
         debug_log "ERROR" "Insufficient storage for swap (${STORAGE_FREE_MB}MB free). Skipping swap setup."
         return 1  # **ストレージ不足なら即終了** 
     fi
@@ -583,14 +584,27 @@ cleanup_build_tools() {
     # **インストールしたビルドツールのリスト**
     local build_tools="make gcc git libtool-bin automake pkg-config zlib-dev libncurses-dev curl libxml2 libxml2-dev autoconf automake bison flex perl patch wget wget-ssl tar unzip"
 
+    # **現在インストールされているパッケージを取得**
+    local installed_tools
+    installed_tools=$(opkg list-installed | awk '{print $1}')
+
+    # **削除対象リストを作成**
+    local remove_list=""
     for tool in $build_tools; do
-        if opkg list-installed | grep -q "^$tool "; then
-            debug_log "INFO" "Removing package: $tool"
-            opkg remove "$tool"
+        if echo "$installed_tools" | grep -q "^$tool$"; then
+            remove_list="$remove_list $tool"
         else
             debug_log "DEBUG" "Package not installed: $tool (Skipping)"
         fi
     done
+
+    # **一括で削除実行**
+    if [ -n "$remove_list" ]; then
+        debug_log "INFO" "Removing packages: $remove_list"
+        opkg remove $remove_list
+    else
+        debug_log "DEBUG" "No build tools found to remove."
+    fi
 
     debug_log "INFO" "Build tools cleanup completed."
 }
@@ -645,13 +659,7 @@ install_build() {
         return 1
     fi
 
-    setup_swap
-    
-    # **スワップの動作チェック**
-    if [ $? -ne 0 ]; then
-        debug_log "ERROR" "$(get_message 'MSG_ERR_INSUFFICIENT_SWAP')"
-        return 1
-    fi
+    setup_swap || { debug_log "ERROR" "$(get_message 'MSG_ERR_INSUFFICIENT_SWAP')"; return 1; }
 
     # **インストールの確認 (YNオプションが有効な場合のみ)**
     if [ "$confirm_install" = "yes" ]; then
@@ -689,8 +697,9 @@ install_build() {
         .[$pkg].build.commands[$ver] // 
         .[$pkg].build.commands.default // empty' "$CACHE_DIR/custom-package.db" 2>/dev/null)
 
-    if [ -z "$build_command" ]; then
-        debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_COMMAND_NOT_FOUND" | sed "s/{pkg}/$package_name/" | sed "s/{ver}/$openwrt_version/")"
+    # **ビルドコマンドのチェック (empty チェックを含む)**
+    if [ -z "$build_command" ] || [ "$build_command" = "empty" ]; then
+        debug_log "ERROR" "No build command found for $package_name."
         return 1
     fi
 
