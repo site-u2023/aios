@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-04-02"
+SCRIPT_VERSION="2025.02.28-04-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -634,8 +634,12 @@ get_value_with_fallback() {
 build_package_db() {
     local package_name="$1"
     local openwrt_version=""
+    
+    # **HTTPSの無効化設定**
+    git config --global url."git://".insteadOf https://
+    git config --global http.sslVerify false  # SSL検証を無効化
 
-    # OpenWrtバージョンの取得
+    # **OpenWrtバージョンの取得**
     if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
         openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
     else
@@ -645,24 +649,16 @@ build_package_db() {
 
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version for package: $package_name"
 
-    # **パッケージ名を正規化（"-"を削除）**
-    local normalized_name
-    normalized_name=$(echo "$package_name" | sed 's/-//g')
-
-    # **HTTPSの無効化設定**
-    git config --global url."git://".insteadOf https://
-    git config --global http.sslVerify false  # SSL検証を無効化
-
     # **パッケージセクションをキャッシュへ保存**
     local package_section_cache="${CACHE_DIR}/package_section.ch"
-    awk -v pkg="\\[$normalized_name\\]" '
-        $0 ~ pkg {flag=1; next}
+    awk -v pkg="[$package_name]" '
+        $0 == pkg {flag=1; next}
         flag && /^\[/ {flag=0}
         flag {print}
     ' "${BASE_DIR}/custom-package.db" > "$package_section_cache"
 
     if [ ! -s "$package_section_cache" ]; then
-        debug_log "ERROR" "Package not found in database: $package_name ($normalized_name)"
+        debug_log "ERROR" "Package not found in database: $package_name"
         return 1
     fi
 
@@ -670,7 +666,7 @@ build_package_db() {
 
     # **バージョンリストを取得**
     local version_list_cache="${CACHE_DIR}/version_list.ch"
-    grep -o 'ver_[0-9.]*' "$package_section_cache" | sed 's/ver_//' | sort -Vr > "$version_list_cache"
+    grep -o 'ver_[0-9.]*' "$package_section_cache" | sed -E 's/ver_//; s/\.$//' | sort -Vr > "$version_list_cache"
 
     if [ ! -s "$version_list_cache" ]; then
         debug_log "ERROR" "No versions found for package: $package_name"
