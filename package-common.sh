@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-01-06"
+SCRIPT_VERSION="2025.02.28-01-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -158,8 +158,6 @@ stop_spinner() {
     unset SPINNER_PID
 
     echo -en "\e[?25h"
-
-    echo eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
 }
 
 # パッケージリストの更新
@@ -223,16 +221,14 @@ local_package_db() {
 
     debug_log "DEBUG" "Starting to apply local-package.db for package: '$package_name'"
 
-    safe_pkg=$(printf '%s\n' "$package_name" | sed 's/[\/&]/\\&/g')
+    debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name"
+    
+    debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name (Script: $0, Version: $SCRIPT_VERSION)"
 
-
-echo "Current script: $0"
-
-debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name (Script: $0, Version: $SCRIPT_VERSION)"
-
-
-    debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name" "$0" "$SCRIPT_VERSION"
-echo fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+    #debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name" "$0" "$SCRIPT_VERSION"
+    
+    echo OK
+    
     # local-package.dbから指定されたセクションを抽出
     extract_commands() {
         # [PACKAGE] をエスケープして検索、コメント行は無視
@@ -241,15 +237,12 @@ echo fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
             $0 ~ "^\\[" {flag=0}                  # 次のセクションが始まったらflagをリセット
             flag && $0 !~ "^#" {print}             # コメント行（#）を除外
         ' "${BASE_DIR}/local-package.db"
-
-        echo rrrrrrrrrrrrrrrrrrrrrrrrrrrrrr
     }
 
     # コマンドを実行するために抽出したコマンドを格納
     local cmds
     cmds=$(extract_commands)  # コマンドを取得
 
-echo llllllllllllllll
     # コマンドが見つからない場合、エラーメッセージを表示して終了
     if [ -z "$cmds" ]; then
         debug_log "DEBUG" "No commands found for package: $package_name"
@@ -363,7 +356,6 @@ install_normal_package() {
     fi
 
     stop_spinner "$(color green "$package_name $(get_message "MSG_INSTALL_SUCCESS")")"
-    echo OKKKKKKKKKKKKKKK
 }
 
 # **インストール関数**
@@ -455,7 +447,6 @@ install_package() {
     fi
     
     install_normal_package "$package_name" "$force_install" || return 1
-echo kkkkkkkkkkkkkkkkkkkkkkkkkkk
 
     # **ローカルパッケージDBの適用 (インストール成功後に実行)**
     if [ "$skip_package_db" != "yes" ]; then
