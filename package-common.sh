@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-04-10"
+SCRIPT_VERSION="2025.02.28-04-11"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -649,19 +649,11 @@ build_package_db() {
     local normalized_name
     normalized_name=$(echo "$package_name" | sed 's/-//g')
 
-    # **Git の設定を初期化**
+    # **Git の初期設定**
     git config --global --unset url."git://".insteadOf
     git config --global url."https://github.com/".insteadOf git://github.com/
     git config --global http.sslVerify false  # SSL検証を無効化
     export GIT_CURL_VERBOSE=1  # Gitの詳細ログを表示
-
-    # **SSHのIPQoSを設定**
-    if ! grep -q "IPQoS cs1" ~/.ssh/config 2>/dev/null; then
-        mkdir -p ~/.ssh
-        echo -e "Host *\n  IPQoS cs1" >> ~/.ssh/config
-        chmod 600 ~/.ssh/config
-        debug_log "DEBUG" "Added IPQoS cs1 to SSH config"
-    fi
 
     # **パッケージセクションをキャッシュへ保存**
     local package_section_cache="${CACHE_DIR}/package_section.ch"
@@ -716,13 +708,14 @@ build_package_db() {
 
     debug_log "DEBUG" "Cloning source from: $source_url"
 
-    # **GitHubのプロトコルを切り替え**
+    # **GitHub のプロトコルを切り替え**
     local git_fallback=false
     local original_url="$source_url"
     local build_dir="${CACHE_DIR}/build/$package_name"
     mkdir -p "$build_dir"
 
-    # **ネットワークテスト**
+    # **GitHub への接続テスト**
+    debug_log "DEBUG" "Testing GitHub connectivity..."
     if ! ping -c 2 github.com >/dev/null 2>&1; then
         debug_log "ERROR" "GitHub unreachable (ping failed)"
         return 1
@@ -756,6 +749,16 @@ build_package_db() {
     fi
 
     debug_log "DEBUG" "Source cloned to: $build_dir"
+
+    # **SSH の IPQoS 設定をフォールバック**
+    if [ "$git_fallback" = true ]; then
+        if ! grep -q "IPQoS cs1" ~/.ssh/config 2>/dev/null; then
+            mkdir -p ~/.ssh
+            echo -e "Host github.com\n  IPQoS cs1" >> ~/.ssh/config
+            chmod 600 ~/.ssh/config
+            debug_log "DEBUG" "Added IPQoS cs1 to SSH config for GitHub"
+        fi
+    fi
 
     # **ビルドコマンドを取得**
     local build_command=""
