@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-04-15"
+SCRIPT_VERSION="2025.02.28-04-16"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -572,8 +572,12 @@ cleanup_build() {
     debug_log "INFO" "Cleaning up build directory..."
 
     # `.ipk` 以外を削除（BusyBox find の制約を回避）
+    # `.ipk` 以外のファイルを削除
     find "$BUILD_DIR" -type f ! -name "*.ipk" -exec rm -f {} +
-    find "$BUILD_DIR" -type d -empty -exec rmdir {} +
+
+    # 空のディレクトリを削除（-empty を使わずに実行）
+    find "$BUILD_DIR" -type d -exec rmdir {} 2>/dev/null \;
+
 
     debug_log "INFO" "Build directory cleanup completed."
 }
