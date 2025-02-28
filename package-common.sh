@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-04-09"
+SCRIPT_VERSION="2025.02.28-04-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -654,6 +654,14 @@ build_package_db() {
     git config --global url."https://github.com/".insteadOf git://github.com/
     git config --global http.sslVerify false  # SSL検証を無効化
     export GIT_CURL_VERBOSE=1  # Gitの詳細ログを表示
+
+    # **SSHのIPQoSを設定**
+    if ! grep -q "IPQoS cs1" ~/.ssh/config 2>/dev/null; then
+        mkdir -p ~/.ssh
+        echo -e "Host *\n  IPQoS cs1" >> ~/.ssh/config
+        chmod 600 ~/.ssh/config
+        debug_log "DEBUG" "Added IPQoS cs1 to SSH config"
+    fi
 
     # **パッケージセクションをキャッシュへ保存**
     local package_section_cache="${CACHE_DIR}/package_section.ch"
