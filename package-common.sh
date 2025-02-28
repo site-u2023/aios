@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-02-08"
+SCRIPT_VERSION="2025.02.28-02-09"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -243,22 +243,25 @@ local_package_db() {
 
     echo "Executing commands for $package_name..."
 
-    # `sed` を使って変数を動的に置換 (存在しない場合はそのまま)
-    for i in 1 2 3 4 5; do
-        var_name="CUSTOM$i"
-        eval var_value=\$$var_name  # `eval` を使って変数の値を取得
-
-        if [ -n "$var_value" ]; then
-            cmds=$(echo "$cmds" | sed "s|\${$var_name}|$var_value|g")
-        fi
-    done
-   
     # コマンドを一時ファイルに書き出し
     echo "$cmds" > ${CACHE_DIR}/commands.ch
+
+    # `sed` を使って変数を動的に置換 (存在する場合のみ)
+    for i in 1 2 3 4 5; do
+        var_name="CUSTOM$i"
+        eval var_value=\$$var_name  # `CUSTOM*` の値を取得
+
+        if [ -n "$var_value" ]; then
+            sed -i "s|\${$var_name}|$var_value|g" "${CACHE_DIR}/commands.ch"
+        fi
+    done
 
     # ここで一括でコマンドを実行
     # chファイルに書き出したコマンドをそのまま実行する
     . ${CACHE_DIR}/commands.ch  # chファイル内のコマンドをそのまま実行
+
+    # `commands.ch` の内容を `DEBUG` ログに記録（置換後）
+    debug_log "DEBUG" "After substitution:\n$(cat "${CACHE_DIR}/commands.ch")"
 
     # 最後に設定を確認（デバッグ用）
     debug_log "DEBUG" "Displaying current configuration for $package_name: $(uci show "$package_name")"
