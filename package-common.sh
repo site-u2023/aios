@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-04-01"
+SCRIPT_VERSION="2025.02.28-04-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -643,11 +643,15 @@ build_package_db() {
         return 1
     fi
 
-    debug_log "INFO" "Using OpenWrt version: $openwrt_version for package: $package_name"
+    debug_log "DEBUG" "Using OpenWrt version: $openwrt_version for package: $package_name"
 
     # **パッケージ名を正規化（"-"を削除）**
     local normalized_name
     normalized_name=$(echo "$package_name" | sed 's/-//g')
+
+    # **HTTPSの無効化設定**
+    git config --global url."git://".insteadOf https://
+    git config --global http.sslVerify false  # SSL検証を無効化
 
     # **パッケージセクションをキャッシュへ保存**
     local package_section_cache="${CACHE_DIR}/package_section.ch"
@@ -678,7 +682,6 @@ build_package_db() {
     # **最も近い下位互換バージョンを探す**
     local target_version=""
     while read -r version; do
-        echo "🔍 [DEBUG] Checking version: $version"
         if [ "$(echo -e "$version\n$openwrt_version" | sort -Vr | head -n1)" = "$openwrt_version" ]; then
             target_version="$version"
             break
@@ -707,8 +710,7 @@ build_package_db() {
     echo "$build_command" > "${CACHE_DIR}/build_command.ch"
 
     # **デバッグログ: 置換後のビルドコマンド**
-    debug_log "DEBUG" "Final build command cached in ${CACHE_DIR}/build_command.ch"
-    debug_log "DEBUG" "$(cat "${CACHE_DIR}/build_command.ch")"
+    debug_log "DEBUG" "Final build command: $(cat "${CACHE_DIR}/build_command.ch")"
 
     return 0
 }
