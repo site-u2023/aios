@@ -354,10 +354,6 @@ install_normal_package() {
 
     stop_spinner "$(color green "$package_name $(get_message "MSG_INSTALL_SUCCESS")")"
     echo OKKKKKKKKKKKKKKK
-    #stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$(printf '%s' "$package_name" | sed 's/-/\\-/g')/")")"
-    #stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s/{pkg}/$package_name/")")"
-    #safe_pkg=$(printf '%s\n' "$package_name" | sed 's/[&/\]/\\&/g')
-    #stop_spinner "$(color green "$(get_message "MSG_INSTALL_SUCCESS" | sed "s|{pkg}|$safe_pkg|")")"
 }
 
 # **インストール関数**
