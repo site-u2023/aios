@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-02-06"
+SCRIPT_VERSION="2025.02.28-02-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -249,7 +249,7 @@ local_package_db() {
         eval var_value=\$$var_name  # `eval` を使って変数の値を取得
 
         if [ -n "$var_value" ]; then
-            cmds=$(echo "$cmds" | sed "s|\${$var_name}|$var_value|g")
+            cmds=$(echo "$cmds" | sed "s|\${$var_name}|'$var_value'|g")
         fi
     done
    
