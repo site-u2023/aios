@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-04-16"
+SCRIPT_VERSION="2025.02.28-04-17"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -874,7 +874,7 @@ install_build() {
     debug_log "DEBUG" "Build time for $package_name: $build_time seconds"
 
     # **ビルドディレクトリのクリーンアップ**
-    cleanup_build
+    # cleanup_build
 
     # **`clean` オプションが指定された場合のみ、ビルドツールを削除**
     if [ "$cleanup_after_build" = "yes" ]; then
