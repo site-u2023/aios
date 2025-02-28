@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-02-03"
+SCRIPT_VERSION="2025.02.28-02-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -243,7 +243,8 @@ local_package_db() {
 
     echo "Executing commands for $package_name..."
     # コマンドを一時ファイルに書き出し
-    echo "$cmds" > ${CACHE_DIR}/commands.ch
+    #echo "$cmds" > ${CACHE_DIR}/commands.ch
+    echo "$cmds" | envsubst > ${CACHE_DIR}/commands.ch
 
     # ここで一括でコマンドを実行
     # chファイルに書き出したコマンドをそのまま実行する
