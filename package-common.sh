@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-02-11"
+SCRIPT_VERSION="2025.02.28-03-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -246,10 +246,12 @@ local_package_db() {
 
     # 環境変数 `CUSTOM*` のリストを作成
     CUSTOM_VARS=$(env | grep "^CUSTOM" | awk -F= '{print $1}')
+    debug_log "DEBUG" "Detected CUSTOM variables: $CUSTOM_VARS"
 
     # `sed` で変数を動的に置換
     for var_name in $CUSTOM_VARS; do
         eval var_value=\$$var_name  # `CUSTOM*` の値を取得
+        debug_log "DEBUG" "Processing: $var_name -> [$var_value]"
 
         if [ -n "$var_value" ]; then
             # 変数が定義されている場合はその値に置換
@@ -270,6 +272,7 @@ local_package_db() {
     # ch ファイル内のコマンドを実行
     . "${CACHE_DIR}/commands.ch"
 }
+
 
 # パッケージ名（引数として渡せるように変更）
 XXX_local_package_db() {
