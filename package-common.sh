@@ -764,7 +764,7 @@ install_build() {
     if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
         openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
     fi
-    debug_log "DEBUG" "Using OpenWrt version: $openwrt_version"
+    debug_log "DEBUG" "Using OpenWrt version: $openwrt_version" 
 
     # **ビルド環境の準備**
     local build_tools="make gcc git libtool-bin automake pkg-config zlib-dev libncurses-dev curl libxml2 libxml2-dev autoconf automake bison flex perl patch wget wget-ssl tar unzip"
