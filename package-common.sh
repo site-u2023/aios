@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-03"
+SCRIPT_VERSION="2025.03.01-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -649,32 +649,48 @@ build_package_db() {
 
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version for package: $package_name"
 
-    # **システムのアーキテクチャを取得**
-    check_architecture  # キャッシュされたアーキテクチャを取得
+    # **アーキテクチャを取得**
+    check_architecture
     local arch=$(cat "${CACHE_DIR}/architecture.ch")
 
+    # **OpenWrt のターゲットに変換**
     local target=""
     case "$arch" in
-        x86_64) target="x86/64" ;;
-        aarch64) target="aarch64/generic" ;;
-        armv7l) target="armvirt/32" ;;
-        armv8l) target="armvirt/64" ;;
-        mips*) target="mips/generic" ;;
-        mipsel*) target="mipsel/generic" ;;
+        x86_64) target="x86/64"; sdk_arch="x86_64" ;;
+        aarch64) target="aarch64/generic"; sdk_arch="aarch64" ;;
+        armv7l) target="armvirt/32"; sdk_arch="arm_cortex-a7_neon-vfpv4" ;;  # 実際のSDKフォーマットに修正
+        armv8l) target="armvirt/64"; sdk_arch="aarch64_cortex-a53" ;;
+        mips*) target="mips/generic"; sdk_arch="mips_24kc" ;;
+        mipsel*) target="mipsel/generic"; sdk_arch="mipsel_24kc" ;;
         *) debug_log "ERROR" "Unsupported architecture: $arch"; return 1 ;;
     esac
 
-    debug_log "DEBUG" "Detected system architecture: $arch (OpenWrt target: $target)"
+    debug_log "DEBUG" "Detected system architecture: $arch (OpenWrt target: $target, SDK: $sdk_arch)"
 
-    # **OpenWrt SDK の確認**
+    # **SDK の確認**
     if [ -z "$STAGING_DIR" ] || [ ! -d "$STAGING_DIR" ]; then
         debug_log "WARN" "OpenWrt SDK not found. Attempting to set up..."
 
-        local sdk_url="https://downloads.openwrt.org/releases/${openwrt_version}/targets/${target}/openwrt-sdk-${openwrt_version}-${target}_gcc-12.3.0_musl.Linux-$(uname -m).tar.xz"
+        local sdk_base_url="https://downloads.openwrt.org/releases/${openwrt_version}/targets/${target}"
+        local sdk_filename="openwrt-sdk-${openwrt_version}-${target}_gcc-12.3.0_musl.Linux-${sdk_arch}.tar.xz"
+        local sdk_url="${sdk_base_url}/${sdk_filename}"
         local sdk_dir="/tmp/openwrt-sdk"
 
         mkdir -p "$sdk_dir"
         cd "$sdk_dir" || return 1
+
+        # **URLが有効か事前チェック**
+        if ! wget --spider "$sdk_url" 2>/dev/null; then
+            debug_log "ERROR" "SDK not found at $sdk_url. Trying fallback..."
+            # **フォールバック：generic な SDK の使用**
+            sdk_filename="openwrt-sdk-${openwrt_version}-generic_gcc-12.3.0_musl.Linux-${sdk_arch}.tar.xz"
+            sdk_url="${sdk_base_url}/${sdk_filename}"
+
+            if ! wget --spider "$sdk_url" 2>/dev/null; then
+                debug_log "ERROR" "Fallback SDK not found at $sdk_url. Cannot proceed!"
+                return 1
+            fi
+        fi
 
         wget "$sdk_url" -O sdk.tar.xz || {
             debug_log "ERROR" "Failed to download OpenWrt SDK ($sdk_url)"
@@ -692,42 +708,7 @@ build_package_db() {
         debug_log "INFO" "OpenWrt SDK set up successfully at $STAGING_DIR"
     fi
 
-    # **パッケージセクションをキャッシュへ保存**
-    local package_section_cache="${CACHE_DIR}/package_section.ch"
-    awk -v pkg="[$package_name]" '
-        $0 == pkg {flag=1; next}
-        flag && /^\[/ {flag=0}
-        flag {print}
-    ' "${BASE_DIR}/custom-package.db" > "$package_section_cache"
-
-    if [ ! -s "$package_section_cache" ]; then
-        debug_log "ERROR" "Package not found in database: $package_name"
-        return 1
-    fi
-
-    debug_log "DEBUG" "Package section cached: $package_section_cache"
-
-    # **バージョンリストを取得**
-    local target_version=""
-    target_version=$(grep -o 'ver_[0-9.]*' "$package_section_cache" | sed -E 's/ver_//; s/\.$//' | sort -Vr | head -n1)
-
-    if [ -z "$target_version" ]; then
-        debug_log "ERROR" "No compatible version found for $package_name"
-        return 1
-    fi
-
-    debug_log "DEBUG" "Using version: $target_version"
-
-    # **ビルドに必要なソースURLを取得**
-    local source_url
-    source_url=$(awk -F '=' '/^source_url/ {print $2}' "$package_section_cache" | tr -d ' ')
-
-    if [ -z "$source_url" ]; then
-        debug_log "ERROR" "Source URL not found for package: $package_name"
-        return 1
-    fi
-
-    debug_log "DEBUG" "Cloning source from: $source_url"
+    # **ビルドディレクトリの作成**
     local build_dir="${BASE_DIR}/build/$package_name"
     mkdir -p "$build_dir"
     rm -rf "$build_dir"
@@ -740,7 +721,7 @@ build_package_db() {
 
     debug_log "DEBUG" "Source cloned to: $build_dir"
 
-    # **Makefile の確認と修正**
+    # **Makefile の修正**
     if [ ! -f "$build_dir/Makefile" ]; then
         debug_log "ERROR" "Makefile not found in $build_dir"
         return 1
@@ -748,29 +729,10 @@ build_package_db() {
 
     sed -i 's|^\s*include /rules.mk|include $(TOPDIR)/rules.mk|' "$build_dir/Makefile"
 
-    # **ビルドコマンドを取得**
-    local build_command=""
-    build_command=$(grep -m1 "ver_${target_version}.build_command" "$package_section_cache" | awk -F '=' '{print $2}')
-
-    if [ -z "$build_command" ]; then
-        debug_log "WARN" "No build command found, attempting default build method..."
-
-        if [ -f "$build_dir/Makefile" ]; then
-            build_command="make"
-        elif [ -f "$build_dir/src/Makefile" ]; then
-            build_command="cd src && make"
-        else
-            debug_log "ERROR" "No valid Makefile found, cannot proceed with build!"
-            return 1
-        fi
-    fi
-
-    debug_log "INFO" "Build command found: $build_command"
-
     # **ビルド開始**
     cd "$build_dir" || return 1
-    if ! eval "$build_command"; then
-        debug_log "ERROR" "Build command failed: $build_command"
+    if ! make; then
+        debug_log "ERROR" "Build command failed"
         return 1
     fi
 
