@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-03-01"
+SCRIPT_VERSION="2025.02.28-03-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -256,50 +256,6 @@ local_package_db() {
 
     # **設定を適用**
     . "${CACHE_DIR}/commands.ch"
-}
-
-# パッケージ名（引数として渡せるように変更）
-XXX_local_package_db() {
-    package_name=$1  # ここでパッケージ名を引数として受け取る
-
-    debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name"
-   
-    # local-package.dbから指定されたセクションを抽出
-    extract_commands() {
-        # [PACKAGE] をエスケープして検索、コメント行は無視
-        awk -v pkg="$package_name" '
-            $0 ~ "^\\[" pkg "\\]" {flag=1; next}  # [****]セクションに到達
-            $0 ~ "^\\[" {flag=0}                  # 次のセクションが始まったらflagをリセット
-            flag && $0 !~ "^#" {print}             # コメント行（#）を除外
-        ' "${BASE_DIR}/local-package.db"
-    }
-
-    # コマンドを実行するために抽出したコマンドを格納
-    local cmds
-    cmds=$(extract_commands)  # コマンドを取得
-
-    # コマンドが見つからない場合、エラーメッセージを表示して終了
-    if [ -z "$cmds" ]; then
-        debug_log "DEBUG" "No commands found for package: $package_name"
-        return 1
-    fi
-
-    echo "Executing commands for $package_name..."
-
-    # コマンドを一時ファイルに書き出し
-    echo "$cmds" > ${CACHE_DIR}/commands.ch
-
-    # ここで一括でコマンドを実行
-    # chファイルに書き出したコマンドをそのまま実行する
-    . ${CACHE_DIR}/commands.ch  # chファイル内のコマンドをそのまま実行
-
-    # `commands.ch` の内容を `DEBUG` ログに記録（置換後）
-    debug_log "DEBUG" "After substitution:\n$(cat "${CACHE_DIR}/commands.ch")"
-
-    # 最後に設定を確認（デバッグ用）
-    debug_log "DEBUG" "Displaying current configuration for $package_name: $(uci show "$package_name")"
-
-    echo "All commands executed successfully."
 }
 
 confirm_installation() {
@@ -593,6 +549,52 @@ setup_swap() {
     cat /proc/swaps
 }
 
+cleanup_swap() {
+    debug_log "INFO" "Cleaning up zram-swap..."
+
+    # **スワップを無効化**
+    swapoff /dev/zram0
+
+    # **zram0 を削除**
+    echo 1 > /sys/class/zram-control/hot_remove
+
+    # **`kmod-zram` がロードされているなら `rmmod`**
+    if lsmod | grep -q "zram"; then
+        rmmod zram
+        debug_log "INFO" "Removed kmod-zram module."
+    fi
+
+    debug_log "INFO" "zram-swap successfully removed."
+}
+
+cleanup_build() {
+    debug_log "INFO" "Cleaning up build directory..."
+
+    # `.ipk` 以外を削除（`find` で `.ipk` を除外）
+    find "$BUILD_DIR" -type f ! -name "*.ipk" -delete
+    find "$BUILD_DIR" -type d -empty -delete  # 空フォルダも削除
+
+    debug_log "INFO" "Build directory cleanup completed."
+}
+
+cleanup_build_tools() {
+    debug_log "INFO" "Removing build tools to free up space..."
+
+    # **インストールしたビルドツールのリスト**
+    local build_tools="make gcc git libtool-bin automake pkg-config zlib-dev libncurses-dev curl libxml2 libxml2-dev autoconf automake bison flex perl patch wget wget-ssl tar unzip"
+
+    for tool in $build_tools; do
+        if opkg list-installed | grep -q "^$tool "; then
+            debug_log "INFO" "Removing package: $tool"
+            opkg remove "$tool"
+        else
+            debug_log "DEBUG" "Package not installed: $tool (Skipping)"
+        fi
+    done
+
+    debug_log "INFO" "Build tools cleanup completed."
+}
+
 # 【DBファイルから値を取得する関数】
 get_ini_value() {
     local section="$1"
@@ -711,6 +713,10 @@ install_build() {
     echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$package_name/" | sed "s/{time}/$build_time/")"
     debug_log "DEBUG" "Build time for $package_name: $build_time seconds"
 
+    cleanup_build
+    # cleanup_swap
+    # cleanup_build_tools
+    
     # **ビルド完了後のメッセージ**
     echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$package_name/")"
     debug_log "DEBUG" "Successfully built and installed package: $package_name"
