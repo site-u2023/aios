@@ -715,7 +715,7 @@ build_package_db() {
     # **GitHub のプロトコルを切り替え**
     local git_fallback=false
     local original_url="$source_url"
-    local build_dir="${CACHE_DIR}/build/$package_name"
+    local build_dir="${BASE_DIR}/build/$package_name"
     mkdir -p "$build_dir"
 
     # **GitHub への接続テスト**
