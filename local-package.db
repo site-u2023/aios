@@ -1,4 +1,4 @@
-SCRIPT_VERSION="2025.02.28-00-00"
+SCRIPT_VERSION="2025.02.28-00-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION package.db \033[0m"
 
 # ttyd設定
@@ -49,7 +49,7 @@ uci commit ttyd
 [zram-swap]
 uci add system zram
 uci set system.@zram[0].enabled='1'
-uci set system.@zram[0].size='${CUSTOM1}'
+uci set system.@zram[0].size='${CUSTOM_ZRAM_SIZE}'
 uci set system.@zram[0].comp_algorithm='zstd'
 uci commit system
 /etc/init.d/zram restart
