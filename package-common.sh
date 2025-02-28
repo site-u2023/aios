@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-08"
+SCRIPT_VERSION="2025.03.01-00-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -649,15 +649,14 @@ build_package_db() {
 
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version for package: $package_name"
 
-    # **アーキテクチャを取得**
+    # **アーキテクチャとターゲットを取得**
     check_architecture
     local arch=$(cat "${CACHE_DIR}/architecture.ch")
 
-    # **ターゲットとアーキテクチャの自動検出**
+    # **opkg.conf からターゲットとアーキテクチャを取得**
     local target=""
     local sdk_arch=""
     
-    # **opkg.conf からターゲットを検出**
     if grep -q "src/gz openwrt_core" /etc/opkg/distfeeds.conf; then
         target=$(grep "src/gz openwrt_core" /etc/opkg/distfeeds.conf | awk '{print $3}' | sed 's|.*/targets/||; s|/packages||')
         sdk_arch=$(grep "src/gz openwrt_base" /etc/opkg/distfeeds.conf | awk '{print $3}' | sed 's|.*/packages/||; s|/base||')
@@ -670,7 +669,7 @@ build_package_db() {
 
     debug_log "DEBUG" "Detected OpenWrt target: $target, SDK Arch: $sdk_arch"
 
-    # **SDK のダウンロード**
+    # **SDK のセットアップ**
     if [ -z "$STAGING_DIR" ] || [ ! -d "$STAGING_DIR" ]; then
         debug_log "WARN" "OpenWrt SDK not found. Attempting to set up..."
 
@@ -735,7 +734,7 @@ build_package_db() {
 
     # **ビルド開始**
     cd "$build_dir" || return 1
-    if ! make; then
+    if ! make package/${package_name}/compile -j$(nproc); then
         debug_log "ERROR" "Build command failed"
         return 1
     fi
@@ -753,6 +752,7 @@ build_package_db() {
 
     return 0
 }
+
 
 install_build() {
     local confirm_install="no"
