@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-04-13"
+SCRIPT_VERSION="2025.02.28-04-14"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -708,14 +708,21 @@ build_package_db() {
 
     debug_log "DEBUG" "Cloning source from: $source_url"
 
-    # **ネットワーク確認：フレッツ光**
+    # **GitHub のプロトコルを切り替え**
+    local git_fallback=false
+    local original_url="$source_url"
+    local build_dir="${CACHE_DIR}/build/$package_name"
+    mkdir -p "$build_dir"
+
+    # **GitHub への接続テスト**
+    debug_log "DEBUG" "Testing GitHub connectivity..."
     if ! ping -c 2 github.com >/dev/null 2>&1; then
-        debug_log "ERROR" "GitHub unreachable (ping failed on NTT)"
+        debug_log "ERROR" "GitHub unreachable (ping failed)"
         return 1
     fi
 
     if ! curl -Is https://github.com | grep -q "HTTP/"; then
-        debug_log "ERROR" "GitHub unreachable (curl failed on NTT)"
+        debug_log "ERROR" "GitHub unreachable (curl failed)"
         return 1
     fi
 
@@ -725,13 +732,14 @@ build_package_db() {
     git clone "$source_url" "$build_dir"
 
     if [ ! -d "$build_dir/.git" ]; then
-        debug_log "WARN" "Git protocol failed on NTT, falling back to HTTPS..."
-        source_url="$original_url"  # フォールバック用URL設定
+        debug_log "WARN" "Git protocol failed, falling back to HTTPS..."
+        git_fallback=true
     fi
 
-    # **`git://` が失敗した場合は HTTPS に切り替え（コミュファ光の場合）**
-    if [ ! -d "$build_dir/.git" ]; then
-        debug_log "INFO" "Attempting fallback to HTTPS..."
+    # **`git://` が失敗した場合は `https://` に切り替え**
+    if [ "$git_fallback" = true ]; then
+        source_url="$original_url"
+        rm -rf "$build_dir"
         git clone "$source_url" "$build_dir"
 
         if [ ! -d "$build_dir/.git" ]; then
@@ -741,6 +749,16 @@ build_package_db() {
     fi
 
     debug_log "DEBUG" "Source cloned to: $build_dir"
+
+    # **SSH の IPQoS 設定をフォールバック**
+    if [ "$git_fallback" = true ]; then
+        if ! grep -q "IPQoS cs1" ~/.ssh/config 2>/dev/null; then
+            mkdir -p ~/.ssh
+            echo -e "Host github.com\n  IPQoS cs1" >> ~/.ssh/config
+            chmod 600 ~/.ssh/config
+            debug_log "DEBUG" "Added IPQoS cs1 to SSH config for GitHub"
+        fi
+    fi
 
     # **ビルドコマンドを取得**
     local build_command=""
