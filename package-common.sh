@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-07"
+SCRIPT_VERSION="2025.03.01-00-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -653,39 +653,41 @@ build_package_db() {
     check_architecture
     local arch=$(cat "${CACHE_DIR}/architecture.ch")
 
-    # **OpenWrt のターゲットを決定**
+    # **ターゲットとアーキテクチャの自動検出**
     local target=""
     local sdk_arch=""
-    case "$arch" in
-        x86_64) target="x86/64"; sdk_arch="x86_64" ;;
-        aarch64) target="aarch64/generic"; sdk_arch="aarch64" ;;
-        armv7l) target="armvirt"; sdk_arch="armvirt" ;;  # 修正
-        armv8l) target="armvirt/64"; sdk_arch="aarch64" ;;
-        mips*) target="mips/generic"; sdk_arch="mips_24kc" ;;
-        mipsel*) target="mipsel/generic"; sdk_arch="mipsel_24kc" ;;
-        *) debug_log "ERROR" "Unsupported architecture: $arch"; return 1 ;;
-    esac
+    
+    # **opkg.conf からターゲットを検出**
+    if grep -q "src/gz openwrt_core" /etc/opkg/distfeeds.conf; then
+        target=$(grep "src/gz openwrt_core" /etc/opkg/distfeeds.conf | awk '{print $3}' | sed 's|.*/targets/||; s|/packages||')
+        sdk_arch=$(grep "src/gz openwrt_base" /etc/opkg/distfeeds.conf | awk '{print $3}' | sed 's|.*/packages/||; s|/base||')
+    fi
 
-    debug_log "DEBUG" "Detected system architecture: $arch (OpenWrt target: $target, SDK: $sdk_arch)"
+    if [ -z "$target" ] || [ -z "$sdk_arch" ]; then
+        debug_log "ERROR" "Failed to detect OpenWrt target or architecture from opkg settings!"
+        return 1
+    fi
 
-    # **SDK の確認**
+    debug_log "DEBUG" "Detected OpenWrt target: $target, SDK Arch: $sdk_arch"
+
+    # **SDK のダウンロード**
     if [ -z "$STAGING_DIR" ] || [ ! -d "$STAGING_DIR" ]; then
         debug_log "WARN" "OpenWrt SDK not found. Attempting to set up..."
 
         local sdk_base_url="https://downloads.openwrt.org/releases/${openwrt_version}/targets/${target}"
-        local sdk_filename="openwrt-sdk-${openwrt_version}-${sdk_arch}_gcc-12.3.0_musl.Linux-${sdk_arch}.tar.xz"
+        local sdk_filename="openwrt-sdk-${openwrt_version}-${target}_gcc-12.3.0_musl.Linux-${sdk_arch}.tar.xz"
         local sdk_url="${sdk_base_url}/${sdk_filename}"
         local sdk_dir="/tmp/openwrt-sdk"
 
         mkdir -p "$sdk_dir"
         cd "$sdk_dir" || return 1
 
-        # **SDK の URL が存在するか事前チェック**
+        # **SDK の存在確認**
         if ! wget --spider "$sdk_url" 2>/dev/null; then
             debug_log "ERROR" "SDK not found at $sdk_url. Trying alternative naming..."
             
             # **フォールバック**
-            sdk_filename="openwrt-sdk-${openwrt_version}-${sdk_arch}_gcc-12.3.0_musl.Linux-generic.tar.xz"
+            sdk_filename="openwrt-sdk-${openwrt_version}-${target}_gcc-12.3.0_musl.Linux-generic.tar.xz"
             sdk_url="${sdk_base_url}/${sdk_filename}"
             
             if ! wget --spider "$sdk_url" 2>/dev/null; then
