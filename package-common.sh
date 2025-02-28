@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-03-02"
+SCRIPT_VERSION="2025.02.28-03-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -620,6 +620,7 @@ get_value_with_fallback() {
 install_build() {
     local confirm_install="no"
     local hidden="no"
+    local cleanup_after_build="no"
     local package_name=""
 
     # **オプションの処理**
@@ -627,6 +628,7 @@ install_build() {
         case "$arg" in
             yn) confirm_install="yes" ;;
             hidden) hidden="yes" ;;
+            clean) cleanup_after_build="yes" ;;  # `clean` が指定されたら cleanup_build_tools を実行
             *)
                 if [ -z "$package_name" ]; then
                     package_name="$arg"
@@ -713,10 +715,18 @@ install_build() {
     echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$package_name/" | sed "s/{time}/$build_time/")"
     debug_log "DEBUG" "Build time for $package_name: $build_time seconds"
 
+    # **ビルドディレクトリのクリーンアップ**
     cleanup_build
+
+    # **`clean` オプションが指定された場合のみ、ビルドツールを削除**
+    if [ "$cleanup_after_build" = "yes" ]; then
+        debug_log "INFO" "Cleaning up build tools after build..."
+        cleanup_build_tools
+    fi
+
+    # **スワップを削除する場合（必要ならコメント解除）**
     # cleanup_swap
-    # cleanup_build_tools
-    
+
     # **ビルド完了後のメッセージ**
     echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$package_name/")"
     debug_log "DEBUG" "Successfully built and installed package: $package_name"
