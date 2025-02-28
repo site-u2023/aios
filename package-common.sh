@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-11"
+SCRIPT_VERSION="2025.03.01-00-12"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -755,6 +755,7 @@ build_package_db() {
 
     return 0
 }
+
 
 install_build() {
     local confirm_install="no"
