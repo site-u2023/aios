@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-04-04"
+SCRIPT_VERSION="2025.02.28-04-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -690,6 +690,28 @@ build_package_db() {
 
     debug_log "DEBUG" "Using version: $target_version"
 
+    # **ソースコードのダウンロード**
+    local source_url
+    source_url=$(awk -F '=' '/^source_url/ {print $2}' "$package_section_cache" | tr -d ' ')
+
+    if [ -z "$source_url" ]; then
+        debug_log "ERROR" "Source URL not found for package: $package_name"
+        return 1
+    fi
+
+    debug_log "INFO" "Cloning source from: $source_url"
+
+    # **クローン先のディレクトリを設定**
+    local build_dir="/tmp/aios/build/$package_name"
+    mkdir -p "$build_dir"
+
+    if [ ! -d "$build_dir/.git" ]; then
+        git clone --depth=1 "$source_url" "$build_dir"
+    else
+        debug_log "INFO" "Repository already cloned, pulling latest changes..."
+        (cd "$build_dir" && git pull)
+    fi
+
     # **ビルドコマンドを取得**
     local build_command=""
     build_command=$(awk -F '=' -v ver="ver_${target_version}.build_command" '$1 ~ ver {print $2}' "$package_section_cache")
@@ -701,8 +723,8 @@ build_package_db() {
 
     debug_log "INFO" "Build command found: $build_command"
 
-    # **ビルドコマンドをキャッシュに保存**
-    echo "$build_command" > "${CACHE_DIR}/build_command.ch"
+    # **ビルドディレクトリに移動して実行**
+    echo "cd $build_dir && $build_command" > "${CACHE_DIR}/build_command.ch"
 
     # **デバッグログ: 置換後のビルドコマンド**
     debug_log "DEBUG" "Final build command: $(cat "${CACHE_DIR}/build_command.ch")"
