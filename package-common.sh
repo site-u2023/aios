@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-02-05"
+SCRIPT_VERSION="2025.02.28-02-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -244,18 +244,17 @@ local_package_db() {
     echo "Executing commands for $package_name..."
 
     # `sed` を使って変数を動的に置換 (存在しない場合はそのまま)
-    sed_cmd="sed"
-    [ -n "$CUSTOM1" ] && sed_cmd="$sed_cmd -e 's|\${CUSTOM1}|$CUSTOM1|g'"
-    [ -n "$CUSTOM2" ] && sed_cmd="$sed_cmd -e 's|\${CUSTOM2}|$CUSTOM2|g'"
-    [ -n "$CUSTOM3" ] && sed_cmd="$sed_cmd -e 's|\${CUSTOM2}|$CUSTOM2|g'"
-    [ -n "$CUSTOM4" ] && sed_cmd="$sed_cmd -e 's|\${CUSTOM2}|$CUSTOM2|g'"
-    [ -n "$CUSTOM5" ] && sed_cmd="$sed_cmd -e 's|\${CUSTOM2}|$CUSTOM2|g'"
+    for i in 1 2 3 4 5; do
+        var_name="CUSTOM$i"
+        eval var_value=\$$var_name  # `eval` を使って変数の値を取得
 
-    # 変換して一時ファイルに保存
-    echo "$cmds" | eval "$sed_cmd" > "${CACHE_DIR}/commands.ch"
-    
+        if [ -n "$var_value" ]; then
+            cmds=$(echo "$cmds" | sed "s|\${$var_name}|$var_value|g")
+        fi
+    done
+   
     # コマンドを一時ファイルに書き出し
-    #echo "$cmds" > ${CACHE_DIR}/commands.ch
+    echo "$cmds" > ${CACHE_DIR}/commands.ch
 
     # ここで一括でコマンドを実行
     # chファイルに書き出したコマンドをそのまま実行する
