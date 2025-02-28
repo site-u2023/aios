@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.28-02-04"
+SCRIPT_VERSION="2025.02.28-02-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -252,7 +252,7 @@ local_package_db() {
     [ -n "$CUSTOM5" ] && sed_cmd="$sed_cmd -e 's|\${CUSTOM2}|$CUSTOM2|g'"
 
     # 変換して一時ファイルに保存
-    eval "$sed_cmd" <<< "$cmds" > "${CACHE_DIR}/commands.ch"
+    echo "$cmds" | eval "$sed_cmd" > "${CACHE_DIR}/commands.ch"
     
     # コマンドを一時ファイルに書き出し
     #echo "$cmds" > ${CACHE_DIR}/commands.ch
