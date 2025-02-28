@@ -873,6 +873,9 @@ install_build() {
     echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$package_name/" | sed "s/{time}/$build_time/")"
     debug_log "DEBUG" "Build time for $package_name: $build_time seconds"
 
+    # **ビルド後の .ipk 確認**
+    ipk_files=$(find "${BASE_DIR}/bin/packages/" -type f -name "*.ipk" 2>/dev/null)
+
     # **ビルドディレクトリのクリーンアップ**
     # cleanup_build
 
