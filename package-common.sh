@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-04"
+SCRIPT_VERSION="2025.03.01-00-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -655,10 +655,11 @@ build_package_db() {
 
     # **OpenWrt のターゲットに変換**
     local target=""
+    local sdk_arch=""
     case "$arch" in
         x86_64) target="x86/64"; sdk_arch="x86_64" ;;
         aarch64) target="aarch64/generic"; sdk_arch="aarch64" ;;
-        armv7l) target="armvirt/32"; sdk_arch="arm_cortex-a7_neon-vfpv4" ;;  # 実際のSDKフォーマットに修正
+        armv7l) target="armvirt/32"; sdk_arch="arm_cortex-a7_neon-vfpv4" ;;
         armv8l) target="armvirt/64"; sdk_arch="aarch64_cortex-a53" ;;
         mips*) target="mips/generic"; sdk_arch="mips_24kc" ;;
         mipsel*) target="mipsel/generic"; sdk_arch="mipsel_24kc" ;;
@@ -672,7 +673,7 @@ build_package_db() {
         debug_log "WARN" "OpenWrt SDK not found. Attempting to set up..."
 
         local sdk_base_url="https://downloads.openwrt.org/releases/${openwrt_version}/targets/${target}"
-        local sdk_filename="openwrt-sdk-${openwrt_version}-${target}_gcc-12.3.0_musl.Linux-${sdk_arch}.tar.xz"
+        local sdk_filename="openwrt-sdk-${openwrt_version}-${target//\//-}_gcc-12.3.0_musl.Linux-${sdk_arch}.tar.xz"
         local sdk_url="${sdk_base_url}/${sdk_filename}"
         local sdk_dir="/tmp/openwrt-sdk"
 
@@ -681,11 +682,10 @@ build_package_db() {
 
         # **URLが有効か事前チェック**
         if ! wget --spider "$sdk_url" 2>/dev/null; then
-            debug_log "ERROR" "SDK not found at $sdk_url. Trying fallback..."
-            # **フォールバック：generic な SDK の使用**
-            sdk_filename="openwrt-sdk-${openwrt_version}-generic_gcc-12.3.0_musl.Linux-${sdk_arch}.tar.xz"
-            sdk_url="${sdk_base_url}/${sdk_filename}"
+            debug_log "ERROR" "SDK not found at $sdk_url. Trying alternative naming..."
+            sdk_filename="openwrt-sdk-${openwrt_version}-${target//\//-}_gcc-12.3.0_musl.Linux-${sdk_arch}.tar.xz"
 
+            sdk_url="${sdk_base_url}/${sdk_filename}"
             if ! wget --spider "$sdk_url" 2>/dev/null; then
                 debug_log "ERROR" "Fallback SDK not found at $sdk_url. Cannot proceed!"
                 return 1
