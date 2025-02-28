@@ -49,7 +49,7 @@ uci commit ttyd
 [zram-swap]
 uci add system zram
 uci set system.@zram[0].enabled='1'
-uci set system.@zram[0].size='${ZRAM_SIZE_MB}'
+uci set system.@zram[0].size='${CUSTOM1}'
 uci set system.@zram[0].comp_algorithm='zstd'
 uci commit system
 /etc/init.d/zram restart
