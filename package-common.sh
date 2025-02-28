@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-01"
+SCRIPT_VERSION="2025.03.01-00-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -639,7 +639,7 @@ build_package_db() {
     local package_name="$1"
     local openwrt_version=""
 
-    # OpenWrt バージョンの取得
+    # **OpenWrt バージョンの取得**
     if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
         openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
     else
@@ -649,18 +649,35 @@ build_package_db() {
 
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version for package: $package_name"
 
+    # **システムのアーキテクチャを取得**
+    check_architecture  # キャッシュされたアーキテクチャを取得
+    local arch=$(cat "${CACHE_DIR}/architecture.ch")
+
+    local target=""
+    case "$arch" in
+        x86_64) target="x86/64" ;;
+        aarch64) target="aarch64/generic" ;;
+        armv7l) target="armvirt/32" ;;
+        armv8l) target="armvirt/64" ;;
+        mips*) target="mips/generic" ;;
+        mipsel*) target="mipsel/generic" ;;
+        *) debug_log "ERROR" "Unsupported architecture: $arch"; return 1 ;;
+    esac
+
+    debug_log "DEBUG" "Detected system architecture: $arch (OpenWrt target: $target)"
+
     # **OpenWrt SDK の確認**
     if [ -z "$STAGING_DIR" ] || [ ! -d "$STAGING_DIR" ]; then
         debug_log "WARN" "OpenWrt SDK not found. Attempting to set up..."
-        
-        local sdk_url="https://downloads.openwrt.org/releases/24.10-SNAPSHOT/targets/x86/64/openwrt-sdk-24.10-SNAPSHOT-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz"
+
+        local sdk_url="https://downloads.openwrt.org/releases/${openwrt_version}/targets/${target}/openwrt-sdk-${openwrt_version}-${target}_gcc-12.3.0_musl.Linux-$(uname -m).tar.xz"
         local sdk_dir="/tmp/openwrt-sdk"
 
         mkdir -p "$sdk_dir"
         cd "$sdk_dir" || return 1
 
         wget "$sdk_url" -O sdk.tar.xz || {
-            debug_log "ERROR" "Failed to download OpenWrt SDK"
+            debug_log "ERROR" "Failed to download OpenWrt SDK ($sdk_url)"
             return 1
         }
 
@@ -770,7 +787,6 @@ build_package_db() {
 
     return 0
 }
-
 
 install_build() {
     local confirm_install="no"
