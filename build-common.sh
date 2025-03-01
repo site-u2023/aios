@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-00-02"
+SCRIPT_VERSION="2025.03.02-00-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -476,7 +476,7 @@ build_package_db() {
         # SDKが無ければ、openwrtをクローン
         if [ ! -d "${BASE_DIR}/sdk" ]; then
             echo "Cloning OpenWrt source..."
-            openwrt_sdk || return 1
+#            openwrt_sdk || return 1
         fi
     fi
 
