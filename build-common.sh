@@ -323,7 +323,7 @@ build_package_db() {
 
     # **パッケージ名のエスケープ処理**
     local escaped_package_name
-    escaped_package_name=$(echo "$package_name" | sed 's/\[/\\[/g; s/\]/\\]/g')
+    escaped_package_name=$(echo "$package_name" | sed 's/\[/\\[/g; s/\]/\\]/g; s/-/\\-/g')
 
     # **パッケージセクションをキャッシュへ保存**
     local package_section_cache="${CACHE_DIR}/package_section.ch"
