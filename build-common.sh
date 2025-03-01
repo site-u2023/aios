@@ -114,40 +114,6 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 # ver_19.07.install_package = git, make, gcc, autoconf, automake, lua, luci-lib-nixio
 # ver_19.07.build_command = make package/luci-app-temp-status/compile V=99
 #########################################################################
-build_package() {
-    local package_name="$1"
-
-    if [ -z "$package_name" ]; then
-        echo "Usage: build_package <package_name>"
-        return 1
-    fi
-
-    echo "Building OpenWrt package: $package_name"
-
-    # --- OpenWrt SDK のディレクトリ確認 ---
-    if [ ! -d "${BASE_DIR}/sdk" ]; then
-        echo "Error: OpenWrt SDK not found in ${BASE_DIR}/sdk"
-        return 1
-    fi
-
-    cd "${BASE_DIR}/sdk" || return 1
-
-    # --- feeds の更新 ---
-    echo "Updating feeds..."
-    ./scripts/feeds update -a
-    ./scripts/feeds install "$package_name"
-
-    # --- .config にパッケージを追加 ---
-    echo "Adding $package_name to .config..."
-    echo "CONFIG_PACKAGE_$package_name=y" >> .config
-    make defconfig
-
-    echo "Package $package_name has been configured successfully!"
-}
-
-
-
-
 setup_swap() {
     local swap_size=""
     local force_enable="no"
@@ -485,6 +451,32 @@ build_package_db() {
         debug_log "ERROR" "Failed to write build command to cache: ${CACHE_DIR}/build_command.ch"
         return 1
     fi
+
+    # --- OpenWrt SDK の確認 ---
+    if [ -d "sdk" ]; then
+        echo "Using OpenWrt SDK..."
+        cd sdk || return 1
+    else
+        # SDKが無ければ、openwrtをクローン
+        if [ ! -d "openwrt" ]; then
+            echo "Cloning OpenWrt source..."
+            openwrt_sdk || return 1
+        fi
+    fi
+
+    # --- Gitからパッケージをクローン ---
+    echo "Cloning $package_name into package/$package_name..."
+    git clone "$repo_url" "package/$package_name"
+
+    # --- feeds の更新とインストール ---
+    echo "Updating and installing feeds..."
+    ./scripts/feeds update -a
+    ./scripts/feeds install "$package_name"
+
+    # --- .config にパッケージを追加 ---
+    echo "Adding $package_name to .config..."
+    echo "CONFIG_PACKAGE_$package_name=y" >> .config
+    make defconfig
 
     return 0
 }
