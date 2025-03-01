@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-09"
+SCRIPT_VERSION="2025.03.01-00-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -308,24 +308,20 @@ openwrt_sdk() {
     ARCH=$(uname -m)
     VERSION=$(cat /etc/openwrt_release | grep DISTRIB_RELEASE | cut -d '=' -f2)
 
-    # 必要なパッケージのインストール
-    echo "必要なパッケージをインストールしています..."
-    opkg update
-    opkg install gcc make libncurses5-dev libssl-dev libelf-dev bc
-
     # OpenWrt SDKのダウンロード
+    mkdir -p ${BASE_DIR}/sdk
     SDK_URL="https://downloads.openwrt.org/sources/openwrt-sdk-${ARCH}-${VERSION}.tar.xz"
     echo "OpenWrt SDKをダウンロードしています: $SDK_URL"
-    wget $SDK_URL -O /tmp/openwrt-sdk.tar.xz
+    wget $SDK_URL -O ${BASE_DIR}/sdk/openwrt-sdk.tar.xz
 
     # SDKの展開
     echo "SDKを展開しています..."
-    mkdir -p /opt/openwrt-sdk
-    tar -xvf /tmp/openwrt-sdk.tar.xz -C /opt/openwrt-sdk
+    mkdir -p ${BASE_DIR}/build/openwrt-sdk
+    tar -xvf ${BASE_DIR}/sdk/openwrt-sdk.tar.xz -C ${BASE_DIR}/build/openwrt-sdk
 
     # ビルド環境の設定
     echo "ビルド環境を設定しています..."
-    cd /opt/openwrt-sdk
+    cd ${BASE_DIR}/build/openwrt-sdk
     ./scripts/feeds update -a
     ./scripts/feeds install -a
 
@@ -487,8 +483,6 @@ install_build() {
             esac
         done
     fi
-
-    openwrt_sdk
     
     # **ビルド環境の準備**
     echo "$(get_message 'MSG_BUILD_ENV_SETUP')"
@@ -498,6 +492,8 @@ install_build() {
         install_package "$tool" hidden
     done
 
+    openwrt_sdk
+ 
     # **パッケージ情報の取得**
     build_package_db "$package_name"
 
