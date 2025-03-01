@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-00-00"
+SCRIPT_VERSION="2025.03.02-00-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -307,12 +307,11 @@ openwrt_sdk() {
     debug_log "DEBUG: Starting OpenWrt SDK installation."
 
     # OpenWrt SDKのダウンロード
-    mkdir -p "${BASE_DIR}/sdk"
     sdk_url="https://github.com/openwrt/openwrt.git"
     echo "Downloading OpenWrt SDK: $sdk_url"
 
     # Git cloneを試みる
-    git clone "$sdk_url" "${BASE_DIR}/sdk" 2> "${BASE_DIR}/sdk/git_error.log"
+    git clone "$sdk_url" "${BASE_DIR}/sdk" 2> "${LOG_DIR}/git_error.log"
     if [ $? -ne 0 ]; then
         debug_log "DEBUG: Git clone failed. Checking error log."
 
@@ -321,14 +320,14 @@ openwrt_sdk() {
         installed_ca_cert=0
 
         # HTTPSヘルパーが見つからない場合 → git-http をインストール
-        if grep -q "unable to find remote helper for 'https'" "${BASE_DIR}/sdk/git_error.log"; then
+        if grep -q "unable to find remote helper for 'https'" "${LOG_DIR}/git_error.log"; then
             debug_log "DEBUG: Detected missing HTTPS support. Installing git-http."
             install_package git-http hidden
             installed_git_http=1
         fi
 
         # 証明書エラーの場合 → ca-certificates をインストール
-        if grep -q "certificate verification failed" "${BASE_DIR}/sdk/git_error.log"; then
+        if grep -q "certificate verification failed" "${LOG_DIR}/git_error.log"; then
             debug_log "DEBUG: Detected SSL certificate issue. Installing ca-certificates."
             install_package ca-certificates hidden
             installed_ca_cert=1
@@ -466,7 +465,9 @@ build_package_db() {
         debug_log "ERROR" "Failed to write build command to cache: ${CACHE_DIR}/install_build_package.ch"
         return 1
     fi
-    
+
+    install_package git hidden
+
     # --- OpenWrt SDK の確認 ---
     if [ -d "${BASE_DIR}/sdk" ]; then
         echo "Using OpenWrt SDK..."
