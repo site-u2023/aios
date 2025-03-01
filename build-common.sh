@@ -290,28 +290,6 @@ cleanup_build_tools() {
     debug_log "INFO" "Build tools cleanup completed."
 }
 
-# 【DBファイルから値を取得する関数】
-get_ini_value() {
-    local section="$1"
-    local key="$2"
-    awk -F'=' -v s="[$section]" -v k="$key" '
-        $0 ~ s {flag=1; next} /^\[/{flag=0}
-        flag && $1==k {print $2; exit}
-    ' "$DB_FILE"
-}
-
-# 【セクションから値を取得（デフォルト値を含める）】
-get_value_with_fallback() {
-    local section="$1"
-    local key="$2"
-    local value
-    value=$(get_ini_value "$section" "$key")
-    if [ -z "$value" ]; then
-        value=$(get_ini_value "default" "$key")
-    fi
-    echo "$value"
-}
-
 build_package_db() {
     local package_name="$1"
     local openwrt_version=""
