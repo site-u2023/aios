@@ -114,6 +114,40 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 # ver_19.07.install_package = git, make, gcc, autoconf, automake, lua, luci-lib-nixio
 # ver_19.07.build_command = make package/luci-app-temp-status/compile V=99
 #########################################################################
+build_package() {
+    local package_name="$1"
+
+    if [ -z "$package_name" ]; then
+        echo "Usage: build_package <package_name>"
+        return 1
+    fi
+
+    echo "Building OpenWrt package: $package_name"
+
+    # --- OpenWrt SDK のディレクトリ確認 ---
+    if [ ! -d "${BASE_DIR}/sdk" ]; then
+        echo "Error: OpenWrt SDK not found in ${BASE_DIR}/sdk"
+        return 1
+    fi
+
+    cd "${BASE_DIR}/sdk" || return 1
+
+    # --- feeds の更新 ---
+    echo "Updating feeds..."
+    ./scripts/feeds update -a
+    ./scripts/feeds install "$package_name"
+
+    # --- .config にパッケージを追加 ---
+    echo "Adding $package_name to .config..."
+    echo "CONFIG_PACKAGE_$package_name=y" >> .config
+    make defconfig
+
+    echo "Package $package_name has been configured successfully!"
+}
+
+
+
+
 setup_swap() {
     local swap_size=""
     local force_enable="no"
