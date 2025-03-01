@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-07"
+SCRIPT_VERSION="2025.03.01-00-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -470,17 +470,27 @@ install_build() {
     # **パッケージ情報の取得**
     build_package_db "$package_name"
 
+    # **キャッシュからビルドコマンドを読み込む**
+    if [ -f "${CACHE_DIR}/build_command.ch" ]; then
+        build_command=$(cat "${CACHE_DIR}/build_command.ch")
+    else
+        debug_log "ERROR" "Build command cache not found"
+        return 1
+    fi
+
     # **ビルド開始**
     echo "$(get_message 'MSG_BUILD_START' | sed "s/{pkg}/$package_name/")"
     start_spinner "$(get_message 'MSG_BUILD_RUNNING')"
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
     if ! eval "$build_command"; then
         stop_spinner
         echo "$(get_message 'MSG_BUILD_FAIL' | sed "s/{pkg}/$package_name/")"
         debug_log "ERROR" "$(get_message 'MSG_BUILD_FAIL' | sed "s/{pkg}/$package_name/")"
         return 1
     fi
-    local end_time=$(date +%s)
+    local end_time
+    end_time=$(date +%s)
     local build_time=$((end_time - start_time))
     stop_spinner  # スピナー停止
 
