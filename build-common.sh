@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-01"
+SCRIPT_VERSION="2025.03.01-00-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -140,7 +140,13 @@ setup_swap() {
 
     # **空き容量を確認**
     local STORAGE_FREE_MB
-    STORAGE_FREE_MB=$(df -m /overlay | awk 'NR==2 {print $4}')  # MB単位の空き容量
+    STORAGE_FREE_MB=$(df -m /overlay 2>/dev/null | awk 'NR==2 {print $4}')
+
+    # **df コマンドの結果が数値であることを確認**
+    if ! echo "$STORAGE_FREE_MB" | grep -q '^[0-9]\+$'; then
+        debug_log "ERROR" "Invalid storage size ($STORAGE_FREE_MB). Skipping swap setup."
+        return 1
+    fi
 
     # **df コマンドの結果が数値であることを確認**
     if ! echo "$STORAGE_FREE_MB" | grep -q '^[0-9]\+$'; then
@@ -369,7 +375,7 @@ build_package_db() {
 
     # **ビルドコマンドを取得**
     local build_command=""
-    build_command=$(awk -F '=' -v ver="ver_${target_version}.build_command" '$1 ~ ver {print $2}' "$package_section_cache" 2>/dev/null)
+    build_command=$(grep "^ver_${target_version}.build_command" "$package_section_cache" | cut -d '=' -f2 | tr -d ' ')
 
     if [ -z "$build_command" ]; then
         debug_log "ERROR" "No build command found for $package_name (version: $target_version)"
