@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-02"
+SCRIPT_VERSION="2025.03.01-00-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -306,7 +306,7 @@ cleanup_build_tools() {
 build_package_db() {
     local package_name="$1"
     local openwrt_version=""
-
+    
     # **OpenWrtバージョンの取得**
     if [ ! -f "${CACHE_DIR}/openwrt.ch" ]; then
         debug_log "ERROR" "OpenWrt version file not found: ${CACHE_DIR}/openwrt.ch"
@@ -321,29 +321,16 @@ build_package_db() {
 
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version for package: $package_name"
 
-    # **パッケージ名を正規化（"-"を削除）**
-    local normalized_name
-    normalized_name=$(echo "$package_name" | sed 's/-//g')
-    if [ -z "$normalized_name" ]; then
-        debug_log "ERROR" "Invalid package name: $package_name"
-        return 1
-    fi
-
     # **パッケージセクションをキャッシュへ保存**
     local package_section_cache="${CACHE_DIR}/package_section.ch"
-    if [ ! -f "${BASE_DIR}/custom-package.db" ]; then
-        debug_log "ERROR" "custom-package.db not found: ${BASE_DIR}/custom-package.db"
-        return 1
-    fi
-
-    awk -v pkg="\\[$normalized_name\\]" '
+    awk -v pkg="\\[$package_name\\]" '
         $0 ~ pkg {flag=1; next}
         flag && /^\[/ {flag=0}
         flag {print}
     ' "${BASE_DIR}/custom-package.db" > "$package_section_cache"
 
     if [ ! -s "$package_section_cache" ]; then
-        debug_log "ERROR" "Package not found in database: $package_name ($normalized_name)"
+        debug_log "ERROR" "Package not found in database: $package_name"
         return 1
     fi
 
@@ -355,7 +342,6 @@ build_package_db() {
 
     if [ -z "$target_version" ]; then
         debug_log "ERROR" "No compatible version found for $package_name on OpenWrt $openwrt_version"
-        debug_log "DEBUG" "Available versions: $(grep -o 'ver_[0-9.]*' "$package_section_cache")"
         return 1
     fi
 
@@ -363,11 +349,10 @@ build_package_db() {
 
     # **ソースURLを取得**
     local source_url=""
-    source_url=$(awk -F '=' -v key="source_url" '$1 ~ key {print $2}' "$package_section_cache" 2>/dev/null)
+    source_url=$(grep "^source_url" "$package_section_cache" | cut -d '=' -f2- | sed 's/^ *//;s/ *$//')
 
     if [ -z "$source_url" ]; then
         debug_log "ERROR" "No source_url found for $package_name"
-        debug_log "DEBUG" "Package section content:\n$(cat "$package_section_cache")"
         return 1
     fi
 
@@ -375,11 +360,10 @@ build_package_db() {
 
     # **ビルドコマンドを取得**
     local build_command=""
-    build_command=$(grep "^ver_${target_version}.build_command" "$package_section_cache" | cut -d '=' -f2 | tr -d ' ')
+    build_command=$(grep "^ver_${target_version}.build_command" "$package_section_cache" | cut -d '=' -f2- | sed 's/^ *//;s/ *$//')
 
     if [ -z "$build_command" ]; then
         debug_log "ERROR" "No build command found for $package_name (version: $target_version)"
-        debug_log "DEBUG" "Package section content:\n$(cat "$package_section_cache")"
         return 1
     fi
 
