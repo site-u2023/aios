@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-10"
+SCRIPT_VERSION="2025.03.01-00-11"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -304,28 +304,52 @@ cleanup_build_tools() {
 }
 
 openwrt_sdk() {
-    # デバイスのアーキテクチャとバージョンを取得
-    ARCH=$(uname -m)
-    VERSION=$(cat /etc/openwrt_release | grep DISTRIB_RELEASE | cut -d '=' -f2)
+    # デバイスのアーキテクチャを取得
+    arch=$(uname -m)
 
-    # OpenWrt SDKのダウンロード
+    # OpenWrtのバージョン情報を取得
+    version=$(cat /etc/openwrt_version 2>/dev/null || echo "unknown")
+
+    # アーキテクチャとバージョンが取得できない場合はエラー
+    if [ -z "$arch" ] || [ -z "$version" ]; then
+        echo "Error: Unable to determine architecture or OpenWrt version."
+        return 1
+    fi
+
+    # OpenWrt SDKのダウンロードURLを構築
+    sdk_url="https://downloads.openwrt.org/openwrt-sdk-${arch}-${version}.tar.xz"
+    echo "Generated SDK URL: $sdk_url"  # URLを表示して確認
+
+    # SDKのダウンロード
     mkdir -p ${BASE_DIR}/sdk
-    SDK_URL="https://downloads.openwrt.org/sources/openwrt-sdk-${ARCH}-${VERSION}.tar.xz"
-    echo "OpenWrt SDKをダウンロードしています: $SDK_URL"
-    wget $SDK_URL -O ${BASE_DIR}/sdk/openwrt-sdk.tar.xz
+    wget -v $sdk_url -O ${BASE_DIR}/sdk/openwrt-sdk.tar.xz
+    if [ $? -ne 0 ]; then
+        echo "Error: SDKのダウンロードに失敗しました。URLを確認してください。"
+        return 1
+    fi
 
     # SDKの展開
     echo "SDKを展開しています..."
     mkdir -p ${BASE_DIR}/build/openwrt-sdk
     tar -xvf ${BASE_DIR}/sdk/openwrt-sdk.tar.xz -C ${BASE_DIR}/build/openwrt-sdk
+    if [ $? -ne 0 ]; then
+        echo "Error: SDKの展開に失敗しました。"
+        return 1
+    fi
 
     # ビルド環境の設定
     echo "ビルド環境を設定しています..."
     cd ${BASE_DIR}/build/openwrt-sdk
     ./scripts/feeds update -a
     ./scripts/feeds install -a
+    if [ $? -ne 0 ]; then
+        echo "Error: フィードの更新またはインストールに失敗しました。"
+        return 1
+    fi
 
-    echo "OpenWrt SDKのセットアップが完了しました。"
+    # SDKのパスを設定
+    export PATH="/opt/openwrt-sdk-${arch}-${version}/bin:$PATH"
+    echo "OpenWrt SDKのインストールが完了しました。"
 }
 
 build_package_db() {
