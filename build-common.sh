@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-03"
+SCRIPT_VERSION="2025.03.01-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -306,7 +306,7 @@ cleanup_build_tools() {
 build_package_db() {
     local package_name="$1"
     local openwrt_version=""
-    
+
     # **OpenWrtバージョンの取得**
     if [ ! -f "${CACHE_DIR}/openwrt.ch" ]; then
         debug_log "ERROR" "OpenWrt version file not found: ${CACHE_DIR}/openwrt.ch"
@@ -321,9 +321,13 @@ build_package_db() {
 
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version for package: $package_name"
 
+    # **パッケージ名のエスケープ処理**
+    local escaped_package_name
+    escaped_package_name=$(echo "$package_name" | sed 's/\[/\\[/g; s/\]/\\]/g')
+
     # **パッケージセクションをキャッシュへ保存**
     local package_section_cache="${CACHE_DIR}/package_section.ch"
-    awk -v pkg="\\[$package_name\\]" '
+    awk -v pkg="\\[$escaped_package_name\\]" '
         $0 ~ pkg {flag=1; next}
         flag && /^\[/ {flag=0}
         flag {print}
