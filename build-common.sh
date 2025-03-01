@@ -305,61 +305,31 @@ cleanup_build_tools() {
 
 openwrt_sdk() {
     # デバイスのアーキテクチャとバージョンを取得
-    local arch=$(uname -m)
-    local version=$(cat /etc/openwrt_release | grep DISTRIB_REVISION | cut -d '=' -f2)
+    ARCH=$(uname -m)
+    VERSION=$(cat /etc/openwrt_release | grep DISTRIB_RELEASE | cut -d '=' -f2)
 
-    # アーキテクチャとバージョンが取得できない場合はエラー
-    if [ -z "$arch" ] || [ -z "$version" ]; then
-        echo "デバイスのアーキテクチャまたはバージョンの取得に失敗しました。"
-        return 1
-    fi
+    # 必要なパッケージのインストール
+    echo "必要なパッケージをインストールしています..."
+    opkg update
+    opkg install gcc make libncurses5-dev libssl-dev libelf-dev bc
 
-    # SDKのダウンロードURLを設定
-    local sdk_url="https://downloads.openwrt.org/releases/$version/targets/$arch/generic/openwrt-sdk-$version-$arch_gcc-*.tar.xz"
+    # OpenWrt SDKのダウンロード
+    SDK_URL="https://downloads.openwrt.org/sources/openwrt-sdk-${ARCH}-${VERSION}.tar.xz"
+    echo "OpenWrt SDKをダウンロードしています: $SDK_URL"
+    wget $SDK_URL -O /tmp/openwrt-sdk.tar.xz
 
-    # SDKの保存先ディレクトリを作成
-    local sdk_dir="$HOME/openwrt_sdk"
-    mkdir -p "$sdk_dir"
+    # SDKの展開
+    echo "SDKを展開しています..."
+    mkdir -p /opt/openwrt-sdk
+    tar -xvf /tmp/openwrt-sdk.tar.xz -C /opt/openwrt-sdk
 
-    # SDKをダウンロード
-    local sdk_file="$sdk_dir/openwrt-sdk.tar.xz"
-    echo "SDKをダウンロードしています: $sdk_url"
-    wget -q -O "$sdk_file" "$sdk_url"
-    if [ $? -ne 0 ]; then
-        echo "SDKのダウンロードに失敗しました。URLを確認してください: $sdk_url"
-        return 1
-    fi
+    # ビルド環境の設定
+    echo "ビルド環境を設定しています..."
+    cd /opt/openwrt-sdk
+    ./scripts/feeds update -a
+    ./scripts/feeds install -a
 
-    # SDKを展開
-    echo "SDKを展開しています: $sdk_file"
-    tar -xf "$sdk_file" -C "$sdk_dir"
-    if [ $? -ne 0 ]; then
-        echo "SDKの展開に失敗しました。"
-        return 1
-    fi
-
-    # 展開したSDKのディレクトリ名を取得
-    local sdk_extracted_dir=$(tar -tf "$sdk_file" | head -n 1 | cut -f1 -d'/')
-    if [ -z "$sdk_extracted_dir" ]; then
-        echo "展開したSDKのディレクトリ名の取得に失敗しました。"
-        return 1
-    fi
-
-    # SDKのパスを設定
-    local sdk_path="$sdk_dir/$sdk_extracted_dir"
-    if [ ! -d "$sdk_path" ]; then
-        echo "SDKのパスが正しくありません: $sdk_path"
-        return 1
-    fi
-
-    # SDKの環境設定スクリプトを読み込む
-    if [ -f "$sdk_path/staging_dir/toolchain-$arch_gcc*/env.sh" ]; then
-        source "$sdk_path/staging_dir/toolchain-$arch_gcc*/env.sh"
-        echo "SDKの環境設定が完了しました。"
-    else
-        echo "SDKの環境設定スクリプトが見つかりません。"
-        return 1
-    fi
+    echo "OpenWrt SDKのセットアップが完了しました。"
 }
 
 build_package_db() {
