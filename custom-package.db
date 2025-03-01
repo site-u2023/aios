@@ -2,6 +2,11 @@ SCRIPT_VERSION="2025.02.29-00-00"
 
 [default]
 
+[openwrt-sdk]
+source_url = https://github.com/openwrt/openwrt.git
+ver_21.02.install_build_package = make gcc autoconf automake lua luci-lib-nixio luci-lib-jsonc
+ver_21.02.build_command = make toolchain/install -j$(nproc)
+
 [luci-app-temp-status]
 source_url = https://github.com/gSpotx2f/luci-app-temp-status.git
 ver_21.02.install_build_package = make gcc autoconf automake lua luci-lib-nixio luci-lib-jsonc
