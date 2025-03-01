@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-13"
+SCRIPT_VERSION="2025.03.02-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -450,11 +450,9 @@ build_package_db() {
         return 1
     fi
 
-exit
-
     # インストールパッケージを取得
     local binstall_build_package=""
-    install_build_package=$(grep "^install_build_package" | cut -d '=' -f2- | sed 's/^ *//;s/ *$//')
+    install_build_package=$(grep "^ver_${target_version}.install_build_package" "$package_section_cache" | cut -d '=' -f2- | sed 's/^ *//;s/ *$//')
 
     if [ -z "$install_build_package" ]; then
         debug_log "ERROR" "No install_build_package found for $package_name (version: $target_version)"
