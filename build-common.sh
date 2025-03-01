@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-04"
+SCRIPT_VERSION="2025.03.01-00-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -321,10 +321,15 @@ build_package_db() {
 
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version for package: $package_name"
 
-    # **パッケージ名のエスケープ処理**
+    # シェルのパラメータ展開でエスケープ処理
     local escaped_package_name
-    escaped_package_name=$(echo "$package_name" | sed 's/\[/\\[/g; s/\]/\\]/g; s/-/\\-/g')
+    escaped_package_name="${package_name//-/\\-}"
+    escaped_package_name="${escaped_package_name//[/\\[}"
+    escaped_package_name="${escaped_package_name//]/\\]}"
 
+    escaped_package_name
+    debug_log "DEBUG" "Escape parameter: $escaped_package_name"
+    
     # **パッケージセクションをキャッシュへ保存**
     local package_section_cache="${CACHE_DIR}/package_section.ch"
     awk -v pkg="\\[$escaped_package_name\\]" '
