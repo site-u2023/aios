@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-11"
+SCRIPT_VERSION="2025.03.01-00-12"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -306,8 +306,6 @@ cleanup_build_tools() {
 openwrt_sdk() {
     debug_log "DEBUG: Starting OpenWrt SDK installation."
 
-    install_package git hidden
-
     # OpenWrt SDKのダウンロード
     mkdir -p "${BASE_DIR}/sdk"
     sdk_url="https://github.com/openwrt/openwrt.git"
@@ -453,12 +451,12 @@ build_package_db() {
     fi
 
     # --- OpenWrt SDK の確認 ---
-    if [ -d "sdk" ]; then
+    if [ -d "${BASE_DIR}/sdk" ]; then
         echo "Using OpenWrt SDK..."
-        cd sdk || return 1
+        cd ${BASE_DIR}/sdk || return 1
     else
         # SDKが無ければ、openwrtをクローン
-        if [ ! -d "openwrt" ]; then
+        if [ ! -d "${BASE_DIR}/sdk" ]; then
             echo "Cloning OpenWrt source..."
             openwrt_sdk || return 1
         fi
@@ -476,7 +474,7 @@ build_package_db() {
 
     # --- feeds の更新とインストール ---
     echo "ビルド環境を設定しています..."
-    cd ${BASE_DIR}/build/openwrt-sdk
+    cd ${BASE_DIR}/build/$package_name
     ./scripts/feeds update -a
     ./scripts/feeds install "$package_name"
     if [ $? -ne 0 ]; then
@@ -572,7 +570,7 @@ install_build() {
     
     # **ビルド環境の準備**
     echo "$(get_message 'MSG_BUILD_ENV_SETUP')"
-    local build_tools="make gcc libtool-bin automake pkg-config zlib-dev libncurses-dev curl libxml2 libxml2-dev autoconf automake bison flex perl patch wget wget-ssl tar unzip"
+    local build_tools="make gcc git libtool-bin automake pkg-config zlib-dev libncurses-dev curl libxml2 libxml2-dev autoconf automake bison flex perl patch wget wget-ssl tar unzip"
 
     for tool in $build_tools; do
         install_package "$tool" hidden
