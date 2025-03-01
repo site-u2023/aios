@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-12"
+SCRIPT_VERSION="2025.03.01-00-13"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -449,6 +449,8 @@ build_package_db() {
         debug_log "ERROR" "Failed to write build command to cache: ${CACHE_DIR}/build_command.ch"
         return 1
     fi
+
+exit
 
     # インストールパッケージを取得
     local binstall_build_package=""
