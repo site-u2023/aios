@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-00-01"
+SCRIPT_VERSION="2025.03.02-00-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -568,13 +568,13 @@ install_build() {
     if [ "$swap_enable" = "yes" ]; then
         if [ -n "$swap_size" ]; then
             echo "$(get_message 'MSG_SWAP_SETUP' | sed "s/{size}/$swap_size/")"
-            setup_swap "size=$swap_size"
+#            setup_swap "size=$swap_size"
         elif [ "$swap_force" = "yes" ]; then
             echo "$(get_message 'MSG_SWAP_FORCE')"
-            setup_swap "force"
+#            setup_swap "force"
         else
             echo "$(get_message 'MSG_SWAP_DEFAULT')"
-            setup_swap
+#            setup_swap
         fi
 
         # **スワップの設定が失敗した場合はエラーログを出して終了**
