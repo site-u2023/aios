@@ -115,32 +115,57 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 # ver_19.07.build_command = make package/luci-app-temp-status/compile V=99
 #########################################################################
 setup_swap() {
+    local swap_size=""
+    local force_enable="no"
+    local disable_swap="no"
+
+    # **オプションの処理**
+    for arg in "$@"; do
+        case "$arg" in
+            size=*) swap_size="${arg#size=}" ;;  # size=512 などの指定
+            force) force_enable="yes" ;;  # スワップ強制再設定
+            disable) disable_swap="yes" ;;  # スワップ無効化
+        esac
+    done
+
+    # **スワップを無効化する処理**
+    if [ "$disable_swap" = "yes" ]; then
+        cleanup_swap
+        debug_log "INFO" "Swap has been disabled as per request."
+        return 0
+    fi
+
     local RAM_TOTAL_MB
     RAM_TOTAL_MB=$(awk '/MemTotal/ {print int($2 / 1024)}' /proc/meminfo)
 
     # **空き容量を確認**
     local STORAGE_FREE_MB
     STORAGE_FREE_MB=$(df -m /overlay | awk 'NR==2 {print $4}')  # MB単位の空き容量
-    
-    # **スワップサイズを RAM とストレージの両方で決定**
-    if [ "$RAM_TOTAL_MB" -lt 512 ]; then
-        ZRAM_SIZE_MB=512
-    elif [ "$RAM_TOTAL_MB" -lt 1024 ]; then
-        ZRAM_SIZE_MB=256
-    else
-        ZRAM_SIZE_MB=128
-    fi
 
-    # **ストレージの空きが十分ならスワップサイズを最大 1024MB まで増やす**
-    if [ "$STORAGE_FREE_MB" -ge 1024 ]; then
-        ZRAM_SIZE_MB=1024
-    elif [ "$STORAGE_FREE_MB" -ge 512 ] && [ "$ZRAM_SIZE_MB" -lt 512 ]; then
-        ZRAM_SIZE_MB=512
+    # **スワップサイズの決定**
+    local ZRAM_SIZE_MB
+    if [ -n "$swap_size" ]; then
+        ZRAM_SIZE_MB="$swap_size"
+    else
+        if [ "$RAM_TOTAL_MB" -lt 512 ]; then
+            ZRAM_SIZE_MB=512
+        elif [ "$RAM_TOTAL_MB" -lt 1024 ]; then
+            ZRAM_SIZE_MB=256
+        else
+            ZRAM_SIZE_MB=128
+        fi
+
+        # **ストレージの空きが十分ならスワップサイズを最大 1024MB まで増やす**
+        if [ "$STORAGE_FREE_MB" -ge 1024 ]; then
+            ZRAM_SIZE_MB=1024
+        elif [ "$STORAGE_FREE_MB" -ge 512 ] && [ "$ZRAM_SIZE_MB" -lt 512 ]; then
+            ZRAM_SIZE_MB=512
+        fi
     fi
 
     debug_log "INFO" "RAM: ${RAM_TOTAL_MB}MB, Setting zram size to ${ZRAM_SIZE_MB}MB"
 
-   # **環境変数を登録 (`CUSTOM_*` に統一)**
+    # **環境変数を登録 (`CUSTOM_*` に統一)**
     export CUSTOM_ZRAM_SIZE="$ZRAM_SIZE_MB"
 
     debug_log "INFO" "Exported: CUSTOM_ZRAM_SIZE=${CUSTOM_ZRAM_SIZE}"
@@ -149,6 +174,17 @@ setup_swap() {
         STORAGE_FREE_MB=0
         debug_log "ERROR" "Insufficient storage for swap (${STORAGE_FREE_MB}MB free). Skipping swap setup."
         return 1  # **ストレージ不足なら即終了** 
+    fi
+
+    # **既存スワップの処理**
+    if grep -q 'zram' /proc/swaps; then
+        if [ "$force_enable" = "yes" ]; then
+            debug_log "INFO" "Force enabling swap. Cleaning up existing swap..."
+            cleanup_swap
+        else
+            debug_log "INFO" "Swap is already enabled. Skipping setup."
+            return 0
+        fi
     fi
 
     # **zswap (zram-swap) のインストール**
@@ -173,19 +209,40 @@ setup_swap() {
 cleanup_swap() {
     debug_log "INFO" "Cleaning up zram-swap..."
 
-    # **スワップを無効化**
-    swapoff /dev/zram0
-
-    # **zram0 を削除**
-    echo 1 > /sys/class/zram-control/hot_remove
-
-    # **`kmod-zram` がロードされているなら `rmmod`**
-    if lsmod | grep -q "zram"; then
-        rmmod zram
-        debug_log "INFO" "Removed kmod-zram module."
+    # **スワップが有効か確認**
+    if grep -q 'zram' /proc/swaps; then
+        swapoff /dev/zram0
+        if [ $? -eq 0 ]; then
+            debug_log "INFO" "Swap successfully disabled."
+        else
+            debug_log "ERROR" "Failed to disable swap!"
+            return 1
+        fi
+    else
+        debug_log "INFO" "No active swap found."
     fi
 
-    debug_log "INFO" "zram-swap successfully removed."
+    # **zram0 の削除**
+    if [ -e "/sys/class/zram-control/hot_remove" ]; then
+        echo 1 > /sys/class/zram-control/hot_remove
+        debug_log "INFO" "zram device removed."
+    else
+        debug_log "WARN" "zram-control not found. Skipping hot remove."
+    fi
+
+    # **カーネルモジュールを削除**
+    if lsmod | grep -q "zram"; then
+        rmmod zram
+        if [ $? -eq 0 ]; then
+            debug_log "INFO" "Removed kmod-zram module."
+        else
+            debug_log "ERROR" "Failed to remove kmod-zram!"
+        fi
+    else
+        debug_log "INFO" "zram module not loaded."
+    fi
+
+    debug_log "INFO" "zram-swap cleanup completed."
 }
 
 cleanup_build() {
@@ -259,11 +316,15 @@ build_package_db() {
     local package_name="$1"
     local openwrt_version=""
 
-    # OpenWrtバージョンの取得
-    if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
-        openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
-    else
-        debug_log "ERROR" "OpenWrt version not found!"
+    # **OpenWrtバージョンの取得**
+    if [ ! -f "${CACHE_DIR}/openwrt.ch" ]; then
+        debug_log "ERROR" "OpenWrt version file not found: ${CACHE_DIR}/openwrt.ch"
+        return 1
+    fi
+
+    openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch" 2>/dev/null)
+    if [ -z "$openwrt_version" ]; then
+        debug_log "ERROR" "Failed to retrieve OpenWrt version from ${CACHE_DIR}/openwrt.ch"
         return 1
     fi
 
@@ -272,9 +333,18 @@ build_package_db() {
     # **パッケージ名を正規化（"-"を削除）**
     local normalized_name
     normalized_name=$(echo "$package_name" | sed 's/-//g')
+    if [ -z "$normalized_name" ]; then
+        debug_log "ERROR" "Invalid package name: $package_name"
+        return 1
+    fi
 
     # **パッケージセクションをキャッシュへ保存**
     local package_section_cache="${CACHE_DIR}/package_section.ch"
+    if [ ! -f "${BASE_DIR}/custom-package.db" ]; then
+        debug_log "ERROR" "custom-package.db not found: ${BASE_DIR}/custom-package.db"
+        return 1
+    fi
+
     awk -v pkg="\\[$normalized_name\\]" '
         $0 ~ pkg {flag=1; next}
         flag && /^\[/ {flag=0}
@@ -294,6 +364,7 @@ build_package_db() {
 
     if [ -z "$target_version" ]; then
         debug_log "ERROR" "No compatible version found for $package_name on OpenWrt $openwrt_version"
+        debug_log "DEBUG" "Available versions: $(grep -o 'ver_[0-9.]*' "$package_section_cache")"
         return 1
     fi
 
@@ -301,10 +372,11 @@ build_package_db() {
 
     # **ソースURLを取得**
     local source_url=""
-    source_url=$(awk -F '=' -v key="source_url" '$1 ~ key {print $2}' "$package_section_cache")
+    source_url=$(awk -F '=' -v key="source_url" '$1 ~ key {print $2}' "$package_section_cache" 2>/dev/null)
 
     if [ -z "$source_url" ]; then
         debug_log "ERROR" "No source_url found for $package_name"
+        debug_log "DEBUG" "Package section content:\n$(cat "$package_section_cache")"
         return 1
     fi
 
@@ -312,17 +384,21 @@ build_package_db() {
 
     # **ビルドコマンドを取得**
     local build_command=""
-    build_command=$(awk -F '=' -v ver="ver_${target_version}.build_command" '$1 ~ ver {print $2}' "$package_section_cache")
+    build_command=$(awk -F '=' -v ver="ver_${target_version}.build_command" '$1 ~ ver {print $2}' "$package_section_cache" 2>/dev/null)
 
     if [ -z "$build_command" ]; then
         debug_log "ERROR" "No build command found for $package_name (version: $target_version)"
+        debug_log "DEBUG" "Package section content:\n$(cat "$package_section_cache")"
         return 1
     fi
 
     debug_log "INFO" "Build command: $build_command"
 
     # **キャッシュへ保存**
-    echo "$build_command" > "${CACHE_DIR}/build_command.ch"
+    if ! echo "$build_command" > "${CACHE_DIR}/build_command.ch"; then
+        debug_log "ERROR" "Failed to write build command to cache: ${CACHE_DIR}/build_command.ch"
+        return 1
+    fi
 
     return 0
 }
@@ -369,16 +445,25 @@ install_build() {
     fi
 
     # **スワップを設定（オプションが有効な場合）**
+    local swap_status=0
     if [ "$swap_enable" = "yes" ]; then
         if [ -n "$swap_size" ]; then
             echo "$(get_message 'MSG_SWAP_SETUP' | sed "s/{size}/$swap_size/")"
-            setup_swap "size=$swap_size" || echo "$(get_message 'MSG_SWAP_FAILED')"
+            setup_swap "size=$swap_size"
         elif [ "$swap_force" = "yes" ]; then
             echo "$(get_message 'MSG_SWAP_FORCE')"
-            setup_swap "force" || echo "$(get_message 'MSG_SWAP_FAILED')"
+            setup_swap "force"
         else
             echo "$(get_message 'MSG_SWAP_DEFAULT')"
-            setup_swap || echo "$(get_message 'MSG_SWAP_FAILED')"
+            setup_swap
+        fi
+
+        # **スワップの設定が失敗した場合はエラーログを出して終了**
+        swap_status=$?
+        if [ "$swap_status" -ne 0 ]; then
+            echo "$(get_message 'MSG_SWAP_FAILED')"
+            debug_log "ERROR" "Swap setup failed with status $swap_status"
+            return 1
         fi
     fi
 
@@ -433,4 +518,3 @@ install_build() {
 
     echo "$(get_message 'MSG_BUILD_COMPLETE' | sed "s/{pkg}/$package_name/")"
 }
-
