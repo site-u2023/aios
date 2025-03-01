@@ -638,103 +638,79 @@ get_value_with_fallback() {
 build_package_db() {
     local package_name="$1"
     local openwrt_version=""
-    local sdk_dir="${BASE_DIR}/sdk"
-    local build_dir="${BASE_DIR}/build/$package_name"
 
     # OpenWrtバージョンの取得
-    if [ -f "/etc/openwrt_release" ]; then
-        openwrt_version=$(grep "DISTRIB_RELEASE" /etc/openwrt_release | cut -d"'" -f2)
+    if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
+        openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
     else
-        debug_log "ERROR" "Failed to detect OpenWrt version!"
+        debug_log "ERROR" "OpenWrt version not found!"
         return 1
     fi
 
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version for package: $package_name"
 
-    # OpenWrtのターゲットとアーキテクチャを取得
-    local target=$(grep "DISTRIB_TARGET" /etc/openwrt_release | cut -d"'" -f2)
-    local arch=$(grep "DISTRIB_ARCH" /etc/openwrt_release | cut -d"'" -f2)
+    # **パッケージ名を正規化（"-"を削除）**
+    local normalized_name
+    normalized_name=$(echo "$package_name" | sed 's/-//g')
 
-    if [ -z "$target" ] || [ -z "$arch" ]; then
-        debug_log "ERROR" "Failed to detect OpenWrt target or architecture!"
+    # **パッケージセクションをキャッシュへ保存**
+    local package_section_cache="${CACHE_DIR}/package_section.ch"
+    awk -v pkg="\\[$normalized_name\\]" '
+        $0 ~ pkg {flag=1; next}
+        flag && /^\[/ {flag=0}
+        flag {print}
+    ' "${BASE_DIR}/custom-package.db" > "$package_section_cache"
+
+    if [ ! -s "$package_section_cache" ]; then
+        debug_log "ERROR" "Package not found in database: $package_name ($normalized_name)"
         return 1
     fi
 
-    debug_log "DEBUG" "Detected OpenWrt target: $target, SDK Arch: $arch"
+    debug_log "DEBUG" "Package section cached: $package_section_cache"
 
-    # SDKのダウンロードURLを作成
-    local sdk_url="https://downloads.openwrt.org/releases/${openwrt_version}/targets/${target}/openwrt-sdk-${openwrt_version}-${target}_gcc-12.3.0_musl.Linux-${arch}.tar.xz"
+    # **バージョンリストを取得**
+    local version_list_cache="${CACHE_DIR}/version_list.ch"
+    grep -o 'ver_[0-9.]*' "$package_section_cache" | sed 's/ver_//' | sort -Vr > "$version_list_cache"
 
-    # SDKのセットアップ
-    if [ ! -d "$sdk_dir" ]; then
-        debug_log "WARN" "OpenWrt SDK not found. Attempting to set up..."
-        mkdir -p "$sdk_dir"
-        cd "$sdk_dir" || return 1
-        if ! wget "$sdk_url"; then
-            debug_log "ERROR" "Failed to download OpenWrt SDK from $sdk_url"
-            return 1
+    if [ ! -s "$version_list_cache" ]; then
+        debug_log "ERROR" "No versions found for package: $package_name"
+        return 1
+    fi
+
+    debug_log "DEBUG" "Available versions cached: $version_list_cache"
+
+    # **最も近い下位互換バージョンを探す**
+    local target_version=""
+    while read -r version; do
+        if [ "$(echo -e "$version\n$openwrt_version" | sort -Vr | head -n1)" = "$openwrt_version" ]; then
+            target_version="$version"
+            break
         fi
-        tar -xf "$(basename "$sdk_url")" --strip-components=1 -C "$sdk_dir"
-        if [ $? -ne 0 ]; then
-            debug_log "ERROR" "Failed to extract OpenWrt SDK"
-            return 1
-        fi
-        debug_log "INFO" "OpenWrt SDK set up successfully at $sdk_dir"
-    fi
+    done < "$version_list_cache"
 
-    # パッケージソースのクローン
-    if [ -d "$build_dir" ]; then
-        rm -rf "$build_dir"
-    fi
-    mkdir -p "$build_dir"
-
-    local source_url
-    source_url=$(awk -F '=' '/^source_url/ {print $2}' "${BASE_DIR}/custom-package.db" | tr -d ' ')
-
-    if [ -z "$source_url" ]; then
-        debug_log "ERROR" "Source URL not found for package: $package_name"
+    if [ -z "$target_version" ]; then
+        debug_log "ERROR" "No compatible version found for $package_name on OpenWrt $openwrt_version"
         return 1
     fi
 
-    git clone "$source_url" "$build_dir"
-    if [ ! -d "$build_dir/.git" ]; then
-        debug_log "ERROR" "Failed to clone repository: $source_url"
-        return 1
-    fi
-    debug_log "DEBUG" "Source cloned to: $build_dir"
+    debug_log "DEBUG" "Using version: $target_version"
 
-    # SDKディレクトリに移動
-    cd "$sdk_dir" || return 1
+    # **ビルドコマンドを取得**
+    local build_command=""
+    build_command=$(awk -F '=' -v ver="ver_${target_version}.build_command" '$1 ~ ver {print $2}' "$package_section_cache")
 
-    # パッケージをSDK内にコピー
-    cp -r "$build_dir" "package/$package_name"
-
-    # ビルド環境のセットアップ
-    ./scripts/feeds update -a
-    ./scripts/feeds install -a
-
-    # `rules.mk`のパスを修正
-    if [ ! -f "include/rules.mk" ]; then
-        debug_log "ERROR" "Missing rules.mk in SDK"
+    if [ -z "$build_command" ]; then
+        debug_log "ERROR" "No build command found for package: $package_name (version: $target_version)"
         return 1
     fi
 
-    # ビルド実行
-    make package/$package_name/compile V=s
-    if [ $? -ne 0 ]; then
-        debug_log "ERROR" "Failed to build package: $package_name"
-        return 1
-    fi
+    debug_log "INFO" "Build command found: $build_command"
 
-    # `bin/packages/` 配下の `.ipk` ファイルを確認
-    local ipk_file=$(find bin/packages/ bin/targets/ -type f -name "*.ipk" 2>/dev/null | head -n 1)
+    # **ビルドコマンドをキャッシュに保存**
+    echo "$build_command" > "${CACHE_DIR}/build_command.ch"
 
-    if [ -z "$ipk_file" ]; then
-        debug_log "ERROR" "Build completed but no .ipk file found!"
-        return 1
-    fi
-
-    debug_log "INFO" "IPK package found: $ipk_file"
+    # **デバッグログ: 置換後のビルドコマンド**
+    debug_log "DEBUG" "Final build command: $(cat "${CACHE_DIR}/build_command.ch")"
 
     return 0
 }
