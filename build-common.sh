@@ -465,14 +465,25 @@ build_package_db() {
     fi
 
     # --- Gitからパッケージをクローン ---
+    echo "$package_name を展開しています..."
+    mkdir -p ${BASE_DIR}/build
     echo "Cloning $package_name into package/$package_name..."
-    git clone "$repo_url" "package/$package_name"
+    git clone "$source_url" "package/$package_name" "${BASE_DIR}/build"
+        if [ $? -ne 0 ]; then
+        echo "Error: $package_name の展開に失敗しました。"
+        return 1
+    fi
 
     # --- feeds の更新とインストール ---
-    echo "Updating and installing feeds..."
+    echo "ビルド環境を設定しています..."
+    cd ${BASE_DIR}/build/openwrt-sdk
     ./scripts/feeds update -a
     ./scripts/feeds install "$package_name"
-
+    if [ $? -ne 0 ]; then
+        echo "Error: フィードの更新またはインストールに失敗しました。"
+        return 1
+    fi
+    
     # --- .config にパッケージを追加 ---
     echo "Adding $package_name to .config..."
     echo "CONFIG_PACKAGE_$package_name=y" >> .config
