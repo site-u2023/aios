@@ -304,52 +304,47 @@ cleanup_build_tools() {
 }
 
 openwrt_sdk() {
-    # デバイスのアーキテクチャを取得
-    arch=$(uname -m)
+    debug_log "DEBUG: Starting OpenWrt SDK installation."
 
-    # OpenWrtのバージョン情報を取得
-    version=$(cat /etc/openwrt_version 2>/dev/null || echo "unknown")
+    install_package git hidden
 
-    # アーキテクチャとバージョンが取得できない場合はエラー
-    if [ -z "$arch" ] || [ -z "$version" ]; then
-        echo "Error: Unable to determine architecture or OpenWrt version."
-        return 1
-    fi
+    # Download OpenWrt SDK
+    mkdir -p "${BASE_DIR}/sdk"
+    sdk_url="https://github.com/openwrt/openwrt.git"
+    echo "Downloading OpenWrt SDK: $sdk_url"
 
-    # OpenWrt SDKのダウンロードURLを構築
-    sdk_url="https://downloads.openwrt.org/openwrt-sdk-${arch}-${version}.tar.xz"
-    echo "Generated SDK URL: $sdk_url"  # URLを表示して確認
-
-    # SDKのダウンロード
-    mkdir -p ${BASE_DIR}/sdk
-    wget -v $sdk_url -O ${BASE_DIR}/sdk/openwrt-sdk.tar.xz
+    # Attempt Git clone
+    git clone "$sdk_url" "${BASE_DIR}/sdk" 2> "${BASE_DIR}/sdk/git_error.log"
     if [ $? -ne 0 ]; then
-        echo "Error: SDKのダウンロードに失敗しました。URLを確認してください。"
-        return 1
+        debug_log "DEBUG: Git clone failed. Checking error log."
+
+        # エラーログ解析
+        if grep -q "unable to find remote helper for 'https'" "${BASE_DIR}/sdk/git_error.log"; then
+            debug_log "DEBUG: Detected missing HTTPS support. Installing ca-certificates and git-http."
+            install_package ca-certificates hidden
+            install_package git-http hidden
+        elif grep -q "Could not resolve host" "${BASE_DIR}/sdk/git_error.log"; then
+            debug_log "DEBUG: Detected DNS resolution issue. Check network settings."
+            return 1
+        elif grep -q "Connection timed out" "${BASE_DIR}/sdk/git_error.log"; then
+            debug_log "DEBUG: Detected network timeout. Check internet connection."
+            return 1
+        else
+            debug_log "DEBUG: Unknown git clone error. Installing general dependencies."
+            install_package ca-certificates hidden
+            install_package git-http hidden
+        fi
+
+        # Retry Git clone
+        debug_log "DEBUG: Retrying Git clone after installing required packages."
+        git clone "$sdk_url" "${BASE_DIR}/sdk"
+        if [ $? -ne 0 ]; then
+            debug_log "DEBUG: Git clone failed again. Manual intervention required."
+            return 1
+        fi
     fi
 
-    # SDKの展開
-    echo "SDKを展開しています..."
-    mkdir -p ${BASE_DIR}/build/openwrt-sdk
-    tar -xvf ${BASE_DIR}/sdk/openwrt-sdk.tar.xz -C ${BASE_DIR}/build/openwrt-sdk
-    if [ $? -ne 0 ]; then
-        echo "Error: SDKの展開に失敗しました。"
-        return 1
-    fi
-
-    # ビルド環境の設定
-    echo "ビルド環境を設定しています..."
-    cd ${BASE_DIR}/build/openwrt-sdk
-    ./scripts/feeds update -a
-    ./scripts/feeds install -a
-    if [ $? -ne 0 ]; then
-        echo "Error: フィードの更新またはインストールに失敗しました。"
-        return 1
-    fi
-
-    # SDKのパスを設定
-    export PATH="/opt/openwrt-sdk-${arch}-${version}/bin:$PATH"
-    echo "OpenWrt SDKのインストールが完了しました。"
+    debug_log "DEBUG: OpenWrt SDK installation completed successfully."
 }
 
 build_package_db() {
@@ -507,16 +502,16 @@ install_build() {
             esac
         done
     fi
+
+    openwrt_sdk
     
     # **ビルド環境の準備**
     echo "$(get_message 'MSG_BUILD_ENV_SETUP')"
-    local build_tools="make gcc git libtool-bin automake pkg-config zlib-dev libncurses-dev curl libxml2 libxml2-dev autoconf automake bison flex perl patch wget wget-ssl tar unzip"
+    local build_tools="make gcc libtool-bin automake pkg-config zlib-dev libncurses-dev curl libxml2 libxml2-dev autoconf automake bison flex perl patch wget wget-ssl tar unzip"
 
     for tool in $build_tools; do
         install_package "$tool" hidden
     done
-
-    openwrt_sdk
  
     # **パッケージ情報の取得**
     build_package_db "$package_name"
