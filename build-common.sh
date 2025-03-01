@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-0"
+SCRIPT_VERSION="2025.03.01-00-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -103,6 +103,8 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 # - install_build uconv                  → インストール（確認なし）
 # - install_build uconv yn               → インストール（確認あり）
 # - install_build uconv yn hidden        → インストール（確認あり、既にインストール済みの場合のメッセージは非表示）
+# - install_build uconv swap=1024 swap=force
+#
 #
 # 【custom-package.dbの記述例】
 # [luci-app-temp-status] 
@@ -286,25 +288,9 @@ build_package_db() {
 
     debug_log "DEBUG" "Package section cached: $package_section_cache"
 
-    # **バージョンリストを取得**
-    local version_list_cache="${CACHE_DIR}/version_list.ch"
-    grep -o 'ver_[0-9.]*' "$package_section_cache" | sed 's/ver_//' | sort -Vr > "$version_list_cache"
-
-    if [ ! -s "$version_list_cache" ]; then
-        debug_log "ERROR" "No versions found for package: $package_name"
-        return 1
-    fi
-
-    debug_log "DEBUG" "Available versions cached: $version_list_cache"
-
-    # **最も近い下位互換バージョンを探す**
+    # **最適なバージョンを決定**
     local target_version=""
-    while read -r version; do
-        if [ "$(echo -e "$version\n$openwrt_version" | sort -Vr | head -n1)" = "$openwrt_version" ]; then
-            target_version="$version"
-            break
-        fi
-    done < "$version_list_cache"
+    target_version=$(grep -o 'ver_[0-9.]*' "$package_section_cache" | sed 's/ver_//' | sort -Vr | head -n1)
 
     if [ -z "$target_version" ]; then
         debug_log "ERROR" "No compatible version found for $package_name on OpenWrt $openwrt_version"
@@ -315,31 +301,28 @@ build_package_db() {
 
     # **ソースURLを取得**
     local source_url=""
-    source_url=
+    source_url=$(awk -F '=' -v key="source_url" '$1 ~ key {print $2}' "$package_section_cache")
 
     if [ -z "$source_url" ]; then
-        debug_log "ERROR" "No 
+        debug_log "ERROR" "No source_url found for $package_name"
         return 1
     fi
 
-    debug_log "INFO" "source_url found: $source_url"
-    
+    debug_log "INFO" "Source URL: $source_url"
+
     # **ビルドコマンドを取得**
     local build_command=""
     build_command=$(awk -F '=' -v ver="ver_${target_version}.build_command" '$1 ~ ver {print $2}' "$package_section_cache")
 
     if [ -z "$build_command" ]; then
-        debug_log "ERROR" "No build command found for package: $package_name (version: $target_version)"
+        debug_log "ERROR" "No build command found for $package_name (version: $target_version)"
         return 1
     fi
 
-    debug_log "INFO" "Build command found: $build_command"
+    debug_log "INFO" "Build command: $build_command"
 
-    # **ビルドコマンドをキャッシュに保存**
+    # **キャッシュへ保存**
     echo "$build_command" > "${CACHE_DIR}/build_command.ch"
-
-    # **デバッグログ: 置換後のビルドコマンド**
-    debug_log "DEBUG" "Final build command: $(cat "${CACHE_DIR}/build_command.ch")"
 
     return 0
 }
@@ -347,6 +330,8 @@ build_package_db() {
 install_build() {
     local confirm_install="no"
     local swap_enable="no"
+    local swap_size=""
+    local swap_force="no"
     local hidden="no"
     local cleanup_after_build="no"
     local package_name=""
@@ -355,9 +340,17 @@ install_build() {
     for arg in "$@"; do
         case "$arg" in
             yn) confirm_install="yes" ;;
-            swap) swap_enable="yes" ;;
+            swap) swap_enable="yes" ;;  # スワップを有効化
+            swap=*)  # スワップサイズ指定または force
+                swap_enable="yes"
+                if echo "$arg" | grep -q "force"; then
+                    swap_force="yes"
+                else
+                    swap_size="${arg#swap=}"
+                fi
+                ;;
             hidden) hidden="yes" ;;
-            clean) cleanup_after_build="yes" ;;  # `clean` が指定されたら cleanup_build_tools を実行
+            clean) cleanup_after_build="yes" ;;
             *)
                 if [ -z "$package_name" ]; then
                     package_name="$arg"
@@ -370,81 +363,74 @@ install_build() {
 
     # **パッケージ名が指定されているか確認**
     if [ -z "$package_name" ]; then
-        debug_log "ERROR" "$(get_message "MSG_ERROR_NO_PACKAGE_NAME")"
+        echo "$(get_message 'MSG_ERROR_NO_PACKAGE_NAME')"
+        debug_log "ERROR" "$(get_message 'MSG_ERROR_NO_PACKAGE_NAME')"
         return 1
     fi
 
-    setup_swap || { debug_log "ERROR" "$(get_message 'MSG_ERR_INSUFFICIENT_SWAP')"; return 1; }
+    # **スワップを設定（オプションが有効な場合）**
+    if [ "$swap_enable" = "yes" ]; then
+        if [ -n "$swap_size" ]; then
+            echo "$(get_message 'MSG_SWAP_SETUP' | sed "s/{size}/$swap_size/")"
+            setup_swap "size=$swap_size" || echo "$(get_message 'MSG_SWAP_FAILED')"
+        elif [ "$swap_force" = "yes" ]; then
+            echo "$(get_message 'MSG_SWAP_FORCE')"
+            setup_swap "force" || echo "$(get_message 'MSG_SWAP_FAILED')"
+        else
+            echo "$(get_message 'MSG_SWAP_DEFAULT')"
+            setup_swap || echo "$(get_message 'MSG_SWAP_FAILED')"
+        fi
+    fi
 
     # **インストールの確認 (YNオプションが有効な場合のみ)**
     if [ "$confirm_install" = "yes" ]; then
         while true; do
-            local msg=$(get_message "MSG_CONFIRM_INSTALL" | sed "s/{pkg}/$package_name/")
-            echo "$msg"
-
-            echo -n "$(get_message "MSG_CONFIRM_ONLY_YN")"
+            echo "$(get_message 'MSG_CONFIRM_INSTALL' | sed "s/{pkg}/$package_name/")"
+            echo -n "$(get_message 'MSG_CONFIRM_ONLY_YN')"
             read -r yn
             case "$yn" in
                 [Yy]*) break ;;  # Yes → インストール続行
                 [Nn]*) return 1 ;; # No → キャンセル
-                *) echo "Invalid input. Please enter Y or N." ;;
+                *) echo "$(get_message 'MSG_INVALID_INPUT')" ;;
             esac
         done
     fi
 
-    # **OpenWrt バージョン取得**
-    local openwrt_version=""
-    if [ -f "${CACHE_DIR}/openwrt.ch" ]; then
-        openwrt_version=$(cat "${CACHE_DIR}/openwrt.ch")
-    fi
-    debug_log "DEBUG" "Using OpenWrt version: $openwrt_version" 
-
     # **ビルド環境の準備**
+    echo "$(get_message 'MSG_BUILD_ENV_SETUP')"
     local build_tools="make gcc git libtool-bin automake pkg-config zlib-dev libncurses-dev curl libxml2 libxml2-dev autoconf automake bison flex perl patch wget wget-ssl tar unzip"
-                      
+
     for tool in $build_tools; do
         install_package "$tool" hidden
     done
 
+    # **パッケージ情報の取得**
     build_package_db "$package_name"
-    
-    debug_log "DEBUG" "Executing build command: $build_command"
 
-    # **ビルド開始メッセージ**
-    echo "$(get_message "MSG_BUILD_START" | sed "s/{pkg}/$package_name/")"
-
-    # **ビルド実行（スピナー開始）**
+    # **ビルド開始**
+    echo "$(get_message 'MSG_BUILD_START' | sed "s/{pkg}/$package_name/")"
     start_spinner "$(get_message 'MSG_BUILD_RUNNING')"
     local start_time=$(date +%s)
     if ! eval "$build_command"; then
         stop_spinner
-        echo "$(get_message "MSG_BUILD_FAIL" | sed "s/{pkg}/$package_name/")"
-        debug_log "ERROR" "$(get_message "MSG_ERROR_BUILD_FAILED" | sed "s/{pkg}/$package_name/")"
+        echo "$(get_message 'MSG_BUILD_FAIL' | sed "s/{pkg}/$package_name/")"
+        debug_log "ERROR" "$(get_message 'MSG_BUILD_FAIL' | sed "s/{pkg}/$package_name/")"
         return 1
     fi
     local end_time=$(date +%s)
     local build_time=$((end_time - start_time))
     stop_spinner  # スピナー停止
 
-    echo "$(get_message "MSG_BUILD_TIME" | sed "s/{pkg}/$package_name/" | sed "s/{time}/$build_time/")"
+    echo "$(get_message 'MSG_BUILD_SUCCESS' | sed "s/{pkg}/$package_name/" | sed "s/{time}/$build_time/")"
     debug_log "DEBUG" "Build time for $package_name: $build_time seconds"
 
-    # **ビルド後の .ipk 確認**
-    ipk_files=$(find "${BASE_DIR}/bin/packages/" -type f -name "*.ipk" 2>/dev/null)
-
-    # **ビルドディレクトリのクリーンアップ**
-    # cleanup_build
-
-    # **`clean` オプションが指定された場合のみ、ビルドツールを削除**
+    # **クリーンアップ（オプションが指定された場合のみ）**
     if [ "$cleanup_after_build" = "yes" ]; then
-        debug_log "INFO" "Cleaning up build tools after build..."
+        echo "$(get_message 'MSG_CLEANUP_START')"
         cleanup_build_tools
+        echo "$(get_message 'MSG_CLEANUP_DONE')"
     fi
 
-    # **スワップを削除する場合（必要ならコメント解除）**
-    # cleanup_swap
-
-    # **ビルド完了後のメッセージ**
-    echo "$(get_message "MSG_BUILD_SUCCESS" | sed "s/{pkg}/$package_name/")"
-    debug_log "DEBUG" "Successfully built and installed package: $package_name"
+    echo "$(get_message 'MSG_BUILD_COMPLETE' | sed "s/{pkg}/$package_name/")"
 }
+
