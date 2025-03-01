@@ -142,6 +142,13 @@ setup_swap() {
     local STORAGE_FREE_MB
     STORAGE_FREE_MB=$(df -m /overlay | awk 'NR==2 {print $4}')  # MB単位の空き容量
 
+    # **df コマンドの結果が数値であることを確認**
+    if ! echo "$STORAGE_FREE_MB" | grep -q '^[0-9]\+$'; then
+        STORAGE_FREE_MB=0
+        debug_log "ERROR" "Invalid storage free size. Skipping swap setup."
+        return 1
+    fi
+
     # **スワップサイズの決定**
     local ZRAM_SIZE_MB
     if [ -n "$swap_size" ]; then
