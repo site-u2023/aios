@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-06"
+SCRIPT_VERSION="2025.03.01-00-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -339,9 +339,9 @@ build_package_db() {
 
     debug_log "DEBUG" "Package section cached: $package_section_cache"
 
-    # 最適なバージョンを決定
+    # 最適なバージョンを決定（末尾が数字で終わるパターンに変更）
     local target_version=""
-    target_version=$(grep -o 'ver_[0-9.]*' "$package_section_cache" | sed 's/ver_//' | sort -Vr | head -n1)
+    target_version=$(grep -o 'ver_[0-9.]*[0-9]' "$package_section_cache" | sed 's/ver_//' | sort -Vr | head -n1)
 
     if [ -z "$target_version" ]; then
         debug_log "ERROR" "No compatible version found for $package_name on OpenWrt $openwrt_version"
