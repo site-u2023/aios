@@ -450,6 +450,23 @@ build_package_db() {
         return 1
     fi
 
+    # インストールパッケージを取得
+    local binstall_build_package=""
+    install_build_package=$(grep "^install_build_package" | cut -d '=' -f2- | sed 's/^ *//;s/ *$//')
+
+    if [ -z "$install_build_package" ]; then
+        debug_log "ERROR" "No install_build_package found for $package_name (version: $target_version)"
+        return 1
+    fi
+
+    debug_log "INFO" "Install build package: $install_build_package"
+
+    # キャッシュへ保存
+    if ! echo "$install_build_package" > "${CACHE_DIR}/install_build_package.ch"; then
+        debug_log "ERROR" "Failed to write build command to cache: ${CACHE_DIR}/install_build_package.ch"
+        return 1
+    fi
+    
     # --- OpenWrt SDK の確認 ---
     if [ -d "${BASE_DIR}/sdk" ]; then
         echo "Using OpenWrt SDK..."
@@ -567,18 +584,25 @@ install_build() {
             return 1
         fi
     fi
-    
-    # **ビルド環境の準備**
-    echo "$(get_message 'MSG_BUILD_ENV_SETUP')"
-    local build_tools="make gcc git libtool-bin automake pkg-config zlib-dev libncurses-dev curl libxml2 libxml2-dev autoconf automake bison flex perl patch wget wget-ssl tar unzip"
-
-    for tool in $build_tools; do
-        install_package "$tool" hidden
-    done
  
     # **パッケージ情報の取得**
     build_package_db "$package_name"
 
+    # **インストールパッケージを読み込む**
+    if [ -f "${CACHE_DIR}/install_build_package.ch" ]; then
+        install_build_package=$(cat "${CACHE_DIR}/install_build_package.ch")
+    else
+        debug_log "ERROR" "Install_build_package cache not found"
+        return 1
+    fi
+
+    # **ビルド環境の準備**
+    echo "$(get_message 'MSG_BUILD_ENV_SETUP')"
+
+    for tool in $install_build_packag; do
+        install_package "$tool" hidden
+    done
+    
     # **キャッシュからビルドコマンドを読み込む**
     if [ -f "${CACHE_DIR}/build_command.ch" ]; then
         build_command=$(cat "${CACHE_DIR}/build_command.ch")
