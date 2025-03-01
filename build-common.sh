@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-00-03"
+SCRIPT_VERSION="2025.03.02-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -492,7 +492,7 @@ build_package_db() {
 
     # --- feeds の更新とインストール ---
     echo "ビルド環境を設定しています..."
-    cd ${BASE_DIR}/build/$package_name
+    cd "${BASE_DIR}/build" || exit 1
     ./scripts/feeds update -a
     ./scripts/feeds install "$package_name"
     if [ $? -ne 0 ]; then
