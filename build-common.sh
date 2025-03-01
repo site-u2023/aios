@@ -476,7 +476,7 @@ build_package_db() {
         # SDKが無ければ、openwrtをクローン
         if [ ! -d "${BASE_DIR}/sdk" ]; then
             echo "Cloning OpenWrt source..."
-#            openwrt_sdk || return 1
+            openwrt_sdk || return 1
         fi
     fi
 
