@@ -73,10 +73,9 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 # 4️⃣ インストール確認（yn オプションが指定された場合）
 # 4️⃣ スワップ適用（サイズ自動判別）
 # 4️⃣ ビルド用汎用パッケージ（リポジトリにあるパッケージは全てinstall_package()利用）
+# 7️⃣ custom-package.db の適用（ビルド用設定）
 # 4️⃣ ビルド作業
-# 7️⃣ custom-package.db の適用（ビルド用設定：DBの記述に従う）
 # 5️⃣ インストールの実行（.ipk）
-# 7️⃣ package.db の適用（ビルド後の設定適用がある場合：DBの記述に従う）
 #
 # 【ビルド用汎用パッケージ】
 # install_package = 以下
@@ -89,6 +88,7 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 #
 # 【オプション】※順不同で適用可
 # - yn         : インストール前に確認する（デフォルト: 確認なし）
+# - swap       : スワップを設定する（デフォルト：なし）
 # - hidden     : 既にインストール済みの場合、"パッケージ xxx はすでにインストールされています" のメッセージを非表示にする（デフォルト: 表示）
 # - clean      : ビルド作業に利用したキャッシュ、ファイルのリムーブ（デフォルト: なし）
 #
@@ -105,12 +105,12 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 # - install_build uconv yn hidden        → インストール（確認あり、既にインストール済みの場合のメッセージは非表示）
 #
 # 【custom-package.dbの記述例】
-#  [luci-app-temp-status] 
-#  source_url = https://github.com/gSpotx2f/luci-app-temp-status.git
-#  ver_21.02.install_package = git, make, gcc, autoconf, automake, lua, luci-lib-nixio, luci-lib-jsonc
-#  ver_21.02.build_command = make package/luci-app-temp-status/compile
-#  ver_19.07.install_package = git, make, gcc, autoconf, automake, lua, luci-lib-nixio
-#  ver_19.07.build_command = make package/luci-app-temp-status/compile V=99
+# [luci-app-temp-status] 
+# source_url = https://github.com/gSpotx2f/luci-app-temp-status.git
+# ver_21.02.install_package = git, make, gcc, autoconf, automake, lua, luci-lib-nixio, luci-lib-jsonc
+# ver_21.02.build_command = make package/luci-app-temp-status/compile
+# ver_19.07.install_package = git, make, gcc, autoconf, automake, lua, luci-lib-nixio
+# ver_19.07.build_command = make package/luci-app-temp-status/compile V=99
 #########################################################################
 setup_swap() {
     local RAM_TOTAL_MB
@@ -313,6 +313,17 @@ build_package_db() {
 
     debug_log "DEBUG" "Using version: $target_version"
 
+    # **ソースURLを取得**
+    local source_url=""
+    source_url=
+
+    if [ -z "$source_url" ]; then
+        debug_log "ERROR" "No 
+        return 1
+    fi
+
+    debug_log "INFO" "source_url found: $source_url"
+    
     # **ビルドコマンドを取得**
     local build_command=""
     build_command=$(awk -F '=' -v ver="ver_${target_version}.build_command" '$1 ~ ver {print $2}' "$package_section_cache")
@@ -335,6 +346,7 @@ build_package_db() {
 
 install_build() {
     local confirm_install="no"
+    local swap_enable="no"
     local hidden="no"
     local cleanup_after_build="no"
     local package_name=""
@@ -343,6 +355,7 @@ install_build() {
     for arg in "$@"; do
         case "$arg" in
             yn) confirm_install="yes" ;;
+            swap) swap_enable="yes" ;;
             hidden) hidden="yes" ;;
             clean) cleanup_after_build="yes" ;;  # `clean` が指定されたら cleanup_build_tools を実行
             *)
