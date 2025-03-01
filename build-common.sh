@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-05"
+SCRIPT_VERSION="2025.03.01-00-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -307,7 +307,7 @@ build_package_db() {
     local package_name="$1"
     local openwrt_version=""
 
-    # **OpenWrtバージョンの取得**
+    # OpenWrtバージョンの取得
     if [ ! -f "${CACHE_DIR}/openwrt.ch" ]; then
         debug_log "ERROR" "OpenWrt version file not found: ${CACHE_DIR}/openwrt.ch"
         return 1
@@ -321,21 +321,15 @@ build_package_db() {
 
     debug_log "DEBUG" "Using OpenWrt version: $openwrt_version for package: $package_name"
 
-    # シェルのパラメータ展開でエスケープ処理
-    local escaped_package_name
-    escaped_package_name="${package_name//-/\\-}"
-    escaped_package_name="${escaped_package_name//[/\\[}"
-    escaped_package_name="${escaped_package_name//]/\\]}"
+    # ヘッダー行は [パッケージ名] という形式で記録されている前提
+    local header="[$package_name]"
 
-    escaped_package_name
-    debug_log "DEBUG" "Escape parameter: $escaped_package_name"
-    
-    # **パッケージセクションをキャッシュへ保存**
+    # パッケージセクションをキャッシュへ保存
     local package_section_cache="${CACHE_DIR}/package_section.ch"
-    awk -v pkg="\\[$escaped_package_name\\]" '
-        $0 ~ pkg {flag=1; next}
-        flag && /^\[/ {flag=0}
-        flag {print}
+    awk -v header="$header" '
+        $0 == header { flag=1; next }
+        flag && /^\[/ { flag=0 }
+        flag { print }
     ' "${BASE_DIR}/custom-package.db" > "$package_section_cache"
 
     if [ ! -s "$package_section_cache" ]; then
@@ -345,7 +339,7 @@ build_package_db() {
 
     debug_log "DEBUG" "Package section cached: $package_section_cache"
 
-    # **最適なバージョンを決定**
+    # 最適なバージョンを決定
     local target_version=""
     target_version=$(grep -o 'ver_[0-9.]*' "$package_section_cache" | sed 's/ver_//' | sort -Vr | head -n1)
 
@@ -356,7 +350,7 @@ build_package_db() {
 
     debug_log "DEBUG" "Using version: $target_version"
 
-    # **ソースURLを取得**
+    # ソースURLを取得
     local source_url=""
     source_url=$(grep "^source_url" "$package_section_cache" | cut -d '=' -f2- | sed 's/^ *//;s/ *$//')
 
@@ -367,7 +361,7 @@ build_package_db() {
 
     debug_log "INFO" "Source URL: $source_url"
 
-    # **ビルドコマンドを取得**
+    # ビルドコマンドを取得
     local build_command=""
     build_command=$(grep "^ver_${target_version}.build_command" "$package_section_cache" | cut -d '=' -f2- | sed 's/^ *//;s/ *$//')
 
@@ -378,7 +372,7 @@ build_package_db() {
 
     debug_log "INFO" "Build command: $build_command"
 
-    # **キャッシュへ保存**
+    # キャッシュへ保存
     if ! echo "$build_command" > "${CACHE_DIR}/build_command.ch"; then
         debug_log "ERROR" "Failed to write build command to cache: ${CACHE_DIR}/build_command.ch"
         return 1
