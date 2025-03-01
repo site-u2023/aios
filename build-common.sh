@@ -569,8 +569,6 @@ install_build() {
             return 1
         fi
     fi
-
-    openwrt_sdk
     
     # **ビルド環境の準備**
     echo "$(get_message 'MSG_BUILD_ENV_SETUP')"
