@@ -308,34 +308,44 @@ openwrt_sdk() {
 
     install_package git hidden
 
-    # Download OpenWrt SDK
+    # OpenWrt SDKのダウンロード
     mkdir -p "${BASE_DIR}/sdk"
     sdk_url="https://github.com/openwrt/openwrt.git"
     echo "Downloading OpenWrt SDK: $sdk_url"
 
-    # Attempt Git clone
+    # Git cloneを試みる
     git clone "$sdk_url" "${BASE_DIR}/sdk" 2> "${BASE_DIR}/sdk/git_error.log"
     if [ $? -ne 0 ]; then
         debug_log "DEBUG: Git clone failed. Checking error log."
 
-        # エラーログ解析
+        # フラグ（インストール済みかどうか）
+        installed_git_http=0
+        installed_ca_cert=0
+
+        # HTTPSヘルパーが見つからない場合 → git-http をインストール
         if grep -q "unable to find remote helper for 'https'" "${BASE_DIR}/sdk/git_error.log"; then
-            debug_log "DEBUG: Detected missing HTTPS support. Installing ca-certificates and git-http."
-            install_package ca-certificates hidden
+            debug_log "DEBUG: Detected missing HTTPS support. Installing git-http."
             install_package git-http hidden
-        elif grep -q "Could not resolve host" "${BASE_DIR}/sdk/git_error.log"; then
-            debug_log "DEBUG: Detected DNS resolution issue. Check network settings."
-            return 1
-        elif grep -q "Connection timed out" "${BASE_DIR}/sdk/git_error.log"; then
-            debug_log "DEBUG: Detected network timeout. Check internet connection."
-            return 1
-        else
-            debug_log "DEBUG: Unknown git clone error. Installing general dependencies."
+            installed_git_http=1
+        fi
+
+        # 証明書エラーの場合 → ca-certificates をインストール
+        if grep -q "certificate verification failed" "${BASE_DIR}/sdk/git_error.log"; then
+            debug_log "DEBUG: Detected SSL certificate issue. Installing ca-certificates."
             install_package ca-certificates hidden
+            installed_ca_cert=1
+        fi
+
+        # どちらかを入れても解決しない場合、残りをインストール
+        if [ $installed_git_http -eq 1 ] && [ $installed_ca_cert -eq 0 ]; then
+            debug_log "DEBUG: Git clone failed after installing git-http. Trying ca-certificates."
+            install_package ca-certificates hidden
+        elif [ $installed_ca_cert -eq 1 ] && [ $installed_git_http -eq 0 ]; then
+            debug_log "DEBUG: Git clone failed after installing ca-certificates. Trying git-http."
             install_package git-http hidden
         fi
 
-        # Retry Git clone
+        # 再度Git cloneを試みる
         debug_log "DEBUG: Retrying Git clone after installing required packages."
         git clone "$sdk_url" "${BASE_DIR}/sdk"
         if [ $? -ne 0 ]; then
@@ -344,7 +354,27 @@ openwrt_sdk() {
         fi
     fi
 
-    debug_log "DEBUG: OpenWrt SDK installation completed successfully."
+    debug_log "DEBUG: OpenWrt SDK download successful. Proceeding with package setup."
+
+    # SDK のパッケージビルド用設定
+    cd "${BASE_DIR}/sdk" || { debug_log "DEBUG: Failed to enter SDK directory."; return 1; }
+
+    # `staging_dir` の作成（存在しない場合）
+    if [ ! -d "staging_dir" ]; then
+        echo "Setting up staging directory..."
+        mkdir -p staging_dir
+    fi
+
+    # `toolchain` のビルド
+    echo "Building toolchain..."
+    make toolchain/install -j$(nproc)
+
+    # `package` の準備
+    echo "Setting up package build environment..."
+    make package/cleanup
+    make package/compile -j$(nproc)
+
+    debug_log "DEBUG: OpenWrt SDK setup for package build completed successfully."
 }
 
 build_package_db() {
