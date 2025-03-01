@@ -466,6 +466,20 @@ install_build() {
         return 1
     fi
 
+    # **インストールの確認 (YNオプションが有効な場合のみ)**
+    if [ "$confirm_install" = "yes" ]; then
+        while true; do
+            echo "$(get_message 'MSG_CONFIRM_INSTALL' | sed "s/{pkg}/$package_name/")"
+            echo -n "$(get_message 'MSG_CONFIRM_ONLY_YN')"
+            read -r yn
+            case "$yn" in
+                [Yy]*) break ;;  # Yes → インストール続行
+                [Nn]*) return 1 ;; # No → キャンセル
+                *) echo "$(get_message 'MSG_INVALID_INPUT')" ;;
+            esac
+        done
+    fi
+    
     # **スワップを設定（オプションが有効な場合）**
     local swap_status=0
     if [ "$swap_enable" = "yes" ]; then
@@ -487,20 +501,6 @@ install_build() {
             debug_log "ERROR" "Swap setup failed with status $swap_status"
             return 1
         fi
-    fi
-
-    # **インストールの確認 (YNオプションが有効な場合のみ)**
-    if [ "$confirm_install" = "yes" ]; then
-        while true; do
-            echo "$(get_message 'MSG_CONFIRM_INSTALL' | sed "s/{pkg}/$package_name/")"
-            echo -n "$(get_message 'MSG_CONFIRM_ONLY_YN')"
-            read -r yn
-            case "$yn" in
-                [Yy]*) break ;;  # Yes → インストール続行
-                [Nn]*) return 1 ;; # No → キャンセル
-                *) echo "$(get_message 'MSG_INVALID_INPUT')" ;;
-            esac
-        done
     fi
 
     openwrt_sdk
