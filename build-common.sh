@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-00-08"
+SCRIPT_VERSION="2025.03.01-00-09"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -303,6 +303,65 @@ cleanup_build_tools() {
     debug_log "INFO" "Build tools cleanup completed."
 }
 
+openwrt_sdk() {
+    # デバイスのアーキテクチャとバージョンを取得
+    local arch=$(uname -m)
+    local version=$(cat /etc/openwrt_release | grep DISTRIB_REVISION | cut -d '=' -f2)
+
+    # アーキテクチャとバージョンが取得できない場合はエラー
+    if [ -z "$arch" ] || [ -z "$version" ]; then
+        echo "デバイスのアーキテクチャまたはバージョンの取得に失敗しました。"
+        return 1
+    fi
+
+    # SDKのダウンロードURLを設定
+    local sdk_url="https://downloads.openwrt.org/releases/$version/targets/$arch/generic/openwrt-sdk-$version-$arch_gcc-*.tar.xz"
+
+    # SDKの保存先ディレクトリを作成
+    local sdk_dir="$HOME/openwrt_sdk"
+    mkdir -p "$sdk_dir"
+
+    # SDKをダウンロード
+    local sdk_file="$sdk_dir/openwrt-sdk.tar.xz"
+    echo "SDKをダウンロードしています: $sdk_url"
+    wget -q -O "$sdk_file" "$sdk_url"
+    if [ $? -ne 0 ]; then
+        echo "SDKのダウンロードに失敗しました。URLを確認してください: $sdk_url"
+        return 1
+    fi
+
+    # SDKを展開
+    echo "SDKを展開しています: $sdk_file"
+    tar -xf "$sdk_file" -C "$sdk_dir"
+    if [ $? -ne 0 ]; then
+        echo "SDKの展開に失敗しました。"
+        return 1
+    fi
+
+    # 展開したSDKのディレクトリ名を取得
+    local sdk_extracted_dir=$(tar -tf "$sdk_file" | head -n 1 | cut -f1 -d'/')
+    if [ -z "$sdk_extracted_dir" ]; then
+        echo "展開したSDKのディレクトリ名の取得に失敗しました。"
+        return 1
+    fi
+
+    # SDKのパスを設定
+    local sdk_path="$sdk_dir/$sdk_extracted_dir"
+    if [ ! -d "$sdk_path" ]; then
+        echo "SDKのパスが正しくありません: $sdk_path"
+        return 1
+    fi
+
+    # SDKの環境設定スクリプトを読み込む
+    if [ -f "$sdk_path/staging_dir/toolchain-$arch_gcc*/env.sh" ]; then
+        source "$sdk_path/staging_dir/toolchain-$arch_gcc*/env.sh"
+        echo "SDKの環境設定が完了しました。"
+    else
+        echo "SDKの環境設定スクリプトが見つかりません。"
+        return 1
+    fi
+}
+
 build_package_db() {
     local package_name="$1"
     local openwrt_version=""
@@ -459,6 +518,8 @@ install_build() {
         done
     fi
 
+    openwrt_sdk
+    
     # **ビルド環境の準備**
     echo "$(get_message 'MSG_BUILD_ENV_SETUP')"
     local build_tools="make gcc git libtool-bin automake pkg-config zlib-dev libncurses-dev curl libxml2 libxml2-dev autoconf automake bison flex perl patch wget wget-ssl tar unzip"
