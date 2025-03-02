@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-00-00"
+SCRIPT_VERSION="2025.03.03-00-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -88,29 +88,43 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 # feed_package "hidden" "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
 #########################################################################
 gSpotx2f_package() {
-  local ask_yn=false
-  local hidden=false
+  # オプションと通常引数を文字列として分離
+  opts=""
+  args=""
 
   while [ $# -gt 0 ]; do
     case "$1" in
-      yn) ask_yn=true; shift ;;
-      hidden) hidden=true; shift ;;
-      *) break ;;
+      yn|hidden)
+        # オプションはそのまま opts に追加（先頭に空白が入るので後で set -- でトリムされる）
+        opts="$opts $1"
+        ;;
+      *)
+        args="$args $1"
+        ;;
     esac
+    shift
   done
 
-  local REPO_OWNER="$1"
-  local REPO_NAME="$2"
-  local DIR_PATH="$3"
-  local PKG_PREFIX="$4"
+  # 必須引数4つがあるかチェック（args は空白で区切られるので set -- で分解）
+  set -- $args
+  if [ "$#" -ne 4 ]; then
+    echo "エラー: 必要な引数 (REPO_OWNER, REPO_NAME, DIR_PATH, PKG_PREFIX) が不足しています。" >&2
+    return 1
+  fi
 
+  REPO_OWNER="$1"
+  REPO_NAME="$2"
+  DIR_PATH="$3"
+  PKG_PREFIX="$4"
+
+  # ※以下は元の処理と同じ
   local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
 
   local version_file="${CACHE_DIR}/openwrt.ch"
   if [ ! -f "$version_file" ]; then
-      echo "エラー: OpenWrt バージョン情報がありません。" >&2
-      return 1
+    echo "エラー: OpenWrt バージョン情報がありません。" >&2
+    return 1
   fi
   local openwrt_version
   openwrt_version=$(cut -d'.' -f1,2 < "$version_file")
@@ -118,23 +132,22 @@ gSpotx2f_package() {
   local json
   json=$(wget --no-check-certificate -qO- "$API_URL")
   if [ -z "$json" ]; then
-      echo "エラー: GitHub API からデータを取得できませんでした。" >&2
-      return 1
+    echo "エラー: GitHub API からデータを取得できませんでした。" >&2
+    return 1
   fi
 
   local PKG_FILE
   PKG_FILE=$(echo "$json" | jq -r '.[].name' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
-
   if [ -z "$PKG_FILE" ]; then
     echo "$PKG_PREFIX が見つかりません。"
     return 1
   fi
 
   echo "$PKG_FILE が見つかりました。"
-
   debug_log "DEBUG" "パッケージ: $PKG_FILE"
 
-  feed_package $([ "$ask_yn" = true ] && echo "yn") $([ "$hidden" = true ] && echo "hidden") "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
+  # opts は文字列（例："yn hidden"）なので、そのまま展開すれば各単語に分割される
+  feed_package $opts "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
 }
 
 feed_package() {
