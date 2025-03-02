@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-00-05"
+SCRIPT_VERSION="2025.03.02-00-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -106,8 +106,8 @@ packages() {
 
     check_version_feed yn hidden "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
     check_version_feed yn hidden "gSpotx2f" "packages-openwrt" "current" "luci-i18n-cpu-status"
-    feed_package yn hidden "gSpotx2f" "packages-openwrt" "current" "luci-app-temp-status"
-    feed_package yn hidden "gSpotx2f" "packages-openwrt" "current" "luci-app-log-viewer"
+    check_version_feed yn hidden "gSpotx2f" "packages-openwrt" "current" "luci-app-temp-status"
+    check_version_feed yn hidden "gSpotx2f" "packages-openwrt" "current" "luci-app-log-viewer"
     # feed_package "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
 }
 
