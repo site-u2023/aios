@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-01-15"
+SCRIPT_VERSION="2025.03.02-01-16"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -130,7 +130,6 @@ gSpotx2f_package() {
 
     # GitHub API でリポジトリのルートディレクトリを取得
     local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/"
-    echo "GitHub API からディレクトリ情報を取得: $api_url"
 
     local json
     json=$(wget --no-check-certificate -qO- "$api_url")
@@ -145,20 +144,22 @@ gSpotx2f_package() {
 
     # 該当バージョンのフォルダがあればそれを選択（なければ初期値を維持）
     local selected_path="$dir_arg"
+    local version_found=false
     for dir in $available_versions; do
         if echo "$dir" | grep -qE "^(openwrt-|)$openwrt_version"; then
             selected_path="$dir"
+            version_found=true
             break
         fi
     done
 
-    # もし選択されたパスが "current" のままであれば、openwrt_version に基づいて適切なディレクトリを設定
-    if [ "$selected_path" == "current" ]; then
-        if [ "$openwrt_version" == "19.07" ]; then
-            selected_path="19.07"
-        fi
+    # もし19.07が見つからなければ、currentを選択
+    if [ "$version_found" = false ]; then
+        selected_path="current"
+        echo "警告: OpenWrtバージョン$openwrt_version用のディレクトリは見つかりませんでした。'current'が選択されました。"
     fi
 
+    # 最後に選択されたパッケージディレクトリを表示
     echo "選択されたパッケージディレクトリ: $selected_path"
 
     # feed_package() に渡すオプション文字列を生成（順不同でOK）
@@ -170,83 +171,6 @@ gSpotx2f_package() {
     # feed_package() の呼び出し：オプションを先頭にして引数を渡す
     debug_log "DEBUG" "feed_package $options $repo_owner $repo_name $selected_path $package_prefix"
     feed_package $options "$repo_owner" "$repo_name" "$selected_path" "$package_prefix"
-}
-
-
-XXX_feed_package() {
-  local ask_yn=false hidden=false
-  for arg in "$@"; do
-    case "$arg" in
-      yn) ask_yn=true ;;   # `yn` オプションがあれば確認を取る
-      hidden) hidden=true ;; # `hidden` オプションがあれば既に最新なら出力なし
-    esac
-  done
-
-  shift "$#"  # オプションを削除
-
-  local REPO_OWNER="$1"
-  local REPO_NAME="$2"
-  local DIR_PATH="$3"
-  local PKG_PREFIX="$4"
-
-  local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
-  local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
-
-  echo "GitHub API からデータを取得中: $API_URL"
-  local JSON=$(wget --no-check-certificate -qO- "$API_URL")
-  if [ -z "$JSON" ]; then
-    echo "APIからデータを取得できませんでした。"
-    return 1
-  fi
-
-  local ENTRY=$(echo "$JSON" | tr '\n' ' ' | sed 's/},{/}\n{/g' | grep "\"name\": *\"${PKG_PREFIX}" | tail -n 1)
-  if [ -z "$ENTRY" ]; then
-    echo "パッケージが見つかりません。"
-    return 1
-  fi
-
-  local PKG_FILE=$(echo "$ENTRY" | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p')
-  local DOWNLOAD_URL=$(echo "$ENTRY" | sed -n 's/.*"download_url": *"\([^"]*\)".*/\1/p')
-
-  if [ -z "$PKG_FILE" ] || [ -z "$DOWNLOAD_URL" ]; then
-    echo "パッケージ情報の取得に失敗しました。"
-    return 1
-  fi
-
-  echo "最新のパッケージ: $PKG_FILE"
-  echo "ダウンロードURL: $DOWNLOAD_URL"
-
-  # 現在のバージョンを取得
-  local INSTALLED_VERSION=$(opkg info "$PKG_PREFIX" 2>/dev/null | grep Version | awk '{print $2}')
-  local NEW_VERSION=$(echo "$PKG_FILE" | sed -E "s/^${PKG_PREFIX}_([0-9\.\-r]+)_.*\.ipk/\1/")
-
-  if [ "$INSTALLED_VERSION" = "$NEW_VERSION" ]; then
-    if [ "$hidden" = true ]; then
-      return 0  # メッセージなしで終了
-    fi
-    echo "✅ 既に最新バージョン（$NEW_VERSION）がインストール済みです。"
-    return 0
-  fi
-
-  # `yn` オプションがある場合のみ確認を取る
-  if [ "$ask_yn" = true ]; then
-    echo "新しいバージョン $NEW_VERSION をインストールしますか？ [y/N]"
-    read -r yn
-    case "$yn" in
-      y|Y) echo "✅ インストールを続行..." ;;
-      *) echo "🚫 インストールをキャンセルしました。"; return 1 ;;
-    esac
-  fi
-
-  echo "⏳ パッケージをダウンロード中..."
-  wget --no-check-certificate -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 1
-  echo "📦 パッケージをインストール中..."
-  opkg install "$OUTPUT_FILE" || return 1
-  echo "🔄 サービスを再起動..."
-  /etc/init.d/rpcd restart
-  /etc/init.d/"$PKG_PREFIX" start
-  echo "✅ インストール完了: $PKG_PREFIX ($NEW_VERSION)"
-  return 0
 }
 
 feed_package() {
