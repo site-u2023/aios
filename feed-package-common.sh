@@ -81,26 +81,32 @@ feed_package() {
   REPO_NAME="$2"
   DIR_PATH="$3"
   PKG_PREFIX="$4"
-
-  OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
+  
+  # 保存先ディレクトリ設定
+  OUTPUT_DIR="${FEED_DIR}/${PKG_PREFIX}"
+  mkdir -p "$OUTPUT_DIR"
+  
+  # 出力ファイルパス
+  OUTPUT_FILE="${OUTPUT_DIR}/${PKG_PREFIX}.ipk"
 
   API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
   echo "GitHub API からデータを取得中: $API_URL"
 
+  # APIからJSONを取得
   JSON=$(wget --no-check-certificate -qO- "$API_URL")
   if [ $? -ne 0 ] || [ -z "$JSON" ]; then
     echo "APIからデータを取得できませんでした。"
     return 1
   fi
 
-  # JSON を1行に変換し、各オブジェクトごとに改行、該当のパッケージ名で絞り込む
+  # JSONを1行に変換し、パッケージ名で絞り込み、最新のパッケージを抽出
   ENTRY=$(echo "$JSON" | tr '\n' ' ' | sed 's/},{/}\n{/g' | grep "\"name\": *\"${PKG_PREFIX}" | tail -n 1)
   if [ -z "$ENTRY" ]; then
     echo "パッケージ名に合致するエントリが見つかりませんでした。"
     return 1
   fi
 
-  # ENTRY から download_url を抽出
+  # ENTRYからdownload_urlを抽出
   DOWNLOAD_URL=$(echo "$ENTRY" | sed -n 's/.*"download_url": *"\([^"]*\)".*/\1/p')
   if [ -z "$DOWNLOAD_URL" ]; then
     echo "download_url の抽出に失敗しました。"
@@ -109,13 +115,18 @@ feed_package() {
 
   echo "最新のパッケージURL: $DOWNLOAD_URL"
   echo "ダウンロードを開始します..."
+  
+  # パッケージをダウンロード
   wget --no-check-certificate -O "$OUTPUT_FILE" "$DOWNLOAD_URL"
   if [ $? -ne 0 ]; then
     echo "パッケージのダウンロードに失敗しました。"
     return 1
   fi
 
+  # ダウンロードが成功した場合
   echo "パッケージを $OUTPUT_FILE にダウンロードしました。"
+  
+  # インストール開始
   echo "パッケージをインストール中..."
   opkg install "$OUTPUT_FILE"
   if [ $? -ne 0 ]; then
@@ -123,10 +134,20 @@ feed_package() {
     return 1
   fi
 
+  # インストール成功
   echo "パッケージのインストールに成功しました。"
+  
+  # パッケージが正常にインストールされたか確認
+  if ! opkg list-installed | grep -q "$PKG_PREFIX"; then
+    echo "インストール後、パッケージが見つかりません。"
+    return 1
+  fi
+  
+  echo "パッケージ $PKG_PREFIX は正常にインストールされ、動作しています。"
   return 0
 }
 
+
 # ===== サンプル使用例 =====
 # 以下のようにして呼び出してください。
-feed_package "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
+# feed_package "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
