@@ -165,7 +165,7 @@ check_version_feed() {
     feed_package $options "$repo_owner" "$repo_name" "$selected_path" "$package_prefix"
 }
 
-feed_package() {
+XXX_feed_package() {
   local ask_yn=false hidden=false
   for arg in "$@"; do
     case "$arg" in
@@ -241,7 +241,7 @@ feed_package() {
   return 0
 }
 
-XXX_feed_package() {
+feed_package() {
   local ask_yn=false
   local hidden=false
 
