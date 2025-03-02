@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-01-11"
+SCRIPT_VERSION="2025.03.02-01-12"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -153,7 +153,7 @@ gSpotx2f_package() {
     options=$(echo "$options" | sed 's/^ *//')  # 先頭の空白を除去
 
     # feed_package() の呼び出し：オプションを先頭にして引数を渡す
-    debug_log "DEBUG" "feed_package $options $repo_owner $repo_name $dir_arg $package_prefix"
+    debug_log "INFO" "feed_package $options $repo_owner $repo_name $dir_arg $package_prefix"
     feed_package $options "$repo_owner" "$repo_name" "$dir_arg" "$package_prefix"
 }
 
@@ -211,8 +211,8 @@ feed_package() {
 
   # パッケージが見つからない場合
   if [ -z "$PKG_FILE" ]; then
-    debug_log "DEBUG" "パッケージが見つかりません。"
-    echo "パッケージが見つかりません。"
+    debug_log "DEBUG" "$package_name が見つかりません。"
+    echo "$package_name が見つかりません。"
     return 1
   fi
 
