@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-00-03"
+SCRIPT_VERSION="2025.03.02-01-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -75,7 +75,61 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 #   $3 : ディレクトリパス（例: current）
 #   $4 : パッケージ名のプレフィックス（例: luci-app-cpu-perf）
 #   $5 : ダウンロード後の出力先ファイル（例: /tmp/luci-app-cpu-perf_all.ipk）
+#
+# 使い方
+# feed_package ["yn"] ["hidden"] "リポジトリオーナー" "リポジトリ名" "ディレクトリ" "パッケージ名"
+# 例: デフォルト（確認なしでインストール）
+# feed_package "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
+# 例: 確認を取ってインストール
+# feed_package "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
+# 例: インストール済みならメッセージなし
+# feed_package "hidden" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
+# 例: `yn` と `hidden` を順不同で指定
+# feed_package "hidden" "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
 #########################################################################
+#!/bin/sh
+
+check_version_feed() {
+    local repo_owner="$1"  # 例: "gSpotx2f"
+    local repo_name="$2"   # 例: "packages-openwrt"
+    local package_prefix="$3" # 例: "luci-app-cpu-perf"
+
+    # OpenWrt のバージョンをキャッシュから取得
+    local version_file="${CACHE_DIR}/openwrt.ch"
+    if [ ! -f "$version_file" ]; then
+        echo "エラー: OpenWrt バージョン情報がありません。" >&2
+        return 1
+    fi
+    local openwrt_version=$(cat "$version_file" | cut -d'.' -f1,2)
+
+    # GitHub API でリポジトリのルートディレクトリを取得
+    local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/"
+    echo "GitHub API からディレクトリ情報を取得: $api_url"
+    
+    local json=$(wget --no-check-certificate -qO- "$api_url")
+    if [ -z "$json" ]; then
+        echo "エラー: GitHub API からデータを取得できませんでした。" >&2
+        return 1
+    fi
+
+    # JSON からディレクトリリストを抽出
+    local available_versions=$(echo "$json" | grep -o '"name": "[^"]*' | cut -d'"' -f4)
+
+    # 該当バージョンのフォルダがあるかチェック
+    local selected_path="current" # デフォルトは "current"
+    for dir in $available_versions; do
+        if echo "$dir" | grep -qE "^(openwrt-|)$openwrt_version"; then
+            selected_path="$dir"
+            break
+        fi
+    done
+
+    echo "選択されたパッケージディレクトリ: $selected_path"
+
+    # feed_package() に渡すコマンドを生成
+    echo "feed_package \"$repo_owner\" \"$repo_name\" \"$selected_path\" \"$package_prefix\""
+}
+
 feed_package() {
   local ask_yn=false hidden=false
   for arg in "$@"; do
@@ -151,18 +205,3 @@ feed_package() {
   echo "✅ インストール完了: $PKG_PREFIX ($NEW_VERSION)"
   return 0
 }
-
-# 使い方
-# feed_package ["yn"] ["hidden"] "リポジトリオーナー" "リポジトリ名" "ディレクトリ" "パッケージ名"
-
-# 例: デフォルト（確認なしでインストール）
-# feed_package "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
-
-# 例: 確認を取ってインストール
-# feed_package "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
-
-# 例: インストール済みならメッセージなし
-# feed_package "hidden" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
-
-# 例: `yn` と `hidden` を順不同で指定
-# feed_package "hidden" "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
