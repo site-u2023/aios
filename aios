@@ -104,7 +104,7 @@ packages() {
     install_package luci-i18n-ttyd yn hidden
     install_package openssh-sftp-server yn hidden
 
-    check_version_feed "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
+    check_version_feed "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf" yn hidden
     # feed_package "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
 }
 
