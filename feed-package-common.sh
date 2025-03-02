@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-01-17"
+SCRIPT_VERSION="2025.03.02-01-18"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -91,6 +91,7 @@ gSpotx2f_package() {
     local ask_yn=false
     local hidden=false
     local nonopt_args=""
+    local package_name=""
 
     # すべての引数をチェックし、オプションはフラグ、その他は必須パラメータとして保存
     for arg in "$@"; do
@@ -118,6 +119,7 @@ gSpotx2f_package() {
     local repo_name="$2"
     local dir_arg="$3"       # 初期ディレクトリ（通常は "current"）
     local package_prefix="$4"
+    package_name="${5:-}"    # 5番目の引数としてパッケージ名（省略可能）
 
     # OpenWrt のバージョンをキャッシュから取得
     local version_file="${CACHE_DIR}/openwrt.ch"
@@ -128,11 +130,8 @@ gSpotx2f_package() {
     local openwrt_version
     openwrt_version=$(cut -d'.' -f1,2 < "$version_file")  # バージョンを "19.07" 形式で取得
 
-    # GitHub API でリポジトリのルートディレクトリを取得
-    local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/"
-    echo "GitHub API からディレクトリ情報を取得: $api_url"
-
-    local json
+    # GitHub API で 19.07 ディレクトリを確認
+    local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/19.07"
     json=$(wget --no-check-certificate -qO- "$api_url")
     if [ -z "$json" ]; then
         echo "エラー: GitHub API からデータを取得できませんでした。" >&2
@@ -145,21 +144,25 @@ gSpotx2f_package() {
 
     # 該当バージョンのフォルダがあればそれを選択（なければ初期値を維持）
     local selected_path="$dir_arg"
+    local version_found=false
+
     for dir in $available_versions; do
-        if echo "$dir" | grep -qE "^(openwrt-|)$openwrt_version"; then
+        if echo "$dir" | grep -qE "^${openwrt_version}"; then
             selected_path="$dir"
+            version_found=true
             break
         fi
     done
 
-    # もし選択されたパスが "current" のままであれば、openwrt_version に基づいて適切なディレクトリを設定
-    if [ "$selected_path" == "current" ]; then
-        if [ "$openwrt_version" == "19.07" ]; then
-            selected_path="19.07"
-        fi
+    # もし該当するバージョンが無ければ、currentディレクトリをそのまま選択
+    if [ "$version_found" = false ]; then
+        echo "警告: OpenWrtバージョン$openwrt_version用のディレクトリは見つかりませんでした。'current'が選択されました。"
     fi
 
-    echo "選択されたパッケージディレクトリ: $selected_path"
+    # パッケージ名が指定されている場合にパッケージ名を表示
+    if [ -n "$package_name" ]; then
+        echo "選択されたパッケージ: $package_name"
+    fi
 
     # feed_package() に渡すオプション文字列を生成（順不同でOK）
     local options=""
