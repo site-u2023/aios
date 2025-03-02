@@ -87,8 +87,6 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 # 例: `yn` と `hidden` を順不同で指定
 # feed_package "hidden" "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
 #########################################################################
-#!/bin/sh
-
 check_version_feed() {
     local repo_owner="$1"  # 例: "gSpotx2f"
     local repo_name="$2"   # 例: "packages-openwrt"
