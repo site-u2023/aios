@@ -169,8 +169,8 @@ feed_package() {
   local ask_yn=false hidden=false
   for arg in "$@"; do
     case "$arg" in
-      yn) ask_yn=true ;;
-      hidden) hidden=true ;;
+      yn) ask_yn=true ;;   # `yn` オプションがあれば確認を取る
+      hidden) hidden=true ;; # `hidden` オプションがあれば既に最新なら出力なし
     esac
   done
 
@@ -178,34 +178,22 @@ feed_package() {
 
   local REPO_OWNER="$1"
   local REPO_NAME="$2"
-  local PKG_PREFIX="$3"
+  local DIR_PATH="$3"
+  local PKG_PREFIX="$4"
 
-  # OpenWrt バージョン取得
-  local OPENWRT_VERSION=$(grep 'DISTRIB_RELEASE' /etc/openwrt_release | cut -d"'" -f2 | cut -c 1-2)
-  local DIR_PATHS=("current" "openwrt-${OPENWRT_VERSION}" "openwrt-23" "openwrt-22" "openwrt-21" "openwrt-20" "openwrt-19" "snapshots")
+  local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
+  local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
 
-  # 利用可能なディレクトリを自動選択
-  local API_URL BASE_DIR_PATH=""
-  for DIR in "${DIR_PATHS[@]}"; do
-    API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR}"
-    JSON=$(wget --no-check-certificate -qO- "$API_URL")
-    if [ -n "$JSON" ] && echo "$JSON" | grep -q "\"name\": *\"${PKG_PREFIX}"; then
-      BASE_DIR_PATH="$DIR"
-      break
-    fi
-  done
-
-  if [ -z "$BASE_DIR_PATH" ]; then
-    echo "❌ 対応するパッケージディレクトリが見つかりませんでした。"
+  echo "GitHub API からデータを取得中: $API_URL"
+  local JSON=$(wget --no-check-certificate -qO- "$API_URL")
+  if [ -z "$JSON" ]; then
+    echo "APIからデータを取得できませんでした。"
     return 1
   fi
 
-  echo "📂 使用するディレクトリ: $BASE_DIR_PATH"
-
-  # 最新のパッケージ取得
   local ENTRY=$(echo "$JSON" | tr '\n' ' ' | sed 's/},{/}\n{/g' | grep "\"name\": *\"${PKG_PREFIX}" | tail -n 1)
   if [ -z "$ENTRY" ]; then
-    echo "❌ パッケージが見つかりません。"
+    echo "パッケージが見つかりません。"
     return 1
   fi
 
@@ -213,25 +201,26 @@ feed_package() {
   local DOWNLOAD_URL=$(echo "$ENTRY" | sed -n 's/.*"download_url": *"\([^"]*\)".*/\1/p')
 
   if [ -z "$PKG_FILE" ] || [ -z "$DOWNLOAD_URL" ]; then
-    echo "❌ パッケージ情報の取得に失敗しました。"
+    echo "パッケージ情報の取得に失敗しました。"
     return 1
   fi
 
-  echo "📦 最新のパッケージ: $PKG_FILE"
-  echo "🔗 ダウンロードURL: $DOWNLOAD_URL"
+  echo "最新のパッケージ: $PKG_FILE"
+  echo "ダウンロードURL: $DOWNLOAD_URL"
 
-  # 現在のバージョン取得
+  # 現在のバージョンを取得
   local INSTALLED_VERSION=$(opkg info "$PKG_PREFIX" 2>/dev/null | grep Version | awk '{print $2}')
   local NEW_VERSION=$(echo "$PKG_FILE" | sed -E "s/^${PKG_PREFIX}_([0-9\.\-r]+)_.*\.ipk/\1/")
 
   if [ "$INSTALLED_VERSION" = "$NEW_VERSION" ]; then
     if [ "$hidden" = true ]; then
-      return 0
+      return 0  # メッセージなしで終了
     fi
     echo "✅ 既に最新バージョン（$NEW_VERSION）がインストール済みです。"
     return 0
   fi
 
+  # `yn` オプションがある場合のみ確認を取る
   if [ "$ask_yn" = true ]; then
     echo "新しいバージョン $NEW_VERSION をインストールしますか？ [y/N]"
     read -r yn
@@ -241,7 +230,6 @@ feed_package() {
     esac
   fi
 
-  local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
   echo "⏳ パッケージをダウンロード中..."
   wget --no-check-certificate -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 1
   echo "📦 パッケージをインストール中..."
