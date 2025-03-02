@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-01-01"
+SCRIPT_VERSION="2025.03.02-01-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -127,7 +127,7 @@ check_version_feed() {
     echo "選択されたパッケージディレクトリ: $selected_path"
 
     # feed_package() に渡すコマンドを生成
-    echo "feed_package \"$repo_owner\" \"$repo_name\" \"$selected_path\" \"$package_prefix\""
+    debug_log "DEBUG" "feed_package \"$repo_owner\" \"$repo_name\" \"$selected_path\" \"$package_prefix\""
 }
 
 feed_package() {
