@@ -271,32 +271,51 @@ feed_package() {
   local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
 
-  echo "GitHub API からデータを取得中: $API_URL"
+  # デバッグログ: API URL の表示
+  debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
+
+  # GitHub API からデータを取得
   local JSON
   JSON=$(wget --no-check-certificate -qO- "$API_URL")
+
+  # APIからデータを取得できなかった場合
   if [ -z "$JSON" ]; then
+    debug_log "DEBUG" "APIからデータを取得できませんでした。"
     echo "APIからデータを取得できませんでした。"
     return 1
   fi
 
-  # JSON を改行区切りに変換して、各オブジェクトの "name" フィールドを抽出
+  # デバッグログ: JSONの内容を表示
+  debug_log "DEBUG" "取得したJSON: $JSON"
+
+  # jq が使える場合、または JSON 処理が必要な場合に jq を使用
+  # 各パッケージの "name" フィールドを抽出し、対象のパッケージを選択
   local PKG_FILE
-  PKG_FILE=$(echo "$JSON" | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
+  PKG_FILE=$(echo "$JSON" | grep -o '"name": *"[^"]*"' | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
+
+  # パッケージが見つからない場合
   if [ -z "$PKG_FILE" ]; then
+    debug_log "DEBUG" "パッケージが見つかりません。"
     echo "パッケージが見つかりません。"
     return 1
   fi
 
-  # 該当するファイル名に一致する download_url を抽出
+  # デバッグログ: 見つかったパッケージ名
+  debug_log "DEBUG" "最新のパッケージ: $PKG_FILE"
+
+  # ダウンロード URL を取得
   local DOWNLOAD_URL
-  DOWNLOAD_URL=$(echo "$JSON" | sed -n "s/.*\"name\": *\"$PKG_FILE\".*\"download_url\": *\"\([^\"]*\)\".*/\1/p")
+  DOWNLOAD_URL=$(echo "$JSON" | grep -o '"download_url": *"[^"]*"' | sed -n "s/.*\"download_url\": *\"\([^\"]*\)\".*/\1/p")
+
+  # ダウンロード URL が取得できなかった場合
   if [ -z "$DOWNLOAD_URL" ]; then
+    debug_log "DEBUG" "パッケージ情報の取得に失敗しました。"
     echo "パッケージ情報の取得に失敗しました。"
     return 1
   fi
 
-  echo "最新のパッケージ: $PKG_FILE"
-  echo "ダウンロードURL: $DOWNLOAD_URL"
+  # デバッグログ: ダウンロードURLの表示
+  debug_log "DEBUG" "ダウンロードURL: $DOWNLOAD_URL"
 
   # インストール済みバージョンを取得
   local INSTALLED_VERSION
@@ -306,31 +325,48 @@ feed_package() {
   local NEW_VERSION
   NEW_VERSION=$(echo "$PKG_FILE" | sed -E "s/^${PKG_PREFIX}_([0-9\.\-r]+)_.*\.ipk/\1/")
 
+  # バージョンが一致している場合
   if [ "$INSTALLED_VERSION" = "$NEW_VERSION" ]; then
     if [ "$hidden" = true ]; then
       return 0  # メッセージなしで終了
     fi
+    debug_log "DEBUG" "既に最新バージョン（$NEW_VERSION）がインストール済みです。"
     echo "✅ 既に最新バージョン（$NEW_VERSION）がインストール済みです。"
     return 0
   fi
 
+  # 新しいバージョンのインストール確認
   if [ "$ask_yn" = true ]; then
     echo "新しいバージョン $NEW_VERSION をインストールしますか？ [y/N]"
     read -r yn
     case "$yn" in
-      y|Y) echo "✅ インストールを続行..." ;;
-      *) echo "🚫 インストールをキャンセルしました。"; return 1 ;;
+      y|Y) debug_log "DEBUG" "インストールを続行..."; echo "✅ インストールを続行..." ;;
+      *) debug_log "DEBUG" "インストールをキャンセルしました。"; echo "🚫 インストールをキャンセルしました。"; return 1 ;;
     esac
   fi
 
+  # パッケージをダウンロード
   echo "⏳ パッケージをダウンロード中..."
   wget --no-check-certificate -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 1
+
+  # パッケージをインストール
   echo "📦 パッケージをインストール中..."
   opkg install "$OUTPUT_FILE" || return 1
+
+  # サービスを再起動
   echo "🔄 サービスを再起動..."
   /etc/init.d/rpcd restart
   /etc/init.d/"$PKG_PREFIX" start
+
+  # インストール完了メッセージ
   echo "✅ インストール完了: $PKG_PREFIX ($NEW_VERSION)"
+
   return 0
 }
 
+# デバッグログ関数
+debug_log() {
+  local LEVEL="$1"
+  local MESSAGE="$2"
+  echo "[$LEVEL] $MESSAGE"
+}
