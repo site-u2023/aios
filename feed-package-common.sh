@@ -110,7 +110,6 @@ check_version_feed() {
     # 必須パラメータを分解（例: リポジトリオーナー, リポジトリ名, 初期ディレクトリ, パッケージプレフィックス）
     set -- $nonopt_args
     if [ "$#" -lt 4 ]; then
-        echo "Usage: check_version_feed <repo_owner> <repo_name> <directory> <package_prefix> [options...]"
         return 1
     fi
 
@@ -122,7 +121,6 @@ check_version_feed() {
     # OpenWrt のバージョンをキャッシュから取得
     local version_file="${CACHE_DIR}/openwrt.ch"
     if [ ! -f "$version_file" ]; then
-        echo "エラー: OpenWrt バージョン情報がありません。" >&2
         return 1
     fi
     local openwrt_version
@@ -130,12 +128,10 @@ check_version_feed() {
 
     # GitHub API でリポジトリのルートディレクトリを取得
     local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/"
-    echo "GitHub API からディレクトリ情報を取得: $api_url"
 
     local json
     json=$(wget --no-check-certificate -qO- "$api_url")
     if [ -z "$json" ]; then
-        echo "エラー: GitHub API からデータを取得できませんでした。" >&2
         return 1
     fi
 
@@ -159,6 +155,7 @@ check_version_feed() {
         fi
     fi
 
+    # 最後に選択されたパッケージディレクトリを表示（1回だけ）
     echo "選択されたパッケージディレクトリ: $selected_path"
 
     # feed_package() に渡すオプション文字列を生成（順不同でOK）
@@ -168,7 +165,6 @@ check_version_feed() {
     options=$(echo "$options" | sed 's/^ *//')  # 先頭の空白を除去
 
     # feed_package() の呼び出し：オプションを先頭にして引数を渡す
-    debug_log "DEBUG" "feed_package $options $repo_owner $repo_name $selected_path $package_prefix"
     feed_package $options "$repo_owner" "$repo_name" "$selected_path" "$package_prefix"
 }
 
