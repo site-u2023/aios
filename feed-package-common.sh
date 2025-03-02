@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-00-01"
+SCRIPT_VERSION="2025.03.03-00-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -88,14 +88,13 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 # feed_package "hidden" "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
 #########################################################################
 gSpotx2f_package() {
-  # オプションと通常引数を文字列として分離
-  opts=""
-  args=""
+  local opts=""
+  local args=""
 
+  # すべての引数を走査し、オプション（yn, hidden）は opts に、その他は args に格納
   while [ $# -gt 0 ]; do
     case "$1" in
       yn|hidden)
-        # オプションはそのまま opts に追加（先頭に空白が入るので後で set -- でトリムされる）
         opts="$opts $1"
         ;;
       *)
@@ -105,22 +104,19 @@ gSpotx2f_package() {
     shift
   done
 
-  # 必須引数4つがあるかチェック（args は空白で区切られるので set -- で分解）
+  # 必須引数4つがあるかチェック
   set -- $args
   if [ "$#" -ne 4 ]; then
     echo "エラー: 必要な引数 (REPO_OWNER, REPO_NAME, DIR_PATH, PKG_PREFIX) が不足しています。" >&2
     return 1
   fi
 
-  REPO_OWNER="$1"
-  REPO_NAME="$2"
-  DIR_PATH="$3"
-  PKG_PREFIX="$4"
+  local REPO_OWNER="$1"
+  local REPO_NAME="$2"
+  local DIR_PATH="$3"
+  local PKG_PREFIX="$4"
 
-  # ※以下は元の処理と同じ
-  local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
-  local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
-
+  # バージョンファイルからOpenWrtのバージョンを取得（例: 19.07）
   local version_file="${CACHE_DIR}/openwrt.ch"
   if [ ! -f "$version_file" ]; then
     echo "エラー: OpenWrt バージョン情報がありません。" >&2
@@ -129,6 +125,12 @@ gSpotx2f_package() {
   local openwrt_version
   openwrt_version=$(cut -d'.' -f1,2 < "$version_file")
 
+  # もしディレクトリが "current" で、バージョンが 19.07 なら、DIR_PATH を "19.07" に置換
+  if [ "$DIR_PATH" = "current" ] && [ "$openwrt_version" = "19.07" ]; then
+    DIR_PATH="19.07"
+  fi
+
+  local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
   local json
   json=$(wget --no-check-certificate -qO- "$API_URL")
   if [ -z "$json" ]; then
@@ -146,7 +148,7 @@ gSpotx2f_package() {
   echo "$PKG_FILE が見つかりました。"
   debug_log "DEBUG" "パッケージ: $PKG_FILE"
 
-  # opts は文字列（例："yn hidden"）なので、そのまま展開すれば各単語に分割される
+  # opts は文字列として構築されているので、そのまま展開すれば各単語に分割される
   feed_package $opts "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
 }
 
