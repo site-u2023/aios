@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-00-08"
+SCRIPT_VERSION="2025.03.03-00-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -115,7 +115,6 @@ gSpotx2f_package() {
   local REPO_NAME="$2"
   local DIR_PATH="$3"
   local PKG_PREFIX="$4"
-  local PKG_VERSION="${PKG_PREFIX}_"
   local orig_DIR_PATH="$DIR_PATH"  # 元の引数を保持
 
   # バージョン情報の取得
@@ -127,13 +126,20 @@ gSpotx2f_package() {
   local openwrt_version
   openwrt_version=$(cut -d'.' -f1,2 < "$version_file")
 
-  if [ "$openwrt_version" = "19.07" ]; then
+  if [ "$DIR_PATH" = "current" ] && [ "$openwrt_version" = "19.07" ]; then
     DIR_PATH="19.07"
+    local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
+    local json
+    json=$(wget --no-check-certificate -qO- "$API_URL")
+    if [ -z "$json" ]; then
+      echo "エラー: GitHub API からデータを取得できませんでした。" >&2
+      return 1
+    fi
   fi
   
   if [ "$DIR_PATH" = "19.07" ]; then
     local PKG_FILE
-    PKG_FILE=$(wget --no-check-certificate -qO- "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}" | jq -r '.[] | .name' | grep "^${PKG_PREFIX}" | sort | tail -n 1)
+    PKG_FILE=$(echo "$json" | jq -r '.[].name' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
     if [ -n "$PKG_FILE" ]; then
       echo "バージョンは${DIR_PASH}です。"
     else
