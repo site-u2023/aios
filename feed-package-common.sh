@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-00-03"
+SCRIPT_VERSION="2025.03.03-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -133,6 +133,11 @@ gSpotx2f_package() {
 
   # GitHub APIから情報を1回だけ取得してパッケージを検索
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
+  
+  # デバッグ出力でレスポンス内容を確認
+  wget --no-check-certificate -qO- "$API_URL" | jq .
+
+  # パッケージ検索
   local PKG_FILE
   PKG_FILE=$(wget --no-check-certificate -qO- "$API_URL" | jq -r '.[] | .name' | grep "^${PKG_PREFIX}_.*" | sort | tail -n 1)
 
@@ -147,7 +152,6 @@ gSpotx2f_package() {
   # opts は文字列（例: "yn hidden"）なので、feed_packageに展開すれば各単語に分割される
   feed_package $opts "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
 }
-
 
 feed_package() {
   local ask_yn=false
