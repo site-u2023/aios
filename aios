@@ -106,8 +106,8 @@ packages() {
 
     check_version_feed yn hidden "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
     check_version_feed yn hidden "gSpotx2f" "packages-openwrt" "current" "luci-i18n-cpu-status"
-    check_version_feed yn hidden "gSpotx2f" "packages-openwrt" "current" "luci-app-temp-status"
-    check_version_feed yn hidden "gSpotx2f" "packages-openwrt" "current" "luci-app-log-viewer"
+    feed_package yn hidden "gSpotx2f" "packages-openwrt" "current" "luci-app-temp-status"
+    feed_package yn hidden "gSpotx2f" "packages-openwrt" "current" "luci-app-log-viewer"
     # feed_package "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
 }
 
