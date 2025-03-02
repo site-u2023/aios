@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-01-05"
+SCRIPT_VERSION="2025.03.02-01-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -203,10 +203,9 @@ feed_package() {
     return 1
   fi
 
-  # jqを使用してJSONからパッケージファイル名を取得
+  # JSON を改行区切りに変換して、各オブジェクトの "name" フィールドを抽出
   local PKG_FILE
-  PKG_FILE=$(echo "$JSON" | jq -r ".[] | select(.name | test(\"^${PKG_PREFIX}_\")) | .name" | sort | tail -n 1)
-
+  PKG_FILE=$(echo "$JSON" | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
   if [ -z "$PKG_FILE" ]; then
     echo "パッケージが見つかりません。"
     return 1
@@ -214,8 +213,7 @@ feed_package() {
 
   # 該当するファイル名に一致する download_url を抽出
   local DOWNLOAD_URL
-  DOWNLOAD_URL=$(echo "$JSON" | jq -r ".[] | select(.name == \"$PKG_FILE\") | .download_url")
-
+  DOWNLOAD_URL=$(echo "$JSON" | sed -n "s/.*\"name\": *\"$PKG_FILE\".*\"download_url\": *\"\([^\"]*\)\".*/\1/p")
   if [ -z "$DOWNLOAD_URL" ]; then
     echo "パッケージ情報の取得に失敗しました。"
     return 1
@@ -259,3 +257,4 @@ feed_package() {
   echo "✅ インストール完了: $PKG_PREFIX ($NEW_VERSION)"
   return 0
 }
+
