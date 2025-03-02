@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-01-09"
+SCRIPT_VERSION="2025.03.02-01-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -362,11 +362,4 @@ feed_package() {
   echo "✅ インストール完了: $PKG_PREFIX ($NEW_VERSION)"
 
   return 0
-}
-
-# デバッグログ関数
-debug_log() {
-  local LEVEL="$1"
-  local MESSAGE="$2"
-  echo "[$LEVEL] $MESSAGE"
 }
