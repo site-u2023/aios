@@ -107,12 +107,9 @@ packages() {
     gSpotx2f_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
     gSpotx2f_package gSpotx2f packages-openwrt current luci-i18n-cpu-status yn hidden
     gSpotx2f_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden
+    gSpotx2f_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden
     gSpotx2f_package gSpotx2f packages-openwrt current luci-app-log yn hidden
 
-#    gSpotx2f_package "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf" yn hidden
-#    gSpotx2f_package "gSpotx2f" "packages-openwrt" "current" "luci-i18n-cpu-status" yn hidden
-#    gSpotx2f_package "gSpotx2f" "packages-openwrt" "current" "luci-app-temp-status" yn hidden
-#    gSpotx2f_package "gSpotx2f" "packages-openwrt" "current" "luci-app-log-viewer" yn hidden
 }
 
 # メイン処理
