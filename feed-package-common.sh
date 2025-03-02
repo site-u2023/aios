@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-01-15"
+SCRIPT_VERSION="2025.03.02-01-16"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -87,81 +87,84 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 # 例: `yn` と `hidden` を順不同で指定
 # feed_package "hidden" "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
 #########################################################################
+
 gSpotx2f_package() {
-    local ask_yn=false
-    local hidden=false
-    local nonopt_args=""
-    local package_name=""
+  local ask_yn=false
+  local hidden=false
 
-    # すべての引数をチェックし、オプションはフラグ、その他は必須パラメータとして保存
-    for arg in "$@"; do
-        case "$arg" in
-            yn)
-                ask_yn=true
-                ;;
-            hidden)
-                hidden=true
-                ;;
-            *)
-                nonopt_args="${nonopt_args} $arg"
-                ;;
-        esac
-    done
+  # オプションを処理する（順不同対応）
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      yn)
+        ask_yn=true
+        shift
+        ;;
+      hidden)
+        hidden=true
+        shift
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
 
-    # 必須パラメータを分解（例: リポジトリオーナー, リポジトリ名, 初期ディレクトリ, パッケージプレフィックス）
-    set -- $nonopt_args
-    if [ "$#" -lt 4 ]; then
-        echo "Usage: check_version_feed <repo_owner> <repo_name> <directory> <package_prefix> [options...]"
-        return 1
-    fi
+  # 残りの引数を変数に格納
+  local REPO_OWNER="$1"
+  local REPO_NAME="$2"
+  local DIR_PATH="$3"
+  local PKG_PREFIX="$4"
 
-    local repo_owner="$1"
-    local repo_name="$2"
-    local dir_arg="$3"       # 初期ディレクトリ（通常は "current"）
-    local package_prefix="$4"
-    package_name="${5:-}"    # 5番目の引数としてパッケージ名（省略可能）
+  local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
+  local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
 
-    # OpenWrt のバージョンをキャッシュから取得
-    local version_file="${CACHE_DIR}/openwrt.ch"
-    if [ ! -f "$version_file" ]; then
-        echo "エラー: OpenWrt バージョン情報がありません。" >&2
-        return 1
-    fi
-    local openwrt_version
-    openwrt_version=$(cut -d'.' -f1,2 < "$version_file")  # バージョンを "19.07" 形式で取得
+  # OpenWrt のバージョンをキャッシュから取得
+  local version_file="${CACHE_DIR}/openwrt.ch"
+  if [ ! -f "$version_file" ]; then
+      echo "エラー: OpenWrt バージョン情報がありません。" >&2
+      return 1
+  fi
+  local openwrt_version
+  openwrt_version=$(cut -d'.' -f1,2 < "$version_file")  # バージョンを "19.07" 形式で取得
 
-    # GitHub API で 19.07 ディレクトリを確認
-    local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/19.07"
-    json=$(wget --no-check-certificate -qO- "$api_url")
-    if [ -z "$json" ]; then
-        echo "エラー: GitHub API からデータを取得できませんでした。" >&2
-        return 1
-    fi
+  # GitHub API で 19.07 ディレクトリを確認
+  local api_url="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/19.07"
+  local json=""
+  json=$(wget --no-check-certificate -qO- "$api_url")
+  if [ -z "$json" ]; then
+      echo "エラー: GitHub API からデータを取得できませんでした。" >&2
+      return 1
+  fi
 
-    local PKG_FILE
-    PKG_FILE=$(echo "$json" | grep -o '"name": *"[^"]*"' | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' | grep "^${package_name}_" | sort | tail -n 1)
+  # デバッグログ: API URL の表示
+  debug_log "DEBUG" "GitHub API からデータを取得中: $api_url"
 
 
-    if [ -z "$PKG_FILE" ]; then
-        echo "パッケージ '$package_name' は見つかりませんでした。元のディレクトリ '$dir_arg' を使用します。"
-        debug_log "DEBUG" "見つからなかったパッケージ名: $PKG_FILE"
-        return 1
-    else
-        echo "パッケージ '$package_name' は見つかりました。'19.07'を選択します。"
-        # デバッグログ: 見つかったパッケージ名
-        debug_log "DEBUG" "見つかったパッケージ名: $PKG_FILE"
-        dir_arg="19.07"  # 'current' から '19.07' に切り替え
-    fi
+  # 各パッケージの "name" フィールドを抽出し、対象のパッケージを選択
+  local PKG_FILE
+  PKG_FILE=$(echo "$json" | grep -o '"name": *"[^"]*"' | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
 
-    # feed_package() に渡すオプション文字列を生成（順不同でOK）
-    local options=""
-    [ "$ask_yn" = true ] && options="$options yn"
-    [ "$hidden" = true ] && options="$options hidden"
-    options=$(echo "$options" | sed 's/^ *//')  # 先頭の空白を除去
+  # パッケージが見つからない場合
+  if [ -z "$PKG_FILE" ]; then
+    echo "$PKG_PREFIX が見つかりません。"
+    return 1
+  else
+    DIR_PATH="19.07"
+    echo "$PKG_FILE が見つかりました。"
+  fi
 
-    # feed_package() の呼び出し：オプションを先頭にして引数を渡す
-    debug_log "INFO" "feed_package $options $repo_owner $repo_name $dir_arg $package_prefix"
-    feed_package $options "$repo_owner" "$repo_name" "$dir_arg" "$package_prefix"
+  # デバッグログ: 見つかったパッケージ名
+  debug_log "DEBUG" "パッケージ: $PKG_FILE"
+
+  # feed_package() に渡すオプション文字列を生成（順不同でOK）
+  local options=""
+  [ "$ask_yn" = true ] && options="$options yn"
+  [ "$hidden" = true ] && options="$options hidden"
+  options=$(echo "$options" | sed 's/^ *//')  # 先頭の空白を除去
+
+  # feed_package() の呼び出し：オプションを先頭にして引数を渡す
+  debug_log "INFO" "feed_package $options $repo_owner $repo_name $dir_arg $package_prefix"
+  feed_package $options "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
 }
 
 feed_package() {
