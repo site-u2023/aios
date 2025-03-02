@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-01-11"
+SCRIPT_VERSION="2025.03.02-01-12"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -126,13 +126,11 @@ check_version_feed() {
         return 1
     fi
     local openwrt_version
-    openwrt_version=$(cut -d'.' -f1,2 < "$version_file")
+    openwrt_version=$(cut -d'.' -f1,2 < "$version_file")  # バージョンを "19.07" 形式で取得
 
     # GitHub API でリポジトリのルートディレクトリを取得
     local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/"
     echo "GitHub API からディレクトリ情報を取得: $api_url"
-
-    debug_log "DEBUG" "GitHub API からのレスポンス: $json"
 
     local json
     json=$(wget --no-check-certificate -qO- "$api_url")
@@ -151,11 +149,15 @@ check_version_feed() {
         if echo "$dir" | grep -qE "^(openwrt-|)$openwrt_version"; then
             selected_path="$dir"
             break
-        elif [ -z "$json" ]; then
-            echo "エラー: GitHub API からデータを取得できませんでした。レスポンス内容: $json" >&2
-            return 1
         fi
     done
+
+    # もし選択されたパスが "current" のままであれば、openwrt_version に基づいて適切なディレクトリを設定
+    if [ "$selected_path" == "current" ]; then
+        if [ "$openwrt_version" == "19.07" ]; then
+            selected_path="19.07"
+        fi
+    fi
 
     echo "選択されたパッケージディレクトリ: $selected_path"
 
@@ -166,7 +168,7 @@ check_version_feed() {
     options=$(echo "$options" | sed 's/^ *//')  # 先頭の空白を除去
 
     # feed_package() の呼び出し：オプションを先頭にして引数を渡す
-    debug_log "DEBUG" "feed_package $options "$repo_owner" "$repo_name" "$selected_path" "$package_prefix""
+    debug_log "DEBUG" "feed_package $options $repo_owner $repo_name $selected_path $package_prefix"
     feed_package $options "$repo_owner" "$repo_name" "$selected_path" "$package_prefix"
 }
 
