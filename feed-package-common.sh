@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-00-01"
+SCRIPT_VERSION="2025.03.02-00-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -89,33 +89,28 @@ feed_package() {
   # 出力ファイルパス
   OUTPUT_FILE="${OUTPUT_DIR}/${PKG_PREFIX}.ipk"
 
+  # API URL (GitHubのリポジトリ内の特定のディレクトリを指定)
   API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
   echo "GitHub API からデータを取得中: $API_URL"
 
-  # APIからJSONを取得
+  # GitHubのJSONデータを取得
   JSON=$(wget --no-check-certificate -qO- "$API_URL")
   if [ $? -ne 0 ] || [ -z "$JSON" ]; then
-    echo "APIからデータを取得できませんでした。"
+    echo "GitHubからデータを取得できませんでした。"
     return 1
   fi
 
-  # JSONを1行に変換し、パッケージ名で絞り込み、最新のパッケージを抽出
-  ENTRY=$(echo "$JSON" | tr '\n' ' ' | sed 's/},{/}\n{/g' | grep "\"name\": *\"${PKG_PREFIX}" | tail -n 1)
-  if [ -z "$ENTRY" ]; then
-    echo "パッケージ名に合致するエントリが見つかりませんでした。"
+  # バージョン情報を含むパッケージ名を取得
+  PACKAGE_NAME=$(echo "$JSON" | grep -o "\"name\": *\"${PKG_PREFIX}[^\" ]*.ipk" | tail -n 1 | sed 's/.*"name": *"\([^"]*\)".*/\1/')
+  if [ -z "$PACKAGE_NAME" ]; then
+    echo "バージョン付きのパッケージ名が見つかりませんでした。"
     return 1
   fi
-
-  # ENTRYからdownload_urlを抽出
-  DOWNLOAD_URL=$(echo "$ENTRY" | sed -n 's/.*"download_url": *"\([^"]*\)".*/\1/p')
-  if [ -z "$DOWNLOAD_URL" ]; then
-    echo "download_url の抽出に失敗しました。"
-    return 1
-  fi
-
-  echo "最新のパッケージURL: $DOWNLOAD_URL"
-  echo "ダウンロードを開始します..."
   
+  # ダウンロードURLを作成
+  DOWNLOAD_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/raw/master/${DIR_PATH}/${PACKAGE_NAME}"
+  echo "最新のパッケージURL: $DOWNLOAD_URL"
+
   # パッケージをダウンロード
   wget --no-check-certificate -O "$OUTPUT_FILE" "$DOWNLOAD_URL"
   if [ $? -ne 0 ]; then
@@ -123,10 +118,8 @@ feed_package() {
     return 1
   fi
 
-  # ダウンロードが成功した場合
+  # ダウンロード完了後、インストール開始
   echo "パッケージを $OUTPUT_FILE にダウンロードしました。"
-  
-  # インストール開始
   echo "パッケージをインストール中..."
   opkg install "$OUTPUT_FILE"
   if [ $? -ne 0 ]; then
@@ -134,19 +127,15 @@ feed_package() {
     return 1
   fi
 
-  # インストール成功
-  echo "パッケージのインストールに成功しました。"
-  
-  # パッケージが正常にインストールされたか確認
+  # インストール成功の確認
   if ! opkg list-installed | grep -q "$PKG_PREFIX"; then
     echo "インストール後、パッケージが見つかりません。"
     return 1
   fi
-  
+
   echo "パッケージ $PKG_PREFIX は正常にインストールされ、動作しています。"
   return 0
 }
-
 
 # ===== サンプル使用例 =====
 # 以下のようにして呼び出してください。
