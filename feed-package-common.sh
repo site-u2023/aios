@@ -77,66 +77,92 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 #   $5 : ダウンロード後の出力先ファイル（例: /tmp/luci-app-cpu-perf_all.ipk）
 #########################################################################
 feed_package() {
-  REPO_OWNER="$1"
-  REPO_NAME="$2"
-  DIR_PATH="$3"
-  PKG_PREFIX="$4"
-  
-  # 保存先ディレクトリ設定
-  OUTPUT_DIR="${FEED_DIR}/${PKG_PREFIX}"
-  mkdir -p "$OUTPUT_DIR"
-  
-  # 出力ファイルパス
-  OUTPUT_FILE="${OUTPUT_DIR}/${PKG_PREFIX}.ipk"
+  local ask_yn=false hidden=false
+  for arg in "$@"; do
+    case "$arg" in
+      yn) ask_yn=true ;;   # `yn` オプションがあれば確認を取る
+      hidden) hidden=true ;; # `hidden` オプションがあれば既に最新なら出力なし
+    esac
+  done
 
-  # API URL (GitHubのリポジトリ内の特定のディレクトリを指定)
-  API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
+  shift "$#"  # オプションを削除
+
+  local REPO_OWNER="$1"
+  local REPO_NAME="$2"
+  local DIR_PATH="$3"
+  local PKG_PREFIX="$4"
+
+  local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
+  local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
+
   echo "GitHub API からデータを取得中: $API_URL"
-
-  # GitHubのJSONデータを取得
-  JSON=$(wget --no-check-certificate -qO- "$API_URL")
-  if [ $? -ne 0 ] || [ -z "$JSON" ]; then
-    echo "GitHubからデータを取得できませんでした。"
+  local JSON=$(wget --no-check-certificate -qO- "$API_URL")
+  if [ -z "$JSON" ]; then
+    echo "APIからデータを取得できませんでした。"
     return 1
   fi
 
-  # バージョン情報を含むパッケージ名を取得
-  PACKAGE_NAME=$(echo "$JSON" | grep -o '"name": *"'"${PKG_PREFIX}"'[^"]*.ipk"' | tail -n 1 | sed -E 's/.*"name": *"([^"]+)".*/\1/')
-  if [ -z "$PACKAGE_NAME" ]; then
-    echo "バージョン付きのパッケージ名が見つかりませんでした。"
-    return 1
-  fi
-  
-  # ダウンロードURLを作成
-  DOWNLOAD_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/raw/master/${DIR_PATH}/${PACKAGE_NAME}"
-  echo "最新のパッケージURL: $DOWNLOAD_URL"
-
-  # パッケージをダウンロード
-  wget --no-check-certificate -O "$OUTPUT_FILE" "$DOWNLOAD_URL"
-  if [ $? -ne 0 ]; then
-    echo "パッケージのダウンロードに失敗しました。"
+  local ENTRY=$(echo "$JSON" | tr '\n' ' ' | sed 's/},{/}\n{/g' | grep "\"name\": *\"${PKG_PREFIX}" | tail -n 1)
+  if [ -z "$ENTRY" ]; then
+    echo "パッケージが見つかりません。"
     return 1
   fi
 
-  # ダウンロード完了後、インストール開始
-  echo "パッケージを $OUTPUT_FILE にダウンロードしました。"
-  echo "パッケージをインストール中..."
-  opkg install "$OUTPUT_FILE"
-  if [ $? -ne 0 ]; then
-    echo "パッケージのインストールに失敗しました。"
+  local PKG_FILE=$(echo "$ENTRY" | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p')
+  local DOWNLOAD_URL=$(echo "$ENTRY" | sed -n 's/.*"download_url": *"\([^"]*\)".*/\1/p')
+
+  if [ -z "$PKG_FILE" ] || [ -z "$DOWNLOAD_URL" ]; then
+    echo "パッケージ情報の取得に失敗しました。"
     return 1
   fi
 
-  # インストール成功の確認
-  if ! opkg list-installed | grep -q "$PKG_PREFIX"; then
-    echo "インストール後、パッケージが見つかりません。"
-    return 1
+  echo "最新のパッケージ: $PKG_FILE"
+  echo "ダウンロードURL: $DOWNLOAD_URL"
+
+  # 現在のバージョンを取得
+  local INSTALLED_VERSION=$(opkg info "$PKG_PREFIX" 2>/dev/null | grep Version | awk '{print $2}')
+  local NEW_VERSION=$(echo "$PKG_FILE" | sed -E "s/^${PKG_PREFIX}_([0-9\.\-r]+)_.*\.ipk/\1/")
+
+  if [ "$INSTALLED_VERSION" = "$NEW_VERSION" ]; then
+    if [ "$hidden" = true ]; then
+      return 0  # メッセージなしで終了
+    fi
+    echo "✅ 既に最新バージョン（$NEW_VERSION）がインストール済みです。"
+    return 0
   fi
 
-  echo "パッケージ $PKG_PREFIX は正常にインストールされ、動作しています。"
+  # `yn` オプションがある場合のみ確認を取る
+  if [ "$ask_yn" = true ]; then
+    echo "新しいバージョン $NEW_VERSION をインストールしますか？ [y/N]"
+    read -r yn
+    case "$yn" in
+      y|Y) echo "✅ インストールを続行..." ;;
+      *) echo "🚫 インストールをキャンセルしました。"; return 1 ;;
+    esac
+  fi
+
+  echo "⏳ パッケージをダウンロード中..."
+  wget --no-check-certificate -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 1
+  echo "📦 パッケージをインストール中..."
+  opkg install "$OUTPUT_FILE" || return 1
+  echo "🔄 サービスを再起動..."
+  /etc/init.d/rpcd restart
+  /etc/init.d/"$PKG_PREFIX" start
+  echo "✅ インストール完了: $PKG_PREFIX ($NEW_VERSION)"
   return 0
 }
 
-# ===== サンプル使用例 =====
-# 以下のようにして呼び出してください。
+# 使い方
+# feed_package ["yn"] ["hidden"] "リポジトリオーナー" "リポジトリ名" "ディレクトリ" "パッケージ名"
+
+# 例: デフォルト（確認なしでインストール）
 # feed_package "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
+
+# 例: 確認を取ってインストール
+# feed_package "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
+
+# 例: インストール済みならメッセージなし
+# feed_package "hidden" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
+
+# 例: `yn` と `hidden` を順不同で指定
+# feed_package "hidden" "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
