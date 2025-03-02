@@ -1,7 +1,7 @@
 #!/bin/sh
 # GitHub API を利用して指定パッケージの最新ファイルを取得するスクリプト
 
-# 関数: latest_package
+# 関数: feed_package
 # 説明:
 #   GitHub API を用いて、指定されたリポジトリの特定ディレクトリ内から、
 #   パッケージ名のプレフィックスに合致するファイル一覧を取得し、アルファベット順で最後のもの（＝最新と仮定）を
@@ -13,7 +13,7 @@
 #   $3 : ディレクトリパス（例: current）
 #   $4 : パッケージ名のプレフィックス（例: luci-app-cpu-perf）
 #   $5 : ダウンロード後の出力先ファイル（例: /tmp/luci-app-cpu-perf_all.ipk）
-latest_package() {
+feed_package() {
   REPO_OWNER="$1"
   REPO_NAME="$2"
   DIR_PATH="$3"
@@ -59,7 +59,7 @@ latest_package() {
 # ===== サンプル使用例 =====
 # 以下は、luci-app-cpu-perf の最新パッケージを取得する例です。
 # ※実際の運用では、引数を変更することで他のパッケージにも対応可能です。
-latest_package "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf" "/tmp/luci-app-cpu-perf_all.ipk"
+feed_package "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf" "/tmp/luci-app-cpu-perf_all.ipk"
 if [ $? -eq 0 ]; then
   echo "パッケージのダウンロードに成功しました。"
 else
