@@ -52,7 +52,7 @@ delete_aios() {
 
 # 必要ディレクトリ作成
 make_directory() {
-    mkdir -p "$BASE_DIR" "$CACHE_DIR" "$LOG_DIR"
+    mkdir -p "$BASE_DIR" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"
 }
 
 # 共通ダウンロード関数
