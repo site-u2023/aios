@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-01-17"
+SCRIPT_VERSION="2025.03.03-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -91,24 +91,14 @@ gSpotx2f_package() {
   local ask_yn=false
   local hidden=false
 
-  # オプションを処理する（順不同対応）
   while [ $# -gt 0 ]; do
     case "$1" in
-      yn)
-        ask_yn=true
-        shift
-        ;;
-      hidden)
-        hidden=true
-        shift
-        ;;
-      *)
-        break
-        ;;
+      yn) ask_yn=true; shift ;;
+      hidden) hidden=true; shift ;;
+      *) break ;;
     esac
   done
 
-  # 残りの引数を変数に格納
   local REPO_OWNER="$1"
   local REPO_NAME="$2"
   local DIR_PATH="$3"
@@ -117,78 +107,48 @@ gSpotx2f_package() {
   local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
 
-  # OpenWrt のバージョンをキャッシュから取得
   local version_file="${CACHE_DIR}/openwrt.ch"
   if [ ! -f "$version_file" ]; then
       echo "エラー: OpenWrt バージョン情報がありません。" >&2
       return 1
   fi
   local openwrt_version
-  openwrt_version=$(cut -d'.' -f1,2 < "$version_file")  # バージョンを "19.07" 形式で取得
+  openwrt_version=$(cut -d'.' -f1,2 < "$version_file")
 
-  # GitHub API で 19.07 ディレクトリを確認
-  local api_url="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/19.07"
-  local json=""
-  json=$(wget --no-check-certificate -qO- "$api_url")
+  local json
+  json=$(wget --no-check-certificate -qO- "$API_URL")
   if [ -z "$json" ]; then
       echo "エラー: GitHub API からデータを取得できませんでした。" >&2
       return 1
   fi
 
-  # デバッグログ: API URL の表示
-  debug_log "DEBUG" "GitHub API からデータを取得中: $api_url"
-
-
-  # 各パッケージの "name" フィールドを抽出し、対象のパッケージを選択
   local PKG_FILE
-  PKG_FILE=$(echo "$json" | grep -o '"name": *"[^"]*"' | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
+  PKG_FILE=$(echo "$json" | jq -r '.[].name' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
 
-  # パッケージが見つからない場合
   if [ -z "$PKG_FILE" ]; then
     echo "$PKG_PREFIX が見つかりません。"
-    return 0
-  else
-    DIR_PATH="19.07"
-    echo "$PKG_FILE が見つかりました。"
-    return 0
+    return 1
   fi
 
-  # デバッグログ: 見つかったパッケージ名
+  echo "$PKG_FILE が見つかりました。"
+
   debug_log "DEBUG" "パッケージ: $PKG_FILE"
 
-  # feed_package() に渡すオプション文字列を生成（順不同でOK）
-  local options=""
-  [ "$ask_yn" = true ] && options="$options yn"
-  [ "$hidden" = true ] && options="$options hidden"
-  options=$(echo "$options" | sed 's/^ *//')  # 先頭の空白を除去
-
-  # feed_package() の呼び出し：オプションを先頭にして引数を渡す
-  debug_log "INFO" "feed_package $options $repo_owner $repo_name $dir_arg $package_prefix"
-  feed_package $options "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
+  feed_package $([ "$ask_yn" = true ] && echo "yn") $([ "$hidden" = true ] && echo "hidden") "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
 }
 
 feed_package() {
   local ask_yn=false
   local hidden=false
 
-  # オプションを処理する（順不同対応）
   while [ $# -gt 0 ]; do
     case "$1" in
-      yn)
-        ask_yn=true
-        shift
-        ;;
-      hidden)
-        hidden=true
-        shift
-        ;;
-      *)
-        break
-        ;;
+      yn) ask_yn=true; shift ;;
+      hidden) hidden=true; shift ;;
+      *) break ;;
     esac
   done
 
-  # 残りの引数を変数に格納
   local REPO_OWNER="$1"
   local REPO_NAME="$2"
   local DIR_PATH="$3"
@@ -197,71 +157,56 @@ feed_package() {
   local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
 
-  # デバッグログ: API URL の表示
   debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
 
-  # GitHub API からデータを取得
   local JSON
   JSON=$(wget --no-check-certificate -qO- "$API_URL")
 
-  # APIからデータを取得できなかった場合
   if [ -z "$JSON" ]; then
     debug_log "DEBUG" "APIからデータを取得できませんでした。"
     echo "APIからデータを取得できませんでした。"
     return 1
   fi
 
-  # デバッグログ: JSONの内容を表示
   debug_log "DEBUG" "取得したJSON: $JSON"
 
-  # jq が使える場合、または JSON 処理が必要な場合に jq を使用
-  # 各パッケージの "name" フィールドを抽出し、対象のパッケージを選択
   local PKG_FILE
-  PKG_FILE=$(echo "$JSON" | grep -o '"name": *"[^"]*"' | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
+  PKG_FILE=$(echo "$JSON" | jq -r '.[].name' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
 
-  # パッケージが見つからない場合
   if [ -z "$PKG_FILE" ]; then
-    debug_log "DEBUG" "$package_name が見つかりません。"
-    echo "$package_name が見つかりません。"
+    debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
+    echo "$PKG_PREFIX が見つかりません。"
     return 1
   fi
 
-  # デバッグログ: 見つかったパッケージ名
   debug_log "DEBUG" "最新のパッケージ: $PKG_FILE"
 
-  # ダウンロード URL を取得
   local DOWNLOAD_URL
-  DOWNLOAD_URL=$(echo "$JSON" | grep -o '"download_url": *"[^"]*"' | sed -n "s/.*\"download_url\": *\"\([^\"]*\)\".*/\1/p")
+  DOWNLOAD_URL=$(echo "$JSON" | jq -r --arg PKG "$PKG_FILE" '.[] | select(.name == $PKG) | .download_url')
 
-  # ダウンロード URL が取得できなかった場合
   if [ -z "$DOWNLOAD_URL" ]; then
     debug_log "DEBUG" "パッケージ情報の取得に失敗しました。"
     echo "パッケージ情報の取得に失敗しました。"
     return 1
   fi
 
-  # デバッグログ: ダウンロードURLの表示
   debug_log "DEBUG" "ダウンロードURL: $DOWNLOAD_URL"
 
-  # インストール済みバージョンを取得
   local INSTALLED_VERSION
   INSTALLED_VERSION=$(opkg info "$PKG_PREFIX" 2>/dev/null | grep Version | awk '{print $2}')
-  
-  # 新しいバージョンを抽出
+
   local NEW_VERSION
   NEW_VERSION=$(echo "$PKG_FILE" | sed -E "s/^${PKG_PREFIX}_([0-9\.\-r]+)_.*\.ipk/\1/")
 
-  # バージョンが一致している場合
   if [ "$INSTALLED_VERSION" = "$NEW_VERSION" ]; then
     if [ "$hidden" = true ]; then
-      return 0  # メッセージなしで終了
+      return 0
     fi
     debug_log "DEBUG" "既に最新バージョン（$NEW_VERSION）がインストール済みです。"
     echo "✅ 既に最新バージョン（$NEW_VERSION）がインストール済みです。"
     return 0
   fi
 
-  # 新しいバージョンのインストール確認
   if [ "$ask_yn" = true ]; then
     echo "新しいバージョン $NEW_VERSION をインストールしますか？ [y/N]"
     read -r yn
@@ -271,20 +216,16 @@ feed_package() {
     esac
   fi
 
-  # パッケージをダウンロード
   echo "⏳ パッケージをダウンロード中..."
   wget --no-check-certificate -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 1
 
-  # パッケージをインストール
   echo "📦 パッケージをインストール中..."
   opkg install "$OUTPUT_FILE" || return 1
 
-  # サービスを再起動
   echo "🔄 サービスを再起動..."
   /etc/init.d/rpcd restart
   /etc/init.d/"$PKG_PREFIX" start
 
-  # インストール完了メッセージ
   echo "✅ インストール完了: $PKG_PREFIX ($NEW_VERSION)"
 
   return 0
