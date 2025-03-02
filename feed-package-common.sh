@@ -115,6 +115,7 @@ gSpotx2f_package() {
   local REPO_NAME="$2"
   local DIR_PATH="$3"
   local PKG_PREFIX="$4"
+  local PKG_VERSION="${PKG_PREFIX}"
   local orig_DIR_PATH="$DIR_PATH"  # 元の引数を保持
 
   # バージョン情報の取得
@@ -126,29 +127,22 @@ gSpotx2f_package() {
   local openwrt_version
   openwrt_version=$(cut -d'.' -f1,2 < "$version_file")
 
-  # もしバージョンが19.07なら、DIR_PATHを19.07に変更
-  if [ "$DIR_PATH" = "current" ] && [ "$openwrt_version" = "19.07" ]; then
+  if [ "$openwrt_version" = "19.07" ]; then
     DIR_PATH="19.07"
   fi
-
-  # GitHub APIから情報を1回だけ取得してパッケージを検索
-  local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
   
-  # デバッグ出力でレスポンス内容を確認
-  wget --no-check-certificate -qO- "$API_URL" | jq .
-
-  # パッケージ検索
-  local PKG_FILE
-  PKG_FILE=$(wget --no-check-certificate -qO- "$API_URL" | jq -r '.[] | .name' | grep "^${PKG_PREFIX}_.*" | sort | tail -n 1)
-
-  if [ -n "$PKG_FILE" ]; then
-    echo "バージョンは${DIR_PATH}で、パッケージ ${PKG_FILE} が見つかりました。"
-  else
-    echo "バージョンは${DIR_PATH}で、${PKG_PREFIX} に該当するパッケージが見つかりませんでした。"
+  if [ "$DIR_PATH" = "19.07" ]; then
+    local PKG_FILE
+    PKG_FILE=$(wget --no-check-certificate -qO- "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}" | jq -r '.[] | .name' | grep "^${PKG_VERSION}_.*" | sort | tail -n 1)
+    if [ -n "$PKG_FILE" ]; then
+      echo "バージョンは${DIR_PASH}です。"
+    else
+      echo "バージョンは${DIR_PASH}です。"
+    fi
   fi
 
   debug_log "DEBUG" "パッケージ: $PKG_FILE"
-  debug_log "DEBUG" "オプション: $opts $REPO_OWNER $REPO_NAME $DIR_PATH $PKG_PREFIX"
+  debug_log "DEBUG" "オプション: $opts "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX""
   # opts は文字列（例: "yn hidden"）なので、feed_packageに展開すれば各単語に分割される
   feed_package $opts "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
 }
