@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-01-18"
+SCRIPT_VERSION="2025.03.02-01-11"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -138,30 +138,12 @@ gSpotx2f_package() {
         return 1
     fi
 
-    # JSON からディレクトリリストを抽出
-    local available_versions
-    available_versions=$(echo "$json" | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p')
-
-    # 該当バージョンのフォルダがあればそれを選択（なければ初期値を維持）
-    local selected_path="$dir_arg"
-    local version_found=false
-
-    for dir in $available_versions; do
-        if echo "$dir" | grep -qE "^${openwrt_version}"; then
-            selected_path="$dir"
-            version_found=true
-            break
-        fi
-    done
-
-    # もし該当するバージョンが無ければ、currentディレクトリをそのまま選択
-    if [ "$version_found" = false ]; then
-        echo "警告: OpenWrtバージョン$openwrt_version用のディレクトリは見つかりませんでした。'current'が選択されました。"
-    fi
-
-    # パッケージ名が指定されている場合にパッケージ名を表示
-    if [ -n "$package_name" ]; then
-        echo "選択されたパッケージ: $package_name"
+    # パッケージ名が含まれているかチェック
+    if echo "$json" | grep -q "$package_name"; then
+        echo "パッケージ '$package_name' は見つかりました。'19.07'を選択します。"
+        dir_arg="19.07"  # 'current' から '19.07' に切り替え
+    else
+        echo "パッケージ '$package_name' は見つかりませんでした。元のディレクトリ '$dir_arg' を使用します。"
     fi
 
     # feed_package() に渡すオプション文字列を生成（順不同でOK）
@@ -171,8 +153,8 @@ gSpotx2f_package() {
     options=$(echo "$options" | sed 's/^ *//')  # 先頭の空白を除去
 
     # feed_package() の呼び出し：オプションを先頭にして引数を渡す
-    debug_log "DEBUG" "feed_package $options $repo_owner $repo_name $selected_path $package_prefix"
-    feed_package $options "$repo_owner" "$repo_name" "$selected_path" "$package_prefix"
+    debug_log "DEBUG" "feed_package $options $repo_owner $repo_name $dir_arg $package_prefix"
+    feed_package $options "$repo_owner" "$repo_name" "$dir_arg" "$package_prefix"
 }
 
 feed_package() {
