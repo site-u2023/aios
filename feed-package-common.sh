@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-00-02"
+SCRIPT_VERSION="2025.03.03-00-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -126,32 +126,28 @@ gSpotx2f_package() {
   local openwrt_version
   openwrt_version=$(cut -d'.' -f1,2 < "$version_file")
 
+  # もしバージョンが19.07なら、DIR_PATHを19.07に変更
   if [ "$DIR_PATH" = "current" ] && [ "$openwrt_version" = "19.07" ]; then
     DIR_PATH="19.07"
-    local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
-    local json
-    json=$(wget --no-check-certificate -qO- "$API_URL")
-    if [ -z "$json" ]; then
-      echo "エラー: GitHub API からデータを取得できませんでした。" >&2
-      return 1
-    fi
   fi
-  
-  if [ "$DIR_PATH" = "19.07" ]; then
-    local PKG_FILE
-    PKG_FILE=$(echo "$json" | jq -r '.[].name' | grep "^${PKG_PREFIX}_.*" | sort | tail -n 1)
-    if [ -n "$PKG_FILE" ]; then
-      echo "バージョンは${DIR_PASH}です。"
-    else
-      echo "バージョンは${DIR_PASH}です。"
-    fi
+
+  # GitHub APIから情報を1回だけ取得してパッケージを検索
+  local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
+  local PKG_FILE
+  PKG_FILE=$(wget --no-check-certificate -qO- "$API_URL" | jq -r '.[] | .name' | grep "^${PKG_PREFIX}_.*" | sort | tail -n 1)
+
+  if [ -n "$PKG_FILE" ]; then
+    echo "バージョンは${DIR_PATH}で、パッケージ ${PKG_FILE} が見つかりました。"
+  else
+    echo "バージョンは${DIR_PATH}で、${PKG_PREFIX} に該当するパッケージが見つかりませんでした。"
   fi
 
   debug_log "DEBUG" "パッケージ: $PKG_FILE"
-  debug_log "DEBUG" "オプション: $opts "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX""
+  debug_log "DEBUG" "オプション: $opts $REPO_OWNER $REPO_NAME $DIR_PATH $PKG_PREFIX"
   # opts は文字列（例: "yn hidden"）なので、feed_packageに展開すれば各単語に分割される
   feed_package $opts "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
 }
+
 
 feed_package() {
   local ask_yn=false
