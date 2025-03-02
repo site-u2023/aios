@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-01-14"
+SCRIPT_VERSION="2025.03.02-01-15"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -87,7 +87,7 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 # 例: `yn` と `hidden` を順不同で指定
 # feed_package "hidden" "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
 #########################################################################
-check_version_feed() {
+gSpotx2f_package() {
     local ask_yn=false
     local hidden=false
     local nonopt_args=""
