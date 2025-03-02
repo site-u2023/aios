@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-01-03"
+SCRIPT_VERSION="2025.03.02-01-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -165,11 +165,11 @@ check_version_feed() {
     feed_package $options "$repo_owner" "$repo_name" "$selected_path" "$package_prefix"
 }
 
-feed_package() {
+feed_package() { 
   local ask_yn=false
   local hidden=false
 
-  # オプションを処理する
+  # オプションを処理する（順不同対応）
   while [ $# -gt 0 ]; do
     case "$1" in
       yn)
@@ -192,27 +192,33 @@ feed_package() {
   local DIR_PATH="$3"
   local PKG_PREFIX="$4"
 
-  # 以下、残りの処理...
   local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
 
   echo "GitHub API からデータを取得中: $API_URL"
-  local JSON=$(wget --no-check-certificate -qO- "$API_URL")
+  local JSON
+  JSON=$(wget --no-check-certificate -qO- "$API_URL")
   if [ -z "$JSON" ]; then
     echo "APIからデータを取得できませんでした。"
     return 1
   fi
 
-  local ENTRY=$(echo "$JSON" | tr '\n' ' ' | sed 's/},{/}\n{/g' | grep "\"name\": *\"${PKG_PREFIX}" | tail -n 1)
-  if [ -z "$ENTRY" ]; then
+  # JSON を改行区切りに変換して、各オブジェクトの "name" フィールドを抽出
+  local PKG_FILE
+  PKG_FILE=$(echo "$JSON" | tr '\n' ' ' | sed 's/},{/}\n{/g' \
+            | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' \
+            | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
+  if [ -z "$PKG_FILE" ]; then
     echo "パッケージが見つかりません。"
     return 1
   fi
 
-  local PKG_FILE=$(echo "$ENTRY" | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p')
-  local DOWNLOAD_URL=$(echo "$ENTRY" | sed -n 's/.*"download_url": *"\([^"]*\)".*/\1/p')
-
-  if [ -z "$PKG_FILE" ] || [ -z "$DOWNLOAD_URL" ]; then
+  # 該当するファイル名に一致する download_url を抽出
+  local DOWNLOAD_URL
+  DOWNLOAD_URL=$(echo "$JSON" | tr '\n' ' ' | sed 's/},{/}\n{/g' \
+                  | grep "\"name\": *\"$PKG_FILE\"" \
+                  | sed -n 's/.*"download_url": *"\([^"]*\)".*/\1/p')
+  if [ -z "$DOWNLOAD_URL" ]; then
     echo "パッケージ情報の取得に失敗しました。"
     return 1
   fi
@@ -220,8 +226,10 @@ feed_package() {
   echo "最新のパッケージ: $PKG_FILE"
   echo "ダウンロードURL: $DOWNLOAD_URL"
 
-  local INSTALLED_VERSION=$(opkg info "$PKG_PREFIX" 2>/dev/null | grep Version | awk '{print $2}')
-  local NEW_VERSION=$(echo "$PKG_FILE" | sed -E "s/^${PKG_PREFIX}_([0-9\.\-r]+)_.*\.ipk/\1/")
+  local INSTALLED_VERSION
+  INSTALLED_VERSION=$(opkg info "$PKG_PREFIX" 2>/dev/null | grep Version | awk '{print $2}')
+  local NEW_VERSION
+  NEW_VERSION=$(echo "$PKG_FILE" | sed -E "s/^${PKG_PREFIX}_([0-9\.\-r]+)_.*\.ipk/\1/")
 
   if [ "$INSTALLED_VERSION" = "$NEW_VERSION" ]; then
     if [ "$hidden" = true ]; then
