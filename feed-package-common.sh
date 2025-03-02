@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-00-02"
+SCRIPT_VERSION="2025.03.02-00-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -101,7 +101,7 @@ feed_package() {
   fi
 
   # バージョン情報を含むパッケージ名を取得
-  PACKAGE_NAME=$(echo "$JSON" | grep -o "\"name\": *\"${PKG_PREFIX}[^\" ]*.ipk" | tail -n 1 | sed 's/.*"name": *"\([^"]*\)".*/\1/')
+  PACKAGE_NAME=$(echo "$JSON" | grep -o '"name": *"'"${PKG_PREFIX}"'[^"]*.ipk"' | tail -n 1 | sed -E 's/.*"name": *"([^"]+)".*/\1/')
   if [ -z "$PACKAGE_NAME" ]; then
     echo "バージョン付きのパッケージ名が見つかりませんでした。"
     return 1
