@@ -115,7 +115,7 @@ gSpotx2f_package() {
   local REPO_NAME="$2"
   local DIR_PATH="$3"
   local PKG_PREFIX="$4"
-  local PKG_VERSION="${PKG_PREFIX}_"
+  local PKG_VERSION="${PKG_PREFIX}""_"
   local orig_DIR_PATH="$DIR_PATH"  # 元の引数を保持
 
   # バージョン情報の取得
