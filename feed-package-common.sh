@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-01-06"
+SCRIPT_VERSION="2025.03.02-01-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -166,6 +166,94 @@ check_version_feed() {
 }
 
 feed_package() {
+  local ask_yn=false hidden=false
+  for arg in "$@"; do
+    case "$arg" in
+      yn) ask_yn=true ;;
+      hidden) hidden=true ;;
+    esac
+  done
+
+  shift "$#"  # オプションを削除
+
+  local REPO_OWNER="$1"
+  local REPO_NAME="$2"
+  local PKG_PREFIX="$3"
+
+  # OpenWrt バージョン取得
+  local OPENWRT_VERSION=$(grep 'DISTRIB_RELEASE' /etc/openwrt_release | cut -d"'" -f2 | cut -c 1-2)
+  local DIR_PATHS=("current" "openwrt-${OPENWRT_VERSION}" "openwrt-23" "openwrt-22" "openwrt-21" "openwrt-20" "openwrt-19" "snapshots")
+
+  # 利用可能なディレクトリを自動選択
+  local API_URL BASE_DIR_PATH=""
+  for DIR in "${DIR_PATHS[@]}"; do
+    API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR}"
+    JSON=$(wget --no-check-certificate -qO- "$API_URL")
+    if [ -n "$JSON" ] && echo "$JSON" | grep -q "\"name\": *\"${PKG_PREFIX}"; then
+      BASE_DIR_PATH="$DIR"
+      break
+    fi
+  done
+
+  if [ -z "$BASE_DIR_PATH" ]; then
+    echo "❌ 対応するパッケージディレクトリが見つかりませんでした。"
+    return 1
+  fi
+
+  echo "📂 使用するディレクトリ: $BASE_DIR_PATH"
+
+  # 最新のパッケージ取得
+  local ENTRY=$(echo "$JSON" | tr '\n' ' ' | sed 's/},{/}\n{/g' | grep "\"name\": *\"${PKG_PREFIX}" | tail -n 1)
+  if [ -z "$ENTRY" ]; then
+    echo "❌ パッケージが見つかりません。"
+    return 1
+  fi
+
+  local PKG_FILE=$(echo "$ENTRY" | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p')
+  local DOWNLOAD_URL=$(echo "$ENTRY" | sed -n 's/.*"download_url": *"\([^"]*\)".*/\1/p')
+
+  if [ -z "$PKG_FILE" ] || [ -z "$DOWNLOAD_URL" ]; then
+    echo "❌ パッケージ情報の取得に失敗しました。"
+    return 1
+  fi
+
+  echo "📦 最新のパッケージ: $PKG_FILE"
+  echo "🔗 ダウンロードURL: $DOWNLOAD_URL"
+
+  # 現在のバージョン取得
+  local INSTALLED_VERSION=$(opkg info "$PKG_PREFIX" 2>/dev/null | grep Version | awk '{print $2}')
+  local NEW_VERSION=$(echo "$PKG_FILE" | sed -E "s/^${PKG_PREFIX}_([0-9\.\-r]+)_.*\.ipk/\1/")
+
+  if [ "$INSTALLED_VERSION" = "$NEW_VERSION" ]; then
+    if [ "$hidden" = true ]; then
+      return 0
+    fi
+    echo "✅ 既に最新バージョン（$NEW_VERSION）がインストール済みです。"
+    return 0
+  fi
+
+  if [ "$ask_yn" = true ]; then
+    echo "新しいバージョン $NEW_VERSION をインストールしますか？ [y/N]"
+    read -r yn
+    case "$yn" in
+      y|Y) echo "✅ インストールを続行..." ;;
+      *) echo "🚫 インストールをキャンセルしました。"; return 1 ;;
+    esac
+  fi
+
+  local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
+  echo "⏳ パッケージをダウンロード中..."
+  wget --no-check-certificate -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 1
+  echo "📦 パッケージをインストール中..."
+  opkg install "$OUTPUT_FILE" || return 1
+  echo "🔄 サービスを再起動..."
+  /etc/init.d/rpcd restart
+  /etc/init.d/"$PKG_PREFIX" start
+  echo "✅ インストール完了: $PKG_PREFIX ($NEW_VERSION)"
+  return 0
+}
+
+XXX_feed_package() {
   local ask_yn=false
   local hidden=false
 
