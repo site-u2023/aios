@@ -130,6 +130,7 @@ gSpotx2f_package() {
 
     # GitHub API でリポジトリのルートディレクトリを取得
     local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/"
+    echo "GitHub API からディレクトリ情報を取得: $api_url"
 
     local json
     json=$(wget --no-check-certificate -qO- "$api_url")
@@ -144,22 +145,20 @@ gSpotx2f_package() {
 
     # 該当バージョンのフォルダがあればそれを選択（なければ初期値を維持）
     local selected_path="$dir_arg"
-    local version_found=false
     for dir in $available_versions; do
         if echo "$dir" | grep -qE "^(openwrt-|)$openwrt_version"; then
             selected_path="$dir"
-            version_found=true
             break
         fi
     done
 
-    # もし19.07が見つからなければ、currentを選択
-    if [ "$version_found" = false ]; then
-        selected_path="current"
-        echo "警告: OpenWrtバージョン$openwrt_version用のディレクトリは見つかりませんでした。'current'が選択されました。"
+    # もし選択されたパスが "current" のままであれば、openwrt_version に基づいて適切なディレクトリを設定
+    if [ "$selected_path" == "current" ]; then
+        if [ "$openwrt_version" == "19.07" ]; then
+            selected_path="19.07"
+        fi
     fi
 
-    # 最後に選択されたパッケージディレクトリを表示
     echo "選択されたパッケージディレクトリ: $selected_path"
 
     # feed_package() に渡すオプション文字列を生成（順不同でOK）
