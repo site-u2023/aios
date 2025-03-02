@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-01-10"
+SCRIPT_VERSION="2025.03.02-01-11"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -131,7 +131,9 @@ check_version_feed() {
     # GitHub API でリポジトリのルートディレクトリを取得
     local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/"
     echo "GitHub API からディレクトリ情報を取得: $api_url"
-    
+
+    debug_log "DEBUG" "GitHub API からのレスポンス: $json"
+
     local json
     json=$(wget --no-check-certificate -qO- "$api_url")
     if [ -z "$json" ]; then
@@ -141,7 +143,7 @@ check_version_feed() {
 
     # JSON からディレクトリリストを抽出
     local available_versions
-    available_versions=$(echo "$json" | grep -o '"name": "[^"]*' | cut -d'"' -f4)
+    available_versions=$(echo "$json" | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p')
 
     # 該当バージョンのフォルダがあればそれを選択（なければ初期値を維持）
     local selected_path="$dir_arg"
@@ -149,6 +151,9 @@ check_version_feed() {
         if echo "$dir" | grep -qE "^(openwrt-|)$openwrt_version"; then
             selected_path="$dir"
             break
+        elif [ -z "$json" ]; then
+            echo "エラー: GitHub API からデータを取得できませんでした。レスポンス内容: $json" >&2
+            return 1
         fi
     done
 
