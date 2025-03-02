@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-01-12"
+SCRIPT_VERSION="2025.03.02-01-15"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -138,12 +138,19 @@ gSpotx2f_package() {
         return 1
     fi
 
-    # パッケージ名が含まれているかチェック
-    if echo "$json" | grep -q "$package_name"; then
-        echo "パッケージ '$package_name' は見つかりました。'19.07'を選択します。"
-        dir_arg="19.07"  # 'current' から '19.07' に切り替え
-    else
+    local PKG_FILE
+    PKG_FILE=$(echo "$json" | grep -o '"name": *"[^"]*"' | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' | grep "^${package_name}_" | sort | tail -n 1)
+
+
+    if [ -z "$PKG_FILE" ]; then
         echo "パッケージ '$package_name' は見つかりませんでした。元のディレクトリ '$dir_arg' を使用します。"
+        debug_log "DEBUG" "見つからなかったパッケージ名: $PKG_FILE"
+        return 1
+    else
+        echo "パッケージ '$package_name' は見つかりました。'19.07'を選択します。"
+        # デバッグログ: 見つかったパッケージ名
+        debug_log "DEBUG" "見つかったパッケージ名: $PKG_FILE"
+        dir_arg="19.07"  # 'current' から '19.07' に切り替え
     fi
 
     # feed_package() に渡すオプション文字列を生成（順不同でOK）
