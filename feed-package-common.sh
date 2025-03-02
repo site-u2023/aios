@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.02-01-02"
+SCRIPT_VERSION="2025.03.02-01-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -88,9 +88,36 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 # feed_package "hidden" "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
 #########################################################################
 check_version_feed() {
-    local repo_owner="$1"  # 例: "gSpotx2f"
-    local repo_name="$2"   # 例: "packages-openwrt"
-    local package_prefix="$3" # 例: "luci-app-cpu-perf"
+    local ask_yn=false
+    local hidden=false
+    local nonopt_args=""
+
+    # すべての引数をチェックし、オプションはフラグ、その他は必須パラメータとして保存
+    for arg in "$@"; do
+        case "$arg" in
+            yn)
+                ask_yn=true
+                ;;
+            hidden)
+                hidden=true
+                ;;
+            *)
+                nonopt_args="${nonopt_args} $arg"
+                ;;
+        esac
+    done
+
+    # 必須パラメータを分解（例: リポジトリオーナー, リポジトリ名, 初期ディレクトリ, パッケージプレフィックス）
+    set -- $nonopt_args
+    if [ "$#" -lt 4 ]; then
+        echo "Usage: check_version_feed <repo_owner> <repo_name> <directory> <package_prefix> [options...]"
+        return 1
+    fi
+
+    local repo_owner="$1"
+    local repo_name="$2"
+    local dir_arg="$3"       # 初期ディレクトリ（通常は "current"）
+    local package_prefix="$4"
 
     # OpenWrt のバージョンをキャッシュから取得
     local version_file="${CACHE_DIR}/openwrt.ch"
@@ -98,23 +125,26 @@ check_version_feed() {
         echo "エラー: OpenWrt バージョン情報がありません。" >&2
         return 1
     fi
-    local openwrt_version=$(cat "$version_file" | cut -d'.' -f1,2)
+    local openwrt_version
+    openwrt_version=$(cut -d'.' -f1,2 < "$version_file")
 
     # GitHub API でリポジトリのルートディレクトリを取得
     local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/"
     echo "GitHub API からディレクトリ情報を取得: $api_url"
     
-    local json=$(wget --no-check-certificate -qO- "$api_url")
+    local json
+    json=$(wget --no-check-certificate -qO- "$api_url")
     if [ -z "$json" ]; then
         echo "エラー: GitHub API からデータを取得できませんでした。" >&2
         return 1
     fi
 
     # JSON からディレクトリリストを抽出
-    local available_versions=$(echo "$json" | grep -o '"name": "[^"]*' | cut -d'"' -f4)
+    local available_versions
+    available_versions=$(echo "$json" | grep -o '"name": "[^"]*' | cut -d'"' -f4)
 
-    # 該当バージョンのフォルダがあるかチェック
-    local selected_path="current" # デフォルトは "current"
+    # 該当バージョンのフォルダがあればそれを選択（なければ初期値を維持）
+    local selected_path="$dir_arg"
     for dir in $available_versions; do
         if echo "$dir" | grep -qE "^(openwrt-|)$openwrt_version"; then
             selected_path="$dir"
@@ -124,8 +154,15 @@ check_version_feed() {
 
     echo "選択されたパッケージディレクトリ: $selected_path"
 
-    # feed_package() に渡すコマンドを生成
-    debug_log "DEBUG" "feed_package \"$repo_owner\" \"$repo_name\" \"$selected_path\" \"$package_prefix\""
+    # feed_package() に渡すオプション文字列を生成（順不同でOK）
+    local options=""
+    [ "$ask_yn" = true ] && options="$options yn"
+    [ "$hidden" = true ] && options="$options hidden"
+    options=$(echo "$options" | sed 's/^ *//')  # 先頭の空白を除去
+
+    # feed_package() の呼び出し：オプションを先頭にして引数を渡す
+    debug_log "DEBUG" "feed_package $options "$repo_owner" "$repo_name" "$selected_path" "$package_prefix""
+    feed_package $options "$repo_owner" "$repo_name" "$selected_path" "$package_prefix"
 }
 
 feed_package() {
