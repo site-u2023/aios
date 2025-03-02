@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-00-03"
+SCRIPT_VERSION="2025.03.03-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -126,47 +126,29 @@ gSpotx2f_package() {
   local openwrt_version
   openwrt_version=$(cut -d'.' -f1,2 < "$version_file")
 
-  # もし元のDIR_PATHが "current" で、かつバージョンが "19.07" なら、
-  # 一度 "19.07" ディレクトリで検索を試みる
   if [ "$DIR_PATH" = "current" ] && [ "$openwrt_version" = "19.07" ]; then
     DIR_PATH="19.07"
-  fi
-
-  local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
-  local json
-  json=$(wget --no-check-certificate -qO- "$API_URL")
-  if [ -z "$json" ]; then
-    echo "エラー: GitHub API からデータを取得できませんでした。" >&2
-    return 1
-  fi
-
-  # 該当パッケージの名前をjqで抽出
-  local PKG_FILE
-  PKG_FILE=$(echo "$json" | jq -r '.[].name' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
-
-  # もし "19.07" で該当パッケージが見つからなければ、元のDIR_PATH (current) を使用する
-  if [ -z "$PKG_FILE" ] && [ "$DIR_PATH" = "19.07" ]; then
-    echo "警告: 19.07ディレクトリでは ${PKG_PREFIX} が見つかりませんでした。元のディレクトリ (${orig_DIR_PATH}) を使用します。"
-    DIR_PATH="${orig_DIR_PATH}"
-    API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
+    local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
+    local json
     json=$(wget --no-check-certificate -qO- "$API_URL")
     if [ -z "$json" ]; then
       echo "エラー: GitHub API からデータを取得できませんでした。" >&2
       return 1
     fi
+  fi
+  
+  if [ "$DIR_PATH" = "19.07" ]; then
+    local PKG_FILE
     PKG_FILE=$(echo "$json" | jq -r '.[].name' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
-    if [ -z "$PKG_FILE" ]; then
-      echo "${PKG_PREFIX} が見つかりません。"
-      return 1
+    if [ -n "$PKG_FILE" ]
+      echo "バージョンは${DIR_PASH}です。"
+    else
+      echo "バージョンは${DIR_PASH}です。"
     fi
-  elif [ -z "$PKG_FILE" ]; then
-    echo "${PKG_PREFIX} が見つかりません。"
-    return 1
   fi
 
-  echo "$PKG_FILE が見つかりました。"
   debug_log "DEBUG" "パッケージ: $PKG_FILE"
-
+  debug_log "DEBUG" "オプション: $opts "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX""
   # opts は文字列（例: "yn hidden"）なので、feed_packageに展開すれば各単語に分割される
   feed_package $opts "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
 }
