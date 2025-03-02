@@ -131,21 +131,33 @@ check_version_feed() {
 }
 
 feed_package() {
-  local ask_yn=false hidden=false
-  for arg in "$@"; do
-    case "$arg" in
-      yn) ask_yn=true ;;   # `yn` オプションがあれば確認を取る
-      hidden) hidden=true ;; # `hidden` オプションがあれば既に最新なら出力なし
+  local ask_yn=false
+  local hidden=false
+
+  # オプションを処理する
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      yn)
+        ask_yn=true
+        shift
+        ;;
+      hidden)
+        hidden=true
+        shift
+        ;;
+      *)
+        break
+        ;;
     esac
   done
 
-  shift "$#"  # オプションを削除
-
+  # 残りの引数を変数に格納
   local REPO_OWNER="$1"
   local REPO_NAME="$2"
   local DIR_PATH="$3"
   local PKG_PREFIX="$4"
 
+  # 以下、残りの処理...
   local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
 
@@ -173,7 +185,6 @@ feed_package() {
   echo "最新のパッケージ: $PKG_FILE"
   echo "ダウンロードURL: $DOWNLOAD_URL"
 
-  # 現在のバージョンを取得
   local INSTALLED_VERSION=$(opkg info "$PKG_PREFIX" 2>/dev/null | grep Version | awk '{print $2}')
   local NEW_VERSION=$(echo "$PKG_FILE" | sed -E "s/^${PKG_PREFIX}_([0-9\.\-r]+)_.*\.ipk/\1/")
 
@@ -185,7 +196,6 @@ feed_package() {
     return 0
   fi
 
-  # `yn` オプションがある場合のみ確認を取る
   if [ "$ask_yn" = true ]; then
     echo "新しいバージョン $NEW_VERSION をインストールしますか？ [y/N]"
     read -r yn
