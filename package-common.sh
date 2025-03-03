@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-01-02"
+SCRIPT_VERSION="2025.03.01-01-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -56,8 +56,10 @@ BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build}"
-mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR"
+FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
+mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR" "$FEED_DIR"
 DEBUG_MODE="${DEBUG_MODE:-false}"
+
 
 #########################################################################
 # Last Update: 2025-02-24 21:16:00 (JST) 🚀
@@ -298,21 +300,28 @@ package_pre_install() {
         fi
     fi
   
-    # リポジトリ内パッケージ確認
-    debug_log "DEBUG" "Checking repository for package: $package_name"
+# リポジトリ内パッケージ確認
+debug_log "DEBUG" "Checking repository for package: $package_name"
 
-    if [ ! -f "$package_cache" ]; then
-        debug_log "ERROR" "Package cache not found! Run update_package_list() first."
-        return 1
-    fi
+if [ ! -f "$package_cache" ]; then
+    debug_log "ERROR" "Package cache not found! Run update_package_list() first."
+    return 1
+fi
 
-    if grep -q "^$package_name " "$package_cache"; then
-        debug_log "DEBUG" "Package $package_name found in repository."
-        return 0  # パッケージが存在するのでOK
-    fi
+# パッケージがキャッシュ内に存在するか確認
+if grep -q "^$package_name " "$package_cache"; then
+    debug_log "DEBUG" "Package $package_name found in repository."
+    return 0  # パッケージが存在するのでOK
+fi
 
-    debug_log "DEBUG" "Package $package_name not found in repository."
-    return 1  # パッケージが見つからなかった
+# キャッシュに存在しない場合、FEED_DIR内を探してみる
+if [ -f "$FEED_DIR/$package_name" ]; then
+    debug_log "DEBUG" "Package $package_name found in FEED_DIR: $FEED_DIR"
+    return 0  # FEED_DIR内にパッケージが見つかったのでOK
+fi
+
+debug_log "DEBUG" "Package $package_name not found in repository or FEED_DIR."
+return 1  # パッケージが見つからなかった
 }
 
 install_normal_package() {
