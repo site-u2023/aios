@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-01-08"
+SCRIPT_VERSION="2025.03.03-01-09"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -145,17 +145,17 @@ gSpotx2f_package() {
   debug_log "DEBUG" "PKG_VERSION: $PKG_VERSION"
   if [ "$DIR_PATH" = "19.07" ]; then
     local PKG_FILE
-    PKG_FILE=$(wget --no-check-certificate -qO- "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}" | jq -r '.[] | .name' | grep "^${PKG_VERSION}" | sort | tail -n 1 | tr -d '[:space:]')
+    PKG_FILE=$(wget --no-check-certificate -qO- "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}" | jq -r '.[] | .name' | grep "^${PKG_VERSION}_" | sort | tail -n 1 | tr -d '[:space:]')
     debug_log "DEBUG" "PKG_FILE: $PKG_FILE"
 
     TEST_FILE=$(wget --no-check-certificate -qO- "https://api.github.com/repos/gSpotx2f/packages-openwrt/contents/19.07" | jq -r '.[] | .name' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
     debug_log "DEBUG" "TEST_FILE: $TEST_FILE"
 
-    debug_log "DEBUG" "GitHub API からデータを取得中: https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
-    wget --no-check-certificate -qO- "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}" | jq .  # ここで出力を確認
+    #debug_log "DEBUG" "GitHub API からデータを取得中: https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
+    #wget --no-check-certificate -qO- "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}" | jq .  # ここで出力を確認
 
-    wget --no-check-certificate -qO- "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}" > /tmp/github_response.json
-    cat /tmp/github_response.json  # ここで内容を確認
+    #wget --no-check-certificate -qO- "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}" > /tmp/github_response.json
+    #cat /tmp/github_response.json  # ここで内容を確認
 
     if [ -n "$PKG_FILE" ]; then
       echo "バージョンは${DIR_PASH}です。"
