@@ -106,6 +106,9 @@ packages() {
     install_package luci-app-ttyd yn hidden
     install_package luci-i18n-ttyd yn hidden
     install_package openssh-sftp-server yn hidden
+    install_package luci-mod-dashboard yn hidden
+    install_package coreutils yn hidden
+    install_package irqbalance yn hidden
 
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden
