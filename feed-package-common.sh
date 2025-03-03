@@ -56,9 +56,9 @@ BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build}"
-mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
+mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR"
 #########################################################################
 # Last Update: 2025-03-02 14:00:00 (JST) 🚀
 # install_build: パッケージのビルド処理 (OpenWrt / Alpine Linux)
