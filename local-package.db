@@ -43,11 +43,11 @@ install_package internet-detector-mod-modem-restart yn hidden
 install_package internet-detector-mod-email yn hidden
 
 [luci-app-diskman]
-install_package luci-compat hidden
-install_package luci-lib-ipkg hidden
-install_package parted hidden
-install_package blkid hidden
-install_package smartmontools hidden
+install_package luci-compat hidden disabled
+install_package luci-lib-ipkg hidden disabled
+install_package parted hidden disabled
+install_package blkid hidden disabled
+install_package smartmontools hidden disabled
 install_package e2fsprogs hidden
 install_package btrfs-progs yn hidden
 install_package lsblk yn hidden
