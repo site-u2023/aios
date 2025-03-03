@@ -88,105 +88,7 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 # feed_package "hidden" "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
 #########################################################################
 gSpotx2f_package() {
-  local opts=""
-  local args=""
 
-  # すべての引数を走査し、オプション (yn, hidden) と通常引数を分離する
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      yn|hidden)
-        opts="$opts $1"
-        ;;
-      *)
-        args="$args $1"
-        ;;
-    esac
-    shift
-  done
-
-  # 必須引数が4つあるかチェック
-  set -- $args
-  if [ "$#" -ne 4 ]; then
-    echo "エラー: 必要な引数 (REPO_OWNER, REPO_NAME, DIR_PATH, PKG_PREFIX) が不足しています。" >&2
-    return 1
-  fi
-
-  local REPO_OWNER="$1"
-  local REPO_NAME="$2"
-  local DIR_PATH="$3"
-  local PKG_PREFIX="$4"
-  local PKG_VERSION="${PKG_PREFIX}_"
-  local orig_DIR_PATH="$DIR_PATH"  # 元の引数を保持
-
-  debug_log "DEBUG" "PKG_PREFIX: $PKG_PREFIX"
-  debug_log "DEBUG" "PKG_VERSION: $PKG_VERSION"
-  debug_log "DEBUG" "DIR_PATH: $DIR_PATH"
-  
-  # バージョン情報の取得
-  local version_file="${CACHE_DIR}/openwrt.ch"
-  if [ ! -f "$version_file" ]; then
-    echo "エラー: OpenWrt バージョン情報がありません。" >&2
-    return 1
-  fi
-  local openwrt_version
-  openwrt_version=$(cut -d'.' -f1,2 < "$version_file" | tr -d ' \t\r\n')
-  debug_log "DEBUG" "openwrt_version: $openwrt_version"
-  
-  if [ "$openwrt_version" = "19.07" ]; then   
-    DIR_PATH="19.07"
-  else
-    DIR_PATH="current"
-  fi
-  debug_log "DEBUG" "openwrt_version -> DIR_PATH: $DIR_PATH"
-
-  debug_log "DEBUG" "REPO_OWNER: $REPO_OWNER"
-  debug_log "DEBUG" "REPO_NAME: $REPO_NAME"
-  debug_log "DEBUG" "DIR_PATH: $DIR_PATH"
-  debug_log "DEBUG" "PKG_VERSION: $PKG_VERSION"
-  
-  if [ "$DIR_PATH" = "19.07" ]; then
-    # キャッシュファイルのパス
-    local cache_file="${CACHE_DIR}/package_tmp.ch"
-
-    # キャッシュファイルにデータを保存
-    local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
-    debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
-
-    # APIからデータを取得してキャッシュファイルに保存
-    local JSON
-    JSON=$(wget --no-check-certificate -qO- "$API_URL")
-    
-    # データが取得できなかった場合はエラー
-    if [ -z "$JSON" ]; then
-      debug_log "DEBUG" "APIからデータを取得できませんでした。"
-      echo "APIからデータを取得できませんでした。"
-      return 1
-    fi
-
-    # JSONデータをキャッシュファイルに保存
-    echo "$JSON" > "$cache_file"
-    debug_log "DEBUG" "キャッシュファイルにデータを保存しました: $cache_file"
-
-    # キャッシュファイルからパッケージ名を取得
-    local PKG_FILE
-    PKG_FILE=$(cat "$cache_file" | jq -r '.[].name' | grep "^${PKG_VERSION}" | sort | tail -n 1)
-
-    if [ -z "$PKG_FILE" ]; then
-      debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
-      echo "$PKG_PREFIX が見つかりません。"
-      return 1
-    fi
-
-    debug_log "DEBUG" "PKG_FILE: $PKG_FILE"
-
-    # 結果の表示
-    echo "バージョンは${DIR_PATH}で、パッケージ ${PKG_FILE} が見つかりました。"
-  fi
-
-  debug_log "DEBUG" "パッケージ: $PKG_FILE"
-  debug_log "DEBUG" "オプション: $opts $REPO_OWNER $REPO_NAME $DIR_PATH $PKG_PREFIX"
-  # opts は文字列（例: "yn hidden"）なので、feed_packageに展開すれば各単語に分割される
-  feed_package $opts "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
 }
 
 feed_package() {
@@ -286,6 +188,14 @@ feed_package() {
   /etc/init.d/rpcd restart
   /etc/init.d/"$PKG_PREFIX" start
 
+  if [[ "$PKG_PREFIX" =~ luci- ]]; then
+    /etc/init.d/rpcd restart
+    debug_log "DEBUG" "Luciアプリのためサービス再起動をスキップします。"
+  else
+    echo "🔄 サービスを再起動..."
+    /etc/init.d/"$PKG_PREFIX" start
+  fi
+  
   echo "✅ インストール完了: $PKG_PREFIX ($NEW_VERSION)"
 
   return 0
