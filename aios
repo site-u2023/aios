@@ -117,7 +117,7 @@ packages() {
     feed_package gSpotx2f packages-openwrt current luci-app-log yn hidden
     feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled
 
-    feed_package lisaac luci-app-diskman "" luci-app-diskman yn hidden
+    feed_package lisaac luci-app-diskman "" luci-app-diskman yn hidden disabled
 
     feed_package jerrykuku luci-theme-argon "" luci-theme-argon yn hidden
 
