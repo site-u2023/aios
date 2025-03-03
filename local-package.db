@@ -1,52 +1,47 @@
 SCRIPT_VERSION="2025.03.03-00-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION package.db \033[0m"
 
-# ttyd設定
 [ttyd]
-
-# 既存の ttyd 設定をすべて削除
 uci delete ttyd.ttyd 2>/dev/null
 uci delete ttyd.@ttyd[-1] 2>/dev/null
 
 uci commit ttyd
 
-# 最初のセクション設定（@ttyd）
 uci set ttyd.ttyd='ttyd'
 uci set ttyd.ttyd.port='7681'
 uci set ttyd.ttyd.interface='@lan'
 uci set ttyd.ttyd.ipv6='1'
 uci set ttyd.ttyd.command='/bin/login -f root'
 
-# `client_option` をクリアしてからリストを追加
 uci del ttyd.ttyd.client_option 2>/dev/null
 uci add_list ttyd.ttyd.client_option='theme={"background": "black"}'
 uci add_list ttyd.ttyd.client_option='titleFixed=ttyd'
 
-# 最初のセクションをコミット
 uci commit ttyd
 
-# 次のセクション設定（@ttyd[-1]）
 uci add ttyd ttyd  # 新しいセクションを作成
 uci set ttyd.@ttyd[-1].port='8888'
 uci set ttyd.@ttyd[-1].interface='@lan'
 uci set ttyd.@ttyd[-1].ipv6='1'
 uci set ttyd.@ttyd[-1].command='/bin/login -f root'
 
-# `client_option` をクリアしてからリストを追加
 uci del ttyd.@ttyd[-1].client_option 2>/dev/null
 uci add_list ttyd.@ttyd[-1].client_option='theme={"background": "blue"}'
 uci add_list ttyd.@ttyd[-1].client_option='titleFixed=aios'
 
-# 追加セクションの設定をコミット
 uci commit ttyd
 
-# internet-detector
+[irqbalance]
+opkg install irqbalance
+uci set irqbalance.irqbalance=irqbalance
+uci set irqbalance.irqbalance.enabled='1'
+uci commit irqbalance
+
 [internet-detector]
 install_package luci-app-internet-detector hidden
 install_package internet-detector-mod-modem-restart yn hidden
 install_package internet-detector-mod-email yn hidden
 
-# luci-app-diskman
 [luci-app-diskman]
 install_package luci-compat hidden
 install_package luci-lib-ipkg hidden
@@ -60,12 +55,10 @@ install_package mdadm yn hidden
 install_package kmod-md-raid456 yn hidden
 install_package kmod-md-linear yn hidden
 
-# luci-theme-argon
 [luci-theme-argon]
 feed_package kiddin9 luci-theme-edge "" luci-theme-edge yn hidden
 feed_package Leo-Jo-My luci-theme-opentomato "" luci-theme-opentomato yn hidden
 
-# zram-swap設定
 [zram-swap]
 uci add system zram
 uci set system.@zram[0].enabled='1'
