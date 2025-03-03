@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.01-01-04"
+SCRIPT_VERSION="2025.03.01-01-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -283,19 +283,22 @@ package_pre_install() {
     local package_name="$1"
     local package_cache="${CACHE_DIR}/package_list.ch"
 
-    debug_log "DEBUG" "Checking package: $package_name"
+    # パスが含まれている場合、ベースネームを抽出する
+    local base_package_name=$(basename "$package_name")
+
+    debug_log "DEBUG" "Checking package: $base_package_name"
     
     # デバイス内パッケージ確認
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        output=$(opkg list-installed "$package_name" 2>&1)
+        output=$(opkg list-installed "$base_package_name" 2>&1)
         if [ -n "$output" ]; then  # 出力があった場合
-            debug_log "DEBUG" "Package $package_name is already installed on the device."
+            debug_log "DEBUG" "Package $base_package_name is already installed on the device."
             return 1  # 既にインストールされている場合は終了
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        output=$(apk info "$package_name" 2>&1)
+        output=$(apk info "$base_package_name" 2>&1)
         if [ -n "$output" ]; then  # 出力があった場合
-            debug_log "DEBUG" "Package $package_name is already installed on the device."
+            debug_log "DEBUG" "Package $base_package_name is already installed on the device."
             return 1  # 既にインストールされている場合は終了
         fi
     fi
