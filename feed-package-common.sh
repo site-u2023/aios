@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-01-06"
+SCRIPT_VERSION="2025.03.03-01-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -115,7 +115,7 @@ gSpotx2f_package() {
   local REPO_NAME="$2"
   local DIR_PATH="$3"
   local PKG_PREFIX="$4"
-  local PKG_VERSION="${PKG_PREFIX}_"
+  local PKG_VERSION="${PKG_PREFIX}"
   local orig_DIR_PATH="$DIR_PATH"  # 元の引数を保持
 
   debug_log "DEBUG" "PKG_PREFIX: $PKG_PREFIX"
@@ -145,10 +145,10 @@ gSpotx2f_package() {
   debug_log "DEBUG" "PKG_VERSION: $PKG_VERSION"
   if [ "$DIR_PATH" = "19.07" ]; then
     local PKG_FILE
-    PKG_FILE=$(wget --no-check-certificate -qO- "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}" | jq -r '.[] | .name' | grep "^${PKG_VERSION}" | sort | tail -n 1)
+    PKG_FILE=$(wget --no-check-certificate -qO- "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}" | jq -r '.[] | .name' | grep "^${PKG_PREFIX}_.*" | sort | tail -n 1)
     debug_log "DEBUG" "PKG_FILE: $PKG_FILE"
 
-    TEST_FILE=$(wget --no-check-certificate -qO- "https://api.github.com/repos/gSpotx2f/packages-openwrt/contents/19.07" | jq -r '.[] | .name' | grep "^${PKG_PREFIX}" | sort | tail -n 1)
+    TEST_FILE=$(wget --no-check-certificate -qO- "https://api.github.com/repos/gSpotx2f/packages-openwrt/contents/19.07" | jq -r '.[] | .name' | grep "^${PKG_PREFIX}_.*" | sort | tail -n 1)
     debug_log "DEBUG" "TEST_FILE: $TEST_FILE"
     
     if [ -n "$PKG_FILE" ]; then
