@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-01-10"
+SCRIPT_VERSION="2025.03.03-01-11"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -145,20 +145,42 @@ gSpotx2f_package() {
   debug_log "DEBUG" "PKG_VERSION: $PKG_VERSION"
   
   if [ "$DIR_PATH" = "19.07" ]; then
-    # GitHub APIからデータを取得して一時ファイルに保存
+    # キャッシュファイルのパス
     local cache_file="${CACHE_DIR}/package_tmp.ch"
-    wget --no-check-certificate -qO- "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}" > "$cache_file"
 
-    # キャッシュからパッケージ名を取得してソート
+    # キャッシュファイルにデータを保存
+    local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
+    debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
+
+    # APIからデータを取得してキャッシュファイルに保存
+    local JSON
+    JSON=$(wget --no-check-certificate -qO- "$API_URL")
+    
+    # データが取得できなかった場合はエラー
+    if [ -z "$JSON" ]; then
+      debug_log "DEBUG" "APIからデータを取得できませんでした。"
+      echo "APIからデータを取得できませんでした。"
+      return 1
+    fi
+
+    # JSONデータをキャッシュファイルに保存
+    echo "$JSON" > "$cache_file"
+    debug_log "DEBUG" "キャッシュファイルにデータを保存しました: $cache_file"
+
+    # キャッシュファイルからパッケージ名を取得
     local PKG_FILE
-    PKG_FILE=$(grep "^${PKG_VERSION}" "$cache_file" | sort | tail -n 1 | tr -d '[:space:]')
+    PKG_FILE=$(cat "$cache_file" | jq -r '.[].name' | grep "^${PKG_VERSION}" | sort | tail -n 1)
+
+    if [ -z "$PKG_FILE" ]; then
+      debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
+      echo "$PKG_PREFIX が見つかりません。"
+      return 1
+    fi
+
     debug_log "DEBUG" "PKG_FILE: $PKG_FILE"
 
-    if [ -n "$PKG_FILE" ]; then
-      echo "バージョンは${DIR_PATH}で、パッケージ ${PKG_FILE} が見つかりました。"
-    else
-      echo "バージョンは${DIR_PATH}で、${PKG_PREFIX} に該当するパッケージが見つかりませんでした。"
-    fi
+    # 結果の表示
+    echo "バージョンは${DIR_PATH}で、パッケージ ${PKG_FILE} が見つかりました。"
   fi
 
   debug_log "DEBUG" "パッケージ: $PKG_FILE"
