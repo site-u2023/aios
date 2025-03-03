@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-02-05"
+SCRIPT_VERSION="2025.03.03-02-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -92,16 +92,24 @@ echo ok
 }
 
 feed_package() {
-  local ask_yn=false
-  local hidden=false
-  local opts=""
+  local confirm_install="no"
+  local skip_lang_pack="no"
+  local force_install="no"
+  local skip_package_db="no"
+  local set_disabled="no"
+  local hidden="no"
+  local opts=""   # オプションを格納する変数
   local args=""
 
-  # 引数を走査し、オプション (yn, hidden) と通常引数を分離する
+  # 引数を走査し、オプション (yn, nolang, force, notpack, disabled, hidden) と通常引数を分離する
   while [ $# -gt 0 ]; do
     case "$1" in
-      yn) ask_yn=true; shift ;;   # ynオプション
-      hidden) hidden=true; shift ;; # hiddenオプション
+      yn) confirm_install="yes"; opts="$opts yn" ;;   # ynオプション
+      nolang) skip_lang_pack="yes"; opts="$opts nolang" ;; # nolangオプション
+      force) force_install="yes"; opts="$opts force" ;;   # forceオプション
+      notpack) skip_package_db="yes"; opts="$opts notpack" ;; # notpackオプション
+      disabled) set_disabled="yes"; opts="$opts disabled" ;; # disabledオプション
+      hidden) hidden="yes"; opts="$opts hidden" ;; # hiddenオプション
       *) args="$args $1" ;;        # 通常引数を格納
     esac
     shift
@@ -158,7 +166,9 @@ feed_package() {
   ${BASE_WGET} "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 1
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
-  install_package "$OUTPUT_FILE" yn hidden || return 1
+  
+  # opts に格納されたオプションを展開して渡す
+  install_package "$OUTPUT_FILE" $opts || return 1  # opts でオプションを渡す
   
   return 0
 }
