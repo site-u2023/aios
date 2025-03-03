@@ -121,7 +121,7 @@ packages() {
 
     feed_package jerrykuku luci-theme-argon "" luci-theme-argon yn hidden
 
-    install_package list
+    # install_package list
 }
 
 # メイン処理
