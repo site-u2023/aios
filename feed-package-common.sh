@@ -129,16 +129,15 @@ gSpotx2f_package() {
     return 1
   fi
   local openwrt_version
-  openwrt_version=$(cut -d'.' -f1,2 < "$version_file")
+  openwrt_version=$(cut -d'.' -f1,2 < "$version_file" | tr -d ' \t\r\n')
   debug_log "DEBUG" "openwrt_version: $openwrt_version"
   
-  if [ "$openwrt_version" = "19.07" ]; then
-    debug_log "DEBUG" "openwrt_version -> DIR_PATH: $DIR_PATH"
+  if [ "$openwrt_version" = "19.07" ]; then   
     DIR_PATH="19.07"
   else
-    debug_log "DEBUG" "openwrt_version -> DIR_PATH: $DIR_PATH"
     DIR_PATH="current"
   fi
+  debug_log "DEBUG" "openwrt_version -> DIR_PATH: $DIR_PATH"
   
   if [ "$DIR_PATH" = "19.07" ]; then
     local PKG_FILE
