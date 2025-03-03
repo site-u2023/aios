@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-00-04"
+SCRIPT_VERSION="2025.03.03-00-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -444,7 +444,8 @@ install_package() {
     done
 
     # **ベースネームを取得**
-    BASE_NAME=$(basename "$package_name")
+    BASE_NAME=$(basename "$package_name" .ipk)
+    BASE_NAME=$(basename "$package_name" .apk)
     
     # update オプション処理
     if [ "$update_mode" = "yes" ]; then
