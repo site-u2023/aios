@@ -315,7 +315,7 @@ if grep -q "^$package_name " "$package_cache"; then
 fi
 
 # キャッシュに存在しない場合、FEED_DIR内を探してみる
-if [ -f "$FEED_DIR/$package_name" ]; then
+if [ -f "$package_name" ]; then
     debug_log "DEBUG" "Package $package_name found in FEED_DIR: $FEED_DIR"
     return 0  # FEED_DIR内にパッケージが見つかったのでOK
 fi
