@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-00-02"
+SCRIPT_VERSION="2025.03.03-00-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -160,6 +160,35 @@ stop_spinner() {
     unset SPINNER_PID
 
     echo -en "\e[?25h"
+}
+
+check_install_list() {
+    echo -e " \033[1;31mPackages installed after flashing\033[0;39m"
+
+    FLASH_TIME="$(awk '
+    $1 == "Installed-Time:" && ($2 < OLDEST || OLDEST=="") {
+      OLDEST=$2
+    }
+    END {
+      print OLDEST
+    }
+    ' /usr/lib/opkg/status)"
+
+    awk -v FT="$FLASH_TIME" '
+    $1 == "Package:" {
+
+      PKG=$2
+      USR=""
+    }
+    $1 == "Status:" && $3 ~ "user" {
+      USR=1
+    }
+    $1 == "Installed-Time:" && USR && $2 != FT {
+      print PKG
+    }
+    ' /usr/lib/opkg/status | sort
+    
+    return 0    
 }
 
 # パッケージリストの更新
@@ -378,6 +407,7 @@ install_package() {
     local test_mode="no"
     local update_mode="no"
     local unforce="no"
+    local install_list="no"
     local package_name=""
 
     # オプション解析
@@ -400,6 +430,7 @@ install_package() {
                 continue
                 ;;
             unforce) unforce="yes" ;;
+            list) install_list="yes"; check_install_list ;;
             -*) echo "Unknown option: $1"; return 1 ;;
             *)
                 if [ -z "$package_name" ]; then
