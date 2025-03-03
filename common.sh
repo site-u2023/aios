@@ -532,10 +532,8 @@ download() {
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
 
-    # **script.ch がなければ作成**
-    if [ ! -f "$script.ch" ]; then
-        touch "$script.ch"
-    fi
+    if [ ! -f "$script_db" ]; then
+        touch "$script_db"
 
     # **ローカルバージョンの取得（script.ch を参照）**
     if grep -q "^${file_name}=" "$script_db"; then
