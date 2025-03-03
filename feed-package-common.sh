@@ -162,7 +162,7 @@ feed_package() {
   echo "📦 パッケージをインストール中..."
 
   debug_log "DEBUG" "$(ls -i "${FEED_DIR}")"
-  install_package $OUTPUT_FILE" yn hidden || return 1
+  install_package "$OUTPUT_FILE" yn hidden || return 1
   
   return 0
 }
