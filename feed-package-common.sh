@@ -88,7 +88,7 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 # feed_package "hidden" "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
 #########################################################################
 gSpotx2f_package() {
-
+echo ok
 }
 
 feed_package() {
