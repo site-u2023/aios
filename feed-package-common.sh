@@ -115,7 +115,7 @@ gSpotx2f_package() {
   local REPO_NAME="$2"
   local DIR_PATH="$3"
   local PKG_PREFIX="$4"
-  local PKG_VERSION="${PKG_PREFIX}_.*"
+  local PKG_VERSION="${PKG_PREFIX}_"
   local orig_DIR_PATH="$DIR_PATH"  # 元の引数を保持
 
   debug_log "DEBUG" "PKG_PREFIX: $PKG_PREFIX"
@@ -188,7 +188,7 @@ feed_package() {
     return 1
   fi
 
-  debug_log "DEBUG" "取得したJSON: $JSON"
+  # debug_log "DEBUG" "取得したJSON: $JSON"
 
   local PKG_FILE
   PKG_FILE=$(echo "$JSON" | jq -r '.[].name' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
