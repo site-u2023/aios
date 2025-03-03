@@ -40,11 +40,6 @@ uci add_list ttyd.@ttyd[-1].client_option='titleFixed=aios'
 # 追加セクションの設定をコミット
 uci commit ttyd
 
-# サービスを再起動
-/etc/init.d/ttyd enable
-/etc/init.d/ttyd restart
-/etc/init.d/rpcd restart
-
 # zram-swap設定
 [zram-swap]
 uci add system zram
@@ -52,6 +47,5 @@ uci set system.@zram[0].enabled='1'
 uci set system.@zram[0].size='${CUSTOM_ZRAM_SIZE}'
 uci set system.@zram[0].comp_algorithm='zstd'
 uci commit system
-/etc/init.d/zram restart
 
 
