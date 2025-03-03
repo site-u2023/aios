@@ -174,7 +174,7 @@ feed_package() {
   local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
 
-  debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
+  # debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
 
   local JSON
   JSON=$(wget --no-check-certificate -qO- "$API_URL")
