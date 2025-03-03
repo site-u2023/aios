@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-00-05"
+SCRIPT_VERSION="2025.03.03-00-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -316,9 +316,9 @@ package_pre_install() {
 
     # デバイス内パッケージ確認
     local check_name="$package_name"
-    check_name=$(basename "$check_name" .ipk)
-    check_name=$(basename "$check_name" .apk)
-    
+    check_name="${check_name%.ipk}"
+    check_name="${check_name%.apk}"
+
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         output=$(opkg list-installed "$check_name" 2>&1)
         if [ -n "$output" ]; then  # 出力があった場合
@@ -445,8 +445,8 @@ install_package() {
 
     # **ベースネームを取得**
     BASE_NAME=$(basename "$package_name" .ipk)
-    BASE_NAME=$(basename "$package_name" .apk)
-    
+    BASE_NAME=$(basename "$BASE_NAME" .apk)
+
     # update オプション処理
     if [ "$update_mode" = "yes" ]; then
         update_package_list
