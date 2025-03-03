@@ -46,6 +46,11 @@ install_package luci-app-internet-detector hidden
 install_package internet-detector-mod-modem-restart yn hidden
 install_package internet-detector-mod-email yn hidden
 
+# luci-theme-argon
+[luci-theme-argon]
+feed_package kiddin9 luci-theme-edge "" luci-theme-edge yn hidden
+feed_package Leo-Jo-My luci-theme-opentomato "" luci-theme-opentomato yn hidden
+
 # zram-swap設定
 [zram-swap]
 uci add system zram
