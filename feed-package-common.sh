@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-01-09"
+SCRIPT_VERSION="2025.03.03-01-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -115,7 +115,7 @@ gSpotx2f_package() {
   local REPO_NAME="$2"
   local DIR_PATH="$3"
   local PKG_PREFIX="$4"
-  local PKG_VERSION="${PKG_PREFIX}"
+  local PKG_VERSION="${PKG_PREFIX}_"
   local orig_DIR_PATH="$DIR_PATH"  # 元の引数を保持
 
   debug_log "DEBUG" "PKG_PREFIX: $PKG_PREFIX"
@@ -143,24 +143,21 @@ gSpotx2f_package() {
   debug_log "DEBUG" "REPO_NAME: $REPO_NAME"
   debug_log "DEBUG" "DIR_PATH: $DIR_PATH"
   debug_log "DEBUG" "PKG_VERSION: $PKG_VERSION"
+  
   if [ "$DIR_PATH" = "19.07" ]; then
+    # GitHub APIからデータを取得して一時ファイルに保存
+    local cache_file="${CACHE_DIR}/package_tmp.ch"
+    wget --no-check-certificate -qO- "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}" > "$cache_file"
+
+    # キャッシュからパッケージ名を取得してソート
     local PKG_FILE
-    PKG_FILE=$(wget --no-check-certificate -qO- "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}" | jq -r '.[] | .name' | grep "^${PKG_VERSION}_" | sort | tail -n 1 | tr -d '[:space:]')
+    PKG_FILE=$(grep "^${PKG_VERSION}" "$cache_file" | sort | tail -n 1 | tr -d '[:space:]')
     debug_log "DEBUG" "PKG_FILE: $PKG_FILE"
 
-    TEST_FILE=$(wget --no-check-certificate -qO- "https://api.github.com/repos/gSpotx2f/packages-openwrt/contents/19.07" | jq -r '.[] | .name' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
-    debug_log "DEBUG" "TEST_FILE: $TEST_FILE"
-
-    #debug_log "DEBUG" "GitHub API からデータを取得中: https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
-    #wget --no-check-certificate -qO- "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}" | jq .  # ここで出力を確認
-
-    #wget --no-check-certificate -qO- "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}" > /tmp/github_response.json
-    #cat /tmp/github_response.json  # ここで内容を確認
-
     if [ -n "$PKG_FILE" ]; then
-      echo "バージョンは${DIR_PASH}です。"
+      echo "バージョンは${DIR_PATH}で、パッケージ ${PKG_FILE} が見つかりました。"
     else
-      echo "バージョンは${DIR_PASH}です。"
+      echo "バージョンは${DIR_PATH}で、${PKG_PREFIX} に該当するパッケージが見つかりませんでした。"
     fi
   fi
 
