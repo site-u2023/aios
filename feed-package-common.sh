@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-02-00"
+SCRIPT_VERSION="2025.03.03-02-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -155,7 +155,8 @@ feed_package() {
   debug_log "DEBUG" "ダウンロードURL: $DOWNLOAD_URL"
 
   echo "⏳ パッケージをダウンロード中..."
-  "${BASE_WGET}" "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 1
+  wget --no-check-certificate -q -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 1
+  #"${BASE_WGET}" "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 1
 
   echo "📦 パッケージをインストール中..."
   install_package "$OUTPUT_FILE" hidden || return 1
