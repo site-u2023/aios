@@ -115,7 +115,7 @@ gSpotx2f_package() {
   local REPO_NAME="$2"
   local DIR_PATH="$3"
   local PKG_PREFIX="$4"
-  local PKG_VERSION="${PKG_VERSION}_.*"
+  local PKG_VERSION="${PKG_PREFIX}_.*"
   local orig_DIR_PATH="$DIR_PATH"  # 元の引数を保持
 
   debug_log "DEBUG" "PKG_PREFIX: $PKG_PREFIX"
@@ -142,7 +142,7 @@ gSpotx2f_package() {
   if [ "$DIR_PATH" = "19.07" ]; then
     local PKG_FILE
     PKG_FILE=$(wget --no-check-certificate -qO- "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}" | jq -r '.[] | .name' | grep "^${PKG_VERSION}" | sort | tail -n 1)
-    # debug_log "DEBUG" "PKG_FILE: $PKG_FILE"
+    debug_log "DEBUG" "PKG_FILE: $PKG_FILE"
     
     if [ -n "$PKG_FILE" ]; then
       echo "バージョンは${DIR_PASH}です。"
@@ -177,7 +177,7 @@ feed_package() {
   local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
 
-  # debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
+  debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
 
   local JSON
   JSON=$(wget --no-check-certificate -qO- "$API_URL")
