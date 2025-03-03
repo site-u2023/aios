@@ -457,20 +457,20 @@ install_package() {
         local_package_db "$package_name"
     fi
 
-# サービスが存在し、かつリスタートが必要なサービスを判定
-if [ -x "/etc/init.d/$package_name" ]; then
-    # Luci関連のサービスの場合
-    if [[ "$package_name" =~ luci- ]]; then
-        # Luci関連のパッケージの場合はrpcdを再起動
-        /etc/init.d/rpcd restart
-        debug_log "DEBUG" "$package_name is a Luci package, rpcd has been restarted."
+    # サービスが存在し、かつリスタートが必要なサービスを判定
+    if [ -x "/etc/init.d/$package_name" ]; then
+        # Luci関連のサービスの場合
+        if [[ "$package_name" =~ luci- ]]; then
+            # Luci関連のパッケージの場合はrpcdを再起動
+            /etc/init.d/rpcd restart
+            debug_log "DEBUG" "$package_name is a Luci package, rpcd has been restarted."
+        else
+            # その他のサービスは通常の再起動・有効化
+            /etc/init.d/"$package_name" restart
+            /etc/init.d/"$package_name" enable
+            debug_log "DEBUG" "$package_name has been restarted and enabled."
+        fi
     else
-        # その他のサービスは通常の再起動・有効化
-        /etc/init.d/"$package_name" restart
-        /etc/init.d/"$package_name" enable
-        debug_log "DEBUG" "$package_name has been restarted and enabled."
+        debug_log "DEBUG" "$package_name is not a service or the service script is not found."
     fi
-else
-    debug_log "DEBUG" "$package_name is not a service or the service script is not found."
-fi
 }
