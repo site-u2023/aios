@@ -1,4 +1,4 @@
-SCRIPT_VERSION="2025.02.28-00-01"
+SCRIPT_VERSION="2025.03.03-00-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION package.db \033[0m"
 
 # ttyd設定
@@ -39,6 +39,12 @@ uci add_list ttyd.@ttyd[-1].client_option='titleFixed=aios'
 
 # 追加セクションの設定をコミット
 uci commit ttyd
+
+# internet-detector
+[internet-detector]
+install_package luci-app-internet-detector hidden
+install_package internet-detector-mod-modem-restart yn hidden
+install_package internet-detector-mod-email yn hidden
 
 # zram-swap設定
 [zram-swap]
