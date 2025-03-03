@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-01-16"
+SCRIPT_VERSION="2025.03.03-01-17"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -183,10 +183,6 @@ feed_package() {
 
   echo "📦 パッケージをインストール中..."
   opkg install "$OUTPUT_FILE" || return 1
-
-  echo "🔄 サービスを再起動..."
-  /etc/init.d/rpcd restart
-  /etc/init.d/"$PKG_PREFIX" start
 
   if [[ "$PKG_PREFIX" =~ luci- ]]; then
     /etc/init.d/rpcd restart
