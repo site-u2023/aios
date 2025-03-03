@@ -184,15 +184,5 @@ feed_package() {
   echo "📦 パッケージをインストール中..."
   install_package "$OUTPUT_FILE" hidden || return 1
 
-  if [[ "$PKG_PREFIX" =~ luci- ]]; then
-    /etc/init.d/rpcd restart
-    debug_log "DEBUG" "Luciアプリのためサービス再起動をスキップします。"
-  else
-    echo "🔄 サービスを再起動..."
-    /etc/init.d/"$PKG_PREFIX" start
-  fi
-  
-  echo "✅ インストール完了: $PKG_PREFIX ($NEW_VERSION)"
-
   return 0
 }
