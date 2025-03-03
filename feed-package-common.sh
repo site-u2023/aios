@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-01-01"
+SCRIPT_VERSION="2025.03.03-01-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -142,7 +142,7 @@ gSpotx2f_package() {
   if [ "$DIR_PATH" = "19.07" ]; then
     local PKG_FILE
     PKG_FILE=$(wget --no-check-certificate -qO- "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}" | jq -r '.[] | .name' | grep "^${PKG_VERSION}" | sort | tail -n 1)
-    debug_log "DEBUG" "PKG_FILE: $PKG_FILE"
+    # debug_log "DEBUG" "PKG_FILE: $PKG_FILE"
     
     if [ -n "$PKG_FILE" ]; then
       echo "バージョンは${DIR_PASH}です。"
