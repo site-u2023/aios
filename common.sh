@@ -534,7 +534,8 @@ download() {
 
     if [ ! -f "$script_db" ]; then
         touch "$script_db"
-
+    fi
+    
     # **ローカルバージョンの取得（script.ch を参照）**
     if grep -q "^${file_name}=" "$script_db"; then
         local_version=$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)
