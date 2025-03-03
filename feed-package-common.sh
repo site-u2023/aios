@@ -49,7 +49,7 @@ DEV_NULL="${DEV_NULL:-on}"
 # unset DEV_NULL
 
 # 基本定数の設定 
-BASE_WGET="${BASE_WGET:-wget -q -O}"
+BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q -O}"
 # BASE_WGET="${BASE_WGET:-wget -O}"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
@@ -179,7 +179,7 @@ feed_package() {
   fi
 
   echo "⏳ パッケージをダウンロード中..."
-  wget --no-check-certificate -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 1
+  wget "${BASE_WGET}" "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 1
 
   echo "📦 パッケージをインストール中..."
   opkg install "$OUTPUT_FILE" || return 1
