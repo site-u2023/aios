@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-01-12"
+SCRIPT_VERSION="2025.03.03-01-13"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -192,22 +192,30 @@ gSpotx2f_package() {
 feed_package() {
   local ask_yn=false
   local hidden=false
+  local opts=""
+  local args=""
 
-  # オプション（yn、hidden）を順不同で受け付ける
+  # 引数を走査し、オプション (yn, hidden) と通常引数を分離する
   while [ $# -gt 0 ]; do
     case "$1" in
-      yn) ask_yn=true; shift ;;
-      hidden) hidden=true; shift ;;
-      *) break ;;
+      yn) ask_yn=true; shift ;;   # ynオプション
+      hidden) hidden=true; shift ;; # hiddenオプション
+      *) args="$args $1" ;;        # 通常引数を格納
     esac
+    shift
   done
 
-  # 残りの引数を変数に格納
+  # 必須引数が4つあるかチェック
+  set -- $args
+  if [ "$#" -ne 4 ]; then
+    echo "エラー: 必要な引数 (REPO_OWNER, REPO_NAME, DIR_PATH, PKG_PREFIX) が不足しています。" >&2
+    return 1
+  fi
+
   local REPO_OWNER="$1"
   local REPO_NAME="$2"
   local DIR_PATH="$3"
   local PKG_PREFIX="$4"
-
   local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
 
