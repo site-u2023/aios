@@ -170,7 +170,7 @@ feed_package() {
   fi
 
   if [ "$ask_yn" = true ]; then
-    echo "新しいバージョン $NEW_VERSION をインストールしますか？ [y/N]"
+    echo " $NEW_VERSION をインストールしますか？ [y/N]"
     read -r yn
     case "$yn" in
       y|Y) debug_log "DEBUG" "インストールを続行..."; echo "✅ インストールを続行..." ;;
