@@ -415,10 +415,6 @@ check_downloader() {
 normalize_version() {
     input="$1"
 
-    # **二バイト → 一バイト変換**
-    input=$(normalize_input "$input")
-    [ -z "$input" ] && { echo "Error: normalize_input() returned empty string"; return 1; }
-
     # **許可された文字（数字, 記号）以外を削除**
     input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
 
@@ -533,15 +529,12 @@ download() {
         shift
     done
 
-    # **ファイル名の正規化**
-    file_name=$(normalize_input "$file_name")
-
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
 
     # **script.ch がなければ作成**
-    if [ ! -f "$script_db" ]; then
-        touch "$script_db"
+    if [ ! -f "$script.ch" ]; then
+        touch "$script.ch"
     fi
 
     # **ローカルバージョンの取得（script.ch を参照）**
