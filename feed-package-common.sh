@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-00-05"
+SCRIPT_VERSION="2025.03.03-01-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -115,9 +115,13 @@ gSpotx2f_package() {
   local REPO_NAME="$2"
   local DIR_PATH="$3"
   local PKG_PREFIX="$4"
-  local PKG_VERSION="${PKG_PREFIX}"
+  local PKG_VERSION="${PKG_VERSION}_.*"
   local orig_DIR_PATH="$DIR_PATH"  # 元の引数を保持
 
+  debug_log "DEBUG" "PKG_PREFIX: $PKG_PREFIX"
+  debug_log "DEBUG" "PKG_VERSION: $PKG_VERSION"
+  debug_log "DEBUG" "DIR_PATH: $DIR_PATH"
+  
   # バージョン情報の取得
   local version_file="${CACHE_DIR}/openwrt.ch"
   if [ ! -f "$version_file" ]; then
@@ -128,12 +132,15 @@ gSpotx2f_package() {
   openwrt_version=$(cut -d'.' -f1,2 < "$version_file")
 
   if [ "$openwrt_version" = "19.07" ]; then
+    debug_log "DEBUG" "openwrt_version -> DIR_PATH: $DIR_PATH"
     DIR_PATH="19.07"
   fi
   
   if [ "$DIR_PATH" = "19.07" ]; then
     local PKG_FILE
-    PKG_FILE=$(wget --no-check-certificate -qO- "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}" | jq -r '.[] | .name' | grep "^${PKG_VERSION}_.*" | sort | tail -n 1)
+    PKG_FILE=$(wget --no-check-certificate -qO- "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}" | jq -r '.[] | .name' | grep "^${PKG_VERSION}" | sort | tail -n 1)
+    debug_log "DEBUG" "PKG_FILE: $PKG_FILE"
+    
     if [ -n "$PKG_FILE" ]; then
       echo "バージョンは${DIR_PASH}です。"
     else
@@ -142,7 +149,7 @@ gSpotx2f_package() {
   fi
 
   debug_log "DEBUG" "パッケージ: $PKG_FILE"
-  debug_log "DEBUG" "オプション: $opts "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX""
+  debug_log "DEBUG" "オプション: $opts $REPO_OWNER $REPO_NAME $DIR_PATH $PKG_PREFIX"
   # opts は文字列（例: "yn hidden"）なので、feed_packageに展開すれば各単語に分割される
   feed_package $opts "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
 }
