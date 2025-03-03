@@ -182,7 +182,7 @@ feed_package() {
   wget "${BASE_WGET}" "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 1
 
   echo "📦 パッケージをインストール中..."
-  opkg install "$OUTPUT_FILE" || return 1
+  install_package "$OUTPUT_FILE" hidden || return 1
 
   if [[ "$PKG_PREFIX" =~ luci- ]]; then
     /etc/init.d/rpcd restart
