@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-00-01"
+SCRIPT_VERSION="2025.03.03-00-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -104,11 +104,11 @@ packages() {
     install_package luci-i18n-ttyd yn hidden
     install_package openssh-sftp-server yn hidden
 
-    gSpotx2f_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
-    gSpotx2f_package gSpotx2f packages-openwrt current luci-i18n-cpu-status yn hidden
-    gSpotx2f_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden
-    gSpotx2f_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden
-    gSpotx2f_package gSpotx2f packages-openwrt current luci-app-log yn hidden
+    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
+    feed_package gSpotx2f packages-openwrt current luci-i18n-cpu-status yn hidden
+    feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden
+    feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden
+    feed_package gSpotx2f packages-openwrt current luci-app-log yn hidden
 
 }
 
