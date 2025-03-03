@@ -154,30 +154,6 @@ feed_package() {
 
   debug_log "DEBUG" "ダウンロードURL: $DOWNLOAD_URL"
 
-  local INSTALLED_VERSION
-  INSTALLED_VERSION=$(opkg info "$PKG_PREFIX" 2>/dev/null | grep Version | awk '{print $2}')
-
-  local NEW_VERSION
-  NEW_VERSION=$(echo "$PKG_FILE" | sed -E "s/^${PKG_PREFIX}_([0-9\.\-r]+)_.*\.ipk/\1/")
-
-  if [ "$INSTALLED_VERSION" = "$NEW_VERSION" ]; then
-    if [ "$hidden" = true ]; then
-      return 0
-    fi
-    debug_log "DEBUG" "既に最新バージョン（$NEW_VERSION）がインストール済みです。"
-    echo "✅ 既に最新バージョン（$NEW_VERSION）がインストール済みです。"
-    return 0
-  fi
-
-  if [ "$ask_yn" = true ]; then
-    echo " $NEW_VERSION をインストールしますか？ [y/N]"
-    read -r yn
-    case "$yn" in
-      y|Y) debug_log "DEBUG" "インストールを続行..."; echo "✅ インストールを続行..." ;;
-      *) debug_log "DEBUG" "インストールをキャンセルしました。"; echo "🚫 インストールをキャンセルしました。"; return 1 ;;
-    esac
-  fi
-
   echo "⏳ パッケージをダウンロード中..."
   "${BASE_WGET}" "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 1
 
