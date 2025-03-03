@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-01-11"
+SCRIPT_VERSION="2025.03.03-01-12"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -193,6 +193,7 @@ feed_package() {
   local ask_yn=false
   local hidden=false
 
+  # オプション（yn、hidden）を順不同で受け付ける
   while [ $# -gt 0 ]; do
     case "$1" in
       yn) ask_yn=true; shift ;;
@@ -201,6 +202,7 @@ feed_package() {
     esac
   done
 
+  # 残りの引数を変数に格納
   local REPO_OWNER="$1"
   local REPO_NAME="$2"
   local DIR_PATH="$3"
@@ -219,8 +221,6 @@ feed_package() {
     echo "APIからデータを取得できませんでした。"
     return 1
   fi
-
-  # debug_log "DEBUG" "取得したJSON: $JSON"
 
   local PKG_FILE
   PKG_FILE=$(echo "$JSON" | jq -r '.[].name' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
