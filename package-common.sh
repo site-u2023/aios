@@ -287,7 +287,8 @@ package_pre_install() {
 
     # デバイス内パッケージ確認
     local check_name="$package_name"
-    check_name=$(basename "$check_name")
+    check_name=$(basename "$check_name" .ipk)
+    check_name=$(basename "$check_name" .apk)
     
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         output=$(opkg list-installed "$check_name" 2>&1)
