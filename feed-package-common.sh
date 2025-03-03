@@ -141,7 +141,7 @@ feed_package() {
     return 1
   fi
 
-  debug_log "DEBUG" "最新のパッケージ: $PKG_FILE"
+  debug_log "DEBUG" "NEW PACKAGE: $PKG_FILE"
 
   local DOWNLOAD_URL
   DOWNLOAD_URL=$(echo "$JSON" | jq -r --arg PKG "$PKG_FILE" '.[] | select(.name == $PKG) | .download_url')
@@ -152,19 +152,17 @@ feed_package() {
     return 1
   fi
 
-  debug_log "DEBUG" "ダウンロードURL: $DOWNLOAD_URL"
-
   echo "⏳ パッケージをダウンロード中..."
 
-  debug_log "DEBUG" "OUTPUT_FILE: $OUTPUT_FILE"
-  debug_log "DEBUG" "DOWNLOAD_URL: $DOWNLOAD_URL"
+  debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
+  debug_log "DEBUG" "DOWNLOAD URL: $DOWNLOAD_URL"
 
   ${BASE_WGET} "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 1
 
   echo "📦 パッケージをインストール中..."
-  install_package "$PKG_FILE" yn hidden || return 1
-  
+
   debug_log "DEBUG" "$(ls -i "${FEED_DIR}")"
+  install_package $OUTPUT_FILE" yn hidden || return 1
   
   return 0
 }
