@@ -152,16 +152,12 @@ feed_package() {
     return 1
   fi
 
-  echo "⏳ パッケージをダウンロード中..."
-
   debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
   debug_log "DEBUG" "DOWNLOAD URL: $DOWNLOAD_URL"
 
   ${BASE_WGET} "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 1
 
-  echo "📦 パッケージをインストール中..."
-
-  debug_log "DEBUG" "$(ls -i "${FEED_DIR}")"
+  debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   install_package "$OUTPUT_FILE" yn hidden || return 1
   
   return 0
