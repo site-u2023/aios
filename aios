@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-00-03"
+SCRIPT_VERSION="2025.03.03-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -111,6 +111,11 @@ packages() {
     feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden
     feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden
     feed_package gSpotx2f packages-openwrt current luci-app-log yn hidden
+
+    feed_package jerrykuku luci-theme-argon "" luci-theme-argon yn hidden
+
+
+    install_package list
 }
 
 # メイン処理
