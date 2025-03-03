@@ -830,9 +830,6 @@ check_common() {
             exit 0
             ;;
         full)
-            download "country-common.sh"
-            download "package-common.sh"
-            download "feed-package-common.sh"
             download "hidden" "messages.db"
             download "hidden" "openwrt.db"
             download "hidden" "country.db"
@@ -844,9 +841,6 @@ check_common() {
             select_country "$lang_code"
             ;;
         light|debug)
-            download "country-common.sh"
-            download "package-common.sh"
-            download "feed-package-common.sh"
             download "messages.db"
             download "openwrt.db"
             download "country.db"
