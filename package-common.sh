@@ -283,22 +283,19 @@ package_pre_install() {
     local package_name="$1"
     local package_cache="${CACHE_DIR}/package_list.ch"
 
-    # パスが含まれている場合、ベースネームを抽出する
-    local base_package_name=$(basename "$package_name")
-
-    debug_log "DEBUG" "Checking package: $base_package_name"
+    debug_log "DEBUG" "Checking package: $package_name"
     
     # デバイス内パッケージ確認
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        output=$(opkg list-installed "$base_package_name" 2>&1)
+        output=$(opkg list-installed "$BASE_NAME" 2>&1)
         if [ -n "$output" ]; then  # 出力があった場合
-            debug_log "DEBUG" "Package $base_package_name is already installed on the device."
+            debug_log "DEBUG" "Package $BASE_NAME is already installed on the device."
             return 1  # 既にインストールされている場合は終了
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        output=$(apk info "$base_package_name" 2>&1)
+        output=$(apk info "$BASE_NAME" 2>&1)
         if [ -n "$output" ]; then  # 出力があった場合
-            debug_log "DEBUG" "Package $base_package_name is already installed on the device."
+            debug_log "DEBUG" "Package $BASE_NAME is already installed on the device."
             return 1  # 既にインストールされている場合は終了
         fi
     fi
@@ -411,6 +408,9 @@ install_package() {
         shift
     done
 
+    # **ベースネームを取得**
+    BASE_NAME=$(basename "$package_name")
+    
     # update オプション処理
     if [ "$update_mode" = "yes" ]; then
         update_package_list
@@ -441,9 +441,9 @@ install_package() {
     fi
 
     # 言語パッケージか通常パッケージかを判別
-    if [[ "$package_name" == luci-i18n-* ]]; then
+    if [[ "$BASE_NAME" == luci-i18n-* ]]; then
         # 言語パッケージの場合、package_name に言語コードを追加
-        package_name="${package_name}-${lang_code}"
+        package_name="${BASE_NAME}-${lang_code}"
     fi
 
     package_pre_install "$package_name" || return 1
@@ -457,20 +457,20 @@ install_package() {
 
     # **ローカルパッケージDBの適用 (インストール成功後に実行)**
     if [ "$skip_package_db" != "yes" ]; then
-        local_package_db "$package_name"
+        local_package_db "$BASE_NAME"
     fi
 
     # サービスが存在し、かつリスタートが必要なサービスを判定
-    if [ -x "/etc/init.d/$package_name" ]; then
+    if [ -x "/etc/init.d/$BASE_NAME" ]; then
         # Luci関連のサービスの場合
-        if [[ "$package_name" =~ luci- ]]; then
+        if [[ "$BASE_NAME" =~ luci- ]]; then
             # Luci関連のパッケージの場合はrpcdを再起動
             /etc/init.d/rpcd restart
             debug_log "DEBUG" "$package_name is a Luci package, rpcd has been restarted."
         else
             # その他のサービスは通常の再起動・有効化
-            /etc/init.d/"$package_name" restart
-            /etc/init.d/"$package_name" enable
+            /etc/init.d/"$BASE_NAME" restart
+            /etc/init.d/"$BASE_NAME" enable
             debug_log "DEBUG" "$package_name has been restarted and enabled."
         fi
     else
