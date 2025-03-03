@@ -129,9 +129,9 @@ chmod_aios
 delete_aios
 make_directory
 download_common "common.sh"
-download_common "country-common.sh"
-download_common "package-common.sh"
-download_common "feed-package-common.sh"
+#download_common "country-common.sh"
+#download_common "package-common.sh"
+#download_common "feed-package-common.sh"
 check_option "$@"
 print_banner
 packages
