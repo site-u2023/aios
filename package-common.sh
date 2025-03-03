@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-00-03"
+SCRIPT_VERSION="2025.03.03-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -495,20 +495,23 @@ install_package() {
         local_package_db "$BASE_NAME"
     fi
 
-    # サービスが存在し、かつリスタートが必要なサービスを判定
-    if [ -x "/etc/init.d/$BASE_NAME" ]; then
-        # Luci関連のサービスの場合
-        if [[ "$BASE_NAME" =~ luci- ]]; then
-            # Luci関連のパッケージの場合はrpcdを再起動
-            /etc/init.d/rpcd restart
-            debug_log "DEBUG" "$package_name is a Luci package, rpcd has been restarted."
+    # サービス関連の処理（disabled オプションが有効な場合は全スキップ）
+    if [ "$set_disabled" != "yes" ]; then
+        # サービスが存在するかチェックし、処理を分岐
+        if [ -x "/etc/init.d/$BASE_NAME" ]; then
+            if [[ "$BASE_NAME" =~ luci- ]]; then
+                # Luci関連のパッケージの場合はrpcdを再起動
+                /etc/init.d/rpcd restart
+                debug_log "DEBUG" "$package_name is a Luci package, rpcd has been restarted."
+            else
+                /etc/init.d/"$BASE_NAME" restart
+                /etc/init.d/"$BASE_NAME" enable
+                debug_log "DEBUG" "$package_name has been restarted and enabled."
+            fi
         else
-            # その他のサービスは通常の再起動・有効化
-            /etc/init.d/"$BASE_NAME" restart
-            /etc/init.d/"$BASE_NAME" enable
-            debug_log "DEBUG" "$package_name has been restarted and enabled."
+            debug_log "DEBUG" "$package_name is not a service or the service script is not found."
         fi
     else
-        debug_log "DEBUG" "$package_name is not a service or the service script is not found."
+        debug_log "DEBUG" "Skipping service handling for $package_name due to disabled option."
     fi
 }
