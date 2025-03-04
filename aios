@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.04-00-19"
+SCRIPT_VERSION="2025.03.04-00-20"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -442,7 +442,6 @@ get_message() {
 }
 
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
-
 #########################################################################
 # Last Update: 2025-02-18 23:00:00 (JST) 🚀
 # "Standardizing version formatting for consistency."
@@ -539,10 +538,6 @@ download() {
 
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
-
-    if [ ! -f "$script_db" ]; then
-        touch "$script_db"
-    fi
     
     # **script.ch に無ければ install_path からバージョンを取得）**
     if grep -q "^${file_name}=" "$script_db"; then
@@ -557,6 +552,12 @@ download() {
     debug_log "DEBUG" "Local version: $local_version, Remote version: $remote_version"
 
     # **script.ch にバージョン情報を更新**
+    if [ -z "$new_version" ]; then
+        # リモートバージョンが空の場合、ダミーバージョンを設定
+        new_version="0000.00.00-00-00"
+        debug_log "DEBUG" "No version found. Using fallback version: $new_version"
+    fi
+
     if grep -q "^${file_name}=" "$script_db"; then
         existing_version=$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)
         if [ "$existing_version" != "$new_version" ]; then
@@ -666,11 +667,6 @@ get_script_version() {
     if [ -z "$version" ]; then
         echo "Error: Could not extract SCRIPT_VERSION from $script_file" >&2
         return 1
-    fi
-
-    # **script.ch がなければ作成**
-    if [ ! -f "$script_db" ]; then
-        touch "$script_db"
     fi
 
     # **script.ch への書き込み**
