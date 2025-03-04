@@ -725,7 +725,7 @@ make_directory() {
 initialization() {
 #    check_version
     chmod_aios
-#    delete_aios
+    delete_aios
     make_directory
 }
 
