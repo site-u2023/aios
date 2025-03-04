@@ -519,6 +519,7 @@ download() {
     local file_name=""
     local local_version=""
     local remote_version=""
+    CACHE_DIR="/tmp/aios/cache"
     local script_db="${CACHE_DIR}/script.ch"
 
     # **引数解析（順不同対応）**
