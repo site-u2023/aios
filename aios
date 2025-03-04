@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.04-00-17"
+SCRIPT_VERSION="2025.03.04-00-18"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -543,9 +543,11 @@ download() {
         touch "$script_db"
     fi
     
-    # **ローカルバージョンの取得（script.ch を参照）**
+    # **script.ch に無ければ install_path からバージョンを取得）**
     if grep -q "^${file_name}=" "$script_db"; then
         local_version=$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)
+    elif [ -f "$install_path" ]; then
+        local_version=$(get_script_version "$install_path")
     fi
 
     # **リモートバージョンの取得**
@@ -622,19 +624,12 @@ download() {
 
     # **script.ch にバージョン情報を更新**
     if grep -q "^${file_name}=" "$script_db"; then
-        debug_log "DEBUG" "Updating version in script.ch for ${file_name} to $remote_version"
         sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_db"
     else
-        debug_log "DEBUG" "Adding $file_name to script.ch with version $remote_version"
         echo "${file_name}=${remote_version}" >> "$script_db"
     fi
+    }
 
-    debug_log "DEBUG" "Updated script.ch: ${file_name}=${remote_version}"
-
-    return 0
-}
-
-#######################################################################
 get_script_version() {
     local script_file="$1"
     local script_db="${CACHE_DIR}/script.ch"
