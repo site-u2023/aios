@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.04-00-08"
+SCRIPT_VERSION="2025.03.04-00-09"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -493,7 +493,7 @@ get_message() {
 
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
-# Last Update: 2025-03-04 12:00:00 (JST) 🚀
+# Last Update: 2025-03-04 12:30:00 (JST) 🚀
 # "Efficient downloading with precise versioning and silent modes."
 #
 # 【要件】
@@ -504,14 +504,18 @@ get_message() {
 #    - check_option() で設定された QUIET_MODE に従い、すべてのログを抑制する。
 # 4. chmod オプション:
 #    - ダウンロード後、対象ファイルに実行権限 (chmod +x) を付与する。
-# 5. 引数の順序は自由（hidden、quiet、chmod の順番は任意）。
-# 6. wget のエラーハンドリングを行い、失敗時の詳細を debug_log() に記録する。
-# 7. 影響範囲: common.sh の download() のみ（他の関数には影響なし）。
+# 5. read オプション:
+#    - ダウンロード後、対象ファイルを読み込む（source）する。（ただし、ファイル名が *common*.sh に一致する場合は自動で読み込む）
+#    - デフォルトでは読み込まない。
+# 6. 引数の順序は自由（hidden, quiet, chmod, read の順番は任意）。
+# 7. wget のエラーハンドリングを行い、失敗時の詳細を debug_log() に記録する。
+# 8. 影響範囲: common.sh の download() のみ（他の関数には影響なし）。
 #########################################################################
 download() {
     local hidden_mode="false"
     local quiet_mode="${QUIET_MODE:-false}"
     local chmod_mode="false"
+    local read_mode="false"
     local file_name=""
     local local_version=""
     local remote_version=""
@@ -524,6 +528,7 @@ download() {
             quiet) quiet_mode="true" ;;
             debug) DEBUG_MODE="true" ;;
             chmod) chmod_mode="true" ;;
+            read) read_mode="true" ;;
             *) file_name="$1" ;;  # 最初に見つかった非オプション引数をファイル名とする
         esac
         shift
@@ -547,7 +552,7 @@ download() {
     # **リモートバージョンが取得できない場合は仮のバージョンを設定**
     if [ -z "$remote_version" ]; then
         debug_log "DEBUG" "No version DEBUGrmation found for $file_name. Skipping version check and proceeding with download."
-        remote_version="0000.00.00-00-00"
+        remote_version="2025.01.01-00-00"
     fi
 
     # **デバッグモード時のみ、バージョン情報を記録**
@@ -585,6 +590,7 @@ download() {
 
     # **ダウンロード成功メッセージ（hidden でも常に表示）**
     echo "$(color green "Download completed: $file_name - Version: $remote_version")"
+    debug_log "DEBUG" "Download completed: $file_name is valid."
 
     # **chmod オプション時、実行権限を付与**
     if [ "$chmod_mode" = "true" ]; then
@@ -592,7 +598,19 @@ download() {
         debug_log "DEBUG" "chmod +x applied to $file_name"
     fi
 
-    debug_log "DEBUG" "Download completed: $file_name is valid."
+    # **read オプションおよび自動判定（*common*.sh）の読み込み**
+    case "$file_name" in
+        *common*.sh)
+            . "$install_path"
+            debug_log "DEBUG" "Automatically sourced common file: $file_name"
+            ;;
+        *)
+            if [ "$read_mode" = "true" ]; then
+                . "$install_path"
+                debug_log "DEBUG" "Sourced file due to read option: $file_name"
+            fi
+            ;;
+    esac
 
     # **script.ch にバージョン情報を更新**
     if grep -q "^${file_name}=" "$script_db"; then
