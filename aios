@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.04-00-07"
+SCRIPT_VERSION="2025.03.04-00-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -705,9 +705,9 @@ make_directory() {
 
 # 初期化処理を実行
 initialization() {
-#   check_version
+#    check_version
     chmod_aios
-    delete_aios
+#    delete_aios
     make_directory
 }
 
@@ -926,7 +926,7 @@ check_common() {
             check_downloader
             print_banner
             select_country "$lang_code"
-            packages
+            # packages
             ;;
         light|debug)
             initialization
@@ -944,7 +944,7 @@ check_common() {
             check_downloader
             print_banner
             select_country "$lang_code"
-            packages
+            # packages
             ;;
         return)
             rm -f "${CACHE_DIR}/country.ch" \
