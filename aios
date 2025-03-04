@@ -539,75 +539,67 @@ download() {
 
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
-    
-    # リモートのバージョンを取得
-    remote_version=$(wget -qO- "$remote_url" | grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' | cut -d'=' -f2 | tr -d '"')
-    
-    # リモートバージョンが取得できなかった場合、ダミーバージョンを設定
-    if [ -z "$remote_version" ]; then
-        remote_version="$dummy_version"
-        debug_log "WARNING" "Failed to get remote version. Using dummy version: $dummy_version"
-    fi
-    
-    debug_log "DEBUG" "Remote version: $remote_version"
 
-    # script.ch が無ければ、リモートのバージョンをそのまま script.ch に書き込む
+    # script.ch が無ければ、初めてリモートのバージョンを取得してダミーバージョンを設定
     if [ ! -f "$script_db" ]; then
-        local_version="$remote_version"
+        remote_version=$(wget -qO- "$remote_url" | grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' | cut -d'=' -f2 | tr -d '"')
+        
+        # リモートバージョンが取得できなかった場合、ダミーバージョンを設定
+        if [ -z "$remote_version" ]; then
+            remote_version="$dummy_version"
+            debug_log "WARNING" "Failed to get remote version. Using dummy version: $dummy_version"
+        fi
+        # 初めての書き込みはダミーバージョンを使用
         echo "${file_name}=${remote_version}" >> "$script_db"
         debug_log "DEBUG" "script.ch not found. Created with ${file_name}=${remote_version}"
     else
-        # script.ch が存在すれば、ローカルバージョンを取得
+        # script.ch が存在する場合、ローカルバージョンを取得
         local_version=$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)
     fi
 
-    # ローカルバージョンが無ければリモートバージョンを設定
-    if [ -z "$local_version" ]; then
-        local_version="$remote_version"
-        echo "${file_name}=${local_version}" >> "$script_db"
-        debug_log "DEBUG" "No local version found. Adding remote version: $local_version to script.ch"
-    fi
-
-    debug_log "DEBUG" "Using local version: $local_version"
+    debug_log "DEBUG" "Remote version: $remote_version"
+    debug_log "DEBUG" "Local version: $local_version"
 
     # バージョン比較と判定
-    if [ "$local_version" = "$remote_version" ]; then
+    if [ -z "$local_version" ] || [ -z "$remote_version" ] || [ "$local_version" != "$remote_version" ]; then
+        # ローカルバージョンが無い場合、またはリモートと異なる場合、ダウンロードを実行
+        debug_log "DEBUG" "Updating $file_name (Local: $local_version, Remote: $remote_version)"
+        
+        # ダウンロード処理
+        debug_log "DEBUG" "Install path: $install_path"
+        if ! $BASE_WGET "$install_path" "$remote_url"; then
+            debug_log "ERROR" "Download failed: $file_name"
+            return 1
+        fi
+
+        # 空ファイルチェック
+        if [ ! -s "$install_path" ]; then
+            debug_log "ERROR" "Download failed: $file_name is empty."
+            return 1
+        fi
+
+        # ダウンロード成功メッセージ（hidden でも表示）
+        echo "$(color green "Download completed: $file_name - Version: $remote_version")"
+        debug_log "DEBUG" "Download completed: $file_name is valid."
+
+        # chmod オプション時、実行権限を付与
+        if [ "$chmod_mode" = "true" ]; then
+            chmod +x "$install_path"
+            debug_log "DEBUG" "chmod +x applied to $file_name"
+        fi
+
+        # script.ch のバージョン情報を更新
+        if grep -q "^${file_name}=" "$script_db"; then
+            sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_db"
+        else
+            echo "${file_name}=${remote_version}" >> "$script_db"
+        fi
+    else
+        # 既に最新の場合、アップデートしない
         if [ "$quiet_mode" != "true" ]; then
-            echo "$(color yellow "$file_name is already up-to-date. (Version: $local_version)")"
+            echo "$(color green "$file_name is already up-to-date. (Version: $local_version)")"
         fi
         return 0
-    fi
-
-    debug_log "DEBUG" "Updating $file_name (Local: $local_version, Remote: $remote_version)"
-
-    # ダウンロード処理
-    debug_log "DEBUG" "Install path: $install_path"
-    if ! $BASE_WGET "$install_path" "$remote_url"; then
-        debug_log "ERROR" "Download failed: $file_name"
-        return 1
-    fi
-
-    # 空ファイルチェック
-    if [ ! -s "$install_path" ]; then
-        debug_log "ERROR" "Download failed: $file_name is empty."
-        return 1
-    fi
-
-    # ダウンロード成功メッセージ（hidden でも表示）
-    echo "$(color green "Download completed: $file_name - Version: $remote_version")"
-    debug_log "DEBUG" "Download completed: $file_name is valid."
-
-    # chmod オプション時、実行権限を付与
-    if [ "$chmod_mode" = "true" ]; then
-        chmod +x "$install_path"
-        debug_log "DEBUG" "chmod +x applied to $file_name"
-    fi
-
-    # script.ch のバージョン情報を更新
-    if grep -q "^${file_name}=" "$script_db"; then
-        sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_db"
-    else
-        echo "${file_name}=${remote_version}" >> "$script_db"
     fi
 }
 
