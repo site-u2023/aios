@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.04-00-16"
+SCRIPT_VERSION="2025.03.04-00-17"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -519,7 +519,6 @@ download() {
     local file_name=""
     local local_version=""
     local remote_version=""
-    CACHE_DIR="/tmp/aios/cache"
     local script_db="${CACHE_DIR}/script.ch"
 
     # **引数解析（順不同対応）**
@@ -534,6 +533,8 @@ download() {
         esac
         shift
     done
+
+    debug_log "DEBUG" "file_name: $file_name"
 
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
@@ -581,6 +582,7 @@ download() {
     fi
 
     # **ダウンロード開始**
+    debug_log "DEBUG" "Install path: $install_path"
     if ! $BASE_WGET "$install_path" "$remote_url"; then
         debug_log "ERROR" "Download failed: $file_name"
         return 1
