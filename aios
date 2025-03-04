@@ -528,9 +528,11 @@ get_script_version() {
     
     # **`SCRIPT_VERSION="..."` の値を取得**
     version=$(grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' "$script_file" | cut -d'=' -f2 | tr -d '"')
+    debug_log "DEBUG" "Extracted version: $version"
 
     # **バージョンの正規化**
     version=$(normalize_version "$version")
+    debug_log "DEBUG" "Normalized version: $version"
 
     # **バージョン取得に失敗した場合はエラー**
     if [ -z "$version" ]; then
@@ -538,8 +540,10 @@ get_script_version() {
         return 1
     fi
 
-    # **script.ch への書き込み**
-    if grep -q "^${script_file}=" "$script_db"; then
+    # script.ch への書き込み
+    if [ ! -f "$script_db" ]; then
+        echo "${script_file}=${version}" > "$script_db"
+    elif grep -q "^${script_file}=" "$script_db"; then
         sed -i "s|^${script_file}=.*|${script_file}=${version}|" "$script_db"
     else
         echo "${script_file}=${version}" >> "$script_db"
