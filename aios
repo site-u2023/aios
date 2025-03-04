@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.04-00-18"
+SCRIPT_VERSION="2025.03.04-00-19"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -381,56 +381,6 @@ check_downloader() {
 }
 
 #########################################################################
-# Last Update: 2025-02-18 23:00:00 (JST) 🚀
-# "Standardizing version formatting for consistency."
-#
-# 【要件】
-# 1. **バージョン番号のフォーマットを統一**
-#    - `YYYY.MM.DD-自由形式`
-#    - `YYYYMMDDHHMMSS-自由形式`
-#    - 許可される区切り文字: `- . , ; : 空白`
-#
-# 2. **処理内容**
-#    - **許可された文字のみを抽出**
-#    - **先頭のゼロを削除（例: `02` → `2`）**
-#    - **前後の余計なスペースを削除**
-#
-# 3. **適用対象**
-#    - **`download()`**: **スクリプトバージョンの取得・比較**
-#    - **`compare_versions()`**: **バージョン比較時のフォーマット統一**
-#
-# 4. **適用しない対象**
-#    - **バージョン番号の解釈を変更しない（順番の入れ替えはしない）**
-#    - **日付以外の文字列は削除せず、フォーマットの標準化のみ行う**
-#
-# 5. **依存関係**
-#    - `normalize_input()` を使用し、iconv による処理を統一
-#
-# 6. **影響範囲**
-#    - `common.sh` に統合し、`download()` & `compare_versions()` で使用
-#########################################################################
-normalize_version() {
-    input="$1"
-
-    # **許可された文字（数字, 記号）以外を削除**
-    input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
-
-    # **不要な改行やスペースを削除**
-    input=$(echo "$input" | tr -d '\n' | sed 's/ *$//')
-
-    # **区切り文字を正しく処理**
-    input=$(echo "$input" | awk -F'[._-]' '{
-        for (i=1; i<=NF; i++) {
-            if ($i ~ /^[0-9]+$/) sub(/^0+/, "", $i)  # 先頭ゼロ削除（ただし区切りは保持）
-            printf "%s%s", $i, (i<NF ? (FS == "_" ? "-" : ".") : "")
-        }
-        print ""
-    }')
-
-    echo "$input"
-}
-
-#########################################################################
 # Last Update: 2025-02-18 18:00:00 (JST) 🚀
 # "Efficiency in retrieval, clarity in communication."
 # get_message: システムメッセージを取得する関数
@@ -492,6 +442,57 @@ get_message() {
 }
 
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
+
+#########################################################################
+# Last Update: 2025-02-18 23:00:00 (JST) 🚀
+# "Standardizing version formatting for consistency."
+#
+# 【要件】
+# 1. **バージョン番号のフォーマットを統一**
+#    - `YYYY.MM.DD-自由形式`
+#    - `YYYYMMDDHHMMSS-自由形式`
+#    - 許可される区切り文字: `- . , ; : 空白`
+#
+# 2. **処理内容**
+#    - **許可された文字のみを抽出**
+#    - **先頭のゼロを削除（例: `02` → `2`）**
+#    - **前後の余計なスペースを削除**
+#
+# 3. **適用対象**
+#    - **`download()`**: **スクリプトバージョンの取得・比較**
+#    - **`compare_versions()`**: **バージョン比較時のフォーマット統一**
+#
+# 4. **適用しない対象**
+#    - **バージョン番号の解釈を変更しない（順番の入れ替えはしない）**
+#    - **日付以外の文字列は削除せず、フォーマットの標準化のみ行う**
+#
+# 5. **依存関係**
+#    - `normalize_input()` を使用し、iconv による処理を統一
+#
+# 6. **影響範囲**
+#    - `common.sh` に統合し、`download()` & `compare_versions()` で使用
+#########################################################################
+normalize_version() {
+    input="$1"
+
+    # **許可された文字（数字, 記号）以外を削除**
+    input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
+
+    # **不要な改行やスペースを削除**
+    input=$(echo "$input" | tr -d '\n' | sed 's/ *$//')
+
+    # **区切り文字を正しく処理**
+    input=$(echo "$input" | awk -F'[._-]' '{
+        for (i=1; i<=NF; i++) {
+            if ($i ~ /^[0-9]+$/) sub(/^0+/, "", $i)  # 先頭ゼロ削除（ただし区切りは保持）
+            printf "%s%s", $i, (i<NF ? (FS == "_" ? "-" : ".") : "")
+        }
+        print ""
+    }')
+
+    echo "$input"
+}
+
 #########################################################################
 # Last Update: 2025-03-04 12:45:00 (JST) 🚀
 # "Efficient downloading with precise versioning and silent modes."
@@ -555,11 +556,18 @@ download() {
 
     debug_log "DEBUG" "Local version: $local_version, Remote version: $remote_version"
 
-    # **リモートバージョンが取得できない場合は仮のバージョンを設定**
-    if [ -z "$remote_version" ]; then
-        debug_log "ERROR" "Failed to fetch remote version. Using fallback version."
-        debug_log "DEBUG" "No version information found for $file_name. Skipping version check and proceeding with download."
-        remote_version="0000.00.00-00-00"
+    # **script.ch にバージョン情報を更新**
+    if grep -q "^${file_name}=" "$script_db"; then
+        existing_version=$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)
+        if [ "$existing_version" != "$new_version" ]; then
+            debug_log "DEBUG" "Updating version in script.ch for ${file_name} to $new_version"
+            sed -i "s|^${file_name}=.*|${file_name}=${new_version}|" "$script_db"
+        else
+            debug_log "DEBUG" "${file_name} is already at version $new_version. No update needed."
+        fi
+    else
+        debug_log "DEBUG" "Adding $file_name to script.ch with version $new_version"
+        echo "${file_name}=${new_version}" >> "$script_db"
     fi
 
     # **デバッグモード時のみ、バージョン情報を記録**
