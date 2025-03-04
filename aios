@@ -603,13 +603,13 @@ download() {
         *common*.sh)
             . "$install_path"
             debug_log "DEBUG" "Automatically sourced common file: $file_name"
-            echo "$file_name has been loaded."
+            echo "$(color green "$file_name has been loaded.")"
             ;;
         *)
             if [ "$read_mode" = "true" ]; then
                 . "$install_path"
                 debug_log "DEBUG" "Sourced file due to read option: $file_name"
-                echo "$file_name has been loaded."
+                echo "$(color green "$file_name has been loaded.")"
             fi
             ;;
     esac
