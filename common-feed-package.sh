@@ -85,10 +85,6 @@ mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR"
 # 例: `yn` と `hidden` を順不同で指定
 # feed_package "hidden" "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
 #########################################################################
-gSpotx2f_package() {
-echo ok
-}
-
 feed_package() {
   local confirm_install="no"
   local skip_lang_pack="no"
