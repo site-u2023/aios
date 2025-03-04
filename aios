@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.04-00-26"
+SCRIPT_VERSION="2025.03.04-00-27"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -474,20 +474,17 @@ get_message() {
 normalize_version() {
     input="$1"
 
-    # **許可された文字（数字, 記号）以外を削除**
+    # 許可された文字（数字, 記号）以外を削除
     input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
 
-    # **不要な改行やスペースを削除**
+    # 不要な改行やスペースを削除
     input=$(echo "$input" | tr -d '\n' | sed 's/ *$//')
 
-    # **区切り文字を正しく処理**
-    input=$(echo "$input" | awk -F'[._-]' '{
-        for (i=1; i<=NF; i++) {
-            if ($i ~ /^[0-9]+$/) sub(/^0+/, "", $i)  # 先頭ゼロ削除（ただし区切りは保持）
-            printf "%s%s", $i, (i<NF ? (FS == "_" ? "-" : ".") : "")
-        }
-        print ""
-    }')
+    # 先頭ゼロを削除する処理
+    input=$(echo "$input" | sed -E 's/(^|[._-])0+([0-9])/\1\2/g')
+
+    # 必要に応じて区切り文字を処理する
+    input=$(echo "$input" | sed 's/[._-]\{1,1\}/./g')
 
     echo "$input"
 }
@@ -539,11 +536,6 @@ get_script_version() {
     if [ -z "$version" ]; then
         echo "Error: Could not extract SCRIPT_VERSION from $script_file" >&2
         return 1
-    fi
-
-    # **script.ch がなければ作成**
-    if [ ! -f "$script_db" ]; then
-        touch "$script_db"
     fi
 
     # **script.ch への書き込み**
