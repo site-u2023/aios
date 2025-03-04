@@ -372,12 +372,12 @@ check_downloader() {
             PACKAGE_MANAGER="apk"
         elif command -v opkg >/dev/null 2>&1; then
             PACKAGE_MANAGER="opkg"
-        else
+        else 
             PACKAGE_MANAGER="opkg"  # デフォルトをセット
         fi
         echo "$PACKAGE_MANAGER" > "${CACHE_DIR}/downloader.ch"
     fi
-    echo -e "$(color green "Downloader $PACKAGE_MANAGER")"
+    echo -e "$(color green "Package Manager: $PACKAGE_MANAGER is supported (stable)")"
 }
 
 #########################################################################
