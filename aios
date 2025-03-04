@@ -40,10 +40,7 @@ SCRIPT_VERSION="2025.03.04-00-02"
 ### 🛠️ Keep the debugging process structured, efficient, and reliable.
 ### =========================================================
 
-#echo "$(color green "Download completed: aios - Version: $SCRIPT_VERSION")"
-#echo -e "$(color green "Download completed: aios - (Version: $SCRIPT_VERSION)"
 echo -e "\033[1;32mDownload completed: aios - Version: $SCRIPT_VERSION\033[0m"
-033[1;32m
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
