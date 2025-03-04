@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.04-00-29"
+SCRIPT_VERSION="2025.03.04-01-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -476,15 +476,19 @@ normalize_version() {
 
     # 許可された文字（数字, 記号）以外を削除
     input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
+    debug_log "DEBUG" "After removing disallowed characters: $input"
 
     # 不要な改行やスペースを削除
     input=$(echo "$input" | tr -d '\n' | sed 's/ *$//')
+    debug_log "DEBUG" "After trimming spaces: $input"
 
     # 先頭ゼロを削除する処理
     input=$(echo "$input" | sed -E 's/(^|[._-])0+([0-9])/\1\2/g')
+    debug_log "DEBUG" "After removing leading zeros: $input"
 
     # 必要に応じて区切り文字を処理する
     input=$(echo "$input" | sed 's/[._-]\{1,1\}/./g')
+    debug_log "DEBUG" "After processing delimiters: $input"
 
     echo "$input"
 }
