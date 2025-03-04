@@ -40,8 +40,6 @@ SCRIPT_VERSION="2025.03.04-00-05"
 ### 🛠️ Keep the debugging process structured, efficient, and reliable.
 ### =========================================================
 
-echo -e "\033[1;32mDownload completed: aios - Version: $SCRIPT_VERSION\033[0m"
-
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
 # export DEV_NULL="on"
@@ -687,7 +685,7 @@ handle_exit() {
 #########################################################################
 # バージョンチェック
 check_version() {
-    echo "$(color green "Download completed: $0 - Version: $SCRIPT_VERSION")"
+    echo "$(color green "Download completed: $(basename "$0") - Version: $SCRIPT_VERSION")"
 }
 
 # 権限設定
