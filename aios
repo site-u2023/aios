@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.04-00-09"
+SCRIPT_VERSION="2025.03.04-00-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -493,7 +493,7 @@ get_message() {
 
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
-# Last Update: 2025-03-04 12:30:00 (JST) 🚀
+# Last Update: 2025-03-04 12:45:00 (JST) 🚀
 # "Efficient downloading with precise versioning and silent modes."
 #
 # 【要件】
@@ -505,7 +505,7 @@ get_message() {
 # 4. chmod オプション:
 #    - ダウンロード後、対象ファイルに実行権限 (chmod +x) を付与する。
 # 5. read オプション:
-#    - ダウンロード後、対象ファイルを読み込む（source）する。（ただし、ファイル名が *common*.sh に一致する場合は自動で読み込む）
+#    - ダウンロード後、対象ファイルを読み込む（source）。（ただし、ファイル名が *common*.sh に一致する場合は自動で読み込む）
 #    - デフォルトでは読み込まない。
 # 6. 引数の順序は自由（hidden, quiet, chmod, read の順番は任意）。
 # 7. wget のエラーハンドリングを行い、失敗時の詳細を debug_log() に記録する。
@@ -551,7 +551,7 @@ download() {
 
     # **リモートバージョンが取得できない場合は仮のバージョンを設定**
     if [ -z "$remote_version" ]; then
-        debug_log "DEBUG" "No version DEBUGrmation found for $file_name. Skipping version check and proceeding with download."
+        debug_log "DEBUG" "No version information found for $file_name. Skipping version check and proceeding with download."
         remote_version="2025.01.01-00-00"
     fi
 
