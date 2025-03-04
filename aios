@@ -553,8 +553,9 @@ download() {
 
     # **リモートバージョンが取得できない場合は仮のバージョンを設定**
     if [ -z "$remote_version" ]; then
+        debug_log "ERROR" "Failed to fetch remote version. Using fallback version."
         debug_log "DEBUG" "No version information found for $file_name. Skipping version check and proceeding with download."
-        remote_version="2025.01.01-00-00"
+        remote_version="0000.00.00-00-00"
     fi
 
     # **デバッグモード時のみ、バージョン情報を記録**
@@ -618,8 +619,10 @@ download() {
 
     # **script.ch にバージョン情報を更新**
     if grep -q "^${file_name}=" "$script_db"; then
+        debug_log "DEBUG" "Updating version in script.ch for $file_name to $remote_version"
         sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_db"
     else
+        debug_log "DEBUG" "Adding $file_name to script.ch with version $remote_version"
         echo "${file_name}=${remote_version}" >> "$script_db"
     fi
 
