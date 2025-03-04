@@ -924,8 +924,8 @@ check_common() {
             check_architecture
             check_downloader
             print_banner
-            packages
             select_country "$lang_code"
+            packages
             ;;
         light|debug)
             initialization
@@ -941,8 +941,8 @@ check_common() {
             check_architecture
             check_downloader
             print_banner
-            packages
             select_country "$lang_code"
+            packages
             ;;
         return)
             rm -f "${CACHE_DIR}/country.ch" \
