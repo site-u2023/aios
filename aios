@@ -524,7 +524,7 @@ get_script_version() {
 }
 
 # ファイルをダウンロードし、バージョンと実行権限を付与した後にスクリプトを読み込む関数
-download_and_source() {
+download() {
     local hidden_mode="false"
     local quiet_mode="${QUIET_MODE:-false}"
     local chmod_mode="false"
@@ -578,12 +578,12 @@ download_and_source() {
             return 1
         fi
 
-        debug_log "INFO" "Download completed: $file_name - Version: $remote_version"
-        echo "Download completed: $file_name - Version: $remote_version"
+        debug_log "DEBUG" "Download completed: $file_name - Version: $remote_version"
+        echo "$(color green "Download completed: $file_name - Version: $remote_version")"
 
         if [ "$chmod_mode" = "true" ]; then
             chmod +x "$install_path"
-            debug_log "INFO" "chmod +x applied to $file_name"
+            debug_log "DEBUG" "chmod +x applied to $file_name"
         fi
 
         if grep -q "^${file_name}=" "$script_db"; then
@@ -593,15 +593,15 @@ download_and_source() {
         fi
     else
         if [ "$quiet_mode" != "true" ]; then
-            debug_log "INFO" "$file_name is already up-to-date. (Version: $local_version)"
-            echo "$file_name is already up-to-date. (Version: $local_version)"
+            debug_log "DEBUG" "$file_name is already up-to-date. (Version: $local_version)"
+            echo "$(color green "$file_name is already up-to-date. (Version: $local_version)")"
         fi
     fi
 
     # スクリプトの読み込み
     if [ -f "$install_path" ]; then
         . "$install_path"
-        debug_log "INFO" "Sourced: $install_path"
+        debug_log "DEBUG" "Sourced: $install_path"
     else
         debug_log "ERROR" "File not found for sourcing: $install_path"
     fi
