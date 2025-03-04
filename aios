@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.04-01-01"
+SCRIPT_VERSION="2025.03.04-01-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -471,6 +471,25 @@ get_message() {
 # 6. **影響範囲**
 #    - `common.sh` に統合し、`download()` & `compare_versions()` で使用
 #########################################################################
+# Last Update: 2025-03-04 12:45:00 (JST) 🚀
+# "Efficient downloading with precise versioning and silent modes."
+#
+# 【要件】
+# 1. BASE_WGET を使用してファイルをダウンロードする。
+# 2. hidden オプション:
+#    - ダウンロードの成否ログを記録するが、既存ファイルがある場合は出力を抑制する。
+# 3. quiet オプション:
+#    - check_option() で設定された QUIET_MODE に従い、すべてのログを抑制する。
+# 4. chmod オプション:
+#    - ダウンロード後、対象ファイルに実行権限 (chmod +x) を付与する。
+# 5. read オプション:
+#    - ダウンロード後、対象ファイルを読み込む（source）する。（ただし、ファイル名が *common*.sh に一致する場合は自動で読み込む）
+#    - デフォルトでは読み込まない。
+# 6. 引数の順序は自由（hidden, quiet, chmod, read の順番は任意）。
+# 7. wget のエラーハンドリングを行い、失敗時の詳細を debug_log() に記録する。
+# 8. 影響範囲: common.sh の download() のみ（他の関数には影響なし）。
+#########################################################################
+# スクリプトのバージョンを正規化する関数
 normalize_version() {
     input="$1"
 
@@ -493,36 +512,18 @@ normalize_version() {
     echo "$input"
 }
 
-#########################################################################
-# Last Update: 2025-03-04 12:45:00 (JST) 🚀
-# "Efficient downloading with precise versioning and silent modes."
-#
-# 【要件】
-# 1. BASE_WGET を使用してファイルをダウンロードする。
-# 2. hidden オプション:
-#    - ダウンロードの成否ログを記録するが、既存ファイルがある場合は出力を抑制する。
-# 3. quiet オプション:
-#    - check_option() で設定された QUIET_MODE に従い、すべてのログを抑制する。
-# 4. chmod オプション:
-#    - ダウンロード後、対象ファイルに実行権限 (chmod +x) を付与する。
-# 5. read オプション:
-#    - ダウンロード後、対象ファイルを読み込む（source）する。（ただし、ファイル名が *common*.sh に一致する場合は自動で読み込む）
-#    - デフォルトでは読み込まない。
-# 6. 引数の順序は自由（hidden, quiet, chmod, read の順番は任意）。
-# 7. wget のエラーハンドリングを行い、失敗時の詳細を debug_log() に記録する。
-# 8. 影響範囲: common.sh の download() のみ（他の関数には影響なし）。
-#########################################################################
+# スクリプトファイルからバージョンを取得し、正規化する関数
 get_script_version() {
     local script_file="$1"
     local script_db="${CACHE_DIR}/script.ch"
 
-    # **スクリプトファイルが指定されていない場合はエラー**
+    # スクリプトファイルが指定されていない場合はエラー
     if [ -z "$script_file" ]; then
         echo "Error: No script file specified." >&2
         return 1
     fi
 
-    # **スクリプトが存在しない場合はエラー**
+    # スクリプトが存在しない場合はエラー
     if [ ! -f "$script_file" ]; then
         echo "Error: Script file not found: $script_file" >&2
         return 1
@@ -530,35 +531,24 @@ get_script_version() {
 
     local version=""
     
-    # **`SCRIPT_VERSION="..."` の値を取得**
-    version=$(grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' "$script_file" | cut -d'=' -f2 | tr -d '"')
+    # `SCRIPT_VERSION="..."` の値を取得
+    version=$(grep -Eo 'SCRIPT_VERSION=["'"'"'][0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*["'"'"']' "$script_file" | cut -d'=' -f2 | tr -d '"')
     debug_log "DEBUG" "Extracted version: $version"
 
-    # **バージョンの正規化**
+    # バージョンの正規化
     version=$(normalize_version "$version")
     debug_log "DEBUG" "Normalized version: $version"
 
-    # **バージョン取得に失敗した場合はエラー**
+    # バージョン取得に失敗した場合はエラー
     if [ -z "$version" ]; then
         echo "Error: Could not extract SCRIPT_VERSION from $script_file" >&2
         return 1
     fi
 
-    # script.ch への書き込み
-    if [ ! -f "$script_db" ]; then
-        echo "${script_file}=${version}" > "$script_db"
-    elif grep -q "^${script_file}=" "$script_db"; then
-        sed -i "s|^${script_file}=.*|${script_file}=${version}|" "$script_db"
-    else
-        echo "${script_file}=${version}" >> "$script_db"
-    fi
-
-    # **デバッグログに記録**
-    debug_log "DEBUG" "Updated script.ch: ${script_file}=${version}"
-
     echo "$version"
 }
 
+# ファイルをダウンロードし、バージョンを管理する関数
 download() {
     local hidden_mode="false"
     local quiet_mode="${QUIET_MODE:-false}"
@@ -588,23 +578,29 @@ download() {
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
 
-    # script.ch が無ければ、リモートのバージョンを取得
+    # script.ch が存在しなければエラー
     if [ ! -f "$script_db" ]; then
-        remote_version=$(wget -qO- "$remote_url" | grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' | cut -d'=' -f2 | tr -d '"')
-        debug_log "DEBUG" "Extracted remote version: $remote_version"
-
-        # リモートバージョンが取得できなかった場合、ダミーバージョンを使用
-        if [ -z "$remote_version" ]; then
-            remote_version="$dummy_version"
-            debug_log "WARNING" "Failed to get remote version. Using dummy version: $dummy_version"
-        fi
-
-        debug_log "DEBUG" "Remote version: $remote_version"
-    else
-        # script.ch が存在する場合、ローカルバージョンを取得
-        local_version=$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)
-        debug_log "DEBUG" "Local version: $local_version"
+        echo "Error: script.ch file not found: $script_db" >&2
+        return 1
     fi
+
+    # リモートのバージョンを取得
+    remote_version=$(wget -qO- "$remote_url" | grep -Eo 'SCRIPT_VERSION=["'"'"'][0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*["'"'"']' | cut -d'=' -f2 | tr -d '"')
+    debug_log "DEBUG" "Extracted remote version: $remote_version"
+
+    # リモートバージョンが取得できなかった場合はエラー
+    if [ -z "$remote_version" ]; then
+        echo "Error: Could not extract remote version from $remote_url" >&2
+        return 1
+    fi
+
+    debug_log "DEBUG" "Remote version: $remote_version"
+
+    # script.ch からローカルバージョンを取得
+    if grep -q "^${file_name}=" "$script_db"; then
+        local_version=$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)
+    fi
+    debug_log "DEBUG" "Local version: $local_version"
 
     # バージョン比較と判定
     if [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
@@ -649,133 +645,6 @@ download() {
     fi
 }
 
-XXX_download() {
-    local hidden_mode="false"
-    local quiet_mode="${QUIET_MODE:-false}"
-    local chmod_mode="false"
-    local read_mode="false"
-    local file_name=""
-    local local_version=""
-    local remote_version=""
-    local script_db="${CACHE_DIR}/script.ch"
-
-    # **引数解析（順不同対応）**
-    while [ "$#" -gt 0 ]; do
-        case "$1" in
-            hidden) hidden_mode="true" ;;
-            quiet) quiet_mode="true" ;;
-            debug) DEBUG_MODE="true" ;;
-            chmod) chmod_mode="true" ;;
-            read) read_mode="true" ;;
-            *) file_name="$1" ;;  # 最初に見つかった非オプション引数をファイル名とする
-        esac
-        shift
-    done
-
-    debug_log "DEBUG" "file_name: $file_name"
-
-    local install_path="${BASE_DIR}/${file_name}"
-    local remote_url="${BASE_URL}/${file_name}"
-    
-    # **script.ch に無ければ install_path からバージョンを取得）**
-    if grep -q "^${file_name}=" "$script_db"; then
-        local_version=$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)
-    elif [ -f "$install_path" ]; then
-        local_version=$(get_script_version "$install_path")
-    fi
-
-    # **リモートバージョンの取得**
-    remote_version=$(wget -qO- "$remote_url" | grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' | cut -d'=' -f2 | tr -d '"')
-
-    debug_log "DEBUG" "Local version: $local_version, Remote version: $remote_version"
-
-    # **script.ch にバージョン情報を更新**
-    if [ -z "$new_version" ]; then
-        # リモートバージョンが空の場合、ダミーバージョンを設定
-        new_version="0000.00.00-00-00"
-        debug_log "DEBUG" "No version found. Using fallback version: $new_version"
-    fi
-
-    if grep -q "^${file_name}=" "$script_db"; then
-        existing_version=$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)
-        if [ "$existing_version" != "$new_version" ]; then
-            debug_log "DEBUG" "Updating version in script.ch for ${file_name} to $new_version"
-            sed -i "s|^${file_name}=.*|${file_name}=${new_version}|" "$script_db"
-        else
-            debug_log "DEBUG" "${file_name} is already at version $new_version. No update needed."
-        fi
-    else
-        debug_log "DEBUG" "Adding $file_name to script.ch with version $new_version"
-        echo "${file_name}=${new_version}" >> "$script_db"
-    fi
-
-    # **デバッグモード時のみ、バージョン情報を記録**
-    debug_log "DEBUG" "Download function executed - Target Version: $remote_version"
-
-    # **hidden モード時、ローカルファイルがあるなら即リターン**
-    if [ "$hidden_mode" = "true" ] && [ -f "$install_path" ]; then
-        debug_log "DEBUG" "hidden mode enabled - Skipping download for $file_name"
-        return 0
-    fi
-
-    # **バージョンチェック**
-    if [ -z "$local_version" ]; then
-        debug_log "DEBUG" "No local version found for $file_name. Downloading..."
-    elif [ "$local_version" = "$remote_version" ]; then
-        if [ "$quiet_mode" != "true" ]; then
-            echo "$(color yellow "$file_name is already up-to-date. (Version: $local_version)")"
-        fi
-        return 0
-    else
-        debug_log "DEBUG" "Updating $file_name (Local: $local_version, Remote: $remote_version)"
-    fi
-
-    # **ダウンロード開始**
-    debug_log "DEBUG" "Install path: $install_path"
-    if ! $BASE_WGET "$install_path" "$remote_url"; then
-        debug_log "ERROR" "Download failed: $file_name"
-        return 1
-    fi
-
-    # **空ファイルチェック**
-    if [ ! -s "$install_path" ]; then
-        debug_log "ERROR" "Download failed: $file_name is empty."
-        return 1
-    fi
-
-    # **ダウンロード成功メッセージ（hidden でも常に表示）**
-    echo "$(color green "Download completed: $file_name - Version: $remote_version")"
-    debug_log "DEBUG" "Download completed: $file_name is valid."
-
-    # **chmod オプション時、実行権限を付与**
-    if [ "$chmod_mode" = "true" ]; then
-        chmod +x "$install_path"
-        debug_log "DEBUG" "chmod +x applied to $file_name"
-    fi
-
-    # **read オプションおよび自動判定（*common*.sh）の読み込み**
-    case "$file_name" in
-        *common*.sh)
-            . "$install_path"
-            debug_log "DEBUG" "Automatically sourced common file: $file_name"
-            echo "$(color green "$file_name has been loaded.")"
-            ;;
-        *)
-            if [ "$read_mode" = "true" ]; then
-                . "$install_path"
-                debug_log "DEBUG" "Sourced file due to read option: $file_name"
-                echo "$(color green "$file_name has been loaded.")"
-            fi
-            ;;
-    esac
-
-    # **script.ch にバージョン情報を更新**
-    if grep -q "^${file_name}=" "$script_db"; then
-        sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_db"
-    else
-        echo "${file_name}=${remote_version}" >> "$script_db"
-    fi
- }
 # 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
