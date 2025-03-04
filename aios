@@ -677,32 +677,32 @@ handle_exit() {
 #########################################################################
 # 初期設定
 #########################################################################
+# バージョンチェック
+check_version() {
+    echo "$(color green "Download completed: $0 - Version: $SCRIPT_VERSION")"
+}
+
+# 権限設定
+chmod_aios() {
+    chmod +x "$BIN_PATH"
+}
+
+# 初期化処理
+delete_aios() {
+    rm -rf "${BASE_DIR}"
+}
+
+# 必要ディレクトリ作成
+make_directory() {
+    mkdir -p "$BASE_DIR" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"
+}
+
+# 初期化処理を実行
 initialization() {
-
-  # バージョンチェック
-  check_version() {
-　    echo "$(color green "Download completed: $0 - Version: $SCRIPT_VERSION")"
-　}
-
-  # 権限設定
-  chmod_aios() {
-      chmod +x "$BIN_PATH"
-  }
-
-  # 初期化処理
-  delete_aios() {
-      rm -rf "${BASE_DIR}"
-  }
-
-  # 必要ディレクトリ作成
-  make_directory() {
-      mkdir -p "$BASE_DIR" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"
-  }
-
-check_version
-chmod_aios
-delete_aios
-make_directory
+    check_version
+    chmod_aios
+    delete_aios
+    make_directory
 }
 
 #########################################################################
