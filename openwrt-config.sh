@@ -13,7 +13,6 @@
 # ・メインメニューの表示とユーザーによる各種オプションの選択
 
 SCRIPT_VERSION="2025.02.16-00-00"
-echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION openwrt-config.sh \033[0m"
 
 INPUT_LANG="${1:-}"
 
