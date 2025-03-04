@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.04-00-02"
+SCRIPT_VERSION="2025.03.04-00-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -678,6 +678,12 @@ handle_exit() {
 # 初期設定
 #########################################################################
 initialization() {
+
+  # バージョンチェック
+  check_version() {
+　    echo "$(color green "Download completed: $0 - Version: $SCRIPT_VERSION")"
+　}
+
   # 権限設定
   chmod_aios() {
       chmod +x "$BIN_PATH"
@@ -692,6 +698,8 @@ initialization() {
   make_directory() {
       mkdir -p "$BASE_DIR" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"
   }
+
+check_version
 chmod_aios
 delete_aios
 make_directory
