@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.04-00-11"
+SCRIPT_VERSION="2025.03.04-00-12"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -505,7 +505,7 @@ get_message() {
 # 4. chmod オプション:
 #    - ダウンロード後、対象ファイルに実行権限 (chmod +x) を付与する。
 # 5. read オプション:
-#    - ダウンロード後、対象ファイルを読み込む（source）。（ただし、ファイル名が *common*.sh に一致する場合は自動で読み込む）
+#    - ダウンロード後、対象ファイルを読み込む（source）する。（ただし、ファイル名が *common*.sh に一致する場合は自動で読み込む）
 #    - デフォルトでは読み込まない。
 # 6. 引数の順序は自由（hidden, quiet, chmod, read の順番は任意）。
 # 7. wget のエラーハンドリングを行い、失敗時の詳細を debug_log() に記録する。
@@ -603,11 +603,13 @@ download() {
         *common*.sh)
             . "$install_path"
             debug_log "DEBUG" "Automatically sourced common file: $file_name"
+            echo "$file_name has been loaded."
             ;;
         *)
             if [ "$read_mode" = "true" ]; then
                 . "$install_path"
                 debug_log "DEBUG" "Sourced file due to read option: $file_name"
+                echo "$file_name has been loaded."
             fi
             ;;
     esac
