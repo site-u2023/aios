@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-00-02"
+SCRIPT_VERSION="2025.03.05-00-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -523,10 +523,86 @@ XXX_get_script_version() {
     echo "$version"
 }
 
+# ファイルをダウンロードし、バージョンを管理する関数
+XXX_download() {
+    local hidden_mode="false"
+    local quiet_mode="${QUIET_MODE:-false}"
+    local chmod_mode="false"
+    local read_mode="false"
+    local file_name=""
+    local local_version=""
+    local remote_version=""
+    local script_db="${CACHE_DIR}/script.ch"
+    local dummy_version="2025.01.01-00-00"
+
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            hidden) hidden_mode="true" ;;
+            quiet) quiet_mode="true" ;;
+            debug) DEBUG_MODE="true" ;;
+            chmod) chmod_mode="true" ;;
+            read) read_mode="true" ;;
+            *) file_name="$1" ;;
+        esac
+        shift
+    done
+
+    local install_path="${BASE_DIR}/${file_name}"
+    local remote_url="${BASE_URL}/${file_name}"
+
+    if [ ! -f "$script_db" ]; then
+        touch "$script_db"
+    fi
+
+    remote_version=$(wget -qO- "$remote_url" | grep -Eo 'SCRIPT_VERSION=["'"'"'][0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*["'"'"']' | cut -d'=' -f2 | tr -d '"')
+    remote_version=$(normalize_version "$remote_version")
+    if [ -z "$remote_version" ]; then
+        remote_version="$dummy_version"
+    fi
+
+    if grep -q "^${file_name}=" "$script_db"; then
+        local_version=$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)
+        local_version=$(normalize_version "$local_version")
+    fi
+
+    if [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
+        if ! $BASE_WGET "$install_path" "$remote_url"; then
+            debug_log "ERROR" "Download failed: $file_name"
+            echo "Error: Download failed: $file_name" >&2
+            return 1
+        fi
+
+        if [ ! -s "$install_path" ]; then
+            debug_log "ERROR" "Download failed: $file_name is empty"
+            echo "Error: Download failed: $file_name is empty." >&2
+            return 1
+        fi
+
+        debug_log "INFO" "Download completed: $file_name - Version: $remote_version"
+        echo "Download completed: $file_name - Version: $remote_version"
+
+        if [ "$chmod_mode" = "true" ]; then
+            chmod +x "$install_path"
+            debug_log "INFO" "chmod +x applied to $file_name"
+        fi
+
+        if grep -q "^${file_name}=" "$script_db"; then
+            sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_db"
+        else
+            echo "${file_name}=${remote_version}" >> "$script_db"
+        fi
+    else
+        if [ "$quiet_mode" != "true" ]; then
+            debug_log "INFO" "$file_name is already up-to-date. (Version: $local_version)"
+            echo "$file_name is already up-to-date. (Version: $local_version)"
+        fi
+        return 0
+    fi
+}
+
 # スクリプトのバージョンを正規化する関数
 normalize_version() {
     local input="$1"
-    input=$(echo "$input" | grep -Eo 'SCRIPT_VERSION=["'"'"'][^"'"'"']+["'"'"']' | grep -Eo '([0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*)')
     input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
     input=$(echo "$input" | tr -d '\n' | sed 's/ *$//')
     input=$(echo "$input" | sed -E 's/(^|[._-])0+([0-9])/\1\2/g')
@@ -537,6 +613,7 @@ normalize_version() {
 # スクリプトファイルからバージョンを取得し、正規化する関数
 get_script_version() {
     local script_file="$1"
+    local script_db="${CACHE_DIR}/script.ch"
 
     if [ -z "$script_file" ] || [ ! -f "$script_file" ]; then
         debug_log "ERROR" "Script file not found: $script_file"
@@ -544,8 +621,9 @@ get_script_version() {
         return 1
     fi
 
-    local version
-    version=$(normalize_version "$(cat "$script_file")")
+    local version=""
+    version=$(grep -Eo 'SCRIPT_VERSION=["'"'"'][0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*["'"'"']' "$script_file" | cut -d'=' -f2 | tr -d '"')
+    version=$(normalize_version "$version")
     if [ -z "$version" ]; then
         debug_log "ERROR" "Could not extract SCRIPT_VERSION from $script_file"
         echo "Error: Could not extract SCRIPT_VERSION from $script_file" >&2
@@ -637,88 +715,13 @@ download() {
     fi
 
     # スクリプトの読み込み
-    if [ "$read_mode" = "true" ] && [ -f "$install_path" ]; then
-        . "$install_path"
-        debug_log "INFO" "Sourced: $install_path"
-    elif [ "$read_mode" = "true" ]; then
-        debug_log "ERROR" "File not found for sourcing: $install_path"
-    fi
-}
-
-# ファイルをダウンロードし、バージョンを管理する関数
-XXX_download() {
-    local hidden_mode="false"
-    local quiet_mode="${QUIET_MODE:-false}"
-    local chmod_mode="false"
-    local read_mode="false"
-    local file_name=""
-    local local_version=""
-    local remote_version=""
-    local script_db="${CACHE_DIR}/script.ch"
-    local dummy_version="2025.01.01-00-00"
-
-    while [ "$#" -gt 0 ]; do
-        case "$1" in
-            hidden) hidden_mode="true" ;;
-            quiet) quiet_mode="true" ;;
-            debug) DEBUG_MODE="true" ;;
-            chmod) chmod_mode="true" ;;
-            read) read_mode="true" ;;
-            *) file_name="$1" ;;
-        esac
-        shift
-    done
-
-    local install_path="${BASE_DIR}/${file_name}"
-    local remote_url="${BASE_URL}/${file_name}"
-
-    if [ ! -f "$script_db" ]; then
-        touch "$script_db"
-    fi
-
-    remote_version=$(wget -qO- "$remote_url" | grep -Eo 'SCRIPT_VERSION=["'"'"'][0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*["'"'"']' | cut -d'=' -f2 | tr -d '"')
-    remote_version=$(normalize_version "$remote_version")
-    if [ -z "$remote_version" ]; then
-        remote_version="$dummy_version"
-    fi
-
-    if grep -q "^${file_name}=" "$script_db"; then
-        local_version=$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)
-        local_version=$(normalize_version "$local_version")
-    fi
-
-    if [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
-        if ! $BASE_WGET "$install_path" "$remote_url"; then
-            debug_log "ERROR" "Download failed: $file_name"
-            echo "Error: Download failed: $file_name" >&2
-            return 1
-        fi
-
-        if [ ! -s "$install_path" ]; then
-            debug_log "ERROR" "Download failed: $file_name is empty"
-            echo "Error: Download failed: $file_name is empty." >&2
-            return 1
-        fi
-
-        debug_log "INFO" "Download completed: $file_name - Version: $remote_version"
-        echo "Download completed: $file_name - Version: $remote_version"
-
-        if [ "$chmod_mode" = "true" ]; then
-            chmod +x "$install_path"
-            debug_log "INFO" "chmod +x applied to $file_name"
-        fi
-
-        if grep -q "^${file_name}=" "$script_db"; then
-            sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_db"
+    if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q '^common-.*\.sh$'; then
+        if [ -f "$install_path" ]; then
+            . "$install_path"
+            debug_log "INFO" "Sourced: $install_path"
         else
-            echo "${file_name}=${remote_version}" >> "$script_db"
+            debug_log "ERROR" "File not found for sourcing: $install_path"
         fi
-    else
-        if [ "$quiet_mode" != "true" ]; then
-            debug_log "INFO" "$file_name is already up-to-date. (Version: $local_version)"
-            echo "$file_name is already up-to-date. (Version: $local_version)"
-        fi
-        return 0
     fi
 }
 
