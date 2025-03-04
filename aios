@@ -332,7 +332,7 @@ check_openwrt() {
         local db_entry=$(grep "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db" | cut -d'=' -f2)
         PACKAGE_MANAGER=$(echo "$db_entry" | cut -d'|' -f1)
         VERSION_STATUS=$(echo "$db_entry" | cut -d'|' -f2)
-        echo -e "$(color green "Version $CURRENT_VERSION is supported ($VERSION_STATUS)")"
+        echo -e "$(color green "OpnWrt version: $CURRENT_VERSION is supported ($VERSION_STATUS)")"
     else
         handle_error "Unsupported OpenWrt version: $CURRENT_VERSION"
         exit 1  # 🚨 スクリプト全体を終了
