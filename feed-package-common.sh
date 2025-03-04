@@ -40,8 +40,6 @@ SCRIPT_VERSION="2025.03.03-02-06"
 ### 🛠️ Keep the debugging process structured, efficient, and reliable.
 ### =========================================================
 
-echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION feed-package-common.sh \033[0m"
-
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
 # export DEV_NULL="on"
