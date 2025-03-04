@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.04-00-20"
+SCRIPT_VERSION="2025.03.04-00-21"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -521,6 +521,99 @@ download() {
     local remote_version=""
     local script_db="${CACHE_DIR}/script.ch"
 
+    # 引数解析（順不同対応）
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            hidden) hidden_mode="true" ;;
+            quiet) quiet_mode="true" ;;
+            debug) DEBUG_MODE="true" ;;
+            chmod) chmod_mode="true" ;;
+            read) read_mode="true" ;;
+            *) file_name="$1" ;;  # 最初に見つかった非オプション引数をファイル名とする
+        esac
+        shift
+    done
+
+    debug_log "DEBUG" "file_name: $file_name"
+
+    local install_path="${BASE_DIR}/${file_name}"
+    local remote_url="${BASE_URL}/${file_name}"
+    
+    # script.ch が無ければ、リモートのバージョンをそのまま script.ch に書き込む
+    if [ ! -f "$script_db" ]; then
+        remote_version=$(wget -qO- "$remote_url" | grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' | cut -d'=' -f2 | tr -d '"')
+        echo "${file_name}=${remote_version}" >> "$script_db"
+        debug_log "DEBUG" "script.ch not found. Created with ${file_name}=${remote_version}"
+    fi
+
+    # リモートバージョンを取得
+    remote_version=$(wget -qO- "$remote_url" | grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' | cut -d'=' -f2 | tr -d '"')
+
+    debug_log "DEBUG" "Remote version: $remote_version"
+
+    # ローカルバージョンを取得
+    if grep -q "^${file_name}=" "$script_db"; then
+        local_version=$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)
+    fi
+
+    # ローカルバージョンが無ければ、リモートバージョンを追加して処理を進める
+    if [ -z "$local_version" ]; then
+        local_version="$remote_version"
+        echo "${file_name}=${local_version}" >> "$script_db"
+        debug_log "DEBUG" "No local version found. Adding remote version: $local_version to script.ch"
+    fi
+
+    # バージョン比較と判定
+    if [ "$local_version" = "$remote_version" ]; then
+        if [ "$quiet_mode" != "true" ]; then
+            echo "$(color yellow "$file_name is already up-to-date. (Version: $local_version)")"
+        fi
+        return 0
+    fi
+
+    debug_log "DEBUG" "Updating $file_name (Local: $local_version, Remote: $remote_version)"
+
+    # ダウンロード処理
+    debug_log "DEBUG" "Install path: $install_path"
+    if ! $BASE_WGET "$install_path" "$remote_url"; then
+        debug_log "ERROR" "Download failed: $file_name"
+        return 1
+    fi
+
+    # 空ファイルチェック
+    if [ ! -s "$install_path" ]; then
+        debug_log "ERROR" "Download failed: $file_name is empty."
+        return 1
+    fi
+
+    # ダウンロード成功メッセージ（hidden でも表示）
+    echo "$(color green "Download completed: $file_name - Version: $remote_version")"
+    debug_log "DEBUG" "Download completed: $file_name is valid."
+
+    # chmod オプション時、実行権限を付与
+    if [ "$chmod_mode" = "true" ]; then
+        chmod +x "$install_path"
+        debug_log "DEBUG" "chmod +x applied to $file_name"
+    fi
+
+    # script.ch のバージョン情報を更新
+    if grep -q "^${file_name}=" "$script_db"; then
+        sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_db"
+    else
+        echo "${file_name}=${remote_version}" >> "$script_db"
+    fi
+}
+
+XXX_download() {
+    local hidden_mode="false"
+    local quiet_mode="${QUIET_MODE:-false}"
+    local chmod_mode="false"
+    local read_mode="false"
+    local file_name=""
+    local local_version=""
+    local remote_version=""
+    local script_db="${CACHE_DIR}/script.ch"
+
     # **引数解析（順不同対応）**
     while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -642,12 +735,6 @@ download() {
 get_script_version() {
     local script_file="$1"
     local script_db="${CACHE_DIR}/script.ch"
-
-    # **スクリプトファイルが指定されていない場合はエラー**
-    if [ -z "$script_file" ]; then
-        echo "Error: No script file specified." >&2
-        return 1
-    fi
 
     # **スクリプトが存在しない場合はエラー**
     if [ ! -f "$script_file" ]; then
