@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.04-01-16"
+SCRIPT_VERSION="2025.03.05-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -53,10 +53,10 @@ BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BIN_PATH="/usr/bin/aios"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
-DL_FILE="${CACHE_DIR:-$BASE_DIR/download}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
+DL_DIR="${CACHE_DIR:-$BASE_DIR/download}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
-mkdir -p "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"
+mkdir -p "$CACHE_DIR" "$LOG_DIR" "$DL_DIR" "$FEED_DIR"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
 # 🔵　エラー・デバッグ・アップデート系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
@@ -554,13 +554,13 @@ download() {
     fi
 
     # ダウンロードして一時ファイルに保存
-    if ! $BASE_WGET "$DL_FILE" "$remote_url"; then
+    if ! $BASE_WGET "$DL_DIR" "$remote_url"; then
         debug_log "ERROR" "Download failed: $file_name"
         echo "Error: Download failed: $file_name" >&2
         return 1
     fi
 
-    remote_version=$(normalize_version "$(cat "$DL_FILE")")
+    remote_version=$(normalize_version "$(cat "$DL_DIR")")
     if [ -z "$remote_version" ]; then
         remote_version="$dummy_version"
     fi
@@ -570,7 +570,7 @@ download() {
     fi
 
     if [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
-        if ! mv "$DL_FILE" "$install_path"; then
+        if ! mv "$DL_DIR" "$install_path"; then
             debug_log "ERROR" "Failed to move downloaded file to $install_path"
             echo "Error: Failed to move downloaded file to $install_path" >&2
             return 1
@@ -596,7 +596,7 @@ download() {
             echo "${file_name}=${remote_version}" >> "$script_db"
         fi
     else
-        rm "$DL_FILE"
+        rm "$DL_DIR"
         if [ "$quiet_mode" != "true" ]; then
             debug_log "DEBUG" "$file_name is already up-to-date. (Version: $local_version)"
             echo "$(color green "$file_name is already up-to-date. (Version: $local_version)")"
