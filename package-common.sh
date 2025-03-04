@@ -316,24 +316,24 @@ package_pre_install() {
 
     # デバイス内パッケージ確認
     local check_extension=$(basename "$package_name" .ipk)
-    local check_name=$(basename "$check_extension" .apk)
+    check_extension=$(basename "$check_extension" .apk)
 
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        output=$(opkg list-installed "$check_name" 2>&1)
+        output=$(opkg list-installed "$check_extension" 2>&1)
         if [ -n "$output" ]; then  # 出力があった場合
-            debug_log "DEBUG" "opkg package "$check_name" is already installed on the device."
+            debug_log "DEBUG" "opkg package "$check_extension" is already installed on the device."
             return 1  # 既にインストールされている場合は終了
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        output=$(apk info "$check_name" 2>&1)
+        output=$(apk info "$check_extension" 2>&1)
         if [ -n "$output" ]; then  # 出力があった場合
-            debug_log "DEBUG" "apk ackage "$check_name" is already installed on the device."
+            debug_log "DEBUG" "apk ackage "$check_extension" is already installed on the device."
             return 1  # 既にインストールされている場合は終了
         fi
     fi
   
 # リポジトリ内パッケージ確認
-debug_log "DEBUG" "Checking repository for package: $check_name"
+debug_log "DEBUG" "Checking repository for package: $check_extension"
 
 if [ ! -f "$package_cache" ]; then
     debug_log "ERROR" "Package cache not found! Run update_package_list() first."
