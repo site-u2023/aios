@@ -553,14 +553,7 @@ download() {
         touch "$script_db"
     fi
 
-    # ダウンロードして一時ファイルに保存
-    if ! $BASE_WGET "$DL_DIR" "$remote_url"; then
-        debug_log "ERROR" "Download failed: $file_name"
-        echo "Error: Download failed: $file_name" >&2
-        return 1
-    fi
-
-    remote_version=$(normalize_version "$(cat "$DL_DIR")")
+    remote_version=$(normalize_version "$($BASE_WGET -O- "$remote_url")")
     if [ -z "$remote_version" ]; then
         remote_version="$dummy_version"
     fi
@@ -570,9 +563,9 @@ download() {
     fi
 
     if [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
-        if ! mv "$DL_DIR" "$install_path"; then
-            debug_log "ERROR" "Failed to move downloaded file to $install_path"
-            echo "Error: Failed to move downloaded file to $install_path" >&2
+        if ! $BASE_WGET "$install_path" "$remote_url"; then
+            debug_log "ERROR" "Download failed: $file_name"
+            echo "Error: Download failed: $file_name" >&2
             return 1
         fi
 
@@ -596,7 +589,6 @@ download() {
             echo "${file_name}=${remote_version}" >> "$script_db"
         fi
     else
-        rm "$DL_DIR"
         if [ "$quiet_mode" != "true" ]; then
             debug_log "DEBUG" "$file_name is already up-to-date. (Version: $local_version)"
             echo "$(color green "$file_name is already up-to-date. (Version: $local_version)")"
