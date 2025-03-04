@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.04-00-24"
+SCRIPT_VERSION="2025.03.04-00-25"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -511,6 +511,54 @@ normalize_version() {
 # 7. wget のエラーハンドリングを行い、失敗時の詳細を debug_log() に記録する。
 # 8. 影響範囲: common.sh の download() のみ（他の関数には影響なし）。
 #########################################################################
+get_script_version() {
+    local script_file="$1"
+    local script_db="${CACHE_DIR}/script.ch"
+
+    # **スクリプトファイルが指定されていない場合はエラー**
+    if [ -z "$script_file" ]; then
+        echo "Error: No script file specified." >&2
+        return 1
+    fi
+
+    # **スクリプトが存在しない場合はエラー**
+    if [ ! -f "$script_file" ]; then
+        echo "Error: Script file not found: $script_file" >&2
+        return 1
+    fi
+
+    local version=""
+    
+    # **`SCRIPT_VERSION="..."` の値を取得**
+    version=$(grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' "$script_file" | cut -d'=' -f2 | tr -d '"')
+
+    # **バージョンの正規化**
+    version=$(normalize_version "$version")
+
+    # **バージョン取得に失敗した場合はエラー**
+    if [ -z "$version" ]; then
+        echo "Error: Could not extract SCRIPT_VERSION from $script_file" >&2
+        return 1
+    fi
+
+    # **script.ch がなければ作成**
+    if [ ! -f "$script_db" ]; then
+        touch "$script_db"
+    fi
+
+    # **script.ch への書き込み**
+    if grep -q "^${script_file}=" "$script_db"; then
+        sed -i "s|^${script_file}=.*|${script_file}=${version}|" "$script_db"
+    else
+        echo "${script_file}=${version}" >> "$script_db"
+    fi
+
+    # **デバッグログに記録**
+    debug_log "DEBUG" "Updated script.ch: ${script_file}=${version}"
+
+    echo "$version"
+}
+
 download() {
     local hidden_mode="false"
     local quiet_mode="${QUIET_MODE:-false}"
