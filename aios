@@ -914,9 +914,9 @@ check_common() {
             ;;
         full)
             initialization
-            download "hidden" "country-common.sh"
-            download "hidden" "package-common.sh"
-            download "hidden" "feed-package-common.sh"
+            download "hidden" "country-common.sh" "chmod"
+            download "hidden" "package-common.sh" "chmod"
+            download "hidden" "feed-package-common.sh" "chmod"
             download "hidden" "messages.db"
             download "hidden" "openwrt.db"
             download "hidden" "country.db"
