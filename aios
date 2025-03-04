@@ -540,31 +540,28 @@ download() {
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
 
-    # script.ch が無ければ、初めてリモートのバージョンを取得してダミーバージョンを設定
+    # script.ch が無ければ、リモートのバージョンを取得
     if [ ! -f "$script_db" ]; then
         remote_version=$(wget -qO- "$remote_url" | grep -Eo 'SCRIPT_VERSION=["'"'"']?[0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*' | cut -d'=' -f2 | tr -d '"')
-        
-        # リモートバージョンが取得できなかった場合、ダミーバージョンを設定
+
+        # リモートバージョンが取得できなかった場合、ダミーバージョンを使用
         if [ -z "$remote_version" ]; then
             remote_version="$dummy_version"
             debug_log "WARNING" "Failed to get remote version. Using dummy version: $dummy_version"
         fi
-        # 初めての書き込みはダミーバージョンを使用
-        echo "${file_name}=${remote_version}" >> "$script_db"
-        debug_log "DEBUG" "script.ch not found. Created with ${file_name}=${remote_version}"
+
+        debug_log "DEBUG" "Remote version: $remote_version"
     else
         # script.ch が存在する場合、ローカルバージョンを取得
         local_version=$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)
+        debug_log "DEBUG" "Local version: $local_version"
     fi
 
-    debug_log "DEBUG" "Remote version: $remote_version"
-    debug_log "DEBUG" "Local version: $local_version"
-
     # バージョン比較と判定
-    if [ -z "$local_version" ] || [ -z "$remote_version" ] || [ "$local_version" != "$remote_version" ]; then
+    if [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
         # ローカルバージョンが無い場合、またはリモートと異なる場合、ダウンロードを実行
         debug_log "DEBUG" "Updating $file_name (Local: $local_version, Remote: $remote_version)"
-        
+
         # ダウンロード処理
         debug_log "DEBUG" "Install path: $install_path"
         if ! $BASE_WGET "$install_path" "$remote_url"; then
