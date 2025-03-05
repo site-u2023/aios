@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-00-01"
+SCRIPT_VERSION="2025.03.05-00-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -151,28 +151,21 @@ feed_package() {
     shift
   done
 
-  # 必須引数が4つあるかチェック
+  # 必須引数が3つあるかチェック
   set -- $args
-  if [ "$#" -ne 4 ]; then
-    debug_log "DEBUG" "必要な引数 (REPO_OWNER, REPO_NAME, DIR_PATH, PKG_PREFIX) が不足しています。" >&2
+  if [ "$#" -lt 3 ]; then
+    debug_log "DEBUG" "必要な引数 (REPO_OWNER, REPO_NAME, PKG_PREFIX) が不足しています。" >&2
     return 0  # エラーが発生しても処理を継続
   fi
 
   local REPO_OWNER="$1"
   local REPO_NAME="$2"
-  local DIR_PATH="$3"
+  local DIR_PATH="${3:-}"  # DIR_PATH が空の場合も考慮
   local PKG_PREFIX="$4"
   local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
-  local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
+  local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents${DIR_PATH:+/$DIR_PATH}"
 
   debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
-
-  # DIR_PATHが指定されていない場合、自動補完
-  if [ -z "$DIR_PATH" ];then
-    # ディレクトリが空ならリポジトリのトップディレクトリを探索
-    API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/"
-    debug_log "DEBUG" "DIR_PATHが指定されていないため、リポジトリのトップディレクトリを探索"
-  fi
 
   # APIからデータを取得
   local JSON
