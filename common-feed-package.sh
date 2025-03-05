@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-07-00"
+SCRIPT_VERSION="2025.03.03-07-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -210,15 +210,15 @@ feed_package2() {
 
   # 必須引数が4つあるかチェック
   set -- $args
-  if [ "$#" -ne 4 ]; then
+  if [ "$#" -lt 4 ]; then
     debug_log "DEBUG" "必要な引数 (REPO_OWNER, REPO_NAME, DIR_PATH, PKG_PREFIX) が不足しています。" >&2
     return 1
   fi
 
-  local REPO_OWNER="jerrykuku"
-  local REPO_NAME="$1"
-  local DIR_PATH="$2"
-  local PKG_PREFIX="$3"
+  local REPO_OWNER="$1"
+  local REPO_NAME="$2"
+  local DIR_PATH="$3"
+  local PKG_PREFIX="$4"
   local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
 
