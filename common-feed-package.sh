@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-00-08"
+SCRIPT_VERSION="2025.03.05-00-09"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -201,12 +201,4 @@ gSpotx2f_package() {
   local PKG_PREFIX="$3"
   # Add specific processing for gSpotx2f
   default_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
-}
-
-install_package() {
-  local PACKAGE_FILE="$1"
-  shift
-  local OPTIONS="$@"
-  # Installation logic
-  echo "Installing package: $PACKAGE_FILE with options: $OPTIONS"
 }
