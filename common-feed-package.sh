@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-07-09"
+SCRIPT_VERSION="2025.03.03-07-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -208,7 +208,7 @@ feed_package2() {
   done
 
   set -- $args
-  if [ "$#" -ne 3 ]; then
+  if [ "$#" -ne 2 ]; then
     debug_log "DEBUG" "必要な引数 (REPO_OWNER, REPO_NAME, PKG_PREFIX) が不足しています。" >&2
     return 1
   fi
