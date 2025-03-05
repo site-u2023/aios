@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-01-09"
+SCRIPT_VERSION="2025.03.05-01-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -221,6 +221,28 @@ test_debug_functions() {
             return 1
             ;;
     esac
+}
+
+#########################################################################
+# country_DEBUG: 選択された国と言語の詳細情報を表示
+#########################################################################
+country_DEBUG() {
+    local country_DEBUG_file="${BASE_DIR}/country.ch"
+    local selected_language_code=$(cat "${BASE_DIR}/check_country")
+    if [ -f "$country_DEBUG_file" ]; then
+        grep -w "$selected_language_code" "$country_DEBUG_file"
+    else
+        printf "%s\n" "$(color red "Country DEBUGrmation not found.")"
+    fi
+}
+
+#########################################################################
+# handle_exit: 正常終了メッセージを表示して終了
+#########################################################################
+handle_exit() {
+    local message="$1"
+    color yellow "$message"
+    exit 0
 }
 
 # 🔴　エラー・デバッグ・アップデート系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
@@ -726,28 +748,6 @@ OK_download() {
 
 # 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
-#########################################################################
-# country_DEBUG: 選択された国と言語の詳細情報を表示
-#########################################################################
-country_DEBUG() {
-    local country_DEBUG_file="${BASE_DIR}/country.ch"
-    local selected_language_code=$(cat "${BASE_DIR}/check_country")
-    if [ -f "$country_DEBUG_file" ]; then
-        grep -w "$selected_language_code" "$country_DEBUG_file"
-    else
-        printf "%s\n" "$(color red "Country DEBUGrmation not found.")"
-    fi
-}
-
-#########################################################################
-# handle_exit: 正常終了メッセージを表示して終了
-#########################################################################
-handle_exit() {
-    local message="$1"
-    color yellow "$message"
-    exit 0
-}
-
 # 🔵　メイン　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
 # 初期設定
@@ -807,21 +807,10 @@ initialization() {
         return 1
     fi
 
-    # ダウンロード実行時のみ実行
-    if is_directly_executed; then
-        # 2. 既存のファイルとディレクトリを削除
-        if ! delete_aios; then
-            debug_log "ERROR" "Failed to clean up existing files"
-            return 1
-        fi
-
-        # 必要なディレクトリを作成
-        if ! make_directory; then
-            debug_log "ERROR" "Failed to create required directories"
-            return 1
-        fi
-    else
-        debug_log "DEBUG" "Script was sourced, skipping deletion"
+    # 必要なディレクトリを作成
+    if ! make_directory; then
+        debug_log "ERROR" "Failed to create required directories"
+        return 1
     fi
 
     # スクリプトを読み込む
