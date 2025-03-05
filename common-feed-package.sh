@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-00-11"
+SCRIPT_VERSION="2025.03.05-00-12"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -38,8 +38,8 @@ BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
-BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build}"
-FEED_DIR="${BUILD_DIR:-$BASE_DIR/feed}"
+BUILD_DIR="${LOG_DIR:-$BASE_DIR/build}"
+FEED_DIR="${BASE_DIR:-$BASE_DIR/feed}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR" "$FEED_DIR"
 
@@ -102,7 +102,7 @@ feed_package() {
 
   # 必須引数をチェック
   set -- $args
-  if [ "$#" -lt 4 ]; then
+  if [ "$#" -lt 4 ];then
     debug_log "DEBUG" "必要な引数 (REPO_OWNER, REPO_NAME, DIR_PATH, PKG_PREFIX) が不足しています。" >&2
     return 0
   fi
@@ -183,7 +183,7 @@ default_package() {
   fi
 
   local PKG_FILE
-  PKG_FILE=$(echo "$JSON" | jq -r '.[] | select(.type == "file" and startswith(.name, "'${PKG_PREFIX}'_")) | .name' | sort | tail -n 1)
+  PKG_FILE=$(echo "$JSON" | jq -r '[.[] | select(.type == "file" and .name | test("^'${PKG_PREFIX}'_"))] | sort_by(.name) | last | .name')
 
   if [ -z "$PKG_FILE" ];then
     debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
