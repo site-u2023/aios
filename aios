@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-02-04"
+SCRIPT_VERSION="2025.03.05-02-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -575,7 +575,7 @@ download() {
         touch "$script_db"
     fi
 
-    # ダウンロードして一時ファイルに保存
+    debug_log "DEBUG" "Downloading file from $remote_url to $TMP_FILE"
     if ! $BASE_WGET "$TMP_FILE" "$remote_url"; then
         debug_log "ERROR" "Download failed: $file_name"
         echo "Error: Download failed: $file_name" >&2
@@ -592,6 +592,7 @@ download() {
     fi
 
     if [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
+        debug_log "DEBUG" "Moving downloaded file to $install_path"
         if ! mv "$TMP_FILE" "$install_path"; then
             debug_log "ERROR" "Failed to move downloaded file to $install_path"
             echo "Error: Failed to move downloaded file to $install_path" >&2
@@ -625,8 +626,8 @@ download() {
         fi
     fi
 
-    # スクリプトの読み込み
     if [ "$read_mode" = "true" ] && [ -f "$install_path" ]; then
+        debug_log "DEBUG" "Sourcing file: $install_path"
         . "$install_path"
         debug_log "DEBUG" "Sourced: $install_path"
     elif [ "$read_mode" = "true" ]; then
@@ -884,7 +885,7 @@ check_common() {
             exit 0
             ;;
         full)
-            download "hidden" "aios" "chmod" "read"
+            download "hidden" "aios" "chmod"
             download "hidden" "common-country.sh" "chmod"
             download "hidden" "common-package.sh" "chmod"
             download "hidden" "common-feed-package.sh" "chmod"
