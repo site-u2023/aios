@@ -56,7 +56,6 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
-PACKAGE_EXT="${PACKAGE_EXT:-ipk}"
 mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR" "$FEED_DIR"
 #########################################################################
 # Last Update: 2025-03-04 10:00:00 (JST) 🚀
@@ -124,6 +123,7 @@ feed_package() {
     return 1
   fi
 
+  # 将来的に除去するルーチン
   if [ "$PACKAGE_MANAGER" != "opkg" ]; then
       echo -e "$(color yellow "Currently not supported for apk.")"
       return 1
@@ -133,7 +133,7 @@ feed_package() {
   local REPO_NAME="$2"
   local DIR_PATH="$3"
   local PKG_PREFIX="$4"
-  local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.${PACKAGE_EXT}"
+  local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.${PACKAGE_MANAGER}"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
 
   debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
@@ -219,6 +219,7 @@ feed_package_release() {
     return 1
   fi
 
+  # 将来的に除去するルーチン
   if [ "$PACKAGE_MANAGER" != "opkg" ]; then
       echo -e "$(color yellow "Currently not supported for apk.")"
       return 1
@@ -227,7 +228,7 @@ feed_package_release() {
   local REPO_OWNER="$1"
   local REPO_NAME="$2"
   local PKG_PREFIX="${REPO_NAME}"
-  local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.${PACKAGE_EXT}"
+  local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.${PACKAGE_MANAGER}"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases"
 
   debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
