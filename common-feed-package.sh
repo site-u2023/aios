@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-05-02"
+SCRIPT_VERSION="2025.03.03-05-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -208,12 +208,12 @@ feed_package() {
   debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
   debug_log "DEBUG" "DOWNLOAD URL: $DOWNLOAD_URL"
 
-  ${BASE_WGET} "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 1
+  ${BASE_WGET} "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   
   # opts に格納されたオプションを展開して渡す
-  install_package "$OUTPUT_FILE" $opts || return 1  # opts でオプションを渡す
+  install_package "$OUTPUT_FILE" $opts || return 0  # opts でオプションを渡す
   
   return 0
 }
