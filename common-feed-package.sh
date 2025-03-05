@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-00-10"
+SCRIPT_VERSION="2025.03.05-00-11"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -39,7 +39,7 @@ BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build}"
-FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
+FEED_DIR="${BUILD_DIR:-$BASE_DIR/feed}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR" "$FEED_DIR"
 
@@ -183,7 +183,7 @@ default_package() {
   fi
 
   local PKG_FILE
-  PKG_FILE=$(echo "$JSON" | jq -r '[.[] | select(.type == "file" and .name | test("^'${PKG_PREFIX}'_"))] | sort_by(.name) | last | .name')
+  PKG_FILE=$(echo "$JSON" | jq -r '.[] | select(.type == "file" and startswith(.name, "'${PKG_PREFIX}'_")) | .name' | sort | tail -n 1)
 
   if [ -z "$PKG_FILE" ];then
     debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
