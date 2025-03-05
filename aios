@@ -54,9 +54,9 @@ BIN_PATH="/usr/bin/aios"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
-TMP_FILE="${TMP_FILE:-$BASE_DIR/download}"
+DL_DIR="${DL_DIR:-$BASE_DIR/download}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
-mkdir -p "$CACHE_DIR" "$LOG_DIR" "$TMP_FILE" "$FEED_DIR"
+mkdir -p "$CACHE_DIR" "$LOG_DIR" "$DL_DIR" "$FEED_DIR"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
 # 🔵　エラー・デバッグ・アップデート系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
