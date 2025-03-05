@@ -674,23 +674,28 @@ make_directory() {
     fi
 }
 
+# スクリプトが直接実行されたか、sourceされたかを判定する関数を追加
+is_directly_executed() {
+    if [ "${0##*/}" = "aios" ] || [ "${0##*/}" = "$(basename "$0")" ]; then
+        return 0  # 直接実行
+    else
+        return 1  # sourceされた
+    fi
+}
+
 # 初期化処理を実行
+# initialization関数の修正
 initialization() {
     debug_log "DEBUG" "Starting initialization..."
-
-    debug_log "DEBUG" "Running delete_aios..."
-#    delete_aios || debug_log "ERROR" "delete_aios failed"
-
-    debug_log "DEBUG" "Running chmod_aios..."
-    chmod_aios || debug_log "ERROR" "chmod_aios failed"
     
-    debug_log "DEBUG" "Running read_aios..."
-    read_aios || debug_log "ERROR" "read_aios failed"
-    
-    debug_log "DEBUG" "Running make_directory..."
-    make_directory || debug_log "ERROR" "make_directory failed"
-    
-    debug_log "DEBUG" "Initialization complete"
+    if is_directly_executed; then
+        delete_aios
+        chmod_aios
+        make_directory
+    else
+        debug_log "DEBUG" "Script was sourced, skipping initialization"
+        return 0
+    fi
 }
 
 #########################################################################
@@ -947,6 +952,19 @@ check_common() {
     esac
 }
 
+# メイン処理
+main() {
+    if is_directly_executed; then
+        # 直接実行時（コマンドとして実行）
+        check_option "$@"
+    else
+        # sourceされた場合（読み込まれた場合）
+        debug_log "DEBUG" "Script was sourced, available as library"
+        return 0
+    fi
+}
+
 # 🔴　メイン　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
-check_option "$@"
+# メイン実行
+main "$@"
