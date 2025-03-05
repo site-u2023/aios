@@ -684,18 +684,29 @@ is_directly_executed() {
 }
 
 # 初期化処理を実行
-# initialization関数の修正
 initialization() {
     debug_log "DEBUG" "Starting initialization..."
     
-    if is_directly_executed; then
-        delete_aios
-        chmod_aios
-        make_directory
-    else
-        debug_log "DEBUG" "Script was sourced, skipping initialization"
-        return 0
+    # 1. 既存のファイルとディレクトリを削除
+    if ! delete_aios; then
+        debug_log "ERROR" "Failed to clean up existing files"
+        return 1
     fi
+    
+    # 2. 必要なディレクトリを作成
+    if ! make_directory; then
+        debug_log "ERROR" "Failed to create required directories"
+        return 1
+    fi
+    
+    # 3. スクリプト自体の権限を設定
+    if ! chmod_aios; then
+        debug_log "ERROR" "Failed to set execute permission"
+        return 1
+    fi
+    
+    debug_log "DEBUG" "Initialization completed successfully"
+    return 0
 }
 
 #########################################################################
