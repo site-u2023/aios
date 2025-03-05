@@ -663,7 +663,7 @@ delete_aios() {
 
 # 必要ディレクトリ作成
 make_directory() {
-    mkdir -p "$BASE_DIR" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"
+    mkdir -p "$BASE_DIR" "$CACHE_DIR" "$LOG_DIR" "$DL_DIR" "$FEED_DIR"
 }
 
 # 初期化処理を実行
