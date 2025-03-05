@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-06-02"
+SCRIPT_VERSION="2025.03.03-06-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -118,7 +118,7 @@ feed_package() {
 
   # 必須引数が3つあるかチェック (REPO_OWNER と REPO_NAME は固定)
   set -- $args
-  if [ "$#" -ne 3 ]; then
+  if [ "$#" -ne 3 ];then
     debug_log "DEBUG" "必要な引数 (DIR_PATH, PKG_PREFIX, OUTPUT_FILE) が不足しています。" >&2
     return 1
   fi
