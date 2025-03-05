@@ -56,7 +56,7 @@ BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 #DL_DIR="${DL_DIR:-$BASE_DIR/download}"
-TMP_FILE="${BASE_DIR}/download"
+TMP_FILE="${BASE_DIR}/tmp_download"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 
 # 🔵　エラー・デバッグ・アップデート系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
@@ -771,7 +771,7 @@ delete_aios() {
 # 必要ディレクトリ作成
 make_directory() {
     debug_log "DEBUG" "Creating required directories"
-    if ! mkdir -p "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR" "$TMP_FILE"; then
+    if ! mkdir -p "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"; then
         debug_log "ERROR" "Failed to create required directories"
         return 1
     fi
