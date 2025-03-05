@@ -180,6 +180,7 @@ feed_package() {
   if [ -z "$JSON" ]; then
     debug_log "DEBUG" "APIからデータを取得できませんでした。"
     echo "APIからデータを取得できませんでした。"
+    return 1
   fi
 
   # 最新パッケージファイルの取得
@@ -189,6 +190,7 @@ feed_package() {
   if [ -z "$PKG_FILE" ]; then
     debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
     echo "$PKG_PREFIX が見つかりません。"
+    return 1
   fi
 
   debug_log "DEBUG" "NEW PACKAGE: $PKG_FILE"
@@ -200,6 +202,7 @@ feed_package() {
   if [ -z "$DOWNLOAD_URL" ]; then
     debug_log "DEBUG" "パッケージ情報の取得に失敗しました。"
     echo "パッケージ情報の取得に失敗しました。"
+    return 1
   fi
 
   debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
