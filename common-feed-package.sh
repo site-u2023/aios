@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-05-03"
+SCRIPT_VERSION="2025.03.05-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -154,7 +154,8 @@ feed_package() {
   # 必須引数が4つあるかチェック
   set -- $args
   if [ "$#" -ne 4 ]; then
-      debug_log "DEBUG"  "必要な引数 (REPO_OWNER, REPO_NAME, DIR_PATH, PKG_PREFIX) が不足しています。" >&2
+    debug_log "DEBUG" "必要な引数 (REPO_OWNER, REPO_NAME, DIR_PATH, PKG_PREFIX) が不足しています。" >&2
+    return 0  # エラーが発生しても処理を継続
   fi
 
   local REPO_OWNER="$1"
@@ -167,7 +168,7 @@ feed_package() {
   debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
 
   # DIR_PATHが指定されていない場合、自動補完
-  if [ -z "$DIR_PATH" ]; then
+  if [ -z "$DIR_PATH" ];then
     # ディレクトリが空ならリポジトリのトップディレクトリを探索
     API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/"
     debug_log "DEBUG" "DIR_PATHが指定されていないため、リポジトリのトップディレクトリを探索"
@@ -177,20 +178,20 @@ feed_package() {
   local JSON
   JSON=$(wget --no-check-certificate -qO- "$API_URL")
 
-  if [ -z "$JSON" ]; then
+  if [ -z "$JSON" ];then
     debug_log "DEBUG" "APIからデータを取得できませんでした。"
-    echo "APIからデータを取得できませんでした。"
-    return 0
+    [ "$hidden" != "yes" ] && echo "APIからデータを取得できませんでした。"
+    return 0  # エラーが発生しても処理を継続
   fi
 
   # 最新パッケージファイルの取得
   local PKG_FILE
   PKG_FILE=$(echo "$JSON" | jq -r '.[].name' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
 
-  if [ -z "$PKG_FILE" ]; then
+  if [ -z "$PKG_FILE" ];then
     debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
-    echo "$PKG_PREFIX が見つかりません。"
-    return 0
+    [ "$hidden" != "yes" ] && echo "$PKG_PREFIX が見つかりません。"
+    return 0  # エラーが発生しても処理を継続
   fi
 
   debug_log "DEBUG" "NEW PACKAGE: $PKG_FILE"
@@ -199,21 +200,21 @@ feed_package() {
   local DOWNLOAD_URL
   DOWNLOAD_URL=$(echo "$JSON" | jq -r --arg PKG "$PKG_FILE" '.[] | select(.name == $PKG) | .download_url')
 
-  if [ -z "$DOWNLOAD_URL" ]; then
+  if [ -z "$DOWNLOAD_URL" ];then
     debug_log "DEBUG" "パッケージ情報の取得に失敗しました。"
-    echo "パッケージ情報の取得に失敗しました。"
-    return 0
+    [ "$hidden" != "yes" ] && echo "パッケージ情報の取得に失敗しました。"
+    return 0  # エラーが発生しても処理を継続
   fi
 
   debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
   debug_log "DEBUG" "DOWNLOAD URL: $DOWNLOAD_URL"
 
-  ${BASE_WGET} "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0
+  ${BASE_WGET} "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # エラーが発生しても処理を継続
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   
   # opts に格納されたオプションを展開して渡す
-  install_package "$OUTPUT_FILE" $opts || return 0  # opts でオプションを渡す
+  install_package "$OUTPUT_FILE" $opts || return 0  # エラーが発生しても処理を継続
   
   return 0
 }
