@@ -553,7 +553,7 @@ download() {
     local local_version=""
     local remote_version=""
     local script_db="${CACHE_DIR}/script.ch"
-    local dummy_version="2025.01.01-00-00"
+    local dummy_version="No version control."
 
     while [ "$#" -gt 0 ]; do
         case "$1" in
