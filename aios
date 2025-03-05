@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-01-06"
+SCRIPT_VERSION="2025.03.05-01-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1030,7 +1030,7 @@ check_common() {
             exit 0
             ;;
         full)
-            download "hidden" "aios" "chmod"
+            download "hidden" "aios" "chmod" "read"
             download "hidden" "common-country.sh" "chmod"
             download "hidden" "common-package.sh" "chmod"
             download "hidden" "common-feed-package.sh" "chmod"
@@ -1050,7 +1050,7 @@ check_common() {
             packages
             ;;
         light|debug)
-            download "aios" "chmod"
+            download "aios" "chmod" "read"
             download "common-country.sh"
             download "common-package.sh"
             download "common-feed-package.sh"
