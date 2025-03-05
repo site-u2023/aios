@@ -638,9 +638,9 @@ handle_exit() {
 #########################################################################
 # 初期設定
 #########################################################################
-# バージョンチェック
-check_version() {
-    echo "$(color green "Download completed: $(basename "$0") - Version: $SCRIPT_VERSION")"
+# 初期化処理
+delete_aios() {
+    rm -rf "${BASE_DIR}"
 }
 
 # 権限設定
@@ -650,15 +650,15 @@ chmod_aios() {
 
 # ファイルを読み込む
 read_aios() {
-    if ! . "$BIN_PATH"; then
-        echo "Failed to source \"$BIN_PATH\""
+    if [ -x "$BIN_PATH" ]; then
+        "$BIN_PATH" || {
+            echo "Failed to execute \"$BIN_PATH\""
+            exit 1
+        }
+    else
+        echo "Error: \"$BIN_PATH\" is not executable."
         exit 1
     fi
-}
-
-# 初期化処理
-delete_aios() {
-    rm -rf "${BASE_DIR}"
 }
 
 # 必要ディレクトリ作成
@@ -668,10 +668,9 @@ make_directory() {
 
 # 初期化処理を実行
 initialization() {
-#    check_version
+#    delete_aios
     chmod_aios
     read_aios
-    delete_aios
     make_directory
 }
 
