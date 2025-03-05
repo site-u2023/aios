@@ -650,15 +650,10 @@ chmod_aios() {
 
 # ファイルを読み込む
 read_aios() {
-    if [ -x "$BIN_PATH" ]; then
-        "$BIN_PATH" || {
-            echo "Failed to execute \"$BIN_PATH\""
-            exit 1
-        }
-    else
-        echo "Error: \"$BIN_PATH\" is not executable."
+    "$BIN_PATH" || {
+        echo "Error: Failed to execute \"$BIN_PATH\""
         exit 1
-    fi
+    }
 }
 
 # 必要ディレクトリ作成
