@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-00-07"
+SCRIPT_VERSION="2025.03.05-00-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -89,76 +89,41 @@ feed_package() {
   local args=""
 
   # 引数を走査し、オプションと通常引数を分離する
-  while [ $# -gt 0 ];do
+  while [ $# -gt 0 ]; do
     case "$1" in
-      yn) confirm_install="yes"; opts="$opts yn";;
-      hidden) hidden="yes"; opts="$opts hidden";;
-      disabled) set_disabled="yes"; opts="$opts disabled";;
-      *) args="$args $1";;
+      yn) confirm_install="yes"; opts="$opts yn" ;;
+      hidden) hidden="yes"; opts="$opts hidden" ;;
+      disabled) set_disabled="yes"; opts="$opts disabled" ;;
+      *) args="$args $1" ;;
     esac
     shift
   done
 
   # 必須引数をチェック
   set -- $args
-  if [ "$#" -lt 3 ];then
-    debug_log "DEBUG" "必要な引数 (REPO_OWNER, REPO_NAME, PKG_PREFIX) が不足しています。" >&2
+  if [ "$#" -lt 4 ]; then
+    debug_log "DEBUG" "必要な引数 (REPO_OWNER, REPO_NAME, DIR_PATH, PKG_PREFIX) が不足しています。" >&2
     return 0
   fi
 
-  # 引数の数に応じて処理を分岐
-  if [ "$#" -eq 3 ];then
-    local REPO_OWNER="$1"
-    local REPO_NAME="$2"
-    local PKG_PREFIX="$3"
-    local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
-    local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents"
-
-  elif [ "$#" -eq 4 ];then
-    local REPO_OWNER="$1"
-    local REPO_NAME="$2"
-    local DIR_PATH="$3"
-    local PKG_PREFIX="$4"
-    local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
-    local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
-  else
-    debug_log "DEBUG" "引数の数が正しくありません。" >&2
-    return 0
-  fi
+  local REPO_OWNER="$1"
+  local REPO_NAME="$2"
+  local DIR_PATH="$3"
+  local PKG_PREFIX="$4"
+  local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
+  local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
 
   debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
 
-  # API からデータを取得
-  local JSON
-  JSON=$(wget --no-check-certificate -qO- "$API_URL")
-
-  if [ -z "$JSON" ];then
-    debug_log "DEBUG" "APIからデータを取得できませんでした。"
-    [ "$hidden" != "yes" ] && echo "APIからデータを取得できませんでした。"
-    return 0
-  fi
-
-  # 最新パッケージファイルの取得
-  local PKG_FILE
-  PKG_FILE=$(echo "$JSON" | jq -r '.[].name' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
-
-  if [ -z "$PKG_FILE" ];then
-    debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
-    [ "$hidden" != "yes" ] && echo "$PKG_PREFIX が見つかりません。"
-    return 0
-  fi
-
-  debug_log "DEBUG" "NEW PACKAGE: $PKG_FILE"
-
-  # ダウンロードURLの取得
-  local DOWNLOAD_URL
-  DOWNLOAD_URL=$(echo "$JSON" | jq -r --arg PKG "$PKG_FILE" '.[] | select(.name == $PKG) | .download_url')
-
-  if [ -z "$DOWNLOAD_URL" ];then
-    debug_log "DEBUG" "パッケージ情報の取得に失敗しました。"
-    [ "$hidden" != "yes" ] && echo "パッケージ情報の取得に失敗しました。"
-    return 0
-  fi
+  # リポジトリごとの専用関数を呼び出す
+  case "$REPO_OWNER" in
+    kiddin9) kiddin9_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX" ;;
+    Leo-Jo-My) Leo_Jo_My_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX" ;;
+    lisaac) lisaac_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX" ;;
+    jerrykuku) jerrykuku_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX" ;;
+    gSpotx2f) gSpotx2f_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX" ;;
+    *) default_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX" ;;
+  esac
 
   debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
   debug_log "DEBUG" "DOWNLOAD URL: $DOWNLOAD_URL"
@@ -171,4 +136,77 @@ feed_package() {
   install_package "$OUTPUT_FILE" $opts || return 0
   
   return 0
+}
+
+default_package() {
+  local REPO_NAME="$1"
+  local DIR_PATH="$2"
+  local PKG_PREFIX="$3"
+  local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
+
+  local JSON
+  JSON=$(wget --no-check-certificate -qO- "$API_URL")
+
+  if [ -z "$JSON" ]; then
+    debug_log "DEBUG" "APIからデータを取得できませんでした。"
+    return 0
+  fi
+
+  local PKG_FILE
+  PKG_FILE=$(echo "$JSON" | jq -r '[.[] | select(.type == "file" and .name | test("^'${PKG_PREFIX}'_"))] | sort_by(.name) | last | .name')
+
+  if [ -z "$PKG_FILE" ]; then
+    debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
+    return 0
+  fi
+
+  DOWNLOAD_URL=$(echo "$JSON" | jq -r --arg PKG "$PKG_FILE" '.[] | select(.name == $PKG) | .download_url')
+}
+
+kiddin9_package() {
+  local REPO_NAME="$1"
+  local DIR_PATH="$2"
+  local PKG_PREFIX="$3"
+  # Add specific processing for kiddin9
+  default_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
+}
+
+Leo_Jo_My_package() {
+  local REPO_NAME="$1"
+  local DIR_PATH="$2"
+  local PKG_PREFIX="$3"
+  # Add specific processing for Leo-Jo-My
+  default_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
+}
+
+lisaac_package() {
+  local REPO_NAME="$1"
+  local DIR_PATH="$2"
+  local PKG_PREFIX="$3"
+  # Add specific processing for lisaac
+  default_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
+}
+
+jerrykuku_package() {
+  local REPO_NAME="$1"
+  local DIR_PATH="$2"
+  local PKG_PREFIX="$3"
+  # Add specific processing for jerrykuku
+  default_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
+}
+
+gSpotx2f_package() {
+  local REPO_NAME="$1"
+  local DIR_PATH="$2"
+  local PKG_PREFIX="$3"
+  # Add specific processing for gSpotx2f
+  default_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
+}
+
+install_package() {
+  local PACKAGE_FILE="$1"
+  shift
+  local OPTIONS="$@"
+  # Installation logic
+  echo "Installing package: $PACKAGE_FILE with options: $OPTIONS"
 }
