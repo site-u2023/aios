@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-00-12"
+SCRIPT_VERSION="2025.03.03-05-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -24,6 +24,21 @@ SCRIPT_VERSION="2025.03.05-00-12"
 #
 # 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
 # =========================================================
+### =========================================================
+### 📌 AI Assistance Request: Bug Fixing Procedure
+### 
+### When debugging or fixing errors in this script, follow these steps:
+### 
+### 1️⃣ Create a minimal test script to identify the bug.
+### 2️⃣ Execute the test and verify the reproducibility of the error.
+### 3️⃣ Fix the error and re-run the test to confirm the solution.
+### 4️⃣ Apply the corrected code to the production environment.
+### 
+### ⚠️ DO NOT modify the main script without first confirming the fix 
+###     through a dedicated test script.
+### 
+### 🛠️ Keep the debugging process structured, efficient, and reliable.
+### =========================================================
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -38,11 +53,10 @@ BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
-BUILD_DIR="${LOG_DIR:-$BASE_DIR/build}"
-FEED_DIR="${BASE_DIR:-$BASE_DIR/feed}"
+BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build}"
+FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR" "$FEED_DIR"
-
 #########################################################################
 # Last Update: 2025-03-04 10:00:00 (JST) 🚀
 # install_build: パッケージのビルド処理 (OpenWrt / Alpine Linux)
@@ -85,26 +99,28 @@ feed_package() {
   local skip_package_db="no"
   local set_disabled="no"
   local hidden="no"
-  local opts=""
-  local args=""
-  local pattern=""
+  local opts=""   # オプションを格納する変数
+  local args=""   # 通常引数を格納する変数
 
   # 引数を走査し、オプションと通常引数を分離する
   while [ $# -gt 0 ]; do
     case "$1" in
-      yn) confirm_install="yes"; opts="$opts yn" ;;
-      hidden) hidden="yes"; opts="$opts hidden" ;;
-      disabled) set_disabled="yes"; opts="$opts disabled" ;;
-      *) args="$args $1" ;;
+      yn) confirm_install="yes"; opts="$opts yn" ;;   # ynオプション
+      nolang) skip_lang_pack="yes"; opts="$opts nolang" ;; # nolangオプション
+      force) force_install="yes"; opts="$opts force" ;;   # forceオプション
+      notpack) skip_package_db="yes"; opts="$opts notpack" ;; # notpackオプション
+      disabled) set_disabled="yes"; opts="$opts disabled" ;; # disabledオプション
+      hidden) hidden="yes"; opts="$opts hidden" ;; # hiddenオプション
+      *) args="$args $1" ;;        # 通常引数を格納
     esac
     shift
   done
 
-  # 必須引数をチェック
+  # 必須引数が4つあるかチェック
   set -- $args
-  if [ "$#" -lt 4 ];then
+  if [ "$#" -ne 4 ]; then
     debug_log "DEBUG" "必要な引数 (REPO_OWNER, REPO_NAME, DIR_PATH, PKG_PREFIX) が不足しています。" >&2
-    return 0
+    return 1
   fi
 
   local REPO_OWNER="$1"
@@ -116,106 +132,54 @@ feed_package() {
 
   debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
 
-  # パターン解析
-  case "$REPO_OWNER" in
-    kiddin9 | Leo-Jo-My | lisaac | jerrykuku)
-      pattern="A"
-      ;;
-    gSpotx2f)
-      case "$PKG_PREFIX" in
-        luci-app-cpu-perf | luci-app-cpu-status | luci-app-temp-status | luci-app-log-viewer | luci-app-log | internet-detector)
-          pattern="A-Github"
-          ;;
-        *)
-          pattern="A-Package名"
-          ;;
-      esac
-      ;;
-    *)
-      pattern="デフォルト"
-      ;;
-  esac
+  # DIR_PATHが指定されていない場合、自動補完
+  if [ -z "$DIR_PATH" ]; then
+    # ディレクトリが空ならリポジトリのトップディレクトリを探索
+    API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/"
+    debug_log "DEBUG" "DIR_PATHが指定されていないため、リポジトリのトップディレクトリを探索"
+  fi
 
-  # パターンに基づく処理
-  case "$pattern" in
-    "A")
-      process_pattern_A "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
-      ;;
-    "A-Github")
-      process_pattern_A_github "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
-      ;;
-    "A-Package名")
-      process_pattern_A_package "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
-      ;;
-    "デフォルト")
-      default_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
-      ;;
-    *)
-      default_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
-      ;;
-  esac
+  # APIからデータを取得
+  local JSON
+  JSON=$(wget --no-check-certificate -qO- "$API_URL")
+
+  if [ -z "$JSON" ]; then
+    debug_log "DEBUG" "APIからデータを取得できませんでした。"
+    echo "APIからデータを取得できませんでした。"
+    return 0  # エラーが発生しても処理を継続
+  fi
+
+  # 最新パッケージファイルの取得
+  local PKG_FILE
+  PKG_FILE=$(echo "$JSON" | jq -r '.[].name' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
+
+  if [ -z "$PKG_FILE" ]; then
+    debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
+    [ "$hidden" != "yes" ] && echo "$PKG_PREFIX が見つかりません。"
+    return 0  # エラーが発生しても処理を継続
+  fi
+
+  debug_log "DEBUG" "NEW PACKAGE: $PKG_FILE"
+
+  # ダウンロードURLの取得
+  local DOWNLOAD_URL
+  DOWNLOAD_URL=$(echo "$JSON" | jq -r --arg PKG "$PKG_FILE" '.[] | select(.name == $PKG) | .download_url')
+
+  if [ -z "$DOWNLOAD_URL" ]; then
+    debug_log "DEBUG" "パッケージ情報の取得に失敗しました。"
+    echo "パッケージ情報の取得に失敗しました。"
+    return 0  # エラーが発生しても処理を継続
+  fi
 
   debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
   debug_log "DEBUG" "DOWNLOAD URL: $DOWNLOAD_URL"
 
-  ${BASE_WGET} "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0
+  ${BASE_WGET} "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # エラーが発生しても処理を継続
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   
   # opts に格納されたオプションを展開して渡す
-  install_package "$OUTPUT_FILE" $opts || return 0
+  install_package "$OUTPUT_FILE" $opts || return 0  # エラーが発生しても処理を継続
   
   return 0
-}
-
-default_package() {
-  local REPO_NAME="$1"
-  local DIR_PATH="$2"
-  local PKG_PREFIX="$3"
-  local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
-
-  local JSON
-  JSON=$(wget --no-check-certificate -qO- "$API_URL")
-
-  if [ -z "$JSON" ];then
-    debug_log "DEBUG" "APIからデータを取得できませんでした。"
-    return 0
-  fi
-
-  local PKG_FILE
-  PKG_FILE=$(echo "$JSON" | jq -r '[.[] | select(.type == "file" and .name | test("^'${PKG_PREFIX}'_"))] | sort_by(.name) | last | .name')
-
-  if [ -z "$PKG_FILE" ];then
-    debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
-    return 0
-  fi
-
-  DOWNLOAD_URL=$(echo "$JSON" | jq -r --arg PKG "$PKG_FILE" '.[] | select(.name == $PKG) | .download_url')
-}
-
-process_pattern_A() {
-  local REPO_OWNER="$1"
-  local REPO_NAME="$2"
-  local DIR_PATH="$3"
-  local PKG_PREFIX="$4"
-  # パターンAの処理
-  default_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
-}
-
-process_pattern_A_github() {
-  local REPO_OWNER="$1"
-  local REPO_NAME="$2"
-  local DIR_PATH="$3"
-  local PKG_PREFIX="$4"
-  # パターンA-Githubの処理
-  default_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
-}
-
-process_pattern_A_package() {
-  local REPO_OWNER="$1"
-  local REPO_NAME="$2"
-  local DIR_PATH="$3"
-  local PKG_PREFIX="$4"
-  # パターンA-Package名の処理
-  default_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
 }
