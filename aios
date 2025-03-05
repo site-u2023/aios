@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-01-17"
+SCRIPT_VERSION="2025.03.05-02-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -627,7 +627,7 @@ download() {
 
     # スクリプトの読み込み
     if [ "$read_mode" = "true" ] && [ -f "$install_path" ]; then
-        . "$install_path"
+        "$install_path"
         debug_log "INFO" "Sourced: $install_path"
     elif [ "$read_mode" = "true" ]; then
         debug_log "ERROR" "File not found for sourcing: $install_path"
