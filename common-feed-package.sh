@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-04-00"
+SCRIPT_VERSION="2025.03.03-05-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -273,7 +273,7 @@ XXX_feed_package() {
 
   if [ -z "$PKG_FILE" ]; then
     debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
-    echo "$PKG_PREFIX が見つかりません。"
+    [ "$hidden" != "yes" ] && echo "$PKG_PREFIX が見つかりません。"
     return 1
   fi
 
