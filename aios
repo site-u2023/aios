@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-01-14"
+SCRIPT_VERSION="2025.03.05-01-15"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -778,15 +778,6 @@ make_directory() {
     fi
 }
 
-# ファイルを読み込む
-read_aios() {
-    debug_log "DEBUG" "Sourcing $BIN_PATH"
-    if ! . "$BIN_PATH"; then
-        debug_log "ERROR" "Failed to source $BIN_PATH"
-        return 1
-    fi
-}
-
 # 初期化処理を実行
 initialization() {
     debug_log "DEBUG" "Starting initialization..."
@@ -800,12 +791,6 @@ initialization() {
     # 必要なディレクトリを作成
     if ! make_directory; then
         debug_log "ERROR" "Failed to create required directories"
-        return 1
-    fi
-
-    # スクリプトを読み込む
-    if ! read_aios; then
-        debug_log "ERROR" "Failed to source the script"
         return 1
     fi
 }
