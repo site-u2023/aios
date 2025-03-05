@@ -1030,7 +1030,7 @@ check_common() {
             exit 0
             ;;
         full)
-            download "hidden" "aios" "chmod" "read"
+            download "hidden" "aios" "chmod"
             download "hidden" "common-country.sh" "chmod"
             download "hidden" "common-package.sh" "chmod"
             download "hidden" "common-feed-package.sh" "chmod"
@@ -1050,7 +1050,7 @@ check_common() {
             packages
             ;;
         light|debug)
-            download "aios" "chmod" "read"
+            download "aios" "chmod"
             download "common-country.sh"
             download "common-package.sh"
             download "common-feed-package.sh"
