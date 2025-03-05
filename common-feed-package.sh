@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-00-06"
+SCRIPT_VERSION="2025.03.05-00-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -89,32 +89,32 @@ feed_package() {
   local args=""
 
   # 引数を走査し、オプションと通常引数を分離する
-  while [ $# -gt 0 ]; do
+  while [ $# -gt 0 ];do
     case "$1" in
-      yn) confirm_install="yes"; opts="$opts yn" ;;
-      hidden) hidden="yes"; opts="$opts hidden" ;;
-      disabled) set_disabled="yes"; opts="$opts disabled" ;;
-      *) args="$args $1" ;;
+      yn) confirm_install="yes"; opts="$opts yn";;
+      hidden) hidden="yes"; opts="$opts hidden";;
+      disabled) set_disabled="yes"; opts="$opts disabled";;
+      *) args="$args $1";;
     esac
     shift
   done
 
   # 必須引数をチェック
   set -- $args
-  if [ "$#" -lt 3 ]; then
+  if [ "$#" -lt 3 ];then
     debug_log "DEBUG" "必要な引数 (REPO_OWNER, REPO_NAME, PKG_PREFIX) が不足しています。" >&2
     return 0
   fi
 
   # 引数の数に応じて処理を分岐
-  if [ "$#" -eq 3 ]; then
+  if [ "$#" -eq 3 ];then
     local REPO_OWNER="$1"
     local REPO_NAME="$2"
     local PKG_PREFIX="$3"
     local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
     local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents"
 
-  elif [ "$#" -eq 4 ]; then
+  elif [ "$#" -eq 4 ];then
     local REPO_OWNER="$1"
     local REPO_NAME="$2"
     local DIR_PATH="$3"
