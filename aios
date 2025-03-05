@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-01-05"
+SCRIPT_VERSION="2025.03.05-01-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -788,7 +788,7 @@ make_directory() {
     fi
 }
 
-# スクリプトが直接実行されたか、sourceされたかを判定する関数を追加
+# スクリプトが直接実行されたか、sourceされたかを判定する関数
 is_directly_executed() {
     if [ "${0##*/}" = "aios" ] || [ "${0##*/}" = "$(basename "$0")" ]; then
         return 0  # 直接実行
@@ -799,37 +799,31 @@ is_directly_executed() {
 
 # 初期化処理を実行
 initialization() {
-    # 既に初期化済みの場合はスキップ
-    if [ "$AIOS_INITIALIZED" = "true" ]; then
-        debug_log "DEBUG" "Already initialized, skipping..."
-        return 0
-    fi
-    
     debug_log "DEBUG" "Starting initialization..."
-    
-    # 直接実行時のみ実行
+
+    # 1. 実行権限を設定（これは必須）
+    if ! chmod_aios; then
+        debug_log "ERROR" "Failed to set execute permission"
+        return 1
+    fi
+
+    # ダウンロード実行時のみ実行
     if is_directly_executed; then
-        # 1. 実行権限を設定（これは必須）
-        if ! chmod_aios; then
-            debug_log "ERROR" "Failed to set execute permission"
-            return 1
-        fi
-        
         # 2. 既存のファイルとディレクトリを削除
         if ! delete_aios; then
             debug_log "ERROR" "Failed to clean up existing files"
             return 1
         fi
-        
+
         # 3. 必要なディレクトリを作成
         if ! make_directory; then
             debug_log "ERROR" "Failed to create required directories"
             return 1
         fi
     else
-        debug_log "DEBUG" "Script was sourced, skipping full initialization"
+        debug_log "DEBUG" "Script was sourced, skipping deletion"
     fi
-    
+
     # 初期化完了をマーク
     AIOS_INITIALIZED="true"
     debug_log "DEBUG" "Initialization completed successfully"
@@ -1036,7 +1030,7 @@ check_common() {
             exit 0
             ;;
         full)
-            download "hidden" "aios" "chmod" "read"
+            download "hidden" "aios" "chmod"
             download "hidden" "common-country.sh" "chmod"
             download "hidden" "common-package.sh" "chmod"
             download "hidden" "common-feed-package.sh" "chmod"
@@ -1056,7 +1050,7 @@ check_common() {
             packages
             ;;
         light|debug)
-            download "aios" "chmod" "read"
+            download "aios" "chmod"
             download "common-country.sh"
             download "common-package.sh"
             download "common-feed-package.sh"
@@ -1088,10 +1082,13 @@ check_common() {
     esac
 }
 
+# メイン処理
+main() {
+    initialization
+    check_option "$@"
+}
+
 # 🔴　メイン　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
-# 初期化
-initialization
-
-# メイン実行
-check_option "$@"
+# スクリプト実行
+main "$@"
