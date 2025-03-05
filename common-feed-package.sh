@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-07-07"
+SCRIPT_VERSION="2025.03.03-07-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -215,7 +215,7 @@ feed_package2() {
 
   local REPO_OWNER="$1"
   local REPO_NAME="$2"
-  local PKG_PREFIX="$3"
+  local PKG_PREFIX="${REPO_NAME}"
   local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases"
 
