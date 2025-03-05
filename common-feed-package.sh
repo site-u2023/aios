@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-00-09"
+SCRIPT_VERSION="2025.03.05-00-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -87,6 +87,7 @@ feed_package() {
   local hidden="no"
   local opts=""
   local args=""
+  local pattern=""
 
   # 引数を走査し、オプションと通常引数を分離する
   while [ $# -gt 0 ]; do
@@ -115,14 +116,43 @@ feed_package() {
 
   debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
 
-  # リポジトリごとの専用関数を呼び出す
+  # パターン解析
   case "$REPO_OWNER" in
-    kiddin9) kiddin9_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX" ;;
-    Leo-Jo-My) Leo_Jo_My_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX" ;;
-    lisaac) lisaac_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX" ;;
-    jerrykuku) jerrykuku_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX" ;;
-    gSpotx2f) gSpotx2f_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX" ;;
-    *) default_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX" ;;
+    kiddin9 | Leo-Jo-My | lisaac | jerrykuku)
+      pattern="A"
+      ;;
+    gSpotx2f)
+      case "$PKG_PREFIX" in
+        luci-app-cpu-perf | luci-app-cpu-status | luci-app-temp-status | luci-app-log-viewer | luci-app-log | internet-detector)
+          pattern="A-Github"
+          ;;
+        *)
+          pattern="A-Package名"
+          ;;
+      esac
+      ;;
+    *)
+      pattern="デフォルト"
+      ;;
+  esac
+
+  # パターンに基づく処理
+  case "$pattern" in
+    "A")
+      process_pattern_A "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
+      ;;
+    "A-Github")
+      process_pattern_A_github "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
+      ;;
+    "A-Package名")
+      process_pattern_A_package "$REPO_OWNER" "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
+      ;;
+    "デフォルト")
+      default_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
+      ;;
+    *)
+      default_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
+      ;;
   esac
 
   debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
@@ -147,7 +177,7 @@ default_package() {
   local JSON
   JSON=$(wget --no-check-certificate -qO- "$API_URL")
 
-  if [ -z "$JSON" ]; then
+  if [ -z "$JSON" ];then
     debug_log "DEBUG" "APIからデータを取得できませんでした。"
     return 0
   fi
@@ -155,7 +185,7 @@ default_package() {
   local PKG_FILE
   PKG_FILE=$(echo "$JSON" | jq -r '[.[] | select(.type == "file" and .name | test("^'${PKG_PREFIX}'_"))] | sort_by(.name) | last | .name')
 
-  if [ -z "$PKG_FILE" ]; then
+  if [ -z "$PKG_FILE" ];then
     debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
     return 0
   fi
@@ -163,42 +193,29 @@ default_package() {
   DOWNLOAD_URL=$(echo "$JSON" | jq -r --arg PKG "$PKG_FILE" '.[] | select(.name == $PKG) | .download_url')
 }
 
-kiddin9_package() {
-  local REPO_NAME="$1"
-  local DIR_PATH="$2"
-  local PKG_PREFIX="$3"
-  # Add specific processing for kiddin9
+process_pattern_A() {
+  local REPO_OWNER="$1"
+  local REPO_NAME="$2"
+  local DIR_PATH="$3"
+  local PKG_PREFIX="$4"
+  # パターンAの処理
   default_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
 }
 
-Leo_Jo_My_package() {
-  local REPO_NAME="$1"
-  local DIR_PATH="$2"
-  local PKG_PREFIX="$3"
-  # Add specific processing for Leo-Jo-My
+process_pattern_A_github() {
+  local REPO_OWNER="$1"
+  local REPO_NAME="$2"
+  local DIR_PATH="$3"
+  local PKG_PREFIX="$4"
+  # パターンA-Githubの処理
   default_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
 }
 
-lisaac_package() {
-  local REPO_NAME="$1"
-  local DIR_PATH="$2"
-  local PKG_PREFIX="$3"
-  # Add specific processing for lisaac
-  default_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
-}
-
-jerrykuku_package() {
-  local REPO_NAME="$1"
-  local DIR_PATH="$2"
-  local PKG_PREFIX="$3"
-  # Add specific processing for jerrykuku
-  default_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
-}
-
-gSpotx2f_package() {
-  local REPO_NAME="$1"
-  local DIR_PATH="$2"
-  local PKG_PREFIX="$3"
-  # Add specific processing for gSpotx2f
+process_pattern_A_package() {
+  local REPO_OWNER="$1"
+  local REPO_NAME="$2"
+  local DIR_PATH="$3"
+  local PKG_PREFIX="$4"
+  # パターンA-Package名の処理
   default_package "$REPO_NAME" "$DIR_PATH" "$PKG_PREFIX"
 }
