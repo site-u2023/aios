@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-01-11"
+SCRIPT_VERSION="2025.03.05-01-12"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -47,7 +47,6 @@ DEV_NULL="${DEV_NULL:-on}"
 # unset DEV_NULL
 
 # 基本定数の設定 
-AIOS_INITIALIZED="false"
 BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q -O}"
 # BASE_WGET="${BASE_WGET:-wget -O}"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
@@ -788,28 +787,13 @@ make_directory() {
     fi
 }
 
-# スクリプトが直接実行されたか、sourceされたかを判定する関数
-is_directly_executed() {
-    if [ "${0##*/}" = "aios" ] || [ "${0##*/}" = "$(basename "$0")" ]; then
-        return 0  # 直接実行
-    else
-        return 1  # sourceされた
-    fi
-}
-
 # 初期化処理を実行
 initialization() {
     debug_log "DEBUG" "Starting initialization..."
 
-    # 実行権限を設定（これは必須）
+    # 実行権限を設定
     if ! chmod_aios; then
         debug_log "ERROR" "Failed to set execute permission"
-        return 1
-    fi
-
-    # 必要なディレクトリを作成
-    if ! make_directory; then
-        debug_log "ERROR" "Failed to create required directories"
         return 1
     fi
 
@@ -819,10 +803,11 @@ initialization() {
         return 1
     fi
 
-    # 初期化完了をマーク
-    AIOS_INITIALIZED="true"
-    debug_log "DEBUG" "Initialization completed successfully"
-    return 0
+    # 必要なディレクトリを作成
+    if ! make_directory; then
+        debug_log "ERROR" "Failed to create required directories"
+        return 1
+    fi
 }
 
 #########################################################################
