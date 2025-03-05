@@ -895,9 +895,6 @@ check_common() {
             download "hidden" "country.db"
             download "hidden" "local-package.db"
             download "hidden" "custom-package.db"
-            #. "${BASE_DIR}/common-country.sh"
-            #. "${BASE_DIR}/common-package.sh"
-            #. "${BASE_DIR}/common-feed-package.sh"
             check_openwrt
             check_architecture
             check_downloader
