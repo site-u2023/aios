@@ -720,10 +720,10 @@ packages() {
     feed_package gSpotx2f packages-openwrt current luci-app-log yn hidden
     feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled
 
-    feed_package "lisaac" "luci-app-diskman" "current" "luci-app-diskman" "yn" "hidden" "disabled"
+    feed_package yn hidden disabled lisaac luci-app-diskman current luci-app-diskman
 
-    feed_package "jerrykuku" "luci-theme-argon" "themes" "luci-theme-argon" "yn" "hidden"
-
+    feed_package yn hidden jerrykuku luci-theme-argon themes luci-theme-argon
+    
     # install_package list
 }
 
