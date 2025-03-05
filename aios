@@ -651,8 +651,8 @@ chmod_aios() {
 # ファイルを読み込む
 read_aios() {
     . "$BIN_PATH" || {
-     echo "Failed to source "$BIN_PATH"
-     exit 1
+        echo "Failed to source \"$BIN_PATH\""
+        exit 1
     }
 }
 
