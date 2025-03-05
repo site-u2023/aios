@@ -638,15 +638,6 @@ handle_exit() {
 #########################################################################
 # 初期設定
 #########################################################################
-# 初期化処理
-delete_aios() {
-    debug_log "DEBUG" "Deleting $BASE_DIR"
-    if ! rm -rf "${BASE_DIR}"; then
-        debug_log "ERROR" "Failed to delete $BASE_DIR"
-        return 1
-    fi
-}
-
 # 権限設定
 chmod_aios() {
     debug_log "DEBUG" "Setting permissions for $BIN_PATH"
@@ -661,6 +652,15 @@ read_aios() {
     debug_log "DEBUG" "Sourcing $BIN_PATH"
     if ! . "$BIN_PATH"; then
         debug_log "ERROR" "Failed to source $BIN_PATH"
+        return 1
+    fi
+}
+
+# 初期化処理
+delete_aios() {
+    debug_log "DEBUG" "Deleting $BASE_DIR"
+    if ! rm -rf "${BASE_DIR}"; then
+        debug_log "ERROR" "Failed to delete $BASE_DIR"
         return 1
     fi
 }
@@ -687,22 +687,32 @@ is_directly_executed() {
 initialization() {
     debug_log "DEBUG" "Starting initialization..."
     
-    # 1. 既存のファイルとディレクトリを削除
-    if ! delete_aios; then
-        debug_log "ERROR" "Failed to clean up existing files"
-        return 1
-    fi
-    
-    # 2. 必要なディレクトリを作成
-    if ! make_directory; then
-        debug_log "ERROR" "Failed to create required directories"
-        return 1
-    fi
-    
-    # 3. スクリプト自体の権限を設定
-    if ! chmod_aios; then
-        debug_log "ERROR" "Failed to set execute permission"
-        return 1
+    if is_directly_executed; then
+        # 1. まず実行権限を設定（これは必須）
+        if ! chmod_aios; then
+            debug_log "ERROR" "Failed to set execute permission"
+            return 1
+        fi
+        
+        # 2. 現在のスクリプトをメモリに読み込む
+        if ! read_aios; then
+            debug_log "ERROR" "Failed to source script"
+            return 1
+        fi
+        
+        # 3. 既存のファイルとディレクトリを削除
+        if ! delete_aios; then
+            debug_log "ERROR" "Failed to clean up existing files"
+            return 1
+        fi
+        
+        # 4. 必要なディレクトリを作成
+        if ! make_directory; then
+            debug_log "ERROR" "Failed to create required directories"
+            return 1
+        fi
+    else
+        debug_log "DEBUG" "Script was sourced, skipping full initialization"
     fi
     
     debug_log "DEBUG" "Initialization completed successfully"
