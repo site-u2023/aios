@@ -58,7 +58,7 @@ install_package kmod-md-linear yn hidden
 [luci-theme-argon]
 install_package luci-compat hidden　disabled
 install_package luci-lib-ipkg hidden
-feed_package2 yn kiddin9 luci-theme-edge
+feed_package_release yn kiddin9 luci-theme-edge
 
 [zram-swap]
 uci add system zram
