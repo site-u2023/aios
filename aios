@@ -653,6 +653,7 @@ read_aios() {
     . "$BIN_PATH" || {
      echo "Failed to source "$BIN_PATH"
      exit 1
+    }
 }
 
 # 初期化処理
