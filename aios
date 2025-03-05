@@ -650,10 +650,10 @@ chmod_aios() {
 
 # ファイルを読み込む
 read_aios() {
-    . "$BIN_PATH" || {
+    if ! . "$BIN_PATH"; then
         echo "Failed to source \"$BIN_PATH\""
         exit 1
-    }
+    fi
 }
 
 # 初期化処理
