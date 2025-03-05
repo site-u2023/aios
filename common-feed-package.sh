@@ -184,7 +184,7 @@ feed_package() {
   return 0
 }
 
-feed_package2() {
+feed_package_release() {
   local confirm_install="no"
   local skip_lang_pack="no"
   local force_install="no"
@@ -245,84 +245,6 @@ feed_package2() {
   DOWNLOAD_URL=$(echo "$JSON" | jq -r --arg PKG "$PKG_FILE" '.[] | .assets[] | select(.name == $PKG) | .browser_download_url')
 
   if [ -z "$DOWNLOAD_URL" ];then
-    debug_log "DEBUG" "パッケージ情報の取得に失敗しました。"
-    echo "パッケージ情報の取得に失敗しました。"
-    return 0
-  fi
-
-  debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
-  debug_log "DEBUG" "DOWNLOAD URL: $DOWNLOAD_URL"
-
-  ${BASE_WGET} "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0
-
-  debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
-  
-  install_package "$OUTPUT_FILE" $opts || return 0
-  
-  return 0
-}
-
-OK_feed_package2() {
-  local confirm_install="no"
-  local skip_lang_pack="no"
-  local force_install="no"
-  local skip_package_db="no"
-  local set_disabled="no"
-  local hidden="no"
-  local opts=""
-  local args=""
-
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      yn) confirm_install="yes"; opts="$opts yn" ;;
-      nolang) skip_lang_pack="yes"; opts="$opts nolang" ;;
-      force) force_install="yes"; opts="$opts force" ;;
-      notpack) skip_package_db="yes"; opts="$opts notpack" ;;
-      disabled) set_disabled="yes"; opts="$opts disabled" ;;
-      hidden) hidden="yes"; opts="$opts hidden" ;;
-      *) args="$args $1" ;;
-    esac
-    shift
-  done
-
-  set -- $args
-  if [ "$#" -ne 2 ]; then
-    debug_log "DEBUG" "必要な引数 (REPO_OWNER, REPO_NAME) が不足しています。" >&2
-    return 1
-  fi
-
-  local REPO_OWNER="$1"
-  local REPO_NAME="$2"
-  local PKG_PREFIX="luci-theme-argon"
-  local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
-  local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases"
-
-  debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
-
-  local JSON
-  JSON=$(wget --no-check-certificate -qO- "$API_URL")
-
-  if [ -z "$JSON" ]; then
-    debug_log "DEBUG" "APIからデータを取得できませんでした。"
-    echo "APIからデータを取得できませんでした。"
-    return 0
-  fi
-
-  local PKG_FILE
-  PKG_FILE=$(echo "$JSON" | jq -r --arg PKG_PREFIX "$PKG_PREFIX" '.[] | .assets[] | select(.name | startswith($PKG_PREFIX)) | .name' | sort | tail -n 1)
-
-  if [ -z "$PKG_FILE" ]; then
-    debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
-    [ "$hidden" != "yes" ] && echo "$PKG_PREFIX が見つかりません。"
-    return 0
-  fi
-
-  debug_log "DEBUG" "NEW PACKAGE: $PKG_FILE"
-
-  local DOWNLOAD_URL
-  DOWNLOAD_URL=$(echo "$JSON" | jq -r --arg PKG "$PKG_FILE" '.[] | .assets[] | select(.name == $PKG) | .browser_download_url')
-
-  if [ -z "$DOWNLOAD_URL" ]; then
     debug_log "DEBUG" "パッケージ情報の取得に失敗しました。"
     echo "パッケージ情報の取得に失敗しました。"
     return 0
