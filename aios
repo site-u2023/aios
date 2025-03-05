@@ -640,33 +640,57 @@ handle_exit() {
 #########################################################################
 # 初期化処理
 delete_aios() {
-    rm -rf "${BASE_DIR}"
+    debug_log "DEBUG" "Deleting $BASE_DIR"
+    if ! rm -rf "${BASE_DIR}"; then
+        debug_log "ERROR" "Failed to delete $BASE_DIR"
+        return 1
+    fi
 }
 
 # 権限設定
 chmod_aios() {
-    chmod +x "$BIN_PATH"
+    debug_log "DEBUG" "Setting permissions for $BIN_PATH"
+    if ! chmod +x "$BIN_PATH"; then
+        debug_log "ERROR" "Failed to set permissions for $BIN_PATH"
+        return 1
+    fi
 }
 
 # ファイルを読み込む
 read_aios() {
-    "$BIN_PATH" || {
-        echo "Error: Failed to execute \"$BIN_PATH\""
-        exit 1
-    }
+    debug_log "DEBUG" "Sourcing $BIN_PATH"
+    if ! . "$BIN_PATH"; then
+        debug_log "ERROR" "Failed to source $BIN_PATH"
+        return 1
+    fi
 }
 
 # 必要ディレクトリ作成
 make_directory() {
-    mkdir -p "$BASE_DIR" "$CACHE_DIR" "$LOG_DIR" "$DL_DIR" "$FEED_DIR"
+    debug_log "DEBUG" "Creating required directories"
+    if ! mkdir -p "$BASE_DIR" "$CACHE_DIR" "$LOG_DIR" "$DL_DIR" "$FEED_DIR"; then
+        debug_log "ERROR" "Failed to create required directories"
+        return 1
+    fi
 }
 
 # 初期化処理を実行
 initialization() {
-#    delete_aios
-    chmod_aios
-    read_aios
-    make_directory
+    debug_log "DEBUG" "Starting initialization..."
+
+    debug_log "DEBUG" "Running delete_aios..."
+#    delete_aios || debug_log "ERROR" "delete_aios failed"
+
+    debug_log "DEBUG" "Running chmod_aios..."
+    chmod_aios || debug_log "ERROR" "chmod_aios failed"
+    
+    debug_log "DEBUG" "Running read_aios..."
+    read_aios || debug_log "ERROR" "read_aios failed"
+    
+    debug_log "DEBUG" "Running make_directory..."
+    make_directory || debug_log "ERROR" "make_directory failed"
+    
+    debug_log "DEBUG" "Initialization complete"
 }
 
 #########################################################################
