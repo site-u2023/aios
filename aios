@@ -722,7 +722,8 @@ packages() {
 
     feed_package yn hidden disabled lisaac luci-app-diskman  luci-app-diskman
 
-    feed_package yn hidden jerrykuku luci-theme-argon  luci-theme-argon
+    feed_package2 hidden "current" "luci-theme-argon" "/tmp/luci-theme-argon_all.ipk"
+    #feed_package yn hidden jerrykuku luci-theme-argon  luci-theme-argon
     
     # install_package list
 }
