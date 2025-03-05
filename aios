@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-00-08"
+SCRIPT_VERSION="2025.03.05-00-09"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -648,6 +648,13 @@ chmod_aios() {
     chmod +x "$BIN_PATH"
 }
 
+# ファイルを読み込む
+read_aios() {
+    . "$BIN_PATH" || {
+     echo "Failed to source "$BIN_PATH"
+     exit 1
+}
+
 # 初期化処理
 delete_aios() {
     rm -rf "${BASE_DIR}"
@@ -662,6 +669,7 @@ make_directory() {
 initialization() {
 #    check_version
     chmod_aios
+    read_aios
     delete_aios
     make_directory
 }
@@ -876,9 +884,9 @@ check_common() {
             download "hidden" "country.db"
             download "hidden" "local-package.db"
             download "hidden" "custom-package.db"
-            . "${BASE_DIR}/common-country.sh"
-            . "${BASE_DIR}/common-package.sh"
-            . "${BASE_DIR}/common-feed-package.sh"
+            #. "${BASE_DIR}/common-country.sh"
+            #. "${BASE_DIR}/common-package.sh"
+            #. "${BASE_DIR}/common-feed-package.sh"
             check_openwrt
             check_architecture
             check_downloader
