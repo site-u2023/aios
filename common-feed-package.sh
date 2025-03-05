@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-07-06"
+SCRIPT_VERSION="2025.03.03-07-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -208,14 +208,14 @@ feed_package2() {
   done
 
   set -- $args
-  if [ "$#" -ne 2 ]; then
-    debug_log "DEBUG" "必要な引数 (REPO_OWNER, REPO_NAME) が不足しています。" >&2
+  if [ "$#" -ne 3 ]; then
+    debug_log "DEBUG" "必要な引数 (REPO_OWNER, REPO_NAME, PKG_PREFIX) が不足しています。" >&2
     return 1
   fi
 
   local REPO_OWNER="$1"
   local REPO_NAME="$2"
-  local PKG_PREFIX="luci-theme-argon"
+  local PKG_PREFIX="$3"
   local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases"
 
@@ -224,7 +224,7 @@ feed_package2() {
   local JSON
   JSON=$(wget --no-check-certificate -qO- "$API_URL")
 
-  if [ -z "$JSON" ]; then
+  if [ -z "$JSON" ];then
     debug_log "DEBUG" "APIからデータを取得できませんでした。"
     echo "APIからデータを取得できませんでした。"
     return 0
@@ -233,7 +233,7 @@ feed_package2() {
   local PKG_FILE
   PKG_FILE=$(echo "$JSON" | jq -r --arg PKG_PREFIX "$PKG_PREFIX" '.[] | .assets[] | select(.name | startswith($PKG_PREFIX)) | .name' | sort | tail -n 1)
 
-  if [ -z "$PKG_FILE" ]; then
+  if [ -z "$PKG_FILE" ];then
     debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
     [ "$hidden" != "yes" ] && echo "$PKG_PREFIX が見つかりません。"
     return 0
@@ -244,7 +244,7 @@ feed_package2() {
   local DOWNLOAD_URL
   DOWNLOAD_URL=$(echo "$JSON" | jq -r --arg PKG "$PKG_FILE" '.[] | .assets[] | select(.name == $PKG) | .browser_download_url')
 
-  if [ -z "$DOWNLOAD_URL" ]; then
+  if [ -z "$DOWNLOAD_URL" ];then
     debug_log "DEBUG" "パッケージ情報の取得に失敗しました。"
     echo "パッケージ情報の取得に失敗しました。"
     return 0
