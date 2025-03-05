@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-02-06"
+SCRIPT_VERSION="2025.03.05-02-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -626,12 +626,13 @@ download() {
         fi
     fi
 
-    if [ "$read_mode" = "true" ] && [ -f "$install_path" ]; then
-        debug_log "DEBUG" "Sourcing file: $install_path"
-        . "$install_path"
-        debug_log "DEBUG" "Sourced: $install_path"
-    elif [ "$read_mode" = "true" ]; then
-        debug_log "ERROR" "File not found for sourcing: $install_path"
+    if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q '^common-.*\.sh$'; then
+        if [ -f "$install_path" ]; then
+            . "$install_path"
+            debug_log "INFO" "Sourced: $install_path"
+        else
+            debug_log "ERROR" "File not found for sourcing: $install_path"
+        fi
     fi
 }
 
@@ -894,9 +895,9 @@ check_common() {
             download "hidden" "country.db"
             download "hidden" "local-package.db"
             download "hidden" "custom-package.db"
-            . "${BASE_DIR}/common-country.sh"
-            . "${BASE_DIR}/common-package.sh"
-            . "${BASE_DIR}/common-feed-package.sh"
+            #. "${BASE_DIR}/common-country.sh"
+            #. "${BASE_DIR}/common-package.sh"
+            #. "${BASE_DIR}/common-feed-package.sh"
             check_openwrt
             check_architecture
             check_downloader
