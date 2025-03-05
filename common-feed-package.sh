@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-05-01"
+SCRIPT_VERSION="2025.03.03-05-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -180,7 +180,7 @@ feed_package() {
   if [ -z "$JSON" ]; then
     debug_log "DEBUG" "APIからデータを取得できませんでした。"
     echo "APIからデータを取得できませんでした。"
-    return 1
+    return 0
   fi
 
   # 最新パッケージファイルの取得
@@ -190,7 +190,7 @@ feed_package() {
   if [ -z "$PKG_FILE" ]; then
     debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
     echo "$PKG_PREFIX が見つかりません。"
-    return 1
+    return 0
   fi
 
   debug_log "DEBUG" "NEW PACKAGE: $PKG_FILE"
@@ -202,7 +202,7 @@ feed_package() {
   if [ -z "$DOWNLOAD_URL" ]; then
     debug_log "DEBUG" "パッケージ情報の取得に失敗しました。"
     echo "パッケージ情報の取得に失敗しました。"
-    return 1
+    return 0
   fi
 
   debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
