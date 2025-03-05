@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-00-03"
+SCRIPT_VERSION="2025.03.05-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -24,21 +24,6 @@ SCRIPT_VERSION="2025.03.05-00-03"
 #
 # 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
 # =========================================================
-### =========================================================
-### 📌 AI Assistance Request: Bug Fixing Procedure
-### 
-### When debugging or fixing errors in this script, follow these steps:
-### 
-### 1️⃣ Create a minimal test script to identify the bug.
-### 2️⃣ Execute the test and verify the reproducibility of the error.
-### 3️⃣ Fix the error and re-run the test to confirm the solution.
-### 4️⃣ Apply the corrected code to the production environment.
-### 
-### ⚠️ DO NOT modify the main script without first confirming the fix 
-###     through a dedicated test script.
-### 
-### 🛠️ Keep the debugging process structured, efficient, and reliable.
-### =========================================================
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -57,41 +42,7 @@ BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR" "$FEED_DIR"
-#########################################################################
-# Last Update: 2025-03-04 10:00:00 (JST) 🚀
-# install_build: パッケージのビルド処理 (OpenWrt / Alpine Linux)
-# GitHub API を利用して指定パッケージの最新ファイルを取得するスクリプト
-# 関数: feed_package
-# 説明:
-#   GitHub API を用いて、指定されたリポジトリの特定ディレクトリ内から、
-#   パッケージ名のプレフィックスに合致するファイル一覧を取得し、アルファベット順で最後のもの（＝最新と仮定）を
-#   ダウンロード先に保存する。
-#   また、DIR_PATHが指定されていない場合、自動的にリポジトリのトップディレクトリを探索し、
-#   該当するディレクトリを自動的に選択する。
-#
-# 引数:
-#   $1 : リポジトリのオーナー（例: gSpotx2f）
-#   $2 : リポジトリ名（例: packages-openwrt）
-#   $3 : ディレクトリパス（例: current）
-#   $4 : パッケージ名のプレフィックス（例: luci-app-cpu-perf）
-#   $5 : ダウンロード後の出力先ファイル（例: /tmp/luci-app-cpu-perf_all.ipk）
-#
-# 使い方
-# feed_package ["yn"] ["hidden"] "リポジトリオーナー" "リポジトリ名" "ディレクトリ" "パッケージ名"
-# 例: デフォルト（確認なしでインストール）
-# feed_package "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
-# 例: 確認を取ってインストール
-# feed_package "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
-# 例: インストール済みならメッセージなし
-# feed_package "hidden" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
-# 例: `yn` と `hidden` を順不同で指定
-# feed_package "hidden" "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
-#
-# 新仕様:
-# 1. DIR_PATHが空の場合、リポジトリのトップディレクトリを探索し、最適なディレクトリを自動選択。
-# 2. オプション（yn, hidden, force, disabled等）の引数を追加で処理できるように対応。
-# 3. GitHub APIから最新のパッケージ情報を取得し、ダウンロードとインストールを行う。
-#########################################################################
+
 #########################################################################
 # Last Update: 2025-03-04 10:00:00 (JST) 🚀
 # install_build: パッケージのビルド処理 (OpenWrt / Alpine Linux)
@@ -134,28 +85,25 @@ feed_package() {
   local skip_package_db="no"
   local set_disabled="no"
   local hidden="no"
-  local opts=""   # オプションを格納する変数
-  local args=""   # 通常引数を格納する変数
+  local opts=""
+  local args=""
 
   # 引数を走査し、オプションと通常引数を分離する
   while [ $# -gt 0 ]; do
     case "$1" in
-      yn) confirm_install="yes"; opts="$opts yn" ;;   # ynオプション
-      nolang) skip_lang_pack="yes"; opts="$opts nolang" ;; # nolangオプション
-      force) force_install="yes"; opts="$opts force" ;;   # forceオプション
-      notpack) skip_package_db="yes"; opts="$opts notpack" ;; # notpackオプション
-      disabled) set_disabled="yes"; opts="$opts disabled" ;; # disabledオプション
-      hidden) hidden="yes"; opts="$opts hidden" ;; # hiddenオプション
-      *) args="$args $1" ;;        # 通常引数を格納
+      yn) confirm_install="yes"; opts="$opts yn" ;;
+      hidden) hidden="yes"; opts="$opts hidden" ;;
+      disabled) set_disabled="yes"; opts="$opts disabled" ;;
+      *) args="$args $1" ;;
     esac
     shift
   done
 
-  # 必須引数が3つあるかチェック
+  # 必須引数をチェック
   set -- $args
   if [ "$#" -lt 3 ]; then
     debug_log "DEBUG" "必要な引数 (REPO_OWNER, REPO_NAME, PKG_PREFIX) が不足しています。" >&2
-    return 0  # エラーが発生しても処理を継続
+    return 0
   fi
 
   local REPO_OWNER="$1"
@@ -167,14 +115,14 @@ feed_package() {
 
   debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
 
-  # APIからデータを取得
+  # API からデータを取得
   local JSON
   JSON=$(wget --no-check-certificate -qO- "$API_URL")
 
   if [ -z "$JSON" ];then
     debug_log "DEBUG" "APIからデータを取得できませんでした。"
     [ "$hidden" != "yes" ] && echo "APIからデータを取得できませんでした。"
-    return 0  # エラーが発生しても処理を継続
+    return 0
   fi
 
   # 最新パッケージファイルの取得
@@ -184,7 +132,7 @@ feed_package() {
   if [ -z "$PKG_FILE" ];then
     debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
     [ "$hidden" != "yes" ] && echo "$PKG_PREFIX が見つかりません。"
-    return 0  # エラーが発生しても処理を継続
+    return 0
   fi
 
   debug_log "DEBUG" "NEW PACKAGE: $PKG_FILE"
@@ -196,18 +144,18 @@ feed_package() {
   if [ -z "$DOWNLOAD_URL" ];then
     debug_log "DEBUG" "パッケージ情報の取得に失敗しました。"
     [ "$hidden" != "yes" ] && echo "パッケージ情報の取得に失敗しました。"
-    return 0  # エラーが発生しても処理を継続
+    return 0
   fi
 
   debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
   debug_log "DEBUG" "DOWNLOAD URL: $DOWNLOAD_URL"
 
-  ${BASE_WGET} "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # エラーが発生しても処理を継続
+  ${BASE_WGET} "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   
   # opts に格納されたオプションを展開して渡す
-  install_package "$OUTPUT_FILE" $opts || return 0  # エラーが発生しても処理を継続
+  install_package "$OUTPUT_FILE" $opts || return 0
   
   return 0
 }
