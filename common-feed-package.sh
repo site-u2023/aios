@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-00-04"
+SCRIPT_VERSION="2025.03.05-00-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -106,12 +106,25 @@ feed_package() {
     return 0
   fi
 
-  local REPO_OWNER="$1"
-  local REPO_NAME="$2"
-  local DIR_PATH="${3:-}"  # DIR_PATH が空の場合も考慮
-  local PKG_PREFIX="$4"
-  local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
-  local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents${DIR_PATH:+/$DIR_PATH}"
+  # 引数の数に応じて処理を分岐
+  if [ "$#" -eq 3 ]; then
+    local REPO_OWNER="$1"
+    local REPO_NAME="$2"
+    local PKG_PREFIX="$3"
+    local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
+    local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents"
+
+  elif [ "$#" -eq 4 ]; then
+    local REPO_OWNER="$1"
+    local REPO_NAME="$2"
+    local DIR_PATH="$3"
+    local PKG_PREFIX="$4"
+    local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
+    local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
+  else
+    debug_log "DEBUG" "引数の数が正しくありません。" >&2
+    return 0
+  fi
 
   debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
 
