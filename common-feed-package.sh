@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-05-01"
+SCRIPT_VERSION="2025.03.03-06-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -93,6 +93,97 @@ mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR" "$FEED_DIR"
 # 3. GitHub APIから最新のパッケージ情報を取得し、ダウンロードとインストールを行う。
 #########################################################################
 feed_package() {
+  local confirm_install="no"
+  local skip_lang_pack="no"
+  local force_install="no"
+  local skip_package_db="no"
+  local set_disabled="no"
+  local hidden="no"
+  local opts=""   # オプションを格納する変数
+  local args=""   # 通常引数を格納する変数
+
+  # 引数を走査し、オプションと通常引数を分離する
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      yn) confirm_install="yes"; opts="$opts yn" ;;   # ynオプション
+      nolang) skip_lang_pack="yes"; opts="$opts nolang" ;; # nolangオプション
+      force) force_install="yes"; opts="$opts force" ;;   # forceオプション
+      notpack) skip_package_db="yes"; opts="$opts notpack" ;; # notpackオプション
+      disabled) set_disabled="yes"; opts="$opts disabled" ;; # disabledオプション
+      hidden) hidden="yes"; opts="$opts hidden" ;; # hiddenオプション
+      *) args="$args $1" ;;        # 通常引数を格納
+    esac
+    shift
+  done
+
+  # 必須引数が4つあるかチェック
+  set -- $args
+  if [ "$#" -ne 4 ]; then
+    debug_log "DEBUG" "必要な引数 (REPO_OWNER, REPO_NAME, DIR_PATH, PKG_PREFIX) が不足しています。" >&2
+    return 1
+  fi
+
+  local REPO_OWNER="$1"
+  local REPO_NAME="$2"
+  local DIR_PATH="$3"
+  local PKG_PREFIX="$4"
+  local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.ipk"
+  local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
+
+  debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
+
+  # DIR_PATHが指定されていない場合、自動補完
+  if [ -z "$DIR_PATH" ]; then
+    # ディレクトリが空ならリポジトリのトップディレクトリを探索
+    API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/"
+    debug_log "DEBUG" "DIR_PATHが指定されていないため、リポジトリのトップディレクトリを探索"
+  fi
+
+  # APIからデータを取得
+  local JSON
+  JSON=$(wget --no-check-certificate -qO- "$API_URL")
+
+  if [ -z "$JSON" ]; then
+    debug_log "DEBUG" "APIからデータを取得できませんでした。"
+    echo "APIからデータを取得できませんでした。"
+    return 0  # エラーが発生しても処理を継続
+  fi
+
+  # 最新パッケージファイルの取得
+  local PKG_FILE
+  PKG_FILE=$(echo "$JSON" | jq -r '.[].name' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
+
+  if [ -z "$PKG_FILE" ]; then
+    debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
+    [ "$hidden" != "yes" ] && echo "$PKG_PREFIX が見つかりません。"
+    return 0  # エラーが発生しても処理を継続
+  fi
+
+  debug_log "DEBUG" "NEW PACKAGE: $PKG_FILE"
+
+  # ダウンロードURLの取得
+  local DOWNLOAD_URL
+  DOWNLOAD_URL=$(echo "$JSON" | jq -r --arg PKG "$PKG_FILE" '.[] | select(.name == $PKG) | .download_url')
+
+  if [ -z "$DOWNLOAD_URL" ]; then
+    debug_log "DEBUG" "パッケージ情報の取得に失敗しました。"
+    echo "パッケージ情報の取得に失敗しました。"
+    return 0  # エラーが発生しても処理を継続
+  fi
+
+  debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
+  debug_log "DEBUG" "DOWNLOAD URL: $DOWNLOAD_URL"
+
+  ${BASE_WGET} "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # エラーが発生しても処理を継続
+
+  debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
+  
+  # opts に格納されたオプションを展開して渡す
+  install_package "$OUTPUT_FILE" $opts || return 0  # エラーが発生しても処理を継続
+  
+  return 0
+}
+OK_feed_package() {
   local confirm_install="no"
   local skip_lang_pack="no"
   local force_install="no"
