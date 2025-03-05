@@ -722,7 +722,7 @@ packages() {
 
     feed_package yn hidden disabled lisaac luci-app-diskman  luci-app-diskman
 
-    feed_package2 jerrykuku luci-theme-argon yn hidden 
+    feed_package2 jerrykuku luci-theme-argon yn hidden disabled
     
     # install_package list
 }
