@@ -31,12 +31,13 @@ uci add_list ttyd.@ttyd[-1].client_option='titleFixed=aios'
 uci commit ttyd
 
 [irqbalance]
-opkg install irqbalance
 uci set irqbalance.irqbalance=irqbalance
 uci set irqbalance.irqbalance.enabled='1'
 uci commit irqbalance
 
 [internet-detector]
+install_package luci-compat hidden
+install_package luci-lib-ipkg hidden
 feed_package gSpotx2f packages-openwrt current luci-app-internet-detector hidden
 feed_package gSpotx2f packages-openwrt current internet-detector-mod-modem-restart yn hidden
 feed_package gSpotx2f packages-openwrt current internet-detector-mod-email yn hidden
