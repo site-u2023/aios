@@ -321,7 +321,7 @@ check_openwrt() {
             
             # **GL.iNet カスタム版は弾く**
             if [ "$distrib_id" != "OpenWrt" ]; then
-                handle_error "Unsupported OpenWrt version: $distrib_id (Only OpenWrt is supported)"
+                handle_error "Unsupported OpenWrt version: $distrib_id (Only OpenWrt - supported)"
                 exit 1  # 🚨 スクリプト全体を終了
             fi
 
@@ -354,7 +354,7 @@ check_openwrt() {
         local db_entry=$(grep "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db" | cut -d'=' -f2)
         PACKAGE_MANAGER=$(echo "$db_entry" | cut -d'|' -f1)
         VERSION_STATUS=$(echo "$db_entry" | cut -d'|' -f2)
-        echo -e "$(color green "OpnWrt version: $CURRENT_VERSION is supported ($VERSION_STATUS)")"
+        echo -e "$(color green "OpnWrt version: $CURRENT_VERSION - supported ($VERSION_STATUS)")"
     else
         handle_error "Unsupported OpenWrt version: $CURRENT_VERSION"
         exit 1  # 🚨 スクリプト全体を終了
@@ -399,7 +399,7 @@ check_downloader() {
         fi
         echo "$PACKAGE_MANAGER" > "${CACHE_DIR}/downloader.ch"
     fi
-    echo -e "$(color green "Package Manager: $PACKAGE_MANAGER is supported (stable)")"
+    echo -e "$(color green "Package Manager: $PACKAGE_MANAGER - supported (stable)")"
 }
 
 #########################################################################
