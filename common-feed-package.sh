@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-06-00"
+SCRIPT_VERSION="2025.03.03-06-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -143,7 +143,7 @@ feed_package() {
   local JSON
   JSON=$(wget --no-check-certificate -qO- "$API_URL")
 
-  if [ -z "$JSON" ]; then
+  if [ -z "$JSON" ];then
     debug_log "DEBUG" "APIからデータを取得できませんでした。"
     echo "APIからデータを取得できませんでした。"
     return 0  # エラーが発生しても処理を継続
@@ -153,7 +153,7 @@ feed_package() {
   local PKG_FILE
   PKG_FILE=$(echo "$JSON" | jq -r '.[].name' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
 
-  if [ -z "$PKG_FILE" ]; then
+  if [ -z "$PKG_FILE" ];then
     debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
     [ "$hidden" != "yes" ] && echo "$PKG_PREFIX が見つかりません。"
     return 0  # エラーが発生しても処理を継続
@@ -165,7 +165,7 @@ feed_package() {
   local DOWNLOAD_URL
   DOWNLOAD_URL=$(echo "$JSON" | jq -r --arg PKG "$PKG_FILE" '.[] | select(.name == $PKG) | .download_url')
 
-  if [ -z "$DOWNLOAD_URL" ]; then
+  if [ -z "$DOWNLOAD_URL" ];then
     debug_log "DEBUG" "パッケージ情報の取得に失敗しました。"
     echo "パッケージ情報の取得に失敗しました。"
     return 0  # エラーが発生しても処理を継続
@@ -183,6 +183,7 @@ feed_package() {
   
   return 0
 }
+
 OK_feed_package() {
   local confirm_install="no"
   local skip_lang_pack="no"
