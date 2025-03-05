@@ -56,8 +56,9 @@ install_package kmod-md-raid456 yn hidden
 install_package kmod-md-linear yn hidden
 
 [luci-theme-argon]
+install_package luci-compat hidden
+install_package luci-lib-ipkg hidden
 feed_package2 yn kiddin9 luci-theme-edge
-feed_package yn hidden Leo-Jo-My luci-theme-opentomato themes luci-theme-opentomato
 
 [zram-swap]
 uci add system zram
