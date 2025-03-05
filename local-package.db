@@ -56,7 +56,7 @@ install_package kmod-md-raid456 yn hidden
 install_package kmod-md-linear yn hidden
 
 [luci-theme-argon]
-feed_package yn hidden kiddin9 luci-theme-edge themes luci-theme-edge
+feed_package2 yn kiddin9 luci-theme-edge
 feed_package yn hidden Leo-Jo-My luci-theme-opentomato themes luci-theme-opentomato
 
 [zram-swap]
