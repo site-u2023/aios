@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-01-06"
+SCRIPT_VERSION="2025.03.05-01-09"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -58,7 +58,7 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 DL_DIR="${DL_DIR:-$BASE_DIR/download}"
 TMP_FILE="${BASE_DIR}/tmp_download}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
-mkdir -p "$CACHE_DIR" "$LOG_DIR" "$DL_DIR" "$FEED_DIR" "${TMP_FILE}"
+mkdir -p "$CACHE_DIR" "$LOG_DIR" "$DL_DIR" "$FEED_DIR" "$TMP_FILE"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
 # 🔵　エラー・デバッグ・アップデート系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
@@ -782,7 +782,7 @@ delete_aios() {
 # 必要ディレクトリ作成
 make_directory() {
     debug_log "DEBUG" "Creating required directories"
-    if ! mkdir -p "$BASE_DIR" "$CACHE_DIR" "$LOG_DIR" "$DL_DIR" "$FEED_DIR"; then
+    if ! mkdir -p "$CACHE_DIR" "$LOG_DIR" "$DL_DIR" "$FEED_DIR" "$TMP_FILE"; then
         debug_log "ERROR" "Failed to create required directories"
         return 1
     fi
@@ -801,7 +801,7 @@ is_directly_executed() {
 initialization() {
     debug_log "DEBUG" "Starting initialization..."
 
-    # 1. 実行権限を設定（これは必須）
+    # 実行権限を設定（これは必須）
     if ! chmod_aios; then
         debug_log "ERROR" "Failed to set execute permission"
         return 1
@@ -815,13 +815,19 @@ initialization() {
             return 1
         fi
 
-        # 3. 必要なディレクトリを作成
+        # 必要なディレクトリを作成
         if ! make_directory; then
             debug_log "ERROR" "Failed to create required directories"
             return 1
         fi
     else
         debug_log "DEBUG" "Script was sourced, skipping deletion"
+    fi
+
+    # スクリプトを読み込む
+    if ! read_aios; then
+        debug_log "ERROR" "Failed to source the script"
+        return 1
     fi
 
     # 初期化完了をマーク
