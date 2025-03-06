@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.05-02-15"
+SCRIPT_VERSION="2025.03.06-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -389,17 +389,23 @@ check_architecture() {
 check_downloader() {
     if [ -f "${BASE_DIR}/downloader.ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader.ch")
+        PACKAGE_EXTENSION=$(cat "${CACHE_DIR}/extension.ch")
     else
         if command -v apk >/dev/null 2>&1; then
             PACKAGE_MANAGER="apk"
+            PACKAGE_EXTENSION="apk"
         elif command -v opkg >/dev/null 2>&1; then
             PACKAGE_MANAGER="opkg"
+            PACKAGE_EXTENSION="ipk"
         else 
             PACKAGE_MANAGER="opkg"  # デフォルトをセット
+            PACKAGE_EXTENSION="ipk" 
         fi
         echo "$PACKAGE_MANAGER" > "${CACHE_DIR}/downloader.ch"
+        echo "$PACKAGE_EXTENSION" > "${CACHE_DIR}/extension.ch"
     fi
     echo -e "$(color green "Package Manager: $PACKAGE_MANAGER - supported (stable)")"
+    echo -e "$(color green "Package Extension: $PACKAGE_EXTENSION - supported (stable)")"
 }
 
 #########################################################################
