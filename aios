@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-00-14"
+SCRIPT_VERSION="2025.03.06-00-15"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -440,11 +440,16 @@ get_message() {
     local params="$2"
     local quiet_flag="$3"
     local message_db="${BASE_DIR}/messages.db"
-    local lang="${ACTIVE_LANGUAGE:-US}"  # `ACTIVE_LANGUAGE` が未設定なら `US`
+    local message_cache="${CACHE_DIR}/message.ch"
+    local lang="US"  # デフォルトはUS
+
+    # message.chから言語を読み取る
+    if [ -f "$message_cache" ]; then
+        lang=$(cat "$message_cache")
+    fi
 
     # `messages.db` が存在しない場合、キーそのままを返す
     if [ ! -f "$message_db" ]; then
-        debug_log "DEBUG" "messages.db not found. Returning key as message."
         message="$key"
     else
         # 言語優先検索
@@ -457,7 +462,6 @@ get_message() {
 
         # それでも見つからなければ、キーそのままを返す
         if [ -z "$message" ]; then
-            debug_log "DEBUG" "Message key '$key' not found in messages.db."
             message="$key"
         fi
     fi
@@ -467,7 +471,6 @@ get_message() {
         for param in $params; do
             key=$(echo "$param" | cut -d'=' -f1)
             value=$(echo "$param" | cut -d'=' -f2)
-            debug_log "DEBUG" "Replacing {$key} with $value in message: $message"
             # `sed` コマンドで使用する際に `value` をエスケープする
             escaped_value=$(echo "$value" | sed -e 's/[\/&]/\\&/g')
             message=$(echo "$message" | sed -e "s/{$key}/$escaped_value/g")
