@@ -9,6 +9,81 @@ SUPPORTED_LANGUAGES="US JP"
 US|MSG_UNDER_TEST=👽 Under test
 JP|MSG_UNDER_TEST=👹 試験中
 
+# -----------------------
+# system-config.sh
+# -----------------------
+# 情報表示関連
+US|MSG_INFO_COUNTRY=Country: {name}
+JP|MSG_INFO_COUNTRY=国名: {name}
+
+US|MSG_INFO_DISPLAY=Display Name: {name}
+JP|MSG_INFO_DISPLAY=表示名: {name}
+
+US|MSG_INFO_LANG_CODE=Language Code: {code}
+JP|MSG_INFO_LANG_CODE=言語コード: {code}
+
+US|MSG_INFO_COUNTRY_CODE=Country Code: {code}
+JP|MSG_INFO_COUNTRY_CODE=国コード: {code}
+
+# デバイス名/パスワード設定関連
+US|MSG_ENTER_DEVICE_NAME=Enter the new device name:
+JP|MSG_ENTER_DEVICE_NAME=新しいデバイス名を入力してください:
+
+US|MSG_ENTER_NEW_PASSWORD=Enter the new password:
+JP|MSG_ENTER_NEW_PASSWORD=新しいパスワードを入力してください:
+
+US|MSG_CONFIRM_DEVICE_SETTINGS=Are you sure with the following settings? (y/n):
+JP|MSG_CONFIRM_DEVICE_SETTINGS=以下の内容でよろしいですか？ (y/n):
+
+US|MSG_UPDATE_SUCCESS=Password and device name have been successfully updated.
+JP|MSG_UPDATE_SUCCESS=パスワードとデバイス名が正常に更新されました。
+
+US|MSG_UPDATE_CANCELLED=Operation has been canceled.
+JP|MSG_UPDATE_CANCELLED=設定がキャンセルされました。
+
+US|MSG_UPDATE_FAILED_PASSWORD=Failed to update password.
+JP|MSG_UPDATE_FAILED_PASSWORD=パスワードの更新に失敗しました。
+
+US|MSG_UPDATE_FAILED_DEVICE=Failed to update device name.
+JP|MSG_UPDATE_FAILED_DEVICE=デバイス名の更新に失敗しました。
+
+US|MSG_UPDATE_FAILED_COMMIT=Failed to commit changes.
+JP|MSG_UPDATE_FAILED_COMMIT=変更の保存に失敗しました。
+
+# WiFi設定関連
+US|MSG_NO_WIFI_DEVICES=No Wi-Fi devices found. Exiting.
+JP|MSG_NO_WIFI_DEVICES=Wi-Fiデバイスが見つかりません。終了します。
+
+US|MSG_WIFI_DEVICE_BAND=Device {device} (Band: {band})
+JP|MSG_WIFI_DEVICE_BAND=デバイス {device} (帯域: {band})
+
+US|MSG_ENTER_SSID=Enter SSID:
+JP|MSG_ENTER_SSID=SSIDを入力してください:
+
+US|MSG_ENTER_WIFI_PASSWORD=Enter password (8 or more characters):
+JP|MSG_ENTER_WIFI_PASSWORD=パスワードを入力してください (8文字以上):
+
+US|MSG_PASSWORD_TOO_SHORT=Password must be at least 8 characters long.
+JP|MSG_PASSWORD_TOO_SHORT=パスワードは8文字以上で入力してください。
+
+US|MSG_WIFI_SETTINGS_UPDATED=Device {device} settings have been updated.
+JP|MSG_WIFI_SETTINGS_UPDATED=デバイス {device} の設定が更新されました。
+
+US|MSG_ENABLE_BAND=Enable band {band} on device {device}? (y/n):
+JP|MSG_ENABLE_BAND=デバイス {device} のバンド {band} を有効にしますか？(y/n):
+
+US|MSG_CONFIRM_WIFI_SETTINGS=Configuration: SSID = {ssid}, Password = {password}. Is this correct? (y/n):
+JP|MSG_CONFIRM_WIFI_SETTINGS=設定内容: SSID = {ssid}, パスワード = {password}。これで良いですか？ (y/n):
+
+US|MSG_REENTER_INFO=Please re-enter the information.
+JP|MSG_REENTER_INFO=もう一度入力してください。
+
+US|MSG_INVALID_YN=Invalid input. Please enter 'y' or 'n'.
+JP|MSG_INVALID_YN=無効な入力です。y または n を入力してください。
+
+# システム設定関連
+US|MSG_PRESS_KEY_REBOOT=Press any key to reboot the device
+JP|MSG_PRESS_KEY_REBOOT=任意のキーを押してデバイスを再起動します
 
 # -----------------------
 # 🔍 デバッグ用メッセージ
