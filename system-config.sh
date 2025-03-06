@@ -76,78 +76,55 @@ information() {
     local language_code="$LANGUAGE"
     local country_code="$COUNTRYCODE"
 
-    case "$SELECTED_LANGUAGE" in
-        JP)
-            echo -e "$(color white "国名: $country_name")"
-            echo -e "$(color white "表示名: $display_name")"
-            echo -e "$(color white "言語コード: $language_code")"
-            echo -e "$(color white "国コード: $country_code")"
-            ;;
-        US|*) # 英語とその他すべての未定義言語の処理
-            echo -e "$(color white "Country: $country_name")"
-            echo -e "$(color white "Display Name: $display_name")"
-            echo -e "$(color white "Language Code: $language_code")"
-            echo -e "$(color white "Country Code: $country_code")"
-            ;;
-    esac
+    # メッセージDBからメッセージを取得して表示
+    echo -e "$(get_msg "MSG_INFO_COUNTRY" "name=$country_name")"
+    echo -e "$(get_msg "MSG_INFO_DISPLAY" "name=$display_name")"
+    echo -e "$(get_msg "MSG_INFO_LANG_CODE" "code=$language_code")"
+    echo -e "$(get_msg "MSG_INFO_COUNTRY_CODE" "code=$country_code")"
 }
-
 #########################################################################
 # set_device_name_password: デバイス名とパスワードの設定を行う
 # ユーザーから入力を受け、確認後、ubus および uci で更新する
 #########################################################################
 set_device_name_password() {
     local device_name password confirmation
-    local lang msg_device msg_password msg_confirm msg_success msg_cancel
 
-    lang="$SELECTED_LANGUAGE"
-    case "$lang" in
-        JP)
-            msg_device="新しいデバイス名を入力してください: "
-            msg_password="新しいパスワードを入力してください: "
-            msg_confirm="以下の内容でよろしいですか？ (y/n): "
-            msg_success="パスワードとデバイス名が正常に更新されました。"
-            msg_cancel="設定がキャンセルされました。"
-            ;;
-        US|*) # 英語とその他すべての未定義言語の処理
-            msg_device="Enter the new device name: "
-            msg_password="Enter the new password: "
-            msg_confirm="Are you sure with the following settings? (y/n): "
-            msg_success="Password and device name have been successfully updated."
-            msg_cancel="Operation has been canceled."
-            ;;
-    esac
-
-    echo "Starting device name and password update process..."
-    read -p "$msg_device" device_name
-    read -s -p "$msg_password" password
+    echo "$(get_msg "MSG_ENTER_DEVICE_NAME")"
+    read device_name
+    
+    echo -n "$(get_msg "MSG_ENTER_NEW_PASSWORD")"
+    read -s password
     echo
-    # 確認プロンプトは共通の ask_confirmation() も利用できるが、ここは独自の確認文言を使用
+
+    # 設定内容の表示
     echo "Device Name: $device_name"
     echo "Password: $password"
-    read -p "$msg_confirm" confirmation
+    
+    echo -n "$(get_msg "MSG_CONFIRM_DEVICE_SETTINGS")"
+    read confirmation
+    
     if [ "$confirmation" != "y" ]; then
-        echo "$msg_cancel"
+        echo "$(get_msg "MSG_UPDATE_CANCELLED")"
         return 1
     fi
 
     echo "Updating password and device name..."
     ubus call luci setPassword "{ \"username\": \"root\", \"password\": \"$password\" }" || {
-        echo "Failed to update password."
+        echo "$(get_msg "MSG_UPDATE_FAILED_PASSWORD")"
         return 1
     }
 
     uci set system.@system[0].hostname="$device_name" || {
-        echo "Failed to update device name."
+        echo "$(get_msg "MSG_UPDATE_FAILED_DEVICE")"
         return 1
     }
 
     uci commit system || {
-        echo "Failed to commit changes."
+        echo "$(get_msg "MSG_UPDATE_FAILED_COMMIT")"
         return 1
     }
 
-    echo "$msg_success"
+    echo "$(get_msg "MSG_UPDATE_SUCCESS")"
 }
 
 #########################################################################
@@ -157,40 +134,10 @@ set_device_name_password() {
 set_wifi_ssid_password() {
     local device iface iface_num ssid password enable_band band htmode devices
     local wifi_country_code=$(echo "$ZONENAME" | awk '{print $4}')
-    local lang msg_no_devices msg_band msg_enter_ssid msg_enter_password msg_password_invalid
-    local msg_updated msg_select_band msg_confirm msg_reenter msg_invalid
     
-    lang="$SELECTED_LANGUAGE"
-    case "$lang" in
-        JP)
-            msg_no_devices="Wi-Fiデバイスが見つかりません。終了します。"
-            msg_band="デバイス %s (帯域: %s)"
-            msg_enter_ssid="SSIDを入力してください: "
-            msg_enter_password="パスワードを入力してください (8文字以上): "
-            msg_password_invalid="パスワードは8文字以上で入力してください。"
-            msg_updated="デバイス %s の設定が更新されました。"
-            msg_select_band="デバイス %s のバンド %s を有効にしますか？(y/n): "
-            msg_confirm="設定内容: SSID = %s, パスワード = %s。これで良いですか？ (y/n): "
-            msg_reenter="もう一度入力してください。"
-            msg_invalid="無効な入力です。y または n を入力してください。"
-            ;;
-        US|*) # 英語とその他すべての未定義言語の処理
-            msg_no_devices="No Wi-Fi devices found. Exiting."
-            msg_band="Device %s (Band: %s)"
-            msg_enter_ssid="Enter SSID: "
-            msg_enter_password="Enter password (8 or more characters): "
-            msg_password_invalid="Password must be at least 8 characters long."
-            msg_updated="Device %s settings have been updated."
-            msg_select_band="Enable band %s on device %s? (y/n): "
-            msg_confirm="Configuration: SSID = %s, Password = %s. Is this correct? (y/n): "
-            msg_reenter="Please re-enter the information."
-            msg_invalid="Invalid input. Please enter 'y' or 'n'."
-            ;;
-    esac
-
     devices=$(uci show wireless | grep 'wifi-device' | cut -d'=' -f1 | cut -d'.' -f2 | sort -u)
     if [ -z "$devices" ]; then
-        echo "$msg_no_devices"
+        echo "$(get_msg "MSG_NO_WIFI_DEVICES")"
         exit 1
     fi
 
@@ -198,8 +145,8 @@ set_wifi_ssid_password() {
         band=$(uci get wireless."$device".band 2>/dev/null)
         htmode=$(uci get wireless."$device".htmode 2>/dev/null)
 
-        printf "$msg_band\n" "$device" "$band"
-        printf "$msg_select_band" "$device" "$band"
+        echo "$(get_msg "MSG_WIFI_DEVICE_BAND" "device=$device" "band=$band")"
+        echo -n "$(get_msg "MSG_ENABLE_BAND" "device=$device" "band=$band")"
         read enable_band
         if [ "$enable_band" != "y" ]; then
             continue
@@ -208,32 +155,33 @@ set_wifi_ssid_password() {
         iface_num=$(echo "$device" | grep -o '[0-9]*')
         iface="aios${iface_num}"
 
-        printf "$msg_enter_ssid"
+        echo -n "$(get_msg "MSG_ENTER_SSID")"
         read ssid
         while true; do
-            printf "$msg_enter_password"
+            echo -n "$(get_msg "MSG_ENTER_WIFI_PASSWORD")"
             read -s password
             echo
             if [ "${#password}" -ge 8 ]; then
                 break
             else
-                echo "$msg_password_invalid"
+                echo "$(get_msg "MSG_PASSWORD_TOO_SHORT")"
             fi
         done
 
         while true; do
-            printf "$msg_confirm\n" "$ssid" "$password"
+            echo "$(get_msg "MSG_CONFIRM_WIFI_SETTINGS" "ssid=$ssid" "password=$password")"
             read confirm
             if [ "$confirm" = "y" ]; then
                 break
             elif [ "$confirm" = "n" ]; then
-                echo "$msg_reenter"
+                echo "$(get_msg "MSG_REENTER_INFO")"
                 break
             else
-                echo "$msg_invalid"
+                echo "$(get_msg "MSG_INVALID_YN")"
             fi
         done
 
+        # WiFi設定の適用
         uci set wireless."$iface"="wifi-iface"
         uci set wireless."$iface".device="${device:-aios}"
         uci set wireless."$iface".mode='ap'
@@ -251,10 +199,9 @@ set_wifi_ssid_password() {
     /etc/init.d/network reload
 
     for device in $devices_to_enable; do
-        printf "$msg_updated\n" "$device"
+        echo "$(get_msg "MSG_WIFI_SETTINGS_UPDATED" "device=$device")"
     done
 }
-
 #########################################################################
 # set_device: デバイス全体の設定を行い、最終的にリブートを実行する
 #  ※ SSH ドロップベア設定、システム設定、NTP サーバ設定、ファイアウォール・パケットスティアリング、
@@ -335,7 +282,8 @@ set_device() {
     #/etc/init.d/dnsmasq restart
     #/etc/init.d/odhcpd restart
 
-    read -p "Press any key to reboot the device"
+    # 再起動確認メッセージ
+    read -p "$(get_msg "MSG_PRESS_KEY_REBOOT")"
     reboot
 }
 
