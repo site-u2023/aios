@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.02.27-00-00"
+SCRIPT_VERSION="2025.03.06-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -459,26 +459,32 @@ normalize_language() {
         return 1
     fi
 
+    local country_data
+    country_data=$(cat "$country_cache")
+    debug_log "DEBUG" "country.ch content: $country_data"
+
     local field_count
-    field_count=$(awk '{print NF}' "$country_cache")
+    field_count=$(echo "$country_data" | awk '{print NF}')
+    debug_log "DEBUG" "Field count in country.ch: $field_count"
 
     if [ "$field_count" -ge 5 ]; then
-        selected_language=$(awk '{print $5}' "$country_cache")
+        selected_language=$(echo "$country_data" | awk '{print $5}')
     else
-        selected_language=$(awk '{print $2}' "$country_cache")
+        selected_language=$(echo "$country_data" | awk '{print $2}')
     fi
 
     debug_log "DEBUG" "Selected language extracted from country.ch -> $selected_language"
 
     local supported_languages
     supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
+    debug_log "DEBUG" "Supported languages: $supported_languages"
 
     if echo "$supported_languages" | grep -qw "$selected_language"; then
         debug_log "DEBUG" "Using message database language: $selected_language"
         echo "$selected_language" > "$message_cache"
         ACTIVE_LANGUAGE="$selected_language"
     else
-        debug_log "DEBUGING" "Language '$selected_language' not found in messages.db. Using 'US' as fallback."
+        debug_log "DEBUG" "Language '$selected_language' not found in messages.db. Using 'US' as fallback."
         echo "US" > "$message_cache"
         ACTIVE_LANGUAGE="US"
     fi
