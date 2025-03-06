@@ -467,6 +467,7 @@ get_message() {
         for param in $params; do
             key=$(echo "$param" | cut -d'=' -f1)
             value=$(echo "$param" | cut -d'=' -f2)
+            debug_log "DEBUG" "Replacing {$key} with $value in message: $message"
             # `sed` コマンドで使用する際に `value` をエスケープする
             escaped_value=$(echo "$value" | sed -e 's/[\/&]/\\&/g')
             message=$(echo "$message" | sed -e "s/{$key}/$escaped_value/g")
