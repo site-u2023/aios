@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-00-03"
+SCRIPT_VERSION="2025.03.06-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -912,7 +912,7 @@ check_common() {
             check_downloader
             print_banner
             select_country "$lang_code"
-            download "hidden" "system-config.sh" "chmod" "read"
+            download "hidden" "system-config.sh" "chmod"
             packages
             ;;
         light|debug)
@@ -930,7 +930,7 @@ check_common() {
             check_downloader
             print_banner
             select_country "$lang_code"
-            download "system-config.sh" "chmod" "read"
+            download "system-config.sh" "chmod"
             packages
             ;;
         return)
