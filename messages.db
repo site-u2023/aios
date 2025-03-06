@@ -1,13 +1,18 @@
 # メッセージデータベース (多言語対応)
 # フォーマット: 言語コード|メッセージキー=メッセージ
 
-SCRIPT_VERSION="2025.02.18-00-03"
+SCRIPT_VERSION="2025.02.18-00-04"
 
 SUPPORTED_LANGUAGES="US JP"
 
 # デバッグテスト -------------------------------------
 US|MSG_UNDER_TEST=👽 Under test
 JP|MSG_UNDER_TEST=👹 試験中
+
+# messages.db for system-config.sh
+# Last Update: 2025-03-06 02:01:50
+
+SCRIPT_VERSION="2025.03.06-02-01"
 
 # =======================
 # system-config.sh
