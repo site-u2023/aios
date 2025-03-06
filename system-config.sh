@@ -89,6 +89,56 @@ information() {
 set_device_name_password() {
     local device_name password confirmation
 
+    while true; do
+        echo "$(get_msg "MSG_ENTER_DEVICE_NAME")"
+        read -r device_name
+        [ -n "$device_name" ] && break
+        echo "$(get_msg "MSG_ERROR_EMPTY_INPUT")"
+    done
+
+    while true; do
+        echo -n "$(get_msg "MSG_ENTER_NEW_PASSWORD")"
+        read -rs password
+        echo
+        [ ${#password} -ge 8 ] && break
+        echo "$(get_msg "MSG_ERROR_PASSWORD_LENGTH")"
+    done
+
+    echo "$(get_msg "MSG_CONFIRM_SETTINGS_PREVIEW")"
+    echo "$(get_msg "MSG_PREVIEW_DEVICE_NAME" "name=$device_name")"
+    echo "$(get_msg "MSG_PREVIEW_PASSWORD" "password=$password")"
+    
+    echo -n "$(get_msg "MSG_CONFIRM_DEVICE_SETTINGS")"
+    read -r confirmation
+    
+    if [ "$confirmation" != "y" ]; then
+        echo "$(get_msg "MSG_UPDATE_CANCELLED")"
+        return 1
+    fi
+
+    # 設定の適用
+    if ! ubus call luci setPassword "{ \"username\": \"root\", \"password\": \"$password\" }"; then
+        handle_error "MSG_UPDATE_FAILED_PASSWORD"
+        return 1
+    fi
+
+    if ! uci set system.@system[0].hostname="$device_name"; then
+        handle_error "MSG_UPDATE_FAILED_DEVICE"
+        return 1
+    fi
+
+    if ! uci commit system; then
+        handle_error "MSG_UPDATE_FAILED_COMMIT"
+        return 1
+    fi
+
+    echo "$(get_msg "MSG_UPDATE_SUCCESS")"
+    return 0
+}
+
+BAK_set_device_name_password() {
+    local device_name password confirmation
+
     echo "$(get_msg "MSG_ENTER_DEVICE_NAME")"
     read device_name
     
@@ -132,6 +182,101 @@ set_device_name_password() {
 # 各 Wi-Fi デバイスごとにユーザー入力を受け、uci コマンドで更新する
 #########################################################################
 set_wifi_ssid_password() {
+    local devices wifi_country_code
+    local devices_to_enable=""
+
+    wifi_country_code=$(echo "$ZONENAME" | awk '{print $4}')
+    devices=$(uci show wireless | grep 'wifi-device' | cut -d'=' -f1 | cut -d'.' -f2 | sort -u)
+
+    if [ -z "$devices" ]; then
+        echo "$(get_msg "MSG_NO_WIFI_DEVICES")"
+        return 1
+    fi
+
+    for device in $devices; do
+        configure_wifi_device "$device" "$wifi_country_code" || continue
+        devices_to_enable="$devices_to_enable $device"
+    done
+
+    if ! uci commit wireless; then
+        handle_error "MSG_COMMIT_FAILED_WIFI"
+        return 1
+    fi
+
+    /etc/init.d/network reload
+
+    for device in $devices_to_enable; do
+        echo "$(get_msg "MSG_WIFI_SETTINGS_UPDATED" "device=$device")"
+    done
+}
+
+# WiFiデバイス個別設定
+configure_wifi_device() {
+    local device="$1"
+    local wifi_country_code="$2"
+    local band htmode ssid password enable_band confirm iface_num iface
+
+    band=$(uci get wireless."$device".band 2>/dev/null)
+    htmode=$(uci get wireless."$device".htmode 2>/dev/null)
+
+    echo "$(get_msg "MSG_WIFI_DEVICE_BAND" "device=$device" "band=$band")"
+    echo -n "$(get_msg "MSG_ENABLE_BAND" "device=$device" "band=$band")"
+    read -r enable_band
+
+    [ "$enable_band" = "y" ] || return 0
+
+    iface_num=$(echo "$device" | grep -o '[0-9]*')
+    iface="aios${iface_num}"
+
+    # SSID設定
+    while true; do
+        echo -n "$(get_msg "MSG_ENTER_SSID")"
+        read -r ssid
+        [ -n "$ssid" ] && break
+        echo "$(get_msg "MSG_ERROR_EMPTY_SSID")"
+    done
+
+    # パスワード設定
+    while true; do
+        echo -n "$(get_msg "MSG_ENTER_WIFI_PASSWORD")"
+        read -rs password
+        echo
+        [ ${#password} -ge 8 ] && break
+        echo "$(get_msg "MSG_PASSWORD_TOO_SHORT")"
+    done
+
+    # 設定確認
+    while true; do
+        echo "$(get_msg "MSG_CONFIRM_WIFI_SETTINGS" "ssid=$ssid" "password=$password")"
+        read -r confirm
+        case "$confirm" in
+            y) break ;;
+            n) echo "$(get_msg "MSG_REENTER_INFO")"
+               return 1 ;;
+            *) echo "$(get_msg "MSG_INVALID_YN")" ;;
+        esac
+    done
+
+    # WiFi設定の適用
+    setup_wifi_interface "$device" "$iface" "$ssid" "$password" "$wifi_country_code"
+}
+
+# WiFiインターフェース設定
+setup_wifi_interface() {
+    local device="$1" iface="$2" ssid="$3" password="$4" country="$5"
+
+    uci set wireless."$iface"="wifi-iface"
+    uci set wireless."$iface".device="$device"
+    uci set wireless."$iface".mode='ap'
+    uci set wireless."$iface".ssid="$ssid"
+    uci set wireless."$iface".key="$password"
+    uci set wireless."$iface".encryption='sae-mixed'
+    uci set wireless."$iface".network='lan'
+    uci set wireless."$device".country="$country"
+    uci -q delete wireless."$device".disabled
+}
+
+BAK_set_wifi_ssid_password() {
     local device iface iface_num ssid password enable_band band htmode devices
     local wifi_country_code=$(echo "$ZONENAME" | awk '{print $4}')
     
@@ -207,7 +352,125 @@ set_wifi_ssid_password() {
 #  ※ SSH ドロップベア設定、システム設定、NTP サーバ設定、ファイアウォール・パケットスティアリング、
 #     カスタム DNS 設定などを uci コマンドで行う。
 #########################################################################
+# システム設定
 set_device() {
+    # SSHアクセス設定
+    configure_ssh
+
+    # システム基本設定
+    configure_system
+
+    # ネットワーク設定
+    configure_network
+
+    # DNS設定
+    configure_dns
+
+    # 再起動確認
+    echo -n "$(get_msg "MSG_PRESS_KEY_REBOOT")"
+    read -r
+    reboot
+}
+
+# SSH設定
+configure_ssh() {
+    uci set dropbear.@dropbear[0].Interface='lan'
+    uci commit dropbear
+}
+
+# システム基本設定の適用
+configure_system() {
+    local description notes zonename timezone
+    description=$(cat /etc/openwrt_version) || description="Unknown"
+    notes=$(date) || notes="No date"
+    zonename=$(echo "$ZONENAME" | awk '{print $1}' 2>/dev/null || echo "Unknown")
+    timezone="${TIMEZONE:-UTC}"
+
+    echo "$(get_msg "MSG_APPLYING_ZONENAME" "zone=$zonename")"
+    echo "$(get_msg "MSG_APPLYING_TIMEZONE" "timezone=$timezone")"
+
+    apply_system_settings "$description" "$notes" "$zonename" "$timezone"
+    configure_ntp
+}
+
+# システム設定の適用
+apply_system_settings() {
+    local description="$1" notes="$2" zonename="$3" timezone="$4"
+
+    uci set system.@system[0]=system
+    uci set system.@system[0].description="$description"
+    uci set system.@system[0].zonename="$zonename"
+    uci set system.@system[0].timezone="$timezone"
+    uci set system.@system[0].conloglevel='6'
+    uci set system.@system[0].cronloglevel='9'
+    uci set system.@system[0].notes="$notes"
+    uci commit system
+
+    /etc/init.d/system reload
+}
+
+# NTP設定
+configure_ntp() {
+    uci set system.ntp.enable_server='1'
+    uci set system.ntp.use_dhcp='0'
+    uci set system.ntp.interface='lan'
+    uci -q delete system.ntp.server
+
+    for server in 0.pool.ntp.org 1.pool.ntp.org 2.pool.ntp.org 3.pool.ntp.org; do
+        uci add_list system.ntp.server="$server"
+    done
+
+    uci commit system
+    /etc/init.d/sysntpd restart
+}
+
+# ネットワーク設定
+configure_network() {
+    # ファイアウォール設定
+    uci set firewall.@defaults[0].flow_offloading='1'
+    
+    # Mediatek検出とハードウェアオフロード設定
+    if grep -q 'mediatek' /etc/openwrt_release; then
+        uci set firewall.@defaults[0].flow_offloading_hw='1'
+    fi
+    
+    uci commit firewall
+
+    # パケットステアリング設定
+    uci set network.globals.packet_steering='1'
+    uci commit network
+}
+
+# DNS設定
+configure_dns() {
+    # 既存のDNS設定をクリア
+    uci -q delete dhcp.lan.dhcp_option
+    uci -q delete dhcp.lan.dns
+
+    # IPv4 DNS設定
+    local ipv4_dns=("1.1.1.1,8.8.8.8" "1.0.0.1,8.8.4.4")
+    for dns in "${ipv4_dns[@]}"; do
+        uci add_list dhcp.lan.dhcp_option="6,$dns"
+    done
+
+    # IPv6 DNS設定
+    local ipv6_dns=(
+        "2606:4700:4700::1111"
+        "2001:4860:4860::8888"
+        "2606:4700:4700::1001"
+        "2001:4860:4860::8844"
+    )
+    for dns in "${ipv6_dns[@]}"; do
+        uci add_list dhcp.lan.dns="$dns"
+    done
+
+    # その他のDHCP設定
+    uci set dhcp.@dnsmasq[0].cachesize='2000'
+    uci set dhcp.lan.leasetime='24h'
+    uci commit dhcp
+}
+
+BAK_set_device() {
     # SSH アクセス用のインターフェース設定
     uci set dropbear.@dropbear[0].Interface='lan'
     uci commit dropbear
@@ -290,18 +553,43 @@ set_device() {
 #########################################################################
 # メイン処理の開始
 #########################################################################
-download_country_zone
-download_and_execute_common
-check_common "$INPUT_LANG"
+main() {
+    init_config
+    
+    # 必要なスクリプトのダウンロードと実行
+    download_country_zone || exit 1
+    download_and_execute_common || exit 1
+    
+    # 共通チェックと初期設定
+    check_common "$INPUT_LANG" || exit 1
+    process_country_selection || exit 1
+    
+    # 情報表示とタイムゾーン設定
+    information
+    select_timezone "$SELECTED_COUNTRY" || exit 1
+    
+    # 必要な設定機能を実行
+    # コメントアウトされている行は必要に応じて有効化
+    #set_device_name_password
+    #set_wifi_ssid_password
+    #set_device
+}
+
+# スクリプトの実行
+main "$@"
+
+# download_country_zone
+# download_and_execute_common
+# check_common "$INPUT_LANG"
 
 # 国選択プロセスの実行（新規実装の関数）
-process_country_selection
+# process_country_selection
 
 # 国・言語・ゾーン情報の表示
-information
+# information
 
 # タイムゾーンの選択（common-functions.sh の関数を利用）
-select_timezone "$SELECTED_COUNTRY"
+# select_timezone "$SELECTED_COUNTRY"
 
 # デバイス設定（必要に応じてコメントアウト解除）
 #set_device_name_password
