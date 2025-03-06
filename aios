@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-00-15"
+SCRIPT_VERSION="2025.03.06-00-17"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -626,19 +626,18 @@ download() {
             return 1
         fi
 
-        local read_message=""
-        if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\.sh"; then
-            read_message="read "
-            . "$install_path"
-            debug_log "DEBUG" "Sourced: $install_path"
-        fi
-
-        debug_log "DEBUG" "Download completed: ${read_message}$file_name - Version: $remote_version"
         echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
 
         if [ "$chmod_mode" = "true" ]; then
             chmod +x "$install_path"
             debug_log "DEBUG" "chmod +x applied to $file_name"
+        fi
+
+        local read_message=""
+        if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\.sh"; then
+            read_message="read "
+            ( . "$install_path" )  # サブシェルでスクリプトを実行
+            debug_log "DEBUG" "Sourced: $install_path"
         fi
 
         if grep -q "^${file_name}=" "$script_db"; then
