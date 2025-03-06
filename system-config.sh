@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-00-07"
+SCRIPT_VERSION="2025.03.06-00-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -110,7 +110,7 @@ set_device_name_password() {
         return 1
     fi
 
-    if! uci commit system; then
+    if ! uci commit system; then
         echo "$(color red "$(get_message "MSG_UPDATE_FAILED_COMMIT")")"
         return 1
     fi
