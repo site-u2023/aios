@@ -1,9 +1,63 @@
 #!/bin/sh
-# License: CC0
-# OpenWrt >= 19.07
+
+SCRIPT_VERSION="2025.03.06-00-01"
+
+# =========================================================
+# 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
+# 🚀 Last Update: 2025-02-21
 #
-# system-config.sh
+# 🏷️ License: CC0 (Public Domain)
+# 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
 #
+# ⚠️ IMPORTANT NOTICE:
+# OpenWrt OS exclusively uses **Almquist Shell (ash)** and
+# is **NOT** compatible with Bourne-Again Shell (bash).
+#
+# 📢 POSIX Compliance Guidelines:
+# ✅ Use `[` instead of `[[` for conditions
+# ✅ Use `$(command)` instead of backticks `` `command` ``
+# ✅ Use `$(( ))` for arithmetic instead of `let`
+# ✅ Define functions as `func_name() {}` (no `function` keyword)
+# ✅ No associative arrays (`declare -A` is NOT supported)
+# ✅ No here-strings (`<<<` is NOT supported)
+# ✅ No `-v` flag in `test` or `[[`
+#
+# 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
+# =========================================================
+### =========================================================
+### 📌 AI Assistance Request: Bug Fixing Procedure
+### 
+### When debugging or fixing errors in this script, follow these steps:
+### 
+### 1️⃣ Create a minimal test script to identify the bug.
+### 2️⃣ Execute the test and verify the reproducibility of the error.
+### 3️⃣ Fix the error and re-run the test to confirm the solution.
+### 4️⃣ Apply the corrected code to the production environment.
+### 
+### ⚠️ DO NOT modify the main script without first confirming the fix 
+###     through a dedicated test script.
+### 
+### 🛠️ Keep the debugging process structured, efficient, and reliable.
+### =========================================================
+
+DEV_NULL="${DEV_NULL:-on}"
+# サイレントモード
+# export DEV_NULL="on"
+# 通常モード
+# unset DEV_NULL
+
+# 基本定数の設定 
+BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q -O}"
+# BASE_WGET="${BASE_WGET:-wget -O}"
+BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
+BASE_DIR="${BASE_DIR:-/tmp/aios}"
+CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
+LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
+BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build}"
+FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
+DEBUG_MODE="${DEBUG_MODE:-false}"
+mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR" "$FEED_DIR"
+#########################################################################
 # 本スクリプトは、デバイスの初期設定を行うためのスクリプトです。
 # 主な処理内容は以下の通りです：
 #  1. 国・ゾーン情報スクリプトのダウンロード
@@ -12,131 +66,7 @@
 #  4. デバイス名・パスワードの設定 (set_device_name_password)
 #  5. Wi-Fi SSID・パスワードの設定 (set_wifi_ssid_password)
 #  6. システム全体の設定 (set_device)
-echo system-config.sh Last update 202502031310-8
-
-# 定数の設定
-BASE_URL="https://raw.githubusercontent.com/site-u2023/aios/main"
-BASE_DIR="/tmp/aios"
-SUPPORTED_VERSIONS="21 22 23 24 SN"
-SUPPORTED_LANGUAGES="en ja zh-cn zh-tw id ko de ru"
-INPUT_LANG="$1"
-
 #########################################################################
-# download_country_zone: 国・ゾーン情報スクリプトのダウンロード
-#########################################################################
-download_country_zone() {
-    if [ ! -f "${BASE_DIR%/}/country-zone.sh" ]; then
-        wget --quiet -O "${BASE_DIR%/}/country-zone.sh" "${BASE_URL}/country-zone.sh" || \
-            handle_error "Failed to download country-zone.sh"
-    fi
-}
-
-#########################################################################
-# download_and_execute_common: common-functions.sh をダウンロードし読み込む
-#########################################################################
-download_and_execute_common() {
-    if [ ! -f "${BASE_DIR%/}/common-functions.sh" ]; then
-        wget --quiet -O "${BASE_DIR%/}/common-functions.sh" "${BASE_URL}/common-functions.sh" || \
-            handle_error "Failed to download common-functions.sh"
-    fi
-
-    source "${BASE_DIR%/}/common-functions.sh" || \
-        handle_error "Failed to source common-functions.sh"
-}
-
-#########################################################################
-# select_timezone: 複数のタイムゾーンから選択
-#########################################################################
-XXXXX_select_timezone() {
-    local available_zonename available_timezones selected_timezone selected_zone
-    local msg_timezone_single msg_timezone_list msg_select_tz
-
-    # 言語に応じたメッセージ設定
-    case "$SELECTED_LANGUAGE" in
-        ja)
-            msg_timezone_single="タイムゾーン: "
-            msg_timezone_list="利用可能なタイムゾーン:"
-            msg_select_tz="タイムゾーンの番号を選択してください: "
-            ;;
-        zh-cn)
-            msg_timezone_single="时区: "
-            msg_timezone_list="可用时区:"
-            msg_select_tz="请选择时区编号: "
-            ;;
-        zh-tw)
-            msg_timezone_single="時區: "
-            msg_timezone_list="可用時區:"
-            msg_select_tz="請選擇時區編號: "
-            ;;
-            id)
-            msg_timezone_single="Zona waktu: "
-            msg_timezone_list="Zona waktu yang tersedia:"
-            msg_select_tz="Pilih nomor zona waktu: "
-            ;;
-        ko)
-            msg_timezone_single="시간대: "
-            msg_timezone_list="사용 가능한 시간대:"
-            msg_select_tz="시간대 번호를 선택하세요: "
-            ;;
-        de)
-            msg_timezone_single="Zeitzone: "
-            msg_timezone_list="Verfügbare Zeitzonen:"
-            msg_select_tz="Bitte wählen Sie die Zeitzonennummer: "
-            ;;
-        ru)
-            msg_timezone_single="Часовой пояс: "
-            msg_timezone_list="Доступные часовые пояса:"
-            msg_select_tz="Выберите номер часового пояса: "
-            ;;
-        en|*) # 英語とその他すべての未定義言語の処理
-            msg_timezone_single="Time Zone: "
-            msg_timezone_list="Available Time Zones:"
-            msg_select_tz="Select the time zone by number: "
-            ;;
-    esac
-
-    # 都市名とタイムゾーンの情報を取得
-    available_zonename=$(sh "${BASE_DIR}/country-zone.sh" "$SELECTED_COUNTRY" "cities")
-    available_timezones=$(sh "${BASE_DIR}/country-zone.sh" "$SELECTED_COUNTRY" "offsets")
-
-    # 一時ファイルに保存
-    echo "$available_zonename" | tr ',' '\n' > "${BASE_DIR}/zonename_list"
-    echo "$available_timezones" | tr ',' '\n' > "${BASE_DIR}/timezone_list"
-
-    total_zonename=$(wc -l < "${BASE_DIR}/zonename_list")
-
-    if [ "$total_zonename" -eq 1 ]; then
-        # 1つしかない場合はそのまま表示
-        ZONENAME=$(head -n 1 "${BASE_DIR}/zonename_list")
-        TIMEZONE=$(head -n 1 "${BASE_DIR}/timezone_list")
-        echo "$(color white "${msg_timezone_single}${ZONENAME} - ${TIMEZONE}")"
-    else
-        # 複数ある場合はリスト表示して選択
-        echo "$(color white "$msg_timezone_list")"
-
-        # 並列して都市名とタイムゾーンを表示
-        i=1
-        while read -r zonename && read -r timezone <&3; do
-            echo "[$i] $zonename - $timezone"
-            i=$((i+1))
-        done < "${BASE_DIR}/zonename_list" 3< "${BASE_DIR}/timezone_list"
-
-        # ユーザーに選択させる
-        read -p "$(color white "$msg_select_tz")" selected_index
-
-        ZONENAME=$(sed -n "${selected_index}p" "${BASE_DIR}/zonename_list")
-        TIMEZONE=$(sed -n "${selected_index}p" "${BASE_DIR}/timezone_list")
-
-        if [ -z "$ZONENAME" ] || [ -z "$TIMEZONE" ]; then
-            # 無効な選択ならデフォルトで1番目を選択
-            ZONENAME=$(head -n 1 "${BASE_DIR}/zonename_list")
-            TIMEZONE=$(head -n 1 "${BASE_DIR}/timezone_list")
-        fi
-
-        echo "$(color white "${msg_timezone_single}${ZONENAME} - ${TIMEZONE}")"
-    fi
-}
-
 #########################################################################
 # information: country_zone で取得済みのゾーン情報を元にシステム情報を表示する
 #########################################################################
@@ -147,49 +77,13 @@ information() {
     local country_code="$COUNTRYCODE"
 
     case "$SELECTED_LANGUAGE" in
-        ja)
+        JP)
             echo -e "$(color white "国名: $country_name")"
             echo -e "$(color white "表示名: $display_name")"
             echo -e "$(color white "言語コード: $language_code")"
             echo -e "$(color white "国コード: $country_code")"
             ;;
-        zh-cn)
-            echo -e "$(color white "国家: $country_name")"
-            echo -e "$(color white "显示名称: $display_name")"
-            echo -e "$(color white "语言代码: $language_code")"
-            echo -e "$(color white "国家代码: $country_code")"
-            ;;
-        zh-tw)
-            echo -e "$(color white "國家: $country_name")"
-            echo -e "$(color white "顯示名稱: $display_name")"
-            echo -e "$(color white "語言代碼: $language_code")"
-            echo -e "$(color white "國家代碼: $country_code")"
-            ;;
-        id)
-            echo -e "$(color white "Nama Negara: $country_name")"
-            echo -e "$(color white "Nama Tampilan: $display_name")"
-            echo -e "$(color white "Kode Bahasa: $language_code")"
-            echo -e "$(color white "Kode Negara: $country_code")"
-            ;;
-        ko)
-            echo -e "$(color white "국가명: $country_name")"
-            echo -e "$(color white "표시 이름: $display_name")"
-            echo -e "$(color white "언어 코드: $language_code")"
-            echo -e "$(color white "국가 코드: $country_code")"
-            ;;
-        de)
-            echo -e "$(color white "Ländername: $country_name")"
-            echo -e "$(color white "Anzeigename: $display_name")"
-            echo -e "$(color white "Sprachcode: $language_code")"
-            echo -e "$(color white "Ländercode: $country_code")"
-            ;;
-        ru)
-            echo -e "$(color white "Название страны: $country_name")"
-            echo -e "$(color white "Отображаемое имя: $display_name")"
-            echo -e "$(color white "Код языка: $language_code")"
-            echo -e "$(color white "Код страны: $country_code")"
-            ;;
-        en|*) # 英語とその他すべての未定義言語の処理
+        US|*) # 英語とその他すべての未定義言語の処理
             echo -e "$(color white "Country: $country_name")"
             echo -e "$(color white "Display Name: $display_name")"
             echo -e "$(color white "Language Code: $language_code")"
@@ -208,56 +102,14 @@ set_device_name_password() {
 
     lang="$SELECTED_LANGUAGE"
     case "$lang" in
-        ja)
+        JP)
             msg_device="新しいデバイス名を入力してください: "
             msg_password="新しいパスワードを入力してください: "
             msg_confirm="以下の内容でよろしいですか？ (y/n): "
             msg_success="パスワードとデバイス名が正常に更新されました。"
             msg_cancel="設定がキャンセルされました。"
             ;;
-        zh-cn)
-            msg_device="请输入新的设备名称: "
-            msg_password="请输入新的密码: "
-            msg_confirm="您确认以下设置吗？ (y/n): "
-            msg_success="密码和设备名称已成功更新。"
-            msg_cancel="操作已取消。"
-            ;;
-        zh-tw)
-            msg_device="請輸入新的設備名稱: "
-            msg_password="請輸入新的密碼: "
-            msg_confirm="您確認以下設定嗎？ (y/n): "
-            msg_success="密碼和設備名稱已成功更新。"
-            msg_cancel="操作已取消。"
-            ;;
-        id)
-            msg_device="Masukkan nama perangkat baru: "
-            msg_password="Masukkan kata sandi baru: "
-            msg_confirm="Apakah Anda yakin dengan pengaturan berikut? (y/n): "
-            msg_success="Kata sandi dan nama perangkat berhasil diperbarui."
-            msg_cancel="Pengaturan telah dibatalkan."
-            ;;
-        ko)
-            msg_device="새 장치 이름을 입력하세요: "
-            msg_password="새 비밀번호를 입력하세요: "
-            msg_confirm="다음 설정으로 진행하시겠습니까? (y/n): "
-            msg_success="비밀번호와 장치 이름이 성공적으로 업데이트되었습니다."
-            msg_cancel="설정이 취소되었습니다."
-            ;;
-        de)
-            msg_device="Geben Sie den neuen Gerätenamen ein: "
-            msg_password="Geben Sie das neue Passwort ein: "
-            msg_confirm="Sind Sie mit den folgenden Einstellungen einverstanden? (y/n): "
-            msg_success="Passwort und Gerätename wurden erfolgreich aktualisiert."
-            msg_cancel="Die Einstellungen wurden abgebrochen."
-            ;;
-        ru)
-            msg_device="Введите новое имя устройства: "
-            msg_password="Введите новый пароль: "
-            msg_confirm="Вы уверены в следующих настройках? (y/n): "
-            msg_success="Пароль и имя устройства успешно обновлены."
-            msg_cancel="Настройки были отменены."
-            ;;
-        en|*) # 英語とその他すべての未定義言語の処理
+        US|*) # 英語とその他すべての未定義言語の処理
             msg_device="Enter the new device name: "
             msg_password="Enter the new password: "
             msg_confirm="Are you sure with the following settings? (y/n): "
@@ -310,7 +162,7 @@ set_wifi_ssid_password() {
     
     lang="$SELECTED_LANGUAGE"
     case "$lang" in
-        ja)
+        JP)
             msg_no_devices="Wi-Fiデバイスが見つかりません。終了します。"
             msg_band="デバイス %s (帯域: %s)"
             msg_enter_ssid="SSIDを入力してください: "
@@ -322,79 +174,7 @@ set_wifi_ssid_password() {
             msg_reenter="もう一度入力してください。"
             msg_invalid="無効な入力です。y または n を入力してください。"
             ;;
-        zh-cn)
-            msg_no_devices="未找到Wi-Fi设备。正在退出。"
-            msg_band="设备 %s (频段: %s)"
-            msg_enter_ssid="请输入SSID: "
-            msg_enter_password="请输入密码（8个字符以上）: "
-            msg_password_invalid="密码必须至少包含8个字符。"
-            msg_updated="设备 %s 的设置已更新。"
-            msg_select_band="启用设备 %s 的频段 %s？(y/n): "
-            msg_confirm="配置信息: SSID = %s, 密码 = %s。是否正确？(y/n): "
-            msg_reenter="请重新输入信息。"
-            msg_invalid="输入无效。请输入'y'或'n'。"
-            ;;
-        zh-tw)
-            msg_no_devices="未找到Wi-Fi裝置。正在退出。"
-            msg_band="裝置 %s (頻段: %s)"
-            msg_enter_ssid="請輸入SSID: "
-            msg_enter_password="請輸入密碼（8個字元以上）: "
-            msg_password_invalid="密碼必須至少包含8個字元。"
-            msg_updated="裝置 %s 的設定已更新。"
-            msg_select_band="啟用裝置 %s 的頻段 %s？(y/n): "
-            msg_confirm="設定資訊: SSID = %s, 密碼 = %s。是否正確？(y/n): "
-            msg_reenter="請重新輸入資訊。"
-            msg_invalid="輸入無效。請輸入'y'或'n'。"
-            ;;
-        id)
-            msg_no_devices="Perangkat Wi-Fi tidak ditemukan. Keluar."
-            msg_band="Perangkat %s (Pita: %s)"
-            msg_enter_ssid="Masukkan SSID: "
-            msg_enter_password="Masukkan kata sandi (minimal 8 karakter): "
-            msg_password_invalid="Kata sandi harus terdiri dari minimal 8 karakter."
-            msg_updated="Pengaturan perangkat %s telah diperbarui."
-            msg_select_band="Aktifkan pita %s di perangkat %s? (y/n): "
-            msg_confirm="Konfigurasi: SSID = %s, Kata Sandi = %s. Apakah ini benar? (y/n): "
-            msg_reenter="Silakan masukkan kembali informasi."
-            msg_invalid="Masukan tidak valid. Harap masukkan 'y' atau 'n'."
-            ;;
-        ko)
-            msg_no_devices="Wi-Fi 장치를 찾을 수 없습니다. 종료합니다."
-            msg_band="장치 %s (대역: %s)"
-            msg_enter_ssid="SSID를 입력하세요: "
-            msg_enter_password="비밀번호를 입력하세요 (8자 이상): "
-            msg_password_invalid="비밀번호는 최소 8자 이상이어야 합니다."
-            msg_updated="장치 %s의 설정이 업데이트되었습니다."
-            msg_select_band="장치 %s에서 대역 %s를 활성화하시겠습니까? (y/n): "
-            msg_confirm="설정 내용: SSID = %s, 비밀번호 = %s. 이대로 진행하시겠습니까? (y/n): "
-            msg_reenter="정보를 다시 입력하세요."
-            msg_invalid="잘못된 입력입니다. 'y' 또는 'n'을 입력하세요."
-            ;;
-        de)
-            msg_no_devices="Keine Wi-Fi-Geräte gefunden. Beenden."
-            msg_band="Gerät %s (Band: %s)"
-            msg_enter_ssid="Bitte SSID eingeben: "
-            msg_enter_password="Bitte Passwort eingeben (mindestens 8 Zeichen): "
-            msg_password_invalid="Das Passwort muss mindestens 8 Zeichen lang sein."
-            msg_updated="Die Einstellungen für Gerät %s wurden aktualisiert."
-            msg_select_band="Band %s auf Gerät %s aktivieren? (y/n): "
-            msg_confirm="Konfiguration: SSID = %s, Passwort = %s. Ist das korrekt? (y/n): "
-            msg_reenter="Bitte geben Sie die Informationen erneut ein."
-            msg_invalid="Ungültige Eingabe. Bitte 'y' oder 'n' eingeben."
-            ;;
-        ru)
-            msg_no_devices="Устройства Wi-Fi не найдены. Завершение работы."
-            msg_band="Устройство %s (Диапазон: %s)"
-            msg_enter_ssid="Введите SSID: "
-            msg_enter_password="Введите пароль (не менее 8 символов): "
-            msg_password_invalid="Пароль должен содержать не менее 8 символов."
-            msg_updated="Настройки устройства %s были обновлены."
-            msg_select_band="Включить диапазон %s на устройстве %s? (y/n): "
-            msg_confirm="Конфигурация: SSID = %s, Пароль = %s. Это правильно? (y/n): "
-            msg_reenter="Пожалуйста, введите информацию заново."
-            msg_invalid="Неверный ввод. Пожалуйста, введите 'y' или 'n'."
-            ;;
-        en|*) # 英語とその他すべての未定義言語の処理
+        US|*) # 英語とその他すべての未定義言語の処理
             msg_no_devices="No Wi-Fi devices found. Exiting."
             msg_band="Device %s (Band: %s)"
             msg_enter_ssid="Enter SSID: "
