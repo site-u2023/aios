@@ -136,6 +136,8 @@ feed_package() {
   local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.${PACKAGE_EXTENSION}"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
 
+  install_package jq hidden
+  
   debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
 
   # DIR_PATHが指定されていない場合、自動補完
@@ -231,6 +233,8 @@ feed_package_release() {
   local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.${PACKAGE_EXTENSION}"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases"
 
+  install_package jq hidden
+  
   debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
 
   local JSON
