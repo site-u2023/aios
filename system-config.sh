@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-00-14"
+SCRIPT_VERSION="2025.03.06-00-15"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -82,13 +82,12 @@ set_device_name_password() {
 
     while true; do
         echo -n "$(color yellow "$(get_message "MSG_ENTER_NEW_PASSWORD")")"
-        stty -echo
         read password
-        stty echo
         echo
         [ ${#password} -ge 8 ] && break
         echo "$(color red "$(get_message "MSG_ERROR_PASSWORD_LENGTH")")"
     done
+
 
     echo "$(color yellow "$(get_message "MSG_CONFIRM_SETTINGS_PREVIEW")")"
     echo "$(color green "$(get_message "MSG_PREVIEW_DEVICE_NAME" "name=$device_name")")"
@@ -202,16 +201,14 @@ configure_wifi_device() {
         echo "$(color red "$(get_message "MSG_ERROR_EMPTY_SSID")")"
     done
 
-    # パスワード設定
-    while true; do
-        echo -n "$(color yellow "$(get_message "MSG_ENTER_WIFI_PASSWORD")")"
-        stty -echo
-        read password
-        stty echo
-        echo
-        [ ${#password} -ge 8 ] && break
-        echo "$(color red "$(get_message "MSG_PASSWORD_TOO_SHORT")")"
-    done
+# パスワード設定
+while true; do
+    echo -n "$(color yellow "$(get_message "MSG_ENTER_WIFI_PASSWORD")")"
+    read password
+    echo
+    [ ${#password} -ge 8 ] && break
+    echo "$(color red "$(get_message "MSG_PASSWORD_TOO_SHORT")")"
+done
 
     # HTモード設定の最適化
     case "$band" in
