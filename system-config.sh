@@ -71,16 +71,15 @@ mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR" "$FEED_DIR"
 # information: country_zone で取得済みのゾーン情報を元にシステム情報を表示する
 #########################################################################
 information() {
-    # キャッシュファイルからの読み込み
     local country_name=$(cat "${CACHE_DIR}/zonename.ch" 2>/dev/null)
     local display_name=$(cat "${CACHE_DIR}/language.ch" 2>/dev/null)
     local language_code=$(cat "${CACHE_DIR}/luci.ch" 2>/dev/null)
     local country_code=$(awk '{print $4}' "${CACHE_DIR}/country.ch" 2>/dev/null)
 
-    echo "$(get_message "MSG_INFO_COUNTRY" "name=$country_name")"
-    echo "$(get_message "MSG_INFO_DISPLAY" "name=$display_name")"
-    echo "$(get_message "MSG_INFO_LANG_CODE" "code=$language_code")"
-    echo "$(get_message "MSG_INFO_COUNTRY_CODE" "code=$country_code")"
+    echo "$(color green "$(get_message "MSG_INFO_COUNTRY" "name=$country_name")")"
+    echo "$(color green "$(get_message "MSG_INFO_DISPLAY" "name=$display_name")")"
+    echo "$(color green "$(get_message "MSG_INFO_LANG_CODE" "code=$language_code")")"
+    echo "$(color green "$(get_message "MSG_INFO_COUNTRY_CODE" "code=$country_code")")"
 }
 
 #########################################################################
