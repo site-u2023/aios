@@ -641,7 +641,6 @@ download() {
         if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\.sh"; then
             read_message="read "
             echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
-            #( . "$install_path" )  # サブシェルでスクリプトを実行
             . "$install_path"
             debug_log "DEBUG" "Sourced: $install_path"
         else
