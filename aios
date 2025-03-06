@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-01-11"
+SCRIPT_VERSION="2025.03.06-01-12"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -702,6 +702,7 @@ download() {
 
     # フラグに従って処理を実行
     if [ "$exec_mode" = "true" ]; then
+        chmod +x "$install_path"
         exec "$install_path" "$@"
     elif [ "$read_mode" = "true" ]; then
         . "$install_path"
