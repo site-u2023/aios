@@ -223,22 +223,39 @@ configure_wifi_device() {
     local wifi_country_code="$2"
     local band htmode ssid password enable_band confirm iface_num iface
 
+    # バンド情報の詳細取得
     band=$(uci get wireless."$device".band 2>/dev/null)
     htmode=$(uci get wireless."$device".htmode 2>/dev/null)
+    
+    # バンドの種類を判定
+    local band_type
+    case "$band" in
+        "2g"|"2G") band_type="2.4GHz" ;;
+        "5g"|"5G") band_type="5GHz" ;;
+        "6g"|"6G") band_type="6GHz" ;;
+        *) band_type="$band" ;;
+    esac
 
-    echo "$(get_msg "MSG_WIFI_DEVICE_BAND" "device=$device" "band=$band")"
-    echo -n "$(get_msg "MSG_ENABLE_BAND" "device=$device" "band=$band")"
+    # デバイスの情報表示
+    echo "$(get_msg "MSG_WIFI_DEVICE_BAND" "device=$device" "band=$band_type")"
+    echo -n "$(get_msg "MSG_ENABLE_BAND" "device=$device" "band=$band_type")"
     read -r enable_band
 
     [ "$enable_band" = "y" ] || return 0
 
+    # インターフェース名の生成
     iface_num=$(echo "$device" | grep -o '[0-9]*')
     iface="aios${iface_num}"
 
+    # デフォルトSSIDの生成
+    local default_ssid="aios_${band_type}"
+
     # SSID設定
     while true; do
-        echo -n "$(get_msg "MSG_ENTER_SSID")"
+        echo -n "$(get_msg "MSG_ENTER_SSID") [${default_ssid}]: "
         read -r ssid
+        # デフォルトSSIDの使用
+        [ -z "$ssid" ] && ssid="$default_ssid"
         [ -n "$ssid" ] && break
         echo "$(get_msg "MSG_ERROR_EMPTY_SSID")"
     done
@@ -252,8 +269,24 @@ configure_wifi_device() {
         echo "$(get_msg "MSG_PASSWORD_TOO_SHORT")"
     done
 
+    # HTモード設定の最適化
+    case "$band" in
+        "2g"|"2G")
+            [ -z "$htmode" ] && htmode="HT20"
+            ;;
+        "5g"|"5G")
+            [ -z "$htmode" ] && htmode="VHT80"
+            ;;
+        "6g"|"6G")
+            [ -z "$htmode" ] && htmode="HE80"
+            ;;
+    esac
+
     # 設定確認
     while true; do
+        echo "$(get_msg "MSG_WIFI_CONFIG_PREVIEW")"
+        echo "$(get_msg "MSG_WIFI_BAND_INFO" "band=$band_type")"
+        echo "$(get_msg "MSG_WIFI_HTMODE_INFO" "mode=$htmode")"
         echo "$(get_msg "MSG_CONFIRM_WIFI_SETTINGS" "ssid=$ssid" "password=$password")"
         read -r confirm
         case "$confirm" in
@@ -265,12 +298,12 @@ configure_wifi_device() {
     done
 
     # WiFi設定の適用
-    setup_wifi_interface "$device" "$iface" "$ssid" "$password" "$wifi_country_code"
+    setup_wifi_interface "$device" "$iface" "$ssid" "$password" "$wifi_country_code" "$htmode"
 }
 
 # WiFiインターフェース設定
 setup_wifi_interface() {
-    local device="$1" iface="$2" ssid="$3" password="$4" country="$5"
+    local device="$1" iface="$2" ssid="$3" password="$4" country="$5" htmode="$6"
 
     uci set wireless."$iface"="wifi-iface"
     uci set wireless."$iface".device="$device"
@@ -280,6 +313,7 @@ setup_wifi_interface() {
     uci set wireless."$iface".encryption='sae-mixed'
     uci set wireless."$iface".network='lan'
     uci set wireless."$device".country="$country"
+    [ -n "$htmode" ] && uci set wireless."$device".htmode="$htmode"
     uci -q delete wireless."$device".disabled
 }
 
