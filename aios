@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-00-02"
+SCRIPT_VERSION="2025.03.06-00-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -440,28 +440,37 @@ get_message() {
     local quiet_flag="$2"
     local message_db="${BASE_DIR}/messages.db"
     local lang="${ACTIVE_LANGUAGE:-US}"  # `ACTIVE_LANGUAGE` が未設定なら `US`
+    local message
 
     # `messages.db` が存在しない場合、キーそのままを返す
     if [ ! -f "$message_db" ]; then
         debug_log "DEBUG" "messages.db not found. Returning key as message."
         message="$key"
     else
-        # **言語優先検索**
+        # 言語優先検索
         message=$(grep "^${lang}|${key}=" "$message_db" | cut -d'=' -f2-)
 
-        # **フォールバック検索**
+        # フォールバック検索
         if [ -z "$message" ]; then
             message=$(grep "^US|${key}=" "$message_db" | cut -d'=' -f2-)
         fi
 
-        # **それでも見つからなければ、キーそのままを返す**
+        # それでも見つからなければ、キーそのままを返す
         if [ -z "$message" ]; then
             debug_log "DEBUG" "Message key '$key' not found in messages.db."
             message="$key"
         fi
     fi
 
-    # **quiet モード対応**
+    # プレースホルダーの置換
+    shift 2
+    for placeholder in "$@"; do
+        key=$(echo $placeholder | cut -d'=' -f1)
+        value=$(echo $placeholder | cut -d'=' -f2-)
+        message=$(echo "$message" | sed "s/{$key}/$value/g")
+    done
+
+    # quiet モード対応
     if [ "$quiet_flag" = "quiet" ]; then
         return 0
     else
