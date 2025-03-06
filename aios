@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-01-12"
+SCRIPT_VERSION="2025.03.06-01-13"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -56,37 +56,9 @@ BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
-DL_FILE="${CACHE_DIR}/download"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
-
-aios_read() {
-# 初回起動かどうかを示すフラグ変数。更新後にループを起こさないために使用
-if [ -z "$AIOS_UPDATED" ]; then
-  echo "AIOS: バージョンチェックを実施中 (現行バージョン: $SCRIPT_VERSION)..."
-
-  # ここで実際のバージョン比較を行う（たとえばリモート先にあるバージョン情報を取得して比較）
-  # 下記はサンプルとして常に「新版がある」と仮定し REMOTE_VERSION を設定
-  REMOTE_VERSION="2025.03.06-01-07"
-
-  if [ "$REMOTE_VERSION" != "$SCRIPT_VERSION" ]; then
-    echo "AIOS: 新バージョン ($REMOTE_VERSION) 有。ダウンロードを試みます..."
-    # リモートから aiOS スクリプトをダウンロード（wgetのオプションなどは実環境や既存実装に合わせる）
-    if wget -q -O "$SCRIPT_PATH" "https://raw.githubusercontent.com/site-u2023/aios/main/aios?cache_bust=$(date +%s)"; then
-      chmod +x "$SCRIPT_PATH"
-      echo "AIOS: ダウンロード成功。exec で新バージョンを起動します。"
-      AIOS_UPDATED=1 exec "$SCRIPT_PATH" "$@"
-    else
-      echo "AIOS: ダウンロード失敗。現在のバージョンで続行します。"
-    fi
-  else
-    echo "AIOS: すでに最新バージョン ($SCRIPT_VERSION) を使用中です。"
-  fi
-fi
-
-# 以下、通常のプログラムロジック
-echo "AIOS: メイン動作を開始します。バージョン: $SCRIPT_VERSION"
-
-}
+DL_FILE="${CACHE_DIR}/download"
+AIOS_FILE="${CACHE_DIR}/aios_update.ch"
 
 # 🔵　エラー・デバッグ・アップデート系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
@@ -601,7 +573,6 @@ download() {
     local chmod_mode="false"
     local read_mode="false"
     local exec_mode="false"
-    local aios_updated="false"
     local file_name=""
     local local_version=""
     local remote_version=""
@@ -620,9 +591,9 @@ download() {
         shift
     done
 
-    # 既に更新後の再起動なら (aios_updated が真なら) ダウンロードの重複実行を防ぐ
-    if [ "$aios_updated" = "true" ]; then
-        debug_log "DEBUG" "aios_updatedが設定されています。ループを回避するため、アップデートはスキップします。"
+    # 既に更新後の再起動ならダウンロードの重複実行を防ぐ
+    if [ -f "$AIOS_FILE" ] && [ "$(cat "$AIOS_FILE")" = "true" ]; then
+        debug_log "DEBUG" "AIOS本体が更新されているため、ループを回避するためにアップデートをスキップします。"
         return 0
     fi
 
@@ -662,6 +633,7 @@ download() {
             return 1
         fi
 
+        # chmod モードが有効な場合に実行権限を設定
         if [ "$chmod_mode" = "true" ]; then
             chmod +x "$install_path"
             debug_log "DEBUG" "chmod +x applied to $file_name"
@@ -678,7 +650,8 @@ download() {
         if [ "$file_name" = "$(basename "$BIN_PATH")" ]; then
             debug_log "DEBUG" "AIOS本体が更新されたため、再起動フラグを設定します。"
             exec_mode="true"
-            aios_updated="true"
+            # フラグをキャッシュファイルに書き込む
+            echo "true" > "$AIOS_FILE"
         fi
 
         # ソース読み込みフラグ設定
