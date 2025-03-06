@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-00-09"
+SCRIPT_VERSION="2025.03.06-00-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -464,8 +464,7 @@ get_message() {
 
     # パラメータ置換
     if [ -n "$params" ]; then
-        IFS=' ' read -r -a param_array <<< "$params"
-        for param in "${param_array[@]}"; do
+        for param in $params; do
             key=$(echo "$param" | cut -d'=' -f1)
             value=$(echo "$param" | cut -d'=' -f2)
             message=$(echo "$message" | sed -e "s/{$key}/$value/g")
