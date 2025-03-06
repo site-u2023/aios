@@ -12,6 +12,7 @@ JP|MSG_UNDER_TEST=👹 試験中
 # -----------------------
 # system-config.sh
 # -----------------------
+
 # 情報表示関連
 US|MSG_INFO_COUNTRY=Country: {name}
 JP|MSG_INFO_COUNTRY=国名: {name}
@@ -32,23 +33,11 @@ JP|MSG_ENTER_DEVICE_NAME=新しいデバイス名を入力してください:
 US|MSG_ENTER_NEW_PASSWORD=Enter the new password:
 JP|MSG_ENTER_NEW_PASSWORD=新しいパスワードを入力してください:
 
-US|MSG_CONFIRM_DEVICE_SETTINGS=Are you sure with the following settings? (y/n):
-JP|MSG_CONFIRM_DEVICE_SETTINGS=以下の内容でよろしいですか？ (y/n):
+US|MSG_PREVIEW_DEVICE_NAME=Device Name: {name}
+JP|MSG_PREVIEW_DEVICE_NAME=デバイス名: {name}
 
-US|MSG_UPDATE_SUCCESS=Password and device name have been successfully updated.
-JP|MSG_UPDATE_SUCCESS=パスワードとデバイス名が正常に更新されました。
-
-US|MSG_UPDATE_CANCELLED=Operation has been canceled.
-JP|MSG_UPDATE_CANCELLED=設定がキャンセルされました。
-
-US|MSG_UPDATE_FAILED_PASSWORD=Failed to update password.
-JP|MSG_UPDATE_FAILED_PASSWORD=パスワードの更新に失敗しました。
-
-US|MSG_UPDATE_FAILED_DEVICE=Failed to update device name.
-JP|MSG_UPDATE_FAILED_DEVICE=デバイス名の更新に失敗しました。
-
-US|MSG_UPDATE_FAILED_COMMIT=Failed to commit changes.
-JP|MSG_UPDATE_FAILED_COMMIT=変更の保存に失敗しました。
+US|MSG_PREVIEW_PASSWORD=Password: {password}
+JP|MSG_PREVIEW_PASSWORD=パスワード: {password}
 
 # WiFi設定関連
 US|MSG_NO_WIFI_DEVICES=No Wi-Fi devices found. Exiting.
@@ -63,9 +52,6 @@ JP|MSG_ENTER_SSID=SSIDを入力してください:
 US|MSG_ENTER_WIFI_PASSWORD=Enter password (8 or more characters):
 JP|MSG_ENTER_WIFI_PASSWORD=パスワードを入力してください (8文字以上):
 
-US|MSG_PASSWORD_TOO_SHORT=Password must be at least 8 characters long.
-JP|MSG_PASSWORD_TOO_SHORT=パスワードは8文字以上で入力してください。
-
 US|MSG_WIFI_SETTINGS_UPDATED=Device {device} settings have been updated.
 JP|MSG_WIFI_SETTINGS_UPDATED=デバイス {device} の設定が更新されました。
 
@@ -75,15 +61,124 @@ JP|MSG_ENABLE_BAND=デバイス {device} のバンド {band} を有効にしま�
 US|MSG_CONFIRM_WIFI_SETTINGS=Configuration: SSID = {ssid}, Password = {password}. Is this correct? (y/n):
 JP|MSG_CONFIRM_WIFI_SETTINGS=設定内容: SSID = {ssid}, パスワード = {password}。これで良いですか？ (y/n):
 
+# システム設定関連
+US|MSG_APPLYING_ZONENAME=Applying zonename settings: {zone}
+JP|MSG_APPLYING_ZONENAME=ゾーン名設定を適用中: {zone}
+
+US|MSG_APPLYING_TIMEZONE=Applying timezone settings: {timezone}
+JP|MSG_APPLYING_TIMEZONE=タイムゾーン設定を適用中: {timezone}
+
+US|MSG_SYSTEM_UPDATE_START=Starting system configuration update...
+JP|MSG_SYSTEM_UPDATE_START=システム設定の更新を開始します...
+
+US|MSG_SYSTEM_UPDATE_COMPLETE=System configuration update completed.
+JP|MSG_SYSTEM_UPDATE_COMPLETE=システム設定の更新が完了しました。
+
+# ネットワーク設定関連
+US|MSG_NETWORK_UPDATE_START=Starting network configuration update...
+JP|MSG_NETWORK_UPDATE_START=ネットワーク設定の更新を開始します...
+
+US|MSG_NETWORK_UPDATE_COMPLETE=Network configuration update completed.
+JP|MSG_NETWORK_UPDATE_COMPLETE=ネットワーク設定の更新が完了しました。
+
+US|MSG_FIREWALL_UPDATE=Updating firewall settings...
+JP|MSG_FIREWALL_UPDATE=ファイアウォール設定を更新中...
+
+US|MSG_PACKET_STEERING_UPDATE=Updating packet steering settings...
+JP|MSG_PACKET_STEERING_UPDATE=パケットステアリング設定を更新中...
+
+# DNS/DHCP設定関連
+US|MSG_DNS_UPDATE_START=Starting DNS configuration update...
+JP|MSG_DNS_UPDATE_START=DNS設定の更新を開始します...
+
+US|MSG_DNS_UPDATE_COMPLETE=DNS configuration update completed.
+JP|MSG_DNS_UPDATE_COMPLETE=DNS設定の更新が完了しました。
+
+US|MSG_DHCP_UPDATE=Updating DHCP settings...
+JP|MSG_DHCP_UPDATE=DHCP設定を更新中...
+
+# エラーメッセージ
+US|MSG_ERROR_EMPTY_INPUT=Input cannot be empty.
+JP|MSG_ERROR_EMPTY_INPUT=入力が空です。
+
+US|MSG_ERROR_PASSWORD_LENGTH=Password must be at least 8 characters long.
+JP|MSG_ERROR_PASSWORD_LENGTH=パスワードは8文字以上である必要があります。
+
+US|MSG_ERROR_EMPTY_SSID=SSID cannot be empty.
+JP|MSG_ERROR_EMPTY_SSID=SSIDが空です。
+
+US|MSG_ERROR_INVALID_CONFIG=Invalid configuration detected.
+JP|MSG_ERROR_INVALID_CONFIG=不正な設定が検出されました。
+
+# 更新失敗メッセージ
+US|MSG_UPDATE_FAILED_PASSWORD=Failed to update password.
+JP|MSG_UPDATE_FAILED_PASSWORD=パスワードの更新に失敗しました。
+
+US|MSG_UPDATE_FAILED_DEVICE=Failed to update device name.
+JP|MSG_UPDATE_FAILED_DEVICE=デバイス名の更新に失敗しました。
+
+US|MSG_UPDATE_FAILED_COMMIT=Failed to commit changes.
+JP|MSG_UPDATE_FAILED_COMMIT=変更の保存に失敗しました。
+
+US|MSG_COMMIT_FAILED_WIFI=Failed to commit wireless settings.
+JP|MSG_COMMIT_FAILED_WIFI=無線設定の保存に失敗しました。
+
+US|MSG_ERROR_SYSTEM_UPDATE=Failed to update system settings.
+JP|MSG_ERROR_SYSTEM_UPDATE=システム設定の更新に失敗しました。
+
+US|MSG_ERROR_NTP_UPDATE=Failed to update NTP settings.
+JP|MSG_ERROR_NTP_UPDATE=NTP設定の更新に失敗しました。
+
+US|MSG_ERROR_NETWORK_UPDATE=Failed to update network settings.
+JP|MSG_ERROR_NETWORK_UPDATE=ネットワーク設定の更新に失敗しました。
+
+US|MSG_ERROR_DNS_UPDATE=Failed to update DNS settings.
+JP|MSG_ERROR_DNS_UPDATE=DNS設定の更新に失敗しました。
+
+# 確認メッセージ
+US|MSG_CONFIRM_SETTINGS_PREVIEW=Please confirm the following settings:
+JP|MSG_CONFIRM_SETTINGS_PREVIEW=以下の設定内容を確認してください：
+
+US|MSG_CONFIRM_DEVICE_SETTINGS=Are you sure with the following settings? (y/n):
+JP|MSG_CONFIRM_DEVICE_SETTINGS=以下の内容でよろしいですか？ (y/n):
+
+US|MSG_CONFIRM_CONTINUE=Do you want to continue? (y/n):
+JP|MSG_CONFIRM_CONTINUE=続行しますか？ (y/n):
+
+US|MSG_CONFIRM_APPLY=Apply these settings? (y/n):
+JP|MSG_CONFIRM_APPLY=これらの設定を適用しますか？ (y/n):
+
 US|MSG_REENTER_INFO=Please re-enter the information.
 JP|MSG_REENTER_INFO=もう一度入力してください。
 
 US|MSG_INVALID_YN=Invalid input. Please enter 'y' or 'n'.
 JP|MSG_INVALID_YN=無効な入力です。y または n を入力してください。
 
-# システム設定関連
+# 操作状態メッセージ
+US|MSG_UPDATE_SUCCESS=Password and device name have been successfully updated.
+JP|MSG_UPDATE_SUCCESS=パスワードとデバイス名が正常に更新されました。
+
+US|MSG_UPDATE_CANCELLED=Operation has been canceled.
+JP|MSG_UPDATE_CANCELLED=設定がキャンセルされました。
+
+US|MSG_OPERATION_START=Starting operation: {operation}
+JP|MSG_OPERATION_START=操作を開始します: {operation}
+
+US|MSG_OPERATION_COMPLETE=Operation completed: {operation}
+JP|MSG_OPERATION_COMPLETE=操作が完了しました: {operation}
+
+US|MSG_OPERATION_FAILED=Operation failed: {operation}
+JP|MSG_OPERATION_FAILED=操作が失敗しました: {operation}
+
+# 再起動関連
 US|MSG_PRESS_KEY_REBOOT=Press any key to reboot the device
 JP|MSG_PRESS_KEY_REBOOT=任意のキーを押してデバイスを再起動します
+
+US|MSG_REBOOT_REQUIRED=System reboot required to apply changes.
+JP|MSG_REBOOT_REQUIRED=変更を適用するにはシステムの再起動が必要です。
+
+US|MSG_REBOOT_COUNTDOWN=System will reboot in {seconds} seconds...
+JP|MSG_REBOOT_COUNTDOWN=システムは {seconds} 秒後に再起動します...
 
 # -----------------------
 # 🔍 デバッグ用メッセージ
