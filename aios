@@ -437,10 +437,10 @@ check_downloader() {
 #########################################################################
 get_message() {
     local key="$1"
-    local quiet_flag="$2"
+    local params="$2"
+    local quiet_flag="$3"
     local message_db="${BASE_DIR}/messages.db"
     local lang="${ACTIVE_LANGUAGE:-US}"  # `ACTIVE_LANGUAGE` が未設定なら `US`
-    local message
 
     # `messages.db` が存在しない場合、キーそのままを返す
     if [ ! -f "$message_db" ]; then
@@ -462,10 +462,9 @@ get_message() {
         fi
     fi
 
-    # プレースホルダーの置換
+    # パラメータ置換
     if [ -n "$params" ]; then
-        set -- $params
-        for param in "$@"; do
+        for param in $params; do
             key=$(echo "$param" | cut -d'=' -f1)
             value=$(echo "$param" | cut -d'=' -f2)
             message=$(echo "$message" | sed -e "s/{$key}/$value/g")
