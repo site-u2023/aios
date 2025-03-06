@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-00-09"
+SCRIPT_VERSION="2025.03.06-00-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -60,9 +60,13 @@ mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR" "$FEED_DIR"
 
 # information: country_zone で取得済みのゾーン情報を元にシステム情報を表示
 information() {
+    debug_log "DEBUG" "$(color green "$(get_message "MSG_INFO_COUNTRY" "name=$COUNTRY_NAME")")"
     echo "$(color green "$(get_message "MSG_INFO_COUNTRY" "name=$COUNTRY_NAME")")"
+    debug_log "DEBUG" "$(color green "$(get_message "MSG_INFO_DISPLAY" "name=$DISPLAY_NAME")")"
     echo "$(color green "$(get_message "MSG_INFO_DISPLAY" "name=$DISPLAY_NAME")")"
+    debug_log "DEBUG" "$(color green "$(get_message "MSG_INFO_LANG_CODE" "code=$LANGUAGE_CODE")")"
     echo "$(color green "$(get_message "MSG_INFO_LANG_CODE" "code=$LANGUAGE_CODE")")"
+    debug_log "DEBUG" "$(color green "$(get_message "MSG_INFO_COUNTRY_CODE" "code=$COUNTRY_CODE")")"
     echo "$(color green "$(get_message "MSG_INFO_COUNTRY_CODE" "code=$COUNTRY_CODE")")"
 }
 
