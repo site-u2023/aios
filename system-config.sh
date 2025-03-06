@@ -71,12 +71,12 @@ mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR" "$FEED_DIR"
 # information: country_zone で取得済みのゾーン情報を元にシステム情報を表示する
 #########################################################################
 information() {
-    local country_name="$ZONENAME"
-    local display_name="$DISPLAYNAME"
-    local language_code="$LANGUAGE"
-    local country_code="$COUNTRYCODE"
+    # 環境変数からの直接参照を、キャッシュファイルからの読み込みに変更
+    local country_name=$(cat "${CACHE_DIR}/zonename.ch" 2>/dev/null)
+    local display_name=$(cat "${CACHE_DIR}/language.ch" 2>/dev/null)
+    local language_code=$(cat "${CACHE_DIR}/luci.ch" 2>/dev/null)
+    local country_code=$(awk '{print $4}' "${CACHE_DIR}/country.ch" 2>/dev/null)
 
-    # メッセージDBからメッセージを取得して表示
     echo -e "$(get_msg "MSG_INFO_COUNTRY" "name=$country_name")"
     echo -e "$(get_msg "MSG_INFO_DISPLAY" "name=$display_name")"
     echo -e "$(get_msg "MSG_INFO_LANG_CODE" "code=$language_code")"
