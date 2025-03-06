@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-01-01"
+SCRIPT_VERSION="2025.03.06-01-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -631,7 +631,11 @@ download() {
             debug_log "DEBUG" "chmod +x applied to $file_name"
         fi
 
-        echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
+        if grep -q "^${file_name}=" "$script_db"; then
+            sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_db"
+        else
+            echo "${file_name}=${remote_version}" >> "$script_db"
+        fi
 
         local read_message=""
         if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\.sh"; then
@@ -641,12 +645,9 @@ download() {
             debug_log "DEBUG" "Sourced: $install_path"
         fi
 
-        if grep -q "^${file_name}=" "$script_db"; then
-            sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_db"
-        else
-            echo "${file_name}=${remote_version}" >> "$script_db"
-        fi
-           else
+        echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
+
+    else
         if [ "$quiet_mode" != "true" ]; then
             debug_log "DEBUG" "$file_name is already up-to-date. (Version: $local_version)"
             echo "$(color green "$file_name is already up-to-date. (Version: $local_version)")"
