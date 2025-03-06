@@ -640,8 +640,7 @@ download() {
         local read_message=""
         if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\.sh"; then
             read_message="read "
-            # ( . "$install_path" )  # サブシェルでスクリプトを実行
-            . "$install_path"
+            ( . "$install_path" )  # サブシェルでスクリプトを実行
             debug_log "DEBUG" "Sourced: $install_path"
         fi
 
