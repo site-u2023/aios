@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-01-05"
+SCRIPT_VERSION="2025.03.06-01-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -51,12 +51,43 @@ BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q -O}"
 # BASE_WGET="${BASE_WGET:-wget -O}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 BIN_PATH=$(readlink -f "$0")
+file_name="$(basename "$BIN_PATH")"
+BIN_DIR="$(dirname "$BIN_PATH")"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 DL_FILE="${CACHE_DIR}/download"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
+
+aios_read() {
+# 初回起動かどうかを示すフラグ変数。更新後にループを起こさないために使用
+if [ -z "$AIOS_UPDATED" ]; then
+  echo "AIOS: バージョンチェックを実施中 (現行バージョン: $SCRIPT_VERSION)..."
+
+  # ここで実際のバージョン比較を行う（たとえばリモート先にあるバージョン情報を取得して比較）
+  # 下記はサンプルとして常に「新版がある」と仮定し REMOTE_VERSION を設定
+  REMOTE_VERSION="2025.03.06-01-07"
+
+  if [ "$REMOTE_VERSION" != "$SCRIPT_VERSION" ]; then
+    echo "AIOS: 新バージョン ($REMOTE_VERSION) 有。ダウンロードを試みます..."
+    # リモートから aiOS スクリプトをダウンロード（wgetのオプションなどは実環境や既存実装に合わせる）
+    if wget -q -O "$SCRIPT_PATH" "https://raw.githubusercontent.com/site-u2023/aios/main/aios?cache_bust=$(date +%s)"; then
+      chmod +x "$SCRIPT_PATH"
+      echo "AIOS: ダウンロード成功。exec で新バージョンを起動します。"
+      AIOS_UPDATED=1 exec "$SCRIPT_PATH" "$@"
+    else
+      echo "AIOS: ダウンロード失敗。現在のバージョンで続行します。"
+    fi
+  else
+    echo "AIOS: すでに最新バージョン ($SCRIPT_VERSION) を使用中です。"
+  fi
+fi
+
+# 以下、通常のプログラムロジック
+echo "AIOS: メイン動作を開始します。バージョン: $SCRIPT_VERSION"
+
+}
 
 # 🔵　エラー・デバッグ・アップデート系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
@@ -589,12 +620,18 @@ download() {
         shift
     done
 
+    # 既に更新後の再起動なら (AIOS_UPDATED が真なら) ダウンロードの重複実行を防ぐ
+    if [ -n "$AIOS_UPDATED" ]; then
+        debug_log "DEBUG" "AIOS_UPDATEDが設定されています。ループを回避するため、アップデートはスキップします。"
+        return 0
+    fi
+
+    # ダウンロード先(インストール先)とリモートURL
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
 
-    if [ ! -f "$script_db" ]; then
-        touch "$script_db"
-    fi
+    [ -d "$CACHE_DIR" ] || mkdir -p "$CACHE_DIR"
+    [ -f "$script_db" ] || touch "$script_db"
 
     debug_log "DEBUG" "Downloading file from $remote_url to $DL_FILE"
     if ! $BASE_WGET "$DL_FILE" "$remote_url"; then
@@ -612,6 +649,7 @@ download() {
         local_version=$(normalize_version "$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)")
     fi
 
+    # ローカル版とリモート版のバージョンが異なるならアップデート実行
     if [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
         debug_log "DEBUG" "Moving downloaded file to $install_path"
         if ! mv "$DL_FILE" "$install_path"; then
@@ -631,6 +669,7 @@ download() {
             debug_log "DEBUG" "chmod +x applied to $file_name"
         fi
 
+        # バージョン情報をDBに反映
         if grep -q "^${file_name}=" "$script_db"; then
             sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_db"
         else
@@ -644,8 +683,15 @@ download() {
             . "$install_path"
             debug_log "DEBUG" "Sourced: $install_path"
         else
-             echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
+            echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
         fi
+
+        # 本体(aios)の更新なら自分自身を再起動し、次回は AIOS_UPDATED=1 でループ防止
+        if echo "$file_name" | grep -q "aios$"; then
+            debug_log "DEBUG" "AIOS本体が更新されたため、execで再起動します。"
+            AIOS_UPDATED=1 exec "$install_path" "$@"
+        fi
+
     else
         if [ "$quiet_mode" != "true" ]; then
             debug_log "DEBUG" "$file_name is already up-to-date. (Version: $local_version)"
@@ -905,7 +951,7 @@ check_common() {
             exit 0
             ;;
         full)
-            download "hidden" "aios"
+            download "hidden" "aios" "read"
             download "hidden" "common-country.sh" "chmod"
             download "hidden" "common-package.sh" "chmod"
             download "hidden" "common-feed-package.sh" "chmod"
@@ -923,7 +969,7 @@ check_common() {
             #packages
             ;;
         light|debug)
-            download "aios"
+            download "aios" "read"
             download "common-country.sh"
             download "common-package.sh"
             download "common-feed-package.sh"
