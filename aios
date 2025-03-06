@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-00-05"
+SCRIPT_VERSION="2025.03.06-00-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -463,12 +463,14 @@ get_message() {
     fi
 
     # プレースホルダーの置換
-    shift 2
-    for placeholder in "$@"; do
-        key=$(echo $placeholder | cut -d'=' -f1)
-        value=$(echo $placeholder | cut -d'=' -f2-)
-        message=$(echo "$message" | sed "s/{$key}/$value/g")
-    done
+    if [ -n "$params" ]; then
+        set -- $params
+        for param in "$@"; do
+            key=$(echo "$param" | cut -d'=' -f1)
+            value=$(echo "$param" | cut -d'=' -f2)
+            message=$(echo "$message" | sed -e "s/{$key}/$value/g")
+        done
+    fi
 
     # quiet モード対応
     if [ "$quiet_flag" = "quiet" ]; then
