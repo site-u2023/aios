@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-00-00"
+SCRIPT_VERSION="2025.03.06-00-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -124,7 +124,7 @@ feed_package() {
   fi
 
   # 将来的に除去するルーチン
-  if [ "$PACKAGE_MANAGER" != "opkg" ]; then
+  if [ "$PACKAGE_EXTENSION" != "ipk" ]; then
       echo -e "$(color yellow "Currently not supported for apk.")"
       return 1
   fi
@@ -133,7 +133,7 @@ feed_package() {
   local REPO_NAME="$2"
   local DIR_PATH="$3"
   local PKG_PREFIX="$4"
-  local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.${PACKAGE_MANAGER}"
+  local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.${PACKAGE_EXTENSION}"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
 
   debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
@@ -220,7 +220,7 @@ feed_package_release() {
   fi
 
   # 将来的に除去するルーチン
-  if [ "$PACKAGE_MANAGER" != "opkg" ]; then
+  if [ "$PACKAGE_EXTENSION" != "ipk" ]; then
       echo -e "$(color yellow "Currently not supported for apk.")"
       return 1
   fi
@@ -228,7 +228,7 @@ feed_package_release() {
   local REPO_OWNER="$1"
   local REPO_NAME="$2"
   local PKG_PREFIX="${REPO_NAME}"
-  local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.${PACKAGE_MANAGER}"
+  local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.${PACKAGE_EXTENSION}"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases"
 
   debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
