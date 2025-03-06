@@ -1,7 +1,7 @@
 # メッセージデータベース (多言語対応)
 # フォーマット: 言語コード|メッセージキー=メッセージ
 
-SCRIPT_VERSION="2025.02.18-00-02"
+SCRIPT_VERSION="2025.02.18-00-03"
 
 SUPPORTED_LANGUAGES="US JP"
 
@@ -9,9 +9,9 @@ SUPPORTED_LANGUAGES="US JP"
 US|MSG_UNDER_TEST=👽 Under test
 JP|MSG_UNDER_TEST=👹 試験中
 
-# -----------------------
+# =======================
 # system-config.sh
-# -----------------------
+# =======================
 
 # 情報表示関連
 US|MSG_INFO_COUNTRY=Country: {name}
@@ -39,7 +39,7 @@ JP|MSG_PREVIEW_DEVICE_NAME=デバイス名: {name}
 US|MSG_PREVIEW_PASSWORD=Password: {password}
 JP|MSG_PREVIEW_PASSWORD=パスワード: {password}
 
-# WiFi設定関連
+# WiFi基本設定関連
 US|MSG_NO_WIFI_DEVICES=No Wi-Fi devices found. Exiting.
 JP|MSG_NO_WIFI_DEVICES=Wi-Fiデバイスが見つかりません。終了します。
 
@@ -52,6 +52,40 @@ JP|MSG_ENTER_SSID=SSIDを入力してください:
 US|MSG_ENTER_WIFI_PASSWORD=Enter password (8 or more characters):
 JP|MSG_ENTER_WIFI_PASSWORD=パスワードを入力してください (8文字以上):
 
+# WiFiマルチバンド関連（新規追加）
+US|MSG_WIFI_BAND_2G=2.4GHz Band (Legacy/IoT Devices)
+JP|MSG_WIFI_BAND_2G=2.4GHz帯 (従来機器/IoT機器向け)
+
+US|MSG_WIFI_BAND_5G=5GHz Band (High Speed)
+JP|MSG_WIFI_BAND_5G=5GHz帯 (高速通信向け)
+
+US|MSG_WIFI_BAND_6G=6GHz Band (Ultra High Speed)
+JP|MSG_WIFI_BAND_6G=6GHz帯 (超高速通信向け)
+
+US|MSG_WIFI_CONFIG_PREVIEW=WiFi Configuration Preview:
+JP|MSG_WIFI_CONFIG_PREVIEW=WiFi設定の確認:
+
+US|MSG_WIFI_BAND_INFO=Band Type: {band}
+JP|MSG_WIFI_BAND_INFO=周波数帯: {band}
+
+US|MSG_WIFI_HTMODE_INFO=Channel Width Mode: {mode}
+JP|MSG_WIFI_HTMODE_INFO=チャンネル帯域モード: {mode}
+
+US|MSG_WIFI_MODE_HT20=20MHz Channel Width
+JP|MSG_WIFI_MODE_HT20=20MHz帯域幅
+
+US|MSG_WIFI_MODE_VHT80=80MHz Channel Width
+JP|MSG_WIFI_MODE_VHT80=80MHz帯域幅
+
+US|MSG_WIFI_MODE_HE80=80MHz Channel Width (Wi-Fi 6E)
+JP|MSG_WIFI_MODE_HE80=80MHz帯域幅 (Wi-Fi 6E)
+
+US|MSG_WIFI_SECURITY_INFO=Security: WPA3/WPA2 Mixed Mode (SAE/PSK)
+JP|MSG_WIFI_SECURITY_INFO=セキュリティ: WPA3/WPA2混在モード (SAE/PSK)
+
+US|MSG_WIFI_DEFAULT_SSID=Default SSID will be: {ssid}
+JP|MSG_WIFI_DEFAULT_SSID=デフォルトSSID: {ssid}
+
 US|MSG_WIFI_SETTINGS_UPDATED=Device {device} settings have been updated.
 JP|MSG_WIFI_SETTINGS_UPDATED=デバイス {device} の設定が更新されました。
 
@@ -59,7 +93,7 @@ US|MSG_ENABLE_BAND=Enable band {band} on device {device}? (y/n):
 JP|MSG_ENABLE_BAND=デバイス {device} のバンド {band} を有効にしますか？(y/n):
 
 US|MSG_CONFIRM_WIFI_SETTINGS=Configuration: SSID = {ssid}, Password = {password}. Is this correct? (y/n):
-JP|MSG_CONFIRM_WIFI_SETTINGS=設定内容: SSID = {ssid}, パスワード = {password}。これで良いですか？ (y/n):
+JP|MSG_CONFIRM_WIFI_SETTINGS=設定内容: SSID = {ssid}, パスワード = {password}。これで良いですか？(y/n):
 
 # システム設定関連
 US|MSG_APPLYING_ZONENAME=Applying zonename settings: {zone}
@@ -140,13 +174,13 @@ US|MSG_CONFIRM_SETTINGS_PREVIEW=Please confirm the following settings:
 JP|MSG_CONFIRM_SETTINGS_PREVIEW=以下の設定内容を確認してください：
 
 US|MSG_CONFIRM_DEVICE_SETTINGS=Are you sure with the following settings? (y/n):
-JP|MSG_CONFIRM_DEVICE_SETTINGS=以下の内容でよろしいですか？ (y/n):
+JP|MSG_CONFIRM_DEVICE_SETTINGS=以下の内容でよろしいですか？(y/n):
 
 US|MSG_CONFIRM_CONTINUE=Do you want to continue? (y/n):
-JP|MSG_CONFIRM_CONTINUE=続行しますか？ (y/n):
+JP|MSG_CONFIRM_CONTINUE=続行しますか？(y/n):
 
 US|MSG_CONFIRM_APPLY=Apply these settings? (y/n):
-JP|MSG_CONFIRM_APPLY=これらの設定を適用しますか？ (y/n):
+JP|MSG_CONFIRM_APPLY=これらの設定を適用しますか？(y/n):
 
 US|MSG_REENTER_INFO=Please re-enter the information.
 JP|MSG_REENTER_INFO=もう一度入力してください。
