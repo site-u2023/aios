@@ -9,16 +9,6 @@ SUPPORTED_LANGUAGES="US JP"
 US|MSG_UNDER_TEST=👽 Under test
 JP|MSG_UNDER_TEST=👹 試験中
 
-# messages.db for system-config.sh
-# Last Update: 2025-03-06 02:01:50
-
-SCRIPT_VERSION="2025.03.06-02-01"
-
-# messages.db for system-config.sh
-# Last Update: 2025-03-06 02:01:50
-
-SCRIPT_VERSION="2025.03.06-02-01"
-
 # =======================
 # system-config.sh
 # =======================
