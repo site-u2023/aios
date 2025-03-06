@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-01-09"
+SCRIPT_VERSION="2025.03.06-01-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -596,19 +596,13 @@ get_script_version() {
     echo "$version"
 }
 
-#!/bin/sh
-
-# 基本定数の設定 
-BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q -O}"
-DEBUG_MODE="${DEBUG_MODE:-false}"
-BIN_PATH="$(readlink -f "$0")"
-
 download() {
     local hidden_mode="false"
     local quiet_mode="${QUIET_MODE:-false}"
     local chmod_mode="false"
     local read_mode="false"
     local exec_mode="false"
+    local aios_updated="false"
     local file_name=""
     local local_version=""
     local remote_version=""
@@ -627,9 +621,9 @@ download() {
         shift
     done
 
-    # 既に更新後の再起動なら (AIOS_UPDATED が真なら) ダウンロードの重複実行を防ぐ
-    if [ -n "$AIOS_UPDATED" ]; then
-        debug_log "DEBUG" "AIOS_UPDATEDが設定されています。ループを回避するため、アップデートはスキップします。"
+    # 既に更新後の再起動なら (aios_updated が真なら) ダウンロードの重複実行を防ぐ
+    if [ "$aios_updated" = "true" ]; then
+        debug_log "DEBUG" "aios_updatedが設定されています。ループを回避するため、アップデートはスキップします。"
         return 0
     fi
 
@@ -685,7 +679,7 @@ download() {
         if [ "$file_name" = "$(basename "$BIN_PATH")" ]; then
             debug_log "DEBUG" "AIOS本体が更新されたため、再起動フラグを設定します。"
             exec_mode="true"
-            AIOS_UPDATED=1
+            aios_updated="true"
         fi
 
         # ソース読み込みフラグ設定
