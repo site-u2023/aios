@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-00-10"
+SCRIPT_VERSION="2025.03.06-00-11"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -467,7 +467,9 @@ get_message() {
         for param in $params; do
             key=$(echo "$param" | cut -d'=' -f1)
             value=$(echo "$param" | cut -d'=' -f2)
-            message=$(echo "$message" | sed -e "s/{$key}/$value/g")
+            # `sed` コマンドで使用する際に `value` をエスケープする
+            escaped_value=$(echo "$value" | sed -e 's/[\/&]/\\&/g')
+            message=$(echo "$message" | sed -e "s/{$key}/$escaped_value/g")
         done
     fi
 
