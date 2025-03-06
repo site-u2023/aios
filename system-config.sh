@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-00-15"
+SCRIPT_VERSION="2025.03.06-00-16"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -81,7 +81,7 @@ set_device_name_password() {
     done
 
     while true; do
-        echo -n "$(color yellow "$(get_message "MSG_ENTER_NEW_PASSWORD")")"
+        echo "$(color yellow "$(get_message "MSG_ENTER_NEW_PASSWORD")")"
         read password
         echo
         [ ${#password} -ge 8 ] && break
@@ -93,7 +93,7 @@ set_device_name_password() {
     echo "$(color green "$(get_message "MSG_PREVIEW_DEVICE_NAME" "name=$device_name")")"
     echo "$(color green "$(get_message "MSG_PREVIEW_PASSWORD" "password=$password")")"
     
-    echo -n "$(color yellow "$(get_message "MSG_CONFIRM_DEVICE_SETTINGS")")"
+    echo "$(color yellow "$(get_message "MSG_CONFIRM_DEVICE_SETTINGS")")"
     read confirmation
     
     if [ "$confirmation" != "y" ]; then
@@ -179,7 +179,7 @@ configure_wifi_device() {
 
     # デバイスの情報表示
     echo "$(color green "$(get_message "MSG_WIFI_DEVICE_BAND" "device=$device" "band=$band_type")")"
-    echo -n "$(color yellow "$(get_message "MSG_ENABLE_BAND" "device=$device" "band=$band_type")")"
+    echo "$(color yellow "$(get_message "MSG_ENABLE_BAND" "device=$device" "band=$band_type")")"
     read enable_band
 
     [ "$enable_band" = "y" ] || return 0
@@ -193,7 +193,7 @@ configure_wifi_device() {
 
     # SSID設定
     while true; do
-        echo -n "$(color yellow "$(get_message "MSG_ENTER_SSID")") [${default_ssid}]: "
+        echo "$(color yellow "$(get_message "MSG_ENTER_SSID")") [${default_ssid}]: "
         read ssid
         # デフォルトSSIDの使用
         [ -z "$ssid" ] && ssid="$default_ssid"
@@ -203,7 +203,7 @@ configure_wifi_device() {
 
 # パスワード設定
 while true; do
-    echo -n "$(color yellow "$(get_message "MSG_ENTER_WIFI_PASSWORD")")"
+    echo "$(color yellow "$(get_message "MSG_ENTER_WIFI_PASSWORD")")"
     read password
     echo
     [ ${#password} -ge 8 ] && break
@@ -265,7 +265,7 @@ set_device() {
     configure_network
     configure_dns
 
-    echo -n "$(color yellow "$(get_message "MSG_PRESS_KEY_REBOOT")")"
+    echo "$(color yellow "$(get_message "MSG_PRESS_KEY_REBOOT")")"
     read
     reboot
 }
