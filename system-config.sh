@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-00-04"
+SCRIPT_VERSION="2025.03.06-00-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -503,22 +503,7 @@ configure_dns() {
 # メイン処理
 #########################################################################
 main() {
-    init_config
-    
-    # 必要なスクリプトのダウンロードと実行
-    download_country_zone || exit 1
-    download_and_execute_common || exit 1
-    
-    # 共通チェックと初期設定
-    check_common "$INPUT_LANG" || exit 1
-    process_country_selection || exit 1
-    
-    # 情報表示とタイムゾーン設定
     information
-    select_timezone "$SELECTED_COUNTRY" || exit 1
-    
-    # 必要な設定機能を実行
-    # コメントアウトされている行は必要に応じて有効化
     set_device_name_password
     set_wifi_ssid_password
     set_device
