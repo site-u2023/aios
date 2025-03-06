@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-00-10"
+SCRIPT_VERSION="2025.03.06-00-11"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -60,14 +60,10 @@ mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR" "$FEED_DIR"
 
 # information: country_zone で取得済みのゾーン情報を元にシステム情報を表示
 information() {
-    debug_log "DEBUG" "$(color green "$(get_message "MSG_INFO_COUNTRY" "name=$COUNTRY_NAME")")"
-    echo "$(color green "$(get_message "MSG_INFO_COUNTRY" "name=$COUNTRY_NAME")")"
-    debug_log "DEBUG" "$(color green "$(get_message "MSG_INFO_DISPLAY" "name=$DISPLAY_NAME")")"
-    echo "$(color green "$(get_message "MSG_INFO_DISPLAY" "name=$DISPLAY_NAME")")"
-    debug_log "DEBUG" "$(color green "$(get_message "MSG_INFO_LANG_CODE" "code=$LANGUAGE_CODE")")"
-    echo "$(color green "$(get_message "MSG_INFO_LANG_CODE" "code=$LANGUAGE_CODE")")"
-    debug_log "DEBUG" "$(color green "$(get_message "MSG_INFO_COUNTRY_CODE" "code=$COUNTRY_CODE")")"
-    echo "$(color green "$(get_message "MSG_INFO_COUNTRY_CODE" "code=$COUNTRY_CODE")")"
+    echo "$(color green "$(get_message "MSG_INFO_COUNTRY" "name=${CACHE_DIR}/country.ch")")"
+    echo "$(color green "$(get_message "MSG_INFO_LANG_CODE" "code=${CACHE_DIR}/language.ch")")"
+    echo "$(color green "$(get_message "MSG_INFO_COUNTRY_CODE" "code=${CACHE_DIR}/zonename.ch")")"
+    echo "$(color green "$(get_message "MSG_INFO_COUNTRY_CODE" "code=${CACHE_DIR}/timezone.ch")")"
 }
 
 # set_device_name_password: デバイス名とパスワードの設定を行う
@@ -129,7 +125,7 @@ set_wifi_ssid_password() {
     local devices_to_enable=""
 
     # country.ch から国コードを取得
-    wifi_country_code=$(awk '{print $4}' "${CACHE_DIR}/country.ch" 2>/dev/null)
+    wifi_country_code=$("${CACHE_DIR}/language.ch" 2>/dev/null)
     
     if [ -z "$wifi_country_code" ]; then
         echo "$(color red "$(get_message "MSG_ERROR_NO_COUNTRY_CODE")")"
