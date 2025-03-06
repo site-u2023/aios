@@ -596,11 +596,19 @@ get_script_version() {
     echo "$version"
 }
 
+#!/bin/sh
+
+# 基本定数の設定 
+BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q -O}"
+DEBUG_MODE="${DEBUG_MODE:-false}"
+BIN_PATH="$(readlink -f "$0")"
+
 download() {
     local hidden_mode="false"
     local quiet_mode="${QUIET_MODE:-false}"
     local chmod_mode="false"
     local read_mode="false"
+    local exec_mode="false"
     local file_name=""
     local local_version=""
     local remote_version=""
@@ -673,26 +681,37 @@ download() {
             echo "${file_name}=${remote_version}" >> "$script_db"
         fi
 
-        # 本体(aios)の更新ならフラグを立てる
+        # 本体(aios)の更新フラグ設定
         if [ "$file_name" = "$(basename "$BIN_PATH")" ]; then
             debug_log "DEBUG" "AIOS本体が更新されたため、再起動フラグを設定します。"
+            exec_mode="true"
             AIOS_UPDATED=1
         fi
 
-        local read_message=""
+        # ソース読み込みフラグ設定
         if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\.sh"; then
-            read_message="read "
-            echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
-            . "$install_path"
-            debug_log "DEBUG" "Sourced: $install_path"
-        else
-            echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
+            debug_log "DEBUG" "Sourcing $install_path"
+            read_mode="true"
         fi
+
+        # ダウンロード完了メッセージ
+        local read_message=""
+        if [ "$read_mode" = "true" ]; then
+            read_message="read "
+        fi
+        echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
     else
         if [ "$quiet_mode" != "true" ]; then
             debug_log "DEBUG" "$file_name is already up-to-date. (Version: $local_version)"
             echo "$(color green "$file_name is already up-to-date. (Version: $local_version)")"
         fi
+    fi
+
+    # フラグに従って処理を実行
+    if [ "$exec_mode" = "true" ]; then
+        exec "$install_path" "$@"
+    elif [ "$read_mode" = "true" ]; then
+        . "$install_path"
     fi
 }
 
