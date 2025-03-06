@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-00-08"
+SCRIPT_VERSION="2025.03.06-00-09"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -144,7 +144,7 @@ set_wifi_ssid_password() {
         devices_to_enable="$devices_to_enable $device"
     done
 
-    if! uci commit wireless; then
+    if ! uci commit wireless; then
         echo "$(color red "$(get_message "MSG_COMMIT_FAILED_WIFI")")"
         return 1
     fi
