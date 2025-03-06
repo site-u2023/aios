@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-00-00"
+SCRIPT_VERSION="2025.03.06-00-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -185,7 +185,14 @@ set_wifi_ssid_password() {
     local devices wifi_country_code
     local devices_to_enable=""
 
-    wifi_country_code=$(echo "$ZONENAME" | awk '{print $4}')
+    # country.ch から国コードを取得
+    wifi_country_code=$(awk '{print $4}' "${CACHE_DIR}/country.ch" 2>/dev/null)
+    
+    if [ -z "$wifi_country_code" ]; then
+        echo "$(get_msg "MSG_ERROR_NO_COUNTRY_CODE")"
+        return 1
+    fi
+
     devices=$(uci show wireless | grep 'wifi-device' | cut -d'=' -f1 | cut -d'.' -f2 | sort -u)
 
     if [ -z "$devices" ]; then
@@ -383,8 +390,10 @@ configure_system() {
     local description notes zonename timezone
     description=$(cat /etc/openwrt_version) || description="Unknown"
     notes=$(date) || notes="No date"
-    zonename=$(echo "$ZONENAME" | awk '{print $1}' 2>/dev/null || echo "Unknown")
-    timezone="${TIMEZONE:-UTC}"
+    
+    # キャッシュから直接読み込み
+    zonename=$(cat "${CACHE_DIR}/zonename.ch" 2>/dev/null || echo "Unknown")
+    timezone=$(cat "${CACHE_DIR}/timezone.ch" 2>/dev/null || echo "UTC")
 
     echo "$(get_msg "MSG_APPLYING_ZONENAME" "zone=$zonename")"
     echo "$(get_msg "MSG_APPLYING_TIMEZONE" "timezone=$timezone")"
