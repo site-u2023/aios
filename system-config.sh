@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-00-05"
+SCRIPT_VERSION="2025.03.06-00-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -77,10 +77,10 @@ information() {
     local language_code=$(cat "${CACHE_DIR}/luci.ch" 2>/dev/null)
     local country_code=$(awk '{print $4}' "${CACHE_DIR}/country.ch" 2>/dev/null)
 
-    echo "$(get_msg "MSG_INFO_COUNTRY" "name=$country_name")"
-    echo "$(get_msg "MSG_INFO_DISPLAY" "name=$display_name")"
-    echo "$(get_msg "MSG_INFO_LANG_CODE" "code=$language_code")"
-    echo "$(get_msg "MSG_INFO_COUNTRY_CODE" "code=$country_code")"
+    echo "$(get_message "MSG_INFO_COUNTRY" "name=$country_name")"
+    echo "$(get_message "MSG_INFO_DISPLAY" "name=$display_name")"
+    echo "$(get_message "MSG_INFO_LANG_CODE" "code=$language_code")"
+    echo "$(get_message "MSG_INFO_COUNTRY_CODE" "code=$country_code")"
 }
 
 #########################################################################
@@ -90,31 +90,31 @@ set_device_name_password() {
     local device_name password confirmation
 
     while true; do
-        echo "$(get_msg "MSG_ENTER_DEVICE_NAME")"
+        echo "$(get_message "MSG_ENTER_DEVICE_NAME")"
         read device_name
         [ -n "$device_name" ] && break
-        echo "$(get_msg "MSG_ERROR_EMPTY_INPUT")"
+        echo "$(get_message "MSG_ERROR_EMPTY_INPUT")"
     done
 
     while true; do
-        echo -n "$(get_msg "MSG_ENTER_NEW_PASSWORD")"
+        echo -n "$(get_message "MSG_ENTER_NEW_PASSWORD")"
         stty -echo
         read password
         stty echo
         echo
         [ ${#password} -ge 8 ] && break
-        echo "$(get_msg "MSG_ERROR_PASSWORD_LENGTH")"
+        echo "$(get_message "MSG_ERROR_PASSWORD_LENGTH")"
     done
 
-    echo "$(get_msg "MSG_CONFIRM_SETTINGS_PREVIEW")"
-    echo "$(get_msg "MSG_PREVIEW_DEVICE_NAME" "name=$device_name")"
-    echo "$(get_msg "MSG_PREVIEW_PASSWORD" "password=$password")"
+    echo "$(get_message "MSG_CONFIRM_SETTINGS_PREVIEW")"
+    echo "$(get_message "MSG_PREVIEW_DEVICE_NAME" "name=$device_name")"
+    echo "$(get_message "MSG_PREVIEW_PASSWORD" "password=$password")"
     
-    echo -n "$(get_msg "MSG_CONFIRM_DEVICE_SETTINGS")"
+    echo -n "$(get_message "MSG_CONFIRM_DEVICE_SETTINGS")"
     read confirmation
     
     if [ "$confirmation" != "y" ]; then
-        echo "$(get_msg "MSG_UPDATE_CANCELLED")"
+        echo "$(get_message "MSG_UPDATE_CANCELLED")"
         return 1
     fi
 
@@ -134,17 +134,17 @@ set_device_name_password() {
         return 1
     fi
 
-    echo "$(get_msg "MSG_UPDATE_SUCCESS")"
+    echo "$(get_message "MSG_UPDATE_SUCCESS")"
     return 0
 }
 
 BAK_set_device_name_password() {
     local device_name password confirmation
 
-    echo "$(get_msg "MSG_ENTER_DEVICE_NAME")"
+    echo "$(get_message "MSG_ENTER_DEVICE_NAME")"
     read device_name
     
-    echo -n "$(get_msg "MSG_ENTER_NEW_PASSWORD")"
+    echo -n "$(get_message "MSG_ENTER_NEW_PASSWORD")"
     read -s password
     echo
 
@@ -152,31 +152,31 @@ BAK_set_device_name_password() {
     echo "Device Name: $device_name"
     echo "Password: $password"
     
-    echo -n "$(get_msg "MSG_CONFIRM_DEVICE_SETTINGS")"
+    echo -n "$(get_message "MSG_CONFIRM_DEVICE_SETTINGS")"
     read confirmation
     
     if [ "$confirmation" != "y" ]; then
-        echo "$(get_msg "MSG_UPDATE_CANCELLED")"
+        echo "$(get_message "MSG_UPDATE_CANCELLED")"
         return 1
     fi
 
     echo "Updating password and device name..."
     ubus call luci setPassword "{ \"username\": \"root\", \"password\": \"$password\" }" || {
-        echo "$(get_msg "MSG_UPDATE_FAILED_PASSWORD")"
+        echo "$(get_message "MSG_UPDATE_FAILED_PASSWORD")"
         return 1
     }
 
     uci set system.@system[0].hostname="$device_name" || {
-        echo "$(get_msg "MSG_UPDATE_FAILED_DEVICE")"
+        echo "$(get_message "MSG_UPDATE_FAILED_DEVICE")"
         return 1
     }
 
     uci commit system || {
-        echo "$(get_msg "MSG_UPDATE_FAILED_COMMIT")"
+        echo "$(get_message "MSG_UPDATE_FAILED_COMMIT")"
         return 1
     }
 
-    echo "$(get_msg "MSG_UPDATE_SUCCESS")"
+    echo "$(get_message "MSG_UPDATE_SUCCESS")"
 }
 
 #########################################################################
@@ -190,14 +190,14 @@ set_wifi_ssid_password() {
     wifi_country_code=$(awk '{print $4}' "${CACHE_DIR}/country.ch" 2>/dev/null)
     
     if [ -z "$wifi_country_code" ]; then
-        echo "$(get_msg "MSG_ERROR_NO_COUNTRY_CODE")"
+        echo "$(get_message "MSG_ERROR_NO_COUNTRY_CODE")"
         return 1
     fi
 
     devices=$(uci show wireless | grep 'wifi-device' | cut -d'=' -f1 | cut -d'.' -f2 | sort -u)
 
     if [ -z "$devices" ]; then
-        echo "$(get_msg "MSG_NO_WIFI_DEVICES")"
+        echo "$(get_message "MSG_NO_WIFI_DEVICES")"
         return 1
     fi
 
@@ -214,7 +214,7 @@ set_wifi_ssid_password() {
     /etc/init.d/network reload
 
     for device in $devices_to_enable; do
-        echo "$(get_msg "MSG_WIFI_SETTINGS_UPDATED" "device=$device")"
+        echo "$(get_message "MSG_WIFI_SETTINGS_UPDATED" "device=$device")"
     done
 }
 
@@ -238,8 +238,8 @@ configure_wifi_device() {
     esac
 
     # デバイスの情報表示
-    echo "$(get_msg "MSG_WIFI_DEVICE_BAND" "device=$device" "band=$band_type")"
-    echo -n "$(get_msg "MSG_ENABLE_BAND" "device=$device" "band=$band_type")"
+    echo "$(get_message "MSG_WIFI_DEVICE_BAND" "device=$device" "band=$band_type")"
+    echo -n "$(get_message "MSG_ENABLE_BAND" "device=$device" "band=$band_type")"
     read enable_band
 
     [ "$enable_band" = "y" ] || return 0
@@ -253,23 +253,23 @@ configure_wifi_device() {
 
     # SSID設定
     while true; do
-        echo -n "$(get_msg "MSG_ENTER_SSID") [${default_ssid}]: "
+        echo -n "$(get_message "MSG_ENTER_SSID") [${default_ssid}]: "
         read ssid
         # デフォルトSSIDの使用
         [ -z "$ssid" ] && ssid="$default_ssid"
         [ -n "$ssid" ] && break
-        echo "$(get_msg "MSG_ERROR_EMPTY_SSID")"
+        echo "$(get_message "MSG_ERROR_EMPTY_SSID")"
     done
 
     # パスワード設定
     while true; do
-        echo -n "$(get_msg "MSG_ENTER_WIFI_PASSWORD")"
+        echo -n "$(get_message "MSG_ENTER_WIFI_PASSWORD")"
         stty -echo
         read password
         stty echo
         echo
         [ ${#password} -ge 8 ] && break
-        echo "$(get_msg "MSG_PASSWORD_TOO_SHORT")"
+        echo "$(get_message "MSG_PASSWORD_TOO_SHORT")"
     done
 
     # HTモード設定の最適化
@@ -287,16 +287,16 @@ configure_wifi_device() {
 
     # 設定確認
     while true; do
-        echo "$(get_msg "MSG_WIFI_CONFIG_PREVIEW")"
-        echo "$(get_msg "MSG_WIFI_BAND_INFO" "band=$band_type")"
-        echo "$(get_msg "MSG_WIFI_HTMODE_INFO" "mode=$htmode")"
-        echo "$(get_msg "MSG_CONFIRM_WIFI_SETTINGS" "ssid=$ssid" "password=$password")"
+        echo "$(get_message "MSG_WIFI_CONFIG_PREVIEW")"
+        echo "$(get_message "MSG_WIFI_BAND_INFO" "band=$band_type")"
+        echo "$(get_message "MSG_WIFI_HTMODE_INFO" "mode=$htmode")"
+        echo "$(get_message "MSG_CONFIRM_WIFI_SETTINGS" "ssid=$ssid" "password=$password")"
         read confirm
         case "$confirm" in
             y) break ;;
-            n) echo "$(get_msg "MSG_REENTER_INFO")"
+            n) echo "$(get_message "MSG_REENTER_INFO")"
                return 1 ;;
-            *) echo "$(get_msg "MSG_INVALID_YN")" ;;
+            *) echo "$(get_message "MSG_INVALID_YN")" ;;
         esac
     done
 
@@ -326,7 +326,7 @@ BAK_set_wifi_ssid_password() {
     
     devices=$(uci show wireless | grep 'wifi-device' | cut -d'=' -f1 | cut -d'.' -f2 | sort -u)
     if [ -z "$devices" ]; then
-        echo "$(get_msg "MSG_NO_WIFI_DEVICES")"
+        echo "$(get_message "MSG_NO_WIFI_DEVICES")"
         exit 1
     fi
 
@@ -334,8 +334,8 @@ BAK_set_wifi_ssid_password() {
         band=$(uci get wireless."$device".band 2>/dev/null)
         htmode=$(uci get wireless."$device".htmode 2>/dev/null)
 
-        echo "$(get_msg "MSG_WIFI_DEVICE_BAND" "device=$device" "band=$band")"
-        echo -n "$(get_msg "MSG_ENABLE_BAND" "device=$device" "band=$band")"
+        echo "$(get_message "MSG_WIFI_DEVICE_BAND" "device=$device" "band=$band")"
+        echo -n "$(get_message "MSG_ENABLE_BAND" "device=$device" "band=$band")"
         read enable_band
         if [ "$enable_band" != "y" ]; then
             continue
@@ -344,29 +344,29 @@ BAK_set_wifi_ssid_password() {
         iface_num=$(echo "$device" | grep -o '[0-9]*')
         iface="aios${iface_num}"
 
-        echo -n "$(get_msg "MSG_ENTER_SSID")"
+        echo -n "$(get_message "MSG_ENTER_SSID")"
         read ssid
         while true; do
-            echo -n "$(get_msg "MSG_ENTER_WIFI_PASSWORD")"
+            echo -n "$(get_message "MSG_ENTER_WIFI_PASSWORD")"
             read -s password
             echo
             if [ "${#password}" -ge 8 ]; then
                 break
             else
-                echo "$(get_msg "MSG_PASSWORD_TOO_SHORT")"
+                echo "$(get_message "MSG_PASSWORD_TOO_SHORT")"
             fi
         done
 
         while true; do
-            echo "$(get_msg "MSG_CONFIRM_WIFI_SETTINGS" "ssid=$ssid" "password=$password")"
+            echo "$(get_message "MSG_CONFIRM_WIFI_SETTINGS" "ssid=$ssid" "password=$password")"
             read confirm
             if [ "$confirm" = "y" ]; then
                 break
             elif [ "$confirm" = "n" ]; then
-                echo "$(get_msg "MSG_REENTER_INFO")"
+                echo "$(get_message "MSG_REENTER_INFO")"
                 break
             else
-                echo "$(get_msg "MSG_INVALID_YN")"
+                echo "$(get_message "MSG_INVALID_YN")"
             fi
         done
 
@@ -388,7 +388,7 @@ BAK_set_wifi_ssid_password() {
     /etc/init.d/network reload
 
     for device in $devices_to_enable; do
-        echo "$(get_msg "MSG_WIFI_SETTINGS_UPDATED" "device=$device")"
+        echo "$(get_message "MSG_WIFI_SETTINGS_UPDATED" "device=$device")"
     done
 }
 #########################################################################
@@ -400,7 +400,7 @@ set_device() {
     configure_network
     configure_dns
 
-    echo -n "$(get_msg "MSG_PRESS_KEY_REBOOT")"
+    echo -n "$(get_message "MSG_PRESS_KEY_REBOOT")"
     read
     reboot
 }
@@ -420,8 +420,8 @@ configure_system() {
     zonename=$(cat "${CACHE_DIR}/zonename.ch" 2>/dev/null || echo "Unknown")
     timezone=$(cat "${CACHE_DIR}/timezone.ch" 2>/dev/null || echo "UTC")
 
-    echo "$(get_msg "MSG_APPLYING_ZONENAME" "zone=$zonename")"
-    echo "$(get_msg "MSG_APPLYING_TIMEZONE" "timezone=$timezone")"
+    echo "$(get_message "MSG_APPLYING_ZONENAME" "zone=$zonename")"
+    echo "$(get_message "MSG_APPLYING_TIMEZONE" "timezone=$timezone")"
 
     apply_system_settings "$description" "$notes" "$zonename" "$timezone"
     configure_ntp
