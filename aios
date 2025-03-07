@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-00-19"
+SCRIPT_VERSION="2025.03.07-00-20"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -639,7 +639,7 @@ download() {
         debug_log "DEBUG" "Moving downloaded file to $install_path"
         debug_log "DEBUG" "Local version is $local_version"
         debug_log "DEBUG" "Remote version is $remote_version"
-        if ! mv "$install_path" "$install_path"; then
+        if ! mv "$DL_FILE" "$install_path"; then
             debug_log "ERROR" "Failed to move downloaded file to $install_path"
             echo "Error: Failed to move downloaded file to $install_path" >&2
             return 1
