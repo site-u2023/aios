@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-01-09"
+SCRIPT_VERSION="2025.03.07-01-10"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -573,23 +573,19 @@ decode_base64() {
 }
 
 download() {
-    local hidden_mode="false"
-    local quiet_mode="${QUIET_MODE:-false}"
-    local chmod_mode="false"
-    local read_mode="false"
-    local file_name=""
-    local local_version=""
-    local remote_version=""
-    local read_message=""
-    local script_file="${CACHE_DIR}/script.ch"
-    local aios_update="${CACHE_DIR}/aios_update.ch"
-    local install_path="${BASE_DIR}/${file_name}"
-    local remote_url="${BASE_URL}/${file_name}"
-    local repo_owner="site-u2023"
-    local lepo_name="aios"
-    local base_wget="wget -qO- --server-response"
-    local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/${file_name}"
-    local dummy_version="No version control."
+    hidden_mode="false"
+    quiet_mode="${QUIET_MODE:-false}"
+    chmod_mode="false"
+    read_mode="false"
+    file_name=""
+    script_file="${CACHE_DIR}/script.ch"
+    aios_update="${CACHE_DIR}/aios_update.ch"
+    install_path="${BASE_DIR}/${file_name}"
+    remote_url="${BASE_URL}/${file_name}"
+    repo_owner="site-u2023"
+    repo_name="aios"
+    api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/${file_name}"
+    dummy_version="No version control."
 
     while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -621,13 +617,13 @@ download() {
 
     decoded_content=$(decode_base64 "$response")
 
-    remote_version=$(remote_normalize_version "$decoded_content")
+    remote_version=$(normalize_version "$decoded_content")
     if [ -z "$remote_version" ]; then
         remote_version="$dummy_version"
     fi
     debug_log "DEBUG" "Remote version is $remote_version"
 
-    local_version=$(local_normalize_version "$script_file" "$file_name")
+    local_version=$(normalize_version "$(cat "$script_file")")
     if [ -z "$local_version" ]; then
         echo "Error: Could not extract SCRIPT_VERSION from $script_file" >&2
         exit 1
@@ -664,7 +660,7 @@ download() {
             debug_log "DEBUG" "Updated $script_file with ${file_name}=${remote_version}"
         fi
 
-        if ! $BASE_WGET "$install_path" "$remote_url"; then
+        if ! wget -qO- "$install_path" "$remote_url"; then
             debug_log "ERROR" "Download failed: $file_name"
             echo "Error: Download failed: $file_name" >&2
             return 1
