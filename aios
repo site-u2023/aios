@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-02-21"
+SCRIPT_VERSION="2025.03.07-03-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -668,6 +668,7 @@ download() {
             read_message="read "
             touch "$aios_update"
             echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"               
+            chmod +x "$BIN_PATH"
             exec "$BIN_PATH" "$@"
         else
             rm -f "$aios_update"
