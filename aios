@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-02-15"
+SCRIPT_VERSION="2025.03.07-02-17"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -564,10 +564,6 @@ decode_base64() {
     echo "$1" | base64 -d 2>/dev/null
 }
 
-trim() {
-    echo "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
-}
-
 download() {
     hidden_mode="false"
     quiet_mode="${QUIET_MODE:-false}"
@@ -576,8 +572,8 @@ download() {
     file_name=""
     script_file="${CACHE_DIR}/script.ch"
     aios_update="${CACHE_DIR}/aios_update.ch"
-    install_path="${BASE_DIR}/$(trim "$file_name")"
-    remote_url="${BASE_URL}/$(trim "$file_name")"
+    install_path="${BASE_DIR}"/"$file_name"
+    remote_url="${BASE_URL}"/"$file_name"
     repo_owner="site-u2023"
     repo_name="aios"
     api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/${file_name}"
@@ -596,12 +592,6 @@ download() {
         shift
     done
 
-    echo "DEBUG: BASE_URL=$BASE_URL"
-    echo "DEBUG: file_name=$file_name"
-    echo "DEBUG: remote_url=$remote_url"
-    echo "DEBUG: install_path=$install_path"
-
-    file_name=$(trim "$file_name")
     echo "DEBUG: File name: $file_name"
     if [ -z "$file_name" ]; then
         echo "Error: No file name provided" >&2
