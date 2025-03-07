@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-00-12"
+SCRIPT_VERSION="2025.03.07-00-13"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -653,6 +653,7 @@ download() {
         else
             echo "${file_name}=${remote_version}" >> "$script_file"
         fi
+        debug_log "DEBUG" "Updated $script_file with ${file_name}=${remote_version}"
     else
         if [ "$quiet_mode" != "true" ]; then
             debug_log "DEBUG" "$file_name is already up-to-date. (Version: $local_version)"
