@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-00-15"
+SCRIPT_VERSION="2025.03.07-00-16"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -554,11 +554,9 @@ local_normalize_version() {
     local file_name="$2"
     local input
 
-    # ファイル内容をデバッグログに出力
     debug_log "DEBUG" "Contents of $script_file:"
     debug_log "DEBUG" "$(cat "$script_file")"
 
-    # grep -m 1 を使用してバージョンを抽出
     input=$(grep -m 1 "^${file_name}=" "$script_file" | cut -d'=' -f2)
     if [ -z "$input" ]; then
         debug_log "ERROR" "No version found for $file_name in $script_file"
@@ -567,7 +565,6 @@ local_normalize_version() {
     fi
     debug_log "DEBUG" "Extracted input for $file_name: $input"
     
-    # 正規化処理
     input=$(echo "$input" | grep -Eo '([0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*)')
     input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
     input=$(echo "$input" | tr -d '\n' | sed 's/ *$//')
@@ -654,6 +651,8 @@ download() {
             return 1
         fi
 
+        debug_log "DEBUG" "File moved successfully to $install_path"
+
         if [ "$chmod_mode" = "true" ]; then
             chmod +x "$install_path"
             debug_log "DEBUG" "chmod +x applied to $file_name"
@@ -685,6 +684,7 @@ download() {
             rm -f "$aios_update"
             echo "$(color yellow "Skipping re-execution; $file_name - Version: $remote_version")"
         fi
+        debug_log "DEBUG" "Execution permissions applied to $install_path"
     elif [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
         read_message="read "
         echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
