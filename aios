@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-00-10"
+SCRIPT_VERSION="2025.03.07-00-12"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -554,6 +554,8 @@ local_normalize_version() {
     local file_name="$2"
 
     local input=$(grep -m 1 "^${file_name}=" "$script_file" | cut -d'=' -f2)
+    debug_log "DEBUG" "Extracted input for $file_name: $input"
+
     input=$(echo "$input" | grep -Eo '([0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*)')
     input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
     input=$(echo "$input" | tr -d '\n' | sed 's/ *$//')
@@ -588,6 +590,11 @@ download() {
         shift
     done
 
+    if [ -z "$file_name" ]; then
+        echo "Error: No file name provided" >&2
+        return 1
+    fi
+
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
 
@@ -596,6 +603,12 @@ download() {
         debug_log "ERROR" "Download failed: $file_name"
         echo "Error: Download failed: $file_name" >&2
         return 1
+    fi
+
+    if [ -f "/tmp/aios/cache/script.ch" ]; then
+        echo "script.ch exists"
+    else
+        echo "script.ch does not exist"
     fi
 
     remote_version=$(remote_normalize_version "$(cat "$DL_FILE")")
@@ -607,6 +620,8 @@ download() {
     
     local_version=$(local_normalize_version "$script_file" "$file_name")
     if [ -z "$local_version" ]; then
+        debug_log "DEBUG" "local version is $local_version"
+        echo "Local version: $local_version"
         debug_log "ERROR" "Could not extract SCRIPT_VERSION from $script_file"
         echo "Error: Could not extract SCRIPT_VERSION from $script_file" >&2
         return 1
