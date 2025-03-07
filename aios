@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-02-09"
+SCRIPT_VERSION="2025.03.07-02-11"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -577,6 +577,7 @@ download() {
     repo_owner="site-u2023"
     repo_name="aios"
     api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/${file_name}"
+    api_response=$(wget -qO- "$api_url")
     dummy_version="No version control."
 
     while [ "$#" -gt 0 ]; do
@@ -596,7 +597,6 @@ download() {
         return 1
     fi
 
-    api_response=$(wget -qO- "$api_url")
     if [ -z "$api_response" ]; then
         echo "ERROR: Could not retrieve file content from GitHub API" >&2
         exit 1
@@ -607,11 +607,13 @@ download() {
     response=$(echo "$api_response" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
     decoded_content=$(decode_base64 "$response")
 
-    remote_version=$(remote_normalize_version "$decoded_content")
+    remote_version=$(normalize_version "$decoded_content")
     if [ -z "$remote_version" ]; then
         remote_version="$dummy_version"
     fi
     debug_log "DEBUG" "Remote version is $remote_version"
+
+    read -p
 
     local_version=$(local_normalize_version "$script_file" "$script_file")
     if [ -z "$local_version" ]; then
