@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-02-00"
+SCRIPT_VERSION="2025.03.07-02-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -629,7 +629,7 @@ download() {
         debug_log "DEBUG" "Local version is $local_version"
         debug_log "DEBUG" "Remote version is $remote_version"
 
-        if [ ! -s "$install_path" ]; then
+        if ! $WIGET "$install_path" "$remote_url"; then
             debug_log "ERROR" "Download failed: $file_name is empty"
             echo "Error: Download failed: $file_name is empty." >&2
             return 1
@@ -652,12 +652,6 @@ download() {
                 echo "${file_name}=${remote_version}" >> "$script_file"
             fi
             debug_log "DEBUG" "Updated $script_file with ${file_name}=${remote_version}"
-        fi
-
-        if ! wget -qO- "$install_path" "$remote_url"; then
-            debug_log "ERROR" "Download failed: $file_name"
-            echo "Error: Download failed: $file_name" >&2
-            return 1
         fi
     else
         if [ "$quiet_mode" != "true" ]; then
