@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-01-20"
+SCRIPT_VERSION="2025.03.06-01-21"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -603,10 +603,7 @@ download() {
     debug_log "Fetching remote version for $file_name from $remote_url"
     remote_version="$(normalize_version "$(curl -s "$remote_url" | grep 'SCRIPT_VERSION' | cut -d'=' -f2 | tr -d '"')")"
     debug_log "Fetched remote version: $remote_version"
-    if [ -z "$remote_version" ] || [ "$remote_version" = "$dummy_version" ]; then
-        debug_log "Failed to fetch a valid remote version. Using dummy version: $dummy_version"
-        remote_version="$dummy_version"
-    fi
+    [ -z "$remote_version" ] && remote_version="$dummy_version"
 
     if grep -q "^${file_name}=" "$script_db"; then
         local_version="$(normalize_version "$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)")"
@@ -661,7 +658,7 @@ download() {
 
         # ダウンロード完了メッセージの表示
         local read_message=""
-        if [ "$read_mode" = "true" ]; then
+        if [ "$read_mode" = "true" ];then
             read_message="read "
         fi
         echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
@@ -677,7 +674,7 @@ download() {
         chmod +x "$install_path"
         debug_log "Setting permissions for $install_path"
         exec "$install_path" "$@"
-    elif [ "$read_mode" = "true" ]; then
+    elif [ "$read_mode" = "true" ];then
         . "$install_path"
     fi
 }
