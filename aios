@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-01-21"
+SCRIPT_VERSION="2025.03.06-01-22"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -567,20 +567,18 @@ get_script_version() {
     echo "$version"
 }
 
-# ダウンロード関数
 download() {
     local hidden_mode="false"
     local quiet_mode="${QUIET_MODE:-false}"
     local chmod_mode="false"
     local read_mode="false"
-    local exec_mode="false"
     local file_name=""
     local local_version=""
     local remote_version=""
     local script_db="${CACHE_DIR}/script.ch"
     local dummy_version="No version control."
 
-    while [ "$#" -gt 0 ]; do  # コマンドライン引数の解析
+    while [ "$#" -gt 0 ]; do
         case "$1" in
             hidden) hidden_mode="true" ;;
             quiet) quiet_mode="true" ;;
@@ -592,91 +590,70 @@ download() {
         shift
     done
 
-    # インストールパスとリモートURLの設定
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
 
-    [ -d "$CACHE_DIR" ] || mkdir -p "$CACHE_DIR"
-    [ -f "$script_db" ] || touch "$script_db"
-
-    # リモートバージョンの取得
-    debug_log "Fetching remote version for $file_name from $remote_url"
-    remote_version="$(normalize_version "$(curl -s "$remote_url" | grep 'SCRIPT_VERSION' | cut -d'=' -f2 | tr -d '"')")"
-    debug_log "Fetched remote version: $remote_version"
-    [ -z "$remote_version" ] && remote_version="$dummy_version"
-
-    if grep -q "^${file_name}=" "$script_db"; then
-        local_version="$(normalize_version "$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)")"
-        debug_log "Found local version for $file_name: $local_version"
+    if [ ! -f "$script_db" ]; then
+        touch "$script_db"
     fi
 
-    # バージョンが異なる場合、ダウンロードを実行
-    if [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
-        debug_log "Downloading file from $remote_url to $DL_FILE"
-        if ! $BASE_WGET "$DL_FILE" "$remote_url"; then
-            debug_log "Download failed: $file_name"
-            echo "Error: Download failed: $file_name" >&2
-            return 1
-        fi
+    debug_log "DEBUG" "Downloading file from $remote_url to $DL_FILE"
+    if ! $BASE_WGET "$DL_FILE" "$remote_url"; then
+        debug_log "ERROR" "Download failed: $file_name"
+        echo "Error: Download failed: $file_name" >&2
+        return 1
+    fi
 
-        debug_log "Moving downloaded file to $install_path"
+    remote_version=$(normalize_version "$(cat "$DL_FILE")")
+    if [ -z "$remote_version" ]; then
+        remote_version="$dummy_version"
+    fi
+
+    if grep -q "^${file_name}=" "$script_db"; then
+        local_version=$(normalize_version "$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)")
+    fi
+
+    if [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
+        debug_log "DEBUG" "Moving downloaded file to $install_path"
         if ! mv "$DL_FILE" "$install_path"; then
-            debug_log "Failed to move downloaded file to $install_path"
+            debug_log "ERROR" "Failed to move downloaded file to $install_path"
             echo "Error: Failed to move downloaded file to $install_path" >&2
             return 1
         fi
 
         if [ ! -s "$install_path" ]; then
-            debug_log "Download failed: $file_name is empty"
+            debug_log "ERROR" "Download failed: $file_name is empty"
             echo "Error: Download failed: $file_name is empty." >&2
             return 1
         fi
 
-        # 実行権限の設定
+        debug_log "DEBUG" "Download completed: $file_name - Version: $remote_version"
+        echo "$(color green "Download completed: $file_name - Version: $remote_version")"
+
         if [ "$chmod_mode" = "true" ]; then
             chmod +x "$install_path"
-            debug_log "chmod +x applied to $file_name"
+            debug_log "DEBUG" "chmod +x applied to $file_name"
         fi
 
-        # script_db の更新
-        debug_log "Updating script_db with $file_name version $remote_version"
         if grep -q "^${file_name}=" "$script_db"; then
             sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_db"
         else
             echo "${file_name}=${remote_version}" >> "$script_db"
         fi
 
-        # exec_mode の設定
-        if [ "$file_name" = "$(basename "$BIN_PATH")" ]; then
-            exec_mode="true"
+        if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
+            . "$install_path"
+            debug_log "DEBUG" "Sourced: $install_path"
         fi
-
-        # read_mode の設定
-        if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\.sh"; then
-            read_mode="true"
-        fi
-
-        # ダウンロード完了メッセージの表示
-        local read_message=""
-        if [ "$read_mode" = "true" ];then
-            read_message="read "
-        fi
-        echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
     else
         if [ "$quiet_mode" != "true" ]; then
-            debug_log "$file_name is already up-to-date. (Version: $local_version)"
+            debug_log "DEBUG" "$file_name is already up-to-date. (Version: $local_version)"
             echo "$(color green "$file_name is already up-to-date. (Version: $local_version)")"
         fi
     fi
 
-    # 最終処理：必要に応じてスクリプトを実行または読み込み
-    if [ "$exec_mode" = "true" ]; then
-        chmod +x "$install_path"
-        debug_log "Setting permissions for $install_path"
-        exec "$install_path" "$@"
-    elif [ "$read_mode" = "true" ];then
-        . "$install_path"
-    fi
+    # デバッグログの追加
+    debug_log "DEBUG" "Finished download function for $file_name"
 }
 
 # 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
