@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-03-06"
+SCRIPT_VERSION="2025.03.07-03-07"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -655,8 +655,7 @@ download() {
         fi
     else
         if [ "$quiet_mode" != "true" ]; then
-            debug_log "DEBUG" "$file_name is already up-to-date. (Version: $local_version)"
-            echo "$(color green "$file_name is already up-to-date. (Version: $local_version)")"
+            echo "$(color green "already up-to-date: $file_name - Version: $local_version")"
         fi
     fi
 
