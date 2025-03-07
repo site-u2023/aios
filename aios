@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-03-00"
+SCRIPT_VERSION="2025.03.07-03-02"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -659,24 +659,14 @@ download() {
         fi
     fi
 
-    if [ "$file_name" = "$BIN_FILE" ]; then
-        debug_log "DEBUG" "Bin path: $BIN_PATH"
-        debug_log "DEBUG" "Bin dir: $BIN_DIR"
-        debug_log "DEBUG" "Bin file: $BIN_FILE"
-        mv "$install_path" "$BIN_PATH"
-        if [ ! -f "$aios_update" ]; then
-            read_message="read "
-            touch "$aios_update"
-            echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"               
+	if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
+		read_message="read "
+		if [ "$file_name" = "$BIN_FILE" ]; then
+			mv "$install_path" "$BIN_PATH"
+	        echo "$(color green "Update completed: ${read_message}$file_name - Version: $remote_version")"               
             chmod +x "$BIN_PATH"
-            exec "$BIN_PATH" "$@"
-        else
-            rm -f "$aios_update"
-            echo "$(color yellow "Skipping re-execution; $file_name - Version: $remote_version")"
-        fi
-        debug_log "DEBUG" "Execution permissions applied to $install_path"
-    elif [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
-        read_message="read "
+            exec "$BIN_PATH" "$@"	
+		fi
         echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
         debug_log "DEBUG" "Sourced: $install_path"
         . "$install_path"
@@ -940,7 +930,6 @@ check_common() {
             exit 0
             ;;
         full)
-            download "hidden" "aios"
             download "hidden" "common-country.sh" "chmod"
             download "hidden" "common-package.sh" "chmod"
             download "hidden" "common-feed-package.sh" "chmod"
@@ -958,7 +947,6 @@ check_common() {
             #packages
             ;;
         light|debug)
-            download "aios"
             download "common-country.sh"
             download "common-package.sh"
             download "common-feed-package.sh"
@@ -993,6 +981,10 @@ check_common() {
 
 # メイン処理
 main() {
+    if [ "$0" != "$BIN_PATH" ]; then
+        # コマンドとして実行された場合はスクリプトの更新を確認
+        download "hidden" "aios" "chmod" "read" "$@"
+    fi
     initialization
     check_option "$@"
 }
