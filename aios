@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-00-16"
+SCRIPT_VERSION="2025.03.07-00-17"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -664,11 +664,13 @@ download() {
             echo "${file_name}=${remote_version}" >> "$script_file"
         fi
         debug_log "DEBUG" "Updated $script_file with ${file_name}=${remote_version}"
+    elif [ "$quiet_mode" != "true" ]; then
+        debug_log "DEBUG" "$file_name is already up-to-date. (Version: $local_version)"
+        echo "$(color green "$file_name is already up-to-date. (Version: $local_version)")"
     else
-        if [ "$quiet_mode" != "true" ]; then
-            debug_log "DEBUG" "$file_name is already up-to-date. (Version: $local_version)"
-            echo "$(color green "$file_name is already up-to-date. (Version: $local_version)")"
-        fi
+        debug_log "ERROR" "Downloaded file does not exist: $DL_FILE"
+        echo "Error: Downloaded file does not exist: $DL_FILE" >&2
+        return 1
     fi
 
     if [ "$file_name" = "$BIN_FILE" ]; then
