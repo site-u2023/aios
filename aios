@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-01-19"
+SCRIPT_VERSION="2025.03.07-02-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -606,7 +606,7 @@ download() {
         exit 1
     fi
 
-    echo "DEBUG: API response: $api_response"
+    #echo "DEBUG: API response: $api_response"
 
     response=$(echo "$api_response" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
 
