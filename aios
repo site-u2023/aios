@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-02-19"
+SCRIPT_VERSION="2025.03.07-02-21"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -574,7 +574,8 @@ download() {
     aios_update="${CACHE_DIR}/aios_update.ch"
     repo_owner="site-u2023"
     repo_name="aios"
-    dummy_version="No version control."
+    dummy_remote_version="No remote version control."
+    dummy_local_version="No local version control."
 
     while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -588,8 +589,8 @@ download() {
         shift
     done
 
-    install_path="${BASE_DIR}"/"$file_name"
-    remote_url="${BASE_URL}"/"$file_name"
+    install_path="${BASE_DIR}/$file_name"
+    remote_url="${BASE_URL}/$file_name"
     api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/${file_name}"
     api_response=$(wget -qO- "$api_url")
 
@@ -610,20 +611,17 @@ download() {
 
     remote_version=$(remote_normalize_version "$decoded_content")
     if [ -z "$remote_version" ]; then
-        remote_version="$dummy_version"
+        remote_version="$dummy_remote_version"
     fi
     debug_log "DEBUG" "Remote version is $remote_version"
 
     local_version=$(local_normalize_version "$script_file" "$script_file")
     if [ -z "$local_version" ]; then
-        debug_log "DEBUG" "Local version is not found"
+        local_version="$dummy_local_version"
     fi  
     debug_log "DEBUG" "Local version is $local_version"
 
     if [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
-        debug_log "DEBUG" "Local version is $local_version"
-        debug_log "DEBUG" "Remote version is $remote_version"
-
         if ! $BASE_WGET "$install_path" "$remote_url"; then
             debug_log "ERROR" "Download failed: $file_name is empty"
             echo "Error: Download failed: $file_name is empty." >&2
@@ -669,8 +667,7 @@ download() {
         if [ ! -f "$aios_update" ]; then
             read_message="read "
             touch "$aios_update"
-            echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
-                        
+            echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"               
             exec "$BIN_PATH" "$@"
         else
             rm -f "$aios_update"
