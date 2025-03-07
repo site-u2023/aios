@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-01-13"
+SCRIPT_VERSION="2025.03.07-01-15"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -617,13 +617,13 @@ download() {
 
     decoded_content=$(decode_base64 "$response")
 
-    remote_version=$(remote_normalize_version( "$decoded_content")")
+    remote_version=$(remote_normalize_version "$decoded_content")
     if [ -z "$remote_version" ]; then
         remote_version="$dummy_version"
     fi
     debug_log "DEBUG" "Remote version is $remote_version"
 
-    local_version=$(local_normalize_version "$(cat "$script_file")")
+    local_version=$(local_normalize_version "$script_file" "$script_file")
     if [ -z "$local_version" ]; then
         echo "Error: Could not extract SCRIPT_VERSION from $script_file" >&2
         exit 1
