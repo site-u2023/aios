@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-01-08"
+SCRIPT_VERSION="2025.03.07-01-09"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -587,7 +587,7 @@ download() {
     local remote_url="${BASE_URL}/${file_name}"
     local repo_owner="site-u2023"
     local lepo_name="aios"
-    local base_wget="wget -qO-"
+    local base_wget="wget -qO- --server-response"
     local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/${file_name}"
     local dummy_version="No version control."
 
