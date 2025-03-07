@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-00-00"
+SCRIPT_VERSION="2025.03.07-00-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -577,6 +577,7 @@ download() {
     local local_version=""
     local remote_version=""
     local script_db="${CACHE_DIR}/script.ch"
+    local aios_update="${CACHE_DIR}/aios_update.ch"
     local dummy_version="No version control."
 
     while [ "$#" -gt 0 ]; do
@@ -646,9 +647,17 @@ download() {
     fi
 
     if [ "$file_name" = "$BIN_FILE" ]; then
-        echo "$(color green "Download completed: $file_name - Version: $remote_version")"
-        debug_log "DEBUG" "Sourced: $install_path"
-        exec . "$install_path"
+        if [ ! -f "$temp_flag" ]; then
+            debug_log "DEBUG" "Sourced: $install_path"
+            touch "$aios_update"
+            debug_log "DEBUG" "aios_update: $aios_update"
+            echo "$(color green "Download completed: $file_name - Version: $remote_version")"
+            chmod +x "$BIN_FILE"
+            exec . "$install_path"
+        else
+            rm -f "$aios_update"
+            echo "$(color red "Update loop detected, skipping re-execution.")"
+        fi
     elif [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
         echo "$(color green "Download completed: $file_name - Version: $remote_version")"
         debug_log "DEBUG" "Sourced: $install_path"
