@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-01-18"
+SCRIPT_VERSION="2025.03.06-01-19"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -654,7 +654,7 @@ download() {
 
         # ダウンロード完了メッセージの表示
         local read_message=""
-        if [ "$read_mode" = "true" ]; then
+        if [ "$read_mode" = "true" ];then
             read_message="read "
         fi
         echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
