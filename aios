@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-00-01"
+SCRIPT_VERSION="2025.03.07-00-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -656,7 +656,7 @@ download() {
             exec "$install_path" "$@"
         else
             rm -f "$aios_update"
-            echo "$(color red "Update loop detected, skipping re-execution.")"
+            echo "$(color yellow "Skipping re-execution; $file_name - Version: $remote_version")"
         fi
     elif [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
         echo "$(color green "Download completed: $file_name - Version: $remote_version")"
