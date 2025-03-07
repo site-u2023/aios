@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-01-17"
+SCRIPT_VERSION="2025.03.07-01-19"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -620,8 +620,7 @@ download() {
 
     local_version=$(local_normalize_version "$script_file" "$script_file")
     if [ -z "$local_version" ]; then
-        echo "Error: Could not extract SCRIPT_VERSION from $script_file" >&2
-        exit 1
+        debug_log "DEBUG" "Local version is not found"
     fi  
     debug_log "DEBUG" "Local version is $local_version"
 
