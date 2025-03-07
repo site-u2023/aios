@@ -625,8 +625,7 @@ download() {
 
     api_version=$($base_wget "$api_url" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
 
-    decoded_content=$(echo "$response" | tr -d '\n' | tr -d ' ' | sed 's/[A-Za-z0-9+/]\{4\}/& /g' | awk '{for(i=1;i<=NF;i++) {c="";for(j=1;j<=4;j++) c=c substr($i,j,1); print c}}' | tr -d '\0')
-    #decoded_content=$(decode_base64 "$response")
+    decoded_content=$(decode_base64 "$response")
 
     if [ -z "$decoded_content" ]; then
         echo "ERROR: Could not retrieve file content from GitHub API" >&2
