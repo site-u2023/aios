@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-01-01"
+SCRIPT_VERSION="2025.03.07-01-02"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -568,6 +568,25 @@ local_normalize_version() {
     echo "$input"
 }
 
+decode_base64() {
+    input="$1"
+    echo "$input" | tr -d '\n' | tr 'A-Za-z0-9+/' ' -_' | awk '
+    {
+        for (i = 1; i <= length($0); i += 4) {
+            a = index("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_", substr($0, i, 1)) - 1
+            b = index("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_", substr($0, i+1, 1)) - 1
+            c = index("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_", substr($0, i+2, 1)) - 1
+            d = index("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_", substr($0, i+3, 1)) - 1
+            printf "%c%c%c", rshift(a, 2), and(lshift(a, 6) + rshift(b, 4), 255), and(lshift(b, 4) + rshift(c, 2), 255)
+        }
+        printf "\n"
+    }
+    function lshift(x, y) { return and(x * 2^y, 255) }
+    function rshift(x, y) { return int(and(x, 255) / 2^y) }
+    function and(x, y) { return x & y }
+    '
+}
+
 download() {
     local hidden_mode="false"
     local quiet_mode="${QUIET_MODE:-false}"
@@ -606,14 +625,15 @@ download() {
 
     api_version=$($base_wget "$api_url" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
 
-    decoded_content=$(echo "$api_version" | tr -d '\n' | tr -d ' ' | sed 's/[A-Za-z0-9+/]\{4\}/& /g' | awk '{for(i=1;i<=NF;i++) {c="";for(j=1;j<=4;j++) c=c substr($i,j,1); print c}}' | tr -d '\0')
+    decoded_content=$(echo "$response" | tr -d '\n' | tr -d ' ' | sed 's/[A-Za-z0-9+/]\{4\}/& /g' | awk '{for(i=1;i<=NF;i++) {c="";for(j=1;j<=4;j++) c=c substr($i,j,1); print c}}' | tr -d '\0')
+    #decoded_content=$(decode_base64 "$response")
 
     if [ -z "$decoded_content" ]; then
         echo "ERROR: Could not retrieve file content from GitHub API" >&2
         exit 1
     fi
 
-    remote_version=$(normalize_version "$api_version")
+    remote_version=$(normalize_version "$decoded_content")
     if [ -z "$remote_version" ]; then
         remote_version="$dummy_version"
     fi
