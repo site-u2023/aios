@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-03-02"
+SCRIPT_VERSION="2025.03.07-03-04"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -615,7 +615,7 @@ download() {
     fi
     debug_log "DEBUG" "Remote version is $remote_version"
 
-    local_version=$(local_normalize_version "$script_file" "$script_file")
+    local_version=$(local_normalize_version "$script_file" "$file_name")
     if [ -z "$local_version" ]; then
         local_version="$dummy_local_version"
     fi  
