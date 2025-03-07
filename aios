@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-01-19"
+SCRIPT_VERSION="2025.03.06-01-20"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -600,11 +600,17 @@ download() {
     [ -f "$script_db" ] || touch "$script_db"
 
     # リモートバージョンの取得
+    debug_log "Fetching remote version for $file_name from $remote_url"
     remote_version="$(normalize_version "$(curl -s "$remote_url" | grep 'SCRIPT_VERSION' | cut -d'=' -f2 | tr -d '"')")"
-    [ -z "$remote_version" ] && remote_version="$dummy_version"
+    debug_log "Fetched remote version: $remote_version"
+    if [ -z "$remote_version" ] || [ "$remote_version" = "$dummy_version" ]; then
+        debug_log "Failed to fetch a valid remote version. Using dummy version: $dummy_version"
+        remote_version="$dummy_version"
+    fi
 
     if grep -q "^${file_name}=" "$script_db"; then
         local_version="$(normalize_version "$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)")"
+        debug_log "Found local version for $file_name: $local_version"
     fi
 
     # バージョンが異なる場合、ダウンロードを実行
@@ -636,6 +642,7 @@ download() {
         fi
 
         # script_db の更新
+        debug_log "Updating script_db with $file_name version $remote_version"
         if grep -q "^${file_name}=" "$script_db"; then
             sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_db"
         else
@@ -654,7 +661,7 @@ download() {
 
         # ダウンロード完了メッセージの表示
         local read_message=""
-        if [ "$read_mode" = "true" ];then
+        if [ "$read_mode" = "true" ]; then
             read_message="read "
         fi
         echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
