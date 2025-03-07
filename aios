@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-01-05"
+SCRIPT_VERSION="2025.03.07-01-06"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -604,14 +604,18 @@ download() {
         return 1
     fi
 
-    api_version=$($base_wget "$api_url" | grep -o '"content": "[^"]*' | cut -d'"' -f4 | base64 --decode)
+    api_response=$(wget -qO- "$api_url")
 
-    if [ -z "$api_version" ]; then
+    if [ -z "$api_response" ]; then
         echo "ERROR: Could not retrieve file content from GitHub API" >&2
         exit 1
     fi
 
-    remote_version=$(normalize_version "$api_version")
+    response=$(echo "$api_response" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
+
+    decoded_content=$(decode_base64 "$response")
+
+    remote_version=$(normalize_version "$decoded_content")
     if [ -z "$remote_version" ]; then
         remote_version="$dummy_version"
     fi
