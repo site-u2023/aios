@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-02-11"
+SCRIPT_VERSION="2025.03.07-02-12"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -592,6 +592,7 @@ download() {
         shift
     done
 
+    echo "DEBUG: File name: $file_name"
     if [ -z "$file_name" ]; then
         echo "Error: No file name provided" >&2
         return 1
