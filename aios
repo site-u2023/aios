@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-00-05"
+SCRIPT_VERSION="2025.03.07-00-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -537,7 +537,7 @@ get_message() {
 # 8. 影響範囲: common.sh の download() のみ（他の関数には影響なし）。
 #########################################################################
 # スクリプトのバージョンを正規化する関数
-normalize_version() {
+remote_normalize_version() {
     local input="$1"
     input=$(echo "$input" | grep -Eo 'SCRIPT_VERSION=["'"'"'][^"'"'"']+["'"'"']' | grep -Eo '([0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*)')
     input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
@@ -547,25 +547,14 @@ normalize_version() {
     echo "$input"
 }
 
-# スクリプトファイルからバージョンを取得し、正規化する関数
-get_script_version() {
-    local script_file="$1"
-
-    if [ -z "$script_file" ] || [ ! -f "$script_file" ]; then
-        debug_log "ERROR" "Script file not found: $script_file"
-        echo "Error: Script file not found: $script_file" >&2
-        return 1
-    fi
-
-    local version
-    version=$(normalize_version "$(cat "$script_file")")
-    if [ -z "$version" ]; then
-        debug_log "ERROR" "Could not extract SCRIPT_VERSION from $script_file"
-        echo "Error: Could not extract SCRIPT_VERSION from $script_file" >&2
-        return 1
-    fi
-
-    echo "$version"
+local_normalize_version() {
+    local input="$1"
+    input=$(echo "$input" | grep -Eo '([0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*)')
+    input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
+    input=$(echo "$input" | tr -d '\n' | sed 's/ *$//')
+    input=$(echo "$input" | sed -E 's/(^|[._-])0+([0-9])/\1\2/g')
+    input=$(echo "$input" | sed 's/[._-]\{1,1\}/./g')
+    echo "$input"
 }
 
 download() {
@@ -577,7 +566,7 @@ download() {
     local local_version=""
     local remote_version=""
     local read_message=""
-    local script_db="${CACHE_DIR}/script.ch"
+    local script_file="${CACHE_DIR}/script.ch"
     local aios_update="${CACHE_DIR}/aios_update.ch"
     local dummy_version="No version control."
 
@@ -596,10 +585,6 @@ download() {
     local install_path="${BASE_DIR}/${file_name}"
     local remote_url="${BASE_URL}/${file_name}"
 
-    if [ ! -f "$script_db" ]; then
-        touch "$script_db"
-    fi
-
     debug_log "DEBUG" "Downloading file from $remote_url to $DL_FILE"
     if ! $BASE_WGET "$DL_FILE" "$remote_url"; then
         debug_log "ERROR" "Download failed: $file_name"
@@ -607,13 +592,16 @@ download() {
         return 1
     fi
 
-    remote_version=$(normalize_version "$(cat "$DL_FILE")")
+    remote_version=$(remote_normalize_version "$(cat "$DL_FILE")")
     if [ -z "$remote_version" ]; then
         remote_version="$dummy_version"
     fi
-
-    if grep -q "^${file_name}=" "$script_db"; then
-        local_version=$(normalize_version "$(grep "^${file_name}=" "$script_db" | cut -d'=' -f2)")
+    
+    local_version=$(local_normalize_version "$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)")
+        if [ -z "$local version" ]; then
+        debug_log "ERROR" "Could not extract SCRIPT_VERSION from $script_file"
+        echo "Error: Could not extract SCRIPT_VERSION from $script_file" >&2
+        return 1
     fi
 
     if [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
@@ -655,7 +643,7 @@ download() {
             debug_log "DEBUG" "Sourced: $install_path"
             touch "$aios_update"
             echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
-            debug_log "DEBUG" "Bin fire: $BIN_FILE"            
+            debug_log "DEBUG" "Bin file: $BIN_FILE"            
             chmod +x "$BIN_FILE"
             exec "$install_path" "$@"
         else
