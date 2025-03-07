@@ -625,7 +625,6 @@ download() {
     debug_log "DEBUG" "Local version is $local_version"
 
     if [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
-        debug_log "DEBUG" "Moving downloaded file to $install_path"
         debug_log "DEBUG" "Local version is $local_version"
         debug_log "DEBUG" "Remote version is $remote_version"
 
