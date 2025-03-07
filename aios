@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-00-06"
+SCRIPT_VERSION="2025.03.07-00-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -539,6 +539,7 @@ get_message() {
 # スクリプトのバージョンを正規化する関数
 remote_normalize_version() {
     local input="$1"
+
     input=$(echo "$input" | grep -Eo 'SCRIPT_VERSION=["'"'"'][^"'"'"']+["'"'"']' | grep -Eo '([0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*)')
     input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
     input=$(echo "$input" | tr -d '\n' | sed 's/ *$//')
@@ -548,7 +549,11 @@ remote_normalize_version() {
 }
 
 local_normalize_version() {
-    local input="$1"
+    local script_file="$1"
+    local file_name="$2"
+    local input
+
+    input=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
     input=$(echo "$input" | grep -Eo '([0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*)')
     input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
     input=$(echo "$input" | tr -d '\n' | sed 's/ *$//')
@@ -597,8 +602,8 @@ download() {
         remote_version="$dummy_version"
     fi
     
-    local_version=$(local_normalize_version "$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)")
-        if [ -z "$local version" ]; then
+    local_version=$(local_normalize_version "$script_file" "$file_name")
+    if [ -z "$local_version" ]; then
         debug_log "ERROR" "Could not extract SCRIPT_VERSION from $script_file"
         echo "Error: Could not extract SCRIPT_VERSION from $script_file" >&2
         return 1
