@@ -576,8 +576,8 @@ download() {
     file_name=""
     script_file="${CACHE_DIR}/script.ch"
     aios_update="${CACHE_DIR}/aios_update.ch"
-    install_path="${BASE_DIR}/${file_name}"
-    remote_url="${BASE_URL}/${file_name}"
+    install_path="${BASE_DIR}/$(trim "$file_name")"
+    remote_url="${BASE_URL}/$(trim "$file_name")"
     repo_owner="site-u2023"
     repo_name="aios"
     api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/${file_name}"
@@ -595,6 +595,11 @@ download() {
         esac
         shift
     done
+
+    echo "DEBUG: BASE_URL=$BASE_URL"
+    echo "DEBUG: file_name=$file_name"
+    echo "DEBUG: remote_url=$remote_url"
+    echo "DEBUG: install_path=$install_path"
 
     file_name=$(trim "$file_name")
     echo "DEBUG: File name: $file_name"
