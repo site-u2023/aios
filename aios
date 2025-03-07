@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-02-02"
+SCRIPT_VERSION="2025.03.07-02-04"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -660,13 +660,16 @@ download() {
     fi
 
     if [ "$file_name" = "$BIN_FILE" ]; then
+        debug_log "DEBUG" "Bin path: $BIN_PATH"
+        debug_log "DEBUG" "Bin dir: $BIN_DIR"
+        debug_log "DEBUG" "Bin file: $BIN_FILE"
+        mv "$BASE_DIR/$file_name" "$BIN_PATH"
         if [ ! -f "$aios_update" ]; then
             read_message="read "
-            debug_log "DEBUG" "Sourced: $install_path"
             touch "$aios_update"
             echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
-            debug_log "DEBUG" "Bin file: $BIN_FILE"            
-            exec "$install_path" "$@"
+                        
+            exec "$BIN_PATH" "$@"
         else
             rm -f "$aios_update"
             echo "$(color yellow "Skipping re-execution; $file_name - Version: $remote_version")"
