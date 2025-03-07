@@ -647,13 +647,13 @@ download() {
     fi
 
     if [ "$file_name" = "$BIN_FILE" ]; then
-        if [ ! -f "$temp_flag" ]; then
+        if [ ! -f "$aios_update" ]; then
             debug_log "DEBUG" "Sourced: $install_path"
             touch "$aios_update"
             debug_log "DEBUG" "aios_update: $aios_update"
             echo "$(color green "Download completed: $file_name - Version: $remote_version")"
             chmod +x "$BIN_FILE"
-            exec . "$install_path"
+            exec "$install_path" "$@"
         else
             rm -f "$aios_update"
             echo "$(color red "Update loop detected, skipping re-execution.")"
