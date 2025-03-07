@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-00-04"
+SCRIPT_VERSION="2025.03.07-00-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -618,6 +618,8 @@ download() {
 
     if [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
         debug_log "DEBUG" "Moving downloaded file to $install_path"
+        debug_log "DEBUG" "Local version is $local_version"
+        debug_log "DEBUG" "Remote version is $remote_version"
         if ! mv "$DL_FILE" "$install_path"; then
             debug_log "ERROR" "Failed to move downloaded file to $install_path"
             echo "Error: Failed to move downloaded file to $install_path" >&2
