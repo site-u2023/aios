@@ -647,13 +647,15 @@ download() {
 
     if [ "$file_name" = "$BIN_FILE" ]; then
         echo "$(color green "Download completed: $file_name - Version: $remote_version")"
+        debug_log "DEBUG" "Sourced: $install_path"
         exec . "$install_path"
     elif [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
         echo "$(color green "Download completed: $file_name - Version: $remote_version")"
-        . "$install_path"
         debug_log "DEBUG" "Sourced: $install_path"
+        . "$install_path"
     else
         echo "$(color green "Download completed: $file_name - Version: $remote_version")"
+        debug_log "DEBUG" "Sourced: $install_path"
     fi
 
     # デバッグログの追加
