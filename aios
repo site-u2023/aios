@@ -648,10 +648,10 @@ download() {
             debug_log "DEBUG" "chmod +x applied to $file_name"
         fi
 
-        if grep -q "^${file_name}=" "$script_db"; then
-            sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_db"
+        if grep -q "^${file_name}=" "$script_file"; then
+            sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_file"
         else
-            echo "${file_name}=${remote_version}" >> "$script_db"
+            echo "${file_name}=${remote_version}" >> "$script_file"
         fi
     else
         if [ "$quiet_mode" != "true" ]; then
