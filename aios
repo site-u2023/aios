@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.07-03-04"
+SCRIPT_VERSION="2025.03.07-03-06"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -547,12 +547,13 @@ remote_normalize_version() {
     echo "$input"
 }
 
+# local_normalize_version関数の定義
 local_normalize_version() {
     local script_file="$1"
     local file_name="$2"
     local input
     input=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
-    input=$(echo "$input" | grep -Eo '([0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*)')
+    input=$(echo "$input" | grep -Eo '([0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}\.[0-9.]+)')
     input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
     input=$(echo "$input" | tr -d '\n' | sed 's/ *$//')
     input=$(echo "$input" | sed -E 's/(^|[._-])0+([0-9])/\1\2/g')
@@ -609,13 +610,13 @@ download() {
     response=$(echo "$api_response" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
     decoded_content=$(decode_base64 "$response")
 
-    remote_version=$(remote_normalize_version "$decoded_content")
+    local remote_version=$(remote_normalize_version "$decoded_content")
     if [ -z "$remote_version" ]; then
         remote_version="$dummy_remote_version"
     fi
     debug_log "DEBUG" "Remote version is $remote_version"
 
-    local_version=$(local_normalize_version "$script_file" "$file_name")
+    local local_version=$(local_normalize_version "$script_file" "$file_name")
     if [ -z "$local_version" ]; then
         local_version="$dummy_local_version"
     fi  
