@@ -631,7 +631,7 @@ download() {
     if [ -z "$download_remote_version" ]; then
         download_remote_version="$download_dummy_remote_version"
     fi
-    debug_log "DEBUG" "Remote version is $download_remote_version"
+    debug_log "DEBUG" "Remote version: "$download_file_name" - $download_remote_version"
 
     if [ -f "$download_script_file" ]; then
         download_local_version=$(local_normalize_version "$download_script_file" "$download_file_name")
@@ -639,7 +639,7 @@ download() {
     if [ -z "$download_local_version" ]; then
         download_local_version="$download_dummy_local_version"
     fi  
-    debug_log "DEBUG" "Local version is $download_local_version"
+    debug_log "DEBUG" "Local version: "$download_file_name" - $download_local_version"
 
     # 8. メインロジック - バージョン比較と更新処理
     # ===============================
