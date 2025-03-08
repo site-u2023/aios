@@ -1,7 +1,7 @@
 # OpenWrt バージョンデータベース (supported_versions.db)
 # バージョン=パッケージマネージャー|ステータス
 
-SCRIPT_VERSION="2025.02.16-00-00"
+SCRIPT_VERSION=2025.03.08-00-00
 
 # OpenWrt 18.x 系列 (サポート終了)
 18.06.0=opkg|eol
