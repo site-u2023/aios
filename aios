@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-05-00"
+SCRIPT_VERSION="2025.03.08-05-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -678,34 +678,19 @@ download() {
             fi
             debug_log "DEBUG" "Updated $download_script_file with ${download_file_name}=${download_remote_version}"
         fi
-    
-        # 静音モード処理
-        if [ "$download_quiet_mode" != "true" ]; then
-            debug_log "DEBUG" "Quiet mode: $download_file_name - Version: $download_local_version"
-            return 0
-        else
-            echo "$(color green "Update completed: ${download_read_message}$download_file_name - Version: $download_remote_version")" 
-        fi
 
         # 読み込みモード処理
-        if [ "$download_read_mode" = "true" ] || echo "$download_file_name" | grep -q "common.*\\.sh"; then
-	    debug_log "DEBUG" "BIN_FILE: $BIN_FILE"
-	    debug_log "DEBUG" "download_file_name: $download_file_name"
-            download_read_message="read"
-            if [ "$download_file_name" = "$BIN_FILE" ]; then
-		if [ -f "${CACHE_DIR}/aios_updating" ]; then
-        	    rm -f "${CACHE_DIR}/aios_updating"
-        	    return 0
-    		fi
-		touch "${CACHE_DIR}/aios_updating"
-                mv "$download_install_path" "$BIN_PATH"
-                echo "$(color green "Update completed: $download_file_name - Version: $download_remote_version")"               
-                exec "$BIN_PATH" "$@"
-            else
-		debug_log "DEBUG" "Read mode: $download_file_name - Version: $download_local_version"
-                . "$download_install_path"
-            fi
-        fi
+        if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
+	    read_message="read"
+	    . "$install_path"
+	fi
+
+        # aios更新処理
+	if [ "$MODE" != "aios_update" ]; then
+	    mv "$download_install_path" "$BIN_PATH"
+	    echo "$(color green "Update completed: $file_name - Version: $remote_version")"    
+            exec "$BIN_PATH"   
+	fi
 
         # 完了メッセージ
         if [ "$download_quiet_mode" != "true" ]; then
