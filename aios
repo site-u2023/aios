@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-02-04"
+SCRIPT_VERSION="2025.03.08-03-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -833,9 +833,9 @@ OK_download() {
 	    if [ "$file_name" = "$BIN_FILE" ]; then
 	        mv "$install_path" "$BIN_PATH"
 	        echo "$(color green "Update completed: $file_name - Version: $remote_version")"  
-    		    if [ "$MODE" != "update-self" ]; then
+    		    if [ "$MODE" != "update_aios" ]; then
                     # 通常起動時に更新された場合は、更新専用モードで再起動
-                    exec "$BIN_PATH" update-aios
+                    exec "$BIN_PATH" update_aios
                 else
                     # 更新専用モードの場合は単に終了
                     return 0
