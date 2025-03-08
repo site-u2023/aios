@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-01-00"
+SCRIPT_VERSION="2025.03.08-01-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -666,7 +666,7 @@ download() {
 
 	if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
 	    read_message="read "
-	    if [ "$file_name" = "$BIN_FILE" ]; then
+	    if [ "$file_name" = "$BIN_PATH" ]; then
 		mv "$install_path" "$BIN_PATH"
 	        echo "$(color green "Update completed: ${read_message}$file_name - Version: $remote_version")"               
             	chmod +x "$BIN_PATH"
@@ -990,7 +990,7 @@ main() {
     initialization
     check_option "$@"
     debug_log "DEBUG" "Executing script with BIN_PATH: $BIN_PATH"
-    if [ "$0" != "$BIN_PATH" ]; then
+    if [ "$0" != "$BIN_FILE" ]; then
         # コマンドとして実行された場合はスクリプトの更新を確認
         download "hidden" "aios" "chmod" "read"
     fi
