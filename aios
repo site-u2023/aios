@@ -671,12 +671,13 @@ download() {
 	    echo "$(color green "Update completed: ${read_message}$file_name - Version: $remote_version")"               
             exec "$BIN_PATH" "$@"
 	    return 0
+	else
+	    . "$install_path"
 	fi
     fi
         
     echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
     debug_log "DEBUG" "Sourced: $install_path"
-    . "$install_path"
 
     # デバッグログの追加
     debug_log "DEBUG" "Finished download function for $file_name"
