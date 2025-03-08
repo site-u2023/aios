@@ -1,7 +1,7 @@
 # メッセージデータベース (多言語対応)
 # フォーマット: 言語コード|メッセージキー=メッセージ
 
-SCRIPT_VERSION=2025.03.08-00-00
+SCRIPT_VERSION="2025.03.08-00-00"
 
 SUPPORTED_LANGUAGES="US JP"
 
