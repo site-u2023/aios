@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-00-07"
+SCRIPT_VERSION="2025.03.08-00-08"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -51,7 +51,8 @@ DEV_NULL="${DEV_NULL:-on}"
 BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q -O}"
 # BASE_WGET="${BASE_WGET:-wget -O}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
-BIN_PATH=$(readlink -f "$0")
+# BIN_PATH=$(readlink -f "$0")
+BIN_PATH="/usr/bin/aios"
 BIN_DIR="$(dirname "$BIN_PATH")"
 BIN_FILE="$(basename "$BIN_PATH")"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
