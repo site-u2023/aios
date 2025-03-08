@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-01-14"
+SCRIPT_VERSION="2025.03.08-01-15"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -651,7 +651,6 @@ download() {
             debug_log "DEBUG" "Finished download function for $download_file_name"
             debug_log "DEBUG" "Sourced: $download_install_path"
             echo "$(color green "Download completed: ${download_read_message}$download_file_name - Version: $download_remote_version")" 
-            return 0
         fi 
 
         # ダウンロードファイルの検証
@@ -695,34 +694,30 @@ download() {
                 mv "$download_install_path" "$BIN_PATH"
                 echo "$(color green "Update completed: $download_file_name - Version: $download_remote_version")"               
                 exec "$BIN_PATH" "$@"
-                return 0
             else
+		debug_log "DEBUG" "Read mode: $download_file_name - Version: $download_local_version"
                 . "$download_install_path"
-                return 0
             fi
         fi
 
         # 完了メッセージ
         if [ "$download_quiet_mode" != "true" ]; then
             debug_log "DEBUG" "Quiet mode download completed: $download_read_message $download_file_name - Version: $download_local_version"
-            return 0
         else
             echo "$(color green "Download completed: $download_read_message $download_file_name - Version: $download_remote_version")"
-            return 0
         fi
 
     # 9. 既存ファイルの処理（更新不要の場合）
     # ===============================
     elif [ "$download_read_mode" = "true" ] || echo "$download_file_name" | grep -q "common.*\\.sh"; then
         . "$download_install_path"
-        return 0
     elif [ "$download_quiet_mode" != "true" ]; then
         debug_log "DEBUG" "Quiet mode already up to date: $download_file_name - Version: $download_local_version"
-        return 0
     else
         echo "$(color green "Already up to date: $download_file_name - Version: $download_local_version")"
-        return 0
     fi
+
+    return 0
 }
 
 OK_download() {
@@ -822,7 +817,6 @@ OK_download() {
     
         if [ "$quiet_mode" != "true" ]; then
 	    debug_log "DEBUG" "Quiet mode: $file_name - Version: $local_version"
-	    return 0
         else
 	    echo "$(color green "Update completed: ${read_message}$file_name - Version: $remote_version")" 
         fi
@@ -842,10 +836,8 @@ OK_download() {
 
 	if [ "$quiet_mode" != "true" ]; then
 	    debug_log "DEBUG" "Quiet mode download completed: $read_message $file_name - Version: $local_version"
-	    return 0
         else
 	    echo "$(color green "Download completed: $read_message $file_name - Version: $remote_version")"
-	    return 0
         fi
 
     elif [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
@@ -853,11 +845,12 @@ OK_download() {
 	return 0
     elif [ "$quiet_mode" != "true" ]; then
 	debug_log "DEBUG" "Quiet mode already up to date: $file_name - Version: $local_version"
-	return 0
     else
 	echo "$(color green "Already up to date: $file_name - Version: $local_version")"
 	return 0
     fi
+
+    return 0
 }
 
 # 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
