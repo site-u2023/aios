@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-00-00"
+SCRIPT_VERSION="2025.03.09-00-02"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -971,6 +971,9 @@ check_common() {
             echo "$(get_message "MSG_RESET_COMPLETE")"
             exit 0
             ;;
+        aios_update)
+	    download "hidden" "chmod" "aios"
+	    ;;
         full)
             download "hidden" "common-country.sh" "chmod"
             download "hidden" "common-package.sh" "chmod"
@@ -1005,9 +1008,6 @@ check_common() {
             download "system-config.sh" "chmod" "read"
             #packages
             ;;
-        aios_update)
-	    download "hidden" "chmod" "aios"
-	    ;;
         return)
             rm -f "${CACHE_DIR}/country.ch" \
                   "${CACHE_DIR}/language.ch" \
