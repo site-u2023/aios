@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-05-14"
+SCRIPT_VERSION="2025.03.08-05-15"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -57,8 +57,9 @@ BIN_FILE="$(basename "$BIN_PATH")"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
-LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
+LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
+AIOS_INITIALIZED="false"
 
 # 🔵　エラー・デバッグ・アップデート系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
@@ -159,12 +160,10 @@ debug_log() {
             "DEBUG") echo -e "$(color white "$log_message")" ;;
         esac
 
+	# ログファイルに記録
 	if [ "$AIOS_INITIALIZED" = "true" ]; then
     	    echo "$log_message" >> "$LOG_DIR/debug.log"
 	fi
-
-        # ログファイルに記録
-        echo "$log_message" >> "$LOG_DIR/debug.log"
     fi
 }
 
@@ -854,7 +853,7 @@ packages() {
 #       キャッシュリセット、ドライラン、ログ出力先 /var/log/aios.log、強制実行が有効になる。
 #########################################################################
 check_option() {
-    debug_log "ECHO" "check_option received before args: $*"
+    debug_log "ERROR" "check_option received before args: $*"
 
     # デフォルト値の設定
     SELECTED_LANGUAGE=""
@@ -930,6 +929,8 @@ check_option() {
         esac
         shift
     done
+
+    AIOS_INITIALIZED="true"
 
     # 環境変数として設定
     export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET AIOS_UPDATE HELP
