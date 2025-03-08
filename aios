@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-00-02"
+SCRIPT_VERSION="2025.03.09-00-04"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -571,150 +571,157 @@ download() {
     # 1. 初期設定
     # ===============================
     # 設定変数
-    download_hidden_mode="false"
-    download_quiet_mode="${QUIET_MODE:-false}"
-    download_chmod_mode="false"
-    download_read_mode="false"
-    download_file_name=""
-    download_script_file="${CACHE_DIR}/script.ch"
-    download_repo_owner="site-u2023"
-    download_repo_name="aios"
-    download_dummy_remote_version="No remote version control."
-    download_dummy_local_version="No local version control."
-    download_read_message=""
+    local hidden_mode="false"
+    local quiet_mode="${QUIET_MODE:-false}"
+    local chmod_mode="false"
+    local read_mode="false"
+    local file_name=""
+    local script_file="${CACHE_DIR}/script.ch"
+    local repo_owner="site-u2023"
+    local repo_name="aios"
+    local dummy_remote_version="No remote version control."
+    local dummy_local_version="No local version control."
+    local read_message=""
+    local self_update="false"
 
     # 2. 引数処理
     # ===============================
     while [ "$#" -gt 0 ]; do
         case "$1" in
-            hidden) download_hidden_mode="true" ;;
-            quiet)  download_quiet_mode="true" ;;
+            hidden) hidden_mode="true" ;;
+            quiet)  quiet_mode="true" ;;
             debug)  DEBUG_MODE="true" ;;
-            chmod)  download_chmod_mode="true" ;;
-            read)   download_read_mode="true" ;;
-            *)      download_file_name="$1" ;;
+            chmod)  chmod_mode="true" ;;
+            read)   read_mode="true" ;;
+            *)      file_name="$1" ;;
         esac
         shift
     done
 
     # 3. パス・URLの設定
     # ===============================
-    download_install_path="${BASE_DIR}/$download_file_name"
-    download_remote_url="${BASE_URL}/$download_file_name"
-    download_api_url="https://api.github.com/repos/${download_repo_owner}/${download_repo_name}/contents/${download_file_name}"
+    local install_path="${BASE_DIR}/$file_name"
+    local remote_url="${BASE_URL}/$file_name"
+    local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/${file_name}"
+
+    if [ "$file_name" = "$BIN_FILE" ]; then
+        self_update="true"
+        debug_log "DEBUG" "aios update detected for $BIN_FILE"
+    fi
 
     # 4. 入力検証
     # ===============================
-    if [ -z "$download_file_name" ]; then
+    if [ -z "$file_name" ]; then
         echo "Error: No file name provided" >&2
         return 1
     fi
 
     # 5. GitHubからメタデータ取得
     # ===============================
-    download_api_response=$(wget -qO- "$download_api_url")
-    download_remote_version=""
-    download_local_version=""
-    download_response=""
-    download_decoded_content=""
+    api_response=$(wget -qO- "$api_url")
+    remote_version=""
+    local_version=""
+    response=""
+    decoded_content=""
 
-    if [ -z "$download_api_response" ]; then
+    if [ -z "$api_response" ]; then
         echo "ERROR: Could not retrieve file content from GitHub API" >&2
         return 1
     fi
 
     # 6. コンテンツの処理
     # ===============================
-    download_response=$(echo "$download_api_response" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
-    download_decoded_content=$(decode_base64 "$download_response")
+    response=$(echo "$api_response" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
+    decoded_content=$(decode_base64 "$response")
 
     # 7. バージョン情報の取得
     # ===============================
-    download_remote_version=$(remote_normalize_version "$download_decoded_content")
-    if [ -z "$download_remote_version" ]; then
-        download_remote_version="$download_dummy_remote_version"
+    remote_version=$(remote_normalize_version "$decoded_content")
+    if [ -z "$remote_version" ]; then
+        remote_version="$dummy_remote_version"
     fi
-    debug_log "DEBUG" "Remote version: "$download_file_name" - $download_remote_version"
+    debug_log "DEBUG" "Remote version: "$file_name" - $remote_version"
 
-    if [ -f "$download_script_file" ]; then
-        download_local_version=$(local_normalize_version "$download_script_file" "$download_file_name")
+    if [ -f "$script_file" ]; then
+        local_version=$(local_normalize_version "$script_file" "$file_name")
     fi
-    if [ -z "$download_local_version" ]; then
-        download_local_version="$download_dummy_local_version"
+    if [ -z "$local_version" ]; then
+        local_version="$dummy_local_version"
     fi  
-    debug_log "DEBUG" "Local version: "$download_file_name" - $download_local_version"
+    debug_log "DEBUG" "Local version: "$file_name" - $local_version"
 
     # 8. メインロジック - バージョン比較と更新処理
     # ===============================
-    if [ -z "$download_local_version" ] || [ "$download_local_version" != "$download_remote_version" ]; then
+    if [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
         # ファイルのダウンロード処理
-        if ! $BASE_WGET "$download_install_path" "$download_remote_url"; then
-            debug_log "ERROR" "Download failed: $download_file_name is empty"
-            echo "Error: Download failed: $download_file_name is empty." >&2
-            debug_log "DEBUG" "Finished download function for $download_file_name"
-            debug_log "DEBUG" "Sourced: $download_install_path"
-            echo "$(color green "Download completed: ${download_read_message}$download_file_name - Version: $download_remote_version")" 
+        if ! $BASE_WGET "$install_path" "$remote_url"; then
+            debug_log "ERROR" "Download failed: $file_name is empty"
+            echo "Error: Download failed: $file_name is empty." >&2
+            debug_log "DEBUG" "Finished download function for $file_name"
+            debug_log "DEBUG" "Sourced: $install_path"
+            echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version" 
         fi 
 
         # ダウンロードファイルの検証
-        if [ ! -s "$download_install_path" ]; then
-            debug_log "ERROR" "Download failed: $download_file_name is empty"
-            echo "Error: Download failed: $download_file_name is empty." >&2
+        if [ ! -s "$install_path" ]; then
+            debug_log "ERROR" "Download failed: $file_name is empty"
+            echo "Error: Download failed: $file_name is empty." >&2
             return 1
         fi
 
         # 権限設定
-        if [ "$download_chmod_mode" = "true" ]; then
-            chmod +x "$download_install_path"
-            debug_log "DEBUG" "chmod +x applied to $download_file_name"
+        if [ "$chmod_mode" = "true" ]; then
+            chmod +x "$install_path"
+            debug_log "DEBUG" "chmod +x applied to $file_name"
         fi
 
         # バージョン情報の更新
-        if [ ! -f "$download_script_file" ]; then
-            echo "${download_file_name}=${download_remote_version}" > "$download_script_file"
-            debug_log "DEBUG" "Created $download_script_file with ${download_file_name}=${download_remote_version}"
+        if [ ! -f "$script_file" ]; then
+            echo "${file_name}=${remote_version}" > "$script_file"
+            debug_log "DEBUG" "Created $script_file with ${file_name}=${remote_version}"
         else
-            if grep -q "^${download_file_name}=" "$download_script_file"; then
-                sed -i "s|^${download_file_name}=.*|${download_file_name}=${download_remote_version}|" "$download_script_file"
+            if grep -q "^${file_name}=" "$script_file"; then
+                sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_file"
             else
-                echo "${download_file_name}=${download_remote_version}" >> "$download_script_file"
+                echo "${file_name}=${remote_version}" >> "$script_file"
             fi
-            debug_log "DEBUG" "Updated $download_script_file with ${download_file_name}=${download_remote_version}"
+            debug_log "DEBUG" "Updated $script_file with ${file_name}=${remote_version}"
         fi
 
         # 読み込みモード処理
-        if [ "$download_read_mode" = "true" ] || echo "$download_file_name" | grep -q "common.*\\.sh"; then
-	    download_read_message="read"
-	    . "$download_install_path"
+        if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
+	    read_message="read"
+	    . "$install_path"
 	fi
 
         # aios更新処理
-	if [ "$MODE" = "aios_update" ]; then
-	    chmod +x "$download_install_path"
-	    mv "$download_install_path" "$BIN_PATH"
-	    echo "$(color green "Update completed: $download_file_name - Version: $download_remote_version}")"    
+	if [ "$self_update" = "true" ] && [ "$MODE" = "aios_update" ]; then
+	    chmod +x "$install_path"
+	    mv "$install_path" "$BIN_PATH"
+	    echo "$(color green "Update completed: $file_name - Version: $remote_version}"    
             exec "$BIN_PATH"   
 	fi
 
         # 完了メッセージ
-        if [ "$download_quiet_mode" != "true" ]; then
-            debug_log "DEBUG" "Quiet mode download completed: $download_read_message $download_file_name - Version: $download_local_version"
+        if [ "$quiet_mode" != "true" ]; then
+            debug_log "DEBUG" "Quiet mode download completed: $read_message $file_name - Version: $local_version"
         else
-            echo "$(color green "Download completed: $download_read_message $download_file_name - Version: $download_remote_version")"
+            echo "$(color green "Download completed: $read_message $file_name - Version: $remote_version")"
         fi
 
     # 9. 既存ファイルの処理（更新不要の場合）
     # ===============================
-    elif [ "$download_read_mode" = "true" ] || echo "$download_file_name" | grep -q "common.*\\.sh"; then
-        . "$download_install_path"
-    elif [ "$download_quiet_mode" != "true" ]; then
-        debug_log "DEBUG" "Quiet mode already up to date: $download_file_name - Version: $download_local_version"
+    elif [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
+        . "$install_path"
+    elif [ "$quiet_mode" != "true" ]; then
+        debug_log "DEBUG" "Quiet mode already up to date: $file_name - Version: $local_version"
     else
-        echo "$(color green "Already up to date: $download_file_name - Version: $download_local_version")"
+        echo "$(color green "Already up to date: $file_name - Version: $local_version")"
     fi
 
     return 0
 }
+
 
 # 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
