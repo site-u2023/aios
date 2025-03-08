@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-01-08"
+SCRIPT_VERSION="2025.03.09-02-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -611,61 +611,76 @@ download() {
         return 1
     fi
 
+    if [ "$file_name" = "country.db" ]; then
+	skip_api="true"
+	debug_log "DEBUG" "skip API for country.db - No version information"
+    fi
+
     # 5. GitHubからメタデータ取得
     # ===============================
-    loca api_response=$(wget -qO- "$api_url")
+    local api_response=""
     local remote_version=""
     local local_version=""
     local response=""
     local decoded_content=""
-    local skip_api=false
-
-    if [ "$file_name" = "countrys.db" ]; then
-	skip_api=true
-	debug_log "DEBUG" "skip api for countrys.db"
-    fi
 	
-    if [ -z "$api_response" ]; then
-        echo "ERROR: Could not retrieve file content from GitHub API" >&2
-	debug_log "DEBUG" $BASE_WGET "https://api.github.com/rate_limit"
-        skip_api=true
+    if [ "$skip_api" = "false" ]; then
+        # APIからメタデータ取得を試行
+        api_response=$(wget -qO- "$api_url" 2>/dev/null)
+        
+        # API応答チェック
+        if [ -z "$api_response" ]; then
+            debug_log "WARN" "Could not retrieve content from GitHub API - falling back to direct download"
+            # レート制限確認（ログ用）
+            wget -qO- "https://api.github.com/rate_limit" > "${CACHE_DIR}/rate_limit.tmp" 2>/dev/null
+            if [ -s "${CACHE_DIR}/rate_limit.tmp" ]; then
+                remaining=$(grep -o '"remaining":[0-9]*' "${CACHE_DIR}/rate_limit.tmp" | head -1 | cut -d':' -f2)
+                debug_log "DEBUG" "GitHub API remaining requests: $remaining"
+            fi
+            skip_api="true"
+        elif echo "$api_response" | grep -q "rate limit exceeded"; then
+            debug_log "WARN" "GitHub API rate limit exceeded - falling back to direct download"
+            skip_api="true"
+        fi
     fi
 
     # 6. コンテンツの処理
     # ===============================
     if [ "$skip_api" = "false" ]; then
-	debug_log "DEBUG" "Checking version via API: $file_name"
+        debug_log "DEBUG" "Processing API response for: $file_name"
         response=$(echo "$api_response" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
         decoded_content=$(decode_base64 "$response")
-    fi
-
-    # 7. バージョン情報の取得
-    # ===============================
-    remote_version=$(remote_normalize_version "$decoded_content")
-    if [ -z "$remote_version" ]; then
+        
+        # バージョン情報の取得
+        remote_version=$(remote_normalize_version "$decoded_content")
+        if [ -z "$remote_version" ]; then
+            remote_version="$dummy_remote_version"
+        fi
+        debug_log "DEBUG" "Remote version: $file_name - $remote_version"
+    else
+        debug_log "DEBUG" "Skipping API version check for: $file_name"
         remote_version="$dummy_remote_version"
     fi
-    debug_log "DEBUG" "Remote version: "$file_name" - $remote_version"
 
+    # 7. ローカルバージョン情報の取得
+    # ===============================
     if [ -f "$script_file" ]; then
         local_version=$(local_normalize_version "$script_file" "$file_name")
     fi
     if [ -z "$local_version" ]; then
         local_version="$dummy_local_version"
     fi  
-    debug_log "DEBUG" "Local version: "$file_name" - $local_version"
+    debug_log "DEBUG" "Local version: $file_name - $local_version"
 
     # 8. メインロジック - バージョン比較と更新処理
     # ===============================
-    if [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
+    if [ "$skip_api" = "true" ] || [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
         # ファイルのダウンロード処理
-        if ! $BASE_WGET "$install_path" "$remote_url"; then
-            debug_log "ERROR" "Download failed: $file_name is empty"
-            echo "Error: Download failed: $file_name is empty." >&2
-            debug_log "DEBUG" "Finished download function for $file_name"
-            debug_log "DEBUG" "Sourced: $install_path"
-            echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")" 
-        fi 
+	if ! $BASE_WGET "$install_path" "$remote_url"; then
+    	    debug_log "ERROR" "Download failed: $file_name is empty"
+    	    echo "Error: Download failed: $file_name is empty." >&2
+    	    return 1
+	fi
         # ダウンロードファイルの検証
         if [ ! -s "$install_path" ]; then
             debug_log "ERROR" "Download failed: $file_name is empty"
@@ -679,17 +694,19 @@ download() {
             debug_log "DEBUG" "chmod +x applied to $file_name"
         fi
 
-        # バージョン情報の更新
-        if [ ! -f "$script_file" ]; then
-            echo "${file_name}=${remote_version}" > "$script_file"
-            debug_log "DEBUG" "Created $script_file with ${file_name}=${remote_version}"
-        else
-            if grep -q "^${file_name}=" "$script_file"; then
-                sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_file"
+        # バージョン情報の更新 (APIスキップ時は更新しない)
+        if [ "$skip_api" = "false" ]; then
+            if [ ! -f "$script_file" ]; then
+                echo "${file_name}=${remote_version}" > "$script_file"
+                debug_log "DEBUG" "Created $script_file with ${file_name}=${remote_version}"
             else
-                echo "${file_name}=${remote_version}" >> "$script_file"
+                if grep -q "^${file_name}=" "$script_file"; then
+                    sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_file"
+                else
+                    echo "${file_name}=${remote_version}" >> "$script_file"
+                fi
+                debug_log "DEBUG" "Updated $script_file with ${file_name}=${remote_version}"
             fi
-            debug_log "DEBUG" "Updated $script_file with ${file_name}=${remote_version}"
         fi
 
         # 読み込みモード処理
