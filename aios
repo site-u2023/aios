@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-01-01"
+SCRIPT_VERSION="2025.03.08-01-02"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -694,7 +694,7 @@ download() {
 # 権限設定
 chmod_aios() {
     debug_log "DEBUG" "Setting permissions for $BIN_PATH"
-    if ! chmod +x "$BIN_FILE"; then
+    if ! chmod +x "$BIN_PATH"; then
         debug_log "ERROR" "Failed to set permissions for $BIN_PATH"
         return 1
     fi
@@ -987,13 +987,13 @@ check_common() {
 
 # メイン処理
 main() {
-    initialization
-    check_option "$@"
     debug_log "DEBUG" "Executing script with BIN_PATH: $BIN_PATH"
     if [ "$0" != "$BIN_FILE" ]; then
         # コマンドとして実行された場合はスクリプトの更新を確認
         download "hidden" "aios" "chmod" "read"
     fi
+    initialization
+    check_option "$@"
 }
 
 # 🔴　メイン　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
