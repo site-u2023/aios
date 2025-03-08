@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-00-05"
+SCRIPT_VERSION="2025.03.08-00-06"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -571,8 +571,6 @@ download() {
     chmod_mode="false"
     read_mode="false"
     file_name=""
-    local remote_version=""
-    local local_version=""
     script_file="${CACHE_DIR}/script.ch"
     aios_update="${CACHE_DIR}/aios_update.ch"
     repo_owner="site-u2023"
@@ -596,6 +594,10 @@ download() {
     remote_url="${BASE_URL}/$file_name"
     api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/${file_name}"
     api_response=$(wget -qO- "$api_url")
+    local remote_version=""
+    local local_version=""
+    local response=""
+    local decoded_content=""
 
     if [ -z "$file_name" ]; then
         echo "Error: No file name provided" >&2
