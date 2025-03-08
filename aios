@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-02-02"
+SCRIPT_VERSION="2025.03.08-02-03"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -866,11 +866,6 @@ OK_download() {
 #########################################################################
 # 初期設定
 #########################################################################
-update_aios() {
-    debug_log "DEBUG" "Updating $BIN_PATH script..."
-    download "aios" "chmod" "read"
-}
-
 # 権限設定
 chmod_aios() {
     debug_log "DEBUG" "Setting permissions for $BIN_PATH"
@@ -898,14 +893,14 @@ make_directory() {
     fi
 }
 
+# aiosアップデート
+update_aios() {
+    debug_log "DEBUG" "Updating $BIN_PATH script..."
+    download "hidden" "aios" "read"
+}
+
 # 初期化処理を実行
 initialization() {
-    # コマンドとして実行された場合はスクリプトの更新を確認
-    debug_log "DEBUG" "Executing script with BIN_PATH: $BIN_PATH"
-    if [ "$0" != "$BIN_FILE" ]; then
-        update_aios
-    fi
-
     # 実行権限を設定
     if ! chmod_aios; then
         debug_log "ERROR" "Failed to set execute permission"
@@ -916,6 +911,12 @@ initialization() {
     if ! make_directory; then
         debug_log "ERROR" "Failed to create required directories"
         return 1
+    fi
+
+    # コマンドとして実行された場合はスクリプトの更新を確認
+    if [ "$0" != "$BIN_FILE" ]; then
+        debug_log "DEBUG" "Executing script with BIN_PATH: $BIN_PATH"
+        update_aios
     fi
 }
 
@@ -1168,7 +1169,7 @@ check_common() {
             select_country
             ;;
 	update_aios)
-	    download "aios" "chmod" "read"
+	    download "hidden" "aios" "read"
     	    exit 0
     	    ;;
         *)
