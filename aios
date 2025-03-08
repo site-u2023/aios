@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-05-06"
+SCRIPT_VERSION="2025.03.08-05-07"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -721,7 +721,7 @@ download() {
 #########################################################################
 # 権限設定
 chmod_aios() {
-debug_log "DEBUG" 4
+debug_log "DEBUG" echo "4"
     debug_log "DEBUG" "Setting permissions for $BIN_PATH"
     if ! chmod +x "$BIN_PATH"; then
         debug_log "ERROR" "Failed to set permissions for $BIN_PATH"
@@ -749,7 +749,7 @@ make_directory() {
 
 # 初期化処理を実行
 initialization() {
-debug_log "DEBUG" 3
+debug_log "DEBUG" echo "3"
     # 実行権限を設定
     debug_log "DEBUG" "BIN PATH: $BIN_PATH"
     if ! chmod_aios; then
@@ -1023,7 +1023,7 @@ check_common() {
 
 # メイン処理
 main() {
-debug_log "DEBUG" 2
+debug_log "DEBUG" echo "2"
     initialization
     check_option "$@"
 }
@@ -1031,5 +1031,5 @@ debug_log "DEBUG" 2
 # 🔴　メイン　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # スクリプト実行
-debug_log "DEBUG" 1
+debug_log "DEBUG" echo "1"
 main "$@"
