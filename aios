@@ -664,15 +664,14 @@ download() {
         fi
     fi
 
-	if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
-	    read_message="read "
-	    if [ "$file_name" = "$BIN_PATH" ]; then
-		mv "$install_path" "$BIN_PATH"
-	        echo "$(color green "Update completed: ${read_message}$file_name - Version: $remote_version")"               
-            	chmod +x "$BIN_PATH"
-            	exec "$BIN_PATH" "$@"
-	    	return 0
-	    fi
+    if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
+	read_message="read "
+	if [ "$file_name" = "$BIN_FILE" ]; then
+	    mv "$install_path" "$BIN_PATH"
+	    echo "$(color green "Update completed: ${read_message}$file_name - Version: $remote_version")"               
+            exec "$BIN_PATH" "$@"
+	    return 0
+	fi
         echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
         debug_log "DEBUG" "Sourced: $install_path"
         . "$install_path"
