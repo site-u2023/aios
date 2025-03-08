@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-04-00"
+SCRIPT_VERSION="2025.03.08-04-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -830,13 +830,13 @@ OK_download() {
 
         if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
 	    read_message="read"
-	    if [ "$MODE" != "aios_update" ]; then
-	        mv "$install_path" "$BIN_PATH"
-	        echo "$(color green "Update completed: $file_name - Version: $remote_version")"    
-                exec "$BIN_PATH"
-	    else
 	        . "$install_path"
-	    fi
+	fi
+
+	if [ "$MODE" != "aios_update" ]; then
+	    mv "$install_path" "$BIN_PATH"
+	    echo "$(color green "Update completed: $file_name - Version: $remote_version")"    
+            exec "$BIN_PATH"   
 	fi
 
 	if [ "$quiet_mode" != "true" ]; then
@@ -1145,7 +1145,7 @@ check_common() {
             #packages
             ;;
         aios_update)
-	    download "hidden" "chmod" "aios" "read"
+	    download "hidden" "chmod" "aios"
 	    ;;
         return)
             rm -f "${CACHE_DIR}/country.ch" \
