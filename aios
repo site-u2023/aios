@@ -635,8 +635,6 @@ download() {
             return 1
         fi
 
-        debug_log "DEBUG" "File moved successfully to $install_path"
-
         if [ "$chmod_mode" = "true" ]; then
             chmod +x "$install_path"
             debug_log "DEBUG" "chmod +x applied to $file_name"
