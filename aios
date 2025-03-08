@@ -60,13 +60,6 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 
-# メイン処理
-main() {
-debug_log "ERROR" "2"
-    initialization
-    check_option "$@"
-}
-
 # 🔵　エラー・デバッグ・アップデート系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
 # Last Update: 2025-02-16 16:00:00 (JST) 🚀
@@ -728,8 +721,7 @@ download() {
 #########################################################################
 # 権限設定
 chmod_aios() {
-echo "4"
-    debug_log "DEBUG" "Setting permissions for $BIN_PATH"
+    debug_log "INFO" "Setting permissions for $BIN_PATH"
     if ! chmod +x "$BIN_PATH"; then
         debug_log "ERROR" "Failed to set permissions for $BIN_PATH"
         return 1
@@ -738,7 +730,7 @@ echo "4"
 
 # 初期化処理
 delete_aios() {
-    debug_log "DEBUG" "Deleting $BASE_DIR"
+    debug_log "INFO" "Deleting $BASE_DIR"
     if ! rm -rf "${BASE_DIR}"; then
         debug_log "ERROR" "Failed to delete $BASE_DIR"
         return 1
@@ -747,7 +739,7 @@ delete_aios() {
 
 # 必要ディレクトリ作成
 make_directory() {
-    debug_log "DEBUG" "Creating required directories"
+    debug_log "INFO" "Creating required directories"
     if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"; then
         debug_log "ERROR" "Failed to create required directories"
         return 1
@@ -756,9 +748,8 @@ make_directory() {
 
 # 初期化処理を実行
 initialization() {
-echo "3"
     # 実行権限を設定
-    debug_log "DEBUG" "BIN PATH: $BIN_PATH"
+    debug_log "INFO" "BIN PATH: $BIN_PATH"
     if ! chmod_aios; then
         debug_log "ERROR" "Failed to set execute permission"
         return 1
@@ -859,7 +850,7 @@ packages() {
 #       キャッシュリセット、ドライラン、ログ出力先 /var/log/aios.log、強制実行が有効になる。
 #########################################################################
 check_option() {
-    debug_log DEBUG "check_option received before args: $*"
+    debug_log INFO "check_option received before args: $*"
 
     # デフォルト値の設定
     SELECTED_LANGUAGE=""
@@ -1028,8 +1019,13 @@ check_common() {
     esac
 }
 
+# メイン処理
+main() {
+    initialization
+    check_option "$@"
+}
+
 # 🔴　メイン　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # スクリプト実行
-debug_log "ERROR" "1"
 main "$@"
