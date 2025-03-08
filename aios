@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-05-13"
+SCRIPT_VERSION="2025.03.08-05-14"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -159,8 +159,12 @@ debug_log() {
             "DEBUG") echo -e "$(color white "$log_message")" ;;
         esac
 
+	if [ "$AIOS_INITIALIZED" = "true" ]; then
+    	    echo "$log_message" >> "$LOG_DIR/debug.log"
+	fi
+
         # ログファイルに記録
-        echo "$log_message" >> "$LOG_DIR/debug.log" 2>/dev/null
+        echo "$log_message" >> "$LOG_DIR/debug.log"
     fi
 }
 
