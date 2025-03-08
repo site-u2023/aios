@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-05-03"
+SCRIPT_VERSION="2025.03.08-05-04"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -740,7 +740,7 @@ delete_aios() {
 # 必要ディレクトリ作成
 make_directory() {
     debug_log "DEBUG" "Creating required directories"
-    if ! mkdir -p "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"; then
+    if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"; then
         debug_log "ERROR" "Failed to create required directories"
         return 1
     fi
