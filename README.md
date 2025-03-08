@@ -11,6 +11,11 @@ January 25, 2025: version α
 
 ## ダウンロード
 
+### WGET
+```sh
+wget -q -O /usr/bin/aios "https://raw.githubusercontent.com/site-u2023/aios/main/aios; aios
+```
+
 ### キャッシュフリー
 ```sh
 wget -q -O /usr/bin/aios "https://raw.githubusercontent.com/site-u2023/aios/main/aios?cache_bust=$(date +%s)"; aios
