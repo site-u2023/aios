@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-01-06"
+SCRIPT_VERSION="2025.03.08-01-07"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -606,7 +606,7 @@ download() {
 
     if [ -z "$api_response" ]; then
         echo "ERROR: Could not retrieve file content from GitHub API" >&2
-        exit 1
+        return 1
     fi
 
     #echo "DEBUG: API response: $api_response"
@@ -632,8 +632,11 @@ download() {
         if ! $BASE_WGET "$install_path" "$remote_url"; then
             debug_log "ERROR" "Download failed: $file_name is empty"
             echo "Error: Download failed: $file_name is empty." >&2
-            return 1
-        fi
+    	    debug_log "DEBUG" "Finished download function for $file_name"
+    	    debug_log "DEBUG" "Sourced: $install_path"
+    	    echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")" 
+            return 0
+        fi 
 
         if [ ! -s "$install_path" ]; then
             debug_log "ERROR" "Download failed: $file_name is empty"
@@ -673,14 +676,9 @@ download() {
 	    return 0
 	else
 	    . "$install_path"
+	    return 0
 	fi
-    fi
-        
-    echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
-    debug_log "DEBUG" "Sourced: $install_path"
-
-    # デバッグログの追加
-    debug_log "DEBUG" "Finished download function for $file_name"
+    fi 
 }
 
 # 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
