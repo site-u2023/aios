@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-03-01"
+SCRIPT_VERSION="2025.03.08-04-00"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -830,19 +830,12 @@ OK_download() {
 
         if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
 	    read_message="read"
-	    if [ "$file_name" = "$BIN_FILE" ]; then
+	    if [ "$MODE" != "aios_update" ]; then
 	        mv "$install_path" "$BIN_PATH"
-	        echo "$(color green "Update completed: $file_name - Version: $remote_version")"  
-    		    if [ "$MODE" != "update_aios" ]; then
-                    # 通常起動時に更新された場合は、更新専用モードで再起動
-                    exec "$BIN_PATH" update_aios
-                else
-                    # 更新専用モードの場合は単に終了
-                    return 0
-                fi
+	        echo "$(color green "Update completed: $file_name - Version: $remote_version")"    
+                exec "$BIN_PATH"
 	    else
 	        . "$install_path"
-	        return 0
 	    fi
 	fi
 
@@ -1012,6 +1005,7 @@ check_option() {
     LOGFILE=""
     FORCE="false"
     RESET="false"
+    AIOS_UPDATE="false"
     HELP="false"
 
     # 言語およびオプション引数の処理
@@ -1063,7 +1057,7 @@ check_option() {
                 fi
                 ;;
 	    -u|--u|-update|--update)
-    		MODE="update_aios"
+    		MODE="aios_update"
     		;;
             -*)
                 echo "Warning: Unknown option: $1" >&2
@@ -1078,7 +1072,7 @@ check_option() {
     done
 
     # 環境変数として設定
-    export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET HELP
+    export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET AIOS_UPDATE HELP
 
     # デバッグ情報を出力
     debug_log DEBUG "check_option: SELECTED_LANGUAGE='$SELECTED_LANGUAGE', MODE='$MODE', DEBUG_MODE='$DEBUG_MODE', DEBUG_LEVEL='$DEBUG_LEVEL', DRY_RUN='$DRY_RUN', LOGFILE='$LOGFILE', FORCE='$FORCE', RESET='$RESET', HELP='$HELP'"
@@ -1150,6 +1144,9 @@ check_common() {
             download "system-config.sh" "chmod" "read"
             #packages
             ;;
+        aios_update)
+	    download "hidden" "chmod" "aios" "read"
+	    ;;
         return)
             rm -f "${CACHE_DIR}/country.ch" \
                   "${CACHE_DIR}/language.ch" \
@@ -1161,10 +1158,6 @@ check_common() {
                   "${CACHE_DIR}/timezone_success_done"
             select_country
             ;;
-	update_aios)
-	    download "hidden" "aios" "read"
-    	    exit 0
-    	    ;;
         *)
             ;;
     esac
