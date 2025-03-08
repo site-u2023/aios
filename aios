@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-02-00"
+SCRIPT_VERSION="2025.03.08-02-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -689,6 +689,8 @@ download() {
 
         # 読み込みモード処理
         if [ "$download_read_mode" = "true" ] || echo "$download_file_name" | grep -q "common.*\\.sh"; then
+	    debug_log "DEBUG" "BIN_FILE: $BIN_FILE"
+	    debug_log "DEBUG" "download_file_name: $download_file_name"
             download_read_message="read"
             if [ "$download_file_name" = "$BIN_FILE" ]; then
                 mv "$download_install_path" "$BIN_PATH"
