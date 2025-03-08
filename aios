@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-01-06"
+SCRIPT_VERSION="2025.03.09-01-08"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -582,7 +582,7 @@ download() {
     local dummy_remote_version="No remote version control."
     local dummy_local_version="No local version control."
     local read_message=""
-    local self_update="false"
+    local skip_api=false
 
     # 2. 引数処理
     # ===============================
@@ -604,11 +604,6 @@ download() {
     local remote_url="${BASE_URL}/$file_name"
     local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/${file_name}"
 
-    if [ "$file_name" = "$BIN_FILE" ]; then
-        self_update="true"
-        debug_log "DEBUG" "aios update detected for $BIN_FILE"
-    fi
-
     # 4. 入力検証
     # ===============================
     if [ -z "$file_name" ]; then
@@ -618,21 +613,31 @@ download() {
 
     # 5. GitHubからメタデータ取得
     # ===============================
-    api_response=$(wget -qO- "$api_url")
-    remote_version=""
-    local_version=""
-    response=""
-    decoded_content=""
+    loca api_response=$(wget -qO- "$api_url")
+    local remote_version=""
+    local local_version=""
+    local response=""
+    local decoded_content=""
+    local skip_api=false
 
+    if [ "$file_name" = "countrys.db" ]; then
+	skip_api=true
+	debug_log "DEBUG" "skip api for countrys.db"
+    fi
+	
     if [ -z "$api_response" ]; then
         echo "ERROR: Could not retrieve file content from GitHub API" >&2
-        return 1
+	debug_log "DEBUG" $BASE_WGET "https://api.github.com/rate_limit"
+        skip_api=true
     fi
 
     # 6. コンテンツの処理
     # ===============================
-    response=$(echo "$api_response" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
-    decoded_content=$(decode_base64 "$response")
+    if [ "$skip_api" = "false" ]; then
+	debug_log "DEBUG" "Checking version via API: $file_name"
+        response=$(echo "$api_response" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
+        decoded_content=$(decode_base64 "$response")
+    fi
 
     # 7. バージョン情報の取得
     # ===============================
@@ -661,7 +666,6 @@ download() {
             debug_log "DEBUG" "Sourced: $install_path"
             echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")" 
         fi 
-
         # ダウンロードファイルの検証
         if [ ! -s "$install_path" ]; then
             debug_log "ERROR" "Download failed: $file_name is empty"
@@ -695,7 +699,7 @@ download() {
 	fi
 
         # aios更新処理
-	if [ "$self_update" = "true" ] && [ "$MODE" = "aios_update" ]; then
+	if [ "$file_name" = "$BIN_FILE" ] && [ "$MODE" = "aios_update" ]; then
 	    chmod +x "$install_path"
 	    mv "$install_path" "$BIN_PATH"
 	    echo "$(color green "Update completed: $file_name - Version: $remote_version")"
@@ -722,7 +726,6 @@ download() {
 
     return 0
 }
-
 
 # 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
