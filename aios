@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-00-02"
+SCRIPT_VERSION="2025.03.08-00-04"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -571,6 +571,8 @@ download() {
     chmod_mode="false"
     read_mode="false"
     file_name=""
+    local remote_version=""
+    local local_version=""
     script_file="${CACHE_DIR}/script.ch"
     aios_update="${CACHE_DIR}/aios_update.ch"
     repo_owner="site-u2023"
@@ -610,13 +612,15 @@ download() {
     response=$(echo "$api_response" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
     decoded_content=$(decode_base64 "$response")
 
-    local remote_version=$(remote_normalize_version "$decoded_content")
+    remote_version=$(remote_normalize_version "$decoded_content")
     if [ -z "$remote_version" ]; then
         remote_version="$dummy_remote_version"
     fi
     debug_log "DEBUG" "Remote version is $remote_version"
 
-    local local_version=$(local_normalize_version "$script_file" "$file_name")
+    if [ -f "$script_file" ]; then
+        local_version=$(local_normalize_version "$script_file" "$file_name")
+    fi
     if [ -z "$local_version" ]; then
         local_version="$dummy_local_version"
     fi  
