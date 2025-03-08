@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-01-04"
+SCRIPT_VERSION="2025.03.08-01-05"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -672,13 +672,11 @@ download() {
             exec "$BIN_PATH" "$@"
 	    return 0
 	fi
-        echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
-        debug_log "DEBUG" "Sourced: $install_path"
-        . "$install_path"
-    else
-        echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
-        debug_log "DEBUG" "Sourced: $install_path"
     fi
+        
+    echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")"
+    debug_log "DEBUG" "Sourced: $install_path"
+    . "$install_path"
 
     # デバッグログの追加
     debug_log "DEBUG" "Finished download function for $file_name"
