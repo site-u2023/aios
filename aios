@@ -721,7 +721,7 @@ download() {
 #########################################################################
 # 権限設定
 chmod_aios() {
-    debug_log "INFO" "Setting permissions for $BIN_PATH"
+    debug_log "ERROR" "Setting permissions for $BIN_PATH"
     if ! chmod +x "$BIN_PATH"; then
         debug_log "ERROR" "Failed to set permissions for $BIN_PATH"
         return 1
@@ -730,7 +730,7 @@ chmod_aios() {
 
 # 初期化処理
 delete_aios() {
-    debug_log "INFO" "Deleting $BASE_DIR"
+    debug_log "ERROR" "Deleting $BASE_DIR"
     if ! rm -rf "${BASE_DIR}"; then
         debug_log "ERROR" "Failed to delete $BASE_DIR"
         return 1
@@ -739,7 +739,7 @@ delete_aios() {
 
 # 必要ディレクトリ作成
 make_directory() {
-    debug_log "INFO" "Creating required directories"
+    debug_log "ERROR" "Creating required directories"
     if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"; then
         debug_log "ERROR" "Failed to create required directories"
         return 1
@@ -749,7 +749,7 @@ make_directory() {
 # 初期化処理を実行
 initialization() {
     # 実行権限を設定
-    debug_log "INFO" "BIN PATH: $BIN_PATH"
+    debug_log "ERROR" "BIN PATH: $BIN_PATH"
     if ! chmod_aios; then
         debug_log "ERROR" "Failed to set execute permission"
         return 1
@@ -850,7 +850,7 @@ packages() {
 #       キャッシュリセット、ドライラン、ログ出力先 /var/log/aios.log、強制実行が有効になる。
 #########################################################################
 check_option() {
-    debug_log INFO "check_option received before args: $*"
+    debug_log "ERROR" "check_option received before args: $*"
 
     # デフォルト値の設定
     SELECTED_LANGUAGE=""
@@ -931,7 +931,7 @@ check_option() {
     export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET AIOS_UPDATE HELP
 
     # デバッグ情報を出力
-    debug_log DEBUG "check_option: SELECTED_LANGUAGE='$SELECTED_LANGUAGE', MODE='$MODE', DEBUG_MODE='$DEBUG_MODE', DEBUG_LEVEL='$DEBUG_LEVEL', DRY_RUN='$DRY_RUN', LOGFILE='$LOGFILE', FORCE='$FORCE', RESET='$RESET', HELP='$HELP'"
+    debug_log "DEBUG" "check_option: SELECTED_LANGUAGE='$SELECTED_LANGUAGE', MODE='$MODE', DEBUG_MODE='$DEBUG_MODE', DEBUG_LEVEL='$DEBUG_LEVEL', DRY_RUN='$DRY_RUN', LOGFILE='$LOGFILE', FORCE='$FORCE', RESET='$RESET', HELP='$HELP'"
 
     # 設定された言語を `check_common()` に渡す
     check_common "$SELECTED_LANGUAGE"
