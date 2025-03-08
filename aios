@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-05-04"
+SCRIPT_VERSION="2025.03.08-05-05"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -686,7 +686,7 @@ download() {
 	fi
 
         # aios更新処理
-	if [ "$MODE" != "aios_update" ]; then
+	if [ "$MODE" = "aios_update" ]; then
 	    chmod +x "$download_install_path"
 	    mv "$download_install_path" "$BIN_PATH"
 	    echo "$(color green "Update completed: $file_name - Version: $remote_version")"    
