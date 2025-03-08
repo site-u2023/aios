@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-02-01"
+SCRIPT_VERSION="2025.03.08-02-02"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -693,6 +693,11 @@ download() {
 	    debug_log "DEBUG" "download_file_name: $download_file_name"
             download_read_message="read"
             if [ "$download_file_name" = "$BIN_FILE" ]; then
+		if [ -f "${CACHE_DIR}/aios_updating" ]; then
+        	    rm -f "${CACHE_DIR}/aios_updating"
+        	    return 0
+    		fi
+		touch "${CACHE_DIR}/aios_updating"
                 mv "$download_install_path" "$BIN_PATH"
                 echo "$(color green "Update completed: $download_file_name - Version: $download_remote_version")"               
                 exec "$BIN_PATH" "$@"
@@ -1063,6 +1068,9 @@ check_option() {
                     exit 1
                 fi
                 ;;
+	    -u|--u|-update|--update)
+    		MODE="update_aios"
+    		;;
             -*)
                 echo "Warning: Unknown option: $1" >&2
                 ;;
@@ -1159,6 +1167,10 @@ check_common() {
                   "${CACHE_DIR}/timezone_success_done"
             select_country
             ;;
+	update_aios)
+	    download "aios" "chmod" "read"
+    	    exit 0
+    	    ;;
         *)
             ;;
     esac
