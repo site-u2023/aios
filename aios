@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-05-01"
+SCRIPT_VERSION="2025.03.08-05-02"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -687,6 +687,7 @@ download() {
 
         # aios更新処理
 	if [ "$MODE" != "aios_update" ]; then
+	    chmod +x "$download_install_path"
 	    mv "$download_install_path" "$BIN_PATH"
 	    echo "$(color green "Update completed: $file_name - Version: $remote_version")"    
             exec "$BIN_PATH"   
@@ -875,6 +876,7 @@ make_directory() {
 # 初期化処理を実行
 initialization() {
     # 実行権限を設定
+    debug_log "DEBUG" "BIN PATH: $BIN_PATH"
     if ! chmod_aios; then
         debug_log "ERROR" "Failed to set execute permission"
         return 1
