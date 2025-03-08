@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-05-12"
+SCRIPT_VERSION="2025.03.08-05-13"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -143,7 +143,6 @@ debug_log() {
         INFO)     allowed_levels="INFO WARN ERROR" ;;
         WARN)     allowed_levels="WARN ERROR" ;;
         ERROR)    allowed_levels="ERROR" ;;
-        ECHO)     allowed_levels="ERROR" ;;
         *)        allowed_levels="ERROR" ;;
     esac
 
@@ -158,7 +157,6 @@ debug_log() {
             "WARN") echo -e "$(color yellow "$log_message")" ;;
             "INFO") echo -e "$(color cyan "$log_message")" ;;
             "DEBUG") echo -e "$(color white "$log_message")" ;;
-	    "ECHO") echo -e "$(color white "$log_message")" ;;
         esac
 
         # ログファイルに記録
@@ -723,7 +721,7 @@ download() {
 #########################################################################
 # 権限設定
 chmod_aios() {
-    debug_log "ECHO" "Setting permissions for $BIN_PATH"
+    debug_log "ERROR" "Setting permissions for $BIN_PATH"
     if ! chmod +x "$BIN_PATH"; then
         debug_log "ERROR" "Failed to set permissions for $BIN_PATH"
         return 1
@@ -732,7 +730,7 @@ chmod_aios() {
 
 # 初期化処理
 delete_aios() {
-    debug_log "ECHO" "Deleting $BASE_DIR"
+    debug_log "ERROR" "Deleting $BASE_DIR"
     if ! rm -rf "${BASE_DIR}"; then
         debug_log "ERROR" "Failed to delete $BASE_DIR"
         return 1
@@ -741,7 +739,7 @@ delete_aios() {
 
 # 必要ディレクトリ作成
 make_directory() {
-    debug_log "ECHO" "Creating required directories"
+    debug_log "ERROR" "Creating required directories"
     if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"; then
         debug_log "ERROR" "Failed to create required directories"
         return 1
@@ -751,7 +749,7 @@ make_directory() {
 # 初期化処理を実行
 initialization() {
     # 実行権限を設定
-    debug_log "ECHO" "BIN PATH: $BIN_PATH"
+    debug_log "ERROR" "BIN PATH: $BIN_PATH"
     if ! chmod_aios; then
         debug_log "ERROR" "Failed to set execute permission"
         return 1
