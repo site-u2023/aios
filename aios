@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.08-01-02"
+SCRIPT_VERSION="2025.03.08-01-03"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -987,11 +987,6 @@ check_common() {
 
 # メイン処理
 main() {
-    debug_log "DEBUG" "Executing script with BIN_PATH: $BIN_PATH"
-    if [ "$0" != "$BIN_FILE" ]; then
-        # コマンドとして実行された場合はスクリプトの更新を確認
-        download "hidden" "aios" "chmod" "read"
-    fi
     initialization
     check_option "$@"
 }
