@@ -659,7 +659,7 @@ download() {
             echo "Error: Download failed: $file_name is empty." >&2
             debug_log "DEBUG" "Finished download function for $file_name"
             debug_log "DEBUG" "Sourced: $install_path"
-            echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version" 
+            echo "$(color green "Download completed: ${read_message}$file_name - Version: $remote_version")" 
         fi 
 
         # ダウンロードファイルの検証
