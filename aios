@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-02-05"
+SCRIPT_VERSION="2025.03.09-02-06"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -965,9 +965,9 @@ check_option() {
     export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET HELP
 
     # デバッグ情報を出力
-    debug_log "DEBUG" "SELECTED_LANGUAGE='$SELECTED_LANGUAGE', MODE='$MODE', DEBUG_MODE='$DEBUG_MODE'"
-    debug_log "DEBUG" "DEBUG_LEVEL='$DEBUG_LEVEL', DRY_RUN='$DRY_RUN', LOGFILE='$LOGFILE'"
-    debug_log "DEBUG" "FORCE='$FORCE', RESET='$RESET', HELP='$HELP'"
+    debug_log "DEBUG" "SELECTED_LANGUAGE=$SELECTED_LANGUAGE, MODE=$MODE, DEBUG_MODE=$DEBUG_MODE"
+    debug_log "DEBUG" "DEBUG_LEVEL=$DEBUG_LEVEL, DRY_RUN=$DRY_RUN, LOGFILE=$LOGFILE"
+    debug_log "DEBUG" "FORCE=$FORCE, RESET=$RESET, HELP=$HELP"
 
     # 設定された言語を `check_common()` に渡す
     check_common "$SELECTED_LANGUAGE"
@@ -987,7 +987,9 @@ check_option() {
 check_common() {
     local lang_code="$1"
     local mode="${2:-full}" 
- 
+
+    debug_log "DEBUG" "check_common: MODE=$MODE"
+
     # モードごとの処理
     case "$mode" in
         reset)
