@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-02-03"
+SCRIPT_VERSION="2025.03.09-02-04"
 
 echo -e "\033[1;32mDownload completed: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -668,22 +668,30 @@ download() {
     fi
 
     if [ "$file_name" = "country.db" ]; then
-	skip_api="true"
-	debug_log "DEBUG" "skip API for country.db - No version information"
+        skip_api="true"
+        debug_log "DEBUG" "skip API for country.db - No version information"
     fi
 
-    # 5. GitHubからメタデータ取得
+    # 5. GitHubからメタデータ取得と処理
     # ===============================
     local api_response=""
     local remote_version=""
     local local_version=""
     local response=""
     local decoded_content=""
-	
+    
     # GitHub API応答処理
     if [ "$skip_api" = "false" ]; then
-	check_api_rate_limit
+        # API制限チェック
+        if [ "$DEBUG_MODE" = "true" ]; then
+            debug_log "DEBUG" "API Limits: Core $(wget -qO- https://api.github.com/rate_limit | grep -o '"core":{"limit":[0-9]*,"remaining":[0-9]*' | sed 's/.*limit":\([0-9]*\),"remaining":\([0-9]*\).*/\2\/\1/'), Reset at $(wget -qO- https://api.github.com/rate_limit | grep -o '"reset":[0-9]*' | head -1 | cut -d':' -f2 | xargs -I{} date -r {} +"%H:%M:%S" 2>/dev/null)"
+        fi
+        
         debug_log "DEBUG" "Processing API response for: $file_name"
+        
+        # API応答を取得
+        api_response=$(wget -qO- "$api_url" 2>/dev/null)
+        
         # コンテンツ部分を抽出
         response=$(echo "$api_response" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
     
@@ -705,7 +713,7 @@ download() {
             remote_version=$(remote_normalize_version "$decoded_content")
             if [ -z "$remote_version" ]; then
                 debug_log "WARN" "Failed to extract version from decoded content"
-		remote_version="$dummy_remote_version"
+                remote_version="$dummy_remote_version"
             fi
         else
             debug_log "ERROR" "Failed to decode base64 content"
@@ -713,27 +721,12 @@ download() {
         fi
     
         debug_log "DEBUG" "Remote version: $file_name - $remote_version"
-    fi
-
-    # 6. コンテンツの処理
-    # ===============================
-    if [ "$skip_api" = "false" ]; then
-        debug_log "DEBUG" "Processing API response for: $file_name"
-        response=$(echo "$api_response" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
-        decoded_content=$(decode_base64 "$response")
-        
-        # バージョン情報の取得
-        remote_version=$(remote_normalize_version "$decoded_content")
-        if [ -z "$remote_version" ]; then
-            remote_version="$dummy_remote_version"
-        fi
-        debug_log "DEBUG" "Remote version: $file_name - $remote_version"
     else
         debug_log "DEBUG" "Skipping API version check for: $file_name"
         remote_version="$dummy_remote_version"
     fi
 
-    # 7. ローカルバージョン情報の取得
+    # 6. ローカルバージョン情報の取得
     # ===============================
     if [ -f "$script_file" ]; then
         local_version=$(local_normalize_version "$script_file" "$file_name")
@@ -743,15 +736,15 @@ download() {
     fi  
     debug_log "DEBUG" "Local version: $file_name - $local_version"
 
-    # 8. メインロジック - バージョン比較と更新処理
+    # 7. メインロジック - バージョン比較と更新処理
     # ===============================
     if [ "$skip_api" = "true" ] || [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
         # ファイルのダウンロード処理
-	if ! $BASE_WGET "$install_path" "$remote_url"; then
-    	    debug_log "ERROR" "Download failed: $file_name is empty"
-    	    echo "Error: Download failed: $file_name is empty." >&2
-    	    return 1
-	fi
+        if ! $BASE_WGET "$install_path" "$remote_url"; then
+            debug_log "ERROR" "Download failed: $file_name is empty"
+            echo "Error: Download failed: $file_name is empty." >&2
+            return 1
+        fi
         # ダウンロードファイルの検証
         if [ ! -s "$install_path" ]; then
             debug_log "ERROR" "Download failed: $file_name is empty"
@@ -782,18 +775,18 @@ download() {
 
         # 読み込みモード処理
         if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
-	    read_message="read"
-	    . "$install_path"
-	fi
+            read_message="read"
+            . "$install_path"
+        fi
 
         # aios更新処理
-	if [ "$file_name" = "$BIN_FILE" ] && [ "$MODE" = "update" ]; then
-    	    chmod +x "$install_path"
-    	    mv "$install_path" "$BIN_PATH"
-    	    echo "$(color green "Update completed: $file_name - Version: $remote_version")"  
-    	    # 更新後フラグを設定
-    	    touch "${CACHE_DIR}/post_update_flag"
-	fi
+        if [ "$file_name" = "$BIN_FILE" ] && [ "$MODE" = "update" ]; then
+            chmod +x "$install_path"
+            mv "$install_path" "$BIN_PATH"
+            echo "$(color green "Update completed: $file_name - Version: $remote_version")"  
+            # 更新後フラグを設定
+            touch "${CACHE_DIR}/post_update_flag"
+        fi
 
         # 完了メッセージ
         if [ "$quiet_mode" != "true" ]; then
@@ -802,7 +795,7 @@ download() {
             echo "$(color green "Download completed: $read_message $file_name - Version: $remote_version")"
         fi
 
-    # 9. 既存ファイルの処理（更新不要の場合）
+    # 8. 既存ファイルの処理（更新不要の場合）
     # ===============================
     elif [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
         . "$install_path"
