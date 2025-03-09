@@ -567,20 +567,41 @@ local_normalize_version() {
 # GitHub API呼び出し前にレート制限を確認する関数
 check_api_rate_limit() {
     if [ "$DEBUG_MODE" = "true" ]; then
-        local rate_info=$(wget -qO- "https://api.github.com/rate_limit" 2>/dev/null)
-        if [ -n "$rate_info" ]; then
-            local remaining=$(echo "$rate_info" | grep -o '"core":{"limit":[0-9]*,"remaining":[0-9]*' | grep -o 'remaining":[0-9]*' | cut -d':' -f2)
-            local limit=$(echo "$rate_info" | grep -o '"core":{"limit":[0-9]*,"remaining":[0-9]*' | grep -o 'limit":[0-9]*' | cut -d':' -f2)
-            local reset=$(echo "$rate_info" | grep -o '"reset":[0-9]*' | head -1 | cut -d':' -f2)
-            local reset_time=$(date -r "$reset" "+%H:%M:%S" 2>/dev/null)
+        # POSIXではlocalをサポートしていないため、プレフィックスで区別
+        api_rate_info=$(wget -qO- "https://api.github.com/rate_limit" 2>/dev/null)
+        if [ -n "$api_rate_info" ]; then
+            # 各値を抽出
+            api_remaining=$(echo "$api_rate_info" | grep -o '"core":{"limit":[0-9]*,"remaining":[0-9]*' | grep -o 'remaining":[0-9]*' | cut -d':' -f2)
+            api_limit=$(echo "$api_rate_info" | grep -o '"core":{"limit":[0-9]*,"remaining":[0-9]*' | grep -o 'limit":[0-9]*' | cut -d':' -f2)
+            api_reset=$(echo "$api_rate_info" | grep -o '"reset":[0-9]*' | head -1 | cut -d':' -f2)
             
-            debug_log "DEBUG" "API Limits: Core ${remaining}/${limit} remaining, Reset at ${reset_time:-unknown}"
+            # 現在時刻とリセット時刻の差分を計算 (OpenWrtで広く互換性のある方法)
+            api_current_time=$(date +%s)
+            api_time_left=0
+            if [ -n "$api_reset" ] && [ -n "$api_current_time" ]; then
+                api_time_left=$(expr "$api_reset" - "$api_current_time")
+                if [ "$api_time_left" -lt 0 ]; then
+                    api_time_left=0
+                fi
+            fi
+            
+            # 分と秒に変換
+            api_min_left=$(expr "$api_time_left" / 60)
+            api_sec_left=$(expr "$api_time_left" % 60)
+            
+            # ログ出力
+            debug_log "DEBUG" "API Limits: Core ${api_remaining:-?}/${api_limit:-?} remaining, Reset in ${api_min_left}m ${api_sec_left}s"
             
             # 残りが10%未満なら警告
-            if [ -n "$remaining" ] && [ -n "$limit" ] && [ "$remaining" -lt $(( limit / 10 )) ]; then
-                debug_log "WARN" "GitHub API rate limit almost exhausted (${remaining}/${limit})"
-                return 1
+            if [ -n "$api_remaining" ] && [ -n "$api_limit" ] && [ "$api_limit" -gt 0 ]; then
+                api_threshold=$(expr "$api_limit" / 10)
+                if [ "$api_remaining" -lt "$api_threshold" ]; then
+                    debug_log "WARN" "GitHub API rate limit almost exhausted (${api_remaining}/${api_limit})"
+                    return 1
+                fi
             fi
+        else
+            debug_log "WARN" "Failed to fetch GitHub API rate limit information"
         fi
     fi
     return 0
