@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-03-05"
+SCRIPT_VERSION="2025.03.09-03-06"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -717,11 +717,19 @@ download() {
 
         # aios更新処理
 	if [ "$file_name" = "$BIN_FILE" ] && [ "$MODE" = "update" ]; then
-	    chmod +x "$install_path"
-	    mv "$install_path" "$BIN_PATH"
-	    echo "$(color green "Update completed: $file_name - Version: $remote_version")"
-    	    exec "$BIN_PATH" "$@" 
-	fi
+    	chmod +x "$install_path"
+    	mv "$install_path" "$BIN_PATH"
+    	echo "$(color green "Update completed: $file_name - Version: $remote_version")"
+    
+    	# 更新後フラグを設定
+    	touch "${CACHE_DIR}/post_update_flag"
+    
+    	# 引数を明示的に指定して再実行
+    	if [ -n "$DEBUG_MODE" ] && [ "$DEBUG_MODE" = "true" ]; then
+        	exec "$BIN_PATH" "-d" "-cf"  # デバッグモードが有効なら-dを付ける
+    	else
+        	exec "$BIN_PATH" "-cf"  # 通常は標準モードで実行
+    	fi
 
         # 完了メッセージ
         if [ "$quiet_mode" != "true" ]; then
@@ -823,24 +831,40 @@ make_directory() {
 }
 
 check_update() {
+    # 確実にキャッシュディレクトリが存在するか確認
+    mkdir -p "$CACHE_DIR" 2>/dev/null
+
+    # アップデート後の特殊処理
+    POST_UPDATE="false"
+    if [ -f "${CACHE_DIR}/post_update_flag" ]; then
+        POST_UPDATE="true"
+        rm -f "${CACHE_DIR}/post_update_flag"
+        debug_log "DEBUG" "Post-update detected, continuing with normal execution"
+        MODE="full"  # 更新後は標準モードに設定
+        return 0
+    fi
+
     # アップデート状態ファイルの確認
     if [ ! -f "$UPDATE_CACHE" ]; then
         # 初回実行: アップデートモードをセット
         debug_log "DEBUG" "First run detected, setting update mode"
         MODE="update"
         # 状態ファイル作成（バージョン情報を記録）
-        echo "$SCRIPT_VERSION" > "$UPDATE_CACHE"
+        echo "$SCRIPT_VERSION" > "$UPDATE_CACHE" || debug_log "WARN" "Could not create $UPDATE_CACHE"
     else
         # 再実行: アップデートキャッシュをチェック
-        local cached_version=$(cat "$UPDATE_CACHE")
+        local cached_version=$(cat "$UPDATE_CACHE" 2>/dev/null || echo "unknown")
         if [ "$cached_version" != "$SCRIPT_VERSION" ]; then
             debug_log "DEBUG" "Version changed from $cached_version to $SCRIPT_VERSION"
             # バージョン情報を更新
-            echo "$SCRIPT_VERSION" > "$UPDATE_CACHE"
+            echo "$SCRIPT_VERSION" > "$UPDATE_CACHE" || debug_log "WARN" "Could not update $UPDATE_CACHE"
         fi
         # 引数で明示的なモード指定がなければfullをデフォルトに
         [ -z "$MODE" ] && MODE="full"
     fi
+
+    # 常に成功を返す（エラーがあっても処理を継続）
+    return 0
 }
 
 # 初期化処理を実行
@@ -858,10 +882,8 @@ initialization() {
         return 1
     fi
 
-    if ! check_update; then
-        debug_log "ERROR" "Failed to set execute update"
-        return 0
-    fi
+    check_update || debug_log "WARN" "Update check had issues, continuing anyway"
+    return 0
 }
 
 #########################################################################
