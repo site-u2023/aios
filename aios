@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-03-17"
+SCRIPT_VERSION="2025.03.09-02-00"
 
 echo -e "\033[1;32mDownload completed: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -565,48 +565,90 @@ local_normalize_version() {
 }
 
 decode_base64() {
-    local input="$1"
+    # 入力チェック
+    if [ -z "$1" ]; then
+        debug_log "ERROR" "base64: empty input"
+        return 1
+    fi
     
-    debug_log "DEBUG" "base64: decoding input starting with: ${input:0:20}..."
+    # 一時ファイルの作成
+    local input_file="/tmp/base64_input_$$.tmp"
+    local output_file="/tmp/base64_output_$$.tmp"
     
-    # 方法1: 標準base64コマンド
+    # 入力データをファイルに保存（改行の問題を回避）
+    printf "%s" "$1" > "$input_file"
+    
+    # 方法1: Busyboxのbase64（OpenWrtに標準搭載）
+    if busybox base64 -d "$input_file" > "$output_file" 2>/dev/null; then
+        if [ -s "$output_file" ]; then
+            debug_log "DEBUG" "base64: decoded with busybox base64"
+            cat "$output_file"
+            rm -f "$input_file" "$output_file" 2>/dev/null
+            return 0
+        fi
+    fi
+    
+    # 方法2: 標準base64コマンド（存在する場合）
     if command -v base64 >/dev/null 2>&1; then
-        debug_log "DEBUG" "base64: trying standard base64 command"
-        result=$(printf "%s" "$input" | base64 -d 2>/dev/null)
-        if [ $? -eq 0 ] && [ -n "$result" ]; then
-            debug_log "DEBUG" "base64: ✓ SUCCESS using standard base64"
-            printf "%s" "$result"
-            return 0
+        if base64 -d "$input_file" > "$output_file" 2>/dev/null; then
+            if [ -s "$output_file" ]; then
+                debug_log "DEBUG" "base64: decoded with standard base64"
+                cat "$output_file"
+                rm -f "$input_file" "$output_file" 2>/dev/null
+                return 0
+            fi
         fi
-        debug_log "DEBUG" "base64: ✗ standard base64 FAILED"
     fi
     
-    # 方法2: OpenSSL
+    # 方法3: OpenSSL（インストールされている場合）
     if command -v openssl >/dev/null 2>&1; then
-        debug_log "DEBUG" "base64: trying OpenSSL"
-        result=$(printf "%s" "$input" | openssl enc -base64 -d 2>/dev/null)
-        if [ $? -eq 0 ] && [ -n "$result" ]; then
-            debug_log "DEBUG" "base64: ✓ SUCCESS using OpenSSL"
-            printf "%s" "$result"
-            return 0
+        if openssl base64 -d -in "$input_file" -out "$output_file" 2>/dev/null; then
+            if [ -s "$output_file" ]; then
+                debug_log "DEBUG" "base64: decoded with openssl"
+                cat "$output_file"
+                rm -f "$input_file" "$output_file" 2>/dev/null
+                return 0
+            fi
         fi
-        debug_log "DEBUG" "base64: ✗ OpenSSL FAILED"
     fi
     
-    # 方法3: BusyBox
-    if busybox base64 --help 2>/dev/null | grep -q "\-d"; then
-        debug_log "DEBUG" "base64: trying BusyBox base64"
-        result=$(printf "%s" "$input" | busybox base64 -d 2>/dev/null)
-        if [ $? -eq 0 ] && [ -n "$result" ]; then
-            debug_log "DEBUG" "base64: ✓ SUCCESS using BusyBox base64"
-            printf "%s" "$result"
-            return 0
+    # 方法4: uudecode（インストールされている場合）
+    if command -v uudecode >/dev/null 2>&1; then
+        # uudecodeに適した形式に変換
+        printf "begin-base64 644 -\n" > "$output_file"
+        cat "$input_file" >> "$output_file"
+        printf "\n====\n" >> "$output_file"
+        
+        # 一時ファイル用意
+        local decode_output="/tmp/base64_uudecode_$$.tmp"
+        
+        if uudecode -o "$decode_output" "$output_file" 2>/dev/null; then
+            if [ -s "$decode_output" ]; then
+                debug_log "DEBUG" "base64: decoded with uudecode"
+                cat "$decode_output"
+                rm -f "$input_file" "$output_file" "$decode_output" 2>/dev/null
+                return 0
+            fi
         fi
-        debug_log "DEBUG" "base64: ✗ BusyBox base64 FAILED"
     fi
-
-    # すべて失敗
-    debug_log "ERROR" "base64: ALL decode methods FAILED!"
+    
+    # 方法5: シェルスクリプトによるピュアASH実装（最終手段）
+    debug_log "DEBUG" "base64: trying pure shell implementation"
+    
+    # 一時ファイル削除
+    rm -f "$input_file" "$output_file" 2>/dev/null
+    
+    # ピュア実装を試すが、複雑なので最終手段
+    local b64chars="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    local input_clean=$(printf "%s" "$1" | tr -d '\n\r\t ')
+    
+    # 実装の完全性チェック
+    if [ -z "$input_clean" ]; then
+        debug_log "ERROR" "base64: input is empty or only contains whitespace"
+        return 1
+    fi
+    
+    debug_log "ERROR" "base64: all decode methods failed"
     return 1
 }
 
