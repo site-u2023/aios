@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-02-19"
+SCRIPT_VERSION="2025.03.09-02-21"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -885,7 +885,6 @@ check_option() {
 
     # デフォルト値の設定
     SELECTED_LANGUAGE=""
-    MODE="update"
     DEBUG_MODE="false"
     DEBUG_LEVEL="INFO"
     DRY_RUN="false"
@@ -1005,7 +1004,7 @@ check_common() {
         update)
 	    debug_log "DEBUG" "check_common: aios update"
 	    download "hidden" "chmod" "aios"
-	    sh /usr/tmp/aios "$@"
+	    initialization
 	    ;;
         full)
             download "hidden" "common-country.sh" "chmod"
@@ -1066,4 +1065,5 @@ main() {
 # 🔴　メイン　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # スクリプト実行
+MODE=update
 main "$@"
