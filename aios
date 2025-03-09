@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-02-10"
+SCRIPT_VERSION="2025.03.09-02-11"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -970,7 +970,7 @@ check_option() {
     debug_log "DEBUG" "FORCE=$FORCE, RESET=$RESET, HELP=$HELP"
 
     # 設定された言語を `check_common()` に渡す
-    check_common "$SELECTED_LANGUAGE"
+    check_common "$SELECTED_LANGUAGE" "$MODE"
 }
 
 #########################################################################
@@ -986,12 +986,13 @@ check_option() {
 #########################################################################
 check_common() {
     local lang_code="$1"
-    MODE="${2-full}"
+    local mode="$2"
 
     debug_log "DEBUG" "check_common: MODE=$MODE"
+    debug_log "DEBUG" "check_common: mode=$mode"
 
     # モードごとの処理
-    case "$MODE" in
+    case "$mode" in
         reset)
             rm -f "${CACHE_DIR}/country.ch" \
                   "${CACHE_DIR}/language.ch" \
