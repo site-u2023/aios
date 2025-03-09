@@ -710,8 +710,7 @@ check_api_rate_limit() {
 }
 
 decode_base64() { 
-    echo "$1"
-    base64 -d 2>/dev/null; 
+    echo "$1" | base64 -d 2>/dev/null; 
 }
 
 download() {
