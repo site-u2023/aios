@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-03-01"
+SCRIPT_VERSION="2025.03.09-03-02"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -721,7 +721,7 @@ download() {
 	    mv "$install_path" "$BIN_PATH"
 	    echo "$(color green "Update completed: $file_name - Version: $remote_version")"
 	    export MODE="full"
-    	    #exec "$BIN_PATH" "$@" 
+    	    exec "$BIN_PATH" "$@" 
 	fi
 
         # 完了メッセージ
