@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-02-09"
+SCRIPT_VERSION="2025.03.09-02-10"
 
 echo -e "\033[1;32mDownload completed: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -606,40 +606,70 @@ check_api_rate_limit() {
 }
 
 decode_base64() {
-    # 極めてシンプルなアプローチ
-    local input="$1"
-    local tmp_in="${CACHE_DIR}/b64in_$$.tmp"
-    local tmp_out="${CACHE_DIR}/b64out_$$.tmp"
+    input="$1"
+    output=""
+    decoder_type=""
+    base64_cache="${CACHE_DIR}/base64.ch"
     
-    # 入力を一時ファイルに書き込み
-    echo "$input" > "$tmp_in"
-    
-    # BusyBoxのbase64（OpenWrtに標準搭載）
-    if busybox base64 -d "$tmp_in" > "$tmp_out" 2>/dev/null; then
-        if [ -s "$tmp_out" ]; then
-            debug_log "DEBUG" "base64: decoded with busybox"
-            cat "$tmp_out"
-            rm -f "$tmp_in" "$tmp_out"
-            return 0
-        fi
-    fi
-    
-    # 標準base64コマンド
-    if command -v base64 >/dev/null 2>&1; then
-        if base64 -d < "$tmp_in" > "$tmp_out" 2>/dev/null; then
-            if [ -s "$tmp_out" ]; then
-                debug_log "DEBUG" "base64: decoded with standard base64"
-                cat "$tmp_out"
-                rm -f "$tmp_in" "$tmp_out"
-                return 0
+    # キャッシュファイルから以前検出したデコーダーを確認
+    if [ -f "$base64_cache" ]; then
+        # shellcheck disable=SC1090
+        . "$base64_cache"
+        debug_log "DEBUG" "base64: using cached decoder: $BASE64_DECODER"
+    else
+        # 利用可能なデコーダーを検索
+        if command -v base64 >/dev/null 2>&1; then
+            BASE64_DECODER="coreutils"
+            debug_log "DEBUG" "base64: found coreutils-base64"
+        elif command -v openssl >/dev/null 2>&1; then
+            BASE64_DECODER="openssl" 
+            debug_log "DEBUG" "base64: found openssl"
+        else
+            debug_log "WARN" "base64: no decoder found, attempting to install coreutils-base64"
+            # サイレントでパッケージをインストール試行
+            opkg update >/dev/null 2>&1
+            opkg install coreutils-base64 >/dev/null 2>&1
+            
+            # インストール成功したか確認
+            if command -v base64 >/dev/null 2>&1; then
+                BASE64_DECODER="coreutils"
+                debug_log "INFO" "base64: successfully installed coreutils-base64"
+            else
+                debug_log "ERROR" "base64: failed to install decoder, decode operation will fail"
+                BASE64_DECODER="none"
             fi
         fi
+        
+        # 検出結果をキャッシュファイルに保存
+        mkdir -p "$CACHE_DIR"
+        echo "BASE64_DECODER=\"$BASE64_DECODER\"" > "$base64_cache"
     fi
     
-    # ファイル経由のrawデータ転送
-    debug_log "ERROR" "base64: all decode methods failed"
-    rm -f "$tmp_in" "$tmp_out"
-    return 1
+    # デコード実行
+    case "$BASE64_DECODER" in
+        "coreutils")
+            output=$(echo "$input" | base64 -d 2>/dev/null)
+            decoder_type="coreutils-base64"
+            ;;
+        "openssl")
+            output=$(echo "$input" | openssl base64 -d 2>/dev/null)
+            decoder_type="openssl"
+            ;;
+        *)
+            debug_log "ERROR" "base64: no decoder available"
+            return 1
+            ;;
+    esac
+    
+    # 結果を確認
+    if [ $? -eq 0 ] && [ -n "$output" ]; then
+        debug_log "DEBUG" "base64: decoded with $decoder_type"
+        echo "$output"
+        return 0
+    else
+        debug_log "ERROR" "base64: decode failed with $decoder_type"
+        return 1
+    fi
 }
 
 download() {
