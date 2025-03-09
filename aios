@@ -721,7 +721,7 @@ download() {
 	    mv "$install_path" "$BIN_PATH"
 	    echo "$(color green "Update completed: $file_name - Version: $remote_version")"
 	    export MODE="full"
-    	    exec "$BIN_PATH" "$@" 
+    	    # exec "$BIN_PATH" "$@" 
 	fi
 
         # 完了メッセージ
