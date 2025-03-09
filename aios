@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-03-00"
+SCRIPT_VERSION="2025.03.09-03-01"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -722,12 +722,11 @@ download() {
 	    echo "$(color green "Update completed: $file_name - Version: $remote_version")"
 	    export MODE="full"
     	    #exec "$BIN_PATH" "$@" 
-	    initialization "$@"
 	fi
 
         # 完了メッセージ
         if [ "$quiet_mode" != "true" ]; then
-            debug_log "DEBUG" "Quiet mode download completed: $read_message $file_name - Version: $local_version"
+            debug_log "DEBUG" "Quiet mode download completed: $read_message $file_name - Version: $remote_version"
         else
             echo "$(color green "Download completed: $read_message $file_name - Version: $remote_version")"
         fi
@@ -1009,6 +1008,7 @@ check_common() {
         update)
 	    debug_log "DEBUG" "check_common: aios update"
 	    download "hidden" "chmod" "aios"
+	    mode=""
 	    main "$@"
 	    ;;
         full)
