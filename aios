@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-03-16"
+SCRIPT_VERSION="2025.03.09-03-17"
 
 echo -e "\033[1;32mDownload completed: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -699,6 +699,7 @@ download() {
         fi
     
         debug_log "DEBUG" "Remote version: $file_name - $remote_version"
+    fi
 
     # 6. コンテンツの処理
     # ===============================
