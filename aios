@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-00-03"
+SCRIPT_VERSION="2025.03.10-00-04"
 
 echo -e "\033[1;32mDownload completed: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -1285,7 +1285,7 @@ check_common() {
 		exec "$BIN_PATH" "$@"
 	    fi
 	    ;;
-        full)
+        xxx_full)
             download "hidden" "common-country.sh" "chmod"
             download "hidden" "common-package.sh" "chmod"
             download "hidden" "common-feed-package.sh" "chmod"
@@ -1302,7 +1302,7 @@ check_common() {
             download "hidden" "system-config.sh" "chmod" "read"
             #packages
             ;;
-        light|debug)
+        full|light|debug)
             download "common-country.sh"
             download "common-package.sh"
             download "common-feed-package.sh"
