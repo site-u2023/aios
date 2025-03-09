@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-02-14"
+SCRIPT_VERSION="2025.03.09-02-15"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -799,39 +799,6 @@ packages() {
     # install_package list
 }
 
-# スクリプトの起動方法判定
-detect_execution_method() {
-    
-    # 親プロセスの情報を取得
-    PARENT_CMD=$(ps -o cmd= -p $PPID)
-    
-    # 実行方法判定（複数条件をチェック）
-    DOWNLOAD_AND_EXECUTE="false"
-    DIRECT_EXECUTE="false"
-    
-    # 1. ダウンロード直後に実行されたケース
-    if echo "$PARENT_CMD" | grep -q "wget.*aios.*sh"; then
-        DOWNLOAD_AND_EXECUTE="true"
-        echo "スクリプトはダウンロード後に直接実行されました"
-    # 2. パスが /usr/bin/aios であればインストール済みと判定
-    elif [ "$BIN_PATH" = "/usr/bin/aios" ]; then
-        DIRECT_EXECUTE="true"
-        echo "スクリプトはインストール済みコマンドとして実行されました"
-    # 3. 曖昧な場合は追加情報で判断
-    else
-        # プロセスのコマンドラインを確認
-        if ps | grep -q "sh.*aios"; then
-            DOWNLOAD_AND_EXECUTE="true" 
-            echo "スクリプトは sh コマンドで実行されました"
-        else
-            DIRECT_EXECUTE="true"
-            echo "スクリプトは直接実行されました"
-        fi
-    fi
-    
-    export DOWNLOAD_AND_EXECUTE DIRECT_EXECUTE
-}
-
 #########################################################################
 # 初期設定
 #########################################################################
@@ -924,7 +891,7 @@ check_option() {
 
     # デフォルト値の設定
     SELECTED_LANGUAGE=""
-    MODE="full"
+    MODE="update"
     DEBUG_MODE="false"
     DEBUG_LEVEL="INFO"
     DRY_RUN="false"
@@ -1024,14 +991,6 @@ check_common() {
     local lang_code="$1"
     local mode="$2"
 
-    if [ "$DOWNLOAD_AND_EXECUTE" = "true" ]; then
-        echo "初回インストール処理を実行します..."
-        mode="update"
-    elif [ "$DIRECT_EXECUTE" = "true" ]; then
-        echo "通常の aios 処理を実行します..."
-	mode="full"
-    fi
-
     debug_log "DEBUG" "check_common: MODE=$MODE"
     debug_log "DEBUG" "check_common: mode=$mode"
 
@@ -1051,8 +1010,7 @@ check_common() {
             ;;
         update)
 	    debug_log "DEBUG" "check_common: aios update"
-	    download "hidden" "chmod" "aios"    
-	    aios "$@"
+	    download "hidden" "chmod" "aios"
 	    ;;
         full)
             download "hidden" "common-country.sh" "chmod"
