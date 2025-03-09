@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-00-00"
+SCRIPT_VERSION="2025.03.10-00-01"
 
 echo -e "\033[1;32mDownload completed: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -556,7 +556,7 @@ github_api() {
     fi
 }
 
-# トークン設定コマンド
+# トークン設定コマンド（OpenWrt互換性強化版）
 setup_github_token() {
     echo "GitHub API Token Setup"
     echo "======================"
@@ -564,11 +564,21 @@ setup_github_token() {
     echo "The token will be used for API requests to avoid rate limits."
     echo ""
     
-    printf "Enter your GitHub Personal Access Token: "
-    stty -echo  # 入力を非表示に
-    read -r token
-    stty echo   # 入力表示を元に戻す
-    echo ""     # 改行
+    # sttyが利用可能かチェック
+    if command -v stty >/dev/null 2>&1; then
+        # sttyが利用可能な場合、非表示モードを使用
+        printf "Enter your GitHub Personal Access Token: "
+        stty -echo
+        read -r token
+        stty echo
+        echo ""  # 改行
+    else
+        # sttyが利用できない場合の代替方法
+        echo "NOTE: Your input will be visible as you type (stty not available)"
+        printf "Enter your GitHub Personal Access Token: "
+        read -r token
+        echo ""
+    fi
     
     if [ -n "$token" ]; then
         if save_github_token "$token"; then
