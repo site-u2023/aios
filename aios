@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-00-05"
+SCRIPT_VERSION="2025.03.10-00-06"
 
 echo -e "\033[1;32mDownload completed: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -969,7 +969,7 @@ download() {
         fi
 
         # 完了メッセージ
-        if [ "$quiet_mode" != "true" ]; then
+        if [ "$hidden_mode" != "true" ]; then
             debug_log "DEBUG" "Quiet mode download completed: $read_message $file_name - Version: $remote_version"
         else
             echo "$(color green "Download completed: $read_message $file_name - Version: $remote_version")"
@@ -979,7 +979,7 @@ download() {
     # ===============================
     elif [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
         . "$install_path"
-    elif [ "$quiet_mode" != "true" ]; then
+    elif [ "$hidden_mode" != "true" ]; then
         debug_log "DEBUG" "Quiet mode already up to date: $file_name - Version: $local_version"
     else
         echo "$(color green "Already up to date: $file_name - Version: $local_version")"
