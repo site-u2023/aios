@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-02-12"
+SCRIPT_VERSION="2025.03.10-00-00"
 
 echo -e "\033[1;32mDownload completed: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -61,6 +61,7 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 UPDATE_CACHE="${CACHE_DIR}/update.ch"
+GITHUB_TOKEN_FILE="/etc/aios_token"
 
 # 🔵　エラー・デバッグ・アップデート系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
@@ -491,6 +492,99 @@ get_message() {
     fi
 }
 
+# 🔵　トークン系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
+
+# トークン取得関数
+get_github_token() {
+    # トークンファイルが存在すれば読み込み
+    if [ -f "$GITHUB_TOKEN_FILE" ] && [ -r "$GITHUB_TOKEN_FILE" ]; then
+        token=$(cat "$GITHUB_TOKEN_FILE" | tr -d '\n\r')
+        if [ -n "$token" ]; then
+            echo "$token"
+            return 0
+        fi
+    fi
+    
+    # 環境変数からも取得可能
+    if [ -n "$GITHUB_TOKEN" ]; then
+        echo "$GITHUB_TOKEN"
+        return 0
+    fi
+    
+    # トークンなし
+    return 1
+}
+
+# トークン保存関数
+save_github_token() {
+    token="$1"
+    
+    if [ -z "$token" ]; then
+        debug_log "ERROR" "Empty token provided, cannot save"
+        return 1
+    fi
+    
+    # トークンを保存して権限を設定
+    echo "$token" > "$GITHUB_TOKEN_FILE"
+    chmod 600 "$GITHUB_TOKEN_FILE"
+    
+    if [ $? -eq 0 ]; then
+        debug_log "INFO" "GitHub token saved to $GITHUB_TOKEN_FILE"
+        return 0
+    else
+        debug_log "ERROR" "Failed to save token to $GITHUB_TOKEN_FILE"
+        return 1
+    fi
+}
+
+# GitHub API呼び出し（トークン対応版）
+github_api() {
+    endpoint="$1"
+    
+    # トークンを取得
+    token=$(get_github_token)
+    
+    if [ -n "$token" ]; then
+        # トークンがある場合は認証付きリクエスト
+        debug_log "DEBUG" "Using authenticated GitHub API request"
+        wget -qO- --header="Authorization: token $token" \
+            "https://api.github.com/$endpoint" 2>/dev/null
+    else
+        # トークンがない場合は通常リクエスト
+        debug_log "DEBUG" "Using unauthenticated GitHub API request"
+        wget -qO- "https://api.github.com/$endpoint" 2>/dev/null
+    fi
+}
+
+# トークン設定コマンド
+setup_github_token() {
+    echo "GitHub API Token Setup"
+    echo "======================"
+    echo "This will save a GitHub Personal Access Token to $GITHUB_TOKEN_FILE"
+    echo "The token will be used for API requests to avoid rate limits."
+    echo ""
+    
+    printf "Enter your GitHub Personal Access Token: "
+    stty -echo  # 入力を非表示に
+    read -r token
+    stty echo   # 入力表示を元に戻す
+    echo ""     # 改行
+    
+    if [ -n "$token" ]; then
+        if save_github_token "$token"; then
+            echo "Token has been saved successfully!"
+            echo "API requests will now use authentication."
+        else
+            echo "Failed to save token. Please check permissions."
+        fi
+    else
+        echo "No token entered. Operation cancelled."
+    fi
+}
+
+# 🔴　トークン系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
+
+
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
 # Last Update: 2025-02-18 23:00:00 (JST) 🚀
@@ -715,7 +809,8 @@ download() {
     # ===============================
     local install_path="${BASE_DIR}/$file_name"
     local remote_url="${BASE_URL}/$file_name"
-    local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/${file_name}"
+    #local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/${file_name}"
+    local api_url="repos/${repo_owner}/${repo_name}/contents/${file_name}"
 
     # 4. 入力検証
     # ===============================
@@ -1106,6 +1201,9 @@ check_option() {
 		debug_log "DEBUG" "check_option: aios update"
     		MODE="update"
     		;;
+	    -t|--t|-token|--token)
+		setup_github_token
+		;;
             -*)
                 echo "Warning: Unknown option: $1" >&2
                 ;;
