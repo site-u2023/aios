@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-00-06"
+SCRIPT_VERSION="2025.03.10-00-07"
 
 echo -e "\033[1;32mDownload completed: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -715,6 +715,22 @@ decode_base64() {
     decoder_type=""
     base64_cache="${CACHE_DIR}/base64.ch"
     
+    # キャッシュディレクトリ確認
+    mkdir -p "$CACHE_DIR" 2>/dev/null
+    
+    # 入力検証
+    if [ -z "$input" ]; then
+        debug_log "ERROR" "base64: empty input provided"
+        return 1
+    fi
+    
+    # 一時ファイルのパス設定
+    input_file="${CACHE_DIR}/base64_input.$$"
+    tmp_file="${CACHE_DIR}/base64_output.$$"
+    
+    # 入力を一時ファイルに保存（パイプ処理を回避）
+    echo "$input" > "$input_file"
+    
     # キャッシュファイルから以前検出したデコーダーを確認
     if [ -f "$base64_cache" ]; then
         # shellcheck disable=SC1090
@@ -754,46 +770,56 @@ decode_base64() {
         fi
         
         # 検出結果をキャッシュファイルに保存
-        mkdir -p "$CACHE_DIR"
         echo "BASE64_DECODER=\"$BASE64_DECODER\"" > "$base64_cache"
     fi
     
-    # 一時ファイルのパスを設定
-    tmp_file="${CACHE_DIR}/base64_tmp.$$"
-    
-    # デコード実行 - パイプエラーを防ぐために一時ファイルを使用
+    # デコード実行 - ファイル入出力を使用してパイプエラーを防止
     case "$BASE64_DECODER" in
         "coreutils")
-            if echo "$input" | base64 -d > "$tmp_file" 2>/dev/null; then
-                output=$(cat "$tmp_file")
-                rm -f "$tmp_file"
-                decoder_type="coreutils-base64"
+            if base64 -d "$input_file" > "$tmp_file" 2>/dev/null; then
+                if [ -s "$tmp_file" ]; then  # ファイルサイズが0より大きいか確認
+                    output=$(cat "$tmp_file")
+                    decoder_type="coreutils-base64"
+                else
+                    debug_log "ERROR" "base64: decoded file is empty"
+                    rm -f "$input_file" "$tmp_file"
+                    return 1
+                fi
             else
                 debug_log "ERROR" "base64: decode failed with coreutils"
-                rm -f "$tmp_file"
+                rm -f "$input_file" "$tmp_file"
                 return 1
             fi
             ;;
         "openssl")
-            if echo "$input" | openssl base64 -d > "$tmp_file" 2>/dev/null; then
-                output=$(cat "$tmp_file")
-                rm -f "$tmp_file"
-                decoder_type="openssl"
+            if openssl base64 -d -in "$input_file" -out "$tmp_file" 2>/dev/null; then
+                if [ -s "$tmp_file" ]; then  # ファイルサイズが0より大きいか確認
+                    output=$(cat "$tmp_file")
+                    decoder_type="openssl"
+                else
+                    debug_log "ERROR" "base64: decoded file is empty"
+                    rm -f "$input_file" "$tmp_file"
+                    return 1
+                fi
             else
                 debug_log "ERROR" "base64: decode failed with openssl"
-                rm -f "$tmp_file"
+                rm -f "$input_file" "$tmp_file"
                 return 1
             fi
             ;;
         *)
             debug_log "ERROR" "base64: no decoder available"
+            rm -f "$input_file" "$tmp_file"
             return 1
             ;;
     esac
     
+    # 一時ファイルを削除
+    rm -f "$input_file" "$tmp_file"
+    
     # 結果を確認
     if [ -n "$output" ]; then
-        debug_log "DEBUG" "base64: decoded with $decoder_type"
+        debug_log "DEBUG" "base64: decoded with $decoder_type (size: $(echo -n "$output" | wc -c) bytes)"
         echo "$output"
         return 0
     else
