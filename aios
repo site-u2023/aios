@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-03-14"
+SCRIPT_VERSION="2025.03.09-03-16"
 
 echo -e "\033[1;32mDownload completed: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -565,93 +565,48 @@ local_normalize_version() {
 }
 
 decode_base64() {
-    # パラメータ検証
-    if [ -z "$1" ]; then
-        debug_log "ERROR" "base64 decode: no input provided"
-        return 1
-    fi
+    local input="$1"
     
-    # 入力パラメータをローカル変数に保存
-    input="$1"
+    debug_log "DEBUG" "base64: decoding input starting with: ${input:0:20}..."
     
-    # 各メソッドの詳細なデバッグ出力
-    
-    # 方法1: OpenSSL
-    debug_log "DEBUG" "base64: trying OpenSSL method"
-    if command -v openssl >/dev/null 2>&1; then
-        debug_log "DEBUG" "base64: OpenSSL command found"
-        result=$(printf "%s" "$input" | openssl enc -base64 -d 2>/dev/null)
-        if [ $? -eq 0 ] && [ -n "$result" ]; then
-            debug_log "DEBUG" "base64: ✓ SUCCESSFUL decode with OpenSSL"
-            printf "%s" "$result"
-            return 0
-        else
-            debug_log "DEBUG" "base64: ✗ OpenSSL decode FAILED"
-        fi
-    else
-        debug_log "DEBUG" "base64: OpenSSL not available"
-    fi
-    
-    # 方法2: 標準base64コマンド
-    debug_log "DEBUG" "base64: trying standard base64 command"
+    # 方法1: 標準base64コマンド
     if command -v base64 >/dev/null 2>&1; then
-        debug_log "DEBUG" "base64: standard base64 command found"
+        debug_log "DEBUG" "base64: trying standard base64 command"
         result=$(printf "%s" "$input" | base64 -d 2>/dev/null)
         if [ $? -eq 0 ] && [ -n "$result" ]; then
-            debug_log "DEBUG" "base64: ✓ SUCCESSFUL decode with standard base64"
+            debug_log "DEBUG" "base64: ✓ SUCCESS using standard base64"
             printf "%s" "$result"
             return 0
-        else
-            debug_log "DEBUG" "base64: ✗ standard base64 decode FAILED"
         fi
-    else
-        debug_log "DEBUG" "base64: standard base64 not available"
+        debug_log "DEBUG" "base64: ✗ standard base64 FAILED"
     fi
     
-    # 方法3: BusyBox base64
-    debug_log "DEBUG" "base64: trying BusyBox base64"
-    if command -v busybox >/dev/null 2>&1; then
-        debug_log "DEBUG" "base64: BusyBox command found"
-        if busybox base64 --help 2>/dev/null | grep -q "\-d"; then
-            debug_log "DEBUG" "base64: BusyBox with base64 -d support confirmed"
-            result=$(printf "%s" "$input" | busybox base64 -d 2>/dev/null)
-            if [ $? -eq 0 ] && [ -n "$result" ]; then
-                debug_log "DEBUG" "base64: ✓ SUCCESSFUL decode with BusyBox base64"
-                printf "%s" "$result"
-                return 0
-            else
-                debug_log "DEBUG" "base64: ✗ BusyBox base64 decode FAILED"
-            fi
-        else
-            debug_log "DEBUG" "base64: BusyBox found but no base64 -d support"
-        fi
-    else
-        debug_log "DEBUG" "base64: BusyBox not available"
-    fi
-    
-    # 方法4: uudecode
-    debug_log "DEBUG" "base64: trying uudecode method"
-    if command -v uudecode >/dev/null 2>&1; then
-        debug_log "DEBUG" "base64: uudecode command found"
-        temp_file="/tmp/base64tmp_$$.tmp"
-        printf "begin-base64 644 -\n%s\n====\n" "$input" > "$temp_file"
-        result=$(uudecode -o - "$temp_file" 2>/dev/null)
-        status=$?
-        rm -f "$temp_file" 2>/dev/null
-        
-        if [ $status -eq 0 ] && [ -n "$result" ]; then
-            debug_log "DEBUG" "base64: ✓ SUCCESSFUL decode with uudecode"
+    # 方法2: OpenSSL
+    if command -v openssl >/dev/null 2>&1; then
+        debug_log "DEBUG" "base64: trying OpenSSL"
+        result=$(printf "%s" "$input" | openssl enc -base64 -d 2>/dev/null)
+        if [ $? -eq 0 ] && [ -n "$result" ]; then
+            debug_log "DEBUG" "base64: ✓ SUCCESS using OpenSSL"
             printf "%s" "$result"
             return 0
-        else
-            debug_log "DEBUG" "base64: ✗ uudecode decode FAILED"
         fi
-    else
-        debug_log "DEBUG" "base64: uudecode not available"
+        debug_log "DEBUG" "base64: ✗ OpenSSL FAILED"
     fi
     
-    # どの方法も失敗
-    debug_log "ERROR" "base64: ALL decode methods FAILED"
+    # 方法3: BusyBox
+    if busybox base64 --help 2>/dev/null | grep -q "\-d"; then
+        debug_log "DEBUG" "base64: trying BusyBox base64"
+        result=$(printf "%s" "$input" | busybox base64 -d 2>/dev/null)
+        if [ $? -eq 0 ] && [ -n "$result" ]; then
+            debug_log "DEBUG" "base64: ✓ SUCCESS using BusyBox base64"
+            printf "%s" "$result"
+            return 0
+        fi
+        debug_log "DEBUG" "base64: ✗ BusyBox base64 FAILED"
+    fi
+
+    # すべて失敗
+    debug_log "ERROR" "base64: ALL decode methods FAILED!"
     return 1
 }
 
@@ -712,25 +667,38 @@ download() {
     local response=""
     local decoded_content=""
 	
+    # GitHub API応答処理部分の修正
     if [ "$skip_api" = "false" ]; then
-        # APIからメタデータ取得を試行
-        api_response=$(wget -qO- "$api_url" 2>/dev/null)
-        
-        # API応答チェック
-        if [ -z "$api_response" ]; then
-            debug_log "WARN" "Could not retrieve content from GitHub API - falling back to direct download"
-            # レート制限確認（ログ用）
-            wget -qO- "https://api.github.com/rate_limit" > "${CACHE_DIR}/rate_limit.tmp" 2>/dev/null
-            if [ -s "${CACHE_DIR}/rate_limit.tmp" ]; then
-                remaining=$(grep -o '"remaining":[0-9]*' "${CACHE_DIR}/rate_limit.tmp" | head -1 | cut -d':' -f2)
-                debug_log "DEBUG" "GitHub API remaining requests: $remaining"
-            fi
-            skip_api="true"
-        elif echo "$api_response" | grep -q "rate limit exceeded"; then
-            debug_log "WARN" "GitHub API rate limit exceeded - falling back to direct download"
-            skip_api="true"
+        debug_log "DEBUG" "Processing API response for: $file_name"
+        # コンテンツ部分を抽出
+        response=$(echo "$api_response" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
+    
+        # レスポンスの内容をデバッグ
+        if [ -n "$response" ]; then
+            debug_log "DEBUG" "API response contains content field: ${response:0:20}..."
+        else
+            debug_log "WARN" "API response missing content field - raw sample: ${api_response:0:100}..."
         fi
-    fi
+    
+        # base64デコード
+        decoded_content=$(decode_base64 "$response")
+        decode_status=$?
+    
+        if [ $decode_status -eq 0 ] && [ -n "$decoded_content" ]; then
+            debug_log "DEBUG" "Successfully decoded content (first 50 chars): ${decoded_content:0:50}..."
+        
+            # バージョン情報の取得
+            remote_version=$(remote_normalize_version "$decoded_content")
+            if [ -z "$remote_version" ]; then
+                debug_log "WARN" "Failed to extract version from decoded content"
+                remote_version="$dummy_remote_version"
+            fi
+        else
+            debug_log "ERROR" "Failed to decode base64 content"
+            remote_version="$dummy_remote_version"
+        fi
+    
+        debug_log "DEBUG" "Remote version: $file_name - $remote_version"
 
     # 6. コンテンツの処理
     # ===============================
