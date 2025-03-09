@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-03-02"
+SCRIPT_VERSION="2025.03.09-03-03"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -59,7 +59,7 @@ BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
-AIOS_INITIALIZED="false"
+UPDATE_CACHE="${CACHE_DIR}/update.ch"
 
 # 🔵　エラー・デバッグ・アップデート系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
@@ -720,8 +720,7 @@ download() {
 	    chmod +x "$install_path"
 	    mv "$install_path" "$BIN_PATH"
 	    echo "$(color green "Update completed: $file_name - Version: $remote_version")"
-	    export MODE="full"
-    	    # exec "$BIN_PATH" "$@" 
+    	    exec "$BIN_PATH" "$@" 
 	fi
 
         # 完了メッセージ
@@ -823,6 +822,27 @@ make_directory() {
     fi
 }
 
+check_update() {
+    # アップデート状態ファイルの確認
+    if [ ! -f "$UPDATE_CACHE" ]; then
+        # 初回実行: アップデートモードをセット
+        debug_log "DEBUG" "First run detected, setting update mode"
+        MODE="update"
+        # 状態ファイル作成（バージョン情報を記録）
+        echo "$SCRIPT_VERSION" > "$UPDATE_CACHE"
+    else
+        # 再実行: アップデートキャッシュをチェック
+        local cached_version=$(cat "$UPDATE_CACHE")
+        if [ "$cached_version" != "$SCRIPT_VERSION" ]; then
+            debug_log "DEBUG" "Version changed from $cached_version to $SCRIPT_VERSION"
+            # バージョン情報を更新
+            echo "$SCRIPT_VERSION" > "$UPDATE_CACHE"
+        fi
+        # 引数で明示的なモード指定がなければfullをデフォルトに
+        [ -z "$MODE" ] && MODE="full"
+    fi
+}
+
 # 初期化処理を実行
 initialization() {
     # 実行権限を設定
@@ -835,6 +855,11 @@ initialization() {
     # 必要なディレクトリを作成
     if ! make_directory; then
         debug_log "ERROR" "Failed to create required directories"
+        return 1
+    fi
+
+    if ! check_updat; then
+        debug_log "ERROR" "Failed to set execute update"
         return 1
     fi
 }
@@ -1070,5 +1095,4 @@ main() {
 # 🔴　メイン　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # スクリプト実行
-MODE=update
 main "$@"
