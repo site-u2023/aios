@@ -565,115 +565,55 @@ local_normalize_version() {
 }
 
 decode_base64() {
-    local input="$1"
-    local output=""
-    
-    # 方法1: OpenSSL (OpenWrtに標準搭載されることが多い)
-    if command -v openssl >/dev/null 2>&1; then
-        output=$(printf "%s" "$input" | openssl enc -base64 -d 2>/dev/null)
-        if [ $? -eq 0 ] && [ -n "$output" ]; then
-            printf "%s" "$output"
-            return 0
-        fi
-    fi
-    
-    # 方法2: uudecode (busybox に含まれることが多い)
-    if command -v uudecode >/dev/null 2>&1; then
-        # 一時ファイルを作成してuudecodeで処理
-        local tmp_file="${CACHE_DIR}/base64tmp.$$"
-        printf "begin-base64 644 -\n%s\n====\n" "$input" > "$tmp_file"
-        uudecode -o - "$tmp_file" 2>/dev/null
-        local status=$?
-        rm -f "$tmp_file"
-        if [ $status -eq 0 ]; then
-            return 0
-        fi
-    fi
-    
-    # 方法3: BusyBox base64 (一部のOpenWrtでは利用可能)
-    if busybox base64 --help 2>/dev/null | grep -q "\-d"; then
-        output=$(printf "%s" "$input" | busybox base64 -d 2>/dev/null)
-        if [ $? -eq 0 ] && [ -n "$output" ]; then
-            printf "%s" "$output"
-            return 0
-        fi
-    fi
-    
-    # 方法4: `base64`コマンド (標準の実装)
-    if command -v base64 >/dev/null 2>&1; then
-        output=$(printf "%s" "$input" | base64 -d 2>/dev/null)
-        if [ $? -eq 0 ] && [ -n "$output" ]; then
-            printf "%s" "$output"
-            return 0
-        fi
-    fi
-    
-    # 方法5: fallback - API経由でデコード (外部接続が可能な場合)
-    if command -v wget >/dev/null 2>&1 || command -v curl >/dev/null 2>&1; then
-        local tmp_file="${CACHE_DIR}/base64api.$$"
-        local api_url="https://api.allorigins.win/raw?url=https://base64decode.org/api/decode/${input}"
-        
-        if command -v curl >/dev/null 2>&1; then
-            curl -s -o "$tmp_file" "$api_url" 2>/dev/null
-        else
-            wget -q -O "$tmp_file" "$api_url" 2>/dev/null
-        fi
-        
-        if [ -s "$tmp_file" ]; then
-            cat "$tmp_file"
-            rm -f "$tmp_file"
-            return 0
-        fi
-        rm -f "$tmp_file" 2>/dev/null
-    fi
-    
-    # 方法6: 純粋なシェルスクリプトでのデコード (最終手段 - 短いデータ向け)
-    debug_log "WARN" "Using pure shell base64 decoding - this may be slow"
-    
-    # Base64デコードテーブル
-    local b64chars="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-    local input_clean
-    
-    # 入力クリーニング（改行とパディングを削除）
-    input_clean=$(printf "%s" "$input" | tr -d '\n\r' | sed 's/=*$//')
-    
-    # 短いデータのみ処理（長いとシェルスクリプトでは非常に遅い）
-    if [ ${#input_clean} -gt 500 ]; then
-        debug_log "ERROR" "Pure shell base64 decode: input too long, max 500 chars"
+    # パラメータ検証
+    if [ -z "$1" ]; then
         return 1
     fi
     
-    # 純粋なシェルでの簡易デコード (本番環境では使わないが最終手段として提供)
-    # この実装は簡易的なもので、複雑なデータには向かない
-    local i=0 n=0 bits=0 char
-    local result=""
+    # 外部コマンドを優先的に使用
+    if command -v openssl >/dev/null 2>&1; then
+        printf "%s" "$1" | openssl enc -base64 -d 2>/dev/null
+        return $?
+    fi
     
-    while [ $i -lt ${#input_clean} ]; do
-        char="${input_clean:$i:1}"
-        i=$((i + 1))
-        
-        # インデックス検索
-        local idx=0 j=0
-        while [ $j -lt ${#b64chars} ]; do
-            if [ "${b64chars:$j:1}" = "$char" ]; then
-                idx=$j
-                break
-            fi
-            j=$((j + 1))
-        done
-        
-        # ビット操作
-        bits=$((bits << 6 | idx))
-        n=$((n + 6))
-        
-        if [ $n -ge 8 ]; then
-            n=$((n - 8))
-            result="$result$(printf "\\$(printf '%03o' $((bits >> n & 255))))"
+    if command -v base64 >/dev/null 2>&1; then
+        printf "%s" "$1" | base64 -d 2>/dev/null
+        return $?
+    fi
+    
+    if busybox base64 --help 2>/dev/null | grep -q "\-d"; then
+        printf "%s" "$1" | busybox base64 -d 2>/dev/null
+        return $?
+    fi
+    
+    # uudecodeを使用（一時ファイル経由）
+    if command -v uudecode >/dev/null 2>&1; then
+        TEMP_FILE="/tmp/base64_$$.tmp"
+        printf "begin-base64 644 -\n%s\n====\n" "$1" > "$TEMP_FILE"
+        uudecode -o - "$TEMP_FILE" 2>/dev/null
+        RET=$?
+        rm -f "$TEMP_FILE"
+        return $RET
+    fi
+    
+    # wget/curlを使ってAPIからデコード
+    if command -v wget >/dev/null 2>&1; then
+        # 注: これは実際のAPIエンドポイントに置き換えてください
+        TEMP_FILE="/tmp/base64_api_$$.tmp"
+        encoded_param=$(printf "%s" "$1" | sed 's/+/%2B/g;s/\//%2F/g;s/=/%3D/g')
+        wget -q -O "$TEMP_FILE" "https://api.example.com/base64decode?data=$encoded_param" 2>/dev/null
+        if [ -s "$TEMP_FILE" ]; then
+            cat "$TEMP_FILE"
+            rm -f "$TEMP_FILE"
+            return 0
         fi
-    done
+        rm -f "$TEMP_FILE"
+    fi
     
-    printf "%s" "$result"
-    return 0
+    # 全て失敗した場合
+    debug_log "ERROR" "No base64 decode method available"
+    echo "$1"  # デコードできないのでそのまま返す
+    return 1
 }
 
 download() {
