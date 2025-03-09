@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-02-12"
+SCRIPT_VERSION="2025.03.09-02-13"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -598,6 +598,8 @@ download() {
         shift
     done
 
+    install_package base64 yn hidden
+
     # 3. パス・URLの設定
     # ===============================
     local install_path="${BASE_DIR}/$file_name"
@@ -716,12 +718,18 @@ download() {
 	fi
 
         # aios更新処理
-	if [ "$file_name" = "$BIN_FILE" ] && [ "$MODE" = "update" ]; then
-	    chmod +x "$install_path"
-	    mv "$install_path" "$BIN_PATH"
-	    echo "$(color green "Update completed: $file_name - Version: $remote_version")"
-	    export AIOS_UPDATED=1
-    	    exec "$BIN_PATH" "$@" 
+	if [ "$file_name" = "$BIN_FILE" ]; then
+	    if [ "$MODE" = "update" ]; then
+	        chmod +x "$install_path"
+	        mv "$install_path" "$BIN_PATH"
+	        echo "$(color green "Update completed: $file_name - Version: $remote_version")"
+	        export MODE="full"
+    	        exec "$BIN_PATH" "$@" 
+	    else
+		echo "$(color blue "No update: $file_name - Version: $remote_version")"
+	        export MODE="full"
+    	        exec "$BIN_PATH" "$@" 
+	    fi
 	fi
 
         # 完了メッセージ
@@ -747,52 +755,6 @@ download() {
 # 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # 🔵　メイン　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
-#########################################################################
-# 初期設定
-#########################################################################
-# 権限設定
-chmod_aios() {
-    debug_log "ERROR" "Setting permissions for $BIN_PATH"
-    if ! chmod +x "$BIN_PATH"; then
-        debug_log "ERROR" "Failed to set permissions for $BIN_PATH"
-        return 1
-    fi
-}
-
-# 初期化処理
-delete_aios() {
-    debug_log "ERROR" "Deleting $BASE_DIR"
-    if ! rm -rf "${BASE_DIR}"; then
-        debug_log "ERROR" "Failed to delete $BASE_DIR"
-        return 1
-    fi
-}
-
-# 必要ディレクトリ作成
-make_directory() {
-    debug_log "ERROR" "Creating required directories"
-    if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"; then
-        debug_log "ERROR" "Failed to create required directories"
-        return 1
-    fi
-}
-
-# 初期化処理を実行
-initialization() {
-    # 実行権限を設定
-    debug_log "ERROR" "BIN PATH: $BIN_PATH"
-    if ! chmod_aios; then
-        debug_log "ERROR" "Failed to set execute permission"
-        return 1
-    fi
-
-    # 必要なディレクトリを作成
-    if ! make_directory; then
-        debug_log "ERROR" "Failed to create required directories"
-        return 1
-    fi
-}
-
 #########################################################################
 # バナー表示
 #########################################################################
@@ -837,6 +799,85 @@ packages() {
     feed_package_release jerrykuku luci-theme-argon yn hidden disabled
     
     # install_package list
+}
+
+# スクリプトの起動方法判定
+detect_execution_method() {
+    
+    # 親プロセスの情報を取得
+    PARENT_CMD=$(ps -o cmd= -p $PPID)
+    
+    # 実行方法判定（複数条件をチェック）
+    DOWNLOAD_AND_EXECUTE="false"
+    DIRECT_EXECUTE="false"
+    
+    # 1. ダウンロード直後に実行されたケース
+    if echo "$PARENT_CMD" | grep -q "wget.*aios.*sh"; then
+        DOWNLOAD_AND_EXECUTE="true"
+        echo "スクリプトはダウンロード後に直接実行されました"
+    # 2. パスが /usr/bin/aios であればインストール済みと判定
+    elif [ "$BIN_PATH" = "/usr/bin/aios" ]; then
+        DIRECT_EXECUTE="true"
+        echo "スクリプトはインストール済みコマンドとして実行されました"
+    # 3. 曖昧な場合は追加情報で判断
+    else
+        # プロセスのコマンドラインを確認
+        if ps | grep -q "sh.*aios"; then
+            DOWNLOAD_AND_EXECUTE="true" 
+            echo "スクリプトは sh コマンドで実行されました"
+        else
+            DIRECT_EXECUTE="true"
+            echo "スクリプトは直接実行されました"
+        fi
+    fi
+    
+    export DOWNLOAD_AND_EXECUTE DIRECT_EXECUTE
+}
+
+#########################################################################
+# 初期設定
+#########################################################################
+# 権限設定
+chmod_aios() {
+    debug_log "ERROR" "Setting permissions for $BIN_PATH"
+    if ! chmod +x "$BIN_PATH"; then
+        debug_log "ERROR" "Failed to set permissions for $BIN_PATH"
+        return 1
+    fi
+}
+
+# 初期化処理
+delete_aios() {
+    debug_log "ERROR" "Deleting $BASE_DIR"
+    if ! rm -rf "${BASE_DIR}"; then
+        debug_log "ERROR" "Failed to delete $BASE_DIR"
+        return 1
+    fi
+}
+
+# 必要ディレクトリ作成
+make_directory() {
+    debug_log "ERROR" "Creating required directories"
+    if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"; then
+        debug_log "ERROR" "Failed to create required directories"
+        return 1
+    fi
+}
+
+# 初期化処理を実行
+initialization() {
+    # 実行権限を設定
+    debug_log "ERROR" "BIN PATH: $BIN_PATH"
+    if ! chmod_aios; then
+        debug_log "ERROR" "Failed to set execute permission"
+        return 1
+    fi
+
+    # 必要なディレクトリを作成
+    if ! make_directory; then
+        debug_log "ERROR" "Failed to create required directories"
+        return 1
+    fi
 }
 
 #########################################################################
@@ -892,7 +933,6 @@ check_option() {
     LOGFILE=""
     FORCE="false"
     RESET="false"
-    AIOS_UPDATE="false"
     HELP="false"
 
     # 言語およびオプション引数の処理
@@ -959,8 +999,6 @@ check_option() {
         shift
     done
 
-    AIOS_INITIALIZED="true"
-
     # 環境変数として設定
     export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET HELP
 
@@ -988,6 +1026,14 @@ check_common() {
     local lang_code="$1"
     local mode="$2"
 
+    if [ "$DOWNLOAD_AND_EXECUTE" = "true" ]; then
+        echo "初回インストール処理を実行します..."
+        mode="update"
+    elif [ "$DIRECT_EXECUTE" = "true" ]; then
+        echo "通常の aios 処理を実行します..."
+	mode="full"
+    fi
+
     debug_log "DEBUG" "check_common: MODE=$MODE"
     debug_log "DEBUG" "check_common: mode=$mode"
 
@@ -1007,11 +1053,8 @@ check_common() {
             ;;
         update)
 	    debug_log "DEBUG" "check_common: aios update"
-	    if [ -n "$AIOS_UPDATED" ]; then
-    		MODE="full"
-	        AIOS_UPDATED=""
-	    fi	    
-	    download "hidden" "chmod" "aios"
+	    download "hidden" "chmod" "aios"    
+	    aios "$@"
 	    ;;
         full)
             download "hidden" "common-country.sh" "chmod"
