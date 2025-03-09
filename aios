@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-03-12"
+SCRIPT_VERSION="2025.03.09-03-13"
 
 echo -e "\033[1;32mDownload completed: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -565,7 +565,115 @@ local_normalize_version() {
 }
 
 decode_base64() {
-    echo "$1" | base64 -d 2>/dev/null
+    local input="$1"
+    local output=""
+    
+    # 方法1: OpenSSL (OpenWrtに標準搭載されることが多い)
+    if command -v openssl >/dev/null 2>&1; then
+        output=$(printf "%s" "$input" | openssl enc -base64 -d 2>/dev/null)
+        if [ $? -eq 0 ] && [ -n "$output" ]; then
+            printf "%s" "$output"
+            return 0
+        fi
+    fi
+    
+    # 方法2: uudecode (busybox に含まれることが多い)
+    if command -v uudecode >/dev/null 2>&1; then
+        # 一時ファイルを作成してuudecodeで処理
+        local tmp_file="${CACHE_DIR}/base64tmp.$$"
+        printf "begin-base64 644 -\n%s\n====\n" "$input" > "$tmp_file"
+        uudecode -o - "$tmp_file" 2>/dev/null
+        local status=$?
+        rm -f "$tmp_file"
+        if [ $status -eq 0 ]; then
+            return 0
+        fi
+    fi
+    
+    # 方法3: BusyBox base64 (一部のOpenWrtでは利用可能)
+    if busybox base64 --help 2>/dev/null | grep -q "\-d"; then
+        output=$(printf "%s" "$input" | busybox base64 -d 2>/dev/null)
+        if [ $? -eq 0 ] && [ -n "$output" ]; then
+            printf "%s" "$output"
+            return 0
+        fi
+    fi
+    
+    # 方法4: `base64`コマンド (標準の実装)
+    if command -v base64 >/dev/null 2>&1; then
+        output=$(printf "%s" "$input" | base64 -d 2>/dev/null)
+        if [ $? -eq 0 ] && [ -n "$output" ]; then
+            printf "%s" "$output"
+            return 0
+        fi
+    fi
+    
+    # 方法5: fallback - API経由でデコード (外部接続が可能な場合)
+    if command -v wget >/dev/null 2>&1 || command -v curl >/dev/null 2>&1; then
+        local tmp_file="${CACHE_DIR}/base64api.$$"
+        local api_url="https://api.allorigins.win/raw?url=https://base64decode.org/api/decode/${input}"
+        
+        if command -v curl >/dev/null 2>&1; then
+            curl -s -o "$tmp_file" "$api_url" 2>/dev/null
+        else
+            wget -q -O "$tmp_file" "$api_url" 2>/dev/null
+        fi
+        
+        if [ -s "$tmp_file" ]; then
+            cat "$tmp_file"
+            rm -f "$tmp_file"
+            return 0
+        fi
+        rm -f "$tmp_file" 2>/dev/null
+    fi
+    
+    # 方法6: 純粋なシェルスクリプトでのデコード (最終手段 - 短いデータ向け)
+    debug_log "WARN" "Using pure shell base64 decoding - this may be slow"
+    
+    # Base64デコードテーブル
+    local b64chars="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    local input_clean
+    
+    # 入力クリーニング（改行とパディングを削除）
+    input_clean=$(printf "%s" "$input" | tr -d '\n\r' | sed 's/=*$//')
+    
+    # 短いデータのみ処理（長いとシェルスクリプトでは非常に遅い）
+    if [ ${#input_clean} -gt 500 ]; then
+        debug_log "ERROR" "Pure shell base64 decode: input too long, max 500 chars"
+        return 1
+    fi
+    
+    # 純粋なシェルでの簡易デコード (本番環境では使わないが最終手段として提供)
+    # この実装は簡易的なもので、複雑なデータには向かない
+    local i=0 n=0 bits=0 char
+    local result=""
+    
+    while [ $i -lt ${#input_clean} ]; do
+        char="${input_clean:$i:1}"
+        i=$((i + 1))
+        
+        # インデックス検索
+        local idx=0 j=0
+        while [ $j -lt ${#b64chars} ]; do
+            if [ "${b64chars:$j:1}" = "$char" ]; then
+                idx=$j
+                break
+            fi
+            j=$((j + 1))
+        done
+        
+        # ビット操作
+        bits=$((bits << 6 | idx))
+        n=$((n + 6))
+        
+        if [ $n -ge 8 ]; then
+            n=$((n - 8))
+            result="$result$(printf "\\$(printf '%03o' $((bits >> n & 255))))"
+        fi
+    done
+    
+    printf "%s" "$result"
+    return 0
 }
 
 download() {
