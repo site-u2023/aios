@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-02-06"
+SCRIPT_VERSION="2025.03.09-02-07"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -989,6 +989,7 @@ check_common() {
     local mode="${2:-full}" 
 
     debug_log "DEBUG" "check_common: MODE=$MODE"
+    debug_log "DEBUG" "check_common: mode=$mode"
 
     # モードごとの処理
     case "$mode" in
