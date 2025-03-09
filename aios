@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-03-10"
+SCRIPT_VERSION="2025.03.09-03-11"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -1048,14 +1048,14 @@ check_common() {
         update)
 	    debug_log "DEBUG" "check_common: aios update"
 	    download "hidden" "chmod" "aios"
-    	　　if [ ! -f "${CACHE_DIR}/post_update_flag" ]; then
+	    if [ ! -f "${CACHE_DIR}/post_update_flag" ]; then
 		MODE="full"
-        	check_commod "$lang_code" "$MODE" "$@"
-    	   else
-        	MODE="full"
-        	exec "$BIN_PATH" "$@"
-    	   fi
-	   ;;
+		check_commod "$lang_code" "$MODE" "$@"
+	    else
+		MODE="full"
+		exec "$BIN_PATH" "$@"
+	    fi
+	    ;;
         full)
             download "hidden" "common-country.sh" "chmod"
             download "hidden" "common-package.sh" "chmod"
