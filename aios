@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-02-02"
+SCRIPT_VERSION="2025.03.09-02-03"
 
 echo -e "\033[1;32mDownload completed: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -564,6 +564,28 @@ local_normalize_version() {
     echo "$input"
 }
 
+# GitHub API呼び出し前にレート制限を確認する関数
+check_api_rate_limit() {
+    if [ "$DEBUG_MODE" = "true" ]; then
+        local rate_info=$(wget -qO- "https://api.github.com/rate_limit" 2>/dev/null)
+        if [ -n "$rate_info" ]; then
+            local remaining=$(echo "$rate_info" | grep -o '"core":{"limit":[0-9]*,"remaining":[0-9]*' | grep -o 'remaining":[0-9]*' | cut -d':' -f2)
+            local limit=$(echo "$rate_info" | grep -o '"core":{"limit":[0-9]*,"remaining":[0-9]*' | grep -o 'limit":[0-9]*' | cut -d':' -f2)
+            local reset=$(echo "$rate_info" | grep -o '"reset":[0-9]*' | head -1 | cut -d':' -f2)
+            local reset_time=$(date -r "$reset" "+%H:%M:%S" 2>/dev/null)
+            
+            debug_log "DEBUG" "API Limits: Core ${remaining}/${limit} remaining, Reset at ${reset_time:-unknown}"
+            
+            # 残りが10%未満なら警告
+            if [ -n "$remaining" ] && [ -n "$limit" ] && [ "$remaining" -lt $(( limit / 10 )) ]; then
+                debug_log "WARN" "GitHub API rate limit almost exhausted (${remaining}/${limit})"
+                return 1
+            fi
+        fi
+    fi
+    return 0
+}
+
 decode_base64() {
     # 極めてシンプルなアプローチ
     local input="$1"
@@ -658,8 +680,9 @@ download() {
     local response=""
     local decoded_content=""
 	
-    # GitHub API応答処理部分の修正
+    # GitHub API応答処理
     if [ "$skip_api" = "false" ]; then
+	check_api_rate_limit
         debug_log "DEBUG" "Processing API response for: $file_name"
         # コンテンツ部分を抽出
         response=$(echo "$api_response" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
@@ -682,7 +705,7 @@ download() {
             remote_version=$(remote_normalize_version "$decoded_content")
             if [ -z "$remote_version" ]; then
                 debug_log "WARN" "Failed to extract version from decoded content"
-                remote_version="$dummy_remote_version"
+		remote_version="$dummy_remote_version"
             fi
         else
             debug_log "ERROR" "Failed to decode base64 content"
