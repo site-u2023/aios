@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-02-04"
+SCRIPT_VERSION="2025.03.09-02-05"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -944,7 +944,8 @@ check_option() {
                 fi
                 ;;
 	    -u|--u|-update|--update)
-    		MODE="aios_update"
+		debug_log "DEBUG" "check_option: aios update"
+    		MODE="update"
     		;;
             -*)
                 echo "Warning: Unknown option: $1" >&2
@@ -1001,13 +1002,14 @@ check_common() {
             echo "$(get_message "MSG_RESET_COMPLETE")"
             exit 0
             ;;
-        aios_update)
-	    debug_log "DEBUG" "aios update"
+        update)
+	    debug_log "DEBUG" "check_common: aios update"
 	    if [ -n "$AIOS_UPDATED" ]; then
     		MODE="full"
 	        AIOS_UPDATED=""
 	    fi	    
 	    download "hidden" "chmod" "aios"
+	    exit 0
 	    ;;
         full)
             download "hidden" "common-country.sh" "chmod"
