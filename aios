@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-03-13"
+SCRIPT_VERSION="2025.03.09-03-14"
 
 echo -e "\033[1;32mDownload completed: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -567,75 +567,91 @@ local_normalize_version() {
 decode_base64() {
     # パラメータ検証
     if [ -z "$1" ]; then
-        debug_log "ERROR" "No input provided for base64 decoding"
+        debug_log "ERROR" "base64 decode: no input provided"
         return 1
     fi
     
-    # 外部コマンドを優先的に使用
+    # 入力パラメータをローカル変数に保存
+    input="$1"
+    
+    # 各メソッドの詳細なデバッグ出力
+    
+    # 方法1: OpenSSL
+    debug_log "DEBUG" "base64: trying OpenSSL method"
     if command -v openssl >/dev/null 2>&1; then
-        debug_log "DEBUG" "Trying base64 decode with: openssl"
-        result=$(printf "%s" "$1" | openssl enc -base64 -d 2>/dev/null)
+        debug_log "DEBUG" "base64: OpenSSL command found"
+        result=$(printf "%s" "$input" | openssl enc -base64 -d 2>/dev/null)
         if [ $? -eq 0 ] && [ -n "$result" ]; then
-            debug_log "DEBUG" "✓ Successfully decoded with openssl"
+            debug_log "DEBUG" "base64: ✓ SUCCESSFUL decode with OpenSSL"
             printf "%s" "$result"
             return 0
+        else
+            debug_log "DEBUG" "base64: ✗ OpenSSL decode FAILED"
         fi
+    else
+        debug_log "DEBUG" "base64: OpenSSL not available"
     fi
     
+    # 方法2: 標準base64コマンド
+    debug_log "DEBUG" "base64: trying standard base64 command"
     if command -v base64 >/dev/null 2>&1; then
-        debug_log "DEBUG" "Trying base64 decode with: native base64"
-        result=$(printf "%s" "$1" | base64 -d 2>/dev/null)
+        debug_log "DEBUG" "base64: standard base64 command found"
+        result=$(printf "%s" "$input" | base64 -d 2>/dev/null)
         if [ $? -eq 0 ] && [ -n "$result" ]; then
-            debug_log "DEBUG" "✓ Successfully decoded with native base64"
+            debug_log "DEBUG" "base64: ✓ SUCCESSFUL decode with standard base64"
             printf "%s" "$result"
             return 0
+        else
+            debug_log "DEBUG" "base64: ✗ standard base64 decode FAILED"
         fi
+    else
+        debug_log "DEBUG" "base64: standard base64 not available"
     fi
     
-    if busybox base64 --help 2>/dev/null | grep -q "\-d"; then
-        debug_log "DEBUG" "Trying base64 decode with: busybox base64"
-        result=$(printf "%s" "$1" | busybox base64 -d 2>/dev/null)
-        if [ $? -eq 0 ] && [ -n "$result" ]; then
-            debug_log "DEBUG" "✓ Successfully decoded with busybox base64"
-            printf "%s" "$result"
-            return 0
+    # 方法3: BusyBox base64
+    debug_log "DEBUG" "base64: trying BusyBox base64"
+    if command -v busybox >/dev/null 2>&1; then
+        debug_log "DEBUG" "base64: BusyBox command found"
+        if busybox base64 --help 2>/dev/null | grep -q "\-d"; then
+            debug_log "DEBUG" "base64: BusyBox with base64 -d support confirmed"
+            result=$(printf "%s" "$input" | busybox base64 -d 2>/dev/null)
+            if [ $? -eq 0 ] && [ -n "$result" ]; then
+                debug_log "DEBUG" "base64: ✓ SUCCESSFUL decode with BusyBox base64"
+                printf "%s" "$result"
+                return 0
+            else
+                debug_log "DEBUG" "base64: ✗ BusyBox base64 decode FAILED"
+            fi
+        else
+            debug_log "DEBUG" "base64: BusyBox found but no base64 -d support"
         fi
+    else
+        debug_log "DEBUG" "base64: BusyBox not available"
     fi
     
-    # uudecodeを使用（一時ファイル経由）
+    # 方法4: uudecode
+    debug_log "DEBUG" "base64: trying uudecode method"
     if command -v uudecode >/dev/null 2>&1; then
-        debug_log "DEBUG" "Trying base64 decode with: uudecode"
-        TEMP_FILE="/tmp/base64_$$.tmp"
-        printf "begin-base64 644 -\n%s\n====\n" "$1" > "$TEMP_FILE"
-        result=$(uudecode -o - "$TEMP_FILE" 2>/dev/null)
-        RET=$?
-        rm -f "$TEMP_FILE"
-        if [ $RET -eq 0 ] && [ -n "$result" ]; then
-            debug_log "DEBUG" "✓ Successfully decoded with uudecode"
+        debug_log "DEBUG" "base64: uudecode command found"
+        temp_file="/tmp/base64tmp_$$.tmp"
+        printf "begin-base64 644 -\n%s\n====\n" "$input" > "$temp_file"
+        result=$(uudecode -o - "$temp_file" 2>/dev/null)
+        status=$?
+        rm -f "$temp_file" 2>/dev/null
+        
+        if [ $status -eq 0 ] && [ -n "$result" ]; then
+            debug_log "DEBUG" "base64: ✓ SUCCESSFUL decode with uudecode"
             printf "%s" "$result"
             return 0
+        else
+            debug_log "DEBUG" "base64: ✗ uudecode decode FAILED"
         fi
+    else
+        debug_log "DEBUG" "base64: uudecode not available"
     fi
     
-    # wget/curlを使ってAPIからデコード
-    if command -v wget >/dev/null 2>&1; then
-        debug_log "DEBUG" "Trying base64 decode with: wget API call"
-        # 注: 実際のAPIを使用する場合はエンドポイントを変更
-        TEMP_FILE="/tmp/base64_api_$$.tmp"
-        encoded_param=$(printf "%s" "$1" | sed 's/+/%2B/g;s/\//%2F/g;s/=/%3D/g')
-        wget -q -O "$TEMP_FILE" "https://api.example.com/base64decode?data=$encoded_param" 2>/dev/null
-        if [ -s "$TEMP_FILE" ]; then
-            debug_log "DEBUG" "✓ Successfully decoded with API call"
-            cat "$TEMP_FILE"
-            rm -f "$TEMP_FILE"
-            return 0
-        fi
-        rm -f "$TEMP_FILE"
-    fi
-    
-    # 全て失敗した場合
-    debug_log "ERROR" "All base64 decode methods failed"
-    echo "$1"  # デコードできないのでそのまま返す
+    # どの方法も失敗
+    debug_log "ERROR" "base64: ALL decode methods FAILED"
     return 1
 }
 
