@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.09-03-07"
+SCRIPT_VERSION="2025.03.09-03-08"
 echo -e "\033[7;40mUpdated to version $SCRIPT_VERSION aios \033[0m"
 
 # =========================================================
@@ -717,12 +717,13 @@ download() {
 
         # aios更新処理
 	if [ "$file_name" = "$BIN_FILE" ] && [ "$MODE" = "update" ]; then
-    	chmod +x "$install_path"
-    	mv "$install_path" "$BIN_PATH"
-    	echo "$(color green "Update completed: $file_name - Version: $remote_version")"  
-    	# 更新後フラグを設定
-    	touch "${CACHE_DIR}/post_update_flag"
-        exec "$BIN_PATH" "$@" 
+    	    chmod +x "$install_path"
+    	    mv "$install_path" "$BIN_PATH"
+    	    echo "$(color green "Update completed: $file_name - Version: $remote_version")"  
+    	    # 更新後フラグを設定
+    	    touch "${CACHE_DIR}/post_update_flag"
+            exec "$BIN_PATH" "$@" 
+	fi
 
         # 完了メッセージ
         if [ "$quiet_mode" != "true" ]; then
