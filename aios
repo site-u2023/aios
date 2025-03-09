@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-00-01"
+SCRIPT_VERSION="2025.03.10-00-03"
 
 echo -e "\033[1;32mDownload completed: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -846,13 +846,13 @@ download() {
     if [ "$skip_api" = "false" ]; then
         # API制限チェック
         if [ "$DEBUG_MODE" = "true" ]; then
-            debug_log "DEBUG" "API Limits: Core $(wget -qO- https://api.github.com/rate_limit | grep -o '"core":{"limit":[0-9]*,"remaining":[0-9]*' | sed 's/.*limit":\([0-9]*\),"remaining":\([0-9]*\).*/\2\/\1/'), Reset at $(wget -qO- https://api.github.com/rate_limit | grep -o '"reset":[0-9]*' | head -1 | cut -d':' -f2 | xargs -I{} date -r {} +"%H:%M:%S" 2>/dev/null)"
-        fi
+            check_api_rate_limit
+	fi
         
         debug_log "DEBUG" "Processing API response for: $file_name"
         
         # API応答を取得
-        api_response=$(wget -qO- "$api_url" 2>/dev/null)
+        api_response=$(github_api "$api_url")
         
         # コンテンツ部分を抽出
         response=$(echo "$api_response" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
