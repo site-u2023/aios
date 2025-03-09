@@ -566,41 +566,50 @@ local_normalize_version() {
 
 # GitHub API呼び出し前にレート制限を確認する関数
 check_api_rate_limit() {
+    # POSIX準拠変数
+    api_rate_info=""
+    api_remaining=""
+    api_limit=""
+    api_reset=""
+    api_reset_str=""
+    
     if [ "$DEBUG_MODE" = "true" ]; then
         api_rate_info=$(wget -qO- "https://api.github.com/rate_limit" 2>/dev/null)
         if [ -n "$api_rate_info" ]; then
-            # 基本情報の抽出
+            # API情報の抽出
             api_remaining=$(echo "$api_rate_info" | grep -o '"core":{"limit":[0-9]*,"remaining":[0-9]*' | grep -o 'remaining":[0-9]*' | cut -d':' -f2)
             api_limit=$(echo "$api_rate_info" | grep -o '"core":{"limit":[0-9]*,"remaining":[0-9]*' | grep -o 'limit":[0-9]*' | cut -d':' -f2)
             api_reset=$(echo "$api_rate_info" | grep -o '"reset":[0-9]*' | head -1 | cut -d':' -f2)
             
-            # dateコマンドだけでの残り時間計算
-            api_now=$(date +%s)
-            api_diff=0
-            if [ -n "$api_reset" ] && [ -n "$api_now" ]; then
-                api_diff=$(expr "$api_reset" - "$api_now")
-                if [ "$api_diff" -lt 0 ]; then
-                    api_diff=0
+            # リセット時間の表示 (BusyBoxのdate対応)
+            if [ -n "$api_reset" ]; then
+                # @timestamp形式を使用(-d @timestamp)
+                api_reset_str=$(date -d "@$api_reset" "+%H:%M:%S" 2>/dev/null) 
+                if [ -z "$api_reset_str" ]; then
+                    # 失敗した場合は別の方法を試す
+                    api_now=$(date +%s)
+                    api_diff=$(expr "$api_reset" - "$api_now")
+                    if [ "$api_diff" -gt 0 ]; then
+                        api_min=$(expr "$api_diff" / 60)
+                        api_sec=$(expr "$api_diff" % 60)
+                        api_reset_str="in ${api_min}m ${api_sec}s"
+                    else
+                        api_reset_str="imminent"
+                    fi
+                else
+                    api_reset_str="at $api_reset_str"
                 fi
-            fi
-            
-            # 分と秒に変換
-            api_min=$(expr "$api_diff" / 60)
-            api_sec=$(expr "$api_diff" % 60)
-            
-            # リセット時刻表示
-            if [ "$api_diff" -gt 0 ]; then
-                api_reset_msg="in ${api_min}m ${api_sec}s"
             else
-                # リセット済みまたは更新中
-                api_reset_msg="imminent"
+                api_reset_str="unknown"
             fi
             
-            debug_log "DEBUG" "API Limits: Core ${api_remaining:-?}/${api_limit:-?}, Reset ${api_reset_msg}"
+            # ログ出力
+            debug_log "DEBUG" "API Limits: Core ${api_remaining:-?}/${api_limit:-?}, Reset ${api_reset_str}"
             
-            # 制限警告（10%以下）
+            # 制限が10%以下になると警告
             if [ -n "$api_remaining" ] && [ -n "$api_limit" ] && [ "$api_limit" -gt 0 ]; then
-                if [ "$api_remaining" -lt $(expr "$api_limit" / 10) ]; then
+                api_threshold=$(expr "$api_limit" / 10)
+                if [ "$api_remaining" -lt "$api_threshold" ]; then
                     debug_log "WARN" "GitHub API rate limit running low: ${api_remaining}/${api_limit}"
                     return 1
                 fi
