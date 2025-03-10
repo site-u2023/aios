@@ -1509,6 +1509,12 @@ check_common() {
                   "${CACHE_DIR}/timezone_success_done"
             select_country
             ;;
+	test_api)
+	    #wget -q -O /tmp/aios/github_api_test.sh "https://raw.githubusercontent.com/site-u2023/aios/main/github_api_test.sh"
+	    BASE_WGET "$BASE_DIR"/github_api_test.sh "$BASE_URL"/github_api_test.sh
+	    chmod +x /tmp/aios/github_api_test.sh
+	    sh /tmp/aios/github_api_test.sh
+	    ;;
         *)
             ;;
     esac
