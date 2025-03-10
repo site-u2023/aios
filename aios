@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-03-12"
+SCRIPT_VERSION="2025.03.10-03-13"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -878,7 +878,7 @@ clean_version_string() {
     fi
 }
 
-# GitHubコミットからバージョン情報を取得
+# GitHubコミットからバージョン情報を取得（完全版）
 get_commit_version() {
     local file_path="$1"
     
@@ -894,27 +894,24 @@ get_commit_version() {
     
     if [ -n "$token" ]; then
         debug_log "DEBUG" "Using token authentication for API request"
-        
-        # API呼び出し実行
         commit_info=$(wget -qO- --header="Authorization: token $token" \
             "https://api.github.com/$api_url" 2>/dev/null)
-        
-        # レスポンス検証（SHAフィールドの存在確認）
+            
+        # 判定ロジックの修正: レスポンスが空でないことに加えて
+        # SHA情報があるかを確認することで認証状態を正確に判定
         if [ -n "$commit_info" ] && echo "$commit_info" | grep -q '"sha"'; then
-            debug_log "DEBUG" "Successfully authenticated with token"
             auth_method="token"
+            debug_log "DEBUG" "Token authentication successful"
         else
-            debug_log "WARN" "Token authentication may have failed, using direct download"
-            auth_method="direct"
+            debug_log "WARN" "Token auth response lacks expected fields"
         fi
     else
         debug_log "DEBUG" "No token available, using direct API request"
         commit_info=$(wget -qO- "https://api.github.com/$api_url" 2>/dev/null)
-        auth_method="direct"
     fi
     
     if [ -n "$commit_info" ]; then
-        # 日付とSHAを抽出
+        # 日付とSHAを抽出（改行を正しく処理するよう改善）
         local commit_date=$(echo "$commit_info" | tr -d '\n\r' | grep -o '"date": *"[^"]*"' | head -1 | sed 's/.*"date": *"\([^"]*\)".*/\1/')
         local commit_sha=$(echo "$commit_info" | tr -d '\n\r' | grep -o '"sha": *"[^"]*"' | head -1 | sed 's/.*"sha": *"\([^"]*\)".*/\1/' | cut -c 1-7)
         
@@ -923,15 +920,17 @@ get_commit_version() {
             local formatted_date=$(echo "$commit_date" | sed 's/T.*Z//g;s/-/./g')
             local clean_version="${formatted_date}-${commit_sha}"
             
-            debug_log "DEBUG" "Successfully extracted commit info: $clean_version via $auth_method"
+            debug_log "DEBUG" "Successfully extracted commit info: $clean_version"
             echo "$clean_version $auth_method"
             return 0
         fi
         debug_log "DEBUG" "Failed to extract commit info from response"
+    else
+        debug_log "DEBUG" "No API response received for: $file_path"
     fi
     
     # API取得失敗時は現在時刻を使用
-    echo "$(date +%Y.%m.%d)-unknown $auth_method"
+    echo "$(date +%Y.%m.%d)-unknown ${auth_method}"
     return 1
 }
 
