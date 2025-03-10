@@ -600,17 +600,6 @@ init() {
         download "$BASE_URL/messages.db" "${BASE_DIR}/messages.db" "Failed to download messages.db"
     fi
     
-    # dynamic-system-info.sh が存在するか確認
-    if [ ! -f "$DYNAMIC_INFO_SCRIPT" ]; then
-        debug_log "WARN" "dynamic-system-info.sh not found. Attempting to download..."
-        download "$BASE_URL/dynamic-system-info.sh" "$DYNAMIC_INFO_SCRIPT" "Failed to download dynamic-system-info.sh"
-        
-        if [ -f "$DYNAMIC_INFO_SCRIPT" ]; then
-            chmod +x "$DYNAMIC_INFO_SCRIPT"
-            . "$DYNAMIC_INFO_SCRIPT"
-        fi
-    fi
-    
     debug_log "INFO" "Initialization complete"
     return 0
 }
