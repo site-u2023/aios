@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-02-15"
+SCRIPT_VERSION="2025.03.10-02-16"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -741,7 +741,7 @@ check_api_rate_limit() {
     return 0
 }
 
-# GitHubコミットからバージョン情報を取得
+# GitHubコミットからバージョン情報を取得（ANSIエスケープコード除去対応版）
 get_commit_version() {
     local file_path="$1"
     
@@ -771,11 +771,11 @@ get_commit_version() {
         local commit_sha=$(echo "$commit_info" | tr -d '\n\r' | grep -o '"sha": *"[^"]*"' | head -1 | sed 's/.*"sha": *"\([^"]*\)".*/\1/' | cut -c 1-7)
         
         if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
-            # YYYY.MM.DD-SHA 形式に変換（余分な改行や角括弧を含まない）
+            # YYYY.MM.DD-SHA 形式に変換
             local formatted_date=$(echo "$commit_date" | sed 's/T.*Z//g;s/-/./g')
             debug_log "DEBUG" "Successfully extracted commit info: ${formatted_date}-${commit_sha}"
-            # 単一の文字列として返す
-            echo "${formatted_date}-${commit_sha} ${auth_method}"
+            # ANSIエスケープコードを削除して返す
+            echo "${formatted_date}-${commit_sha} ${auth_method}" | sed 's/\x1b\[[0-9;]*m//g'
             return 0
         fi
         debug_log "DEBUG" "Failed to extract commit info from response"
@@ -783,19 +783,19 @@ get_commit_version() {
         debug_log "DEBUG" "No API response received for: $file_path"
     fi
     
-    # API取得失敗時は現在時刻を使用
-    echo "$(date +%Y.%m.%d)-unknown ${auth_method}"
+    # API取得失敗時は現在時刻を使用（ANSIエスケープコード除去）
+    echo "$(date +%Y.%m.%d)-unknown ${auth_method}" | sed 's/\x1b\[[0-9;]*m//g'
     return 1
 }
 
-# バージョン情報を安全に更新する関数（修正版）
+# バージョン情報を安全に更新する関数（ANSIコード除去対応版）
 update_file_version() {
     local file_name="$1"
     local version="$2"
     local script_file="$3"
     
-    # 余分な改行や角括弧を除去
-    version=$(echo "$version" | tr -d '\n\r' | sed 's/\[//g' | sed 's/\]//g')
+    # 余分な改行や角括弧、ANSIエスケープコードを除去
+    version=$(echo "$version" | tr -d '\n\r' | sed 's/\[//g' | sed 's/\]//g' | sed 's/\x1b\[[0-9;]*m//g')
     
     if [ ! -f "$script_file" ]; then
         printf "%s=%s\n" "${file_name}" "${version}" > "$script_file"
@@ -958,21 +958,21 @@ download() {
         
 	# バージョン情報の更新
 	if [ ! -f "$script_file" ]; then
-    	    # 余分な改行や角括弧を除去
-    	    clean_version=$(echo "$remote_version" | tr -d '\n\r' | sed 's/\[//g' | sed 's/\]//g')
+    	    # 余分な改行や角括弧、ANSIエスケープコードを除去
+    	    clean_version=$(echo "$remote_version" | tr -d '\n\r' | sed 's/\[//g' | sed 's/\]//g' | sed 's/\x1b\[[0-9;]*m//g')
     	    printf "%s=%s\n" "${file_name}" "${clean_version}" > "$script_file"
 	else
-	    if grep -q "^${file_name}=" "$script_file"; then
-        	# エスケープ処理を改良して余分な改行を除去
+    	    if grep -q "^${file_name}=" "$script_file"; then
+        	# エスケープ処理を改良
         	escaped_file=$(echo "$file_name" | sed 's/[\/&]/\\&/g')
-        	clean_version=$(echo "$remote_version" | tr -d '\n\r' | sed 's/\[//g' | sed 's/\]//g')
+        	clean_version=$(echo "$remote_version" | tr -d '\n\r' | sed 's/\[//g' | sed 's/\]//g' | sed 's/\x1b\[[0-9;]*m//g')
         	escaped_version=$(echo "$clean_version" | sed 's/[\/&]/\\&/g')
         	sed -i "s/^${escaped_file}=.*/${escaped_file}=${escaped_version}/" "$script_file"
-    	    else
-        	clean_version=$(echo "$remote_version" | tr -d '\n\r' | sed 's/\[//g' | sed 's/\]//g')
+            else
+        	clean_version=$(echo "$remote_version" | tr -d '\n\r' | sed 's/\[//g' | sed 's/\]//g' | sed 's/\x1b\[[0-9;]*m//g')
         	printf "%s=%s\n" "${file_name}" "${clean_version}" >> "$script_file"
-    	    fi
-	fi
+	    fi
+    	fi
         status_message="Download completed"
     fi
     
