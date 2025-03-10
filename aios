@@ -70,7 +70,7 @@ GITHUB_TOKEN_FILE="/etc/aios_token"
 #
 # 【要件】
 # 1. すべてのエラーメッセージを `messages.db` で管理し、多言語対応する。
-# 2. `debug_log("ERROR", message)` も `message.db` を使用する。
+# 2. `debug_log("ERROR", message)` も `messages.db` を使用する。
 # 3. `{file}`, `{version}` などの変数を動的に置換。
 # 4. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
 #########################################################################
