@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-02-05"
+SCRIPT_VERSION="2025.03.10-02-06"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -741,7 +741,7 @@ check_api_rate_limit() {
     return 0
 }
 
-# GitHubコミットからバージョン情報を取得
+# GitHubコミットからバージョン情報を取得（修正版）
 get_commit_version() {
     local file_path="$1"
     
@@ -753,7 +753,7 @@ get_commit_version() {
     local auth_method="direct"
     
     # トークンによるAPI認証
-    token=$(get_github_token)
+    local token=$(get_github_token)
     if [ -n "$token" ]; then
         debug_log "DEBUG" "Using token authentication for API request"
         commit_info=$(wget -qO- --header="Authorization: token $token" \
@@ -766,15 +766,16 @@ get_commit_version() {
     fi
     
     if [ -n "$commit_info" ]; then
-        # 日付とSHA情報を抽出（JSONフォーマットに対応した正規表現）
-        local commit_date=$(echo "$commit_info" | sed -n 's/.*"date"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-        local commit_sha=$(echo "$commit_info" | sed -n 's/.*"sha"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1 | cut -c 1-7)
+        # より単純な方法でJSONから日付とSHAを抽出
+        local commit_date=$(echo "$commit_info" | grep -o '"date": *"[^"]*"' | head -1 | sed 's/.*"date": *"\([^"]*\)".*/\1/')
+        local commit_sha=$(echo "$commit_info" | grep -o '"sha": *"[^"]*"' | head -1 | sed 's/.*"sha": *"\([^"]*\)".*/\1/' | cut -c 1-7)
         
         if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
             # YYYY.MM.DD-SHA 形式に変換
             local formatted_date=$(echo "$commit_date" | sed 's/T.*Z//g;s/-/./g')
             debug_log "DEBUG" "Successfully extracted commit info: ${formatted_date}-${commit_sha}"
-            echo "${formatted_date}-${commit_sha} ${auth_method}"
+            # 改行を含まない単一の文字列として返す
+            printf "%s %s" "${formatted_date}-${commit_sha}" "${auth_method}"
             return 0
         fi
         debug_log "DEBUG" "Failed to extract commit info from response"
@@ -783,7 +784,7 @@ get_commit_version() {
     fi
     
     # API取得失敗時は現在時刻を使用
-    echo "$(date +%Y.%m.%d)-unknown direct"
+    printf "%s %s" "$(date +%Y.%m.%d)-unknown" "direct"
     return 1
 }
 
@@ -915,17 +916,20 @@ download() {
             debug_log "DEBUG" "chmod +x applied to $file_name"
         fi
         
-        # バージョン情報の更新
-        if [ ! -f "$script_file" ]; then
-            echo "${file_name}=${remote_version}" > "$script_file"
-        else
-            if grep -q "^${file_name}=" "$script_file"; then
-                sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_file"
-            else
-                echo "${file_name}=${remote_version}" >> "$script_file"
-            fi
-        fi
-        
+	# バージョン情報の更新
+	if [ ! -f "$script_file" ]; then
+    	printf "%s=%s\n" "${file_name}" "${remote_version}" > "$script_file"
+	else
+    	    if grep -q "^${file_name}=" "$script_file"; then
+        	# エスケープ処理を改良
+        	escaped_file=$(echo "$file_name" | sed 's/[\/&]/\\&/g')
+        	escaped_version=$(echo "$remote_version" | sed 's/[\/&]/\\&/g')
+        	sed -i "s/^${escaped_file}=.*/${escaped_file}=${escaped_version}/" "$script_file"
+    	    else
+        	printf "%s=%s\n" "${file_name}" "${remote_version}" >> "$script_file"
+    	    fi
+	fi
+
         status_message="Download completed"
     fi
     
@@ -941,10 +945,10 @@ download() {
     if [ -n "$action_message" ]; then
         message="${message} (${action_message})"
     fi
-    
+
     # 出力
     if [ "$hidden_mode" = "true" ]; then
-        echo "$(color green "${message}")"
+        echo -e "$(color green "${message}")"
     else
         debug_log "DEBUG" "Quiet mode ${message}"
     fi
