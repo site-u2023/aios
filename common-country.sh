@@ -79,7 +79,7 @@ fi
 #
 # 【要件】
 # 1. `test_country_search()`, `test_timezone_search()`, `test_cache_contents()` を統合。
-# 2. `debug_log()` を使用し、メッセージを `message.db` から取得。
+# 2. `debug_log()` を使用し、メッセージを `messages.db` から取得。
 # 3. `country.db` の検索結果が適切に出力されるか確認できるようにする。
 # 4. 影響範囲: `common.sh` のみ（`aios` には影響なし）。
 #########################################################################
@@ -669,7 +669,7 @@ get_message() {
     local message_code="$1"
     local message=""
     local language_code="en"  # デフォルト言語
-    local message_db="${BASE_DIR}/message.db"
+    local message_db="${BASE_DIR}/messages.db"
     local cache_country="${CACHE_DIR}/country.ch"
     
     # カントリーキャッシュから言語コードを取得
@@ -887,10 +887,10 @@ init() {
         fi
     fi
     
-    # message.db が存在するか確認
-    if [ ! -f "${BASE_DIR}/message.db" ]; then
-        debug_log "WARN" "message.db not found. Attempting to download..."
-        download "$BASE_URL/message.db" "${BASE_DIR}/message.db" "Failed to download message.db"
+    # messages.db が存在するか確認
+    if [ ! -f "${BASE_DIR}/messages.db" ]; then
+        debug_log "WARN" "messages.db not found. Attempting to download..."
+        download "$BASE_URL/messages.db" "${BASE_DIR}/messages.db" "Failed to download messages.db"
     fi
     
     # dynamic-system-info.sh が存在するか確認
