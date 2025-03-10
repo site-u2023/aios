@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-02-02"
+SCRIPT_VERSION="2025.03.10-02-03"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -1012,7 +1012,13 @@ version_is_newer() {
 }
 
 download() {
-    # ファイル名を最初の引数として処理、残りはオプション
+    # 引数処理を改善（ファイル名を必須の最初の引数として扱う）
+    if [ $# -eq 0 ]; then
+        debug_log "ERROR" "No file name provided"
+        return 1
+    fi
+    
+    # 最初の引数はファイル名として処理
     local file_name="$1"
     shift
     
@@ -1437,10 +1443,10 @@ check_common() {
             exit 0
             ;;
         update)
-	    download "hidden" "chmod" "aios"
+	    download "aios" "hidden" "chmod"
 	    if [ ! -f "${CACHE_DIR}/post_update_flag" ]; then
 		MODE="full"
-		check_commod "$lang_code" "$MODE" "$@"
+		check_common "$lang_code" "$MODE" "$@"
 	    else
 		MODE="full"
 		exec "$BIN_PATH" $(echo "$@" | sed 's/update//g' | sed 's/--update//g' | sed 's/-u//g' | sed 's/--u//g')
