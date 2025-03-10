@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-00-09"
+SCRIPT_VERSION="2025.03.10-01-00"
 
 echo -e "\033[1;32mDownload completed: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -709,8 +709,30 @@ check_api_rate_limit() {
     return 0
 }
 
-decode_base64() { 
-    echo "$1" | base64 -d 2>/dev/null; 
+decode_base64() {
+    input="$1"
+    echo "$input" | awk '
+    BEGIN {
+        b64="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+        for(i=0;i<64;i++) b64_idx[substr(b64,i+1,1)]=i
+    }
+    {
+        # 簡易的なbase64デコード
+        for(j=1;j<=length;j+=4) {
+            # 各4文字ブロック処理（簡略版）
+            if(j+3<=length) {
+                c1=b64_idx[substr($0,j,1)]
+                c2=b64_idx[substr($0,j+1,1)]
+                c3=b64_idx[substr($0,j+2,1)]
+                c4=b64_idx[substr($0,j+3,1)]
+                
+                printf("%c%c%c", 
+                    (c1<<2)|(c2>>4), 
+                    ((c2&15)<<4)|(c3>>2), 
+                    ((c3&3)<<6)|c4)
+            }
+        }
+    }'
 }
 
 download() {
