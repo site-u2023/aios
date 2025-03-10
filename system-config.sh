@@ -364,6 +364,36 @@ configure_dns() {
     uci commit dhcp
 }
 
+#########################################################################
+# パッケージのインストール (オプション)
+# テスト用（最終的に推奨パッケージスクリプトに移動）
+#########################################################################
+packages() {
+    # パッケージのインストール
+    #install_package luci yn hidden
+    install_package ttyd yn hidden
+    install_package luci-app-ttyd yn hidden
+    install_package luci-i18n-ttyd yn hidden
+    install_package openssh-sftp-server yn hidden
+    install_package luci-mod-dashboard yn hidden
+    #install_package coreutils yn hidden
+    install_package irqbalance yn hidden
+    install_package jq yn hidden
+
+    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
+    feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden
+    feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden
+    feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden
+    feed_package gSpotx2f packages-openwrt current luci-app-log yn hidden
+    feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled
+
+    feed_package_release lisaac luci-app-diskman yn hidden disabled
+
+    feed_package_release jerrykuku luci-theme-argon yn hidden disabled
+    
+    # install_package list
+}
+
 # メイン処理
 main() {
     information
