@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-04-02"
+SCRIPT_VERSION="2025.03.10-04-03"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -808,9 +808,19 @@ check_token_status() {
             wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null
             
             if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-                # jqでパース
-                local core_limit=$(jq -r '.resources.core.limit' "$temp_file")
-                local core_remaining=$(jq -r '.resources.core.remaining' "$temp_file")
+                local core_limit=""
+                local core_remaining=""
+                
+                # jqが利用可能ならjqを使う
+                if check_jq_available; then
+                    echo "Parser: jq available (preferred method)"
+                    core_limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
+                    core_remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
+                else
+                    echo "Parser: fallback method (grep/sed)"
+                    core_limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+')
+                    core_remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+')
+                fi
                 
                 echo "Core rate limit: $core_limit"
                 echo "Core remaining: $core_remaining"
@@ -818,7 +828,6 @@ check_token_status() {
                 # 認証状態の判断
                 if [ "$core_limit" = "5000" ]; then
                     echo "Auth status: ✅ AUTHENTICATED (Higher limits active)"
-                    echo "Using token authentication successfully"
                 else
                     echo "Auth status: ❌ UNAUTHENTICATED (Standard limits)"
                 fi
@@ -838,25 +847,45 @@ check_token_status() {
     echo "========================================"
 }
 
+check_jq_available() {
+    if command -v jq >/dev/null 2>&1; then
+        return 0 # jqが利用可能
+    else
+        return 1 # jqが利用できない
+    fi
+}
+
 # APIレート制限確認関数
 check_api_rate_limit() {
     if [ "$DEBUG_MODE" = "true" ]; then
-        # トークン取得
         local token="$(get_github_token)"
         local temp_file="/tmp/aios_api_limit.tmp"
         
-        # APIレスポンスを取得
+        # APIレスポンスを一時ファイルに保存
         if [ -n "$token" ]; then
             wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null
         else
             wget -q -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
         fi
         
-        # jqでパース
         if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-            local core_limit=$(jq -r '.resources.core.limit' "$temp_file")
-            local core_remain=$(jq -r '.resources.core.remaining' "$temp_file")
-            local core_reset=$(jq -r '.resources.core.reset' "$temp_file")
+            local core_limit=""
+            local core_remaining=""
+            local core_reset=""
+            
+            # jqが利用可能ならjqを使う
+            if check_jq_available; then
+                debug_log "DEBUG" "Using jq for JSON parsing"
+                core_limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
+                core_remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
+                core_reset=$(jq -r '.resources.core.reset' "$temp_file" 2>/dev/null)
+            else
+                # jqが利用できない場合のフォールバック
+                debug_log "DEBUG" "jq not available, using fallback parsing method"
+                core_limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+')
+                core_remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+')
+                core_reset=$(grep -A3 '"core"' "$temp_file" | grep '"reset"' | head -1 | grep -o '[0-9]\+')
+            fi
             
             # 時間計算
             if [ -n "$core_reset" ]; then
@@ -870,7 +899,7 @@ check_api_rate_limit() {
                 local auth_text="anonymous"
                 [ "$core_limit" = "5000" ] && auth_text="authenticated"
                 
-                debug_log "DEBUG" "API Limits: Core $core_remain/$core_limit ($auth_text), Reset in ${mins}m ${secs}s" 
+                debug_log "DEBUG" "API Limits: Core $core_remaining/$core_limit ($auth_text), Reset in ${mins}m ${secs}s"
             fi
             
             # 一時ファイル削除
@@ -921,35 +950,50 @@ get_commit_version() {
     # トークン取得
     local token="$(get_github_token)"
     
-    # APIリクエスト実行
     if [ -n "$token" ]; then
         debug_log "DEBUG" "Using token authentication for API request"
-        wget -q -O "$temp_file" --header="Authorization: token $token" \
-            "https://api.github.com/$api_url" 2>/dev/null
-            
-        # jqでレスポンス検証
-        if [ -f "$temp_file" ] && [ -s "$temp_file" ] && \
-           jq -e '.[0].sha' "$temp_file" >/dev/null 2>&1; then
-            auth_method="token"
-            debug_log "DEBUG" "Token authentication successful"
-        else
-            debug_log "WARN" "Token auth may have failed, falling back to direct request"
+        wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/$api_url" 2>/dev/null
+        
+        # レスポンス検証
+        if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+            # jqが利用可能ならjqで検証
+            if check_jq_available; then
+                if jq -e '.[0].sha' "$temp_file" >/dev/null 2>&1; then
+                    auth_method="token"
+                    debug_log "DEBUG" "Token authentication successful (jq verified)"
+                fi
+            else
+                # フォールバック：単純にshaの存在確認
+                if grep -q '"sha"' "$temp_file"; then
+                    auth_method="token"
+                    debug_log "DEBUG" "Token authentication successful (grep verified)"
+                fi
+            fi
         fi
     else
         debug_log "DEBUG" "No token available, using direct API request"
         wget -q -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
     fi
     
-    # jqで情報抽出
+    # 情報抽出
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-        # 日付とSHAを抽出（jqの -r オプションで生の値を取得）
-        local commit_date=$(jq -r '.[0].commit.committer.date' "$temp_file" 2>/dev/null | grep -o "[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}")
-        local commit_sha=$(jq -r '.[0].sha' "$temp_file" 2>/dev/null)
+        local commit_date=""
+        local commit_sha=""
+        
+        # jqが利用可能ならjqでパース
+        if check_jq_available; then
+            commit_date=$(jq -r '.[0].commit.committer.date' "$temp_file" 2>/dev/null | grep -o "[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}")
+            commit_sha=$(jq -r '.[0].sha' "$temp_file" 2>/dev/null | cut -c 1-7)
+        else
+            # フォールバック：grepとsedでパース
+            commit_date=$(grep -o '"date"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | head -1 | grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}')
+            commit_sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | head -1 | grep -o '[a-f0-9]\{7,40\}' | cut -c 1-7)
+        fi
         
         if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
             # YYYY.MM.DD-SHA 形式に変換
             local formatted_date=$(echo "$commit_date" | sed 's/-/./g')
-            local clean_version="${formatted_date}-${commit_sha:0:7}"
+            local clean_version="${formatted_date}-${commit_sha}"
             
             debug_log "DEBUG" "Successfully extracted commit info: $clean_version via $auth_method"
             rm -f "$temp_file"
@@ -960,7 +1004,7 @@ get_commit_version() {
     fi
     
     # 一時ファイル削除
-    rm -f "$temp_file"
+    rm -f "$temp_file" 2>/dev/null
     
     # API取得失敗時は現在時刻を使用
     echo "$(date +%Y.%m.%d)-unknown $auth_method"
