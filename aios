@@ -1559,7 +1559,7 @@ check_common() {
             check_downloader
             print_banner
             select_country "$lang_code"
-            download "hidden" "system-config.sh" "chmod" "read"
+            download "system-config.sh" "hidden" "chmod" "read"
             #packages
             ;;
         light)
@@ -1576,7 +1576,7 @@ check_common() {
             check_downloader
             print_banner
             select_country "$lang_code"
-            download "hidden" "system-config.sh" "chmod" "read"
+            download "system-config.sh" "chmod" "read"
             #packages
             ;;
         full)
