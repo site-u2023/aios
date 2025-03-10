@@ -1163,60 +1163,24 @@ print_banner() {
 }
 
 #########################################################################
-# すべてのキャッシュファイルの初期化を管理する関数
+# キャッシュシステム - 中央管理関数
 #########################################################################
-init_all_cache_files() {
-    debug_log "DEBUG" "Initializing all cache files"
+
+# 基本ディレクトリの作成とアクセス権確認
+make_directory() {
+    debug_log "DEBUG" "Creating required directories"
     
-    # キャッシュディレクトリの作成
-    mkdir -p "$CACHE_DIR" 2>/dev/null || {
-        debug_log "ERROR" "Failed to create cache directory: $CACHE_DIR"
-        return 1
-    }
-    
-    # 1. デバイス系情報のキャッシュ初期化
-    if type init_device_cache >/dev/null 2>&1; then
-        init_device_cache || debug_log "WARN" "Device cache initialization had issues"
-    else
-        debug_log "WARN" "init_device_cache function not available"
-    fi
-    
-    # 2. パッケージマネージャ情報の初期化
-    if type detect_and_save_package_manager >/dev/null 2>&1; then
-        detect_and_save_package_manager
-    else
-        # フォールバック: 直接実装
-        if [ ! -f "${CACHE_DIR}/downloader.ch" ]; then
-            if command -v opkg >/dev/null 2>&1; then
-                echo "opkg" > "${CACHE_DIR}/downloader.ch"
-                echo "ipk" > "${CACHE_DIR}/extension.ch"
-            elif command -v apk >/dev/null 2>&1; then
-                echo "apk" > "${CACHE_DIR}/downloader.ch"
-                echo "apk" > "${CACHE_DIR}/extension.ch"
-            else
-                echo "opkg" > "${CACHE_DIR}/downloader.ch"
-                echo "ipk" > "${CACHE_DIR}/extension.ch"
-            fi
-        fi
-    fi
-    
-    # 必須キャッシュファイルの存在チェック
-    debug_log "DEBUG" "Checking required cache files"
-    local missing_files=0
-    
-    for cache_file in downloader.ch extension.ch; do
-        if [ ! -f "${CACHE_DIR}/${cache_file}" ]; then
-            debug_log "ERROR" "Required cache file missing: ${cache_file}"
-            missing_files=$((missing_files + 1))
-        fi
+    # 必要なディレクトリの作成
+    for dir in "$BASE_DIR" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR" "$BUILD_DIR"; do
+        mkdir -p "$dir" 2>/dev/null || {
+            debug_log "ERROR" "Failed to create directory: $dir"
+            return 1
+        }
+        chmod 755 "$dir" 2>/dev/null || {
+            debug_log "WARN" "Could not set permissions for: $dir"
+        }
     done
     
-    if [ "$missing_files" -gt 0 ]; then
-        debug_log "ERROR" "${missing_files} required cache files are missing"
-        return 1
-    fi
-    
-    debug_log "INFO" "All required cache files initialized"
     return 0
 }
 
@@ -1224,7 +1188,7 @@ init_all_cache_files() {
 init_cache_system() {
     debug_log "DEBUG" "Initializing cache system"
     
-    # 1. ディレクトリが存在するか確認
+    # 1. 基本ディレクトリの確保
     if [ ! -d "$CACHE_DIR" ]; then
         make_directory || {
             debug_log "ERROR" "Failed to initialize directories"
@@ -1232,15 +1196,15 @@ init_cache_system() {
         }
     fi
     
-    # 2. パッケージマネージャー情報を確認・設定
+    # 2. パッケージマネージャーキャッシュの初期化
     if [ ! -f "${CACHE_DIR}/downloader.ch" ] || [ ! -f "${CACHE_DIR}/extension.ch" ]; then
         debug_log "INFO" "Initializing package manager cache"
         
-        # dynamic-system-info.sh の関数が利用可能か確認
+        # A. dynamic-system-info.sh の関数が利用可能か確認
         if type detect_and_save_package_manager >/dev/null 2>&1; then
             detect_and_save_package_manager
         else
-            # フォールバック実装
+            # B. フォールバック実装
             init_package_manager_cache
         fi
     fi
@@ -1255,112 +1219,101 @@ init_cache_system() {
 
 # パッケージマネージャーキャッシュの簡易初期化（フォールバック）
 init_package_manager_cache() {
+    # A. パッケージマネージャー情報
     if [ ! -f "${CACHE_DIR}/downloader.ch" ]; then
         if command -v opkg >/dev/null 2>&1; then
             echo "opkg" > "${CACHE_DIR}/downloader.ch"
-            debug_log "INFO" "Set downloader.ch: opkg"
+            debug_log "INFO" "Created downloader.ch: opkg"
         elif command -v apk >/dev/null 2>&1; then
             echo "apk" > "${CACHE_DIR}/downloader.ch"
-            debug_log "INFO" "Set downloader.ch: apk"
+            debug_log "INFO" "Created downloader.ch: apk"
         else
             echo "opkg" > "${CACHE_DIR}/downloader.ch"
             debug_log "WARN" "No package manager detected, using opkg as default"
         fi
     fi
     
+    # B. パッケージ拡張子情報
     if [ ! -f "${CACHE_DIR}/extension.ch" ]; then
         if [ -f "${CACHE_DIR}/downloader.ch" ]; then
-            local pm=$(cat "${CACHE_DIR}/downloader.ch")
+            local pm
+            pm=$(cat "${CACHE_DIR}/downloader.ch")
             case "$pm" in
                 opkg) echo "ipk" > "${CACHE_DIR}/extension.ch" ;;
                 apk)  echo "apk" > "${CACHE_DIR}/extension.ch" ;;
                 *)    echo "ipk" > "${CACHE_DIR}/extension.ch" ;;
             esac
-            debug_log "INFO" "Set extension.ch based on downloader.ch"
+            debug_log "INFO" "Created extension.ch based on downloader.ch"
         else
             echo "ipk" > "${CACHE_DIR}/extension.ch"
-            debug_log "INFO" "Set default extension.ch: ipk"
+            debug_log "INFO" "Created default extension.ch: ipk"
         fi
     fi
 }
 
-# キャッシュ状態のデバッグ出力
+# キャッシュ状態の詳細デバッグ出力
 debug_cache_status() {
     debug_log "DEBUG" "Cache directory: $CACHE_DIR"
     debug_log "DEBUG" "Cache directory exists: $([ -d "$CACHE_DIR" ] && echo 'yes' || echo 'no')"
     debug_log "DEBUG" "Cache directory writable: $([ -w "$CACHE_DIR" ] && echo 'yes' || echo 'no')"
     
-    # 必須キャッシュファイルのリスト
+    # キャッシュファイルのステータス確認
     local required_files="downloader.ch extension.ch"
     local optional_files="country.ch language.ch luci.ch zone.ch zonename.ch timezone.ch architecture.ch osversion.ch message.ch"
     
+    # 必須キャッシュファイルの状態確認
     debug_log "DEBUG" "Required cache files status:"
-    for file in $required_files; do
-        if [ -f "${CACHE_DIR}/${file}" ]; then
-            local content=$(cat "${CACHE_DIR}/${file}")
-            debug_log "DEBUG" "- ${file}: EXISTS (content: ${content})"
+    for cache_file in $required_files; do
+        if [ -f "${CACHE_DIR}/${cache_file}" ]; then
+            local content
+            content=$(cat "${CACHE_DIR}/${cache_file}")
+            debug_log "DEBUG" "- ${cache_file}: EXISTS (content: ${content})"
         else
-            debug_log "DEBUG" "- ${file}: MISSING (REQUIRED)"
+            debug_log "DEBUG" "- ${cache_file}: MISSING (REQUIRED)"
         fi
     done
     
+    # オプショナルキャッシュファイルの状態確認
     debug_log "DEBUG" "Optional cache files status:"
-    for file in $optional_files; do
-        if [ -f "${CACHE_DIR}/${file}" ]; then
-            local content=$(cat "${CACHE_DIR}/${file}")
-            debug_log "DEBUG" "- ${file}: EXISTS (content: ${content})"
+    for cache_file in $optional_files; do
+        if [ -f "${CACHE_DIR}/${cache_file}" ]; then
+            local content
+            content=$(cat "${CACHE_DIR}/${cache_file}")
+            debug_log "DEBUG" "- ${cache_file}: EXISTS (content: ${content})"
         else
-            debug_log "DEBUG" "- ${file}: NOT YET CREATED"
+            debug_log "DEBUG" "- ${cache_file}: NOT YET CREATED"
         fi
     done
 }
 
 #########################################################################
-# 初期設定
+# aios初期化とシステムセットアップ関連関数
 #########################################################################
-# 権限設定
-chmod_aios() {
 
+# 実行権限の設定
+chmod_aios() {
     echo "$(color magenta "Setting permissions for $BIN_PATH")"
 
     if ! chmod +x "$BIN_PATH"; then
-        debug_log "ERROR" "Failed to set permissions for $BIN_PATH"
+        debug_log "ERROR" "Failed to set execute permission"
         return 1
     fi
+    return 0
 }
 
-# 初期化処理
+# ディレクトリ削除処理
 delete_aios() {
     debug_log "ERROR" "Deleting $BASE_DIR"
     if ! rm -rf "${BASE_DIR}"; then
         debug_log "ERROR" "Failed to delete $BASE_DIR"
         return 1
     fi
-}
-
-# 基本ディレクトリの作成とアクセス権確認
-make_directory() {
-    debug_log "DEBUG" "Creating required directories"
-    
-    # 必要なディレクトリの配列
-    local dirs="$BASE_DIR $CACHE_DIR $LOG_DIR $FEED_DIR $BUILD_DIR"
-    
-    # 各ディレクトリを作成・権限設定
-    for dir in $dirs; do
-        mkdir -p "$dir" 2>/dev/null || {
-            debug_log "ERROR" "Failed to create directory: $dir"
-            return 1
-        }
-        chmod 755 "$dir" 2>/dev/null || {
-            debug_log "WARN" "Could not set permissions for: $dir"
-        }
-    done
-    
     return 0
 }
 
+# アップデート状態確認
 check_update() {
-    # 確実にキャッシュディレクトリが存在するか確認
+    # キャッシュディレクトリの確保
     mkdir -p "$CACHE_DIR" 2>/dev/null
 
     # アップデート後の特殊処理
@@ -1382,7 +1335,8 @@ check_update() {
         echo "$SCRIPT_VERSION" > "$UPDATE_CACHE" || debug_log "WARN" "Could not create $UPDATE_CACHE"
     else
         # 再実行: アップデートキャッシュをチェック
-        local cached_version=$(cat "$UPDATE_CACHE" 2>/dev/null || echo "unknown")
+        local cached_version
+        cached_version=$(cat "$UPDATE_CACHE" 2>/dev/null || echo "unknown")
         if [ "$cached_version" != "$SCRIPT_VERSION" ]; then
             debug_log "DEBUG" "Version changed from $cached_version to $SCRIPT_VERSION"
             # バージョン情報を更新
@@ -1396,7 +1350,7 @@ check_update() {
     return 0
 }
 
-# 初期化処理を実行
+# 初期化処理のメイン関数
 initialization() {
     # 実行権限を設定
     if ! chmod_aios; then
@@ -1410,53 +1364,23 @@ initialization() {
         return 1
     fi
 
+    # キャッシュシステムの初期化
+    if ! init_cache_system; then
+        debug_log "WARN" "Cache system initialization had issues"
+    fi
+
+    # アップデート状態の確認
     check_update || debug_log "WARN" "Update check had issues, continuing anyway"
+    
     return 0
 }
 
 #########################################################################
-# Last Update: 2025-02-15 10:00:00 (JST) 🚀
-# check_option: コマンドラインオプション解析・正規化関数
-#
-# 【概要】
-# この関数は、aios 起動時に渡されたコマンドライン引数を解析し、
-# ダッシュ付きの引数はオプションとして解析、非ダッシュ引数はすべて
-# 言語オプションとして扱い、最初に見つかった値を SELECTED_LANGUAGE に設定します。
-#
-# ※ MODE の指定は必ずダッシュ付きで行い、以下の各パターンを受け付けます。
-#     common_full  : -cf, --cf, -common_full, --common_full  → MODE="full"
-#     common_light : -cl, --cl, -ocommon_light, --ocommon_light → MODE="light"
-#     common_debug : -cd, --cd, -common_debug, --common_debug, --ocommon_debug → MODE="debug"
-#     reset        : -r, --r, -reset, --reset, -resrt, --resrt → MODE="reset" および RESET="true"
-#
-# 【対応オプション】
-#  - ヘルプ:         -h, --h, -help, --help, -?, --?  
-#  - バージョン:     -v, --v, -version, --version  
-#  - デバッグ:       -d, --d, -debug, --debug, -d1, --d1  
-#                     → DEBUG_MODE="true", DEBUG_LEVEL="DEBUG"
-#                   -d2, --d2, -debug2, --debug2  
-#                     → DEBUG_MODE="true", DEBUG_LEVEL="DEBUG2"
-#  - モード指定:
-#       - full:       -cf, --cf, -common_full, --common_full  → MODE="full"
-#       - light:      -cl, --cl, -ocommon_light, --ocommon_light → MODE="light"
-#       - debug:      -cd, --cd, -common_debug, --common_debug, --ocommon_debug → MODE="debug"
-#       - reset:      -r, --r, -reset, --reset, -resrt, --resrt → MODE="reset", RESET="true"
-#  - 強制実行:       -f, --f, -force, --force  → FORCE="true"
-#  - ドライラン:     -dr, --dr, -dry-run, --dry-run  → DRY_RUN="true"
-#  - ログ出力先:     -l, --l, -logfile, --logfile <path>  → LOGFILE に指定パス
-#
-# 【仕様】
-# 1. ダッシュ付きの引数はオプションとして解析し、非ダッシュ引数はすべて SELECTED_LANGUAGE として扱います。
-# 2. 解析結果はグローバル変数 SELECTED_LANGUAGE, DEBUG_MODE, DEBUG_LEVEL, MODE, DRY_RUN, LOGFILE, FORCE, RESET, HELP としてエクスポートされ、
-#    後続の check_common(), select_country(), debug(), script_version() などに正規化された値として渡されます。
-#
-# 【使用例】
-#   sh aios.sh -d --dry-run --reset -l /var/log/aios.log -f -cf en
-#    → 言語 "en" が SELECTED_LANGUAGE に設定され、MODE は "full"（-cf等で指定）、デバッグモード有効、
-#       キャッシュリセット、ドライラン、ログ出力先 /var/log/aios.log、強制実行が有効になる。
+# aiosコマンドライン処理とモード制御
 #########################################################################
-check_option() {
 
+# コマンドラインオプション解析・正規化関数
+check_option() {
     echo "$(color magenta "check_option received before args: $*")"
 
     # デフォルト値の設定
@@ -1509,7 +1433,7 @@ check_option() {
                 DRY_RUN="true"
                 ;;
             -l|--l|-logfile|--logfile)
-                if [ -n "$2" ] && [ "${2#-}" != "$2" ]; then
+                if [ -n "$2" ] && [ "${2#-}" = "$2" ]; then
                     LOGFILE="$2"
                     shift
                 else
@@ -1517,20 +1441,20 @@ check_option() {
                     exit 1
                 fi
                 ;;
-	    -u|--u|-update|--update)
-		debug_log "DEBUG" "check_option: aios update"
-    		MODE="update"
-    		;;
-	    -t|--t|-token|--token)
-		setup_github_token
-		;;
-	    -ts|--ts|--token-status)
-    		check_token_status
-    		exit 0
-    		;;
-	    -test_api)
-		MODE="test_api"
-		;;
+            -u|--u|-update|--update)
+                debug_log "DEBUG" "check_option: aios update"
+                MODE="update"
+                ;;
+            -t|--t|-token|--token)
+                setup_github_token
+                ;;
+            -ts|--ts|--token-status)
+                check_token_status
+                exit 0
+                ;;
+            -test_api)
+                MODE="test_api"
+                ;;
             -*)
                 echo "Warning: Unknown option: $1" >&2
                 ;;
@@ -1567,6 +1491,7 @@ check_option() {
 # 4. `openwrt.db`, `messages.db`, `country.db`, `packages.db` を適切にダウンロード。
 # 5. 影響範囲: `common.sh`（矛盾なく適用）。
 #########################################################################
+# コマンドライン処理とモードに基づくアクション選択
 check_common() {
     local lang_code="$1"
     local mode="$2"
@@ -1593,15 +1518,15 @@ check_common() {
             exit 0
             ;;
         update)
-	    download "aios" "hidden" "chmod"
-	    if [ ! -f "${CACHE_DIR}/post_update_flag" ]; then
-		MODE="full"
-		check_common "$lang_code" "$MODE" "$@"
-	    else
-		MODE="full"
-		exec "$BIN_PATH" $(echo "$@" | sed 's/update//g' | sed 's/--update//g' | sed 's/-u//g' | sed 's/--u//g')
-	    fi
-	    ;;
+            download "aios" "hidden" "chmod"
+            if [ ! -f "${CACHE_DIR}/post_update_flag" ]; then
+                MODE="full"
+                check_common "$lang_code" "$MODE" "$@"
+            else
+                MODE="full"
+                exec "$BIN_PATH" $(echo "$@" | sed 's/update//g' | sed 's/--update//g' | sed 's/-u//g' | sed 's/--u//g')
+            fi
+            ;;
         debug)
             download "common-country.sh" "hidden"
             download "common-package.sh" "hidden"
@@ -1610,7 +1535,10 @@ check_common() {
             download "country.db" "hidden"
             download "local-package.db" "hidden"
             download "custom-package.db" "hidden"
-	    download "dynamic-system-info.sh" "hidden"
+            download "dynamic-system-info.sh" "hidden"
+            print_banner
+            init_cache_system
+            
             select_country "$lang_code"
             download "system-config.sh" "hidden" "chmod"
             #packages
@@ -1623,7 +1551,10 @@ check_common() {
             download "country.db"
             download "local-package.db"
             download "custom-package.db"
-	    download "dynamic-system-info.sh"
+            download "dynamic-system-info.sh"
+            print_banner
+            init_cache_system
+            
             select_country "$lang_code"
             download "system-config.sh" "chmod"
             #packages
@@ -1636,7 +1567,10 @@ check_common() {
             download "country.db"
             download "local-package.db"
             download "custom-package.db"
-	    download "dynamic-system-info.sh"
+            download "dynamic-system-info.sh"
+            print_banner
+            init_cache_system
+            
             select_country "$lang_code"
             download "system-config.sh" "chmod"
             #packages
@@ -1652,20 +1586,34 @@ check_common() {
                   "${CACHE_DIR}/timezone_success_done"
             select_country
             ;;
-	test_api)
-	    $BASE_WGET ${BASE_DIR}/github_api_test.sh ${BASE_URL}/github_api_test.sh
-	    chmod +x ${BASE_DIR}/github_api_test.sh
-	    sh ${BASE_DIR}/github_api_test.sh
-	    exit 0
-	    ;;
+        test_api)
+            $BASE_WGET "${BASE_DIR}/github_api_test.sh" "${BASE_URL}/github_api_test.sh"
+            chmod +x "${BASE_DIR}/github_api_test.sh"
+            sh "${BASE_DIR}/github_api_test.sh"
+            exit 0
+            ;;
         *)
+            # デフォルト動作
+            debug_log "WARN" "Unknown mode: $MODE, falling back to standard behavior"
+            download "common-country.sh"
+            download "dynamic-system-info.sh"
+            
+            # キャッシュシステムの初期化
+            init_cache_system
             ;;
     esac
+    
+    # 必要なキャッシュの存在確認
+    if [ ! -f "${CACHE_DIR}/downloader.ch" ] || [ ! -f "${CACHE_DIR}/extension.ch" ]; then
+        debug_log "WARN" "Essential cache files missing after initialization"
+        init_package_manager_cache
+    fi
+    
+    return 0
 }
 
 # メイン処理
 main() {
-    print_banner
     initialization
     check_option "$@"
 }
