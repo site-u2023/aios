@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-03-19"
+SCRIPT_VERSION="2025.03.10-04-00"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -844,39 +844,40 @@ check_token_status() {
 check_api_rate_limit() {
     if [ "$DEBUG_MODE" = "true" ]; then
         # トークン取得
-        local token=$(get_github_token)
-        local auth_header=""
+        local token="$(get_github_token)"
+        local temp_file="/tmp/aios_api_limit.tmp"
         
+        # 一時ファイルにAPIレスポンスを保存
         if [ -n "$token" ]; then
-            auth_header="--header=\"Authorization: token $token\""
+            wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null
+        else
+            wget -q -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
         fi
         
-        # API制限情報取得
-        api_info=$(eval "wget -qO- $auth_header \"https://api.github.com/rate_limit\" 2>/dev/null")
-        
-        if [ -n "$api_info" ]; then
-            # コア部分のみを抽出
-            local core_section=$(echo "$api_info" | sed -n 's/.*"core":\([^}]*\)}.*/\1/p')
+        # ファイルが存在し内容があるか確認
+        if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+            # コア制限の行を抽出
+            local core_limit="$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+')"
+            local core_remain="$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+')"
+            local core_reset="$(grep -A3 '"core"' "$temp_file" | grep '"reset"' | head -1 | grep -o '[0-9]\+')"
             
-            if [ -n "$core_section" ]; then
-                api_remaining=$(echo "$core_section" | sed -n 's/.*"remaining":\([0-9]*\).*/\1/p')
-                api_limit=$(echo "$core_section" | sed -n 's/.*"limit":\([0-9]*\).*/\1/p')
-                api_reset=$(echo "$core_section" | sed -n 's/.*"reset":\([0-9]*\).*/\1/p')
+            # 時間計算
+            if [ -n "$core_reset" ]; then
+                local now_time="$(date +%s)"
+                local diff_sec="$(($core_reset - $now_time))"
+                [ "$diff_sec" -lt 0 ] && diff_sec=0
+                local mins="$(($diff_sec / 60))"
+                local secs="$(($diff_sec % 60))"
                 
-                api_now=$(date +%s)
+                # 認証状態判定（5000が認証済み）
+                local auth_text="anonymous"
+                [ "$core_limit" = "5000" ] && auth_text="authenticated"
                 
-                if [ -n "$api_reset" ] && [ -n "$api_now" ]; then
-                    api_seconds=$((api_reset - api_now))
-                    [ "$api_seconds" -lt 0 ] && api_seconds=0
-                    api_minutes=$((api_seconds / 60))
-                    api_seconds=$((api_seconds % 60))
-                    
-                    local auth_status="anonymous"
-                    [ "$api_limit" -gt 60 ] && auth_status="authenticated"
-                    
-                    debug_log "DEBUG" "API Limits: Core ${api_remaining}/${api_limit} ($auth_status), Reset in ${api_minutes}m ${api_seconds}s"
-                fi
+                debug_log "DEBUG" "API Limits: Core $core_remain/$core_limit ($auth_text), Reset in ${mins}m ${secs}s" 
             fi
+            
+            # 一時ファイル削除
+            rm -f "$temp_file"
         fi
     fi
     return 0
@@ -913,57 +914,58 @@ clean_version_string() {
 get_commit_version() {
     local file_path="$1"
     
-    # リポジトリ情報を明示的に設定
+    # リポジトリ情報
     local repo_owner="site-u2023"
     local repo_name="aios"
     local api_url="repos/${repo_owner}/${repo_name}/commits?path=${file_path}&per_page=1"
-    local commit_info=""
+    local temp_file="/tmp/aios_commit_info.tmp"
     local auth_method="direct"
     
-    # トークンによるAPI認証
-    local token=$(get_github_token)
+    # トークン取得
+    local token="$(get_github_token)"
     
+    # APIリクエスト実行と一時ファイルへの保存
     if [ -n "$token" ]; then
         debug_log "DEBUG" "Using token authentication for API request"
-        commit_info=$(wget -qO- --header="Authorization: token $token" \
-            "https://api.github.com/$api_url" 2>/dev/null)
+        wget -q -O "$temp_file" --header="Authorization: token $token" \
+            "https://api.github.com/$api_url" 2>/dev/null
             
-        # 判定ロジックの修正: レスポンスが空でないことに加えて
-        # SHA情報があるかを確認することで認証状態を正確に判定
-	if [ -n "$commit_info" ] && (echo "$commit_info" | grep -q '"sha"' || echo "$commit_info" | grep -q '"commit"'); then
-    	    auth_method="token"
-    	    debug_log "DEBUG" "Token authentication successful"
-	else
-    	    # 詳細なデバッグ情報
-    	    debug_log "DEBUG" "Response first 100 chars: $(echo "$commit_info" | head -c 100)"
-    	    debug_log "WARN" "Token auth response lacks expected fields"
-	fi
+        # 応答確認（SHA存在チェック）
+        if [ -f "$temp_file" ] && [ -s "$temp_file" ] && grep -q '"sha"' "$temp_file"; then
+            auth_method="token"
+            debug_log "DEBUG" "Token authentication successful"
+        else
+            debug_log "WARN" "Token auth may have failed"
+        fi
     else
         debug_log "DEBUG" "No token available, using direct API request"
-        commit_info=$(wget -qO- "https://api.github.com/$api_url" 2>/dev/null)
+        wget -q -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
     fi
     
-    if [ -n "$commit_info" ]; then
-        # 日付とSHAを抽出（改行を正しく処理するよう改善）
-        local commit_date=$(echo "$commit_info" | tr -d '\n\r' | grep -o '"date": *"[^"]*"' | head -1 | sed 's/.*"date": *"\([^"]*\)".*/\1/')
-        local commit_sha=$(echo "$commit_info" | tr -d '\n\r' | grep -o '"sha": *"[^"]*"' | head -1 | sed 's/.*"sha": *"\([^"]*\)".*/\1/' | cut -c 1-7)
+    # 情報抽出
+    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+        # 日付とSHAを抽出
+        local commit_date="$(grep -o '"date"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | head -1 | sed 's/.*"[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}.*/\0/' | grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}')"
+        local commit_sha="$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | head -1 | grep -o '[a-f0-9]\{7,8\}')"
         
         if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
             # YYYY.MM.DD-SHA 形式に変換
-            local formatted_date=$(echo "$commit_date" | sed 's/T.*Z//g;s/-/./g')
-            local clean_version="${formatted_date}-${commit_sha}"
+            local formatted_date="$(echo "$commit_date" | sed 's/-/./g')"
+            local clean_version="${formatted_date}-${commit_sha:0:7}"
             
             debug_log "DEBUG" "Successfully extracted commit info: $clean_version"
+            rm -f "$temp_file"
             echo "$clean_version $auth_method"
             return 0
         fi
         debug_log "DEBUG" "Failed to extract commit info from response"
-    else
-        debug_log "DEBUG" "No API response received for: $file_path"
     fi
     
+    # 一時ファイル削除
+    rm -f "$temp_file"
+    
     # API取得失敗時は現在時刻を使用
-    echo "$(date +%Y.%m.%d)-unknown ${auth_method}"
+    echo "$(date +%Y.%m.%d)-unknown $auth_method"
     return 1
 }
 
