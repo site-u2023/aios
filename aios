@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-03-08"
+SCRIPT_VERSION="2025.03.10-03-09"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -509,32 +509,61 @@ get_message() {
 
 # 🔵　トークン系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
+# GitHub API呼び出し（デバッグ強化版）
+github_api_request() {
+    local endpoint="$1"
+    local token=$(get_github_token)
+    local response=""
+    
+    if [ -n "$token" ]; then
+        debug_log "DEBUG" "Attempting authenticated request with token (${#token} chars)"
+        response=$(wget -q --header="Authorization: token $token" \
+            --header="Accept: application/vnd.github.v3+json" \
+            -O- "https://api.github.com/$endpoint" 2>/dev/null)
+            
+        # レスポンス検証 - リミットチェック
+        if echo "$response" | grep -q '"message":"API rate limit exceeded'; then
+            debug_log "WARN" "GitHub API rate limit exceeded"
+            return 1
+        fi
+        
+        # 認証エラーチェック
+        if echo "$response" | grep -q '"message":"Bad credentials"'; then
+            debug_log "ERROR" "GitHub API authentication failed: Bad credentials"
+            return 2
+        fi
+        
+        # その他エラーチェック
+        if echo "$response" | grep -q '"message":"'; then
+            local error_msg=$(echo "$response" | grep -o '"message":"[^"]*"' | cut -d':' -f2- | tr -d '"')
+            debug_log "ERROR" "GitHub API error: $error_msg"
+            return 3
+        fi
+        
+        # 成功
+        echo "$response"
+        return 0
+    else
+        debug_log "DEBUG" "No token found, using unauthenticated request"
+        wget -q -O- "https://api.github.com/$endpoint" 2>/dev/null
+        return $?
+    fi
+}
+
 # トークン取得関数
 get_github_token() {
-    # トークンファイルが存在すれば読み込み
     if [ -f "$GITHUB_TOKEN_FILE" ] && [ -r "$GITHUB_TOKEN_FILE" ]; then
-        token=$(cat "$GITHUB_TOKEN_FILE" | tr -d '\n\r')
-        if [ -n "$token" ]; then
-            # トークンが存在するか確認
-            debug_log "DEBUG" "Found GitHub token in $GITHUB_TOKEN_FILE"
+        # 厳格なトークン抽出と検証
+        local raw_token=$(cat "$GITHUB_TOKEN_FILE")
+        local token=$(echo "$raw_token" | tr -d '\n\r\t ' | grep -o '^[a-zA-Z0-9_]\+')
+        
+        if [ -n "$token" ] && [ ${#token} -ge 30 ]; then
             echo "$token"
             return 0
         else
-            debug_log "WARN" "Token file exists but is empty"
+            debug_log "WARN" "Invalid token format in $GITHUB_TOKEN_FILE"
         fi
-    else
-        debug_log "DEBUG" "Token file not found at $GITHUB_TOKEN_FILE"
     fi
-    
-    # 環境変数からも取得可能
-    if [ -n "$GITHUB_TOKEN" ]; then
-        debug_log "DEBUG" "Using GitHub token from environment variable"
-        echo "$GITHUB_TOKEN"
-        return 0
-    fi
-    
-    # トークンなし
-    debug_log "DEBUG" "No GitHub token found"
     return 1
 }
 
@@ -840,17 +869,35 @@ clean_version_string() {
     fi
 }
 
-# GitHubコミットからバージョン情報を取得（完全版）
+# GitHubコミットからバージョン情報を取得
 get_commit_version() {
     local file_path="$1"
-    
-    # リポジトリ情報を明示的に設定
     local repo_owner="site-u2023"
     local repo_name="aios"
-    local api_url="repos/${repo_owner}/${repo_name}/commits?path=${file_path}&per_page=1"
-    local commit_info=""
+    local endpoint="repos/${repo_owner}/${repo_name}/commits?path=${file_path}&per_page=1"
     local auth_method="direct"
     
+    # API呼び出し
+    local response=$(github_api_request "$endpoint")
+    local api_status=$?
+
+    # ステータスに基づく認証方法の判断
+    case "$api_status" in
+        0)  # 成功
+            if [ -n "$(get_github_token)" ]; then
+                auth_method="token"
+                debug_log "INFO" "Using authenticated GitHub API"
+            else
+                auth_method="standard"
+                debug_log "DEBUG" "Using standard GitHub API"
+            fi
+            ;;
+        *)  # 失敗
+            auth_method="failed"
+            debug_log "WARN" "API request failed with status $api_status, falling back to direct download"
+            ;;
+    esac
+
     # トークンによるAPI認証
     local token=$(get_github_token)
     
