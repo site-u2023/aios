@@ -1121,7 +1121,7 @@ download() {
     
     # 読み込み処理
     local action_message=""
-    if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
+    if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q ".*\\.sh"; then
         . "$install_path"
         action_message="Loaded"
     fi
@@ -1447,9 +1447,9 @@ check_common() {
             download "country.db" "hidden"
             download "local-package.db" "hidden"
             download "custom-package.db" "hidden"
-	    download "dynamic-system-info.sh" "hidden" "read"
+	    download "dynamic-system-info.sh" "hidden"
             select_country "$lang_code"
-            download "system-config.sh" "hidden" "chmod" "read"
+            download "system-config.sh" "hidden" "chmod"
             #packages
             ;;
         light)
@@ -1460,9 +1460,9 @@ check_common() {
             download "country.db"
             download "local-package.db"
             download "custom-package.db"
-	    download "dynamic-system-info.sh" "read"
+	    download "dynamic-system-info.sh"
             select_country "$lang_code"
-            download "system-config.sh" "chmod" "read"
+            download "system-config.sh" "chmod"
             #packages
             ;;
         full)
@@ -1473,9 +1473,9 @@ check_common() {
             download "country.db"
             download "local-package.db"
             download "custom-package.db"
-	    download "dynamic-system-info.sh" "read"
+	    download "dynamic-system-info.sh"
             select_country "$lang_code"
-            download "system-config.sh" "chmod" "read"
+            download "system-config.sh" "chmod"
             #packages
             ;;
         return)
