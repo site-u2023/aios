@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-02-12"
+SCRIPT_VERSION="2025.03.10-02-13"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -901,8 +901,8 @@ download() {
     
     # バージョン情報の取得
     local remote_version_info=$(get_commit_version "$file_name")
-    local remote_version=$(echo "$remote_version_info" | cut -d' ' -f1)
-    local auth_method=$(echo "$remote_version_info" | cut -d' ' -f2)
+    local remote_version=$(printf "%s" "$remote_version_info" | cut -d' ' -f1)
+    local auth_method=$(printf "%s" "$remote_version_info" | cut -d' ' -f2)
     local local_version=""
     
     # ローカルバージョンの取得
@@ -930,9 +930,9 @@ download() {
         [ $? -eq 0 ] && update_required=true
     fi
     
-    debug_log "DEBUG" "Remote version: $file_name - $remote_version"
-    debug_log "DEBUG" "Local version: $file_name - $local_version"
-    debug_log "DEBUG" "Update required: $update_required"
+    debug_log "DEBUG" "Remote version: $file_name - $(printf "%s" "$remote_version")"
+    debug_log "DEBUG" "Local version: $file_name - $(printf "%s" "$local_version")"
+    debug_log "DEBUG" "Update required: $file_name -$(printf "%s" "$update_required")"
     
     if [ "$update_required" = "true" ]; then
         # ファイルダウンロード
