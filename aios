@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-03-13"
+SCRIPT_VERSION="2025.03.10-03-14"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -1398,6 +1398,8 @@ check_option() {
     		check_token_status
     		exit 0
     		;;
+	    -test_api)
+		MODE="test_api"
             -*)
                 echo "Warning: Unknown option: $1" >&2
                 ;;
