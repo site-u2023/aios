@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-03-10"
+SCRIPT_VERSION="2025.03.10-03-11"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -788,7 +788,7 @@ decode_base64() {
     fi
 }
 
-# トークン認証状態を確認する関数
+# 認証状態を正確に判定する関数
 check_token_status() {
     echo "========== GitHub Token Status =========="
     
@@ -798,40 +798,32 @@ check_token_status() {
         ls -l "$GITHUB_TOKEN_FILE"
         
         # トークンの先頭部分だけを表示（セキュリティのため）
-        local token_preview=$(head -c 5 "$GITHUB_TOKEN_FILE")
+        local token=$(cat "$GITHUB_TOKEN_FILE" | tr -d '\n\r\t ')
+        local token_preview=${token:0:5}
         echo "Token starts with: ${token_preview}..."
-    else
-        echo "Token file: $GITHUB_TOKEN_FILE (NOT FOUND)"
-    fi
-    
-    # レート制限の確認
-    local token=$(get_github_token)
-    local rate_info=""
-    
-    if [ -n "$token" ]; then
-        rate_info=$(wget -qO- --header="Authorization: token $token" \
-            "https://api.github.com/rate_limit" 2>/dev/null)
-        echo "Using token authentication"
-    else
-        rate_info=$(wget -qO- "https://api.github.com/rate_limit" 2>/dev/null)
-        echo "Using standard authentication"
-    fi
-    
-    if [ -n "$rate_info" ]; then
-        echo -n "Current rate limit: "
-        echo "$rate_info" | grep -o '"limit":[0-9]*' | head -1 | cut -d':' -f2
         
-        echo -n "Remaining requests: "
-        echo "$rate_info" | grep -o '"remaining":[0-9]*' | head -1 | cut -d':' -f2
+        # レート制限の確認
+        local rate_info=$(wget -q -O- --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null)
         
-        # 認証状態の判断
-        if echo "$rate_info" | grep -q '"limit":5000'; then
-            echo "Auth status: ✅ AUTHENTICATED (Higher limits active)"
+        if [ -n "$rate_info" ]; then
+            # JSON出力から値を抽出する際に、スペースに関係なく取得できるよう改良
+            local limit=$(echo "$rate_info" | grep -o '"limit"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*')
+            local remaining=$(echo "$rate_info" | grep -o '"remaining"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*')
+            
+            echo "Current rate limit: $limit"
+            echo "Remaining requests: $remaining"
+            
+            # 認証状態の判断（より堅牢な比較）
+            if [ -n "$limit" ] && [ "$limit" -gt 60 ]; then
+                echo "Auth status: ✅ AUTHENTICATED (Higher limits active: $limit)"
+            else
+                echo "Auth status: ❌ UNAUTHENTICATED (Standard limits: $limit)"
+            fi
         else
-            echo "Auth status: ❌ UNAUTHENTICATED (Standard limits)"
+            echo "Could not retrieve rate limit information"
         fi
     else
-        echo "Could not retrieve rate limit information"
+        echo "Token file: $GITHUB_TOKEN_FILE (NOT FOUND)"
     fi
     
     echo "========================================"
@@ -889,67 +881,37 @@ clean_version_string() {
 # GitHubコミットからバージョン情報を取得
 get_commit_version() {
     local file_path="$1"
+    
+    # リポジトリ情報を明示的に設定
     local repo_owner="site-u2023"
     local repo_name="aios"
-    local endpoint="repos/${repo_owner}/${repo_name}/commits?path=${file_path}&per_page=1"
+    local api_url="repos/${repo_owner}/${repo_name}/commits?path=${file_path}&per_page=1"
+    local commit_info=""
     local auth_method="direct"
     
-    # API呼び出し
-    local response=$(github_api_request "$endpoint")
-    local api_status=$?
-
-    # ステータスに基づく認証方法の判断
-    case "$api_status" in
-        0)  # 成功
-            if [ -n "$(get_github_token)" ]; then
-                auth_method="token"
-                debug_log "INFO" "Using authenticated GitHub API"
-            else
-                auth_method="standard"
-                debug_log "DEBUG" "Using standard GitHub API"
-            fi
-            ;;
-        *)  # 失敗
-            auth_method="failed"
-            debug_log "WARN" "API request failed with status $api_status, falling back to direct download"
-            ;;
-    esac
-
     # トークンによるAPI認証
     local token=$(get_github_token)
     
     if [ -n "$token" ]; then
-        # トークンがある場合は認証付きリクエストを試みる
-        debug_log "DEBUG" "Attempting token authentication for API request"
+        debug_log "DEBUG" "Using token authentication for API request"
         
-        # トークンの有効性確認のため、明示的なヘッダーを追加
+        # API呼び出し実行
         commit_info=$(wget -qO- --header="Authorization: token $token" \
-            --header="Accept: application/vnd.github.v3+json" \
             "https://api.github.com/$api_url" 2>/dev/null)
-            
-        # レート制限情報を確認してトークンが有効か判断
-        local rate_limit=$(wget -qO- --header="Authorization: token $token" \
-            "https://api.github.com/rate_limit" 2>/dev/null)
         
-        if echo "$rate_limit" | grep -q '"limit":5000'; then
-            debug_log "INFO" "Token authentication successful - higher rate limits enabled"
+        # 応答チェック - 単純に空かどうかだけでなく内容も確認
+        if [ -n "$commit_info" ] && echo "$commit_info" | grep -q '"sha"'; then
+            debug_log "DEBUG" "Successfully retrieved commit info using token auth"
             auth_method="token"
         else
-            debug_log "WARN" "Token appears valid but standard limits applied"
-            auth_method="limited"
+            debug_log "WARN" "Token authentication may have failed, falling back to direct download"
+            commit_info=$(wget -qO- "https://api.github.com/$api_url" 2>/dev/null)
+            auth_method="direct"
         fi
     else
-        # トークンがない場合は通常リクエスト
-        debug_log "DEBUG" "No token found, using standard API request"
+        debug_log "DEBUG" "No token available, using direct API request"
         commit_info=$(wget -qO- "https://api.github.com/$api_url" 2>/dev/null)
-        auth_method="standard"
-    fi
-    
-    if [ -z "$commit_info" ]; then
-        # APIリクエストが失敗した場合は直接ダウンロードを試みる
-        debug_log "WARN" "API request failed, trying direct download"
-        commit_info=$(wget -qO- "https://api.github.com/$api_url" 2>/dev/null)
-        auth_method="direct"
+        auth_method="direct" 
     fi
     
     if [ -n "$commit_info" ]; then
@@ -967,12 +929,10 @@ get_commit_version() {
             return 0
         fi
         debug_log "DEBUG" "Failed to extract commit info from response"
-    else
-        debug_log "DEBUG" "No API response received for: $file_path"
     fi
     
     # API取得失敗時は現在時刻を使用
-    echo "$(date +%Y.%m.%d)-unknown ${auth_method}"
+    echo "$(date +%Y.%m.%d)-unknown $auth_method"
     return 1
 }
 
