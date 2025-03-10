@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-02-00"
+SCRIPT_VERSION="2025.03.10-02-01"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -643,31 +643,6 @@ setup_github_token() {
 # 7. wget のエラーハンドリングを行い、失敗時の詳細を debug_log() に記録する。
 # 8. 影響範囲: common.sh の download() のみ（他の関数には影響なし）。
 #########################################################################
-# スクリプトのバージョンを正規化する関数
-remote_normalize_version() {
-    local input="$1"
-    input=$(echo "$input" | grep -Eo 'SCRIPT_VERSION=["'"'"'][^"'"'"']+["'"'"']' | grep -Eo '([0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*)')
-    input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
-    input=$(echo "$input" | tr -d '\n' | sed 's/ *$//')
-    input=$(echo "$input" | sed -E 's/(^|[._-])0+([0-9])/\1\2/g')
-    input=$(echo "$input" | sed 's/[._-]\{1,1\}/./g')
-    echo "$input"
-}
-
-# local_normalize_version関数の定義
-local_normalize_version() {
-    local script_file="$1"
-    local file_name="$2"
-    local input
-    input=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
-    input=$(echo "$input" | grep -Eo '([0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}\.[0-9.]+)')
-    input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
-    input=$(echo "$input" | tr -d '\n' | sed 's/ *$//')
-    input=$(echo "$input" | sed -E 's/(^|[._-])0+([0-9])/\1\2/g')
-    input=$(echo "$input" | sed 's/[._-]\{1,1\}/./g')
-    echo "$input"
-}
-
 # GitHub API呼び出し前にレート制限を確認する関数
 check_api_rate_limit() {
     if [ "$DEBUG_MODE" = "true" ]; then
@@ -785,241 +760,188 @@ decode_base64() {
     fi
 }
 
+# GitHub APIからファイルのコミット情報を取得しバージョンを生成する関数
+get_commit_version() {
+    local file_path="$1"
+    local api_url="repos/${repo_owner}/${repo_name}/commits?path=${file_path}&per_page=1"
+    local commit_info=""
+    
+    # トークンによるAPI認証
+    token=$(get_github_token)
+    if [ -n "$token" ]; then
+        commit_info=$(wget -qO- --header="Authorization: token $token" \
+            "https://api.github.com/$api_url" 2>/dev/null)
+    else
+        commit_info=$(wget -qO- "https://api.github.com/$api_url" 2>/dev/null)
+    fi
+    
+    if [ -n "$commit_info" ]; then
+        # 日付とSHA情報を抽出
+        local commit_date=$(echo "$commit_info" | grep -o '"date": "[^"]*' | head -1 | cut -d'"' -f4)
+        local commit_sha=$(echo "$commit_info" | grep -o '"sha": "[^"]*' | head -1 | cut -d'"' -f4 | cut -c 1-7)
+        
+        if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
+            # YYYY.MM.DD-SHA 形式に変換
+            local formatted_date=$(echo "$commit_date" | sed 's/T.*Z//g;s/-/./g')
+            echo "${formatted_date}-${commit_sha}"
+            return 0
+        fi
+    fi
+    
+    # API取得失敗時は現在時刻を使用
+    echo "$(date +%Y.%m.%d)-unknown"
+    return 1
+}
+
+# ファイルのバージョンを比較する関数
+version_is_newer() {
+    local current="$1"
+    local reference="$2"
+    
+    # どちらかが不明の場合は更新必要
+    if [ "$current" = "No version control" ] || [ "$reference" = "No version control" ]; then
+        return 0
+    fi
+    
+    # 日付部分を取得（YYYY.MM.DD形式）
+    local current_date=$(echo "$current" | cut -d'-' -f1)
+    local reference_date=$(echo "$reference" | cut -d'-' -f1)
+    
+    # 日付を数値に変換（区切り文字を削除）
+    local current_num=$(echo "$current_date" | tr -d '.')
+    local reference_num=$(echo "$reference_date" | tr -d '.')
+    
+    # 数値比較
+    if [ "$current_num" -gt "$reference_num" ]; then
+        return 0  # 現在のバージョンが新しい
+    elif [ "$current_num" -lt "$reference_num" ]; then
+        return 1  # リファレンスバージョンが新しい
+    fi
+    
+    # 日付が同じ場合はSHAが異なれば更新
+    local current_sha=$(echo "$current" | cut -d'-' -f2)
+    local reference_sha=$(echo "$reference" | cut -d'-' -f2)
+    
+    if [ "$current_sha" != "$reference_sha" ]; then
+        return 0  # 異なるコミット
+    fi
+    
+    return 1  # 同一バージョン
+}
+
 download() {
-    # 1. 初期設定
-    # ===============================
-    local file_name=""
-    local install_path=""
-    local remote_url=""
-    local api_url=""
+    # ファイル名を最初の引数として処理、残りはオプション
+    local file_name="$1"
+    shift
+    
+    # 設定変数
     local hidden_mode="false"
     local quiet_mode="${QUIET_MODE:-false}"
     local chmod_mode="false"
     local read_mode="false"
     local script_file="${CACHE_DIR}/script.ch"
-    local repo_owner="site-u2023"
-    local repo_name="aios"
-    local dummy_remote_version="No remote version control."
-    local dummy_local_version="No local version control."
-    local skip_api=false
-    
-    # メッセージ関連の変数
-    local status_message=""
-    local action_message=""
+    local dummy_version="No version control"
+    local auth_method="direct"
     local auth_message=""
-    local version_to_display=""
-    local is_updated=false
-
-    # 2. 引数処理 (ファイル名を最初に、オプションを後に)
-    # ===============================
-    if [ $# -gt 0 ]; then
-        file_name="$1"
+    
+    # オプション引数の処理
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            hidden) hidden_mode="true" ;;
+            quiet)  quiet_mode="true" ;;
+            debug)  DEBUG_MODE="true" ;;
+            chmod)  chmod_mode="true" ;;
+            read)   read_mode="true" ;;
+            *)      debug_log "WARN" "Unknown option: $1, ignoring" ;;
+        esac
         shift
-        
-        # 残りの引数を順不同でオプションとして処理
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                hidden) hidden_mode="true" ;;
-                quiet)  quiet_mode="true" ;;
-                debug)  DEBUG_MODE="true" ;;
-                chmod)  chmod_mode="true" ;;
-                read)   read_mode="true" ;;
-                *)      debug_log "WARN" "Unknown option: $1, ignoring" ;;
-            esac
-            shift
-        done
-    else
-        echo "Error: No file name provided" >&2
-        return 1
-    fi
-
-    # 3. パス・URLの設定
-    # ===============================
-    install_path="${BASE_DIR}/$file_name"
-    remote_url="${BASE_URL}/$file_name"
-    api_url="repos/${repo_owner}/${repo_name}/contents/${file_name}"
-
-    # 4. 特定ファイルのAPIスキップ設定
-    # ===============================
-    if [ "$file_name" = "country.db" ]; then
-        skip_api="true"
-        debug_log "DEBUG" "skip API for country.db - No version information"
-    fi
-
-    # 5. GitHubからメタデータ取得と処理
-    # ===============================
-    local api_response=""
-    local remote_version=""
+    done
+    
+    # パス設定
+    local install_path="${BASE_DIR}/$file_name"
+    local remote_url="${BASE_URL}/$file_name"
+    
+    # バージョン情報の取得
+    local remote_version=$(get_commit_version "$file_name")
     local local_version=""
-    local response=""
-    local decoded_content=""
-    local download_method="direct"
     
-    # GitHub API応答処理
-    if [ "$skip_api" = "false" ]; then
-        # API制限チェック
-        if [ "$DEBUG_MODE" = "true" ]; then
-            check_api_rate_limit
-        fi
-        
-        debug_log "DEBUG" "Processing API response for: $file_name"
-        
-        # トークンを取得して認証方式を決定
-        token=$(get_github_token)
-        
-        if [ -n "$token" ]; then
-            # トークン認証でAPI呼び出し
-            api_response=$(wget -qO- --header="Authorization: token $token" \
-                "https://api.github.com/$api_url" 2>/dev/null)
-            auth_message="via token auth"
-            download_method="token API"
-        else
-            # 通常認証でAPI呼び出し
-            api_response=$(wget -qO- "https://api.github.com/$api_url" 2>/dev/null)
-            auth_message="via standard API"
-            download_method="standard API"
-        fi
-        
-        # コンテンツ部分を抽出
-        response=$(echo "$api_response" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
-    
-        # レスポンスの内容をデバッグ
-        if [ -n "$response" ]; then
-            debug_log "DEBUG" "API response contains content field: ${response:0:20}..."
-        else
-            debug_log "WARN" "API response missing content field - raw sample: ${api_response:0:100}..."
-            skip_api="true"  # APIが失敗した場合は直接ダウンロードに切り替え
-            download_method="direct download"
-            auth_message="via direct download (API failed)"
-        fi
-    
-        if [ "$skip_api" = "false" ]; then
-            # base64デコード
-            decoded_content=$(decode_base64 "$response")
-            decode_status=$?
-        
-            if [ $decode_status -eq 0 ] && [ -n "$decoded_content" ]; then
-                debug_log "DEBUG" "Successfully decoded content (first 50 chars): ${decoded_content:0:50}..."
-            
-                # バージョン情報の取得
-                remote_version=$(remote_normalize_version "$decoded_content")
-                if [ -z "$remote_version" ]; then
-                    debug_log "WARN" "Failed to extract version from decoded content"
-                    remote_version="$dummy_remote_version"
-                fi
-            else
-                debug_log "ERROR" "Failed to decode base64 content"
-                remote_version="$dummy_remote_version"
-                skip_api="true"  # デコード失敗の場合は直接ダウンロードに切り替え
-                download_method="direct download"
-                auth_message="via direct download (decode failed)"
-            fi
-        
-            debug_log "DEBUG" "Remote version: $file_name - $remote_version"
-        fi
-    else
-        debug_log "DEBUG" "Skipping API version check for: $file_name"
-        remote_version="$dummy_remote_version"
-        download_method="direct download"
-        auth_message="via direct download (API skipped)"
-    fi
-
-    # 6. ローカルバージョン情報の取得
-    # ===============================
+    # ローカルバージョンの取得
     if [ -f "$script_file" ]; then
-        local_version=$(local_normalize_version "$script_file" "$file_name")
+        local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
     fi
-    if [ -z "$local_version" ]; then
-        local_version="$dummy_local_version"
-    fi  
-    debug_log "DEBUG" "Local version: $file_name - $local_version"
-
-    # 7. メインロジック - バージョン比較と更新処理
-    # ===============================
-    if [ "$skip_api" = "true" ] || [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
-        # アップデートフラグ設定
-        is_updated=true
-        status_message="Download completed"
-        version_to_display="$remote_version"
-        
-        # ファイルのダウンロード処理
+    [ -z "$local_version" ] && local_version="$dummy_version"
+    
+    # 使用した認証方法を記録
+    if echo "$auth_method" | grep -q "token"; then
+        auth_message="via token auth"
+    elif echo "$auth_method" | grep -q "standard"; then
+        auth_message="via standard API"
+    else
+        auth_message="via direct download"
+    fi
+    
+    # バージョン比較とダウンロード判断
+    local status_message="No update needed"
+    local update_required=false
+    
+    version_is_newer "$remote_version" "$local_version"
+    if [ $? -eq 0 ]; then
+        update_required=true
+    fi
+    
+    if [ "$update_required" = "true" ]; then
+        # ファイルダウンロード
         if ! $BASE_WGET "$install_path" "$remote_url"; then
             debug_log "ERROR" "Download failed: $file_name is empty"
-            echo "Error: Download failed: $file_name is empty." >&2
             return 1
         fi
-        # ダウンロードファイルの検証
+        
+        # ファイル検証
         if [ ! -s "$install_path" ]; then
             debug_log "ERROR" "Download failed: $file_name is empty"
-            echo "Error: Download failed: $file_name is empty." >&2
             return 1
         fi
-
+        
         # 権限設定
         if [ "$chmod_mode" = "true" ]; then
             chmod +x "$install_path"
             debug_log "DEBUG" "chmod +x applied to $file_name"
         fi
-
-        # バージョン情報の更新 (APIスキップ時は更新しない)
-        if [ "$skip_api" = "false" ]; then
-            if [ ! -f "$script_file" ]; then
-                echo "${file_name}=${remote_version}" > "$script_file"
-                debug_log "DEBUG" "Created $script_file with ${file_name}=${remote_version}"
+        
+        # バージョン情報の更新
+        if [ ! -f "$script_file" ]; then
+            echo "${file_name}=${remote_version}" > "$script_file"
+        else
+            if grep -q "^${file_name}=" "$script_file"; then
+                sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_file"
             else
-                if grep -q "^${file_name}=" "$script_file"; then
-                    sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_file"
-                else
-                    echo "${file_name}=${remote_version}" >> "$script_file"
-                fi
-                debug_log "DEBUG" "Updated $script_file with ${file_name}=${remote_version}"
+                echo "${file_name}=${remote_version}" >> "$script_file"
             fi
         fi
-
-        # aios更新処理
-        if [ "$file_name" = "$BIN_FILE" ] && [ "$MODE" = "update" ]; then
-            chmod +x "$install_path"
-            mv "$install_path" "$BIN_PATH"
-            status_message="Update completed"
-            # 更新後フラグを設定
-            touch "${CACHE_DIR}/post_update_flag"
-        fi
-
-    else
-        # 更新の必要がない場合
-        status_message="No update needed"
-        version_to_display="$local_version"
+        
+        status_message="Download completed"
     fi
-
-    # 8. 読み込み処理（別条件で判断）
-    # ===============================
+    
+    # 読み込み処理
+    local action_message=""
     if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
         . "$install_path"
         action_message="Loaded"
     fi
-
-    # 9. 最終的なメッセージ出力（統一処理）
-    # =====================================
-    # メッセージコンポーネントを構築
-    local final_message=""
     
-    # ステータスとファイル名、バージョン、認証方式
-    final_message="${file_name}: ${status_message} - Version: ${version_to_display} ${auth_message}"
-    
-    # アクションメッセージがある場合は追加
+    # 最終メッセージ生成
+    local message="${file_name}: ${status_message} - Version: ${remote_version} ${auth_message}"
     if [ -n "$action_message" ]; then
-        final_message="${final_message} (${action_message})"
+        message="${message} (${action_message})"
     fi
     
-    # hidden/debugモードに基づいて出力
+    # 出力
     if [ "$hidden_mode" = "true" ]; then
-        # hiddenモード: debug_logでログ出力
-        debug_log "DEBUG" "Quiet mode ${final_message}"
+	debug_log "DEBUG" "Quiet mode ${message}"
     else
-        # 通常モード: カラー表示（緑）でecho出力
-	echo "$(color green "${final_message}")"
+	echo "$(color green "${message}")"
     fi
-
+    
     return 0
 }
 
