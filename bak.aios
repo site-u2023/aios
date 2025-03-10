@@ -1,0 +1,1421 @@
+#!/bin/sh
+
+SCRIPT_VERSION="2025.03.10-02-00"
+
+echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
+
+# =========================================================
+# 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
+# 🚀 Last Update: 2025-02-21
+#
+# 🏷️ License: CC0 (Public Domain)
+# 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
+#
+# ⚠️ IMPORTANT NOTICE:
+# OpenWrt OS exclusively uses **Almquist Shell (ash)** and
+# is **NOT** compatible with Bourne-Again Shell (bash).
+#
+# 📢 POSIX Compliance Guidelines:
+# ✅ Use `[` instead of `[[` for conditions
+# ✅ Use `$(command)` instead of backticks `` `command` ``
+# ✅ Use `$(( ))` for arithmetic instead of `let`
+# ✅ Define functions as `func_name() {}` (no `function` keyword)
+# ✅ No associative arrays (`declare -A` is NOT supported)
+# ✅ No here-strings (`<<<` is NOT supported)
+# ✅ No `-v` flag in `test` or `[[`
+#
+# 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
+# =========================================================
+### =========================================================
+### 📌 AI Assistance Request: Bug Fixing Procedure
+### 
+### When debugging or fixing errors in this script, follow these steps:
+### 
+### 1️⃣ Create a minimal test script to identify the bug.
+### 2️⃣ Execute the test and verify the reproducibility of the error.
+### 3️⃣ Fix the error and re-run the test to confirm the solution.
+### 4️⃣ Apply the corrected code to the production environment.
+### 
+### ⚠️ DO NOT modify the main script without first confirming the fix 
+###     through a dedicated test script.
+### 
+### 🛠️ Keep the debugging process structured, efficient, and reliable.
+### =========================================================
+
+DEV_NULL="${DEV_NULL:-on}"
+# サイレントモード
+# export DEV_NULL="on"
+# 通常モード
+# unset DEV_NULL
+
+# 基本定数の設定 
+BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q -O}"
+# BASE_WGET="${BASE_WGET:-wget -O}"
+DEBUG_MODE="${DEBUG_MODE:-false}"
+BIN_PATH=$(readlink -f "$0")
+BIN_DIR="$(dirname "$BIN_PATH")"
+BIN_FILE="$(basename "$BIN_PATH")"
+BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
+BASE_DIR="${BASE_DIR:-/tmp/aios}"
+CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
+FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
+LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
+UPDATE_CACHE="${CACHE_DIR}/update.ch"
+GITHUB_TOKEN_FILE="/etc/aios_token"
+
+# 🔵　エラー・デバッグ・アップデート系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
+#########################################################################
+# Last Update: 2025-02-16 16:00:00 (JST) 🚀
+# "Clarity in errors, precision in handling. Every function must be robust."
+#
+# 【要件】
+# 1. すべてのエラーメッセージを `messages.db` で管理し、多言語対応する。
+# 2. `debug_log("ERROR", message)` も `message.db` を使用する。
+# 3. `{file}`, `{version}` などの変数を動的に置換。
+# 4. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
+#########################################################################
+handle_error() {
+    local error_key="$1"
+    local file="$2"
+    local version="$3"
+    local exit_required="${4:-no}"
+
+    local error_message
+    error_message=$(get_message "$error_key")
+
+    # メッセージが取得できなかった場合のフォールバック
+    if [ -z "$error_message" ]; then
+        error_message="Unknown error occurred. Key: $error_key"
+    fi
+
+    # 変数を置換
+    error_message=$(echo "$error_message" | sed -e "s/{file}/$file/g" -e "s/{version}/$version/g")
+
+    # ログ記録 & 表示
+    debug_log "ERROR" "$error_message"
+    echo -e "$(color red "$error_message")"
+
+    if [ "$exit_required" = "yes" ]; then
+        debug_log "ERROR" "Critical error occurred, exiting: $error_message"
+        exit 1
+    else
+        debug_log "DEBUG" "Non-critical error: $error_message"
+        return 1
+    fi
+}
+
+#########################################################################
+# Last Update: 2025-02-16 16:10:00 (JST) 🚀
+# "Logging with clarity, debugging with precision."
+#
+# 【要件】
+# 1. すべてのログメッセージを `messages.db` で管理し、多言語対応する。
+# 2. `{file}`, `{version}` などの変数を `sed` で動的に置換する。
+# 3. `DEBUG_MODE` の設定に応じて `DEBUG`, `INFO`, `WARN`, `ERROR` を管理する。
+# 4. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
+#########################################################################
+debug_log() {
+    local level="$1"
+    local message="$2"
+    local file="$3"
+    local version="$4"
+
+    # `$1` にログレベルが指定されていない場合、デフォルトを `DEBUG` にする
+    case "$level" in
+        "DEBUG"|"INFO"|"WARN"|"ERROR") ;;  # 何もしない (正しいログレベル)
+        "")
+            level="DEBUG"
+            message="$1"
+            file="$2"
+            version="$3"
+            ;;
+        *)
+            message="$1"
+            file="$2"
+            version="$3"
+            level="DEBUG"
+            ;;
+    esac
+
+    # 変数を置換
+    message=$(echo "$message" | sed -e "s/{file}/$file/g" -e "s/{version}/$version/g")
+
+    # ログレベル制御
+    case "$DEBUG_LEVEL" in
+        DEBUG)    allowed_levels="DEBUG INFO WARN ERROR" ;;
+        INFO)     allowed_levels="INFO WARN ERROR" ;;
+        WARN)     allowed_levels="WARN ERROR" ;;
+        ERROR)    allowed_levels="ERROR" ;;
+        *)        allowed_levels="ERROR" ;;
+    esac
+
+    if echo "$allowed_levels" | grep -q "$level"; then
+        local timestamp
+        timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+        local log_message="[$timestamp] $level: $message"
+
+        # カラー表示
+        case "$level" in
+            "ERROR") echo -e "$(color red "$log_message")" ;;
+            "WARN") echo -e "$(color yellow "$log_message")" ;;
+            "INFO") echo -e "$(color cyan "$log_message")" ;;
+            "DEBUG") echo -e "$(color white "$log_message")" ;;
+        esac
+
+	# ログファイルに記録
+	if [ "$AIOS_INITIALIZED" = "true" ]; then
+    	    echo "$log_message" >> "$LOG_DIR/debug.log"
+	fi
+    fi
+}
+
+#########################################################################
+# Last Update: 2025-02-16 17:30:00 (JST) 🚀
+# "Debug with clarity, test with precision. Every log tells a story."
+#
+# 【要件】
+# 1. `test_country_search()`, `test_timezone_search()`, `test_cache_contents()` を統合。
+# 2. `debug_log()` を使用し、メッセージを `message.db` から取得。
+# 3. `country.db` の検索結果が適切に出力されるか確認できるようにする。
+# 4. 影響範囲: `common.sh` のみ（`aios` には影響なし）。
+#########################################################################
+test_debug_functions() {
+    local test_type="$1"
+    local test_input="$2"
+
+    case "$test_type" in
+        country)
+            debug_log "DEBUG" "MSG_TEST_COUNTRY_SEARCH" "$test_input"
+            if [ ! -f "${BASE_DIR}/country.db" ]; then
+                handle_error "ERR_FILE_NOT_FOUND" "country.db"
+                return 1
+            fi
+            awk -v query="$test_input" '
+                $2 ~ query || $3 ~ query || $4 ~ query || $5 ~ query {
+                    print NR, $2, $3, $4, $5, $6, $7, $8, $9
+                }' "${BASE_DIR}/country.db"
+            ;;
+
+        timezone)
+            debug_log "DEBUG" "MSG_TEST_TIMEZONE_SEARCH" "$test_input"
+            if [ ! -f "${BASE_DIR}/country.db" ]; then
+                handle_error "ERR_FILE_NOT_FOUND" "country.db"
+                return 1
+            fi
+            awk -v country="$test_input" '
+                $2 == country || $4 == country || $5 == country {
+                    print NR, $5, $6, $7, $8, $9, $10, $11
+                }' "${BASE_DIR}/country.db"
+            ;;
+
+        cache)
+            debug_log "DEBUG" "MSG_TEST_CACHE_CONTENTS"
+            for cache_file in "country_tmp.ch" "zone_tmp.ch"; do
+                if [ -f "${CACHE_DIR}/$cache_file" ]; then
+                    debug_log "DEBUG" "MSG_CACHE_CONTENTS" "$cache_file"
+                    cat "${CACHE_DIR}/$cache_file"
+                else
+                    debug_log "DEBUG" "MSG_CACHE_NOT_FOUND" "$cache_file"
+                fi
+            done
+            ;;
+        
+        *)
+            debug_log "ERROR" "ERR_INVALID_ARGUMENT" "$test_type"
+            return 1
+            ;;
+    esac
+}
+
+#########################################################################
+# country_DEBUG: 選択された国と言語の詳細情報を表示
+#########################################################################
+country_DEBUG() {
+    local country_DEBUG_file="${BASE_DIR}/country.ch"
+    local selected_language_code=$(cat "${BASE_DIR}/check_country")
+    if [ -f "$country_DEBUG_file" ]; then
+        grep -w "$selected_language_code" "$country_DEBUG_file"
+    else
+        printf "%s\n" "$(color red "Country DEBUGrmation not found.")"
+    fi
+}
+
+#########################################################################
+# handle_exit: 正常終了メッセージを表示して終了
+#########################################################################
+handle_exit() {
+    local message="$1"
+    color yellow "$message"
+    exit 0
+}
+
+# 🔴　エラー・デバッグ・アップデート系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
+
+#########################################################################
+# print_help: ヘルプメッセージを表示
+#########################################################################
+print_help() {
+    echo "Usage: aios.sh [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  -reset, --reset, -r     Reset all cached data"
+    echo "  -help, --help, -h       Show this help message"
+    echo "  ja, en, zh-cn, ...      Set language"
+    echo ""
+    echo "Examples:"
+    echo "  sh aios.sh full ja       # Run in full mode with language set to Japanese"
+    echo "  sh aios.sh full          # If language cache exists, use it; otherwise, prompt for language"
+}
+
+#########################################################################
+# color: ANSI エスケープシーケンスを使って色付きメッセージを出力する関数
+#########################################################################
+color() {
+    local color_code
+    color_code=$(color_code_map "$1")
+    shift
+    echo -e "${color_code}$*$(color_code_map "reset")"
+}
+
+#########################################################################
+# color_code_map: カラー名から ANSI エスケープシーケンスを返す関数
+#########################################################################
+color_code_map() {
+    local color="$1"
+    case "$color" in
+        "red") echo "\033[1;31m" ;;
+        "green") echo "\033[1;32m" ;;
+        "yellow") echo "\033[1;33m" ;;
+        "blue") echo "\033[1;34m" ;;
+        "magenta") echo "\033[1;35m" ;;
+        "cyan") echo "\033[1;36m" ;;
+        "white") echo "\033[1;37m" ;;
+        "red_underline") echo "\033[4;31m" ;;
+        "green_underline") echo "\033[4;32m" ;;
+        "yellow_underline") echo "\033[4;33m" ;;
+        "blue_underline") echo "\033[4;34m" ;;
+        "magenta_underline") echo "\033[4;35m" ;;
+        "cyan_underline") echo "\033[4;36m" ;;
+        "white_underline") echo "\033[4;37m" ;;
+        "red_white") echo "\033[1;41m" ;;
+        "green_white") echo "\033[1;42m" ;;
+        "yellow_white") echo "\033[1;43m" ;;
+        "blue_white") echo "\033[1;44m" ;;
+        "magenta_white") echo "\033[1;45m" ;;
+        "cyan_white") echo "\033[1;46m" ;;
+        "white_black") echo "\033[7;40m" ;;
+        "reset") echo "\033[0;39m" ;;
+        *) echo "\033[0;39m" ;;  # デフォルトでリセット
+    esac
+}
+
+#########################################################################
+# check_openwrt: OpenWrtのバージョン確認・管理のみを担当
+#########################################################################
+check_openwrt() {
+    local version_file="${CACHE_DIR}/openwrt.ch"
+
+    # **キャッシュがあれば使用**
+    if [ -f "$version_file" ]; then
+        CURRENT_VERSION=$(cat "$version_file")
+    else
+        local raw_version=""
+        local distrib_id=""
+
+        # **① /etc/openwrt_release から取得（最優先）**
+        if [ -f "/etc/openwrt_release" ]; then
+            distrib_id=$(awk -F"'" '/DISTRIB_ID/ {print $2}' /etc/openwrt_release)
+            
+            # **GL.iNet カスタム版は弾く**
+            if [ "$distrib_id" != "OpenWrt" ]; then
+                handle_error "Unsupported OpenWrt version: $distrib_id (Only OpenWrt - supported)"
+                exit 1  # 🚨 スクリプト全体を終了
+            fi
+
+            if grep -q "DISTRIB_RELEASE=" /etc/openwrt_release; then
+                raw_version=$(awk -F"'" '/DISTRIB_RELEASE/ {print $2}' /etc/openwrt_release)
+            fi
+        fi
+
+        # **② /etc/openwrt_version が存在すれば使用**
+        if [ -z "$raw_version" ] && [ -f "/etc/openwrt_version" ]; then
+            raw_version=$(cat /etc/openwrt_version)
+        fi
+
+        # **③ バージョンが取得できなければスクリプト全体を終了**
+        if [ -z "$raw_version" ]; then
+            handle_error "Could not determine OpenWrt version. Check system files."
+            exit 1  # 🚨 スクリプト全体を終了
+        fi
+
+        # **④ バージョン表記の統一**
+        CURRENT_VERSION=$(echo "$raw_version" | tr '-' '.')
+
+        # **⑤ キャッシュに書き出し**
+        echo "$CURRENT_VERSION" > "$version_file"
+        chmod 444 "$version_file"  # 読み取り専用
+    fi
+
+    # **⑥ データベースにバージョンがあるか確認**
+    if grep -q "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db"; then
+        local db_entry=$(grep "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db" | cut -d'=' -f2)
+        PACKAGE_MANAGER=$(echo "$db_entry" | cut -d'|' -f1)
+        VERSION_STATUS=$(echo "$db_entry" | cut -d'|' -f2)
+        echo -e "$(color green "OpnWrt version: $CURRENT_VERSION - supported ($VERSION_STATUS)")"
+    else
+        handle_error "Unsupported OpenWrt version: $CURRENT_VERSION"
+        exit 1  # 🚨 スクリプト全体を終了
+    fi
+}
+
+#########################################################################
+# check_architecture: OpenWrtのアーキテクチャを確認・キャッシュ
+#########################################################################
+check_architecture() {
+    local arch_file="${CACHE_DIR}/architecture.ch"
+
+    # **キャッシュがあれば再取得しない**
+    if [ -f "$arch_file" ]; then
+        arch=$(cat "$arch_file" | tr -d '\r')
+        debug_log "DEBUG" "Using cached architecture: $arch"
+        return 0
+    fi
+
+    # **アーキテクチャを取得**
+    local arch=$(uname -m)
+
+    # **キャッシュに保存（アーキテクチャ名のみ）**
+    echo "$arch" > "$arch_file"
+
+    debug_log "DEBUG" "Architecture detected: $arch"
+}
+
+#########################################################################
+# check_downloader: パッケージマネージャー判定（apk / opkg 対応）
+#########################################################################
+check_downloader() {
+    if [ -f "${BASE_DIR}/downloader.ch" ]; then
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader.ch")
+        PACKAGE_EXTENSION=$(cat "${CACHE_DIR}/extension.ch")
+    else
+        if command -v apk >/dev/null 2>&1; then
+            PACKAGE_MANAGER="apk"
+            PACKAGE_EXTENSION="apk"
+        elif command -v opkg >/dev/null 2>&1; then
+            PACKAGE_MANAGER="opkg"
+            PACKAGE_EXTENSION="ipk"
+        else 
+            PACKAGE_MANAGER="opkg"  # デフォルトをセット
+            PACKAGE_EXTENSION="ipk" 
+        fi
+        echo "$PACKAGE_MANAGER" > "${CACHE_DIR}/downloader.ch"
+        echo "$PACKAGE_EXTENSION" > "${CACHE_DIR}/extension.ch"
+    fi
+    echo -e "$(color green "Package Manager: $PACKAGE_MANAGER - supported (stable)")"
+    echo -e "$(color green "Package Extension: $PACKAGE_EXTENSION - supported (stable)")"
+}
+
+#########################################################################
+# Last Update: 2025-02-18 18:00:00 (JST) 🚀
+# "Efficiency in retrieval, clarity in communication."
+# get_message: システムメッセージを取得する関数
+#
+# 【要件】
+# 1. **メッセージの取得ロジック**
+#    - `$ACTIVE_LANGUAGE` を最優先で使用（`normalize_language()` で設定）
+#    - `$ACTIVE_LANGUAGE` が未設定の場合は `US` をフォールバックとして使用
+#
+# 2. **メッセージ検索の順序**
+#    ① `$ACTIVE_LANGUAGE|キー=` で `messages.db` を検索
+#    ② `US|キー=` で `messages.db` を検索（フォールバック）
+#    ③ どちらにも該当しない場合、`キー` をそのまま返す
+#
+# 3. **動作の最適化**
+#    - `$ACTIVE_LANGUAGE` を直接参照し、キャッシュ (`message.ch`) には依存しない
+#    - `$quiet_flag` に `"quiet"` が指定された場合、出力せずに `return 0`
+#
+# 4. **メンテナンス**
+#    - 言語取得ロジックを `normalize_language()` に統一し、責務を分離
+#    - `get_message()` は「取得するだけ」に特化し、書き込み・設定は行わない
+#
+# 5. **影響範囲**
+#    - `common.sh` 内のメッセージ取得全般（`debug_log()` 含む）
+#    - `messages.db` のフォーマット変更時も `get_message()` の修正は不要
+#########################################################################
+get_message() {
+    local key="$1"
+    local params="$2"
+    local quiet_flag="$3"
+    local message_db="${BASE_DIR}/messages.db"
+    local message_cache="${CACHE_DIR}/message.ch"
+    local lang="US"  # デフォルトはUS
+
+    # message.chから言語を読み取る
+    if [ -f "$message_cache" ]; then
+        lang=$(cat "$message_cache")
+    fi
+
+    # `messages.db` が存在しない場合、キーそのままを返す
+    if [ ! -f "$message_db" ]; then
+        message="$key"
+    else
+        # 言語優先検索
+        message=$(grep "^${lang}|${key}=" "$message_db" | cut -d'=' -f2-)
+
+        # フォールバック検索
+        if [ -z "$message" ]; then
+            message=$(grep "^US|${key}=" "$message_db" | cut -d'=' -f2-)
+        fi
+
+        # それでも見つからなければ、キーそのままを返す
+        if [ -z "$message" ]; then
+            message="$key"
+        fi
+    fi
+
+    # パラメータ置換
+    if [ -n "$params" ]; then
+        for param in $params; do
+            key=$(echo "$param" | cut -d'=' -f1)
+            value=$(echo "$param" | cut -d'=' -f2)
+            # `sed` コマンドで使用する際に `value` をエスケープする
+            escaped_value=$(echo "$value" | sed -e 's/[\/&]/\\&/g')
+            message=$(echo "$message" | sed -e "s/{$key}/$escaped_value/g")
+        done
+    fi
+
+    # quiet モード対応
+    if [ "$quiet_flag" = "quiet" ]; then
+        return 0
+    else
+        echo "$message"
+    fi
+}
+
+# 🔵　トークン系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
+
+# トークン取得関数
+get_github_token() {
+    # トークンファイルが存在すれば読み込み
+    if [ -f "$GITHUB_TOKEN_FILE" ] && [ -r "$GITHUB_TOKEN_FILE" ]; then
+        token=$(cat "$GITHUB_TOKEN_FILE" | tr -d '\n\r')
+        if [ -n "$token" ]; then
+            echo "$token"
+            return 0
+        fi
+    fi
+    
+    # 環境変数からも取得可能
+    if [ -n "$GITHUB_TOKEN" ]; then
+        echo "$GITHUB_TOKEN"
+        return 0
+    fi
+    
+    # トークンなし
+    return 1
+}
+
+# トークン保存関数
+save_github_token() {
+    token="$1"
+    
+    if [ -z "$token" ]; then
+        debug_log "ERROR" "Empty token provided, cannot save"
+        return 1
+    fi
+    
+    # トークンを保存して権限を設定
+    echo "$token" > "$GITHUB_TOKEN_FILE"
+    chmod 600 "$GITHUB_TOKEN_FILE"
+    
+    if [ $? -eq 0 ]; then
+        debug_log "INFO" "GitHub token saved to $GITHUB_TOKEN_FILE"
+        return 0
+    else
+        debug_log "ERROR" "Failed to save token to $GITHUB_TOKEN_FILE"
+        return 1
+    fi
+}
+
+# GitHub API呼び出し（トークン対応版）
+github_api() {
+    endpoint="$1"
+    
+    # トークンを取得
+    token=$(get_github_token)
+    
+    if [ -n "$token" ]; then
+        # トークンがある場合は認証付きリクエスト
+        debug_log "DEBUG" "Using authenticated GitHub API request"
+        wget -qO- --header="Authorization: token $token" \
+            "https://api.github.com/$endpoint" 2>/dev/null
+    else
+        # トークンがない場合は通常リクエスト
+        debug_log "DEBUG" "Using unauthenticated GitHub API request"
+        wget -qO- "https://api.github.com/$endpoint" 2>/dev/null
+    fi
+}
+
+# トークン設定コマンド（OpenWrt互換性強化版）
+setup_github_token() {
+    echo "GitHub API Token Setup"
+    echo "======================"
+    echo "This will save a GitHub Personal Access Token to $GITHUB_TOKEN_FILE"
+    echo "The token will be used for API requests to avoid rate limits."
+    echo ""
+    
+    # sttyが利用可能かチェック
+    if command -v stty >/dev/null 2>&1; then
+        # sttyが利用可能な場合、非表示モードを使用
+        printf "Enter your GitHub Personal Access Token: "
+        stty -echo
+        read -r token
+        stty echo
+        echo ""  # 改行
+    else
+        # sttyが利用できない場合の代替方法
+        echo "NOTE: Your input will be visible as you type (stty not available)"
+        printf "Enter your GitHub Personal Access Token: "
+        read -r token
+        echo ""
+    fi
+    
+    if [ -n "$token" ]; then
+        if save_github_token "$token"; then
+            echo "Token has been saved successfully!"
+            echo "API requests will now use authentication."
+        else
+            echo "Failed to save token. Please check permissions."
+        fi
+    else
+        echo "No token entered. Operation cancelled."
+    fi
+}
+
+# 🔴　トークン系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
+
+
+# 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
+#########################################################################
+# Last Update: 2025-02-18 23:00:00 (JST) 🚀
+# "Standardizing version formatting for consistency."
+#
+# 【要件】
+# 1. **バージョン番号のフォーマットを統一**
+#    - `YYYY.MM.DD-自由形式`
+#    - `YYYYMMDDHHMMSS-自由形式`
+#    - 許可される区切り文字: `- . , ; : 空白`
+#
+# 2. **処理内容**
+#    - **許可された文字のみを抽出**
+#    - **先頭のゼロを削除（例: `02` → `2`）**
+#    - **前後の余計なスペースを削除**
+#
+# 3. **適用対象**
+#    - **`download()`**: **スクリプトバージョンの取得・比較**
+#    - **`compare_versions()`**: **バージョン比較時のフォーマット統一**
+#
+# 4. **適用しない対象**
+#    - **バージョン番号の解釈を変更しない（順番の入れ替えはしない）**
+#    - **日付以外の文字列は削除せず、フォーマットの標準化のみ行う**
+#
+# 5. **依存関係**
+#    - `normalize_input()` を使用し、iconv による処理を統一
+#
+# 6. **影響範囲**
+#    - `common.sh` に統合し、`download()` & `compare_versions()` で使用
+#########################################################################
+# Last Update: 2025-03-04 12:45:00 (JST) 🚀
+# "Efficient downloading with precise versioning and silent modes."
+#
+# 【要件】
+# 1. BASE_WGET を使用してファイルをダウンロードする。
+# 2. hidden オプション:
+#    - ダウンロードの成否ログを記録するが、既存ファイルがある場合は出力を抑制する。
+# 3. quiet オプション:
+#    - check_option() で設定された QUIET_MODE に従い、すべてのログを抑制する。
+# 4. chmod オプション:
+#    - ダウンロード後、対象ファイルに実行権限 (chmod +x) を付与する。
+# 5. read オプション:
+#    - ダウンロード後、対象ファイルを読み込む（source）する。（ただし、ファイル名が *common*.sh に一致する場合は自動で読み込む）
+#    - デフォルトでは読み込まない。
+# 6. 引数の順序は自由（hidden, quiet, chmod, read の順番は任意）。
+# 7. wget のエラーハンドリングを行い、失敗時の詳細を debug_log() に記録する。
+# 8. 影響範囲: common.sh の download() のみ（他の関数には影響なし）。
+#########################################################################
+# スクリプトのバージョンを正規化する関数
+remote_normalize_version() {
+    local input="$1"
+    input=$(echo "$input" | grep -Eo 'SCRIPT_VERSION=["'"'"'][^"'"'"']+["'"'"']' | grep -Eo '([0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*)')
+    input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
+    input=$(echo "$input" | tr -d '\n' | sed 's/ *$//')
+    input=$(echo "$input" | sed -E 's/(^|[._-])0+([0-9])/\1\2/g')
+    input=$(echo "$input" | sed 's/[._-]\{1,1\}/./g')
+    echo "$input"
+}
+
+# local_normalize_version関数の定義
+local_normalize_version() {
+    local script_file="$1"
+    local file_name="$2"
+    local input
+    input=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
+    input=$(echo "$input" | grep -Eo '([0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}\.[0-9.]+)')
+    input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
+    input=$(echo "$input" | tr -d '\n' | sed 's/ *$//')
+    input=$(echo "$input" | sed -E 's/(^|[._-])0+([0-9])/\1\2/g')
+    input=$(echo "$input" | sed 's/[._-]\{1,1\}/./g')
+    echo "$input"
+}
+
+# GitHub API呼び出し前にレート制限を確認する関数
+check_api_rate_limit() {
+    if [ "$DEBUG_MODE" = "true" ]; then
+        # タイムスタンプ取得と残り時間計算（動作確認済み）
+        api_info=$(wget -qO- "https://api.github.com/rate_limit" 2>/dev/null)
+        if [ -n "$api_info" ]; then
+            # 現在のAPI利用状況を抽出
+            api_remaining=$(echo "$api_info" | grep -o '"core":{"limit":[0-9]*,"remaining":[0-9]*' | grep -o 'remaining":[0-9]*' | cut -d':' -f2)
+            api_limit=$(echo "$api_info" | grep -o '"core":{"limit":[0-9]*,"remaining":[0-9]*' | grep -o 'limit":[0-9]*' | cut -d':' -f2)
+            api_reset=$(echo "$api_info" | grep -o '"reset":[0-9]*' | head -1 | cut -d':' -f2)
+            api_now=$(date +%s)
+            
+            # 残り時間計算
+            api_seconds=0
+            if [ -n "$api_reset" ] && [ -n "$api_now" ]; then
+                api_seconds=$(expr "$api_reset" - "$api_now")
+                if [ "$api_seconds" -lt 0 ]; then
+                    api_seconds=0
+                fi
+            fi
+            
+            # 残り時間を分:秒形式に変換
+            api_minutes=$(expr "$api_seconds" / 60)
+            api_seconds=$(expr "$api_seconds" % 60)
+            
+            # デバッグログ出力
+            debug_log "DEBUG" "API Limits: Core ${api_remaining:-?}/${api_limit:-?}, Reset in ${api_minutes}m ${api_seconds}s"
+            
+            # API制限が少なくなったら警告
+            if [ -n "$api_remaining" ] && [ -n "$api_limit" ] && [ "$api_limit" -gt 0 ]; then
+                api_threshold=$(expr "$api_limit" / 10)
+                if [ "$api_remaining" -lt "$api_threshold" ]; then
+                    debug_log "WARN" "GitHub API rate limit running low (${api_remaining}/${api_limit})"
+                    return 1
+                fi
+            fi
+        fi
+    fi
+    return 0
+}
+
+decode_base64() {
+    input="$1"
+    output=""
+    decoder_type=""
+    base64_cache="${CACHE_DIR}/base64.ch"
+    
+    # キャッシュファイルから以前検出したデコーダーを確認
+    if [ -f "$base64_cache" ]; then
+        # shellcheck disable=SC1090
+        . "$base64_cache"
+        debug_log "DEBUG" "base64: using cached decoder: $BASE64_DECODER"
+    else
+        # 利用可能なデコーダーを検索
+        if command -v base64 >/dev/null 2>&1; then
+            BASE64_DECODER="coreutils"
+            debug_log "DEBUG" "base64: found coreutils-base64"
+        elif command -v openssl >/dev/null 2>&1; then
+            BASE64_DECODER="openssl" 
+            debug_log "DEBUG" "base64: found openssl"
+        else
+            debug_log "WARN" "base64: no decoder found, attempting to install coreutils-base64"
+            
+            # DEBUGモードの場合は通常表示、それ以外はサイレント
+            if [ "$DEBUG_MODE" = "true" ]; then
+                debug_log "INFO" "Running: opkg update"
+                opkg update
+                debug_log "INFO" "Running: opkg install coreutils-base64"
+                opkg install coreutils-base64
+            else
+                # サイレントでパッケージをインストール試行
+                opkg update >/dev/null 2>&1
+                opkg install coreutils-base64 >/dev/null 2>&1
+            fi
+            
+            # インストール成功したか確認
+            if command -v base64 >/dev/null 2>&1; then
+                BASE64_DECODER="coreutils"
+                debug_log "INFO" "base64: successfully installed coreutils-base64"
+            else
+                debug_log "ERROR" "base64: failed to install decoder, decode operation will fail"
+                BASE64_DECODER="none"
+            fi
+        fi
+        
+        # 検出結果をキャッシュファイルに保存
+        mkdir -p "$CACHE_DIR"
+        echo "BASE64_DECODER=\"$BASE64_DECODER\"" > "$base64_cache"
+    fi
+    
+    # デコード実行
+    case "$BASE64_DECODER" in
+        "coreutils")
+            output=$(echo "$input" | base64 -d 2>/dev/null)
+            decoder_type="coreutils-base64"
+            ;;
+        "openssl")
+            output=$(echo "$input" | openssl base64 -d 2>/dev/null)
+            decoder_type="openssl"
+            ;;
+        *)
+            debug_log "ERROR" "base64: no decoder available"
+            return 1
+            ;;
+    esac
+    
+    # 結果を確認
+    if [ $? -eq 0 ] && [ -n "$output" ]; then
+        debug_log "DEBUG" "base64: decoded with $decoder_type"
+        echo "$output"
+        return 0
+    else
+        debug_log "ERROR" "base64: decode failed with $decoder_type"
+        return 1
+    fi
+}
+
+download() {
+    # 1. 初期設定
+    # ===============================
+    local file_name=""
+    local install_path=""
+    local remote_url=""
+    local api_url=""
+    local hidden_mode="false"
+    local quiet_mode="${QUIET_MODE:-false}"
+    local chmod_mode="false"
+    local read_mode="false"
+    local script_file="${CACHE_DIR}/script.ch"
+    local repo_owner="site-u2023"
+    local repo_name="aios"
+    local dummy_remote_version="No remote version control."
+    local dummy_local_version="No local version control."
+    local skip_api=false
+    
+    # メッセージ関連の変数
+    local status_message=""
+    local action_message=""
+    local auth_message=""
+    local version_to_display=""
+    local is_updated=false
+
+    # 2. 引数処理 (ファイル名を最初に、オプションを後に)
+    # ===============================
+    if [ $# -gt 0 ]; then
+        file_name="$1"
+        shift
+        
+        # 残りの引数を順不同でオプションとして処理
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                hidden) hidden_mode="true" ;;
+                quiet)  quiet_mode="true" ;;
+                debug)  DEBUG_MODE="true" ;;
+                chmod)  chmod_mode="true" ;;
+                read)   read_mode="true" ;;
+                *)      debug_log "WARN" "Unknown option: $1, ignoring" ;;
+            esac
+            shift
+        done
+    else
+        echo "Error: No file name provided" >&2
+        return 1
+    fi
+
+    # 3. パス・URLの設定
+    # ===============================
+    install_path="${BASE_DIR}/$file_name"
+    remote_url="${BASE_URL}/$file_name"
+    api_url="repos/${repo_owner}/${repo_name}/contents/${file_name}"
+
+    # 4. 特定ファイルのAPIスキップ設定
+    # ===============================
+    if [ "$file_name" = "country.db" ]; then
+        skip_api="true"
+        debug_log "DEBUG" "skip API for country.db - No version information"
+    fi
+
+    # 5. GitHubからメタデータ取得と処理
+    # ===============================
+    local api_response=""
+    local remote_version=""
+    local local_version=""
+    local response=""
+    local decoded_content=""
+    local download_method="direct"
+    
+    # GitHub API応答処理
+    if [ "$skip_api" = "false" ]; then
+        # API制限チェック
+        if [ "$DEBUG_MODE" = "true" ]; then
+            check_api_rate_limit
+        fi
+        
+        debug_log "DEBUG" "Processing API response for: $file_name"
+        
+        # トークンを取得して認証方式を決定
+        token=$(get_github_token)
+        
+        if [ -n "$token" ]; then
+            # トークン認証でAPI呼び出し
+            api_response=$(wget -qO- --header="Authorization: token $token" \
+                "https://api.github.com/$api_url" 2>/dev/null)
+            auth_message="via token auth"
+            download_method="token API"
+        else
+            # 通常認証でAPI呼び出し
+            api_response=$(wget -qO- "https://api.github.com/$api_url" 2>/dev/null)
+            auth_message="via standard API"
+            download_method="standard API"
+        fi
+        
+        # コンテンツ部分を抽出
+        response=$(echo "$api_response" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
+    
+        # レスポンスの内容をデバッグ
+        if [ -n "$response" ]; then
+            debug_log "DEBUG" "API response contains content field: ${response:0:20}..."
+        else
+            debug_log "WARN" "API response missing content field - raw sample: ${api_response:0:100}..."
+            skip_api="true"  # APIが失敗した場合は直接ダウンロードに切り替え
+            download_method="direct download"
+            auth_message="via direct download (API failed)"
+        fi
+    
+        if [ "$skip_api" = "false" ]; then
+            # base64デコード
+            decoded_content=$(decode_base64 "$response")
+            decode_status=$?
+        
+            if [ $decode_status -eq 0 ] && [ -n "$decoded_content" ]; then
+                debug_log "DEBUG" "Successfully decoded content (first 50 chars): ${decoded_content:0:50}..."
+            
+                # バージョン情報の取得
+                remote_version=$(remote_normalize_version "$decoded_content")
+                if [ -z "$remote_version" ]; then
+                    debug_log "WARN" "Failed to extract version from decoded content"
+                    remote_version="$dummy_remote_version"
+                fi
+            else
+                debug_log "ERROR" "Failed to decode base64 content"
+                remote_version="$dummy_remote_version"
+                skip_api="true"  # デコード失敗の場合は直接ダウンロードに切り替え
+                download_method="direct download"
+                auth_message="via direct download (decode failed)"
+            fi
+        
+            debug_log "DEBUG" "Remote version: $file_name - $remote_version"
+        fi
+    else
+        debug_log "DEBUG" "Skipping API version check for: $file_name"
+        remote_version="$dummy_remote_version"
+        download_method="direct download"
+        auth_message="via direct download (API skipped)"
+    fi
+
+    # 6. ローカルバージョン情報の取得
+    # ===============================
+    if [ -f "$script_file" ]; then
+        local_version=$(local_normalize_version "$script_file" "$file_name")
+    fi
+    if [ -z "$local_version" ]; then
+        local_version="$dummy_local_version"
+    fi  
+    debug_log "DEBUG" "Local version: $file_name - $local_version"
+
+    # 7. メインロジック - バージョン比較と更新処理
+    # ===============================
+    if [ "$skip_api" = "true" ] || [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
+        # アップデートフラグ設定
+        is_updated=true
+        status_message="Download completed"
+        version_to_display="$remote_version"
+        
+        # ファイルのダウンロード処理
+        if ! $BASE_WGET "$install_path" "$remote_url"; then
+            debug_log "ERROR" "Download failed: $file_name is empty"
+            echo "Error: Download failed: $file_name is empty." >&2
+            return 1
+        fi
+        # ダウンロードファイルの検証
+        if [ ! -s "$install_path" ]; then
+            debug_log "ERROR" "Download failed: $file_name is empty"
+            echo "Error: Download failed: $file_name is empty." >&2
+            return 1
+        fi
+
+        # 権限設定
+        if [ "$chmod_mode" = "true" ]; then
+            chmod +x "$install_path"
+            debug_log "DEBUG" "chmod +x applied to $file_name"
+        fi
+
+        # バージョン情報の更新 (APIスキップ時は更新しない)
+        if [ "$skip_api" = "false" ]; then
+            if [ ! -f "$script_file" ]; then
+                echo "${file_name}=${remote_version}" > "$script_file"
+                debug_log "DEBUG" "Created $script_file with ${file_name}=${remote_version}"
+            else
+                if grep -q "^${file_name}=" "$script_file"; then
+                    sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_file"
+                else
+                    echo "${file_name}=${remote_version}" >> "$script_file"
+                fi
+                debug_log "DEBUG" "Updated $script_file with ${file_name}=${remote_version}"
+            fi
+        fi
+
+        # aios更新処理
+        if [ "$file_name" = "$BIN_FILE" ] && [ "$MODE" = "update" ]; then
+            chmod +x "$install_path"
+            mv "$install_path" "$BIN_PATH"
+            status_message="Update completed"
+            # 更新後フラグを設定
+            touch "${CACHE_DIR}/post_update_flag"
+        fi
+
+    else
+        # 更新の必要がない場合
+        status_message="No update needed"
+        version_to_display="$local_version"
+    fi
+
+    # 8. 読み込み処理（別条件で判断）
+    # ===============================
+    if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
+        . "$install_path"
+        action_message="Loaded"
+    fi
+
+    # 9. 最終的なメッセージ出力（統一処理）
+    # =====================================
+    # メッセージコンポーネントを構築
+    local final_message=""
+    
+    # ステータスとファイル名、バージョン、認証方式
+    final_message="${file_name}: ${status_message} - Version: ${version_to_display} ${auth_message}"
+    
+    # アクションメッセージがある場合は追加
+    if [ -n "$action_message" ]; then
+        final_message="${final_message} (${action_message})"
+    fi
+    
+    # hidden/debugモードに基づいて出力
+    if [ "$hidden_mode" = "true" ]; then
+        # hiddenモード: debug_logでログ出力
+        debug_log "DEBUG" "Quiet mode ${final_message}"
+    else
+        # 通常モード: カラー表示（緑）でecho出力
+	echo "$(color green "${final_message}")"
+    fi
+
+    return 0
+}
+
+# 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
+
+# 🔵　メイン　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
+#########################################################################
+# バナー表示
+#########################################################################
+print_banner() {
+    echo
+    color magenta "                    ii i"
+    color blue    "         aaaa      iii       oooo      sssss"
+    color cyan    "            aa      ii      oo  oo    ss"
+    color green   "         aaaaa      ii      oo  oo     sssss"
+    color yellow  "        aa  aa      ii      oo  oo         ss"
+    color red     "         aaaaa     iiii      oooo     ssssss"
+    echo
+    printf "%s\n" "$(color white "$(get_message "MSG_BANNER_DECCRIPTION")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_BANNER_NAME")")"
+    printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DISCLAIMER")")"
+}
+
+#########################################################################
+# パッケージのインストール (オプション)
+# テスト用（最終的に推奨パッケージスクリプトに移動）
+#########################################################################
+packages() {
+    # パッケージのインストール
+    #install_package luci yn hidden
+    install_package ttyd yn hidden
+    install_package luci-app-ttyd yn hidden
+    install_package luci-i18n-ttyd yn hidden
+    install_package openssh-sftp-server yn hidden
+    install_package luci-mod-dashboard yn hidden
+    #install_package coreutils yn hidden
+    install_package irqbalance yn hidden
+
+    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
+    feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden
+    feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden
+    feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden
+    feed_package gSpotx2f packages-openwrt current luci-app-log yn hidden
+    feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled
+
+    feed_package_release lisaac luci-app-diskman yn hidden disabled
+
+    feed_package_release jerrykuku luci-theme-argon yn hidden disabled
+    
+    # install_package list
+}
+
+#########################################################################
+# 初期設定
+#########################################################################
+# 権限設定
+chmod_aios() {
+
+    echo "$(color magenta "Setting permissions for $BIN_PATH")"
+
+    if ! chmod +x "$BIN_PATH"; then
+        debug_log "ERROR" "Failed to set permissions for $BIN_PATH"
+        return 1
+    fi
+}
+
+# 初期化処理
+delete_aios() {
+    debug_log "ERROR" "Deleting $BASE_DIR"
+    if ! rm -rf "${BASE_DIR}"; then
+        debug_log "ERROR" "Failed to delete $BASE_DIR"
+        return 1
+    fi
+}
+
+# 必要ディレクトリ作成
+make_directory() {
+
+    echo "$(color magenta "Creating required directories")"
+
+    if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"; then
+        debug_log "ERROR" "Failed to create required directories"
+        return 1
+    fi
+}
+
+check_update() {
+    # 確実にキャッシュディレクトリが存在するか確認
+    mkdir -p "$CACHE_DIR" 2>/dev/null
+
+    # アップデート後の特殊処理
+    POST_UPDATE="false"
+    if [ -f "${CACHE_DIR}/post_update_flag" ]; then
+        POST_UPDATE="true"
+        rm -f "${CACHE_DIR}/post_update_flag"
+        debug_log "DEBUG" "Post-update detected, continuing with normal execution"
+        MODE="full"  # 更新後は標準モードに設定
+        return 0
+    fi
+
+    # アップデート状態ファイルの確認
+    if [ ! -f "$UPDATE_CACHE" ]; then
+        # 初回実行: アップデートモードをセット
+        debug_log "DEBUG" "First run detected, setting update mode"
+        MODE="update"
+        # 状態ファイル作成（バージョン情報を記録）
+        echo "$SCRIPT_VERSION" > "$UPDATE_CACHE" || debug_log "WARN" "Could not create $UPDATE_CACHE"
+    else
+        # 再実行: アップデートキャッシュをチェック
+        local cached_version=$(cat "$UPDATE_CACHE" 2>/dev/null || echo "unknown")
+        if [ "$cached_version" != "$SCRIPT_VERSION" ]; then
+            debug_log "DEBUG" "Version changed from $cached_version to $SCRIPT_VERSION"
+            # バージョン情報を更新
+            echo "$SCRIPT_VERSION" > "$UPDATE_CACHE" || debug_log "WARN" "Could not update $UPDATE_CACHE"
+        fi
+        # 引数で明示的なモード指定がなければfullをデフォルトに
+        [ -z "$MODE" ] && MODE="full"
+    fi
+
+    # 常に成功を返す（エラーがあっても処理を継続）
+    return 0
+}
+
+# 初期化処理を実行
+initialization() {
+    # 実行権限を設定
+    if ! chmod_aios; then
+        debug_log "ERROR" "Failed to set execute permission"
+        return 1
+    fi
+
+    # 必要なディレクトリを作成
+    if ! make_directory; then
+        debug_log "ERROR" "Failed to create required directories"
+        return 1
+    fi
+
+    check_update || debug_log "WARN" "Update check had issues, continuing anyway"
+    return 0
+}
+
+#########################################################################
+# Last Update: 2025-02-15 10:00:00 (JST) 🚀
+# check_option: コマンドラインオプション解析・正規化関数
+#
+# 【概要】
+# この関数は、aios 起動時に渡されたコマンドライン引数を解析し、
+# ダッシュ付きの引数はオプションとして解析、非ダッシュ引数はすべて
+# 言語オプションとして扱い、最初に見つかった値を SELECTED_LANGUAGE に設定します。
+#
+# ※ MODE の指定は必ずダッシュ付きで行い、以下の各パターンを受け付けます。
+#     common_full  : -cf, --cf, -common_full, --common_full  → MODE="full"
+#     common_light : -cl, --cl, -ocommon_light, --ocommon_light → MODE="light"
+#     common_debug : -cd, --cd, -common_debug, --common_debug, --ocommon_debug → MODE="debug"
+#     reset        : -r, --r, -reset, --reset, -resrt, --resrt → MODE="reset" および RESET="true"
+#
+# 【対応オプション】
+#  - ヘルプ:         -h, --h, -help, --help, -?, --?  
+#  - バージョン:     -v, --v, -version, --version  
+#  - デバッグ:       -d, --d, -debug, --debug, -d1, --d1  
+#                     → DEBUG_MODE="true", DEBUG_LEVEL="DEBUG"
+#                   -d2, --d2, -debug2, --debug2  
+#                     → DEBUG_MODE="true", DEBUG_LEVEL="DEBUG2"
+#  - モード指定:
+#       - full:       -cf, --cf, -common_full, --common_full  → MODE="full"
+#       - light:      -cl, --cl, -ocommon_light, --ocommon_light → MODE="light"
+#       - debug:      -cd, --cd, -common_debug, --common_debug, --ocommon_debug → MODE="debug"
+#       - reset:      -r, --r, -reset, --reset, -resrt, --resrt → MODE="reset", RESET="true"
+#  - 強制実行:       -f, --f, -force, --force  → FORCE="true"
+#  - ドライラン:     -dr, --dr, -dry-run, --dry-run  → DRY_RUN="true"
+#  - ログ出力先:     -l, --l, -logfile, --logfile <path>  → LOGFILE に指定パス
+#
+# 【仕様】
+# 1. ダッシュ付きの引数はオプションとして解析し、非ダッシュ引数はすべて SELECTED_LANGUAGE として扱います。
+# 2. 解析結果はグローバル変数 SELECTED_LANGUAGE, DEBUG_MODE, DEBUG_LEVEL, MODE, DRY_RUN, LOGFILE, FORCE, RESET, HELP としてエクスポートされ、
+#    後続の check_common(), select_country(), debug(), script_version() などに正規化された値として渡されます。
+#
+# 【使用例】
+#   sh aios.sh -d --dry-run --reset -l /var/log/aios.log -f -cf en
+#    → 言語 "en" が SELECTED_LANGUAGE に設定され、MODE は "full"（-cf等で指定）、デバッグモード有効、
+#       キャッシュリセット、ドライラン、ログ出力先 /var/log/aios.log、強制実行が有効になる。
+#########################################################################
+check_option() {
+
+    echo "$(color magenta "check_option received before args: $*")"
+
+    # デフォルト値の設定
+    SELECTED_LANGUAGE=""
+    DEBUG_MODE="false"
+    DEBUG_LEVEL="INFO"
+    DRY_RUN="false"
+    LOGFILE=""
+    FORCE="false"
+    RESET="false"
+    HELP="false"
+
+    # 言語およびオプション引数の処理
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            -h|--h|-help|--help|-\?|--\?)
+                HELP="true"
+                print_help
+                exit 0
+                ;;
+            -v|--v|-version|--version)
+                script_version
+                exit 0
+                ;;
+            -d|--d|-debug|--debug|-d1|--d1)
+                DEBUG_MODE="true"
+                DEBUG_LEVEL="DEBUG"
+                ;;
+            -d2|--d2|-debug2|--debug2)
+                DEBUG_MODE="true"
+                DEBUG_LEVEL="DEBUG2"
+                ;;
+            -cf|--cf|-common_full|--common_full)
+                MODE="full"
+                ;;
+            -cl|--cl|-ocommon_light|--ocommon_light)
+                MODE="light"
+                ;;
+            -cd|--cd|-common_debug|--common_debug|--ocommon_debug)
+                MODE="debug"
+                ;;
+            -r|--r|-reset|--reset|-resrt|--resrt)
+                MODE="reset"
+                RESET="true"
+                ;;
+            -f|--f|-force|--force)
+                FORCE="true"
+                ;;
+            -dr|--dr|-dry-run|--dry-run)
+                DRY_RUN="true"
+                ;;
+            -l|--l|-logfile|--logfile)
+                if [ -n "$2" ] && [ "${2#-}" != "$2" ]; then
+                    LOGFILE="$2"
+                    shift
+                else
+                    echo "Error: --logfile requires a path argument"
+                    exit 1
+                fi
+                ;;
+	    -u|--u|-update|--update)
+		debug_log "DEBUG" "check_option: aios update"
+    		MODE="update"
+    		;;
+	    -t|--t|-token|--token)
+		setup_github_token
+		;;
+            -*)
+                echo "Warning: Unknown option: $1" >&2
+                ;;
+            *)
+                if [ -z "$SELECTED_LANGUAGE" ]; then
+                    SELECTED_LANGUAGE="$1"
+                fi
+                ;;
+        esac
+        shift
+    done
+
+    # 環境変数として設定
+    export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET HELP
+
+    # デバッグ情報を出力
+    debug_log "DEBUG" "check_option: MODE=$MODE, SELECTED_LANGUAGE=$SELECTED_LANGUAGE"
+    debug_log "DEBUG" "check_option: DEBUG_MODE=$DEBUG_MODE, DEBUG_LEVEL=$DEBUG_LEVEL"
+    debug_log "DEBUG" "check_option: DRY_RUN=$DRY_RUN, LOGFILE=$LOGFILE"
+    debug_log "DEBUG" "check_option: FORCE=$FORCE, RESET=$RESET, HELP=$HELP"
+
+    # 設定された言語を `check_common()` に渡す
+    check_common "$SELECTED_LANGUAGE" "$MODE"
+}
+
+#########################################################################
+# Last Update: 2025-02-16 21:45:00 (JST) 🚀
+# "Ensuring seamless updates, one script at a time."
+#
+# 【要件】
+# 1. `download_script()` を `download()` に統合し、一貫性を確保する。
+# 2. `debug_log()` を強化し、ダウンロード状況を詳細に記録。
+# 3. `download()` のエラーハンドリングを見直し、失敗時の挙動を改善。
+# 4. `openwrt.db`, `messages.db`, `country.db`, `packages.db` を適切にダウンロード。
+# 5. 影響範囲: `common.sh`（矛盾なく適用）。
+#########################################################################
+check_common() {
+    local lang_code="$1"
+    local mode="$2"
+
+    debug_log "DEBUG" "check_common: MODE=$MODE"
+    debug_log "DEBUG" "check_common: mode=$mode"
+
+    if [ -n "$mode" ]; then
+        MODE="$mode"
+    fi
+
+    # モードごとの処理
+    case "$MODE" in
+        reset)
+            rm -f "${CACHE_DIR}/country.ch" \
+                  "${CACHE_DIR}/language.ch" \
+                  "${CACHE_DIR}/luci.ch" \
+                  "${CACHE_DIR}/zone.ch" \
+                  "${CACHE_DIR}/zonename.ch" \
+                  "${CACHE_DIR}/timezone.ch" \
+                  "${CACHE_DIR}/country_success_done" \
+                  "${CACHE_DIR}/timezone_success_done"
+            echo "$(get_message "MSG_RESET_COMPLETE")"
+            exit 0
+            ;;
+        update)
+	    download "hidden" "chmod" "aios"
+	    if [ ! -f "${CACHE_DIR}/post_update_flag" ]; then
+		MODE="full"
+		check_commod "$lang_code" "$MODE" "$@"
+	    else
+		MODE="full"
+		exec "$BIN_PATH" $(echo "$@" | sed 's/update//g' | sed 's/--update//g' | sed 's/-u//g' | sed 's/--u//g')
+	    fi
+	    ;;
+        debug)
+            download "common-country.sh" "hidden"
+            download "common-package.sh" "hidden"
+            download "common-feed-package.sh" "hidden"
+            download "messages.db" "hidden"
+            download "openwrt.db" "hidden"
+            download "country.db" "hidden"
+            download "local-package.db" "hidden"
+            download "custom-package.db" "hidden"
+            check_openwrt
+            check_architecture
+            check_downloader
+            print_banner
+            select_country "$lang_code"
+            download "hidden" "system-config.sh" "chmod" "read"
+            #packages
+            ;;
+        light)
+            download "common-country.sh"
+            download "common-package.sh"
+            download "common-feed-package.sh"
+            download "messages.db"
+            download "openwrt.db"
+            download "country.db"
+            download "local-package.db"
+            download "custom-package.db"
+            check_openwrt
+            check_architecture
+            check_downloader
+            print_banner
+            select_country "$lang_code"
+            download "hidden" "system-config.sh" "chmod" "read"
+            #packages
+            ;;
+        full)
+            download "common-country.sh"
+            download "common-package.sh"
+            download "common-feed-package.sh"
+            download "messages.db"
+            download "openwrt.db"
+            download "country.db"
+            download "local-package.db"
+            download "custom-package.db"
+            check_openwrt
+            check_architecture
+            check_downloader
+            print_banner
+            select_country "$lang_code"
+            download "system-config.sh" "chmod" "read"
+            #packages
+            ;;
+        return)
+            rm -f "${CACHE_DIR}/country.ch" \
+                  "${CACHE_DIR}/language.ch" \
+                  "${CACHE_DIR}/luci.ch" \
+                  "${CACHE_DIR}/zone.ch" \
+                  "${CACHE_DIR}/zonename.ch" \
+                  "${CACHE_DIR}/timezone.ch" \
+                  "${CACHE_DIR}/country_success_done" \
+                  "${CACHE_DIR}/timezone_success_done"
+            select_country
+            ;;
+        *)
+            ;;
+    esac
+}
+
+# メイン処理
+main() {
+    initialization
+    check_option "$@"
+}
+
+# 🔴　メイン　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
+
+# スクリプト実行
+main "$@"
