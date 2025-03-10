@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-01-05"
+SCRIPT_VERSION="2025.03.10-02-00"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -788,12 +788,14 @@ decode_base64() {
 download() {
     # 1. 初期設定
     # ===============================
-    # 設定変数
+    local file_name=""
+    local install_path=""
+    local remote_url=""
+    local api_url=""
     local hidden_mode="false"
     local quiet_mode="${QUIET_MODE:-false}"
     local chmod_mode="false"
     local read_mode="false"
-    local file_name=""
     local script_file="${CACHE_DIR}/script.ch"
     local repo_owner="site-u2023"
     local repo_name="aios"
@@ -804,36 +806,41 @@ download() {
     # メッセージ関連の変数
     local status_message=""
     local action_message=""
+    local auth_message=""
     local version_to_display=""
     local is_updated=false
 
-    # 2. 引数処理
+    # 2. 引数処理 (ファイル名を最初に、オプションを後に)
     # ===============================
-    while [ "$#" -gt 0 ]; do
-        case "$1" in
-            hidden) hidden_mode="true" ;;
-            quiet)  quiet_mode="true" ;;
-            debug)  DEBUG_MODE="true" ;;
-            chmod)  chmod_mode="true" ;;
-            read)   read_mode="true" ;;
-            *)      file_name="$1" ;;
-        esac
+    if [ $# -gt 0 ]; then
+        file_name="$1"
         shift
-    done
-
-    # 3. パス・URLの設定
-    # ===============================
-    local install_path="${BASE_DIR}/$file_name"
-    local remote_url="${BASE_URL}/$file_name"
-    local api_url="repos/${repo_owner}/${repo_name}/contents/${file_name}"
-
-    # 4. 入力検証
-    # ===============================
-    if [ -z "$file_name" ]; then
+        
+        # 残りの引数を順不同でオプションとして処理
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                hidden) hidden_mode="true" ;;
+                quiet)  quiet_mode="true" ;;
+                debug)  DEBUG_MODE="true" ;;
+                chmod)  chmod_mode="true" ;;
+                read)   read_mode="true" ;;
+                *)      debug_log "WARN" "Unknown option: $1, ignoring" ;;
+            esac
+            shift
+        done
+    else
         echo "Error: No file name provided" >&2
         return 1
     fi
 
+    # 3. パス・URLの設定
+    # ===============================
+    install_path="${BASE_DIR}/$file_name"
+    remote_url="${BASE_URL}/$file_name"
+    api_url="repos/${repo_owner}/${repo_name}/contents/${file_name}"
+
+    # 4. 特定ファイルのAPIスキップ設定
+    # ===============================
     if [ "$file_name" = "country.db" ]; then
         skip_api="true"
         debug_log "DEBUG" "skip API for country.db - No version information"
@@ -846,6 +853,7 @@ download() {
     local local_version=""
     local response=""
     local decoded_content=""
+    local download_method="direct"
     
     # GitHub API応答処理
     if [ "$skip_api" = "false" ]; then
@@ -856,8 +864,21 @@ download() {
         
         debug_log "DEBUG" "Processing API response for: $file_name"
         
-        # API応答を取得
-        api_response=$(github_api "$api_url")
+        # トークンを取得して認証方式を決定
+        token=$(get_github_token)
+        
+        if [ -n "$token" ]; then
+            # トークン認証でAPI呼び出し
+            api_response=$(wget -qO- --header="Authorization: token $token" \
+                "https://api.github.com/$api_url" 2>/dev/null)
+            auth_message="via token auth"
+            download_method="token API"
+        else
+            # 通常認証でAPI呼び出し
+            api_response=$(wget -qO- "https://api.github.com/$api_url" 2>/dev/null)
+            auth_message="via standard API"
+            download_method="standard API"
+        fi
         
         # コンテンツ部分を抽出
         response=$(echo "$api_response" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
@@ -867,30 +888,40 @@ download() {
             debug_log "DEBUG" "API response contains content field: ${response:0:20}..."
         else
             debug_log "WARN" "API response missing content field - raw sample: ${api_response:0:100}..."
+            skip_api="true"  # APIが失敗した場合は直接ダウンロードに切り替え
+            download_method="direct download"
+            auth_message="via direct download (API failed)"
         fi
     
-        # base64デコード
-        decoded_content=$(decode_base64 "$response")
-        decode_status=$?
-    
-        if [ $decode_status -eq 0 ] && [ -n "$decoded_content" ]; then
-            debug_log "DEBUG" "Successfully decoded content (first 50 chars): ${decoded_content:0:50}..."
+        if [ "$skip_api" = "false" ]; then
+            # base64デコード
+            decoded_content=$(decode_base64 "$response")
+            decode_status=$?
         
-            # バージョン情報の取得
-            remote_version=$(remote_normalize_version "$decoded_content")
-            if [ -z "$remote_version" ]; then
-                debug_log "WARN" "Failed to extract version from decoded content"
+            if [ $decode_status -eq 0 ] && [ -n "$decoded_content" ]; then
+                debug_log "DEBUG" "Successfully decoded content (first 50 chars): ${decoded_content:0:50}..."
+            
+                # バージョン情報の取得
+                remote_version=$(remote_normalize_version "$decoded_content")
+                if [ -z "$remote_version" ]; then
+                    debug_log "WARN" "Failed to extract version from decoded content"
+                    remote_version="$dummy_remote_version"
+                fi
+            else
+                debug_log "ERROR" "Failed to decode base64 content"
                 remote_version="$dummy_remote_version"
+                skip_api="true"  # デコード失敗の場合は直接ダウンロードに切り替え
+                download_method="direct download"
+                auth_message="via direct download (decode failed)"
             fi
-        else
-            debug_log "ERROR" "Failed to decode base64 content"
-            remote_version="$dummy_remote_version"
+        
+            debug_log "DEBUG" "Remote version: $file_name - $remote_version"
         fi
-    
-        debug_log "DEBUG" "Remote version: $file_name - $remote_version"
     else
         debug_log "DEBUG" "Skipping API version check for: $file_name"
         remote_version="$dummy_remote_version"
+        download_method="direct download"
+        auth_message="via direct download (API skipped)"
     fi
 
     # 6. ローカルバージョン情報の取得
@@ -972,19 +1003,21 @@ download() {
     # メッセージコンポーネントを構築
     local final_message=""
     
-    # ステータスとファイル名、バージョン
-    final_message="${status_message}: ${file_name} - Version: ${version_to_display}"
+    # ステータスとファイル名、バージョン、認証方式
+    final_message="${file_name}: ${status_message} - Version: ${version_to_display} ${auth_message}"
     
     # アクションメッセージがある場合は追加
     if [ -n "$action_message" ]; then
         final_message="${final_message} (${action_message})"
     fi
     
-    # 最終出力
-    if [ "$hidden_mode" != "true" ]; then
+    # hidden/debugモードに基づいて出力
+    if [ "$hidden_mode" = "true" ]; then
+        # hiddenモード: debug_logでログ出力
         debug_log "DEBUG" "Quiet mode ${final_message}"
     else
-        echo "$(color green "${final_message}")"
+        # 通常モード: カラー表示（緑）でecho出力
+	echo "$(color green "${final_message}")"
     fi
 
     return 0
@@ -1310,14 +1343,14 @@ check_common() {
 	    fi
 	    ;;
         debug)
-            download "hidden" "common-country.sh" "chmod"
-            download "hidden" "common-package.sh" "chmod"
-            download "hidden" "common-feed-package.sh" "chmod"
-            download "hidden" "messages.db"
-            download "hidden" "openwrt.db"
-            download "hidden" "country.db"
-            download "hidden" "local-package.db"
-            download "hidden" "custom-package.db"
+            download "common-country.sh" "hidden"
+            download "common-package.sh" "hidden"
+            download "common-feed-package.sh" "hidden"
+            download "messages.db" "hidden"
+            download "openwrt.db" "hidden"
+            download "country.db" "hidden"
+            download "local-package.db" "hidden"
+            download "custom-package.db" "hidden"
             check_openwrt
             check_architecture
             check_downloader
@@ -1327,14 +1360,14 @@ check_common() {
             #packages
             ;;
         light)
-            download "hidden" "common-country.sh" "chmod"
-            download "hidden" "common-package.sh" "chmod"
-            download "hidden" "common-feed-package.sh" "chmod"
-            download "hidden" "messages.db"
-            download "hidden" "openwrt.db"
-            download "hidden" "country.db"
-            download "hidden" "local-package.db"
-            download "hidden" "custom-package.db"
+            download "common-country.sh"
+            download "common-package.sh"
+            download "common-feed-package.sh"
+            download "messages.db"
+            download "openwrt.db"
+            download "country.db"
+            download "local-package.db"
+            download "custom-package.db"
             check_openwrt
             check_architecture
             check_downloader
