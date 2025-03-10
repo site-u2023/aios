@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-01-01"
+SCRIPT_VERSION="2025.03.10-01-02"
 
 echo -e "\033[1;32mDownload completed: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -730,9 +730,18 @@ decode_base64() {
             debug_log "DEBUG" "base64: found openssl"
         else
             debug_log "WARN" "base64: no decoder found, attempting to install coreutils-base64"
-            # サイレントでパッケージをインストール試行
-            opkg update >/dev/null 2>&1
-            opkg install coreutils-base64 >/dev/null 2>&1
+            
+            # DEBUGモードの場合は通常表示、それ以外はサイレント
+            if [ "$DEBUG_MODE" = "true" ]; then
+                debug_log "INFO" "Running: opkg update"
+                opkg update
+                debug_log "INFO" "Running: opkg install coreutils-base64"
+                opkg install coreutils-base64
+            else
+                # サイレントでパッケージをインストール試行
+                opkg update >/dev/null 2>&1
+                opkg install coreutils-base64 >/dev/null 2>&1
+            fi
             
             # インストール成功したか確認
             if command -v base64 >/dev/null 2>&1; then
