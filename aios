@@ -1538,7 +1538,7 @@ check_common() {
             ;;
 	test_api)
 	    #wget -q -O /tmp/aios/github_api_test.sh "https://raw.githubusercontent.com/site-u2023/aios/main/github_api_test.sh"
-	    BASE_WGET ${BASE_DIR}/github_api_test.sh ${BASE_URL}/github_api_test.sh
+	    $BASE_WGET ${BASE_DIR}/github_api_test.sh ${BASE_URL}/github_api_test.sh
 	    chmod +x ${BASE_DIR}/github_api_test.sh
 	    sh ${BASE_DIR}/github_api_test.sh
 	    ;;
