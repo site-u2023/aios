@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-03-06"
+SCRIPT_VERSION="2025.03.10-03-08"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -742,6 +742,55 @@ decode_base64() {
     fi
 }
 
+# トークン認証状態を確認する関数
+check_token_status() {
+    echo "========== GitHub Token Status =========="
+    
+    # トークンファイルの存在確認
+    if [ -f "$GITHUB_TOKEN_FILE" ]; then
+        echo "Token file: $GITHUB_TOKEN_FILE (EXISTS)"
+        ls -l "$GITHUB_TOKEN_FILE"
+        
+        # トークンの先頭部分だけを表示（セキュリティのため）
+        local token_preview=$(head -c 5 "$GITHUB_TOKEN_FILE")
+        echo "Token starts with: ${token_preview}..."
+    else
+        echo "Token file: $GITHUB_TOKEN_FILE (NOT FOUND)"
+    fi
+    
+    # レート制限の確認
+    local token=$(get_github_token)
+    local rate_info=""
+    
+    if [ -n "$token" ]; then
+        rate_info=$(wget -qO- --header="Authorization: token $token" \
+            "https://api.github.com/rate_limit" 2>/dev/null)
+        echo "Using token authentication"
+    else
+        rate_info=$(wget -qO- "https://api.github.com/rate_limit" 2>/dev/null)
+        echo "Using standard authentication"
+    fi
+    
+    if [ -n "$rate_info" ]; then
+        echo -n "Current rate limit: "
+        echo "$rate_info" | grep -o '"limit":[0-9]*' | head -1 | cut -d':' -f2
+        
+        echo -n "Remaining requests: "
+        echo "$rate_info" | grep -o '"remaining":[0-9]*' | head -1 | cut -d':' -f2
+        
+        # 認証状態の判断
+        if echo "$rate_info" | grep -q '"limit":5000'; then
+            echo "Auth status: ✅ AUTHENTICATED (Higher limits active)"
+        else
+            echo "Auth status: ❌ UNAUTHENTICATED (Standard limits)"
+        fi
+    else
+        echo "Could not retrieve rate limit information"
+    fi
+    
+    echo "========================================"
+}
+
 # APIレート制限確認関数
 check_api_rate_limit() {
     if [ "$DEBUG_MODE" = "true" ]; then
@@ -814,22 +863,16 @@ get_commit_version() {
             --header="Accept: application/vnd.github.v3+json" \
             "https://api.github.com/$api_url" 2>/dev/null)
             
-        # レスポンスを確認してトークンが有効か判断
-        if echo "$commit_info" | grep -q '"message":"Bad credentials"'; then
-            debug_log "WARN" "Token authentication failed: Bad credentials"
-            auth_method="failed"
+        # レート制限情報を確認してトークンが有効か判断
+        local rate_limit=$(wget -qO- --header="Authorization: token $token" \
+            "https://api.github.com/rate_limit" 2>/dev/null)
+        
+        if echo "$rate_limit" | grep -q '"limit":5000'; then
+            debug_log "INFO" "Token authentication successful - higher rate limits enabled"
+            auth_method="token"
         else
-            # レート制限情報を確認
-            local rate_limit=$(wget -qO- --header="Authorization: token $token" \
-                "https://api.github.com/rate_limit" 2>/dev/null)
-            
-            if echo "$rate_limit" | grep -q '"limit":5000'; then
-                debug_log "INFO" "Token authentication successful - higher rate limits enabled"
-                auth_method="token"
-            else
-                debug_log "WARN" "Token appears valid but rate limits unchanged"
-                auth_method="limited"
-            fi
+            debug_log "WARN" "Token appears valid but standard limits applied"
+            auth_method="limited"
         fi
     else
         # トークンがない場合は通常リクエスト
@@ -838,9 +881,9 @@ get_commit_version() {
         auth_method="standard"
     fi
     
-    if [ -z "$commit_info" ] || [ "$auth_method" = "failed" ]; then
-        # 認証に失敗した場合や応答がない場合は直接ダウンロードを試みる
-        debug_log "WARN" "API request failed or returned empty response, trying direct download"
+    if [ -z "$commit_info" ]; then
+        # APIリクエストが失敗した場合は直接ダウンロードを試みる
+        debug_log "WARN" "API request failed, trying direct download"
         commit_info=$(wget -qO- "https://api.github.com/$api_url" 2>/dev/null)
         auth_method="direct"
     fi
@@ -1329,6 +1372,10 @@ check_option() {
 	    -t|--t|-token|--token)
 		setup_github_token
 		;;
+	    -ts|--ts|--token-status)
+    		check_token_status
+    		exit 0
+    		;;
             -*)
                 echo "Warning: Unknown option: $1" >&2
                 ;;
