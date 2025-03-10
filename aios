@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-02-10"
+SCRIPT_VERSION="2025.03.10-02-12"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -766,15 +766,15 @@ get_commit_version() {
     fi
     
     if [ -n "$commit_info" ]; then
-        # より単純な方法でJSONから日付とSHAを抽出 - トリム処理を追加
-        local commit_date=$(echo "$commit_info" | grep -o '"date": *"[^"]*"' | head -1 | sed 's/.*"date": *"\([^"]*\)".*/\1/')
-        local commit_sha=$(echo "$commit_info" | grep -o '"sha": *"[^"]*"' | head -1 | sed 's/.*"sha": *"\([^"]*\)".*/\1/' | cut -c 1-7)
+        # 日付とSHAを抽出（改良版）
+        local commit_date=$(echo "$commit_info" | tr -d '\n\r' | grep -o '"date": *"[^"]*"' | head -1 | sed 's/.*"date": *"\([^"]*\)".*/\1/')
+        local commit_sha=$(echo "$commit_info" | tr -d '\n\r' | grep -o '"sha": *"[^"]*"' | head -1 | sed 's/.*"sha": *"\([^"]*\)".*/\1/' | cut -c 1-7)
         
         if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
             # YYYY.MM.DD-SHA 形式に変換
             local formatted_date=$(echo "$commit_date" | sed 's/T.*Z//g;s/-/./g')
             debug_log "DEBUG" "Successfully extracted commit info: ${formatted_date}-${commit_sha}"
-            # 改行を含まない単一の文字列として返す（echo -nではなくprintfを使用）
+            # 改行を含まない単一の文字列として返す
             printf "%s %s" "${formatted_date}-${commit_sha}" "${auth_method}"
             return 0
         fi
