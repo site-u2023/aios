@@ -606,25 +606,6 @@ save_github_token() {
     fi
 }
 
-# GitHub API呼び出し（トークン対応版）
-github_api() {
-    endpoint="$1"
-    
-    # トークンを取得
-    token=$(get_github_token)
-    
-    if [ -n "$token" ]; then
-        # トークンがある場合は認証付きリクエスト
-        debug_log "DEBUG" "Using authenticated GitHub API request"
-        wget -qO- --header="Authorization: token $token" \
-            "https://api.github.com/$endpoint" 2>/dev/null
-    else
-        # トークンがない場合は通常リクエスト
-        debug_log "DEBUG" "Using unauthenticated GitHub API request"
-        wget -qO- "https://api.github.com/$endpoint" 2>/dev/null
-    fi
-}
-
 # トークン設定コマンド（OpenWrt互換性強化版）
 setup_github_token() {
     echo "GitHub API Token Setup"
