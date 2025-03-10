@@ -185,77 +185,6 @@ debug_log() {
 }
 
 #########################################################################
-# Last Update: 2025-02-16 17:30:00 (JST) 🚀
-# "Debug with clarity, test with precision. Every log tells a story."
-#
-# 【要件】
-# 1. `test_country_search()`, `test_timezone_search()`, `test_cache_contents()` を統合。
-# 2. `debug_log()` を使用し、メッセージを `message.db` から取得。
-# 3. `country.db` の検索結果が適切に出力されるか確認できるようにする。
-# 4. 影響範囲: `common.sh` のみ（`aios` には影響なし）。
-#########################################################################
-test_debug_functions() {
-    local test_type="$1"
-    local test_input="$2"
-
-    case "$test_type" in
-        country)
-            debug_log "DEBUG" "MSG_TEST_COUNTRY_SEARCH" "$test_input"
-            if [ ! -f "${BASE_DIR}/country.db" ]; then
-                handle_error "ERR_FILE_NOT_FOUND" "country.db"
-                return 1
-            fi
-            awk -v query="$test_input" '
-                $2 ~ query || $3 ~ query || $4 ~ query || $5 ~ query {
-                    print NR, $2, $3, $4, $5, $6, $7, $8, $9
-                }' "${BASE_DIR}/country.db"
-            ;;
-
-        timezone)
-            debug_log "DEBUG" "MSG_TEST_TIMEZONE_SEARCH" "$test_input"
-            if [ ! -f "${BASE_DIR}/country.db" ]; then
-                handle_error "ERR_FILE_NOT_FOUND" "country.db"
-                return 1
-            fi
-            awk -v country="$test_input" '
-                $2 == country || $4 == country || $5 == country {
-                    print NR, $5, $6, $7, $8, $9, $10, $11
-                }' "${BASE_DIR}/country.db"
-            ;;
-
-        cache)
-            debug_log "DEBUG" "MSG_TEST_CACHE_CONTENTS"
-            for cache_file in "country_tmp.ch" "zone_tmp.ch"; do
-                if [ -f "${CACHE_DIR}/$cache_file" ]; then
-                    debug_log "DEBUG" "MSG_CACHE_CONTENTS" "$cache_file"
-                    cat "${CACHE_DIR}/$cache_file"
-                else
-                    debug_log "DEBUG" "MSG_CACHE_NOT_FOUND" "$cache_file"
-                fi
-            done
-            ;;
-        
-        *)
-            debug_log "ERROR" "ERR_INVALID_ARGUMENT" "$test_type"
-            return 1
-            ;;
-    esac
-}
-
-#########################################################################
-# country_DEBUG: 選択された国と言語の詳細情報を表示
-#########################################################################
-country_DEBUG() {
-    local country_DEBUG_file="${BASE_DIR}/country.ch"
-    local selected_language_code=$(cat "${BASE_DIR}/check_country")
-    if [ -f "$country_DEBUG_file" ]; then
-        grep -w "$selected_language_code" "$country_DEBUG_file"
-    else
-        printf "%s\n" "$(color red "Country DEBUGrmation not found.")"
-    fi
-}
-
-#########################################################################
 # handle_exit: 正常終了メッセージを表示して終了
 #########################################################################
 handle_exit() {
@@ -914,45 +843,6 @@ get_commit_version() {
     # API取得失敗時は現在時刻を使用
     echo "$(date +%Y.%m.%d)-unknown $auth_method"
     return 1
-}
-
-# バージョン情報を安全に更新する関数（完全版）
-update_file_version() {
-    local file_name="$1"
-    local version="$2"
-    local script_file="$3"
-    
-    # バージョン文字列をクリーンアップ
-    version=$(clean_version_string "$version")
-    
-    if [ ! -f "$script_file" ]; then
-        printf "%s=%s\n" "${file_name}" "${version}" > "$script_file"
-        return 0
-    fi
-    
-    # 一時ファイルを使用した安全な書き換え
-    local tmp_file="${script_file}.tmp"
-    > "$tmp_file"  # 一時ファイルを初期化
-    
-    if grep -q "^${file_name}=" "$script_file"; then
-        # 該当行を置換
-        while IFS= read -r line; do
-            if echo "$line" | grep -q "^${file_name}="; then
-                echo "${file_name}=${version}" >> "$tmp_file"
-            else
-                echo "$line" >> "$tmp_file"
-            fi
-        done < "$script_file"
-    else
-        # ファイルをそのままコピーして新しいエントリを追加
-        cat "$script_file" > "$tmp_file"
-        echo "${file_name}=${version}" >> "$tmp_file"
-    fi
-    
-    # 一時ファイルを元のファイルに移動
-    mv "$tmp_file" "$script_file"
-    
-    return 0
 }
 
 # バージョン比較関数
