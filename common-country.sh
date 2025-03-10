@@ -384,6 +384,7 @@ select_zone() {
 #
 # country_write: 選択された国の情報をキャッシュに書き込む
 #########################################################################
+# 国と言語情報をキャッシュに書き込む関数
 country_write() {
     debug_log "DEBUG" "Entering country_write()"
     
@@ -392,23 +393,114 @@ country_write() {
     
     # 一時ファイルが存在するか確認
     if [ ! -f "$tmp_country" ]; then
-        handle_error "ERR_FILE_NOT_FOUND" "$tmp_country"
+        debug_log "ERROR" "File not found: $tmp_country"
         return 1
     fi
     
-    # 選択された行の番号を取得
-    local line_number=$(cat "$tmp_country")
-    
+    # 選択されたデータを取得
+    local country_data=""
     # 数値でない場合はフルラインが含まれていると判断
-    if ! echo "$line_number" | grep -q '^[0-9]\+$'; then
-        cp "$tmp_country" "$cache_country"
+    if ! grep -qE '^[0-9]+$' "$tmp_country"; then
+        country_data=$(cat "$tmp_country")
     else
-        # country.db から該当行を抽出
-        sed -n "${line_number}p" "${BASE_DIR}/country.db" > "$cache_country"
+        # country.dbから該当行を抽出
+        local line_number=$(cat "$tmp_country")
+        country_data=$(sed -n "${line_number}p" "${BASE_DIR}/country.db")
     fi
     
-    # 国情報をログに記録
-    debug_log "INFO" "Country selected: $(cat "$cache_country" | awk '{print $2, $3}')"
+    # キャッシュに保存
+    if [ -n "$country_data" ]; then
+        # 1. country.ch - 完全な国情報（基準データ）
+        echo "$country_data" > "$cache_country"
+        
+        # 2. language.ch - 言語コード ($4)
+        echo "$(echo "$country_data" | awk '{print $4}')" > "${CACHE_DIR}/language.ch"
+        
+        # 3. luci.ch - LuCI UI言語コード ($4 - language.chと同じ)
+        echo "$(echo "$country_data" | awk '{print $4}')" > "${CACHE_DIR}/luci.ch"
+        
+        # 4. zone_tmp.ch - タイムゾーン情報 ($6以降)
+        echo "$(echo "$country_data" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i; print ""}')" > "${CACHE_DIR}/zone_tmp.ch"
+        
+        # 成功フラグの設定
+        echo "1" > "${CACHE_DIR}/country_success_done"
+        
+        debug_log "INFO" "Country information written to cache"
+        debug_log "INFO" "Selected country: $(echo "$country_data" | awk '{print $2, $3}')"
+    else
+        debug_log "ERROR" "No country data to write to cache"
+        return 1
+    fi
+    
+    return 0
+}
+
+# タイムゾーン情報をキャッシュに書き込む関数
+zone_write() {
+    debug_log "DEBUG" "Entering zone_write()"
+    
+    local tmp_zone="${CACHE_DIR}/zone_tmp.ch"
+    
+    # 一時ファイルが存在するか確認
+    if [ ! -f "$tmp_zone" ]; then
+        debug_log "ERROR" "File not found: $tmp_zone"
+        return 1
+    fi
+    
+    # 選択された番号または直接タイムゾーン情報を取得
+    local selected_timezone=""
+    local selected_number=""
+    
+    # ファイルの内容が数値かどうかをチェック
+    if grep -qE '^[0-9]+$' "$tmp_zone"; then
+        selected_number=$(cat "$tmp_zone")
+        
+        # zone_tmp.ch から選択された行のタイムゾーンを取得
+        local zone_list="${CACHE_DIR}/zone_list.ch"
+        if [ -f "$zone_list" ]; then
+            selected_timezone=$(sed -n "${selected_number}p" "$zone_list")
+        else
+            # zone_tmp.chをスペースで分割してn番目の項目を取得
+            local zone_data=$(cat "${CACHE_DIR}/zone_tmp.ch")
+            selected_timezone=$(echo "$zone_data" | tr ' ' '\n' | sed -n "${selected_number}p")
+        fi
+    else
+        # 直接タイムゾーン情報が含まれている場合
+        selected_timezone=$(cat "$tmp_zone")
+    fi
+    
+    # タイムゾーン情報を分割して保存
+    if [ -n "$selected_timezone" ]; then
+        # タイムゾーン情報を解析（フォーマットに依存）
+        local zonename=""
+        local timezone=""
+        
+        # 一般的なフォーマットの場合: "America/New_York"
+        if echo "$selected_timezone" | grep -q "/"; then
+            zonename="$selected_timezone"
+            timezone="$selected_timezone"
+        else
+            # それ以外の場合、カスタム解析が必要かもしれません
+            zonename="$selected_timezone"
+            timezone="$selected_timezone"
+        fi
+        
+        # キャッシュに書き込み
+        echo "$zonename" > "${CACHE_DIR}/zonename.ch"
+        echo "$timezone" > "${CACHE_DIR}/timezone.ch"
+        echo "$selected_timezone" > "${CACHE_DIR}/zone.ch"
+        
+        # 成功フラグの設定
+        echo "1" > "${CACHE_DIR}/timezone_success_done"
+        
+        debug_log "INFO" "Timezone information written to cache"
+        debug_log "INFO" "Selected timezone: $selected_timezone"
+    else
+        debug_log "ERROR" "No timezone data to write to cache"
+        return 1
+    fi
+    
+    return 0
 }
 
 #########################################################################
