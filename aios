@@ -1402,6 +1402,7 @@ check_option() {
     		;;
 	    -test_api)
 		MODE="test_api"
+		;;
             -*)
                 echo "Warning: Unknown option: $1" >&2
                 ;;
