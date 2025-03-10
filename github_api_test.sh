@@ -76,20 +76,39 @@ test_network_basic() {
 test_api_rate_limit_no_auth() {
     report INFO "API制限テスト (認証なし) 実行中..."
     
-    local result=$(wget -qO- "https://api.github.com/rate_limit" 2>/dev/null)
+    # 一時ファイルを使用
+    local temp_file="/tmp/github_api_limit_noauth.tmp"
+    wget -q -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
     
-    if [ -n "$result" ]; then
-        local remaining=$(echo "$result" | sed -n 's/.*"remaining":\([0-9]*\).*/\1/p' | head -1)
-        local limit=$(echo "$result" | sed -n 's/.*"limit":\([0-9]*\).*/\1/p' | head -1)
-        
-        if [ -n "$remaining" ] && [ -n "$limit" ]; then
-            report SUCCESS "API制限 (認証なし): 残り $remaining/$limit リクエスト"
-            return 0
+    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+        # jqがインストールされている場合
+        if command -v jq >/dev/null 2>&1; then
+            local remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
+            local limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
+            
+            if [ -n "$remaining" ] && [ -n "$limit" ]; then
+                report SUCCESS "API制限 (認証なし): 残り $remaining/$limit リクエスト"
+                rm -f "$temp_file"
+                return 0
+            fi
+        else
+            # jqがない場合は簡易パース
+            local result=$(cat "$temp_file")
+            # core.limitの値を抽出
+            local limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+')
+            local remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+')
+            
+            if [ -n "$remaining" ] && [ -n "$limit" ]; then
+                report SUCCESS "API制限 (認証なし): 残り $remaining/$limit リクエスト"
+                rm -f "$temp_file"
+                return 0
+            fi
         fi
     fi
     
     report FAILURE "API制限の取得に失敗しました (認証なし)"
-    debug "レスポンス: ${result:0:100}..."
+    [ -f "$temp_file" ] && debug "レスポンスサイズ: $(wc -c < "$temp_file") バイト"
+    rm -f "$temp_file" 2>/dev/null
     return 1
 }
 
@@ -103,20 +122,37 @@ test_api_rate_limit_with_auth() {
         return 1
     fi
     
-    local result=$(wget -qO- --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null)
+    # 一時ファイルを使用
+    local temp_file="/tmp/github_api_limit_auth.tmp"
+    wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null
     
-    if [ -n "$result" ]; then
-        local remaining=$(echo "$result" | sed -n 's/.*"remaining":\([0-9]*\).*/\1/p' | head -1)
-        local limit=$(echo "$result" | sed -n 's/.*"limit":\([0-9]*\).*/\1/p' | head -1)
-        
-        if [ -n "$remaining" ] && [ -n "$limit" ]; then
-            report SUCCESS "API制限 (認証あり): 残り $remaining/$limit リクエスト"
-            return 0
+    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+        # jqがインストールされている場合
+        if command -v jq >/dev/null 2>&1; then
+            local remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
+            local limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
+            
+            if [ -n "$remaining" ] && [ -n "$limit" ]; then
+                report SUCCESS "API制限 (認証あり): 残り $remaining/$limit リクエスト"
+                rm -f "$temp_file"
+                return 0
+            fi
+        else
+            # jqがない場合は簡易パース
+            local limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+')
+            local remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+')
+            
+            if [ -n "$remaining" ] && [ -n "$limit" ]; then
+                report SUCCESS "API制限 (認証あり): 残り $remaining/$limit リクエスト"
+                rm -f "$temp_file"
+                return 0
+            fi
         fi
     fi
     
     report FAILURE "API制限の取得に失敗しました (認証あり)"
-    debug "レスポンス: ${result:0:100}..."
+    [ -f "$temp_file" ] && debug "レスポンスサイズ: $(wc -c < "$temp_file") バイト"
+    rm -f "$temp_file" 2>/dev/null
     return 1
 }
 
@@ -126,26 +162,41 @@ test_repo_info() {
     
     local repo="site-u2023/aios"
     local token=$(get_token)
-    local auth_header=""
-    [ -n "$token" ] && auth_header="--header=\"Authorization: token $token\""
+    local temp_file="/tmp/github_repo_info.tmp"
     
-    local cmd="wget -qO- $auth_header \"https://api.github.com/repos/$repo\""
-    debug "実行コマンド: $cmd"
+    # 認証ヘッダーの有無で分岐
+    if [ -n "$token" ]; then
+        wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/repos/$repo" 2>/dev/null
+    else
+        wget -q -O "$temp_file" "https://api.github.com/repos/$repo" 2>/dev/null
+    fi
     
-    local result=$(eval $cmd 2>/dev/null)
-    
-    if [ -n "$result" ]; then
-        local name=$(echo "$result" | sed -n 's/.*"name":\s*"\([^"]*\)".*/\1/p' | head -1)
-        local default_branch=$(echo "$result" | sed -n 's/.*"default_branch":\s*"\([^"]*\)".*/\1/p' | head -1)
-        
-        if [ -n "$name" ] && [ -n "$default_branch" ]; then
-            report SUCCESS "リポジトリ情報: 名前=$name, デフォルトブランチ=$default_branch"
-            return 0
+    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+        if command -v jq >/dev/null 2>&1; then
+            local name=$(jq -r '.name' "$temp_file" 2>/dev/null)
+            local default_branch=$(jq -r '.default_branch' "$temp_file" 2>/dev/null)
+            
+            if [ -n "$name" ] && [ -n "$default_branch" ]; then
+                report SUCCESS "リポジトリ情報: 名前=$name, デフォルトブランチ=$default_branch"
+                rm -f "$temp_file"
+                return 0
+            fi
+        else
+            # 簡易パース
+            local name=$(grep '"name"' "$temp_file" | head -1 | cut -d'"' -f4)
+            local default_branch=$(grep '"default_branch"' "$temp_file" | head -1 | cut -d'"' -f4)
+            
+            if [ -n "$name" ] && [ -n "$default_branch" ]; then
+                report SUCCESS "リポジトリ情報: 名前=$name, デフォルトブランチ=$default_branch"
+                rm -f "$temp_file"
+                return 0
+            fi
         fi
     fi
     
     report FAILURE "リポジトリ情報の取得に失敗しました"
-    debug "レスポンス: ${result:0:100}..."
+    [ -f "$temp_file" ] && debug "レスポンスサイズ: $(wc -c < "$temp_file") バイト"
+    rm -f "$temp_file" 2>/dev/null
     return 1
 }
 
@@ -155,29 +206,48 @@ test_contents() {
     
     local repo="site-u2023/aios"
     local token=$(get_token)
-    local auth_header=""
-    [ -n "$token" ] && auth_header="--header=\"Authorization: token $token\""
+    local temp_file="/tmp/github_contents.tmp"
     
-    local cmd="wget -qO- $auth_header \"https://api.github.com/repos/$repo/contents\""
-    debug "実行コマンド: $cmd"
+    # 認証ヘッダーの有無で分岐
+    if [ -n "$token" ]; then
+        wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/repos/$repo/contents" 2>/dev/null
+    else
+        wget -q -O "$temp_file" "https://api.github.com/repos/$repo/contents" 2>/dev/null
+    fi
     
-    local result=$(eval $cmd 2>/dev/null)
-    
-    if [ -n "$result" ]; then
-        # ファイル数をカウント (オブジェクト数をカウント)
-        local file_count=$(echo "$result" | grep -o '"name"' | wc -l)
-        
-        if [ "$file_count" -gt 0 ]; then
-            report SUCCESS "リポジトリコンテンツ: $file_count 個のファイルを検出"
-            # 最初の5つのファイル名を表示
-            echo "$result" | sed -n 's/.*"name":\s*"\([^"]*\)".*/\1/p' | head -5 | \
-                while read file; do echo "  - $file"; done
-            return 0
+    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+        # ファイル数をカウント
+        if command -v jq >/dev/null 2>&1; then
+            local file_count=$(jq '. | length' "$temp_file" 2>/dev/null)
+            
+            if [ -n "$file_count" ] && [ "$file_count" -gt 0 ]; then
+                report SUCCESS "リポジトリコンテンツ: $file_count 個のファイルを検出"
+                echo "最初の5つのファイル:"
+                jq -r '.[0:5] | .[] | .name' "$temp_file" 2>/dev/null | while read file; do 
+                    echo "  - $file"; 
+                done
+                rm -f "$temp_file"
+                return 0
+            fi
+        else
+            # 簡易カウント方法
+            local file_count=$(grep -c '"name"' "$temp_file")
+            
+            if [ "$file_count" -gt 0 ]; then
+                report SUCCESS "リポジトリコンテンツ: 約 $file_count 個のファイルを検出"
+                echo "いくつかのファイル:"
+                grep '"name"' "$temp_file" | head -5 | cut -d'"' -f4 | while read file; do
+                    echo "  - $file"
+                done
+                rm -f "$temp_file"
+                return 0
+            fi
         fi
     fi
     
     report FAILURE "リポジトリコンテンツの取得に失敗しました"
-    debug "レスポンス: ${result:0:100}..."
+    [ -f "$temp_file" ] && debug "レスポンスサイズ: $(wc -c < "$temp_file") バイト"
+    rm -f "$temp_file" 2>/dev/null
     return 1
 }
 
@@ -189,30 +259,45 @@ test_file_commit() {
     local file="country.db"
     local token=$(get_token)
     local branch="main"  # デフォルトブランチ名
-    local auth_header=""
-    [ -n "$token" ] && auth_header="--header=\"Authorization: token $token\""
+    local temp_file="/tmp/github_file_commit.tmp"
     
-    local cmd="wget -qO- $auth_header \"https://api.github.com/repos/$repo/commits?path=$file&sha=$branch\""
-    debug "実行コマンド: $cmd"
+    # 認証ヘッダーの有無で分岐
+    if [ -n "$token" ]; then
+        wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/repos/$repo/commits?path=$file&sha=$branch" 2>/dev/null
+    else
+        wget -q -O "$temp_file" "https://api.github.com/repos/$repo/commits?path=$file&sha=$branch" 2>/dev/null
+    fi
     
-    local result=$(eval $cmd 2>/dev/null)
-    
-    if [ -n "$result" ]; then
-        # コミット数をカウント
-        local commit_count=$(echo "$result" | grep -o '"sha"' | wc -l)
-        
-        if [ "$commit_count" -gt 0 ]; then
-            report SUCCESS "ファイルコミット履歴: $file に対して $commit_count 件のコミットを検出"
-            # 最新のコミットハッシュとメッセージを表示
-            local latest_sha=$(echo "$result" | sed -n 's/.*"sha":\s*"\([^"]*\)".*/\1/p' | head -1)
-            local latest_date=$(echo "$result" | sed -n 's/.*"date":\s*"\([^"]*\)".*/\1/p' | head -1)
-            echo "  - 最新コミット: ${latest_sha:0:7} (日付: $latest_date)"
-            return 0
+    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+        if command -v jq >/dev/null 2>&1; then
+            local commit_count=$(jq '. | length' "$temp_file" 2>/dev/null)
+            
+            if [ -n "$commit_count" ] && [ "$commit_count" -gt 0 ]; then
+                report SUCCESS "ファイルコミット履歴: $file に対して $commit_count 件のコミットを検出"
+                local latest_sha=$(jq -r '.[0].sha' "$temp_file" 2>/dev/null)
+                local latest_date=$(jq -r '.[0].commit.committer.date' "$temp_file" 2>/dev/null)
+                echo "  - 最新コミット: ${latest_sha:0:7} (日付: $latest_date)"
+                rm -f "$temp_file"
+                return 0
+            fi
+        else
+            # 簡易カウント方法
+            local commit_count=$(grep -c '"sha"' "$temp_file")
+            
+            if [ "$commit_count" -gt 0 ]; then
+                report SUCCESS "ファイルコミット履歴: $file に対して約 $commit_count 件のコミットを検出"
+                local latest_sha=$(grep '"sha"' "$temp_file" | head -1 | cut -d'"' -f4)
+                local latest_date=$(grep '"date"' "$temp_file" | head -1 | cut -d'"' -f4)
+                echo "  - 最新コミット: ${latest_sha:0:7} (日付: $latest_date)"
+                rm -f "$temp_file"
+                return 0
+            fi
         fi
     fi
     
     report FAILURE "ファイルコミット履歴の取得に失敗しました"
-    debug "レスポンス: ${result:0:100}..."
+    [ -f "$temp_file" ] && debug "レスポンスサイズ: $(wc -c < "$temp_file") バイト"
+    rm -f "$temp_file" 2>/dev/null
     return 1
 }
 
@@ -230,7 +315,7 @@ test_file_download() {
         local file_size=$(wc -c < "$temp_file")
         if [ "$file_size" -gt 0 ]; then
             report SUCCESS "ファイルダウンロード: $file (サイズ: $file_size バイト)"
-            # ファイルの先頭10行を表示
+            # ファイルの先頭5行を表示
             echo "ファイル内容のサンプル:"
             head -5 "$temp_file" | while read line; do echo "  > $line"; done
             rm -f "$temp_file"
