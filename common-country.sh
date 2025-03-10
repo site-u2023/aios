@@ -568,42 +568,6 @@ timezone_setup() {
     fi
 }
 
-#########################################################################
-# Last Update: 2025-03-10 11:00:00 (JST) 🚀
-# "Enhanced initialization with resource verification."
-#
-# init: 必要なファイルとディレクトリの初期化
-#########################################################################
-init() {
-    debug_log "INFO" "Initializing common-country.sh"
-    
-    # 基本ディレクトリの作成
-    mkdir -p "$BASE_DIR" "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR"
-    
-    # country.db が存在するか確認
-    if [ ! -f "${BASE_DIR}/country.db" ]; then
-        debug_log "WARN" "country.db not found. Attempting to download..."
-        download "$BASE_URL/country.db" "${BASE_DIR}/country.db" "Failed to download country.db"
-        
-        if [ ! -f "${BASE_DIR}/country.db" ]; then
-            debug_log "ERROR" "ERR_FILE_NOT_FOUND" "country.db"
-            return 1
-        fi
-    fi
-    
-    # messages.db が存在するか確認
-    if [ ! -f "${BASE_DIR}/messages.db" ]; then
-        debug_log "WARN" "messages.db not found. Attempting to download..."
-        download "$BASE_URL/messages.db" "${BASE_DIR}/messages.db" "Failed to download messages.db"
-    fi
-    
-    debug_log "INFO" "Initialization complete"
-    return 0
-}
-
-# スクリプト実行時の初期化
-init
-
 # デバッグモードが有効な場合は情報表示
 if [ "$DEBUG_MODE" = "true" ]; then
     debug_log "DEBUG" "common-country.sh loaded with BASE_DIR=$BASE_DIR"
