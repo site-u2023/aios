@@ -538,6 +538,7 @@ save_github_token() {
 #   - sttyコマンド有無に応じた処理分岐
 #   - 標準的なシェルコマンドのみ使用
 #########################################################################
+# OpenWrt向けシンプルなトークン入力関数
 setup_github_token() {
     echo "GitHub API Token Setup"
     echo "======================"
@@ -545,21 +546,10 @@ setup_github_token() {
     echo "The token will be used for API requests to avoid rate limits."
     echo ""
     
-    # sttyが利用可能かチェック
-    if command -v stty >/dev/null 2>&1; then
-        # sttyが利用可能な場合、非表示モードを使用
-        printf "Enter your GitHub Personal Access Token: "
-        stty -echo
-        read -r token
-        stty echo
-        echo ""  # 改行
-    else
-        # sttyが利用できない場合の代替方法
-        echo "NOTE: Your input will be visible as you type (stty not available)"
-        printf "Enter your GitHub Personal Access Token: "
-        read -r token
-        echo ""
-    fi
+    # OpenWrtはsttyが利用できないことを前提とする
+    printf "Enter your GitHub Personal Access Token: "
+    read -r token
+    echo ""
     
     if [ -n "$token" ]; then
         if save_github_token "$token"; then
@@ -1163,130 +1153,6 @@ print_banner() {
 }
 
 #########################################################################
-# キャッシュシステム - 中央管理関数
-#########################################################################
-
-# 基本ディレクトリの作成とアクセス権確認
-make_directory() {
-    debug_log "DEBUG" "Creating required directories"
-    
-    # 必要なディレクトリの作成
-    for dir in "$BASE_DIR" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR" "$BUILD_DIR"; do
-        mkdir -p "$dir" 2>/dev/null || {
-            debug_log "ERROR" "Failed to create directory: $dir"
-            return 1
-        }
-        chmod 755 "$dir" 2>/dev/null || {
-            debug_log "WARN" "Could not set permissions for: $dir"
-        }
-    done
-    
-    return 0
-}
-
-# キャッシュ初期化の中央管理
-init_cache_system() {
-    debug_log "DEBUG" "Initializing cache system"
-    
-    # 1. 基本ディレクトリの確保
-    if [ ! -d "$CACHE_DIR" ]; then
-        make_directory || {
-            debug_log "ERROR" "Failed to initialize directories"
-            return 1
-        }
-    fi
-    
-    # 2. パッケージマネージャーキャッシュの初期化
-    if [ ! -f "${CACHE_DIR}/downloader.ch" ] || [ ! -f "${CACHE_DIR}/extension.ch" ]; then
-        debug_log "INFO" "Initializing package manager cache"
-        
-        # A. dynamic-system-info.sh の関数が利用可能か確認
-        if type detect_and_save_package_manager >/dev/null 2>&1; then
-            detect_and_save_package_manager
-        else
-            # B. フォールバック実装
-            init_package_manager_cache
-        fi
-    fi
-    
-    # 3. キャッシュ状態のデバッグ出力
-    if [ "$DEBUG_MODE" = "true" ]; then
-        debug_cache_status
-    fi
-    
-    return 0
-}
-
-# パッケージマネージャーキャッシュの簡易初期化（フォールバック）
-init_package_manager_cache() {
-    # A. パッケージマネージャー情報
-    if [ ! -f "${CACHE_DIR}/downloader.ch" ]; then
-        if command -v opkg >/dev/null 2>&1; then
-            echo "opkg" > "${CACHE_DIR}/downloader.ch"
-            debug_log "INFO" "Created downloader.ch: opkg"
-        elif command -v apk >/dev/null 2>&1; then
-            echo "apk" > "${CACHE_DIR}/downloader.ch"
-            debug_log "INFO" "Created downloader.ch: apk"
-        else
-            echo "opkg" > "${CACHE_DIR}/downloader.ch"
-            debug_log "WARN" "No package manager detected, using opkg as default"
-        fi
-    fi
-    
-    # B. パッケージ拡張子情報
-    if [ ! -f "${CACHE_DIR}/extension.ch" ]; then
-        if [ -f "${CACHE_DIR}/downloader.ch" ]; then
-            local pm
-            pm=$(cat "${CACHE_DIR}/downloader.ch")
-            case "$pm" in
-                opkg) echo "ipk" > "${CACHE_DIR}/extension.ch" ;;
-                apk)  echo "apk" > "${CACHE_DIR}/extension.ch" ;;
-                *)    echo "ipk" > "${CACHE_DIR}/extension.ch" ;;
-            esac
-            debug_log "INFO" "Created extension.ch based on downloader.ch"
-        else
-            echo "ipk" > "${CACHE_DIR}/extension.ch"
-            debug_log "INFO" "Created default extension.ch: ipk"
-        fi
-    fi
-}
-
-# キャッシュ状態の詳細デバッグ出力
-debug_cache_status() {
-    debug_log "DEBUG" "Cache directory: $CACHE_DIR"
-    debug_log "DEBUG" "Cache directory exists: $([ -d "$CACHE_DIR" ] && echo 'yes' || echo 'no')"
-    debug_log "DEBUG" "Cache directory writable: $([ -w "$CACHE_DIR" ] && echo 'yes' || echo 'no')"
-    
-    # キャッシュファイルのステータス確認
-    local required_files="downloader.ch extension.ch"
-    local optional_files="country.ch language.ch luci.ch zone.ch zonename.ch timezone.ch architecture.ch osversion.ch message.ch"
-    
-    # 必須キャッシュファイルの状態確認
-    debug_log "DEBUG" "Required cache files status:"
-    for cache_file in $required_files; do
-        if [ -f "${CACHE_DIR}/${cache_file}" ]; then
-            local content
-            content=$(cat "${CACHE_DIR}/${cache_file}")
-            debug_log "DEBUG" "- ${cache_file}: EXISTS (content: ${content})"
-        else
-            debug_log "DEBUG" "- ${cache_file}: MISSING (REQUIRED)"
-        fi
-    done
-    
-    # オプショナルキャッシュファイルの状態確認
-    debug_log "DEBUG" "Optional cache files status:"
-    for cache_file in $optional_files; do
-        if [ -f "${CACHE_DIR}/${cache_file}" ]; then
-            local content
-            content=$(cat "${CACHE_DIR}/${cache_file}")
-            debug_log "DEBUG" "- ${cache_file}: EXISTS (content: ${content})"
-        else
-            debug_log "DEBUG" "- ${cache_file}: NOT YET CREATED"
-        fi
-    done
-}
-
-#########################################################################
 # aios初期化とシステムセットアップ関連関数
 #########################################################################
 
@@ -1311,10 +1177,45 @@ delete_aios() {
     return 0
 }
 
+# 必要ディレクトリ作成
+make_directory() {
+
+    echo "$(color magenta "Creating required directories")"
+
+    if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"; then
+        debug_log "ERROR" "Failed to create required directories"
+        return 1
+    fi
+}
+
+# キャッシュ初期化（簡素化版）
+init_cache() {    
+    # パッケージマネージャー情報の初期化
+    if [ ! -f "${CACHE_DIR}/downloader.ch" ]; then
+        if command -v opkg >/dev/null 2>&1; then
+            echo "opkg" > "${CACHE_DIR}/downloader.ch"
+            echo "ipk" > "${CACHE_DIR}/extension.ch"
+        elif command -v apk >/dev/null 2>&1; then
+            echo "apk" > "${CACHE_DIR}/downloader.ch"
+            echo "apk" > "${CACHE_DIR}/extension.ch"
+        else
+            echo "opkg" > "${CACHE_DIR}/downloader.ch"
+            echo "ipk" > "${CACHE_DIR}/extension.ch"
+        fi
+    fi
+    
+    # デバッグ情報（デバッグモード時のみ）
+    if [ "$DEBUG_MODE" = "true" ]; then
+        echo "Cache directory: $CACHE_DIR"
+        echo "Package manager: $(cat ${CACHE_DIR}/downloader.ch 2>/dev/null || echo 'unknown')"
+        echo "Package extension: $(cat ${CACHE_DIR}/extension.ch 2>/dev/null || echo 'unknown')"
+    fi
+    
+    return 0
+}
+
 # アップデート状態確認
 check_update() {
-    # キャッシュディレクトリの確保
-    mkdir -p "$CACHE_DIR" 2>/dev/null
 
     # アップデート後の特殊処理
     POST_UPDATE="false"
@@ -1365,7 +1266,7 @@ initialization() {
     fi
 
     # キャッシュシステムの初期化
-    if ! init_cache_system; then
+    if ! init_cache; then
         debug_log "WARN" "Cache system initialization had issues"
     fi
 
@@ -1536,9 +1437,7 @@ check_common() {
             download "local-package.db" "hidden"
             download "custom-package.db" "hidden"
             download "dynamic-system-info.sh" "hidden"
-            print_banner
-            init_cache_system
-            
+            print_banner       
             select_country "$lang_code"
             download "system-config.sh" "hidden" "chmod"
             #packages
@@ -1552,9 +1451,7 @@ check_common() {
             download "local-package.db"
             download "custom-package.db"
             download "dynamic-system-info.sh"
-            print_banner
-            init_cache_system
-            
+            print_banner       
             select_country "$lang_code"
             download "system-config.sh" "chmod"
             #packages
@@ -1568,9 +1465,7 @@ check_common() {
             download "local-package.db"
             download "custom-package.db"
             download "dynamic-system-info.sh"
-            print_banner
-            init_cache_system
-            
+            print_banner        
             select_country "$lang_code"
             download "system-config.sh" "chmod"
             #packages
