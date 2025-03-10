@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-04-03"
+SCRIPT_VERSION="2025.03.10-04-04"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -1036,36 +1036,6 @@ print_banner() {
     printf "%s\n" "$(color white "$(get_message "MSG_BANNER_DECCRIPTION")")"
     printf "%s\n" "$(color white "$(get_message "MSG_BANNER_NAME")")"
     printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DISCLAIMER")")"
-}
-
-#########################################################################
-# パッケージのインストール (オプション)
-# テスト用（最終的に推奨パッケージスクリプトに移動）
-#########################################################################
-packages() {
-    # パッケージのインストール
-    #install_package luci yn hidden
-    install_package ttyd yn hidden
-    install_package luci-app-ttyd yn hidden
-    install_package luci-i18n-ttyd yn hidden
-    install_package openssh-sftp-server yn hidden
-    install_package luci-mod-dashboard yn hidden
-    #install_package coreutils yn hidden
-    install_package irqbalance yn hidden
-    install_package jq yn hidden
-
-    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-log yn hidden
-    feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled
-
-    feed_package_release lisaac luci-app-diskman yn hidden disabled
-
-    feed_package_release jerrykuku luci-theme-argon yn hidden disabled
-    
-    # install_package list
 }
 
 #########################################################################
