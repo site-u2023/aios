@@ -1163,6 +1163,64 @@ print_banner() {
 }
 
 #########################################################################
+# すべてのキャッシュファイルの初期化を管理する関数
+#########################################################################
+init_all_cache_files() {
+    debug_log "DEBUG" "Initializing all cache files"
+    
+    # キャッシュディレクトリの作成
+    mkdir -p "$CACHE_DIR" 2>/dev/null || {
+        debug_log "ERROR" "Failed to create cache directory: $CACHE_DIR"
+        return 1
+    }
+    
+    # 1. デバイス系情報のキャッシュ初期化
+    if type init_device_cache >/dev/null 2>&1; then
+        init_device_cache || debug_log "WARN" "Device cache initialization had issues"
+    else
+        debug_log "WARN" "init_device_cache function not available"
+    fi
+    
+    # 2. パッケージマネージャ情報の初期化
+    if type detect_and_save_package_manager >/dev/null 2>&1; then
+        detect_and_save_package_manager
+    else
+        # フォールバック: 直接実装
+        if [ ! -f "${CACHE_DIR}/downloader.ch" ]; then
+            if command -v opkg >/dev/null 2>&1; then
+                echo "opkg" > "${CACHE_DIR}/downloader.ch"
+                echo "ipk" > "${CACHE_DIR}/extension.ch"
+            elif command -v apk >/dev/null 2>&1; then
+                echo "apk" > "${CACHE_DIR}/downloader.ch"
+                echo "apk" > "${CACHE_DIR}/extension.ch"
+            else
+                echo "opkg" > "${CACHE_DIR}/downloader.ch"
+                echo "ipk" > "${CACHE_DIR}/extension.ch"
+            fi
+        fi
+    fi
+    
+    # 必須キャッシュファイルの存在チェック
+    debug_log "DEBUG" "Checking required cache files"
+    local missing_files=0
+    
+    for cache_file in downloader.ch extension.ch; do
+        if [ ! -f "${CACHE_DIR}/${cache_file}" ]; then
+            debug_log "ERROR" "Required cache file missing: ${cache_file}"
+            missing_files=$((missing_files + 1))
+        fi
+    done
+    
+    if [ "$missing_files" -gt 0 ]; then
+        debug_log "ERROR" "${missing_files} required cache files are missing"
+        return 1
+    fi
+    
+    debug_log "INFO" "All required cache files initialized"
+    return 0
+}
+
+#########################################################################
 # 初期設定
 #########################################################################
 # 権限設定
