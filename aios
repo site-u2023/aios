@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-03-09"
+SCRIPT_VERSION="2025.03.10-03-10"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -550,20 +550,37 @@ github_api_request() {
     fi
 }
 
-# トークン取得関数
+# 改善されたトークン取得関数
 get_github_token() {
     if [ -f "$GITHUB_TOKEN_FILE" ] && [ -r "$GITHUB_TOKEN_FILE" ]; then
-        # 厳格なトークン抽出と検証
+        # 1. 生のトークンを取得
         local raw_token=$(cat "$GITHUB_TOKEN_FILE")
-        local token=$(echo "$raw_token" | tr -d '\n\r\t ' | grep -o '^[a-zA-Z0-9_]\+')
         
-        if [ -n "$token" ] && [ ${#token} -ge 30 ]; then
+        # 2. 複数の処理方法を試す
+        
+        # 方法1: 改行と空白を削除
+        local token=$(echo "$raw_token" | tr -d '\n\r\t ')
+        
+        # 方法2: ghp_で始まる40文字の英数字パターンを抽出
+        if [ -z "$token" ] || [ ${#token} -ne 40 ]; then
+            token=$(echo "$raw_token" | grep -o 'ghp_[a-zA-Z0-9]\{36\}')
+        fi
+        
+        # 最終チェック
+        if [ -n "$token" ] && [ ${#token} -eq 40 ]; then
             echo "$token"
             return 0
         else
             debug_log "WARN" "Invalid token format in $GITHUB_TOKEN_FILE"
         fi
     fi
+    
+    # 環境変数からの取得
+    if [ -n "$GITHUB_TOKEN" ]; then
+        echo "$GITHUB_TOKEN"
+        return 0
+    fi
+    
     return 1
 }
 
