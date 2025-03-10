@@ -13,19 +13,56 @@ JP|MSG_UNDER_TEST=👹 試験中
 # country-common.sh
 # =======================
 
-# 基本的なバナーメッセージ
+# バナーメッセージ
 US|MSG_BANNER_DECCRIPTION=OpenWrt/Alpine Intelligent Operating System Setup
-US|MSG_BANNER_NAME=AIOS - All-In-One Setup Tool
-US|MSG_BANNER_DISCLAIMER=USE AT YOUR OWN RISK. This tool modifies system settings.
 JP|MSG_BANNER_DECCRIPTION=OpenWrt/Alpine インテリジェント オペレーティングシステムセットアップ
+
+US|MSG_BANNER_NAME=AIOS - All-In-One Setup Tool
 JP|MSG_BANNER_NAME=AIOS - オールインワンセットアップツール
+
+US|MSG_BANNER_DISCLAIMER=USE AT YOUR OWN RISK. This tool modifies system settings.
 JP|MSG_BANNER_DISCLAIMER=ご利用は自己責任でお願いします。このツールはシステム設定を変更します。
 
 # 国検出関連メッセージ
 US|MSG_DETECTED_COUNTRY=Detected country
-US|MSG_USE_DETECTED_COUNTRY=Do you want to use the detected country
 JP|MSG_DETECTED_COUNTRY=検出された国
+
+US|MSG_USE_DETECTED_COUNTRY=Do you want to use the detected country
 JP|MSG_USE_DETECTED_COUNTRY=検出された国を使用しますか
+
+# タイムゾーン検出関連メッセージ
+US|MSG_DETECTED_TIMEZONE=Detected timezone
+JP|MSG_DETECTED_TIMEZONE=検出されたタイムゾーン
+
+US|MSG_USE_DETECTED_TIMEZONE=Do you want to use the detected timezone
+JP|MSG_USE_DETECTED_TIMEZONE=検出されたタイムゾーンを使用しますか
+
+# リセット完了メッセージ
+US|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared.
+JP|MSG_RESET_COMPLETE=リセットが完了しました。すべてのキャッシュデータがクリアされました。
+
+# エラーメッセージ
+US|ERR_DOWNLOAD_NO_DESTINATION=Error: No destination specified for download
+JP|ERR_DOWNLOAD_NO_DESTINATION=エラー：ダウンロード先が指定されていません
+
+US|ERR_FILE_NOT_FOUND=Error: File not found: {file}
+JP|ERR_FILE_NOT_FOUND=エラー：ファイルが見つかりません：{file}
+
+# 一般的なメッセージ
+US|MSG_DOWNLOADING=Downloading: {file}
+JP|MSG_DOWNLOADING=ダウンロード中：{file}
+
+US|MSG_DOWNLOAD_SUCCESS=Download successful: {file}
+JP|MSG_DOWNLOAD_SUCCESS=ダウンロード成功：{file}
+
+US|MSG_DOWNLOAD_FAILED=Download failed: {file}
+JP|MSG_DOWNLOAD_FAILED=ダウンロード失敗：{file}
+
+US|MSG_INITIALIZING=Initializing {file}
+JP|MSG_INITIALIZING=初期化中 {file}
+
+US|MSG_INITIALIZATION_COMPLETE=Initialization complete
+JP|MSG_INITIALIZATION_COMPLETE=初期化完了
 
 # =======================
 # system-config.sh
