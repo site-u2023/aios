@@ -1429,6 +1429,7 @@ check_common() {
             fi
             ;;
         debug)
+            download "dynamic-system-info.sh" "hidden"
             download "common-country.sh" "hidden"
             download "common-package.sh" "hidden"
             download "common-feed-package.sh" "hidden"
@@ -1436,13 +1437,13 @@ check_common() {
             download "country.db" "hidden"
             download "local-package.db" "hidden"
             download "custom-package.db" "hidden"
-            download "dynamic-system-info.sh" "hidden"
             print_banner       
             select_country "$lang_code"
             download "system-config.sh" "hidden" "chmod"
             #packages
             ;;
         light)
+            download "dynamic-system-info.sh"
             download "common-country.sh"
             download "common-package.sh"
             download "common-feed-package.sh"
@@ -1450,13 +1451,13 @@ check_common() {
             download "country.db"
             download "local-package.db"
             download "custom-package.db"
-            download "dynamic-system-info.sh"
             print_banner       
             select_country "$lang_code"
             download "system-config.sh" "chmod"
             #packages
             ;;
         full)
+            download "dynamic-system-info.sh"
             download "common-country.sh"
             download "common-package.sh"
             download "common-feed-package.sh"
@@ -1464,7 +1465,6 @@ check_common() {
             download "country.db"
             download "local-package.db"
             download "custom-package.db"
-            download "dynamic-system-info.sh"
             print_banner        
             select_country "$lang_code"
             download "system-config.sh" "chmod"
