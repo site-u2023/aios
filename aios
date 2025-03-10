@@ -1,8 +1,8 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-01-02"
+SCRIPT_VERSION="2025.03.10-01-03"
 
-echo -e "\033[1;32mDownload completed: aios - Version: $SCRIPT_VERSION\033[0m"
+echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -842,7 +842,9 @@ download() {
     local local_version=""
     local response=""
     local decoded_content=""
-    
+    local download_message=""
+    local read_message=""
+
     # GitHub API応答処理
     if [ "$skip_api" = "false" ]; then
         # API制限チェック
@@ -924,12 +926,15 @@ download() {
         # バージョン情報の更新 (APIスキップ時は更新しない)
         if [ "$skip_api" = "false" ]; then
             if [ ! -f "$script_file" ]; then
+		download_message="download completed"
                 echo "${file_name}=${remote_version}" > "$script_file"
                 debug_log "DEBUG" "Created $script_file with ${file_name}=${remote_version}"
             else
+		download_message="No update needed"
                 if grep -q "^${file_name}=" "$script_file"; then
                     sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_file"
                 else
+		    download_message="download completed"
                     echo "${file_name}=${remote_version}" >> "$script_file"
                 fi
                 debug_log "DEBUG" "Updated $script_file with ${file_name}=${remote_version}"
@@ -938,7 +943,7 @@ download() {
 
         # 読み込みモード処理
         if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
-            read_message="read"
+            read_message="Loaded"
             . "$install_path"
         fi
 
@@ -946,26 +951,28 @@ download() {
         if [ "$file_name" = "$BIN_FILE" ] && [ "$MODE" = "update" ]; then
             chmod +x "$install_path"
             mv "$install_path" "$BIN_PATH"
-            echo "$(color green "Update completed: $file_name - Version: $remote_version")"  
+	    download_message="Update completed"
+            read_message="Loaded" 
             # 更新後フラグを設定
             touch "${CACHE_DIR}/post_update_flag"
         fi
 
         # 完了メッセージ
         if [ "$hidden_mode" != "true" ]; then
-            debug_log "DEBUG" "Quiet mode download completed: $read_message $file_name - Version: $remote_version"
+            debug_log "DEBUG" "Quiet mode $download_message: $file_name - Version: $remote_version $read_message"
         else
-            echo "$(color green "Download completed: $read_message $file_name - Version: $remote_version")"
+            echo "$(color green "$download_message: $file_name - Version: $remote_version $read_message")"
         fi
 
     # 8. 既存ファイルの処理（更新不要の場合）
     # ===============================
     elif [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
+	read_message="Loaded"
         . "$install_path"
     elif [ "$hidden_mode" != "true" ]; then
-        debug_log "DEBUG" "Quiet mode already up to date: $file_name - Version: $local_version"
+        debug_log "DEBUG" "Quiet mode $download_message: $file_name - Version: $local_version $read_message""
     else
-        echo "$(color green "Already up to date: $file_name - Version: $local_version")"
+        echo "$(color green "$download_message: $file_name - Version: $local_version $read_message"")"
     fi
 
     return 0
@@ -1025,7 +1032,9 @@ packages() {
 #########################################################################
 # 権限設定
 chmod_aios() {
-    debug_log "ERROR" "Setting permissions for $BIN_PATH"
+
+    echo "$(color magenta "Setting permissions for $BIN_PATH")"
+
     if ! chmod +x "$BIN_PATH"; then
         debug_log "ERROR" "Failed to set permissions for $BIN_PATH"
         return 1
@@ -1043,7 +1052,9 @@ delete_aios() {
 
 # 必要ディレクトリ作成
 make_directory() {
-    debug_log "ERROR" "Creating required directories"
+
+    echo "$(color magenta "Creating required directories")"
+
     if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"; then
         debug_log "ERROR" "Failed to create required directories"
         return 1
@@ -1090,7 +1101,6 @@ check_update() {
 # 初期化処理を実行
 initialization() {
     # 実行権限を設定
-    debug_log "ERROR" "BIN PATH: $BIN_PATH"
     if ! chmod_aios; then
         debug_log "ERROR" "Failed to set execute permission"
         return 1
@@ -1148,7 +1158,8 @@ initialization() {
 #       キャッシュリセット、ドライラン、ログ出力先 /var/log/aios.log、強制実行が有効になる。
 #########################################################################
 check_option() {
-    debug_log "ERROR" "check_option received before args: $*"
+
+    echo "$(color magenta "check_option received before args: $*")"
 
     # デフォルト値の設定
     SELECTED_LANGUAGE=""
@@ -1231,9 +1242,10 @@ check_option() {
     export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET HELP
 
     # デバッグ情報を出力
-    debug_log "DEBUG" "SELECTED_LANGUAGE=$SELECTED_LANGUAGE, MODE=$MODE, DEBUG_MODE=$DEBUG_MODE"
-    debug_log "DEBUG" "DEBUG_LEVEL=$DEBUG_LEVEL, DRY_RUN=$DRY_RUN, LOGFILE=$LOGFILE"
-    debug_log "DEBUG" "FORCE=$FORCE, RESET=$RESET, HELP=$HELP"
+    debug_log "DEBUG" "check_option: MODE=$MODE, SELECTED_LANGUAGE=$SELECTED_LANGUAGE"
+    debug_log "DEBUG" "check_option: DEBUG_MODE=$DEBUG_MODE, DEBUG_LEVEL=$DEBUG_LEVEL"
+    debug_log "DEBUG" "check_option: DRY_RUN=$DRY_RUN, LOGFILE=$LOGFILE"
+    debug_log "DEBUG" "check_option: FORCE=$FORCE, RESET=$RESET, HELP=$HELP"
 
     # 設定された言語を `check_common()` に渡す
     check_common "$SELECTED_LANGUAGE" "$MODE"
@@ -1276,7 +1288,6 @@ check_common() {
             exit 0
             ;;
         update)
-	    debug_log "DEBUG" "check_common: aios update"
 	    download "hidden" "chmod" "aios"
 	    if [ ! -f "${CACHE_DIR}/post_update_flag" ]; then
 		MODE="full"
