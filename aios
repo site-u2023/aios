@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-02-01"
+SCRIPT_VERSION="2025.03.10-02-02"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -643,44 +643,226 @@ setup_github_token() {
 # 7. wget のエラーハンドリングを行い、失敗時の詳細を debug_log() に記録する。
 # 8. 影響範囲: common.sh の download() のみ（他の関数には影響なし）。
 #########################################################################
-# GitHub API呼び出し前にレート制限を確認する関数
+# APIレート制限確認関数
 check_api_rate_limit() {
     if [ "$DEBUG_MODE" = "true" ]; then
-        # タイムスタンプ取得と残り時間計算（動作確認済み）
         api_info=$(wget -qO- "https://api.github.com/rate_limit" 2>/dev/null)
         if [ -n "$api_info" ]; then
-            # 現在のAPI利用状況を抽出
             api_remaining=$(echo "$api_info" | grep -o '"core":{"limit":[0-9]*,"remaining":[0-9]*' | grep -o 'remaining":[0-9]*' | cut -d':' -f2)
             api_limit=$(echo "$api_info" | grep -o '"core":{"limit":[0-9]*,"remaining":[0-9]*' | grep -o 'limit":[0-9]*' | cut -d':' -f2)
             api_reset=$(echo "$api_info" | grep -o '"reset":[0-9]*' | head -1 | cut -d':' -f2)
             api_now=$(date +%s)
             
-            # 残り時間計算
-            api_seconds=0
             if [ -n "$api_reset" ] && [ -n "$api_now" ]; then
                 api_seconds=$(expr "$api_reset" - "$api_now")
-                if [ "$api_seconds" -lt 0 ]; then
-                    api_seconds=0
-                fi
-            fi
-            
-            # 残り時間を分:秒形式に変換
-            api_minutes=$(expr "$api_seconds" / 60)
-            api_seconds=$(expr "$api_seconds" % 60)
-            
-            # デバッグログ出力
-            debug_log "DEBUG" "API Limits: Core ${api_remaining:-?}/${api_limit:-?}, Reset in ${api_minutes}m ${api_seconds}s"
-            
-            # API制限が少なくなったら警告
-            if [ -n "$api_remaining" ] && [ -n "$api_limit" ] && [ "$api_limit" -gt 0 ]; then
-                api_threshold=$(expr "$api_limit" / 10)
-                if [ "$api_remaining" -lt "$api_threshold" ]; then
-                    debug_log "WARN" "GitHub API rate limit running low (${api_remaining}/${api_limit})"
-                    return 1
-                fi
+                [ "$api_seconds" -lt 0 ] && api_seconds=0
+                api_minutes=$(expr "$api_seconds" / 60)
+                api_seconds=$(expr "$api_seconds" % 60)
+                debug_log "DEBUG" "API Limits: Core ${api_remaining:-?}/${api_limit:-?}, Reset in ${api_minutes}m ${api_seconds}s"
             fi
         fi
     fi
+    return 0
+}
+
+# GitHubコミットからバージョン情報を取得
+get_commit_version() {
+    local file_path="$1"
+    local api_url="repos/${repo_owner}/${repo_name}/commits?path=${file_path}&per_page=1"
+    local commit_info=""
+    local auth_method="direct"
+    
+    # トークンによるAPI認証
+    token=$(get_github_token)
+    if [ -n "$token" ]; then
+        commit_info=$(wget -qO- --header="Authorization: token $token" \
+            "https://api.github.com/$api_url" 2>/dev/null)
+        auth_method="token"
+    else
+        commit_info=$(wget -qO- "https://api.github.com/$api_url" 2>/dev/null)
+        auth_method="standard"
+    fi
+    
+    if [ -n "$commit_info" ]; then
+        # 日付とSHA情報を抽出
+        local commit_date=$(echo "$commit_info" | grep -o '"date": "[^"]*' | head -1 | cut -d'"' -f4)
+        local commit_sha=$(echo "$commit_info" | grep -o '"sha": "[^"]*' | head -1 | cut -d'"' -f4 | cut -c 1-7)
+        
+        if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
+            # YYYY.MM.DD-SHA 形式に変換
+            local formatted_date=$(echo "$commit_date" | sed 's/T.*Z//g;s/-/./g')
+            echo "${formatted_date}-${commit_sha} ${auth_method}"
+            return 0
+        fi
+    fi
+    
+    # API取得失敗時は現在時刻を使用
+    echo "$(date +%Y.%m.%d)-unknown direct"
+    return 1
+}
+
+# バージョン比較関数
+version_is_newer() {
+    local current="$1"
+    local reference="$2"
+    
+    # バージョン部分とメソッド部分を分離
+    local current_version=$(echo "$current" | cut -d' ' -f1)
+    local reference_version=$(echo "$reference" | cut -d' ' -f1)
+    
+    # どちらかが不明の場合は更新必要
+    if echo "$current_version $reference_version" | grep -q "No version\|unknown"; then
+        return 0
+    fi
+    
+    # 日付部分を取得（YYYY.MM.DD形式）
+    local current_date=$(echo "$current_version" | cut -d'-' -f1)
+    local reference_date=$(echo "$reference_version" | cut -d'-' -f1)
+    
+    # 日付を数値に変換（区切り文字を削除）
+    local current_num=$(echo "$current_date" | tr -d '.')
+    local reference_num=$(echo "$reference_date" | tr -d '.')
+    
+    # 数値比較
+    if [ "$current_num" -gt "$reference_num" ]; then
+        return 0  # 現在のバージョンが新しい
+    elif [ "$current_num" -lt "$reference_num" ]; then
+        return 1  # リファレンスバージョンが新しい
+    fi
+    
+    # 日付が同じ場合はSHAが異なれば更新
+    local current_sha=$(echo "$current_version" | cut -d'-' -f2)
+    local reference_sha=$(echo "$reference_version" | cut -d'-' -f2)
+    
+    if [ "$current_sha" != "$reference_sha" ]; then
+        return 0  # 異なるコミット
+    fi
+    
+    return 1  # 同一バージョン
+}
+
+# ダウンロード関数
+download() {
+    # ファイル名を最初の引数として処理、残りはオプション
+    local file_name="$1"
+    shift
+    
+    # 設定変数
+    local hidden_mode="false"
+    local quiet_mode="${QUIET_MODE:-false}"
+    local chmod_mode="false"
+    local read_mode="false"
+    local script_file="${CACHE_DIR}/script.ch"
+    local dummy_version="No version control"
+    
+    # オプション引数の処理
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            hidden) hidden_mode="true" ;;
+            quiet)  quiet_mode="true" ;;
+            debug)  DEBUG_MODE="true" ;;
+            chmod)  chmod_mode="true" ;;
+            read)   read_mode="true" ;;
+            *)      debug_log "WARN" "Unknown option: $1, ignoring" ;;
+        esac
+        shift
+    done
+    
+    # パス設定
+    local install_path="${BASE_DIR}/$file_name"
+    local remote_url="${BASE_URL}/$file_name"
+    
+    # API制限チェック（デバッグモード時のみ）
+    [ "$DEBUG_MODE" = "true" ] && check_api_rate_limit
+    
+    # バージョン情報の取得
+    local remote_version_info=$(get_commit_version "$file_name")
+    local remote_version=$(echo "$remote_version_info" | cut -d' ' -f1)
+    local auth_method=$(echo "$remote_version_info" | cut -d' ' -f2)
+    local local_version=""
+    
+    # ローカルバージョンの取得
+    if [ -f "$script_file" ]; then
+        local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
+    fi
+    [ -z "$local_version" ] && local_version="$dummy_version"
+    
+    # 認証メッセージの設定
+    local auth_message=""
+    case "$auth_method" in
+        token)    auth_message="via token auth" ;;
+        standard) auth_message="via standard API" ;;
+        *)        auth_message="via direct download" ;;
+    esac
+    
+    # バージョン比較とダウンロード判断
+    local status_message="No update needed"
+    local update_required=false
+    
+    if [ "$local_version" = "$dummy_version" ]; then
+        update_required=true
+    else
+        version_is_newer "$remote_version" "$local_version"
+        [ $? -eq 0 ] && update_required=true
+    fi
+    
+    debug_log "DEBUG" "Remote version: $file_name - $remote_version"
+    debug_log "DEBUG" "Local version: $file_name - $local_version"
+    debug_log "DEBUG" "Update required: $update_required"
+    
+    if [ "$update_required" = "true" ]; then
+        # ファイルダウンロード
+        if ! $BASE_WGET "$install_path" "$remote_url"; then
+            debug_log "ERROR" "Download failed: $file_name is empty"
+            return 1
+        fi
+        
+        # ファイル検証
+        if [ ! -s "$install_path" ]; then
+            debug_log "ERROR" "Download failed: $file_name is empty"
+            return 1
+        fi
+        
+        # 権限設定
+        if [ "$chmod_mode" = "true" ]; then
+            chmod +x "$install_path"
+            debug_log "DEBUG" "chmod +x applied to $file_name"
+        fi
+        
+        # バージョン情報の更新
+        if [ ! -f "$script_file" ]; then
+            echo "${file_name}=${remote_version}" > "$script_file"
+        else
+            if grep -q "^${file_name}=" "$script_file"; then
+                sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_file"
+            else
+                echo "${file_name}=${remote_version}" >> "$script_file"
+            fi
+        fi
+        
+        status_message="Download completed"
+    fi
+    
+    # 読み込み処理
+    local action_message=""
+    if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
+        . "$install_path"
+        action_message="Loaded"
+    fi
+    
+    # 最終メッセージ生成
+    local message="${file_name}: ${status_message} - Version: ${remote_version} ${auth_message}"
+    if [ -n "$action_message" ]; then
+        message="${message} (${action_message})"
+    fi
+    
+    # 出力
+    if [ "$hidden_mode" = "true" ]; then
+        echo "$(color green "${message}")"
+    else
+        debug_log "DEBUG" "Quiet mode ${message}"
+    fi
+    
     return 0
 }
 
