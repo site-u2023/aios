@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-02-04"
+SCRIPT_VERSION="2025.03.10-02-05"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -643,6 +643,82 @@ setup_github_token() {
 # 7. wget のエラーハンドリングを行い、失敗時の詳細を debug_log() に記録する。
 # 8. 影響範囲: common.sh の download() のみ（他の関数には影響なし）。
 #########################################################################
+decode_base64() {
+    input="$1"
+    output=""
+    decoder_type=""
+    base64_cache="${CACHE_DIR}/base64.ch"
+    
+    # キャッシュファイルから以前検出したデコーダーを確認
+    if [ -f "$base64_cache" ]; then
+        # shellcheck disable=SC1090
+        . "$base64_cache"
+        debug_log "DEBUG" "base64: using cached decoder: $BASE64_DECODER"
+    else
+        # 利用可能なデコーダーを検索
+        if command -v base64 >/dev/null 2>&1; then
+            BASE64_DECODER="coreutils"
+            debug_log "DEBUG" "base64: found coreutils-base64"
+        elif command -v openssl >/dev/null 2>&1; then
+            BASE64_DECODER="openssl" 
+            debug_log "DEBUG" "base64: found openssl"
+        else
+            debug_log "WARN" "base64: no decoder found, attempting to install coreutils-base64"
+            
+            # DEBUGモードの場合は通常表示、それ以外はサイレント
+            if [ "$DEBUG_MODE" = "true" ]; then
+                debug_log "INFO" "Running: opkg update"
+                opkg update
+                debug_log "INFO" "Running: opkg install coreutils-base64"
+                opkg install coreutils-base64
+            else
+                # サイレントでパッケージをインストール試行
+                opkg update >/dev/null 2>&1
+                opkg install coreutils-base64 >/dev/null 2>&1
+            fi
+            
+            # インストール成功したか確認
+            if command -v base64 >/dev/null 2>&1; then
+                BASE64_DECODER="coreutils"
+                debug_log "INFO" "base64: successfully installed coreutils-base64"
+            else
+                debug_log "ERROR" "base64: failed to install decoder, decode operation will fail"
+                BASE64_DECODER="none"
+            fi
+        fi
+        
+        # 検出結果をキャッシュファイルに保存
+        mkdir -p "$CACHE_DIR"
+        echo "BASE64_DECODER=\"$BASE64_DECODER\"" > "$base64_cache"
+    fi
+    
+    # デコード実行
+    case "$BASE64_DECODER" in
+        "coreutils")
+            output=$(echo "$input" | base64 -d 2>/dev/null)
+            decoder_type="coreutils-base64"
+            ;;
+        "openssl")
+            output=$(echo "$input" | openssl base64 -d 2>/dev/null)
+            decoder_type="openssl"
+            ;;
+        *)
+            debug_log "ERROR" "base64: no decoder available"
+            return 1
+            ;;
+    esac
+    
+    # 結果を確認
+    if [ $? -eq 0 ] && [ -n "$output" ]; then
+        debug_log "DEBUG" "base64: decoded with $decoder_type"
+        echo "$output"
+        return 0
+    else
+        debug_log "ERROR" "base64: decode failed with $decoder_type"
+        return 1
+    fi
+}
+
 # APIレート制限確認関数
 check_api_rate_limit() {
     if [ "$DEBUG_MODE" = "true" ]; then
@@ -871,273 +947,6 @@ download() {
         echo "$(color green "${message}")"
     else
         debug_log "DEBUG" "Quiet mode ${message}"
-    fi
-    
-    return 0
-}
-
-decode_base64() {
-    input="$1"
-    output=""
-    decoder_type=""
-    base64_cache="${CACHE_DIR}/base64.ch"
-    
-    # キャッシュファイルから以前検出したデコーダーを確認
-    if [ -f "$base64_cache" ]; then
-        # shellcheck disable=SC1090
-        . "$base64_cache"
-        debug_log "DEBUG" "base64: using cached decoder: $BASE64_DECODER"
-    else
-        # 利用可能なデコーダーを検索
-        if command -v base64 >/dev/null 2>&1; then
-            BASE64_DECODER="coreutils"
-            debug_log "DEBUG" "base64: found coreutils-base64"
-        elif command -v openssl >/dev/null 2>&1; then
-            BASE64_DECODER="openssl" 
-            debug_log "DEBUG" "base64: found openssl"
-        else
-            debug_log "WARN" "base64: no decoder found, attempting to install coreutils-base64"
-            
-            # DEBUGモードの場合は通常表示、それ以外はサイレント
-            if [ "$DEBUG_MODE" = "true" ]; then
-                debug_log "INFO" "Running: opkg update"
-                opkg update
-                debug_log "INFO" "Running: opkg install coreutils-base64"
-                opkg install coreutils-base64
-            else
-                # サイレントでパッケージをインストール試行
-                opkg update >/dev/null 2>&1
-                opkg install coreutils-base64 >/dev/null 2>&1
-            fi
-            
-            # インストール成功したか確認
-            if command -v base64 >/dev/null 2>&1; then
-                BASE64_DECODER="coreutils"
-                debug_log "INFO" "base64: successfully installed coreutils-base64"
-            else
-                debug_log "ERROR" "base64: failed to install decoder, decode operation will fail"
-                BASE64_DECODER="none"
-            fi
-        fi
-        
-        # 検出結果をキャッシュファイルに保存
-        mkdir -p "$CACHE_DIR"
-        echo "BASE64_DECODER=\"$BASE64_DECODER\"" > "$base64_cache"
-    fi
-    
-    # デコード実行
-    case "$BASE64_DECODER" in
-        "coreutils")
-            output=$(echo "$input" | base64 -d 2>/dev/null)
-            decoder_type="coreutils-base64"
-            ;;
-        "openssl")
-            output=$(echo "$input" | openssl base64 -d 2>/dev/null)
-            decoder_type="openssl"
-            ;;
-        *)
-            debug_log "ERROR" "base64: no decoder available"
-            return 1
-            ;;
-    esac
-    
-    # 結果を確認
-    if [ $? -eq 0 ] && [ -n "$output" ]; then
-        debug_log "DEBUG" "base64: decoded with $decoder_type"
-        echo "$output"
-        return 0
-    else
-        debug_log "ERROR" "base64: decode failed with $decoder_type"
-        return 1
-    fi
-}
-
-# GitHub APIからファイルのコミット情報を取得しバージョンを生成する関数
-get_commit_version() {
-    local file_path="$1"
-    local api_url="repos/${repo_owner}/${repo_name}/commits?path=${file_path}&per_page=1"
-    local commit_info=""
-    
-    # トークンによるAPI認証
-    token=$(get_github_token)
-    if [ -n "$token" ]; then
-        commit_info=$(wget -qO- --header="Authorization: token $token" \
-            "https://api.github.com/$api_url" 2>/dev/null)
-    else
-        commit_info=$(wget -qO- "https://api.github.com/$api_url" 2>/dev/null)
-    fi
-    
-    if [ -n "$commit_info" ]; then
-        # 日付とSHA情報を抽出
-        local commit_date=$(echo "$commit_info" | grep -o '"date": "[^"]*' | head -1 | cut -d'"' -f4)
-        local commit_sha=$(echo "$commit_info" | grep -o '"sha": "[^"]*' | head -1 | cut -d'"' -f4 | cut -c 1-7)
-        
-        if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
-            # YYYY.MM.DD-SHA 形式に変換
-            local formatted_date=$(echo "$commit_date" | sed 's/T.*Z//g;s/-/./g')
-            echo "${formatted_date}-${commit_sha}"
-            return 0
-        fi
-    fi
-    
-    # API取得失敗時は現在時刻を使用
-    echo "$(date +%Y.%m.%d)-unknown"
-    return 1
-}
-
-# ファイルのバージョンを比較する関数
-version_is_newer() {
-    local current="$1"
-    local reference="$2"
-    
-    # どちらかが不明の場合は更新必要
-    if [ "$current" = "No version control" ] || [ "$reference" = "No version control" ]; then
-        return 0
-    fi
-    
-    # 日付部分を取得（YYYY.MM.DD形式）
-    local current_date=$(echo "$current" | cut -d'-' -f1)
-    local reference_date=$(echo "$reference" | cut -d'-' -f1)
-    
-    # 日付を数値に変換（区切り文字を削除）
-    local current_num=$(echo "$current_date" | tr -d '.')
-    local reference_num=$(echo "$reference_date" | tr -d '.')
-    
-    # 数値比較
-    if [ "$current_num" -gt "$reference_num" ]; then
-        return 0  # 現在のバージョンが新しい
-    elif [ "$current_num" -lt "$reference_num" ]; then
-        return 1  # リファレンスバージョンが新しい
-    fi
-    
-    # 日付が同じ場合はSHAが異なれば更新
-    local current_sha=$(echo "$current" | cut -d'-' -f2)
-    local reference_sha=$(echo "$reference" | cut -d'-' -f2)
-    
-    if [ "$current_sha" != "$reference_sha" ]; then
-        return 0  # 異なるコミット
-    fi
-    
-    return 1  # 同一バージョン
-}
-
-download() {
-    # 引数処理を改善（ファイル名を必須の最初の引数として扱う）
-    if [ $# -eq 0 ]; then
-        debug_log "ERROR" "No file name provided"
-        return 1
-    fi
-    
-    # 最初の引数はファイル名として処理
-    local file_name="$1"
-    shift
-    
-    # 設定変数
-    local hidden_mode="false"
-    local quiet_mode="${QUIET_MODE:-false}"
-    local chmod_mode="false"
-    local read_mode="false"
-    local script_file="${CACHE_DIR}/script.ch"
-    local dummy_version="No version control"
-    local auth_method="direct"
-    local auth_message=""
-    
-    # オプション引数の処理
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            hidden) hidden_mode="true" ;;
-            quiet)  quiet_mode="true" ;;
-            debug)  DEBUG_MODE="true" ;;
-            chmod)  chmod_mode="true" ;;
-            read)   read_mode="true" ;;
-            *)      debug_log "WARN" "Unknown option: $1, ignoring" ;;
-        esac
-        shift
-    done
-    
-    # パス設定
-    local install_path="${BASE_DIR}/$file_name"
-    local remote_url="${BASE_URL}/$file_name"
-    
-    # バージョン情報の取得
-    local remote_version=$(get_commit_version "$file_name")
-    local local_version=""
-    
-    # ローカルバージョンの取得
-    if [ -f "$script_file" ]; then
-        local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
-    fi
-    [ -z "$local_version" ] && local_version="$dummy_version"
-    
-    # 使用した認証方法を記録
-    if echo "$auth_method" | grep -q "token"; then
-        auth_message="via token auth"
-    elif echo "$auth_method" | grep -q "standard"; then
-        auth_message="via standard API"
-    else
-        auth_message="via direct download"
-    fi
-    
-    # バージョン比較とダウンロード判断
-    local status_message="No update needed"
-    local update_required=false
-    
-    version_is_newer "$remote_version" "$local_version"
-    if [ $? -eq 0 ]; then
-        update_required=true
-    fi
-    
-    if [ "$update_required" = "true" ]; then
-        # ファイルダウンロード
-        if ! $BASE_WGET "$install_path" "$remote_url"; then
-            debug_log "ERROR" "Download failed: $file_name is empty"
-            return 1
-        fi
-        
-        # ファイル検証
-        if [ ! -s "$install_path" ]; then
-            debug_log "ERROR" "Download failed: $file_name is empty"
-            return 1
-        fi
-        
-        # 権限設定
-        if [ "$chmod_mode" = "true" ]; then
-            chmod +x "$install_path"
-            debug_log "DEBUG" "chmod +x applied to $file_name"
-        fi
-        
-        # バージョン情報の更新
-        if [ ! -f "$script_file" ]; then
-            echo "${file_name}=${remote_version}" > "$script_file"
-        else
-            if grep -q "^${file_name}=" "$script_file"; then
-                sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_file"
-            else
-                echo "${file_name}=${remote_version}" >> "$script_file"
-            fi
-        fi
-        
-        status_message="Download completed"
-    fi
-    
-    # 読み込み処理
-    local action_message=""
-    if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
-        . "$install_path"
-        action_message="Loaded"
-    fi
-    
-    # 最終メッセージ生成
-    local message="${file_name}: ${status_message} - Version: ${remote_version} ${auth_message}"
-    if [ -n "$action_message" ]; then
-        message="${message} (${action_message})"
-    fi
-    
-    # 出力
-    if [ "$hidden_mode" = "true" ]; then
-	debug_log "DEBUG" "Quiet mode ${message}"
-    else
-	echo "$(color green "${message}")"
     fi
     
     return 0
