@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-03-17"
+SCRIPT_VERSION="2025.03.10-03-19"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -797,30 +797,41 @@ check_token_status() {
         echo "Token file: $GITHUB_TOKEN_FILE (EXISTS)"
         ls -l "$GITHUB_TOKEN_FILE"
         
-        # トークンの先頭部分だけを表示（セキュリティのため）
-        local token=$(cat "$GITHUB_TOKEN_FILE" | tr -d '\n\r\t ')
-        local token_preview=${token:0:5}
-        echo "Token starts with: ${token_preview}..."
-        
-        # レート制限の確認
-        local rate_info=$(wget -q -O- --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null)
-        
-        if [ -n "$rate_info" ]; then
-            # JSON出力から値を抽出する際に、スペースに関係なく取得できるよう改良
-            local limit=$(echo "$rate_info" | grep -o '"limit"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*')
-            local remaining=$(echo "$rate_info" | grep -o '"remaining"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*')
+        # トークン取得
+        local token=$(get_github_token)
+        if [ -n "$token" ]; then
+            local token_preview=${token:0:5}
+            echo "Token starts with: ${token_preview}..."
             
-            echo "Current rate limit: $limit"
-            echo "Remaining requests: $remaining"
+            # レート制限の確認
+            local rate_info=$(wget -q -O- --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null)
             
-            # 認証状態の判断（より堅牢な比較）
-            if [ -n "$limit" ] && [ "$limit" -gt 60 ]; then
-                echo "Auth status: ✅ AUTHENTICATED (Higher limits active: $limit)"
+            if [ -n "$rate_info" ]; then
+                # コアレート制限のみを抽出（他のリソースは無視）
+                local core_section=$(echo "$rate_info" | sed -n 's/.*"core":\([^}]*\)}.*/\1/p')
+                
+                if [ -n "$core_section" ]; then
+                    local core_limit=$(echo "$core_section" | sed -n 's/.*"limit":\([0-9]*\).*/\1/p')
+                    local core_remaining=$(echo "$core_section" | sed -n 's/.*"remaining":\([0-9]*\).*/\1/p')
+                    
+                    echo "Core rate limit: $core_limit"
+                    echo "Core remaining: $core_remaining"
+                    
+                    # 認証状態の判断
+                    if [ -n "$core_limit" ] && [ "$core_limit" -gt 60 ]; then
+                        echo "Auth status: ✅ AUTHENTICATED (Higher limits active)"
+                        echo "Using token authentication successfully"
+                    else
+                        echo "Auth status: ❌ UNAUTHENTICATED (Standard limits)"
+                    fi
+                else
+                    echo "Could not parse core rate limit information"
+                fi
             else
-                echo "Auth status: ❌ UNAUTHENTICATED (Standard limits: $limit)"
+                echo "Could not retrieve rate limit information"
             fi
         else
-            echo "Could not retrieve rate limit information"
+            echo "Could not extract valid token from file"
         fi
     else
         echo "Token file: $GITHUB_TOKEN_FILE (NOT FOUND)"
@@ -832,19 +843,39 @@ check_token_status() {
 # APIレート制限確認関数
 check_api_rate_limit() {
     if [ "$DEBUG_MODE" = "true" ]; then
-        api_info=$(wget -qO- "https://api.github.com/rate_limit" 2>/dev/null)
+        # トークン取得
+        local token=$(get_github_token)
+        local auth_header=""
+        
+        if [ -n "$token" ]; then
+            auth_header="--header=\"Authorization: token $token\""
+        fi
+        
+        # API制限情報取得
+        api_info=$(eval "wget -qO- $auth_header \"https://api.github.com/rate_limit\" 2>/dev/null")
+        
         if [ -n "$api_info" ]; then
-            api_remaining=$(echo "$api_info" | grep -o '"core":{"limit":[0-9]*,"remaining":[0-9]*' | grep -o 'remaining":[0-9]*' | cut -d':' -f2)
-            api_limit=$(echo "$api_info" | grep -o '"core":{"limit":[0-9]*,"remaining":[0-9]*' | grep -o 'limit":[0-9]*' | cut -d':' -f2)
-            api_reset=$(echo "$api_info" | grep -o '"reset":[0-9]*' | head -1 | cut -d':' -f2)
-            api_now=$(date +%s)
+            # コア部分のみを抽出
+            local core_section=$(echo "$api_info" | sed -n 's/.*"core":\([^}]*\)}.*/\1/p')
             
-            if [ -n "$api_reset" ] && [ -n "$api_now" ]; then
-                api_seconds=$(expr "$api_reset" - "$api_now")
-                [ "$api_seconds" -lt 0 ] && api_seconds=0
-                api_minutes=$(expr "$api_seconds" / 60)
-                api_seconds=$(expr "$api_seconds" % 60)
-                debug_log "DEBUG" "API Limits: Core ${api_remaining:-?}/${api_limit:-?}, Reset in ${api_minutes}m ${api_seconds}s"
+            if [ -n "$core_section" ]; then
+                api_remaining=$(echo "$core_section" | sed -n 's/.*"remaining":\([0-9]*\).*/\1/p')
+                api_limit=$(echo "$core_section" | sed -n 's/.*"limit":\([0-9]*\).*/\1/p')
+                api_reset=$(echo "$core_section" | sed -n 's/.*"reset":\([0-9]*\).*/\1/p')
+                
+                api_now=$(date +%s)
+                
+                if [ -n "$api_reset" ] && [ -n "$api_now" ]; then
+                    api_seconds=$((api_reset - api_now))
+                    [ "$api_seconds" -lt 0 ] && api_seconds=0
+                    api_minutes=$((api_seconds / 60))
+                    api_seconds=$((api_seconds % 60))
+                    
+                    local auth_status="anonymous"
+                    [ "$api_limit" -gt 60 ] && auth_status="authenticated"
+                    
+                    debug_log "DEBUG" "API Limits: Core ${api_remaining}/${api_limit} ($auth_status), Reset in ${api_minutes}m ${api_seconds}s"
+                fi
             fi
         fi
     fi
