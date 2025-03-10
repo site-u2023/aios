@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-01-04"
+SCRIPT_VERSION="2025.03.10-01-05"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -799,9 +799,13 @@ download() {
     local repo_name="aios"
     local dummy_remote_version="No remote version control."
     local dummy_local_version="No local version control."
-    local read_message=""
-    local download_message=""  # 初期化を追加
     local skip_api=false
+    
+    # メッセージ関連の変数
+    local status_message=""
+    local action_message=""
+    local version_to_display=""
+    local is_updated=false
 
     # 2. 引数処理
     # ===============================
@@ -902,7 +906,10 @@ download() {
     # 7. メインロジック - バージョン比較と更新処理
     # ===============================
     if [ "$skip_api" = "true" ] || [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
-        download_message="Download completed"  # デフォルトメッセージを設定
+        # アップデートフラグ設定
+        is_updated=true
+        status_message="Download completed"
+        version_to_display="$remote_version"
         
         # ファイルのダウンロード処理
         if ! $BASE_WGET "$install_path" "$remote_url"; then
@@ -938,48 +945,46 @@ download() {
             fi
         fi
 
-        # 読み込みモード処理
-        if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
-            read_message="Loaded"
-            . "$install_path"
-        fi
-
         # aios更新処理
         if [ "$file_name" = "$BIN_FILE" ] && [ "$MODE" = "update" ]; then
             chmod +x "$install_path"
             mv "$install_path" "$BIN_PATH"
-            download_message="Update completed"
-            read_message="Loaded" 
+            status_message="Update completed"
             # 更新後フラグを設定
             touch "${CACHE_DIR}/post_update_flag"
         fi
 
-        # 完了メッセージ
-        if [ "$hidden_mode" != "true" ]; then
-            debug_log "DEBUG" "Quiet mode $download_message: $file_name - Version: $remote_version $read_message"
-        else
-            echo "$(color green "$download_message: $file_name - Version: $remote_version $read_message")"
-        fi
-
-    # 8. 既存ファイルの処理（更新不要の場合）
-    # ===============================
-    elif [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
-        read_message="Loaded"
-        # 既存の処理を読み込み
-        . "$install_path"
-        # メッセージは「読み込み専用」に特化
-        if [ "$hidden_mode" != "true" ]; then
-            debug_log "DEBUG" "Quiet mode Loaded: $file_name - Version: $local_version"
-        else
-            echo "$(color green "Loaded: $file_name - Version: $local_version")"
-        fi
     else
-        # 更新不要の場合のメッセージ
-        if [ "$hidden_mode" != "true" ]; then
-            debug_log "DEBUG" "Quiet mode No update needed: $file_name - Version: $local_version"
-        else
-            echo "$(color green "No update needed: $file_name - Version: $local_version")"
-        fi
+        # 更新の必要がない場合
+        status_message="No update needed"
+        version_to_display="$local_version"
+    fi
+
+    # 8. 読み込み処理（別条件で判断）
+    # ===============================
+    if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
+        . "$install_path"
+        action_message="Loaded"
+    fi
+
+    # 9. 最終的なメッセージ出力（統一処理）
+    # =====================================
+    # メッセージコンポーネントを構築
+    local final_message=""
+    
+    # ステータスとファイル名、バージョン
+    final_message="${status_message}: ${file_name} - Version: ${version_to_display}"
+    
+    # アクションメッセージがある場合は追加
+    if [ -n "$action_message" ]; then
+        final_message="${final_message} (${action_message})"
+    fi
+    
+    # 最終出力
+    if [ "$hidden_mode" != "true" ]; then
+        debug_log "DEBUG" "Quiet mode ${final_message}"
+    else
+        echo "$(color green "${final_message}")"
     fi
 
     return 0
