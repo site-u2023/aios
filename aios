@@ -1551,7 +1551,6 @@ check_common() {
             download "common-feed-package.sh" "hidden"
 	    download "dynamic-system-info.sh" "hidden"
             download "messages.db" "hidden"
-            download "openwrt.db" "hidden"
             download "country.db" "hidden"
             download "local-package.db" "hidden"
             download "custom-package.db" "hidden"
@@ -1570,7 +1569,6 @@ check_common() {
 	    download "dynamic-system-info.sh"
             download "messages.db"
             download "openwrt.db"
-            download "country.db"
             download "local-package.db"
             download "custom-package.db"
             check_openwrt
@@ -1587,7 +1585,6 @@ check_common() {
             download "common-feed-package.sh"
 	    download "dynamic-system-info.sh"
             download "messages.db"
-            download "openwrt.db"
             download "country.db"
             download "local-package.db"
             download "custom-package.db"
