@@ -254,112 +254,6 @@ color_code_map() {
 }
 
 #########################################################################
-# check_openwrt: OpenWrtのバージョン確認・管理のみを担当
-#########################################################################
-check_openwrt() {
-    local version_file="${CACHE_DIR}/openwrt.ch"
-
-    # **キャッシュがあれば使用**
-    if [ -f "$version_file" ]; then
-        CURRENT_VERSION=$(cat "$version_file")
-    else
-        local raw_version=""
-        local distrib_id=""
-
-        # **① /etc/openwrt_release から取得（最優先）**
-        if [ -f "/etc/openwrt_release" ]; then
-            distrib_id=$(awk -F"'" '/DISTRIB_ID/ {print $2}' /etc/openwrt_release)
-            
-            # **GL.iNet カスタム版は弾く**
-            if [ "$distrib_id" != "OpenWrt" ]; then
-                handle_error "Unsupported OpenWrt version: $distrib_id (Only OpenWrt - supported)"
-                exit 1  # 🚨 スクリプト全体を終了
-            fi
-
-            if grep -q "DISTRIB_RELEASE=" /etc/openwrt_release; then
-                raw_version=$(awk -F"'" '/DISTRIB_RELEASE/ {print $2}' /etc/openwrt_release)
-            fi
-        fi
-
-        # **② /etc/openwrt_version が存在すれば使用**
-        if [ -z "$raw_version" ] && [ -f "/etc/openwrt_version" ]; then
-            raw_version=$(cat /etc/openwrt_version)
-        fi
-
-        # **③ バージョンが取得できなければスクリプト全体を終了**
-        if [ -z "$raw_version" ]; then
-            handle_error "Could not determine OpenWrt version. Check system files."
-            exit 1  # 🚨 スクリプト全体を終了
-        fi
-
-        # **④ バージョン表記の統一**
-        CURRENT_VERSION=$(echo "$raw_version" | tr '-' '.')
-
-        # **⑤ キャッシュに書き出し**
-        echo "$CURRENT_VERSION" > "$version_file"
-        chmod 444 "$version_file"  # 読み取り専用
-    fi
-
-    # **⑥ データベースにバージョンがあるか確認**
-    if grep -q "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db"; then
-        local db_entry=$(grep "^$CURRENT_VERSION=" "${BASE_DIR}/openwrt.db" | cut -d'=' -f2)
-        PACKAGE_MANAGER=$(echo "$db_entry" | cut -d'|' -f1)
-        VERSION_STATUS=$(echo "$db_entry" | cut -d'|' -f2)
-        echo -e "$(color green "OpnWrt version: $CURRENT_VERSION - supported ($VERSION_STATUS)")"
-    else
-        handle_error "Unsupported OpenWrt version: $CURRENT_VERSION"
-        exit 1  # 🚨 スクリプト全体を終了
-    fi
-}
-
-#########################################################################
-# check_architecture: OpenWrtのアーキテクチャを確認・キャッシュ
-#########################################################################
-check_architecture() {
-    local arch_file="${CACHE_DIR}/architecture.ch"
-
-    # **キャッシュがあれば再取得しない**
-    if [ -f "$arch_file" ]; then
-        arch=$(cat "$arch_file" | tr -d '\r')
-        debug_log "DEBUG" "Using cached architecture: $arch"
-        return 0
-    fi
-
-    # **アーキテクチャを取得**
-    local arch=$(uname -m)
-
-    # **キャッシュに保存（アーキテクチャ名のみ）**
-    echo "$arch" > "$arch_file"
-
-    debug_log "DEBUG" "Architecture detected: $arch"
-}
-
-#########################################################################
-# check_downloader: パッケージマネージャー判定（apk / opkg 対応）
-#########################################################################
-check_downloader() {
-    if [ -f "${BASE_DIR}/downloader.ch" ]; then
-        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader.ch")
-        PACKAGE_EXTENSION=$(cat "${CACHE_DIR}/extension.ch")
-    else
-        if command -v apk >/dev/null 2>&1; then
-            PACKAGE_MANAGER="apk"
-            PACKAGE_EXTENSION="apk"
-        elif command -v opkg >/dev/null 2>&1; then
-            PACKAGE_MANAGER="opkg"
-            PACKAGE_EXTENSION="ipk"
-        else 
-            PACKAGE_MANAGER="opkg"  # デフォルトをセット
-            PACKAGE_EXTENSION="ipk" 
-        fi
-        echo "$PACKAGE_MANAGER" > "${CACHE_DIR}/downloader.ch"
-        echo "$PACKAGE_EXTENSION" > "${CACHE_DIR}/extension.ch"
-    fi
-    echo -e "$(color green "Package Manager: $PACKAGE_MANAGER - supported (stable)")"
-    echo -e "$(color green "Package Extension: $PACKAGE_EXTENSION - supported (stable)")"
-}
-
-#########################################################################
 # Last Update: 2025-02-18 18:00:00 (JST) 🚀
 # "Efficiency in retrieval, clarity in communication."
 # get_message: システムメッセージを取得する関数
@@ -1549,15 +1443,11 @@ check_common() {
             download "common-country.sh" "hidden"
             download "common-package.sh" "hidden"
             download "common-feed-package.sh" "hidden"
-	    download "dynamic-system-info.sh" "hidden"
+	    download "dynamic-system-info.sh" "hidden" "read"
             download "messages.db" "hidden"
             download "country.db" "hidden"
             download "local-package.db" "hidden"
             download "custom-package.db" "hidden"
-            check_openwrt
-            check_architecture
-            check_downloader
-            print_banner
             select_country "$lang_code"
             download "system-config.sh" "hidden" "chmod" "read"
             #packages
@@ -1566,15 +1456,11 @@ check_common() {
             download "common-country.sh"
             download "common-package.sh"
             download "common-feed-package.sh"
-	    download "dynamic-system-info.sh"
+	    download "dynamic-system-info.sh" "read"
             download "messages.db"
             download "country.db"
             download "local-package.db"
             download "custom-package.db"
-            check_openwrt
-            check_architecture
-            check_downloader
-            print_banner
             select_country "$lang_code"
             download "system-config.sh" "chmod" "read"
             #packages
@@ -1583,15 +1469,11 @@ check_common() {
             download "common-country.sh"
             download "common-package.sh"
             download "common-feed-package.sh"
-	    download "dynamic-system-info.sh"
+	    download "dynamic-system-info.sh" "read"
             download "messages.db"
             download "country.db"
             download "local-package.db"
             download "custom-package.db"
-            check_openwrt
-            check_architecture
-            check_downloader
-            print_banner
             select_country "$lang_code"
             download "system-config.sh" "chmod" "read"
             #packages
@@ -1620,6 +1502,7 @@ check_common() {
 
 # メイン処理
 main() {
+    print_banner
     initialization
     check_option "$@"
 }
