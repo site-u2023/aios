@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-02-16"
+SCRIPT_VERSION="2025.03.10-03-00"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -741,7 +741,36 @@ check_api_rate_limit() {
     return 0
 }
 
-# GitHubコミットからバージョン情報を取得（ANSIエスケープコード除去対応版）
+# バージョン文字列をクリーンアップする関数（完全版）
+clean_version_string() {
+    local version_str="$1"
+    
+    # 1. 改行と復帰を削除
+    local cleaned=$(echo "$version_str" | tr -d '\n\r')
+    
+    # 2. 角括弧を削除
+    cleaned=$(echo "$cleaned" | sed 's/\[//g' | sed 's/\]//g')
+    
+    # 3. ANSIエスケープコードを削除（複数パターン対応）
+    # - フルパターン: \x1b[1;37m
+    # - 部分パターン: 1;37m
+    cleaned=$(echo "$cleaned" | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/[0-9]\+;[0-9]\+m//g')
+    
+    # 4. 不必要な重複を削除（日付の重複など）
+    cleaned=$(echo "$cleaned" | sed -e 's/\(20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)\1*/\1/g' -e 's/\(20[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]\)\1*/\1/g')
+    
+    # 5. バージョンの一般的なフォーマットだけを抽出（日付-ハッシュ値）
+    local version_pattern=$(echo "$cleaned" | grep -o '20[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]-[0-9a-zA-Z]\+')
+    
+    # パターンが見つかった場合はそれを使用、見つからない場合はクリーン化した文字列を返す
+    if [ -n "$version_pattern" ]; then
+        echo "$version_pattern"
+    else
+        echo "$cleaned"
+    fi
+}
+
+# GitHubコミットからバージョン情報を取得（完全版）
 get_commit_version() {
     local file_path="$1"
     
@@ -773,9 +802,10 @@ get_commit_version() {
         if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
             # YYYY.MM.DD-SHA 形式に変換
             local formatted_date=$(echo "$commit_date" | sed 's/T.*Z//g;s/-/./g')
-            debug_log "DEBUG" "Successfully extracted commit info: ${formatted_date}-${commit_sha}"
-            # ANSIエスケープコードを削除して返す
-            echo "${formatted_date}-${commit_sha} ${auth_method}" | sed 's/\x1b\[[0-9;]*m//g'
+            local clean_version="${formatted_date}-${commit_sha}"
+            
+            debug_log "DEBUG" "Successfully extracted commit info: $clean_version"
+            echo "$clean_version $auth_method"
             return 0
         fi
         debug_log "DEBUG" "Failed to extract commit info from response"
@@ -783,19 +813,19 @@ get_commit_version() {
         debug_log "DEBUG" "No API response received for: $file_path"
     fi
     
-    # API取得失敗時は現在時刻を使用（ANSIエスケープコード除去）
-    echo "$(date +%Y.%m.%d)-unknown ${auth_method}" | sed 's/\x1b\[[0-9;]*m//g'
+    # API取得失敗時は現在時刻を使用
+    echo "$(date +%Y.%m.%d)-unknown ${auth_method}"
     return 1
 }
 
-# バージョン情報を安全に更新する関数（ANSIコード除去対応版）
+# バージョン情報を安全に更新する関数（完全版）
 update_file_version() {
     local file_name="$1"
     local version="$2"
     local script_file="$3"
     
-    # 余分な改行や角括弧、ANSIエスケープコードを除去
-    version=$(echo "$version" | tr -d '\n\r' | sed 's/\[//g' | sed 's/\]//g' | sed 's/\x1b\[[0-9;]*m//g')
+    # バージョン文字列をクリーンアップ
+    version=$(clean_version_string "$version")
     
     if [ ! -f "$script_file" ]; then
         printf "%s=%s\n" "${file_name}" "${version}" > "$script_file"
@@ -957,19 +987,17 @@ download() {
         fi
         
 	# バージョン情報の更新
+	local clean_version=$(clean_version_string "$remote_version")
+
 	if [ ! -f "$script_file" ]; then
-    	    # 余分な改行や角括弧、ANSIエスケープコードを除去
-    	    clean_version=$(echo "$remote_version" | tr -d '\n\r' | sed 's/\[//g' | sed 's/\]//g' | sed 's/\x1b\[[0-9;]*m//g')
     	    printf "%s=%s\n" "${file_name}" "${clean_version}" > "$script_file"
 	else
     	    if grep -q "^${file_name}=" "$script_file"; then
         	# エスケープ処理を改良
         	escaped_file=$(echo "$file_name" | sed 's/[\/&]/\\&/g')
-        	clean_version=$(echo "$remote_version" | tr -d '\n\r' | sed 's/\[//g' | sed 's/\]//g' | sed 's/\x1b\[[0-9;]*m//g')
         	escaped_version=$(echo "$clean_version" | sed 's/[\/&]/\\&/g')
         	sed -i "s/^${escaped_file}=.*/${escaped_file}=${escaped_version}/" "$script_file"
-            else
-        	clean_version=$(echo "$remote_version" | tr -d '\n\r' | sed 's/\[//g' | sed 's/\]//g' | sed 's/\x1b\[[0-9;]*m//g')
+    	    else
         	printf "%s=%s\n" "${file_name}" "${clean_version}" >> "$script_file"
 	    fi
     	fi
