@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-03-00"
+SCRIPT_VERSION="2025.03.10-03-02"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -114,6 +114,7 @@ handle_error() {
 # 3. `DEBUG_MODE` の設定に応じて `DEBUG`, `INFO`, `WARN`, `ERROR` を管理する。
 # 4. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
 #########################################################################
+# デバッグログ関数の修正版（バージョン情報をクリーンに表示）
 debug_log() {
     local level="$1"
     local message="$2"
@@ -136,6 +137,20 @@ debug_log() {
             level="DEBUG"
             ;;
     esac
+
+    # バージョン情報のクリーニング（メッセージにバージョン情報が含まれる場合）
+    if echo "$message" | grep -q "version\|Version"; then
+        # バージョン情報部分を抽出してクリーニング
+        local cleaned_message="$message"
+        # aios - [2025-03-10... のようなパターンを検出
+        if echo "$message" | grep -q " - "; then
+            local prefix=$(echo "$message" | sed 's/ - .*//')
+            local version_part=$(echo "$message" | sed 's/.* - //')
+            local cleaned_version=$(clean_version_string "$version_part")
+            cleaned_message="$prefix - $cleaned_version"
+        fi
+        message="$cleaned_message"
+    fi
 
     # 変数を置換
     message=$(echo "$message" | sed -e "s/{file}/$file/g" -e "s/{version}/$version/g")
@@ -162,10 +177,10 @@ debug_log() {
             "DEBUG") echo -e "$(color white "$log_message")" ;;
         esac
 
-	# ログファイルに記録
-	if [ "$AIOS_INITIALIZED" = "true" ]; then
-    	    echo "$log_message" >> "$LOG_DIR/debug.log"
-	fi
+        # ログファイルに記録
+        if [ "$AIOS_INITIALIZED" = "true" ]; then
+            echo "$log_message" >> "$LOG_DIR/debug.log"
+        fi
     fi
 }
 
@@ -741,7 +756,7 @@ check_api_rate_limit() {
     return 0
 }
 
-# バージョン文字列をクリーンアップする関数（完全版）
+# バージョン文字列をクリーンアップする関数
 clean_version_string() {
     local version_str="$1"
     
@@ -752,15 +767,13 @@ clean_version_string() {
     cleaned=$(echo "$cleaned" | sed 's/\[//g' | sed 's/\]//g')
     
     # 3. ANSIエスケープコードを削除（複数パターン対応）
-    # - フルパターン: \x1b[1;37m
-    # - 部分パターン: 1;37m
     cleaned=$(echo "$cleaned" | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/[0-9]\+;[0-9]\+m//g')
     
     # 4. 不必要な重複を削除（日付の重複など）
     cleaned=$(echo "$cleaned" | sed -e 's/\(20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)\1*/\1/g' -e 's/\(20[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]\)\1*/\1/g')
     
     # 5. バージョンの一般的なフォーマットだけを抽出（日付-ハッシュ値）
-    local version_pattern=$(echo "$cleaned" | grep -o '20[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]-[0-9a-zA-Z]\+')
+    local version_pattern=$(echo "$cleaned" | grep -o '20[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]-[0-9a-zA-Z]\+' | head -1)
     
     # パターンが見つかった場合はそれを使用、見つからない場合はクリーン化した文字列を返す
     if [ -n "$version_pattern" ]; then
@@ -943,7 +956,10 @@ download() {
         local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
     fi
     [ -z "$local_version" ] && local_version="$dummy_version"
-    
+
+    local clean_remote_version=$(clean_version_string "$remote_version")
+    local clean_local_version=$(clean_version_string "$local_version")
+
     # 認証メッセージの設定
     local auth_message=""
     case "$auth_method" in
@@ -963,8 +979,8 @@ download() {
         [ $? -eq 0 ] && update_required=true
     fi
     
-    debug_log "DEBUG" "Remote version: $file_name - $(printf "%s" "$remote_version")"
-    debug_log "DEBUG" "Local version: $file_name - $(printf "%s" "$local_version")"
+    debug_log "DEBUG" "Remote version: $file_name - $clean_remote_version"
+    debug_log "DEBUG" "Local version: $file_name - $clean_local_version"
     debug_log "DEBUG" "Update required: $file_name -$(printf "%s" "$update_required")"
     
     if [ "$update_required" = "true" ]; then
@@ -986,21 +1002,21 @@ download() {
             debug_log "DEBUG" "chmod +x applied to $file_name"
         fi
         
-	# バージョン情報の更新
-	local clean_version=$(clean_version_string "$remote_version")
-
-	if [ ! -f "$script_file" ]; then
-    	    printf "%s=%s\n" "${file_name}" "${clean_version}" > "$script_file"
-	else
-    	    if grep -q "^${file_name}=" "$script_file"; then
-        	# エスケープ処理を改良
-        	escaped_file=$(echo "$file_name" | sed 's/[\/&]/\\&/g')
-        	escaped_version=$(echo "$clean_version" | sed 's/[\/&]/\\&/g')
-        	sed -i "s/^${escaped_file}=.*/${escaped_file}=${escaped_version}/" "$script_file"
-    	    else
-        	printf "%s=%s\n" "${file_name}" "${clean_version}" >> "$script_file"
-	    fi
-    	fi
+    	# バージョン情報の更新
+    	if [ ! -f "$script_file" ]; then
+            printf "%s=%s\n" "${file_name}" "${clean_remote_version}" > "$script_file"
+    	else
+            if grep -q "^${file_name}=" "$script_file"; then
+                # エスケープ処理を改良
+                escaped_file=$(echo "$file_name" | sed 's/[\/&]/\\&/g')
+                escaped_version=$(echo "$clean_remote_version" | sed 's/[\/&]/\\&/g')
+                sed -i "s/^${escaped_file}=.*/${escaped_file}=${escaped_version}/" "$script_file"
+            else
+                printf "%s=%s\n" "${file_name}" "${clean_remote_version}" >> "$script_file"
+            fi
+        fi
+    
+        # ステータスメッセージの修正
         status_message="Download completed"
     fi
     
@@ -1011,8 +1027,8 @@ download() {
         action_message="Loaded"
     fi
     
-    # 最終メッセージ生成
-    local message="${file_name}: ${status_message} - Version: ${remote_version} ${auth_message}"
+    # 出力メッセージの修正
+    local message="${file_name}: ${status_message} - Version: ${clean_remote_version} ${auth_message}"
     if [ -n "$action_message" ]; then
         message="${message} (${action_message})"
     fi
