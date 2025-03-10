@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-01-03"
+SCRIPT_VERSION="2025.03.10-01-04"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -800,6 +800,7 @@ download() {
     local dummy_remote_version="No remote version control."
     local dummy_local_version="No local version control."
     local read_message=""
+    local download_message=""  # 初期化を追加
     local skip_api=false
 
     # 2. 引数処理
@@ -820,7 +821,6 @@ download() {
     # ===============================
     local install_path="${BASE_DIR}/$file_name"
     local remote_url="${BASE_URL}/$file_name"
-    #local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/${file_name}"
     local api_url="repos/${repo_owner}/${repo_name}/contents/${file_name}"
 
     # 4. 入力検証
@@ -842,15 +842,13 @@ download() {
     local local_version=""
     local response=""
     local decoded_content=""
-    local download_message=""
-    local read_message=""
-
+    
     # GitHub API応答処理
     if [ "$skip_api" = "false" ]; then
         # API制限チェック
         if [ "$DEBUG_MODE" = "true" ]; then
             check_api_rate_limit
-	fi
+        fi
         
         debug_log "DEBUG" "Processing API response for: $file_name"
         
@@ -904,6 +902,8 @@ download() {
     # 7. メインロジック - バージョン比較と更新処理
     # ===============================
     if [ "$skip_api" = "true" ] || [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
+        download_message="Download completed"  # デフォルトメッセージを設定
+        
         # ファイルのダウンロード処理
         if ! $BASE_WGET "$install_path" "$remote_url"; then
             debug_log "ERROR" "Download failed: $file_name is empty"
@@ -926,15 +926,12 @@ download() {
         # バージョン情報の更新 (APIスキップ時は更新しない)
         if [ "$skip_api" = "false" ]; then
             if [ ! -f "$script_file" ]; then
-		download_message="download completed"
                 echo "${file_name}=${remote_version}" > "$script_file"
                 debug_log "DEBUG" "Created $script_file with ${file_name}=${remote_version}"
             else
-		download_message="No update needed"
                 if grep -q "^${file_name}=" "$script_file"; then
                     sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_file"
                 else
-		    download_message="download completed"
                     echo "${file_name}=${remote_version}" >> "$script_file"
                 fi
                 debug_log "DEBUG" "Updated $script_file with ${file_name}=${remote_version}"
@@ -951,7 +948,7 @@ download() {
         if [ "$file_name" = "$BIN_FILE" ] && [ "$MODE" = "update" ]; then
             chmod +x "$install_path"
             mv "$install_path" "$BIN_PATH"
-	    download_message="Update completed"
+            download_message="Update completed"
             read_message="Loaded" 
             # 更新後フラグを設定
             touch "${CACHE_DIR}/post_update_flag"
@@ -967,12 +964,22 @@ download() {
     # 8. 既存ファイルの処理（更新不要の場合）
     # ===============================
     elif [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
-	read_message="Loaded"
+        read_message="Loaded"
+        # 既存の処理を読み込み
         . "$install_path"
-    elif [ "$hidden_mode" != "true" ]; then
-        debug_log "DEBUG" "Quiet mode $download_message: $file_name - Version: $local_version $read_message""
+        # メッセージは「読み込み専用」に特化
+        if [ "$hidden_mode" != "true" ]; then
+            debug_log "DEBUG" "Quiet mode Loaded: $file_name - Version: $local_version"
+        else
+            echo "$(color green "Loaded: $file_name - Version: $local_version")"
+        fi
     else
-        echo "$(color green "$download_message: $file_name - Version: $local_version $read_message"")"
+        # 更新不要の場合のメッセージ
+        if [ "$hidden_mode" != "true" ]; then
+            debug_log "DEBUG" "Quiet mode No update needed: $file_name - Version: $local_version"
+        else
+            echo "$(color green "No update needed: $file_name - Version: $local_version")"
+        fi
     fi
 
     return 0
