@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-02-00"
+SCRIPT_VERSION="2025.03.10-04-03"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -114,6 +114,7 @@ handle_error() {
 # 3. `DEBUG_MODE` の設定に応じて `DEBUG`, `INFO`, `WARN`, `ERROR` を管理する。
 # 4. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
 #########################################################################
+# デバッグログ関数の修正版（バージョン情報をクリーンに表示）
 debug_log() {
     local level="$1"
     local message="$2"
@@ -136,6 +137,20 @@ debug_log() {
             level="DEBUG"
             ;;
     esac
+
+    # バージョン情報のクリーニング（メッセージにバージョン情報が含まれる場合）
+    if echo "$message" | grep -q "version\|Version"; then
+        # バージョン情報部分を抽出してクリーニング
+        local cleaned_message="$message"
+        # aios - [2025-03-10... のようなパターンを検出
+        if echo "$message" | grep -q " - "; then
+            local prefix=$(echo "$message" | sed 's/ - .*//')
+            local version_part=$(echo "$message" | sed 's/.* - //')
+            local cleaned_version=$(clean_version_string "$version_part")
+            cleaned_message="$prefix - $cleaned_version"
+        fi
+        message="$cleaned_message"
+    fi
 
     # 変数を置換
     message=$(echo "$message" | sed -e "s/{file}/$file/g" -e "s/{version}/$version/g")
@@ -162,10 +177,10 @@ debug_log() {
             "DEBUG") echo -e "$(color white "$log_message")" ;;
         esac
 
-	# ログファイルに記録
-	if [ "$AIOS_INITIALIZED" = "true" ]; then
-    	    echo "$log_message" >> "$LOG_DIR/debug.log"
-	fi
+        # ログファイルに記録
+        if [ "$AIOS_INITIALIZED" = "true" ]; then
+            echo "$log_message" >> "$LOG_DIR/debug.log"
+        fi
     fi
 }
 
@@ -494,24 +509,78 @@ get_message() {
 
 # 🔵　トークン系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
-# トークン取得関数
+# GitHub API呼び出し（デバッグ強化版）
+github_api_request() {
+    local endpoint="$1"
+    local token=$(get_github_token)
+    local response=""
+    
+    if [ -n "$token" ]; then
+        debug_log "DEBUG" "Attempting authenticated request with token (${#token} chars)"
+        response=$(wget -q --header="Authorization: token $token" \
+            --header="Accept: application/vnd.github.v3+json" \
+            -O- "https://api.github.com/$endpoint" 2>/dev/null)
+            
+        # レスポンス検証 - リミットチェック
+        if echo "$response" | grep -q '"message":"API rate limit exceeded'; then
+            debug_log "WARN" "GitHub API rate limit exceeded"
+            return 1
+        fi
+        
+        # 認証エラーチェック
+        if echo "$response" | grep -q '"message":"Bad credentials"'; then
+            debug_log "ERROR" "GitHub API authentication failed: Bad credentials"
+            return 2
+        fi
+        
+        # その他エラーチェック
+        if echo "$response" | grep -q '"message":"'; then
+            local error_msg=$(echo "$response" | grep -o '"message":"[^"]*"' | cut -d':' -f2- | tr -d '"')
+            debug_log "ERROR" "GitHub API error: $error_msg"
+            return 3
+        fi
+        
+        # 成功
+        echo "$response"
+        return 0
+    else
+        debug_log "DEBUG" "No token found, using unauthenticated request"
+        wget -q -O- "https://api.github.com/$endpoint" 2>/dev/null
+        return $?
+    fi
+}
+
+# 改善されたトークン取得関数
 get_github_token() {
-    # トークンファイルが存在すれば読み込み
     if [ -f "$GITHUB_TOKEN_FILE" ] && [ -r "$GITHUB_TOKEN_FILE" ]; then
-        token=$(cat "$GITHUB_TOKEN_FILE" | tr -d '\n\r')
-        if [ -n "$token" ]; then
+        # 1. 生のトークンを取得
+        local raw_token=$(cat "$GITHUB_TOKEN_FILE")
+        
+        # 2. 複数の処理方法を試す
+        
+        # 方法1: 改行と空白を削除
+        local token=$(echo "$raw_token" | tr -d '\n\r\t ')
+        
+        # 方法2: ghp_で始まる40文字の英数字パターンを抽出
+        if [ -z "$token" ] || [ ${#token} -ne 40 ]; then
+            token=$(echo "$raw_token" | grep -o 'ghp_[a-zA-Z0-9]\{36\}')
+        fi
+        
+        # 最終チェック
+        if [ -n "$token" ] && [ ${#token} -eq 40 ]; then
             echo "$token"
             return 0
+        else
+            debug_log "WARN" "Invalid token format in $GITHUB_TOKEN_FILE"
         fi
     fi
     
-    # 環境変数からも取得可能
+    # 環境変数からの取得
     if [ -n "$GITHUB_TOKEN" ]; then
         echo "$GITHUB_TOKEN"
         return 0
     fi
     
-    # トークンなし
     return 1
 }
 
@@ -643,72 +712,6 @@ setup_github_token() {
 # 7. wget のエラーハンドリングを行い、失敗時の詳細を debug_log() に記録する。
 # 8. 影響範囲: common.sh の download() のみ（他の関数には影響なし）。
 #########################################################################
-# スクリプトのバージョンを正規化する関数
-remote_normalize_version() {
-    local input="$1"
-    input=$(echo "$input" | grep -Eo 'SCRIPT_VERSION=["'"'"'][^"'"'"']+["'"'"']' | grep -Eo '([0-9]{4}[-.][0-9]{2}[-.][0-9]{2}[-.0-9]*)')
-    input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
-    input=$(echo "$input" | tr -d '\n' | sed 's/ *$//')
-    input=$(echo "$input" | sed -E 's/(^|[._-])0+([0-9])/\1\2/g')
-    input=$(echo "$input" | sed 's/[._-]\{1,1\}/./g')
-    echo "$input"
-}
-
-# local_normalize_version関数の定義
-local_normalize_version() {
-    local script_file="$1"
-    local file_name="$2"
-    local input
-    input=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
-    input=$(echo "$input" | grep -Eo '([0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}\.[0-9.]+)')
-    input=$(echo "$input" | sed 's/[^0-9A-Za-z._-]//g')
-    input=$(echo "$input" | tr -d '\n' | sed 's/ *$//')
-    input=$(echo "$input" | sed -E 's/(^|[._-])0+([0-9])/\1\2/g')
-    input=$(echo "$input" | sed 's/[._-]\{1,1\}/./g')
-    echo "$input"
-}
-
-# GitHub API呼び出し前にレート制限を確認する関数
-check_api_rate_limit() {
-    if [ "$DEBUG_MODE" = "true" ]; then
-        # タイムスタンプ取得と残り時間計算（動作確認済み）
-        api_info=$(wget -qO- "https://api.github.com/rate_limit" 2>/dev/null)
-        if [ -n "$api_info" ]; then
-            # 現在のAPI利用状況を抽出
-            api_remaining=$(echo "$api_info" | grep -o '"core":{"limit":[0-9]*,"remaining":[0-9]*' | grep -o 'remaining":[0-9]*' | cut -d':' -f2)
-            api_limit=$(echo "$api_info" | grep -o '"core":{"limit":[0-9]*,"remaining":[0-9]*' | grep -o 'limit":[0-9]*' | cut -d':' -f2)
-            api_reset=$(echo "$api_info" | grep -o '"reset":[0-9]*' | head -1 | cut -d':' -f2)
-            api_now=$(date +%s)
-            
-            # 残り時間計算
-            api_seconds=0
-            if [ -n "$api_reset" ] && [ -n "$api_now" ]; then
-                api_seconds=$(expr "$api_reset" - "$api_now")
-                if [ "$api_seconds" -lt 0 ]; then
-                    api_seconds=0
-                fi
-            fi
-            
-            # 残り時間を分:秒形式に変換
-            api_minutes=$(expr "$api_seconds" / 60)
-            api_seconds=$(expr "$api_seconds" % 60)
-            
-            # デバッグログ出力
-            debug_log "DEBUG" "API Limits: Core ${api_remaining:-?}/${api_limit:-?}, Reset in ${api_minutes}m ${api_seconds}s"
-            
-            # API制限が少なくなったら警告
-            if [ -n "$api_remaining" ] && [ -n "$api_limit" ] && [ "$api_limit" -gt 0 ]; then
-                api_threshold=$(expr "$api_limit" / 10)
-                if [ "$api_remaining" -lt "$api_threshold" ]; then
-                    debug_log "WARN" "GitHub API rate limit running low (${api_remaining}/${api_limit})"
-                    return 1
-                fi
-            fi
-        fi
-    fi
-    return 0
-}
-
 decode_base64() {
     input="$1"
     output=""
@@ -785,241 +788,438 @@ decode_base64() {
     fi
 }
 
+# 認証状態を正確に判定する関数
+check_token_status() {
+    echo "========== GitHub Token Status =========="
+    
+    # トークンファイルの存在確認
+    if [ -f "$GITHUB_TOKEN_FILE" ]; then
+        echo "Token file: $GITHUB_TOKEN_FILE (EXISTS)"
+        ls -l "$GITHUB_TOKEN_FILE"
+        
+        # トークン取得
+        local token=$(get_github_token)
+        if [ -n "$token" ]; then
+            local token_preview=${token:0:5}
+            echo "Token starts with: ${token_preview}..."
+            
+            # 一時ファイルにレスポンス保存
+            local temp_file="/tmp/aios_token_test.tmp"
+            wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null
+            
+            if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+                local core_limit=""
+                local core_remaining=""
+                
+                # jqが利用可能ならjqを使う
+                if check_jq_available; then
+                    echo "Parser: jq available (preferred method)"
+                    core_limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
+                    core_remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
+                else
+                    echo "Parser: fallback method (grep/sed)"
+                    core_limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+')
+                    core_remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+')
+                fi
+                
+                echo "Core rate limit: $core_limit"
+                echo "Core remaining: $core_remaining"
+                
+                # 認証状態の判断
+                if [ "$core_limit" = "5000" ]; then
+                    echo "Auth status: ✅ AUTHENTICATED (Higher limits active)"
+                else
+                    echo "Auth status: ❌ UNAUTHENTICATED (Standard limits)"
+                fi
+                
+                # 一時ファイル削除
+                rm -f "$temp_file"
+            else
+                echo "Could not retrieve rate limit information"
+            fi
+        else
+            echo "Could not extract valid token from file"
+        fi
+    else
+        echo "Token file: $GITHUB_TOKEN_FILE (NOT FOUND)"
+    fi
+    
+    echo "========================================"
+}
+
+check_jq_available() {
+    if command -v jq >/dev/null 2>&1; then
+        return 0 # jqが利用可能
+    else
+        return 1 # jqが利用できない
+    fi
+}
+
+# APIレート制限確認関数
+check_api_rate_limit() {
+    if [ "$DEBUG_MODE" = "true" ]; then
+        local token="$(get_github_token)"
+        local temp_file="/tmp/aios_api_limit.tmp"
+        
+        # APIレスポンスを一時ファイルに保存
+        if [ -n "$token" ]; then
+            wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null
+        else
+            wget -q -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
+        fi
+        
+        if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+            local core_limit=""
+            local core_remaining=""
+            local core_reset=""
+            
+            # jqが利用可能ならjqを使う
+            if check_jq_available; then
+                debug_log "DEBUG" "Using jq for JSON parsing"
+                core_limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
+                core_remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
+                core_reset=$(jq -r '.resources.core.reset' "$temp_file" 2>/dev/null)
+            else
+                # jqが利用できない場合のフォールバック
+                debug_log "DEBUG" "jq not available, using fallback parsing method"
+                core_limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+')
+                core_remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+')
+                core_reset=$(grep -A3 '"core"' "$temp_file" | grep '"reset"' | head -1 | grep -o '[0-9]\+')
+            fi
+            
+            # 時間計算
+            if [ -n "$core_reset" ]; then
+                local now_time=$(date +%s)
+                local diff_sec=$(($core_reset - $now_time))
+                [ "$diff_sec" -lt 0 ] && diff_sec=0
+                local mins=$(($diff_sec / 60))
+                local secs=$(($diff_sec % 60))
+                
+                # 認証状態判定
+                local auth_text="anonymous"
+                [ "$core_limit" = "5000" ] && auth_text="authenticated"
+                
+                debug_log "DEBUG" "API Limits: Core $core_remaining/$core_limit ($auth_text), Reset in ${mins}m ${secs}s"
+            fi
+            
+            # 一時ファイル削除
+            rm -f "$temp_file"
+        fi
+    fi
+    return 0
+}
+
+# バージョン文字列をクリーンアップする関数
+clean_version_string() {
+    local version_str="$1"
+    
+    # 1. 改行と復帰を削除
+    local cleaned=$(echo "$version_str" | tr -d '\n\r')
+    
+    # 2. 角括弧を削除
+    cleaned=$(echo "$cleaned" | sed 's/\[//g' | sed 's/\]//g')
+    
+    # 3. ANSIエスケープコードを削除（複数パターン対応）
+    cleaned=$(echo "$cleaned" | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/[0-9]\+;[0-9]\+m//g')
+    
+    # 4. 不必要な重複を削除（日付の重複など）
+    cleaned=$(echo "$cleaned" | sed -e 's/\(20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)\1*/\1/g' -e 's/\(20[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]\)\1*/\1/g')
+    
+    # 5. バージョンの一般的なフォーマットだけを抽出（日付-ハッシュ値）
+    local version_pattern=$(echo "$cleaned" | grep -o '20[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]-[0-9a-zA-Z]\+' | head -1)
+    
+    # パターンが見つかった場合はそれを使用、見つからない場合はクリーン化した文字列を返す
+    if [ -n "$version_pattern" ]; then
+        echo "$version_pattern"
+    else
+        echo "$cleaned"
+    fi
+}
+
+# GitHubコミットからバージョン情報を取得（完全版）
+get_commit_version() {
+    local file_path="$1"
+    
+    # リポジトリ情報
+    local repo_owner="site-u2023"
+    local repo_name="aios"
+    local api_url="repos/${repo_owner}/${repo_name}/commits?path=${file_path}&per_page=1"
+    local temp_file="/tmp/aios_commit_info.tmp"
+    local auth_method="direct"
+    
+    # トークン取得
+    local token="$(get_github_token)"
+    
+    if [ -n "$token" ]; then
+        debug_log "DEBUG" "Using token authentication for API request"
+        wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/$api_url" 2>/dev/null
+        
+        # レスポンス検証
+        if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+            # jqが利用可能ならjqで検証
+            if check_jq_available; then
+                if jq -e '.[0].sha' "$temp_file" >/dev/null 2>&1; then
+                    auth_method="token"
+                    debug_log "DEBUG" "Token authentication successful (jq verified)"
+                fi
+            else
+                # フォールバック：単純にshaの存在確認
+                if grep -q '"sha"' "$temp_file"; then
+                    auth_method="token"
+                    debug_log "DEBUG" "Token authentication successful (grep verified)"
+                fi
+            fi
+        fi
+    else
+        debug_log "DEBUG" "No token available, using direct API request"
+        wget -q -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
+    fi
+    
+    # 情報抽出
+    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+        local commit_date=""
+        local commit_sha=""
+        
+        # jqが利用可能ならjqでパース
+        if check_jq_available; then
+            commit_date=$(jq -r '.[0].commit.committer.date' "$temp_file" 2>/dev/null | grep -o "[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}")
+            commit_sha=$(jq -r '.[0].sha' "$temp_file" 2>/dev/null | cut -c 1-7)
+        else
+            # フォールバック：grepとsedでパース
+            commit_date=$(grep -o '"date"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | head -1 | grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}')
+            commit_sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | head -1 | grep -o '[a-f0-9]\{7,40\}' | cut -c 1-7)
+        fi
+        
+        if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
+            # YYYY.MM.DD-SHA 形式に変換
+            local formatted_date=$(echo "$commit_date" | sed 's/-/./g')
+            local clean_version="${formatted_date}-${commit_sha}"
+            
+            debug_log "DEBUG" "Successfully extracted commit info: $clean_version via $auth_method"
+            rm -f "$temp_file"
+            echo "$clean_version $auth_method"
+            return 0
+        fi
+        debug_log "DEBUG" "Failed to extract commit info from response"
+    fi
+    
+    # 一時ファイル削除
+    rm -f "$temp_file" 2>/dev/null
+    
+    # API取得失敗時は現在時刻を使用
+    echo "$(date +%Y.%m.%d)-unknown $auth_method"
+    return 1
+}
+
+# バージョン情報を安全に更新する関数（完全版）
+update_file_version() {
+    local file_name="$1"
+    local version="$2"
+    local script_file="$3"
+    
+    # バージョン文字列をクリーンアップ
+    version=$(clean_version_string "$version")
+    
+    if [ ! -f "$script_file" ]; then
+        printf "%s=%s\n" "${file_name}" "${version}" > "$script_file"
+        return 0
+    fi
+    
+    # 一時ファイルを使用した安全な書き換え
+    local tmp_file="${script_file}.tmp"
+    > "$tmp_file"  # 一時ファイルを初期化
+    
+    if grep -q "^${file_name}=" "$script_file"; then
+        # 該当行を置換
+        while IFS= read -r line; do
+            if echo "$line" | grep -q "^${file_name}="; then
+                echo "${file_name}=${version}" >> "$tmp_file"
+            else
+                echo "$line" >> "$tmp_file"
+            fi
+        done < "$script_file"
+    else
+        # ファイルをそのままコピーして新しいエントリを追加
+        cat "$script_file" > "$tmp_file"
+        echo "${file_name}=${version}" >> "$tmp_file"
+    fi
+    
+    # 一時ファイルを元のファイルに移動
+    mv "$tmp_file" "$script_file"
+    
+    return 0
+}
+
+# バージョン比較関数
+version_is_newer() {
+    local current="$1"
+    local reference="$2"
+    
+    # どちらかが不明の場合は更新必要
+    if echo "$current $reference" | grep -q "No version\|unknown"; then
+        return 0
+    fi
+    
+    # 日付部分を抽出（YYYY.MM.DD形式）- より堅牢な方法
+    local current_date=$(echo "$current" | grep -o "[0-9][0-9][0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]" | head -1)
+    local reference_date=$(echo "$reference" | grep -o "[0-9][0-9][0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]" | head -1)
+    
+    # 日付が抽出できなかった場合は更新が必要
+    if [ -z "$current_date" ] || [ -z "$reference_date" ]; then
+        return 0
+    fi
+    
+    # 日付を数値に変換（区切り文字を削除）
+    local current_num=$(echo "$current_date" | tr -d '.')
+    local reference_num=$(echo "$reference_date" | tr -d '.')
+    
+    # 数値比較（日付形式）
+    if [ "$current_num" -gt "$reference_num" ]; then
+        return 0  # 現在のバージョンが新しい
+    elif [ "$current_num" -lt "$reference_num" ]; then
+        return 1  # リファレンスバージョンが新しい
+    fi
+    
+    # 日付が同じ場合はSHA部分を比較
+    local current_sha=$(echo "$current" | grep -o "\-[a-z0-9]*" | sed 's/^-//' | head -1)
+    local reference_sha=$(echo "$reference" | grep -o "\-[a-z0-9]*" | sed 's/^-//' | head -1)
+    
+    if [ -n "$current_sha" ] && [ -n "$reference_sha" ] && [ "$current_sha" != "$reference_sha" ]; then
+        return 0  # 異なるコミット
+    fi
+    
+    return 1  # 同一バージョン
+}
+
+# ダウンロード関数
 download() {
-    # 1. 初期設定
-    # ===============================
-    local file_name=""
-    local install_path=""
-    local remote_url=""
-    local api_url=""
+    # ファイル名を最初の引数として処理、残りはオプション
+    local file_name="$1"
+    shift
+    
+    # 設定変数
     local hidden_mode="false"
     local quiet_mode="${QUIET_MODE:-false}"
     local chmod_mode="false"
     local read_mode="false"
     local script_file="${CACHE_DIR}/script.ch"
-    local repo_owner="site-u2023"
-    local repo_name="aios"
-    local dummy_remote_version="No remote version control."
-    local dummy_local_version="No local version control."
-    local skip_api=false
+    local dummy_version="No version control"
     
-    # メッセージ関連の変数
-    local status_message=""
-    local action_message=""
-    local auth_message=""
-    local version_to_display=""
-    local is_updated=false
-
-    # 2. 引数処理 (ファイル名を最初に、オプションを後に)
-    # ===============================
-    if [ $# -gt 0 ]; then
-        file_name="$1"
+    # オプション引数の処理
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            hidden) hidden_mode="true" ;;
+            quiet)  quiet_mode="true" ;;
+            debug)  DEBUG_MODE="true" ;;
+            chmod)  chmod_mode="true" ;;
+            read)   read_mode="true" ;;
+            *)      debug_log "WARN" "Unknown option: $1, ignoring" ;;
+        esac
         shift
-        
-        # 残りの引数を順不同でオプションとして処理
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                hidden) hidden_mode="true" ;;
-                quiet)  quiet_mode="true" ;;
-                debug)  DEBUG_MODE="true" ;;
-                chmod)  chmod_mode="true" ;;
-                read)   read_mode="true" ;;
-                *)      debug_log "WARN" "Unknown option: $1, ignoring" ;;
-            esac
-            shift
-        done
-    else
-        echo "Error: No file name provided" >&2
-        return 1
-    fi
-
-    # 3. パス・URLの設定
-    # ===============================
-    install_path="${BASE_DIR}/$file_name"
-    remote_url="${BASE_URL}/$file_name"
-    api_url="repos/${repo_owner}/${repo_name}/contents/${file_name}"
-
-    # 4. 特定ファイルのAPIスキップ設定
-    # ===============================
-    if [ "$file_name" = "country.db" ]; then
-        skip_api="true"
-        debug_log "DEBUG" "skip API for country.db - No version information"
-    fi
-
-    # 5. GitHubからメタデータ取得と処理
-    # ===============================
-    local api_response=""
-    local remote_version=""
+    done
+    
+    # パス設定
+    local install_path="${BASE_DIR}/$file_name"
+    local remote_url="${BASE_URL}/$file_name"
+    
+    # API制限チェック（デバッグモード時のみ）
+    [ "$DEBUG_MODE" = "true" ] && check_api_rate_limit
+    
+    # バージョン情報の取得
+    local remote_version_info=$(get_commit_version "$file_name")
+    local remote_version=$(printf "%s" "$remote_version_info" | cut -d' ' -f1)
+    local auth_method=$(printf "%s" "$remote_version_info" | cut -d' ' -f2)
     local local_version=""
-    local response=""
-    local decoded_content=""
-    local download_method="direct"
     
-    # GitHub API応答処理
-    if [ "$skip_api" = "false" ]; then
-        # API制限チェック
-        if [ "$DEBUG_MODE" = "true" ]; then
-            check_api_rate_limit
-        fi
-        
-        debug_log "DEBUG" "Processing API response for: $file_name"
-        
-        # トークンを取得して認証方式を決定
-        token=$(get_github_token)
-        
-        if [ -n "$token" ]; then
-            # トークン認証でAPI呼び出し
-            api_response=$(wget -qO- --header="Authorization: token $token" \
-                "https://api.github.com/$api_url" 2>/dev/null)
-            auth_message="via token auth"
-            download_method="token API"
-        else
-            # 通常認証でAPI呼び出し
-            api_response=$(wget -qO- "https://api.github.com/$api_url" 2>/dev/null)
-            auth_message="via standard API"
-            download_method="standard API"
-        fi
-        
-        # コンテンツ部分を抽出
-        response=$(echo "$api_response" | grep -o '"content": "[^"]*' | cut -d'"' -f4)
-    
-        # レスポンスの内容をデバッグ
-        if [ -n "$response" ]; then
-            debug_log "DEBUG" "API response contains content field: ${response:0:20}..."
-        else
-            debug_log "WARN" "API response missing content field - raw sample: ${api_response:0:100}..."
-            skip_api="true"  # APIが失敗した場合は直接ダウンロードに切り替え
-            download_method="direct download"
-            auth_message="via direct download (API failed)"
-        fi
-    
-        if [ "$skip_api" = "false" ]; then
-            # base64デコード
-            decoded_content=$(decode_base64 "$response")
-            decode_status=$?
-        
-            if [ $decode_status -eq 0 ] && [ -n "$decoded_content" ]; then
-                debug_log "DEBUG" "Successfully decoded content (first 50 chars): ${decoded_content:0:50}..."
-            
-                # バージョン情報の取得
-                remote_version=$(remote_normalize_version "$decoded_content")
-                if [ -z "$remote_version" ]; then
-                    debug_log "WARN" "Failed to extract version from decoded content"
-                    remote_version="$dummy_remote_version"
-                fi
-            else
-                debug_log "ERROR" "Failed to decode base64 content"
-                remote_version="$dummy_remote_version"
-                skip_api="true"  # デコード失敗の場合は直接ダウンロードに切り替え
-                download_method="direct download"
-                auth_message="via direct download (decode failed)"
-            fi
-        
-            debug_log "DEBUG" "Remote version: $file_name - $remote_version"
-        fi
-    else
-        debug_log "DEBUG" "Skipping API version check for: $file_name"
-        remote_version="$dummy_remote_version"
-        download_method="direct download"
-        auth_message="via direct download (API skipped)"
-    fi
-
-    # 6. ローカルバージョン情報の取得
-    # ===============================
+    # ローカルバージョンの取得
     if [ -f "$script_file" ]; then
-        local_version=$(local_normalize_version "$script_file" "$file_name")
+        local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
     fi
-    if [ -z "$local_version" ]; then
-        local_version="$dummy_local_version"
-    fi  
-    debug_log "DEBUG" "Local version: $file_name - $local_version"
+    [ -z "$local_version" ] && local_version="$dummy_version"
 
-    # 7. メインロジック - バージョン比較と更新処理
-    # ===============================
-    if [ "$skip_api" = "true" ] || [ -z "$local_version" ] || [ "$local_version" != "$remote_version" ]; then
-        # アップデートフラグ設定
-        is_updated=true
-        status_message="Download completed"
-        version_to_display="$remote_version"
-        
-        # ファイルのダウンロード処理
+    local clean_remote_version=$(clean_version_string "$remote_version")
+    local clean_local_version=$(clean_version_string "$local_version")
+
+    # 認証メッセージの設定
+    local auth_message=""
+    case "$auth_method" in
+        token)    auth_message="via token auth" ;;
+        standard) auth_message="via standard API" ;;
+        *)        auth_message="via direct download" ;;
+    esac
+    
+    # バージョン比較とダウンロード判断
+    local status_message="No update needed"
+    local update_required=false
+    
+    if [ "$local_version" = "$dummy_version" ]; then
+        update_required=true
+    else
+        version_is_newer "$remote_version" "$local_version"
+        [ $? -eq 0 ] && update_required=true
+    fi
+    
+    debug_log "DEBUG" "Remote version: $file_name - $clean_remote_version"
+    debug_log "DEBUG" "Local version: $file_name - $clean_local_version"
+    debug_log "DEBUG" "Update required: $file_name -$(printf "%s" "$update_required")"
+    
+    if [ "$update_required" = "true" ]; then
+        # ファイルダウンロード
         if ! $BASE_WGET "$install_path" "$remote_url"; then
             debug_log "ERROR" "Download failed: $file_name is empty"
-            echo "Error: Download failed: $file_name is empty." >&2
             return 1
         fi
-        # ダウンロードファイルの検証
+        
+        # ファイル検証
         if [ ! -s "$install_path" ]; then
             debug_log "ERROR" "Download failed: $file_name is empty"
-            echo "Error: Download failed: $file_name is empty." >&2
             return 1
         fi
-
+        
         # 権限設定
         if [ "$chmod_mode" = "true" ]; then
             chmod +x "$install_path"
             debug_log "DEBUG" "chmod +x applied to $file_name"
         fi
-
-        # バージョン情報の更新 (APIスキップ時は更新しない)
-        if [ "$skip_api" = "false" ]; then
-            if [ ! -f "$script_file" ]; then
-                echo "${file_name}=${remote_version}" > "$script_file"
-                debug_log "DEBUG" "Created $script_file with ${file_name}=${remote_version}"
+        
+    	# バージョン情報の更新
+    	if [ ! -f "$script_file" ]; then
+            printf "%s=%s\n" "${file_name}" "${clean_remote_version}" > "$script_file"
+    	else
+            if grep -q "^${file_name}=" "$script_file"; then
+                # エスケープ処理を改良
+                escaped_file=$(echo "$file_name" | sed 's/[\/&]/\\&/g')
+                escaped_version=$(echo "$clean_remote_version" | sed 's/[\/&]/\\&/g')
+                sed -i "s/^${escaped_file}=.*/${escaped_file}=${escaped_version}/" "$script_file"
             else
-                if grep -q "^${file_name}=" "$script_file"; then
-                    sed -i "s|^${file_name}=.*|${file_name}=${remote_version}|" "$script_file"
-                else
-                    echo "${file_name}=${remote_version}" >> "$script_file"
-                fi
-                debug_log "DEBUG" "Updated $script_file with ${file_name}=${remote_version}"
+                printf "%s=%s\n" "${file_name}" "${clean_remote_version}" >> "$script_file"
             fi
         fi
-
-        # aios更新処理
-        if [ "$file_name" = "$BIN_FILE" ] && [ "$MODE" = "update" ]; then
-            chmod +x "$install_path"
-            mv "$install_path" "$BIN_PATH"
-            status_message="Update completed"
-            # 更新後フラグを設定
-            touch "${CACHE_DIR}/post_update_flag"
-        fi
-
-    else
-        # 更新の必要がない場合
-        status_message="No update needed"
-        version_to_display="$local_version"
+    
+        # ステータスメッセージの修正
+        status_message="Download completed"
     fi
-
-    # 8. 読み込み処理（別条件で判断）
-    # ===============================
+    
+    # 読み込み処理
+    local action_message=""
     if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q "common.*\\.sh"; then
         . "$install_path"
         action_message="Loaded"
     fi
-
-    # 9. 最終的なメッセージ出力（統一処理）
-    # =====================================
-    # メッセージコンポーネントを構築
-    local final_message=""
     
-    # ステータスとファイル名、バージョン、認証方式
-    final_message="${file_name}: ${status_message} - Version: ${version_to_display} ${auth_message}"
-    
-    # アクションメッセージがある場合は追加
+    # 出力メッセージの修正
+    local message="${file_name}: ${status_message} - Version: ${clean_remote_version} ${auth_message}"
     if [ -n "$action_message" ]; then
-        final_message="${final_message} (${action_message})"
-    fi
-    
-    # hidden/debugモードに基づいて出力
-    if [ "$hidden_mode" = "true" ]; then
-        # hiddenモード: debug_logでログ出力
-        debug_log "DEBUG" "Quiet mode ${final_message}"
-    else
-        # 通常モード: カラー表示（緑）でecho出力
-	echo "$(color green "${final_message}")"
+        message="${message} (${action_message})"
     fi
 
+    # 出力
+    if [ "$hidden_mode" = "true" ]; then
+        echo -e "$(color green "${message}")"
+    else
+        debug_log "DEBUG" "Quiet mode ${message}"
+    fi
+    
     return 0
 }
 
@@ -1057,6 +1257,7 @@ packages() {
     install_package luci-mod-dashboard yn hidden
     #install_package coreutils yn hidden
     install_package irqbalance yn hidden
+    install_package jq yn hidden
 
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden
@@ -1271,6 +1472,13 @@ check_option() {
 	    -t|--t|-token|--token)
 		setup_github_token
 		;;
+	    -ts|--ts|--token-status)
+    		check_token_status
+    		exit 0
+    		;;
+	    -test_api)
+		MODE="test_api"
+		;;
             -*)
                 echo "Warning: Unknown option: $1" >&2
                 ;;
@@ -1333,10 +1541,10 @@ check_common() {
             exit 0
             ;;
         update)
-	    download "hidden" "chmod" "aios"
+	    download "aios" "hidden" "chmod"
 	    if [ ! -f "${CACHE_DIR}/post_update_flag" ]; then
 		MODE="full"
-		check_commod "$lang_code" "$MODE" "$@"
+		check_common "$lang_code" "$MODE" "$@"
 	    else
 		MODE="full"
 		exec "$BIN_PATH" $(echo "$@" | sed 's/update//g' | sed 's/--update//g' | sed 's/-u//g' | sed 's/--u//g')
@@ -1404,6 +1612,12 @@ check_common() {
                   "${CACHE_DIR}/timezone_success_done"
             select_country
             ;;
+	test_api)
+	    $BASE_WGET ${BASE_DIR}/github_api_test.sh ${BASE_URL}/github_api_test.sh
+	    chmod +x ${BASE_DIR}/github_api_test.sh
+	    sh ${BASE_DIR}/github_api_test.sh
+	    exit 0
+	    ;;
         *)
             ;;
     esac
