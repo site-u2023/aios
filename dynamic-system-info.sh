@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-01-00"
+SCRIPT_VERSION="2025.03.10-02-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -415,6 +415,73 @@ EOF
     
     # Return the filename
     echo "$report_file"
+}
+
+# デバイス情報キャッシュを初期化・保存する関数
+init_device_cache() {
+    # キャッシュディレクトリの確保
+    mkdir -p "$CACHE_DIR" 2>/dev/null || {
+        echo "ERROR: Failed to create cache directory: $CACHE_DIR"
+        return 1
+    }
+    
+    # アーキテクチャ情報の保存
+    if [ ! -f "${CACHE_DIR}/architecture.ch" ]; then
+        local arch
+        arch=$(uname -m)
+        echo "$arch" > "${CACHE_DIR}/architecture.ch"
+        debug_log "INFO" "Created architecture cache: $arch"
+    fi
+    
+    # OSバージョン情報の保存
+    if [ ! -f "${CACHE_DIR}/osversion.ch" ]; then
+        local version=""
+        # OpenWrtバージョン取得
+        if [ -f "/etc/openwrt_release" ]; then
+            # ファイルからバージョン抽出
+            version=$(grep -E "DISTRIB_RELEASE" /etc/openwrt_release | cut -d "'" -f 2)
+            
+            # スナップショット情報の取得
+            local snapshot=""
+            snapshot=$(grep -E "DISTRIB_DESCRIPTION" /etc/openwrt_release | grep -o "r[0-9]*")
+            if [ -n "$snapshot" ]; then
+                version="${version}-${snapshot}"
+            fi
+        elif [ -f "/etc/os-release" ]; then
+            # Alpine等の他のOSの場合
+            version=$(grep -E "^VERSION_ID=" /etc/os-release | cut -d "=" -f 2 | tr -d '"')
+        fi
+        
+        if [ -n "$version" ]; then
+            echo "$version" > "${CACHE_DIR}/osversion.ch"
+            debug_log "INFO" "Created OS version cache: $version"
+        else
+            echo "unknown" > "${CACHE_DIR}/osversion.ch"
+            debug_log "WARN" "Could not determine OS version"
+        fi
+    fi
+    
+    return 0
+}
+
+# パッケージマネージャー情報を検出・保存する関数
+detect_and_save_package_manager() {
+    if [ ! -f "${CACHE_DIR}/downloader.ch" ]; then
+        if command -v opkg >/dev/null 2>&1; then
+            echo "opkg" > "${CACHE_DIR}/downloader.ch"
+            echo "ipk" > "${CACHE_DIR}/extension.ch"
+            debug_log "INFO" "Detected and saved package manager: opkg"
+        elif command -v apk >/dev/null 2>&1; then
+            echo "apk" > "${CACHE_DIR}/downloader.ch"
+            echo "apk" > "${CACHE_DIR}/extension.ch"
+            debug_log "INFO" "Detected and saved package manager: apk"
+        else
+            # デフォルトとしてopkgを使用
+            echo "opkg" > "${CACHE_DIR}/downloader.ch"
+            echo "ipk" > "${CACHE_DIR}/extension.ch"
+            debug_log "WARN" "No package manager detected, using opkg as default"
+        fi
+    fi
 }
 
 # 📌 Debug helper function
