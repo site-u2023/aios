@@ -10,6 +10,24 @@ US|MSG_UNDER_TEST=👽 Under test
 JP|MSG_UNDER_TEST=👹 試験中
 
 # =======================
+# country-common.sh
+# =======================
+
+# 基本的なバナーメッセージ
+US|MSG_BANNER_DECCRIPTION=OpenWrt/Alpine Intelligent Operating System Setup
+US|MSG_BANNER_NAME=AIOS - All-In-One Setup Tool
+US|MSG_BANNER_DISCLAIMER=USE AT YOUR OWN RISK. This tool modifies system settings.
+JP|MSG_BANNER_DECCRIPTION=OpenWrt/Alpine インテリジェント オペレーティングシステムセットアップ
+JP|MSG_BANNER_NAME=AIOS - オールインワンセットアップツール
+JP|MSG_BANNER_DISCLAIMER=ご利用は自己責任でお願いします。このツールはシステム設定を変更します。
+
+# 国検出関連メッセージ
+US|MSG_DETECTED_COUNTRY=Detected country
+US|MSG_USE_DETECTED_COUNTRY=Do you want to use the detected country
+JP|MSG_DETECTED_COUNTRY=検出された国
+JP|MSG_USE_DETECTED_COUNTRY=検出された国を使用しますか
+
+# =======================
 # system-config.sh
 # =======================
 
