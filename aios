@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.11-00-15"
+SCRIPT_VERSION="2025.03.11-00-16"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -901,8 +901,8 @@ download() {
     fi
     [ -z "$local_version" ] && local_version="$dummy_version"
 
-    local clean_remote_version=$(clean_version_string "$remote_version")
-    local clean_local_version=$(clean_version_string "$local_version")
+    local clean_remote_version="$remote_version"
+    local clean_local_version="$local_version"
 
     # 認証メッセージの設定
     local auth_message=""
