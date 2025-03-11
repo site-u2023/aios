@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.11-00-12"
+SCRIPT_VERSION="2025.03.11-00-13"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -1155,94 +1155,6 @@ print_banner() {
 }
 
 #########################################################################
-# aios初期化とシステムセットアップ関連関数
-#########################################################################
-
-# 実行権限の設定
-chmod_aios() {
-    echo "$(color magenta "Setting permissions for $BIN_PATH")"
-
-    if ! chmod +x "$BIN_PATH"; then
-        debug_log "ERROR" "Failed to set execute permission"
-        return 1
-    fi
-    return 0
-}
-
-# ディレクトリ削除処理
-delete_aios() {
-    debug_log "ERROR" "Deleting $BASE_DIR"
-    if ! rm -rf "${BASE_DIR}"; then
-        debug_log "ERROR" "Failed to delete $BASE_DIR"
-        return 1
-    fi
-    return 0
-}
-
-# 必要ディレクトリ作成
-make_directory() {
-    echo "$(color magenta "Creating required directories")"
-
-    if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"; then
-        debug_log "ERROR" "Failed to create required directories"
-        return 1
-    fi
-}
-
-# アップデート状態確認
-check_update() {
-    echo "$(color magenta "Execution of update")"
-
-    # 全引数を処理
-    local all_args="$*"
-    
-    # アップデート関連オプションのみをフィルタリング
-    local filtered_args=""
-    for arg in $all_args; do
-        case "$arg" in
-            -u|--u|-update|--update)
-                # アップデート関連オプションは除外
-                ;;
-            *)
-                # その他のオプションは保持
-                filtered_args="$filtered_args $arg"
-                ;;
-        esac
-    done
-    
-    debug_log "DEBUG" "Original args: $all_args"
-    debug_log "DEBUG" "Filtered args: $filtered_args"
-    
-    # ダウンロード実行
-    download "aios" "hidden" "chmod"
-    
-    # ファイルが存在する場合のみ移動してexec
-    if [ -f "$BASE_DIR/$BIN_FILE" ]; then
-        mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH"
-        exec "$BIN_PATH" $filtered_args
-    fi
-
-    MODE="full"
-}
-
-# 初期化処理のメイン
-initialization() {
-    # 実行権限を設定
-    if ! chmod_aios; then
-        debug_log "ERROR" "Failed to set execute permission"
-        return 1
-    fi
-
-    # 必要なディレクトリを作成
-    if ! make_directory; then
-        debug_log "ERROR" "Failed to create required directories"
-        return 1
-    fi
-    
-    return 0
-}
-
-#########################################################################
 # aiosコマンドライン処理とモード制御
 #########################################################################
 
@@ -1321,7 +1233,11 @@ check_option() {
                 exit 0
                 ;;
             -test_api)
-                MODE="test_api"
+                $BASE_WGET "${BASE_DIR}/github_api_test.sh" "${BASE_URL}/github_api_test.sh"
+                chmod +x "${BASE_DIR}/github_api_test.sh"
+                sh "${BASE_DIR}/github_api_test.sh"
+                exit 0
+            ;;
                 ;;
             -*)
                 echo "Warning: Unknown option: $1" >&2
@@ -1335,7 +1251,7 @@ check_option() {
         shift
     done
 
-    # 環境変数として設定
+    # 環境変数設定
     export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET HELP
 
     # デバッグ情報を出力
@@ -1402,19 +1318,16 @@ check_common() {
             download "system-config.sh" "hidden" "chmod"
             #packages
             ;;
-        light)
-            download "dynamic-system-info.sh"
-            download "common-country.sh"
-            download "common-package.sh"
-            download "common-feed-package.sh"
-            download "messages.db"
-            download "country.db"
-            download "local-package.db"
-            download "custom-package.db"
-            print_banner       
-            select_country "$lang_code"
-            download "system-config.sh" "chmod"
-            #packages
+        return)
+            rm -f "${CACHE_DIR}/country.ch" \
+                  "${CACHE_DIR}/language.ch" \
+                  "${CACHE_DIR}/luci.ch" \
+                  "${CACHE_DIR}/zone.ch" \
+                  "${CACHE_DIR}/zonename.ch" \
+                  "${CACHE_DIR}/timezone.ch" \
+                  "${CACHE_DIR}/country_success_done" \
+                  "${CACHE_DIR}/timezone_success_done"
+            select_country
             ;;
         full)
             download "dynamic-system-info.sh" "chmod" "read"
@@ -1430,22 +1343,7 @@ check_common() {
             download "system-config.sh" "chmod" "read"
             #packages
             ;;
-        return)
-            rm -f "${CACHE_DIR}/country.ch" \
-                  "${CACHE_DIR}/language.ch" \
-                  "${CACHE_DIR}/luci.ch" \
-                  "${CACHE_DIR}/zone.ch" \
-                  "${CACHE_DIR}/zonename.ch" \
-                  "${CACHE_DIR}/timezone.ch" \
-                  "${CACHE_DIR}/country_success_done" \
-                  "${CACHE_DIR}/timezone_success_done"
-            select_country
-            ;;
-        test_api)
-            $BASE_WGET "${BASE_DIR}/github_api_test.sh" "${BASE_URL}/github_api_test.sh"
-            chmod +x "${BASE_DIR}/github_api_test.sh"
-            sh "${BASE_DIR}/github_api_test.sh"
-            exit 0
+        light)
             ;;
         *)
             ;;
@@ -1454,9 +1352,91 @@ check_common() {
     return 0
 }
 
-# メイン処理
+#########################################################################
+# aios初期化とシステムセットアップ関連関数
+#########################################################################
+
+# 実行権限の設定
+chmod_aios() {
+    echo "$(color magenta "Setting permissions for $BIN_PATH")"
+
+    if ! chmod +x "$BIN_PATH"; then
+        debug_log "ERROR" "Failed to set execute permission"
+        return 1
+    fi
+    return 0
+}
+
+# ディレクトリ削除処理
+delete_aios() {
+    debug_log "ERROR" "Deleting $BASE_DIR"
+    if ! rm -rf "${BASE_DIR}"; then
+        debug_log "ERROR" "Failed to delete $BASE_DIR"
+        return 1
+    fi
+    return 0
+}
+
+# 必要ディレクトリ作成
+make_directory() {
+    echo "$(color magenta "Creating required directories")"
+
+    if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"; then
+        debug_log "ERROR" "Failed to create required directories"
+        return 1
+    fi
+}
+
+# アップデート状態確認
+check_update() {
+    echo "$(color magenta "Execution of update")"
+
+    # 全引数を処理
+    local all_args="$*"
+    
+    # アップデート関連オプションのみをフィルタリング
+    local filtered_args=""
+    for arg in $all_args; do
+        case "$arg" in
+            -u|--u|-update|--update)
+                # アップデート関連オプションは除外
+                ;;
+            *)
+                # その他のオプションは保持
+                filtered_args="$filtered_args $arg"
+                ;;
+        esac
+    done
+    
+    debug_log "DEBUG" "Original args: $all_args"
+    debug_log "DEBUG" "Filtered args: $filtered_args"
+    
+    # ダウンロード実行
+    download "aios" "hidden" "chmod"
+    
+    # ファイルが存在する場合のみ移動してexec
+    if [ -f "$BASE_DIR/$BIN_FILE" ]; then
+        mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH"
+        exec "$BIN_PATH" $filtered_args
+    fi
+
+    MODE="full"
+}
+
+# 初期化処理のメイン
 main() {
-    initialization
+    # 実行権限を設定
+    if ! chmod_aios; then
+        debug_log "ERROR" "Failed to set execute permission"
+        return 1
+    fi
+
+    # 必要なディレクトリを作成
+    if ! make_directory; then
+        debug_log "ERROR" "Failed to create required directories"
+        return 1
+    fi
+    
     check_option "$@"
 }
 
