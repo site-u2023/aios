@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.11-00-16"
+SCRIPT_VERSION="2025.03.11-00-17"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -713,18 +713,10 @@ get_commit_version() {
         
         # レスポンス検証
         if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-            # jqが利用可能ならjqで検証
-            if check_jq_available; then
-                if jq -e '.[0].sha' "$temp_file" >/dev/null 2>&1; then
-                    auth_method="token"
-                    debug_log "DEBUG" "Token authentication successful (jq verified)"
-                fi
-            else
-                # フォールバック：単純にshaの存在確認
-                if grep -q '"sha"' "$temp_file"; then
-                    auth_method="token"
-                    debug_log "DEBUG" "Token authentication successful (grep verified)"
-                fi
+            # jq非依存でshaの存在確認
+            if grep -q '"sha"' "$temp_file"; then
+                auth_method="token"
+                debug_log "DEBUG" "Token authentication successful (verified)"
             fi
         fi
     else
@@ -737,15 +729,9 @@ get_commit_version() {
         local commit_date=""
         local commit_sha=""
         
-        # jqが利用可能ならjqでパース
-        if check_jq_available; then
-            commit_date=$(jq -r '.[0].commit.committer.date' "$temp_file" 2>/dev/null | grep -o "[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}")
-            commit_sha=$(jq -r '.[0].sha' "$temp_file" 2>/dev/null | cut -c 1-7)
-        else
-            # フォールバック：grepとsedでパース
-            commit_date=$(grep -o '"date"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | head -1 | grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}')
-            commit_sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | head -1 | grep -o '[a-f0-9]\{7,40\}' | cut -c 1-7)
-        fi
+        # grepとsedでパース (jq非依存)
+        commit_date=$(grep -o '"date"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | head -1 | grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}')
+        commit_sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | head -1 | grep -o '[a-f0-9]\{7,40\}' | cut -c 1-7)
         
         if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
             # YYYY.MM.DD-SHA 形式に変換
@@ -899,8 +885,22 @@ download() {
     local install_path="${BASE_DIR}/$file_name"
     local remote_url="${BASE_URL}/$file_name"
     
-    # API制限チェック（デバッグモード時のみ）
-    [ "$DEBUG_MODE" = "true" ] && check_api_rate_limit
+    # API制限チェック（デバッグモード時のみ）- インライン実装
+    if [ "$DEBUG_MODE" = "true" ]; then
+        local token="$(get_github_token)"
+        local api_output=""
+        
+        if [ -n "$token" ]; then
+            api_output=$(wget -q -O- --header="Authorization: token $token" \
+                      "https://api.github.com/rate_limit" 2>/dev/null)
+        fi
+        
+        if [ -n "$api_output" ]; then
+            local limit=$(echo "$api_output" | grep -o '"limit":[0-9]*' | head -1 | cut -d':' -f2)
+            local remaining=$(echo "$api_output" | grep -o '"remaining":[0-9]*' | head -1 | cut -d':' -f2)
+            debug_log "DEBUG" "API limits: $remaining/$limit remaining"
+        fi
+    fi
     
     # バージョン情報の取得
     local remote_version_info=$(get_commit_version "$file_name")
