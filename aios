@@ -1124,9 +1124,9 @@ download() {
 
     # 出力
     if [ "$hidden_mode" = "true" ]; then
-        debug_log "DEBUG" "Quiet mode ${message}"
-    else
         echo -e "$(color green "${message}")"
+    else
+        debug_log "DEBUG" "$(color blue "Quiet mode ${message}")"
     fi
     
     return 0
