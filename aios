@@ -992,7 +992,7 @@ download() {
             if grep -q "^${file_name}=" "$script_file"; then
                 escaped_file=$(echo "$file_name" | sed 's/[&]/\\&/g')
                 escaped_version=$(echo "$clean_remote_version" | sed 's/[&]/\\&/g')
-                sed -i "s#^${escaped_file}=.*#${escaped_file}=${escaped_version}#" "$script_file"
+                sed -i "s#^${escaped_file}=.*#${escaped_file}=${escaped_version}/" "$script_file"
             else
                 printf "%s=%s\n" "${file_name}" "${clean_remote_version}" >> "$script_file"
             fi
