@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.11-00-01"
+SCRIPT_VERSION="2025.03.11-00-02"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -1193,7 +1193,7 @@ check_update() {
     download "aios" "hidden" "chmod"
     echo "$(color magenta "BIN_PATH=$BIN_PATH")"
     echo "$(color magenta "BIN_FILE=$BIN_FILE")"
-    mv -f "$BASE_DIR" "$BIN_PATH"
+    mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH"
     MODE="full"
     exec "$BIN_PATH" $(echo "$@" | sed 's/update//g' | sed 's/-update//g' | sed 's/--update//g' | sed 's/-u//g' | sed 's/--u//g')       
 }
