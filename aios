@@ -127,6 +127,7 @@ handle_error() {
 # 3. `DEBUG_MODE` の設定に応じて `DEBUG`, `INFO`, `WARN`, `ERROR` を管理する。
 # 4. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
 #########################################################################
+# デバッグログ出力関数
 debug_log() {
     local level="$1"
     local message="$2"
@@ -159,8 +160,8 @@ debug_log() {
             local prefix=$(echo "$message" | sed 's/ - .*//')
             local version_part=$(echo "$message" | sed 's/.* - //')
             
-            # clean_version_string の呼び出しをインライン実装に置き換え
-            local cleaned_version=$(echo "$version_part" | sed 's/\x1b\[[0-9;]*[mK]//g' | tr -d '\n\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            # clean_version_string関数を呼び出し
+            local cleaned_version=$(clean_version_string "$version_part")
             
             cleaned_message="$prefix - $cleaned_version"
         fi
@@ -582,6 +583,28 @@ setup_github_token() {
 
 
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
+# バージョン文字列をクリーニングする専用関数
+clean_version_string() {
+    local version_str="$1"
+    # 日付の連続出力を排除し、正確なバージョン番号を取り出す
+    local cleaned_str=""
+    
+    # 日付とバージョン番号部分を分離
+    if echo "$version_str" | grep -q "[0-9]\\{4\\}\\.[0-9]\\{2\\}\\.[0-9]\\{2\\}"; then
+        # ANSIエスケープシーケンスを削除
+        cleaned_str=$(echo "$version_str" | sed 's/\x1b\[[0-9;]*[mK]//g')
+        # 日付部分の重複を削除（最後の日付+バージョン番号のみ残す）
+        cleaned_str=$(echo "$cleaned_str" | sed 's/\[[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\(\[[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\)*//g')
+        # 改行を削除
+        cleaned_str=$(echo "$cleaned_str" | tr -d '\n\r')
+    else
+        # バージョン番号形式でない場合はそのまま返す
+        cleaned_str="$version_str"
+    fi
+    
+    echo "$cleaned_str"
+}
+
 #########################################################################
 # Last Update: 2025-03-10 10:34:56 (JST) 🚀
 # "GitHub API認証状態の診断と表示"
@@ -916,8 +939,8 @@ download() {
     fi
     [ -z "$local_version" ] && local_version="$dummy_version"
 
-    local clean_remote_version=$(echo "$remote_version" | sed 's/\x1b\[[0-9;]*[mK]//g' | sed 's/\[[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\(\[[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\)*//g' | tr -d '\n\r')
-    local clean_local_version=$(echo "$local_version" | sed 's/\x1b\[[0-9;]*[mK]//g' | sed 's/\[[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\(\[[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\)*//g' | tr -d '\n\r')
+    local clean_remote_version=$(clean_version_string "$remote_version")
+    local clean_local_version=$(clean_version_string "$local_version")
 
     # 認証メッセージの設定
     local auth_message=""
@@ -937,10 +960,10 @@ download() {
         version_is_newer "$remote_version" "$local_version"
         [ $? -eq 0 ] && update_required=true
     fi
-    
-    debug_log "DEBUG" "Remote version: $file_name - $clean_remote_version"
-    debug_log "DEBUG" "Local version: $file_name - $clean_local_version"
-    debug_log "DEBUG" "Update required: $file_name -$(printf "%s" "$update_required")"
+
+    [ "$DEBUG_MODE" = "true" ] && debug_log "DEBUG" "Remote version: $file_name - $remote_version"
+    [ "$DEBUG_MODE" = "true" ] && debug_log "DEBUG" "Local version: $file_name - $local_version" 
+    [ "$DEBUG_MODE" = "true" ] && debug_log "DEBUG" "Update required: $file_name -$([ "$FORCE" = "true" ] || [ "$clean_remote_version" != "$clean_local_version" ] && echo "true" || echo "false")"
     
     if [ "$update_required" = "true" ]; then
         # ファイルダウンロード
