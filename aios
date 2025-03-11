@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-10-05"
+SCRIPT_VERSION="2025.03.12-10-06"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -1413,7 +1413,8 @@ print_banner() {
 check_option() {
 
     # デフォルト値の設定
-    ORIGINAL_ARGS="$@" 
+    ORIGINAL_ARGS="$@"
+    MODE="${MODE:-update}"
     SELECTED_LANGUAGE=""
     DEBUG_MODE="false"
     DEBUG_LEVEL="INFO"
@@ -1473,7 +1474,7 @@ check_option() {
                 ;;
             -u|--u|-update|--update)
                 debug_log "DEBUG" "check_option: aios update"
-                check_update "$ORIGINAL_ARGS"
+                MODE="update"
                 ;;
             -t|--t|-token|--token)
                 setup_github_token
@@ -1530,8 +1531,6 @@ check_common() {
     debug_log "DEBUG" "check_common: MODE=$MODE"
     debug_log "DEBUG" "check_common: mode=$mode"
 
-    mode="${MODE:-full}"
-
     # モードごとの処理
     case "$mode" in
         reset)
@@ -1556,6 +1555,9 @@ check_common() {
             select_country "$lang_code"
             download "system-config.sh" "hidden" "chmod"
             #packages
+            ;;
+        update}
+            check_update "$ORIGINAL_ARGS"
             ;;
         full)
             download "dynamic-system-info.sh" "chmod" "read"
@@ -1657,14 +1659,6 @@ main() {
         debug_log "ERROR" "Failed to create required directories"
         return 1
     fi
-
-    case "$MODE" in
-    full|light|debug|return|reset)
-        ;;
-    *)
-        MODE="update"
-        ;;
-esac
 
     check_option "$@"
 }
