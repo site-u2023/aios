@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-15-00"
+SCRIPT_VERSION="2025.03.12-16-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1145,66 +1145,91 @@ get_commit_version() {
     local temp_file="/tmp/aios_commit_info.tmp"
     local auth_method="direct"
     
-    # トークン取得
+    # トークン取得とリクエスト
     local token="$(get_github_token)"
-    
     if [ -n "$token" ]; then
-        debug_log "DEBUG" "Using token authentication for API request"
+        debug_log "DEBUG" "トークン認証を使用してAPIリクエストを実行します"
         wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/$api_url" 2>/dev/null
-        
-        # レスポンス検証
-        if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-            # 認証成功の確認（簡易チェック）
-            if grep -q '"sha"' "$temp_file"; then
-                auth_method="token"
-                debug_log "DEBUG" "Token authentication successful"
-            fi
-        fi
+        auth_method="token"
     else
-        debug_log "DEBUG" "No token available, using direct API request"
+        debug_log "DEBUG" "トークンがないため直接APIリクエストを実行します"
         wget -q -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
     fi
     
-    # 情報抽出
-    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-        local commit_date=""
-        local commit_sha=""
+    # 応答の確認
+    if [ ! -s "$temp_file" ]; then
+        debug_log "ERROR" "GitHub APIからの応答が空です"
+        rm -f "$temp_file" 2>/dev/null
+        echo "$(date +%Y.%m.%d)-unknown $auth_method"
+        return 1
+    fi
+    
+    # APIエラーチェック
+    if grep -q "API rate limit exceeded" "$temp_file"; then
+        debug_log "WARN" "GitHub APIレート制限を超えました"
+        rm -f "$temp_file" 2>/dev/null
+        echo "$(date +%Y.%m.%d)-ratelimit $auth_method"
+        return 2
+    fi
+    
+    # コミット情報抽出
+    local commit_date=""
+    local commit_sha=""
+    
+    if command -v jq >/dev/null 2>&1; then
+        # jqがある場合
+        debug_log "DEBUG" "jqを使用してJSONを解析します"
+        commit_date=$(jq -r '.[0].commit.committer.date' "$temp_file" 2>/dev/null | grep -o "[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}")
+        commit_sha=$(jq -r '.[0].sha' "$temp_file" 2>/dev/null | cut -c 1-7)
+    else
+        # jqがない場合の堅牢な抽出方法
+        debug_log "DEBUG" "jqが利用できないため、grepとsedを使用します"
         
-        # jqが利用可能ならjqでパース
-        if command -v jq >/dev/null 2>&1; then
-            commit_date=$(jq -r '.[0].commit.committer.date' "$temp_file" 2>/dev/null | grep -o "[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}")
-            commit_sha=$(jq -r '.[0].sha' "$temp_file" 2>/dev/null | cut -c 1-7)
-        else
-            # 改良版: grepとsedのみでJSONから情報を抽出
-            # 日付の抽出 (フォーマット: "2025-03-12")
-            commit_date=$(grep -o '"date"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | 
-                          head -1 | 
-                          sed 's/.*"\([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\).*/\1/')
-
-            # SHAの抽出 (7文字)
-            commit_sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | 
+        # 日付抽出 - 複数パターンを試行
+        commit_date=$(grep -o '"date"[[:space:]]*:[[:space:]]*"[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' "$temp_file" | 
+                     head -1 | 
+                     sed 's/.*"\([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\).*/\1/')
+        
+        if [ -z "$commit_date" ]; then
+            # 代替パターン
+            commit_date=$(grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}Z' "$temp_file" | 
                          head -1 | 
-                         sed 's/.*"sha"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' | 
-                         cut -c 1-7)
+                         cut -d'T' -f1)
         fi
         
-        if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
-            # YYYY.MM.DD-SHA 形式に変換
-            local formatted_date=$(echo "$commit_date" | sed 's/-/./g')
-            local clean_version="${formatted_date}-${commit_sha}"
-            
-            debug_log "DEBUG" "Successfully extracted commit info: $clean_version via $auth_method"
-            rm -f "$temp_file"
-            echo "$clean_version $auth_method"
-            return 0
+        # SHA抽出 - より堅牢なパターン
+        commit_sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\{40\}' "$temp_file" | 
+                    head -1 | 
+                    sed 's/.*"sha"[[:space:]]*:[[:space:]]*"\([a-f0-9]\{7\}\).*/\1/')
+        
+        if [ -z "$commit_sha" ]; then
+            # 代替パターン
+            commit_sha=$(grep -o '[a-f0-9]\{40\}' "$temp_file" | head -1 | cut -c 1-7)
         fi
-        debug_log "DEBUG" "Failed to extract commit info from response"
+    fi
+    
+    # 抽出成功の確認
+    if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
+        # YYYY.MM.DD-SHA 形式に変換
+        local formatted_date=$(echo "$commit_date" | tr '-' '.')
+        local version="${formatted_date}-${commit_sha}"
+        
+        debug_log "DEBUG" "コミット情報の抽出成功: $version ($auth_method経由)"
+        rm -f "$temp_file" 2>/dev/null
+        echo "$version $auth_method"
+        return 0
+    fi
+    
+    # デバッグ出力
+    debug_log "WARN" "コミット情報の抽出に失敗しました"
+    if [ "$DEBUG_MODE" = "true" ]; then
+        debug_log "DEBUG" "API応答（先頭部分）: $(head -n 5 "$temp_file")"
     fi
     
     # 一時ファイル削除
     rm -f "$temp_file" 2>/dev/null
     
-    # API取得失敗時は現在時刻を使用
+    # 失敗時のフォールバック
     echo "$(date +%Y.%m.%d)-unknown $auth_method"
     return 1
 }
