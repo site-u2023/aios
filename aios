@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-10-01"
+SCRIPT_VERSION="2025.03.12-10-02"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -1411,10 +1411,9 @@ print_banner() {
 
 # コマンドラインオプション解析・正規化関数
 check_option() {
-    echo "$(color magenta "check_option received before args: $*")"
 
     # デフォルト値の設定
-    ORIGINAL_ARGS="$@" 
+    ORIGINAL_ARGS="$*" 
     SELECTED_LANGUAGE=""
     DEBUG_MODE="false"
     DEBUG_LEVEL="INFO"
@@ -1505,6 +1504,7 @@ check_option() {
     export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET HELP
 
     # デバッグ情報を出力
+    debug_log "DEBUG" "check_option received before args: $*"
     debug_log "DEBUG" "check_option: MODE=$MODE, SELECTED_LANGUAGE=$SELECTED_LANGUAGE"
     debug_log "DEBUG" "check_option: DEBUG_MODE=$DEBUG_MODE, DEBUG_LEVEL=$DEBUG_LEVEL"
     debug_log "DEBUG" "check_option: DRY_RUN=$DRY_RUN, LOGFILE=$LOGFILE"
@@ -1589,8 +1589,6 @@ check_common() {
 
 # 実行権限の設定
 chmod_aios() {
-    echo "$(color magenta "Setting permissions for $BIN_PATH")"
-
     if ! chmod +x "$BIN_PATH"; then
         debug_log "ERROR" "Failed to set execute permission"
         return 1
@@ -1600,7 +1598,6 @@ chmod_aios() {
 
 # ディレクトリ削除処理
 delete_aios() {
-    debug_log "ERROR" "Deleting $BASE_DIR"
     if ! rm -rf "${BASE_DIR}"; then
         debug_log "ERROR" "Failed to delete $BASE_DIR"
         return 1
@@ -1610,8 +1607,6 @@ delete_aios() {
 
 # 必要ディレクトリ作成
 make_directory() {
-    echo "$(color magenta "Creating required directories")"
-
     if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"; then
         debug_log "ERROR" "Failed to create required directories"
         return 1
@@ -1620,8 +1615,6 @@ make_directory() {
 
 # アップデート状態確認
 check_update() {
-    echo "$(color magenta "Execution of update")"
-
     # 全引数を処理
     local all_args="$*"
     
@@ -1668,10 +1661,10 @@ main() {
         return 1
     fi
     
-    check_option "$@"
+    check_option "$*"
 }
 
 # 🔴　メイン　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # スクリプト実行
-main "$@"
+main "$*"
