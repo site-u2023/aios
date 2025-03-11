@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-10-02"
+SCRIPT_VERSION="2025.03.12-10-03"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -1413,7 +1413,7 @@ print_banner() {
 check_option() {
 
     # デフォルト値の設定
-    ORIGINAL_ARGS="$*" 
+    ORIGINAL_ARGS="$@" 
     SELECTED_LANGUAGE=""
     DEBUG_MODE="false"
     DEBUG_LEVEL="INFO"
@@ -1504,7 +1504,7 @@ check_option() {
     export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET HELP
 
     # デバッグ情報を出力
-    debug_log "DEBUG" "check_option received before args: $*"
+    debug_log "DEBUG" "check_option received before args: $@"
     debug_log "DEBUG" "check_option: MODE=$MODE, SELECTED_LANGUAGE=$SELECTED_LANGUAGE"
     debug_log "DEBUG" "check_option: DEBUG_MODE=$DEBUG_MODE, DEBUG_LEVEL=$DEBUG_LEVEL"
     debug_log "DEBUG" "check_option: DRY_RUN=$DRY_RUN, LOGFILE=$LOGFILE"
@@ -1616,7 +1616,7 @@ make_directory() {
 # アップデート状態確認
 check_update() {
     # 全引数を処理
-    local all_args="$*"
+    local all_args="$@"
     
     # アップデート関連オプションのみをフィルタリング
     local filtered_args=""
@@ -1661,10 +1661,10 @@ main() {
         return 1
     fi
     
-    check_option "$*"
+    check_option "$@"
 }
 
 # 🔴　メイン　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # スクリプト実行
-main "$*"
+main "$@"
