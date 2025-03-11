@@ -1224,7 +1224,9 @@ check_update() {
     mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH"
     MODE="full"
     
-    # 新しいプロセスとして実行（引数があれば渡す）
+    # 新しいプロセスとして実行（引数があれば渡す
+    debug_log "DEBUG" "read applied to $BIN_PATH"
+
     if [ -n "$filtered_args" ]; then
         exec "$BIN_PATH" $filtered_args
     else
