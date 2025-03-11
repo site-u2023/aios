@@ -1369,7 +1369,7 @@ download() {
     fi
     
     # 出力メッセージの修正
-    local message="${file_name}: ${status_message} - Version: ${clean_remote_version} ${auth_message}"
+    local message="${status_message}: ${file_name} - Version: ${clean_remote_version} ${auth_message}"
     if [ -n "$action_message" ]; then
         message="${message} (${action_message})"
     fi
