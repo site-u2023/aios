@@ -1124,9 +1124,9 @@ download() {
 
     # 出力
     if [ "$hidden_mode" = "true" ]; then
-        echo -e "$(color green "${message}")"
-    else
         debug_log "DEBUG" "Quiet mode ${message}"
+    else
+        echo -e "$(color green "${message}")"
     fi
     
     return 0
@@ -1191,13 +1191,14 @@ make_directory() {
 # アップデート状態確認
 check_update() {
     download "aios" "hidden" "chmod"
-    echo "BIN_PATH=$BIN_PATH" "/usr/bi/BIN_PATH=/usr/bin/$BIN_FILE"
-    mv -f "$BIN_PATH" "/usr/bin/$BIN_FILE"
+    echo "$(color magenta "BIN_PATH=$BIN_PATH")"
+    echo "$(color magenta "BIN_FILE=$BIN_FILE")"
+    mv -f "$BASE_DIR" "$BIN_PATH"
     MODE="full"
     exec "$BIN_PATH" $(echo "$@" | sed 's/update//g' | sed 's/-update//g' | sed 's/--update//g' | sed 's/-u//g' | sed 's/--u//g')       
 }
 
-# 初期化処理のメイン関数
+# 初期化処理のメイン
 initialization() {
     # 実行権限を設定
     if ! chmod_aios; then
