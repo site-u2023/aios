@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-11-02"
+SCRIPT_VERSION="2025.03.12-11-03"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -1619,24 +1619,34 @@ make_directory() {
 
 # アップデート状態確認
 check_update() {
-    local all_args="$*"
-    local filtered_args=""
-    local is_update_param
+    # デフォルトモードの設定（引数がなくても動作するように）
+    MODE="${MODE:-update}"
     
-    # 引数処理（ループなし）
-    while [ $# -gt 0 ]; do
-        is_update_param=0
-        case "$1" in
-            -u|--u|-update|--update)
-                is_update_param=1
-                ;;
-        esac
-        
-        if [ $is_update_param -eq 0 ]; then
-            filtered_args="${filtered_args:+$filtered_args }$1"
-        fi
-        shift
-    done
+    # 全引数を処理
+    local all_args="$@"
+    local has_args=0
+    
+    # 引数があるかチェック
+    [ $# -gt 0 ] && has_args=1
+    
+    # アップデート関連オプションのみをフィルタリング
+    local filtered_args=""
+    
+    # 引数がある場合のみ処理
+    if [ $has_args -eq 1 ]; then
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                -u|--u|-update|--update)
+                    # アップデート関連オプションは除外
+                    ;;
+                *)
+                    # その他のオプションは保持
+                    filtered_args="${filtered_args:+$filtered_args }$1"
+                    ;;
+            esac
+            shift
+        done
+    fi
     
     debug_log "DEBUG" "Original args: $all_args"
     debug_log "DEBUG" "Filtered args: $filtered_args"
@@ -1645,14 +1655,22 @@ check_update() {
     download "aios" "chmod"
     MODE="full"
 
-    # 実行
+    # ファイルが存在する場合のみ移動してexec
     if [ -f "$BASE_DIR/$BIN_FILE" ]; then
         mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH"
-        exec "$BIN_PATH" $filtered_args
+        
+        # 引数があればそれを渡し、なければ引数なしで実行
+        if [ -n "$filtered_args" ]; then
+            debug_log "DEBUG" "Executing with filtered args: $filtered_args"
+            exec "$BIN_PATH" $filtered_args
+        else
+            debug_log "DEBUG" "Executing without args"
+            exec "$BIN_PATH"
+        fi
     fi
 }
 
-OK_check_update() {
+check_update() {
     # 全引数を処理
     local all_args="$@"
     
