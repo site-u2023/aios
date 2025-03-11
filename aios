@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.11-00-17"
+SCRIPT_VERSION="2025.03.11-00-18"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -127,7 +127,6 @@ handle_error() {
 # 3. `DEBUG_MODE` の設定に応じて `DEBUG`, `INFO`, `WARN`, `ERROR` を管理する。
 # 4. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
 #########################################################################
-# デバッグログ関数の修正版（バージョン情報をクリーンに表示）
 debug_log() {
     local level="$1"
     local message="$2"
@@ -159,7 +158,10 @@ debug_log() {
         if echo "$message" | grep -q " - "; then
             local prefix=$(echo "$message" | sed 's/ - .*//')
             local version_part=$(echo "$message" | sed 's/.* - //')
-            local cleaned_version=$(clean_version_string "$version_part")
+            
+            # clean_version_string の呼び出しをインライン実装に置き換え
+            local cleaned_version=$(echo "$version_part" | sed 's/\x1b\[[0-9;]*[mK]//g' | tr -d '\n\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            
             cleaned_message="$prefix - $cleaned_version"
         fi
         message="$cleaned_message"
