@@ -1359,7 +1359,7 @@ check_common() {
             exit 0
             ;;
         update)
-            check_update
+            check_update "$@"
             ;;
         debug)
             download "dynamic-system-info.sh" "hidden"
