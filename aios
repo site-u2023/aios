@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.11-00-00"
+SCRIPT_VERSION="2025.03.11-00-01"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -1420,21 +1420,8 @@ check_common() {
             exit 0
             ;;
         *)
-            # デフォルト動作
-            debug_log "WARN" "Unknown mode: $MODE, falling back to standard behavior"
-            download "common-country.sh"
-            download "dynamic-system-info.sh"
-            
-            # キャッシュシステムの初期化
-            init_cache_system
             ;;
     esac
-    
-    # 必要なキャッシュの存在確認
-    if [ ! -f "${CACHE_DIR}/downloader.ch" ] || [ ! -f "${CACHE_DIR}/extension.ch" ]; then
-        debug_log "WARN" "Essential cache files missing after initialization"
-        init_package_manager_cache
-    fi
     
     return 0
 }
