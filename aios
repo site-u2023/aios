@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.11-00-03"
+SCRIPT_VERSION="2025.03.11-00-05"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -1190,8 +1190,8 @@ make_directory() {
 
 # アップデート状態確認
 check_update() {
-    # 全引数を取得
-    local all_args="$@"
+    # 全引数をローカル変数に保存
+    local all_args="$*"
     
     # ダウンロードと権限設定
     download "aios" "hidden" "chmod"
@@ -1200,15 +1200,32 @@ check_update() {
     mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH"
     MODE="full"
     
-    # 単語境界を考慮して更新関連オプションのみを削除
-    local filtered_args=$(echo "$all_args" | sed -e 's/\<-u\>//g' -e 's/\<--u\>//g' -e 's/\<-update\>//g' -e 's/\<--update\>//g')
+    # 更新関連のオプションのみを削除（BusyBox互換の方法）
+    local filtered_args=""
+    for arg in $all_args; do
+        case "$arg" in
+            -u|-update|--u|--update)
+                # 更新関連オプションはスキップ
+                ;;
+            *)
+                # その他のオプションは保持
+                filtered_args="$filtered_args $arg"
+                ;;
+        esac
+    done
     
-    # デバッグログに記録
+    # 先頭のスペースを削除
+    filtered_args=$(echo "$filtered_args" | sed 's/^ *//')
+    
     debug_log "DEBUG" "Original args: $all_args"
     debug_log "DEBUG" "Filtered args: $filtered_args"
     
     # 新しいプロセスとして実行
-    exec "$BIN_PATH" $filtered_args
+    if [ -n "$filtered_args" ]; then
+        exec "$BIN_PATH" $filtered_args
+    else
+        exec "$BIN_PATH"
+    fi
 }
 
 # 初期化処理のメイン
