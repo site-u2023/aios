@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-14-00"
+SCRIPT_VERSION="2025.03.12-15-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1308,20 +1308,31 @@ OK_get_commit_version() {
 #   - 更新タスクの実行判断
 #########################################################################
 version_is_newer() {
-    local current="$1"
-    local reference="$2"
+    local current="$1"  # リモートバージョン
+    local reference="$2"  # ローカルバージョン
+    
+    # デバッグ出力を追加
+    debug_log "DEBUG" "比較: リモート=$current, ローカル=$reference"
     
     # どちらかが不明の場合は更新必要
     if echo "$current $reference" | grep -q "No version\|unknown"; then
+        debug_log "DEBUG" "不明なバージョンがあるため更新必要"
         return 0
     fi
     
-    # 日付部分を抽出（YYYY.MM.DD形式）- より堅牢な方法
+    # 完全一致の場合は更新不要
+    if [ "$current" = "$reference" ]; then
+        debug_log "DEBUG" "完全一致: 更新不要"
+        return 1
+    fi
+    
+    # 日付部分を抽出（YYYY.MM.DD形式）
     local current_date=$(echo "$current" | grep -o "[0-9][0-9][0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]" | head -1)
     local reference_date=$(echo "$reference" | grep -o "[0-9][0-9][0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]" | head -1)
     
     # 日付が抽出できなかった場合は更新が必要
     if [ -z "$current_date" ] || [ -z "$reference_date" ]; then
+        debug_log "DEBUG" "日付抽出失敗: 安全のため更新"
         return 0
     fi
     
@@ -1331,19 +1342,26 @@ version_is_newer() {
     
     # 数値比較（日付形式）
     if [ "$current_num" -gt "$reference_num" ]; then
-        return 0  # 現在のバージョンが新しい
+        debug_log "DEBUG" "リモート日付が新しい: 更新必要"
+        return 0  # リモート（current）が新しい
     elif [ "$current_num" -lt "$reference_num" ]; then
-        return 1  # リファレンスバージョンが新しい
+        debug_log "DEBUG" "ローカル日付が新しい: 更新不要"
+        return 1  # ローカル（reference）が新しい
     fi
     
     # 日付が同じ場合はSHA部分を比較
     local current_sha=$(echo "$current" | grep -o "\-[a-z0-9]*" | sed 's/^-//' | head -1)
     local reference_sha=$(echo "$reference" | grep -o "\-[a-z0-9]*" | sed 's/^-//' | head -1)
     
+    # SHA情報をデバッグ出力
+    debug_log "DEBUG" "SHA比較: リモート=$current_sha, ローカル=$reference_sha"
+    
     if [ -n "$current_sha" ] && [ -n "$reference_sha" ] && [ "$current_sha" != "$reference_sha" ]; then
+        debug_log "DEBUG" "SHA異なる: 更新必要"
         return 0  # 異なるコミット
     fi
     
+    debug_log "DEBUG" "バージョン同一または比較不能: 更新不要"
     return 1  # 同一バージョン
 }
 
@@ -1445,10 +1463,21 @@ download() {
     local update_required=false
     
     if [ "$local_version" = "$dummy_version" ]; then
+        debug_log "DEBUG" "初回ダウンロード: $file_name"
         update_required=true
+    elif [ "$clean_remote_version" = "$clean_local_version" ]; then
+        debug_log "DEBUG" "完全一致: 更新不要 $file_name"
+        update_required=false
     else
-        version_is_newer "$remote_version" "$local_version"
-        [ $? -eq 0 ] && update_required=true
+        debug_log "DEBUG" "バージョン比較開始: $file_name"
+        version_is_newer "$clean_remote_version" "$clean_local_version"
+        if [ $? -eq 0 ]; then
+            debug_log "DEBUG" "新バージョン検出: 更新必要 $file_name"
+            update_required=true
+        else
+            debug_log "DEBUG" "既存バージョン: 更新不要 $file_name"
+            update_required=false
+        fi
     fi
     
     debug_log "DEBUG" "Remote version: $file_name - $clean_remote_version"
