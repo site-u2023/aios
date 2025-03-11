@@ -35,6 +35,11 @@ wget -q -O /usr/bin/aios "https://raw.githubusercontent.com/site-u2023/aios/main
 wget -q -O /usr/bin/aios "https://raw.githubusercontent.com/site-u2023/aios/main/aios?cache_bust=$(date +%s)"; sh /usr/bin/aios -d
 ```
 
+### aios アップデート
+```sh
+aios -u
+```
+
 ## 要件定義書
 
 https://github.com/site-u2023/aios/blob/main/requirement-definition.md
