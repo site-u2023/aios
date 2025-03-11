@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-00-04"
+SCRIPT_VERSION="2025.03.12-00-06"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -738,11 +738,11 @@ get_commit_version() {
         if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
             # YYYY.MM.DD-SHA 形式に変換
             local formatted_date=$(echo "$commit_date" | sed 's/-/./g')
-            local clean_version="${formatted_date}-${commit_sha}"
+            local clean_version=$(echo "$version" | sed 's/\x1b\[[0-9;]*[mK]//g' | tr -d '\n\r')
             
             debug_log "DEBUG" "Successfully extracted commit info: $clean_version via $auth_method"
             rm -f "$temp_file"
-            echo "$clean_version $auth_method"
+            debug_log "DEBUG" "$clean_version $auth_method"
             return 0
         fi
         debug_log "DEBUG" "Failed to extract commit info from response"
