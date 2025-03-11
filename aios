@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-11-00"
+SCRIPT_VERSION="2025.03.12-11-01"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -1577,18 +1577,6 @@ check_common() {
             ;;
         update)
             check_update "$ORIGINAL_ARGS"
-            download "dynamic-system-info.sh" "chmod" "read"
-            download "common-country.sh" "chmod" "read"
-            download "common-package.sh" "chmod" "read"
-            download "common-feed-package.sh" "chmod" "read"
-            download "messages.db"
-            download "country.db"
-            download "local-package.db"
-            download "custom-package.db"
-            print_banner        
-            select_country "$lang_code"
-            download "system-config.sh" "chmod" "read"
-            #packages
             ;;
         light)
             ;;
