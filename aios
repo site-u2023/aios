@@ -1190,22 +1190,15 @@ make_directory() {
 
 # アップデート状態確認
 check_update() {
-    # 全引数をローカル変数に保存
+    # 全引数を処理
     local all_args="$*"
     
-    # ダウンロードと権限設定
-    download "aios" "hidden" "chmod"
-    debug_log "DEBUG" "BIN_PATH=$BIN_PATH"
-    debug_log "DEBUG" "BIN_FILE=$BIN_FILE"
-    mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH"
-    MODE="full"
-    
-    # 更新関連のオプションのみを削除（BusyBox互換の方法）
+    # アップデート関連オプションのみをフィルタリング
     local filtered_args=""
     for arg in $all_args; do
         case "$arg" in
-            -u|-update|--u|--update)
-                # 更新関連オプションはスキップ
+            -u|--u|-update|--update)
+                # アップデート関連オプションは除外
                 ;;
             *)
                 # その他のオプションは保持
@@ -1214,13 +1207,22 @@ check_update() {
         esac
     done
     
-    # 先頭のスペースを削除
+    # 先頭の余分なスペースを削除
     filtered_args=$(echo "$filtered_args" | sed 's/^ *//')
     
     debug_log "DEBUG" "Original args: $all_args"
     debug_log "DEBUG" "Filtered args: $filtered_args"
     
-    # 新しいプロセスとして実行
+    # 更新処理
+    download "aios" "hidden" "chmod"
+
+    debug_log "DEBUG" "BIN_PATH=$BIN_PATH"
+    debug_log "DEBUG" "BIN_FILE=$BIN_FILE"
+
+    mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH"
+    MODE="full"
+    
+    # 新しいプロセスとして実行（引数があれば渡す）
     if [ -n "$filtered_args" ]; then
         exec "$BIN_PATH" $filtered_args
     else
@@ -1254,6 +1256,7 @@ check_option() {
     echo "$(color magenta "check_option received before args: $*")"
 
     # デフォルト値の設定
+    ORIGINAL_ARGS="$@" 
     SELECTED_LANGUAGE=""
     DEBUG_MODE="false"
     DEBUG_LEVEL="INFO"
@@ -1313,7 +1316,7 @@ check_option() {
                 ;;
             -u|--u|-update|--update)
                 debug_log "DEBUG" "check_option: aios update"
-                check_update "$@"
+                check_update "$ORIGINAL_ARGS"
                 ;;
             -t|--t|-token|--token)
                 setup_github_token
