@@ -1618,7 +1618,7 @@ make_directory() {
 }
 
 # アップデート状態確認
-check_update() {
+AI_check_update() {
     # デフォルトモードの設定（引数がなくても動作するように）
     MODE="${MODE:-update}"
     
