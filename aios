@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.11-00-08"
+SCRIPT_VERSION="2025.03.11-00-09"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -1114,6 +1114,7 @@ download() {
     if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q ".*\\.sh"; then
         . "$install_path"
         action_message="Loaded"
+        debug_log "DEBUG" "read applied to $file_name"
     fi
     
     # 出力メッセージの修正
