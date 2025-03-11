@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-00-02"
+SCRIPT_VERSION="2025.03.12-00-03"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -916,7 +916,7 @@ download() {
     fi
     [ -z "$local_version" ] && local_version="$dummy_version"
 
-    local clean_remote_version=$(echo "$remote_version" | sed 's/\x1b\[[0-9;]*[mK]//g' | tr -d '\n\r')
+    local clean_remote_version=$(echo "$remote_version" | sed 's/\x1b\[[0-9;]*[mK]//g' | tr -d '\n\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
     local clean_local_version=$(echo "$local_version" | sed 's/\x1b\[[0-9;]*[mK]//g' | tr -d '\n\r')
 
     # 認証メッセージの設定
