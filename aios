@@ -1281,28 +1281,20 @@ check_common() {
     local mode="$2"
 
     debug_log "DEBUG" "check_common: MODE=$MODE"
-
-    if [ -n "$MODE" ]; then
-        mode="$MODE"
-    else
-        mode="full"
-    fi
-
     debug_log "DEBUG" "check_common: mode=$mode"
+
+    mode="${MODE:-full}"
 
     # モードごとの処理
     case "$mode" in
         reset)
-            rm -f "${CACHE_DIR}/country.ch" \
-                  "${CACHE_DIR}/language.ch" \
-                  "${CACHE_DIR}/luci.ch" \
-                  "${CACHE_DIR}/zone.ch" \
-                  "${CACHE_DIR}/zonename.ch" \
-                  "${CACHE_DIR}/timezone.ch" \
-                  "${CACHE_DIR}/country_success_done" \
-                  "${CACHE_DIR}/timezone_success_done"
+            rm -f "${CACHE_DIR}"
             echo "$(get_message "MSG_RESET_COMPLETE")"
             exit 0
+            ;;
+        return)
+            rm -f "${CACHE_DIR}"
+            select_country
             ;;
         debug)
             download "dynamic-system-info.sh" "hidden" "chmod"
@@ -1317,17 +1309,6 @@ check_common() {
             select_country "$lang_code"
             download "system-config.sh" "hidden" "chmod"
             #packages
-            ;;
-        return)
-            rm -f "${CACHE_DIR}/country.ch" \
-                  "${CACHE_DIR}/language.ch" \
-                  "${CACHE_DIR}/luci.ch" \
-                  "${CACHE_DIR}/zone.ch" \
-                  "${CACHE_DIR}/zonename.ch" \
-                  "${CACHE_DIR}/timezone.ch" \
-                  "${CACHE_DIR}/country_success_done" \
-                  "${CACHE_DIR}/timezone_success_done"
-            select_country
             ;;
         full)
             download "dynamic-system-info.sh" "chmod" "read"
