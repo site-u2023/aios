@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-10-07"
+SCRIPT_VERSION="2025.03.12-10-08"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -1474,7 +1474,7 @@ check_option() {
                 ;;
             -u|--u|-update|--update)
                 debug_log "DEBUG" "check_option: aios update"
-                check_update "$ORIGINAL_ARGS"
+                MODE="update"
                 ;;
             -t|--t|-token|--token)
                 setup_github_token
@@ -1525,8 +1525,8 @@ check_option() {
 #########################################################################
 # コマンドライン処理とモードに基づくアクション選択
 check_common() {
-    local lang_code="$1"
-    local mode="$2"
+    local lang_code="$SELECTED_LANGUAGE"
+    local mode="$MODE"
 
     debug_log "DEBUG" "check_common: MODE=$MODE"
     debug_log "DEBUG" "check_common: mode=$mode"
@@ -1571,7 +1571,7 @@ check_common() {
             #packages
             ;;
         update)
-            check_update
+            check_update "$ORIGINAL_ARGS"
             download "dynamic-system-info.sh" "chmod" "read"
             download "common-country.sh" "chmod" "read"
             download "common-package.sh" "chmod" "read"
