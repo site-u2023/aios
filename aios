@@ -1092,7 +1092,6 @@ check_option() {
                 chmod +x "${BASE_DIR}/github_api_test.sh"
                 sh "${BASE_DIR}/github_api_test.sh"
                 exit 0
-            ;;
                 ;;
             -*)
                 echo "Warning: Unknown option: $1" >&2
