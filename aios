@@ -992,7 +992,7 @@ version_is_newer() {
 #   - hidden=trueの場合は色付きで表示、それ以外はdebug_logを使用
 #
 # 5. **特殊処理**
-#   - common*.shファイルは自動的に読み込み（source）
+#   - *.shファイルは自動的に読み込み（source）
 #   - バージョン情報は${CACHE_DIR}/script.chに保存
 #   - 権限付与オプション時はchmod +xを実行
 #
@@ -1282,7 +1282,7 @@ check_option() {
                 ;;
             -u|--u|-update|--update)
                 debug_log "DEBUG" "check_option: aios update"
-                MODE="update"
+                check_update "$@"
                 ;;
             -t|--t|-token|--token)
                 setup_github_token
@@ -1359,14 +1359,11 @@ check_common() {
             echo "$(get_message "MSG_RESET_COMPLETE")"
             exit 0
             ;;
-        update)
-            check_update "$@"
-            ;;
         debug)
-            download "dynamic-system-info.sh" "hidden"
-            download "common-country.sh" "hidden"
-            download "common-package.sh" "hidden"
-            download "common-feed-package.sh" "hidden"
+            download "dynamic-system-info.sh" "hidden" "chmod"
+            download "common-country.sh" "hidden" "chmod"
+            download "common-package.sh" "hidden" "chmod"
+            download "common-feed-package.sh" "hidden" "chmod"
             download "messages.db" "hidden"
             download "country.db" "hidden"
             download "local-package.db" "hidden"
