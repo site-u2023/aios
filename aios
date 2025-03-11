@@ -1191,6 +1191,7 @@ make_directory() {
 # アップデート状態確認
 check_update() {
     download "aios" "hidden" "chmod"
+    echo "BIN_PATH=$BIN_PATH" "/usr/bi/BIN_PATH=/usr/bin/$BIN_FILE"
     mv -f "$BIN_PATH" "/usr/bin/$BIN_FILE"
     MODE="full"
     exec "$BIN_PATH" $(echo "$@" | sed 's/update//g' | sed 's/-update//g' | sed 's/--update//g' | sed 's/-u//g' | sed 's/--u//g')       
