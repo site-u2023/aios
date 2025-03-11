@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-00-11"
+SCRIPT_VERSION="2025.03.12-00-12"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -584,6 +584,420 @@ setup_github_token() {
 
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 #########################################################################
+# Last Update: 2025-03-10 10:34:56 (JST) 🚀
+# "堅牢なGitHub API呼び出し機能の実装"
+#
+# 【要件】
+# 1. **認証管理**
+#   - 利用可能な場合はトークン認証を使用
+#   - トークンがない場合は匿名リクエストにフォールバック
+#   - 認証ヘッダーとAcceptヘッダーを適切に設定
+#
+# 2. **エラー検出と処理**
+#   - API制限エラーの検出と適切なログ記録
+#   - 認証エラー（Bad credentials）の検出と通知
+#   - その他のAPIエラーメッセージの抽出と表示
+#
+# 3. **戻り値と状態通知**
+#   - 成功時: APIレスポンスを標準出力に返す
+#   - 失敗時: エラー種別に応じた終了コードを返す
+#     * 1: レート制限超過
+#     * 2: 認証エラー
+#     * 3: その他のAPIエラー
+#
+# 4. **デバッグ支援**
+#   - トークン長のログ記録（値自体は記録しない）
+#   - 認証状態とリクエスト方法の記録
+#   - エラー時の詳細情報を提供
+#
+# 5. **POSIX互換性**
+#   - wgetのみを使用し、curlに依存しない実装
+#   - オプションは広範囲の環境で動作する基本的なものに限定
+#########################################################################
+github_api_request() {
+    local endpoint="$1"
+    local token=$(get_github_token)
+    local response=""
+    
+    if [ -n "$token" ]; then
+        debug_log "DEBUG" "Attempting authenticated request with token (${#token} chars)"
+        response=$(wget -q --header="Authorization: token $token" \
+            --header="Accept: application/vnd.github.v3+json" \
+            -O- "https://api.github.com/$endpoint" 2>/dev/null)
+            
+        # レスポンス検証 - リミットチェック
+        if echo "$response" | grep -q '"message":"API rate limit exceeded'; then
+            debug_log "WARN" "GitHub API rate limit exceeded"
+            return 1
+        fi
+        
+        # 認証エラーチェック
+        if echo "$response" | grep -q '"message":"Bad credentials"'; then
+            debug_log "ERROR" "GitHub API authentication failed: Bad credentials"
+            return 2
+        fi
+        
+        # その他エラーチェック
+        if echo "$response" | grep -q '"message":"'; then
+            local error_msg=$(echo "$response" | grep -o '"message":"[^"]*"' | cut -d':' -f2- | tr -d '"')
+            debug_log "ERROR" "GitHub API error: $error_msg"
+            return 3
+        fi
+        
+        # 成功
+        echo "$response"
+        return 0
+    else
+        debug_log "DEBUG" "No token found, using unauthenticated request"
+        wget -q -O- "https://api.github.com/$endpoint" 2>/dev/null
+        return $?
+    fi
+}
+
+#########################################################################
+# Last Update: 2025-03-10 10:34:56 (JST) 🚀
+# "GitHub APIトークンを安全かつ柔軟に取得する"
+#
+# 【要件】
+# 1. **トークンソース優先順位**
+#   - トークンファイル（$GITHUB_TOKEN_FILE）を最優先で使用
+#   - 環境変数（$GITHUB_TOKEN）をセカンドソースとして使用
+#
+# 2. **トークンの抽出と検証**
+#   - ファイルから読み取ったトークンから改行・空白を削除
+#   - 'ghp_'で始まる40文字の英数字パターンを抽出
+#   - 長さと形式の基本的な検証を実施
+#
+# 3. **エラーハンドリング**
+#   - トークンファイルが存在しない場合は環境変数をチェック
+#   - 無効なトークン形式の場合は警告ログを記録
+#   - トークンが見つからない場合は空文字を返し、呼び出し元が適切に処理
+#
+# 4. **セキュリティ考慮事項**
+#   - トークンの一部のみをログに記録（漏洩防止）
+#   - トークンファイルの権限を確認（読み取り権限）
+#
+# 5. **POSIX互換性**
+#   - 全ての処理はPOSIX互換のシェルコマンドで実装
+#   - OpenWrt/Alpine Linux環境での動作を保証
+#########################################################################
+get_github_token() {
+    if [ -f "$GITHUB_TOKEN_FILE" ] && [ -r "$GITHUB_TOKEN_FILE" ]; then
+        # 1. 生のトークンを取得
+        local raw_token=$(cat "$GITHUB_TOKEN_FILE")
+        
+        # 2. 複数の処理方法を試す
+        
+        # 方法1: 改行と空白を削除
+        local token=$(echo "$raw_token" | tr -d '\n\r\t ')
+        
+        # 方法2: ghp_で始まる40文字の英数字パターンを抽出
+        if [ -z "$token" ] || [ ${#token} -ne 40 ]; then
+            token=$(echo "$raw_token" | grep -o 'ghp_[a-zA-Z0-9]\{36\}')
+        fi
+        
+        # 最終チェック
+        if [ -n "$token" ] && [ ${#token} -eq 40 ]; then
+            echo "$token"
+            return 0
+        else
+            debug_log "WARN" "Invalid token format in $GITHUB_TOKEN_FILE"
+        fi
+    fi
+    
+    # 環境変数からの取得
+    if [ -n "$GITHUB_TOKEN" ]; then
+        echo "$GITHUB_TOKEN"
+        return 0
+    fi
+    
+    return 1
+}
+
+#########################################################################
+# Last Update: 2025-03-10 10:34:56 (JST) 🚀
+# "GitHub APIトークンを安全に保存する"
+#
+# 【要件】
+# 1. **基本機能**
+#   - 提供されたトークン文字列をファイルに保存
+#   - 保存先ファイル: $GITHUB_TOKEN_FILE （通常は/etc/aios_token）
+#
+# 2. **セキュリティ対策**
+#   - ファイルのパーミッションを600に設定（所有者のみ読み書き可能）
+#   - 空のトークンが提供された場合は保存を拒否
+#
+# 3. **エラーハンドリング**
+#   - トークンが空の場合はエラーログを記録して失敗を返す
+#   - ファイル書き込み失敗時はエラーログを記録
+#   - 成功/失敗状態を戻り値で明示的に通知
+#
+# 4. **フィードバック**
+#   - 操作の成功・失敗をログに記録
+#   - デバッグレベルに応じた詳細情報の提供
+#
+# 5. **POSIX互換性**
+#   - 全ての処理はPOSIX互換のシェルコマンドのみで実装
+#   - OpenWrt環境での動作を保証
+#########################################################################
+save_github_token() {
+    token="$1"
+    
+    if [ -z "$token" ]; then
+        debug_log "ERROR" "Empty token provided, cannot save"
+        return 1
+    fi
+    
+    # トークンを保存して権限を設定
+    echo "$token" > "$GITHUB_TOKEN_FILE"
+    chmod 600 "$GITHUB_TOKEN_FILE"
+    
+    if [ $? -eq 0 ]; then
+        debug_log "INFO" "GitHub token saved to $GITHUB_TOKEN_FILE"
+        return 0
+    else
+        debug_log "ERROR" "Failed to save token to $GITHUB_TOKEN_FILE"
+        return 1
+    fi
+}
+
+#########################################################################
+# Last Update: 2025-03-10 10:34:56 (JST) 🚀
+# "対話型のGitHubトークン設定機能"
+#
+# 【要件】
+# 1. **基本機能**
+#   - ユーザーからGitHubトークンを対話的に取得
+#   - トークンの安全な保存と権限設定
+#
+# 2. **UI/UX設計**
+#   - 明確な説明と指示を表示
+#   - 保存場所と目的の通知
+#   - 処理結果のフィードバックを提供
+#
+# 3. **セキュリティ対策**
+#   - sttyが利用可能な場合、入力時にトークンを非表示に
+#   - sttyが利用できない環境でも代替手段を提供
+#   - 保存時に適切な権限を設定
+#
+# 4. **エラーハンドリング**
+#   - 空の入力に対する適切な処理
+#   - 保存失敗時のエラーメッセージ表示
+#
+# 5. **環境互換性**
+#   - OpenWrt/BusyBoxの制限された環境でも動作
+#   - sttyコマンド有無に応じた処理分岐
+#   - 標準的なシェルコマンドのみ使用
+#########################################################################
+# OpenWrt向けシンプルなトークン入力関数
+setup_github_token() {
+    echo "GitHub API Token Setup"
+    echo "======================"
+    echo "This will save a GitHub Personal Access Token to $GITHUB_TOKEN_FILE"
+    echo "The token will be used for API requests to avoid rate limits."
+    echo ""
+    
+    # OpenWrtはsttyが利用できないことを前提とする
+    printf "Enter your GitHub Personal Access Token: "
+    read -r token
+    echo ""
+    
+    if [ -n "$token" ]; then
+        if save_github_token "$token"; then
+            echo "Token has been saved successfully!"
+            echo "API requests will now use authentication."
+        else
+            echo "Failed to save token. Please check permissions."
+        fi
+    else
+        echo "No token entered. Operation cancelled."
+    fi
+}
+
+# 🔴　トークン系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
+
+
+# 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
+#########################################################################
+# Last Update: 2025-03-10 10:34:56 (JST) 🚀
+# "GitHub API認証状態の診断と表示"
+#
+# 【要件】
+# 1. **診断機能**
+#   - トークンファイルの存在確認と権限表示
+#   - トークンの有効性検証
+#   - GitHub API認証状態の確認（レート制限情報取得）
+#
+# 2. **表示情報**
+#   - トークンファイルの場所と存在状態
+#   - トークンのプレビュー（先頭5文字のみ）
+#   - API制限値（認証状態に依存）
+#   - 残りリクエスト数
+#   - 認証状態の明示的な表示（✅/❌）
+#
+# 3. **ツール依存性**
+#   - jqを使用したJSONデータの解析
+#   - wgetを使用したAPI通信
+#   - 一時ファイルを使用した結果保存と解析
+#
+# 4. **フォーマット**
+#   - 見やすいセクション区切り（=====）
+#   - 認証状態に応じた記号表示（✅/❌）
+#   - 重要情報の明示的な表示
+#
+# 5. **クリーンアップ**
+#   - 一時ファイルの適切な削除
+#   - エラー状態の適切な表示
+#########################################################################
+check_token_status() {
+    echo "========== GitHub Token Status =========="
+    
+    # トークンファイルの存在確認
+    if [ -f "$GITHUB_TOKEN_FILE" ]; then
+        echo "Token file: $GITHUB_TOKEN_FILE (EXISTS)"
+        ls -l "$GITHUB_TOKEN_FILE"
+        
+        # トークン取得
+        local token=$(get_github_token)
+        if [ -n "$token" ]; then
+            local token_preview=${token:0:5}
+            echo "Token starts with: ${token_preview}..."
+            
+            # 一時ファイルにレスポンス保存
+            local temp_file="/tmp/aios_token_test.tmp"
+            wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null
+            
+            if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+                local core_limit=""
+                local core_remaining=""
+                
+                # jqが利用可能ならjqを使う
+                if check_jq_available; then
+                    echo "Parser: jq available (preferred method)"
+                    core_limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
+                    core_remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
+                else
+                    echo "Parser: fallback method (grep/sed)"
+                    core_limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+')
+                    core_remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+')
+                fi
+                
+                echo "Core rate limit: $core_limit"
+                echo "Core remaining: $core_remaining"
+                
+                # 認証状態の判断
+                if [ "$core_limit" = "5000" ]; then
+                    echo "Auth status: ✅ AUTHENTICATED (Higher limits active)"
+                else
+                    echo "Auth status: ❌ UNAUTHENTICATED (Standard limits)"
+                fi
+                
+                # 一時ファイル削除
+                rm -f "$temp_file"
+            else
+                echo "Could not retrieve rate limit information"
+            fi
+        else
+            echo "Could not extract valid token from file"
+        fi
+    else
+        echo "Token file: $GITHUB_TOKEN_FILE (NOT FOUND)"
+    fi
+    
+    echo "========================================"
+}
+
+check_jq_available() {
+    if command -v jq >/dev/null 2>&1; then
+        return 0 # jqが利用可能
+    else
+        return 1 # jqが利用できない
+    fi
+}
+
+#########################################################################
+# Last Update: 2025-03-10 10:34:56 (JST) 🚀
+# "GitHub APIレート制限の内部監視"
+#
+# 【要件】
+# 1. **基本機能**
+#   - APIレート制限情報の取得と解析
+#   - デバッグモード時のみ動作（パフォーマンス考慮）
+#
+# 2. **取得情報**
+#   - Core API制限値（認証/非認証で異なる）
+#   - 残りリクエスト数
+#   - 制限リセットまでの時間
+#
+# 3. **表示形式**
+#   - 認証状態表示（authenticated/anonymous）
+#   - 残り制限カウント（使用済/合計）
+#   - リセットまでの時間（分:秒）
+#
+# 4. **実装要件**
+#   - jqを使用したJSON解析
+#   - 軽量な処理（DEBUG_MODE=trueの場合のみ実行）
+#   - 一時ファイルの適切な管理
+#
+# 5. **非同期動作**
+#   - 他の処理を妨げない設計（常に成功を返す）
+#   - エラー発生時も静かに失敗（メイン処理に影響なし）
+#   - 情報はデバッグログにのみ記録
+#########################################################################
+check_api_rate_limit() {
+    if [ "$DEBUG_MODE" = "true" ]; then
+        local token="$(get_github_token)"
+        local temp_file="/tmp/aios_api_limit.tmp"
+        
+        # APIレスポンスを一時ファイルに保存
+        if [ -n "$token" ]; then
+            wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null
+        else
+            wget -q -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
+        fi
+        
+        if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+            local core_limit=""
+            local core_remaining=""
+            local core_reset=""
+            
+            # jqが利用可能ならjqを使う
+            if check_jq_available; then
+                debug_log "DEBUG" "Using jq for JSON parsing"
+                core_limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
+                core_remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
+                core_reset=$(jq -r '.resources.core.reset' "$temp_file" 2>/dev/null)
+            else
+                # jqが利用できない場合のフォールバック
+                debug_log "DEBUG" "jq not available, using fallback parsing method"
+                core_limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+')
+                core_remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+')
+                core_reset=$(grep -A3 '"core"' "$temp_file" | grep '"reset"' | head -1 | grep -o '[0-9]\+')
+            fi
+            
+            # 時間計算
+            if [ -n "$core_reset" ]; then
+                local now_time=$(date +%s)
+                local diff_sec=$(($core_reset - $now_time))
+                [ "$diff_sec" -lt 0 ] && diff_sec=0
+                local mins=$(($diff_sec / 60))
+                local secs=$(($diff_sec % 60))
+                
+                # 認証状態判定
+                local auth_text="anonymous"
+                [ "$core_limit" = "5000" ] && auth_text="authenticated"
+                
+                debug_log "DEBUG" "API Limits: Core $core_remaining/$core_limit ($auth_text), Reset in ${mins}m ${secs}s"
+            fi
+            
+            # 一時ファイル削除
+            rm -f "$temp_file"
+        fi
+    fi
+    return 0
+}
+
+#########################################################################
 # Last Update: 2025-03-10 10:30:32 (JST) 🚀
 # "バージョン文字列を標準形式に正規化する"
 #
@@ -631,90 +1045,6 @@ clean_version_string() {
     else
         echo "$cleaned"
     fi
-}
-
-#########################################################################
-# Last Update: 2025-03-10 10:34:56 (JST) 🚀
-# "GitHub API認証状態の診断と表示"
-#
-# 【要件】
-# 1. **診断機能**
-#   - トークンファイルの存在確認と権限表示
-#   - トークンの有効性検証
-#   - GitHub API認証状態の確認（レート制限情報取得）
-#
-# 2. **表示情報**
-#   - トークンファイルの場所と存在状態
-#   - トークンのプレビュー（先頭5文字のみ）
-#   - API制限値（認証状態に依存）
-#   - 残りリクエスト数
-#   - 認証状態の明示的な表示（✅/❌）
-#
-# 3. **ツール依存性**
-#   - jqを使用したJSONデータの解析
-#   - wgetを使用したAPI通信
-#   - 一時ファイルを使用した結果保存と解析
-#
-# 4. **フォーマット**
-#   - 見やすいセクション区切り（=====）
-#   - 認証状態に応じた記号表示（✅/❌）
-#   - 重要情報の明示的な表示
-#
-# 5. **クリーンアップ**
-#   - 一時ファイルの適切な削除
-#   - エラー状態の適切な表示
-#########################################################################
-check_github_api_status() {
-    local verbose="$1"  # 詳細表示フラグ
-    local token=$(get_github_token)
-    local cmd_output=""
-    
-    # 認証ヘッダー設定
-    if [ -n "$token" ]; then
-        cmd_output=$(wget -q -O- --header="Authorization: token $token" \
-                    "https://api.github.com/rate_limit" 2>/dev/null)
-    else
-        cmd_output=$(wget -q -O- "https://api.github.com/rate_limit" 2>/dev/null)
-    fi
-    
-    # 出力処理（シンプル化）
-    if [ -n "$cmd_output" ]; then
-        local limit=$(echo "$cmd_output" | grep -o '"limit":[0-9]*' | head -1 | cut -d':' -f2)
-        local remaining=$(echo "$cmd_output" | grep -o '"remaining":[0-9]*' | head -1 | cut -d':' -f2)
-        
-        if [ "$verbose" = "true" ]; then
-            echo "API limits: $remaining/$limit remaining"
-        else
-            debug_log "DEBUG" "API limits: $remaining/$limit remaining"
-        fi
-    fi
-}
-
-compare_versions() {
-    local current="$1"
-    local reference="$2"
-    
-    # unknown対応
-    if echo "$current $reference" | grep -q "unknown\|No version"; then
-        return 0  # 更新必要
-    fi
-    
-    # 日付抽出 (YYYY.MM.DD形式)
-    local curr_date=$(echo "$current" | grep -o "[0-9]\{4\}\.[0-9]\{2\}\.[0-9]\{2\}" | head -1)
-    local ref_date=$(echo "$reference" | grep -o "[0-9]\{4\}\.[0-9]\{2\}\.[0-9]\{2\}" | head -1)
-    
-    # 抽出失敗時は更新必要
-    if [ -z "$curr_date" ] || [ -z "$ref_date" ]; then
-        return 0
-    fi
-    
-    # 数値比較（.を削除）
-    local curr_num=$(echo "$curr_date" | tr -d '.')
-    local ref_num=$(echo "$ref_date" | tr -d '.')
-    
-    [ "$curr_num" -gt "$ref_num" ] && return 0
-    
-    return 1
 }
 
 #########################################################################
@@ -766,10 +1096,18 @@ get_commit_version() {
         
         # レスポンス検証
         if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-            # jq非依存でshaの存在確認
-            if grep -q '"sha"' "$temp_file"; then
-                auth_method="token"
-                debug_log "DEBUG" "Token authentication successful (verified)"
+            # jqが利用可能ならjqで検証
+            if check_jq_available; then
+                if jq -e '.[0].sha' "$temp_file" >/dev/null 2>&1; then
+                    auth_method="token"
+                    debug_log "DEBUG" "Token authentication successful (jq verified)"
+                fi
+            else
+                # フォールバック：単純にshaの存在確認
+                if grep -q '"sha"' "$temp_file"; then
+                    auth_method="token"
+                    debug_log "DEBUG" "Token authentication successful (grep verified)"
+                fi
             fi
         fi
     else
@@ -782,18 +1120,24 @@ get_commit_version() {
         local commit_date=""
         local commit_sha=""
         
-        # grepとsedでパース (jq非依存)
-        commit_date=$(grep -o '"date"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | head -1 | grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}')
-        commit_sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | head -1 | grep -o '[a-f0-9]\{7,40\}' | cut -c 1-7)
+        # jqが利用可能ならjqでパース
+        if check_jq_available; then
+            commit_date=$(jq -r '.[0].commit.committer.date' "$temp_file" 2>/dev/null | grep -o "[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}")
+            commit_sha=$(jq -r '.[0].sha' "$temp_file" 2>/dev/null | cut -c 1-7)
+        else
+            # フォールバック：grepとsedでパース
+            commit_date=$(grep -o '"date"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | head -1 | grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}')
+            commit_sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | head -1 | grep -o '[a-f0-9]\{7,40\}' | cut -c 1-7)
+        fi
         
         if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
             # YYYY.MM.DD-SHA 形式に変換
             local formatted_date=$(echo "$commit_date" | sed 's/-/./g')
-            local clean_version=$(echo "$version" | sed 's/\x1b\[[0-9;]*[mK]//g' | tr -d '\n\r')
+            local clean_version="${formatted_date}-${commit_sha}"
             
             debug_log "DEBUG" "Successfully extracted commit info: $clean_version via $auth_method"
             rm -f "$temp_file"
-            debug_log "DEBUG" "$clean_version $auth_method"
+            echo "$clean_version $auth_method"
             return 0
         fi
         debug_log "DEBUG" "Failed to extract commit info from response"
@@ -938,22 +1282,8 @@ download() {
     local install_path="${BASE_DIR}/$file_name"
     local remote_url="${BASE_URL}/$file_name"
     
-    # API制限チェック（デバッグモード時のみ）- インライン実装
-    if [ "$DEBUG_MODE" = "true" ]; then
-        local token="$(get_github_token)"
-        local api_output=""
-        
-        if [ -n "$token" ]; then
-            api_output=$(wget -q -O- --header="Authorization: token $token" \
-                      "https://api.github.com/rate_limit" 2>/dev/null)
-        fi
-        
-        if [ -n "$api_output" ]; then
-            local limit=$(echo "$api_output" | grep -o '"limit":[0-9]*' | head -1 | cut -d':' -f2)
-            local remaining=$(echo "$api_output" | grep -o '"remaining":[0-9]*' | head -1 | cut -d':' -f2)
-            debug_log "DEBUG" "API limits: $remaining/$limit remaining"
-        fi
-    fi
+    # API制限チェック（デバッグモード時のみ）
+    [ "$DEBUG_MODE" = "true" ] && check_api_rate_limit
     
     # バージョン情報の取得
     local remote_version_info=$(get_commit_version "$file_name")
@@ -988,10 +1318,10 @@ download() {
         version_is_newer "$remote_version" "$local_version"
         [ $? -eq 0 ] && update_required=true
     fi
-
-    [ "$DEBUG_MODE" = "true" ] && debug_log "DEBUG" "Remote version: $file_name - $remote_version"
-    [ "$DEBUG_MODE" = "true" ] && debug_log "DEBUG" "Local version: $file_name - $local_version" 
-    [ "$DEBUG_MODE" = "true" ] && debug_log "DEBUG" "Update required: $file_name -$([ "$FORCE" = "true" ] || [ "$clean_remote_version" != "$clean_local_version" ] && echo "true" || echo "false")"
+    
+    debug_log "DEBUG" "Remote version: $file_name - $clean_remote_version"
+    debug_log "DEBUG" "Local version: $file_name - $clean_local_version"
+    debug_log "DEBUG" "Update required: $file_name -$(printf "%s" "$update_required")"
     
     if [ "$update_required" = "true" ]; then
         # ファイルダウンロード
@@ -1016,11 +1346,11 @@ download() {
     	if [ ! -f "$script_file" ]; then
             printf "%s=%s\n" "${file_name}" "${clean_remote_version}" > "$script_file"
     	else
-            # script.chファイル更新時の処理
             if grep -q "^${file_name}=" "$script_file"; then
-                escaped_file=$(echo "$file_name" | sed 's/[&]/\\&/g')
-                escaped_version=$(echo "$clean_remote_version" | sed 's/[&]/\\&/g')
-                sed -i "s#^${escaped_file}=.*#${escaped_file}=${escaped_version}/" "$script_file"
+                # エスケープ処理を改良
+                escaped_file=$(echo "$file_name" | sed 's/[\/&]/\\&/g')
+                escaped_version=$(echo "$clean_remote_version" | sed 's/[\/&]/\\&/g')
+                sed -i "s/^${escaped_file}=.*/${escaped_file}=${escaped_version}/" "$script_file"
             else
                 printf "%s=%s\n" "${file_name}" "${clean_remote_version}" >> "$script_file"
             fi
@@ -1032,7 +1362,7 @@ download() {
     
     # 読み込み処理
     local action_message=""
-    if [ "$read_mode" = "true" ] || [ "${file_name%.sh}" != "$file_name" ]; then
+    if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q ".*\\.sh"; then
         . "$install_path"
         action_message="Loaded"
         debug_log "DEBUG" "read applied to $file_name"
