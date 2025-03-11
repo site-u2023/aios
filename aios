@@ -1021,6 +1021,32 @@ clean_version_string() {
     local version_str="$1"
     
     # 1. 改行と復帰を削除
+    local cleaned=$(echo "$version_str" | tr -d '\n\r')
+    
+    # 2. 角括弧を削除
+    cleaned=$(echo "$cleaned" | sed 's/\[//g' | sed 's/\]//g')
+    
+    # 3. ANSIエスケープコードを削除（複数パターン対応）
+    cleaned=$(echo "$cleaned" | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/[0-9]\+;[0-9]\+m//g')
+    
+    # 4. 不必要な重複を削除（日付の重複など）
+    cleaned=$(echo "$cleaned" | sed -e 's/\(20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)\1*/\1/g' -e 's/\(20[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]\)\1*/\1/g')
+    
+    # 5. バージョンの一般的なフォーマットだけを抽出（日付-ハッシュ値）
+    local version_pattern=$(echo "$cleaned" | grep -o '20[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]-[0-9a-zA-Z]\+' | head -1)
+    
+    # パターンが見つかった場合はそれを使用、見つからない場合はクリーン化した文字列を返す
+    if [ -n "$version_pattern" ]; then
+        echo "$version_pattern"
+    else
+        echo "$cleaned"
+    fi
+}
+
+AI_clean_version_string() {
+    local version_str="$1"
+    
+    # 1. 改行と復帰を削除
     local cleaned=$(printf "%s" "$version_str" | tr -d '\n\r')
     
     # 2. 角括弧を削除
