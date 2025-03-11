@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.11-00-10"
+SCRIPT_VERSION="2025.03.11-00-12"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -1181,7 +1181,6 @@ delete_aios() {
 
 # 必要ディレクトリ作成
 make_directory() {
-
     echo "$(color magenta "Creating required directories")"
 
     if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"; then
@@ -1192,6 +1191,8 @@ make_directory() {
 
 # アップデート状態確認
 check_update() {
+    echo "$(color magenta "Execution of update")"
+
     # 全引数を処理
     local all_args="$*"
     
@@ -1209,29 +1210,19 @@ check_update() {
         esac
     done
     
-    # 先頭の余分なスペースを削除
-    filtered_args=$(echo "$filtered_args" | sed 's/^ *//')
-    
     debug_log "DEBUG" "Original args: $all_args"
     debug_log "DEBUG" "Filtered args: $filtered_args"
     
-    # 更新処理
-    download "aios" "chmod"
-
-    debug_log "DEBUG" "BIN_PATH=$BIN_PATH"
-    debug_log "DEBUG" "BIN_FILE=$BIN_FILE"
-
-    mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH"
-    MODE="full"
+    # ダウンロード実行
+    download "aios" "hidden" "chmod"
     
-    # 新しいプロセスとして実行（引数があれば渡す
-    debug_log "DEBUG" "read applied to $BIN_PATH"
-
-    if [ -n "$filtered_args" ]; then
+    # ファイルが存在する場合のみ移動してexec
+    if [ -f "$BASE_DIR/$BIN_FILE" ]; then
+        mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH"
         exec "$BIN_PATH" $filtered_args
-    else
-        exec "$BIN_PATH"
     fi
+
+    MODE="full"
 }
 
 # 初期化処理のメイン
