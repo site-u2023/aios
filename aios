@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.11-00-07"
+SCRIPT_VERSION="2025.03.11-00-08"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -1124,9 +1124,10 @@ download() {
 
     # 出力
     if [ "$hidden_mode" = "true" ]; then
-        echo -e "$(color green "${message}")"
-    else
         debug_log "DEBUG" "$(color blue "Quiet mode ${message}")"
+        
+    else
+        echo -e "$(color green "${message}")"
     fi
     
     return 0
@@ -1214,7 +1215,7 @@ check_update() {
     debug_log "DEBUG" "Filtered args: $filtered_args"
     
     # 更新処理
-    download "aios" "hidden" "chmod"
+    download "aios" "chmod"
 
     debug_log "DEBUG" "BIN_PATH=$BIN_PATH"
     debug_log "DEBUG" "BIN_FILE=$BIN_FILE"
@@ -1422,17 +1423,17 @@ check_common() {
             #packages
             ;;
         full)
-            download "dynamic-system-info.sh"
-            download "common-country.sh"
-            download "common-package.sh"
-            download "common-feed-package.sh"
+            download "dynamic-system-info.sh" "chmod" "read"
+            download "common-country.sh" "chmod" "read"
+            download "common-package.sh" "chmod" "read"
+            download "common-feed-package.sh" "chmod" "read"
             download "messages.db"
             download "country.db"
             download "local-package.db"
             download "custom-package.db"
             print_banner        
             select_country "$lang_code"
-            download "system-config.sh" "chmod"
+            download "system-config.sh" "chmod" "read"
             #packages
             ;;
         return)
