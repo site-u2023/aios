@@ -1188,67 +1188,12 @@ make_directory() {
     fi
 }
 
-# キャッシュ初期化（簡素化版）
-init_cache() {    
-    # パッケージマネージャー情報の初期化
-    if [ ! -f "${CACHE_DIR}/downloader.ch" ]; then
-        if command -v opkg >/dev/null 2>&1; then
-            echo "opkg" > "${CACHE_DIR}/downloader.ch"
-            echo "ipk" > "${CACHE_DIR}/extension.ch"
-        elif command -v apk >/dev/null 2>&1; then
-            echo "apk" > "${CACHE_DIR}/downloader.ch"
-            echo "apk" > "${CACHE_DIR}/extension.ch"
-        else
-            echo "opkg" > "${CACHE_DIR}/downloader.ch"
-            echo "ipk" > "${CACHE_DIR}/extension.ch"
-        fi
-    fi
-    
-    # デバッグ情報（デバッグモード時のみ）
-    if [ "$DEBUG_MODE" = "true" ]; then
-        echo "Cache directory: $CACHE_DIR"
-        echo "Package manager: $(cat ${CACHE_DIR}/downloader.ch 2>/dev/null || echo 'unknown')"
-        echo "Package extension: $(cat ${CACHE_DIR}/extension.ch 2>/dev/null || echo 'unknown')"
-    fi
-    
-    return 0
-}
-
 # アップデート状態確認
 check_update() {
-
-    # アップデート後の特殊処理
-    POST_UPDATE="false"
-    if [ -f "${CACHE_DIR}/post_update_flag" ]; then
-        POST_UPDATE="true"
-        rm -f "${CACHE_DIR}/post_update_flag"
-        debug_log "DEBUG" "Post-update detected, continuing with normal execution"
-        MODE="full"  # 更新後は標準モードに設定
-        return 0
-    fi
-
-    # アップデート状態ファイルの確認
-    if [ ! -f "$UPDATE_CACHE" ]; then
-        # 初回実行: アップデートモードをセット
-        debug_log "DEBUG" "First run detected, setting update mode"
-        MODE="update"
-        # 状態ファイル作成（バージョン情報を記録）
-        echo "$SCRIPT_VERSION" > "$UPDATE_CACHE" || debug_log "WARN" "Could not create $UPDATE_CACHE"
-    else
-        # 再実行: アップデートキャッシュをチェック
-        local cached_version
-        cached_version=$(cat "$UPDATE_CACHE" 2>/dev/null || echo "unknown")
-        if [ "$cached_version" != "$SCRIPT_VERSION" ]; then
-            debug_log "DEBUG" "Version changed from $cached_version to $SCRIPT_VERSION"
-            # バージョン情報を更新
-            echo "$SCRIPT_VERSION" > "$UPDATE_CACHE" || debug_log "WARN" "Could not update $UPDATE_CACHE"
-        fi
-        # 引数で明示的なモード指定がなければfullをデフォルトに
-        [ -z "$MODE" ] && MODE="full"
-    fi
-
-    # 常に成功を返す（エラーがあっても処理を継続）
-    return 0
+    download "aios" "hidden" "chmod"
+    mv -f "$BIN_PATH" "/usr/bin/$BIN_FILE"
+    MODE="full"
+    exec "$BIN_PATH" $(echo "$@" | sed 's/update//g' | sed 's/--update//g' | sed 's/-u//g' | sed 's/--u//g')       
 }
 
 # 初期化処理のメイン関数
@@ -1263,11 +1208,6 @@ initialization() {
     if ! make_directory; then
         debug_log "ERROR" "Failed to create required directories"
         return 1
-    fi
-
-    # キャッシュシステムの初期化
-    if ! init_cache; then
-        debug_log "WARN" "Cache system initialization had issues"
     fi
 
     # アップデート状態の確認
@@ -1398,14 +1338,17 @@ check_common() {
     local mode="$2"
 
     debug_log "DEBUG" "check_common: MODE=$MODE"
-    debug_log "DEBUG" "check_common: mode=$mode"
 
-    if [ -n "$mode" ]; then
-        MODE="$mode"
+    if [ -n "$MODE" ]; then
+        mode="$MODE"
+    else
+        mode="full"
     fi
 
+    debug_log "DEBUG" "check_common: mode=$mode"
+
     # モードごとの処理
-    case "$MODE" in
+    case "$mode" in
         reset)
             rm -f "${CACHE_DIR}/country.ch" \
                   "${CACHE_DIR}/language.ch" \
@@ -1419,14 +1362,7 @@ check_common() {
             exit 0
             ;;
         update)
-            download "aios" "hidden" "chmod"
-            if [ ! -f "${CACHE_DIR}/post_update_flag" ]; then
-                MODE="full"
-                check_common "$lang_code" "$MODE" "$@"
-            else
-                MODE="full"
-                exec "$BIN_PATH" $(echo "$@" | sed 's/update//g' | sed 's/--update//g' | sed 's/-u//g' | sed 's/--u//g')
-            fi
+            check_update
             ;;
         debug)
             download "dynamic-system-info.sh" "hidden"
