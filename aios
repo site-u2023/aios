@@ -1414,7 +1414,7 @@ check_option() {
 
     # デフォルト値の設定
     ORIGINAL_ARGS="$@"
-    MODE="${MODE:-full}"
+    MODE="${MODE:-update}"
     SELECTED_LANGUAGE=""
     DEBUG_MODE="false"
     DEBUG_LEVEL="INFO"
@@ -1570,6 +1570,21 @@ check_common() {
             download "system-config.sh" "chmod" "read"
             #packages
             ;;
+        update)
+            check_update
+            download "dynamic-system-info.sh" "chmod" "read"
+            download "common-country.sh" "chmod" "read"
+            download "common-package.sh" "chmod" "read"
+            download "common-feed-package.sh" "chmod" "read"
+            download "messages.db"
+            download "country.db"
+            download "local-package.db"
+            download "custom-package.db"
+            print_banner        
+            select_country "$lang_code"
+            download "system-config.sh" "chmod" "read"
+            #packages
+            ;;
         light)
             ;;
         *)
@@ -1639,6 +1654,8 @@ check_update() {
         mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH"
         exec "$BIN_PATH" $filtered_args
     fi
+
+    MODE="full"
 }
 
 # 初期化処理のメイン
