@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-10-03"
+SCRIPT_VERSION="2025.03.12-10-04"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -1505,10 +1505,7 @@ check_option() {
 
     # デバッグ情報を出力
     debug_log "DEBUG" "check_option received before args: $@"
-    debug_log "DEBUG" "check_option: MODE=$MODE, SELECTED_LANGUAGE=$SELECTED_LANGUAGE"
-    debug_log "DEBUG" "check_option: DEBUG_MODE=$DEBUG_MODE, DEBUG_LEVEL=$DEBUG_LEVEL"
-    debug_log "DEBUG" "check_option: DRY_RUN=$DRY_RUN, LOGFILE=$LOGFILE"
-    debug_log "DEBUG" "check_option: FORCE=$FORCE, RESET=$RESET, HELP=$HELP"
+    debug_log "DEBUG" "check_option: MODE=$MODE, SELECTED_LANGUAGE=$SELECTED_LANGUAGE DEBUG_MODE=$DEBUG_MODE DEBUG_LEVEL=$DEBUG_LEVEL DRY_RUN=$DRY_RUN LOGFILE=$LOGFILE FORCE=$FORCE RESET=$RESET HELP=$HELP"
 
     # 設定された言語を `check_common()` に渡す
     check_common "$SELECTED_LANGUAGE" "$MODE"
@@ -1660,7 +1657,15 @@ main() {
         debug_log "ERROR" "Failed to create required directories"
         return 1
     fi
-    
+
+    case "$MODE" in
+    full|light|debug|return|reset)
+        ;;
+    *)
+        MODE="update"
+        ;;
+esac
+
     check_option "$@"
 }
 
