@@ -1193,7 +1193,7 @@ check_update() {
     download "aios" "hidden" "chmod"
     mv -f "$BIN_PATH" "/usr/bin/$BIN_FILE"
     MODE="full"
-    exec "$BIN_PATH" $(echo "$@" | sed 's/update//g' | sed 's/--update//g' | sed 's/-u//g' | sed 's/--u//g')       
+    exec "$BIN_PATH" $(echo "$@" | sed 's/update//g' | sed 's/-update//g' | sed 's/--update//g' | sed 's/-u//g' | sed 's/--u//g')       
 }
 
 # 初期化処理のメイン関数
@@ -1209,9 +1209,6 @@ initialization() {
         debug_log "ERROR" "Failed to create required directories"
         return 1
     fi
-
-    # アップデート状態の確認
-    check_update || debug_log "WARN" "Update check had issues, continuing anyway"
     
     return 0
 }
