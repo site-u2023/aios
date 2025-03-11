@@ -1414,7 +1414,7 @@ check_option() {
 
     # デフォルト値の設定
     ORIGINAL_ARGS="$@"
-    MODE="${MODE:-update}"
+    MODE="${MODE:-full}"
     SELECTED_LANGUAGE=""
     DEBUG_MODE="false"
     DEBUG_LEVEL="INFO"
@@ -1474,7 +1474,7 @@ check_option() {
                 ;;
             -u|--u|-update|--update)
                 debug_log "DEBUG" "check_option: aios update"
-                MODE="update"
+                check_update "$ORIGINAL_ARGS"
                 ;;
             -t|--t|-token|--token)
                 setup_github_token
@@ -1555,9 +1555,6 @@ check_common() {
             select_country "$lang_code"
             download "system-config.sh" "hidden" "chmod"
             #packages
-            ;;
-        update}
-            check_update "$ORIGINAL_ARGS"
             ;;
         full)
             download "dynamic-system-info.sh" "chmod" "read"
@@ -1642,8 +1639,6 @@ check_update() {
         mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH"
         exec "$BIN_PATH" $filtered_args
     fi
-
-    MODE="full"
 }
 
 # 初期化処理のメイン
