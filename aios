@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-10-08"
+SCRIPT_VERSION="2025.03.12-10-09"
 
 echo -e "\033[1;35mCurrent Version: aios - Version: $SCRIPT_VERSION\033[0m"
 
@@ -1648,14 +1648,13 @@ check_update() {
     
     # ダウンロード実行
     download "aios" "chmod"
-    
+    MODE="full"
+
     # ファイルが存在する場合のみ移動してexec
     if [ -f "$BASE_DIR/$BIN_FILE" ]; then
         mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH"
         exec "$BIN_PATH" $filtered_args
     fi
-
-    MODE="full"
 }
 
 # 初期化処理のメイン
