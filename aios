@@ -1533,14 +1533,19 @@ check_common() {
 
     # モードごとの処理
     case "$mode" in
-        reset)
-            rm -f "${CACHE_DIR}"
+        reset|return)
+            if ! rm -rf "${CACHE_DIR}"; then
+                debug_log "ERROR" "Failed to remove cache directory: ${CACHE_DIR}"
+                echo "Reset failed: Could not remove cache directory."
+                return 1
+            fi
+            # キャッシュディレクトリを再作成
+            mkdir -p "${CACHE_DIR}" || {
+                debug_log "ERROR" "Failed to recreate cache directory: ${CACHE_DIR}"
+                echo "Reset partially failed: Cache removed but could not be recreated."
+            }
             echo "$(get_message "MSG_RESET_COMPLETE")"
             exit 0
-            ;;
-        return)
-            rm -f "${CACHE_DIR}"
-            select_country
             ;;
         debug)
             download "dynamic-system-info.sh" "hidden" "chmod"
