@@ -343,6 +343,54 @@ get_message() {
     fi
 }
 
+# 汎用確認関数
+# $1: メッセージキー (messages.dbから取得する場合)
+# $2: 置換パラメータ名 (オプション)
+# $3: 置換パラメータ値 (オプション)
+# $4: 直接表示メッセージ (メッセージキーがない場合)
+confirm() {
+    local msg_key="$1"
+    local param_name="$2"
+    local param_value="$3"
+    local direct_msg="$4"
+    local msg=""
+    
+    # メッセージの取得と変数置換
+    if [ -n "$msg_key" ]; then
+        msg=$(get_message "$msg_key")
+        # パラメータ名と値が指定されている場合は置換
+        if [ -n "$param_name" ] && [ -n "$param_value" ]; then
+            msg="${msg//\{$param_name\}/$param_value}"
+        fi
+    else
+        # 直接メッセージが指定されている場合はそれを使用
+        msg="$direct_msg"
+    fi
+    
+    debug_log "DEBUG" "Confirm prompt: $msg"
+    
+    # 確認プロンプト
+    while true; do
+        printf "%s " "$(color cyan "$msg")"
+        read -r yn || return 1
+        yn=$(normalize_input "$yn")
+        
+        case "$yn" in
+            [Yy]*) 
+                debug_log "DEBUG" "User confirmed: Yes"
+                return 0 
+                ;;
+            [Nn]*) 
+                debug_log "DEBUG" "User confirmed: No"
+                return 1 
+                ;;
+            *) 
+                printf "%s\n" "$(color red "$(get_message "MSG_INVALID_INPUT_YN")")" 
+                ;;
+        esac
+    done
+}
+
 # 🔵　トークン系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 #########################################################################
