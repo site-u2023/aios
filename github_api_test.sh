@@ -387,18 +387,17 @@ test_repo_info() {
         echo "----------------------------------------"
     fi
     
-    # シンプルなgrepコマンドで直接値を抽出
+    # 単純なgrepを使用して値を直接抽出
     local repo_full_name=$(grep -o '"full_name"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | head -1 | sed 's/.*:"//;s/"$//')
     local repo_description=$(grep -o '"description"[[:space:]]*:[[:space:]]*[^,}]*' "$temp_file" | head -1 | sed 's/.*://;s/^[[:space:]]*//;s/null//')
     local repo_stars=$(grep -o '"stargazers_count"[[:space:]]*:[[:space:]]*[0-9]*' "$temp_file" | head -1 | grep -o '[0-9]*')
     local repo_forks=$(grep -o '"forks_count"[[:space:]]*:[[:space:]]*[0-9]*' "$temp_file" | head -1 | grep -o '[0-9]*')
     
-    # 説明が取得できなかった場合
+    # 説明がない場合のデフォルト値
     if [ -z "$repo_description" ]; then
         repo_description="No description"
     fi
     
-    # 結果表示
     if [ -n "$repo_full_name" ]; then
         report SUCCESS "Repository information:"
         echo "  - Name: $repo_full_name"
@@ -407,6 +406,14 @@ test_repo_info() {
         echo "  - Forks: $repo_forks"
     else
         report FAILURE "Failed to parse repository information"
+        
+        # デバッグモードでさらに詳細な情報を表示
+        if [ "$DEBUG_MODE" = "true" ]; then
+            report DEBUG "Parser debug information:"
+            echo "Full name extraction attempt: $(grep -o '"full_name"' "$temp_file" | wc -l) matches"
+            echo "First 3 lines of file:"
+            head -3 "$temp_file"
+        fi
     fi
     
     rm -f "$temp_file" 2>/dev/null
