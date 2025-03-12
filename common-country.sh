@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-02-01"
+SCRIPT_VERSION="2025.03.12-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -122,27 +122,26 @@ select_country() {
     local system_country=""
     
     if type get_country_info >/dev/null 2>&1; then
+        # システム情報から国データを取得
         local system_country_info=$(get_country_info)
         if [ -n "$system_country_info" ]; then
             debug_log "DEBUG" "Found system country info: $system_country_info"
+            # デフォルトの言語コードを抽出 ($4)
             system_language=$(echo "$system_country_info" | awk '{print $4}')
+            # デフォルトの国名を抽出 ($2)
             system_country=$(echo "$system_country_info" | awk '{print $2}')
         fi
     fi
 
-    # 入力済みの場合はシステム情報の提案をスキップ
+    # デフォルト値をユーザーに提案
     if [ -z "$input_lang" ] && [ -n "$system_country" ]; then
         printf "%s\n" "$(color cyan "$(get_message "MSG_DETECTED_COUNTRY")" "$system_country")"
-        printf "%s" "$(color cyan "$(get_message "MSG_USE_DETECTED_COUNTRY")")" 
-        read -r yn
-        yn=$(normalize_input "$yn")
         
-        if [ "$yn" = "Y" ] || [ "$yn" = "y" ]; then
-            # システム検出の国を使用
+        # 既存のY/N判定関数を使用
+        if confirm_yn "$(get_message "MSG_USE_DETECTED_COUNTRY")"; then
             input_lang="$system_country"
             debug_log "DEBUG" "Using system country: $system_country"
         else
-            # 明示的にNullにして入力フローに移行
             input_lang=""
             debug_log "DEBUG" "User declined system country. Moving to manual input."
         fi
@@ -176,17 +175,14 @@ select_country() {
         if [ "$result_count" -eq 1 ]; then
             local country_name=$(echo "$full_results" | awk '{print $2, $3}')
             printf "%s\n" "$(color cyan "$(get_message "MSG_SINGLE_MATCH_FOUND")" "$country_name")"
-            printf "%s" "$(color cyan "$(get_message "MSG_CONFIRM_ONLY_YN")")" 
-            read -r confirm
-            confirm=$(normalize_input "$confirm")
             
-            if [ "$confirm" = "Y" ] || [ "$confirm" = "y" ]; then
+            # 既存のY/N判定関数を使用
+            if confirm_yn "$(get_message "MSG_CONFIRM_ONLY_YN")"; then
                 echo "$full_results" > "$tmp_country"
                 country_write
                 select_zone
                 return 0
             else
-                # 拒否された場合は検索をリセット
                 input_lang=""
                 continue
             fi
@@ -195,55 +191,42 @@ select_country() {
         # 複数結果の場合、リスト表示して選択
         debug_log "DEBUG" "Multiple matches found for '$input_lang'. Presenting selection list."
         
-        # 表示用リスト作成（国名と表示名のみ抽出）
+        # 表示用リスト作成
         local display_results=$(echo "$full_results" | awk '{print $2, $3}')
         
-        # 番号付きリストから選択
-        printf "%s\n" "$(color cyan "$(get_message "MSG_MULTIPLE_MATCHES_FOUND")")"
-        local count=1
-        echo "$display_results" | while read -r line; do
-            printf "%s: %s\n" "$count" "$line"
-            count=$((count + 1))
-        done
+        echo "$display_results" > "$tmp_country"
+        select_list "$display_results" "$tmp_country" "country"
         
-        # 選択肢に「戻る」オプションを追加
-        printf "%s: %s\n" "$count" "$(get_message "MSG_RETURN_TO_SEARCH")"
-        
-        # ユーザー選択を取得
-        printf "%s" "$(color cyan "$(get_message "MSG_SELECT_COUNTRY_NUMBER")")"
-        read -r number
-        number=$(normalize_input "$number")
-        
-        # 「戻る」が選択された場合
-        if [ "$number" -eq "$count" ]; then
-            input_lang=""
-            continue
-        fi
-        
-        # 範囲チェック
-        if ! echo "$number" | grep -q '^[0-9]\+$' || \
-           [ "$number" -lt 1 ] || [ "$number" -gt "$result_count" ]; then
+        # 選択された番号の検証
+        local selected_number=$(cat "$tmp_country")
+        if [ -z "$selected_number" ] || ! echo "$selected_number" | grep -q '^[0-9]\+$'; then
             printf "%s\n" "$(color red "$(get_message "MSG_INVALID_NUMBER")")"
             continue
         fi
         
-        # 選択された国の情報を取得
-        local selected_country=$(echo "$full_results" | sed -n "${number}p")
-        local country_name=$(echo "$selected_country" | awk '{print $2, $3}')
+        # 選択されたデータの取得
+        local selected_full=$(echo "$full_results" | sed -n "${selected_number}p")
+        if [ -z "$selected_full" ]; then
+            printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
+            continue
+        fi
         
         # 選択確認
-        printf "%s\n" "$(color cyan "$(get_message "MSG_SELECTED_COUNTRY")" "$country_name")"
-        printf "%s" "$(color cyan "$(get_message "MSG_CONFIRM_ONLY_YN")")" 
-        read -r confirm
-        confirm=$(normalize_input "$confirm")
+        local selected_country_name=$(echo "$selected_full" | awk '{print $2, $3}')
+        printf "%s\n" "$(color cyan "$(get_message "MSG_SELECTED_COUNTRY")" "$selected_country_name")"
         
-        if [ "$confirm" = "Y" ] || [ "$confirm" = "y" ]; then
-            echo "$selected_country" > "$tmp_country"
+        # 既存のY/N判定関数を使用
+        if confirm_yn "$(get_message "MSG_CONFIRM_ONLY_YN")"; then
+            echo "$selected_full" > "$tmp_country"
             country_write
             select_zone
             return 0
         else
-            # 拒否された場合は現在の検索結果から再選択
+            # 再検索するか確認
+            if confirm_yn "$(get_message "MSG_SEARCH_AGAIN")"; then
+                input_lang=""
+            fi
+            # 確認がNoの場合は同じリストから選び直し
             continue
         fi
     done
@@ -447,9 +430,6 @@ select_zone() {
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_zone="${CACHE_DIR}/zone.ch"
     local tmp_zone="${CACHE_DIR}/zone_tmp.ch"
-    local country_col=""
-    local language_col=""
-    local timezone_cols=""
     
     # すでにキャッシュファイルがある場合はスキップ
     if [ -f "$cache_zone" ]; then
@@ -466,13 +446,10 @@ select_zone() {
     
     # カントリー情報を読み込む
     local country_data=$(cat "$cache_country")
-    country_col=$(echo "$country_data" | awk '{print $2}')
-    language_col=$(echo "$country_data" | awk '{print $4}')
+    local country_col=$(echo "$country_data" | awk '{print $2}')
+    local timezone_cols=$(echo "$country_data" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i; print ""}')
     
-    # タイムゾーン列の抽出 (6列目以降全て)
-    timezone_cols=$(echo "$country_data" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i; print ""}')
-    
-    # システムから現在のタイムゾーンを取得（もし dynamic-system-info.sh が使用可能であれば）
+    # システムから現在のタイムゾーンを取得
     local current_tz=""
     if type get_current_timezone >/dev/null 2>&1; then
         current_tz=$(get_current_timezone)
@@ -496,11 +473,9 @@ select_zone() {
     # デフォルト値が見つかった場合、それを提案
     if [ -n "$default_tz" ]; then
         printf "%s\n" "$(color cyan "$(get_message "MSG_DETECTED_TIMEZONE")" "$default_tz")"
-        printf "%s" "$(color cyan "$(get_message "MSG_USE_DETECTED_TIMEZONE")")"
-        read -r yn
-        yn=$(normalize_input "$yn")
         
-        if [ "$yn" = "Y" ] || [ "$yn" = "y" ]; then
+        # 既存のY/N判定関数を使用
+        if confirm_yn "$(get_message "MSG_USE_DETECTED_TIMEZONE")"; then
             debug_log "DEBUG" "Using detected timezone: $default_tz (index: $default_tz_index)"
             echo "$default_tz_index" > "$tmp_zone"
             echo "$default_tz" > "$cache_zone"
@@ -508,14 +483,12 @@ select_zone() {
         fi
     fi
     
-    # タイムゾーン一覧の表示
+    # タイムゾーン一覧を表示して選択させる
     echo "$timezone_cols" | tr ' ' '\n' | grep -v "^$" > "$tmp_zone"
     select_list "$(cat "$tmp_zone")" "$tmp_zone" "zone"
     
-    # 選択された番号を取得
-    local selected_number=$(cat "$tmp_zone")
-    
     # 選択されたタイムゾーンを取得
+    local selected_number=$(cat "$tmp_zone")
     local selected_timezone=$(echo "$timezone_cols" | tr ' ' '\n' | sed -n "${selected_number}p")
     
     # 結果をキャッシュに書き込み
