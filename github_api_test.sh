@@ -9,7 +9,7 @@
 # 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 19.07 and 24.10)
 # =========================================================
 
-echo "VERSION 08"
+echo "VERSION 09"
 
 # スクリプト先頭部分に追加
 # デバッグモードの検出（aios から渡される場合に対応）
@@ -388,7 +388,7 @@ test_repo_info() {
     fi
     
     # 単純なgrepを使用して値を直接抽出
-    local repo_full_name=$(grep -o '"full_name"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | head -1 | sed 's/.*:"//;s/"$//')
+    local repo_full_name=$(grep -o '"full_name"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | head -1 | sed 's/.*"full_name"[[:space:]]*:[[:space:]]*"//; s/"[[:space:]]*$//')
     local repo_description=$(grep -o '"description"[[:space:]]*:[[:space:]]*[^,}]*' "$temp_file" | head -1 | sed 's/.*://;s/^[[:space:]]*//;s/null//')
     local repo_stars=$(grep -o '"stargazers_count"[[:space:]]*:[[:space:]]*[0-9]*' "$temp_file" | head -1 | grep -o '[0-9]*')
     local repo_forks=$(grep -o '"forks_count"[[:space:]]*:[[:space:]]*[0-9]*' "$temp_file" | head -1 | grep -o '[0-9]*')
