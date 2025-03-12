@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-19-00"
+SCRIPT_VERSION="2025.03.12-20-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -897,48 +897,64 @@ check_api_rate_limit() {
             local core_limit=""
             local core_remaining=""
             local core_reset=""
+            local now_time=""
+            local diff_sec=""
+            local mins=""
+            local secs=""
+            local auth_text=""
             
             # jqが利用可能ならjqでパース
             if check_jq_available; then
-                debug_log "DEBUG" "Using jq for JSON parsing"
                 core_limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
                 core_remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
                 core_reset=$(jq -r '.resources.core.reset' "$temp_file" 2>/dev/null)
-            else
-                # jqが利用できない場合のフォールバック
-                debug_log "DEBUG" "jq not available, using fallback parsing method"
-                core_limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+')
-                core_remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+')
-                core_reset=$(grep -A3 '"core"' "$temp_file" | grep '"reset"' | head -1 | grep -o '[0-9]\+')
-            fi
-            
-            # 時間計算（エラーに強い実装）
-            if [ -n "$core_reset" ]; then
-                local now_time=$(date +%s)
-                local diff_sec=0
                 
-                # 安全な比較と減算
-                if [ "$core_reset" -gt "$now_time" ]; then
-                    diff_sec=$(expr $core_reset - $now_time)
-                fi
+                # 時間計算
+                now_time=$(date +%s)
                 
-                # 分と秒の計算
-                local mins=0
-                local secs=0
-                
-                if [ $diff_sec -gt 0 ]; then
-                    mins=$(expr $diff_sec / 60)
-                    secs=$(expr $diff_sec % 60)
+                # 文字列の比較と計算（数値として）
+                if [ -n "$core_reset" ] && [ -n "$now_time" ]; then
+                    # 数値として比較可能な形に確実に変換
+                    core_reset=$(echo "$core_reset" | tr -cd '0-9')
+                    now_time=$(echo "$now_time" | tr -cd '0-9')
+                    
+                    if [ "$core_reset" -gt "$now_time" ]; then
+                        diff_sec=$(expr "$core_reset" - "$now_time")
+                        mins=$(expr "$diff_sec" / 60)
+                        secs=$(expr "$diff_sec" % 60)
+                    else
+                        mins="0"
+                        secs="0"
+                    fi
+                else
+                    mins="0"
+                    secs="0"
                 fi
                 
                 # 認証状態判定
-                local auth_text="anonymous"
                 if [ "$core_limit" = "5000" ]; then
                     auth_text="authenticated"
+                else
+                    auth_text="anonymous"
+                fi
+            else
+                # jqが利用できない場合は簡易表示のみ（算術演算を回避）
+                core_limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+' | head -1)
+                core_remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+' | head -1)
+                
+                # 認証状態の簡易判定
+                if [ "$core_limit" = "5000" ]; then
+                    auth_text="authenticated"
+                else
+                    auth_text="anonymous"
                 fi
                 
-                debug_log "DEBUG" "API Limits: Core $core_remaining/$core_limit ($auth_text), Reset in ${mins}m ${secs}s"
+                # 算術演算を避けて固定メッセージを表示
+                mins="?"
+                secs="?"
             fi
+            
+            debug_log "DEBUG" "API Limits: Core $core_remaining/$core_limit ($auth_text), Reset in ${mins}m ${secs}s"
             
             # 一時ファイル削除
             rm -f "$temp_file"
