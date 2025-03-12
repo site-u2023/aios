@@ -514,7 +514,6 @@ get_token_prefix() {
 
 # 🔵 総合テスト実行 🔵
 run_all_tests() {
-    echo "VERSION 05"
     echo "==========================================================="
     echo "📊 GitHub API Connection Test (aios)"
     echo "🕒 Execution time: $(date +'%Y-%m-%d %H:%M:%S')"
