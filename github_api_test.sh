@@ -46,6 +46,32 @@ get_token() {
     fi
 }
 
+# シンプルなJSON解析関数（jqがない場合用）
+extract_json_value() {
+    local json_file="$1"
+    local key_path="$2"
+    local result=""
+    
+    # key_pathが階層的なパスの場合（例："core.remaining"）
+    if echo "$key_path" | grep -q "\."; then
+        local parent_key=$(echo "$key_path" | cut -d '.' -f1)
+        local child_key=$(echo "$key_path" | cut -d '.' -f2)
+        
+        # 親キーのブロックを抽出
+        local block_start=$(grep -n "\"$parent_key\"" "$json_file" | head -1 | cut -d':' -f1)
+        
+        if [ -n "$block_start" ]; then
+            # 親ブロックから子キーの値を抽出
+            result=$(tail -n +$block_start "$json_file" | grep -m 1 "\"$child_key\"" | sed 's/.*: *\([0-9]\+\).*/\1/')
+        fi
+    else
+        # 単一キーの場合は直接抽出
+        result=$(grep "\"$key_path\"" "$json_file" | head -1 | sed 's/.*: *\([^,"]*\).*/\1/' | sed 's/"//g')
+    fi
+    
+    echo "$result"
+}
+
 # ネットワーク基本接続テスト
 test_network_basic() {
     report INFO "基本ネットワーク接続テスト中..."
@@ -92,16 +118,20 @@ test_api_rate_limit_no_auth() {
                 return 0
             fi
         else
-            # jqがない場合は簡易パース
-            local result=$(cat "$temp_file")
-            # core.limitの値を抽出
-            local limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+')
-            local remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+')
+            # jqがない場合は改良版パーサーを使用
+            local limit=""
+            local remaining=""
             
-            if [ -n "$remaining" ] && [ -n "$limit" ]; then
-                report SUCCESS "API制限 (認証なし): 残り $remaining/$limit リクエスト"
-                rm -f "$temp_file"
-                return 0
+            # coreセクションを見つけて解析
+            if grep -q '"core"' "$temp_file"; then
+                remaining=$(extract_json_value "$temp_file" "core.remaining")
+                limit=$(extract_json_value "$temp_file" "core.limit")
+                
+                if [ -n "$remaining" ] && [ -n "$limit" ]; then
+                    report SUCCESS "API制限 (認証なし): 残り $remaining/$limit リクエスト"
+                    rm -f "$temp_file"
+                    return 0
+                fi
             fi
         fi
     fi
@@ -138,14 +168,20 @@ test_api_rate_limit_with_auth() {
                 return 0
             fi
         else
-            # jqがない場合は簡易パース
-            local limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+')
-            local remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+')
+            # jqがない場合は改良版パーサーを使用
+            local limit=""
+            local remaining=""
             
-            if [ -n "$remaining" ] && [ -n "$limit" ]; then
-                report SUCCESS "API制限 (認証あり): 残り $remaining/$limit リクエスト"
-                rm -f "$temp_file"
-                return 0
+            # coreセクションを見つけて解析
+            if grep -q '"core"' "$temp_file"; then
+                remaining=$(extract_json_value "$temp_file" "core.remaining")
+                limit=$(extract_json_value "$temp_file" "core.limit")
+                
+                if [ -n "$remaining" ] && [ -n "$limit" ]; then
+                    report SUCCESS "API制限 (認証あり): 残り $remaining/$limit リクエスト"
+                    rm -f "$temp_file"
+                    return 0
+                fi
             fi
         fi
     fi
@@ -182,9 +218,9 @@ test_repo_info() {
                 return 0
             fi
         else
-            # 簡易パース
-            local name=$(grep '"name"' "$temp_file" | head -1 | cut -d'"' -f4)
-            local default_branch=$(grep '"default_branch"' "$temp_file" | head -1 | cut -d'"' -f4)
+            # 改良版パーサーを使用
+            local name=$(grep '"name":' "$temp_file" | head -1 | sed 's/.*"name": *"\([^"]*\)".*/\1/')
+            local default_branch=$(grep '"default_branch":' "$temp_file" | head -1 | sed 's/.*"default_branch": *"\([^"]*\)".*/\1/')
             
             if [ -n "$name" ] && [ -n "$default_branch" ]; then
                 report SUCCESS "リポジトリ情報: 名前=$name, デフォルトブランチ=$default_branch"
@@ -230,13 +266,13 @@ test_contents() {
                 return 0
             fi
         else
-            # 簡易カウント方法
+            # 改良版ファイル検出方法
             local file_count=$(grep -c '"name"' "$temp_file")
             
             if [ "$file_count" -gt 0 ]; then
-                report SUCCESS "リポジトリコンテンツ: 約 $file_count 個のファイルを検出"
-                echo "いくつかのファイル:"
-                grep '"name"' "$temp_file" | head -5 | cut -d'"' -f4 | while read file; do
+                report SUCCESS "リポジトリコンテンツ: $file_count 個のファイルを検出"
+                echo "最初の5つのファイル:"
+                grep '"name":' "$temp_file" | head -5 | sed 's/.*"name": *"\([^"]*\)".*/\1/' | while read file; do
                     echo "  - $file"
                 done
                 rm -f "$temp_file"
@@ -281,13 +317,23 @@ test_file_commit() {
                 return 0
             fi
         else
-            # 簡易カウント方法
-            local commit_count=$(grep -c '"sha"' "$temp_file")
+            # 改良版コミット履歴検出方法
+            local commit_count=$(grep -c '"sha":' "$temp_file")
             
             if [ "$commit_count" -gt 0 ]; then
-                report SUCCESS "ファイルコミット履歴: $file に対して約 $commit_count 件のコミットを検出"
-                local latest_sha=$(grep '"sha"' "$temp_file" | head -1 | cut -d'"' -f4)
-                local latest_date=$(grep '"date"' "$temp_file" | head -1 | cut -d'"' -f4)
+                report SUCCESS "ファイルコミット履歴: $file に対して $commit_count 件のコミットを検出"
+                
+                # 最新のコミットSHAを取得（最初のshaエントリ）
+                local latest_sha=$(grep '"sha":' "$temp_file" | head -1 | sed 's/.*"sha": *"\([^"]*\)".*/\1/')
+                
+                # 日付の取得（少し複雑だが、パターンマッチングで対応）
+                local latest_date=""
+                # commitセクションを見つけて解析
+                local section_start=$(grep -n '"commit":' "$temp_file" | head -1 | cut -d':' -f1)
+                if [ -n "$section_start" ]; then
+                    latest_date=$(tail -n +$section_start "$temp_file" | grep -m 1 '"date":' | sed 's/.*"date": *"\([^"]*\)".*/\1/')
+                fi
+                
                 echo "  - 最新コミット: ${latest_sha:0:7} (日付: $latest_date)"
                 rm -f "$temp_file"
                 return 0
