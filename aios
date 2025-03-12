@@ -1225,7 +1225,7 @@ version_is_newer() {
 #   - hidden: 詳細出力の有無（true=詳細表示、false=最小限の表示）
 #   - quiet: すべての出力を抑制
 #   - chmod: ダウンロード後に実行権限を付与（+x）
-#   - read: ファイルを読み込む（source）
+#   - load: ファイルを読み込む（source）
 #   - debug: デバッグモードでの実行
 #
 # 3. **バージョン処理**
@@ -1257,7 +1257,7 @@ download() {
     local hidden_mode="false"
     local quiet_mode="${QUIET_MODE:-false}"
     local chmod_mode="false"
-    local read_mode="false"
+    local load_mode="false"
     local script_file="${CACHE_DIR}/script.ch"
     local dummy_version="No version control"
     
@@ -1268,7 +1268,7 @@ download() {
             quiet)  quiet_mode="true" ;;
             debug)  DEBUG_MODE="true" ;;
             chmod)  chmod_mode="true" ;;
-            read)   read_mode="true" ;;
+            load)   load_mode="true" ;;
             *)      debug_log "WARN" "Unknown option: $1, ignoring" ;;
         esac
         shift
@@ -1369,10 +1369,10 @@ download() {
     
     # 読み込み処理
     local action_message=""
-    if [ "$read_mode" = "true" ] || echo "$file_name" | grep -q ".*\\.sh"; then
+    if [ "$load_mode" = "true" ] || echo "$file_name" | grep -q ".*\\.sh"; then
         . "$install_path"
         action_message="Loaded"
-        debug_log "DEBUG" "read applied to $file_name"
+        debug_log "DEBUG" "load applied to $file_name"
     fi
     
     # 出力メッセージの修正
@@ -1564,17 +1564,17 @@ check_common() {
             #packages
             ;;
         full)
-            download "dynamic-system-info.sh" "chmod" "read"
-            download "common-country.sh" "chmod" "read"
-            download "common-package.sh" "chmod" "read"
-            download "common-feed-package.sh" "chmod" "read"
+            download "dynamic-system-info.sh" "chmod" "load"
+            download "common-country.sh" "chmod" "load"
+            download "common-package.sh" "chmod" "load"
+            download "common-feed-package.sh" "chmod" "load"
             download "messages.db"
             download "country.db"
             download "local-package.db"
             download "custom-package.db"
             print_banner        
             select_country "$lang_code"
-            download "system-config.sh" "chmod" "read"
+            download "system-config.sh" "chmod" "load"
             #packages
             ;;
         update)
@@ -1583,7 +1583,7 @@ check_common() {
         light)
             ;;
         test_api)
-            download "github_api_test.sh" "chmod" "read"
+            download "github_api_test.sh" "chmod" "load"
             sh "${BASE_DIR}/github_api_test.sh"
             exit 0
             ;;
