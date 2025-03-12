@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-21-03"
+SCRIPT_VERSION="2025.03.12-22-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -380,40 +380,46 @@ github_api_request() {
     local endpoint="$1"
     local token=$(get_github_token)
     local response=""
+    local auth_method="anonymous"
     
+    # トークンがある場合は認証リクエストを試みる
     if [ -n "$token" ]; then
-        debug_log "DEBUG" "Attempting authenticated request with token (${#token} chars)"
+        debug_log "DEBUG" "認証付きリクエストを試行します"
         response=$(wget -q --header="Authorization: token $token" \
             --header="Accept: application/vnd.github.v3+json" \
             -O- "https://api.github.com/$endpoint" 2>/dev/null)
             
-        # レスポンス検証 - リミットチェック
-        if echo "$response" | grep -q '"message":"API rate limit exceeded'; then
-            debug_log "WARN" "GitHub API rate limit exceeded"
-            return 1
-        fi
-        
-        # 認証エラーチェック
+        # レスポンスの検証
         if echo "$response" | grep -q '"message":"Bad credentials"'; then
-            debug_log "ERROR" "GitHub API authentication failed: Bad credentials"
-            return 2
+            debug_log "WARN" "認証失敗: 匿名リクエストにフォールバックします"
+            # 認証失敗時は匿名リクエストを試行
+            response=$(wget -q -O- "https://api.github.com/$endpoint" 2>/dev/null)
+            auth_method="anonymous_fallback"
+        else
+            auth_method="authenticated"
         fi
-        
-        # その他エラーチェック
-        if echo "$response" | grep -q '"message":"'; then
-            local error_msg=$(echo "$response" | grep -o '"message":"[^"]*"' | cut -d':' -f2- | tr -d '"')
-            debug_log "ERROR" "GitHub API error: $error_msg"
-            return 3
-        fi
-        
-        # 成功
-        echo "$response"
-        return 0
     else
-        debug_log "DEBUG" "No token found, using unauthenticated request"
-        wget -q -O- "https://api.github.com/$endpoint" 2>/dev/null
-        return $?
+        # トークンがない場合は初めから匿名リクエスト
+        debug_log "DEBUG" "トークンなし: 匿名リクエストを実行します"
+        response=$(wget -q -O- "https://api.github.com/$endpoint" 2>/dev/null)
     fi
+    
+    # レスポンスの検証
+    if [ -z "$response" ]; then
+        debug_log "ERROR" "空のレスポンス"
+        return 1
+    fi
+    
+    # APIレート制限のチェック
+    if echo "$response" | grep -q '"message":"API rate limit exceeded'; then
+        debug_log "WARN" "APIレート制限に達しました"
+        return 2
+    fi
+    
+    # 成功レスポンスの返却
+    echo "$response"
+    echo "$auth_method" >&2  # 認証メソッドをステータスとして返す
+    return 0
 }
 
 get_github_token() {
