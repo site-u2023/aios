@@ -3,13 +3,13 @@
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
 # 🚀 Last Update: 2025-03-12
-# Version: 04
+# Version: 05
 #
 # 🏷️ License: CC0 (Public Domain)
 # 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 19.07 and 24.10)
 # =========================================================
 
-echo "VERSION 04"
+echo "VERSION 05"
 
 # 🔵 aios関数チェック 🔵
 if type debug_log >/dev/null 2>&1 && type get_github_token >/dev/null 2>&1; then
@@ -136,7 +136,7 @@ test_network_basic() {
         report PARTIAL "Ping: api.github.com is not reachable (possibly blocked by firewall)"
     fi
     
-    # HTTPS接続テスト - OpenWrt 19.07での問題を回避
+    # HTTPS接続テスト
     wget -q --no-check-certificate --spider https://api.github.com >/dev/null 2>&1
     local https_result=$?
     
@@ -150,68 +150,69 @@ test_network_basic() {
     return 0
 }
 
-# 🔵 トークン状態テスト 🔵
+# 🔵 トークン状態テスト（修正版） 🔵
 test_token_status() {
     report INFO "Checking GitHub token status..."
     local token_file="/etc/aios_token"
-    local token=""
     
-    # トークンファイルの存在確認
-    if [ -f "$token_file" ]; then
-        report SUCCESS "Token file: $token_file (exists)"
-        
-        # 権限チェック
-        local perms=$(ls -l "$token_file" | awk '{print $1}')
-        report INFO "  File permissions: $perms"
-        
-        # トークン取得
-        token=$(get_github_token)
-        if [ -n "$token" ]; then
-            # トークンの先頭部分だけを表示（セキュリティ対策）
-            if [ "${#token}" -gt 5 ]; then
-                local token_preview="${token:0:5}..."
-                report INFO "  Token prefix: $token_preview"
+    # トークンファイルがない場合は早期リターン
+    if [ ! -f "$token_file" ]; then
+        report PARTIAL "Token file: $token_file (doesn't exist)"
+        report INFO "  Use 'aios -t' command to set a token"
+        return 0
+    fi
+    
+    # 以下はファイルが存在する場合の処理
+    report SUCCESS "Token file: $token_file (exists)"
+    
+    # 権限チェック
+    local perms=$(ls -l "$token_file" | awk '{print $1}')
+    report INFO "  File permissions: $perms"
+    
+    # トークン取得
+    local token=$(get_github_token)
+    if [ -z "$token" ]; then
+        report FAILURE "  Failed to read token"
+        return 1
+    fi
+    
+    # トークンの先頭部分だけを表示（セキュリティ対策）
+    if [ "${#token}" -gt 5 ]; then
+        local token_preview="${token:0:5}..."
+        report INFO "  Token prefix: $token_preview"
+    else
+        report INFO "  Token: Valid (details hidden)"
+    fi
+    
+    # トークン認証チェック
+    local temp_file="/tmp/github_token_check.tmp"
+    wget -q --no-check-certificate -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/user" 2>/dev/null
+    
+    # 認証状態の確認
+    if [ -s "$temp_file" ]; then
+        if grep -q "login" "$temp_file" 2>/dev/null; then
+            # ユーザー名抽出
+            local login=""
+            if command -v jq >/dev/null 2>&1; then
+                login=$(jq -r '.login' "$temp_file" 2>/dev/null)
             else
-                report INFO "  Token: Valid (details hidden)"
+                login=$(grep -o '"login"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed 's/.*"login"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null)
             fi
             
-            # トークン認証チェック
-            local temp_file="/tmp/github_token_check.tmp"
-            
-            # OpenWrt 19.07の問題を回避
-            wget -q --no-check-certificate -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/user" 2>/dev/null
-            
-            # 認証状態の確認
-            if [ -s "$temp_file" ]; then
-                if grep -q "login" "$temp_file" 2>/dev/null; then
-                    # ユーザー名抽出
-                    local login=""
-                    if command -v jq >/dev/null 2>&1; then
-                        login=$(jq -r '.login' "$temp_file" 2>/dev/null)
-                    else
-                        login=$(grep -o '"login"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed 's/.*"login"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null)
-                    fi
-                    
-                    if [ -n "$login" ]; then
-                        report SUCCESS "  Authentication: ✅ Valid (user: $login)"
-                    else
-                        report SUCCESS "  Authentication: ✅ Valid (username extraction failed)"
-                    fi
-                else
-                    report FAILURE "  Authentication: ❌ Invalid (response doesn't contain user info)"
-                fi
+            if [ -n "$login" ]; then
+                report SUCCESS "  Authentication: ✅ Valid (user: $login)"
             else
-                report FAILURE "  Authentication: ❌ Invalid (empty response)"
+                report SUCCESS "  Authentication: ✅ Valid (username extraction failed)"
             fi
-            
-            rm -f "$temp_file" 2>/dev/null
         else
-            report FAILURE "  Failed to read token"
+            report FAILURE "  Authentication: ❌ Invalid (response doesn't contain user info)"
         fi
     else
-        report PARTIAL "Token file: $token_file (doesn't exist)"
-        report INFO "  Use `aios -t` command to set a token"
+        report FAILURE "  Authentication: ❌ Invalid (empty response)"
     fi
+    
+    rm -f "$temp_file" 2>/dev/null
+    return 0
 }
 
 # 🔵 API制限テスト 🔵
@@ -219,103 +220,116 @@ test_api_rate_limit_no_auth() {
     report INFO "API rate limit test (unauthenticated)..."
     local temp_file="/tmp/github_ratelimit_noauth.tmp"
     
-    # OpenWrt 19.07の問題を回避
+    # API呼び出し
     wget -q --no-check-certificate -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
     
     # レスポンスチェック
-    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-        local remaining limit reset_time
-        
-        # JSONデータを安全に抽出
-        if command -v jq >/dev/null 2>&1; then
-            # jqによるパース
-            remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
-            limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
-            reset_time=$(jq -r '.resources.core.reset' "$temp_file" 2>/dev/null)
-        else
-            # サイレント出力でパース
-            remaining=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"remaining"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
-            limit=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"limit"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
-            reset_time=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"reset"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
-        fi
-        
-        # 結果表示
-        if [ -n "$remaining" ] && [ -n "$limit" ]; then
-            # 残り時間計算（可能なら）
-            local reset_msg="unknown"
-            if [ -n "$reset_time" ] && [ "$USING_AIOS_FUNCTIONS" -eq 1 ] && type format_timestamp >/dev/null 2>&1; then
-                reset_msg=$(format_timestamp "$reset_time")
-            fi
-            
-            report SUCCESS "API rate limit (unauthenticated): $remaining/$limit requests remaining (resets in: $reset_msg)"
-            rm -f "$temp_file" 2>/dev/null
-            return 0
-        fi
+    if [ ! -f "$temp_file" ] || [ ! -s "$temp_file" ]; then
+        report FAILURE "Failed to get API rate limit information"
+        rm -f "$temp_file" 2>/dev/null
+        return 1
     fi
     
-    report FAILURE "Failed to get API rate limit information"
+    # JSONデータを安全に抽出
+    local remaining="" limit="" reset_time=""
+    
+    if command -v jq >/dev/null 2>&1; then
+        # jqによるパース
+        remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
+        limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
+        reset_time=$(jq -r '.resources.core.reset' "$temp_file" 2>/dev/null)
+    else
+        # サイレント出力でパース - エラー出力を確実に破棄
+        remaining=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"remaining"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
+        limit=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"limit"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
+        reset_time=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"reset"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
+    fi
+    
+    # 結果表示
+    if [ -n "$remaining" ] && [ -n "$limit" ]; then
+        # 残り時間計算（可能なら）
+        local reset_msg="unknown"
+        if [ -n "$reset_time" ] && [ "$USING_AIOS_FUNCTIONS" -eq 1 ] && type format_timestamp >/dev/null 2>&1; then
+            reset_msg=$(format_timestamp "$reset_time")
+        fi
+        
+        report SUCCESS "API rate limit (unauthenticated): $remaining/$limit requests remaining (resets in: $reset_msg)"
+    else
+        report FAILURE "Failed to parse API rate limit information"
+    fi
+    
     rm -f "$temp_file" 2>/dev/null
-    return 1
+    return 0
 }
 
+# 🔵 API制限テスト（認証あり） 🔵
 test_api_rate_limit_with_auth() {
     report INFO "API rate limit test (authenticated)..."
+    
+    # トークンファイルの存在確認（早期リターン）
+    if [ ! -f "/etc/aios_token" ]; then
+        report INFO "Skipping authenticated API rate limit test (token file not found)"
+        return 0
+    }
     
     # トークン取得
     local token=$(get_github_token)
     if [ -z "$token" ]; then
-        report PARTIAL "No token available, skipping authenticated API rate limit test"
+        report INFO "Skipping authenticated API rate limit test (token not available)"
         return 0
-    fi
+    }
     
     # API呼び出し
     local temp_file="/tmp/github_ratelimit_auth.tmp"
     wget -q --no-check-certificate -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null
     
     # レスポンスチェック
-    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-        # 認証エラーチェック
-        if grep -q "Bad credentials" "$temp_file" 2>/dev/null; then
-            report FAILURE "API rate limit test: Invalid token"
-            rm -f "$temp_file" 2>/dev/null
-            return 1
-        fi
-        
-        # APIレスポンスパース
-        local remaining limit reset_time
-        
-        if command -v jq >/dev/null 2>&1; then
-            # jqによるパース
-            remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
-            limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
-            reset_time=$(jq -r '.resources.core.reset' "$temp_file" 2>/dev/null)
-        else
-            # サイレント出力でパース
-            remaining=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"remaining"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
-            limit=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"limit"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
-            reset_time=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"reset"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
-        fi
-        
-        # 結果表示
-        if [ -n "$remaining" ] && [ -n "$limit" ]; then
-            # 残り時間計算（可能なら）
-            local reset_msg="unknown"
-            if [ -n "$reset_time" ] && [ "$USING_AIOS_FUNCTIONS" -eq 1 ] && type format_timestamp >/dev/null 2>&1; then
-                reset_msg=$(format_timestamp "$reset_time")
-            fi
-            
-            report SUCCESS "API rate limit (authenticated): $remaining/$limit requests remaining (resets in: $reset_msg)"
-            rm -f "$temp_file" 2>/dev/null
-            return 0
-        fi
+    if [ ! -f "$temp_file" ] || [ ! -s "$temp_file" ]; then
+        report FAILURE "Failed to get authenticated API rate limit information"
+        rm -f "$temp_file" 2>/dev/null
+        return 1
+    }
+    
+    # 認証エラーチェック
+    if grep -q "Bad credentials" "$temp_file" 2>/dev/null; then
+        report FAILURE "API rate limit test: Invalid token"
+        rm -f "$temp_file" 2>/dev/null
+        return 1
+    }
+    
+    # APIレスポンスパース
+    local remaining="" limit="" reset_time=""
+    
+    if command -v jq >/dev/null 2>&1; then
+        # jqによるパース
+        remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
+        limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
+        reset_time=$(jq -r '.resources.core.reset' "$temp_file" 2>/dev/null)
+    else
+        # サイレント出力でパース - エラー出力を確実に破棄
+        remaining=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"remaining"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
+        limit=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"limit"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
+        reset_time=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"reset"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
     fi
     
-    report FAILURE "Failed to get authenticated API rate limit information"
+    # 結果表示
+    if [ -n "$remaining" ] && [ -n "$limit" ]; then
+        # 残り時間計算（可能なら）
+        local reset_msg="unknown"
+        if [ -n "$reset_time" ] && [ "$USING_AIOS_FUNCTIONS" -eq 1 ] && type format_timestamp >/dev/null 2>&1; then
+            reset_msg=$(format_timestamp "$reset_time")
+        fi
+        
+        report SUCCESS "API rate limit (authenticated): $remaining/$limit requests remaining (resets in: $reset_msg)"
+    else
+        report FAILURE "Failed to parse authenticated API rate limit information"
+    fi
+    
     rm -f "$temp_file" 2>/dev/null
-    return 1
+    return 0
 }
 
-# 🔵 リポジトリ情報テスト 🔵
+# 🔵 リポジトリ情報テスト（改善版） 🔵
 test_repo_info() {
     report INFO "Repository information test running..."
     
@@ -338,46 +352,49 @@ test_repo_info() {
     fi
     
     # レスポンスチェック
-    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-        # レポジトリ情報抽出
-        local repo_full_name repo_description repo_stars repo_forks
-        
-        if command -v jq >/dev/null 2>&1; then
-            # jqによるパース
-            repo_full_name=$(jq -r '.full_name' "$temp_file" 2>/dev/null)
-            repo_description=$(jq -r '.description // "No description"' "$temp_file" 2>/dev/null)
-            repo_stars=$(jq -r '.stargazers_count' "$temp_file" 2>/dev/null)
-            repo_forks=$(jq -r '.forks_count' "$temp_file" 2>/dev/null)
-        else
-            # サイレント出力でパース
-            repo_full_name=$(grep -o '"full_name"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed 's/.*"full_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null)
-            repo_description=$(grep -o '"description"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed 's/.*"description"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null)
-            repo_stars=$(grep -o '"stargazers_count"[[:space:]]*:[[:space:]]*[0-9]\+' "$temp_file" 2>/dev/null | grep -o '[0-9]\+' 2>/dev/null)
-            repo_forks=$(grep -o '"forks_count"[[:space:]]*:[[:space:]]*[0-9]\+' "$temp_file" 2>/dev/null | grep -o '[0-9]\+' 2>/dev/null)
-            
-            # 説明がない場合
-            if [ -z "$repo_description" ]; then
-                repo_description="No description"
-            fi
-        fi
-        
-        if [ -n "$repo_full_name" ]; then
-            report SUCCESS "Repository information:"
-            echo "  - Name: $repo_full_name"
-            echo "  - Description: $repo_description"
-            echo "  - Stars: $repo_stars"
-            echo "  - Forks: $repo_forks"
-            rm -f "$temp_file" 2>/dev/null
-            return 0
-        fi
+    if [ ! -f "$temp_file" ] || [ ! -s "$temp_file" ]; then
+        report FAILURE "Failed to get repository information (empty response)"
+        rm -f "$temp_file" 2>/dev/null
+        return 1
     fi
     
-    report FAILURE "Failed to get repository information"
+    # レポジトリ情報抽出
+    local repo_full_name="" repo_description="" repo_stars="" repo_forks=""
+    
+    if command -v jq >/dev/null 2>&1; then
+        # jqによるパース
+        repo_full_name=$(jq -r '.full_name' "$temp_file" 2>/dev/null)
+        repo_description=$(jq -r '.description // "No description"' "$temp_file" 2>/dev/null)
+        repo_stars=$(jq -r '.stargazers_count' "$temp_file" 2>/dev/null)
+        repo_forks=$(jq -r '.forks_count' "$temp_file" 2>/dev/null)
+    else
+        # サイレント出力でパース - エラー出力を確実に破棄
+        repo_full_name=$(grep -o '"full_name"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed 's/.*"full_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null)
+        repo_description=$(grep -o '"description"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed 's/.*"description"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null)
+        repo_stars=$(grep -o '"stargazers_count"[[:space:]]*:[[:space:]]*[0-9]\+' "$temp_file" 2>/dev/null | grep -o '[0-9]\+' 2>/dev/null)
+        repo_forks=$(grep -o '"forks_count"[[:space:]]*:[[:space:]]*[0-9]\+' "$temp_file" 2>/dev/null | grep -o '[0-9]\+' 2>/dev/null)
+    fi
+    
+    # 説明がない場合
+    if [ -z "$repo_description" ]; then
+        repo_description="No description"
+    fi
+    
+    if [ -n "$repo_full_name" ]; then
+        report SUCCESS "Repository information:"
+        echo "  - Name: $repo_full_name"
+        echo "  - Description: $repo_description"
+        echo "  - Stars: $repo_stars"
+        echo "  - Forks: $repo_forks"
+    else
+        report FAILURE "Failed to parse repository information"
+    fi
+    
     rm -f "$temp_file" 2>/dev/null
-    return 1
+    return 0
 }
 
-# 🔵 コミット履歴テスト 🔵
+# 🔵 コミット履歴テスト（改善版） 🔵
 test_commit_history() {
     report INFO "Latest commit information test running..."
     
@@ -400,50 +417,50 @@ test_commit_history() {
     fi
     
     # レスポンスチェック
-    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-        report SUCCESS "Latest commit information:"
-        
-        if command -v jq >/dev/null 2>&1; then
-            # jqによるパース
-            for i in 0 1 2; do
-                local sha=$(jq -r ".[$i].sha" "$temp_file" 2>/dev/null | cut -c1-7)
-                local message=$(jq -r ".[$i].commit.message" "$temp_file" 2>/dev/null | head -1)
-                
-                if [ "$sha" = "null" ] || [ -z "$sha" ]; then
-                    continue
-                fi
-                
-                echo "  - Commit ID: $sha"
-                echo "    Message: $message"
-            done
-        else
-            # サイレント出力でパース
-            for i in 1 2 3; do
-                # パターンマッチでSHA抽出
-                local sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\{7,40\}"' "$temp_file" 2>/dev/null | sed -n "${i}p" | sed 's/.*"sha"[[:space:]]*:[[:space:]]*"\([a-f0-9]\{7\}\).*/\1/' 2>/dev/null)
-                
-                if [ -n "$sha" ]; then
-                    echo "  - Commit ID: $sha"
-                    
-                    # パターンマッチでメッセージ抽出
-                    local message=$(grep -o '"message"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed -n "${i}p" | sed 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/    Message: \1/' 2>/dev/null)
-                    if [ -n "$message" ]; then
-                        echo "$message"
-                    fi
-                fi
-            done
-        fi
-        
+    if [ ! -f "$temp_file" ] || [ ! -s "$temp_file" ]; then
+        report FAILURE "Failed to retrieve commit history (empty response)"
         rm -f "$temp_file" 2>/dev/null
-        return 0
+        return 1
     fi
     
-    report FAILURE "Failed to retrieve commit history"
+    report SUCCESS "Latest commit information:"
+    
+    if command -v jq >/dev/null 2>&1; then
+        # jqによるパース
+        for i in 0 1 2; do
+            local sha=$(jq -r ".[$i].sha" "$temp_file" 2>/dev/null | cut -c1-7)
+            local message=$(jq -r ".[$i].commit.message" "$temp_file" 2>/dev/null | head -1)
+            
+            if [ "$sha" = "null" ] || [ -z "$sha" ]; then
+                continue
+            fi
+            
+            echo "  - Commit ID: $sha"
+            echo "    Message: $message"
+        done
+    else
+        # サイレント出力でパース
+        for i in 1 2 3; do
+            # パターンマッチでSHA抽出
+            local sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\{7,40\}"' "$temp_file" 2>/dev/null | sed -n "${i}p" | sed 's/.*"sha"[[:space:]]*:[[:space:]]*"\([a-f0-9]\{7\}\).*/\1/' 2>/dev/null)
+            
+            if [ -n "$sha" ]; then
+                echo "  - Commit ID: $sha"
+                
+                # パターンマッチでメッセージ抽出
+                local message_line=$(grep -o '"message"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed -n "${i}p" | sed 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null)
+                if [ -n "$message_line" ]; then
+                    echo "    Message: $message_line"
+                fi
+            fi
+        done
+    fi
+    
     rm -f "$temp_file" 2>/dev/null
-    return 1
+    return 0
 }
 
-# 🔵 ファイルダウンロードテスト 🔵
+# 🔵 ファイルダウンロードテスト（改善版） 🔵
 test_file_download() {
     report INFO "File download test running..."
     
@@ -455,25 +472,49 @@ test_file_download() {
     # 直接ダウンロード 
     wget -q --no-check-certificate -O "$temp_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null
     
-    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-        local file_size=$(wc -c < "$temp_file")
-        local file_version=$(grep -o 'SCRIPT_VERSION="[^"]*"' "$temp_file" 2>/dev/null | head -1 | cut -d'"' -f2)
-        
-        report SUCCESS "File 'aios' download successful"
-        echo "  - Size: $file_size bytes"
-        echo "  - Version: $file_version"
-        
-        rm -f "$temp_file"
-        return 0
+    if [ ! -f "$temp_file" ] || [ ! -s "$temp_file" ]; then
+        report FAILURE "Failed to download file (empty response)"
+        rm -f "$temp_file" 2>/dev/null
+        return 1
     fi
     
-    report FAILURE "Failed to download file"
+    local file_size=$(wc -c < "$temp_file")
+    local file_version=$(grep -o 'SCRIPT_VERSION="[^"]*"' "$temp_file" 2>/dev/null | head -1 | cut -d'"' -f2)
+    
+    if [ -n "$file_size" ]; then
+        report SUCCESS "File 'aios' download successful"
+        echo "  - Size: $file_size bytes"
+        if [ -n "$file_version" ]; then
+            echo "  - Version: $file_version"
+        else
+            echo "  - Version: Unknown"
+        fi
+    else
+        report FAILURE "Failed to get file information"
+    fi
+    
     rm -f "$temp_file" 2>/dev/null
-    return 1
+    return 0
+}
+
+# 🔵 トークン接頭辞表示（POSIX準拠） 🔵
+get_token_prefix() {
+    local token="$1"
+    local prefix=""
+    
+    if [ -n "$token" ] && [ ${#token} -gt 5 ]; then
+        # POSIXシェル互換の方法でトークンの最初の5文字を抽出
+        prefix=$(printf "%s" "$token" | cut -c1-5)"..."
+    else
+        prefix="???.."
+    fi
+    
+    printf "%s" "$prefix"
 }
 
 # 🔵 総合テスト実行 🔵
 run_all_tests() {
+    echo "VERSION 05"
     echo "==========================================================="
     echo "📊 GitHub API Connection Test (aios)"
     echo "🕒 Execution time: $(date +'%Y-%m-%d %H:%M:%S')"
@@ -497,12 +538,7 @@ run_all_tests() {
     echo "📈 API Rate Limit Information"
     echo "==========================================================="
     test_api_rate_limit_no_auth
-    # トークンがある場合のみ認証ありテストを実行
-    if [ -f "/etc/aios_token" ]; then
-        test_api_rate_limit_with_auth
-    else
-        report INFO "Skipping authenticated API rate limit test (no token available)"
-    fi
+    test_api_rate_limit_with_auth
     
     echo "==========================================================="
     echo "📁 Repository Access"
