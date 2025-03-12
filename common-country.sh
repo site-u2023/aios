@@ -136,9 +136,8 @@ select_country() {
     # デフォルト値をユーザーに提案
     if [ -z "$input_lang" ] && [ -n "$system_country" ]; then
         printf "%s\n" "$(color cyan "$(get_message "MSG_DETECTED_COUNTRY")" "$system_country")"
-        
-        # 既存のY/N判定関数を使用
-        if confirm_yn "$(get_message "MSG_USE_DETECTED_COUNTRY")"; then
+    
+        if confirm "MSG_USE_DETECTED_COUNTRY"; then
             input_lang="$system_country"
             debug_log "DEBUG" "Using system country: $system_country"
         else
@@ -175,9 +174,8 @@ select_country() {
         if [ "$result_count" -eq 1 ]; then
             local country_name=$(echo "$full_results" | awk '{print $2, $3}')
             printf "%s\n" "$(color cyan "$(get_message "MSG_SINGLE_MATCH_FOUND")" "$country_name")"
-            
-            # 既存のY/N判定関数を使用
-            if confirm_yn "$(get_message "MSG_CONFIRM_ONLY_YN")"; then
+    
+            if confirm "MSG_CONFIRM_ONLY_YN"; then
                 echo "$full_results" > "$tmp_country"
                 country_write
                 select_zone
@@ -216,17 +214,18 @@ select_country() {
         printf "%s\n" "$(color cyan "$(get_message "MSG_SELECTED_COUNTRY")" "$selected_country_name")"
         
         # 既存のY/N判定関数を使用
-        if confirm_yn "$(get_message "MSG_CONFIRM_ONLY_YN")"; then
+        local selected_country_name=$(echo "$selected_full" | awk '{print $2, $3}')
+        printf "%s\n" "$(color cyan "$(get_message "MSG_SELECTED_COUNTRY")" "$selected_country_name")"
+
+        if confirm "MSG_CONFIRM_ONLY_YN"; then
             echo "$selected_full" > "$tmp_country"
             country_write
             select_zone
             return 0
         else
-            # 再検索するか確認
-            if confirm_yn "$(get_message "MSG_SEARCH_AGAIN")"; then
+            if confirm "MSG_SEARCH_AGAIN"; then
                 input_lang=""
             fi
-            # 確認がNoの場合は同じリストから選び直し
             continue
         fi
     done
@@ -473,9 +472,8 @@ select_zone() {
     # デフォルト値が見つかった場合、それを提案
     if [ -n "$default_tz" ]; then
         printf "%s\n" "$(color cyan "$(get_message "MSG_DETECTED_TIMEZONE")" "$default_tz")"
-        
-        # 既存のY/N判定関数を使用
-        if confirm_yn "$(get_message "MSG_USE_DETECTED_TIMEZONE")"; then
+    
+        if confirm "MSG_USE_DETECTED_TIMEZONE"; then
             debug_log "DEBUG" "Using detected timezone: $default_tz (index: $default_tz_index)"
             echo "$default_tz_index" > "$tmp_zone"
             echo "$default_tz" > "$cache_zone"
