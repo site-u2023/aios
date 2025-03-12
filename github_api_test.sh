@@ -3,13 +3,13 @@
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
 # 🚀 Last Update: 2025-03-12
-# Version: 03
+# Version: 04
 #
 # 🏷️ License: CC0 (Public Domain)
 # 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 19.07 and 24.10)
 # =========================================================
 
-echo "VERSION 03"
+echo "VERSION 04"
 
 # 🔵 aios関数チェック 🔵
 if type debug_log >/dev/null 2>&1 && type get_github_token >/dev/null 2>&1; then
@@ -298,7 +298,7 @@ test_api_rate_limit_with_auth() {
         
         # 結果表示
         if [ -n "$remaining" ] && [ -n "$limit" ]; then
-                # 残り時間計算（可能なら）
+            # 残り時間計算（可能なら）
             local reset_msg="unknown"
             if [ -n "$reset_time" ] && [ "$USING_AIOS_FUNCTIONS" -eq 1 ] && type format_timestamp >/dev/null 2>&1; then
                 reset_msg=$(format_timestamp "$reset_time")
@@ -474,7 +474,7 @@ test_file_download() {
 
 # 🔵 総合テスト実行 🔵
 run_all_tests() {
-    echo "VERSION 03"
+    echo "VERSION 04"
     echo "==========================================================="
     echo "📊 GitHub API Connection Test (aios)"
     echo "🕒 Execution time: $(date +'%Y-%m-%d %H:%M:%S')"
@@ -498,7 +498,12 @@ run_all_tests() {
     echo "📈 API Rate Limit Information"
     echo "==========================================================="
     test_api_rate_limit_no_auth
-    test_api_rate_limit_with_auth
+    # トークンがある場合のみ認証ありテストを実行
+    if [ -f "/etc/aios_token" ]; then
+        test_api_rate_limit_with_auth
+    else
+        report INFO "Skipping authenticated API rate limit test (no token available)"
+    fi
     
     echo "==========================================================="
     echo "📁 Repository Access"
