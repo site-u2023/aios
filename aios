@@ -1630,10 +1630,7 @@ check_option() {
                 exit 0
                 ;;
             -test_api)
-                $BASE_WGET "${BASE_DIR}/github_api_test.sh" "${BASE_URL}/github_api_test.sh"
-                chmod +x "${BASE_DIR}/github_api_test.sh"
-                sh "${BASE_DIR}/github_api_test.sh"
-                exit 0
+                MODE="test_api"
                 ;;
             -*)
                 echo "Warning: Unknown option: $1" >&2
@@ -1727,6 +1724,9 @@ check_common() {
             ;;
         light)
             ;;
+        test_api)
+            download "github_api_test.sh" "chmod" "read"
+            exit 0
         *)
             ;;
     esac
