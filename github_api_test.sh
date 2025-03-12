@@ -107,7 +107,7 @@ extract_json_value() {
     echo "$result"
 }
 
-# UNIXタイムスタンプを人間可読な形式に変換（POSIX準拠）
+# UNIXタイムスタンプを人間可読な形式に変換
 format_timestamp() {
     local timestamp=$1
     local now=$(date +%s)
@@ -311,7 +311,7 @@ test_repo_info() {
                 return 0
             fi
         else
-            # 改良版パーサーを使用
+             # 改良版パーサーを使用
             local name=$(grep '"name":' "$temp_file" | head -1 | sed 's/.*"name": *"\([^"]*\)".*/\1/')
             local default_branch=$(grep '"default_branch":' "$temp_file" | head -1 | sed 's/.*"default_branch": *"\([^"]*\)".*/\1/')
             
