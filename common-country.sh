@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-00-00"
+SCRIPT_VERSION="2025.03.12-00-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -264,12 +264,9 @@ XX_select_country() {
     # デフォルト値をユーザーに提案
     if [ -n "$system_country" ]; then
         printf "%s\n" "$(color cyan "$(get_message "MSG_DETECTED_COUNTRY")" "$system_country")"
-        printf "%s" "$(color cyan "$(get_message "MSG_USE_DETECTED_COUNTRY")")" 
-        read -r yn
-        yn=$(normalize_input "$yn")
-        
-        if [ "$yn" = "Y" ] || [ "$yn" = "y" ]; then
+        if confirm "MSG_USE_DETECTED_COUNTRY"; then
             input_lang="$system_country"
+            debug_log "DEBUG" "Using system country: $system_country"
         fi
     fi
 
