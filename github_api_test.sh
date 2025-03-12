@@ -265,20 +265,13 @@ test_api_rate_limit_no_auth() {
         return 1
     fi
     
-    # JSONデータを安全に抽出
-    local remaining=$(json_get_value "$temp_file" "resources.core.remaining")
-    local limit=$(json_get_value "$temp_file" "resources.core.limit")
-    local reset_time=$(json_get_value "$temp_file" "resources.core.reset")
+    # シンプルなgrepで直接値を抽出（より堅牢な方法）
+    local remaining=$(grep -o '"remaining":[0-9]\+' "$temp_file" | head -1 | cut -d: -f2)
+    local limit=$(grep -o '"limit":[0-9]\+' "$temp_file" | head -1 | cut -d: -f2)
     
     # 結果表示
     if [ -n "$remaining" ] && [ -n "$limit" ]; then
-        # 残り時間計算（可能なら）
-        local reset_msg="unknown"
-        if [ -n "$reset_time" ] && [ "$USING_AIOS_FUNCTIONS" -eq 1 ] && type format_timestamp >/dev/null 2>&1; then
-            reset_msg=$(format_timestamp "$reset_time")
-        fi
-        
-        report SUCCESS "API rate limit (unauthenticated): $remaining/$limit requests remaining (resets in: $reset_msg)"
+        report SUCCESS "API rate limit (unauthenticated): $remaining/$limit requests remaining"
     else
         report FAILURE "Failed to parse API rate limit information"
     fi
@@ -546,6 +539,13 @@ run_all_tests() {
     report INFO "Check the above results for GitHub API connection status"
     report INFO "If authentication errors occur, use 'aios -t' to set a token"
     echo "==========================================================="
+
+    # APIレスポンス全体をファイルに保存（デバッグ用）
+if [ "$DEBUG_MODE" = "true" ]; then
+    cp "$temp_file" "/tmp/api_response_debug.json"
+    report DEBUG "API Response saved to /tmp/api_response_debug.json"
+fi
+
 }
 
 # メイン実行
