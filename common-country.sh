@@ -345,13 +345,12 @@ select_list() {
         # 選択内容の表示 (ここでは表示せず、confirm関数に任せる)
         # -- 重複表示を避けるため、ここでの表示を削除 --
         
-        # 確認処理（共通関数使用）で、その中で選択内容を表示する
-        if confirm "MSG_CONFIRM_YNR" "$selected_value"; then
-            # 選択番号を一時ファイルに保存
+        # 確認部分で選択内容の表示は行わない（重複表示を避けるため）
+        if confirm "MSG_CONFIRM_YNR" "selected_value" "$selected_value"; then
             echo "$number" > "$tmp_file"
             break
-        elif [ "$CONFIRM_RESULT" = "R" ] || [ "$CONFIRM_RESULT" = "r" ]; then
-            # リスタートオプション (CONFIRM_RESULTはconfirm関数が設定する想定)
+        elif [ "$CONFIRM_RESULT" = "R" ]; then
+            # リスタートオプション
             debug_log "DEBUG" "ユーザーが選択をリスタート"
             rm -f "${CACHE_DIR}/country.ch"
             select_country
