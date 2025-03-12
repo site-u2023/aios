@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-20-04"
+SCRIPT_VERSION="2025.03.12-20-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -755,94 +755,6 @@ setup_github_token() {
 
 
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
-#########################################################################
-# Last Update: 2025-03-10 10:34:56 (JST) 🚀
-# "GitHub API認証状態の診断と表示"
-#
-# 【要件】
-# 1. **診断機能**
-#   - トークンファイルの存在確認と権限表示
-#   - トークンの有効性検証
-#   - GitHub API認証状態の確認（レート制限情報取得）
-#
-# 2. **表示情報**
-#   - トークンファイルの場所と存在状態
-#   - トークンのプレビュー（先頭5文字のみ）
-#   - API制限値（認証状態に依存）
-#   - 残りリクエスト数
-#   - 認証状態の明示的な表示（✅/❌）
-#
-# 3. **ツール依存性**
-#   - jqを使用したJSONデータの解析
-#   - wgetを使用したAPI通信
-#   - 一時ファイルを使用した結果保存と解析
-#
-# 4. **フォーマット**
-#   - 見やすいセクション区切り（=====）
-#   - 認証状態に応じた記号表示（✅/❌）
-#   - 重要情報の明示的な表示
-#
-# 5. **クリーンアップ**
-#   - 一時ファイルの適切な削除
-#   - エラー状態の適切な表示
-#########################################################################
-check_token_status() {
-    echo "========== GitHub Token Status =========="
-    
-    # トークンファイルの存在確認
-    if [ -f "$GITHUB_TOKEN_FILE" ]; then
-        echo "Token file: $GITHUB_TOKEN_FILE (EXISTS)"
-        ls -l "$GITHUB_TOKEN_FILE"
-        
-        # トークン取得
-        local token=$(get_github_token)
-        if [ -n "$token" ]; then
-            local token_preview=${token:0:5}
-            echo "Token starts with: ${token_preview}..."
-            
-            # 一時ファイルにレスポンス保存
-            local temp_file="/tmp/aios_token_test.tmp"
-            wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null
-            
-            if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-                local core_limit=""
-                local core_remaining=""
-                
-                # jqが利用可能ならjqを使う
-                if check_jq_available; then
-                    echo "Parser: jq available (preferred method)"
-                    core_limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
-                    core_remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
-                else
-                    echo "Parser: fallback method (grep/sed)"
-                    core_limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+')
-                    core_remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+')
-                fi
-                
-                echo "Core rate limit: $core_limit"
-                echo "Core remaining: $core_remaining"
-                
-                # 認証状態の判断
-                if [ "$core_limit" = "5000" ]; then
-                    echo "Auth status: ✅ AUTHENTICATED (Higher limits active)"
-                else
-                    echo "Auth status: ❌ UNAUTHENTICATED (Standard limits)"
-                fi
-                
-                # 一時ファイル削除
-                rm -f "$temp_file"
-            else
-                echo "Could not retrieve rate limit information"
-            fi
-        else
-            echo "Could not extract valid token from file"
-        fi
-    else
-        echo "Token file: $GITHUB_TOKEN_FILE (NOT FOUND)"
-    fi
-    
-    echo "========================================"
-}
 
 check_jq_available() {
     if command -v jq >/dev/null 2>&1; then
@@ -1017,92 +929,6 @@ clean_version_string() {
     fi
 }
 
-OK_clean_version_string() {
-    local version_str="$1"
-    
-    # 1. 改行と復帰を削除
-    local cleaned=$(echo "$version_str" | tr -d '\n\r')
-    
-    # 2. 角括弧を削除
-    cleaned=$(echo "$cleaned" | sed 's/\[//g' | sed 's/\]//g')
-    
-    # 3. ANSIエスケープコードを削除（複数パターン対応）
-    cleaned=$(echo "$cleaned" | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/[0-9]\+;[0-9]\+m//g')
-    
-    # 4. 不必要な重複を削除（日付の重複など）
-    cleaned=$(echo "$cleaned" | sed -e 's/\(20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)\1*/\1/g' -e 's/\(20[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]\)\1*/\1/g')
-    
-    # 5. バージョンの一般的なフォーマットだけを抽出（日付-ハッシュ値）
-    local version_pattern=$(echo "$cleaned" | grep -o '20[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]-[0-9a-zA-Z]\+' | head -1)
-    
-    # パターンが見つかった場合はそれを使用、見つからない場合はクリーン化した文字列を返す
-    if [ -n "$version_pattern" ]; then
-        echo "$version_pattern"
-    else
-        echo "$cleaned"
-    fi
-}
-
-AI_clean_version_string() {
-    local version_str="$1"
-    
-    # 1. 改行と復帰を削除
-    local cleaned=$(printf "%s" "$version_str" | tr -d '\n\r')
-    
-    # 2. 角括弧を削除
-    cleaned=$(printf "%s" "$cleaned" | sed 's/\[//g; s/\]//g')
-    
-    # 3. ANSIエスケープコードを削除
-    cleaned=$(printf "%s" "$cleaned" | sed 's/\x1b\[[0-9;]*[mK]//g')
-    
-    # 4. バージョン番号の抽出（シンプルな方法）
-    if echo "$cleaned" | grep -q '20[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]'; then
-        # 年.月.日 形式のバージョンを抽出
-        local date_part=$(printf "%s" "$cleaned" | grep -o '20[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]')
-        
-        # バージョン文字列の残りの部分があれば追加
-        if echo "$cleaned" | grep -q "${date_part}-"; then
-            local remainder=$(printf "%s" "$cleaned" | sed "s/.*${date_part}-//; s/[^0-9a-zA-Z-].*//")
-            printf "%s-%s" "$date_part" "$remainder"
-        else
-            printf "%s" "$date_part"
-        fi
-    else
-        # バージョンが見つからない場合は元の文字列をクリーニングしたものを返す
-        printf "%s" "$cleaned"
-    fi
-}
-
-#########################################################################
-# Last Update: 2025-03-10 10:30:32 (JST) 🚀
-# "GitHub APIからファイルの最新コミット情報を取得してバージョン化する"
-#
-# 【要件】
-# 1. **APIアクセス方法**
-#   - GitHub API v3を使用し、指定ファイルの最新コミット情報を取得
-#   - トークン認証を優先使用（利用可能な場合）
-#   - 認証失敗時は匿名アクセスにフォールバック
-#
-# 2. **バージョン情報の生成**
-#   - コミット日付とSHAハッシュからバージョン文字列を構築
-#   - 形式: `YYYY.MM.DD-SHA(短縮形)`
-#   - 日付フォーマット変換: YYYY-MM-DD → YYYY.MM.DD
-#   - SHA: 先頭7文字のみ使用
-#
-# 3. **エラーハンドリング**
-#   - API失敗時は現在日付と"unknown"を使用したバージョン情報を返す
-#   - 認証状態を2つ目の戻り値として返す（token/direct）
-#   - 一時ファイルを使用し、処理後に適切に削除
-#
-# 4. **依存ツール**
-#   - jq: JSONパース用（存在する場合のみ使用）
-#   - wget: APIリクエスト用
-#   - 一時ファイル: /tmp/aios_commit_info.tmp
-#
-# 5. **既存実装からの変更点**
-#   - Base64デコードが不要（ファイルコンテンツではなくコミット情報を使用）
-#   - 認証状態をより正確に識別して返す
-#########################################################################
 #########################################################################
 # Last Update: 2025-03-12 02:14:00 (JST) 🚀
 # "GitHub APIからファイルの最新コミット情報を取得してバージョン化する"
@@ -1624,9 +1450,6 @@ check_option() {
                 ;;
             -t|--t|-token|--token)
                 setup_github_token
-                ;;
-            -ts|--ts|--token-status)
-                check_token_status
                 exit 0
                 ;;
             -ta|--ta|-test_api|--test_api)
