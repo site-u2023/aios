@@ -135,19 +135,23 @@ select_country() {
 
     # デフォルト値をユーザーに提案
     if [ -z "$input_lang" ] && [ -n "$system_country" ]; then
-        printf "%s\n" "$(color cyan "$(get_message "MSG_DETECTED_COUNTRY")" "$system_country")"
-    
-        # メッセージとプロンプトを分離
+        printf "%s %s\n" "$(color cyan "$(get_message "MSG_DETECTED_COUNTRY")")" "$system_country"
         printf "%s\n" "$(color cyan "$(get_message "MSG_USE_DETECTED_COUNTRY")")"
+        printf "%s " "$(color cyan "$(get_message "MSG_CONFIRM_ONLY_YN")")"
         
-        # 確認プロンプトを表示
-        if confirm "MSG_CONFIRM_ONLY_YN"; then
-            input_lang="$system_country"
-            debug_log "DEBUG" "Using system country: $system_country"
-        else
-            input_lang=""
-            debug_log "DEBUG" "User declined system country. Moving to manual input."
-        fi
+        read -r yn
+        yn=$(normalize_input "$yn")
+        
+        case "$yn" in
+            [Yy]*)
+                input_lang="$system_country"
+                debug_log "DEBUG" "Using system country: $system_country"
+                ;;
+            *)
+                input_lang=""
+                debug_log "DEBUG" "User declined system country. Moving to manual input."
+                ;;
+        esac
     fi
 
     # 国の入力と検索ループ
@@ -155,7 +159,7 @@ select_country() {
         # 入力がまだない場合は入力を求める
         if [ -z "$input_lang" ]; then
             printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_COUNTRY")")"
-            printf "%s" "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
+            printf "%s " "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
             read -r input_lang
             debug_log "DEBUG" "User entered country search: $input_lang"
         fi
@@ -168,7 +172,7 @@ select_country() {
 
         # 検索結果がない場合
         if [ -z "$full_results" ]; then
-            printf "%s\n" "$(color red "$(get_message "MSG_COUNTRY_NOT_FOUND")" "$input_lang")"
+            printf "%s %s\n" "$(color red "$(get_message "MSG_COUNTRY_NOT_FOUND")")" "$input_lang"
             input_lang=""  # リセットして再入力
             continue
         fi
@@ -178,19 +182,25 @@ select_country() {
         if [ "$result_count" -eq 1 ]; then
             local country_name=$(echo "$full_results" | awk '{print $2, $3}')
             
-            # プレースホルダー置換を適切に行う
-            printf "%s\n" "$(color cyan "$(get_message "MSG_SINGLE_MATCH_FOUND")" "$country_name")"
-    
-            # 確認プロンプト表示（メッセージとプロンプトを分離）
-            if confirm "MSG_CONFIRM_ONLY_YN"; then
-                echo "$full_results" > "$tmp_country"
-                country_write
-                select_zone
-                return 0
-            else
-                input_lang=""
-                continue
-            fi
+            # 修正：プレースホルダー置換をプログラムで明示的に行う
+            printf "%s %s\n" "$(color cyan "$(get_message "MSG_SINGLE_MATCH_FOUND")")" "$country_name"
+            printf "%s " "$(color cyan "$(get_message "MSG_CONFIRM_ONLY_YN")")"
+            
+            read -r yn
+            yn=$(normalize_input "$yn")
+            
+            case "$yn" in
+                [Yy]*)
+                    echo "$full_results" > "$tmp_country"
+                    country_write
+                    select_zone
+                    return 0
+                    ;;
+                *)
+                    input_lang=""
+                    continue
+                    ;;
+            esac
         fi
 
         # 複数結果の場合、リスト表示して選択
@@ -218,20 +228,31 @@ select_country() {
         
         # 選択確認 (重複している部分を削除)
         local selected_country_name=$(echo "$selected_full" | awk '{print $2, $3}')
-        printf "%s\n" "$(color cyan "$(get_message "MSG_SELECTED_COUNTRY")" "$selected_country_name")"
-
-        # 確認プロンプト（メッセージとプロンプトを分離）
-        if confirm "MSG_CONFIRM_ONLY_YN"; then
-            echo "$selected_full" > "$tmp_country"
-            country_write
-            select_zone
-            return 0
-        else
-            if confirm "MSG_SEARCH_AGAIN"; then
-                input_lang=""
-            fi
-            continue
-        fi
+        printf "%s %s\n" "$(color cyan "$(get_message "MSG_SELECTED_COUNTRY")")" "$selected_country_name"
+        
+        # 確認プロンプト表示
+        printf "%s " "$(color cyan "$(get_message "MSG_CONFIRM_ONLY_YN")")"
+        read -r yn
+        yn=$(normalize_input "$yn")
+        
+        case "$yn" in
+            [Yy]*)
+                echo "$selected_full" > "$tmp_country"
+                country_write
+                select_zone
+                return 0
+                ;;
+            *)
+                printf "%s " "$(color cyan "$(get_message "MSG_SEARCH_AGAIN")")"
+                read -r yn
+                yn=$(normalize_input "$yn")
+                
+                if echo "$yn" | grep -qi '^[yY]'; then
+                    input_lang=""
+                fi
+                continue
+                ;;
+        esac
     done
 }
 
