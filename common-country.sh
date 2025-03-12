@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-00-04"
+SCRIPT_VERSION="2025.03.12-00-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -351,88 +351,131 @@ select_list() {
 
 # タイムゾーンの選択を促す関数
 select_zone() {
-    debug_log "DEBUG" "Entering select_zone()"
+    debug_log "DEBUG" "select_zone()関数を実行します"
     
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_zone="${CACHE_DIR}/zone.ch"
+    local cache_zonename="${CACHE_DIR}/zonename.ch"
+    local cache_timezone="${CACHE_DIR}/timezone.ch"
     local tmp_zone="${CACHE_DIR}/zone_tmp.ch"
     
-    # すでにキャッシュファイルがある場合はスキップ
-    if [ -f "$cache_zone" ]; then
-        debug_log "DEBUG" "Zone cache found. Skipping zone selection."
+    # すでに設定済みかチェック
+    if [ -f "$cache_zonename" ] && [ -f "$cache_timezone" ]; then
+        debug_log "DEBUG" "タイムゾーンはすでに設定済みです。select_zone()をスキップします"
         return 0
     fi
 
     # カントリーファイルが存在するか確認
     if [ ! -f "$cache_country" ]; then
-        debug_log "ERROR" "Country file not found. Running select_country first."
+        debug_log "ERROR" "カントリーファイルが見つかりません。select_country()を先に実行します"
         select_country
         return $?
     fi
     
-    # カントリー情報を読み込む
+    # カントリーデータからタイムゾーン情報を抽出
     local country_data=$(cat "$cache_country")
-    local country_col=$(echo "$country_data" | awk '{print $2}')
-    local timezone_cols=$(echo "$country_data" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i; print ""}')
     
-    # システムから現在のタイムゾーンを取得
-    local current_tz=""
-    if type get_current_timezone >/dev/null 2>&1; then
-        current_tz=$(get_current_timezone)
-        debug_log "DEBUG" "Current system timezone: $current_tz"
+    # フィールド6以降を抽出（すべてのタイムゾーン関連データ）
+    local zone_data=$(echo "$country_data" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i}')
+    debug_log "DEBUG" "抽出されたゾーンデータ: $zone_data"
+    
+    # データがない場合は終了
+    if [ -z "$zone_data" ]; then
+        debug_log "ERROR" "ゾーンデータがありません"
+        return 1
     fi
     
-    # デフォルトタイムゾーンの検出
-    local default_tz=""
-    local default_tz_index=0
-    local tz_count=0
+    # カンマで区切られたゾーンデータを処理
+    # 形式: "Asia/Tokyo,JST-9 Europe/London,GMT0"
+    local zone_list=""
+    local count=1
     
-    for zone in $timezone_cols; do
-        tz_count=$((tz_count + 1))
-        if [ -n "$current_tz" ] && echo "$zone" | grep -q "$current_tz"; then
-            default_tz="$zone"
-            default_tz_index=$tz_count
-            break
+    # 一時ファイルを初期化
+    : > "$tmp_zone"
+    
+    # ゾーンデータをパースして表示可能な形式に変換
+    echo "$zone_data" | tr ' ' '\n' | while read -r zone_pair; do
+        # カンマ区切りのペアから個別データを抽出
+        local zonename=$(echo "$zone_pair" | cut -d',' -f1)
+        local timezone=$(echo "$zone_pair" | cut -d',' -f2)
+        
+        if [ -n "$zonename" ] && [ -n "$timezone" ]; then
+            echo "$count: $zonename ($timezone)"
+            echo "$zonename,$timezone" >> "$tmp_zone"
+            count=$((count + 1))
         fi
-    done
+    done > "${CACHE_DIR}/zone_display.txt"
     
-    # デフォルト値が見つかった場合、それを提案
-    if [ -n "$default_tz" ]; then
-        local msg_detected=$(get_message "MSG_DETECTED_TIMEZONE")
-        printf "%s %s\n" "$msg_detected" "$default_tz"
-        
-        # 確認プロンプト
-        local msg_confirm=$(get_message "MSG_CONFIRM_ONLY_YN")
-        printf "%s " "$msg_confirm"
-        
-        read -r yn
-        yn=$(normalize_input "$yn")
-        
-        case "$yn" in
-            [Yy]*)
-                debug_log "DEBUG" "Using detected timezone: $default_tz (index: $default_tz_index)"
-                echo "$default_tz_index" > "$tmp_zone"
-                echo "$default_tz" > "$cache_zone"
-                return 0
-                ;;
-            *)
-                # ユーザーが拒否した場合は手動選択へ進む
-                ;;
-        esac
+    # ゾーンリストを表示
+    local msg_select_zone=$(get_message "MSG_SELECT_TIMEZONE")
+    printf "%s\n" "$msg_select_zone"
+    cat "${CACHE_DIR}/zone_display.txt"
+    
+    # ユーザーに選択を促す
+    local prompt_msg=$(get_message "MSG_SELECT_ZONE_NUMBER")
+    printf "%s " "$prompt_msg"
+    
+    read -r choice
+    choice=$(normalize_input "$choice")
+    
+    # 選択が正しいか確認
+    if ! echo "$choice" | grep -q "^[0-9]\+$"; then
+        local msg_invalid=$(get_message "MSG_INVALID_NUMBER")
+        printf "%s\n" "$msg_invalid"
+        return 1
     fi
     
-    # タイムゾーン一覧を表示して選択させる
-    echo "$timezone_cols" | tr ' ' '\n' | grep -v "^$" > "$tmp_zone"
-    select_list "$(cat "$tmp_zone")" "$tmp_zone" "zone"
+    # 選択された行を取得
+    local selected_pair=$(sed -n "${choice}p" "$tmp_zone")
+    if [ -z "$selected_pair" ]; then
+        local msg_error=$(get_message "MSG_ERROR_OCCURRED")
+        printf "%s\n" "$msg_error"
+        return 1
+    fi
     
-    # 選択されたタイムゾーンを取得
-    local selected_number=$(cat "$tmp_zone")
-    local selected_timezone=$(echo "$timezone_cols" | tr ' ' '\n' | sed -n "${selected_number}p")
+    # カンマで区切られたペアから値を抽出
+    local selected_zonename=$(echo "$selected_pair" | cut -d',' -f1)
+    local selected_timezone=$(echo "$selected_pair" | cut -d',' -f2)
     
-    # 結果をキャッシュに書き込み
-    echo "$selected_timezone" > "$cache_zone"
+    # 確認メッセージ
+    local msg_selected=$(get_message "MSG_SELECTED_TIMEZONE")
+    msg_selected=$(echo "$msg_selected" | sed "s/{0}/$selected_zonename/g")
+    printf "%s\n" "$msg_selected"
     
-    debug_log "DEBUG" "Selected timezone: $selected_timezone (number: $selected_number)"
+    # 確認プロンプト
+    local msg_confirm=$(get_message "MSG_CONFIRM_ONLY_YN")
+    printf "%s " "$msg_confirm"
+    
+    read -r yn
+    yn=$(normalize_input "$yn")
+    
+    case "$yn" in
+        [Yy]*)
+            # キャッシュに書き込み
+            echo "$selected_zonename" > "$cache_zonename"
+            echo "$selected_timezone" > "$cache_timezone"
+            echo "$selected_pair" > "$cache_zone"
+            
+            local msg_success=$(get_message "MSG_TIMEZONE_SUCCESS")
+            printf "%s\n" "$msg_success"
+            
+            # 基本的な言語パッケージをインストール
+            if type install_package >/dev/null 2>&1; then
+                install_package luci-i18n-base yn hidden
+                install_package luci-i18n-opkg yn hidden
+                install_package luci-i18n-firewall yn hidden
+            fi
+            
+            return 0
+            ;;
+        *)
+            # キャンセルされた場合、再度選択させる
+            debug_log "DEBUG" "ユーザーがタイムゾーン選択をキャンセルしました"
+            # 再帰的に関数を呼び出し
+            select_zone
+            return $?
+            ;;
+    esac
 }
 
 # 国と言語情報をキャッシュに書き込む関数
