@@ -334,7 +334,7 @@ select_list() {
         if [ "$number" -lt 1 ] || [ "$number" -gt "$total_items" ]; then
             local range_msg=$(get_message "MSG_NUMBER_OUT_OF_RANGE" "範囲外の番号です: {0}")
             # プレースホルダー置換（sedでエスケープ処理）
-            range_msg=$(echo "$range_msg" | sed "s/{0}/1-$total_items/g")
+            range_msg=$(echo "$range_msg" | sed "s|{0}|1-$total_items|g")
             printf "%s\n" "$(color red "$range_msg")"
             continue
         fi
