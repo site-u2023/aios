@@ -272,6 +272,7 @@ select_country() {
 # $1: 表示するリストデータ
 # $2: 結果を保存する一時ファイル
 # $3: タイプ（country/zone）
+# 番号付きリストからユーザーに選択させる関数
 select_list() {
     debug_log "DEBUG" "select_list() 関数を実行: タイプ=$3"
     
@@ -317,19 +318,21 @@ select_list() {
     # ユーザーに選択を促す
     while true; do
         # メッセージの取得と表示
-        printf "%s " "$(color cyan "$(get_message "$prompt_msg_key")")"
+        local prompt_msg=$(get_message "$prompt_msg_key" "番号を選択:")
+        printf "%s " "$(color cyan "$prompt_msg")"
         read -r number
         number=$(normalize_input "$number")
         
         # 数値チェック
         if ! echo "$number" | grep -q '^[0-9]\+$'; then
-            printf "%s\n" "$(color red "$(get_message "$error_msg_key")")"
+            local error_msg=$(get_message "$error_msg_key" "無効な番号です")
+            printf "%s\n" "$(color red "$error_msg")"
             continue
         fi
         
         # 範囲チェック
         if [ "$number" -lt 1 ] || [ "$number" -gt "$total_items" ]; then
-            local range_msg=$(get_message "MSG_NUMBER_OUT_OF_RANGE")
+            local range_msg=$(get_message "MSG_NUMBER_OUT_OF_RANGE" "範囲外の番号です: {0}")
             # プレースホルダー置換（sedでエスケープ処理）
             range_msg=$(echo "$range_msg" | sed "s/{0}/1-$total_items/g")
             printf "%s\n" "$(color red "$range_msg")"
@@ -339,16 +342,16 @@ select_list() {
         # 選択項目を取得
         local selected_value=$(echo "$select_list" | sed -n "${number}p")
         
-        # 選択内容の表示
-        local selected_msg=$(get_message "MSG_SELECTED")
-        printf "%s %s\n" "$(color cyan "$selected_msg")" "$selected_value"
+        # 選択内容の表示 (ここでは表示せず、confirm関数に任せる)
+        # -- 重複表示を避けるため、ここでの表示を削除 --
         
-        # 確認処理（共通関数使用）
-        if confirm "MSG_CONFIRM_YNR"; then
+        # 確認処理（共通関数使用）で、その中で選択内容を表示する
+        if confirm "MSG_CONFIRM_YNR" "$selected_value"; then
+            # 選択番号を一時ファイルに保存
             echo "$number" > "$tmp_file"
             break
-        elif [ "$yn" = "R" ] || [ "$yn" = "r" ]; then
-            # リスタートオプション
+        elif [ "$CONFIRM_RESULT" = "R" ] || [ "$CONFIRM_RESULT" = "r" ]; then
+            # リスタートオプション (CONFIRM_RESULTはconfirm関数が設定する想定)
             debug_log "DEBUG" "ユーザーが選択をリスタート"
             rm -f "${CACHE_DIR}/country.ch"
             select_country
