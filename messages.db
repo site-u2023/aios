@@ -31,6 +31,20 @@ JP|MSG_RETURN_TO_SEARCH=検索に戻る
 # =======================
 # country-common.sh
 # =======================
+US|MSG_COUNTRY_NOT_FOUND=No matching country found for '{0}'. Please try again.
+JP|MSG_COUNTRY_NOT_FOUND='{0}'に一致する国が見つかりません。再度入力してください。
+
+US|MSG_SINGLE_MATCH_FOUND=Found single match: {0}
+JP|MSG_SINGLE_MATCH_FOUND=一致する国が見つかりました: {0}
+
+US|MSG_MULTIPLE_MATCHES_FOUND=Multiple matching countries found:
+JP|MSG_MULTIPLE_MATCHES_FOUND=複数の国が見つかりました:
+
+US|MSG_SELECTED_COUNTRY=You selected: {0}
+JP|MSG_SELECTED_COUNTRY=選択された国: {0}
+
+US|MSG_SEARCH_AGAIN=Search again?
+JP|MSG_SEARCH_AGAIN=再検索しますか？
 
 # バナーメッセージ
 US|MSG_BANNER_DECCRIPTION=OpenWrt/Alpine Intelligent Operating System Setup
