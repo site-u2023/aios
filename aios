@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-22-00"
+SCRIPT_VERSION="2025.03.12-22-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -380,45 +380,68 @@ github_api_request() {
     local endpoint="$1"
     local token=$(get_github_token)
     local response=""
-    local auth_method="anonymous"
+    local auth_status="anonymous"
     
-    # トークンがある場合は認証リクエストを試みる
+    # 認証トークンがある場合
     if [ -n "$token" ]; then
-        debug_log "DEBUG" "認証付きリクエストを試行します"
+        # 通常のHTTPSリクエストを試行
+        debug_log "DEBUG" "認証付きHTTPSリクエストを実行"
         response=$(wget -q --header="Authorization: token $token" \
             --header="Accept: application/vnd.github.v3+json" \
             -O- "https://api.github.com/$endpoint" 2>/dev/null)
             
-        # レスポンスの検証
-        if echo "$response" | grep -q '"message":"Bad credentials"'; then
-            debug_log "WARN" "認証失敗: 匿名リクエストにフォールバックします"
-            # 認証失敗時は匿名リクエストを試行
-            response=$(wget -q -O- "https://api.github.com/$endpoint" 2>/dev/null)
-            auth_method="anonymous_fallback"
+        # 成功した場合
+        if [ -n "$response" ] && ! echo "$response" | grep -q '"message":"Bad credentials"'; then
+            auth_status="authenticated"
         else
-            auth_method="authenticated"
+            # 認証失敗時に証明書検証スキップで再試行
+            debug_log "WARN" "通常リクエスト失敗: 証明書検証スキップで再試行"
+            response=$(wget --no-check-certificate -q \
+                --header="Authorization: token $token" \
+                --header="Accept: application/vnd.github.v3+json" \
+                -O- "https://api.github.com/$endpoint" 2>/dev/null)
+                
+            if [ -n "$response" ] && ! echo "$response" | grep -q '"message":"Bad credentials"'; then
+                auth_status="authenticated_nocert"
+            else
+                # 認証が完全に失敗した場合は匿名リクエストへ
+                debug_log "WARN" "認証失敗: 匿名リクエストへフォールバック"
+                response=$(wget -q -O- "https://api.github.com/$endpoint" 2>/dev/null)
+                
+                # それも失敗したら証明書検証スキップで匿名リクエスト
+                if [ -z "$response" ]; then
+                    debug_log "WARN" "匿名リクエスト失敗: 証明書検証スキップで再試行"
+                    response=$(wget --no-check-certificate -q \
+                        -O- "https://api.github.com/$endpoint" 2>/dev/null)
+                    auth_status="anonymous_nocert"
+                else
+                    auth_status="anonymous"
+                fi
+            fi
         fi
     else
-        # トークンがない場合は初めから匿名リクエスト
-        debug_log "DEBUG" "トークンなし: 匿名リクエストを実行します"
+        # トークンがない場合は匿名リクエスト
         response=$(wget -q -O- "https://api.github.com/$endpoint" 2>/dev/null)
+        
+        # 失敗したら証明書検証スキップで再試行
+        if [ -z "$response" ]; then
+            debug_log "WARN" "匿名リクエスト失敗: 証明書検証スキップで再試行"
+            response=$(wget --no-check-certificate -q \
+                -O- "https://api.github.com/$endpoint" 2>/dev/null)
+            auth_status="anonymous_nocert"
+        else
+            auth_status="anonymous"
+        fi
     fi
     
-    # レスポンスの検証
+    # 最終結果の確認
     if [ -z "$response" ]; then
-        debug_log "ERROR" "空のレスポンス"
+        debug_log "ERROR" "すべての接続方法が失敗しました"
         return 1
     fi
     
-    # APIレート制限のチェック
-    if echo "$response" | grep -q '"message":"API rate limit exceeded'; then
-        debug_log "WARN" "APIレート制限に達しました"
-        return 2
-    fi
-    
-    # 成功レスポンスの返却
     echo "$response"
-    echo "$auth_method" >&2  # 認証メソッドをステータスとして返す
+    echo "$auth_status" >&2
     return 0
 }
 
