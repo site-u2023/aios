@@ -362,7 +362,7 @@ confirm() {
         # パラメータ名と値が指定されている場合は置換
         if [ -n "$param_name" ] && [ -n "$param_value" ]; then
             # POSIXに準拠した置換方法
-            msg=$(echo "$msg" | sed "s/{$param_name}/$param_value/g")
+            msg=$(echo "$msg" | sed "s|{$param_name}|$param_value|g")
         fi
     else
         # 直接メッセージが指定されている場合はそれを使用
