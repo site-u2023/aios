@@ -52,8 +52,8 @@ US|MSG_USE_DETECTED_COUNTRY=Do you want to use the detected country?
 JP|MSG_USE_DETECTED_COUNTRY=検出された国を使用しますか？
 
 # タイムゾーン検出関連メッセージ
-US|MSG_DETECTED_TIMEZONE=Detected timezone
-JP|MSG_DETECTED_TIMEZONE=検出されたタイムゾーン
+US|MSG_DETECTED_TIMEZONE=Detected timezone:
+JP|MSG_DETECTED_TIMEZONE=検出されたタイムゾーン:
 
 US|MSG_USE_DETECTED_TIMEZONE=Do you want to use the detected timezone
 JP|MSG_USE_DETECTED_TIMEZONE=検出されたタイムゾーンを使用しますか
