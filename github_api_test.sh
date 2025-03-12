@@ -419,9 +419,10 @@ test_file_commit() {
             
             if [ -n "$commit_count" ] && [ "$commit_count" -gt 0 ]; then
                 report SUCCESS "ファイルコミット履歴: $file に対して $commit_count 件のコミットを検出"
-                local latest_sha=$(jq -r '.[0].sha' "$temp_file" 2>/dev/null)
+                # jqを使って直接SHA部分と日付を取得（パイプの使用を避ける）
+                local latest_sha=$(jq -r '.[0].sha' "$temp_file" 2>/dev/null | cut -c1-7)
                 local latest_date=$(jq -r '.[0].commit.committer.date' "$temp_file" 2>/dev/null)
-                echo "  - 最新コミット: ${latest_sha:0:7} (日付: $latest_date)"
+                echo "  - 最新コミット: $latest_sha (日付: $latest_date)"
                 rm -f "$temp_file"
                 return 0
             fi
@@ -433,17 +434,14 @@ test_file_commit() {
                 report SUCCESS "ファイルコミット履歴: $file に対して $commit_count 件のコミットを検出"
                 
                 # 最新のコミットSHAを取得（最初のshaエントリ）
-                local latest_sha=$(grep '"sha":' "$temp_file" | head -1 | sed 's/.*"sha": *"\([^"]*\)".*/\1/')
+                local latest_sha=$(grep '"sha":' "$temp_file" | head -1 | sed 's/.*"sha": *"\([^"]*\)".*/\1/' | cut -c1-7)
                 
-                # 日付の取得（少し複雑だが、パターンマッチングで対応）
+                # 日付の取得（より堅牢な方法で）
                 local latest_date=""
-                # commitセクションを見つけて解析
-                local section_start=$(grep -n '"commit":' "$temp_file" | head -1 | cut -d':' -f1)
-                if [ -n "$section_start" ]; then
-                    latest_date=$(tail -n +$section_start "$temp_file" | grep -m 1 '"date":' | sed 's/.*"date": *"\([^"]*\)".*/\1/')
-                fi
+                local pattern='"date"[[:space:]]*:[[:space:]]*"[^"]*"'
+                latest_date=$(grep -m 1 "$pattern" "$temp_file" | sed 's/.*"date"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
                 
-                echo "  - 最新コミット: ${latest_sha:0:7} (日付: $latest_date)"
+                echo "  - 最新コミット: $latest_sha (日付: $latest_date)"
                 rm -f "$temp_file"
                 return 0
             fi
