@@ -372,8 +372,8 @@ JP|MSG_UPDATE_FAILED=❌ アップデートに失敗しました。詳細はロ�
 US|MSG_INSTALL_SUCCESS=Installation completed successfully.
 JP|MSG_INSTALL_SUCCESS= のインストールは完了しました。
 
-US|MSG_CONFIRM_ONLY_YN=🔄 Confirm (Y=Yes / N=No):
-JP|MSG_CONFIRM_ONLY_YN=🔄 確認 (Y=はい / N=いいえ):
+US|MSG_CONFIRM_ONLY_YN=🔄 Confirm (y/n):
+JP|MSG_CONFIRM_ONLY_YN=🔄 確認 (y/n):
 
 US|MSG_UNKNOWN_OPTION=⚠️ Unknown option: {option}
 JP|MSG_UNKNOWN_OPTION=⚠️ 不明なオプション: {option}
