@@ -3,170 +3,109 @@
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
 # 🚀 Last Update: 2025-03-12
-# Version: 02
+# Version: 03
 #
 # 🏷️ License: CC0 (Public Domain)
 # 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 19.07 and 24.10)
-#
-# 📢 NOTE: OpenWrt OS exclusively uses Almquist Shell (ash)
 # =========================================================
 
-# グローバル変数
-JQ_AVAILABLE=0
-WGET_AVAILABLE=0
-GITHUB_TOKEN_FILE="/etc/aios_token"
+echo "VERSION 03"
 
-# ユーティリティ関数
+# 🔵 aios関数チェック 🔵
+if type debug_log >/dev/null 2>&1 && type get_github_token >/dev/null 2>&1; then
+    USING_AIOS_FUNCTIONS=1
+else
+    USING_AIOS_FUNCTIONS=0
+    
+    # 最低限必要なフォールバック関数（単体実行時用）
+    GITHUB_TOKEN_FILE="/etc/aios_token"
+    
+    debug_log() {
+        local level="$1"
+        local message="$2"
+        echo "[$level] $message"
+    }
+    
+    get_github_token() {
+        if [ -f "$GITHUB_TOKEN_FILE" ] && [ -r "$GITHUB_TOKEN_FILE" ]; then
+            cat "$GITHUB_TOKEN_FILE" | tr -d '\n\r' | head -1
+            return 0
+        fi
+        return 1
+    }
+fi
+
+# 🔵 テスト用ユーティリティ関数 🔵
 report() {
     local status="$1"
     local message="$2"
     
     case "$status" in
-        "SUCCESS") echo -e "\033[1;32m[成功]\033[0m $message" ;;
-        "PARTIAL") echo -e "\033[1;33m[一部成功]\033[0m $message" ;;
-        "FAILURE") echo -e "\033[1;31m[失敗]\033[0m $message" ;;
-        "INFO")    echo -e "\033[1;36m[情報]\033[0m $message" ;;
+        "SUCCESS") echo -e "\033[1;32m[Success]\033[0m $message" ;;
+        "PARTIAL") echo -e "\033[1;33m[Partial]\033[0m $message" ;;
+        "FAILURE") echo -e "\033[1;31m[Failure]\033[0m $message" ;;
+        "INFO")    echo -e "\033[1;36m[Info]\033[0m $message" ;;
+        "DEBUG")   echo -e "\033[1;35m[DEBUG]\033[0m $message" ;;
         *)         echo -e "\033[1;37m[$status]\033[0m $message" ;;
     esac
 }
 
-debug() {
-    echo -e "\033[1;35m[DEBUG]\033[0m $1"
-}
-
-# トークンの取得（aios互換）
-get_token() {
-    if [ -f "$GITHUB_TOKEN_FILE" ] && [ -r "$GITHUB_TOKEN_FILE" ]; then
-        cat "$GITHUB_TOKEN_FILE" | tr -d '\n\r' | head -1
-        return 0
-    fi
-    
-    # 環境変数からの取得
-    if [ -n "$GITHUB_TOKEN" ]; then
-        echo "$GITHUB_TOKEN"
-        return 0
-    fi
-    
-    return 1
-}
-
-# システム診断
+# 🔵 システム＆ネットワーク診断関数 🔵
 check_system() {
-    report INFO "システム診断を実行中..."
+    report INFO "System diagnostics running..."
     
-    # wgetは必須ツール（OpenWrtの標準）
-    if command -v wget >/dev/null 2>&1; then
-        WGET_AVAILABLE=1
-        report SUCCESS "wget: 使用可能です"
-    else
-        report FAILURE "wget: インストールされていません。テストを実行できません"
-        exit 1
-    fi
-    
+    # jqチェック
     if command -v jq >/dev/null 2>&1; then
-        JQ_AVAILABLE=1
-        report SUCCESS "jq: インストールされています（バージョン: $(jq --version 2>&1)）"
+        report INFO "jq: Installed ($(jq --version 2>&1))"
     else
-        report PARTIAL "jq: インストールされていません。代替パース方式を使用します"
+        report INFO "jq: Not installed. Using alternative parsing"
     fi
     
-    report SUCCESS "ホスト名: $(hostname 2>/dev/null)"
-    report SUCCESS "OS情報: $(uname -a 2>/dev/null)"
+    report INFO "Hostname: $(hostname 2>/dev/null)"
+    report INFO "OS: $(uname -a 2>/dev/null)"
 }
 
-# ネットワーク接続状態の確認
 check_network() {
-    report INFO "ネットワーク接続状況の確認中..."
+    report INFO "Checking network connectivity..."
     
     # インターフェース一覧
     if command -v ip >/dev/null 2>&1; then
         local interfaces=$(ip -o -4 addr show 2>/dev/null | awk '{print $2}' | sort | uniq | tr '\n' ' ')
-        report SUCCESS "ネットワークインターフェース: $interfaces"
+        report INFO "Network interfaces: $interfaces"
     elif command -v ifconfig >/dev/null 2>&1; then
         local interfaces=$(ifconfig 2>/dev/null | grep -E "^[a-z]" | awk '{print $1}' | tr '\n' ' ')
-        report SUCCESS "ネットワークインターフェース: $interfaces"
+        report INFO "Network interfaces: $interfaces"
     fi
     
     # デフォルトゲートウェイ
     if command -v ip >/dev/null 2>&1; then
         local gateway=$(ip route 2>/dev/null | grep default | awk '{print $3}' | head -1)
         if [ -n "$gateway" ]; then
-            report SUCCESS "デフォルトゲートウェイ: $gateway"
+            report INFO "Default gateway: $gateway"
         else
-            report PARTIAL "デフォルトゲートウェイ: 見つかりません"
+            report INFO "Default gateway: Not found"
         fi
     elif command -v route >/dev/null 2>&1; then
         local gateway=$(route -n 2>/dev/null | grep '^0.0.0.0' | awk '{print $2}' | head -1)
         if [ -n "$gateway" ]; then
-            report SUCCESS "デフォルトゲートウェイ: $gateway"
+            report INFO "Default gateway: $gateway"
         else
-            report PARTIAL "デフォルトゲートウェイ: 見つかりません"
+            report INFO "Default gateway: Not found"
         fi
     fi
     
     # DNSサーバー
-    report SUCCESS "DNSサーバー:"
+    report INFO "DNS servers:"
     if [ -f "/etc/resolv.conf" ]; then
-        local nameservers=$(grep '^nameserver' /etc/resolv.conf 2>/dev/null | awk '{print "  - " $2}')
-        echo "$nameservers"
+        grep '^nameserver' /etc/resolv.conf 2>/dev/null | awk '{print "  - " $2}'
     else
-        echo "  - 設定が見つかりません"
+        echo "  - Not found"
     fi
 }
 
-# aios互換のタイムスタンプフォーマット関数
-format_timestamp() {
-    # 入力値が空の場合の保護
-    if [ -z "$1" ]; then
-        echo "不明"
-        return 0
-    fi
-    
-    local unix_time="$1"
-    # 数値チェック（OpenWrt 19.07のashでも動作する方法）
-    case "$unix_time" in
-        ''|*[!0-9]*) 
-            echo "不明"
-            return 0
-            ;;
-    esac
-    
-    # 現在時刻を取得
-    local now=$(date +%s)
-    case "$now" in
-        ''|*[!0-9]*) 
-            echo "不明"
-            return 0
-            ;;
-    esac
-    
-    # 文字列から数値への安全な変換（OpenWrtのashでも動作）
-    if [ "$unix_time" -gt "$now" ]; then
-        # exprの結果が0より小さくならないことを保証
-        local diff=$(expr $unix_time - $now 2>/dev/null)
-        if [ -z "$diff" ] || [ "$diff" -lt 0 ]; then
-            echo "不明"
-            return 0
-        fi
-        
-        if [ "$diff" -lt 60 ]; then
-            echo "1分未満"
-        elif [ "$diff" -lt 3600 ]; then
-            local mins=$(expr $diff / 60 2>/dev/null)
-            echo "${mins}分後"
-        else
-            local hours=$(expr $diff / 3600 2>/dev/null)
-            local mins=$(expr $diff % 3600 / 60 2>/dev/null)
-            echo "${hours}時間${mins}分後"
-        fi
-    else
-        echo "0分後"
-    fi
-}
-
-# 基本接続テスト
+# 🔵 基本的なネットワーク接続テスト 🔵
 test_network_basic() {
-    report INFO "基本ネットワーク接続テスト中..."
+    report INFO "Basic network connectivity test..."
     
     # DNS解決テスト
     local resolved_ip=""
@@ -177,261 +116,221 @@ test_network_basic() {
     elif command -v getent >/dev/null 2>&1; then
         resolved_ip=$(getent hosts api.github.com 2>/dev/null | awk '{print $1}' | head -1)
     else
-        # 単純なpingコマンドからIPアドレスを抽出
+        # pingからIPアドレスを抽出
         resolved_ip=$(ping -c 1 api.github.com 2>/dev/null | grep PING | head -1 | sed -e 's/.*(\([0-9.]*\)).*/\1/')
     fi
     
     if [ -n "$resolved_ip" ]; then
-        report SUCCESS "DNS解決: api.github.com を解決できました"
-        debug "DNS解決結果: $resolved_ip"
+        report SUCCESS "DNS resolution: api.github.com resolved successfully"
+        report DEBUG "DNS result: $resolved_ip"
     else
-        report FAILURE "DNS解決: api.github.com を解決できません"
+        report FAILURE "DNS resolution: Unable to resolve api.github.com"
         return 1
     fi
     
     # Pingテスト
     if ping -c 1 -W 2 api.github.com >/dev/null 2>&1; then
         local ping_time=$(ping -c 1 -W 2 api.github.com 2>/dev/null | grep "time=" | awk -F "time=" '{print $2}' | awk '{print $1}')
-        report SUCCESS "Ping: api.github.com に到達可能です (時間: $ping_time)"
+        report SUCCESS "Ping: api.github.com is reachable (time: $ping_time)"
     else
-        report PARTIAL "Ping: api.github.com に到達できません (ファイアウォールで制限されている可能性あり)"
+        report PARTIAL "Ping: api.github.com is not reachable (possibly blocked by firewall)"
     fi
     
-    # HTTPS接続テスト - OpenWrt 19.07での問題を回避するため --no-checkを追加
-    local https_result=0
+    # HTTPS接続テスト - OpenWrt 19.07での問題を回避
     wget -q --no-check-certificate --spider https://api.github.com >/dev/null 2>&1
-    https_result=$?
+    local https_result=$?
     
     if [ "$https_result" -eq 0 ]; then
-        report SUCCESS "HTTPS: api.github.com へHTTPS接続可能です"
+        report SUCCESS "HTTPS: Connection to api.github.com succeeded"
     else
-        # 再試行 - 証明書チェックなしで
-        wget -q --no-check-certificate --spider https://api.github.com >/dev/null 2>&1
-        https_result=$?
-        if [ "$https_result" -eq 0 ]; then
-            report PARTIAL "HTTPS: api.github.com へHTTPS接続可能ですが、証明書検証に問題があります"
-        else
-            report FAILURE "HTTPS: api.github.com へHTTPS接続できません"
-            return 1
-        fi
+        report FAILURE "HTTPS: Connection to api.github.com failed"
+        return 1
     fi
     
     return 0
 }
 
-# トークン状態詳細チェック
+# 🔵 トークン状態テスト 🔵
 test_token_status() {
-    report INFO "GitHub トークン状態確認中..."
-    local token_file="$GITHUB_TOKEN_FILE"
+    report INFO "Checking GitHub token status..."
+    local token_file="/etc/aios_token"
     local token=""
     
     # トークンファイルの存在確認
     if [ -f "$token_file" ]; then
-        report SUCCESS "トークンファイル: $token_file (存在します)"
+        report SUCCESS "Token file: $token_file (exists)"
         
         # 権限チェック
         local perms=$(ls -l "$token_file" | awk '{print $1}')
-        report INFO "  ファイル権限: $perms"
+        report INFO "  File permissions: $perms"
         
         # トークン取得
-        token=$(get_token)
+        token=$(get_github_token)
         if [ -n "$token" ]; then
-            local token_preview="${token:0:5}..."
-            report INFO "  トークン先頭: $token_preview"
+            # トークンの先頭部分だけを表示（セキュリティ対策）
+            if [ "${#token}" -gt 5 ]; then
+                local token_preview="${token:0:5}..."
+                report INFO "  Token prefix: $token_preview"
+            else
+                report INFO "  Token: Valid (details hidden)"
+            fi
             
             # トークン認証チェック
             local temp_file="/tmp/github_token_check.tmp"
             
-            # --no-check-certificateを追加してOpenWrt 19.07の問題を回避
+            # OpenWrt 19.07の問題を回避
             wget -q --no-check-certificate -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/user" 2>/dev/null
             
             # 認証状態の確認
             if [ -s "$temp_file" ]; then
                 if grep -q "login" "$temp_file" 2>/dev/null; then
+                    # ユーザー名抽出
                     local login=""
-                    if [ "$JQ_AVAILABLE" -eq 1 ]; then
+                    if command -v jq >/dev/null 2>&1; then
                         login=$(jq -r '.login' "$temp_file" 2>/dev/null)
                     else
                         login=$(grep -o '"login"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed 's/.*"login"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null)
                     fi
                     
                     if [ -n "$login" ]; then
-                        report SUCCESS "  認証状態: ✅ 有効（ユーザー: $login）"
+                        report SUCCESS "  Authentication: ✅ Valid (user: $login)"
                     else
-                        report SUCCESS "  認証状態: ✅ 有効（ユーザー名取得失敗）"
+                        report SUCCESS "  Authentication: ✅ Valid (username extraction failed)"
                     fi
                 else
-                    report FAILURE "  認証状態: ❌ 無効（応答にユーザー情報がありません）"
+                    report FAILURE "  Authentication: ❌ Invalid (response doesn't contain user info)"
                 fi
             else
-                report FAILURE "  認証状態: ❌ 無効（応答が空です）"
+                report FAILURE "  Authentication: ❌ Invalid (empty response)"
             fi
             
             rm -f "$temp_file" 2>/dev/null
         else
-            report FAILURE "  トークン読み取り失敗"
+            report FAILURE "  Failed to read token"
         fi
     else
-        report PARTIAL "トークンファイル: $token_file (存在しません)"
-        report INFO "  `aios -t` コマンドでトークンを設定できます"
+        report PARTIAL "Token file: $token_file (doesn't exist)"
+        report INFO "  Use `aios -t` command to set a token"
     fi
 }
 
-# JSONデータから安全に値を抽出する関数
-safe_extract_json_value() {
-    local file="$1"
-    local field="$2"
-    
-    if [ "$JQ_AVAILABLE" -eq 1 ]; then
-        jq -r ".$field // \"\"" "$file" 2>/dev/null
-    else
-        grep -o "\"$field\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$file" 2>/dev/null | sed "s/.*\"$field\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/" 2>/dev/null
-    fi
-}
-
-# 数値フィールドを安全に抽出する関数
-safe_extract_json_number() {
-    local file="$1"
-    local field="$2"
-    
-    if [ "$JQ_AVAILABLE" -eq 1 ]; then
-        jq -r ".$field // 0" "$file" 2>/dev/null
-    else
-        grep -o "\"$field\"[[:space:]]*:[[:space:]]*[0-9]\+" "$file" 2>/dev/null | grep -o '[0-9]\+' 2>/dev/null
-    fi
-}
-
-# API情報パース用の安全な関数
-safe_parse_json() {
-    local file="$1"
-    local pattern="$2"
-    local field="$3"
-    
-    if [ ! -f "$file" ]; then
-        return 1
-    fi
-    
-    # パターンで検索し、フィールドを抽出（エラー出力は捨てる）
-    local result=$(grep -A3 "$pattern" "$file" 2>/dev/null | grep "\"$field\"" 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null)
-    echo "$result"
-}
-
-# 認証なしでのAPI制限テスト（改善版）
+# 🔵 API制限テスト 🔵
 test_api_rate_limit_no_auth() {
-    report INFO "API制限テスト (認証なし) 実行中..."
+    report INFO "API rate limit test (unauthenticated)..."
     local temp_file="/tmp/github_ratelimit_noauth.tmp"
     
-    # OpenWrt 19.07での問題を回避するため --no-checkを追加
+    # OpenWrt 19.07の問題を回避
     wget -q --no-check-certificate -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
     
     # レスポンスチェック
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-        local remaining=""
-        local limit=""
-        local reset_time=""
+        local remaining limit reset_time
         
-        if [ "$JQ_AVAILABLE" -eq 1 ]; then
+        # JSONデータを安全に抽出
+        if command -v jq >/dev/null 2>&1; then
+            # jqによるパース
             remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
             limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
             reset_time=$(jq -r '.resources.core.reset' "$temp_file" 2>/dev/null)
         else
-            # 安全なパース方法
-            remaining=$(safe_parse_json "$temp_file" '"core"' "remaining")
-            limit=$(safe_parse_json "$temp_file" '"core"' "limit")
-            reset_time=$(safe_parse_json "$temp_file" '"core"' "reset")
+            # サイレント出力でパース
+            remaining=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"remaining"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
+            limit=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"limit"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
+            reset_time=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"reset"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
         fi
-            
+        
+        # 結果表示
         if [ -n "$remaining" ] && [ -n "$limit" ]; then
-            local reset_formatted=""
-            if [ -n "$reset_time" ]; then
-                reset_formatted=$(format_timestamp "$reset_time")
-                report SUCCESS "API制限 (認証なし): 残り $remaining/$limit リクエスト (回復: $reset_formatted)"
-            else
-                report SUCCESS "API制限 (認証なし): 残り $remaining/$limit リクエスト"
+            # 残り時間計算（可能なら）
+            local reset_msg="unknown"
+            if [ -n "$reset_time" ] && [ "$USING_AIOS_FUNCTIONS" -eq 1 ] && type format_timestamp >/dev/null 2>&1; then
+                reset_msg=$(format_timestamp "$reset_time")
             fi
-            rm -f "$temp_file"
+            
+            report SUCCESS "API rate limit (unauthenticated): $remaining/$limit requests remaining (resets in: $reset_msg)"
+            rm -f "$temp_file" 2>/dev/null
             return 0
         fi
     fi
     
-    report FAILURE "API制限情報を取得できませんでした"
+    report FAILURE "Failed to get API rate limit information"
     rm -f "$temp_file" 2>/dev/null
     return 1
 }
 
-# 認証ありでのAPI制限テスト（改善版）
 test_api_rate_limit_with_auth() {
-    report INFO "API制限テスト (認証あり) 実行中..."
+    report INFO "API rate limit test (authenticated)..."
     
-    local token=$(get_token)
+    # トークン取得
+    local token=$(get_github_token)
     if [ -z "$token" ]; then
-        report PARTIAL "トークンが設定されていないため、認証ありのAPI制限テストはスキップします"
+        report PARTIAL "No token available, skipping authenticated API rate limit test"
         return 0
     fi
     
+    # API呼び出し
     local temp_file="/tmp/github_ratelimit_auth.tmp"
-    
-    # OpenWrt 19.07での問題を回避するため --no-checkを追加
     wget -q --no-check-certificate -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null
     
     # レスポンスチェック
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-        # 認証エラーをチェック
+        # 認証エラーチェック
         if grep -q "Bad credentials" "$temp_file" 2>/dev/null; then
-            report FAILURE "API制限テスト: 無効なトークンです"
-            rm -f "$temp_file"
+            report FAILURE "API rate limit test: Invalid token"
+            rm -f "$temp_file" 2>/dev/null
             return 1
         fi
         
-        local remaining=""
-        local limit=""
-        local reset_time=""
+        # APIレスポンスパース
+        local remaining limit reset_time
         
-        if [ "$JQ_AVAILABLE" -eq 1 ]; then
+        if command -v jq >/dev/null 2>&1; then
+            # jqによるパース
             remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
             limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
             reset_time=$(jq -r '.resources.core.reset' "$temp_file" 2>/dev/null)
         else
-            # 安全なパース方法
-            remaining=$(safe_parse_json "$temp_file" '"core"' "remaining")
-            limit=$(safe_parse_json "$temp_file" '"core"' "limit") 
-            reset_time=$(safe_parse_json "$temp_file" '"core"' "reset")
+            # サイレント出力でパース
+            remaining=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"remaining"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
+            limit=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"limit"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
+            reset_time=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"reset"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
         fi
         
+        # 結果表示
         if [ -n "$remaining" ] && [ -n "$limit" ]; then
-            local reset_formatted=""
-            if [ -n "$reset_time" ]; then
-                reset_formatted=$(format_timestamp "$reset_time")
-                report SUCCESS "API制限 (認証あり): 残り $remaining/$limit リクエスト (回復: $reset_formatted)"
-            else
-                report SUCCESS "API制限 (認証あり): 残り $remaining/$limit リクエスト"
+                # 残り時間計算（可能なら）
+            local reset_msg="unknown"
+            if [ -n "$reset_time" ] && [ "$USING_AIOS_FUNCTIONS" -eq 1 ] && type format_timestamp >/dev/null 2>&1; then
+                reset_msg=$(format_timestamp "$reset_time")
             fi
-            rm -f "$temp_file"
+            
+            report SUCCESS "API rate limit (authenticated): $remaining/$limit requests remaining (resets in: $reset_msg)"
+            rm -f "$temp_file" 2>/dev/null
             return 0
         fi
     fi
     
-    report FAILURE "API制限情報を取得できませんでした"
+    report FAILURE "Failed to get authenticated API rate limit information"
     rm -f "$temp_file" 2>/dev/null
     return 1
 }
 
-# リポジトリ情報テスト（改善版）
+# 🔵 リポジトリ情報テスト 🔵
 test_repo_info() {
-    report INFO "リポジトリ情報取得テスト実行中..."
+    report INFO "Repository information test running..."
     
     local repo_owner="site-u2023"
     local repo_name="aios"
     local temp_file="/tmp/github_repo_info.tmp"
     
-    # トークンの取得
-    local token=$(get_token)
+    # トークン取得
+    local token=$(get_github_token)
     local auth_header=""
     if [ -n "$token" ]; then
         auth_header="Authorization: token $token"
     fi
     
-    # API呼び出し - OpenWrt 19.07の問題を回避
+    # API呼び出し
     if [ -n "$auth_header" ]; then
         wget -q --no-check-certificate -O "$temp_file" --header="$auth_header" "https://api.github.com/repos/$repo_owner/$repo_name" 2>/dev/null
     else
@@ -440,49 +339,60 @@ test_repo_info() {
     
     # レスポンスチェック
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-        # 安全に値を抽出
-        local repo_full_name=$(safe_extract_json_value "$temp_file" "full_name")
-        local repo_description=$(safe_extract_json_value "$temp_file" "description")
-        local repo_stars=$(safe_extract_json_number "$temp_file" "stargazers_count")
-        local repo_forks=$(safe_extract_json_number "$temp_file" "forks_count")
+        # レポジトリ情報抽出
+        local repo_full_name repo_description repo_stars repo_forks
         
-        # 説明がない場合のデフォルト値
-        if [ -z "$repo_description" ]; then
-            repo_description="説明なし"
+        if command -v jq >/dev/null 2>&1; then
+            # jqによるパース
+            repo_full_name=$(jq -r '.full_name' "$temp_file" 2>/dev/null)
+            repo_description=$(jq -r '.description // "No description"' "$temp_file" 2>/dev/null)
+            repo_stars=$(jq -r '.stargazers_count' "$temp_file" 2>/dev/null)
+            repo_forks=$(jq -r '.forks_count' "$temp_file" 2>/dev/null)
+        else
+            # サイレント出力でパース
+            repo_full_name=$(grep -o '"full_name"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed 's/.*"full_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null)
+            repo_description=$(grep -o '"description"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed 's/.*"description"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null)
+            repo_stars=$(grep -o '"stargazers_count"[[:space:]]*:[[:space:]]*[0-9]\+' "$temp_file" 2>/dev/null | grep -o '[0-9]\+' 2>/dev/null)
+            repo_forks=$(grep -o '"forks_count"[[:space:]]*:[[:space:]]*[0-9]\+' "$temp_file" 2>/dev/null | grep -o '[0-9]\+' 2>/dev/null)
+            
+            # 説明がない場合
+            if [ -z "$repo_description" ]; then
+                repo_description="No description"
+            fi
         fi
         
         if [ -n "$repo_full_name" ]; then
-            report SUCCESS "リポジトリ情報:"
-            echo "  - 名前: $repo_full_name"
-            echo "  - 説明: $repo_description"
-            echo "  - スター数: $repo_stars"
-            echo "  - フォーク数: $repo_forks"
-            rm -f "$temp_file"
+            report SUCCESS "Repository information:"
+            echo "  - Name: $repo_full_name"
+            echo "  - Description: $repo_description"
+            echo "  - Stars: $repo_stars"
+            echo "  - Forks: $repo_forks"
+            rm -f "$temp_file" 2>/dev/null
             return 0
         fi
     fi
     
-    report FAILURE "リポジトリ情報を取得できませんでした"
+    report FAILURE "Failed to get repository information"
     rm -f "$temp_file" 2>/dev/null
     return 1
 }
 
-# コミット履歴テスト（改善版）
+# 🔵 コミット履歴テスト 🔵
 test_commit_history() {
-    report INFO "最新コミット情報取得テスト実行中..."
+    report INFO "Latest commit information test running..."
     
     local repo_owner="site-u2023"
     local repo_name="aios"
     local temp_file="/tmp/github_commit_history.tmp"
     
-    # トークンの取得
-    local token=$(get_token)
+    # トークン取得
+    local token=$(get_github_token)
     local auth_header=""
     if [ -n "$token" ]; then
         auth_header="Authorization: token $token"
     fi
     
-    # API呼び出し - OpenWrt 19.07の問題を回避
+    # API呼び出し
     if [ -n "$auth_header" ]; then
         wget -q --no-check-certificate -O "$temp_file" --header="$auth_header" "https://api.github.com/repos/$repo_owner/$repo_name/commits?per_page=3" 2>/dev/null
     else
@@ -491,9 +401,10 @@ test_commit_history() {
     
     # レスポンスチェック
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-        report SUCCESS "最新コミット情報:"
+        report SUCCESS "Latest commit information:"
         
-        if [ "$JQ_AVAILABLE" -eq 1 ]; then
+        if command -v jq >/dev/null 2>&1; then
+            # jqによるパース
             for i in 0 1 2; do
                 local sha=$(jq -r ".[$i].sha" "$temp_file" 2>/dev/null | cut -c1-7)
                 local message=$(jq -r ".[$i].commit.message" "$temp_file" 2>/dev/null | head -1)
@@ -502,18 +413,20 @@ test_commit_history() {
                     continue
                 fi
                 
-                echo "  - コミットID: $sha"
-                echo "    メッセージ: $message"
+                echo "  - Commit ID: $sha"
+                echo "    Message: $message"
             done
         else
-            # 安全なコミット情報抽出
+            # サイレント出力でパース
             for i in 1 2 3; do
+                # パターンマッチでSHA抽出
                 local sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\{7,40\}"' "$temp_file" 2>/dev/null | sed -n "${i}p" | sed 's/.*"sha"[[:space:]]*:[[:space:]]*"\([a-f0-9]\{7\}\).*/\1/' 2>/dev/null)
                 
                 if [ -n "$sha" ]; then
-                    echo "  - コミットID: $sha"
+                    echo "  - Commit ID: $sha"
                     
-                    local message=$(grep -o '"message"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed -n "${i}p" | sed 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/    メッセージ: \1/' 2>/dev/null)
+                    # パターンマッチでメッセージ抽出
+                    local message=$(grep -o '"message"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed -n "${i}p" | sed 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/    Message: \1/' 2>/dev/null)
                     if [ -n "$message" ]; then
                         echo "$message"
                     fi
@@ -521,50 +434,50 @@ test_commit_history() {
             done
         fi
         
-        rm -f "$temp_file"
+        rm -f "$temp_file" 2>/dev/null
         return 0
     fi
     
-    report FAILURE "コミット履歴を取得できませんでした"
+    report FAILURE "Failed to retrieve commit history"
     rm -f "$temp_file" 2>/dev/null
     return 1
 }
 
-# ファイルダウンロードテスト
+# 🔵 ファイルダウンロードテスト 🔵
 test_file_download() {
-    report INFO "ファイルダウンロードテスト実行中..."
+    report INFO "File download test running..."
     
     local repo_owner="site-u2023"
     local repo_name="aios"
     local file_path="aios"
     local temp_file="/tmp/github_file_test.tmp"
     
-    # 直接ダウンロード - OpenWrt 19.07の問題を回避
+    # 直接ダウンロード 
     wget -q --no-check-certificate -O "$temp_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null
     
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
         local file_size=$(wc -c < "$temp_file")
         local file_version=$(grep -o 'SCRIPT_VERSION="[^"]*"' "$temp_file" 2>/dev/null | head -1 | cut -d'"' -f2)
         
-        report SUCCESS "ファイル 'aios' ダウンロード成功"
-        echo "  - サイズ: $file_size バイト"
-        echo "  - バージョン: $file_version"
+        report SUCCESS "File 'aios' download successful"
+        echo "  - Size: $file_size bytes"
+        echo "  - Version: $file_version"
         
         rm -f "$temp_file"
         return 0
     fi
     
-    report FAILURE "ファイルをダウンロードできませんでした"
+    report FAILURE "Failed to download file"
     rm -f "$temp_file" 2>/dev/null
     return 1
 }
 
-# 総合テスト実行
+# 🔵 総合テスト実行 🔵
 run_all_tests() {
-    echo "VERSION 02"
+    echo "VERSION 03"
     echo "==========================================================="
-    echo "📊 GitHub API接続テスト (aios)"
-    echo "🕒 実行時間: $(date +'%Y-%m-%d %H:%M:%S')"
+    echo "📊 GitHub API Connection Test (aios)"
+    echo "🕒 Execution time: $(date +'%Y-%m-%d %H:%M:%S')"
     echo "==========================================================="
     
     # システム情報確認
@@ -572,34 +485,34 @@ run_all_tests() {
     check_network
     
     echo "==========================================================="
-    echo "🔍 接続テスト"
+    echo "🔍 Connection Test"
     echo "==========================================================="
     test_network_basic
     
     echo "==========================================================="
-    echo "🔑 トークン状態"
+    echo "🔑 Token Status"
     echo "==========================================================="
     test_token_status
     
     echo "==========================================================="
-    echo "📈 API制限情報"
+    echo "📈 API Rate Limit Information"
     echo "==========================================================="
     test_api_rate_limit_no_auth
     test_api_rate_limit_with_auth
     
     echo "==========================================================="
-    echo "📁 リポジトリアクセス"
+    echo "📁 Repository Access"
     echo "==========================================================="
     test_repo_info
     test_commit_history
     test_file_download
     
     echo "==========================================================="
-    echo "📝 テスト結果概要"
+    echo "📝 Test Results Summary"
     echo "==========================================================="
-    report INFO "テスト完了"
-    report INFO "GitHub API接続テストの結果を上記で確認してください"
-    report INFO "認証エラーが発生する場合は 'aios -t' で新しいトークンを設定してください"
+    report INFO "Test completed"
+    report INFO "Check the above results for GitHub API connection status"
+    report INFO "If authentication errors occur, use 'aios -t' to set a new token"
     echo "==========================================================="
 }
 
