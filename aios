@@ -354,13 +354,15 @@ confirm() {
     local param_value="$3"
     local direct_msg="$4"
     local msg=""
+    local yn=""
     
     # メッセージの取得と変数置換
     if [ -n "$msg_key" ]; then
         msg=$(get_message "$msg_key")
         # パラメータ名と値が指定されている場合は置換
         if [ -n "$param_name" ] && [ -n "$param_value" ]; then
-            msg="${msg//\{$param_name\}/$param_value}"
+            # POSIXに準拠した置換方法
+            msg=$(echo "$msg" | sed "s/{$param_name}/$param_value/g")
         fi
     else
         # 直接メッセージが指定されている場合はそれを使用
@@ -372,20 +374,38 @@ confirm() {
     # 確認プロンプト表示
     printf "%s " "$(color cyan "$msg")"
     
+    # ユーザー入力処理
     while true; do
-        read -r yn || return 1
+        # readコマンドエラーをハンドリング
+        if ! read -r yn; then
+            debug_log "ERROR" "Failed to read user input"
+            return 1
+        fi
+        
+        # 入力の正規化
         yn=$(normalize_input "$yn")
         
+        # 入力の検証
         case "$yn" in
             [Yy]*) 
                 debug_log "DEBUG" "User confirmed: Yes"
+                # グローバル変数に結果を保存（呼び出し側でも使えるように）
+                CONFIRM_RESULT="Y"
                 return 0 
                 ;;
             [Nn]*) 
                 debug_log "DEBUG" "User confirmed: No"
+                CONFIRM_RESULT="N"
                 return 1 
                 ;;
+            [Rr]*)
+                # リスタートオプション対応（オプション）
+                debug_log "DEBUG" "User selected: Restart"
+                CONFIRM_RESULT="R"
+                return 2
+                ;;
             *) 
+                # 無効な入力の場合のエラーメッセージ
                 printf "%s\n" "$(color red "$(get_message "MSG_INVALID_INPUT_YN")")"
                 printf "%s " "$(color cyan "$msg")" 
                 ;;
