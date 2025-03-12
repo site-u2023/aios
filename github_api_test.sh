@@ -11,6 +11,16 @@
 
 echo "VERSION 08"
 
+# スクリプト先頭部分に追加
+# デバッグモードの検出（aios から渡される場合に対応）
+if [ -z "$DEBUG_MODE" ]; then
+    if echo "$@" | grep -q "\-d"; then
+        DEBUG_MODE="true"
+    else
+        DEBUG_MODE="false"
+    fi
+fi
+
 # 🔵 aios関数チェック 🔵
 if type debug_log >/dev/null 2>&1 && type get_github_token >/dev/null 2>&1; then
     USING_AIOS_FUNCTIONS=1
@@ -50,42 +60,34 @@ report() {
     esac
 }
 
-# 🔵 JSON値抽出ユーティリティ（jq不要） 🔵
+# 🔵 JSON値抽出ユーティリティ（jq不要、シンプル化） 🔵
 json_get_value() {
     local file="$1"
     local key="$2"
     
-    # キーが階層構造の場合（例：resources.core.remaining）
-    if echo "$key" | grep -q "\." 2>/dev/null; then
-        # ドットで区切られた階層構造のキーを処理
-        local parent_key=$(echo "$key" | cut -d. -f1)
-        local child_key=$(echo "$key" | cut -d. -f2)
-        local grandchild_key=$(echo "$key" | cut -d. -f3)
-        
-        # 親キーのブロックを抽出
-        local parent_start=$(grep -n "\"$parent_key\"" "$file" | head -1 | cut -d: -f1)
-        if [ -n "$parent_start" ]; then
-            local parent_text=$(tail -n +$parent_start "$file" | sed -n '/{/,/}/p' | head -20)
+    # シンプルに直接キーの値を取得（階層対応）
+    if [ -f "$file" ]; then
+        if echo "$key" | grep -q "\." 2>/dev/null; then
+            # 階層キーの場合
+            local parts=$(echo "$key" | tr '.' ' ')
+            local key1=$(echo "$parts" | awk '{print $1}')
+            local key2=$(echo "$parts" | awk '{print $2}')
+            local key3=$(echo "$parts" | awk '{print $3}')
             
-            # 子キーのブロックを抽出
-            local child_line=$(echo "$parent_text" | grep -n "\"$child_key\"" | head -1 | cut -d: -f1)
-            if [ -n "$child_line" ]; then
-                local child_text=$(echo "$parent_text" | tail -n +$child_line | sed -n '/{/,/}/p' | head -20)
-                
-                # 孫キーの値を抽出
-                if [ -n "$grandchild_key" ]; then
-                    echo "$child_text" | grep "\"$grandchild_key\"" | head -1 | sed 's/.*: *\([0-9]\+\).*/\1/' | tr -d '", '
-                else
-                    # 孫キーがない場合、子キー自体の値を返す（シンプルな場合のみ）
-                    echo "$parent_text" | grep "\"$child_key\"" | head -1 | sed 's/.*: *\([0-9]\+\).*/\1/' | tr -d '", '
-                fi
+            # key1.key2.key3 の場合
+            if [ -n "$key3" ]; then
+                grep -o "\"$key3\"[[:space:]]*:[[:space:]]*[0-9]\\+" "$file" | head -1 | grep -o "[0-9]\\+"
+            # key1.key2 の場合
+            elif [ -n "$key2" ]; then
+                grep -o "\"$key2\"[[:space:]]*:[[:space:]]*[0-9]\\+" "$file" | head -1 | grep -o "[0-9]\\+"
             fi
+        else
+            # 単一キーの場合
+            grep -o "\"$key\"[[:space:]]*:[[:space:]]*[^,}\"]\\+" "$file" | head -1 | sed 's/.*:[[:space:]]*//; s/[[:space:]]*$//'
         fi
-    else
-        # 単一キーの場合は直接抽出
-        grep "\"$key\"" "$file" | head -1 | sed 's/.*: *\([^,}]*\).*/\1/' | tr -d '", '
     fi
 }
+
 # 🔵 システム＆ネットワーク診断関数 🔵
 check_system() {
     report INFO "System diagnostics running..."
@@ -250,7 +252,7 @@ test_token_status() {
     return 0
 }
 
-# 🔵 API制限テスト 🔵
+# 🔵 API制限テスト（非認証） 🔵
 test_api_rate_limit_no_auth() {
     report INFO "API rate limit test (unauthenticated)..."
     local temp_file="/tmp/github_ratelimit_noauth.tmp"
@@ -265,13 +267,22 @@ test_api_rate_limit_no_auth() {
         return 1
     fi
     
-    # シンプルなgrepで直接値を抽出（より堅牢な方法）
-    local remaining=$(grep -o '"remaining":[0-9]\+' "$temp_file" | head -1 | cut -d: -f2)
-    local limit=$(grep -o '"limit":[0-9]\+' "$temp_file" | head -1 | cut -d: -f2)
+    # デバッグモードの場合はレスポンスを表示
+    if [ "$DEBUG_MODE" = "true" ]; then
+        report DEBUG "API Response (unauthenticated):"
+        echo "----------------------------------------"
+        cat "$temp_file" | head -30
+        echo "----------------------------------------"
+    fi
+    
+    # 直接grepで値を抽出（より堅牢な方法）
+    local core_remaining=$(grep -o '"remaining"[[:space:]]*:[[:space:]]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
+    local core_limit=$(grep -o '"limit"[[:space:]]*:[[:space:]]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
+    local reset_time=$(grep -o '"reset"[[:space:]]*:[[:space:]]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
     
     # 結果表示
-    if [ -n "$remaining" ] && [ -n "$limit" ]; then
-        report SUCCESS "API rate limit (unauthenticated): $remaining/$limit requests remaining"
+    if [ -n "$core_remaining" ] && [ -n "$core_limit" ]; then
+        report SUCCESS "API rate limit (unauthenticated): $core_remaining/$core_limit requests remaining"
     else
         report FAILURE "Failed to parse API rate limit information"
     fi
@@ -308,6 +319,14 @@ test_api_rate_limit_with_auth() {
         return 1
     fi
     
+    # デバッグモードの場合はレスポンスを表示
+    if [ "$DEBUG_MODE" = "true" ]; then
+        report DEBUG "API Response (authenticated):"
+        echo "----------------------------------------"
+        cat "$temp_file" | head -30
+        echo "----------------------------------------"
+    fi
+    
     # 認証エラーチェック
     if grep -q "Bad credentials" "$temp_file" 2>/dev/null; then
         report FAILURE "API rate limit test: Invalid token"
@@ -315,20 +334,14 @@ test_api_rate_limit_with_auth() {
         return 1
     fi
     
-    # APIレスポンスパース
-    local remaining=$(json_get_value "$temp_file" "resources.core.remaining")
-    local limit=$(json_get_value "$temp_file" "resources.core.limit")
-    local reset_time=$(json_get_value "$temp_file" "resources.core.reset")
+    # 直接grepで値を抽出
+    local core_remaining=$(grep -o '"remaining"[[:space:]]*:[[:space:]]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
+    local core_limit=$(grep -o '"limit"[[:space:]]*:[[:space:]]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
+    local reset_time=$(grep -o '"reset"[[:space:]]*:[[:space:]]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
     
     # 結果表示
-    if [ -n "$remaining" ] && [ -n "$limit" ]; then
-        # 残り時間計算（可能なら）
-        local reset_msg="unknown"
-        if [ -n "$reset_time" ] && [ "$USING_AIOS_FUNCTIONS" -eq 1 ] && type format_timestamp >/dev/null 2>&1; then
-            reset_msg=$(format_timestamp "$reset_time")
-        fi
-        
-        report SUCCESS "API rate limit (authenticated): $remaining/$limit requests remaining (resets in: $reset_msg)"
+    if [ -n "$core_remaining" ] && [ -n "$core_limit" ]; then
+        report SUCCESS "API rate limit (authenticated): $core_remaining/$core_limit requests remaining"
     else
         report FAILURE "Failed to parse authenticated API rate limit information"
     fi
@@ -539,13 +552,6 @@ run_all_tests() {
     report INFO "Check the above results for GitHub API connection status"
     report INFO "If authentication errors occur, use 'aios -t' to set a token"
     echo "==========================================================="
-
-    # APIレスポンス全体をファイルに保存（デバッグ用）
-if [ "$DEBUG_MODE" = "true" ]; then
-    cp "$temp_file" "/tmp/api_response_debug.json"
-    report DEBUG "API Response saved to /tmp/api_response_debug.json"
-fi
-
 }
 
 # メイン実行
