@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-17-00"
+SCRIPT_VERSION="2025.03.12-18-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1074,6 +1074,33 @@ AI_clean_version_string() {
 #   - Base64デコードが不要（ファイルコンテンツではなくコミット情報を使用）
 #   - 認証状態をより正確に識別して返す
 #########################################################################
+#########################################################################
+# Last Update: 2025-03-12 02:14:00 (JST) 🚀
+# "GitHub APIからファイルの最新コミット情報を取得してバージョン化する"
+#
+# 【要件】
+# 1. **APIアクセス方法**
+#   - GitHub API v3を使用し、指定ファイルの最新コミット情報を取得
+#   - トークン認証を優先使用（利用可能な場合）
+#   - 認証失敗時は匿名アクセスにフォールバック
+#   - jq非依存の堅牢な実装
+#
+# 2. **バージョン情報の生成**
+#   - コミット日付とSHAハッシュからバージョン文字列を構築
+#   - 形式: `YYYY.MM.DD-SHA(短縮形)`
+#   - 日付フォーマット変換: YYYY-MM-DD → YYYY.MM.DD
+#   - SHA: 先頭7文字のみ使用
+#
+# 3. **エラーハンドリング**
+#   - API失敗時は直接ダウンロードによるファイルハッシュ取得を試みる
+#   - 最終手段として現在日付とハッシュ値を使用
+#   - 認証状態を2つ目の戻り値として返す
+#
+# 4. **BusyBox環境対応**
+#   - OpenWrt 19.07のBusyBox v1.35.0を想定
+#   - シンプルなgrepとsedのパターンに依存
+#   - POSIXシェル準拠
+#########################################################################
 get_commit_version() {
     local file_path="$1"
     
@@ -1088,68 +1115,103 @@ get_commit_version() {
     local token="$(get_github_token)"
     if [ -n "$token" ]; then
         debug_log "DEBUG" "トークン認証を使用してAPIリクエストを実行します"
-        wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/$api_url" 2>/dev/null
-        auth_method="token"
+        if ! wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/$api_url" 2>/dev/null; then
+            debug_log "WARN" "トークン認証でのAPI取得に失敗しました。匿名アクセスを試みます。"
+            wget -q -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null || true
+        else
+            auth_method="token"
+        fi
     else
         debug_log "DEBUG" "トークンがないため直接APIリクエストを実行します"
-        wget -q -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
+        wget -q -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null || true
     fi
     
     # 応答の確認
     if [ ! -s "$temp_file" ]; then
-        debug_log "ERROR" "GitHub APIからの応答が空です"
-        rm -f "$temp_file" 2>/dev/null
-        echo "$(date +%Y.%m.%d)-unknown $auth_method"
-        return 1
+        debug_log "WARN" "GitHub APIからの応答が空です。直接ファイル取得を試みます"
+        # APIに失敗した場合は直接ファイルをダウンロード
+        local direct_file="/tmp/aios_direct_file.tmp"
+        if wget -q -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
+            # ファイルからハッシュを生成（最初の7文字だけ使用）
+            local file_hash=$(sha256sum "$direct_file" 2>/dev/null | cut -c1-7)
+            rm -f "$direct_file" "$temp_file" 2>/dev/null
+            local today=$(date +%Y.%m.%d)
+            echo "$today-$file_hash direct"
+            return 0
+        else
+            debug_log "ERROR" "ファイルの直接取得にも失敗しました"
+            rm -f "$direct_file" "$temp_file" 2>/dev/null
+            echo "$(date +%Y.%m.%d)-unknown $auth_method"
+            return 1
+        fi
     fi
     
     # APIエラーチェック
     if grep -q "API rate limit exceeded" "$temp_file"; then
-        debug_log "WARN" "GitHub APIレート制限を超えました"
-        rm -f "$temp_file" 2>/dev/null
-        echo "$(date +%Y.%m.%d)-ratelimit $auth_method"
-        return 2
+        debug_log "WARN" "GitHub APIレート制限を超えました。直接ファイル取得を試みます"
+        # 直接ファイル取得にフォールバック
+        local direct_file="/tmp/aios_direct_file.tmp"
+        if wget -q -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
+            local file_hash=$(sha256sum "$direct_file" 2>/dev/null | cut -c1-7)
+            rm -f "$direct_file" "$temp_file" 2>/dev/null
+            local today=$(date +%Y.%m.%d)
+            echo "$today-$file_hash direct"
+            return 0
+        else
+            debug_log "ERROR" "ファイルの直接取得にも失敗しました"
+            rm -f "$direct_file" "$temp_file" 2>/dev/null
+            echo "$(date +%Y.%m.%d)-ratelimit $auth_method"
+            return 2
+        fi
     fi
     
-    # コミット情報抽出
+    # コミット情報抽出（jq非依存の堅牢方式）
     local commit_date=""
     local commit_sha=""
     
-    if command -v jq >/dev/null 2>&1; then
-        # jqがある場合
-        debug_log "DEBUG" "jqを使用してJSONを解析します"
-        commit_date=$(jq -r '.[0].commit.committer.date' "$temp_file" 2>/dev/null | grep -o "[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}")
-        commit_sha=$(jq -r '.[0].sha' "$temp_file" 2>/dev/null | cut -c 1-7)
-    else
-        # jqがない場合の堅牢な抽出方法
-        debug_log "DEBUG" "jqが利用できないため、grepとsedを使用します"
-        
-        # 日付抽出 - 複数パターンを試行
-        commit_date=$(grep -o '"date"[[:space:]]*:[[:space:]]*"[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' "$temp_file" | 
-                     head -1 | 
-                     sed 's/.*"\([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\).*/\1/')
-        
-        if [ -z "$commit_date" ]; then
-            # 代替パターン
-            commit_date=$(grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}Z' "$temp_file" | 
-                         head -1 | 
-                         cut -d'T' -f1)
-        fi
-        
-        # SHA抽出 - より堅牢なパターン
-        commit_sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\{40\}' "$temp_file" | 
-                    head -1 | 
-                    sed 's/.*"sha"[[:space:]]*:[[:space:]]*"\([a-f0-9]\{7\}\).*/\1/')
-        
-        if [ -z "$commit_sha" ]; then
-            # 代替パターン
-            commit_sha=$(grep -o '[a-f0-9]\{40\}' "$temp_file" | head -1 | cut -c 1-7)
-        fi
+    # 1. SHA情報の抽出（より堅牢な複数パターン対応）
+    commit_sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\+' "$temp_file" | head -1 | grep -o '[a-f0-9]\{7,40\}' | cut -c1-7)
+    
+    if [ -z "$commit_sha" ]; then
+        # バックアップパターン
+        commit_sha=$(grep -o '[a-f0-9]\{40\}' "$temp_file" | head -1 | cut -c1-7)
     fi
     
-    # 抽出成功の確認
+    # 2. 日付情報の抽出（より堅牢な複数パターン対応）
+    # パターン1: "date": "YYYY-MM-DD..."
+    commit_date=$(grep -o '"date"[[:space:]]*:[[:space:]]*"[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' "$temp_file" | head -1 | grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}')
+    
+    if [ -z "$commit_date" ]; then
+        # パターン2: YYYY-MM-DDTHH:MM:SSZ形式
+        commit_date=$(grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}Z' "$temp_file" | head -1 | cut -d'T' -f1)
+    fi
+    
+    if [ -z "$commit_date" ] && [ -z "$commit_sha" ]; then
+        debug_log "WARN" "コミット情報の抽出に失敗しました。最終手段を試みます"
+        # 最終手段: grep -vで余計な情報を除去して必要部分を解析
+        local filtered_file="/tmp/aios_filtered.tmp"
+        grep -v '^\s*$' "$temp_file" > "$filtered_file"
+        
+        # SHA再抽出
+        commit_sha=$(grep -o '"sha"' "$filtered_file" -A 1 | grep -o '[a-f0-9]\{7,40\}' | head -1 | cut -c1-7)
+        
+        if [ -z "$commit_sha" ]; then
+            commit_sha="unknown"
+        fi
+        
+        # 日付再抽出
+        commit_date=$(grep -o '"date"' "$filtered_file" -A 1 | grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' | head -1)
+        
+        if [ -z "$commit_date" ]; then
+            commit_date=$(date +%Y-%m-%d)
+        fi
+        
+        rm -f "$filtered_file" 2>/dev/null
+    fi
+    
+    # バージョン文字列構築と結果返却
     if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
-        # YYYY.MM.DD-SHA 形式に変換
+        # 日付フォーマットを変換（YYYY-MM-DD → YYYY.MM.DD）
         local formatted_date=$(echo "$commit_date" | tr '-' '.')
         local version="${formatted_date}-${commit_sha}"
         
@@ -1159,17 +1221,10 @@ get_commit_version() {
         return 0
     fi
     
-    # デバッグ出力
-    debug_log "WARN" "コミット情報の抽出に失敗しました"
-    if [ "$DEBUG_MODE" = "true" ]; then
-        debug_log "DEBUG" "API応答（先頭部分）: $(head -n 5 "$temp_file")"
-    fi
-    
-    # 一時ファイル削除
+    # 全ての方法が失敗した場合
+    debug_log "ERROR" "すべての方法でコミット情報取得に失敗しました"
     rm -f "$temp_file" 2>/dev/null
-    
-    # 失敗時のフォールバック
-    echo "$(date +%Y.%m.%d)-unknown $auth_method"
+    echo "$(date +%Y.%m.%d)-fallback $auth_method"
     return 1
 }
 
