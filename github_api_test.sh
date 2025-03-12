@@ -9,7 +9,7 @@
 # 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 19.07 and 24.10)
 # =========================================================
 
-echo "VERSION 07"
+echo "VERSION 08"
 
 # 🔵 aios関数チェック 🔵
 if type debug_log >/dev/null 2>&1 && type get_github_token >/dev/null 2>&1; then
@@ -537,3 +537,7 @@ run_all_tests() {
     report INFO "If authentication errors occur, use 'aios -t' to set a token"
     echo "==========================================================="
 }
+
+# メイン実行
+run_all_tests
+exit 0
