@@ -15,29 +15,42 @@ SCRIPT_VERSION="2025.03.06-00-01"
 #
 # 📢 POSIX Compliance Guidelines:
 # ✅ Use `[` instead of `[[` for conditions
-# ✅ Use `$(command)` instead of backticks `` `command` ``
-# ✅ Use `$(( ))` for arithmetic instead of `let`
-# ✅ Define functions as `func_name() {}` (no `function` keyword)
-# ✅ No associative arrays (`declare -A` is NOT supported)
-# ✅ No here-strings (`<<<` is NOT supported)
-# ✅ No `-v` flag in `test` or `[[`
+# ✅ Use $(command) instead of backticks `command`
+# ✅ Use $(( )) for arithmetic instead of let
+# ✅ Define functions as func_name() {} (no function keyword)
+# ✅ No associative arrays (declare -A is NOT supported)
+# ✅ No here-strings (<<< is NOT supported)
+# ✅ No -v flag in test or [[
+# ✅ Avoid bash-specific string operations like ${var:0:3}
+# ✅ Avoid arrays entirely when possible (even indexed arrays can be problematic)
+# ✅ Use printf followed by read instead of read -p
+# ✅ Use printf instead of echo -e for portable formatting
+# ✅ Avoid process substitution <() and >()
+# ✅ Prefer case statements over complex if/elif chains
+# ✅ Use command -v instead of which or type for command existence checks
+# ✅ Keep scripts modular with small, focused functions
+# ✅ Use simple error handling instead of complex traps
+# ✅ Test scripts with ash/dash explicitly, not just bash
 #
 # 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
-# =========================================================
 ### =========================================================
-### 📌 AI Assistance Request: Bug Fixing Procedure
+### 📌 AI Assistance Request: POSIX-Compliant Debugging Guide
 ### 
-### When debugging or fixing errors in this script, follow these steps:
+### When debugging or fixing errors in this POSIX shell script:
 ### 
-### 1️⃣ Create a minimal test script to identify the bug.
-### 2️⃣ Execute the test and verify the reproducibility of the error.
-### 3️⃣ Fix the error and re-run the test to confirm the solution.
-### 4️⃣ Apply the corrected code to the production environment.
+### 1️⃣ Create a minimal reproducible test case (avoid bash features)
+### 2️⃣ Test with ash/dash explicitly: dash ./test.sh
+### 3️⃣ Use portable debugging methods: echo, printf, or set -x
+### 4️⃣ Validate fixes against all POSIX compliance guidelines
+### 5️⃣ Ensure the solution works in resource-constrained OpenWrt
 ### 
-### ⚠️ DO NOT modify the main script without first confirming the fix 
-###     through a dedicated test script.
+### ⚠️ IMPORTANT:
+### - Avoid suggesting bash-specific solutions
+### - Always test fixes with ash/dash before implementation
+### - Prefer simple solutions over complex ones
+### - Do not modify production code without test verification
 ### 
-### 🛠️ Keep the debugging process structured, efficient, and reliable.
+### 🛠️ Keep debugging simple, focused, and POSIX-compliant!
 ### =========================================================
 
 DEV_NULL="${DEV_NULL:-on}"
