@@ -188,32 +188,21 @@ select_country() {
         if [ "$result_count" -eq 1 ]; then
             local country_name=$(echo "$full_results" | awk '{print $2, $3}')
             
-            # プレースホルダー置換の修正
-            local msg_match=$(get_message "MSG_SINGLE_MATCH_FOUND")
-            # エスケープ処理付きのsedでプレースホルダーを置換
-            escaped_country=$(echo "$country_name" | sed 's/[\/&]/\\&/g')
-            msg_match=$(echo "$msg_match" | sed "s/{0}/$escaped_country/g")
-            printf "%s\n" "$msg_match"
+            # メッセージデータベースからメッセージを取得し、プレースホルダーを置換
+            local msg=$(get_message "MSG_SINGLE_MATCH_FOUND")
+            msg=$(echo "$msg" | sed "s/{0}/$country_name/g")
+            printf "%s\n" "$msg"
             
             # 確認プロンプト
-            local msg_confirm=$(get_message "MSG_CONFIRM_ONLY_YN")
-            printf "%s " "$msg_confirm"
-            
-            read -r yn
-            yn=$(normalize_input "$yn")
-            
-            case "$yn" in
-                [Yy]*)
-                    echo "$full_results" > "$tmp_country"
-                    country_write
-                    select_zone
-                    return 0
-                    ;;
-                *)
-                    input_lang=""
-                    continue
-                    ;;
-            esac
+            if confirm "MSG_CONFIRM_ONLY_YN"; then
+                echo "$full_results" > "$tmp_country"
+                country_write
+                select_zone
+                return 0
+            else
+                input_lang=""
+                continue
+            fi
         fi
 
         # 複数結果の場合、リスト表示して選択
@@ -279,43 +268,47 @@ select_country() {
 }
 
 # 番号付きリストからユーザーに選択させる関数
+# リスト選択を処理する関数
+# $1: 表示するリストデータ
+# $2: 結果を保存する一時ファイル
+# $3: タイプ（country/zone）
 select_list() {
-    debug_log "DEBUG" "Entering select_list() with type: $3"
+    debug_log "DEBUG" "select_list() 関数を実行: タイプ=$3"
     
     local select_list="$1"
     local tmp_file="$2"
     local type="$3"
     local count=1
     
-    # 数値でないときは、リスト表示
-    local error_msg=""
-    local prompt_msg=""
+    # タイプに応じたメッセージキーを設定
+    local error_msg_key=""
+    local prompt_msg_key=""
     
     case "$type" in
         country)
-            error_msg=$(get_message "MSG_INVALID_COUNTRY_NUMBER")
-            prompt_msg=$(get_message "MSG_SELECT_COUNTRY_NUMBER")
+            error_msg_key="MSG_INVALID_COUNTRY_NUMBER"
+            prompt_msg_key="MSG_SELECT_COUNTRY_NUMBER"
             ;;
         zone)
-            error_msg=$(get_message "MSG_INVALID_ZONE_NUMBER")
-            prompt_msg=$(get_message "MSG_SELECT_ZONE_NUMBER")
+            error_msg_key="MSG_INVALID_ZONE_NUMBER"
+            prompt_msg_key="MSG_SELECT_ZONE_NUMBER"
             ;;
         *)
-            error_msg=$(get_message "MSG_INVALID_NUMBER")
-            prompt_msg=$(get_message "MSG_SELECT_NUMBER")
+            error_msg_key="MSG_INVALID_NUMBER"
+            prompt_msg_key="MSG_SELECT_NUMBER"
             ;;
     esac
     
     # リストの行数を数える
     local total_items=$(echo "$select_list" | wc -l)
     
-    # 結果が1つだけの場合は自動選択
+    # 項目が1つしかない場合は自動選択
     if [ "$total_items" -eq 1 ]; then
         echo "1" > "$tmp_file"
         return 0
     fi
     
-    # リスト表示
+    # 項目をリスト表示
     echo "$select_list" | while read -r line; do
         printf "%s: %s\n" "$count" "$line"
         count=$((count + 1))
@@ -323,35 +316,53 @@ select_list() {
     
     # ユーザーに選択を促す
     while true; do
-        printf "%s " "$prompt_msg"
+        # メッセージの取得と表示
+        printf "%s " "$(color cyan "$(get_message "$prompt_msg_key")")"
         read -r number
         number=$(normalize_input "$number")
         
         # 数値チェック
         if ! echo "$number" | grep -q '^[0-9]\+$'; then
-            printf "%s\n" "$error_msg"
+            printf "%s\n" "$(color red "$(get_message "$error_msg_key")")"
             continue
         fi
         
         # 範囲チェック
         if [ "$number" -lt 1 ] || [ "$number" -gt "$total_items" ]; then
-            local msg_range=$(get_message "MSG_NUMBER_OUT_OF_RANGE")
-            msg_range=$(echo "$msg_range" | sed "s/{0}/1-$total_items/g")
-            printf "%s\n" "$msg_range"
+            local range_msg=$(get_message "MSG_NUMBER_OUT_OF_RANGE")
+            # プレースホルダー置換（sedでエスケープ処理）
+            range_msg=$(echo "$range_msg" | sed "s/{0}/1-$total_items/g")
+            printf "%s\n" "$(color red "$range_msg")"
             continue
         fi
         
-        # 選択番号を保存
-        echo "$number" > "$tmp_file"
-        break
+        # 選択項目を取得
+        local selected_value=$(echo "$select_list" | sed -n "${number}p")
+        
+        # 選択内容の表示
+        local selected_msg=$(get_message "MSG_SELECTED")
+        printf "%s %s\n" "$(color cyan "$selected_msg")" "$selected_value"
+        
+        # 確認処理（共通関数使用）
+        if confirm "MSG_CONFIRM_YNR"; then
+            echo "$number" > "$tmp_file"
+            break
+        elif [ "$yn" = "R" ] || [ "$yn" = "r" ]; then
+            # リスタートオプション
+            debug_log "DEBUG" "ユーザーが選択をリスタート"
+            rm -f "${CACHE_DIR}/country.ch"
+            select_country
+            return 0
+        fi
+        # 他の場合は再選択
     done
     
-    debug_log "DEBUG" "Selected $type number: $(cat $tmp_file)"
+    debug_log "DEBUG" "選択完了: $type 番号 $(cat $tmp_file)"
 }
 
-# タイムゾーンの選択を促す関数
+# タイムゾーンの選択を処理する関数
 select_zone() {
-    debug_log "DEBUG" "select_zone() 関数を実行します"
+    debug_log "DEBUG" "select_zone() 関数を実行"
     
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_zone="${CACHE_DIR}/zone.ch"
@@ -362,137 +373,138 @@ select_zone() {
     
     # すでに設定済みかチェック
     if [ -f "$cache_zonename" ] && [ -f "$cache_timezone" ]; then
-        debug_log "DEBUG" "タイムゾーンはすでに設定済みです。select_zone() をスキップします"
+        debug_log "DEBUG" "タイムゾーンはすでに設定済み。select_zone() をスキップ"
         return 0
     fi
 
     # カントリーファイルが存在するか確認
     if [ ! -f "$cache_country" ]; then
-        debug_log "ERROR" "カントリーファイルが見つかりません。select_country() を先に実行します"
+        debug_log "ERROR" "カントリーファイルが見つかりません。select_country() を先に実行"
         select_country
         return $?
     fi
     
     # カントリーデータからタイムゾーン情報を抽出
     local country_data=$(cat "$cache_country")
+    local country_col=$(echo "$country_data" | awk '{print $2}')
+    local timezone_cols=$(echo "$country_data" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i; print ""}')
     
-    # フィールド6以降を抽出（すべてのタイムゾーン関連データ）
-    local zone_data=$(echo "$country_data" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i}')
-    debug_log "DEBUG" "抽出されたゾーンデータ: $zone_data"
-    
-    # データがない場合は終了
-    if [ -z "$zone_data" ]; then
-        debug_log "ERROR" "ゾーンデータがありません"
-        return 1
+    # システムから現在のタイムゾーンを取得
+    local current_tz=""
+    if type get_current_timezone >/dev/null 2>&1; then
+        current_tz=$(get_current_timezone)
+        debug_log "DEBUG" "現在のシステムタイムゾーン: $current_tz"
     fi
     
-    # カンマで区切られたゾーンデータを処理
-    # 形式: "Asia/Tokyo,JST-9 Europe/London,GMT0"
-    local zone_list=""
+    # デフォルトタイムゾーンの検出
+    local default_tz=""
+    local default_tz_index=0
+    local tz_count=0
+    
+    for zone in $timezone_cols; do
+        tz_count=$((tz_count + 1))
+        if [ -n "$current_tz" ] && echo "$zone" | grep -q "$current_tz"; then
+            default_tz="$zone"
+            default_tz_index=$tz_count
+            break
+        fi
+    done
+    
+    # デフォルト値が見つかった場合、それを提案
+    if [ -n "$default_tz" ]; then
+        local detected_msg=$(get_message "MSG_DETECTED_TIMEZONE")
+        printf "%s %s\n" "$(color cyan "$detected_msg")" "$default_tz"
+        
+        # 確認処理（共通関数使用）
+        if confirm "MSG_CONFIRM_ONLY_YN"; then
+            debug_log "DEBUG" "検出されたタイムゾーンを使用: $default_tz (インデックス: $default_tz_index)"
+            echo "$default_tz_index" > "$tmp_zone"
+            echo "$default_tz" > "$cache_zone"
+            
+            # ゾーン情報をカンマで分割して保存
+            local zonename=$(echo "$default_tz" | cut -d',' -f1)
+            local timezone=$(echo "$default_tz" | cut -d',' -f2)
+            
+            if [ -n "$zonename" ] && [ -n "$timezone" ]; then
+                echo "$zonename" > "$cache_zonename"
+                echo "$timezone" > "$cache_timezone"
+                
+                # 成功フラグ設定
+                if [ ! -f "$flag_zone" ]; then
+                    printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+                    touch "$flag_zone"
+                fi
+                
+                # 基本言語パッケージのインストール
+                if [ -f "${CACHE_DIR}/downloader.ch" ] && type install_package >/dev/null 2>&1; then
+                    install_package luci-i18n-base yn hidden
+                    install_package luci-i18n-opkg yn hidden
+                    install_package luci-i18n-firewall yn hidden
+                fi
+                
+                return 0
+            fi
+        fi
+        # 拒否された場合は下の手動選択へ続く
+    fi
+    
+    # タイムゾーン一覧の準備
+    : > "$tmp_zone"
+    local zone_pairs=""
     local count=1
     
-    # 一時ファイルを初期化
-    : > "$tmp_zone"
-    
     # ゾーンデータをパースして表示可能な形式に変換
-    echo "$zone_data" | tr ' ' '\n' | grep -v "^$" | while read -r zone_pair; do
+    echo "$timezone_cols" | tr ' ' '\n' | grep -v "^$" | while read -r zone_pair; do
         # カンマ区切りのペアから個別データを抽出
         local zonename=$(echo "$zone_pair" | cut -d',' -f1)
         local timezone=$(echo "$zone_pair" | cut -d',' -f2)
         
         if [ -n "$zonename" ] && [ -n "$timezone" ]; then
-            echo "$count: $zonename ($timezone)"
+            # 表示用と保存用で別々に処理
+            echo "$zonename ($timezone)" >> "${CACHE_DIR}/zone_display.txt"
             echo "$zonename,$timezone" >> "$tmp_zone"
             count=$((count + 1))
         fi
-    done > "${CACHE_DIR}/zone_display.txt"
+    done
     
-    # ゾーンリストを表示
-    printf "%s\n" "🕒 タイムゾーンを選択してください："
-    cat "${CACHE_DIR}/zone_display.txt"
+    # select_list関数で選択処理
+    printf "%s\n" "$(color cyan "$(get_message "MSG_SELECT_TIMEZONE")")"
+    select_list "$(cat "${CACHE_DIR}/zone_display.txt")" "${CACHE_DIR}/zone_selected.txt" "zone"
     
-    # ユーザーに選択を促す
-    printf "%s " "🔢 番号を入力してください："
-    
-    read -r choice
-    choice=$(normalize_input "$choice")
-    
-    # 選択が正しいか確認
-    if ! echo "$choice" | grep -q "^[0-9]\+$"; then
-        printf "%s\n" "❌ 無効な番号です。数字を入力してください。"
-        select_zone
-        return $?
+    # 選択された番号を取得
+    local selected_number=$(cat "${CACHE_DIR}/zone_selected.txt")
+    if [ -z "$selected_number" ]; then
+        debug_log "ERROR" "タイムゾーン選択エラー"
+        return 1
     fi
     
-    # 選択された行を取得
-    local total_items=$(cat "${CACHE_DIR}/zone_display.txt" | wc -l)
-    
-    if [ "$choice" -lt 1 ] || [ "$choice" -gt "$total_items" ]; then
-        printf "%s\n" "❌ 有効な範囲（1-$total_items）の数字を入力してください。"
-        select_zone
-        return $?
-    fi
-    
-    # 選択された行を取得
-    local line_number=0
-    local selected_pair=""
-    
-    line_number=0
-    while read -r line; do
-        line_number=$((line_number + 1))
-        if [ "$line_number" -eq "$choice" ]; then
-            selected_pair="$line"
-            break
-        fi
-    done < "$tmp_zone"
-    
-    if [ -z "$selected_pair" ]; then
-        printf "%s\n" "❌ エラーが発生しました。再度選択してください。"
-        select_zone
-        return $?
-    fi
+    # 選択されたカンマ区切りペアを取得
+    local selected_pair=$(sed -n "${selected_number}p" "$tmp_zone")
     
     # カンマで区切られたペアから値を抽出
     local selected_zonename=$(echo "$selected_pair" | cut -d',' -f1)
     local selected_timezone=$(echo "$selected_pair" | cut -d',' -f2)
     
-    # 確認メッセージ
-    printf "%s\n" "✅ 選択されたタイムゾーン： $selected_zonename"
+    # キャッシュに書き込み
+    echo "$selected_zonename" > "$cache_zonename"
+    echo "$selected_timezone" > "$cache_timezone"
+    echo "$selected_pair" > "$cache_zone"
     
-    # 確認プロンプト
-    printf "%s " "🔄 確認 (Y=はい / N=いいえ)："
+    # 成功メッセージと後処理
+    if [ ! -f "$flag_zone" ]; then
+        printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+        touch "$flag_zone"
+    fi
     
-    read -r yn
-    yn=$(normalize_input "$yn")
+    # 基本的な言語パッケージをインストール
+    if [ -f "${CACHE_DIR}/downloader.ch" ] && type install_package >/dev/null 2>&1; then
+        install_package luci-i18n-base yn hidden
+        install_package luci-i18n-opkg yn hidden
+        install_package luci-i18n-firewall yn hidden
+    fi
     
-    case "$yn" in
-        [Yy]*)
-            # キャッシュに書き込み
-            echo "$selected_zonename" > "$cache_zonename"
-            echo "$selected_timezone" > "$cache_timezone"
-            echo "$selected_pair" > "$cache_zone"
-            
-            if [ ! -f "$flag_zone" ]; then
-                printf "%s\n" "✅ タイムゾーン選択が正常に完了しました！"
-                touch "$flag_zone"
-            fi
-            
-            # 基本的な言語パッケージをインストール
-            if type install_package >/dev/null 2>&1; then
-                install_package luci-i18n-base yn hidden
-                install_package luci-i18n-opkg yn hidden
-                install_package luci-i18n-firewall yn hidden
-            fi
-            
-            return 0
-            ;;
-        *)
-            # キャンセルされた場合、再度選択させる
-            debug_log "DEBUG" "ユーザーがタイムゾーン選択をキャンセルしました"
-            select_zone
-            return $?
-            ;;
-    esac
+    debug_log "DEBUG" "選択されたタイムゾーン: $selected_zonename ($selected_timezone)"
+    return 0
 }
 
 # 国と言語情報をキャッシュに書き込む関数
