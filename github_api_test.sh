@@ -107,7 +107,7 @@ extract_json_value() {
     echo "$result"
 }
 
-# UNIXタイムスタンプを人間可読な形式に変換
+# UNIXタイムスタンプを人間可読な形式に変換（POSIX準拠）
 format_timestamp() {
     local timestamp=$1
     local now=$(date +%s)
@@ -167,7 +167,13 @@ test_api_rate_limit_no_auth() {
     
     # 一時ファイルを使用
     local temp_file="/tmp/github_api_limit_noauth.tmp"
-    wget -q -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
+    
+    # curlとwgetのどちらを使用するかを決定
+    if [ "$CURL_AVAILABLE" -eq 1 ]; then
+        curl -s -o "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
+    else
+        wget -q -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
+    fi
     
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
         # jqがインストールされている場合
@@ -222,7 +228,13 @@ test_api_rate_limit_with_auth() {
     
     # 一時ファイルを使用
     local temp_file="/tmp/github_api_limit_auth.tmp"
-    wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null
+    
+    # curlとwgetのどちらを使用するかを決定
+    if [ "$CURL_AVAILABLE" -eq 1 ]; then
+        curl -s -H "Authorization: token $token" -o "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
+    else
+        wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null
+    fi
     
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
         # jqがインストールされている場合
@@ -273,11 +285,19 @@ test_repo_info() {
     local token=$(get_token)
     local temp_file="/tmp/github_repo_info.tmp"
     
-    # 認証ヘッダーの有無で分岐
-    if [ -n "$token" ]; then
-        wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/repos/$repo" 2>/dev/null
+    # curlとwgetのどちらを使用するかを決定
+    if [ "$CURL_AVAILABLE" -eq 1 ]; then
+        if [ -n "$token" ]; then
+            curl -s -H "Authorization: token $token" -o "$temp_file" "https://api.github.com/repos/$repo" 2>/dev/null
+        else
+            curl -s -o "$temp_file" "https://api.github.com/repos/$repo" 2>/dev/null
+        fi
     else
-        wget -q -O "$temp_file" "https://api.github.com/repos/$repo" 2>/dev/null
+        if [ -n "$token" ]; then
+            wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/repos/$repo" 2>/dev/null
+        else
+            wget -q -O "$temp_file" "https://api.github.com/repos/$repo" 2>/dev/null
+        fi
     fi
     
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
@@ -317,11 +337,19 @@ test_contents() {
     local token=$(get_token)
     local temp_file="/tmp/github_contents.tmp"
     
-    # 認証ヘッダーの有無で分岐
-    if [ -n "$token" ]; then
-        wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/repos/$repo/contents" 2>/dev/null
+    # curlとwgetのどちらを使用するかを決定
+    if [ "$CURL_AVAILABLE" -eq 1 ]; then
+        if [ -n "$token" ]; then
+            curl -s -H "Authorization: token $token" -o "$temp_file" "https://api.github.com/repos/$repo/contents" 2>/dev/null
+        else
+            curl -s -o "$temp_file" "https://api.github.com/repos/$repo/contents" 2>/dev/null
+        fi
     else
-        wget -q -O "$temp_file" "https://api.github.com/repos/$repo/contents" 2>/dev/null
+        if [ -n "$token" ]; then
+            wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/repos/$repo/contents" 2>/dev/null
+        else
+            wget -q -O "$temp_file" "https://api.github.com/repos/$repo/contents" 2>/dev/null
+        fi
     fi
     
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
@@ -370,11 +398,19 @@ test_file_commit() {
     local branch="main"  # デフォルトブランチ名
     local temp_file="/tmp/github_file_commit.tmp"
     
-    # 認証ヘッダーの有無で分岐
-    if [ -n "$token" ]; then
-        wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/repos/$repo/commits?path=$file&sha=$branch" 2>/dev/null
+    # curlとwgetのどちらを使用するかを決定
+    if [ "$CURL_AVAILABLE" -eq 1 ]; then
+        if [ -n "$token" ]; then
+            curl -s -H "Authorization: token $token" -o "$temp_file" "https://api.github.com/repos/$repo/commits?path=$file&sha=$branch" 2>/dev/null
+        else
+            curl -s -o "$temp_file" "https://api.github.com/repos/$repo/commits?path=$file&sha=$branch" 2>/dev/null
+        fi
     else
-        wget -q -O "$temp_file" "https://api.github.com/repos/$repo/commits?path=$file&sha=$branch" 2>/dev/null
+        if [ -n "$token" ]; then
+            wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/repos/$repo/commits?path=$file&sha=$branch" 2>/dev/null
+        else
+            wget -q -O "$temp_file" "https://api.github.com/repos/$repo/commits?path=$file&sha=$branch" 2>/dev/null
+        fi
     fi
     
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
@@ -430,7 +466,14 @@ test_file_download() {
     # 一時ファイルパス
     local temp_file="/tmp/github_test_download"
     
-    if wget -q -O "$temp_file" "$base_url/$file"; then
+    # curlとwgetのどちらを使用するかを決定
+    if [ "$CURL_AVAILABLE" -eq 1 ]; then
+        curl -s -o "$temp_file" "$base_url/$file" 2>/dev/null
+    else
+        wget -q -O "$temp_file" "$base_url/$file" 2>/dev/null
+    fi
+    
+    if [ -f "$temp_file" ]; then
         local file_size=$(wc -c < "$temp_file")
         if [ "$file_size" -gt 0 ]; then
             report SUCCESS "ファイルダウンロード: $file (サイズ: $file_size バイト)"
