@@ -12,7 +12,6 @@
 
 # グローバル変数
 JQ_AVAILABLE=0
-CURL_AVAILABLE=0
 WGET_AVAILABLE=0
 
 # ユーティリティ関数
@@ -55,31 +54,20 @@ get_token() {
 check_system() {
     report INFO "システム診断を実行中..."
     
+    # wgetは必須ツール（OpenWrtの標準）
+    if command -v wget >/dev/null 2>&1; then
+        WGET_AVAILABLE=1
+        report SUCCESS "wget: 使用可能です"
+    else
+        report FAILURE "wget: インストールされていません。テストを実行できません"
+        exit 1
+    fi
+    
     if command -v jq >/dev/null 2>&1; then
         JQ_AVAILABLE=1
         report SUCCESS "jq: インストールされています（バージョン: $(jq --version 2>&1)）"
     else
         report PARTIAL "jq: インストールされていません。代替パース方式を使用します"
-    fi
-    
-    if command -v curl >/dev/null 2>&1; then
-        CURL_AVAILABLE=1
-        report SUCCESS "curl: インストールされています（バージョン: $(curl --version | head -1)）"
-    else
-        report PARTIAL "curl: インストールされていません。wgetを使用します"
-    fi
-    
-    # wgetは必須ツール
-    if command -v wget >/dev/null 2>&1; then
-        WGET_AVAILABLE=1
-        if [ "$CURL_AVAILABLE" -eq 0 ]; then
-            report SUCCESS "wget: インストールされています（curlの代替として使用）"
-        fi
-    else
-        if [ "$CURL_AVAILABLE" -eq 0 ]; then
-            report FAILURE "wget/curl: どちらもインストールされていません。テストを実行できません"
-            exit 1
-        fi
     fi
     
     report SUCCESS "ホスト名: $(hostname 2>/dev/null)"
@@ -126,17 +114,36 @@ check_network() {
     fi
 }
 
-# タイムスタンプをフォーマット
+# OpenWrt 19.07に対応したより堅牢なタイムスタンプフォーマット関数
 format_timestamp() {
+    # 入力値が空の場合の保護
+    if [ -z "$1" ]; then
+        echo "不明"
+        return 0
+    fi
+    
     local unix_time="$1"
+    # 数値チェック（OpenWrt 19.07のashでも動作する方法）
+    case "$unix_time" in
+        ''|*[!0-9]*) 
+            echo "不明"
+            return 0
+            ;;
+    esac
+    
+    # 現在時刻を取得
     local now=$(date +%s)
+    case "$now" in
+        ''|*[!0-9]*) 
+            echo "不明"
+            return 0
+            ;;
+    esac
     
-    # 文字列の数値変換を確実にするための処理
-    unix_time=$(echo "$unix_time" | tr -cd '0-9')
-    now=$(echo "$now" | tr -cd '0-9')
-    
+    # 文字列から数値への安全な変換（OpenWrtのashでも動作）
     local diff=0
     if [ "$unix_time" -gt "$now" ]; then
+        # exprの結果が0より小さくならないことを保証
         diff=$(expr "$unix_time" - "$now")
     fi
     
@@ -144,9 +151,15 @@ format_timestamp() {
         echo "0分後"
     elif [ "$diff" -lt 60 ]; then
         echo "1分未満"
-    else
+    elif [ "$diff" -lt 3600 ]; then
+        # OpenWrt 19.07のashでも動作
         local mins=$(expr "$diff" / 60)
         echo "${mins}分後"
+    else
+        # OpenWrt 19.07のashでも動作
+        local hours=$(expr "$diff" / 3600)
+        local mins=$(expr "$diff" % 3600 / 60)
+        echo "${hours}時間${mins}分後"
     fi
 }
 
@@ -183,15 +196,9 @@ test_network_basic() {
         report PARTIAL "Ping: api.github.com に到達できません (ファイアウォールで制限されている可能性あり)"
     fi
     
-    # HTTPS接続テスト
-    local https_result=0
-    if [ "$CURL_AVAILABLE" -eq 1 ]; then
-        curl -s -o /dev/null -w "%{http_code}" https://api.github.com >/dev/null 2>&1
-        https_result=$?
-    else
-        wget -q --spider https://api.github.com
-        https_result=$?
-    fi
+    # HTTPS接続テスト（wgetのみ使用）
+    wget -q --spider https://api.github.com
+    local https_result=$?
     
     if [ "$https_result" -eq 0 ]; then
         report SUCCESS "HTTPS: api.github.com へHTTPS接続可能です"
@@ -225,12 +232,7 @@ test_token_status() {
             
             # トークン認証チェック
             local temp_file="/tmp/github_token_check.tmp"
-            
-            if [ "$CURL_AVAILABLE" -eq 1 ]; then
-                curl -s -H "Authorization: token $token" -o "$temp_file" "https://api.github.com/user" 2>/dev/null
-            else
-                wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/user" 2>/dev/null
-            fi
+            wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/user" 2>/dev/null
             
             # 認証状態の確認
             if [ -s "$temp_file" ]; then
@@ -269,12 +271,8 @@ test_api_rate_limit_no_auth() {
     report INFO "API制限テスト (認証なし) 実行中..."
     local temp_file="/tmp/github_ratelimit_noauth.tmp"
     
-    # curlとwgetのどちらを使用するかを決定
-    if [ "$CURL_AVAILABLE" -eq 1 ]; then
-        curl -s -o "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
-    else
-        wget -q -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
-    fi
+    # wgetを使用（OpenWrtの標準）
+    wget -q -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
     
     # レスポンスチェック
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
@@ -286,40 +284,28 @@ test_api_rate_limit_no_auth() {
             remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
             limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
             reset_time=$(jq -r '.resources.core.reset' "$temp_file" 2>/dev/null)
-            
-            if [ -n "$remaining" ] && [ -n "$limit" ]; then
-                local reset_formatted=""
-                if [ -n "$reset_time" ]; then
-                    reset_formatted=$(format_timestamp "$reset_time")
-                    report SUCCESS "API制限 (認証なし): 残り $remaining/$limit リクエスト (回復: $reset_formatted)"
-                else
-                    report SUCCESS "API制限 (認証なし): 残り $remaining/$limit リクエスト"
-                fi
-                rm -f "$temp_file"
-                return 0
-            fi
         else
             # 代替パース方法
             remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+')
             limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+')
             reset_time=$(grep -A3 '"core"' "$temp_file" | grep '"reset"' | head -1 | grep -o '[0-9]\+')
+        fi
             
-            if [ -n "$remaining" ] && [ -n "$limit" ]; then
-                local reset_formatted=""
-                if [ -n "$reset_time" ]; then
-                    reset_formatted=$(format_timestamp "$reset_time")
-                    report SUCCESS "API制限 (認証なし): 残り $remaining/$limit リクエスト (回復: $reset_formatted)"
-                else
-                    report SUCCESS "API制限 (認証なし): 残り $remaining/$limit リクエスト"
-                fi
-                rm -f "$temp_file"
-                return 0
+        if [ -n "$remaining" ] && [ -n "$limit" ]; then
+            local reset_formatted=""
+            if [ -n "$reset_time" ]; then
+                reset_formatted=$(format_timestamp "$reset_time")
+                report SUCCESS "API制限 (認証なし): 残り $remaining/$limit リクエスト (回復: $reset_formatted)"
+            else
+                report SUCCESS "API制限 (認証なし): 残り $remaining/$limit リクエスト"
             fi
+            rm -f "$temp_file"
+            return 0
         fi
     fi
     
     report FAILURE "API制限情報を取得できませんでした"
-        rm -f "$temp_file" 2>/dev/null
+    rm -f "$temp_file" 2>/dev/null
     return 1
 }
 
@@ -329,18 +315,14 @@ test_api_rate_limit_with_auth() {
     
     local token=$(get_token)
     if [ -z "$token" ]; then
-        report PARTIAL "トークンが設定されていないため、このテストはスキップします"
+        report PARTIAL "トークンが設定されていないため、認証ありのAPI制限テストはスキップします"
         return 0
     fi
     
     local temp_file="/tmp/github_ratelimit_auth.tmp"
     
-    # curlとwgetのどちらを使用するかを決定
-    if [ "$CURL_AVAILABLE" -eq 1 ]; then
-        curl -s -H "Authorization: token $token" -o "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
-    else
-        wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null
-    fi
+    # wgetを使用（OpenWrtの標準）
+    wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null
     
     # レスポンスチェック
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
@@ -359,35 +341,23 @@ test_api_rate_limit_with_auth() {
             remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
             limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
             reset_time=$(jq -r '.resources.core.reset' "$temp_file" 2>/dev/null)
-            
-            if [ -n "$remaining" ] && [ -n "$limit" ]; then
-                local reset_formatted=""
-                if [ -n "$reset_time" ]; then
-                    reset_formatted=$(format_timestamp "$reset_time")
-                    report SUCCESS "API制限 (認証あり): 残り $remaining/$limit リクエスト (回復: $reset_formatted)"
-                else
-                    report SUCCESS "API制限 (認証あり): 残り $remaining/$limit リクエスト"
-                fi
-                rm -f "$temp_file"
-                return 0
-            fi
         else
             # 代替パース方法
             remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+')
             limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+')
             reset_time=$(grep -A3 '"core"' "$temp_file" | grep '"reset"' | head -1 | grep -o '[0-9]\+')
-            
-            if [ -n "$remaining" ] && [ -n "$limit" ]; then
-                local reset_formatted=""
-                if [ -n "$reset_time" ]; then
-                    reset_formatted=$(format_timestamp "$reset_time")
-                    report SUCCESS "API制限 (認証あり): 残り $remaining/$limit リクエスト (回復: $reset_formatted)"
-                else
-                    report SUCCESS "API制限 (認証あり): 残り $remaining/$limit リクエスト"
-                fi
-                rm -f "$temp_file"
-                return 0
+        fi
+        
+        if [ -n "$remaining" ] && [ -n "$limit" ]; then
+            local reset_formatted=""
+            if [ -n "$reset_time" ]; then
+                reset_formatted=$(format_timestamp "$reset_time")
+                report SUCCESS "API制限 (認証あり): 残り $remaining/$limit リクエスト (回復: $reset_formatted)"
+            else
+                report SUCCESS "API制限 (認証あり): 残り $remaining/$limit リクエスト"
             fi
+            rm -f "$temp_file"
+            return 0
         fi
     fi
     
@@ -412,18 +382,10 @@ test_repo_info() {
     fi
     
     # API呼び出し
-    if [ "$CURL_AVAILABLE" -eq 1 ]; then
-        if [ -n "$auth_header" ]; then
-            curl -s -H "$auth_header" -o "$temp_file" "https://api.github.com/repos/$repo_owner/$repo_name" 2>/dev/null
-        else
-            curl -s -o "$temp_file" "https://api.github.com/repos/$repo_owner/$repo_name" 2>/dev/null
-        fi
+    if [ -n "$auth_header" ]; then
+        wget -q -O "$temp_file" --header="$auth_header" "https://api.github.com/repos/$repo_owner/$repo_name" 2>/dev/null
     else
-        if [ -n "$auth_header" ]; then
-            wget -q -O "$temp_file" --header="$auth_header" "https://api.github.com/repos/$repo_owner/$repo_name" 2>/dev/null
-        else
-            wget -q -O "$temp_file" "https://api.github.com/repos/$repo_owner/$repo_name" 2>/dev/null
-        fi
+        wget -q -O "$temp_file" "https://api.github.com/repos/$repo_owner/$repo_name" 2>/dev/null
     fi
     
     # レスポンスチェック
@@ -438,16 +400,6 @@ test_repo_info() {
             repo_description=$(jq -r '.description // "説明なし"' "$temp_file" 2>/dev/null)
             repo_stars=$(jq -r '.stargazers_count' "$temp_file" 2>/dev/null)
             repo_forks=$(jq -r '.forks_count' "$temp_file" 2>/dev/null)
-            
-            if [ -n "$repo_full_name" ]; then
-                report SUCCESS "リポジトリ情報:"
-                echo "  - 名前: $repo_full_name"
-                echo "  - 説明: $repo_description"
-                echo "  - スター数: $repo_stars"
-                echo "  - フォーク数: $repo_forks"
-                rm -f "$temp_file"
-                return 0
-            fi
         else
             # 代替パース方法
             repo_full_name=$(grep -o '"full_name"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | head -1 | sed 's/.*"full_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
@@ -458,16 +410,16 @@ test_repo_info() {
             if [ -z "$repo_description" ]; then
                 repo_description="説明なし"
             fi
-            
-            if [ -n "$repo_full_name" ]; then
-                report SUCCESS "リポジトリ情報:"
-                echo "  - 名前: $repo_full_name"
-                echo "  - 説明: $repo_description"
-                echo "  - スター数: $repo_stars"
-                echo "  - フォーク数: $repo_forks"
-                rm -f "$temp_file"
-                return 0
-            fi
+        fi
+        
+        if [ -n "$repo_full_name" ]; then
+            report SUCCESS "リポジトリ情報:"
+            echo "  - 名前: $repo_full_name"
+            echo "  - 説明: $repo_description"
+            echo "  - スター数: $repo_stars"
+            echo "  - フォーク数: $repo_forks"
+            rm -f "$temp_file"
+            return 0
         fi
     fi
     
@@ -492,18 +444,10 @@ test_commit_history() {
     fi
     
     # API呼び出し
-    if [ "$CURL_AVAILABLE" -eq 1 ]; then
-        if [ -n "$auth_header" ]; then
-            curl -s -H "$auth_header" -o "$temp_file" "https://api.github.com/repos/$repo_owner/$repo_name/commits?per_page=3" 2>/dev/null
-        else
-            curl -s -o "$temp_file" "https://api.github.com/repos/$repo_owner/$repo_name/commits?per_page=3" 2>/dev/null
-        fi
+    if [ -n "$auth_header" ]; then
+        wget -q -O "$temp_file" --header="$auth_header" "https://api.github.com/repos/$repo_owner/$repo_name/commits?per_page=3" 2>/dev/null
     else
-        if [ -n "$auth_header" ]; then
-            wget -q -O "$temp_file" --header="$auth_header" "https://api.github.com/repos/$repo_owner/$repo_name/commits?per_page=3" 2>/dev/null
-        else
-            wget -q -O "$temp_file" "https://api.github.com/repos/$repo_owner/$repo_name/commits?per_page=3" 2>/dev/null
-        fi
+        wget -q -O "$temp_file" "https://api.github.com/repos/$repo_owner/$repo_name/commits?per_page=3" 2>/dev/null
     fi
     
     # レスポンスチェック
@@ -522,15 +466,14 @@ test_commit_history() {
                     break
                 fi
                 
-                echo "  [$sha] $date - $author"
-                echo "      $message"
-                i=$((i+1))
+                echo "  - コミット: [$sha] $date - $author"
+                echo "    メッセージ: $message"
+                i=$(expr $i + 1)
             done
         else
-            # 代替パース方法（3件以上ある前提で簡易版パース）
-            local commit_data=$(grep -A 5 '"sha"' "$temp_file" | head -15)
-            echo "$commit_data" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\{7\}' | sed 's/.*"sha"[[:space:]]*:[[:space:]]*"\([a-f0-9]\{7\}\).*/  - コミットID: \1/'
-            echo "$commit_data" | grep -o '"message"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/     メッセージ: \1/'
+            # 代替パース方法（より堅牢なgrep方式）
+            grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\{7,40\}"' "$temp_file" | head -3 | sed 's/.*"sha"[[:space:]]*:[[:space:]]*"\([a-f0-9]\{7\}\).*/  - コミットID: \1/' | head -3
+            grep -o '"message"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | head -3 | sed 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/    メッセージ: \1/'
         fi
         
         rm -f "$temp_file"
@@ -552,11 +495,7 @@ test_file_download() {
     local temp_file="/tmp/github_file_test.tmp"
     
     # 直接ダウンロード
-    if [ "$CURL_AVAILABLE" -eq 1 ]; then
-        curl -s -o "$temp_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null
-    else
-        wget -q -O "$temp_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null
-    fi
+    wget -q -O "$temp_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null
     
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
         local file_size=$(wc -c < "$temp_file")
