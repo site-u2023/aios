@@ -270,14 +270,14 @@ test_api_rate_limit_with_auth() {
     if [ ! -f "/etc/aios_token" ]; then
         report INFO "Skipping authenticated API rate limit test (token file not found)"
         return 0
-    }
+    fi
     
     # トークン取得
     local token=$(get_github_token)
     if [ -z "$token" ]; then
         report INFO "Skipping authenticated API rate limit test (token not available)"
         return 0
-    }
+    fi
     
     # API呼び出し
     local temp_file="/tmp/github_ratelimit_auth.tmp"
@@ -288,14 +288,14 @@ test_api_rate_limit_with_auth() {
         report FAILURE "Failed to get authenticated API rate limit information"
         rm -f "$temp_file" 2>/dev/null
         return 1
-    }
+    fi
     
     # 認証エラーチェック
     if grep -q "Bad credentials" "$temp_file" 2>/dev/null; then
         report FAILURE "API rate limit test: Invalid token"
         rm -f "$temp_file" 2>/dev/null
         return 1
-    }
+    fi
     
     # APIレスポンスパース
     local remaining="" limit="" reset_time=""
