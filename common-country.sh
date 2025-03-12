@@ -351,23 +351,24 @@ select_list() {
 
 # タイムゾーンの選択を促す関数
 select_zone() {
-    debug_log "DEBUG" "select_zone()関数を実行します"
+    debug_log "DEBUG" "select_zone() 関数を実行します"
     
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_zone="${CACHE_DIR}/zone.ch"
     local cache_zonename="${CACHE_DIR}/zonename.ch"
     local cache_timezone="${CACHE_DIR}/timezone.ch"
     local tmp_zone="${CACHE_DIR}/zone_tmp.ch"
+    local flag_zone="${CACHE_DIR}/timezone_success_done"
     
     # すでに設定済みかチェック
     if [ -f "$cache_zonename" ] && [ -f "$cache_timezone" ]; then
-        debug_log "DEBUG" "タイムゾーンはすでに設定済みです。select_zone()をスキップします"
+        debug_log "DEBUG" "タイムゾーンはすでに設定済みです。select_zone() をスキップします"
         return 0
     fi
 
     # カントリーファイルが存在するか確認
     if [ ! -f "$cache_country" ]; then
-        debug_log "ERROR" "カントリーファイルが見つかりません。select_country()を先に実行します"
+        debug_log "ERROR" "カントリーファイルが見つかりません。select_country() を先に実行します"
         select_country
         return $?
     fi
@@ -394,7 +395,7 @@ select_zone() {
     : > "$tmp_zone"
     
     # ゾーンデータをパースして表示可能な形式に変換
-    echo "$zone_data" | tr ' ' '\n' | while read -r zone_pair; do
+    echo "$zone_data" | tr ' ' '\n' | grep -v "^$" | while read -r zone_pair; do
         # カンマ区切りのペアから個別データを抽出
         local zonename=$(echo "$zone_pair" | cut -d',' -f1)
         local timezone=$(echo "$zone_pair" | cut -d',' -f2)
@@ -407,30 +408,48 @@ select_zone() {
     done > "${CACHE_DIR}/zone_display.txt"
     
     # ゾーンリストを表示
-    local msg_select_zone=$(get_message "MSG_SELECT_TIMEZONE")
-    printf "%s\n" "$msg_select_zone"
+    printf "%s\n" "🕒 タイムゾーンを選択してください："
     cat "${CACHE_DIR}/zone_display.txt"
     
     # ユーザーに選択を促す
-    local prompt_msg=$(get_message "MSG_SELECT_ZONE_NUMBER")
-    printf "%s " "$prompt_msg"
+    printf "%s " "🔢 番号を入力してください："
     
     read -r choice
     choice=$(normalize_input "$choice")
     
     # 選択が正しいか確認
     if ! echo "$choice" | grep -q "^[0-9]\+$"; then
-        local msg_invalid=$(get_message "MSG_INVALID_NUMBER")
-        printf "%s\n" "$msg_invalid"
-        return 1
+        printf "%s\n" "❌ 無効な番号です。数字を入力してください。"
+        select_zone
+        return $?
     fi
     
     # 選択された行を取得
-    local selected_pair=$(sed -n "${choice}p" "$tmp_zone")
+    local total_items=$(cat "${CACHE_DIR}/zone_display.txt" | wc -l)
+    
+    if [ "$choice" -lt 1 ] || [ "$choice" -gt "$total_items" ]; then
+        printf "%s\n" "❌ 有効な範囲（1-$total_items）の数字を入力してください。"
+        select_zone
+        return $?
+    fi
+    
+    # 選択された行を取得
+    local line_number=0
+    local selected_pair=""
+    
+    line_number=0
+    while read -r line; do
+        line_number=$((line_number + 1))
+        if [ "$line_number" -eq "$choice" ]; then
+            selected_pair="$line"
+            break
+        fi
+    done < "$tmp_zone"
+    
     if [ -z "$selected_pair" ]; then
-        local msg_error=$(get_message "MSG_ERROR_OCCURRED")
-        printf "%s\n" "$msg_error"
-        return 1
+        printf "%s\n" "❌ エラーが発生しました。再度選択してください。"
+        select_zone
+        return $?
     fi
     
     # カンマで区切られたペアから値を抽出
@@ -438,13 +457,10 @@ select_zone() {
     local selected_timezone=$(echo "$selected_pair" | cut -d',' -f2)
     
     # 確認メッセージ
-    local msg_selected=$(get_message "MSG_SELECTED_TIMEZONE")
-    msg_selected=$(echo "$msg_selected" | sed "s/{0}/$selected_zonename/g")
-    printf "%s\n" "$msg_selected"
+    printf "%s\n" "✅ 選択されたタイムゾーン： $selected_zonename"
     
     # 確認プロンプト
-    local msg_confirm=$(get_message "MSG_CONFIRM_ONLY_YN")
-    printf "%s " "$msg_confirm"
+    printf "%s " "🔄 確認 (Y=はい / N=いいえ)："
     
     read -r yn
     yn=$(normalize_input "$yn")
@@ -456,8 +472,10 @@ select_zone() {
             echo "$selected_timezone" > "$cache_timezone"
             echo "$selected_pair" > "$cache_zone"
             
-            local msg_success=$(get_message "MSG_TIMEZONE_SUCCESS")
-            printf "%s\n" "$msg_success"
+            if [ ! -f "$flag_zone" ]; then
+                printf "%s\n" "✅ タイムゾーン選択が正常に完了しました！"
+                touch "$flag_zone"
+            fi
             
             # 基本的な言語パッケージをインストール
             if type install_package >/dev/null 2>&1; then
@@ -471,7 +489,6 @@ select_zone() {
         *)
             # キャンセルされた場合、再度選択させる
             debug_log "DEBUG" "ユーザーがタイムゾーン選択をキャンセルしました"
-            # 再帰的に関数を呼び出し
             select_zone
             return $?
             ;;
