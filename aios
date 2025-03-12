@@ -1725,7 +1725,8 @@ check_common() {
         light)
             ;;
         test_api)
-            download "github_api_test.sh" "chmod" "read"
+            download "github_api_test.sh" "chmod"
+            sh "${BASE_DIR}"/github_api_test.sh
             exit 0
             ;;
         *)
