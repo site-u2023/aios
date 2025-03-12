@@ -3,13 +3,13 @@
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
 # 🚀 Last Update: 2025-03-12
-# Version: 05
+# Version: 06
 #
 # 🏷️ License: CC0 (Public Domain)
 # 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 19.07 and 24.10)
 # =========================================================
 
-echo "VERSION 05"
+echo "VERSION 06"
 
 # 🔵 aios関数チェック 🔵
 if type debug_log >/dev/null 2>&1 && type get_github_token >/dev/null 2>&1; then
@@ -50,17 +50,35 @@ report() {
     esac
 }
 
+# 🔵 JSON値抽出ユーティリティ（jq不要） 🔵
+json_get_value() {
+    local file="$1"
+    local key="$2"
+    
+    # キーが階層構造の場合（例：resources.core.remaining）
+    if echo "$key" | grep -q "\." 2>/dev/null; then
+        # ドットで区切られた階層構造のキーを処理
+        local parent_key=$(echo "$key" | cut -d. -f1)
+        local child_key=$(echo "$key" | cut -d. -f2-)
+        
+        # 親キーの範囲を見つける
+        local parent_block=$(sed -n "/$parent_key/,/}/p" "$file" 2>/dev/null)
+        
+        # 親ブロック内で子キーを検索
+        echo "$parent_block" | grep -o "\"$child_key\"[[:space:]]*:[[:space:]]*[^,}]*" 2>/dev/null | \
+            sed "s/.*\"$child_key\"[[:space:]]*:[[:space:]]*\([^,}]*\).*/\1/" 2>/dev/null | \
+            sed 's/"//g; s/^[[:space:]]*//; s/[[:space:]]*$//' 2>/dev/null
+    else
+        # 単一キーの場合は直接抽出
+        grep -o "\"$key\"[[:space:]]*:[[:space:]]*[^,}]*" "$file" 2>/dev/null | \
+            sed "s/.*\"$key\"[[:space:]]*:[[:space:]]*\([^,}]*\).*/\1/" 2>/dev/null | \
+            sed 's/"//g; s/^[[:space:]]*//; s/[[:space:]]*$//' 2>/dev/null
+    fi
+}
+
 # 🔵 システム＆ネットワーク診断関数 🔵
 check_system() {
     report INFO "System diagnostics running..."
-    
-    # jqチェック
-    if command -v jq >/dev/null 2>&1; then
-        report INFO "jq: Installed ($(jq --version 2>&1))"
-    else
-        report INFO "jq: Not installed. Using alternative parsing"
-    fi
-    
     report INFO "Hostname: $(hostname 2>/dev/null)"
     report INFO "OS: $(uname -a 2>/dev/null)"
 }
@@ -150,7 +168,22 @@ test_network_basic() {
     return 0
 }
 
-# 🔵 トークン状態テスト（修正版） 🔵
+# 🔵 トークン接頭辞表示 🔵
+get_token_prefix() {
+    local token="$1"
+    local prefix=""
+    
+    if [ -n "$token" ] && [ ${#token} -gt 5 ]; then
+        # POSIXシェル互換の方法でトークンの最初の5文字を抽出
+        prefix=$(printf "%s" "$token" | cut -c1-5)"..."
+    else
+        prefix="???.."
+    fi
+    
+    printf "%s" "$prefix"
+}
+
+# 🔵 トークン状態テスト 🔵
 test_token_status() {
     report INFO "Checking GitHub token status..."
     local token_file="/etc/aios_token"
@@ -177,12 +210,8 @@ test_token_status() {
     fi
     
     # トークンの先頭部分だけを表示（セキュリティ対策）
-    if [ "${#token}" -gt 5 ]; then
-        local token_preview="${token:0:5}..."
-        report INFO "  Token prefix: $token_preview"
-    else
-        report INFO "  Token: Valid (details hidden)"
-    fi
+    local token_preview=$(get_token_prefix "$token")
+    report INFO "  Token prefix: $token_preview"
     
     # トークン認証チェック
     local temp_file="/tmp/github_token_check.tmp"
@@ -192,12 +221,8 @@ test_token_status() {
     if [ -s "$temp_file" ]; then
         if grep -q "login" "$temp_file" 2>/dev/null; then
             # ユーザー名抽出
-            local login=""
-            if command -v jq >/dev/null 2>&1; then
-                login=$(jq -r '.login' "$temp_file" 2>/dev/null)
-            else
-                login=$(grep -o '"login"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed 's/.*"login"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null)
-            fi
+            local login=$(grep -o '"login"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | \
+                sed 's/.*"login"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null)
             
             if [ -n "$login" ]; then
                 report SUCCESS "  Authentication: ✅ Valid (user: $login)"
@@ -231,19 +256,9 @@ test_api_rate_limit_no_auth() {
     fi
     
     # JSONデータを安全に抽出
-    local remaining="" limit="" reset_time=""
-    
-    if command -v jq >/dev/null 2>&1; then
-        # jqによるパース
-        remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
-        limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
-        reset_time=$(jq -r '.resources.core.reset' "$temp_file" 2>/dev/null)
-    else
-        # サイレント出力でパース - エラー出力を確実に破棄
-        remaining=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"remaining"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
-        limit=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"limit"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
-        reset_time=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"reset"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
-    fi
+    local remaining=$(json_get_value "$temp_file" "resources.core.remaining")
+    local limit=$(json_get_value "$temp_file" "resources.core.limit")
+    local reset_time=$(json_get_value "$temp_file" "resources.core.reset")
     
     # 結果表示
     if [ -n "$remaining" ] && [ -n "$limit" ]; then
@@ -298,19 +313,9 @@ test_api_rate_limit_with_auth() {
     fi
     
     # APIレスポンスパース
-    local remaining="" limit="" reset_time=""
-    
-    if command -v jq >/dev/null 2>&1; then
-        # jqによるパース
-        remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
-        limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
-        reset_time=$(jq -r '.resources.core.reset' "$temp_file" 2>/dev/null)
-    else
-        # サイレント出力でパース - エラー出力を確実に破棄
-        remaining=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"remaining"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
-        limit=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"limit"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
-        reset_time=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"reset"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null | head -1)
-    fi
+    local remaining=$(json_get_value "$temp_file" "resources.core.remaining")
+    local limit=$(json_get_value "$temp_file" "resources.core.limit")
+    local reset_time=$(json_get_value "$temp_file" "resources.core.reset")
     
     # 結果表示
     if [ -n "$remaining" ] && [ -n "$limit" ]; then
@@ -329,7 +334,7 @@ test_api_rate_limit_with_auth() {
     return 0
 }
 
-# 🔵 リポジトリ情報テスト（改善版） 🔵
+# 🔵 リポジトリ情報テスト 🔵
 test_repo_info() {
     report INFO "Repository information test running..."
     
@@ -359,21 +364,10 @@ test_repo_info() {
     fi
     
     # レポジトリ情報抽出
-    local repo_full_name="" repo_description="" repo_stars="" repo_forks=""
-    
-    if command -v jq >/dev/null 2>&1; then
-        # jqによるパース
-        repo_full_name=$(jq -r '.full_name' "$temp_file" 2>/dev/null)
-        repo_description=$(jq -r '.description // "No description"' "$temp_file" 2>/dev/null)
-        repo_stars=$(jq -r '.stargazers_count' "$temp_file" 2>/dev/null)
-        repo_forks=$(jq -r '.forks_count' "$temp_file" 2>/dev/null)
-    else
-        # サイレント出力でパース - エラー出力を確実に破棄
-        repo_full_name=$(grep -o '"full_name"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed 's/.*"full_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null)
-        repo_description=$(grep -o '"description"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed 's/.*"description"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null)
-        repo_stars=$(grep -o '"stargazers_count"[[:space:]]*:[[:space:]]*[0-9]\+' "$temp_file" 2>/dev/null | grep -o '[0-9]\+' 2>/dev/null)
-        repo_forks=$(grep -o '"forks_count"[[:space:]]*:[[:space:]]*[0-9]\+' "$temp_file" 2>/dev/null | grep -o '[0-9]\+' 2>/dev/null)
-    fi
+    local repo_full_name=$(json_get_value "$temp_file" "full_name")
+    local repo_description=$(json_get_value "$temp_file" "description")
+    local repo_stars=$(json_get_value "$temp_file" "stargazers_count")
+    local repo_forks=$(json_get_value "$temp_file" "forks_count")
     
     # 説明がない場合
     if [ -z "$repo_description" ]; then
@@ -394,7 +388,7 @@ test_repo_info() {
     return 0
 }
 
-# 🔵 コミット履歴テスト（改善版） 🔵
+# 🔵 コミット履歴テスト 🔵
 test_commit_history() {
     report INFO "Latest commit information test running..."
     
@@ -425,42 +419,46 @@ test_commit_history() {
     
     report SUCCESS "Latest commit information:"
     
-    if command -v jq >/dev/null 2>&1; then
-        # jqによるパース
-        for i in 0 1 2; do
-            local sha=$(jq -r ".[$i].sha" "$temp_file" 2>/dev/null | cut -c1-7)
-            local message=$(jq -r ".[$i].commit.message" "$temp_file" 2>/dev/null | head -1)
-            
-            if [ "$sha" = "null" ] || [ -z "$sha" ]; then
-                continue
-            fi
-            
+    # コミット情報抽出
+    # POSIXシェルでの配列処理は限られているため、パターンマッチでコミットを抽出
+    local commit_count=$(grep -c '"sha"' "$temp_file" 2>/dev/null)
+    local i=1
+    
+    while [ $i -le 3 ] && [ $i -le "$commit_count" ]; do
+        # SHA抽出
+        local sha_pattern=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\{7,40\}"' "$temp_file" 2>/dev/null | sed -n "${i}p")
+        if [ -z "$sha_pattern" ]; then
+            break
+        fi
+        
+        local sha=$(echo "$sha_pattern" | sed 's/.*"sha"[[:space:]]*:[[:space:]]*"\([a-f0-9]\{7,40\}\)".*/\1/' 2>/dev/null | cut -c1-7)
+        
+        if [ -n "$sha" ]; then
             echo "  - Commit ID: $sha"
-            echo "    Message: $message"
-        done
-    else
-        # サイレント出力でパース
-        for i in 1 2 3; do
-            # パターンマッチでSHA抽出
-            local sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\{7,40\}"' "$temp_file" 2>/dev/null | sed -n "${i}p" | sed 's/.*"sha"[[:space:]]*:[[:space:]]*"\([a-f0-9]\{7\}\).*/\1/' 2>/dev/null)
             
-            if [ -n "$sha" ]; then
-                echo "  - Commit ID: $sha"
-                
-                # パターンマッチでメッセージ抽出
-                local message_line=$(grep -o '"message"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed -n "${i}p" | sed 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null)
-                if [ -n "$message_line" ]; then
-                    echo "    Message: $message_line"
-                fi
+            # メッセージ抽出 - より堅牢なパターンマッチング
+            # コミットマーカーから次のコミットまでの範囲を一時的に抽出
+            local commit_block=$(sed -n "/\"sha\"[[:space:]]*:[[:space:]]*\"$sha/,/\"sha\"[[:space:]]*:/p" "$temp_file" 2>/dev/null | head -n -1)
+            
+            # ブロック内からメッセージを抽出
+            local message=$(echo "$commit_block" | grep -o '"message"[[:space:]]*:[[:space:]]*"[^"]*"' 2>/dev/null | head -1 | 
+                            sed 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null)
+            
+            if [ -n "$message" ]; then
+                echo "    Message: $message"
+            else
+                echo "    Message: (no message)"
             fi
-        done
-    fi
+        fi
+        
+        i=$((i + 1))
+    done
     
     rm -f "$temp_file" 2>/dev/null
     return 0
 }
 
-# 🔵 ファイルダウンロードテスト（改善版） 🔵
+# 🔵 ファイルダウンロードテスト 🔵
 test_file_download() {
     report INFO "File download test running..."
     
@@ -495,21 +493,6 @@ test_file_download() {
     
     rm -f "$temp_file" 2>/dev/null
     return 0
-}
-
-# 🔵 トークン接頭辞表示（POSIX準拠） 🔵
-get_token_prefix() {
-    local token="$1"
-    local prefix=""
-    
-    if [ -n "$token" ] && [ ${#token} -gt 5 ]; then
-        # POSIXシェル互換の方法でトークンの最初の5文字を抽出
-        prefix=$(printf "%s" "$token" | cut -c1-5)"..."
-    else
-        prefix="???.."
-    fi
-    
-    printf "%s" "$prefix"
 }
 
 # 🔵 総合テスト実行 🔵
@@ -551,7 +534,7 @@ run_all_tests() {
     echo "==========================================================="
     report INFO "Test completed"
     report INFO "Check the above results for GitHub API connection status"
-    report INFO "If authentication errors occur, use 'aios -t' to set a new token"
+    report INFO "If authentication errors occur, use 'aios -t' to set a token"
     echo "==========================================================="
 }
 
