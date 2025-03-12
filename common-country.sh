@@ -550,8 +550,8 @@ country_write() {
         # 成功フラグの設定
         echo "1" > "${CACHE_DIR}/country_success_done"
         
-        debug_log "INFO" "Country information written to cache"
-        debug_log "INFO" "Selected country: $(echo "$country_data" | awk '{print $2, $3}')"
+        debug_log "DEBUG" "Country information written to cache"
+        debug_log "DEBUG" "Selected country: $(echo "$country_data" | awk '{print $2, $3}')"
     else
         debug_log "ERROR" "No country data to write to cache"
         return 1
