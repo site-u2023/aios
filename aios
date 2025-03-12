@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-16-00"
+SCRIPT_VERSION="2025.03.12-17-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -417,65 +417,6 @@ github_api_request() {
     fi
 }
 
-#########################################################################
-# Last Update: 2025-03-10 10:34:56 (JST) 🚀
-# "GitHub APIトークンを安全かつ柔軟に取得する"
-#
-# 【要件】
-# 1. **トークンソース優先順位**
-#   - トークンファイル（$GITHUB_TOKEN_FILE）を最優先で使用
-#   - 環境変数（$GITHUB_TOKEN）をセカンドソースとして使用
-#
-# 2. **トークンの抽出と検証**
-#   - ファイルから読み取ったトークンから改行・空白を削除
-#   - 'ghp_'で始まる40文字の英数字パターンを抽出
-#   - 長さと形式の基本的な検証を実施
-#
-# 3. **エラーハンドリング**
-#   - トークンファイルが存在しない場合は環境変数をチェック
-#   - 無効なトークン形式の場合は警告ログを記録
-#   - トークンが見つからない場合は空文字を返し、呼び出し元が適切に処理
-#
-# 4. **セキュリティ考慮事項**
-#   - トークンの一部のみをログに記録（漏洩防止）
-#   - トークンファイルの権限を確認（読み取り権限）
-#
-# 5. **POSIX互換性**
-#   - 全ての処理はPOSIX互換のシェルコマンドで実装
-#   - OpenWrt/Alpine Linux環境での動作を保証
-#########################################################################
-get_github_token() {
-    if [ -f "$GITHUB_TOKEN_FILE" ] && [ -r "$GITHUB_TOKEN_FILE" ]; then
-        # 1. 生のトークンを取得
-        local raw_token=$(cat "$GITHUB_TOKEN_FILE")
-        
-        # 2. 複数の処理方法を試す
-        
-        # 方法1: 改行と空白を削除
-        local token=$(echo "$raw_token" | tr -d '\n\r\t ')
-        
-        # 方法2: ghp_で始まる40文字の英数字パターンを抽出
-        if [ -z "$token" ] || [ ${#token} -ne 40 ]; then
-            token=$(echo "$raw_token" | grep -o 'ghp_[a-zA-Z0-9]\{36\}')
-        fi
-        
-        # 最終チェック
-        if [ -n "$token" ] && [ ${#token} -eq 40 ]; then
-            echo "$token"
-            return 0
-        else
-            debug_log "WARN" "Invalid token format in $GITHUB_TOKEN_FILE"
-        fi
-    fi
-    
-    # 環境変数からの取得
-    if [ -n "$GITHUB_TOKEN" ]; then
-        echo "$GITHUB_TOKEN"
-        return 0
-    fi
-    
-    return 1
-}
 
 #########################################################################
 # Last Update: 2025-03-10 10:34:56 (JST) 🚀
@@ -682,26 +623,9 @@ github_api_request() {
 #########################################################################
 get_github_token() {
     if [ -f "$GITHUB_TOKEN_FILE" ] && [ -r "$GITHUB_TOKEN_FILE" ]; then
-        # 1. 生のトークンを取得
-        local raw_token=$(cat "$GITHUB_TOKEN_FILE")
-        
-        # 2. 複数の処理方法を試す
-        
-        # 方法1: 改行と空白を削除
-        local token=$(echo "$raw_token" | tr -d '\n\r\t ')
-        
-        # 方法2: ghp_で始まる40文字の英数字パターンを抽出
-        if [ -z "$token" ] || [ ${#token} -ne 40 ]; then
-            token=$(echo "$raw_token" | grep -o 'ghp_[a-zA-Z0-9]\{36\}')
-        fi
-        
-        # 最終チェック
-        if [ -n "$token" ] && [ ${#token} -eq 40 ]; then
-            echo "$token"
-            return 0
-        else
-            debug_log "WARN" "Invalid token format in $GITHUB_TOKEN_FILE"
-        fi
+        # 単純に改行だけ削除したトークンを返す（より堅牢）
+        cat "$GITHUB_TOKEN_FILE" | tr -d '\n\r' | head -1
+        return 0
     fi
     
     # 環境変数からの取得
@@ -711,6 +635,21 @@ get_github_token() {
     fi
     
     return 1
+}
+
+save_version_to_cache() {
+    local file_name="$1"
+    local version="$2"
+    local script_file="$3"
+    
+    # tmpファイルを使用して置き換える（古いsedでも動作）
+    if [ -f "$script_file" ]; then
+        grep -v "^${file_name}=" "$script_file" > "${script_file}.tmp"
+        echo "${file_name}=${version}" >> "${script_file}.tmp"
+        mv "${script_file}.tmp" "$script_file"
+    else
+        echo "${file_name}=${version}" > "$script_file"
+    fi
 }
 
 #########################################################################
@@ -1530,17 +1469,17 @@ download() {
         
     	# バージョン情報の更新
     	if [ ! -f "$script_file" ]; then
-            printf "%s=%s\n" "${file_name}" "${clean_remote_version}" > "$script_file"
-    	else
-            if grep -q "^${file_name}=" "$script_file"; then
-                # エスケープ処理を改良
-                escaped_file=$(echo "$file_name" | sed 's/[\/&]/\\&/g')
-                escaped_version=$(echo "$clean_remote_version" | sed 's/[\/&]/\\&/g')
-                sed -i "s/^${escaped_file}=.*/${escaped_file}=${escaped_version}/" "$script_file"
-            else
-                printf "%s=%s\n" "${file_name}" "${clean_remote_version}" >> "$script_file"
-            fi
+        printf "%s=%s\n" "${file_name}" "${clean_remote_version}" > "$script_file"
+    else
+        if grep -q "^${file_name}=" "$script_file"; then
+            # エスケープ処理を改良
+            escaped_file=$(echo "$file_name" | sed 's/[\/&]/\\&/g')
+            escaped_version=$(echo "$clean_remote_version" | sed 's/[\/&]/\\&/g')
+            sed -i "s/^${escaped_file}=.*/${escaped_file}=${escaped_version}/" "$script_file"
+        else
+            printf "%s=%s\n" "${file_name}" "${clean_remote_version}" >> "$script_file"
         fi
+    fi
     
         # ステータスメッセージの修正
         status_message="Download completed"
