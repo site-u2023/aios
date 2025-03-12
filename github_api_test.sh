@@ -55,58 +55,37 @@ json_get_value() {
     local file="$1"
     local key="$2"
     
-    # キーが階層構造の場合
+    # キーが階層構造の場合（例：resources.core.remaining）
     if echo "$key" | grep -q "\." 2>/dev/null; then
-        # 最初のドットで区切る
+        # ドットで区切られた階層構造のキーを処理
         local parent_key=$(echo "$key" | cut -d. -f1)
-        local child_key=$(echo "$key" | cut -d. -f2-)
+        local child_key=$(echo "$key" | cut -d. -f2)
+        local grandchild_key=$(echo "$key" | cut -d. -f3)
         
-        # 親キーのブロック全体を抽出（開始の{から終了の}まで）
-        local start_line=$(grep -n "\"$parent_key\"" "$file" | head -1 | cut -d: -f1)
-        if [ -z "$start_line" ]; then
-            return 1
-        fi
-        
-        # 親キーブロックを抽出（簡易的な方法）
-        local parent_block=$(tail -n +$start_line "$file" | sed -n '/{/,/}/p')
-        
-        # 子キーを検索
-        if echo "$child_key" | grep -q "\." 2>/dev/null; then
-            # さらに階層がある場合は再帰的に処理
-            local temp_file="/tmp/json_extract_temp.$$"
-            echo "$parent_block" > "$temp_file"
-            json_get_value "$temp_file" "$child_key"
-            local result=$?
-            rm -f "$temp_file" 2>/dev/null
-            return $result
-        else
-            # 最下層の子キーを抽出
-            local value=$(echo "$parent_block" | grep -o "\"$child_key\"[[:space:]]*:[[:space:]]*[^,}\n]*" | 
-                        sed "s/\"$child_key\"[[:space:]]*:[[:space:]]*//")
-            # 前後の引用符と空白を削除
-            value=$(echo "$value" | sed 's/^"//; s/"$//; s/^[[:space:]]*//; s/[[:space:]]*$//')
+        # 親キーのブロックを抽出
+        local parent_start=$(grep -n "\"$parent_key\"" "$file" | head -1 | cut -d: -f1)
+        if [ -n "$parent_start" ]; then
+            local parent_text=$(tail -n +$parent_start "$file" | sed -n '/{/,/}/p' | head -20)
             
-            if [ -n "$value" ]; then
-                echo "$value"
-                return 0
+            # 子キーのブロックを抽出
+            local child_line=$(echo "$parent_text" | grep -n "\"$child_key\"" | head -1 | cut -d: -f1)
+            if [ -n "$child_line" ]; then
+                local child_text=$(echo "$parent_text" | tail -n +$child_line | sed -n '/{/,/}/p' | head -20)
+                
+                # 孫キーの値を抽出
+                if [ -n "$grandchild_key" ]; then
+                    echo "$child_text" | grep "\"$grandchild_key\"" | head -1 | sed 's/.*: *\([0-9]\+\).*/\1/' | tr -d '", '
+                else
+                    # 孫キーがない場合、子キー自体の値を返す（シンプルな場合のみ）
+                    echo "$parent_text" | grep "\"$child_key\"" | head -1 | sed 's/.*: *\([0-9]\+\).*/\1/' | tr -d '", '
+                fi
             fi
         fi
     else
-        # 単一キーの場合
-        local value=$(grep -o "\"$key\"[[:space:]]*:[[:space:]]*[^,}\n]*" "$file" | 
-                    sed "s/\"$key\"[[:space:]]*:[[:space:]]*//")
-        # 前後の引用符と空白を削除
-        value=$(echo "$value" | sed 's/^"//; s/"$//; s/^[[:space:]]*//; s/[[:space:]]*$//')
-        
-        if [ -n "$value" ]; then
-            echo "$value"
-            return 0
-        fi
+        # 単一キーの場合は直接抽出
+        grep "\"$key\"" "$file" | head -1 | sed 's/.*: *\([^,}]*\).*/\1/' | tr -d '", '
     fi
-    
-    return 1
 }
-
 # 🔵 システム＆ネットワーク診断関数 🔵
 check_system() {
     report INFO "System diagnostics running..."
