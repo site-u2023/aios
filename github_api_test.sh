@@ -107,6 +107,28 @@ extract_json_value() {
     echo "$result"
 }
 
+# UNIXタイムスタンプを人間可読な形式に変換
+format_timestamp() {
+    local timestamp=$1
+    local now=$(date +%s)
+    
+    # 現在時刻との差分を計算（秒）
+    local diff=$((timestamp - now))
+    
+    if [ $diff -le 0 ]; then
+        echo "すぐに"
+    elif [ $diff -lt 60 ]; then
+        echo "${diff}秒後"
+    elif [ $diff -lt 3600 ]; then
+        local minutes=$((diff / 60))
+        echo "${minutes}分後"
+    else
+        local hours=$((diff / 3600))
+        local minutes=$(((diff % 3600) / 60))
+        echo "${hours}時間${minutes}分後"
+    fi
+}
+
 # ネットワーク基本接続テスト
 test_network_basic() {
     report INFO "基本ネットワーク接続テスト中..."
@@ -152,9 +174,11 @@ test_api_rate_limit_no_auth() {
         if [ "$JQ_AVAILABLE" -eq 1 ]; then
             local remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
             local limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
+            local reset=$(jq -r '.resources.core.reset' "$temp_file" 2>/dev/null)
             
-            if [ -n "$remaining" ] && [ -n "$limit" ]; then
-                report SUCCESS "API制限 (認証なし): 残り $remaining/$limit リクエスト"
+            if [ -n "$remaining" ] && [ -n "$limit" ] && [ -n "$reset" ]; then
+                local reset_time=$(format_timestamp "$reset")
+                report SUCCESS "API制限 (認証なし): 残り $remaining/$limit リクエスト (回復: $reset_time)"
                 rm -f "$temp_file"
                 return 0
             fi
@@ -162,14 +186,17 @@ test_api_rate_limit_no_auth() {
             # jqがない場合は改良版パーサーを使用
             local limit=""
             local remaining=""
+            local reset=""
             
             # coreセクションを見つけて解析
             if grep -q '"core"' "$temp_file"; then
                 remaining=$(extract_json_value "$temp_file" "core.remaining")
                 limit=$(extract_json_value "$temp_file" "core.limit")
+                reset=$(extract_json_value "$temp_file" "core.reset")
                 
-                if [ -n "$remaining" ] && [ -n "$limit" ]; then
-                    report SUCCESS "API制限 (認証なし): 残り $remaining/$limit リクエスト"
+                if [ -n "$remaining" ] && [ -n "$limit" ] && [ -n "$reset" ]; then
+                    local reset_time=$(format_timestamp "$reset")
+                    report SUCCESS "API制限 (認証なし): 残り $remaining/$limit リクエスト (回復: $reset_time)"
                     rm -f "$temp_file"
                     return 0
                 fi
@@ -202,9 +229,11 @@ test_api_rate_limit_with_auth() {
         if [ "$JQ_AVAILABLE" -eq 1 ]; then
             local remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
             local limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
+            local reset=$(jq -r '.resources.core.reset' "$temp_file" 2>/dev/null)
             
-            if [ -n "$remaining" ] && [ -n "$limit" ]; then
-                report SUCCESS "API制限 (認証あり): 残り $remaining/$limit リクエスト"
+            if [ -n "$remaining" ] && [ -n "$limit" ] && [ -n "$reset" ]; then
+                local reset_time=$(format_timestamp "$reset")
+                report SUCCESS "API制限 (認証あり): 残り $remaining/$limit リクエスト (回復: $reset_time)"
                 rm -f "$temp_file"
                 return 0
             fi
@@ -212,14 +241,17 @@ test_api_rate_limit_with_auth() {
             # jqがない場合は改良版パーサーを使用
             local limit=""
             local remaining=""
+            local reset=""
             
             # coreセクションを見つけて解析
             if grep -q '"core"' "$temp_file"; then
                 remaining=$(extract_json_value "$temp_file" "core.remaining")
                 limit=$(extract_json_value "$temp_file" "core.limit")
+                reset=$(extract_json_value "$temp_file" "core.reset")
                 
-                if [ -n "$remaining" ] && [ -n "$limit" ]; then
-                    report SUCCESS "API制限 (認証あり): 残り $remaining/$limit リクエスト"
+                if [ -n "$remaining" ] && [ -n "$limit" ] && [ -n "$reset" ]; then
+                    local reset_time=$(format_timestamp "$reset")
+                    report SUCCESS "API制限 (認証あり): 残り $remaining/$limit リクエスト (回復: $reset_time)"
                     rm -f "$temp_file"
                     return 0
                 fi
