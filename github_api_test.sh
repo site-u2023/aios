@@ -3,13 +3,13 @@
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
 # 🚀 Last Update: 2025-03-12
-# Version: 06
+# Version: 07
 #
 # 🏷️ License: CC0 (Public Domain)
 # 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 19.07 and 24.10)
 # =========================================================
 
-echo "VERSION 06"
+echo "VERSION 07"
 
 # 🔵 aios関数チェック 🔵
 if type debug_log >/dev/null 2>&1 && type get_github_token >/dev/null 2>&1; then
@@ -537,7 +537,3 @@ run_all_tests() {
     report INFO "If authentication errors occur, use 'aios -t' to set a token"
     echo "==========================================================="
 }
-
-# メイン実行
-run_all_tests
-exit 0
