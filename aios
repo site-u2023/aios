@@ -1584,7 +1584,6 @@ check_common() {
             ;;
         test_api)
             download "github_api_test.sh" "chmod" "load"
-            #sh "${BASE_DIR}/github_api_test.sh"
             exit 0
             ;;
         *)
