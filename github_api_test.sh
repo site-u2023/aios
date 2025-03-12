@@ -1,5 +1,7 @@
 #!/bin/sh
 
+echo "Version: 01"
+
 # POSIX準拠のAPI接続テストスクリプト
 # 保存先: /tmp/github_api_test.sh
 
