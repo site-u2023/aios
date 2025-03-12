@@ -455,10 +455,13 @@ install_package() {
     fi
 
     # 言語パッケージか通常パッケージかを判別
-    if [[ "$BASE_NAME" == luci-i18n-* ]]; then
-        # 言語パッケージの場合、package_name に言語コードを追加
-        package_name="${BASE_NAME}-${lang_code}"
-    fi
+    # 言語パッケージか通常パッケージかを判別
+    case "$BASE_NAME" in
+        luci-i18n-*)
+            # 言語パッケージの場合、package_name に言語コードを追加
+            package_name="${BASE_NAME}-${lang_code}"
+            ;;
+    esac
 
     package_pre_install "$package_name" || return 1
     
@@ -480,7 +483,7 @@ install_package() {
     if [ "$set_disabled" != "yes" ]; then
         # サービスが存在するかチェックし、処理を分岐
         if [ -x "/etc/init.d/$BASE_NAME" ]; then
-            if [[ "$BASE_NAME" =~ luci- ]]; then
+            if echo "$BASE_NAME" | grep -q "^luci-"; then
                 # Luci関連のパッケージの場合はrpcdを再起動
                 /etc/init.d/rpcd restart
                 debug_log "DEBUG" "$package_name is a Luci package, rpcd has been restarted."
