@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-00-03"
+SCRIPT_VERSION="2025.03.12-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -137,21 +137,15 @@ select_country() {
     if [ -z "$input_lang" ] && [ -n "$system_country" ]; then
         printf "%s %s\n" "$(color cyan "$(get_message "MSG_DETECTED_COUNTRY")")" "$system_country"
         printf "%s\n" "$(color cyan "$(get_message "MSG_USE_DETECTED_COUNTRY")")"
-        printf "%s " "$(color cyan "$(get_message "MSG_CONFIRM_ONLY_YN")")"
-        
-        read -r yn
-        yn=$(normalize_input "$yn")
-        
-        case "$yn" in
-            [Yy]*)
-                input_lang="$system_country"
-                debug_log "DEBUG" "Using system country: $system_country"
-                ;;
-            *)
-                input_lang=""
-                debug_log "DEBUG" "User declined system country. Moving to manual input."
-                ;;
-        esac
+    
+        # confirm関数を使用してY/N確認を行う
+        if confirm "MSG_CONFIRM_ONLY_YN"; then
+            input_lang="$system_country"
+            debug_log "DEBUG" "Using system country: $system_country"
+        else
+            input_lang=""
+            debug_log "DEBUG" "User declined system country. Moving to manual input."
+        fi
     fi
 
     # 国の入力と検索ループ
@@ -172,7 +166,10 @@ select_country() {
 
         # 検索結果がない場合
         if [ -z "$full_results" ]; then
-            printf "%s %s\n" "$(color red "$(get_message "MSG_COUNTRY_NOT_FOUND")")" "$input_lang"
+            # メッセージのプレースホルダーを置換
+            local msg=$(get_message "MSG_COUNTRY_NOT_FOUND")
+            msg=$(echo "$msg" | sed "s/{0}/$input_lang/g")
+            printf "%s\n" "$(color red "$msg")"
             input_lang=""  # リセットして再入力
             continue
         fi
@@ -182,25 +179,21 @@ select_country() {
         if [ "$result_count" -eq 1 ]; then
             local country_name=$(echo "$full_results" | awk '{print $2, $3}')
             
-            # 修正：プレースホルダー置換をプログラムで明示的に行う
-            printf "%s %s\n" "$(color cyan "$(get_message "MSG_SINGLE_MATCH_FOUND")")" "$country_name"
-            printf "%s " "$(color cyan "$(get_message "MSG_CONFIRM_ONLY_YN")")"
-            
-            read -r yn
-            yn=$(normalize_input "$yn")
-            
-            case "$yn" in
-                [Yy]*)
-                    echo "$full_results" > "$tmp_country"
-                    country_write
-                    select_zone
-                    return 0
-                    ;;
-                *)
-                    input_lang=""
-                    continue
-                    ;;
-            esac
+            # プレースホルダーを置換したメッセージを表示
+            local msg=$(get_message "MSG_SINGLE_MATCH_FOUND")
+            msg=$(echo "$msg" | sed "s/{0}/$country_name/g")
+            printf "%s\n" "$(color cyan "$msg")"
+    
+            # confirm関数でYN確認
+            if confirm "MSG_CONFIRM_ONLY_YN"; then
+                echo "$full_results" > "$tmp_country"
+                country_write
+                select_zone
+                return 0
+            else
+                input_lang=""
+                continue
+            fi
         fi
 
         # 複数結果の場合、リスト表示して選択
@@ -226,33 +219,25 @@ select_country() {
             continue
         fi
         
-        # 選択確認 (重複している部分を削除)
+        # 選択確認
         local selected_country_name=$(echo "$selected_full" | awk '{print $2, $3}')
-        printf "%s %s\n" "$(color cyan "$(get_message "MSG_SELECTED_COUNTRY")")" "$selected_country_name"
-        
-        # 確認プロンプト表示
-        printf "%s " "$(color cyan "$(get_message "MSG_CONFIRM_ONLY_YN")")"
-        read -r yn
-        yn=$(normalize_input "$yn")
-        
-        case "$yn" in
-            [Yy]*)
-                echo "$selected_full" > "$tmp_country"
-                country_write
-                select_zone
-                return 0
-                ;;
-            *)
-                printf "%s " "$(color cyan "$(get_message "MSG_SEARCH_AGAIN")")"
-                read -r yn
-                yn=$(normalize_input "$yn")
-                
-                if echo "$yn" | grep -qi '^[yY]'; then
-                    input_lang=""
-                fi
-                continue
-                ;;
-        esac
+        local msg=$(get_message "MSG_SELECTED_COUNTRY")
+        msg=$(echo "$msg" | sed "s/{0}/$selected_country_name/g")
+        printf "%s\n" "$(color cyan "$msg")"
+
+        # confirm関数を使用して確認
+        if confirm "MSG_CONFIRM_ONLY_YN"; then
+            echo "$selected_full" > "$tmp_country"
+            country_write
+            select_zone
+            return 0
+        else
+            # 再検索するか確認
+            if confirm "MSG_SEARCH_AGAIN"; then
+                input_lang=""
+            fi
+            continue
+        fi
     done
 }
 
