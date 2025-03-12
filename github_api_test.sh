@@ -36,6 +36,41 @@ report() {
     esac
 }
 
+# jqの有無を診断する関数
+check_jq() {
+    report INFO "システム診断を実行中..."
+    
+    if command -v jq >/dev/null 2>&1; then
+        report SUCCESS "jq: インストールされています（バージョン: $(jq --version 2>/dev/null)）"
+        JQ_AVAILABLE=1
+    else
+        report PARTIAL "jq: インストールされていません。代替パース方式を使用します"
+        JQ_AVAILABLE=0
+    fi
+    
+    # curlまたはwgetの確認
+    if command -v curl >/dev/null 2>&1; then
+        report SUCCESS "curl: インストールされています（バージョン: $(curl --version 2>/dev/null | head -n 1)）"
+        CURL_AVAILABLE=1
+    else
+        CURL_AVAILABLE=0
+        if command -v wget >/dev/null 2>&1; then
+            report SUCCESS "wget: インストールされています（バージョン: $(wget --version 2>/dev/null | head -n 1)）"
+            WGET_AVAILABLE=1
+        else
+            report FAILURE "curl/wget: どちらもインストールされていません。HTTPリクエストができません"
+            WGET_AVAILABLE=0
+            return 1
+        fi
+    fi
+    
+    # システム情報
+    report SUCCESS "ホスト名: $(hostname 2>/dev/null)"
+    report SUCCESS "OS情報: $(uname -a 2>/dev/null)"
+    
+    return 0
+}
+
 # トークン読み取り
 get_token() {
     local token_file="/etc/aios_token"
@@ -79,13 +114,19 @@ test_network_basic() {
     # DNS解決テスト
     if nslookup api.github.com >/dev/null 2>&1; then
         report SUCCESS "DNS解決: api.github.com を解決できました"
+        # 可能であればIPアドレスを表示
+        local ip_addr=$(nslookup api.github.com 2>/dev/null | grep -A1 "Name:" | grep "Address:" | head -1 | awk '{print $2}')
+        if [ -n "$ip_addr" ]; then
+            debug "DNS解決結果: $ip_addr"
+        fi
     else
         report FAILURE "DNS解決: api.github.com を解決できません"
     fi
     
     # Pingテスト (可能であれば)
     if ping -c 1 -W 2 api.github.com >/dev/null 2>&1; then
-        report SUCCESS "Ping: api.github.com に到達可能です"
+        local ping_time=$(ping -c 1 -W 2 api.github.com 2>/dev/null | grep "time=" | awk -F "time=" '{print $2}' | awk '{print $1}')
+        report SUCCESS "Ping: api.github.com に到達可能です (時間: $ping_time)"
     else
         report PARTIAL "Ping: api.github.com に到達できません (ファイアウォールで制限されている可能性あり)"
     fi
@@ -108,7 +149,7 @@ test_api_rate_limit_no_auth() {
     
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
         # jqがインストールされている場合
-        if command -v jq >/dev/null 2>&1; then
+        if [ "$JQ_AVAILABLE" -eq 1 ]; then
             local remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
             local limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
             
@@ -158,7 +199,7 @@ test_api_rate_limit_with_auth() {
     
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
         # jqがインストールされている場合
-        if command -v jq >/dev/null 2>&1; then
+        if [ "$JQ_AVAILABLE" -eq 1 ]; then
             local remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
             local limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
             
@@ -208,7 +249,7 @@ test_repo_info() {
     fi
     
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-        if command -v jq >/dev/null 2>&1; then
+        if [ "$JQ_AVAILABLE" -eq 1 ]; then
             local name=$(jq -r '.name' "$temp_file" 2>/dev/null)
             local default_branch=$(jq -r '.default_branch' "$temp_file" 2>/dev/null)
             
@@ -253,7 +294,7 @@ test_contents() {
     
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
         # ファイル数をカウント
-        if command -v jq >/dev/null 2>&1; then
+        if [ "$JQ_AVAILABLE" -eq 1 ]; then
             local file_count=$(jq '. | length' "$temp_file" 2>/dev/null)
             
             if [ -n "$file_count" ] && [ "$file_count" -gt 0 ]; then
@@ -267,7 +308,7 @@ test_contents() {
             fi
         else
             # 改良版ファイル検出方法
-            local file_count=$(grep -c '"name"' "$temp_file")
+            local file_count=$(grep -c '"name":' "$temp_file")
             
             if [ "$file_count" -gt 0 ]; then
                 report SUCCESS "リポジトリコンテンツ: $file_count 個のファイルを検出"
@@ -305,7 +346,7 @@ test_file_commit() {
     fi
     
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-        if command -v jq >/dev/null 2>&1; then
+        if [ "$JQ_AVAILABLE" -eq 1 ]; then
             local commit_count=$(jq '. | length' "$temp_file" 2>/dev/null)
             
             if [ -n "$commit_count" ] && [ "$commit_count" -gt 0 ]; then
@@ -377,18 +418,87 @@ test_file_download() {
     return 1
 }
 
+# ネットワーク接続状況のチェック
+test_network_status() {
+    report INFO "ネットワーク接続状況の確認中..."
+    
+    # インターフェース情報の取得
+    if command -v ip >/dev/null 2>&1; then
+        report SUCCESS "ネットワークインターフェース:"
+        ip -4 addr | grep -v 'lo' | grep 'inet' | awk '{print "  - " $NF ": " $2}'
+    elif command -v ifconfig >/dev/null 2>&1; then
+        report SUCCESS "ネットワークインターフェース:"
+        ifconfig | grep -E '(^[a-z]|inet addr)' | grep -v 'lo' | awk '{if($1 ~ /^[a-z]/) {printf "  - %s: ", $1} else if($0 ~ /inet/) {print $2}}' | sed 's/addr://'
+    else
+        report PARTIAL "ネットワークインターフェース情報を取得できません (ip/ifconfigコマンドがありません)"
+    fi
+    
+    # デフォルトゲートウェイの確認
+    if command -v ip >/dev/null 2>&1; then
+        local gateway=$(ip route | grep default | awk '{print $3}' | head -1)
+        if [ -n "$gateway" ]; then
+            report SUCCESS "デフォルトゲートウェイ: $gateway"
+        else
+            report PARTIAL "デフォルトゲートウェイが見つかりません"
+        fi
+    elif command -v route >/dev/null 2>&1; then
+        local gateway=$(route -n | grep '^0.0.0.0' | awk '{print $2}' | head -1)
+        if [ -n "$gateway" ]; then
+            report SUCCESS "デフォルトゲートウェイ: $gateway"
+        else
+            report PARTIAL "デフォルトゲートウェイが見つかりません"
+        fi
+    else
+        report PARTIAL "ルーティング情報を取得できません (ip/routeコマンドがありません)"
+    fi
+    
+    # DNSサーバーの確認
+    if [ -f "/etc/resolv.conf" ]; then
+        local dns_servers=$(grep "nameserver" /etc/resolv.conf | awk '{print $2}')
+        if [ -n "$dns_servers" ]; then
+            report SUCCESS "DNSサーバー:"
+            echo "$dns_servers" | while read server; do
+                echo "  - $server"
+            done
+        else
+            report PARTIAL "DNSサーバーが設定されていません"
+        fi
+    else
+        report PARTIAL "DNSサーバー情報を取得できません (/etc/resolv.conf がありません)"
+    fi
+    
+    echo ""
+}
+
 # すべてのテストの実行
 run_all_tests() {
     echo "=================================================="
     echo "GitHub API接続テスト - $(date)"
     echo "=================================================="
     
+    # グローバル変数の初期化
+    JQ_AVAILABLE=0
+    CURL_AVAILABLE=0
+    WGET_AVAILABLE=0
+    
+    # システム診断
+    check_jq
+    echo ""
+    
+    # ネットワーク状態確認
+    test_network_status
+    
+    # 基本接続テスト
     test_network_basic
     echo ""
+    
+    # API制限テスト
     test_api_rate_limit_no_auth
     echo ""
     test_api_rate_limit_with_auth
     echo ""
+    
+    # リポジトリ情報テスト
     test_repo_info
     echo ""
     test_contents
