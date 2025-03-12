@@ -55,25 +55,56 @@ json_get_value() {
     local file="$1"
     local key="$2"
     
-    # キーが階層構造の場合（例：resources.core.remaining）
+    # キーが階層構造の場合
     if echo "$key" | grep -q "\." 2>/dev/null; then
-        # ドットで区切られた階層構造のキーを処理
+        # 最初のドットで区切る
         local parent_key=$(echo "$key" | cut -d. -f1)
         local child_key=$(echo "$key" | cut -d. -f2-)
         
-        # 親キーの範囲を見つける
-        local parent_block=$(sed -n "/$parent_key/,/}/p" "$file" 2>/dev/null)
+        # 親キーのブロック全体を抽出（開始の{から終了の}まで）
+        local start_line=$(grep -n "\"$parent_key\"" "$file" | head -1 | cut -d: -f1)
+        if [ -z "$start_line" ]; then
+            return 1
+        fi
         
-        # 親ブロック内で子キーを検索
-        echo "$parent_block" | grep -o "\"$child_key\"[[:space:]]*:[[:space:]]*[^,}]*" 2>/dev/null | \
-            sed "s/.*\"$child_key\"[[:space:]]*:[[:space:]]*\([^,}]*\).*/\1/" 2>/dev/null | \
-            sed 's/"//g; s/^[[:space:]]*//; s/[[:space:]]*$//' 2>/dev/null
+        # 親キーブロックを抽出（簡易的な方法）
+        local parent_block=$(tail -n +$start_line "$file" | sed -n '/{/,/}/p')
+        
+        # 子キーを検索
+        if echo "$child_key" | grep -q "\." 2>/dev/null; then
+            # さらに階層がある場合は再帰的に処理
+            local temp_file="/tmp/json_extract_temp.$$"
+            echo "$parent_block" > "$temp_file"
+            json_get_value "$temp_file" "$child_key"
+            local result=$?
+            rm -f "$temp_file" 2>/dev/null
+            return $result
+        else
+            # 最下層の子キーを抽出
+            local value=$(echo "$parent_block" | grep -o "\"$child_key\"[[:space:]]*:[[:space:]]*[^,}\n]*" | 
+                        sed "s/\"$child_key\"[[:space:]]*:[[:space:]]*//")
+            # 前後の引用符と空白を削除
+            value=$(echo "$value" | sed 's/^"//; s/"$//; s/^[[:space:]]*//; s/[[:space:]]*$//')
+            
+            if [ -n "$value" ]; then
+                echo "$value"
+                return 0
+            fi
+        fi
     else
-        # 単一キーの場合は直接抽出
-        grep -o "\"$key\"[[:space:]]*:[[:space:]]*[^,}]*" "$file" 2>/dev/null | \
-            sed "s/.*\"$key\"[[:space:]]*:[[:space:]]*\([^,}]*\).*/\1/" 2>/dev/null | \
-            sed 's/"//g; s/^[[:space:]]*//; s/[[:space:]]*$//' 2>/dev/null
+        # 単一キーの場合
+        local value=$(grep -o "\"$key\"[[:space:]]*:[[:space:]]*[^,}\n]*" "$file" | 
+                    sed "s/\"$key\"[[:space:]]*:[[:space:]]*//")
+        # 前後の引用符と空白を削除
+        value=$(echo "$value" | sed 's/^"//; s/"$//; s/^[[:space:]]*//; s/[[:space:]]*$//')
+        
+        if [ -n "$value" ]; then
+            echo "$value"
+            return 0
+        fi
     fi
+    
+    return 1
 }
 
 # 🔵 システム＆ネットワーク診断関数 🔵
