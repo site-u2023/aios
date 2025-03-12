@@ -209,11 +209,7 @@ select_country() {
             continue
         fi
         
-        # 選択確認
-        local selected_country_name=$(echo "$selected_full" | awk '{print $2, $3}')
-        printf "%s\n" "$(color cyan "$(get_message "MSG_SELECTED_COUNTRY")" "$selected_country_name")"
-        
-        # 既存のY/N判定関数を使用
+        # 選択確認 (重複している部分を削除)
         local selected_country_name=$(echo "$selected_full" | awk '{print $2, $3}')
         printf "%s\n" "$(color cyan "$(get_message "MSG_SELECTED_COUNTRY")" "$selected_country_name")"
 
@@ -228,108 +224,6 @@ select_country() {
             fi
             continue
         fi
-    done
-}
-
-XX_select_country() {
-    debug_log "DEBUG" "Entering select_country() with arg: '$1'"
-
-    local cache_country="${CACHE_DIR}/country.ch"
-    local tmp_country="${CACHE_DIR}/country_tmp.ch"
-    local input_lang="$1"  # 引数として渡された言語コード（無ければ後で入力）
-
-    # キャッシュがあればゾーン選択へスキップ
-    if [ -f "$cache_country" ]; then
-        debug_log "DEBUG" "Country cache found. Skipping selection."
-        select_zone
-        return
-    fi
-
-    # システム情報からデフォルト値を取得 (dynamic-system-info.sh から)
-    local system_language=""
-    local system_country=""
-    
-    if type get_country_info >/dev/null 2>&1; then
-        # システム情報から国データを取得
-        local system_country_info=$(get_country_info)
-        if [ -n "$system_country_info" ]; then
-            debug_log "DEBUG" "Found system country info: $system_country_info"
-            # デフォルトの言語コードを抽出 ($4)
-            system_language=$(echo "$system_country_info" | awk '{print $4}')
-            # デフォルトの国名を抽出 ($2)
-            system_country=$(echo "$system_country_info" | awk '{print $2}')
-        fi
-    fi
-
-    # デフォルト値をユーザーに提案
-    if [ -n "$system_country" ]; then
-        printf "%s\n" "$(color cyan "$(get_message "MSG_DETECTED_COUNTRY")" "$system_country")"
-        if confirm "MSG_USE_DETECTED_COUNTRY"; then
-            input_lang="$system_country"
-            debug_log "DEBUG" "Using system country: $system_country"
-        fi
-    fi
-
-    while true; do
-        # `$1` がある場合は read せず、直接 `input_lang` を使う
-        if [ -z "$input_lang" ]; then
-            printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_COUNTRY")")"
-            printf "%s" "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
-            read -r input_lang
-        fi
-
-        # 入力の正規化: "/", ",", "_" をスペースに置き換え
-        local cleaned_input
-        cleaned_input=$(echo "$input_lang" | sed 's/[\/,_]/ /g')
-
-        # 🔹 `country.db` から検索（フルライン取得）
-        local full_results
-        full_results=$(awk -v search="$cleaned_input" 'BEGIN {IGNORECASE=1} { if ($0 ~ search) print $0 }' "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
-
-        if [ -z "$full_results" ]; then
-            printf "%s\n" "$(color red "Error: No matching country found for '$input_lang'. Please try again.")"
-            input_lang=""  # 🔹 エラー時はリセットして再入力
-            continue
-        fi
-
-        debug_log "DEBUG" "Country found for '$input_lang'. Presenting selection list."
-
-        # 🔹 表示用リスト作成（`$2 $3` のみを抽出してリスト表示）
-        local display_results
-        display_results=$(echo "$full_results" | awk '{print $2, $3}')
-
-        # 🔹 選択リスト表示（番号付き）
-        echo "$display_results" > "$tmp_country"
-        select_list "$display_results" "$tmp_country" "country"
-
-        # 🔹 ユーザー選択番号を取得
-        local selected_number
-        selected_number=$(awk 'END {print NR}' "$tmp_country")
-
-        if [ -z "$selected_number" ]; then
-            printf "%s\n" "$(color red "Error: No selection made. Please try again.")"
-            continue
-        fi
-
-        # 🔹 `full_results` から該当行のフルデータを取得
-        local selected_full
-        selected_full=$(echo "$full_results" | sed -n "${selected_number}p")
-
-        if [ -z "$selected_full" ]; then
-            printf "%s\n" "$(color red "Error: Failed to retrieve full country information. Please try again.")"
-            continue
-        fi
-
-        # 🔹 フルラインを `tmp_country` に保存
-        echo "$selected_full" > "$tmp_country"
-
-        # 🔹 `country_write()` に渡す（キャッシュ書き込み）
-        country_write
-
-        # 🔹 ゾーン選択へ進む
-        debug_log "DEBUG" "Country selection completed. Proceeding to select_zone()."
-        select_zone
-        return
     done
 }
 
