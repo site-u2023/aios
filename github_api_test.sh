@@ -266,7 +266,7 @@ test_token_status() {
     fi
 }
 
-# 認証なしでのAPI制限テスト
+# 認証なしでのAPI制限テスト（修正版）
 test_api_rate_limit_no_auth() {
     report INFO "API制限テスト (認証なし) 実行中..."
     local temp_file="/tmp/github_ratelimit_noauth.tmp"
@@ -285,10 +285,10 @@ test_api_rate_limit_no_auth() {
             limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
             reset_time=$(jq -r '.resources.core.reset' "$temp_file" 2>/dev/null)
         else
-            # 代替パース方法
-            remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+')
-            limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+')
-            reset_time=$(grep -A3 '"core"' "$temp_file" | grep '"reset"' | head -1 | grep -o '[0-9]\+')
+            # 代替パース方法（改善版）- 標準出力への漏れを防止
+            remaining=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"remaining"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null)
+            limit=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"limit"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null)
+            reset_time=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"reset"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null)
         fi
             
         if [ -n "$remaining" ] && [ -n "$limit" ]; then
@@ -309,7 +309,7 @@ test_api_rate_limit_no_auth() {
     return 1
 }
 
-# 認証ありでのAPI制限テスト
+# 認証ありでのAPI制限テスト（修正版）
 test_api_rate_limit_with_auth() {
     report INFO "API制限テスト (認証あり) 実行中..."
     
@@ -327,7 +327,7 @@ test_api_rate_limit_with_auth() {
     # レスポンスチェック
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
         # 認証エラーをチェック
-        if grep -q "Bad credentials" "$temp_file"; then
+        if grep -q "Bad credentials" "$temp_file" 2>/dev/null; then
             report FAILURE "API制限テスト: 無効なトークンです"
             rm -f "$temp_file"
             return 1
@@ -342,10 +342,10 @@ test_api_rate_limit_with_auth() {
             limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
             reset_time=$(jq -r '.resources.core.reset' "$temp_file" 2>/dev/null)
         else
-            # 代替パース方法
-            remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+')
-            limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+')
-            reset_time=$(grep -A3 '"core"' "$temp_file" | grep '"reset"' | head -1 | grep -o '[0-9]\+')
+            # 代替パース方法（改善版）- 標準出力への漏れを防止
+            remaining=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"remaining"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null)
+            limit=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"limit"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null)
+            reset_time=$(grep -A3 '"core"' "$temp_file" 2>/dev/null | grep '"reset"' 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null)
         fi
         
         if [ -n "$remaining" ] && [ -n "$limit" ]; then
@@ -428,7 +428,7 @@ test_repo_info() {
     return 1
 }
 
-# コミット履歴テスト
+# コミット履歴テスト（修正版）
 test_commit_history() {
     report INFO "最新コミット情報取得テスト実行中..."
     
@@ -471,9 +471,20 @@ test_commit_history() {
                 i=$(expr $i + 1)
             done
         else
-            # 代替パース方法（より堅牢なgrep方式）
-            grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\{7,40\}"' "$temp_file" | head -3 | sed 's/.*"sha"[[:space:]]*:[[:space:]]*"\([a-f0-9]\{7\}\).*/  - コミットID: \1/' | head -3
-            grep -o '"message"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" | head -3 | sed 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/    メッセージ: \1/'
+            # 代替パース方法（より堅牢なgrep方式）- 出力順序も修正
+            for i in 1 2 3; do
+                local sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\{7,40\}"' "$temp_file" 2>/dev/null | sed -n "${i}p" | sed 's/.*"sha"[[:space:]]*:[[:space:]]*"\([a-f0-9]\{7\}\).*/\1/' 2>/dev/null)
+                if [ -n "$sha" ]; then
+                    echo "  - コミットID: $sha"
+                fi
+            done
+            
+            for i in 1 2 3; do
+                local msg=$(grep -o '"message"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed -n "${i}p" | sed 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/    メッセージ: \1/' 2>/dev/null)
+                if [ -n "$msg" ]; then
+                    echo "$msg"
+                fi
+            done
         fi
         
         rm -f "$temp_file"
