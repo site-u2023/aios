@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-21-02"
+SCRIPT_VERSION="2025.03.12-21-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1584,7 +1584,7 @@ check_common() {
             ;;
         test_api)
             download "github_api_test.sh" "chmod" "load"
-            sh "${BASE_DIR}/github_api_test.sh"
+            #sh "${BASE_DIR}/github_api_test.sh"
             exit 0
             ;;
         *)
