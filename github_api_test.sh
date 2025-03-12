@@ -1,7 +1,5 @@
 #!/bin/sh
 
-echo "VERSION 03"
-
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
 # 🚀 Last Update: 2025-03-12
