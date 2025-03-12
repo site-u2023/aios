@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-20-02"
+SCRIPT_VERSION="2025.03.12-20-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1629,7 +1629,7 @@ check_option() {
                 check_token_status
                 exit 0
                 ;;
-            -test_api)
+            -ta|--ta|-test_api|--test_api)
                 MODE="test_api"
                 ;;
             -*)
