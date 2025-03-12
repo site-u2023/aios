@@ -137,7 +137,11 @@ select_country() {
     if [ -z "$input_lang" ] && [ -n "$system_country" ]; then
         printf "%s\n" "$(color cyan "$(get_message "MSG_DETECTED_COUNTRY")" "$system_country")"
     
-        if confirm "MSG_USE_DETECTED_COUNTRY"; then
+        # メッセージとプロンプトを分離
+        printf "%s\n" "$(color cyan "$(get_message "MSG_USE_DETECTED_COUNTRY")")"
+        
+        # 確認プロンプトを表示
+        if confirm "MSG_CONFIRM_ONLY_YN"; then
             input_lang="$system_country"
             debug_log "DEBUG" "Using system country: $system_country"
         else
@@ -173,8 +177,11 @@ select_country() {
         local result_count=$(echo "$full_results" | wc -l)
         if [ "$result_count" -eq 1 ]; then
             local country_name=$(echo "$full_results" | awk '{print $2, $3}')
+            
+            # プレースホルダー置換を適切に行う
             printf "%s\n" "$(color cyan "$(get_message "MSG_SINGLE_MATCH_FOUND")" "$country_name")"
     
+            # 確認プロンプト表示（メッセージとプロンプトを分離）
             if confirm "MSG_CONFIRM_ONLY_YN"; then
                 echo "$full_results" > "$tmp_country"
                 country_write
@@ -213,6 +220,7 @@ select_country() {
         local selected_country_name=$(echo "$selected_full" | awk '{print $2, $3}')
         printf "%s\n" "$(color cyan "$(get_message "MSG_SELECTED_COUNTRY")" "$selected_country_name")"
 
+        # 確認プロンプト（メッセージとプロンプトを分離）
         if confirm "MSG_CONFIRM_ONLY_YN"; then
             echo "$selected_full" > "$tmp_country"
             country_write
