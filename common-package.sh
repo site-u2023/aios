@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.03-00-07"
+SCRIPT_VERSION="2025.03.12-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -287,25 +287,6 @@ local_package_db() {
     . "${CACHE_DIR}/commands.ch"
 }
 
-confirm_installation() {
-    local package="$1"
-
-    debug_log "DEBUG" "Confirming installation for package: $package"
-
-    while true; do
-        local msg=$(get_message "MSG_CONFIRM_INSTALL")
-        msg="${msg//\{pkg\}/$package}"
-        echo "$msg"
-        printf "%s " "$(get_message "MSG_CONFIRM_ONLY_YN")"
-        read -r yn || return 1
-        case "$yn" in
-            [Yy]*) return 0 ;;  # 継続
-            [Nn]*) return 1 ;;  # キャンセル
-            *) echo "$(color red "Invalid input. Please enter Y or N.")" ;;
-        esac
-    done
-}
-
 package_pre_install() {
     local package_name="$1"
     local package_cache="${CACHE_DIR}/package_list.ch"
@@ -483,7 +464,9 @@ install_package() {
     
     # **YN確認 (オプションで有効時のみ)**
     if [ "$confirm_install" = "yes" ]; then
-        confirm_installation "$package_name" || return 1
+        if ! confirm "MSG_CONFIRM_INSTALL" "pkg" "$package_name"; then
+            return 1
+        fi
     fi
     
     install_normal_package "$package_name" "$force_install" || return 1
