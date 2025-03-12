@@ -1,9 +1,11 @@
 #!/bin/sh
 
-echo "VERSION 02"
+echo "VERSION 03"
+
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
 # 🚀 Last Update: 2025-03-12
+# Version: 02
 #
 # 🏷️ License: CC0 (Public Domain)
 # 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 19.07 and 24.10)
@@ -14,6 +16,7 @@ echo "VERSION 02"
 # グローバル変数
 JQ_AVAILABLE=0
 WGET_AVAILABLE=0
+GITHUB_TOKEN_FILE="/etc/aios_token"
 
 # ユーティリティ関数
 report() {
@@ -35,10 +38,8 @@ debug() {
 
 # トークンの取得（aios互換）
 get_token() {
-    local token_file="/etc/aios_token"
-    
-    if [ -f "$token_file" ] && [ -r "$token_file" ]; then
-        cat "$token_file" | tr -d '\n\r' | head -1
+    if [ -f "$GITHUB_TOKEN_FILE" ] && [ -r "$GITHUB_TOKEN_FILE" ]; then
+        cat "$GITHUB_TOKEN_FILE" | tr -d '\n\r' | head -1
         return 0
     fi
     
@@ -220,10 +221,10 @@ test_network_basic() {
     return 0
 }
 
-# トークン状態詳細チェック（旧-ts機能）
+# トークン状態詳細チェック
 test_token_status() {
     report INFO "GitHub トークン状態確認中..."
-    local token_file="/etc/aios_token"
+    local token_file="$GITHUB_TOKEN_FILE"
     local token=""
     
     # トークンファイルの存在確認
@@ -253,7 +254,7 @@ test_token_status() {
                     if [ "$JQ_AVAILABLE" -eq 1 ]; then
                         login=$(jq -r '.login' "$temp_file" 2>/dev/null)
                     else
-                        login=$(grep -o '"login"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed 's/.*"login"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+                        login=$(grep -o '"login"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed 's/.*"login"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null)
                     fi
                     
                     if [ -n "$login" ]; then
@@ -278,7 +279,31 @@ test_token_status() {
     fi
 }
 
-# API情報パース用の安全な関数（grep出力制御版）
+# JSONデータから安全に値を抽出する関数
+safe_extract_json_value() {
+    local file="$1"
+    local field="$2"
+    
+    if [ "$JQ_AVAILABLE" -eq 1 ]; then
+        jq -r ".$field // \"\"" "$file" 2>/dev/null
+    else
+        grep -o "\"$field\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$file" 2>/dev/null | sed "s/.*\"$field\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/" 2>/dev/null
+    fi
+}
+
+# 数値フィールドを安全に抽出する関数
+safe_extract_json_number() {
+    local file="$1"
+    local field="$2"
+    
+    if [ "$JQ_AVAILABLE" -eq 1 ]; then
+        jq -r ".$field // 0" "$file" 2>/dev/null
+    else
+        grep -o "\"$field\"[[:space:]]*:[[:space:]]*[0-9]\+" "$file" 2>/dev/null | grep -o '[0-9]\+' 2>/dev/null
+    fi
+}
+
+# API情報パース用の安全な関数
 safe_parse_json() {
     local file="$1"
     local pattern="$2"
@@ -289,7 +314,8 @@ safe_parse_json() {
     fi
     
     # パターンで検索し、フィールドを抽出（エラー出力は捨てる）
-    grep -A3 "$pattern" "$file" 2>/dev/null | grep "\"$field\"" 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null
+    local result=$(grep -A3 "$pattern" "$file" 2>/dev/null | grep "\"$field\"" 2>/dev/null | head -1 | grep -o '[0-9]\+' 2>/dev/null)
+    echo "$result"
 }
 
 # 認証なしでのAPI制限テスト（改善版）
@@ -392,30 +418,6 @@ test_api_rate_limit_with_auth() {
     return 1
 }
 
-# JSONデータから安全に値を抽出する関数
-safe_extract_json_value() {
-    local file="$1"
-    local field="$2"
-    
-    if [ "$JQ_AVAILABLE" -eq 1 ]; then
-        jq -r ".$field // \"\"" "$file" 2>/dev/null
-    else
-        grep -o "\"$field\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$file" 2>/dev/null | sed "s/.*\"$field\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/" 2>/dev/null
-    fi
-}
-
-# 数値フィールドを安全に抽出する関数
-safe_extract_json_number() {
-    local file="$1"
-    local field="$2"
-    
-    if [ "$JQ_AVAILABLE" -eq 1 ]; then
-        jq -r ".$field // 0" "$file" 2>/dev/null
-    else
-        grep -o "\"$field\"[[:space:]]*:[[:space:]]*[0-9]\+" "$file" 2>/dev/null | grep -o '[0-9]\+' 2>/dev/null
-    fi
-}
-
 # リポジトリ情報テスト（改善版）
 test_repo_info() {
     report INFO "リポジトリ情報取得テスト実行中..."
@@ -496,38 +498,28 @@ test_commit_history() {
         if [ "$JQ_AVAILABLE" -eq 1 ]; then
             for i in 0 1 2; do
                 local sha=$(jq -r ".[$i].sha" "$temp_file" 2>/dev/null | cut -c1-7)
-                local date=$(jq -r ".[$i].commit.author.date" "$temp_file" 2>/dev/null | sed 's/T/ /; s/Z//')
                 local message=$(jq -r ".[$i].commit.message" "$temp_file" 2>/dev/null | head -1)
-                local author=$(jq -r ".[$i].commit.author.name" "$temp_file" 2>/dev/null)
                 
                 if [ "$sha" = "null" ] || [ -z "$sha" ]; then
                     continue
                 fi
                 
-                echo "  - コミット: [$sha] $date - $author"
+                echo "  - コミットID: $sha"
                 echo "    メッセージ: $message"
             done
         else
-            # 安全な代替パース方法 - コミット情報を順番に出力
-            local commit_count=0
-            local line=0
-            
-            # コミットSHAとメッセージを順番に表示（安全にエラー出力を捨てる）
-            while [ $commit_count -lt 3 ]; do
-                line=$(( line + 1 ))
-                local sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\{7,40\}"' "$temp_file" 2>/dev/null | sed -n "${line}p" | sed 's/.*"sha"[[:space:]]*:[[:space:]]*"\([a-f0-9]\{7\}\).*/\1/' 2>/dev/null)
-                if [ -z "$sha" ]; then
-                    break
+            # 安全なコミット情報抽出
+            for i in 1 2 3; do
+                local sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\{7,40\}"' "$temp_file" 2>/dev/null | sed -n "${i}p" | sed 's/.*"sha"[[:space:]]*:[[:space:]]*"\([a-f0-9]\{7\}\).*/\1/' 2>/dev/null)
+                
+                if [ -n "$sha" ]; then
+                    echo "  - コミットID: $sha"
+                    
+                    local message=$(grep -o '"message"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed -n "${i}p" | sed 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/    メッセージ: \1/' 2>/dev/null)
+                    if [ -n "$message" ]; then
+                        echo "$message"
+                    fi
                 fi
-                
-                echo "  - コミットID: $sha"
-                
-                local message=$(grep -o '"message"[[:space:]]*:[[:space:]]*"[^"]*"' "$temp_file" 2>/dev/null | sed -n "${line}p" | sed 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/    メッセージ: \1/' 2>/dev/null)
-                if [ -n "$message" ]; then
-                    echo "$message"
-                fi
-                
-                commit_count=$(( commit_count + 1 ))
             done
         fi
         
@@ -571,6 +563,7 @@ test_file_download() {
 
 # 総合テスト実行
 run_all_tests() {
+    echo "VERSION 02"
     echo "==========================================================="
     echo "📊 GitHub API接続テスト (aios)"
     echo "🕒 実行時間: $(date +'%Y-%m-%d %H:%M:%S')"
@@ -615,4 +608,3 @@ run_all_tests() {
 # メイン実行
 run_all_tests
 exit 0
-            
