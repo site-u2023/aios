@@ -125,7 +125,6 @@ handle_error() {
 # 3. `DEBUG_MODE` の設定に応じて `DEBUG`, `INFO`, `WARN`, `ERROR` を管理する。
 # 4. 影響範囲: `aios` & `common.sh`（矛盾なく適用）。
 #########################################################################
-# デバッグログ出力関数
 debug_log() {
     local level="$1"
     local message="$2"
@@ -417,6 +416,68 @@ github_api_request() {
     fi
 }
 
+get_github_token() {
+    if [ -f "$GITHUB_TOKEN_FILE" ] && [ -r "$GITHUB_TOKEN_FILE" ]; then
+        # 単純に改行だけ削除したトークンを返す（より堅牢）
+        cat "$GITHUB_TOKEN_FILE" | tr -d '\n\r' | head -1
+        return 0
+    fi
+    
+    # 環境変数からの取得
+    if [ -n "$GITHUB_TOKEN" ]; then
+        echo "$GITHUB_TOKEN"
+        return 0
+    fi
+    
+    return 1
+}
+
+save_github_token() {
+    token="$1"
+    
+    if [ -z "$token" ]; then
+        debug_log "ERROR" "Empty token provided, cannot save"
+        return 1
+    fi
+    
+    # トークンを保存して権限を設定
+    echo "$token" > "$GITHUB_TOKEN_FILE"
+    chmod 600 "$GITHUB_TOKEN_FILE"
+    
+    if [ $? -eq 0 ]; then
+        debug_log "INFO" "GitHub token saved to $GITHUB_TOKEN_FILE"
+        return 0
+    else
+        debug_log "ERROR" "Failed to save token to $GITHUB_TOKEN_FILE"
+        return 1
+    fi
+}
+
+setup_github_token() {
+    echo "GitHub API Token Setup"
+    echo "======================"
+    echo "This will save a GitHub Personal Access Token to $GITHUB_TOKEN_FILE"
+    echo "The token will be used for API requests to avoid rate limits."
+    echo ""
+    
+    # OpenWrtはsttyが利用できないことを前提とする
+    printf "Enter your GitHub Personal Access Token: "
+    read -r token
+    echo ""
+    
+    if [ -n "$token" ]; then
+        if save_github_token "$token"; then
+            echo "Token has been saved successfully!"
+            echo "API requests will now use authentication."
+        else
+            echo "Failed to save token. Please check permissions."
+        fi
+    else
+        echo "No token entered. Operation cancelled."
+    fi
+
+    return 0
+}
 
 #########################################################################
 # Last Update: 2025-03-10 10:34:56 (JST) 🚀
@@ -756,14 +817,6 @@ setup_github_token() {
 
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
-check_jq_available() {
-    if command -v jq >/dev/null 2>&1; then
-        return 0 # jqが利用可能
-    else
-        return 1 # jqが利用できない
-    fi
-}
-
 #########################################################################
 # Last Update: 2025-03-10 10:34:56 (JST) 🚀
 # "GitHub APIレート制限の内部監視"
@@ -815,55 +868,37 @@ check_api_rate_limit() {
             local secs=""
             local auth_text=""
             
-            # jqが利用可能ならjqでパース
-            if check_jq_available; then
-                core_limit=$(jq -r '.resources.core.limit' "$temp_file" 2>/dev/null)
-                core_remaining=$(jq -r '.resources.core.remaining' "$temp_file" 2>/dev/null)
-                core_reset=$(jq -r '.resources.core.reset' "$temp_file" 2>/dev/null)
+            # POSIXシェルコマンドのみでJSONパース
+            core_limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+' | head -1)
+            core_remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+' | head -1)
+            core_reset=$(grep -A3 '"core"' "$temp_file" | grep '"reset"' | head -1 | grep -o '[0-9]\+' | head -1)
+            
+            # 時間計算
+            now_time=$(date +%s)
+            
+            # 数値として比較可能な形に確実に変換
+            if [ -n "$core_reset" ] && [ -n "$now_time" ]; then
+                core_reset=$(echo "$core_reset" | tr -cd '0-9')
+                now_time=$(echo "$now_time" | tr -cd '0-9')
                 
-                # 時間計算
-                now_time=$(date +%s)
-                
-                # 文字列の比較と計算（数値として）
-                if [ -n "$core_reset" ] && [ -n "$now_time" ]; then
-                    # 数値として比較可能な形に確実に変換
-                    core_reset=$(echo "$core_reset" | tr -cd '0-9')
-                    now_time=$(echo "$now_time" | tr -cd '0-9')
-                    
-                    if [ "$core_reset" -gt "$now_time" ]; then
-                        diff_sec=$(expr "$core_reset" - "$now_time")
-                        mins=$(expr "$diff_sec" / 60)
-                        secs=$(expr "$diff_sec" % 60)
-                    else
-                        mins="0"
-                        secs="0"
-                    fi
+                if [ "$core_reset" -gt "$now_time" ]; then
+                    diff_sec=$(expr "$core_reset" - "$now_time")
+                    mins=$(expr "$diff_sec" / 60)
+                    secs=$(expr "$diff_sec" % 60)
                 else
                     mins="0"
                     secs="0"
                 fi
-                
-                # 認証状態判定
-                if [ "$core_limit" = "5000" ]; then
-                    auth_text="authenticated"
-                else
-                    auth_text="anonymous"
-                fi
             else
-                # jqが利用できない場合は簡易表示のみ（算術演算を回避）
-                core_limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+' | head -1)
-                core_remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+' | head -1)
-                
-                # 認証状態の簡易判定
-                if [ "$core_limit" = "5000" ]; then
-                    auth_text="authenticated"
-                else
-                    auth_text="anonymous"
-                fi
-                
-                # 算術演算を避けて固定メッセージを表示
-                mins="?"
-                secs="?"
+                mins="0"
+                secs="0"
+            fi
+            
+            # 認証状態判定
+            if [ "$core_limit" = "5000" ]; then
+                auth_text="authenticated"
+            else
+                auth_text="anonymous"
             fi
             
             debug_log "DEBUG" "API Limits: Core $core_remaining/$core_limit ($auth_text), Reset in ${mins}m ${secs}s"
@@ -969,7 +1004,7 @@ get_commit_version() {
     # トークン取得とリクエスト
     local token="$(get_github_token)"
     if [ -n "$token" ]; then
-        debug_log "DEBUG" "トークン認証を使用してAPIリクエストを実行します"
+        debug_log "DEBUG" "Using token authentication for API request"
         
         # 中間結果をログに記録しない、静かに失敗するように設計
         if wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/$api_url" 2>/dev/null; then
@@ -986,14 +1021,14 @@ get_commit_version() {
             auth_method="direct"
         fi
     else
-        debug_log "DEBUG" "トークンがないため直接APIリクエストを実行します"
+        debug_log "DEBUG" "No token available, making direct API request"
         wget -q -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
         auth_method="direct"
     fi
     
     # 応答の確認
     if [ ! -s "$temp_file" ]; then
-        debug_log "WARN" "GitHub APIからの応答が空です。直接ファイル取得を試みます"
+        debug_log "WARN" "Empty response from GitHub API. Attempting direct file download"
         # APIに失敗した場合は直接ファイルをダウンロード
         local direct_file="/tmp/aios_direct_file.tmp"
         if wget -q -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
@@ -1005,7 +1040,7 @@ get_commit_version() {
             echo "$today-$file_hash direct"
             return 0
         else
-            debug_log "ERROR" "ファイルの直接取得にも失敗しました"
+            debug_log "ERROR" "Failed to directly download file"
             rm -f "$direct_file" 2>/dev/null
             rm -f "$temp_file" 2>/dev/null
             echo "$(date +%Y.%m.%d)-unknown $auth_method"
@@ -1015,7 +1050,7 @@ get_commit_version() {
     
     # APIエラーチェック
     if grep -q "API rate limit exceeded" "$temp_file"; then
-        debug_log "WARN" "GitHub APIレート制限を超えました。直接ファイル取得を試みます"
+        debug_log "WARN" "GitHub API rate limit exceeded. Attempting direct file download"
         # 直接ファイル取得にフォールバック
         local direct_file="/tmp/aios_direct_file.tmp"
         if wget -q -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
@@ -1026,7 +1061,7 @@ get_commit_version() {
             echo "$today-$file_hash direct"
             return 0
         else
-            debug_log "ERROR" "ファイルの直接取得にも失敗しました"
+            debug_log "ERROR" "Failed to directly download file"
             rm -f "$direct_file" 2>/dev/null
             rm -f "$temp_file" 2>/dev/null
             echo "$(date +%Y.%m.%d)-ratelimit $auth_method"
@@ -1060,7 +1095,7 @@ get_commit_version() {
     fi
     
     if [ -z "$commit_date" ] || [ -z "$commit_sha" ]; then
-        debug_log "WARN" "コミット情報の抽出に失敗しました。より堅牢な方法を試します"
+        debug_log "WARN" "Failed to extract commit information. Trying more robust method"
         
         # 最終手段: 全テキスト検索
         commit_sha=$(tr -cd 'a-f0-9' < "$temp_file" | grep -o '[a-f0-9]\{40\}' | head -1 | head -c 7)
@@ -1081,14 +1116,14 @@ get_commit_version() {
         local formatted_date=$(echo "$commit_date" | tr '-' '.')
         local version="${formatted_date}-${commit_sha}"
         
-        debug_log "DEBUG" "コミット情報の抽出成功: $version ($auth_method経由)"
+        debug_log "DEBUG" "Successfully extracted commit info: $version (via $auth_method)"
         rm -f "$temp_file" 2>/dev/null
         echo "$version $auth_method"
         return 0
     fi
     
     # 全ての方法が失敗した場合
-    debug_log "ERROR" "すべての方法でコミット情報取得に失敗しました"
+    debug_log "ERROR" "All methods failed to get commit information"
     rm -f "$temp_file" 2>/dev/null
     echo "$(date +%Y.%m.%d)-fallback $auth_method"
     return 1
@@ -1123,17 +1158,17 @@ version_is_newer() {
     local reference="$2"  # ローカルバージョン
     
     # デバッグ出力を追加
-    debug_log "DEBUG" "比較: リモート=$current, ローカル=$reference"
+    debug_log "DEBUG" "Comparing: Remote=$current, Local=$reference"
     
     # どちらかが不明の場合は更新必要
     if echo "$current $reference" | grep -q "No version\|unknown"; then
-        debug_log "DEBUG" "不明なバージョンがあるため更新必要"
+        debug_log "DEBUG" "Unknown version detected, update required"
         return 0
     fi
     
     # 完全一致の場合は更新不要
     if [ "$current" = "$reference" ]; then
-        debug_log "DEBUG" "完全一致: 更新不要"
+        debug_log "DEBUG" "Exact match: No update needed"
         return 1
     fi
     
@@ -1143,7 +1178,7 @@ version_is_newer() {
     
     # 日付が抽出できなかった場合は更新が必要
     if [ -z "$current_date" ] || [ -z "$reference_date" ]; then
-        debug_log "DEBUG" "日付抽出失敗: 安全のため更新"
+        debug_log "DEBUG" "Date extraction failed: Update for safety"
         return 0
     fi
     
@@ -1153,10 +1188,10 @@ version_is_newer() {
     
     # 数値比較（日付形式）
     if [ "$current_num" -gt "$reference_num" ]; then
-        debug_log "DEBUG" "リモート日付が新しい: 更新必要"
+        debug_log "DEBUG" "Remote date is newer: Update required"
         return 0  # リモート（current）が新しい
     elif [ "$current_num" -lt "$reference_num" ]; then
-        debug_log "DEBUG" "ローカル日付が新しい: 更新不要"
+        debug_log "DEBUG" "Local date is newer: No update needed"
         return 1  # ローカル（reference）が新しい
     fi
     
@@ -1165,14 +1200,14 @@ version_is_newer() {
     local reference_sha=$(echo "$reference" | grep -o "\-[a-z0-9]*" | sed 's/^-//' | head -1)
     
     # SHA情報をデバッグ出力
-    debug_log "DEBUG" "SHA比較: リモート=$current_sha, ローカル=$reference_sha"
+    debug_log "DEBUG" "SHA comparison: Remote=$current_sha, Local=$reference_sha"
     
     if [ -n "$current_sha" ] && [ -n "$reference_sha" ] && [ "$current_sha" != "$reference_sha" ]; then
-        debug_log "DEBUG" "SHA異なる: 更新必要"
+        debug_log "DEBUG" "Different SHA: Update required"
         return 0  # 異なるコミット
     fi
     
-    debug_log "DEBUG" "バージョン同一または比較不能: 更新不要"
+    debug_log "DEBUG" "Same version or unable to compare: No update needed"
     return 1  # 同一バージョン
 }
 
@@ -1274,19 +1309,19 @@ download() {
     local update_required=false
     
     if [ "$local_version" = "$dummy_version" ]; then
-        debug_log "DEBUG" "初回ダウンロード: $file_name"
+        debug_log "DEBUG" "First download: $file_name"
         update_required=true
     elif [ "$clean_remote_version" = "$clean_local_version" ]; then
-        debug_log "DEBUG" "完全一致: 更新不要 $file_name"
+        debug_log "DEBUG" "Exact match: No update needed for $file_name"
         update_required=false
     else
-        debug_log "DEBUG" "バージョン比較開始: $file_name"
+        debug_log "DEBUG" "Starting version comparison: $file_name"
         version_is_newer "$clean_remote_version" "$clean_local_version"
         if [ $? -eq 0 ]; then
-            debug_log "DEBUG" "新バージョン検出: 更新必要 $file_name"
+            debug_log "DEBUG" "New version detected: Update required for $file_name"
             update_required=true
         else
-            debug_log "DEBUG" "既存バージョン: 更新不要 $file_name"
+            debug_log "DEBUG" "Existing version: No update needed for $file_name"
             update_required=false
         fi
     fi
@@ -1314,19 +1349,19 @@ download() {
             debug_log "DEBUG" "chmod +x applied to $file_name"
         fi
         
-    	# バージョン情報の更新
-    	if [ ! -f "$script_file" ]; then
-        printf "%s=%s\n" "${file_name}" "${clean_remote_version}" > "$script_file"
-    else
-        if grep -q "^${file_name}=" "$script_file"; then
-            # エスケープ処理を改良
-            escaped_file=$(echo "$file_name" | sed 's/[\/&]/\\&/g')
-            escaped_version=$(echo "$clean_remote_version" | sed 's/[\/&]/\\&/g')
-            sed -i "s/^${escaped_file}=.*/${escaped_file}=${escaped_version}/" "$script_file"
+        # バージョン情報の更新
+        if [ ! -f "$script_file" ]; then
+            printf "%s=%s\n" "${file_name}" "${clean_remote_version}" > "$script_file"
         else
-            printf "%s=%s\n" "${file_name}" "${clean_remote_version}" >> "$script_file"
+            if grep -q "^${file_name}=" "$script_file"; then
+                # エスケープ処理を改良
+                escaped_file=$(echo "$file_name" | sed 's/[\/&]/\\&/g')
+                escaped_version=$(echo "$clean_remote_version" | sed 's/[\/&]/\\&/g')
+                sed -i "s/^${escaped_file}=.*/${escaped_file}=${escaped_version}/" "$script_file"
+            else
+                printf "%s=%s\n" "${file_name}" "${clean_remote_version}" >> "$script_file"
+            fi
         fi
-    fi
     
         # ステータスメッセージの修正
         status_message="Download completed"
