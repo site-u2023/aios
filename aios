@@ -369,9 +369,10 @@ confirm() {
     
     debug_log "DEBUG" "Confirm prompt: $msg"
     
-    # 確認プロンプト
+    # 確認プロンプト表示
+    printf "%s " "$(color cyan "$msg")"
+    
     while true; do
-        printf "%s " "$(color cyan "$msg")"
         read -r yn || return 1
         yn=$(normalize_input "$yn")
         
@@ -385,7 +386,8 @@ confirm() {
                 return 1 
                 ;;
             *) 
-                printf "%s\n" "$(color red "$(get_message "MSG_INVALID_INPUT_YN")")" 
+                printf "%s\n" "$(color red "$(get_message "MSG_INVALID_INPUT_YN")")"
+                printf "%s " "$(color cyan "$msg")" 
                 ;;
         esac
     done
