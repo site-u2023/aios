@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-00-02"
+SCRIPT_VERSION="2025.03.12-00-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -266,72 +266,157 @@ select_country() {
 # $2: 一時ファイルパス
 # $3: リストタイプ (country/zone)
 #########################################################################
-select_list() {
-    debug_log "DEBUG" "Entering select_list() with type: $3"
-    
-    local select_list="$1"
-    local tmp_file="$2"
-    local type="$3"
-    local count=1
-    
-    # 数値でないときは、リスト表示
-    local error_msg=""
-    local prompt_msg=""
-    
-    case "$type" in
-        country)
-            error_msg="$(get_message "MSG_INVALID_COUNTRY_NUMBER")"
-            prompt_msg="$(get_message "MSG_SELECT_COUNTRY_NUMBER")"
-            ;;
-        zone)
-            error_msg="$(get_message "MSG_INVALID_ZONE_NUMBER")"
-            prompt_msg="$(get_message "MSG_SELECT_ZONE_NUMBER")"
-            ;;
-        *)
-            error_msg="$(get_message "MSG_INVALID_NUMBER")"
-            prompt_msg="$(get_message "MSG_SELECT_NUMBER")"
-            ;;
-    esac
-    
-    # リストの行数を数える
-    local total_items=$(echo "$select_list" | wc -l)
-    
-    # 結果が1つだけの場合は自動選択
-    if [ "$total_items" -eq 1 ]; then
-        echo "1" > "$tmp_file"
-        return 0
+select_country() {
+    debug_log "DEBUG" "Entering select_country() with arg: '$1'"
+
+    local cache_country="${CACHE_DIR}/country.ch"
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
+    local input_lang="$1"  # 引数として渡された言語コード（無ければ後で入力）
+
+    # キャッシュがあればゾーン選択へスキップ
+    if [ -f "$cache_country" ]; then
+        debug_log "DEBUG" "Country cache found. Skipping selection."
+        select_zone
+        return
     fi
+
+    # システム情報からデフォルト値を取得
+    local system_language=""
+    local system_country=""
     
-    # リスト表示
-    echo "$select_list" | while read -r line; do
-        printf "%s: %s\n" "$count" "$line"
-        count=$((count + 1))
-    done
-    
-    # ユーザーに選択を促す
+    if type get_country_info >/dev/null 2>&1; then
+        # システム情報から国データを取得
+        local system_country_info=$(get_country_info)
+        if [ -n "$system_country_info" ]; then
+            debug_log "DEBUG" "Found system country info: $system_country_info"
+            # デフォルトの言語コードを抽出 ($4)
+            system_language=$(echo "$system_country_info" | awk '{print $4}')
+            # デフォルトの国名を抽出 ($2)
+            system_country=$(echo "$system_country_info" | awk '{print $2}')
+        fi
+    fi
+
+    # デフォルト値をユーザーに提案
+    if [ -z "$input_lang" ] && [ -n "$system_country" ]; then
+        printf "%s %s\n" "$(color cyan "$(get_message "MSG_DETECTED_COUNTRY")")" "$system_country"
+        printf "%s\n" "$(color cyan "$(get_message "MSG_USE_DETECTED_COUNTRY")")"
+        printf "%s " "$(color cyan "$(get_message "MSG_CONFIRM_ONLY_YN")")"
+        
+        read -r yn
+        yn=$(normalize_input "$yn")
+        
+        case "$yn" in
+            [Yy]*)
+                input_lang="$system_country"
+                debug_log "DEBUG" "Using system country: $system_country"
+                ;;
+            *)
+                input_lang=""
+                debug_log "DEBUG" "User declined system country. Moving to manual input."
+                ;;
+        esac
+    fi
+
+    # 国の入力と検索ループ
     while true; do
-        printf "%s" "$(color cyan "$prompt_msg")"
-        read -r number
-        number=$(normalize_input "$number")
+        # 入力がまだない場合は入力を求める
+        if [ -z "$input_lang" ]; then
+            printf "%s\n" "$(color cyan "$(get_message "MSG_ENTER_COUNTRY")")"
+            printf "%s " "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
+            read -r input_lang
+            debug_log "DEBUG" "User entered country search: $input_lang"
+        fi
+
+        # 入力の正規化と検索
+        local cleaned_input=$(echo "$input_lang" | sed 's/[\/,_]/ /g')
+        local full_results=$(awk -v search="$cleaned_input" \
+            'BEGIN {IGNORECASE=1} { if ($0 ~ search) print $0 }' \
+            "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
+
+        # 検索結果がない場合
+        if [ -z "$full_results" ]; then
+            printf "%s %s\n" "$(color red "$(get_message "MSG_COUNTRY_NOT_FOUND")")" "$input_lang"
+            input_lang=""  # リセットして再入力
+            continue
+        fi
+
+        # 結果が1件のみの場合、自動選択と確認
+        local result_count=$(echo "$full_results" | wc -l)
+        if [ "$result_count" -eq 1 ]; then
+            local country_name=$(echo "$full_results" | awk '{print $2, $3}')
+            
+            # 修正：プレースホルダー置換をプログラムで明示的に行う
+            printf "%s %s\n" "$(color cyan "$(get_message "MSG_SINGLE_MATCH_FOUND")")" "$country_name"
+            printf "%s " "$(color cyan "$(get_message "MSG_CONFIRM_ONLY_YN")")"
+            
+            read -r yn
+            yn=$(normalize_input "$yn")
+            
+            case "$yn" in
+                [Yy]*)
+                    echo "$full_results" > "$tmp_country"
+                    country_write
+                    select_zone
+                    return 0
+                    ;;
+                *)
+                    input_lang=""
+                    continue
+                    ;;
+            esac
+        fi
+
+        # 複数結果の場合、リスト表示して選択
+        debug_log "DEBUG" "Multiple matches found for '$input_lang'. Presenting selection list."
         
-        # 数値チェック
-        if ! echo "$number" | grep -q '^[0-9]\+$'; then
-            printf "%s\n" "$(color red "$error_msg")"
+        # 表示用リスト作成
+        local display_results=$(echo "$full_results" | awk '{print $2, $3}')
+        
+        echo "$display_results" > "$tmp_country"
+        select_list "$display_results" "$tmp_country" "country"
+        
+        # 選択された番号の検証
+        local selected_number=$(cat "$tmp_country")
+        if [ -z "$selected_number" ] || ! echo "$selected_number" | grep -q '^[0-9]\+$'; then
+            printf "%s\n" "$(color red "$(get_message "MSG_INVALID_NUMBER")")"
             continue
         fi
         
-        # 範囲チェック
-        if [ "$number" -lt 1 ] || [ "$number" -gt "$total_items" ]; then
-            printf "%s\n" "$(color red "$(get_message "MSG_NUMBER_OUT_OF_RANGE")" "1-$total_items")"
+        # 選択されたデータの取得
+        local selected_full=$(echo "$full_results" | sed -n "${selected_number}p")
+        if [ -z "$selected_full" ]; then
+            printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
             continue
         fi
         
-        # 選択番号を保存
-        echo "$number" > "$tmp_file"
-        break
+        # 選択確認 (重複している部分を削除)
+        local selected_country_name=$(echo "$selected_full" | awk '{print $2, $3}')
+        printf "%s %s\n" "$(color cyan "$(get_message "MSG_SELECTED_COUNTRY")")" "$selected_country_name"
+        
+        # 確認プロンプト表示
+        printf "%s " "$(color cyan "$(get_message "MSG_CONFIRM_ONLY_YN")")"
+        read -r yn
+        yn=$(normalize_input "$yn")
+        
+        case "$yn" in
+            [Yy]*)
+                echo "$selected_full" > "$tmp_country"
+                country_write
+                select_zone
+                return 0
+                ;;
+            *)
+                printf "%s " "$(color cyan "$(get_message "MSG_SEARCH_AGAIN")")"
+                read -r yn
+                yn=$(normalize_input "$yn")
+                
+                if echo "$yn" | grep -qi '^[yY]'; then
+                    input_lang=""
+                fi
+                continue
+                ;;
+        esac
     done
-    
-    debug_log "DEBUG" "Selected $type number: $(cat $tmp_file)"
 }
 
 #########################################################################
