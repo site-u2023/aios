@@ -343,12 +343,12 @@ US|MSG_SELECT_NUMBER=📌 Select Number:
 JP|MSG_SELECT_NUMBER=📌 番号を選択:
 US|MSG_CONFIRM_SELECTION=✅ Confirm selection:
 JP|MSG_CONFIRM_SELECTION=✅ 選択を確認:
-US|MSG_CONFIRM_YNR=🔄 Confirm (Y=Yes / N=No / R=Restart):
-JP|MSG_CONFIRM_YNR=🔄 確認 (Y=はい / N=いいえ / R=再選択):
+US|MSG_CONFIRM_YNR=🔄 Confirm (y/n/r):
+JP|MSG_CONFIRM_YNR=🔄 確認 (y/n/r):
 US|MSG_COUNTRY_SUCCESS=✅ Country and language selection completed successfully!
-US|MSG_TIMEZONE_SUCCESS=✅ Timezone selection completed successfully!
+US|MSG_TIMEZONE_SUCCESS=✅ Zone selection completed successfully!
 JP|MSG_COUNTRY_SUCCESS=✅ 国と言語の選択が完了しました！
-JP|MSG_TIMEZONE_SUCCESS=✅ タイムゾーンの選択が完了しました！
+JP|MSG_TIMEZONE_SUCCESS=✅ ゾーンの選択が完了しました！
 US|MSG_INVALID_SELECTION=❌ Invalid selection. Please choose a valid number.
 JP|MSG_INVALID_SELECTION=❌ 無効な選択です。有効な番号を入力してください。
 US|MSG_INVALID_INPUT_YNR=❌ Invalid input. Please enter 'Y', 'N', or 'R'.
