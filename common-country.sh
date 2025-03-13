@@ -591,10 +591,10 @@ country_write() {
         # 1. country.ch - 完全な国情報（基準データ）
         echo "$country_data" > "$cache_country"
         
-        # 2. language.ch - 言語コード ($4)
-        echo "$(echo "$country_data" | awk '{print $4}')" > "${CACHE_DIR}/language.ch"
+        # 2. language.ch - 国コード ($5)
+        echo "$(echo "$country_data" | awk '{print $5}')" > "${CACHE_DIR}/language.ch"
         
-        # 3. luci.ch - LuCI UI言語コード ($4 - language.chと同じ)
+        # 3. luci.ch - LuCI UI言語コード ($4)
         echo "$(echo "$country_data" | awk '{print $4}')" > "${CACHE_DIR}/luci.ch"
         
         # 4. zone_tmp.ch - タイムゾーン情報 ($6以降)
