@@ -371,40 +371,51 @@ XXX_select_country() {
     done
 }
 
-# システム情報の検出のみを行う関数
-detect_location() {
-    debug_log "DEBUG" "Running detect_location() function"
+# システムの地域情報を検出し設定する関数
+detect_and_set_location() {
+    debug_log "DEBUG" "Running detect_and_set_location() function"
     
-    # スクリプトパスの確認
-    [ -f "$BASE_DIR/dynamic-system-info.sh" ] || {
-        debug_log "ERROR" "dynamic-system-info.sh not found"
-        return 1
-    }
+    # システムから検出した情報表示
+    printf "%s\n" "$(color yellow "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
     
-    # 情報表示
-    local country="$1"
-    local timezone="$2"
-    local zonename="$3"
-    
-    # 国情報がある場合は表示
     [ -n "$country" ] && {
         printf "%s %s\n" "$(color blue "$(get_message "MSG_DETECTED_COUNTRY")")" \
             "$(color blue "$country")"
     }
     
-    # タイムゾーン情報がある場合は表示
     [ -n "$timezone" ] && {
         if [ -n "$zonename" ]; then
-            printf "%s %s,%s\n" "$(color blue "$(get_message "MSG_DETECTED_ZONE")")" \
+            printf "%s %s,%s\n\n" "$(color blue "$(get_message "MSG_DETECTED_ZONE")")" \
                 "$zonename" "$timezone"
         else
-            printf "%s %s\n" "$(color blue "$(get_message "MSG_DETECTED_ZONE")")" \
+            printf "%s %s\n\n" "$(color blue "$(get_message "MSG_DETECTED_ZONE")")" \
                 "$timezone"
         fi
     }
     
-    debug_log "INFO" "System information displayed"
-    return 0
+    # システム検出情報を使用するか確認
+    printf "%s\n" "$(color blue "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
+    if confirm "MSG_CONFIRM_ONLY_YN"; then
+        debug_log "INFO" "User accepted system detected settings"
+        
+        # countryの一時ファイルを作成し、country_write()に処理を委譲
+        echo "$country" > "${CACHE_DIR}/country_tmp.ch" && country_write || {
+            debug_log "ERROR" "Failed to process country data"
+            return 1
+        }
+        
+        # zoneの一時ファイルを作成し、zone_write()に処理を委譲
+        echo "$zonename,$timezone" > "${CACHE_DIR}/zone_tmp.ch" && zone_write || {
+            debug_log "ERROR" "Failed to process timezone data"
+            return 1
+        }
+        
+        debug_log "INFO" "System detection process completed successfully"
+        return 0
+    fi
+    
+    debug_log "INFO" "User declined system detected settings"
+    return 1
 }
 
 # システムの地域情報を検出し設定する関数
