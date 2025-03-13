@@ -260,7 +260,7 @@ detect_and_set_location() {
     fi
     
     # 検出情報表示
-    printf "%s\n" "$(color yellow "$(get_message "MSG_DISCLAIMER")")"
+    printf "%s\n" "$(color yellow "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
     printf "%s %s\n" "$(color blue "$(get_message "MSG_DETECTED_COUNTRY")")" "$system_country"
     
     # ゾーン名があれば表示、なければタイムゾーンのみ
