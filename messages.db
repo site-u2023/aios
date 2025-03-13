@@ -16,6 +16,12 @@ JP|MSG_UNDER_TEST=👹 試験中
 # select_country()
 # =======================
 
+MSG_EMPTY_INPUT="入力が空です。数字を入力してください。"
+MSG_EMPTY_INPUT_US="Input is empty. Please enter a number."
+
+MSG_NUMBER_OUT_OF_RANGE="入力した数字は範囲外です。有効な番号を選んでください。"
+MSG_NUMBER_OUT_OF_RANGE_US="Number out of range. Please select a valid option."
+
 MSG_NO_LANG_MATCH="指定された言語コード（短縮国名）が見つかりませんでした。別の方法で選択します。"
 MSG_NO_LANG_MATCH_US="The specified language code was not found. Proceeding to alternate selection method."
 
