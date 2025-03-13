@@ -268,7 +268,7 @@ select_country() {
                     echo "$(echo "$selected_full" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone_tmp.ch"
                     echo "1" > "${CACHE_DIR}/country_success_done"
                     
-                    debug_log "INFO" "Country selected from multiple choices: $selected_country"
+                    debug_log "DEBUG" "Country selected from multiple choices: $selected_country"
                     select_zone
                     return 0
                 fi
@@ -468,7 +468,7 @@ select_zone() {
                 local zonename=$(echo "$zone_data" | cut -d ',' -f 1)
                 local timezone=$(echo "$zone_data" | cut -d ',' -f 2)
                 
-                debug_log "INFO" "Timezone data parsed: zonename='$zonename', timezone='$timezone'"
+                debug_log "DEBUG" "Timezone data parsed: zonename='$zonename', timezone='$timezone'"
                 
                 # キャッシュに保存
                 echo "$zonename" > "$cache_zonename"
@@ -476,7 +476,7 @@ select_zone() {
                 echo "$zone_data" > "$cache_zone"
                 
                 printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
-                debug_log "INFO" "Timezone has been set: $zone_data"
+                debug_log "DEBUG" "Timezone has been set: $zone_data"
                 return 0
             fi
         fi
