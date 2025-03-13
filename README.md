@@ -25,7 +25,7 @@ wget -q -O /usr/bin/aios "https://raw.githubusercontent.com/site-u2023/aios/main
 ```sh
 wget -q -O /usr/bin/aios "https://raw.githubusercontent.com/site-u2023/aios/main/aios?cache_bust=$(date +%s)"; sh /usr/bin/aios JP
 ```
-### English
+### US
 ```sh
 wget -q -O /usr/bin/aios "https://raw.githubusercontent.com/site-u2023/aios/main/aios?cache_bust=$(date +%s)"; sh /usr/bin/aios US
 ```
