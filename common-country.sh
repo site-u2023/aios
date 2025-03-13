@@ -121,6 +121,9 @@ select_country() {
         return
     fi
 
+    # 自動選択を試行
+    detect_and_set_location && return 0
+
     # システム情報の取得試行
     local system_country=""
     if type get_country_info >/dev/null 2>&1; then
@@ -148,9 +151,8 @@ select_country() {
                         return 1
                     }
                     
-                    # タイムゾーン情報の抽出 ($6以降)
-                    echo "$(echo "$country_data" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone_tmp.ch"
                     # zone_write関数に処理を委譲
+                    echo "$(echo "$country_data" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone_tmp.ch"
                     zone_write || {
                         debug_log "ERROR" "Failed to write timezone data"
                         return 1
@@ -313,7 +315,7 @@ select_country() {
 
 # システムの地域情報を検出し設定する関数
 detect_and_set_location() {
-    debug_log "DEBUG" "Running detect_and_set_location function"
+    debug_log "DEBUG" "Running detect_and_set_location() function"
     
     # システムから国とタイムゾーン情報を取得
     local system_country=""
@@ -364,13 +366,9 @@ detect_and_set_location() {
                 return 1
             }
             
-            # タイムゾーン情報を一時ファイルに書き込み
-            if [ -n "$system_zonename" ]; then
-                echo "$system_zonename,$system_timezone" > "${CACHE_DIR}/zone_tmp.ch"
-            else
-                echo "$system_timezone" > "${CACHE_DIR}/zone_tmp.ch"
-            fi
-            
+            # タイムゾーン情報の抽出 ($6以降) と書き込み
+            local timezone_data=$(echo "$country_data" | cut -d ' ' -f 6-)
+            echo "$timezone_data" > "${CACHE_DIR}/zone_tmp.ch"
             # zone_write関数に処理を委譲
             zone_write || {
                 debug_log "ERROR" "Failed to write timezone data"
@@ -379,11 +377,14 @@ detect_and_set_location() {
             
             debug_log "INFO" "Auto-detected settings have been applied successfully"
             return 0
+        else
+            debug_log "WARN" "No matching entry found for detected country: $system_country"
+            return 1
         fi
+    else
+        debug_log "INFO" "User declined auto-detected settings"
+        return 1
     fi
-    
-    debug_log "INFO" "User declined auto-detected settings"
-    return 1
 }
 
 # 番号付きリストからユーザーに選択させる関数
