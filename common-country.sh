@@ -288,6 +288,111 @@ select_country() {
     done
 }
 
+detect_and_set_location() {
+    debug_log "DEBUG" "Executing detect_and_set_location()"
+    
+    # キャッシュファイルのパス
+    local cache_country="${CACHE_DIR}/country.ch"
+    local cache_zone="${CACHE_DIR}/zone.ch"
+    local cache_zonename="${CACHE_DIR}/zonename.ch"
+    local cache_timezone="${CACHE_DIR}/timezone.ch"
+    local flag_zone="${CACHE_DIR}/timezone_success_done"
+    
+    # すでに設定済みならスキップ
+    if [ -f "$cache_zonename" ] && [ -f "$cache_timezone" ]; then
+        debug_log "DEBUG" "Location already set. Skipping."
+        return 0
+    fi
+
+    # システム情報取得
+    local system_country=""
+    local system_timezone=""
+    
+    if type get_country_info >/dev/null 2>&1; then
+        local system_country_info=$(get_country_info)
+        if [ -n "$system_country_info" ]; then
+            system_country=$(echo "$system_country_info" | awk '{print $2}')
+        fi
+    fi
+    
+    if type get_current_timezone >/dev/null 2>&1; then
+        system_timezone=$(get_current_timezone)
+    fi
+    
+    # 検出情報がない場合は通常フローへ
+    if [ -z "$system_country" ] || [ -z "$system_timezone" ]; then
+        debug_log "DEBUG" "Cannot detect country/timezone automatically. Using standard flow."
+        select_country
+        return $?
+    fi
+    
+    # 国情報から正確なタイムゾーン情報を取得
+    local country_data=$(awk -v country="$system_country" 'BEGIN {IGNORECASE=1} { if ($2 == country) print $0 }' "$BASE_DIR/country.db")
+    if [ -z "$country_data" ]; then
+        debug_log "DEBUG" "Country not found in database. Using standard flow."
+        select_country
+        return $?
+    fi
+    
+    # タイムゾーン情報取得
+    local country_name=$(echo "$country_data" | awk '{print $2, $3}')
+    local timezone_cols=$(echo "$country_data" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i; print ""}')
+    local default_tz=""
+    
+    for zone in $timezone_cols; do
+        if [ -n "$system_timezone" ] && echo "$zone" | grep -q "$system_timezone"; then
+            default_tz="$zone"
+            break
+        fi
+    done
+    
+    # タイムゾーンが見つからなければ最初のものを使用
+    if [ -z "$default_tz" ]; then
+        default_tz=$(echo "$timezone_cols" | awk '{print $1}')
+    fi
+    
+    # ゾーン情報をカンマで分割
+    local zonename=$(echo "$default_tz" | cut -d',' -f1)
+    local timezone=$(echo "$default_tz" | cut -d',' -f2)
+    
+    # 免責事項表示
+    printf "%s\n\n" "$(color yellow "$(get_message "MSG_DISCLAIMER")")"
+    
+    # 検出された情報を表示（日本語対応）
+    printf "%s %s\n" "$(color blue "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color cyan "$country_name")"
+    printf "%s %s\n\n" "$(color blue "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color cyan "$zonename ($timezone)")"
+    
+    # 一括確認
+    local msg_use_settings=$(get_message "MSG_USE_DETECTED_SETTINGS")
+    printf "%s\n" "$(color blue "$msg_use_settings")"
+    
+    if confirm "MSG_CONFIRM_ONLY_YN"; then
+        # 確認されたら情報を保存
+        echo "$country_data" > "$cache_country"
+        echo "$default_tz" > "$cache_zone"
+        echo "$zonename" > "$cache_zonename" 
+        echo "$timezone" > "$cache_timezone"
+        
+        # 完了メッセージ
+        printf "%s\n" "$(color green "$(get_message "MSG_SETUP_COMPLETE")")"
+        touch "$flag_zone"
+        
+        # 基本言語パッケージのインストール
+        if [ -f "${CACHE_DIR}/downloader.ch" ] && type install_package >/dev/null 2>&1; then
+            install_package luci-i18n-base yn hidden
+            install_package luci-i18n-opkg yn hidden
+            install_package luci-i18n-firewall yn hidden
+        fi
+        
+        return 0
+    else
+        # 拒否されたら通常フロー
+        debug_log "DEBUG" "User declined automatic settings. Using standard flow."
+        select_country
+        return $?
+    fi
+}
+
 # 番号付きリストからユーザーに選択させる関数
 # リスト選択を処理する関数
 # $1: 表示するリストデータ
@@ -295,7 +400,7 @@ select_country() {
 # $3: タイプ（country/zone）
 # 番号付きリストからユーザーに選択させる関数
 select_list() {
-    debug_log "DEBUG" "select_list() function executing: type=$3"
+    debug_log "DEBUG" "select_list() 関数実行中: type=$3"
     
     local select_list="$1"
     local tmp_file="$2"
@@ -330,13 +435,13 @@ select_list() {
         return 0
     fi
     
-    # 項目をリスト表示（下線なし、見やすい番号付け）
+    # 項目をリスト表示（下線付き、番号を整列）
     echo "$select_list" | while read -r line; do
         if [ $count -lt 10 ]; then
             # 1桁番号の場合は整列を調整
-            printf " %s. %s\n" "$count" "$line"
+            printf " %s. %s\n" "$count" "$(color white_underline "$line")"
         else
-            printf "%s. %s\n" "$count" "$line"
+            printf "%s. %s\n" "$count" "$(color white_underline "$line")"
         fi
         count=$((count + 1))
     done
@@ -368,13 +473,13 @@ select_list() {
         # 選択項目を取得
         local selected_value=$(echo "$select_list" | sed -n "${number}p")
         
-        # 確認部分で選択内容の表示は行わない（重複表示を避けるため）
+        # 確認プロンプト表示
         if confirm "MSG_CONFIRM_YNR" "selected_value" "$selected_value"; then
             echo "$number" > "$tmp_file"
             break
         elif [ "$CONFIRM_RESULT" = "R" ]; then
             # リスタートオプション
-            debug_log "DEBUG" "User selected restart option"
+            debug_log "DEBUG" "ユーザーが再起動オプションを選択"
             rm -f "${CACHE_DIR}/country.ch"
             select_country
             return 0
@@ -382,7 +487,7 @@ select_list() {
         # 他の場合は再選択
     done
     
-    debug_log "DEBUG" "Selection complete: $type number $(cat $tmp_file)"
+    debug_log "DEBUG" "選択完了: $type 番号 $(cat $tmp_file)"
 }
 
 # タイムゾーンの選択を処理する関数
