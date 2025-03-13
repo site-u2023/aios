@@ -16,6 +16,9 @@ JP|MSG_UNDER_TEST=👹 試験中
 # select_country()
 # =======================
 
+MSG_NO_LANG_MATCH="指定された言語コード（短縮国名）が見つかりませんでした。別の方法で選択します。"
+MSG_NO_LANG_MATCH_US="The specified language code was not found. Proceeding to alternate selection method."
+
 US|MSG_RETURN_TO_SEARCH=Return to search
 JP|MSG_RETURN_TO_SEARCH=検索に戻る
 
