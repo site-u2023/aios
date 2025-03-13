@@ -561,6 +561,87 @@ select_zone() {
     return $?
 }
 
+#########################################################################
+# Last Update: 2025-02-18 11:00:00 (JST) 🚀
+# "Precision in code, clarity in purpose. Every update refines the path."
+# normalize_language: 言語設定の正規化
+#
+# 【要件】
+# 1. 言語の決定:
+#    - `country.ch` を最優先で参照（変更不可）
+#    - `country.ch` が無い場合は `select_country()` を実行し、手動選択
+#
+# 2. システムメッセージの言語 (`message.ch`) の確定:
+#    - `messages.db` の `SUPPORTED_LANGUAGES` を確認
+#    - `country.ch` に記録された言語が `SUPPORTED_LANGUAGES` に含まれる場合、それを `message.ch` に保存
+#    - `SUPPORTED_LANGUAGES` に無い場合、`message.ch` に `US`（フォールバック）を設定
+#
+# 3. `country.ch` との関係:
+#    - `country.ch` はデバイス設定用（変更不可）
+#    - `message.ch` はシステムメッセージ表示用（フォールバック可能）
+#
+# 4. `$ACTIVE_LANGUAGE` の管理:
+#    - `normalize_language()` 実行時に `$ACTIVE_LANGUAGE` を設定
+#    - `$ACTIVE_LANGUAGE` は `message.ch` の値を常に参照
+#    - `$ACTIVE_LANGUAGE` が未設定の場合、フォールバックで `US`
+#
+# 5. メンテナンス:
+#    - `country.ch` はどのような場合でも変更しない
+#    - `message.ch` のみフォールバックを適用し、システムメッセージの一貫性を維持
+#    - 言語設定に影響を与えず、メッセージの表示のみを制御する
+#########################################################################
+normalize_language() {
+    local message_db="${BASE_DIR}/messages.db"
+    local country_cache="${CACHE_DIR}/country.ch"
+    local message_cache="${CACHE_DIR}/message.ch"
+    local selected_language=""
+    local flag_file="${CACHE_DIR}/country_success_done"
+
+    if [ -f "$flag_file" ]; then
+        debug_log "DEBUG" "normalize_language() already done. Skipping repeated success message."
+        return 0
+    fi
+
+    if [ ! -f "$country_cache" ]; then
+        debug_log "ERROR" "country.ch not found. Cannot determine language."
+        return 1
+    fi
+
+    local country_data
+    country_data=$(cat "$country_cache")
+    debug_log "DEBUG" "country.ch content: $country_data"
+
+    local field_count
+    field_count=$(echo "$country_data" | awk '{print NF}')
+    debug_log "DEBUG" "Field count in country.ch: $field_count"
+
+    if [ "$field_count" -ge 5 ]; then
+        selected_language=$(echo "$country_data" | awk '{print $5}')
+    else
+        selected_language=$(echo "$country_data" | awk '{print $2}')
+    fi
+
+    debug_log "DEBUG" "Selected language extracted from country.ch -> $selected_language"
+
+    local supported_languages
+    supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
+    debug_log "DEBUG" "Supported languages: $supported_languages"
+
+    if echo "$supported_languages" | grep -qw "$selected_language"; then
+        debug_log "DEBUG" "Using message database language: $selected_language"
+        echo "$selected_language" > "$message_cache"
+        ACTIVE_LANGUAGE="$selected_language"
+    else
+        debug_log "DEBUG" "Language '$selected_language' not found in messages.db. Using 'US' as fallback."
+        echo "US" > "$message_cache"
+        ACTIVE_LANGUAGE="US"
+    fi
+
+    debug_log "DEBUG" "Final system message language -> $ACTIVE_LANGUAGE"
+    echo "$(get_message "MSG_COUNTRY_SUCCESS")"
+    touch "$flag_file"
+}
+
 # 国と言語情報をキャッシュに書き込む関数
 country_write() {
     debug_log "DEBUG" "Entering country_write()"
