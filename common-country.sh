@@ -263,14 +263,9 @@ select_country() {
             printf "%s\n" "$(color red "$msg_invalid")"
         fi
 
-        # 再検索するか確認
-        if confirm "MSG_SEARCH_AGAIN"; then
-            input_lang=""
-        else
-            # キャンセル処理
-            debug_log "INFO" "Country selection canceled by user"
-            return 1
-        fi
+        # 検索プロンプトを表示
+        input_lang=""
+        debug_log "DEBUG" "Resetting search and showing prompt again"
     done
 }
 
