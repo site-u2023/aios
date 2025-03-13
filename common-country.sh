@@ -331,23 +331,24 @@ detect_and_set_location() {
                 return 1
             }
             
-            # システムから検出したゾーン名とタイムゾーン情報を使用
-            debug_log "DEBUG" "Writing detected timezone info to zone_tmp.ch"
-            if [ -n "$system_zonename" ]; then
+            # ゾーン情報を一時ファイルに書き込み
+            if [ -n "$system_zonename" ] && [ -n "$system_timezone" ]; then
+                # ゾーン名とタイムゾーン情報を組み合わせて一時ファイルに書き込む
+                debug_log "DEBUG" "Writing combined zone info to temporary file: ${system_zonename},${system_timezone}"
                 echo "${system_zonename},${system_timezone}" > "${CACHE_DIR}/zone_tmp.ch"
-                debug_log "DEBUG" "Written zonename and timezone: ${system_zonename},${system_timezone}"
             else
+                # タイムゾーン情報のみを一時ファイルに書き込む
+                debug_log "DEBUG" "Writing timezone only to temporary file: ${system_timezone}"
                 echo "${system_timezone}" > "${CACHE_DIR}/zone_tmp.ch"
-                debug_log "DEBUG" "Written timezone only: ${system_timezone}"
             fi
             
             # zone_write関数に処理を委譲
+            debug_log "DEBUG" "Calling zone_write()"
             zone_write || {
                 debug_log "ERROR" "Failed to write timezone data"
                 return 1
             }
             
-            # 設定完了
             debug_log "DEBUG" "Auto-detected settings have been applied successfully"
             return 0
         else
