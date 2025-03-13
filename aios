@@ -327,11 +327,11 @@ get_message() {
     # パラメータ置換
     if [ -n "$params" ]; then
         for param in $params; do
-            key=$(echo "$param" | cut -d'=' -f1)
+            param_key=$(echo "$param" | cut -d'=' -f1)
             value=$(echo "$param" | cut -d'=' -f2)
             # `sed` コマンドで使用する際に `value` をエスケープする
             escaped_value=$(echo "$value" | sed -e 's/[\/&]/\\&/g')
-            message=$(echo "$message" | sed -e "s/{$key}/$escaped_value/g")
+            message=$(echo "$message" | sed -e "s/{$param_key}/$escaped_value/g")
         done
     fi
 
@@ -339,7 +339,12 @@ get_message() {
     if [ "$quiet_flag" = "quiet" ]; then
         return 0
     else
-        echo "$message"
+        # デバッグモード時はキーとメッセージの両方を表示
+        if [ "$DEBUG_MODE" = "true" ]; then
+            echo "$key: $message"
+        else
+            echo "$message"
+        fi
     fi
 }
 
