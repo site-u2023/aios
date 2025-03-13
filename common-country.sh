@@ -246,7 +246,7 @@ detect_and_set_location() {
     [ -f "$BASE_DIR/dynamic-system-info.sh" ] || return 1
     
     # 国情報の取得
-    system_country=$(. "$BASE_DIR/dynamic-system-info.sh" && get_country_code)
+    system_country=$(. "$BASE_DIR/dynamic-system-info.sh" && get_country_info)
     
     # タイムゾーン情報の取得
     system_timezone=$(. "$BASE_DIR/dynamic-system-info.sh" && get_timezone_info)
