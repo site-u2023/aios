@@ -302,18 +302,18 @@ detect_and_set_location() {
         return 1
     fi
     
-    # 検出情報表示（一回だけ表示）
+    # 検出情報表示
     printf "%s\n" "$(color yellow "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
     printf "%s %s\n" "$(color blue "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color blue "$(echo "$system_country" | cut -d' ' -f2)")"
     
-    # ゾーン名があれば表示、なければタイムゾーンのみ
+    # ゾーン名があればゾーン名とタイムゾーン、なければタイムゾーンのみ表示
     if [ -n "$system_zonename" ]; then
-        printf "%s %s%s%s\n\n" "$(color blue "$(get_message "MSG_DETECTED_ZONE")")" "$(color blue "$system_zonename")" "$(color blue ",")" "$(color blue "$system_timezone")"
+        printf "%s %s,%s\n\n" "$(color blue "$(get_message "MSG_DETECTED_ZONE")")" "$(color blue "$system_zonename")" "$(color blue "$system_timezone")"
     else
         printf "%s %s\n\n" "$(color blue "$(get_message "MSG_DETECTED_ZONE")")" "$(color blue "$system_timezone")"
     fi
     
-    # 確認（重複表示を削除）
+    # 確認
     if confirm "MSG_CONFIRM_ONLY_YN"; then
         # country.dbから完全な国情報を検索
         local country_data=$(grep -i "^[^ ]* *$system_country" "$BASE_DIR/country.db")
@@ -324,53 +324,32 @@ detect_and_set_location() {
             debug_log "DEBUG" "Writing country data to temporary file"
             echo "$country_data" > "${CACHE_DIR}/country_tmp.ch"
             
-            # キャッシュディレクトリと一時ファイルの存在確認
-            if [ ! -f "${CACHE_DIR}/country_tmp.ch" ]; then
-                debug_log "ERROR" "Failed to create country_tmp.ch"
-                return 1
-            fi
-            
             # country_write関数に処理を委譲
             debug_log "DEBUG" "Calling country_write()"
-            country_write
-            
-            # 結果を確認
-            if [ $? -ne 0 ]; then
-                debug_log "ERROR" "country_write() failed"
+            country_write || {
+                debug_log "ERROR" "Failed to write country data"
                 return 1
-            fi
+            }
             
-            # タイムゾーン情報の抽出 ($6以降) と書き込み
-            debug_log "DEBUG" "Extracting timezone data"
-            local timezone_data=$(echo "$country_data" | cut -d ' ' -f 6-)
-            debug_log "DEBUG" "Timezone data: ${timezone_data}"
-            
-            echo "$timezone_data" > "${CACHE_DIR}/zone_tmp.ch"
-            
-            # キャッシュファイルの存在確認
-            if [ ! -f "${CACHE_DIR}/zone_tmp.ch" ]; then
-                debug_log "ERROR" "Failed to create zone_tmp.ch"
-                return 1
+            # システムから検出したゾーン名とタイムゾーン情報を使用
+            debug_log "DEBUG" "Writing detected timezone info to zone_tmp.ch"
+            if [ -n "$system_zonename" ]; then
+                echo "${system_zonename},${system_timezone}" > "${CACHE_DIR}/zone_tmp.ch"
+                debug_log "DEBUG" "Written zonename and timezone: ${system_zonename},${system_timezone}"
+            else
+                echo "${system_timezone}" > "${CACHE_DIR}/zone_tmp.ch"
+                debug_log "DEBUG" "Written timezone only: ${system_timezone}"
             fi
             
             # zone_write関数に処理を委譲
-            debug_log "DEBUG" "Calling zone_write()"
-            zone_write
-            
-            # 結果を確認
-            if [ $? -ne 0 ]; then
-                debug_log "ERROR" "zone_write() failed"
+            zone_write || {
+                debug_log "ERROR" "Failed to write timezone data"
                 return 1
-            fi
+            }
             
-            # キャッシュファイルの存在を確認
-            if [ -f "${CACHE_DIR}/country.ch" ] && [ -f "${CACHE_DIR}/zone.ch" ]; then
-                debug_log "DEBUG" "Auto-detected settings have been applied successfully"
-                return 0
-            else
-                debug_log "ERROR" "Cache files not created properly"
-                return 1
-            fi
+            # 設定完了
+            debug_log "DEBUG" "Auto-detected settings have been applied successfully"
+            return 0
         else
             debug_log "WARN" "No matching entry found for detected country: $system_country"
             return 1
@@ -663,44 +642,26 @@ zone_write() {
     # 一時ファイルが存在するか確認
     if [ ! -f "$tmp_zone" ]; then
         debug_log "ERROR" "File not found: $tmp_zone"
-        printf "%s\n" "$(color red "$(get_message "ERR_FILE_NOT_FOUND" | sed "s/{file}/$tmp_zone/g")")"
+        # sedのデリミタを#に変更
+        printf "%s\n" "$(color red "$(get_message "ERR_FILE_NOT_FOUND" | sed "s#{file}#$tmp_zone#g")")"
         return 1
     fi
     
-    # 選択された番号または直接タイムゾーン情報を取得
-    local selected_timezone=""
-    local selected_number=""
-    
-    # ファイルの内容が数値かどうかをチェック
-    if grep -qE '^[0-9]+$' "$tmp_zone"; then
-        selected_number=$(cat "$tmp_zone")
-        
-        # zone_tmp.ch から選択された行のタイムゾーンを取得
-        local zone_list="${CACHE_DIR}/zone_list.ch"
-        if [ -f "$zone_list" ]; then
-            selected_timezone=$(sed -n "${selected_number}p" "$zone_list")
-        else
-            # zone_tmp.chをスペースで分割してn番目の項目を取得
-            local zone_data=$(cat "${CACHE_DIR}/zone_tmp.ch")
-            selected_timezone=$(echo "$zone_data" | tr ' ' '\n' | sed -n "${selected_number}p")
-        fi
-    else
-        # 直接タイムゾーン情報が含まれている場合
-        selected_timezone=$(cat "$tmp_zone")
-    fi
+    # タイムゾーン情報を取得
+    local selected_timezone=$(cat "$tmp_zone")
+    debug_log "DEBUG" "Processing timezone from file: ${selected_timezone}"
     
     # タイムゾーン情報を分割して保存
     if [ -n "$selected_timezone" ]; then
-        # タイムゾーン情報を解析（フォーマットに依存）
         local zonename=""
         local timezone=""
         
-        # 一般的なフォーマットの場合: "America/New_York"
-        if echo "$selected_timezone" | grep -q "/"; then
-            zonename="$selected_timezone"
-            timezone="$selected_timezone"
+        if echo "$selected_timezone" | grep -q ","; then
+            # カンマで区切られている場合は分割
+            zonename=$(echo "$selected_timezone" | cut -d ',' -f 1)
+            timezone=$(echo "$selected_timezone" | cut -d ',' -f 2)
         else
-            # それ以外の場合、カスタム解析
+            # カンマがない場合はそのまま使用
             zonename="$selected_timezone"
             timezone="$selected_timezone"
         fi
@@ -711,7 +672,7 @@ zone_write() {
         echo "$selected_timezone" > "${CACHE_DIR}/zone.ch"
         
         debug_log "DEBUG" "Timezone information written to cache"
-        debug_log "DEBUG" "Selected timezone: $selected_timezone"
+        debug_log "DEBUG" "Selected zonename: $zonename, timezone: $timezone"
     else
         debug_log "ERROR" "No timezone data to write to cache"
         printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
