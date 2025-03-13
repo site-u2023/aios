@@ -646,24 +646,24 @@ normalize_language() {
 country_write() {
     debug_log "DEBUG" "Entering country_write()"
     
-    local tmp_country="${CACHE_DIR}/country_tmp.ch"
+    local tmp_Language="${CACHE_DIR}/language.ch"
     local cache_country="${CACHE_DIR}/country.ch"
     
     # 一時ファイルが存在するか確認
-    if [ ! -f "$tmp_country" ]; then
-        debug_log "ERROR" "File not found: $tmp_country"
-        printf "%s\n" "$(color red "$(get_message "ERR_FILE_NOT_FOUND" | sed "s/{file}/$tmp_country/g")")"
+    if [ ! -f "$tmp_Language" ]; then
+        debug_log "ERROR" "File not found: $tmp_Language"
+        printf "%s\n" "$(color red "$(get_message "ERR_FILE_NOT_FOUND" | sed "s/{file}/$tmp_Language/g")")"
         return 1
     fi
     
     # 選択されたデータを取得
     local country_data=""
     # 数値でない場合はフルラインが含まれていると判断
-    if ! grep -qE '^[0-9]+$' "$tmp_country"; then
-        country_data=$(cat "$tmp_country")
+    if ! grep -qE '^[0-9]+$' "$tmp_Language"; then
+        country_data=$(cat "$tmp_Language")
     else
         # country.dbから該当行を抽出
-        local line_number=$(cat "$tmp_country")
+        local line_number=$(cat "$tmp_Language")
         country_data=$(sed -n "${line_number}p" "${BASE_DIR}/country.db")
     fi
     
