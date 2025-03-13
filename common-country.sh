@@ -657,7 +657,7 @@ normalize_language() {
     fi
 
     debug_log "DEBUG" "Final active language: ${ACTIVE_LANGUAGE}"
-    echo "$(get_message "MSG_COUNTRY_SUCCESS")"
+    printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
 }
 
 # タイムゾーン情報をキャッシュに書き込む関数
