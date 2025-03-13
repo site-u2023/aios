@@ -233,7 +233,7 @@ select_country() {
                     return 1
                 }
                 
-                debug_log "INFO" "Country selected from single match: $country_name"
+                debug_log "DEBUG" "Country selected from single match: $country_name"
                 select_zone
                 return 0
             else
@@ -305,7 +305,7 @@ select_country() {
             input_lang=""
         else
             # キャンセル処理
-            debug_log "INFO" "Country selection canceled by user"
+            debug_log "DEBUG" "Country selection canceled by user"
             return 1
         fi
     done
@@ -373,14 +373,14 @@ detect_and_set_location() {
                 return 1
             }
             
-            debug_log "INFO" "Auto-detected settings have been applied successfully"
+            debug_log "DEBUG" "Auto-detected settings have been applied successfully"
             return 0
         else
             debug_log "WARN" "No matching entry found for detected country: $system_country"
             return 1
         fi
     else
-        debug_log "INFO" "User declined auto-detected settings"
+        debug_log "DEBUG" "User declined auto-detected settings"
         return 1
     fi
 }
@@ -670,8 +670,8 @@ zone_write() {
         # 成功フラグの設定
         echo "1" > "${CACHE_DIR}/timezone_success_done"
         
-        debug_log "INFO" "Timezone information written to cache"
-        debug_log "INFO" "Selected timezone: $selected_timezone"
+        debug_log "DEBUG" "Timezone information written to cache"
+        debug_log "DEBUG" "Selected timezone: $selected_timezone"
     else
         debug_log "ERROR" "No timezone data to write to cache"
         printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
@@ -703,7 +703,7 @@ timezone_setup() {
     
     # 動的システム関数を使用して設定
     if type set_system_timezone >/dev/null 2>&1; then
-        debug_log "INFO" "Setting timezone using set_system_timezone(): $timezone"
+        debug_log "DEBUG" "Setting timezone using set_system_timezone(): $timezone"
         if set_system_timezone "$timezone"; then
             local msg_set=$(get_message "MSG_TIMEZONE_SET")
             msg_set=$(echo "$msg_set" | sed "s/{timezone}/$timezone/g")
@@ -717,7 +717,7 @@ timezone_setup() {
     
     # 伝統的な方法でタイムゾーンを設定
     if [ -n "$timezone" ]; then
-        debug_log "INFO" "Setting timezone using traditional method: $timezone"
+        debug_log "DEBUG" "Setting timezone using traditional method: $timezone"
         
         # OpenWrt用タイムゾーン設定（UCI経由）
         if command -v uci >/dev/null 2>&1; then
