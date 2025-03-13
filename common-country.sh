@@ -467,7 +467,7 @@ select_zone() {
             if echo "$zone_data" | grep -q ","; then
                 # カンマで区切られているデータ
                 local zonename=$(echo "$zone_data" | cut -d ',' -f 1)
-                local timezone=$(echo "$zone_data" | cut -d ',' -f 2)
+                local timezone=$(echo "$zone_data" | cut -d ',' -f 2 | cut -d ' ' -f 1)
                 
                 debug_log "DEBUG" "Timezone data parsed: zonename='$zonename', timezone='$timezone'"
                 
