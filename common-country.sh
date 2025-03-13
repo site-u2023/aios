@@ -619,7 +619,7 @@ country_write() {
 
 normalize_language() {
     local message_db="${BASE_DIR}/messages.db"
-    local country_cache="${CACHE_DIR}/country.ch"
+    local language_cache="${CACHE_DIR}/language.ch"
     local message_cache="${CACHE_DIR}/message.ch"
     local selected_language=""
     local flag_file="${CACHE_DIR}/country_success_done"
@@ -629,26 +629,14 @@ normalize_language() {
         return 0
     fi
 
-    if [ ! -f "$country_cache" ]; then
-        debug_log "ERROR" "country.ch not found. Cannot determine language."
+    if [ ! -f "$language_cache" ]; then
+        debug_log "ERROR" "language.ch not found. Cannot determine language."
         return 1
     fi
 
-    local country_data
-    country_data=$(cat "$country_cache")
-    debug_log "DEBUG" "country.ch content: $country_data"
-
-    local field_count
-    field_count=$(echo "$country_data" | awk '{print NF}')
-    debug_log "DEBUG" "Field count in country.ch: $field_count"
-
-    if [ "$field_count" -ge 5 ]; then
-        selected_language=$(echo "$country_data" | awk '{print $5}')
-    else
-        selected_language=$(echo "$country_data" | awk '{print $2}')
-    fi
-
-    debug_log "DEBUG" "Selected language extracted from country.ch -> $selected_language"
+    # language.chから直接言語コードを読み込み
+    selected_language=$(cat "$language_cache")
+    debug_log "DEBUG" "Language code from language.ch: $selected_language"
 
     local supported_languages
     supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
