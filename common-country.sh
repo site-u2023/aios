@@ -140,15 +140,15 @@ select_country() {
     if [ -z "$input_lang" ] && [ -n "$system_country" ]; then
         # 検出された国を表示
         local msg_detected=$(get_message "MSG_DETECTED_COUNTRY")
-        printf "%s %s\n" "$msg_detected" "$system_country"
+        printf "%s %s\n" "$(color blue "$msg_detected")" "$system_country"
         
         # 国を使用するか確認
         local msg_use=$(get_message "MSG_USE_DETECTED_COUNTRY")
-        printf "%s\n" "$msg_use"
+        printf "%s\n" "$(color blue "$msg_use")"
         
         # 確認プロンプトを表示
         local msg_confirm=$(get_message "MSG_CONFIRM_ONLY_YN")
-        printf "%s " "$msg_confirm"
+        printf "%s " "$(color cyan "$msg_confirm")"
         
         read -r yn
         yn=$(normalize_input "$yn")
@@ -170,10 +170,10 @@ select_country() {
         # 入力がまだない場合は入力を求める
         if [ -z "$input_lang" ]; then
             local msg_enter=$(get_message "MSG_ENTER_COUNTRY")
-            printf "%s\n" "$msg_enter"
+            printf "%s\n" "$(color blue "$msg_enter")"
             
             local msg_search=$(get_message "MSG_SEARCH_KEYWORD")
-            printf "%s " "$msg_search"
+            printf "%s " "$(color cyan "$msg_search")"
             
             read -r input_lang
             debug_log "DEBUG" "User entered country search: $input_lang"
@@ -191,7 +191,7 @@ select_country() {
             # エスケープ処理付きのsedでプレースホルダーを置換
             escaped_input=$(echo "$input_lang" | sed 's/[\/&]/\\&/g')
             msg_not_found=$(echo "$msg_not_found" | sed "s/{0}/$escaped_input/g")
-            printf "%s\n" "$msg_not_found"
+            printf "%s\n" "$(color red "$msg_not_found")"
             input_lang=""  # リセットして再入力
             continue
         fi
@@ -204,7 +204,7 @@ select_country() {
             # メッセージデータベースからメッセージを取得し、プレースホルダーを置換
             local msg=$(get_message "MSG_SINGLE_MATCH_FOUND")
             msg=$(echo "$msg" | sed "s/{0}/$country_name/g")
-            printf "%s\n" "$msg"
+            printf "%s\n" "$(color blue "$msg")"
             
             # 確認プロンプト
             if confirm "MSG_CONFIRM_ONLY_YN"; then
@@ -231,7 +231,7 @@ select_country() {
         local selected_number=$(cat "$tmp_country")
         if [ -z "$selected_number" ] || ! echo "$selected_number" | grep -q '^[0-9]\+$'; then
             local msg_invalid=$(get_message "MSG_INVALID_NUMBER")
-            printf "%s\n" "$msg_invalid"
+            printf "%s\n" "$(color red "$msg_invalid")"
             continue
         fi
         
@@ -239,7 +239,7 @@ select_country() {
         local selected_full=$(echo "$full_results" | sed -n "${selected_number}p")
         if [ -z "$selected_full" ]; then
             local msg_error=$(get_message "MSG_ERROR_OCCURRED")
-            printf "%s\n" "$msg_error"
+            printf "%s\n" "$(color red "$msg_error")"
             continue
         fi
         
@@ -249,11 +249,11 @@ select_country() {
         # エスケープ処理付きのsedでプレースホルダーを置換
         escaped_country=$(echo "$selected_country_name" | sed 's/[\/&]/\\&/g')
         msg_selected=$(echo "$msg_selected" | sed "s/{0}/$escaped_country/g")
-        printf "%s\n" "$msg_selected"
+        printf "%s\n" "$(color blue "$msg_selected")"
 
         # 確認プロンプト
         local msg_confirm=$(get_message "MSG_CONFIRM_ONLY_YN")
-        printf "%s " "$msg_confirm"
+        printf "%s " "$(color cyan "$msg_confirm")"
         read -r yn
         yn=$(normalize_input "$yn")
         
@@ -266,7 +266,7 @@ select_country() {
                 ;;
             *)
                 local msg_search_again=$(get_message "MSG_SEARCH_AGAIN")
-                printf "%s " "$msg_search_again"
+                printf "%s " "$(color yellow "$msg_search_again")"
                 read -r yn
                 yn=$(normalize_input "$yn")
                 
@@ -395,6 +395,7 @@ select_zone() {
     # カントリーファイルが存在するか確認
     if [ ! -f "$cache_country" ]; then
         debug_log "ERROR" "カントリーファイルが見つかりません。select_country() を先に実行"
+        printf "%s\n" "$(color yellow "$(get_message "MSG_COUNTRY_NOT_FOUND")")"
         select_country
         return $?
     fi
@@ -428,7 +429,7 @@ select_zone() {
     # デフォルト値が見つかった場合、それを提案
     if [ -n "$default_tz" ]; then
         local detected_msg=$(get_message "MSG_DETECTED_TIMEZONE")
-        printf "%s %s\n" "$(color cyan "$detected_msg")" "$default_tz"
+        printf "%s %s\n" "$(color blue "$detected_msg")" "$default_tz"
         
         # 確認処理（共通関数使用）
         if confirm "MSG_CONFIRM_ONLY_YN"; then
@@ -483,13 +484,14 @@ select_zone() {
     done
     
     # select_list関数で選択処理
-    printf "%s\n" "$(color cyan "$(get_message "MSG_SELECT_TIMEZONE")")"
+    printf "%s\n" "$(color blue "$(get_message "MSG_SELECT_TIMEZONE")")"
     select_list "$(cat "${CACHE_DIR}/zone_display.txt")" "${CACHE_DIR}/zone_selected.txt" "zone"
     
     # 選択された番号を取得
     local selected_number=$(cat "${CACHE_DIR}/zone_selected.txt")
     if [ -z "$selected_number" ]; then
         debug_log "ERROR" "タイムゾーン選択エラー"
+        printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
         return 1
     fi
     
@@ -532,6 +534,7 @@ country_write() {
     # 一時ファイルが存在するか確認
     if [ ! -f "$tmp_country" ]; then
         debug_log "ERROR" "File not found: $tmp_country"
+        printf "%s\n" "$(color red "$(get_message "ERR_FILE_NOT_FOUND" | sed "s/{file}/$tmp_country/g")")"
         return 1
     fi
     
@@ -567,6 +570,7 @@ country_write() {
         debug_log "DEBUG" "Selected country: $(echo "$country_data" | awk '{print $2, $3}')"
     else
         debug_log "ERROR" "No country data to write to cache"
+        printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
         return 1
     fi
     
@@ -582,6 +586,7 @@ zone_write() {
     # 一時ファイルが存在するか確認
     if [ ! -f "$tmp_zone" ]; then
         debug_log "ERROR" "File not found: $tmp_zone"
+        printf "%s\n" "$(color red "$(get_message "ERR_FILE_NOT_FOUND" | sed "s/{file}/$tmp_zone/g")")"
         return 1
     fi
     
@@ -635,6 +640,7 @@ zone_write() {
         debug_log "INFO" "Selected timezone: $selected_timezone"
     else
         debug_log "ERROR" "No timezone data to write to cache"
+        printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
         return 1
     fi
     
@@ -650,9 +656,10 @@ timezone_setup() {
     # タイムゾーンキャッシュが存在するか確認
     if [ ! -f "$cache_zone" ]; then
         debug_log "ERROR" "Zone cache not found. Running select_zone first."
+        printf "%s\n" "$(color yellow "$(get_message "MSG_TIMEZONE_NOT_FOUND" "タイムゾーンが見つかりません")")"
         select_zone
         if [ ! -f "$cache_zone" ]; then
-            handle_error "ERR_FILE_NOT_FOUND" "$cache_zone"
+            printf "%s\n" "$(color red "$(get_message "ERR_FILE_NOT_FOUND" | sed "s/{file}/$cache_zone/g")")"
             return 1
         fi
     fi
@@ -666,10 +673,11 @@ timezone_setup() {
         if set_system_timezone "$timezone"; then
             local msg_set=$(get_message "MSG_TIMEZONE_SET")
             msg_set=$(echo "$msg_set" | sed "s/{timezone}/$timezone/g")
-            printf "%s\n" "$msg_set"
+            printf "%s\n" "$(color green "$msg_set")"
             return 0
         else
             debug_log "WARN" "Failed to set timezone using set_system_timezone(). Falling back to traditional method."
+            printf "%s\n" "$(color yellow "$(get_message "WARN_FALLBACK_METHOD")")"
         fi
     fi
     
@@ -689,15 +697,15 @@ timezone_setup() {
             ln -sf "/usr/share/zoneinfo/$timezone" /etc/localtime
             echo "$timezone" > /etc/timezone
         else
-            handle_error "ERR_TIMEZONE_NOT_SUPPORTED"
+            printf "%s\n" "$(color red "$(get_message "ERR_TIMEZONE_NOT_SUPPORTED")")"
             return 1
         fi
         
         local msg_set=$(get_message "MSG_TIMEZONE_SET")
         msg_set=$(echo "$msg_set" | sed "s/{timezone}/$timezone/g")
-        printf "%s\n" "$msg_set"
+        printf "%s\n" "$(color green "$msg_set")"
     else
-        handle_error "ERR_TIMEZONE_EMPTY"
+        printf "%s\n" "$(color red "$(get_message "ERR_TIMEZONE_EMPTY")")"
         return 1
     fi
     
