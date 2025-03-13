@@ -351,8 +351,8 @@ JP|MSG_USE_DETECTED_SETTINGS=この設定を使用しますか？
 US|MSG_SETUP_COMPLETE=✅ Setup completed successfully!
 JP|MSG_SETUP_COMPLETE=✅ 設定が完了しました！
 
-US|MSG_SELECT_COUNTRY_NUMBER=📌 Please select country number:
-JP|MSG_SELECT_COUNTRY_NUMBER=📌 国の番号を選択してください:
+US|MSG_SELECT_COUNTRY_NUMBER=📌 Please select country (number):
+JP|MSG_SELECT_COUNTRY_NUMBER=📌 国を選択してください(番号):
 
 US|MSG_SELECT_NUMBER=📌 Select Number:
 JP|MSG_SELECT_NUMBER=📌 番号を選択:
