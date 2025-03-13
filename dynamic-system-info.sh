@@ -75,7 +75,7 @@ get_device_architecture() {
         target=$(grep "DISTRIB_TARGET" /etc/openwrt_release | cut -d "'" -f 2)
         arch=$(grep "DISTRIB_ARCH" /etc/openwrt_release | cut -d "'" -f 2)
     fi
-    echo "$target" "$arch"
+    echo "$target $arch"
 }
 
 # 📌 Get OS type and version
