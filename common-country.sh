@@ -623,55 +623,93 @@ select_zone() {
     return $?
 }
 
-# 国と言語情報をキャッシュに書き込む関数
+# 国情報をキャッシュに書き込む関数
 country_write() {
     debug_log "DEBUG" "Entering country_write()"
     
+    # 一時ファイルのパス
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
+    
+    # 出力先ファイルのパス
     local cache_country="${CACHE_DIR}/country.ch"
+    local cache_language="${CACHE_DIR}/language.ch"
+    local cache_message="${CACHE_DIR}/message.ch"
     
     # 一時ファイルが存在するか確認
     if [ ! -f "$tmp_country" ]; then
-        debug_log "ERROR" "File not found: $tmp_country"
-        printf "%s\n" "$(color red "$(get_message "ERR_FILE_NOT_FOUND" | sed "s/{file}/$tmp_country/g")")"
+        local err_msg=$(get_message "ERR_FILE_NOT_FOUND")
+        local err_msg_final=$(echo "$err_msg" | sed "s/{file}/$tmp_country/g")
+        printf "%s\n" "$(color red "$err_msg_final")"
         return 1
     fi
     
-    # 選択されたデータを取得
-    local country_data=""
-    # 数値でない場合はフルラインが含まれていると判断
-    if ! grep -qE '^[0-9]+$' "$tmp_country"; then
-        country_data=$(cat "$tmp_country")
+    # 一時ファイルから国情報をキャッシュに保存
+    cat "$tmp_country" > "$cache_country"
+    debug_log "DEBUG" "Country information written to cache"
+    
+    # 選択された国と言語情報を抽出
+    local selected_country=$(awk '{print $2, $3}' "$cache_country")
+    debug_log "DEBUG" "Selected country: $selected_country"
+    
+    # 言語設定の正規化
+    debug_log "DEBUG" "Normalizing language settings"
+    
+    # message.dbと言語キャッシュファイルのパス
+    local message_db="$BASE_DIR/messages.db"
+    local language_cache="$CACHE_DIR/language.ch"
+    local message_cache="$CACHE_DIR/message.ch"
+    debug_log "DEBUG" "message_db=$message_db"
+    debug_log "DEBUG" "language_cache=$language_cache"
+    debug_log "DEBUG" "message_cache=$message_cache"
+    
+    # 選択された国の言語コードを取得（5列目）
+    local selected_lang_code=$(awk '{print $5}' "$cache_country")
+    debug_log "DEBUG" "Selected language code: $selected_lang_code"
+    
+    # 利用可能な言語一覧を取得
+    local supported_langs=""
+    if [ -f "$message_db" ]; then
+        supported_langs=$(awk 'BEGIN {first=1} /^[A-Z0-9_]+_[A-Z]{2}=/ {
+            if (first) {
+                first=0;
+                print substr($0, index($0, "_")+1, 2)
+            } else {
+                if (index(langs, substr($0, index($0, "_")+1, 2)) == 0) {
+                    langs = langs " " substr($0, index($0, "_")+1, 2)
+                }
+            }
+        } END {print langs}' "$message_db")
     else
-        # country.dbから該当行を抽出
-        local line_number=$(cat "$tmp_country")
-        country_data=$(sed -n "${line_number}p" "${BASE_DIR}/country.db")
+        supported_langs="US"  # デフォルト言語
+    fi
+    debug_log "DEBUG" "Available supported languages: $supported_langs"
+    
+    # 選択された言語がサポートされているか確認
+    local is_supported=0
+    for lang in $supported_langs; do
+        if [ "$lang" = "$selected_lang_code" ]; then
+            is_supported=1
+            break
+        fi
+    done
+    
+    # サポートされている場合は選択言語を使用、そうでなければUSをデフォルトとして使用
+    local active_language=""
+    if [ "$is_supported" -eq 1 ]; then
+        debug_log "DEBUG" "Language $selected_lang_code is supported"
+        active_language="$selected_lang_code"
+    else
+        debug_log "DEBUG" "Language $selected_lang_code is not supported, using US as default"
+        active_language="US"
     fi
     
-    # キャッシュに保存
-    if [ -n "$country_data" ]; then
-        # 1. country.ch - 完全な国情報（基準データ）
-        echo "$country_data" > "$cache_country"
-        
-        # 2. language.ch - 国コード ($5)
-        echo "$(echo "$country_data" | awk '{print $5}')" > "${CACHE_DIR}/language.ch"
-        
-        # 3. luci.ch - LuCI UI言語コード ($4)
-        echo "$(echo "$country_data" | awk '{print $4}')" > "${CACHE_DIR}/luci.ch"
-        
-        # 4. zone_tmp.ch - タイムゾーン情報 ($6以降)
-        echo "$(echo "$country_data" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i; print ""}')" > "${CACHE_DIR}/zone_tmp.ch"
-        
-        debug_log "DEBUG" "Country information written to cache"
-        debug_log "DEBUG" "Selected country: $(echo "$country_data" | awk '{print $2, $3}')"
-        
-        # 言語設定の正規化を実行
-        normalize_language
-    else
-        debug_log "ERROR" "No country data to write to cache"
-        printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
-        return 1
-    fi
+    # 言語設定をキャッシュに保存
+    echo "$selected_lang_code" > "$language_cache"
+    echo "$active_language" > "$message_cache"
+    debug_log "DEBUG" "Final active language: $active_language"
+    
+    # 成功メッセージを表示
+    printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
     
     return 0
 }
