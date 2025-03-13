@@ -227,23 +227,23 @@ print_help() {
 #########################################################################
 # color: ANSI エスケープシーケンスを使って色付きメッセージを出力する関数
 #########################################################################
-color() {
-    # 端末出力でない場合や色無効フラグがある場合はプレーンテキスト出力
-    if [ ! -t 1 ] || [ "$NO_COLOR" = "true" ]; then
-        printf "%s" "$*"
-        return
-    fi
+color_printf() {
+    local color="$1"
+    shift
+    local text="$*"
     
-    local color_name="$1"
-    shift  # 最初の引数（色名）を削除
+    # 色コード選択
+    local code=""
+    case "$color" in
+        "red") code="\033[1;31m" ;;
+        "green") code="\033[1;32m" ;;
+        "blue") code="\033[1;34m" ;;
+        "white_underline") code="\033[4;37m" ;;
+        *) code="\033[0m" ;;
+    esac
     
-    # color_code_mapから色コードを取得
-    local color_start color_end
-    color_start=$(color_code_map "$color_name")
-    color_end=$(color_code_map "reset")
-    
-    # printfでエスケープシーケンス付きテキスト出力
-    printf "%b%s%b" "$color_start" "$*" "$color_end"
+    # %bでエスケープシーケンスを解釈
+    printf "%b%b%b" "$code" "$text" "\033[0m"
 }
 
 #########################################################################
