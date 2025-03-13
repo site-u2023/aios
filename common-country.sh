@@ -328,7 +328,7 @@ select_list() {
     
     # 項目をリスト表示
     echo "$select_list" | while read -r line; do
-        printf "%s: %s\n" "$count" "$(color white_underline "$line")"
+        printf "%s: %s\n" "$count" "$(color white "$line")"
         count=$((count + 1))
     done
     
