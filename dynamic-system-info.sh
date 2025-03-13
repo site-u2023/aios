@@ -158,82 +158,6 @@ get_available_language_packages() {
     echo "$lang_packages"
 }
 
-# 📌 Get current system timezone
-# Returns: Current timezone (e.g., "Asia/Tokyo")
-get_current_timezone() {
-    local timezone=""
-    
-    # Try to get from UCI (OpenWrt specific)
-    if command -v uci >/dev/null 2>&1; then
-        timezone=$(uci get system.@system[0].timezone 2>/dev/null)
-    fi
-    
-    # Fallback to /etc/timezone
-    if [ -z "$timezone" ] && [ -f "/etc/timezone" ]; then
-        timezone=$(cat /etc/timezone)
-    fi
-    
-    # Fallback to TZ environment variable
-    if [ -z "$timezone" ] && [ -n "$TZ" ]; then
-        timezone="$TZ"
-    fi
-    
-    # Last resort - use readlink on /etc/localtime
-    if [ -z "$timezone" ] && [ -L "/etc/localtime" ]; then
-        timezone=$(readlink /etc/localtime | sed 's|.*/zoneinfo/||')
-    fi
-    
-    echo "$timezone"
-}
-
-# 📌 Get available timezones
-# Returns: List of available timezone names from the system
-get_available_timezones() {
-    local zonedir="/usr/share/zoneinfo"
-    local tmplist="${CACHE_DIR}/available_timezones.tmp"
-    
-    # Check if zoneinfo directory exists
-    if [ -d "$zonedir" ]; then
-        # Using find to list all timezone files
-        find "$zonedir" -type f -not -path "*/posix/*" -not -path "*/right/*" -not -path "*/Etc/*" | \
-            sed "s|$zonedir/||" | sort > "$tmplist"
-    else
-        # Fallback to a minimal list of common timezones
-        cat > "$tmplist" << EOF
-Africa/Cairo
-Africa/Johannesburg
-Africa/Lagos
-America/Anchorage
-America/Chicago
-America/Denver
-America/Los_Angeles
-America/New_York
-America/Sao_Paulo
-Asia/Dubai
-Asia/Hong_Kong
-Asia/Kolkata
-Asia/Seoul
-Asia/Shanghai
-Asia/Singapore
-Asia/Tokyo
-Australia/Melbourne
-Australia/Sydney
-Europe/Amsterdam
-Europe/Berlin
-Europe/London
-Europe/Moscow
-Europe/Paris
-Europe/Rome
-Pacific/Auckland
-EOF
-    fi
-    
-    cat "$tmplist"
-    rm -f "$tmplist"
-}
-
-#!/bin/sh
-
 # タイムゾーン情報を取得（例: JST-9）
 get_timezone_info() {
     local timezone=""
@@ -287,6 +211,54 @@ get_zonename_info() {
     
     echo "$zonename"
 }
+
+# 📌 Get available timezones
+# Returns: List of available timezone names from the system
+get_available_timezones() {
+    local zonedir="/usr/share/zoneinfo"
+    local tmplist="${CACHE_DIR}/available_timezones.tmp"
+    
+    # Check if zoneinfo directory exists
+    if [ -d "$zonedir" ]; then
+        # Using find to list all timezone files
+        find "$zonedir" -type f -not -path "*/posix/*" -not -path "*/right/*" -not -path "*/Etc/*" | \
+            sed "s|$zonedir/||" | sort > "$tmplist"
+    else
+        # Fallback to a minimal list of common timezones
+        cat > "$tmplist" << EOF
+Africa/Cairo
+Africa/Johannesburg
+Africa/Lagos
+America/Anchorage
+America/Chicago
+America/Denver
+America/Los_Angeles
+America/New_York
+America/Sao_Paulo
+Asia/Dubai
+Asia/Hong_Kong
+Asia/Kolkata
+Asia/Seoul
+Asia/Shanghai
+Asia/Singapore
+Asia/Tokyo
+Australia/Melbourne
+Australia/Sydney
+Europe/Amsterdam
+Europe/Berlin
+Europe/London
+Europe/Moscow
+Europe/Paris
+Europe/Rome
+Pacific/Auckland
+EOF
+    fi
+    
+    cat "$tmplist"
+    rm -f "$tmplist"
+}
+
+#!/bin/sh
 
 # 📌 Set system timezone
 # Param: $1 - Timezone name (e.g., "Asia/Tokyo")
