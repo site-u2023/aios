@@ -108,7 +108,7 @@ normalize_input() {
 # ユーザーに国の選択を促す関数
 select_country() {
     debug_log "DEBUG" "Running select_country() function with arg='$1'"
-    
+
     # キャッシュファイルのパス定義
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_zone="${CACHE_DIR}/zone.ch"
@@ -121,7 +121,10 @@ select_country() {
     fi
 
     # 自動選択を試行
-    detect_and_set_location && return 0
+    detect_and_set_location
+    if [ $? -eq 0 ]; then
+        return 0
+    fi
 
     # システム情報の取得試行
     local system_country=""
@@ -129,7 +132,7 @@ select_country() {
         # 国名のみを抽出（ロケールなどの付加情報は除外）
         system_country=$(get_country_info | awk '{print $2}')
         debug_log "DEBUG" "Detected system country: $system_country"
-        
+
         # 検出された国を表示
         if [ -n "$system_country" ]; then
             # まず検出された国を表示
@@ -140,7 +143,7 @@ select_country() {
             if confirm "MSG_CONFIRM_ONLY_YN"; then
                 # country.dbから完全な情報を検索
                 local country_data=$(grep -i "^[^ ]* *$system_country" "$BASE_DIR/country.db")
-                
+
                 if [ -n "$country_data" ]; then
                     # 一時ファイルに書き込み
                     echo "$country_data" > "${CACHE_DIR}/country_tmp.ch"
@@ -149,14 +152,14 @@ select_country() {
                         debug_log "ERROR" "Failed to write country data"
                         return 1
                     }
-                    
+
                     # zone_write関数に処理を委譲
                     echo "$(echo "$country_data" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone_tmp.ch"
                     zone_write || {
                         debug_log "ERROR" "Failed to write timezone data"
                         return 1
                     }
-                    
+
                     debug_log "DEBUG" "Auto-detected country has been set: $system_country"
                     return 0
                 else
@@ -172,10 +175,10 @@ select_country() {
         if [ -z "$input_lang" ]; then
             local msg_enter=$(get_message "MSG_ENTER_COUNTRY")
             printf "%s\n" "$(color blue "$msg_enter")"
-            
+
             local msg_search=$(get_message "MSG_SEARCH_KEYWORD")
             printf "%s " "$(color cyan "$msg_search")"
-            
+
             read -r input_lang
             debug_log "DEBUG" "User entered search keyword: $input_lang"
         fi
@@ -208,32 +211,32 @@ select_country() {
         local result_count=$(echo "$full_results" | wc -l)
         if [ "$result_count" -eq 1 ]; then
             local country_name=$(echo "$full_results" | awk '{print $2, $3}')
-            
+
             # メッセージと国名を別々に色付け
             local msg=$(get_message "MSG_SINGLE_MATCH_FOUND")
             local msg_prefix=${msg%%\{0\}*}
             local msg_suffix=${msg#*\{0\}}
-            
+
             printf "%s%s%s\n" "$(color blue "$msg_prefix" "$country_name" "$msg_suffix")"
-            
+
             # 確認（confirm関数使用）
             if confirm "MSG_CONFIRM_ONLY_YN"; then
                 echo "$full_results" > "${CACHE_DIR}/country_tmp.ch"
-                
+
                 # country_write関数に処理を委譲
                 country_write || {
                     debug_log "ERROR" "Failed to write country data"
                     return 1
                 }
-                
+
                 # zone_write関数に処理を委譲
                 echo "$(echo "$full_results" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone_tmp.ch"
                 zone_write || {
                     debug_log "ERROR" "Failed to write timezone data"
                     return 1
                 }
-                
-                debug_log "DEBUG" "Country selected from single match: $country_name"
+
+                debug_log "INFO" "Country selected from single match: $country_name"
                 select_zone
                 return 0
             else
@@ -244,49 +247,49 @@ select_country() {
 
         # 複数結果の場合、リスト表示して選択
         debug_log "DEBUG" "Multiple results found for '$input_lang'. Displaying selection list."
-        
+
         # 表示用リスト作成
         echo "$full_results" | awk '{print NR, ":", $2, $3}'
-        
+
         # 番号入力要求
         local msg_select=$(get_message "MSG_SELECT_COUNTRY_NUMBER")
         printf "%s " "$(color cyan "$msg_select")"
-        
+
         local number
         read -r number
         debug_log "DEBUG" "User selected number: $number"
-        
+
         # 選択された番号の検証
         if echo "$number" | grep -q '^[0-9]\+$'; then
             if [ "$number" -gt 0 ] && [ "$number" -le "$result_count" ]; then
                 # 選択された行を取得
                 local selected_full=$(echo "$full_results" | sed -n "${number}p")
                 local selected_country=$(echo "$selected_full" | awk '{print $2, $3}')
-                
+
                 # 確認メッセージ表示
                 local msg_selected=$(get_message "MSG_SELECTED_COUNTRY")
                 local msg_prefix=${msg_selected%%\{0\}*}
                 local msg_suffix=${msg_selected#*\{0\}}
-                
+
                 printf "%s%s%s\n" "$(color blue "$msg_prefix" "$selected_country" "$msg_suffix")"
-                
+
                 if confirm "MSG_CONFIRM_ONLY_YN"; then
                     # 一時ファイルに書き込み
                     echo "$selected_full" > "${CACHE_DIR}/country_tmp.ch"
-                    
+
                     # country_write関数に処理を委譲
                     country_write || {
                         debug_log "ERROR" "Failed to write country data"
                         return 1
                     }
-                    
+
                     # zone_write関数に処理を委譲
                     echo "$(echo "$selected_full" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone_tmp.ch"
                     zone_write || {
                         debug_log "ERROR" "Failed to write timezone data"
                         return 1
                     }
-                    
+
                     debug_log "DEBUG" "Country selected from multiple choices: $selected_country"
                     select_zone
                     return 0
@@ -299,13 +302,13 @@ select_country() {
             local msg_invalid=$(get_message "MSG_INVALID_NUMBER")
             printf "%s\n" "$(color red "$msg_invalid")"
         fi
-        
+
         # 再検索するか確認
         if confirm "MSG_SEARCH_AGAIN"; then
             input_lang=""
         else
             # キャンセル処理
-            debug_log "DEBUG" "Country selection canceled by user"
+            debug_log "INFO" "Country selection canceled by user"
             return 1
         fi
     done
