@@ -228,22 +228,11 @@ print_help() {
 # color: ANSI エスケープシーケンスを使って色付きメッセージを出力する関数
 #########################################################################
 color() {
-    local color="$1"
+    local color_code
+    color_code=$(color_code_map "$1")
     shift
-    local text="$*"
-    
-    # 色コード選択
-    local code=""
-    case "$color" in
-        "red") code="\033[1;31m" ;;
-        "green") code="\033[1;32m" ;;
-        "blue") code="\033[1;34m" ;;
-        "white_underline") code="\033[4;37m" ;;
-        *) code="\033[0m" ;;
-    esac
-    
-    # %bでエスケープシーケンスを解釈
-    printf "%b%b%b" "$code" "$text" "\033[0m"
+    # %b でエスケープシーケンスを処理
+    printf "%b%s%b" "$color_code" "$*" "$(color_code_map "reset")"
 }
 
 #########################################################################
