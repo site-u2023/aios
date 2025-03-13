@@ -107,59 +107,62 @@ normalize_input() {
 
 # ユーザーに国の選択を促す関数
 select_country() {
-    debug_log "DEBUG" "select_country() 実行: 引数='$1'"
-
+    debug_log "DEBUG" "Running select_country() function with arg='$1'"
+    
+    # キャッシュファイルのパス定義
     local cache_country="${CACHE_DIR}/country.ch"
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
     local input_lang="$1"  # 引数として渡された言語コード
 
     # キャッシュがあればゾーン選択へスキップ
     if [ -f "$cache_country" ]; then
-        debug_log "DEBUG" "国キャッシュが存在。選択をスキップ"
+        debug_log "DEBUG" "Country cache exists. Skipping country selection."
         select_zone
         return
     fi
 
-    # キャッシュがない場合のみ自動検出を試みる
-    if [ "$AUTO_DETECT" != "no" ]; then
-        # システム情報の取得試行
-        local system_country=""
-        if type get_country_info >/dev/null 2>&1; then
-            # 国名のみを抽出（ロケールなどの付加情報は除外）
-            system_country=$(get_country_info | awk '{print $2}')
-            debug_log "DEBUG" "システムから検出された国: $system_country"
+    # システム情報の取得試行
+    local system_country=""
+    if type get_country_info >/dev/null 2>&1; then
+        # 国名のみを抽出（ロケールなどの付加情報は除外）
+        system_country=$(get_country_info | awk '{print $2}')
+        debug_log "DEBUG" "Detected system country: $system_country"
+        
+        # 検出された国を表示
+        if [ -n "$system_country" ]; then
+            local msg_detected=$(get_message "MSG_DETECTED_COUNTRY")
+            printf "%s %s\n" "$(color blue "$msg_detected")" "$(color white_underline "$system_country")"
             
-            # 検出された国を表示（簡潔に）
-            if [ -n "$system_country" ]; then
-                local msg_detected=$(get_message "MSG_DETECTED_COUNTRY")
-                printf "%s %s\n" "$(color blue "$msg_detected")" "$(color cyan "$system_country")"
+            # 検出された国を使用するか確認
+            if confirm "MSG_USE_DETECTED_COUNTRY"; then
+                # country.dbから完全な情報を検索
+                local country_data=$(grep -i "^[^ ]* *$system_country" "$BASE_DIR/country.db")
                 
-                # 検出された国を使用するか確認
-                if confirm "MSG_USE_DETECTED_COUNTRY"; then
-                    # country.dbから完全な情報を検索
-                    local country_data=$(grep -i "^[^ ]* *$system_country" "$BASE_DIR/country.db")
+                if [ -n "$country_data" ]; then
+                    # キャッシュに直接書き込み
+                    echo "$country_data" > "$cache_country"
                     
-                    if [ -n "$country_data" ]; then
-                        # キャッシュに書き出し
-                        echo "$country_data" > "$cache_country"
-                        country_write
-                        debug_log "INFO" "自動検出された国が設定されました: $system_country"
-                        select_zone
-                        return 0
-                    else
-                        debug_log "WARN" "検出された国に対応するエントリが見つかりません: $system_country"
-                    fi
+                    # 言語情報の抽出と保存
+                    echo "$(echo "$country_data" | awk '{print $4}')" > "${CACHE_DIR}/language.ch"
+                    echo "$(echo "$country_data" | awk '{print $4}')" > "${CACHE_DIR}/luci.ch"
+                    
+                    # タイムゾーン情報の抽出 ($6以降)
+                    echo "$(echo "$country_data" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone_tmp.ch"
+                    
+                    # 成功フラグ設定
+                    echo "1" > "${CACHE_DIR}/country_success_done"
+                    
+                    debug_log "INFO" "Auto-detected country has been set: $system_country"
+                    select_zone
+                    return 0
+                else
+                    debug_log "WARN" "No matching entry found for detected country: $system_country"
                 fi
-            fi
-        else
-            # 従来の自動検出を試行（互換性のため）
-            if detect_and_set_location; then
-                return 0
             fi
         fi
     fi
 
-    # 以下、元のコードと同じ（手動選択部分）
+    # 国の入力と検索ループ
     while true; do
         # 入力がまだない場合は入力を求める
         if [ -z "$input_lang" ]; then
@@ -170,7 +173,13 @@ select_country() {
             printf "%s " "$(color cyan "$msg_search")"
             
             read -r input_lang
-            debug_log "DEBUG" "ユーザーが入力した検索キーワード: $input_lang"
+            debug_log "DEBUG" "User entered search keyword: $input_lang"
+        fi
+
+        # 空の入力をチェック
+        if [ -z "$input_lang" ]; then
+            debug_log "WARN" "Empty search keyword"
+            continue
         fi
 
         # 入力の正規化と検索
@@ -183,7 +192,7 @@ select_country() {
         if [ -z "$full_results" ]; then
             local msg_not_found=$(get_message "MSG_COUNTRY_NOT_FOUND")
             # エスケープ処理付きのsedでプレースホルダーを置換
-            escaped_input=$(echo "$input_lang" | sed 's/[\/&]/\\&/g')
+            local escaped_input=$(echo "$input_lang" | sed 's/[\/&]/\\&/g')
             msg_not_found=$(echo "$msg_not_found" | sed "s/{0}/$escaped_input/g")
             printf "%s\n" "$(color red "$msg_not_found")"
             input_lang=""  # リセットして再入力
@@ -197,15 +206,23 @@ select_country() {
             
             # メッセージと国名を別々に色付け
             local msg=$(get_message "MSG_SINGLE_MATCH_FOUND")
-            msg_prefix=${msg%%\{0\}*}
-            msg_suffix=${msg#*\{0\}}
+            local msg_prefix=${msg%%\{0\}*}
+            local msg_suffix=${msg#*\{0\}}
             
-            printf "%s%s%s\n" "$(color blue "$msg_prefix")" "$(color blue_underline "$country_name")" "$(color blue "$msg_suffix")"
+            printf "%s%s%s\n" "$(color blue "$msg_prefix")" "$(color white_underline "$country_name")" "$(color blue "$msg_suffix")"
             
             # 確認（confirm関数使用）
             if confirm "MSG_CONFIRM_ONLY_YN"; then
                 echo "$full_results" > "$tmp_country"
-                country_write
+                
+                # 直接キャッシュ書き込み（country_write関数を使用しない場合）
+                echo "$full_results" > "$cache_country"
+                echo "$(echo "$full_results" | awk '{print $4}')" > "${CACHE_DIR}/language.ch"
+                echo "$(echo "$full_results" | awk '{print $4}')" > "${CACHE_DIR}/luci.ch"
+                echo "$(echo "$full_results" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone_tmp.ch"
+                echo "1" > "${CACHE_DIR}/country_success_done"
+                
+                debug_log "INFO" "Country selected from single match: $country_name"
                 select_zone
                 return 0
             else
@@ -214,11 +231,65 @@ select_country() {
             fi
         fi
 
-        # 複数結果の場合は以下同じ...（省略）
+        # 複数結果の場合、リスト表示して選択
+        debug_log "DEBUG" "Multiple results found for '$input_lang'. Displaying selection list."
+        
+        # 表示用リスト作成
+        echo "$full_results" | awk '{print NR, ":", $2, $3}'
+        
+        # 番号入力要求
+        local msg_select=$(get_message "MSG_SELECT_COUNTRY_NUMBER")
+        printf "%s " "$(color cyan "$msg_select")"
+        
+        local number
+        read -r number
+        debug_log "DEBUG" "User selected number: $number"
+        
+        # 選択された番号の検証
+        if echo "$number" | grep -q '^[0-9]\+$'; then
+            if [ "$number" -gt 0 ] && [ "$number" -le "$result_count" ]; then
+                # 選択された行を取得
+                local selected_full=$(echo "$full_results" | sed -n "${number}p")
+                local selected_country=$(echo "$selected_full" | awk '{print $2, $3}')
+                
+                # 確認メッセージ表示
+                local msg_selected=$(get_message "MSG_SELECTED_COUNTRY")
+                local msg_prefix=${msg_selected%%\{0\}*}
+                local msg_suffix=${msg_selected#*\{0\}}
+                
+                printf "%s%s%s\n" "$(color blue "$msg_prefix")" "$(color white_underline "$selected_country")" "$(color blue "$msg_suffix")"
+                
+                if confirm "MSG_CONFIRM_ONLY_YN"; then
+                    # 直接キャッシュに書き込み
+                    echo "$selected_full" > "$cache_country"
+                    echo "$(echo "$selected_full" | awk '{print $4}')" > "${CACHE_DIR}/language.ch"
+                    echo "$(echo "$selected_full" | awk '{print $4}')" > "${CACHE_DIR}/luci.ch"
+                    echo "$(echo "$selected_full" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone_tmp.ch"
+                    echo "1" > "${CACHE_DIR}/country_success_done"
+                    
+                    debug_log "INFO" "Country selected from multiple choices: $selected_country"
+                    select_zone
+                    return 0
+                fi
+            else
+                local msg_invalid=$(get_message "MSG_INVALID_NUMBER")
+                printf "%s\n" "$(color red "$msg_invalid")"
+            fi
+        else
+            local msg_invalid=$(get_message "MSG_INVALID_NUMBER")
+            printf "%s\n" "$(color red "$msg_invalid")"
+        fi
+        
+        # 再検索するか確認
+        if confirm "MSG_SEARCH_AGAIN"; then
+            input_lang=""
+        else
+            # キャンセル処理
+            debug_log "INFO" "Country selection canceled by user"
+            return 1
+        fi
     done
 }
-
-#!/bin/sh
 
 # システムの地域情報を検出し設定する関数
 detect_and_set_location() {
@@ -365,7 +436,7 @@ select_list() {
 
 # タイムゾーンの選択を処理する関数
 select_zone() {
-    debug_log "DEBUG" "select_zone() 関数を実行開始"
+    debug_log "DEBUG" "Running select_zone() function"
     
     # キャッシュファイルのパス定義
     local cache_zone="${CACHE_DIR}/zone.ch"
@@ -374,132 +445,170 @@ select_zone() {
     
     # すべてのキャッシュファイルが存在する場合はスキップ
     if [ -f "$cache_zone" ] && [ -f "$cache_zonename" ] && [ -f "$cache_timezone" ]; then
-        debug_log "DEBUG" "タイムゾーン情報は既にキャッシュされています"
+        debug_log "DEBUG" "Timezone info already cached. Skipping selection."
         return 0
     fi
     
-    # システムからのタイムゾーン情報取得を試行
+    # country.dbからタイムゾーン情報を取得
+    local tmp_zone="${CACHE_DIR}/zone_tmp.ch"
+    
+    # zone_tmp.chファイルが存在する場合はそれを使用
+    if [ -f "$tmp_zone" ]; then
+        debug_log "DEBUG" "Using timezone data from existing temporary file"
+        local zone_data=$(cat "$tmp_zone")
+        
+        # データが空でないことを確認
+        if [ -z "$zone_data" ]; then
+            debug_log "WARN" "Empty timezone data in temporary file"
+        else
+            # フォーマットの確認（カンマを含むかどうか）
+            if echo "$zone_data" | grep -q ","; then
+                # カンマで区切られているデータ
+                local zonename=$(echo "$zone_data" | cut -d ',' -f 1)
+                local timezone=$(echo "$zone_data" | cut -d ',' -f 2)
+                
+                debug_log "INFO" "Timezone data parsed: zonename='$zonename', timezone='$timezone'"
+                
+                # キャッシュに保存
+                echo "$zonename" > "$cache_zonename"
+                echo "$timezone" > "$cache_timezone"
+                echo "$zone_data" > "$cache_zone"
+                
+                printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+                debug_log "INFO" "Timezone has been set: $zone_data"
+                return 0
+            fi
+        fi
+    fi
+    
+    # システムからのタイムゾーン情報取得
     local system_timezone=""
     local system_zonename=""
     
-    # 新関数を使用してタイムゾーン情報を取得
     if type get_timezone_info >/dev/null 2>&1; then
         system_timezone=$(get_timezone_info)
-        debug_log "DEBUG" "システムから取得したタイムゾーン: $system_timezone"
+        debug_log "DEBUG" "System timezone info retrieved: $system_timezone"
     fi
     
     if type get_zonename_info >/dev/null 2>&1; then
         system_zonename=$(get_zonename_info)
-        debug_log "DEBUG" "システムから取得したゾーン名: $system_zonename"
+        debug_log "DEBUG" "System zonename info retrieved: $system_zonename"
     fi
     
-    # 自動検出したタイムゾーン情報がある場合
+    # タイムゾーン情報がある場合は表示
     if [ -n "$system_timezone" ] && [ -n "$system_zonename" ]; then
         local detected_tz="$system_zonename,$system_timezone"
         
         # 検出結果を表示
         local msg_detected=$(get_message "MSG_DETECTED_TIMEZONE")
-        printf "%s %s\n" "$(color blue "$msg_detected")" "$(color cyan "$detected_tz")"
+        printf "%s %s\n" "$(color blue "$msg_detected")" "$(color white_underline "$detected_tz")"
         
         # 確認を求める
         if confirm "MSG_CONFIRM_ONLY_YN"; then
-            # キャッシュファイルにタイムゾーン情報を保存
+            # キャッシュファイルに保存
             echo "$system_zonename" > "$cache_zonename"
             echo "$system_timezone" > "$cache_timezone"
             echo "$detected_tz" > "$cache_zone"
             
             # 成功メッセージ
             printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
-            debug_log "INFO" "タイムゾーンが自動設定されました: $detected_tz"
+            debug_log "INFO" "Timezone has been set: $detected_tz"
             return 0
         fi
     fi
     
-    # 手動選択のための主要なタイムゾーンリスト（一覧が長すぎるため、主要なもののみ表示）
-    local type="zone"
-    local tmp_zone="${CACHE_DIR}/zone_tmp.ch"
+    # country.dbからタイムゾーンリストを抽出
+    debug_log "DEBUG" "Extracting timezone list from country.db"
+    local country_db="${BASE_DIR}/country.db"
     local zone_list=""
     
-    # よく使われる主要なタイムゾーンを用意
-    # 地域ごとのよく使われるタイムゾーンを優先表示
-    local common_zones="America/New_York America/Chicago America/Denver America/Los_Angeles America/Anchorage America/Honolulu Asia/Tokyo Asia/Shanghai Asia/Singapore Asia/Kolkata Europe/London Europe/Paris Europe/Berlin Australia/Sydney Pacific/Auckland"
-    
-    # available_timezones関数から全リストを取得
-    local all_timezones=""
-    if type get_available_timezones >/dev/null 2>&1; then
-        all_timezones=$(get_available_timezones)
-        debug_log "DEBUG" "利用可能なタイムゾーンを取得しました: $(echo "$all_timezones" | wc -l)件"
+    if [ -f "$country_db" ]; then
+        # country.dbからすべてのユニークなタイムゾーンを抽出 (最終フィールドからカンマ区切りで)
+        zone_list=$(awk '{print $NF}' "$country_db" | sort -u)
+        debug_log "DEBUG" "Extracted timezone list from country.db"
     else
-        # 関数が利用できない場合はフォールバックリストを使用
-        debug_log "WARN" "get_available_timezones関数が利用できません。フォールバックリストを使用します"
-        all_timezones="$common_zones"
+        debug_log "ERROR" "country.db file not found at: $country_db"
+        zone_list="Asia/Tokyo,JST-9"  # デフォルト値
     fi
     
-    # 利用可能なタイムゾーンから表示用リストを生成
-    # 共通の主要なタイムゾーンを先頭に表示し、その後に全タイムゾーンを表示
-    for zone in $common_zones; do
-        # タイムゾーン情報を取得 (例: JST-9)
-        local tz_info=""
-        if [ -f "/usr/share/zoneinfo/$zone" ]; then
-            # 実際のタイムゾーン情報を取得するには、TZ環境変数を使用
-            tz_info=$(TZ="$zone" date +"%Z%z" | sed 's/+/-/; s/00$//')
-            zone_list="${zone_list}${zone} (${tz_info})\n"
+    # リスト表示
+    debug_log "DEBUG" "Displaying timezone selection list"
+    local msg_select=$(get_message "MSG_SELECT_TIMEZONE")
+    printf "%s\n" "$(color blue "$msg_select")"
+    
+    # 番号付きでリスト表示
+    local line_num=0
+    echo "$zone_list" | while IFS= read -r line; do
+        if [ -n "$line" ]; then
+            line_num=$((line_num + 1))
+            printf "%3d: %s\n" "$line_num" "$line"
         fi
     done
     
-    # 重複を除去し、一時ファイルに保存
-    echo -e "$zone_list" | sort -u > "$tmp_zone"
+    # 番号入力要求
+    local msg_enter=$(get_message "MSG_ENTER_NUMBER")
+    printf "%s " "$(color cyan "$msg_enter")"
     
-    # リスト選択実行
-    select_list "$(cat "$tmp_zone")" "$tmp_zone" "$type"
+    # 選択番号の入力
+    local selected_number
+    read -r selected_number
+    debug_log "DEBUG" "User selected timezone number: $selected_number"
     
-    # 以下は既存の処理と同じ...
-    local selected_number=$(cat "$tmp_zone")
+    # 選択結果の処理
     if [ -z "$selected_number" ] || ! echo "$selected_number" | grep -q '^[0-9]\+$'; then
-        debug_log "WARN" "タイムゾーン選択が無効または取消されました"
+        debug_log "WARN" "Invalid timezone selection or canceled"
         return 1
     fi
     
-# 選択されたタイムゾーンの取得と解析
-local selected_zone=$(sed -n "${selected_number}p" "$tmp_zone")
-
-# タイムゾーン名とタイムゾーン情報を適切に分離
-if echo "$selected_zone" | grep -q "("; then
-    # 括弧がある場合（例: "Asia/Tokyo (JST-9)"）
-    local zonename=$(echo "$selected_zone" | sed 's/ *(.*//' | sed 's/ *$//')
-    local timezone=$(echo "$selected_zone" | sed -n 's/.*(\(.*\)).*/\1/p')
-else
-    # 括弧がない場合（例：単なる "Asia/Tokyo"）
-    local zonename="$selected_zone"
-    # デフォルトのタイムゾーン情報を設定
-    local timezone=""
-    if [ -f "/usr/share/zoneinfo/$zonename" ]; then
-        timezone=$(TZ="$zonename" date +"%Z%z" 2>/dev/null | sed 's/+/-/; s/00$//')
-    fi
-fi
-
-    # 値の確認と補正
-    if [ -z "$zonename" ]; then
-        debug_log "ERROR" "タイムゾーン名の解析に失敗しました: $selected_zone"
+    # 選択されたタイムゾーンの取得
+    local selected_zone=$(echo "$zone_list" | sed -n "${selected_number}p")
+    debug_log "DEBUG" "Selected timezone: $selected_zone"
+    
+    # 選択されたゾーンが空でないことを確認
+    if [ -z "$selected_zone" ]; then
+        debug_log "ERROR" "Empty timezone selection, invalid number: $selected_number"
+        local msg_invalid=$(get_message "MSG_INVALID_NUMBER")
+        printf "%s\n" "$(color red "$msg_invalid")"
         return 1
     fi
-
-    # タイムゾーン情報が空の場合は代替処理
-    if [ -z "$timezone" ]; then
-        debug_log "WARN" "タイムゾーン情報を取得できませんでした: $zonename"
-        # デフォルト値を設定
-        timezone="GMT0"
+    
+    # 選択されたゾーンの解析
+    local zonename=""
+    local timezone=""
+    
+    if echo "$selected_zone" | grep -q ","; then
+        # カンマで区切られているデータ
+        zonename=$(echo "$selected_zone" | cut -d ',' -f 1)
+        timezone=$(echo "$selected_zone" | cut -d ',' -f 2)
+    else
+        # カンマがない場合はゾーン名としてそのまま使用
+        zonename="$selected_zone"
+        timezone="GMT0"  # デフォルト値
     fi
-
-    # キャッシュファイルに保存
-    echo "$zonename" > "$cache_zonename"
-    echo "$timezone" > "$cache_timezone"
-    echo "$zonename,$timezone" > "$cache_zone"
-
-    printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
-    debug_log "INFO" "タイムゾーン選択が完了しました: $zonename,$timezone"
-
-    return 0
+    
+    # 確認メッセージ表示
+    local selected_tz="$zonename,$timezone"
+    local msg_confirm=$(get_message "MSG_CONFIRM_TIMEZONE")
+    local msg_prefix=${msg_confirm%%\{0\}*}
+    local msg_suffix=${msg_confirm#*\{0\}}
+    
+    printf "%s%s%s\n" "$(color blue "$msg_prefix")" "$(color white_underline "$selected_tz")" "$(color blue "$msg_suffix")"
+    
+    if confirm "MSG_CONFIRM_ONLY_YN"; then
+        # キャッシュファイルに保存
+        echo "$zonename" > "$cache_zonename"
+        echo "$timezone" > "$cache_timezone"
+        echo "$selected_tz" > "$cache_zone"
+        
+        printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+        debug_log "INFO" "Timezone selection completed: $selected_tz"
+        return 0
+    else
+        # 再選択
+        debug_log "INFO" "User canceled timezone selection, restarting"
+        select_zone
+        return $?
+    fi
 }
 
 # 国と言語情報をキャッシュに書き込む関数
