@@ -313,7 +313,7 @@ detect_and_set_location() {
     
     # ゾーン名があれば表示、なければタイムゾーンのみ
     if [ -n "$system_zonename" ]; then
-        printf "%s %s,%s\n\n" "$(color blue "$(get_message "MSG_DETECTED_ZONE")")" "$(color blue "$system_zonename")" "$(color blue "$system_timezone")"
+        printf "%s %s%s%s\n\n" "$(color blue "$(get_message "MSG_DETECTED_ZONE")")" "$(color blue "$system_zonename")" "$(color blue ",")" "$(color blue "$system_timezone")"
     else
         printf "%s %s\n\n" "$(color blue "$(get_message "MSG_DETECTED_ZONE")")" "$(color blue "$system_timezone")"
     fi
