@@ -501,7 +501,7 @@ select_zone() {
     if [ -z "$zone_list" ]; then
         debug_log "ERROR" "No timezone information found for selected country"
         return 1
-    fi  # ここの閉じ括弧が「}」になっていましたが「fi」に修正
+    fi
     debug_log "DEBUG" "Extracted timezone list for selected country"
     
     # タイムゾーンリストの表示
@@ -678,71 +678,6 @@ zone_write() {
     else
         debug_log "ERROR" "No timezone data to write to cache"
         printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
-        return 1
-    fi
-    
-    return 0
-}
-
-# タイムゾーンの設定を実行する関数
-timezone_setup() {
-    debug_log "DEBUG" "Entering timezone_setup()"
-    
-    local cache_zone="${CACHE_DIR}/zone.ch"
-    
-    # タイムゾーンキャッシュが存在するか確認
-    if [ ! -f "$cache_zone" ]; then
-        debug_log "ERROR" "Zone cache not found. Running select_zone first."
-        printf "%s\n" "$(color yellow "$(get_message "MSG_TIMEZONE_NOT_FOUND" "タイムゾーンが見つかりません")")"
-        select_zone
-        if [ ! -f "$cache_zone" ]; then
-            printf "%s\n" "$(color red "$(get_message "ERR_FILE_NOT_FOUND" | sed "s/{file}/$cache_zone/g")")"
-            return 1
-        fi
-    fi
-    
-    # タイムゾーンを取得
-    local timezone=$(cat "$cache_zone")
-    
-    # 動的システム関数を使用して設定
-    if type set_system_timezone >/dev/null 2>&1; then
-        debug_log "DEBUG" "Setting timezone using set_system_timezone(): $timezone"
-        if set_system_timezone "$timezone"; then
-            local msg_set=$(get_message "MSG_TIMEZONE_SET")
-            msg_set=$(echo "$msg_set" | sed "s/{timezone}/$timezone/g")
-            printf "%s\n" "$(color green "$msg_set")"
-            return 0
-        else
-            debug_log "WARN" "Failed to set timezone using set_system_timezone(). Falling back to traditional method."
-            printf "%s\n" "$(color yellow "$(get_message "WARN_FALLBACK_METHOD" "代替方法で設定を試みます")")"
-        fi
-    fi
-    
-    # 伝統的な方法でタイムゾーンを設定
-    if [ -n "$timezone" ]; then
-        debug_log "DEBUG" "Setting timezone using traditional method: $timezone"
-        
-        # OpenWrt用タイムゾーン設定（UCI経由）
-        if command -v uci >/dev/null 2>&1; then
-            uci set system.@system[0].zonename="$timezone"
-            uci set system.@system[0].timezone="$timezone"
-            uci commit system
-            /etc/init.d/system reload
-            
-        # 汎用Unix系システム用タイムゾーン設定
-        elif [ -d "/usr/share/zoneinfo" ]; then
-            ln -sf "/usr/share/zoneinfo/$timezone" /etc/localtime
-            echo "$timezone" > /etc/timezone
-        else
-            printf "%s\n" "$(color red "$(get_message "ERR_TIMEZONE_NOT_SUPPORTED")")"
-            return 1
-        fi
-        
-        local msg_set=$(get_message "MSG_TIMEZONE_SET")
-        msg_set=$(echo "$msg_set" | sed "s/{timezone}/$timezone/g")
-        printf "%s\n" "$(color green "$msg_set")"
-    else
-        printf "%s\n" "$(color red "$(get_message "ERR_TIMEZONE_EMPTY")")"
         return 1
     fi
     
