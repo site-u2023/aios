@@ -686,6 +686,9 @@ country_write() {
         
         debug_log "DEBUG" "Country information written to cache"
         debug_log "DEBUG" "Selected country: $(echo "$country_data" | awk '{print $2, $3}')"
+        
+        # 言語設定の正規化を実行
+        normalize_language
     else
         debug_log "ERROR" "No country data to write to cache"
         printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
