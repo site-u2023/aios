@@ -274,7 +274,7 @@ select_country() {
     done
 }
 
-# システムの地域情報を検出し設定する関数（修正版）
+# システムの地域情報を検出し設定する関数
 detect_and_set_location() {
     debug_log "DEBUG" "Running detect_and_set_location() function"
     
@@ -289,18 +289,21 @@ detect_and_set_location() {
         return 1
     fi
     
-    # 国情報の取得（直接関数の出力を使用）
+    # 国情報の取得
     system_country=$(. "$BASE_DIR/dynamic-system-info.sh" && get_country_info)
+    debug_log "DEBUG" "Detected country info: ${system_country}"
     
     # タイムゾーン情報の取得
     system_timezone=$(. "$BASE_DIR/dynamic-system-info.sh" && get_timezone_info)
+    debug_log "DEBUG" "Detected timezone info: ${system_timezone}"
     
     # ゾーン名の取得
     system_zonename=$(. "$BASE_DIR/dynamic-system-info.sh" && get_zonename_info)
+    debug_log "DEBUG" "Detected zone name info: ${system_zonename}"
     
     # 検出できなければ通常フローへ
     if [ -z "$system_country" ] || [ -z "$system_timezone" ]; then
-        debug_log "DEBUG" "Could not detect system country or timezone"
+        debug_log "WARN" "Could not detect system country or timezone"
         return 1
     fi
     
@@ -320,15 +323,62 @@ detect_and_set_location() {
     if confirm "MSG_CONFIRM_ONLY_YN"; then
         # country.dbから完全な国情報を検索
         local country_data=$(grep -i "^[^ ]* *$system_country" "$BASE_DIR/country.db")
+        debug_log "DEBUG" "Found country data: ${country_data}"
         
         if [ -n "$country_data" ]; then
-            # 以下は元のコードと同じ（設定の適用処理）
-            # ...（省略）...
+            # 国情報を一時ファイルに書き込み
+            debug_log "DEBUG" "Writing country data to temporary file"
+            echo "$country_data" > "${CACHE_DIR}/country_tmp.ch"
             
-            debug_log "DEBUG" "Auto-detected settings have been applied successfully"
-            return 0
+            # キャッシュディレクトリと一時ファイルの存在確認
+            if [ ! -f "${CACHE_DIR}/country_tmp.ch" ]; then
+                debug_log "ERROR" "Failed to create country_tmp.ch"
+                return 1
+            fi
+            
+            # country_write関数に処理を委譲
+            debug_log "DEBUG" "Calling country_write()"
+            country_write
+            
+            # 結果を確認
+            if [ $? -ne 0 ]; then
+                debug_log "ERROR" "country_write() failed"
+                return 1
+            fi
+            
+            # タイムゾーン情報の抽出 ($6以降) と書き込み
+            debug_log "DEBUG" "Extracting timezone data"
+            local timezone_data=$(echo "$country_data" | cut -d ' ' -f 6-)
+            debug_log "DEBUG" "Timezone data: ${timezone_data}"
+            
+            echo "$timezone_data" > "${CACHE_DIR}/zone_tmp.ch"
+            
+            # キャッシュファイルの存在確認
+            if [ ! -f "${CACHE_DIR}/zone_tmp.ch" ]; then
+                debug_log "ERROR" "Failed to create zone_tmp.ch"
+                return 1
+            fi
+            
+            # zone_write関数に処理を委譲
+            debug_log "DEBUG" "Calling zone_write()"
+            zone_write
+            
+            # 結果を確認
+            if [ $? -ne 0 ]; then
+                debug_log "ERROR" "zone_write() failed"
+                return 1
+            fi
+            
+            # キャッシュファイルの存在を確認
+            if [ -f "${CACHE_DIR}/country.ch" ] && [ -f "${CACHE_DIR}/zone.ch" ]; then
+                debug_log "DEBUG" "Auto-detected settings have been applied successfully"
+                return 0
+            else
+                debug_log "ERROR" "Cache files not created properly"
+                return 1
+            fi
         else
-            debug_log "DEBUG" "No matching entry found for detected country: $system_country"
+            debug_log "WARN" "No matching entry found for detected country: $system_country"
             return 1
         fi
     else
