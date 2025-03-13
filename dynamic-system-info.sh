@@ -68,18 +68,14 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 # Returns: Architecture string (e.g., "mips_24kc", "arm_cortex-a7", "x86_64")
 get_device_architecture() {
     local arch=""
+    local architecture=""
     
     # Try to get detailed architecture from OpenWrt
     if [ -f "/etc/openwrt_release" ]; then
+        target=$(grep "DISTRIB_TARGET" /etc/openwrt_release | cut -d "'" -f 2)
         arch=$(grep "DISTRIB_ARCH" /etc/openwrt_release | cut -d "'" -f 2)
     fi
-    
-    # Fallback to basic architecture if specific arch not found
-    if [ -z "$arch" ]; then
-        arch=$(uname -m)
-    fi
-    
-    echo "$arch"
+    echo "$target" "$arch"
 }
 
 # 📌 Get OS type and version
@@ -91,16 +87,8 @@ get_os_info() {
     # Check for OpenWrt
     if [ -f "/etc/openwrt_release" ]; then
         os_type="OpenWrt"
+        os_version=$(grep "DISTRIB_ID" /etc/openwrt_release | cut -d "'" -f 2)
         os_version=$(grep "DISTRIB_RELEASE" /etc/openwrt_release | cut -d "'" -f 2)
-    # Check for Alpine Linux
-    elif [ -f "/etc/alpine-release" ]; then
-        os_type="Alpine"
-        os_version=$(cat /etc/alpine-release)
-    # Generic Linux fallback
-    else
-        os_type=$(uname -s)
-        os_version=$(uname -r)
-    fi
     
     echo "${os_type} ${os_version}"
 }
@@ -161,56 +149,27 @@ get_available_language_packages() {
 # タイムゾーン情報を取得（例: JST-9）
 get_timezone_info() {
     local timezone=""
-    
-    # /etc/TZファイルから取得（OpenWrtやAlpineで一般的）
-    if [ -f "/etc/TZ" ]; then
-        timezone=$(cat /etc/TZ)
+
+    # 1. UCI（OpenWrt）設定から直接取得
+    if command -v uci >/dev/null 2>&1; then
+        timezone="$(uci get system.@system[0].timezone 2>/dev/null)"
     fi
-    
-    # 取得できない場合はdateコマンドを使う
-    if [ -z "$timezone" ]; then
-        timezone=$(date +%Z%z)
-    fi
-    
+
     echo "$timezone"
 }
 
 # ゾーン名を取得（例: Asia/Tokyo）
 get_zonename_info() {
     local zonename=""
-    
+
     # UCI（OpenWrt）から取得
     if command -v uci >/dev/null 2>&1; then
-        zonename=$(uci get system.@system[0].timezone 2>/dev/null)
+        zonename="$(uci get system.@system[0].timezone 2>/dev/null)"
     fi
-    
-    # /etc/timezoneから取得
-    if [ -z "$zonename" ] && [ -f "/etc/timezone" ]; then
-        zonename=$(cat /etc/timezone)
-    fi
-    
-    # シンボリックリンクから取得
-    if [ -z "$zonename" ] && [ -L "/etc/localtime" ]; then
-        zonename=$(readlink -f /etc/localtime | sed 's|.*/zoneinfo/||')
-    fi
-    
-    # ゾーン名が取得できない場合はタイムゾーンから推測
-    if [ -z "$zonename" ]; then
-        local tz=$(get_timezone_info)
-        case "$tz" in
-            JST-9)
-                zonename="Asia/Tokyo"
-                ;;
-            # 必要に応じて他のケースを追加
-            *)
-                # 不明な場合は空を返す
-                zonename=""
-                ;;
-        esac
-    fi
-    
+
     echo "$zonename"
 }
+
 
 # 📌 Get available timezones
 # Returns: List of available timezone names from the system
