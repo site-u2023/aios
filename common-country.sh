@@ -600,9 +600,6 @@ country_write() {
         # 4. zone_tmp.ch - タイムゾーン情報 ($6以降)
         echo "$(echo "$country_data" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i; print ""}')" > "${CACHE_DIR}/zone_tmp.ch"
         
-        # 成功フラグの設定
-        echo "1" > "${CACHE_DIR}/country_success_done"
-        
         debug_log "DEBUG" "Country information written to cache"
         debug_log "DEBUG" "Selected country: $(echo "$country_data" | awk '{print $2, $3}')"
         
@@ -618,45 +615,53 @@ country_write() {
 }
 
 normalize_language() {
+    # 必要なパス定義
     local message_db="${BASE_DIR}/messages.db"
     local language_cache="${CACHE_DIR}/language.ch"
     local message_cache="${CACHE_DIR}/message.ch"
     local selected_language=""
-    local flag_file="${CACHE_DIR}/country_success_done"
 
-    debug_log "DEBUG" "language_cache=${language_cache}"
-    
-    if [ -f "$flag_file" ]; then
-        debug_log "DEBUG" "normalize_language() already done. Skipping repeated success message."
+    # メッセージキャッシュが既に存在するか確認
+    if [ -f "$message_cache" ]; then
+        debug_log "DEBUG" "message.ch already exists. Using existing language settings."
         return 0
     fi
 
+    # デバッグログの出力
+    debug_log "DEBUG" "Normalizing language settings"
+    debug_log "DEBUG" "message_db=${message_db}"
+    debug_log "DEBUG" "language_cache=${language_cache}"
+    debug_log "DEBUG" "message_cache=${message_cache}"
+
+    # language.chファイルの存在確認
     if [ ! -f "$language_cache" ]; then
-        debug_log "ERROR" "language.ch not found. Cannot determine language."
+        debug_log "DEBUG" "language.ch not found. Cannot determine language."
         return 1
     fi
 
     # language.chから直接言語コードを読み込み
     selected_language=$(cat "$language_cache")
-    debug_log "DEBUG" "Language code from language.ch: $selected_language"
+    debug_log "DEBUG" "Selected language code: ${selected_language}"
 
     local supported_languages
     supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
-    debug_log "DEBUG" "Supported languages: $supported_languages"
+    debug_log "DEBUG" "Available supported languages: ${supported_languages}"
 
     if echo "$supported_languages" | grep -qw "$selected_language"; then
-        debug_log "DEBUG" "Using message database language: $selected_language"
+        debug_log "DEBUG" "Language ${selected_language} is supported"
         echo "$selected_language" > "$message_cache"
         ACTIVE_LANGUAGE="$selected_language"
     else
-        debug_log "DEBUG" "Language '$selected_language' not found in messages.db. Using 'US' as fallback."
+        debug_log "DEBUG" "Language ${selected_language} not supported, falling back to US"
         echo "US" > "$message_cache"
         ACTIVE_LANGUAGE="US"
     fi
 
-    debug_log "DEBUG" "Final system message language -> $ACTIVE_LANGUAGE"
+    debug_log "DEBUG" "Final active language: ${ACTIVE_LANGUAGE}"
     echo "$(get_message "MSG_COUNTRY_SUCCESS")"
-    touch "$flag_file"
+    
+    # フラグファイルの確認と作成
+    [ -f "$flag_file" ] || touch "$flag_file"
 }
 
 # タイムゾーン情報をキャッシュに書き込む関数
@@ -714,9 +719,6 @@ zone_write() {
         echo "$zonename" > "${CACHE_DIR}/zonename.ch"
         echo "$timezone" > "${CACHE_DIR}/timezone.ch"
         echo "$selected_timezone" > "${CACHE_DIR}/zone.ch"
-        
-        # 成功フラグの設定
-        echo "1" > "${CACHE_DIR}/timezone_success_done"
         
         debug_log "DEBUG" "Timezone information written to cache"
         debug_log "DEBUG" "Selected timezone: $selected_timezone"
