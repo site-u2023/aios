@@ -408,7 +408,7 @@ select_zone() {
     
     # システムから現在のタイムゾーンを取得
     local current_tz=""
-    if type get_current_timezone >/dev/null 2>&1; then
+    if type get_zonename_info >/dev/null 2>&1; then
         current_tz=$(get_zonename_info)
         debug_log "DEBUG" "Current system timezone: $current_tz"
     fi
