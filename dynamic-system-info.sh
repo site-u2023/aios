@@ -359,7 +359,7 @@ get_country_info() {
     fi
     
     # Get current timezone
-    current_timezone=$(get_current_timezone)
+    current_timezone=$(get_timezone_info)
     
     # If country.db exists, try to match the information
     if [ -f "$country_db" ] && [ -n "$current_lang" ]; then
@@ -422,7 +422,7 @@ EOF
 
 LOCALIZATION:
 ------------
-Current Timezone: $(get_current_timezone)
+Current Timezone: $(get_timezone_info)
 Available Language Packages: $(get_available_language_packages)
 EOF
 
@@ -547,7 +547,7 @@ debug_info() {
         echo "Architecture: $(get_device_architecture)"
         echo "OS: $(get_os_info)"
         echo "Package Manager: $(get_package_manager)"
-        echo "Current Timezone: $(get_current_timezone)"
+        echo "Current Timezone: $(get_timezone_info)"
         echo "Available Languages: $(get_available_language_packages)"
         echo "==========================="
     fi
