@@ -89,6 +89,7 @@ get_os_info() {
         os_type="OpenWrt"
         os_version=$(grep "DISTRIB_ID" /etc/openwrt_release | cut -d "'" -f 2)
         os_version=$(grep "DISTRIB_RELEASE" /etc/openwrt_release | cut -d "'" -f 2)
+    fi
     
     echo "${os_type} ${os_version}"
 }
