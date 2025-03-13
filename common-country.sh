@@ -460,19 +460,45 @@ select_zone() {
         return 1
     fi
     
-    # 選択されたタイムゾーンの取得と解析
-    local selected_zone=$(cat "$tmp_zone" | sed -n "${selected_number}p")
-    local zonename=$(echo "$selected_zone" | awk -F'[()]' '{print $1}' | sed 's/ *$//')
-    local timezone=$(echo "$selected_zone" | awk -F'[()]' '{print $2}')
-    
+# 選択されたタイムゾーンの取得と解析
+local selected_zone=$(sed -n "${selected_number}p" "$tmp_zone")
+
+# タイムゾーン名とタイムゾーン情報を適切に分離
+if echo "$selected_zone" | grep -q "("; then
+    # 括弧がある場合（例: "Asia/Tokyo (JST-9)"）
+    local zonename=$(echo "$selected_zone" | sed 's/ *(.*//' | sed 's/ *$//')
+    local timezone=$(echo "$selected_zone" | sed -n 's/.*(\(.*\)).*/\1/p')
+else
+    # 括弧がない場合（例：単なる "Asia/Tokyo"）
+    local zonename="$selected_zone"
+    # デフォルトのタイムゾーン情報を設定
+    local timezone=""
+    if [ -f "/usr/share/zoneinfo/$zonename" ]; then
+        timezone=$(TZ="$zonename" date +"%Z%z" 2>/dev/null | sed 's/+/-/; s/00$//')
+    fi
+fi
+
+    # 値の確認と補正
+    if [ -z "$zonename" ]; then
+        debug_log "ERROR" "タイムゾーン名の解析に失敗しました: $selected_zone"
+        return 1
+    fi
+
+    # タイムゾーン情報が空の場合は代替処理
+    if [ -z "$timezone" ]; then
+        debug_log "WARN" "タイムゾーン情報を取得できませんでした: $zonename"
+        # デフォルト値を設定
+        timezone="GMT0"
+    fi
+
     # キャッシュファイルに保存
     echo "$zonename" > "$cache_zonename"
     echo "$timezone" > "$cache_timezone"
     echo "$zonename,$timezone" > "$cache_zone"
-    
+
     printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
     debug_log "INFO" "タイムゾーン選択が完了しました: $zonename,$timezone"
-    
+
     return 0
 }
 
