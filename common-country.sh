@@ -415,48 +415,53 @@ select_zone() {
         fi
     fi
     
-    # 手動選択処理（システム情報がない場合や自動設定を拒否した場合）
+    # 手動選択のための主要なタイムゾーンリスト（一覧が長すぎるため、主要なもののみ表示）
     local type="zone"
+    local tmp_zone="${CACHE_DIR}/zone_tmp.ch"
     local zone_list=""
     
-    # タイムゾーンリストの作成
-    zone_list=$(cat <<EOF
-America/New_York (EST-5EDT-4)
-America/Chicago (CST-6CDT-5)
-America/Denver (MST-7MDT-6)
-America/Los_Angeles (PST-8PDT-7)
-America/Anchorage (AKST-9AKDT-8)
-America/Honolulu (HST-10)
-Asia/Tokyo (JST-9)
-Asia/Shanghai (CST-8)
-Asia/Singapore (SGT-8)
-Asia/Kolkata (IST-5:30)
-Europe/London (GMT0BST-1)
-Europe/Paris (CET-1CEST-2)
-Europe/Berlin (CET-1CEST-2)
-Australia/Sydney (AEST-10AEDT-11)
-Pacific/Auckland (NZST-12NZDT-13)
-EOF
-)
+    # よく使われる主要なタイムゾーンを用意
+    # 地域ごとのよく使われるタイムゾーンを優先表示
+    local common_zones="America/New_York America/Chicago America/Denver America/Los_Angeles America/Anchorage America/Honolulu Asia/Tokyo Asia/Shanghai Asia/Singapore Asia/Kolkata Europe/London Europe/Paris Europe/Berlin Australia/Sydney Pacific/Auckland"
     
-    # 一時ファイルに保存してリスト選択実行
-    local tmp_zone="${CACHE_DIR}/zone_tmp.ch"
-    echo "$zone_list" > "$tmp_zone"
+    # available_timezones関数から全リストを取得
+    local all_timezones=""
+    if type get_available_timezones >/dev/null 2>&1; then
+        all_timezones=$(get_available_timezones)
+        debug_log "DEBUG" "利用可能なタイムゾーンを取得しました: $(echo "$all_timezones" | wc -l)件"
+    else
+        # 関数が利用できない場合はフォールバックリストを使用
+        debug_log "WARN" "get_available_timezones関数が利用できません。フォールバックリストを使用します"
+        all_timezones="$common_zones"
+    fi
     
-    select_list "$zone_list" "$tmp_zone" "$type"
+    # 利用可能なタイムゾーンから表示用リストを生成
+    # 共通の主要なタイムゾーンを先頭に表示し、その後に全タイムゾーンを表示
+    for zone in $common_zones; do
+        # タイムゾーン情報を取得 (例: JST-9)
+        local tz_info=""
+        if [ -f "/usr/share/zoneinfo/$zone" ]; then
+            # 実際のタイムゾーン情報を取得するには、TZ環境変数を使用
+            tz_info=$(TZ="$zone" date +"%Z%z" | sed 's/+/-/; s/00$//')
+            zone_list="${zone_list}${zone} (${tz_info})\n"
+        fi
+    done
     
-    # 選択結果の処理
+    # 重複を除去し、一時ファイルに保存
+    echo -e "$zone_list" | sort -u > "$tmp_zone"
+    
+    # リスト選択実行
+    select_list "$(cat "$tmp_zone")" "$tmp_zone" "$type"
+    
+    # 以下は既存の処理と同じ...
     local selected_number=$(cat "$tmp_zone")
     if [ -z "$selected_number" ] || ! echo "$selected_number" | grep -q '^[0-9]\+$'; then
         debug_log "WARN" "タイムゾーン選択が無効または取消されました"
         return 1
     fi
     
-    # 選択されたタイムゾーンの取得
-    local selected_zone=$(echo "$zone_list" | sed -n "${selected_number}p")
-    debug_log "DEBUG" "選択されたタイムゾーン: $selected_zone"
-    
-    # 選択されたゾーンの解析
+    # 選択されたタイムゾーンの取得と解析
+    local selected_zone=$(cat "$tmp_zone" | sed -n "${selected_number}p")
     local zonename=$(echo "$selected_zone" | awk -F'[()]' '{print $1}' | sed 's/ *$//')
     local timezone=$(echo "$selected_zone" | awk -F'[()]' '{print $2}')
     
