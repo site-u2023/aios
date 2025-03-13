@@ -131,9 +131,9 @@ select_country() {
         # 検出された国を表示
         if [ -n "$system_country" ]; then
             # まず検出された国を表示
-            printf "%s %s\n" "$(get_message "MSG_DETECTED_COUNTRY" "$system_country")"
+            printf "%s %s\n" "$(color blue "$(get_message "MSG_DETECTED_COUNTRY" "$system_country")")"
             # 次に確認メッセージを表示
-            printf "%s\n" "$(get_message "MSG_USE_DETECTED_COUNTRY")"
+            printf "%s\n" "$(color blue "$(get_message "MSG_USE_DETECTED_COUNTRY")")"
             # 最後にconfirm関数でYN判定を表示
             if confirm "MSG_CONFIRM_ONLY_YN"; then
                 # country.dbから完全な情報を検索
