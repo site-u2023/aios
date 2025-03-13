@@ -142,7 +142,7 @@ select_country() {
                 return 1
             }
             
-            debug_log "INFO" "Language selected via command argument: $input_lang"
+            debug_log "DEBUG" "Language selected via command argument: $input_lang"
             printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
             
             # 選択されたタイムゾーンのゾーン情報からゾーンを選択
