@@ -111,14 +111,13 @@ select_country() {
     
     # キャッシュファイルのパス定義
     local cache_country="${CACHE_DIR}/country.ch"
-    local tmp_country="${CACHE_DIR}/country_tmp.ch"
+    local cache_zone="${CACHE_DIR}/zone.ch"
     local input_lang="$1"  # 引数として渡された言語コード
 
-    # キャッシュがあればゾーン選択へスキップ
-    if [ -f "$cache_country" ]; then
-        debug_log "DEBUG" "Country cache exists. Skipping country selection."
-        select_zone
-        return
+    # キャッシュがあれば全ての選択プロセスをスキップ
+    if [ -f "$cache_country" ] && [ -f "$cache_zone" ]; then
+        debug_log "DEBUG" "Country and Timezone cache exist. Skipping selection process."
+        return 0
     fi
 
     # 自動選択を試行
@@ -144,7 +143,7 @@ select_country() {
                 
                 if [ -n "$country_data" ]; then
                     # 一時ファイルに書き込み
-                    echo "$country_data" > "$tmp_country"
+                    echo "$country_data" > "${CACHE_DIR}/country_tmp.ch"
                     # country_write関数に処理を委譲
                     country_write || {
                         debug_log "ERROR" "Failed to write country data"
@@ -159,7 +158,6 @@ select_country() {
                     }
                     
                     debug_log "DEBUG" "Auto-detected country has been set: $system_country"
-                    select_zone
                     return 0
                 else
                     debug_log "WARN" "No matching entry found for detected country: $system_country"
@@ -220,7 +218,7 @@ select_country() {
             
             # 確認（confirm関数使用）
             if confirm "MSG_CONFIRM_ONLY_YN"; then
-                echo "$full_results" > "$tmp_country"
+                echo "$full_results" > "${CACHE_DIR}/country_tmp.ch"
                 
                 # country_write関数に処理を委譲
                 country_write || {
@@ -274,7 +272,7 @@ select_country() {
                 
                 if confirm "MSG_CONFIRM_ONLY_YN"; then
                     # 一時ファイルに書き込み
-                    echo "$selected_full" > "$tmp_country"
+                    echo "$selected_full" > "${CACHE_DIR}/country_tmp.ch"
                     
                     # country_write関数に処理を委譲
                     country_write || {
