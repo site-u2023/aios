@@ -561,35 +561,62 @@ select_zone() {
     return $?
 }
 
-#########################################################################
-# Last Update: 2025-02-18 11:00:00 (JST) 🚀
-# "Precision in code, clarity in purpose. Every update refines the path."
-# normalize_language: 言語設定の正規化
-#
-# 【要件】
-# 1. 言語の決定:
-#    - `country.ch` を最優先で参照（変更不可）
-#    - `country.ch` が無い場合は `select_country()` を実行し、手動選択
-#
-# 2. システムメッセージの言語 (`message.ch`) の確定:
-#    - `messages.db` の `SUPPORTED_LANGUAGES` を確認
-#    - `country.ch` に記録された言語が `SUPPORTED_LANGUAGES` に含まれる場合、それを `message.ch` に保存
-#    - `SUPPORTED_LANGUAGES` に無い場合、`message.ch` に `US`（フォールバック）を設定
-#
-# 3. `country.ch` との関係:
-#    - `country.ch` はデバイス設定用（変更不可）
-#    - `message.ch` はシステムメッセージ表示用（フォールバック可能）
-#
-# 4. `$ACTIVE_LANGUAGE` の管理:
-#    - `normalize_language()` 実行時に `$ACTIVE_LANGUAGE` を設定
-#    - `$ACTIVE_LANGUAGE` は `message.ch` の値を常に参照
-#    - `$ACTIVE_LANGUAGE` が未設定の場合、フォールバックで `US`
-#
-# 5. メンテナンス:
-#    - `country.ch` はどのような場合でも変更しない
-#    - `message.ch` のみフォールバックを適用し、システムメッセージの一貫性を維持
-#    - 言語設定に影響を与えず、メッセージの表示のみを制御する
-#########################################################################
+# 国と言語情報をキャッシュに書き込む関数
+country_write() {
+    debug_log "DEBUG" "Entering country_write()"
+    
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
+    local cache_country="${CACHE_DIR}/country.ch"
+    
+    # 一時ファイルが存在するか確認
+    if [ ! -f "$tmp_country" ]; then
+        debug_log "ERROR" "File not found: $tmp_country"
+        printf "%s\n" "$(color red "$(get_message "ERR_FILE_NOT_FOUND" | sed "s/{file}/$tmp_country/g")")"
+        return 1
+    fi
+    
+    # 選択されたデータを取得
+    local country_data=""
+    # 数値でない場合はフルラインが含まれていると判断
+    if ! grep -qE '^[0-9]+$' "$tmp_country"; then
+        country_data=$(cat "$tmp_country")
+    else
+        # country.dbから該当行を抽出
+        local line_number=$(cat "$tmp_country")
+        country_data=$(sed -n "${line_number}p" "${BASE_DIR}/country.db")
+    fi
+    
+    # キャッシュに保存
+    if [ -n "$country_data" ]; then
+        # 1. country.ch - 完全な国情報（基準データ）
+        echo "$country_data" > "$cache_country"
+        
+        # 2. language.ch - 国コード ($5)
+        echo "$(echo "$country_data" | awk '{print $5}')" > "${CACHE_DIR}/language.ch"
+        
+        # 3. luci.ch - LuCI UI言語コード ($4)
+        echo "$(echo "$country_data" | awk '{print $4}')" > "${CACHE_DIR}/luci.ch"
+        
+        # 4. zone_tmp.ch - タイムゾーン情報 ($6以降)
+        echo "$(echo "$country_data" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i; print ""}')" > "${CACHE_DIR}/zone_tmp.ch"
+        
+        # 成功フラグの設定
+        echo "1" > "${CACHE_DIR}/country_success_done"
+        
+        debug_log "DEBUG" "Country information written to cache"
+        debug_log "DEBUG" "Selected country: $(echo "$country_data" | awk '{print $2, $3}')"
+        
+        # 言語設定の正規化を実行
+        normalize_language
+    else
+        debug_log "ERROR" "No country data to write to cache"
+        printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
+        return 1
+    fi
+    
+    return 0
+}
+
 normalize_language() {
     local message_db="${BASE_DIR}/messages.db"
     local country_cache="${CACHE_DIR}/country.ch"
@@ -640,62 +667,6 @@ normalize_language() {
     debug_log "DEBUG" "Final system message language -> $ACTIVE_LANGUAGE"
     echo "$(get_message "MSG_COUNTRY_SUCCESS")"
     touch "$flag_file"
-}
-
-# 国と言語情報をキャッシュに書き込む関数
-country_write() {
-    debug_log "DEBUG" "Entering country_write()"
-    
-    local tmp_Language="${CACHE_DIR}/language.ch"
-    local cache_country="${CACHE_DIR}/country.ch"
-    
-    # 一時ファイルが存在するか確認
-    if [ ! -f "$tmp_Language" ]; then
-        debug_log "ERROR" "File not found: $tmp_Language"
-        printf "%s\n" "$(color red "$(get_message "ERR_FILE_NOT_FOUND" | sed "s/{file}/$tmp_Language/g")")"
-        return 1
-    fi
-    
-    # 選択されたデータを取得
-    local country_data=""
-    # 数値でない場合はフルラインが含まれていると判断
-    if ! grep -qE '^[0-9]+$' "$tmp_Language"; then
-        country_data=$(cat "$tmp_Language")
-    else
-        # country.dbから該当行を抽出
-        local line_number=$(cat "$tmp_Language")
-        country_data=$(sed -n "${line_number}p" "${BASE_DIR}/country.db")
-    fi
-    
-    # キャッシュに保存
-    if [ -n "$country_data" ]; then
-        # 1. country.ch - 完全な国情報（基準データ）
-        echo "$country_data" > "$cache_country"
-        
-        # 2. language.ch - 国コード ($5)
-        echo "$(echo "$country_data" | awk '{print $5}')" > "${CACHE_DIR}/language.ch"
-        
-        # 3. luci.ch - LuCI UI言語コード ($4)
-        echo "$(echo "$country_data" | awk '{print $4}')" > "${CACHE_DIR}/luci.ch"
-        
-        # 4. zone_tmp.ch - タイムゾーン情報 ($6以降)
-        echo "$(echo "$country_data" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i; print ""}')" > "${CACHE_DIR}/zone_tmp.ch"
-        
-        # 成功フラグの設定
-        echo "1" > "${CACHE_DIR}/country_success_done"
-        
-        debug_log "DEBUG" "Country information written to cache"
-        debug_log "DEBUG" "Selected country: $(echo "$country_data" | awk '{print $2, $3}')"
-        
-        # 言語設定の正規化を実行
-        normalize_language
-    else
-        debug_log "ERROR" "No country data to write to cache"
-        printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
-        return 1
-    fi
-    
-    return 0
 }
 
 # タイムゾーン情報をキャッシュに書き込む関数
