@@ -114,20 +114,64 @@ select_country() {
     local cache_zone="${CACHE_DIR}/zone.ch"
     local input_lang="$1"  # 引数として渡された言語コード
 
-    # キャッシュがあれば全ての選択プロセスをスキップ
+    # 1. 引数で短縮国名（JP、USなど）が指定されている場合（最優先）
+    if [ -n "$input_lang" ]; then
+        debug_log "DEBUG" "Language argument provided: $input_lang"
+        
+        # 短縮国名（$5）と完全一致するエントリを検索
+        local lang_match=$(awk -v lang="$input_lang" '$5 == lang {print $0; exit}' "$BASE_DIR/country.db")
+        
+        if [ -n "$lang_match" ]; then
+            debug_log "DEBUG" "Exact language code match found: $lang_match"
+            
+            # 一時ファイルに書き込み
+            echo "$lang_match" > "${CACHE_DIR}/country_tmp.ch"
+            
+            # country_write関数に処理を委譲
+            country_write || {
+                debug_log "ERROR" "Failed to write country data from language argument"
+                return 1
+            }
+            
+            # 言語に対応するタイムゾーン情報を取得
+            echo "$(echo "$lang_match" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone_tmp.ch"
+            
+            # zone_write関数に処理を委譲
+            zone_write || {
+                debug_log "ERROR" "Failed to write timezone data from language argument"
+                return 1
+            }
+            
+            debug_log "INFO" "Language selected via command argument: $input_lang"
+            printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
+            
+            # 選択されたタイムゾーンのゾーン情報からゾーンを選択
+            select_zone
+            return 0
+        else
+            debug_log "DEBUG" "No exact language code match for: $input_lang, proceeding to next selection method"
+            # 引数一致しない場合は次へ進む（メッセージ表示なし）
+            input_lang=""  # 引数をクリア
+        fi
+    fi
+
+    # 2. キャッシュがあれば全ての選択プロセスをスキップ
     if [ -f "$cache_country" ] && [ -f "$cache_zone" ]; then
         debug_log "DEBUG" "Country and Timezone cache exist. Skipping selection process."
         return 0
     fi
 
-    # 自動選択を試行（一度だけ検出処理を行う）
+    # 3. 自動選択を試行（一度だけ検出処理を行う）
     if detect_and_set_location; then
         # 正常に設定された場合はここで終了
         return 0
     fi
 
-    # 自動検出が失敗または拒否された場合、手動入力へ
+    # 4. 自動検出が失敗または拒否された場合、手動入力へ
     debug_log "DEBUG" "Automatic location detection failed or was declined. Proceeding to manual input."
+
+    # 以下、既存の手動入力ロジック...
+    # （変更なし）
 
     # 国の入力と検索ループ
     while true; do
