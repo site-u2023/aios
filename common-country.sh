@@ -438,84 +438,81 @@ select_list() {
 }
 
 # タイムゾーンの選択を処理する関数
-select_zone() {
-    debug_log "DEBUG" "Running select_zone() function"
-    
-    # キャッシュファイルのパス定義
-    local cache_zone="${CACHE_DIR}/zone.ch"
-    local cache_zonename="${CACHE_DIR}/zonename.ch"
-    local cache_timezone="${CACHE_DIR}/timezone.ch"
-    
-    # 選択された国の情報を取得
-    local selected_country_file="${CACHE_DIR}/country.ch"
-    if [ ! -f "$selected_country_file" ]; then
-        debug_log "ERROR" "Country selection file not found"
-        return 1
-    fi
-    
-    # 国のタイムゾーン情報を抽出（6列目以降がタイムゾーン情報）
-    local zone_list=$(awk '{for(i=6;i<=NF;i++) print $i}' "$selected_country_file")
-    if [ -z "$zone_list" ]; then
-        debug_log "ERROR" "No timezone information found for selected country"
-        return 1
-    }
-    debug_log "DEBUG" "Extracted timezone list for selected country"
-    
-    # タイムゾーンリストの表示
-    printf "%s\n" "$(color blue "$(get_message "MSG_SELECT_TIMEZONE")")"
-    
-    # 番号付きリスト表示
-    local count=1
-    echo "$zone_list" | while IFS= read -r line; do
-        [ -n "$line" ] && printf "%3d: %s\n" "$count" "$line"
-        count=$((count + 1))
-    done
-    
-    # 番号入力受付
-    printf "%s " "$(color cyan "$(get_message "MSG_ENTER_NUMBER")")"
-    read -r number
-    debug_log "DEBUG" "User input: $number"
-    
-    # 入力検証
-    if [ -z "$number" ] || ! echo "$number" | grep -q '^[0-9]\+$'; then
-        printf "%s\n" "$(color red "$(get_message "MSG_INVALID_NUMBER")")"
-        return 1
-    fi
-    
-    # 選択されたタイムゾーンの取得
-    local selected=$(echo "$zone_list" | sed -n "${number}p")
-    if [ -z "$selected" ]; then
-        printf "%s\n" "$(color red "$(get_message "MSG_INVALID_NUMBER")")"
-        return 1
-    fi
-    debug_log "DEBUG" "Selected timezone: $selected"
-    
-    # タイムゾーン情報の分割
-    local zonename=""
-    local timezone=""
-    
-    if echo "$selected" | grep -q ","; then
-        zonename=$(echo "$selected" | cut -d ',' -f 1)
-        timezone=$(echo "$selected" | cut -d ',' -f 2)
-    else
-        zonename="$selected"
-        timezone="GMT0"
-    fi
-    
-    # 確認
-    printf "%s\n" "$(color blue "$(get_message "MSG_CONFIRM_TIMEZONE") $zonename,$timezone")"
-    
-    if confirm "MSG_CONFIRM_ONLY_YN"; then
-        echo "$zonename" > "$cache_zonename"
-        echo "$timezone" > "$cache_timezone"
-        echo "$zonename,$timezone" > "$cache_zone"
-        printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
-        return 0
-    fi
-    
-    # 再選択
-    select_zone
-    return $?
+# キャッシュファイルのパス定義
+local cache_zone="${CACHE_DIR}/zone.ch"
+local cache_zonename="${CACHE_DIR}/zonename.ch"
+local cache_timezone="${CACHE_DIR}/timezone.ch"
+
+# 選択された国の情報を取得
+local selected_country_file="${CACHE_DIR}/country.ch"
+if [ ! -f "$selected_country_file" ]; then
+    debug_log "ERROR" "Country selection file not found"
+    return 1
+fi
+
+# 国のタイムゾーン情報を抽出（6列目以降がタイムゾーン情報）
+local zone_list=$(awk '{for(i=6;i<=NF;i++) print $i}' "$selected_country_file")
+if [ -z "$zone_list" ]; then
+    debug_log "ERROR" "No timezone information found for selected country"
+    return 1
+fi  # ここの閉じ括弧が「}」になっていましたが「fi」に修正しました
+debug_log "DEBUG" "Extracted timezone list for selected country"
+
+# タイムゾーンリストの表示
+printf "%s\n" "$(color blue "$(get_message "MSG_SELECT_TIMEZONE")")"
+
+# 番号付きリスト表示
+local count=1
+echo "$zone_list" | while IFS= read -r line; do
+    [ -n "$line" ] && printf "%3d: %s\n" "$count" "$line"
+    count=$((count + 1))
+done
+
+# 番号入力受付
+printf "%s " "$(color cyan "$(get_message "MSG_ENTER_NUMBER")")"
+read -r number
+debug_log "DEBUG" "User input: $number"
+
+# 入力検証
+if [ -z "$number" ] || ! echo "$number" | grep -q '^[0-9]\+$'; then
+    printf "%s\n" "$(color red "$(get_message "MSG_INVALID_NUMBER")")"
+    return 1
+fi
+
+# 選択されたタイムゾーンの取得
+local selected=$(echo "$zone_list" | sed -n "${number}p")
+if [ -z "$selected" ]; then
+    printf "%s\n" "$(color red "$(get_message "MSG_INVALID_NUMBER")")"
+    return 1
+fi
+debug_log "DEBUG" "Selected timezone: $selected"
+
+# タイムゾーン情報の分割
+local zonename=""
+local timezone=""
+
+if echo "$selected" | grep -q ","; then
+    zonename=$(echo "$selected" | cut -d ',' -f 1)
+    timezone=$(echo "$selected" | cut -d ',' -f 2)
+else
+    zonename="$selected"
+    timezone="GMT0"
+fi
+
+# 確認
+printf "%s\n" "$(color blue "$(get_message "MSG_CONFIRM_TIMEZONE") $zonename,$timezone")"
+
+if confirm "MSG_CONFIRM_ONLY_YN"; then
+    echo "$zonename" > "$cache_zonename"
+    echo "$timezone" > "$cache_timezone"
+    echo "$zonename,$timezone" > "$cache_zone"
+    printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+    return 0
+fi
+
+# 再選択
+select_zone
+return $?
 }
 
 # 国と言語情報をキャッシュに書き込む関数
