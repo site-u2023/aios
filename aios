@@ -226,28 +226,24 @@ print_help() {
 
 #########################################################################
 # color: ANSI エスケープシーケンスを使って色付きメッセージを出力する関数
-# 使用法: color <色名> <テキスト...>
-# 例: color red "エラーが発生しました"
-#     color blue "設定" "完了"
 #########################################################################
 color() {
-    # 色コードを取得
+    # 端末出力でない場合や色無効フラグがある場合はプレーンテキスト出力
+    if [ ! -t 1 ] || [ "$NO_COLOR" = "true" ]; then
+        printf "%s" "$*"
+        return
+    fi
+    
     local color_name="$1"
     shift  # 最初の引数（色名）を削除
-    local text="$*"  # 残りの引数をすべて結合
     
-    # 端末出力かどうか確認＋色無効フラグチェック
-    if [ -t 1 ] && [ "$NO_COLOR" != "true" ]; then
-        # color_code_mapから色コードを取得
-        local color_start=$(color_code_map "$color_name")
-        local color_end=$(color_code_map "reset")
-        
-        # printfで出力（echo -eの代わり）
-        printf "%b%s%b" "$color_start" "$text" "$color_end"
-    else
-        # 色なしで出力
-        printf "%s" "$text"
-    fi
+    # color_code_mapから色コードを取得
+    local color_start color_end
+    color_start=$(color_code_map "$color_name")
+    color_end=$(color_code_map "reset")
+    
+    # printfでエスケープシーケンス付きテキスト出力
+    printf "%b%s%b" "$color_start" "$*" "$color_end"
 }
 
 #########################################################################
@@ -277,8 +273,8 @@ color_code_map() {
         "magenta_white") printf "\033[1;45m" ;;
         "cyan_white") printf "\033[1;46m" ;;
         "white_black") printf "\033[7;40m" ;;
-        "reset") printf "\033[0;39m" ;;
-        *) printf "\033[0;39m" ;;  # デフォルトでリセット
+        "reset") printf "\033[0m" ;;
+        *) printf "\033[0m" ;;  # デフォルトでリセット
     esac
 }
 
