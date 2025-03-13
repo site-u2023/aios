@@ -105,86 +105,8 @@ normalize_input() {
     echo "$input"
 }
 
-# 国選択処理
-select_country() {
-    debug_log "DEBUG" "Running select_country() function with arg='$1'"
-    
-    # キャッシュファイルのパス定義
-    local tmp_country="${CACHE_DIR}/country_tmp.ch"
-    local input_lang="$1"  # 引数として渡された言語コード
-
-    # 国の入力と検索ループ
-    while true; do
-        # 入力要求
-        if [ -z "$input_lang" ]; then
-            printf "%s\n" "$(color blue "$(get_message "MSG_ENTER_COUNTRY")")"
-            printf "%s " "$(color cyan "$(get_message "MSG_SEARCH_KEYWORD")")"
-            read -r input_lang
-            debug_log "DEBUG" "User entered search keyword: $input_lang"
-        fi
-
-        # 空入力チェック
-        [ -n "$input_lang" ] || {
-            debug_log "WARN" "Empty search keyword"
-            continue
-        }
-
-        # 検索実行
-        local cleaned_input=$(echo "$input_lang" | sed 's/[\/,_]/ /g')
-        local full_results=$(awk -v search="$cleaned_input" \
-            'BEGIN {IGNORECASE=1} { if ($0 ~ search) print $0 }' \
-            "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
-
-        # 検索結果なし
-        [ -n "$full_results" ] || {
-            printf "%s\n" "$(color red "$(get_message "MSG_COUNTRY_NOT_FOUND")")"
-            input_lang=""
-            continue
-        }
-
-        # 結果表示と選択
-        echo "$full_results" | awk '{print NR, ":", $2, $3}'
-        printf "%s " "$(color cyan "$(get_message "MSG_SELECT_COUNTRY_NUMBER")")"
-        
-        local number
-        read -r number
-        debug_log "DEBUG" "User selected number: $number"
-        
-        # 番号の検証
-        if echo "$number" | grep -q '^[0-9]\+$'; then
-            local result_count=$(echo "$full_results" | wc -l)
-            if [ "$number" -gt 0 ] && [ "$number" -le "$result_count" ]; then
-                local selected_full=$(echo "$full_results" | sed -n "${number}p")
-                local selected_country=$(echo "$selected_full" | awk '{print $2, $3}')
-                
-                printf "%s\n" "$(color blue "$(get_message "MSG_SELECTED_COUNTRY") $selected_country")"
-                
-                if confirm "MSG_CONFIRM_ONLY_YN"; then
-                    # 一時ファイルに選択内容を保存
-                    echo "$selected_full" > "$tmp_country"
-                    debug_log "DEBUG" "Country selected: $selected_country"
-                    
-                    # country_write関数を呼び出して処理を継続
-                    country_write && select_zone
-                    return $?
-                fi
-            fi
-        fi
-        
-        printf "%s\n" "$(color red "$(get_message "MSG_INVALID_NUMBER")")"
-        
-        # 再検索確認
-        if confirm "MSG_SEARCH_AGAIN"; then
-            input_lang=""
-        else
-            debug_log "INFO" "Country selection canceled by user"
-            return 1
-        fi
-    done
-}
-
 # ユーザーに国の選択を促す関数
-XXX_select_country() {
+select_country() {
     debug_log "DEBUG" "Running select_country() function with arg='$1'"
     
     # キャッシュファイルのパス定義
@@ -373,53 +295,6 @@ XXX_select_country() {
 
 # システムの地域情報を検出し設定する関数
 detect_and_set_location() {
-    debug_log "DEBUG" "Running detect_and_set_location() function"
-    
-    # システムから検出した情報表示
-    printf "%s\n" "$(color yellow "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
-    
-    [ -n "$country" ] && {
-        printf "%s %s\n" "$(color blue "$(get_message "MSG_DETECTED_COUNTRY")")" \
-            "$(color blue "$country")"
-    }
-    
-    [ -n "$timezone" ] && {
-        if [ -n "$zonename" ]; then
-            printf "%s %s,%s\n\n" "$(color blue "$(get_message "MSG_DETECTED_ZONE")")" \
-                "$zonename" "$timezone"
-        else
-            printf "%s %s\n\n" "$(color blue "$(get_message "MSG_DETECTED_ZONE")")" \
-                "$timezone"
-        fi
-    }
-    
-    # システム検出情報を使用するか確認
-    printf "%s\n" "$(color blue "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
-    if confirm "MSG_CONFIRM_ONLY_YN"; then
-        debug_log "INFO" "User accepted system detected settings"
-        
-        # countryの一時ファイルを作成し、country_write()に処理を委譲
-        echo "$country" > "${CACHE_DIR}/country_tmp.ch" && country_write || {
-            debug_log "ERROR" "Failed to process country data"
-            return 1
-        }
-        
-        # zoneの一時ファイルを作成し、zone_write()に処理を委譲
-        echo "$zonename,$timezone" > "${CACHE_DIR}/zone_tmp.ch" && zone_write || {
-            debug_log "ERROR" "Failed to process timezone data"
-            return 1
-        }
-        
-        debug_log "INFO" "System detection process completed successfully"
-        return 0
-    fi
-    
-    debug_log "INFO" "User declined system detected settings"
-    return 1
-}
-
-# システムの地域情報を検出し設定する関数
-XXX_detect_and_set_location() {
     debug_log "DEBUG" "detect_and_set_location() 実行"
     
     # システムから国とタイムゾーン情報を取得
@@ -563,25 +438,30 @@ select_list() {
 }
 
 # タイムゾーンの選択を処理する関数
-# タイムゾーン選択処理
 select_zone() {
     debug_log "DEBUG" "Running select_zone() function"
     
+    # キャッシュファイルのパス定義
+    local cache_zone="${CACHE_DIR}/zone.ch"
+    local cache_zonename="${CACHE_DIR}/zonename.ch"
+    local cache_timezone="${CACHE_DIR}/timezone.ch"
+    
     # 選択された国の情報を取得
     local selected_country_file="${CACHE_DIR}/country.ch"
-    [ -f "$selected_country_file" ] || {
+    if [ ! -f "$selected_country_file" ]; then
         debug_log "ERROR" "Country selection file not found"
         return 1
-    }
+    fi
     
-    # 国のタイムゾーン情報を取得（6列目以降）
+    # 国のタイムゾーン情報を抽出（6列目以降がタイムゾーン情報）
     local zone_list=$(awk '{for(i=6;i<=NF;i++) print $i}' "$selected_country_file")
-    [ -n "$zone_list" ] || {
-        debug_log "ERROR" "No timezone data found"
+    if [ -z "$zone_list" ]; then
+        debug_log "ERROR" "No timezone information found for selected country"
         return 1
     }
+    debug_log "DEBUG" "Extracted timezone list for selected country"
     
-    # タイムゾーンリスト表示
+    # タイムゾーンリストの表示
     printf "%s\n" "$(color blue "$(get_message "MSG_SELECT_TIMEZONE")")"
     
     # 番号付きリスト表示
@@ -591,40 +471,49 @@ select_zone() {
         count=$((count + 1))
     done
     
-    # 番号入力
+    # 番号入力受付
     printf "%s " "$(color cyan "$(get_message "MSG_ENTER_NUMBER")")"
     read -r number
-    debug_log "DEBUG" "User selected number: $number"
+    debug_log "DEBUG" "User input: $number"
     
-    # 入力チェック
+    # 入力検証
     if [ -z "$number" ] || ! echo "$number" | grep -q '^[0-9]\+$'; then
         printf "%s\n" "$(color red "$(get_message "MSG_INVALID_NUMBER")")"
         return 1
     fi
     
-    # 選択されたタイムゾーン取得
+    # 選択されたタイムゾーンの取得
     local selected=$(echo "$zone_list" | sed -n "${number}p")
-    [ -n "$selected" ] || {
+    if [ -z "$selected" ]; then
         printf "%s\n" "$(color red "$(get_message "MSG_INVALID_NUMBER")")"
         return 1
-    }
+    fi
+    debug_log "DEBUG" "Selected timezone: $selected"
     
-    # タイムゾーン情報を一時ファイルに保存
-    local tmp_zone="${CACHE_DIR}/zone_tmp.ch"
-    echo "$selected" > "$tmp_zone"
-    debug_log "DEBUG" "Selected timezone saved to temporary file: $selected"
+    # タイムゾーン情報の分割
+    local zonename=""
+    local timezone=""
     
-    # 確認メッセージ表示
-    printf "%s\n" "$(color blue "$(get_message "MSG_CONFIRM_TIMEZONE") $selected")"
-    
-    if confirm "MSG_CONFIRM_ONLY_YN"; then
-        # zone_write関数を呼び出してキャッシュに書き込み
-        zone_write && {
-            printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
-            return 0
-        }
+    if echo "$selected" | grep -q ","; then
+        zonename=$(echo "$selected" | cut -d ',' -f 1)
+        timezone=$(echo "$selected" | cut -d ',' -f 2)
+    else
+        zonename="$selected"
+        timezone="GMT0"
     fi
     
+    # 確認
+    printf "%s\n" "$(color blue "$(get_message "MSG_CONFIRM_TIMEZONE") $zonename,$timezone")"
+    
+    if confirm "MSG_CONFIRM_ONLY_YN"; then
+        echo "$zonename" > "$cache_zonename"
+        echo "$timezone" > "$cache_timezone"
+        echo "$zonename,$timezone" > "$cache_zone"
+        printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+        return 0
+    fi
+    
+    # 再選択
     select_zone
     return $?
 }
