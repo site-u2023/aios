@@ -140,18 +140,21 @@ select_country() {
                 local country_data=$(grep -i "^[^ ]* *$system_country" "$BASE_DIR/country.db")
                 
                 if [ -n "$country_data" ]; then
-                    # キャッシュに直接書き込み
-                    echo "$country_data" > "$cache_country"
-                    
-                    # 言語情報の抽出と保存
-                    echo "$(echo "$country_data" | awk '{print $4}')" > "${CACHE_DIR}/language.ch"
-                    echo "$(echo "$country_data" | awk '{print $4}')" > "${CACHE_DIR}/luci.ch"
+                    # 一時ファイルに書き込み
+                    echo "$country_data" > "$tmp_country"
+                    # country_write関数に処理を委譲
+                    country_write || {
+                        debug_log "ERROR" "Failed to write country data"
+                        return 1
+                    }
                     
                     # タイムゾーン情報の抽出 ($6以降)
                     echo "$(echo "$country_data" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone_tmp.ch"
-                    
-                    # 成功フラグ設定
-                    echo "1" > "${CACHE_DIR}/country_success_done"
+                    # zone_write関数に処理を委譲
+                    zone_write || {
+                        debug_log "ERROR" "Failed to write timezone data"
+                        return 1
+                    }
                     
                     debug_log "DEBUG" "Auto-detected country has been set: $system_country"
                     select_zone
@@ -217,12 +220,18 @@ select_country() {
             if confirm "MSG_CONFIRM_ONLY_YN"; then
                 echo "$full_results" > "$tmp_country"
                 
-                # 直接キャッシュ書き込み（country_write関数を使用しない場合）
-                echo "$full_results" > "$cache_country"
-                echo "$(echo "$full_results" | awk '{print $4}')" > "${CACHE_DIR}/language.ch"
-                echo "$(echo "$full_results" | awk '{print $4}')" > "${CACHE_DIR}/luci.ch"
+                # country_write関数に処理を委譲
+                country_write || {
+                    debug_log "ERROR" "Failed to write country data"
+                    return 1
+                }
+                
+                # zone_write関数に処理を委譲
                 echo "$(echo "$full_results" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone_tmp.ch"
-                echo "1" > "${CACHE_DIR}/country_success_done"
+                zone_write || {
+                    debug_log "ERROR" "Failed to write timezone data"
+                    return 1
+                }
                 
                 debug_log "INFO" "Country selected from single match: $country_name"
                 select_zone
@@ -262,12 +271,21 @@ select_country() {
                 printf "%s%s%s\n" "$(color blue "$msg_prefix" "$selected_country" "$msg_suffix")"
                 
                 if confirm "MSG_CONFIRM_ONLY_YN"; then
-                    # 直接キャッシュに書き込み
-                    echo "$selected_full" > "$cache_country"
-                    echo "$(echo "$selected_full" | awk '{print $4}')" > "${CACHE_DIR}/language.ch"
-                    echo "$(echo "$selected_full" | awk '{print $4}')" > "${CACHE_DIR}/luci.ch"
+                    # 一時ファイルに書き込み
+                    echo "$selected_full" > "$tmp_country"
+                    
+                    # country_write関数に処理を委譲
+                    country_write || {
+                        debug_log "ERROR" "Failed to write country data"
+                        return 1
+                    }
+                    
+                    # zone_write関数に処理を委譲
                     echo "$(echo "$selected_full" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone_tmp.ch"
-                    echo "1" > "${CACHE_DIR}/country_success_done"
+                    zone_write || {
+                        debug_log "ERROR" "Failed to write timezone data"
+                        return 1
+                    }
                     
                     debug_log "DEBUG" "Country selected from multiple choices: $selected_country"
                     select_zone
@@ -295,7 +313,7 @@ select_country() {
 
 # システムの地域情報を検出し設定する関数
 detect_and_set_location() {
-    debug_log "DEBUG" "detect_and_set_location() 実行"
+    debug_log "DEBUG" "Running detect_and_set_location function"
     
     # システムから国とタイムゾーン情報を取得
     local system_country=""
@@ -316,13 +334,13 @@ detect_and_set_location() {
     
     # 検出できなければ通常フローへ
     if [ -z "$system_country" ] || [ -z "$system_timezone" ]; then
+        debug_log "WARN" "Could not detect system country or timezone"
         return 1
     fi
     
     # 検出情報表示
     printf "%s\n" "$(color yellow "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
     printf "%s %s\n" "$(color blue "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color blue "$system_country")"
-
     
     # ゾーン名があれば表示、なければタイムゾーンのみ
     if [ -n "$system_zonename" ]; then
@@ -334,15 +352,38 @@ detect_and_set_location() {
     # 確認
     printf "%s\n" "$(color blue "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
     if confirm "MSG_CONFIRM_ONLY_YN"; then
-        # グローバル変数に検出結果を設定
-        DETECTED_COUNTRY="$system_country"
-        DETECTED_TIMEZONE="$system_timezone"
-        DETECTED_ZONENAME="$system_zonename"
-        return 0
-    else
-        # 拒否された場合は通常フロー
-        return 1
+        # country.dbから完全な国情報を検索
+        local country_data=$(grep -i "^[^ ]* *$system_country" "$BASE_DIR/country.db")
+        
+        if [ -n "$country_data" ]; then
+            # 国情報を一時ファイルに書き込み
+            echo "$country_data" > "${CACHE_DIR}/country_tmp.ch"
+            # country_write関数に処理を委譲
+            country_write || {
+                debug_log "ERROR" "Failed to write country data"
+                return 1
+            }
+            
+            # タイムゾーン情報を一時ファイルに書き込み
+            if [ -n "$system_zonename" ]; then
+                echo "$system_zonename,$system_timezone" > "${CACHE_DIR}/zone_tmp.ch"
+            else
+                echo "$system_timezone" > "${CACHE_DIR}/zone_tmp.ch"
+            fi
+            
+            # zone_write関数に処理を委譲
+            zone_write || {
+                debug_log "ERROR" "Failed to write timezone data"
+                return 1
+            }
+            
+            debug_log "INFO" "Auto-detected settings have been applied successfully"
+            return 0
+        fi
     fi
+    
+    debug_log "INFO" "User declined auto-detected settings"
+    return 1
 }
 
 # 番号付きリストからユーザーに選択させる関数
