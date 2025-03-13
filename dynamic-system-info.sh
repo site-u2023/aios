@@ -165,7 +165,7 @@ get_zonename_info() {
 
     # UCI（OpenWrt）から取得
     if command -v uci >/dev/null 2>&1; then
-        zonename="$(uci get system.@system[0].timezone 2>/dev/null)"
+        zonename="$(uci get system.@system[0].zonename 2>/dev/null)"
     fi
 
     echo "$zonename"
