@@ -302,7 +302,7 @@ detect_and_set_location() {
         return 1
     fi
     
-    # 検出情報表示
+    # 検出情報表示（一回だけ表示）
     printf "%s\n" "$(color yellow "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
     printf "%s %s\n" "$(color blue "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color blue "$(echo "$system_country" | cut -d' ' -f2)")"
     
@@ -313,8 +313,7 @@ detect_and_set_location() {
         printf "%s %s\n\n" "$(color blue "$(get_message "MSG_DETECTED_ZONE")")" "$(color blue "$system_timezone")"
     fi
     
-    # 確認
-    printf "%s\n" "$(color blue "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
+    # 確認（重複表示を削除）
     if confirm "MSG_CONFIRM_ONLY_YN"; then
         # country.dbから完全な国情報を検索
         local country_data=$(grep -i "^[^ ]* *$system_country" "$BASE_DIR/country.db")
