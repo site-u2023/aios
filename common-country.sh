@@ -107,62 +107,24 @@ normalize_input() {
 
 # ユーザーに国の選択を促す関数
 select_country() {
-    debug_log "DEBUG" "Entering select_country() with arg: '$1'"
+    debug_log "DEBUG" "select_country() 実行: 引数='$1'"
 
     local cache_country="${CACHE_DIR}/country.ch"
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
-    local input_lang="$1"  # 引数として渡された言語コード（無ければ後で入力）
+    local input_lang="$1"  # 引数として渡された言語コード
 
     # キャッシュがあればゾーン選択へスキップ
     if [ -f "$cache_country" ]; then
-        debug_log "DEBUG" "Country cache found. Skipping selection."
+        debug_log "DEBUG" "国キャッシュが存在。選択をスキップ"
         select_zone
         return
     fi
 
-    # システム情報からデフォルト値を取得
-    local system_language=""
-    local system_country=""
-    
-    if type get_country_info >/dev/null 2>&1; then
-        # システム情報から国データを取得
-        local system_country_info=$(get_country_info)
-        if [ -n "$system_country_info" ]; then
-            debug_log "DEBUG" "Found system country info: $system_country_info"
-            # デフォルトの言語コードを抽出 ($4)
-            system_language=$(echo "$system_country_info" | awk '{print $4}')
-            # デフォルトの国名を抽出 ($2)
-            system_country=$(echo "$system_country_info" | awk '{print $2}')
+    # キャッシュがない場合のみ自動検出を試みる
+    if [ "$AUTO_DETECT" != "no" ]; then
+        if detect_and_set_location; then
+            return 0
         fi
-    fi
-
-    # デフォルト値をユーザーに提案
-    if [ -z "$input_lang" ] && [ -n "$system_country" ]; then
-        # 検出された国を表示
-        local msg_detected=$(get_message "MSG_DETECTED_COUNTRY")
-        printf "%s %s\n" "$(color blue "$msg_detected")" "$(color blue_underline "$system_country")"
-        
-        # 国を使用するか確認
-        local msg_use=$(get_message "MSG_USE_DETECTED_COUNTRY")
-        printf "%s\n" "$(color blue "$msg_use")"
-        
-        # 確認プロンプトを表示
-        local msg_confirm=$(get_message "MSG_CONFIRM_ONLY_YN")
-        printf "%s " "$(color cyan "$msg_confirm")"
-        
-        read -r yn
-        yn=$(normalize_input "$yn")
-        
-        case "$yn" in
-            [Yy]*)
-                input_lang="$system_country"
-                debug_log "DEBUG" "Using system country: $system_country"
-                ;;
-            *)
-                input_lang=""
-                debug_log "DEBUG" "User declined system country. Moving to manual input."
-                ;;
-        esac
     fi
 
     # 国の入力と検索ループ
@@ -176,7 +138,7 @@ select_country() {
             printf "%s " "$(color cyan "$msg_search")"
             
             read -r input_lang
-            debug_log "DEBUG" "User entered country search: $input_lang"
+            debug_log "DEBUG" "ユーザーが入力した検索キーワード: $input_lang"
         fi
 
         # 入力の正規化と検索
@@ -203,13 +165,12 @@ select_country() {
             
             # メッセージと国名を別々に色付け
             local msg=$(get_message "MSG_SINGLE_MATCH_FOUND")
-            # プレースホルダー部分を抽出
             msg_prefix=${msg%%\{0\}*}
             msg_suffix=${msg#*\{0\}}
             
             printf "%s%s%s\n" "$(color blue "$msg_prefix")" "$(color blue_underline "$country_name")" "$(color blue "$msg_suffix")"
             
-            # 確認プロンプト
+            # 確認（confirm関数使用）
             if confirm "MSG_CONFIRM_ONLY_YN"; then
                 echo "$full_results" > "$tmp_country"
                 country_write
@@ -222,7 +183,7 @@ select_country() {
         fi
 
         # 複数結果の場合、リスト表示して選択
-        debug_log "DEBUG" "Multiple matches found for '$input_lang'. Presenting selection list."
+        debug_log "DEBUG" "複数の結果が見つかりました '$input_lang'。選択リストを表示"
         
         # 表示用リスト作成
         local display_results=$(echo "$full_results" | awk '{print $2, $3}')
@@ -249,143 +210,63 @@ select_country() {
         # 選択確認
         local selected_country_name=$(echo "$selected_full" | awk '{print $2, $3}')
         local msg_selected=$(get_message "MSG_SELECTED_COUNTRY")
-        # プレースホルダー部分を抽出
         msg_prefix=${msg_selected%%\{0\}*}
         msg_suffix=${msg_selected#*\{0\}}
         
         printf "%s%s%s\n" "$(color blue "$msg_prefix")" "$(color blue_underline "$selected_country_name")" "$(color blue "$msg_suffix")"
 
-        # 確認プロンプト
-        local msg_confirm=$(get_message "MSG_CONFIRM_ONLY_YN")
-        printf "%s " "$(color cyan "$msg_confirm")"
-        read -r yn
-        yn=$(normalize_input "$yn")
-        
-        case "$yn" in
-            [Yy]*)
-                echo "$selected_full" > "$tmp_country"
-                country_write
-                select_zone
-                return 0
-                ;;
-            *)
-                local msg_search_again=$(get_message "MSG_SEARCH_AGAIN")
-                printf "%s " "$(color yellow "$msg_search_again")"
-                read -r yn
-                yn=$(normalize_input "$yn")
-                
-                case "$yn" in
-                    [Yy]*) input_lang="" ;;
-                    *) ;;
-                esac
-                continue
-                ;;
-        esac
+        # 確認（confirm関数使用）
+        if confirm "MSG_CONFIRM_ONLY_YN"; then
+            echo "$selected_full" > "$tmp_country"
+            country_write
+            select_zone
+            return 0
+        else
+            # 再検索するか確認（confirm関数使用）
+            if confirm "MSG_SEARCH_AGAIN"; then
+                input_lang=""
+            fi
+            continue
+        fi
     done
 }
 
 detect_and_set_location() {
-    debug_log "DEBUG" "Executing detect_and_set_location()"
+    debug_log "DEBUG" "detect_and_set_location() 実行"
     
-    # キャッシュファイルのパス
-    local cache_country="${CACHE_DIR}/country.ch"
-    local cache_zone="${CACHE_DIR}/zone.ch"
-    local cache_zonename="${CACHE_DIR}/zonename.ch"
-    local cache_timezone="${CACHE_DIR}/timezone.ch"
-    local flag_zone="${CACHE_DIR}/timezone_success_done"
-    
-    # すでに設定済みならスキップ
-    if [ -f "$cache_zonename" ] && [ -f "$cache_timezone" ]; then
-        debug_log "DEBUG" "Location already set. Skipping."
-        return 0
-    fi
-
-    # システム情報取得
+    # システムから国とタイムゾーン情報を取得
     local system_country=""
     local system_timezone=""
     
     if type get_country_info >/dev/null 2>&1; then
-        local system_country_info=$(get_country_info)
-        if [ -n "$system_country_info" ]; then
-            system_country=$(echo "$system_country_info" | awk '{print $2}')
-        fi
+        system_country=$(get_country_info | awk '{print $2}')
     fi
     
     if type get_current_timezone >/dev/null 2>&1; then
         system_timezone=$(get_current_timezone)
     fi
     
-    # 検出情報がない場合は通常フローへ
+    # 検出できなければ通常フローへ
     if [ -z "$system_country" ] || [ -z "$system_timezone" ]; then
-        debug_log "DEBUG" "Cannot detect country/timezone automatically. Using standard flow."
-        select_country
-        return $?
+        return 1
     fi
     
-    # 国情報から正確なタイムゾーン情報を取得
-    local country_data=$(awk -v country="$system_country" 'BEGIN {IGNORECASE=1} { if ($2 == country) print $0 }' "$BASE_DIR/country.db")
-    if [ -z "$country_data" ]; then
-        debug_log "DEBUG" "Country not found in database. Using standard flow."
-        select_country
-        return $?
-    fi
+    # 検出情報表示
+    printf "%s\n" "$(color yellow "$(get_message "MSG_DISCLAIMER")")"
+    printf "%s %s\n" "$(color blue "$(get_message "MSG_DETECTED_COUNTRY")")" "$system_country"
+    printf "%s %s\n\n" "$(color blue "$(get_message "MSG_DETECTED_TIMEZONE")")" "$system_timezone"
     
-    # タイムゾーン情報取得
-    local country_name=$(echo "$country_data" | awk '{print $2, $3}')
-    local timezone_cols=$(echo "$country_data" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i; print ""}')
-    local default_tz=""
-    
-    for zone in $timezone_cols; do
-        if [ -n "$system_timezone" ] && echo "$zone" | grep -q "$system_timezone"; then
-            default_tz="$zone"
-            break
-        fi
-    done
-    
-    # タイムゾーンが見つからなければ最初のものを使用
-    if [ -z "$default_tz" ]; then
-        default_tz=$(echo "$timezone_cols" | awk '{print $1}')
-    fi
-    
-    # ゾーン情報をカンマで分割
-    local zonename=$(echo "$default_tz" | cut -d',' -f1)
-    local timezone=$(echo "$default_tz" | cut -d',' -f2)
-    
-    # 免責事項表示
-    printf "%s\n\n" "$(color yellow "$(get_message "MSG_DISCLAIMER")")"
-    
-    # 検出された情報を表示（日本語対応）
-    printf "%s %s\n" "$(color blue "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color cyan "$country_name")"
-    printf "%s %s\n\n" "$(color blue "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color cyan "$zonename ($timezone)")"
-    
-    # 一括確認
-    local msg_use_settings=$(get_message "MSG_USE_DETECTED_SETTINGS")
-    printf "%s\n" "$(color blue "$msg_use_settings")"
-    
+    # 確認（既存の関数を使用）
+    printf "%s\n" "$(color blue "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
     if confirm "MSG_CONFIRM_ONLY_YN"; then
-        # 確認されたら情報を保存
-        echo "$country_data" > "$cache_country"
-        echo "$default_tz" > "$cache_zone"
-        echo "$zonename" > "$cache_zonename" 
-        echo "$timezone" > "$cache_timezone"
-        
+        # 検出された国を設定
+        select_country "$system_country"
         # 完了メッセージ
         printf "%s\n" "$(color green "$(get_message "MSG_SETUP_COMPLETE")")"
-        touch "$flag_zone"
-        
-        # 基本言語パッケージのインストール
-        if [ -f "${CACHE_DIR}/downloader.ch" ] && type install_package >/dev/null 2>&1; then
-            install_package luci-i18n-base yn hidden
-            install_package luci-i18n-opkg yn hidden
-            install_package luci-i18n-firewall yn hidden
-        fi
-        
         return 0
     else
-        # 拒否されたら通常フロー
-        debug_log "DEBUG" "User declined automatic settings. Using standard flow."
-        select_country
-        return $?
+        # 拒否された場合は通常フロー
+        return 1
     fi
 }
 
