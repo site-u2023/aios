@@ -192,8 +192,9 @@ select_country() {
         # 検索結果がない場合
         if [ -z "$full_results" ]; then
             local msg_not_found=$(get_message "MSG_COUNTRY_NOT_FOUND")
-            # エスケープ処理付きのsedでプレースホルダーを置換
-            local escaped_input=$(echo "$input_lang" | sed 's/[\/&]/\\&/g')
+            local escaped_input="$input_lang"
+            escaped_input=$(echo "$escaped_input" | sed 's/\//\\\//g')
+            escaped_input=$(echo "$escaped_input" | sed 's/&/\\\&/g')
             msg_not_found=$(echo "$msg_not_found" | sed "s/{0}/$escaped_input/g")
             printf "%s\n" "$(color red "$msg_not_found")"
             input_lang=""  # リセットして再入力
