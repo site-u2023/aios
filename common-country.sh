@@ -140,7 +140,7 @@ select_country() {
     if [ -z "$input_lang" ] && [ -n "$system_country" ]; then
         # 検出された国を表示
         local msg_detected=$(get_message "MSG_DETECTED_COUNTRY")
-        printf "%s %s\n" "$(color blue "$msg_detected")" "$(color white_underline "$system_country")"
+        printf "%s %s\n" "$(color blue "$msg_detected")" "$(color cyan "$system_country")"
         
         # 国を使用するか確認
         local msg_use=$(get_message "MSG_USE_DETECTED_COUNTRY")
@@ -199,15 +199,12 @@ select_country() {
         # 結果が1件のみの場合、自動選択と確認
         local result_count=$(echo "$full_results" | wc -l)
         if [ "$result_count" -eq 1 ]; then
+            # 国コードと国名を取得
             local country_name=$(echo "$full_results" | awk '{print $2, $3}')
             
             # メッセージと国名を別々に色付け
             local msg=$(get_message "MSG_SINGLE_MATCH_FOUND")
-            # プレースホルダー部分を抽出
-            msg_prefix=${msg%%\{0\}*}
-            msg_suffix=${msg#*\{0\}}
-            
-            printf "%s%s%s\n" "$(color blue "$msg_prefix")" "$(color white_underline "$country_name")" "$(color blue "$msg_suffix")"
+            printf "%s %s\n" "$(color blue "$msg")" "$(color cyan "$country_name")"
             
             # 確認プロンプト
             if confirm "MSG_CONFIRM_ONLY_YN"; then
@@ -225,13 +222,23 @@ select_country() {
         debug_log "DEBUG" "Multiple matches found for '$input_lang'. Presenting selection list."
         
         # 表示用リスト作成
-        local display_results=$(echo "$full_results" | awk '{print $2, $3}')
+        local display_results=""
+        printf "%s\n" "$(color blue "$(get_message "MSG_AVAILABLE_COUNTRIES")")"
         
-        echo "$display_results" > "$tmp_country"
-        select_list "$display_results" "$tmp_country" "country"
+        # 複数結果の処理
+        echo "$full_results" | while IFS= read -r line; do
+            local country_name=$(echo "$line" | awk '{print $2, $3}')
+            display_results="${display_results}${country_name}\n"
+        done
+        
+        # 表示結果を保存
+        echo "$display_results" | sed 's/\\n/\n/g' > "$tmp_country"
+        
+        # 結果をリスト表示して選択
+        select_list "$(cat "$tmp_country")" "${CACHE_DIR}/country_selected.txt" "country"
         
         # 選択された番号の検証
-        local selected_number=$(cat "$tmp_country")
+        local selected_number=$(cat "${CACHE_DIR}/country_selected.txt")
         if [ -z "$selected_number" ] || ! echo "$selected_number" | grep -q '^[0-9]\+$'; then
             local msg_invalid=$(get_message "MSG_INVALID_NUMBER")
             printf "%s\n" "$(color red "$msg_invalid")"
@@ -248,12 +255,9 @@ select_country() {
         
         # 選択確認
         local selected_country_name=$(echo "$selected_full" | awk '{print $2, $3}')
-        local msg_selected=$(get_message "MSG_SELECTED_COUNTRY")
-        # プレースホルダー部分を抽出
-        msg_prefix=${msg_selected%%\{0\}*}
-        msg_suffix=${msg_selected#*\{0\}}
         
-        printf "%s%s%s\n" "$(color blue "$msg_prefix")" "$(color white_underline "$selected_country_name")" "$(color blue "$msg_suffix")"
+        local msg_selected=$(get_message "MSG_SELECTED_COUNTRY")
+        printf "%s %s\n" "$(color blue "$msg_selected")" "$(color cyan "$selected_country_name")"
 
         # 確認プロンプト
         local msg_confirm=$(get_message "MSG_CONFIRM_ONLY_YN")
@@ -326,30 +330,35 @@ select_list() {
         return 0
     fi
     
-    # 項目をリスト表示
+    # 項目をリスト表示（下線なし、見やすい番号付け）
     echo "$select_list" | while read -r line; do
-        printf "%s: %s\n" "$count" "$(color white "$line")"
+        if [ $count -lt 10 ]; then
+            # 1桁番号の場合は整列を調整
+            printf " %s. %s\n" "$count" "$line"
+        else
+            printf "%s. %s\n" "$count" "$line"
+        fi
         count=$((count + 1))
     done
     
     # ユーザーに選択を促す
     while true; do
         # メッセージの取得と表示
-        local prompt_msg=$(get_message "$prompt_msg_key" "番号を選択:")
+        local prompt_msg=$(get_message "$prompt_msg_key")
         printf "%s " "$(color cyan "$prompt_msg")"
         read -r number
         number=$(normalize_input "$number")
         
         # 数値チェック
         if ! echo "$number" | grep -q '^[0-9]\+$'; then
-            local error_msg=$(get_message "$error_msg_key" "無効な番号です")
+            local error_msg=$(get_message "$error_msg_key")
             printf "%s\n" "$(color red "$error_msg")"
             continue
         fi
         
         # 範囲チェック
         if [ "$number" -lt 1 ] || [ "$number" -gt "$total_items" ]; then
-            local range_msg=$(get_message "MSG_NUMBER_OUT_OF_RANGE" "範囲外の番号です: {0}")
+            local range_msg=$(get_message "MSG_NUMBER_OUT_OF_RANGE")
             # プレースホルダー置換（sedでエスケープ処理）
             range_msg=$(echo "$range_msg" | sed "s|{0}|1-$total_items|g")
             printf "%s\n" "$(color red "$range_msg")"
@@ -403,6 +412,7 @@ select_zone() {
     
     # カントリーデータからタイムゾーン情報を抽出
     local country_data=$(cat "$cache_country")
+    local country_code=$(echo "$country_data" | awk '{print $1}')
     local country_col=$(echo "$country_data" | awk '{print $2}')
     local timezone_cols=$(echo "$country_data" | awk '{for(i=6; i<=NF; i++) printf "%s ", $i; print ""}')
     
@@ -430,7 +440,7 @@ select_zone() {
     # デフォルト値が見つかった場合、それを提案
     if [ -n "$default_tz" ]; then
         local detected_msg=$(get_message "MSG_DETECTED_TIMEZONE")
-        printf "%s %s\n" "$(color blue "$detected_msg")" "$(color white_underline "$default_tz")"
+        printf "%s %s\n" "$(color blue "$detected_msg")" "$(color cyan "$default_tz")"
         
         # 確認処理（共通関数使用）
         if confirm "MSG_CONFIRM_ONLY_YN"; then
@@ -471,6 +481,8 @@ select_zone() {
     local count=1
     
     # ゾーンデータをパースして表示可能な形式に変換
+    printf "%s\n" "$(color blue "$(get_message "MSG_AVAILABLE_TIMEZONES")")"
+    
     echo "$timezone_cols" | tr ' ' '\n' | grep -v "^$" | while read -r zone_pair; do
         # カンマ区切りのペアから個別データを抽出
         local zonename=$(echo "$zone_pair" | cut -d',' -f1)
@@ -485,7 +497,6 @@ select_zone() {
     done
     
     # select_list関数で選択処理
-    printf "%s\n" "$(color blue "$(get_message "MSG_SELECT_TIMEZONE")")"
     select_list "$(cat "${CACHE_DIR}/zone_display.txt")" "${CACHE_DIR}/zone_selected.txt" "zone"
     
     # 選択された番号を取得
