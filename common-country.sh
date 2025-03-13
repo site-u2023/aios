@@ -659,9 +659,6 @@ normalize_language() {
 
     debug_log "DEBUG" "Final active language: ${ACTIVE_LANGUAGE}"
     echo "$(get_message "MSG_COUNTRY_SUCCESS")"
-    
-    # フラグファイルの確認と作成
-    [ -f "$flag_file" ] || touch "$flag_file"
 }
 
 # タイムゾーン情報をキャッシュに書き込む関数
