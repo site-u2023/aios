@@ -477,7 +477,37 @@ select_zone() {
     fi
     debug_log "DEBUG" "Extracted timezone list for selected country"
     
-    # タイムゾーンリストの表示
+    # タイムゾーン数を数える
+    local zone_count=$(echo "$zone_list" | wc -l)
+    debug_log "DEBUG" "Found $zone_count timezone(s) for selected country"
+    
+    # タイムゾーンが1つだけの場合は自動選択
+    if [ "$zone_count" -eq 1 ]; then
+        local selected=$(echo "$zone_list")
+        debug_log "DEBUG" "Only one timezone available: $selected - auto selecting"
+        
+        # タイムゾーン情報の分割
+        local zonename=""
+        local timezone=""
+        
+        if echo "$selected" | grep -q ","; then
+            zonename=$(echo "$selected" | cut -d ',' -f 1)
+            timezone=$(echo "$selected" | cut -d ',' -f 2)
+        else
+            zonename="$selected"
+            timezone="GMT0"
+        fi
+        
+        # キャッシュに直接書き込み
+        echo "$zonename" > "$cache_zonename"
+        echo "$timezone" > "$cache_timezone"
+        echo "$selected" > "$cache_zone"
+        
+        printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+        return 0
+    fi
+    
+    # 複数のタイムゾーンがある場合は選択肢を表示
     printf "%s\n" "$(color blue "$(get_message "MSG_SELECT_TIMEZONE")")"
     
     # 番号付きリスト表示
@@ -519,12 +549,12 @@ select_zone() {
     fi
     
     # 確認
-    printf "%s\n" "$(color blue "$(get_message "MSG_CONFIRM_TIMEZONE") $zonename,$timezone")"
+    printf "%s %s\n" "$(color blue "$(get_message "MSG_CONFIRM_TIMEZONE")")" "$(color blue "$selected")"
     
     if confirm "MSG_CONFIRM_ONLY_YN"; then
         echo "$zonename" > "$cache_zonename"
         echo "$timezone" > "$cache_timezone"
-        echo "$zonename,$timezone" > "$cache_zone"
+        echo "$selected" > "$cache_zone"
         printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
         return 0
     fi
