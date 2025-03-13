@@ -140,7 +140,7 @@ select_country() {
     if [ -z "$input_lang" ] && [ -n "$system_country" ]; then
         # 検出された国を表示
         local msg_detected=$(get_message "MSG_DETECTED_COUNTRY")
-        printf "%s %s\n" "$(color blue "$msg_detected")" "$system_country"
+        printf "%s %s\n" "$(color blue "$msg_detected")" "$(color white_underline "$system_country")"
         
         # 国を使用するか確認
         local msg_use=$(get_message "MSG_USE_DETECTED_COUNTRY")
@@ -201,10 +201,13 @@ select_country() {
         if [ "$result_count" -eq 1 ]; then
             local country_name=$(echo "$full_results" | awk '{print $2, $3}')
             
-            # メッセージデータベースからメッセージを取得し、プレースホルダーを置換
+            # メッセージと国名を別々に色付け
             local msg=$(get_message "MSG_SINGLE_MATCH_FOUND")
-            msg=$(echo "$msg" | sed "s/{0}/$country_name/g")
-            printf "%s\n" "$(color blue "$msg")"
+            # プレースホルダー部分を抽出
+            msg_prefix=${msg%%\{0\}*}
+            msg_suffix=${msg#*\{0\}}
+            
+            printf "%s%s%s\n" "$(color blue "$msg_prefix")" "$(color white_underline "$country_name")" "$(color blue "$msg_suffix")"
             
             # 確認プロンプト
             if confirm "MSG_CONFIRM_ONLY_YN"; then
@@ -246,10 +249,11 @@ select_country() {
         # 選択確認
         local selected_country_name=$(echo "$selected_full" | awk '{print $2, $3}')
         local msg_selected=$(get_message "MSG_SELECTED_COUNTRY")
-        # エスケープ処理付きのsedでプレースホルダーを置換
-        escaped_country=$(echo "$selected_country_name" | sed 's/[\/&]/\\&/g')
-        msg_selected=$(echo "$msg_selected" | sed "s/{0}/$escaped_country/g")
-        printf "%s\n" "$(color blue "$msg_selected")"
+        # プレースホルダー部分を抽出
+        msg_prefix=${msg_selected%%\{0\}*}
+        msg_suffix=${msg_selected#*\{0\}}
+        
+        printf "%s%s%s\n" "$(color blue "$msg_prefix")" "$(color white_underline "$selected_country_name")" "$(color blue "$msg_suffix")"
 
         # 確認プロンプト
         local msg_confirm=$(get_message "MSG_CONFIRM_ONLY_YN")
@@ -287,7 +291,7 @@ select_country() {
 # $3: タイプ（country/zone）
 # 番号付きリストからユーザーに選択させる関数
 select_list() {
-    debug_log "DEBUG" "select_list() 関数を実行: タイプ=$3"
+    debug_log "DEBUG" "select_list() function executing: type=$3"
     
     local select_list="$1"
     local tmp_file="$2"
@@ -324,7 +328,7 @@ select_list() {
     
     # 項目をリスト表示
     echo "$select_list" | while read -r line; do
-        printf "%s: %s\n" "$count" "$line"
+        printf "%s: %s\n" "$count" "$(color white_underline "$line")"
         count=$((count + 1))
     done
     
@@ -355,16 +359,13 @@ select_list() {
         # 選択項目を取得
         local selected_value=$(echo "$select_list" | sed -n "${number}p")
         
-        # 選択内容の表示 (ここでは表示せず、confirm関数に任せる)
-        # -- 重複表示を避けるため、ここでの表示を削除 --
-        
         # 確認部分で選択内容の表示は行わない（重複表示を避けるため）
         if confirm "MSG_CONFIRM_YNR" "selected_value" "$selected_value"; then
             echo "$number" > "$tmp_file"
             break
         elif [ "$CONFIRM_RESULT" = "R" ]; then
             # リスタートオプション
-            debug_log "DEBUG" "ユーザーが選択をリスタート"
+            debug_log "DEBUG" "User selected restart option"
             rm -f "${CACHE_DIR}/country.ch"
             select_country
             return 0
@@ -372,12 +373,12 @@ select_list() {
         # 他の場合は再選択
     done
     
-    debug_log "DEBUG" "選択完了: $type 番号 $(cat $tmp_file)"
+    debug_log "DEBUG" "Selection complete: $type number $(cat $tmp_file)"
 }
 
 # タイムゾーンの選択を処理する関数
 select_zone() {
-    debug_log "DEBUG" "select_zone() 関数を実行"
+    debug_log "DEBUG" "Executing select_zone() function"
     
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_zone="${CACHE_DIR}/zone.ch"
@@ -388,13 +389,13 @@ select_zone() {
     
     # すでに設定済みかチェック
     if [ -f "$cache_zonename" ] && [ -f "$cache_timezone" ]; then
-        debug_log "DEBUG" "タイムゾーンはすでに設定済み。select_zone() をスキップ"
+        debug_log "DEBUG" "Timezone already set. Skipping select_zone()"
         return 0
     fi
 
     # カントリーファイルが存在するか確認
     if [ ! -f "$cache_country" ]; then
-        debug_log "ERROR" "カントリーファイルが見つかりません。select_country() を先に実行"
+        debug_log "ERROR" "Country file not found. Running select_country() first"
         printf "%s\n" "$(color yellow "$(get_message "MSG_COUNTRY_NOT_FOUND")")"
         select_country
         return $?
@@ -409,7 +410,7 @@ select_zone() {
     local current_tz=""
     if type get_current_timezone >/dev/null 2>&1; then
         current_tz=$(get_current_timezone)
-        debug_log "DEBUG" "現在のシステムタイムゾーン: $current_tz"
+        debug_log "DEBUG" "Current system timezone: $current_tz"
     fi
     
     # デフォルトタイムゾーンの検出
@@ -429,11 +430,11 @@ select_zone() {
     # デフォルト値が見つかった場合、それを提案
     if [ -n "$default_tz" ]; then
         local detected_msg=$(get_message "MSG_DETECTED_TIMEZONE")
-        printf "%s %s\n" "$(color blue "$detected_msg")" "$default_tz"
+        printf "%s %s\n" "$(color blue "$detected_msg")" "$(color white_underline "$default_tz")"
         
         # 確認処理（共通関数使用）
         if confirm "MSG_CONFIRM_ONLY_YN"; then
-            debug_log "DEBUG" "検出されたタイムゾーンを使用: $default_tz (インデックス: $default_tz_index)"
+            debug_log "DEBUG" "Using detected timezone: $default_tz (index: $default_tz_index)"
             echo "$default_tz_index" > "$tmp_zone"
             echo "$default_tz" > "$cache_zone"
             
@@ -490,7 +491,7 @@ select_zone() {
     # 選択された番号を取得
     local selected_number=$(cat "${CACHE_DIR}/zone_selected.txt")
     if [ -z "$selected_number" ]; then
-        debug_log "ERROR" "タイムゾーン選択エラー"
+        debug_log "ERROR" "Timezone selection error"
         printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
         return 1
     fi
@@ -520,7 +521,7 @@ select_zone() {
         install_package luci-i18n-firewall yn hidden
     fi
     
-    debug_log "DEBUG" "選択されたタイムゾーン: $selected_zonename ($selected_timezone)"
+    debug_log "DEBUG" "Selected timezone: $selected_zonename ($selected_timezone)"
     return 0
 }
 
@@ -623,7 +624,7 @@ zone_write() {
             zonename="$selected_timezone"
             timezone="$selected_timezone"
         else
-            # それ以外の場合、カスタム解析が必要かもしれません
+            # それ以外の場合、カスタム解析
             zonename="$selected_timezone"
             timezone="$selected_timezone"
         fi
@@ -677,7 +678,7 @@ timezone_setup() {
             return 0
         else
             debug_log "WARN" "Failed to set timezone using set_system_timezone(). Falling back to traditional method."
-            printf "%s\n" "$(color yellow "$(get_message "WARN_FALLBACK_METHOD")")"
+            printf "%s\n" "$(color yellow "$(get_message "WARN_FALLBACK_METHOD" "代替方法で設定を試みます")")"
         fi
     fi
     
