@@ -237,6 +237,7 @@ detect_and_set_location() {
     # システムから国とタイムゾーン情報を取得
     local system_country=""
     local system_timezone=""
+    local tmp_country="${CACHE_DIR}/country_tmp.ch"
     
     if type get_country_info >/dev/null 2>&1; then
         system_country=$(get_country_info | awk '{print $2}')
@@ -254,16 +255,28 @@ detect_and_set_location() {
     # 検出情報表示
     printf "%s\n" "$(color yellow "$(get_message "MSG_DISCLAIMER")")"
     printf "%s %s\n" "$(color blue "$(get_message "MSG_DETECTED_COUNTRY")")" "$system_country"
-    printf "%s %s\n\n" "$(color blue "$(get_message "MSG_DETECTED_TIMEZONE")")" "$system_timezone"
+    printf "%s %s\n\n" "$(color blue "$(get_message "MSG_DETECTED_ZONE")")" "$system_timezone"
     
-    # 確認（既存の関数を使用）
+    # 確認
     printf "%s\n" "$(color blue "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
     if confirm "MSG_CONFIRM_ONLY_YN"; then
-        # 検出された国を設定
-        select_country "$system_country"
-        # 完了メッセージ
-        printf "%s\n" "$(color green "$(get_message "MSG_SETUP_COMPLETE")")"
-        return 0
+        # 検出された国データを取得
+        local country_data=$(awk -v country="$system_country" 'BEGIN {IGNORECASE=1} { if ($2 == country) print $0 }' "$BASE_DIR/country.db")
+        
+        if [ -n "$country_data" ]; then
+            # 一時ファイルに書き込み
+            echo "$country_data" > "$tmp_country"
+            
+            # 適切な関数を使ってキャッシュ書き込み
+            country_write
+            
+            # ゾーンの設定（無限ループを防ぐため直接タイムゾーン設定）
+            select_zone "$system_timezone"
+            return 0
+        else
+            debug_log "DEBUG" "検出された国がデータベースに見つかりません"
+            return 1
+        fi
     else
         # 拒否された場合は通常フロー
         return 1
