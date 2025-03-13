@@ -514,5 +514,3 @@ debug_info() {
     fi
 }
 
-# Initial debug info when script is sourced
-debug_info
