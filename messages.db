@@ -344,6 +344,13 @@ JP|MSG_ENTER_NUMBER_CHOICE=🔢 選択する番号を入力してください。
 US|MSG_CONFIRM_YNR=🔄 Confirm (y/n/r):
 JP|MSG_CONFIRM_YNR=🔄 確認 (y/n/r):
 
+# 簡略化フロー用メッセージ
+US|MSG_USE_DETECTED_SETTINGS=Do you want to use these settings?
+JP|MSG_USE_DETECTED_SETTINGS=この設定を使用しますか？
+
+US|MSG_SETUP_COMPLETE=✅ Setup completed successfully!
+JP|MSG_SETUP_COMPLETE=✅ 設定が完了しました！
+
 US|MSG_SELECT_COUNTRY_NUMBER=📌 Please select country number:
 JP|MSG_SELECT_COUNTRY_NUMBER=📌 国の番号を選択してください:
 
