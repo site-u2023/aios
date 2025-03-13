@@ -232,6 +232,62 @@ EOF
     rm -f "$tmplist"
 }
 
+#!/bin/sh
+
+# タイムゾーン情報を取得（例: JST-9）
+get_timezone_info() {
+    local timezone=""
+    
+    # /etc/TZファイルから取得（OpenWrtやAlpineで一般的）
+    if [ -f "/etc/TZ" ]; then
+        timezone=$(cat /etc/TZ)
+    fi
+    
+    # 取得できない場合はdateコマンドを使う
+    if [ -z "$timezone" ]; then
+        timezone=$(date +%Z%z)
+    fi
+    
+    echo "$timezone"
+}
+
+# ゾーン名を取得（例: Asia/Tokyo）
+get_zonename_info() {
+    local zonename=""
+    
+    # UCI（OpenWrt）から取得
+    if command -v uci >/dev/null 2>&1; then
+        zonename=$(uci get system.@system[0].timezone 2>/dev/null)
+    fi
+    
+    # /etc/timezoneから取得
+    if [ -z "$zonename" ] && [ -f "/etc/timezone" ]; then
+        zonename=$(cat /etc/timezone)
+    fi
+    
+    # シンボリックリンクから取得
+    if [ -z "$zonename" ] && [ -L "/etc/localtime" ]; then
+        zonename=$(readlink -f /etc/localtime | sed 's|.*/zoneinfo/||')
+    fi
+    
+    # ゾーン名が取得できない場合はタイムゾーンから推測
+    if [ -z "$zonename" ]; then
+        local tz=$(get_timezone_info)
+        case "$tz" in
+            JST-9)
+                zonename="Asia/Tokyo"
+                ;;
+            # 必要に応じて他のケースを追加
+            *)
+                # 不明な場合は空を返す
+                zonename=""
+                ;;
+        esac
+    fi
+    
+    echo "$zonename"
+}
+
 # 📌 Set system timezone
 # Param: $1 - Timezone name (e.g., "Asia/Tokyo")
 # Returns: 0 on success, non-zero on error
