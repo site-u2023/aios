@@ -1502,7 +1502,7 @@ download() {
         debug_log "DEBUG" "$(color blue "Quiet mode ${message}")"
         
     else
-        echo -e "$(color green "${message}")"
+        printf "%s\n" "$(color green "${message}")"
     fi
     
     return 0
@@ -1515,14 +1515,21 @@ download() {
 # バナー表示
 #########################################################################
 print_banner() {
-    echo
-    color magenta "                    ii i"
-    color blue    "         aaaa      iii       oooo      sssss"
-    color cyan    "            aa      ii      oo  oo    ss"
-    color green   "         aaaaa      ii      oo  oo     sssss"
-    color yellow  "        aa  aa      ii      oo  oo         ss"
-    color red     "         aaaaa     iiii      oooo     ssssss"
-    echo
+    # Empty line at start
+    printf "\n"
+    
+    # ASCII art with colors
+    printf "%s\n" "$(color magenta "                    ii i")"
+    printf "%s\n" "$(color blue    "         aaaa      iii       oooo      sssss")"
+    printf "%s\n" "$(color cyan    "            aa      ii      oo  oo    ss")"
+    printf "%s\n" "$(color green   "         aaaaa      ii      oo  oo     sssss")"
+    printf "%s\n" "$(color yellow  "        aa  aa      ii      oo  oo         ss")"
+    printf "%s\n" "$(color red     "         aaaaa     iiii      oooo     ssssss")"
+    
+    # Empty line after ASCII art
+    printf "\n"
+    
+    # Banner messages
     printf "%s\n" "$(color white "$(get_message "MSG_BANNER_DECCRIPTION")")"
     printf "%s\n" "$(color white "$(get_message "MSG_BANNER_NAME")")"
     printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DISCLAIMER")")"
@@ -1654,15 +1661,15 @@ check_common() {
         reset|return)
             if ! rm -rf "${CACHE_DIR}"; then
                 debug_log "ERROR" "Failed to remove cache directory: ${CACHE_DIR}"
-                echo "Reset failed: Could not remove cache directory."
+                printf "%s%s%s\n" "$(color yellow "Reset failed: Could not remove cache directory.")"
                 return 1
             fi
             # キャッシュディレクトリを再作成
             mkdir -p "${CACHE_DIR}" || {
                 debug_log "ERROR" "Failed to recreate cache directory: ${CACHE_DIR}"
-                echo "Reset partially failed: Cache removed but could not be recreated."
+                printf "%s%s%s\n" "$(color yellow "Reset partially failed: Cache removed but could not be recreated.")"
             }
-            echo "$(get_message "MSG_RESET_COMPLETE")"
+            printf "%s%s%s\n" "$(color yellow "$(get_message "MSG_RESET_COMPLETE")")"
             exit 0
             ;;
         debug)
