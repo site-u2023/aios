@@ -497,7 +497,7 @@ select_list() {
     debug_log "DEBUG" "Selection complete: $type number $(cat $tmp_file)"
 }
 
-# タイムゾーンの自動選択を処理する関数
+# タイムゾーンの選択を処理する関数
 select_zone() {
     debug_log "DEBUG" "Running select_zone() function"
     
@@ -563,22 +563,36 @@ select_zone() {
     done
     
     # 番号入力受付
-    printf "%s " "$(color cyan "$(get_message "MSG_ENTER_NUMBER")")"
-    read -r number
-    debug_log "DEBUG" "User input: $number"
-    
-    # 入力検証
-    if [ -z "$number" ] || ! echo "$number" | grep -q '^[0-9]\+$'; then
-        printf "%s\n" "$(color red "$(get_message "MSG_INVALID_NUMBER")")"
-        return 1
-    fi
+    local number=""
+    while true; do
+        printf "%s " "$(color cyan "$(get_message "MSG_ENTER_NUMBER")")"
+        read -r number
+        debug_log "DEBUG" "User input: $number"
+        
+        # 入力検証 - 空白またはゼロは許可しない
+        if [ -z "$number" ]; then
+            printf "%s\n" "$(color red "$(get_message "MSG_EMPTY_INPUT")")"
+            continue
+        fi
+        
+        # 数字かどうか確認
+        if ! echo "$number" | grep -q '^[0-9]\+$'; then
+            printf "%s\n" "$(color red "$(get_message "MSG_INVALID_NUMBER")")"
+            continue
+        fi
+        
+        # 選択範囲内かどうか確認
+        if [ "$number" -lt 1 ] || [ "$number" -gt "$zone_count" ]; then
+            printf "%s\n" "$(color red "$(get_message "MSG_NUMBER_OUT_OF_RANGE")")"
+            continue
+        fi
+        
+        # ここまで来れば有効な入力
+        break
+    done
     
     # 選択されたタイムゾーンの取得
     local selected=$(echo "$zone_list" | sed -n "${number}p")
-    if [ -z "$selected" ]; then
-        printf "%s\n" "$(color red "$(get_message "MSG_INVALID_NUMBER")")"
-        return 1
-    fi
     debug_log "DEBUG" "Selected timezone: $selected"
     
     # タイムゾーン情報の分割
