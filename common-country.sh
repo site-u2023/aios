@@ -624,7 +624,7 @@ normalize_language() {
     local selected_language=""
     local flag_file="${CACHE_DIR}/country_success_done"
 
-    debug_log "DEBUG" "language_cache=$language_cache"
+    debug_log "DEBUG" "language_cache=${language_cache}"
     
     if [ -f "$flag_file" ]; then
         debug_log "DEBUG" "normalize_language() already done. Skipping repeated success message."
