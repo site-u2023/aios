@@ -41,9 +41,6 @@ JP|MSG_BANNER_DECCRIPTION=OpenWrt/Alpine インテリジェント オペレー�
 US|MSG_BANNER_NAME=AIOS - All-In-One Setup Tool
 JP|MSG_BANNER_NAME=AIOS - オールインワンセットアップツール
 
-US|MSG_BANNER_DISCLAIMER=USE AT YOUR OWN RISK. This tool modifies system settings.
-JP|MSG_BANNER_DISCLAIMER=ご利用は自己責任でお願いします。このツールはシステム設定を変更します。
-
 # 国検出関連メッセージ
 US|MSG_DETECTED_COUNTRY=Detected country:
 JP|MSG_DETECTED_COUNTRY=検出された国:
