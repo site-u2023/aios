@@ -153,7 +153,7 @@ select_country() {
                     # 成功フラグ設定
                     echo "1" > "${CACHE_DIR}/country_success_done"
                     
-                    debug_log "INFO" "Auto-detected country has been set: $system_country"
+                    debug_log "DEBUG" "Auto-detected country has been set: $system_country"
                     select_zone
                     return 0
                 else
