@@ -497,7 +497,7 @@ select_list() {
     debug_log "DEBUG" "Selection complete: $type number $(cat $tmp_file)"
 }
 
-# タイムゾーンの選択を処理する関数
+# タイムゾーンの自動選択を処理する関数
 select_zone() {
     debug_log "DEBUG" "Running select_zone() function"
     
@@ -547,6 +547,7 @@ select_zone() {
         echo "$timezone" > "$cache_timezone"
         echo "$selected" > "$cache_zone"
         
+        # ここで統一したメッセージを表示（自動・手動共通）
         printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
         return 0
     fi
