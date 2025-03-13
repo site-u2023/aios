@@ -131,7 +131,7 @@ select_country() {
         # 検出された国を表示
         if [ -n "$system_country" ]; then
             # まず検出された国を表示
-            printf "%s %s\n" "$(get_message "MSG_DETECTED_COUNTRY")" "$(color white_underline "$system_country")"
+            printf "%s %s\n" "$(get_message "MSG_DETECTED_COUNTRY" "$system_country")"
             # 次に確認メッセージを表示
             printf "%s\n" "$(get_message "MSG_USE_DETECTED_COUNTRY")"
             # 最後にconfirm関数でYN判定を表示
@@ -210,7 +210,7 @@ select_country() {
             local msg_prefix=${msg%%\{0\}*}
             local msg_suffix=${msg#*\{0\}}
             
-            printf "%s%s%s\n" "$(color blue "$msg_prefix")" "$(color white_underline "$country_name")" "$(color blue "$msg_suffix")"
+            printf "%s%s%s\n" "$(color blue "$msg_prefix" "$country_name" "$msg_suffix")"
             
             # 確認（confirm関数使用）
             if confirm "MSG_CONFIRM_ONLY_YN"; then
@@ -258,7 +258,7 @@ select_country() {
                 local msg_prefix=${msg_selected%%\{0\}*}
                 local msg_suffix=${msg_selected#*\{0\}}
                 
-                printf "%s%s%s\n" "$(color blue "$msg_prefix")" "$(color white_underline "$selected_country")" "$(color blue "$msg_suffix")"
+                printf "%s%s%s\n" "$(color blue "$msg_prefix" "$selected_country" "$msg_suffix")"
                 
                 if confirm "MSG_CONFIRM_ONLY_YN"; then
                     # 直接キャッシュに書き込み
@@ -502,7 +502,7 @@ select_zone() {
         
         # 検出結果を表示
         local msg_detected=$(get_message "MSG_DETECTED_TIMEZONE")
-        printf "%s %s\n" "$(color blue "$msg_detected")" "$(color white_underline "$detected_tz")"
+        printf "%s %s\n" "$(color blue "$msg_detected" "$detected_tz")"
         
         # 確認を求める
         if confirm "MSG_CONFIRM_ONLY_YN"; then
@@ -593,7 +593,7 @@ select_zone() {
     local msg_prefix=${msg_confirm%%\{0\}*}
     local msg_suffix=${msg_confirm#*\{0\}}
     
-    printf "%s%s%s\n" "$(color blue "$msg_prefix")" "$(color white_underline "$selected_tz")" "$(color blue "$msg_suffix")"
+    printf "%s%s%s\n" "$(color blue "$msg_prefix" "$selected_tz" "$msg_suffix")"
     
     if confirm "MSG_CONFIRM_ONLY_YN"; then
         # キャッシュファイルに保存
