@@ -547,6 +547,7 @@ debug_info() {
         echo "Architecture: $(get_device_architecture)"
         echo "OS: $(get_os_info)"
         echo "Package Manager: $(get_package_manager)"
+        echo "Current Zonename: $(get_zonename_info)"
         echo "Current Timezone: $(get_timezone_info)"
         echo "Available Languages: $(get_available_language_packages)"
         echo "==========================="
