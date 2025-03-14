@@ -394,7 +394,8 @@ confirm() {
         
         # 入力の正規化（数字のみ正規化し、大文字小文字は変換しない）
         yn=$(normalize_input "$yn")
-        
+        debug_log "DEBUG" "User input: $yn, normalized to: $yn"
+
         # 入力の検証（大文字小文字両方に対応）
         case "$yn" in
             [Yy]|[Yy][Ee][Ss]) 
