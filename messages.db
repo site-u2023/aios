@@ -12,8 +12,78 @@ US|MSG_UNDER_TEST=👽 Under test
 JP|MSG_UNDER_TEST=👹 試験中
 
 # =======================
-# aios
+# aios help messages
 # =======================
+# print_help() 関数
+US|MSG_HELP_USAGE=Usage: aios [OPTIONS] [LANGUAGE]
+
+JP|MSG_HELP_USAGE=使用方法: aios [オプション] [言語]
+
+US|MSG_HELP_OPTIONS_HEADER=Options:
+JP|MSG_HELP_OPTIONS_HEADER=オプション:
+
+US|MSG_HELP_HELP=Show this help message
+JP|MSG_HELP_HELP=このヘルプメッセージを表示
+
+US|MSG_HELP_VERSION=Show script version
+JP|MSG_HELP_VERSION=スクリプトのバージョンを表示
+
+US|MSG_HELP_RESET=Reset all cached data
+JP|MSG_HELP_RESET=キャッシュデータをすべてリセット
+
+US|MSG_HELP_DEBUG=Enable debug mode
+JP|MSG_HELP_DEBUG=デバッグモードを有効化
+
+US|MSG_HELP_UPDATE=Update aios script
+JP|MSG_HELP_UPDATE=aiosスクリプトを更新
+
+US|MSG_HELP_FORCE=Force operations without confirmation
+JP|MSG_HELP_FORCE=確認なしで操作を強制実行
+
+US|MSG_HELP_TOKEN=Setup GitHub API token
+JP|MSG_HELP_TOKEN=GitHub APIトークンを設定
+
+US|MSG_HELP_FULL=Run in full mode
+JP|MSG_HELP_FULL=フルモードで実行
+
+US|MSG_HELP_LIGHT=Run in light mode
+JP|MSG_HELP_LIGHT=軽量モードで実行
+
+US|MSG_HELP_COMMON_DEBUG=Run in debug mode
+JP|MSG_HELP_COMMON_DEBUG=デバッグモードで実行
+
+US|MSG_HELP_DRY_RUN=Show what would be done without actual execution
+JP|MSG_HELP_DRY_RUN=実際の実行なしで何が行われるかを表示
+
+US|MSG_HELP_LANGUAGE_HEADER=Language:
+JP|MSG_HELP_LANGUAGE_HEADER=言語:
+
+US|MSG_HELP_LANGUAGE=Set user interface language
+JP|MSG_HELP_LANGUAGE=ユーザーインターフェース言語を設定
+
+US|MSG_HELP_EXAMPLES_HEADER=Examples:
+JP|MSG_HELP_EXAMPLES_HEADER=使用例:
+
+US|MSG_HELP_EXAMPLE1=sh aios full ja       # Run in full mode with Japanese language
+JP|MSG_HELP_EXAMPLE1=sh aios full ja       # 日本語でフルモードを実行
+
+US|MSG_HELP_EXAMPLE2=sh aios -u            # Update the script to latest version
+JP|MSG_HELP_EXAMPLE2=sh aios -u            # スクリプトを最新バージョンに更新
+
+US|MSG_HELP_EXAMPLE3=sh aios -r            # Reset all cached data
+JP|MSG_HELP_EXAMPLE3=sh aios -r            # すべてのキャッシュデータをリセット
+
+US|MSG_HELP_EXAMPLE4=sh aios -d -cf        # Run in full mode with debug output
+JP|MSG_HELP_EXAMPLE4=sh aios -d -cf        # デバッグ出力付きでフルモードを実行
+
+US|MSG_HELP_DEBUG_HEADER=Debug levels:
+JP|MSG_HELP_DEBUG_HEADER=デバッグレベル:
+
+US|MSG_HELP_DEBUG_STANDARD=-d, --debug           # Standard debug info
+JP|MSG_HELP_DEBUG_STANDARD=-d, --debug           # 標準デバッグ情報
+
+US|MSG_HELP_DEBUG_VERBOSE=-d2, --debug2         # Verbose debug info
+JP|MSG_HELP_DEBUG_VERBOSE=-d2, --debug2         # 詳細なデバッグ情報
 
 # handle_error() 関数
 # 動的にエラーメッセージキーを受け取るため、様々なエラーメッセージキーを使用する可能性がある
