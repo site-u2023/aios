@@ -16,6 +16,9 @@ JP|MSG_UNDER_TEST=👹 試験中
 # select_country()
 # =======================
 
+US|MSG_LANGUAGE_SET=Script language and country settings completed successfully!
+JP|MSG_LANGUAGE_SET=スクリプト用の国と言語の設定が完了しました！
+
 MSG_EMPTY_INPUT="入力が空です。数字を入力してください。"
 MSG_EMPTY_INPUT_US="Input is empty. Please enter a number."
 
