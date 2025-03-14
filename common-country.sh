@@ -239,7 +239,7 @@ select_country() {
                     return 1
                 }
 
-                debug_log "INFO" "Country selected from single match: $country_name"
+                debug_log "DEBUG" "Country selected from single match: $country_name"
                 select_zone
                 return 0
             else
