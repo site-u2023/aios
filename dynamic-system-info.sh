@@ -137,10 +137,26 @@ get_language_country_mapping() {
         pl) mapping="PL" ;;
         ca) mapping="ES" ;;
         cs) mapping="CZ" ;;
-        *) mapping=$(echo "$language_code" | tr '[:lower:]' '[:upper:]') ;;
+        *) 
+            # API取得または大文字変換でフォールバック
+            if [ -n "$API_URL" ] && command -v curl >/dev/null 2>&1; then
+                # APIから言語データを取得（例としての実装）
+                tmp_result=$(curl -s "$API_URL/lang/$language_code" 2>/dev/null)
+                if [ -n "$tmp_result" ]; then
+                    mapping="$tmp_result"
+                    debug_log "DEBUG" "Retrieved mapping from API: $language_code -> $mapping"
+                else
+                    mapping=$(echo "$language_code" | tr '[:lower:]' '[:upper:]')
+                    debug_log "DEBUG" "API lookup failed, using uppercase: $language_code -> $mapping"
+                fi
+            else
+                mapping=$(echo "$language_code" | tr '[:lower:]' '[:upper:]')
+                debug_log "DEBUG" "Using uppercase conversion: $language_code -> $mapping"
+            fi
+            ;;
     esac
     
-    debug_log "DEBUG" "Mapped language code to country: $language_code -> $mapping"
+    debug_log "DEBUG" "Final mapping: $language_code -> $mapping"
     
     # キャッシュファイルに言語と国コードの対応を出力
     if [ ! -f "$cache_file" ] || ! grep -q "^$language_code:$mapping$" "$cache_file" 2>/dev/null; then
