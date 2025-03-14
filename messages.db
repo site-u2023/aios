@@ -159,6 +159,11 @@ US|MSG_INVALID_INPUT_YN=Invalid input. Please enter Y or N.
 CN|MSG_INVALID_INPUT_YN=输入无效。请输入 Y 或 N。
 TW|MSG_INVALID_INPUT_YN=輸入無效。請輸入 Y 或 N。
 
+JP|MSG_INVALID_INPUT_YN=無効な入力です。Y/N/R のいずれかを入力してください。
+US|MSG_INVALID_INPUT_YN=Invalid input. Please enter Y, N, or R.
+CN|MSG_INVALID_INPUT_YN=输入无效。请输入 Y/N/R。
+TW|MSG_INVALID_INPUT_YN=輸入無效。請輸入 Y/N/R。
+
 # check_common() 関数のreset/returnモード
 US|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared.
 JP|MSG_RESET_COMPLETE=リセットが完了しました。すべてのキャッシュデータがクリアされました。
