@@ -1329,6 +1329,7 @@ make_directory() {
 # アップデート状態確認
 check_update() {
     # デフォルトモードの設定（引数がなくても動作するように）
+    local lang_code="$SELECTED_LANGUAGE"
     MODE="${MODE:-update}"
     
     # 全引数を処理
@@ -1369,7 +1370,7 @@ check_update() {
         mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH"
     fi
 
-    exec "$BIN_PATH" $filtered_args
+    exec "$BIN_PATH" "$lang_code" $filtered_args
 }
 
 # 初期化処理のメイン
