@@ -1,76 +1,81 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.10-02-00"
+SCRIPT_VERSION="2025.03.14-01-01"
 
 # =========================================================
-# 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
-# 🚀 Last Update: 2025-02-21
+# 📌 OpenWrt / Alpine Linux POSIX準拠シェルスクリプト
+# 🚀 最終更新日: 2025-03-14
 #
-# 🏷️ License: CC0 (Public Domain)
-# 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
+# 🏷️ ライセンス: CC0 (パブリックドメイン)
+# 🎯 互換性: OpenWrt >= 19.07 (24.10.0でテスト済み)
 #
-# ⚠️ IMPORTANT NOTICE:
-# OpenWrt OS exclusively uses **Almquist Shell (ash)** and
-# is **NOT** compatible with Bourne-Again Shell (bash).
+# ⚠️ 重要な注意事項:
+# OpenWrtは**Almquistシェル(ash)**のみを使用し、
+# **Bourne-Again Shell(bash)**とは互換性がありません。
 #
-# 📢 POSIX Compliance Guidelines:
-# ✅ Use `[` instead of `[[` for conditions
-# ✅ Use $(command) instead of backticks `command`
-# ✅ Use $(( )) for arithmetic instead of let
-# ✅ Define functions as func_name() {} (no function keyword)
-# ✅ No associative arrays (declare -A is NOT supported)
-# ✅ No here-strings (<<< is NOT supported)
-# ✅ No -v flag in test or [[
-# ✅ Avoid bash-specific string operations like ${var:0:3}
-# ✅ Avoid arrays entirely when possible (even indexed arrays can be problematic)
-# ✅ Use printf followed by read instead of read -p
-# ✅ Use printf instead of echo -e for portable formatting
-# ✅ Avoid process substitution <() and >()
-# ✅ Prefer case statements over complex if/elif chains
-# ✅ Use command -v instead of which or type for command existence checks
-# ✅ Keep scripts modular with small, focused functions
-# ✅ Use simple error handling instead of complex traps
-# ✅ Test scripts with ash/dash explicitly, not just bash
+# 📢 POSIX準拠ガイドライン:
+# ✅ 条件には `[[` ではなく `[` を使用する
+# ✅ バックティック ``command`` ではなく `$(command)` を使用する
+# ✅ `let` の代わりに `$(( ))` を使用して算術演算を行う
+# ✅ 関数は `function` キーワードなしで `func_name() {}` と定義する
+# ✅ 連想配列は使用しない (`declare -A` はサポートされていない)
+# ✅ ヒアストリングは使用しない (`<<<` はサポートされていない)
+# ✅ `test` や `[[` で `-v` フラグを使用しない
+# ✅ `${var:0:3}` のようなbash特有の文字列操作を避ける
+# ✅ 配列はできるだけ避ける（インデックス配列でも問題が発生する可能性がある）
+# ✅ `read -p` の代わりに `printf` の後に `read` を使用する
+# ✅ フォーマットには `echo -e` ではなく `printf` を使用する
+# ✅ プロセス置換 `<()` や `>()` を避ける
+# ✅ 複雑なif/elifチェーンよりもcaseステートメントを優先する
+# ✅ コマンドの存在確認には `which` や `type` ではなく `command -v` を使用する
+# ✅ スクリプトをモジュール化し、小さな焦点を絞った関数を保持する
+# ✅ 複雑なtrapの代わりに単純なエラー処理を使用する
+# ✅ スクリプトはbashだけでなく、明示的にash/dashでテストする
 #
-# 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
+# 🛠️ OpenWrt向けにシンプル、POSIX準拠、軽量に保つ！
 ### =========================================================
-### 📌 AI Assistance Request: POSIX-Compliant Debugging Guide
+### 📌 AIサポート要求: POSIX準拠デバッグガイド
 ### 
-### When debugging or fixing errors in this POSIX shell script:
+### このPOSIXシェルスクリプトのデバッグやエラー修正時:
 ### 
-### 1️⃣ Create a minimal reproducible test case (avoid bash features)
-### 2️⃣ Test with ash/dash explicitly: dash ./test.sh
-### 3️⃣ Use portable debugging methods: echo, printf, or set -x
-### 4️⃣ Validate fixes against all POSIX compliance guidelines
-### 5️⃣ Ensure the solution works in resource-constrained OpenWrt
+### 1️⃣ 最小限の再現可能なテストケースを作成する（bash機能を避ける）
+### 2️⃣ 明示的にash/dashでテスト: dash ./test.sh
+### 3️⃣ 移植性のあるデバッグ方法を使用: echo、printf、または set -x
+### 4️⃣ 修正をすべてのPOSIX準拠ガイドラインに対して検証する
+### 5️⃣ リソースが制限されたOpenWrtでソリューションが機能するようにする
 ### 
-### ⚠️ IMPORTANT:
-### - Avoid suggesting bash-specific solutions
-### - Always test fixes with ash/dash before implementation
-### - Prefer simple solutions over complex ones
-### - Do not modify production code without test verification
+### ⚠️ 重要:
+### - bash固有のソリューションを提案しない
+### - 実装前に必ずash/dashで修正をテストする
+### - 複雑なものよりも単純なソリューションを優先する
+### - テスト検証なしに本番コードを変更しない
 ### 
-### 🛠️ Keep debugging simple, focused, and POSIX-compliant!
+### 🛠️ デバッグはシンプル、的確、POSIX準拠に保つ！
 ### =========================================================
 
-# 基本定数の設定
+DEV_NULL="${DEV_NULL:-on}"
+# サイレントモード
+# export DEV_NULL="on"
+# 通常モード
+# unset DEV_NULL
+
+# 基本定数の設定 
+BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q -O}"
+# BASE_WGET="${BASE_WGET:-wget -O}"
+DEBUG_MODE="${DEBUG_MODE:-false}"
+BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
+FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
-mkdir -p "$CACHE_DIR" "$LOG_DIR"
-DEBUG_MODE="${DEBUG_MODE:-false}"
 
-# ==========================================================================
-# Dynamic System Information - Helper Functions for common-country.sh
-# ==========================================================================
-
-# 📌 Get device architecture
-# Returns: Architecture string (e.g., "mips_24kc", "arm_cortex-a7", "x86_64")
+# 📌 デバイスアーキテクチャの取得
+# 戻り値: アーキテクチャ文字列 (例: "mips_24kc", "arm_cortex-a7", "x86_64")
 get_device_architecture() {
     local arch=""
-    local architecture=""
+    local target=""
     
-    # Try to get detailed architecture from OpenWrt
+    # OpenWrtから詳細なアーキテクチャ情報を取得
     if [ -f "/etc/openwrt_release" ]; then
         target=$(grep "DISTRIB_TARGET" /etc/openwrt_release | cut -d "'" -f 2)
         arch=$(grep "DISTRIB_ARCH" /etc/openwrt_release | cut -d "'" -f 2)
@@ -78,24 +83,23 @@ get_device_architecture() {
     echo "$target $arch"
 }
 
-# 📌 Get OS type and version
-# Returns: OS type and version string (e.g., "OpenWrt 24.10.0", "Alpine 3.18.0")
+# 📌 OSタイプとバージョンの取得
+# 戻り値: OSタイプとバージョン文字列 (例: "OpenWrt 24.10.0", "Alpine 3.18.0")
 get_os_info() {
     local os_type=""
     local os_version=""
     
-    # Check for OpenWrt
+    # OpenWrtのチェック
     if [ -f "/etc/openwrt_release" ]; then
         os_type="OpenWrt"
-        os_version=$(grep "DISTRIB_ID" /etc/openwrt_release | cut -d "'" -f 2)
         os_version=$(grep "DISTRIB_RELEASE" /etc/openwrt_release | cut -d "'" -f 2)
     fi
     
-    echo "${os_type} ${os_version}"
+    echo "$os_type $os_version"
 }
 
-# 📌 Detect package manager
-# Returns: Package manager info (e.g., "opkg", "apk")
+# 📌 パッケージマネージャーの検出
+# 戻り値: パッケージマネージャー情報 (例: "opkg", "apk")
 get_package_manager() {
     if command -v opkg >/dev/null 2>&1; then
         echo "opkg"
@@ -106,8 +110,8 @@ get_package_manager() {
     fi
 }
 
-# 📌 Get available language packages
-# Returns: List of available language packages in the format "language_code:language_name"
+# 📌 利用可能な言語パッケージの取得
+# 戻り値: "language_code:language_name"形式の利用可能な言語パッケージのリスト
 get_available_language_packages() {
     local pkg_manager=$(get_package_manager)
     local lang_packages=""
@@ -115,27 +119,27 @@ get_available_language_packages() {
     
     case "$pkg_manager" in
         opkg)
-            # Get installed language packages
+            # インストール済み言語パッケージの取得
             opkg list-installed | grep "luci-i18n-base" | cut -d ' ' -f 1 > "$tmp_file" || :
             
-            # Also check available (not installed) packages
+            # 利用可能な（インストールされていない）パッケージも確認
             opkg list | grep "luci-i18n-base" | cut -d ' ' -f 1 >> "$tmp_file" || :
             ;;
         apk)
-            # For Alpine Linux, use apk to find language packages
+            # Alpine Linuxでは、apkを使用して言語パッケージを検索
             apk list | grep -i "lang" | cut -d ' ' -f 1 > "$tmp_file" || :
             ;;
         *)
-            # Fallback: Create empty file
+            # フォールバック: 空のファイルを作成
             touch "$tmp_file"
             ;;
     esac
     
-    # Process the output into a usable format
+    # 出力を使用可能な形式に処理
     if [ -s "$tmp_file" ]; then
-        # Sort and remove duplicates
+        # ソートして重複を削除
         sort -u "$tmp_file" | while read -r line; do
-            # Extract language code (e.g., extract "fr" from luci-i18n-base-fr)
+            # 言語コードを抽出 (例: luci-i18n-base-frから"fr"を抽出)
             local lang_code=$(echo "$line" | sed -n 's/.*-\([a-z][a-z]\(-[a-z][a-z]\)\?\)$/\1/p')
             if [ -n "$lang_code" ]; then
                 lang_packages="${lang_packages}${lang_code} "
@@ -151,7 +155,7 @@ get_available_language_packages() {
 get_timezone_info() {
     local timezone=""
 
-    # 1. UCI（OpenWrt）設定から直接取得
+    # UCI（OpenWrt）設定から直接取得
     if command -v uci >/dev/null 2>&1; then
         timezone="$(uci get system.@system[0].timezone 2>/dev/null)"
     fi
@@ -171,20 +175,19 @@ get_zonename_info() {
     echo "$zonename"
 }
 
-
-# 📌 Get available timezones
-# Returns: List of available timezone names from the system
+# 📌 利用可能なタイムゾーンの取得
+# 戻り値: システムから利用可能なタイムゾーン名のリスト
 get_available_timezones() {
     local zonedir="/usr/share/zoneinfo"
     local tmplist="${CACHE_DIR}/available_timezones.tmp"
     
-    # Check if zoneinfo directory exists
+    # zoneinfoディレクトリが存在するか確認
     if [ -d "$zonedir" ]; then
-        # Using find to list all timezone files
+        # findを使用してすべてのタイムゾーンファイルをリスト
         find "$zonedir" -type f -not -path "*/posix/*" -not -path "*/right/*" -not -path "*/Etc/*" | \
             sed "s|$zonedir/||" | sort > "$tmplist"
     else
-        # Fallback to a minimal list of common timezones
+        # 一般的なタイムゾーンの最小限のリストにフォールバック
         cat > "$tmplist" << EOF
 Africa/Cairo
 Africa/Johannesburg
@@ -218,11 +221,9 @@ EOF
     rm -f "$tmplist"
 }
 
-#!/bin/sh
-
-# 📌 Set system timezone
-# Param: $1 - Timezone name (e.g., "Asia/Tokyo")
-# Returns: 0 on success, non-zero on error
+# 📌 システムタイムゾーンの設定
+# パラメータ: $1 - タイムゾーン名 (例: "Asia/Tokyo")
+# 戻り値: 成功時は0、失敗時は非ゼロ
 set_system_timezone() {
     local timezone="$1"
     local result=0
@@ -232,31 +233,31 @@ set_system_timezone() {
         return 1
     fi
     
-    # Check if the timezone is valid
+    # タイムゾーンが有効かどうか確認
     if [ ! -f "/usr/share/zoneinfo/$timezone" ]; then
         echo "Error: Invalid timezone '$timezone'" >&2
         return 2
     fi
     
-    # Attempt to set timezone using uci (OpenWrt method)
+    # uciを使用してタイムゾーンを設定（OpenWrt方式）
     if command -v uci >/dev/null 2>&1; then
         uci set system.@system[0].timezone="$timezone"
         uci commit system
         result=$?
-    # Alpine Linux / Generic Linux method
+    # Alpine Linux / 一般的なLinux方式
     else
-        # Create symlink to timezone file
+        # タイムゾーンファイルへのシンボリックリンクを作成
         ln -sf "/usr/share/zoneinfo/$timezone" /etc/localtime
         echo "$timezone" > /etc/timezone
         result=$?
     fi
     
-    return $result
+    return "$result"
 }
 
-# 📌 Set system locale/language
-# Param: $1 - Language code (e.g., "fr", "ja", "zh-cn")
-# Returns: 0 on success, non-zero on error
+# 📌 システムロケール/言語の設定
+# パラメータ: $1 - 言語コード (例: "fr", "ja", "zh-cn")
+# 戻り値: 成功時は0、失敗時は非ゼロ
 set_system_language() {
     local lang_code="$1"
     local pkg_manager=$(get_package_manager)
@@ -269,19 +270,19 @@ set_system_language() {
     
     case "$pkg_manager" in
         opkg)
-            # Install language package for OpenWrt if not already installed
+            # まだインストールされていない場合はOpenWrt用の言語パッケージをインストール
             if ! opkg list-installed | grep -q "luci-i18n-base-$lang_code"; then
                 opkg update
                 opkg install "luci-i18n-base-$lang_code"
                 result=$?
                 
-                # Set language in UCI configuration
-                if [ $result -eq 0 ] && command -v uci >/dev/null 2>&1; then
+                # UCI設定で言語を設定
+                if [ "$result" -eq 0 ] && command -v uci >/dev/null 2>&1; then
                     uci set luci.main.lang="$lang_code"
                     uci commit luci
                 fi
             else
-                # Language package already installed, just set the language
+                # 言語パッケージは既にインストールされているので、言語のみを設定
                 if command -v uci >/dev/null 2>&1; then
                     uci set luci.main.lang="$lang_code"
                     uci commit luci
@@ -289,11 +290,11 @@ set_system_language() {
             fi
             ;;
         apk)
-            # For Alpine Linux, install language package
+            # Alpine Linuxの場合、言語パッケージをインストール
             apk add "lang-$lang_code" 2>/dev/null
             result=$?
             
-            # Set system locale
+            # システムロケールを設定
             echo "LANG=${lang_code}.UTF-8" > /etc/locale.conf
             ;;
         *)
@@ -302,134 +303,134 @@ set_system_language() {
             ;;
     esac
     
-    return $result
+    return "$result"
 }
 
-# 📌 Get country information for device
-# Returns: Combined country information based on system settings and database
+# 📌 デバイスの国情報の取得
+# 戻り値: システム設定とデータベースに基づく組み合わせた国情報
 get_country_info() {
     local current_lang=""
     local current_timezone=""
     local country_code=""
     local country_db="${BASE_DIR}/country.db"
     
-    # Get current system language
+    # 現在のシステム言語を取得
     if command -v uci >/dev/null 2>&1; then
         current_lang=$(uci get luci.main.lang 2>/dev/null)
     fi
     
-    # Get current timezone
+    # 現在のタイムゾーンを取得
     current_timezone=$(get_timezone_info)
     
-    # If country.db exists, try to match the information
+    # country.dbが存在する場合、情報を照合
     if [ -f "$country_db" ] && [ -n "$current_lang" ]; then
-        # Try to match by language code first
+        # まず言語コードで照合
         country_info=$(awk -v lang="$current_lang" '$4 == lang {print $0; exit}' "$country_db")
         
-        # If no match by language, try to match by timezone
+        # 言語で一致しない場合、タイムゾーンで照合
         if [ -z "$country_info" ] && [ -n "$current_timezone" ]; then
             country_info=$(awk -v tz="$current_timezone" '$0 ~ tz {print $0; exit}' "$country_db")
         fi
         
-        # If still no match, return empty
+        # まだ一致しない場合は空を返す
         if [ -n "$country_info" ]; then
             echo "$country_info"
             return 0
         fi
     fi
     
-    # If we couldn't find a match or don't have country.db, return empty
+    # 一致が見つからないか、country.dbがない場合は空を返す
     echo ""
     return 1
 }
 
-# 📌 Generate comprehensive system report
-# Saves the report to a file and returns the filename
+# 📌 包括的なシステムレポートの生成
+# レポートをファイルに保存し、ファイル名を返す
 generate_system_report() {
     local report_file="${CACHE_DIR}/system_report.txt"
     
-    # Create header
+    # ヘッダーの作成
     cat > "$report_file" << EOF
 ============================================
-System Information Report
-Generated: $(date)
+システム情報レポート
+生成日時: $(date)
 ============================================
 
 EOF
     
-    # System information
+    # システム情報
     cat >> "$report_file" << EOF
-DEVICE INFORMATION:
+デバイス情報:
 ------------------
-Architecture: $(get_device_architecture)
-Operating System: $(get_os_info)
-Package Manager: $(get_package_manager)
-Hostname: $(hostname)
-Kernel: $(uname -r)
+アーキテクチャ: $(get_device_architecture)
+オペレーティングシステム: $(get_os_info)
+パッケージマネージャー: $(get_package_manager)
+ホスト名: $(hostname)
+カーネル: $(uname -r)
 EOF
 
-    # Network information
+    # ネットワーク情報
     cat >> "$report_file" << EOF
 
-NETWORK INFORMATION:
+ネットワーク情報:
 -------------------
 EOF
-    # Get IP addresses and interfaces
-    ifconfig 2>/dev/null >> "$report_file" || ip addr 2>/dev/null >> "$report_file" || echo "Network information not available" >> "$report_file"
+    # IPアドレスとインターフェースの取得
+    ifconfig 2>/dev/null >> "$report_file" || ip addr 2>/dev/null >> "$report_file" || echo "ネットワーク情報は利用できません" >> "$report_file"
     
-    # Language and timezone information
+    # 言語とタイムゾーン情報
     cat >> "$report_file" << EOF
 
-LOCALIZATION:
+ローカライゼーション:
 ------------
-Current Timezone: $(get_timezone_info)
-Available Language Packages: $(get_available_language_packages)
+現在のタイムゾーン: $(get_timezone_info)
+利用可能な言語パッケージ: $(get_available_language_packages)
 EOF
 
-    # If UCI is available, get LuCI language
+    # UCIが利用可能な場合、LuCI言語を取得
     if command -v uci >/dev/null 2>&1; then
-        echo "LuCI Language: $(uci get luci.main.lang 2>/dev/null || echo "Not set")" >> "$report_file"
+        echo "LuCI言語: $(uci get luci.main.lang 2>/dev/null || echo "未設定")" >> "$report_file"
     fi
     
-    # Package information
+    # パッケージ情報
     cat >> "$report_file" << EOF
 
-PACKAGE INFORMATION:
+パッケージ情報:
 -------------------
 EOF
     case "$(get_package_manager)" in
         opkg)
-            echo "Installed Packages (partial list - first 20):" >> "$report_file"
+            echo "インストール済みパッケージ (部分リスト - 最初の20件):" >> "$report_file"
             opkg list-installed | head -n 20 >> "$report_file"
             echo "..." >> "$report_file"
             ;;
         apk)
-            echo "Installed Packages (partial list - first 20):" >> "$report_file"
+            echo "インストール済みパッケージ (部分リスト - 最初の20件):" >> "$report_file"
             apk list --installed | head -n 20 >> "$report_file"
             echo "..." >> "$report_file"
             ;;
         *)
-            echo "Package information not available" >> "$report_file"
+            echo "パッケージ情報は利用できません" >> "$report_file"
             ;;
     esac
     
-    # Storage information
+    # ストレージ情報
     cat >> "$report_file" << EOF
 
-STORAGE INFORMATION:
+ストレージ情報:
 -------------------
 EOF
-    df -h >> "$report_file" 2>/dev/null || echo "Storage information not available" >> "$report_file"
+    df -h >> "$report_file" 2>/dev/null || echo "ストレージ情報は利用できません" >> "$report_file"
     
-    # Memory information
+    # メモリ情報
     cat >> "$report_file" << EOF
 
-MEMORY INFORMATION:
+メモリ情報:
 ------------------
 EOF
-    free -m >> "$report_file" 2>/dev/null || echo "Memory information not available" >> "$report_file"
+    free -m >> "$report_file" 2>/dev/null || echo "メモリ情報は利用できません" >> "$report_file"
     
-    # Return the filename
+    # ファイル名を返す
     echo "$report_file"
 }
 
@@ -446,7 +447,7 @@ init_device_cache() {
         local arch
         arch=$(uname -m)
         echo "$arch" > "${CACHE_DIR}/architecture.ch"
-        debug_log "INFO" "Created architecture cache: $arch"
+        echo "INFO: Created architecture cache: $arch"
     fi
     
     # OSバージョン情報の保存
@@ -470,10 +471,10 @@ init_device_cache() {
         
         if [ -n "$version" ]; then
             echo "$version" > "${CACHE_DIR}/osversion.ch"
-            debug_log "INFO" "Created OS version cache: $version"
+            echo "INFO: Created OS version cache: $version"
         else
             echo "unknown" > "${CACHE_DIR}/osversion.ch"
-            debug_log "WARN" "Could not determine OS version"
+            echo "WARN: Could not determine OS version"
         fi
     fi
     
@@ -486,21 +487,21 @@ detect_and_save_package_manager() {
         if command -v opkg >/dev/null 2>&1; then
             echo "opkg" > "${CACHE_DIR}/downloader.ch"
             echo "ipk" > "${CACHE_DIR}/extension.ch"
-            debug_log "INFO" "Detected and saved package manager: opkg"
+            echo "INFO: Detected and saved package manager: opkg"
         elif command -v apk >/dev/null 2>&1; then
             echo "apk" > "${CACHE_DIR}/downloader.ch"
             echo "apk" > "${CACHE_DIR}/extension.ch"
-            debug_log "INFO" "Detected and saved package manager: apk"
+            echo "INFO: Detected and saved package manager: apk"
         else
             # デフォルトとしてopkgを使用
             echo "opkg" > "${CACHE_DIR}/downloader.ch"
             echo "ipk" > "${CACHE_DIR}/extension.ch"
-            debug_log "WARN" "No package manager detected, using opkg as default"
+            echo "WARN: No package manager detected, using opkg as default"
         fi
     fi
 }
 
-# 📌 Debug helper function
+# 📌 デバッグヘルパー関数
 debug_info() {
     if [ "$DEBUG_MODE" = "true" ]; then
         echo "===== SYSTEM DEBUG INFO ====="
@@ -513,4 +514,3 @@ debug_info() {
         echo "==========================="
     fi
 }
-
