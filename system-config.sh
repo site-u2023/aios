@@ -76,8 +76,8 @@ information() {
     local timezone_code=$(cat "${CACHE_DIR}/timezone.ch")
 
     echo "$(color green "$(get_message "MSG_INFO_LANG_CODE" "code=${lang_code}")")"
-    echo "$(color green "$(get_message "MSG_INFO_COUNTRY_CODE" "code=${zonename_code}")")"
-    echo "$(color green "$(get_message "MSG_INFO_COUNTRY_CODE" "code=${timezone_code}")")"
+    echo "$(color green "$(get_message "MSG_INFO_ZONENAME_CODE" "code=${zonename_code}")")"
+    echo "$(color green "$(get_message "MSG_INFO_TIMEZONE_CODE" "code=${timezone_code}")")"
 }
 
 # set_device_name_password: デバイス名とパスワードの設定を行う
@@ -375,10 +375,7 @@ configure_dns() {
     uci commit dhcp
 }
 
-#########################################################################
 # パッケージのインストール (オプション)
-# テスト用（最終的に推奨パッケージスクリプトに移動）
-#########################################################################
 packages() {
     # パッケージのインストール
     #install_package luci yn hidden
@@ -391,16 +388,16 @@ packages() {
     install_package irqbalance yn hidden
     install_package jq yn hidden
 
-    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-log yn hidden
-    feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled
+    #feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
+    #feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden
+    #feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden
+    #feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden
+    #feed_package gSpotx2f packages-openwrt current luci-app-log yn hidden
+    #feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled
 
-    feed_package_release lisaac luci-app-diskman yn hidden disabled
+    #feed_package_release lisaac luci-app-diskman yn hidden disabled
 
-    feed_package_release jerrykuku luci-theme-argon yn hidden disabled
+    #feed_package_release jerrykuku luci-theme-argon yn hidden disabled
     
     # install_package list
 }
