@@ -1253,7 +1253,6 @@ check_common() {
             print_banner       
             select_country "$lang_code"
             download "system-config.sh" "hidden" "chmod" "load"
-            packages
             ;;
         full)
             download "dynamic-system-info.sh" "chmod" "load"
@@ -1267,7 +1266,6 @@ check_common() {
             print_banner        
             select_country "$lang_code"
             download "system-config.sh" "chmod" "load"
-            packages
             ;;
         update)
             check_update "$ORIGINAL_ARGS"
