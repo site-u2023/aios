@@ -562,32 +562,48 @@ select_zone() {
     
     # select_list関数を呼び出す
     select_list "$zone_list" "$number_file" "zone"
+    local select_result=$?
     
-    # 選択結果の取得
-    if [ ! -f "$number_file" ]; then
-        debug_log "ERROR" "Zone selection number file not found"
-        return 1
-    fi
-    
-    local number=$(cat "$number_file")
-    if [ -z "$number" ]; then
-        debug_log "ERROR" "Empty zone selection number"
-        return 1
-    fi
-    
-    # 選択されたタイムゾーンの取得
-    local selected=$(echo "$zone_list" | sed -n "${number}p")
-    debug_log "DEBUG" "Selected timezone: $selected"
-    
-    # zone_write関数に処理を委譲（直接引数として渡す）
-    zone_write "$selected" || {
-        debug_log "ERROR" "Failed to write timezone data"
-        return 1
-    }
-    
-    # 成功メッセージを表示
-    printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
-    return 0
+    # 戻り値に応じた処理
+    case $select_result in
+        0) # 選択成功
+            # 選択結果の取得
+            if [ ! -f "$number_file" ]; then
+                debug_log "ERROR" "Zone selection number file not found"
+                return 1
+            fi
+            
+            local number=$(cat "$number_file")
+            if [ -z "$number" ]; then
+                debug_log "ERROR" "Empty zone selection number"
+                return 1
+            fi
+            
+            # 選択されたタイムゾーンの取得
+            local selected=$(echo "$zone_list" | sed -n "${number}p")
+            debug_log "DEBUG" "Selected timezone: $selected"
+            
+            # zone_write関数に処理を委譲（直接引数として渡す）
+            zone_write "$selected" || {
+                debug_log "ERROR" "Failed to write timezone data"
+                return 1
+            }
+            
+            # 成功メッセージを表示
+            printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+            return 0
+            ;;
+            
+        2) # 「戻る」が選択された
+            debug_log "DEBUG" "User requested to return to previous step"
+            return 2
+            ;;
+            
+        *) # キャンセルまたはエラー
+            debug_log "DEBUG" "Zone selection cancelled or error occurred"
+            return 1
+            ;;
+    esac
 }
 
 # 国情報をキャッシュに書き込む関数
