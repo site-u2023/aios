@@ -14,7 +14,7 @@ CN|MSG_UNDER_TEST=👽 测试中
 TW|MSG_UNDER_TEST=👹 測試中
 
 # =======================
-# aios help messages
+# aios
 # =======================
 # print_help() 関数
 US|MSG_HELP_USAGE=Usage: aios [OPTIONS] [LANGUAGE]
