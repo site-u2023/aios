@@ -19,8 +19,8 @@ JP|MSG_UNDER_TEST=👹 試験中
 US|MSG_SELECT_TIMEZONE=Please select your timezone from the list:
 JP|MSG_SELECT_TIMEZONE=リストからタイムゾーンを選択してください：
 
-US|MSG_LANGUAGE_SET=✅ Script language and country settings completed successfully!
-JP|MSG_LANGUAGE_SET=✅ スクリプト用の国と言語の設定が完了しました！
+US|MSG_LANGUAGE_SET=✅ Script language settings completed successfully!
+JP|MSG_LANGUAGE_SET=✅ スクリプト用の言語の設定が完了しました！
 
 MSG_EMPTY_INPUT="入力が空です。数字を入力してください。"
 MSG_EMPTY_INPUT_US="Input is empty. Please enter a number."
