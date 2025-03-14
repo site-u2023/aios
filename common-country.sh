@@ -64,34 +64,13 @@ DEV_NULL="${DEV_NULL:-on}"
 # 基本定数の設定 
 BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q -O}"
 # BASE_WGET="${BASE_WGET:-wget -O}"
+DEBUG_MODE="${DEBUG_MODE:-false}"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
+FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
-BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build}"
 
-# ディレクトリ作成（エラーハンドリング追加）
-mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR" || {
-    echo "Error: Failed to create required directories" >&2
-    exit 1
-}
-
-DEBUG_MODE="${DEBUG_MODE:-false}"
-
-#########################################################################
-# Last Update: 2025-03-14 01:24:18 (UTC) 🚀
-# "Ensuring consistent input handling and text normalization."
-#
-# 【要件】
-# 1. **入力テキストを正規化（Normalize Input）**
-#    - 全角数字を半角数字に変換
-#    - 将来的には他の文字種も対応予定
-#
-# 2. **適用対象**
-#    - **`select_country()`**: **Y/N 確認時のみ適用**
-#    - **`select_list()`**: **番号選択 & Y/N 確認時のみ適用**
-#    - **`download()`**: **ファイル名の正規化**
-#########################################################################
 # sed用にテキストをエスケープする関数
 escape_for_sed() {
     local input="$1"
@@ -786,4 +765,9 @@ if [ "$DEBUG_MODE" = "true" ]; then
     else
         debug_log "DEBUG" "dynamic-system-info.sh not loaded or functions not available"
     fi
+    
+    # 新しく追加したセキュリティ改善に関するデバッグメッセージ
+    debug_log "DEBUG" "Added escape_for_sed function to safely handle special characters in user inputs"
+    debug_log "DEBUG" "Modified select_country, select_list and zone_write functions to use proper escaping"
+    debug_log "DEBUG" "This prevents command injection and ensures POSIX-compliant string handling"
 fi
