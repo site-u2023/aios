@@ -114,6 +114,45 @@ get_package_manager() {
     fi
 } 
 
+# 📌 言語コードから国コードへのマッピングを行う関数
+get_language_country_mapping() {
+    local language_code="$1"
+    local mapping=""
+    local cache_file="${CACHE_DIR}/language_list.ch"
+    
+    debug_log "DEBUG" "Looking up country code for language: $language_code"
+    
+    # 言語コードに対応する国コードを直接マッピング
+    case "$language_code" in
+        en) mapping="US" ;;
+        ja) mapping="JP" ;;
+        zh-cn) mapping="CN" ;;
+        zh-tw) mapping="TW" ;;
+        ko) mapping="KR" ;;
+        de) mapping="DE" ;;
+        fr) mapping="FR" ;;
+        es) mapping="ES" ;;
+        it) mapping="IT" ;;
+        ru) mapping="RU" ;;
+        pl) mapping="PL" ;;
+        ca) mapping="ES" ;;
+        cs) mapping="CZ" ;;
+        *) mapping=$(echo "$language_code" | tr '[:lower:]' '[:upper:]') ;;
+    esac
+    
+    debug_log "DEBUG" "Mapped language code to country: $language_code -> $mapping"
+    
+    # キャッシュファイルに言語と国コードの対応を出力
+    if [ ! -f "$cache_file" ] || ! grep -q "^$language_code:$mapping$" "$cache_file" 2>/dev/null; then
+        echo "$language_code:$mapping" >> "$cache_file"
+        debug_log "DEBUG" "Added mapping to cache file: $language_code:$mapping"
+    fi
+    
+    # 国コードを返す
+    echo "$mapping"
+    return 0
+}
+
 # 📌 利用可能な言語パッケージの取得
 # 戻り値: "language_code:language_name"形式の利用可能な言語パッケージのリスト
 # 📌 LuCIで利用可能な言語パッケージを検出し、luci.chに保存する関数
