@@ -331,7 +331,7 @@ get_message() {
             echo "$key"  # キーをそのまま返す
         fi
         return 1
-    }
+    fi
 
     # DBからメッセージを検索
     local message=""
