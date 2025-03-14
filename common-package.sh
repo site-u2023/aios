@@ -385,7 +385,7 @@ get_language_code() {
                 debug_log "DEBUG" "Retrieved language code after generating luci.ch: $lang_code"
             else
                 debug_log "ERROR" "Failed to generate luci.ch, using default language: en"
-            }
+            fi
         else
             debug_log "ERROR" "get_available_language_packages() function not available"
         fi
