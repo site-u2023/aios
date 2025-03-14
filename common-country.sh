@@ -488,12 +488,22 @@ select_list() {
         local msg_suffix=${msg_selected#*\{0\}}
         printf "%s%s%s\n" "$(color blue "$msg_prefix")" "$(color blue "$safe_item")" "$(color blue "$msg_suffix")"
         
-        # 確認
-        if confirm "MSG_CONFIRM_ONLY_YN"; then
+        confirm "MSG_CONFIRM_YNR"
+        ret=$?
+        case $ret in
+            0) # Yes
             echo "$number" > "$tmp_file"
             debug_log "DEBUG" "Selection confirmed: $number ($selected_item)"
             return 0
-        fi
+            ;;
+        2) # Return to previous step
+            debug_log "DEBUG" "User requested to return to previous step"
+            return 2
+            ;;
+        *) # No または他
+            debug_log "DEBUG" "Selection cancelled"
+            ;;
+        esac
         
         # 確認がキャンセルされた場合は再選択
         debug_log "DEBUG" "User cancelled, prompting again"
