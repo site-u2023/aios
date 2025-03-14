@@ -197,8 +197,11 @@ JP|MSG_CONFIRM_INSTALL=パッケージ {pkg} をインストールしますか�
 US|MSG_INFO_LANG_CODE=Language Code: {code}
 JP|MSG_INFO_LANG_CODE=言語コード: {code}
 
-US|MSG_INFO_COUNTRY_CODE=Country Code: {code}
-JP|MSG_INFO_COUNTRY_CODE=国コード: {code}
+US|MSG_INFO_ZONENAME_CODE=Zonename Code: {code}
+JP|MSG_INFO_ZONENAME_CODE=ゾーンネームコード: {code}
+
+US|MSG_INFO_TIMEZONE_CODE=Timezone Code: {code}
+JP|MSG_INFO_TIMEZONE_CODE=タイムゾーンコード: {code}
 
 # set_device_name_password() 関数
 US|MSG_ENTER_DEVICE_NAME=Enter the new device name:
