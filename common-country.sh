@@ -180,6 +180,7 @@ select_country() {
             printf "%s " "$(color cyan "$msg_search")"
 
             read -r input_lang
+            input_lang=$(normalize_input "$input_lang")
             debug_log "DEBUG" "User entered search keyword: $input_lang"
         fi
 
@@ -441,6 +442,7 @@ XXX_select_country() {
             printf "%s " "$(color cyan "$msg_search")"
 
             read -r input_lang
+            input_lang=$(normalize_input "$input_lang")
             debug_log "DEBUG" "User entered search keyword: $input_lang"
         fi
 
