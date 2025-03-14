@@ -368,8 +368,8 @@ US|MSG_INVALID_ZONE_NUMBER=❌ Invalid zone number. Please try again.
 JP|MSG_INVALID_ZONE_NUMBER=❌ 無効なゾーン番号です。もう一度お試しください。
 
 # ゾーン選択プロンプトメッセージ
-US|MSG_SELECT_ZONE_NUMBER=📌 Please select zone number:
-JP|MSG_SELECT_ZONE_NUMBER=📌 ゾーンの番号を選択してください:
+US|MSG_SELECT_ZONE_NUMBER=📌 Please select zone (number):
+JP|MSG_SELECT_ZONE_NUMBER=📌 ゾーンを選択してください(番号):
 
 US|MSG_CONFIRM_SELECTION=✅ Confirm selection:
 JP|MSG_CONFIRM_SELECTION=✅ 選択を確認:
