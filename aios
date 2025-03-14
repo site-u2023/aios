@@ -310,10 +310,36 @@ get_message() {
 
 # 入力テキストを正規化する関数
 normalize_input() {
-    input="$1"
-    # 全角数字を半角数字に変換
-    input=$(echo "$input" | sed 'y/０１２３４５６７８９/0123456789/')
-    echo "$input"
+    local input="$1"
+    
+    # AWKを使った一括処理（OpenWrtにはawk標準搭載）
+    local output=$(echo "$input" | awk '{
+        # 数字（0-9）
+        gsub("０", "0"); gsub("１", "1"); gsub("２", "2"); gsub("３", "3"); gsub("４", "4");
+        gsub("５", "5"); gsub("６", "6"); gsub("７", "7"); gsub("８", "8"); gsub("９", "9");
+        
+        # 英大文字（A-Z）
+        gsub("Ａ", "A"); gsub("Ｂ", "B"); gsub("Ｃ", "C"); gsub("Ｄ", "D"); gsub("Ｅ", "E");
+        gsub("Ｆ", "F"); gsub("Ｇ", "G"); gsub("Ｈ", "H"); gsub("Ｉ", "I"); gsub("Ｊ", "J");
+        gsub("Ｋ", "K"); gsub("Ｌ", "L"); gsub("Ｍ", "M"); gsub("Ｎ", "N"); gsub("Ｏ", "O");
+        gsub("Ｐ", "P"); gsub("Ｑ", "Q"); gsub("Ｒ", "R"); gsub("Ｓ", "S"); gsub("Ｔ", "T");
+        gsub("Ｕ", "U"); gsub("Ｖ", "V"); gsub("Ｗ", "W"); gsub("Ｘ", "X"); gsub("Ｙ", "Y"); gsub("Ｚ", "Z");
+        
+        # 英小文字（a-z）
+        gsub("ａ", "a"); gsub("ｂ", "b"); gsub("ｃ", "c"); gsub("ｄ", "d"); gsub("ｅ", "e");
+        gsub("ｆ", "f"); gsub("ｇ", "g"); gsub("ｈ", "h"); gsub("ｉ", "i"); gsub("ｊ", "j");
+        gsub("ｋ", "k"); gsub("ｌ", "l"); gsub("ｍ", "m"); gsub("ｎ", "n"); gsub("ｏ", "o");
+        gsub("ｐ", "p"); gsub("ｑ", "q"); gsub("ｒ", "r"); gsub("ｓ", "s"); gsub("ｔ", "t");
+        gsub("ｕ", "u"); gsub("ｖ", "v"); gsub("ｗ", "w"); gsub("ｘ", "x"); gsub("ｙ", "y"); gsub("ｚ", "z");
+        
+        # 主要な記号
+        gsub("　", " "); gsub("！", "!"); gsub("？", "?"); gsub("．", "."); gsub("，", ","); 
+        gsub("：", ":"); gsub("；", ";"); gsub("＠", "@"); gsub("＃", "#"); gsub("＄", "$");
+        print;
+    }')
+    
+    debug_log "DEBUG" "Normalized full-width to half-width characters"
+    echo "$output"
 }
 
 # 確認入力処理関数
