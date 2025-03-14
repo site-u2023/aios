@@ -556,7 +556,7 @@ init_device_cache() {
         local arch
         arch=$(uname -m)
         echo "$arch" > "${CACHE_DIR}/architecture.ch"
-        echo "INFO: Created architecture cache: $arch"
+        debug_log "DEBUG" "Created architecture cache: $arch"
     fi
     
     # OSバージョン情報の保存
@@ -580,7 +580,7 @@ init_device_cache() {
         
         if [ -n "$version" ]; then
             echo "$version" > "${CACHE_DIR}/osversion.ch"
-            echo "INFO: Created OS version cache: $version"
+            debug_log "DEBUG" "Created OS version cache: $version"
         else
             echo "unknown" > "${CACHE_DIR}/osversion.ch"
             echo "WARN: Could not determine OS version"
@@ -596,11 +596,11 @@ detect_and_save_package_manager() {
         if command -v opkg >/dev/null 2>&1; then
             echo "opkg" > "${CACHE_DIR}/package_manager.ch"
             echo "ipk" > "${CACHE_DIR}/extension.ch"
-            echo "INFO: Detected and saved package manager: opkg"
+            debug_log "DEBUG" "Detected and saved package manager: opkg"
         elif command -v apk >/dev/null 2>&1; then
             echo "apk" > "${CACHE_DIR}/package_manager.ch"
             echo "apk" > "${CACHE_DIR}/extension.ch"
-            echo "INFO: Detected and saved package manager: apk"
+            debug_log "DEBUG" "Detected and saved package manager: apk"
         else
             # デフォルトとしてopkgを使用
             echo "opkg" > "${CACHE_DIR}/package_manager.ch"
