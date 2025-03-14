@@ -362,205 +362,6 @@ select_country() {
     done
 }
 
-# ユーザーに国の選択を促す関数
-XXX_select_country() {
-    debug_log "DEBUG" "Running select_country() function with arg='$1'"
-
-    # キャッシュファイルのパス定義
-    local cache_country="${CACHE_DIR}/country.ch"
-    local cache_zone="${CACHE_DIR}/zone.ch"
-    local input_lang="$1"  # 引数として渡された言語コード
-
-    # 1. 引数で短縮国名（JP、USなど）が指定されている場合（最優先）
-    if [ -n "$input_lang" ]; then
-        debug_log "DEBUG" "Language argument provided: $input_lang"
-        
-        # 短縮国名（$5）と完全一致するエントリを検索
-        local lang_match=$(awk -v lang="$input_lang" '$5 == lang {print $0; exit}' "$BASE_DIR/country.db")
-        
-        if [ -n "$lang_match" ]; then
-            debug_log "DEBUG" "Exact language code match found: $lang_match"
-            
-            # 一時ファイルに書き込み
-            echo "$lang_match" > "${CACHE_DIR}/country.tmp"
-            
-            # country_write関数に処理を委譲（成功メッセージをスキップ）
-            country_write true || {
-                debug_log "ERROR" "Failed to write country data from language argument"
-                return 1
-            }
-            
-            # 言語を正規化（メッセージキャッシュを作成）
-            normalize_language
-            
-            # 言語に対応するタイムゾーン情報を取得
-            echo "$(echo "$lang_match" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone.tmp"
-            
-            # zone_write関数に処理を委譲
-            zone_write || {
-                debug_log "ERROR" "Failed to write timezone data from language argument"
-                return 1
-            }
-            
-            debug_log "DEBUG" "Language selected via command argument: $input_lang"
-            # ここで1回だけ成功メッセージを表示
-            printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
-            
-            # 選択されたタイムゾーンのゾーン情報からゾーンを選択
-            select_zone
-            return 0
-        else
-            debug_log "DEBUG" "No exact language code match for: $input_lang, proceeding to next selection method"
-            # 引数一致しない場合は次へ進む（メッセージ表示なし）
-            input_lang=""  # 引数をクリア
-        fi
-    fi
-
-    # 2. キャッシュがあれば全ての選択プロセスをスキップ
-    if [ -f "$cache_country" ] && [ -f "$cache_zone" ]; then
-        debug_log "DEBUG" "Country and Timezone cache exist. Skipping selection process."
-        return 0
-    fi
-
-    # 3. 自動選択を試行（一度だけ検出処理を行う）
-    if detect_and_set_location; then
-        # 正常に設定された場合はここで終了
-        return 0
-    fi
-
-        # 4. 自動検出が失敗または拒否された場合、手動入力へ
-    debug_log "DEBUG" "Automatic location detection failed or was declined. Proceeding to manual input."
-
-    # 国の入力と検索ループ
-    while true; do
-        # 入力がまだない場合は入力を求める
-        if [ -z "$input_lang" ]; then
-            local msg_enter=$(get_message "MSG_ENTER_COUNTRY")
-            printf "%s\n" "$(color blue "$msg_enter")"
-
-            local msg_search=$(get_message "MSG_SEARCH_KEYWORD")
-            printf "%s " "$(color cyan "$msg_search")"
-
-            read -r input_lang
-            input_lang=$(normalize_input "$input_lang")
-            debug_log "DEBUG" "User entered search keyword: $input_lang"
-        fi
-
-        # 空の入力をチェック
-        if [ -z "$input_lang" ]; then
-            debug_log "DEBUG" "Empty search keyword"
-            continue
-        fi
-
-        # 入力の正規化と検索
-        local cleaned_input=$(echo "$input_lang" | sed 's/[\/,_]/ /g')
-        local full_results=$(awk -v search="$cleaned_input" \
-            'BEGIN {IGNORECASE=1} { if ($0 ~ search) print $0 }' \
-            "$BASE_DIR/country.db" 2>>"$LOG_DIR/debug.log")
-
-        # 検索結果がない場合
-        if [ -z "$full_results" ]; then
-            local msg_not_found=$(get_message "MSG_COUNTRY_NOT_FOUND")
-            local escaped_input=$(escape_for_sed "$input_lang")
-            msg_not_found=$(echo "$msg_not_found" | sed "s/{0}/$escaped_input/g")
-            printf "%s\n" "$(color red "$msg_not_found")"
-            input_lang=""  # リセットして再入力
-            continue
-        fi
-
-        # 結果が1件のみの場合、自動選択と確認
-        local result_count=$(echo "$full_results" | wc -l)
-        if [ "$result_count" -eq 1 ]; then
-            local country_name=$(echo "$full_results" | awk '{print $2, $3}')
-
-            # メッセージと国名を別々に色付け
-            local msg=$(get_message "MSG_SINGLE_MATCH_FOUND")
-            local msg_prefix=${msg%%\{0\}*}
-            local msg_suffix=${msg#*\{0\}}
-
-            printf "%s%s%s\n" "$(color blue "$msg_prefix" "$country_name" "$msg_suffix")"
-
-            # 確認（confirm関数使用）
-            if confirm "MSG_CONFIRM_ONLY_YN"; then
-                echo "$full_results" > "${CACHE_DIR}/country.tmp"
-
-                # country_write関数に処理を委譲
-                country_write || {
-                    debug_log "ERROR" "Failed to write country data"
-                    return 1
-                }
-
-                # 言語を正規化
-                normalize_language
-                
-                # zone_write関数に処理を委譲
-                echo "$(echo "$full_results" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone.tmp"
-                zone_write || {
-                    debug_log "ERROR" "Failed to write timezone data"
-                    return 1
-                }
-
-                debug_log "DEBUG" "Country selected from single match: $country_name"
-                select_zone
-                return 0
-            else
-                input_lang=""
-                continue
-            fi
-        fi
-
-        # 複数結果の場合、select_list関数を使用
-        debug_log "DEBUG" "Multiple results found for '$input_lang'. Using select_list function."
-
-        # 表示用リスト作成（国名のみ抽出）
-        local display_list=$(echo "$full_results" | awk '{print $2, $3}')
-        local number_file="${CACHE_DIR}/number_selection.tmp"
-        
-        # select_list関数を呼び出し
-        select_list "$display_list" "$number_file" "country"
-        
-        # 選択結果の取得
-        if [ -f "$number_file" ]; then
-            local selected_number=$(cat "$number_file")
-            debug_log "DEBUG" "User selected number: $selected_number"
-            
-            # 選択された行を取得
-            local selected_full=$(echo "$full_results" | sed -n "${selected_number}p")
-            local selected_country=$(echo "$selected_full" | awk '{print $2, $3}')
-            
-            debug_log "DEBUG" "Selected country: $selected_country"
-            
-            # 一時ファイルに書き込み
-            echo "$selected_full" > "${CACHE_DIR}/country.tmp"
-            
-            # country_write関数に処理を委譲
-            country_write || {
-                debug_log "ERROR" "Failed to write country data"
-                return 1
-            }
-            
-            # 言語を正規化
-            normalize_language
-            
-            # zone_write関数に処理を委譲
-            echo "$(echo "$selected_full" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone.tmp"
-            zone_write || {
-                debug_log "ERROR" "Failed to write timezone data"
-                return 1
-            }
-            
-            debug_log "DEBUG" "Country selected from multiple choices: $selected_country"
-            select_zone
-            return 0
-        else
-            # 選択がキャンセルされた場合
-            debug_log "DEBUG" "User cancelled country selection"
-            input_lang=""
-            continue
-        fi
-    done
-}
-
 # システムの地域情報を検出し設定する関数
 detect_and_set_location() {
     debug_log "DEBUG" "Running detect_and_set_location() function"
@@ -931,14 +732,19 @@ country_write() {
 # 言語設定を正規化する関数
 normalize_language() {
     # 必要なパス定義
-    local message_db="${BASE_DIR}/messages.db"
+    local base_db="${BASE_DIR}/messages_base.db"
+    local asian_db="${BASE_DIR}/messages_asian.db"
+    local euro_db="${BASE_DIR}/messages_euro.db"
     local language_cache="${CACHE_DIR}/language.ch"
     local message_cache="${CACHE_DIR}/message.ch"
+    local db_cache="${CACHE_DIR}/message_db.ch"
     local selected_language=""
-
+    
     # デバッグログの出力
-    debug_log "DEBUG" "Normalizing language settings"
-    debug_log "DEBUG" "message_db=${message_db}"
+    debug_log "DEBUG" "Normalizing language settings with multi-file structure"
+    debug_log "DEBUG" "base_db=${base_db}"
+    debug_log "DEBUG" "asian_db=${asian_db}"
+    debug_log "DEBUG" "euro_db=${euro_db}"
     debug_log "DEBUG" "language_cache=${language_cache}"
     debug_log "DEBUG" "message_cache=${message_cache}"
 
@@ -952,29 +758,109 @@ normalize_language() {
     selected_language=$(cat "$language_cache")
     debug_log "DEBUG" "Selected language code: ${selected_language}"
 
-    # サポート言語の取得方法を統一（より正確なパターンマッチング）
-    local supported_languages=""
-    if [ -f "$message_db" ]; then
-        # パターン：JP|MSG_KEY=value または US|MSG_KEY=value
-        supported_languages=$(grep -o "^[A-Z][A-Z]|" "$message_db" | sort -u | tr -d "|" | tr '\n' ' ')
-        debug_log "DEBUG" "Available supported languages: ${supported_languages}"
-    else
-        supported_languages="US"  # デフォルト言語
-        debug_log "DEBUG" "Message DB not found, defaulting to US only"
+    # 基本言語ファイルの存在確認
+    if [ ! -f "$base_db" ]; then
+        debug_log "DEBUG" "Base message DB not found: ${base_db}"
+        printf "%s\n" "$(color red "基本メッセージファイルが見つかりません: ${base_db}")"
+        # US言語をデフォルトとして設定
+        echo "US" > "$message_cache"
+        echo "$base_db" > "$db_cache"
+        ACTIVE_LANGUAGE="US"
+        debug_log "DEBUG" "Defaulting to US language due to missing base DB"
+        return 1
     fi
 
-    # 選択された言語がサポートされているか確認（grep使用に変更）
-    if echo " $supported_languages " | grep -q " $selected_language "; then
-        debug_log "DEBUG" "Language ${selected_language} is supported"
+    # 基本DB内のサポート言語を取得
+    local base_supported=""
+    base_supported=$(grep "^SUPPORTED_LANGUAGES=" "$base_db" | cut -d'"' -f2)
+    debug_log "DEBUG" "Base supported languages: ${base_supported}"
+    
+    # 言語コードに基づいて適切なDBファイルを特定
+    local target_db="$base_db"
+    
+    case "$selected_language" in
+        US|JP)
+            # 基本ファイルに含まれる言語
+            debug_log "DEBUG" "Language ${selected_language} is in base DB"
+            target_db="$base_db"
+            ;;
+        CN|TW|KO)
+            # アジア言語ファイルが必要
+            if [ -f "$asian_db" ]; then
+                debug_log "DEBUG" "Asian language file exists, checking for language support"
+                if grep -q "^SUPPORTED_LANGUAGES=.*$selected_language" "$asian_db"; then
+                    debug_log "DEBUG" "Language ${selected_language} found in Asian DB"
+                    target_db="$asian_db"
+                else
+                    debug_log "DEBUG" "Language ${selected_language} not found in Asian DB, falling back to base DB"
+                    target_db="$base_db"
+                fi
+            else
+                debug_log "DEBUG" "Asian language file not found, falling back to base DB"
+                target_db="$base_db"
+            fi
+            ;;
+        DE|FR|RU)
+            # ヨーロッパ言語ファイルが必要
+            if [ -f "$euro_db" ]; then
+                debug_log "DEBUG" "European language file exists, checking for language support"
+                if grep -q "^SUPPORTED_LANGUAGES=.*$selected_language" "$euro_db"; then
+                    debug_log "DEBUG" "Language ${selected_language} found in European DB"
+                    target_db="$euro_db"
+                else
+                    debug_log "DEBUG" "Language ${selected_language} not found in European DB, falling back to base DB"
+                    target_db="$base_db"
+                fi
+            else
+                debug_log "DEBUG" "European language file not found, falling back to base DB"
+                target_db="$base_db"
+            fi
+            ;;
+        *)
+            # 不明な言語コードの場合はベースDBを使用
+            debug_log "DEBUG" "Unknown language code: ${selected_language}, using base DB"
+            target_db="$base_db"
+            ;;
+    esac
+    
+    # 特定されたDBファイルから言語サポートを確認
+    local db_supported=""
+    db_supported=$(grep "^SUPPORTED_LANGUAGES=" "$target_db" | cut -d'"' -f2)
+    debug_log "DEBUG" "Target DB supported languages: ${db_supported}"
+    
+    # 指定された言語がサポートされているか確認
+    local is_supported=0
+    for lang in $db_supported; do
+        if [ "$lang" = "$selected_language" ]; then
+            is_supported=1
+            break
+        fi
+    done
+    
+    # 言語設定をキャッシュに保存
+    if [ $is_supported -eq 1 ]; then
+        debug_log "DEBUG" "Language ${selected_language} is supported in target DB"
         echo "$selected_language" > "$message_cache"
+        echo "$target_db" > "$db_cache"
         ACTIVE_LANGUAGE="$selected_language"
     else
         debug_log "DEBUG" "Language ${selected_language} not supported, falling back to US"
-        echo "US" > "$message_cache"
-        ACTIVE_LANGUAGE="US"
+        # 基本DBにUSが含まれるか確認
+        if echo "$base_supported" | grep -q "US"; then
+            echo "US" > "$message_cache"
+            echo "$base_db" > "$db_cache"
+            ACTIVE_LANGUAGE="US"
+        else
+            # 万が一USがサポートされていない場合は最初のサポート言語を使用
+            local first_lang=$(echo "$base_supported" | awk '{print $1}')
+            echo "$first_lang" > "$message_cache"
+            echo "$base_db" > "$db_cache"
+            ACTIVE_LANGUAGE="$first_lang"
+            debug_log "DEBUG" "US not supported in base DB, using first available language: ${first_lang}"
+        fi
     fi
-
-    debug_log "DEBUG" "Final active language: ${ACTIVE_LANGUAGE}"
+    
+    debug_log "DEBUG" "Final active language: ${ACTIVE_LANGUAGE} from ${target_db}"
     # 言語セットのメッセージ（country_writeとは別メッセージ）
     printf "%s\n" "$(color green "$(get_message "MSG_LANGUAGE_SET")")"
     return 0
