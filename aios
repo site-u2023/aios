@@ -300,81 +300,71 @@ load_language_file() {
     return 0
 }
 
+# メッセージを取得する関数
 get_message() {
     local key="$1"
-    local params="$2"
-    local quiet_flag="$3"
-    local base_db="${BASE_DIR}/messages_base.db"
-    local asian_db="${BASE_DIR}/messages_asian.db"
-    local euro_db="${BASE_DIR}/messages_euro.db"
-    local message_cache="${CACHE_DIR}/message.ch"
-    local lang="US"  # デフォルト言語
+    local default_msg="$2"  # デフォルトメッセージ（省略可）
+    local lang=""
+    local db_file=""
     
-    # 言語設定の取得
-    if [ -f "$message_cache" ]; then
-        lang=$(cat "$message_cache")
+    # キャッシュからアクティブな言語とDBファイルを取得
+    if [ -f "${CACHE_DIR}/message.ch" ]; then
+        lang=$(cat "${CACHE_DIR}/message.ch")
+    else
+        lang="US"  # デフォルト言語
     fi
     
-    debug_log "DEBUG" "Looking up message key: ${key} for language: ${lang}"
-    
-    # 言語カテゴリの判定
-    local lang_file="$base_db"
-    case "$lang" in
-        CN|TW|KO)
-            if [ -f "$asian_db" ]; then
-                lang_file="$asian_db"
-            fi
-            ;;
-        DE|FR|RU)
-            if [ -f "$euro_db" ]; then
-                lang_file="$euro_db"
-            fi
-            ;;
-    esac
-    
-    # メッセージの検索
-    if [ -f "$lang_file" ]; then
-        message=$(grep "^${lang}|${key}=" "$lang_file" 2>/dev/null | cut -d'=' -f2-)
-        
-        # 該当言語のDBにメッセージが見つからない場合
-        if [ -z "$message" ] && [ "$lang_file" != "$base_db" ]; then
-            debug_log "DEBUG" "Message not found in language file, checking base database"
-            message=$(grep "^${lang}|${key}=" "$base_db" 2>/dev/null | cut -d'=' -f2-)
-        fi
-        
-        # 言語固有のメッセージが見つからない場合はUSにフォールバック
-        if [ -z "$message" ]; then
-            debug_log "DEBUG" "Message not found for ${lang}, falling back to US"
-            message=$(grep "^US|${key}=" "$base_db" 2>/dev/null | cut -d'=' -f2-)
-        fi
+    if [ -f "${CACHE_DIR}/message_db.ch" ]; then
+        db_file=$(cat "${CACHE_DIR}/message_db.ch")
+    else
+        db_file="${BASE_DIR}/messages_base.db"  # デフォルトDB
     fi
     
-    # メッセージが見つからない場合はキーをそのまま返す
-    if [ -z "$message" ]; then
-        debug_log "WARNING" "No translation found for key: ${key}"
-        message="$key"
-    fi
+    debug_log "DEBUG" "get_message: key=${key}, language=${lang}, db_file=${db_file}"
     
-    # パラメータ置換処理
-    if [ -n "$params" ]; then
-        debug_log "DEBUG" "Applying parameter substitution to message"
-        for param in $params; do
-            param_key=$(echo "$param" | cut -d'=' -f1)
-            value=$(echo "$param" | cut -d'=' -f2-)
-            # sedコマンドでエスケープ処理
-            escaped_value=$(echo "$value" | sed -e 's/[\/&]/\\&/g')
-            message=$(echo "$message" | sed -e "s/{$param_key}/$escaped_value/g")
-        done
-    fi
-    
-    # quietモードでなければ表示
-    if [ "$quiet_flag" != "quiet" ]; then
-        if [ "$DEBUG_MODE" = "true" ]; then
-            echo "$key: $message"
+    # 指定されたDBファイルが存在するか確認
+    if [ ! -f "$db_file" ]; then
+        debug_log "ERROR" "Message DB file not found: ${db_file}"
+        if [ -n "$default_msg" ]; then
+            echo "$default_msg"
         else
-            echo "$message"
+            echo "$key"  # キーをそのまま返す
+        fi
+        return 1
+    }
+
+    # DBからメッセージを検索
+    local message=""
+    message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+    
+    # 言語固有のメッセージが見つからない場合
+    if [ -z "$message" ]; then
+        # 英語メッセージを検索
+        message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        
+        # それでも見つからない場合は基本DBで再検索
+        if [ -z "$message" ] && [ "$db_file" != "${BASE_DIR}/messages_base.db" ]; then
+            debug_log "DEBUG" "Message not found in specialized DB, trying base DB"
+            message=$(grep "^${lang}|${key}=" "${BASE_DIR}/messages_base.db" 2>/dev/null | cut -d'=' -f2-)
+            
+            if [ -z "$message" ]; then
+                message=$(grep "^US|${key}=" "${BASE_DIR}/messages_base.db" 2>/dev/null | cut -d'=' -f2-)
+            fi
         fi
     fi
+    
+    # それでも見つからない場合はデフォルトかキーを返す
+    if [ -z "$message" ]; then
+        debug_log "WARNING" "Message not found for key: ${key}"
+        if [ -n "$default_msg" ]; then
+            message="$default_msg"
+        else
+            message="$key"  # キーをそのまま返す
+        fi
+    fi
+    
+    echo "$message"
+    return 0
 }
 
 # 全角文字を半角文字に変換する関数
