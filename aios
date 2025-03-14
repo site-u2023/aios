@@ -308,6 +308,17 @@ get_message() {
     fi
 }
 
+# 入力テキストを正規化する関数
+normalize_input() {
+    input="$1"
+    # 全角数字を半角数字に変換
+    input=$(echo "$input" | sed 'y/０１２３４５６７８９/0123456789/')
+    # 小文字を大文字に変換
+    input=$(echo "$input" | tr '[:lower:]' '[:upper:]')
+    echo "$input"
+}
+
+# 確認入力処理関数
 confirm() {
     local msg_key="$1"
     local param_name="$2"
@@ -321,15 +332,16 @@ confirm() {
         msg=$(get_message "$msg_key")
         # パラメータ名と値が指定されている場合は置換
         if [ -n "$param_name" ] && [ -n "$param_value" ]; then
-            # POSIXに準拠した置換方法
-            msg=$(echo "$msg" | sed "s|{$param_name}|$param_value|g")
+            # POSIXに準拠した置換方法（エスケープ処理を追加）
+            local safe_value=$(echo "$param_value" | sed 's/[\/&]/\\&/g')
+            msg=$(echo "$msg" | sed "s|{$param_name}|$safe_value|g")
         fi
     else
         # 直接メッセージが指定されている場合はそれを使用
         msg="$direct_msg"
     fi
     
-    debug_log "DEBUG" "Confirm prompt: $msg"
+    debug_log "DEBUG" "Confirm prompt: $msg_key: $msg"
     
     # 確認プロンプト表示
     printf "%s " "$(color cyan "$msg")"
@@ -347,18 +359,18 @@ confirm() {
         
         # 入力の検証
         case "$yn" in
-            [Yy]*) 
+            Y|YES) 
                 debug_log "DEBUG" "User confirmed: Yes"
                 # グローバル変数に結果を保存（呼び出し側でも使えるように）
                 CONFIRM_RESULT="Y"
                 return 0 
                 ;;
-            [Nn]*) 
+            N|NO) 
                 debug_log "DEBUG" "User confirmed: No"
                 CONFIRM_RESULT="N"
                 return 1 
                 ;;
-            [Rr]*)
+            R|RETURN)
                 # リスタートオプション対応（オプション）
                 debug_log "DEBUG" "User selected: Restart"
                 CONFIRM_RESULT="R"
