@@ -161,8 +161,8 @@ JP|MSG_UPDATE_SUCCESS=✅ パッケージリストは最新に更新しました
 US|MSG_ERROR_UPDATE_FAILED=❌ Failed to update package list.
 JP|MSG_ERROR_UPDATE_FAILED=❌ パッケージリストの更新に失敗しました。
 
-# メッセージキーは定義されていないがコードで参照
-# MSG_ERROR_WRITE_CACHE
+US|MSG_ERROR_WRITE_CACHE=❌ Error: Failed to write to cache file.
+JP|MSG_ERROR_WRITE_CACHE=❌ エラー：キャッシュファイルへの書き込みに失敗しました。
 
 # local_package_db() 関数
 # この関数はメッセージDBからのキーを使用していません
@@ -241,7 +241,8 @@ US|MSG_UPDATE_SUCCESS=Password and device name have been successfully updated.
 JP|MSG_UPDATE_SUCCESS=パスワードとデバイス名が正常に更新されました。
 
 # set_wifi_ssid_password() 関数
-# MSG_ERROR_NO_COUNTRY_CODE（注意：これはmessages.dbに定義されていません）
+US|MSG_ERROR_NO_COUNTRY_CODE=Error: Country code not found.
+JP|MSG_ERROR_NO_COUNTRY_CODE=エラー：国コードが見つかりません。
 
 US|MSG_NO_WIFI_DEVICES=No Wi-Fi devices found. Exiting.
 JP|MSG_NO_WIFI_DEVICES=Wi-Fiデバイスが見つかりません。終了します。
@@ -268,7 +269,8 @@ JP|MSG_ERROR_EMPTY_SSID=SSIDが空です。
 US|MSG_ENTER_WIFI_PASSWORD=Enter password (8 or more characters):
 JP|MSG_ENTER_WIFI_PASSWORD=パスワードを入力してください (8文字以上):
 
-# MSG_PASSWORD_TOO_SHORT（注意：これはmessages.dbに定義されていません）
+US|MSG_PASSWORD_TOO_SHORT=Password is too short. Please enter at least 8 characters.
+JP|MSG_PASSWORD_TOO_SHORT=パスワードが短すぎます。8文字以上入力してください。
 
 US|MSG_WIFI_CONFIG_PREVIEW=WiFi Configuration Preview:
 JP|MSG_WIFI_CONFIG_PREVIEW=WiFi設定の確認:
