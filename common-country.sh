@@ -113,6 +113,7 @@ select_country() {
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_zone="${CACHE_DIR}/zone.ch"
     local input_lang="$1"  # 引数として渡された言語コード
+    local skip_success_message=false  # 成功メッセージをスキップするフラグ
 
     # 1. 引数で短縮国名（JP、USなど）が指定されている場合（最優先）
     if [ -n "$input_lang" ]; then
@@ -127,8 +128,8 @@ select_country() {
             # 一時ファイルに書き込み
             echo "$lang_match" > "${CACHE_DIR}/country_tmp.ch"
             
-            # country_write関数に処理を委譲
-            country_write || {
+            # country_write関数に処理を委譲（成功メッセージをスキップ）
+            country_write true || {
                 debug_log "ERROR" "Failed to write country data from language argument"
                 return 1
             }
@@ -143,6 +144,7 @@ select_country() {
             }
             
             debug_log "DEBUG" "Language selected via command argument: $input_lang"
+            # ここで1回だけ成功メッセージを表示
             printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
             
             # 選択されたタイムゾーンのゾーン情報からゾーンを選択
@@ -625,7 +627,9 @@ select_zone() {
 
 # 国情報をキャッシュに書き込む関数
 country_write() {
-    debug_log "DEBUG" "Entering country_write()"
+    local skip_message="${1:-false}"  # 成功メッセージをスキップするかのフラグ
+    
+    debug_log "DEBUG" "Entering country_write() with skip_message=$skip_message"
     
     # 一時ファイルのパス
     local tmp_country="${CACHE_DIR}/country_tmp.ch"
@@ -701,8 +705,10 @@ country_write() {
     echo "$active_language" > "$message_cache"
     debug_log "DEBUG" "Final active language: $active_language"
     
-    # 成功メッセージを表示
-    printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
+    # 成功メッセージを表示（スキップフラグが設定されていない場合のみ）
+    if [ "$skip_message" = "false" ]; then
+        printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
+    fi
     
     return 0
 }
