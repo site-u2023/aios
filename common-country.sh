@@ -639,12 +639,6 @@ normalize_language() {
     debug_log "DEBUG" "language_cache=${language_cache}"
     debug_log "DEBUG" "message_cache=${message_cache}"
 
-    # メッセージキャッシュが既に存在するか確認
-    if [ -f "$message_cache" ]; then
-        debug_log "DEBUG" "message.ch already exists. Using existing language settings."
-        return 0
-    fi
-
     # language.chファイルの存在確認
     if [ ! -f "$language_cache" ]; then
         debug_log "DEBUG" "language.ch not found. Cannot determine language."
