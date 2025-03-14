@@ -366,7 +366,7 @@ confirm() {
                 ;;
             *) 
                 # 無効な入力の場合のエラーメッセージ
-                printf "%s\n" "$(color red "$(get_message "MSG_INVALID_INPUT_YN")")"
+                printf "%s\n" "$(color red "$(get_message "MSG_INVALID_INPUT_YNR")")"
                 printf "%s " "$(color cyan "$msg")" 
                 ;;
         esac
