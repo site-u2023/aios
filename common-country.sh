@@ -248,15 +248,10 @@ select_country() {
             fi
         fi
 
-        # 複数結果の場合、select_list関数を使用
+        # 複数結果の場合、select_list関数を使用（将来実装）
         debug_log "DEBUG" "Multiple results found for '$input_lang'. Displaying selection list."
 
-        # 表示用リスト作成とselect_list呼び出し
-        local display_list=$(echo "$full_results" | awk '{print $2, $3}')
-        local number_file="${CACHE_DIR}/number_selection.tmp"
-        
-        # select_list関数の代わりに従来の方法で実装（将来的にselect_list関数に移行予定）
-        # 表示用リスト作成
+        # 表示用リスト作成（現在の実装）
         echo "$full_results" | awk '{print NR, ":", $2, $3}'
 
         # 番号入力要求
@@ -302,9 +297,23 @@ select_country() {
                         return 1
                     }
                     
-    debug_log "DEBUG" "Country selected from multiple choices: $selected_country"
-    select_zone
-    return 0
+                    debug_log "DEBUG" "Country selected from multiple choices: $selected_country"
+                    select_zone
+                    return 0
+                fi
+            else
+                local msg_invalid=$(get_message "MSG_INVALID_NUMBER")
+                printf "%s\n" "$(color red "$msg_invalid")"
+            fi
+        else
+            local msg_invalid=$(get_message "MSG_INVALID_NUMBER")
+            printf "%s\n" "$(color red "$msg_invalid")"
+        fi
+
+        # 検索プロンプトを表示
+        input_lang=""
+        debug_log "DEBUG" "Resetting search and showing prompt again"
+    done
 }
 
 # システムの地域情報を検出し設定する関数
