@@ -253,53 +253,122 @@ color_code_map() {
     esac
 }
 
+load_language_file() {
+    local lang_code="$1"
+    local base_db="${BASE_DIR}/messages_base.db"
+    
+    debug_log "DEBUG" "Attempting to load language messages for code: ${lang_code}"
+    
+    # 基本言語ファイルは常にロード（US, JPを含む）
+    if [ ! -f "$base_db" ]; then
+        debug_log "ERROR" "Base language file not found: ${base_db}"
+        return 1
+    fi
+    
+    # 言語コードに基づいて追加ファイルをロード
+    case "$lang_code" in
+        US|JP)
+            # 基本ファイルのみで十分
+            debug_log "INFO" "Using base language file only for ${lang_code}"
+            ;;
+        CN|TW|KO)
+            # アジア言語ファイルが必要
+            local asian_db="${BASE_DIR}/messages_asian.db"
+            if [ -f "$asian_db" ]; then
+                debug_log "INFO" "Loading additional Asian language file for ${lang_code}"
+            else
+                debug_log "WARNING" "Asian language file not found, falling back to base messages"
+            fi
+            ;;
+        DE|FR|RU)
+            # ヨーロッパ言語ファイルが必要
+            local euro_db="${BASE_DIR}/messages_euro.db"
+            if [ -f "$euro_db" ]; then
+                debug_log "INFO" "Loading additional European language file for ${lang_code}"
+            else
+                debug_log "WARNING" "European language file not found, falling back to base messages"
+            fi
+            ;;
+        *)
+            # 不明な言語コードの場合はUSにフォールバック
+            debug_log "WARNING" "Unknown language code: ${lang_code}, falling back to US"
+            lang_code="US"
+            ;;
+    esac
+    
+    debug_log "DEBUG" "Language files loaded successfully for ${lang_code}"
+    return 0
+}
+
 get_message() {
     local key="$1"
     local params="$2"
     local quiet_flag="$3"
-    local message_db="${BASE_DIR}/messages.db"
+    local base_db="${BASE_DIR}/messages_base.db"
+    local asian_db="${BASE_DIR}/messages_asian.db"
+    local euro_db="${BASE_DIR}/messages_euro.db"
     local message_cache="${CACHE_DIR}/message.ch"
-    local lang="US"  # デフォルトはUS
-
-    # message.chから言語を読み取る
+    local lang="US"  # デフォルト言語
+    
+    # 言語設定の取得
     if [ -f "$message_cache" ]; then
         lang=$(cat "$message_cache")
     fi
-
-    # `messages.db` が存在しない場合、キーそのままを返す
-    if [ ! -f "$message_db" ]; then
-        message="$key"
-    else
-        # 言語優先検索
-        message=$(grep "^${lang}|${key}=" "$message_db" | cut -d'=' -f2-)
-
-        # フォールバック検索
-        if [ -z "$message" ]; then
-            message=$(grep "^US|${key}=" "$message_db" | cut -d'=' -f2-)
+    
+    debug_log "DEBUG" "Looking up message key: ${key} for language: ${lang}"
+    
+    # 言語カテゴリの判定
+    local lang_file="$base_db"
+    case "$lang" in
+        CN|TW|KO)
+            if [ -f "$asian_db" ]; then
+                lang_file="$asian_db"
+            fi
+            ;;
+        DE|FR|RU)
+            if [ -f "$euro_db" ]; then
+                lang_file="$euro_db"
+            fi
+            ;;
+    esac
+    
+    # メッセージの検索
+    if [ -f "$lang_file" ]; then
+        message=$(grep "^${lang}|${key}=" "$lang_file" 2>/dev/null | cut -d'=' -f2-)
+        
+        # 該当言語のDBにメッセージが見つからない場合
+        if [ -z "$message" ] && [ "$lang_file" != "$base_db" ]; then
+            debug_log "DEBUG" "Message not found in language file, checking base database"
+            message=$(grep "^${lang}|${key}=" "$base_db" 2>/dev/null | cut -d'=' -f2-)
         fi
-
-        # それでも見つからなければ、キーそのままを返す
+        
+        # 言語固有のメッセージが見つからない場合はUSにフォールバック
         if [ -z "$message" ]; then
-            message="$key"
+            debug_log "DEBUG" "Message not found for ${lang}, falling back to US"
+            message=$(grep "^US|${key}=" "$base_db" 2>/dev/null | cut -d'=' -f2-)
         fi
     fi
-
-    # パラメータ置換
+    
+    # メッセージが見つからない場合はキーをそのまま返す
+    if [ -z "$message" ]; then
+        debug_log "WARNING" "No translation found for key: ${key}"
+        message="$key"
+    fi
+    
+    # パラメータ置換処理
     if [ -n "$params" ]; then
+        debug_log "DEBUG" "Applying parameter substitution to message"
         for param in $params; do
             param_key=$(echo "$param" | cut -d'=' -f1)
-            value=$(echo "$param" | cut -d'=' -f2)
-            # `sed` コマンドで使用する際に `value` をエスケープする
+            value=$(echo "$param" | cut -d'=' -f2-)
+            # sedコマンドでエスケープ処理
             escaped_value=$(echo "$value" | sed -e 's/[\/&]/\\&/g')
             message=$(echo "$message" | sed -e "s/{$param_key}/$escaped_value/g")
         done
     fi
-
-    # quiet モード対応
-    if [ "$quiet_flag" = "quiet" ]; then
-        return 0
-    else
-        # デバッグモード時はキーとメッセージの両方を表示
+    
+    # quietモードでなければ表示
+    if [ "$quiet_flag" != "quiet" ]; then
         if [ "$DEBUG_MODE" = "true" ]; then
             echo "$key: $message"
         else
