@@ -666,17 +666,16 @@ country_write() {
     local selected_lang_code=$(awk '{print $5}' "$cache_country")
     debug_log "DEBUG" "Selected language code: $selected_lang_code"
     
-    # サポート言語のリストを取得（簡素化した方法）
+    # サポートされている言語コードのリストを取得（より正確な方法）
     local supported_langs=""
     if [ -f "$message_db" ]; then
-        # メッセージファイルからサポート言語を抽出
-        supported_langs=$(grep -o "_[A-Z][A-Z]=" "$message_db" | sort -u | tr -d "_=" | tr '\n' ' ')
-        debug_log "DEBUG" "Extracted supported languages: $supported_langs"
+        # パターン：JP|MSG_KEY=value または US|MSG_KEY=value
+        supported_langs=$(grep -o "^[A-Z][A-Z]|" "$message_db" | sort -u | tr -d "|" | tr '\n' ' ')
+        debug_log "DEBUG" "Available supported languages: $supported_langs"
     else
         supported_langs="US"  # デフォルト言語
         debug_log "DEBUG" "Message DB not found, defaulting to US only"
     fi
-    debug_log "DEBUG" "Available supported languages: $supported_langs"
     
     # 選択された言語がサポートされているか確認
     local is_supported=0
