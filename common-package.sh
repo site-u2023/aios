@@ -362,18 +362,43 @@ verify_package_manager() {
 }
 
 # 言語コードの取得
+# 言語コードの取得
 get_language_code() {
     local lang_code="en"  # デフォルト値
-    if [ -f "${CACHE_DIR}/luci.ch" ]; then
-        lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
-
-        # luci.ch で指定されている言語コードが "xx" なら "en" に変更
+    local luci_cache="${CACHE_DIR}/luci.ch"
+    
+    debug_log "DEBUG" "Getting LuCI language code"
+    
+    # luci.chファイルが存在するか確認
+    if [ -f "$luci_cache" ]; then
+        lang_code=$(head -n 1 "$luci_cache" | awk '{print $1}')
+        debug_log "DEBUG" "Found language code in luci.ch: $lang_code"
+        
+        # luci.chで指定されている言語コードが "xx" なら "en" に変更
         if [ "$lang_code" = "xx" ]; then
             lang_code="en"
+            debug_log "DEBUG" "Language code 'xx' found, using 'en' instead"
+        fi
+    else
+        debug_log "DEBUG" "luci.ch not found, generating language package information"
+        
+        # luci.chがない場合はget_available_language_packagesを呼び出す
+        if type get_available_language_packages >/dev/null 2>&1; then
+            get_available_language_packages >/dev/null
+            
+            # 生成されたluci.chを再度読み込み
+            if [ -f "$luci_cache" ]; then
+                lang_code=$(head -n 1 "$luci_cache" | awk '{print $1}')
+                debug_log "DEBUG" "Retrieved language code after generating luci.ch: $lang_code"
+            else
+                debug_log "ERROR" "Failed to generate luci.ch, using default language: en"
+            fi
+        else
+            debug_log "ERROR" "get_available_language_packages() function not available"
         fi
     fi
     
-    debug_log "DEBUG" "Language code detected: $lang_code"
+    debug_log "DEBUG" "Using LuCI language code: $lang_code"
     echo "$lang_code"
 }
 
