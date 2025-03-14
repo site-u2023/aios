@@ -136,7 +136,7 @@ get_available_language_packages() {
     if [ ! -f "$package_cache" ]; then
         debug_log "DEBUG" "Package list cache not found, calling update_package_list()"
         
-        # common-package.shが読み込まれていることを確認
+        # common-package.shが読み込まれているか確認
         if type update_package_list >/dev/null 2>&1; then
             update_package_list
             debug_log "DEBUG" "Package list updated successfully"
@@ -172,21 +172,27 @@ get_available_language_packages() {
     if [ -f "$country_cache" ]; then
         preferred_lang=$(awk '{print $4}' "$country_cache")
         debug_log "DEBUG" "Preferred language from country.db: $preferred_lang"
+        
+        # ここでxxのフォールバック処理を行う
+        if [ "$preferred_lang" = "xx" ]; then
+            preferred_lang="$default_lang"
+            debug_log "DEBUG" "Language code 'xx' found in country.db, falling back to '$default_lang'"
+        fi
     fi
     
     # LuCI言語の決定ロジック
     local selected_lang="$default_lang"  # デフォルトは英語
     
-    if [ -n "$preferred_lang" ] && [ "$preferred_lang" != "xx" ]; then
+    if [ -n "$preferred_lang" ]; then
         # country.dbから取得した言語が利用可能か確認
         if echo "$lang_packages" | grep -q "^$preferred_lang$"; then
             selected_lang="$preferred_lang"
             debug_log "DEBUG" "Using preferred language: $selected_lang"
         else
-            debug_log "DEBUG" "Preferred language not available, using default: $default_lang"
+            debug_log "DEBUG" "Preferred language not available, falling back to default: $default_lang"
         fi
     else
-        debug_log "DEBUG" "No preferred language specified or 'xx' found, using default: $default_lang"
+        debug_log "DEBUG" "No preferred language specified, using default: $default_lang"
     fi
     
     # luci.chに書き込み
