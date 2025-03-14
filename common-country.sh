@@ -78,14 +78,6 @@ escape_for_sed() {
     printf '%s' "$input" | sed 's/[\/&.*[\]^$]/\\&/g'
 }
 
-# 入力テキストを正規化する関数
-normalize_input() {
-    input="$1"
-    # 全角数字を半角数字に変換
-    input=$(echo "$input" | sed 'y/０１２３４５６７８９/0123456789/')
-    echo "$input"
-}
-
 # ユーザーに国の選択を促す関数
 select_country() {
     debug_log "DEBUG" "Running select_country() function with arg='$1'"
