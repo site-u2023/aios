@@ -313,8 +313,6 @@ normalize_input() {
     input="$1"
     # 全角数字を半角数字に変換
     input=$(echo "$input" | sed 'y/０１２３４５６７８９/0123456789/')
-    # 小文字を大文字に変換
-    input=$(echo "$input" | tr '[:lower:]' '[:upper:]')
     echo "$input"
 }
 
@@ -354,25 +352,25 @@ confirm() {
             return 1
         fi
         
-        # 入力の正規化
+        # 入力の正規化（数字のみ正規化し、大文字小文字は変換しない）
         yn=$(normalize_input "$yn")
         
-        # 入力の検証
+        # 入力の検証（大文字小文字両方に対応）
         case "$yn" in
-            Y|YES) 
+            [Yy]|[Yy][Ee][Ss]) 
                 debug_log "DEBUG" "User confirmed: Yes"
                 # グローバル変数に結果を保存（呼び出し側でも使えるように）
                 CONFIRM_RESULT="Y"
                 return 0 
                 ;;
-            N|NO) 
+            [Nn]|[Nn][Oo]) 
                 debug_log "DEBUG" "User confirmed: No"
                 CONFIRM_RESULT="N"
                 return 1 
                 ;;
-            R|RETURN)
-                # リスタートオプション対応（オプション）
-                debug_log "DEBUG" "User selected: Restart"
+            [Rr]|[Rr][Ee][Tt][Uu][Rr][Nn])
+                # リスタートオプション対応
+                debug_log "DEBUG" "User selected: Return to previous step"
                 CONFIRM_RESULT="R"
                 return 2
                 ;;
