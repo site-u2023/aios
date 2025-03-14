@@ -68,6 +68,10 @@ BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
+ARCHITECTURE="${CACHE_DIR}/architecture.ch"
+OSVERSION="${CACHE_DIR}/osversion.ch"
+PACKAGE_MANAGER="${CACHE_DIR}/package_manager.ch"
+PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
 
 # 📌 デバイスアーキテクチャの取得
 # 戻り値: アーキテクチャ文字列 (例: "mips_24kc", "arm_cortex-a7", "x86_64")
