@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-00-16"
+SCRIPT_VERSION="2025.03.14-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -405,9 +405,10 @@ packages() {
 # メイン処理
 main() {
     information
-    set_device_name_password
-    set_wifi_ssid_password
-    set_device
+    #set_device_name_password
+    #set_wifi_ssid_password
+    #set_device
+    packages
 }
 
 # スクリプトの実行
