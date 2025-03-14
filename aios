@@ -187,33 +187,33 @@ handle_exit() {
 # 🔴　エラー・デバッグ・アップデート系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
 
 print_help() {
-    printf "Usage: %s [OPTIONS] [LANGUAGE]\n\n" "$(basename "$0")"
+    printf "%s\n\n" "$(get_message "MSG_HELP_USAGE")"
     
-    printf "Options:\n"
-    printf "  %-25s %s\n" "-h, --help" "Show this help message"
-    printf "  %-25s %s\n" "-v, --version" "Show script version"
-    printf "  %-25s %s\n" "-r, --reset" "Reset all cached data"
-    printf "  %-25s %s\n" "-d, --debug" "Enable debug mode"
-    printf "  %-25s %s\n" "-u, --update" "Update aios script"
-    printf "  %-25s %s\n" "-f, --force" "Force operations without confirmation"
-    printf "  %-25s %s\n" "-t, --token" "Setup GitHub API token"
-    printf "  %-25s %s\n" "-cf, --common_full" "Run in full mode"
-    printf "  %-25s %s\n" "-cl, --common_light" "Run in light mode"
-    printf "  %-25s %s\n" "-cd, --common_debug" "Run in debug mode"
-    printf "  %-25s %s\n" "-dr, --dry-run" "Show what would be done without actual execution"
+    printf "%s\n" "$(get_message "MSG_HELP_OPTIONS_HEADER")"
+    printf "  %-25s %s\n" "-h, --help" "$(get_message "MSG_HELP_HELP")"
+    printf "  %-25s %s\n" "-v, --version" "$(get_message "MSG_HELP_VERSION")"
+    printf "  %-25s %s\n" "-r, --reset" "$(get_message "MSG_HELP_RESET")"
+    printf "  %-25s %s\n" "-d, --debug" "$(get_message "MSG_HELP_DEBUG")"
+    printf "  %-25s %s\n" "-u, --update" "$(get_message "MSG_HELP_UPDATE")"
+    printf "  %-25s %s\n" "-f, --force" "$(get_message "MSG_HELP_FORCE")"
+    printf "  %-25s %s\n" "-t, --token" "$(get_message "MSG_HELP_TOKEN")"
+    printf "  %-25s %s\n" "-cf, --common_full" "$(get_message "MSG_HELP_FULL")"
+    printf "  %-25s %s\n" "-cl, --common_light" "$(get_message "MSG_HELP_LIGHT")"
+    printf "  %-25s %s\n" "-cd, --common_debug" "$(get_message "MSG_HELP_COMMON_DEBUG")"
+    printf "  %-25s %s\n" "-dr, --dry-run" "$(get_message "MSG_HELP_DRY_RUN")"
     
-    printf "\nLanguage:\n"
-    printf "  %-25s %s\n" "ja, en, zh-cn, ..." "Set user interface language"
+    printf "\n%s\n" "$(get_message "MSG_HELP_LANGUAGE_HEADER")"
+    printf "  %-25s %s\n" "ja, en, zh-cn, ..." "$(get_message "MSG_HELP_LANGUAGE")"
     
-    printf "\nExamples:\n"
-    printf "  %s\n" "sh aios full ja       # Run in full mode with Japanese language"
-    printf "  %s\n" "sh aios -u            # Update the script to latest version"
-    printf "  %s\n" "sh aios -r            # Reset all cached data"
-    printf "  %s\n" "sh aios -d -cf        # Run in full mode with debug output"
+    printf "\n%s\n" "$(get_message "MSG_HELP_EXAMPLES_HEADER")"
+    printf "  %s\n" "$(get_message "MSG_HELP_EXAMPLE1")"
+    printf "  %s\n" "$(get_message "MSG_HELP_EXAMPLE2")"
+    printf "  %s\n" "$(get_message "MSG_HELP_EXAMPLE3")"
+    printf "  %s\n" "$(get_message "MSG_HELP_EXAMPLE4")"
     
-    printf "\nDebug levels:\n"
-    printf "  %s\n" "-d, --debug           # Standard debug info"
-    printf "  %s\n" "-d2, --debug2         # Verbose debug info"
+    printf "\n%s\n" "$(get_message "MSG_HELP_DEBUG_HEADER")"
+    printf "  %s\n" "$(get_message "MSG_HELP_DEBUG_STANDARD")"
+    printf "  %s\n" "$(get_message "MSG_HELP_DEBUG_VERBOSE")"
 }
 
 color() {
