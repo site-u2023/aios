@@ -256,6 +256,11 @@ CN|MSG_TIMEZONE_SUCCESS=✅ 区域选择成功完成！
 TW|MSG_TIMEZONE_SUCCESS=✅ 區域選擇成功完成！
 
 # select_list() 関数
+JP|MSG_CONFIRM_YNR=🔄 選択を確定しますか？ (y/n/r)
+US|MSG_CONFIRM_YNR=🔄 Confirm this selection? (y/n/r)
+CN|MSG_CONFIRM_YNR=🔄 确认选择吗？ (y/n/r)
+TW|MSG_CONFIRM_YNR=🔄 確認選擇嗎？ (y/n/r)
+
 US|MSG_INVALID_COUNTRY_NUMBER=❌ Invalid country number. Please try again.
 JP|MSG_INVALID_COUNTRY_NUMBER=❌ 無効な国番号です。もう一度お試しください。
 CN|MSG_INVALID_COUNTRY_NUMBER=❌ 无效的国家编号。请重试。
