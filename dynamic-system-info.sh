@@ -98,16 +98,32 @@ get_os_info() {
     echo "$os_type $os_version"
 }
 
-# 📌 パッケージマネージャーの検出
+# 📌 パッケージマネージャーの検出と保存
 # 戻り値: パッケージマネージャー情報 (例: "opkg", "apk")
 get_package_manager() {
+    local pkg_manager
+    
+    # パッケージマネージャーの検出
     if command -v opkg >/dev/null 2>&1; then
-        echo "opkg"
+        pkg_manager="opkg"
     elif command -v apk >/dev/null 2>&1; then
-        echo "apk"
+        pkg_manager="apk"
     else
-        echo "unknown"
+        pkg_manager="unknown"
     fi
+    
+    # 検出結果をファイルに保存
+    printf "%s\n" "$pkg_manager" > "${CACHE_DIR}/package_manager.ch" || {
+        debug_log "ERROR" "Failed to write package manager info to ${CACHE_DIR}/package_manager.ch"
+        return 1
+    }
+    
+    debug_log "DEBUG" "Detected package manager: $pkg_manager, saved to ${CACHE_DIR}/package_manager.ch"
+    
+    # 検出結果を返す
+    echo "$pkg_manager"
+    
+    return 0
 }
 
 # 📌 利用可能な言語パッケージの取得
