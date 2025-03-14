@@ -92,6 +92,13 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 #    - **`select_list()`**: **番号選択 & Y/N 確認時のみ適用**
 #    - **`download()`**: **ファイル名の正規化**
 #########################################################################
+# sed用にテキストをエスケープする関数
+escape_for_sed() {
+    local input="$1"
+    # sedで特殊扱いされる文字をエスケープ
+    printf '%s' "$input" | sed 's/[\/&.*[\]^$]/\\&/g'
+}
+
 # 入力テキストを正規化する関数
 normalize_input() {
     input="$1"
@@ -198,9 +205,7 @@ select_country() {
         # 検索結果がない場合
         if [ -z "$full_results" ]; then
             local msg_not_found=$(get_message "MSG_COUNTRY_NOT_FOUND")
-            local escaped_input="$input_lang"
-            escaped_input=$(echo "$escaped_input" | sed 's/\//\\\//g')
-            escaped_input=$(echo "$escaped_input" | sed 's/&/\\\&/g')
+            local escaped_input=$(escape_for_sed "$input_lang")
             msg_not_found=$(echo "$msg_not_found" | sed "s/{0}/$escaped_input/g")
             printf "%s\n" "$(color red "$msg_not_found")"
             input_lang=""  # リセットして再入力
@@ -494,10 +499,11 @@ select_list() {
                 ;;
         esac
         
-        # プレースホルダー置換
+        # プレースホルダー置換（エスケープ処理された選択項目）
+        local safe_item=$(escape_for_sed "$selected_item")
         local msg_prefix=${msg_selected%%\{0\}*}
         local msg_suffix=${msg_selected#*\{0\}}
-        printf "%s%s%s\n" "$(color blue "$msg_prefix")" "$(color blue "$selected_item")" "$(color blue "$msg_suffix")"
+        printf "%s%s%s\n" "$(color blue "$msg_prefix")" "$(color blue "$safe_item")" "$(color blue "$msg_suffix")"
         
         # 確認
         if confirm "MSG_CONFIRM_ONLY_YN"; then
@@ -726,13 +732,16 @@ zone_write() {
     
     local tmp_zone="${CACHE_DIR}/zone.tmp"
     
-    # 一時ファイルが存在するか確認
-    if [ ! -f "$tmp_zone" ]; then
-        debug_log "ERROR" "File not found: $tmp_zone"
-        # sedのデリミタを#に変更
-        printf "%s\n" "$(color red "$(get_message "ERR_FILE_NOT_FOUND" | sed "s#{file}#$tmp_zone#g")")"
-        return 1
-    fi
+        # 一時ファイルが存在するか確認
+        if [ ! -f "$tmp_zone" ]; then
+            debug_log "ERROR" "File not found: $tmp_zone"
+            # ファイル名をエスケープして安全に表示
+            local safe_filename=$(escape_for_sed "$tmp_zone")
+            local err_msg=$(get_message "ERR_FILE_NOT_FOUND")
+            err_msg=$(echo "$err_msg" | sed "s/{file}/$safe_filename/g")
+            printf "%s\n" "$(color red "$err_msg")"
+            return 1
+        fi
     
     # タイムゾーン情報を取得
     local selected_timezone=$(cat "$tmp_zone")
