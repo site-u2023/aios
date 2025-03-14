@@ -67,8 +67,8 @@ JP|MSG_ENTER_COUNTRY=🌏 国名、コード、または言語を入力してく
 US|MSG_SEARCH_KEYWORD=🔍 Search (Keyword/Code):
 JP|MSG_SEARCH_KEYWORD=🔍 検索（キーワード/コード）:
 
-US|MSG_COUNTRY_NOT_FOUND=No matching country found for '{0}'. Please try again.
-JP|MSG_COUNTRY_NOT_FOUND='{0}'に一致する国が見つかりません。再度入力してください。
+US|MSG_COUNTRY_NOT_FOUND=❌ No matching country found for '{0}'. Please try again.
+JP|MSG_COUNTRY_NOT_FOUND=❌ '{0}'に一致する国が見つかりません。再度入力してください。
 
 US|MSG_SINGLE_MATCH_FOUND=Found single match: {0}
 JP|MSG_SINGLE_MATCH_FOUND=一致する国が見つかりました: {0}
@@ -122,16 +122,16 @@ US|MSG_SELECT_TIMEZONE=Please select your timezone from the list:
 JP|MSG_SELECT_TIMEZONE=リストからタイムゾーンを選択してください：
 
 # country_write() 関数
-US|ERR_FILE_NOT_FOUND=Error: File not found: {file}
-JP|ERR_FILE_NOT_FOUND=エラー：ファイルが見つかりません：{file}
+US|ERR_FILE_NOT_FOUND=❌ Error: File not found: {file}
+JP|ERR_FILE_NOT_FOUND=❌ エラー：ファイルが見つかりません：{file}
 
 # normalize_language() 関数
 US|MSG_LANGUAGE_SET=✅ Script language settings completed successfully!
 JP|MSG_LANGUAGE_SET=✅ スクリプト用の言語の設定が完了しました！
 
 # zone_write() 関数
-US|MSG_ERROR_OCCURRED=An error occurred.
-JP|MSG_ERROR_OCCURRED=エラーが発生しました。
+US|MSG_ERROR_OCCURRED=⚠️ An error occurred.
+JP|MSG_ERROR_OCCURRED=⚠️ エラーが発生しました。
 
 # =======================
 # common-package.sh
