@@ -98,33 +98,17 @@ get_os_info() {
     echo "$os_type $os_version"
 }
 
-# 📌 パッケージマネージャーの検出と保存
+# 📌 パッケージマネージャーの検出
 # 戻り値: パッケージマネージャー情報 (例: "opkg", "apk")
 get_package_manager() {
-    local pkg_manager
-    
-    # パッケージマネージャーの検出
     if command -v opkg >/dev/null 2>&1; then
-        pkg_manager="opkg"
+        echo "opkg"
     elif command -v apk >/dev/null 2>&1; then
-        pkg_manager="apk"
+        echo "apk"
     else
-        pkg_manager="unknown"
+        echo "unknown"
     fi
-    
-    # 検出結果をファイルに保存
-    printf "%s\n" "$pkg_manager" > "${CACHE_DIR}/package_manager.ch" || {
-        debug_log "ERROR" "Failed to write package manager info to ${CACHE_DIR}/package_manager.ch"
-        return 1
-    }
-    
-    debug_log "DEBUG" "Detected package manager: $pkg_manager, saved to ${CACHE_DIR}/package_manager.ch"
-    
-    # 検出結果を返す
-    echo "$pkg_manager"
-    
-    return 0
-}
+} 
 
 # 📌 利用可能な言語パッケージの取得
 # 戻り値: "language_code:language_name"形式の利用可能な言語パッケージのリスト
@@ -499,18 +483,18 @@ init_device_cache() {
 
 # パッケージマネージャー情報を検出・保存する関数
 detect_and_save_package_manager() {
-    if [ ! -f "${CACHE_DIR}/downloader.ch" ]; then
+    if [ ! -f "${CACHE_DIR}/package_manager.ch" ]; then
         if command -v opkg >/dev/null 2>&1; then
-            echo "opkg" > "${CACHE_DIR}/downloader.ch"
+            echo "opkg" > "${CACHE_DIR}/package_manager.ch"
             echo "ipk" > "${CACHE_DIR}/extension.ch"
             echo "INFO: Detected and saved package manager: opkg"
         elif command -v apk >/dev/null 2>&1; then
-            echo "apk" > "${CACHE_DIR}/downloader.ch"
+            echo "apk" > "${CACHE_DIR}/package_manager.ch"
             echo "apk" > "${CACHE_DIR}/extension.ch"
             echo "INFO: Detected and saved package manager: apk"
         else
             # デフォルトとしてopkgを使用
-            echo "opkg" > "${CACHE_DIR}/downloader.ch"
+            echo "opkg" > "${CACHE_DIR}/package_manager.ch"
             echo "ipk" > "${CACHE_DIR}/extension.ch"
             echo "WARN: No package manager detected, using opkg as default"
         fi
@@ -530,3 +514,12 @@ debug_info() {
         echo "==========================="
     fi
 }
+
+# メイン処理
+main() {
+    init_device_cache
+    detect_and_save_package_manager
+}
+
+# スクリプトの実行
+main "$@"
