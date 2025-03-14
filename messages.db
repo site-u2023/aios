@@ -240,6 +240,11 @@ JP|MSG_CONFIRM_ONLY_YN=🔄 確認 (y/n):
 CN|MSG_CONFIRM_ONLY_YN=🔄 确认 (y/n):
 TW|MSG_CONFIRM_ONLY_YN=🔄 確認 (y/n):
 
+US|MSG_CONFIRM_ONLY_YNR=🔄 Confirm (y/n/r):
+JP|MSG_CONFIRM_ONLY_YNR=🔄 確認 (y/n/r):
+CN|MSG_CONFIRM_ONLY_YNR=🔄 确认 (y/n/r):
+TW|MSG_CONFIRM_ONLY_YNR=🔄 確認 (y/n/r):
+
 US|MSG_TIMEZONE_SUCCESS=✅ Zone selection completed successfully!
 JP|MSG_TIMEZONE_SUCCESS=✅ ゾーンの選択が完了しました！
 CN|MSG_TIMEZONE_SUCCESS=✅ 区域选择成功完成！
