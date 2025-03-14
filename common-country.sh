@@ -1,10 +1,10 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.14-00-00"
+SCRIPT_VERSION="2025.03.14-00-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
-# 🚀 Last Update: 2025-02-21
+# 🚀 Last Update: 2025-03-14
 #
 # 🏷️ License: CC0 (Public Domain)
 # 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
@@ -69,33 +69,28 @@ BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build}"
-mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR"
+
+# ディレクトリ作成（エラーハンドリング追加）
+mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR" || {
+    echo "Error: Failed to create required directories" >&2
+    exit 1
+}
+
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
 #########################################################################
-# Last Update: 2025-02-18 23:00:00 (JST) 🚀
+# Last Update: 2025-03-14 01:24:18 (UTC) 🚀
 # "Ensuring consistent input handling and text normalization."
 #
 # 【要件】
 # 1. **入力テキストを正規化（Normalize Input）**
-#    - `iconv` が利用可能な場合、UTF-8 から ASCII//TRANSLIT に変換
-#    - `iconv` がない場合、元の入力をそのまま返す（スルー）
+#    - 全角数字を半角数字に変換
+#    - 将来的には他の文字種も対応予定
 #
 # 2. **適用対象**
 #    - **`select_country()`**: **Y/N 確認時のみ適用**
 #    - **`select_list()`**: **番号選択 & Y/N 確認時のみ適用**
 #    - **`download()`**: **ファイル名の正規化**
-#
-# 3. **適用しない対象**
-#    - **言語選択の曖昧検索には適用しない**（例: `日本語` → `ja` に変換しない）
-#    - **バージョンフォーマットの変更はしない**
-#
-# 4. **依存関係**
-#    - `iconv` が **ない場合は何もしない**
-#    - `sed` や `awk` を使わず `echo` ベースで処理
-#
-# 5. **影響範囲**
-#    - `common.sh` に統合し、全スクリプトで共通関数として利用
 #########################################################################
 # 入力テキストを正規化する関数
 normalize_input() {
@@ -113,7 +108,6 @@ select_country() {
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_zone="${CACHE_DIR}/zone.ch"
     local input_lang="$1"  # 引数として渡された言語コード
-    local skip_success_message=false  # 成功メッセージをスキップするフラグ
 
     # 1. 引数で短縮国名（JP、USなど）が指定されている場合（最優先）
     if [ -n "$input_lang" ]; then
@@ -126,7 +120,7 @@ select_country() {
             debug_log "DEBUG" "Exact language code match found: $lang_match"
             
             # 一時ファイルに書き込み
-            echo "$lang_match" > "${CACHE_DIR}/country_tmp.ch"
+            echo "$lang_match" > "${CACHE_DIR}/country.tmp"
             
             # country_write関数に処理を委譲（成功メッセージをスキップ）
             country_write true || {
@@ -134,8 +128,11 @@ select_country() {
                 return 1
             }
             
+            # 言語を正規化（メッセージキャッシュを作成）
+            normalize_language
+            
             # 言語に対応するタイムゾーン情報を取得
-            echo "$(echo "$lang_match" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone_tmp.ch"
+            echo "$(echo "$lang_match" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone.tmp"
             
             # zone_write関数に処理を委譲
             zone_write || {
@@ -172,9 +169,6 @@ select_country() {
     # 4. 自動検出が失敗または拒否された場合、手動入力へ
     debug_log "DEBUG" "Automatic location detection failed or was declined. Proceeding to manual input."
 
-    # 以下、既存の手動入力ロジック...
-    # （変更なし）
-
     # 国の入力と検索ループ
     while true; do
         # 入力がまだない場合は入力を求める
@@ -191,7 +185,7 @@ select_country() {
 
         # 空の入力をチェック
         if [ -z "$input_lang" ]; then
-            debug_log "WARN" "Empty search keyword"
+            debug_log "DEBUG" "Empty search keyword"
             continue
         fi
 
@@ -227,7 +221,7 @@ select_country() {
 
             # 確認（confirm関数使用）
             if confirm "MSG_CONFIRM_ONLY_YN"; then
-                echo "$full_results" > "${CACHE_DIR}/country_tmp.ch"
+                echo "$full_results" > "${CACHE_DIR}/country.tmp"
 
                 # country_write関数に処理を委譲
                 country_write || {
@@ -235,8 +229,11 @@ select_country() {
                     return 1
                 }
 
+                # 言語を正規化
+                normalize_language
+                
                 # zone_write関数に処理を委譲
-                echo "$(echo "$full_results" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone_tmp.ch"
+                echo "$(echo "$full_results" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone.tmp"
                 zone_write || {
                     debug_log "ERROR" "Failed to write timezone data"
                     return 1
@@ -251,9 +248,14 @@ select_country() {
             fi
         fi
 
-        # 複数結果の場合、リスト表示して選択
+        # 複数結果の場合、select_list関数を使用
         debug_log "DEBUG" "Multiple results found for '$input_lang'. Displaying selection list."
 
+        # 表示用リスト作成とselect_list呼び出し
+        local display_list=$(echo "$full_results" | awk '{print $2, $3}')
+        local number_file="${CACHE_DIR}/number_selection.tmp"
+        
+        # select_list関数の代わりに従来の方法で実装（将来的にselect_list関数に移行予定）
         # 表示用リスト作成
         echo "$full_results" | awk '{print NR, ":", $2, $3}'
 
@@ -263,6 +265,7 @@ select_country() {
 
         local number
         read -r number
+        number=$(normalize_input "$number")
         debug_log "DEBUG" "User selected number: $number"
 
         # 選択された番号の検証
@@ -281,7 +284,7 @@ select_country() {
 
                 if confirm "MSG_CONFIRM_ONLY_YN"; then
                     # 一時ファイルに書き込み
-                    echo "$selected_full" > "${CACHE_DIR}/country_tmp.ch"
+                    echo "$selected_full" > "${CACHE_DIR}/country.tmp"
 
                     # country_write関数に処理を委譲
                     country_write || {
@@ -289,30 +292,19 @@ select_country() {
                         return 1
                     }
 
+                    # 言語を正規化
+                    normalize_language
+                    
                     # zone_write関数に処理を委譲
-                    echo "$(echo "$selected_full" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone_tmp.ch"
+                    echo "$(echo "$selected_full" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone.tmp"
                     zone_write || {
                         debug_log "ERROR" "Failed to write timezone data"
                         return 1
                     }
-
-                    debug_log "DEBUG" "Country selected from multiple choices: $selected_country"
-                    select_zone
-                    return 0
-                fi
-            else
-                local msg_invalid=$(get_message "MSG_INVALID_NUMBER")
-                printf "%s\n" "$(color red "$msg_invalid")"
-            fi
-        else
-            local msg_invalid=$(get_message "MSG_INVALID_NUMBER")
-            printf "%s\n" "$(color red "$msg_invalid")"
-        fi
-
-        # 検索プロンプトを表示
-        input_lang=""
-        debug_log "DEBUG" "Resetting search and showing prompt again"
-    done
+                    
+    debug_log "DEBUG" "Country selected from multiple choices: $selected_country"
+    select_zone
+    return 0
 }
 
 # システムの地域情報を検出し設定する関数
@@ -344,7 +336,7 @@ detect_and_set_location() {
     
     # 検出できなければ通常フローへ
     if [ -z "$system_country" ] || [ -z "$system_timezone" ]; then
-        debug_log "WARN" "Could not detect system country or timezone"
+        debug_log "DEBUG" "Could not detect system country or timezone"
         return 1
     fi
     
@@ -368,7 +360,7 @@ detect_and_set_location() {
         if [ -n "$country_data" ]; then
             # 国情報を一時ファイルに書き込み
             debug_log "DEBUG" "Writing country data to temporary file"
-            echo "$country_data" > "${CACHE_DIR}/country_tmp.ch"
+            echo "$country_data" > "${CACHE_DIR}/country.tmp"
             
             # country_write関数に処理を委譲（メッセージ表示スキップ）
             debug_log "DEBUG" "Calling country_write()"
@@ -377,6 +369,9 @@ detect_and_set_location() {
                 return 1
             }
             
+            # 言語を正規化
+            normalize_language
+            
             # 国選択完了メッセージを表示（ここで1回だけ）
             printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
             
@@ -384,11 +379,11 @@ detect_and_set_location() {
             if [ -n "$system_zonename" ] && [ -n "$system_timezone" ]; then
                 # ゾーン名とタイムゾーン情報を組み合わせて一時ファイルに書き込む
                 debug_log "DEBUG" "Writing combined zone info to temporary file: ${system_zonename},${system_timezone}"
-                echo "${system_zonename},${system_timezone}" > "${CACHE_DIR}/zone_tmp.ch"
+                echo "${system_zonename},${system_timezone}" > "${CACHE_DIR}/zone.tmp"
             else
                 # タイムゾーン情報のみを一時ファイルに書き込む
                 debug_log "DEBUG" "Writing timezone only to temporary file: ${system_timezone}"
-                echo "${system_timezone}" > "${CACHE_DIR}/zone_tmp.ch"
+                echo "${system_timezone}" > "${CACHE_DIR}/zone.tmp"
             fi
             
             # zone_write関数に処理を委譲
@@ -404,7 +399,7 @@ detect_and_set_location() {
             debug_log "DEBUG" "Auto-detected settings have been applied successfully"
             return 0
         else
-            debug_log "WARN" "No matching entry found for detected country: $system_country"
+            debug_log "DEBUG" "No matching entry found for detected country: $system_country"
             return 1
         fi
     else
@@ -414,11 +409,9 @@ detect_and_set_location() {
 }
 
 # 番号付きリストからユーザーに選択させる関数
-# リスト選択を処理する関数
 # $1: 表示するリストデータ
 # $2: 結果を保存する一時ファイル
 # $3: タイプ（country/zone）
-# 番号付きリストからユーザーに選択させる関数
 select_list() {
     debug_log "DEBUG" "select_list() function executing: type=$3"
     
@@ -567,7 +560,13 @@ select_zone() {
     # 複数のタイムゾーンがある場合は選択肢を表示
     printf "%s\n" "$(color blue "$(get_message "MSG_SELECT_TIMEZONE")")"
     
-    # 番号付きリスト表示
+    # 番号付きリスト表示 - select_list関数を使用
+    local number_file="${CACHE_DIR}/selection_number.tmp"
+    
+    # select_list関数を呼び出す（今後の実装）
+    # select_list "$zone_list" "$number_file" "zone"
+    
+    # 今回は従来のロジックを使用（互換性のため）
     local count=1
     echo "$zone_list" | while IFS= read -r line; do
         [ -n "$line" ] && printf "%3d: %s\n" "$count" "$line"
@@ -579,6 +578,7 @@ select_zone() {
     while true; do
         printf "%s " "$(color cyan "$(get_message "MSG_ENTER_NUMBER")")"
         read -r number
+        number=$(normalize_input "$number")
         debug_log "DEBUG" "User input: $number"
         
         # 入力検証 - 空白またはゼロは許可しない
@@ -623,7 +623,6 @@ select_zone() {
     printf "%s %s\n" "$(color blue "$(get_message "MSG_CONFIRM_TIMEZONE")")" "$(color blue "$selected")"
     
     if confirm "MSG_CONFIRM_ONLY_YN"; then
-        echo "$zonename" > "$cache_zonename"
         echo "$timezone" > "$cache_timezone"
         echo "$selected" > "$cache_zone"
         printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
@@ -642,12 +641,11 @@ country_write() {
     debug_log "DEBUG" "Entering country_write() with skip_message=$skip_message"
     
     # 一時ファイルのパス
-    local tmp_country="${CACHE_DIR}/country_tmp.ch"
+    local tmp_country="${CACHE_DIR}/country.tmp"
     
     # 出力先ファイルのパス
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_language="${CACHE_DIR}/language.ch"
-    local cache_message="${CACHE_DIR}/message.ch"
     
     # 一時ファイルが存在するか確認
     if [ ! -f "$tmp_country" ]; then
@@ -665,55 +663,13 @@ country_write() {
     local selected_country=$(awk '{print $2, $3}' "$cache_country")
     debug_log "DEBUG" "Selected country: $selected_country"
     
-    # 言語設定の正規化
-    debug_log "DEBUG" "Normalizing language settings"
-    
-    # message.dbと言語キャッシュファイルのパス
-    local message_db="$BASE_DIR/messages.db"
-    local language_cache="$CACHE_DIR/language.ch"
-    local message_cache="$CACHE_DIR/message.ch"
-    debug_log "DEBUG" "message_db=$message_db"
-    debug_log "DEBUG" "language_cache=$language_cache"
-    debug_log "DEBUG" "message_cache=$message_cache"
-    
     # 選択された国の言語コードを取得（5列目）
     local selected_lang_code=$(awk '{print $5}' "$cache_country")
     debug_log "DEBUG" "Selected language code: $selected_lang_code"
     
-    # サポートされている言語コードのリストを取得（より正確な方法）
-    local supported_langs=""
-    if [ -f "$message_db" ]; then
-        # パターン：JP|MSG_KEY=value または US|MSG_KEY=value
-        supported_langs=$(grep -o "^[A-Z][A-Z]|" "$message_db" | sort -u | tr -d "|" | tr '\n' ' ')
-        debug_log "DEBUG" "Available supported languages: $supported_langs"
-    else
-        supported_langs="US"  # デフォルト言語
-        debug_log "DEBUG" "Message DB not found, defaulting to US only"
-    fi
-    
-    # 選択された言語がサポートされているか確認
-    local is_supported=0
-    for lang in $supported_langs; do
-        if [ "$lang" = "$selected_lang_code" ]; then
-            is_supported=1
-            break
-        fi
-    done
-    
-    # サポートされている場合は選択言語を使用、そうでなければUSをデフォルトとして使用
-    local active_language=""
-    if [ "$is_supported" -eq 1 ]; then
-        debug_log "DEBUG" "Language $selected_lang_code is supported"
-        active_language="$selected_lang_code"
-    else
-        debug_log "DEBUG" "Language $selected_lang_code is not supported, using US as default"
-        active_language="US"
-    fi
-    
-    # 言語設定をキャッシュに保存
-    echo "$selected_lang_code" > "$language_cache"
-    echo "$active_language" > "$message_cache"
-    debug_log "DEBUG" "Final active language: $active_language"
+    # 言語設定をキャッシュに保存（message.chはnormalize_languageで生成）
+    echo "$selected_lang_code" > "$cache_language"
+    debug_log "DEBUG" "Language code written to cache"
     
     # 成功メッセージを表示（スキップフラグが設定されていない場合のみ）
     if [ "$skip_message" = "false" ]; then
@@ -723,6 +679,7 @@ country_write() {
     return 0
 }
 
+# 言語設定を正規化する関数
 normalize_language() {
     # 必要なパス定義
     local message_db="${BASE_DIR}/messages.db"
@@ -730,17 +687,17 @@ normalize_language() {
     local message_cache="${CACHE_DIR}/message.ch"
     local selected_language=""
 
-    # メッセージキャッシュが既に存在するか確認
-    if [ -f "$message_cache" ]; then
-        debug_log "DEBUG" "message.ch already exists. Using existing language settings."
-        return 0
-    fi
-
     # デバッグログの出力
     debug_log "DEBUG" "Normalizing language settings"
     debug_log "DEBUG" "message_db=${message_db}"
     debug_log "DEBUG" "language_cache=${language_cache}"
     debug_log "DEBUG" "message_cache=${message_cache}"
+
+    # メッセージキャッシュが既に存在するか確認
+    if [ -f "$message_cache" ]; then
+        debug_log "DEBUG" "message.ch already exists. Using existing language settings."
+        return 0
+    fi
 
     # language.chファイルの存在確認
     if [ ! -f "$language_cache" ]; then
@@ -752,11 +709,19 @@ normalize_language() {
     selected_language=$(cat "$language_cache")
     debug_log "DEBUG" "Selected language code: ${selected_language}"
 
-    local supported_languages
-    supported_languages=$(grep "^SUPPORTED_LANGUAGES=" "$message_db" | cut -d'=' -f2 | tr -d '"')
-    debug_log "DEBUG" "Available supported languages: ${supported_languages}"
+    # サポート言語の取得方法を統一（より正確なパターンマッチング）
+    local supported_languages=""
+    if [ -f "$message_db" ]; then
+        # パターン：JP|MSG_KEY=value または US|MSG_KEY=value
+        supported_languages=$(grep -o "^[A-Z][A-Z]|" "$message_db" | sort -u | tr -d "|" | tr '\n' ' ')
+        debug_log "DEBUG" "Available supported languages: ${supported_languages}"
+    else
+        supported_languages="US"  # デフォルト言語
+        debug_log "DEBUG" "Message DB not found, defaulting to US only"
+    fi
 
-    if echo "$supported_languages" | grep -qw "$selected_language"; then
+    # 選択された言語がサポートされているか確認（grep使用に変更）
+    if echo " $supported_languages " | grep -q " $selected_language "; then
         debug_log "DEBUG" "Language ${selected_language} is supported"
         echo "$selected_language" > "$message_cache"
         ACTIVE_LANGUAGE="$selected_language"
@@ -767,14 +732,16 @@ normalize_language() {
     fi
 
     debug_log "DEBUG" "Final active language: ${ACTIVE_LANGUAGE}"
-    printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
+    # 言語セットのメッセージ（country_writeとは別メッセージ）
+    printf "%s\n" "$(color green "$(get_message "MSG_LANGUAGE_SET")")"
+    return 0
 }
 
 # タイムゾーン情報をキャッシュに書き込む関数
 zone_write() {
     debug_log "DEBUG" "Entering zone_write()"
     
-    local tmp_zone="${CACHE_DIR}/zone_tmp.ch"
+    local tmp_zone="${CACHE_DIR}/zone.tmp"
     
     # 一時ファイルが存在するか確認
     if [ ! -f "$tmp_zone" ]; then
@@ -819,12 +786,12 @@ zone_write() {
     return 0
 }
 
-# デバッグモードが有効な場合は情報表示
+# スクリプト情報表示（デバッグモード有効時）
 if [ "$DEBUG_MODE" = "true" ]; then
     debug_log "DEBUG" "common-country.sh loaded with BASE_DIR=$BASE_DIR"
     if type get_device_architecture >/dev/null 2>&1; then
         debug_log "DEBUG" "dynamic-system-info.sh loaded successfully"
     else
-        debug_log "WARN" "dynamic-system-info.sh not loaded or functions not available"
+        debug_log "DEBUG" "dynamic-system-info.sh not loaded or functions not available"
     fi
 fi
