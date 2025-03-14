@@ -298,17 +298,20 @@ detect_and_set_location() {
         debug_log "DEBUG" "dynamic-system-info.sh not found. Cannot detect location."
         return 1
     fi
-    
+
+    # dynamic-system-info.shを一度だけ読み込む
+    . "$BASE_DIR/dynamic-system-info.sh"
+
     # 国情報の取得
-    system_country=$(. "$BASE_DIR/dynamic-system-info.sh" && get_country_info)
+    system_country=$(get_country_info)
     debug_log "DEBUG" "Detected country info: ${system_country}"
-    
+
     # タイムゾーン情報の取得
-    system_timezone=$(. "$BASE_DIR/dynamic-system-info.sh" && get_timezone_info)
+    system_timezone=$(get_timezone_info)
     debug_log "DEBUG" "Detected timezone info: ${system_timezone}"
-    
+
     # ゾーン名の取得
-    system_zonename=$(. "$BASE_DIR/dynamic-system-info.sh" && get_zonename_info)
+    system_zonename=$(get_zonename_info)
     debug_log "DEBUG" "Detected zone name info: ${system_zonename}"
     
     # 検出できなければ通常フローへ
