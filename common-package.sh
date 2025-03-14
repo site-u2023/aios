@@ -1,10 +1,10 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.12-00-00"
+SCRIPT_VERSION="2025.03.14-01-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
-# 🚀 Last Update: 2025-02-21
+# 🚀 Last Update: 2025-03-14
 #
 # 🏷️ License: CC0 (Public Domain)
 # 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
@@ -66,17 +66,19 @@ BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
+BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR" "$FEED_DIR"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
+
 #########################################################################
-# Last Update: 2025-02-24 21:16:00 (JST) 🚀
+# Last Update: 2025-03-14 06:00:00 (JST) 🚀
 # install_package: パッケージのインストール処理 (OpenWrt / Alpine Linux)
 #
 # 【概要】
 # 指定されたパッケージをインストールし、オプションに応じて以下の処理を実行する。
-# ✅ OpenWrt /の `opkg update` / `apk update` を適用（条件付き）
+# ✅ OpenWrt / Alpine の `opkg update` / `apk update` を適用（条件付き）
 # ✅ 言語パッケージ・設定ファイル (`local-package.db`) の適用
 #
 # 【フロー】
@@ -137,13 +139,16 @@ start_spinner() {
     spinner_chars='| / - \\'
     i=0
 
-    echo -en "\e[?25l"
+    # カーソル非表示
+    printf "\033[?25l"
 
     while true; do
         # POSIX 準拠の方法でインデックスを計算し、1文字抽出
         local index=$(( i % 4 ))
-        local spinner_char=$(expr substr "$spinner_chars" $(( index + 1 )) 1)
+        local char_pos=$(( index + 1 ))
+        local spinner_char=$(expr substr "$spinner_chars" "$char_pos" 1)
         printf "\r📡 %s %s" "$(color yellow "$SPINNER_MESSAGE")" "$spinner_char"
+        
         if command -v usleep >/dev/null 2>&1; then
             usleep 200000
         else
@@ -161,18 +166,20 @@ stop_spinner() {
     if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
         kill "$SPINNER_PID" >/dev/null 2>&1
         printf "\r\033[K"  # 行をクリア
-        echo "$(color green "$message")"
+        printf "%s\n" "$(color green "$message")"
     else
         printf "\r\033[K"
-        echo "$(color red "$message")"
+        printf "%s\n" "$(color red "$message")"
     fi
     unset SPINNER_PID
 
-    echo -en "\e[?25h"
+    # カーソル表示
+    printf "\033[?25h"
 }
 
+# インストール後のパッケージリストを表示
 check_install_list() {
-    echo -e " \033[1;31mPackages installed after flashing\033[0;39m"
+    printf " \033[1;31mPackages installed after flashing\033[0;39m\n"
 
     FLASH_TIME="$(awk '
     $1 == "Installed-Time:" && ($2 < OLDEST || OLDEST=="") {
@@ -185,7 +192,6 @@ check_install_list() {
 
     awk -v FT="$FLASH_TIME" '
     $1 == "Package:" {
-
       PKG=$2
       USR=""
     }
@@ -219,7 +225,7 @@ update_package_list() {
 
     # キャッシュが最新なら `opkg update` をスキップ
     if [ $((current_time - cache_time)) -lt $max_age ]; then
-        debug_log "DEBUG" "パッケージリストは24時間以内に更新されています。スキップします。"
+        debug_log "DEBUG" "Package list was updated within 24 hours. Skipping update."
         return 0
     fi
 
@@ -230,14 +236,14 @@ update_package_list() {
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
             stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
-            debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+            debug_log "ERROR" "Failed to update package lists with opkg"
             return 1
         }
         opkg list > "$package_cache" 2>/dev/null
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
             stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
-            debug_log "ERROR" "$(get_message "MSG_ERROR_UPDATE_FAILED")"
+            debug_log "ERROR" "Failed to update package lists with apk"
             return 1
         }
         apk search > "$package_cache" 2>/dev/null
@@ -248,15 +254,16 @@ update_package_list() {
 
     # キャッシュのタイムスタンプを更新
     touch "$update_cache" || {
-        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_WRITE_CACHE")")"
+        debug_log "ERROR" "Failed to write to cache file: $update_cache"
         return 1
     }
 
     return 0
 }
 
+# local-package.dbからの設定を適用
 local_package_db() {
-    package_name=$1  # どんなパッケージ名でも受け取れる
+    local package_name="$1"  # どんなパッケージ名でも受け取れる
 
     debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name"
 
@@ -279,7 +286,7 @@ local_package_db() {
     fi
 
     # **変数の置換**
-    echo "$cmds" > "${CACHE_DIR}/commands.ch"
+    printf "%s" "$cmds" > "${CACHE_DIR}/commands.ch"
 
     # **環境変数 `CUSTOM_*` を自動検出して置換**
     CUSTOM_VARS=$(env | grep "^CUSTOM_" | awk -F= '{print $1}')
@@ -298,6 +305,7 @@ local_package_db() {
     . "${CACHE_DIR}/commands.ch"
 }
 
+# パッケージインストール前のチェック
 package_pre_install() {
     local package_name="$1"
     local package_cache="${CACHE_DIR}/package_list.ch"
@@ -311,41 +319,42 @@ package_pre_install() {
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         output=$(opkg list-installed "$check_extension" 2>&1)
         if [ -n "$output" ]; then  # 出力があった場合
-            debug_log "DEBUG" "opkg package "$check_extension" is already installed on the device."
+            debug_log "DEBUG" "Package \"$check_extension\" is already installed on the device"
             return 1  # 既にインストールされている場合は終了
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         output=$(apk info "$check_extension" 2>&1)
         if [ -n "$output" ]; then  # 出力があった場合
-            debug_log "DEBUG" "apk ackage "$check_extension" is already installed on the device."
+            debug_log "DEBUG" "Package \"$check_extension\" is already installed on the device"
             return 1  # 既にインストールされている場合は終了
         fi
     fi
   
-# リポジトリ内パッケージ確認
-debug_log "DEBUG" "Checking repository for package: $check_extension"
+    # リポジトリ内パッケージ確認
+    debug_log "DEBUG" "Checking repository for package: $check_extension"
 
-if [ ! -f "$package_cache" ]; then
-    debug_log "ERROR" "Package cache not found! Run update_package_list() first."
-    return 1
-fi
+    if [ ! -f "$package_cache" ]; then
+        debug_log "ERROR" "Package cache not found! Run update_package_list() first"
+        return 1
+    fi
 
-# パッケージがキャッシュ内に存在するか確認
-if grep -q "^$package_name " "$package_cache"; then
-    debug_log "DEBUG" "Package $package_name found in repository."
-    return 0  # パッケージが存在するのでOK
-fi
+    # パッケージがキャッシュ内に存在するか確認
+    if grep -q "^$package_name " "$package_cache"; then
+        debug_log "DEBUG" "Package $package_name found in repository"
+        return 0  # パッケージが存在するのでOK
+    fi
 
-# キャッシュに存在しない場合、FEED_DIR内を探してみる
-if [ -f "$package_name" ]; then
-    debug_log "DEBUG" "Package $package_name found in FEED_DIR: $FEED_DIR"
-    return 0  # FEED_DIR内にパッケージが見つかったのでOK
-fi
+    # キャッシュに存在しない場合、FEED_DIR内を探してみる
+    if [ -f "$package_name" ]; then
+        debug_log "DEBUG" "Package $package_name found in FEED_DIR: $FEED_DIR"
+        return 0  # FEED_DIR内にパッケージが見つかったのでOK
+    fi
 
-debug_log "DEBUG" "Package $package_name not found in repository or FEED_DIR."
-return 1  # パッケージが見つからなかった
+    debug_log "DEBUG" "Package $package_name not found in repository or FEED_DIR"
+    return 1  # パッケージが見つからなかった
 }
 
+# 通常パッケージのインストール処理
 install_normal_package() {
     local package_name="$1"
     local force_install="$2"
@@ -353,7 +362,6 @@ install_normal_package() {
     debug_log "DEBUG" "Starting installation process for: $package_name"
 
     start_spinner "$(color yellow "$package_name $(get_message "MSG_INSTALLING_PACKAGE")")"
-    #start_spinner "$(color yellow "$(get_message "MSG_INSTALLING_PACKAGE" | sed "s/{pkg}/$package_name/")")"
 
     if [ "$force_install" = "yes" ]; then
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
@@ -382,9 +390,10 @@ install_normal_package() {
     fi
 
     stop_spinner "$(color green "$package_name $(get_message "MSG_INSTALL_SUCCESS")")"
+    return 0
 }
 
-# **インストール関数**
+# **パッケージインストールのメイン関数**
 install_package() {
     # 変数初期化
     local confirm_install="no"
@@ -420,12 +429,12 @@ install_package() {
                 ;;
             unforce) unforce="yes" ;;
             list) install_list="yes"; check_install_list ;;
-            -*) echo "Unknown option: $1"; return 1 ;;
+            -*) printf "Unknown option: %s\n" "$1"; return 1 ;;
             *)
                 if [ -z "$package_name" ]; then
                     package_name="$1"
                 else
-                    debug_log "DEBUG" "$(color yellow "$(get_message "MSG_UNKNOWN_OPTION" | sed "s/{option}/$1/")")"
+                    debug_log "DEBUG" "Unexpected additional argument: $1"
                 fi
                 ;;
         esac
@@ -433,20 +442,20 @@ install_package() {
     done
 
     # **ベースネームを取得**
-    BASE_NAME=$(basename "$package_name" .ipk)
+    local BASE_NAME=$(basename "$package_name" .ipk)
     BASE_NAME=$(basename "$BASE_NAME" .apk)
 
     # update オプション処理
     if [ "$update_mode" = "yes" ]; then
         update_package_list
-        return 0
+        return $?
     fi
 
     # パッケージマネージャー確認
     if [ -f "${CACHE_DIR}/downloader.ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader.ch")
     else
-        debug_log "ERROR" "$(color red "$(get_message "MSG_ERROR_NO_PACKAGE_MANAGER")")"
+        debug_log "ERROR" "Cannot determine package manager. File not found: ${CACHE_DIR}/downloader.ch"
         return 1
     fi
 
@@ -454,18 +463,16 @@ install_package() {
     update_package_list || return 1
 
     # 言語コードの取得
+    local lang_code="en"  # デフォルト値
     if [ -f "${CACHE_DIR}/luci.ch" ]; then
         lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
 
         # luci.ch で指定されている言語コードが "xx" なら "en" に変更
-        if [ "$lang_code" == "xx" ]; then
+        if [ "$lang_code" = "xx" ]; then
             lang_code="en"
         fi
-    else
-        lang_code="en"  # デフォルトで英語
     fi
 
-    # 言語パッケージか通常パッケージかを判別
     # 言語パッケージか通常パッケージかを判別
     case "$BASE_NAME" in
         luci-i18n-*)
@@ -474,7 +481,12 @@ install_package() {
             ;;
     esac
 
-    package_pre_install "$package_name" || return 1
+    # test_mode が有効でなければパッケージの事前チェックを行う
+    if [ "$test_mode" != "yes" ]; then
+        if ! package_pre_install "$package_name"; then
+            return 1
+        fi
+    fi
     
     # **YN確認 (オプションで有効時のみ)**
     if [ "$confirm_install" = "yes" ]; then
@@ -483,7 +495,10 @@ install_package() {
         fi
     fi
     
-    install_normal_package "$package_name" "$force_install" || return 1
+    # パッケージのインストール
+    if ! install_normal_package "$package_name" "$force_install"; then
+        return 1
+    fi
 
     # **ローカルパッケージDBの適用 (インストール成功後に実行)**
     if [ "$skip_package_db" != "yes" ]; then
@@ -497,16 +512,18 @@ install_package() {
             if echo "$BASE_NAME" | grep -q "^luci-"; then
                 # Luci関連のパッケージの場合はrpcdを再起動
                 /etc/init.d/rpcd restart
-                debug_log "DEBUG" "$package_name is a Luci package, rpcd has been restarted."
+                debug_log "DEBUG" "$package_name is a Luci package, rpcd has been restarted"
             else
                 /etc/init.d/"$BASE_NAME" restart
                 /etc/init.d/"$BASE_NAME" enable
-                debug_log "DEBUG" "$package_name has been restarted and enabled."
+                debug_log "DEBUG" "$package_name has been restarted and enabled"
             fi
         else
-            debug_log "DEBUG" "$package_name is not a service or the service script is not found."
+            debug_log "DEBUG" "$package_name is not a service or the service script is not found"
         fi
     else
-        debug_log "DEBUG" "Skipping service handling for $package_name due to disabled option."
+        debug_log "DEBUG" "Skipping service handling for $package_name due to disabled option"
     fi
+    
+    return 0
 }
