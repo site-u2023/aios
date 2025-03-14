@@ -158,41 +158,39 @@ get_available_language_packages() {
     if [ "$pkg_manager" = "opkg" ]; then
         debug_log "DEBUG" "Extracting LuCI language packages from package_list.ch"
         grep "luci-i18n-base-" "$package_cache" > "$tmp_file" || touch "$tmp_file"
+        
+        # 言語コードを抽出
+        lang_packages=$(sed -n 's/luci-i18n-base-\([a-z][a-z]\(-[a-z][a-z]\)\?\) .*/\1/p' "$tmp_file" | sort -u)
+        debug_log "DEBUG" "Available LuCI languages: $lang_packages"
     else
         debug_log "ERROR" "Unsupported package manager: $pkg_manager"
         touch "$tmp_file"
     fi
     
-    # 言語コードを抽出
-    lang_packages=$(sed -n 's/luci-i18n-base-\([a-z][a-z]\(-[a-z][a-z]\)\?\) .*/\1/p' "$tmp_file" | sort -u)
-    debug_log "DEBUG" "Available LuCI languages: $lang_packages"
-    
     # country.chからLuCI言語コード（$4）を取得
     local preferred_lang=""
     if [ -f "$country_cache" ]; then
         preferred_lang=$(awk '{print $4}' "$country_cache")
-        debug_log "DEBUG" "Preferred language from country.db: $preferred_lang"
-        
-        # ここでxxのフォールバック処理を行う
-        if [ "$preferred_lang" = "xx" ]; then
-            preferred_lang="$default_lang"
-            debug_log "DEBUG" "Language code 'xx' found in country.db, falling back to '$default_lang'"
-        fi
+        debug_log "DEBUG" "Preferred language from country.ch: $preferred_lang"
+    else
+        debug_log "WARNING" "Country cache not found, using default language"
     fi
     
     # LuCI言語の決定ロジック
     local selected_lang="$default_lang"  # デフォルトは英語
     
     if [ -n "$preferred_lang" ]; then
-        # country.dbから取得した言語が利用可能か確認
-        if echo "$lang_packages" | grep -q "^$preferred_lang$"; then
+        if [ "$preferred_lang" = "xx" ]; then
+            # xxの場合はそのまま使用
+            selected_lang="xx"
+            debug_log "DEBUG" "Using special language code: xx (no localization)"
+        elif echo "$lang_packages" | grep -q "^$preferred_lang$"; then
+            # country.chの言語コードがパッケージリストに存在する場合
             selected_lang="$preferred_lang"
             debug_log "DEBUG" "Using preferred language: $selected_lang"
         else
-            debug_log "DEBUG" "Preferred language not available, falling back to default: $default_lang"
+            debug_log "DEBUG" "Preferred language not available, using default: $default_lang"
         fi
-    else
-        debug_log "DEBUG" "No preferred language specified, using default: $default_lang"
     fi
     
     # luci.chに書き込み
@@ -202,7 +200,7 @@ get_available_language_packages() {
     # 一時ファイル削除
     rm -f "$tmp_file"
     
-    # 利用可能な言語リストを返す（スペース区切り）
+    # 利用可能な言語リストを返す
     echo "$lang_packages"
     return 0
 }
