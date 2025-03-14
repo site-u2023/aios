@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.14-01-00"
+SCRIPT_VERSION="2025.03.14-02-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -66,11 +66,8 @@ BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
-BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
-mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR" "$FEED_DIR"
 DEBUG_MODE="${DEBUG_MODE:-false}"
-
 
 #########################################################################
 # Last Update: 2025-03-14 06:00:00 (JST) 🚀
@@ -84,54 +81,13 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 # 【フロー】
 # 1️⃣ デバイスにパッケージがインストール済みか確認
 # 2️⃣ `update.ch` のキャッシュをチェックし、`opkg update / apk update` を実行
-# 4️⃣ インストール確認（yn オプションが指定された場合）
-# 5️⃣ パッケージのインストールを実行
-# 6️⃣ 言語パッケージの適用（nolang オプションでスキップ可能）
-# 7️⃣ `local-package.db` の適用（notpack オプションでスキップ可能）
-# 8️⃣ 設定の有効化（デフォルト enabled、disabled オプションで無効化）
-#
-# 【グローバルオプション】
-# DEV_NULL : 標準出力の制御
-# DEBUG    : デバッグモード（詳細ログ出力）
-#
-# 【オプション】
-# - yn         : インストール前に確認（デフォルト: 確認なし）
-# - nolang     : 言語パッケージの適用をスキップ（デフォルト: 適用する）
-# - force      : 強制インストール（デフォルト: 適用しない）
-# - notpack    : `local-package.db` での設定適用をスキップ（デフォルト: 適用する）
-# - disabled   : 設定を disabled にする（デフォルト: enabled）
-# - hidden     : 既にインストール済みの場合のメッセージを非表示
-# - test       : インストール済みのパッケージでも処理を実行
-# - update     : `opkg update` / `apk update` を強制実行（`update.ch` のキャッシュ無視）
-#
-# 【仕様】
-# - `update.ch` を書き出し、`opkg update / apk update` の実行管理
-# - `downloader.ch` から `opkg` または `apk` を判定し、適切なパッケージ管理ツールを使用
-# - `local-package.db` を オプションにより適用
-# - `local-package.db` の設定がある場合、`uci set` を実行し適用（notpack オプションでスキップ可能）
-# - 言語パッケージの適用対象は `luci-app-*`（nolang オプションでスキップ可能）
-# - 設定の有効化はデフォルト enabled、disabled オプションで無効化可能
-# - `update` は明示的に `install_package update` で実行（インストール時には自動実行しない）
-#
-# 【使用例】
-# - install_package ttyd                  → `ttyd` をインストール（確認なし、local-package.db 適用、言語パック適用）
-# - install_package ttyd yn               → `ttyd` をインストール（確認あり）
-# - install_package ttyd nolang           → `ttyd` をインストール（言語パック適用なし）
-# - install_package ttyd notpack          → `ttyd` をインストール（local-package.db の適用なし）
-# - install_package ttyd disabled         → `ttyd` をインストール（設定を disabled にする）
-# - install_package ttyd yn nolang disabled hidden
-#   → `ttyd` をインストール（確認あり、言語パック適用なし、設定を disabled にし、
-#      既にインストール済みの場合のメッセージを非表示）
-# - install_package ttyd test             → `ttyd` をインストール（インストール済みでも強制インストール）
-# - install_package ttyd update           → `ttyd` をインストール（`opkg update / apk update` を強制実行）
-#
-# 【messages.db の記述例】
-# [ttyd]
-# opkg update
-# uci commit ttyd
-# initd/ttyd/restart
-# [ttyd] opkg update; uci commit ttyd; initd/ttyd/restart
+# 3️⃣ インストール確認（yn オプションが指定された場合）
+# 4️⃣ パッケージのインストールを実行
+# 5️⃣ 言語パッケージの適用（nolang オプションでスキップ可能）
+# 6️⃣ `local-package.db` の適用（notpack オプションでスキップ可能）
+# 7️⃣ 設定の有効化（デフォルト enabled、disabled オプションで無効化）
 #########################################################################
+
 # **スピナー開始関数**
 start_spinner() {
     local message="$1"
@@ -393,76 +349,20 @@ install_normal_package() {
     return 0
 }
 
-# **パッケージインストールのメイン関数**
-install_package() {
-    # 変数初期化
-    local confirm_install="no"
-    local skip_lang_pack="no"
-    local force_install="no"
-    local skip_package_db="no"
-    local set_disabled="no"
-    local hidden="no"
-    local test_mode="no"
-    local update_mode="no"
-    local unforce="no"
-    local install_list="no"
-    local package_name=""
-
-    # オプション解析
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            yn) confirm_install="yes" ;;
-            nolang) skip_lang_pack="yes" ;;
-            force) force_install="yes" ;;
-            notpack) skip_package_db="yes" ;;
-            disabled) set_disabled="yes" ;;
-            hidden) hidden="yes" ;;
-            test) test_mode="yes" ;;
-            update)
-                update_mode="yes"
-                shift
-                if [ $# -gt 0 ]; then
-                    package_to_update="$1"
-                    shift
-                fi
-                continue
-                ;;
-            unforce) unforce="yes" ;;
-            list) install_list="yes"; check_install_list ;;
-            -*) printf "Unknown option: %s\n" "$1"; return 1 ;;
-            *)
-                if [ -z "$package_name" ]; then
-                    package_name="$1"
-                else
-                    debug_log "DEBUG" "Unexpected additional argument: $1"
-                fi
-                ;;
-        esac
-        shift
-    done
-
-    # **ベースネームを取得**
-    local BASE_NAME=$(basename "$package_name" .ipk)
-    BASE_NAME=$(basename "$BASE_NAME" .apk)
-
-    # update オプション処理
-    if [ "$update_mode" = "yes" ]; then
-        update_package_list
-        return $?
-    fi
-
-    # パッケージマネージャー確認
+# パッケージマネージャーの確認
+verify_package_manager() {
     if [ -f "${CACHE_DIR}/downloader.ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader.ch")
+        debug_log "DEBUG" "Package manager detected: $PACKAGE_MANAGER"
+        return 0
     else
         debug_log "ERROR" "Cannot determine package manager. File not found: ${CACHE_DIR}/downloader.ch"
         return 1
     fi
+}
 
-    # **パッケージリスト更新**
-    update_package_list || return 1
-
-    # 言語コードの取得
+# 言語コードの取得
+get_language_code() {
     local lang_code="en"  # デフォルト値
     if [ -f "${CACHE_DIR}/luci.ch" ]; then
         lang_code=$(head -n 1 "${CACHE_DIR}/luci.ch" | awk '{print $1}')
@@ -472,57 +372,206 @@ install_package() {
             lang_code="en"
         fi
     fi
+    
+    debug_log "DEBUG" "Language code detected: $lang_code"
+    echo "$lang_code"
+}
+
+# サービス設定
+configure_service() {
+    local package_name="$1"
+    local base_name="$2"
+    
+    debug_log "DEBUG" "Configuring service for: $package_name"
+    
+    # サービスが存在するかチェックし、処理を分岐
+    if [ -x "/etc/init.d/$base_name" ]; then
+        if echo "$base_name" | grep -q "^luci-"; then
+            # Luci関連のパッケージの場合はrpcdを再起動
+            /etc/init.d/rpcd restart
+            debug_log "DEBUG" "$package_name is a LuCI package, rpcd has been restarted"
+        else
+            /etc/init.d/"$base_name" restart
+            /etc/init.d/"$base_name" enable
+            debug_log "DEBUG" "$package_name has been restarted and enabled"
+        fi
+    else
+        debug_log "DEBUG" "$package_name is not a service or the service script is not found"
+    fi
+}
+
+# オプション解析
+parse_package_options() {
+    # 変数初期化
+    PKG_OPTIONS_CONFIRM="no"
+    PKG_OPTIONS_SKIP_LANG="no"
+    PKG_OPTIONS_FORCE="no"
+    PKG_OPTIONS_SKIP_PACKAGE_DB="no"
+    PKG_OPTIONS_DISABLED="no"
+    PKG_OPTIONS_HIDDEN="no"
+    PKG_OPTIONS_TEST="no"
+    PKG_OPTIONS_UPDATE="no"
+    PKG_OPTIONS_UNFORCE="no"
+    PKG_OPTIONS_LIST="no"
+    PKG_OPTIONS_PACKAGE_NAME=""
+    
+    # オプション解析
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            yn) PKG_OPTIONS_CONFIRM="yes" ;;
+            nolang) PKG_OPTIONS_SKIP_LANG="yes" ;;
+            force) PKG_OPTIONS_FORCE="yes" ;;
+            notpack) PKG_OPTIONS_SKIP_PACKAGE_DB="yes" ;;
+            disabled) PKG_OPTIONS_DISABLED="yes" ;;
+            hidden) PKG_OPTIONS_HIDDEN="yes" ;;
+            test) PKG_OPTIONS_TEST="yes" ;;
+            update)
+                PKG_OPTIONS_UPDATE="yes"
+                shift
+                if [ $# -gt 0 ]; then
+                    PKG_OPTIONS_PACKAGE_UPDATE="$1"
+                    shift
+                fi
+                continue
+                ;;
+            unforce) PKG_OPTIONS_UNFORCE="yes" ;;
+            list) PKG_OPTIONS_LIST="yes" ;;
+            -*) 
+                debug_log "ERROR" "Unknown option: $1"
+                return 1 
+                ;;
+            *)
+                if [ -z "$PKG_OPTIONS_PACKAGE_NAME" ]; then
+                    PKG_OPTIONS_PACKAGE_NAME="$1"
+                else
+                    debug_log "DEBUG" "Unexpected additional argument: $1"
+                fi
+                ;;
+        esac
+        shift
+    done
+    
+    # パッケージ名が指定されていない場合の処理
+    if [ -z "$PKG_OPTIONS_PACKAGE_NAME" ] && [ "$PKG_OPTIONS_LIST" != "yes" ] && [ "$PKG_OPTIONS_UPDATE" != "yes" ]; then
+        debug_log "ERROR" "No package name specified"
+        return 1
+    fi
+    
+    return 0
+}
+
+# パッケージ処理メイン部分
+process_package() {
+    local package_name="$1"
+    local base_name="$2"
+    local confirm_install="$3"
+    local force_install="$4"
+    local skip_package_db="$5"
+    local set_disabled="$6"
+    local test_mode="$7"
+    local lang_code="$8"
 
     # 言語パッケージか通常パッケージかを判別
-    case "$BASE_NAME" in
+    case "$base_name" in
         luci-i18n-*)
             # 言語パッケージの場合、package_name に言語コードを追加
-            package_name="${BASE_NAME}-${lang_code}"
+            package_name="${base_name}-${lang_code}"
+            debug_log "DEBUG" "Language package detected, using: $package_name"
             ;;
     esac
 
     # test_mode が有効でなければパッケージの事前チェックを行う
     if [ "$test_mode" != "yes" ]; then
         if ! package_pre_install "$package_name"; then
+            debug_log "DEBUG" "Package $package_name is already installed or not found"
             return 1
         fi
+    else
+        debug_log "DEBUG" "Test mode enabled, skipping pre-install checks"
     fi
     
     # **YN確認 (オプションで有効時のみ)**
     if [ "$confirm_install" = "yes" ]; then
         if ! confirm "MSG_CONFIRM_INSTALL" "pkg" "$package_name"; then
+            debug_log "DEBUG" "User declined installation of $package_name"
             return 1
         fi
     fi
     
     # パッケージのインストール
     if ! install_normal_package "$package_name" "$force_install"; then
+        debug_log "ERROR" "Failed to install package: $package_name"
         return 1
     fi
 
     # **ローカルパッケージDBの適用 (インストール成功後に実行)**
     if [ "$skip_package_db" != "yes" ]; then
-        local_package_db "$BASE_NAME"
+        local_package_db "$base_name"
+    else
+        debug_log "DEBUG" "Skipping local-package.db application for $package_name"
+    fi
+    
+    return 0
+}
+
+# **パッケージインストールのメイン関数**
+install_package() {
+    # オプション解析
+    if ! parse_package_options "$@"; then
+        return 1
+    fi
+    
+    # インストール一覧表示モードの場合
+    if [ "$PKG_OPTIONS_LIST" = "yes" ]; then
+        check_install_list
+        return 0
+    fi
+    
+    # **ベースネームを取得**
+    local BASE_NAME
+    if [ -n "$PKG_OPTIONS_PACKAGE_NAME" ]; then
+        BASE_NAME=$(basename "$PKG_OPTIONS_PACKAGE_NAME" .ipk)
+        BASE_NAME=$(basename "$BASE_NAME" .apk)
+    fi
+
+    # update オプション処理
+    if [ "$PKG_OPTIONS_UPDATE" = "yes" ]; then
+        debug_log "DEBUG" "Updating package lists"
+        update_package_list
+        return $?
+    fi
+
+    # パッケージマネージャー確認
+    if ! verify_package_manager; then
+        debug_log "ERROR" "Failed to verify package manager"
+        return 1
+    fi
+
+    # **パッケージリスト更新**
+    update_package_list || return 1
+
+    # 言語コード取得
+    local lang_code
+    lang_code=$(get_language_code)
+    
+    # パッケージ処理
+    if ! process_package \
+            "$PKG_OPTIONS_PACKAGE_NAME" \
+            "$BASE_NAME" \
+            "$PKG_OPTIONS_CONFIRM" \
+            "$PKG_OPTIONS_FORCE" \
+            "$PKG_OPTIONS_SKIP_PACKAGE_DB" \
+            "$PKG_OPTIONS_DISABLED" \
+            "$PKG_OPTIONS_TEST" \
+            "$lang_code"; then
+        return 1
     fi
 
     # サービス関連の処理（disabled オプションが有効な場合は全スキップ）
-    if [ "$set_disabled" != "yes" ]; then
-        # サービスが存在するかチェックし、処理を分岐
-        if [ -x "/etc/init.d/$BASE_NAME" ]; then
-            if echo "$BASE_NAME" | grep -q "^luci-"; then
-                # Luci関連のパッケージの場合はrpcdを再起動
-                /etc/init.d/rpcd restart
-                debug_log "DEBUG" "$package_name is a Luci package, rpcd has been restarted"
-            else
-                /etc/init.d/"$BASE_NAME" restart
-                /etc/init.d/"$BASE_NAME" enable
-                debug_log "DEBUG" "$package_name has been restarted and enabled"
-            fi
-        else
-            debug_log "DEBUG" "$package_name is not a service or the service script is not found"
-        fi
+    if [ "$PKG_OPTIONS_DISABLED" != "yes" ]; then
+        configure_service "$PKG_OPTIONS_PACKAGE_NAME" "$BASE_NAME"
     else
-        debug_log "DEBUG" "Skipping service handling for $package_name due to disabled option"
+        debug_log "DEBUG" "Skipping service handling for $PKG_OPTIONS_PACKAGE_NAME due to disabled option"
     fi
     
     return 0
