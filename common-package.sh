@@ -351,12 +351,12 @@ install_normal_package() {
 
 # パッケージマネージャーの確認
 verify_package_manager() {
-    if [ -f "${CACHE_DIR}/downloader.ch" ]; then
-        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/downloader.ch")
+    if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/package_manager.ch")
         debug_log "DEBUG" "Package manager detected: $PACKAGE_MANAGER"
         return 0
     else
-        debug_log "ERROR" "Cannot determine package manager. File not found: ${CACHE_DIR}/downloader.ch"
+        debug_log "ERROR" "Cannot determine package manager. File not found: ${CACHE_DIR}/package_manager.ch"
         return 1
     fi
 }
