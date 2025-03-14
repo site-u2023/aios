@@ -166,7 +166,7 @@ select_country() {
         return 0
     fi
 
-    # 4. 自動検出が失敗または拒否された場合、手動入力へ
+        # 4. 自動検出が失敗または拒否された場合、手動入力へ
     debug_log "DEBUG" "Automatic location detection failed or was declined. Proceeding to manual input."
 
     # 国の入力と検索ループ
@@ -248,71 +248,55 @@ select_country() {
             fi
         fi
 
-        # 複数結果の場合、select_list関数を使用（将来実装）
-        debug_log "DEBUG" "Multiple results found for '$input_lang'. Displaying selection list."
+        # 複数結果の場合、select_list関数を使用
+        debug_log "DEBUG" "Multiple results found for '$input_lang'. Using select_list function."
 
-        # 表示用リスト作成（現在の実装）
-        echo "$full_results" | awk '{print NR, ":", $2, $3}'
-
-        # 番号入力要求
-        local msg_select=$(get_message "MSG_SELECT_COUNTRY_NUMBER")
-        printf "%s " "$(color cyan "$msg_select")"
-
-        local number
-        read -r number
-        number=$(normalize_input "$number")
-        debug_log "DEBUG" "User selected number: $number"
-
-        # 選択された番号の検証
-        if echo "$number" | grep -q '^[0-9]\+$'; then
-            if [ "$number" -gt 0 ] && [ "$number" -le "$result_count" ]; then
-                # 選択された行を取得
-                local selected_full=$(echo "$full_results" | sed -n "${number}p")
-                local selected_country=$(echo "$selected_full" | awk '{print $2, $3}')
-
-                # 確認メッセージ表示
-                local msg_selected=$(get_message "MSG_SELECTED_COUNTRY")
-                local msg_prefix=${msg_selected%%\{0\}*}
-                local msg_suffix=${msg_selected#*\{0\}}
-
-                printf "%s%s%s\n" "$(color blue "$msg_prefix" "$selected_country" "$msg_suffix")"
-
-                if confirm "MSG_CONFIRM_ONLY_YN"; then
-                    # 一時ファイルに書き込み
-                    echo "$selected_full" > "${CACHE_DIR}/country.tmp"
-
-                    # country_write関数に処理を委譲
-                    country_write || {
-                        debug_log "ERROR" "Failed to write country data"
-                        return 1
-                    }
-
-                    # 言語を正規化
-                    normalize_language
-                    
-                    # zone_write関数に処理を委譲
-                    echo "$(echo "$selected_full" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone.tmp"
-                    zone_write || {
-                        debug_log "ERROR" "Failed to write timezone data"
-                        return 1
-                    }
-                    
-                    debug_log "DEBUG" "Country selected from multiple choices: $selected_country"
-                    select_zone
-                    return 0
-                fi
-            else
-                local msg_invalid=$(get_message "MSG_INVALID_NUMBER")
-                printf "%s\n" "$(color red "$msg_invalid")"
-            fi
+        # 表示用リスト作成（国名のみ抽出）
+        local display_list=$(echo "$full_results" | awk '{print $2, $3}')
+        local number_file="${CACHE_DIR}/number_selection.tmp"
+        
+        # select_list関数を呼び出し
+        select_list "$display_list" "$number_file" "country"
+        
+        # 選択結果の取得
+        if [ -f "$number_file" ]; then
+            local selected_number=$(cat "$number_file")
+            debug_log "DEBUG" "User selected number: $selected_number"
+            
+            # 選択された行を取得
+            local selected_full=$(echo "$full_results" | sed -n "${selected_number}p")
+            local selected_country=$(echo "$selected_full" | awk '{print $2, $3}')
+            
+            debug_log "DEBUG" "Selected country: $selected_country"
+            
+            # 一時ファイルに書き込み
+            echo "$selected_full" > "${CACHE_DIR}/country.tmp"
+            
+            # country_write関数に処理を委譲
+            country_write || {
+                debug_log "ERROR" "Failed to write country data"
+                return 1
+            }
+            
+            # 言語を正規化
+            normalize_language
+            
+            # zone_write関数に処理を委譲
+            echo "$(echo "$selected_full" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone.tmp"
+            zone_write || {
+                debug_log "ERROR" "Failed to write timezone data"
+                return 1
+            }
+            
+            debug_log "DEBUG" "Country selected from multiple choices: $selected_country"
+            select_zone
+            return 0
         else
-            local msg_invalid=$(get_message "MSG_INVALID_NUMBER")
-            printf "%s\n" "$(color red "$msg_invalid")"
+            # 選択がキャンセルされた場合
+            debug_log "DEBUG" "User cancelled country selection"
+            input_lang=""
+            continue
         fi
-
-        # 検索プロンプトを表示
-        input_lang=""
-        debug_log "DEBUG" "Resetting search and showing prompt again"
     done
 }
 
@@ -422,12 +406,11 @@ detect_and_set_location() {
 # $2: 結果を保存する一時ファイル
 # $3: タイプ（country/zone）
 select_list() {
-    debug_log "DEBUG" "select_list() function executing: type=$3"
+    debug_log "DEBUG" "Running select_list() function with type=$3"
     
     local select_list="$1"
     local tmp_file="$2"
     local type="$3"
-    local count=1
     
     # タイプに応じたメッセージキーを設定
     local error_msg_key=""
@@ -450,37 +433,43 @@ select_list() {
     
     # リストの行数を数える
     local total_items=$(echo "$select_list" | wc -l)
+    debug_log "DEBUG" "Total items in list: $total_items"
     
     # 項目が1つしかない場合は自動選択
     if [ "$total_items" -eq 1 ]; then
+        debug_log "DEBUG" "Only one item in list, auto-selecting"
         echo "1" > "$tmp_file"
         return 0
     fi
     
     # 項目をリスト表示
-    echo "$select_list" | while read -r line; do
-        printf "%s: %s\n" "$count" "$(color white "$line")"
-        count=$((count + 1))
+    local display_count=1
+    echo "$select_list" | while IFS= read -r line; do
+        printf "%d: %s\n" "$display_count" "$line"
+        display_count=$((display_count + 1))
     done
     
     # ユーザーに選択を促す
     while true; do
         # メッセージの取得と表示
-        local prompt_msg=$(get_message "$prompt_msg_key" "番号を選択:")
+        local prompt_msg=$(get_message "$prompt_msg_key")
         printf "%s " "$(color cyan "$prompt_msg")"
+        
+        local number
         read -r number
         number=$(normalize_input "$number")
+        debug_log "DEBUG" "User input: $number"
         
         # 数値チェック
         if ! echo "$number" | grep -q '^[0-9]\+$'; then
-            local error_msg=$(get_message "$error_msg_key" "無効な番号です")
+            local error_msg=$(get_message "$error_msg_key")
             printf "%s\n" "$(color red "$error_msg")"
             continue
         fi
         
         # 範囲チェック
         if [ "$number" -lt 1 ] || [ "$number" -gt "$total_items" ]; then
-            local range_msg=$(get_message "MSG_NUMBER_OUT_OF_RANGE" "範囲外の番号です: {0}")
+            local range_msg=$(get_message "MSG_NUMBER_OUT_OF_RANGE")
             # プレースホルダー置換（sedでエスケープ処理）
             range_msg=$(echo "$range_msg" | sed "s|{0}|1-$total_items|g")
             printf "%s\n" "$(color red "$range_msg")"
@@ -488,23 +477,38 @@ select_list() {
         fi
         
         # 選択項目を取得
-        local selected_value=$(echo "$select_list" | sed -n "${number}p")
+        local selected_item=$(echo "$select_list" | sed -n "${number}p")
+        debug_log "DEBUG" "Selected item: $selected_item"
         
-        # 確認部分で選択内容の表示は行わない（重複表示を避けるため）
-        if confirm "MSG_CONFIRM_YNR" "selected_value" "$selected_value"; then
+        # 確認メッセージ表示
+        local msg_selected=""
+        case "$type" in
+            country)
+                msg_selected=$(get_message "MSG_SELECTED_COUNTRY")
+                ;;
+            zone)
+                msg_selected=$(get_message "MSG_SELECTED_ZONE")
+                ;;
+            *)
+                msg_selected=$(get_message "MSG_SELECTED_ITEM")
+                ;;
+        esac
+        
+        # プレースホルダー置換
+        local msg_prefix=${msg_selected%%\{0\}*}
+        local msg_suffix=${msg_selected#*\{0\}}
+        printf "%s%s%s\n" "$(color blue "$msg_prefix")" "$(color blue "$selected_item")" "$(color blue "$msg_suffix")"
+        
+        # 確認
+        if confirm "MSG_CONFIRM_ONLY_YN"; then
             echo "$number" > "$tmp_file"
-            break
-        elif [ "$CONFIRM_RESULT" = "R" ]; then
-            # リスタートオプション
-            debug_log "DEBUG" "User selected restart option"
-            rm -f "${CACHE_DIR}/country.ch"
-            select_country
+            debug_log "DEBUG" "Selection confirmed: $number ($selected_item)"
             return 0
         fi
-        # 他の場合は再選択
+        
+        # 確認がキャンセルされた場合は再選択
+        debug_log "DEBUG" "User cancelled, prompting again"
     done
-    
-    debug_log "DEBUG" "Selection complete: $type number $(cat $tmp_file)"
 }
 
 # タイムゾーンの選択を処理する関数
@@ -565,52 +569,27 @@ select_zone() {
         
         return 0
     fi
-    
+
     # 複数のタイムゾーンがある場合は選択肢を表示
     printf "%s\n" "$(color blue "$(get_message "MSG_SELECT_TIMEZONE")")"
     
     # 番号付きリスト表示 - select_list関数を使用
-    local number_file="${CACHE_DIR}/selection_number.tmp"
+    local number_file="${CACHE_DIR}/zone_selection.tmp"
     
-    # select_list関数を呼び出す（今後の実装）
-    # select_list "$zone_list" "$number_file" "zone"
+    # select_list関数を呼び出す
+    select_list "$zone_list" "$number_file" "zone"
     
-    # 今回は従来のロジックを使用（互換性のため）
-    local count=1
-    echo "$zone_list" | while IFS= read -r line; do
-        [ -n "$line" ] && printf "%3d: %s\n" "$count" "$line"
-        count=$((count + 1))
-    done
+    # 選択結果の取得
+    if [ ! -f "$number_file" ]; then
+        debug_log "ERROR" "Zone selection number file not found"
+        return 1
+    fi
     
-    # 番号入力受付
-    local number=""
-    while true; do
-        printf "%s " "$(color cyan "$(get_message "MSG_ENTER_NUMBER")")"
-        read -r number
-        number=$(normalize_input "$number")
-        debug_log "DEBUG" "User input: $number"
-        
-        # 入力検証 - 空白またはゼロは許可しない
-        if [ -z "$number" ]; then
-            printf "%s\n" "$(color red "$(get_message "MSG_EMPTY_INPUT")")"
-            continue
-        fi
-        
-        # 数字かどうか確認
-        if ! echo "$number" | grep -q '^[0-9]\+$'; then
-            printf "%s\n" "$(color red "$(get_message "MSG_INVALID_NUMBER")")"
-            continue
-        fi
-        
-        # 選択範囲内かどうか確認
-        if [ "$number" -lt 1 ] || [ "$number" -gt "$zone_count" ]; then
-            printf "%s\n" "$(color red "$(get_message "MSG_NUMBER_OUT_OF_RANGE")")"
-            continue
-        fi
-        
-        # ここまで来れば有効な入力
-        break
-    done
+    local number=$(cat "$number_file")
+    if [ -z "$number" ]; then
+        debug_log "ERROR" "Empty zone selection number"
+        return 1
+    fi
     
     # 選択されたタイムゾーンの取得
     local selected=$(echo "$zone_list" | sed -n "${number}p")
@@ -628,19 +607,14 @@ select_zone() {
         timezone="GMT0"
     fi
     
-    # 確認
-    printf "%s %s\n" "$(color blue "$(get_message "MSG_CONFIRM_TIMEZONE")")" "$(color blue "$selected")"
+    # キャッシュに書き込み
+    echo "$zonename" > "$cache_zonename"
+    echo "$timezone" > "$cache_timezone"
+    echo "$selected" > "$cache_zone"
     
-    if confirm "MSG_CONFIRM_ONLY_YN"; then
-        echo "$timezone" > "$cache_timezone"
-        echo "$selected" > "$cache_zone"
-        printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
-        return 0
-    fi
-    
-    # 再選択
-    select_zone
-    return $?
+    # 成功メッセージを表示
+    printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+    return 0
 }
 
 # 国情報をキャッシュに書き込む関数
