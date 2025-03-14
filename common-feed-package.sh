@@ -66,10 +66,9 @@ BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
-BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
-mkdir -p "$CACHE_DIR" "$LOG_DIR" "$BUILD_DIR" "$FEED_DIR"
+
 #########################################################################
 # Last Update: 2025-03-04 10:00:00 (JST) 🚀
 # install_build: パッケージのビルド処理 (OpenWrt / Alpine Linux)
