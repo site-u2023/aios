@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.14-01-00"
+SCRIPT_VERSION="2025.03.14-00-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -352,30 +352,21 @@ detect_and_set_location() {
             # 国選択完了メッセージを表示（ここで1回だけ）
             printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
             
-            # タイムゾーン情報の構築とパース
-            local timezone_str=""
+            # ゾーン情報を一時ファイルに書き込み
             if [ -n "$system_zonename" ] && [ -n "$system_timezone" ]; then
-                # ゾーン名とタイムゾーン情報を組み合わせ
-                timezone_str="${system_zonename},${system_timezone}"
-                debug_log "DEBUG" "Building combined timezone string: ${timezone_str}"
+                # ゾーン名とタイムゾーン情報を組み合わせて一時ファイルに書き込む
+                debug_log "DEBUG" "Writing combined zone info to temporary file: ${system_zonename},${system_timezone}"
+                echo "${system_zonename},${system_timezone}" > "${CACHE_DIR}/zone.tmp"
             else
-                # タイムゾーン情報のみ
-                timezone_str="${system_timezone}"
-                debug_log "DEBUG" "Using timezone only: ${timezone_str}"
+                # タイムゾーン情報のみを一時ファイルに書き込む
+                debug_log "DEBUG" "Writing timezone only to temporary file: ${system_timezone}"
+                echo "${system_timezone}" > "${CACHE_DIR}/zone.tmp"
             fi
             
-            # 一時ファイルにも書き込み（互換性のため）
-            echo "$timezone_str" > "${CACHE_DIR}/zone.tmp"
-            
-            # 共通関数を使用してタイムゾーン情報を解析
-            parse_timezone_info "$timezone_str" || {
-                debug_log "ERROR" "Failed to parse timezone information"
-                return 1
-            }
-            
-            # 共通関数を使用してキャッシュに書き込み
-            write_timezone_cache || {
-                debug_log "ERROR" "Failed to write timezone information to cache"
+            # zone_write関数に処理を委譲
+            debug_log "DEBUG" "Calling zone_write()"
+            zone_write || {
+                debug_log "ERROR" "Failed to write timezone data"
                 return 1
             }
             
@@ -505,68 +496,14 @@ select_list() {
     done
 }
 
-# タイムゾーン文字列を解析する関数
-# 引数: $1 - タイムゾーン文字列（例: "Tokyo,JST-9"）
-# 出力: TZ_* 環境変数にセット
-parse_timezone_info() {
-    local timezone_str="$1"
-    
-    # 空の入力チェック
-    if [ -z "$timezone_str" ]; then
-        debug_log "ERROR" "Empty timezone string provided"
-        return 1
-    }
-    
-    # タイムゾーン情報の分割
-    local zonename=""
-    local timezone=""
-    
-    if echo "$timezone_str" | grep -q ","; then
-        # カンマで区切られている場合は分割
-        zonename=$(echo "$timezone_str" | cut -d ',' -f 1)
-        timezone=$(echo "$timezone_str" | cut -d ',' -f 2)
-    else
-        # カンマがない場合はそのまま使用
-        zonename="$timezone_str"
-        timezone="GMT0"
-    fi
-    
-    # 結果を環境変数で返す
-    TZ_ZONENAME="$zonename"
-    TZ_TIMEZONE="$timezone"
-    TZ_FULL="$timezone_str"
-    
-    debug_log "DEBUG" "Parsed timezone: zonename=$zonename, timezone=$timezone"
-    return 0
-}
-
-# タイムゾーン情報をキャッシュに書き込む関数
-# 環境変数 TZ_* を使用
-write_timezone_cache() {
-    # 環境変数の存在確認
-    if [ -z "$TZ_ZONENAME" ] || [ -z "$TZ_TIMEZONE" ]; then
-        debug_log "ERROR" "Missing timezone information. Run parse_timezone_info first."
-        return 1
-    }
-    
-    # キャッシュへのパス
-    local cache_zonename="${CACHE_DIR}/zonename.ch"
-    local cache_timezone="${CACHE_DIR}/timezone.ch"
-    local cache_zone="${CACHE_DIR}/zone.ch"
-    
-    # キャッシュに書き込み
-    echo "$TZ_ZONENAME" > "$cache_zonename"
-    echo "$TZ_TIMEZONE" > "$cache_timezone"
-    echo "$TZ_FULL" > "$cache_zone"
-    
-    debug_log "DEBUG" "Timezone information written to cache"
-    return 0
-}
-
 # タイムゾーンの選択を処理する関数
 select_zone() {
     debug_log "DEBUG" "Running select_zone() function"
     
+    # キャッシュファイルのパス定義
+    local cache_zone="${CACHE_DIR}/zone.ch"
+    local cache_zonename="${CACHE_DIR}/zonename.ch"
+    local cache_timezone="${CACHE_DIR}/timezone.ch"
     local skip_message="${1:-false}"
     
     # 選択された国の情報を取得
@@ -574,14 +511,14 @@ select_zone() {
     if [ ! -f "$selected_country_file" ]; then
         debug_log "ERROR" "Country selection file not found"
         return 1
-    }
+    fi
     
     # 国のタイムゾーン情報を抽出（6列目以降がタイムゾーン情報）
     local zone_list=$(awk '{for(i=6;i<=NF;i++) print $i}' "$selected_country_file")
     if [ -z "$zone_list" ]; then
         debug_log "ERROR" "No timezone information found for selected country"
         return 1
-    }
+    fi
     debug_log "DEBUG" "Extracted timezone list for selected country"
     
     # タイムゾーン数を数える
@@ -593,17 +530,22 @@ select_zone() {
         local selected=$(echo "$zone_list")
         debug_log "DEBUG" "Only one timezone available: $selected - auto selecting"
         
-        # 共通関数を使用してタイムゾーン情報を解析
-        parse_timezone_info "$selected" || {
-            debug_log "ERROR" "Failed to parse timezone information"
-            return 1
-        }
+        # タイムゾーン情報の分割
+        local zonename=""
+        local timezone=""
         
-        # 共通関数を使用してキャッシュに書き込み
-        write_timezone_cache || {
-            debug_log "ERROR" "Failed to write timezone information to cache"
-            return 1
-        }
+        if echo "$selected" | grep -q ","; then
+            zonename=$(echo "$selected" | cut -d ',' -f 1)
+            timezone=$(echo "$selected" | cut -d ',' -f 2)
+        else
+            zonename="$selected"
+            timezone="GMT0"
+        fi
+        
+        # キャッシュに直接書き込み
+        echo "$zonename" > "$cache_zonename"
+        echo "$timezone" > "$cache_timezone"
+        echo "$selected" > "$cache_zone"
         
         # メッセージを表示（スキップフラグが設定されていない場合のみ）
         if [ "$skip_message" = "false" ]; then
@@ -638,17 +580,22 @@ select_zone() {
     local selected=$(echo "$zone_list" | sed -n "${number}p")
     debug_log "DEBUG" "Selected timezone: $selected"
     
-    # 共通関数を使用してタイムゾーン情報を解析
-    parse_timezone_info "$selected" || {
-        debug_log "ERROR" "Failed to parse timezone information"
-        return 1
-    }
+    # タイムゾーン情報の分割
+    local zonename=""
+    local timezone=""
     
-    # 共通関数を使用してキャッシュに書き込み
-    write_timezone_cache || {
-        debug_log "ERROR" "Failed to write timezone information to cache"
-        return 1
-    }
+    if echo "$selected" | grep -q ","; then
+        zonename=$(echo "$selected" | cut -d ',' -f 1)
+        timezone=$(echo "$selected" | cut -d ',' -f 2)
+    else
+        zonename="$selected"
+        timezone="GMT0"
+    fi
+    
+    # キャッシュに書き込み
+    echo "$zonename" > "$cache_zonename"
+    echo "$timezone" > "$cache_timezone"
+    echo "$selected" > "$cache_zone"
     
     # 成功メッセージを表示
     printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
@@ -764,33 +711,48 @@ zone_write() {
     
     local tmp_zone="${CACHE_DIR}/zone.tmp"
     
-    # 一時ファイルが存在するか確認
-    if [ ! -f "$tmp_zone" ]; then
-        debug_log "ERROR" "File not found: $tmp_zone"
-        # ファイル名をエスケープして安全に表示
-        local safe_filename=$(escape_for_sed "$tmp_zone")
-        local err_msg=$(get_message "ERR_FILE_NOT_FOUND")
-        err_msg=$(echo "$err_msg" | sed "s/{file}/$safe_filename/g")
-        printf "%s\n" "$(color red "$err_msg")"
-        return 1
-    }
+        # 一時ファイルが存在するか確認
+        if [ ! -f "$tmp_zone" ]; then
+            debug_log "ERROR" "File not found: $tmp_zone"
+            # ファイル名をエスケープして安全に表示
+            local safe_filename=$(escape_for_sed "$tmp_zone")
+            local err_msg=$(get_message "ERR_FILE_NOT_FOUND")
+            err_msg=$(echo "$err_msg" | sed "s/{file}/$safe_filename/g")
+            printf "%s\n" "$(color red "$err_msg")"
+            return 1
+        fi
     
     # タイムゾーン情報を取得
     local selected_timezone=$(cat "$tmp_zone")
+    debug_log "DEBUG" "Processing timezone from file: ${selected_timezone}"
     
-    # 共通関数を使用してタイムゾーン情報を解析
-    parse_timezone_info "$selected_timezone" || {
-        debug_log "ERROR" "Failed to parse timezone information"
+    # タイムゾーン情報を分割して保存
+    if [ -n "$selected_timezone" ]; then
+        local zonename=""
+        local timezone=""
+        
+        if echo "$selected_timezone" | grep -q ","; then
+            # カンマで区切られている場合は分割
+            zonename=$(echo "$selected_timezone" | cut -d ',' -f 1)
+            timezone=$(echo "$selected_timezone" | cut -d ',' -f 2)
+        else
+            # カンマがない場合はそのまま使用
+            zonename="$selected_timezone"
+            timezone="$selected_timezone"
+        fi
+        
+        # キャッシュに書き込み
+        echo "$zonename" > "${CACHE_DIR}/zonename.ch"
+        echo "$timezone" > "${CACHE_DIR}/timezone.ch"
+        echo "$selected_timezone" > "${CACHE_DIR}/zone.ch"
+        
+        debug_log "DEBUG" "Timezone information written to cache"
+        debug_log "DEBUG" "Selected zonename: $zonename, timezone: $timezone"
+    else
+        debug_log "ERROR" "No timezone data to write to cache"
         printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
         return 1
-    }
-    
-    # 共通関数を使用してキャッシュに書き込み
-    write_timezone_cache || {
-        debug_log "ERROR" "Failed to write timezone information to cache"
-        printf "%s\n" "$(color red "$(get_message "MSG_ERROR_WRITE_CACHE")")"
-        return 1
-    }
+    fi
     
     return 0
 }
@@ -804,8 +766,8 @@ if [ "$DEBUG_MODE" = "true" ]; then
         debug_log "DEBUG" "dynamic-system-info.sh not loaded or functions not available"
     fi
     
-    # セキュリティとコード改善に関するデバッグメッセージ
+    # 新しく追加したセキュリティ改善に関するデバッグメッセージ
     debug_log "DEBUG" "Added escape_for_sed function to safely handle special characters in user inputs"
-    debug_log "DEBUG" "Added parse_timezone_info and write_timezone_cache for improved code reusability"
-    debug_log "DEBUG" "Refactored timezone handling to reduce code duplication while maintaining POSIX compliance"
-}
+    debug_log "DEBUG" "Modified select_country, select_list and zone_write functions to use proper escaping"
+    debug_log "DEBUG" "This prevents command injection and ensures POSIX-compliant string handling"
+fi
