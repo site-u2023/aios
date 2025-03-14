@@ -1242,18 +1242,18 @@ check_common() {
             exit 0
             ;;
         debug)
-            download "dynamic-system-info.sh" "hidden" "chmod"
-            download "common-country.sh" "hidden" "chmod"
-            download "common-package.sh" "hidden" "chmod"
-            download "common-feed-package.sh" "hidden" "chmod"
+            download "dynamic-system-info.sh" "hidden" "chmod" "load"
+            download "common-country.sh" "hidden" "chmod" "load"
+            download "common-package.sh" "hidden" "chmod" "load"
+            download "common-feed-package.sh" "hidden" "chmod" "load"
             download "messages.db" "hidden"
             download "country.db" "hidden"
             download "local-package.db" "hidden"
             download "custom-package.db" "hidden"
             print_banner       
             select_country "$lang_code"
-            download "system-config.sh" "hidden" "chmod"
-            #packages
+            download "system-config.sh" "hidden" "chmod" "load"
+            packages
             ;;
         full)
             download "dynamic-system-info.sh" "chmod" "load"
@@ -1267,7 +1267,7 @@ check_common() {
             print_banner        
             select_country "$lang_code"
             download "system-config.sh" "chmod" "load"
-            #packages
+            packages
             ;;
         update)
             check_update "$ORIGINAL_ARGS"
