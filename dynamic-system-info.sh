@@ -116,43 +116,89 @@ get_package_manager() {
 
 # 📌 利用可能な言語パッケージの取得
 # 戻り値: "language_code:language_name"形式の利用可能な言語パッケージのリスト
+# 📌 LuCIで利用可能な言語パッケージを検出し、luci.chに保存する関数
 get_available_language_packages() {
-    local pkg_manager=$(get_package_manager)
+    local pkg_manager=""
     local lang_packages=""
     local tmp_file="${CACHE_DIR}/lang_packages.tmp"
+    local package_cache="${CACHE_DIR}/package_list.ch"
+    local luci_cache="${CACHE_DIR}/luci.ch"
+    local country_cache="${CACHE_DIR}/country.ch"
+    local default_lang="en"
     
-    case "$pkg_manager" in
-        opkg)
-            # インストール済み言語パッケージの取得
-            opkg list-installed | grep "luci-i18n-base" | cut -d ' ' -f 1 > "$tmp_file" || :
-            
-            # 利用可能な（インストールされていない）パッケージも確認
-            opkg list | grep "luci-i18n-base" | cut -d ' ' -f 1 >> "$tmp_file" || :
-            ;;
-        apk)
-            # Alpine Linuxでは、apkを使用して言語パッケージを検索
-            apk list | grep -i "lang" | cut -d ' ' -f 1 > "$tmp_file" || :
-            ;;
-        *)
-            # フォールバック: 空のファイルを作成
-            touch "$tmp_file"
-            ;;
-    esac
+    debug_log "DEBUG" "Running get_available_language_packages() to detect LuCI languages"
     
-    # 出力を使用可能な形式に処理
-    if [ -s "$tmp_file" ]; then
-        # ソートして重複を削除
-        sort -u "$tmp_file" | while read -r line; do
-            # 言語コードを抽出 (例: luci-i18n-base-frから"fr"を抽出)
-            local lang_code=$(echo "$line" | sed -n 's/.*-\([a-z][a-z]\(-[a-z][a-z]\)\?\)$/\1/p')
-            if [ -n "$lang_code" ]; then
-                lang_packages="${lang_packages}${lang_code} "
-            fi
-        done
+    # パッケージマネージャーの検出
+    pkg_manager=$(get_package_manager)
+    debug_log "DEBUG" "Using package manager: $pkg_manager"
+    
+    # package_list.chが存在しない場合はupdate_package_list()を呼び出す
+    if [ ! -f "$package_cache" ]; then
+        debug_log "DEBUG" "Package list cache not found, calling update_package_list()"
+        
+        # common-package.shが読み込まれていることを確認
+        if type update_package_list >/dev/null 2>&1; then
+            update_package_list
+            debug_log "DEBUG" "Package list updated successfully"
+        else
+            debug_log "ERROR" "update_package_list() function not available"
+        fi
     fi
     
+    # package_list.chが存在するか再確認
+    if [ ! -f "$package_cache" ]; then
+        debug_log "ERROR" "Package list cache still not available after update attempt"
+        # デフォルト言語をluci.chに設定
+        echo "$default_lang" > "$luci_cache"
+        debug_log "DEBUG" "Default language '$default_lang' written to luci.ch"
+        return 1
+    fi
+    
+    # LuCI言語パッケージを一時ファイルに格納
+    if [ "$pkg_manager" = "opkg" ]; then
+        debug_log "DEBUG" "Extracting LuCI language packages from package_list.ch"
+        grep "luci-i18n-base-" "$package_cache" > "$tmp_file" || touch "$tmp_file"
+    else
+        debug_log "ERROR" "Unsupported package manager: $pkg_manager"
+        touch "$tmp_file"
+    fi
+    
+    # 言語コードを抽出
+    lang_packages=$(sed -n 's/luci-i18n-base-\([a-z][a-z]\(-[a-z][a-z]\)\?\) .*/\1/p' "$tmp_file" | sort -u)
+    debug_log "DEBUG" "Available LuCI languages: $lang_packages"
+    
+    # country.chからLuCI言語コード（$4）を取得
+    local preferred_lang=""
+    if [ -f "$country_cache" ]; then
+        preferred_lang=$(awk '{print $4}' "$country_cache")
+        debug_log "DEBUG" "Preferred language from country.db: $preferred_lang"
+    fi
+    
+    # LuCI言語の決定ロジック
+    local selected_lang="$default_lang"  # デフォルトは英語
+    
+    if [ -n "$preferred_lang" ] && [ "$preferred_lang" != "xx" ]; then
+        # country.dbから取得した言語が利用可能か確認
+        if echo "$lang_packages" | grep -q "^$preferred_lang$"; then
+            selected_lang="$preferred_lang"
+            debug_log "DEBUG" "Using preferred language: $selected_lang"
+        else
+            debug_log "DEBUG" "Preferred language not available, using default: $default_lang"
+        fi
+    else
+        debug_log "DEBUG" "No preferred language specified or 'xx' found, using default: $default_lang"
+    fi
+    
+    # luci.chに書き込み
+    echo "$selected_lang" > "$luci_cache"
+    debug_log "DEBUG" "Selected LuCI language '$selected_lang' written to luci.ch"
+    
+    # 一時ファイル削除
     rm -f "$tmp_file"
+    
+    # 利用可能な言語リストを返す（スペース区切り）
     echo "$lang_packages"
+    return 0
 }
 
 # タイムゾーン情報を取得（例: JST-9）
