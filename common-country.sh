@@ -737,6 +737,7 @@ normalize_language() {
     local euro_db="${BASE_DIR}/messages_euro.db"
     local language_cache="${CACHE_DIR}/language.ch"
     local message_cache="${CACHE_DIR}/message.ch"
+    local luci_cache="${CACHE_DIR}/luci.ch"
     local db_cache="${CACHE_DIR}/message_db.ch"
     local selected_language=""
     
@@ -745,9 +746,7 @@ normalize_language() {
     debug_log "DEBUG" "base_db=${base_db}"
     debug_log "DEBUG" "asian_db=${asian_db}"
     debug_log "DEBUG" "euro_db=${euro_db}"
-    debug_log "DEBUG" "language_cache=${language_cache}"
-    debug_log "DEBUG" "message_cache=${message_cache}"
-
+    
     # language.chファイルの存在確認
     if [ ! -f "$language_cache" ]; then
         debug_log "DEBUG" "language.ch not found. Cannot determine language."
@@ -760,108 +759,98 @@ normalize_language() {
 
     # 基本言語ファイルの存在確認
     if [ ! -f "$base_db" ]; then
-        debug_log "DEBUG" "Base message DB not found: ${base_db}"
-        printf "%s\n" "$(color red "基本メッセージファイルが見つかりません: ${base_db}")"
+        debug_log "ERROR" "Base message DB not found: ${base_db}"
         # US言語をデフォルトとして設定
         echo "US" > "$message_cache"
-        echo "$base_db" > "$db_cache"
+        echo "en" > "$luci_cache"  # luci.chも英語に設定
         ACTIVE_LANGUAGE="US"
         debug_log "DEBUG" "Defaulting to US language due to missing base DB"
         return 1
     fi
-
-    # 基本DB内のサポート言語を取得
-    local base_supported=""
-    base_supported=$(grep "^SUPPORTED_LANGUAGES=" "$base_db" | cut -d'"' -f2)
-    debug_log "DEBUG" "Base supported languages: ${base_supported}"
     
-    # 言語コードに基づいて適切なDBファイルを特定
-    local target_db="$base_db"
+    # 言語コードに基づいて適切なDBファイルと対応するluci言語を特定
+    local target_db=""
+    local luci_lang=""
     
     case "$selected_language" in
-        US|JP)
-            # 基本ファイルに含まれる言語
-            debug_log "DEBUG" "Language ${selected_language} is in base DB"
+        US)
             target_db="$base_db"
+            luci_lang="en"
             ;;
-        CN|TW|KO)
-            # アジア言語ファイルが必要
+        JP)
+            target_db="$base_db"
+            luci_lang="ja"
+            ;;
+        CN)
             if [ -f "$asian_db" ]; then
-                debug_log "DEBUG" "Asian language file exists, checking for language support"
-                if grep -q "^SUPPORTED_LANGUAGES=.*$selected_language" "$asian_db"; then
-                    debug_log "DEBUG" "Language ${selected_language} found in Asian DB"
-                    target_db="$asian_db"
-                else
-                    debug_log "DEBUG" "Language ${selected_language} not found in Asian DB, falling back to base DB"
-                    target_db="$base_db"
-                fi
+                target_db="$asian_db"
             else
-                debug_log "DEBUG" "Asian language file not found, falling back to base DB"
                 target_db="$base_db"
             fi
+            luci_lang="zh-cn"
             ;;
-        DE|FR|RU)
-            # ヨーロッパ言語ファイルが必要
-            if [ -f "$euro_db" ]; then
-                debug_log "DEBUG" "European language file exists, checking for language support"
-                if grep -q "^SUPPORTED_LANGUAGES=.*$selected_language" "$euro_db"; then
-                    debug_log "DEBUG" "Language ${selected_language} found in European DB"
-                    target_db="$euro_db"
-                else
-                    debug_log "DEBUG" "Language ${selected_language} not found in European DB, falling back to base DB"
-                    target_db="$base_db"
-                fi
+        TW)
+            if [ -f "$asian_db" ]; then
+                target_db="$asian_db"
             else
-                debug_log "DEBUG" "European language file not found, falling back to base DB"
                 target_db="$base_db"
             fi
+            luci_lang="zh-tw"
+            ;;
+        KO)
+            if [ -f "$asian_db" ]; then
+                target_db="$asian_db"
+            else
+                target_db="$base_db"
+            fi
+            luci_lang="ko"
+            ;;
+        DE)
+            if [ -f "$euro_db" ]; then
+                target_db="$euro_db"
+            else
+                target_db="$base_db"
+            fi
+            luci_lang="de"
+            ;;
+        FR)
+            if [ -f "$euro_db" ]; then
+                target_db="$euro_db"
+            else
+                target_db="$base_db"
+            fi
+            luci_lang="fr"
+            ;;
+        RU)
+            if [ -f "$euro_db" ]; then
+                target_db="$euro_db"
+            else
+                target_db="$base_db"
+            fi
+            luci_lang="ru"
             ;;
         *)
-            # 不明な言語コードの場合はベースDBを使用
-            debug_log "DEBUG" "Unknown language code: ${selected_language}, using base DB"
+            # 不明な言語コードの場合
+            debug_log "DEBUG" "Unknown language code: ${selected_language}, using base DB and English"
             target_db="$base_db"
+            luci_lang="en"
             ;;
     esac
     
-    # 特定されたDBファイルから言語サポートを確認
-    local db_supported=""
-    db_supported=$(grep "^SUPPORTED_LANGUAGES=" "$target_db" | cut -d'"' -f2)
-    debug_log "DEBUG" "Target DB supported languages: ${db_supported}"
+    # 対応するDBを保存
+    echo "$target_db" > "$db_cache"
     
-    # 指定された言語がサポートされているか確認
-    local is_supported=0
-    for lang in $db_supported; do
-        if [ "$lang" = "$selected_language" ]; then
-            is_supported=1
-            break
-        fi
-    done
+    # 言語設定を保存
+    echo "$selected_language" > "$message_cache"
+    # luci言語設定も同時に更新
+    echo "$luci_lang" > "$luci_cache"
     
-    # 言語設定をキャッシュに保存
-    if [ $is_supported -eq 1 ]; then
-        debug_log "DEBUG" "Language ${selected_language} is supported in target DB"
-        echo "$selected_language" > "$message_cache"
-        echo "$target_db" > "$db_cache"
-        ACTIVE_LANGUAGE="$selected_language"
-    else
-        debug_log "DEBUG" "Language ${selected_language} not supported, falling back to US"
-        # 基本DBにUSが含まれるか確認
-        if echo "$base_supported" | grep -q "US"; then
-            echo "US" > "$message_cache"
-            echo "$base_db" > "$db_cache"
-            ACTIVE_LANGUAGE="US"
-        else
-            # 万が一USがサポートされていない場合は最初のサポート言語を使用
-            local first_lang=$(echo "$base_supported" | awk '{print $1}')
-            echo "$first_lang" > "$message_cache"
-            echo "$base_db" > "$db_cache"
-            ACTIVE_LANGUAGE="$first_lang"
-            debug_log "DEBUG" "US not supported in base DB, using first available language: ${first_lang}"
-        fi
-    fi
+    ACTIVE_LANGUAGE="$selected_language"
     
     debug_log "DEBUG" "Final active language: ${ACTIVE_LANGUAGE} from ${target_db}"
-    # 言語セットのメッセージ（country_writeとは別メッセージ）
+    debug_log "DEBUG" "LuCI language set to: ${luci_lang}"
+    
+    # 言語セットのメッセージ
     printf "%s\n" "$(color green "$(get_message "MSG_LANGUAGE_SET")")"
     return 0
 }
