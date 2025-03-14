@@ -370,12 +370,15 @@ detect_and_set_location() {
             debug_log "DEBUG" "Writing country data to temporary file"
             echo "$country_data" > "${CACHE_DIR}/country_tmp.ch"
             
-            # country_write関数に処理を委譲
+            # country_write関数に処理を委譲（メッセージ表示スキップ）
             debug_log "DEBUG" "Calling country_write()"
-            country_write || {
+            country_write true || {
                 debug_log "ERROR" "Failed to write country data"
                 return 1
             }
+            
+            # 国選択完了メッセージを表示（ここで1回だけ）
+            printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
             
             # ゾーン情報を一時ファイルに書き込み
             if [ -n "$system_zonename" ] && [ -n "$system_timezone" ]; then
@@ -394,6 +397,9 @@ detect_and_set_location() {
                 debug_log "ERROR" "Failed to write timezone data"
                 return 1
             }
+            
+            # ゾーン選択完了メッセージを表示（ここで1回だけ）
+            printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
             
             debug_log "DEBUG" "Auto-detected settings have been applied successfully"
             return 0
@@ -507,6 +513,7 @@ select_zone() {
     local cache_zone="${CACHE_DIR}/zone.ch"
     local cache_zonename="${CACHE_DIR}/zonename.ch"
     local cache_timezone="${CACHE_DIR}/timezone.ch"
+    local skip_message="${1:-false}"
     
     # 選択された国の情報を取得
     local selected_country_file="${CACHE_DIR}/country.ch"
@@ -549,8 +556,11 @@ select_zone() {
         echo "$timezone" > "$cache_timezone"
         echo "$selected" > "$cache_zone"
         
-        # ここで統一したメッセージを表示（自動・手動共通）
-        printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+        # メッセージを表示（スキップフラグが設定されていない場合のみ）
+        if [ "$skip_message" = "false" ]; then
+            printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+        fi
+        
         return 0
     fi
     
