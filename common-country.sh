@@ -743,9 +743,6 @@ normalize_language() {
     
     # デバッグログの出力
     debug_log "DEBUG" "Normalizing language settings with multi-file structure"
-    debug_log "DEBUG" "base_db=${base_db}"
-    debug_log "DEBUG" "asian_db=${asian_db}"
-    debug_log "DEBUG" "euro_db=${euro_db}"
     
     # language.chファイルの存在確認
     if [ ! -f "$language_cache" ]; then
@@ -760,95 +757,63 @@ normalize_language() {
     # 基本言語ファイルの存在確認
     if [ ! -f "$base_db" ]; then
         debug_log "ERROR" "Base message DB not found: ${base_db}"
-        # US言語をデフォルトとして設定
         echo "US" > "$message_cache"
-        echo "en" > "$luci_cache"  # luci.chも英語に設定
+        echo "en" > "$luci_cache"
         ACTIVE_LANGUAGE="US"
         debug_log "DEBUG" "Defaulting to US language due to missing base DB"
         return 1
     fi
     
-    # 言語コードに基づいて適切なDBファイルと対応するluci言語を特定
-    local target_db=""
-    local luci_lang=""
+    # 言語コードに応じたDB選択と対応するluci言語の設定
+    local target_db="$base_db"  # デフォルトは基本DB
+    local luci_lang="en"        # デフォルトは英語
     
-    case "$selected_language" in
-        US)
-            target_db="$base_db"
-            luci_lang="en"
-            ;;
-        JP)
-            target_db="$base_db"
-            luci_lang="ja"
-            ;;
-        CN)
-            if [ -f "$asian_db" ]; then
-                target_db="$asian_db"
-            else
-                target_db="$base_db"
-            fi
-            luci_lang="zh-cn"
-            ;;
-        TW)
-            if [ -f "$asian_db" ]; then
-                target_db="$asian_db"
-            else
-                target_db="$base_db"
-            fi
-            luci_lang="zh-tw"
-            ;;
-        KO)
-            if [ -f "$asian_db" ]; then
-                target_db="$asian_db"
-            else
-                target_db="$base_db"
-            fi
-            luci_lang="ko"
-            ;;
-        DE)
-            if [ -f "$euro_db" ]; then
-                target_db="$euro_db"
-            else
-                target_db="$base_db"
-            fi
-            luci_lang="de"
-            ;;
-        FR)
-            if [ -f "$euro_db" ]; then
-                target_db="$euro_db"
-            else
-                target_db="$base_db"
-            fi
-            luci_lang="fr"
-            ;;
-        RU)
-            if [ -f "$euro_db" ]; then
-                target_db="$euro_db"
-            else
-                target_db="$base_db"
-            fi
-            luci_lang="ru"
-            ;;
-        *)
-            # 不明な言語コードの場合
-            debug_log "DEBUG" "Unknown language code: ${selected_language}, using base DB and English"
-            target_db="$base_db"
-            luci_lang="en"
-            ;;
-    esac
+    # 言語設定テーブル（language_code:luci_code:db_type）
+    local lang_table="US:en:base JP:ja:base CN:zh-cn:asian TW:zh-tw:asian KO:ko:asian DE:de:euro FR:fr:euro RU:ru:euro"
     
-    # 対応するDBを保存
+    # 言語コードに一致するエントリを検索
+    local lang_entry
+    for lang_entry in $lang_table; do
+        # コロン区切りの各フィールドを取得
+        local lang_code="${lang_entry%%:*}"
+        local remainder="${lang_entry#*:}"
+        local luci_code="${remainder%%:*}"
+        local db_type="${remainder#*:}"
+        
+        if [ "$selected_language" = "$lang_code" ]; then
+            # luciコードを設定
+            luci_lang="$luci_code"
+            
+            # DB種類に応じて対象DBを決定
+            case "$db_type" in
+                base)
+                    target_db="$base_db"
+                    ;;
+                asian)
+                    # アジア言語DB存在チェック
+                    if [ -f "$asian_db" ]; then
+                        target_db="$asian_db"
+                    fi
+                    ;;
+                euro)
+                    # 欧州言語DB存在チェック
+                    if [ -f "$euro_db" ]; then
+                        target_db="$euro_db"
+                    fi
+                    ;;
+            esac
+            break
+        fi
+    done
+    
+    # 設定を保存
     echo "$target_db" > "$db_cache"
-    
-    # 言語設定を保存
     echo "$selected_language" > "$message_cache"
-    # luci言語設定も同時に更新
     echo "$luci_lang" > "$luci_cache"
     
     ACTIVE_LANGUAGE="$selected_language"
     
-    debug_log "DEBUG" "Final active language: ${ACTIVE_LANGUAGE} from ${target_db}"
-    debug_log "DEBUG" "LuCI language set to: ${luci_lang}"
+    debug_log "DEBUG" "Final active language: ${ACTIVE_LANGUAGE}, target DB: ${target_db}, LuCI: ${luci_lang}"
     
     # 言語セットのメッセージ
     printf "%s\n" "$(color green "$(get_message "MSG_LANGUAGE_SET")")"
