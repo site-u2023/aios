@@ -240,8 +240,8 @@ JP|MSG_UPDATE_FAILED_DEVICE=デバイス名の更新に失敗しました。
 US|MSG_UPDATE_FAILED_COMMIT=Failed to commit changes.
 JP|MSG_UPDATE_FAILED_COMMIT=変更の保存に失敗しました。
 
-US|MSG_UPDATE_SUCCESS=Password and device name have been successfully updated.
-JP|MSG_UPDATE_SUCCESS=パスワードとデバイス名が正常に更新されました。
+US|MSG_UPDATE_SUCCESS=✅ Password and device name have been successfully updated.
+JP|MSG_UPDATE_SUCCESS=✅ パスワードとデバイス名が正常に更新されました。
 
 # set_wifi_ssid_password() 関数
 US|MSG_ERROR_NO_COUNTRY_CODE=Error: Country code not found.
