@@ -111,10 +111,11 @@ debug_log() {
     local message="$2"
     local file="$3"
     local version="$4"
-
-    # `$1` にログレベルが指定されていない場合、デフォルトを `DEBUG` にする
+    local debug_level="${DEBUG_LEVEL:-ERROR}"  # デフォルト値を設定
+    
+    # レベル判定のシンプル化
     case "$level" in
-        "DEBUG"|"INFO"|"WARN"|"ERROR") ;;  # 何もしない (正しいログレベル)
+        "DEBUG"|"INFO"|"WARN"|"ERROR") ;;
         "")
             level="DEBUG"
             message="$1"
@@ -165,10 +166,10 @@ debug_log() {
 
         # カラー表示
         case "$level" in
-            "ERROR") echo -e "$(color red "$log_message")" ;;
-            "WARN") echo -e "$(color yellow "$log_message")" ;;
-            "INFO") echo -e "$(color cyan "$log_message")" ;;
-            "DEBUG") echo -e "$(color white "$log_message")" ;;
+            "ERROR") printf "%s\n" "$(color red "$log_message")" ;;
+            "WARN") printf "%s\n" "$(color yellow "$log_message")" ;;
+            "INFO") printf "%s\n" "$(color cyan "$log_message")" ;;
+            "DEBUG") printf "%s\n" "$(color white "$log_message")" ;;
         esac
 
         # ログファイルに記録
