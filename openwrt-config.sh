@@ -172,7 +172,7 @@ execute_menu_action() {
     echo "DEBUG: Selected command: $command_line" >&2
     
     # 空コマンドチェック
-    if [ -z "$command_line" ]; then
+    if [ -z "$command_line" ];then
         echo "DEBUG: Empty command selected" >&2
         return 0
     fi
