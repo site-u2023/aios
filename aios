@@ -1234,12 +1234,12 @@ print_banner() {
     printf "\n"
     
     # ASCII art with colors
-    printf "%s\n" "$(color magenta "                  ii i")"
-    printf "%s\n" "$(color blue    "       aaaa      iii       oooo      sssss")"
-    printf "%s\n" "$(color cyan    "          aa      ii      oo  oo    ss")"
-    printf "%s\n" "$(color green   "       aaaaa      ii      oo  oo     sssss")"
-    printf "%s\n" "$(color yellow  "      aa  aa      ii      oo  oo         ss")"
-    printf "%s\n" "$(color red     "       aaaaa     iiii      oooo     ssssss")"
+    printf "%s\n" "$(color magenta "                 ii i")"
+    printf "%s\n" "$(color blue    "      aaaa      iii       oooo      sssss")"
+    printf "%s\n" "$(color cyan    "         aa      ii      oo  oo    ss")"
+    printf "%s\n" "$(color green   "      aaaaa      ii      oo  oo     sssss")"
+    printf "%s\n" "$(color yellow  "     aa  aa      ii      oo  oo         ss")"
+    printf "%s\n" "$(color red     "      aaaaa     iiii      oooo     ssssss")"
     
     # Empty line after ASCII art
     printf "\n"
@@ -1260,12 +1260,12 @@ bloc_banner() {
     printf "\n"
     
     # 小文字「aios」のブロックASCIIアート
-    printf "%s\n" "$(color magenta "                  ██ █")"
-    printf "%s\n" "$(color blue    "       ████      ███       ████      █████")"
-    printf "%s\n" "$(color cyan    "          ██      ██      ██  ██    ██")"
-    printf "%s\n" "$(color green   "       █████      ██      ██  ██     █████")"
-    printf "%s\n" "$(color yellow  "      ██  ██      ██      ██  ██         ██")"
-    printf "%s\n" "$(color red     "       █████     ████      ████     ██████")"
+    printf "%s\n" "$(color magenta "                 ██ █")"
+    printf "%s\n" "$(color blue    "      ████      ███       ████      █████")"
+    printf "%s\n" "$(color cyan    "         ██      ██      ██  ██    ██")"
+    printf "%s\n" "$(color green   "      █████      ██      ██  ██     █████")"
+    printf "%s\n" "$(color yellow  "     ██  ██      ██      ██  ██         ██")"
+    printf "%s\n" "$(color red     "      █████     ████      ████     ██████")"
     
     # バナーの後に空行
     printf "\n"
@@ -1285,12 +1285,12 @@ monochrome_banner() {
     printf "\n"
     
     # 小文字「aios」のブロックASCIIアート
-    printf "%s\n" "$(color white "                ██ █")"
-    printf "%s\n" "$(color white "     ████      ███       ████      █████")"
-    printf "%s\n" "$(color white "        ██      ██      ██  ██    ██")"
-    printf "%s\n" "$(color white "     █████      ██      ██  ██     █████")"
-    printf "%s\n" "$(color white "    ██  ██      ██      ██  ██         ██")"
-    printf "%s\n" "$(color white "     █████     ████      ████     ██████")"
+    printf "%s\n" "$(color white "               ██ █")"
+    printf "%s\n" "$(color white "    ████      ███       ████      █████")"
+    printf "%s\n" "$(color white "       ██      ██      ██  ██    ██")"
+    printf "%s\n" "$(color white "    █████      ██      ██  ██     █████")"
+    printf "%s\n" "$(color white "   ██  ██      ██      ██  ██         ██")"
+    printf "%s\n" "$(color white "    █████     ████      ████     ██████")"
     
     # バナーの後に空行
     printf "\n"
