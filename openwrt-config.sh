@@ -28,14 +28,14 @@ menyu_selector() {
 
 # ダウンロード用データ
 menu_download() {
-    echo 'download "internet-config.sh" "chmod" "run"'
-    echo 'download "system-config.sh" "chmod" "run"'
-    echo 'download "package-install.sh" "chmod" "run"'
-    echo 'download "adblocker-dns.sh" "chmod" "run"'
-    echo 'download "accesspoint-setup.sh" "chmod" "run"'
-    echo 'download "other-utilities.sh" "chmod" "run"'
-    echo "menu_exit"
-    echo "remove_exit"
+    download "internet-config.sh" "chmod" "run"
+    download "system-config.sh" "chmod" "run"
+    download "package-install.sh" "chmod" "run"
+    download "adblocker-dns.sh" "chmod" "run"
+    download "accesspoint-setup.sh" "chmod" "run"
+    download "other-utilities.sh" "chmod" "run"
+    menu_exit
+    remove_exit
 }
 
 menu_exit() {
@@ -182,7 +182,7 @@ execute_menu_action() {
     rm -f "$temp_file"
 
     echo "DEBUG: Running command: $command_line" >&2
-    eval $command_line
+    eval "$command_line"
 
     local status=$?
     echo "DEBUG: Command execution finished with status: $status" >&2
