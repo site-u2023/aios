@@ -1,10 +1,9 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.15-00-00"
+SCRIPT_VERSION="2025.03.16-00-00"
 
 # 基本定数の設定 
 BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q -O}"
-# BASE_WGET="${BASE_WGET:-wget -O}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 BIN_PATH=$(readlink -f "$0")
 BIN_DIR="$(dirname "$BIN_PATH")"
@@ -16,27 +15,43 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 
 # メニュー表示用データ
-menyu_selector() (
-printf "%s\n" "$(color red "$(get_message "MENU_INTERNET")")"
-printf "%s\n" "$(color blue "$(get_message "MENU_SYSTEM")")"
-printf "%s\n" "$(color green "$(get_message "MENU_PACKAGES")")"
-printf "%s\n" "$(color magenta "$(get_message "MENU_ADBLOCKER")")"
-printf "%s\n" "$(color cyan "$(get_message "MENU_ACCESSPOINT")")"
-printf "%s\n" "$(color yellow "$(get_message "MENU_OTHERS")")"
-printf "%s\n" "$(color white "$(get_message "MENU_EXIT")")"
-printf "%s\n" "$(color white_black "$(get_message "MENU_REMOVE")")"
-)
+menyu_selector() {
+    printf "%s\n" "$(color red "$(get_message "MENU_INTERNET")")"
+    printf "%s\n" "$(color blue "$(get_message "MENU_SYSTEM")")"
+    printf "%s\n" "$(color green "$(get_message "MENU_PACKAGES")")"
+    printf "%s\n" "$(color magenta "$(get_message "MENU_ADBLOCKER")")"
+    printf "%s\n" "$(color cyan "$(get_message "MENU_ACCESSPOINT")")"
+    printf "%s\n" "$(color yellow "$(get_message "MENU_OTHERS")")"
+    printf "%s\n" "$(color white "$(get_message "MENU_EXIT")")"
+    printf "%s\n" "$(color white_black "$(get_message "MENU_REMOVE")")"
+}
 
 # ダウンロード用データ
 menu_download() {
-    echo "internet-config.sh chmod run"
-    echo "system-config.sh chmod run"
-    echo "package-install.sh chmod run"
-    echo "adblocker-dns.sh chmod run"
-    echo "accesspoint-setup.sh chmod run"
-    echo "other-utilities.sh chmod run"
-    echo "exit"
-    echo "remove"
+    download "internet-config.sh" "chmod" "run"
+    download "system-config.sh" "chmod" "run"
+    download "package-install.sh" "chmod" "run"
+    download "adblocker-dns.sh" "chmod" "run"
+    download "accesspoint-setup.sh" "chmod" "run"
+    download "other-utilities.sh" "chmod" "run"
+    menu_exit
+    remove_exit
+}
+
+menu_exit() {
+    printf "%s\n" "$(get_message "CONFIG_EXIT_CONFIRMED")"
+    sleep 1
+    exit 0
+}
+
+remove_exit() {
+    if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
+        printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
+        sleep 1
+        [ -f "$0" ] && rm -f "$0"
+        [ -d "$BASE_DIR" ] && rm -rf "$BASE_DIR"
+        exit 0
+    fi
 }
 
 # セレクター関数（メニュー表示と選択処理）
@@ -145,40 +160,15 @@ selector() {
 
 execute_menu_action() {
     local choice="$1"
+    local command
 
     echo "DEBUG: Executing action for choice: $choice" >&2
 
     # メニューコマンドを取得
-    local command_line
-    command_line=$(menu_download | sed -n "${choice}p")
+    command=$(menu_download | sed -n "${choice}p")
 
-    # コマンドとパラメータを分割
-    set -- $command_line
-
-    case "$1" in
-        "exit")
-            printf "%s\n" "$(get_message "CONFIG_EXIT_CONFIRMED")"
-            sleep 1
-            exit 0
-            ;;
-        "remove")
-            if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
-                printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
-                sleep 1
-                [ -f "$0" ] && rm -f "$0"
-                [ -d "$BASE_DIR" ] && rm -rf "$BASE_DIR"
-                exit 0
-            else
-                printf "%s\n" "$(get_message "CONFIG_DELETE_CANCELED")"
-                sleep 2
-                return 0
-            fi
-            ;;
-        *)
-            echo "DEBUG: Calling download for $1 with $2 and $3" >&2
-            download "$1" "$2" "$3"
-            ;;
-    esac
+    echo "DEBUG: Running command: $command" >&2
+    eval $command
 
     local status=$?
     echo "DEBUG: Command execution finished with status: $status" >&2
