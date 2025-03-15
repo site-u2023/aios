@@ -82,6 +82,29 @@ filter_menu_items() {
     debug_log "Menu items filtered and saved to $output_file"
 }
 
+read_user_choice() {
+    local prompt_text="$1"
+    
+    # プロンプト表示
+    printf "%s " "$prompt_text"
+    
+    # ユーザー入力を取得
+    local user_input=""
+    read -r user_input
+    
+    # デバッグ情報を標準エラーに出力
+    debug_log "DEBUG" "User selected raw input: $user_input" >&2
+    
+    # サブシェルで正規化処理を実行し、標準出力のみを捕捉
+    local normalized_input
+    normalized_input=$(normalize_input "$user_input")
+    
+    debug_log "DEBUG" "Normalized input: $normalized_input" >&2
+    
+    # 正規化された入力のみを返す
+    printf "%s" "$normalized_input"
+}
+
 # メニューセレクター関数（メニュー表示と選択処理）
 selector() {
     local menu_title="$1"
