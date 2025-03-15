@@ -1156,11 +1156,11 @@ print_banner_ascii() {
     
     # ASCIIアート
     printf "%s\n" "$(color magenta "               ## #")"
-    printf "%s\n" "$(color blue    "    ####      ###       ####      #####")"
-    printf "%s\n" "$(color cyan    "       ##      ##      ##  ##    ##")"
-    printf "%s\n" "$(color green   "    #####      ##      ##  ##     #####")"
-    printf "%s\n" "$(color yellow  "   ##  ##      ##      ##  ##         ##")"
-    printf "%s\n" "$(color red     "    #####     ####      ####     ######")"
+    printf "%s\n" "$(color blue    "     ####      ###       ####      #####")"
+    printf "%s\n" "$(color cyan    "        ##      ##      ##  ##    ##")"
+    printf "%s\n" "$(color green   "     #####      ##      ##  ##     #####")"
+    printf "%s\n" "$(color yellow  "    ##  ##      ##      ##  ##         ##")"
+    printf "%s\n" "$(color red     "     #####     ####      ####     ######")"
     
     # バナーの後に空行
     printf "\n"
@@ -1181,11 +1181,11 @@ print_banner_unicode() {
     
     # ASCIIアート（環境依存文字 - ブロック）
     printf "%s\n" "$(color white "               ██ █")"
-    printf "%s\n" "$(color white "    ████      ███       ████      █████")"
-    printf "%s\n" "$(color white "       ██      ██      ██  ██    ██")"
-    printf "%s\n" "$(color white "    █████      ██      ██  ██     █████")"
-    printf "%s\n" "$(color white "   ██  ██      ██      ██  ██         ██")"
-    printf "%s\n" "$(color white "    █████     ████      ████     ██████")"
+    printf "%s\n" "$(color white "     ████      ███       ████      █████")"
+    printf "%s\n" "$(color white "        ██      ██      ██  ██    ██")"
+    printf "%s\n" "$(color white "     █████      ██      ██  ██     █████")"
+    printf "%s\n" "$(color white "    ██  ██      ██      ██  ██         ██")"
+    printf "%s\n" "$(color white "     █████     ████      ████     ██████")"
     
     # バナーの後に空行
     printf "\n"
