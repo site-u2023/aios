@@ -1,14 +1,79 @@
 #!/bin/sh
 
-# =========================================================
-# 📌 設定スクリプト
-# 🚀 最終更新: 2025-03-15 06:37
-# 
-# 🏷️ ライセンス: CC0 (パブリックドメイン)
-# 🎯 互換性: OpenWrt >= 19.07
-# =========================================================
+SCRIPT_VERSION="2025.03.14-00-00"
 
-SCRIPT_VERSION="2025.03.15-06:37"
+# =========================================================
+# 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
+# 🚀 Last Update: 2025-02-21
+#
+# 🏷️ License: CC0 (Public Domain)
+# 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
+#
+# ⚠️ IMPORTANT NOTICE:
+# OpenWrt OS exclusively uses **Almquist Shell (ash)** and
+# is **NOT** compatible with Bourne-Again Shell (bash).
+#
+# 📢 POSIX Compliance Guidelines:
+# ✅ Use `[` instead of `[[` for conditions
+# ✅ Use $(command) instead of backticks `command`
+# ✅ Use $(( )) for arithmetic instead of let
+# ✅ Define functions as func_name() {} (no function keyword)
+# ✅ No associative arrays (declare -A is NOT supported)
+# ✅ No here-strings (<<< is NOT supported)
+# ✅ No -v flag in test or [[
+# ✅ Avoid bash-specific string operations like ${var:0:3}
+# ✅ Avoid arrays entirely when possible (even indexed arrays can be problematic)
+# ✅ Use printf followed by read instead of read -p
+# ✅ Use printf instead of echo -e for portable formatting
+# ✅ Avoid process substitution <() and >()
+# ✅ Prefer case statements over complex if/elif chains
+# ✅ Use command -v instead of which or type for command existence checks
+# ✅ Keep scripts modular with small, focused functions
+# ✅ Use simple error handling instead of complex traps
+# ✅ Test scripts with ash/dash explicitly, not just bash
+#
+# 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
+### =========================================================
+### 📌 AI Assistance Request: POSIX-Compliant Debugging Guide
+### 
+### When debugging or fixing errors in this POSIX shell script:
+### 
+### 1️⃣ Create a minimal reproducible test case (avoid bash features)
+### 2️⃣ Test with ash/dash explicitly: dash ./test.sh
+### 3️⃣ Use portable debugging methods: echo, printf, or set -x
+### 4️⃣ Validate fixes against all POSIX compliance guidelines
+### 5️⃣ Ensure the solution works in resource-constrained OpenWrt
+### 
+### ⚠️ IMPORTANT:
+### - Avoid suggesting bash-specific solutions
+### - Always test fixes with ash/dash before implementation
+### - Prefer simple solutions over complex ones
+### - Do not modify production code without test verification
+### 
+### 🛠️ Keep debugging simple, focused, and POSIX-compliant!
+### =========================================================
+
+DEV_NULL="${DEV_NULL:-on}"
+# サイレントモード
+# export DEV_NULL="on"
+# 通常モード
+# unset DEV_NULL
+
+# 基本定数の設定 
+BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q -O}"
+# BASE_WGET="${BASE_WGET:-wget -O}"
+DEBUG_MODE="${DEBUG_MODE:-false}"
+BIN_PATH=$(readlink -f "$0")
+BIN_DIR="$(dirname "$BIN_PATH")"
+BIN_FILE="$(basename "$BIN_PATH")"
+BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
+BASE_DIR="${BASE_DIR:-/tmp/aios}"
+CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
+FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
+LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
+UPDATE_CACHE="${CACHE_DIR}/update.ch"
+GITHUB_TOKEN_FILE="/etc/aios_token"
+
 SCRIPT_NAME=$(basename "$0" .sh)
 DEBUG=1
 
@@ -20,7 +85,8 @@ printf "%s\n" "$(color green "$(get_message "MENU_PACKAGES")")"
 printf "%s\n" "$(color magenta "$(get_message "MENU_ADBLOCKER")")"
 printf "%s\n" "$(color cyan "$(get_message "MENU_ACCESSPOINT")")"
 printf "%s\n" "$(color yellow "$(get_message "MENU_OTHERS")")"
-printf "%s\n" "$(color white_black "$(get_message "MENU_EXIT")")"
+printf "%s\n" "$(color white "$(get_message "MENU_EXIT")")"
+printf "%s\n" "$(color white_black "$(get_message "MENU_REMOVE")")"
 )
 
 # ダウンロード用データ
@@ -32,6 +98,7 @@ download "adblocker-dns.sh" "chmod" "load"
 download "accesspoint-setup.sh" "chmod" "load"
 download "other-utilities.sh" "chmod" "load"
 "exit" "" ""
+"remove" "" ""
 )
 
 # メニューセレクター関数（メニュー表示と選択処理）
@@ -40,6 +107,7 @@ selector() {
     local menu_count=0
     local choice=""
     local i=0
+    local item_color=""
     
     debug_log "DEBUG" "Starting menu selector function"
     
@@ -66,11 +134,18 @@ selector() {
     
     printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
     
+    # カラーコードの配列
+    local color_codes="red blue green magenta cyan yellow white white_black"
+    
     # 番号付きでメニュー項目を表示
     i=1
     while IFS= read -r line; do
-        # メニュー項目番号と内容を表示
-        printf " [%d]: %s\n" "$i" "$line"
+        # 行の色を抽出
+        local current_color=$(echo "$color_codes" | cut -d' ' -f$i 2>/dev/null)
+        [ -z "$current_color" ] && current_color="white"
+        
+        # 色付きの番号と項目を表示
+        printf " %s %s\n" "$(color "$current_color" "[${i}]:")" "$line"
         i=$((i + 1))
     done < "$temp_file"
     
@@ -126,18 +201,26 @@ execute_menu_action() {
     
     debug_log "DEBUG" "Selected command: $command_line"
     
-    # 終了処理
+    # exit処理 (単純終了)
     if [ "$command_line" = "\"exit\" \"\" \"\"" ]; then
         debug_log "DEBUG" "Exit option selected"
+        printf "%s\n" "$(get_message "CONFIG_EXIT_CONFIRMED")"
+        return 255
+    fi
+    
+    # remove処理 (スクリプト削除)
+    if [ "$command_line" = "\"remove\" \"\" \"\"" ]; then
+        debug_log "DEBUG" "Remove option selected"
         
-        local confirm_text="$(get_message "CONFIG_CONFIRM_DELETE")"
-        if confirm "$confirm_text"; then
-            debug_log "DEBUG" "User confirmed script deletion"
+        if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
+            debug_log "DEBUG" "User confirmed script removal"
             rm -f "$0"
+            # BASE_DIRのクリーンアップを追加
+            rm -rf "$BASE_DIR"
             printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
             return 255
         else
-            debug_log "DEBUG" "User cancelled script deletion"
+            debug_log "DEBUG" "User cancelled script removal"
             printf "%s\n" "$(get_message "CONFIG_DELETE_CANCELED")"
             sleep 2
             return 0
