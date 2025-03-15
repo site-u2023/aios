@@ -164,17 +164,17 @@ debug_log() {
         timestamp=$(date '+%Y-%m-%d %H:%M:%S')
         local log_message="[$timestamp] $level: $message"
 
-        # カラー表示
+        # カラー表示 - 標準エラー出力に出力
         case "$level" in
-            "ERROR") printf "%s\n" "$(color red "$log_message")" ;;
-            "WARN") printf "%s\n" "$(color yellow "$log_message")" ;;
-            "INFO") printf "%s\n" "$(color cyan "$log_message")" ;;
-            "DEBUG") printf "%s\n" "$(color white "$log_message")" ;;
+            "ERROR") printf "%s\n" "$(color red "$log_message")" >&2 ;;
+            "WARN") printf "%s\n" "$(color yellow "$log_message")" >&2 ;;
+            "INFO") printf "%s\n" "$(color cyan "$log_message")" >&2 ;;
+            "DEBUG") printf "%s\n" "$(color white "$log_message")" >&2 ;;
         esac
 
         # ログファイルに記録
-        if [ "$AIOS_INITIALIZED" = "true" ]; then
-            echo "$log_message" >> "$LOG_DIR/debug.log"
+        if [ "$AIOS_INITIALIZED" = "true" ] && [ -d "$LOG_DIR" ]; then
+            echo "$log_message" >> "$LOG_DIR/debug.log" 2>/dev/null
         fi
     fi
 }
@@ -380,12 +380,13 @@ get_message() {
     return 0
 }
 
-# 全角文字を半角文字に変換する関数
+# 修正版 normalize_input 関数 - デバッグ出力を標準エラー出力に分離
 normalize_input() {
     local input="$1"
     local output="$input"
     
-    debug_log "DEBUG" "Starting character normalization for input text"
+    # デバッグメッセージを標準エラー出力へリダイレクト
+    [ "$DEBUG_MODE" = "true" ] && printf "DEBUG: Starting character normalization for input text\n" >&2
     
     # 変換テーブル（各行はsedコマンドの負荷を分散するため分割）
     
@@ -422,10 +423,11 @@ normalize_input() {
     # 韓国語特有の全角記号
     output=$(echo "$output" | sed 's/￦/\\/g; s/￥/\\/g')
     
-    # 変換対象外の文字はそのまま残す（弾かない）
+    # デバッグメッセージを標準エラー出力へリダイレクト
+    [ "$DEBUG_MODE" = "true" ] && printf "DEBUG: Character normalization completed\n" >&2
     
-    debug_log "DEBUG" "Character normalization completed"
-    echo "$output"
+    # 正規化した結果のみを返す（デバッグ情報なし）
+    printf '%s' "$output"
 }
 
 # 確認入力処理関数
