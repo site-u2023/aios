@@ -66,41 +66,28 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 
-# デバッグログ関数 - 標準エラー出力に英語のメッセージを出力
-debug_log() {
-    if [ "$DEBUG_MODE" = "true" ]; then
-        printf "[%s] DEBUG: %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$1" >&2
-    fi
-}
-
 # メニュー表示用データ
 menyu_selector() (
-    # メニュー生成前にデバッグ情報を標準エラー出力に出力
-    debug_log "Generating menu items"
-    
-    printf "%s\n" "$(color red "$(get_message "MENU_INTERNET")")"
-    printf "%s\n" "$(color blue "$(get_message "MENU_SYSTEM")")"
-    printf "%s\n" "$(color green "$(get_message "MENU_PACKAGES")")"
-    printf "%s\n" "$(color magenta "$(get_message "MENU_ADBLOCKER")")"
-    printf "%s\n" "$(color cyan "$(get_message "MENU_ACCESSPOINT")")"
-    printf "%s\n" "$(color yellow "$(get_message "MENU_OTHERS")")"
-    printf "%s\n" "$(color white "$(get_message "MENU_EXIT")")"
-    printf "%s\n" "$(color white_black "$(get_message "MENU_REMOVE")")"
+printf "%s\n" "$(color red "$(get_message "MENU_INTERNET")")"
+printf "%s\n" "$(color blue "$(get_message "MENU_SYSTEM")")"
+printf "%s\n" "$(color green "$(get_message "MENU_PACKAGES")")"
+printf "%s\n" "$(color magenta "$(get_message "MENU_ADBLOCKER")")"
+printf "%s\n" "$(color cyan "$(get_message "MENU_ACCESSPOINT")")"
+printf "%s\n" "$(color yellow "$(get_message "MENU_OTHERS")")"
+printf "%s\n" "$(color white "$(get_message "MENU_EXIT")")"
+printf "%s\n" "$(color white_black "$(get_message "MENU_REMOVE")")"
 )
 
 # ダウンロード用データ
 menu_download() (
-    # ダウンロードコマンド生成前にデバッグ情報
-    debug_log "Generating download commands"
-    
-    download "internet-config.sh" "chmod" "load"
-    download "system-config.sh" "chmod" "load"
-    download "package-install.sh" "chmod" "load"
-    download "adblocker-dns.sh" "chmod" "load"
-    download "accesspoint-setup.sh" "chmod" "load"
-    download "other-utilities.sh" "chmod" "load"
-    "exit" "" ""
-    "remove" "" ""
+download "internet-config.sh" "chmod" "load"
+download "system-config.sh" "chmod" "load"
+download "package-install.sh" "chmod" "load"
+download "adblocker-dns.sh" "chmod" "load"
+download "accesspoint-setup.sh" "chmod" "load"
+download "other-utilities.sh" "chmod" "load"
+"exit" "" ""
+"remove" "" ""
 )
 
 # メニューセレクター関数（メニュー表示と選択処理）
@@ -112,9 +99,6 @@ selector() {
     local item_color=""
     local script_name=$(basename "$0" .sh)
     
-    # セレクター開始をデバッグ出力
-    debug_log "Starting menu selector function"
-    
     # カラーコードの配列
     local color_list="red blue green magenta cyan yellow white white_black"
     
@@ -122,18 +106,22 @@ selector() {
     local menu_data=""
     local temp_file="${CACHE_DIR}/menu_selector_output.tmp"
     
-    # メニューアイテムをキャプチャ - デバッグ出力は標準エラーに送る
-    menyu_selector > "$temp_file" 2>&3
+    # メニューアイテムをキャプチャ - デバッグログは標準エラー出力に
+    if [ "$DEBUG_MODE" = "true" ]; then
+        debug_log "Generating menu items" >&2
+    fi
+    
+    menyu_selector > "$temp_file" 2>/dev/null
     menu_count=$(wc -l < "$temp_file")
     
     # メニュー項目数をデバッグ出力
-    debug_log "Menu contains ${menu_count} items"
+    if [ "$DEBUG_MODE" = "true" ]; then
+        debug_log "Menu contains ${menu_count} items" >&2
+    fi
     
     # 画面クリア処理をデバッグ変数で制御
     if [ "$DEBUG_MODE" != "true" ]; then
         clear
-    else
-        debug_log "Debug mode active - skipping screen clear"
     fi
     
     # プレースホルダーの置換を確実に行うため、直接変数を代入
@@ -179,12 +167,16 @@ selector() {
     choice=$(normalize_input "$choice")
     
     # 入力値のデバッグ出力
-    debug_log "User input: ${choice}"
+    if [ "$DEBUG_MODE" = "true" ]; then
+        debug_log "User input: ${choice}" >&2
+    fi
     
     # 入力値チェック
     if ! printf "%s" "$choice" | grep -q '^[0-9]\+$'; then
         printf "%s\n" "$(get_message "CONFIG_ERROR_NOT_NUMBER")"
-        debug_log "Invalid input: not a number"
+        if [ "$DEBUG_MODE" = "true" ]; then
+            debug_log "Invalid input: not a number" >&2
+        fi
         sleep 2
         return 0
     fi
@@ -193,13 +185,17 @@ selector() {
         local error_text="$(get_message "CONFIG_ERROR_INVALID_NUMBER")"
         error_text=$(printf "%s" "$error_text" | sed "s/{0}/$menu_count/g")
         printf "%s\n" "$error_text"
-        debug_log "Invalid input: number out of range"
+        if [ "$DEBUG_MODE" = "true" ]; then
+            debug_log "Invalid input: number out of range" >&2
+        fi
         sleep 2
         return 0
     fi
     
     # 選択アクションの実行
-    debug_log "Processing menu selection: ${choice}"
+    if [ "$DEBUG_MODE" = "true" ]; then
+        debug_log "Processing menu selection: ${choice}" >&2
+    fi
     execute_menu_action "$choice"
     
     return $?
@@ -212,18 +208,24 @@ execute_menu_action() {
     local command_line=""
     
     # デバッグ出力
-    debug_log "Executing menu action for choice: ${choice}"
+    if [ "$DEBUG_MODE" = "true" ]; then
+        debug_log "Executing menu action for choice: ${choice}" >&2
+    fi
     
     # メニューコマンドを取得
-    menu_download > "$temp_file" 2>&3
+    menu_download > "$temp_file" 2>/dev/null
     command_line=$(sed -n "${choice}p" "$temp_file")
     rm -f "$temp_file"
     
-    debug_log "Command to execute: ${command_line}"
+    if [ "$DEBUG_MODE" = "true" ]; then
+        debug_log "Command to execute: ${command_line}" >&2
+    fi
     
     # exit処理（スクリプト終了）
     if [ "$command_line" = "\"exit\" \"\" \"\"" ]; then
-        debug_log "Exit option selected"
+        if [ "$DEBUG_MODE" = "true" ]; then
+            debug_log "Exit option selected" >&2
+        fi
         printf "%s\n" "$(get_message "CONFIG_EXIT_CONFIRMED")"
         sleep 1
         return 255
@@ -231,10 +233,14 @@ execute_menu_action() {
     
     # remove処理（スクリプトとディレクトリ削除）
     if [ "$command_line" = "\"remove\" \"\" \"\"" ]; then
-        debug_log "Remove option selected"
+        if [ "$DEBUG_MODE" = "true" ]; then
+            debug_log "Remove option selected" >&2
+        fi
         
         if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
-            debug_log "User confirmed removal"
+            if [ "$DEBUG_MODE" = "true" ]; then
+                debug_log "User confirmed removal" >&2
+            fi
             printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
             sleep 1
             
@@ -244,7 +250,9 @@ execute_menu_action() {
             
             return 255
         else
-            debug_log "User cancelled removal"
+            if [ "$DEBUG_MODE" = "true" ]; then
+                debug_log "User cancelled removal" >&2
+            fi
             printf "%s\n" "$(get_message "CONFIG_DELETE_CANCELED")"
             sleep 2
             return 0
@@ -252,7 +260,9 @@ execute_menu_action() {
     fi
     
     # 通常コマンド実行
-    debug_log "Executing command: ${command_line}"
+    if [ "$DEBUG_MODE" = "true" ]; then
+        debug_log "Executing command: ${command_line}" >&2
+    fi
     eval "$command_line"
     
     return $?
@@ -262,19 +272,9 @@ execute_menu_action() {
 main() {
     local ret=0
     
-    # デバッグモード時に標準エラー出力のリダイレクト
     if [ "$DEBUG_MODE" = "true" ]; then
-        # デバッグ出力用にファイルディスクリプタ3を標準エラー出力に複製
-        exec 3>&2
-    else
-        # デバッグモードでない場合はファイルディスクリプタ3を/dev/nullにリダイレクト
-        exec 3>/dev/null
+        debug_log "Starting menu script v${SCRIPT_VERSION}" >&2
     fi
-    
-    debug_log "Starting menu script v${SCRIPT_VERSION}"
-    
-    # ディレクトリ作成 - 必要な場合のみ
-    [ ! -d "${CACHE_DIR}" ] && mkdir -p "${CACHE_DIR}" && debug_log "Created cache directory: ${CACHE_DIR}"
     
     # メインループ
     while true; do
@@ -282,13 +282,12 @@ main() {
         ret=$?
         
         if [ "$ret" -eq 255 ]; then
-            debug_log "Script terminating"
+            if [ "$DEBUG_MODE" = "true" ]; then
+                debug_log "Script terminating" >&2
+            fi
             break
         fi
     done
-    
-    # ファイルディスクリプタ3をクローズ
-    exec 3>&-
 }
 
 # スクリプト実行
