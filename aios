@@ -1260,8 +1260,6 @@ print_banner() {
         debug_log "DEBUG" "Auto-detected banner style: $BANNER_STYLE"
     fi
 
-    BANNER_STYLE="ascii"
-
     # スタイルに応じたバナー表示
     case "$BANNER_STYLE" in
         unicode|block)
