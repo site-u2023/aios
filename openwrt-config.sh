@@ -39,6 +39,26 @@ echo "exit" "" ""
 echo "remove" "" ""
 )
 
+safe_sed_replace() {
+    local text="$1"
+    local pattern="$2"
+    local replacement="$3"
+    
+    # パターンが空の場合は置換せず元の文字列を返す
+    if [ -z "$pattern" ]; then
+        debug_log "Empty pattern detected in sed operation. Skipping."
+        echo "$text"
+        return 0
+    fi
+    
+    # 特殊文字のエスケープ
+    local esc_pattern=$(echo "$pattern" | sed 's/[\/&]/\\&/g')
+    local esc_replacement=$(echo "$replacement" | sed 's/[\/&]/\\&/g')
+    
+    # 置換実行
+    echo "$text" | sed "s/$esc_pattern/$esc_replacement/g" 2>/dev/null || echo "$text"
+}
+
 # メニューセレクター関数（メニュー表示と選択処理）
 selector() {
     local menu_title="$1"
@@ -55,25 +75,29 @@ selector() {
     local menu_data=""
     local temp_file="${CACHE_DIR}/menu_selector_output.tmp"
     
+    # ディレクトリ存在確認
+    [ ! -d "${CACHE_DIR}" ] && mkdir -p "${CACHE_DIR}"
+    
     # メニューアイテムをキャプチャ
     menyu_selector > "$temp_file" 2>/dev/null
     menu_count=$(wc -l < "$temp_file")
     
     # 画面クリア処理をデバッグ変数で制御
     if [ "$DEBUG_MODE" != "true" ]; then
-       clear
+        clear
     fi
     
-    # プレースホルダーの置換を確実に行うため、直接変数を代入
+    # プレースホルダーの置換を確実に行うため、safe_sed_replace関数を使用
     local header_text="$(get_message "CONFIG_HEADER")"
-    header_text=$(printf "%s" "$header_text" | sed "s/{0}/$script_name/g" | sed "s/{1}/$SCRIPT_VERSION/g")
+    header_text=$(safe_sed_replace "$header_text" "{0}" "$script_name")
+    header_text=$(safe_sed_replace "$header_text" "{1}" "$SCRIPT_VERSION")
     printf "%s\n" "$header_text"
     
     printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
     
     if [ -n "$menu_title" ]; then
         local title_text="$(get_message "CONFIG_SECTION_TITLE")"
-        title_text=$(printf "%s" "$title_text" | sed "s/{0}/$menu_title/g")
+        title_text=$(safe_sed_replace "$title_text" "{0}" "$menu_title")
         printf "%s\n" "$title_text"
     fi
     
@@ -98,10 +122,11 @@ selector() {
     
     # プレースホルダーの置換を確実に行う
     local prompt_text="$(get_message "CONFIG_SELECT_PROMPT")"
-    prompt_text=$(printf "%s" "$prompt_text" | sed "s/{0}/$menu_count/g")
+    prompt_text=$(safe_sed_replace "$prompt_text" "{0}" "$menu_count")
     printf "%s " "$prompt_text"
     
     read -r choice
+    debug_log "User selected: $choice"
     
     # 入力値を正規化
     choice=$(normalize_input "$choice")
@@ -115,13 +140,14 @@ selector() {
     
     if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_count" ]; then
         local error_text="$(get_message "CONFIG_ERROR_INVALID_NUMBER")"
-        error_text=$(printf "%s" "$error_text" | sed "s/{0}/$menu_count/g")
+        error_text=$(safe_sed_replace "$error_text" "{0}" "$menu_count")
         printf "%s\n" "$error_text"
         sleep 2
         return 0
     fi
     
     # 選択アクションの実行
+    debug_log "Processing menu selection: $choice"
     execute_menu_action "$choice"
     
     return $?
@@ -133,10 +159,20 @@ execute_menu_action() {
     local temp_file="${CACHE_DIR}/menu_download_commands.tmp"
     local command_line=""
     
+    # ディレクトリ存在確認
+    [ ! -d "${CACHE_DIR}" ] && mkdir -p "${CACHE_DIR}"
+    
     # メニューコマンドを取得
     menu_download > "$temp_file" 2>/dev/null
-    command_line=$(sed -n "${choice}p" "$temp_file")
+    command_line=$(sed -n "${choice}p" "$temp_file" 2>/dev/null || echo "")
+    debug_log "Selected command: $command_line"
     rm -f "$temp_file"
+    
+    # コマンド行が空の場合
+    if [ -z "$command_line" ]; then
+        debug_log "Empty command line selected"
+        return 0
+    fi
     
     # exit処理（スクリプト終了）
     if [ "$command_line" = "exit  " ]; then
@@ -164,7 +200,8 @@ execute_menu_action() {
     fi
     
     # 通常コマンド実行（run モードでサブシェルで実行してループ防止）
-    eval "$command_line"
+    debug_log "Executing command: $command_line"
+    (eval "$command_line")
     
     return $?
 }
@@ -172,9 +209,6 @@ execute_menu_action() {
 # メイン関数
 main() {
     local ret=0
-    
-    # ディレクトリ作成（必要な場合のみ）
-    [ ! -d "${CACHE_DIR}" ] && mkdir -p "${CACHE_DIR}"
     
     # メインループ
     while true; do
