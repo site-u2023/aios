@@ -53,28 +53,26 @@ selector() {
     
     # メニューヘッダー表示
     clear
-    printf "%s\n" "$(get_message "CONFIG_HEADER" "$SCRIPT_NAME" "$SCRIPT_VERSION")"
+    # プレースホルダーの置換を確実に行うため、直接変数を代入
+    local header_text="$(get_message "CONFIG_HEADER")"
+    header_text=$(echo "$header_text" | sed "s/{0}/$SCRIPT_NAME/g" | sed "s/{1}/$SCRIPT_VERSION/g")
+    printf "%s\n" "$header_text"
+    
     printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
-    [ -n "$menu_title" ] && printf "%s\n" "$(get_message "CONFIG_SECTION_TITLE" "$menu_title")"
+    
+    if [ -n "$menu_title" ]; then
+        local title_text="$(get_message "CONFIG_SECTION_TITLE")"
+        title_text=$(echo "$title_text" | sed "s/{0}/$menu_title/g")
+        printf "%s\n" "$title_text"
+    fi
+    
     printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
     
     # 番号付きでメニュー項目を表示
     i=1
     while IFS= read -r line; do
-        local color_code=""
-        
-        # 行の最初にある色のコードを取得
-        color_code=$(echo "$line" | sed -n 's/.*color \([^ ]*\).*/\1/p')
-        
         # メニュー項目番号と内容を表示
-        if [ -n "$color_code" ]; then
-            # 色コードが取得できた場合、それを使用
-            printf " %s%s\n" "$(color "$color_code" "[$i]: ")" "$line"
-        else
-            # 色コードが取得できなかった場合、デフォルト色
-            printf " [%d]: %s\n" "$i" "$line"
-        fi
-        
+        printf " [%d]: %s\n" "$i" "$line"
         i=$((i + 1))
     done < "$temp_file"
     
@@ -82,7 +80,12 @@ selector() {
     
     # 選択プロンプト
     printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
-    printf "%s" "$(get_message "CONFIG_SELECT_PROMPT" "max=$menu_count") "
+    
+    # プレースホルダーの置換を確実に行う
+    local prompt_text="$(get_message "CONFIG_SELECT_PROMPT")"
+    prompt_text=$(echo "$prompt_text" | sed "s/{0}/$menu_count/g")
+    printf "%s " "$prompt_text"
+    
     read -r choice
     
     # 入力値を正規化
@@ -97,7 +100,9 @@ selector() {
     fi
     
     if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_count" ]; then
-        printf "%s\n" "$(get_message "CONFIG_ERROR_INVALID_NUMBER" "max=$menu_count")"
+        local error_text="$(get_message "CONFIG_ERROR_INVALID_NUMBER")"
+        error_text=$(echo "$error_text" | sed "s/{0}/$menu_count/g")
+        printf "%s\n" "$error_text"
         sleep 2
         return 0
     fi
@@ -127,7 +132,8 @@ execute_menu_action() {
     if [ "$command_line" = "\"exit\" \"\" \"\"" ]; then
         debug_log "DEBUG" "Exit option selected"
         
-        if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
+        local confirm_text="$(get_message "CONFIG_CONFIRM_DELETE")"
+        if confirm "$confirm_text"; then
             debug_log "DEBUG" "User confirmed script deletion"
             rm -f "$0"
             printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
