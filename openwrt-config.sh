@@ -36,52 +36,39 @@ download "other-utilities.sh" "chmod" "load"
 "exit" "" ""
 )
 
-# メニュー表示用基本関数
-print_menu() {
-    printf -- '%s %s %s\n' "$1" "$2" "$3"
+# デバッグメッセージを出力する関数
+debug_log() {
+    if [ "$DEBUG" = "1" ]; then
+        echo "[DEBUG] $1" >&2
+    fi
 }
 
 # メニューセレクター関数（メニュー表示と選択処理）
 selector() {
     local menu_title="$1"
-    local selector_data=""
-    local download_data=""
-    local menu_count=0
+    local choice=""
     
-    debug_log "DEBUG" "Loading menu display data: $menyu_selector"
-    menyu_selector
-    
-    debug_log "DEBUG" "Loading menu download data $menu_download"
-    menu_download
-    
-    # メニュー項目数をカウント
-    menu_count=$(echo "$selector_data" | wc -l)
-    debug_log "DEBUG" "Menu contains $menu_count items"
-    
-    # clear
+    # メニュー表示ヘッダー
+    clear
     printf "%s\n" "$(get_message "CONFIG_HEADER" "$SCRIPT_NAME" "$SCRIPT_VERSION")"
     printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
     [ -n "$menu_title" ] && printf "%s\n" "$(get_message "CONFIG_SECTION_TITLE" "$menu_title")"
     printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
     
-    # メニュー項目表示（多言語対応版）
-    echo "$selector_data" | while IFS= read -r line; do
-        if [ -n "$line" ]; then
-            # 行の要素を抽出
-            local num=$(echo "$line" | cut -d '"' -f 2)
-            local color_name=$(echo "$line" | cut -d '"' -f 4)
-            local title_id=$(echo "$line" | cut -d '"' -f 6)
-            
-            # メッセージDBからタイトルを取得
-            local title=$(get_message "$title_id")
-            
-            printf " %s%s\n" "$(color "$color_name" "[$num]: ")" "$(color "$color_name" "$title")"
-        fi
-    done
+    # メニュー項目数を計算（行数をカウント）
+    local menu_count=$(menyu_selector | wc -l)
+    debug_log "Menu contains $menu_count items"
     
+    # メニュー表示（menyu_selector関数の出力をそのまま表示）
+    menyu_selector
+    
+    # メニュー選択プロンプト
     printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
     printf "%s" "$(get_message "CONFIG_SELECT_PROMPT" "max=$menu_count")"
     read -r choice
+    
+    # 入力値を正規化（全角→半角）
+    choice=$(normalize_input "$choice")
     
     # 入力値チェック
     if ! echo "$choice" | grep -q '^[0-9]\+$'; then
@@ -96,42 +83,80 @@ selector() {
         return 0
     fi
     
-    # 選択アクションの実行
-    local line_data=$(echo "$download_data" | sed -n "${choice}p")
-    local script=$(echo "$line_data" | cut -d '"' -f 2)
-    local opt1=$(echo "$line_data" | cut -d '"' -f 4)
-    local opt2=$(echo "$line_data" | cut -d '"' -f 6)
-    
-    # 終了オプションの処理
-    if [ "$script" = "exit" ]; then
-        if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
-            debug_log "DEBUG" "User requested script deletion"
-            rm -f "$0"
-            printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
-        else
-            printf "%s\n" "$(get_message "CONFIG_DELETE_CANCELED")"
-        fi
-        return 255
-    fi
-    
-    # ダウンロードと実行
-    printf "%s\n" "$(get_message "CONFIG_DOWNLOADING" "file=$script")"
-    if download "$script" "$opt1" "$opt2"; then
-        debug_log "DEBUG" "Successfully processed $script"
-    else
-        printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_FAILED" "file=$script")"
-        sleep 2
-    fi
+    # 選択された項目に基づいて対応するコマンドを実行
+    execute_menu_item "$choice"
     
     return 0
 }
 
+# 選択されたメニュー項目を実行する関数
+execute_menu_item() {
+    local choice="$1"
+    local i=1
+    local cmd=""
+    
+    debug_log "Processing choice: $choice"
+    
+    # menu_downloadの出力を保存して処理
+    menu_download | {
+        while IFS= read -r line; do
+            if [ "$i" = "$choice" ]; then
+                cmd="$line"
+                break
+            fi
+            i=$((i + 1))
+        done
+        
+        debug_log "Selected command: $cmd"
+        
+        # 選択されたコマンドを評価して実行
+        if [ "$cmd" = "\"exit\" \"\" \"\"" ]; then
+            if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
+                debug_log "User requested script deletion"
+                rm -f "$0"
+                printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
+            else
+                printf "%s\n" "$(get_message "CONFIG_DELETE_CANCELED")"
+            fi
+            return 255
+        else
+            # コマンドを実行
+            eval "$cmd"
+        fi
+    }
+    
+    return 0
+}
+
+# 確認ダイアログを表示する関数
+confirm() {
+    local message="$1"
+    local answer=""
+    
+    printf "%s " "$message"
+    read -r answer
+    
+    case "$answer" in
+        [Yy]*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 # メイン関数
 main() {
-    
     # メインループ
     while true; do
         selector "$(get_message "MENU_TITLE")"
+        ret=$?
+        
+        # selector関数が255を返した場合（exit選択時）はループを終了
+        if [ $ret -eq 255 ]; then
+            break
+        fi
     done
 }
 
