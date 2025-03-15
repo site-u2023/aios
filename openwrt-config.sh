@@ -36,6 +36,13 @@ menu_download() (
 "8" "exit" "" ""
 )
 
+process_menu_data() {
+    while read -r line; do
+        set -- $line
+        echo "$1" "$2" "$3"
+    done
+}
+
 # メニューセレクター関数（メニュー表示と選択処理）
 selector() {
     local menu_title="$1"
@@ -44,10 +51,10 @@ selector() {
     local menu_count=0
     
     debug_log "DEBUG" "Loading menu display data: $menyu_selector"
-    selector_data=$(menyu_selector | while read -r line; do echo "$line"; done)
+    selector_data=$(menyu_selector | process_menu_data)
     
     debug_log "DEBUG" "Loading menu download data $menu_download"
-    download_data=$(menu_download | while read -r line; do echo "$line"; done)
+    download_data=$(menu_download | process_menu_data)
     
     # メニュー項目数をカウント
     menu_count=$(echo "$selector_data" | wc -l)
