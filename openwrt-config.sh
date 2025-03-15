@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.14-00-00"
+SCRIPT_VERSION="2025.03.15-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -111,6 +111,9 @@ selector() {
     
     debug_log "DEBUG" "Starting menu selector function"
     
+    # カラーコードの配列
+    local color_list="red blue green magenta cyan yellow white white_black"
+    
     # メニューデータを取得して行数をカウント
     local temp_file="${CACHE_DIR}/menu_selector_output.tmp"
     menyu_selector > "$temp_file" 2>/dev/null
@@ -134,14 +137,11 @@ selector() {
     
     printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
     
-    # カラーコードの配列
-    local color_codes="red blue green magenta cyan yellow white white_black"
-    
     # 番号付きでメニュー項目を表示
     i=1
     while IFS= read -r line; do
-        # 行の色を抽出
-        local current_color=$(echo "$color_codes" | cut -d' ' -f$i 2>/dev/null)
+        # 色を決定（iに基づく）
+        local current_color=$(echo "$color_list" | cut -d' ' -f$i 2>/dev/null)
         [ -z "$current_color" ] && current_color="white"
         
         # 色付きの番号と項目を表示
@@ -201,26 +201,28 @@ execute_menu_action() {
     
     debug_log "DEBUG" "Selected command: $command_line"
     
-    # exit処理 (単純終了)
+    # exit処理（スクリプト終了）
     if [ "$command_line" = "\"exit\" \"\" \"\"" ]; then
         debug_log "DEBUG" "Exit option selected"
         printf "%s\n" "$(get_message "CONFIG_EXIT_CONFIRMED")"
+        sleep 1
         return 255
     fi
     
-    # remove処理 (スクリプト削除)
+    # remove処理（スクリプトとディレクトリ削除）
     if [ "$command_line" = "\"remove\" \"\" \"\"" ]; then
         debug_log "DEBUG" "Remove option selected"
         
         if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
-            debug_log "DEBUG" "User confirmed script removal"
+            debug_log "DEBUG" "User confirmed script and directory removal"
             rm -f "$0"
             # BASE_DIRのクリーンアップを追加
-            rm -rf "$BASE_DIR"
+            [ -d "$BASE_DIR" ] && rm -rf "$BASE_DIR"
             printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
+            sleep 1
             return 255
         else
-            debug_log "DEBUG" "User cancelled script removal"
+            debug_log "DEBUG" "User cancelled script and directory removal"
             printf "%s\n" "$(get_message "CONFIG_DELETE_CANCELED")"
             sleep 2
             return 0
