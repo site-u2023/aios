@@ -18,9 +18,8 @@ menyu_selector() (
 "3" "green" "MENU_PACKAGE_INSTALL"
 "4" "magenta" "MENU_ADBLOCKER"
 "5" "cyan" "MENU_ACCESSPOINT"
-"6" "yellow" "MENU_HOMEASSISTANT"
-"7" "white" "MENU_UTILITIES"
-"8" "white_black" "MENU_EXIT"
+"6" "white" "MENU_UTILITIES"
+"7" "white_black" "MENU_EXIT"
 )
 
 # ダウンロード用データ
@@ -30,9 +29,8 @@ menu_download() (
 "3" "package-install.sh" "chmod" "load"
 "4" "adblocker-dns.sh" "chmod" "load"
 "5" "accesspoint-setup.sh" "chmod" "load"
-"6" "homeassistant-install.sh" "chmod" "load"
-"7" "other-utilities.sh" "chmod" "load"
-"8" "exit" "" ""
+"6" "other-utilities.sh" "chmod" "load"
+"7" "exit" "" ""
 )
 
 # メニューセレクター関数
