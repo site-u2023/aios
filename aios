@@ -364,15 +364,23 @@ get_message() {
         fi
     fi
     
-    # パラメータ置換処理 - POSIXシェル準拠
+    # パラメータ置換処理 - 修正版
     if [ -n "$params" ]; then
-        # 変数名と値のペアをループ処理
-        echo "$params" | tr '&' '\n' | while IFS='=' read -r var_name var_value; do
-            # 安全な値に変換（セキュリティ対策）
-            var_value=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
-            # メッセージ内の{var_name}をvar_valueに置換
-            message=$(echo "$message" | sed "s/{$var_name}/$var_value/g")
-        done
+        local temp_msg="$message"
+        local var_name=""
+        local var_value=""
+        
+        # パラメータを処理（単一パラメータ対応）
+        var_name=$(echo "$params" | cut -d'=' -f1)
+        var_value=$(echo "$params" | cut -d'=' -f2-)
+        
+        if [ -n "$var_name" ] && [ -n "$var_value" ]; then
+            # sedでメッセージ内の{var_name}をvar_valueに置換
+            # 特殊文字をエスケープして安全にする
+            var_value_esc=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
+            temp_msg=$(echo "$temp_msg" | sed "s/{$var_name}/$var_value_esc/g")
+            message="$temp_msg"
+        fi
     fi
     
     echo "$message"
