@@ -231,6 +231,69 @@ US|MSG_CONFIRM_INSTALL=Do you want to install {pkg}?
 JP|MSG_CONFIRM_INSTALL=パッケージ {pkg} をインストールしますか？
 
 # =======================
+# openwrt-config.sh
+# =======================
+
+# menyu_selector() 関数
+US|MENU_INTERNET_SETUP=Internet connection setup (MAP-e, DS-LITE, PPPoE)
+JP|MENU_INTERNET_SETUP=インターネット接続設定 (MAP-e, DS-LITE, PPPoE)
+
+US|MENU_SYSTEM_SETUP=Initial system setup (hostname, password, wifi, etc.)
+JP|MENU_SYSTEM_SETUP=システム初期設定 (ホスト名,パスワード,WiFi等)
+
+US|MENU_PACKAGE_INSTALL=Install recommended packages (automatic or selective)
+JP|MENU_PACKAGE_INSTALL=推奨パッケージのインストール (自動または選択式)
+
+US|MENU_ADBLOCKER=Install ad blocker and DNS encryption
+JP|MENU_ADBLOCKER=広告ブロッカーとDNS暗号化のインストール
+
+US|MENU_ACCESSPOINT=Access point connection setup (Dumb/Bridge)
+JP|MENU_ACCESSPOINT=アクセスポイント接続設定 (ダム/ブリッジモード)
+
+US|MENU_HOMEASSISTANT=Install Home Assistant (Only v23.05)
+JP|MENU_HOMEASSISTANT=Home Assistantのインストール (v23.05のみ)
+
+US|MENU_UTILITIES=Other utilities: Button, IPERF3, SAMBA4, LBS, DFS Check, Guest Wi-Fi
+JP|MENU_UTILITIES=その他: ボタン設定, IPERF3, SAMBA4, LBS, DFSチェック, ゲストWiFi
+
+US|MENU_EXIT=Quit (Delete this script or not)
+JP|MENU_EXIT=終了 (スクリプトの削除有無)
+
+# selector() 関数
+US|OPENWRT_CONFIG_HEADER=OpenWrt Configuration Script v{0}
+JP|OPENWRT_CONFIG_HEADER=OpenWrt 設定スクリプト v{0}
+
+US|OPENWRT_CONFIG_SEPARATOR=-----------------------------------------------------
+JP|OPENWRT_CONFIG_SEPARATOR=-----------------------------------------------------
+
+US|OPENWRT_CONFIG_SECTION_TITLE={0}
+JP|OPENWRT_CONFIG_SECTION_TITLE={0}
+
+US|OPENWRT_CONFIG_SELECT_PROMPT=Please select a number (1-{0}): 
+JP|OPENWRT_CONFIG_SELECT_PROMPT=番号を選択してください (1-{0}): 
+
+US|OPENWRT_CONFIG_ERROR_NOT_NUMBER=Please enter a valid number.
+JP|OPENWRT_CONFIG_ERROR_NOT_NUMBER=有効な数字を入力してください。
+
+US|OPENWRT_CONFIG_ERROR_INVALID_NUMBER=Invalid number. Please enter a number between 1 and {0}.
+JP|OPENWRT_CONFIG_ERROR_INVALID_NUMBER=無効な番号です。1から{0}までの番号を入力してください。
+
+US|OPENWRT_CONFIG_CONFIRM_DELETE=Do you want to delete this script?
+JP|OPENWRT_CONFIG_CONFIRM_DELETE=このスクリプトを削除しますか？
+
+US|OPENWRT_CONFIG_DELETE_CONFIRMED=Script has been deleted. Goodbye!
+JP|OPENWRT_CONFIG_DELETE_CONFIRMED=スクリプトを削除しました。さようなら！
+
+US|OPENWRT_CONFIG_DELETE_CANCELED=Script will be kept. Goodbye!
+JP|OPENWRT_CONFIG_DELETE_CANCELED=スクリプトは保持されます。さようなら！
+
+US|OPENWRT_CONFIG_DOWNLOADING=Downloading and executing: {0}
+JP|OPENWRT_CONFIG_DOWNLOADING=ダウンロードして実行中: {0}
+
+US|OPENWRT_CONFIG_DOWNLOAD_FAILED=Failed to download: {0}
+JP|OPENWRT_CONFIG_DOWNLOAD_FAILED=ダウンロードに失敗しました: {0}
+
+# =======================
 # system-config.sh
 # =======================
 # information() 関数
