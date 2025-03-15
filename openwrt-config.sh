@@ -29,8 +29,6 @@ printf "%s\n" "$(color white_black "$(get_message "MENU_REMOVE")")"
 
 # ダウンロード用データ - ループ問題修正
 menu_download() {
-    # デバッグ出力を抑制したコマンド実行
-    {
         download "internet-config.sh" "chmod" "run"
         download "system-config.sh" "chmod" "run"
         download "package-install.sh" "chmod" "run"
@@ -39,89 +37,126 @@ menu_download() {
         download "other-utilities.sh" "chmod" "run"
         echo "exit" "" ""
         echo "remove" "" ""
-    } 2>/dev/null
 }
 
-# 改良版 safe_sed_replace 関数 - 特殊文字を確実にエスケープ
-safe_sed_replace() {
-    local text="$1"
-    local pattern="$2"
-    local replacement="$3"
+# カラー表示関数
+color() {
+    local color_code=""
+    case "$1" in
+        "red") color_code="\033[1;31m" ;;
+        "green") color_code="\033[1;32m" ;;
+        "yellow") color_code="\033[1;33m" ;;
+        "blue") color_code="\033[1;34m" ;;
+        "magenta") color_code="\033[1;35m" ;;
+        "cyan") color_code="\033[1;36m" ;;
+        "white") color_code="\033[1;37m" ;;
+        "white_black") color_code="\033[7;40m" ;;
+        *) color_code="\033[0m" ;;
+    esac
+    shift
+    printf "%b%s%b" "$color_code" "$*" "\033[0m"
+}
+
+# メッセージ取得関数
+get_message() {
+    local key="$1"
+    local db_file="${BASE_DIR}/messages_base.db"
+    local lang_code="JP"
     
-    # 入力チェック
-    if [ -z "$text" ]; then
-        debug_log "Empty input text detected. Returning empty string." >&2
-        echo ""
-        return 0
+    if [ -f "${CACHE_DIR}/language.ch" ]; then
+        lang_code=$(cat "${CACHE_DIR}/language.ch")
     fi
     
-    if [ -z "$pattern" ]; then
-        debug_log "Empty pattern detected. Returning original text." >&2
-        echo "$text"
-        return 0
+    echo "DEBUG: Getting message: key=$key, language=$lang_code" >&2
+    
+    if [ ! -f "$db_file" ]; then
+        echo "DEBUG: Message database not found: $db_file" >&2
+        return 1
     fi
     
-    # パターンと置換文字列のエスケープ処理
-    local esc_pattern
-    esc_pattern=$(printf '%s' "$pattern" | sed 's/[\/&]/\\&/g')
+    local message=""
+    message=$(grep "^${lang_code}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
     
-    local esc_replacement
-    esc_replacement=$(printf '%s' "$replacement" | sed 's/[\/&]/\\&/g')
+    if [ -z "$message" ]; then
+        message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+    fi
     
-    # 単純な置換方法を使用
-    printf '%s' "$text" | tr "{$pattern}" "$replacement" 2>/dev/null || printf '%s' "$text"
+    if [ -z "$message" ]; then
+        echo "DEBUG: Message not found for key: $key" >&2
+        message="$key"
+    fi
+    
+    echo "$message"
+    return 0
 }
 
-# メニュー項目のフィルタリング - デバッグ出力を除去
-filter_menu_items() {
-    local input_file="$1"
-    local output_file="$2"
+# 文字正規化関数
+normalize_input() {
+    local input="$1"
+    local output="$input"
     
-    debug_log "Filtering menu items to remove debug output" >&2
+    echo "DEBUG: Starting character normalization" >&2
     
-    # デバッグ行を除去して新しいファイルに保存
-    grep -v "DEBUG:" "$input_file" > "$output_file" 2>/dev/null || cp "$input_file" "$output_file"
+    # 数字（0-9）: 全角→半角
+    output=$(echo "$output" | sed 's/０/0/g; s/１/1/g; s/２/2/g; s/３/3/g; s/４/4/g')
+    output=$(echo "$output" | sed 's/５/5/g; s/６/6/g; s/７/7/g; s/８/8/g; s/９/9/g')
     
-    debug_log "Menu items filtered and saved to $output_file" >&2
+    # アルファベット大文字（A-Z）: 全角→半角
+    output=$(echo "$output" | sed 's/Ａ/A/g; s/Ｂ/B/g; s/Ｃ/C/g; s/Ｄ/D/g; s/Ｅ/E/g')
+    output=$(echo "$output" | sed 's/Ｆ/F/g; s/Ｇ/G/g; s/Ｈ/H/g; s/Ｉ/I/g; s/Ｊ/J/g')
+    output=$(echo "$output" | sed 's/Ｋ/K/g; s/Ｌ/L/g; s/Ｍ/M/g; s/Ｎ/N/g; s/Ｏ/O/g')
+    output=$(echo "$output" | sed 's/Ｐ/P/g; s/Ｑ/Q/g; s/Ｒ/R/g; s/Ｓ/S/g; s/Ｔ/T/g')
+    output=$(echo "$output" | sed 's/Ｕ/U/g; s/Ｖ/V/g; s/Ｗ/W/g; s/Ｘ/X/g; s/Ｙ/Y/g; s/Ｚ/Z/g')
+    
+    # アルファベット小文字（a-z）: 全角→半角
+    output=$(echo "$output" | sed 's/ａ/a/g; s/ｂ/b/g; s/ｃ/c/g; s/ｄ/d/g; s/ｅ/e/g')
+    output=$(echo "$output" | sed 's/ｆ/f/g; s/ｇ/g/g; s/ｈ/h/g; s/ｉ/i/g; s/ｊ/j/g')
+    output=$(echo "$output" | sed 's/ｋ/k/g; s/ｌ/l/g; s/ｍ/m/g; s/ｎ/n/g; s/ｏ/o/g')
+    output=$(echo "$output" | sed 's/ｐ/p/g; s/ｑ/q/g; s/ｒ/r/g; s/ｓ/s/g; s/ｔ/t/g')
+    output=$(echo "$output" | sed 's/ｕ/u/g; s/ｖ/v/g; s/ｗ/w/g; s/ｘ/x/g; s/ｙ/y/g; s/ｚ/z/g')
+    
+    # 全角スペース→半角スペース
+    output=$(echo "$output" | sed 's/　/ /g')
+    
+    echo "DEBUG: Character normalization completed" >&2
+    printf "%s" "$output"
 }
 
-read_user_choice() {
-    local prompt_text="$1"
+# 確認入力処理関数
+confirm() {
+    local prompt="$1"
+    local response=""
     
-    # プロンプト表示
-    printf "%s " "$prompt_text"
+    printf "%s " "$(color cyan "$prompt")"
+    read -r response
     
-    # ユーザー入力を取得
-    local user_input=""
-    read -r user_input
+    # 入力を正規化
+    response=$(normalize_input "$response")
+    echo "DEBUG: User response: $response" >&2
     
-    # デバッグ情報を標準エラーに出力
-    debug_log "DEBUG" "User selected raw input: $user_input" >&2
-    
-    # サブシェルで正規化処理を実行し、標準出力のみを捕捉
-    local normalized_input
-    normalized_input=$(normalize_input "$user_input")
-    
-    debug_log "DEBUG" "Normalized input: $normalized_input" >&2
-    
-    # 正規化された入力のみを返す
-    printf "%s" "$normalized_input"
+    # 肯定的な回答かをチェック
+    case "$response" in
+        [Yy]|[Yy][Ee][Ss])
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
 }
 
-# メニューセレクター関数（メニュー表示と選択処理）
+# セレクター関数（メニュー表示と選択処理）
 selector() {
     local menu_title="$1"
     local menu_count=0
     local choice=""
     local i=0
-    local item_color=""
     local script_name=$(basename "$0" .sh)
     
-    # カラーコードの配列
+    # カラーリスト
     local color_list="red blue green magenta cyan yellow white white_black"
     
-    # メニューデータを取得して一時保存
-    local menu_data=""
+    # 一時ファイル
     local temp_file="${CACHE_DIR}/menu_selector_output.tmp"
     local filtered_file="${CACHE_DIR}/menu_filtered.tmp"
     
@@ -131,19 +166,13 @@ selector() {
     # メニューアイテムをキャプチャ
     menyu_selector > "$temp_file" 2>/dev/null
     
-    # デバッグメッセージをフィルタリング
-    grep -v "DEBUG:" "$temp_file" > "$filtered_file" 2>/dev/null || cp "$temp_file" "$filtered_file"
+    # デバッグ行をフィルタリング
+    grep -v "^DEBUG:" "$temp_file" > "$filtered_file" 2>/dev/null || cp "$temp_file" "$filtered_file"
     menu_count=$(wc -l < "$filtered_file")
     
-    # デバッグメッセージを標準エラー出力に送信
-    debug_log "DEBUG" "Menu items count after filtering: $menu_count" >&2
+    echo "DEBUG: Menu items count: $menu_count" >&2
     
-    # 画面クリア処理をデバッグ変数で制御
-    #if [ "$DEBUG_MODE" != "true" ]; then
-    #    clear
-    #fi
-    
-    # プレースホルダーの置換を簡易的に行う方法
+    # ヘッダー表示
     local header_text="$(get_message "CONFIG_HEADER")"
     header_text=$(echo "$header_text" | sed "s/{0}/$script_name/g" 2>/dev/null || echo "$header_text")
     header_text=$(echo "$header_text" | sed "s/{1}/$SCRIPT_VERSION/g" 2>/dev/null || echo "$header_text")
@@ -162,48 +191,42 @@ selector() {
     # 番号付きでメニュー項目を表示
     i=1
     while IFS= read -r line; do
-        # デバッグラインをスキップ（念のため）
-        if echo "$line" | grep -q "DEBUG:"; then
+        # デバッグ行をスキップ
+        if echo "$line" | grep -q "^DEBUG:"; then
             continue
         fi
         
-        # 色を決定（iに基づく）
+        # 色を決定
         local current_color=""
         current_color=$(echo "$color_list" | cut -d' ' -f$i 2>/dev/null)
         [ -z "$current_color" ] && current_color="white"
         
-        # 色付きの番号と項目を表示
+        # 番号と項目を表示
         printf " %s %s\n" "$(color "$current_color" "[${i}]:")" "$line"
         i=$((i + 1))
     done < "$filtered_file"
     
-    # 一時ファイルを削除
+    # 一時ファイル削除
     rm -f "$temp_file" "$filtered_file"
     
     # 選択プロンプト
     printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
     
-    # プレースホルダーの置換を簡易的に行う
     local prompt_text="$(get_message "CONFIG_SELECT_PROMPT")"
     prompt_text=$(echo "$prompt_text" | sed "s/{0}/$menu_count/g" 2>/dev/null || echo "$prompt_text")
-    
-    # ユーザー入力を安全に取得（サブシェルからの戻り値をキャプチャ）
     printf "%s " "$prompt_text"
     
     # ユーザー入力を読み取り
     read -r raw_choice
+    echo "DEBUG: User input: $raw_choice" >&2
     
-    # デバッグ出力は標準エラー出力へ
-    debug_log "DEBUG" "User selected raw input: $raw_choice" >&2
+    # 入力値を正規化
+    choice=$(normalize_input "$raw_choice")
+    echo "DEBUG: Normalized choice: $choice" >&2
     
-    # 入力値を正規化（サブシェルを使用）
-    choice=$( (normalize_input "$raw_choice") )
-    
-    debug_log "DEBUG" "Normalized input: $choice" >&2
-    
-    # 入力値チェック - POSIX互換の正規表現
+    # 数値チェック
     if ! echo "$choice" | grep -q '^[0-9][0-9]*$'; then
-        debug_log "DEBUG" "Invalid input: Not a number" >&2
+        echo "DEBUG: Invalid input (not a number)" >&2
         printf "%s\n" "$(get_message "CONFIG_ERROR_NOT_NUMBER")"
         sleep 2
         return 0
@@ -211,7 +234,7 @@ selector() {
     
     # 範囲チェック
     if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_count" ]; then
-        debug_log "DEBUG" "Input out of range: $choice (valid range: 1-$menu_count)" >&2
+        echo "DEBUG: Input out of range: $choice (valid: 1-$menu_count)" >&2
         local error_text="$(get_message "CONFIG_ERROR_INVALID_NUMBER")"
         error_text=$(echo "$error_text" | sed "s/{0}/$menu_count/g" 2>/dev/null || echo "$error_text")
         printf "%s\n" "$error_text"
@@ -219,65 +242,56 @@ selector() {
         return 0
     fi
     
-    # 選択アクションの実行
-    debug_log "DEBUG" "Processing menu selection: $choice" >&2
+    # 選択アクションを実行
+    echo "DEBUG: Processing menu selection: $choice" >&2
     execute_menu_action "$choice"
     
     return $?
 }
 
-# 選択メニュー実行関数 - ループ対策と範囲チェック強化
+# メニューアクション実行関数
 execute_menu_action() {
     local choice="$1"
-    local temp_file="${CACHE_DIR}/menu_download_commands.tmp"
+    local temp_file="${CACHE_DIR}/menu_commands.tmp"
     local command_line=""
     
-    # デバッグ情報をstderrに出力
-    debug_log "DEBUG" "Executing action for choice: $choice" >&2
+    echo "DEBUG: Executing action for choice: $choice" >&2
     
     # メニューコマンドを取得
     menu_download > "$temp_file" 2>/dev/null
     
-    # 選択行が範囲内かチェック
+    # 行数取得と範囲チェック
     local lines=$(wc -l < "$temp_file")
-    debug_log "DEBUG" "Menu has $lines lines, checking if choice $choice is valid" >&2
+    echo "DEBUG: Menu has $lines commands" >&2
     
-    # 選択値を整数として検証
-    if ! echo "$choice" | grep -q '^[0-9][0-9]*$'; then
-        debug_log "ERROR" "Invalid choice: not a number" >&2
-        printf "%s\n" "$(get_message "CONFIG_ERROR_NOT_NUMBER")"
-        rm -f "$temp_file" 2>/dev/null
-        return 0
-    fi
-    
-    # 範囲チェック
     if [ "$choice" -lt 1 ] || [ "$choice" -gt "$lines" ]; then
-        debug_log "ERROR" "Choice out of range: $choice (valid range: 1-$lines)" >&2
-        printf "%s\n" "$(get_message "CONFIG_ERROR_INVALID_NUMBER" | sed "s/{0}/$lines/g")"
-        rm -f "$temp_file" 2>/dev/null
+        echo "DEBUG: Choice out of range: $choice (valid: 1-$lines)" >&2
+        printf "%s\n" "$(get_message "CONFIG_ERROR_INVALID_NUMBER")"
+        rm -f "$temp_file"
         return 0
     fi
     
-    # コマンド行を安全に取得
-    command_line=$(sed -n "${choice}p" "$temp_file" 2>/dev/null)
-    debug_log "DEBUG" "Selected command line: '$command_line'" >&2
-    rm -f "$temp_file" 2>/dev/null
+    # コマンド行を取得
+    command_line=$(sed -n "${choice}p" "$temp_file")
+    rm -f "$temp_file"
     
-    # コマンド行が空の場合
+    echo "DEBUG: Selected command: $command_line" >&2
+    
+    # 空コマンドチェック
     if [ -z "$command_line" ]; then
-        debug_log "DEBUG" "Empty command line selected" >&2
+        echo "DEBUG: Empty command selected" >&2
         return 0
     fi
     
-    # exit処理（スクリプト終了）
-    if [ "$command_line" = "exit  " ]; then
+    # 特殊コマンド処理: exit
+    if [ "$command_line" = "exit" ] || [ "$command_line" = "exit  " ]; then
         printf "%s\n" "$(get_message "CONFIG_EXIT_CONFIRMED")"
         sleep 1
         return 255
     fi
     
-    # remove処理（スクリプトとディレクトリ削除）
-    if [ "$command_line" = "remove  " ]; then
+        # 特殊コマンド処理: remove
+    if [ "$command_line" = "remove" ] || [ "$command_line" = "remove  " ]; then
         if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
             printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
             sleep 1
@@ -294,13 +308,13 @@ execute_menu_action() {
         fi
     fi
     
-    # 通常コマンド実行（run モードでサブシェルで実行してループ防止）
-    debug_log "DEBUG" "Executing command: $command_line" >&2
-    (eval "$command_line") 2>/dev/null
-    local cmd_status=$?
-    debug_log "DEBUG" "Command execution completed with status: $cmd_status" >&2
+    # 通常コマンド実行
+    echo "DEBUG: Executing command: $command_line" >&2
+    ( eval "$command_line" )
+    local status=$?
+    echo "DEBUG: Command execution finished with status: $status" >&2
     
-    return $cmd_status
+    return $status
 }
 
 # メイン関数
