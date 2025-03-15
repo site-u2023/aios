@@ -44,16 +44,10 @@ selector() {
     local menu_count=0
     
     debug_log "DEBUG" "Loading menu display data"
-    selector_data=$(cat <<EOF
-$(menyu_selector)
-EOF
-)
+    selector_data=$(menyu_selector | cat)
     
     debug_log "DEBUG" "Loading menu download data"
-    download_data=$(cat <<EOF
-$(menu_download)
-EOF
-)
+    download_data=$(menu_download | cat)
     
     # メニュー項目数をカウント
     menu_count=$(echo "$selector_data" | wc -l)
