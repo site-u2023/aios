@@ -40,16 +40,14 @@ download "other-utilities.sh" "chmod" "load"
 selector() {
     local menu_title="$1"
     local menu_count=0
-    local selector_output=""
     local choice=""
+    local i=0
     
     debug_log "DEBUG" "Starting menu selector function"
     
-    # キャプチャ用一時ファイル
+    # メニューデータを取得して行数をカウント
     local temp_file="${CACHE_DIR}/menu_selector_output.tmp"
     menyu_selector > "$temp_file" 2>/dev/null
-    
-    # メニュー項目数をカウント
     menu_count=$(wc -l < "$temp_file")
     debug_log "DEBUG" "Menu contains $menu_count items"
     
@@ -60,8 +58,26 @@ selector() {
     [ -n "$menu_title" ] && printf "%s\n" "$(get_message "CONFIG_SECTION_TITLE" "$menu_title")"
     printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
     
-    # 一時ファイルからメニュー項目を表示
-    cat "$temp_file"
+    # 番号付きでメニュー項目を表示
+    i=1
+    while IFS= read -r line; do
+        local color_code=""
+        
+        # 行の最初にある色のコードを取得
+        color_code=$(echo "$line" | sed -n 's/.*color \([^ ]*\).*/\1/p')
+        
+        # メニュー項目番号と内容を表示
+        if [ -n "$color_code" ]; then
+            # 色コードが取得できた場合、それを使用
+            printf " %s%s\n" "$(color "$color_code" "[$i]: ")" "$line"
+        else
+            # 色コードが取得できなかった場合、デフォルト色
+            printf " [%d]: %s\n" "$i" "$line"
+        fi
+        
+        i=$((i + 1))
+    done < "$temp_file"
+    
     rm -f "$temp_file"
     
     # 選択プロンプト
@@ -87,28 +103,27 @@ selector() {
     fi
     
     # 選択アクションの実行
-    process_selection "$choice"
+    execute_menu_action "$choice"
+    
     return $?
 }
 
-# 選択されたメニュー項目を処理
-process_selection() {
-    local selected_number="$1"
-    local temp_file="${CACHE_DIR}/menu_download_output.tmp"
+# 選択メニュー実行関数
+execute_menu_action() {
+    local choice="$1"
+    local temp_file="${CACHE_DIR}/menu_download_commands.tmp"
     local command_line=""
     
-    debug_log "DEBUG" "Processing menu selection: $selected_number"
+    debug_log "DEBUG" "Processing menu selection: $choice"
     
-    # menu_download関数の出力をファイルに保存
+    # メニューコマンドを取得
     menu_download > "$temp_file" 2>/dev/null
-    
-    # 対応するダウンロードコマンドを取得
-    command_line=$(sed -n "${selected_number}p" "$temp_file")
+    command_line=$(sed -n "${choice}p" "$temp_file")
     rm -f "$temp_file"
     
     debug_log "DEBUG" "Selected command: $command_line"
     
-    # 特殊コマンド「exit」の処理
+    # 終了処理
     if [ "$command_line" = "\"exit\" \"\" \"\"" ]; then
         debug_log "DEBUG" "Exit option selected"
         
@@ -118,15 +133,17 @@ process_selection() {
             printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
             return 255
         else
+            debug_log "DEBUG" "User cancelled script deletion"
             printf "%s\n" "$(get_message "CONFIG_DELETE_CANCELED")"
             sleep 2
             return 0
         fi
     fi
     
-    # 通常コマンドの実行
+    # 通常コマンド実行
     debug_log "DEBUG" "Executing command: $command_line"
     eval "$command_line"
+    
     return $?
 }
 
@@ -134,7 +151,7 @@ process_selection() {
 main() {
     local ret=0
     
-    # キャッシュディレクトリを確保
+    # キャッシュディレクトリ確保
     [ ! -d "${CACHE_DIR}" ] && mkdir -p "${CACHE_DIR}"
     
     debug_log "DEBUG" "Starting menu config script"
