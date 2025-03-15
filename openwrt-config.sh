@@ -14,6 +14,19 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 
+menu_exit() {
+    printf "%s\n" "終了が確認されました。"
+    sleep 1
+    exit 0
+}
+
+remove_exit() {
+    printf "%s\n" "スクリプトと関連ディレクトリを削除しています..."
+    [ -f "$0" ] && rm -f "$0"
+    [ -d "$BASE_DIR" ] && rm -rf "$BASE_DIR"
+    exit 0
+}
+
 # メニュー表示用データ
 menyu_selector() {
     printf "%s\n" "$(color red "$(get_message "MENU_INTERNET")")"
@@ -28,180 +41,57 @@ menyu_selector() {
 
 # ダウンロード用データ
 menu_download() {
-    download "internet-config.sh" "chmod" "run"
-    download "system-config.sh" "chmod" "run"
-    download "package-install.sh" "chmod" "run"
-    download "adblocker-dns.sh" "chmod" "run"
-    download "accesspoint-setup.sh" "chmod" "run"
-    download "other-utilities.sh" "chmod" "run"
-    menu_exit
-    remove_exit
+    echo 'download "internet-config.sh" "chmod" "load"'
+    echo 'download "system-config.sh" "chmod" "load"'
+    echo 'download "package-install.sh" "chmod" "load"'
+    echo 'download "adblocker-dns.sh" "chmod" "load"'
+    echo 'download "accesspoint-setup.sh" "chmod" "load"'
+    echo 'download "other-utilities.sh" "chmod" "load"'
+    echo 'menu_exit'
+    echo 'remove_exit'
 }
 
-menu_exit() {
-    printf "%s\n" "$(get_message "CONFIG_EXIT_CONFIRMED")"
-    sleep 1
-    exit 0
-}
-
-remove_exit() {
-    if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
-        printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
-        sleep 1
-        [ -f "$0" ] && rm -f "$0"
-        [ -d "$BASE_DIR" ] && rm -rf "$BASE_DIR"
-        exit 0
-    fi
-}
-
-# セレクター関数（メニュー表示と選択処理）
+# メニュー表示と選択処理
 selector() {
-    local menu_title="$1"
-    local menu_count=0
-    local choice=""
-    local i=0
-    local script_name=$(basename "$0" .sh)
+    choice=""
     
-    # カラーリスト
-    local color_list="red blue green magenta cyan yellow white white_black"
-    
-    # 一時ファイル
-    local temp_file="${CACHE_DIR}/menu_selector_output.tmp"
-    local filtered_file="${CACHE_DIR}/menu_filtered.tmp"
-    
-    # ディレクトリ存在確認
-    [ ! -d "${CACHE_DIR}" ] && mkdir -p "${CACHE_DIR}"
-    
-    # メニューアイテムをキャプチャ
-    menyu_selector > "$temp_file" 2>/dev/null
-    
-    # デバッグ行をフィルタリング
-    grep -v "^DEBUG:" "$temp_file" > "$filtered_file" 2>/dev/null || cp "$temp_file" "$filtered_file"
-    menu_count=$(wc -l < "$filtered_file")
-    
-    echo "DEBUG: Menu items count: $menu_count" >&2
-    
-    # ヘッダー表示
-    local header_text="$(get_message "CONFIG_HEADER")"
-    header_text=$(echo "$header_text" | sed "s/{0}/$script_name/g" 2>/dev/null || echo "$header_text")
-    header_text=$(echo "$header_text" | sed "s/{1}/$SCRIPT_VERSION/g" 2>/dev/null || echo "$header_text")
-    printf "%s\n" "$header_text"
-    
-    printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
-    
-    if [ -n "$menu_title" ]; then
-        local title_text="$(get_message "CONFIG_SECTION_TITLE")"
-        title_text=$(echo "$title_text" | sed "s/{0}/$menu_title/g" 2>/dev/null || echo "$title_text")
-        printf "%s\n" "$title_text"
-    fi
-    
-    printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
-    
-    # 番号付きでメニュー項目を表示
-    i=1
-    while IFS= read -r line; do
-        # デバッグ行をスキップ
-        if echo "$line" | grep -q "^DEBUG:"; then
-            continue
-        fi
-        
-        # 色を決定
-        local current_color=""
-        current_color=$(echo "$color_list" | cut -d' ' -f$i 2>/dev/null)
-        [ -z "$current_color" ] && current_color="white"
-        
-        # 番号と項目を表示
-        printf " %s %s\n" "$(color "$current_color" "[${i}]:")" "$line"
-        i=$((i + 1))
-    done < "$filtered_file"
-    
-    # 一時ファイル削除
-    rm -f "$temp_file" "$filtered_file"
+    # メニュー表示
+    menyu_selector
     
     # 選択プロンプト
-    printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
-    
-    local prompt_text="$(get_message "CONFIG_SELECT_PROMPT")"
-    prompt_text=$(echo "$prompt_text" | sed "s/{0}/$menu_count/g" 2>/dev/null || echo "$prompt_text")
-    printf "%s " "$prompt_text"
+    printf "番号を選択してください (1-8): "
     
     # ユーザー入力を読み取り
-    read -r raw_choice
-    echo "DEBUG: User input: $raw_choice" >&2
-    
-    # 入力値を正規化
-    choice=$(normalize_input "$raw_choice")
-    echo "DEBUG: Normalized choice: $choice" >&2
+    read -r choice
+    echo "DEBUG: User input: $choice" >&2
     
     # 数値チェック
     if ! echo "$choice" | grep -q '^[0-9][0-9]*$'; then
-        echo "DEBUG: Invalid input (not a number)" >&2
-        printf "%s\n" "$(get_message "CONFIG_ERROR_NOT_NUMBER")"
+        printf "無効な入力です。もう一度入力してください。\n"
         sleep 2
         return 0
     fi
+            
+    tmp_file="${CACHE_DIR}/menu_commands.tmp"
     
-    # 範囲チェック
-    if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_count" ]; then
-        echo "DEBUG: Input out of range: $choice (valid: 1-$menu_count)" >&2
-        local error_text="$(get_message "CONFIG_ERROR_INVALID_NUMBER")"
-        error_text=$(echo "$error_text" | sed "s/{0}/$menu_count/g" 2>/dev/null || echo "$error_text")
-        printf "%s\n" "$error_text"
-        sleep 2
-        return 0
-    fi
-    
-    # 選択アクションを実行
-    echo "DEBUG: Processing menu selection: $choice" >&2
-    execute_menu_action "$choice"
-    
-    return $?
-}
-
-execute_menu_action() {
-    local choice="$1"
-    local temp_file="${CACHE_DIR}/menu_commands.tmp"
-    local command_line
-
-    echo "DEBUG: Executing action for choice: $choice" >&2
-
     # メニューコマンドを取得
-    menu_download > "$temp_file"
-
-    # 行数取得と範囲チェック
-    local lines=$(wc -l < "$temp_file")
-    if [ "$choice" -lt 1 ] || [ "$choice" -gt "$lines" ]; then
-        echo "DEBUG: Choice out of range: $choice (valid: 1-$lines)" >&2
-        printf "%s\n" "$(get_message "CONFIG_ERROR_INVALID_NUMBER")"
-        rm -f "$temp_file"
-        return 0
-    fi
-
-    # コマンド行を取得
-    command_line=$(sed -n "${choice}p" "$temp_file")
-    rm -f "$temp_file"
-
-    echo "DEBUG: Running command: $command_line" >&2
-    eval "$command_line"
-
-    local status=$?
-    echo "DEBUG: Command execution finished with status: $status" >&2
-
-    return $status
+    menu_download > "$tmp_file"
+    
+    # 選択した行を抽出して表示
+    selected_line=$(sed -n "${choice}p" "$tmp_file")
+    echo "DEBUG: Extracted line: $selected_line"
+    
+    # コマンド行を実行
+    eval "$selected_line"
+    
+    # クリーンアップ
+    rm -f "$tmp_file"
 }
 
 # メイン関数
 main() {
-    local ret=0
-    
-    # メインループ
     while true; do
-        selector "$(get_message "MENU_TITLE")"
-        ret=$?
-        
-        if [ "$ret" -eq 255 ]; then
-            break
-        fi
+        selector
     done
 }
 
