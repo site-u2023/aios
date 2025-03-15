@@ -28,14 +28,14 @@ menyu_selector() {
 
 # ダウンロード用データ
 menu_download() {
-    download "internet-config.sh" "chmod" "run"
-    download "system-config.sh" "chmod" "run"
-    download "package-install.sh" "chmod" "run"
-    download "adblocker-dns.sh" "chmod" "run"
-    download "accesspoint-setup.sh" "chmod" "run"
-    download "other-utilities.sh" "chmod" "run"
-    menu_exit
-    remove_exit
+    echo 'download "internet-config.sh" "chmod" "run"'
+    echo 'download "system-config.sh" "chmod" "run"'
+    echo 'download "package-install.sh" "chmod" "run"'
+    echo 'download "adblocker-dns.sh" "chmod" "run"'
+    echo 'download "accesspoint-setup.sh" "chmod" "run"'
+    echo 'download "other-utilities.sh" "chmod" "run"'
+    echo "menu_exit"
+    echo "remove_exit"
 }
 
 menu_exit() {
@@ -166,7 +166,7 @@ execute_menu_action() {
     echo "DEBUG: Executing action for choice: $choice" >&2
 
     # メニューコマンドを取得
-    menu_download > "$temp_file" 2>&1
+    menu_download > "$temp_file"
 
     # 行数取得と範囲チェック
     local lines=$(wc -l < "$temp_file")
