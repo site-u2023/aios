@@ -250,9 +250,6 @@ JP|MENU_ADBLOCKER=広告ブロッカーとDNS暗号化のインストール
 US|MENU_ACCESSPOINT=Access point connection setup (Dumb/Bridge)
 JP|MENU_ACCESSPOINT=アクセスポイント接続設定 (ダム/ブリッジモード)
 
-US|MENU_HOMEASSISTANT=Install Home Assistant (Only v23.05)
-JP|MENU_HOMEASSISTANT=Home Assistantのインストール (v23.05のみ)
-
 US|MENU_UTILITIES=Other utilities: Button, IPERF3, SAMBA4, LBS, DFS Check, Guest Wi-Fi
 JP|MENU_UTILITIES=その他: ボタン設定, IPERF3, SAMBA4, LBS, DFSチェック, ゲストWiFi
 
