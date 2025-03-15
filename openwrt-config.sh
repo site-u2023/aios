@@ -290,7 +290,7 @@ execute_menu_action() {
         return 255
     fi
     
-        # 特殊コマンド処理: remove
+    # 特殊コマンド処理: remove
     if [ "$command_line" = "remove" ] || [ "$command_line" = "remove  " ]; then
         if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
             printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
