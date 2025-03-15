@@ -112,9 +112,9 @@ selector() {
     debug_log "Menu items count after filtering: $menu_count"
     
     # 画面クリア処理をデバッグ変数で制御
-    if [ "$DEBUG_MODE" != "true" ]; then
-        clear
-    fi
+    #if [ "$DEBUG_MODE" != "true" ]; then
+    #    clear
+    #fi
     
     # プレースホルダーの置換を簡易的に行う方法
     local header_text="$(get_message "CONFIG_HEADER")"
