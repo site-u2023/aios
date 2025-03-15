@@ -36,13 +36,8 @@ menu_download() (
 "8" "exit" "" ""
 )
 
-# メニュー項目を表示する共通関数
+# メニュー表示用の共通関数
 print_menu() {
-    printf '%s %s %s\n' "$1" "$2" "$3"
-}
-
-# ダウンロードメニュー用の表示関数
-print_download() {
     printf '%s %s %s\n' "$1" "$2" "$3"
 }
 
