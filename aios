@@ -549,22 +549,6 @@ github_api_request() {
     fi
 }
 
-get_github_token() {
-    if [ -f "$GITHUB_TOKEN_FILE" ] && [ -r "$GITHUB_TOKEN_FILE" ]; then
-        # 単純に改行だけ削除したトークンを返す（より堅牢）
-        cat "$GITHUB_TOKEN_FILE" | tr -d '\n\r' | head -1
-        return 0
-    fi
-    
-    # 環境変数からの取得
-    if [ -n "$GITHUB_TOKEN" ]; then
-        echo "$GITHUB_TOKEN"
-        return 0
-    fi
-    
-    return 1
-}
-
 save_github_token() {
     token="$1"
     
