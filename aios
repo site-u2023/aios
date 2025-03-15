@@ -1083,7 +1083,7 @@ download_finalize() {
     fi
     
     # 出力メッセージの作成
-    local message="${status_message}: ${file_name} - Version: ${clean_remote_version} ${auth_message}"
+    local message="${status_message}: ${file_name} ${clean_remote_version} ${auth_message}"
     if [ -n "$action_message" ]; then
         message="${message} (${action_message})"
     fi
@@ -1277,7 +1277,7 @@ check_option() {
     export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET HELP
 
     # デバッグ情報を出力
-    debug_log "DEBUG" "aios - Version: $SCRIPT_VERSION"
+    debug_log "DEBUG" "$BIN_FILE: $SCRIPT_VERSION"
     debug_log "DEBUG" "check_option received before args: $ORIGINAL_ARGS"
     debug_log "DEBUG" "check_option: MODE=$MODE, SELECTED_LANGUAGE=$SELECTED_LANGUAGE DEBUG_MODE=$DEBUG_MODE DEBUG_LEVEL=$DEBUG_LEVEL DRY_RUN=$DRY_RUN LOGFILE=$LOGFILE FORCE=$FORCE RESET=$RESET HELP=$HELP"
 
