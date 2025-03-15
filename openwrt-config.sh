@@ -199,13 +199,23 @@ execute_menu_action() {
     local temp_file="${CACHE_DIR}/menu_download_commands.tmp"
     local command_line=""
     
-    # ディレクトリ存在確認
-    [ ! -d "${CACHE_DIR}" ] && mkdir -p "${CACHE_DIR}"
+    debug_log "Executing action for choice: $choice"
     
     # メニューコマンドを取得
     menu_download > "$temp_file" 2>/dev/null
+    
+    # 選択行が範囲内かチェック
+    local lines=$(wc -l < "$temp_file")
+    debug_log "Menu has $lines lines, checking if choice $choice is valid"
+    
+    if [ "$choice" -lt 1 ] || [ "$choice" -gt "$lines" ]; then
+        debug_log "Choice out of range: $choice (valid range: 1-$lines)"
+        printf "%s\n" "$(get_message "CONFIG_ERROR_INVALID_NUMBER")"
+        return 0
+    fi
+    
     command_line=$(sed -n "${choice}p" "$temp_file" 2>/dev/null || echo "")
-    debug_log "Selected command: $command_line"
+    debug_log "Selected command line: '$command_line'"
     rm -f "$temp_file"
     
     # コマンド行が空の場合
