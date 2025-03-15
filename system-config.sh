@@ -75,9 +75,9 @@ information() {
     local zonename_code=$(cat "${CACHE_DIR}/zonename.ch")
     local timezone_code=$(cat "${CACHE_DIR}/timezone.ch")
 
-    echo "$(color green "$(get_message "MSG_INFO_LANG_CODE" "code=${lang_code}")")"
-    echo "$(color green "$(get_message "MSG_INFO_ZONENAME_CODE" "code=${zonename_code}")")"
-    echo "$(color green "$(get_message "MSG_INFO_TIMEZONE_CODE" "code=${timezone_code}")")"
+    echo "$(color green "$(get_message "MSG_INFO_LANG_CODE" "code=$lang_code")")"
+    echo "$(color green "$(get_message "MSG_INFO_ZONENAME_CODE" "code=$zonename_code")")"
+    echo "$(color green "$(get_message "MSG_INFO_TIMEZONE_CODE" "code=$timezone_code")")"
 }
 
 # set_device_name_password: デバイス名とパスワードの設定を行う
