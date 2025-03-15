@@ -14,26 +14,26 @@ DEBUG=1
 
 # メニュー表示用データ
 menyu_selector() (
-"1" "red" "MENU_INTERNET" 
-"2" "blue" "MENU_SYSTEM"
-"3" "green" "MENU_PACKAGES"
-"4" "magenta" "MENU_ADBLOCKER"
-"5" "cyan" "MENU_ACCESSPOINT"
-"6" "yellow" "MENU_HOMEASSISTANT"
-"7" "white" "MENU_OTHERS"
-"8" "white_black" "MENU_EXIT"
+printf "%s\n" "$(color red "$(get_message "MENU_INTERNET")")"
+printf "%s\n" "$(color blue "$(get_message "MENU_SYSTEM")")"
+printf "%s\n" "$(color green "$(get_message "MENU_PACKAGES")")"
+printf "%s\n" "$(color magenta "$(get_message "MENU_ADBLOCKER")")"
+printf "%s\n" "$(color cyan "$(get_message "MENU_ACCESSPOINT")")"
+printf "%s\n" "$(color yellow "$(get_message "MENU_HOMEASSISTANT")")"
+printf "%s\n" "$(color white "$(get_message "MENU_OTHERS")")"
+printf "%s\n" "$(color white_black "$(get_message "MENU_EXIT")")"
 )
 
 # ダウンロード用データ
 menu_download() (
-"1" "internet-setup.sh" "chmod" "load"
-"2" "system-setup.sh" "chmod" "load"
-"3" "package-install.sh" "chmod" "load"
-"4" "adblocker-dns.sh" "chmod" "load"
-"5" "accesspoint-setup.sh" "chmod" "load"
-"6" "homeassistant-install.sh" "chmod" "load"
-"7" "other-utilities.sh" "chmod" "load"
-"8" "exit" "" ""
+download "internet-setup.sh" "chmod" "load"
+download "system-setup.sh" "chmod" "load"
+download "package-install.sh" "chmod" "load"
+download "adblocker-dns.sh" "chmod" "load"
+download "accesspoint-setup.sh" "chmod" "load"
+download "homeassistant-install.sh" "chmod" "load"
+download "other-utilities.sh" "chmod" "load"
+"exit" "" ""
 )
 
 # メニュー表示用基本関数
