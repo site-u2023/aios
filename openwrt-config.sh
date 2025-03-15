@@ -143,57 +143,56 @@ selector() {
     return $?
 }
 
-# メニューアクション実行関数
 execute_menu_action() {
     local choice="$1"
     local temp_file="${CACHE_DIR}/menu_commands.tmp"
     local command_line=""
-    
+
     echo "DEBUG: Executing action for choice: $choice" >&2
-    
+
     # メニューコマンドを取得
     menu_download > "$temp_file" 2>/dev/null
-    
+
     # 行数取得と範囲チェック
     local lines=$(wc -l < "$temp_file")
     echo "DEBUG: Menu has $lines commands" >&2
-    
+
     if [ "$choice" -lt 1 ] || [ "$choice" -gt "$lines" ]; then
         echo "DEBUG: Choice out of range: $choice (valid: 1-$lines)" >&2
         printf "%s\n" "$(get_message "CONFIG_ERROR_INVALID_NUMBER")"
         rm -f "$temp_file"
         return 0
     fi
-    
+
     # コマンド行を取得
     command_line=$(sed -n "${choice}p" "$temp_file")
     rm -f "$temp_file"
-    
+
     echo "DEBUG: Selected command: $command_line" >&2
-    
+
     # 空コマンドチェック
-    if [ -z "$command_line" ];then
+    if [ -z "$command_line" ]; then
         echo "DEBUG: Empty command selected" >&2
         return 0
     fi
-    
+
     # 特殊コマンド処理: exit
     if [ "$command_line" = "exit" ] || [ "$command_line" = "exit  " ]; then
         printf "%s\n" "$(get_message "CONFIG_EXIT_CONFIRMED")"
         sleep 1
         return 255
     fi
-    
+
     # 特殊コマンド処理: remove
     if [ "$command_line" = "remove" ] || [ "$command_line" = "remove  " ]; then
         if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
             printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
             sleep 1
-            
+
             # スクリプト自身とBASE_DIRを削除
             [ -f "$0" ] && rm -f "$0"
             [ -d "$BASE_DIR" ] && rm -rf "$BASE_DIR"
-            
+
             return 255
         else
             printf "%s\n" "$(get_message "CONFIG_DELETE_CANCELED")"
@@ -201,13 +200,13 @@ execute_menu_action() {
             return 0
         fi
     fi
-    
+
     # 通常コマンド実行
     echo "DEBUG: Executing command: $command_line" >&2
     ( eval "$command_line" )
     local status=$?
     echo "DEBUG: Command execution finished with status: $status" >&2
-    
+
     return $status
 }
 
