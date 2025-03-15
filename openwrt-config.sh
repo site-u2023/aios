@@ -47,13 +47,13 @@ safe_sed_replace() {
     
     # 入力チェック
     if [ -z "$text" ]; then
-        debug_log "Empty input text detected. Returning empty string."
+        debug_log "Empty input text detected. Returning empty string." >&2
         echo ""
         return 0
     fi
     
     if [ -z "$pattern" ]; then
-        debug_log "Empty pattern detected. Returning original text."
+        debug_log "Empty pattern detected. Returning original text." >&2
         echo "$text"
         return 0
     fi
@@ -74,12 +74,12 @@ filter_menu_items() {
     local input_file="$1"
     local output_file="$2"
     
-    debug_log "Filtering menu items to remove debug output"
+    debug_log "Filtering menu items to remove debug output" >&2
     
     # デバッグ行を除去して新しいファイルに保存
-    grep -v "DEBUG:" "$input_file" > "$output_file" || cp "$input_file" "$output_file"
+    grep -v "DEBUG:" "$input_file" > "$output_file" 2>/dev/null || cp "$input_file" "$output_file"
     
-    debug_log "Menu items filtered and saved to $output_file"
+    debug_log "Menu items filtered and saved to $output_file" >&2
 }
 
 read_user_choice() {
@@ -132,7 +132,8 @@ selector() {
     grep -v "DEBUG:" "$temp_file" > "$filtered_file" 2>/dev/null || cp "$temp_file" "$filtered_file"
     menu_count=$(wc -l < "$filtered_file")
     
-    debug_log "Menu items count after filtering: $menu_count"
+    # デバッグメッセージを標準エラー出力に送信
+    debug_log "DEBUG" "Menu items count after filtering: $menu_count" >&2
     
     # 画面クリア処理をデバッグ変数で制御
     #if [ "$DEBUG_MODE" != "true" ]; then
@@ -182,18 +183,24 @@ selector() {
     # プレースホルダーの置換を簡易的に行う
     local prompt_text="$(get_message "CONFIG_SELECT_PROMPT")"
     prompt_text=$(echo "$prompt_text" | sed "s/{0}/$menu_count/g" 2>/dev/null || echo "$prompt_text")
+    
+    # ユーザー入力を安全に取得（サブシェルからの戻り値をキャプチャ）
     printf "%s " "$prompt_text"
     
-    read -r choice
-    debug_log "User selected raw input: $choice"
+    # ユーザー入力を読み取り
+    read -r raw_choice
     
-    # 入力値を正規化
-    choice=$(normalize_input "$choice")
-    debug_log "Normalized input: $choice"
+    # デバッグ出力は標準エラー出力へ
+    debug_log "DEBUG" "User selected raw input: $raw_choice" >&2
+    
+    # 入力値を正規化（サブシェルを使用）
+    choice=$( (normalize_input "$raw_choice") )
+    
+    debug_log "DEBUG" "Normalized input: $choice" >&2
     
     # 入力値チェック - POSIX互換の正規表現
     if ! echo "$choice" | grep -q '^[0-9][0-9]*$'; then
-        debug_log "Invalid input: Not a number"
+        debug_log "DEBUG" "Invalid input: Not a number" >&2
         printf "%s\n" "$(get_message "CONFIG_ERROR_NOT_NUMBER")"
         sleep 2
         return 0
@@ -201,7 +208,7 @@ selector() {
     
     # 範囲チェック
     if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_count" ]; then
-        debug_log "Input out of range: $choice (valid range: 1-$menu_count)"
+        debug_log "DEBUG" "Input out of range: $choice (valid range: 1-$menu_count)" >&2
         local error_text="$(get_message "CONFIG_ERROR_INVALID_NUMBER")"
         error_text=$(echo "$error_text" | sed "s/{0}/$menu_count/g" 2>/dev/null || echo "$error_text")
         printf "%s\n" "$error_text"
@@ -210,7 +217,7 @@ selector() {
     fi
     
     # 選択アクションの実行
-    debug_log "Processing menu selection: $choice"
+    debug_log "DEBUG" "Processing menu selection: $choice" >&2
     execute_menu_action "$choice"
     
     return $?
