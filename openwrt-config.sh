@@ -151,7 +151,14 @@ execute_menu_action() {
     echo "DEBUG: Executing action for choice: $choice" >&2
 
     # メニューコマンドを取得
+    echo "DEBUG: Calling menu_download function" >&2
     menu_download > "$temp_file" 2>/dev/null
+
+    echo "DEBUG: Checking if $temp_file exists and is not empty" >&2
+    if [ ! -s "$temp_file" ]; then
+        echo "DEBUG: $temp_file does not exist or is empty" >&2
+        return 1
+    fi
 
     # 行数取得と範囲チェック
     local lines=$(wc -l < "$temp_file")
@@ -165,6 +172,7 @@ execute_menu_action() {
     fi
 
     # コマンド行を取得
+    echo "DEBUG: Retrieving command line from $temp_file" >&2
     command_line=$(sed -n "${choice}p" "$temp_file")
     rm -f "$temp_file"
 
@@ -209,7 +217,6 @@ execute_menu_action() {
 
     return $status
 }
-
 # メイン関数
 main() {
     local ret=0
