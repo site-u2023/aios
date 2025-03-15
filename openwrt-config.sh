@@ -51,7 +51,7 @@ selector() {
     
     # メニュー項目数をカウント
     menu_count=$(echo "$selector_data" | wc -l)
-    debug_log "INFO" "Menu contains $menu_count items"
+    debug_log "DEBUG" "Menu contains $menu_count items"
     
     clear
     echo_message "CONFIG_HEADER" "$SCRIPT_NAME" "$SCRIPT_VERSION"
@@ -100,7 +100,7 @@ selector() {
     # 終了オプションの処理
     if [ "$script" = "exit" ]; then
         if confirm "CONFIG_CONFIRM_DELETE"; then
-            debug_log "INFO" "User requested script deletion"
+            debug_log "DEBUG" "User requested script deletion"
             rm -f "$0"
             echo_message "CONFIG_DELETE_CONFIRMED"
         else
@@ -112,7 +112,7 @@ selector() {
     # ダウンロードと実行
     echo_message "CONFIG_DOWNLOADING" "$script"
     if download "$script" "$opt1" "$opt2"; then
-        debug_log "INFO" "Successfully processed $script"
+        debug_log "DEBUG" "Successfully processed $script"
     else
         echo_message "CONFIG_DOWNLOAD_FAILED" "$script"
         sleep 2
@@ -123,11 +123,10 @@ selector() {
 
 # メイン関数
 main() {
-    debug_log "INFO" "Starting OpenWrt Config script v$SCRIPT_VERSION"
     
     # メインループ
     while true; do
-        selector "OpenWrt 設定メニュー"
+        selector "$(echo_message "MENU_TITLE")"
     done
 }
 
