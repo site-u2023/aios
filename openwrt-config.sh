@@ -1,25 +1,27 @@
 #!/bin/sh
 
 # =========================================================
-# 📌 OpenWrt 設定スクリプト for AIOS
-# 🚀 最終更新: 2025-03-15 06:07
+# 📌 設定スクリプト
+# 🚀 最終更新: 2025-03-15 06:37
 # 
 # 🏷️ ライセンス: CC0 (パブリックドメイン)
 # 🎯 互換性: OpenWrt >= 19.07
 # =========================================================
 
-SCRIPT_VERSION="2025.03.15-06:07"
+SCRIPT_VERSION="2025.03.15-06:37"
+SCRIPT_NAME=$(basename "$0" .sh)
+DEBUG=1
 
 # メニュー表示用データ
 menyu_selector() (
-menyu_selector() (
-"1" "red" "MENU_INTERNET_SETUP" 
-"2" "blue" "MENU_SYSTEM_SETUP"
-"3" "green" "MENU_PACKAGE_INSTALL"
+"1" "red" "MENU_INTERNET" 
+"2" "blue" "MENU_SYSTEM"
+"3" "green" "MENU_PACKAGES"
 "4" "magenta" "MENU_ADBLOCKER"
 "5" "cyan" "MENU_ACCESSPOINT"
-"6" "white" "MENU_UTILITIES"
-"7" "white_black" "MENU_EXIT"
+"6" "yellow" "MENU_HOMEASSISTANT"
+"7" "white" "MENU_OTHERS"
+"8" "white_black" "MENU_EXIT"
 )
 
 # ダウンロード用データ
@@ -29,11 +31,12 @@ menu_download() (
 "3" "package-install.sh" "chmod" "load"
 "4" "adblocker-dns.sh" "chmod" "load"
 "5" "accesspoint-setup.sh" "chmod" "load"
-"6" "other-utilities.sh" "chmod" "load"
-"7" "exit" "" ""
+"6" "homeassistant-install.sh" "chmod" "load"
+"7" "other-utilities.sh" "chmod" "load"
+"8" "exit" "" ""
 )
 
-# メニューセレクター関数
+# メニューセレクター関数（メニュー表示と選択処理）
 selector() {
     local menu_title="$1"
     local selector_data=""
@@ -51,10 +54,10 @@ selector() {
     debug_log "INFO" "Menu contains $menu_count items"
     
     clear
-    echo_message "OPENWRT_CONFIG_HEADER" "$SCRIPT_VERSION"
-    echo_message "OPENWRT_CONFIG_SEPARATOR"
-    [ -n "$menu_title" ] && echo_message "OPENWRT_CONFIG_SECTION_TITLE" "$menu_title"
-    echo_message "OPENWRT_CONFIG_SEPARATOR"
+    echo_message "CONFIG_HEADER" "$SCRIPT_NAME" "$SCRIPT_VERSION"
+    echo_message "CONFIG_SEPARATOR"
+    [ -n "$menu_title" ] && echo_message "CONFIG_SECTION_TITLE" "$menu_title"
+    echo_message "CONFIG_SEPARATOR"
     
     # メニュー項目表示（多言語対応版）
     echo "$selector_data" | while IFS= read -r line; do
@@ -71,69 +74,48 @@ selector() {
         fi
     done
     
-    echo_message "OPENWRT_CONFIG_SEPARATOR"
-    echo_message "OPENWRT_CONFIG_SELECT_PROMPT" "$menu_count"
-    
-    # 選択を取得
+    echo_message "CONFIG_SEPARATOR"
+    printf "%s" "$(echo_message "CONFIG_SELECT_PROMPT" "$menu_count")"
     read -r choice
-    debug_log "DEBUG" "User selected option: $choice"
     
-    # 選択が有効かチェック
-    if ! echo "$choice" | grep -q "^[0-9]\+$"; then
-        debug_log "WARN" "Invalid input: Not a number"
-        echo_message "OPENWRT_CONFIG_ERROR_NOT_NUMBER"
-        sleep 1
-        return 1
+    # 入力値チェック
+    if ! echo "$choice" | grep -q '^[0-9]\+$'; then
+        echo_message "CONFIG_ERROR_NOT_NUMBER"
+        sleep 2
+        return 0
     fi
     
     if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_count" ]; then
-        debug_log "WARN" "Invalid choice: $choice (valid range: 1-$menu_count)"
-        echo_message "OPENWRT_CONFIG_ERROR_INVALID_NUMBER" "$menu_count"
-        sleep 1
-        return 1
+        echo_message "CONFIG_ERROR_INVALID_NUMBER" "$menu_count"
+        sleep 2
+        return 0
     fi
     
-    # 選択に対応するダウンロードデータを取得
-    local selected_item=$(echo "$download_data" | grep -v "^$" | grep "^\"$choice\"")
-    debug_log "INFO" "Selected item data: $selected_item"
+    # 選択アクションの実行
+    local line_data=$(echo "$download_data" | sed -n "${choice}p")
+    local script=$(echo "$line_data" | cut -d '"' -f 2)
+    local opt1=$(echo "$line_data" | cut -d '"' -f 4)
+    local opt2=$(echo "$line_data" | cut -d '"' -f 6)
     
-    # 行の要素を解析
-    local script=$(echo "$selected_item" | cut -d '"' -f 4)
-    local opt1=$(echo "$selected_item" | cut -d '"' -f 6)
-    local opt2=$(echo "$selected_item" | cut -d '"' -f 8)
-    
-    debug_log "INFO" "Processing selection: script=$script, options=$opt1 $opt2"
-    
-    # スクリプト実行
+    # 終了オプションの処理
     if [ "$script" = "exit" ]; then
-        debug_log "INFO" "Exit option selected"
-        if confirm "OPENWRT_CONFIG_CONFIRM_DELETE"; then
-            debug_log "INFO" "User confirmed script deletion"
+        if confirm "CONFIG_CONFIRM_DELETE"; then
+            debug_log "INFO" "User requested script deletion"
             rm -f "$0"
-            echo_message "OPENWRT_CONFIG_DELETE_CONFIRMED"
+            echo_message "CONFIG_DELETE_CONFIRMED"
         else
-            debug_log "INFO" "User chose not to delete script"
-            echo_message "OPENWRT_CONFIG_DELETE_CANCELED"
+            echo_message "CONFIG_DELETE_CANCELED"
         fi
-        exit 0
+        return 255
+    fi
+    
+    # ダウンロードと実行
+    echo_message "CONFIG_DOWNLOADING" "$script"
+    if download "$script" "$opt1" "$opt2"; then
+        debug_log "INFO" "Successfully processed $script"
     else
-        # スクリプトをダウンロードして実行
-        debug_log "INFO" "Downloading and executing $script"
-        echo_message "OPENWRT_CONFIG_DOWNLOADING" "$script"
-        
-        if [ -n "$opt1" ] && [ -n "$opt2" ]; then
-            download "$script" "$opt1" "$opt2"
-        elif [ -n "$opt1" ]; then
-            download "$script" "$opt1"
-        else
-            download "$script"
-        fi
-        
-        if [ $? -ne 0 ]; then
-            debug_log "ERROR" "Failed to download or execute $script"
-            echo_message "OPENWRT_CONFIG_DOWNLOAD_FAILED" "$script"
-            sleep 2
-        fi
+        echo_message "CONFIG_DOWNLOAD_FAILED" "$script"
+        sleep 2
     fi
     
     return 0
