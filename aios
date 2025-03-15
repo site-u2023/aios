@@ -752,7 +752,7 @@ get_commit_version() {
     
     # 応答の確認
     if [ ! -s "$temp_file" ]; then
-        debug_log "WARN" "Empty response from GitHub API. Attempting direct file download"
+        debug_log "DEBUG" "Empty response from GitHub API. Attempting direct file download"
         # APIに失敗した場合は直接ファイルをダウンロード
         local direct_file="/tmp/aios_direct_file.tmp"
         if wget -q -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
