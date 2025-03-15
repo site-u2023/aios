@@ -129,7 +129,9 @@ selector() {
     
     debug_output "DEBUG: Menu contains $menu_count items"
     
+    if [ "$DEBUG_MODE" != "true" ]; then
     clear
+    fi
     
     # プレースホルダーの置換を確実に行うため、直接変数を代入
     local header_text="$(get_message "CONFIG_HEADER")"
