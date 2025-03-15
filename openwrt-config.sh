@@ -12,14 +12,15 @@ SCRIPT_VERSION="2025.03.15-06:07"
 
 # メニュー表示用データ
 menyu_selector() (
-"1" "red" "インターネット接続設定 (MAP-e, DS-LITE, PPPoE)" 
-"2" "blue" "システム初期設定 (ホスト名,パスワード,WiFi等)"
-"3" "green" "推奨パッケージのインストール (自動または選択式)"
-"4" "magenta" "広告ブロッカーとDNS暗号化のインストール"
-"5" "cyan" "アクセスポイント接続設定 (ダム/ブリッジモード)"
-"6" "yellow" "Home Assistantのインストール (v23.05のみ)"
-"7" "white" "その他: ボタン設定, IPERF3, SAMBA4, LBS, DFSチェック, ゲストWiFi"
-"8" "white_black" "終了 (スクリプトの削除有無)"
+menyu_selector() (
+"1" "red" "MENU_INTERNET_SETUP" 
+"2" "blue" "MENU_SYSTEM_SETUP"
+"3" "green" "MENU_PACKAGE_INSTALL"
+"4" "magenta" "MENU_ADBLOCKER"
+"5" "cyan" "MENU_ACCESSPOINT"
+"6" "yellow" "MENU_HOMEASSISTANT"
+"7" "white" "MENU_UTILITIES"
+"8" "white_black" "MENU_EXIT"
 )
 
 # ダウンロード用データ
@@ -57,13 +58,16 @@ selector() {
     [ -n "$menu_title" ] && echo_message "OPENWRT_CONFIG_SECTION_TITLE" "$menu_title"
     echo_message "OPENWRT_CONFIG_SEPARATOR"
     
-    # メニュー項目表示
+    # メニュー項目表示（多言語対応版）
     echo "$selector_data" | while IFS= read -r line; do
         if [ -n "$line" ]; then
             # 行の要素を抽出
             local num=$(echo "$line" | cut -d '"' -f 2)
             local color_name=$(echo "$line" | cut -d '"' -f 4)
-            local title=$(echo "$line" | cut -d '"' -f 6)
+            local title_id=$(echo "$line" | cut -d '"' -f 6)
+            
+            # メッセージDBからタイトルを取得
+            local title=$(echo_message "$title_id")
             
             printf " %s%s\n" "$(color "$color_name" "[$num]: ")" "$(color "$color_name" "$title")"
         fi
