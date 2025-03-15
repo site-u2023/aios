@@ -40,25 +40,38 @@ download "other-utilities.sh" "chmod" "load"
 selector() {
     local menu_title="$1"
     local menu_count=0
+    local selector_output=""
+    local choice=""
     
-    debug_log "DEBUG" "Loading menu selector data"
+    debug_log "DEBUG" "Starting menu selector function"
+    
+    # キャプチャ用一時ファイル
+    local temp_file="${CACHE_DIR}/menu_selector_output.tmp"
+    menyu_selector > "$temp_file" 2>/dev/null
     
     # メニュー項目数をカウント
-    menu_count=$(menyu_selector | wc -l)
+    menu_count=$(wc -l < "$temp_file")
     debug_log "DEBUG" "Menu contains $menu_count items"
     
-    # clear
+    # メニューヘッダー表示
+    clear
     printf "%s\n" "$(get_message "CONFIG_HEADER" "$SCRIPT_NAME" "$SCRIPT_VERSION")"
     printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
     [ -n "$menu_title" ] && printf "%s\n" "$(get_message "CONFIG_SECTION_TITLE" "$menu_title")"
     printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
     
-    # メニュー表示（関数の出力をそのまま表示）
-    menyu_selector
+    # 一時ファイルからメニュー項目を表示
+    cat "$temp_file"
+    rm -f "$temp_file"
     
+    # 選択プロンプト
     printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
     printf "%s" "$(get_message "CONFIG_SELECT_PROMPT" "max=$menu_count") "
     read -r choice
+    
+    # 入力値を正規化
+    choice=$(normalize_input "$choice")
+    debug_log "DEBUG" "User selected: $choice"
     
     # 入力値チェック
     if ! echo "$choice" | grep -q '^[0-9]\+$'; then
@@ -74,59 +87,67 @@ selector() {
     fi
     
     # 選択アクションの実行
-    execute_menu_action "$choice"
-    
+    process_selection "$choice"
     return $?
 }
 
-# メニュー項目実行関数
-execute_menu_action() {
-    local choice="$1"
-    local current_line=0
-    local command=""
+# 選択されたメニュー項目を処理
+process_selection() {
+    local selected_number="$1"
+    local temp_file="${CACHE_DIR}/menu_download_output.tmp"
+    local command_line=""
     
-    debug_log "DEBUG" "Processing menu selection: $choice"
+    debug_log "DEBUG" "Processing menu selection: $selected_number"
     
-    # menu_download関数を実行し、選択された行のコマンドを取得
-    menu_download | {
-        while IFS= read -r line; do
-            current_line=$((current_line + 1))
-            
-            if [ "$current_line" -eq "$choice" ]; then
-                command="$line"
-                debug_log "DEBUG" "Selected command: $command"
-                
-                # 終了オプションの処理
-                if [ "$command" = "\"exit\" \"\" \"\"" ]; then
-                    if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
-                        debug_log "DEBUG" "User requested script deletion"
-                        rm -f "$0"
-                        printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
-                        exit 255
-                    else
-                        debug_log "DEBUG" "User cancelled script deletion"
-                        printf "%s\n" "$(get_message "CONFIG_DELETE_CANCELED")"
-                    fi
-                else
-                    # 通常のコマンド実行
-                    debug_log "DEBUG" "Executing command: $command"
-                    eval "$command"
-                fi
-                break
-            fi
-        done
-    }
+    # menu_download関数の出力をファイルに保存
+    menu_download > "$temp_file" 2>/dev/null
     
-    return 0
+    # 対応するダウンロードコマンドを取得
+    command_line=$(sed -n "${selected_number}p" "$temp_file")
+    rm -f "$temp_file"
+    
+    debug_log "DEBUG" "Selected command: $command_line"
+    
+    # 特殊コマンド「exit」の処理
+    if [ "$command_line" = "\"exit\" \"\" \"\"" ]; then
+        debug_log "DEBUG" "Exit option selected"
+        
+        if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
+            debug_log "DEBUG" "User confirmed script deletion"
+            rm -f "$0"
+            printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
+            return 255
+        else
+            printf "%s\n" "$(get_message "CONFIG_DELETE_CANCELED")"
+            sleep 2
+            return 0
+        fi
+    fi
+    
+    # 通常コマンドの実行
+    debug_log "DEBUG" "Executing command: $command_line"
+    eval "$command_line"
+    return $?
 }
 
 # メイン関数
 main() {
-    debug_log "DEBUG" "Starting menu selector script"
+    local ret=0
+    
+    # キャッシュディレクトリを確保
+    [ ! -d "${CACHE_DIR}" ] && mkdir -p "${CACHE_DIR}"
+    
+    debug_log "DEBUG" "Starting menu config script"
     
     # メインループ
     while true; do
         selector "$(get_message "MENU_TITLE")"
+        ret=$?
+        
+        if [ "$ret" -eq 255 ]; then
+            debug_log "DEBUG" "Script terminating"
+            break
+        fi
     done
 }
 
