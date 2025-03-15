@@ -6,8 +6,7 @@ Dedicated configuration software for OpenWrt
 
 January 25, 2025: version α
 
-![main](https://github.com/user-attachments/assets/ebfc8ca2-a42e-470c-9a89-9b5e3eb4ccb8)
-
+![2025-03-15 133725](https://github.com/user-attachments/assets/e3c7cef3-140d-4583-ae63-378e6e40d83d)
 
 ## ダウンロード
 
