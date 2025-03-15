@@ -160,15 +160,29 @@ selector() {
 
 execute_menu_action() {
     local choice="$1"
-    local command
+    local temp_file="${CACHE_DIR}/menu_commands.tmp"
+    local command_line
 
     echo "DEBUG: Executing action for choice: $choice" >&2
 
     # メニューコマンドを取得
-    command=$(menu_download | sed -n "${choice}p")
+    menu_download > "$temp_file" 2>&1
 
-    echo "DEBUG: Running command: $command" >&2
-    eval $command
+    # 行数取得と範囲チェック
+    local lines=$(wc -l < "$temp_file")
+    if [ "$choice" -lt 1 ] || [ "$choice" -gt "$lines" ]; then
+        echo "DEBUG: Choice out of range: $choice (valid: 1-$lines)" >&2
+        printf "%s\n" "$(get_message "CONFIG_ERROR_INVALID_NUMBER")"
+        rm -f "$temp_file"
+        return 0
+    fi
+
+    # コマンド行を取得
+    command_line=$(sed -n "${choice}p" "$temp_file")
+    rm -f "$temp_file"
+
+    echo "DEBUG: Running command: $command_line" >&2
+    eval $command_line
 
     local status=$?
     echo "DEBUG: Command execution finished with status: $status" >&2
