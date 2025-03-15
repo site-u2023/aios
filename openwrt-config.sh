@@ -39,24 +39,35 @@ echo "exit" "" ""
 echo "remove" "" ""
 )
 
+# 改良版 safe_sed_replace 関数
 safe_sed_replace() {
     local text="$1"
     local pattern="$2"
     local replacement="$3"
     
-    # パターンが空の場合は置換せず元の文字列を返す
+    # 入力チェック
+    if [ -z "$text" ]; then
+        debug_log "Empty input text detected. Returning empty string."
+        echo ""
+        return 0
+    fi
+    
     if [ -z "$pattern" ]; then
-        debug_log "Empty pattern detected in sed operation. Skipping."
+        debug_log "Empty pattern detected. Returning original text."
         echo "$text"
         return 0
     fi
     
-    # 特殊文字のエスケープ
-    local esc_pattern=$(echo "$pattern" | sed 's/[\/&]/\\&/g')
-    local esc_replacement=$(echo "$replacement" | sed 's/[\/&]/\\&/g')
+    # パターンと置換文字列のエスケープ処理
+    local esc_pattern
+    local esc_replacement
     
-    # 置換実行
-    echo "$text" | sed "s/$esc_pattern/$esc_replacement/g" 2>/dev/null || echo "$text"
+    # sed自体が失敗しないようにサブシェルで実行
+    esc_pattern=$(printf '%s' "$pattern" | sed 's/[\/&]/\\&/g' 2>/dev/null || echo "$pattern")
+    esc_replacement=$(printf '%s' "$replacement" | sed 's/[\/&]/\\&/g' 2>/dev/null || echo "$replacement")
+    
+    # 安全な置換処理
+    printf '%s' "$text" | sed "s/$esc_pattern/$esc_replacement/g" 2>/dev/null || printf '%s' "$text"
 }
 
 # メニューセレクター関数（メニュー表示と選択処理）
