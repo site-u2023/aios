@@ -41,14 +41,14 @@ menyu_selector() {
 
 # ダウンロード用データ
 menu_download() {
-    echo 'download "internet-config.sh" "chmod" "load"'
-    echo 'download "system-config.sh" "chmod" "load"'
-    echo 'download "package-install.sh" "chmod" "load"'
-    echo 'download "adblocker-dns.sh" "chmod" "load"'
-    echo 'download "accesspoint-setup.sh" "chmod" "load"'
-    echo 'download "other-utilities.sh" "chmod" "load"'
-    echo 'menu_exit'
-    echo 'remove_exit'
+    printf '%s\n' 'download "internet-config.sh" "chmod" "load"'
+    printf '%s\n' 'download "system-config.sh" "chmod" "load"'
+    printf '%s\n' 'download "package-install.sh" "chmod" "load"'
+    printf '%s\n' 'download "adblocker-dns.sh" "chmod" "load"'
+    printf '%s\n' 'download "accesspoint-setup.sh" "chmod" "load"'
+    printf '%s\n' 'download "other-utilities.sh" "chmod" "load"'
+    printf '%s\n' 'menu_exit'
+    printf '%s\n' 'remove_exit'
 }
 
 # メニュー表示と選択処理
