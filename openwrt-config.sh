@@ -44,10 +44,10 @@ selector() {
     local menu_count=0
     
     debug_log "DEBUG" "Loading menu display data: $menyu_selector"
-    selector_data=$(echo "$(menyu_selector)")
+    selector_data=$(menyu_selector | while read -r line; do echo "$line"; done)
     
     debug_log "DEBUG" "Loading menu download data $menu_download"
-    download_data=$(echo "$(menu_download)")
+    download_data=$(menu_download | while read -r line; do echo "$line"; done)
     
     # メニュー項目数をカウント
     menu_count=$(echo "$selector_data" | wc -l)
