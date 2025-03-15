@@ -1223,7 +1223,7 @@ check_option() {
                     LOGFILE="$2"
                     shift
                 else
-                    echo "Error: --logfile requires a path argument"
+                    debug_log "DEBUG" "logfile requires a path argument"
                     exit 1
                 fi
                 ;;
