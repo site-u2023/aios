@@ -1239,7 +1239,36 @@ download() {
 
 # 🔵　メイン　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
-color_print_banner() {
+# メイン関数 - バナー表示の統合関数
+# 引数: 
+#   $1 - バナースタイル（省略可）: "unicode", "ascii", "asterisk", "auto"
+print_banner() {
+    # スタイル指定またはデフォルト「auto」
+    BANNER_STYLE="${1:-auto}"
+    
+    # 自動検出が必要な場合
+    if [ "$BANNER_STYLE" = "auto" ]; then
+        BANNER_STYLE=$(detect_terminal_capability)
+        debug_log "DEBUG" "Auto-detected banner style: $BANNER_STYLE"
+    fi
+    
+    # スタイルに応じたバナー表示
+    case "$BANNER_STYLE" in
+        unicode|block)
+            print_banner_unicode
+            ;;
+        ascii|hash|sharp)
+            print_banner_ascii
+            ;;
+        *)
+            # 不明なスタイルの場合はASCIIにフォールバック
+            debug_log "WARN" "Unknown banner style: $BANNER_STYLE, using ASCII fallback"
+            print_banner_ascii
+            ;;
+    esac
+}
+
+print_banner_ascii() {
     debug_log "DEBUG" "Displaying lowercase aios block ASCII art banner"
     
     # バナーの前に空行
@@ -1264,7 +1293,7 @@ color_print_banner() {
     debug_log "DEBUG" "Block style lowercase aios banner displayed successfully"
 }
 
-print_banner() {
+print_banner_unicode() {
     debug_log "DEBUG" "Displaying lowercase aios block ASCII art banner"
     
     # バナーの前に空行
