@@ -28,16 +28,19 @@ printf "%s\n" "$(color white_black "$(get_message "MENU_REMOVE")")"
 )
 
 # ダウンロード用データ - ループ問題修正
-menu_download() (
-download "internet-config.sh" "chmod" "run"
-download "system-config.sh" "chmod" "run"
-download "package-install.sh" "chmod" "run"
-download "adblocker-dns.sh" "chmod" "run"
-download "accesspoint-setup.sh" "chmod" "run"
-download "other-utilities.sh" "chmod" "run"
-echo "exit" "" ""
-echo "remove" "" ""
-)
+menu_download() {
+    # デバッグ出力を抑制したコマンド実行
+    {
+        download "internet-config.sh" "chmod" "run"
+        download "system-config.sh" "chmod" "run"
+        download "package-install.sh" "chmod" "run"
+        download "adblocker-dns.sh" "chmod" "run"
+        download "accesspoint-setup.sh" "chmod" "run"
+        download "other-utilities.sh" "chmod" "run"
+        echo "exit" "" ""
+        echo "remove" "" ""
+    } 2>/dev/null
+}
 
 # 改良版 safe_sed_replace 関数 - 特殊文字を確実にエスケープ
 safe_sed_replace() {
@@ -223,34 +226,46 @@ selector() {
     return $?
 }
 
-# 選択メニュー実行関数 - ループ対策で修正
+# 選択メニュー実行関数 - ループ対策と範囲チェック強化
 execute_menu_action() {
     local choice="$1"
     local temp_file="${CACHE_DIR}/menu_download_commands.tmp"
     local command_line=""
     
-    debug_log "Executing action for choice: $choice"
+    # デバッグ情報をstderrに出力
+    debug_log "DEBUG" "Executing action for choice: $choice" >&2
     
     # メニューコマンドを取得
     menu_download > "$temp_file" 2>/dev/null
     
     # 選択行が範囲内かチェック
     local lines=$(wc -l < "$temp_file")
-    debug_log "Menu has $lines lines, checking if choice $choice is valid"
+    debug_log "DEBUG" "Menu has $lines lines, checking if choice $choice is valid" >&2
     
-    if [ "$choice" -lt 1 ] || [ "$choice" -gt "$lines" ]; then
-        debug_log "Choice out of range: $choice (valid range: 1-$lines)"
-        printf "%s\n" "$(get_message "CONFIG_ERROR_INVALID_NUMBER")"
+    # 選択値を整数として検証
+    if ! echo "$choice" | grep -q '^[0-9][0-9]*$'; then
+        debug_log "ERROR" "Invalid choice: not a number" >&2
+        printf "%s\n" "$(get_message "CONFIG_ERROR_NOT_NUMBER")"
+        rm -f "$temp_file" 2>/dev/null
         return 0
     fi
     
-    command_line=$(sed -n "${choice}p" "$temp_file" 2>/dev/null || echo "")
-    debug_log "Selected command line: '$command_line'"
-    rm -f "$temp_file"
+    # 範囲チェック
+    if [ "$choice" -lt 1 ] || [ "$choice" -gt "$lines" ]; then
+        debug_log "ERROR" "Choice out of range: $choice (valid range: 1-$lines)" >&2
+        printf "%s\n" "$(get_message "CONFIG_ERROR_INVALID_NUMBER" | sed "s/{0}/$lines/g")"
+        rm -f "$temp_file" 2>/dev/null
+        return 0
+    fi
+    
+    # コマンド行を安全に取得
+    command_line=$(sed -n "${choice}p" "$temp_file" 2>/dev/null)
+    debug_log "DEBUG" "Selected command line: '$command_line'" >&2
+    rm -f "$temp_file" 2>/dev/null
     
     # コマンド行が空の場合
     if [ -z "$command_line" ]; then
-        debug_log "Empty command line selected"
+        debug_log "DEBUG" "Empty command line selected" >&2
         return 0
     fi
     
@@ -280,10 +295,12 @@ execute_menu_action() {
     fi
     
     # 通常コマンド実行（run モードでサブシェルで実行してループ防止）
-    debug_log "Executing command: $command_line"
-    (eval "$command_line")
+    debug_log "DEBUG" "Executing command: $command_line" >&2
+    (eval "$command_line") 2>/dev/null
+    local cmd_status=$?
+    debug_log "DEBUG" "Command execution completed with status: $cmd_status" >&2
     
-    return $?
+    return $cmd_status
 }
 
 # メイン関数
