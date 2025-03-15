@@ -934,58 +934,18 @@ version_is_newer() {
     return 1  # 同一バージョン
 }
 
-# ダウンロードのメイン関数 - 引数を解析し、他の関数を順番に呼び出す
+# メインのダウンロード関数 - オプション解析も担当
 download() {
+    # ファイル名を最初の引数として処理、残りはオプション
     local file_name="$1"
     shift
     
-    # ステップ1: オプション解析
-    local options_data
-    options_data=$(download_parse_options "$@")
-    if [ $? -ne 0 ]; then
-        debug_log "ERROR" "Option parsing failed for $file_name"
-        return 1
-    fi
-    
-    # オプションデータを変数に展開
-    local hidden_mode=$(echo "$options_data" | cut -d'|' -f1)
-    local quiet_mode=$(echo "$options_data" | cut -d'|' -f2)
-    local chmod_mode=$(echo "$options_data" | cut -d'|' -f3)
-    local load_mode=$(echo "$options_data" | cut -d'|' -f4)
-    
-    # ステップ2: バージョンチェック
-    local version_data
-    version_data=$(download_check_version "$file_name")
-    local update_required=$(echo "$version_data" | cut -d'|' -f1)
-    local clean_remote_version=$(echo "$version_data" | cut -d'|' -f2)
-    local clean_local_version=$(echo "$version_data" | cut -d'|' -f3)
-    local auth_message=$(echo "$version_data" | cut -d'|' -f4)
-    
-    # ステップ3: 必要に応じてファイルをダウンロード
-    local status_message="No update needed"
-    if [ "$update_required" = "true" ]; then
-        local download_result
-        download_result=$(download_fetch_file "$file_name" "$chmod_mode")
-        if [ $? -ne 0 ]; then
-            debug_log "ERROR" "Download process failed for $file_name"
-            return 1
-        fi
-        status_message="Download completed"
-    fi
-    
-    # ステップ4: 結果表示とファイル読み込み
-    download_finalize "$file_name" "$status_message" "$clean_remote_version" "$auth_message" "$load_mode" "$hidden_mode"
-    
-    return 0
-}
-
-# ステップ1: オプション解析関数
-download_parse_options() {
     # 設定変数の初期化
     local hidden_mode="false"
     local quiet_mode="${QUIET_MODE:-false}"
     local chmod_mode="false"
     local load_mode="false"
+    local script_file="${CACHE_DIR}/script.ch"
     
     # オプション引数の処理
     while [ $# -gt 0 ]; do
@@ -1000,12 +960,31 @@ download_parse_options() {
         shift
     done
     
-    # パイプ区切りでオプション情報を返す
-    echo "${hidden_mode}|${quiet_mode}|${chmod_mode}|${load_mode}"
+    # バージョンチェック処理
+    local version_data
+    version_data=$(download_check_version "$file_name")
+    local update_required=$(echo "$version_data" | cut -d'|' -f1)
+    local clean_remote_version=$(echo "$version_data" | cut -d'|' -f2)
+    local clean_local_version=$(echo "$version_data" | cut -d'|' -f3)
+    local auth_message=$(echo "$version_data" | cut -d'|' -f4)
+    
+    # ファイルダウンロード処理
+    local status_message="No update needed"
+    if [ "$update_required" = "true" ]; then
+        if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode"; then
+            debug_log "ERROR" "Download process failed for $file_name"
+            return 1
+        fi
+        status_message="Download completed"
+    fi
+    
+    # 結果表示とファイル読み込み
+    download_finalize "$file_name" "$status_message" "$clean_remote_version" "$auth_message" "$load_mode" "$hidden_mode"
+    
     return 0
 }
 
-# ステップ2: バージョンチェック関数
+# バージョンチェック関数
 download_check_version() {
     local file_name="$1"
     local script_file="${CACHE_DIR}/script.ch"
@@ -1067,10 +1046,11 @@ download_check_version() {
     return 0
 }
 
-# ステップ3: ファイルダウンロード関数
+# ファイルダウンロードとバージョン更新関数
 download_fetch_file() {
     local file_name="$1"
-    local chmod_mode="$2"
+    local clean_remote_version="$2"
+    local chmod_mode="$3"
     local install_path="${BASE_DIR}/$file_name"
     local remote_url="${BASE_URL}/$file_name"
     local script_file="${CACHE_DIR}/script.ch"
@@ -1093,28 +1073,12 @@ download_fetch_file() {
         debug_log "DEBUG" "chmod +x applied to $file_name"
     fi
     
-    # バージョン情報更新のための新しい関数呼び出し
-    download_update_version_cache "$file_name"
-    
-    return 0
-}
-
-# バージョンキャッシュ更新関数
-download_update_version_cache() {
-    local file_name="$1"
-    local script_file="${CACHE_DIR}/script.ch"
-    
-    # リモートバージョン情報を再度取得
-    local remote_version_info=$(get_commit_version "$file_name")
-    local remote_version=$(printf "%s" "$remote_version_info" | cut -d' ' -f1)
-    local clean_remote_version=$(clean_version_string "$remote_version")
-    
     # バージョン情報の更新
     if [ ! -f "$script_file" ]; then
         printf "%s=%s\n" "${file_name}" "${clean_remote_version}" > "$script_file"
     else
         if grep -q "^${file_name}=" "$script_file"; then
-            # エスケープ処理を改良
+            # エスケープ処理
             escaped_file=$(echo "$file_name" | sed 's/[\/&]/\\&/g')
             escaped_version=$(echo "$clean_remote_version" | sed 's/[\/&]/\\&/g')
             sed -i "s/^${escaped_file}=.*/${escaped_file}=${escaped_version}/" "$script_file"
@@ -1126,7 +1090,7 @@ download_update_version_cache() {
     return 0
 }
 
-# ステップ4: 結果表示とファイル読み込み関数
+# 結果表示とファイル読み込み関数
 download_finalize() {
     local file_name="$1"
     local status_message="$2"
@@ -1144,7 +1108,7 @@ download_finalize() {
         action_message="Loaded"
     fi
     
-    # 出力メッセージの修正
+    # 出力メッセージの作成
     local message="${status_message}: ${file_name} - Version: ${clean_remote_version} ${auth_message}"
     if [ -n "$action_message" ]; then
         message="${message} (${action_message})"
