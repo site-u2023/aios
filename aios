@@ -195,17 +195,13 @@ print_help() {
     printf "  %-25s %s\n" "-dr, --dry-run" "$(get_message "MSG_HELP_DRY_RUN")"
     
     printf "\n%s\n" "$(get_message "MSG_HELP_LANGUAGE_HEADER")"
-    printf "  %-25s %s\n" "ja, en, zh-cn, ..." "$(get_message "MSG_HELP_LANGUAGE")"
+    printf "  %-25s %s\n" "US, JP, ..." "$(get_message "MSG_HELP_LANGUAGE")"
     
     printf "\n%s\n" "$(get_message "MSG_HELP_EXAMPLES_HEADER")"
     printf "  %s\n" "$(get_message "MSG_HELP_EXAMPLE1")"
     printf "  %s\n" "$(get_message "MSG_HELP_EXAMPLE2")"
     printf "  %s\n" "$(get_message "MSG_HELP_EXAMPLE3")"
     printf "  %s\n" "$(get_message "MSG_HELP_EXAMPLE4")"
-    
-    printf "\n%s\n" "$(get_message "MSG_HELP_DEBUG_HEADER")"
-    printf "  %s\n" "$(get_message "MSG_HELP_DEBUG_STANDARD")"
-    printf "  %s\n" "$(get_message "MSG_HELP_DEBUG_VERBOSE")"
 }
 
 color() {
