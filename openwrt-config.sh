@@ -2,57 +2,6 @@
 
 SCRIPT_VERSION="2025.03.15-00-00"
 
-# =========================================================
-# 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
-# 🚀 Last Update: 2025-02-21
-#
-# 🏷️ License: CC0 (Public Domain)
-# 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
-#
-# ⚠️ IMPORTANT NOTICE:
-# OpenWrt OS exclusively uses **Almquist Shell (ash)** and
-# is **NOT** compatible with Bourne-Again Shell (bash).
-#
-# 📢 POSIX Compliance Guidelines:
-# ✅ Use `[` instead of `[[` for conditions
-# ✅ Use $(command) instead of backticks `command`
-# ✅ Use $(( )) for arithmetic instead of let
-# ✅ Define functions as func_name() {} (no function keyword)
-# ✅ No associative arrays (declare -A is NOT supported)
-# ✅ No here-strings (<<< is NOT supported)
-# ✅ No -v flag in test or [[
-# ✅ Avoid bash-specific string operations like ${var:0:3}
-# ✅ Avoid arrays entirely when possible (even indexed arrays can be problematic)
-# ✅ Use printf followed by read instead of read -p
-# ✅ Use printf instead of echo -e for portable formatting
-# ✅ Avoid process substitution <() and >()
-# ✅ Prefer case statements over complex if/elif chains
-# ✅ Use command -v instead of which or type for command existence checks
-# ✅ Keep scripts modular with small, focused functions
-# ✅ Use simple error handling instead of complex traps
-# ✅ Test scripts with ash/dash explicitly, not just bash
-#
-# 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
-### =========================================================
-### 📌 AI Assistance Request: POSIX-Compliant Debugging Guide
-### 
-### When debugging or fixing errors in this POSIX shell script:
-### 
-### 1️⃣ Create a minimal reproducible test case (avoid bash features)
-### 2️⃣ Test with ash/dash explicitly: dash ./test.sh
-### 3️⃣ Use portable debugging methods: echo, printf, or set -x
-### 4️⃣ Validate fixes against all POSIX compliance guidelines
-### 5️⃣ Ensure the solution works in resource-constrained OpenWrt
-### 
-### ⚠️ IMPORTANT:
-### - Avoid suggesting bash-specific solutions
-### - Always test fixes with ash/dash before implementation
-### - Prefer simple solutions over complex ones
-### - Do not modify production code without test verification
-### 
-### 🛠️ Keep debugging simple, focused, and POSIX-compliant!
-### =========================================================
-
 # 基本定数の設定 
 BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q -O}"
 # BASE_WGET="${BASE_WGET:-wget -O}"
@@ -78,16 +27,16 @@ printf "%s\n" "$(color white "$(get_message "MENU_EXIT")")"
 printf "%s\n" "$(color white_black "$(get_message "MENU_REMOVE")")"
 )
 
-# ダウンロード用データ
+# ダウンロード用データ - ループ問題修正
 menu_download() (
-download "internet-config.sh" "chmod" "load"
-download "system-config.sh" "chmod" "load"
-download "package-install.sh" "chmod" "load"
-download "adblocker-dns.sh" "chmod" "load"
-download "accesspoint-setup.sh" "chmod" "load"
-download "other-utilities.sh" "chmod" "load"
-"exit" "" ""
-"remove" "" ""
+download "internet-config.sh" "chmod" "run"
+download "system-config.sh" "chmod" "run"
+download "package-install.sh" "chmod" "run"
+download "adblocker-dns.sh" "chmod" "run"
+download "accesspoint-setup.sh" "chmod" "run"
+download "other-utilities.sh" "chmod" "run"
+echo "exit" "" ""
+echo "remove" "" ""
 )
 
 # メニューセレクター関数（メニュー表示と選択処理）
@@ -106,18 +55,9 @@ selector() {
     local menu_data=""
     local temp_file="${CACHE_DIR}/menu_selector_output.tmp"
     
-    # メニューアイテムをキャプチャ - デバッグログは標準エラー出力に
-    if [ "$DEBUG_MODE" = "true" ]; then
-        debug_log "Generating menu items" >&2
-    fi
-    
+    # メニューアイテムをキャプチャ
     menyu_selector > "$temp_file" 2>/dev/null
     menu_count=$(wc -l < "$temp_file")
-    
-    # メニュー項目数をデバッグ出力
-    if [ "$DEBUG_MODE" = "true" ]; then
-        debug_log "Menu contains ${menu_count} items" >&2
-    fi
     
     # 画面クリア処理をデバッグ変数で制御
     if [ "$DEBUG_MODE" != "true" ]; then
@@ -166,17 +106,9 @@ selector() {
     # 入力値を正規化
     choice=$(normalize_input "$choice")
     
-    # 入力値のデバッグ出力
-    if [ "$DEBUG_MODE" = "true" ]; then
-        debug_log "User input: ${choice}" >&2
-    fi
-    
     # 入力値チェック
     if ! printf "%s" "$choice" | grep -q '^[0-9]\+$'; then
         printf "%s\n" "$(get_message "CONFIG_ERROR_NOT_NUMBER")"
-        if [ "$DEBUG_MODE" = "true" ]; then
-            debug_log "Invalid input: not a number" >&2
-        fi
         sleep 2
         return 0
     fi
@@ -185,62 +117,37 @@ selector() {
         local error_text="$(get_message "CONFIG_ERROR_INVALID_NUMBER")"
         error_text=$(printf "%s" "$error_text" | sed "s/{0}/$menu_count/g")
         printf "%s\n" "$error_text"
-        if [ "$DEBUG_MODE" = "true" ]; then
-            debug_log "Invalid input: number out of range" >&2
-        fi
         sleep 2
         return 0
     fi
     
     # 選択アクションの実行
-    if [ "$DEBUG_MODE" = "true" ]; then
-        debug_log "Processing menu selection: ${choice}" >&2
-    fi
     execute_menu_action "$choice"
     
     return $?
 }
 
-# 選択メニュー実行関数
+# 選択メニュー実行関数 - ループ対策で修正
 execute_menu_action() {
     local choice="$1"
     local temp_file="${CACHE_DIR}/menu_download_commands.tmp"
     local command_line=""
-    
-    # デバッグ出力
-    if [ "$DEBUG_MODE" = "true" ]; then
-        debug_log "Executing menu action for choice: ${choice}" >&2
-    fi
     
     # メニューコマンドを取得
     menu_download > "$temp_file" 2>/dev/null
     command_line=$(sed -n "${choice}p" "$temp_file")
     rm -f "$temp_file"
     
-    if [ "$DEBUG_MODE" = "true" ]; then
-        debug_log "Command to execute: ${command_line}" >&2
-    fi
-    
     # exit処理（スクリプト終了）
-    if [ "$command_line" = "\"exit\" \"\" \"\"" ]; then
-        if [ "$DEBUG_MODE" = "true" ]; then
-            debug_log "Exit option selected" >&2
-        fi
+    if [ "$command_line" = "exit  " ]; then
         printf "%s\n" "$(get_message "CONFIG_EXIT_CONFIRMED")"
         sleep 1
         return 255
     fi
     
     # remove処理（スクリプトとディレクトリ削除）
-    if [ "$command_line" = "\"remove\" \"\" \"\"" ]; then
-        if [ "$DEBUG_MODE" = "true" ]; then
-            debug_log "Remove option selected" >&2
-        fi
-        
+    if [ "$command_line" = "remove  " ]; then
         if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
-            if [ "$DEBUG_MODE" = "true" ]; then
-                debug_log "User confirmed removal" >&2
-            fi
             printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
             sleep 1
             
@@ -250,19 +157,13 @@ execute_menu_action() {
             
             return 255
         else
-            if [ "$DEBUG_MODE" = "true" ]; then
-                debug_log "User cancelled removal" >&2
-            fi
             printf "%s\n" "$(get_message "CONFIG_DELETE_CANCELED")"
             sleep 2
             return 0
         fi
     fi
     
-    # 通常コマンド実行
-    if [ "$DEBUG_MODE" = "true" ]; then
-        debug_log "Executing command: ${command_line}" >&2
-    fi
+    # 通常コマンド実行（run モードでサブシェルで実行してループ防止）
     eval "$command_line"
     
     return $?
@@ -272,9 +173,8 @@ execute_menu_action() {
 main() {
     local ret=0
     
-    if [ "$DEBUG_MODE" = "true" ]; then
-        debug_log "Starting menu script v${SCRIPT_VERSION}" >&2
-    fi
+    # ディレクトリ作成（必要な場合のみ）
+    [ ! -d "${CACHE_DIR}" ] && mkdir -p "${CACHE_DIR}"
     
     # メインループ
     while true; do
@@ -282,9 +182,6 @@ main() {
         ret=$?
         
         if [ "$ret" -eq 255 ]; then
-            if [ "$DEBUG_MODE" = "true" ]; then
-                debug_log "Script terminating" >&2
-            fi
             break
         fi
     done
