@@ -1299,6 +1299,31 @@ bloc_banner() {
     debug_log "DEBUG" "Block style lowercase aios banner displayed successfully"
 }
 
+monochrome_banner() {
+    debug_log "DEBUG" "Displaying lowercase aios block ASCII art banner"
+    
+    # バナーの前に空行
+    printf "\n"
+    
+    # 小文字「aios」のブロックASCIIアート
+    printf "%s\n" "$(color white "              ██ █")"
+    printf "%s\n" "$(color white "   ████      ███       ████      █████")"
+    printf "%s\n" "$(color white "      ██      ██      ██  ██    ██")"
+    printf "%s\n" "$(color white "   █████      ██      ██  ██     █████")"
+    printf "%s\n" "$(color white "  ██  ██      ██      ██  ██         ██")"
+    printf "%s\n" "$(color white "   █████     ████      ████     ██████")"
+    
+    # バナーの後に空行
+    printf "\n"
+    
+    # バナーメッセージ
+    printf "%s\n" "$(color white "$(get_message "MSG_BANNER_DECCRIPTION")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_BANNER_NAME")")"
+    printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DISCLAIMER")")"
+    
+    debug_log "DEBUG" "Block style lowercase aios banner displayed successfully"
+}
+
 check_option() {
 
     # デフォルト値の設定
@@ -1448,6 +1473,7 @@ check_common() {
             print_banner
             show_banner
             bloc_banner
+            monochrome_banner
             select_country "$lang_code"
             download "system-config.sh" "chmod" "load"
             ;;
