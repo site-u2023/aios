@@ -74,9 +74,6 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 UPDATE_CACHE="${CACHE_DIR}/update.ch"
 GITHUB_TOKEN_FILE="/etc/aios_token"
 
-SCRIPT_NAME=$(basename "$0" .sh)
-DEBUG=1
-
 # メニュー表示用データ
 menyu_selector() (
 printf "%s\n" "$(color red "$(get_message "MENU_INTERNET")")"
@@ -108,30 +105,42 @@ selector() {
     local choice=""
     local i=0
     local item_color=""
+    local script_name=$(basename "$0" .sh)
     
-    debug_log "DEBUG" "Starting menu selector function"
+    debug_output "DEBUG: Starting menu selector function"
     
     # カラーコードの配列
     local color_list="red blue green magenta cyan yellow white white_black"
     
-    # メニューデータを取得して行数をカウント
+    # メニューデータを取得して一時保存
+    local menu_data=""
     local temp_file="${CACHE_DIR}/menu_selector_output.tmp"
+    
+    # デバッグ出力を一時的に無効化（メニュー生成中）
+    local original_dev_null="$DEV_NULL"
+    DEV_NULL="on"
+    
+    # メニューアイテムをキャプチャ
     menyu_selector > "$temp_file" 2>/dev/null
     menu_count=$(wc -l < "$temp_file")
-    debug_log "DEBUG" "Menu contains $menu_count items"
     
-    # メニューヘッダー表示
+    # デバッグ出力を元に戻す
+    DEV_NULL="$original_dev_null"
+    
+    debug_output "DEBUG: Menu contains $menu_count items"
+    
     clear
+    
     # プレースホルダーの置換を確実に行うため、直接変数を代入
     local header_text="$(get_message "CONFIG_HEADER")"
-    header_text=$(echo "$header_text" | sed "s/{0}/$SCRIPT_NAME/g" | sed "s/{1}/$SCRIPT_VERSION/g")
+    header_text=$(printf "%s" "$header_text" | sed "s/{0}/$script_name/g" | sed "s/{1}/$SCRIPT_VERSION/g")
     printf "%s\n" "$header_text"
     
     printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
     
     if [ -n "$menu_title" ]; then
         local title_text="$(get_message "CONFIG_SECTION_TITLE")"
-        title_text=$(echo "$title_text" | sed "s/{0}/$menu_title/g")
+        title_text=$(printf "%s" "$title_text" | sed "s/{0}/$menu_title/g")
         printf "%s\n" "$title_text"
     fi
     
@@ -141,7 +150,7 @@ selector() {
     i=1
     while IFS= read -r line; do
         # 色を決定（iに基づく）
-        local current_color=$(echo "$color_list" | cut -d' ' -f$i 2>/dev/null)
+        local current_color=$(printf "%s" "$color_list" | cut -d' ' -f$i 2>/dev/null)
         [ -z "$current_color" ] && current_color="white"
         
         # 色付きの番号と項目を表示
@@ -156,17 +165,17 @@ selector() {
     
     # プレースホルダーの置換を確実に行う
     local prompt_text="$(get_message "CONFIG_SELECT_PROMPT")"
-    prompt_text=$(echo "$prompt_text" | sed "s/{0}/$menu_count/g")
+    prompt_text=$(printf "%s" "$prompt_text" | sed "s/{0}/$menu_count/g")
     printf "%s " "$prompt_text"
     
     read -r choice
     
     # 入力値を正規化
     choice=$(normalize_input "$choice")
-    debug_log "DEBUG" "User selected: $choice"
+    debug_output "DEBUG: User selected: $choice"
     
     # 入力値チェック
-    if ! echo "$choice" | grep -q '^[0-9]\+$'; then
+    if ! printf "%s" "$choice" | grep -q '^[0-9]\+$'; then
         printf "%s\n" "$(get_message "CONFIG_ERROR_NOT_NUMBER")"
         sleep 2
         return 0
@@ -174,7 +183,7 @@ selector() {
     
     if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_count" ]; then
         local error_text="$(get_message "CONFIG_ERROR_INVALID_NUMBER")"
-        error_text=$(echo "$error_text" | sed "s/{0}/$menu_count/g")
+        error_text=$(printf "%s" "$error_text" | sed "s/{0}/$menu_count/g")
         printf "%s\n" "$error_text"
         sleep 2
         return 0
@@ -192,18 +201,25 @@ execute_menu_action() {
     local temp_file="${CACHE_DIR}/menu_download_commands.tmp"
     local command_line=""
     
-    debug_log "DEBUG" "Processing menu selection: $choice"
+    debug_output "DEBUG: Processing menu selection: $choice"
+    
+    # デバッグ出力を一時的に無効化（コマンド取得中）
+    local original_dev_null="$DEV_NULL"
+    DEV_NULL="on"
     
     # メニューコマンドを取得
     menu_download > "$temp_file" 2>/dev/null
     command_line=$(sed -n "${choice}p" "$temp_file")
     rm -f "$temp_file"
     
-    debug_log "DEBUG" "Selected command: $command_line"
+    # デバッグ出力を元に戻す
+    DEV_NULL="$original_dev_null"
+    
+    debug_output "DEBUG: Selected command: $command_line"
     
     # exit処理（スクリプト終了）
     if [ "$command_line" = "\"exit\" \"\" \"\"" ]; then
-        debug_log "DEBUG" "Exit option selected"
+        debug_output "DEBUG: Exit option selected"
         printf "%s\n" "$(get_message "CONFIG_EXIT_CONFIRMED")"
         sleep 1
         return 255
@@ -211,18 +227,20 @@ execute_menu_action() {
     
     # remove処理（スクリプトとディレクトリ削除）
     if [ "$command_line" = "\"remove\" \"\" \"\"" ]; then
-        debug_log "DEBUG" "Remove option selected"
+        debug_output "DEBUG: Remove option selected"
         
         if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
-            debug_log "DEBUG" "User confirmed script and directory removal"
-            rm -f "$0"
-            # BASE_DIRのクリーンアップを追加
-            [ -d "$BASE_DIR" ] && rm -rf "$BASE_DIR"
+            debug_output "DEBUG: User confirmed script and directory removal"
             printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
             sleep 1
+            
+            # スクリプト自身とBASE_DIRを削除
+            [ -f "$0" ] && rm -f "$0"
+            [ -d "$BASE_DIR" ] && rm -rf "$BASE_DIR"
+            
             return 255
         else
-            debug_log "DEBUG" "User cancelled script and directory removal"
+            debug_output "DEBUG: User cancelled script and directory removal"
             printf "%s\n" "$(get_message "CONFIG_DELETE_CANCELED")"
             sleep 2
             return 0
@@ -230,7 +248,7 @@ execute_menu_action() {
     fi
     
     # 通常コマンド実行
-    debug_log "DEBUG" "Executing command: $command_line"
+    debug_output "DEBUG: Executing command: $command_line"
     eval "$command_line"
     
     return $?
@@ -243,7 +261,7 @@ main() {
     # キャッシュディレクトリ確保
     [ ! -d "${CACHE_DIR}" ] && mkdir -p "${CACHE_DIR}"
     
-    debug_log "DEBUG" "Starting menu config script"
+    debug_output "DEBUG: Starting menu config script"
     
     # メインループ
     while true; do
@@ -251,7 +269,7 @@ main() {
         ret=$?
         
         if [ "$ret" -eq 255 ]; then
-            debug_log "DEBUG" "Script terminating"
+            debug_output "DEBUG: Script terminating"
             break
         fi
     done
