@@ -152,11 +152,20 @@ execute_menu_action() {
 
     # メニューコマンドを取得
     echo "DEBUG: Calling menu_download function" >&2
-    menu_download > "$temp_file" 2>/dev/null
+    menu_download > "$temp_file" 2>&1
+    local status=$?
+    if [ $status -ne 0 ]; then
+        echo "DEBUG: menu_download function failed with status: $status" >&2
+        return $status
+    fi
 
     echo "DEBUG: Checking if $temp_file exists and is not empty" >&2
+    if [ ! -f "$temp_file" ]; then
+        echo "DEBUG: $temp_file does not exist" >&2
+        return 1
+    fi
     if [ ! -s "$temp_file" ]; then
-        echo "DEBUG: $temp_file does not exist or is empty" >&2
+        echo "DEBUG: $temp_file is empty" >&2
         return 1
     fi
 
@@ -211,12 +220,13 @@ execute_menu_action() {
 
     # 通常コマンド実行
     echo "DEBUG: Executing command: $command_line" >&2
-    ( eval "$command_line" )
-    local status=$?
+    eval "$command_line"
+    status=$?
     echo "DEBUG: Command execution finished with status: $status" >&2
 
     return $status
 }
+
 # メイン関数
 main() {
     local ret=0
