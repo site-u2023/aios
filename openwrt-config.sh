@@ -97,30 +97,36 @@ selector() {
     # メニューデータを取得して一時保存
     local menu_data=""
     local temp_file="${CACHE_DIR}/menu_selector_output.tmp"
+    local filtered_file="${CACHE_DIR}/menu_filtered.tmp"
     
     # ディレクトリ存在確認
     [ ! -d "${CACHE_DIR}" ] && mkdir -p "${CACHE_DIR}"
     
     # メニューアイテムをキャプチャ
     menyu_selector > "$temp_file" 2>/dev/null
-    menu_count=$(wc -l < "$temp_file")
+    
+    # デバッグメッセージをフィルタリング
+    grep -v "DEBUG:" "$temp_file" > "$filtered_file" 2>/dev/null || cp "$temp_file" "$filtered_file"
+    menu_count=$(wc -l < "$filtered_file")
+    
+    debug_log "Menu items count after filtering: $menu_count"
     
     # 画面クリア処理をデバッグ変数で制御
     if [ "$DEBUG_MODE" != "true" ]; then
         clear
     fi
     
-    # プレースホルダーの置換を確実に行うため、safe_sed_replace関数を使用
+    # プレースホルダーの置換を簡易的に行う方法
     local header_text="$(get_message "CONFIG_HEADER")"
-    header_text=$(safe_sed_replace "$header_text" "{0}" "$script_name")
-    header_text=$(safe_sed_replace "$header_text" "{1}" "$SCRIPT_VERSION")
+    header_text=$(echo "$header_text" | sed "s/{0}/$script_name/g" 2>/dev/null || echo "$header_text")
+    header_text=$(echo "$header_text" | sed "s/{1}/$SCRIPT_VERSION/g" 2>/dev/null || echo "$header_text")
     printf "%s\n" "$header_text"
     
     printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
     
     if [ -n "$menu_title" ]; then
         local title_text="$(get_message "CONFIG_SECTION_TITLE")"
-        title_text=$(safe_sed_replace "$title_text" "{0}" "$menu_title")
+        title_text=$(echo "$title_text" | sed "s/{0}/$menu_title/g" 2>/dev/null || echo "$title_text")
         printf "%s\n" "$title_text"
     fi
     
@@ -129,41 +135,52 @@ selector() {
     # 番号付きでメニュー項目を表示
     i=1
     while IFS= read -r line; do
+        # デバッグラインをスキップ（念のため）
+        if echo "$line" | grep -q "DEBUG:"; then
+            continue
+        fi
+        
         # 色を決定（iに基づく）
-        local current_color=$(printf "%s" "$color_list" | cut -d' ' -f$i 2>/dev/null)
+        local current_color=""
+        current_color=$(echo "$color_list" | cut -d' ' -f$i 2>/dev/null)
         [ -z "$current_color" ] && current_color="white"
         
         # 色付きの番号と項目を表示
         printf " %s %s\n" "$(color "$current_color" "[${i}]:")" "$line"
         i=$((i + 1))
-    done < "$temp_file"
+    done < "$filtered_file"
     
-    rm -f "$temp_file"
+    # 一時ファイルを削除
+    rm -f "$temp_file" "$filtered_file"
     
     # 選択プロンプト
     printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
     
-    # プレースホルダーの置換を確実に行う
+    # プレースホルダーの置換を簡易的に行う
     local prompt_text="$(get_message "CONFIG_SELECT_PROMPT")"
-    prompt_text=$(safe_sed_replace "$prompt_text" "{0}" "$menu_count")
+    prompt_text=$(echo "$prompt_text" | sed "s/{0}/$menu_count/g" 2>/dev/null || echo "$prompt_text")
     printf "%s " "$prompt_text"
     
     read -r choice
-    debug_log "User selected: $choice"
+    debug_log "User selected raw input: $choice"
     
     # 入力値を正規化
     choice=$(normalize_input "$choice")
+    debug_log "Normalized input: $choice"
     
-    # 入力値チェック
-    if ! printf "%s" "$choice" | grep -q '^[0-9]\+$'; then
+    # 入力値チェック - POSIX互換の正規表現
+    if ! echo "$choice" | grep -q '^[0-9][0-9]*$'; then
+        debug_log "Invalid input: Not a number"
         printf "%s\n" "$(get_message "CONFIG_ERROR_NOT_NUMBER")"
         sleep 2
         return 0
     fi
     
+    # 範囲チェック
     if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_count" ]; then
+        debug_log "Input out of range: $choice (valid range: 1-$menu_count)"
         local error_text="$(get_message "CONFIG_ERROR_INVALID_NUMBER")"
-        error_text=$(safe_sed_replace "$error_text" "{0}" "$menu_count")
+        error_text=$(echo "$error_text" | sed "s/{0}/$menu_count/g" 2>/dev/null || echo "$error_text")
         printf "%s\n" "$error_text"
         sleep 2
         return 0
