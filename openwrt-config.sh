@@ -39,7 +39,7 @@ echo "exit" "" ""
 echo "remove" "" ""
 )
 
-# 改良版 safe_sed_replace 関数
+# 改良版 safe_sed_replace 関数 - 特殊文字を確実にエスケープ
 safe_sed_replace() {
     local text="$1"
     local pattern="$2"
@@ -60,14 +60,26 @@ safe_sed_replace() {
     
     # パターンと置換文字列のエスケープ処理
     local esc_pattern
+    esc_pattern=$(printf '%s' "$pattern" | sed 's/[\/&]/\\&/g')
+    
     local esc_replacement
+    esc_replacement=$(printf '%s' "$replacement" | sed 's/[\/&]/\\&/g')
     
-    # sed自体が失敗しないようにサブシェルで実行
-    esc_pattern=$(printf '%s' "$pattern" | sed 's/[\/&]/\\&/g' 2>/dev/null || echo "$pattern")
-    esc_replacement=$(printf '%s' "$replacement" | sed 's/[\/&]/\\&/g' 2>/dev/null || echo "$replacement")
+    # 単純な置換方法を使用
+    printf '%s' "$text" | tr "{$pattern}" "$replacement" 2>/dev/null || printf '%s' "$text"
+}
+
+# メニュー項目のフィルタリング - デバッグ出力を除去
+filter_menu_items() {
+    local input_file="$1"
+    local output_file="$2"
     
-    # 安全な置換処理
-    printf '%s' "$text" | sed "s/$esc_pattern/$esc_replacement/g" 2>/dev/null || printf '%s' "$text"
+    debug_log "Filtering menu items to remove debug output"
+    
+    # デバッグ行を除去して新しいファイルに保存
+    grep -v "DEBUG:" "$input_file" > "$output_file" || cp "$input_file" "$output_file"
+    
+    debug_log "Menu items filtered and saved to $output_file"
 }
 
 # メニューセレクター関数（メニュー表示と選択処理）
