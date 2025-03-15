@@ -2,13 +2,13 @@
 
 # =========================================================
 # 📌 OpenWrt 設定スクリプト for AIOS
-# 🚀 最終更新: 2025-03-15 05:43
+# 🚀 最終更新: 2025-03-15 05:48
 # 
 # 🏷️ ライセンス: CC0 (パブリックドメイン)
 # 🎯 互換性: OpenWrt >= 19.07
 # =========================================================
 
-SCRIPT_VERSION="2025.03.15-05:43"
+SCRIPT_VERSION="2025.03.15-05:48"
 
 # メニュー定義関数
 menu_openwrt() {
@@ -23,24 +23,24 @@ menu_openwrt() {
 }
 
 # メニューセレクター関数
-selector() {
-    local menu_title="$1"
-    local menu_func="$2"
-    local menu_data=""
+show_menu_and_select() {
+    local menu_func="$1"
+    local menu_title="$2"
+    local menu_data
     local menu_count=0
     
-    # メニュー関数から内容を取得
+    debug_log "DEBUG" "Loading menu data from function: $menu_func"
     menu_data=$($menu_func)
     
     # メニュー項目数をカウント
-    menu_count=$(echo "$menu_data" | wc -l)
-    debug_log "DEBUG" "Menu has $menu_count items"
+    menu_count=$(echo "$menu_data" | grep -v "^$" | wc -l)
+    debug_log "INFO" "Menu contains $menu_count items"
     
     clear
-    printf "%s\n" "$(color yellow "OpenWrt 設定スクリプト v$SCRIPT_VERSION")"
-    printf "%s\n" "$(color white "-----------------------------------------------------")"
-    [ -n "$menu_title" ] && printf "%s\n" "$(color cyan "$menu_title")"
-    printf "%s\n" "$(color white "-----------------------------------------------------")"
+    echo_message "OPENWRT_CONFIG_HEADER" "$SCRIPT_VERSION"
+    echo_message "OPENWRT_CONFIG_SEPARATOR"
+    [ -n "$menu_title" ] && echo_message "OPENWRT_CONFIG_SECTION_TITLE" "$menu_title"
+    echo_message "OPENWRT_CONFIG_SEPARATOR"
     
     # メニュー項目表示
     local i=1
@@ -55,51 +55,53 @@ selector() {
         fi
     done
     
-    printf "%s\n" "$(color white "-----------------------------------------------------")"
-    printf "%s " "$(color cyan "番号を選択してください (1-$menu_count): ")"
+    echo_message "OPENWRT_CONFIG_SEPARATOR"
+    echo_message "OPENWRT_CONFIG_SELECT_PROMPT" "$menu_count"
     
     # 選択を取得
     read -r choice
+    debug_log "DEBUG" "User selected option: $choice"
     
     # 選択が有効かチェック
     if ! echo "$choice" | grep -q "^[0-9]\+$"; then
         debug_log "WARN" "Invalid input: Not a number"
-        printf "%s\n" "$(color red "数字を入力してください。")"
+        echo_message "OPENWRT_CONFIG_ERROR_NOT_NUMBER"
         sleep 1
         return 1
     fi
     
     if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_count" ]; then
         debug_log "WARN" "Invalid choice: $choice (valid range: 1-$menu_count)"
-        printf "%s\n" "$(color red "無効な選択です。1から${menu_count}までの番号を入力してください。")"
+        echo_message "OPENWRT_CONFIG_ERROR_INVALID_NUMBER" "$menu_count"
         sleep 1
         return 1
     fi
     
     # 選択された行を抽出
-    local selected_item=$(echo "$menu_data" | sed -n "${choice}p")
+    local selected_item=$(echo "$menu_data" | grep -v "^$" | sed -n "${choice}p")
     
     # 行の要素を解析
     local script=$(echo "$selected_item" | cut -d '"' -f 6)
     local opt1=$(echo "$selected_item" | cut -d '"' -f 8)
     local opt2=$(echo "$selected_item" | cut -d '"' -f 10)
     
-    debug_log "INFO" "Selected: $choice - Script: $script, Options: $opt1 $opt2"
+    debug_log "INFO" "Processing selection: script=$script, options=$opt1 $opt2"
     
     # スクリプト実行
     if [ "$script" = "exit" ]; then
-        if confirm "スクリプトを削除しますか？"; then
+        debug_log "INFO" "Exit option selected"
+        if confirm "OPENWRT_CONFIG_CONFIRM_DELETE"; then
             debug_log "INFO" "User confirmed script deletion"
             rm -f "$0"
-            printf "%s\n" "$(color green "スクリプトを削除しました。さようなら！")"
+            echo_message "OPENWRT_CONFIG_DELETE_CONFIRMED"
         else
-            debug_log "INFO" "User chose not to delete the script"
-            printf "%s\n" "$(color green "スクリプトは保持されます。さようなら！")"
+            debug_log "INFO" "User chose not to delete script"
+            echo_message "OPENWRT_CONFIG_DELETE_CANCELED"
         fi
         exit 0
     else
         # スクリプトをダウンロードして実行
-        debug_log "INFO" "Downloading and executing $script with options: $opt1 $opt2"
+        debug_log "INFO" "Downloading and executing $script"
         if [ -n "$opt1" ] && [ -n "$opt2" ]; then
             download "$script" "$opt1" "$opt2"
         elif [ -n "$opt1" ]; then
@@ -118,7 +120,7 @@ main() {
     
     # メインループ
     while true; do
-        selector "OpenWrt 設定メニュー" menu_openwrt
+        show_menu_and_select menu_openwrt ""
     done
 }
 
