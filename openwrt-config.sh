@@ -27,96 +27,16 @@ printf "%s\n" "$(color white "$(get_message "MENU_EXIT")")"
 printf "%s\n" "$(color white_black "$(get_message "MENU_REMOVE")")"
 )
 
-# ダウンロード用データ - ループ問題修正
-XXX_menu_download() {
-        download "internet-config.sh" "chmod" "run"
-        download "system-config.sh" "chmod" "run"
-        download "package-install.sh" "chmod" "run"
-        download "adblocker-dns.sh" "chmod" "run"
-        download "accesspoint-setup.sh" "chmod" "run"
-        download "other-utilities.sh" "chmod" "run"
-        echo "exit" "" ""
-        echo "remove" "" ""
-}
-
-# ダウンロード関数
-download() {
-    local file_name="$1"
-    local permission="$2"
-    local action="$3"
-
-    echo "DEBUG: Downloading $file_name with permissions $permission and action $action" >&2
-
-    $BASE_WGET "$BASE_DIR/$file_name" "$BASE_URL/$file_name"
-    local wget_status=$?
-    if [ $wget_status -ne 0 ]; then
-        echo "DEBUG: Failed to download $file_name with status $wget_status" >&2
-        return $wget_status
-    fi
-
-    if [ ! -s "$BASE_DIR/$file_name" ]; then
-        echo "DEBUG: $file_name is empty after download" >&2
-        return 1
-    fi
-
-    if [ "$permission" = "chmod" ]; then
-        chmod +x "$BASE_DIR/$file_name"
-        echo "DEBUG: Applied chmod to $file_name" >&2
-    fi
-
-    if [ "$action" = "run" ]; then
-        . "$BASE_DIR/$file_name"
-        local source_status=$?
-        if [ $source_status -ne 0 ]; then
-            echo "DEBUG: Failed to source $file_name with status $source_status" >&2
-            return $source_status
-        fi
-        echo "DEBUG: Executed $file_name" >&2
-    fi
-
-    return 0
-}
-
-# メニューコマンドを取得する関数
+# ダウンロード用データ
 menu_download() {
-    download "internet-config.sh" "chmod" "run"
-    local status=$?
-    if [ $status -ne 0 ]; then
-        echo "DEBUG: Download process failed for internet-config.sh with status $status" >&2
-    fi
-
-    download "system-config.sh" "chmod" "run"
-    status=$?
-    if [ $status -ne 0 ]; then
-        echo "DEBUG: Download process failed for system-config.sh with status $status" >&2
-    fi
-
-    download "package-install.sh" "chmod" "run"
-    status=$?
-    if [ $status -ne 0 ]; then
-        echo "DEBUG: Download process failed for package-install.sh with status $status" >&2
-    fi
-
-    download "adblocker-dns.sh" "chmod" "run"
-    status=$?
-    if [ $status -ne 0 ]; then
-        echo "DEBUG: Download process failed for adblocker-dns.sh with status $status" >&2
-    fi
-
-    download "accesspoint-setup.sh" "chmod" "run"
-    status=$?
-    if [ $status -ne 0 ]; then
-        echo "DEBUG: Download process failed for accesspoint-setup.sh with status $status" >&2
-    fi
-
-    download "other-utilities.sh" "chmod" "run"
-    status=$?
-    if [ $status -ne 0 ]; then
-        echo "DEBUG: Download process failed for other-utilities.sh with status $status" >&2
-    fi
-
-    echo "exit" "" ""
-    echo "remove" "" ""
+    echo "internet-config.sh chmod run"
+    echo "system-config.sh chmod run"
+    echo "package-install.sh chmod run"
+    echo "adblocker-dns.sh chmod run"
+    echo "accesspoint-setup.sh chmod run"
+    echo "other-utilities.sh chmod run"
+    echo "exit"
+    echo "remove"
 }
 
 # セレクター関数（メニュー表示と選択処理）
@@ -225,83 +145,42 @@ selector() {
 
 execute_menu_action() {
     local choice="$1"
-    local temp_file="${CACHE_DIR}/menu_commands.tmp"
-    local command_line=""
 
     echo "DEBUG: Executing action for choice: $choice" >&2
 
     # メニューコマンドを取得
-    echo "DEBUG: Calling menu_download function" >&2
-    menu_download > "$temp_file" 2>&1
-    local status=$?
-    if [ $status -ne 0 ]; then
-        echo "DEBUG: menu_download function failed with status: $status" >&2
-        return $status
-    fi
+    local command_line
+    command_line=$(menu_download | sed -n "${choice}p")
 
-    echo "DEBUG: Checking if $temp_file exists and is not empty" >&2
-    if [ ! -f "$temp_file" ]; then
-        echo "DEBUG: $temp_file does not exist" >&2
-        return 1
-    fi
-    if [ ! -s "$temp_file" ]; then
-        echo "DEBUG: $temp_file is empty" >&2
-        return 1
-    fi
+    # コマンドとパラメータを分割
+    set -- $command_line
 
-    # 行数取得と範囲チェック
-    local lines=$(wc -l < "$temp_file")
-    echo "DEBUG: Menu has $lines commands" >&2
-
-    if [ "$choice" -lt 1 ] || [ "$choice" -gt "$lines" ]; then
-        echo "DEBUG: Choice out of range: $choice (valid: 1-$lines)" >&2
-        printf "%s\n" "$(get_message "CONFIG_ERROR_INVALID_NUMBER")"
-        rm -f "$temp_file"
-        return 0
-    fi
-
-    # コマンド行を取得
-    echo "DEBUG: Retrieving command line from $temp_file" >&2
-    command_line=$(sed -n "${choice}p" "$temp_file")
-    rm -f "$temp_file"
-
-    echo "DEBUG: Selected command: $command_line" >&2
-
-    # 空コマンドチェック
-    if [ -z "$command_line" ]; then
-        echo "DEBUG: Empty command selected" >&2
-        return 0
-    fi
-
-    # 特殊コマンド処理: exit
-    if [ "$command_line" = "exit" ] || [ "$command_line" = "exit  " ]; then
-        printf "%s\n" "$(get_message "CONFIG_EXIT_CONFIRMED")"
-        sleep 1
-        return 255
-    fi
-
-    # 特殊コマンド処理: remove
-    if [ "$command_line" = "remove" ] || [ "$command_line" = "remove  " ]; then
-        if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
-            printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
+    case "$1" in
+        "exit")
+            printf "%s\n" "$(get_message "CONFIG_EXIT_CONFIRMED")"
             sleep 1
+            exit 0
+            ;;
+        "remove")
+            if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
+                printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
+                sleep 1
+                [ -f "$0" ] && rm -f "$0"
+                [ -d "$BASE_DIR" ] && rm -rf "$BASE_DIR"
+                exit 0
+            else
+                printf "%s\n" "$(get_message "CONFIG_DELETE_CANCELED")"
+                sleep 2
+                return 0
+            fi
+            ;;
+        *)
+            echo "DEBUG: Calling download for $1 with $2 and $3" >&2
+            download "$1" "$2" "$3"
+            ;;
+    esac
 
-            # スクリプト自身とBASE_DIRを削除
-            [ -f "$0" ] && rm -f "$0"
-            [ -d "$BASE_DIR" ] && rm -rf "$BASE_DIR"
-
-            return 255
-        else
-            printf "%s\n" "$(get_message "CONFIG_DELETE_CANCELED")"
-            sleep 2
-            return 0
-        fi
-    fi
-
-    # 通常コマンド実行
-    echo "DEBUG: Executing command: $command_line" >&2
-    eval "$command_line"
-    status=$?
+    local status=$?
     echo "DEBUG: Command execution finished with status: $status" >&2
 
     return $status
