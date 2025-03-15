@@ -28,7 +28,7 @@ printf "%s\n" "$(color white_black "$(get_message "MENU_REMOVE")")"
 )
 
 # ダウンロード用データ - ループ問題修正
-menu_download() {
+XXX_menu_download() {
         download "internet-config.sh" "chmod" "run"
         download "system-config.sh" "chmod" "run"
         download "package-install.sh" "chmod" "run"
@@ -37,6 +37,86 @@ menu_download() {
         download "other-utilities.sh" "chmod" "run"
         echo "exit" "" ""
         echo "remove" "" ""
+}
+
+# ダウンロード関数
+download() {
+    local file_name="$1"
+    local permission="$2"
+    local action="$3"
+
+    echo "DEBUG: Downloading $file_name with permissions $permission and action $action" >&2
+
+    $BASE_WGET "$BASE_DIR/$file_name" "$BASE_URL/$file_name"
+    local wget_status=$?
+    if [ $wget_status -ne 0 ]; then
+        echo "DEBUG: Failed to download $file_name with status $wget_status" >&2
+        return $wget_status
+    fi
+
+    if [ ! -s "$BASE_DIR/$file_name" ]; then
+        echo "DEBUG: $file_name is empty after download" >&2
+        return 1
+    fi
+
+    if [ "$permission" = "chmod" ]; then
+        chmod +x "$BASE_DIR/$file_name"
+        echo "DEBUG: Applied chmod to $file_name" >&2
+    fi
+
+    if [ "$action" = "run" ]; then
+        . "$BASE_DIR/$file_name"
+        local source_status=$?
+        if [ $source_status -ne 0 ]; then
+            echo "DEBUG: Failed to source $file_name with status $source_status" >&2
+            return $source_status
+        fi
+        echo "DEBUG: Executed $file_name" >&2
+    fi
+
+    return 0
+}
+
+# メニューコマンドを取得する関数
+menu_download() {
+    download "internet-config.sh" "chmod" "run"
+    local status=$?
+    if [ $status -ne 0 ]; then
+        echo "DEBUG: Download process failed for internet-config.sh with status $status" >&2
+    fi
+
+    download "system-config.sh" "chmod" "run"
+    status=$?
+    if [ $status -ne 0 ]; then
+        echo "DEBUG: Download process failed for system-config.sh with status $status" >&2
+    fi
+
+    download "package-install.sh" "chmod" "run"
+    status=$?
+    if [ $status -ne 0 ]; then
+        echo "DEBUG: Download process failed for package-install.sh with status $status" >&2
+    fi
+
+    download "adblocker-dns.sh" "chmod" "run"
+    status=$?
+    if [ $status -ne 0 ]; then
+        echo "DEBUG: Download process failed for adblocker-dns.sh with status $status" >&2
+    fi
+
+    download "accesspoint-setup.sh" "chmod" "run"
+    status=$?
+    if [ $status -ne 0 ]; then
+        echo "DEBUG: Download process failed for accesspoint-setup.sh with status $status" >&2
+    fi
+
+    download "other-utilities.sh" "chmod" "run"
+    status=$?
+    if [ $status -ne 0 ]; then
+        echo "DEBUG: Download process failed for other-utilities.sh with status $status" >&2
+    fi
+
+    echo "exit" "" ""
+    echo "remove" "" ""
 }
 
 # セレクター関数（メニュー表示と選択処理）
