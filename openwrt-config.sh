@@ -15,6 +15,13 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 
+# デバッグ用の関数 - メニュー関連のデバッグを分離
+menu_debug() {
+    if [ "$DEBUG_MODE" = "true" ]; then
+        printf "[DEBUG] %s\n" "$1" >&2
+    fi
+}
+
 # メニュー表示用データ
 menyu_selector() (
 printf "%s\n" "$(color red "$(get_message "MENU_INTERNET")")"
@@ -59,9 +66,15 @@ selector() {
     menyu_selector > "$temp_file" 2>/dev/null
     menu_count=$(wc -l < "$temp_file")
     
+    # デバッグ情報の記録（メニュー項目とは分離）
+    menu_debug "Menu items count: $menu_count"
+    menu_debug "Current script: $script_name"
+    
     # 画面クリア処理をデバッグ変数で制御
     if [ "$DEBUG_MODE" != "true" ]; then
         clear
+    else
+        menu_debug "Debug mode active - skipping screen clear"
     fi
     
     # プレースホルダーの置換を確実に行うため、直接変数を代入
@@ -79,14 +92,17 @@ selector() {
     
     printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
     
-    # 番号付きでメニュー項目を表示
+    # 番号付きでメニュー項目を表示 - デバッグと分離
     i=1
     while IFS= read -r line; do
         # 色を決定（iに基づく）
         local current_color=$(printf "%s" "$color_list" | cut -d' ' -f$i 2>/dev/null)
         [ -z "$current_color" ] && current_color="white"
         
-        # 色付きの番号と項目を表示
+        # デバッグモードの場合は詳細情報を別に記録
+        menu_debug "Menu item $i: color=$current_color, content='$line'"
+        
+        # 色付きの番号と項目を表示（通常出力）
         printf " %s %s\n" "$(color "$current_color" "[${i}]:")" "$line"
         i=$((i + 1))
     done < "$temp_file"
@@ -105,10 +121,12 @@ selector() {
     
     # 入力値を正規化
     choice=$(normalize_input "$choice")
+    menu_debug "User input (normalized): '$choice'"
     
     # 入力値チェック
     if ! printf "%s" "$choice" | grep -q '^[0-9]\+$'; then
         printf "%s\n" "$(get_message "CONFIG_ERROR_NOT_NUMBER")"
+        menu_debug "Invalid input: not a number"
         sleep 2
         return 0
     fi
@@ -117,11 +135,13 @@ selector() {
         local error_text="$(get_message "CONFIG_ERROR_INVALID_NUMBER")"
         error_text=$(printf "%s" "$error_text" | sed "s/{0}/$menu_count/g")
         printf "%s\n" "$error_text"
+        menu_debug "Invalid input: out of range (1-$menu_count)"
         sleep 2
         return 0
     fi
     
     # 選択アクションの実行
+    menu_debug "Executing menu action for choice: $choice"
     execute_menu_action "$choice"
     
     return $?
@@ -138,9 +158,13 @@ execute_menu_action() {
     command_line=$(sed -n "${choice}p" "$temp_file")
     rm -f "$temp_file"
     
+    # デバッグ情報
+    menu_debug "Selected command line: '$command_line'"
+    
     # exit処理（スクリプト終了）
     if [ "$command_line" = "exit  " ]; then
         printf "%s\n" "$(get_message "CONFIG_EXIT_CONFIRMED")"
+        menu_debug "Exit command selected"
         sleep 1
         return 255
     fi
@@ -149,6 +173,7 @@ execute_menu_action() {
     if [ "$command_line" = "remove  " ]; then
         if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
             printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
+            menu_debug "Remove command confirmed"
             sleep 1
             
             # スクリプト自身とBASE_DIRを削除
@@ -158,15 +183,19 @@ execute_menu_action() {
             return 255
         else
             printf "%s\n" "$(get_message "CONFIG_DELETE_CANCELED")"
+            menu_debug "Remove command canceled"
             sleep 2
             return 0
         fi
     fi
     
     # 通常コマンド実行（run モードでサブシェルで実行してループ防止）
+    menu_debug "Executing command: $command_line"
     eval "$command_line"
+    local ret=$?
+    menu_debug "Command execution returned: $ret"
     
-    return $?
+    return $ret
 }
 
 # メイン関数
@@ -175,16 +204,21 @@ main() {
     
     # ディレクトリ作成（必要な場合のみ）
     [ ! -d "${CACHE_DIR}" ] && mkdir -p "${CACHE_DIR}"
+    menu_debug "Starting main execution loop"
     
     # メインループ
     while true; do
         selector "$(get_message "MENU_TITLE")"
         ret=$?
         
+        menu_debug "Selector returned: $ret"
         if [ "$ret" -eq 255 ]; then
+            menu_debug "Exit condition detected, breaking main loop"
             break
         fi
     done
+    
+    menu_debug "Main execution completed"
 }
 
 # スクリプト実行
