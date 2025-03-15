@@ -61,7 +61,7 @@ selector() {
     
     # 画面クリア処理をデバッグ変数で制御
     if [ "$DEBUG_MODE" != "true" ]; then
-       # clear
+       clear
     fi
     
     # プレースホルダーの置換を確実に行うため、直接変数を代入
