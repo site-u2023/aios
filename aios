@@ -303,7 +303,8 @@ load_language_file() {
 # メッセージを取得する関数
 get_message() {
     local key="$1"
-    local default_msg="$2"  # デフォルトメッセージ（省略可）
+    local params="$2"  # パラメータ文字列（例: "code=JP"）
+    local default_msg=""
     local lang=""
     local db_file=""
     
@@ -320,7 +321,7 @@ get_message() {
         db_file="${BASE_DIR}/messages_base.db"  # デフォルトDB
     fi
     
-    debug_log "DEBUG" "get_message: key=${key}, language=${lang}, db_file=${db_file}"
+    debug_log "DEBUG" "get_message: key=${key}, language=${lang}, db_file=${db_file}, params=${params}"
     
     # 指定されたDBファイルが存在するか確認
     if [ ! -f "$db_file" ]; then
@@ -361,6 +362,17 @@ get_message() {
         else
             message="$key"  # キーをそのまま返す
         fi
+    fi
+    
+    # パラメータ置換処理 - POSIXシェル準拠
+    if [ -n "$params" ]; then
+        # 変数名と値のペアをループ処理
+        echo "$params" | tr '&' '\n' | while IFS='=' read -r var_name var_value; do
+            # 安全な値に変換（セキュリティ対策）
+            var_value=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
+            # メッセージ内の{var_name}をvar_valueに置換
+            message=$(echo "$message" | sed "s/{$var_name}/$var_value/g")
+        done
     fi
     
     echo "$message"
@@ -1233,13 +1245,13 @@ color_print_banner() {
     # バナーの前に空行
     printf "\n"
     
-    # 小文字「aios」のブロックASCIIアート
-    printf "%s\n" "$(color magenta "               ██ █")"
-    printf "%s\n" "$(color blue    "    ████      ███       ████      █████")"
-    printf "%s\n" "$(color cyan    "       ██      ██      ██  ██    ██")"
-    printf "%s\n" "$(color green   "    █████      ██      ██  ██     █████")"
-    printf "%s\n" "$(color yellow  "   ██  ██      ██      ██  ██         ██")"
-    printf "%s\n" "$(color red     "    █████     ████      ████     ██████")"
+    # ASCIIアート
+    printf "%s\n" "$(color magenta "               ## #")"
+    printf "%s\n" "$(color blue    "    ####      ###       ####      #####")"
+    printf "%s\n" "$(color cyan    "       ##      ##      ##  ##    ##")"
+    printf "%s\n" "$(color green   "    #####      ##      ##  ##     #####")"
+    printf "%s\n" "$(color yellow  "   ##  ##      ##      ##  ##         ##")"
+    printf "%s\n" "$(color red     "    #####     ####      ####     ######")"
     
     # バナーの後に空行
     printf "\n"
@@ -1258,7 +1270,7 @@ print_banner() {
     # バナーの前に空行
     printf "\n"
     
-    # 小文字「aios」のブロックASCIIアート
+    # ASCIIアート（環境依存文字 - ブロック）
     printf "%s\n" "$(color white "               ██ █")"
     printf "%s\n" "$(color white "    ████      ███       ████      █████")"
     printf "%s\n" "$(color white "       ██      ██      ██  ██    ██")"
