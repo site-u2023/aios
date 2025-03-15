@@ -53,10 +53,10 @@ selector() {
     menu_count=$(echo "$selector_data" | wc -l)
     debug_log "DEBUG" "Menu contains $menu_count items"
     
-    clear
-    printf "%s\n" "$(get_message "CONFIG_HEADER" "var=$SCRIPT_NAME" "version=$SCRIPT_VERSION")"
+    # clear
+    printf "%s\n" "$(get_message "CONFIG_HEADER" "$SCRIPT_NAME" "$SCRIPT_VERSION")"
     printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
-    [ -n "$menu_title" ] && printf "%s\n" "$(get_message "CONFIG_SECTION_TITLE" "title=$menu_title")"
+    [ -n "$menu_title" ] && printf "%s\n" "$(get_message "CONFIG_SECTION_TITLE" "$menu_title")"
     printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
     
     # メニュー項目表示（多言語対応版）
