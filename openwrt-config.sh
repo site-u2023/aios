@@ -54,10 +54,10 @@ selector() {
     debug_log "DEBUG" "Menu contains $menu_count items"
     
     clear
-    echo_message "CONFIG_HEADER" "$SCRIPT_NAME" "$SCRIPT_VERSION"
-    echo_message "CONFIG_SEPARATOR"
-    [ -n "$menu_title" ] && echo_message "CONFIG_SECTION_TITLE" "$menu_title"
-    echo_message "CONFIG_SEPARATOR"
+    printf "%s\n" "$(get_message "CONFIG_HEADER" "var=$SCRIPT_NAME" "version=$SCRIPT_VERSION")"
+    printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
+    [ -n "$menu_title" ] && printf "%s\n" "$(get_message "CONFIG_SECTION_TITLE" "title=$menu_title")"
+    printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
     
     # メニュー項目表示（多言語対応版）
     echo "$selector_data" | while IFS= read -r line; do
@@ -68,25 +68,25 @@ selector() {
             local title_id=$(echo "$line" | cut -d '"' -f 6)
             
             # メッセージDBからタイトルを取得
-            local title=$(echo_message "$title_id")
+            local title=$(get_message "$title_id")
             
             printf " %s%s\n" "$(color "$color_name" "[$num]: ")" "$(color "$color_name" "$title")"
         fi
     done
     
-    echo_message "CONFIG_SEPARATOR"
-    printf "%s" "$(echo_message "CONFIG_SELECT_PROMPT" "$menu_count")"
+    printf "%s\n" "$(get_message "CONFIG_SEPARATOR")"
+    printf "%s" "$(get_message "CONFIG_SELECT_PROMPT" "max=$menu_count")"
     read -r choice
     
     # 入力値チェック
     if ! echo "$choice" | grep -q '^[0-9]\+$'; then
-        echo_message "CONFIG_ERROR_NOT_NUMBER"
+        printf "%s\n" "$(get_message "CONFIG_ERROR_NOT_NUMBER")"
         sleep 2
         return 0
     fi
     
     if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_count" ]; then
-        echo_message "CONFIG_ERROR_INVALID_NUMBER" "$menu_count"
+        printf "%s\n" "$(get_message "CONFIG_ERROR_INVALID_NUMBER" "max=$menu_count")"
         sleep 2
         return 0
     fi
@@ -99,22 +99,22 @@ selector() {
     
     # 終了オプションの処理
     if [ "$script" = "exit" ]; then
-        if confirm "CONFIG_CONFIRM_DELETE"; then
+        if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
             debug_log "DEBUG" "User requested script deletion"
             rm -f "$0"
-            echo_message "CONFIG_DELETE_CONFIRMED"
+            printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
         else
-            echo_message "CONFIG_DELETE_CANCELED"
+            printf "%s\n" "$(get_message "CONFIG_DELETE_CANCELED")"
         fi
         return 255
     fi
     
     # ダウンロードと実行
-    echo_message "CONFIG_DOWNLOADING" "$script"
+    printf "%s\n" "$(get_message "CONFIG_DOWNLOADING" "file=$script")"
     if download "$script" "$opt1" "$opt2"; then
         debug_log "DEBUG" "Successfully processed $script"
     else
-        echo_message "CONFIG_DOWNLOAD_FAILED" "$script"
+        printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_FAILED" "file=$script")"
         sleep 2
     fi
     
@@ -126,7 +126,7 @@ main() {
     
     # メインループ
     while true; do
-        selector "$(echo_message "MENU_TITLE")"
+        selector "$(get_message "MENU_TITLE")"
     done
 }
 
