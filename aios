@@ -178,12 +178,6 @@ debug_log() {
     fi
 }
 
-handle_exit() {
-    local message="$1"
-    color yellow "$message"
-    exit 0
-}
-
 print_help() {
     printf "%s\n\n" "$(get_message "MSG_HELP_USAGE")"
     
