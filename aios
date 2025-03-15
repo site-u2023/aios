@@ -1227,33 +1227,7 @@ download() {
 
 # 🔵　メイン　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
-print_banner() {
-    # Empty line at start
-    debug_log "DEBUG" "Displaying lowercase aios block ASCII art banner"
-
-    printf "\n"
-    
-    # ASCII art with colors
-    printf "%s\n" "$(color magenta "               ii i")"
-    printf "%s\n" "$(color blue    "    aaaa      iii       oooo      sssss")"
-    printf "%s\n" "$(color cyan    "       aa      ii      oo  oo    ss")"
-    printf "%s\n" "$(color green   "    aaaaa      ii      oo  oo     sssss")"
-    printf "%s\n" "$(color yellow  "   aa  aa      ii      oo  oo         ss")"
-    printf "%s\n" "$(color red     "    aaaaa     iiii      oooo     ssssss")"
-    
-    # Empty line after ASCII art
-    printf "\n"
-    
-    # Banner messages
-    printf "%s\n" "$(color white "$(get_message "MSG_BANNER_DECCRIPTION")")"
-    printf "%s\n" "$(color white "$(get_message "MSG_BANNER_NAME")")"
-    printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DISCLAIMER")")"
-
-    debug_log "DEBUG" "Block style lowercase aios banner displayed successfully"
-
-}
-
-bloc_banner() {
+color_print_banner() {
     debug_log "DEBUG" "Displaying lowercase aios block ASCII art banner"
     
     # バナーの前に空行
@@ -1278,7 +1252,7 @@ bloc_banner() {
     debug_log "DEBUG" "Block style lowercase aios banner displayed successfully"
 }
 
-monochrome_banner() {
+print_banner() {
     debug_log "DEBUG" "Displaying lowercase aios block ASCII art banner"
     
     # バナーの前に空行
@@ -1450,8 +1424,6 @@ check_common() {
             download "local-package.db"
             download "custom-package.db"
             print_banner
-            bloc_banner
-            monochrome_banner
             select_country "$lang_code"
             download "system-config.sh" "chmod" "load"
             ;;
