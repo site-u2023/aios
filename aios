@@ -1226,17 +1226,13 @@ check_option() {
                 DEBUG_MODE="true"
                 DEBUG_LEVEL="DEBUG"
                 ;;
-            -d2|--d2|-debug2|--debug2)
-                DEBUG_MODE="true"
-                DEBUG_LEVEL="DEBUG2"
-                ;;
             -cf|--cf|-common_full|--common_full)
                 MODE="full"
                 ;;
             -cl|--cl|-ocommon_light|--ocommon_light)
                 MODE="light"
                 ;;
-            -cd|--cd|-common_debug|--common_debug|--ocommon_debug)
+            -cd|--cd|-common_debug|--common_debug|--common_debug)
                 MODE="debug"
                 ;;
             -r|--r|-reset|--reset|-resrt|--resrt)
