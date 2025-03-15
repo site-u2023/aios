@@ -53,12 +53,6 @@ SCRIPT_VERSION="2025.03.15-00-00"
 ### 🛠️ Keep debugging simple, focused, and POSIX-compliant!
 ### =========================================================
 
-DEV_NULL="${DEV_NULL:-on}"
-# サイレントモード
-# export DEV_NULL="on"
-# 通常モード
-# unset DEV_NULL
-
 # 基本定数の設定 
 BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q -O}"
 # BASE_WGET="${BASE_WGET:-wget -O}"
@@ -105,10 +99,6 @@ selector() {
     local item_color=""
     local script_name=$(basename "$0" .sh)
     
-    if [ "$DEBUG_MODE" = "true" ]; then
-        printf "DEBUG: Starting menu selector function\n" >&2
-    fi
-    
     # カラーコードの配列
     local color_list="red blue green magenta cyan yellow white white_black"
     
@@ -116,20 +106,9 @@ selector() {
     local menu_data=""
     local temp_file="${CACHE_DIR}/menu_selector_output.tmp"
     
-    # デバッグ出力を一時的に無効化（メニュー生成中）
-    local original_dev_null="$DEV_NULL"
-    DEV_NULL="on"
-    
     # メニューアイテムをキャプチャ
     menyu_selector > "$temp_file" 2>/dev/null
     menu_count=$(wc -l < "$temp_file")
-    
-    # デバッグ出力を元に戻す
-    DEV_NULL="$original_dev_null"
-    
-    if [ "$DEBUG_MODE" = "true" ]; then
-        printf "DEBUG: Menu contains %d items\n" "$menu_count" >&2
-    fi
     
     # 画面クリア処理をデバッグ変数で制御
     if [ "$DEBUG_MODE" != "true" ]; then
@@ -178,10 +157,6 @@ selector() {
     # 入力値を正規化
     choice=$(normalize_input "$choice")
     
-    if [ "$DEBUG_MODE" = "true" ]; then
-        printf "DEBUG: User selected: %s\n" "$choice" >&2
-    fi
-    
     # 入力値チェック
     if ! printf "%s" "$choice" | grep -q '^[0-9]\+$'; then
         printf "%s\n" "$(get_message "CONFIG_ERROR_NOT_NUMBER")"
@@ -209,31 +184,13 @@ execute_menu_action() {
     local temp_file="${CACHE_DIR}/menu_download_commands.tmp"
     local command_line=""
     
-    if [ "$DEBUG_MODE" = "true" ]; then
-        printf "DEBUG: Processing menu selection: %s\n" "$choice" >&2
-    fi
-    
-    # デバッグ出力を一時的に無効化（コマンド取得中）
-    local original_dev_null="$DEV_NULL"
-    DEV_NULL="on"
-    
     # メニューコマンドを取得
     menu_download > "$temp_file" 2>/dev/null
     command_line=$(sed -n "${choice}p" "$temp_file")
     rm -f "$temp_file"
     
-    # デバッグ出力を元に戻す
-    DEV_NULL="$original_dev_null"
-    
-    if [ "$DEBUG_MODE" = "true" ]; then
-        printf "DEBUG: Selected command: %s\n" "$command_line" >&2
-    fi
-    
     # exit処理（スクリプト終了）
     if [ "$command_line" = "\"exit\" \"\" \"\"" ]; then
-        if [ "$DEBUG_MODE" = "true" ]; then
-            printf "DEBUG: Exit option selected\n" >&2
-        fi
         printf "%s\n" "$(get_message "CONFIG_EXIT_CONFIRMED")"
         sleep 1
         return 255
@@ -241,14 +198,7 @@ execute_menu_action() {
     
     # remove処理（スクリプトとディレクトリ削除）
     if [ "$command_line" = "\"remove\" \"\" \"\"" ]; then
-        if [ "$DEBUG_MODE" = "true" ]; then
-            printf "DEBUG: Remove option selected\n" >&2
-        fi
-        
         if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
-            if [ "$DEBUG_MODE" = "true" ]; then
-                printf "DEBUG: User confirmed script and directory removal\n" >&2
-            fi
             printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
             sleep 1
             
@@ -258,9 +208,6 @@ execute_menu_action() {
             
             return 255
         else
-            if [ "$DEBUG_MODE" = "true" ]; then
-                printf "DEBUG: User cancelled script and directory removal\n" >&2
-            fi
             printf "%s\n" "$(get_message "CONFIG_DELETE_CANCELED")"
             sleep 2
             return 0
@@ -268,9 +215,6 @@ execute_menu_action() {
     fi
     
     # 通常コマンド実行
-    if [ "$DEBUG_MODE" = "true" ]; then
-        printf "DEBUG: Executing command: %s\n" "$command_line" >&2
-    fi
     eval "$command_line"
     
     return $?
@@ -279,23 +223,13 @@ execute_menu_action() {
 # メイン関数
 main() {
     local ret=0
-    
-    # キャッシュディレクトリ確保
-    [ ! -d "${CACHE_DIR}" ] && mkdir -p "${CACHE_DIR}"
-    
-    if [ "$DEBUG_MODE" = "true" ]; then
-        printf "DEBUG: Starting menu config script\n" >&2
-    fi
-    
+        
     # メインループ
     while true; do
         selector "$(get_message "MENU_TITLE")"
         ret=$?
         
         if [ "$ret" -eq 255 ]; then
-            if [ "$DEBUG_MODE" = "true" ]; then
-                printf "DEBUG: Script terminating\n" >&2
-            fi
             break
         fi
     done
