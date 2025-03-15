@@ -19,19 +19,17 @@ printf "%s\n" "$(color blue "$(get_message "MENU_SYSTEM")")"
 printf "%s\n" "$(color green "$(get_message "MENU_PACKAGES")")"
 printf "%s\n" "$(color magenta "$(get_message "MENU_ADBLOCKER")")"
 printf "%s\n" "$(color cyan "$(get_message "MENU_ACCESSPOINT")")"
-printf "%s\n" "$(color yellow "$(get_message "MENU_HOMEASSISTANT")")"
-printf "%s\n" "$(color white "$(get_message "MENU_OTHERS")")"
+printf "%s\n" "$(color yellow "$(get_message "MENU_OTHERS")")"
 printf "%s\n" "$(color white_black "$(get_message "MENU_EXIT")")"
 )
 
 # ダウンロード用データ
 menu_download() (
-download "internet-setup.sh" "chmod" "load"
-download "system-setup.sh" "chmod" "load"
+download "internet-config.sh" "chmod" "load"
+download "system-config.sh" "chmod" "load"
 download "package-install.sh" "chmod" "load"
 download "adblocker-dns.sh" "chmod" "load"
 download "accesspoint-setup.sh" "chmod" "load"
-download "homeassistant-install.sh" "chmod" "load"
 download "other-utilities.sh" "chmod" "load"
 "exit" "" ""
 )
