@@ -1330,7 +1330,6 @@ check_common() {
             print_banner       
             select_country "$lang_code"
             download "openwrt-config.sh" "hidden" "chmod" "load"
-            #download "system-config.sh" "hidden" "chmod" "load"
             ;;
         full)
             download "dynamic-system-info.sh" "chmod" "load"
@@ -1346,7 +1345,6 @@ check_common() {
             print_banner
             select_country "$lang_code"
             download "openwrt-config.sh" "chmod" "load"
-            #download "system-config.sh" "chmod" "load"
             ;;
         update)
             check_update "$ORIGINAL_ARGS"
