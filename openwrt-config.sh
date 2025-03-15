@@ -71,8 +71,6 @@ BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
-UPDATE_CACHE="${CACHE_DIR}/update.ch"
-GITHUB_TOKEN_FILE="/etc/aios_token"
 
 # メニュー表示用データ
 menyu_selector() (
@@ -107,7 +105,9 @@ selector() {
     local item_color=""
     local script_name=$(basename "$0" .sh)
     
-    debug_output "DEBUG: Starting menu selector function"
+    if [ "$DEBUG_MODE" = "true" ]; then
+        printf "DEBUG: Starting menu selector function\n" >&2
+    fi
     
     # カラーコードの配列
     local color_list="red blue green magenta cyan yellow white white_black"
@@ -127,10 +127,13 @@ selector() {
     # デバッグ出力を元に戻す
     DEV_NULL="$original_dev_null"
     
-    debug_output "DEBUG: Menu contains $menu_count items"
+    if [ "$DEBUG_MODE" = "true" ]; then
+        printf "DEBUG: Menu contains %d items\n" "$menu_count" >&2
+    fi
     
+    # 画面クリア処理をデバッグ変数で制御
     if [ "$DEBUG_MODE" != "true" ]; then
-    clear
+        clear
     fi
     
     # プレースホルダーの置換を確実に行うため、直接変数を代入
@@ -174,7 +177,10 @@ selector() {
     
     # 入力値を正規化
     choice=$(normalize_input "$choice")
-    debug_output "DEBUG: User selected: $choice"
+    
+    if [ "$DEBUG_MODE" = "true" ]; then
+        printf "DEBUG: User selected: %s\n" "$choice" >&2
+    fi
     
     # 入力値チェック
     if ! printf "%s" "$choice" | grep -q '^[0-9]\+$'; then
@@ -203,7 +209,9 @@ execute_menu_action() {
     local temp_file="${CACHE_DIR}/menu_download_commands.tmp"
     local command_line=""
     
-    debug_output "DEBUG: Processing menu selection: $choice"
+    if [ "$DEBUG_MODE" = "true" ]; then
+        printf "DEBUG: Processing menu selection: %s\n" "$choice" >&2
+    fi
     
     # デバッグ出力を一時的に無効化（コマンド取得中）
     local original_dev_null="$DEV_NULL"
@@ -217,11 +225,15 @@ execute_menu_action() {
     # デバッグ出力を元に戻す
     DEV_NULL="$original_dev_null"
     
-    debug_output "DEBUG: Selected command: $command_line"
+    if [ "$DEBUG_MODE" = "true" ]; then
+        printf "DEBUG: Selected command: %s\n" "$command_line" >&2
+    fi
     
     # exit処理（スクリプト終了）
     if [ "$command_line" = "\"exit\" \"\" \"\"" ]; then
-        debug_output "DEBUG: Exit option selected"
+        if [ "$DEBUG_MODE" = "true" ]; then
+            printf "DEBUG: Exit option selected\n" >&2
+        fi
         printf "%s\n" "$(get_message "CONFIG_EXIT_CONFIRMED")"
         sleep 1
         return 255
@@ -229,10 +241,14 @@ execute_menu_action() {
     
     # remove処理（スクリプトとディレクトリ削除）
     if [ "$command_line" = "\"remove\" \"\" \"\"" ]; then
-        debug_output "DEBUG: Remove option selected"
+        if [ "$DEBUG_MODE" = "true" ]; then
+            printf "DEBUG: Remove option selected\n" >&2
+        fi
         
         if confirm "$(get_message "CONFIG_CONFIRM_DELETE")"; then
-            debug_output "DEBUG: User confirmed script and directory removal"
+            if [ "$DEBUG_MODE" = "true" ]; then
+                printf "DEBUG: User confirmed script and directory removal\n" >&2
+            fi
             printf "%s\n" "$(get_message "CONFIG_DELETE_CONFIRMED")"
             sleep 1
             
@@ -242,7 +258,9 @@ execute_menu_action() {
             
             return 255
         else
-            debug_output "DEBUG: User cancelled script and directory removal"
+            if [ "$DEBUG_MODE" = "true" ]; then
+                printf "DEBUG: User cancelled script and directory removal\n" >&2
+            fi
             printf "%s\n" "$(get_message "CONFIG_DELETE_CANCELED")"
             sleep 2
             return 0
@@ -250,7 +268,9 @@ execute_menu_action() {
     fi
     
     # 通常コマンド実行
-    debug_output "DEBUG: Executing command: $command_line"
+    if [ "$DEBUG_MODE" = "true" ]; then
+        printf "DEBUG: Executing command: %s\n" "$command_line" >&2
+    fi
     eval "$command_line"
     
     return $?
@@ -263,7 +283,9 @@ main() {
     # キャッシュディレクトリ確保
     [ ! -d "${CACHE_DIR}" ] && mkdir -p "${CACHE_DIR}"
     
-    debug_output "DEBUG: Starting menu config script"
+    if [ "$DEBUG_MODE" = "true" ]; then
+        printf "DEBUG: Starting menu config script\n" >&2
+    fi
     
     # メインループ
     while true; do
@@ -271,7 +293,9 @@ main() {
         ret=$?
         
         if [ "$ret" -eq 255 ]; then
-            debug_output "DEBUG: Script terminating"
+            if [ "$DEBUG_MODE" = "true" ]; then
+                printf "DEBUG: Script terminating\n" >&2
+            fi
             break
         fi
     done
