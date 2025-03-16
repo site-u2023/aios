@@ -1,6 +1,9 @@
 SCRIPT_VERSION="2025.03.14-00-00"
 
 SUPPORTED_LANGUAGES="DE RU FR"
+# DE AT CH LI LU
+# RU KZ KG
+# FR BE CH LU CA MC TD DJ CG CI BJ NE CM GA MA RE SC VU HT BF
 
 # メッセージデータベース (多言語対応 - ヨーロッパ言語版)
 # フォーマット: 言語コード|メッセージキー=メッセージ
