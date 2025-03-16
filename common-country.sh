@@ -684,7 +684,6 @@ select_zone() {
     esac
 }
 
-# 国情報をキャッシュに書き込む関数
 country_write() {
     local skip_message="${1:-false}"  # 成功メッセージをスキップするかのフラグ
     
@@ -696,6 +695,7 @@ country_write() {
     # 出力先ファイルのパス
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_language="${CACHE_DIR}/language.ch"
+    local cache_luci="${CACHE_DIR}/luci.ch"
     
     # 一時ファイルが存在するか確認
     if [ ! -f "$tmp_country" ]; then
@@ -717,9 +717,17 @@ country_write() {
     local selected_lang_code=$(awk '{print $5}' "$cache_country")
     debug_log "DEBUG" "Selected language code: $selected_lang_code"
     
-    # 言語設定をキャッシュに保存（message.chはnormalize_languageで生成）
+    # 言語設定をキャッシュに保存
     echo "$selected_lang_code" > "$cache_language"
     debug_log "DEBUG" "Language code written to cache"
+    
+    # LuCIインターフェース用言語コードを取得（4列目）
+    local luci_code=$(awk '{print $4}' "$cache_country")
+    debug_log "DEBUG" "LuCI interface language code: $luci_code"
+    
+    # LuCI言語コードをキャッシュに保存
+    echo "$luci_code" > "$cache_luci"
+    debug_log "DEBUG" "LuCI language code written to cache: $luci_code"
     
     # 成功メッセージを表示（スキップフラグが設定されていない場合のみ）
     if [ "$skip_message" = "false" ]; then
@@ -728,8 +736,6 @@ country_write() {
     
     return 0
 }
-
-#!/bin/sh
 
 # 国コードから言語コードへのマッピング関数
 map_country_code() {
