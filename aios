@@ -246,53 +246,6 @@ color_code_map() {
 
 # 🔵　メッセージ系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
-MUDA_load_language_file() {
-    local lang_code="$1"
-    local base_db="${BASE_DIR}/messages_base.db"
-    
-    debug_log "DEBUG" "Attempting to load language messages for code: ${lang_code}"
-    
-    # 基本言語ファイルは常にロード（US, JPを含む）
-    if [ ! -f "$base_db" ]; then
-        debug_log "ERROR" "Base language file not found: ${base_db}"
-        return 1
-    fi
-    
-    # 言語コードに基づいて追加ファイルをロード
-    case "$lang_code" in
-        US|JP)
-            # 基本ファイルのみで十分
-            debug_log "INFO" "Using base language file only for ${lang_code}"
-            ;;
-        CN|TW|KO)
-            # アジア言語ファイルが必要
-            local asian_db="${BASE_DIR}/messages_asian.db"
-            if [ -f "$asian_db" ]; then
-                debug_log "INFO" "Loading additional Asian language file for ${lang_code}"
-            else
-                debug_log "WARNING" "Asian language file not found, falling back to base messages"
-            fi
-            ;;
-        DE|FR|RU)
-            # ヨーロッパ言語ファイルが必要
-            local euro_db="${BASE_DIR}/messages_euro.db"
-            if [ -f "$euro_db" ]; then
-                debug_log "INFO" "Loading additional European language file for ${lang_code}"
-            else
-                debug_log "WARNING" "European language file not found, falling back to base messages"
-            fi
-            ;;
-        *)
-            # 不明な言語コードの場合はUSにフォールバック
-            debug_log "WARNING" "Unknown language code: ${lang_code}, falling back to US"
-            lang_code="US"
-            ;;
-    esac
-    
-    debug_log "DEBUG" "Language files loaded successfully for ${lang_code}"
-    return 0
-}
-
 # メッセージを取得する関数
 get_message() {
     local key="$1"
