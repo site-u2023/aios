@@ -815,59 +815,37 @@ normalize_language() {
     # 基本言語ファイルの存在確認
     if [ ! -f "$base_db" ]; then
         debug_log "ERROR" "Base message DB not found: ${base_db}"
-        echo "ID" > "$message_cache"  # デフォルトをインドネシア語に変更
-        echo "id" > "$luci_cache"
-        ACTIVE_LANGUAGE="ID"
-        debug_log "DEBUG" "Defaulting to ID language due to missing base DB"
+        echo "US" > "$message_cache"
+        echo "en" > "$luci_cache"
+        ACTIVE_LANGUAGE="US"
+        debug_log "DEBUG" "Defaulting to US language due to missing base DB"
         return 1
     fi
     
-    # 言語コードに応じたDB選択と対応するluci言語の設定
+    # 対応言語情報を各DBから取得
     local target_db="$base_db"  # デフォルトは基本DB
-    local luci_lang="id"        # デフォルトはインドネシア語に変更
+    local luci_lang="en"        # デフォルトは英語
     
-    # 言語設定テーブル（language_code:luci_code:db_type）
-    local lang_table="ID:id:etc EG:ar:etc ES:es:etc JP:ja:base CN:zh-cn:asian TW:zh-tw:asian KO:ko:asian DE:de:euro FR:fr:euro RU:ru:euro"
-    
-    # 言語コードに一致するエントリを検索
-    local lang_entry
-    for lang_entry in $lang_table; do
-        # コロン区切りの各フィールドを取得
-        local lang_code="${lang_entry%%:*}"
-        local remainder="${lang_entry#*:}"
-        local luci_code="${remainder%%:*}"
-        local db_type="${remainder#*:}"
-        
-        if [ "$selected_language" = "$lang_code" ]; then
-            # luciコードを設定
-            luci_lang="$luci_code"
-            debug_log "DEBUG" "Found matching language entry: code=${lang_code}, luci=${luci_code}, db_type=${db_type}"
+    # 各DBファイルを確認して選択された言語をサポートするDBを探す
+    for db_file in "$etc_db" "$asian_db" "$euro_db" "$base_db"; do
+        if [ -f "$db_file" ]; then
+            # DBファイルから対応言語リストを取得
+            local supported_langs=$(grep "^SUPPORTED_LANGUAGES=" "$db_file" | cut -d'=' -f2 | tr -d '"')
+            debug_log "DEBUG" "Checking DB ${db_file} with languages: ${supported_langs}"
             
-            # DB種類に応じて対象DBを決定
-            case "$db_type" in
-                base)
-                    target_db="$base_db"
-                    ;;
-                asian)
-                    # アジア言語DB存在チェック
-                    if [ -f "$asian_db" ]; then
-                        target_db="$asian_db"
-                    fi
-                    ;;
-                euro)
-                    # 欧州言語DB存在チェック
-                    if [ -f "$euro_db" ]; then
-                        target_db="$euro_db"
-                    fi
-                    ;;
-                etc)
-                    # その他言語DB存在チェック
-                    if [ -f "$etc_db" ]; then
-                        target_db="$etc_db"
-                    fi
-                    ;;
-            esac
-            break
+            # 言語がサポートされているか確認
+            if echo " $supported_langs " | grep -q " $selected_language "; then
+                target_db="$db_file"
+                debug_log "DEBUG" "Found language ${selected_language} in DB: ${db_file}"
+                
+                # LuCI言語コードをDBから取得（可能であれば）
+                local luci_code=$(grep "^LANGUAGE_TO_LUCI_${selected_language}=" "$db_file" | cut -d'=' -f2 | tr -d '"')
+                if [ -n "$luci_code" ]; then
+                    luci_lang="$luci_code"
+                    debug_log "DEBUG" "Found LuCI code: ${luci_lang} for ${selected_language}"
+                fi
+                break
+            fi
         fi
     done
     
@@ -875,7 +853,7 @@ normalize_language() {
     echo "$target_db" > "$db_cache"
     echo "$selected_language" > "$message_cache"
     echo "$luci_lang" > "$luci_cache"
-    debug_log "DEBUG" "Writing to cache: message_cache=${selected_language}, luci_cache=${luci_lang}, db_cache=${target_db}"
+    debug_log "DEBUG" "Cache updated: message=${selected_language}, luci=${luci_lang}, db=${target_db}"
     
     ACTIVE_LANGUAGE="$selected_language"
     
