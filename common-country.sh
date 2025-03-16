@@ -736,42 +736,36 @@ map_country_code() {
     local country_code="$1"
     local db_dir="${BASE_DIR}"
     
-    # Debug output (in English)
+    # デバッグ出力
     debug_log "DEBUG" "Processing country code: $country_code"
     
-    # 直接言語コードとして有効な場合はそのまま返す
-    case "$country_code" in
-        US|JP|CN|TW|KO|DE|FR|RU|ID|EG|ES)
-            debug_log "DEBUG" "Direct language code match: $country_code"
-            echo "$country_code"
-            return 0
-            ;;
-    esac
-    
-    # 各DBファイルを順に確認
-    local db_files="messages_base.db messages_asian.db messages_euro.db messages_etc.db"
+    # 各DBファイルを順に確認して言語マッピングを検索
+    local db_files="messages_etc.db messages_euro.db messages_asian.db messages_base.db"
     
     for db_file in $db_files; do
         local full_path="${db_dir}/${db_file}"
         
         if [ -f "$full_path" ]; then
-            # ファイル先頭の20行からSUPPORTED_LANGUAGESとSUPPORTED_LANGUAGE_*変数を抽出
+            # ファイル先頭の20行を取得
             local header=$(head -n 20 "$full_path")
             
-            # サポート言語を取得
+            # サポート言語リストを取得
             local langs=$(echo "$header" | grep "SUPPORTED_LANGUAGES" | cut -d'"' -f2)
-            debug_log "DEBUG" "Checking languages in $db_file: $langs"
             
-            # 各言語に対応するマッピングを確認
+            # まず直接一致するか確認
+            if echo " $langs " | grep -q " $country_code "; then
+                debug_log "DEBUG" "Direct language match: $country_code in $db_file"
+                echo "$country_code"
+                return 0
+            fi
+            
+            # マッピングを確認
             for lang in $langs; do
-                # その言語のマッピング変数を探す
                 local map_line=$(echo "$header" | grep "SUPPORTED_LANGUAGE_${lang}=" | head -1)
                 
                 if [ -n "$map_line" ]; then
-                    # マッピング変数の値を取得
                     local countries=$(echo "$map_line" | cut -d'"' -f2)
                     
-                    # 検索対象の国コードがマッピングに含まれるかチェック
                     if echo " $countries " | grep -q " $country_code "; then
                         debug_log "DEBUG" "Found mapping: $country_code -> $lang in $db_file"
                         echo "$lang"
@@ -782,13 +776,12 @@ map_country_code() {
         fi
     done
     
-    # マッピングがなければ元のコードを返す
-    debug_log "DEBUG" "No mapping found for country code: $country_code"
+    # マッピングが見つからない場合は元の値を返す
+    debug_log "DEBUG" "No mapping found for country code: $country_code, using as is"
     echo "$country_code"
     return 0
 }
 
-# 言語設定を正規化する関数（国コード→言語コードマッピング対応版）
 normalize_language() {
     # 必要なパス定義
     local base_db="${BASE_DIR}/messages_base.db"
@@ -831,10 +824,10 @@ normalize_language() {
     
     # 言語コードに応じたDB選択と対応するluci言語の設定
     local target_db="$base_db"  # デフォルトは基本DB
-    local luci_lang="en"        # デフォルトは英語
+    local luci_lang="id"        # デフォルトはインドネシア語に変更
     
     # 言語設定テーブル（language_code:luci_code:db_type）
-    local lang_table="ID:id:etc EG:ar:etc ES:es:etc"
+    local lang_table="ID:id:etc EG:ar:etc ES:es:etc JP:ja:base CN:zh-cn:asian TW:zh-tw:asian KO:ko:asian DE:de:euro FR:fr:euro RU:ru:euro"
     
     # 言語コードに一致するエントリを検索
     local lang_entry
@@ -848,6 +841,7 @@ normalize_language() {
         if [ "$selected_language" = "$lang_code" ]; then
             # luciコードを設定
             luci_lang="$luci_code"
+            debug_log "DEBUG" "Found matching language entry: code=${lang_code}, luci=${luci_code}, db_type=${db_type}"
             
             # DB種類に応じて対象DBを決定
             case "$db_type" in
@@ -881,6 +875,7 @@ normalize_language() {
     echo "$target_db" > "$db_cache"
     echo "$selected_language" > "$message_cache"
     echo "$luci_lang" > "$luci_cache"
+    debug_log "DEBUG" "Writing to cache: message_cache=${selected_language}, luci_cache=${luci_lang}, db_cache=${target_db}"
     
     ACTIVE_LANGUAGE="$selected_language"
     
