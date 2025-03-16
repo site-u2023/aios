@@ -735,6 +735,7 @@ normalize_language() {
     local base_db="${BASE_DIR}/messages_base.db"
     local asian_db="${BASE_DIR}/messages_asian.db"
     local euro_db="${BASE_DIR}/messages_euro.db"
+    local etc_db="${BASE_DIR}/messages_etc.db" 
     local language_cache="${CACHE_DIR}/language.ch"
     local message_cache="${CACHE_DIR}/message.ch"
     local luci_cache="${CACHE_DIR}/luci.ch"
@@ -799,6 +800,12 @@ normalize_language() {
                     # 欧州言語DB存在チェック
                     if [ -f "$euro_db" ]; then
                         target_db="$euro_db"
+                    fi
+                    ;;
+                etc)
+                    # その他言語DB存在チェック
+                    if [ -f "$etc_db" ]; then
+                        target_db="$etc_db"
                     fi
                     ;;
             esac
