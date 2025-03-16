@@ -790,13 +790,14 @@ normalize_language() {
     local etc_db="${BASE_DIR}/messages_etc.db" 
     local language_cache="${CACHE_DIR}/language.ch"
     local message_cache="${CACHE_DIR}/message.ch"
-    local luci_cache="${CACHE_DIR}/luci.ch"
-    local db_cache="${CACHE_DIR}/message_db.ch"
+    local message_db_tmp="${CACHE_DIR}/message_db.tmp"
     local country_code=""
     local selected_language=""
     
     # デバッグログの出力
-    debug_log "DEBUG" "Normalizing language settings with country-to-language mapping"
+    debug_log "DEBUG" "Normalizing language settings"
+    debug_log "DEBUG" "language_cache=${language_cache}"
+    debug_log "DEBUG" "message_cache=${message_cache}"
     
     # language.chファイルの存在確認
     if [ ! -f "$language_cache" ]; then
@@ -806,60 +807,54 @@ normalize_language() {
 
     # language.chから国コードを読み込み
     country_code=$(cat "$language_cache")
-    debug_log "DEBUG" "Original country/language code: ${country_code}"
+    debug_log "DEBUG" "Original country code: ${country_code}"
     
     # 国コードから言語コードへのマッピング処理
     selected_language=$(map_country_code "$country_code")
-    debug_log "DEBUG" "Mapped to language code: ${selected_language}"
+    debug_log "DEBUG" "Mapped language code: ${selected_language}"
 
-    # 基本言語ファイルの存在確認
-    if [ ! -f "$base_db" ]; then
-        debug_log "ERROR" "Base message DB not found: ${base_db}"
-        echo "US" > "$message_cache"
-        echo "en" > "$luci_cache"
-        ACTIVE_LANGUAGE="US"
-        debug_log "DEBUG" "Defaulting to US language due to missing base DB"
-        return 1
-    fi
+    # 対応するDBファイルを検索
+    local target_db=""
+    local found=0
     
-    # 対応言語情報を各DBから取得
-    local target_db="$base_db"  # デフォルトは基本DB
-    local luci_lang="en"        # デフォルトは英語
-    
-    # 各DBファイルを確認して選択された言語をサポートするDBを探す
-    for db_file in "$etc_db" "$asian_db" "$euro_db" "$base_db"; do
+    # 各DBファイルをチェック
+    for db_file in "$etc_db" "$euro_db" "$asian_db" "$base_db"; do
         if [ -f "$db_file" ]; then
-            # DBファイルから対応言語リストを取得
+            # DBファイルからSUPPORTED_LANGUAGESを抽出
             local supported_langs=$(grep "^SUPPORTED_LANGUAGES=" "$db_file" | cut -d'=' -f2 | tr -d '"')
-            debug_log "DEBUG" "Checking DB ${db_file} with languages: ${supported_langs}"
+            debug_log "DEBUG" "Checking DB ${db_file} for language ${selected_language}"
+            debug_log "DEBUG" "Supported languages: ${supported_langs}"
             
-            # 言語がサポートされているか確認
+            # 指定言語がサポートされているか確認
             if echo " $supported_langs " | grep -q " $selected_language "; then
                 target_db="$db_file"
-                debug_log "DEBUG" "Found language ${selected_language} in DB: ${db_file}"
-                
-                # LuCI言語コードをDBから取得（可能であれば）
-                local luci_code=$(grep "^LANGUAGE_TO_LUCI_${selected_language}=" "$db_file" | cut -d'=' -f2 | tr -d '"')
-                if [ -n "$luci_code" ]; then
-                    luci_lang="$luci_code"
-                    debug_log "DEBUG" "Found LuCI code: ${luci_lang} for ${selected_language}"
-                fi
+                found=1
+                debug_log "DEBUG" "Found matching DB: ${target_db}"
                 break
             fi
         fi
     done
+
+    # DBが見つからなかった場合はデフォルトを使用
+    if [ $found -eq 0 ]; then
+        if [ -f "$base_db" ]; then
+            target_db="$base_db"
+            debug_log "DEBUG" "Language not found in any DB, using base_db"
+        else
+            debug_log "ERROR" "No valid message DB found"
+            return 1
+        fi
+    fi
     
-    # 設定を保存
-    echo "$target_db" > "$db_cache"
+    # 設定を保存（許可されたファイルのみ）
     echo "$selected_language" > "$message_cache"
-    echo "$luci_lang" > "$luci_cache"
-    debug_log "DEBUG" "Cache updated: message=${selected_language}, luci=${luci_lang}, db=${target_db}"
+    echo "$target_db" > "$message_db_tmp"
+    debug_log "DEBUG" "Updated message_cache=${selected_language}"
+    debug_log "DEBUG" "Created temporary DB reference file: ${message_db_tmp}"
     
     ACTIVE_LANGUAGE="$selected_language"
     
-    debug_log "DEBUG" "Final active language: ${ACTIVE_LANGUAGE}, target DB: ${target_db}, LuCI: ${luci_lang}"
-    
-    # 言語セットのメッセージ
+    # 言語セットのメッセージを表示
     printf "%s\n" "$(color green "$(get_message "MSG_LANGUAGE_SET")")"
     return 0
 }
