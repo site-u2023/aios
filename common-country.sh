@@ -796,7 +796,7 @@ normalize_language() {
     local etc_db="${BASE_DIR}/messages_etc.db" 
     local language_cache="${CACHE_DIR}/language.ch"
     local message_cache="${CACHE_DIR}/message.ch"
-    local message_db_tmp="${CACHE_DIR}/message_db.tmp"
+    local message_db_ch="${CACHE_DIR}/message_db.ch"
     local country_code=""
     local selected_language=""
     
@@ -852,11 +852,11 @@ normalize_language() {
         fi
     fi
     
-    # 設定を保存（許可されたファイルのみ）
+    # 設定を保存（許可されたファイルのみ - message.chとmessage_db.ch）
     echo "$selected_language" > "$message_cache"
-    echo "$target_db" > "$message_db_tmp"
+    echo "$target_db" > "$message_db_ch"  # ここで.chファイルに書き込む
     debug_log "DEBUG" "Updated message_cache=${selected_language}"
-    debug_log "DEBUG" "Created temporary DB reference file: ${message_db_tmp}"
+    debug_log "DEBUG" "Updated message_db_ch with target DB path"
     
     ACTIVE_LANGUAGE="$selected_language"
     
