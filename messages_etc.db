@@ -1,4 +1,4 @@
-SCRIPT_VERSION="2025.03.16-11-53"
+SCRIPT_VERSION="2025.03.16-12-03"
 
 SUPPORTED_LANGUAGES="ID EG ES"
 SUPPORTED_LANGUAGE_ID="ID TL BN MY SG TH"
@@ -98,6 +98,18 @@ ES|MSG_HELP_EXAMPLE3=sh aios -r            # Restablecer todos los datos en cach
 ID|MSG_HELP_EXAMPLE4=sh aios -d -cf        # Jalankan dalam mode penuh dengan output debug
 EG|MSG_HELP_EXAMPLE4=sh aios -d -cf        # تشغيل في الوضع الكامل مع إخراج التصحيح
 ES|MSG_HELP_EXAMPLE4=sh aios -d -cf        # Ejecutar en modo completo con salida de depuración
+
+ID|MSG_HELP_DEBUG_HEADER=Level debug:
+EG|MSG_HELP_DEBUG_HEADER=مستويات التصحيح:
+ES|MSG_HELP_DEBUG_HEADER=Niveles de depuración:
+
+ID|MSG_HELP_DEBUG_STANDARD=-d, --debug           # Informasi debug standar
+EG|MSG_HELP_DEBUG_STANDARD=-d, --debug           # معلومات التصحيح القياسية
+ES|MSG_HELP_DEBUG_STANDARD=-d, --debug           # Información de depuración estándar
+
+ID|MSG_HELP_DEBUG_VERBOSE=-d2, --debug2         # Informasi debug terperinci
+EG|MSG_HELP_DEBUG_VERBOSE=-d2, --debug2         # معلومات التصحيح المفصلة
+ES|MSG_HELP_DEBUG_VERBOSE=-d2, --debug2         # Información de depuración detallada
 
 # print_banner() 関数
 ID|MSG_BANNER_DECCRIPTION=Perangkat lunak konfigurasi khusus untuk OpenWRT
