@@ -788,7 +788,7 @@ map_country_code() {
     return 0
 }
 
-# 言語設定を正規化する関数
+# 言語設定を正規化する関数（国コード→言語コードマッピング対応版）
 normalize_language() {
     # 必要なパス定義
     local base_db="${BASE_DIR}/messages_base.db"
@@ -799,10 +799,11 @@ normalize_language() {
     local message_cache="${CACHE_DIR}/message.ch"
     local luci_cache="${CACHE_DIR}/luci.ch"
     local db_cache="${CACHE_DIR}/message_db.ch"
+    local country_code=""
     local selected_language=""
     
     # デバッグログの出力
-    debug_log "DEBUG" "Normalizing language settings with multi-file structure"
+    debug_log "DEBUG" "Normalizing language settings with country-to-language mapping"
     
     # language.chファイルの存在確認
     if [ ! -f "$language_cache" ]; then
@@ -810,17 +811,21 @@ normalize_language() {
         return 1
     fi
 
-    # language.chから直接言語コードを読み込み
-    selected_language=$(cat "$language_cache")
-    debug_log "DEBUG" "Selected language code: ${selected_language}"
+    # language.chから国コードを読み込み
+    country_code=$(cat "$language_cache")
+    debug_log "DEBUG" "Original country/language code: ${country_code}"
+    
+    # 国コードから言語コードへのマッピング処理
+    selected_language=$(map_country_code "$country_code")
+    debug_log "DEBUG" "Mapped to language code: ${selected_language}"
 
     # 基本言語ファイルの存在確認
     if [ ! -f "$base_db" ]; then
         debug_log "ERROR" "Base message DB not found: ${base_db}"
-        echo "US" > "$message_cache"
-        echo "en" > "$luci_cache"
-        ACTIVE_LANGUAGE="US"
-        debug_log "DEBUG" "Defaulting to US language due to missing base DB"
+        echo "ID" > "$message_cache"  # デフォルトをインドネシア語に変更
+        echo "id" > "$luci_cache"
+        ACTIVE_LANGUAGE="ID"
+        debug_log "DEBUG" "Defaulting to ID language due to missing base DB"
         return 1
     fi
     
@@ -829,7 +834,7 @@ normalize_language() {
     local luci_lang="en"        # デフォルトは英語
     
     # 言語設定テーブル（language_code:luci_code:db_type）
-    local lang_table="US:en:base JP:ja:base CN:zh-cn:asian TW:zh-tw:asian KO:ko:asian DE:de:euro FR:fr:euro RU:ru:euro"
+    local lang_table="ID:id:etc EG:ar:etc ES:es:etc"
     
     # 言語コードに一致するエントリを検索
     local lang_entry
