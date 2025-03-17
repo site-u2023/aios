@@ -1,50 +1,37 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.17-02-00"
+SCRIPT_VERSION="2025.03.17-03-00"
 
 # メニューセレクター関数
 selector() {
-    # メニューDBとキャッシュディレクトリのパス
-    local menu_db="${BASE_DIR}/menu.db"
     local section_name="${1:-openwrt-config}"
     local menu_file="${CACHE_DIR}/menu_entries.tmp"
     local cmd_file="${CACHE_DIR}/menu_commands.tmp"
+    local colors="red blue green magenta cyan yellow white white_black"
+    local menu_count=0
     
-    # デバッグ出力
-    debug_log "DEBUG" "Starting selector function with section: $section_name"
+    debug_log "DEBUG" "Starting menu selector with section: $section_name"
     
-    # ディレクトリ確認
-    if [ ! -d "$CACHE_DIR" ]; then
-        mkdir -p "$CACHE_DIR"
-        debug_log "DEBUG" "Created cache directory: $CACHE_DIR"
-    fi
-    
-    # menu.dbの存在確認
-    if [ ! -f "$menu_db" ]; then
-        debug_log "ERROR" "Menu database not found: $menu_db"
+    # メニューDBの存在確認
+    if [ ! -f "${BASE_DIR}/menu.db" ]; then
+        debug_log "ERROR" "Menu database not found at ${BASE_DIR}/menu.db"
         printf "%s\n" "$(color red "メニューデータベースが見つかりません")"
         return 1
     fi
     
-    # menu.dbの内容をデバッグ表示
-    if [ "$DEBUG_MODE" = "true" ]; then
-        debug_log "DEBUG" "Menu DB content:"
-        cat "$menu_db" | while read -r line; do
-            debug_log "DEBUG" "DB line: $line"
-        done
-    fi
+    # デバッグ表示
+    debug_log "DEBUG" "Menu DB path: ${BASE_DIR}/menu.db"
     
     # 一時ファイル初期化
     : > "$menu_file"
     : > "$cmd_file"
     
-    # セクションを検索して処理
-    debug_log "DEBUG" "Looking for section [$section_name] in menu.db"
+    # セクション検索
+    debug_log "DEBUG" "Searching for section [$section_name] in menu.db"
     local in_section=0
-    local menu_count=0
-    local colors="red blue green magenta cyan yellow white white_black"
     
-    cat "$menu_db" | while IFS= read -r line; do
+    # ファイルを1行ずつ処理
+    while IFS= read -r line; do
         # コメントと空行をスキップ
         case "$line" in
             \#*|"") continue ;;
@@ -53,13 +40,16 @@ selector() {
         # セクション開始をチェック
         if echo "$line" | grep -q "^\[$section_name\]"; then
             in_section=1
-            debug_log "DEBUG" "Found section: [$section_name]"
+            debug_log "DEBUG" "Found target section: [$section_name]"
             continue
         fi
         
         # 別のセクション開始で終了
         if echo "$line" | grep -q "^\[.*\]"; then
-            [ $in_section -eq 1 ] && break
+            if [ $in_section -eq 1 ]; then
+                debug_log "DEBUG" "Reached next section, stopping search"
+                break
+            fi
             continue
         fi
         
@@ -79,12 +69,9 @@ selector() {
             printf "%s\n" "$cmd" >> "$cmd_file"
             
             menu_count=$((menu_count+1))
-            debug_log "DEBUG" "Added menu item $menu_count: $key -> $cmd"
+            debug_log "DEBUG" "Added menu item: $key -> $cmd"
         fi
-    done
-    
-    # menu_countを更新（パイプ内の値は失われるため）
-    menu_count=$(wc -l < "$menu_file")
+    done < "${BASE_DIR}/menu.db"
     
     # メニュー項目の確認
     if [ $menu_count -eq 0 ]; then
@@ -129,14 +116,14 @@ selector() {
 
 # 終了関数
 menu_exit() {
-    printf "%s\n" "$(color green "$(get_message "CONFIG_EXIT_CONFIRMED")")"
+    printf "%s\n" "$(color green "スクリプトを終了します")"
     sleep 1
     exit 0
 }
 
 # 削除終了関数
 remove_exit() {
-    printf "%s\n" "$(color green "$(get_message "CONFIG_DELETE_CONFIRMED")")"
+    printf "%s\n" "$(color green "スクリプトと関連ディレクトリを削除します")"
     [ -f "$0" ] && rm -f "$0"
     [ -d "$BASE_DIR" ] && rm -rf "$BASE_DIR"
     exit 0
@@ -144,17 +131,13 @@ remove_exit() {
 
 # メイン関数
 main() {
-    # デバッグモード時にmenu.dbの確認
+    debug_log "DEBUG" "menu.db exists at ${BASE_DIR}/menu.db"
+    
     if [ "$DEBUG_MODE" = "true" ]; then
-        if [ -f "${BASE_DIR}/menu.db" ]; then
-            debug_log "DEBUG" "menu.db exists at ${BASE_DIR}/menu.db"
-            debug_log "DEBUG" "First 10 lines of menu.db:"
-            head -n 10 "${BASE_DIR}/menu.db" | while read -r line; do
-                debug_log "DEBUG" "menu.db> $line"
-            done
-        else
-            debug_log "ERROR" "menu.db not found at ${BASE_DIR}/menu.db"
-        fi
+        debug_log "DEBUG" "First 10 lines of menu.db:"
+        head -n 10 "${BASE_DIR}/menu.db" | while read -r line; do
+            debug_log "DEBUG" "menu.db> $line"
+        done
     fi
     
     # 引数があれば指定セクションを表示
@@ -163,7 +146,7 @@ main() {
         return $?
     fi
     
-    # 引数がなければデフォルトメニュー表示
+    # 引数がなければデフォルトセクションを表示
     while true; do
         selector "openwrt-config"
     done
