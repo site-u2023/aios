@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.17-03-00"
+SCRIPT_VERSION="2025.03.17-05-00"
 
 # メニューセレクター関数
 selector() {
@@ -69,7 +69,7 @@ selector() {
             printf "%s\n" "$cmd" >> "$cmd_file"
             
             menu_count=$((menu_count+1))
-            debug_log "DEBUG" "Added menu item: $key -> $cmd"
+            debug_log "DEBUG" "Added menu item $menu_count: $key -> $cmd"
         fi
     done < "${BASE_DIR}/menu.db"
     
@@ -131,13 +131,17 @@ remove_exit() {
 
 # メイン関数
 main() {
-    debug_log "DEBUG" "menu.db exists at ${BASE_DIR}/menu.db"
-    
+    # デバッグモードでmenu.dbの内容を確認
     if [ "$DEBUG_MODE" = "true" ]; then
-        debug_log "DEBUG" "First 10 lines of menu.db:"
-        head -n 10 "${BASE_DIR}/menu.db" | while read -r line; do
-            debug_log "DEBUG" "menu.db> $line"
-        done
+        if [ -f "${BASE_DIR}/menu.db" ]; then
+            debug_log "DEBUG" "Menu DB exists at ${BASE_DIR}/menu.db"
+            debug_log "DEBUG" "First 10 lines of menu.db:"
+            head -n 10 "${BASE_DIR}/menu.db" | while read -r line; do
+                debug_log "DEBUG" "menu.db> $line"
+            done
+        else
+            debug_log "ERROR" "Menu DB not found at ${BASE_DIR}/menu.db"
+        fi
     fi
     
     # 引数があれば指定セクションを表示
