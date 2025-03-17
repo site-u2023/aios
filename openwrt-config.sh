@@ -1,14 +1,14 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.17-10-45"
+SCRIPT_VERSION="2025.03.17-15-00"
 
 # メニューセレクター関数
 selector() {
-    section_name="${1:-openwrt-config}"
+    section_name="${1:-openwrt-config.sh}"
     menu_keys_file="${CACHE_DIR}/menu_keys.tmp"
     menu_displays_file="${CACHE_DIR}/menu_displays.tmp"
     menu_commands_file="${CACHE_DIR}/menu_commands.tmp"
-    colors="red blue green magenta cyan yellow white white_black"
+    menu_colors_file="${CACHE_DIR}/menu_colors.tmp"
     menu_count=0
     
     [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] Starting menu selector with section: $section_name"
@@ -33,19 +33,8 @@ selector() {
     fi
     
     # キャッシュファイルの初期化
-    rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file"
-    touch "$menu_keys_file" "$menu_displays_file" "$menu_commands_file"
-    
-    # デバッグ用に一時ファイルの存在を確認
-    if [ "$DEBUG_MODE" = "true" ]; then
-        for f in "$menu_keys_file" "$menu_displays_file" "$menu_commands_file"; do
-            if [ -f "$f" ]; then
-                echo "[DEBUG] Temporary file created: $f"
-            else
-                echo "[ERROR] Failed to create temporary file: $f"
-            fi
-        done
-    fi
+    rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
+    touch "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
     
     # セクション検索
     [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] Searching for section [$section_name] in menu.db"
@@ -76,20 +65,20 @@ selector() {
         
         # セクション内の項目を処理
         if [ $in_section -eq 1 ]; then
-            # キーとコマンドを分離して保存
-            key=$(echo "$line" | cut -d' ' -f1)
-            cmd=$(echo "$line" | cut -d' ' -f2-)
+            # 色、キー、コマンドを分離
+            color_name=$(echo "$line" | cut -d' ' -f1)
+            key=$(echo "$line" | cut -d' ' -f2)
+            cmd=$(echo "$line" | cut -d' ' -f3-)
+            
+            [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] Parsing line: color=$color_name, key=$key, cmd=$cmd"
             
             # カウンターをインクリメント
             menu_count=$((menu_count+1))
             
             # 各ファイルに情報を保存
             echo "$key" >> "$menu_keys_file"
-            
-            # 色の選択
-            color_index=$(( (menu_count % 8) + 1 ))
-            color_name=$(echo "$colors" | cut -d' ' -f$color_index)
-            [ -z "$color_name" ] && color_name="white"
+            echo "$cmd" >> "$menu_commands_file"
+            echo "$color_name" >> "$menu_colors_file"
             
             # get_messageの呼び出し
             display_text=$(get_message "$key")
@@ -99,25 +88,12 @@ selector() {
                 [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] No message found for key: $key, using key as display text"
             fi
             
-            # 表示テキストとコマンドを保存（[数字] 形式に変更）
+            # 表示テキストを保存（[数字] 形式）
             printf "%s\n" "$(color "$color_name" "[${menu_count}] $display_text")" >> "$menu_displays_file" 2>/dev/null
-            printf "%s\n" "$cmd" >> "$menu_commands_file" 2>/dev/null
             
-            [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] Added menu item $menu_count: [$key] -> [$cmd]"
+            [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] Added menu item $menu_count: [$key] -> [$cmd] with color: $color_name"
         fi
     done < "${BASE_DIR}/menu.db"
-    
-    # デバッグ: ファイル内容確認
-    if [ "$DEBUG_MODE" = "true" ]; then
-        echo "[DEBUG] Menu keys file content:"
-        if [ -s "$menu_keys_file" ]; then
-            cat "$menu_keys_file" | while IFS= read -r line; do
-                echo "[DEBUG]  - $line"
-            done
-        else
-            echo "[DEBUG]  (empty file)"
-        fi
-    fi
     
     # メニュー項目の確認
     if [ $menu_count -eq 0 ]; then
@@ -128,10 +104,13 @@ selector() {
     
     [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] Found $menu_count menu items"
     
-    # メニュー表示
-    printf "\n%s\n" "$(color white "==============================================================")"
-    printf "%s\n" "$(color green "$(get_message "CONFIG_HEADER")")"
-    printf "%s\n" "$(color white "==============================================================")"
+    # タイトルヘッダーを表示
+    title=$(get_message "MENU_TITLE")
+    header=$(get_message "CONFIG_HEADER")
+    if [ -n "$header" ]; then
+        header=$(echo "$header" | sed "s/{0}/$title/g" | sed "s/{1}/$SCRIPT_VERSION/g")
+        printf "\n%s\n" "$(color white "$header")"
+    fi
     printf "\n"
     
     if [ -s "$menu_displays_file" ]; then
@@ -183,9 +162,11 @@ selector() {
     # 選択されたキーとコマンドを取得
     selected_key=""
     selected_cmd=""
+    selected_color=""
     
     selected_key=$(sed -n "${choice}p" "$menu_keys_file" 2>/dev/null)
     selected_cmd=$(sed -n "${choice}p" "$menu_commands_file" 2>/dev/null)
+    selected_color=$(sed -n "${choice}p" "$menu_colors_file" 2>/dev/null)
     
     if [ -z "$selected_key" ] || [ -z "$selected_cmd" ]; then
         [ "$DEBUG_MODE" = "true" ] && echo "[ERROR] Failed to retrieve selected menu item data"
@@ -194,6 +175,7 @@ selector() {
     fi
     
     [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] Selected key: $selected_key"
+    [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] Selected color: $selected_color"
     [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] Executing command: $selected_cmd"
     
     # コマンド実行前の表示
@@ -201,7 +183,7 @@ selector() {
     [ -z "$msg" ] && msg="$selected_key"
     download_msg=$(get_message "CONFIG_DOWNLOADING")
     download_msg=$(echo "$download_msg" | sed "s/{0}/$msg/g")
-    printf "\n%s\n\n" "$(color blue "$download_msg")"
+    printf "\n%s\n\n" "$(color "$selected_color" "$download_msg")"
     sleep 1
     
     # コマンド実行
@@ -211,7 +193,7 @@ selector() {
     [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] Command execution finished with status: $cmd_status"
     
     # 一時ファイル削除
-    rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file"
+    rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
     
     return $cmd_status
 }
@@ -273,7 +255,7 @@ main() {
     
     # 引数がなければデフォルトセクションを表示
     while true; do
-        selector "openwrt-config"
+        selector "openwrt-config.sh"
     done
 }
 
