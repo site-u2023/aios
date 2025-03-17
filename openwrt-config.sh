@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.17-10-25"
+SCRIPT_VERSION="2025.03.17-10-45"
 
 # メニューセレクター関数
 selector() {
@@ -99,8 +99,8 @@ selector() {
                 [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] No message found for key: $key, using key as display text"
             fi
             
-            # 表示テキストとコマンドを保存
-            printf "%s\n" "$(color "$color_name" "${menu_count}. $display_text")" >> "$menu_displays_file" 2>/dev/null
+            # 表示テキストとコマンドを保存（[数字] 形式に変更）
+            printf "%s\n" "$(color "$color_name" "[${menu_count}] $display_text")" >> "$menu_displays_file" 2>/dev/null
             printf "%s\n" "$cmd" >> "$menu_commands_file" 2>/dev/null
             
             [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] Added menu item $menu_count: [$key] -> [$cmd]"
@@ -129,9 +129,9 @@ selector() {
     [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] Found $menu_count menu items"
     
     # メニュー表示
-    printf "\n%s\n" "$(color white_black "===============================")"
-    printf "%s\n" "$(color white_black "          メインメニュー         ")"
-    printf "%s\n" "$(color white_black "===============================")"
+    printf "\n%s\n" "$(color white "==============================================================")"
+    printf "%s\n" "$(color white "          CONFIG_HEADER        ")"
+    printf "%s\n" "$(color white "==============================================================")"
     printf "\n"
     
     if [ -s "$menu_displays_file" ]; then
