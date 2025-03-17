@@ -130,7 +130,7 @@ selector() {
     
     # メニュー表示
     printf "\n%s\n" "$(color white "==============================================================")"
-    printf "%s\n" "$(color white "          CONFIG_HEADER        ")"
+    printf "%s\n" "$(color white "CONFIG_HEADER")"
     printf "%s\n" "$(color white "==============================================================")"
     printf "\n"
     
