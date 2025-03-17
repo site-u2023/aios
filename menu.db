@@ -1,6 +1,6 @@
 # AIOSメニュー設定データベース
 
-[openwrt-config]
+[openwrt-config.sh]
 MENU_INTERNET download "internet-config.sh" "chmod" "load"
 MENU_SYSTEM download "system-config.sh" "chmod" "load" 
 MENU_PACKAGES download "package-install.sh" "chmod" "load"
