@@ -1,0 +1,9 @@
+[openwrt-config]
+MENU_INTERNET download "internet-config.sh" "chmod" "load"
+MENU_SYSTEM download "system-config.sh" "chmod" "load"
+MENU_PACKAGES download "package-install.sh" "chmod" "load"
+MENU_ADBLOCKER "adblocker-dns.sh" "chmod" "load"
+MENU_ACCESSPOINT "accesspoint-setup.sh" "chmod" "load"
+MENU_OTHERS "other-utilities.sh" "chmod" "load"
+MENU_EXIT menu_exit
+MENU_REMOVE remove_exit
