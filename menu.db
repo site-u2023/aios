@@ -1,9 +1,25 @@
+# AIOSメニュー設定データベース
+# 形式: メニューキー コマンドとパラメータ
+
 [openwrt-config]
 MENU_INTERNET download "internet-config.sh" "chmod" "load"
-MENU_SYSTEM download "system-config.sh" "chmod" "load"
+MENU_SYSTEM download "system-config.sh" "chmod" "load" 
 MENU_PACKAGES download "package-install.sh" "chmod" "load"
-MENU_ADBLOCKER "adblocker-dns.sh" "chmod" "load"
-MENU_ACCESSPOINT "accesspoint-setup.sh" "chmod" "load"
-MENU_OTHERS "other-utilities.sh" "chmod" "load"
+MENU_ADBLOCKER download "adblocker-dns.sh" "chmod" "load"
+MENU_ACCESSPOINT download "accesspoint-setup.sh" "chmod" "load"
+MENU_OTHERS download "other-utilities.sh" "chmod" "load"
 MENU_EXIT menu_exit
 MENU_REMOVE remove_exit
+
+[system-config]
+# システム設定メニュー項目
+MENU_HOSTNAME system_set_hostname
+MENU_PASSWORD system_set_password
+MENU_TIMEZONE system_set_timezone
+MENU_BACK menu_back
+
+[network-config]
+# ネットワーク設定メニュー項目
+MENU_INTERFACES network_configure_interfaces
+MENU_WIFI network_configure_wifi
+MENU_BACK menu_back
