@@ -1,47 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.17-09-12"
-
-# =========================================================
-# 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
-# 🚀 Last Update: 2025-03-17
-#
-# 🏷️ License: CC0 (Public Domain)
-# 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
-#
-# ⚠️ IMPORTANT NOTICE:
-# OpenWrt OS exclusively uses **Almquist Shell (ash)** and
-# is **NOT** compatible with Bourne-Again Shell (bash).
-#
-# 📢 POSIX Compliance Guidelines:
-# ✅ Use `[` instead of `[[` for conditions
-# ✅ Use $(command) instead of backticks `command`
-# ✅ Use $(( )) for arithmetic instead of let
-# ✅ Define functions as func_name() {} (no function keyword)
-# ✅ No associative arrays (declare -A is NOT supported)
-# ✅ No here-strings (<<< is NOT supported)
-# ✅ No -v flag in test or [[
-# ✅ Avoid bash-specific string operations like ${var:0:3}
-# ✅ Avoid arrays entirely when possible (even indexed arrays can be problematic)
-# ✅ Use printf followed by read instead of read -p
-# ✅ Use printf instead of echo -e for portable formatting
-# ✅ Avoid process substitution <() and >()
-# ✅ Prefer case statements over complex if/elif chains
-# ✅ Use command -v instead of which or type for command existence checks
-# ✅ Keep scripts modular with small, focused functions
-# ✅ Use simple error handling instead of complex traps
-# ✅ Test scripts with ash/dash explicitly, not just bash
-#
-# 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
-### =========================================================
-
-# デフォルトの設定値
-BASE_DIR="${BASE_DIR:-/tmp/aios}"
-CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
-DEBUG_MODE="${DEBUG_MODE:-false}"
-
-# メニューセレクタースクリプト
-# メニューDBからメニュー項目を読み込み、ユーザーに選択を促し、選択したコマンドを実行する
+SCRIPT_VERSION="2025.03.17-09-30"
 
 # メニューセレクター関数
 selector() {
@@ -61,7 +20,9 @@ selector() {
         return 1
     fi
     
-    # キャッシュディレクトリの存在確認
+    debug_log "DEBUG" "Menu DB path: ${BASE_DIR}/menu.db"
+    
+    # キャッシュディレクトリの存在確認と作成
     if [ ! -d "$CACHE_DIR" ]; then
         debug_log "DEBUG" "Creating cache directory: $CACHE_DIR"
         mkdir -p "$CACHE_DIR" || {
@@ -69,19 +30,29 @@ selector() {
             printf "%s\n" "$(color red "キャッシュディレクトリを作成できません")"
             return 1
         }
-    }
+    fi
     
-    # キャッシュファイルの初期化
-    : > "$menu_keys_file"
-    : > "$menu_displays_file"
-    : > "$menu_commands_file"
+    # キャッシュファイルの初期化 (リダイレクト演算子を使用)
+    rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file"
+    touch "$menu_keys_file" "$menu_displays_file" "$menu_commands_file"
+    
+    # デバッグ用に一時ファイルの存在を確認
+    if [ "$DEBUG_MODE" = "true" ]; then
+        for f in "$menu_keys_file" "$menu_displays_file" "$menu_commands_file"; do
+            if [ -f "$f" ]; then
+                debug_log "DEBUG" "Temporary file created: $f"
+            else
+                debug_log "ERROR" "Failed to create temporary file: $f"
+            fi
+        done
+    fi
     
     # セクション検索
     debug_log "DEBUG" "Searching for section [$section_name] in menu.db"
     local in_section=0
     
     # ファイルを1行ずつ処理
-    while IFS= read -r line; do
+    while IFS= read -r line || [ -n "$line" ]; do
         # コメントと空行をスキップ
         case "$line" in
             \#*|"") continue ;;
@@ -109,24 +80,44 @@ selector() {
             local key=$(echo "$line" | cut -d' ' -f1)
             local cmd=$(echo "$line" | cut -d' ' -f2-)
             
+            # カウンターをインクリメント
+            menu_count=$((menu_count+1))
+            
             # 各ファイルに情報を保存
             echo "$key" >> "$menu_keys_file"
-            
-            # メニュー項目番号とメッセージキー
-            menu_count=$((menu_count+1))
             
             # 色の選択
             local color_index=$(( (menu_count % 8) + 1 ))
             local color_name=$(echo "$colors" | cut -d' ' -f$color_index)
             [ -z "$color_name" ] && color_name="white"
             
+            # get_messageの呼び出しを追加
+            local display_text=$(get_message "$key")
+            if [ -z "$display_text" ] || [ "$display_text" = "$key" ]; then
+                # メッセージが見つからない場合はキーをそのまま使用
+                display_text="$key"
+                debug_log "DEBUG" "No message found for key: $key, using key as display text"
+            fi
+            
             # 表示テキストとコマンドを保存
-            printf "%s\n" "$(color "$color_name" "$menu_count: $(get_message "$key")")" >> "$menu_displays_file"
-            printf "%s\n" "$cmd" >> "$menu_commands_file"
+            printf "%s\n" "$(color "$color_name" "$menu_count. $display_text")" >> "$menu_displays_file" 2>/dev/null
+            printf "%s\n" "$cmd" >> "$menu_commands_file" 2>/dev/null
             
             debug_log "DEBUG" "Added menu item $menu_count: [$key] -> [$cmd]"
         fi
     done < "${BASE_DIR}/menu.db"
+    
+    # デバッグ: ファイル内容確認
+    if [ "$DEBUG_MODE" = "true" ]; then
+        debug_log "DEBUG" "Menu keys file content:"
+        if [ -s "$menu_keys_file" ]; then
+            cat "$menu_keys_file" | while IFS= read -r line; do
+                debug_log "DEBUG" "  - $line"
+            done
+        else
+            debug_log "DEBUG" "  (empty file)"
+        fi
+    fi
     
     # メニュー項目の確認
     if [ $menu_count -eq 0 ]; then
@@ -135,14 +126,22 @@ selector() {
         return 1
     fi
     
-    # メニューヘッダー表示
+    debug_log "DEBUG" "Found $menu_count menu items"
+    
+    # メニュー表示
     printf "\n%s\n" "$(color white_black "===============================")"
     printf "%s\n" "$(color white_black "          メインメニュー         ")"
     printf "%s\n" "$(color white_black "===============================")"
     printf "\n"
     
-    # メニュー表示
-    cat "$menu_displays_file"
+    if [ -s "$menu_displays_file" ]; then
+        cat "$menu_displays_file"
+    else
+        debug_log "ERROR" "Menu display file is empty or cannot be read"
+        printf "%s\n" "$(color red "メニュー表示ファイルが空か読めません")"
+        return 1
+    fi
+    
     printf "\n"
     
     # 選択プロンプト
@@ -150,8 +149,15 @@ selector() {
     
     # ユーザー入力
     local choice=""
-    read -r choice
-    choice=$(normalize_input "$choice" 2>/dev/null || echo "$choice")
+    if ! read -r choice; then
+        debug_log "ERROR" "Failed to read user input"
+        return 1
+    fi
+    
+    # 入力の正規化（利用可能な場合のみ）
+    if type normalize_input >/dev/null 2>&1; then
+        choice=$(normalize_input "$choice" 2>/dev/null || echo "$choice")
+    fi
     debug_log "DEBUG" "User input: $choice"
     
     # 数値チェック
@@ -169,13 +175,25 @@ selector() {
     fi
     
     # 選択されたキーとコマンドを取得
-    local selected_key=$(sed -n "${choice}p" "$menu_keys_file")
-    local selected_cmd=$(sed -n "${choice}p" "$menu_commands_file")
+    local selected_key=""
+    local selected_cmd=""
+    
+    selected_key=$(sed -n "${choice}p" "$menu_keys_file" 2>/dev/null)
+    selected_cmd=$(sed -n "${choice}p" "$menu_commands_file" 2>/dev/null)
+    
+    if [ -z "$selected_key" ] || [ -z "$selected_cmd" ]; then
+        debug_log "ERROR" "Failed to retrieve selected menu item data"
+        printf "%s\n" "$(color red "メニュー項目の取得に失敗しました")"
+        return 1
+    fi
     
     debug_log "DEBUG" "Selected key: $selected_key"
     debug_log "DEBUG" "Executing command: $selected_cmd"
     
-    printf "\n%s\n\n" "$(color blue "$(get_message "$selected_key")を実行します...")"
+    # コマンド実行前の表示
+    local msg=$(get_message "$selected_key")
+    [ -z "$msg" ] && msg="$selected_key"
+    printf "\n%s\n\n" "$(color blue "${msg}を実行します...")"
     sleep 1
     
     # コマンド実行
@@ -186,12 +204,6 @@ selector() {
     
     # 一時ファイル削除
     rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file"
-    
-    # コマンド終了後に少し待機
-    if [ $cmd_status -ne 0 ]; then
-        printf "\n%s\n" "$(color yellow "コマンドは終了しましたが、エラーが発生した可能性があります")"
-        sleep 2
-    fi
     
     return $cmd_status
 }
@@ -210,7 +222,11 @@ remove_exit() {
     printf "%s " "$(color cyan "本当に削除してよろしいですか？ (y/n):")"
     local choice=""
     read -r choice
-    choice=$(normalize_input "$choice" 2>/dev/null || echo "$choice")
+    
+    # 入力の正規化（利用可能な場合のみ）
+    if type normalize_input >/dev/null 2>&1; then
+        choice=$(normalize_input "$choice" 2>/dev/null || echo "$choice")
+    fi
     
     case "$choice" in
         [Yy]|[Yy][Ee][Ss])
@@ -224,21 +240,6 @@ remove_exit() {
             return 0
             ;;
     esac
-}
-
-# メインループ関数
-main_menu_loop() {
-    local section_name="${1:-openwrt-config}"
-    
-    while true; do
-        selector "$section_name"
-        
-        # Ctrlキー操作などによる異常終了を防ぐ
-        if [ $? -eq 130 ]; then
-            printf "\n%s\n" "$(color yellow "メニューに戻ります...")"
-            sleep 1
-        fi
-    done
 }
 
 # メイン関数
@@ -258,12 +259,14 @@ main() {
     
     # 引数があれば指定セクションを表示
     if [ $# -gt 0 ]; then
-        main_menu_loop "$1"
+        selector "$1"
         return $?
     fi
     
     # 引数がなければデフォルトセクションを表示
-    main_menu_loop "openwrt-config"
+    while true; do
+        selector "openwrt-config"
+    done
 }
 
 # スクリプト自体が直接実行された場合のみ、mainを実行
