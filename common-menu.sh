@@ -72,6 +72,39 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 
+# エラーハンドリング関数 - 一元化された処理
+handle_menu_error() {
+    local error_type="$1"    # エラータイプ
+    local section_name="$2"  # 現在のセクション名
+    local previous_menu="$3" # 前のメニュー名
+    local main_menu="$4"     # メインメニュー名
+    local error_msg="$5"     # エラーメッセージキー（オプション）
+
+    debug_log "ERROR" "$error_type in section [$section_name]"
+    
+    # エラーメッセージを表示（指定されていれば使用、なければ汎用メッセージ）
+    if [ -n "$error_msg" ]; then
+        printf "%s\n" "$(color red "$(get_message "$error_msg")")"
+    else
+        printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
+    fi
+    
+    sleep 2
+    
+    # エラー時にメニューに戻る処理
+    if [ "$section_name" = "$main_menu" ]; then
+        # メインメニューの場合は再表示（ループ）
+        debug_log "INFO" "Main menu $error_type, reloading main menu"
+        selector "$main_menu"
+        return $?
+    else
+        # サブメニューの場合は前のメニューに戻る
+        debug_log "INFO" "Returning to previous menu: $previous_menu after $error_type"
+        selector "$previous_menu"
+        return $?
+    fi
+}
+
 # メニューセレクター関数 - POSIX準拠版
 selector() {
     # グローバル変数でメニュー階層を管理
@@ -102,6 +135,16 @@ selector() {
     fi
     
     debug_log "DEBUG" "Menu DB path: ${BASE_DIR}/menu.db"
+    
+    # キャッシュディレクトリの存在確認と作成
+    if [ ! -d "$CACHE_DIR" ]; then
+        debug_log "DEBUG" "Creating cache directory: $CACHE_DIR"
+        mkdir -p "$CACHE_DIR" || {
+            debug_log "ERROR" "Failed to create cache directory: $CACHE_DIR"
+            printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
+            return 1
+        }
+    fi
     
     # キャッシュファイルの初期化
     local menu_keys_file="${CACHE_DIR}/menu_keys.tmp"
@@ -174,21 +217,9 @@ selector() {
     
     # メニュー項目の確認
     if [ $menu_count -eq 0 ]; then
-        debug_log "ERROR" "No menu items found in section [$section_name]"
-        printf "%s\n" "$(color red "No menu items found in section [$section_name]")"
-        
-        # エラー時に前のメニューに戻る
-        if [ "$section_name" = "$main_menu" ]; then
-            # メインメニューの場合は再表示（ループ）
-            debug_log "INFO" "Main menu error, reloading main menu"
-            selector "$main_menu"
-            return $?
-        else
-            # サブメニューの場合は前のメニューに戻る
-            debug_log "INFO" "Returning to previous menu: $previous_menu"
-            selector "$previous_menu"
-            return $?
-        fi
+        # エラーハンドラーを呼び出し
+        handle_menu_error "no_items" "$section_name" "$previous_menu" "$main_menu" ""
+        return $?
     fi
     
     debug_log "DEBUG" "Found $menu_count menu items"
@@ -202,19 +233,9 @@ selector() {
     if [ -s "$menu_displays_file" ]; then
         cat "$menu_displays_file"
     else
-        debug_log "ERROR" "Menu display file is empty or cannot be read"
-        printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
-        
-        # エラー時に前のメニューに戻る
-        if [ "$section_name" = "$main_menu" ]; then
-            debug_log "INFO" "Main menu error, reloading main menu"
-            selector "$main_menu"
-            return $?
-        else
-            debug_log "INFO" "Returning to previous menu: $previous_menu"
-            selector "$previous_menu"
-            return $?
-        fi
+        # エラーハンドラーを呼び出し
+        handle_menu_error "empty_display" "$section_name" "$previous_menu" "$main_menu" "MSG_ERROR_OCCURRED"
+        return $?
     fi
     
     printf "\n"
@@ -228,18 +249,9 @@ selector() {
     # ユーザー入力
     local choice=""
     if ! read -r choice; then
-        debug_log "ERROR" "Failed to read user input"
-        
-        # エラー時に前のメニューに戻る
-        if [ "$section_name" = "$main_menu" ]; then
-            debug_log "INFO" "Main menu error, reloading main menu"
-            selector "$main_menu"
-            return $?
-        else
-            debug_log "INFO" "Returning to previous menu: $previous_menu"
-            selector "$previous_menu"
-            return $?
-        fi
+        # エラーハンドラーを呼び出し
+        handle_menu_error "read_input" "$section_name" "$previous_menu" "$main_menu" "MSG_ERROR_OCCURRED"
+        return $?
     fi
     
     # 入力の正規化（利用可能な場合のみ）
@@ -278,19 +290,9 @@ selector() {
     selected_color=$(sed -n "${choice}p" "$menu_colors_file" 2>/dev/null)
     
     if [ -z "$selected_key" ] || [ -z "$selected_cmd" ]; then
-        debug_log "ERROR" "Failed to retrieve selected menu item data"
-        printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
-        
-        # エラー時に前のメニューに戻る
-        if [ "$section_name" = "$main_menu" ]; then
-            debug_log "INFO" "Main menu error, reloading main menu"
-            selector "$main_menu"
-            return $?
-        else
-            debug_log "INFO" "Returning to previous menu: $previous_menu"
-            selector "$previous_menu"
-            return $?
-        fi
+        # エラーハンドラーを呼び出し
+        handle_menu_error "invalid_selection" "$section_name" "$previous_menu" "$main_menu" "MSG_ERROR_OCCURRED"
+        return $?
     fi
     
     debug_log "DEBUG" "Selected key: $selected_key"
@@ -313,19 +315,9 @@ selector() {
     
     # コマンド実行エラー時、前のメニューに戻る
     if [ $cmd_status -ne 0 ]; then
-        debug_log "ERROR" "Command failed with status $cmd_status"
-        printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
-        sleep 2
-        
-        if [ "$section_name" = "$main_menu" ]; then
-            debug_log "INFO" "Main menu command error, reloading main menu"
-            selector "$main_menu"
-            return $?
-        else 
-            debug_log "INFO" "Command error, returning to previous menu: $previous_menu"
-            selector "$previous_menu"
-            return $?
-        fi
+        # エラーハンドラーを呼び出し
+        handle_menu_error "command_failed" "$section_name" "$previous_menu" "$main_menu" "MSG_ERROR_OCCURRED"
+        return $?
     fi
     
     # 一時ファイル削除
