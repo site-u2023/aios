@@ -229,37 +229,28 @@ get_zonename_info() {
     echo "$zonename"
 }
 
-# USBデバイスの存在を確認する関数（単独で動作）
-has_usb_devices() {
-    debug_log "DEBUG" "Checking for USB devices"
+# USBデバイス検出
+get_usb_devices() {
+    local usb_status=""
     
+    # /sys/bus/usbディレクトリの確認
     if [ -d "/sys/bus/usb/devices" ]; then
-        # ベンダーIDを持つデバイスをカウント（ハブ以外のデバイスを検出）
-        local count=0
+        debug_log "DEBUG" "Scanning /sys/bus/usb/devices for vendor IDs"
+        # ベンダーIDを持つデバイスを検索（ハブ以外のデバイスを検出）
         for device in /sys/bus/usb/devices/[0-9]*-[0-9]*; do
             if [ -f "$device/idVendor" ]; then
-                count=$((count + 1))
+                usb_status="detected"
                 debug_log "DEBUG" "Found USB device: $(cat $device/idVendor 2>/dev/null):$(cat $device/idProduct 2>/dev/null)"
-                return 0  # デバイスが見つかったら即時終了
+                break  # 1つでもデバイスが見つかれば検出完了
             fi
         done
-    fi
-        
-    debug_log "DEBUG" "No USB devices detected"
-    return 1  # USBデバイスなし
-}
-
-# USBデバイスステータスの表示（メッセージキーと色を使用）
-show_usb_status() {
-    debug_log "DEBUG" "Displaying USB device status with translation and color"
-    
-    if has_usb_devices; then
-        # USBデバイスが見つかった場合
-        printf "%s\n" "$(color green "$(get_message "MSG_USB_DETECTED")")"
     else
-        # USBデバイスが見つからなかった場合
-        printf "%s\n" "$(color red "$(get_message "MSG_USB_NOT_DETECTED")")"
+        debug_log "DEBUG" "/sys/bus/usb/devices directory not found"
     fi
+    
+    # 結果をキャッシュファイルに書き出し
+    echo "$usb_status" > "${CACHE_DIR}/usb_device.ch"
+    debug_log "DEBUG" "USB detection result ($usb_status) saved to ${CACHE_DIR}/usb_device.ch"
 }
 
 # 📌 デバイスの国情報の取得
