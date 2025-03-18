@@ -1,8 +1,8 @@
 # AIOSメニュー設定データベース
 
 [openwrt-config]
-magenta MENU_INTERNET selector internet-config.sh
-blue MENU_SYSTEM selector system-config.sh
+magenta MENU_INTERNET selector internet-config
+blue MENU_SYSTEM selector system-config
 cyan MENU_PACKAGES download "package-config.sh" "chmod" "load"
 green MENU_ADBLOCKER download "adblocker-dns.sh" "chmod" "load"
 yellow MENU_ACCESSPOINT download "accesspoint-setup.sh" "chmod" "load"
