@@ -252,8 +252,13 @@ selector() {
     
     # 選択範囲チェック
     if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_count" ]; then
+        # 多言語メッセージを取得
         local error_msg=$(get_message "CONFIG_ERROR_INVALID_NUMBER")
-        error_msg=$(echo "$error_msg" | sed "s/{0}/$menu_count/g")
+    
+        # 簡易置換（POSIXシェル互換）
+        error_msg="${error_msg/PLACEHOLDER/$menu_count}"
+    
+        debug_log "DEBUG" "Invalid selection: $choice is out of range (1-$menu_count)"
         printf "\n%s\n" "$(color red "$error_msg")"
         sleep 2
         # 同じメニューを再表示
