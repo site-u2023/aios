@@ -3,6 +3,8 @@
 
 SCRIPT_VERSION="2025.03.17-15-00"
 
+MAIN_NEMU="openwrt-config.sh"
+
 # メニューセレクター関数
 selector() {
     section_name="${1:-internet-config.sh}"
