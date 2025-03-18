@@ -7,15 +7,6 @@ MAIN_MENU="openwrt-config.sh"
 # 現在のセレクターメニュー名を定義
 SELECTOR_MENU="internet-config.sh"
 
-# 共通ライブラリをロード
-if [ -f "${BASE_DIR}/common.sh" ]; then
-    [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] Loading common library from ${BASE_DIR}/common.sh"
-    . "${BASE_DIR}/common.sh"
-else
-    [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] Common library not found, downloading..."
-    download "common.sh" "hidden" "chmod" "load"
-fi
-
 # メイン関数
 main() {
     # デバッグモードでmenu.dbの内容を確認
