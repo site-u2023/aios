@@ -82,12 +82,9 @@ handle_menu_error() {
 
     debug_log "ERROR" "$error_type in section [$section_name]"
     
-    # エラーメッセージを表示（指定されていれば使用、なければ汎用メッセージ）
-    if [ -n "$error_msg" ]; then
-        printf "%s\n" "$(color red "$(get_message "$error_msg")")"
-    else
-        printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
-    fi
+    # エラーメッセージ表示
+    local msg_key="${error_msg:-MSG_ERROR_OCCURRED}"
+    printf "%s\n" "$(color red "$(get_message "$msg_key")")"
     
     sleep 2
     
@@ -126,26 +123,7 @@ selector() {
     
     # メインメニュー名を取得
     local main_menu="${MAIN_MENU:-openwrt-config}"
-    
-    # メニューDBの存在確認
-    if [ ! -f "${BASE_DIR}/menu.db" ]; then
-        debug_log "ERROR" "Menu database not found at ${BASE_DIR}/menu.db"
-        printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
-        return 1
-    fi
-    
-    debug_log "DEBUG" "Menu DB path: ${BASE_DIR}/menu.db"
-    
-    # キャッシュディレクトリの存在確認と作成
-    if [ ! -d "$CACHE_DIR" ]; then
-        debug_log "DEBUG" "Creating cache directory: $CACHE_DIR"
-        mkdir -p "$CACHE_DIR" || {
-            debug_log "ERROR" "Failed to create cache directory: $CACHE_DIR"
-            printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
-            return 1
-        }
-    fi
-    
+        
     # キャッシュファイルの初期化
     local menu_keys_file="${CACHE_DIR}/menu_keys.tmp"
     local menu_displays_file="${CACHE_DIR}/menu_displays.tmp"
