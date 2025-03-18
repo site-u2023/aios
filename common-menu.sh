@@ -105,7 +105,7 @@ handle_menu_error() {
     fi
 }
 
-# メニューセレクター関数 - POSIX準拠版
+# メニューセレクター関数
 selector() {
     # グローバル変数でメニュー階層を管理
     local previous_menu="$CURRENT_MENU"
@@ -208,8 +208,17 @@ selector() {
     # タイトルヘッダーを表示
     local title=$(get_message "MENU_TITLE")
     
-    # MENU_TITLEの後に1つの空白と[セクション名]を表示
-    printf "\n%s\n\n" "$(color white "${title} [$section_name]")"
+    # メインメニューの場合はCONFIG_HEADER、それ以外はメニュータイトルを表示
+    if [ "$section_name" = "$main_menu" ]; then
+        printf "\n%s\n\n" "$(color white "${title} $(get_message "CONFIG_HEADER")")"
+    else
+        # セクション名からそのまま対応するキーを生成
+        local section_key=""
+        section_key=$(echo "$section_name" | sed 's/-config$//' | tr '[:lower:]' '[:upper:]')
+        section_key="MENU_${section_key}"
+        
+        printf "\n%s\n\n" "$(color white "${title} $(get_message "$section_key")")"
+    fi
     
     if [ -s "$menu_displays_file" ]; then
         cat "$menu_displays_file"
@@ -252,13 +261,8 @@ selector() {
     
     # 選択範囲チェック
     if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_count" ]; then
-        # 多言語メッセージを取得
         local error_msg=$(get_message "CONFIG_ERROR_INVALID_NUMBER")
-    
-        # 簡易置換（POSIXシェル互換）
-        error_msg="${error_msg/PLACEHOLDER/$menu_count}"
-    
-        debug_log "DEBUG" "Invalid selection: $choice is out of range (1-$menu_count)"
+        error_msg=$(echo "$error_msg" | sed "s/PLACEHOLDER/$menu_count/g")
         printf "\n%s\n" "$(color red "$error_msg")"
         sleep 2
         # 同じメニューを再表示
