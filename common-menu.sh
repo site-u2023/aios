@@ -206,7 +206,7 @@ selector() {
     local title=$(get_message "MENU_TITLE")
     
     # MENU_TITLEの後に1つの空白と[セクション名]を表示
-    printf "\n%s\n\n" "$(color white_black "${title} [$section_name]")"
+    printf "\n%s\n\n" "$(color white "${title} [$section_name]")"
     
     if [ -s "$menu_displays_file" ]; then
         cat "$menu_displays_file"
