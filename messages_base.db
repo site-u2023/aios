@@ -315,7 +315,7 @@ JP|MSG_CONFIRM_INSTALL=パッケージ {pkg} をインストールしますか�
 # system-config.sh
 # =======================
 # information() 関数
-US|MSG_INFO_ARCHITECTURE=rchitecture: {info}
+US|MSG_INFO_ARCHITECTURE=Architecture: {info}
 JP|MSG_INFO_ARCHITECTURE=アーキテクチャー: {info}
 
 US|MSG_INFO_OSVERSION=OS Version: {info}
