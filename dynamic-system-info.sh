@@ -230,24 +230,21 @@ get_zonename_info() {
 }
 
 # USBデバイス検出
-# USBデバイスを検出しキャッシュに結果を保存する関数
+# USBデバイス検出関数
 get_usb_devices() {
-    USB_DEVICE="${CACHE_DIR}/usbdevice.ch"
+    # キャッシュファイルパスの設定
+    USB_DEVICE="${CACHE_DIR}/usb_device.ch"
     
-    if [ -d "/sys/bus/usb/devices" ]; then
-        # ベンダーIDを持つデバイスを検索（ハブ以外のデバイスを検出）
-        for device in /sys/bus/usb/devices/[0-9]*-[0-9]*; do
-            if [ -f "$device/idVendor" ]; then
-                debug_log "DEBUG" "Found USB device: $(cat $device/idVendor 2>/dev/null):$(cat $device/idProduct 2>/dev/null)"
-                # 検出結果をキャッシュに保存
-                echo "detected" > "$USB_DEVICE"
-            fi
-        done
+    # USBデバイスの存在確認
+    if [ -d "/sys/bus/usb/devices" ] && ls /sys/bus/usb/devices/[0-9]*-[0-9]*/idVendor >/dev/null 2>&1; then
+        # USBデバイスが存在する場合
+        debug_log "DEBUG" "USB device detected"
+        echo "detected" > "${CACHE_DIR}/usb_device.ch"
+    else
+        # USBデバイスが存在しない場合
+        debug_log "DEBUG" "No USB devices detected"
+        echo "not_detected" > "${CACHE_DIR}/usb_device.ch"
     fi
-    
-    # USBデバイスが見つからなかった場合
-    debug_log "DEBUG" "No USB devices detected"
-    echo "not_detected" > "$USB_DEVICE"
 }
 
 # 📌 デバイスの国情報の取得
