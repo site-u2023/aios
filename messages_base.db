@@ -89,6 +89,9 @@ JP|MENU_EXIT=終了 (スクリプトを閉じる)
 US|MENU_REMOVE=Remove script and related directories
 JP|MENU_REMOVE=スクリプトと関連ディレクトリの削除
 
+US|MENU_RETURN=Return to Main Menu
+JP|MENU_RETURN=メインメニューに戻る
+
 # =======================
 # aios
 # =======================
