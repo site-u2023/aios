@@ -1154,7 +1154,7 @@ print_information() {
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_USBDEVICEE" "code=$usbdevice")")"
 }
 
-print_country) {
+print_country() {
     local architecture=$(cat "${CACHE_DIR}/architecture.ch")
     local osversion=$(cat "${CACHE_DIR}/osversion.ch")
     local usbdevice=$(cat "${CACHE_DIR}/usbdevice.ch")
@@ -1301,6 +1301,7 @@ check_common() {
             print_banner
             print_information
             select_country "$lang_code"
+            print_country
             selector "openwrt-config" 
             ;;
         full)
@@ -1320,6 +1321,7 @@ check_common() {
             print_banner
             print_information
             select_country "$lang_code"
+            print_country
             selector "openwrt-config" 
             ;;
         update)
