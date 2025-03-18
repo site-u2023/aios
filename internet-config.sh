@@ -233,6 +233,11 @@ remove_exit() {
     esac
 }
 
+return_menu() {
+# ここに　リターンを入れる
+
+}
+
 # メイン関数
 main() {
     # デバッグモードでmenu.dbの内容を確認
