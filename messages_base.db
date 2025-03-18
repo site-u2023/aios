@@ -65,17 +65,17 @@ US|MENU_TITLE=Menu:
 JP|MENU_TITLE=メニュー:
 
 # メニュー項目
-US|MENU_INTERNET=Internet connection setup (MAP-e, DS-LITE, PPPoE)
-JP|MENU_INTERNET=インターネット接続設定 (MAP-e, DS-LITE, PPPoE)
+US|MENU_INTERNET=Internet connection setup (Japan only: MAP-e, DS-LITE, PPPoE, etc.)
+JP|MENU_INTERNET=インターネットの接続設定 (日本専用: MAP-e, DS-LITE, PPPoE等)
 
 US|MENU_SYSTEM=Initial system setup (hostname, password, wifi, etc.)
-JP|MENU_SYSTEM=システム初期設定 (ホスト名,パスワード,WiFi等)
+JP|MENU_SYSTEM=システムの初期設定 (ホスト名,パスワード,WiFi等)
 
-US|MENU_PACKAGES=Install recommended packages (automatic or selective)
-JP|MENU_PACKAGES=推奨パッケージのインストール (自動または選択式)
+US|MENU_PACKAGES=Install packages (selective)
+JP|MENU_PACKAGES=パッケージのインストール (選択)
 
-US|MENU_ADBLOCKER=Install ad blocker and DNS encryption
-JP|MENU_ADBLOCKER=広告ブロッカーとDNS暗号化のインストール
+US|MENU_ADBLOCKER=Install and Configure Ad Blocker and DNS Encryption
+JP|MENU_ADBLOCKER=広告ブロッカーとDNS暗号化のインストール及び設定
 
 US|MENU_ACCESSPOINT=Access point connection setup (Dumb/Bridge)
 JP|MENU_ACCESSPOINT=アクセスポイント接続設定 (ダム/ブリッジモード)
