@@ -321,8 +321,8 @@ JP|MSG_INFO_ARCHITECTURE=アーキテクチャー: {info}
 US|MSG_INFO_OSVERSION=OS Version: {info}
 JP|MSG_INFO_OSVERSION=OSバージョン: {info}
 
-US|MSG_INFO_USBDEVICEE=USB device: {info}
-JP|MSG_INFO_USBDEVICEE=USBデバイス: {info}
+US|MSG_INFO_USBDEVICE=USB device: {info}
+JP|MSG_INFO_USBDEVICE=USBデバイス: {info}
 
 US|MSG_INFO_LANG_CODE=Language Code: {code}
 JP|MSG_INFO_LANG_CODE=言語コード: {code}
