@@ -21,8 +21,8 @@ JP|MSG_UNDER_TEST=👹 試験中
 US|CONFIG_HEADER=Main menu
 JP|CONFIG_HEADER=メインメニュー
 
-US|CONFIG_SEPARATOR=-----------------------------------------------------
-JP|CONFIG_SEPARATOR=-----------------------------------------------------
+US|CONFIG_SEPARATOR=----------------------------------------------
+JP|CONFIG_SEPARATOR=----------------------------------------------
 
 US|CONFIG_SECTION_TITLE={0}
 JP|CONFIG_SECTION_TITLE={0}
