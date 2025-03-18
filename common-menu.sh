@@ -209,7 +209,7 @@ selector() {
     local menu_title_template=$(get_message "MENU_TITLE")
     local menu_title=$(echo "$menu_title_template" | sed "s/{0}/$section_name/g")
 
-    printf "\n%s\n\n" "-----------------------------------------------------"
+    printf "\n%s\n" "-----------------------------------------------------"
     printf "%s" "$(color white "$menu_title")"
     printf "\n%s\n\n" "-----------------------------------------------------"
     
