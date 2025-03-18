@@ -321,7 +321,7 @@ get_message() {
         var_value=$(echo "$params" | cut -d'=' -f2-)
     
         if [ -n "$var_name" ] && [ -n "$var_value" ]; then
-            echo "Debug: Replacing placeholder {$var_name} with value"
+            debug_log "DEBUG" "Replacing placeholder {$var_name} with value"
             temp_msg=$(echo "$temp_msg" | sed "s|{$var_name}|$var_value|g")
             message="$temp_msg"
         fi
