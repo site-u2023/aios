@@ -1,7 +1,83 @@
 #!/bin/sh
 
+COMMON_VERSION="2025.03.18-01-00"
+
+# =========================================================
+# 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
+# 🚀 Last Update: 2025-02-21
+#
+# 🏷️ License: CC0 (Public Domain)
+# 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
+#
+# ⚠️ IMPORTANT NOTICE:
+# OpenWrt OS exclusively uses **Almquist Shell (ash)** and
+# is **NOT** compatible with Bourne-Again Shell (bash).
+#
+# 📢 POSIX Compliance Guidelines:
+# ✅ Use `[` instead of `[[` for conditions
+# ✅ Use $(command) instead of backticks `command`
+# ✅ Use $(( )) for arithmetic instead of let
+# ✅ Define functions as func_name() {} (no function keyword)
+# ✅ No associative arrays (declare -A is NOT supported)
+# ✅ No here-strings (<<< is NOT supported)
+# ✅ No -v flag in test or [[
+# ✅ Avoid bash-specific string operations like ${var:0:3}
+# ✅ Avoid arrays entirely when possible (even indexed arrays can be problematic)
+# ✅ Use printf followed by read instead of read -p
+# ✅ Use printf instead of echo -e for portable formatting
+# ✅ Avoid process substitution <() and >()
+# ✅ Prefer case statements over complex if/elif chains
+# ✅ Use command -v instead of which or type for command existence checks
+# ✅ Keep scripts modular with small, focused functions
+# ✅ Use simple error handling instead of complex traps
+# ✅ Test scripts with ash/dash explicitly, not just bash
+#
+# 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
+### =========================================================
+### 📌 AI Assistance Request: POSIX-Compliant Debugging Guide
+### 
+### When debugging or fixing errors in this POSIX shell script:
+### 
+### 1️⃣ Create a minimal reproducible test case (avoid bash features)
+### 2️⃣ Test with ash/dash explicitly: dash ./test.sh
+### 3️⃣ Use portable debugging methods: echo, printf, or set -x
+### 4️⃣ Validate fixes against all POSIX compliance guidelines
+### 5️⃣ Ensure the solution works in resource-constrained OpenWrt
+### 
+### ⚠️ IMPORTANT:
+### - Avoid suggesting bash-specific solutions
+### - Always test fixes with ash/dash before implementation
+### - Prefer simple solutions over complex ones
+### - Do not modify production code without test verification
+### 
+### 🛠️ Keep debugging simple, focused, and POSIX-compliant!
+### =========================================================
+
+DEV_NULL="${DEV_NULL:-on}"
+# サイレントモード
+# export DEV_NULL="on"
+# 通常モード
+# unset DEV_NULL
+
+# 基本定数の設定 
+BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q -O}"
+# BASE_WGET="${BASE_WGET:-wget -O}"
+DEBUG_MODE="${DEBUG_MODE:-false}"
+BIN_PATH=$(readlink -f "$0")
+BIN_DIR="$(dirname "$BIN_PATH")"
+BIN_FILE="$(basename "$BIN_PATH")"
+BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
+BASE_DIR="${BASE_DIR:-/tmp/aios}"
+CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
+FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
+LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
+
 # メニューセレクター関数 - POSIX準拠版
 selector() {
+    # グローバル変数でメニュー階層を管理
+    local previous_menu="$CURRENT_MENU"
+    CURRENT_MENU="$1"
+    
     # グローバル変数かパラメータからセクション名を取得
     local section_name=""
     if [ -n "$1" ]; then
@@ -13,28 +89,19 @@ selector() {
     fi
     
     debug_log "DEBUG" "Starting menu selector with section: $section_name"
+    debug_log "DEBUG" "Previous menu was: $previous_menu"
     
-    # メインメニュー名を設定（グローバル変数か既定値）
+    # メインメニュー名を取得
     local main_menu="${MAIN_MENU:-openwrt-config}"
     
     # メニューDBの存在確認
     if [ ! -f "${BASE_DIR}/menu.db" ]; then
         debug_log "ERROR" "Menu database not found at ${BASE_DIR}/menu.db"
-        printf "%s\n" "$(color red "メニューデータベースが見つかりません")"
+        printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
         return 1
     fi
     
     debug_log "DEBUG" "Menu DB path: ${BASE_DIR}/menu.db"
-    
-    # キャッシュディレクトリの存在確認と作成
-    if [ ! -d "$CACHE_DIR" ]; then
-        debug_log "DEBUG" "Creating cache directory: $CACHE_DIR"
-        mkdir -p "$CACHE_DIR" || {
-            debug_log "ERROR" "Failed to create cache directory: $CACHE_DIR"
-            printf "%s\n" "$(color red "キャッシュディレクトリを作成できません")"
-            return 1
-        }
-    fi
     
     # キャッシュファイルの初期化
     local menu_keys_file="${CACHE_DIR}/menu_keys.tmp"
@@ -108,18 +175,20 @@ selector() {
     # メニュー項目の確認
     if [ $menu_count -eq 0 ]; then
         debug_log "ERROR" "No menu items found in section [$section_name]"
-        printf "%s\n" "$(color red "セクション[$section_name]にメニュー項目がありません")"
+        printf "%s\n" "$(color red "No menu items found in section [$section_name]")"
         
-        # メインメニューに戻る処理（主要な修正箇所）
-        if [ "$section_name" != "$main_menu" ]; then
-            debug_log "INFO" "Returning to main menu after error"
-            printf "%s\n" "$(color blue "メインメニューに戻ります...")"
-            sleep 2
+        # エラー時に前のメニューに戻る
+        if [ "$section_name" = "$main_menu" ]; then
+            # メインメニューの場合は再表示（ループ）
+            debug_log "INFO" "Main menu error, reloading main menu"
             selector "$main_menu"
             return $?
+        else
+            # サブメニューの場合は前のメニューに戻る
+            debug_log "INFO" "Returning to previous menu: $previous_menu"
+            selector "$previous_menu"
+            return $?
         fi
-        
-        return 1
     fi
     
     debug_log "DEBUG" "Found $menu_count menu items"
@@ -134,18 +203,18 @@ selector() {
         cat "$menu_displays_file"
     else
         debug_log "ERROR" "Menu display file is empty or cannot be read"
-        printf "%s\n" "$(color red "メニュー表示ファイルが空か読めません")"
+        printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
         
-        # メインメニューに戻る処理
-        if [ "$section_name" != "$main_menu" ]; then
-            debug_log "INFO" "Returning to main menu after error"
-            printf "%s\n" "$(color blue "メインメニューに戻ります...")"
-            sleep 2
+        # エラー時に前のメニューに戻る
+        if [ "$section_name" = "$main_menu" ]; then
+            debug_log "INFO" "Main menu error, reloading main menu"
             selector "$main_menu"
             return $?
+        else
+            debug_log "INFO" "Returning to previous menu: $previous_menu"
+            selector "$previous_menu"
+            return $?
         fi
-        
-        return 1
     fi
     
     printf "\n"
@@ -161,16 +230,16 @@ selector() {
     if ! read -r choice; then
         debug_log "ERROR" "Failed to read user input"
         
-        # メインメニューに戻る処理
-        if [ "$section_name" != "$main_menu" ]; then
-            debug_log "INFO" "Returning to main menu after input error"
-            printf "%s\n" "$(color blue "メインメニューに戻ります...")"
-            sleep 2
+        # エラー時に前のメニューに戻る
+        if [ "$section_name" = "$main_menu" ]; then
+            debug_log "INFO" "Main menu error, reloading main menu"
             selector "$main_menu"
             return $?
+        else
+            debug_log "INFO" "Returning to previous menu: $previous_menu"
+            selector "$previous_menu"
+            return $?
         fi
-        
-        return 1
     fi
     
     # 入力の正規化（利用可能な場合のみ）
@@ -181,8 +250,7 @@ selector() {
     
     # 数値チェック
     if ! echo "$choice" | grep -q '^[0-9][0-9]*$'; then
-        local error_msg=$(get_message "CONFIG_ERROR_NOT_NUMBER")
-        printf "\n%s\n" "$(color red "$error_msg")"
+        printf "\n%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
         sleep 2
         # 同じメニューを再表示
         selector "$section_name"
@@ -211,18 +279,18 @@ selector() {
     
     if [ -z "$selected_key" ] || [ -z "$selected_cmd" ]; then
         debug_log "ERROR" "Failed to retrieve selected menu item data"
-        printf "%s\n" "$(color red "メニュー項目の取得に失敗しました")"
+        printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
         
-        # メインメニューに戻る処理
-        if [ "$section_name" != "$main_menu" ]; then
-            debug_log "INFO" "Returning to main menu after menu item error"
-            printf "%s\n" "$(color blue "メインメニューに戻ります...")"
-            sleep 2
+        # エラー時に前のメニューに戻る
+        if [ "$section_name" = "$main_menu" ]; then
+            debug_log "INFO" "Main menu error, reloading main menu"
             selector "$main_menu"
             return $?
-        }
-        
-        return 1
+        else
+            debug_log "INFO" "Returning to previous menu: $previous_menu"
+            selector "$previous_menu"
+            return $?
+        fi
     fi
     
     debug_log "DEBUG" "Selected key: $selected_key"
@@ -243,15 +311,19 @@ selector() {
     
     debug_log "DEBUG" "Command execution finished with status: $cmd_status"
     
-    # エラー発生時にメインメニューに戻る
+    # コマンド実行エラー時、前のメニューに戻る
     if [ $cmd_status -ne 0 ]; then
-        debug_log "ERROR" "Command execution failed with status: $cmd_status"
-        # メインメニューに戻る処理（ただしメインメニュー実行中のエラーは除く）
-        if [ "$section_name" != "$main_menu" ]; then
-            debug_log "INFO" "Returning to main menu after command error"
-            printf "%s\n" "$(color blue "メインメニューに戻ります...")"
-            sleep 2
+        debug_log "ERROR" "Command failed with status $cmd_status"
+        printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
+        sleep 2
+        
+        if [ "$section_name" = "$main_menu" ]; then
+            debug_log "INFO" "Main menu command error, reloading main menu"
             selector "$main_menu"
+            return $?
+        else 
+            debug_log "INFO" "Command error, returning to previous menu: $previous_menu"
+            selector "$previous_menu"
             return $?
         fi
     fi
@@ -260,4 +332,43 @@ selector() {
     rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
     
     return $cmd_status
+}
+
+# メインメニューに戻る関数
+return_menu() {
+    # グローバル変数MAIN_MENUからメインメニュー名を取得
+    local main_menu="${MAIN_MENU:-openwrt-config}"
+    
+    debug_log "DEBUG" "Returning to main menu: $main_menu"
+    printf "%s\n" "$(color blue "$(get_message "CONFIG_RETURN_TO_MAIN")")"
+    sleep 1
+    
+    # メインメニューに戻る
+    selector "$main_menu"
+    return $?
+}
+
+# 削除確認関数
+remove_exit() {
+    debug_log "DEBUG" "Starting remove_exit using confirm function"
+    
+    # 確認関数を使用
+    if confirm "CONFIG_CONFIRM_DELETE"; then
+        debug_log "DEBUG" "User confirmed deletion, proceeding with removal"
+        printf "%s\n" "$(color green "$(get_message "CONFIG_DELETE_CONFIRMED")")"
+        [ -f "$BIN_PATH" ] && rm -f "$BIN_PATH"
+        [ -d "$BASE_DIR" ] && rm -rf "$BASE_DIR"
+        exit 0
+    else
+        debug_log "DEBUG" "User canceled deletion, returning to menu"
+        printf "%s\n" "$(color blue "$(get_message "CONFIG_DELETE_CANCELED")")"
+        return 0
+    fi
+}
+
+# 標準終了関数
+menu_exit() {
+    printf "%s\n" "$(color green "$(get_message "CONFIG_EXIT_CONFIRMED")")"
+    sleep 1
+    exit 0
 }
