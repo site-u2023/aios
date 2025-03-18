@@ -94,12 +94,12 @@ handle_menu_error() {
     # エラー時にメニューに戻る処理
     if [ "$section_name" = "$main_menu" ]; then
         # メインメニューの場合は再表示（ループ）
-        debug_log "INFO" "Main menu $error_type, reloading main menu"
+        debug_log "DEBUG" "Main menu $error_type, reloading main menu"
         selector "$main_menu"
         return $?
     else
         # サブメニューの場合は前のメニューに戻る
-        debug_log "INFO" "Returning to previous menu: $previous_menu after $error_type"
+        debug_log "DEBUG" "Returning to previous menu: $previous_menu after $error_type"
         selector "$previous_menu"
         return $?
     fi
@@ -206,19 +206,10 @@ selector() {
     debug_log "DEBUG" "Found $menu_count menu items"
     
     # タイトルヘッダーを表示
-    local title=$(get_message "MENU_TITLE")
+    local menu_title_template=$(get_message "MENU_TITLE")
+    local menu_title=$(echo "$menu_title_template" | sed "s/{0}/$section_name/g")
     
-    # メインメニューの場合はCONFIG_HEADER、それ以外はメニュータイトルを表示
-    if [ "$section_name" = "$main_menu" ]; then
-        printf "\n%s\n\n" "$(color white "${title} $(get_message "CONFIG_HEADER")")"
-    else
-        # セクション名からそのまま対応するキーを生成
-        local section_key=""
-        section_key=$(echo "$section_name" | sed 's/-config$//' | tr '[:lower:]' '[:upper:]')
-        section_key="MENU_${section_key}"
-        
-        printf "\n%s\n\n" "$(color white "${title} $(get_message "$section_key")")"
-    fi
+    printf "\n%s\n\n" "$(color white "$menu_title")"
     
     if [ -s "$menu_displays_file" ]; then
         cat "$menu_displays_file"
@@ -290,10 +281,12 @@ selector() {
     debug_log "DEBUG" "Executing command: $selected_cmd"
     
     # コマンド実行前の表示
-    local msg=$(get_message "$selected_key")
-    [ -z "$msg" ] && msg="$selected_key"
-    local download_msg=$(get_message "CONFIG_DOWNLOADING")
-    download_msg=$(echo "$download_msg" | sed "s/{0}/$msg/g")
+    local selected_text=$(get_message "$selected_key")
+    [ -z "$selected_text" ] && selected_text="$selected_key"
+    
+    # プレースホルダー置換による表示
+    local download_msg=$(get_message "CONFIG_DOWNLOADING" "0=$selected_text")
+    
     printf "\n%s\n\n" "$(color "$selected_color" "$download_msg")"
     sleep 1
     
