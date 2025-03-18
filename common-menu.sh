@@ -333,7 +333,7 @@ remove_exit() {
         exit 0
     else
         debug_log "DEBUG" "User canceled deletion, returning to menu"
-        printf "%s\n" "$(color blue "$(get_message "CONFIG_DELETE_CANCELED")")"
+        printf "%s\n" "$(color yellow "$(get_message "CONFIG_DELETE_CANCELED")")"
         return 0
     fi
 }
