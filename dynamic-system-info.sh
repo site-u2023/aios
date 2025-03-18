@@ -229,6 +229,26 @@ get_zonename_info() {
     echo "$zonename"
 }
 
+# USBデバイスの存在を確認する関数（単独で動作）
+has_usb_devices() {
+    debug_log "DEBUG" "Checking for USB devices"
+    
+    if [ -d "/sys/bus/usb/devices" ]; then
+        # ベンダーIDを持つデバイスをカウント（ハブ以外のデバイスを検出）
+        local count=0
+        for device in /sys/bus/usb/devices/[0-9]*-[0-9]*; do
+            if [ -f "$device/idVendor" ]; then
+                count=$((count + 1))
+                debug_log "DEBUG" "Found USB device: $(cat $device/idVendor 2>/dev/null):$(cat $device/idProduct 2>/dev/null)"
+                return 0  # デバイスが見つかったら即時終了
+            fi
+        done
+    fi
+        
+    debug_log "DEBUG" "No USB devices detected"
+    return 1  # USBデバイスなし
+}
+
 # 📌 デバイスの国情報の取得
 # 戻り値: システム設定とデータベースに基づく組み合わせた国情報
 get_country_info() {
