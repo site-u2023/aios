@@ -284,8 +284,7 @@ return_menu() {
     local main_menu="${MAIN_MENU:-openwrt-config.sh}"
     
     [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] Returning to main menu: $main_menu"
-    
-    printf "%s\n" "$(color blue "メインメニューに戻ります...")"
+    printf "%s\n" "$(color blue "$(get_message "CONFIG_RETURN_TO_MAIN")")"
     sleep 1
     
     # メインメニューに戻るコマンドを実行
