@@ -1,6 +1,6 @@
 # AIOSメニュー設定データベース
 
-[openwrt-config.sh]
+[openwrt-config]
 magenta MENU_INTERNET selector internet-config.sh
 blue MENU_SYSTEM selector system-config.sh
 cyan MENU_PACKAGES download "package-config.sh" "chmod" "load"
@@ -10,12 +10,12 @@ red MENU_OTHERS download "other-utilities.sh" "chmod" "load"
 white MENU_EXIT menu_exit
 white_black MENU_REMOVE remove_exit
 
-[internet-config.sh]
+[internet-config]
 magenta MENU_INTERNET download "internet-config.sh" "chmod" "load"
 white MENU_EXIT menu_exit
 white_black MENU_RETURN return_menu
 
-[system-config.sh]
+[system-config]
 blue MENU_SYSTEM download "system-config.sh" "chmod" "load" 
 white MENU_EXIT menu_exit
 white_black MENU_RETURN return_menu
