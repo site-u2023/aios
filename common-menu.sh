@@ -72,6 +72,9 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 
+# メインメニューのセクション名を定義
+MAIN_MENU="${MAIN_MENU:-openwrt-config}"
+
 # エラーハンドリング関数 - 一元化された処理
 handle_menu_error() {
     local error_type="$1"    # エラータイプ
@@ -222,7 +225,7 @@ selector() {
     local selection_prompt=$(get_message "CONFIG_SELECT_PROMPT")
     # {0}をメニュー数で置換
     selection_prompt=$(echo "$selection_prompt" | sed "s/{0}/$menu_count/g")
-    printf "%s" "$(color green "$selection_prompt")"
+    printf "%s" "$(color blue "$selection_prompt")"
     
     # ユーザー入力
     local choice=""
@@ -307,10 +310,9 @@ selector() {
 # メインメニューに戻る関数
 return_menu() {
     # グローバル変数MAIN_MENUからメインメニュー名を取得
-    local main_menu="${MAIN_MENU:-openwrt-config}"
+    local main_menu="${MAIN_MENU}"
     
     debug_log "DEBUG" "Returning to main menu: $main_menu"
-    printf "%s\n" "$(color blue "$(get_message "CONFIG_RETURN_TO_MAIN")")"
     sleep 1
     
     # メインメニューに戻る
