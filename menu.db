@@ -12,3 +12,8 @@ white_black MENU_REMOVE remove_exit
 
 [internet-config.sh]
 # ここにメニューと動作を入れる
+echo "test: internet-config.sh"
+
+[system-config.sh]
+# ここにメニューと動作を入れる
+echo "test: system-config.sh"
