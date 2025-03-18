@@ -325,7 +325,7 @@ US|MSG_INFO_USBDEVICE=USB device: {info}
 JP|MSG_INFO_USBDEVICE=USBデバイス: {info}
 
 US|MSG_INFO_COUNTRY=Country: {code}
-JP|MSG_INFO_カントリー=国: {code}
+JP|MSG_INFO_COUNTRY=国: {code}
 
 US|MSG_INFO_LANGUAGE=Language: {code}
 JP|MSG_INFO_LANGUAGE=言語: {code}
