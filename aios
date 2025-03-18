@@ -417,7 +417,9 @@ confirm() {
             debug_log "ERROR" "Failed to read user input"
             return 1
         fi
-        
+
+        printf "\n"
+
         # 入力の正規化（数字のみ正規化し、大文字小文字は変換しない）
         yn=$(normalize_input "$yn")
         debug_log "DEBUG" "User input: $yn, normalized to: $yn"
