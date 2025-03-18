@@ -54,8 +54,8 @@ US|CONFIG_RETURN_TO_MAIN=Returning to main menu...
 JP|CONFIG_RETURN_TO_MAIN=メインメニューに戻ります...
 
 # download関数用メッセージ
-US|CONFIG_DOWNLOADING=Downloading and executing: {0}
-JP|CONFIG_DOWNLOADING=ダウンロードして実行中: {0}
+US|CONFIG_DOWNLOADING=Executing: {0}
+JP|CONFIG_DOWNLOADING=実行中: {0}
 
 US|CONFIG_DOWNLOAD_FAILED=Failed to download: {0}
 JP|CONFIG_DOWNLOAD_FAILED=ダウンロードに失敗しました: {0}
