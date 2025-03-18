@@ -1145,21 +1145,23 @@ print_banner_unicode() {
 }
 
 print_information() {
-
     local architecture=$(cat "${CACHE_DIR}/architecture.ch")
     local osversion=$(cat "${CACHE_DIR}/osversion.ch")
     local usbdevice=$(cat "${CACHE_DIR}/usbdevice.ch")
-    local lang_code=$(cat "${CACHE_DIR}/language.ch")
-    local zonename_code=$(cat "${CACHE_DIR}/zonename.ch")
-    local timezone_code=$(cat "${CACHE_DIR}/timezone.ch")
 
     printf "\n%s\n" "$(color green "$(get_message "MSG_INFO_ARCHITECTURE" "code=$architecture")")"
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_OSVERSION" "code=$osversion")")"
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_USBDEVICEE" "code=$usbdevice")")"
+}
+
+print_country) {
+    local architecture=$(cat "${CACHE_DIR}/architecture.ch")
+    local osversion=$(cat "${CACHE_DIR}/osversion.ch")
+    local usbdevice=$(cat "${CACHE_DIR}/usbdevice.ch")
+
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_LANG_CODE" "code=$lang_code")")"
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_ZONENAME_CODE" "code=$zonename_code")")"
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_TIMEZONE_CODE" "code=$timezone_code")")"
-
 }
 
 # 🔴　バナー系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
