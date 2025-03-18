@@ -3,7 +3,7 @@
 [openwrt-config.sh]
 magenta MENU_INTERNET download "internet-config.sh" "chmod" "load"
 blue MENU_SYSTEM download "system-config.sh" "chmod" "load" 
-cyan MENU_PACKAGES download "package-install.sh" "chmod" "load"
+cyan MENU_PACKAGES download "package-config.sh" "chmod" "load"
 green MENU_ADBLOCKER download "adblocker-dns.sh" "chmod" "load"
 yellow MENU_ACCESSPOINT download "accesspoint-setup.sh" "chmod" "load"
 red MENU_OTHERS download "other-utilities.sh" "chmod" "load"
