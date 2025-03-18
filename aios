@@ -1152,7 +1152,7 @@ print_information() {
 
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_ARCHITECTURE" "info=$architecture")")"
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_OSVERSION" "info=$osversion")")"
-    printf "%s\n" "$(color green "$(get_message "MSG_INFO_USBDEVICEE" "info=$usbdevice")")"
+    printf "%s\n" "$(color green "$(get_message "MSG_INFO_USBDEVICE" "info=$usbdevice")")"
     printf "\n"
 }
 
