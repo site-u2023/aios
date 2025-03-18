@@ -61,8 +61,8 @@ US|CONFIG_DOWNLOAD_FAILED=Failed to download: {0}
 JP|CONFIG_DOWNLOAD_FAILED=ダウンロードに失敗しました: {0}
 
 # メニュータイトル
-US|MENU_TITLE=Configuration Menu
-JP|MENU_TITLE=設定メニュー
+US|MENU_TITLE=Menu:
+JP|MENU_TITLE=メニュー:
 
 # メニュー項目
 US|MENU_INTERNET=Internet connection setup (MAP-e, DS-LITE, PPPoE)
