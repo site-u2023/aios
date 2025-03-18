@@ -249,6 +249,19 @@ has_usb_devices() {
     return 1  # USBデバイスなし
 }
 
+# USBデバイスステータスの表示（メッセージキーと色を使用）
+show_usb_status() {
+    debug_log "DEBUG" "Displaying USB device status with translation and color"
+    
+    if has_usb_devices; then
+        # USBデバイスが見つかった場合
+        printf "%s\n" "$(color green "$(get_message "MSG_USB_DETECTED")")"
+    else
+        # USBデバイスが見つからなかった場合
+        printf "%s\n" "$(color red "$(get_message "MSG_USB_NOT_DETECTED")")"
+    fi
+}
+
 # 📌 デバイスの国情報の取得
 # 戻り値: システム設定とデータベースに基づく組み合わせた国情報
 get_country_info() {
