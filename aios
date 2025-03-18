@@ -1166,8 +1166,8 @@ print_country() {
     local zonename=$(cat "${CACHE_DIR}/zonename.ch")
     local timezone=$(cat "${CACHE_DIR}/timezone.ch")
 
-    printf "%s\n" "$(color green "$(get_message "MSG_INFO_COUNTRY" "code=$language")")"
-    printf "%s\n" "$(color green "$(get_message "MSG_INFO_LANGUAGE" "code=$luci")")"
+    printf "%s\n" "$(color green "$(get_message "MSG_INFO_COUNTRY" "code=$country")")"
+    printf "%s\n" "$(color green "$(get_message "MSG_INFO_LANGUAGE" "code=$language")")"
     #printf "%s\n" "$(color green "$(get_message "MSG_INFO_MESSAGE" "code=$message")")"
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_ZONENAME" "code=$zonename")")"
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_TIMEZONE" "code=$timezone")")"
