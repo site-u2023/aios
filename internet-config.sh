@@ -1,9 +1,31 @@
-
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.17-15-00"
+SCRIPT_VERSION="2025.03.17-15-45"
 
-MAIN_NEMU="openwrt-config.sh"
+# メインメニューのセクション名をグローバル変数で定義
+MAIN_MENU="openwrt-config.sh"
+SELECTOR_MENU="internet-config.sh"
+
+# メインメニューに戻る関数
+return_menu() {
+    [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] Returning to main menu: $MAIN_MENU"
+    
+    printf "%s\n" "$(color blue "$(get_message "CONFIG_RETURN_TO_MAIN")")"
+    sleep 1
+    
+    # メインメニューに戻るコマンドを実行
+    if [ -f "${BASE_DIR}/${MAIN_MENU}" ]; then
+        [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] Found main menu script at ${BASE_DIR}/${MAIN_MENU}, loading..."
+        # シェルスクリプトとして実行
+        . "${BASE_DIR}/${MAIN_MENU}"
+        return $?
+    else
+        [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] Main menu script not found, downloading..."
+        # メインメニュースクリプトが見つからない場合はダウンロード
+        download "$MAIN_MENU" "chmod" "load"
+        return $?
+    fi
+}
 
 # メニューセレクター関数
 selector() {
@@ -208,36 +230,22 @@ menu_exit() {
     exit 0
 }
 
-# 削除終了関数
+# 削除終了関数 - aisoのconfirm()関数を使用
 remove_exit() {
-    printf "%s\n" "$(color yellow "$(get_message "CONFIG_CONFIRM_DELETE")")"
+    [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] Starting remove_exit function using confirm()"
     
-    printf "%s " "$(color cyan "本当に削除してよろしいですか？ (y/n):")"
-    choice=""
-    read -r choice
-    
-    # 入力の正規化（利用可能な場合のみ）
-    if command -v normalize_input >/dev/null 2>&1; then
-        choice=$(normalize_input "$choice" 2>/dev/null || echo "$choice")
+    # aisoのconfirm関数を使用
+    if confirm "CONFIG_CONFIRM_DELETE"; then
+        [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] User confirmed deletion, proceeding with removal"
+        printf "%s\n" "$(color green "$(get_message "CONFIG_DELETE_CONFIRMED")")"
+        [ -f "$BIN_PATH" ] && rm -f "$BIN_PATH"
+        [ -d "$BASE_DIR" ] && rm -rf "$BASE_DIR"
+        exit 0
+    else
+        [ "$DEBUG_MODE" = "true" ] && echo "[DEBUG] User canceled deletion, returning to menu"
+        printf "%s\n" "$(color blue "$(get_message "CONFIG_DELETE_CANCELED")")"
+        return 0
     fi
-    
-    case "$choice" in
-        [Yy]|[Yy][Ee][Ss])
-            printf "%s\n" "$(color green "$(get_message "CONFIG_DELETE_CONFIRMED")")"
-            [ -f "$BIN_PATH" ] && rm -f "$BIN_PATH"
-            [ -d "$BASE_DIR" ] && rm -rf "$BASE_DIR"
-            exit 0
-            ;;
-        *)
-            printf "%s\n" "$(color blue "$(get_message "CONFIG_DELETE_CANCELED")")"
-            return 0
-            ;;
-    esac
-}
-
-return_menu() {
-# ここに　リターンを入れる
-
 }
 
 # メイン関数
@@ -263,7 +271,7 @@ main() {
     
     # 引数がなければデフォルトセクションを表示
     while true; do
-        selector "$section_name"
+        selector "internet-config.sh"
     done
 }
 
