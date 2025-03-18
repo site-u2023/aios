@@ -1144,6 +1144,23 @@ print_banner_unicode() {
     debug_log "DEBUG" "Block style lowercase aios banner displayed successfully"
 }
 
+print_information() {
+
+    local architecture=$(cat "${CACHE_DIR}/architecture.ch")
+    local osversion=$(cat "${CACHE_DIR}/osversion")
+    local usbdevice=$(cat "${CACHE_DIR}/usbdevice.ch")
+    local lang_code=$(cat "${CACHE_DIR}/language.ch")
+    local zonename_code=$(cat "${CACHE_DIR}/zonename.ch")
+    local timezone_code=$(cat "${CACHE_DIR}/timezone.ch")
+
+    echo "$(color green "$(get_message "MSG_INFO_ARCHITECTURE" "$architecture")")"
+    echo "$(color green "$(get_message "MSG_INFO_OSVERSION" "$osversion")")"
+    echo "$(color green "$(get_message "MSG_INFO_USBDEVICEE" "$usb_device")")"
+    echo "$(color green "$(get_message "MSG_INFO_LANG_CODE" "$lang_code")")"
+    echo "$(color green "$(get_message "MSG_INFO_ZONENAME_CODE" "$zonename_code")")"
+    echo "$(color green "$(get_message "MSG_INFO_TIMEZONE_CODE" "$timezone_code")")"
+
+}
 # 🔴　バナー系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # 🔵　メイン　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
@@ -1278,7 +1295,8 @@ check_common() {
             download "messages_etc.db" "hidden"
             download "local-package.db" "hidden"
             download "custom-package.db" "hidden"
-            print_banner       
+            print_banner
+            print_information
             select_country "$lang_code"
             selector "openwrt-config" 
             ;;
@@ -1297,6 +1315,7 @@ check_common() {
             download "local-package.db"
             download "custom-package.db"
             print_banner
+            print_information
             select_country "$lang_code"
             selector "openwrt-config" 
             ;;
