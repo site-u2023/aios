@@ -125,7 +125,7 @@ selector() {
     debug_log "DEBUG" "Previous menu was: $previous_menu"
     
     # メインメニュー名を取得
-    local main_menu="${MAIN_MENU:-openwrt-config}"
+    local main_menu="${MAIN_MENU}"
         
     # キャッシュファイルの初期化
     local menu_keys_file="${CACHE_DIR}/menu_keys.tmp"
@@ -327,9 +327,9 @@ return_menu() {
 
 # 削除確認関数
 remove_exit() {
-    debug_log "DEBUG" "Starting remove_exit using confirm function"
+    debug_log "DEBUG" "Starting remove_exit confirmation process"
     
-    # 確認関数を使用
+    # 確認プロンプト表示
     if confirm "CONFIG_CONFIRM_DELETE"; then
         debug_log "DEBUG" "User confirmed deletion, proceeding with removal"
         printf "%s\n" "$(color green "$(get_message "CONFIG_DELETE_CONFIRMED")")"
@@ -338,8 +338,17 @@ remove_exit() {
         exit 0
     else
         debug_log "DEBUG" "User canceled deletion, returning to menu"
-        printf "%s\n" "$(color yellow "$(get_message "CONFIG_DELETE_CANCELED")")"
-        return 0
+        printf "%s\n" "$(color blue "$(get_message "CONFIG_DELETE_CANCELED")")"
+        
+        # メインメニューに戻る処理
+        # (グローバル変数を使用)
+        local main_menu="${MAIN_MENU}"
+        debug_log "DEBUG" "Returning to main menu after cancellation"
+        sleep 1
+        
+        # メインメニューを表示
+        selector "$main_menu"
+        return $?
     fi
 }
 
