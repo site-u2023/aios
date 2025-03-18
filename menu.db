@@ -3,7 +3,7 @@
 [openwrt-config]
 magenta MENU_INTERNET selector internet-config
 blue MENU_SYSTEM selector system-config
-cyan MENU_PACKAGES download "package-config.sh" "chmod" "load"
+cyan MENU_PACKAGES selector package-config
 green MENU_ADBLOCKER download "adblocker-dns.sh" "chmod" "load"
 yellow MENU_ACCESSPOINT download "accesspoint-setup.sh" "chmod" "load"
 red MENU_OTHERS download "other-utilities.sh" "chmod" "load"
@@ -11,11 +11,100 @@ white MENU_EXIT menu_exit
 white_black MENU_REMOVE remove_exit
 
 [internet-config]
-magenta MENU_INTERNET download "internet-config.sh" "chmod" "load"
+magenta MENU_MAPE selector internet-mape
+blue MENU_DSLITE selector internet-dslite
+green MENU_PPPOE selector internet-pppoe
+cyan MENU_DHCP selector internet-dhcp
 white MENU_EXIT menu_exit
 white_black MENU_RETURN return_menu
 
 [system-config]
-blue MENU_SYSTEM download "system-config.sh" "chmod" "load" 
+magenta MENU_HOSTNAME selector system-hostname
+blue MENU_PASSWORD selector system-password
+green MENU_WIFI selector system-wifi
+cyan MENU_TIMEZONE selector system-timezone
+yellow MENU_LED selector system-led
+red MENU_REBOOT selector system-reboot
+white MENU_EXIT menu_exit
+white_black MENU_RETURN return_menu
+
+[package-config]
+magenta MENU_AUTO_INSTALL selector package-auto
+blue MENU_MANUAL_SELECT selector package-manual
+green MENU_UPDATE selector package-update
+cyan MENU_CUSTOM selector package-custom
+white MENU_EXIT menu_exit
+white_black MENU_RETURN return_menu
+
+# インターネット設定のサブセクション
+[internet-mape]
+magenta MENU_MAPE_CONFIG download "internet-mape.sh" "chmod" "load"
+white MENU_EXIT menu_exit
+white_black MENU_RETURN return_menu
+
+[internet-dslite]
+blue MENU_DSLITE_CONFIG download "internet-dslite.sh" "chmod" "load"
+white MENU_EXIT menu_exit
+white_black MENU_RETURN return_menu
+
+[internet-pppoe]
+green MENU_PPPOE_CONFIG download "internet-pppoe.sh" "chmod" "load"
+white MENU_EXIT menu_exit
+white_black MENU_RETURN return_menu
+
+[internet-dhcp]
+cyan MENU_DHCP_CONFIG download "internet-dhcp.sh" "chmod" "load"
+white MENU_EXIT menu_exit
+white_black MENU_RETURN return_menu
+
+# システム設定のサブセクション
+[system-hostname]
+magenta MENU_HOSTNAME_CONFIG download "system-hostname.sh" "chmod" "load"
+white MENU_EXIT menu_exit
+white_black MENU_RETURN return_menu
+
+[system-password]
+blue MENU_PASSWORD_CONFIG download "system-password.sh" "chmod" "load"
+white MENU_EXIT menu_exit
+white_black MENU_RETURN return_menu
+
+[system-wifi]
+green MENU_WIFI_CONFIG download "system-wifi.sh" "chmod" "load"
+white MENU_EXIT menu_exit
+white_black MENU_RETURN return_menu
+
+[system-timezone]
+cyan MENU_TIMEZONE_CONFIG download "system-timezone.sh" "chmod" "load"
+white MENU_EXIT menu_exit
+white_black MENU_RETURN return_menu
+
+[system-led]
+yellow MENU_LED_CONFIG download "system-led.sh" "chmod" "load"
+white MENU_EXIT menu_exit
+white_black MENU_RETURN return_menu
+
+[system-reboot]
+red MENU_REBOOT_CONFIG download "system-reboot.sh" "chmod" "load"
+white MENU_EXIT menu_exit
+white_black MENU_RETURN return_menu
+
+# パッケージ設定のサブセクション
+[package-auto]
+magenta MENU_AUTO_INSTALL_CONFIG download "package-auto.sh" "chmod" "load"
+white MENU_EXIT menu_exit
+white_black MENU_RETURN return_menu
+
+[package-manual]
+blue MENU_MANUAL_SELECT_CONFIG download "package-manual.sh" "chmod" "load"
+white MENU_EXIT menu_exit
+white_black MENU_RETURN return_menu
+
+[package-update]
+green MENU_UPDATE_CONFIG download "package-update.sh" "chmod" "load"
+white MENU_EXIT menu_exit
+white_black MENU_RETURN return_menu
+
+[package-custom]
+cyan MENU_CUSTOM_CONFIG download "package-custom.sh" "chmod" "load"
 white MENU_EXIT menu_exit
 white_black MENU_RETURN return_menu
