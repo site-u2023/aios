@@ -10,4 +10,5 @@ red MENU_OTHERS download "other-utilities.sh" "chmod" "load"
 white MENU_EXIT menu_exit
 white_black MENU_REMOVE remove_exit
 
-# 他のセクション...
+[internet-config.sh]
+# ここにメニューと動作を入れる
