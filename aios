@@ -1267,6 +1267,7 @@ check_common() {
         debug)
             download "dynamic-system-info.sh" "hidden" "chmod" "load"
             download "common-country.sh" "hidden" "chmod" "load"
+            download "common-country.sh" "hidden" "chmod" "load"
             download "common-package.sh" "hidden" "chmod" "load"
             download "common-feed-package.sh" "hidden" "chmod" "load"
             download "menu.db" "hidden"
@@ -1279,11 +1280,12 @@ check_common() {
             download "custom-package.db" "hidden"
             print_banner       
             select_country "$lang_code"
-            download "openwrt-config.sh" "hidden" "chmod" "load"
+            selector "openwrt-config.sh" 
             ;;
         full)
             download "dynamic-system-info.sh" "chmod" "load"
             download "common-country.sh" "chmod" "load"
+            download "common-menu.sh" "chmod" "load"
             download "common-package.sh" "chmod" "load"
             download "common-feed-package.sh" "chmod" "load"
             download "menu.db"
@@ -1296,8 +1298,7 @@ check_common() {
             download "custom-package.db"
             print_banner
             select_country "$lang_code"
-            download "openwrt-config.sh" "chmod" "load"
-            #download "system-config.sh" "chmod" "load"
+            selector "openwrt-config.sh" 
             ;;
         update)
             check_update "$ORIGINAL_ARGS"
