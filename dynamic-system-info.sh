@@ -249,7 +249,7 @@ get_usb_devices() {
     fi
     
     # 結果をキャッシュファイルに書き出し
-    echo "$usb_status" > "${CACHE_DIR}/usb_device.ch"
+    echo "$usb_status" > "${CACHE_DIR}/usbdevice.ch"
     debug_log "DEBUG" "USB detection result ($usb_status) saved to ${CACHE_DIR}/usb_device.ch"
 }
 
@@ -444,6 +444,7 @@ debug_info() {
 # メイン処理
 main() {
     init_device_cache
+    get_usb_devices
     detect_and_save_package_manager
 }
 
