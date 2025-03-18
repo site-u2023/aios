@@ -233,17 +233,17 @@ get_zonename_info() {
 # USBデバイス検出関数
 get_usb_devices() {
     # キャッシュファイルパスの設定
-    USB_DEVICE="${CACHE_DIR}/usb_device.ch"
+    USB_DEVICE="${CACHE_DIR}/usbdevice.ch"
     
     # USBデバイスの存在確認
     if [ -d "/sys/bus/usb/devices" ] && ls /sys/bus/usb/devices/[0-9]*-[0-9]*/idVendor >/dev/null 2>&1; then
         # USBデバイスが存在する場合
         debug_log "DEBUG" "USB device detected"
-        echo "detected" > "${CACHE_DIR}/usb_device.ch"
+        echo "detected" > "${CACHE_DIR}/usbdevice.ch"
     else
         # USBデバイスが存在しない場合
         debug_log "DEBUG" "No USB devices detected"
-        echo "not_detected" > "${CACHE_DIR}/usb_device.ch"
+        echo "not_detected" > "${CACHE_DIR}/usbdevice.ch"
     fi
 }
 
