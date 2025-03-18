@@ -1280,7 +1280,7 @@ check_common() {
             download "custom-package.db" "hidden"
             print_banner       
             select_country "$lang_code"
-            selector "openwrt-config.sh" 
+            selector "openwrt-config" 
             ;;
         full)
             download "dynamic-system-info.sh" "chmod" "load"
@@ -1298,7 +1298,7 @@ check_common() {
             download "custom-package.db"
             print_banner
             select_country "$lang_code"
-            selector "openwrt-config.sh" 
+            selector "openwrt-config" 
             ;;
         update)
             check_update "$ORIGINAL_ARGS"
