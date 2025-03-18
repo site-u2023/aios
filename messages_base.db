@@ -78,10 +78,10 @@ US|MENU_ADBLOCKER=Install and Configure Ad Blocker and DNS Encryption
 JP|MENU_ADBLOCKER=広告ブロッカーとDNS暗号化のインストール及び設定
 
 US|MENU_ACCESSPOINT=Access point connection setup (Dumb/Bridge)
-JP|MENU_ACCESSPOINT=アクセスポイント接続設定 (ダム/ブリッジモード)
+JP|MENU_ACCESSPOINT=アクセスポイントの接続設定 (ダム/ブリッジモード)
 
-US|MENU_OTHERS=Other utilities: Button settings, IPERF3, SAMBA4, LBS, DFS Check, Guest Wi-Fi
-JP|MENU_OTHERS=その他: ボタン設定, IPERF3, SAMBA4, LBS, DFSチェック, ゲストWiFi
+US|MENU_OTHERS=Other utilities: Button settings, IPERF3, SAMBA4
+JP|MENU_OTHERS=その他: ボタン設定, IPERF3, SAMBA4
 
 US|MENU_EXIT=Exit (Close the script)
 JP|MENU_EXIT=終了 (スクリプトを閉じる)
