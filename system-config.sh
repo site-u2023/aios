@@ -404,7 +404,7 @@ packages() {
 
 # メイン処理
 main() {
-    information
+    #information
     #set_device_name_password
     #set_wifi_ssid_password
     #set_device
