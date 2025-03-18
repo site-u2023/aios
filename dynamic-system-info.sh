@@ -287,12 +287,7 @@ get_country_info() {
 
 # デバイス情報キャッシュを初期化・保存する関数
 init_device_cache() {
-    # キャッシュディレクトリの確保
-    mkdir -p "$CACHE_DIR" 2>/dev/null || {
-        echo "ERROR: Failed to create cache directory: $CACHE_DIR"
-        return 1
-    }
-    
+   
     # アーキテクチャ情報の保存
     if [ ! -f "${CACHE_DIR}/architecture.ch" ]; then
         local arch
@@ -300,7 +295,7 @@ init_device_cache() {
         echo "$arch" > "${CACHE_DIR}/architecture.ch"
         debug_log "DEBUG" "Created architecture cache: $arch"
     fi
-    
+
     # OSバージョン情報の保存
     if [ ! -f "${CACHE_DIR}/osversion.ch" ]; then
         local version=""
@@ -308,16 +303,6 @@ init_device_cache() {
         if [ -f "/etc/openwrt_release" ]; then
             # ファイルからバージョン抽出
             version=$(grep -E "DISTRIB_RELEASE" /etc/openwrt_release | cut -d "'" -f 2)
-            
-            # スナップショット情報の取得
-            local snapshot=""
-            snapshot=$(grep -E "DISTRIB_DESCRIPTION" /etc/openwrt_release | grep -o "r[0-9]*")
-            if [ -n "$snapshot" ]; then
-                version="${version}-${snapshot}"
-            fi
-        fi
-        
-        if [ -n "$version" ]; then
             echo "$version" > "${CACHE_DIR}/osversion.ch"
             debug_log "DEBUG" "Created OS version cache: $version"
         else
@@ -325,7 +310,7 @@ init_device_cache() {
             echo "WARN: Could not determine OS version"
         fi
     fi
-    
+ 
     return 0
 }
 
