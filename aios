@@ -1160,13 +1160,17 @@ print_information() {
 }
 
 print_country() {
-    local lang_code=$(cat "${CACHE_DIR}/language.ch")
-    local zonename_code=$(cat "${CACHE_DIR}/zonename.ch")
-    local timezone_code=$(cat "${CACHE_DIR}/timezone.ch")
+    local country=$(cat "${CACHE_DIR}/country.ch")
+    local language=$(cat "${CACHE_DIR}/language.ch")
+    local message=$(cat "${CACHE_DIR}/message.ch")
+    local zonename=$(cat "${CACHE_DIR}/zonename.ch")
+    local timezone=$(cat "${CACHE_DIR}/timezone.ch")
 
-    printf "%s\n" "$(color green "$(get_message "MSG_INFO_LANG_CODE" "code=$lang_code")")"
-    printf "%s\n" "$(color green "$(get_message "MSG_INFO_ZONENAME_CODE" "code=$zonename_code")")"
-    printf "%s\n" "$(color green "$(get_message "MSG_INFO_TIMEZONE_CODE" "code=$timezone_code")")"
+    printf "%s\n" "$(color green "$(get_message "MSG_INFO_COUNTRY" "code=$country")")"
+    printf "%s\n" "$(color green "$(get_message "MSG_INFO_LANGUAGE" "code=$language")")"
+    printf "%s\n" "$(color green "$(get_message "MSG_INFO_LANGUAGE" "code=$message")")"
+    printf "%s\n" "$(color green "$(get_message "MSG_INFO_ZONENAME" "code=$zonename")")"
+    printf "%s\n" "$(color green "$(get_message "MSG_INFO_TIMEZONE" "code=$timezone")")"
     printf "\n"
 }
 
