@@ -1147,7 +1147,7 @@ print_banner_unicode() {
 print_information() {
 
     local architecture=$(cat "${CACHE_DIR}/architecture.ch")
-    local osversion=$(cat "${CACHE_DIR}/osversion")
+    local osversion=$(cat "${CACHE_DIR}/osversion.ch")
     local usbdevice=$(cat "${CACHE_DIR}/usbdevice.ch")
     local lang_code=$(cat "${CACHE_DIR}/language.ch")
     local zonename_code=$(cat "${CACHE_DIR}/zonename.ch")
