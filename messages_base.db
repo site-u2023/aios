@@ -324,14 +324,17 @@ JP|MSG_INFO_OSVERSION=OSバージョン: {info}
 US|MSG_INFO_USBDEVICE=USB device: {info}
 JP|MSG_INFO_USBDEVICE=USBデバイス: {info}
 
-US|MSG_INFO_LANG_CODE=Language Code: {code}
-JP|MSG_INFO_LANG_CODE=言語コード: {code}
+US|MSG_INFO_COUNTRY=Country: {code}
+JP|MSG_INFO_カントリー=国: {code}
 
-US|MSG_INFO_ZONENAME_CODE=Zonename Code: {code}
-JP|MSG_INFO_ZONENAME_CODE=ゾーンネームコード: {code}
+US|MSG_INFO_LANGUAGE=Language: {code}
+JP|MSG_INFO_LANGUAGE=言語: {code}
 
-US|MSG_INFO_TIMEZONE_CODE=Timezone Code: {code}
-JP|MSG_INFO_TIMEZONE_CODE=タイムゾーンコード: {code}
+US|MSG_INFO_ZONENAME=Zonename: {code}
+JP|MSG_INFO_ZONENAME=ゾーンネーム: {code}
+
+US|MSG_INFO_TIMEZONE=Timezone: {code}
+JP|MSG_INFO_TIMEZONE=タイムゾーン: {code}
 
 # set_device_name_password() 関数
 US|MSG_ENTER_DEVICE_NAME=Enter the new device name:
