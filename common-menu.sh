@@ -208,8 +208,10 @@ selector() {
     # タイトルヘッダーを表示
     local menu_title_template=$(get_message "MENU_TITLE")
     local menu_title=$(echo "$menu_title_template" | sed "s/{0}/$section_name/g")
-    
+
+    printf "\n%s\n\n" "-----------------------------------------------------"
     printf "\n%s\n\n" "$(color white "$menu_title")"
+    printf "\n%s\n\n" "-----------------------------------------------------"
     
     if [ -s "$menu_displays_file" ]; then
         cat "$menu_displays_file"
