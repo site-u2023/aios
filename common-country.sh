@@ -454,6 +454,7 @@ detect_and_set_location() {
             
             # ゾーン選択完了メッセージを表示（ここで1回だけ）
             printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+            printf "\n"
             
             debug_log "DEBUG" "Auto-detected settings have been applied successfully"
             return 0
@@ -627,6 +628,7 @@ select_zone() {
         # メッセージを表示（スキップフラグが設定されていない場合のみ）
         if [ "$skip_message" = "false" ]; then
             printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+            printf "\n"
         fi
         
         return 0
@@ -669,6 +671,7 @@ select_zone() {
             
             # 成功メッセージを表示
             printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+            printf "\n"
             return 0
             ;;
             
