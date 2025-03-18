@@ -315,14 +315,14 @@ JP|MSG_CONFIRM_INSTALL=パッケージ {pkg} をインストールしますか�
 # system-config.sh
 # =======================
 # information() 関数
-US|MSG_INFO_ARCHITECTURE=rchitecture: {code}
-JP|MSG_INFO_ARCHITECTURE=アーキテクチャー: {code}
+US|MSG_INFO_ARCHITECTURE=rchitecture: {info}
+JP|MSG_INFO_ARCHITECTURE=アーキテクチャー: {info}
 
-US|MSG_INFO_OSVERSION=OS Version: {code}
-JP|MSG_INFO_OSVERSION=OSバージョン: {code}
+US|MSG_INFO_OSVERSION=OS Version: {info}
+JP|MSG_INFO_OSVERSION=OSバージョン: {info}
 
-US|MSG_INFO_USBDEVICEE=USB device: {code}
-JP|MSG_INFO_USBDEVICEE=USBデバイス: {code}
+US|MSG_INFO_USBDEVICEE=USB device: {info}
+JP|MSG_INFO_USBDEVICEE=USBデバイス: {info}
 
 US|MSG_INFO_LANG_CODE=Language Code: {code}
 JP|MSG_INFO_LANG_CODE=言語コード: {code}
