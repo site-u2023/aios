@@ -1140,7 +1140,8 @@ print_banner_unicode() {
     printf "%s\n" "$(color white "$(get_message "MSG_BANNER_DECCRIPTION")")"
     printf "%s\n" "$(color white "$(get_message "MSG_BANNER_NAME")")"
     printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DISCLAIMER")")"
-    
+    printf "\n"
+
     debug_log "DEBUG" "Block style lowercase aios banner displayed successfully"
 }
 
@@ -1149,7 +1150,6 @@ print_information() {
     local osversion=$(cat "${CACHE_DIR}/osversion.ch")
     local usbdevice=$(cat "${CACHE_DIR}/usbdevice.ch")
 
-    printf "\n"
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_ARCHITECTURE" "info=$architecture")")"
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_OSVERSION" "info=$osversion")")"
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_USBDEVICEE" "info=$usbdevice")")"
@@ -1161,7 +1161,6 @@ print_country() {
     local osversion=$(cat "${CACHE_DIR}/osversion.ch")
     local usbdevice=$(cat "${CACHE_DIR}/usbdevice.ch")
 
-    printf "\n"
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_LANG_CODE" "code=$lang_code")")"
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_ZONENAME_CODE" "code=$zonename_code")")"
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_TIMEZONE_CODE" "code=$timezone_code")")"
