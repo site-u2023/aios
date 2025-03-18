@@ -9,15 +9,18 @@ selector() {
     elif [ -n "$SELECTOR_MENU" ]; then
         section_name="$SELECTOR_MENU"
     else
-        section_name="openwrt-config.sh"
+        section_name="openwrt-config"
     fi
     
     debug_log "DEBUG" "Starting menu selector with section: $section_name"
     
+    # メインメニュー名を設定（グローバル変数か既定値）
+    local main_menu="${MAIN_MENU:-openwrt-config}"
+    
     # メニューDBの存在確認
     if [ ! -f "${BASE_DIR}/menu.db" ]; then
         debug_log "ERROR" "Menu database not found at ${BASE_DIR}/menu.db"
-        printf "%s\n" "$(color red "Menu database not found")"
+        printf "%s\n" "$(color red "メニューデータベースが見つかりません")"
         return 1
     fi
     
@@ -28,7 +31,7 @@ selector() {
         debug_log "DEBUG" "Creating cache directory: $CACHE_DIR"
         mkdir -p "$CACHE_DIR" || {
             debug_log "ERROR" "Failed to create cache directory: $CACHE_DIR"
-            printf "%s\n" "$(color red "Failed to create cache directory")"
+            printf "%s\n" "$(color red "キャッシュディレクトリを作成できません")"
             return 1
         }
     fi
@@ -105,7 +108,17 @@ selector() {
     # メニュー項目の確認
     if [ $menu_count -eq 0 ]; then
         debug_log "ERROR" "No menu items found in section [$section_name]"
-        printf "%s\n" "$(color red "No menu items found in section [$section_name]")"
+        printf "%s\n" "$(color red "セクション[$section_name]にメニュー項目がありません")"
+        
+        # メインメニューに戻る処理（主要な修正箇所）
+        if [ "$section_name" != "$main_menu" ]; then
+            debug_log "INFO" "Returning to main menu after error"
+            printf "%s\n" "$(color blue "メインメニューに戻ります...")"
+            sleep 2
+            selector "$main_menu"
+            return $?
+        fi
+        
         return 1
     fi
     
@@ -115,13 +128,23 @@ selector() {
     local title=$(get_message "MENU_TITLE")
     
     # MENU_TITLEの後に1つの空白と[セクション名]を表示
-    printf "\n%s\n\n" "$(color white "${title} [$section_name]")"
+    printf "\n%s\n\n" "$(color white_black "${title} [$section_name]")"
     
     if [ -s "$menu_displays_file" ]; then
         cat "$menu_displays_file"
     else
         debug_log "ERROR" "Menu display file is empty or cannot be read"
-        printf "%s\n" "$(color red "Menu display file is empty or cannot be read")"
+        printf "%s\n" "$(color red "メニュー表示ファイルが空か読めません")"
+        
+        # メインメニューに戻る処理
+        if [ "$section_name" != "$main_menu" ]; then
+            debug_log "INFO" "Returning to main menu after error"
+            printf "%s\n" "$(color blue "メインメニューに戻ります...")"
+            sleep 2
+            selector "$main_menu"
+            return $?
+        fi
+        
         return 1
     fi
     
@@ -137,6 +160,16 @@ selector() {
     local choice=""
     if ! read -r choice; then
         debug_log "ERROR" "Failed to read user input"
+        
+        # メインメニューに戻る処理
+        if [ "$section_name" != "$main_menu" ]; then
+            debug_log "INFO" "Returning to main menu after input error"
+            printf "%s\n" "$(color blue "メインメニューに戻ります...")"
+            sleep 2
+            selector "$main_menu"
+            return $?
+        fi
+        
         return 1
     fi
     
@@ -149,18 +182,22 @@ selector() {
     # 数値チェック
     if ! echo "$choice" | grep -q '^[0-9][0-9]*$'; then
         local error_msg=$(get_message "CONFIG_ERROR_NOT_NUMBER")
-        printf "\n%s\n" "$(color red "Please enter a valid number")"
+        printf "\n%s\n" "$(color red "$error_msg")"
         sleep 2
-        return 0
+        # 同じメニューを再表示
+        selector "$section_name"
+        return $?
     fi
     
     # 選択範囲チェック
     if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_count" ]; then
         local error_msg=$(get_message "CONFIG_ERROR_INVALID_NUMBER")
         error_msg=$(echo "$error_msg" | sed "s/{0}/$menu_count/g")
-        printf "\n%s\n" "$(color red "Please enter a number between 1 and $menu_count")"
+        printf "\n%s\n" "$(color red "$error_msg")"
         sleep 2
-        return 0
+        # 同じメニューを再表示
+        selector "$section_name"
+        return $?
     fi
     
     # 選択されたキーとコマンドを取得
@@ -174,7 +211,17 @@ selector() {
     
     if [ -z "$selected_key" ] || [ -z "$selected_cmd" ]; then
         debug_log "ERROR" "Failed to retrieve selected menu item data"
-        printf "%s\n" "$(color red "Failed to retrieve menu item data")"
+        printf "%s\n" "$(color red "メニュー項目の取得に失敗しました")"
+        
+        # メインメニューに戻る処理
+        if [ "$section_name" != "$main_menu" ]; then
+            debug_log "INFO" "Returning to main menu after menu item error"
+            printf "%s\n" "$(color blue "メインメニューに戻ります...")"
+            sleep 2
+            selector "$main_menu"
+            return $?
+        }
+        
         return 1
     fi
     
@@ -196,57 +243,21 @@ selector() {
     
     debug_log "DEBUG" "Command execution finished with status: $cmd_status"
     
+    # エラー発生時にメインメニューに戻る
+    if [ $cmd_status -ne 0 ]; then
+        debug_log "ERROR" "Command execution failed with status: $cmd_status"
+        # メインメニューに戻る処理（ただしメインメニュー実行中のエラーは除く）
+        if [ "$section_name" != "$main_menu" ]; then
+            debug_log "INFO" "Returning to main menu after command error"
+            printf "%s\n" "$(color blue "メインメニューに戻ります...")"
+            sleep 2
+            selector "$main_menu"
+            return $?
+        fi
+    fi
+    
     # 一時ファイル削除
     rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
     
     return $cmd_status
-}
-
-# メインメニューに戻る関数
-return_menu() {
-    # グローバル変数MAIN_MENUからメインメニュー名を取得
-    local main_menu="${MAIN_MENU:-openwrt-config.sh}"
-    
-    debug_log "DEBUG" "Returning to main menu: $main_menu"
-    
-    printf "%s\n" "$(color blue "Returning to main menu...")"
-    sleep 1
-    
-    # メインメニューに戻るコマンドを実行
-    if [ -f "${BASE_DIR}/${main_menu}" ]; then
-        debug_log "DEBUG" "Found main menu script at ${BASE_DIR}/${main_menu}, loading..."
-        # シェルスクリプトとして実行
-        . "${BASE_DIR}/${main_menu}"
-        return $?
-    else
-        debug_log "DEBUG" "Main menu script not found, downloading..."
-        # メインメニュースクリプトが見つからない場合はダウンロード
-        download "$main_menu" "chmod" "load"
-        return $?
-    fi
-}
-
-# 削除確認関数（aisoのconfirm関数利用）
-remove_exit() {
-    debug_log "DEBUG" "Starting remove_exit using aios confirm function"
-    
-    # aisoのconfirm関数を使用
-    if confirm "CONFIG_CONFIRM_DELETE"; then
-        debug_log "DEBUG" "User confirmed deletion, proceeding with removal"
-        printf "%s\n" "$(color green "Deletion confirmed")"
-        [ -f "$BIN_PATH" ] && rm -f "$BIN_PATH"
-        [ -d "$BASE_DIR" ] && rm -rf "$BASE_DIR"
-        exit 0
-    else
-        debug_log "DEBUG" "User canceled deletion, returning to menu"
-        printf "%s\n" "$(color blue "Deletion canceled")"
-        return 0
-    fi
-}
-
-# 標準終了関数
-menu_exit() {
-    printf "%s\n" "$(color green "Exiting script")"
-    sleep 1
-    exit 0
 }
