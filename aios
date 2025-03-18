@@ -1153,14 +1153,15 @@ print_information() {
     local zonename_code=$(cat "${CACHE_DIR}/zonename.ch")
     local timezone_code=$(cat "${CACHE_DIR}/timezone.ch")
 
-    echo "$(color green "$(get_message "MSG_INFO_ARCHITECTURE" "$architecture")")"
-    echo "$(color green "$(get_message "MSG_INFO_OSVERSION" "$osversion")")"
-    echo "$(color green "$(get_message "MSG_INFO_USBDEVICEE" "$usb_device")")"
-    echo "$(color green "$(get_message "MSG_INFO_LANG_CODE" "$lang_code")")"
-    echo "$(color green "$(get_message "MSG_INFO_ZONENAME_CODE" "$zonename_code")")"
-    echo "$(color green "$(get_message "MSG_INFO_TIMEZONE_CODE" "$timezone_code")")"
+    printf "%s\n" "$(color green "$(get_message "MSG_INFO_ARCHITECTURE" "$architecture")")"
+    printf "%s\n" "$(color green "$(get_message "MSG_INFO_OSVERSION" "$osversion")")"
+    printf "%s\n" "$(color green "$(get_message "MSG_INFO_USBDEVICEE" "$usb_device")")"
+    printf "%s\n" "$(color green "$(get_message "MSG_INFO_LANG_CODE" "code=$lang_code")")"
+    printf "%s\n" "$(color green "$(get_message "MSG_INFO_ZONENAME_CODE" "code=$zonename_code")")"
+    printf "%s\n" "$(color green "$(get_message "MSG_INFO_TIMEZONE_CODE" "code=$timezone_code")")"
 
 }
+
 # 🔴　バナー系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # 🔵　メイン　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
