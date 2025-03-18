@@ -315,16 +315,14 @@ get_message() {
         local temp_msg="$message"
         local var_name=""
         local var_value=""
-        
+    
         # パラメータを処理（単一パラメータ対応）
         var_name=$(echo "$params" | cut -d'=' -f1)
         var_value=$(echo "$params" | cut -d'=' -f2-)
-        
+    
         if [ -n "$var_name" ] && [ -n "$var_value" ]; then
-            # sedでメッセージ内の{var_name}をvar_valueに置換
-            # 特殊文字をエスケープして安全にする
-            var_value_esc=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
-            temp_msg=$(echo "$temp_msg" | sed "s/{$var_name}/$var_value_esc/g")
+            echo "Debug: Replacing placeholder {$var_name} with value"
+            temp_msg=$(echo "$temp_msg" | sed "s|{$var_name}|$var_value|g")
             message="$temp_msg"
         fi
     fi
@@ -1157,9 +1155,9 @@ print_information() {
 }
 
 print_country() {
-    local architecture=$(cat "${CACHE_DIR}/architecture.ch")
-    local osversion=$(cat "${CACHE_DIR}/osversion.ch")
-    local usbdevice=$(cat "${CACHE_DIR}/usbdevice.ch")
+    local lang_code=$(cat "${CACHE_DIR}/language.ch")
+    local zonename_code=$(cat "${CACHE_DIR}/zonename.ch")
+    local timezone_code=$(cat "${CACHE_DIR}/timezone.ch")
 
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_LANG_CODE" "code=$lang_code")")"
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_ZONENAME_CODE" "code=$zonename_code")")"
