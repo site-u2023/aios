@@ -315,9 +315,6 @@ init_device_cache() {
             if [ -n "$snapshot" ]; then
                 version="${version}-${snapshot}"
             fi
-        elif [ -f "/etc/os-release" ]; then
-            # Alpine等の他のOSの場合
-            version=$(grep -E "^VERSION_ID=" /etc/os-release | cut -d "=" -f 2 | tr -d '"')
         fi
         
         if [ -n "$version" ]; then
