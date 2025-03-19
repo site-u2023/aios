@@ -1,6 +1,6 @@
 #!/bin/sh
 
-COMMON_VERSION="2025.03.19-01-00"
+COMMON_VERSION="2025.03.19-02-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -110,6 +110,8 @@ get_auto_color() {
     local position="$1"
     local total_items="$2"
     
+    debug_log "DEBUG" "Auto-assigning color for position $position of $total_items items"
+    
     # 色の自動割り当てロジック
     case "$total_items" in
         6)
@@ -207,11 +209,43 @@ selector() {
     rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
     touch "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
     
-    # セクション検索
-    debug_log "DEBUG" "Searching for section [$section_name] in menu.db"
+    # まず、セクション内の通常項目数をカウント（特殊項目を除く）
+    local total_normal_items=0
     local in_section=0
     
-    # まず、セクション内の項目を処理
+    while IFS= read -r line || [ -n "$line" ]; do
+        # コメントと空行をスキップ
+        case "$line" in
+            \#*|"") continue ;;
+        esac
+        
+        # セクション開始をチェック
+        if echo "$line" | grep -q "^\[$section_name\]"; then
+            in_section=1
+            debug_log "DEBUG" "Found target section for counting: [$section_name]"
+            continue
+        fi
+        
+        # 別のセクション開始で終了
+        if echo "$line" | grep -q "^\[.*\]"; then
+            if [ $in_section -eq 1 ]; then
+                debug_log "DEBUG" "Reached next section, stopping count"
+                break
+            fi
+            continue
+        fi
+        
+        # セクション内の項目をカウント
+        if [ $in_section -eq 1 ]; then
+            total_normal_items=$((total_normal_items+1))
+        fi
+    done < "${BASE_DIR}/menu.db"
+    
+    debug_log "DEBUG" "Total normal menu items in section [$section_name]: $total_normal_items"
+    
+    # セクション検索（2回目）- 項目を処理
+    in_section=0
+    
     while IFS= read -r line || [ -n "$line" ]; do
         # コメントと空行をスキップ
         case "$line" in
@@ -253,8 +287,8 @@ selector() {
                 local key=$(echo "$line" | cut -d' ' -f1)
                 local cmd=$(echo "$line" | cut -d' ' -f2-)
                 
-                # 自動色割り当て
-                local color_name=$(get_auto_color "$menu_count" "$menu_count")
+                # 自動色割り当て - 位置と総項目数を渡す
+                local color_name=$(get_auto_color "$menu_count" "$total_normal_items")
                 
                 debug_log "DEBUG" "No color specified, auto-assigned: color=$color_name, key=$key, cmd=$cmd"
             fi
@@ -374,7 +408,7 @@ selector() {
     # {0}をメニュー数で置換（特殊項目は含めない）
     local menu_choices=$((menu_count - special_items_count))
     selection_prompt=$(echo "$selection_prompt" | sed "s/{0}/$menu_choices/g")
-    printf "%s" "$(color blue "$selection_prompt")"
+    printf "%s" "$(color blue "$selection_prompt")")
     
     # ユーザー入力
     local choice=""
