@@ -91,8 +91,8 @@ JP|MENU_ACCESSPOINT=アクセスポイントの接続設定 (ダム/ブリッジ
 US|MENU_OTHERS=Other utilities: Button settings, IPERF3, SAMBA4
 JP|MENU_OTHERS=その他: ボタン設定, IPERF3, SAMBA4
 
-US|MENU_EXIT=Exit (Close the script)
-JP|MENU_EXIT=終了 (スクリプトを閉じる)
+US|MENU_EXIT=Exit
+JP|MENU_EXIT=終了
 
 US|MENU_REMOVE=Remove script and related directories
 JP|MENU_REMOVE=スクリプトと関連ディレクトリの削除
