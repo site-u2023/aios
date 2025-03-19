@@ -13,6 +13,12 @@ SUPPORTED_LANGUAGE_JP="JP"
 US|MSG_UNDER_TEST=👽 Under test
 JP|MSG_UNDER_TEST=👹 試験中
 
+US|CONFIG_DOWNLOAD_SUCCESS=Download completed
+JP|CONFIG_DOWNLOAD_SUCCESS=ダウンロード完了
+
+US|CONFIG_DOWNLOAD_UNNECESSARY=No update needed
+JP|CONSS=FIG_DOWNLOAD_UNNECESSARY=アップデート不要
+
 # =======================
 # common-menu.sh
 # =======================
