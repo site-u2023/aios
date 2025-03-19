@@ -91,45 +91,43 @@ pop_menu_history() {
     fi
 }
 
-# パンくずリスト表示関数 - 修正版
 display_breadcrumbs() {
-    debug_log "DEBUG" "Building breadcrumb navigation with proper menu structure"
+    debug_log "DEBUG" "Building breadcrumb navigation from history"
     
     # メインメニューのテキスト取得
     local main_menu_text=$(get_message "MAIN_MENU_NAME")
     
-    # パンくず表示の初期化
+    # パンくずの初期値設定
     local breadcrumb="$(color white "$main_menu_text")"
     local separator=" > "
     
-    # 履歴がない場合はメインメニューのみ表示
+    # 履歴が空の場合はメインメニューのみ表示
     if [ -z "$MENU_HISTORY" ]; then
+        debug_log "DEBUG" "No menu history found, showing main menu only"
         printf "%s\n\n" "$breadcrumb"
         return
     fi
     
-    # 履歴からメニュー項目を取得
+    # 履歴から表示テキストを抽出（短縮なし）
     local i=0
-    local item=""
-    local menu_name=""
-    local display_text=""
+    local items=""
     
-    # 履歴を順番に処理（セパレータで分割）
     IFS="$MENU_HISTORY_SEPARATOR"
     for item in $MENU_HISTORY; do
         i=$((i + 1))
-        if [ $((i % 2)) -eq 1 ]; then
-            # メニュー名（奇数位置）
-            menu_name="$item"
-        else
-            # 表示テキスト（偶数位置）- 切れないように全文表示
-            display_text="$item"
-            breadcrumb="${breadcrumb}${separator}$(color white "$display_text")"
+        # 偶数番目（2,4,6...）が表示テキスト
+        if [ $((i % 2)) -eq 0 ]; then
+            items="$item $items"
         fi
+    done
+    
+    # 空白区切りでアイテムを処理（逆順）
+    for item in $items; do
+        breadcrumb="${breadcrumb}${separator}$(color white "$item")"
     done
     unset IFS
     
-    # パンくずリストを表示（2行の空行を追加）
+    # パンくずリストを表示
     printf "%s\n\n" "$breadcrumb"
 }
 
@@ -649,38 +647,25 @@ selector() {
 }
 
 push_menu_history() {
-    local menu_name="$1"    # メニュー名
+    local menu_name="$1"    # メニューセクション名（menu.dbのINIヘッダー）
     local display_text="$2" # 表示テキスト
     
-    debug_log "DEBUG" "Adding menu item to navigation history"
+    debug_log "DEBUG" "Adding to menu history: $menu_name ($display_text)"
     
-    # 現在の履歴をファイルに退避
-    [ -n "$MENU_HISTORY" ] && echo "$MENU_HISTORY" > "${CACHE_DIR}/menu_history_prev.tmp"
-    
-    # 新しい履歴を構築（最大10階層まで）
-    local history_file="${CACHE_DIR}/menu_history.tmp"
-    echo "${menu_name}${MENU_HISTORY_SEPARATOR}${display_text}" > "$history_file"
-    
-    # 前の履歴を追加（ただし最大10階層まで）
-    if [ -f "${CACHE_DIR}/menu_history_prev.tmp" ]; then
-        # 現在の階層数をカウント
-        local levels=$(grep -o "$MENU_HISTORY_SEPARATOR" "${CACHE_DIR}/menu_history_prev.tmp" | wc -l)
-        levels=$((levels / 2 + 1))
-        
-        # 最大10階層まで
-        if [ "$levels" -lt 10 ]; then
-            echo -n "$MENU_HISTORY_SEPARATOR" >> "$history_file"
-            cat "${CACHE_DIR}/menu_history_prev.tmp" >> "$history_file"
-        else
-            debug_log "DEBUG" "Reached maximum history depth (10 levels), truncating"
-            # 最初の9階層だけ取得してつなげる
-            local truncated_history=$(head -c 1000 "${CACHE_DIR}/menu_history_prev.tmp" | cut -d"$MENU_HISTORY_SEPARATOR" -f1-18)
-            echo -n "$MENU_HISTORY_SEPARATOR$truncated_history" >> "$history_file"
-        fi
+    # メニュー名がそのままINIヘッダーとして使えるか確認
+    if ! grep -q "^\[$menu_name\]" "${BASE_DIR}/menu.db"; then
+        debug_log "DEBUG" "Warning: Menu section [$menu_name] not found in menu.db"
     fi
     
-    # 履歴を変数に読み込み
-    MENU_HISTORY=$(cat "$history_file")
+    # 履歴の追加方法
+    if [ -z "$MENU_HISTORY" ]; then
+        # 履歴が空の場合は直接設定
+        MENU_HISTORY="${menu_name}${MENU_HISTORY_SEPARATOR}${display_text}"
+    else
+        # 既存の履歴の後に追加（順序を正しく保持）
+        MENU_HISTORY="${menu_name}${MENU_HISTORY_SEPARATOR}${display_text}${MENU_HISTORY_SEPARATOR}${MENU_HISTORY}"
+    fi
+    
     debug_log "DEBUG" "Current menu history: $MENU_HISTORY"
 }
 
@@ -756,45 +741,54 @@ return_menu() {
     return $?
 }
 
-# 前のメニューに戻る関数 - 修正版
 go_back_menu() {
-    debug_log "DEBUG" "Navigating back to previous menu"
+    debug_log "DEBUG" "Processing go_back_menu function"
     
-    # 履歴がない場合はメインメニューへ
+    # 履歴が空の場合はメインメニューへ
     if [ -z "$MENU_HISTORY" ]; then
-        debug_log "DEBUG" "No history found, returning to main menu"
+        debug_log "DEBUG" "History is empty, returning to main menu"
         return_menu
         return $?
     fi
     
-    # 最初のペア（現在のメニュー+テキスト）を削除
-    local new_history=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f3-)
+    # 履歴の構造: menu1:text1:menu2:text2:...
+    # 最初のメニュー名（ヘッダー名）を取得
+    local current_menu=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f1)
+    debug_log "DEBUG" "Current menu: $current_menu"
     
-    # 履歴が空になった場合はメインメニューへ
-    if [ -z "$new_history" ]; then
-        debug_log "DEBUG" "Reached end of history, returning to main menu"
+    # 履歴の区切り記号をカウント
+    local sep_count=$(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c)
+    
+    # 履歴が1階層分しかない場合はメインメニューへ
+    if [ "$sep_count" -le 1 ]; then
+        debug_log "DEBUG" "Only one level in history, returning to main menu"
         MENU_HISTORY=""
         return_menu
         return $?
     fi
     
+    # 最初のペア（現在のメニュー+テキスト）を削除して前のメニューを取得
+    local new_history=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f3-)
+    
     # 新しい履歴の先頭がメニュー名
     local prev_menu=$(echo "$new_history" | cut -d"$MENU_HISTORY_SEPARATOR" -f1)
     
-    debug_log "DEBUG" "Previous menu found: $prev_menu"
+    debug_log "DEBUG" "Previous menu key: $prev_menu"
+    debug_log "DEBUG" "New history: $new_history"
     
-    # メニュー名の有効性を確認
+    # メニュー名（INIヘッダー）の有効性を確認
     if [ -n "$prev_menu" ] && grep -q "^\[$prev_menu\]" "${BASE_DIR}/menu.db"; then
         # 履歴を更新
         MENU_HISTORY="$new_history"
+        debug_log "DEBUG" "Valid previous menu found: $prev_menu"
         
         # 前のメニューへ移動
         selector "$prev_menu" "" 1
         return $?
     fi
     
-    # 有効なメニューが見つからない場合
-    debug_log "DEBUG" "Invalid previous menu, returning to main menu"
+    # 有効な前のメニューが見つからない場合はメインメニューへ
+    debug_log "DEBUG" "No valid previous menu found, returning to main menu"
     MENU_HISTORY=""
     return_menu
     return $?
