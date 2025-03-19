@@ -1185,47 +1185,42 @@ go_back_menu() {
     local orig_history="$MENU_HISTORY"
     debug_log "DEBUG" "Current menu history before going back: $orig_history"
     
-    # 履歴からメニュー情報を取得
-    local current_menu=$(get_menu_history_item "$orig_history" 0 "menu")
-    debug_log "DEBUG" "Current menu: $current_menu"
+    # 現在のメニューセクション名を取得（最初のコロンの前）
+    local current_menu=""
+    local previous_menu=""
     
-    # 前のメニュー情報を取得
-    local prev_menu=$(get_menu_history_item "$orig_history" 1 "menu")
-    debug_log "DEBUG" "Previous menu: $prev_menu"
-    
-    # 前のメニューが存在するか確認
-    if [ -n "$prev_menu" ] && [ -n "$current_menu" ]; then
-        # 現在のメニューと表示テキストを取得
-        local current_text=$(get_menu_history_item "$orig_history" 0 "text")
-        # 現在のメニューのペア（menu:text）を含む文字列
-        local current_pair="${current_menu}${MENU_HISTORY_SEPARATOR}${current_text}"
+    # 履歴がある場合のみ処理
+    if [ -n "$orig_history" ]; then
+        # 現在のメニュー名を取得
+        current_menu=$(echo "$orig_history" | cut -d":" -f1)
         
-        # 履歴から現在のメニューを削除
-        # 現在のペアと残りの文字列の間のセパレータも削除
-        MENU_HISTORY=$(echo "$orig_history" | sed "s/^${current_pair}${MENU_HISTORY_SEPARATOR}//")
-        debug_log "DEBUG" "Updated history: $MENU_HISTORY"
-        
-        debug_log "DEBUG" "Navigating back to menu: $prev_menu"
-        sleep 1
-        
-        # 正常な値かチェック（メニュー名に空白やコロンを含まないようにする）
-        if echo "$prev_menu" | grep -q '[[:space:]:]'; then
-            debug_log "DEBUG" "Invalid previous menu name, returning to main menu"
-            return_menu
+        # 履歴が2つ以上あるか確認
+        if echo "$orig_history" | grep -q ":.*:"; then
+            # 3つ目のフィールドが前のメニュー
+            previous_menu=$(echo "$orig_history" | cut -d":" -f3)
+            
+            # 履歴を更新（現在のメニューのペアを削除）
+            MENU_HISTORY=$(echo "$orig_history" | cut -d":" -f3-)
+            debug_log "DEBUG" "Updated menu history: $MENU_HISTORY"
+            
+            debug_log "DEBUG" "Navigating to previous menu: $previous_menu"
+            sleep 1
+            
+            # 前のメニューへ移動
+            selector "$previous_menu" "" 1
             return $?
         fi
-        
-        # 前のメニューに移動
-        selector "$prev_menu" "" 1
-        return $?
-    else
-        # 前のメニューが存在しない、またはメニュー情報がない場合はメインメニューに戻る
-        debug_log "DEBUG" "No valid previous menu found, returning to main menu"
-        MENU_HISTORY=""
-        sleep 1
-        return_menu
-        return $?
     fi
+    
+    # 履歴がない、または1階層のみの場合はメインメニューへ
+    debug_log "DEBUG" "No previous menu found, returning to main menu"
+    # 履歴をクリア
+    MENU_HISTORY=""
+    sleep 1
+    
+    # メインメニューを表示
+    selector "${MAIN_MENU}" "" 1
+    return $?
 }
 
 # 削除確認関数
