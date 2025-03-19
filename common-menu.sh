@@ -213,61 +213,21 @@ get_auto_color() {
     echo "$selected_color"
 }
 
-selector() {
-    local section_name="$1"        # 表示するセクション名
-    local parent_display_text="$2" # 親メニューの表示テキスト（パンくず用）
-    local skip_history="$3"        # 履歴に追加しない場合は1
+# メニュー項目の処理関数
+process_menu_items() {
+    local section_name="$1"
+    local menu_keys_file="$2"
+    local menu_displays_file="$3"
+    local menu_commands_file="$4"
+    local menu_colors_file="$5"
     
-    # セクション名が指定されていない場合はメインメニューを使用
-    if [ -z "$section_name" ]; then
-        section_name="${MAIN_MENU:-openwrt-config}"
-    fi
+    debug_log "DEBUG" "Processing menu items for section: $section_name"
     
-    debug_log "DEBUG" "Starting menu selector with section: $section_name"
-    
-    # 現在のセクションを記録
-    CURRENT_MENU="$section_name"
-    
-    # 履歴管理（skipが指定されていない場合のみ）
-    if [ "$skip_history" != "1" ]; then
-        # メインメニューに戻る場合は履歴をクリア
-        if [ "$section_name" = "$MAIN_MENU" ]; then
-            MENU_HISTORY=""
-            debug_log "DEBUG" "Cleared menu history for main menu"
-        else
-            # 親メニューの表示テキストが指定されている場合のみ履歴に追加
-            if [ -n "$parent_display_text" ]; then
-                push_menu_history "$section_name" "$parent_display_text"
-            fi
-        fi
-    fi
-    
-    # メインメニュー名を取得
-    local main_menu="${MAIN_MENU}"
-    
-    # メインメニューかどうかの判定
-    local is_main_menu=0
-    if [ "$section_name" = "$main_menu" ]; then
-        is_main_menu=1
-        debug_log "DEBUG" "Current section is the main menu"
-    else
-        debug_log "DEBUG" "Current section is a sub-menu"
-    fi
-    
-    # キャッシュファイルの初期化
-    local menu_keys_file="${CACHE_DIR}/menu_keys.tmp"
-    local menu_displays_file="${CACHE_DIR}/menu_displays.tmp"
-    local menu_commands_file="${CACHE_DIR}/menu_commands.tmp"
-    local menu_colors_file="${CACHE_DIR}/menu_colors.tmp"
     local menu_count=0
-    
-    rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
-    touch "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
-    
-    # まず、セクション内の通常項目数をカウント（特殊項目を除く）
     local total_normal_items=0
     local in_section=0
     
+    # まず、セクション内の通常項目数をカウント（特殊項目を除く）
     while IFS= read -r line || [ -n "$line" ]; do
         # コメントと空行をスキップ
         case "$line" in
@@ -370,11 +330,26 @@ selector() {
     
     debug_log "DEBUG" "Read $menu_count regular menu items from menu.db"
     
-    # 特殊メニュー項目の追加
+    # 処理したメニュー項目数を返す
+    echo "$menu_count"
+}
+
+# 特殊メニュー項目追加関数
+add_special_menu_items() {
+    local section_name="$1"
+    local is_main_menu="$2"
+    local menu_count="$3"
+    local menu_keys_file="$4"
+    local menu_displays_file="$5"
+    local menu_commands_file="$6"
+    local menu_colors_file="$7"
+    
+    debug_log "DEBUG" "Adding special menu items for section: $section_name"
+    
     local special_items_count=0
     
-    # メインメニューの場合は [0]と[00]を追加
-    if [ $is_main_menu -eq 1 ]; then
+    # メインメニューの場合は [10]と[00]を追加
+    if [ "$is_main_menu" -eq 1 ]; then
         # [10] EXIT - 終了 (旧[0])
         menu_count=$((menu_count+1))
         special_items_count=$((special_items_count+1))
@@ -448,36 +423,26 @@ selector() {
     fi
     
     debug_log "DEBUG" "Added $special_items_count special menu items"
-    debug_log "DEBUG" "Total menu items: $menu_count"
     
-    # メニュー項目の確認
-    if [ $menu_count -eq 0 ]; then
-        # エラーハンドラーを呼び出し
-        handle_menu_error "no_items" "$section_name" "" "$main_menu" ""
-        return $?
-    fi
+    # 特殊メニュー項目数と合計メニュー項目数を返す
+    echo "$special_items_count $menu_count"
+}
+
+# ユーザー選択処理関数
+handle_user_selection() {
+    local section_name="$1"
+    local is_main_menu="$2"
+    local menu_count="$3"
+    local menu_choices="$4"
+    local menu_keys_file="$5"
+    local menu_displays_file="$6"
+    local menu_commands_file="$7"
+    local menu_colors_file="$8"
+    local main_menu="$9"
     
-    # タイトルヘッダーを表示
-    local menu_title_template=$(get_message "MENU_TITLE")
-    local menu_title=$(echo "$menu_title_template" | sed "s/{0}/$section_name/g")
-    
-    # パンくずリストを表示
-    display_breadcrumbs
-    
-    # メニュー項目を表示
-    if [ -s "$menu_displays_file" ]; then
-        cat "$menu_displays_file"
-    else
-        # エラーハンドラーを呼び出し
-        handle_menu_error "empty_display" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
-        return $?
-    fi
-    
-    printf "\n"
+    debug_log "DEBUG" "Handling user selection for section: $section_name"
     
     # 選択プロンプト表示（特殊項目を含む）
-    local menu_choices=$((menu_count - special_items_count))
-    
     if [ $is_main_menu -eq 1 ]; then
         # メインメニュー用のプロンプト（10, 00を含む）
         local selection_prompt=$(get_message "CONFIG_MAIN_SELECT_PROMPT")
@@ -513,7 +478,7 @@ selector() {
     if ! read -r choice; then
         # エラーハンドラーを呼び出し
         handle_menu_error "read_input" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
-        return $?
+        return 1
     fi
     
     # 入力の正規化（利用可能な場合のみ）
@@ -542,8 +507,7 @@ selector() {
             else
                 printf "\n%s\n" "$(color red "$(get_message "CONFIG_ERROR_INVALID_NUMBER")")"
                 sleep 2
-                selector "$section_name" "" 1
-                return $?
+                return 0 # リトライが必要
             fi
             ;;
         "0")
@@ -554,8 +518,7 @@ selector() {
             else
                 printf "\n%s\n" "$(color red "$(get_message "CONFIG_ERROR_INVALID_NUMBER")")"
                 sleep 2
-                selector "$section_name" "" 1
-                return $?
+                return 0 # リトライが必要
             fi
             ;;
         *)
@@ -563,9 +526,7 @@ selector() {
             if ! echo "$choice" | grep -q '^[0-9][0-9]*$'; then
                 printf "\n%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
                 sleep 2
-                # 同じメニューを再表示
-                selector "$section_name" "" 1
-                return $?
+                return 0 # リトライが必要
             fi
         
             # 選択範囲チェック（通常メニュー項目のみ）
@@ -574,9 +535,7 @@ selector() {
                 error_msg=$(echo "$error_msg" | sed "s/PLACEHOLDER/$menu_choices/g")
                 printf "\n%s\n" "$(color red "$error_msg")"
                 sleep 2
-                # 同じメニューを再表示
-                selector "$section_name" "" 1
-                return $?
+                return 0 # リトライが必要
             fi
         
             # 通常入力の場合はそのままの値を使用
@@ -596,7 +555,7 @@ selector() {
     if [ -z "$selected_key" ] || [ -z "$selected_cmd" ]; then
         # エラーハンドラーを呼び出し
         handle_menu_error "invalid_selection" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
-        return $?
+        return 1
     fi
     
     debug_log "DEBUG" "Selected key: $selected_key"
@@ -636,14 +595,124 @@ selector() {
         if [ $cmd_status -ne 0 ]; then
             # エラーハンドラーを呼び出し
             handle_menu_error "command_failed" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
-            return $?
+            return 1
         fi
     fi
+    
+    return $cmd_status
+}
+
+# メインのセレクター関数（リファクタリング版）
+selector() {
+    local section_name="$1"        # 表示するセクション名
+    local parent_display_text="$2" # 親メニューの表示テキスト（パンくず用）
+    local skip_history="$3"        # 履歴に追加しない場合は1
+    
+    # セクション名が指定されていない場合はメインメニューを使用
+    if [ -z "$section_name" ]; then
+        section_name="${MAIN_MENU:-openwrt-config}"
+    fi
+    
+    debug_log "DEBUG" "Starting menu selector with section: $section_name"
+    
+    # 現在のセクションを記録
+    CURRENT_MENU="$section_name"
+    
+    # 履歴管理（skipが指定されていない場合のみ）
+    if [ "$skip_history" != "1" ]; then
+        # メインメニューに戻る場合は履歴をクリア
+        if [ "$section_name" = "$MAIN_MENU" ]; then
+            MENU_HISTORY=""
+            debug_log "DEBUG" "Cleared menu history for main menu"
+        else
+            # 親メニューの表示テキストが指定されている場合のみ履歴に追加
+            if [ -n "$parent_display_text" ]; then
+                push_menu_history "$section_name" "$parent_display_text"
+            fi
+        fi
+    fi
+    
+    # メインメニュー名を取得
+    local main_menu="${MAIN_MENU}"
+    
+    # メインメニューかどうかの判定
+    local is_main_menu=0
+    if [ "$section_name" = "$main_menu" ]; then
+        is_main_menu=1
+        debug_log "DEBUG" "Current section is the main menu"
+    else
+        debug_log "DEBUG" "Current section is a sub-menu"
+    fi
+    
+    # キャッシュファイルの初期化
+    local menu_keys_file="${CACHE_DIR}/menu_keys.tmp"
+    local menu_displays_file="${CACHE_DIR}/menu_displays.tmp"
+    local menu_commands_file="${CACHE_DIR}/menu_commands.tmp"
+    local menu_colors_file="${CACHE_DIR}/menu_colors.tmp"
+    
+    rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
+    touch "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
+    
+    # メニュー項目の処理
+    local menu_count=$(process_menu_items "$section_name" "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file")
+    
+    # 特殊メニュー項目の追加
+    local special_result=$(add_special_menu_items "$section_name" "$is_main_menu" "$menu_count" "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file")
+    local special_items_count=$(echo "$special_result" | cut -d' ' -f1)
+    menu_count=$(echo "$special_result" | cut -d' ' -f2)
+    
+    debug_log "DEBUG" "Total menu items after adding special items: $menu_count"
+    
+    # メニュー項目の確認
+    if [ $menu_count -eq 0 ]; then
+        # エラーハンドラーを呼び出し
+        handle_menu_error "no_items" "$section_name" "" "$main_menu" ""
+        return $?
+    fi
+    
+    # タイトルヘッダーを表示
+    local menu_title_template=$(get_message "MENU_TITLE")
+    local menu_title=$(echo "$menu_title_template" | sed "s/{0}/$section_name/g")
+    
+    # パンくずリストを表示
+    display_breadcrumbs
+    
+    # メニュー項目を表示
+    if [ -s "$menu_displays_file" ]; then
+        cat "$menu_displays_file"
+    else
+        # エラーハンドラーを呼び出し
+        handle_menu_error "empty_display" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
+        return $?
+    fi
+    
+    printf "\n"
+    
+    # 通常メニュー項目数（特殊項目を除く）
+    local menu_choices=$((menu_count - special_items_count))
+    
+    # ユーザー選択の処理（リトライのためのループ）
+    while true; do
+        # ユーザー選択処理を呼び出し
+        handle_user_selection "$section_name" "$is_main_menu" "$menu_count" "$menu_choices" \
+            "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file" "$main_menu"
+        
+        local selection_status=$?
+        
+        # リターンコードが0の場合はリトライ
+        if [ $selection_status -ne 0 ]; then
+            break
+        fi
+        
+        # リトライの場合は現在のメニューを再表示
+        selector "$section_name" "" 1
+        return $?
+    done
     
     # 一時ファイル削除
     rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
     
-    return $cmd_status
+    return $selection_status
 }
 
 push_menu_history() {
