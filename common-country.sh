@@ -174,10 +174,10 @@ select_country() {
         # 入力がまだない場合は入力を求める
         if [ -z "$input_lang" ]; then
             local msg_enter=$(get_message "MSG_ENTER_COUNTRY")
-            printf "%s\n" "$(color blue "$msg_enter")"
+            printf "%s\n" "$(color white "$msg_enter")"
 
             local msg_search=$(get_message "MSG_SEARCH_KEYWORD")
-            printf "%s " "$(color cyan "$msg_search")"
+            printf "%s " "$(color white "$msg_search")"
 
             read -r input_lang
             input_lang=$(normalize_input "$input_lang")
@@ -216,7 +216,7 @@ select_country() {
             local msg_prefix=${msg%%\{0\}*}
             local msg_suffix=${msg#*\{0\}}
 
-            printf "%s%s%s\n" "$(color blue "$msg_prefix" "$country_name" "$msg_suffix")"
+            printf "%s%s%s\n" "$(color white "$msg_prefix" "$country_name" "$msg_suffix")"
 
             # 確認（confirm関数使用）
             if confirm "MSG_CONFIRM_ONLY_YN"; then
@@ -399,14 +399,14 @@ detect_and_set_location() {
     fi
     
     # 検出情報表示
-    printf "%s\n" "$(color yellow "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
-    printf "%s %s\n" "$(color blue "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color blue "$(echo "$system_country" | cut -d' ' -f2)")"
+    printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
+    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$(echo "$system_country" | cut -d' ' -f2)")"
     
     # ゾーン名があればゾーン名とタイムゾーン、なければタイムゾーンのみ表示
     if [ -n "$system_zonename" ]; then
-        printf "%s %s$(color blue ",")%s\n\n" "$(color blue "$(get_message "MSG_DETECTED_ZONE")")" "$(color blue "$system_zonename")" "$(color blue "$system_timezone")"
+        printf "%s %s$(color white ",")%s\n\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_zonename")" "$(color white "$system_timezone")"
     else
-        printf "%s %s\n\n" "$(color blue "$(get_message "MSG_DETECTED_ZONE")")" "$(color blue "$system_timezone")"
+        printf "%s %s\n\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_timezone")"
     fi
     
     # 確認
@@ -520,7 +520,7 @@ select_list() {
     while true; do
         # メッセージの取得と表示
         local prompt_msg=$(get_message "$prompt_msg_key")
-        printf "%s " "$(color cyan "$prompt_msg")"
+        printf "%s " "$(color white "$prompt_msg")"
         
         local number
         read -r number
@@ -565,7 +565,7 @@ select_list() {
         local safe_item=$(escape_for_sed "$selected_item")
         local msg_prefix=${msg_selected%%\{0\}*}
         local msg_suffix=${msg_selected#*\{0\}}
-        printf "%s%s%s\n" "$(color blue "$msg_prefix")" "$(color blue "$safe_item")" "$(color blue "$msg_suffix")"
+        printf "%s%s%s\n" "$(color white "$msg_prefix")" "$(color white "$safe_item")" "$(color white "$msg_suffix")"
         
         confirm "MSG_CONFIRM_YNR"
         ret=$?
@@ -635,7 +635,7 @@ select_zone() {
     fi
 
     # 複数のタイムゾーンがある場合は選択肢を表示
-    printf "%s\n" "$(color blue "$(get_message "MSG_SELECT_TIMEZONE")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_SELECT_TIMEZONE")")"
     
     # 番号付きリスト表示 - select_list関数を使用
     local number_file="${CACHE_DIR}/zone_selection.tmp"
