@@ -110,7 +110,8 @@ pop_menu_history() {
     echo "$first_entry"
 }
 
-# パンくずリスト表示関数（revに依存しないバージョン）
+# パンくずリスト表示関数
+# パンくずリスト表示関数
 display_breadcrumbs() {
     debug_log "DEBUG" "Displaying breadcrumbs from history: $MENU_HISTORY"
     
@@ -122,56 +123,57 @@ display_breadcrumbs() {
     
     # メインメニューのパンくず（常に最初に表示）
     local main_menu_text=$(get_message "MAIN_MENU_NAME")
-    [ -z "$main_menu_text" ] && main_menu_text="メインメニュー" # デフォルト値
+    # デフォルト値をメインメニューの日本語名に
+    [ -z "$main_menu_text" ] || [ "$main_menu_text" = "MAIN_MENU_NAME" ] && main_menu_text="メインメニュー"
     
     # パンくずの初期値はメインメニュー
-    local breadcrumb="$(color white "$main_menu_text")"
+    local breadcrumb="$(color cyan "$main_menu_text")"
     local separator=" > "
-    
-    # 履歴文字列をIFSで分割して処理
-    local old_ifs="$IFS"
-    IFS=':'
     
     # 履歴文字列を一時ファイルに保存
     local temp_history_file="${CACHE_DIR}/history.tmp"
     echo "$MENU_HISTORY" > "$temp_history_file"
     
-    # 履歴を項目ごとに分割して処理
-    local item_count=0
-    local items=""
+    # 履歴をパンくずリストに変換するための処理
+    local temp_list="${CACHE_DIR}/breadcrumb_list.tmp"
+    rm -f "$temp_list"
+    touch "$temp_list"
     
-    # 履歴アイテムをカウント
-    item_count=$(awk -F: '{print NF}' "$temp_history_file")
-    debug_log "DEBUG" "History has $item_count items"
+    # 履歴を解析して表示用リストに変換
+    local item=""
+    local i=0
+    local is_menu_name=1  # 1=メニュー名、0=表示テキスト
     
-    # 履歴項目を逆順で処理するため、リストを構築
-    local i=1
-    local pairs=""
-    
-    while [ "$i" -le "$item_count" ]; do
-        # 奇数インデックスはメニュー名、偶数インデックスは表示テキスト
-        if [ "$((i % 2))" -eq "1" ] && [ "$i" -lt "$item_count" ]; then
-            local menu_name=$(cut -d':' -f"$i" "$temp_history_file")
-            local display_text=$(cut -d':' -f"$((i+1))" "$temp_history_file")
-            
-            # メインメニューはスキップ（既に表示済み）
-            if [ "$menu_name" != "$MAIN_MENU" ]; then
-                # 表示テキストがある場合のみ追加
-                if [ -n "$display_text" ]; then
-                    # パンくずに追加
-                    breadcrumb="${breadcrumb}${separator}$(color cyan "$display_text")"
-                    debug_log "DEBUG" "Added breadcrumb: $display_text"
-                fi
+    # コロン区切りで履歴を処理
+    IFS=':'
+    for item in $MENU_HISTORY; do
+        if [ $is_menu_name -eq 1 ]; then
+            # メニュー名はスキップ
+            is_menu_name=0
+        else
+            # 表示テキストを保存（メインメニューは除外）
+            if [ "$item" != "$MAIN_MENU" ]; then
+                echo "$item" >> "$temp_list"
             fi
+            is_menu_name=1
         fi
-        i=$((i+2)) # ペアでスキップ
+    done
+    unset IFS
+    
+    # リストを逆順で処理（tac/tail -r がない場合の代替）
+    local line_count=$(wc -l < "$temp_list")
+    local j=$line_count
+    
+    while [ $j -gt 0 ]; do
+        local entry=$(sed -n "${j}p" "$temp_list")
+        if [ -n "$entry" ]; then
+            breadcrumb="${breadcrumb}${separator}$(color white "$entry")"
+        fi
+        j=$((j-1))
     done
     
     # 一時ファイルを削除
-    rm -f "$temp_history_file"
-    
-    # 元のIFSを復元
-    IFS="$old_ifs"
+    rm -f "$temp_history_file" "$temp_list"
     
     # パンくずリストを表示
     printf "%s\n\n" "$breadcrumb"
@@ -508,9 +510,12 @@ selector() {
     printf "%s\n" "----------------------------------------------"
     printf "%s\n" "$(color white "$menu_title")"
     printf "%s\n" "----------------------------------------------"
+    printf "%s\n" 
     
+    printf "%s\n" "----------------------------------------------"
     # パンくずリストを表示
     display_breadcrumbs
+    printf "%s\n" "----------------------------------------------"
     
     # メニュー項目を表示
     if [ -s "$menu_displays_file" ]; then
