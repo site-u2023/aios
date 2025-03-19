@@ -38,7 +38,7 @@ white_black MENU_RETURN return_menu
 
 # インターネット設定のサブセクション
 [internet-mape]
-magenta MENU_MAPE_CONFIG download "internet-mape.sh" "chmod" "load"
+magenta MENU_MAPE_CONFIG download "v6mig-prov.sh" "chmod" "load"
 white MENU_EXIT menu_exit
 white_black MENU_RETURN return_menu
 
