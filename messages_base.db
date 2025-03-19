@@ -42,11 +42,11 @@ US|MAIN_MENU_NAME=● Main menu
 JP|MAIN_MENU_NAME=● メインメニュー
 
 # メニュー項目
-US|MENU_INTERNET=Japan internet connection setup (MAP-e, DS-LITE, PPPoE, etc.)
-JP|MENU_INTERNET=日本のインターネット接続設定 (MAP-e, DS-LITE, PPPoE等)
+#US|MENU_INTERNET=Japan internet connection setup (MAP-e, DS-LITE, PPPoE, etc.)
+#JP|MENU_INTERNET=日本のインターネット接続設定 (MAP-e, DS-LITE, PPPoE等)
 
-US|MENU_SYSTEM=Initial system setup (hostname, password, wifi, etc.)
-JP|MENU_SYSTEM=システム初期設定 (ホスト名,パスワード,WiFi等)
+#US|MENU_SYSTEM=Initial system setup (hostname, password, wifi, etc.)
+#JP|MENU_SYSTEM=システム初期設定 (ホスト名,パスワード,WiFi等)
 
 US|MENU_PACKAGES=Install packages (selective)
 JP|MENU_PACKAGES=パッケージインストール (選択)
