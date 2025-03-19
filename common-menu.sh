@@ -161,57 +161,96 @@ handle_menu_error() {
     fi
 }
 
-# 色の自動割り当て関数
+# 色の自動割り当て関数（9色対応）
 get_auto_color() {
     local position="$1"
     local total_items="$2"
     
     debug_log "DEBUG" "Auto-assigning color for position $position of $total_items items"
     
-    # 色の自動割り当てロジック
+    # 色の自動割り当てロジック（新ルール）
     case "$total_items" in
+        9)
+            case "$position" in
+                1) echo "red" ;;
+                2) echo "orange" ;;
+                3) echo "yellow" ;;
+                4) echo "green" ;;
+                5) echo "cyan" ;;
+                6) echo "blue" ;;
+                7) echo "indigo" ;;
+                8) echo "purple" ;;
+                9) echo "magenta" ;;
+                *) echo "white" ;; # フォールバック
+            esac
+            ;;
+        8)
+            case "$position" in
+                1) echo "red" ;;
+                2) echo "orange" ;;
+                3) echo "yellow" ;;
+                4) echo "green" ;;
+                5) echo "cyan" ;;
+                6) echo "blue" ;;
+                7) echo "indigo" ;;
+                8) echo "purple" ;;
+                *) echo "white" ;; # フォールバック
+            esac
+            ;;
+        7)
+            case "$position" in
+                1) echo "red" ;;
+                2) echo "orange" ;;
+                3) echo "yellow" ;;
+                4) echo "green" ;;
+                5) echo "blue" ;;
+                6) echo "indigo" ;;
+                7) echo "purple" ;;
+                *) echo "white" ;; # フォールバック
+            esac
+            ;;
         6)
             case "$position" in
-                1) echo "magenta" ;;
-                2) echo "blue" ;;
-                3) echo "cyan" ;;
+                1) echo "red" ;;
+                2) echo "orange" ;;
+                3) echo "yellow" ;;
                 4) echo "green" ;;
-                5) echo "yellow" ;;
-                6) echo "red" ;;
+                5) echo "blue" ;;
+                6) echo "purple" ;;
                 *) echo "white" ;; # フォールバック
             esac
             ;;
         5)
             case "$position" in
-                1) echo "blue" ;;
-                2) echo "cyan" ;;
-                3) echo "green" ;;
-                4) echo "yellow" ;;
-                5) echo "red" ;;
+                1) echo "red" ;;
+                2) echo "orange" ;;
+                3) echo "yellow" ;;
+                4) echo "green" ;;
+                5) echo "blue" ;;
                 *) echo "white" ;; # フォールバック
             esac
             ;;
         4)
             case "$position" in
-                1) echo "cyan" ;;
-                2) echo "green" ;;
-                3) echo "yellow" ;;
-                4) echo "red" ;;
+                1) echo "red" ;;
+                2) echo "yellow" ;;
+                3) echo "green" ;;
+                4) echo "blue" ;;
                 *) echo "white" ;; # フォールバック
             esac
             ;;
         3)
             case "$position" in
-                1) echo "green" ;;
-                2) echo "yellow" ;;
-                3) echo "red" ;;
+                1) echo "red" ;;
+                2) echo "green" ;;
+                3) echo "blue" ;;
                 *) echo "white" ;; # フォールバック
             esac
             ;;
         2)
             case "$position" in
-                1) echo "green" ;;
-                2) echo "red" ;;
+                1) echo "red" ;;
+                2) echo "blue" ;;
                 *) echo "white" ;; # フォールバック
             esac
             ;;
