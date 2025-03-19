@@ -62,18 +62,6 @@ MENU_HISTORY=""
 CURRENT_MENU=""
 MENU_HISTORY_SEPARATOR=":"
 
-# メインメニューに戻る関数
-return_menu() {
-    debug_log "DEBUG" "Returning to main menu"
-    
-    # 履歴をクリア
-    MENU_HISTORY=""
-    
-    # メインメニューを表示
-    selector "${MAIN_MENU}" "" 1
-    return $?
-}
-
 # メニュー履歴にエントリを追加する関数
 pop_menu_history() {
     debug_log "DEBUG" "Popping from menu history"
@@ -100,35 +88,6 @@ pop_menu_history() {
     
     # 取り出したメニュー名を返す
     echo "$first_menu"
-}
-
-# メニュー履歴から最新のエントリを取得して履歴から削除する関数
-pop_menu_history() {
-    debug_log "DEBUG" "Popping from menu history"
-    
-    # 履歴が空の場合、メインメニューを返す
-    if [ -z "$MENU_HISTORY" ]; then
-        debug_log "DEBUG" "History empty, returning main menu"
-        echo "$MAIN_MENU"
-        return
-    fi
-    
-    # 最初の区切り文字までを取得（フィールド1）
-    local first_entry=$(echo "$MENU_HISTORY" | cut -d':' -f1)
-    
-    # 残りの履歴を更新
-    if echo "$MENU_HISTORY" | grep -q ':'; then
-        # 最初の2つのエントリ（メニュー名とその表示テキスト）を削除
-        MENU_HISTORY=$(echo "$MENU_HISTORY" | cut -d':' -f3-)
-    else
-        # 唯一のエントリだった場合は履歴をクリア
-        MENU_HISTORY=""
-    fi
-    
-    debug_log "DEBUG" "Popped entry: $first_entry, Remaining history: $MENU_HISTORY"
-    
-    # メニュー名を返す
-    echo "$first_entry"
 }
 
 # パンくずリスト表示関数
@@ -756,6 +715,18 @@ get_menu_history_item() {
     
     # 結果を返す
     echo "$result"
+}
+
+# メインメニューに戻る関数
+return_menu() {
+    debug_log "DEBUG" "Returning to main menu"
+    
+    # 履歴をクリア
+    MENU_HISTORY=""
+    
+    # メインメニューを表示
+    selector "${MAIN_MENU}" "" 1
+    return $?
 }
 
 # 前のメニューに戻る関数
