@@ -111,23 +111,22 @@ pop_menu_history() {
 }
 
 # パンくずリスト表示関数
-# パンくずリスト表示関数
 display_breadcrumbs() {
-    debug_log "DEBUG" "Displaying breadcrumbs from history: $MENU_HISTORY"
+    debug_log "DEBUG" "Displaying breadcrumbs as menu guide: $MENU_HISTORY"
     
-    # 履歴が空の場合は何も表示しない
+    # メインメニューのパンくず（メッセージキーを使用）
+    local main_menu_text=$(get_message "MAIN_MENU_NAME")
+    [ -z "$main_menu_text" ] || [ "$main_menu_text" = "MAIN_MENU_NAME" ] && main_menu_text="メインメニュー" # デフォルト値
+    
+    # 履歴が空の場合はメインメニューのみ表示
     if [ -z "$MENU_HISTORY" ]; then
-        debug_log "DEBUG" "No history to display breadcrumbs"
+        debug_log "DEBUG" "No history, showing only main menu in breadcrumbs"
+        printf "%s\n\n" "$(color white "$main_menu_text")"
         return
     fi
     
-    # メインメニューのパンくず（常に最初に表示）
-    local main_menu_text=$(get_message "MAIN_MENU_NAME")
-    # デフォルト値をメインメニューの日本語名に
-    [ -z "$main_menu_text" ] || [ "$main_menu_text" = "MAIN_MENU_NAME" ] && main_menu_text="メインメニュー"
-    
     # パンくずの初期値はメインメニュー
-    local breadcrumb="$(color cyan "$main_menu_text")"
+    local breadcrumb="$(color white "$main_menu_text")"
     local separator=" > "
     
     # 履歴文字列を一時ファイルに保存
