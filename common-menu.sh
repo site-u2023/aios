@@ -125,7 +125,7 @@ display_breadcrumbs() {
     [ -z "$main_menu_text" ] && main_menu_text="メインメニュー" # デフォルト値
     
     # パンくずの初期値はメインメニュー
-    local breadcrumb="$(color cyan "$main_menu_text")"
+    local breadcrumb="$(color white "$main_menu_text")"
     local separator=" > "
     
     # 履歴文字列をIFSで分割して処理
