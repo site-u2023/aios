@@ -494,7 +494,7 @@ confirm() {
     debug_log "DEBUG" "Confirm prompt: $msg_key: $msg"
     
     # 確認プロンプト表示
-    printf "%s " "$(color cyan "$msg")"
+    printf "%s " "$(color white "$msg")"
 
     # ユーザー入力処理
     while true; do
@@ -532,7 +532,7 @@ confirm() {
             *) 
                 # 無効な入力の場合のエラーメッセージ
                 printf "%s\n" "$(color red "$(get_message "MSG_INVALID_INPUT_YNR")")"
-                printf "%s " "$(color cyan "$msg")" 
+                printf "%s " "$(color white "$msg")" 
                 ;;
         esac
     done
