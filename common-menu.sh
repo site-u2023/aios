@@ -648,22 +648,39 @@ selector() {
     return $cmd_status
 }
 
-# メニュー履歴に追加する関数 - 修正版
 push_menu_history() {
-    local menu_name="$1"    # メニューID
+    local menu_name="$1"    # メニュー名
     local display_text="$2" # 表示テキスト
     
-    debug_log "DEBUG" "Adding to menu history: $menu_name ($display_text)"
+    debug_log "DEBUG" "Adding menu item to navigation history"
     
-    # 履歴の追加
-    if [ -z "$MENU_HISTORY" ]; then
-        # 初回はそのまま設定
-        MENU_HISTORY="${menu_name}${MENU_HISTORY_SEPARATOR}${display_text}"
-    else
-        # 既存の履歴の後に追加（前後関係を正しく保持）
-        MENU_HISTORY="${MENU_HISTORY}${MENU_HISTORY_SEPARATOR}${menu_name}${MENU_HISTORY_SEPARATOR}${display_text}"
+    # 現在の履歴をファイルに退避
+    [ -n "$MENU_HISTORY" ] && echo "$MENU_HISTORY" > "${CACHE_DIR}/menu_history_prev.tmp"
+    
+    # 新しい履歴を構築（最大10階層まで）
+    local history_file="${CACHE_DIR}/menu_history.tmp"
+    echo "${menu_name}${MENU_HISTORY_SEPARATOR}${display_text}" > "$history_file"
+    
+    # 前の履歴を追加（ただし最大10階層まで）
+    if [ -f "${CACHE_DIR}/menu_history_prev.tmp" ]; then
+        # 現在の階層数をカウント
+        local levels=$(grep -o "$MENU_HISTORY_SEPARATOR" "${CACHE_DIR}/menu_history_prev.tmp" | wc -l)
+        levels=$((levels / 2 + 1))
+        
+        # 最大10階層まで
+        if [ "$levels" -lt 10 ]; then
+            echo -n "$MENU_HISTORY_SEPARATOR" >> "$history_file"
+            cat "${CACHE_DIR}/menu_history_prev.tmp" >> "$history_file"
+        else
+            debug_log "DEBUG" "Reached maximum history depth (10 levels), truncating"
+            # 最初の9階層だけ取得してつなげる
+            local truncated_history=$(head -c 1000 "${CACHE_DIR}/menu_history_prev.tmp" | cut -d"$MENU_HISTORY_SEPARATOR" -f1-18)
+            echo -n "$MENU_HISTORY_SEPARATOR$truncated_history" >> "$history_file"
+        fi
     fi
     
+    # 履歴を変数に読み込み
+    MENU_HISTORY=$(cat "$history_file")
     debug_log "DEBUG" "Current menu history: $MENU_HISTORY"
 }
 
@@ -741,36 +758,32 @@ return_menu() {
 
 # 前のメニューに戻る関数 - 修正版
 go_back_menu() {
-    debug_log "DEBUG" "Navigating back to previous menu level"
+    debug_log "DEBUG" "Navigating back to previous menu"
     
     # 履歴がない場合はメインメニューへ
     if [ -z "$MENU_HISTORY" ]; then
-        debug_log "DEBUG" "No history available, returning to main menu"
+        debug_log "DEBUG" "No history found, returning to main menu"
         return_menu
         return $?
     fi
     
-    # 履歴のセパレータ数をカウント
-    local sep_count=$(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c)
+    # 最初のペア（現在のメニュー+テキスト）を削除
+    local new_history=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f3-)
     
-    # 履歴が1階層しかない場合はメインメニューへ
-    if [ "$sep_count" -le 1 ]; then
-        debug_log "DEBUG" "Only one level in history, returning to main menu"
+    # 履歴が空になった場合はメインメニューへ
+    if [ -z "$new_history" ]; then
+        debug_log "DEBUG" "Reached end of history, returning to main menu"
         MENU_HISTORY=""
         return_menu
         return $?
     fi
     
-    # 履歴から最後のペア（現在のメニュー情報）を削除
-    local new_history=$(echo "$MENU_HISTORY" | sed 's/\(.*\)'"$MENU_HISTORY_SEPARATOR"'[^'"$MENU_HISTORY_SEPARATOR"']*'"$MENU_HISTORY_SEPARATOR"'[^'"$MENU_HISTORY_SEPARATOR"']*$/\1/')
-    
-    # 前のメニュー名を取得
+    # 新しい履歴の先頭がメニュー名
     local prev_menu=$(echo "$new_history" | cut -d"$MENU_HISTORY_SEPARATOR" -f1)
     
-    debug_log "DEBUG" "Previous menu: $prev_menu"
-    debug_log "DEBUG" "Updated history: $new_history"
+    debug_log "DEBUG" "Previous menu found: $prev_menu"
     
-    # メニュー名が有効かチェック
+    # メニュー名の有効性を確認
     if [ -n "$prev_menu" ] && grep -q "^\[$prev_menu\]" "${BASE_DIR}/menu.db"; then
         # 履歴を更新
         MENU_HISTORY="$new_history"
@@ -780,7 +793,7 @@ go_back_menu() {
         return $?
     fi
     
-    # 無効な場合はメインメニューへ
+    # 有効なメニューが見つからない場合
     debug_log "DEBUG" "Invalid previous menu, returning to main menu"
     MENU_HISTORY=""
     return_menu
