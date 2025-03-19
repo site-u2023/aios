@@ -172,11 +172,11 @@ get_auto_color() {
     local colors_9="magenta purple indigo blue cyan green yellow orange red"
     local colors_8="purple indigo blue cyan green yellow orange red"
     local colors_7="purple indigo blue green yellow orange red"
-    local colors_6="purple blue green yellow orange red"
-    local colors_5="blue green yellow orange red"
+    local colors_6="magenta blue cyan green yellow red"
+    local colors_5="magenta blue green yellow red"
     local colors_4="blue green yellow red"
     local colors_3="blue green red"
-    local colors_2="blue red"
+    local colors_2="magent green"
     local colors_1="green"
     
     # 項目数に応じた色配列を選択
