@@ -505,8 +505,6 @@ selector() {
     # タイトルヘッダーを表示
     local menu_title_template=$(get_message "MENU_TITLE")
     local menu_title=$(echo "$menu_title_template" | sed "s/{0}/$section_name/g")
-
-    #printf "%s\n" "$(color white "$menu_title")"
     
     # パンくずリストを表示
     display_breadcrumbs
@@ -522,10 +520,36 @@ selector() {
     
     printf "\n"
     
-    # 選択プロンプト表示
-    local selection_prompt=$(get_message "CONFIG_SELECT_PROMPT")
-    # {0}をメニュー数で置換（特殊項目は含めない）
+    # 選択プロンプト表示（特殊項目を含む）
     local menu_choices=$((menu_count - special_items_count))
+    
+    if [ $is_main_menu -eq 1 ]; then
+        # メインメニュー用のプロンプト（0, 00を含む）
+        local selection_prompt=$(get_message "CONFIG_MAIN_SELECT_PROMPT")
+        
+        # メッセージキーが見つからない場合は独自に構築
+        if [ -z "$selection_prompt" ] || [ "$selection_prompt" = "CONFIG_MAIN_SELECT_PROMPT" ]; then
+            local base_prompt=$(get_message "CONFIG_SELECT_PROMPT")
+            # ベースプロンプトから括弧部分を抽出して修正
+            local base_text=$(echo "$base_prompt" | sed 's/(.*)//g')
+            selection_prompt="${base_text}(1-$menu_choices, 0=終了, 00=削除): "
+            debug_log "DEBUG" "Created custom main menu prompt: $selection_prompt"
+        fi
+    else
+        # サブメニュー用のプロンプト（9, 0を含む）
+        local selection_prompt=$(get_message "CONFIG_SUB_SELECT_PROMPT")
+        
+        # メッセージキーが見つからない場合は独自に構築
+        if [ -z "$selection_prompt" ] || [ "$selection_prompt" = "CONFIG_SUB_SELECT_PROMPT" ]; then
+            local base_prompt=$(get_message "CONFIG_SELECT_PROMPT")
+            # ベースプロンプトから括弧部分を抽出して修正
+            local base_text=$(echo "$base_prompt" | sed 's/(.*)//g')
+            selection_prompt="${base_text}(1-$menu_choices, 9=戻る, 0=終了): "
+            debug_log "DEBUG" "Created custom sub-menu prompt: $selection_prompt"
+        fi
+    fi
+    
+    # {0}をメニュー数で置換
     selection_prompt=$(echo "$selection_prompt" | sed "s/{0}/$menu_choices/g")
     printf "%s" "$(color blue "$selection_prompt")"
     
