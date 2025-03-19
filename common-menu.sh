@@ -747,56 +747,32 @@ return_menu() {
     return $?
 }
 
-# メニュー履歴から前のメニューを取得して移動する関数
+# 前のメニューに戻る関数
 go_back_menu() {
     debug_log "DEBUG" "Going back to previous menu"
     
-    # 現在の履歴を一時変数に保存
     local orig_history="$MENU_HISTORY"
-    debug_log "DEBUG" "Current menu history before going back: $orig_history"
     
-    # 履歴がない場合はメインメニューに戻る
-    if [ -z "$orig_history" ]; then
-        debug_log "DEBUG" "No menu history, returning to main menu"
-        MENU_HISTORY=""
-        return_menu
+    # メニューキー（英数字）のみを使って処理
+    local current_menu_key=$(echo "$orig_history" | cut -d"$MENU_HISTORY_SEPARATOR" -f1)
+    local prev_menu_key=$(echo "$orig_history" | cut -d"$MENU_HISTORY_SEPARATOR" -f3)
+    
+    debug_log "DEBUG" "Current menu key: $current_menu_key"
+    debug_log "DEBUG" "Previous menu key: $prev_menu_key"
+    
+    if [ -n "$prev_menu_key" ] && grep -q "^\[$prev_menu_key\]" "${BASE_DIR}/menu.db"; then
+        # 履歴を更新（現在のメニューのペアを削除）
+        MENU_HISTORY=$(echo "$orig_history" | cut -d"$MENU_HISTORY_SEPARATOR" -f3-)
+        debug_log "DEBUG" "Updated history: $MENU_HISTORY"
+        
+        # 前のメニューへ移動
+        selector "$prev_menu_key" "" 1
         return $?
     fi
     
-    # メニュー履歴をカウント（セパレータの数から算出）
-    local separators=$(echo "$orig_history" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c)
-    local levels=$((separators / 2 + 1))
-    debug_log "DEBUG" "Menu history has $levels levels"
-    
-    # 履歴が1階層のみの場合はメインメニューに戻る
-    if [ $levels -le 1 ]; then
-        debug_log "DEBUG" "Only one level in history, returning to main menu"
-        MENU_HISTORY=""
-        return_menu
-        return $?
-    fi
-    
-    # メニューキーのみを抽出（表示テキストではなく）
-    local current_menu=$(echo "$orig_history" | cut -d"$MENU_HISTORY_SEPARATOR" -f1)
-    local prev_menu=$(echo "$orig_history" | cut -d"$MENU_HISTORY_SEPARATOR" -f3)
-    
-    # 前のメニューの存在を確認
-    if [ -z "$prev_menu" ] || ! grep -q "^\[$prev_menu\]" "${BASE_DIR}/menu.db"; then
-        # 前のメニューが存在しないか無効な場合
-        debug_log "DEBUG" "Previous menu '$prev_menu' is invalid or missing, returning to main menu"
-        MENU_HISTORY=""
-        return_menu
-        return $?
-    fi
-    
-    # 履歴を更新（最初のペアを削除）
-    MENU_HISTORY=$(echo "$orig_history" | cut -d"$MENU_HISTORY_SEPARATOR" -f3-)
-    debug_log "DEBUG" "Updated menu history: $MENU_HISTORY"
-    
-    # 前のメニューへ移動
-    debug_log "DEBUG" "Navigating to previous menu: $prev_menu"
-    sleep 1
-    selector "$prev_menu" "" 1
+    # 前のメニューが見つからない場合
+    MENU_HISTORY=""
+    return_menu
     return $?
 }
 
