@@ -988,13 +988,13 @@ download() {
     local auth_message=$(echo "$version_data" | cut -d'|' -f4)
     
     # ファイルダウンロード処理
-    local status_message="$(color blue "$(get_message "CONFIG_DOWNLOAD_UNNECESSARY")")"
+    local status_message="$(get_message "CONFIG_DOWNLOAD_UNNECESSARY")"
     if [ "$update_required" = "true" ]; then
         if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode"; then
             debug_log "ERROR" "Download process failed for $file_name"
             return 1
         fi
-        status_message="$(color green "$(get_message "CONFIG_DOWNLOAD_SUCCESS")")"
+        status_message="$(get_message "CONFIG_DOWNLOAD_SUCCESS")"
     fi
     
     # 結果表示とファイル読み込み
@@ -1128,16 +1128,19 @@ download_finalize() {
     fi
     
     # 出力メッセージの作成
-    local message="${status_message}: ${file_name} ${clean_remote_version} ${auth_message}"
+    local message="${status_message} ${file_name} ${clean_remote_version} ${auth_message}"
     if [ -n "$action_message" ]; then
         message="${message} (${action_message})"
     fi
 
     # メッセージ出力を先に行う
     if [ "$hidden_mode" = "true" ]; then
-        debug_log "DEBUG" "$(color blue "Quiet mode ${message}")"
+        debug_log "DEBUG" "$(color green "Quiet mode ${message}")"
     else
-        printf "%s\n" "${message}"
+        if [ "$status_message" = "CONFIG_DOWNLOAD_SUCCESS" ]; then
+            printf "%s\n" "$(color green "${message}")"
+        else
+            printf "%s\n" "$(color blue "${message}")" 
     fi
     
     # メッセージ表示後にファイル読み込み処理を実行
