@@ -72,31 +72,32 @@ pop_menu_history() {
         return
     fi
     
-    # 先頭のメニュー名を取得
-    local first_menu=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f1)
+    # 最後のメニュー名とテキストを取得（履歴の末尾2項目を削除）
+    local history_len=$(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c)
+    local menu_count=$((history_len / 2 + 1))  # メニュー数
     
-    # 先頭のペア（メニュー名:表示テキスト）を削除し、残りの履歴を更新
-    if echo "$MENU_HISTORY" | grep -q "$MENU_HISTORY_SEPARATOR.*$MENU_HISTORY_SEPARATOR"; then
-        # 2つ以上のペアがある場合、最初のペアを削除（メニュー名と表示テキスト）
-        MENU_HISTORY=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f3-)
-        debug_log "DEBUG" "Popped entry: $first_menu, Remaining history: $MENU_HISTORY"
-    else
-        # 1つのペアしかない場合、履歴を空にする
+    if [ "$menu_count" -le 1 ]; then
+        # 残り1つの場合は全履歴をクリア
+        local result="$MENU_HISTORY"
         MENU_HISTORY=""
-        debug_log "DEBUG" "Popped last entry: $first_menu, History is now empty"
+        debug_log "DEBUG" "Popped last entry from history, now empty"
+        echo "$result" | cut -d"$MENU_HISTORY_SEPARATOR" -f1
+    else
+        # 最後の2項目（メニュー名:テキスト）を削除
+        local last_menu=$(echo "$MENU_HISTORY" | rev | cut -d"$MENU_HISTORY_SEPARATOR" -f3 | rev)
+        MENU_HISTORY=$(echo "$MENU_HISTORY" | rev | cut -d"$MENU_HISTORY_SEPARATOR" -f3- | rev)
+        debug_log "DEBUG" "Popped last entry, remaining history: $MENU_HISTORY"
+        echo "$last_menu"
     fi
-    
-    # 取り出したメニュー名を返す
-    echo "$first_menu"
 }
 
 # パンくずリスト表示関数
 display_breadcrumbs() {
-    debug_log "DEBUG" "Displaying breadcrumbs as menu guide: $MENU_HISTORY"
+    debug_log "DEBUG" "Displaying breadcrumbs for menu history: $MENU_HISTORY"
     
     # メインメニューのパンくず（常に最初に表示）
     local main_menu_text=$(get_message "MAIN_MENU_NAME")
-    [ -z "$main_menu_text" ] || [ "$main_menu_text" = "MAIN_MENU_NAME" ] && main_menu_text="メインメニュー"
+    [ -z "$main_menu_text" ] || [ "$main_menu_text" = "MAIN_MENU_NAME" ] && main_menu_text="● メインメニュー"
     
     # パンくずの初期値はメインメニュー
     local breadcrumb="$(color white "$main_menu_text")"
@@ -109,21 +110,32 @@ display_breadcrumbs() {
         return
     fi
     
-    # 履歴から表示テキストを抽出
-    local i=0
-    local text=""
+    # 履歴を加工して正しい順序でのパンくずを構築
+    local history_items=""
+    local tokens=""
+    local token=""
+    local IFS="$MENU_HISTORY_SEPARATOR"
     
-    # 最大10レベルまで（安全のため）
-    while [ $i -lt 10 ]; do
-        text=$(get_menu_history_item "$MENU_HISTORY" $i "text")
-        if [ -z "$text" ]; then
-            break
+    # 履歴をトークンに分解し、Text部分のみ取得
+    for token in $MENU_HISTORY; do
+        if echo "$history_items" | grep -q "$token"; then
+            continue # 重複項目をスキップ
         fi
-        breadcrumb="${breadcrumb}${separator}$(color white "$text")"
-        i=$((i+1))
+        
+        # メニュー名とテキストが交互に出現するので、テキスト（表示名）のみ抽出
+        # 偶数位置（0から数えて1,3,5...）がテキスト
+        if [ $(( $(echo "$history_items" | wc -w) % 2 )) -eq 1 ]; then
+            history_items="${history_items:+$history_items }$token"
+        fi
+    done
+    unset IFS
+    
+    # 履歴アイテムを逆順から正順に修正
+    for item in $history_items; do
+        breadcrumb="${breadcrumb}${separator}$(color white "$item")"
     done
     
-    # パンくずリストを表示
+    # パンくずリストを表示 (改行を2つ追加)
     printf "%s\n\n" "$breadcrumb"
 }
 
@@ -649,12 +661,12 @@ push_menu_history() {
     
     debug_log "DEBUG" "Adding to menu history: $menu_name ($display_text)"
     
-    # 履歴が空の場合は直接設定、そうでなければ前に追加
+    # 履歴が空の場合は直接設定、そうでなければ最後に追加（順序を修正）
     if [ -z "$MENU_HISTORY" ]; then
         MENU_HISTORY="${menu_name}${MENU_HISTORY_SEPARATOR}${display_text}"
     else
-        # 既存の履歴の前に追加
-        MENU_HISTORY="${menu_name}${MENU_HISTORY_SEPARATOR}${display_text}${MENU_HISTORY_SEPARATOR}${MENU_HISTORY}"
+        # 既存の履歴の後ろに追加（正順）
+        MENU_HISTORY="${MENU_HISTORY}${MENU_HISTORY_SEPARATOR}${menu_name}${MENU_HISTORY_SEPARATOR}${display_text}"
     fi
     
     debug_log "DEBUG" "Current menu history: $MENU_HISTORY"
