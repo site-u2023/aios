@@ -16,7 +16,7 @@ WAN_IFACE="wan"                      # WAN インターフェース名（グロ�
 VENDORID="acde48-v6pc_swg_hgw"         # ベンダーID（例：ベンダーOUI＋任意文字列）
 PRODUCT="V6MIG-ROUTER"               # 製品名（ASCII 半角英数字、ハイフン、アンダースコア 32文字以内）
 VERSION="1_0"                        # ファームウェアバージョン（数字とアンダースコア、例：1_0）
-PSID=0x00                            # MAP-E 用 PSID（必要に応じて設定、ここでは例として 0x00）
+PSID=0x35                           # MAP-E 用 PSID（必要に応じて設定、ここでは例として 0x00）
 
 #----- 必要なコマンドの存在チェック -----
 for cmd in ip curl jq dig python3; do
