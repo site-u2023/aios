@@ -512,7 +512,7 @@ select_list() {
     # 項目をリスト表示
     local display_count=1
     echo "$select_list" | while IFS= read -r line; do
-        printf " [%d] %s\n" "$display_count" "$line"
+        printf "[%d] %s\n" "$display_count" "$line"
         display_count=$((display_count + 1))
     done
     
