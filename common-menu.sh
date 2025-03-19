@@ -417,7 +417,18 @@ selector() {
         menu_count=$((menu_count+1))
         special_items_count=$((special_items_count+1))
         echo "MENU_BACK" >> "$menu_keys_file"
-        echo "go_back_menu" >> "$menu_commands_file"
+
+        # 履歴が1階層のみの場合はreturn_menu、それ以外はgo_back_menuを使用
+        if echo "$MENU_HISTORY" | grep -q "$MENU_HISTORY_SEPARATOR.*$MENU_HISTORY_SEPARATOR"; then
+            # 複数階層があるため、一つ前のメニューに戻る
+            echo "go_back_menu" >> "$menu_commands_file"
+            debug_log "DEBUG" "Using go_back_menu for multi-level history"
+        else
+            # 一つの階層のみのため、メインメニューに戻る
+            echo "return_menu" >> "$menu_commands_file"
+            debug_log "DEBUG" "Using return_menu for single-level history"
+        fi
+
         echo "white" >> "$menu_colors_file"
 
         local back_text=$(get_message "MENU_BACK")
@@ -737,41 +748,32 @@ go_back_menu() {
     local orig_history="$MENU_HISTORY"
     debug_log "DEBUG" "Current menu history before going back: $orig_history"
     
-    # 現在のメニューセクション名を取得（最初のコロンの前）
-    local current_menu=""
-    local previous_menu=""
-    
-    # 履歴がある場合のみ処理
-    if [ -n "$orig_history" ]; then
-        # 現在のメニュー名を取得
-        current_menu=$(echo "$orig_history" | cut -d":" -f1)
+    # 履歴が複数レベルあるか確認
+    if echo "$orig_history" | grep -q "$MENU_HISTORY_SEPARATOR.*$MENU_HISTORY_SEPARATOR"; then
+        # 現在のメニューIDを取得（最初のコロンまで）
+        local current_menu=$(echo "$orig_history" | cut -d"$MENU_HISTORY_SEPARATOR" -f1)
         
-        # 履歴が2つ以上あるか確認
-        if echo "$orig_history" | grep -q ":.*:"; then
-            # 3つ目のフィールドが前のメニュー
-            previous_menu=$(echo "$orig_history" | cut -d":" -f3)
-            
-            # 履歴を更新（現在のメニューのペアを削除）
-            MENU_HISTORY=$(echo "$orig_history" | cut -d":" -f3-)
-            debug_log "DEBUG" "Updated menu history: $MENU_HISTORY"
-            
+        # 3つ目の要素が前のメニューID
+        local previous_menu=$(echo "$orig_history" | cut -d"$MENU_HISTORY_SEPARATOR" -f3)
+        
+        # 履歴を更新（最初のペアを削除）
+        MENU_HISTORY=$(echo "$orig_history" | cut -d"$MENU_HISTORY_SEPARATOR" -f3-)
+        debug_log "DEBUG" "Updated menu history: $MENU_HISTORY"
+        
+        # 前のメニューが有効か確認
+        if [ -n "$previous_menu" ] && grep -q "^\[$previous_menu\]" "${BASE_DIR}/menu.db"; then
             debug_log "DEBUG" "Navigating to previous menu: $previous_menu"
             sleep 1
-            
-            # 前のメニューへ移動
             selector "$previous_menu" "" 1
             return $?
         fi
     fi
     
-    # 履歴がない、または1階層のみの場合はメインメニューへ
+    # 履歴が不十分、または前のメニューが無効な場合はメインメニューに戻る
     debug_log "DEBUG" "No previous menu found, returning to main menu"
-    # 履歴をクリア
     MENU_HISTORY=""
     sleep 1
-    
-    # メインメニューを表示
-    selector "${MAIN_MENU}" "" 1
+    return_menu
     return $?
 }
 
