@@ -18,21 +18,26 @@ JP|MSG_UNDER_TEST=👹 試験中
 # =======================
 
 # echo_message関数用メッセージ
-US|CONFIG_HEADER=Main menu
-JP|CONFIG_HEADER=メインメニュー
+#US|CONFIG_HEADER=Main menu
+#JP|CONFIG_HEADER=メインメニュー
+
+#US|CONFIG_SECTION_TITLE={0}
+#JP|CONFIG_SECTION_TITLE={0}
+
+#US|CONFIG_SEPARATOR=---------------------------------------
+#JP|CONFIG_SEPARATOR=---------------------------------------
 
 US|MAIN_MENU_NAME=Main menu
 JP|MAIN_MENU_NAME=メインメニュー
 
-US|CONFIG_SEPARATOR=---------------------------------------
-JP|CONFIG_SEPARATOR=---------------------------------------
-
-US|CONFIG_SECTION_TITLE={0}
-JP|CONFIG_SECTION_TITLE={0}
-
 # selector関数用メッセージ
-US|CONFIG_SELECT_PROMPT=Please select a number (1-{0}): 
-JP|CONFIG_SELECT_PROMPT=番号を選択してください (1-{0}): 
+# メインメニュー用（0, 00を含む）
+US|CONFIG_MAIN_SELECT_PROMPT=Please select a number (1-{0}, 0=Exit, 00=Remove): 
+JP|CONFIG_MAIN_SELECT_PROMPT=番号を選択してください (1-{0}, 0=終了, 00=削除): 
+
+# サブメニュー用（0, 9を含む）
+US|CONFIG_SUB_SELECT_PROMPT=Please select a number (1-{0}, 9=Return, 0=Exit): 
+JP|CONFIG_SUB_SELECT_PROMPT=番号を選択してください (1-{0}, 9=戻る, 0=終了): 
 
 US|CONFIG_ERROR_NOT_NUMBER=Please enter a valid number.
 JP|CONFIG_ERROR_NOT_NUMBER=有効な数字を入力してください。
