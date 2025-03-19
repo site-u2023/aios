@@ -1208,10 +1208,12 @@ print_banner_unicode() {
 print_information() {
     local architecture=$(cat "${CACHE_DIR}/architecture.ch")
     local osversion=$(cat "${CACHE_DIR}/osversion.ch")
+    local package_manager=$(cat "${CACHE_DIR}/package_manager.ch")
     local usbdevice=$(cat "${CACHE_DIR}/usbdevice.ch")
 
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_ARCHITECTURE" "info=$architecture")")"
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_OSVERSION" "info=$osversion")")"
+    printf "%s\n" "$(color green "$(get_message "MSG_INFO_PACKAGEMANAGER" "info=$package_manager")")"
     printf "%s\n" "$(color green "$(get_message "MSG_INFO_USBDEVICE" "info=$usbdevice")")"
     printf "\n"
 }
