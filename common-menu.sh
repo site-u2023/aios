@@ -652,17 +652,19 @@ selector() {
     return $cmd_status
 }
 
+# メニュー履歴に追加する関数 - 履歴を正しく構築するように確認
 push_menu_history() {
-    local menu_name="$1"
-    local display_text="$2"
+    local menu_name="$1"    # メニュー名/セクション名
+    local display_text="$2" # 表示テキスト（メッセージ）
     
     debug_log "DEBUG" "Adding to menu history: $menu_name ($display_text)"
     
+    # 履歴が空の場合は直接設定、そうでなければ前に追加
     if [ -z "$MENU_HISTORY" ]; then
         MENU_HISTORY="${menu_name}${MENU_HISTORY_SEPARATOR}${display_text}"
     else
-        # 履歴の後ろに追加（正順）- これは正しい
-        MENU_HISTORY="${MENU_HISTORY}${MENU_HISTORY_SEPARATOR}${menu_name}${MENU_HISTORY_SEPARATOR}${display_text}"
+        # 新しいエントリを前に追加
+        MENU_HISTORY="${menu_name}${MENU_HISTORY_SEPARATOR}${display_text}${MENU_HISTORY_SEPARATOR}${MENU_HISTORY}"
     fi
     
     debug_log "DEBUG" "Current menu history: $MENU_HISTORY"
