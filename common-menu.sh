@@ -408,7 +408,7 @@ selector() {
     # {0}をメニュー数で置換（特殊項目は含めない）
     local menu_choices=$((menu_count - special_items_count))
     selection_prompt=$(echo "$selection_prompt" | sed "s/{0}/$menu_choices/g")
-    printf "%s" "$(color blue "$selection_prompt")")
+    printf "%s" "$(color blue "$selection_prompt")")"
     
     # ユーザー入力
     local choice=""
