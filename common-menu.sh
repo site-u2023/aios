@@ -386,18 +386,18 @@ selector() {
     
     # メインメニューの場合は [0]と[00]を追加
     if [ $is_main_menu -eq 1 ]; then
-        # [0] EXIT - 終了
+        # [10] EXIT - 終了 (旧[0])
         menu_count=$((menu_count+1))
         special_items_count=$((special_items_count+1))
         echo "MENU_EXIT" >> "$menu_keys_file"
         echo "menu_exit" >> "$menu_commands_file"
         echo "white" >> "$menu_colors_file"
-        
+    
         local exit_text=$(get_message "MENU_EXIT")
         [ -z "$exit_text" ] && exit_text="終了"
-        printf "%s\n" "$(color white "[0] $exit_text")" >> "$menu_displays_file"
-        
-        debug_log "DEBUG" "Added special EXIT item [0] to main menu"
+        printf "%s\n" "$(color white "[10] $exit_text")" >> "$menu_displays_file"
+    
+        debug_log "DEBUG" "Added special EXIT item [10] to main menu"
         
         # [00] REMOVE - 削除
         menu_count=$((menu_count+1))
@@ -405,15 +405,15 @@ selector() {
         echo "MENU_REMOVE" >> "$menu_keys_file"
         echo "remove_exit" >> "$menu_commands_file"
         echo "white_black" >> "$menu_colors_file"
-        
+    
         local remove_text=$(get_message "MENU_REMOVE")
         [ -z "$remove_text" ] && remove_text="削除"
         printf "%s\n" "$(color white_black "[00] $remove_text")" >> "$menu_displays_file"
-        
+    
         debug_log "DEBUG" "Added special REMOVE item [00] to main menu"
     else
-        # サブメニューの場合は [9]と[0]を追加
-        # [9] BACK - 前に戻る
+        # サブメニューの場合は [0]と[10]を追加
+        # [0] BACK - 前に戻る (旧[9])
         menu_count=$((menu_count+1))
         special_items_count=$((special_items_count+1))
         echo "MENU_BACK" >> "$menu_keys_file"
@@ -440,22 +440,22 @@ selector() {
 
         local back_text=$(get_message "MENU_BACK")
         [ -z "$back_text" ] && back_text="戻る"
-        printf "%s\n" "$(color white "[9] $back_text")" >> "$menu_displays_file"
+        printf "%s\n" "$(color white "[0] $back_text")" >> "$menu_displays_file"
 
-        debug_log "DEBUG" "Added special BACK item [9] to sub-menu"
-        
-        # [0] EXIT - 終了
+        debug_log "DEBUG" "Added special BACK item [0] to sub-menu"
+    
+        # [10] EXIT - 終了 (旧[0])
         menu_count=$((menu_count+1))
         special_items_count=$((special_items_count+1))
         echo "MENU_EXIT" >> "$menu_keys_file"
         echo "menu_exit" >> "$menu_commands_file"
         echo "white" >> "$menu_colors_file"
-        
+    
         local exit_text=$(get_message "MENU_EXIT")
         [ -z "$exit_text" ] && exit_text="終了"
-        printf "%s\n" "$(color white "[0] $exit_text")" >> "$menu_displays_file"
-        
-        debug_log "DEBUG" "Added special EXIT item [0] to sub-menu"
+        printf "%s\n" "$(color white "[10] $exit_text")" >> "$menu_displays_file"
+    
+        debug_log "DEBUG" "Added special EXIT item [10] to sub-menu"
     fi
     
     debug_log "DEBUG" "Added $special_items_count special menu items"
@@ -490,27 +490,27 @@ selector() {
     local menu_choices=$((menu_count - special_items_count))
     
     if [ $is_main_menu -eq 1 ]; then
-        # メインメニュー用のプロンプト（0, 00を含む）
+        # メインメニュー用のプロンプト（10, 00を含む）
         local selection_prompt=$(get_message "CONFIG_MAIN_SELECT_PROMPT")
-        
+    
         # メッセージキーが見つからない場合は独自に構築
         if [ -z "$selection_prompt" ] || [ "$selection_prompt" = "CONFIG_MAIN_SELECT_PROMPT" ]; then
             local base_prompt=$(get_message "CONFIG_SELECT_PROMPT")
             # ベースプロンプトから括弧部分を抽出して修正
             local base_text=$(echo "$base_prompt" | sed 's/(.*)//g')
-            selection_prompt="${base_text}(1-$menu_choices, 0=終了, 00=削除): "
+            selection_prompt="${base_text}(1-$menu_choices, 10=終了, 00=削除): "
             debug_log "DEBUG" "Created custom main menu prompt: $selection_prompt"
         fi
     else
-        # サブメニュー用のプロンプト（9, 0を含む）
+        # サブメニュー用のプロンプト（0, 10を含む）
         local selection_prompt=$(get_message "CONFIG_SUB_SELECT_PROMPT")
-        
+    
         # メッセージキーが見つからない場合は独自に構築
         if [ -z "$selection_prompt" ] || [ "$selection_prompt" = "CONFIG_SUB_SELECT_PROMPT" ]; then
             local base_prompt=$(get_message "CONFIG_SELECT_PROMPT")
             # ベースプロンプトから括弧部分を抽出して修正
             local base_text=$(echo "$base_prompt" | sed 's/(.*)//g')
-            selection_prompt="${base_text}(1-$menu_choices, 9=戻る, 0=終了): "
+            selection_prompt="${base_text}(1-$menu_choices, 0=戻る, 10=終了): "
             debug_log "DEBUG" "Created custom sub-menu prompt: $selection_prompt"
         fi
     fi
@@ -536,14 +536,14 @@ selector() {
     # 特殊入力の処理
     local real_choice=""
     case "$choice" in
-        "0")
-            # [0]は常にEXIT
+        "10")
+            # [10]は常にEXIT (旧[0])
             if [ $is_main_menu -eq 1 ]; then
                 real_choice=$((menu_count - 2 + 1)) # メインメニューの場合
             else
                 real_choice=$menu_count # サブメニューの場合
             fi
-            debug_log "DEBUG" "Special input [0] mapped to item: $real_choice"
+            debug_log "DEBUG" "Special input [10] mapped to item: $real_choice"
             ;;
         "00")
             # [00]は常にREMOVE（メインメニューのみ）
@@ -557,11 +557,11 @@ selector() {
                 return $?
             fi
             ;;
-        "9")
-            # [9]は常にRETURN（サブメニューのみ）
+        "0")
+            # [0]は常にRETURN（サブメニューのみ）(旧[9])
             if [ $is_main_menu -eq 0 ]; then
                 real_choice=$((menu_count - 1))
-                debug_log "DEBUG" "Special input [9] mapped to item: $real_choice"
+                debug_log "DEBUG" "Special input [0] mapped to item: $real_choice"
             else
                 printf "\n%s\n" "$(color red "$(get_message "CONFIG_ERROR_INVALID_NUMBER")")"
                 sleep 2
@@ -578,7 +578,7 @@ selector() {
                 selector "$section_name" "" 1
                 return $?
             fi
-            
+        
             # 選択範囲チェック（通常メニュー項目のみ）
             if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_choices" ]; then
                 local error_msg=$(get_message "CONFIG_ERROR_INVALID_NUMBER")
@@ -589,7 +589,7 @@ selector() {
                 selector "$section_name" "" 1
                 return $?
             fi
-            
+        
             # 通常入力の場合はそのままの値を使用
             real_choice=$choice
             ;;
