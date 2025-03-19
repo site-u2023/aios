@@ -168,12 +168,6 @@ get_auto_color() {
     
     debug_log "DEBUG" "Auto-assigning color for position $position of $total_items items"
     
-    # 1項目の場合は常に緑色を返す
-    if [ "$total_items" -eq 1 ]; then
-        echo "green"
-        return
-    fi
-    
     # 各メニュー項目数に対応する色配列を定義
     local colors_9="magenta purple indigo blue cyan green yellow orange red"
     local colors_8="purple indigo blue cyan green yellow orange red"
@@ -183,6 +177,7 @@ get_auto_color() {
     local colors_4="blue green yellow red"
     local colors_3="blue green red"
     local colors_2="blue red"
+    local colors_1="green"
     
     # 項目数に応じた色配列を選択
     local color_list=""
@@ -195,6 +190,7 @@ get_auto_color() {
         4) color_list="$colors_4" ;;
         3) color_list="$colors_3" ;;
         2) color_list="$colors_2" ;;
+        1) color_list="$colors_1" ;;
         *) echo "white"; return ;; # フォールバック
     esac
     
