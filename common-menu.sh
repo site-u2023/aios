@@ -168,99 +168,49 @@ get_auto_color() {
     
     debug_log "DEBUG" "Auto-assigning color for position $position of $total_items items"
     
-    # 色の自動割り当てロジック（逆順）
+    # 1項目の場合は常に緑色を返す
+    if [ "$total_items" -eq 1 ]; then
+        echo "green"
+        return
+    fi
+    
+    # 各メニュー項目数に対応する色配列を定義
+    local colors_9="magenta purple indigo blue cyan green yellow orange red"
+    local colors_8="purple indigo blue cyan green yellow orange red"
+    local colors_7="purple indigo blue green yellow orange red"
+    local colors_6="purple blue green yellow orange red"
+    local colors_5="blue green yellow orange red"
+    local colors_4="blue green yellow red"
+    local colors_3="blue green red"
+    local colors_2="blue red"
+    
+    # 項目数に応じた色配列を選択
+    local color_list=""
     case "$total_items" in
-        9)
-            case "$position" in
-                1) echo "magenta" ;;
-                2) echo "purple" ;;
-                3) echo "indigo" ;;
-                4) echo "blue" ;;
-                5) echo "cyan" ;;
-                6) echo "green" ;;
-                7) echo "yellow" ;;
-                8) echo "orange" ;;
-                9) echo "red" ;;
-                *) echo "white" ;; # フォールバック
-            esac
-            ;;
-        8)
-            case "$position" in
-                1) echo "purple" ;;
-                2) echo "indigo" ;;
-                3) echo "blue" ;;
-                4) echo "cyan" ;;
-                5) echo "green" ;;
-                6) echo "yellow" ;;
-                7) echo "orange" ;;
-                8) echo "red" ;;
-                *) echo "white" ;; # フォールバック
-            esac
-            ;;
-        7)
-            case "$position" in
-                1) echo "purple" ;;
-                2) echo "indigo" ;;
-                3) echo "blue" ;;
-                4) echo "green" ;;
-                5) echo "yellow" ;;
-                6) echo "orange" ;;
-                7) echo "red" ;;
-                *) echo "white" ;; # フォールバック
-            esac
-            ;;
-        6)
-            case "$position" in
-                1) echo "purple" ;;
-                2) echo "blue" ;;
-                3) echo "green" ;;
-                4) echo "yellow" ;;
-                5) echo "orange" ;;
-                6) echo "red" ;;
-                *) echo "white" ;; # フォールバック
-            esac
-            ;;
-        5)
-            case "$position" in
-                1) echo "blue" ;;
-                2) echo "green" ;;
-                3) echo "yellow" ;;
-                4) echo "orange" ;;
-                5) echo "red" ;;
-                *) echo "white" ;; # フォールバック
-            esac
-            ;;
-        4)
-            case "$position" in
-                1) echo "blue" ;;
-                2) echo "green" ;;
-                3) echo "yellow" ;;
-                4) echo "red" ;;
-                *) echo "white" ;; # フォールバック
-            esac
-            ;;
-        3)
-            case "$position" in
-                1) echo "blue" ;;
-                2) echo "green" ;;
-                3) echo "red" ;;
-                *) echo "white" ;; # フォールバック
-            esac
-            ;;
-        2)
-            case "$position" in
-                1) echo "blue" ;;
-                2) echo "red" ;;
-                *) echo "white" ;; # フォールバック
-            esac
-            ;;
-        1)
-            echo "green"
-            ;;
-        *)
-            echo "white" # フォールバック色
-            ;;
+        9) color_list="$colors_9" ;;
+        8) color_list="$colors_8" ;;
+        7) color_list="$colors_7" ;;
+        6) color_list="$colors_6" ;;
+        5) color_list="$colors_5" ;;
+        4) color_list="$colors_4" ;;
+        3) color_list="$colors_3" ;;
+        2) color_list="$colors_2" ;;
+        *) echo "white"; return ;; # フォールバック
     esac
+    
+    # 位置に対応する色を抽出（POSIXシェル互換）
+    local i=1
+    local selected_color="white" # フォールバック
+    
+    for color in $color_list; do
+        if [ "$i" -eq "$position" ]; then
+            selected_color="$color"
+            break
+        fi
+        i=$((i + 1))
+    done
+    
+    echo "$selected_color"
 }
 
 selector() {
