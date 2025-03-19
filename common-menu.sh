@@ -91,8 +91,9 @@ pop_menu_history() {
     fi
 }
 
+# パンくずリスト表示関数 - 区切り記号の修正版
 display_breadcrumbs() {
-    debug_log "DEBUG" "Building breadcrumb navigation from history"
+    debug_log "DEBUG" "Building breadcrumb navigation with proper separator between menu items"
     
     # メインメニューのテキスト取得
     local main_menu_text=$(get_message "MAIN_MENU_NAME")
@@ -108,7 +109,7 @@ display_breadcrumbs() {
         return
     fi
     
-    # 履歴から表示テキストを抽出（短縮なし）
+    # 履歴から表示テキストを抽出
     local i=0
     local items=""
     
@@ -120,14 +121,14 @@ display_breadcrumbs() {
             items="$item $items"
         fi
     done
+    unset IFS
     
-    # 空白区切りでアイテムを処理（逆順）
+    # 空白区切りでアイテムを処理（逆順）- 各項目間に区切り記号を追加
     for item in $items; do
         breadcrumb="${breadcrumb}${separator}$(color white "$item")"
     done
-    unset IFS
     
-    # パンくずリストを表示
+    # パンくずリストを表示（2行の空行を追加）
     printf "%s\n\n" "$breadcrumb"
 }
 
