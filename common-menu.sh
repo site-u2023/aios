@@ -551,7 +551,7 @@ selector() {
     
     # {0}をメニュー数で置換
     selection_prompt=$(echo "$selection_prompt" | sed "s/{0}/$menu_choices/g")
-    printf "%s" "$(color blue "$selection_prompt")"
+    printf "%s" "$(color white "$selection_prompt")"
     
     # ユーザー入力
     local choice=""
@@ -744,7 +744,7 @@ remove_exit() {
         exit 0
     else
         debug_log "DEBUG" "User canceled deletion, returning to menu"
-        printf "%s\n" "$(color blue "$(get_message "CONFIG_DELETE_CANCELED")")"
+        printf "%s\n" "$(color white "$(get_message "CONFIG_DELETE_CANCELED")")"
         
         # メインメニューに戻る処理
         local main_menu="${MAIN_MENU}"
