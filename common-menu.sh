@@ -1,6 +1,6 @@
 #!/bin/sh
 
-COMMON_VERSION="2025.03.19-04-00"
+COMMON_VERSION="2025.03.19-05-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -92,9 +92,8 @@ pop_menu_history() {
         return
     fi
     
-    # 最初の区切り文字までを取得
+    # 最初の区切り文字までを取得（フィールド1）
     local first_entry=$(echo "$MENU_HISTORY" | cut -d':' -f1)
-    local second_entry=$(echo "$MENU_HISTORY" | cut -d':' -f2)
     
     # 残りの履歴を更新
     if echo "$MENU_HISTORY" | grep -q ':'; then
@@ -111,51 +110,71 @@ pop_menu_history() {
     echo "$first_entry"
 }
 
-# パンくずリスト表示関数
+# パンくずリスト表示関数（revに依存しないバージョン）
 display_breadcrumbs() {
     debug_log "DEBUG" "Displaying breadcrumbs from history: $MENU_HISTORY"
     
     # 履歴が空の場合は何も表示しない
     if [ -z "$MENU_HISTORY" ]; then
+        debug_log "DEBUG" "No history to display breadcrumbs"
         return
     fi
-    
-    local history_copy="$MENU_HISTORY"
-    local breadcrumb=""
-    local menu_name=""
-    local display_text=""
-    local separator=" > "
-    local has_displayed=0
     
     # メインメニューのパンくず（常に最初に表示）
     local main_menu_text=$(get_message "MAIN_MENU_NAME")
     [ -z "$main_menu_text" ] && main_menu_text="メインメニュー" # デフォルト値
-    breadcrumb="$(color cyan "$main_menu_text")"
     
-    # 履歴を逆順に処理（最新のエントリは先頭にあるため、末尾から処理）
-    while [ -n "$history_copy" ]; do
-        # メニュー名（奇数番目）と表示テキスト（偶数番目）を順に取得
-        menu_name=$(echo "$history_copy" | rev | cut -d':' -f1 | rev)
-        history_copy=$(echo "$history_copy" | rev | cut -d':' -f2- | rev)
-        
-        if [ -n "$history_copy" ]; then
-            display_text=$(echo "$history_copy" | rev | cut -d':' -f1 | rev)
-            history_copy=$(echo "$history_copy" | rev | cut -d':' -f2- | rev)
-        else
-            display_text=""
+    # パンくずの初期値はメインメニュー
+    local breadcrumb="$(color cyan "$main_menu_text")"
+    local separator=" > "
+    
+    # 履歴文字列をIFSで分割して処理
+    local old_ifs="$IFS"
+    IFS=':'
+    
+    # 履歴文字列を一時ファイルに保存
+    local temp_history_file="${CACHE_DIR}/history.tmp"
+    echo "$MENU_HISTORY" > "$temp_history_file"
+    
+    # 履歴を項目ごとに分割して処理
+    local item_count=0
+    local items=""
+    
+    # 履歴アイテムをカウント
+    item_count=$(awk -F: '{print NF}' "$temp_history_file")
+    debug_log "DEBUG" "History has $item_count items"
+    
+    # 履歴項目を逆順で処理するため、リストを構築
+    local i=1
+    local pairs=""
+    
+    while [ "$i" -le "$item_count" ]; do
+        # 奇数インデックスはメニュー名、偶数インデックスは表示テキスト
+        if [ "$((i % 2))" -eq "1" ] && [ "$i" -lt "$item_count" ]; then
+            local menu_name=$(cut -d':' -f"$i" "$temp_history_file")
+            local display_text=$(cut -d':' -f"$((i+1))" "$temp_history_file")
+            
+            # メインメニューはスキップ（既に表示済み）
+            if [ "$menu_name" != "$MAIN_MENU" ]; then
+                # 表示テキストがある場合のみ追加
+                if [ -n "$display_text" ]; then
+                    # パンくずに追加
+                    breadcrumb="${breadcrumb}${separator}$(color cyan "$display_text")"
+                    debug_log "DEBUG" "Added breadcrumb: $display_text"
+                fi
+            fi
         fi
-        
-        # 有効な表示テキストがある場合のみ追加
-        if [ -n "$display_text" ] && [ "$menu_name" != "$MAIN_MENU" ]; then
-            breadcrumb="${breadcrumb}${separator}$(color cyan "$display_text")"
-            has_displayed=1
-        fi
+        i=$((i+2)) # ペアでスキップ
     done
     
-    # パンくずリストを表示（少なくとも1つのパンくず要素がある場合のみ）
-    if [ $has_displayed -eq 1 ]; then
-        printf "%s\n\n" "$breadcrumb"
-    fi
+    # 一時ファイルを削除
+    rm -f "$temp_history_file"
+    
+    # 元のIFSを復元
+    IFS="$old_ifs"
+    
+    # パンくずリストを表示
+    printf "%s\n\n" "$breadcrumb"
 }
 
 # エラーハンドリング関数 - 一元化された処理
@@ -426,7 +445,7 @@ selector() {
         echo "white" >> "$menu_colors_file"
         
         local exit_text=$(get_message "MENU_EXIT")
-        [ -z "$exit_text" ] && exit_text="Exit"
+        [ -z "$exit_text" ] && exit_text="終了"
         printf "%s\n" "$(color white "[0] $exit_text")" >> "$menu_displays_file"
         
         debug_log "DEBUG" "Added special EXIT item [0] to main menu"
@@ -439,7 +458,7 @@ selector() {
         echo "white_black" >> "$menu_colors_file"
         
         local remove_text=$(get_message "MENU_REMOVE")
-        [ -z "$remove_text" ] && remove_text="Remove"
+        [ -z "$remove_text" ] && remove_text="削除"
         printf "%s\n" "$(color white_black "[00] $remove_text")" >> "$menu_displays_file"
         
         debug_log "DEBUG" "Added special REMOVE item [00] to main menu"
@@ -453,7 +472,7 @@ selector() {
         echo "white" >> "$menu_colors_file"
         
         local return_text=$(get_message "MENU_RETURN")
-        [ -z "$return_text" ] && return_text="Return"
+        [ -z "$return_text" ] && return_text="戻る"
         printf "%s\n" "$(color white "[9] $return_text")" >> "$menu_displays_file"
         
         debug_log "DEBUG" "Added special RETURN item [9] to sub-menu"
@@ -466,7 +485,7 @@ selector() {
         echo "white" >> "$menu_colors_file"
         
         local exit_text=$(get_message "MENU_EXIT")
-        [ -z "$exit_text" ] && exit_text="Exit"
+        [ -z "$exit_text" ] && exit_text="終了"
         printf "%s\n" "$(color white "[0] $exit_text")" >> "$menu_displays_file"
         
         debug_log "DEBUG" "Added special EXIT item [0] to sub-menu"
