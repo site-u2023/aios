@@ -732,9 +732,9 @@ return_menu() {
     return $?
 }
 
-# 前のメニューに戻る関数
+# 前のメニューに戻る関数 
 go_back_menu() {
-    debug_log "DEBUG" "Going back to previous menu level"
+    debug_log "DEBUG" "Going back to previous menu"
     
     # 履歴が空の場合はメインメニューへ
     if [ -z "$MENU_HISTORY" ]; then
@@ -743,42 +743,49 @@ go_back_menu() {
         return $?
     fi
     
-    # 履歴から前のメニューを取得
-    local items_count=$(echo "$MENU_HISTORY" | tr "$MENU_HISTORY_SEPARATOR" '\n' | wc -l)
-    
-    # 履歴が2項目（1つのメニュー:テキストのペア）しかない場合はメインメニューへ
-    if [ "$items_count" -le 2 ]; then
-        debug_log "DEBUG" "Only one menu level in history, returning to main menu"
-        MENU_HISTORY=""
-        return_menu
-        return $?
-    fi
-    
-    # 履歴から現在のメニューペアを削除して前のメニューを取得
-    # メニュー名は奇数位置（0から数えて0,2,4...）
+    # 履歴の構造からメニュー名を正しく取得
+    # 履歴形式: menu1:text1:menu2:text2:...
+    # つまり偶数位置（0,2,4...）がメニュー名
+    local history_array=""
+    local section_count=0
     local prev_menu=""
-    local new_history=""
+    local current_menu=""
     
-    # 最後のメニューペア（名前とテキスト）を削除
-    new_history=$(echo "$MENU_HISTORY" | sed "s/\(.*${MENU_HISTORY_SEPARATOR}\)\{2\}[^${MENU_HISTORY_SEPARATOR}]*${MENU_HISTORY_SEPARATOR}[^${MENU_HISTORY_SEPARATOR}]*$/\1/")
-    prev_menu=$(echo "$new_history" | sed -E "s/.*${MENU_HISTORY_SEPARATOR}([^${MENU_HISTORY_SEPARATOR}]*)${MENU_HISTORY_SEPARATOR}[^${MENU_HISTORY_SEPARATOR}]*$/\1/")
+    # 履歴をコロン区切りで分割して配列化（POSIXシェル互換の方法）
+    IFS="$MENU_HISTORY_SEPARATOR"
+    for item in $MENU_HISTORY; do
+        history_array="$history_array $item"
+        section_count=$((section_count + 1))
+    done
+    unset IFS
     
-    debug_log "DEBUG" "Previous menu: $prev_menu"
-    debug_log "DEBUG" "Updated history: $new_history"
+    # 現在のメニュー（最初の項目）を取得
+    current_menu=$(echo "$history_array" | cut -d' ' -f1)
     
-    # 履歴を更新
-    MENU_HISTORY="$new_history"
-    
-    # 前のメニューが見つからない場合はメインメニューへ
-    if [ -z "$prev_menu" ] || ! grep -q "^\[$prev_menu\]" "${BASE_DIR}/menu.db"; then
-        debug_log "DEBUG" "Invalid previous menu, returning to main menu"
-        MENU_HISTORY=""
-        return_menu
-        return $?
+    # 前のメニュー（3番目の項目 = インデックス2）を取得
+    # ただし履歴が2項目以下なら戻り先はメインメニュー
+    if [ $section_count -ge 3 ]; then
+        prev_menu=$(echo "$history_array" | cut -d' ' -f3)
+        # メニュー名かどうか確認（セクション名として存在するか）
+        if grep -q "^\[$prev_menu\]" "${BASE_DIR}/menu.db"; then
+            debug_log "DEBUG" "Found valid previous menu: $prev_menu"
+            
+            # 履歴を更新（現在のメニューと表示テキストを削除）
+            MENU_HISTORY=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f3-)
+            debug_log "DEBUG" "Updated history: $MENU_HISTORY"
+            
+            # 前のメニューへ移動
+            selector "$prev_menu" "" 1
+            return $?
+        else
+            debug_log "DEBUG" "Invalid previous menu section: $prev_menu"
+        fi
     fi
     
-    # 前のメニューを表示
-    selector "$prev_menu" "" 1
+    # 有効な戻り先が見つからない場合はメインメニューへ
+    debug_log "DEBUG" "No valid previous menu, returning to main menu"
+    MENU_HISTORY=""
+    return_menu
     return $?
 }
 
