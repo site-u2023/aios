@@ -31,8 +31,8 @@ JP|MSG_UNDER_TEST=👹 試験中
 #JP|CONFIG_SEPARATOR=---------------------------------------
 
 # メニュータイトル
-US|MAIN_MENU_NAME=Main menu
-JP|MAIN_MENU_NAME=メインメニュー
+US|MAIN_MENU_NAME=● Main menu
+JP|MAIN_MENU_NAME=● メインメニュー
 
 # メニュー項目
 US|MENU_INTERNET=Internet connection setup (Japan only: MAP-e, DS-LITE, PPPoE, etc.)
@@ -64,12 +64,12 @@ JP|MENU_BACK=戻る
 
 # selector関数用メッセージ
 # メインメニュー用（0, 00を含む）
-US|CONFIG_MAIN_SELECT_PROMPT=Please select a number (1-{0}, 0, 00): 
-JP|CONFIG_MAIN_SELECT_PROMPT=番号を選択してください (1-{0}, 0, 00): 
+US|CONFIG_MAIN_SELECT_PROMPT=Please select a number (1-{0}, 10, 00): 
+JP|CONFIG_MAIN_SELECT_PROMPT=番号を選択してください (1-{0}, 10, 00): 
 
 # サブメニュー用（0, 9を含む）
-US|CONFIG_SUB_SELECT_PROMPT=Please select a number (1-{0}, 9, 0): 
-JP|CONFIG_SUB_SELECT_PROMPT=番号を選択してください (1-{0}, 9, 0): 
+US|CONFIG_SUB_SELECT_PROMPT=Please select a number (1-{0}, 0, 10): 
+JP|CONFIG_SUB_SELECT_PROMPT=番号を選択してください (1-{0}, 0, 10): 
 
 US|CONFIG_ERROR_NOT_NUMBER=Please enter a valid number.
 JP|CONFIG_ERROR_NOT_NUMBER=有効な数字を入力してください。
