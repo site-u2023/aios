@@ -15,6 +15,7 @@ magenta MENU_MAPE selector internet-mape
 blue MENU_DSLITE selector internet-dslite
 green MENU_PPPOE selector internet-pppoe
 cyan MENU_DHCP selector internet-dhcp
+green MENU_V&MIG selector internet-v6mig
 white MENU_EXIT menu_exit
 white_black MENU_RETURN return_menu
 
@@ -38,7 +39,7 @@ white_black MENU_RETURN return_menu
 
 # インターネット設定のサブセクション
 [internet-mape]
-magenta MENU_MAPE_CONFIG download "v6mig-prov.sh" "chmod" "load"
+magenta MENU_MAPE_CONFIG download "map-e.sh" "chmod" "load"
 white MENU_EXIT menu_exit
 white_black MENU_RETURN return_menu
 
@@ -54,6 +55,11 @@ white_black MENU_RETURN return_menu
 
 [internet-dhcp]
 cyan MENU_DHCP_CONFIG download "internet-dhcp.sh" "chmod" "load"
+white MENU_EXIT menu_exit
+white_black MENU_RETURN return_menu
+
+[internet-v6mig]
+cyan MENU_V&MIG_CONFIG download "v6mig-prov.sh" "chmod" "load"
 white MENU_EXIT menu_exit
 white_black MENU_RETURN return_menu
 
