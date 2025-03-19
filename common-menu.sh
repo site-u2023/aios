@@ -62,6 +62,18 @@ MENU_HISTORY=""
 CURRENT_MENU=""
 MENU_HISTORY_SEPARATOR=":"
 
+# メインメニューに戻る関数
+return_menu() {
+    debug_log "DEBUG" "Returning to main menu"
+    
+    # 履歴をクリア
+    MENU_HISTORY=""
+    
+    # メインメニューを表示
+    selector "${MAIN_MENU}" "" 1
+    return $?
+}
+
 # メニュー履歴にエントリを追加する関数
 pop_menu_history() {
     debug_log "DEBUG" "Popping from menu history"
@@ -138,47 +150,19 @@ display_breadcrumbs() {
         return
     fi
     
-    # 履歴文字列を一時ファイルに保存して処理
-    local temp_history_file="${CACHE_DIR}/history.tmp"
-    echo "$MENU_HISTORY" > "$temp_history_file"
+    # 履歴から表示テキストを抽出
+    local i=0
+    local text=""
     
-    # 表示テキストのみを抽出（履歴内の偶数番目の要素）
-    local temp_breadcrumb_file="${CACHE_DIR}/breadcrumbs.tmp"
-    rm -f "$temp_breadcrumb_file"
-    touch "$temp_breadcrumb_file"
-    
-    # 履歴からパンくずリストを構築
-    # （ここでは履歴が "menu1:text1:menu2:text2:..." 形式で、表示テキストを抽出）
-    local count=0
-    local in_menu=1  # 1=メニュー名、0=表示テキスト
-    
-    # コロン区切りでトークンを処理
-    local token=""
-    local IFS="$MENU_HISTORY_SEPARATOR"
-    for token in $MENU_HISTORY; do
-        if [ $in_menu -eq 0 ]; then
-            # 表示テキスト部分を保存
-            echo "$token" >> "$temp_breadcrumb_file"
+    # 最大10レベルまで（安全のため）
+    while [ $i -lt 10 ]; do
+        text=$(get_menu_history_item "$MENU_HISTORY" $i "text")
+        if [ -z "$text" ]; then
+            break
         fi
-        # トグル（メニュー名と表示テキストを交互に処理）
-        in_menu=$((1 - in_menu))
+        breadcrumb="${breadcrumb}${separator}$(color white "$text")"
+        i=$((i+1))
     done
-    unset IFS
-    
-    # 保存された表示テキストを逆順で処理
-    if [ -s "$temp_breadcrumb_file" ]; then
-        # ファイルの各行を配列のように処理（POSIXシェル互換方式）
-        local line_count=$(wc -l < "$temp_breadcrumb_file")
-        local i=1
-        while [ $i -le $line_count ]; do
-            local text=$(sed -n "${i}p" "$temp_breadcrumb_file")
-            breadcrumb="${breadcrumb}${separator}$(color white "$text")"
-            i=$((i+1))
-        done
-    fi
-    
-    # 一時ファイルを削除
-    rm -f "$temp_history_file" "$temp_breadcrumb_file"
     
     # パンくずリストを表示
     printf "%s\n\n" "$breadcrumb"
@@ -715,52 +699,111 @@ push_menu_history() {
     debug_log "DEBUG" "Current menu history: $MENU_HISTORY"
 }
 
+# メニュー履歴の解析（指定位置の要素を取得）
+get_menu_history_item() {
+    local history="$1"   # 履歴文字列
+    local position="$2"  # 取得したい位置（0から開始）
+    local type="$3"      # 取得タイプ（menu=メニュー名、text=表示テキスト）
+    
+    # 履歴が空の場合は空文字を返す
+    if [ -z "$history" ]; then
+        echo ""
+        return
+    fi
+    
+    # 一時ファイルに履歴を保存して処理
+    local temp_file="${CACHE_DIR}/history_item.tmp"
+    echo "$history" > "$temp_file"
+    
+    # セパレータで分割してトークンの配列を作成
+    local tokens_file="${CACHE_DIR}/tokens.tmp"
+    rm -f "$tokens_file"
+    touch "$tokens_file"
+    
+    # セパレータで分割して一時ファイルに保存
+    local token=""
+    local count=0
+    local IFS="$MENU_HISTORY_SEPARATOR"
+    for token in $history; do
+        echo "$token" >> "$tokens_file"
+        count=$((count+1))
+    done
+    unset IFS
+    
+    # 指定位置の要素を取得（位置は0から開始）
+    local idx=0
+    
+    # タイプに応じて位置を調整（メニュー名は偶数位置、表示テキストは奇数位置）
+    if [ "$type" = "menu" ]; then
+        # メニュー名の位置（0, 2, 4, ...）
+        idx=$((position * 2))
+    elif [ "$type" = "text" ]; then
+        # 表示テキストの位置（1, 3, 5, ...）
+        idx=$((position * 2 + 1))
+    fi
+    
+    # 範囲チェック
+    if [ $idx -ge $count ]; then
+        echo ""
+        return
+    fi
+    
+    # 指定位置の要素を取得（1からインデックス開始なのでインクリメント）
+    idx=$((idx+1))
+    local result=$(sed -n "${idx}p" "$tokens_file" 2>/dev/null)
+    
+    # 一時ファイルを削除
+    rm -f "$temp_file" "$tokens_file"
+    
+    # 結果を返す
+    echo "$result"
+}
+
 # 前のメニューに戻る関数
 go_back_menu() {
     debug_log "DEBUG" "Going back to previous menu"
     
-    # 現在の履歴を一時変数に保存（デバッグ用）
+    # 現在の履歴を一時変数に保存
     local orig_history="$MENU_HISTORY"
     debug_log "DEBUG" "Current menu history before going back: $orig_history"
     
-    # 履歴から前のメニューを取得（最初の要素以外）
-    local prev_menu=""
+    # 現在のメニュー情報を取得
+    local current_menu=$(get_menu_history_item "$orig_history" 0 "menu")
+    local current_text=$(get_menu_history_item "$orig_history" 0 "text")
+    debug_log "DEBUG" "Current menu: $current_menu ($current_text)"
     
-    if echo "$MENU_HISTORY" | grep -q "$MENU_HISTORY_SEPARATOR.*$MENU_HISTORY_SEPARATOR"; then
-        # 現在のメニューの下に履歴がある場合
-        # 現在のメニュー名と表示テキストをスキップして、次のメニューを取得
-        local next_part=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f3-)
-        prev_menu=$(echo "$next_part" | cut -d"$MENU_HISTORY_SEPARATOR" -f1)
-        
-        # 取得した前のメニュー名を表示（デバッグ用）
-        debug_log "DEBUG" "Identified previous menu: $prev_menu"
-        
-        # 現在のメニュー情報（最初のペア）を履歴から削除
-        MENU_HISTORY="$next_part"
-    else
-        # 履歴が不十分な場合はメインメニューに戻る
-        debug_log "DEBUG" "Insufficient history, returning to main menu"
-        MENU_HISTORY=""
-        return_menu
-        return $?
-    fi
+    # 前のメニュー情報を取得
+    local prev_menu=$(get_menu_history_item "$orig_history" 1 "menu")
+    local prev_text=$(get_menu_history_item "$orig_history" 1 "text")
+    debug_log "DEBUG" "Previous menu: $prev_menu ($prev_text)"
     
-    # 前のメニュー名が取得できた場合、そのメニューに移動
+    # 前のメニューが存在するか確認
     if [ -n "$prev_menu" ]; then
+        # 履歴から現在のメニューを削除（最初のペアを削除）
+        if echo "$orig_history" | grep -q "${MENU_HISTORY_SEPARATOR}.*${MENU_HISTORY_SEPARATOR}"; then
+            # 最初のペアを削除
+            MENU_HISTORY=$(echo "$orig_history" | cut -d"${MENU_HISTORY_SEPARATOR}" -f3-)
+            debug_log "DEBUG" "Updated history after removing current menu: $MENU_HISTORY"
+        else
+            # 最後のペアなので履歴を空にする
+            MENU_HISTORY=""
+            debug_log "DEBUG" "Cleared history after removing last item"
+        fi
+        
         debug_log "DEBUG" "Navigating back to menu: $prev_menu"
-        debug_log "DEBUG" "Updated history: $MENU_HISTORY"
         sleep 1
         selector "$prev_menu" "" 1
         return $?
     else
-        # メニュー名を取得できなかった場合、メインメニューに戻る
-        debug_log "DEBUG" "Could not determine previous menu, returning to main menu"
+        # 前のメニューが存在しない場合はメインメニューに戻る
+        debug_log "DEBUG" "No previous menu found, returning to main menu"
         MENU_HISTORY=""
         sleep 1
-        return_menu
+        selector "${MAIN_MENU}" "" 1
         return $?
     fi
 }
+
 
 # 削除確認関数
 remove_exit() {
