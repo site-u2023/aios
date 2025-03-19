@@ -418,15 +418,22 @@ selector() {
         special_items_count=$((special_items_count+1))
         echo "MENU_BACK" >> "$menu_keys_file"
 
-        # 履歴が1階層のみの場合はreturn_menu、それ以外はgo_back_menuを使用
-        if echo "$MENU_HISTORY" | grep -q "$MENU_HISTORY_SEPARATOR.*$MENU_HISTORY_SEPARATOR"; then
-            # 複数階層があるため、一つ前のメニューに戻る
-            echo "go_back_menu" >> "$menu_commands_file"
-            debug_log "DEBUG" "Using go_back_menu for multi-level history"
-        else
-            # 一つの階層のみのため、メインメニューに戻る
+        # 履歴の階層数をカウント
+        local history_count=0
+        if [ -n "$MENU_HISTORY" ]; then
+            history_count=$(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c)
+            history_count=$((history_count / 2 + 1))  # ペア数に変換
+            debug_log "DEBUG" "Menu history levels: $history_count"
+        fi
+
+        # 履歴が1階層のみならメインメニューに直接戻る
+        if [ $history_count -le 1 ]; then
             echo "return_menu" >> "$menu_commands_file"
             debug_log "DEBUG" "Using return_menu for single-level history"
+        else
+            # 2階層以上あれば前のメニューに戻る
+            echo "go_back_menu" >> "$menu_commands_file"
+            debug_log "DEBUG" "Using go_back_menu for multi-level history ($history_count levels)"
         fi
 
         echo "white" >> "$menu_colors_file"
@@ -740,7 +747,7 @@ return_menu() {
     return $?
 }
 
-# 前のメニューに戻る関数
+# メニュー履歴から前のメニューを取得して移動する関数
 go_back_menu() {
     debug_log "DEBUG" "Going back to previous menu"
     
@@ -748,32 +755,48 @@ go_back_menu() {
     local orig_history="$MENU_HISTORY"
     debug_log "DEBUG" "Current menu history before going back: $orig_history"
     
-    # 履歴が複数レベルあるか確認
-    if echo "$orig_history" | grep -q "$MENU_HISTORY_SEPARATOR.*$MENU_HISTORY_SEPARATOR"; then
-        # 現在のメニューIDを取得（最初のコロンまで）
-        local current_menu=$(echo "$orig_history" | cut -d"$MENU_HISTORY_SEPARATOR" -f1)
-        
-        # 3つ目の要素が前のメニューID
-        local previous_menu=$(echo "$orig_history" | cut -d"$MENU_HISTORY_SEPARATOR" -f3)
-        
-        # 履歴を更新（最初のペアを削除）
-        MENU_HISTORY=$(echo "$orig_history" | cut -d"$MENU_HISTORY_SEPARATOR" -f3-)
-        debug_log "DEBUG" "Updated menu history: $MENU_HISTORY"
-        
-        # 前のメニューが有効か確認
-        if [ -n "$previous_menu" ] && grep -q "^\[$previous_menu\]" "${BASE_DIR}/menu.db"; then
-            debug_log "DEBUG" "Navigating to previous menu: $previous_menu"
-            sleep 1
-            selector "$previous_menu" "" 1
-            return $?
-        fi
+    # 履歴がない場合はメインメニューに戻る
+    if [ -z "$orig_history" ]; then
+        debug_log "DEBUG" "No menu history, returning to main menu"
+        MENU_HISTORY=""
+        return_menu
+        return $?
     fi
     
-    # 履歴が不十分、または前のメニューが無効な場合はメインメニューに戻る
-    debug_log "DEBUG" "No previous menu found, returning to main menu"
-    MENU_HISTORY=""
+    # メニュー履歴をカウント（セパレータの数から算出）
+    local separators=$(echo "$orig_history" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c)
+    local levels=$((separators / 2 + 1))
+    debug_log "DEBUG" "Menu history has $levels levels"
+    
+    # 履歴が1階層のみの場合はメインメニューに戻る
+    if [ $levels -le 1 ]; then
+        debug_log "DEBUG" "Only one level in history, returning to main menu"
+        MENU_HISTORY=""
+        return_menu
+        return $?
+    fi
+    
+    # メニューキーのみを抽出（表示テキストではなく）
+    local current_menu=$(echo "$orig_history" | cut -d"$MENU_HISTORY_SEPARATOR" -f1)
+    local prev_menu=$(echo "$orig_history" | cut -d"$MENU_HISTORY_SEPARATOR" -f3)
+    
+    # 前のメニューの存在を確認
+    if [ -z "$prev_menu" ] || ! grep -q "^\[$prev_menu\]" "${BASE_DIR}/menu.db"; then
+        # 前のメニューが存在しないか無効な場合
+        debug_log "DEBUG" "Previous menu '$prev_menu' is invalid or missing, returning to main menu"
+        MENU_HISTORY=""
+        return_menu
+        return $?
+    fi
+    
+    # 履歴を更新（最初のペアを削除）
+    MENU_HISTORY=$(echo "$orig_history" | cut -d"$MENU_HISTORY_SEPARATOR" -f3-)
+    debug_log "DEBUG" "Updated menu history: $MENU_HISTORY"
+    
+    # 前のメニューへ移動
+    debug_log "DEBUG" "Navigating to previous menu: $prev_menu"
     sleep 1
-    return_menu
+    selector "$prev_menu" "" 1
     return $?
 }
 
