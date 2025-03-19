@@ -468,15 +468,16 @@ selector() {
         # [9] RETURN - 戻る
         menu_count=$((menu_count+1))
         special_items_count=$((special_items_count+1))
-        echo "MENU_RETURN" >> "$menu_keys_file"
-        echo "return_menu" >> "$menu_commands_file"
+        echo "MENU_BACK" >> "$menu_keys_file"
+        echo "go_back_menu" >> "$menu_commands_file"
         echo "white" >> "$menu_colors_file"
         
-        local return_text=$(get_message "MENU_RETURN")
-        [ -z "$return_text" ] && return_text="戻る"
-        printf "%s\n" "$(color white "[9] $return_text")" >> "$menu_displays_file"
-        
-        debug_log "DEBUG" "Added special RETURN item [9] to sub-menu"
+        local back_text=$(get_message "MENU_BACK")
+        [ -z "$back_text" ] && back_text=$(get_message "CONFIG_BACK_DEFAULT")
+        [ -z "$back_text" ] && back_text="前に戻る"
+        printf "%s\n" "$(color white "[9] $back_text")" >> "$menu_displays_file"
+
+        debug_log "DEBUG" "Added special BACK item [9] to sub-menu"
         
         # [0] EXIT - 終了
         menu_count=$((menu_count+1))
