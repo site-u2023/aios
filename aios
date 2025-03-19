@@ -1141,6 +1141,7 @@ download_finalize() {
             printf "%s\n" "$(color green "${message}")"
         else
             printf "%s\n" "$(color blue "${message}")" 
+        fi
     fi
     
     # メッセージ表示後にファイル読み込み処理を実行
