@@ -12,7 +12,7 @@ US|CONFIG_DOWNLOAD_SUCCESS=Download completed:
 JP|CONFIG_DOWNLOAD_SUCCESS=ダウンロード完了:
 
 US|CONFIG_DOWNLOAD_UNNECESSARY=No update needed
-JP|CONSS=FIG_DOWNLOAD_UNNECESSARY=アップデート不要
+JP|CONFIG_DOWNLOAD_UNNECESSARY=アップデート不要
 
 # =======================
 # デバッグテスト
