@@ -71,10 +71,11 @@ push_menu_history() {
     
     debug_log "DEBUG" "Adding to menu history: $menu_name ($display_text)"
     
-    # 履歴が空の場合は直接設定、そうでなければ先頭に追加
+    # 履歴が空の場合は直接設定、そうでなければ追加
     if [ -z "$MENU_HISTORY" ]; then
         MENU_HISTORY="${menu_name}:${display_text}"
     else
+        # 既存の履歴の前に追加
         MENU_HISTORY="${menu_name}:${display_text}:${MENU_HISTORY}"
     fi
     
@@ -465,16 +466,15 @@ selector() {
         debug_log "DEBUG" "Added special REMOVE item [00] to main menu"
     else
         # サブメニューの場合は [9]と[0]を追加
-        # [9] RETURN - 戻る
+        # [9] BACK - 前に戻る
         menu_count=$((menu_count+1))
         special_items_count=$((special_items_count+1))
         echo "MENU_BACK" >> "$menu_keys_file"
         echo "go_back_menu" >> "$menu_commands_file"
         echo "white" >> "$menu_colors_file"
-        
+
         local back_text=$(get_message "MENU_BACK")
-        [ -z "$back_text" ] && back_text=$(get_message "CONFIG_BACK_DEFAULT")
-        [ -z "$back_text" ] && back_text="前に戻る"
+        [ -z "$back_text" ] && back_text="戻る"
         printf "%s\n" "$(color white "[9] $back_text")" >> "$menu_displays_file"
 
         debug_log "DEBUG" "Added special BACK item [9] to sub-menu"
@@ -693,20 +693,42 @@ selector() {
 }
 
 # メインメニューに戻る関数
-return_menu() {
-    # グローバル変数MAIN_MENUからメインメニュー名を取得
-    local main_menu="${MAIN_MENU}"
+go_back_menu() {
+    debug_log "DEBUG" "Going back to previous menu"
     
-    debug_log "DEBUG" "Returning to main menu: $main_menu"
+    # 現在のメニューを履歴から取得（トップエントリ）
+    local current_menu=$(echo "$MENU_HISTORY" | cut -d':' -f1)
+    debug_log "DEBUG" "Current menu before going back: $current_menu"
     
-    # 履歴をクリア（メインメニューに直接戻るため）
+    # 履歴から前のメニュー名と表示テキストを取得
+    # 現在の項目を削除して、次の項目を取得する
+    if echo "$MENU_HISTORY" | grep -q ':'; then
+        # コロンが含まれる場合、履歴が存在する
+        # 現在のメニュー名と表示テキストをスキップ
+        local history_temp=$(echo "$MENU_HISTORY" | cut -d':' -f3-)
+        
+        # 前のメニュー名を取得
+        local prev_menu=$(echo "$history_temp" | cut -d':' -f1)
+        debug_log "DEBUG" "Previous menu from history: $prev_menu"
+        
+        # 履歴を更新（現在の項目を削除）
+        MENU_HISTORY="$history_temp"
+        debug_log "DEBUG" "Updated history: $MENU_HISTORY"
+        
+        # 前のメニューが空でなければそのメニューを表示
+        if [ -n "$prev_menu" ]; then
+            debug_log "DEBUG" "Navigating back to menu: $prev_menu"
+            sleep 1
+            selector "$prev_menu" "" 1
+            return $?
+        fi
+    fi
+    
+    # 履歴が不十分な場合はメインメニューに戻る
+    debug_log "DEBUG" "No previous menu found or history corrupted, returning to main menu"
     MENU_HISTORY=""
-    debug_log "DEBUG" "Cleared menu history for main menu return"
-    
     sleep 1
-    
-    # メインメニューに戻る
-    selector "$main_menu" "" 0
+    return_menu
     return $?
 }
 
