@@ -205,53 +205,82 @@ print_help() {
     printf "  %s\n" "$(get_message "MSG_HELP_EXAMPLE4")"
 }
 
+# 拡張色関数 (太字/通常設定対応)
 color() {
+    local color_name="$1"
+    local weight="normal"  # デフォルトは通常の太さ
+    local text=""
+    
+    # 引数をチェックして太字指定があるか確認
+    if [ "$2" = "-b" ]; then
+        # -bフラグが指定された場合は太字に設定
+        weight="bold"
+        shift 2  # 色名と-bフラグを消費
+        text="$*"
+    elif [ "$2" = "-n" ]; then
+        # -nフラグが指定された場合は通常の太さに設定
+        weight="normal"
+        shift 2  # 色名と-nフラグを消費
+        text="$*"
+    else
+        # フラグなしの場合は通常の太さで2つ目の引数以降をテキストとして扱う
+        shift    # 色名を消費
+        text="$*"
+    fi
+    
+    # 色コードを取得して表示
     local color_code
-    color_code=$(color_code_map "$1")
-    shift
-    # %b でエスケープシーケンスを処理
-    printf "%b%s%b" "$color_code" "$*" "$(color_code_map "reset")"
+    color_code=$(color_code_map "$color_name" "$weight")
+    printf "%b%s%b" "$color_code" "$text" "$(color_code_map reset normal)"
 }
 
-# 拡張ANSI色コードを使用した30色対応関数 (POSIX互換)
+# カラーコードマッピング関数（太字/通常切替対応）
 color_code_map() {
     local color="$1"
+    local use_bold="$2"  # 太字フラグ: "bold" または "normal"
+    
+    # 太字プレフィックスの設定
+    local bold_prefix=""
+    if [ "$use_bold" = "bold" ]; then
+        bold_prefix="1;"
+    fi
+    
     case "$color" in
         # 基本色（9色）
-        "red") printf "\033[1;38;5;196m" ;;
-        "orange") printf "\033[1;38;5;208m" ;;
-        "yellow") printf "\033[1;38;5;226m" ;;
-        "green") printf "\033[1;38;5;46m" ;;
-        "cyan") printf "\033[1;38;5;51m" ;;
-        "blue") printf "\033[1;38;5;33m" ;;
-        "indigo") printf "\033[1;38;5;57m" ;;
-        "purple") printf "\033[1;38;5;129m" ;;
-        "magenta") printf "\033[1;38;5;201m" ;;
-        "white") printf "\033[1;37m" ;;  # 白色追加
+        "red") printf "\033[${bold_prefix}38;5;196m" ;;
+        "orange") printf "\033[${bold_prefix}38;5;208m" ;;
+        "yellow") printf "\033[${bold_prefix}38;5;226m" ;;
+        "green") printf "\033[${bold_prefix}38;5;46m" ;;
+        "cyan") printf "\033[${bold_prefix}38;5;51m" ;;
+        "blue") printf "\033[${bold_prefix}38;5;33m" ;;
+        "indigo") printf "\033[${bold_prefix}38;5;57m" ;;
+        "purple") printf "\033[${bold_prefix}38;5;129m" ;;
+        "magenta") printf "\033[${bold_prefix}38;5;201m" ;;
+        "white") printf "\033[${bold_prefix}37m" ;;  # 白色
         
         # 下線付き（9色+白）
-        "red_underline") printf "\033[4;38;5;196m" ;;
-        "orange_underline") printf "\033[4;38;5;208m" ;;
-        "yellow_underline") printf "\033[4;38;5;226m" ;;
-        "green_underline") printf "\033[4;38;5;46m" ;;
-        "cyan_underline") printf "\033[4;38;5;51m" ;;
-        "blue_underline") printf "\033[4;38;5;33m" ;;
-        "indigo_underline") printf "\033[4;38;5;57m" ;;
-        "purple_underline") printf "\033[4;38;5;129m" ;;
-        "magenta_underline") printf "\033[4;38;5;201m" ;;
-        "white_underline") printf "\033[4;37m" ;;  # 白色下線
+        "red_underline") printf "\033[4;${bold_prefix}38;5;196m" ;;
+        "orange_underline") printf "\033[4;${bold_prefix}38;5;208m" ;;
+        "yellow_underline") printf "\033[4;${bold_prefix}38;5;226m" ;;
+        "green_underline") printf "\033[4;${bold_prefix}38;5;46m" ;;
+        "cyan_underline") printf "\033[4;${bold_prefix}38;5;51m" ;;
+        "blue_underline") printf "\033[4;${bold_prefix}38;5;33m" ;;
+        "indigo_underline") printf "\033[4;${bold_prefix}38;5;57m" ;;
+        "purple_underline") printf "\033[4;${bold_prefix}38;5;129m" ;;
+        "magenta_underline") printf "\033[4;${bold_prefix}38;5;201m" ;;
+        "white_underline") printf "\033[4;${bold_prefix}37m" ;;  # 白色下線
         
         # 反転色（9色+白黒）
-        "red_white") printf "\033[7;38;5;196m" ;;
-        "orange_white") printf "\033[7;38;5;208m" ;;
-        "yellow_white") printf "\033[7;38;5;226m" ;;
-        "green_white") printf "\033[7;38;5;46m" ;;
-        "cyan_white") printf "\033[7;38;5;51m" ;;
-        "blue_white") printf "\033[7;38;5;33m" ;;
-        "indigo_white") printf "\033[7;38;5;57m" ;;
-        "purple_white") printf "\033[7;38;5;129m" ;;
-        "magenta_white") printf "\033[7;38;5;201m" ;;
-        "white_black") printf "\033[7;40m" ;;  # 白地に黒
+        "red_white") printf "\033[7;${bold_prefix}38;5;196m" ;;
+        "orange_white") printf "\033[7;${bold_prefix}38;5;208m" ;;
+        "yellow_white") printf "\033[7;${bold_prefix}38;5;226m" ;;
+        "green_white") printf "\033[7;${bold_prefix}38;5;46m" ;;
+        "cyan_white") printf "\033[7;${bold_prefix}38;5;51m" ;;
+        "blue_white") printf "\033[7;${bold_prefix}38;5;33m" ;;
+        "indigo_white") printf "\033[7;${bold_prefix}38;5;57m" ;;
+        "purple_white") printf "\033[7;${bold_prefix}38;5;129m" ;;
+        "magenta_white") printf "\033[7;${bold_prefix}38;5;201m" ;;
+        "white_black") printf "\033[7;${bold_prefix}40m" ;;  # 白地に黒
         
         # リセット
         "reset") printf "\033[0m" ;;
