@@ -507,15 +507,10 @@ selector() {
     local menu_title_template=$(get_message "MENU_TITLE")
     local menu_title=$(echo "$menu_title_template" | sed "s/{0}/$section_name/g")
 
-    printf "%s\n" "----------------------------------------------"
-    printf "%s\n" "$(color white "$menu_title")"
-    printf "%s\n" "----------------------------------------------"
-    printf "%s\n" 
+    #printf "%s\n" "$(color white "$menu_title")"
     
-    printf "%s\n" "----------------------------------------------"
     # パンくずリストを表示
     display_breadcrumbs
-    printf "%s\n" "----------------------------------------------"
     
     # メニュー項目を表示
     if [ -s "$menu_displays_file" ]; then
