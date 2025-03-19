@@ -18,6 +18,9 @@ JP|MSG_UNDER_TEST=👹 試験中
 # =======================
 
 # echo_message関数用メッセージ
+#US|MENU_TITLE=Menu: {0}
+#JP|MENU_TITLE=メニュー: {0}
+
 #US|CONFIG_HEADER=Main menu
 #JP|CONFIG_HEADER=メインメニュー
 
@@ -27,8 +30,37 @@ JP|MSG_UNDER_TEST=👹 試験中
 #US|CONFIG_SEPARATOR=---------------------------------------
 #JP|CONFIG_SEPARATOR=---------------------------------------
 
+# メニュータイトル
 US|MAIN_MENU_NAME=Main menu
 JP|MAIN_MENU_NAME=メインメニュー
+
+# メニュー項目
+US|MENU_INTERNET=Internet connection setup (Japan only: MAP-e, DS-LITE, PPPoE, etc.)
+JP|MENU_INTERNET=インターネットの接続設定 (日本専用: MAP-e, DS-LITE, PPPoE等)
+
+US|MENU_SYSTEM=Initial system setup (hostname, password, wifi, etc.)
+JP|MENU_SYSTEM=システムの初期設定 (ホスト名,パスワード,WiFi等)
+
+US|MENU_PACKAGES=Install packages (selective)
+JP|MENU_PACKAGES=パッケージのインストール (選択)
+
+US|MENU_ADBLOCKER=Install and Configure Ad Blocker and DNS Encryption
+JP|MENU_ADBLOCKER=広告ブロッカーとDNS暗号化のインストール及び設定
+
+US|MENU_ACCESSPOINT=Access point connection setup (Dumb/Bridge)
+JP|MENU_ACCESSPOINT=アクセスポイントの接続設定 (ダム/ブリッジモード)
+
+US|MENU_OTHERS=Other utilities: Button settings, IPERF3, SAMBA4
+JP|MENU_OTHERS=その他: ボタン設定, IPERF3, SAMBA4
+
+US|MENU_EXIT=Exit
+JP|MENU_EXIT=終了
+
+US|MENU_REMOVE=Remove script and related directories
+JP|MENU_REMOVE=スクリプトと関連ディレクトリの削除
+
+US|MENU_BACK=Back
+JP|MENU_BACK=戻る
 
 # selector関数用メッセージ
 # メインメニュー用（0, 00を含む）
@@ -67,38 +99,6 @@ JP|CONFIG_DOWNLOADING=実行中: {0}
 
 US|CONFIG_DOWNLOAD_FAILED=Failed to download: {0}
 JP|CONFIG_DOWNLOAD_FAILED=ダウンロードに失敗しました: {0}
-
-# メニュータイトル
-US|MENU_TITLE=Menu: {0}
-JP|MENU_TITLE=メニュー: {0}
-
-# メニュー項目
-US|MENU_INTERNET=Internet connection setup (Japan only: MAP-e, DS-LITE, PPPoE, etc.)
-JP|MENU_INTERNET=インターネットの接続設定 (日本専用: MAP-e, DS-LITE, PPPoE等)
-
-US|MENU_SYSTEM=Initial system setup (hostname, password, wifi, etc.)
-JP|MENU_SYSTEM=システムの初期設定 (ホスト名,パスワード,WiFi等)
-
-US|MENU_PACKAGES=Install packages (selective)
-JP|MENU_PACKAGES=パッケージのインストール (選択)
-
-US|MENU_ADBLOCKER=Install and Configure Ad Blocker and DNS Encryption
-JP|MENU_ADBLOCKER=広告ブロッカーとDNS暗号化のインストール及び設定
-
-US|MENU_ACCESSPOINT=Access point connection setup (Dumb/Bridge)
-JP|MENU_ACCESSPOINT=アクセスポイントの接続設定 (ダム/ブリッジモード)
-
-US|MENU_OTHERS=Other utilities: Button settings, IPERF3, SAMBA4
-JP|MENU_OTHERS=その他: ボタン設定, IPERF3, SAMBA4
-
-US|MENU_EXIT=Exit
-JP|MENU_EXIT=終了
-
-US|MENU_REMOVE=Remove script and related directories
-JP|MENU_REMOVE=スクリプトと関連ディレクトリの削除
-
-US|MENU_RETURN=Return
-JP|MENU_RETURN=戻る
 
 # =======================
 # aios
