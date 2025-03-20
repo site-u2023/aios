@@ -314,7 +314,7 @@ process_menu_items() {
             fi
             
             # 表示テキストを保存（[数字] 形式）
-            printf "%s\n" "$(color "$color_name" "[$menu_count] $display_text")" >> "$menu_displays_file" 2>/dev/null
+            printf "%s\n" "$(color "$color_name" "[${menu_count}]${display_text}")" >> "$menu_displays_file" 2>/dev/null
             
             debug_log "DEBUG" "Added menu item $menu_count: [$key] -> [$cmd] with color: $color_name"
         fi
@@ -377,20 +377,16 @@ add_special_menu_items() {
         # 履歴の階層数をカウント
         local history_count=0
         if [ -n "$MENU_HISTORY" ]; then
-            history_count=$(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c)
-            history_count=$((history_count / 2 + 1))  # ペア数に変換
+            if echo "$MENU_HISTORY" | grep -q "$MENU_HISTORY_SEPARATOR"; then
+                history_count=$(($(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c) + 1))
+            else
+                history_count=1
+            fi
             debug_log "DEBUG" "Menu history levels: $history_count"
         fi
-
-        # 履歴が1階層のみならメインメニューに直接戻る
-        if [ $history_count -le 1 ]; then
-            echo "return_menu" >> "$menu_commands_file"
-            debug_log "DEBUG" "Using return_menu for single-level history"
-        else
-            # 2階層以上あれば前のメニューに戻る
-            echo "go_back_menu" >> "$menu_commands_file"
-            debug_log "DEBUG" "Using go_back_menu for multi-level history ($history_count levels)"
-        fi
+        
+        echo "go_back_menu" >> "$menu_commands_file"
+        debug_log "DEBUG" "Using go_back_menu for navigation with $history_count history levels"
 
         echo "white" >> "$menu_colors_file"
 
@@ -772,8 +768,9 @@ get_previous_menu() {
   echo "$prev" | cut -d':' -f1
 }
 
+# 階層を正しく戻る関数（シンプル版）
 go_back_menu() {
-    debug_log "DEBUG" "Processing go_back_menu with simplified logic"
+    debug_log "DEBUG" "Processing go_back_menu with correct hierarchy navigation"
     
     # 履歴が空の場合はメインメニューへ
     if [ -z "$MENU_HISTORY" ]; then
@@ -788,6 +785,8 @@ go_back_menu() {
         section_count=$(($(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c) + 1))
     fi
     
+    debug_log "DEBUG" "Current menu history: $MENU_HISTORY with $section_count sections"
+    
     # 1階層のみの場合はメインメニューへ
     if [ $section_count -le 1 ]; then
         debug_log "DEBUG" "Only one section in history, returning to main menu"
@@ -796,13 +795,19 @@ go_back_menu() {
         return $?
     fi
     
-    # 1階層だけ戻る（履歴の2番目のセクションへ）
+    # 現在のメニューを取得
+    local current_menu=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f1)
+    
+    # 一つ前のメニューを取得
     local prev_menu=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f2)
+    
+    # 履歴から現在のメニューを削除
     local new_history=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f2-)
+    
+    debug_log "DEBUG" "Going back from $current_menu to $prev_menu"
     
     # 前のメニューを表示
     MENU_HISTORY="$new_history"
-    debug_log "DEBUG" "Going back one level to: $prev_menu"
     selector "$prev_menu" "" 1
     return $?
 }
