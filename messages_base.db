@@ -38,8 +38,8 @@ JP|MSG_UNDER_TEST=👹 試験中
 #JP|CONFIG_SEPARATOR=---------------------------------------
 
 # メニュータイトル
-US|MAIN_MENU_NAME=● Main menu
-JP|MAIN_MENU_NAME=● メインメニュー
+US|MAIN_MENU_NAME=Main menu
+JP|MAIN_MENU_NAME=メインメニュー
 
 # メニュー項目
 US|MENU_INTERNET=internet (Japan only)
