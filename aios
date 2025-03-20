@@ -373,28 +373,32 @@ get_message() {
     # メッセージを検索するための変数
     message=""
     
-    # DBファイルが存在する場合はそこから検索
-    if [ -z "$message" ] && [ -f "$db_file" ]; then
-        message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
-        
-        # 言語固有のメッセージが見つからない場合は英語をチェック
-        if [ -z "$message" ]; then
-            message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
-        fi
-    fi
-
-    # メモリ内メッセージから検索
+    # 1. メモリ内メッセージから検索（早い処理を優先）
     if [ -z "$MSG_MEMORY" ]; then
         into_memory_message
     fi
     
-    message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" | cut -d'=' -f2-)
-    
-    # 言語固有のメモリ内メッセージが見つからない場合、英語をチェック
-    if [ -z "$message" ]; then
-        message=$(echo "$MSG_MEMORY" | grep "^US|${key}=" | cut -d'=' -f2-)
+    if [ -n "$MSG_MEMORY" ]; then
+        # 言語固有のメモリ内メッセージを検索
+        message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+        
+        # 言語固有のメモリ内メッセージが見つからない場合、英語をチェック
+        if [ -z "$message" ]; then
+            message=$(echo "$MSG_MEMORY" | grep "^US|${key}=" 2>/dev/null | cut -d'=' -f2-)
+        fi
     fi
-
+    
+    # 2. メモリ内で見つからなかった場合にDBファイルから検索
+    if [ -z "$message" ] && [ -f "$db_file" ]; then
+        # 言語固有のDBメッセージを検索
+        message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        
+        # 言語固有のDBメッセージが見つからない場合、英語をチェック
+        if [ -z "$message" ]; then
+            message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        fi
+    fi
+    
     # それでも見つからない場合はデフォルトかキーを返す
     if [ -z "$message" ]; then
         debug_log "WARNING" "Message not found for key: ${key}"
