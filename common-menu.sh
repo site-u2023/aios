@@ -54,6 +54,15 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 
+# メニュー履歴を追跡するためのグローバル変数
+MENU_HISTORY=""
+CURRENT_MENU=""
+MENU_HISTORY_SEPARATOR=":"
+
+# 現在選択されているメニュー情報（グローバル変数）
+SELECTED_MENU_KEY=""
+SELECTED_MENU_COLOR=""
+
 # メインメニューのセクション名を定義
 unset MAIN_MENU
 MAIN_MENU="${MAIN_MENU:-MAIN_MENU_NAME}"
@@ -106,40 +115,18 @@ debug_breadcrumbs() {
 }
 
 display_breadcrumbs() {
-    debug_log "DEBUG" "Building breadcrumb navigation path with selected menu color"
+    debug_log "DEBUG" "Building breadcrumb navigation with selected menu color"
     
     # メインメニューの情報を取得
     local main_menu_key="MAIN_MENU_NAME"
     local main_menu_text=$(get_message "$main_menu_key")
     
-    # セレクタの色取得
-    local menu_keys_file="${CACHE_DIR}/menu_keys.tmp"
-    local menu_colors_file="${CACHE_DIR}/menu_colors.tmp"
-    local breadcrumb_color="white"
+    # パンくずの色を設定 - グローバル変数を使用
+    local breadcrumb_color="${SELECTED_MENU_COLOR:-white}"
     
-    # 現在選択されている色を取得（存在する場合）
-    if [ -n "$CURRENT_MENU" ] && [ -f "$menu_keys_file" ] && [ -f "$menu_colors_file" ]; then
-        # 現在のメニューキーに対応する行番号を見つける
-        local line_num=1
-        local found=0
-        
-        while IFS= read -r key_line || [ -n "$key_line" ]; do
-            if [ "$key_line" = "$CURRENT_MENU" ]; then
-                found=1
-                break
-            fi
-            line_num=$((line_num + 1))
-        done < "$menu_keys_file"
-        
-        # 対応する色を取得
-        if [ "$found" -eq 1 ]; then
-            local selected_color=$(sed -n "${line_num}p" "$menu_colors_file" 2>/dev/null)
-            [ -n "$selected_color" ] && breadcrumb_color="$selected_color"
-            debug_log "DEBUG" "Found matching color for current menu: $breadcrumb_color"
-        fi
-    fi
+    debug_log "DEBUG" "Using color for breadcrumb: $breadcrumb_color"
     
-    # パンくずの初期値を設定
+    # パンくずの初期値
     local breadcrumb="$(color $breadcrumb_color "$main_menu_text")"
     local separator=" > "
     
@@ -150,10 +137,8 @@ display_breadcrumbs() {
         return
     fi
     
-    # デバッグ情報を詳細に出力
-    debug_log "DEBUG" "Processing menu history data: $MENU_HISTORY"
-    
-    # 履歴データを逆順に処理
+    # 履歴データを逆順に処理（最新→古い順を古い→最新順に変換）
+    # MENU_HISTORYの形式: 最新:一つ前:二つ前...
     local reversed_sections=""
     
     # 履歴を配列なしで逆順に変換
@@ -164,16 +149,17 @@ display_breadcrumbs() {
     done
     unset IFS
     
-    debug_log "DEBUG" "Created reversed section list for breadcrumb display"
+    debug_log "DEBUG" "Reversed history for proper breadcrumb display"
     
     # 逆順にした履歴からパンくずを構築
     for section in $reversed_sections; do
-        # メッセージキーを翻訳して表示
         local display_text=$(get_message "$section")
+        # 表示テキストが空の場合はセクション名をそのまま使用
+        [ -z "$display_text" ] && display_text="$section"
+        
         breadcrumb="${breadcrumb}${separator}$(color $breadcrumb_color "$display_text")"
     done
     
-    # パンくずリストを出力
     printf "%s\n\n" "$breadcrumb"
 }
 
@@ -642,6 +628,10 @@ handle_user_selection() {
         handle_menu_error "invalid_selection" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
         return 1
     fi
+
+    # グローバル変数に選択された情報を保存
+    SELECTED_MENU_KEY="$selected_key"
+    SELECTED_MENU_COLOR="$selected_color"
     
     debug_log "DEBUG" "Selected key: $selected_key"
     debug_log "DEBUG" "Selected color: $selected_color"
