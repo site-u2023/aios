@@ -114,9 +114,9 @@ debug_breadcrumbs() {
     unset IFS
 }
 
-# パンくずリストの表示関数（改良版）
+# パンくずリストの表示関数（完全修正版）
 display_breadcrumbs() {
-    debug_log "DEBUG" "Building breadcrumb navigation from extended history format"
+    debug_log "DEBUG" "Building breadcrumb navigation with proper order and colors"
     
     # メインメニューの情報を取得
     local main_menu_key="MAIN_MENU_NAME"
@@ -138,65 +138,80 @@ display_breadcrumbs() {
         return
     fi
     
-    # 履歴データを処理し、重複を排除
-    local menu_items=""
-    local color_items=""
-    local i=0
-    local processed_menus=""
+    # 履歴形式: MENU_V&MIG:blue:MENU_INTERNET:magenta
+    # これを逆順に処理して正しい階層順にする
     
-    # 履歴項目を配列風のリストに変換
+    # セパレータで分割して配列風に扱う
+    local history_items=""
     IFS="$MENU_HISTORY_SEPARATOR"
     for item in $MENU_HISTORY; do
-        if [ $((i % 2)) -eq 0 ]; then
-            # 偶数インデックスはメニュー項目
-            # 重複チェック
-            if ! echo " $processed_menus " | grep -q " $item "; then
-                menu_items="$menu_items $item"
-                processed_menus="$processed_menus $item"
-            fi
-        else
-            # 奇数インデックスは色情報
-            # 対応するメニューが追加された場合のみ色も追加
-            if ! echo " $processed_menus " | grep -q " $(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f$((i))) "; then
-                color_items="$color_items $item"
-            fi
-        fi
-        i=$((i + 1))
+        history_items="$item $history_items"
     done
     unset IFS
     
-    debug_log "DEBUG" "Processed unique menu history: menus=[$menu_items], colors=[$color_items]"
+    # 逆順になった項目から、メニューと色のペアを再構築
+    debug_log "DEBUG" "Reversed history items: $history_items"
     
-    # メニュー項目から順にパンくずを構築
+    local menu_items=""
+    local color_items=""
+    local i=0
+    
+    # 空白区切りのリストから要素を取り出す
+    for item in $history_items; do
+        if [ $((i % 2)) -eq 0 ]; then
+            # 偶数インデックスは色（逆順なので）
+            color_items="$color_items $item"
+        else
+            # 奇数インデックスはメニュー（逆順なので）
+            menu_items="$menu_items $item"
+        fi
+        i=$((i + 1))
+    done
+    
+    debug_log "DEBUG" "Extracted and properly ordered: menus=[$menu_items], colors=[$color_items]"
+    
+    # メニューと色の数を確認
+    local menu_count=0
+    for menu in $menu_items; do
+        menu_count=$((menu_count + 1))
+    done
+    
+    local color_count=0
+    for color in $color_items; do
+        color_count=$((color_count + 1))
+    done
+    
+    debug_log "DEBUG" "Menu count: $menu_count, Color count: $color_count"
+    
+    # メニュー項目を順に処理してパンくずを構築
     i=0
-    for section in $menu_items; do
-        # メニュー表示テキストを取得
-        local display_text=$(get_message "$section")
-        # 表示テキストが空の場合はセクション名をそのまま使用
-        [ -z "$display_text" ] && display_text="$section"
+    for menu in $menu_items; do
+        # メニューキーからテキストを取得
+        local display_text=$(get_message "$menu")
+        [ -z "$display_text" ] && display_text="$menu"
         
         # 対応する色を取得
-        local section_color="white"  # デフォルト色
+        local menu_color="white"  # デフォルト色
         
-        # 色リストから対応する色を取得
+        # 色リストからi番目の色を取得
         local j=0
-        for color_val in $color_items; do
+        for color in $color_items; do
             if [ $j -eq $i ]; then
-                section_color="$color_val"
-                debug_log "DEBUG" "Using color $section_color for menu section $section"
+                menu_color="$color"
+                debug_log "DEBUG" "Using color $menu_color for menu item $menu"
                 break
             fi
             j=$((j + 1))
         done
         
-        # 色が見つからない場合は自動割り当て
-        if [ "$section_color" = "white" ] || [ -z "$section_color" ]; then
-            section_color=$(get_auto_color "$((i+1))" "3")
-            debug_log "DEBUG" "Auto-assigned color for menu level $i: $section_color"
+        # 色情報がない、またはデフォルト値の場合、自動割り当て
+        if [ -z "$menu_color" ] || [ "$menu_color" = "white" ]; then
+            menu_color=$(get_auto_color "$((i+1))" "$menu_count")
+            debug_log "DEBUG" "Auto-assigned color for menu level $i: $menu_color"
         fi
         
-        # パンくずリストに追加
-        breadcrumb="${breadcrumb}${separator}$(color $section_color "$display_text")"
+        # パンくずに追加
+        breadcrumb="${breadcrumb}${separator}$(color $menu_color "$display_text")"
         i=$((i + 1))
     done
     
@@ -704,11 +719,10 @@ selector() {
         if [ "$section_name" = "$MAIN_MENU" ]; then
             MENU_HISTORY=""
             debug_log "DEBUG" "Cleared menu history for main menu"
-        else
+        fi
             # セクション名を履歴に追加（色情報はhandle_user_selection内で追加）
             # ここでは色情報を追加しない - 二重登録防止のため
             debug_log "DEBUG" "Menu $section_name will be added to history when color is selected"
-        fi
     else
         debug_log "DEBUG" "Skipping history update due to skip_history flag"
     fi
@@ -796,10 +810,10 @@ selector() {
     return $selection_status
 }
 
-# メニュー履歴にエントリを追加する関数（改良版）
+# メニュー履歴にエントリを追加する関数（完全修正版）
 push_menu_history() {
     local menu_name="$1"    # メニューセクション名
-    local menu_color="$2"   # 関連付ける色（省略可）
+    local menu_color="$2"   # 関連付ける色
     
     # 色情報が空の場合はデフォルト値を設定
     [ -z "$menu_color" ] && menu_color="white"
@@ -809,16 +823,13 @@ push_menu_history() {
     # 最大深度を3に設定（メインメニュー含めると最大4階層）
     local max_history_depth=3
     
-    # 現在の履歴の先頭要素を確認（重複防止）
-    local current_top=""
+    # 重複チェック - 履歴の先頭が同じメニューなら追加しない
     if [ -n "$MENU_HISTORY" ]; then
-        current_top=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f1)
-    fi
-    
-    # 同じメニューの重複を防止
-    if [ "$current_top" = "$menu_name" ]; then
-        debug_log "DEBUG" "Menu $menu_name is already at top of history, not adding again"
-        return
+        local first_item=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f1)
+        if [ "$first_item" = "$menu_name" ]; then
+            debug_log "DEBUG" "Menu $menu_name already at top of history, skipping duplicate"
+            return
+        fi
     fi
     
     # 履歴の追加（セクション名と色情報のペア）
@@ -830,13 +841,11 @@ push_menu_history() {
         # 最大深度を超える場合は切り詰め（メニューと色のペアで1階層）
         local pair_count=1
         if echo "$MENU_HISTORY" | grep -q "$MENU_HISTORY_SEPARATOR"; then
-            # 区切り文字の数から項目数を計算（メニューと色でペアなので2で割る）
             local separator_count=$(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c)
             pair_count=$(( (separator_count + 1) / 2 ))
             
             if [ $pair_count -gt $max_history_depth ]; then
                 debug_log "DEBUG" "Truncating history to max depth: $max_history_depth"
-                # ペア単位で切り詰め（2項目で1ペア）
                 local items_to_keep=$((max_history_depth * 2 - 1))
                 MENU_HISTORY=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f1-"$items_to_keep")
             fi
