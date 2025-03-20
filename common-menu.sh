@@ -579,9 +579,7 @@ selector() {
     local skip_history="$3"        # 履歴に追加しない場合は1
     
     # セクション名が指定されていない場合はメインメニューを使用
-    if [ -z "$section_name" ]; then
-        section_name="${MAIN_MENU}"
-    fi
+    section_name="${section_name:-$MAIN_MENU}"
     
     debug_log "DEBUG" "Starting menu selector with section: $section_name"
     
