@@ -1386,7 +1386,7 @@ check_common() {
             print_information
             select_country "$lang_code"
             print_country
-            selector "openwrt-config" 
+            selector "$MAIN_MENU" 
             ;;
         full)
             download "dynamic-system-info.sh" "chmod" "load"
@@ -1406,7 +1406,7 @@ check_common() {
             print_information
             select_country "$lang_code"
             print_country
-            selector "openwrt-config" 
+            selector "$MAIN_MENU"
             ;;
         update)
             check_update "$ORIGINAL_ARGS"
