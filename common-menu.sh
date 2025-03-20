@@ -306,10 +306,27 @@ process_menu_items() {
             echo "$cmd" >> "$menu_commands_file"
             echo "$color_name" >> "$menu_colors_file"
             
-            # メニュー表示用のテキストを取得（翻訳対応）
-            local display_text=$(get_message "$key")
-            if [ -z "$display_text" ] || [ "$display_text" = "$key" ]; then
-                # メッセージが見つからない場合はキーをそのまま使用
+            # メッセージキーの変換処理（特殊文字対応版）
+            local current_lang="${lang_code:-JP}"
+            local display_text=""
+            
+            # メッセージファイルから直接検索（特殊文字対応）
+            debug_log "DEBUG" "Direct search for message key: $key"
+            
+            for msg_file in "${BASE_DIR}"/messages_*.db; do
+                if [ -f "$msg_file" ]; then
+                    # -Fオプションで特殊文字をリテラルとして扱う
+                    local msg_value=$(grep -F "$current_lang|$key=" "$msg_file" 2>/dev/null | cut -d'=' -f2-)
+                    if [ -n "$msg_value" ]; then
+                        display_text="$msg_value"
+                        debug_log "DEBUG" "Found message in file: $msg_file"
+                        break
+                    fi
+                fi
+            done
+            
+            # 変換が見つからない場合はキーをそのまま使用
+            if [ -z "$display_text" ]; then
                 display_text="$key"
                 debug_log "DEBUG" "No message found for key: $key, using key as display text"
             fi
