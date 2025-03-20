@@ -120,7 +120,7 @@ select_country() {
             
             debug_log "DEBUG" "Language selected via command argument: $input_lang"
             # ここで1回だけ成功メッセージを表示
-            printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
+            printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
             
             # 選択されたタイムゾーンのゾーン情報からゾーンを選択
             select_zone
@@ -431,7 +431,7 @@ detect_and_set_location() {
             normalize_language
             
             # 国選択完了メッセージを表示（ここで1回だけ）
-            printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
+            printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
             
             # タイムゾーン文字列の構築
             local timezone_str=""
@@ -453,7 +453,7 @@ detect_and_set_location() {
             }
             
             # ゾーン選択完了メッセージを表示（ここで1回だけ）
-            printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+            printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
             printf "\n"
             
             debug_log "DEBUG" "Auto-detected settings have been applied successfully"
@@ -627,7 +627,7 @@ select_zone() {
         
         # メッセージを表示（スキップフラグが設定されていない場合のみ）
         if [ "$skip_message" = "false" ]; then
-            printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+            printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
             printf "\n"
         fi
         
@@ -670,7 +670,7 @@ select_zone() {
             }
             
             # 成功メッセージを表示
-            printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+            printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
             printf "\n"
             return 0
             ;;
@@ -715,7 +715,7 @@ country_write() {
     # 選択された国と言語情報を抽出
     local selected_country=$(awk '{print $2, $3}' "$cache_country")
     debug_log "DEBUG" "Selected country: $selected_country"
-    
+
     # 選択された国の言語コードを取得（5列目）
     local selected_lang_code=$(awk '{print $5}' "$cache_country")
     debug_log "DEBUG" "Selected language code: $selected_lang_code"
@@ -734,7 +734,7 @@ country_write() {
     
     # 成功メッセージを表示（スキップフラグが設定されていない場合のみ）
     if [ "$skip_message" = "false" ]; then
-        printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
+        printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
     fi
     
     return 0
@@ -864,7 +864,7 @@ normalize_language() {
     ACTIVE_LANGUAGE="$selected_language"
     
     # 言語セットのメッセージを表示
-    printf "%s\n" "$(color green "$(get_message "MSG_LANGUAGE_SET")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SET")")"
     return 0
 }
 
