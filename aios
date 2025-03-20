@@ -337,7 +337,7 @@ into_memory_message() {
     # メッセージを文字列としてMSG_MEMORYに追加する
     MSG_MEMORY="
 US|CONFIG_DOWNLOAD_SUCCESS=Download completed:
-US|CONFIG_DOWNLOAD_UNNECESSARY=No update needed:
+US|CONFIG_DOWNLOAD_UNNECESSARY=No update needed:"
 
     debug_log "DEBUG" "Messages loaded into memory"
 }
