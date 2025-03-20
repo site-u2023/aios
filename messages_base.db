@@ -42,23 +42,23 @@ US|MAIN_MENU_NAME=● Main menu
 JP|MAIN_MENU_NAME=● メインメニュー
 
 # メニュー項目
-US|MENU_INTERNET=Japan internet connection setup (MAP-e, DS-LITE, PPPoE, etc.)
-JP|MENU_INTERNET=日本のインターネット接続設定 (MAP-e, DS-LITE, PPPoE等)
+US|MENU_INTERNET=internet (Japan only)
+JP|MENU_INTERNET=インターネット (日本専用)
 
-US|MENU_SYSTEM=Initial system setup (hostname, password, wifi, etc.)
-JP|MENU_SYSTEM=システム初期設定 (ホスト名,パスワード,WiFi等)
+US|MENU_SYSTEM=System
+JP|MENU_SYSTEM=システム
 
-US|MENU_PACKAGES=Install packages (selective)
-JP|MENU_PACKAGES=パッケージインストール (選択)
+US|MENU_PACKAGES=Packages
+JP|MENU_PACKAGES=パッケージ
 
-US|MENU_ADBLOCKER=Install and Configure Ad Blocker and DNS Encryption
-JP|MENU_ADBLOCKER=広告ブロッカー、DNS暗号化インストール及び設定
+US|MENU_ADBLOCKER=Ad Blocker, DNS Encryption
+JP|MENU_ADBLOCKER=広告ブロッカー、DNS暗号化
 
-US|MENU_ACCESSPOINT=Access point connection setup (Dumb/Bridge)
-JP|MENU_ACCESSPOINT=アクセスポイント接続設定 (ダム/ブリッジモード)
+US|MENU_ACCESSPOINT=Access point
+JP|MENU_ACCESSPOINT=アクセスポイント
 
-US|MENU_OTHERS=Other utilities: Button settings, IPERF3, SAMBA4
-JP|MENU_OTHERS=その他: ボタン設定, IPERF3, SAMBA4
+US|MENU_OTHERS=Other utilities (Button settings, IPERF3, SAMBA4)
+JP|MENU_OTHERS=その他 (ボタン設定, IPERF3, SAMBA4)
 
 US|MENU_EXIT=Exit
 JP|MENU_EXIT=終了
