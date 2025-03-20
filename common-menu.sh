@@ -108,7 +108,7 @@ debug_breadcrumbs() {
 display_breadcrumbs() {
     debug_log "DEBUG" "Building optimized breadcrumb navigation with section names only"
     
-    # デバッグ情報を出力（必要に応じて）
+    # デバッグ情報の出力
     [ "$DEBUG_MODE" = "true" ] && debug_breadcrumbs
     
     # メインメニューの情報を取得
@@ -126,15 +126,22 @@ display_breadcrumbs() {
         return
     fi
     
-    # 履歴を処理してパンくずを構築
-    # MENU_HISTORYの形式は「最新:前のメニュー:古いメニュー」
-    local sections=""
+    # 履歴データは逆順で処理する必要がある
+    # MENU_HISTORYの形式: 最新:一つ前:二つ前...
+    local reversed_sections=""
     
-    # 履歴をスペース区切りのリストに変換
-    sections=$(echo "$MENU_HISTORY" | tr "$MENU_HISTORY_SEPARATOR" ' ')
+    # 履歴を配列なしで逆順に変換
+    IFS="$MENU_HISTORY_SEPARATOR"
+    for section in $MENU_HISTORY; do
+        # 先頭に追加して逆順にする
+        reversed_sections="$section $reversed_sections"
+    done
+    unset IFS
     
-    # 各セクションを変換してパンくずを構築
-    for section in $sections; do
+    debug_log "DEBUG" "Reversed history sections for breadcrumb"
+    
+    # 逆順にした履歴からパンくずを構築
+    for section in $reversed_sections; do
         local display_text=$(get_message "$section")
         breadcrumb="${breadcrumb}${separator}$(color white "$display_text")"
     done
