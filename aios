@@ -387,13 +387,13 @@ get_message() {
     
     # 指定されたDBファイルが存在するか確認
     if [ ! -f "$db_file" ]; then
-        debug_log "ERROR" "Message DB file not found: ${db_file}"
+        debug_log "DEBUG" "Message DB file not found: ${db_file}"
         if [ -n "$default_msg" ]; then
             echo "$default_msg"
         else
             echo "$key"  # キーをそのまま返す
         fi
-        return 1
+        return 0
     fi
 
     # DBからメッセージを検索
