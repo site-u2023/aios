@@ -55,6 +55,7 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 
 # メインメニューのセクション名を定義
+unset MAIN_MENU
 MAIN_MENU="${MAIN_MENU:-MAIN_MENU_NAME}"
 
 # メニュー履歴を追跡するためのグローバル変数
