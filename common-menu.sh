@@ -92,48 +92,37 @@ pop_menu_history() {
 }
 
 display_breadcrumbs() {
-    debug_log "DEBUG" "Building breadcrumb navigation chain with correct order"
+    debug_log "DEBUG" "Building simplified breadcrumb navigation with section names only"
     
     # メインメニューの表示
-    local main_menu_section="$MAIN_MENU"
-    local breadcrumb="$(color white "$main_menu_section")"
+    local breadcrumb="$(color white "$MAIN_MENU")"
     local separator=" > "
     
-    # 履歴が空ならメインメニューのみ表示
+    # 履歴が空の場合はメインメニューのみ表示
     if [ -z "$MENU_HISTORY" ]; then
-        debug_log "DEBUG" "No menu history, showing main menu only"
         printf "%s\n\n" "$breadcrumb"
         return
     fi
     
-    # 履歴データから正しい順序でパンくずリストを構築
-    local history_items=""
-    local menu_items=""
+    # MENU_HISTORYから奇数位置（1,3,5...）の項目のみを抽出
+    # これらがセクション名に相当する
+    local sections=""
+    local i=0
     
-    # 履歴から順序立てて項目を抽出
-    # 構造: menu1:text1:menu2:text2:...
     IFS="$MENU_HISTORY_SEPARATOR"
     for item in $MENU_HISTORY; do
-        menu_items="$item $menu_items"
+        i=$((i + 1))
+        # 奇数番目の項目がセクション名
+        if [ $((i % 2)) -eq 1 ]; then
+            sections="$item $sections"
+        fi
     done
     unset IFS
     
-    # メニュー項目（奇数位置）のみを抽出・結合
-    local i=0
-    local ordered_items=""
-    for item in $menu_items; do
-        i=$((i + 1))
-        # 奇数番目の項目がメニュー名
-        if [ $((i % 2)) -eq 1 ]; then
-            ordered_items="$ordered_items $item"
-        fi
-    done
-    
-    # パンくずリストの構築（正しい順序で）
-    for item in $ordered_items; do
-        # 最初の項目はすでに表示済み（メインメニュー）なのでスキップ
-        if [ "$item" != "$MAIN_MENU" ]; then
-            breadcrumb="${breadcrumb}${separator}$(color white "$item")"
+    # セクション名を順に処理（最初のメインメニューはスキップ）
+    for section in $sections; do
+        if [ "$section" != "$MAIN_MENU" ]; then
+            breadcrumb="${breadcrumb}${separator}$(color white "$section")"
         fi
     done
     
