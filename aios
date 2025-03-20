@@ -332,31 +332,6 @@ color_posix_code_map() {
 
 # 🔵　メッセージ系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
-# 言語キャッシュの初期化
-initialize_language_cache() {
-    debug_log "DEBUG" "Initializing language settings from cache if available"
-    
-    # キャッシュから言語情報を読み込む
-    if [ -f "${CACHE_DIR}/message.ch" ] && [ -f "${CACHE_DIR}/message_db.ch" ]; then
-        local cached_lang=$(cat "${CACHE_DIR}/message.ch")
-        local cached_db=$(cat "${CACHE_DIR}/message_db.ch")
-        
-        debug_log "DEBUG" "Found cached language settings: lang=$cached_lang, db_file=$cached_db"
-        
-        # 環境変数にキャッシュされた言語設定を設定
-        ACTIVE_LANGUAGE="$cached_lang"
-        export ACTIVE_LANGUAGE
-        
-        # ダミーメッセージを取得してキャッシュを有効化
-        get_message "MSG_DUMMY" > /dev/null 2>&1
-        
-        return 0
-    fi
-    
-    debug_log "DEBUG" "No language cache found, will proceed with language selection"
-    return 1
-}
-
 # メッセージを取得する関数
 get_message() {
     local key="$1"
@@ -365,36 +340,7 @@ get_message() {
     local lang=""
     local db_file=""
     
-    # キャッシュからアクティブな言語とDBファイルを取得
-    if [ -f "${CACHE_DIR}/message.ch" ]; then
-        lang=$(cat "${CACHE_DIR}/message.ch")
-    else
-        if [ -n "$ACTIVE_LANGUAGE" ]; then
-            lang="$ACTIVE_LANGUAGE"
-            debug_log "DEBUG" "Using language from environment: $lang"
-        else
-            lang="US"  # デフォルト言語
-        fi
-    fi
-    
-    if [ -f "${CACHE_DIR}/message_db.ch" ]; then
-        db_file=$(cat "${CACHE_DIR}/message_db.ch")
-    else
-        db_file="${BASE_DIR}/messages_base.db"  # デフォルトDB
-    fi
-    
     debug_log "DEBUG" "get_message: key=${key}, language=${lang}, db_file=${db_file}, params=${params}"
-    
-    # 指定されたDBファイルが存在するか確認
-    if [ ! -f "$db_file" ]; then
-        debug_log "DEBUG" "Message DB file not found: ${db_file}"
-        if [ -n "$default_msg" ]; then
-            echo "$default_msg"
-        else
-            echo "$key"  # キーをそのまま返す
-        fi
-        return 0
-    fi
 
     # DBからメッセージを検索
     local message=""
@@ -1402,8 +1348,6 @@ check_common() {
 
     debug_log "DEBUG" "check_common: MODE=$MODE"
     debug_log "DEBUG" "check_common: mode=$mode"
-
-    initialize_language_cache
 
     # モードごとの処理
     case "$mode" in
