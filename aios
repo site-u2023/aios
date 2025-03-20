@@ -336,7 +336,7 @@ color_posix_code_map() {
 # メッセージをインメモリに設定する関数
 into_memory_message() {
     # 既存のメッセージ定義
-    MSG_MEMORY="${MSG_MEMORY}
+    MSG_MEMORY="${MSG_MEMORY}"
 
     US|CONFIG_DOWNLOAD_SUCCESS=Download completed:
     JP|CONFIG_DOWNLOAD_SUCCESS=ダウンロード完了:
