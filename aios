@@ -341,28 +341,24 @@ get_message() {
     local db_file="${db_file:-${BASE_DIR}/messages_base.db}" 
     local message=""
 
-    # キャッシュからアクティブな言語とDBファイルを取得
+    # メッセージDBがダウンロードされた後の言語設定処理
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang=$(cat "${CACHE_DIR}/message.ch")
-    else
-        if [ -n "$ACTIVE_LANGUAGE" ]; then
-            lang="$ACTIVE_LANGUAGE"
-            debug_log "DEBUG" "Using language from environment: $lang"
-        fi
+    elif [ -n "$ACTIVE_LANGUAGE" ]; then
+        lang="$ACTIVE_LANGUAGE"
     fi
     
-    if [ -f "${CACHE_DIR}/message_db.ch" ]; then
-        db_file=$(cat "${CACHE_DIR}/message_db.ch")
-    fi
-    
-    debug_log "DEBUG" "get_message: key=${key}, language=${lang}, db_file=${db_file}, params=${params}"
-    
-    # 1. インメモリのメッセージから検索
-    MSG_MEMORY="US|CONFIG_DOWNLOAD_SUCCESS=Download completed:"
-    #message=$(echo "$MSG_MEMORY" | grep "^US|${key}=" 2>/dev/null | cut -d'=' -f2-)
-    message=$(echo "$MSG_MEMORY" 2>/dev/null | cut -d'=' -f2-)
+    # ダウンロード初期段階では、ハードコードされた英語メッセージをチェック
+    case "$key" in
+        CONFIG_DOWNLOAD_SUCCESS)
+            message="Download completed:"
+            ;;
+        CONFIG_DOWNLOAD_UNNECESSARY)
+            message="No update needed:"
+            ;;
+    esac
 
-    # 2. インメモリで見つからなかった場合にDBファイルから検索
+    # メッセージが見つからなかった場合かつDBファイルが存在する場合は検索
     if [ -z "$message" ] && [ -f "$db_file" ]; then
         # 現在の言語でDBファイルを検索
         message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
@@ -381,13 +377,9 @@ get_message() {
     
     # パラメータ置換処理
     if [ -n "$params" ]; then
-        local var_name=""
-        local var_value=""
-    
-        # パラメータを処理
         var_name=$(echo "$params" | cut -d'=' -f1)
         var_value=$(echo "$params" | cut -d'=' -f2-)
-    
+        
         if [ -n "$var_name" ] && [ -n "$var_value" ]; then
             debug_log "DEBUG" "Replacing placeholder {$var_name} with value"
             var_value_esc=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
