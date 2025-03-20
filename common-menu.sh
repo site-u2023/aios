@@ -305,7 +305,7 @@ process_menu_items() {
             echo "$cmd" >> "$menu_commands_file"
             echo "$color_name" >> "$menu_colors_file"
             
-            # get_messageの呼び出し
+            # メニュー表示用のテキストを取得（翻訳対応）
             local display_text=$(get_message "$key")
             if [ -z "$display_text" ] || [ "$display_text" = "$key" ]; then
                 # メッセージが見つからない場合はキーをそのまま使用
@@ -313,8 +313,8 @@ process_menu_items() {
                 debug_log "DEBUG" "No message found for key: $key, using key as display text"
             fi
             
-            # 表示テキストを保存（[数字] 形式）
-            printf "%s\n" "$(color "$color_name" "[${menu_count}]${display_text}")" >> "$menu_displays_file" 2>/dev/null
+            # 表示テキストを保存（[数字] 形式） - 数字と表示の間に空白を入れる
+            printf "%s\n" "$(color "$color_name" "[${menu_count}] ${display_text}")" >> "$menu_displays_file" 2>/dev/null
             
             debug_log "DEBUG" "Added menu item $menu_count: [$key] -> [$cmd] with color: $color_name"
         fi
