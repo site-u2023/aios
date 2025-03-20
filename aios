@@ -343,11 +343,20 @@ US|CONFIG_DOWNLOAD_UNNECESSARY=No update needed:"
     debug_log "DEBUG" "Essential English messages loaded into memory"
 }
 
+# メッセージをインメモリに設定する関数
+into_memory_message() {
+    # 言語プレフィックス付きでメッセージを定義（USは必須）
+    MSG_MEMORY="
+US|CONFIG_DOWNLOAD_SUCCESS=Download completed:
+US|CONFIG_DOWNLOAD_UNNECESSARY=No update needed:"
+
+    debug_log "DEBUG" "Essential messages loaded into memory"
+}
+
 # メッセージを取得する関数
 get_message() {
     local key="$1"
     local params="$2"  # パラメータ文字列
-    local default_msg=""
     local lang="${lang:-US}" 
     local db_file="${db_file:-${BASE_DIR}/messages_base.db}" 
     local message=""
@@ -368,14 +377,16 @@ get_message() {
     
     debug_log "DEBUG" "get_message: key=${key}, language=${lang}, db_file=${db_file}, params=${params}"
     
-    # 1. インメモリの英語メッセージから検索
+    # 1. インメモリのメッセージから検索（US固定）
+    into_memory_message
     if [ -n "$MSG_MEMORY" ]; then
-        into_memory_message
+        # USプレフィックス付きで検索（初期状態では英語のみ）
         message=$(echo "$MSG_MEMORY" | grep "^US|${key}=" 2>/dev/null | cut -d'=' -f2-)
     fi
-
+    
     # 2. インメモリで見つからなかった場合にDBファイルから検索
     if [ -z "$message" ] && [ -f "$db_file" ]; then
+        # 現在の言語でDBファイルを検索
         message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
         
         # 言語固有のメッセージが見つからない場合、英語をチェック
