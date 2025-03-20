@@ -110,34 +110,16 @@ display_breadcrumbs() {
         return
     fi
     
-    # MENU_HISTORYの構造は「最新:前:さらに前...」
-    local menu_keys=""
-    local i=0
+    # 履歴をデバッグ出力
+    debug_log "DEBUG" "Processing menu history: $MENU_HISTORY"
     
-    # 履歴を分解してリストに変換
-    IFS="$MENU_HISTORY_SEPARATOR"
-    for item in $MENU_HISTORY; do
-        # 逆順に変換不要（すでに最新が先頭）
-        if [ $((i % 2)) -eq 0 ]; then
-            # メニューキーをスペース区切りのリストに追加
-            menu_keys="$menu_keys $item"
-        fi
-        i=$((i + 1))
-    done
-    unset IFS
+    # 履歴からメニュー項目を抽出（コロン区切り）
+    local menu_sections
+    menu_sections=$(echo "$MENU_HISTORY" | tr "$MENU_HISTORY_SEPARATOR" ' ')
     
-    # 正しい順序にするために逆順にする（最後のものを先頭に）
-    local reversed_keys=""
-    for key in $menu_keys; do
-        reversed_keys="$key $reversed_keys"
-    done
-    
-    # 各メニューキーを翻訳してパンくずに追加
-    for menu_key in $reversed_keys; do
-        # get_message関数を使用して翻訳
-        local display_text=$(get_message "$menu_key")
-        
-        # パンくずリストに追加
+    # パンくずリストを構築
+    for section in $menu_sections; do
+        local display_text=$(get_message "$section")
         breadcrumb="${breadcrumb}${separator}$(color white "$display_text")"
     done
     
