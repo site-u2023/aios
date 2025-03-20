@@ -333,6 +333,17 @@ color_posix_code_map() {
 
 # 🔵　メッセージ系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
+into_memory_message() {
+    # メッセージを文字列としてMSG_MEMORYに追加する
+    MSG_MEMORY="
+US|CONFIG_DOWNLOAD_SUCCESS=Download completed:
+JP|CONFIG_DOWNLOAD_SUCCESS=ダウンロード完了:
+US|CONFIG_DOWNLOAD_UNNECESSARY=No update needed:
+JP|CONFIG_DOWNLOAD_UNNECESSARY=アップデート不要:"
+
+    debug_log "DEBUG" "Messages loaded into memory"
+}
+
 # メッセージを取得する関数
 get_message() {
     local key="$1"
@@ -348,15 +359,16 @@ get_message() {
         lang="$ACTIVE_LANGUAGE"
     fi
     
-    # ダウンロード初期段階では、ハードコードされた英語メッセージをチェック
-    case "$key" in
-        CONFIG_DOWNLOAD_SUCCESS)
-            message="Download completed:"
-            ;;
-        CONFIG_DOWNLOAD_UNNECESSARY)
-            message="No update needed:"
-            ;;
-    esac
+    # インメモリメッセージから検索
+    if [ -n "$MSG_MEMORY" ]; then
+        # 言語固有のメモリ内メッセージを検索
+        message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+        
+        # 言語固有のメモリ内メッセージが見つからない場合、英語をチェック
+        if [ -z "$message" ] && [ "$lang" != "US" ]; then
+            message=$(echo "$MSG_MEMORY" | grep "^US|${key}=" 2>/dev/null | cut -d'=' -f2-)
+        fi
+    fi
 
     # メッセージが見つからなかった場合かつDBファイルが存在する場合は検索
     if [ -z "$message" ] && [ -f "$db_file" ]; then
