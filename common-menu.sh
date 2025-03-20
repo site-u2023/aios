@@ -92,7 +92,7 @@ pop_menu_history() {
 }
 
 display_breadcrumbs() {
-    debug_log "DEBUG" "Building simplified breadcrumb navigation chain"
+    debug_log "DEBUG" "Building optimized breadcrumb navigation with section names only"
     
     # メインメニューの表示
     local breadcrumb="$(color white "$MAIN_MENU")"
@@ -115,7 +115,6 @@ display_breadcrumbs() {
     
     # パンくずリストを構築
     for section in $sections; do
-        # メインメニューは既に表示済みなのでスキップ
         if [ "$section" != "$MAIN_MENU" ]; then
             breadcrumb="${breadcrumb}${separator}$(color white "$section")"
         fi
@@ -580,7 +579,7 @@ handle_user_selection() {
 # メインのセレクター関数（リファクタリング版）
 selector() {
     local section_name="$1"        # 表示するセクション名
-    local parent_display_text="$2" # 親メニューの表示テキスト（パンくず用）
+    local parent_display_text="$2" # 未使用（後方互換性のため残す）
     local skip_history="$3"        # 履歴に追加しない場合は1
     
     # セクション名が指定されていない場合はメインメニューを使用
@@ -600,10 +599,8 @@ selector() {
             MENU_HISTORY=""
             debug_log "DEBUG" "Cleared menu history for main menu"
         else
-            # 親メニューの表示テキストが指定されている場合のみ履歴に追加
-            if [ -n "$parent_display_text" ]; then
-                push_menu_history "$section_name" "$parent_display_text"
-            fi
+            # セクション名のみを履歴に追加
+            push_menu_history "$section_name"
         fi
     fi
     
@@ -692,16 +689,15 @@ selector() {
 
 push_menu_history() {
     local menu_name="$1"    # メニューセクション名
-    # 表示テキストは不要なので引数から削除
     
-    debug_log "DEBUG" "Adding section to menu history: $menu_name"
+    debug_log "DEBUG" "Adding section name to menu history: $menu_name"
     
-    # メニュー名がINIヘッダーとして存在するか確認
+    # メニュー名の存在確認
     if ! grep -q "^\[$menu_name\]" "${BASE_DIR}/menu.db"; then
         debug_log "DEBUG" "Warning: Menu section [$menu_name] not found in menu.db"
     fi
     
-    # 履歴の最大深度を設定（安全対策）
+    # 履歴の最大深度（安全対策）
     local max_history_depth=10
     local current_depth=0
     
@@ -712,15 +708,13 @@ push_menu_history() {
     
     # 履歴の追加（セクション名のみ）
     if [ -z "$MENU_HISTORY" ]; then
-        # 履歴が空の場合は直接設定
         MENU_HISTORY="${menu_name}"
     else
-        # 既存の履歴の前に追加
         MENU_HISTORY="${menu_name}${MENU_HISTORY_SEPARATOR}${MENU_HISTORY}"
         
-        # 最大深度を超える場合は古い履歴を切り詰める
+        # 最大深度を超える場合は切り捨て
         if [ "$current_depth" -ge "$max_history_depth" ]; then
-            debug_log "DEBUG" "History depth exceeded maximum ($max_history_depth), truncating oldest entries"
+            debug_log "DEBUG" "History depth exceeded maximum ($max_history_depth), truncating"
             local items_to_keep=$max_history_depth
             MENU_HISTORY=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f1-"$items_to_keep")
         fi
@@ -785,37 +779,51 @@ get_previous_menu() {
 }
 
 go_back_menu() {
-  debug_log "DEBUG" "Processing go_back_menu function with simplified approach"
-  
-  # 履歴が空の場合
-  if [ -z "$MENU_HISTORY" ]; then
+    debug_log "DEBUG" "Processing go_back_menu with optimized approach"
+    
+    # 履歴が空の場合はメインメニューへ
+    if [ -z "$MENU_HISTORY" ]; then
+        debug_log "DEBUG" "History is empty, returning to main menu"
+        return_menu
+        return $?
+    fi
+    
+    # 履歴の区切り記号をカウント
+    local sep_count=$(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c)
+    
+    # 履歴が1階層分しかない場合はメインメニューへ
+    if [ "$sep_count" -eq 0 ]; then
+        debug_log "DEBUG" "Only one level in history, returning to main menu"
+        MENU_HISTORY=""
+        return_menu
+        return $?
+    fi
+    
+    # 現在のセクション名を削除して前のセクションを取得
+    local prev_menu=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f2)
+    local new_history=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f2-)
+    
+    debug_log "DEBUG" "Previous menu section: $prev_menu"
+    debug_log "DEBUG" "New history: $new_history"
+    
+    # セクション名の有効性を確認
+    if [ -n "$prev_menu" ] && grep -q "^\[$prev_menu\]" "${BASE_DIR}/menu.db"; then
+        # 履歴を更新
+        MENU_HISTORY="$new_history"
+        debug_log "DEBUG" "Valid previous menu found, navigating back"
+        
+        # 前のメニューへ移動
+        selector "$prev_menu" "" 1
+        return $?
+    fi
+    
+    # 有効な前のメニューが見つからない場合はメインメニューへ
+    debug_log "DEBUG" "No valid previous menu found, returning to main menu"
+    MENU_HISTORY=""
     return_menu
     return $?
-  fi
-  
-  # 一つ前のメニューを効率的に取得
-  local prev_menu=""
-  local new_history=""
-  
-  # 単一のセッションで処理
-  eval $(echo "$MENU_HISTORY" | awk -F"$MENU_HISTORY_SEPARATOR" '{
-    if (NF > 2) {
-      print "prev_menu=\"" $3 "\"; new_history=\"" substr($0, index($0, $3)) "\"" 
-    } else {
-      print "prev_menu=\"\"; new_history=\"\""
-    }
-  }')
-  
-  if [ -n "$prev_menu" ] && grep -q "^\[$prev_menu\]" "${BASE_DIR}/menu.db"; then
-    MENU_HISTORY="$new_history"
-    selector "$prev_menu" "" 1
-    return $?
-  fi
-  
-  # 有効なメニューが見つからない場合
-  return_menu
-  return $?
 }
+
 # 削除確認関数
 remove_exit() {
     debug_log "DEBUG" "Starting remove_exit confirmation process"
