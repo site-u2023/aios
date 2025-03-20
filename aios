@@ -1111,12 +1111,12 @@ download_finalize() {
 
     # メッセージ出力を先に行う
     if [ "$hidden_mode" = "true" ]; then
-        debug_log "DEBUG" "$(color green "Quiet mode ${message}")"
+        debug_log "DEBUG" "$(color white "Quiet mode ${message}")"
     else
         if [ "$status_type" = "success" ]; then
-            printf "%s\n" "$(color green "${message}")"
+            printf "%s\n" "$(color white "${message}")"
         else
-            printf "%s\n" "$(color blue "${message}")" 
+            printf "%s\n" "$(color white "${message}")" 
         fi
     fi
     
