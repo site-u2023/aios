@@ -154,18 +154,30 @@ display_breadcrumbs() {
     
     debug_log "DEBUG" "Reversed history for proper breadcrumb display"
     
-    # 色情報を読み取り（存在する場合）
-    local colors_array=""
+    # 色情報を読み取り、順番を保持
+    local colors_count=0
+    local color_items=""
+    
     if [ -f "$breadcrumb_colors_file" ]; then
-        # 色履歴の内容を逆順に変換（最新が先頭になるように）
+        # 色履歴の行数をカウント
+        colors_count=$(wc -l < "$breadcrumb_colors_file")
+        debug_log "DEBUG" "Found $colors_count colors in breadcrumb history"
+        
+        # 順番を逆にせずそのままの順序で読み込む
+        # breadcrumb_colors.tmpの内容は新→古の順なので
+        # 古い階層（先に表示）から新しい階層（後に表示）の色を取得
         while IFS= read -r color_item || [ -n "$color_item" ]; do
-            colors_array="$color_item $colors_array"
+            color_items="$color_items $color_item"
         done < "$breadcrumb_colors_file"
-        debug_log "DEBUG" "Loaded colors from history file for breadcrumb display"
+        debug_log "DEBUG" "Loaded colors in original order for breadcrumb display"
     fi
     
     # 逆順にした履歴からパンくずを構築
     local i=0
+    local max_sections=$(echo "$reversed_sections" | wc -w)
+    
+    debug_log "DEBUG" "Building breadcrumb with $max_sections sections"
+    
     for section in $reversed_sections; do
         local display_text=$(get_message "$section")
         # 表示テキストが空の場合はセクション名をそのまま使用
@@ -174,16 +186,22 @@ display_breadcrumbs() {
         # 対応する色を取得
         local section_color="white"  # デフォルト色
         
-        # 色配列から対応する色を検索
-        local j=0
-        for color_val in $colors_array; do
-            if [ $j -eq $i ]; then
-                section_color="$color_val"
-                debug_log "DEBUG" "Using color $section_color for menu level $i"
-                break
+        # 色を逆順から取得（最新の色が最初の要素なので、最後から取得）
+        if [ $colors_count -gt 0 ]; then
+            # 表示順序に合わせて色の位置を計算
+            local color_pos=$((colors_count - i))
+            
+            # 色情報が存在する場合のみ取得
+            if [ $color_pos -gt 0 ]; then
+                section_color=$(sed -n "${color_pos}p" "$breadcrumb_colors_file" 2>/dev/null)
+                [ -z "$section_color" ] && section_color="white"
+                debug_log "DEBUG" "Using color $section_color for menu level $i (position $color_pos)"
             fi
-            j=$((j + 1))
-        done
+        else
+            # 色情報がない場合は自動割り当て
+            section_color=$(get_auto_color "$((i+1))" "3")
+            debug_log "DEBUG" "Auto-assigned color for menu level $i: $section_color"
+        fi
         
         # パンくずリストに追加
         breadcrumb="${breadcrumb}${separator}$(color $section_color "$display_text")"
