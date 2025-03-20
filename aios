@@ -335,14 +335,13 @@ color_posix_code_map() {
 
 # メッセージをインメモリに設定する関数
 into_memory_message() {
-    # 既存のメッセージ定義
-    MSG_MEMORY="${MSG_MEMORY:-US}"
+    # メッセージを文字列としてMSG_MEMORYに追加する
+    MSG_MEMORY="
+US|CONFIG_DOWNLOAD_SUCCESS=Download completed:
+JP|CONFIG_DOWNLOAD_SUCCESS=ダウンロード完了:
+US|CONFIG_DOWNLOAD_UNNECESSARY=No update needed:
+JP|CONFIG_DOWNLOAD_UNNECESSARY=アップデート不要:"
 
-    US|CONFIG_DOWNLOAD_SUCCESS=Download completed:
-    JP|CONFIG_DOWNLOAD_SUCCESS=ダウンロード完了:
-    US|CONFIG_DOWNLOAD_UNNECESSARY=No update needed:
-    JP|CONFIG_DOWNLOAD_UNNECESSARY=アップデート不要:
-    
     debug_log "DEBUG" "Messages loaded into memory"
 }
 
@@ -353,7 +352,7 @@ get_message() {
     local default_msg=""
     local lang="${lang:-US}" 
     local db_file="${db_file:-${BASE_DIR}/messages_base.db}" 
-    local message="${message:-$key}"
+    local message=""
 
     # キャッシュからアクティブな言語とDBファイルを取得
     if [ -f "${CACHE_DIR}/message.ch" ]; then
@@ -371,31 +370,29 @@ get_message() {
     
     debug_log "DEBUG" "get_message: key=${key}, language=${lang}, db_file=${db_file}, params=${params}"
     
-    # 指定されたDBファイルが存在するか確認
-    if [ ! -f "$db_file" ]; then
-        debug_log "DEBUG" "Message DB file not found: ${db_file}"
-        if [ -n "$default_msg" ]; then
-            echo "$default_msg"
-        else
-            echo "$key"  # キーをそのまま返す
-        fi
-        return 0
-    fi
-
-    # DBからメッセージを検索
-    message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+    # メッセージを検索するための変数
+    message=""
     
-    # 言語固有のメッセージが見つからない場合
-    if [ -z "$message" ]; then
-        # 英語メッセージを検索
-        message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+    # DBファイルが存在する場合はそこから検索
+    if [ -z "$message" ] && [ -f "$db_file" ]; then
+        message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        
+        # 言語固有のメッセージが見つからない場合は英語をチェック
+        if [ -z "$message" ]; then
+            message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        fi
     fi
 
-    # 2. DBファイルでメッセージが見つからなかった場合、インメモリから検索
-    into_memory_message
-
-    if [ -z "$message" ] && [ -n "$MSG_MEMORY" ]; then
-        message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" | cut -d'=' -f2-)
+    # メモリ内メッセージから検索
+    if [ -z "$MSG_MEMORY" ]; then
+        into_memory_message
+    fi
+    
+    message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" | cut -d'=' -f2-)
+    
+    # 言語固有のメモリ内メッセージが見つからない場合、英語をチェック
+    if [ -z "$message" ]; then
+        message=$(echo "$MSG_MEMORY" | grep "^US|${key}=" | cut -d'=' -f2-)
     fi
 
     # それでも見つからない場合はデフォルトかキーを返す
@@ -403,12 +400,13 @@ get_message() {
         debug_log "WARNING" "Message not found for key: ${key}"
         if [ -n "$default_msg" ]; then
             message="$default_msg"
+        else
+            message="$key"  # キーをそのまま返す
         fi
     fi
     
-    # パラメータ置換処理 - 修正版
+    # パラメータ置換処理
     if [ -n "$params" ]; then
-        local temp_msg="$message"
         local var_name=""
         local var_value=""
     
@@ -419,8 +417,7 @@ get_message() {
         if [ -n "$var_name" ] && [ -n "$var_value" ]; then
             debug_log "DEBUG" "Replacing placeholder {$var_name} with value"
             var_value_esc=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
-            temp_msg=$(echo "$temp_msg" | sed "s|{$var_name}|$var_value_esc|g")
-            message="$temp_msg"
+            message=$(echo "$message" | sed "s|{$var_name}|$var_value_esc|g")
         fi
     fi
     
