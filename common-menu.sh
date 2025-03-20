@@ -657,7 +657,7 @@ handle_user_selection() {
     local download_msg=$(get_message "CONFIG_DOWNLOADING" "0=$selected_text")
     
     printf "\n%s\n\n" "$(color "$selected_color" "$download_msg")"
-    sleep 1
+    #sleep 1
     
     # コマンド実行 - セレクターコマンドの特別処理
     if echo "$selected_cmd" | grep -q "^selector "; then
