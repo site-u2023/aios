@@ -92,8 +92,24 @@ pop_menu_history() {
     fi
 }
 
+debug_breadcrumbs() {
+    local history="$MENU_HISTORY"
+    debug_log "DEBUG" "Raw history data: $history"
+    
+    local i=0
+    IFS="$MENU_HISTORY_SEPARATOR"
+    for item in $history; do
+        debug_log "DEBUG" "History item $i: $item"
+        i=$((i + 1))
+    done
+    unset IFS
+}
+
 display_breadcrumbs() {
     debug_log "DEBUG" "Building optimized breadcrumb navigation with section names only"
+    
+    # デバッグ情報を出力（必要に応じて）
+    [ "$DEBUG_MODE" = "true" ] && debug_breadcrumbs
     
     # メインメニューの情報を取得
     local main_menu_key="MAIN_MENU_NAME"
@@ -110,15 +126,15 @@ display_breadcrumbs() {
         return
     fi
     
-    # 履歴をデバッグ出力
-    debug_log "DEBUG" "Processing menu history: $MENU_HISTORY"
+    # 履歴を処理してパンくずを構築
+    # MENU_HISTORYの形式は「最新:前のメニュー:古いメニュー」
+    local sections=""
     
-    # 履歴からメニュー項目を抽出（コロン区切り）
-    local menu_sections
-    menu_sections=$(echo "$MENU_HISTORY" | tr "$MENU_HISTORY_SEPARATOR" ' ')
+    # 履歴をスペース区切りのリストに変換
+    sections=$(echo "$MENU_HISTORY" | tr "$MENU_HISTORY_SEPARATOR" ' ')
     
-    # パンくずリストを構築
-    for section in $menu_sections; do
+    # 各セクションを変換してパンくずを構築
+    for section in $sections; do
         local display_text=$(get_message "$section")
         breadcrumb="${breadcrumb}${separator}$(color white "$display_text")"
     done
