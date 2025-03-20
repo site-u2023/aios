@@ -114,21 +114,25 @@ debug_breadcrumbs() {
     unset IFS
 }
 
+# パンくずリストの表示関数
 display_breadcrumbs() {
-    debug_log "DEBUG" "Building breadcrumb navigation with selected menu color"
+    debug_log "DEBUG" "Building breadcrumb navigation with color per hierarchy level"
     
     # メインメニューの情報を取得
     local main_menu_key="MAIN_MENU_NAME"
     local main_menu_text=$(get_message "$main_menu_key")
     
-    # パンくずの色を設定 - グローバル変数を使用
-    local breadcrumb_color="${SELECTED_MENU_COLOR:-white}"
+    # パンくずの区切り文字
+    local separator=" > "
     
-    debug_log "DEBUG" "Using color for breadcrumb: $breadcrumb_color"
+    # パンくずリストの色ファイルパス
+    local breadcrumb_colors_file="${CACHE_DIR}/breadcrumb_colors.tmp"
+    
+    # メインメニューのデフォルト色
+    local main_color="white"
     
     # パンくずの初期値
-    local breadcrumb="$(color $breadcrumb_color "$main_menu_text")"
-    local separator=" > "
+    local breadcrumb="$(color $main_color "$main_menu_text")"
     
     # 履歴が空ならメインメニューのみ表示
     if [ -z "$MENU_HISTORY" ]; then
@@ -138,7 +142,6 @@ display_breadcrumbs() {
     fi
     
     # 履歴データを逆順に処理（最新→古い順を古い→最新順に変換）
-    # MENU_HISTORYの形式: 最新:一つ前:二つ前...
     local reversed_sections=""
     
     # 履歴を配列なしで逆順に変換
@@ -151,59 +154,43 @@ display_breadcrumbs() {
     
     debug_log "DEBUG" "Reversed history for proper breadcrumb display"
     
+    # 色情報を読み取り（存在する場合）
+    local colors_array=""
+    if [ -f "$breadcrumb_colors_file" ]; then
+        # 色履歴の内容を逆順に変換（最新が先頭になるように）
+        while IFS= read -r color_item || [ -n "$color_item" ]; do
+            colors_array="$color_item $colors_array"
+        done < "$breadcrumb_colors_file"
+        debug_log "DEBUG" "Loaded colors from history file for breadcrumb display"
+    fi
+    
     # 逆順にした履歴からパンくずを構築
+    local i=0
     for section in $reversed_sections; do
         local display_text=$(get_message "$section")
         # 表示テキストが空の場合はセクション名をそのまま使用
         [ -z "$display_text" ] && display_text="$section"
         
-        breadcrumb="${breadcrumb}${separator}$(color $breadcrumb_color "$display_text")"
+        # 対応する色を取得
+        local section_color="white"  # デフォルト色
+        
+        # 色配列から対応する色を検索
+        local j=0
+        for color_val in $colors_array; do
+            if [ $j -eq $i ]; then
+                section_color="$color_val"
+                debug_log "DEBUG" "Using color $section_color for menu level $i"
+                break
+            fi
+            j=$((j + 1))
+        done
+        
+        # パンくずリストに追加
+        breadcrumb="${breadcrumb}${separator}$(color $section_color "$display_text")"
+        i=$((i + 1))
     done
     
-    printf "%s\n\n" "$breadcrumb"
-}
-
-OK_display_breadcrumbs() {
-    debug_log "DEBUG" "Building optimized breadcrumb navigation with section names only"
-    
-    # デバッグ情報の出力
-    [ "$DEBUG_MODE" = "true" ] && debug_breadcrumbs
-    
-    # メインメニューの情報を取得
-    local main_menu_key="${MAIN_MENU}"
-    local main_menu_text=$(get_message "$main_menu_key")
-    
-    # パンくずの初期値
-    local breadcrumb="$(color white_black "$main_menu_text")"
-    local separator=" > "
-    
-    # 履歴が空ならメインメニューのみ表示
-    if [ -z "$MENU_HISTORY" ]; then
-        debug_log "DEBUG" "No menu history, showing main menu only"
-        printf "%s\n\n" "$breadcrumb"
-        return
-    fi
-    
-    # 履歴データは逆順で処理する必要がある
-    # MENU_HISTORYの形式: 最新:一つ前:二つ前...
-    local reversed_sections=""
-    
-    # 履歴を配列なしで逆順に変換
-    IFS="$MENU_HISTORY_SEPARATOR"
-    for section in $MENU_HISTORY; do
-        # 先頭に追加して逆順にする
-        reversed_sections="$section $reversed_sections"
-    done
-    unset IFS
-    
-    debug_log "DEBUG" "Reversed history sections for breadcrumb"
-    
-    # 逆順にした履歴からパンくずを構築
-    for section in $reversed_sections; do
-        local display_text=$(get_message "$section")
-        breadcrumb="${breadcrumb}${separator}$(color white_black "$display_text")"
-    done
-    
+    # パンくずリストを出力（末尾に空行2つ）
     printf "%s\n\n" "$breadcrumb"
 }
 
@@ -652,6 +639,16 @@ handle_user_selection() {
         # セレクターコマンドの場合、サブメニューへ移動
         local next_menu=$(echo "$selected_cmd" | cut -d' ' -f2)
         debug_log "DEBUG" "Detected submenu navigation: $next_menu"
+
+        # 選択した色をパンくず用の履歴ファイルに追加
+        local breadcrumb_colors_file="${CACHE_DIR}/breadcrumb_colors.tmp"
+        
+        # ファイルが存在しない場合は作成
+        [ ! -f "$breadcrumb_colors_file" ] && touch "$breadcrumb_colors_file"
+        
+        # 今回選択した色を履歴に追加
+        echo "$selected_color" >> "$breadcrumb_colors_file"
+        debug_log "DEBUG" "Added color to breadcrumb history: $selected_color"
         
         # 一時ファイル削除
         rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
@@ -690,6 +687,13 @@ selector() {
     
     # 現在のセクションを記録
     CURRENT_MENU="$section_name"
+
+    # メインメニューに戻る場合はパンくずの色履歴をクリア
+    if [ "$section_name" = "$MAIN_MENU" ] && [ "$skip_history" != "1" ]; then
+        local breadcrumb_colors_file="${CACHE_DIR}/breadcrumb_colors.tmp"
+        [ -f "$breadcrumb_colors_file" ] && > "$breadcrumb_colors_file"
+        debug_log "DEBUG" "Reset breadcrumb colors for main menu"
+    fi
     
     # 履歴管理（skipが指定されていない場合のみ）
     if [ "$skip_history" != "1" ]; then
@@ -871,7 +875,7 @@ get_previous_menu() {
   echo "$prev" | cut -d':' -f1
 }
 
-# 階層を正しく戻る関数（シンプル版）
+# 階層を正しく戻る関数
 go_back_menu() {
     debug_log "DEBUG" "Processing go_back_menu with correct hierarchy navigation"
     
@@ -889,6 +893,23 @@ go_back_menu() {
     fi
     
     debug_log "DEBUG" "Current menu history: $MENU_HISTORY with $section_count sections"
+    
+    # パンくずの色履歴ファイルも更新
+    local breadcrumb_colors_file="${CACHE_DIR}/breadcrumb_colors.tmp"
+    if [ -f "$breadcrumb_colors_file" ]; then
+        # 色履歴の最新項目を削除（最終行を削除）
+        local total_lines=$(wc -l < "$breadcrumb_colors_file")
+        if [ "$total_lines" -gt 1 ]; then
+            sed -i '$d' "$breadcrumb_colors_file" 2>/dev/null || 
+            (head -n $(($total_lines - 1)) "$breadcrumb_colors_file" > "${breadcrumb_colors_file}.new" && 
+             mv "${breadcrumb_colors_file}.new" "$breadcrumb_colors_file")
+            debug_log "DEBUG" "Removed last color from breadcrumb history"
+        else
+            # 最後の1行の場合はファイルをクリア
+            > "$breadcrumb_colors_file"
+            debug_log "DEBUG" "Cleared breadcrumb color history"
+        fi
+    fi
     
     # 1階層のみの場合はメインメニューへ
     if [ $section_count -le 1 ]; then
