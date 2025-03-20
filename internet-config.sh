@@ -34,24 +34,6 @@ COMMON_VERSION="2025.03.18-01-00"
 #
 # 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
 ### =========================================================
-### 📌 AI Assistance Request: POSIX-Compliant Debugging Guide
-### 
-### When debugging or fixing errors in this POSIX shell script:
-### 
-### 1️⃣ Create a minimal reproducible test case (avoid bash features)
-### 2️⃣ Test with ash/dash explicitly: dash ./test.sh
-### 3️⃣ Use portable debugging methods: echo, printf, or set -x
-### 4️⃣ Validate fixes against all POSIX compliance guidelines
-### 5️⃣ Ensure the solution works in resource-constrained OpenWrt
-### 
-### ⚠️ IMPORTANT:
-### - Avoid suggesting bash-specific solutions
-### - Always test fixes with ash/dash before implementation
-### - Prefer simple solutions over complex ones
-### - Do not modify production code without test verification
-### 
-### 🛠️ Keep debugging simple, focused, and POSIX-compliant!
-### =========================================================
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
