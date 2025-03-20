@@ -112,7 +112,7 @@ display_breadcrumbs() {
     [ "$DEBUG_MODE" = "true" ] && debug_breadcrumbs
     
     # メインメニューの情報を取得
-    local main_menu_key="MAIN_MENU_NAME"
+    local main_menu_key="${MAIN_MENU}"
     local main_menu_text=$(get_message "$main_menu_key")
     
     # パンくずの初期値
