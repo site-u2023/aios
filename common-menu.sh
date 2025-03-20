@@ -446,27 +446,9 @@ handle_user_selection() {
     if [ $is_main_menu -eq 1 ]; then
         # メインメニュー用のプロンプト（10, 00を含む）
         local selection_prompt=$(get_message "CONFIG_MAIN_SELECT_PROMPT")
-    
-        # メッセージキーが見つからない場合は独自に構築
-        if [ -z "$selection_prompt" ] || [ "$selection_prompt" = "CONFIG_MAIN_SELECT_PROMPT" ]; then
-            local base_prompt=$(get_message "CONFIG_SELECT_PROMPT")
-            # ベースプロンプトから括弧部分を抽出して修正
-            local base_text=$(echo "$base_prompt" | sed 's/(.*)//g')
-            selection_prompt="${base_text}(1-$menu_choices, 10=終了, 00=削除): "
-            debug_log "DEBUG" "Created custom main menu prompt: $selection_prompt"
-        fi
     else
         # サブメニュー用のプロンプト（0, 10を含む）
         local selection_prompt=$(get_message "CONFIG_SUB_SELECT_PROMPT")
-    
-        # メッセージキーが見つからない場合は独自に構築
-        if [ -z "$selection_prompt" ] || [ "$selection_prompt" = "CONFIG_SUB_SELECT_PROMPT" ]; then
-            local base_prompt=$(get_message "CONFIG_SELECT_PROMPT")
-            # ベースプロンプトから括弧部分を抽出して修正
-            local base_text=$(echo "$base_prompt" | sed 's/(.*)//g')
-            selection_prompt="${base_text}(1-$menu_choices, 0=戻る, 10=終了): "
-            debug_log "DEBUG" "Created custom sub-menu prompt: $selection_prompt"
-        fi
     fi
     
     # {0}をメニュー数で置換
