@@ -123,7 +123,7 @@ display_breadcrumbs() {
     local main_menu_text=$(get_message "$main_menu_key")
     
     # メインメニューのデフォルト色
-    local main_color="white_black"
+    local main_color="white"
     
     # パンくずの区切り文字（表示用）
     local separator=" > "
