@@ -175,38 +175,6 @@ display_breadcrumbs() {
     printf "%s\n\n" "$breadcrumb"
 }
 
-XXX_display_breadcrumbs() {
-    debug_log "DEBUG" "Building optimized breadcrumb navigation with section names only"
-    
-    # メインメニューの表示
-    local breadcrumb="$(color white "$MAIN_MENU")"
-    local separator=" > "
-    
-    # 履歴が空ならメインメニューのみ表示
-    if [ -z "$MENU_HISTORY" ]; then
-        printf "%s\n\n" "$breadcrumb"
-        return
-    fi
-    
-    # 履歴からセクション名を抽出（逆順に）
-    local sections=""
-    
-    IFS="$MENU_HISTORY_SEPARATOR"
-    for section in $MENU_HISTORY; do
-        sections="$section $sections"
-    done
-    unset IFS
-    
-    # パンくずリストを構築
-    for section in $sections; do
-        if [ "$section" != "$MAIN_MENU" ]; then
-            breadcrumb="${breadcrumb}${separator}$(color white "$section")"
-        fi
-    done
-    
-    printf "%s\n\n" "$breadcrumb"
-}
-
 # エラーハンドリング関数 - 一元化された処理
 handle_menu_error() {
     local error_type="$1"    # エラータイプ
