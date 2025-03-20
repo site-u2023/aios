@@ -63,8 +63,8 @@ JP|MENU_OTHERS=その他 (ボタン設定, IPERF3, SAMBA4)
 US|MENU_EXIT=Exit
 JP|MENU_EXIT=終了
 
-US|MENU_REMOVE=Remove script and related directories
-JP|MENU_REMOVE=スクリプトと関連ディレクトリの削除
+US|MENU_REMOVE=Exit (Remove script)
+JP|MENU_REMOVE=終了 (スクリプト削除)
 
 US|MENU_BACK=Back
 JP|MENU_BACK=戻る
