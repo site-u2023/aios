@@ -355,7 +355,6 @@ get_message() {
     local db_file=""
 
     ACTIVE_LANGUAGE="US"
-    $ACTIVE_LANGUAGE > "${CACHE_DIR}/message.ch"
 
     # キャッシュからアクティブな言語とDBファイルを取得
     if [ -f "${CACHE_DIR}/message.ch" ]; then
