@@ -110,24 +110,30 @@ display_breadcrumbs() {
         return
     fi
     
-    # MENU_HISTORYを逆順で処理（メニューキーのみを抽出）
+    # MENU_HISTORYの構造は「最新:前:さらに前...」
     local menu_keys=""
     local i=0
     
-    # 履歴データをメニューキーのリストとして抽出
+    # 履歴を分解してリストに変換
     IFS="$MENU_HISTORY_SEPARATOR"
     for item in $MENU_HISTORY; do
-        # 奇数番目の項目（メニュー名）のみを使用
+        # 逆順に変換不要（すでに最新が先頭）
         if [ $((i % 2)) -eq 0 ]; then
-            # 先頭に追加（逆順にするため）
-            menu_keys="$item $menu_keys"
+            # メニューキーをスペース区切りのリストに追加
+            menu_keys="$menu_keys $item"
         fi
         i=$((i + 1))
     done
     unset IFS
     
+    # 正しい順序にするために逆順にする（最後のものを先頭に）
+    local reversed_keys=""
+    for key in $menu_keys; do
+        reversed_keys="$key $reversed_keys"
+    done
+    
     # 各メニューキーを翻訳してパンくずに追加
-    for menu_key in $menu_keys; do
+    for menu_key in $reversed_keys; do
         # get_message関数を使用して翻訳
         local display_text=$(get_message "$menu_key")
         
