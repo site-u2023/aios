@@ -92,10 +92,10 @@ pop_menu_history() {
 }
 
 display_breadcrumbs() {
-    debug_log "DEBUG" "Building breadcrumb navigation with section names"
+    debug_log "DEBUG" "Building breadcrumb navigation with section identifiers only"
     
-    # メインメニューの表示
-    local main_menu_section="[$MAIN_MENU]"
+    # メインメニューの表示（[]内の文字のみ）
+    local main_menu_section="$MAIN_MENU"
     local breadcrumb="$(color white "$main_menu_section")"
     local separator=" > "
     
@@ -106,7 +106,7 @@ display_breadcrumbs() {
         return
     fi
     
-    # 履歴からセクション名を抽出して表示
+    # 履歴からセクション名を抽出（[]なしで表示）
     local i=0
     local current_section=""
     
@@ -116,7 +116,7 @@ display_breadcrumbs() {
         i=$((i + 1))
         # 奇数番目の項目がセクション名
         if [ $((i % 2)) -eq 1 ]; then
-            current_section="[$item]"
+            current_section="$item"
             breadcrumb="${breadcrumb}${separator}$(color white "$current_section")"
         fi
     done
