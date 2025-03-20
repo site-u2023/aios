@@ -793,59 +793,45 @@ return_menu() {
     return $?
 }
 
-go_back_menu() {
-    debug_log "DEBUG" "Processing go_back_menu function"
-    
-    # 履歴が空の場合はメインメニューへ
-    if [ -z "$MENU_HISTORY" ]; then
-        debug_log "DEBUG" "History is empty, returning to main menu"
-        return_menu
-        return $?
-    fi
-    
-    # 履歴の構造: menu1:text1:menu2:text2:...
-    # 最初のメニュー名（ヘッダー名）を取得
-    local current_menu=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f1)
-    debug_log "DEBUG" "Current menu: $current_menu"
-    
-    # 履歴の区切り記号をカウント
-    local sep_count=$(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c)
-    
-    # 履歴が1階層分しかない場合はメインメニューへ
-    if [ "$sep_count" -le 1 ]; then
-        debug_log "DEBUG" "Only one level in history, returning to main menu"
-        MENU_HISTORY=""
-        return_menu
-        return $?
-    fi
-    
-    # 最初のペア（現在のメニュー+テキスト）を削除して前のメニューを取得
-    local new_history=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f3-)
-    
-    # 新しい履歴の先頭がメニュー名
-    local prev_menu=$(echo "$new_history" | cut -d"$MENU_HISTORY_SEPARATOR" -f1)
-    
-    debug_log "DEBUG" "Previous menu key: $prev_menu"
-    debug_log "DEBUG" "New history: $new_history"
-    
-    # メニュー名（INIヘッダー）の有効性を確認
-    if [ -n "$prev_menu" ] && grep -q "^\[$prev_menu\]" "${BASE_DIR}/menu.db"; then
-        # 履歴を更新
-        MENU_HISTORY="$new_history"
-        debug_log "DEBUG" "Valid previous menu found: $prev_menu"
-        
-        # 前のメニューへ移動
-        selector "$prev_menu" "" 1
-        return $?
-    fi
-    
-    # 有効な前のメニューが見つからない場合はメインメニューへ
-    debug_log "DEBUG" "No valid previous menu found, returning to main menu"
-    MENU_HISTORY=""
-    return_menu
-    return $?
+# より効率的な履歴処理
+get_previous_menu() {
+  # 単一のシェルセッションで処理
+  local prev=$(echo "$MENU_HISTORY" | sed -E 's/([^:]+:[^:]+:)?.*/\1/' | sed 's/:$//')
+  echo "$prev" | cut -d':' -f1
 }
 
+go_back_menu() {
+  debug_log "DEBUG" "Processing go_back_menu function with simplified approach"
+  
+  # 履歴が空の場合
+  if [ -z "$MENU_HISTORY" ]; then
+    return_menu
+    return $?
+  fi
+  
+  # 一つ前のメニューを効率的に取得
+  local prev_menu=""
+  local new_history=""
+  
+  # 単一のセッションで処理
+  eval $(echo "$MENU_HISTORY" | awk -F"$MENU_HISTORY_SEPARATOR" '{
+    if (NF > 2) {
+      print "prev_menu=\"" $3 "\"; new_history=\"" substr($0, index($0, $3)) "\"" 
+    } else {
+      print "prev_menu=\"\"; new_history=\"\""
+    }
+  }')
+  
+  if [ -n "$prev_menu" ] && grep -q "^\[$prev_menu\]" "${BASE_DIR}/menu.db"; then
+    MENU_HISTORY="$new_history"
+    selector "$prev_menu" "" 1
+    return $?
+  fi
+  
+  # 有効なメニューが見つからない場合
+  return_menu
+  return $?
+}
 # 削除確認関数
 remove_exit() {
     debug_log "DEBUG" "Starting remove_exit confirmation process"
