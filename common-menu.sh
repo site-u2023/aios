@@ -92,35 +92,30 @@ pop_menu_history() {
 }
 
 display_breadcrumbs() {
-    debug_log "DEBUG" "Building simplified breadcrumb navigation with section names only"
+    debug_log "DEBUG" "Building simplified breadcrumb navigation chain"
     
     # メインメニューの表示
     local breadcrumb="$(color white "$MAIN_MENU")"
     local separator=" > "
     
-    # 履歴が空の場合はメインメニューのみ表示
+    # 履歴が空ならメインメニューのみ表示
     if [ -z "$MENU_HISTORY" ]; then
         printf "%s\n\n" "$breadcrumb"
         return
     fi
     
-    # MENU_HISTORYから奇数位置（1,3,5...）の項目のみを抽出
-    # これらがセクション名に相当する
+    # 履歴からセクション名を抽出（逆順に）
     local sections=""
-    local i=0
     
     IFS="$MENU_HISTORY_SEPARATOR"
-    for item in $MENU_HISTORY; do
-        i=$((i + 1))
-        # 奇数番目の項目がセクション名
-        if [ $((i % 2)) -eq 1 ]; then
-            sections="$item $sections"
-        fi
+    for section in $MENU_HISTORY; do
+        sections="$section $sections"
     done
     unset IFS
     
-    # セクション名を順に処理（最初のメインメニューはスキップ）
+    # パンくずリストを構築
     for section in $sections; do
+        # メインメニューは既に表示済みなのでスキップ
         if [ "$section" != "$MAIN_MENU" ]; then
             breadcrumb="${breadcrumb}${separator}$(color white "$section")"
         fi
@@ -697,36 +692,36 @@ selector() {
 
 push_menu_history() {
     local menu_name="$1"    # メニューセクション名
-    local display_text="$2" # 表示テキスト
+    # 表示テキストは不要なので引数から削除
     
-    debug_log "DEBUG" "Adding to menu history: $menu_name"
+    debug_log "DEBUG" "Adding section to menu history: $menu_name"
     
-    # メニュー名の存在確認
+    # メニュー名がINIヘッダーとして存在するか確認
     if ! grep -q "^\[$menu_name\]" "${BASE_DIR}/menu.db"; then
         debug_log "DEBUG" "Warning: Menu section [$menu_name] not found in menu.db"
     fi
     
-    # 履歴の最大深度（安全対策）
+    # 履歴の最大深度を設定（安全対策）
     local max_history_depth=10
     local current_depth=0
     
     if [ -n "$MENU_HISTORY" ]; then
         current_depth=$(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c)
-        current_depth=$((current_depth / 2 + 1))
+        current_depth=$((current_depth + 1))
     fi
     
-    # 履歴の追加（最新を先頭に追加）
+    # 履歴の追加（セクション名のみ）
     if [ -z "$MENU_HISTORY" ]; then
-        # 履歴が空の場合
-        MENU_HISTORY="${menu_name}${MENU_HISTORY_SEPARATOR}${display_text}"
+        # 履歴が空の場合は直接設定
+        MENU_HISTORY="${menu_name}"
     else
         # 既存の履歴の前に追加
-        MENU_HISTORY="${menu_name}${MENU_HISTORY_SEPARATOR}${display_text}${MENU_HISTORY_SEPARATOR}${MENU_HISTORY}"
+        MENU_HISTORY="${menu_name}${MENU_HISTORY_SEPARATOR}${MENU_HISTORY}"
         
-        # 最大深度を超える場合は切り詰め
+        # 最大深度を超える場合は古い履歴を切り詰める
         if [ "$current_depth" -ge "$max_history_depth" ]; then
             debug_log "DEBUG" "History depth exceeded maximum ($max_history_depth), truncating oldest entries"
-            local items_to_keep=$((max_history_depth * 2))
+            local items_to_keep=$max_history_depth
             MENU_HISTORY=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f1-"$items_to_keep")
         fi
     fi
