@@ -114,7 +114,7 @@ debug_breadcrumbs() {
     unset IFS
 }
 
-# パンくずリストの表示関数（拡張履歴フォーマット対応）
+# パンくずリストの表示関数（改良版）
 display_breadcrumbs() {
     debug_log "DEBUG" "Building breadcrumb navigation from extended history format"
     
@@ -138,39 +138,38 @@ display_breadcrumbs() {
         return
     fi
     
-    # 履歴はメニューと色情報が交互に格納されているので、適切に処理する
-    # フォーマット: menu3:color3:menu2:color2:menu1:color1
-    
-    # 履歴を配列風に分割
+    # 履歴データを処理し、重複を排除
     local menu_items=""
     local color_items=""
     local i=0
+    local processed_menus=""
     
+    # 履歴項目を配列風のリストに変換
     IFS="$MENU_HISTORY_SEPARATOR"
     for item in $MENU_HISTORY; do
         if [ $((i % 2)) -eq 0 ]; then
             # 偶数インデックスはメニュー項目
-            menu_items="$item $menu_items"
+            # 重複チェック
+            if ! echo " $processed_menus " | grep -q " $item "; then
+                menu_items="$menu_items $item"
+                processed_menus="$processed_menus $item"
+            fi
         else
             # 奇数インデックスは色情報
-            color_items="$item $color_items"
+            # 対応するメニューが追加された場合のみ色も追加
+            if ! echo " $processed_menus " | grep -q " $(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f$((i))) "; then
+                color_items="$color_items $item"
+            fi
         fi
         i=$((i + 1))
     done
     unset IFS
     
-    debug_log "DEBUG" "Processed menu history into: menus=[$menu_items], colors=[$color_items]"
+    debug_log "DEBUG" "Processed unique menu history: menus=[$menu_items], colors=[$color_items]"
     
     # メニュー項目から順にパンくずを構築
-    local j=0
-    local menu_array=""
-    local color_array=""
-    
-    # スペース区切りのリストを扱いやすくするため一時変数に保存
-    menu_array="$menu_items"
-    color_array="$color_items"
-    
-    for section in $menu_array; do
+    i=0
+    for section in $menu_items; do
         # メニュー表示テキストを取得
         local display_text=$(get_message "$section")
         # 表示テキストが空の場合はセクション名をそのまま使用
@@ -179,20 +178,26 @@ display_breadcrumbs() {
         # 対応する色を取得
         local section_color="white"  # デフォルト色
         
-        # 対応する色を検索
-        local k=0
-        for color_val in $color_array; do
-            if [ $k -eq $j ]; then
+        # 色リストから対応する色を取得
+        local j=0
+        for color_val in $color_items; do
+            if [ $j -eq $i ]; then
                 section_color="$color_val"
                 debug_log "DEBUG" "Using color $section_color for menu section $section"
                 break
             fi
-            k=$((k + 1))
+            j=$((j + 1))
         done
+        
+        # 色が見つからない場合は自動割り当て
+        if [ "$section_color" = "white" ] || [ -z "$section_color" ]; then
+            section_color=$(get_auto_color "$((i+1))" "3")
+            debug_log "DEBUG" "Auto-assigned color for menu level $i: $section_color"
+        fi
         
         # パンくずリストに追加
         breadcrumb="${breadcrumb}${separator}$(color $section_color "$display_text")"
-        j=$((j + 1))
+        i=$((i + 1))
     done
     
     # パンくずリストを出力（末尾に空行2つ）
@@ -696,13 +701,16 @@ selector() {
     # 履歴管理（skipが指定されていない場合のみ）
     if [ "$skip_history" != "1" ]; then
         # メインメニューに戻る場合は履歴をクリア
-        if [ "$section_name" = "$MAIN_MENU" ] && [ "$skip_history" != "1" ]; then
+        if [ "$section_name" = "$MAIN_MENU" ]; then
             MENU_HISTORY=""
             debug_log "DEBUG" "Cleared menu history for main menu"
         else
-            # セクション名のみを履歴に追加
-            push_menu_history "$section_name"
+            # セクション名を履歴に追加（色情報はhandle_user_selection内で追加）
+            # ここでは色情報を追加しない - 二重登録防止のため
+            debug_log "DEBUG" "Menu $section_name will be added to history when color is selected"
         fi
+    else
+        debug_log "DEBUG" "Skipping history update due to skip_history flag"
     fi
     
     # メインメニュー名を取得
@@ -788,15 +796,30 @@ selector() {
     return $selection_status
 }
 
-# メニュー履歴に新しいエントリを追加する関数（色情報も含む）
+# メニュー履歴にエントリを追加する関数（改良版）
 push_menu_history() {
     local menu_name="$1"    # メニューセクション名
-    local menu_color="$2"   # 関連付ける色
+    local menu_color="$2"   # 関連付ける色（省略可）
+    
+    # 色情報が空の場合はデフォルト値を設定
+    [ -z "$menu_color" ] && menu_color="white"
     
     debug_log "DEBUG" "Adding section to history with color: $menu_name ($menu_color)"
     
     # 最大深度を3に設定（メインメニュー含めると最大4階層）
     local max_history_depth=3
+    
+    # 現在の履歴の先頭要素を確認（重複防止）
+    local current_top=""
+    if [ -n "$MENU_HISTORY" ]; then
+        current_top=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f1)
+    fi
+    
+    # 同じメニューの重複を防止
+    if [ "$current_top" = "$menu_name" ]; then
+        debug_log "DEBUG" "Menu $menu_name is already at top of history, not adding again"
+        return
+    fi
     
     # 履歴の追加（セクション名と色情報のペア）
     if [ -z "$MENU_HISTORY" ]; then
@@ -820,7 +843,7 @@ push_menu_history() {
         fi
     fi
     
-    debug_log "DEBUG" "Current menu history with colors: $MENU_HISTORY"
+    debug_log "DEBUG" "Current menu history: $MENU_HISTORY"
 }
 
 get_menu_history_item() {
