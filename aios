@@ -336,7 +336,7 @@ color_posix_code_map() {
 # メッセージをインメモリに設定する関数
 into_memory_message() {
     # 既存のメッセージ定義
-    MSG_MEMORY="${MSG_MEMORY}"
+    MSG_MEMORY="${MSG_MEMORY:-US}"
 
     US|CONFIG_DOWNLOAD_SUCCESS=Download completed:
     JP|CONFIG_DOWNLOAD_SUCCESS=ダウンロード完了:
@@ -351,8 +351,9 @@ get_message() {
     local key="$1"
     local params="$2"  # パラメータ文字列
     local default_msg=""
-    local lang=""
-    local db_file=""
+    local lang="${lang:-US}" 
+    local db_file="${db_file:-${BASE_DIR}/messages_base.db}" 
+    local message="${message:-$key}"
 
     # キャッシュからアクティブな言語とDBファイルを取得
     if [ -f "${CACHE_DIR}/message.ch" ]; then
@@ -361,15 +362,11 @@ get_message() {
         if [ -n "$ACTIVE_LANGUAGE" ]; then
             lang="$ACTIVE_LANGUAGE"
             debug_log "DEBUG" "Using language from environment: $lang"
-        else
-            lang="US"  # デフォルト言語
         fi
     fi
     
     if [ -f "${CACHE_DIR}/message_db.ch" ]; then
         db_file=$(cat "${CACHE_DIR}/message_db.ch")
-    else
-        db_file="${BASE_DIR}/messages_base.db"  # デフォルトDB
     fi
     
     debug_log "DEBUG" "get_message: key=${key}, language=${lang}, db_file=${db_file}, params=${params}"
@@ -386,23 +383,12 @@ get_message() {
     fi
 
     # DBからメッセージを検索
-    local message=""
     message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
     
     # 言語固有のメッセージが見つからない場合
     if [ -z "$message" ]; then
         # 英語メッセージを検索
         message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
-        
-        # それでも見つからない場合は基本DBで再検索
-        if [ -z "$message" ] && [ "$db_file" != "${BASE_DIR}/messages_base.db" ]; then
-            debug_log "DEBUG" "Message not found in specialized DB, trying base DB"
-            message=$(grep "^${lang}|${key}=" "${BASE_DIR}/messages_base.db" 2>/dev/null | cut -d'=' -f2-)
-            
-            if [ -z "$message" ]; then
-                message=$(grep "^US|${key}=" "${BASE_DIR}/messages_base.db" 2>/dev/null | cut -d'=' -f2-)
-            fi
-        fi
     fi
 
     # 2. DBファイルでメッセージが見つからなかった場合、インメモリから検索
@@ -410,11 +396,6 @@ get_message() {
 
     if [ -z "$message" ] && [ -n "$MSG_MEMORY" ]; then
         message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" | cut -d'=' -f2-)
-        
-        # 言語固有のメッセージが見つからない場合、英語を試す
-        if [ -z "$message" ]; then
-            message=$(echo "$MSG_MEMORY" | grep "^US|${key}=" | cut -d'=' -f2-)
-        fi
     fi
 
     # それでも見つからない場合はデフォルトかキーを返す
@@ -422,8 +403,6 @@ get_message() {
         debug_log "WARNING" "Message not found for key: ${key}"
         if [ -n "$default_msg" ]; then
             message="$default_msg"
-        else
-            message="$key"  # キーをそのまま返す
         fi
     fi
     
