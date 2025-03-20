@@ -690,33 +690,27 @@ selector() {
 push_menu_history() {
     local menu_name="$1"    # メニューセクション名
     
-    debug_log "DEBUG" "Adding section name to menu history: $menu_name"
+    debug_log "DEBUG" "Adding section to history: $menu_name"
     
-    # メニュー名の存在確認
-    if ! grep -q "^\[$menu_name\]" "${BASE_DIR}/menu.db"; then
-        debug_log "DEBUG" "Warning: Menu section [$menu_name] not found in menu.db"
-    fi
-    
-    # 履歴の最大深度（安全対策）
-    local max_history_depth=10
-    local current_depth=0
-    
-    if [ -n "$MENU_HISTORY" ]; then
-        current_depth=$(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c)
-        current_depth=$((current_depth + 1))
-    fi
+    # 最大深度を3に設定（メインメニュー含めると最大4階層）
+    local max_history_depth=3
     
     # 履歴の追加（セクション名のみ）
     if [ -z "$MENU_HISTORY" ]; then
-        MENU_HISTORY="${menu_name}"
+        MENU_HISTORY="$menu_name"
     else
         MENU_HISTORY="${menu_name}${MENU_HISTORY_SEPARATOR}${MENU_HISTORY}"
         
-        # 最大深度を超える場合は切り捨て
-        if [ "$current_depth" -ge "$max_history_depth" ]; then
-            debug_log "DEBUG" "History depth exceeded maximum ($max_history_depth), truncating"
-            local items_to_keep=$max_history_depth
-            MENU_HISTORY=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f1-"$items_to_keep")
+        # 最大深度を超える場合は切り詰め
+        local section_count=1
+        if echo "$MENU_HISTORY" | grep -q "$MENU_HISTORY_SEPARATOR"; then
+            section_count=$(($(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c) + 1))
+            
+            if [ $section_count -gt $max_history_depth ]; then
+                debug_log "DEBUG" "Truncating history to max depth: $max_history_depth"
+                local items_to_keep=$max_history_depth
+                MENU_HISTORY=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f1-"$items_to_keep")
+            fi
         fi
     fi
     
@@ -779,7 +773,7 @@ get_previous_menu() {
 }
 
 go_back_menu() {
-    debug_log "DEBUG" "Processing go_back_menu with proper hierarchy navigation"
+    debug_log "DEBUG" "Processing go_back_menu with simplified logic"
     
     # 履歴が空の場合はメインメニューへ
     if [ -z "$MENU_HISTORY" ]; then
@@ -788,40 +782,28 @@ go_back_menu() {
         return $?
     fi
     
-    # 現在のメニューを取得
-    local current_menu=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f1)
-    debug_log "DEBUG" "Current menu from history: $current_menu"
+    # 履歴に含まれるセクション数を確認
+    local section_count=1
+    if echo "$MENU_HISTORY" | grep -q "$MENU_HISTORY_SEPARATOR"; then
+        section_count=$(($(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c) + 1))
+    fi
     
-    # 履歴が1つしかない場合はメインメニューへ
-    if ! echo "$MENU_HISTORY" | grep -q "$MENU_HISTORY_SEPARATOR"; then
-        debug_log "DEBUG" "No previous menu in history, returning to main menu"
+    # 1階層のみの場合はメインメニューへ
+    if [ $section_count -le 1 ]; then
+        debug_log "DEBUG" "Only one section in history, returning to main menu"
         MENU_HISTORY=""
         return_menu
         return $?
     fi
     
-    # 前のメニュー（1階層上）を取得
+    # 1階層だけ戻る（履歴の2番目のセクションへ）
     local prev_menu=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f2)
-    debug_log "DEBUG" "Previous menu level: $prev_menu"
-    
-    # 現在のメニューを履歴から削除（1階層だけ上に戻る）
     local new_history=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f2-)
     
-    # セクション名の有効性を確認
-    if [ -n "$prev_menu" ] && grep -q "^\[$prev_menu\]" "${BASE_DIR}/menu.db"; then
-        # 履歴を更新して1階層上に戻る
-        MENU_HISTORY="$new_history"
-        debug_log "DEBUG" "Going back to menu: $prev_menu"
-        
-        # 前のメニューへ移動
-        selector "$prev_menu" "" 1
-        return $?
-    fi
-    
-    # 有効な前のメニューが見つからない場合はメインメニューへ
-    debug_log "DEBUG" "Invalid previous menu, returning to main menu"
-    MENU_HISTORY=""
-    return_menu
+    # 前のメニューを表示
+    MENU_HISTORY="$new_history"
+    debug_log "DEBUG" "Going back one level to: $prev_menu"
+    selector "$prev_menu" "" 1
     return $?
 }
 
