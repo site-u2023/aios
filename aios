@@ -358,10 +358,9 @@ get_message() {
     debug_log "DEBUG" "get_message: key=${key}, language=${lang}, db_file=${db_file}, params=${params}"
     
     # 1. インメモリのメッセージから検索
-        MSG_MEMORY="US|CONFIG_DOWNLOAD_SUCCESS=Download completed:"
-        message=$(echo "$MSG_MEMORY" | grep "^US|${key}=" 2>/dev/null | cut -d'=' -f2-)
-    fi
-    
+    MSG_MEMORY="US|CONFIG_DOWNLOAD_SUCCESS=Download completed:"
+    message=$(echo "$MSG_MEMORY" | grep "^US|${key}=" 2>/dev/null | cut -d'=' -f2-)
+
     # 2. インメモリで見つからなかった場合にDBファイルから検索
     if [ -z "$message" ] && [ -f "$db_file" ]; then
         # 現在の言語でDBファイルを検索
