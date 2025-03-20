@@ -69,6 +69,10 @@ JP|MENU_REMOVE=スクリプトと関連ディレクトリの削除
 US|MENU_BACK=Back
 JP|MENU_BACK=戻る
 
+# [MENU_INTERNET]
+US|MENU_V&MIG=IPv6 Migration Standard Provisioning
+JP|MENU_V&MIG=IPv6マイグレーション標準プロビジョニング
+
 # selector関数用メッセージ
 # メインメニュー用（0, 00を含む）
 US|CONFIG_MAIN_SELECT_PROMPT=Please select a number (1-{0}, 10, 00): 
