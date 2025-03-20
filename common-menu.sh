@@ -116,7 +116,7 @@ display_breadcrumbs() {
     local main_menu_text=$(get_message "$main_menu_key")
     
     # パンくずの初期値
-    local breadcrumb="$(color white "$main_menu_text")"
+    local breadcrumb="$(color white_black "$main_menu_text")"
     local separator=" > "
     
     # 履歴が空ならメインメニューのみ表示
