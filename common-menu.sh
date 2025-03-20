@@ -184,7 +184,7 @@ display_breadcrumbs() {
         [ -z "$display_text" ] && display_text="$section"
         
         # 対応する色を取得
-        local section_color="white"  # デフォルト色
+        local section_color="white_black"  # デフォルト色
         
         # 色を逆順から取得（最新の色が最初の要素なので、最後から取得）
         if [ $colors_count -gt 0 ]; then
