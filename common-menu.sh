@@ -95,24 +95,9 @@ pop_menu_history() {
 display_breadcrumbs() {
     debug_log "DEBUG" "Building optimized breadcrumb navigation with section names only"
     
-    # メインメニューのテキスト取得
+    # メインメニューの情報を取得
     local main_menu_key="MAIN_MENU_NAME"
-    local main_menu_text=""
-    local current_lang="${lang_code:-JP}"
-    
-    # メインメニューのテキスト検索
-    for msg_file in "${BASE_DIR}"/messages_*.db; do
-        if [ -f "$msg_file" ]; then
-            local found=$(grep -F "$current_lang|$main_menu_key=" "$msg_file" 2>/dev/null | head -n 1)
-            if [ -n "$found" ]; then
-                main_menu_text=$(echo "$found" | cut -d'=' -f2-)
-                break
-            fi
-        fi
-    done
-    
-    # 見つからなければデフォルト
-    [ -z "$main_menu_text" ] && main_menu_text="● メインメニュー"
+    local main_menu_text=$(get_message "$main_menu_key")
     
     # パンくずの初期値
     local breadcrumb="$(color white "$main_menu_text")"
@@ -125,33 +110,28 @@ display_breadcrumbs() {
         return
     fi
     
-    # 履歴からリスト作成（形式は menu1:text1:menu2:text2:... の逆順）
-    local history_pairs=""
-    local menu_stack=""
+    # MENU_HISTORYを逆順で処理（メニューキーのみを抽出）
+    local menu_keys=""
     local i=0
-    local item_count=0
     
-    # 履歴を解析してメニュー項目と表示テキストのペアを作成
+    # 履歴データをメニューキーのリストとして抽出
     IFS="$MENU_HISTORY_SEPARATOR"
     for item in $MENU_HISTORY; do
-        i=$((i + 1))
-        
-        # メニューキーを記録（奇数番目の項目）
-        if [ $((i % 2)) -eq 1 ]; then
-            menu_stack="$item:$menu_stack"
-        # 表示テキストを記録（偶数番目の項目）
-        else
-            # 既存のメニュースタックの先頭にテキストを追加
-            if [ -n "$menu_stack" ]; then
-                history_pairs="$item $history_pairs"
-                item_count=$((item_count + 1))
-            fi
+        # 奇数番目の項目（メニュー名）のみを使用
+        if [ $((i % 2)) -eq 0 ]; then
+            # 先頭に追加（逆順にするため）
+            menu_keys="$item $menu_keys"
         fi
+        i=$((i + 1))
     done
     unset IFS
     
-    # 各メニュー項目のテキストをパンくずに追加
-    for display_text in $history_pairs; do
+    # 各メニューキーを翻訳してパンくずに追加
+    for menu_key in $menu_keys; do
+        # get_message関数を使用して翻訳
+        local display_text=$(get_message "$menu_key")
+        
+        # パンくずリストに追加
         breadcrumb="${breadcrumb}${separator}$(color white "$display_text")"
     done
     
