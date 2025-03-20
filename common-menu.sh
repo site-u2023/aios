@@ -92,41 +92,35 @@ pop_menu_history() {
 }
 
 display_breadcrumbs() {
-    debug_log "DEBUG" "Building breadcrumb navigation chain"
+    debug_log "DEBUG" "Building breadcrumb navigation with section names"
     
-    # メインメニューのテキスト取得
-    local main_menu_text=$(get_message "MAIN_MENU_NAME")
-    [ -z "$main_menu_text" ] && main_menu_text="● メインメニュー"
-    
-    # パンくずの初期値
-    local breadcrumb="$(color white "$main_menu_text")"
+    # メインメニューの表示
+    local main_menu_section="[$MAIN_MENU]"
+    local breadcrumb="$(color white "$main_menu_section")"
     local separator=" > "
     
     # 履歴が空ならメインメニューのみ表示
     if [ -z "$MENU_HISTORY" ]; then
-        debug_log "DEBUG" "No menu history, showing main menu only"
+        debug_log "DEBUG" "No menu history, showing main menu section only"
         printf "%s\n\n" "$breadcrumb"
         return
     fi
     
-    # 逆順で表示テキストを抽出（一時ファイル不使用）
+    # 履歴からセクション名を抽出して表示
     local i=0
-    local items=""
+    local current_section=""
     
+    # セクション名を順番に取得して表示用の文字列に追加
     IFS="$MENU_HISTORY_SEPARATOR"
     for item in $MENU_HISTORY; do
         i=$((i + 1))
-        if [ $((i % 2)) -eq 0 ]; then
-            # 表示テキストを逆順に追加
-            items="$item $items"
+        # 奇数番目の項目がセクション名
+        if [ $((i % 2)) -eq 1 ]; then
+            current_section="[$item]"
+            breadcrumb="${breadcrumb}${separator}$(color white "$current_section")"
         fi
     done
     unset IFS
-    
-    # パンくずを構築
-    for item in $items; do
-        breadcrumb="${breadcrumb}${separator}$(color white "$item")"
-    done
     
     printf "%s\n\n" "$breadcrumb"
 }
@@ -699,9 +693,9 @@ selector() {
 
 push_menu_history() {
     local menu_name="$1"    # メニューセクション名
-    local display_text="$2" # 表示テキスト
+    local display_text="$2" # 表示テキスト（使わないが互換性のため残す）
     
-    debug_log "DEBUG" "Adding to menu history: $menu_name ($display_text)"
+    debug_log "DEBUG" "Adding section to menu history: $menu_name"
     
     # メニュー名がINIヘッダーとして存在するか確認
     if ! grep -q "^\[$menu_name\]" "${BASE_DIR}/menu.db"; then
@@ -717,7 +711,7 @@ push_menu_history() {
         current_depth=$((current_depth / 2 + 1))
     fi
     
-    # 履歴の追加
+    # 履歴の追加（セクション名のみを使用）
     if [ -z "$MENU_HISTORY" ]; then
         # 履歴が空の場合は直接設定
         MENU_HISTORY="${menu_name}${MENU_HISTORY_SEPARATOR}${display_text}"
@@ -728,7 +722,6 @@ push_menu_history() {
         # 最大深度を超える場合は古い履歴を切り詰める
         if [ "$current_depth" -ge "$max_history_depth" ]; then
             debug_log "DEBUG" "History depth exceeded maximum ($max_history_depth), truncating oldest entries"
-            # 最大深度内に収まるように履歴を切り詰める処理
             local items_to_keep=$((max_history_depth * 2))
             MENU_HISTORY=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f1-"$items_to_keep")
         fi
