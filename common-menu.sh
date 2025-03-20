@@ -95,30 +95,24 @@ pop_menu_history() {
 display_breadcrumbs() {
     debug_log "DEBUG" "Building optimized breadcrumb navigation with section names only"
     
-    # メインメニューのテキスト取得（特殊文字対応）
+    # メインメニューのテキスト取得
     local main_menu_key="MAIN_MENU_NAME"
     local main_menu_text=""
     local current_lang="${lang_code:-JP}"
     
-    # メッセージファイルから直接検索（特殊文字対応）
+    # メインメニューのテキスト検索
     for msg_file in "${BASE_DIR}"/messages_*.db; do
         if [ -f "$msg_file" ]; then
-            # grep -F で特殊文字を含むパターンを検索（完全一致を保証）
-            local pattern="$current_lang|$main_menu_key="
-            local found=$(grep -F "$pattern" "$msg_file" 2>/dev/null | head -n 1)
+            local found=$(grep -F "$current_lang|$main_menu_key=" "$msg_file" 2>/dev/null | head -n 1)
             if [ -n "$found" ]; then
-                # 見つかった場合は値を抽出
                 main_menu_text=$(echo "$found" | cut -d'=' -f2-)
                 break
             fi
         fi
     done
     
-    # 変換が見つからない場合はデフォルトを使用
-    if [ -z "$main_menu_text" ]; then
-        main_menu_text="$main_menu_key"
-        debug_log "DEBUG" "WARNING"
-    fi
+    # 見つからなければデフォルト
+    [ -z "$main_menu_text" ] && main_menu_text="● メインメニュー"
     
     # パンくずの初期値
     local breadcrumb="$(color white "$main_menu_text")"
@@ -131,44 +125,33 @@ display_breadcrumbs() {
         return
     fi
     
-    # 逆順で表示テキストを抽出（一時ファイル不使用）
-    # 履歴の形式: menu1:text1:menu2:text2:...
+    # 履歴からリスト作成（形式は menu1:text1:menu2:text2:... の逆順）
+    local history_pairs=""
+    local menu_stack=""
     local i=0
-    local section_keys=""
+    local item_count=0
     
+    # 履歴を解析してメニュー項目と表示テキストのペアを作成
     IFS="$MENU_HISTORY_SEPARATOR"
     for item in $MENU_HISTORY; do
         i=$((i + 1))
+        
+        # メニューキーを記録（奇数番目の項目）
         if [ $((i % 2)) -eq 1 ]; then
-            # セクション名（メニューキー）を逆順に追加
-            section_keys="$item $section_keys"
+            menu_stack="$item:$menu_stack"
+        # 表示テキストを記録（偶数番目の項目）
+        else
+            # 既存のメニュースタックの先頭にテキストを追加
+            if [ -n "$menu_stack" ]; then
+                history_pairs="$item $history_pairs"
+                item_count=$((item_count + 1))
+            fi
         fi
     done
     unset IFS
     
-    # セクション名を処理してパンくずを構築
-    for section in $section_keys; do
-        local display_text=""
-        
-        # メッセージファイルから直接検索
-        for msg_file in "${BASE_DIR}"/messages_*.db; do
-            if [ -f "$msg_file" ]; then
-                # -F オプションで特殊文字対応の検索
-                local pattern="$current_lang|$section="
-                local found=$(grep -F "$pattern" "$msg_file" 2>/dev/null | head -n 1)
-                if [ -n "$found" ]; then
-                    display_text=$(echo "$found" | cut -d'=' -f2-)
-                    break
-                fi
-            fi
-        done
-        
-        # 変換が見つからない場合はキーをそのまま使用
-        if [ -z "$display_text" ]; then
-            display_text="$section"
-        fi
-        
-        # パンくずに追加
+    # 各メニュー項目のテキストをパンくずに追加
+    for display_text in $history_pairs; do
         breadcrumb="${breadcrumb}${separator}$(color white "$display_text")"
     done
     
