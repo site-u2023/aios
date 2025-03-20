@@ -106,6 +106,78 @@ debug_breadcrumbs() {
 }
 
 display_breadcrumbs() {
+    debug_log "DEBUG" "Building breadcrumb navigation path with selected menu color"
+    
+    # メインメニューの情報を取得
+    local main_menu_key="MAIN_MENU_NAME"
+    local main_menu_text=$(get_message "$main_menu_key")
+    
+    # セレクタの色取得
+    local menu_keys_file="${CACHE_DIR}/menu_keys.tmp"
+    local menu_colors_file="${CACHE_DIR}/menu_colors.tmp"
+    local breadcrumb_color="white"
+    
+    # 現在選択されている色を取得（存在する場合）
+    if [ -n "$CURRENT_MENU" ] && [ -f "$menu_keys_file" ] && [ -f "$menu_colors_file" ]; then
+        # 現在のメニューキーに対応する行番号を見つける
+        local line_num=1
+        local found=0
+        
+        while IFS= read -r key_line || [ -n "$key_line" ]; do
+            if [ "$key_line" = "$CURRENT_MENU" ]; then
+                found=1
+                break
+            fi
+            line_num=$((line_num + 1))
+        done < "$menu_keys_file"
+        
+        # 対応する色を取得
+        if [ "$found" -eq 1 ]; then
+            local selected_color=$(sed -n "${line_num}p" "$menu_colors_file" 2>/dev/null)
+            [ -n "$selected_color" ] && breadcrumb_color="$selected_color"
+            debug_log "DEBUG" "Found matching color for current menu: $breadcrumb_color"
+        fi
+    fi
+    
+    # パンくずの初期値を設定
+    local breadcrumb="$(color $breadcrumb_color "$main_menu_text")"
+    local separator=" > "
+    
+    # 履歴が空ならメインメニューのみ表示
+    if [ -z "$MENU_HISTORY" ]; then
+        debug_log "DEBUG" "No menu history, showing main menu only"
+        printf "%s\n\n" "$breadcrumb"
+        return
+    fi
+    
+    # デバッグ情報を詳細に出力
+    debug_log "DEBUG" "Processing menu history data: $MENU_HISTORY"
+    
+    # 履歴データを逆順に処理
+    local reversed_sections=""
+    
+    # 履歴を配列なしで逆順に変換
+    IFS="$MENU_HISTORY_SEPARATOR"
+    for section in $MENU_HISTORY; do
+        # 先頭に追加して逆順にする
+        reversed_sections="$section $reversed_sections"
+    done
+    unset IFS
+    
+    debug_log "DEBUG" "Created reversed section list for breadcrumb display"
+    
+    # 逆順にした履歴からパンくずを構築
+    for section in $reversed_sections; do
+        # メッセージキーを翻訳して表示
+        local display_text=$(get_message "$section")
+        breadcrumb="${breadcrumb}${separator}$(color $breadcrumb_color "$display_text")"
+    done
+    
+    # パンくずリストを出力
+    printf "%s\n\n" "$breadcrumb"
+}
+
+OK_display_breadcrumbs() {
     debug_log "DEBUG" "Building optimized breadcrumb navigation with section names only"
     
     # デバッグ情報の出力
