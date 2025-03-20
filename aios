@@ -335,12 +335,12 @@ color_posix_code_map() {
 
 # メッセージをインメモリに設定する関数
 into_memory_message() {
-    # メッセージを文字列としてMSG_MEMORYに追加する
+    # 初期状態では英語のメッセージのみ必要
     MSG_MEMORY="
-CONFIG_DOWNLOAD_SUCCESS=Download completed:
-CONFIG_DOWNLOAD_UNNECESSARY=No update needed:"
+US|CONFIG_DOWNLOAD_SUCCESS=Download completed:
+US|CONFIG_DOWNLOAD_UNNECESSARY=No update needed:"
 
-    debug_log "DEBUG" "Messages loaded into memory"
+    debug_log "DEBUG" "Essential English messages loaded into memory"
 }
 
 # メッセージを取得する関数
@@ -370,7 +370,7 @@ get_message() {
     
     # 1. インメモリの英語メッセージから検索
     if [ -n "$MSG_MEMORY" ]; then
-        message=$(echo "$MSG_MEMORY" | grep "^${key}=" 2>/dev/null | cut -d'=' -f2-)
+        message=$(echo "$MSG_MEMORY" | grep "^US|${key}=" 2>/dev/null | cut -d'=' -f2-)
     fi
     
     # 2. インメモリで見つからなかった場合にDBファイルから検索
