@@ -73,6 +73,7 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 UPDATE_CACHE="${CACHE_DIR}/update.ch"
 GITHUB_TOKEN_FILE="/etc/aios_token"
+MSG_MEMORY=""
 
 # 🔵　エラー・デバッグ・ヘルプ・カラー系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -332,69 +333,80 @@ color_posix_code_map() {
 
 # 🔵　メッセージ系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
+# メッセージをインメモリに設定する関数
+into_memory_message() {
+    # 既存のメッセージ定義
+    MSG_MEMORY="${MSG_MEMORY}
+
+    US|CONFIG_DOWNLOAD_SUCCESS=Download completed:
+    JP|CONFIG_DOWNLOAD_SUCCESS=ダウンロード完了:
+    US|CONFIG_DOWNLOAD_UNNECESSARY=No update needed:
+    JP|CONFIG_DOWNLOAD_UNNECESSARY=アップデート不要:"
+    
+    debug_log "DEBUG" "Messages loaded into memory"
+}
+
 # メッセージを取得する関数
 get_message() {
     local key="$1"
-    local params="$2"  # パラメータ文字列（例: "code=JP"）
-    local default_msg=""
-    local lang=""
+    local params="$2"  # パラメータ文字列
+    local lang="${lang:-US}"  # デフォルト言語を設定
     local db_file=""
     
-    debug_log "DEBUG" "get_message: key=${key}, language=${lang}, db_file=${db_file}, params=${params}"
+    debug_log "DEBUG" "get_message: key=${key}, language=${lang}, params=${params}"
 
-    # DBからメッセージを検索
     local message=""
-    message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
     
-    # 言語固有のメッセージが見つからない場合
-    if [ -z "$message" ]; then
-        # 英語メッセージを検索
-        message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+    # 1. DBファイルから検索（存在する場合）
+    if [ -f "$db_file" ]; then
+        message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
         
-        # それでも見つからない場合は基本DBで再検索
-        if [ -z "$message" ] && [ "$db_file" != "${BASE_DIR}/messages_base.db" ]; then
-            debug_log "DEBUG" "Message not found in specialized DB, trying base DB"
-            message=$(grep "^${lang}|${key}=" "${BASE_DIR}/messages_base.db" 2>/dev/null | cut -d'=' -f2-)
-            
-            if [ -z "$message" ]; then
-                message=$(grep "^US|${key}=" "${BASE_DIR}/messages_base.db" 2>/dev/null | cut -d'=' -f2-)
-            fi
+        # 言語固有のメッセージが見つからない場合、英語を試す
+        if [ -z "$message" ]; then
+            message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
         fi
     fi
     
-    # それでも見つからない場合はデフォルトかキーを返す
+    # 2. DBファイルでメッセージが見つからなかった場合、インメモリから検索
+    into_memory_message
+
+    if [ -z "$message" ] && [ -n "$MSG_MEMORY" ]; then
+        message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" | cut -d'=' -f2-)
+        
+        # 言語固有のメッセージが見つからない場合、英語を試す
+        if [ -z "$message" ]; then
+            message=$(echo "$MSG_MEMORY" | grep "^US|${key}=" | cut -d'=' -f2-)
+        fi
+    fi
+    
+    # それでも見つからない場合はキーをそのまま返す
     if [ -z "$message" ]; then
         debug_log "WARNING" "Message not found for key: ${key}"
-        if [ -n "$default_msg" ]; then
-            message="$default_msg"
-        else
-            message="$key"  # キーをそのまま返す
-        fi
+        message="$key"
     fi
     
-    # パラメータ置換処理 - 修正版
+    # パラメータ置換処理
     if [ -n "$params" ]; then
-        local temp_msg="$message"
-        local var_name=""
-        local var_value=""
-    
-        # パラメータを処理（単一パラメータ対応）
-        var_name=$(echo "$params" | cut -d'=' -f1)
-        var_value=$(echo "$params" | cut -d'=' -f2-)
-    
-        if [ -n "$var_name" ] && [ -n "$var_value" ]; then
-            debug_log "DEBUG" "Replacing placeholder {$var_name} with value"
-            var_value_esc=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
-            temp_msg=$(echo "$temp_msg" | sed "s|{$var_name}|$var_value_esc|g")
-            message="$temp_msg"
-        fi
+        # 複数パラメータ対応（セミコロン区切りを想定）
+        echo "$params" | tr ';' '\n' | while IFS= read -r param; do
+            if [ -n "$param" ]; then
+                var_name=$(echo "$param" | cut -d'=' -f1)
+                var_value=$(echo "$param" | cut -d'=' -f2-)
+                
+                if [ -n "$var_name" ] && [ -n "$var_value" ]; then
+                    debug_log "DEBUG" "Replacing placeholder {$var_name} with value"
+                    var_value_esc=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
+                    message=$(echo "$message" | sed "s|{$var_name}|$var_value_esc|g")
+                fi
+            fi
+        done
     fi
     
     echo "$message"
     return 0
 }
 
-# 修正版 normalize_input 関数 - デバッグ出力を標準エラー出力に分離
+# normalize_input 関数 - デバッグ出力を標準エラー出力に分離
 normalize_input() {
     local input="$1"
     local output="$input"
