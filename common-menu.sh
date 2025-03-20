@@ -779,7 +779,7 @@ get_previous_menu() {
 }
 
 go_back_menu() {
-    debug_log "DEBUG" "Processing go_back_menu with optimized approach"
+    debug_log "DEBUG" "Processing go_back_menu with proper hierarchy navigation"
     
     # 履歴が空の場合はメインメニューへ
     if [ -z "$MENU_HISTORY" ]; then
@@ -788,29 +788,30 @@ go_back_menu() {
         return $?
     fi
     
-    # 履歴の区切り記号をカウント
-    local sep_count=$(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c)
+    # 現在のメニューを取得
+    local current_menu=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f1)
+    debug_log "DEBUG" "Current menu from history: $current_menu"
     
-    # 履歴が1階層分しかない場合はメインメニューへ
-    if [ "$sep_count" -eq 0 ]; then
-        debug_log "DEBUG" "Only one level in history, returning to main menu"
+    # 履歴が1つしかない場合はメインメニューへ
+    if ! echo "$MENU_HISTORY" | grep -q "$MENU_HISTORY_SEPARATOR"; then
+        debug_log "DEBUG" "No previous menu in history, returning to main menu"
         MENU_HISTORY=""
         return_menu
         return $?
     fi
     
-    # 現在のセクション名を削除して前のセクションを取得
+    # 前のメニュー（1階層上）を取得
     local prev_menu=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f2)
-    local new_history=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f2-)
+    debug_log "DEBUG" "Previous menu level: $prev_menu"
     
-    debug_log "DEBUG" "Previous menu section: $prev_menu"
-    debug_log "DEBUG" "New history: $new_history"
+    # 現在のメニューを履歴から削除（1階層だけ上に戻る）
+    local new_history=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f2-)
     
     # セクション名の有効性を確認
     if [ -n "$prev_menu" ] && grep -q "^\[$prev_menu\]" "${BASE_DIR}/menu.db"; then
-        # 履歴を更新
+        # 履歴を更新して1階層上に戻る
         MENU_HISTORY="$new_history"
-        debug_log "DEBUG" "Valid previous menu found, navigating back"
+        debug_log "DEBUG" "Going back to menu: $prev_menu"
         
         # 前のメニューへ移動
         selector "$prev_menu" "" 1
@@ -818,7 +819,7 @@ go_back_menu() {
     fi
     
     # 有効な前のメニューが見つからない場合はメインメニューへ
-    debug_log "DEBUG" "No valid previous menu found, returning to main menu"
+    debug_log "DEBUG" "Invalid previous menu, returning to main menu"
     MENU_HISTORY=""
     return_menu
     return $?
