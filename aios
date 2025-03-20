@@ -337,10 +337,8 @@ color_posix_code_map() {
 into_memory_message() {
     # メッセージを文字列としてMSG_MEMORYに追加する
     MSG_MEMORY="
-US|CONFIG_DOWNLOAD_SUCCESS=Download completed:
-JP|CONFIG_DOWNLOAD_SUCCESS=ダウンロード完了:
-US|CONFIG_DOWNLOAD_UNNECESSARY=No update needed:
-JP|CONFIG_DOWNLOAD_UNNECESSARY=アップデート不要:"
+CONFIG_DOWNLOAD_SUCCESS=Download completed:
+CONFIG_DOWNLOAD_UNNECESSARY=No update needed:"
 
     debug_log "DEBUG" "Messages loaded into memory"
 }
@@ -370,43 +368,25 @@ get_message() {
     
     debug_log "DEBUG" "get_message: key=${key}, language=${lang}, db_file=${db_file}, params=${params}"
     
-    # メッセージを検索するための変数
-    message=""
-    
-    # 1. メモリ内メッセージから検索（早い処理を優先）
-    if [ -z "$MSG_MEMORY" ]; then
-        into_memory_message
-    fi
-    
+    # 1. インメモリの英語メッセージから検索
     if [ -n "$MSG_MEMORY" ]; then
-        # 言語固有のメモリ内メッセージを検索
-        message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
-        
-        # 言語固有のメモリ内メッセージが見つからない場合、英語をチェック
-        if [ -z "$message" ]; then
-            message=$(echo "$MSG_MEMORY" | grep "^US|${key}=" 2>/dev/null | cut -d'=' -f2-)
-        fi
+        message=$(echo "$MSG_MEMORY" | grep "^${key}=" 2>/dev/null | cut -d'=' -f2-)
     fi
     
-    # 2. メモリ内で見つからなかった場合にDBファイルから検索
+    # 2. インメモリで見つからなかった場合にDBファイルから検索
     if [ -z "$message" ] && [ -f "$db_file" ]; then
-        # 言語固有のDBメッセージを検索
         message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
         
-        # 言語固有のDBメッセージが見つからない場合、英語をチェック
-        if [ -z "$message" ]; then
+        # 言語固有のメッセージが見つからない場合、英語をチェック
+        if [ -z "$message" ] && [ "$lang" != "US" ]; then
             message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
         fi
     fi
     
-    # それでも見つからない場合はデフォルトかキーを返す
+    # メッセージが見つからなかった場合はキーをそのまま返す
     if [ -z "$message" ]; then
         debug_log "WARNING" "Message not found for key: ${key}"
-        if [ -n "$default_msg" ]; then
-            message="$default_msg"
-        else
-            message="$key"  # キーをそのまま返す
-        fi
+        message="$key"
     fi
     
     # パラメータ置換処理
@@ -414,7 +394,7 @@ get_message() {
         local var_name=""
         local var_value=""
     
-        # パラメータを処理（単一パラメータ対応）
+        # パラメータを処理
         var_name=$(echo "$params" | cut -d'=' -f1)
         var_value=$(echo "$params" | cut -d'=' -f2-)
     
