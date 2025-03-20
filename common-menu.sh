@@ -143,7 +143,7 @@ display_breadcrumbs() {
     # 逆順にした履歴からパンくずを構築
     for section in $reversed_sections; do
         local display_text=$(get_message "$section")
-        breadcrumb="${breadcrumb}${separator}$(color white "$display_text")"
+        breadcrumb="${breadcrumb}${separator}$(color white_black "$display_text")"
     done
     
     printf "%s\n\n" "$breadcrumb"
@@ -403,11 +403,11 @@ add_special_menu_items() {
         special_items_count=$((special_items_count+1))
         echo "MENU_REMOVE" >> "$menu_keys_file"
         echo "remove_exit" >> "$menu_commands_file"
-        echo "white_black" >> "$menu_colors_file"
+        echo "white_underline" >> "$menu_colors_file"
     
         local remove_text=$(get_message "MENU_REMOVE")
         [ -z "$remove_text" ] && remove_text="削除"
-        printf "%s\n" "$(color white_black "[00] $remove_text")" >> "$menu_displays_file"
+        printf "%s\n" "$(color white_underline "[00] $remove_text")" >> "$menu_displays_file"
     
         debug_log "DEBUG" "Added special REMOVE item [00] to main menu"
     else
