@@ -354,8 +354,6 @@ get_message() {
     local lang=""
     local db_file=""
 
-    ACTIVE_LANGUAGE="US"
-
     # キャッシュからアクティブな言語とDBファイルを取得
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang=$(cat "${CACHE_DIR}/message.ch")
