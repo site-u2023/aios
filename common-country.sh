@@ -50,6 +50,128 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 
+# normalize_input 関数 - デバッグ出力を標準エラー出力に分離
+normalize_input() {
+    local input="$1"
+    local output="$input"
+    
+    # デバッグメッセージを標準エラー出力へリダイレクト
+    [ "$DEBUG_MODE" = "true" ] && printf "DEBUG: Starting character normalization for input text\n" >&2
+    
+    # 変換テーブル（各行はsedコマンドの負荷を分散するため分割）
+    
+    # 数字（0-9）: 日本語、中国語（簡体字・繁体字）、韓国語で共通
+    output=$(echo "$output" | sed 's/０/0/g; s/１/1/g; s/２/2/g; s/３/3/g; s/４/4/g')
+    output=$(echo "$output" | sed 's/５/5/g; s/６/6/g; s/７/7/g; s/８/8/g; s/９/9/g')
+    
+    # アルファベット大文字（A-Z）: 各国共通の全角英字
+    output=$(echo "$output" | sed 's/Ａ/A/g; s/Ｂ/B/g; s/Ｃ/C/g; s/Ｄ/D/g; s/Ｅ/E/g')
+    output=$(echo "$output" | sed 's/Ｆ/F/g; s/Ｇ/G/g; s/Ｈ/H/g; s/Ｉ/I/g; s/Ｊ/J/g')
+    output=$(echo "$output" | sed 's/Ｋ/K/g; s/Ｌ/L/g; s/Ｍ/M/g; s/Ｎ/N/g; s/Ｏ/O/g')
+    output=$(echo "$output" | sed 's/Ｐ/P/g; s/Ｑ/Q/g; s/Ｒ/R/g; s/Ｓ/S/g; s/Ｔ/T/g')
+    output=$(echo "$output" | sed 's/Ｕ/U/g; s/Ｖ/V/g; s/Ｗ/W/g; s/Ｘ/X/g; s/Ｙ/Y/g; s/Ｚ/Z/g')
+    
+    # アルファベット小文字（a-z）: 各国共通の全角英字
+    output=$(echo "$output" | sed 's/ａ/a/g; s/ｂ/b/g; s/ｃ/c/g; s/ｄ/d/g; s/ｅ/e/g')
+    output=$(echo "$output" | sed 's/ｆ/f/g; s/ｇ/g/g; s/ｈ/h/g; s/ｉ/i/g; s/ｊ/j/g')
+    output=$(echo "$output" | sed 's/ｋ/k/g; s/ｌ/l/g; s/ｍ/m/g; s/ｎ/n/g; s/ｏ/o/g')
+    output=$(echo "$output" | sed 's/ｐ/p/g; s/ｑ/q/g; s/ｒ/r/g; s/ｓ/s/g; s/ｔ/t/g')
+    output=$(echo "$output" | sed 's/ｕ/u/g; s/ｖ/v/g; s/ｗ/w/g; s/ｘ/x/g; s/ｙ/y/g; s/ｚ/z/g')
+    
+    # 主要な記号（日本語、中国語、韓国語で共通使用される記号）
+    output=$(echo "$output" | sed 's/　/ /g')  # 全角スペース
+    output=$(echo "$output" | sed 's/！/!/g; s/＂/"/g; s/＃/#/g; s/＄/$/g; s/％/%/g')
+    output=$(echo "$output" | sed 's/＆/\&/g; s/＇/'\''/g; s/（/(/g; s/）/)/g; s/＊/*/g')
+    output=$(echo "$output" | sed 's/＋/+/g; s/，/,/g; s/－/-/g; s/．/./g; s/／/\//g')
+    
+    # 主要な記号（続き）
+    output=$(echo "$output" | sed 's/：/:/g; s/；/;/g; s/＜/</g; s/＝/=/g; s/＞/>/g')
+    output=$(echo "$output" | sed 's/？/?/g; s/＠/@/g; s/［/[/g; s/＼/\\/g; s/］/]/g')
+    output=$(echo "$output" | sed 's/＾/^/g; s/＿/_/g; s/｀/`/g; s/｛/{/g; s/｜/|/g')
+    output=$(echo "$output" | sed 's/｝/}/g; s/～/~/g')
+    
+    # 韓国語特有の全角記号
+    output=$(echo "$output" | sed 's/￦/\\/g; s/￥/\\/g')
+    
+    # デバッグメッセージを標準エラー出力へリダイレクト
+    [ "$DEBUG_MODE" = "true" ] && printf "DEBUG: Character normalization completed\n" >&2
+    
+    # 正規化した結果のみを返す（デバッグ情報なし）
+    printf '%s' "$output"
+}
+
+# 確認入力処理関数
+confirm() {
+    local msg_key="$1"
+    local param_name="$2"
+    local param_value="$3"
+    local direct_msg="$4"
+    local msg=""
+    local yn=""
+    
+    # メッセージの取得と変数置換
+    if [ -n "$msg_key" ]; then
+        msg=$(get_message "$msg_key")
+        # パラメータ名と値が指定されている場合は置換
+        if [ -n "$param_name" ] && [ -n "$param_value" ]; then
+            # POSIXに準拠した置換方法（エスケープ処理を追加）
+            local safe_value=$(echo "$param_value" | sed 's/[\/&]/\\&/g')
+            msg=$(echo "$msg" | sed "s|{$param_name}|$safe_value|g")
+        fi
+    else
+        # 直接メッセージが指定されている場合はそれを使用
+        msg="$direct_msg"
+    fi
+    
+    debug_log "DEBUG" "Confirm prompt: $msg_key: $msg"
+    
+    # 確認プロンプト表示
+    printf "%s " "$(color white "$msg")"
+
+    # ユーザー入力処理
+    while true; do
+        # readコマンドエラーをハンドリング
+        if ! read -r yn; then
+            debug_log "ERROR" "Failed to read user input"
+            return 1
+        fi
+
+        printf "\n"
+
+        # 入力の正規化（数字のみ正規化し、大文字小文字は変換しない）
+        yn=$(normalize_input "$yn")
+        debug_log "DEBUG" "User input: $yn, normalized to: $yn"
+
+        # 入力の検証（大文字小文字両方に対応）
+        case "$yn" in
+            [Yy]|[Yy][Ee][Ss]) 
+                debug_log "DEBUG" "User confirmed: Yes"
+                # グローバル変数に結果を保存（呼び出し側でも使えるように）
+                CONFIRM_RESULT="Y"
+                return 0 
+                ;;
+            [Nn]|[Nn][Oo]) 
+                debug_log "DEBUG" "User confirmed: No"
+                CONFIRM_RESULT="N"
+                return 1 
+                ;;
+            [Rr]|[Rr][Ee][Tt][Uu][Rr][Nn])
+                # リスタートオプション対応
+                debug_log "DEBUG" "User selected: Return to previous step"
+                CONFIRM_RESULT="R"
+                return 2
+                ;;
+            *) 
+                # 無効な入力の場合のエラーメッセージ
+                printf "%s\n" "$(color red "$(get_message "MSG_INVALID_INPUT_YNR")")"
+                printf "%s " "$(color white "$msg")" 
+                ;;
+        esac
+    done
+
+    printf "%s\n"
+}
+
 # sed用にテキストをエスケープする関数
 escape_for_sed() {
     local input="$1"
