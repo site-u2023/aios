@@ -529,7 +529,7 @@ add_special_menu_items() {
     echo "$special_items_count $menu_count"
 }
 
-# ユーザー選択処理関数（スピナー対応版 - エラーハンドリング強化）
+# ユーザー選択処理関数（スピナー対応版 - シンプル化）
 handle_user_selection() {
     local section_name="$1"
     local is_main_menu="$2"
@@ -653,13 +653,27 @@ handle_user_selection() {
     local selected_text=$(get_message "$selected_key")
     [ -z "$selected_text" ] && selected_text="$selected_key"
     
-    # 通常コマンド実行時のみスピナーを使用し、メニュー移動では使用しない
-    if echo "$selected_cmd" | grep -q "^selector " || \
-       echo "$selected_key" | grep -q "^MENU_BACK$" || \
-       echo "$selected_key" | grep -q "^MENU_EXIT$" || \
-       echo "$selected_key" | grep -q "^MENU_REMOVE$"; then
+    # download()を使うコマンドかどうかをチェック
+    if echo "$selected_cmd" | grep -q "download()"; then
+        # download()を使用するコマンドの場合はスピナーを表示
+        debug_log "DEBUG" "Using spinner for download command"
         
-        # メニュー移動や特殊コマンドの場合は通常表示
+        local download_msg=$(get_message "CONFIG_DOWNLOADING" "0=$selected_text")
+        printf "\n"
+        start_spinner "$download_msg"
+        
+        # コマンド実行
+        eval "$selected_cmd"
+        local cmd_status=$?
+        
+        # スピナーを停止
+        if [ $cmd_status -eq 0 ]; then
+            stop_spinner "$(get_message "CONFIG_COMMAND_SUCCESS")"
+        else
+            stop_spinner "$(get_message "CONFIG_COMMAND_FAILED")" "error"
+        fi
+    else
+        # 通常のコマンドの場合は従来の表示を使用
         local download_msg=$(get_message "CONFIG_DOWNLOADING" "0=$selected_text")
         printf "\n%s\n\n" "$(color "$selected_color" "$download_msg")"
         
@@ -679,65 +693,22 @@ handle_user_selection() {
             selector "$next_menu" "$selected_text" 0
             return $?
         else
-            # 特殊コマンドの実行（スピナーなし）
+            # 通常コマンドの実行
             eval "$selected_cmd"
             local cmd_status=$?
             
             debug_log "DEBUG" "Command execution finished with status: $cmd_status"
-            
-            # コマンド実行エラー時、前のメニューに戻る
-            if [ $cmd_status -ne 0 ]; then
-                # エラーハンドラーを呼び出し
-                handle_menu_error "command_failed" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
-                return 1
-            fi
-            
-            return $cmd_status
         fi
-    else
-        # 通常コマンドの実行（スピナー使用）
-        local download_msg=$(get_message "CONFIG_DOWNLOADING" "0=$selected_text")
-        printf "\n"
-        
-        # トラップ設定（シグナルハンドリング）
-        trap 'debug_log "DEBUG" "Trapped signal, stopping spinner"; [ -n "$SPINNER_PID" ] && stop_spinner "処理が中断されました" "error"; trap - INT TERM HUP; return 1' INT TERM HUP
-        
-        # スピナーを開始
-        start_spinner "$download_msg"
-        
-        # スピナーが起動するまでわずかに待機
-        sleep 0.5
-        
-        # コマンド実行（サブシェルでエラー出力をキャプチャ）
-        local error_output
-        error_output=$(eval "$selected_cmd" 2>&1) || {
-            local cmd_status=$?
-            debug_log "ERROR" "Command failed with status: $cmd_status"
-            debug_log "ERROR" "Error output: $error_output"
-            
-            # スピナーを停止
-            [ -n "$SPINNER_PID" ] && stop_spinner "$(get_message "CONFIG_COMMAND_FAILED")" "error"
-            
-            # エラーメッセージを表示
-            printf "%s\n" "$(color red "$error_output")"
-            sleep 2
-            
-            # トラップを解除
-            trap - INT TERM HUP
-            
-            # エラーハンドラーを呼び出し
-            handle_menu_error "command_failed" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
-            return 1
-        }
-        
-        # 成功時の処理
-        [ -n "$SPINNER_PID" ] && stop_spinner "$(get_message "CONFIG_COMMAND_SUCCESS")"
-        
-        # トラップを解除
-        trap - INT TERM HUP
-        
-        return 0
     fi
+    
+    # コマンド実行エラー時、前のメニューに戻る
+    if [ $cmd_status -ne 0 ]; then
+        # エラーハンドラーを呼び出し
+        handle_menu_error "command_failed" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
+        return 1
+    fi
+    
+    return $cmd_status
 }
 
 # メインのセレクター関数（リファクタリング版）
