@@ -729,8 +729,7 @@ select_zone() {
         
         # メッセージを表示（スキップフラグが設定されていない場合のみ）
         if [ "$skip_message" = "false" ]; then
-            printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
-            printf "\n"
+            printf "%s" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
         fi
         
         return 0
@@ -772,8 +771,7 @@ select_zone() {
             }
             
             # 成功メッセージを表示
-            printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
-            printf "\n"
+            printf "%s" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
             return 0
             ;;
             
