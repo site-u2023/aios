@@ -211,7 +211,7 @@ display_breadcrumbs() {
     done
     
     # パンくずリストを出力（末尾に空行2つ）
-    printf "%s\n" "$breadcrumb"
+    printf "%s\n\n" "$breadcrumb"
     
     debug_log "DEBUG" "Displayed breadcrumb for submenu with single newline"
 }
