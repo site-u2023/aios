@@ -681,11 +681,6 @@ selector() {
     local section_name="$1"        # 表示するセクション名
     local parent_display_text="$2" # 未使用（後方互換性のため残す）
     local skip_history="$3"        # 履歴に追加しない場合は1
-    
-    if [ -n "$MENU_HISTORY" ]; then
-        printf "\n"
-        debug_log "DEBUG" "Added extra spacing for submenu display"
-    fi
   
     # セクション名が指定されていない場合はメインメニューを使用
     section_name="${section_name:-$MAIN_MENU}"
