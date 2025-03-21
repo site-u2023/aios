@@ -76,12 +76,7 @@ MENU_HISTORY_SEPARATOR=":"
 pop_menu_history() {
     debug_log "DEBUG" "Popping from menu history"
     
-    # 履歴が空の場合は何も返さない
-    if [ -z "$MENU_HISTORY" ]; then
-        debug_log "DEBUG" "History is empty, nothing to pop"
-        return
-    fi
-    
+
     # 最後のメニュー名とテキストを取得（履歴の末尾2項目を削除）
     local history_len=$(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c)
     local menu_count=$((history_len / 2 + 1))  # メニュー数
