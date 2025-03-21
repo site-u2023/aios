@@ -277,7 +277,7 @@ select_country() {
             printf "%s\n" "$(color white "$msg_enter")"
 
             local msg_search=$(get_message "MSG_SEARCH_KEYWORD")
-            printf "%s " "$(color white "$msg_search")"
+            printf "\n%s\n " "$(color white "$msg_search")"
 
             read -r input_lang
             input_lang=$(normalize_input "$input_lang")
@@ -616,7 +616,7 @@ select_list() {
     # 項目をリスト表示
     local display_count=1
     echo "$select_list" | while IFS= read -r line; do
-        printf "[%d] %s\n" "$display_count" "$line"
+        printf "[%d] \n%s\n" "$display_count" "$line"
         display_count=$((display_count + 1))
     done
     
@@ -669,7 +669,7 @@ select_list() {
         local safe_item=$(escape_for_sed "$selected_item")
         local msg_prefix=${msg_selected%%\{0\}*}
         local msg_suffix=${msg_selected#*\{0\}}
-        printf "%s%s%s" "$(color white "$msg_prefix")" "$(color white "$safe_item")" "$(color white "$msg_suffix")"
+        printf "\n%s%s%s" "$(color white "$msg_prefix")" "$(color white "$safe_item")" "$(color white "$msg_suffix")"
         
         confirm "MSG_CONFIRM_YNR"
         ret=$?
@@ -738,7 +738,7 @@ select_zone() {
     fi
 
     # 複数のタイムゾーンがある場合は選択肢を表示
-    printf "%s\n" "$(color white "$(get_message "MSG_SELECT_TIMEZONE")")"
+    printf "\n%s\n" "$(color white "$(get_message "MSG_SELECT_TIMEZONE")")"
     
     # 番号付きリスト表示 - select_list関数を使用
     local number_file="${CACHE_DIR}/zone_selection.tmp"
