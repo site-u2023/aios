@@ -529,7 +529,7 @@ add_special_menu_items() {
     echo "$special_items_count $menu_count"
 }
 
-# ユーザー選択処理関数
+# ユーザー選択処理関数（実行中表示を削除したバージョン）
 handle_user_selection() {
     local section_name="$1"
     local is_main_menu="$2"
@@ -574,7 +574,7 @@ handle_user_selection() {
     local real_choice=""
     case "$choice" in
         "10")
-            # [10]は常にEXIT 
+            # [10]は常にEXIT (旧[0])
             if [ $is_main_menu -eq 1 ]; then
                 real_choice=$((menu_count - 2 + 1)) # メインメニューの場合
             else
@@ -594,7 +594,7 @@ handle_user_selection() {
             fi
             ;;
         "0")
-            # [0]は常にRETURN（サブメニューのみ）
+            # [0]は常にRETURN（サブメニューのみ）(旧[9])
             if [ $is_main_menu -eq 0 ]; then
                 real_choice=$((menu_count - 1))
                 debug_log "DEBUG" "Special input [0] mapped to item: $real_choice"
@@ -649,12 +649,8 @@ handle_user_selection() {
     debug_log "DEBUG" "Selected color: $selected_color"
     debug_log "DEBUG" "Executing command: $selected_cmd"
     
-    # コマンド実行前の表示
-    local selected_text=$(get_message "$selected_key")
-    [ -z "$selected_text" ] && selected_text="$selected_key"
-    
-    local download_msg=$(get_message "CONFIG_DOWNLOADING" "0=$selected_text")
-    printf "\n%s\n\n" "$(color "$selected_color" "$download_msg")"
+    # 改行を表示して視覚的な区切りを作る
+    printf "\n\n"
     
     # コマンド実行 - セレクターコマンドの特別処理
     if echo "$selected_cmd" | grep -q "^selector "; then
