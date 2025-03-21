@@ -126,7 +126,7 @@ confirm() {
     debug_log "DEBUG" "Confirm prompt: $msg_key: $msg"
     
     # 確認プロンプト表示
-    printf "%s " "$(color white "$msg")"
+    printf "%s\n\n" "$(color white "$msg")"
 
     # ユーザー入力処理
     while true; do
@@ -500,6 +500,7 @@ detect_and_set_location() {
     fi
     
     # 検出情報表示
+    printf "\n"
     printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
     printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$(echo "$system_country" | cut -d' ' -f2)")"
     
@@ -507,7 +508,7 @@ detect_and_set_location() {
     if [ -n "$system_zonename" ]; then
         printf "%s %s$(color white ",")%s\n\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_zonename")" "$(color white "$system_timezone")"
     else
-        printf "%s %s\n\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_timezone")"
+        printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_timezone")"
     fi
     
     # 確認
