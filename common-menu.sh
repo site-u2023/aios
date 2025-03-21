@@ -204,7 +204,7 @@ display_breadcrumbs() {
         i=$((i + 1))
     done
     
-    # パンくずリストを出力（末尾に空行2つ）
+    # パンくずリストを出力（末尾に空行1つ）
     printf "%s\n" "$breadcrumb"
     
     debug_log "DEBUG" "Displayed breadcrumb for submenu with single newline"
@@ -770,7 +770,7 @@ selector() {
         return $?
     fi
     
-    printf "\n"
+    #printf "\n"
     
     # 通常メニュー項目数（特殊項目を除く）
     local menu_choices=$((menu_count - special_items_count))
