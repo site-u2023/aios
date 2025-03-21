@@ -509,6 +509,8 @@ detect_and_set_location() {
     else
         printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_timezone")"
     fi
+
+    printf "\n"
     
     # 確認
     if confirm "MSG_CONFIRM_ONLY_YN"; then
