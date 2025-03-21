@@ -211,7 +211,9 @@ display_breadcrumbs() {
     done
     
     # パンくずリストを出力（末尾に空行2つ）
-    printf "%s\n\n" "$breadcrumb"
+    printf "%s\n" "$breadcrumb"
+    
+    debug_log "DEBUG" "Displayed breadcrumb for submenu with single newline"
 }
 
 # エラーハンドリング関数 - 一元化された処理
@@ -686,7 +688,10 @@ selector() {
     local parent_display_text="$2" # 未使用（後方互換性のため残す）
     local skip_history="$3"        # 履歴に追加しない場合は1
 
-    printf "%s\n\n"
+    if [ -n "$MENU_HISTORY" ]; then
+        printf "\n"
+        debug_log "DEBUG" "Added extra spacing for submenu display"
+    fi
     
     # セクション名が指定されていない場合はメインメニューを使用
     section_name="${section_name:-$MAIN_MENU}"
