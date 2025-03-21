@@ -693,8 +693,6 @@ selector() {
     
     # セクション名が指定されていない場合はメインメニューを使用
     section_name="${section_name:-$MAIN_MENU}"
-
-    printf "\n\n"
     
     debug_log "DEBUG" "Starting menu selector with section: $section_name"
     
