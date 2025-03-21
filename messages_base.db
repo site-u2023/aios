@@ -24,7 +24,7 @@ JP|MSG_UNDER_TEST=👹 試験中
 # common-menu.sh
 # =======================
 
-# echo_message関数用メッセージ
+# echo_message関数
 #US|MENU_TITLE=Menu: {0}
 #JP|MENU_TITLE=メニュー: {0}
 
@@ -36,6 +36,16 @@ JP|MSG_UNDER_TEST=👹 試験中
 
 #US|CONFIG_SEPARATOR=---------------------------------------
 #JP|CONFIG_SEPARATOR=---------------------------------------
+
+# スピナー関数
+US|CONFIG_LOADING_COMPLETE=Loading completed
+JP|CONFIG_LOADING_COMPLETE=読み込みが完了しました
+
+US|CONFIG_COMMAND_SUCCESS=Process completed successfully
+JP|CONFIG_COMMAND_SUCCESS=処理が正常に完了しました
+
+US|CONFIG_COMMAND_FAILED=Process failed
+JP|CONFIG_COMMAND_FAILED=処理に失敗しました
 
 # メニュータイトル
 US|MAIN_MENU_NAME=Main menu
