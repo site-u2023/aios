@@ -955,9 +955,8 @@ print_banner() {
 print_banner_ascii() {
     debug_log "DEBUG" "Displaying lowercase aios block ASCII art banner"
     
-    printf "\n"
-    
     # ASCIIアート
+    printf "\n"
     printf "%s\n" "$(color magenta "               ## #")"
     printf "%s\n" "$(color blue    "     ####      ###       ####      #####")"
     printf "%s\n" "$(color green   "        ##      ##      ##  ##    ##")"
@@ -978,9 +977,8 @@ print_banner_ascii() {
 print_banner_unicode() {
     debug_log "DEBUG" "Displaying lowercase aios block ASCII art banner"
     
-    printf "\n\n"
-    
     # ASCIIアート（環境依存文字 - ブロック）
+    printf "\n"
     printf "%s\n" "$(color magenta "               ██ █")"
     printf "%s\n" "$(color blue    "     ████      ███       ████      █████")"
     printf "%s\n" "$(color green   "        ██      ██      ██  ██    ██")"
@@ -1003,7 +1001,7 @@ print_information() {
     local package_manager=$(cat "${CACHE_DIR}/package_manager.ch")
     local usbdevice=$(cat "${CACHE_DIR}/usbdevice.ch")
 
-    printf "\n\n"
+    printf "\n"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_ARCHITECTURE" "info=$architecture")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_OSVERSION" "info=$osversion")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_PACKAGEMANAGER" "info=$package_manager")")"
