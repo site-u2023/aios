@@ -978,6 +978,7 @@ print_banner_unicode() {
     debug_log "DEBUG" "Displaying lowercase aios block ASCII art banner"
     
     # ASCIIアート（環境依存文字 - ブロック）
+    printf "\n"
     printf "%s\n" "$(color magenta "               ██ █")"
     printf "%s\n" "$(color blue    "     ████      ███       ████      █████")"
     printf "%s\n" "$(color green   "        ██      ██      ██  ██    ██")"
