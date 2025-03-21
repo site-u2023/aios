@@ -207,7 +207,7 @@ print_help() {
 }
 
 # 拡張色関数 (太字/通常設定対応)
-color() {
+OK_color() {
     local color_name="$1"
     local weight="normal"  # デフォルトは通常の太さ
     local text=""
@@ -235,68 +235,407 @@ color() {
     printf "%b%s%b" "$color_code" "$text" "$(color_code_map reset normal)"
 }
 
-# 拡張カラーコードマッピング関数
+# 🔴　エラー・デバッグ・ヘルプ　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
+
+# 🔵　カラー系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
+
+# 表示設定変数の初期化
+DISPLAY_MODE="normal"     # 表示モード: normal/fancy/box/minimal
+USE_COLOR="1"             # 色表示: 1=有効、0=無効
+USE_BOLD="0"              # 太字表示: 1=有効、0=無効
+USE_UNDERLINE="0"         # 下線表示: 1=有効、0=無効
+USE_BOX="0"               # ボックス表示: 1=有効、0=無効
+
+# 設定ファイルパス
+SETTINGS_FILE="${BASE_DIR:-/tmp/aios}/display_settings.conf"
+
+# コマンドラインオプションの処理関数
+parse_display_options() {
+    debug_log "DEBUG" "Parsing display command line options"
+    
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -d|--display)
+                shift
+                if [ $# -gt 0 ]; then
+                    DISPLAY_MODE="$1"
+                    debug_log "DEBUG" "Display mode set to: $DISPLAY_MODE"
+                fi
+                ;;
+            -c|--color)
+                shift
+                if [ $# -gt 0 ]; then
+                    case "$1" in
+                        on|yes|1) USE_COLOR="1" ;;
+                        off|no|0) USE_COLOR="0" ;;
+                    esac
+                    debug_log "DEBUG" "Color display set to: $USE_COLOR"
+                fi
+                ;;
+            -b|--bold)
+                USE_BOLD="1"
+                debug_log "DEBUG" "Bold text enabled"
+                ;;
+            -u|--underline)
+                USE_UNDERLINE="1" 
+                debug_log "DEBUG" "Underline text enabled"
+                ;;
+            --box)
+                USE_BOX="1"
+                debug_log "DEBUG" "Box display enabled"
+                ;;
+            --plain)
+                # すべての装飾を無効化
+                USE_COLOR="0"
+                USE_BOLD="0"
+                USE_UNDERLINE="0"
+                USE_BOX="0"
+                DISPLAY_MODE="minimal"
+                debug_log "DEBUG" "Plain mode enabled (all decorations disabled)"
+                ;;
+        esac
+        shift
+    done
+}
+
+# カラーコードマッピング関数（太字/下線対応）
 color_code_map() {
     local color="$1"
-    local use_bold="$2"  # 太字フラグ: "bold" または "normal"
+    local weight="$2"  # bold or normal
     
     # 太字プレフィックスの設定
     local bold_prefix=""
-    if [ "$use_bold" = "bold" ]; then
+    if [ "$weight" = "bold" ] || [ "$USE_BOLD" = "1" ]; then
         bold_prefix="1;"
     fi
     
+    # 下線プレフィックスの設定
+    local ul_prefix=""
+    if [ "$USE_UNDERLINE" = "1" ]; then
+        ul_prefix="4;"
+    fi
+    
     case "$color" in
-        # 基本色（9色）
-        "red") printf "\033[${bold_prefix}38;5;196m" ;;
-        "orange") printf "\033[${bold_prefix}38;5;208m" ;;
-        "yellow") printf "\033[${bold_prefix}38;5;226m" ;;
-        "green") printf "\033[${bold_prefix}38;5;46m" ;;
-        "cyan") printf "\033[${bold_prefix}38;5;51m" ;;
-        "blue") printf "\033[${bold_prefix}38;5;33m" ;;
-        "indigo") printf "\033[${bold_prefix}38;5;57m" ;;
-        "purple") printf "\033[${bold_prefix}38;5;129m" ;;
-        "magenta") printf "\033[${bold_prefix}38;5;201m" ;;
-        "white") printf "\033[${bold_prefix}37m" ;;  # 白色
+        # 基本色（9色+黒）
+        "red") printf "\033[${ul_prefix}${bold_prefix}38;5;196m" ;;
+        "orange") printf "\033[${ul_prefix}${bold_prefix}38;5;208m" ;;
+        "yellow") printf "\033[${ul_prefix}${bold_prefix}38;5;226m" ;;
+        "green") printf "\033[${ul_prefix}${bold_prefix}38;5;46m" ;;
+        "cyan") printf "\033[${ul_prefix}${bold_prefix}38;5;51m" ;;
+        "blue") printf "\033[${ul_prefix}${bold_prefix}38;5;33m" ;;
+        "indigo") printf "\033[${ul_prefix}${bold_prefix}38;5;57m" ;;
+        "purple") printf "\033[${ul_prefix}${bold_prefix}38;5;129m" ;;
+        "magenta") printf "\033[${ul_prefix}${bold_prefix}38;5;201m" ;;
+        "white") printf "\033[${ul_prefix}${bold_prefix}37m" ;;
+        "black") printf "\033[${ul_prefix}${bold_prefix}30m" ;;
         
         # 下線付き
-        *"_underline") 
+        *"_underline")
             local base_color=$(echo "$color" | sed 's/_underline//g')
-            local base_code=$(color_code_map "$base_color" "$use_bold" | sed 's/\x1b\[//g' | sed 's/m//g')
-            printf "\033[4;${base_code}m" ;;
+            printf "\033[4;$(color_code_map "$base_color" "$weight" | sed 's/\x1b\[//g' | sed 's/m//g')m"
+            ;;
             
-        # 点滅効果（注意：全てのターミナルでサポートされるわけではありません）
-        "red_blink") printf "\033[5;${bold_prefix}38;5;196m" ;;
-        "yellow_blink") printf "\033[5;${bold_prefix}38;5;226m" ;;
-        "green_blink") printf "\033[5;${bold_prefix}38;5;46m" ;;
-        
-        # 背景色付き
-        "white_on_blue") printf "\033[${bold_prefix}38;5;255;48;5;27m" ;;
-        "black_on_yellow") printf "\033[${bold_prefix}38;5;0;48;5;226m" ;;
-        "white_on_red") printf "\033[${bold_prefix}38;5;255;48;5;196m" ;;
-        "black_on_green") printf "\033[${bold_prefix}38;5;0;48;5;46m" ;;
-        
-        # 斜体（一部のターミナルでサポート）
-        "italic_white") printf "\033[3;${bold_prefix}37m" ;;
-        "italic_green") printf "\033[3;${bold_prefix}38;5;46m" ;;
-        
-        # 取り消し線（一部のターミナルでサポート）
-        "strikethrough_white") printf "\033[9;${bold_prefix}37m" ;;
-        "strikethrough_red") printf "\033[9;${bold_prefix}38;5;196m" ;;
-        
-        # 二重下線（一部のターミナルでサポート）
-        "double_underline_white") printf "\033[21;${bold_prefix}37m" ;;
-        
-        # 反転色
+        # 反転表示
         *"_reverse")
             local base_color=$(echo "$color" | sed 's/_reverse//g')
-            local base_code=$(color_code_map "$base_color" "$use_bold" | sed 's/\x1b\[//g' | sed 's/m//g')
-            printf "\033[7;${base_code}m" ;;
+            printf "\033[7;$(color_code_map "$base_color" "$weight" | sed 's/\x1b\[//g' | sed 's/m//g')m"
+            ;;
             
+        # 背景色指定（white_on_blue など）
+        *"_on_"*)
+            local fg=$(echo "$color" | cut -d'_' -f1)
+            local bg=$(echo "$color" | cut -d'_' -f3)
+            
+            # 前景色コード
+            local fg_code=""
+            case "$fg" in
+                "black") fg_code="30" ;;
+                "red") fg_code="31" ;;
+                "green") fg_code="32" ;;
+                "yellow") fg_code="33" ;;
+                "blue") fg_code="34" ;;
+                "magenta") fg_code="35" ;;
+                "cyan") fg_code="36" ;;
+                "white") fg_code="37" ;;
+                *) fg_code="37" ;;  # デフォルト白
+            esac
+            
+            # 背景色コード
+            local bg_code=""
+            case "$bg" in
+                "black") bg_code="40" ;;
+                "red") bg_code="41" ;;
+                "green") bg_code="42" ;;
+                "yellow") bg_code="43" ;;
+                "blue") bg_code="44" ;;
+                "magenta") bg_code="45" ;;
+                "cyan") bg_code="46" ;;
+                "white") bg_code="47" ;;
+                *) bg_code="40" ;;  # デフォルト黒
+            esac
+            
+            printf "\033[${ul_prefix}${bold_prefix}${fg_code};${bg_code}m"
+            ;;
+            
+        # 反転黒背景白文字
+        "white_black") printf "\033[${ul_prefix}${bold_prefix}7;40m" ;;
+        
         # リセット
         "reset") printf "\033[0m" ;;
-        *) printf "\033[0m" ;;  # デフォルトでリセット
+        *) printf "\033[0m" ;;  # デフォルト
     esac
+}
+
+# 拡張カラー表示関数
+color() {
+    # 色表示無効の場合はプレーンテキストを返す
+    if [ "$USE_COLOR" = "0" ]; then
+        shift
+        echo "$*"
+        return
+    fi
+
+    local color_name="$1"
+    local use_bold="normal"
+    
+    # 第2引数がオプションかどうかを確認
+    if [ "$2" = "-b" ]; then
+        use_bold="bold"
+        shift
+    fi
+    
+    shift
+    local text="$*"
+    
+    # 特殊表示モードの処理
+    if [ "$DISPLAY_MODE" = "box" ] && [ "$USE_BOX" = "1" ]; then
+        # ボックス表示モード
+        box_text "$color_name" "$text"
+        return
+    fi
+    
+    # 色コード取得と表示
+    local color_code=$(color_code_map "$color_name" "$use_bold")
+    local reset_code=$(color_code_map "reset" "normal")
+    printf "%b%s%b" "$color_code" "$text" "$reset_code"
+}
+
+# ボックス表示関数
+box_text() {
+    local color_name="$1"
+    local text="$2"
+    local width=$((${#text} + 4))
+    
+    # 色コード取得
+    local color_code=$(color_code_map "$color_name" "$USE_BOLD")
+    local reset_code=$(color_code_map "reset" "normal")
+    
+    # 上の罫線
+    printf "%b┌" "$color_code"
+    local i=1
+    while [ $i -lt $((width-1)) ]; do
+        printf "─"
+        i=$((i + 1))
+    done
+    printf "┐%b\n" "$reset_code"
+    
+    # テキスト行
+    printf "%b│ %s │%b\n" "$color_code" "$text" "$reset_code"
+    
+    # 下の罫線
+    printf "%b└" "$color_code"
+    i=1
+    while [ $i -lt $((width-1)) ]; do
+        printf "─"
+        i=$((i + 1))
+    done
+    printf "┘%b\n" "$reset_code"
+}
+
+# 文字を繰り返す関数
+repeat_char() {
+    local char="$1"
+    local count="$2"
+    local result=""
+    local i=0
+    
+    while [ $i -lt $count ]; do
+        result="${result}${char}"
+        i=$((i + 1))
+    done
+    
+    echo "$result"
+}
+
+# 装飾ヘッダー表示
+fancy_header() {
+    local text="$1"
+    local color_name="${2:-blue}"
+    
+    # 表示モードに基づく処理
+    case "$DISPLAY_MODE" in
+        box)
+            if [ "$USE_BOX" = "1" ]; then
+                box_text "$color_name" "$text"
+                return
+            fi
+            ;;
+        fancy)
+            # 装飾モード
+            printf "\n%s\n" "$(color "$color_name" -b "$text")"
+            printf "%s\n\n" "$(color "$color_name" "$(repeat_char "=" ${#text})")"
+            return
+            ;;
+        minimal)
+            # 最小限モード
+            printf "\n%s\n\n" "$(color "$color_name" "$text")"
+            return
+            ;;
+    esac
+    
+    # 通常モード（デフォルト）
+    printf "\n%s\n" "$(color "$color_name" "$text")"
+    printf "%s\n\n" "$(color "$color_name" "$(repeat_char "-" ${#text})")"
+}
+
+# 表示設定の保存
+save_display_settings() {
+    local file="$SETTINGS_FILE"
+    debug_log "DEBUG" "Saving display settings to: $file"
+    
+    # 設定ディレクトリの確認
+    mkdir -p "$(dirname "$file")" 2>/dev/null
+    
+    # 設定ファイルの作成
+    cat > "$file" << EOF
+# 表示設定ファイル
+# 更新日時: $(date)
+DISPLAY_MODE=$DISPLAY_MODE
+USE_COLOR=$USE_COLOR
+USE_BOLD=$USE_BOLD
+USE_UNDERLINE=$USE_UNDERLINE
+USE_BOX=$USE_BOX
+EOF
+
+    debug_log "DEBUG" "Display settings saved successfully"
+}
+
+# 表示設定の読み込み
+load_display_settings() {
+    local file="$SETTINGS_FILE"
+    
+    # 設定ファイルがない場合はスキップ
+    if [ ! -f "$file" ]; then
+        debug_log "DEBUG" "Settings file not found, using defaults"
+        return
+    fi
+    
+    debug_log "DEBUG" "Loading display settings from: $file"
+    
+    # POSIX準拠の設定読み込み
+    while IFS="=" read -r key value; do
+        # コメント行と空行をスキップ
+        case "$key" in
+            \#*|"") continue ;;
+        esac
+        
+        # 空白除去
+        key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        
+        # 設定適用
+        case "$key" in
+            DISPLAY_MODE) DISPLAY_MODE="$value" ;;
+            USE_COLOR) USE_COLOR="$value" ;;
+            USE_BOLD) USE_BOLD="$value" ;;
+            USE_UNDERLINE) USE_UNDERLINE="$value" ;;
+            USE_BOX) USE_BOX="$value" ;;
+        esac
+    done < "$file"
+    
+    debug_log "DEBUG" "Display settings loaded successfully"
+}
+
+# 表示設定メニュー
+display_settings_menu() {
+    local exit_menu=0
+    
+    while [ $exit_menu -eq 0 ]; do
+        clear
+        
+        fancy_header "表示設定" "blue"
+        
+        # 設定状態表示
+        printf "%s\n" "$(color blue "[1]") $(color white "表示モード: $(color yellow "$DISPLAY_MODE")")"
+        printf "%s\n" "$(color blue "[2]") $(color white "カラー表示: $([ "$USE_COLOR" = "1" ] && color green "有効" || color red "無効")")"
+        printf "%s\n" "$(color blue "[3]") $(color white "太字表示: $([ "$USE_BOLD" = "1" ] && color green "有効" || color red "無効")")"
+        printf "%s\n" "$(color blue "[4]") $(color white "下線表示: $([ "$USE_UNDERLINE" = "1" ] && color green "有効" || color red "無効")")"
+        printf "%s\n" "$(color blue "[5]") $(color white "ボックス表示: $([ "$USE_BOX" = "1" ] && color green "有効" || color red "無効")")"
+        printf "%s\n" "$(color blue "[6]") $(color white "設定を保存")"
+        printf "%s\n" "$(color blue "[0]") $(color white "戻る")"
+        printf "\n"
+        
+        printf "%s " "$(color green "番号を選択してください (0-6):")"
+        read -r choice
+        
+        case "$choice" in
+            1)  # 表示モード変更
+                clear
+                printf "\n%s\n" "$(color blue "表示モードを選択:")"
+                printf "%s\n" "$(color white "1. normal (標準表示)")"
+                printf "%s\n" "$(color white "2. fancy (装飾表示)")"
+                printf "%s\n" "$(color white "3. box (ボックス表示)")"
+                printf "%s\n" "$(color white "4. minimal (最小限表示)")"
+                printf "%s " "$(color green "番号を選択してください (1-4):")"
+                
+                read -r style_choice
+                case "$style_choice" in
+                    1) DISPLAY_MODE="normal" ;;
+                    2) DISPLAY_MODE="fancy" ;;
+                    3) DISPLAY_MODE="box" ;;
+                    4) DISPLAY_MODE="minimal" ;;
+                    *) printf "%s\n" "$(color red "無効な選択です")" ;;
+                esac
+                debug_log "DEBUG" "Display mode changed to: $DISPLAY_MODE"
+                sleep 1
+                ;;
+                
+            2)  # カラー表示切替
+                USE_COLOR=$([ "$USE_COLOR" = "1" ] && echo "0" || echo "1")
+                debug_log "DEBUG" "Color display toggled to: $USE_COLOR"
+                ;;
+                
+            3)  # 太字表示切替
+                USE_BOLD=$([ "$USE_BOLD" = "1" ] && echo "0" || echo "1")
+                debug_log "DEBUG" "Bold text toggled to: $USE_BOLD"
+                ;;
+                
+            4)  # 下線表示切替
+                USE_UNDERLINE=$([ "$USE_UNDERLINE" = "1" ] && echo "0" || echo "1")
+                debug_log "DEBUG" "Underline text toggled to: $USE_UNDERLINE"
+                ;;
+                
+            5)  # ボックス表示切替
+                USE_BOX=$([ "$USE_BOX" = "1" ] && echo "0" || echo "1")
+                debug_log "DEBUG" "Box display toggled to: $USE_BOX"
+                ;;
+                
+            6)  # 設定保存
+                save_display_settings
+                printf "%s\n" "$(color green "設定を保存しました")"
+                sleep 1
+                ;;
+                
+            0)  # メニュー終了
+                exit_menu=1
+                ;;
+                
+            *)  # 無効な選択
+                printf "%s\n" "$(color red "無効な選択です")"
+                sleep 1
+                ;;
+        esac
+    done
 }
 
 # カラーコードマッピング関数（太字/通常切替対応）
@@ -392,8 +731,7 @@ color_posix_code_map() {
     esac
 }
 
-
-# 🔴　エラー・デバッグ・ヘルプ・カラー系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
+# 🔴　カラー系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
 
 # 🔵　メッセージ系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
