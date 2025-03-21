@@ -690,6 +690,13 @@ selector() {
     local section_name="$1"        # 表示するセクション名
     local parent_display_text="$2" # 未使用（後方互換性のため残す）
     local skip_history="$3"        # 履歴に追加しない場合は1
+
+    # タイムゾーン設定後の特別処理
+    if [ "$EXTRA_SPACING_NEEDED" = "yes" ]; then
+        printf "\n\n"  # タイムゾーン設定後のみ追加の空白
+        EXTRA_SPACING_NEEDED="no"  # フラグをリセット
+        debug_log "DEBUG" "Added extra spacing after timezone configuration"
+    fi
     
     # セクション名が指定されていない場合はメインメニューを使用
     section_name="${section_name:-$MAIN_MENU}"
