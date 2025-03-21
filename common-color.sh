@@ -556,25 +556,34 @@ display_settings_menu() {
 
 # アニメーション表示関数
 animation() {
+    # アニメーションが無効化されている場合は何もせずに終了
     [ "${ANIMATION_ENABLED:-0}" = "0" ] && return
     
     local frames="$1"
     local delay="${2:-1}"
+    local count="${3:-1}"
     local i=0
+    local c=0
     local chars=""
     
+    # フレームの種類を選択
     case "$frames" in
-        spinner) chars="-\|/" ;;
+        spinner) chars="-\\|/" ;;
         dot) chars="⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏" ;;
         bar) chars="▏▎▍▌▋▊▉█▉▊▋▌▍▎▏" ;;
+        pulse) chars="□■■□□□" ;;
         *) chars="$frames" ;;
     esac
     
     printf " "
-    while [ $i -lt ${#chars} ]; do
-        printf "\b%s" "${chars:$i:1}"
-        sleep "$delay"
-        i=$((i + 1))
+    while [ $c -lt $count ]; do
+        i=0
+        while [ $i -lt ${#chars} ]; do
+            printf "\b%s" "${chars:$i:1}"
+            sleep "$delay"
+            i=$((i + 1))
+        done
+        c=$((c + 1))
     done
     printf "\b "
     
