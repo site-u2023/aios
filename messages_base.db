@@ -293,8 +293,8 @@ US|MSG_SELECTED_ZONE=You have selected timezone: {0}
 JP|MSG_SELECTED_ZONE=選択したタイムゾーン: {0}
 
 # select_zone() 関数
-US|MSG_SELECT_TIMEZONE=Please select your timezone from the list:
-JP|MSG_SELECT_TIMEZONE=リストからタイムゾーンを選択してください：
+US|MSG_SELECT_TIMEZONE=Please select your timezone from the list.
+JP|MSG_SELECT_TIMEZONE=リストからタイムゾーンを選択してください。
 
 # country_write() 関数
 US|ERR_FILE_NOT_FOUND=Error: File not found: {file}
