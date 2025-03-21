@@ -235,8 +235,72 @@ color() {
     printf "%b%s%b" "$color_code" "$text" "$(color_code_map reset normal)"
 }
 
-# カラーコードマッピング関数（太字/通常切替対応）
+# 拡張カラーコードマッピング関数
 color_code_map() {
+    local color="$1"
+    local use_bold="$2"  # 太字フラグ: "bold" または "normal"
+    
+    # 太字プレフィックスの設定
+    local bold_prefix=""
+    if [ "$use_bold" = "bold" ]; then
+        bold_prefix="1;"
+    fi
+    
+    case "$color" in
+        # 基本色（9色）
+        "red") printf "\033[${bold_prefix}38;5;196m" ;;
+        "orange") printf "\033[${bold_prefix}38;5;208m" ;;
+        "yellow") printf "\033[${bold_prefix}38;5;226m" ;;
+        "green") printf "\033[${bold_prefix}38;5;46m" ;;
+        "cyan") printf "\033[${bold_prefix}38;5;51m" ;;
+        "blue") printf "\033[${bold_prefix}38;5;33m" ;;
+        "indigo") printf "\033[${bold_prefix}38;5;57m" ;;
+        "purple") printf "\033[${bold_prefix}38;5;129m" ;;
+        "magenta") printf "\033[${bold_prefix}38;5;201m" ;;
+        "white") printf "\033[${bold_prefix}37m" ;;  # 白色
+        
+        # 下線付き
+        *"_underline") 
+            local base_color=$(echo "$color" | sed 's/_underline//g')
+            local base_code=$(color_code_map "$base_color" "$use_bold" | sed 's/\x1b\[//g' | sed 's/m//g')
+            printf "\033[4;${base_code}m" ;;
+            
+        # 点滅効果（注意：全てのターミナルでサポートされるわけではありません）
+        "red_blink") printf "\033[5;${bold_prefix}38;5;196m" ;;
+        "yellow_blink") printf "\033[5;${bold_prefix}38;5;226m" ;;
+        "green_blink") printf "\033[5;${bold_prefix}38;5;46m" ;;
+        
+        # 背景色付き
+        "white_on_blue") printf "\033[${bold_prefix}38;5;255;48;5;27m" ;;
+        "black_on_yellow") printf "\033[${bold_prefix}38;5;0;48;5;226m" ;;
+        "white_on_red") printf "\033[${bold_prefix}38;5;255;48;5;196m" ;;
+        "black_on_green") printf "\033[${bold_prefix}38;5;0;48;5;46m" ;;
+        
+        # 斜体（一部のターミナルでサポート）
+        "italic_white") printf "\033[3;${bold_prefix}37m" ;;
+        "italic_green") printf "\033[3;${bold_prefix}38;5;46m" ;;
+        
+        # 取り消し線（一部のターミナルでサポート）
+        "strikethrough_white") printf "\033[9;${bold_prefix}37m" ;;
+        "strikethrough_red") printf "\033[9;${bold_prefix}38;5;196m" ;;
+        
+        # 二重下線（一部のターミナルでサポート）
+        "double_underline_white") printf "\033[21;${bold_prefix}37m" ;;
+        
+        # 反転色
+        *"_reverse")
+            local base_color=$(echo "$color" | sed 's/_reverse//g')
+            local base_code=$(color_code_map "$base_color" "$use_bold" | sed 's/\x1b\[//g' | sed 's/m//g')
+            printf "\033[7;${base_code}m" ;;
+            
+        # リセット
+        "reset") printf "\033[0m" ;;
+        *) printf "\033[0m" ;;  # デフォルトでリセット
+    esac
+}
+
+# カラーコードマッピング関数（太字/通常切替対応）
+OK_color_code_map() {
     local color="$1"
     local use_bold="$2"  # 太字フラグ: "bold" または "normal"
     
