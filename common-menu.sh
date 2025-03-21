@@ -529,6 +529,7 @@ add_special_menu_items() {
     echo "$special_items_count $menu_count"
 }
 
+# ユーザー選択処理関数
 handle_user_selection() {
     local section_name="$1"
     local is_main_menu="$2"
@@ -573,7 +574,7 @@ handle_user_selection() {
     local real_choice=""
     case "$choice" in
         "10")
-            # [10]は常にEXIT (旧[0])
+            # [10]は常にEXIT 
             if [ $is_main_menu -eq 1 ]; then
                 real_choice=$((menu_count - 2 + 1)) # メインメニューの場合
             else
@@ -593,7 +594,7 @@ handle_user_selection() {
             fi
             ;;
         "0")
-            # [0]は常にRETURN（サブメニューのみ）(旧[9])
+            # [0]は常にRETURN（サブメニューのみ）
             if [ $is_main_menu -eq 0 ]; then
                 real_choice=$((menu_count - 1))
                 debug_log "DEBUG" "Special input [0] mapped to item: $real_choice"
@@ -652,60 +653,37 @@ handle_user_selection() {
     local selected_text=$(get_message "$selected_key")
     [ -z "$selected_text" ] && selected_text="$selected_key"
     
-    # プレースホルダー置換による表示
     local download_msg=$(get_message "CONFIG_DOWNLOADING" "0=$selected_text")
+    printf "\n%s\n\n" "$(color "$selected_color" "$download_msg")"
     
-    # download()を使用するコマンドかどうかを判定
-    if echo "$selected_cmd" | grep -q "download()" && ! echo "$selected_cmd" | grep -q "^selector"; then
-        # downloadを伴うコマンドの場合はスピナーを使用
-        debug_log "DEBUG" "Using spinner for download operation"
-        
-        printf "\n"
-        start_spinner "$download_msg"
-        
-        # コマンド実行
+    # コマンド実行 - セレクターコマンドの特別処理
+    if echo "$selected_cmd" | grep -q "^selector "; then
+        # セレクターコマンドの場合、サブメニューへ移動
+        local next_menu=$(echo "$selected_cmd" | cut -d' ' -f2)
+        debug_log "DEBUG" "Detected submenu navigation: $next_menu"
+    
+        # 選択した色とともにメニュー履歴に追加
+        push_menu_history "$selected_key" "$selected_color"
+    
+        # 一時ファイル削除
+        rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
+    
+        # 次のメニューを表示（表示テキストを親メニュー情報として渡す）
+        selector "$next_menu" "$selected_text" 0
+        return $?
+    else
+        # 通常コマンドの実行
         eval "$selected_cmd"
         local cmd_status=$?
         
-        # スピナーを停止
-        if [ $cmd_status -eq 0 ]; then
-            stop_spinner "$(get_message "CONFIG_COMMAND_SUCCESS")"
-        else
-            stop_spinner "$(get_message "CONFIG_COMMAND_FAILED")" "error"
+        debug_log "DEBUG" "Command execution finished with status: $cmd_status"
+        
+        # コマンド実行エラー時、前のメニューに戻る
+        if [ $cmd_status -ne 0 ]; then
+            # エラーハンドラーを呼び出し
+            handle_menu_error "command_failed" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
+            return 1
         fi
-    else
-        # 通常のメニュー表示・コマンド実行
-        printf "\n%s\n\n" "$(color "$selected_color" "$download_msg")"
-        
-        # コマンド実行 - セレクターコマンドの特別処理
-        if echo "$selected_cmd" | grep -q "^selector "; then
-            # セレクターコマンドの場合、サブメニューへ移動
-            local next_menu=$(echo "$selected_cmd" | cut -d' ' -f2)
-            debug_log "DEBUG" "Detected submenu navigation: $next_menu"
-        
-            # 選択した色とともにメニュー履歴に追加
-            push_menu_history "$selected_key" "$selected_color"
-        
-            # 一時ファイル削除
-            rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
-        
-            # 次のメニューを表示（表示テキストを親メニュー情報として渡す）
-            selector "$next_menu" "$selected_text" 0
-            return $?
-        else
-            # 通常コマンドの実行
-            eval "$selected_cmd"
-            local cmd_status=$?
-            
-            debug_log "DEBUG" "Command execution finished with status: $cmd_status"
-        fi
-    fi
-    
-    # コマンド実行エラー時、前のメニューに戻る
-    if [ $cmd_status -ne 0 ]; then
-        # エラーハンドラーを呼び出し
-        handle_menu_error "command_failed" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
-        return 1
     fi
     
     return $cmd_status
