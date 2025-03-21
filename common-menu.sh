@@ -543,6 +543,9 @@ handle_user_selection() {
     
     debug_log "DEBUG" "Handling user selection for section: $section_name"
     
+    # 最初に2行の改行を追加
+    printf "\n\n"
+
     # 選択プロンプト表示（特殊項目を含む）
     if [ $is_main_menu -eq 1 ]; then
         # メインメニュー用のプロンプト（10, 00を含む）
