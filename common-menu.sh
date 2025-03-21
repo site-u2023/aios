@@ -129,7 +129,7 @@ display_breadcrumbs() {
     # 履歴が空ならメインメニューのみ表示
     if [ -z "$MENU_HISTORY" ]; then
         debug_log "DEBUG" "No menu history, showing main menu only"
-        printf "%s" "$breadcrumb"
+        printf "%s\n\n" "$breadcrumb"
         return
     fi
     
@@ -211,7 +211,7 @@ display_breadcrumbs() {
     done
     
     # パンくずリストを出力（末尾に空行2つ）
-    printf "%s" "$breadcrumb"
+    printf "%s\n\n" "$breadcrumb"
 }
 
 # エラーハンドリング関数 - 一元化された処理
