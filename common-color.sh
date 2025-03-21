@@ -745,6 +745,7 @@ animation() {
     
     # 最終文字をクリア
     printf "\b "
+}
 
 # スピナー開始関数
 start_spinner() {
