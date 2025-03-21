@@ -557,6 +557,8 @@ detect_and_set_location() {
             
             # ゾーン選択完了メッセージを表示（ここで1回だけ）
             printf "%s" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+
+            EXTRA_SPACING_NEEDED="yes"
             
             debug_log "DEBUG" "Auto-detected settings have been applied successfully"
             return 0
