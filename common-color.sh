@@ -765,7 +765,7 @@ start_spinner() {
         printf "\r\033[K"
         
         # メッセージを表示
-        printf "\r📡 %s " "$(color yellow "$SPINNER_MESSAGE")"
+        printf "\r%s " "$(color white "$SPINNER_MESSAGE")"
         
         # アニメーション関数を呼び出し（カーソル制御は行わない）
         animation -t "$SPINNER_TYPE" -d 1 -c 1 -s
@@ -796,9 +796,9 @@ stop_spinner() {
         
         # 成功/失敗に応じたメッセージカラー
         if [ "$status" = "success" ]; then
-            printf "%s\n" "$(color green "$message")"
+            printf "%s\n" "$(color white "$message")"
         else
-            printf "%s\n" "$(color red "$message")"
+            printf "%s\n" "$(color yellow "$message")"
         fi
     else
         printf "\r\033[K"
