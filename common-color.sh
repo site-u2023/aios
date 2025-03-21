@@ -746,7 +746,7 @@ animation() {
     # 最終文字をクリア
     printf "\b "
 
-    # スピナー開始関数（animation関数を使用）
+# スピナー開始関数
 start_spinner() {
     local message="$1"
     local spinner_type="${2:-spinner}"  # デフォルトはスピナー
@@ -766,8 +766,7 @@ start_spinner() {
         # メッセージを表示
         printf "\r📡 %s " "$(color yellow "$SPINNER_MESSAGE")"
         
-        # animationを呼び出して単一フレームを表示
-        # -s オプションでカーソル表示制御は親関数に任せる
+        # アニメーション関数を呼び出し（カーソル制御は行わない）
         animation -t "$SPINNER_TYPE" -d 1 -c 1 -s
         
         # usleepが使える場合はより滑らかに
@@ -813,9 +812,4 @@ stop_spinner() {
     printf "\033[?25h"
     
     debug_log "DEBUG" "Spinner stopped successfully"
-}
-    # カーソル表示を戻す（非表示にした場合のみ）
-    [ "$cursor_hide" = "1" ] && printf "\033[?25h"
-    
-    debug_log "DEBUG" "Animation completed successfully"
 }
