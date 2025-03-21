@@ -60,6 +60,7 @@ COLOR_ENABLED="1"       # 色表示有効/無効
 BOLD_ENABLED="0"        # 太字表示有効/無効
 UNDERLINE_ENABLED="0"   # 下線表示有効/無効
 BOX_ENABLED="0"         # ボックス表示有効/無効
+ANIMATION_ENABLED="0"   # アニメーション有効/無効
 
 # コマンドラインオプション処理関数
 process_display_options() {
@@ -551,4 +552,82 @@ display_settings_menu() {
                 ;;
         esac
     done
+}
+
+# 改良版アニメーション表示関数（ASH/OpenWrt対応）
+animation() {
+    # アニメーションが無効化されている場合は何もせずに終了
+    [ "${ANIMATION_ENABLED:-0}" = "0" ] && return
+    
+    local type="$1"
+    local delay="${2:-1}"
+    local count="${3:-1}"
+    local c=0
+    
+    debug_log "DEBUG" "Starting animation type: $type, delay: $delay, count: $count"
+    
+    # 初期スペース表示
+    printf " "
+    
+    while [ $c -lt $count ]; do
+        # スピナーアニメーション
+        if [ "$type" = "spinner" ]; then
+            printf "\b-"
+            sleep "$delay"
+            printf "\b\\"
+            sleep "$delay"
+            printf "\b|"
+            sleep "$delay"
+            printf "\b/"
+            sleep "$delay"
+        
+        # ドットアニメーション
+        elif [ "$type" = "dot" ]; then
+            printf "\b."
+            sleep "$delay"
+            printf "\b.."
+            sleep "$delay"
+            printf "\b..."
+            sleep "$delay"
+            printf "\b   "
+            sleep "$delay"
+            printf "\b"
+        
+        # バーアニメーション
+        elif [ "$type" = "bar" ]; then
+            printf "\b["
+            sleep "$delay"
+            printf "\b="
+            sleep "$delay"
+            printf "\b>"
+            sleep "$delay"
+            printf "\b]"
+            sleep "$delay"
+            printf "\b "
+            sleep "$delay"
+        
+        # パルスアニメーション
+        elif [ "$type" = "pulse" ]; then
+            printf "\b□"
+            sleep "$delay"
+            printf "\b■"
+            sleep "$delay"
+            printf "\b□"
+            sleep "$delay"
+        
+        # カスタムアニメーション
+        else
+            printf "\b%s" "$type"
+            sleep "$delay"
+            printf "\b "
+            sleep "$delay"
+        fi
+        
+        c=$((c + 1))
+    done
+    
+    # 最終文字をクリア
+    printf "\b "
+    
+    debug_log "DEBUG" "Animation completed successfully"
 }
