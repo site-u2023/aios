@@ -316,8 +316,10 @@ select_country() {
             local msg_prefix=${msg%%\{0\}*}
             local msg_suffix=${msg#*\{0\}}
 
-            printf "%s%s%s\n" "$(color white "$msg_prefix" "$country_name" "$msg_suffix")"
+            printf "%s%s%s" "$(color white "$msg_prefix" "$country_name" "$msg_suffix")"
 
+            printf "\n"
+            
             # 確認（confirm関数使用）
             if confirm "MSG_CONFIRM_ONLY_YN"; then
                 echo "$full_results" > "${CACHE_DIR}/country.tmp"
@@ -507,10 +509,8 @@ detect_and_set_location() {
     if [ -n "$system_zonename" ]; then
         printf "%s %s$(color white ",")%s\n\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_zonename")" "$(color white "$system_timezone")"
     else
-        printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_timezone")"
+        printf "%s %s" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_timezone")"
     fi
-
-    printf "\n"
     
     # 確認
     if confirm "MSG_CONFIRM_ONLY_YN"; then
@@ -534,7 +534,7 @@ detect_and_set_location() {
             normalize_language
             
             # 国選択完了メッセージを表示（ここで1回だけ）
-            printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
+            printf "%s" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
             
             # タイムゾーン文字列の構築
             local timezone_str=""
