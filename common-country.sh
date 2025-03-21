@@ -125,8 +125,8 @@ confirm() {
     
     debug_log "DEBUG" "Confirm prompt: $msg_key: $msg"
     
-    # 確認プロンプト表示
-    printf "%s\n\n" "$(color white "$msg")"
+    # 確認プロンプト表示（カーソルの位置を同じ行に）
+    printf "%s " "$(color white "$msg")"
 
     # ユーザー入力処理
     while true; do
@@ -135,8 +135,6 @@ confirm() {
             debug_log "ERROR" "Failed to read user input"
             return 1
         fi
-
-        printf "\n"
 
         # 入力の正規化（数字のみ正規化し、大文字小文字は変換しない）
         yn=$(normalize_input "$yn")
@@ -148,28 +146,29 @@ confirm() {
                 debug_log "DEBUG" "User confirmed: Yes"
                 # グローバル変数に結果を保存（呼び出し側でも使えるように）
                 CONFIRM_RESULT="Y"
+                printf "\n"  # 入力後に改行を追加
                 return 0 
                 ;;
             [Nn]|[Nn][Oo]) 
                 debug_log "DEBUG" "User confirmed: No"
                 CONFIRM_RESULT="N"
+                printf "\n"  # 入力後に改行を追加
                 return 1 
                 ;;
             [Rr]|[Rr][Ee][Tt][Uu][Rr][Nn])
                 # リスタートオプション対応
                 debug_log "DEBUG" "User selected: Return to previous step"
                 CONFIRM_RESULT="R"
+                printf "\n"  # 入力後に改行を追加
                 return 2
                 ;;
             *) 
                 # 無効な入力の場合のエラーメッセージ
-                printf "%s\n" "$(color red "$(get_message "MSG_INVALID_INPUT_YNR")")"
+                printf "\n%s\n" "$(color red "$(get_message "MSG_INVALID_INPUT_YNR")")"
                 printf "%s " "$(color white "$msg")" 
                 ;;
         esac
     done
-
-    printf "%s\n"
 }
 
 # sed用にテキストをエスケープする関数
