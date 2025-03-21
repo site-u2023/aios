@@ -1153,7 +1153,7 @@ check_common() {
             ;;
         debug)
             download "dynamic-system-info.sh" "hidden" "chmod" "load"
-            download "common-color.sh" "hidden" "chmod" "load
+            download "common-color.sh" "hidden" "chmod" "load"
             download "common-country.sh" "hidden" "chmod" "load"
             download "common-country.sh" "hidden" "chmod" "load"
             download "common-package.sh" "hidden" "chmod" "load"
@@ -1174,7 +1174,7 @@ check_common() {
             ;;
         full)
             download "dynamic-system-info.sh" "chmod" "load"
-            download "common-color.sh" "chmod" "load
+            download "common-color.sh" "chmod" "load"
             download "common-country.sh" "chmod" "load"
             download "common-menu.sh" "chmod" "load"
             download "common-package.sh" "chmod" "load"
