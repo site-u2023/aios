@@ -129,7 +129,7 @@ display_breadcrumbs() {
     local separator=" > "
     
     # パンくずの初期値
-    local breadcrumb="$(color $main_color "$main_menu_text")"
+    local breadcrumb="$(color $main_color -b "$main_menu_text")"
     
     # 履歴が空ならメインメニューのみ表示
     if [ -z "$MENU_HISTORY" ]; then
