@@ -693,6 +693,8 @@ selector() {
     
     # セクション名が指定されていない場合はメインメニューを使用
     section_name="${section_name:-$MAIN_MENU}"
+
+    printf "\n\n"
     
     debug_log "DEBUG" "Starting menu selector with section: $section_name"
     
@@ -774,7 +776,7 @@ selector() {
         return $?
     fi
     
-    printf "\n\n"
+    printf "\n"
     
     # 通常メニュー項目数（特殊項目を除く）
     local menu_choices=$((menu_count - special_items_count))
