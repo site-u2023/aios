@@ -60,7 +60,6 @@ COLOR_ENABLED="1"       # 色表示有効/無効
 BOLD_ENABLED="0"        # 太字表示有効/無効
 UNDERLINE_ENABLED="0"   # 下線表示有効/無効
 BOX_ENABLED="0"         # ボックス表示有効/無効
-ANIMATION_ENABLED="0"   # アニメーション有効/無効
 
 # コマンドラインオプション処理関数
 process_display_options() {
@@ -552,40 +551,4 @@ display_settings_menu() {
                 ;;
         esac
     done
-}
-
-# アニメーション表示関数
-animation() {
-    # アニメーションが無効化されている場合は何もせずに終了
-    [ "${ANIMATION_ENABLED:-0}" = "0" ] && return
-    
-    local frames="$1"
-    local delay="${2:-1}"
-    local count="${3:-1}"
-    local i=0
-    local c=0
-    local chars=""
-    
-    # フレームの種類を選択
-    case "$frames" in
-        spinner) chars="-\\|/" ;;
-        dot) chars="⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏" ;;
-        bar) chars="▏▎▍▌▋▊▉█▉▊▋▌▍▎▏" ;;
-        pulse) chars="□■■□□□" ;;
-        *) chars="$frames" ;;
-    esac
-    
-    printf " "
-    while [ $c -lt $count ]; do
-        i=0
-        while [ $i -lt ${#chars} ]; do
-            printf "\b%s" "${chars:$i:1}"
-            sleep "$delay"
-            i=$((i + 1))
-        done
-        c=$((c + 1))
-    done
-    printf "\b "
-    
-    debug_log "DEBUG" "Animation completed with frame set: $frames"
 }
