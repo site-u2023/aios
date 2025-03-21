@@ -529,7 +529,6 @@ add_special_menu_items() {
     echo "$special_items_count $menu_count"
 }
 
-# ユーザー選択処理関数（スピナー対応版 - シンプル化）
 handle_user_selection() {
     local section_name="$1"
     local is_main_menu="$2"
@@ -653,12 +652,14 @@ handle_user_selection() {
     local selected_text=$(get_message "$selected_key")
     [ -z "$selected_text" ] && selected_text="$selected_key"
     
-    # download()を使うコマンドかどうかをチェック
-    if echo "$selected_cmd" | grep -q "download()"; then
-        # download()を使用するコマンドの場合はスピナーを表示
-        debug_log "DEBUG" "Using spinner for download command"
+    # プレースホルダー置換による表示
+    local download_msg=$(get_message "CONFIG_DOWNLOADING" "0=$selected_text")
+    
+    # download()を使用するコマンドかどうかを判定
+    if echo "$selected_cmd" | grep -q "download()" && ! echo "$selected_cmd" | grep -q "^selector"; then
+        # downloadを伴うコマンドの場合はスピナーを使用
+        debug_log "DEBUG" "Using spinner for download operation"
         
-        local download_msg=$(get_message "CONFIG_DOWNLOADING" "0=$selected_text")
         printf "\n"
         start_spinner "$download_msg"
         
@@ -673,8 +674,7 @@ handle_user_selection() {
             stop_spinner "$(get_message "CONFIG_COMMAND_FAILED")" "error"
         fi
     else
-        # 通常のコマンドの場合は従来の表示を使用
-        local download_msg=$(get_message "CONFIG_DOWNLOADING" "0=$selected_text")
+        # 通常のメニュー表示・コマンド実行
         printf "\n%s\n\n" "$(color "$selected_color" "$download_msg")"
         
         # コマンド実行 - セレクターコマンドの特別処理
