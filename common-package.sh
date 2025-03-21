@@ -71,7 +71,7 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 #########################################################################
 
 # **スピナー開始関数**
-start_spinner() {
+XX_start_spinner() {
     local message="$1"
     SPINNER_MESSAGE="$message"  # 停止時のメッセージ保持
     #spinner_chars='| / - \\'
@@ -99,7 +99,7 @@ start_spinner() {
 }
 
 # **スピナー停止関数**
-stop_spinner() {
+XX_stop_spinner() {
     local message="$1"
 
     if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
