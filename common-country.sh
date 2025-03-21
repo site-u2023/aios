@@ -671,7 +671,7 @@ select_list() {
         local safe_item=$(escape_for_sed "$selected_item")
         local msg_prefix=${msg_selected%%\{0\}*}
         local msg_suffix=${msg_selected#*\{0\}}
-        printf "\n%s%s%s" "$(color white "$msg_prefix")" "$(color white "$safe_item")" "$(color white "$msg_suffix")"
+        printf "%s%s%s" "$(color white "$msg_prefix")" "$(color white "$safe_item")" "$(color white "$msg_suffix")"
         
         confirm "MSG_CONFIRM_YNR"
         ret=$?
