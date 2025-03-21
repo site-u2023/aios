@@ -277,7 +277,7 @@ select_country() {
             printf "%s\n" "$(color white "$msg_enter")"
 
             local msg_search=$(get_message "MSG_SEARCH_KEYWORD")
-            printf "\n%s\n " "$(color white "$msg_search")"
+            printf "\n%s " "$(color white "$msg_search")"
 
             read -r input_lang
             input_lang=$(normalize_input "$input_lang")
