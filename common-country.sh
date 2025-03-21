@@ -775,7 +775,7 @@ select_zone() {
             }
             
             # 成功メッセージを表示
-            printf "%s" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+            printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
             return 0
             ;;
             
