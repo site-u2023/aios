@@ -653,22 +653,33 @@ handle_user_selection() {
     local selected_text=$(get_message "$selected_key")
     [ -z "$selected_text" ] && selected_text="$selected_key"
     
-    # プレースホルダー置換による表示
-    local download_msg=$(get_message "CONFIG_DOWNLOADING" "0=$selected_text")
+    # スピナーを使用するかどうかのフラグ（特殊メニュー項目ではスピナーを使用しない）
+    local use_spinner=1
     
-    printf "\n"
+    # 特殊メニュー項目のチェック（スピナーを使用しない項目）
+    case "$selected_key" in
+        MENU_BACK|MENU_EXIT|MENU_REMOVE)
+            use_spinner=0
+            # 通常の表示
+            local download_msg=$(get_message "CONFIG_DOWNLOADING" "0=$selected_text")
+            printf "\n%s\n\n" "$(color "$selected_color" "$download_msg")"
+            ;;
+        *)
+            # 通常のコマンドの場合はスピナーを使用
+            use_spinner=1
+            ;;
+    esac
     
-    # スピナーを開始
-    start_spinner "$download_msg"
+    # セレクターコマンドのチェック（スピナーを使用しない）
+    if echo "$selected_cmd" | grep -q "^selector "; then
+        use_spinner=0
+    fi
     
     # コマンド実行 - セレクターコマンドの特別処理
     if echo "$selected_cmd" | grep -q "^selector "; then
         # セレクターコマンドの場合、サブメニューへ移動
         local next_menu=$(echo "$selected_cmd" | cut -d' ' -f2)
         debug_log "DEBUG" "Detected submenu navigation: $next_menu"
-        
-        # スピナーを停止
-        stop_spinner "$(get_message "CONFIG_LOADING_COMPLETE")"
     
         # 選択した色とともにメニュー履歴に追加
         push_menu_history "$selected_key" "$selected_color"
@@ -681,18 +692,33 @@ handle_user_selection() {
         return $?
     else
         # 通常コマンドの実行
-        eval "$selected_cmd"
-        local cmd_status=$?
+        if [ $use_spinner -eq 1 ]; then
+            # スピナーの開始
+            local download_msg=$(get_message "CONFIG_DOWNLOADING" "0=$selected_text")
+            printf "\n"
+            start_spinner "$download_msg"
+            
+            # コマンド実行
+            eval "$selected_cmd"
+            local cmd_status=$?
+            
+            # スピナーの停止
+            if [ $cmd_status -eq 0 ]; then
+                stop_spinner "$(get_message "CONFIG_COMMAND_SUCCESS")"
+            else
+                stop_spinner "$(get_message "CONFIG_COMMAND_FAILED")" "error"
+            fi
+        else
+            # スピナーなしで実行
+            eval "$selected_cmd"
+            local cmd_status=$?
+        fi
         
         debug_log "DEBUG" "Command execution finished with status: $cmd_status"
         
-        # スピナーを停止し、実行結果を表示
-        if [ $cmd_status -eq 0 ]; then
-            stop_spinner "$(get_message "CONFIG_COMMAND_SUCCESS")"
-        else
-            stop_spinner "$(get_message "CONFIG_COMMAND_FAILED")" "error"
-            
-            # コマンド実行エラー時、前のメニューに戻る
+        # コマンド実行エラー時、前のメニューに戻る
+        if [ $cmd_status -ne 0 ]; then
+            # エラーハンドラーを呼び出し
             handle_menu_error "command_failed" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
             return 1
         fi
