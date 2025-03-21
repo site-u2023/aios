@@ -553,3 +553,30 @@ display_settings_menu() {
         esac
     done
 }
+
+# アニメーション表示関数
+animation() {
+    [ "${ANIMATION_ENABLED:-0}" = "0" ] && return
+    
+    local frames="$1"
+    local delay="${2:-1}"
+    local i=0
+    local chars=""
+    
+    case "$frames" in
+        spinner) chars="-\|/" ;;
+        dot) chars="⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏" ;;
+        bar) chars="▏▎▍▌▋▊▉█▉▊▋▌▍▎▏" ;;
+        *) chars="$frames" ;;
+    esac
+    
+    printf " "
+    while [ $i -lt ${#chars} ]; do
+        printf "\b%s" "${chars:$i:1}"
+        sleep "$delay"
+        i=$((i + 1))
+    done
+    printf "\b "
+    
+    debug_log "DEBUG" "Animation completed with frame set: $frames"
+}
