@@ -774,7 +774,7 @@ selector() {
         return $?
     fi
     
-    printf "\n"
+    printf "\n\n"
     
     # 通常メニュー項目数（特殊項目を除く）
     local menu_choices=$((menu_count - special_items_count))
