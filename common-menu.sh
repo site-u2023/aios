@@ -134,7 +134,7 @@ display_breadcrumbs() {
     # 履歴が空ならメインメニューのみ表示
     if [ -z "$MENU_HISTORY" ]; then
         debug_log "DEBUG" "No menu history, showing main menu only"
-        printf "%s" "$breadcrumb"
+        printf "%s\n\n" "$breadcrumb"
         return
     fi
     
