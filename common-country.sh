@@ -274,7 +274,7 @@ select_country() {
         # 入力がまだない場合は入力を求める
         if [ -z "$input_lang" ]; then
             local msg_enter=$(get_message "MSG_ENTER_COUNTRY")
-            printf "%s\n" "$(color white "$msg_enter")"
+            printf "%s" "$(color white "$msg_enter")"
 
             local msg_search=$(get_message "MSG_SEARCH_KEYWORD")
             printf "\n%s " "$(color white "$msg_search")"
