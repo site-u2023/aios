@@ -963,14 +963,14 @@ print_banner_ascii() {
     printf "%s\n" "$(color yellow  "     #####      ##      ##  ##     #####")"
     printf "%s\n" "$(color orange  "    ##  ##      ##      ##  ##         ##")"
     printf "%s\n" "$(color red     "     #####     ####      ####     ######")"
-    
+    printf "\n"
     
     # バナーメッセージ
-    printf "\n"
     printf "%s\n" "$(color white "$(get_message "MSG_BANNER_DECCRIPTION")")"
     printf "%s\n" "$(color white "$(get_message "MSG_BANNER_NAME")")"
     printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DISCLAIMER")")"
-    
+    printf "\n"
+
     debug_log "DEBUG" "Block style lowercase aios banner displayed successfully"
 }
 
@@ -978,19 +978,19 @@ print_banner_unicode() {
     debug_log "DEBUG" "Displaying lowercase aios block ASCII art banner"
     
     # ASCIIアート（環境依存文字 - ブロック）
-    printf "\n"
     printf "%s\n" "$(color magenta "               ██ █")"
     printf "%s\n" "$(color blue    "     ████      ███       ████      █████")"
     printf "%s\n" "$(color green   "        ██      ██      ██  ██    ██")"
     printf "%s\n" "$(color yellow  "     █████      ██      ██  ██     █████")"
     printf "%s\n" "$(color orange  "    ██  ██      ██      ██  ██         ██")"
     printf "%s\n" "$(color red     "     █████     ████      ████     ██████")"
+    printf "\n"
 
     # バナーメッセージ
-    printf "\n"
     printf "%s\n" "$(color white "$(get_message "MSG_BANNER_DECCRIPTION")")"
     printf "%s\n" "$(color white "$(get_message "MSG_BANNER_NAME")")"
     printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DISCLAIMER")")"
+    printf "\n"
 
     debug_log "DEBUG" "Block style lowercase aios banner displayed successfully"
 }
@@ -1001,11 +1001,11 @@ print_information() {
     local package_manager=$(cat "${CACHE_DIR}/package_manager.ch")
     local usbdevice=$(cat "${CACHE_DIR}/usbdevice.ch")
 
-    printf "\n"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_ARCHITECTURE" "info=$architecture")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_OSVERSION" "info=$osversion")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_PACKAGEMANAGER" "info=$package_manager")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_USBDEVICE" "info=$usbdevice")")"
+    printf "\n"
 }
 
 print_country() {
@@ -1015,7 +1015,6 @@ print_country() {
     local zonename=$(cat "${CACHE_DIR}/zonename.ch")
     local timezone=$(cat "${CACHE_DIR}/timezone.ch")
 
-    printf "\n"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_COUNTRY" "code=$country")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_LANGUAGE" "code=$language")")"
     #printf "%s\n" "$(color white "$(get_message "MSG_INFO_MESSAGE" "code=$message")")"
