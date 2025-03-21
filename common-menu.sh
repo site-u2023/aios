@@ -67,16 +67,10 @@ SELECTED_MENU_COLOR=""
 unset MAIN_MENU
 MAIN_MENU="${MAIN_MENU:-MAIN_MENU_NAME}"
 
-# メニュー履歴を追跡するためのグローバル変数
-MENU_HISTORY=""
-CURRENT_MENU=""
-MENU_HISTORY_SEPARATOR=":"
-
 # メニュー履歴にエントリを追加する関数
 pop_menu_history() {
     debug_log "DEBUG" "Popping from menu history"
     
-
     # 最後のメニュー名とテキストを取得（履歴の末尾2項目を削除）
     local history_len=$(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c)
     local menu_count=$((history_len / 2 + 1))  # メニュー数
@@ -211,7 +205,7 @@ display_breadcrumbs() {
     done
     
     # パンくずリストを出力（末尾に空行2つ）
-    printf "%s\n\n" "$breadcrumb"
+    printf "%s\n" "$breadcrumb"
     
     debug_log "DEBUG" "Displayed breadcrumb for submenu with single newline"
 }
