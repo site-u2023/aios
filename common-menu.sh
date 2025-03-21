@@ -529,7 +529,7 @@ add_special_menu_items() {
     echo "$special_items_count $menu_count"
 }
 
-# ユーザー選択処理関数
+# ユーザー選択処理関数（スピナー対応版）
 handle_user_selection() {
     local section_name="$1"
     local is_main_menu="$2"
@@ -656,14 +656,19 @@ handle_user_selection() {
     # プレースホルダー置換による表示
     local download_msg=$(get_message "CONFIG_DOWNLOADING" "0=$selected_text")
     
-    printf "\n%s\n\n" "$(color "$selected_color" "$download_msg")"
-    #sleep 1
+    printf "\n"
+    
+    # スピナーを開始
+    start_spinner "$download_msg"
     
     # コマンド実行 - セレクターコマンドの特別処理
     if echo "$selected_cmd" | grep -q "^selector "; then
         # セレクターコマンドの場合、サブメニューへ移動
         local next_menu=$(echo "$selected_cmd" | cut -d' ' -f2)
         debug_log "DEBUG" "Detected submenu navigation: $next_menu"
+        
+        # スピナーを停止
+        stop_spinner "$(get_message "CONFIG_LOADING_COMPLETE")"
     
         # 選択した色とともにメニュー履歴に追加
         push_menu_history "$selected_key" "$selected_color"
@@ -681,9 +686,13 @@ handle_user_selection() {
         
         debug_log "DEBUG" "Command execution finished with status: $cmd_status"
         
-        # コマンド実行エラー時、前のメニューに戻る
-        if [ $cmd_status -ne 0 ]; then
-            # エラーハンドラーを呼び出し
+        # スピナーを停止し、実行結果を表示
+        if [ $cmd_status -eq 0 ]; then
+            stop_spinner "$(get_message "CONFIG_COMMAND_SUCCESS")"
+        else
+            stop_spinner "$(get_message "CONFIG_COMMAND_FAILED")" "error"
+            
+            # コマンド実行エラー時、前のメニューに戻る
             handle_menu_error "command_failed" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
             return 1
         fi
