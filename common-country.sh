@@ -271,7 +271,7 @@ select_list() {
         # プレースホルダー置換
         local safe_item=$(escape_for_sed "$selected_item")
         msg_selected=$(echo "$msg_selected" | sed "s|{item}|$safe_item|g")
-        printf "\n%s\n" "$(color white "$msg_selected")"
+        printf "%s\n" "$(color white "$msg_selected")"
         
         # 確認（YNRモードで）
         confirm "MSG_CONFIRM_SELECT" "" "" "" "ynr"
