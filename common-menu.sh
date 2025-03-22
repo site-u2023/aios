@@ -224,7 +224,7 @@ handle_menu_error() {
     local msg_key="${error_msg:-MSG_ERROR_OCCURRED}"
     printf "%s\n" "$(color red "$(get_message "$msg_key")")"
     
-    sleep 2
+    sleep 1
     
     # エラー時にメニューに戻る処理
     if [ "$section_name" = "$main_menu" ]; then
@@ -591,7 +591,7 @@ handle_user_selection() {
                 debug_log "DEBUG" "Special input [00] mapped to item: $real_choice"
             else
                 printf "\n%s\n\n" "$(color red "$error_msg")"
-                sleep 2
+                sleep 1
                 return 0 # リトライが必要
             fi
             ;;
@@ -602,7 +602,7 @@ handle_user_selection() {
                 debug_log "DEBUG" "Special input [0] mapped to item: $real_choice"
             else
                 printf "\n%s\n\n" "$(color red "$error_msg")"
-                sleep 2
+                sleep 1
                 return 0 # リトライが必要
             fi
             ;;
@@ -610,14 +610,14 @@ handle_user_selection() {
             # 数値チェック
             if ! echo "$choice" | grep -q '^[0-9][0-9]*$'; then
                 printf "\n%s\n\n" "$(color red "$error_msg")"
-                sleep 2
+                sleep 1
                 return 0 # リトライが必要
             fi
         
             # 選択範囲チェック（通常メニュー項目のみ）
             if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_choices" ]; then
                 printf "\n%s\n\n" "$(color red "$error_msg")"
-                sleep 2
+                sleep 1
                 return 0 # リトライが必要
             fi
         
