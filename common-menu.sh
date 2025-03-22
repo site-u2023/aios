@@ -392,12 +392,16 @@ process_menu_items() {
             echo "$cmd" >> "$menu_commands_file"
             echo "$color_name" >> "$menu_colors_file"
             
-            local current_lang=""
+            # メッセージキーの変換処理の修正
+            local display_text=""
+
+            # メッセージファイルから言語設定を直接取得（キャッシュ優先）
+            local current_lang="US"  # デフォルトは英語
             if [ -f "${CACHE_DIR}/message.ch" ]; then
                 current_lang=$(cat "${CACHE_DIR}/message.ch")
             fi
-            
-            local display_text=""
+
+            debug_log "DEBUG" "Using language code for menu display: $current_lang"
             
             # メッセージファイルから直接検索（特殊文字対応）
             debug_log "DEBUG" "Direct search for message key: $key"
