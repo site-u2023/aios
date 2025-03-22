@@ -971,7 +971,7 @@ remove_exit() {
         exit 0
     else
         debug_log "DEBUG" "User canceled deletion, returning to menu"
-        printf "%s\n" "$(color white "$(get_message "CONFIG_DELETE_CANCELED")")"
+        printf "%s\n\n" "$(color white "$(get_message "CONFIG_DELETE_CANCELED")")"
         
         # メインメニューに戻る処理
         local main_menu="${MAIN_MENU}"
