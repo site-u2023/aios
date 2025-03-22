@@ -590,7 +590,7 @@ select_country() {
 }
 
 # システムの地域情報を検出し設定する関数
-detect_and_set_location() {
+OK_detect_and_set_location() {
     debug_log "DEBUG" "Running detect_and_set_location() function"
     
     # システムから国とタイムゾーン情報を取得
@@ -649,18 +649,17 @@ detect_and_set_location() {
             echo "$country_data" > "${CACHE_DIR}/country.tmp"
             
             # country_write関数に処理を委譲（メッセージ表示スキップ）
-            debug_log "DEBUG" "Calling country_write() with skip_message=true"
+            debug_log "DEBUG" "Calling country_write()"
             country_write true || {
                 debug_log "ERROR" "Failed to write country data"
                 return 1
             }
             
+            # 国選択完了メッセージを先に表示
+            printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
+            
             # 言語を正規化
             normalize_language
-            
-            # 国と言語の選択が完了したメッセージを表示（順序変更）
-            printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
-            debug_log "DEBUG" "Adjusted message order for consistent user experience"
             
             # タイムゾーン文字列の構築
             local timezone_str=""
@@ -681,7 +680,7 @@ detect_and_set_location() {
                 return 1
             }
             
-            # ゾーン選択完了メッセージを表示
+            # ゾーン選択完了メッセージを表示（ここで1回だけ）
             printf "%s\n\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
 
             EXTRA_SPACING_NEEDED="yes"
@@ -699,7 +698,7 @@ detect_and_set_location() {
 }
 
 # システムの地域情報を検出し設定する関数
-OK_detect_and_set_location() {
+detect_and_set_location() {
     debug_log "DEBUG" "Running detect_and_set_location() function"
     
     # システムから国とタイムゾーン情報を取得
