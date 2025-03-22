@@ -288,15 +288,15 @@ JP|MSG_NUMBER_OUT_OF_RANGE=入力した数字は範囲外です。有効な番�
 US|MSG_SELECTED_COUNTRY=Selected country: {item}
 JP|MSG_SELECTED_COUNTRY=選択された国: {item}
 
-US|MSG_SELECTED_ZONE=Selected timezone: {item}
-JP|MSG_SELECTED_ZONE=選択されたタイムゾーン: {item}
+US|MSG_SELECTED_ZONE=Selected zone: {item}
+JP|MSG_SELECTED_ZONE=選択されたゾーン: {item}
 
 US|MSG_SELECTED_ITEM=Selected: {item}
 JP|MSG_SELECTED_ITEM=選択項目: {item}
 
 # select_zone() 関数
-US|MSG_SELECT_TIMEZONE=Please select your timezone from the list.
-JP|MSG_SELECT_TIMEZONE=リストからタイムゾーンを選択してください。
+US|MSG_SELECT_TIMEZONE=Please select your zone from the list.
+JP|MSG_SELECT_TIMEZONE=リストからゾーンを選択してください。
 
 # country_write() 関数
 US|ERR_FILE_NOT_FOUND=Error: File not found: {file}
