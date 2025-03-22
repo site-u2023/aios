@@ -392,8 +392,11 @@ process_menu_items() {
             echo "$cmd" >> "$menu_commands_file"
             echo "$color_name" >> "$menu_colors_file"
             
-            # メッセージキーの変換処理（特殊文字対応版）
-            local current_lang="${lang_code:-JP}"
+            local current_lang=""
+            if [ -f "${CACHE_DIR}/message.ch" ]; then
+                current_lang=$(cat "${CACHE_DIR}/message.ch")
+            fi
+            
             local display_text=""
             
             # メッセージファイルから直接検索（特殊文字対応）
