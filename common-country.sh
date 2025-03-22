@@ -100,7 +100,7 @@ normalize_input() {
     printf '%s' "$output"
 }
 
-# 確認入力処理関数
+# 確認入力処理関数 - 同一行での再表示版
 confirm() {
     local msg_key="$1"
     local param_name="$2"
@@ -109,7 +109,7 @@ confirm() {
     local msg=""
     local yn=""
     
-    # メッセージの取得と変数置換（既存コードと同じ）
+    # メッセージの取得と変数置換
     if [ -n "$msg_key" ]; then
         msg=$(get_message "$msg_key")
         if [ -n "$param_name" ] && [ -n "$param_value" ]; then
@@ -120,14 +120,13 @@ confirm() {
         msg="$direct_msg"
     fi
     
-    debug_log "DEBUG" "Confirm prompt: $msg_key: $msg"
+    debug_log "DEBUG" "Using inline prompt handling with existing message keys"
     
-    # 確認プロンプト表示
+    # 初回のプロンプト表示
     printf "%s " "$(color white "$msg")"
 
     # ユーザー入力処理
     while true; do
-        # readコマンドエラーをハンドリング
         if ! read -r yn; then
             debug_log "ERROR" "Failed to read user input"
             return 1
@@ -135,7 +134,7 @@ confirm() {
 
         # 入力の正規化
         yn=$(normalize_input "$yn")
-        debug_log "DEBUG" "User input: $yn, normalized to: $yn"
+        debug_log "DEBUG" "User input received: $yn"
 
         # 入力の検証
         case "$yn" in
@@ -158,16 +157,9 @@ confirm() {
                 return 2
                 ;;
             *) 
-                # 無効入力の場合、エラーメッセージなしで再入力を待つ
-                # カーソルを前に戻す制御文字（\b）を使用
-                # 入力された文字数分だけバックスペースで削除
-                printf "\b \b" >/dev/tty
-                local input_length=${#yn}
-                while [ "$input_length" -gt 0 ]; do
-                    printf "\b \b" >/dev/tty
-                    input_length=$((input_length - 1))
-                done
-                debug_log "DEBUG" "Invalid input cleared without error message"
+                # 無効入力時、同じ行内でプロンプトをクリア＆再表示
+                debug_log "DEBUG" "Invalid input detected, rewriting same line"
+                printf "\r\033[K%s " "$(color white "$msg")"
                 ;;
         esac
     done
@@ -508,12 +500,12 @@ detect_and_set_location() {
     printf "\n"
     printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
     printf "%s %s" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$(echo "$system_country" | cut -d' ' -f2)")"
-    
+
     # ゾーン名があればゾーン名とタイムゾーン、なければタイムゾーンのみ表示
     if [ -n "$system_zonename" ]; then
-        printf "%s %s$(color white ",")%s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_zonename")" "$(color white "$system_timezone")"
+        printf "%s %s%s%s\n\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_zonename")" "$(color white ",")" "$(color white "$system_timezone")"
     else
-        printf "%s %s" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_timezone")"
+        printf "%s %s\n\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_timezone")"
     fi
     
     # 確認
