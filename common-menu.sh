@@ -396,7 +396,7 @@ process_menu_items() {
             local display_text=""
 
             # メッセージファイルから言語設定を直接取得（キャッシュ優先）
-            local current_lang="US"  # デフォルトは英語
+            local current_lang=""
             if [ -f "${CACHE_DIR}/message.ch" ]; then
                 current_lang=$(cat "${CACHE_DIR}/message.ch")
             fi
