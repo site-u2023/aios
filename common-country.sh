@@ -845,7 +845,7 @@ detect_and_set_location() {
             normalize_language
             
             # 国選択完了メッセージを表示（ここで1回だけ）
-            printf "%s" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
+            printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
             
             # タイムゾーン文字列の構築
             local timezone_str=""
