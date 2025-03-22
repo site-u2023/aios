@@ -100,8 +100,172 @@ normalize_input() {
     printf '%s' "$output"
 }
 
-# 確認入力処理関数
+# 確認入力処理関数（y/n/r）- 同一行再表示方式
 confirm() {
+    local msg_key="$1"
+    local param_name="$2"
+    local param_value="$3"
+    local direct_msg="$4"
+    local msg=""
+    local yn=""
+    
+    # メッセージの取得と変数置換
+    if [ -n "$msg_key" ]; then
+        msg=$(get_message "$msg_key")
+        if [ -n "$param_name" ] && [ -n "$param_value" ]; then
+            local safe_value=$(echo "$param_value" | sed 's/[\/&]/\\&/g')
+            msg=$(echo "$msg" | sed "s|{$param_name}|$safe_value|g")
+        fi
+    else
+        msg="$direct_msg"
+    fi
+    
+    debug_log "DEBUG" "Using same-line redisplay for confirmation prompt"
+    
+    # 確認プロンプト表示
+    printf "%s " "$(color white "$msg")"
+
+    # ユーザー入力処理
+    while true; do
+        if ! read -r yn; then
+            debug_log "ERROR" "Failed to read user input"
+            return 1
+        fi
+
+        # 入力の正規化
+        yn=$(normalize_input "$yn")
+        debug_log "DEBUG" "Processing confirm input: $yn"
+
+        # 入力の検証
+        case "$yn" in
+            [Yy]|[Yy][Ee][Ss]) 
+                debug_log "DEBUG" "User confirmed: Yes"
+                CONFIRM_RESULT="Y"
+                printf "\n"
+                return 0 
+                ;;
+            [Nn]|[Nn][Oo]) 
+                debug_log "DEBUG" "User confirmed: No"
+                CONFIRM_RESULT="N"
+                printf "\n"
+                return 1 
+                ;;
+            [Rr]|[Rr][Ee][Tt][Uu][Rr][Nn])
+                debug_log "DEBUG" "User selected: Return to previous step"
+                CONFIRM_RESULT="R"
+                printf "\n"
+                return 2
+                ;;
+            *) 
+                # 無効入力時、同じ行で再表示
+                debug_log "DEBUG" "Invalid input, redisplaying prompt on same line"
+                printf "\r\033[K%s " "$(color white "$msg")"
+                ;;
+        esac
+    done
+}
+
+# 番号選択関数 - select_list()も同一行再表示方式に統一
+select_list() {
+    debug_log "DEBUG" "Running select_list() function with type=$3"
+    
+    local select_list="$1"
+    local tmp_file="$2"
+    local type="$3"
+    local prompt_msg_key=""
+    
+    # タイプに応じたメッセージキー設定
+    case "$type" in
+        country) prompt_msg_key="MSG_SELECT_COUNTRY_NUMBER" ;;
+        zone)    prompt_msg_key="MSG_SELECT_ZONE_NUMBER" ;;
+        *)       prompt_msg_key="MSG_SELECT_NUMBER" ;;
+    esac
+    
+    # リストの行数を数える
+    local total_items=$(echo "$select_list" | wc -l)
+    debug_log "DEBUG" "Total items in list: $total_items"
+    
+    # 項目が1つしかない場合は自動選択
+    if [ "$total_items" -eq 1 ]; then
+        debug_log "DEBUG" "Only one item in list, auto-selecting"
+        echo "1" > "$tmp_file"
+        return 0
+    fi
+    
+    # 項目をリスト表示
+    local display_count=1
+    echo "$select_list" | while IFS= read -r line; do
+        printf "[%d] %s\n" "$display_count" "$line"
+        display_count=$((display_count + 1))
+    done
+    
+    # ユーザーに選択を促す
+    local prompt_msg=$(get_message "$prompt_msg_key")
+    printf "%s " "$(color white "$prompt_msg")"
+    
+    # ユーザー入力処理
+    while true; do
+        local number
+        read -r number
+        number=$(normalize_input "$number")
+        debug_log "DEBUG" "User input number: $number"
+        
+        # 数値チェック
+        if ! echo "$number" | grep -q '^[0-9]\+$'; then
+            debug_log "DEBUG" "Invalid input (not a number): $number"
+            # エラーメッセージなしで同じ行に再表示
+            printf "\r\033[K%s " "$(color white "$prompt_msg")"
+            continue
+        fi
+        
+        # 範囲チェック
+        if [ "$number" -lt 1 ] || [ "$number" -gt "$total_items" ]; then
+            debug_log "DEBUG" "Number out of range: $number (valid: 1-$total_items)"
+            # エラーメッセージなしで同じ行に再表示
+            printf "\r\033[K%s " "$(color white "$prompt_msg")"
+            continue
+        fi
+        
+        # 選択項目を取得
+        local selected_item=$(echo "$select_list" | sed -n "${number}p")
+        debug_log "DEBUG" "Selected item: $selected_item"
+        
+        # 確認メッセージ表示
+        local msg_selected=""
+        case "$type" in
+            country) msg_selected=$(get_message "MSG_SELECTED_COUNTRY") ;;
+            zone)    msg_selected=$(get_message "MSG_SELECTED_ZONE") ;;
+            *)       msg_selected=$(get_message "MSG_SELECTED_ITEM") ;;
+        esac
+        
+        # プレースホルダー置換
+        local safe_item=$(escape_for_sed "$selected_item")
+        local msg_prefix=${msg_selected%%\{0\}*}
+        local msg_suffix=${msg_selected#*\{0\}}
+        printf "%s%s%s" "$(color white "$msg_prefix")" "$(color white "$safe_item")" "$(color white "$msg_suffix")"
+        
+        confirm "MSG_CONFIRM_YNR"
+        ret=$?
+        case $ret in
+            0) # Yes
+                echo "$number" > "$tmp_file"
+                debug_log "DEBUG" "Selection confirmed: $number ($selected_item)"
+                return 0
+                ;;
+            2) # Return
+                debug_log "DEBUG" "User requested to return to previous step"
+                return 2
+                ;;
+            *) # No
+                debug_log "DEBUG" "Selection cancelled, prompting again"
+                printf "\n%s " "$(color white "$prompt_msg")"
+                ;;
+        esac
+    done
+}
+
+# 確認入力処理関数
+OK_confirm() {
     local msg_key="$1"
     local param_name="$2"
     local param_value="$3"
