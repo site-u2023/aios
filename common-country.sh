@@ -842,7 +842,7 @@ detect_and_set_location() {
             }
 
             # 国と言語の選択完了メッセージを先に表示（正しい順序に修正）
-            printf "%s\n\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
+            printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
             debug_log "DEBUG" "Displaying country selection message first for consistent order"
             
             # 言語を正規化
