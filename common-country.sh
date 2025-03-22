@@ -343,7 +343,7 @@ select_country() {
             
             debug_log "DEBUG" "Language selected via command argument: $input_lang"
             # ここで1回だけ成功メッセージを表示
-            printf "\n%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
+            printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
             
             # 選択されたタイムゾーンのゾーン情報からゾーンを選択
             select_zone
@@ -656,118 +656,10 @@ detect_and_set_location() {
             }
             
             # 国選択完了メッセージを先に表示
-            printf "\n%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
+            printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
             
             # 言語を正規化
             normalize_language
-            
-            # タイムゾーン文字列の構築
-            local timezone_str=""
-            if [ -n "$system_zonename" ] && [ -n "$system_timezone" ]; then
-                # ゾーン名とタイムゾーン情報を組み合わせる
-                timezone_str="${system_zonename},${system_timezone}"
-                debug_log "DEBUG" "Created combined timezone string: ${timezone_str}"
-            else
-                # タイムゾーン情報のみ
-                timezone_str="${system_timezone}"
-                debug_log "DEBUG" "Using timezone string: ${timezone_str}"
-            fi
-            
-            # zone_write関数に処理を委譲（直接引数として渡す）
-            debug_log "DEBUG" "Calling zone_write() with timezone data"
-            zone_write "$timezone_str" || {
-                debug_log "ERROR" "Failed to write timezone data"
-                return 1
-            }
-            
-            # ゾーン選択完了メッセージを表示（ここで1回だけ）
-            printf "%s\n\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
-
-            EXTRA_SPACING_NEEDED="yes"
-            
-            debug_log "DEBUG" "Auto-detected settings have been applied successfully"
-            return 0
-        else
-            debug_log "DEBUG" "No matching entry found for detected country: $system_country"
-            return 1
-        fi
-    else
-        debug_log "DEBUG" "User declined auto-detected settings"
-        return 1
-    fi
-}
-
-# システムの地域情報を検出し設定する関数
-OK_detect_and_set_location() {
-    debug_log "DEBUG" "Running detect_and_set_location() function"
-    
-    # システムから国とタイムゾーン情報を取得
-    local system_country=""
-    local system_timezone=""
-    local system_zonename=""
-    
-    # スクリプトパスの確認
-    if [ ! -f "$BASE_DIR/dynamic-system-info.sh" ]; then
-        debug_log "DEBUG" "dynamic-system-info.sh not found. Cannot detect location."
-        return 1
-    fi
-
-    # dynamic-system-info.shを一度だけ読み込む
-    . "$BASE_DIR/dynamic-system-info.sh"
-
-    # 国情報の取得
-    system_country=$(get_country_info)
-    debug_log "DEBUG" "Detected country info: ${system_country}"
-
-    # タイムゾーン情報の取得
-    system_timezone=$(get_timezone_info)
-    debug_log "DEBUG" "Detected timezone info: ${system_timezone}"
-
-    # ゾーン名の取得
-    system_zonename=$(get_zonename_info)
-    debug_log "DEBUG" "Detected zone name info: ${system_zonename}"
-    
-    # 検出できなければ通常フローへ
-    if [ -z "$system_country" ] || [ -z "$system_timezone" ]; then
-        debug_log "DEBUG" "Could not detect system country or timezone"
-        return 1
-    fi
-    
-    # 検出情報表示
-    printf "\n"
-    printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
-    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$(echo "$system_country" | cut -d' ' -f2)")"
-
-    # ゾーン名があればゾーン名とタイムゾーン、なければタイムゾーンのみ表示
-    if [ -n "$system_zonename" ]; then
-        printf "%s %s%s%s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_zonename")" "$(color white ",")" "$(color white "$system_timezone")"
-    else
-        printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_timezone")"
-    fi
-    
-    # 確認
-    if confirm "MSG_CONFIRM_ONLY_YN"; then
-        # country.dbから完全な国情報を検索
-        local country_data=$(grep -i "^[^ ]* *$system_country" "$BASE_DIR/country.db")
-        debug_log "DEBUG" "Found country data: ${country_data}"
-        
-        if [ -n "$country_data" ]; then
-            # 国情報を一時ファイルに書き込み
-            debug_log "DEBUG" "Writing country data to temporary file"
-            echo "$country_data" > "${CACHE_DIR}/country.tmp"
-            
-            # country_write関数に処理を委譲（メッセージ表示スキップ）
-            debug_log "DEBUG" "Calling country_write()"
-            country_write true || {
-                debug_log "ERROR" "Failed to write country data"
-                return 1
-            }
-            
-            # 言語を正規化
-            normalize_language
-            
-            # 国選択完了メッセージを表示（ここで1回だけ）
-            printf "\n%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
             
             # タイムゾーン文字列の構築
             local timezone_str=""
@@ -948,7 +840,7 @@ country_write() {
     
     # 成功メッセージを表示（スキップフラグが設定されていない場合のみ）
     if [ "$skip_message" = "false" ]; then
-        printf "\n%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
+        printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
     fi
     
     return 0
