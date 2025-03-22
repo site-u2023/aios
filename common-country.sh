@@ -294,192 +294,6 @@ select_list() {
     done
 }
 
-# 確認入力処理関数
-OK_confirm() {
-    local msg_key="$1"
-    local param_name="$2"
-    local param_value="$3"
-    local direct_msg="$4"
-    local msg=""
-    local yn=""
-    
-    # メッセージの取得と変数置換
-    if [ -n "$msg_key" ]; then
-        msg=$(get_message "$msg_key")
-        if [ -n "$param_name" ] && [ -n "$param_value" ]; then
-            local safe_value=$(echo "$param_value" | sed 's/[\/&]/\\&/g')
-            msg=$(echo "$msg" | sed "s|{$param_name}|$safe_value|g")
-        fi
-    else
-        msg="$direct_msg"
-    fi
-    
-    debug_log "DEBUG" "Using inline error display for confirmation prompt"
-    
-    # 確認プロンプト表示
-    printf "%s " "$(color white "$msg")"
-
-    # ユーザー入力処理
-    while true; do
-        if ! read -r yn; then
-            debug_log "ERROR" "Failed to read user input"
-            return 1
-        fi
-
-        # 入力の正規化
-        yn=$(normalize_input "$yn")
-        debug_log "DEBUG" "Processing user input: $yn"
-
-        # 入力の検証
-        case "$yn" in
-            [Yy]|[Yy][Ee][Ss]) 
-                debug_log "DEBUG" "User confirmed: Yes"
-                CONFIRM_RESULT="Y"
-                printf "\n"
-                return 0 
-                ;;
-            [Nn]|[Nn][Oo]) 
-                debug_log "DEBUG" "User confirmed: No"
-                CONFIRM_RESULT="N"
-                printf "\n"
-                return 1 
-                ;;
-            [Rr]|[Rr][Ee][Tt][Uu][Rr][Nn])
-                debug_log "DEBUG" "User selected: Return to previous step"
-                CONFIRM_RESULT="R"
-                printf "\n"
-                return 2
-                ;;
-            *) 
-                # 無効入力時、同じ行で再表示
-                debug_log "DEBUG" "Invalid input detected, clearing line and re-prompting"
-                printf "\r\033[K%s " "$(color white "$msg")"
-                ;;
-        esac
-    done
-}
-
-# 番号付きリストからユーザーに選択させる関数
-# $1: 表示するリストデータ
-# $2: 結果を保存する一時ファイル
-# $3: タイプ（country/zone）
-OK_select_list() {
-    debug_log "DEBUG" "Running select_list() function with type=$3"
-    
-    local select_list="$1"
-    local tmp_file="$2"
-    local type="$3"
-    
-    # タイプに応じたメッセージキーを設定
-    local error_msg_key=""
-    local prompt_msg_key=""
-    
-    case "$type" in
-        country)
-            error_msg_key="MSG_INVALID_COUNTRY_NUMBER"
-            prompt_msg_key="MSG_SELECT_COUNTRY_NUMBER"
-            ;;
-        zone)
-            error_msg_key="MSG_INVALID_ZONE_NUMBER"
-            prompt_msg_key="MSG_SELECT_ZONE_NUMBER"
-            ;;
-        *)
-            error_msg_key="MSG_INVALID_NUMBER"
-            prompt_msg_key="MSG_SELECT_NUMBER"
-            ;;
-    esac
-    
-    # リストの行数を数える
-    local total_items=$(echo "$select_list" | wc -l)
-    debug_log "DEBUG" "Total items in list: $total_items"
-    
-    # 項目が1つしかない場合は自動選択
-    if [ "$total_items" -eq 1 ]; then
-        debug_log "DEBUG" "Only one item in list, auto-selecting"
-        echo "1" > "$tmp_file"
-        return 0
-    fi
-    
-    # 項目をリスト表示
-    local display_count=1
-    echo "$select_list" | while IFS= read -r line; do
-        printf "[%d] %s\n" "$display_count" "$line"
-        display_count=$((display_count + 1))
-    done
-    
-    # ユーザーに選択を促す
-    while true; do
-        # メッセージの取得と表示
-        local prompt_msg=$(get_message "$prompt_msg_key")
-        printf "%s " "$(color white "$prompt_msg")"
-        
-        local number
-        read -r number
-        number=$(normalize_input "$number")
-        debug_log "DEBUG" "User input: $number"
-        
-        # 数値チェック
-        if ! echo "$number" | grep -q '^[0-9]\+$'; then
-            local error_msg=$(get_message "$error_msg_key")
-            printf "%s\n" "$(color red "$error_msg")"
-            continue
-        fi
-        
-        # 範囲チェック
-        if [ "$number" -lt 1 ] || [ "$number" -gt "$total_items" ]; then
-            local range_msg=$(get_message "MSG_NUMBER_OUT_OF_RANGE")
-            # プレースホルダー置換（sedでエスケープ処理）
-            range_msg=$(echo "$range_msg" | sed "s|{0}|1-$total_items|g")
-            printf "%s\n" "$(color red "$range_msg")"
-            continue
-        fi
-        
-        # 選択項目を取得
-        local selected_item=$(echo "$select_list" | sed -n "${number}p")
-        debug_log "DEBUG" "Selected item: $selected_item"
-        
-        # 確認メッセージ表示
-        local msg_selected=""
-        case "$type" in
-            country)
-                msg_selected=$(get_message "MSG_SELECTED_COUNTRY")
-                ;;
-            zone)
-                msg_selected=$(get_message "MSG_SELECTED_ZONE")
-                ;;
-            *)
-                msg_selected=$(get_message "MSG_SELECTED_ITEM")
-                ;;
-        esac
-        
-        # プレースホルダー置換（エスケープ処理された選択項目）
-        local safe_item=$(escape_for_sed "$selected_item")
-        local msg_prefix=${msg_selected%%\{0\}*}
-        local msg_suffix=${msg_selected#*\{0\}}
-        printf "%s%s%s" "$(color white "$msg_prefix")" "$(color white "$safe_item")" "$(color white "$msg_suffix")"
-        
-        confirm "MSG_CONFIRM_YNR"
-        ret=$?
-        case $ret in
-            0) # Yes
-            echo "$number" > "$tmp_file"
-            debug_log "DEBUG" "Selection confirmed: $number ($selected_item)"
-            return 0
-            ;;
-        2) # Return to previous step
-            debug_log "DEBUG" "User requested to return to previous step"
-            return 2
-            ;;
-        *) # No または他
-            debug_log "DEBUG" "Selection cancelled"
-            ;;
-        esac
-        
-        # 確認がキャンセルされた場合は再選択
-        debug_log "DEBUG" "User cancelled, prompting again"
-    done
-}
-
 # sed用にテキストをエスケープする関数
 escape_for_sed() {
     local input="$1"
@@ -834,20 +648,21 @@ detect_and_set_location() {
             debug_log "DEBUG" "Writing country data to temporary file"
             echo "$country_data" > "${CACHE_DIR}/country.tmp"
             
-            # country_write関数に処理を委譲（メッセージ表示スキップ）
+            # country_write関数に処理を委譲（メッセージ表示をスキップ）
             debug_log "DEBUG" "Calling country_write() with skip_message=true"
             country_write true || {
                 debug_log "ERROR" "Failed to write country data"
                 return 1
             }
             
-            # 正しい順序で表示するために、ここで国と言語の選択が完了したメッセージを表示
-            printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
-            debug_log "DEBUG" "Displayed country selection message first, following correct order"
-            
-            # 言語を正規化（この中でスクリプト用の言語の設定が完了しましたというメッセージが表示される）
+            # 言語を正規化（この処理で言語設定が完了する）
+            debug_log "DEBUG" "Normalizing language settings first"
             normalize_language
-            debug_log "DEBUG" "Language settings normalized after country message"
+            
+            # 言語設定が完了した後に、国と言語の選択が完了したメッセージを表示
+            # この時点で既に日本語設定が有効なので、日本語メッセージが表示される
+            printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
+            debug_log "DEBUG" "Displaying country success message after language normalization"
             
             # タイムゾーン文字列の構築
             local timezone_str=""
@@ -868,12 +683,12 @@ detect_and_set_location() {
                 return 1
             }
             
-            # ゾーン選択完了メッセージを表示（ここで1回だけ）
+            # ゾーン選択完了メッセージを表示
             printf "%s\n\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
 
             EXTRA_SPACING_NEEDED="yes"
             
-            debug_log "DEBUG" "Auto-detected settings have been applied successfully with correct message order"
+            debug_log "DEBUG" "Auto-detected settings have been applied successfully"
             return 0
         else
             debug_log "DEBUG" "No matching entry found for detected country: $system_country"
