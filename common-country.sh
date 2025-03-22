@@ -151,13 +151,11 @@ confirm() {
             [Yy]|[Yy][Ee][Ss]|はい|ハイ|ﾊｲ) 
                 debug_log "DEBUG" "User confirmed: Yes"
                 CONFIRM_RESULT="Y"
-                printf "\n"
                 return 0 
                 ;;
             [Nn]|[Nn][Oo]|いいえ|イイエ|ｲｲｴ)
                 debug_log "DEBUG" "User confirmed: No"
                 CONFIRM_RESULT="N"
-                printf "\n"
                 return 1 
                 ;;
             [Rr]|[Rr][Ee][Tt][Uu][Rr][Nn]|戻る|モドル|ﾓﾄﾞﾙ)
@@ -165,7 +163,6 @@ confirm() {
                 if [ "$input_type" = "ynr" ]; then
                     debug_log "DEBUG" "User selected: Return option"
                     CONFIRM_RESULT="R"
-                    printf "\n"
                     return 2
                 fi
                 # YNモードではRを無効として処理（エラーとして処理）
