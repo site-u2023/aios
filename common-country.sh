@@ -277,13 +277,15 @@ select_country() {
             printf "%s" "$(color white "$msg_enter")"
 
             local msg_search=$(get_message "MSG_SEARCH_KEYWORD")
-            printf "\n%s " "$(color white "$msg_search")"
+            printf "%s " "$(color white "$msg_search")"
 
             read -r input_lang
             input_lang=$(normalize_input "$input_lang")
             debug_log "DEBUG" "User entered search keyword: $input_lang"
         fi
 
+        printf "\n"
+            
         # 空の入力をチェック
         if [ -z "$input_lang" ]; then
             debug_log "DEBUG" "Empty search keyword"
@@ -315,8 +317,6 @@ select_country() {
             local msg=$(get_message "MSG_SINGLE_MATCH_FOUND")
             local msg_prefix=${msg%%\{0\}*}
             local msg_suffix=${msg#*\{0\}}
-
-            printf "\n"
             
             printf "%s%s%s" "$(color white_black "$msg_prefix" "$country_name" "$msg_suffix")"
 
@@ -626,7 +626,7 @@ select_list() {
     while true; do
         # メッセージの取得と表示
         local prompt_msg=$(get_message "$prompt_msg_key")
-        printf "\n%s " "$(color white "$prompt_msg")"
+        printf "%s " "$(color white_underline "$prompt_msg")"
         
         local number
         read -r number
