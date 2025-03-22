@@ -224,8 +224,6 @@ handle_menu_error() {
     local msg_key="${error_msg:-MSG_ERROR_OCCURRED}"
     printf "%s\n" "$(color red "$(get_message "$msg_key")")"
     
-    sleep 0
-    
     # エラー時にメニューに戻る処理
     if [ "$section_name" = "$main_menu" ]; then
         # メインメニューの場合は再表示（ループ）
@@ -591,7 +589,6 @@ handle_user_selection() {
                 debug_log "DEBUG" "Special input [00] mapped to item: $real_choice"
             else
                 printf "\n%s" "$(color red "$error_msg")"
-                sleep 0
                 return 0 # リトライが必要
             fi
             ;;
@@ -602,7 +599,6 @@ handle_user_selection() {
                 debug_log "DEBUG" "Special input [0] mapped to item: $real_choice"
             else
                 printf "\n%s" "$(color red "$error_msg")"
-                sleep 0
                 return 0 # リトライが必要
             fi
             ;;
@@ -610,14 +606,12 @@ handle_user_selection() {
             # 数値チェック
             if ! echo "$choice" | grep -q '^[0-9][0-9]*$'; then
                 printf "\n%s\n\n\n" "$(color red "$error_msg")"
-                sleep 0
                 return 0 # リトライが必要
             fi
         
             # 選択範囲チェック（通常メニュー項目のみ）
             if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_choices" ]; then
                 printf "\n%s\n\n\n" "$(color red "$error_msg")"
-                sleep 0
                 return 0 # リトライが必要
             fi
         
@@ -973,7 +967,6 @@ remove_exit() {
         # メインメニューに戻る処理
         local main_menu="${MAIN_MENU}"
         debug_log "DEBUG" "Returning to main menu after cancellation"
-        sleep 0
         
         # メインメニューを表示
         selector "$main_menu" "" 1
@@ -984,6 +977,5 @@ remove_exit() {
 # 標準終了関数
 menu_exit() {
     printf "%s\n" "$(color green "$(get_message "CONFIG_EXIT_CONFIRMED")")"
-    sleep 0
     exit 0
 }
