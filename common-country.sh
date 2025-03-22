@@ -168,7 +168,8 @@ confirm() {
                     printf "\n"
                     return 2
                 fi
-                ;;
+                # YNモードではRを無効として処理
+                ;&  # fallthrough
             *)
                 # エラーメッセージ表示（行間詰め）
                 local error_msg=$(get_message "MSG_INVALID_INPUT")
