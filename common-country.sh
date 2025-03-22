@@ -100,7 +100,7 @@ normalize_input() {
     printf '%s' "$output"
 }
 
-# 確認入力処理関数（y/n/r）- 同一行再表示方式
+# 確認入力処理関数 - 同一行再表示方式
 confirm() {
     local msg_key="$1"
     local param_name="$2"
@@ -120,13 +120,14 @@ confirm() {
         msg="$direct_msg"
     fi
     
-    debug_log "DEBUG" "Using same-line redisplay for confirmation prompt"
+    debug_log "DEBUG" "Using same-line clearing for confirmation prompt"
     
     # 確認プロンプト表示
     printf "%s " "$(color white "$msg")"
 
     # ユーザー入力処理
     while true; do
+        # 入力読み取り
         if ! read -r yn; then
             debug_log "ERROR" "Failed to read user input"
             return 1
@@ -134,7 +135,7 @@ confirm() {
 
         # 入力の正規化
         yn=$(normalize_input "$yn")
-        debug_log "DEBUG" "Processing confirm input: $yn"
+        debug_log "DEBUG" "Processing confirmation input: $yn"
 
         # 入力の検証
         case "$yn" in
@@ -157,63 +158,63 @@ confirm() {
                 return 2
                 ;;
             *) 
-                # 無効入力時、同じ行で再表示
-                debug_log "DEBUG" "Invalid input, redisplaying prompt on same line"
+                # 無効入力時、同じ行で再表示（行消去シーケンス使用）
+                debug_log "DEBUG" "Invalid input, redisplaying on same line"
                 printf "\r\033[K%s " "$(color white "$msg")"
                 ;;
         esac
     done
 }
 
-# 番号選択関数 - select_list()も同一行再表示方式に統一
+# 番号選択関数 - 同一行再表示方式に統一
 select_list() {
-    debug_log "DEBUG" "Running select_list() function with type=$3"
+    debug_log "DEBUG" "Running select_list() with same-line redisplay mode"
     
     local select_list="$1"
     local tmp_file="$2"
     local type="$3"
-    local prompt_msg_key=""
     
     # タイプに応じたメッセージキー設定
+    local prompt_msg_key=""
     case "$type" in
         country) prompt_msg_key="MSG_SELECT_COUNTRY_NUMBER" ;;
         zone)    prompt_msg_key="MSG_SELECT_ZONE_NUMBER" ;;
         *)       prompt_msg_key="MSG_SELECT_NUMBER" ;;
     esac
     
-    # リストの行数を数える
+    # リスト行数を数える
     local total_items=$(echo "$select_list" | wc -l)
     debug_log "DEBUG" "Total items in list: $total_items"
     
-    # 項目が1つしかない場合は自動選択
+    # 項目が1つだけなら自動選択
     if [ "$total_items" -eq 1 ]; then
         debug_log "DEBUG" "Only one item in list, auto-selecting"
         echo "1" > "$tmp_file"
         return 0
     fi
     
-    # 項目をリスト表示
+    # 項目を表示
     local display_count=1
     echo "$select_list" | while IFS= read -r line; do
         printf "[%d] %s\n" "$display_count" "$line"
         display_count=$((display_count + 1))
     done
     
-    # ユーザーに選択を促す
+    # 選択プロンプト
     local prompt_msg=$(get_message "$prompt_msg_key")
     printf "%s " "$(color white "$prompt_msg")"
     
-    # ユーザー入力処理
+    # ユーザー入力ループ
     while true; do
         local number
         read -r number
         number=$(normalize_input "$number")
-        debug_log "DEBUG" "User input number: $number"
+        debug_log "DEBUG" "User input: $number"
         
         # 数値チェック
         if ! echo "$number" | grep -q '^[0-9]\+$'; then
-            debug_log "DEBUG" "Invalid input (not a number): $number"
-            # エラーメッセージなしで同じ行に再表示
+            debug_log "DEBUG" "Invalid number input: $number"
+            # 同一行再表示（行消去シーケンス使用）
             printf "\r\033[K%s " "$(color white "$prompt_msg")"
             continue
         fi
@@ -221,16 +222,16 @@ select_list() {
         # 範囲チェック
         if [ "$number" -lt 1 ] || [ "$number" -gt "$total_items" ]; then
             debug_log "DEBUG" "Number out of range: $number (valid: 1-$total_items)"
-            # エラーメッセージなしで同じ行に再表示
+            # 同一行再表示（行消去シーケンス使用）
             printf "\r\033[K%s " "$(color white "$prompt_msg")"
             continue
         fi
         
-        # 選択項目を取得
+        # 選択項目取得
         local selected_item=$(echo "$select_list" | sed -n "${number}p")
         debug_log "DEBUG" "Selected item: $selected_item"
         
-        # 確認メッセージ表示
+        # 確認メッセージ
         local msg_selected=""
         case "$type" in
             country) msg_selected=$(get_message "MSG_SELECTED_COUNTRY") ;;
@@ -244,6 +245,7 @@ select_list() {
         local msg_suffix=${msg_selected#*\{0\}}
         printf "%s%s%s" "$(color white "$msg_prefix")" "$(color white "$safe_item")" "$(color white "$msg_suffix")"
         
+        # 確認プロンプト
         confirm "MSG_CONFIRM_YNR"
         ret=$?
         case $ret in
@@ -326,6 +328,127 @@ OK_confirm() {
                 printf "\r\033[K%s " "$(color white "$msg")"
                 ;;
         esac
+    done
+}
+
+# 番号付きリストからユーザーに選択させる関数
+# $1: 表示するリストデータ
+# $2: 結果を保存する一時ファイル
+# $3: タイプ（country/zone）
+OK_select_list() {
+    debug_log "DEBUG" "Running select_list() function with type=$3"
+    
+    local select_list="$1"
+    local tmp_file="$2"
+    local type="$3"
+    
+    # タイプに応じたメッセージキーを設定
+    local error_msg_key=""
+    local prompt_msg_key=""
+    
+    case "$type" in
+        country)
+            error_msg_key="MSG_INVALID_COUNTRY_NUMBER"
+            prompt_msg_key="MSG_SELECT_COUNTRY_NUMBER"
+            ;;
+        zone)
+            error_msg_key="MSG_INVALID_ZONE_NUMBER"
+            prompt_msg_key="MSG_SELECT_ZONE_NUMBER"
+            ;;
+        *)
+            error_msg_key="MSG_INVALID_NUMBER"
+            prompt_msg_key="MSG_SELECT_NUMBER"
+            ;;
+    esac
+    
+    # リストの行数を数える
+    local total_items=$(echo "$select_list" | wc -l)
+    debug_log "DEBUG" "Total items in list: $total_items"
+    
+    # 項目が1つしかない場合は自動選択
+    if [ "$total_items" -eq 1 ]; then
+        debug_log "DEBUG" "Only one item in list, auto-selecting"
+        echo "1" > "$tmp_file"
+        return 0
+    fi
+    
+    # 項目をリスト表示
+    local display_count=1
+    echo "$select_list" | while IFS= read -r line; do
+        printf "[%d] %s\n" "$display_count" "$line"
+        display_count=$((display_count + 1))
+    done
+    
+    # ユーザーに選択を促す
+    while true; do
+        # メッセージの取得と表示
+        local prompt_msg=$(get_message "$prompt_msg_key")
+        printf "%s " "$(color white "$prompt_msg")"
+        
+        local number
+        read -r number
+        number=$(normalize_input "$number")
+        debug_log "DEBUG" "User input: $number"
+        
+        # 数値チェック
+        if ! echo "$number" | grep -q '^[0-9]\+$'; then
+            local error_msg=$(get_message "$error_msg_key")
+            printf "%s\n" "$(color red "$error_msg")"
+            continue
+        fi
+        
+        # 範囲チェック
+        if [ "$number" -lt 1 ] || [ "$number" -gt "$total_items" ]; then
+            local range_msg=$(get_message "MSG_NUMBER_OUT_OF_RANGE")
+            # プレースホルダー置換（sedでエスケープ処理）
+            range_msg=$(echo "$range_msg" | sed "s|{0}|1-$total_items|g")
+            printf "%s\n" "$(color red "$range_msg")"
+            continue
+        fi
+        
+        # 選択項目を取得
+        local selected_item=$(echo "$select_list" | sed -n "${number}p")
+        debug_log "DEBUG" "Selected item: $selected_item"
+        
+        # 確認メッセージ表示
+        local msg_selected=""
+        case "$type" in
+            country)
+                msg_selected=$(get_message "MSG_SELECTED_COUNTRY")
+                ;;
+            zone)
+                msg_selected=$(get_message "MSG_SELECTED_ZONE")
+                ;;
+            *)
+                msg_selected=$(get_message "MSG_SELECTED_ITEM")
+                ;;
+        esac
+        
+        # プレースホルダー置換（エスケープ処理された選択項目）
+        local safe_item=$(escape_for_sed "$selected_item")
+        local msg_prefix=${msg_selected%%\{0\}*}
+        local msg_suffix=${msg_selected#*\{0\}}
+        printf "%s%s%s" "$(color white "$msg_prefix")" "$(color white "$safe_item")" "$(color white "$msg_suffix")"
+        
+        confirm "MSG_CONFIRM_YNR"
+        ret=$?
+        case $ret in
+            0) # Yes
+            echo "$number" > "$tmp_file"
+            debug_log "DEBUG" "Selection confirmed: $number ($selected_item)"
+            return 0
+            ;;
+        2) # Return to previous step
+            debug_log "DEBUG" "User requested to return to previous step"
+            return 2
+            ;;
+        *) # No または他
+            debug_log "DEBUG" "Selection cancelled"
+            ;;
+        esac
+        
+        # 確認がキャンセルされた場合は再選択
+        debug_log "DEBUG" "User cancelled, prompting again"
     done
 }
 
@@ -730,127 +853,6 @@ detect_and_set_location() {
         debug_log "DEBUG" "User declined auto-detected settings"
         return 1
     fi
-}
-
-# 番号付きリストからユーザーに選択させる関数
-# $1: 表示するリストデータ
-# $2: 結果を保存する一時ファイル
-# $3: タイプ（country/zone）
-OK_select_list() {
-    debug_log "DEBUG" "Running select_list() function with type=$3"
-    
-    local select_list="$1"
-    local tmp_file="$2"
-    local type="$3"
-    
-    # タイプに応じたメッセージキーを設定
-    local error_msg_key=""
-    local prompt_msg_key=""
-    
-    case "$type" in
-        country)
-            error_msg_key="MSG_INVALID_COUNTRY_NUMBER"
-            prompt_msg_key="MSG_SELECT_COUNTRY_NUMBER"
-            ;;
-        zone)
-            error_msg_key="MSG_INVALID_ZONE_NUMBER"
-            prompt_msg_key="MSG_SELECT_ZONE_NUMBER"
-            ;;
-        *)
-            error_msg_key="MSG_INVALID_NUMBER"
-            prompt_msg_key="MSG_SELECT_NUMBER"
-            ;;
-    esac
-    
-    # リストの行数を数える
-    local total_items=$(echo "$select_list" | wc -l)
-    debug_log "DEBUG" "Total items in list: $total_items"
-    
-    # 項目が1つしかない場合は自動選択
-    if [ "$total_items" -eq 1 ]; then
-        debug_log "DEBUG" "Only one item in list, auto-selecting"
-        echo "1" > "$tmp_file"
-        return 0
-    fi
-    
-    # 項目をリスト表示
-    local display_count=1
-    echo "$select_list" | while IFS= read -r line; do
-        printf "[%d] %s\n" "$display_count" "$line"
-        display_count=$((display_count + 1))
-    done
-    
-    # ユーザーに選択を促す
-    while true; do
-        # メッセージの取得と表示
-        local prompt_msg=$(get_message "$prompt_msg_key")
-        printf "%s " "$(color white "$prompt_msg")"
-        
-        local number
-        read -r number
-        number=$(normalize_input "$number")
-        debug_log "DEBUG" "User input: $number"
-        
-        # 数値チェック
-        if ! echo "$number" | grep -q '^[0-9]\+$'; then
-            local error_msg=$(get_message "$error_msg_key")
-            printf "%s\n" "$(color red "$error_msg")"
-            continue
-        fi
-        
-        # 範囲チェック
-        if [ "$number" -lt 1 ] || [ "$number" -gt "$total_items" ]; then
-            local range_msg=$(get_message "MSG_NUMBER_OUT_OF_RANGE")
-            # プレースホルダー置換（sedでエスケープ処理）
-            range_msg=$(echo "$range_msg" | sed "s|{0}|1-$total_items|g")
-            printf "%s\n" "$(color red "$range_msg")"
-            continue
-        fi
-        
-        # 選択項目を取得
-        local selected_item=$(echo "$select_list" | sed -n "${number}p")
-        debug_log "DEBUG" "Selected item: $selected_item"
-        
-        # 確認メッセージ表示
-        local msg_selected=""
-        case "$type" in
-            country)
-                msg_selected=$(get_message "MSG_SELECTED_COUNTRY")
-                ;;
-            zone)
-                msg_selected=$(get_message "MSG_SELECTED_ZONE")
-                ;;
-            *)
-                msg_selected=$(get_message "MSG_SELECTED_ITEM")
-                ;;
-        esac
-        
-        # プレースホルダー置換（エスケープ処理された選択項目）
-        local safe_item=$(escape_for_sed "$selected_item")
-        local msg_prefix=${msg_selected%%\{0\}*}
-        local msg_suffix=${msg_selected#*\{0\}}
-        printf "%s%s%s" "$(color white "$msg_prefix")" "$(color white "$safe_item")" "$(color white "$msg_suffix")"
-        
-        confirm "MSG_CONFIRM_YNR"
-        ret=$?
-        case $ret in
-            0) # Yes
-            echo "$number" > "$tmp_file"
-            debug_log "DEBUG" "Selection confirmed: $number ($selected_item)"
-            return 0
-            ;;
-        2) # Return to previous step
-            debug_log "DEBUG" "User requested to return to previous step"
-            return 2
-            ;;
-        *) # No または他
-            debug_log "DEBUG" "Selection cancelled"
-            ;;
-        esac
-        
-        # 確認がキャンセルされた場合は再選択
-        debug_log "DEBUG" "User cancelled, prompting again"
-    done
 }
 
 # タイムゾーンの選択を処理する関数
