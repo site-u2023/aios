@@ -109,23 +109,20 @@ confirm() {
     local msg=""
     local yn=""
     
-    # メッセージの取得と変数置換
+    # メッセージの取得と変数置換（既存コードと同じ）
     if [ -n "$msg_key" ]; then
         msg=$(get_message "$msg_key")
-        # パラメータ名と値が指定されている場合は置換
         if [ -n "$param_name" ] && [ -n "$param_value" ]; then
-            # POSIXに準拠した置換方法（エスケープ処理を追加）
             local safe_value=$(echo "$param_value" | sed 's/[\/&]/\\&/g')
             msg=$(echo "$msg" | sed "s|{$param_name}|$safe_value|g")
         fi
     else
-        # 直接メッセージが指定されている場合はそれを使用
         msg="$direct_msg"
     fi
     
     debug_log "DEBUG" "Confirm prompt: $msg_key: $msg"
     
-    # 確認プロンプト表示（カーソルの位置を同じ行に）
+    # 確認プロンプト表示
     printf "%s " "$(color white "$msg")"
 
     # ユーザー入力処理
@@ -136,36 +133,41 @@ confirm() {
             return 1
         fi
 
-        # 入力の正規化（数字のみ正規化し、大文字小文字は変換しない）
+        # 入力の正規化
         yn=$(normalize_input "$yn")
         debug_log "DEBUG" "User input: $yn, normalized to: $yn"
 
-        # 入力の検証（大文字小文字両方に対応）
+        # 入力の検証
         case "$yn" in
             [Yy]|[Yy][Ee][Ss]) 
                 debug_log "DEBUG" "User confirmed: Yes"
-                # グローバル変数に結果を保存（呼び出し側でも使えるように）
                 CONFIRM_RESULT="Y"
-                printf "\n"  # 入力後に改行を追加
+                printf "\n"
                 return 0 
                 ;;
             [Nn]|[Nn][Oo]) 
                 debug_log "DEBUG" "User confirmed: No"
                 CONFIRM_RESULT="N"
-                printf "\n"  # 入力後に改行を追加
+                printf "\n"
                 return 1 
                 ;;
             [Rr]|[Rr][Ee][Tt][Uu][Rr][Nn])
-                # リスタートオプション対応
                 debug_log "DEBUG" "User selected: Return to previous step"
                 CONFIRM_RESULT="R"
-                printf "\n"  # 入力後に改行を追加
+                printf "\n"
                 return 2
                 ;;
             *) 
-                # 無効な入力の場合のエラーメッセージ
-                printf "\n%s\n" "$(color red "$(get_message "MSG_INVALID_INPUT_YNR")")"
-                printf "%s " "$(color white "$msg")" 
+                # 無効入力の場合、エラーメッセージなしで再入力を待つ
+                # カーソルを前に戻す制御文字（\b）を使用
+                # 入力された文字数分だけバックスペースで削除
+                printf "\b \b" >/dev/tty
+                local input_length=${#yn}
+                while [ "$input_length" -gt 0 ]; do
+                    printf "\b \b" >/dev/tty
+                    input_length=$((input_length - 1))
+                done
+                debug_log "DEBUG" "Invalid input cleared without error message"
                 ;;
         esac
     done
