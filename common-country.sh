@@ -101,7 +101,7 @@ normalize_input() {
 }
 
 #!/bin/sh
-# POSIX準拠のOpenWrt向け入力処理関数（日本語対応版）
+# POSIX準拠のOpenWrt向け入力処理関数（エラー前行間詰め版）
 
 # Y/N確認関数
 confirm_yn() {
@@ -123,7 +123,7 @@ confirm_yn() {
         msg="$direct_msg"
     fi
     
-    debug_log "DEBUG" "Running confirm_yn() with MSG_INVALID_INPUT_YN error handling"
+    debug_log "DEBUG" "Running confirm_yn() with compact error display"
     
     # ユーザー入力ループ
     while true; do
@@ -142,22 +142,22 @@ confirm_yn() {
         
         # 入力検証（YNのみ）
         case "$yn" in
-            [Yy]|[Yy][Ee][Ss]) 
+            [Yy]|[Yy]) 
                 debug_log "DEBUG" "User confirmed: Yes"
                 CONFIRM_RESULT="Y"
                 printf "\n"
                 return 0 
                 ;;
-            [Nn]|[Nn][Oo]) 
+            [Nn]|[Nn]) 
                 debug_log "DEBUG" "User confirmed: No"
                 CONFIRM_RESULT="N"
                 printf "\n"
                 return 1 
                 ;;
             *)
-                # エラーメッセージを表示して行間詰めで再表示
-                printf "\n%s\n" "$(color red "$(get_message "MSG_INVALID_INPUT_YN")")"
-                debug_log "DEBUG" "Invalid input detected, displayed MSG_INVALID_INPUT_YN"
+                # エラーの前は行間詰め（改行なし）でエラーメッセージを表示
+                printf "%s\n" "$(color red "$(get_message "MSG_INVALID_INPUT_YN")")"
+                debug_log "DEBUG" "Displayed error with MSG_INVALID_INPUT_YN"
                 ;;
         esac
     done
@@ -183,7 +183,7 @@ confirm_ynr() {
         msg="$direct_msg"
     fi
     
-    debug_log "DEBUG" "Running confirm_ynr() with MSG_INVALID_INPUT_YNR error handling"
+    debug_log "DEBUG" "Running confirm_ynr() with compact error display"
     
     # ユーザー入力ループ
     while true; do
@@ -202,34 +202,34 @@ confirm_ynr() {
         
         # 入力検証（YNRの入力処理）
         case "$yn" in
-            [Yy]|[Yy][Ee][Ss]) 
+            [Yy]|[Yy]) 
                 debug_log "DEBUG" "User confirmed: Yes"
                 CONFIRM_RESULT="Y"
                 printf "\n"
                 return 0 
                 ;;
-            [Nn]|[Nn][Oo]) 
+            [Nn]|[Nn]) 
                 debug_log "DEBUG" "User confirmed: No"
                 CONFIRM_RESULT="N"
                 printf "\n"
                 return 1 
                 ;;
-            [Rr]|[Rr][Ee][Tt][Uu][Rr][Nn])
+            [Rr]|[Rr])
                 debug_log "DEBUG" "User selected: Return to previous step"
                 CONFIRM_RESULT="R"
                 printf "\n"
                 return 2
                 ;;
             *)
-                # エラーメッセージを表示して行間詰めで再表示
-                printf "\n%s\n" "$(color red "$(get_message "MSG_INVALID_INPUT_YNR")")"
-                debug_log "DEBUG" "Invalid input detected, displayed MSG_INVALID_INPUT_YNR"
+                # エラーの前は行間詰め（改行なし）でエラーメッセージを表示
+                printf "%s\n" "$(color red "$(get_message "MSG_INVALID_INPUT_YNR")")"
+                debug_log "DEBUG" "Displayed error with MSG_INVALID_INPUT_YNR"
                 ;;
         esac
     done
 }
 
-# 汎用confirm関数（呼び出し元に合わせて適切な関数を使用）
+# 汎用confirm関数
 confirm() {
     local msg_key="$1"
     local param_name="$2"
@@ -237,16 +237,12 @@ confirm() {
     local direct_msg="$4"
     
     # メッセージキーからプロンプトタイプを判断
-    if echo "$msg_key" | grep -q "YNR"; then
-        debug_log "DEBUG" "Detected YNR prompt from message key: $msg_key"
-        confirm_ynr "$msg_key" "$param_name" "$param_value" "$direct_msg"
-        return $?
-    elif [ "$msg_key" = "MSG_CONFIRM_ONLY_YNR" ]; then
-        debug_log "DEBUG" "Using YNR prompt for MSG_CONFIRM_ONLY_YNR"
+    if echo "$msg_key" | grep -q "YNR" || [ "$msg_key" = "MSG_CONFIRM_ONLY_YNR" ] || [ "$msg_key" = "MSG_CONFIRM_YNR" ]; then
+        debug_log "DEBUG" "Using YNR prompt for message key: $msg_key"
         confirm_ynr "$msg_key" "$param_name" "$param_value" "$direct_msg"
         return $?
     else
-        debug_log "DEBUG" "Using YN prompt as default for message key: $msg_key"
+        debug_log "DEBUG" "Using YN prompt for message key: $msg_key"
         confirm_yn "$msg_key" "$param_name" "$param_value" "$direct_msg"
         return $?
     fi
@@ -300,25 +296,25 @@ select_list() {
         
         # 数値チェック
         if ! echo "$number" | grep -q '^[0-9]\+$'; then
-            # エラーメッセージ表示して行間詰めで再プロンプト
-            printf "\n%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
-            debug_log "DEBUG" "Error displayed: not a number, using CONFIG_ERROR_NOT_NUMBER"
+            # エラーの前は行間詰め（改行なし）でエラーメッセージを表示
+            printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
+            debug_log "DEBUG" "Invalid input: not a number"
             continue
         fi
         
         # 範囲チェック
         if [ "$number" -lt 1 ] || [ "$number" -gt "$total_items" ]; then
-            # エラーメッセージ表示して行間詰めで再プロンプト
-            printf "\n%s\n" "$(color red "$(get_message "MSG_NUMBER_OUT_OF_RANGE")")"
-            debug_log "DEBUG" "Error displayed: number out of range (1-$total_items), using MSG_NUMBER_OUT_OF_RANGE"
+            # エラーの前は行間詰め（改行なし）でエラーメッセージを表示
+            printf "%s\n" "$(color red "$(get_message "MSG_NUMBER_OUT_OF_RANGE")")"
+            debug_log "DEBUG" "Invalid input: number out of range (1-$total_items)"
             continue
         fi
         
-        # 選択項目取得
+        # 選択項目を取得
         local selected_item=$(echo "$select_list" | sed -n "${number}p")
         debug_log "DEBUG" "Selected item: $selected_item"
         
-        # 確認メッセージ表示
+        # 確認メッセージを表示
         local msg_selected=""
         case "$type" in
             country) msg_selected=$(get_message "MSG_SELECTED_COUNTRY") ;;
@@ -332,7 +328,7 @@ select_list() {
         printf "\n%s\n" "$(color white "$msg_selected")"
         
         # 選択確認
-        confirm_ynr "MSG_CONFIRM_YNR"
+        confirm "MSG_CONFIRM_YNR"
         local ret=$?
         
         case $ret in
