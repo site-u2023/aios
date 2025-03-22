@@ -628,7 +628,7 @@ select_list() {
     while true; do
         # メッセージの取得と表示
         local prompt_msg=$(get_message "$prompt_msg_key")
-        printf "%s " "$(color white_underline "$prompt_msg")"
+        printf "%s " "$(color white "$prompt_msg")"
         
         local number
         read -r number
