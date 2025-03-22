@@ -100,7 +100,7 @@ normalize_input() {
     printf '%s' "$output"
 }
 
-# 確認入力処理関数 - 同一行での再表示版
+# 確認入力処理関数
 confirm() {
     local msg_key="$1"
     local param_name="$2"
@@ -120,9 +120,9 @@ confirm() {
         msg="$direct_msg"
     fi
     
-    debug_log "DEBUG" "Using inline prompt handling with existing message keys"
+    debug_log "DEBUG" "Using inline error display for confirmation prompt"
     
-    # 初回のプロンプト表示
+    # 確認プロンプト表示
     printf "%s " "$(color white "$msg")"
 
     # ユーザー入力処理
@@ -134,7 +134,7 @@ confirm() {
 
         # 入力の正規化
         yn=$(normalize_input "$yn")
-        debug_log "DEBUG" "User input received: $yn"
+        debug_log "DEBUG" "Processing user input: $yn"
 
         # 入力の検証
         case "$yn" in
@@ -157,8 +157,8 @@ confirm() {
                 return 2
                 ;;
             *) 
-                # 無効入力時、同じ行内でプロンプトをクリア＆再表示
-                debug_log "DEBUG" "Invalid input detected, rewriting same line"
+                # 無効入力時、同じ行で再表示
+                debug_log "DEBUG" "Invalid input detected, clearing line and re-prompting"
                 printf "\r\033[K%s " "$(color white "$msg")"
                 ;;
         esac
@@ -268,7 +268,7 @@ select_country() {
         # 入力がまだない場合は入力を求める
         if [ -z "$input_lang" ]; then
             local msg_enter=$(get_message "MSG_ENTER_COUNTRY")
-            printf "%s" "$(color white "$msg_enter")"
+            printf "%s\n" "$(color white "$msg_enter")"
 
             local msg_search=$(get_message "MSG_SEARCH_KEYWORD")
             printf "%s " "$(color white "$msg_search")"
@@ -499,13 +499,13 @@ detect_and_set_location() {
     # 検出情報表示
     printf "\n"
     printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
-    printf "%s %s" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$(echo "$system_country" | cut -d' ' -f2)")"
+    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$(echo "$system_country" | cut -d' ' -f2)")"
 
     # ゾーン名があればゾーン名とタイムゾーン、なければタイムゾーンのみ表示
     if [ -n "$system_zonename" ]; then
-        printf "%s %s%s%s\n\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_zonename")" "$(color white ",")" "$(color white "$system_timezone")"
+        printf "%s %s%s%s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_zonename")" "$(color white ",")" "$(color white "$system_timezone")"
     else
-        printf "%s %s\n\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_timezone")"
+        printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_timezone")"
     fi
     
     # 確認
