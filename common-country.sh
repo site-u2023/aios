@@ -630,7 +630,7 @@ select_country() {
             local msg_prefix=${msg%%\{0\}*}
             local msg_suffix=${msg#*\{0\}}
             
-            printf "%s%s%s" "$(color white_black "$msg_prefix" "$country_name" "$msg_suffix")"
+            printf "%s%s%s" "$(color white "$msg_prefix" "$country_name" "$msg_suffix")"
 
             printf "\n"
             
