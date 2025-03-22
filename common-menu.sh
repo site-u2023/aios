@@ -956,7 +956,7 @@ remove_exit() {
     # 確認プロンプト表示
     if confirm "CONFIG_CONFIRM_DELETE"; then
         debug_log "DEBUG" "User confirmed deletion, proceeding with removal"
-        printf "%s\n" "$(color green "$(get_message "CONFIG_DELETE_CONFIRMED")")"
+        printf "%s\n\n" "$(color green "$(get_message "CONFIG_DELETE_CONFIRMED")")"
         [ -f "$BIN_PATH" ] && rm -f "$BIN_PATH"
         [ -d "$BASE_DIR" ] && rm -rf "$BASE_DIR"
         exit 0
@@ -976,6 +976,6 @@ remove_exit() {
 
 # 標準終了関数
 menu_exit() {
-    printf "%s\n" "$(color green "$(get_message "CONFIG_EXIT_CONFIRMED")")"
+    printf "%s\n\n" "$(color green "$(get_message "CONFIG_EXIT_CONFIRMED")")"
     exit 0
 }
