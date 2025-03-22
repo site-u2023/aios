@@ -649,9 +649,6 @@ handle_user_selection() {
     debug_log "DEBUG" "Selected color: $selected_color"
     debug_log "DEBUG" "Executing command: $selected_cmd"
     
-    # 改行を表示して視覚的な区切りを作る
-    printf "\n\n"
-    
     # コマンド実行 - セレクターコマンドの特別処理
     if echo "$selected_cmd" | grep -q "^selector "; then
         # セレクターコマンドの場合、サブメニューへ移動
