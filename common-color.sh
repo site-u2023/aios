@@ -125,7 +125,7 @@ color_code_map() {
     fi
     
     case "$color" in
-        # 基本色（9色+黒）
+        # 基本色（9色+黒+グレー）
         "red") printf "\033[${underline_prefix}${bold_prefix}38;5;196m" ;;
         "orange") printf "\033[${underline_prefix}${bold_prefix}38;5;208m" ;;
         "yellow") printf "\033[${underline_prefix}${bold_prefix}38;5;226m" ;;
@@ -137,6 +137,7 @@ color_code_map() {
         "magenta") printf "\033[${underline_prefix}${bold_prefix}38;5;201m" ;;
         "white") printf "\033[${underline_prefix}${bold_prefix}37m" ;;  # 白色
         "black") printf "\033[${underline_prefix}${bold_prefix}30m" ;;  # 黒色
+        "gray") printf "\033[${underline_prefix}${bold_prefix}38;5;240m" ;;  # グレー色追加
         
         # 下線付き
         *"_underline")
@@ -153,6 +154,7 @@ color_code_map() {
                 "magenta") printf "\033[4;${bold_prefix}38;5;201m" ;;
                 "white") printf "\033[4;${bold_prefix}37m" ;;  # 白色下線
                 "black") printf "\033[4;${bold_prefix}30m" ;;  # 黒色下線
+                "gray") printf "\033[4;${bold_prefix}38;5;240m" ;;  # グレー色下線追加
                 *) printf "\033[4;${bold_prefix}37m" ;;  # デフォルト
             esac
             ;;
@@ -176,6 +178,7 @@ color_code_map() {
                 "purple") fg_code="38;5;129" ;;
                 "magenta") fg_code="38;5;201" ;;
                 "white") fg_code="37" ;;
+                "gray") fg_code="38;5;240" ;;  # グレー色追加
                 *) fg_code="37" ;;  # デフォルトは白
             esac
             
@@ -193,6 +196,7 @@ color_code_map() {
                 "purple") bg_code="48;5;129" ;;
                 "magenta") bg_code="48;5;201" ;;
                 "white") bg_code="47" ;;
+                "gray") bg_code="48;5;240" ;;  # グレー背景色追加
                 *) bg_code="40" ;;  # デフォルトは黒
             esac
             
@@ -219,6 +223,7 @@ color_code_map() {
                     "purple") fg_code="38;5;129" ;;
                     "magenta") fg_code="38;5;201" ;;
                     "white") fg_code="37" ;;
+                    "gray") fg_code="38;5;240" ;;  # グレー色追加
                     *) fg_code="37" ;;  # デフォルトは白
                 esac
                 
@@ -235,6 +240,7 @@ color_code_map() {
                     "purple") bg_code="48;5;129" ;;
                     "magenta") bg_code="48;5;201" ;;
                     "white") bg_code="47" ;;
+                    "gray") bg_code="48;5;240" ;;  # グレー背景色追加
                     *) bg_code="40" ;;  # デフォルトは黒
                 esac
                 
