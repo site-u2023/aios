@@ -692,6 +692,8 @@ selector() {
     section_name="${section_name:-$MAIN_MENU}"
     
     debug_log "DEBUG" "Starting menu selector with section: $section_name"
+
+    printf "\n\n"
     
     # 現在のセクションを記録
     CURRENT_MENU="$section_name"
