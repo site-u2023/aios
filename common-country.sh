@@ -100,7 +100,7 @@ normalize_input() {
     printf '%s' "$output"
 }
 
-# 確認入力処理関数 - 同一行再表示方式
+# 確認入力処理関数（エラー表示＆行間詰め版）
 confirm() {
     local msg_key="$1"
     local param_name="$2"
@@ -120,24 +120,24 @@ confirm() {
         msg="$direct_msg"
     fi
     
-    debug_log "DEBUG" "Using same-line clearing for confirmation prompt"
+    debug_log "DEBUG" "Running confirm() with error reporting and compact spacing"
     
-    # 確認プロンプト表示
-    printf "%s " "$(color white "$msg")"
-
-    # ユーザー入力処理
+    # ユーザー入力ループ
     while true; do
-        # 入力読み取り
+        # プロンプト表示
+        printf "%s " "$(color white "$msg")"
+        
+        # 入力を読み取り
         if ! read -r yn; then
             debug_log "ERROR" "Failed to read user input"
             return 1
         fi
-
+        
         # 入力の正規化
         yn=$(normalize_input "$yn")
-        debug_log "DEBUG" "Processing confirmation input: $yn"
-
-        # 入力の検証
+        debug_log "DEBUG" "Processing user input: $yn"
+        
+        # 入力検証
         case "$yn" in
             [Yy]|[Yy][Ee][Ss]) 
                 debug_log "DEBUG" "User confirmed: Yes"
@@ -157,24 +157,25 @@ confirm() {
                 printf "\n"
                 return 2
                 ;;
-            *) 
-                # 無効入力時、同じ行で再表示（行消去シーケンス使用）
-                debug_log "DEBUG" "Invalid input, redisplaying on same line"
-                printf "\r\033[K%s " "$(color white "$msg")"
+            *)
+                # エラーメッセージを表示して行間詰めで再表示
+                printf "$(color red "$(get_message "MSG_ERROR_INVALID_YNR_INPUT")")"
+                debug_log "DEBUG" "Error displayed, re-prompting with compact spacing"
+                printf "\n%s " "$(color white "$msg")"
                 ;;
         esac
     done
 }
 
-# 番号選択関数 - 同一行再表示方式に統一
+# 番号選択関数（エラー表示＆行間詰め版）
 select_list() {
-    debug_log "DEBUG" "Running select_list() with same-line redisplay mode"
+    debug_log "DEBUG" "Running select_list() with type=$3"
     
     local select_list="$1"
     local tmp_file="$2"
     local type="$3"
     
-    # タイプに応じたメッセージキー設定
+    # メッセージキー設定
     local prompt_msg_key=""
     case "$type" in
         country) prompt_msg_key="MSG_SELECT_COUNTRY_NUMBER" ;;
@@ -182,9 +183,9 @@ select_list() {
         *)       prompt_msg_key="MSG_SELECT_NUMBER" ;;
     esac
     
-    # リスト行数を数える
+    # リストの行数を計算
     local total_items=$(echo "$select_list" | wc -l)
-    debug_log "DEBUG" "Total items in list: $total_items"
+    debug_log "DEBUG" "Total items in selection list: $total_items"
     
     # 項目が1つだけなら自動選択
     if [ "$total_items" -eq 1 ]; then
@@ -193,45 +194,48 @@ select_list() {
         return 0
     fi
     
-    # 項目を表示
+    # 選択肢を表示
     local display_count=1
     echo "$select_list" | while IFS= read -r line; do
         printf "[%d] %s\n" "$display_count" "$line"
         display_count=$((display_count + 1))
     done
     
-    # 選択プロンプト
+    # 選択ループ
     local prompt_msg=$(get_message "$prompt_msg_key")
-    printf "%s " "$(color white "$prompt_msg")"
     
-    # ユーザー入力ループ
     while true; do
-        local number
+        # プロンプト表示
+        printf "%s " "$(color white "$prompt_msg")"
+        
+        # 入力を読み取り
         read -r number
         number=$(normalize_input "$number")
-        debug_log "DEBUG" "User input: $number"
+        debug_log "DEBUG" "User entered: $number"
         
         # 数値チェック
         if ! echo "$number" | grep -q '^[0-9]\+$'; then
-            debug_log "DEBUG" "Invalid number input: $number"
-            # 同一行再表示（行消去シーケンス使用）
-            printf "\r\033[K%s " "$(color white "$prompt_msg")"
+            # エラーメッセージ表示して行間詰めで再プロンプト
+            printf "$(color red "$(get_message "MSG_ERROR_NOT_NUMBER")")"
+            debug_log "DEBUG" "Error displayed: not a number"
+            printf "\n%s " "$(color white "$prompt_msg")"
             continue
         fi
         
         # 範囲チェック
         if [ "$number" -lt 1 ] || [ "$number" -gt "$total_items" ]; then
-            debug_log "DEBUG" "Number out of range: $number (valid: 1-$total_items)"
-            # 同一行再表示（行消去シーケンス使用）
-            printf "\r\033[K%s " "$(color white "$prompt_msg")"
+            # エラーメッセージ表示して行間詰めで再プロンプト
+            printf "$(color red "$(get_message "MSG_ERROR_NUMBER_RANGE" "max" "$total_items")")"
+            debug_log "DEBUG" "Error displayed: number out of range (valid: 1-$total_items)"
+            printf "\n%s " "$(color white "$prompt_msg")"
             continue
         fi
         
-        # 選択項目取得
+        # 選択項目を取得
         local selected_item=$(echo "$select_list" | sed -n "${number}p")
-        debug_log "DEBUG" "Selected item: $selected_item"
+        debug_log "DEBUG" "User selected item: $selected_item"
         
-        # 確認メッセージ
+        # 確認メッセージを表示
         local msg_selected=""
         case "$type" in
             country) msg_selected=$(get_message "MSG_SELECTED_COUNTRY") ;;
@@ -243,24 +247,24 @@ select_list() {
         local safe_item=$(escape_for_sed "$selected_item")
         local msg_prefix=${msg_selected%%\{0\}*}
         local msg_suffix=${msg_selected#*\{0\}}
-        printf "%s%s%s" "$(color white "$msg_prefix")" "$(color white "$safe_item")" "$(color white "$msg_suffix")"
+        printf "\n%s%s%s\n" "$(color white "$msg_prefix")" "$(color white "$safe_item")" "$(color white "$msg_suffix")"
         
-        # 確認プロンプト
+        # 選択確認
         confirm "MSG_CONFIRM_YNR"
-        ret=$?
+        local ret=$?
+        
         case $ret in
-            0) # Yes
+            0)  # Yes
+                debug_log "DEBUG" "Selection confirmed: item #$number"
                 echo "$number" > "$tmp_file"
-                debug_log "DEBUG" "Selection confirmed: $number ($selected_item)"
                 return 0
                 ;;
-            2) # Return
+            2)  # Return
                 debug_log "DEBUG" "User requested to return to previous step"
                 return 2
                 ;;
-            *) # No
+            *)  # No - 再選択
                 debug_log "DEBUG" "Selection cancelled, prompting again"
-                printf "\n%s " "$(color white "$prompt_msg")"
                 ;;
         esac
     done
