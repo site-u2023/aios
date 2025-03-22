@@ -318,7 +318,7 @@ select_country() {
 
             printf "\n"
             
-            printf "%s%s%s" "$(color white "$msg_prefix" "$country_name" "$msg_suffix")"
+            printf "%s%s%s" "$(color white_black "$msg_prefix" "$country_name" "$msg_suffix")"
 
             printf "\n"
             
@@ -505,11 +505,11 @@ detect_and_set_location() {
     # 検出情報表示
     printf "\n"
     printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
-    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$(echo "$system_country" | cut -d' ' -f2)")"
+    printf "%s %s" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$(echo "$system_country" | cut -d' ' -f2)")"
     
     # ゾーン名があればゾーン名とタイムゾーン、なければタイムゾーンのみ表示
     if [ -n "$system_zonename" ]; then
-        printf "%s %s$(color white ",")%s\n\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_zonename")" "$(color white "$system_timezone")"
+        printf "%s %s$(color white ",")%s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_zonename")" "$(color white "$system_timezone")"
     else
         printf "%s %s" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_timezone")"
     fi
