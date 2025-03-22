@@ -835,18 +835,19 @@ detect_and_set_location() {
             echo "$country_data" > "${CACHE_DIR}/country.tmp"
             
             # country_write関数に処理を委譲（メッセージ表示スキップ）
-            debug_log "DEBUG" "Calling country_write()"
+            debug_log "DEBUG" "Calling country_write() with skip_message=true"
             country_write true || {
                 debug_log "ERROR" "Failed to write country data"
                 return 1
             }
-
-            # 国と言語の選択完了メッセージを先に表示（正しい順序に修正）
-            printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
-            debug_log "DEBUG" "Displaying country selection message first for consistent order"
             
-            # 言語を正規化
+            # 正しい順序で表示するために、ここで国と言語の選択が完了したメッセージを表示
+            printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
+            debug_log "DEBUG" "Displayed country selection message first, following correct order"
+            
+            # 言語を正規化（この中でスクリプト用の言語の設定が完了しましたというメッセージが表示される）
             normalize_language
+            debug_log "DEBUG" "Language settings normalized after country message"
             
             # タイムゾーン文字列の構築
             local timezone_str=""
@@ -872,7 +873,7 @@ detect_and_set_location() {
 
             EXTRA_SPACING_NEEDED="yes"
             
-            debug_log "DEBUG" "Auto-detected settings have been applied successfully with standardized message order"
+            debug_log "DEBUG" "Auto-detected settings have been applied successfully with correct message order"
             return 0
         else
             debug_log "DEBUG" "No matching entry found for detected country: $system_country"
