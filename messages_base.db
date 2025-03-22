@@ -205,12 +205,6 @@ US|MSG_BANNER_DISCLAIMER=Disclaimer: Use this script at your own risk
 JP|MSG_BANNER_DISCLAIMER=免責事項: 本スクリプトは自己責任でご使用下さい
 
 # confirm() 関数
-US|MSG_INVALID_INPUT_YN=Invalid input. Please enter Y or N.
-JP|MSG_INVALID_INPUT_YN=無効な入力です。Y または N を入力してください。
-
-US|MSG_INVALID_INPUT_YNR=Invalid input. Please enter y, n, or r.
-JP|MSG_INVALID_INPUT_YNR=無効な入力です。y/n/r のいずれかを入力してください。
-
 # check_common() 関数のreset/returnモード
 US|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared.
 JP|MSG_RESET_COMPLETE=リセットが完了しました。すべてのキャッシュデータがクリアされました。
@@ -230,6 +224,17 @@ JP|MSG_ERROR_OCCURRED=エラーが発生しました。
 # common-country.sh
 # =======================
 # select_country() 関数
+
+# confirm() 関数
+US|MSG_CONFIRM_DEFAULT=Confirm? {type}
+JP|MSG_CONFIRM_DEFAULT=選択してください。 {type}
+
+US|MSG_CONFIRM_SELECT=Confirm this selection? {type}
+JP|MSG_CONFIRM_SELECT=選択を確定しますか？ {type}
+
+US|MSG_INVALID_INPUT=Invalid input. Please enter {type}.
+JP|MSG_INVALID_INPUT=無効な入力です。{type} のいずれかを入力してください。
+
 US|MSG_ENTER_COUNTRY=Enter country name, code, or language to search.
 JP|MSG_ENTER_COUNTRY=国名、コード、または言語を入力してください。
 
@@ -258,16 +263,10 @@ JP|MSG_DETECTED_ZONE=検出されたゾーン:
 US|MSG_CONFIRM_ONLY_YN=Confirm (y/n):
 JP|MSG_CONFIRM_ONLY_YN=確認 (y/n):
 
-US|MSG_CONFIRM_ONLY_YNR=Confirm (y/n/r):
-JP|MSG_CONFIRM_ONLY_YNR=確認 (y/n/r):
-
 US|MSG_TIMEZONE_SUCCESS=Zone selection completed successfully!
 JP|MSG_TIMEZONE_SUCCESS=ゾーンの選択が完了しました！
 
 # select_list() 関数
-US|MSG_CONFIRM_YNR=Confirm this selection? (y/n/r)
-JP|MSG_CONFIRM_YNR=選択を確定しますか？ (y/n/r)
-
 US|MSG_INVALID_COUNTRY_NUMBER=Invalid country number. Please try again.
 JP|MSG_INVALID_COUNTRY_NUMBER=無効な国番号です。もう一度お試しください。
 
