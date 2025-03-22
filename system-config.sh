@@ -89,7 +89,7 @@ set_device_name_password() {
     echo "$(color yellow "$(get_message "MSG_CONFIRM_DEVICE_SETTINGS")")"
     read confirmation
     
-    if [ "$confirmation" != "y" ]; then
+    if ! confirm "MSG_CONFIRM_DEVICE_SETTINGS" "yn"; then
         echo "$(color red "$(get_message "MSG_UPDATE_CANCELLED")")"
         return 1
     fi
