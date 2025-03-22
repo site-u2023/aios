@@ -343,7 +343,7 @@ select_country() {
             
             debug_log "DEBUG" "Language selected via command argument: $input_lang"
             # ここで1回だけ成功メッセージを表示
-            printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
+            printf "\n%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
             
             # 選択されたタイムゾーンのゾーン情報からゾーンを選択
             select_zone
@@ -948,7 +948,7 @@ country_write() {
     
     # 成功メッセージを表示（スキップフラグが設定されていない場合のみ）
     if [ "$skip_message" = "false" ]; then
-        printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
+        printf "\n%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
     fi
     
     return 0
