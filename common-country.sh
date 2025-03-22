@@ -648,21 +648,19 @@ detect_and_set_location() {
             debug_log "DEBUG" "Writing country data to temporary file"
             echo "$country_data" > "${CACHE_DIR}/country.tmp"
             
-            # country_write関数に処理を委譲（メッセージ表示をスキップ）
+            # country_write関数に処理を委譲（メッセージ表示スキップ）
             debug_log "DEBUG" "Calling country_write() with skip_message=true"
             country_write true || {
                 debug_log "ERROR" "Failed to write country data"
                 return 1
             }
             
-            # 言語を正規化（この処理で言語設定が完了する）
-            debug_log "DEBUG" "Normalizing language settings first"
+            # 言語を正規化
             normalize_language
             
-            # 言語設定が完了した後に、国と言語の選択が完了したメッセージを表示
-            # この時点で既に日本語設定が有効なので、日本語メッセージが表示される
+            # 国と言語の選択が完了したメッセージを表示（順序変更）
             printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
-            debug_log "DEBUG" "Displaying country success message after language normalization"
+            debug_log "DEBUG" "Adjusted message order for consistent user experience"
             
             # タイムゾーン文字列の構築
             local timezone_str=""
