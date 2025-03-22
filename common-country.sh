@@ -168,23 +168,33 @@ confirm() {
                     printf "\n"
                     return 2
                 fi
-                # YNモードではRを無効として処理
-                ;&  # fallthrough
+                # YNモードではRを無効として処理（エラーとして処理）
+                debug_log "DEBUG" "Return option not allowed in YN mode"
+                # エラーメッセージを表示して次のループへ
+                show_invalid_input_error "$input_type"
+                continue
+                ;;
             *)
                 # エラーメッセージ表示（行間詰め）
-                local error_msg=$(get_message "MSG_INVALID_INPUT")
-                if [ "$input_type" = "ynr" ]; then
-                    # YNRモード用の置換
-                    error_msg=$(echo "$error_msg" | sed 's/{type}/(y\/n\/r)/g')
-                else
-                    # YNモード用の置換
-                    error_msg=$(echo "$error_msg" | sed 's/{type}/(y\/n)/g')
-                fi
-                printf "%s\n" "$(color red "$error_msg")"
+                show_invalid_input_error "$input_type"
                 debug_log "DEBUG" "Invalid input detected for $input_type mode"
                 ;;
         esac
     done
+}
+
+# 無効な入力に対するエラーメッセージを表示する関数
+show_invalid_input_error() {
+    local input_type="$1"
+    local error_msg=$(get_message "MSG_INVALID_INPUT")
+    if [ "$input_type" = "ynr" ]; then
+        # YNRモード用の置換
+        error_msg=$(echo "$error_msg" | sed 's/{type}/(y\/n\/r)/g')
+    else
+        # YNモード用の置換
+        error_msg=$(echo "$error_msg" | sed 's/{type}/(y\/n)/g')
+    fi
+    printf "%s\n" "$(color red "$error_msg")"
 }
 
 # 番号選択関数
