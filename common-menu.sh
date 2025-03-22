@@ -570,6 +570,10 @@ handle_user_selection() {
     
     # 特殊入力の処理
     local real_choice=""
+    
+    # エラーメッセージを一度だけ取得して再利用
+    local error_msg=$(get_message "CONFIG_ERROR_NOT_NUMBER")
+    
     case "$choice" in
         "10")
             # [10]は常にEXIT (旧[0])
@@ -586,7 +590,7 @@ handle_user_selection() {
                 real_choice=$menu_count
                 debug_log "DEBUG" "Special input [00] mapped to item: $real_choice"
             else
-                printf "\n%s\n" "$(color red "$(get_message "CONFIG_ERROR_INVALID_NUMBER")")"
+                printf "\n%s\n" "$(color red "$error_msg")"
                 sleep 2
                 return 0 # リトライが必要
             fi
@@ -597,7 +601,7 @@ handle_user_selection() {
                 real_choice=$((menu_count - 1))
                 debug_log "DEBUG" "Special input [0] mapped to item: $real_choice"
             else
-                printf "\n%s\n" "$(color red "$(get_message "CONFIG_ERROR_INVALID_NUMBER")")"
+                printf "\n%s\n" "$(color red "$error_msg")"
                 sleep 2
                 return 0 # リトライが必要
             fi
@@ -605,15 +609,13 @@ handle_user_selection() {
         *)
             # 数値チェック
             if ! echo "$choice" | grep -q '^[0-9][0-9]*$'; then
-                printf "\n%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
+                printf "\n%s\n" "$(color red "$error_msg")"
                 sleep 2
                 return 0 # リトライが必要
             fi
         
             # 選択範囲チェック（通常メニュー項目のみ）
             if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_choices" ]; then
-                local error_msg=$(get_message "CONFIG_ERROR_INVALID_NUMBER")
-                error_msg=$(echo "$error_msg" | sed "s/PLACEHOLDER/$menu_choices/g")
                 printf "\n%s\n" "$(color red "$error_msg")"
                 sleep 2
                 return 0 # リトライが必要
