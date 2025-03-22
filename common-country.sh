@@ -736,7 +736,7 @@ detect_and_set_location() {
 # $1: 表示するリストデータ
 # $2: 結果を保存する一時ファイル
 # $3: タイプ（country/zone）
-select_list() {
+OK_select_list() {
     debug_log "DEBUG" "Running select_list() function with type=$3"
     
     local select_list="$1"
