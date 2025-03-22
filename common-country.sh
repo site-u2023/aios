@@ -152,19 +152,19 @@ confirm() {
         
         # 入力検証
         case "$yn" in
-            [Yy]|[Yy][Ee][Ss]) 
+            [Yy]|[Yy][Ee][Ss]|はい|ハイ|ﾊｲ) 
                 debug_log "DEBUG" "User confirmed: Yes"
                 CONFIRM_RESULT="Y"
                 printf "\n"
                 return 0 
                 ;;
-            [Nn]|[Nn][Oo]) 
+            [Nn]|[Nn][Oo]|いいえ|イイエ|ｲｲｴ)
                 debug_log "DEBUG" "User confirmed: No"
                 CONFIRM_RESULT="N"
                 printf "\n"
                 return 1 
                 ;;
-            [Rr]|[Rr][Ee][Tt][Uu][Rr][Nn])
+            [Rr]|[Rr][Ee][Tt][Uu][Rr][Nn]|戻る|モドル|ﾓﾄﾞﾙ)
                 # YNRモードの場合のみRを許可
                 if [ "$input_type" = "ynr" ]; then
                     debug_log "DEBUG" "User selected: Return option"
