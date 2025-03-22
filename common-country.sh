@@ -590,7 +590,7 @@ select_country() {
 }
 
 # システムの地域情報を検出し設定する関数
-OK_detect_and_set_location() {
+detect_and_set_location() {
     debug_log "DEBUG" "Running detect_and_set_location() function"
     
     # システムから国とタイムゾーン情報を取得
@@ -698,7 +698,7 @@ OK_detect_and_set_location() {
 }
 
 # システムの地域情報を検出し設定する関数
-detect_and_set_location() {
+OK_detect_and_set_location() {
     debug_log "DEBUG" "Running detect_and_set_location() function"
     
     # システムから国とタイムゾーン情報を取得
