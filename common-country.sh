@@ -100,10 +100,6 @@ normalize_input() {
     printf '%s' "$output"
 }
 
-#!/bin/sh
-# OpenWrt向け入力処理関数（POSIX準拠）
-# 日本語インターフェース、英語デバッグ出力
-
 # 確認入力処理関数
 confirm() {
     local msg_key="${1:-MSG_CONFIRM_DEFAULT}"  # デフォルトのメッセージキー
@@ -172,8 +168,7 @@ confirm() {
                     printf "\n"
                     return 2
                 fi
-                # YNモードではRを無効として処理
-                ;&  # fallthrough
+                ;;
             *)
                 # エラーメッセージ表示（行間詰め）
                 local error_msg=$(get_message "MSG_INVALID_INPUT")
