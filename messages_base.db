@@ -227,7 +227,7 @@ JP|MSG_ERROR_OCCURRED=エラーが発生しました。
 
 # confirm() 関数
 US|MSG_CONFIRM_DEFAULT=Confirm? {type}
-JP|MSG_CONFIRM_DEFAULT=選択してください。 {type}
+JP|MSG_CONFIRM_DEFAULT=選択してください。{type}
 
 US|MSG_CONFIRM_SELECT=Confirm this selection? {type}
 JP|MSG_CONFIRM_SELECT=選択を確定しますか？ {type}
@@ -285,11 +285,14 @@ JP|MSG_SELECT_NUMBER=番号を選択:
 US|MSG_NUMBER_OUT_OF_RANGE=Number out of range. Please select a valid option.
 JP|MSG_NUMBER_OUT_OF_RANGE=入力した数字は範囲外です。有効な番号を選んでください。
 
-US|MSG_SELECTED_COUNTRY=You selected: {0}
-JP|MSG_SELECTED_COUNTRY=選択された国: {0}
+US|MSG_SELECTED_COUNTRY=Selected country: {item}
+JP|MSG_SELECTED_COUNTRY=選択された国: {item}
 
-US|MSG_SELECTED_ZONE=You have selected timezone: {0}
-JP|MSG_SELECTED_ZONE=選択したタイムゾーン: {0}
+US|MSG_SELECTED_ZONE=Selected timezone: {item}
+JP|MSG_SELECTED_ZONE=選択されたタイムゾーン: {item}
+
+US|MSG_SELECTED_ITEM=Selected: {item}
+JP|MSG_SELECTED_ITEM=選択項目: {item}
 
 # select_zone() 関数
 US|MSG_SELECT_TIMEZONE=Please select your timezone from the list.
