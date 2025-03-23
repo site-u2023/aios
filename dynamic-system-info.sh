@@ -66,20 +66,16 @@ get_country_code() {
 
     # IPが取得できたら国コードを取得
     if [ -n "$IP" ]; then
-        echo "Device's Global IP: $IP"
         debug_log "DEBUG: Fetching country code for IP: $IP"
         SELECT_COUNTRY=$(wget -qO- "http://ip-api.com/json/$IP" | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
         
         # 国コードが取得できた場合
         if [ -n "$SELECT_COUNTRY" ]; then
-            echo "Device's Country Code: $SELECT_COUNTRY"
             debug_log "DEBUG: Country code retrieved: $SELECT_COUNTRY"
         else
-            echo "Error: Could not retrieve country code."
             debug_log "DEBUG: Failed to retrieve country code for IP: $IP"
         fi
     else
-        echo "Error: Could not retrieve global IP address."
         debug_log "DEBUG: Failed to retrieve global IP address."
     fi
 }
@@ -93,7 +89,6 @@ get_zone_code() {
 
     # IPが取得できたらタイムゾーンとゾーンネームを取得
     if [ -n "$IP" ]; then
-        echo "Device's Global IP: $IP"
         debug_log "DEBUG: Fetching timezone and zone name for IP: $IP"
         SELECT_ZONE=$(wget -qO- "http://ip-api.com/json/$IP")
 
@@ -103,15 +98,11 @@ get_zone_code() {
 
         # タイムゾーンとゾーンネームが取得できた場合
         if [ -n "$SELECT_TIMEZONE" ] && [ -n "$SELECT_ZONENAME" ]; then
-            echo "Device's Timezone: $SELECT_TIMEZONE"
-            echo "Device's Zone Name: $SELECT_ZONENAME"
             debug_log "DEBUG: Timezone retrieved: $SELECT_TIMEZONE, Zone Name: $SELECT_ZONENAME"
         else
-            echo "Error: Could not retrieve timezone or zone name."
             debug_log "DEBUG: Failed to retrieve timezone or zone name for IP: $IP"
         fi
     else
-        echo "Error: Could not retrieve global IP address."
         debug_log "DEBUG: Failed to retrieve global IP address."
     fi
 }
@@ -121,7 +112,8 @@ process_location_info() {
     debug_log "DEBUG: Starting IP-based location information processing"
     
     # 一時ファイルのパス定義
-    local tmp_zone="${CACHE_DIR}/ip_zone.tmp"
+    local tmp_country
+    local tmp_country="${CACHE_DIR}/ip_country.tmp"
     local tmp_timezone="${CACHE_DIR}/ip_timezone.tmp"
     local tmp_zonename="${CACHE_DIR}/ip_zonename.tmp"
     
@@ -131,7 +123,7 @@ process_location_info() {
     
     # 国コードをファイルに保存
     if [ -n "$SELECT_COUNTRY" ]; then
-        echo "$SELECT_COUNTRY" > "$tmp_zone"
+        echo "$SELECT_COUNTRY" > "$tmp_country"
         debug_log "DEBUG: Country code saved to file: $SELECT_COUNTRY"
     else
         debug_log "ERROR: Failed to get country code"
@@ -139,7 +131,7 @@ process_location_info() {
     fi
     
     # 国コードファイルの存在確認
-    if [ ! -s "$tmp_zone" ]; then
+    if [ ! -s "$tmp_country" ]; then
         debug_log "ERROR: Country code file is empty"
         return 1
     fi
