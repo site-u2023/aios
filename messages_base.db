@@ -343,6 +343,9 @@ JP|MSG_CONFIRM_INSTALL=パッケージ {pkg} をインストールしますか�
 # system-config.sh
 # =======================
 # information() 関数
+US|MSG_INFO_NET_COUNTRY=IP geolocation
+JP|MSG_INFO_NET_COUNTRY=IPアドレス位置情報
+
 US|MSG_INFO_ARCHITECTURE=Architecture: {info}
 JP|MSG_INFO_ARCHITECTURE=アーキテクチャー: {info}
 
