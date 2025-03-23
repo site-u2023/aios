@@ -229,7 +229,7 @@ process_location_info() {
     if [ -z "$country_data" ]; then
         debug_log "ERROR" "No matching country found in database"
         return 1
-    }
+    fi
     
     # 一時ファイルに情報を保存（detect_and_set_locationで使用）
     echo "$country_data" > "${CACHE_DIR}/country.tmp"
