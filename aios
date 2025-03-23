@@ -1010,12 +1010,15 @@ print_information() {
 }
 
 print_country() {
+    local net_country=$(cat "${CACHE_DIR}/net_country.ch")
     local country=$(cat "${CACHE_DIR}/language.ch")
     local language=$(cat "${CACHE_DIR}/luci.ch")
     #local message=$(cat "${CACHE_DIR}/message.ch")
     local zonename=$(cat "${CACHE_DIR}/zonename.ch")
     local timezone=$(cat "${CACHE_DIR}/timezone.ch")
+    local net_country=$(cat "${CACHE_DIR}/net_country.ch")
 
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_NET_COUNTRY" "code=$net_country")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_COUNTRY" "code=$country")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_LANGUAGE" "code=$language")")"
     #printf "%s\n" "$(color white "$(get_message "MSG_INFO_MESSAGE" "code=$message")")"
