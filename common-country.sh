@@ -667,7 +667,7 @@ detect_and_set_location() {
         
         # process_location_info関数が利用可能か確認
         if command -v process_location_info >/dev/null 2>&1; then
-            # IPベースの位置情報を取得
+            # IPベースの位置情報を取得（一時ファイルに保存されるだけ）
             if process_location_info; then
                 debug_log "DEBUG" "Location information retrieved via process_location_info()"
                 
@@ -705,6 +705,7 @@ detect_and_set_location() {
                     
                     # 確認
                     if confirm "MSG_CONFIRM_ONLY_YN"; then
+                        # 設定適用
                         debug_log "DEBUG" "User accepted IP-based location settings"
                         
                         # country_write関数に処理を委譲（メッセージ表示スキップ）
