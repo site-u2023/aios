@@ -90,8 +90,6 @@ get_country_code() {
             # 国コードが取得できた場合
             if [ -n "$country_code" ]; then
                 debug_log "DEBUG" "Country code retrieved: $country_code"
-                # 国コードのみを返す（テキストなし）
-                echo "$country_code"
                 return 0
             else
                 debug_log "DEBUG" "Failed to retrieve country code for IP: $IP"
