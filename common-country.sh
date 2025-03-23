@@ -343,7 +343,10 @@ select_country() {
             
             debug_log "DEBUG" "Language selected via command argument: $input_lang"
             # ここで1回だけ成功メッセージを表示
+            # 国選択完了メッセージを表示
             printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
+            # 言語設定完了のメッセージを表示
+            printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SET")")"
             
             # 選択されたタイムゾーンのゾーン情報からゾーンを選択
             select_zone
@@ -659,7 +662,9 @@ detect_and_set_location() {
             
             # 国選択完了メッセージを先に表示
             printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
-            
+            # 言語設定完了のメッセージを表示
+            printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SET")")"
+        
             # タイムゾーン文字列の構築
             local timezone_str=""
             if [ -n "$system_zonename" ] && [ -n "$system_timezone" ]; then
@@ -844,7 +849,10 @@ country_write() {
     
     # 成功メッセージを表示（スキップフラグが設定されていない場合のみ）
     if [ "$skip_message" = "false" ]; then
+        # 国選択完了メッセージを表示
         printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
+        # 言語設定完了のメッセージを表示
+        printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SET")")"
     fi
     
     return 0
