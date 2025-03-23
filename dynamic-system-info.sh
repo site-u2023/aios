@@ -177,32 +177,39 @@ process_location_info() {
     local tmp_timezone="${CACHE_DIR}/ip_timezone.tmp"
     local tmp_zonename="${CACHE_DIR}/ip_zonename.tmp"
     
-    # 国コード取得
+    # 国コード取得 - グローバル変数SELECTーCOUNTRYを使用
     debug_log "DEBUG" "Retrieving country code from IP address"
-    get_country_code > "$tmp_country"
-
-    cat $tmp_country
+    if ! get_country_code; then
+        debug_log "ERROR" "Failed to get country code from IP"
+        return 1
+    fi
+    
+    # 国コードをファイルに保存
+    echo "$SELECT_COUNTRY" > "$tmp_country"
     
     # 国コードファイルのチェック
     if [ ! -s "$tmp_country" ]; then
-        debug_log "ERROR" "Failed to obtain country code from IP"
+        debug_log "ERROR" "Country code file is empty"
         return 1
     fi
-    debug_log "DEBUG" "Country code saved to temporary file"
+    debug_log "DEBUG" "Country code saved to file: $SELECT_COUNTRY"
     
-    # タイムゾーン情報取得
+    # タイムゾーン情報取得 - 出力をファイルに保存
     debug_log "DEBUG" "Retrieving timezone information from IP address"
-    get_zone_code > "$tmp_zone"
+    if ! get_zone_code > "$tmp_zone"; then
+        debug_log "ERROR" "Failed to get timezone information from IP"
+        return 1
+    fi
     
     # 情報が取得できなかった場合
-    if [ $? -ne 0 ] || [ -z "$tmp_zone" ]; then
-        debug_log "ERROR" "Failed to obtain timezone information from IP"
+    if [ ! -s "$tmp_zone" ]; then
+        debug_log "ERROR" "Timezone file is empty"
         return 1
     fi
     
     # タイムゾーンとゾーン名を抽出して別々のファイルに保存
-    echo "$tmp_zone" | grep "timezone:" | cut -d':' -f2- > "$tmp_timezone"
-    echo "$tmp_zone" | grep "zonename:" | cut -d':' -f2- > "$tmp_zonename"
+    grep "timezone:" "$tmp_zone" | cut -d':' -f2- > "$tmp_timezone"
+    grep "zonename:" "$tmp_zone" | cut -d':' -f2- > "$tmp_zonename"
     
     # 一時ファイルのチェック
     if [ ! -s "$tmp_timezone" ] || [ ! -s "$tmp_zonename" ]; then
