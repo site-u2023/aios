@@ -669,12 +669,15 @@ detect_and_set_location() {
             printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
             printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$(echo "$system_country" | cut -d' ' -f2)")"
 
-            # ゾーン名があればゾーン名とタイムゾーン、なければタイムゾーンのみ表示
-            if [ -n "$system_zonename" ]; then
-                printf "%s %s%s%s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_zonename")" "$(color white ",")" "$(color white "$system_timezone")"
-            else
-                printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_timezone")"
-            fi
+        # ゾーンネームとタイムゾーンをそれぞれ別の行に表示
+        if [ -n "$system_zonename" ]; then
+            printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONENAME")")" "$(color white "$system_zonename")"
+            debug_log "DEBUG: Displaying detected system zone name: $system_zonename"
+        fi
+        if [ -n "$system_timezone" ]; then
+            printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color white "$system_timezone")"
+            debug_log "DEBUG: Displaying detected system timezone: $system_timezone"
+        fi
             
             # 確認
             if confirm "MSG_CONFIRM_ONLY_YN"; then
