@@ -238,6 +238,13 @@ process_location_info() {
         debug_log "ERROR" "Failed to write timezone data from IP detection"
         return 1
     }
+
+    # 処理成功時にネットワーク由来の情報を記録
+    if [ -n "$country_code" ] && [ -n "$timezone" ]; then
+        # ネットワークから取得した地域情報をキャッシュに記録
+        echo "${country_code},${zonename},${timezone}" > "${CACHE_DIR}/net_country.ch"
+        debug_log "DEBUG" "Network location data saved to cache: ${country_code},${zonename},${timezone}"
+    fi
     
     debug_log "DEBUG" "IP-based location information processed successfully"
     return 0
