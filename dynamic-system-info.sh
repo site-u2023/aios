@@ -178,56 +178,36 @@ process_location_info() {
     debug_log "DEBUG" "Starting IP-based location information processing"
     
     # 国コードの取得
-    local country_code=""
-    if command -v get_country_code >/dev/null 2>&1; then
-        debug_log "DEBUG" "Retrieving country code from IP address"
-        country_code=$(get_country_code)
-    else
-        debug_log "ERROR" "get_country_code function not available"
+    get_country_code
+    if [ $? -ne 0 ] || [ -z "$COUNTRY_CODE_RESULT" ]; then
+        debug_log "ERROR" "Failed to obtain country code"
         return 1
     fi
     
-    if [ -z "$country_code" ]; then
-        debug_log "ERROR" "Failed to obtain country code from IP"
+    local country_code="$COUNTRY_CODE_RESULT"
+    debug_log "DEBUG" "Working with country code: $country_code"
+    
+    # ゾーン情報の取得
+    get_zone_code
+    if [ $? -ne 0 ] || [ -z "$ZONENAME_RESULT" ] || [ -z "$TIMEZONE_RESULT" ]; then
+        debug_log "ERROR" "Failed to obtain timezone information"
         return 1
     fi
     
-    debug_log "DEBUG" "Country code obtained: $country_code"
+    local zonename="$ZONENAME_RESULT"
+    local timezone="$TIMEZONE_RESULT"
+    debug_log "DEBUG" "Working with timezone: $timezone, zonename: $zonename"
     
-    # タイムゾーン情報の取得
-    local zone_info=""
-    local timezone=""
-    local zonename=""
-    
-    if command -v get_zone_code >/dev/null 2>&1; then
-        debug_log "DEBUG" "Retrieving timezone information from IP address"
-        zone_info=$(get_zone_code)
-        
-        # 情報抽出
-        timezone=$(echo "$zone_info" | grep "Device's Timezone:" | awk '{print $3}')
-        zonename=$(echo "$zone_info" | grep "Device's Zonename:" | awk '{print $3}')
-    else
-        debug_log "ERROR" "get_zone_code function not available"
-        return 1
-    fi
-    
-    if [ -z "$timezone" ] || [ -z "$zonename" ]; then
-        debug_log "ERROR" "Failed to obtain timezone information from IP"
-        return 1
-    fi
-    
-    debug_log "DEBUG" "Timezone: $timezone, Zone name: $zonename"
-    
-    # country.dbから国情報を検索
+    # country.dbから完全な国情報を検索
     local country_db="${BASE_DIR}/country.db"
     if [ ! -f "$country_db" ]; then
-        debug_log "ERROR" "Country database not found"
+        debug_log "ERROR" "Country database not found at: $country_db"
         return 1
     fi
     
     local country_data=$(grep -i "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *$country_code" "$country_db")
     if [ -z "$country_data" ]; then
-        debug_log "ERROR" "No matching country found in database"
+        debug_log "ERROR" "No matching country found in database for code: $country_code"
         return 1
     fi
     
@@ -235,7 +215,7 @@ process_location_info() {
     echo "$country_data" > "${CACHE_DIR}/country.tmp"
     echo "${zonename},${timezone}" > "${CACHE_DIR}/zone.tmp"
     
-    debug_log "DEBUG" "IP-based location information saved to temporary files"
+    debug_log "DEBUG" "IP-based location information processed successfully"
     return 0
 }
 
