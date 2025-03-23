@@ -649,17 +649,16 @@ detect_and_set_location() {
             echo "$country_data" > "${CACHE_DIR}/country.tmp"
             
             # country_write関数に処理を委譲（メッセージ表示スキップ）
-            debug_log "DEBUG" "Calling country_write()"
+            debug_log "DEBUG" "Calling country_write() with suppress_message flag"
             country_write true || {
                 debug_log "ERROR" "Failed to write country data"
                 return 1
             }
             
+            # country_write()が成功すると、normalize_language()は自動的に実行されるため削除
+            
             # 国選択完了メッセージを先に表示
             printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
-            
-            # 言語を正規化
-            normalize_language
             
             # タイムゾーン文字列の構築
             local timezone_str=""
