@@ -594,7 +594,7 @@ select_country() {
     done
 }
 
-# システムの地域情報を検出し設定する関数
+# detect_and_set_location 関数
 detect_and_set_location() {
     # 既存のcheck_option()関数を使用してオプションを取得
     local skip_device=$(check_option "SKIP_DEVICE_DETECTION" "false")
