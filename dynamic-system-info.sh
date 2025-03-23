@@ -142,19 +142,19 @@ get_zone_code() {
         # ファイルからデータを読み取り
         if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
             # API応答からタイムゾーン情報を抽出
-            SELECT_ZONE==$(grep -o '"timezone":"[^"]*' "$tmp_file" | awk -F'"' '{print $4}')
+            SELECT_ZONE=$(grep -o '"timezone":"[^"]*' "$tmp_file" | awk -F'"' '{print $4}')
             
             # get_timezone_info関数を使用してタイムゾーン形式を取得
-            if [ -n "$SELECT_ZONE=" ] && command -v get_timezone_info >/dev/null 2>&1; then
-                SELECT_ZONE==$(get_timezone_info "$SELECT_ZONE=")
+            if [ -n "$SELECT_ZONE" ] && command -v get_timezone_info >/dev/null 2>&1; then
+                get_timezone_info "$SELECT_ZONE"
             fi
             
             rm -f "$tmp_file" 2>/dev/null
             
-            if [ -n "$SELECT_TIMEZONE=" ] && [ -n "$SELECT_ZONENAME=" ]; then
-                debug_log "DEBUG" "Timezone data retrieved: timezone=$SELECT_TIMEZONE=, zonename=$SELECT_ZONENAME="
-                echo "timezone:$SELECT_TIMEZONE="
-                echo "zonename:$SELECT_ZONENAME="
+            if [ -n "$SELECT_TIMEZONE" ] && [ -n "$SELECT_ZONENAME" ]; then
+                debug_log "DEBUG" "Timezone data retrieved: timezone=$SELECT_TIMEZONE, zonename=$SELECT_ZONENAME"
+                echo "timezone:$SELECT_TIMEZONE"
+                echo "zonename:$SELECT_ZONENAME"
                 return 0
             fi
         else
@@ -177,7 +177,7 @@ process_location_info() {
     local tmp_timezone="${CACHE_DIR}/ip_timezone.tmp"
     local tmp_zonename="${CACHE_DIR}/ip_zonename.tmp"
     
-    # 国コード取得 - グローバル変数SELECTーCOUNTRYを使用
+    # 国コード取得 - グローバル変数SELECT_COUNTRYを使用
     debug_log "DEBUG" "Retrieving country code from IP address"
     if ! get_country_code; then
         debug_log "ERROR" "Failed to get country code from IP"
