@@ -173,7 +173,7 @@ get_zone_code() {
     return 1
 }
 
-# IPアドレスから位置情報を取得する関数
+# IPアドレスから位置情報を取得する関数 - シンプル版
 process_location_info() {
     debug_log "DEBUG" "Starting IP-based location information processing"
     
@@ -181,35 +181,34 @@ process_location_info() {
     local tmp_country="${CACHE_DIR}/country.tmp"
     local tmp_zone="${CACHE_DIR}/zone.tmp"
     
-    # 国コード取得
-    debug_log "DEBUG" "Getting country code from IP"
+    # 国コード取得とファイル保存
+    debug_log "DEBUG" "Retrieving country code from IP address"
     local country_code=$(get_country_code)
     
-    # 国コードが取得できたかチェック
+    # 国コードが取得できなければエラー
     if [ -z "$country_code" ]; then
         debug_log "ERROR" "Failed to get country code from IP"
         return 1
     fi
     
-    debug_log "DEBUG" "Country code obtained: $country_code"
+    # 単純に国コードを一時ファイルに保存
+    echo "$country_code" > "$tmp_country"
+    debug_log "DEBUG" "Country code saved to $tmp_country"
     
-    # ゾーン情報取得
-    debug_log "DEBUG" "Getting timezone information from IP"
+    # ゾーン情報取得とファイル保存
+    debug_log "DEBUG" "Retrieving timezone information from IP address"
     local zone_info=$(get_zone_code)
     
-    # ゾーン情報が取得できたかチェック
+    # ゾーン情報が取得できなければエラー
     if [ -z "$zone_info" ]; then
         debug_log "ERROR" "Failed to get timezone information from IP"
         return 1
     fi
     
-    debug_log "DEBUG" "Zone information obtained: $zone_info"
-    
-    # 一時ファイルに情報を保存
-    echo "$country_code" > "$tmp_country"
+    # 単純にゾーン情報を一時ファイルに保存
     echo "$zone_info" > "$tmp_zone"
+    debug_log "DEBUG" "Timezone information saved to $tmp_zone"
     
-    debug_log "DEBUG" "Location information saved to temporary files"
     return 0
 }
 
