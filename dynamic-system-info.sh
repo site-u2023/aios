@@ -177,74 +177,54 @@ get_zone_code() {
 process_location_info() {
     debug_log "DEBUG" "Starting IP-based location information processing"
     
+    # 国コードを直接取得
+    local country_code=""
+    local timezone=""
+    local zonename=""
+    
     # 国コードの取得
-    get_country_code
-    if [ $? -ne 0 ] || [ -z "$COUNTRY_CODE_RESULT" ]; then
-        debug_log "ERROR" "Failed to obtain country code"
+    if command -v get_country_code >/dev/null 2>&1; then
+        debug_log "DEBUG" "Calling get_country_code()"
+        country_code=$(get_country_code)
+        debug_log "DEBUG" "Country code obtained: $country_code"
+    else
+        debug_log "ERROR" "get_country_code function not available"
         return 1
     fi
     
-    local country_code="$COUNTRY_CODE_RESULT"
-    debug_log "DEBUG" "Working with country code: $country_code"
-    
-    # ゾーン情報の取得
-    get_zone_code
-    if [ $? -ne 0 ] || [ -z "$ZONENAME_RESULT" ] || [ -z "$TIMEZONE_RESULT" ]; then
-        debug_log "ERROR" "Failed to obtain timezone information"
+    # タイムゾーン情報の取得
+    if command -v get_zone_code >/dev/null 2>&1; then
+        debug_log "DEBUG" "Calling get_zone_code()"
+        # get_zone_code の出力から必要な情報を抽出
+        local zone_info=$(get_zone_code)
+        
+        # Device's Timezone: XXX の行からタイムゾーン情報を抽出
+        timezone=$(echo "$zone_info" | grep "Device's Timezone:" | awk '{print $3}')
+        
+        # Device's Zonename: XXX の行からゾーン名情報を抽出
+        zonename=$(echo "$zone_info" | grep "Device's Zonename:" | awk '{print $3}')
+        
+        debug_log "DEBUG" "Timezone obtained: $timezone, Zonename: $zonename"
+    else
+        debug_log "ERROR" "get_zone_code function not available"
         return 1
     fi
-    
-    local zonename="$ZONENAME_RESULT"
-    local timezone="$TIMEZONE_RESULT"
-    debug_log "DEBUG" "Working with timezone: $timezone, zonename: $zonename"
     
     # country.dbから完全な国情報を検索
     local country_db="${BASE_DIR}/country.db"
-    if [ ! -f "$country_db" ]; then
-        debug_log "ERROR" "Country database not found at: $country_db"
-        return 1
-    fi
-    
     local country_data=$(grep -i "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *$country_code" "$country_db")
+    
     if [ -z "$country_data" ]; then
         debug_log "ERROR" "No matching country found in database for code: $country_code"
         return 1
     fi
     
-    # 国情報を一時ファイルに書き込み
+    # 一時ファイルに情報を保存（detect_and_set_locationがこれを使用）
     echo "$country_data" > "${CACHE_DIR}/country.tmp"
+    echo "${zonename},${timezone}" > "${CACHE_DIR}/zone.tmp"
     
-    # country_write関数に処理を委譲
-    if ! command -v country_write >/dev/null 2>&1; then
-        debug_log "ERROR" "country_write function not available"
-        return 1
-    fi
-    
-    country_write true || {
-        debug_log "ERROR" "Failed to write country data from IP detection"
-        return 1
-    }
-    
-    # タイムゾーン文字列の構築
-    local timezone_str="${zonename},${timezone}"
-    
-    # zone_write関数に処理を委譲
-    if ! command -v zone_write >/dev/null 2>&1; then
-        debug_log "ERROR" "zone_write function not available"
-        return 1
-    fi
-    
-    zone_write "$timezone_str" || {
-        debug_log "ERROR" "Failed to write timezone data from IP detection"
-        return 1
-    }
-
-    # 処理成功時にネットワーク由来の情報を記録
-    if [ -n "$country_code" ] && [ -n "$timezone" ]; then
-        # ネットワークから取得した地域情報をキャッシュに記録
-        echo "${country_code},${zonename},${timezone}" > "${CACHE_DIR}/net_country.ch"
-        debug_log "DEBUG" "Network location data saved to cache: ${country_code},${zonename},${timezone}"
-    fi
+    # 情報源をキャッシュに記録
+    echo "IP geolocation" > "${CACHE_DIR}/info_source.ch"
     
     debug_log "DEBUG" "IP-based location information processed successfully"
     return 0
