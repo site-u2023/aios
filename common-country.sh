@@ -594,12 +594,12 @@ select_country() {
     done
 }
 
-# detect_and_set_location 関数
+# システムの地域情報を検出し設定する関数
 detect_and_set_location() {
     # 既存のcheck_option()関数を使用してオプションを取得
-    local skip_device=$(check_option "SKIP_DEVICE_DETECTION" "false")
-    local skip_ip=$(check_option "SKIP_IP_DETECTION" "false")
-    local skip_all=$(check_option "SKIP_ALL_DETECTION" "false")
+    local skip_device="${SKIP_DEVICE_DETECTION:-false}"
+    local skip_ip="${SKIP_IP_DETECTION:-false}"
+    local skip_all="${SKIP_ALL_DETECTION:-false}"
     
     debug_log "DEBUG" "Running detect_and_set_location() with options: skip_device=$skip_device, skip_ip=$skip_ip, skip_all=$skip_all"
     
@@ -667,6 +667,7 @@ detect_and_set_location() {
         
         # process_location_info関数が利用可能か確認
         if command -v process_location_info >/dev/null 2>&1; then
+            debug_log "DEBUG" "Calling process_location_info()"
             if process_location_info; then
                 debug_log "DEBUG" "Location information retrieved via process_location_info()"
                 # process_location_info()がキャッシュを作成するので戻る
