@@ -85,25 +85,33 @@ get_zone_code() {
     IP=$(wget -qO- https://api.ipify.org)
 
     # デバッグログ
-    debug_log "DEBUG: Global IP address retrieved: $IP"
+    debug_log "DEBUG" "Global IP address retrieved: $IP"
 
     # IPが取得できたらタイムゾーンとゾーンネームを取得
     if [ -n "$IP" ]; then
-        debug_log "DEBUG: Fetching timezone and zone name for IP: $IP"
+        debug_log "DEBUG" "Fetching timezone and zone name for IP: $IP"
         SELECT_ZONE=$(wget -qO- "http://ip-api.com/json/$IP")
 
         # タイムゾーンとゾーンネームを抽出
         SELECT_TIMEZONE=$(echo "$SELECT_ZONE" | grep -o '"timezone":"[^"]*' | awk -F'"' '{print $4}')
+        
+        # APIレスポンスを確認して必要な形式でゾーンネームを抽出
+        # zoneName キーを探す
         SELECT_ZONENAME=$(echo "$SELECT_ZONE" | grep -o '"zoneName":"[^"]*' | awk -F'"' '{print $4}')
+        
+        # もし見つからなければ時間帯情報を試す
+        if [ -z "$SELECT_ZONENAME" ]; then
+            SELECT_ZONENAME=$(echo "$SELECT_ZONE" | grep -o '"timezone":"[^"]*' | awk -F'"' '{print $4}')
+        fi
 
         # タイムゾーンとゾーンネームが取得できた場合
         if [ -n "$SELECT_TIMEZONE" ] && [ -n "$SELECT_ZONENAME" ]; then
-            debug_log "DEBUG: Timezone retrieved: $SELECT_TIMEZONE, Zone Name: $SELECT_ZONENAME"
+            debug_log "DEBUG" "Timezone retrieved: $SELECT_TIMEZONE, Zone Name: $SELECT_ZONENAME"
         else
-            debug_log "DEBUG: Failed to retrieve timezone or zone name for IP: $IP"
+            debug_log "DEBUG" "Failed to retrieve timezone or zone name for IP: $IP"
         fi
     else
-        debug_log "DEBUG: Failed to retrieve global IP address."
+        debug_log "DEBUG" "Failed to retrieve global IP address."
     fi
 }
 
