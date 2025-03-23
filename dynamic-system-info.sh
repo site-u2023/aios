@@ -55,6 +55,36 @@ OSVERSION="${CACHE_DIR}/osversion.ch"
 PACKAGE_MANAGER="${CACHE_DIR}/package_manager.ch"
 PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
 
+#!/bin/ash
+
+# グローバルIPから国コードを取得する関数
+get_country_code() {
+    # デバイスのグローバルIP（IPv4）を取得
+    IP=$(wget -qO- https://api.ipify.org)
+
+    # デバッグログ
+    debug_log "DEBUG: Global IP address retrieved: $IP"
+
+    # IPが取得できたら国コードを取得
+    if [ -n "$IP" ]; then
+        echo "Device's Global IP: $IP"
+        debug_log "DEBUG: Fetching country code for IP: $IP"
+        COUNTRY_CODE=$(wget -qO- "http://ip-api.com/json/$IP" | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
+        
+        # 国コードが取得できた場合
+        if [ -n "$COUNTRY_CODE" ]; then
+            echo "Device's Country Code: $COUNTRY_CODE"
+            debug_log "DEBUG: Country code retrieved: $COUNTRY_CODE"
+        else
+            echo "Error: Could not retrieve country code."
+            debug_log "DEBUG: Failed to retrieve country code for IP: $IP"
+        fi
+    else
+        echo "Error: Could not retrieve global IP address."
+        debug_log "DEBUG: Failed to retrieve global IP address."
+    fi
+}
+
 # 📌 デバイスアーキテクチャの取得
 # 戻り値: アーキテクチャ文字列 (例: "mips_24kc", "arm_cortex-a7", "x86_64")
 get_device_architecture() {
@@ -401,6 +431,7 @@ debug_info() {
 
 # メイン処理
 main() {
+    get_country_code
     init_device_cache
     get_usb_devices
     detect_and_save_package_manager
