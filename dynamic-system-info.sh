@@ -59,7 +59,7 @@ PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
 get_country_code() {
     # ローカル変数の定義
     local IP=""
-    local SELECT_COUNTRY=""
+    local country_code=""
     local tmp_file="${CACHE_DIR}/ip_json.tmp"
     
     # まずIPv4の取得を試みる
@@ -84,12 +84,14 @@ get_country_code() {
         
         # ファイルからデータを読み取り
         if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-            SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | awk -F'"' '{print $4}')
+            country_code=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | awk -F'"' '{print $4}')
             rm -f "$tmp_file" 2>/dev/null
             
             # 国コードが取得できた場合
-            if [ -n "$SELECT_COUNTRY" ]; then
-                debug_log "DEBUG" "Country code retrieved: $SELECT_COUNTRY"
+            if [ -n "$country_code" ]; then
+                debug_log "DEBUG" "Country code retrieved: $country_code"
+                # 国コードのみを返す（テキストなし）
+                echo "$country_code"
                 return 0
             else
                 debug_log "DEBUG" "Failed to retrieve country code for IP: $IP"
