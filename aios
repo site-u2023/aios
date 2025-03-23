@@ -1097,6 +1097,15 @@ check_option() {
             -ta|--ta|-test_api|--test_api)
                 MODE="test_api"
                 ;;
+            -sd|--sd|-skip-dev|--skip-dev)
+                SKIP_DEVICE_DETECTION="true"
+                ;;
+            -si|--si|-skip-ip|--skip-ip)
+                SKIP_IP_DETECTION="true"
+                ;;
+            -sa|--sa|-skip-all|--skip-all)
+                SKIP_ALL_DETECTION="true"
+                ;;
             -*)
                 echo "Warning: Unknown option: $1" >&2
                 ;;
