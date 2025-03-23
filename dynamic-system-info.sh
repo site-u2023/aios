@@ -278,6 +278,29 @@ process_location_info() {
         fi
     fi
 
+    # まず get_country_code() を呼び出して情報を取得
+    debug_log "DEBUG: Calling get_country_code() to retrieve location information"
+    
+    # get_country_code 関数が利用可能か確認
+    if ! command -v get_country_code >/dev/null 2>&1; then
+        debug_log "DEBUG: get_country_code function not available, attempting to load dynamic-system-info.sh"
+        if [ -f "$BASE_DIR/dynamic-system-info.sh" ]; then
+            . "$BASE_DIR/dynamic-system-info.sh"
+        else
+            debug_log "ERROR: dynamic-system-info.sh not found, cannot retrieve location data"
+            return 1
+        fi
+    fi
+    
+    # get_country_code 関数を呼び出し
+    get_country_code || {
+        debug_log "ERROR: get_country_code failed to retrieve location information"
+        return 1
+    }
+    
+    debug_log "DEBUG: Successfully retrieved location data from get_country_code"
+    debug_log "DEBUG: Country: $SELECT_COUNTRY, Timezone: $SELECT_TIMEZONE, Zone: $SELECT_ZONENAME"
+
     # キャッシュファイルのパス定義
     local tmp_country="${CACHE_DIR}/ip_country.tmp"
     local tmp_zone="${CACHE_DIR}/ip_zone.tmp"
@@ -327,7 +350,15 @@ process_location_info() {
     fi
     
     debug_log "DEBUG: Location information cache process completed"
-    return 0
+    
+    # 少なくとも国コードかタイムゾーンの一方が取得できているか確認
+    if [ -n "$SELECT_COUNTRY" ] || [ -n "$SELECT_TIMEZONE" ] || [ -n "$SELECT_ZONENAME" ]; then
+        debug_log "DEBUG: At least one location data field was successfully retrieved and cached"
+        return 0
+    else
+        debug_log "ERROR: No valid location data could be retrieved"
+        return 1
+    fi
 }
 
 # 📌 デバイスアーキテクチャの取得
