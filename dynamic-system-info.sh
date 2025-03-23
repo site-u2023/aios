@@ -58,7 +58,7 @@ PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
 # グローバルIPから国コードを取得する関数
 get_country_code() {
     # グローバル変数を初期化
-    COUNTRY_CODE_RESULT=""
+    SELECT_COUNTRY=""
     
     # ローカル変数の定義
     local IP=""
@@ -86,12 +86,12 @@ get_country_code() {
         
         # ファイルからデータを読み取り
         if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-            COUNTRY_CODE_RESULT=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | awk -F'"' '{print $4}')
+            SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | awk -F'"' '{print $4}')
             rm -f "$tmp_file" 2>/dev/null
             
             # 国コードが取得できた場合
-            if [ -n "$COUNTRY_CODE_RESULT" ]; then
-                debug_log "DEBUG" "Country code retrieved: $COUNTRY_CODE_RESULT"
+            if [ -n "$SELECT_COUNTRY" ]; then
+                debug_log "DEBUG" "Country code retrieved: $SELECT_COUNTRY"
                 return 0
             else
                 debug_log "DEBUG" "Failed to retrieve country code for IP: $IP"
@@ -111,8 +111,9 @@ get_country_code() {
 # グローバルIPからタイムゾーンとゾーンネームを取得する関数
 get_zone_code() {
     # グローバル変数をリセット
-    TIMEZONE_RESULT=""
-    ZONENAME_RESULT=""
+    SELECT_ZONE=""
+    SELECT_TIMEZONE=""
+    SELECT_ZONENAME=""
     
     # ローカル変数の定義
     local IP=""
@@ -141,19 +142,19 @@ get_zone_code() {
         # ファイルからデータを読み取り
         if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
             # API応答からタイムゾーン情報を抽出
-            ZONENAME_RESULT=$(grep -o '"timezone":"[^"]*' "$tmp_file" | awk -F'"' '{print $4}')
+            SELECT_ZONE==$(grep -o '"timezone":"[^"]*' "$tmp_file" | awk -F'"' '{print $4}')
             
             # get_timezone_info関数を使用してタイムゾーン形式を取得
-            if [ -n "$ZONENAME_RESULT" ] && command -v get_timezone_info >/dev/null 2>&1; then
-                TIMEZONE_RESULT=$(get_timezone_info "$ZONENAME_RESULT")
+            if [ -n "$SELECT_ZONE=" ] && command -v get_timezone_info >/dev/null 2>&1; then
+                SELECT_ZONE==$(get_timezone_info "$SELECT_ZONE=")
             fi
             
             rm -f "$tmp_file" 2>/dev/null
             
-            if [ -n "$ZONENAME_RESULT" ] && [ -n "$TIMEZONE_RESULT" ]; then
-                debug_log "DEBUG" "Timezone data retrieved: zonename=$ZONENAME_RESULT, timezone=$TIMEZONE_RESULT"
-                echo "timezone:$TIMEZONE_RESULT"
-                echo "zonename:$ZONENAME_RESULT"
+            if [ -n "$SELECT_TIMEZONE=" ] && [ -n "$SELECT_ZONENAME=" ]; then
+                debug_log "DEBUG" "Timezone data retrieved: timezone=$SELECT_TIMEZONE=, zonename=$SELECT_ZONENAME="
+                echo "timezone:$SELECT_TIMEZONE="
+                echo "zonename:$SELECT_ZONENAME="
                 return 0
             fi
         else
