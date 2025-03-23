@@ -110,14 +110,16 @@ get_country_code() {
 
 # グローバルIPからタイムゾーンとゾーンネームを取得する関数
 get_zone_code() {
+    # グローバル変数を初期化（関数の戻り値として使用）
+    ZONE_NAME_RESULT=""
+    TIMEZONE_RESULT=""
+    
     # ローカル変数の定義
     local IP=""
-    local TIMEZONE=""
-    local ZONENAME=""
-    local tmp_file="${CACHE_DIR}/ip_zone.tmp"
+    local tmp_file="${CACHE_DIR}/ip_json.tmp"
     
     # まずIPv4の取得を試みる
-    debug_log "DEBUG" "Attempting to get IPv4 address"
+    debug_log "DEBUG" "Attempting to get IPv4 address for timezone detection"
     IP=$(wget -qO- "https://api.ipify.org" 2>/dev/null)
     
     # IPv4の取得に失敗した場合はIPv6にフォールバック
@@ -126,44 +128,58 @@ get_zone_code() {
         IP=$(wget -qO- "https://api64.ipify.org" 2>/dev/null)
     fi
 
-    # デバッグログ
-    debug_log "DEBUG" "Global IP address retrieved: $IP"
+    # IPが取得できなかった場合はエラー
+    if [ -z "$IP" ]; then
+        debug_log "DEBUG" "Failed to retrieve global IP address"
+        return 1
+    fi
 
-    # IPが取得できたらタイムゾーンとゾーンネームを取得
-    if [ -n "$IP" ]; then
-        echo "Device's Global IP: $IP"
-        debug_log "DEBUG" "Fetching timezone and zone name for IP: $IP"
+    debug_log "DEBUG" "Global IP address retrieved for timezone: $IP"
+
+    # IPアドレスからロケーション情報を取得
+    wget -qO "$tmp_file" "http://ip-api.com/json/$IP" 2>/dev/null
+    
+    # ファイルからデータを読み取り
+    if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+        # ゾーンネーム（地域情報）を抽出
+        ZONE_NAME_RESULT=$(grep -o '"timezone":"[^"]*' "$tmp_file" | awk -F'"' '{print $4}')
         
-        # 一時ファイルを使用して応答を保存
-        wget -qO "$tmp_file" "http://ip-api.com/json/$IP" 2>/dev/null
-        
-        # ファイルからデータを読み取り
-        if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-            # タイムゾーンを抽出
-            TIMEZONE=$(grep -o '"timezone":"[^"]*' "$tmp_file" | awk -F'"' '{print $4}')
-            
-            # IP-APIではZONENAMEは取得できないので、TIMEZONEと同じ値を使用
-            ZONENAME="$TIMEZONE"
-            
-            rm -f "$tmp_file" 2>/dev/null
-            
-            # タイムゾーンが取得できた場合
-            if [ -n "$TIMEZONE" ]; then
-                echo "Device's Timezone: $TIMEZONE"
-                echo "Device's Zonename: $ZONENAME"
-                debug_log "DEBUG" "Timezone retrieved: $TIMEZONE, Zonename: $ZONENAME"
-                return 0
-            else
-                debug_log "DEBUG" "Failed to retrieve timezone for IP: $IP"
-                return 1
-            fi
+        # デフォルトのタイムゾーン形式を設定
+        # 特殊なケース：日本のタイムゾーン処理
+        if [ "$ZONE_NAME_RESULT" = "Asia/Tokyo" ]; then
+            TIMEZONE_RESULT="JST-9"
+        # 韓国のタイムゾーン
+        elif [ "$ZONE_NAME_RESULT" = "Asia/Seoul" ]; then
+            TIMEZONE_RESULT="KST-9"
+        # 中国のタイムゾーン
+        elif echo "$ZONE_NAME_RESULT" | grep -q "Asia/Shanghai\|Asia/Hong_Kong"; then
+            TIMEZONE_RESULT="CST-8"
+        # その他のタイムゾーンはシステム設定から取得またはデフォルト値を使用
         else
-            debug_log "DEBUG" "Failed to retrieve data from IP-API service"
-            rm -f "$tmp_file" 2>/dev/null
+            # システムからタイムゾーンの取得を試みる
+            if command -v get_timezone_info >/dev/null 2>&1; then
+                TIMEZONE_RESULT=$(get_timezone_info)
+            fi
+            
+            # 取得できなかった場合はUTCをデフォルトに
+            if [ -z "$TIMEZONE_RESULT" ]; then
+                TIMEZONE_RESULT="UTC"
+            fi
+        fi
+        
+        rm -f "$tmp_file" 2>/dev/null
+        
+        # 両方の情報が取得できた場合
+        if [ -n "$ZONE_NAME_RESULT" ] && [ -n "$TIMEZONE_RESULT" ]; then
+            debug_log "DEBUG" "Timezone data retrieved: zonename=$ZONE_NAME_RESULT, timezone=$TIMEZONE_RESULT"
+            return 0
+        else
+            debug_log "DEBUG" "Failed to retrieve complete timezone information"
             return 1
         fi
     else
-        debug_log "DEBUG" "Failed to retrieve global IP address"
+        debug_log "DEBUG" "Failed to retrieve data from IP-API service"
+        rm -f "$tmp_file" 2>/dev/null
         return 1
     fi
 }
@@ -172,7 +188,7 @@ get_zone_code() {
 process_location_info() {
     debug_log "DEBUG" "Starting IP-based location information processing"
     
-    # 国コードを直接取得（余分なテキストを含まない形式で）
+    # グローバル変数を初期化
     local country_code=""
     local timezone=""
     local zonename=""
@@ -180,24 +196,35 @@ process_location_info() {
     # 国コードの取得
     if command -v get_country_code >/dev/null 2>&1; then
         debug_log "DEBUG" "Calling get_country_code()"
-        country_code=$(get_country_code)
+        # 標準出力に出る不要な内容をサプレス
+        country_code=$(get_country_code 2>/dev/null)
+        
+        # エラー時の処理
+        if [ -z "$country_code" ]; then
+            debug_log "ERROR" "Failed to obtain country code"
+            return 1
+        fi
+        
         debug_log "DEBUG" "Country code obtained: $country_code"
     else
         debug_log "ERROR" "get_country_code function not available"
         return 1
     fi
     
-    # タイムゾーン情報の取得
+    # ゾーン情報とタイムゾーン情報の取得
     if command -v get_zone_code >/dev/null 2>&1; then
         debug_log "DEBUG" "Calling get_zone_code()"
-        # get_zone_code の出力から必要な情報を抽出
-        local zone_info=$(get_zone_code)
         
-        # Device's Timezone: XXX の行からタイムゾーン情報を抽出
-        timezone=$(echo "$zone_info" | grep "Device's Timezone:" | awk '{print $3}')
+        # get_zone_codeを呼び出してグローバル変数に結果を格納
+        get_zone_code
+        if [ $? -ne 0 ]; then
+            debug_log "ERROR" "Failed to get timezone information"
+            return 1
+        fi
         
-        # Device's Zonename: XXX の行からゾーン名情報を抽出
-        zonename=$(echo "$zone_info" | grep "Device's Zonename:" | awk '{print $3}')
+        # グローバル変数から値を取得
+        zonename="$ZONE_NAME_RESULT"
+        timezone="$TIMEZONE_RESULT"
         
         debug_log "DEBUG" "Timezone obtained: $timezone, Zonename: $zonename"
     else
@@ -242,21 +269,16 @@ process_location_info() {
         return 1
     fi
     
-    # タイムゾーン情報が取得できたか確認
-    if [ -n "$timezone" ]; then
+    # タイムゾーン情報とゾーンネームが取得できたか確認
+    if [ -n "$timezone" ] && [ -n "$zonename" ]; then
         debug_log "DEBUG" "Setting timezone: $timezone, zonename: $zonename"
         
-        # タイムゾーン文字列の構築
-        local timezone_str=""
-        if [ -n "$zonename" ] && [ -n "$timezone" ]; then
-            timezone_str="${zonename},${timezone}"
-        else
-            timezone_str="${timezone}"
-        fi
+        # タイムゾーン文字列を適切に構築
+        local timezone_str="${zonename},${timezone}"
         
         # zone_write関数に処理を委譲
         if command -v zone_write >/dev/null 2>&1; then
-            debug_log "DEBUG" "Calling zone_write with timezone: $timezone_str"
+            debug_log "DEBUG" "Calling zone_write with timezone string: $timezone_str"
             zone_write "$timezone_str" || {
                 debug_log "ERROR" "Failed to write timezone data from IP detection"
                 return 1
