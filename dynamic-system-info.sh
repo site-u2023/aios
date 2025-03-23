@@ -143,22 +143,17 @@ get_zone_code() {
             # API応答からタイムゾーン情報を抽出
             ZONENAME_RESULT=$(grep -o '"timezone":"[^"]*' "$tmp_file" | awk -F'"' '{print $4}')
             
-            # タイムゾーン形式を取得
+            # get_timezone_info関数を使用してタイムゾーン形式を取得
             if [ -n "$ZONENAME_RESULT" ] && command -v get_timezone_info >/dev/null 2>&1; then
-                TIMEZONE_RESULT=$(get_timezone_info)
-                if [ -z "$TIMEZONE_RESULT" ]; then
-                    TIMEZONE_RESULT="GMT0"
-                fi
-            else
-                TIMEZONE_RESULT="GMT0"
+                TIMEZONE_RESULT=$(get_timezone_info "$ZONENAME_RESULT")
             fi
             
             rm -f "$tmp_file" 2>/dev/null
             
             if [ -n "$ZONENAME_RESULT" ] && [ -n "$TIMEZONE_RESULT" ]; then
                 debug_log "DEBUG" "Timezone data retrieved: zonename=$ZONENAME_RESULT, timezone=$TIMEZONE_RESULT"
-                echo "Device's Timezone: $TIMEZONE_RESULT"
-                echo "Device's Zonename: $ZONENAME_RESULT"
+                echo "timezone:$TIMEZONE_RESULT"
+                echo "zonename:$ZONENAME_RESULT"
                 return 0
             fi
         else
@@ -171,42 +166,48 @@ get_zone_code() {
     return 1
 }
 
-# IPアドレスから位置情報を取得する関数 - シンプル版
+# IPアドレスから位置情報を取得する関数
 process_location_info() {
     debug_log "DEBUG" "Starting IP-based location information processing"
     
     # 一時ファイルのパス
-    local tmp_country="${CACHE_DIR}/country.tmp"
-    local tmp_zone="${CACHE_DIR}/zone.tmp"
+    local tmp_country="${CACHE_DIR}/ip_country.tmp"
+    local tmp_timezone="${CACHE_DIR}/ip_timezone.tmp"
+    local tmp_zonename="${CACHE_DIR}/ip_zonename.tmp"
     
-    # 国コード取得とファイル保存
+    # 国コード取得
     debug_log "DEBUG" "Retrieving country code from IP address"
-    local country_code=$(get_country_code)
+    get_country_code > "$tmp_country"
     
-    # 国コードが取得できなければエラー
-    if [ -z "$country_code" ]; then
-        debug_log "ERROR" "Failed to get country code from IP"
+    # 国コードファイルのチェック
+    if [ ! -s "$tmp_country" ]; then
+        debug_log "ERROR" "Failed to obtain country code from IP"
         return 1
     fi
+    debug_log "DEBUG" "Country code saved to temporary file"
     
-    # 単純に国コードを一時ファイルに保存
-    echo "$country_code" > "$tmp_country"
-    debug_log "DEBUG" "Country code saved to $tmp_country"
-    
-    # ゾーン情報取得とファイル保存
+    # タイムゾーン情報取得
     debug_log "DEBUG" "Retrieving timezone information from IP address"
-    local zone_info=$(get_zone_code)
+    local zone_output
+    zone_output=$(get_zone_code)
     
-    # ゾーン情報が取得できなければエラー
-    if [ -z "$zone_info" ]; then
-        debug_log "ERROR" "Failed to get timezone information from IP"
+    # 情報が取得できなかった場合
+    if [ $? -ne 0 ] || [ -z "$zone_output" ]; then
+        debug_log "ERROR" "Failed to obtain timezone information from IP"
         return 1
     fi
     
-    # 単純にゾーン情報を一時ファイルに保存
-    echo "$zone_info" > "$tmp_zone"
-    debug_log "DEBUG" "Timezone information saved to $tmp_zone"
+    # タイムゾーンとゾーン名を抽出して別々のファイルに保存
+    echo "$zone_output" | grep "timezone:" | cut -d':' -f2- > "$tmp_timezone"
+    echo "$zone_output" | grep "zonename:" | cut -d':' -f2- > "$tmp_zonename"
     
+    # 一時ファイルのチェック
+    if [ ! -s "$tmp_timezone" ] || [ ! -s "$tmp_zonename" ]; then
+        debug_log "ERROR" "Failed to extract timezone information"
+        return 1
+    fi
+    
+    debug_log "DEBUG" "Timezone information saved to temporary files"
     return 0
 }
 
