@@ -173,95 +173,53 @@ get_zone_code() {
     return 1
 }
 
-# IPアドレスから位置情報を取得する関数
+# IPアドレスから位置情報を取得して処理する関数
 process_location_info() {
     debug_log "DEBUG" "Starting IP-based location information processing"
     
-    # 一時ファイルのパスを設定
+    # 一時ファイルのパス
     local tmp_country="${CACHE_DIR}/country.tmp"
     local tmp_zone="${CACHE_DIR}/zone.tmp"
+    local country_data=""
     
-    # 国コードの取得
+    # 国コード取得
     debug_log "DEBUG" "Retrieving country code from IP address"
-    local country_code=""
+    local country_code=$(get_country_code)
     
-    # 既存のデバッグログから、country_codeが取得できていることを確認
-    if command -v get_country_code >/dev/null 2>&1; then
-        # 変数に直接代入
-        country_code=$(get_country_code 2>/dev/null)
-        
-        # デバッグログに取得した値を記録（修正点1）
-        debug_log "DEBUG" "Raw country code: '$country_code'"
-        
-        # 変数が空の場合、デバッグログから値を復元（修正点2）
-        if [ -z "$country_code" ]; then
-            # logファイルから最新の country code retrieved: の行を取得
-            if [ -f "$LOG_DIR/debug.log" ]; then
-                local log_cc=$(grep "Country code retrieved:" "$LOG_DIR/debug.log" | tail -1 | sed 's/.*Country code retrieved: *\([A-Z][A-Z]*\).*/\1/')
-                if [ -n "$log_cc" ]; then
-                    country_code="$log_cc"
-                    debug_log "DEBUG" "Retrieved country code from log: $country_code"
-                fi
-            fi
-        fi
-    else
-        debug_log "ERROR" "get_country_code function not available"
-        return 1
-    fi
-    
+    # 国コードが取得できない場合はエラー
     if [ -z "$country_code" ]; then
-        debug_log "ERROR" "Failed to obtain country code from IP"
+        debug_log "ERROR" "Failed to get country code"
         return 1
     fi
     
     debug_log "DEBUG" "Country code obtained: $country_code"
     
-    # タイムゾーン情報の取得
-    local zone_info=""
-    local timezone=""
-    local zonename=""
-    
+    # ゾーン情報取得
     debug_log "DEBUG" "Retrieving timezone information from IP address"
-    if command -v get_zone_code >/dev/null 2>&1; then
-        zone_info=$(get_zone_code 2>/dev/null)
+    local zone_str=$(get_zone_code)
+    
+    # ゾーン情報が取得できない場合はエラー
+    if [ -z "$zone_str" ]; then
+        debug_log "ERROR" "Failed to get timezone information"
+        return 1
+    fi
+    
+    debug_log "DEBUG" "Zone information obtained: $zone_str"
+    
+    # 国コードを元に国情報を検索（country.dbを参照）
+    if [ -f "$BASE_DIR/country.db" ]; then
+        country_data=$(grep -i "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *$country_code" "$BASE_DIR/country.db")
         
-        # 情報抽出
-        timezone=$(echo "$zone_info" | grep "Device's Timezone:" | awk '{print $3}')
-        zonename=$(echo "$zone_info" | grep "Device's Zonename:" | awk '{print $3}')
-        
-        # デバッグログに取得した値を記録（修正点3）
-        debug_log "DEBUG" "Raw timezone: '$timezone', Raw zonename: '$zonename'"
-    else
-        debug_log "ERROR" "get_zone_code function not available"
-        return 1
+        if [ -n "$country_data" ]; then
+            debug_log "DEBUG" "Found matching country data in database"
+            echo "$country_data" > "$tmp_country"
+            echo "$zone_str" > "$tmp_zone"
+            return 0
+        fi
     fi
     
-    if [ -z "$timezone" ] || [ -z "$zonename" ]; then
-        debug_log "ERROR" "Failed to obtain timezone information from IP"
-        return 1
-    fi
-    
-    debug_log "DEBUG" "Timezone: $timezone, Zone name: $zonename"
-    
-    # country.dbから国情報を検索
-    local country_db="${BASE_DIR}/country.db"
-    if [ ! -f "$country_db" ]; then
-        debug_log "ERROR" "Country database not found"
-        return 1
-    fi
-    
-    local country_data=$(grep -i "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *$country_code" "$country_db")
-    if [ -z "$country_data" ]; then
-        debug_log "ERROR" "No matching country found in database"
-        return 1
-    fi
-    
-    # 一時ファイルに情報を保存
-    echo "$country_data" > "$tmp_country"
-    echo "${zonename},${timezone}" > "$tmp_zone"
-    
-    debug_log "DEBUG" "IP-based location information saved to temporary files"
-    return 0
+    debug_log "ERROR" "Failed to process location information"
+    return 1
 }
 
 # 📌 デバイスアーキテクチャの取得
