@@ -726,7 +726,7 @@ detect_and_set_location() {
                     debug_log "DEBUG: Information source recorded: Device settings"
                     
                     # ゾーン選択完了メッセージを表示（ここで1回だけ）
-                    printf "%s\n\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+                    printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
                     EXTRA_SPACING_NEEDED="yes"
                     
                     debug_log "DEBUG: Auto-detected device settings have been applied successfully"
@@ -889,7 +889,7 @@ select_zone() {
         
         # メッセージを表示（スキップフラグが設定されていない場合のみ）
         if [ "$skip_message" = "false" ]; then
-            printf "%s\n\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+            printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
         fi
         
         return 0
@@ -931,7 +931,7 @@ select_zone() {
             }
             
             # 成功メッセージを表示
-            printf "%s\n\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+            printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
             return 0
             ;;
             
