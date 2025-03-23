@@ -1041,6 +1041,9 @@ check_option() {
     FORCE="false"
     RESET="false"
     HELP="false"
+    SKIP_DEVICE_DETECTION="false"
+    SKIP_IP_DETECTION="false"
+    SKIP_ALL_DETECTION="false"
 
     # 言語およびオプション引数の処理
     while [ "$#" -gt 0 ]; do
