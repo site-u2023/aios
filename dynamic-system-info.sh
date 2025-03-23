@@ -142,15 +142,29 @@ get_zone_code() {
             SELECT_ZONE=$(grep -o '"timezone":"[^"]*' "$tmp_file" | awk -F'"' '{print $4}')
             debug_log "DEBUG" "Raw timezone from API: $SELECT_ZONE"
             
-            # 基本的なタイムゾーン情報の設定
             if [ -n "$SELECT_ZONE" ]; then
+                # タイムゾーンIDを設定
                 SELECT_TIMEZONE="$SELECT_ZONE"
-                SELECT_ZONENAME="$SELECT_ZONE"
                 
-                # get_timezone_info関数が存在する場合は利用
-                if command -v get_timezone_info >/dev/null 2>&1; then
-                    get_timezone_info "$SELECT_ZONE"
-                fi
+                # ゾーンネームをマッピング
+                case "$SELECT_ZONE" in
+                    "Asia/Tokyo")
+                        SELECT_ZONENAME="Japan Standard Time (JST)"
+                        ;;
+                    "Asia/Seoul")
+                        SELECT_ZONENAME="Korea Standard Time (KST)"
+                        ;;
+                    "America/New_York")
+                        SELECT_ZONENAME="Eastern Standard Time (EST)"
+                        ;;
+                    "Europe/London")
+                        SELECT_ZONENAME="Greenwich Mean Time (GMT)"
+                        ;;
+                    *)
+                        # デフォルトはタイムゾーンIDをそのまま使用
+                        SELECT_ZONENAME="$SELECT_ZONE"
+                        ;;
+                esac
                 
                 debug_log "DEBUG" "Timezone data retrieved: timezone=$SELECT_TIMEZONE, zonename=$SELECT_ZONENAME"
                 echo "timezone:$SELECT_TIMEZONE"
