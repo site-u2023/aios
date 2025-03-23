@@ -793,6 +793,7 @@ select_zone() {
     esac
 }
 
+# 国コード情報を書き込む関数（言語正規化機能付き）
 country_write() {
     local skip_message="${1:-false}"  # 成功メッセージをスキップするかのフラグ
     
@@ -837,6 +838,10 @@ country_write() {
     # LuCI言語コードをキャッシュに保存
     echo "$luci_code" > "$cache_luci"
     debug_log "DEBUG" "LuCI language code written to cache: $luci_code"
+    
+    # 言語を正規化（この行を追加）
+    debug_log "DEBUG" "Calling normalize_language to process language code"
+    normalize_language
     
     # 成功メッセージを表示（スキップフラグが設定されていない場合のみ）
     if [ "$skip_message" = "false" ]; then
