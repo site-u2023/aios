@@ -769,13 +769,14 @@ detect_and_set_location() {
                     printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
                     printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$ip_country")"
                     
-                    # ゾーンネームとタイムゾーン情報の表示
-                    if [ -n "$ip_zonename" ] && [ -n "$ip_timezone" ]; then
-                        printf "%s %s%s%s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$ip_zonename")" "$(color white ",")" "$(color white "$ip_timezone")"
-                    elif [ -n "$ip_zonename" ]; then
-                        printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$ip_zonename")"
-                    elif [ -n "$ip_timezone" ]; then
-                        printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$ip_timezone")"
+                    # ゾーンネームとタイムゾーン情報を別々の行に表示
+                    if [ -n "$ip_zonename" ]; then
+                        printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONENAME")")" "$(color white "$ip_zonename")"
+                        debug_log "DEBUG: Displaying detected zone name: $ip_zonename"
+                    fi
+                    if [ -n "$ip_timezone" ]; then
+                        printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color white "$ip_timezone")"
+                        debug_log "DEBUG: Displaying detected timezone: $ip_timezone"
                     fi
                     
                     # ユーザーに確認
