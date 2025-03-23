@@ -601,6 +601,7 @@ select_country() {
 #      "skip_all" - すべての検出をスキップ
 #      未指定の場合はすべての検出方法を試行
 # システムの地域情報を検出し設定する関数
+# システムの地域情報を検出し設定する関数
 detect_and_set_location() {
     # グローバル変数を直接取得
     debug_log "DEBUG: Running detect_and_set_location() with skip flags: device=$SKIP_DEVICE_DETECTION, ip=$SKIP_IP_DETECTION, all=$SKIP_ALL_DETECTION"
@@ -637,6 +638,8 @@ detect_and_set_location() {
 
     # 2. デバイス内情報の検出（SKIP_DEVICE_DETECTIONが指定されている場合はスキップ）
     if [ "$SKIP_DEVICE_DETECTION" != "true" ]; then
+        debug_log "DEBUG: Attempting device-based information detection"
+        
         # スクリプトパスの確認
         if [ ! -f "$BASE_DIR/dynamic-system-info.sh" ]; then
             debug_log "DEBUG: dynamic-system-info.sh not found. Cannot use system detection."
@@ -727,11 +730,13 @@ detect_and_set_location() {
                     return 0
                 else
                     debug_log "DEBUG: No matching entry found for detected country: $system_country"
-                }
+                fi
             else
                 debug_log "DEBUG: User declined auto-detected device settings"
             fi
-        }
+        else
+            debug_log "DEBUG: Insufficient system information detected from device"
+        fi
     else
         debug_log "DEBUG: Skipping device information detection due to SKIP_DEVICE_DETECTION=true"
     fi
@@ -740,123 +745,110 @@ detect_and_set_location() {
     if [ "$SKIP_IP_DETECTION" != "true" ]; then
         debug_log "DEBUG: Attempting IP-based location detection"
         
-        # get_country_code関数が利用可能か確認
-        if ! command -v get_country_code >/dev/null 2>&1; then
-            debug_log "DEBUG: Loading get_country_code function from dynamic-system-info.sh"
-            . "$BASE_DIR/dynamic-system-info.sh"
-        fi
-        
-        # process_location_info関数が利用可能か確認
+        # dynamic-system-info.shを読み込む（まだ読み込まれていなければ）
         if ! command -v process_location_info >/dev/null 2>&1; then
-            debug_log "DEBUG: process_location_info function not available, attempting to define it"
+            debug_log "DEBUG: Loading dynamic-system-info.sh for IP detection"
             . "$BASE_DIR/dynamic-system-info.sh"
         fi
         
-        # まずIPからの国情報とタイムゾーン情報を取得
-        if command -v get_country_code >/dev/null 2>&1; then
-            debug_log "DEBUG: Calling get_country_code()"
-            if get_country_code; then
-                debug_log "DEBUG: Successfully retrieved location data via get_country_code()"
+        # ここでprocess_location_info()を直接呼び出し
+        # process_location_info()内でget_country_code()を呼び出す
+        if command -v process_location_info >/dev/null 2>&1; then
+            debug_log "DEBUG: Calling process_location_info() for IP-based detection"
+            if process_location_info; then
+                debug_log "DEBUG: Successfully retrieved and cached location data"
                 
-                # process_location_info関数が利用可能か再確認
-                if command -v process_location_info >/dev/null 2>&1; then
-                    debug_log "DEBUG: Calling process_location_info()"
-                    process_location_info
-
-                    # country.tmpとzone.tmpが作成されたか確認
-                    if [ -f "${CACHE_DIR}/ip_country.tmp" ]; then
-                        # 取得した情報を表示するためのデータ準備
-                        local ip_country="$(cat "${CACHE_DIR}/ip_country.tmp")"
-                        local ip_timezone="$(cat "${CACHE_DIR}/ip_timezone.tmp" 2>/dev/null || echo "")"
-                        local ip_zonename="$(cat "${CACHE_DIR}/ip_zonename.tmp" 2>/dev/null || echo "")"
+                # キャッシュファイルが作成されたか確認
+                if [ -f "${CACHE_DIR}/ip_country.tmp" ]; then
+                    # 取得した情報を表示するためのデータ準備
+                    local ip_country="$(cat "${CACHE_DIR}/ip_country.tmp")"
+                    local ip_timezone="$(cat "${CACHE_DIR}/ip_timezone.tmp" 2>/dev/null || echo "")"
+                    local ip_zonename="$(cat "${CACHE_DIR}/ip_zonename.tmp" 2>/dev/null || echo "")"
+                    
+                    # 検出情報表示
+                    printf "\n"
+                    printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
+                    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$ip_country")"
+                    
+                    # ゾーンネームとタイムゾーン情報の表示
+                    if [ -n "$ip_zonename" ] && [ -n "$ip_timezone" ]; then
+                        printf "%s %s%s%s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$ip_zonename")" "$(color white ",")" "$(color white "$ip_timezone")"
+                    elif [ -n "$ip_zonename" ]; then
+                        printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$ip_zonename")"
+                    elif [ -n "$ip_timezone" ]; then
+                        printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$ip_timezone")"
+                    fi
+                    
+                    # ユーザーに確認
+                    if confirm "MSG_CONFIRM_ONLY_YN"; then
+                        debug_log "DEBUG: User accepted IP-based location settings"
                         
-                        # 検出情報表示
-                        printf "\n"
-                        printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
-                        printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$ip_country")"
-                        
-                        # ゾーンネームとタイムゾーン情報の表示
-                        if [ -n "$ip_zonename" ] && [ -n "$ip_timezone" ]; then
-                            printf "%s %s%s%s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$ip_zonename")" "$(color white ",")" "$(color white "$ip_timezone")"
-                        elif [ -n "$ip_zonename" ]; then
-                            printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$ip_zonename")"
-                        elif [ -n "$ip_timezone" ]; then
-                            printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$ip_timezone")"
-                        fi
-                        
-                        # ユーザーに確認
-                        if confirm "MSG_CONFIRM_ONLY_YN"; then
-                            debug_log "DEBUG: User accepted IP-based location settings"
-                            
-                            # country.db検索して一致する行を取得
-                            local country_data=$(grep -i "$ip_country" "$BASE_DIR/country.db" | head -1)
-                            if [ -n "$country_data" ]; then
-                                debug_log "DEBUG: Found matching country in database for $ip_country"
-                                echo "$country_data" > "${CACHE_DIR}/country.tmp"
-                            else
-                                debug_log "DEBUG: No exact match found in database for country $ip_country"
-                                # もし正確な一致がなければ単純に出力
-                                # ダミーデータ（最低限必要なフィールド）を作成
-                                echo "XX $ip_country Unknown en $ip_country GMT" > "${CACHE_DIR}/country.tmp"
-                            fi
-                            
-                            # country_write関数に処理を委譲（メッセージ表示スキップ）
-                            debug_log "DEBUG: Calling country_write() with suppress_message flag"
-                            country_write true || {
-                                debug_log "ERROR: Failed to write country data from IP detection"
-                                return 1
-                            }
-                            
-                            # タイムゾーン情報を準備
-                            local timezone_data=""
-                            if [ -n "$ip_zonename" ] && [ -n "$ip_timezone" ]; then
-                                timezone_data="${ip_zonename},${ip_timezone}"
-                            elif [ -n "$ip_zonename" ]; then
-                                timezone_data="${ip_zonename}"
-                            elif [ -n "$ip_timezone" ]; then
-                                timezone_data="${ip_timezone}"
-                            else
-                                timezone_data="GMT0"
-                            fi
-                            
-                            # zone_write関数に処理を委譲
-                            echo "$timezone_data" > "${CACHE_DIR}/zone.tmp"
-                            debug_log "DEBUG: Calling zone_write()"
-                            zone_write || {
-                                debug_log "ERROR: Failed to write timezone data from IP detection"
-                                return 1
-                            }
-                            
-                            # 情報源をキャッシュに記録
-                            echo "IPアドレス位置情報" > "${CACHE_DIR}/info_source.ch"
-                            debug_log "DEBUG: Information source recorded: IP geolocation"
-                            
-                            # 国とタイムゾーン設定完了メッセージを表示
-                            printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
-                            printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SET")")"
-                            printf "%s\n\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
-                            
-                            EXTRA_SPACING_NEEDED="yes"
-                            
-                            return 0  # 設定完了
+                        # country.db検索して一致する行を取得
+                        local country_data=$(grep -i "$ip_country" "$BASE_DIR/country.db" | head -1)
+                        if [ -n "$country_data" ]; then
+                            debug_log "DEBUG: Found matching country in database for $ip_country"
+                            echo "$country_data" > "${CACHE_DIR}/country.tmp"
                         else
-                            debug_log "DEBUG: User declined IP-based location settings"
+                            debug_log "DEBUG: No exact match found in database for country $ip_country"
+                            # もし正確な一致がなければ単純に出力
+                            # ダミーデータ（最低限必要なフィールド）を作成
+                            echo "XX $ip_country Unknown en $ip_country GMT" > "${CACHE_DIR}/country.tmp"
                         fi
+                        
+                        # country_write関数に処理を委譲（メッセージ表示スキップ）
+                        debug_log "DEBUG: Calling country_write() with suppress_message flag"
+                        country_write true || {
+                            debug_log "ERROR: Failed to write country data from IP detection"
+                            return 1
+                        }
+                        
+                        # タイムゾーン情報を準備
+                        local timezone_data=""
+                        if [ -n "$ip_zonename" ] && [ -n "$ip_timezone" ]; then
+                            timezone_data="${ip_zonename},${ip_timezone}"
+                        elif [ -n "$ip_zonename" ]; then
+                            timezone_data="${ip_zonename}"
+                        elif [ -n "$ip_timezone" ]; then
+                            timezone_data="${ip_timezone}"
+                        else
+                            timezone_data="GMT0"
+                        fi
+                        
+                        # zone_write関数に処理を委譲
+                        echo "$timezone_data" > "${CACHE_DIR}/zone.tmp"
+                        debug_log "DEBUG: Calling zone_write()"
+                        zone_write || {
+                            debug_log "ERROR: Failed to write timezone data from IP detection"
+                            return 1
+                        }
+                        
+                        # 情報源をキャッシュに記録
+                        echo "IPアドレス位置情報" > "${CACHE_DIR}/info_source.ch"
+                        debug_log "DEBUG: Information source recorded: IP geolocation"
+                        
+                        # 国とタイムゾーン設定完了メッセージを表示
+                        printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
+                        printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SET")")"
+                        printf "%s\n\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+                        
+                        EXTRA_SPACING_NEEDED="yes"
+                        
+                        return 0  # 設定完了
                     else
-                        debug_log "DEBUG: No IP location data files created"
+                        debug_log "DEBUG: User declined IP-based location settings"
                     fi
                 else
-                    debug_log "DEBUG: process_location_info function not available after get_country_code"
+                    debug_log "DEBUG: No IP location data files created by process_location_info()"
                 fi
             else
-                debug_log "DEBUG: get_country_code() failed to retrieve location data"
+                debug_log "DEBUG: process_location_info() failed to retrieve location data"
             fi
         else
-            debug_log "DEBUG: get_country_code function not available"
+            debug_log "DEBUG: process_location_info function not available after loading dynamic-system-info.sh"
         fi
     else
         debug_log "DEBUG: Skipping IP-based detection due to SKIP_IP_DETECTION=true"
-    }
+    fi
     
     # すべての方法が失敗した場合は手動での入力を促す
     debug_log "DEBUG: All automatic detection methods failed, proceeding with manual input"
