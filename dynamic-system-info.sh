@@ -57,62 +57,147 @@ PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
 
 # グローバルIPから国コードを取得する関数
 get_country_code() {
-    # デバイスのグローバルIP（IPv4）を取得
-    IP=$(wget -qO- https://api.ipify.org)
+    # ローカル変数の定義
+    local IP=""
+    local SELECT_COUNTRY=""
+    local tmp_file="${CACHE_DIR}/ip_json.tmp"
+    
+    # まずIPv4の取得を試みる
+    debug_log "DEBUG" "Attempting to get IPv4 address"
+    IP=$(wget -qO- "https://api.ipify.org" 2>/dev/null)
+    
+    # IPv4の取得に失敗した場合はIPv6にフォールバック
+    if [ -z "$IP" ]; then
+        debug_log "DEBUG" "IPv4 retrieval failed, falling back to IPv6"
+        IP=$(wget -qO- "https://api64.ipify.org" 2>/dev/null)
+    fi
 
     # デバッグログ
-    debug_log "DEBUG: Global IP address retrieved: $IP"
+    debug_log "DEBUG" "Global IP address retrieved: $IP"
 
     # IPが取得できたら国コードを取得
     if [ -n "$IP" ]; then
         echo "Device's Global IP: $IP"
-        debug_log "DEBUG: Fetching country code for IP: $IP"
-        SELECT_COUNTRY=$(wget -qO- "http://ip-api.com/json/$IP" | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
+        debug_log "DEBUG" "Fetching country code for IP: $IP"
         
-        # 国コードが取得できた場合
-        if [ -n "$SELECT_COUNTRY" ]; then
-            echo "Device's Country Code: $SELECT_COUNTRY"
-            debug_log "DEBUG: Country code retrieved: $SELECT_COUNTRY"
+        # 一時ファイルを使用して応答を保存
+        wget -qO "$tmp_file" "http://ip-api.com/json/$IP" 2>/dev/null
+        
+        # ファイルからデータを読み取り
+        if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+            SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | awk -F'"' '{print $4}')
+            rm -f "$tmp_file" 2>/dev/null
+            
+            # 国コードが取得できた場合
+            if [ -n "$SELECT_COUNTRY" ]; then
+                echo "Device's Country Code: $SELECT_COUNTRY"
+                debug_log "DEBUG" "Country code retrieved: $SELECT_COUNTRY"
+                return 0
+            else
+                debug_log "DEBUG" "Failed to retrieve country code for IP: $IP"
+                return 1
+            fi
         else
-            echo "Error: Could not retrieve country code."
-            debug_log "DEBUG: Failed to retrieve country code for IP: $IP"
+            debug_log "DEBUG" "Failed to retrieve data from IP-API service"
+            rm -f "$tmp_file" 2>/dev/null
+            return 1
         fi
     else
-        echo "Error: Could not retrieve global IP address."
-        debug_log "DEBUG: Failed to retrieve global IP address."
+        debug_log "DEBUG" "Failed to retrieve global IP address"
+        return 1
     fi
 }
 
 # グローバルIPからタイムゾーンとゾーンネームを取得する関数
 get_zone_code() {
-    # デバイスのグローバルIP（IPv4）を取得
-    IP=$(wget -qO- https://api.ipify.org)
+    # ローカル変数の定義
+    local IP=""
+    local TIMEZONE=""
+    local ZONENAME=""
+    local tmp_file="${CACHE_DIR}/ip_zone.tmp"
+    
+    # まずIPv4の取得を試みる
+    debug_log "DEBUG" "Attempting to get IPv4 address"
+    IP=$(wget -qO- "https://api.ipify.org" 2>/dev/null)
+    
+    # IPv4の取得に失敗した場合はIPv6にフォールバック
+    if [ -z "$IP" ]; then
+        debug_log "DEBUG" "IPv4 retrieval failed, falling back to IPv6"
+        IP=$(wget -qO- "https://api64.ipify.org" 2>/dev/null)
+    fi
 
     # デバッグログ
-    debug_log "DEBUG: Global IP address retrieved: $IP"
+    debug_log "DEBUG" "Global IP address retrieved: $IP"
 
     # IPが取得できたらタイムゾーンとゾーンネームを取得
     if [ -n "$IP" ]; then
         echo "Device's Global IP: $IP"
-        debug_log "DEBUG: Fetching timezone and zone name for IP: $IP"
-        ZONE=$(wget -qO- "http://ip-api.com/json/$IP")
-
-        # タイムゾーンとゾーンネームを抽出
-        TIMEZONE=$(echo "$ZONE" | grep -o '"timezone":"[^"]*' | awk -F'"' '{print $4}')
-        ZONENAME=$(echo "$ZONE" | grep -o '"zoneName":"[^"]*' | awk -F'"' '{print $4}')
-
-        # タイムゾーンとゾーンネームが取得できた場合
-        if [ -n "$TIMEZONE" ] && [ -n "$ZONENAME" ]; then
-            echo "Device's Timezone: $TIMEZONE"
-            echo "Device's Zone Name: $ZONENAME"
-            debug_log "DEBUG: Timezone retrieved: $TIMEZONE, Zone Name: $ZONENAME"
+        debug_log "DEBUG" "Fetching timezone and zone name for IP: $IP"
+        
+        # 一時ファイルを使用して応答を保存
+        wget -qO "$tmp_file" "http://ip-api.com/json/$IP" 2>/dev/null
+        
+        # ファイルからデータを読み取り
+        if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+            # タイムゾーンを抽出
+            TIMEZONE=$(grep -o '"timezone":"[^"]*' "$tmp_file" | awk -F'"' '{print $4}')
+            
+            # IP-APIではZONENAMEは取得できないので、TIMEZONEと同じ値を使用
+            ZONENAME="$TIMEZONE"
+            
+            rm -f "$tmp_file" 2>/dev/null
+            
+            # タイムゾーンが取得できた場合
+            if [ -n "$TIMEZONE" ]; then
+                echo "Device's Timezone: $TIMEZONE"
+                echo "Device's Zonename: $ZONENAME"
+                debug_log "DEBUG" "Timezone retrieved: $TIMEZONE, Zonename: $ZONENAME"
+                return 0
+            else
+                debug_log "DEBUG" "Failed to retrieve timezone for IP: $IP"
+                return 1
+            fi
         else
-            echo "Error: Could not retrieve timezone or zone name."
-            debug_log "DEBUG: Failed to retrieve timezone or zone name for IP: $IP"
+            debug_log "DEBUG" "Failed to retrieve data from IP-API service"
+            rm -f "$tmp_file" 2>/dev/null
+            return 1
         fi
     else
-        echo "Error: Could not retrieve global IP address."
-        debug_log "DEBUG: Failed to retrieve global IP address."
+        debug_log "DEBUG" "Failed to retrieve global IP address"
+        return 1
+    fi
+}
+
+# IPアドレスから取得した地域情報を処理する関数
+process_location_info() {
+    # ローカル変数の定義
+    local country_code=""
+    local timezone=""
+    
+    debug_log "DEBUG" "Starting IP-based location information processing"
+    
+    # 国コードを取得（デバイスの国コード: XX の形式から抽出）
+    country_code=$(get_country_code | grep "デバイスの国コード:" | awk '{print $NF}')
+    
+    # タイムゾーン情報を取得（デバイスのタイムゾーン: XXX の形式から抽出）
+    timezone=$(get_zone_code | grep "デバイスのタイムゾーン:" | awk '{print $NF}')
+    
+    # デバッグログ
+    debug_log "DEBUG" "IP-based detection results - country_code: $country_code, timezone: $timezone"
+    
+    # 両方の情報が取得できたか確認
+    if [ -n "$country_code" ] && [ -n "$timezone" ]; then
+        # country_write関数に国コードを渡す
+        country_write "$country_code"
+        
+        # zone_write関数にタイムゾーンを渡す
+        zone_write "$timezone"
+        
+        debug_log "DEBUG" "Location information processed successfully"
+        return 0
+    else
+        debug_log "ERROR" "Failed to retrieve country code or timezone"
+        return 1
     fi
 }
 
