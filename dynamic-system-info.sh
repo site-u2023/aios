@@ -173,7 +173,7 @@ get_zone_code() {
     return 1
 }
 
-# IPアドレスから位置情報を取得する関数 - 修正版
+# IPアドレスから取得した地域情報を処理する関数 - 修正版
 process_location_info() {
     debug_log "DEBUG" "Starting IP-based location information processing"
     
@@ -183,50 +183,65 @@ process_location_info() {
         return 1
     fi
     
-    # 一時ファイルのパスを設定
-    local tmp_country="${CACHE_DIR}/country.tmp"
-    local tmp_zone="${CACHE_DIR}/zone.tmp"
-    
     # 国コードの取得
     debug_log "DEBUG" "Retrieving country code from IP address"
     local country_code=""
+    
     if command -v get_country_code >/dev/null 2>&1; then
+        # get_country_code関数の出力を変数に保存
         country_code=$(get_country_code)
+        debug_log "DEBUG" "Raw country code result: '${country_code}'"
     else
         debug_log "ERROR" "get_country_code function not available"
         return 1
     fi
     
+    # 国コードが空かどうかを確認（改行や空白を取り除いた後）
+    country_code=$(echo "$country_code" | tr -d '[:space:]')
     if [ -z "$country_code" ]; then
-        debug_log "ERROR" "Failed to obtain country code from IP"
+        debug_log "ERROR" "Empty country code returned from get_country_code"
         return 1
     fi
     
-    debug_log "DEBUG" "Country code obtained: $country_code"
+    debug_log "DEBUG" "Country code confirmed: $country_code"
     
     # タイムゾーン情報の取得
+    debug_log "DEBUG" "Retrieving timezone information from IP address"
     local zone_info=""
     local timezone=""
     local zonename=""
     
-    debug_log "DEBUG" "Retrieving timezone information from IP address"
     if command -v get_zone_code >/dev/null 2>&1; then
         zone_info=$(get_zone_code)
+        debug_log "DEBUG" "Raw zone info: '${zone_info}'"
         
-        # 情報抽出
-        timezone=$(echo "$zone_info" | grep "Device's Timezone:" | awk '{print $3}')
-        zonename=$(echo "$zone_info" | grep "Device's Zonename:" | awk '{print $3}')
+        # 情報抽出を改善
+        if echo "$zone_info" | grep -q "Device's Timezone:"; then
+            timezone=$(echo "$zone_info" | grep "Device's Timezone:" | sed -e 's/.*Device.*s Timezone: *\([^ ]*\).*/\1/')
+        fi
+        
+        if echo "$zone_info" | grep -q "Device's Zonename:"; then
+            zonename=$(echo "$zone_info" | grep "Device's Zonename:" | sed -e 's/.*Device.*s Zonename: *\([^ ]*\).*/\1/')
+        fi
     else
         debug_log "ERROR" "get_zone_code function not available"
         return 1
     fi
     
-    if [ -z "$timezone" ] || [ -z "$zonename" ]; then
-        debug_log "ERROR" "Failed to obtain timezone information from IP"
+    # 日本の場合はデフォルト値を設定
+    if [ "$country_code" = "JP" ] && { [ -z "$timezone" ] || [ -z "$zonename" ]; }; then
+        debug_log "DEBUG" "Setting default timezone for Japan"
+        timezone="JST-9"
+        zonename="Asia/Tokyo"
+    fi
+    
+    # 少なくともどちらか一方があれば処理を続行
+    if [ -z "$timezone" ] && [ -z "$zonename" ]; then
+        debug_log "ERROR" "Failed to obtain any timezone information"
         return 1
     fi
     
-    debug_log "DEBUG" "Timezone: $timezone, Zone name: $zonename"
+    debug_log "DEBUG" "Timezone: '$timezone', Zone name: '$zonename'"
     
     # country.dbから国情報を検索
     local country_db="${BASE_DIR}/country.db"
@@ -235,17 +250,23 @@ process_location_info() {
         return 1
     fi
     
+    # 大文字・小文字を区別せずに検索
     local country_data=$(grep -i "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *$country_code" "$country_db")
     if [ -z "$country_data" ]; then
-        debug_log "ERROR" "No matching country found in database"
+        debug_log "ERROR" "No matching country found in database for code: $country_code"
         return 1
     fi
     
     # 一時ファイルに情報を保存（detect_and_set_locationで使用）
-    echo "$country_data" > "$tmp_country"
-    echo "${zonename},${timezone}" > "$tmp_zone"
+    debug_log "DEBUG" "Writing country data to temporary file: $country_data"
+    echo "$country_data" > "${CACHE_DIR}/country.tmp"
     
-    debug_log "DEBUG" "IP-based location information saved to temporary files"
+    # ゾーン情報を保存
+    local zone_str="${zonename},${timezone}"
+    debug_log "DEBUG" "Writing timezone data to temporary file: $zone_str"
+    echo "$zone_str" > "${CACHE_DIR}/zone.tmp"
+    
+    debug_log "DEBUG" "IP-based location information processed successfully"
     return 0
 }
 
