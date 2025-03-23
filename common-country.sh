@@ -596,22 +596,18 @@ select_country() {
 
 # システムの地域情報を検出し設定する関数
 detect_and_set_location() {
-    # オプション設定の取得
-    local skip_device=$(check_option "SKIP_DEVICE_DETECTION" "false")
-    local skip_ip=$(check_option "SKIP_IP_DETECTION" "false")
-    local skip_all=$(check_option "SKIP_ALL_DETECTION" "false")
+    # グローバル変数を直接取得（check_option関数は使用しない）
+    debug_log "DEBUG" "Running detect_and_set_location() with skip flags: device=$SKIP_DEVICE_DETECTION, ip=$SKIP_IP_DETECTION, all=$SKIP_ALL_DETECTION"
     
-    debug_log "DEBUG" "Running detect_and_set_location() with options: skip_device=$skip_device, skip_ip=$skip_ip, skip_all=$skip_all"
-    
-    # システムから国とタイムゾーン情報を取得するための変数を初期化
+    # システムから国とタイムゾーン情報を取得
     local system_country=""
     local system_timezone=""
     local system_zonename=""
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_zone="${CACHE_DIR}/zone.ch"
     
-    # 0. "skip_all"が指定された場合はすべての検出をスキップ
-    if [ "$skip_all" = "true" ]; then
+    # 0. "SKIP_ALL_DETECTION"が指定された場合はすべての検出をスキップ
+    if [ "$SKIP_ALL_DETECTION" = "true" ]; then
         debug_log "DEBUG" "SKIP_ALL_DETECTION is true, skipping all detection methods"
         return 1
     fi
@@ -633,8 +629,8 @@ detect_and_set_location() {
         debug_log "DEBUG" "No valid location cache found, proceeding with detection"
     fi
 
-    # 2. デバイス内情報の検出（skip_deviceが指定されている場合はスキップ）
-    if [ "$skip_device" != "true" ]; then
+    # 2. デバイス内情報の検出（SKIP_DEVICE_DETECTIONが指定されている場合はスキップ）
+    if [ "$SKIP_DEVICE_DETECTION" != "true" ]; then
         # スクリプトパスの確認
         if [ ! -f "$BASE_DIR/dynamic-system-info.sh" ]; then
             debug_log "DEBUG" "dynamic-system-info.sh not found. Cannot use system detection."
@@ -661,13 +657,14 @@ detect_and_set_location() {
         debug_log "DEBUG" "Skipping device information detection due to SKIP_DEVICE_DETECTION=true"
     fi
     
-    # 3. IP検索による検出（skip_ipが指定されている場合はスキップ）
-    if [ "$skip_ip" != "true" ] && { [ -z "$system_country" ] || [ -z "$system_timezone" ]; }; then
+    # 3. IP検索による検出（SKIP_IP_DETECTIONが指定されている場合はスキップ）
+    if [ "$SKIP_IP_DETECTION" != "true" ] && { [ -z "$system_country" ] || [ -z "$system_timezone" ]; }; then
         debug_log "DEBUG" "System detection insufficient, trying IP-based detection"
         
         # process_location_info関数が利用可能か確認
         if command -v process_location_info >/dev/null 2>&1; then
-            # IPベースの位置情報を取得（一時ファイルに保存されるだけ）
+            # IPベースの位置情報を取得
+            debug_log "DEBUG" "Calling process_location_info function"
             if process_location_info; then
                 debug_log "DEBUG" "Location information retrieved via process_location_info()"
                 
@@ -705,10 +702,9 @@ detect_and_set_location() {
                     
                     # 確認
                     if confirm "MSG_CONFIRM_ONLY_YN"; then
-                        # 設定適用
                         debug_log "DEBUG" "User accepted IP-based location settings"
                         
-                        # country_write関数に処理を委譲（メッセージ表示スキップ）
+                        # country_write関数に処理を委譲
                         country_write true || {
                             debug_log "ERROR" "Failed to write country data from IP detection"
                             return 1
@@ -734,10 +730,7 @@ detect_and_set_location() {
                         return 0  # 設定完了
                     else
                         debug_log "DEBUG" "User declined IP-based location settings"
-                        # 手動入力へ続行
                     fi
-                else
-                    debug_log "DEBUG" "Retrieved IP-based location information is incomplete"
                 fi
             else
                 debug_log "DEBUG" "process_location_info() failed to retrieve location data"
@@ -746,7 +739,7 @@ detect_and_set_location() {
             debug_log "DEBUG" "process_location_info() function not available"
         fi
     else
-        if [ "$skip_ip" = "true" ]; then
+        if [ "$SKIP_IP_DETECTION" = "true" ]; then
             debug_log "DEBUG" "Skipping IP-based detection due to SKIP_IP_DETECTION=true"
         else
             debug_log "DEBUG" "Using system detection results, IP-based detection not needed"
@@ -808,10 +801,6 @@ detect_and_set_location() {
                     return 1
                 }
                 
-                # 情報源をキャッシュに記録
-                echo "デバイス内情報" > "${CACHE_DIR}/info_source.ch"
-                debug_log "DEBUG" "Information source recorded: Device system"
-                
                 # ゾーン選択完了メッセージを表示（ここで1回だけ）
                 printf "%s\n\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
 
@@ -833,6 +822,7 @@ detect_and_set_location() {
     debug_log "DEBUG" "All automatic detection methods failed, proceeding with manual input"
     return 1
 }
+
 # システムの地域情報を検出し設定する関数
 # 引数:
 #   $1: "skip_device" - デバイス内情報の検出をスキップ
