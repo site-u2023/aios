@@ -168,35 +168,108 @@ get_zone_code() {
 
 # IPアドレスから取得した地域情報を処理する関数
 process_location_info() {
-    # ローカル変数の定義
-    local country_code=""
-    local timezone=""
-    
     debug_log "DEBUG" "Starting IP-based location information processing"
     
-    # 国コードを取得（デバイスの国コード: XX の形式から抽出）
-    country_code=$(get_country_code | grep "デバイスの国コード:" | awk '{print $NF}')
+    # 国コードを直接取得（余分なテキストを含まない形式で）
+    local country_code=""
+    local timezone=""
+    local zonename=""
     
-    # タイムゾーン情報を取得（デバイスのタイムゾーン: XXX の形式から抽出）
-    timezone=$(get_zone_code | grep "デバイスのタイムゾーン:" | awk '{print $NF}')
-    
-    # デバッグログ
-    debug_log "DEBUG" "IP-based detection results - country_code: $country_code, timezone: $timezone"
-    
-    # 両方の情報が取得できたか確認
-    if [ -n "$country_code" ] && [ -n "$timezone" ]; then
-        # country_write関数に国コードを渡す
-        country_write "$country_code"
-        
-        # zone_write関数にタイムゾーンを渡す
-        zone_write "$timezone"
-        
-        debug_log "DEBUG" "Location information processed successfully"
-        return 0
+    # 国コードの取得
+    if command -v get_country_code >/dev/null 2>&1; then
+        debug_log "DEBUG" "Calling get_country_code()"
+        country_code=$(get_country_code)
+        debug_log "DEBUG" "Country code obtained: $country_code"
     else
-        debug_log "ERROR" "Failed to retrieve country code or timezone"
+        debug_log "ERROR" "get_country_code function not available"
         return 1
     fi
+    
+    # タイムゾーン情報の取得
+    if command -v get_zone_code >/dev/null 2>&1; then
+        debug_log "DEBUG" "Calling get_zone_code()"
+        # get_zone_code の出力から必要な情報を抽出
+        local zone_info=$(get_zone_code)
+        
+        # Device's Timezone: XXX の行からタイムゾーン情報を抽出
+        timezone=$(echo "$zone_info" | grep "Device's Timezone:" | awk '{print $3}')
+        
+        # Device's Zonename: XXX の行からゾーン名情報を抽出
+        zonename=$(echo "$zone_info" | grep "Device's Zonename:" | awk '{print $3}')
+        
+        debug_log "DEBUG" "Timezone obtained: $timezone, Zonename: $zonename"
+    else
+        debug_log "ERROR" "get_zone_code function not available"
+        return 1
+    fi
+    
+    # 国コードが取得できたか確認
+    if [ -n "$country_code" ]; then
+        debug_log "DEBUG" "Setting country: $country_code"
+        
+        # country.dbから完全な国情報を検索
+        local country_db="${BASE_DIR}/country.db"
+        if [ -f "$country_db" ]; then
+            local country_data=$(grep -i "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *$country_code" "$country_db")
+            
+            if [ -n "$country_data" ]; then
+                # 国情報を一時ファイルに書き込み
+                echo "$country_data" > "${CACHE_DIR}/country.tmp"
+                
+                # country_write関数に処理を委譲（メッセージ表示スキップ）
+                if command -v country_write >/dev/null 2>&1; then
+                    debug_log "DEBUG" "Calling country_write with IP detected data"
+                    country_write true || {
+                        debug_log "ERROR" "Failed to write country data from IP detection"
+                        return 1
+                    }
+                else
+                    debug_log "ERROR" "country_write function not available"
+                    return 1
+                fi
+            else
+                debug_log "ERROR" "No matching country found in database for code: $country_code"
+                return 1
+            fi
+        else
+            debug_log "ERROR" "Country database not found at: $country_db"
+            return 1
+        fi
+    else
+        debug_log "ERROR" "Failed to obtain country code"
+        return 1
+    fi
+    
+    # タイムゾーン情報が取得できたか確認
+    if [ -n "$timezone" ]; then
+        debug_log "DEBUG" "Setting timezone: $timezone, zonename: $zonename"
+        
+        # タイムゾーン文字列の構築
+        local timezone_str=""
+        if [ -n "$zonename" ] && [ -n "$timezone" ]; then
+            timezone_str="${zonename},${timezone}"
+        else
+            timezone_str="${timezone}"
+        fi
+        
+        # zone_write関数に処理を委譲
+        if command -v zone_write >/dev/null 2>&1; then
+            debug_log "DEBUG" "Calling zone_write with timezone: $timezone_str"
+            zone_write "$timezone_str" || {
+                debug_log "ERROR" "Failed to write timezone data from IP detection"
+                return 1
+            }
+        else
+            debug_log "ERROR" "zone_write function not available"
+            return 1
+        fi
+    else
+        debug_log "ERROR" "Failed to obtain timezone information"
+        return 1
+    fi
+    
+    debug_log "DEBUG" "IP-based location information processed successfully"
+    return 0
 }
 
 # 📌 デバイスアーキテクチャの取得
