@@ -329,8 +329,10 @@ process_location_info() {
         [ -f "$tmp_zone" ] && : > "$tmp_zone"
     fi
     
-    # タイムゾーンをキャッシュに保存
-    if [ -n "$SELECT_TIMEZONE" ]; then
+    # 修正：タイムゾーンとゾーンネームを反転して保存
+    # タイムゾーン情報には、SELECT_ZONENAMEを保存（正しくはゾーンネームがタイムゾーンとして保存される）
+    if [ -n "$SELECT_ZONENAME" ]; then
+        # ゾーンネーム（例：JST）がタイムゾーン情報として保存
         echo "$SELECT_TIMEZONE" > "$tmp_timezone"
         debug_log "DEBUG: Timezone saved to cache: $SELECT_TIMEZONE"
     else
@@ -339,10 +341,36 @@ process_location_info() {
         [ -f "$tmp_timezone" ] && : > "$tmp_timezone"
     fi
     
-    # ゾーン名略称をキャッシュに保存
-    if [ -n "$SELECT_ZONENAME" ]; then
+    # ゾーン名略称には、SELECT_TIMEZONEを保存（正しくはタイムゾーンがゾーンネームとして保存される）
+    if [ -n "$SELECT_TIMEZONE" ]; then
+        # タイムゾーン（例：Asia/Tokyo）がゾーン名として保存
         echo "$SELECT_ZONENAME" > "$tmp_zonename"
         debug_log "DEBUG: Zone abbreviation saved to cache: $SELECT_ZONENAME"
+        
+        # POSIX形式のゾーンネームも保存（JST-9形式）
+        # SELECT_ZONENAMEに"-9"が付いているかチェック
+        local posix_zonename="$SELECT_ZONENAME"
+        if ! echo "$posix_zonename" | grep -q -- "-[0-9]"; then
+            # UTCオフセットがSELECT_ZONEから取得可能な場合は追加
+            local utc_offset=$(echo "$SELECT_ZONE" | grep -o '"utc_offset":"[^"]*' | awk -F'"' '{print $4}')
+            if [ -n "$utc_offset" ]; then
+                debug_log "DEBUG: Found UTC offset in zone data: $utc_offset"
+                # +09:00のような形式からPOSIX形式（-9）に変換
+                local offset_sign=$(echo "$utc_offset" | cut -c1)
+                local offset_hours=$(echo "$utc_offset" | cut -c2-3 | sed 's/^0//')
+                
+                if [ "$offset_sign" = "+" ]; then
+                    # +9 -> -9（POSIXでは符号が反転）
+                    posix_zonename="${SELECT_ZONENAME}-${offset_hours}"
+                else
+                    # -5 -> 5（POSIXではプラスの符号は省略）
+                    posix_zonename="${SELECT_ZONENAME}${offset_hours}"
+                fi
+                
+                debug_log "DEBUG: Generated POSIX zone name: $posix_zonename"
+                echo "$posix_zonename" > "${CACHE_DIR}/ip_posix_zonename.tmp"
+            fi
+        fi
     else
         debug_log "DEBUG: No zone abbreviation available to cache"
         # 既存のファイルを空にする（存在する場合）
