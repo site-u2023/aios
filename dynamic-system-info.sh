@@ -77,7 +77,6 @@ get_country_code() {
 
     # IPが取得できたら国コードを取得
     if [ -n "$IP" ]; then
-        echo "Device's Global IP: $IP"
         debug_log "DEBUG" "Fetching country code for IP: $IP"
         
         # 一時ファイルを使用して応答を保存
@@ -90,7 +89,6 @@ get_country_code() {
             
             # 国コードが取得できた場合
             if [ -n "$SELECT_COUNTRY" ]; then
-                echo "Device's Country Code: $SELECT_COUNTRY"
                 debug_log "DEBUG" "Country code retrieved: $SELECT_COUNTRY"
                 return 0
             else
