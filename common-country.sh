@@ -596,14 +596,14 @@ select_country() {
 
 # システムの地域情報を検出し設定する関数
 detect_and_set_location() {
-    # 既存のcheck_option()関数を使用してオプションを取得
-    local skip_device="${SKIP_DEVICE_DETECTION:-false}"
-    local skip_ip="${SKIP_IP_DETECTION:-false}"
-    local skip_all="${SKIP_ALL_DETECTION:-false}"
+    # オプション設定の取得
+    local skip_device=$(check_option "SKIP_DEVICE_DETECTION" "false")
+    local skip_ip=$(check_option "SKIP_IP_DETECTION" "false")
+    local skip_all=$(check_option "SKIP_ALL_DETECTION" "false")
     
     debug_log "DEBUG" "Running detect_and_set_location() with options: skip_device=$skip_device, skip_ip=$skip_ip, skip_all=$skip_all"
     
-    # システムから国とタイムゾーン情報を取得
+    # システムから国とタイムゾーン情報を取得するための変数を初期化
     local system_country=""
     local system_timezone=""
     local system_zonename=""
@@ -667,11 +667,78 @@ detect_and_set_location() {
         
         # process_location_info関数が利用可能か確認
         if command -v process_location_info >/dev/null 2>&1; then
-            debug_log "DEBUG" "Calling process_location_info()"
+            # IPベースの位置情報を取得
             if process_location_info; then
                 debug_log "DEBUG" "Location information retrieved via process_location_info()"
-                # process_location_info()がキャッシュを作成するので戻る
-                return 0
+                
+                # IPから取得した情報を読み込む
+                local ip_country=""
+                local ip_zonename=""
+                local ip_timezone=""
+                
+                # 一時ファイルから情報を読み込み
+                if [ -f "${CACHE_DIR}/country.tmp" ]; then
+                    ip_country=$(cat "${CACHE_DIR}/country.tmp")
+                    debug_log "DEBUG" "IP-based country data loaded from temporary file"
+                fi
+                
+                if [ -f "${CACHE_DIR}/zone.tmp" ]; then
+                    local zone_data=$(cat "${CACHE_DIR}/zone.tmp")
+                    ip_zonename=$(echo "$zone_data" | cut -d',' -f1)
+                    ip_timezone=$(echo "$zone_data" | cut -d',' -f2)
+                    debug_log "DEBUG" "IP-based timezone data loaded from temporary file"
+                fi
+                
+                # IPからの情報が取得できた場合、ユーザー確認を行う
+                if [ -n "$ip_country" ] && { [ -n "$ip_timezone" ] || [ -n "$ip_zonename" ]; }; then
+                    # 検出情報表示
+                    printf "\n"
+                    printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
+                    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$(echo "$ip_country" | cut -d' ' -f2)")"
+                    
+                    # ゾーン名があればゾーン名とタイムゾーン、なければタイムゾーンのみ表示
+                    if [ -n "$ip_zonename" ]; then
+                        printf "%s %s%s%s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$ip_zonename")" "$(color white ",")" "$(color white "$ip_timezone")"
+                    else
+                        printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$ip_timezone")"
+                    fi
+                    
+                    # 確認
+                    if confirm "MSG_CONFIRM_ONLY_YN"; then
+                        # 設定適用
+                        debug_log "DEBUG" "User accepted IP-based location settings"
+                        
+                        # country_write関数に処理を委譲（メッセージ表示スキップ）
+                        country_write true || {
+                            debug_log "ERROR" "Failed to write country data from IP detection"
+                            return 1
+                        }
+                        
+                        # zone_write関数に処理を委譲
+                        zone_write || {
+                            debug_log "ERROR" "Failed to write timezone data from IP detection"
+                            return 1
+                        }
+                        
+                        # 情報源をキャッシュに記録
+                        echo "IPアドレス位置情報" > "${CACHE_DIR}/info_source.ch"
+                        debug_log "DEBUG" "Information source recorded: IP geolocation"
+                        
+                        # 国とタイムゾーン設定完了メッセージを表示
+                        printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
+                        printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SET")")"
+                        printf "%s\n\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+                        
+                        EXTRA_SPACING_NEEDED="yes"
+                        
+                        return 0  # 設定完了
+                    else
+                        debug_log "DEBUG" "User declined IP-based location settings"
+                        # 手動入力へ続行
+                    fi
+                else
+                    debug_log "DEBUG" "Retrieved IP-based location information is incomplete"
+                fi
             else
                 debug_log "DEBUG" "process_location_info() failed to retrieve location data"
             fi
@@ -740,6 +807,10 @@ detect_and_set_location() {
                     debug_log "ERROR" "Failed to write timezone data"
                     return 1
                 }
+                
+                # 情報源をキャッシュに記録
+                echo "デバイス内情報" > "${CACHE_DIR}/info_source.ch"
+                debug_log "DEBUG" "Information source recorded: Device system"
                 
                 # ゾーン選択完了メッセージを表示（ここで1回だけ）
                 printf "%s\n\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
