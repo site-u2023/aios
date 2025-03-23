@@ -179,6 +179,8 @@ process_location_info() {
     # 国コード取得
     debug_log "DEBUG" "Retrieving country code from IP address"
     get_country_code > "$tmp_country"
+
+    echo $tmp_country
     
     # 国コードファイルのチェック
     if [ ! -s "$tmp_country" ]; then
