@@ -558,6 +558,7 @@ debug_info() {
 # メイン処理
 main() {
     get_country_code
+    get_zone_code
     init_device_cache
     get_usb_devices
     detect_and_save_package_manager
