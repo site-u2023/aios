@@ -129,38 +129,39 @@ get_zone_code() {
         IP=$(wget -qO- "https://api64.ipify.org" 2>/dev/null)
     fi
 
-    # デバッグログ
-    debug_log "DEBUG" "Global IP address retrieved for timezone: $IP"
-
     # IPが取得できたらタイムゾーン情報を取得
     if [ -n "$IP" ]; then
         debug_log "DEBUG" "Fetching timezone data for IP: $IP"
         
         # 一時ファイルを使用して応答を保存
-        wget -qO "$tmp_file" "http://ip-api.com/json/$IP" 2>/dev/null
+        wget -qO "$tmp_file" "http://ip-api.com/json/$IP?fields=timezone" 2>/dev/null
         
         # ファイルからデータを読み取り
         if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
             # API応答からタイムゾーン情報を抽出
             SELECT_ZONE=$(grep -o '"timezone":"[^"]*' "$tmp_file" | awk -F'"' '{print $4}')
+            debug_log "DEBUG" "Raw timezone from API: $SELECT_ZONE"
             
-            # get_timezone_info関数を使用してタイムゾーン形式を取得
-            if [ -n "$SELECT_ZONE" ] && command -v get_timezone_info >/dev/null 2>&1; then
-                get_timezone_info "$SELECT_ZONE"
-            fi
-            
-            rm -f "$tmp_file" 2>/dev/null
-            
-            if [ -n "$SELECT_TIMEZONE" ] && [ -n "$SELECT_ZONENAME" ]; then
+            # 基本的なタイムゾーン情報の設定
+            if [ -n "$SELECT_ZONE" ]; then
+                SELECT_TIMEZONE="$SELECT_ZONE"
+                SELECT_ZONENAME="$SELECT_ZONE"
+                
+                # get_timezone_info関数が存在する場合は利用
+                if command -v get_timezone_info >/dev/null 2>&1; then
+                    get_timezone_info "$SELECT_ZONE"
+                fi
+                
                 debug_log "DEBUG" "Timezone data retrieved: timezone=$SELECT_TIMEZONE, zonename=$SELECT_ZONENAME"
                 echo "timezone:$SELECT_TIMEZONE"
                 echo "zonename:$SELECT_ZONENAME"
+                rm -f "$tmp_file" 2>/dev/null
                 return 0
             fi
-        else
-            debug_log "DEBUG" "Failed to retrieve data from IP-API service"
-            rm -f "$tmp_file" 2>/dev/null
         fi
+        
+        debug_log "DEBUG" "Failed to retrieve data from IP-API service"
+        rm -f "$tmp_file" 2>/dev/null
     fi
     
     debug_log "DEBUG" "Failed to get timezone information"
