@@ -973,8 +973,6 @@ normalize_language() {
     
     ACTIVE_LANGUAGE="$selected_language"
     
-    # 言語セットのメッセージを表示
-    printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SET")")"
     return 0
 }
 
