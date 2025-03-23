@@ -173,53 +173,44 @@ get_zone_code() {
     return 1
 }
 
-# IPアドレスから位置情報を取得して処理する関数
+# IPアドレスから位置情報を取得する関数
 process_location_info() {
     debug_log "DEBUG" "Starting IP-based location information processing"
     
     # 一時ファイルのパス
     local tmp_country="${CACHE_DIR}/country.tmp"
     local tmp_zone="${CACHE_DIR}/zone.tmp"
-    local country_data=""
     
     # 国コード取得
-    debug_log "DEBUG" "Retrieving country code from IP address"
+    debug_log "DEBUG" "Getting country code from IP"
     local country_code=$(get_country_code)
     
-    # 国コードが取得できない場合はエラー
+    # 国コードが取得できたかチェック
     if [ -z "$country_code" ]; then
-        debug_log "ERROR" "Failed to get country code"
+        debug_log "ERROR" "Failed to get country code from IP"
         return 1
     fi
     
     debug_log "DEBUG" "Country code obtained: $country_code"
     
     # ゾーン情報取得
-    debug_log "DEBUG" "Retrieving timezone information from IP address"
-    local zone_str=$(get_zone_code)
+    debug_log "DEBUG" "Getting timezone information from IP"
+    local zone_info=$(get_zone_code)
     
-    # ゾーン情報が取得できない場合はエラー
-    if [ -z "$zone_str" ]; then
-        debug_log "ERROR" "Failed to get timezone information"
+    # ゾーン情報が取得できたかチェック
+    if [ -z "$zone_info" ]; then
+        debug_log "ERROR" "Failed to get timezone information from IP"
         return 1
     fi
     
-    debug_log "DEBUG" "Zone information obtained: $zone_str"
+    debug_log "DEBUG" "Zone information obtained: $zone_info"
     
-    # 国コードを元に国情報を検索（country.dbを参照）
-    if [ -f "$BASE_DIR/country.db" ]; then
-        country_data=$(grep -i "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *$country_code" "$BASE_DIR/country.db")
-        
-        if [ -n "$country_data" ]; then
-            debug_log "DEBUG" "Found matching country data in database"
-            echo "$country_data" > "$tmp_country"
-            echo "$zone_str" > "$tmp_zone"
-            return 0
-        fi
-    fi
+    # 一時ファイルに情報を保存
+    echo "$country_code" > "$tmp_country"
+    echo "$zone_info" > "$tmp_zone"
     
-    debug_log "ERROR" "Failed to process location information"
-    return 1
+    debug_log "DEBUG" "Location information saved to temporary files"
+    return 0
 }
 
 # 📌 デバイスアーキテクチャの取得
