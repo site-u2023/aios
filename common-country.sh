@@ -705,7 +705,6 @@ detect_and_set_location() {
                     
                     # 確認
                     if confirm "MSG_CONFIRM_ONLY_YN"; then
-                        # 設定適用
                         debug_log "DEBUG" "User accepted IP-based location settings"
                         
                         # country_write関数に処理を委譲（メッセージ表示スキップ）
@@ -833,7 +832,6 @@ detect_and_set_location() {
     debug_log "DEBUG" "All automatic detection methods failed, proceeding with manual input"
     return 1
 }
-
 # システムの地域情報を検出し設定する関数
 # 引数:
 #   $1: "skip_device" - デバイス内情報の検出をスキップ
