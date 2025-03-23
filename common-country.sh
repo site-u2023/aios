@@ -595,12 +595,180 @@ select_country() {
 }
 
 # システムの地域情報を検出し設定する関数
+detect_and_set_location() {
+    # 既存のcheck_option()関数を使用してオプションを取得
+    local skip_device=$(check_option "SKIP_DEVICE_DETECTION" "false")
+    local skip_ip=$(check_option "SKIP_IP_DETECTION" "false")
+    local skip_all=$(check_option "SKIP_ALL_DETECTION" "false")
+    
+    debug_log "DEBUG" "Running detect_and_set_location() with options: skip_device=$skip_device, skip_ip=$skip_ip, skip_all=$skip_all"
+    
+    # システムから国とタイムゾーン情報を取得
+    local system_country=""
+    local system_timezone=""
+    local system_zonename=""
+    local cache_country="${CACHE_DIR}/country.ch"
+    local cache_zone="${CACHE_DIR}/zone.ch"
+    
+    # 0. "skip_all"が指定された場合はすべての検出をスキップ
+    if [ "$skip_all" = "true" ]; then
+        debug_log "DEBUG" "SKIP_ALL_DETECTION is true, skipping all detection methods"
+        return 1
+    fi
+    
+    # 1. キャッシュから情報取得を試みる（最優先、スキップオプションの影響を受けない）
+    if [ -f "$cache_country" ] && [ -f "$cache_zone" ]; then
+        debug_log "DEBUG" "Found location cache files, using cached data"
+        system_country=$(cat "$cache_country" 2>/dev/null)
+        system_timezone=$(cat "${CACHE_DIR}/timezone.ch" 2>/dev/null)
+        system_zonename=$(cat "${CACHE_DIR}/zonename.ch" 2>/dev/null)
+        
+        if [ -n "$system_country" ] && [ -n "$system_timezone" ]; then
+            debug_log "DEBUG" "Using cached location data: country=$system_country, timezone=$system_timezone, zonename=$system_zonename"
+            return 0  # キャッシュからの読み込み成功
+        else
+            debug_log "DEBUG" "Cache files exist but contain invalid or incomplete data"
+        fi
+    else
+        debug_log "DEBUG" "No valid location cache found, proceeding with detection"
+    fi
+
+    # 2. デバイス内情報の検出（skip_deviceが指定されている場合はスキップ）
+    if [ "$skip_device" != "true" ]; then
+        # スクリプトパスの確認
+        if [ ! -f "$BASE_DIR/dynamic-system-info.sh" ]; then
+            debug_log "DEBUG" "dynamic-system-info.sh not found. Cannot use system detection."
+        else
+            # dynamic-system-info.shを読み込む（まだ読み込まれていなければ）
+            if ! command -v get_country_info >/dev/null 2>&1; then
+                debug_log "DEBUG" "Loading dynamic-system-info.sh"
+                . "$BASE_DIR/dynamic-system-info.sh"
+            fi
+
+            # 国情報の取得
+            system_country=$(get_country_info)
+            debug_log "DEBUG" "Detected country info: ${system_country}"
+
+            # タイムゾーン情報の取得
+            system_timezone=$(get_timezone_info)
+            debug_log "DEBUG" "Detected timezone info: ${system_timezone}"
+
+            # ゾーン名の取得
+            system_zonename=$(get_zonename_info)
+            debug_log "DEBUG" "Detected zone name info: ${system_zonename}"
+        fi
+    else
+        debug_log "DEBUG" "Skipping device information detection due to SKIP_DEVICE_DETECTION=true"
+    fi
+    
+    # 3. IP検索による検出（skip_ipが指定されている場合はスキップ）
+    if [ "$skip_ip" != "true" ] && { [ -z "$system_country" ] || [ -z "$system_timezone" ]; }; then
+        debug_log "DEBUG" "System detection insufficient, trying IP-based detection"
+        
+        # process_location_info関数が利用可能か確認
+        if command -v process_location_info >/dev/null 2>&1; then
+            if process_location_info; then
+                debug_log "DEBUG" "Location information retrieved via process_location_info()"
+                # process_location_info()がキャッシュを作成するので戻る
+                return 0
+            else
+                debug_log "DEBUG" "process_location_info() failed to retrieve location data"
+            fi
+        else
+            debug_log "DEBUG" "process_location_info() function not available"
+        fi
+    else
+        if [ "$skip_ip" = "true" ]; then
+            debug_log "DEBUG" "Skipping IP-based detection due to SKIP_IP_DETECTION=true"
+        else
+            debug_log "DEBUG" "Using system detection results, IP-based detection not needed"
+        fi
+    fi
+    
+    # システム検出またはAPIからの検出で十分な情報がある場合
+    if [ -n "$system_country" ] && [ -n "$system_timezone" ]; then
+        # 検出情報表示
+        printf "\n"
+        printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
+        printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$(echo "$system_country" | cut -d' ' -f2)")"
+
+        # ゾーン名があればゾーン名とタイムゾーン、なければタイムゾーンのみ表示
+        if [ -n "$system_zonename" ]; then
+            printf "%s %s%s%s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_zonename")" "$(color white ",")" "$(color white "$system_timezone")"
+        else
+            printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONE")")" "$(color white "$system_timezone")"
+        fi
+        
+        # 確認
+        if confirm "MSG_CONFIRM_ONLY_YN"; then
+            # country.dbから完全な国情報を検索
+            local country_data=$(grep -i "^[^ ]* *$system_country" "$BASE_DIR/country.db")
+            debug_log "DEBUG" "Found country data: ${country_data}"
+            
+            if [ -n "$country_data" ]; then
+                # 国情報を一時ファイルに書き込み
+                debug_log "DEBUG" "Writing country data to temporary file"
+                echo "$country_data" > "${CACHE_DIR}/country.tmp"
+                
+                # country_write関数に処理を委譲（メッセージ表示スキップ）
+                debug_log "DEBUG" "Calling country_write() with suppress_message flag"
+                country_write true || {
+                    debug_log "ERROR" "Failed to write country data"
+                    return 1
+                }
+                
+                # 国選択完了メッセージを表示
+                printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
+                printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SET")")"
+            
+                # タイムゾーン文字列の構築
+                local timezone_str=""
+                if [ -n "$system_zonename" ] && [ -n "$system_timezone" ]; then
+                    # ゾーン名とタイムゾーン情報を組み合わせる
+                    timezone_str="${system_zonename},${system_timezone}"
+                    debug_log "DEBUG" "Created combined timezone string: ${timezone_str}"
+                else
+                    # タイムゾーン情報のみ
+                    timezone_str="${system_timezone}"
+                    debug_log "DEBUG" "Using timezone string: ${timezone_str}"
+                fi
+                
+                # zone_write関数に処理を委譲（直接引数として渡す）
+                debug_log "DEBUG" "Calling zone_write() with timezone data"
+                zone_write "$timezone_str" || {
+                    debug_log "ERROR" "Failed to write timezone data"
+                    return 1
+                }
+                
+                # ゾーン選択完了メッセージを表示（ここで1回だけ）
+                printf "%s\n\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+
+                EXTRA_SPACING_NEEDED="yes"
+                
+                debug_log "DEBUG" "Auto-detected settings have been applied successfully"
+                return 0
+            else
+                debug_log "DEBUG" "No matching entry found for detected country: $system_country"
+            fi
+        else
+            debug_log "DEBUG" "User declined auto-detected settings"
+        fi
+    else 
+        debug_log "DEBUG" "Could not detect system country or timezone from any available method"
+    fi
+    
+    # すべての方法が失敗した場合は手動での入力を促す
+    debug_log "DEBUG" "All automatic detection methods failed, proceeding with manual input"
+    return 1
+}
+
+# システムの地域情報を検出し設定する関数
 # 引数:
 #   $1: "skip_device" - デバイス内情報の検出をスキップ
 #      "skip_ip" - IP検索をスキップ
 #      "skip_all" - すべての検出をスキップ
 #      未指定の場合はすべての検出方法を試行
-detect_and_set_location() {
+XXX_detect_and_set_location() {
     local skip_device="${1:-}"
     local skip_ip="${2:-}"
     
