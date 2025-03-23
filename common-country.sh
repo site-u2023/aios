@@ -602,6 +602,7 @@ select_country() {
 #      未指定の場合はすべての検出方法を試行
 # システムの地域情報を検出し設定する関数
 # システムの地域情報を検出し設定する関数
+# システムの地域情報を検出し設定する関数
 detect_and_set_location() {
     # グローバル変数を直接取得
     debug_log "DEBUG: Running detect_and_set_location() with skip flags: device=$SKIP_DEVICE_DETECTION, ip=$SKIP_IP_DETECTION, all=$SKIP_ALL_DETECTION"
@@ -821,15 +822,6 @@ detect_and_set_location() {
                             debug_log "ERROR: Failed to write timezone data from IP detection"
                             return 1
                         }
-                        
-                        # 情報源をキャッシュに記録
-                        echo "IPアドレス位置情報" > "${CACHE_DIR}/info_source.ch"
-                        debug_log "DEBUG: Information source recorded: IP geolocation"
-                        
-                        # 国とタイムゾーン設定完了メッセージを表示
-                        printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
-                        printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SET")")"
-                        printf "%s\n\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
                         
                         EXTRA_SPACING_NEEDED="yes"
                         
