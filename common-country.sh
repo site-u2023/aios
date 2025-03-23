@@ -667,6 +667,7 @@ detect_and_set_location() {
             # 検出情報表示
             printf "\n"
             printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
+            printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_DEVICE")")"
             printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$(echo "$system_country" | cut -d' ' -f2)")"
 
         # ゾーンネームとタイムゾーンをそれぞれ別の行に表示
@@ -770,6 +771,7 @@ detect_and_set_location() {
                     # 検出情報表示
                     printf "\n"
                     printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
+                    printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_IP")")"
                     printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$ip_country")"
                     
                     # ゾーンネームとタイムゾーン情報を別々の行に表示
