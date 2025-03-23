@@ -1180,7 +1180,6 @@ check_common() {
             print_banner
             print_information
             select_country "$lang_code"
-            print_country
             selector "$MAIN_MENU" 
             ;;
         full)
@@ -1201,7 +1200,6 @@ check_common() {
             print_banner
             print_information
             select_country "$lang_code"
-            print_country
             selector "$MAIN_MENU"
             ;;
         update)
