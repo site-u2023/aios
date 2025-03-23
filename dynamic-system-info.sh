@@ -172,6 +172,7 @@ process_location_info() {
     
     # 一時ファイルのパス
     local tmp_country="${CACHE_DIR}/ip_country.tmp"
+    local tmp_zone="${CACHE_DIR}/ip_zone.tmp"
     local tmp_timezone="${CACHE_DIR}/ip_timezone.tmp"
     local tmp_zonename="${CACHE_DIR}/ip_zonename.tmp"
     
@@ -188,18 +189,17 @@ process_location_info() {
     
     # タイムゾーン情報取得
     debug_log "DEBUG" "Retrieving timezone information from IP address"
-    local zone_output
-    zone_output=$(get_zone_code)
+    get_zone_code > "$tmp_zone"
     
     # 情報が取得できなかった場合
-    if [ $? -ne 0 ] || [ -z "$zone_output" ]; then
+    if [ $? -ne 0 ] || [ -z "$tmp_zone" ]; then
         debug_log "ERROR" "Failed to obtain timezone information from IP"
         return 1
     fi
     
     # タイムゾーンとゾーン名を抽出して別々のファイルに保存
-    echo "$zone_output" | grep "timezone:" | cut -d':' -f2- > "$tmp_timezone"
-    echo "$zone_output" | grep "zonename:" | cut -d':' -f2- > "$tmp_zonename"
+    echo "$tmp_zone" | grep "timezone:" | cut -d':' -f2- > "$tmp_timezone"
+    echo "$tmp_zone" | grep "zonename:" | cut -d':' -f2- > "$tmp_zonename"
     
     # 一時ファイルのチェック
     if [ ! -s "$tmp_timezone" ] || [ ! -s "$tmp_zonename" ]; then
@@ -557,8 +557,6 @@ debug_info() {
 
 # メイン処理
 main() {
-    get_country_code
-    get_zone_code
     init_device_cache
     get_usb_devices
     detect_and_save_package_manager
