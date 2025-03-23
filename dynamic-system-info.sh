@@ -173,98 +173,94 @@ get_zone_code() {
     return 1
 }
 
-# IPアドレスから取得した地域情報を処理する関数 - 修正版
+# IPアドレスから位置情報を取得して処理する関数
 process_location_info() {
     debug_log "DEBUG" "Starting IP-based location information processing"
     
-    # グローバル変数のチェック - スキップフラグが立っている場合は実行しない
-    if [ "$SKIP_IP_DETECTION" = "true" ] || [ "$SKIP_ALL_DETECTION" = "true" ]; then
-        debug_log "DEBUG" "Skipping IP detection due to global flag settings"
-        return 1
-    fi
+    # 一時ファイルのパスを設定
+    local tmp_country="${CACHE_DIR}/country.tmp"
+    local tmp_zone="${CACHE_DIR}/zone.tmp"
     
-    # 国コードの取得
+    # IPアドレスからの国コード取得
     debug_log "DEBUG" "Retrieving country code from IP address"
+    
+    # get_country_codeの出力を一時ファイルに保存（デバッグメッセージも含む）
+    local temp_output="/tmp/country_code_output.tmp"
+    get_country_code > "$temp_output" 2>&1
+    
+    # デバッグ出力から国コードを抽出
     local country_code=""
-    
-    if command -v get_country_code >/dev/null 2>&1; then
-        # get_country_code関数の出力を変数に保存
-        country_code=$(get_country_code)
-        debug_log "DEBUG" "Raw country code result: '${country_code}'"
-    else
-        debug_log "ERROR" "get_country_code function not available"
+    if grep -q "Country code retrieved:" "$temp_output"; then
+        country_code=$(grep "Country code retrieved:" "$temp_output" | sed 's/.*Country code retrieved: *\([A-Z][A-Z]*\).*/\1/')
+        debug_log "DEBUG" "Extracted country code from output: $country_code"
+    else 
+        debug_log "ERROR" "Could not find country code in output"
+        rm -f "$temp_output"
         return 1
     fi
     
-    # 国コードが空かどうかを確認（改行や空白を取り除いた後）
-    country_code=$(echo "$country_code" | tr -d '[:space:]')
+    # 取得した国コードの検証
     if [ -z "$country_code" ]; then
-        debug_log "ERROR" "Empty country code returned from get_country_code"
+        debug_log "ERROR" "Failed to extract country code"
+        rm -f "$temp_output"
         return 1
     fi
     
-    debug_log "DEBUG" "Country code confirmed: $country_code"
-    
-    # タイムゾーン情報の取得
-    debug_log "DEBUG" "Retrieving timezone information from IP address"
-    local zone_info=""
-    local timezone=""
-    local zonename=""
-    
-    if command -v get_zone_code >/dev/null 2>&1; then
-        zone_info=$(get_zone_code)
-        debug_log "DEBUG" "Raw zone info: '${zone_info}'"
-        
-        # 情報抽出を改善
-        if echo "$zone_info" | grep -q "Device's Timezone:"; then
-            timezone=$(echo "$zone_info" | grep "Device's Timezone:" | sed -e 's/.*Device.*s Timezone: *\([^ ]*\).*/\1/')
-        fi
-        
-        if echo "$zone_info" | grep -q "Device's Zonename:"; then
-            zonename=$(echo "$zone_info" | grep "Device's Zonename:" | sed -e 's/.*Device.*s Zonename: *\([^ ]*\).*/\1/')
-        fi
-    else
-        debug_log "ERROR" "get_zone_code function not available"
-        return 1
-    fi
+    debug_log "DEBUG" "Valid country code confirmed: $country_code"
     
     # 日本の場合はデフォルト値を設定
-    if [ "$country_code" = "JP" ] && { [ -z "$timezone" ] || [ -z "$zonename" ]; }; then
-        debug_log "DEBUG" "Setting default timezone for Japan"
-        timezone="JST-9"
-        zonename="Asia/Tokyo"
+    local timezone="JST-9"
+    local zonename="Asia/Tokyo"
+    
+    if [ "$country_code" != "JP" ]; then
+        # 日本以外の場合はタイムゾーン情報を取得試行
+        debug_log "DEBUG" "Non-JP country code detected, retrieving timezone data"
+        
+        # get_zone_codeの出力を一時ファイルに保存
+        local temp_zone_output="/tmp/zone_code_output.tmp"
+        get_zone_code > "$temp_zone_output" 2>&1
+        
+        # 抽出処理（ここでは簡略化）
+        if grep -q "Timezone:" "$temp_zone_output"; then
+            timezone=$(grep "Timezone:" "$temp_zone_output" | sed 's/.*Timezone: *\([^ ]*\).*/\1/')
+        fi
+        
+        if grep -q "Zonename:" "$temp_zone_output"; then
+            zonename=$(grep "Zonename:" "$temp_zone_output" | sed 's/.*Zonename: *\([^ ]*\).*/\1/')
+        fi
+        
+        rm -f "$temp_zone_output"
+    else
+        debug_log "DEBUG" "Using default timezone settings for Japan"
     fi
     
-    # 少なくともどちらか一方があれば処理を続行
-    if [ -z "$timezone" ] && [ -z "$zonename" ]; then
-        debug_log "ERROR" "Failed to obtain any timezone information"
-        return 1
-    fi
+    debug_log "DEBUG" "Timezone: $timezone, Zonename: $zonename"
     
-    debug_log "DEBUG" "Timezone: '$timezone', Zone name: '$zonename'"
-    
-    # country.dbから国情報を検索
+    # country.dbから国データを検索
     local country_db="${BASE_DIR}/country.db"
     if [ ! -f "$country_db" ]; then
-        debug_log "ERROR" "Country database not found"
+        debug_log "ERROR" "Country database file not found: $country_db"
+        rm -f "$temp_output"
         return 1
     fi
     
-    # 大文字・小文字を区別せずに検索
+    # 国コードでcountry.dbを検索
     local country_data=$(grep -i "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *$country_code" "$country_db")
     if [ -z "$country_data" ]; then
-        debug_log "ERROR" "No matching country found in database for code: $country_code"
+        debug_log "ERROR" "No matching entry found in country database for: $country_code"
+        rm -f "$temp_output"
         return 1
     fi
     
-    # 一時ファイルに情報を保存（detect_and_set_locationで使用）
-    debug_log "DEBUG" "Writing country data to temporary file: $country_data"
-    echo "$country_data" > "${CACHE_DIR}/country.tmp"
+    # 一時ファイルに情報を保存
+    echo "$country_data" > "$tmp_country"
+    echo "${zonename},${timezone}" > "$tmp_zone"
     
-    # ゾーン情報を保存
-    local zone_str="${zonename},${timezone}"
-    debug_log "DEBUG" "Writing timezone data to temporary file: $zone_str"
-    echo "$zone_str" > "${CACHE_DIR}/zone.tmp"
+    debug_log "DEBUG" "Country data saved to temporary file: $country_data"
+    debug_log "DEBUG" "Timezone data saved to temporary file: ${zonename},${timezone}"
+    
+    # 一時出力ファイルを削除
+    rm -f "$temp_output"
     
     debug_log "DEBUG" "IP-based location information processed successfully"
     return 0
