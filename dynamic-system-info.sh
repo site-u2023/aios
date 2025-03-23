@@ -143,14 +143,10 @@ get_zone_code() {
             # API応答からタイムゾーン情報を抽出
             ZONENAME_RESULT=$(grep -o '"timezone":"[^"]*' "$tmp_file" | awk -F'"' '{print $4}')
             
-            # システム情報から対応するタイムゾーン形式を取得（例：JST-9）
-            if [ "$ZONENAME_RESULT" = "Asia/Tokyo" ]; then
-                TIMEZONE_RESULT="JST-9"
-            elif [ -n "$ZONENAME_RESULT" ] && command -v get_timezone_info >/dev/null 2>&1; then
-                local sys_timezone=$(get_timezone_info)
-                if [ -n "$sys_timezone" ]; then
-                    TIMEZONE_RESULT="$sys_timezone"
-                else
+            # タイムゾーン形式を取得
+            if [ -n "$ZONENAME_RESULT" ] && command -v get_timezone_info >/dev/null 2>&1; then
+                TIMEZONE_RESULT=$(get_timezone_info)
+                if [ -z "$TIMEZONE_RESULT" ]; then
                     TIMEZONE_RESULT="GMT0"
                 fi
             else
@@ -161,6 +157,8 @@ get_zone_code() {
             
             if [ -n "$ZONENAME_RESULT" ] && [ -n "$TIMEZONE_RESULT" ]; then
                 debug_log "DEBUG" "Timezone data retrieved: zonename=$ZONENAME_RESULT, timezone=$TIMEZONE_RESULT"
+                echo "Device's Timezone: $TIMEZONE_RESULT"
+                echo "Device's Zonename: $ZONENAME_RESULT"
                 return 0
             fi
         else
