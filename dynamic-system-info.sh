@@ -55,8 +55,6 @@ OSVERSION="${CACHE_DIR}/osversion.ch"
 PACKAGE_MANAGER="${CACHE_DIR}/package_manager.ch"
 PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
 
-#!/bin/ash
-
 # グローバルIPから国コードを取得する関数
 get_country_code() {
     # デバイスのグローバルIP（IPv4）を取得
@@ -69,15 +67,48 @@ get_country_code() {
     if [ -n "$IP" ]; then
         echo "Device's Global IP: $IP"
         debug_log "DEBUG: Fetching country code for IP: $IP"
-        COUNTRY_CODE=$(wget -qO- "http://ip-api.com/json/$IP" | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
+        SELECT_COUNTRY=$(wget -qO- "http://ip-api.com/json/$IP" | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
         
         # 国コードが取得できた場合
-        if [ -n "$COUNTRY_CODE" ]; then
-            echo "Device's Country Code: $COUNTRY_CODE"
-            debug_log "DEBUG: Country code retrieved: $COUNTRY_CODE"
+        if [ -n "$SELECT_COUNTRY" ]; then
+            echo "Device's Country Code: $SELECT_COUNTRY"
+            debug_log "DEBUG: Country code retrieved: $SELECT_COUNTRY"
         else
             echo "Error: Could not retrieve country code."
             debug_log "DEBUG: Failed to retrieve country code for IP: $IP"
+        fi
+    else
+        echo "Error: Could not retrieve global IP address."
+        debug_log "DEBUG: Failed to retrieve global IP address."
+    fi
+}
+
+# グローバルIPからタイムゾーンとゾーンネームを取得する関数
+get_zone_code() {
+    # デバイスのグローバルIP（IPv4）を取得
+    IP=$(wget -qO- https://api.ipify.org)
+
+    # デバッグログ
+    debug_log "DEBUG: Global IP address retrieved: $IP"
+
+    # IPが取得できたらタイムゾーンとゾーンネームを取得
+    if [ -n "$IP" ]; then
+        echo "Device's Global IP: $IP"
+        debug_log "DEBUG: Fetching timezone and zone name for IP: $IP"
+        ZONE=$(wget -qO- "http://ip-api.com/json/$IP")
+
+        # タイムゾーンとゾーンネームを抽出
+        TIMEZONE=$(echo "$ZONE" | grep -o '"timezone":"[^"]*' | awk -F'"' '{print $4}')
+        ZONENAME=$(echo "$ZONE" | grep -o '"zoneName":"[^"]*' | awk -F'"' '{print $4}')
+
+        # タイムゾーンとゾーンネームが取得できた場合
+        if [ -n "$TIMEZONE" ] && [ -n "$ZONENAME" ]; then
+            echo "Device's Timezone: $TIMEZONE"
+            echo "Device's Zone Name: $ZONENAME"
+            debug_log "DEBUG: Timezone retrieved: $TIMEZONE, Zone Name: $ZONENAME"
+        else
+            echo "Error: Could not retrieve timezone or zone name."
+            debug_log "DEBUG: Failed to retrieve timezone or zone name for IP: $IP"
         fi
     else
         echo "Error: Could not retrieve global IP address."
