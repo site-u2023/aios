@@ -643,11 +643,9 @@ detect_and_set_location() {
                 detected_timezone=$(cat "$cache_timezone" 2>/dev/null)
                 detected_zonename=$(cat "$cache_zonename" 2>/dev/null)
                 detection_source="cache"
-                source_message="MSG_USE_DETECTED_CACHE"
                 skip_confirmation="true"
                 
                 debug_log "DEBUG" "Cache detection results - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
-                # ここでreturnしていた行を削除
             else
                 debug_log "DEBUG" "One or more cache files are empty"
             fi
@@ -671,7 +669,6 @@ detect_and_set_location() {
             detected_timezone=$(get_timezone_info)
             detected_zonename=$(get_zonename_info)
             detection_source="device"
-            source_message="MSG_USE_DETECTED_DEVICE"
             
             debug_log "DEBUG" "Device detection results - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
         else
@@ -697,8 +694,7 @@ detect_and_set_location() {
                         detected_country=$(cat "${CACHE_DIR}/ip_country.tmp" 2>/dev/null)
                         detected_timezone=$(cat "${CACHE_DIR}/ip_timezone.tmp" 2>/dev/null)
                         detected_zonename=$(cat "${CACHE_DIR}/ip_zonename.tmp" 2>/dev/null)
-                        detection_source="ip"
-                        source_message="MSG_USE_DETECTED_IP"
+                        detection_source="IP address"
                         
                         debug_log "DEBUG" "IP detection results - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
                     else
@@ -717,19 +713,8 @@ detect_and_set_location() {
     
     # 4. 検出した情報の処理（検出ソースに関わらず共通処理）
     if [ -n "$detected_country" ] && [ -n "$detected_timezone" ] && [ -n "$detected_zonename" ]; then
-        # Country.dbから国データを検索
-        if [ "$detection_source" = "cache" ]; then
-            debug_log "DEBUG" "Using cached country data"
-            country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
-        elif [ "$detection_source" = "device" ]; then
-            # 第5フィールドが detected_country に完全一致するエントリを検索
-            country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
-        else
-            # IP検出の場合も同様の検索方法
-            country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
-        fi
+        country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
         
-        # 国データが見つかった場合のみ処理続行
         if [ -n "$country_data" ]; then
             # プレビュー用に言語設定を適用（キャッシュ以外の場合）
             if [ "$detection_source" != "cache" ]; then
@@ -742,12 +727,12 @@ detect_and_set_location() {
             fi
             
             # 検出情報表示
-            printf "\n"
-            printf "%s\n" "$(color white "$(get_message "$source_message")")"
+            local msg_info=$(get_message "MSG_USE_DETECTED_INFORMATION")
+            msg_info=$(echo "$msg_info" | sed "s/{info}/$detection_source/g")
+            printf "\n%s\n" "$(color white "$msg_info")"
             printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$detected_country")"
             printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONENAME")")" "$(color white "$detected_zonename")"
             printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color white "$detected_timezone")"
-            printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
             debug_log "DEBUG" "Displaying detection information from $detection_source source"
             
             # ユーザーに確認
@@ -789,7 +774,7 @@ detect_and_set_location() {
                     local timezone_str="${detected_zonename},${detected_timezone}"
                     debug_log "DEBUG" "Created combined timezone string: ${timezone_str}"
                     
-                    if [ "$detection_source" = "ip" ]; then
+                    if [ "$detection_source" = "IP address" ]; then
                         echo "$timezone_str" > "${CACHE_DIR}/zone.tmp"
                         zone_write || {
                             debug_log "ERROR" "Failed to write timezone data"
@@ -821,7 +806,6 @@ detect_and_set_location() {
                 detected_timezone=""
                 detected_zonename=""
                 detection_source=""
-                source_message=""
                 preview_applied="false"
                 skip_confirmation="false"
             fi
