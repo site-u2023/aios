@@ -644,6 +644,29 @@ detect_and_set_location() {
                 source_message="MSG_USE_DETECTED_CACHE"
                 
                 debug_log "DEBUG" "Cache detection results - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
+                
+                # キャッシュから取得した国コードに関連する国データを取得
+                country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
+                
+                if [ -n "$country_data" ]; then
+                    # キャッシュから読み込んだ情報を表示
+                    printf "\n"
+                    printf "%s\n" "$(color white "$(get_message "$source_message")")"
+                    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$detected_country")"
+                    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONENAME")")" "$(color white "$detected_zonename")"
+                    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color white "$detected_timezone")"
+                    debug_log "DEBUG" "Using cached location data"
+                    
+                    # キャッシュの場合は自動承認として処理
+                    debug_log "DEBUG" "Cache-based location settings automatically applied"
+                    return 0
+                else
+                    debug_log "DEBUG" "No matching entry found in country.db for cached country: $detected_country"
+                    detected_country=""
+                    detected_timezone=""
+                    detected_zonename=""
+                    detection_source=""
+                fi
             else
                 debug_log "DEBUG" "One or more cache files are empty"
             fi
@@ -719,10 +742,7 @@ detect_and_set_location() {
     # 4. 検出した情報の処理（検出ソースに関わらず共通処理）
     if [ -n "$detected_country" ] && [ -n "$detected_timezone" ] && [ -n "$detected_zonename" ]; then
         # Country.dbから国データを検索
-        if [ "$detection_source" = "cache" ]; then
-            debug_log "DEBUG" "Using cached country data"
-            country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
-        elif [ "$detection_source" = "device" ]; then
+        if [ "$detection_source" = "device" ]; then
             # 第5フィールドが detected_country に完全一致するエントリを検索
             country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
         else
@@ -732,15 +752,13 @@ detect_and_set_location() {
         
         # 国データが見つかった場合のみ処理続行
         if [ -n "$country_data" ]; then
-            # プレビュー用に言語設定を適用（キャッシュ以外の場合）
-            if [ "$detection_source" != "cache" ]; then
-                echo "$country_data" > "${CACHE_DIR}/country.tmp"
-                debug_log "DEBUG" "Applying temporary language settings for preview"
-                country_write true && {
-                    preview_applied="true"
-                    debug_log "DEBUG" "Preview language applied from $detection_source detection"
-                }
-            fi
+            # プレビュー用に言語設定を適用
+            echo "$country_data" > "${CACHE_DIR}/country.tmp"
+            debug_log "DEBUG" "Applying temporary language settings for preview"
+            country_write true && {
+                preview_applied="true"
+                debug_log "DEBUG" "Preview language applied from $detection_source detection"
+            }
             
             # 検出情報表示
             printf "\n"
@@ -755,8 +773,8 @@ detect_and_set_location() {
             if confirm "MSG_CONFIRM_ONLY_YN"; then
                 debug_log "DEBUG" "User accepted $detection_source-based location settings"
                 
-                # キャッシュ以外の場合に設定を適用（プレビューで適用済みなら再適用不要）
-                if [ "$detection_source" != "cache" ] && [ "$preview_applied" = "false" ]; then
+                # プレビューで設定済みなので、必要なければ再設定しない
+                if [ "$preview_applied" = "false" ]; then
                     debug_log "DEBUG" "Writing country data to temporary file"
                     echo "$country_data" > "${CACHE_DIR}/country.tmp"
                     debug_log "DEBUG" "Calling country_write() with suppress_message flag"
@@ -770,23 +788,21 @@ detect_and_set_location() {
                 printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
                 printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SET")")"
                 
-                # タイムゾーン設定（キャッシュ以外の場合のみ）
-                if [ "$detection_source" != "cache" ]; then
-                    local timezone_str="${detected_zonename},${detected_timezone}"
-                    debug_log "DEBUG" "Created combined timezone string: ${timezone_str}"
-                    
-                    if [ "$detection_source" = "ip" ]; then
-                        echo "$timezone_str" > "${CACHE_DIR}/zone.tmp"
-                        zone_write || {
-                            debug_log "ERROR" "Failed to write timezone data"
-                            return 1
-                        }
-                    else
-                        zone_write "$timezone_str" || {
-                            debug_log "ERROR" "Failed to write timezone data"
-                            return 1
-                        }
-                    fi
+                # タイムゾーン設定（ソースに関わらず共通処理）
+                local timezone_str="${detected_zonename},${detected_timezone}"
+                debug_log "DEBUG" "Created combined timezone string: ${timezone_str}"
+                
+                if [ "$detection_source" = "ip" ]; then
+                    echo "$timezone_str" > "${CACHE_DIR}/zone.tmp"
+                    zone_write || {
+                        debug_log "ERROR" "Failed to write timezone data"
+                        return 1
+                    }
+                else
+                    zone_write "$timezone_str" || {
+                        debug_log "ERROR" "Failed to write timezone data"
+                        return 1
+                    }
                 fi
                 
                 # ゾーン選択完了メッセージを表示
@@ -798,8 +814,8 @@ detect_and_set_location() {
             else
                 debug_log "DEBUG" "User declined $detection_source-based location settings"
                 
-                # 一時的な言語設定をクリア（キャッシュ以外の場合）
-                if [ "$detection_source" != "cache" ] && [ "$preview_applied" = "true" ]; then
+                # 一時的な言語設定をクリア
+                if [ "$preview_applied" = "true" ]; then
                     debug_log "DEBUG" "Cleaning up preview language settings"
                     rm -f "${CACHE_DIR}/language.ch" "${CACHE_DIR}/message.ch" "${CACHE_DIR}/country.tmp" 2>/dev/null
                 fi
