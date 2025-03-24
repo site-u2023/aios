@@ -594,14 +594,15 @@ select_country() {
 }
 
 # システムの地域情報を検出し設定する関数
-# 引数:
-#   $1: "skip_device" - デバイス内情報の検出をスキップ
+# 引数: $1: 
+#      "skip-cache" - cache情報の検出をスキップ
+#      "skip_device" - デバイス内情報の検出をスキップ
 #      "skip_ip" - IP検索をスキップ
 #      "skip_all" - すべての検出をスキップ
 #      未指定の場合はすべての検出方法を試行
 detect_and_set_location() {
     # グローバル変数を直接取得
-    debug_log "DEBUG" "Running detect_and_set_location() with skip flags: device=$SKIP_DEVICE_DETECTION, ip=$SKIP_IP_DETECTION, all=$SKIP_ALL_DETECTION"
+    debug_log "DEBUG" "Running detect_and_set_location() with skip flags: cache=$SKIP_CACHE_DETECTION, device=$SKIP_DEVICE_DETECTION, ip=$SKIP_IP_DETECTION, all=$SKIP_ALL_DETECTION"
     
     # 共通変数の宣言
     local detected_country=""
@@ -613,12 +614,12 @@ detect_and_set_location() {
     
     # 0. "SKIP_ALL_DETECTION"が指定された場合はすべての検出をスキップ
     if [ "$SKIP_ALL_DETECTION" = "true" ]; then
-        debug_log "DEBUG" "SKIP_ALL_DETECTION is true, skipping all detection methods"
+        debug_log "DEBUG" "SKIP_ALL_DETECTION is true, skipping all detection methods (cache, device, IP)"
         return 1
     fi
     
-    # 1. キャッシュから情報取得を試みる（最優先、スキップオプションの影響を受けない）
-    if check_location_cache; then
+    # 1. キャッシュから情報取得を試みる（SKIP_CACHE_DETECTIONが指定されていない場合）
+    if [ "$SKIP_CACHE_DETECTION" != "true" ] && check_location_cache; then
         debug_log "DEBUG" "Using cached location data"
         return 0  # キャッシュからの読み込み成功
     fi
