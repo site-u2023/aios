@@ -7,17 +7,72 @@ SUPPORTED_LANGUAGE_JP="JP"
 # メッセージデータベース (多言語対応)
 # フォーマット: 言語コード|メッセージキー=メッセージ
 
-# 英語メッセージ
-US|MSG_GETTING_IP=🌐 Getting IP address...
-US|MSG_GETTING_TIMEZONE=🕒 Getting timezone information...
-US|MSG_GETTING_COUNTRY=🏳️ Getting country information...
-US|MSG_GETTING_FALLBACK=🔄 Using alternative method for country information...
+# =======================
+# dynamic-system-info.sh
+# =======================
 
-# 日本語メッセージ
-JP|MSG_GETTING_IP=🌐 IPアドレスを取得中...
-JP|MSG_GETTING_TIMEZONE=🕒 タイムゾーン情報を取得中...
-JP|MSG_GETTING_COUNTRY=🏳️ 国情報を取得中...
-JP|MSG_GETTING_FALLBACK=🔄 代替方法で国情報を取得中...
+# get_country_code() 
+# 英語メッセージ
+US|MSG_GETTING_IP=Getting IP address...
+JP|MSG_GETTING_IP=IPアドレスを取得中...
+
+US|MSG_IP_RETRIEVED=IP address retrieved
+JP|MSG_IP_RETRIEVED=IPv4アドレスを取得しました
+
+US|MSG_IP_FAILED=Could not get IPv4 address
+JP|MSG_IP_FAILED=IPv4アドレスを取得できませんでした
+
+US|MSG_GETTING_IPV6=Getting IPv6 address...
+JP|MSG_GETTING_IPV6=IPv6アドレスを取得中...
+
+US|MSG_IPV6_RETRIEVED=IPv6 address retrieved
+JP|MSG_IPV6_RETRIEVED=IPv6アドレスを取得しました
+
+US|MSG_IPV6_FAILED=Could not get IPv6 address
+JP|MSG_IPV6_FAILED=IPv6アドレスを取得できませんでした
+
+US|MSG_GETTING_TIMEZONE=Getting timezone information...
+JP|MSG_GETTING_TIMEZONE=タイムゾーン情報を取得中...
+
+US|MSG_TIMEZONE_RETRIEVED=Timezone information retrieved
+JP|MSG_TIMEZONE_RETRIEVED=タイムゾーン情報を取得しました
+
+US|MSG_TIMEZONE_FAILED=Could not get timezone information
+JP|MSG_TIMEZONE_FAILED=タイムゾーン情報を取得できませんでした
+
+US|MSG_GETTING_TIMEZONE_IPV6=Getting timezone with IPv6...
+JP|MSG_GETTING_TIMEZONE_IPV6=IPv6でタイムゾーンを取得中...
+
+US|MSG_TIMEZONE_IPV6_FAILED=Could not get timezone with IPv6
+JP|MSG_TIMEZONE_IPV6_FAILED=IPv6でのタイムゾーン取得に失敗しました
+
+US|MSG_GETTING_COUNTRY=Getting country information...
+JP|MSG_GETTING_COUNTRY=国情報を取得中...
+
+US|MSG_COUNTRY_RETRIEVED=Country information retrieved
+JP|MSG_COUNTRY_RETRIEVED=国情報を取得しました
+
+US|MSG_COUNTRY_FAILED=Could not get country information
+JP|MSG_COUNTRY_FAILED=国情報を取得できませんでした
+
+US|MSG_GETTING_FALLBACK=Using alternative method for country...
+JP|MSG_GETTING_FALLBACK=代替方法で国情報を取得中...
+
+US|MSG_FALLBACK_SUCCESS=Country found with alternative method
+JP|MSG_FALLBACK_SUCCESS=代替方法で国情報を取得しました
+
+US|MSG_FALLBACK_FAILED=Alternative method failed
+JP|MSG_FALLBACK_FAILED=代替方法での取得に失敗しました
+
+US|MSG_GETTING_LAST_RESORT=Trying final method for country...
+JP|MSG_GETTING_LAST_RESORT=最終手段で国情報を取得中...
+
+US|MSG_LAST_RESORT_SUCCESS=Country found with final method
+JP|MSG_LAST_RESORT_SUCCESS=最終手段で国情報を取得しました
+
+US|MSG_LAST_RESORT_FAILED=All attempts to get country failed
+JP|MSG_LAST_RESORT_FAILED=すべての国情報取得に失敗しました
+
 
 # download() 
 US|CONFIG_DOWNLOAD_SUCCESS=Download completed:
