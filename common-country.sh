@@ -601,6 +601,7 @@ select_country() {
 #      "skip_cache-device" - cache情報とデバイス内情報の検出をスキップ
 #      "skip_all" - すべての検出をスキップ
 #      未指定の場合はすべての検出方法を試行
+# システムの地域情報を検出し設定する関数
 detect_and_set_location() {
     # グローバル変数を直接取得
     debug_log "DEBUG" "Running detect_and_set_location() with skip flags: cache=$SKIP_CACHE_DETECTION, device=$SKIP_DEVICE_DETECTION, cache-device=$SKIP_CACHE_DEVICE_DETECTION, ip=$SKIP_IP_DETECTION, all=$SKIP_ALL_DETECTION"
@@ -622,7 +623,6 @@ detect_and_set_location() {
     fi
     
     # 1. キャッシュから情報取得を試みる
-    # (SKIP_CACHE_DETECTIONまたはSKIP_CACHE_DEVICE_DETECTIONが指定されていない場合)
     if [ "$SKIP_CACHE_DETECTION" != "true" ] && [ "$SKIP_CACHE_DEVICE_DETECTION" != "true" ]; then
         local cache_country="${CACHE_DIR}/country.ch"
         local cache_zone="${CACHE_DIR}/zone.ch"
@@ -655,11 +655,9 @@ detect_and_set_location() {
     fi
 
     # 2. デバイス内情報の検出（キャッシュが見つからない場合）
-    # (SKIP_DEVICE_DETECTIONまたはSKIP_CACHE_DEVICE_DETECTIONが指定されている場合はスキップ)
     if [ "$SKIP_DEVICE_DETECTION" != "true" ] && [ "$SKIP_CACHE_DEVICE_DETECTION" != "true" ] && [ -z "$detected_country" ]; then
         debug_log "DEBUG" "Attempting device-based information detection"
         
-        # スクリプトパスの確認と必要な関数の読み込み
         if [ -f "$BASE_DIR/dynamic-system-info.sh" ]; then
             if ! command -v get_country_info >/dev/null 2>&1; then
                 debug_log "DEBUG" "Loading dynamic-system-info.sh"
@@ -683,19 +681,16 @@ detect_and_set_location() {
     if [ "$SKIP_IP_DETECTION" != "true" ] && { [ -z "$detected_country" ] || [ -z "$detected_timezone" ] || [ -z "$detected_zonename" ]; }; then
         debug_log "DEBUG" "Attempting IP-based location detection"
         
-        # 必要な関数の読み込み
         if [ -f "$BASE_DIR/dynamic-system-info.sh" ]; then
             if ! command -v process_location_info >/dev/null 2>&1; then
                 debug_log "DEBUG" "Loading dynamic-system-info.sh for IP detection"
                 . "$BASE_DIR/dynamic-system-info.sh"
             fi
             
-            # IP情報の取得
             if command -v process_location_info >/dev/null 2>&1; then
                 if process_location_info; then
                     debug_log "DEBUG" "Successfully retrieved and cached location data"
                     
-                    # ファイルから情報を読み込み
                     if [ -f "${CACHE_DIR}/ip_country.tmp" ] && [ -f "${CACHE_DIR}/ip_timezone.tmp" ] && [ -f "${CACHE_DIR}/ip_zonename.tmp" ]; then
                         detected_country=$(cat "${CACHE_DIR}/ip_country.tmp" 2>/dev/null)
                         detected_timezone=$(cat "${CACHE_DIR}/ip_timezone.tmp" 2>/dev/null)
@@ -720,10 +715,8 @@ detect_and_set_location() {
     
     # 4. 検出した情報の処理（検出ソースに関わらず共通処理）
     if [ -n "$detected_country" ] && [ -n "$detected_timezone" ] && [ -n "$detected_zonename" ]; then
-        # Country.dbから国データを検索
         country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
         
-        # 国データが見つかった場合のみ処理続行
         if [ -n "$country_data" ]; then
             # プレビュー用に言語設定を適用（キャッシュ以外の場合）
             if [ "$detection_source" != "cache" ]; then
@@ -735,7 +728,7 @@ detect_and_set_location() {
                 }
             fi
             
-            # 検出情報表示（共通部分）
+            # 検出情報表示（共通部分）- すべての検出方法で表示する
             local msg_info=$(get_message "MSG_USE_DETECTED_INFORMATION")
             # {info} を実際の値に置き換え
             msg_info=$(echo "$msg_info" | sed "s/{info}/$info/")
@@ -749,7 +742,7 @@ detect_and_set_location() {
             # キャッシュ以外の場合のみ確認メッセージを表示
             if [ "$skip_confirmation" != "true" ]; then
                 printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
-                printf "%s" "$(color white "$(get_message "MSG_CONFIRM_ONLY_YN")")"
+                printf "%s " "$(color white "$(get_message "MSG_CONFIRM_ONLY_YN")")"
                 debug_log "DEBUG" "Displaying confirmation prompt for $detection_source source"
             else
                 debug_log "DEBUG" "Using cached location data without confirmation prompt"
@@ -819,7 +812,7 @@ detect_and_set_location() {
                 if [ "$preview_applied" = "true" ]; then
                     debug_log "DEBUG" "Cleaning up preview language settings"
                     rm -f "${CACHE_DIR}/language.ch" "${CACHE_DIR}/message.ch" "${CACHE_DIR}/country.tmp" 2>/dev/null
-                fi
+                }
                 
                 # リセットして次の検出方法に進む
                 detected_country=""
@@ -837,12 +830,10 @@ detect_and_set_location() {
     
     # 継続した検出処理のため、ここで検出ソースが空かどうか確認
     if [ -z "$detection_source" ]; then
-        # すべての方法が失敗した場合は手動での入力を促す
         debug_log "DEBUG" "All automatic detection methods failed, proceeding with manual input"
         return 1
     fi
     
-    # いずれかの検出方法が有効だった場合の処理
     return 0
 }
 
