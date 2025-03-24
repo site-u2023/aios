@@ -67,7 +67,7 @@ check_location_cache() {
     # すべての必要なキャッシュファイルが存在するか確認
     if [ -f "$cache_country" ] && [ -f "$cache_zone" ] && [ -f "$cache_timezone" ] && [ -f "$cache_zonename" ]; then
         # すべてのファイルの内容が空でないか確認
-        if [ -s "$cache_country" ] && [ -s "$cache_zone" ] && [ -s "$cache_timezone" ] && [ -s "$cache_zonename" ]; then
+        if [ -s "$cache_language" ] && [ -s "$cache_luci" ] && [ -s "$cache_timezone" ] && [ -s "$cache_zonename" ] && [ -s "$cache_message" ]; then
             debug_log "DEBUG" "Valid location cache files found"
             return 0  # キャッシュ有効
         else
