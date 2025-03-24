@@ -467,6 +467,7 @@ get_usb_devices() {
 
 # 📌 デバイスの国情報の取得
 # 戻り値: システム設定とデータベースに基づく組み合わせた国情報
+# 戻り値: システム設定とデータベースに基づく2文字の国コード
 get_country_info() {
     local current_lang=""
     local current_timezone=""
@@ -483,22 +484,24 @@ get_country_info() {
     
     # country.dbが存在する場合、情報を照合
     if [ -f "$country_db" ] && [ -n "$current_lang" ]; then
-        # まず言語コードで照合
-        country_info=$(awk -v lang="$current_lang" '$4 == lang {print $0; exit}' "$country_db")
+        # まず言語コードで照合（5列目の国コードを取得）
+        country_code=$(awk -v lang="$current_lang" '$4 == lang {print $5; exit}' "$country_db")
         
-        # 言語で一致しない場合、タイムゾーンで照合
-        if [ -z "$country_info" ] && [ -n "$current_timezone" ]; then
-            country_info=$(awk -v tz="$current_timezone" '$0 ~ tz {print $0; exit}' "$country_db")
+        # 言語で一致しない場合、タイムゾーンで照合（同じく5列目）
+        if [ -z "$country_code" ] && [ -n "$current_timezone" ]; then
+            country_code=$(awk -v tz="$current_timezone" '$0 ~ tz {print $5; exit}' "$country_db")
         fi
         
-        # まだ一致しない場合は空を返す
-        if [ -n "$country_info" ]; then
-            echo "$country_info"
+        # 値が取得できた場合は返す
+        if [ -n "$country_code" ]; then
+            debug_log "DEBUG: Found country code from database: $country_code"
+            echo "$country_code"
             return 0
         fi
     fi
     
     # 一致が見つからないか、country.dbがない場合は空を返す
+    debug_log "DEBUG: No country code found in database"
     echo ""
     return 1
 }
