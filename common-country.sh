@@ -742,7 +742,7 @@ detect_and_set_location() {
             # キャッシュ以外の場合のみ確認メッセージを表示
             if [ "$skip_confirmation" != "true" ]; then
                 printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
-                printf "%s " "$(color white "$(get_message "MSG_CONFIRM_ONLY_YN")")"
+                # ここで確認メッセージは表示しない（confirm関数が表示するため）
                 debug_log "DEBUG" "Displaying confirmation prompt for $detection_source source"
             else
                 debug_log "DEBUG" "Using cached location data without confirmation prompt"
