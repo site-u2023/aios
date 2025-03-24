@@ -704,10 +704,12 @@ detect_and_set_location() {
     if [ -n "$detected_country" ] && [ -n "$detected_timezone" ] && [ -n "$detected_zonename" ]; then
         # Country.dbから国データを検索
         if [ "$detection_source" = "device" ]; then
-            country_data=$(grep -i "^[^ ]* *$detected_country" "$BASE_DIR/country.db" | head -1)
+            # 国コードを使って検索（$5フィールドがマッチするエントリを探す）
+            country_data=$(grep -i "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *$detected_country" "$BASE_DIR/country.db" | head -1)
             source_message="MSG_USE_DETECTED_DEVICE"
         else
-            country_data=$(grep -i "$detected_country" "$BASE_DIR/country.db" | head -1)
+            # IP検出の場合も同様の検索
+            country_data=$(grep -i "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *$detected_country" "$BASE_DIR/country.db" | head -1)
             source_message="MSG_USE_DETECTED_IP"
         fi
         
@@ -721,11 +723,11 @@ detect_and_set_location() {
                 debug_log "DEBUG: Preview language applied from $detection_source detection"
             }
             
-            # 検出情報表示
+            # 検出情報表示 - 無駄な処理を削除
             printf "\n"
             printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
             printf "%s\n" "$(color white "$(get_message "$source_message")")"
-            printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$(echo "$detected_country" | cut -d' ' -f2)")"
+            printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$detected_country")"
             printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONENAME")")" "$(color white "$detected_zonename")"
             printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color white "$detected_timezone")"
             debug_log "DEBUG: Displaying detection information from $detection_source source"
