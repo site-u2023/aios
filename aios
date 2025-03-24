@@ -1104,6 +1104,9 @@ check_option() {
             -ta|--ta|-test_api|--test_api)
                 MODE="test_api"
                 ;;
+            -sc|--sc|-skip-cache|--skip-cache)
+                SKIP_CACHE_DETECTION="true"
+                ;;
             -sd|--sd|-skip-dev|--skip-dev)
                 SKIP_DEVICE_DETECTION="true"
                 ;;
