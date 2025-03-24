@@ -12,17 +12,7 @@ SUPPORTED_LANGUAGE_JP="JP"
 # =======================
 
 # get_country_code() 
-US|MSG_GETTING_INFO=Getting network information...
-JP|MSG_GETTING_INFO=ネットワーク情報を取得中...
 
-US|MSG_IP_FAILED=Failed to retrieve IP address
-JP|MSG_IP_FAILED=IPアドレスの取得に失敗しました
-
-US|MSG_INFO_SUCCESS=Network information retrieved
-JP|MSG_INFO_SUCCESS=ネットワーク情報を取得しました
-
-US|MSG_INFO_FAILED=Failed to retrieve network information
-JP|MSG_INFO_FAILED=ネットワーク情報の取得に失敗しました
 
 
 # download() 
