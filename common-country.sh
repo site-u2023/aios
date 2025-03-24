@@ -798,7 +798,7 @@ detect_and_set_location() {
                 if [ "$preview_applied" = "true" ]; then
                     debug_log "DEBUG" "Cleaning up preview language settings"
                     rm -f "${CACHE_DIR}/language.ch" "${CACHE_DIR}/message.ch" "${CACHE_DIR}/country_tmp.ch" 2>/dev/null
-                }
+                fi
                 
                 # リセットして次の検出方法に進む
                 detected_country=""
