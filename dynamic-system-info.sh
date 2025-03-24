@@ -81,9 +81,8 @@ check_location_cache() {
     return 1  # キャッシュ無効または不完全
 }
 
-
-# 国コードとタイムゾーン情報を一括取得する関数（タイムアウト機能付き）
-XXX_get_country_code() {
+# 国コードとタイムゾーン情報を一括取得する関数（シンプルなスピナー付き）
+get_country_code() {
     # ローカル変数の宣言
     local ip_v4=""
     local ip_v6=""
@@ -94,8 +93,6 @@ XXX_get_country_code() {
     local offset_hours=""
     local worldtime_ip=""
     local timeout_sec=15
-    local timeout_pid=""
-    local api_result=0
     
     # グローバル変数の初期化
     SELECT_ZONE=""
@@ -104,131 +101,61 @@ XXX_get_country_code() {
     SELECT_COUNTRY=""
     SELECT_POSIX_TZ=""
     
-    # タイムアウトを設定する関数
-    setup_timeout() {
-        # 指定秒数後にシグナルを送信するバックグラウンドプロセス
-        (
-            sleep "$timeout_sec"
-            # タイムアウト時のメッセージ出力
-            debug_log "DEBUG: API request timed out after $timeout_sec seconds"
-            # PIDが有効な場合のみkillを実行
-            if [ -n "$1" ] && kill -0 "$1" 2>/dev/null; then
-                kill -9 "$1" 2>/dev/null
-            fi
-        ) &
-        timeout_pid=$!
-    }
+    # スピナー開始
+    start_spinner "$(get_message "MSG_GETTING_INFO")" "spinner"
     
-    # タイムアウトをクリアする関数
-    clear_timeout() {
-        if [ -n "$timeout_pid" ]; then
-            kill "$timeout_pid" 2>/dev/null
-            timeout_pid=""
-        fi
-    }
-    
-    # IPv4アドレスの取得を試行（タイムアウト付き）
+    # IPv4アドレスの取得を試行（タイムアウト設定追加）
     debug_log "DEBUG: Attempting to retrieve IPv4 address"
-    (
-        wget -qO- https://api.ipify.org > "${CACHE_DIR}/ipv4.tmp" 2>/dev/null
-    ) &
-    ipv4_pid=$!
-    setup_timeout "$ipv4_pid"
+    ip_v4=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- https://api.ipify.org 2>/dev/null || echo "")
     
-    # 最大タイムアウト時間待機
-    wait "$ipv4_pid" || api_result=$?
-    clear_timeout
-    
-    # 結果の確認
-    if [ -f "${CACHE_DIR}/ipv4.tmp" ] && [ -s "${CACHE_DIR}/ipv4.tmp" ]; then
-        ip_v4=$(cat "${CACHE_DIR}/ipv4.tmp")
-        debug_log "DEBUG: IPv4 address retrieved: $ip_v4"
-    else
-        debug_log "DEBUG: Failed to retrieve IPv4 address or timed out"
-    fi
-    rm -f "${CACHE_DIR}/ipv4.tmp" 2>/dev/null
-    
-    # IPv6アドレスの取得を試行（タイムアウト付き）
+    # IPv6アドレスの取得を試行（タイムアウト設定追加）
     debug_log "DEBUG: Attempting to retrieve IPv6 address"
-    (
-        wget -qO- https://api64.ipify.org > "${CACHE_DIR}/ipv6.tmp" 2>/dev/null
-    ) &
-    ipv6_pid=$!
-    setup_timeout "$ipv6_pid"
+    ip_v6=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- https://api64.ipify.org 2>/dev/null || echo "")
     
-    # 最大タイムアウト時間待機
-    wait "$ipv6_pid" || api_result=$?
-    clear_timeout
-    
-    # 結果の確認
-    if [ -f "${CACHE_DIR}/ipv6.tmp" ] && [ -s "${CACHE_DIR}/ipv6.tmp" ]; then
-        ip_v6=$(cat "${CACHE_DIR}/ipv6.tmp")
-        debug_log "DEBUG: IPv6 address retrieved: $ip_v6"
-    else
-        debug_log "DEBUG: Failed to retrieve IPv6 address or timed out"
+    # 取得したIPアドレスの確認
+    if [ -n "$ip_v4" ]; then
+        debug_log "DEBUG: IPv4 address retrieved: $ip_v4"
     fi
-    rm -f "${CACHE_DIR}/ipv6.tmp" 2>/dev/null
+    
+    if [ -n "$ip_v6" ]; then
+        debug_log "DEBUG: IPv6 address retrieved: $ip_v6"
+    fi
     
     # いずれかのIPアドレスが取得できたか確認
     if [ -z "$ip_v4" ] && [ -z "$ip_v6" ]; then
-        debug_log "DEBUG: Failed to retrieve any IP address, aborting"
+        # スピナー停止
+        stop_spinner "$(get_message "MSG_IP_FAILED")" "fail"
+        debug_log "DEBUG: Failed to retrieve any IP address"
         return 1
     fi
     
-    # IPv4を使用してWorldTimeAPIからタイムゾーン情報を取得（タイムアウト付き）
+    # IPv4を使用してWorldTimeAPIからタイムゾーン情報を取得（タイムアウト設定追加）
     if [ -n "$ip_v4" ]; then
         debug_log "DEBUG: Trying WorldTimeAPI with IPv4 address"
-        (
-            wget -qO- "http://worldtimeapi.org/api/ip" > "${CACHE_DIR}/worldtime_ipv4.tmp" 2>/dev/null
-        ) &
-        wtapi_pid=$!
-        setup_timeout "$wtapi_pid"
+        SELECT_ZONE=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- "http://worldtimeapi.org/api/ip" 2>/dev/null || echo "")
         
-        # 最大タイムアウト時間待機
-        wait "$wtapi_pid" || api_result=$?
-        clear_timeout
-        
-        if [ -f "${CACHE_DIR}/worldtime_ipv4.tmp" ] && [ -s "${CACHE_DIR}/worldtime_ipv4.tmp" ]; then
-            SELECT_ZONE=$(cat "${CACHE_DIR}/worldtime_ipv4.tmp")
-            if [ -n "$SELECT_ZONE" ]; then
-                select_ip="$ip_v4"
-                select_ip_ver="IPv4"
-                debug_log "DEBUG: WorldTimeAPI responded successfully using IPv4"
-            else
-                debug_log "DEBUG: WorldTimeAPI failed with IPv4, response is empty"
-            fi
+        if [ -n "$SELECT_ZONE" ]; then
+            select_ip="$ip_v4"
+            select_ip_ver="IPv4"
+            debug_log "DEBUG: WorldTimeAPI responded successfully using IPv4"
         else
-            debug_log "DEBUG: WorldTimeAPI request with IPv4 failed or timed out"
+            debug_log "DEBUG: WorldTimeAPI failed with IPv4, response is empty"
         fi
-        rm -f "${CACHE_DIR}/worldtime_ipv4.tmp" 2>/dev/null
     fi
     
     # IPv4で取得できなかった場合やデータが不完全な場合はIPv6を試す
     if { [ -z "$SELECT_ZONE" ] || ! echo "$SELECT_ZONE" | grep -q '"timezone"' || ! echo "$SELECT_ZONE" | grep -q '"abbreviation"' || ! echo "$SELECT_ZONE" | grep -q '"utc_offset"'; } && [ -n "$ip_v6" ]; then
         debug_log "DEBUG: Trying WorldTimeAPI with IPv6 address"
-        (
-            wget -qO- "http://worldtimeapi.org/api/ip" > "${CACHE_DIR}/worldtime_ipv6.tmp" 2>/dev/null
-        ) &
-        wtapi_pid=$!
-        setup_timeout "$wtapi_pid"
         
-        # 最大タイムアウト時間待機
-        wait "$wtapi_pid" || api_result=$?
-        clear_timeout
+        SELECT_ZONE=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- "http://worldtimeapi.org/api/ip" 2>/dev/null || echo "")
         
-        if [ -f "${CACHE_DIR}/worldtime_ipv6.tmp" ] && [ -s "${CACHE_DIR}/worldtime_ipv6.tmp" ]; then
-            SELECT_ZONE=$(cat "${CACHE_DIR}/worldtime_ipv6.tmp")
-            if [ -n "$SELECT_ZONE" ]; then
-                select_ip="$ip_v6"
-                select_ip_ver="IPv6"
-                debug_log "DEBUG: WorldTimeAPI responded successfully using IPv6"
-            else
-                debug_log "DEBUG: WorldTimeAPI also failed with IPv6"
-            fi
+        if [ -n "$SELECT_ZONE" ]; then
+            select_ip="$ip_v6"
+            select_ip_ver="IPv6"
+            debug_log "DEBUG: WorldTimeAPI responded successfully using IPv6"
         else
-            debug_log "DEBUG: WorldTimeAPI request with IPv6 failed or timed out"
+            debug_log "DEBUG: WorldTimeAPI also failed with IPv6"
         fi
-        rm -f "${CACHE_DIR}/worldtime_ipv6.tmp" 2>/dev/null
     fi
     
     # WorldTimeAPIからのデータを処理
@@ -260,30 +187,16 @@ XXX_get_country_code() {
             debug_log "DEBUG: WorldTimeAPI response incomplete, missing required timezone data"
         fi
         
-        # WorldTimeAPIから得たIPを使ってIP-APIから国コードを取得（タイムアウト付き）
+        # WorldTimeAPIから得たIPを使ってIP-APIから国コードを取得（タイムアウト設定追加）
         if [ -n "$worldtime_ip" ]; then
             debug_log "DEBUG: Using WorldTimeAPI-provided IP for country code lookup"
-            (
-                wget -qO- "http://ip-api.com/json/$worldtime_ip" > "${CACHE_DIR}/ipapi.tmp" 2>/dev/null
-            ) &
-            ipapi_pid=$!
-            setup_timeout "$ipapi_pid"
+            SELECT_COUNTRY=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- "http://ip-api.com/json/$worldtime_ip" 2>/dev/null | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
             
-            # 最大タイムアウト時間待機
-            wait "$ipapi_pid" || api_result=$?
-            clear_timeout
-            
-            if [ -f "${CACHE_DIR}/ipapi.tmp" ] && [ -s "${CACHE_DIR}/ipapi.tmp" ]; then
-                SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "${CACHE_DIR}/ipapi.tmp" | awk -F'"' '{print $4}')
-                if [ -n "$SELECT_COUNTRY" ]; then
-                    debug_log "DEBUG: Country code retrieved using WorldTimeAPI IP: $SELECT_COUNTRY"
-                else
-                    debug_log "DEBUG: Failed to get country code using WorldTimeAPI IP"
-                fi
+            if [ -n "$SELECT_COUNTRY" ]; then
+                debug_log "DEBUG: Country code retrieved using WorldTimeAPI IP: $SELECT_COUNTRY"
             else
-                debug_log "DEBUG: IP-API request failed or timed out"
+                debug_log "DEBUG: Failed to get country code using WorldTimeAPI IP"
             fi
-            rm -f "${CACHE_DIR}/ipapi.tmp" 2>/dev/null
         fi
     else
         debug_log "DEBUG: Failed to get any valid response from WorldTimeAPI"
@@ -301,42 +214,30 @@ XXX_get_country_code() {
         
         if [ -n "$fallback_ip" ]; then
             debug_log "DEBUG: Querying IP-API directly with local IP: $fallback_ip"
-            (
-                wget -qO- "http://ip-api.com/json/$fallback_ip" > "${CACHE_DIR}/ipapi_fallback.tmp" 2>/dev/null
-            ) &
-            ipapi_pid=$!
-            setup_timeout "$ipapi_pid"
+            SELECT_COUNTRY=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- "http://ip-api.com/json/$fallback_ip" 2>/dev/null | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
             
-            # 最大タイムアウト時間待機
-            wait "$ipapi_pid" || api_result=$?
-            clear_timeout
-            
-            if [ -f "${CACHE_DIR}/ipapi_fallback.tmp" ] && [ -s "${CACHE_DIR}/ipapi_fallback.tmp" ]; then
-                SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "${CACHE_DIR}/ipapi_fallback.tmp" | awk -F'"' '{print $4}')
-                if [ -n "$SELECT_COUNTRY" ]; then
-                    debug_log "DEBUG: Country code retrieved using direct IP query: $SELECT_COUNTRY"
-                else
-                    debug_log "DEBUG: Failed to get country code using direct IP query"
-                fi
+            if [ -n "$SELECT_COUNTRY" ]; then
+                debug_log "DEBUG: Country code retrieved using direct IP query: $SELECT_COUNTRY"
             else
-                debug_log "DEBUG: IP-API fallback request failed or timed out"
+                debug_log "DEBUG: Failed to get country code using direct IP query"
             fi
-            rm -f "${CACHE_DIR}/ipapi_fallback.tmp" 2>/dev/null
         fi
     fi
     
-    # 結果の確認
+    # スピナー停止
     if [ -z "$SELECT_ZONENAME" ] || [ -z "$SELECT_TIMEZONE" ] || [ -z "$SELECT_COUNTRY" ]; then
+        stop_spinner "$(get_message "MSG_INFO_FAILED")" "fail"
         debug_log "DEBUG: Failed to retrieve all required information"
         return 1
     else
+        stop_spinner "$(get_message "MSG_INFO_SUCCESS")" "success"
         debug_log "DEBUG: Successfully retrieved all required information"
         return 0
     fi
 }
 
 # 国コードとタイムゾーン情報を一括取得する関数
-get_country_code() {
+OK_get_country_code() {
     # ローカル変数の宣言
     local ip_v4=""
     local ip_v6=""
