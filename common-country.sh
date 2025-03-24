@@ -746,12 +746,13 @@ detect_and_set_location() {
             printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONENAME")")" "$(color white "$detected_zonename")"
             printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color white "$detected_timezone")"
             
-            # キャッシュ以外の場合は確認メッセージを表示
+            # キャッシュ以外の場合のみ確認メッセージを表示
             if [ "$skip_confirmation" != "true" ]; then
                 printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
-                debug_log "DEBUG" "Displaying detection information from $detection_source source and asking for confirmation"
+                printf "%s" "$(color white "$(get_message "MSG_CONFIRM_ONLY_YN")")"
+                debug_log "DEBUG" "Displaying confirmation prompt for $detection_source source"
             else
-                debug_log "DEBUG" "Using cached location data without confirmation"
+                debug_log "DEBUG" "Using cached location data without confirmation prompt"
             fi
             
             # ユーザー確認（キャッシュ以外）またはキャッシュの自動承認
