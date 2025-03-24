@@ -587,6 +587,36 @@ select_country() {
     done
 }
 
+# 検出した地域情報を表示する共通関数
+display_detected_location() {
+    local detection_source="$1"
+    local detected_country="$2"
+    local detected_zonename="$3"
+    local detected_timezone="$4"
+    local show_success_message="${5:-false}"
+    
+    debug_log "DEBUG" "Displaying location information from source: $detection_source"
+    
+    # 検出情報表示
+    local msg_info=$(get_message "MSG_USE_DETECTED_INFORMATION")
+    msg_info=$(echo "$msg_info" | sed "s/{info}/$detection_source/g")
+    printf "\n%s\n" "$(color white "$msg_info")"
+    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$detected_country")"
+    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONENAME")")" "$(color white "$detected_zonename")"
+    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color white "$detected_timezone")"
+    
+    # 成功メッセージの表示（オプション）
+    if [ "$show_success_message" = "true" ]; then
+        printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
+        printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SET")")"
+        printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+        EXTRA_SPACING_NEEDED="yes"
+        debug_log "DEBUG" "Success messages displayed"
+    fi
+    
+    debug_log "DEBUG" "Location information displayed successfully"
+}
+
 # システムの地域情報を検出し設定する関数
 detect_and_set_location() {
     # デバッグログ出力
@@ -600,7 +630,6 @@ detect_and_set_location() {
     local detection_source=""
     local preview_applied="false"
     local skip_confirmation="false"
-    local source_message=""
     
     # 0. "SKIP_ALL_DETECTION"が指定された場合はすべての検出をスキップ
     if [ "$SKIP_ALL_DETECTION" = "true" ]; then
@@ -649,22 +678,10 @@ detect_and_set_location() {
             # 検出データの検証と表示
             if [ -n "$detected_country" ] && [ -n "$detected_timezone" ] && [ -n "$detected_zonename" ]; then
                 country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
+                debug_log "DEBUG" "Country data retrieved from database for display"
                 
-                # 検出情報表示（必ず表示）
-                local msg_info=$(get_message "MSG_USE_DETECTED_INFORMATION")
-                msg_info=$(echo "$msg_info" | sed "s/{info}/$detection_source/g")
-                printf "\n%s\n" "$(color white "$msg_info")"
-                printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$detected_country")"
-                printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONENAME")")" "$(color white "$detected_zonename")"
-                printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color white "$detected_timezone")"
-                
-                debug_log "DEBUG" "Cache information displayed to user"
-                
-                # 成功メッセージを表示
-                printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
-                printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SET")")"
-                printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
-                EXTRA_SPACING_NEEDED="yes"
+                # 共通関数を使用して検出情報と成功メッセージを表示
+                display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "true"
                 
                 debug_log "DEBUG" "Cache-based location settings have been applied successfully"
                 return 0
@@ -752,21 +769,14 @@ detect_and_set_location() {
 
             debug_log "DEBUG" "Before display - source: $detection_source, country: $detected_country, skip_confirmation: $skip_confirmation"
         
-            # 検出情報表示（キャッシュを含むすべてのソース）
-            local msg_info=$(get_message "MSG_USE_DETECTED_INFORMATION")
-            msg_info=$(echo "$msg_info" | sed "s/{info}/$detection_source/g")
-            printf "\n%s\n" "$(color white "$msg_info")"
-            printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$detected_country")"
-            printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONENAME")")" "$(color white "$detected_zonename")"
-            printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color white "$detected_timezone")"
-
-            debug_log "DEBUG" "After display - proceeded to confirmation step with source: $detection_source"
+            # 共通関数を使用して検出情報を表示（成功メッセージなし）
+            display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone"
             
             # ユーザーに確認
             local proceed_with_settings="false"
             
             if [ "$skip_confirmation" = "true" ]; then
-                # キャッシュの場合は自動承認（表示だけ行う）
+                # キャッシュの場合は自動承認
                 proceed_with_settings="true"
                 debug_log "DEBUG" "Cache-based location settings automatically applied without confirmation"
             else
