@@ -305,10 +305,8 @@ escape_for_sed() {
 select_country() {
     debug_log "DEBUG" "Running select_country() function with arg='$1'"
 
-    # キャッシュファイルのパス定義
-    local cache_country="${CACHE_DIR}/country.ch"
-    local cache_zone="${CACHE_DIR}/zone.ch"
-    local input_lang="$1"  # 引数として渡された言語コード
+    # 引数として渡された言語コード
+    local input_lang="$1"
 
     # 1. 引数で短縮国名（JP、USなど）が指定されている場合（最優先）
     if [ -n "$input_lang" ]; then
@@ -382,19 +380,20 @@ select_country() {
         fi
     fi
 
-    # 2. キャッシュがあれば全ての選択プロセスをスキップ
-    if [ -f "$cache_country" ] && [ -f "$cache_zone" ]; then
-        debug_log "DEBUG" "Country and Timezone cache exist. Skipping selection process."
+    # 2. キャッシュと自動検出を試みる
+    # まずキャッシュを確認
+    if check_location_cache; then
+        debug_log "DEBUG" "Using existing location cache"
         return 0
     fi
-
-    # 3. 自動選択を試行（一度だけ検出処理を行う）
+    
+    # キャッシュがなければ自動検出を試みる
     if detect_and_set_location; then
-        # 正常に設定された場合はここで終了
+        debug_log "DEBUG" "Location automatically detected and set"
         return 0
     fi
 
-    # 4. 自動検出が失敗または拒否された場合、手動入力へ
+    # 3. 自動検出が失敗または拒否された場合、手動入力へ
     debug_log "DEBUG" "Automatic location detection failed or was declined. Proceeding to manual input."
 
     # 国の入力と検索ループ
