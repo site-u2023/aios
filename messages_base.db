@@ -12,8 +12,8 @@ SUPPORTED_LANGUAGE_JP="JP"
 # =======================
 
 # get_country_code() 
-
-
+US|MSG_GETTING_NETWORK_INFO=Getting network information...
+JP|MSG_GETTING_NETWORK_INFO=ネットワーク情報を取得中...
 
 # download() 
 US|CONFIG_DOWNLOAD_SUCCESS=Download completed:
