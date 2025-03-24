@@ -629,8 +629,9 @@ detect_and_set_location() {
         local cache_zone="${CACHE_DIR}/zone.ch"
         local cache_timezone="${CACHE_DIR}/timezone.ch"
         local cache_zonename="${CACHE_DIR}/zonename.ch"
-        
-        debug_log "DEBUG" "Checking location cache files"
+
+        debug_log "DEBUG" "Cache detection flags - SKIP_CACHE_DETECTION: $SKIP_CACHE_DETECTION, SKIP_CACHE_DEVICE_DETECTION: $SKIP_CACHE_DEVICE_DETECTION"
+        debug_log "DEBUG" "Cache detection completed - source: $detection_source, country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
         
         # すべての必要なキャッシュファイルが存在するか確認
         if [ -f "$cache_country" ] && [ -f "$cache_zone" ] && [ -f "$cache_timezone" ] && [ -f "$cache_zonename" ]; then
@@ -725,7 +726,9 @@ detect_and_set_location() {
                     debug_log "DEBUG" "Preview language applied from $detection_source detection"
                 }
             fi
-            
+
+            debug_log "DEBUG" "Before display - source: $detection_source, country: $detected_country, skip_confirmation: $skip_confirmation"
+        
             # 検出情報表示（キャッシュを含むすべてのソース）
             local msg_info=$(get_message "MSG_USE_DETECTED_INFORMATION")
             msg_info=$(echo "$msg_info" | sed "s/{info}/$detection_source/g")
@@ -733,8 +736,9 @@ detect_and_set_location() {
             printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$detected_country")"
             printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONENAME")")" "$(color white "$detected_zonename")"
             printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color white "$detected_timezone")"
-            debug_log "DEBUG" "Displaying detection information from $detection_source source"
 
+            debug_log "DEBUG" "After display - proceeded to confirmation step with source: $detection_source"
+            
             # ユーザーに確認
             local proceed_with_settings="false"
             
