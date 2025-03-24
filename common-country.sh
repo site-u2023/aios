@@ -704,14 +704,14 @@ detect_and_set_location() {
     if [ -n "$detected_country" ] && [ -n "$detected_timezone" ] && [ -n "$detected_zonename" ]; then
         # Country.dbから国データを検索
         if [ "$detection_source" = "device" ]; then
-            # 国コードを使って検索（$5フィールドがマッチするエントリを探す）
-            country_data=$(grep -i "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *$detected_country" "$BASE_DIR/country.db" | head -1)
-            source_message="MSG_USE_DETECTED_DEVICE"
-        else
-            # IP検出の場合も同様の検索
-            country_data=$(grep -i "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *$detected_country" "$BASE_DIR/country.db" | head -1)
-            source_message="MSG_USE_DETECTED_IP"
-        fi
+        # 第5フィールドが detected_country に完全一致するエントリを検索
+        country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
+        source_message="MSG_USE_DETECTED_DEVICE"
+    else
+        # IP検出の場合も同様の検索方法
+        country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
+        source_message="MSG_USE_DETECTED_IP"
+    fi
         
         # 国データが見つかった場合のみ処理続行
         if [ -n "$country_data" ]; then
