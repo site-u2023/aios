@@ -764,10 +764,10 @@ detect_and_set_location() {
                         debug_log "ERROR: Failed to write timezone data"
                         return 1
                     }
-                }
+                fi
                 
                 # ゾーン選択完了メッセージを表示
-                printf "%s\n\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+                printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
                 EXTRA_SPACING_NEEDED="yes"
                 
                 debug_log "DEBUG: $detection_source-based location settings have been applied successfully"
@@ -779,7 +779,7 @@ detect_and_set_location() {
                 if [ "$preview_applied" = "true" ]; then
                     debug_log "DEBUG: Cleaning up preview language settings"
                     rm -f "${CACHE_DIR}/language.ch" "${CACHE_DIR}/message.ch" "${CACHE_DIR}/country.tmp" 2>/dev/null
-                }
+                fi
             fi
         else
             debug_log "DEBUG: No matching entry found for detected country: $detected_country"
@@ -899,7 +899,7 @@ OK_detect_and_set_location() {
                     }
                     
                     # ゾーン選択完了メッセージを表示（ここで1回だけ）
-                    printf "%s\n\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+                    printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
                     EXTRA_SPACING_NEEDED="yes"
                     
                     debug_log "DEBUG: Auto-detected device settings have been applied successfully"
@@ -988,7 +988,7 @@ OK_detect_and_set_location() {
                             # 成功メッセージを表示
                             printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
                             printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SET")")"
-                            printf "%s\n\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+                            printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
                             EXTRA_SPACING_NEEDED="yes"
                             
                             debug_log "DEBUG: IP-based location settings have been applied successfully"
