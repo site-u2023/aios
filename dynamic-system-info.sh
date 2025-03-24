@@ -70,11 +70,8 @@ get_country_code() {
     local select_ip_ver=""
     local select_utcoffset=""
     local select_posix_tz=""
-    local ip_api_data=""
     local offset_sign=""
     local offset_hours=""
-    local select_ip_for_fallback=""
-    local alt_api_data=""
     
     # IPv4アドレスの取得を試行
     debug_log "DEBUG: Attempting to retrieve IPv4 address"
@@ -130,14 +127,15 @@ get_country_code() {
     
     # WorldTimeAPIからのデータを処理
     if [ -n "$SELECT_ZONE" ]; then
-        # 修正：変数の割り当てを正しくする
-        # timezone→ゾーンネーム（例：Asia/Tokyo）
-        # abbreviation→タイムゾーン略称（例：JST）
+        # タイムゾーン情報を抽出
         SELECT_ZONENAME=$(echo "$SELECT_ZONE" | grep -o '"timezone":"[^"]*' | awk -F'"' '{print $4}')
         SELECT_TIMEZONE=$(echo "$SELECT_ZONE" | grep -o '"abbreviation":"[^"]*' | awk -F'"' '{print $4}')
         select_utcoffset=$(echo "$SELECT_ZONE" | grep -o '"utc_offset":"[^"]*' | awk -F'"' '{print $4}')
         
-        debug_log "DEBUG: Data extracted from WorldTimeAPI - ZoneName: $SELECT_ZONENAME, TZ: $SELECT_TIMEZONE, Offset: $select_utcoffset"
+        # 国コードも同時に抽出
+        SELECT_COUNTRY=$(echo "$SELECT_ZONE" | grep -o '"client_ip":"[^"]*' | awk -F'"' '{print $4}' | xargs wget -qO- "http://ip-api.com/json/" 2>/dev/null | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
+        
+        debug_log "DEBUG: Data extracted from WorldTimeAPI - ZoneName: $SELECT_ZONENAME, TZ: $SELECT_TIMEZONE, Offset: $select_utcoffset, Country: $SELECT_COUNTRY"
         
         # すべての情報が揃っているか確認
         if [ -n "$SELECT_ZONENAME" ] && [ -n "$SELECT_TIMEZONE" ] && [ -n "$select_utcoffset" ]; then
@@ -161,107 +159,9 @@ get_country_code() {
         debug_log "DEBUG: Failed to get any valid response from WorldTimeAPI"
     fi
     
-    # IP-APIから国コードを取得（IPv4経由で試行）
-    if [ -n "$ip_v4" ]; then
-        debug_log "DEBUG: Fetching country code via IP-API using IPv4: $ip_v4"
-        ip_api_data=$(wget -qO- "http://ip-api.com/json/$ip_v4" 2>/dev/null)
-        
-        if [ -n "$ip_api_data" ]; then
-            SELECT_COUNTRY=$(echo "$ip_api_data" | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
-            if [ -n "$SELECT_COUNTRY" ]; then
-                debug_log "DEBUG: Country code successfully retrieved via IPv4: $SELECT_COUNTRY"
-            else
-                debug_log "DEBUG: Failed to extract country code from IP-API IPv4 response"
-            fi
-        else
-            debug_log "DEBUG: Failed to get response from IP-API using IPv4"
-        fi
-    fi
-    
-    # IPv4で国コードを取得できなかった場合はIPv6を試す
-    if [ -z "$SELECT_COUNTRY" ] && [ -n "$ip_v6" ]; then
-        debug_log "DEBUG: Fetching country code via IP-API using IPv6: $ip_v6"
-        ip_api_data=$(wget -qO- "http://ip-api.com/json/$ip_v6" 2>/dev/null)
-        
-        if [ -n "$ip_api_data" ]; then
-            SELECT_COUNTRY=$(echo "$ip_api_data" | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
-            if [ -n "$SELECT_COUNTRY" ]; then
-                debug_log "DEBUG: Country code successfully retrieved via IPv6: $SELECT_COUNTRY"
-            else
-                debug_log "DEBUG: Failed to extract country code from IP-API IPv6 response"
-            fi
-        else
-            debug_log "DEBUG: Failed to get response from IP-API using IPv6"
-        fi
-    fi
-    
-    # WorldTimeAPIとIP-APIの両方が失敗した場合の最終手段
-    if { [ -z "$select_posix_tz" ] || [ -z "$SELECT_COUNTRY" ]; } && { [ -n "$ip_v4" ] || [ -n "$ip_v6" ]; }; then
-        debug_log "DEBUG: Trying alternative approach as last resort"
-        
-        if [ -n "$ip_v4" ]; then
-            select_ip_for_fallback="$ip_v4"
-        else
-            select_ip_for_fallback="$ip_v6"
-        fi
-        
-        # WorldTimeAPIが失敗した場合の処理
-        if [ -z "$SELECT_ZONENAME" ] || [ -z "$SELECT_TIMEZONE" ]; then
-            debug_log "DEBUG: Trying generic WorldTimeAPI endpoint as last resort"
-            SELECT_ZONE=$(wget -qO- "http://worldtimeapi.org/api/ip" 2>/dev/null)
-            
-            if [ -n "$SELECT_ZONE" ]; then
-                # 修正：変数の割り当てを正しくする
-                SELECT_ZONENAME=$(echo "$SELECT_ZONE" | grep -o '"timezone":"[^"]*' | awk -F'"' '{print $4}')
-                SELECT_TIMEZONE=$(echo "$SELECT_ZONE" | grep -o '"abbreviation":"[^"]*' | awk -F'"' '{print $4}')
-                select_utcoffset=$(echo "$SELECT_ZONE" | grep -o '"utc_offset":"[^"]*' | awk -F'"' '{print $4}')
-                
-                if [ -n "$SELECT_ZONENAME" ] && [ -n "$SELECT_TIMEZONE" ] && [ -n "$select_utcoffset" ]; then
-                    debug_log "DEBUG: Successfully retrieved timezone data from fallback attempt"
-                    
-                    # POSIX形式のタイムゾーン文字列を生成
-                    offset_sign=$(echo "$select_utcoffset" | cut -c1)
-                    offset_hours=$(echo "$select_utcoffset" | cut -c2-3 | sed 's/^0//')
-                    
-                    if [ "$offset_sign" = "+" ]; then
-                        select_posix_tz="${SELECT_TIMEZONE}-${offset_hours}"
-                    else
-                        select_posix_tz="${SELECT_TIMEZONE}${offset_hours}"
-                    fi
-                    
-                    debug_log "DEBUG: Generated POSIX timezone: $select_posix_tz"
-                fi
-            fi
-        fi
-        
-        # IP-APIが失敗した場合の処理
-        if [ -z "$SELECT_COUNTRY" ]; then
-            debug_log "DEBUG: Trying alternative API for country code as last resort"
-            alt_api_data=$(wget -qO- "https://ipapi.co/$select_ip_for_fallback/json/" 2>/dev/null)
-            
-            if [ -n "$alt_api_data" ]; then
-                SELECT_COUNTRY=$(echo "$alt_api_data" | grep -o '"country_code":"[^"]*' | awk -F'"' '{print $4}')
-                if [ -n "$SELECT_COUNTRY" ]; then
-                    debug_log "DEBUG: Country code successfully retrieved from alternative API: $SELECT_COUNTRY"
-                else
-                    SELECT_COUNTRY=$(echo "$alt_api_data" | grep -o '"country":"[^"]*' | awk -F'"' '{print $4}')
-                    if [ -n "$SELECT_COUNTRY" ]; then
-                        debug_log "DEBUG: Country code successfully extracted from alternative field: $SELECT_COUNTRY"
-                    fi
-                fi
-            fi
-        fi
-    fi
-    
     # 結果の確認
-    if [ -z "$SELECT_ZONENAME" ] && [ -z "$SELECT_COUNTRY" ]; then
-        debug_log "DEBUG: Failed to retrieve both timezone information and country code"
-        return 1
-    elif [ -z "$SELECT_ZONENAME" ]; then
-        debug_log "DEBUG: Failed to retrieve timezone information"
-        return 1
-    elif [ -z "$SELECT_COUNTRY" ]; then
-        debug_log "DEBUG: Failed to retrieve country code"
+    if [ -z "$SELECT_ZONENAME" ] || [ -z "$SELECT_TIMEZONE" ] || [ -z "$SELECT_COUNTRY" ]; then
+        debug_log "DEBUG: Failed to retrieve all required information"
         return 1
     else
         debug_log "DEBUG: Successfully retrieved all required information"
@@ -270,39 +170,17 @@ get_country_code() {
 }
 
 # グローバル変数の情報をキャッシュファイルに保存する関数
+# IPアドレスから地域情報を取得しキャッシュファイルに保存する関数
 process_location_info() {
-    # キャッシュディレクトリが存在するか確認
-    if [ ! -d "$CACHE_DIR" ]; then
-        debug_log "DEBUG: Cache directory does not exist, creating: $CACHE_DIR"
-        mkdir -p "$CACHE_DIR" 2>/dev/null
-        if [ $? -ne 0 ]; then
-            debug_log "DEBUG: Failed to create cache directory: $CACHE_DIR"
-            return 1
-        fi
-    fi
-
-    # まず get_country_code() を呼び出して情報を取得
-    debug_log "DEBUG: Calling get_country_code() to retrieve location information"
+    debug_log "DEBUG: Starting IP-based location information retrieval"
     
-    # get_country_code 関数が利用可能か確認
-    if ! command -v get_country_code >/dev/null 2>&1; then
-        debug_log "DEBUG: get_country_code function not available, attempting to load dynamic-system-info.sh"
-        if [ -f "$BASE_DIR/dynamic-system-info.sh" ]; then
-            . "$BASE_DIR/dynamic-system-info.sh"
-        else
-            debug_log "ERROR: dynamic-system-info.sh not found, cannot retrieve location data"
-            return 1
-        fi
-    fi
-    
-    # get_country_code 関数を呼び出し
+    # get_country_code関数を呼び出して情報を取得
     get_country_code || {
         debug_log "ERROR: get_country_code failed to retrieve location information"
         return 1
     }
     
-    debug_log "DEBUG: Successfully retrieved location data from get_country_code"
-    debug_log "DEBUG: Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME, Timezone: $SELECT_TIMEZONE"
+    debug_log "DEBUG: Retrieved location data - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME, Timezone: $SELECT_TIMEZONE"
 
     # キャッシュファイルのパス定義
     local tmp_country="${CACHE_DIR}/ip_country.tmp"
@@ -310,44 +188,36 @@ process_location_info() {
     local tmp_timezone="${CACHE_DIR}/ip_timezone.tmp"
     local tmp_zonename="${CACHE_DIR}/ip_zonename.tmp"
     
-    debug_log "DEBUG: Saving location information to cache files"
-    
-    # 国コードをキャッシュに保存
-    if [ -n "$SELECT_COUNTRY" ]; then
-        echo "$SELECT_COUNTRY" > "$tmp_country"
-        debug_log "DEBUG: Country code saved to cache: $SELECT_COUNTRY"
-    else
-        debug_log "DEBUG: No country code available to cache"
-        # 既存のファイルを空にする（存在する場合）
-        [ -f "$tmp_country" ] && : > "$tmp_country"
+    # 3つの重要情報が揃っているか確認
+    if [ -z "$SELECT_COUNTRY" ] || [ -z "$SELECT_TIMEZONE" ] || [ -z "$SELECT_ZONENAME" ]; then
+        debug_log "ERROR: Incomplete location data - required information missing"
+        # 既存のファイルを削除してクリーンな状態を確保
+        rm -f "$tmp_country" "$tmp_zone" "$tmp_timezone" "$tmp_zonename" 2>/dev/null
+        return 1
     fi
     
-    # ゾーン情報をキャッシュに保存
+    debug_log "DEBUG: All required location data available, saving to cache files"
+    
+    # 国コードをキャッシュに保存
+    echo "$SELECT_COUNTRY" > "$tmp_country"
+    debug_log "DEBUG: Country code saved to cache: $SELECT_COUNTRY"
+    
+    # 生のゾーン情報（JSON形式）をキャッシュに保存
     if [ -n "$SELECT_ZONE" ]; then
         echo "$SELECT_ZONE" > "$tmp_zone"
         debug_log "DEBUG: Zone data saved to cache (JSON format)"
-    else
-        debug_log "DEBUG: No zone data available to cache"
-        # 既存のファイルを空にする（存在する場合）
-        [ -f "$tmp_zone" ] && : > "$tmp_zone"
     fi
     
-    # 修正：タイムゾーンとゾーンネームの変数が正しく設定されていることを前提とする
-    # ゾーンネーム情報をキャッシュに保存（例：Asia/Tokyo）
-    if [ -n "$SELECT_ZONENAME" ]; then
-        echo "$SELECT_ZONENAME" > "$tmp_zonename"
-        debug_log "DEBUG: Zone name saved to cache: $SELECT_ZONENAME"
-    else
-        debug_log "DEBUG: No zone name available to cache"
-        # 既存のファイルを空にする（存在する場合）
-        [ -f "$tmp_zonename" ] && : > "$tmp_zonename"
-    fi
+    # ゾーンネームをキャッシュに保存（例：Asia/Tokyo）
+    echo "$SELECT_ZONENAME" > "$tmp_zonename"
+    debug_log "DEBUG: Zone name saved to cache: $SELECT_ZONENAME"
     
-    # タイムゾーン略称をキャッシュに保存（例：JST）
-    if [ -n "$SELECT_TIMEZONE" ]; then
-        # UTCオフセットがSELECT_ZONEから取得可能な場合はPOSIX形式で保存（JST-9形式）
-        local posix_tz="$SELECT_TIMEZONE"
-        local utc_offset=$(echo "$SELECT_ZONE" | grep -o '"utc_offset":"[^"]*' | awk -F'"' '{print $4}')
+    # POSIX形式のタイムゾーン文字列を構築（例：JST-9）
+    local posix_tz="$SELECT_TIMEZONE"
+    local utc_offset=""
+    
+    if [ -n "$SELECT_ZONE" ]; then
+        utc_offset=$(echo "$SELECT_ZONE" | grep -o '"utc_offset":"[^"]*' | awk -F'"' '{print $4}')
         
         if [ -n "$utc_offset" ]; then
             debug_log "DEBUG: Found UTC offset in zone data: $utc_offset"
@@ -365,29 +235,14 @@ process_location_info() {
             
             debug_log "DEBUG: Generated POSIX timezone: $posix_tz"
         fi
-        
-        # タイムゾーン情報をPOSIX形式で保存
-        echo "$posix_tz" > "$tmp_timezone"
-        debug_log "DEBUG: Timezone saved to cache in POSIX format: $posix_tz"
-        
-        # POSIX形式のタイムゾーン文字列も別に保存
-        echo "$posix_tz" > "${CACHE_DIR}/ip_posix_tz.tmp"
-    else
-        debug_log "DEBUG: No timezone available to cache"
-        # 既存のファイルを空にする（存在する場合）
-        [ -f "$tmp_timezone" ] && : > "$tmp_timezone"
     fi
     
-    debug_log "DEBUG: Location information cache process completed"
+    # タイムゾーン情報をPOSIX形式で保存
+    echo "$posix_tz" > "$tmp_timezone"
+    debug_log "DEBUG: Timezone saved to cache in POSIX format: $posix_tz"
     
-    # 少なくとも国コードかタイムゾーンの一方が取得できているか確認
-    if [ -n "$SELECT_COUNTRY" ] || [ -n "$SELECT_TIMEZONE" ] || [ -n "$SELECT_ZONENAME" ]; then
-        debug_log "DEBUG: At least one location data field was successfully retrieved and cached"
-        return 0
-    else
-        debug_log "ERROR: No valid location data could be retrieved"
-        return 1
-    fi
+    debug_log "DEBUG: Location information cache process completed successfully"
+    return 0
 }
 
 # 📌 デバイスアーキテクチャの取得
