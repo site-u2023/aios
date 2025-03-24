@@ -714,7 +714,7 @@ detect_and_set_location() {
                     return 0
                 else
                     debug_log "DEBUG: No matching entry found for detected country: $system_country"
-                }
+                fi
             else
                 debug_log "DEBUG: User declined auto-detected device settings"
             fi
