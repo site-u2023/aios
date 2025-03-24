@@ -82,7 +82,7 @@ check_location_cache() {
 }
 
 # 国コードとタイムゾーン情報を一括取得する関数（タイムアウト機能付き）
-get_country_code() {
+XXX_get_country_code() {
     # ローカル変数の宣言
     local ip_v4=""
     local ip_v6=""
@@ -335,7 +335,7 @@ get_country_code() {
 }
 
 # 国コードとタイムゾーン情報を一括取得する関数
-OK_get_country_code() {
+get_country_code() {
     # ローカル変数の宣言
     local ip_v4=""
     local ip_v6=""
@@ -345,6 +345,7 @@ OK_get_country_code() {
     local offset_sign=""
     local offset_hours=""
     local worldtime_ip=""
+    local timeout_sec=15
     
     # グローバル変数の初期化
     SELECT_ZONE=""
@@ -353,13 +354,13 @@ OK_get_country_code() {
     SELECT_COUNTRY=""
     SELECT_POSIX_TZ=""
     
-    # IPv4アドレスの取得を試行
+    # IPv4アドレスの取得を試行（タイムアウト設定追加）
     debug_log "DEBUG: Attempting to retrieve IPv4 address"
-    ip_v4=$(wget -qO- https://api.ipify.org 2>/dev/null || echo "")
+    ip_v4=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- https://api.ipify.org 2>/dev/null || echo "")
     
-    # IPv6アドレスの取得を試行
+    # IPv6アドレスの取得を試行（タイムアウト設定追加）
     debug_log "DEBUG: Attempting to retrieve IPv6 address"
-    ip_v6=$(wget -qO- https://api64.ipify.org 2>/dev/null || echo "")
+    ip_v6=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- https://api64.ipify.org 2>/dev/null || echo "")
     
     # 取得したIPアドレスの確認
     if [ -n "$ip_v4" ]; then
@@ -376,10 +377,10 @@ OK_get_country_code() {
         return 1
     fi
     
-    # IPv4を使用してWorldTimeAPIからタイムゾーン情報を取得
+    # IPv4を使用してWorldTimeAPIからタイムゾーン情報を取得（タイムアウト設定追加）
     if [ -n "$ip_v4" ]; then
         debug_log "DEBUG: Trying WorldTimeAPI with IPv4 address"
-        SELECT_ZONE=$(wget -qO- "http://worldtimeapi.org/api/ip" 2>/dev/null)
+        SELECT_ZONE=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- "http://worldtimeapi.org/api/ip" 2>/dev/null || echo "")
         
         if [ -n "$SELECT_ZONE" ]; then
             select_ip="$ip_v4"
@@ -394,7 +395,7 @@ OK_get_country_code() {
     if { [ -z "$SELECT_ZONE" ] || ! echo "$SELECT_ZONE" | grep -q '"timezone"' || ! echo "$SELECT_ZONE" | grep -q '"abbreviation"' || ! echo "$SELECT_ZONE" | grep -q '"utc_offset"'; } && [ -n "$ip_v6" ]; then
         debug_log "DEBUG: Trying WorldTimeAPI with IPv6 address"
         
-        SELECT_ZONE=$(wget -qO- "http://worldtimeapi.org/api/ip" 2>/dev/null)
+        SELECT_ZONE=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- "http://worldtimeapi.org/api/ip" 2>/dev/null || echo "")
         
         if [ -n "$SELECT_ZONE" ]; then
             select_ip="$ip_v6"
@@ -434,10 +435,10 @@ OK_get_country_code() {
             debug_log "DEBUG: WorldTimeAPI response incomplete, missing required timezone data"
         fi
         
-        # WorldTimeAPIから得たIPを使ってIP-APIから国コードを取得
+        # WorldTimeAPIから得たIPを使ってIP-APIから国コードを取得（タイムアウト設定追加）
         if [ -n "$worldtime_ip" ]; then
             debug_log "DEBUG: Using WorldTimeAPI-provided IP for country code lookup"
-            SELECT_COUNTRY=$(wget -qO- "http://ip-api.com/json/$worldtime_ip" 2>/dev/null | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
+            SELECT_COUNTRY=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- "http://ip-api.com/json/$worldtime_ip" 2>/dev/null | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
             
             if [ -n "$SELECT_COUNTRY" ]; then
                 debug_log "DEBUG: Country code retrieved using WorldTimeAPI IP: $SELECT_COUNTRY"
@@ -461,7 +462,7 @@ OK_get_country_code() {
         
         if [ -n "$fallback_ip" ]; then
             debug_log "DEBUG: Querying IP-API directly with local IP: $fallback_ip"
-            SELECT_COUNTRY=$(wget -qO- "http://ip-api.com/json/$fallback_ip" 2>/dev/null | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
+            SELECT_COUNTRY=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- "http://ip-api.com/json/$fallback_ip" 2>/dev/null | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
             
             if [ -n "$SELECT_COUNTRY" ]; then
                 debug_log "DEBUG: Country code retrieved using direct IP query: $SELECT_COUNTRY"
