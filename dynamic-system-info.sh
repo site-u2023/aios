@@ -55,6 +55,31 @@ OSVERSION="${CACHE_DIR}/osversion.ch"
 PACKAGE_MANAGER="${CACHE_DIR}/package_manager.ch"
 PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
 
+# キャッシュファイルの存在と有効性を確認する関数
+check_location_cache() {
+    local cache_country="${CACHE_DIR}/country.ch"
+    local cache_zone="${CACHE_DIR}/zone.ch"
+    local cache_timezone="${CACHE_DIR}/timezone.ch"
+    local cache_zonename="${CACHE_DIR}/zonename.ch"
+    
+    debug_log "DEBUG" "Checking location cache files"
+    
+    # すべての必要なキャッシュファイルが存在するか確認
+    if [ -f "$cache_country" ] && [ -f "$cache_zone" ] && [ -f "$cache_timezone" ] && [ -f "$cache_zonename" ]; then
+        # すべてのファイルの内容が空でないか確認
+        if [ -s "$cache_country" ] && [ -s "$cache_zone" ] && [ -s "$cache_timezone" ] && [ -s "$cache_zonename" ]; then
+            debug_log "DEBUG" "Valid location cache files found"
+            return 0  # キャッシュ有効
+        else
+            debug_log "DEBUG" "One or more cache files are empty"
+        fi
+    else
+        debug_log "DEBUG" "One or more required cache files are missing"
+    fi
+    
+    return 1  # キャッシュ無効または不完全
+}
+
 # 国コードとタイムゾーン情報を一括取得する関数
 get_country_code() {
     # ローカル変数の宣言
