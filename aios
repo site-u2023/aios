@@ -1110,6 +1110,9 @@ check_option() {
             -sd|--sd|-skip-dev|--skip-dev)
                 SKIP_DEVICE_DETECTION="true"
                 ;;
+            -scd|--scd|-skip-cache-device|--skip-cache-device)
+                SKIP_CACHE_DEVICE_DETECTION="true"
+                ;;
             -si|--si|-skip-ip|--skip-ip)
                 SKIP_IP_DETECTION="true"
                 ;;
