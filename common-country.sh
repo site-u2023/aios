@@ -769,7 +769,7 @@ detect_and_set_location() {
                 if [ "$preview_applied" = "true" ]; then
                     debug_log "DEBUG" "Cleaning up preview language settings"
                     rm -f "${CACHE_DIR}/language.ch" "${CACHE_DIR}/message.ch" "${CACHE_DIR}/country.tmp" 2>/dev/null
-                }
+                fi
             fi
         else
             debug_log "DEBUG" "No matching entry found for detected country: $detected_country"
