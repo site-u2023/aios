@@ -612,8 +612,8 @@ detect_and_set_location() {
     local country_data=""
     local detection_source=""
     local preview_applied="false"
-    local source_message=""
     local skip_confirmation="false"
+    local info=""
     
     # 0. "SKIP_ALL_DETECTION"が指定された場合はすべての検出をスキップ
     if [ "$SKIP_ALL_DETECTION" = "true" ]; then
@@ -642,7 +642,7 @@ detect_and_set_location() {
                 detected_timezone=$(cat "$cache_timezone" 2>/dev/null)
                 detected_zonename=$(cat "$cache_zonename" 2>/dev/null)
                 detection_source="cache"
-                source_message="MSG_USE_DETECTED_CACHE"
+                info="Cache"
                 skip_confirmation="true"   # キャッシュ時は確認をスキップ
                 
                 debug_log "DEBUG" "Cache detection results - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
@@ -671,7 +671,7 @@ detect_and_set_location() {
             detected_timezone=$(get_timezone_info)
             detected_zonename=$(get_zonename_info)
             detection_source="device"
-            source_message="MSG_USE_DETECTED_DEVICE"
+            info="Device"
             
             debug_log "DEBUG" "Device detection results - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
         else
@@ -701,7 +701,7 @@ detect_and_set_location() {
                         detected_timezone=$(cat "${CACHE_DIR}/ip_timezone.tmp" 2>/dev/null)
                         detected_zonename=$(cat "${CACHE_DIR}/ip_zonename.tmp" 2>/dev/null)
                         detection_source="ip"
-                        source_message="MSG_USE_DETECTED_IP"
+                        info="IP address"
                         
                         debug_log "DEBUG" "IP detection results - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
                     else
@@ -736,8 +736,12 @@ detect_and_set_location() {
             fi
             
             # 検出情報表示（共通部分）
+            local msg_info=$(get_message "MSG_USE_DETECTED_INFORMATION")
+            # {info} を実際の値に置き換え
+            msg_info=$(echo "$msg_info" | sed "s/{info}/$info/")
+            
             printf "\n"
-            printf "%s\n" "$(color white "$(get_message "$source_message")")"
+            printf "%s\n" "$(color white "$msg_info")"
             printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$detected_country")"
             printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONENAME")")" "$(color white "$detected_zonename")"
             printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color white "$detected_timezone")"
@@ -745,7 +749,7 @@ detect_and_set_location() {
             # キャッシュ以外の場合は確認メッセージを表示
             if [ "$skip_confirmation" != "true" ]; then
                 printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
-                debug_log "DEBUG" "Displaying detection information from $detection_source source"
+                debug_log "DEBUG" "Displaying detection information from $detection_source source and asking for confirmation"
             else
                 debug_log "DEBUG" "Using cached location data without confirmation"
             fi
@@ -821,9 +825,9 @@ detect_and_set_location() {
                 detected_timezone=""
                 detected_zonename=""
                 detection_source=""
-                source_message=""
                 preview_applied="false"
                 skip_confirmation="false"
+                info=""
             fi
         else
             debug_log "DEBUG" "No matching entry found for detected country: $detected_country"
