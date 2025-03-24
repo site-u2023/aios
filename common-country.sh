@@ -381,7 +381,6 @@ select_country() {
     fi
 
     # 2. キャッシュと自動検出を試みる
-    # まずキャッシュを確認
     if check_location_cache; then
         debug_log "DEBUG" "Using existing location cache"
         return 0
@@ -623,36 +622,48 @@ detect_and_set_location() {
     fi
     
     # 1. キャッシュから情報取得を試みる
-    # (SKIP_CACHE_DETECTIONまたはSKIP_CACHE_DEVICE_DETECTIONが指定されていない場合)
     if [ "$SKIP_CACHE_DETECTION" != "true" ] && [ "$SKIP_CACHE_DEVICE_DETECTION" != "true" ]; then
-        local cache_country="${CACHE_DIR}/country.ch"
-        local cache_zone="${CACHE_DIR}/zone.ch"
+        local cache_language="${CACHE_DIR}/language.ch"
+        local cache_luci="${CACHE_DIR}/luci.ch"
         local cache_timezone="${CACHE_DIR}/timezone.ch"
         local cache_zonename="${CACHE_DIR}/zonename.ch"
+        local cache_message="${CACHE_DIR}/message.ch"
+        local cache_country="${CACHE_DIR}/country.ch"
 
-        debug_log "DEBUG" "Cache detection flags - SKIP_CACHE_DETECTION: $SKIP_CACHE_DETECTION, SKIP_CACHE_DEVICE_DETECTION: $SKIP_CACHE_DEVICE_DETECTION"
-        debug_log "DEBUG" "Cache detection completed - source: $detection_source, country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
+        debug_log "DEBUG" "Checking critical cache files for system operation"
         
         # すべての必要なキャッシュファイルが存在するか確認
-        if [ -f "$cache_country" ] && [ -f "$cache_zone" ] && [ -f "$cache_timezone" ] && [ -f "$cache_zonename" ]; then
-            # すべてのファイルの内容が空でないか確認
-            if [ -s "$cache_country" ] && [ -s "$cache_zone" ] && [ -s "$cache_timezone" ] && [ -s "$cache_zonename" ]; then
-                debug_log "DEBUG" "Valid location cache found"
-                
-                # キャッシュからの情報取得
+        if [ -s "$cache_language" ] && [ -s "$cache_luci" ] && [ -s "$cache_timezone" ] && [ -s "$cache_zonename" ] && [ -s "$cache_message" ]; then
+            debug_log "DEBUG" "All required system cache files exist and have content"
+            
+            # キャッシュからの情報取得（country.chが存在する場合はそれを使用、存在しない場合はlanguage.chから抽出）
+            if [ -s "$cache_country" ]; then
                 detected_country=$(cat "$cache_country" 2>/dev/null)
-                detected_timezone=$(cat "$cache_timezone" 2>/dev/null)
-                detected_zonename=$(cat "$cache_zonename" 2>/dev/null)
-                detection_source="cache"
-                skip_confirmation="true"
-                
-                debug_log "DEBUG" "Cache detection results - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
+                debug_log "DEBUG" "Country loaded from country.ch: $detected_country"
             else
-                debug_log "DEBUG" "One or more cache files are empty"
+                detected_country=$(grep -m 1 "country" "$cache_language" | cut -d'=' -f2 2>/dev/null)
+                debug_log "DEBUG" "Country extracted from language.ch: $detected_country"
+            fi
+            
+            detected_timezone=$(cat "$cache_timezone" 2>/dev/null)
+            detected_zonename=$(cat "$cache_zonename" 2>/dev/null)
+            detection_source="cache"
+            skip_confirmation="true"
+            
+            debug_log "DEBUG" "Cache detection complete - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
+            
+            # 検出データの検証
+            if [ -n "$detected_country" ] && [ -n "$detected_timezone" ] && [ -n "$detected_zonename" ]; then
+                country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
+                debug_log "DEBUG" "Country data retrieved from database for display"
+            else
+                debug_log "DEBUG" "One or more cache values are empty despite files existing"
             fi
         else
-            debug_log "DEBUG" "One or more required cache files are missing"
+            debug_log "DEBUG" "One or more required cache files are missing or empty"
         fi
+    else
+        debug_log "DEBUG" "Cache detection skipped due to flag settings"
     fi
 
     # 2. デバイス内情報の検出（キャッシュが見つからない場合）
