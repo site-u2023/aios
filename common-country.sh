@@ -764,7 +764,7 @@ detect_and_set_location() {
                         debug_log "ERROR" "Failed to write country data"
                         return 1
                     }
-                }
+                fi
                 
                 # 国選択完了メッセージを表示
                 printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
@@ -787,7 +787,7 @@ detect_and_set_location() {
                             return 1
                         }
                     fi
-                }
+                fi
                 
                 # ゾーン選択完了メッセージを表示
                 printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
@@ -802,7 +802,7 @@ detect_and_set_location() {
                 if [ "$detection_source" != "cache" ] && [ "$preview_applied" = "true" ]; then
                     debug_log "DEBUG" "Cleaning up preview language settings"
                     rm -f "${CACHE_DIR}/language.ch" "${CACHE_DIR}/message.ch" "${CACHE_DIR}/country.tmp" 2>/dev/null
-                }
+                fi
                 
                 # リセットして次の検出方法に進む
                 detected_country=""
@@ -828,7 +828,7 @@ detect_and_set_location() {
         else
             debug_log "DEBUG" "No matching entry found for detected country: $detected_country"
         fi
-    }
+    fi
     
     # 継続した検出処理のため、ここで検出ソースが空かどうか確認
     if [ -z "$detection_source" ]; then
