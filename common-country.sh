@@ -589,7 +589,7 @@ select_country() {
 
 # システムの地域情報を検出し設定する関数
 detect_and_set_location() {
-    # グローバル変数を直接取得
+    # デバッグログ出力
     debug_log "DEBUG" "Running detect_and_set_location() with skip flags: cache=$SKIP_CACHE_DETECTION, device=$SKIP_DEVICE_DETECTION, cache-device=$SKIP_CACHE_DEVICE_DETECTION, ip=$SKIP_IP_DETECTION, all=$SKIP_ALL_DETECTION"
     
     # 共通変数の宣言
@@ -610,14 +610,9 @@ detect_and_set_location() {
     
     # 1. キャッシュから情報取得を試みる
     if [ "$SKIP_CACHE_DETECTION" != "true" ] && [ "$SKIP_CACHE_DEVICE_DETECTION" != "true" ]; then
-        debug_log "DEBUG" "Checking location cache using check_location_cache() function"
+        debug_log "DEBUG" "Checking location cache using check_location_cache()"
         
-        # check_location_cache関数を使用してキャッシュの有効性を確認
-        if ! check_location_cache; then
-            # キャッシュが無効な場合は速やかに次の処理へ
-            debug_log "DEBUG" "Cache check failed, proceeding to next detection method"
-        else
-            # キャッシュが有効な場合のみここに到達
+        if check_location_cache; then
             debug_log "DEBUG" "Valid location cache found, loading cache data"
             
             # キャッシュファイルのパス定義
@@ -628,15 +623,22 @@ detect_and_set_location() {
             local cache_message="${CACHE_DIR}/message.ch"
             local cache_country="${CACHE_DIR}/country.ch"
             
-            # キャッシュからの情報取得（country.chが存在する場合はそれを使用、存在しない場合はlanguage.chから抽出）
+            # キャッシュからデータ読み込み
             if [ -s "$cache_country" ]; then
                 detected_country=$(cat "$cache_country" 2>/dev/null)
                 debug_log "DEBUG" "Country loaded from country.ch: $detected_country"
             else
                 detected_country=$(grep -m 1 "country" "$cache_language" | cut -d'=' -f2 2>/dev/null)
                 debug_log "DEBUG" "Country extracted from language.ch: $detected_country"
+                
+                # 抽出できなかった場合はファイル内容全体を試す
+                if [ -z "$detected_country" ]; then
+                    detected_country=$(cat "$cache_language" 2>/dev/null)
+                    debug_log "DEBUG" "Using entire language.ch content as country: $detected_country"
+                fi
             fi
             
+            # タイムゾーン情報の取得
             detected_timezone=$(cat "$cache_timezone" 2>/dev/null)
             detected_zonename=$(cat "$cache_zonename" 2>/dev/null)
             detection_source="cache"
@@ -644,13 +646,33 @@ detect_and_set_location() {
             
             debug_log "DEBUG" "Cache detection complete - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
             
-            # 検出データの検証
+            # 検出データの検証と表示
             if [ -n "$detected_country" ] && [ -n "$detected_timezone" ] && [ -n "$detected_zonename" ]; then
                 country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
-                debug_log "DEBUG" "Country data retrieved from database for display"
+                
+                # 検出情報表示（必ず表示）
+                local msg_info=$(get_message "MSG_USE_DETECTED_INFORMATION")
+                msg_info=$(echo "$msg_info" | sed "s/{info}/$detection_source/g")
+                printf "\n%s\n" "$(color white "$msg_info")"
+                printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$detected_country")"
+                printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONENAME")")" "$(color white "$detected_zonename")"
+                printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color white "$detected_timezone")"
+                
+                debug_log "DEBUG" "Cache information displayed to user"
+                
+                # 成功メッセージを表示
+                printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
+                printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SET")")"
+                printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+                EXTRA_SPACING_NEEDED="yes"
+                
+                debug_log "DEBUG" "Cache-based location settings have been applied successfully"
+                return 0
             else
                 debug_log "DEBUG" "One or more cache values are empty despite files existing"
             fi
+        else
+            debug_log "DEBUG" "Cache check failed, proceeding to next detection method"
         fi
     else
         debug_log "DEBUG" "Cache detection skipped due to flag settings"
