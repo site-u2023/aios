@@ -640,10 +640,10 @@ detect_and_set_location() {
     # 1. キャッシュから情報取得を試みる
     if [ "$SKIP_CACHE_DETECTION" != "true" ] && [ "$SKIP_CACHE_DEVICE_DETECTION" != "true" ]; then
         debug_log "DEBUG" "Checking location cache using check_location_cache()"
-        
+    
         if check_location_cache; then
             debug_log "DEBUG" "Valid location cache found, loading cache data"
-            
+        
             # キャッシュファイルのパス定義
             local cache_language="${CACHE_DIR}/language.ch"
             local cache_luci="${CACHE_DIR}/luci.ch"
@@ -651,7 +651,7 @@ detect_and_set_location() {
             local cache_zonename="${CACHE_DIR}/zonename.ch"
             local cache_message="${CACHE_DIR}/message.ch"
             local cache_country="${CACHE_DIR}/country.ch"
-            
+        
             # キャッシュからデータ読み込み
             if [ -s "$cache_country" ]; then
                 detected_country=$(cat "$cache_country" 2>/dev/null)
@@ -659,30 +659,30 @@ detect_and_set_location() {
             else
                 detected_country=$(grep -m 1 "country" "$cache_language" | cut -d'=' -f2 2>/dev/null)
                 debug_log "DEBUG" "Country extracted from language.ch: $detected_country"
-                
+            
                 # 抽出できなかった場合はファイル内容全体を試す
                 if [ -z "$detected_country" ]; then
                     detected_country=$(cat "$cache_language" 2>/dev/null)
                     debug_log "DEBUG" "Using entire language.ch content as country: $detected_country"
                 fi
             fi
-            
+        
             # タイムゾーン情報の取得
             detected_timezone=$(cat "$cache_timezone" 2>/dev/null)
             detected_zonename=$(cat "$cache_zonename" 2>/dev/null)
             detection_source="cache"
             skip_confirmation="true"
-            
+        
             debug_log "DEBUG" "Cache detection complete - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
-            
+        
             # 検出データの検証と表示
             if [ -n "$detected_country" ] && [ -n "$detected_timezone" ] && [ -n "$detected_zonename" ]; then
                 country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
                 debug_log "DEBUG" "Country data retrieved from database for display"
-                
+            
                 # 共通関数を使用して検出情報と成功メッセージを表示
                 display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "true"
-                
+            
                 debug_log "DEBUG" "Cache-based location settings have been applied successfully"
                 return 0
             else
