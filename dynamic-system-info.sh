@@ -55,12 +55,6 @@ OSVERSION="${CACHE_DIR}/osversion.ch"
 PACKAGE_MANAGER="${CACHE_DIR}/package_manager.ch"
 PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
 
-SELECT_COUNTRY=""
-SELECT_ZONE=""
-SELECT_TIMEZONE=""
-SELECT_ZONENAME=""
-
-
 # 国コードとタイムゾーン情報を一括取得する関数
 get_country_code() {
     # ローカル変数の宣言
@@ -68,10 +62,17 @@ get_country_code() {
     local ip_v6=""
     local select_ip=""
     local select_ip_ver=""
-    local select_utcoffset=""
-    local select_posix_tz=""
+    local utc_offset=""
     local offset_sign=""
     local offset_hours=""
+    local worldtime_ip=""
+    
+    # グローバル変数の初期化
+    SELECT_ZONE=""
+    SELECT_ZONENAME=""
+    SELECT_TIMEZONE=""
+    SELECT_COUNTRY=""
+    SELECT_POSIX_TZ=""
     
     # IPv4アドレスの取得を試行
     debug_log "DEBUG: Attempting to retrieve IPv4 address"
@@ -130,33 +131,65 @@ get_country_code() {
         # タイムゾーン情報を抽出
         SELECT_ZONENAME=$(echo "$SELECT_ZONE" | grep -o '"timezone":"[^"]*' | awk -F'"' '{print $4}')
         SELECT_TIMEZONE=$(echo "$SELECT_ZONE" | grep -o '"abbreviation":"[^"]*' | awk -F'"' '{print $4}')
-        select_utcoffset=$(echo "$SELECT_ZONE" | grep -o '"utc_offset":"[^"]*' | awk -F'"' '{print $4}')
+        utc_offset=$(echo "$SELECT_ZONE" | grep -o '"utc_offset":"[^"]*' | awk -F'"' '{print $4}')
+        worldtime_ip=$(echo "$SELECT_ZONE" | grep -o '"client_ip":"[^"]*' | awk -F'"' '{print $4}')
         
-        # 国コードも同時に抽出
-        SELECT_COUNTRY=$(echo "$SELECT_ZONE" | grep -o '"client_ip":"[^"]*' | awk -F'"' '{print $4}' | xargs wget -qO- "http://ip-api.com/json/" 2>/dev/null | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
+        debug_log "DEBUG: Data extracted from WorldTimeAPI - ZoneName: $SELECT_ZONENAME, TZ: $SELECT_TIMEZONE, Offset: $utc_offset, IP: $worldtime_ip"
         
-        debug_log "DEBUG: Data extracted from WorldTimeAPI - ZoneName: $SELECT_ZONENAME, TZ: $SELECT_TIMEZONE, Offset: $select_utcoffset, Country: $SELECT_COUNTRY"
-        
-        # すべての情報が揃っているか確認
-        if [ -n "$SELECT_ZONENAME" ] && [ -n "$SELECT_TIMEZONE" ] && [ -n "$select_utcoffset" ]; then
+        # すべての時間情報が揃っているか確認
+        if [ -n "$SELECT_ZONENAME" ] && [ -n "$SELECT_TIMEZONE" ] && [ -n "$utc_offset" ]; then
             # POSIX形式のタイムゾーン文字列を生成（例：JST-9）
-            offset_sign=$(echo "$select_utcoffset" | cut -c1)
-            offset_hours=$(echo "$select_utcoffset" | cut -c2-3 | sed 's/^0//')
+            offset_sign=$(echo "$utc_offset" | cut -c1)
+            offset_hours=$(echo "$utc_offset" | cut -c2-3 | sed 's/^0//')
             
             if [ "$offset_sign" = "+" ]; then
                 # +9 -> -9（POSIXでは符号が反転）
-                select_posix_tz="${SELECT_TIMEZONE}-${offset_hours}"
+                SELECT_POSIX_TZ="${SELECT_TIMEZONE}-${offset_hours}"
             else
                 # -5 -> 5（POSIXではプラスの符号は省略）
-                select_posix_tz="${SELECT_TIMEZONE}${offset_hours}"
+                SELECT_POSIX_TZ="${SELECT_TIMEZONE}${offset_hours}"
             fi
             
-            debug_log "DEBUG: Generated POSIX timezone: $select_posix_tz"
+            debug_log "DEBUG: Generated POSIX timezone: $SELECT_POSIX_TZ"
         else
             debug_log "DEBUG: WorldTimeAPI response incomplete, missing required timezone data"
         fi
+        
+        # WorldTimeAPIから得たIPを使ってIP-APIから国コードを取得
+        if [ -n "$worldtime_ip" ]; then
+            debug_log "DEBUG: Using WorldTimeAPI-provided IP for country code lookup"
+            SELECT_COUNTRY=$(wget -qO- "http://ip-api.com/json/$worldtime_ip" 2>/dev/null | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
+            
+            if [ -n "$SELECT_COUNTRY" ]; then
+                debug_log "DEBUG: Country code retrieved using WorldTimeAPI IP: $SELECT_COUNTRY"
+            else
+                debug_log "DEBUG: Failed to get country code using WorldTimeAPI IP"
+            fi
+        fi
     else
         debug_log "DEBUG: Failed to get any valid response from WorldTimeAPI"
+    fi
+    
+    # WorldTimeAPIからIPが取得できなかった場合やIP-APIが失敗した場合のフォールバック
+    if [ -z "$SELECT_COUNTRY" ]; then
+        debug_log "DEBUG: Using fallback method for country code"
+        
+        # 使用可能なIP（IPv4優先）をIP-APIに渡す
+        local fallback_ip="$ip_v6"
+        if [ -n "$ip_v4" ]; then
+            fallback_ip="$ip_v4"
+        fi
+        
+        if [ -n "$fallback_ip" ]; then
+            debug_log "DEBUG: Querying IP-API directly with local IP: $fallback_ip"
+            SELECT_COUNTRY=$(wget -qO- "http://ip-api.com/json/$fallback_ip" 2>/dev/null | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
+            
+            if [ -n "$SELECT_COUNTRY" ]; then
+                debug_log "DEBUG: Country code retrieved using direct IP query: $SELECT_COUNTRY"
+            else
+                debug_log "DEBUG: Failed to get country code using direct IP query"
+            fi
+        fi
     fi
     
     # 結果の確認
@@ -169,18 +202,26 @@ get_country_code() {
     fi
 }
 
-# グローバル変数の情報をキャッシュファイルに保存する関数
 # IPアドレスから地域情報を取得しキャッシュファイルに保存する関数
 process_location_info() {
-    debug_log "DEBUG: Starting IP-based location information retrieval"
+    local skip_retrieval=0
     
-    # get_country_code関数を呼び出して情報を取得
-    get_country_code || {
-        debug_log "ERROR: get_country_code failed to retrieve location information"
-        return 1
-    }
+    # パラメータ処理（オプション）
+    if [ "$1" = "use_cached" ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_TIMEZONE" ] && [ -n "$SELECT_ZONENAME" ]; then
+        skip_retrieval=1
+        debug_log "DEBUG: Using already retrieved location information"
+    fi
     
-    debug_log "DEBUG: Retrieved location data - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME, Timezone: $SELECT_TIMEZONE"
+    # 必要な場合のみget_country_code関数を呼び出し
+    if [ $skip_retrieval -eq 0 ]; then
+        debug_log "DEBUG: Starting IP-based location information retrieval"
+        get_country_code || {
+            debug_log "ERROR: get_country_code failed to retrieve location information"
+            return 1
+        }
+    fi
+    
+    debug_log "DEBUG: Processing location data - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME, Timezone: $SELECT_TIMEZONE"
 
     # キャッシュファイルのパス定義
     local tmp_country="${CACHE_DIR}/ip_country.tmp"
@@ -212,34 +253,39 @@ process_location_info() {
     echo "$SELECT_ZONENAME" > "$tmp_zonename"
     debug_log "DEBUG: Zone name saved to cache: $SELECT_ZONENAME"
     
-    # POSIX形式のタイムゾーン文字列を構築（例：JST-9）
-    local posix_tz="$SELECT_TIMEZONE"
-    local utc_offset=""
-    
-    if [ -n "$SELECT_ZONE" ]; then
-        utc_offset=$(echo "$SELECT_ZONE" | grep -o '"utc_offset":"[^"]*' | awk -F'"' '{print $4}')
+    # POSIXタイムゾーン文字列を保存（get_country_code()で生成済み）
+    if [ -n "$SELECT_POSIX_TZ" ]; then
+        echo "$SELECT_POSIX_TZ" > "$tmp_timezone"
+        debug_log "DEBUG: Using pre-generated POSIX timezone: $SELECT_POSIX_TZ"
+    else
+        # 万が一SELECT_POSIX_TZが設定されていない場合の保険
+        local posix_tz="$SELECT_TIMEZONE"
+        local temp_offset=""
         
-        if [ -n "$utc_offset" ]; then
-            debug_log "DEBUG: Found UTC offset in zone data: $utc_offset"
-            # +09:00のような形式からPOSIX形式（-9）に変換
-            local offset_sign=$(echo "$utc_offset" | cut -c1)
-            local offset_hours=$(echo "$utc_offset" | cut -c2-3 | sed 's/^0//')
+        if [ -n "$SELECT_ZONE" ]; then
+            temp_offset=$(echo "$SELECT_ZONE" | grep -o '"utc_offset":"[^"]*' | awk -F'"' '{print $4}')
             
-            if [ "$offset_sign" = "+" ]; then
-                # +9 -> -9（POSIXでは符号が反転）
-                posix_tz="${SELECT_TIMEZONE}-${offset_hours}"
-            else
-                # -5 -> 5（POSIXではプラスの符号は省略）
-                posix_tz="${SELECT_TIMEZONE}${offset_hours}"
+            if [ -n "$temp_offset" ]; then
+                debug_log "DEBUG: Found UTC offset in zone data: $temp_offset"
+                # +09:00のような形式からPOSIX形式（-9）に変換
+                local temp_sign=$(echo "$temp_offset" | cut -c1)
+                local temp_hours=$(echo "$temp_offset" | cut -c2-3 | sed 's/^0//')
+                
+                if [ "$temp_sign" = "+" ]; then
+                    # +9 -> -9（POSIXでは符号が反転）
+                    posix_tz="${SELECT_TIMEZONE}-${temp_hours}"
+                else
+                    # -5 -> 5（POSIXではプラスの符号は省略）
+                    posix_tz="${SELECT_TIMEZONE}${temp_hours}"
+                fi
+                
+                debug_log "DEBUG: Generated POSIX timezone as fallback: $posix_tz"
             fi
-            
-            debug_log "DEBUG: Generated POSIX timezone: $posix_tz"
         fi
+        
+        echo "$posix_tz" > "$tmp_timezone"
+        debug_log "DEBUG: Timezone saved to cache in POSIX format: $posix_tz"
     fi
-    
-    # タイムゾーン情報をPOSIX形式で保存
-    echo "$posix_tz" > "$tmp_timezone"
-    debug_log "DEBUG: Timezone saved to cache in POSIX format: $posix_tz"
     
     debug_log "DEBUG: Location information cache process completed successfully"
     return 0
