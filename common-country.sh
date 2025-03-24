@@ -725,11 +725,11 @@ detect_and_set_location() {
             
             # 検出情報表示 - 無駄な処理を削除
             printf "\n"
-            printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
             printf "%s\n" "$(color white "$(get_message "$source_message")")"
             printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$detected_country")"
             printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONENAME")")" "$(color white "$detected_zonename")"
             printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color white "$detected_timezone")"
+            printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_SETTINGS")")"
             debug_log "DEBUG: Displaying detection information from $detection_source source"
             
             # ユーザーに確認
