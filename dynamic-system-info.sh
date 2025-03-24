@@ -104,9 +104,6 @@ get_country_code() {
     # キャッシュディレクトリの確認
     [ -d "${CACHE_DIR}" ] || mkdir -p "${CACHE_DIR}"
     
-    # 情報取得中メッセージを表示
-    echo "$(get_message "MSG_GETTING_NETWORK_INFO")"
-    
     # IPv4アドレスの取得を試行（タイムアウト設定追加）
     debug_log "DEBUG: Attempting to retrieve IPv4 address"
     ip_v4=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- https://api.ipify.org 2>/dev/null || echo "")
