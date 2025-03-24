@@ -468,6 +468,7 @@ get_usb_devices() {
 # 📌 デバイスの国情報の取得
 # 戻り値: システム設定とデータベースに基づく組み合わせた国情報
 # 戻り値: システム設定とデータベースに基づく2文字の国コード
+# 戻り値: システム設定から推定される2文字の国コード（JP、USなど）
 get_country_info() {
     local current_lang=""
     local current_timezone=""
@@ -494,14 +495,14 @@ get_country_info() {
         
         # 値が取得できた場合は返す
         if [ -n "$country_code" ]; then
-            debug_log "DEBUG: Found country code from database: $country_code"
+            [ "$DEBUG_MODE" = "true" ] && printf "DEBUG: Found country code from database: %s\n" "$country_code" >&2
             echo "$country_code"
             return 0
         fi
     fi
     
     # 一致が見つからないか、country.dbがない場合は空を返す
-    debug_log "DEBUG: No country code found in database"
+    [ "$DEBUG_MODE" = "true" ] && printf "DEBUG: No country code found in database\n" >&2
     echo ""
     return 1
 }
