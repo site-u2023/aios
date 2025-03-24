@@ -57,15 +57,16 @@ PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
 
 # キャッシュファイルの存在と有効性を確認する関数
 check_location_cache() {
-    local cache_country="${CACHE_DIR}/country.ch"
-    local cache_zone="${CACHE_DIR}/zone.ch"
+    local cache_language="${CACHE_DIR}/language.ch"
+    local cache_luci="${CACHE_DIR}/luci.ch"
     local cache_timezone="${CACHE_DIR}/timezone.ch"
     local cache_zonename="${CACHE_DIR}/zonename.ch"
+    local cache_message="${CACHE_DIR}/message.ch"
     
     debug_log "DEBUG" "Checking location cache files"
     
     # すべての必要なキャッシュファイルが存在するか確認
-    if [ -f "$cache_country" ] && [ -f "$cache_zone" ] && [ -f "$cache_timezone" ] && [ -f "$cache_zonename" ]; then
+    if [ -f "$cache_language" ] && [ -f "$cache_luci" ] && [ -f "$cache_timezone" ] && [ -f "$cache_zonename" ] && [ -f "$cache_message" ]; then
         # すべてのファイルの内容が空でないか確認
         if [ -s "$cache_language" ] && [ -s "$cache_luci" ] && [ -s "$cache_timezone" ] && [ -s "$cache_zonename" ] && [ -s "$cache_message" ]; then
             debug_log "DEBUG" "Valid location cache files found"
