@@ -380,15 +380,10 @@ select_country() {
         fi
     fi
 
-    # 2. キャッシュと自動検出を試みる
-    if check_location_cache; then
-        debug_log "DEBUG" "Using existing location cache"
-        return 0
-    fi
-    
-    # キャッシュがなければ自動検出を試みる
-    if detect_and_set_location; then
-        debug_log "DEBUG" "Location automatically detected and set"
+    # 2. 自動検出処理を実行（キャッシュチェックも内部で行われる）
+    detect_and_set_location
+    if [ $? -eq 0 ]; then
+        debug_log "DEBUG" "Location detection successful, applying settings"
         return 0
     fi
 
