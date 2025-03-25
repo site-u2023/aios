@@ -108,7 +108,6 @@ packages_19() {
     install_package luci-app-ttyd hidden
     install_package luci-i18n-ttyd hidden
     install_package openssh-sftp-server hidden
-    install_package luci-mod-dashboard hidden
     install_package luci-i18n-dashboard hidden
     install_package coreutils hidden
     install_package irqbalance hidden
