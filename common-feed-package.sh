@@ -51,6 +51,8 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
+PACKAGE_EXTENSION="${PACKAGE_EXTENSION:-ipk}"
+
 #########################################################################
 # Last Update: 2025-03-04 10:00:00 (JST) 🚀
 # install_build: パッケージのビルド処理 (OpenWrt / Alpine Linux)
@@ -118,6 +120,8 @@ feed_package() {
   fi
 
   # 将来的に除去するルーチン
+  PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
+  
   if [ "$PACKAGE_EXTENSION" != "ipk" ]; then
       echo -e "$(color yellow "Currently not supported for apk.")"
       return 1
