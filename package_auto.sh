@@ -78,7 +78,9 @@ packages() {
     install_package luci-theme-openwrt-2020 hidden
     install_package attendedsysupgrade-common hidden
     install_package luci-app-attendedsysupgrade hidden
-    install_package luci-i18n-attendedsysupgrade hidden   
+    install_package luci-i18n-attendedsysupgrade hidden 
+    
+    install_package usleep hidden
     install_package jq hidden
 
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf hidden
@@ -121,6 +123,8 @@ packages_19() {
     install_package attendedsysupgrade-common hidden
     install_package luci-app-attendedsysupgrade hidden
     install_package luci-i18n-attendedsysupgrade hidden   
+
+    install_package usleep hidden
     install_package jq hidden
 }
 
@@ -153,6 +157,8 @@ packages_snaphot() {
     install_package attendedsysupgrade-common hidden
     install_package luci-app-attendedsysupgrade hidden
     install_package luci-i18n-attendedsysupgrade hidden   
+
+    install_package usleep hidden
     install_package jq hidden
 }
 
