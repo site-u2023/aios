@@ -1014,8 +1014,127 @@ OK_handle_user_selection() {
     return $cmd_status
 }
 
-# メインのセレクター関数（リファクタリング版）
+# メインのセレクター関数（メインメニューループ修正版）
 selector() {
+    local section_name="$1"        # 表示するセクション名
+    local parent_display_text="$2" # 未使用（後方互換性のため残す）
+    local skip_history="$3"        # 履歴に追加しない場合は1
+    
+    # セクション名が指定されていない場合はメインメニューを使用
+    section_name="${section_name:-$MAIN_MENU}"
+    
+    debug_log "DEBUG" "Starting menu selector with section: $section_name"
+
+    printf "\n"
+    
+    # 現在のセクションを記録
+    CURRENT_MENU="$section_name"
+
+    # メインメニューに戻る場合はパンくずの色履歴をクリア
+    if [ "$section_name" = "$MAIN_MENU" ] && [ "$skip_history" != "1" ]; then
+        local breadcrumb_colors_file="${CACHE_DIR}/breadcrumb_colors.tmp"
+        [ -f "$breadcrumb_colors_file" ] && > "$breadcrumb_colors_file"
+        debug_log "DEBUG" "Reset breadcrumb colors for main menu"
+    fi
+    
+    # 履歴管理（skipが指定されていない場合のみ）
+    if [ "$skip_history" != "1" ]; then
+        # メインメニューに戻る場合は履歴をクリア
+        if [ "$section_name" = "$MAIN_MENU" ]; then
+            MENU_HISTORY=""
+            debug_log "DEBUG" "Cleared menu history for main menu"
+        fi
+            debug_log "DEBUG" "Menu $section_name will be added to history when color is selected"
+    else
+        debug_log "DEBUG" "Skipping history update due to skip_history flag"
+    fi
+    
+    # メインメニュー名を取得
+    local main_menu="${MAIN_MENU}"
+    
+    # メインメニューかどうかの判定
+    local is_main_menu=0
+    if [ "$section_name" = "$main_menu" ]; then
+        is_main_menu=1
+        debug_log "DEBUG" "Current section is the main menu"
+    else
+        debug_log "DEBUG" "Current section is a sub-menu"
+    fi
+    
+    while true; do  # メインループ追加 - メニュー再表示用
+        # キャッシュファイルの初期化
+        local menu_keys_file="${CACHE_DIR}/menu_keys.tmp"
+        local menu_displays_file="${CACHE_DIR}/menu_displays.tmp"
+        local menu_commands_file="${CACHE_DIR}/menu_commands.tmp"
+        local menu_colors_file="${CACHE_DIR}/menu_colors.tmp"
+        
+        rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
+        touch "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
+        
+        # メニュー項目の処理
+        local menu_count=$(process_menu_items "$section_name" "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file")
+        
+        # 特殊メニュー項目の追加
+        local special_result=$(add_special_menu_items "$section_name" "$is_main_menu" "$menu_count" "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file")
+        local special_items_count=$(echo "$special_result" | cut -d' ' -f1)
+        menu_count=$(echo "$special_result" | cut -d' ' -f2)
+        
+        debug_log "DEBUG" "Total menu items after adding special items: $menu_count"
+        
+        # メニュー項目の確認
+        if [ $menu_count -eq 0 ]; then
+            # エラーハンドラーを呼び出し
+            handle_menu_error "no_items" "$section_name" "" "$main_menu" ""
+            return $?
+        fi
+        
+        # タイトルヘッダーを表示
+        local menu_title_template=$(get_message "MENU_TITLE")
+        local menu_title=$(echo "$menu_title_template" | sed "s/{0}/$section_name/g")
+        
+        # パンくずリストを表示
+        display_breadcrumbs
+        
+        # メニュー項目を表示
+        if [ -s "$menu_displays_file" ]; then
+            cat "$menu_displays_file"
+        else
+            # エラーハンドラーを呼び出し
+            handle_menu_error "empty_display" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
+            return $?
+        fi
+        
+        # 通常メニュー項目数（特殊項目を除く）
+        local menu_choices=$((menu_count - special_items_count))
+        
+        # ユーザー選択処理を呼び出し
+        handle_user_selection "$section_name" "$is_main_menu" "$menu_count" "$menu_choices" \
+            "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file" "$main_menu"
+        
+        local selection_status=$?
+        
+        # メインメニューかつ選択が成功した場合は再表示
+        if [ $is_main_menu -eq 1 ] && [ $selection_status -eq 0 ]; then
+            debug_log "DEBUG" "Main menu selection completed, redisplaying menu"
+            # 一時ファイル削除
+            rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
+            # メインメニューの場合はループを継続（再表示）
+            continue
+        else
+            # それ以外はループを抜ける
+            break
+        fi
+    done
+    
+    # 一時ファイル削除
+    rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
+    
+    # 終了
+    return $selection_status
+}
+
+# メインのセレクター関数（リファクタリング版）
+OK_selector() {
     local section_name="$1"        # 表示するセクション名
     local parent_display_text="$2" # 未使用（後方互換性のため残す）
     local skip_history="$3"        # 履歴に追加しない場合は1
