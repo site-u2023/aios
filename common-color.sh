@@ -60,7 +60,7 @@ COLOR_ENABLED="1"       # 色表示有効/無効
 BOLD_ENABLED="0"        # 太字表示有効/無効
 UNDERLINE_ENABLED="0"   # 下線表示有効/無効
 BOX_ENABLED="0"         # ボックス表示有効/無効
-ANIMATION_ENABLED="0"   # アニメーション有効/無効
+ANIMATION_ENABLED="1"   # アニメーション有効/無効
 
 # コマンドラインオプション処理関数
 process_display_options() {
@@ -677,11 +677,11 @@ animation() {
     debug_log "DEBUG" "Animation completed successfully"
 }
 
-# スピナー開始関数 - animation()関数を活用
+# スピナー開始関数
 start_spinner() {
     local message="$1"
     local anim_type="${2:-spinner}"  # デフォルトはspinner
-    local spinner_color="${3:-green}" # スピナーの色（デフォルトはシアン）
+    local spinner_color="${3:-green}" # スピナーの色
     
     SPINNER_MESSAGE="$message"  # 停止時のメッセージ保持
     SPINNER_TYPE="$anim_type"   # アニメーションタイプを保持
@@ -699,8 +699,6 @@ start_spinner() {
             printf "\r\033[K%s " "$(color white "$SPINNER_MESSAGE")"
             
             # animation関数を呼び出し (1サイクル)
-            # -s オプションでカーソル表示制御を無効化（start_spinner側で制御するため）
-            # -c 1 で1回だけアニメーションを表示
             animation -t "$SPINNER_TYPE" -d 1 -c 1 -s
             
             # ディレイ
