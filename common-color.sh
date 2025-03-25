@@ -477,17 +477,17 @@ start_spinner() {
     SPINNER_TYPE="$anim_type"
 
     if [ "$ANIMATION_ENABLED" -eq "0" ]; then
-        echo "$message"
+        debug_log  "$message"
         return
     fi
 
     if command -v usleep >/dev/null 2>&1; then
         SPINNER_USLEEP_VALUE="300000"  # 200000マイクロ秒 = 0.2秒
         SPINNER_DELAY="300000"            # アニメーションディレイ値（秒）
-        echo "[DEBUG] Using fast animation mode (0.2s) with usleep"
+        debug_log "[DEBUG] Using fast animation mode (0.2s) with usleep"
     else
         SPINNER_DELAY="1"        # アニメーションディレイ値（秒）
-        echo "[DEBUG] Using standard animation mode (1s)"
+        debug_log  "[DEBUG] Using standard animation mode (1s)"
     fi
 
     printf "\033[?25l" # カーソル非表示
@@ -513,7 +513,7 @@ start_spinner() {
             ;;
     esac
 
-    echo "[DEBUG] Starting spinner with message: $message, type: $anim_type, delay: $SPINNER_DELAY"
+    debug_log  "[DEBUG] Starting spinner with message: $message, type: $anim_type, delay: $SPINNER_DELAY"
 
     (
         i=0
@@ -530,7 +530,7 @@ start_spinner() {
         done
     ) &
     SPINNER_PID=$!
-    echo "[DEBUG] Spinner started with PID: $SPINNER_PID"
+    debug_log  "[DEBUG] Spinner started with PID: $SPINNER_PID"
 }
 
 # スピナー停止関数
