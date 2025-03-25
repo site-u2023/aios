@@ -471,7 +471,7 @@ load_display_settings() {
 # スピナー開始関数
 start_spinner() {
     message="$1"
-    anim_type="${2:-emoji}"
+    anim_type="${2:-dot}"
 
     SPINNER_MESSAGE="$message"
     SPINNER_TYPE="$anim_type"
