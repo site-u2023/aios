@@ -39,6 +39,11 @@ wget -q -O /usr/bin/aios "https://raw.githubusercontent.com/site-u2023/aios/main
 aios -u
 ```
 
+### GitHub Personal Access Token
+```sh
+aios -t
+```
+
 ## 要件定義書
 
 https://github.com/site-u2023/aios/blob/main/requirement-definition.md
