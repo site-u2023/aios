@@ -560,15 +560,16 @@ display_settings_menu() {
     done
 }
 
-# アニメーション表示関数
+# アニメーション関数
 animation() {
     # アニメーションが無効化されている場合は何もせず終了
     [ "${ANIMATION_ENABLED:-1}" = "0" ] && return
     
     local anim_type="spinner"  # デフォルトはスピナー
-    local delay="0.2"          # デフォルトは0.2秒
+    local delay="1"            # デフォルトは1秒（POSIX互換性のため）
     local count="1"            # デフォルトは1回
     local cursor_hide="1"      # デフォルトはカーソル非表示
+    local param_found=""       # パラメータが見つかったかのフラグ
     
     # オプション処理（POSIX準拠）
     while [ $# -gt 0 ]; do
@@ -599,7 +600,7 @@ animation() {
         shift
     done
     
-    debug_log "DEBUG" "Running animation with type: $anim_type, delay: $delay, count: $count"
+    echo "DEBUG: Animation started with type=$anim_type, delay=$delay, count=$count" >&2
     
     # カーソル非表示（設定されている場合）
     [ "$cursor_hide" = "1" ] && printf "\033[?25l"
@@ -673,10 +674,10 @@ animation() {
     # 行クリア
     printf "\r\033[K"
     
-    debug_log "DEBUG" "Animation completed successfully"
+    echo "DEBUG: Animation completed successfully" >&2
 }
 
-# スピナー開始関数 - animation()関数を活用（色付け対応）
+# スピナー開始関数
 start_spinner() {
     local message="$1"
     local anim_type="${2:-spinner}"  # デフォルトはspinner
@@ -689,29 +690,86 @@ start_spinner() {
     # カーソル非表示
     printf "\033[?25l"
     
-    debug_log "DEBUG" "Starting spinner with message: $message, type: $anim_type, color: $spinner_color"
+    echo "DEBUG: Starting spinner with message: $message, type: $anim_type" >&2
 
-    # バックグラウンドでループ実行
-    while true; do
-        # 行をクリアしてメッセージ表示
-        printf "\r\033[K%s " "$(color white "$SPINNER_MESSAGE")"
-        
-        # animation関数を呼び出し
-        # -s オプションでカーソル表示制御を無効化（start_spinner側で制御するため）
-        # -c 1 で1回だけアニメーションを表示
-        # -d 0.2 で遅延を0.2秒に設定
-        animation -t "$SPINNER_TYPE" -d 0.2 -c 1 -s
-        
-        # ディレイ
-        if command -v usleep >/dev/null 2>&1; then
-            usleep 200000  # 0.2秒
-        else
-            sleep 1
-        fi
-    done &
+    # バックグラウンドでループ実行（単純化バージョン）
+    (
+        while true; do
+            # 行をクリアしてメッセージ表示
+            printf "\r\033[K%s " "$SPINNER_MESSAGE"
+            
+            # スピナータイプに基づいて表示
+            case "$SPINNER_TYPE" in
+                spinner)
+                    # 標準スピナー
+                    for symbol in "-" "\\" "|" "/"; do
+                        printf "\r\033[K%s %s" "$SPINNER_MESSAGE" "$symbol"
+                        # ディレイ
+                        if command -v usleep >/dev/null 2>&1; then
+                            usleep 200000  # 0.2秒
+                        else
+                            sleep 1
+                        fi
+                    done
+                    ;;
+                    
+                dot)
+                    # ドットアニメーション
+                    for symbol in "." ".." "..." "   "; do
+                        printf "\r\033[K%s %s" "$SPINNER_MESSAGE" "$symbol"
+                        if command -v usleep >/dev/null 2>&1; then
+                            usleep 200000
+                        else
+                            sleep 1
+                        fi
+                    done
+                    ;;
+                    
+                bar)
+                    # バーアニメーション
+                    for symbol in "[" "=" ">" "]" " "; do
+                        printf "\r\033[K%s %s" "$SPINNER_MESSAGE" "$symbol"
+                        if command -v usleep >/dev/null 2>&1; then
+                            usleep 200000
+                        else
+                            sleep 1
+                        fi
+                    done
+                    ;;
+                    
+                pulse)
+                    # パルスアニメーション
+                    for symbol in "□" "■" "□"; do
+                        printf "\r\033[K%s %s" "$SPINNER_MESSAGE" "$symbol"
+                        if command -v usleep >/dev/null 2>&1; then
+                            usleep 200000
+                        else
+                            sleep 1
+                        fi
+                    done
+                    ;;
+                    
+                *)
+                    # カスタムアニメーション
+                    printf "\r\033[K%s %s" "$SPINNER_MESSAGE" "$SPINNER_TYPE"
+                    if command -v usleep >/dev/null 2>&1; then
+                        usleep 200000
+                    else
+                        sleep 1
+                    fi
+                    printf "\r\033[K%s  " "$SPINNER_MESSAGE"
+                    if command -v usleep >/dev/null 2>&1; then
+                        usleep 200000
+                    else
+                        sleep 1
+                    fi
+                    ;;
+            esac
+        done
+    ) &
     
     SPINNER_PID=$!
-    debug_log "DEBUG" "Spinner started with PID: $SPINNER_PID"
+    echo "DEBUG: Spinner started with PID: $SPINNER_PID" >&2
 }
 
 # スピナー停止関数
@@ -719,32 +777,44 @@ stop_spinner() {
     local message="$1"
     local status="${2:-success}"
 
-    debug_log "DEBUG" "Stopping spinner with message: $message, status: $status"
+    echo "DEBUG: Stopping spinner with message: $message, status: $status" >&2
 
     # プロセスが存在するか確認（より安全な方法）
-    if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
-        kill "$SPINNER_PID" >/dev/null 2>&1
-        wait "$SPINNER_PID" 2>/dev/null || true
-        printf "\r\033[K"  # 行をクリア
-        
-        # 成功/失敗に応じたメッセージカラー
-        if [ "$status" = "success" ]; then
-            printf "%s\n" "$(color green "$message")"
+    if [ -n "$SPINNER_PID" ]; then
+        # プロセスが実際に存在するか確認
+        ps | grep -v grep | grep -q "$SPINNER_PID" 2>/dev/null
+        if [ $? -eq 0 ]; then
+            echo "DEBUG: Process found, killing PID: $SPINNER_PID" >&2
+            kill "$SPINNER_PID" >/dev/null 2>&1
+            wait "$SPINNER_PID" 2>/dev/null || true
+            printf "\r\033[K"  # 行をクリア
+            
+            # 成功/失敗に応じたメッセージカラー
+            if [ "$status" = "success" ]; then
+                printf "%s\n" "$(color green "$message")"
+            else
+                printf "%s\n" "$(color yellow "$message")"
+            fi
         else
-            printf "%s\n" "$(color yellow "$message")"
+            echo "DEBUG: Process not found for PID: $SPINNER_PID" >&2
+            printf "\r\033[K"
+            printf "%s\n" "$(color red "$message")"
         fi
     else
+        echo "DEBUG: No spinner PID defined" >&2
         printf "\r\033[K"
         printf "%s\n" "$(color red "$message")"
     fi
     
     unset SPINNER_PID
     unset SPINNER_MESSAGE
+    unset SPINNER_TYPE
+    unset SPINNER_COLOR
 
     # カーソル表示
     printf "\033[?25h"
     
-    debug_log "DEBUG" "Spinner stopped successfully"
+    echo "DEBUG: Spinner stopped successfully" >&2
 }
 
 # **スピナー開始関数**
