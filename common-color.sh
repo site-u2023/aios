@@ -748,7 +748,7 @@ XX_start_spinner() {
         local index=$(( i % 4 ))
         local char_pos=$(( index + 1 ))
         local spinner_char=$(expr substr "$spinner_chars" "$char_pos" 1)
-        printf "\r📡 %s %s" "$(color yellow "$SPINNER_MESSAGE")" "$spinner_char"
+        printf "\r%s %s" "$(color yellow "$SPINNER_MESSAGE")" "$spinner_char"
         
         if command -v usleep >/dev/null 2>&1; then
             usleep 200000
