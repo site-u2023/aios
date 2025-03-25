@@ -320,8 +320,8 @@ JP|MSG_LANGUAGE_SET=スクリプト用の言語の設定が完了しました！
 # common-package.sh
 # =======================
 # update_package_list() 関数
-US|MSG_RUNNING_UPDATE=Updating package list...
-JP|MSG_RUNNING_UPDATE=パッケージリストを更新中...
+US|MSG_RUNNING_UPDATE=Updating package list
+JP|MSG_RUNNING_UPDATE=パッケージリストを更新中
 
 US|MSG_UPDATE_FAILED=Update failed. Check the logs for details.
 JP|MSG_UPDATE_FAILED=アップデートに失敗しました。詳細はログを確認してください。
@@ -337,7 +337,7 @@ JP|MSG_ERROR_WRITE_CACHE=エラー：キャッシュファイルへの書き込�
 
 # install_normal_package() 関数
 US|MSG_INSTALLING_PACKAGE=Installing package 
-JP|MSG_INSTALLING_PACKAGE=をインストール中...
+JP|MSG_INSTALLING_PACKAGE=をインストール中
 
 US|MSG_INSTALL_SUCCESS=Installation completed successfully.
 JP|MSG_INSTALL_SUCCESS=のインストールは完了しました。
