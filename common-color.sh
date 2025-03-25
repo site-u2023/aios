@@ -482,8 +482,8 @@ start_spinner() {
     fi
 
     if command -v usleep >/dev/null 2>&1; then
-        SPINNER_USLEEP_VALUE="200000"  # 200000マイクロ秒 = 0.2秒
-        SPINNER_DELAY="0.2"            # アニメーションディレイ値（秒）
+        SPINNER_USLEEP_VALUE="300000"  # 200000マイクロ秒 = 0.2秒
+        SPINNER_DELAY="300000"            # アニメーションディレイ値（秒）
         echo "[DEBUG] Using fast animation mode (0.2s) with usleep"
     else
         SPINNER_DELAY="1"        # アニメーションディレイ値（秒）
