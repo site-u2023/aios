@@ -23,10 +23,10 @@ MENU_LED selector system-led
 MENU_REBOOT selector system-reboot
 
 [MENU_PACKAGES]
-MENU_AUTO_INSTALL selector package-auto
-MENU_MANUAL_SELECT selector package-manual
-MENU_UPDATE selector package-update
-MENU_CUSTOM selector package-custom
+MENU_PACKAGES_AUTO_INSTALL download "package-auto.sh" "chmod" "load"; print_information; install_packages_by_version; install_usb_packages
+MENU_PACKAGES_MANUAL_INSTALL download "package-manual.sh" "chmod" "load"; print_information; install_packages_by_version; install_usb_packages
+MENU_PACKAGES_SAMBA selector download "package-manual.sh" "chmod" "load"; install_package_samba
+MENU_PACKAGES_LIST selector download "package-manual.sh" "chmod" "load"; install_package_list
 
 # インターネット設定のサブセクション
 [MENU_V&MIG]
@@ -60,15 +60,3 @@ MENU_LED_CONFIG download "system-led.sh" "chmod" "load"
 [system-reboot]
 MENU_REBOOT_CONFIG download "system-reboot.sh" "chmod" "load"
 
-# パッケージ設定のサブセクション
-[package-auto]
-MENU_AUTO_INSTALL_CONFIG download "package-auto.sh" "chmod" "load"
-
-[package-manual]
-MENU_MANUAL_SELECT_CONFIG download "package-manual.sh" "chmod" "load"
-
-[package-update]
-MENU_UPDATE_CONFIG download "package-update.sh" "chmod" "load"
-
-[package-custom]
-MENU_CUSTOM_CONFIG download "package-custom.sh" "chmod" "load"
