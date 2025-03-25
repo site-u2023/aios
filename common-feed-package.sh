@@ -121,14 +121,13 @@ feed_package() {
 
   # 将来的に除去するルーチン
   PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
-
   if [ -f "$PACKAGE_EXTENSION" ]; then
       if [ "$(cat "$PACKAGE_EXTENSION")" != "ipk" ]; then
           printf "%s\n" "$(color yellow "Currently not supported for apk.")"
           return 1
       fi
   else
-      echo "[DEBUG] File not found: $PACKAGE_EXTENSION"
+      debug_log "DEBUG" "File not found: $PACKAGE_EXTENSION"
       return 1
   fi
     
@@ -226,14 +225,13 @@ feed_package_release() {
 
   # 将来的に除去するルーチン
   PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
-
   if [ -f "$PACKAGE_EXTENSION" ]; then
       if [ "$(cat "$PACKAGE_EXTENSION")" != "ipk" ]; then
           printf "%s\n" "$(color yellow "Currently not supported for apk.")"
           return 1
       fi
   else
-      echo "[DEBUG] File not found: $PACKAGE_EXTENSION"
+      debug_log "DEBUG" "File not found: $PACKAGE_EXTENSION"
       return 1
   fi
   
