@@ -665,7 +665,7 @@ start_spinner() {
     
     # usleepの有無をチェックしてディレイを設定
     if command -v usleep >/dev/null 2>&1; then
-        SPINNER_USLEEP_VALUE=200000  # 200000マイクロ秒 = 0.2秒
+        SPINNER_USLEEP_VALUE="200000"  # 200000マイクロ秒 = 0.2秒
         SPINNER_DELAY="200000"       # animation関数用のディレイ値（マイクロ秒）
         debug_log "DEBUG" "Using fast animation mode (0.2s) with usleep"
     else
