@@ -674,17 +674,130 @@ add_special_menu_items() {
     echo "$special_items_count $menu_count"
 }
 
-# ユーザー選択処理関数の一部（コマンド実行部分のみ修正）
+# ユーザー選択処理関数（セミコロン対応・エラー継続版）
 handle_user_selection() {
-    # [前半部分は変更なし]
+    local section_name="$1"
+    local is_main_menu="$2"
+    local menu_count="$3"
+    local menu_choices="$4"
+    local menu_keys_file="$5"
+    local menu_displays_file="$6"
+    local menu_commands_file="$7"
+    local menu_colors_file="$8"
+    local main_menu="$9"
     
-    # コマンド実行部分 - セミコロン対応版
+    debug_log "DEBUG" "Handling user selection for section: $section_name"
+
+    # 選択プロンプト表示（特殊項目を含む）
+    if [ $is_main_menu -eq 1 ]; then
+        # メインメニュー用のプロンプト（10, 00を含む）
+        local selection_prompt=$(get_message "CONFIG_MAIN_SELECT_PROMPT")
+    else
+        # サブメニュー用のプロンプト（0, 10を含む）
+        local selection_prompt=$(get_message "CONFIG_SUB_SELECT_PROMPT")
+    fi
+    
+    # {0}をメニュー数で置換
+    selection_prompt=$(echo "$selection_prompt" | sed "s/{0}/$menu_choices/g")
+    printf "%s" "$(color white "$selection_prompt")"
+    
+    # ユーザー入力
+    local choice=""
+    if ! read -r choice; then
+        # エラーハンドラーを呼び出し
+        handle_menu_error "read_input" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
+        return 1
+    fi
+    
+    # 入力の正規化（利用可能な場合のみ）
+    if command -v normalize_input >/dev/null 2>&1; then
+        choice=$(normalize_input "$choice" 2>/dev/null || echo "$choice")
+    fi
+    debug_log "DEBUG" "User input: $choice"
+    
+    # 特殊入力の処理
+    local real_choice=""
+    
+    # エラーメッセージを一度だけ取得して再利用
+    local error_msg=$(get_message "CONFIG_ERROR_NOT_NUMBER")
+    
+    case "$choice" in
+        "10")
+            # [10]は常にEXIT (旧[0])
+            if [ $is_main_menu -eq 1 ]; then
+                real_choice=$((menu_count - 2 + 1)) # メインメニューの場合
+            else
+                real_choice=$menu_count # サブメニューの場合
+            fi
+            debug_log "DEBUG" "Special input [10] mapped to item: $real_choice"
+            ;;
+        "00")
+            # [00]は常にREMOVE（メインメニューのみ）
+            if [ $is_main_menu -eq 1 ]; then
+                real_choice=$menu_count
+                debug_log "DEBUG" "Special input [00] mapped to item: $real_choice"
+            else
+                printf "\n%s" "$(color red "$error_msg")"
+                return 0 # リトライが必要
+            fi
+            ;;
+        "0")
+            # [0]は常にRETURN（サブメニューのみ）(旧[9])
+            if [ $is_main_menu -eq 0 ]; then
+                real_choice=$((menu_count - 1))
+                debug_log "DEBUG" "Special input [0] mapped to item: $real_choice"
+            else
+                printf "\n%s" "$(color red "$error_msg")"
+                return 0 # リトライが必要
+            fi
+            ;;
+        *)
+            # 数値チェック
+            if ! echo "$choice" | grep -q '^[0-9][0-9]*$'; then
+                printf "\n%s\n\n\n" "$(color red "$error_msg")"
+                return 0 # リトライが必要
+            fi
+        
+            # 選択範囲チェック（通常メニュー項目のみ）
+            if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_choices" ]; then
+                printf "\n%s\n\n\n" "$(color red "$error_msg")"
+                return 0 # リトライが必要
+            fi
+        
+            # 通常入力の場合はそのままの値を使用
+            real_choice=$choice
+            ;;
+    esac
+    
+    # 選択されたキーとコマンドを取得
+    local selected_key=""
+    local selected_cmd=""
+    local selected_color=""
+    
+    selected_key=$(sed -n "${real_choice}p" "$menu_keys_file" 2>/dev/null)
+    selected_cmd=$(sed -n "${real_choice}p" "$menu_commands_file" 2>/dev/null)
+    selected_color=$(sed -n "${real_choice}p" "$menu_colors_file" 2>/dev/null)
+    
+    if [ -z "$selected_key" ] || [ -z "$selected_cmd" ]; then
+        # エラーハンドラーを呼び出し
+        handle_menu_error "invalid_selection" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
+        return 1
+    fi
+
+    # グローバル変数に選択された情報を保存
+    SELECTED_MENU_KEY="$selected_key"
+    SELECTED_MENU_COLOR="$selected_color"
+    
     debug_log "DEBUG" "Selected key: $selected_key"
     debug_log "DEBUG" "Selected color: $selected_color"
     debug_log "DEBUG" "Executing command: $selected_cmd"
     
+    # 全体のステータスを追跡
+    local overall_status=0
+    
+    # コマンド実行 - セレクターコマンドの特別処理
     if echo "$selected_cmd" | grep -q "^selector "; then
-        # セレクターコマンドの場合、サブメニューへ移動（変更なし）
+        # セレクターコマンドの場合、サブメニューへ移動
         local next_menu=$(echo "$selected_cmd" | cut -d' ' -f2)
         debug_log "DEBUG" "Detected submenu navigation: $next_menu"
     
@@ -694,7 +807,7 @@ handle_user_selection() {
         # 一時ファイル削除
         rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
     
-        # 次のメニューを表示
+        # 次のメニューを表示（表示テキストを親メニュー情報として渡す）
         selector "$next_menu" "$selected_text" 0
         return $?
     elif echo "$selected_cmd" | grep -q ";"; then
@@ -711,19 +824,27 @@ handle_user_selection() {
             # 空でなければ実行
             if [ -n "$cmd" ]; then
                 debug_log "DEBUG" "Executing command part: $cmd"
+                
+                # コマンドを実行し、エラーを捕捉
                 eval "$cmd"
                 local cmd_status=$?
                 
                 if [ $cmd_status -ne 0 ]; then
-                    debug_log "DEBUG" "Command failed with status: $cmd_status"
-                    IFS="$old_IFS"
-                    # エラーハンドラーを呼び出し
-                    handle_menu_error "command_failed" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
-                    return 1
+                    debug_log "DEBUG" "Command part failed with status: $cmd_status, but continuing execution"
+                    # エラーメッセージを表示するが、続行する
+                    printf "\n%s\n" "$(color yellow "警告: コマンドが失敗しましたが、処理を継続します") ($cmd)"
+                    # 全体のステータスを失敗に設定
+                    overall_status=1
                 fi
             fi
         done
         IFS="$old_IFS"
+        
+        # 全体の処理が失敗していた場合、ユーザーに通知
+        if [ $overall_status -ne 0 ]; then
+            printf "\n%s" "$(color yellow "続けるには Enter キーを押してください")"
+            read -r dummy_var
+        fi
     else
         # 通常コマンドの実行（変更なし）
         eval "$selected_cmd"
