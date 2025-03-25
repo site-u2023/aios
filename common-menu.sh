@@ -291,7 +291,7 @@ get_auto_color() {
 }
 
 # メニュー項目の処理関数
-process_menu_items() {
+OK_process_menu_items() {
     local section_name="$1"
     local menu_keys_file="$2"
     local menu_displays_file="$3"
@@ -436,7 +436,7 @@ process_menu_items() {
 }
 
 # メニュー項目の処理関数（セミコロン対応版）
-XXX_process_menu_items() {
+process_menu_items() {
     local section_name="$1"
     local menu_keys_file="$2"
     local menu_displays_file="$3"
@@ -449,7 +449,7 @@ XXX_process_menu_items() {
     local total_normal_items=0
     local in_section=0
     
-    # セクション内の通常項目数をカウント（特殊項目を除く）
+    # まず、セクション内の通常項目数をカウント（特殊項目を除く）
     while IFS= read -r line || [ -n "$line" ]; do
         # コメントと空行をスキップ
         case "$line" in
@@ -517,34 +517,16 @@ XXX_process_menu_items() {
                 local color_name=$(echo "$line" | cut -d' ' -f1)
                 local key=$(echo "$line" | cut -d' ' -f2)
                 
-                # セミコロンを含むかどうかで処理を分ける
-                if echo "$line" | grep -q ";"; then
-                    # セミコロンを含む場合は、最初のコマンドとセミコロン以降を分ける
-                    local cmd_part=$(echo "$line" | cut -d' ' -f3- | sed 's/;.*//')
-                    local after_semicolon=$(echo "$line" | sed 's/[^;]*;//')
-                    local cmd="$cmd_part; $after_semicolon"
-                    debug_log "DEBUG" "Semicolon detected: command='$cmd_part', after=';$after_semicolon'"
-                else
-                    # 従来通りの処理
-                    local cmd=$(echo "$line" | cut -d' ' -f3-)
-                fi
+                # セミコロンを特殊処理せず、そのままコマンドとして扱う
+                local cmd=$(echo "$line" | cut -d' ' -f3-)
                 
                 debug_log "DEBUG" "Color specified in line: color=$color_name, key=$key, cmd=$cmd"
             else
                 # 色指定なし: キーとコマンドを分離
                 local key=$(echo "$line" | cut -d' ' -f1)
                 
-                # セミコロンを含むかどうかで処理を分ける
-                if echo "$line" | grep -q ";"; then
-                    # セミコロンを含む場合は、最初のコマンドとセミコロン以降を分ける
-                    local cmd_part=$(echo "$line" | cut -d' ' -f2- | sed 's/;.*//')
-                    local after_semicolon=$(echo "$line" | sed 's/[^;]*;//')
-                    local cmd="$cmd_part; $after_semicolon"
-                    debug_log "DEBUG" "Semicolon detected: command='$cmd_part', after=';$after_semicolon'"
-                else
-                    # 従来通りの処理
-                    local cmd=$(echo "$line" | cut -d' ' -f2-)
-                fi
+                # セミコロンを特殊処理せず、そのままコマンドとして扱う
+                local cmd=$(echo "$line" | cut -d' ' -f2-)
                 
                 # 自動色割り当て - 位置と総項目数を渡す
                 local color_name=$(get_auto_color "$menu_count" "$total_normal_items")
@@ -557,7 +539,42 @@ XXX_process_menu_items() {
             echo "$cmd" >> "$menu_commands_file"
             echo "$color_name" >> "$menu_colors_file"
             
-            # 以下、元のコード（メッセージ処理）...
+            # メッセージキーの変換処理の修正
+            local display_text=""
+
+            # メッセージファイルから言語設定を直接取得（キャッシュ優先）
+            local current_lang=""
+            if [ -f "${CACHE_DIR}/message.ch" ]; then
+                current_lang=$(cat "${CACHE_DIR}/message.ch")
+            fi
+
+            debug_log "DEBUG" "Using language code for menu display: $current_lang"
+            
+            # メッセージファイルから直接検索（特殊文字対応）
+            debug_log "DEBUG" "Direct search for message key: $key"
+            
+            for msg_file in "${BASE_DIR}"/messages_*.db; do
+                if [ -f "$msg_file" ]; then
+                    # -Fオプションで特殊文字をリテラルとして扱う
+                    local msg_value=$(grep -F "$current_lang|$key=" "$msg_file" 2>/dev/null | cut -d'=' -f2-)
+                    if [ -n "$msg_value" ]; then
+                        display_text="$msg_value"
+                        debug_log "DEBUG" "Found message in file: $msg_file"
+                        break
+                    fi
+                fi
+            done
+            
+            # 変換が見つからない場合はキーをそのまま使用
+            if [ -z "$display_text" ]; then
+                display_text="$key"
+                debug_log "DEBUG" "No message found for key: $key, using key as display text"
+            fi
+            
+            # 表示テキストを保存（[数字] 形式） - 数字と表示の間に空白を入れる
+            printf "%s\n" "$(color "$color_name" "[${menu_count}] ${display_text}")" >> "$menu_displays_file" 2>/dev/null
+            
+            debug_log "DEBUG" "Added menu item $menu_count: [$key] -> [$cmd] with color: $color_name"
         fi
     done < "${BASE_DIR}/menu.db"
     
@@ -657,8 +674,93 @@ add_special_menu_items() {
     echo "$special_items_count $menu_count"
 }
 
-# ユーザー選択処理関数（実行中表示を削除したバージョン）
+# ユーザー選択処理関数の一部（コマンド実行部分のみ修正）
 handle_user_selection() {
+    # [前半部分は変更なし]
+    
+    # 選択されたキーとコマンドを取得
+    local selected_key=""
+    local selected_cmd=""
+    local selected_color=""
+    
+    selected_key=$(sed -n "${real_choice}p" "$menu_keys_file" 2>/dev/null)
+    selected_cmd=$(sed -n "${real_choice}p" "$menu_commands_file" 2>/dev/null)
+    selected_color=$(sed -n "${real_choice}p" "$menu_colors_file" 2>/dev/null)
+    
+    if [ -z "$selected_key" ] || [ -z "$selected_cmd" ]; then
+        # エラーハンドラーを呼び出し
+        handle_menu_error "invalid_selection" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
+        return 1
+    fi
+
+    # グローバル変数に選択された情報を保存
+    SELECTED_MENU_KEY="$selected_key"
+    SELECTED_MENU_COLOR="$selected_color"
+    
+    debug_log "DEBUG" "Selected key: $selected_key"
+    debug_log "DEBUG" "Selected color: $selected_color"
+    debug_log "DEBUG" "Executing command: $selected_cmd"
+    
+    # コマンド実行 - セミコロンを含むかどうかで処理を分ける
+    if echo "$selected_cmd" | grep -q "^selector "; then
+        # セレクターコマンドの場合、サブメニューへ移動（変更なし）
+        local next_menu=$(echo "$selected_cmd" | cut -d' ' -f2)
+        debug_log "DEBUG" "Detected submenu navigation: $next_menu"
+    
+        # 選択した色とともにメニュー履歴に追加
+        push_menu_history "$selected_key" "$selected_color"
+    
+        # 一時ファイル削除
+        rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
+    
+        # 次のメニューを表示（表示テキストを親メニュー情報として渡す）
+        selector "$next_menu" "$selected_text" 0
+        return $?
+    elif echo "$selected_cmd" | grep -q ";"; then
+        # セミコロンを含むコマンドの処理
+        debug_log "DEBUG" "Processing semicolon-separated command chain"
+        
+        # 評価する前にセミコロンでコマンドを分割
+        IFS=';'
+        for cmd in $selected_cmd; do
+            # 前後の空白を削除
+            cmd=$(echo "$cmd" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            
+            # 空でなければ実行
+            if [ -n "$cmd" ]; then
+                debug_log "DEBUG" "Executing command part: $cmd"
+                eval "$cmd"
+                local cmd_status=$?
+                
+                if [ $cmd_status -ne 0 ]; then
+                    debug_log "DEBUG" "Command part failed with status: $cmd_status"
+                    # エラーハンドラーを呼び出し
+                    handle_menu_error "command_failed" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
+                    return 1
+                fi
+            fi
+        done
+        unset IFS
+    else
+        # 通常コマンドの実行（変更なし）
+        eval "$selected_cmd"
+        local cmd_status=$?
+        
+        debug_log "DEBUG" "Command execution finished with status: $cmd_status"
+        
+        # コマンド実行エラー時、前のメニューに戻る
+        if [ $cmd_status -ne 0 ]; then
+            # エラーハンドラーを呼び出し
+            handle_menu_error "command_failed" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
+            return 1
+        fi
+    fi
+    
+    return $cmd_status
+}
+
+# ユーザー選択処理関数（実行中表示を削除したバージョン）
+OK_handle_user_selection() {
     local section_name="$1"
     local is_main_menu="$2"
     local menu_count="$3"
