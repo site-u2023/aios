@@ -678,30 +678,11 @@ add_special_menu_items() {
 handle_user_selection() {
     # [前半部分は変更なし]
     
-    # 選択されたキーとコマンドを取得
-    local selected_key=""
-    local selected_cmd=""
-    local selected_color=""
-    
-    selected_key=$(sed -n "${real_choice}p" "$menu_keys_file" 2>/dev/null)
-    selected_cmd=$(sed -n "${real_choice}p" "$menu_commands_file" 2>/dev/null)
-    selected_color=$(sed -n "${real_choice}p" "$menu_colors_file" 2>/dev/null)
-    
-    if [ -z "$selected_key" ] || [ -z "$selected_cmd" ]; then
-        # エラーハンドラーを呼び出し
-        handle_menu_error "invalid_selection" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
-        return 1
-    fi
-
-    # グローバル変数に選択された情報を保存
-    SELECTED_MENU_KEY="$selected_key"
-    SELECTED_MENU_COLOR="$selected_color"
-    
+    # コマンド実行部分 - セミコロン対応版
     debug_log "DEBUG" "Selected key: $selected_key"
     debug_log "DEBUG" "Selected color: $selected_color"
     debug_log "DEBUG" "Executing command: $selected_cmd"
     
-    # コマンド実行 - セミコロンを含むかどうかで処理を分ける
     if echo "$selected_cmd" | grep -q "^selector "; then
         # セレクターコマンドの場合、サブメニューへ移動（変更なし）
         local next_menu=$(echo "$selected_cmd" | cut -d' ' -f2)
@@ -713,14 +694,15 @@ handle_user_selection() {
         # 一時ファイル削除
         rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
     
-        # 次のメニューを表示（表示テキストを親メニュー情報として渡す）
+        # 次のメニューを表示
         selector "$next_menu" "$selected_text" 0
         return $?
     elif echo "$selected_cmd" | grep -q ";"; then
         # セミコロンを含むコマンドの処理
-        debug_log "DEBUG" "Processing semicolon-separated command chain"
+        debug_log "DEBUG" "Processing command chain with semicolons"
         
-        # 評価する前にセミコロンでコマンドを分割
+        # セミコロンでコマンドを分割
+        old_IFS="$IFS"
         IFS=';'
         for cmd in $selected_cmd; do
             # 前後の空白を削除
@@ -733,14 +715,15 @@ handle_user_selection() {
                 local cmd_status=$?
                 
                 if [ $cmd_status -ne 0 ]; then
-                    debug_log "DEBUG" "Command part failed with status: $cmd_status"
+                    debug_log "DEBUG" "Command failed with status: $cmd_status"
+                    IFS="$old_IFS"
                     # エラーハンドラーを呼び出し
                     handle_menu_error "command_failed" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
                     return 1
                 fi
             fi
         done
-        unset IFS
+        IFS="$old_IFS"
     else
         # 通常コマンドの実行（変更なし）
         eval "$selected_cmd"
@@ -756,7 +739,7 @@ handle_user_selection() {
         fi
     fi
     
-    return $cmd_status
+    return 0
 }
 
 # ユーザー選択処理関数（実行中表示を削除したバージョン）
