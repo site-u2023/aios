@@ -682,7 +682,7 @@ start_spinner() {
     (
         while true; do
             # 行をクリアしてメッセージ表示
-            printf "\r\033[K📡 %s " "$(color "$SPINNER_COLOR" "$SPINNER_MESSAGE")"
+            printf "\r\033[K%s " "$(color "$SPINNER_COLOR" "$SPINNER_MESSAGE")"
             
             # animation関数を呼び出し
             animation -t "$SPINNER_TYPE" -d "$SPINNER_DELAY" -c 1 -s
