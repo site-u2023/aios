@@ -93,6 +93,8 @@ packages() {
     feed_package_release lisaac luci-app-diskman hidden disabled
 
     feed_package_release jerrykuku luci-theme-argon hidden disabled
+
+    return 0
 }
 
 packages_19() {
@@ -126,6 +128,8 @@ packages_19() {
 
     install_package usleep hidden
     install_package jq hidden
+
+    return 0
 }
 
 packages_snaphot() {
@@ -160,6 +164,8 @@ packages_snaphot() {
 
     install_package usleep hidden
     install_package jq hidden
+
+    return 0
 }
 
 packages_usb() {
@@ -189,16 +195,22 @@ packages_usb() {
     install_package hd-idle hidden 
     install_package luci-app-hd-idle hidden 
     install_package luci-i18n-hd-idle hidden 
+
+    return 0
 }
 
 package_samba() {
     install_package luci-app-samba4 hidden 
     install_package luci-i18n-samba4-ja hidden 
     install_package wsdd2 hidden
+
+    return 0
 }
 
 package_list() {
     check_install_list
+
+    return 0
 }
 
 # OSバージョンに基づいて適切なパッケージ関数を実行する
