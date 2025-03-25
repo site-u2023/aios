@@ -220,6 +220,8 @@ feed_package_release() {
   fi
 
   # 将来的に除去するルーチン
+  PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
+  
   if [ "$PACKAGE_EXTENSION" != "ipk" ]; then
       echo -e "$(color yellow "Currently not supported for apk.")"
       return 1
