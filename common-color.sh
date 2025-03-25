@@ -463,10 +463,8 @@ load_display_settings() {
     fi
 }
 
-# アニメーション関数 - 元のまま維持し、ANIMATION_ENABLEDのチェックを削除
+# アニメーション関数
 animation() {
-    # ANIMATION_ENABLEDチェックを削除（強制的に実行される）
-    
     local anim_type="spinner"  # デフォルトはスピナー
     local delay="1"            # デフォルトは1秒（POSIX互換性のため）
     local count="1"            # デフォルトは1回
@@ -581,7 +579,7 @@ animation() {
 # スピナー開始関数
 start_spinner() {
     local message="$1"
-    local anim_type="${2:-dot}"
+    local anim_type="${2:-spinner}"
     local spinner_color="${3:-green}"
     
     SPINNER_MESSAGE="$message"
@@ -590,10 +588,12 @@ start_spinner() {
     
     # usleepの有無をチェックしてディレイを設定
     if command -v usleep >/dev/null 2>&1; then
-        SPINNER_DELAY="0.2"  # 高速モード
+        # マイクロ秒単位でディレイを設定（animation用は秒単位）
+        SPINNER_USLEEP_VALUE=200000  # 200000マイクロ秒 = 0.2秒
+        SPINNER_DELAY="0.2"          # animation関数用のディレイ値
         debug_log "DEBUG" "Using fast animation mode (0.2s) with usleep"
     else
-        SPINNER_DELAY="1"    # 標準モード
+        SPINNER_DELAY="1"            # 標準モード
         debug_log "DEBUG" "Using standard animation mode (1s)"
     fi
     
@@ -606,13 +606,17 @@ start_spinner() {
     (
         while true; do
             # 行をクリアしてメッセージ表示
-            printf "\r\033[K%s " "$SPINNER_MESSAGE"
+            printf "\r\033[K📡 %s " "$(color "$SPINNER_COLOR" "$SPINNER_MESSAGE")"
             
             # animation関数を呼び出し
             animation -t "$SPINNER_TYPE" -d "$SPINNER_DELAY" -c 1 -s
             
-            # アニメーションと同じディレイを使用
-            sleep "$SPINNER_DELAY"
+            # ディレイ
+            if command -v usleep >/dev/null 2>&1; then
+                usleep "$SPINNER_USLEEP_VALUE"  # マイクロ秒単位のディレイ
+            else
+                sleep "$SPINNER_DELAY"          # 秒単位のディレイ
+            fi
         done
     ) &
     
@@ -620,7 +624,7 @@ start_spinner() {
     debug_log "DEBUG" "Spinner started with PID: $SPINNER_PID"
 }
 
-# スピナー停止関数 - 元のまま維持
+# スピナー停止関数
 stop_spinner() {
     local message="$1"
     local status="${2:-success}"
@@ -658,6 +662,8 @@ stop_spinner() {
     unset SPINNER_MESSAGE
     unset SPINNER_TYPE
     unset SPINNER_COLOR
+    unset SPINNER_DELAY
+    unset SPINNER_USLEEP_VALUE
 
     # カーソル表示
     printf "\033[?25h"
