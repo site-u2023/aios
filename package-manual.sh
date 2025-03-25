@@ -156,46 +156,114 @@ packages_snaphot() {
     install_package jq yn hidden
 }
 
+packages_usb() {
+    install_package block-mount yn hidden 
+    install_package kmod-usb-storage yn hidden 
+    install_package kmod-usb-storage-uas yn hidden 
+    install_package usbutils yn hidden 
+    install_package gdisk yn hidden 
+    install_package libblkid1 yn hidden 
+    install_package kmod-usb-ledtrig-usb yn hidden port
+    install_package luci-app-ledtrig-usbport yn hidden 
+    install_package dosfstools yn hidden 
+    install_package kmod-fs-vfat yn hidden 
+    install_package e2fsprogs yn hidden 
+    install_package kmod-fs-ext4 yn hidden 
+    install_package f2fs-tools yn hidden 
+    install_package kmod-fs-f2fs yn hidden 
+    install_package exfat-fsck yn hidden 
+    install_package kmod-fs-exfat yn hidden 
+    install_package ntfs-3g yn hidden 
+    install_package kmod-fs-ntfs3 yn hidden 
+    install_package hfsfsck yn hidden 
+    install_package kmod-fs-hfs yn hidden 
+    install_package kmod-fs-hfsplus yn hidden 
+
+    install_package hdparm yn hidden 
+    install_package hd-idle yn hidden 
+    install_package luci-app-hd-idle yn hidden 
+    install_package luci-i18n-hd-idle yn hidden 
+}
+
+install_package_samba() {
+    install_package luci-app-samba4 yn hidden 
+    install_package luci-i18n-samba4-ja yn hidden 
+    install_package wsdd2 yn hidden
+}
+
 install_package_list() {
     install_package list
 }
 
-packages_usb() {
-    install_package block-mount
-    install_package kmod-usb-storage
-    install_package kmod-usb-storage-uas
-    install_package usbutils
-    install_package gdisk
-    install_package libblkid1
-    install_package kmod-usb-ledtrig-usbport
-    install_package luci-app-ledtrig-usbport
-    install_package dosfstools
-    install_package kmod-fs-vfat
-    install_package e2fsprogs
-    install_package kmod-fs-ext4
-    install_package f2fs-tools
-    install_package kmod-fs-f2fs
-    install_package exfat-fsck
-    install_package kmod-fs-exfat
-    install_package ntfs-3g
-    install_package kmod-fs-ntfs3
-    install_package hfsfsck
-    install_package kmod-fs-hfs
-    install_package kmod-fs-hfsplus
+# OSバージョンに基づいて適切なパッケージ関数を実行する
+install_packages_by_version() {
+    # OSバージョンファイルの確認
+    if [ ! -f "${CACHE_DIR}/osversion.ch" ]; then
+        debug_log "DEBUG" "OS version file not found, using default package function"
+        packages
+        return 0
+    fi
 
-    install_package hdparm
-    install_package hd-idle
-    install_package luci-app-hd-idle
-    install_package luci-i18n-hd-idle
+    # OSバージョンの読み込み
+    local os_version
+    os_version=$(cat "${CACHE_DIR}/osversion.ch")
     
-    install_package luci-app-samba4
-    install_package luci-i18n-samba4-ja
-    install_package wsdd2
+    printf "📋 検出したOSバージョン: %s\n" "$os_version"
+    debug_log "DEBUG" "Detected OS version: $os_version"
+
+    # バージョンに基づいて関数を呼び出し
+    case "$os_version" in
+        19.*)
+            # バージョン19系の場合
+            printf "📦 OpenWrt 19系用パッケージをインストールします...\n"
+            debug_log "DEBUG" "Installing packages for OpenWrt 19.x series"
+            packages_19
+            ;;
+        *[Ss][Nn][Aa][Pp][Ss][Hh][Oo][Tt]*)
+            # スナップショットバージョンの場合（大文字小文字を区別しない）
+            printf "📦 OpenWrtスナップショット用パッケージをインストールします...\n"
+            debug_log "DEBUG" "Installing packages for OpenWrt SNAPSHOT"
+            packages_snaphot
+            ;;
+        *)
+            # その他の通常バージョン
+            printf "📦 通常パッケージをインストールします...\n"
+            debug_log "DEBUG" "Installing standard packages"
+            packages
+            ;;
+    esac
+
+    return 0
+}
+
+# USBデバイスを検出し、必要なパッケージをインストールする関数
+install_usb_packages() {
+    # USBデバイスのキャッシュファイルを確認
+    if [ ! -f "${CACHE_DIR}/usbdevice.ch" ]; then
+        printf "📋 USBデバイス情報がありません。検出をスキップします。\n"
+        debug_log "DEBUG" "USB device cache file not found, skipping USB detection"
+        return 0
+    fi
+    
+    # USBデバイスが検出されているか確認
+    if [ "$(cat "${CACHE_DIR}/usbdevice.ch")" = "detected" ]; then
+        printf "🔌 USBデバイスを検出しました。USBパッケージをインストールします...\n"
+        debug_log "DEBUG" "USB device detected, installing USB packages"
+        packages_usb
+    else
+        printf "📋 USBデバイスが検出されませんでした。\n"
+        debug_log "DEBUG" "No USB device detected, skipping USB packages"
+    fi
+    
+    return 0
 }
 
 # メイン処理
 main() {
-
+    # OSバージョンに基づいたパッケージインストール
+    install_packages_by_version
+    # USB関連パッケージのインストール
+    install_usb_packages
 }
 
 # スクリプトの実行
