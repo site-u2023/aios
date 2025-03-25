@@ -91,6 +91,8 @@ packages() {
     feed_package_release lisaac luci-app-diskman yn hidden disabled
 
     feed_package_release jerrykuku luci-theme-argon yn hidden disabled
+
+    return 0
 }
 
 packages_19() {
@@ -122,6 +124,8 @@ packages_19() {
     install_package luci-app-attendedsysupgrade yn hidden
     install_package luci-i18n-attendedsysupgrade yn hidden   
     install_package jq yn hidden
+
+    return 0
 }
 
 packages_snaphot() {
@@ -154,6 +158,8 @@ packages_snaphot() {
     install_package luci-app-attendedsysupgrade yn hidden
     install_package luci-i18n-attendedsysupgrade yn hidden   
     install_package jq yn hidden
+
+    return 0
 }
 
 packages_usb() {
@@ -183,16 +189,22 @@ packages_usb() {
     install_package hd-idle yn hidden 
     install_package luci-app-hd-idle yn hidden 
     install_package luci-i18n-hd-idle yn hidden 
+
+    return 0
 }
 
 package_samba() {
     install_package luci-app-samba4 yn hidden 
     install_package luci-i18n-samba4-ja yn hidden 
     install_package wsdd2 yn hidden
+
+    return 0
 }
 
 package_list() {
     check_install_list
+
+    return 0
 }
 
 # OSバージョンに基づいて適切なパッケージ関数を実行する
