@@ -497,7 +497,7 @@ start_spinner() {
             SPINNER_CHARS="- \\ | /"
             ;;
         dot)
-            SPINNER_CHARS=" . .. ... ...."
+            SPINNER_CHARS=". .. ... ...."
             ;;
         bar)
             SPINNER_CHARS="[=] => ->"
