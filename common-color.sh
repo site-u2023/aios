@@ -588,12 +588,11 @@ start_spinner() {
     
     # usleepの有無をチェックしてディレイを設定
     if command -v usleep >/dev/null 2>&1; then
-        # マイクロ秒単位でディレイを設定（animation用は秒単位）
         SPINNER_USLEEP_VALUE=200000  # 200000マイクロ秒 = 0.2秒
-        SPINNER_DELAY="0.2"          # animation関数用のディレイ値
+        SPINNER_DELAY="0.2"
         debug_log "DEBUG" "Using fast animation mode (0.2s) with usleep"
     else
-        SPINNER_DELAY="1"            # 標準モード
+        SPINNER_DELAY="1"
         debug_log "DEBUG" "Using standard animation mode (1s)"
     fi
     
@@ -602,26 +601,21 @@ start_spinner() {
     
     debug_log "DEBUG" "Starting spinner with message: $message, type: $anim_type, delay: $SPINNER_DELAY"
 
-    # バックグラウンドでループ実行
-    (
-        while true; do
-            # 行をクリアしてメッセージ表示
-            printf "\r\033[K📡 %s " "$(color "$SPINNER_COLOR" "$SPINNER_MESSAGE")"
-            
-            # animation関数を呼び出し
-            animation -t "$SPINNER_TYPE" -d "$SPINNER_DELAY" -c 1 -s
-            
-            # ディレイ
-            if command -v usleep >/dev/null 2>&1; then
-                usleep "$SPINNER_USLEEP_VALUE"  # マイクロ秒単位のディレイ
-            else
-                sleep "$SPINNER_DELAY"          # 秒単位のディレイ
-            fi
-        done
-    ) &
-    
-    SPINNER_PID=$!
-    debug_log "DEBUG" "Spinner started with PID: $SPINNER_PID"
+    # フォアグラウンドでループ実行
+    while true; do
+        # 行をクリアしてメッセージ表示
+        printf "\r\033[K📡 %s " "$(color "$SPINNER_COLOR" "$SPINNER_MESSAGE")"
+        
+        # animation関数を呼び出し
+        animation -t "$SPINNER_TYPE" -d "$SPINNER_DELAY" -c 1 -s
+        
+        # ディレイ
+        if command -v usleep >/dev/null 2>&1; then
+            usleep "$SPINNER_USLEEP_VALUE"  # マイクロ秒単位のディレイ
+        else
+            sleep "$SPINNER_DELAY"          # 秒単位のディレイ
+        fi
+    done
 }
 
 # スピナー停止関数
