@@ -466,7 +466,7 @@ load_display_settings() {
 # アニメーション関数
 animation() {
     local anim_type="spinner"  # デフォルトはスピナー
-    local delay="1"            # デフォルトは1秒（POSIX互換性のため）
+    local delay="1"       # デフォルトは1秒
     local count="1"            # デフォルトは1回
     local cursor_hide="1"      # デフォルトはカーソル非表示
     local param_found=""       # パラメータが見つかったかのフラグ
@@ -511,59 +511,136 @@ animation() {
             spinner)
                 # スピナーアニメーション - 1サイクル分の文字
                 printf "-"
-                sleep "$delay"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$delay"
+                else
+                    sleep "$((delay / 1000000))"
+                fi
                 printf "\b\\"
-                sleep "$delay"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$delay"
+                else
+                    sleep "$((delay / 1000000))"
+                fi
                 printf "\b|"
-                sleep "$delay"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$delay"
+                else
+                    sleep "$((delay / 1000000))"
+                fi
                 printf "\b/"
-                sleep "$delay"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$delay"
+                else
+                    sleep "$((delay / 1000000))"
+                fi
                 printf "\b"
                 ;;
                 
             dot)
                 # ドットアニメーション
                 printf "."
-                sleep "$delay"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$delay"
+                else
+                    sleep "$((delay / 1000000))"
+                fi
                 printf "."
-                sleep "$delay"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$delay"
+                else
+                    sleep "$((delay / 1000000))"
+                fi
                 printf "."
-                sleep "$delay"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$delay"
+                else
+                    sleep "$((delay / 1000000))"
+                fi
                 printf "\b\b\b   \b\b\b"
-                sleep "$delay"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$delay"
+                else
+                    sleep "$((delay / 1000000))"
+                fi
                 ;;
                 
             bar)
                 # バーアニメーション
                 printf "["
-                sleep "$delay"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$delay"
+                else
+                    sleep "$((delay / 1000000))"
+                fi
                 printf "\b="
-                sleep "$delay"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$delay"
+                else
+                    sleep "$((delay / 1000000))"
+                fi
                 printf "\b>"
-                sleep "$delay"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$delay"
+                else
+                    sleep "$((delay / 1000000))"
+                fi
                 printf "\b]"
-                sleep "$delay"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$delay"
+                else
+                    sleep "$((delay / 1000000))"
+                fi
                 printf "\b \b"
-                sleep "$delay"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$delay"
+                else
+                    sleep "$((delay / 1000000))"
+                fi
                 ;;
                 
             pulse)
                 # パルスアニメーション
                 printf "□"
-                sleep "$delay"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$delay"
+                else
+                    sleep "$((delay / 1000000))"
+                fi
                 printf "\b■"
-                sleep "$delay"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$delay"
+                else
+                    sleep "$((delay / 1000000))"
+                fi
                 printf "\b□"
-                sleep "$delay"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$delay"
+                else
+                    sleep "$((delay / 1000000))"
+                fi
                 printf "\b"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$delay"
+                else
+                    sleep "$((delay / 1000000))"
+                fi
                 ;;
                 
             *)
                 # カスタムアニメーション
                 printf "%s" "$anim_type"
-                sleep "$delay"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$delay"
+                else
+                    sleep "$((delay / 1000000))"
+                fi
                 printf "\b \b"
-                sleep "$delay"
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$delay"
+                else
+                    sleep "$((delay / 1000000))"
+                fi
                 ;;
         esac
         
@@ -589,10 +666,10 @@ start_spinner() {
     # usleepの有無をチェックしてディレイを設定
     if command -v usleep >/dev/null 2>&1; then
         SPINNER_USLEEP_VALUE=200000  # 200000マイクロ秒 = 0.2秒
-        SPINNER_DELAY="0.2"          # animation関数用のディレイ値
+        SPINNER_DELAY="200000"       # animation関数用のディレイ値（マイクロ秒）
         debug_log "DEBUG" "Using fast animation mode (0.2s) with usleep"
     else
-        SPINNER_DELAY="1"            # 標準モード
+        SPINNER_DELAY="1"            # animation関数用のディレイ値（整数秒）
         debug_log "DEBUG" "Using standard animation mode (1s)"
     fi
     
