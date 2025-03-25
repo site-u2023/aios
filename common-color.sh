@@ -465,12 +465,12 @@ load_display_settings() {
 
 # アニメーション関数
 animation() {
-    local anim_type="spinner"  # デフォルトはスピナー
-    local delay="1"       # デフォルトは1秒
+    local delay="$SPINNER_DELAY"
+    local anim_type="s$SPINNER_TYPE"  # デフォルトはスピナー
     local count="1"            # デフォルトは1回
     local cursor_hide="1"      # デフォルトはカーソル非表示
     local param_found=""       # パラメータが見つかったかのフラグ
-    
+
     # オプション処理（POSIX準拠）
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -499,157 +499,71 @@ animation() {
         esac
         shift
     done
-    
+
     debug_log "DEBUG" "Running animation with type: $anim_type, delay: $delay, count: $count"
-    
+
     # カーソル非表示（設定されている場合）
     [ "$cursor_hide" = "1" ] && printf "\033[?25l"
-    
+
     local c=0
     while [ $c -lt $count ]; do
         case "$anim_type" in
             spinner)
-                # スピナーアニメーション - 1サイクル分の文字
                 printf "-"
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep "$delay"
-                else
-                    sleep "$((delay / 1000000))"
-                fi
+                usleep "$delay"
                 printf "\b\\"
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep "$delay"
-                else
-                    sleep "$((delay / 1000000))"
-                fi
+                usleep "$delay"
                 printf "\b|"
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep "$delay"
-                else
-                    sleep "$((delay / 1000000))"
-                fi
+                usleep "$delay"
                 printf "\b/"
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep "$delay"
-                else
-                    sleep "$((delay / 1000000))"
-                fi
+                usleep "$delay"
                 printf "\b"
                 ;;
-                
             dot)
-                # ドットアニメーション
                 printf "."
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep "$delay"
-                else
-                    sleep "$((delay / 1000000))"
-                fi
+                usleep "$delay"
                 printf "."
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep "$delay"
-                else
-                    sleep "$((delay / 1000000))"
-                fi
+                usleep "$delay"
                 printf "."
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep "$delay"
-                else
-                    sleep "$((delay / 1000000))"
-                fi
+                usleep "$delay"
                 printf "\b\b\b   \b\b\b"
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep "$delay"
-                else
-                    sleep "$((delay / 1000000))"
-                fi
+                usleep "$delay"
                 ;;
-                
             bar)
-                # バーアニメーション
                 printf "["
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep "$delay"
-                else
-                    sleep "$((delay / 1000000))"
-                fi
+                usleep "$delay"
                 printf "\b="
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep "$delay"
-                else
-                    sleep "$((delay / 1000000))"
-                fi
+                usleep "$delay"
                 printf "\b>"
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep "$delay"
-                else
-                    sleep "$((delay / 1000000))"
-                fi
+                usleep "$delay"
                 printf "\b]"
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep "$delay"
-                else
-                    sleep "$((delay / 1000000))"
-                fi
+                usleep "$delay"
                 printf "\b \b"
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep "$delay"
-                else
-                    sleep "$((delay / 1000000))"
-                fi
+                usleep "$delay"
                 ;;
-                
             pulse)
-                # パルスアニメーション
                 printf "□"
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep "$delay"
-                else
-                    sleep "$((delay / 1000000))"
-                fi
+                usleep "$delay"
                 printf "\b■"
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep "$delay"
-                else
-                    sleep "$((delay / 1000000))"
-                fi
+                usleep "$delay"
                 printf "\b□"
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep "$delay"
-                else
-                    sleep "$((delay / 1000000))"
-                fi
+                usleep "$delay"
                 printf "\b"
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep "$delay"
-                else
-                    sleep "$((delay / 1000000))"
-                fi
+                usleep "$delay"
                 ;;
-                
             *)
-                # カスタムアニメーション
                 printf "%s" "$anim_type"
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep "$delay"
-                else
-                    sleep "$((delay / 1000000))"
-                fi
+                usleep "$delay"
                 printf "\b \b"
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep "$delay"
-                else
-                    sleep "$((delay / 1000000))"
-                fi
+                usleep "$delay"
                 ;;
         esac
-        
         c=$((c + 1))
     done
-    
+
     # カーソル表示（設定されている場合）
     [ "$cursor_hide" = "1" ] && printf "\033[?25h"
-    
+
     debug_log "DEBUG" "Animation completed successfully"
 }
 
