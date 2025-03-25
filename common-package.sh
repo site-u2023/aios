@@ -449,7 +449,7 @@ process_package() {
     if [ "$confirm_install" = "yes" ]; then
         if ! confirm "MSG_CONFIRM_INSTALL" "pkg" "$package_name"; then
             debug_log "DEBUG" "User declined installation of $package_name"
-            return 1
+            return 0
         fi
     fi
     
