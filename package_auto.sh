@@ -81,6 +81,7 @@ packages() {
     install_package luci-i18n-attendedsysupgrade hidden 
     
     install_package usleep hidden
+    install_package git hidden
     install_package jq hidden
 
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf hidden
@@ -127,6 +128,7 @@ packages_19() {
     install_package luci-i18n-attendedsysupgrade hidden   
 
     install_package usleep hidden
+    install_package git hidden
     install_package jq hidden
 
     return 0
@@ -163,6 +165,7 @@ packages_snaphot() {
     install_package luci-i18n-attendedsysupgrade hidden   
 
     install_package usleep hidden
+    install_package git hidden
     install_package jq hidden
 
     return 0
