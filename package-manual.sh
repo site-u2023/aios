@@ -188,7 +188,7 @@ packages_usb() {
 install_package_samba() {
     install_package luci-app-samba4 yn hidden 
     install_package luci-i18n-samba4-ja yn hidden 
-    install_package wsdd2 yn hidden
+    #install_package wsdd2 yn hidden
 }
 
 install_package_list() {
