@@ -119,12 +119,12 @@ feed_package() {
     return 1
   fi
 
-  # 将来的に除去するルーチン
   PACKAGE_EXTENSION=$(cat "${CACHE_DIR}/extension.ch")
 
   if [ -n "$PACKAGE_EXTENSION" ]; then
       debug_log "DEBUG" "Content of PACKAGE_EXTENSION: $PACKAGE_EXTENSION"
-    
+      
+      # 将来的に除去するルーチン
       if [ "$PACKAGE_EXTENSION" != "ipk" ]; then
           printf "%s\n" "$(color yellow "Currently not supported for apk.")"
           return 1
@@ -226,12 +226,12 @@ feed_package_release() {
     return 1
   fi
 
-  # 将来的に除去するルーチン
   PACKAGE_EXTENSION=$(cat "${CACHE_DIR}/extension.ch")
 
   if [ -n "$PACKAGE_EXTENSION" ]; then
       debug_log "DEBUG" "Content of PACKAGE_EXTENSION: $PACKAGE_EXTENSION"
-    
+      
+      # 将来的に除去するルーチン
       if [ "$PACKAGE_EXTENSION" != "ipk" ]; then
           printf "%s\n" "$(color yellow "Currently not supported for apk.")"
           return 1
