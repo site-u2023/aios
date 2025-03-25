@@ -499,16 +499,16 @@ start_spinner() {
     local spinner_chars
     case "$anim_type" in
         spinner)
-            spinner_chars="-\\|/"
+            spinner_chars=('-' '\' '|' '/')
             ;;
         dot)
-            spinner_chars=". .. ... ...."
+            spinner_chars=('.' '..' '...' '....')
             ;;
         bar)
-            spinner_chars="[=]->"
+            spinner_chars=('[=]' '=>' '->')
             ;;
         pulse)
-            spinner_chars="◯◎"
+            spinner_chars=('◯' '◎')
             ;;
         *)
             spinner_chars="-\\|/"
