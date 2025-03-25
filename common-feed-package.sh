@@ -120,19 +120,17 @@ feed_package() {
   fi
 
   # 将来的に除去するルーチン
-  debug_log "DEBUG" "CACHE_DIR: $CACHE_DIR"
-  debug_log "DEBUG" "Checking file: $CACHE_DIR/extension.ch"
-  
-  PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
-  if [ -f "$PACKAGE_EXTENSION" ]; then
-      debug_log "DEBUG" "File found: $PACKAGE_EXTENSION"
-      if [ "$(cat "$PACKAGE_EXTENSION")" != "ipk" ]; then
-          debug_log "DEBUG" "Content of $PACKAGE_EXTENSION: $(cat "$PACKAGE_EXTENSION")"
+  PACKAGE_EXTENSION=$(cat "${CACHE_DIR}/extension.ch")
+
+  if [ -n "$PACKAGE_EXTENSION" ]; then
+      debug_log "DEBUG" "Content of PACKAGE_EXTENSION: $PACKAGE_EXTENSION"
+    
+      if [ "$PACKAGE_EXTENSION" != "ipk" ]; then
           printf "%s\n" "$(color yellow "Currently not supported for apk.")"
           return 1
       fi
   else
-      debug_log "DEBUG" "File not found: $PACKAGE_EXTENSION"
+      debug_log "DEBUG" "File not found or empty: ${CACHE_DIR}/extension.ch"
       return 1
   fi
     
@@ -229,19 +227,17 @@ feed_package_release() {
   fi
 
   # 将来的に除去するルーチン
-  debug_log "DEBUG" "CACHE_DIR: $CACHE_DIR"
-  debug_log "DEBUG" "Checking file: $CACHE_DIR/extension.ch"
-  
-  PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
-  if [ -f "$PACKAGE_EXTENSION" ]; then
-      debug_log "DEBUG" "File found: $PACKAGE_EXTENSION"
-      if [ "$(cat "$PACKAGE_EXTENSION")" != "ipk" ]; then
-          debug_log "DEBUG" "Content of $PACKAGE_EXTENSION: $(cat "$PACKAGE_EXTENSION")"
+  PACKAGE_EXTENSION=$(cat "${CACHE_DIR}/extension.ch")
+
+  if [ -n "$PACKAGE_EXTENSION" ]; then
+      debug_log "DEBUG" "Content of PACKAGE_EXTENSION: $PACKAGE_EXTENSION"
+    
+      if [ "$PACKAGE_EXTENSION" != "ipk" ]; then
           printf "%s\n" "$(color yellow "Currently not supported for apk.")"
           return 1
       fi
   else
-      debug_log "DEBUG" "File not found: $PACKAGE_EXTENSION"
+      debug_log "DEBUG" "File not found or empty: ${CACHE_DIR}/extension.ch"
       return 1
   fi
   
