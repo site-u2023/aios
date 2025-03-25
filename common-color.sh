@@ -470,73 +470,67 @@ load_display_settings() {
 
 # スピナー開始関数
 start_spinner() {
-    local message="$1"
-    local anim_type="${2:-emoji}"
-    local spinner_color="${3:-green}"
+    message="$1"
+    anim_type="${2:-emoji}"
 
     SPINNER_MESSAGE="$message"
     SPINNER_TYPE="$anim_type"
-    SPINNER_COLOR="$spinner_color"
 
     if [ "$ANIMATION_ENABLED" -eq "0" ]; then
         echo "$message"
         return
     fi
 
-    # usleepの有無をチェックしてディレイを設定
     if command -v usleep >/dev/null 2>&1; then
         SPINNER_USLEEP_VALUE="200000"  # 200000マイクロ秒 = 0.2秒
-        SPINNER_DELAY="200000"         # アニメーションディレイ値（マイクロ秒）
-        debug_log "DEBUG" "Using fast animation mode (0.2s) with usleep"
+        SPINNER_DELAY="0.2"            # アニメーションディレイ値（秒）
+        echo "[DEBUG] Using fast animation mode (0.2s) with usleep"
     else
         SPINNER_DELAY="1"        # アニメーションディレイ値（秒）
-        debug_log "DEBUG" "Using standard animation mode (1s)"
+        echo "[DEBUG] Using standard animation mode (1s)"
     fi
 
-    # カーソル非表示
-    printf "\033[?25l"
+    printf "\033[?25l" # カーソル非表示
 
-    local spinner_chars
     case "$anim_type" in
         spinner)
-            spinner_chars="-\\|/"
+            SPINNER_CHARS="- \\ | /"
             ;;
         dot)
-            spinner_chars=". .. ... ...."
+            SPINNER_CHARS=". .. ... ...."
             ;;
         bar)
-            spinner_chars="[=] => ->"
+            SPINNER_CHARS="[=] => ->"
             ;;
         pulse)
-            spinner_chars="◯ ◎"
+            SPINNER_CHARS="◯ ◎"
             ;;
         emoji)
-            spinner_chars="🤖 👺 😀 👽 😈 💀"
+            SPINNER_CHARS="🤖 👺 😀 👽 😈 💀"
             ;;
         *)
-            spinner_chars="-\\|/"
+            SPINNER_CHARS="- \\ | /"
             ;;
     esac
 
-    debug_log "DEBUG" "Starting spinner with message: $message, type: $anim_type, delay: $SPINNER_DELAY"
+    echo "[DEBUG] Starting spinner with message: $message, type: $anim_type, delay: $SPINNER_DELAY"
 
-    # バックグラウンドでループ実行
     (
-        local i=0
+        i=0
         while true; do
-            # 行をクリアしてメッセージ表示
-            printf "\r\033[K%s %s" "$(color "$SPINNER_COLOR" "$SPINNER_MESSAGE")" "$(color "$SPINNER_COLOR" "${spinner_chars:i++%${#spinner_chars}:1}")"
+            for char in $SPINNER_CHARS; do
+                printf "\r\033[K%s %s" "$SPINNER_MESSAGE" "$char"
 
-            # ディレイ
-            if command -v usleep >/dev/null 2>&1; then
-                usleep "$SPINNER_USLEEP_VALUE"  # マイクロ秒単位のディレイ
-            else
-                sleep "$SPINNER_DELAY"  # 秒単位のディレイ
-            fi
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$SPINNER_USLEEP_VALUE"  # マイクロ秒単位のディレイ
+                else
+                    sleep "$SPINNER_DELAY"  # 秒単位のディレイ
+                fi
+            done
         done
     ) &
     SPINNER_PID=$!
-    debug_log "DEBUG" "Spinner started with PID: $SPINNER_PID"
+    echo "[DEBUG] Spinner started with PID: $SPINNER_PID"
 }
 
 # スピナー停止関数
