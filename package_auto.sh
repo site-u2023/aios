@@ -191,13 +191,13 @@ packages_usb() {
     install_package luci-i18n-hd-idle hidden 
 }
 
-install_package_samba() {
+package_samba() {
     install_package luci-app-samba4 hidden 
     install_package luci-i18n-samba4-ja hidden 
     install_package wsdd2 hidden
 }
 
-install_package_list() {
+package_list() {
     check_install_list
 }
 
