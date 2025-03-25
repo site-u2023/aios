@@ -192,7 +192,7 @@ install_package_samba() {
 }
 
 install_package_list() {
-    install_package list
+    check_install_list
 }
 
 # OSバージョンに基づいて適切なパッケージ関数を実行する
