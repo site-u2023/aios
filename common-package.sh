@@ -70,52 +70,6 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 # 7️⃣ 設定の有効化（デフォルト enabled、disabled オプションで無効化）
 #########################################################################
 
-# **スピナー開始関数**
-XX_start_spinner() {
-    local message="$1"
-    SPINNER_MESSAGE="$message"  # 停止時のメッセージ保持
-    #spinner_chars='| / - \\'
-    spinner_chars="-\\|/"
-    i=0
-
-    # カーソル非表示
-    printf "\033[?25l"
-
-    while true; do
-        # POSIX 準拠の方法でインデックスを計算し、1文字抽出
-        local index=$(( i % 4 ))
-        local char_pos=$(( index + 1 ))
-        local spinner_char=$(expr substr "$spinner_chars" "$char_pos" 1)
-        printf "\r📡 %s %s" "$(color yellow "$SPINNER_MESSAGE")" "$spinner_char"
-        
-        if command -v usleep >/dev/null 2>&1; then
-            usleep 200000
-        else
-            sleep 1
-        fi
-        i=$(( i + 1 ))
-    done &
-    SPINNER_PID=$!
-}
-
-# **スピナー停止関数**
-XX_stop_spinner() {
-    local message="$1"
-
-    if [ -n "$SPINNER_PID" ] && ps | grep -q " $SPINNER_PID "; then
-        kill "$SPINNER_PID" >/dev/null 2>&1
-        printf "\r\033[K"  # 行をクリア
-        printf "%s\n" "$(color green "$message")"
-    else
-        printf "\r\033[K"
-        printf "%s\n" "$(color red "$message")"
-    fi
-    unset SPINNER_PID
-
-    # カーソル表示
-    printf "\033[?25h"
-}
-
 # インストール後のパッケージリストを表示
 check_install_list() {
     printf " \033[1;31mPackages installed after flashing\033[0;39m\n"
