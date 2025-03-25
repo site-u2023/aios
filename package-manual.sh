@@ -82,6 +82,7 @@ packages() {
 
     install_package usleep yn hidden
     install_package git yn hidden
+    install_package git-http yn hidden
     install_package ca-certificates yn hidden
     install_package jq yn hidden
 
@@ -130,6 +131,7 @@ packages_19() {
 
     install_package usleep yn hidden
     install_package git yn hidden
+    install_package git-http yn hidden
     install_package ca-certificates yn hidden
     install_package jq yn hidden
 
@@ -168,6 +170,7 @@ packages_snaphot() {
 
     install_package usleep yn hidden
     install_package git yn hidden
+    install_package git-http yn hidden
     install_package ca-certificates yn hidden
     install_package jq yn hidden
 
