@@ -658,20 +658,19 @@ detect_and_set_location() {
             local cache_timezone="${CACHE_DIR}/timezone.ch"
             local cache_zonename="${CACHE_DIR}/zonename.ch"
             local cache_message="${CACHE_DIR}/message.ch"
-            local cache_country="${CACHE_DIR}/country.ch"
         
             # キャッシュからデータ読み込み
-            if [ -s "$cache_country" ]; then
-                detected_country=$(cat "$cache_country" 2>/dev/null)
-                debug_log "DEBUG" "Country loaded from country.ch: $detected_country"
+            if [ -s "$cache_language" ]; then
+                detected_country=$(cat "$cache_language" 2>/dev/null)
+                debug_log "DEBUG" "Country loaded from language.ch: $detected_country"
             else
-                detected_country=$(grep -m 1 "country" "$cache_language" | cut -d'=' -f2 2>/dev/null)
-                debug_log "DEBUG" "Country extracted from language.ch: $detected_country"
+                detected_country=$(grep -m 1 "country" "$cache_country" | cut -d'=' -f2 2>/dev/null)
+                debug_log "DEBUG" "Country extracted from country.ch: $detected_country"
             
                 # 抽出できなかった場合はファイル内容全体を試す
                 if [ -z "$detected_country" ]; then
-                    detected_country=$(cat "$cache_language" 2>/dev/null)
-                    debug_log "DEBUG" "Using entire language.ch content as country: $detected_country"
+                    detected_country=$(cat "$cache_country" 2>/dev/null)
+                    debug_log "DEBUG" "Using entire country.ch content as country: $detected_country"
                 fi
             fi
         
@@ -701,6 +700,28 @@ detect_and_set_location() {
         fi
     else
         debug_log "DEBUG" "Cache detection skipped due to flag settings"
+    fi
+
+    # 2. デバイス内情報の検出（キャッシュが見つからない場合）
+    if [ -z "$detected_country" ] && [ "$SKIP_DEVICE_DETECTION" != "true" ] && [ "$SKIP_CACHE_DEVICE_DETECTION" != "true" ]; then
+        debug_log "DEBUG" "Attempting device-based information detection"
+        
+        if [ -f "$BASE_DIR/dynamic-system-info.sh" ]; then
+            if ! command -v get_country_info >/dev/null 2>&1; then
+                debug_log "DEBUG" "Loading dynamic-system-info.sh"
+                . "$BASE_DIR/dynamic-system-info.sh"
+            fi
+
+            # 情報の取得
+            detected_country=$(get_country_info)
+            detected_timezone=$(get_timezone_info)
+            detected_zonename=$(get_zonename_info)
+            detection_source="device"
+            
+            debug_log "DEBUG" "Device detection results - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
+        else
+            debug_log "DEBUG" "dynamic-system-info.sh not found. Cannot use system detection."
+        fi
     fi
 
     # 2. デバイス内情報の検出（キャッシュが見つからない場合）
