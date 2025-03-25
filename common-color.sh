@@ -60,7 +60,12 @@ COLOR_ENABLED="1"       # 色表示有効/無効
 BOLD_ENABLED="0"        # 太字表示有効/無効
 UNDERLINE_ENABLED="0"   # 下線表示有効/無効
 BOX_ENABLED="0"         # ボックス表示有効/無効
-ANIMATION_ENABLED="1"   # アニメーション有効/無効
+
+# スピナーデフォルト設定
+SPINNER_DELAY="1" # デフォルトは秒単位
+SPINNER_USLEEP_VALUE="1000000" # 1秒（マイクロ秒）
+SPINNER_COLOR="green" # デフォルトのスピナー色
+ANIMATION_ENABLED="1" # アニメーション有効/無効フラグ
 
 # コマンドラインオプション処理関数
 process_display_options() {
@@ -463,153 +468,70 @@ load_display_settings() {
     fi
 }
 
-# アニメーション関数
-animation() {
-    local delay="$SPINNER_DELAY"
-    local anim_type="s$SPINNER_TYPE"  # デフォルトはスピナー
-    local count="1"            # デフォルトは1回
-    local cursor_hide="1"      # デフォルトはカーソル非表示
-    local param_found=""       # パラメータが見つかったかのフラグ
-
-    # オプション処理（POSIX準拠）
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            -t|--type)
-                shift
-                [ -n "$1" ] && anim_type="$1"
-                ;;
-            -d|--delay)
-                shift
-                [ -n "$1" ] && delay="$1"
-                ;;
-            -c|--count)
-                shift
-                [ -n "$1" ] && count="$1"
-                ;;
-            -s|--show-cursor)
-                cursor_hide="0"
-                ;;
-            *)
-                # 最初の位置引数はタイプ
-                if [ -z "$param_found" ]; then
-                    anim_type="$1"
-                    param_found="1"
-                fi
-                ;;
-        esac
-        shift
-    done
-
-    debug_log "DEBUG" "Running animation with type: $anim_type, delay: $delay, count: $count"
-
-    # カーソル非表示（設定されている場合）
-    [ "$cursor_hide" = "1" ] && printf "\033[?25l"
-
-    local c=0
-    while [ $c -lt $count ]; do
-        case "$anim_type" in
-            spinner)
-                printf "-"
-                usleep "$delay"
-                printf "\b\\"
-                usleep "$delay"
-                printf "\b|"
-                usleep "$delay"
-                printf "\b/"
-                usleep "$delay"
-                printf "\b"
-                ;;
-            dot)
-                printf "."
-                usleep "$delay"
-                printf "."
-                usleep "$delay"
-                printf "."
-                usleep "$delay"
-                printf "\b\b\b   \b\b\b"
-                usleep "$delay"
-                ;;
-            bar)
-                printf "["
-                usleep "$delay"
-                printf "\b="
-                usleep "$delay"
-                printf "\b>"
-                usleep "$delay"
-                printf "\b]"
-                usleep "$delay"
-                printf "\b \b"
-                usleep "$delay"
-                ;;
-            pulse)
-                printf "□"
-                usleep "$delay"
-                printf "\b■"
-                usleep "$delay"
-                printf "\b□"
-                usleep "$delay"
-                printf "\b"
-                usleep "$delay"
-                ;;
-            *)
-                printf "%s" "$anim_type"
-                usleep "$delay"
-                printf "\b \b"
-                usleep "$delay"
-                ;;
-        esac
-        c=$((c + 1))
-    done
-
-    # カーソル表示（設定されている場合）
-    [ "$cursor_hide" = "1" ] && printf "\033[?25h"
-
-    debug_log "DEBUG" "Animation completed successfully"
-}
-
 # スピナー開始関数
 start_spinner() {
     local message="$1"
-    local anim_type="${2:-spinner}"
+    local anim_type="${2:-dot}"
     local spinner_color="${3:-green}"
-    
+
     SPINNER_MESSAGE="$message"
     SPINNER_TYPE="$anim_type"
     SPINNER_COLOR="$spinner_color"
-    
+
+    if [ "$ANIMATION_ENABLED" -eq "0" ]; then
+        echo "$message"
+        return
+    fi
+
     # usleepの有無をチェックしてディレイを設定
     if command -v usleep >/dev/null 2>&1; then
         SPINNER_USLEEP_VALUE="200000"  # 200000マイクロ秒 = 0.2秒
-        SPINNER_DELAY="200000"       # animation関数用のディレイ値（マイクロ秒）
+        SPINNER_DELAY="200000"         # アニメーションディレイ値（マイクロ秒）
         debug_log "DEBUG" "Using fast animation mode (0.2s) with usleep"
     else
-        SPINNER_DELAY="1"            # animation関数用のディレイ値（整数秒）
+        SPINNER_DELAY="1"        # アニメーションディレイ値（秒）
         debug_log "DEBUG" "Using standard animation mode (1s)"
     fi
-    
+
     # カーソル非表示
     printf "\033[?25l"
-    
+
+    local spinner_chars
+    case "$anim_type" in
+        spinner)
+            spinner_chars="-\\|/"
+            ;;
+        dot)
+            spinner_chars=". .. ... ...."
+            ;;
+        bar)
+            spinner_chars="[=]->"
+            ;;
+        pulse)
+            spinner_chars="◯◎"
+            ;;
+        *)
+            spinner_chars="-\\|/"
+            ;;
+    esac
+
     debug_log "DEBUG" "Starting spinner with message: $message, type: $anim_type, delay: $SPINNER_DELAY"
 
     # バックグラウンドでループ実行
     (
+        local i=0
         while true; do
             # 行をクリアしてメッセージ表示
-            printf "\r\033[K%s " "$(color "$SPINNER_COLOR" "$SPINNER_MESSAGE")"
-            
-            # animation関数を呼び出し
-            animation -t "$SPINNER_TYPE" -d "$SPINNER_DELAY" -c 1 -s
-            
+            printf "\r\033[K%s %s" "$(color "$SPINNER_COLOR" "$SPINNER_MESSAGE")" "$(color "$SPINNER_COLOR" "${spinner_chars:i++%${#spinner_chars}:1}")"
+
             # ディレイ
             if command -v usleep >/dev/null 2>&1; then
                 usleep "$SPINNER_USLEEP_VALUE"  # マイクロ秒単位のディレイ
             else
-                sleep "$SPINNER_DELAY"          # 秒単位のディレイ
+                sleep "$SPINNER_DELAY"  # 秒単位のディレイ
             fi
         done
     ) &
-    
     SPINNER_PID=$!
     debug_log "DEBUG" "Spinner started with PID: $SPINNER_PID"
 }
@@ -618,6 +540,11 @@ start_spinner() {
 stop_spinner() {
     local message="$1"
     local status="${2:-success}"
+
+    if [ "$ANIMATION_ENABLED" -eq "0" ]; then
+        echo "$message"
+        return
+    fi
 
     debug_log "DEBUG" "Stopping spinner with message: $message, status: $status"
 
