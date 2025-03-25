@@ -676,40 +676,38 @@ animation() {
     debug_log "DEBUG" "Animation completed successfully"
 }
 
-# スピナー開始関数
+# スピナー開始関数 - animation()関数を活用（色付け対応）
 start_spinner() {
     local message="$1"
+    local anim_type="${2:-spinner}"  # デフォルトはspinner
+    local spinner_color="${3:-green}" # スピナーの色（デフォルトはシアン）
+    
     SPINNER_MESSAGE="$message"  # 停止時のメッセージ保持
-    spinner_chars="-\\|/"
-    i=0
-
+    SPINNER_TYPE="$anim_type"   # アニメーションタイプを保持
+    SPINNER_COLOR="$spinner_color" # スピナーの色を保持
+    
     # カーソル非表示
     printf "\033[?25l"
+    
+    debug_log "DEBUG" "Starting spinner with message: $message, type: $anim_type, color: $spinner_color"
 
-    debug_log "DEBUG" "Starting spinner animation with message: $message"
-
+    # バックグラウンドでループ実行
     while true; do
-        # POSIX 準拠の方法でインデックスを計算
-        local index=$(( i % 4 ))
-        # 文字を抽出（expr部分をPOSIX互換に）
-        case "$index" in
-            0) local spinner_char="-" ;;
-            1) local spinner_char="\\" ;;
-            2) local spinner_char="|" ;;
-            3) local spinner_char="/" ;;
-        esac
+        # 行をクリアしてメッセージ表示
+        printf "\r\033[K%s " "$(color white "$SPINNER_MESSAGE")"
         
-        # 文字の表示をクリアしてスピナー文字を表示
-        printf "\r\033[K%s %s" "$(color white "$SPINNER_MESSAGE")" "$spinner_char"
+        # animation関数を呼び出し
+        # -s オプションでカーソル表示制御を無効化（start_spinner側で制御するため）
+        # -c 1 で1回だけアニメーションを表示
+        # -d 0.2 で遅延を0.2秒に設定
+        animation -t "$SPINNER_TYPE" -d 0.2 -c 1 -s
         
-        # より滑らかな動きのためにusleepを試みる
+        # ディレイ
         if command -v usleep >/dev/null 2>&1; then
             usleep 200000  # 0.2秒
         else
             sleep 1
         fi
-        
-        i=$(( i + 1 ))
     done &
     
     SPINNER_PID=$!
