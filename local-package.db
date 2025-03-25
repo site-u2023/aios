@@ -60,11 +60,24 @@ install_package luci-compat hidden　disabled
 install_package luci-lib-ipkg hidden
 feed_package_release yn kiddin9 luci-theme-edge
 
-[zram-swap]
-uci add system zram
-uci set system.@zram[0].enabled='1'
-uci set system.@zram[0].size='${CUSTOM_ZRAM_SIZE}'
-uci set system.@zram[0].comp_algorithm='zstd'
-uci commit system
+[samba4]
+NAS="openwrt"
+MNT="/mnt/sda"
+uci set samba4.@samba[0]=samba
+uci set samba4.@samba[0].workgroup='WORKGROUP'
+uci set samba4.@samba[0].charset='UTF-8'
+uci set samba4.@samba[0].description='Samba on OpenWRT'
+uci set samba4.@samba[0].enable_extra_tuning='1'
+uci set samba4.@samba[0].interface='lan'
+uci set samba4.sambashare=sambashare
+uci set samba4.sambashare.name=${NAS}
+uci set samba4.sambashare.path=${MNT}
+uci set samba4.sambashare.read_only='no'
+uci set samba4.sambashare.force_root='1'
+uci set samba4.sambashare.guest_ok='yes'
+uci set samba4.sambashare.inherit_owner='yes'
+uci set samba4.sambashare.create_mask='0777'
+uci set samba4.sambashare.dir_mask='0777'
+uci commit samba4
 
 
