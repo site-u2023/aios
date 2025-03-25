@@ -578,41 +578,46 @@ animation() {
     debug_log "DEBUG" "Animation completed successfully"
 }
 
-# スピナー開始関数 - animation関数を利用
+# スピナー開始関数
 start_spinner() {
     local message="$1"
-    local anim_type="${2:-spinner}"  # デフォルトはspinner
-    local spinner_color="${3:-green}" # スピナーの色
+    local anim_type="${2:-dot}"
+    local spinner_color="${3:-green}"
     
-    SPINNER_MESSAGE="$message"  # メッセージ保持
-    SPINNER_TYPE="$anim_type"   # タイプ保持
-    SPINNER_COLOR="$spinner_color" # 色を保持
+    SPINNER_MESSAGE="$message"
+    SPINNER_TYPE="$anim_type"
+    SPINNER_COLOR="$spinner_color"
+    
+    # usleepの有無をチェックしてディレイを設定
+    if command -v usleep >/dev/null 2>&1; then
+        SPINNER_DELAY="0.2"  # 高速モード
+        debug_log "DEBUG" "Using fast animation mode (0.2s) with usleep"
+    else
+        SPINNER_DELAY="1"    # 標準モード
+        debug_log "DEBUG" "Using standard animation mode (1s)"
+    fi
     
     # カーソル非表示
     printf "\033[?25l"
     
-    debug_log "DEBUG" "Starting spinner with message: $message, type: $anim_type"
+    debug_log "DEBUG" "Starting spinner with message: $message, type: $anim_type, delay: $SPINNER_DELAY"
 
-    # バックグラウンドプロセス - メッセージ表示後にアニメーション関数を呼び出す
+    # バックグラウンドでループ実行
     (
         while true; do
-            # メッセージを表示
+            # 行をクリアしてメッセージ表示
             printf "\r\033[K%s " "$SPINNER_MESSAGE"
             
-            # アニメーション関数を呼び出し（カーソル表示制御は無効化）
-            animation -t "$SPINNER_TYPE" -d 1 -c 1 -s
+            # animation関数を呼び出し
+            animation -t "$SPINNER_TYPE" -d "$SPINNER_DELAY" -c 1 -s
             
-            # 適切な遅延
-            if command -v usleep >/dev/null 2>&1; then
-                usleep 100000  # 0.1秒
-            else
-                sleep 1
-            fi
+            # アニメーションと同じディレイを使用
+            sleep "$SPINNER_DELAY"
         done
     ) &
     
     SPINNER_PID=$!
-    debug_log "DEBUG" "Spinner process started with PID: $SPINNER_PID"
+    debug_log "DEBUG" "Spinner started with PID: $SPINNER_PID"
 }
 
 # スピナー停止関数 - 元のまま維持
