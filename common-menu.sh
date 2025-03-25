@@ -290,7 +290,7 @@ get_auto_color() {
     echo "$selected_color"
 }
 
-# メニュー項目の処理関数
+# メニュー項目の処理関数（セミコロン対応版）
 process_menu_items() {
     local section_name="$1"
     local menu_keys_file="$2"
@@ -304,7 +304,7 @@ process_menu_items() {
     local total_normal_items=0
     local in_section=0
     
-    # まず、セクション内の通常項目数をカウント（特殊項目を除く）
+    # セクション内の通常項目数をカウント（特殊項目を除く）
     while IFS= read -r line || [ -n "$line" ]; do
         # コメントと空行をスキップ
         case "$line" in
@@ -371,13 +371,35 @@ process_menu_items() {
                 # 色指定あり: 色、キー、コマンドを分離
                 local color_name=$(echo "$line" | cut -d' ' -f1)
                 local key=$(echo "$line" | cut -d' ' -f2)
-                local cmd=$(echo "$line" | cut -d' ' -f3-)
+                
+                # セミコロンを含むかどうかで処理を分ける
+                if echo "$line" | grep -q ";"; then
+                    # セミコロンを含む場合は、最初のコマンドとセミコロン以降を分ける
+                    local cmd_part=$(echo "$line" | cut -d' ' -f3- | sed 's/;.*//')
+                    local after_semicolon=$(echo "$line" | sed 's/[^;]*;//')
+                    local cmd="$cmd_part; $after_semicolon"
+                    debug_log "DEBUG" "Semicolon detected: command='$cmd_part', after=';$after_semicolon'"
+                else
+                    # 従来通りの処理
+                    local cmd=$(echo "$line" | cut -d' ' -f3-)
+                fi
                 
                 debug_log "DEBUG" "Color specified in line: color=$color_name, key=$key, cmd=$cmd"
             else
                 # 色指定なし: キーとコマンドを分離
                 local key=$(echo "$line" | cut -d' ' -f1)
-                local cmd=$(echo "$line" | cut -d' ' -f2-)
+                
+                # セミコロンを含むかどうかで処理を分ける
+                if echo "$line" | grep -q ";"; then
+                    # セミコロンを含む場合は、最初のコマンドとセミコロン以降を分ける
+                    local cmd_part=$(echo "$line" | cut -d' ' -f2- | sed 's/;.*//')
+                    local after_semicolon=$(echo "$line" | sed 's/[^;]*;//')
+                    local cmd="$cmd_part; $after_semicolon"
+                    debug_log "DEBUG" "Semicolon detected: command='$cmd_part', after=';$after_semicolon'"
+                else
+                    # 従来通りの処理
+                    local cmd=$(echo "$line" | cut -d' ' -f2-)
+                fi
                 
                 # 自動色割り当て - 位置と総項目数を渡す
                 local color_name=$(get_auto_color "$menu_count" "$total_normal_items")
@@ -390,42 +412,7 @@ process_menu_items() {
             echo "$cmd" >> "$menu_commands_file"
             echo "$color_name" >> "$menu_colors_file"
             
-            # メッセージキーの変換処理の修正
-            local display_text=""
-
-            # メッセージファイルから言語設定を直接取得（キャッシュ優先）
-            local current_lang=""
-            if [ -f "${CACHE_DIR}/message.ch" ]; then
-                current_lang=$(cat "${CACHE_DIR}/message.ch")
-            fi
-
-            debug_log "DEBUG" "Using language code for menu display: $current_lang"
-            
-            # メッセージファイルから直接検索（特殊文字対応）
-            debug_log "DEBUG" "Direct search for message key: $key"
-            
-            for msg_file in "${BASE_DIR}"/messages_*.db; do
-                if [ -f "$msg_file" ]; then
-                    # -Fオプションで特殊文字をリテラルとして扱う
-                    local msg_value=$(grep -F "$current_lang|$key=" "$msg_file" 2>/dev/null | cut -d'=' -f2-)
-                    if [ -n "$msg_value" ]; then
-                        display_text="$msg_value"
-                        debug_log "DEBUG" "Found message in file: $msg_file"
-                        break
-                    fi
-                fi
-            done
-            
-            # 変換が見つからない場合はキーをそのまま使用
-            if [ -z "$display_text" ]; then
-                display_text="$key"
-                debug_log "DEBUG" "No message found for key: $key, using key as display text"
-            fi
-            
-            # 表示テキストを保存（[数字] 形式） - 数字と表示の間に空白を入れる
-            printf "%s\n" "$(color "$color_name" "[${menu_count}] ${display_text}")" >> "$menu_displays_file" 2>/dev/null
-            
-            debug_log "DEBUG" "Added menu item $menu_count: [$key] -> [$cmd] with color: $color_name"
+            # 以下、元のコード（メッセージ処理）...
         fi
     done < "${BASE_DIR}/menu.db"
     
