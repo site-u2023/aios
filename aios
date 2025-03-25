@@ -359,7 +359,7 @@ save_github_token() {
     chmod 600 "$GITHUB_TOKEN_FILE"
     
     if [ $? -eq 0 ]; then
-        debug_log "INFO" "GitHub token saved to $GITHUB_TOKEN_FILE"
+        debug_log "DEBUG" "GitHub token saved to $GITHUB_TOKEN_FILE"
         return 0
     else
         debug_log "ERROR" "Failed to save token to $GITHUB_TOKEN_FILE"
