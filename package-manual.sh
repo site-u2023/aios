@@ -208,26 +208,22 @@ install_packages_by_version() {
     local os_version
     os_version=$(cat "${CACHE_DIR}/osversion.ch")
     
-    printf "📋 検出したOSバージョン: %s\n" "$os_version"
     debug_log "DEBUG" "Detected OS version: $os_version"
 
     # バージョンに基づいて関数を呼び出し
     case "$os_version" in
         19.*)
             # バージョン19系の場合
-            printf "📦 OpenWrt 19系用パッケージをインストールします...\n"
             debug_log "DEBUG" "Installing packages for OpenWrt 19.x series"
             packages_19
             ;;
         *[Ss][Nn][Aa][Pp][Ss][Hh][Oo][Tt]*)
             # スナップショットバージョンの場合（大文字小文字を区別しない）
-            printf "📦 OpenWrtスナップショット用パッケージをインストールします...\n"
             debug_log "DEBUG" "Installing packages for OpenWrt SNAPSHOT"
             packages_snaphot
             ;;
         *)
             # その他の通常バージョン
-            printf "📦 通常パッケージをインストールします...\n"
             debug_log "DEBUG" "Installing standard packages"
             packages
             ;;
@@ -240,18 +236,15 @@ install_packages_by_version() {
 install_usb_packages() {
     # USBデバイスのキャッシュファイルを確認
     if [ ! -f "${CACHE_DIR}/usbdevice.ch" ]; then
-        printf "📋 USBデバイス情報がありません。検出をスキップします。\n"
         debug_log "DEBUG" "USB device cache file not found, skipping USB detection"
         return 0
     fi
     
     # USBデバイスが検出されているか確認
     if [ "$(cat "${CACHE_DIR}/usbdevice.ch")" = "detected" ]; then
-        printf "🔌 USBデバイスを検出しました。USBパッケージをインストールします...\n"
         debug_log "DEBUG" "USB device detected, installing USB packages"
         packages_usb
     else
-        printf "📋 USBデバイスが検出されませんでした。\n"
         debug_log "DEBUG" "No USB device detected, skipping USB packages"
     fi
     
@@ -260,6 +253,7 @@ install_usb_packages() {
 
 # メイン処理
 main() {
+    print_information
     # OSバージョンに基づいたパッケージインストール
     install_packages_by_version
     # USB関連パッケージのインストール
