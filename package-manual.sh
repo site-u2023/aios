@@ -79,6 +79,9 @@ packages() {
     install_package attendedsysupgrade-common yn hidden
     install_package luci-app-attendedsysupgrade yn hidden
     install_package luci-i18n-attendedsysupgrade yn hidden   
+
+    install_package usleep yn hidden
+    install_package git yn hidden
     install_package jq yn hidden
 
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
@@ -123,6 +126,9 @@ packages_19() {
     install_package attendedsysupgrade-common yn hidden
     install_package luci-app-attendedsysupgrade yn hidden
     install_package luci-i18n-attendedsysupgrade yn hidden   
+
+    install_package usleep yn hidden
+    install_package git yn hidden
     install_package jq yn hidden
 
     return 0
@@ -157,6 +163,9 @@ packages_snaphot() {
     install_package attendedsysupgrade-common yn hidden
     install_package luci-app-attendedsysupgrade yn hidden
     install_package luci-i18n-attendedsysupgrade yn hidden   
+
+    install_package usleep yn hidden
+    install_package git yn hidden
     install_package jq yn hidden
 
     return 0
