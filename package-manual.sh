@@ -83,7 +83,6 @@ packages() {
     install_package git yn hidden
     install_package git-http yn hidden
     install_package ca-certificates yn hidden
-    install_package jq yn hidden
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden
     feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden
@@ -126,7 +125,6 @@ packages_19() {
     install_package git yn hidden
     install_package git-http yn hidden
     install_package ca-certificates yn hidden
-    install_package jq yn hidden
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
     feed_package gSpotx2f packages-openwrt 19.07 luci-app-cpu-status-mini yn hidden   
     feed_package gSpotx2f packages-openwrt 19.07 luci-app-log yn hidden
@@ -168,7 +166,6 @@ packages_snaphot() {
     install_package git yn hidden
     install_package git-http yn hidden
     install_package ca-certificates yn hidden
-    install_package jq yn hidden
     return 0
 }
 
