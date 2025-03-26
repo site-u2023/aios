@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.14-00-00"
+SCRIPT_VERSION="2025.03.26-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -60,21 +60,29 @@ DEV_NULL="${DEV_NULL:-on}"
 # unset DEV_NULL
 
 # 基本定数の設定 
-BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q -O}"
+# 基本wgetコマンド - ヘッダー無し
 # BASE_WGET="${BASE_WGET:-wget -O}"
+BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q}"
+# Bearer認証用wgetコマンド（トークンは呼び出し時に指定）
+BASE_WGET_AUTH_BEARER='wget --no-check-certificate -q -O "$1" --header="Authorization: Bearer $2" "$3"'
+# 従来のtoken認証用wgetコマンド（トークンは呼び出し時に指定）
+BASE_WGET_AUTH_TOKEN='wget --no-check-certificate -q -O "$1" --header="Authorization: token $2" "$3"'
 DEBUG_MODE="${DEBUG_MODE:-false}"
-BIN_PATH=$(readlink -f "$0")
+BIN_PATH="$(readlink -f "$0")"
 BIN_DIR="$(dirname "$BIN_PATH")"
 BIN_FILE="$(basename "$BIN_PATH")"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
+CACHE_BUST="?cache_bust=$(date +%s)"  # キャッシュバスティング用パラメータを初期化
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
+
 UPDATE_CACHE="${CACHE_DIR}/update.ch"
 GITHUB_TOKEN_FILE="/etc/aios_token"
+MSG_MEMORY=""
 
-# 🔵　エラー・デバッグ・アップデート系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
+# 🔵　エラー・デバッグ　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 
 handle_error() {
     local error_key="$1"
@@ -111,10 +119,11 @@ debug_log() {
     local message="$2"
     local file="$3"
     local version="$4"
-
-    # `$1` にログレベルが指定されていない場合、デフォルトを `DEBUG` にする
+    local debug_level="${DEBUG_LEVEL:-ERROR}"  # デフォルト値を設定
+    
+    # レベル判定のシンプル化
     case "$level" in
-        "DEBUG"|"INFO"|"WARN"|"ERROR") ;;  # 何もしない (正しいログレベル)
+        "DEBUG"|"INFO"|"WARN"|"ERROR") ;;
         "")
             level="DEBUG"
             message="$1"
@@ -163,28 +172,24 @@ debug_log() {
         timestamp=$(date '+%Y-%m-%d %H:%M:%S')
         local log_message="[$timestamp] $level: $message"
 
-        # カラー表示
+        # カラー表示 - 標準エラー出力に出力
         case "$level" in
-            "ERROR") echo -e "$(color red "$log_message")" ;;
-            "WARN") echo -e "$(color yellow "$log_message")" ;;
-            "INFO") echo -e "$(color cyan "$log_message")" ;;
-            "DEBUG") echo -e "$(color white "$log_message")" ;;
+            "ERROR") printf "%s\n" "$(color red "$log_message")" >&2 ;;
+            "WARN") printf "%s\n" "$(color yellow "$log_message")" >&2 ;;
+            "INFO") printf "%s\n" "$(color cyan "$log_message")" >&2 ;;
+            "DEBUG") printf "%s\n" "$(color white "$log_message")" >&2 ;;
         esac
 
         # ログファイルに記録
-        if [ "$AIOS_INITIALIZED" = "true" ]; then
-            echo "$log_message" >> "$LOG_DIR/debug.log"
+        if [ "$AIOS_INITIALIZED" = "true" ] && [ -d "$LOG_DIR" ]; then
+            echo "$log_message" >> "$LOG_DIR/debug.log" 2>/dev/null
         fi
     fi
 }
 
-handle_exit() {
-    local message="$1"
-    color yellow "$message"
-    exit 0
-}
+# 🔴　エラー・デバッグ　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
 
-# 🔴　エラー・デバッグ・アップデート系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
+# 🔵　ヘルプ　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 
 print_help() {
     printf "%s\n\n" "$(get_message "MSG_HELP_USAGE")"
@@ -203,183 +208,99 @@ print_help() {
     printf "  %-25s %s\n" "-dr, --dry-run" "$(get_message "MSG_HELP_DRY_RUN")"
     
     printf "\n%s\n" "$(get_message "MSG_HELP_LANGUAGE_HEADER")"
-    printf "  %-25s %s\n" "ja, en, zh-cn, ..." "$(get_message "MSG_HELP_LANGUAGE")"
+    printf "  %-25s %s\n" "US, JP, ..." "$(get_message "MSG_HELP_LANGUAGE")"
     
     printf "\n%s\n" "$(get_message "MSG_HELP_EXAMPLES_HEADER")"
     printf "  %s\n" "$(get_message "MSG_HELP_EXAMPLE1")"
     printf "  %s\n" "$(get_message "MSG_HELP_EXAMPLE2")"
     printf "  %s\n" "$(get_message "MSG_HELP_EXAMPLE3")"
     printf "  %s\n" "$(get_message "MSG_HELP_EXAMPLE4")"
-    
-    printf "\n%s\n" "$(get_message "MSG_HELP_DEBUG_HEADER")"
-    printf "  %s\n" "$(get_message "MSG_HELP_DEBUG_STANDARD")"
-    printf "  %s\n" "$(get_message "MSG_HELP_DEBUG_VERBOSE")"
 }
 
+# 🔴　ヘルプ　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
+
+# 🔵　カラー系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
+
+# 基本色表示関数
 color() {
-    local color_code
-    color_code=$(color_code_map "$1")
-    shift
-    # %b でエスケープシーケンスを処理
-    printf "%b%s%b" "$color_code" "$*" "$(color_code_map "reset")"
-}
-
-color_code_map() {
-    local color="$1"
-    case "$color" in
-        "red") printf "\033[1;31m" ;;
-        "green") printf "\033[1;32m" ;;
-        "yellow") printf "\033[1;33m" ;;
-        "blue") printf "\033[1;34m" ;;
-        "magenta") printf "\033[1;35m" ;;
-        "cyan") printf "\033[1;36m" ;;
-        "white") printf "\033[1;37m" ;;
-        "red_underline") printf "\033[4;31m" ;;
-        "green_underline") printf "\033[4;32m" ;;
-        "yellow_underline") printf "\033[4;33m" ;;
-        "blue_underline") printf "\033[4;34m" ;;
-        "magenta_underline") printf "\033[4;35m" ;;
-        "cyan_underline") printf "\033[4;36m" ;;
-        "white_underline") printf "\033[4;37m" ;;
-        "red_white") printf "\033[1;41m" ;;
-        "green_white") printf "\033[1;42m" ;;
-        "yellow_white") printf "\033[1;43m" ;;
-        "blue_white") printf "\033[1;44m" ;;
-        "magenta_white") printf "\033[1;45m" ;;
-        "cyan_white") printf "\033[1;46m" ;;
-        "white_black") printf "\033[7;40m" ;;
-        "reset") printf "\033[0m" ;;
-        *) printf "\033[0m" ;;  # デフォルトでリセット
+    local c="$1"; shift
+    case "$c" in
+        red) printf "\033[38;5;196m%s\033[0m" "$*" ;;
+        orange) printf "\033[38;5;208m%s\033[0m" "$*" ;;
+        yellow) printf "\033[38;5;226m%s\033[0m" "$*" ;;
+        green) printf "\033[38;5;46m%s\033[0m" "$*" ;;
+        cyan) printf "\033[38;5;51m%s\033[0m" "$*" ;;
+        blue) printf "\033[38;5;33m%s\033[0m" "$*" ;;
+        indigo) printf "\033[38;5;57m%s\033[0m" "$*" ;;
+        purple) printf "\033[38;5;129m%s\033[0m" "$*" ;;
+        magenta) printf "\033[38;5;201m%s\033[0m" "$*" ;;
+        white) printf "\033[37m%s\033[0m" "$*" ;;
+        black) printf "\033[30m%s\033[0m" "$*" ;;
+        *) printf "%s" "$*" ;;
     esac
 }
 
-load_language_file() {
-    local lang_code="$1"
-    local base_db="${BASE_DIR}/messages_base.db"
-    
-    debug_log "DEBUG" "Attempting to load language messages for code: ${lang_code}"
-    
-    # 基本言語ファイルは常にロード（US, JPを含む）
-    if [ ! -f "$base_db" ]; then
-        debug_log "ERROR" "Base language file not found: ${base_db}"
-        return 1
-    fi
-    
-    # 言語コードに基づいて追加ファイルをロード
-    case "$lang_code" in
-        US|JP)
-            # 基本ファイルのみで十分
-            debug_log "INFO" "Using base language file only for ${lang_code}"
-            ;;
-        CN|TW|KO)
-            # アジア言語ファイルが必要
-            local asian_db="${BASE_DIR}/messages_asian.db"
-            if [ -f "$asian_db" ]; then
-                debug_log "INFO" "Loading additional Asian language file for ${lang_code}"
-            else
-                debug_log "WARNING" "Asian language file not found, falling back to base messages"
-            fi
-            ;;
-        DE|FR|RU)
-            # ヨーロッパ言語ファイルが必要
-            local euro_db="${BASE_DIR}/messages_euro.db"
-            if [ -f "$euro_db" ]; then
-                debug_log "INFO" "Loading additional European language file for ${lang_code}"
-            else
-                debug_log "WARNING" "European language file not found, falling back to base messages"
-            fi
-            ;;
-        *)
-            # 不明な言語コードの場合はUSにフォールバック
-            debug_log "WARNING" "Unknown language code: ${lang_code}, falling back to US"
-            lang_code="US"
-            ;;
-    esac
-    
-    debug_log "DEBUG" "Language files loaded successfully for ${lang_code}"
-    return 0
+# 🔴　カラー系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
+
+# 🔵　メッセージ系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
+
+into_memory_message() {
+    # メッセージを文字列としてMSG_MEMORYに追加する
+    MSG_MEMORY="
+US|CONFIG_DOWNLOAD_SUCCESS=Download completed:
+US|CONFIG_DOWNLOAD_UNNECESSARY=No update needed:"
+
+    debug_log "DEBUG" "Messages loaded into memory"
 }
 
 # メッセージを取得する関数
 get_message() {
     local key="$1"
-    local params="$2"  # パラメータ文字列（例: "code=JP"）
-    local default_msg=""
-    local lang=""
-    local db_file=""
-    
-    # キャッシュからアクティブな言語とDBファイルを取得
+    local params="$2"  # パラメータ文字列
+    local lang="${lang:-US}" 
+    local db_file="${db_file:-${BASE_DIR}/messages_base.db}" 
+    local message=""
+
+    # メッセージDBがダウンロードされた後の言語設定処理
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang=$(cat "${CACHE_DIR}/message.ch")
-    else
-        lang="US"  # デフォルト言語
+    elif [ -n "$ACTIVE_LANGUAGE" ]; then
+        lang="$ACTIVE_LANGUAGE"
     fi
     
-    if [ -f "${CACHE_DIR}/message_db.ch" ]; then
-        db_file=$(cat "${CACHE_DIR}/message_db.ch")
-    else
-        db_file="${BASE_DIR}/messages_base.db"  # デフォルトDB
-    fi
-    
-    debug_log "DEBUG" "get_message: key=${key}, language=${lang}, db_file=${db_file}, params=${params}"
-    
-    # 指定されたDBファイルが存在するか確認
-    if [ ! -f "$db_file" ]; then
-        debug_log "ERROR" "Message DB file not found: ${db_file}"
-        if [ -n "$default_msg" ]; then
-            echo "$default_msg"
-        else
-            echo "$key"  # キーをそのまま返す
-        fi
-        return 1
+    # インメモリメッセージから検索
+    into_memory_message
+    if [ -n "$MSG_MEMORY" ]; then
+        # 言語固有のメモリ内メッセージを検索
+        message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
     fi
 
-    # DBからメッセージを検索
-    local message=""
-    message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
-    
-    # 言語固有のメッセージが見つからない場合
-    if [ -z "$message" ]; then
-        # 英語メッセージを検索
-        message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+    # メッセージが見つからなかった場合かつDBファイルが存在する場合は検索
+    if [ -z "$message" ] && [ -f "$db_file" ]; then
+        # 現在の言語でDBファイルを検索
+        message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
         
-        # それでも見つからない場合は基本DBで再検索
-        if [ -z "$message" ] && [ "$db_file" != "${BASE_DIR}/messages_base.db" ]; then
-            debug_log "DEBUG" "Message not found in specialized DB, trying base DB"
-            message=$(grep "^${lang}|${key}=" "${BASE_DIR}/messages_base.db" 2>/dev/null | cut -d'=' -f2-)
-            
-            if [ -z "$message" ]; then
-                message=$(grep "^US|${key}=" "${BASE_DIR}/messages_base.db" 2>/dev/null | cut -d'=' -f2-)
-            fi
+        # 言語固有のメッセージが見つからない場合、英語をチェック
+        if [ -z "$message" ] && [ "$lang" != "US" ]; then
+            message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
         fi
     fi
     
-    # それでも見つからない場合はデフォルトかキーを返す
+    # メッセージが見つからなかった場合はキーをそのまま返す
     if [ -z "$message" ]; then
         debug_log "WARNING" "Message not found for key: ${key}"
-        if [ -n "$default_msg" ]; then
-            message="$default_msg"
-        else
-            message="$key"  # キーをそのまま返す
-        fi
+        message="$key"
     fi
     
-    # パラメータ置換処理 - 修正版
+    # パラメータ置換処理
     if [ -n "$params" ]; then
-        local temp_msg="$message"
-        local var_name=""
-        local var_value=""
-        
-        # パラメータを処理（単一パラメータ対応）
         var_name=$(echo "$params" | cut -d'=' -f1)
         var_value=$(echo "$params" | cut -d'=' -f2-)
         
         if [ -n "$var_name" ] && [ -n "$var_value" ]; then
-            # sedでメッセージ内の{var_name}をvar_valueに置換
-            # 特殊文字をエスケープして安全にする
+            debug_log "DEBUG" "Replacing placeholder {$var_name} with value"
             var_value_esc=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
-            temp_msg=$(echo "$temp_msg" | sed "s/{$var_name}/$var_value_esc/g")
-            message="$temp_msg"
+            message=$(echo "$message" | sed "s|{$var_name}|$var_value_esc|g")
         fi
     fi
     
@@ -387,328 +308,129 @@ get_message() {
     return 0
 }
 
-# 全角文字を半角文字に変換する関数
-normalize_input() {
-    local input="$1"
-    local output="$input"
-    
-    debug_log "DEBUG" "Starting character normalization for input text"
-    
-    # 変換テーブル（各行はsedコマンドの負荷を分散するため分割）
-    
-    # 数字（0-9）: 日本語、中国語（簡体字・繁体字）、韓国語で共通
-    output=$(echo "$output" | sed 's/０/0/g; s/１/1/g; s/２/2/g; s/３/3/g; s/４/4/g')
-    output=$(echo "$output" | sed 's/５/5/g; s/６/6/g; s/７/7/g; s/８/8/g; s/９/9/g')
-    
-    # アルファベット大文字（A-Z）: 各国共通の全角英字
-    output=$(echo "$output" | sed 's/Ａ/A/g; s/Ｂ/B/g; s/Ｃ/C/g; s/Ｄ/D/g; s/Ｅ/E/g')
-    output=$(echo "$output" | sed 's/Ｆ/F/g; s/Ｇ/G/g; s/Ｈ/H/g; s/Ｉ/I/g; s/Ｊ/J/g')
-    output=$(echo "$output" | sed 's/Ｋ/K/g; s/Ｌ/L/g; s/Ｍ/M/g; s/Ｎ/N/g; s/Ｏ/O/g')
-    output=$(echo "$output" | sed 's/Ｐ/P/g; s/Ｑ/Q/g; s/Ｒ/R/g; s/Ｓ/S/g; s/Ｔ/T/g')
-    output=$(echo "$output" | sed 's/Ｕ/U/g; s/Ｖ/V/g; s/Ｗ/W/g; s/Ｘ/X/g; s/Ｙ/Y/g; s/Ｚ/Z/g')
-    
-    # アルファベット小文字（a-z）: 各国共通の全角英字
-    output=$(echo "$output" | sed 's/ａ/a/g; s/ｂ/b/g; s/ｃ/c/g; s/ｄ/d/g; s/ｅ/e/g')
-    output=$(echo "$output" | sed 's/ｆ/f/g; s/ｇ/g/g; s/ｈ/h/g; s/ｉ/i/g; s/ｊ/j/g')
-    output=$(echo "$output" | sed 's/ｋ/k/g; s/ｌ/l/g; s/ｍ/m/g; s/ｎ/n/g; s/ｏ/o/g')
-    output=$(echo "$output" | sed 's/ｐ/p/g; s/ｑ/q/g; s/ｒ/r/g; s/ｓ/s/g; s/ｔ/t/g')
-    output=$(echo "$output" | sed 's/ｕ/u/g; s/ｖ/v/g; s/ｗ/w/g; s/ｘ/x/g; s/ｙ/y/g; s/ｚ/z/g')
-    
-    # 主要な記号（日本語、中国語、韓国語で共通使用される記号）
-    output=$(echo "$output" | sed 's/　/ /g')  # 全角スペース
-    output=$(echo "$output" | sed 's/！/!/g; s/＂/"/g; s/＃/#/g; s/＄/$/g; s/％/%/g')
-    output=$(echo "$output" | sed 's/＆/\&/g; s/＇/'\''/g; s/（/(/g; s/）/)/g; s/＊/*/g')
-    output=$(echo "$output" | sed 's/＋/+/g; s/，/,/g; s/－/-/g; s/．/./g; s/／/\//g')
-    
-    # 主要な記号（続き）
-    output=$(echo "$output" | sed 's/：/:/g; s/；/;/g; s/＜/</g; s/＝/=/g; s/＞/>/g')
-    output=$(echo "$output" | sed 's/？/?/g; s/＠/@/g; s/［/[/g; s/＼/\\/g; s/］/]/g')
-    output=$(echo "$output" | sed 's/＾/^/g; s/＿/_/g; s/｀/`/g; s/｛/{/g; s/｜/|/g')
-    output=$(echo "$output" | sed 's/｝/}/g; s/～/~/g')
-    
-    # 韓国語特有の全角記号
-    output=$(echo "$output" | sed 's/￦/\\/g; s/￥/\\/g')
-    
-    # 変換対象外の文字はそのまま残す（弾かない）
-    
-    debug_log "DEBUG" "Character normalization completed"
-    echo "$output"
-}
-
-# 確認入力処理関数
-confirm() {
-    local msg_key="$1"
-    local param_name="$2"
-    local param_value="$3"
-    local direct_msg="$4"
-    local msg=""
-    local yn=""
-    
-    # メッセージの取得と変数置換
-    if [ -n "$msg_key" ]; then
-        msg=$(get_message "$msg_key")
-        # パラメータ名と値が指定されている場合は置換
-        if [ -n "$param_name" ] && [ -n "$param_value" ]; then
-            # POSIXに準拠した置換方法（エスケープ処理を追加）
-            local safe_value=$(echo "$param_value" | sed 's/[\/&]/\\&/g')
-            msg=$(echo "$msg" | sed "s|{$param_name}|$safe_value|g")
-        fi
-    else
-        # 直接メッセージが指定されている場合はそれを使用
-        msg="$direct_msg"
-    fi
-    
-    debug_log "DEBUG" "Confirm prompt: $msg_key: $msg"
-    
-    # 確認プロンプト表示
-    printf "%s " "$(color cyan "$msg")"
-    
-    # ユーザー入力処理
-    while true; do
-        # readコマンドエラーをハンドリング
-        if ! read -r yn; then
-            debug_log "ERROR" "Failed to read user input"
-            return 1
-        fi
-        
-        # 入力の正規化（数字のみ正規化し、大文字小文字は変換しない）
-        yn=$(normalize_input "$yn")
-        debug_log "DEBUG" "User input: $yn, normalized to: $yn"
-
-        # 入力の検証（大文字小文字両方に対応）
-        case "$yn" in
-            [Yy]|[Yy][Ee][Ss]) 
-                debug_log "DEBUG" "User confirmed: Yes"
-                # グローバル変数に結果を保存（呼び出し側でも使えるように）
-                CONFIRM_RESULT="Y"
-                return 0 
-                ;;
-            [Nn]|[Nn][Oo]) 
-                debug_log "DEBUG" "User confirmed: No"
-                CONFIRM_RESULT="N"
-                return 1 
-                ;;
-            [Rr]|[Rr][Ee][Tt][Uu][Rr][Nn])
-                # リスタートオプション対応
-                debug_log "DEBUG" "User selected: Return to previous step"
-                CONFIRM_RESULT="R"
-                return 2
-                ;;
-            *) 
-                # 無効な入力の場合のエラーメッセージ
-                printf "%s\n" "$(color red "$(get_message "MSG_INVALID_INPUT_YNR")")"
-                printf "%s " "$(color cyan "$msg")" 
-                ;;
-        esac
-    done
-}
+# 🔴　メッセージ系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
 
 # 🔵　トークン系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
+format_api_status() {
+    local auth_method="$1"
+    local remaining="$2"
+    local limit="$3"
+    local reset_minutes="$4"
+    local status_text=""
+    
+    debug_log "DEBUG" "Formatting API status with auth_method=$auth_method, remaining=$remaining, limit=$limit, reset_minutes=$reset_minutes"
+    
+    if [ "$auth_method" = "token" ] || [ "$auth_method" = "header" ] || [ "$auth_method" = "user" ]; then
+        # 認証API表示
+        status_text="API: ${remaining}/${limit} TTL:${reset_minutes}m"
+    elif [ "$auth_method" = "direct" ] && [ -n "$remaining" ] && [ -n "$limit" ]; then
+        # 未認証APIでも残り回数が分かる場合
+        status_text="API: ${remaining}/${limit} TTL:${reset_minutes}m"
+    else
+        # 直接ダウンロード時
+        status_text="API: N/A TTL:${reset_minutes}m"
+    fi
+    
+    echo "$status_text"
+}
+
 github_api_request() {
     local endpoint="$1"
     local token=$(get_github_token)
     local response=""
-    local auth_status="anonymous"
+    local auth_method="direct"
+    local temp_file="/tmp/github_api_request.tmp"
     
-    # 認証トークンがある場合
-    if [ -n "$token" ]; then
-        # 通常のHTTPSリクエストを試行
-        debug_log "DEBUG" "認証付きHTTPSリクエストを実行"
-        response=$(wget -q --header="Authorization: token $token" \
-            --header="Accept: application/vnd.github.v3+json" \
-            -O- "https://api.github.com/$endpoint" 2>/dev/null)
-            
-        # 成功した場合
-        if [ -n "$response" ] && ! echo "$response" | grep -q '"message":"Bad credentials"'; then
-            auth_status="authenticated"
+    # wgetの機能チェック
+    if [ -z "$WGET_SUPPORTS_HEADER" ]; then
+        if wget --help 2>&1 | grep -q -- "--header"; then
+            export WGET_SUPPORTS_HEADER=1
         else
-            # 認証失敗時に証明書検証スキップで再試行
-            debug_log "WARN" "通常リクエスト失敗: 証明書検証スキップで再試行"
-            response=$(wget --no-check-certificate -q \
-                --header="Authorization: token $token" \
-                --header="Accept: application/vnd.github.v3+json" \
-                -O- "https://api.github.com/$endpoint" 2>/dev/null)
-                
-            if [ -n "$response" ] && ! echo "$response" | grep -q '"message":"Bad credentials"'; then
-                auth_status="authenticated_nocert"
-            else
-                # 認証が完全に失敗した場合は匿名リクエストへ
-                debug_log "WARN" "認証失敗: 匿名リクエストへフォールバック"
-                response=$(wget -q -O- "https://api.github.com/$endpoint" 2>/dev/null)
-                
-                # それも失敗したら証明書検証スキップで匿名リクエスト
-                if [ -z "$response" ]; then
-                    debug_log "WARN" "匿名リクエスト失敗: 証明書検証スキップで再試行"
-                    response=$(wget --no-check-certificate -q \
-                        -O- "https://api.github.com/$endpoint" 2>/dev/null)
-                    auth_status="anonymous_nocert"
+            export WGET_SUPPORTS_HEADER=0
+        fi
+    fi
+    
+    if [ -n "$token" ]; then
+        debug_log "DEBUG" "Using token authentication for API request"
+        
+        # 認証方法1: Bearerヘッダー認証
+        if [ "$WGET_SUPPORTS_HEADER" = "1" ]; then
+            debug_log "DEBUG" "Trying Bearer authentication"
+            
+            # 一時ファイルに保存してから読み取る
+            eval $BASE_WGET_AUTH_BEARER "$temp_file" "$token" "https://api.github.com/$endpoint" 2>/dev/null
+            
+            if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+                response=$(cat "$temp_file")
+                if ! echo "$response" | grep -q '"message":"Bad credentials"'; then
+                    auth_method="bearer"
+                    debug_log "DEBUG" "Bearer authentication successful"
                 else
-                    auth_status="anonymous"
+                    debug_log "DEBUG" "Bearer authentication failed, trying token auth"
+                    
+                    # 従来のtoken認証も試行
+                    eval $BASE_WGET_AUTH_TOKEN "$temp_file" "$token" "https://api.github.com/$endpoint" 2>/dev/null
+                    
+                    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+                        response=$(cat "$temp_file")
+                        if ! echo "$response" | grep -q '"message":"Bad credentials"'; then
+                            auth_method="token"
+                            debug_log "DEBUG" "Token authentication successful"
+                        else
+                            debug_log "DEBUG" "Token authentication failed, trying user auth"
+                        fi
+                    fi
+                fi
+            else
+                debug_log "DEBUG" "Empty response from Bearer authentication"
+            fi
+        fi
+        
+        # 認証方法2: wgetのユーザー認証（ヘッダーがサポートされていない場合）
+        if [ "$auth_method" = "direct" ] && [ "$WGET_SUPPORTS_HEADER" = "0" ]; then
+            debug_log "DEBUG" "Trying user authentication"
+            $BASE_WGET -O "$temp_file" --user="$token" --password="x-oauth-basic" \
+                     "https://api.github.com/$endpoint" 2>/dev/null
+                     
+            if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+                response=$(cat "$temp_file")
+                if ! echo "$response" | grep -q '"message":"Bad credentials"'; then
+                    auth_method="user"
+                    debug_log "DEBUG" "User authentication successful"
+                else
+                    debug_log "DEBUG" "User authentication failed"
                 fi
             fi
         fi
-    else
-        # トークンがない場合は匿名リクエスト
-        response=$(wget -q -O- "https://api.github.com/$endpoint" 2>/dev/null)
         
-        # 失敗したら証明書検証スキップで再試行
-        if [ -z "$response" ]; then
-            debug_log "WARN" "匿名リクエスト失敗: 証明書検証スキップで再試行"
-            response=$(wget --no-check-certificate -q \
-                -O- "https://api.github.com/$endpoint" 2>/dev/null)
-            auth_status="anonymous_nocert"
-        else
-            auth_status="anonymous"
-        fi
-    fi
-    
-    # 最終結果の確認
-    if [ -z "$response" ]; then
-        debug_log "ERROR" "すべての接続方法が失敗しました"
-        return 1
-    fi
-    
-    echo "$response"
-    echo "$auth_status" >&2
-    return 0
-}
-
-get_github_token() {
-    if [ -f "$GITHUB_TOKEN_FILE" ] && [ -r "$GITHUB_TOKEN_FILE" ]; then
-        # 単純に改行だけ削除したトークンを返す（より堅牢）
-        cat "$GITHUB_TOKEN_FILE" | tr -d '\n\r' | head -1
-        return 0
-    fi
-    
-    # 環境変数からの取得
-    if [ -n "$GITHUB_TOKEN" ]; then
-        echo "$GITHUB_TOKEN"
-        return 0
-    fi
-    
-    return 1
-}
-
-save_github_token() {
-    token="$1"
-    
-    if [ -z "$token" ]; then
-        debug_log "ERROR" "Empty token provided, cannot save"
-        return 1
-    fi
-    
-    # トークンを保存して権限を設定
-    echo "$token" > "$GITHUB_TOKEN_FILE"
-    chmod 600 "$GITHUB_TOKEN_FILE"
-    
-    if [ $? -eq 0 ]; then
-        debug_log "INFO" "GitHub token saved to $GITHUB_TOKEN_FILE"
-        return 0
-    else
-        debug_log "ERROR" "Failed to save token to $GITHUB_TOKEN_FILE"
-        return 1
-    fi
-}
-
-setup_github_token() {
-    echo "GitHub API Token Setup"
-    echo "======================"
-    echo "This will save a GitHub Personal Access Token to $GITHUB_TOKEN_FILE"
-    echo "The token will be used for API requests to avoid rate limits."
-    echo ""
-    
-    # OpenWrtはsttyが利用できないことを前提とする
-    printf "Enter your GitHub Personal Access Token: "
-    read -r token
-    echo ""
-    
-    if [ -n "$token" ]; then
-        if save_github_token "$token"; then
-            echo "Token has been saved successfully!"
-            echo "API requests will now use authentication."
-        else
-            echo "Failed to save token. Please check permissions."
-        fi
-    else
-        echo "No token entered. Operation cancelled."
-    fi
-
-    return 0
-}
-
-save_github_token() {
-    token="$1"
-    
-    if [ -z "$token" ]; then
-        debug_log "ERROR" "Empty token provided, cannot save"
-        return 1
-    fi
-    
-    # トークンを保存して権限を設定
-    echo "$token" > "$GITHUB_TOKEN_FILE"
-    chmod 600 "$GITHUB_TOKEN_FILE"
-    
-    if [ $? -eq 0 ]; then
-        debug_log "INFO" "GitHub token saved to $GITHUB_TOKEN_FILE"
-        return 0
-    else
-        debug_log "ERROR" "Failed to save token to $GITHUB_TOKEN_FILE"
-        return 1
-    fi
-}
-
-setup_github_token() {
-    echo "GitHub API Token Setup"
-    echo "======================"
-    echo "This will save a GitHub Personal Access Token to $GITHUB_TOKEN_FILE"
-    echo "The token will be used for API requests to avoid rate limits."
-    echo ""
-    
-    # OpenWrtはsttyが利用できないことを前提とする
-    printf "Enter your GitHub Personal Access Token: "
-    read -r token
-    echo ""
-    
-    if [ -n "$token" ]; then
-        if save_github_token "$token"; then
-            echo "Token has been saved successfully!"
-            echo "API requests will now use authentication."
-        else
-            echo "Failed to save token. Please check permissions."
-        fi
-    else
-        echo "No token entered. Operation cancelled."
-    fi
-
-    return 0
-}
-
-# 🔴　トークン系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
-
-
-# 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
-
-github_api_request() {
-    local endpoint="$1"
-    local token=$(get_github_token)
-    local response=""
-    
-    if [ -n "$token" ]; then
-        debug_log "DEBUG" "Attempting authenticated request with token (${#token} chars)"
-        response=$(wget -q --header="Authorization: token $token" \
-            --header="Accept: application/vnd.github.v3+json" \
-            -O- "https://api.github.com/$endpoint" 2>/dev/null)
+        # 認証方法3: フォールバック（直接アクセス）
+        if [ "$auth_method" = "direct" ]; then
+            debug_log "DEBUG" "Falling back to direct access"
+            $BASE_WGET -O "$temp_file" "https://api.github.com/$endpoint" 2>/dev/null
             
-        # レスポンス検証 - リミットチェック
+            if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+                response=$(cat "$temp_file")
+            fi
+        fi
+            
+        # レスポンス検証
+        if [ -z "$response" ]; then
+            debug_log "WARN" "Empty response from API request"
+            rm -f "$temp_file" 2>/dev/null
+            return 1
+        fi
+        
         if echo "$response" | grep -q '"message":"API rate limit exceeded'; then
             debug_log "WARN" "GitHub API rate limit exceeded"
+            rm -f "$temp_file" 2>/dev/null
             return 1
         fi
         
         # 認証エラーチェック
         if echo "$response" | grep -q '"message":"Bad credentials"'; then
             debug_log "ERROR" "GitHub API authentication failed: Bad credentials"
+            rm -f "$temp_file" 2>/dev/null
             return 2
         fi
         
@@ -716,29 +438,60 @@ github_api_request() {
         if echo "$response" | grep -q '"message":"'; then
             local error_msg=$(echo "$response" | grep -o '"message":"[^"]*"' | cut -d':' -f2- | tr -d '"')
             debug_log "ERROR" "GitHub API error: $error_msg"
+            rm -f "$temp_file" 2>/dev/null
             return 3
         fi
+
+        # 認証方法のログ記録
+        debug_log "DEBUG" "API request completed via $auth_method"
         
         # 成功
         echo "$response"
+        rm -f "$temp_file" 2>/dev/null
         return 0
     else
         debug_log "DEBUG" "No token found, using unauthenticated request"
-        wget -q -O- "https://api.github.com/$endpoint" 2>/dev/null
+        $BASE_WGET -O - "https://api.github.com/$endpoint" 2>/dev/null
         return $?
     fi
 }
 
-get_github_token() {
-    if [ -f "$GITHUB_TOKEN_FILE" ] && [ -r "$GITHUB_TOKEN_FILE" ]; then
-        # 単純に改行だけ削除したトークンを返す（より堅牢）
-        cat "$GITHUB_TOKEN_FILE" | tr -d '\n\r' | head -1
-        return 0
+save_github_token() {
+    token="$1"
+    
+    if [ -z "$token" ]; then
+        debug_log "ERROR" "Empty token provided, cannot save"
+        return 1
     fi
     
-    # 環境変数からの取得
+    # トークンを保存して権限を設定
+    echo "$token" > "$GITHUB_TOKEN_FILE"
+    chmod 600 "$GITHUB_TOKEN_FILE"
+    
+    if [ $? -eq 0 ]; then
+        debug_log "DEBUG" "GitHub token saved to $GITHUB_TOKEN_FILE"
+        return 0
+    else
+        debug_log "ERROR" "Failed to save token to $GITHUB_TOKEN_FILE"
+        return 1
+    fi
+}
+
+get_github_token() {
+    local token=""
+    
+    if [ -f "$GITHUB_TOKEN_FILE" ] && [ -r "$GITHUB_TOKEN_FILE" ]; then
+        # 改行や余分なスペースを削除したトークンを返す
+        token=$(cat "$GITHUB_TOKEN_FILE" | tr -d '\n\r\t ' | head -1)
+        if [ -n "$token" ]; then
+            echo "$token"
+            return 0
+        fi
+    fi
+    
+    # 環境変数からの取得（不要な文字も削除）
     if [ -n "$GITHUB_TOKEN" ]; then
-        echo "$GITHUB_TOKEN"
+        echo "$GITHUB_TOKEN" | tr -d '\n\r\t '
         return 0
     fi
     
@@ -760,35 +513,30 @@ save_version_to_cache() {
     fi
 }
 
-save_github_token() {
-    token="$1"
-    
-    if [ -z "$token" ]; then
-        debug_log "ERROR" "Empty token provided, cannot save"
-        return 1
-    fi
-    
-    # トークンを保存して権限を設定
-    echo "$token" > "$GITHUB_TOKEN_FILE"
-    chmod 600 "$GITHUB_TOKEN_FILE"
-    
-    if [ $? -eq 0 ]; then
-        debug_log "INFO" "GitHub token saved to $GITHUB_TOKEN_FILE"
-        return 0
-    else
-        debug_log "ERROR" "Failed to save token to $GITHUB_TOKEN_FILE"
-        return 1
-    fi
-}
-
+# トークンセットアップ関数の改善版
 setup_github_token() {
     echo "GitHub API Token Setup"
     echo "======================"
+    
+    # wget機能チェック
+    local wget_capability=$(detect_wget_capabilities)
+    debug_log "DEBUG" "Detected wget capability: $wget_capability"
+    
+    # トークン認証が利用できない場合は警告して終了
+    if [ "$wget_capability" = "limited" ]; then
+        echo "ERROR: GitHub API token authentication is not supported on this system."
+        echo "Your version of wget does not support the required authentication methods."
+        echo "API requests will be limited to 60 calls per hour."
+        echo ""
+        echo "This system uses a wget version without authentication support." 
+        debug_log "DEBUG" "Token authentication not supported due to limited wget capabilities"
+        return 1
+    fi
+    
     echo "This will save a GitHub Personal Access Token to $GITHUB_TOKEN_FILE"
     echo "The token will be used for API requests to avoid rate limits."
     echo ""
     
-    # OpenWrtはsttyが利用できないことを前提とする
     printf "Enter your GitHub Personal Access Token: "
     read -r token
     echo ""
@@ -796,7 +544,18 @@ setup_github_token() {
     if [ -n "$token" ]; then
         if save_github_token "$token"; then
             echo "Token has been saved successfully!"
-            echo "API requests will now use authentication."
+            echo "API requests will now use authentication (up to 5000 calls per hour)."
+            echo ""
+            
+            # 使用可能な認証方法の表示
+            case "$wget_capability" in
+                header)
+                    echo "Your system supports header authentication (optimal)."
+                    ;;
+                basic)
+                    echo "Your system supports basic authentication."
+                    ;;
+            esac
         else
             echo "Failed to save token. Please check permissions."
         fi
@@ -809,68 +568,210 @@ setup_github_token() {
 
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
+# OpenWrt環境のwget機能検出関数（改良版）
+detect_wget_capabilities() {
+    debug_log "DEBUG" "Detecting wget capabilities for current environment"
+    
+    local temp_file="/tmp/wget_help.tmp"
+    local test_file="/tmp/wget_test_header.tmp"
+    local header_support="no"
+    local user_support="no"
+    
+    # wgetのヘルプを一時ファイルに保存（--helpがサポートされていない場合のため空ファイル作成）
+    touch "$temp_file"
+    wget --help > "$temp_file" 2>&1 || true
+    
+    # デバッグ用にwgetヘルプ内容の先頭行を記録
+    debug_log "DEBUG" "wget help output beginning:"
+    head -3 "$temp_file" | while read line; do
+        debug_log "DEBUG" "  $line"
+    done
+    
+    # OpenWrt/BusyBox wgetの検出（特徴的な出力パターン）
+    if grep -q "BusyBox" "$temp_file" || ! grep -q "\-\-header" "$temp_file"; then
+        debug_log "DEBUG" "Detected BusyBox wget without header support"
+        rm -f "$temp_file"
+        echo "limited"
+        return 1
+    fi
+    
+    # ヘッダーオプションのサポートを確認 - より厳密なパターン
+    if grep -q -- "--header=" "$temp_file" || grep -q -- "--header " "$temp_file"; then
+        debug_log "DEBUG" "wget supports header authentication"
+        header_support="yes"
+    fi
+    
+    # 基本認証のサポートを確認 - より厳密なパターン
+    if grep -q -- "--user=" "$temp_file" || grep -q -- "--user " "$temp_file"; then
+        debug_log "DEBUG" "wget supports basic authentication"
+        user_support="yes"
+    fi
+    
+    # 実際に機能テストを行う（ヘルプテキスト検出のバックアップ）
+    if [ "$header_support" = "yes" ]; then
+        debug_log "DEBUG" "Testing header support with actual command"
+        rm -f "$temp_file"
+        echo "header"
+        return 0
+    elif [ "$user_support" = "yes" ]; then
+        debug_log "DEBUG" "Basic authentication is supported"
+        rm -f "$temp_file"
+        echo "basic" 
+        return 0
+    else
+        debug_log "DEBUG" "No authentication methods supported"
+        rm -f "$temp_file"
+        echo "limited"
+        return 1
+    fi
+}
+
+# check_api_rate_limit関数の修正版
 check_api_rate_limit() {
-    if [ "$DEBUG_MODE" = "true" ]; then
-        local token="$(get_github_token)"
-        local temp_file="/tmp/aios_api_limit.tmp"
+    local token="$(get_github_token)"
+    local temp_file="/tmp/aios_api_limit.tmp"
+    local auth_method="direct"
+    local core_limit=""
+    local core_remaining=""
+    local reset_minutes="60"  # デフォルト値
+    
+    debug_log "DEBUG" "Checking API rate limit"
+    
+    # 既存のファイルを削除
+    [ -f "$temp_file" ] && rm -f "$temp_file"
+    
+    # wget機能チェック
+    local wget_capability=""
+    if [ -n "$token" ]; then
+        wget_capability=$(detect_wget_capabilities)
+        debug_log "DEBUG" "wget capability: $wget_capability"
         
-        # APIレスポンスを一時ファイルに保存
-        if [ -n "$token" ]; then
-            wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null
-        else
-            wget -q -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
+        # トークンがあり、機能が利用可能な場合のみ認証を試みる
+        case "$wget_capability" in
+            header)
+                debug_log "DEBUG" "Trying token authentication with header"
+                wget -q --no-check-certificate -O "$temp_file" --header="Authorization: token $token" \
+                     "https://api.github.com/rate_limit" 2>/dev/null
+                     
+                if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials\|Unauthorized" "$temp_file"; then
+                    auth_method="token"
+                    debug_log "DEBUG" "Successfully authenticated with token header"
+                else
+                    debug_log "DEBUG" "Token header authentication failed, falling back to direct access"
+                fi
+                ;;
+                
+            basic)
+                debug_log "DEBUG" "Trying basic authentication"
+                wget -q --no-check-certificate -O "$temp_file" --user="$token" --password="x-oauth-basic" \
+                     "https://api.github.com/rate_limit" 2>/dev/null
+                     
+                if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials\|Unauthorized" "$temp_file"; then
+                    auth_method="basic"
+                    debug_log "DEBUG" "Successfully authenticated with basic auth"
+                else
+                    debug_log "DEBUG" "Basic authentication failed, falling back to direct access"
+                fi
+                ;;
+                
+            limited|*)
+                debug_log "DEBUG" "Token authentication not supported on this system"
+                # トークンが設定されていても認証機能が使えない場合、警告を表示
+                if [ -f "$GITHUB_TOKEN_FILE" ]; then
+                    debug_log "DEBUG" "GitHub token is set but authentication is not supported with current wget version"
+                fi
+                ;;
+        esac
+    fi
+    
+    # 非認証リクエスト（認証に失敗した場合または認証なしの場合）
+    if [ "$auth_method" = "direct" ]; then
+        debug_log "DEBUG" "Making direct API request"
+        wget -q --no-check-certificate -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
+    fi
+    
+    # レスポンス解析（既存コードと同様）
+    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+        # レート情報の抽出（より堅牢なパターン）
+        core_limit=$(grep -o '"limit"[ ]*:[ ]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
+        core_remaining=$(grep -o '"remaining"[ ]*:[ ]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
+        core_reset=$(grep -o '"reset"[ ]*:[ ]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
+        
+        # コアセクションを優先的に検索（値が見つからない場合）
+        if [ -z "$core_limit" ] || [ -z "$core_remaining" ] || [ -z "$core_reset" ]; then
+            debug_log "DEBUG" "Trying alternative extraction pattern for core section"
+            core_section=$(sed -n '/"core":/,/},/p' "$temp_file")
+            [ -z "$core_limit" ] && core_limit=$(echo "$core_section" | grep -o '"limit"[ ]*:[ ]*[0-9]\+' | head -1 | grep -o '[0-9]\+')
+            [ -z "$core_remaining" ] && core_remaining=$(echo "$core_section" | grep -o '"remaining"[ ]*:[ ]*[0-9]\+' | head -1 | grep -o '[0-9]\+')
+            [ -z "$core_reset" ] && core_reset=$(echo "$core_section" | grep -o '"reset"[ ]*:[ ]*[0-9]\+' | head -1 | grep -o '[0-9]\+')
         fi
         
-        if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-            local core_limit=""
-            local core_remaining=""
-            local core_reset=""
-            local now_time=""
-            local diff_sec=""
-            local mins=""
-            local secs=""
-            local auth_text=""
-            
-            # POSIXシェルコマンドのみでJSONパース
-            core_limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+' | head -1)
-            core_remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+' | head -1)
-            core_reset=$(grep -A3 '"core"' "$temp_file" | grep '"reset"' | head -1 | grep -o '[0-9]\+' | head -1)
-            
-            # 時間計算
+        debug_log "DEBUG" "Extracted values - limit:$core_limit remaining:$core_remaining reset:$core_reset"
+        
+        # リセット時間の処理（既存コードと同様）
+        if [ -n "$core_reset" ] && [ "$core_reset" -gt 1000000000 ]; then
+            # 現在時刻を取得
             now_time=$(date +%s)
+            debug_log "DEBUG" "Current time: $now_time, Reset time: $core_reset"
             
-            # 数値として比較可能な形に確実に変換
-            if [ -n "$core_reset" ] && [ -n "$now_time" ]; then
-                core_reset=$(echo "$core_reset" | tr -cd '0-9')
-                now_time=$(echo "$now_time" | tr -cd '0-9')
-                
-                if [ "$core_reset" -gt "$now_time" ]; then
-                    diff_sec=$(expr "$core_reset" - "$now_time")
-                    mins=$(expr "$diff_sec" / 60)
-                    secs=$(expr "$diff_sec" % 60)
-                else
-                    mins="0"
-                    secs="0"
-                fi
+            # 残り時間を計算
+            if [ "$core_reset" -gt "$now_time" ]; then
+                reset_seconds=$(( core_reset - now_time ))
+                reset_minutes=$(( reset_seconds / 60 ))
+                [ "$reset_minutes" -lt 1 ] && reset_minutes="1"
+                debug_log "DEBUG" "Time until API limit reset: $reset_seconds seconds ($reset_minutes minutes)"
             else
-                mins="0"
-                secs="0"
+                # リセット時刻が過去の場合（APIが更新されていない可能性）
+                reset_minutes="0"
+                debug_log "DEBUG" "Reset time is in the past, API should be refreshed"
             fi
-            
-            # 認証状態判定
-            if [ "$core_limit" = "5000" ]; then
-                auth_text="authenticated"
+        else
+            debug_log "DEBUG" "Invalid or missing reset timestamp: '$core_reset'"
+            # デフォルト値を使用
+            if [ "$auth_method" != "direct" ]; then
+                reset_minutes="60"
             else
-                auth_text="anonymous"
+                reset_minutes="5"
             fi
-            
-            debug_log "DEBUG" "API Limits: Core $core_remaining/$core_limit ($auth_text), Reset in ${mins}m ${secs}s"
-            
-            # 一時ファイル削除
-            rm -f "$temp_file"
+            debug_log "DEBUG" "Using default reset time: $reset_minutes minutes"
+        fi
+    else
+        debug_log "WARN" "Failed to get API rate limit information"
+        # ファイルが存在しない、または空の場合
+        if [ "$auth_method" != "direct" ]; then
+            core_limit="5000"
+            core_remaining="?"
+            reset_minutes="60"
+        else
+            core_limit="60"
+            core_remaining="?"
+            reset_minutes="5"
         fi
     fi
-    return 0
+    
+    # 空値のチェック
+    [ -z "$core_limit" ] && core_limit="?"
+    [ -z "$core_remaining" ] && core_remaining="?"
+    
+    # APIステータスの生成 - 認証が使えない場合でも正確に表示
+    if [ "$auth_method" != "direct" ]; then
+        # 認証されている場合
+        status_text="API: ${core_remaining}/${core_limit} TTL:${reset_minutes}m"
+    elif [ -n "$core_remaining" ] && [ -n "$core_limit" ] && [ "$core_remaining" != "?" ] && [ "$core_limit" != "?" ]; then
+        # 直接アクセスでも値が取得できた場合
+        status_text="API: ${core_remaining}/${core_limit} TTL:${reset_minutes}m"
+    else
+        # 値が取得できなかった場合
+        status_text="API: N/A TTL:${reset_minutes}m"
+    fi
+    
+    debug_log "DEBUG" "Final API status: $status_text (auth_method=$auth_method)"
+    
+    # 一時ファイル削除
+    [ -f "$temp_file" ] && rm -f "$temp_file"
+    
+    # 結果を返す
+    echo "$status_text"
 }
 
 clean_version_string() {
@@ -918,32 +819,38 @@ get_commit_version() {
     if [ -n "$token" ]; then
         debug_log "DEBUG" "Using token authentication for API request"
         
-        # 中間結果をログに記録しない、静かに失敗するように設計
-        if wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/$api_url" 2>/dev/null; then
-            # wget成功の場合
-            auth_method="token"
-            if ! grep -q '"sha"' "$temp_file"; then
-                # APIエラーまたは応答無効の場合
-                wget -q -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
+        # Bearer認証を試行
+        eval $BASE_WGET_AUTH_BEARER "$temp_file" "$token" "https://api.github.com/$api_url" 2>/dev/null
+        
+        # wget成功の場合
+        if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials" "$temp_file"; then
+            auth_method="bearer"
+            debug_log "DEBUG" "Bearer authentication successful"
+        else
+            # token認証を試行
+            eval $BASE_WGET_AUTH_TOKEN "$temp_file" "$token" "https://api.github.com/$api_url" 2>/dev/null
+            
+            if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials" "$temp_file"; then
+                auth_method="token"
+                debug_log "DEBUG" "Token authentication successful"
+            else
+                debug_log "DEBUG" "Authentication failed, falling back to direct access"
+                $BASE_WGET -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
                 auth_method="direct"
             fi
-        else
-            # wget失敗の場合は匿名アクセスを試行
-            wget -q -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
-            auth_method="direct"
         fi
     else
         debug_log "DEBUG" "No token available, making direct API request"
-        wget -q -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
+        $BASE_WGET -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
         auth_method="direct"
     fi
     
     # 応答の確認
     if [ ! -s "$temp_file" ]; then
-        debug_log "WARN" "Empty response from GitHub API. Attempting direct file download"
+        debug_log "DEBUG" "Empty response from GitHub API. Attempting direct file download"
         # APIに失敗した場合は直接ファイルをダウンロード
         local direct_file="/tmp/aios_direct_file.tmp"
-        if wget -q -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
+        if $BASE_WGET -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
             # ファイルからハッシュを生成（最初の7文字だけ使用）
             local file_hash=$(sha256sum "$direct_file" 2>/dev/null | cut -c1-7)
             rm -f "$direct_file" 2>/dev/null
@@ -965,7 +872,7 @@ get_commit_version() {
         debug_log "WARN" "GitHub API rate limit exceeded. Attempting direct file download"
         # 直接ファイル取得にフォールバック
         local direct_file="/tmp/aios_direct_file.tmp"
-        if wget -q -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
+        if $BASE_WGET -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
             local file_hash=$(sha256sum "$direct_file" 2>/dev/null | cut -c1-7)
             rm -f "$direct_file" 2>/dev/null
             rm -f "$temp_file" 2>/dev/null
@@ -1045,7 +952,6 @@ version_is_newer() {
     local current="$1"  # リモートバージョン
     local reference="$2"  # ローカルバージョン
     
-    # デバッグ出力を追加
     debug_log "DEBUG" "Comparing: Remote=$current, Local=$reference"
     
     # どちらかが不明の場合は更新必要
@@ -1090,27 +996,43 @@ version_is_newer() {
     # SHA情報をデバッグ出力
     debug_log "DEBUG" "SHA comparison: Remote=$current_sha, Local=$reference_sha"
     
-    if [ -n "$current_sha" ] && [ -n "$reference_sha" ] && [ "$current_sha" != "$reference_sha" ]; then
-        debug_log "DEBUG" "Different SHA: Update required"
-        return 0  # 異なるコミット
+    # 直接DL時の特別処理: ハッシュの先頭7文字だけ比較して異なる場合のみ更新
+    if [ -n "$current_sha" ] && [ -n "$reference_sha" ]; then
+        # どちらかにdirectというマークがあれば直接DLモードと判断
+        if echo "$current $reference" | grep -q "direct"; then
+            # 先頭7文字だけ比較（SHA-1とSHA-256を混在比較する場合の対策）
+            local current_short=$(echo "$current_sha" | head -c 7)
+            local reference_short=$(echo "$reference_sha" | head -c 7)
+            
+            if [ "$current_short" != "$reference_short" ]; then
+                debug_log "DEBUG" "Different file hash in direct mode: Update required"
+                return 0  # 異なるハッシュ
+            else
+                debug_log "DEBUG" "Same file hash in direct mode: No update needed"
+                return 1  # 同一ハッシュ
+            fi
+        elif [ "$current_sha" != "$reference_sha" ]; then
+            debug_log "DEBUG" "Different SHA: Update required"
+            return 0  # 異なるコミット
+        fi
     fi
     
     debug_log "DEBUG" "Same version or unable to compare: No update needed"
     return 1  # 同一バージョン
 }
 
+# メインのダウンロード関数 - オプション解析も担当
 download() {
     # ファイル名を最初の引数として処理、残りはオプション
     local file_name="$1"
     shift
     
-    # 設定変数
+    # 設定変数の初期化
     local hidden_mode="false"
     local quiet_mode="${QUIET_MODE:-false}"
     local chmod_mode="false"
     local load_mode="false"
     local script_file="${CACHE_DIR}/script.ch"
-    local dummy_version="No version control"
     
     # オプション引数の処理
     while [ $# -gt 0 ]; do
@@ -1125,9 +1047,37 @@ download() {
         shift
     done
     
-    # パス設定
-    local install_path="${BASE_DIR}/$file_name"
-    local remote_url="${BASE_URL}/$file_name"
+    # バージョンチェック処理
+    local version_data
+    version_data=$(download_check_version "$file_name")
+    local update_required=$(echo "$version_data" | cut -d'|' -f1)
+    local clean_remote_version=$(echo "$version_data" | cut -d'|' -f2)
+    local clean_local_version=$(echo "$version_data" | cut -d'|' -f3)
+    local auth_message=$(echo "$version_data" | cut -d'|' -f4)
+    
+    # ファイルダウンロード処理
+    local status_type="no_update"
+    local status_message="$(get_message "CONFIG_DOWNLOAD_UNNECESSARY")"
+    if [ "$update_required" = "true" ]; then
+        if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode"; then
+            debug_log "ERROR" "Download process failed for $file_name"
+            return 1
+        fi
+        status_type="success"
+        status_message="$(get_message "CONFIG_DOWNLOAD_SUCCESS")"
+    fi
+    
+    # 結果表示とファイル読み込み
+    download_finalize "$file_name" "$status_message" "$clean_remote_version" "$auth_message" "$load_mode" "$hidden_mode" "$status_type"
+    
+    return 0
+}
+
+# バージョンチェック関数
+download_check_version() {
+    local file_name="$1"
+    local script_file="${CACHE_DIR}/script.ch"
+    local dummy_version="No version control"
     
     # API制限チェック（デバッグモード時のみ）
     [ "$DEBUG_MODE" = "true" ] && check_api_rate_limit
@@ -1156,7 +1106,6 @@ download() {
     esac
     
     # バージョン比較とダウンロード判断
-    local status_message="No update needed"
     local update_required=false
     
     if [ "$local_version" = "$dummy_version" ]; then
@@ -1181,63 +1130,97 @@ download() {
     debug_log "DEBUG" "Local version: $file_name - $clean_local_version"
     debug_log "DEBUG" "Update required: $file_name -$(printf "%s" "$update_required")"
     
-    if [ "$update_required" = "true" ]; then
-        # ファイルダウンロード
-        if ! $BASE_WGET "$install_path" "$remote_url"; then
-            debug_log "ERROR" "Download failed: $file_name is empty"
-            return 1
-        fi
-        
-        # ファイル検証
-        if [ ! -s "$install_path" ]; then
-            debug_log "ERROR" "Download failed: $file_name is empty"
-            return 1
-        fi
-        
-        # 権限設定
-        if [ "$chmod_mode" = "true" ]; then
-            chmod +x "$install_path"
-            debug_log "DEBUG" "chmod +x applied to $file_name"
-        fi
-        
-        # バージョン情報の更新
-        if [ ! -f "$script_file" ]; then
-            printf "%s=%s\n" "${file_name}" "${clean_remote_version}" > "$script_file"
-        else
-            if grep -q "^${file_name}=" "$script_file"; then
-                # エスケープ処理を改良
-                escaped_file=$(echo "$file_name" | sed 's/[\/&]/\\&/g')
-                escaped_version=$(echo "$clean_remote_version" | sed 's/[\/&]/\\&/g')
-                sed -i "s/^${escaped_file}=.*/${escaped_file}=${escaped_version}/" "$script_file"
-            else
-                printf "%s=%s\n" "${file_name}" "${clean_remote_version}" >> "$script_file"
-            fi
-        fi
+    # 結果を返す
+    echo "${update_required}|${clean_remote_version}|${clean_local_version}|${auth_message}"
+    return 0
+}
+
+# ファイルダウンロードと検証関数
+download_fetch_file() {
+    local file_name="$1"
+    local clean_remote_version="$2"
+    local chmod_mode="$3"
+    local install_path="${BASE_DIR}/$file_name"
+    local script_file="${CACHE_DIR}/script.ch"
+    local remote_url=""
     
-        # ステータスメッセージの修正
-        status_message="Download completed"
+    # 直接ダウンロード時のみキャッシュバスティングを適用
+    if echo "$clean_remote_version" | grep -q "direct"; then
+        remote_url="${BASE_URL}/$file_name${CACHE_BUST}"
+        debug_log "DEBUG" "Using cache-busted URL for direct download: $file_name"
+    else
+        remote_url="${BASE_URL}/$file_name"
     fi
     
-    # 読み込み処理
+    debug_log "DEBUG" "Downloading file: $file_name from $remote_url"
+    
+    # ファイルをダウンロード
+    if ! $BASE_WGET -O "$install_path" "$remote_url"; then
+        debug_log "ERROR" "Download failed: $file_name"
+        return 1
+    fi
+    
+    # ファイル検証
+    if [ ! -s "$install_path" ]; then
+        debug_log "ERROR" "Downloaded file is empty: $file_name"
+        return 1
+    fi
+    
+    # 権限設定
+    if [ "$chmod_mode" = "true" ]; then
+        chmod +x "$install_path"
+        debug_log "DEBUG" "chmod +x applied to $file_name"
+    fi
+    
+    # バージョン情報の更新
+    save_version_to_cache "$file_name" "$clean_remote_version" "$script_file"
+    
+    return 0
+}
+
+download_finalize() {
+    local file_name="$1"
+    local status_message="$2"
+    local clean_remote_version="$3"
+    local auth_method="$4"  # tokenやdirectなどの認証方法
+    local load_mode="$5"
+    local hidden_mode="$6"
+    local status_type="$7"
+    local install_path="${BASE_DIR}/$file_name"
+    
+    # APIレート情報を取得
+    local api_status=$(check_api_rate_limit)
+    
+    # 読み込みが必要かどうかのフラグ設定
+    local should_load="false"
     local action_message=""
     if [ "$load_mode" = "true" ] || echo "$file_name" | grep -q ".*\\.sh"; then
-        . "$install_path"
-        action_message="Loaded"
-        debug_log "DEBUG" "load applied to $file_name"
+        should_load="true"
+        action_message="(Loaded)"
     fi
     
-    # 出力メッセージの修正
-    local message="${status_message}: ${file_name} - Version: ${clean_remote_version} ${auth_message}"
+    # 出力メッセージの作成
+    local message="${status_message} ${file_name} ${clean_remote_version} ${api_status}"
     if [ -n "$action_message" ]; then
-        message="${message} (${action_message})"
+        message="${message} ${action_message}"
     fi
 
-    # 出力
+    # メッセージ出力
     if [ "$hidden_mode" = "true" ]; then
-        debug_log "DEBUG" "$(color blue "Quiet mode ${message}")"
-        
+        debug_log "DEBUG" "Quiet mode ${message}"
     else
-        printf "%s\n" "$(color green "${message}")"
+        if [ "$status_type" = "success" ]; then
+            printf "%s\n" "$(color white "${message}")"
+        else
+            printf "%s\n" "$(color white "${message}")" 
+        fi
+    fi
+    
+    # ファイル読み込み処理を実行
+    if [ "$should_load" = "true" ]; then
+        debug_log "DEBUG" "Now loading source file: $file_name"
+        . "$install_path"
+        debug_log "DEBUG" "Successfully loaded: $file_name"
     fi
     
     return 0
@@ -1279,51 +1262,77 @@ print_banner() {
 print_banner_ascii() {
     debug_log "DEBUG" "Displaying lowercase aios block ASCII art banner"
     
-    # バナーの前に空行
-    printf "\n"
-    
     # ASCIIアート
+    printf "\n"
     printf "%s\n" "$(color magenta "               ## #")"
-    printf "%s\n" "$(color blue    "    ####      ###       ####      #####")"
-    printf "%s\n" "$(color cyan    "       ##      ##      ##  ##    ##")"
-    printf "%s\n" "$(color green   "    #####      ##      ##  ##     #####")"
-    printf "%s\n" "$(color yellow  "   ##  ##      ##      ##  ##         ##")"
-    printf "%s\n" "$(color red     "    #####     ####      ####     ######")"
-    
-    # バナーの後に空行
+    printf "%s\n" "$(color blue    "     ####      ###       ####      #####")"
+    printf "%s\n" "$(color green   "        ##      ##      ##  ##    ##")"
+    printf "%s\n" "$(color yellow  "     #####      ##      ##  ##     #####")"
+    printf "%s\n" "$(color orange  "    ##  ##      ##      ##  ##         ##")"
+    printf "%s\n" "$(color red     "     #####     ####      ####     ######")"
     printf "\n"
     
     # バナーメッセージ
     printf "%s\n" "$(color white "$(get_message "MSG_BANNER_DECCRIPTION")")"
     printf "%s\n" "$(color white "$(get_message "MSG_BANNER_NAME")")"
     printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DISCLAIMER")")"
-    
+    printf "\n"
+
     debug_log "DEBUG" "Block style lowercase aios banner displayed successfully"
 }
 
 print_banner_unicode() {
     debug_log "DEBUG" "Displaying lowercase aios block ASCII art banner"
     
-    # バナーの前に空行
-    printf "\n"
-    
     # ASCIIアート（環境依存文字 - ブロック）
-    printf "%s\n" "$(color white "               ██ █")"
-    printf "%s\n" "$(color white "    ████      ███       ████      █████")"
-    printf "%s\n" "$(color white "       ██      ██      ██  ██    ██")"
-    printf "%s\n" "$(color white "    █████      ██      ██  ██     █████")"
-    printf "%s\n" "$(color white "   ██  ██      ██      ██  ██         ██")"
-    printf "%s\n" "$(color white "    █████     ████      ████     ██████")"
-    
-    # バナーの後に空行
     printf "\n"
-    
+    printf "%s\n" "$(color magenta "               ██ █")"
+    printf "%s\n" "$(color blue    "     ████      ███       ████      █████")"
+    printf "%s\n" "$(color green   "        ██      ██      ██  ██    ██")"
+    printf "%s\n" "$(color yellow  "     █████      ██      ██  ██     █████")"
+    printf "%s\n" "$(color orange  "    ██  ██      ██      ██  ██         ██")"
+    printf "%s\n" "$(color red     "     █████     ████      ████     ██████")"
+    printf "\n"
+
     # バナーメッセージ
     printf "%s\n" "$(color white "$(get_message "MSG_BANNER_DECCRIPTION")")"
     printf "%s\n" "$(color white "$(get_message "MSG_BANNER_NAME")")"
     printf "%s\n" "$(color red "$(get_message "MSG_BANNER_DISCLAIMER")")"
-    
+    printf "\n"
+
     debug_log "DEBUG" "Block style lowercase aios banner displayed successfully"
+}
+
+print_information() {
+    local architecture=$(cat "${CACHE_DIR}/architecture.ch")
+    local osversion=$(cat "${CACHE_DIR}/osversion.ch")
+    local package_manager=$(cat "${CACHE_DIR}/package_manager.ch")
+    local usbdevice=$(cat "${CACHE_DIR}/usbdevice.ch")
+
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_ARCHITECTURE" "info=$architecture")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_OSVERSION" "info=$osversion")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_PACKAGEMANAGER" "info=$package_manager")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_USBDEVICE" "info=$usbdevice")")"
+}
+
+print_country() {
+    if [ -f "${CACHE_DIR}/ip_country.tmp" ]; then
+        local ip_country=$(cat "${CACHE_DIR}/ip_country.tmp")
+    fi
+    local country=$(cat "${CACHE_DIR}/language.ch")
+    local language=$(cat "${CACHE_DIR}/luci.ch")
+    #local message=$(cat "${CACHE_DIR}/message.ch")
+    local zonename=$(cat "${CACHE_DIR}/zonename.ch")
+    local timezone=$(cat "${CACHE_DIR}/timezone.ch")
+
+    if [ -f "${CACHE_DIR}/ip_country.tmp" ]; then
+        printf "%s\n" "$(color white "$(get_message "MSG_INFO_NET_COUNTRY" "code=$ip_country")")"
+    fi
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_COUNTRY" "code=$country")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_LANGUAGE" "code=$language")")"
+    #printf "%s\n" "$(color white "$(get_message "MSG_INFO_MESSAGE" "code=$message")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_ZONENAME" "code=$zonename")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_TIMEZONE" "code=$timezone")")"
 }
 
 # 🔴　バナー系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
@@ -1343,6 +1352,9 @@ check_option() {
     FORCE="false"
     RESET="false"
     HELP="false"
+    SKIP_DEVICE_DETECTION="false"
+    SKIP_IP_DETECTION="false"
+    SKIP_ALL_DETECTION="false"
 
     # 言語およびオプション引数の処理
     while [ "$#" -gt 0 ]; do
@@ -1360,17 +1372,13 @@ check_option() {
                 DEBUG_MODE="true"
                 DEBUG_LEVEL="DEBUG"
                 ;;
-            -d2|--d2|-debug2|--debug2)
-                DEBUG_MODE="true"
-                DEBUG_LEVEL="DEBUG2"
-                ;;
             -cf|--cf|-common_full|--common_full)
                 MODE="full"
                 ;;
             -cl|--cl|-ocommon_light|--ocommon_light)
                 MODE="light"
                 ;;
-            -cd|--cd|-common_debug|--common_debug|--ocommon_debug)
+            -cd|--cd|-common_debug|--common_debug|--common_debug)
                 MODE="debug"
                 ;;
             -r|--r|-reset|--reset|-resrt|--resrt)
@@ -1388,7 +1396,7 @@ check_option() {
                     LOGFILE="$2"
                     shift
                 else
-                    echo "Error: --logfile requires a path argument"
+                    debug_log "DEBUG" "logfile requires a path argument"
                     exit 1
                 fi
                 ;;
@@ -1402,6 +1410,21 @@ check_option() {
                 ;;
             -ta|--ta|-test_api|--test_api)
                 MODE="test_api"
+                ;;
+            -sc|--sc|-skip-cache|--skip-cache)
+                SKIP_CACHE_DETECTION="true"
+                ;;
+            -sd|--sd|-skip-dev|--skip-dev)
+                SKIP_DEVICE_DETECTION="true"
+                ;;
+            -scd|--scd|-skip-cache-device|--skip-cache-device)
+                SKIP_CACHE_DEVICE_DETECTION="true"
+                ;;
+            -si|--si|-skip-ip|--skip-ip)
+                SKIP_IP_DETECTION="true"
+                ;;
+            -sa|--sa|-skip-all|--skip-all)
+                SKIP_ALL_DETECTION="true"
                 ;;
             -*)
                 echo "Warning: Unknown option: $1" >&2
@@ -1419,7 +1442,7 @@ check_option() {
     export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET HELP
 
     # デバッグ情報を出力
-    debug_log "DEBUG" "aios - Version: $SCRIPT_VERSION"
+    debug_log "DEBUG" "$BIN_FILE: $SCRIPT_VERSION"
     debug_log "DEBUG" "check_option received before args: $ORIGINAL_ARGS"
     debug_log "DEBUG" "check_option: MODE=$MODE, SELECTED_LANGUAGE=$SELECTED_LANGUAGE DEBUG_MODE=$DEBUG_MODE DEBUG_LEVEL=$DEBUG_LEVEL DRY_RUN=$DRY_RUN LOGFILE=$LOGFILE FORCE=$FORCE RESET=$RESET HELP=$HELP"
 
@@ -1452,33 +1475,43 @@ check_common() {
             ;;
         debug)
             download "dynamic-system-info.sh" "hidden" "chmod" "load"
+            download "common-color.sh" "hidden" "chmod" "load"
+            download "common-country.sh" "hidden" "chmod" "load"
             download "common-country.sh" "hidden" "chmod" "load"
             download "common-package.sh" "hidden" "chmod" "load"
             download "common-feed-package.sh" "hidden" "chmod" "load"
+            download "menu.db" "hidden"
+            download "country.db" "hidden"
             download "messages_base.db" "hidden"
             download "messages_asian.db" "hidden"
             download "messages_euro.db" "hidden"
-            download "country.db" "hidden"
+            download "messages_etc.db" "hidden"
             download "local-package.db" "hidden"
             download "custom-package.db" "hidden"
-            print_banner       
+            print_banner
+            print_information
             select_country "$lang_code"
-            download "system-config.sh" "hidden" "chmod" "load"
+            selector "$MAIN_MENU" 
             ;;
         full)
             download "dynamic-system-info.sh" "chmod" "load"
+            download "common-color.sh" "chmod" "load"
             download "common-country.sh" "chmod" "load"
+            download "common-menu.sh" "chmod" "load"
             download "common-package.sh" "chmod" "load"
             download "common-feed-package.sh" "chmod" "load"
+            download "menu.db"
+            download "country.db"
             download "messages_base.db"
             download "messages_asian.db"
             download "messages_euro.db"
-            download "country.db"
+            download "messages_etc.db"
             download "local-package.db"
             download "custom-package.db"
             print_banner
+            print_information
             select_country "$lang_code"
-            download "system-config.sh" "chmod" "load"
+            selector "$MAIN_MENU"
             ;;
         update)
             check_update "$ORIGINAL_ARGS"
