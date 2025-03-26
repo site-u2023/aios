@@ -504,6 +504,7 @@ setup_github_token() {
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # API制限の回復までの残り時間を表示する関数
+# API制限の回復までの残り時間を表示する関数（POSIX準拠改良版）
 check_api_rate_limit() {
     local token="$(get_github_token)"
     local temp_file="/tmp/aios_api_limit.tmp"
@@ -538,20 +539,6 @@ check_api_rate_limit() {
         wget -q --no-check-certificate -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
     fi
     
-    # レスポンス全体をデバッグ表示
-    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-        debug_log "DEBUG" "API response received (first 5 lines):"
-        head -n 5 "$temp_file" | while read -r line; do
-            debug_log "DEBUG" "RESPONSE: $line"
-        done
-        
-        # reset行を抽出して表示（JSONの構造確認）
-        debug_log "DEBUG" "Looking for reset timestamp in response:"
-        grep -n "reset" "$temp_file" | head -n 3 | while read -r line; do
-            debug_log "DEBUG" "RESET LINE: $line"
-        done
-    fi
-    
     # レスポンス解析
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
         # レート情報の抽出（より堅牢なパターン）
@@ -583,7 +570,7 @@ check_api_rate_limit() {
                 [ "$reset_minutes" -lt 1 ] && reset_minutes="1"
                 debug_log "DEBUG" "Time until API limit reset: $reset_seconds seconds ($reset_minutes minutes)"
             else
-                # リセット時刻が過去の場合
+                # リセット時刻が過去の場合（APIが更新されていない可能性）
                 reset_minutes="0"
                 debug_log "DEBUG" "Reset time is in the past, API should be refreshed"
             fi
@@ -624,11 +611,8 @@ check_api_rate_limit() {
     
     debug_log "DEBUG" "Final API status: $status_text"
     
-    # JSONファイルをデバッグファイルにコピー（検証用）
-    if [ -f "$temp_file" ]; then
-        cp "$temp_file" "$TEST_DIR/last_response.json"
-        debug_log "DEBUG" "Saved response to $TEST_DIR/last_response.json"
-    fi
+    # 一時ファイル削除
+    [ -f "$temp_file" ] && rm -f "$temp_file"
     
     # 結果を返す
     echo "$status_text"
@@ -806,7 +790,6 @@ version_is_newer() {
     local current="$1"  # リモートバージョン
     local reference="$2"  # ローカルバージョン
     
-    # デバッグ出力を追加
     debug_log "DEBUG" "Comparing: Remote=$current, Local=$reference"
     
     # どちらかが不明の場合は更新必要
@@ -851,9 +834,25 @@ version_is_newer() {
     # SHA情報をデバッグ出力
     debug_log "DEBUG" "SHA comparison: Remote=$current_sha, Local=$reference_sha"
     
-    if [ -n "$current_sha" ] && [ -n "$reference_sha" ] && [ "$current_sha" != "$reference_sha" ]; then
-        debug_log "DEBUG" "Different SHA: Update required"
-        return 0  # 異なるコミット
+    # 直接DL時の特別処理: ハッシュの先頭7文字だけ比較して異なる場合のみ更新
+    if [ -n "$current_sha" ] && [ -n "$reference_sha" ]; then
+        # どちらかにdirectというマークがあれば直接DLモードと判断
+        if echo "$current $reference" | grep -q "direct"; then
+            # 先頭7文字だけ比較（SHA-1とSHA-256を混在比較する場合の対策）
+            local current_short=$(echo "$current_sha" | head -c 7)
+            local reference_short=$(echo "$reference_sha" | head -c 7)
+            
+            if [ "$current_short" != "$reference_short" ]; then
+                debug_log "DEBUG" "Different file hash in direct mode: Update required"
+                return 0  # 異なるハッシュ
+            else
+                debug_log "DEBUG" "Same file hash in direct mode: No update needed"
+                return 1  # 同一ハッシュ
+            fi
+        elif [ "$current_sha" != "$reference_sha" ]; then
+            debug_log "DEBUG" "Different SHA: Update required"
+            return 0  # 異なるコミット
+        fi
     fi
     
     debug_log "DEBUG" "Same version or unable to compare: No update needed"
@@ -974,7 +973,7 @@ download_check_version() {
     return 0
 }
 
-# ファイルダウンロードとバージョン更新関数
+# 改善版ファイルダウンロードと検証関数
 download_fetch_file() {
     local file_name="$1"
     local clean_remote_version="$2"
@@ -982,17 +981,80 @@ download_fetch_file() {
     local install_path="${BASE_DIR}/$file_name"
     local remote_url="${BASE_URL}/$file_name"
     local script_file="${CACHE_DIR}/script.ch"
+    local temp_file="${install_path}.tmp"
+    local retry_count=3
+    local success=false
+    local i=0
     
-    # ファイルダウンロード
-    if ! $BASE_WGET "$install_path" "$remote_url"; then
-        debug_log "ERROR" "Download failed: $file_name is empty"
+    debug_log "DEBUG" "Downloading file: $file_name from $remote_url"
+    
+    # ファイルダウンロード（一時ファイルに）
+    while [ $i -lt $retry_count ] && [ "$success" = "false" ]; do
+        if $BASE_WGET "$temp_file" "$remote_url"; then
+            # ファイルサイズチェック
+            if [ -s "$temp_file" ]; then
+                success=true
+                debug_log "DEBUG" "Download successful on attempt $((i+1))"
+            else
+                debug_log "WARN" "Downloaded file is empty on attempt $((i+1))"
+                rm -f "$temp_file" 2>/dev/null
+            fi
+        else
+            debug_log "WARN" "Download failed on attempt $((i+1))"
+        fi
+        
+        i=$((i+1))
+        [ "$success" = "false" ] && [ $i -lt $retry_count ] && sleep 2
+    done
+    
+    if [ "$success" = "false" ]; then
+        debug_log "ERROR" "Download failed after $retry_count attempts: $file_name"
         return 1
     fi
     
-    # ファイル検証
+    # 既存ファイルとの比較（存在する場合）
+    if [ -f "$install_path" ]; then
+        # ファイルサイズが同じかチェック
+        local old_size=$(wc -c < "$install_path")
+        local new_size=$(wc -c < "$temp_file")
+        
+        if [ "$old_size" = "$new_size" ]; then
+            # サイズが同じなら内容ハッシュも比較（差分検出精度向上）
+            local old_hash=$(sha256sum "$install_path" 2>/dev/null | cut -d' ' -f1)
+            local new_hash=$(sha256sum "$temp_file" 2>/dev/null | cut -d' ' -f1)
+            
+            if [ "$old_hash" = "$new_hash" ]; then
+                debug_log "DEBUG" "File content unchanged (verified by hash)"
+                rm -f "$temp_file" 2>/dev/null
+                
+                # バージョン情報だけ更新
+                save_version_to_cache "$file_name" "$clean_remote_version" "$script_file"
+                return 0
+            else
+                debug_log "DEBUG" "File content changed (different hash)"
+            fi
+        else
+            debug_log "DEBUG" "File size changed: old=$old_size, new=$new_size"
+        fi
+    fi
+    
+    # 新ファイルを適用
+    mv "$temp_file" "$install_path"
+    
+    # ファイル検証（最終チェック）
     if [ ! -s "$install_path" ]; then
-        debug_log "ERROR" "Download failed: $file_name is empty"
+        debug_log "ERROR" "Verification failed: $file_name is empty"
         return 1
+    fi
+    
+    # シンタックスエラーチェック（シェルスクリプトの場合）
+    if [ "$chmod_mode" = "true" ] && echo "$file_name" | grep -q "\.sh$"; then
+        if sh -n "$install_path" 2>/dev/null; then
+            debug_log "DEBUG" "Syntax check passed for $file_name"
+        else
+            debug_log "WARN" "Syntax warning in $file_name, but continuing"
+            # エラーがあっても続行（APIの問題で誤検出の可能性があるため）
+        fi
     fi
     
     # 権限設定
@@ -1002,18 +1064,7 @@ download_fetch_file() {
     fi
     
     # バージョン情報の更新
-    if [ ! -f "$script_file" ]; then
-        printf "%s=%s\n" "${file_name}" "${clean_remote_version}" > "$script_file"
-    else
-        if grep -q "^${file_name}=" "$script_file"; then
-            # エスケープ処理
-            escaped_file=$(echo "$file_name" | sed 's/[\/&]/\\&/g')
-            escaped_version=$(echo "$clean_remote_version" | sed 's/[\/&]/\\&/g')
-            sed -i "s/^${escaped_file}=.*/${escaped_file}=${escaped_version}/" "$script_file"
-        else
-            printf "%s=%s\n" "${file_name}" "${clean_remote_version}" >> "$script_file"
-        fi
-    fi
+    save_version_to_cache "$file_name" "$clean_remote_version" "$script_file"
     
     return 0
 }
