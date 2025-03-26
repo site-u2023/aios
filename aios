@@ -513,13 +513,19 @@ save_version_to_cache() {
     fi
 }
 
-# トークンセットアップ関数の修正版
+# トークンセットアップ関数
 setup_github_token() {
     echo "GitHub API Token Setup"
     echo "======================"
     
     # wget機能チェック
     local wget_capability=$(detect_wget_capabilities)
+    debug_log "DEBUG" "Detected wget capability: $wget_capability"
+    
+    # wgetバージョンを表示
+    local wget_version=$(wget --version | head -1)
+    echo "Detected wget: $wget_version"
+    echo ""
     
     # トークン認証が利用できない場合は警告して終了
     if [ "$wget_capability" = "limited" ]; then
@@ -567,7 +573,7 @@ setup_github_token() {
 
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
-# OpenWrt環境のwget機能検出関数
+# より堅牢なwget機能検出関数
 detect_wget_capabilities() {
     debug_log "DEBUG" "Detecting wget capabilities for current environment"
     
@@ -576,25 +582,43 @@ detect_wget_capabilities() {
     # wgetのヘルプを一時ファイルに保存
     wget --help > "$temp_file" 2>&1
     
-    # ヘッダーオプションのサポートを確認
-    if grep -q -- "--header" "$temp_file"; then
+    # デバッグ用にwgetバージョンを記録
+    wget --version | head -1 > "/tmp/wget_version.tmp" 2>&1
+    local wget_version=$(cat "/tmp/wget_version.tmp")
+    debug_log "DEBUG" "wget version: $wget_version"
+    
+    # ヘルプ内容の先頭行をデバッグログに出力
+    head -5 "$temp_file" | while read line; do
+        debug_log "DEBUG" "wget help: $line"
+    done
+    
+    # ヘッダーオプションのサポートを確認 - より厳密なパターン
+    if grep -q -- "--header=" "$temp_file" || grep -q -- "--header " "$temp_file"; then
         debug_log "DEBUG" "wget supports header authentication (compatible with Bearer/token auth)"
-        rm -f "$temp_file"
+        rm -f "$temp_file" "/tmp/wget_version.tmp"
         echo "header"
         return 0
     fi
     
-    # 基本認証のサポートを確認
-    if grep -q -- "--user" "$temp_file"; then
+    # 基本認証のサポートを確認 - より厳密なパターン
+    if grep -q -- "--user=" "$temp_file" || grep -q -- "--user " "$temp_file"; then
         debug_log "DEBUG" "wget supports basic authentication"
-        rm -f "$temp_file"
+        rm -f "$temp_file" "/tmp/wget_version.tmp"
         echo "basic"
         return 0
     fi
     
+    # OpenWrt 19.07は特定のバージョンを検出
+    if echo "$wget_version" | grep -q "OpenWrt"; then
+        debug_log "DEBUG" "Detected OpenWrt wget with limited capabilities"
+        rm -f "$temp_file" "/tmp/wget_version.tmp"
+        echo "limited"
+        return 1
+    fi
+    
     # サポートされていない場合
     debug_log "DEBUG" "wget has limited authentication capabilities, token auth not available"
-    rm -f "$temp_file"
+    rm -f "$temp_file" "/tmp/wget_version.tmp"
     echo "limited"
     return 1
 }
