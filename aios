@@ -540,7 +540,27 @@ setup_github_token() {
 
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
-# API制限の回復までの残り時間を表示する関数（POSIX準拠改良版）
+# OpenWrtバージョン検出（POSIXに準拠）
+detect_wget_capabilities() {
+    debug_log "DEBUG" "Checking wget capabilities for the current environment"
+    
+    # wgetのヘルプを取得して機能を調べる
+    if wget --help 2>&1 | grep -q -- "--header"; then
+        # --headerオプションがサポートされている
+        debug_log "DEBUG" "wget supports --header option"
+        echo "supports_header"
+    elif wget --help 2>&1 | grep -q -- "--user"; then
+        # --userオプション（基本認証）がサポートされている
+        debug_log "DEBUG" "wget supports --user option for basic auth"
+        echo "supports_basic_auth"
+    else
+        # どちらもサポートされていない
+        debug_log "DEBUG" "wget has limited authentication support"
+        echo "limited_support"
+    fi
+}
+
+# API制限を確認する関数（改良版）
 check_api_rate_limit() {
     local token="$(get_github_token)"
     local temp_file="/tmp/aios_api_limit.tmp"
@@ -548,46 +568,67 @@ check_api_rate_limit() {
     local core_limit=""
     local core_remaining=""
     local reset_minutes="60"  # デフォルト値
+    local wget_capability="$(detect_wget_capabilities)"
     
-    debug_log "DEBUG" "Checking API rate limit"
+    debug_log "DEBUG" "Checking API rate limit with wget capability: $wget_capability"
     
     # 既存のファイルを削除
     [ -f "$temp_file" ] && rm -f "$temp_file"
     
-    # APIリクエスト実行
+    # トークンがある場合の認証処理
     if [ -n "$token" ]; then
-        debug_log "DEBUG" "Making authenticated API request with Bearer token"
-        wget -q --no-check-certificate -O "$temp_file" --header="Authorization: Bearer $token" \
-             "https://api.github.com/rate_limit" 2>/dev/null
-             
-        # レスポンスを検証
-        if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials" "$temp_file"; then
-            auth_method="token"
-            debug_log "DEBUG" "Successfully authenticated with Bearer token"
-        else
-            debug_log "DEBUG" "Bearer auth failed, trying token auth"
-            
-            # 一旦temp_fileを削除して再試行
-            [ -f "$temp_file" ] && rm -f "$temp_file"
-            
-            # 従来のtoken認証を試行
-            wget -q --no-check-certificate -O "$temp_file" --header="Authorization: token $token" \
-                 "https://api.github.com/rate_limit" 2>/dev/null
-                 
-            if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials" "$temp_file"; then
-                auth_method="token"
-                debug_log "DEBUG" "Successfully authenticated with token format"
-            else
-                debug_log "DEBUG" "All authentication methods failed, falling back to direct access"
-                auth_method="direct"
-            fi
-        fi
+        debug_log "DEBUG" "Token found, attempting authentication"
+        
+        # 環境に応じた認証方法を選択
+        case "$wget_capability" in
+            supports_header)
+                # 認証ヘッダーをサポートする環境（24.10など）
+                debug_log "DEBUG" "Trying header-based authentication (Bearer)"
+                wget -q --no-check-certificate -O "$temp_file" --header="Authorization: Bearer $token" \
+                     "https://api.github.com/rate_limit" 2>/dev/null
+                     
+                if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials\|Unauthorized" "$temp_file"; then
+                    auth_method="bearer"
+                    debug_log "DEBUG" "Bearer authentication successful"
+                else
+                    debug_log "DEBUG" "Bearer auth failed, trying token format"
+                    rm -f "$temp_file" 2>/dev/null
+                    
+                    wget -q --no-check-certificate -O "$temp_file" --header="Authorization: token $token" \
+                         "https://api.github.com/rate_limit" 2>/dev/null
+                         
+                    if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials\|Unauthorized" "$temp_file"; then
+                        auth_method="token"
+                        debug_log "DEBUG" "Token authentication successful"
+                    else
+                        debug_log "DEBUG" "Header authentication failed"
+                    fi
+                fi
+                ;;
+                
+            supports_basic_auth)
+                # 基本認証をサポートする環境（19.07など）
+                debug_log "DEBUG" "Trying basic authentication"
+                wget -q --no-check-certificate -O "$temp_file" --user="$token" --password="x-oauth-basic" \
+                     "https://api.github.com/rate_limit" 2>/dev/null
+                     
+                if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials\|Unauthorized" "$temp_file"; then
+                    auth_method="basic"
+                    debug_log "DEBUG" "Basic authentication successful"
+                else
+                    debug_log "DEBUG" "Basic authentication failed"
+                fi
+                ;;
+                
+            *)
+                debug_log "DEBUG" "Limited wget capability, using direct access"
+                ;;
+        esac
     fi
     
-    # 非認証リクエスト（必要な場合）
+    # 直接アクセス（認証に失敗した場合または認証なしの場合）
     if [ "$auth_method" = "direct" ]; then
-        debug_log "DEBUG" "Making direct API request"
-        [ -f "$temp_file" ] && rm -f "$temp_file"
+        debug_log "DEBUG" "Using direct API access (no authentication)"
         wget -q --no-check-certificate -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
     fi
     
@@ -629,7 +670,7 @@ check_api_rate_limit() {
         else
             debug_log "DEBUG" "Invalid or missing reset timestamp: '$core_reset'"
             # デフォルト値を使用
-            if [ "$auth_method" = "token" ]; then
+            if [ "$auth_method" != "direct" ]; then
                 reset_minutes="60"
             else
                 reset_minutes="5"
@@ -639,7 +680,7 @@ check_api_rate_limit() {
     else
         debug_log "WARN" "Failed to get API rate limit information"
         # ファイルが存在しない、または空の場合
-        if [ "$auth_method" = "token" ]; then
+        if [ "$auth_method" != "direct" ]; then
             core_limit="5000"
             core_remaining="?"
             reset_minutes="60"
@@ -654,15 +695,8 @@ check_api_rate_limit() {
     [ -z "$core_limit" ] && core_limit="?"
     [ -z "$core_remaining" ] && core_remaining="?"
     
-    # APIステータスの生成 - 修正箇所
-    if [ "$auth_method" = "token" ]; then
-        status_text="API: ${core_remaining}/${core_limit} TTL:${reset_minutes}m"
-    elif [ -n "$core_remaining" ] && [ -n "$core_limit" ] && [ "$core_remaining" != "?" ] && [ "$core_limit" != "?" ]; then
-        # 直接アクセスでもAPIレート情報が取得できた場合は表示
-        status_text="API: ${core_remaining}/${core_limit} TTL:${reset_minutes}m"
-    else
-        status_text="API: N/A TTL:${reset_minutes}m"
-    fi
+    # APIステータスの生成
+    status_text="API: ${core_remaining}/${core_limit} TTL:${reset_minutes}m"
     
     debug_log "DEBUG" "Final API status: $status_text (auth_method=$auth_method)"
     
