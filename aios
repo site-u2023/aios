@@ -60,8 +60,13 @@ DEV_NULL="${DEV_NULL:-on}"
 # unset DEV_NULL
 
 # 基本定数の設定 
-BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q -O}"
+# 基本wgetコマンド - ヘッダー無し
 # BASE_WGET="${BASE_WGET:-wget -O}"
+BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q}"
+# Bearer認証用wgetコマンド（トークンは呼び出し時に指定）
+BASE_WGET_AUTH_BEARER='wget --no-check-certificate -q -O "$1" --header="Authorization: Bearer $2" "$3"'
+# 従来のtoken認証用wgetコマンド（トークンは呼び出し時に指定）
+BASE_WGET_AUTH_TOKEN='wget --no-check-certificate -q -O "$1" --header="Authorization: token $2" "$3"'
 DEBUG_MODE="${DEBUG_MODE:-false}"
 BIN_PATH="$(readlink -f "$0")"
 BIN_DIR="$(dirname "$BIN_PATH")"
@@ -335,6 +340,7 @@ github_api_request() {
     local token=$(get_github_token)
     local response=""
     local auth_method="direct"
+    local temp_file="/tmp/github_api_request.tmp"
     
     # wgetの機能チェック
     if [ -z "$WGET_SUPPORTS_HEADER" ]; then
@@ -348,55 +354,83 @@ github_api_request() {
     if [ -n "$token" ]; then
         debug_log "DEBUG" "Using token authentication for API request"
         
-        # 認証方法1: wgetのヘッダーオプション (24.10)
+        # 認証方法1: Bearerヘッダー認証
         if [ "$WGET_SUPPORTS_HEADER" = "1" ]; then
-            debug_log "DEBUG" "Trying header authentication"
-            response=$(wget -q --no-check-certificate --header="Authorization: token $token" \
-                          --header="Accept: application/vnd.github.v3+json" \
-                          -O- "https://api.github.com/$endpoint" 2>/dev/null)
-                          
-            if [ -n "$response" ] && ! echo "$response" | grep -q '"message":"Bad credentials"'; then
-                auth_method="token"
-                debug_log "DEBUG" "Header authentication successful"
+            debug_log "DEBUG" "Trying Bearer authentication"
+            
+            # 一時ファイルに保存してから読み取る
+            eval $BASE_WGET_AUTH_BEARER "$temp_file" "$token" "https://api.github.com/$endpoint" 2>/dev/null
+            
+            if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+                response=$(cat "$temp_file")
+                if ! echo "$response" | grep -q '"message":"Bad credentials"'; then
+                    auth_method="bearer"
+                    debug_log "DEBUG" "Bearer authentication successful"
+                else
+                    debug_log "DEBUG" "Bearer authentication failed, trying token auth"
+                    
+                    # 従来のtoken認証も試行
+                    eval $BASE_WGET_AUTH_TOKEN "$temp_file" "$token" "https://api.github.com/$endpoint" 2>/dev/null
+                    
+                    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+                        response=$(cat "$temp_file")
+                        if ! echo "$response" | grep -q '"message":"Bad credentials"'; then
+                            auth_method="token"
+                            debug_log "DEBUG" "Token authentication successful"
+                        else
+                            debug_log "DEBUG" "Token authentication failed, trying user auth"
+                        fi
+                    fi
+                }
             else
-                debug_log "DEBUG" "Header authentication failed, trying user auth"
+                debug_log "DEBUG" "Empty response from Bearer authentication"
             fi
         fi
         
-        # 認証方法2: wgetのユーザー認証 (19.07)
-        if [ "$auth_method" = "direct" ]; then
+        # 認証方法2: wgetのユーザー認証（ヘッダーがサポートされていない場合）
+        if [ "$auth_method" = "direct" ] && [ "$WGET_SUPPORTS_HEADER" = "0" ]; then
             debug_log "DEBUG" "Trying user authentication"
-            response=$(wget -q --no-check-certificate --user="$token" --password="x-oauth-basic" \
-                         -O- "https://api.github.com/$endpoint" 2>/dev/null)
-                         
-            if [ -n "$response" ] && ! echo "$response" | grep -q '"message":"Bad credentials"'; then
-                auth_method="user"
-                debug_log "DEBUG" "User authentication successful"
-            else
-                debug_log "DEBUG" "All authentication methods failed, falling back to direct download"
+            $BASE_WGET -O "$temp_file" --user="$token" --password="x-oauth-basic" \
+                     "https://api.github.com/$endpoint" 2>/dev/null
+                     
+            if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+                response=$(cat "$temp_file")
+                if ! echo "$response" | grep -q '"message":"Bad credentials"'; then
+                    auth_method="user"
+                    debug_log "DEBUG" "User authentication successful"
+                else
+                    debug_log "DEBUG" "User authentication failed"
+                fi
             fi
         fi
         
         # 認証方法3: フォールバック（直接アクセス）
         if [ "$auth_method" = "direct" ]; then
             debug_log "DEBUG" "Falling back to direct access"
-            response=$(wget -q --no-check-certificate -O- "https://api.github.com/$endpoint" 2>/dev/null)
+            $BASE_WGET -O "$temp_file" "https://api.github.com/$endpoint" 2>/dev/null
+            
+            if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+                response=$(cat "$temp_file")
+            fi
         fi
             
         # レスポンス検証
         if [ -z "$response" ]; then
             debug_log "WARN" "Empty response from API request"
+            rm -f "$temp_file" 2>/dev/null
             return 1
         fi
         
         if echo "$response" | grep -q '"message":"API rate limit exceeded'; then
             debug_log "WARN" "GitHub API rate limit exceeded"
+            rm -f "$temp_file" 2>/dev/null
             return 1
         fi
         
         # 認証エラーチェック
         if echo "$response" | grep -q '"message":"Bad credentials"'; then
             debug_log "ERROR" "GitHub API authentication failed: Bad credentials"
+            rm -f "$temp_file" 2>/dev/null
             return 2
         fi
         
@@ -404,6 +438,7 @@ github_api_request() {
         if echo "$response" | grep -q '"message":"'; then
             local error_msg=$(echo "$response" | grep -o '"message":"[^"]*"' | cut -d':' -f2- | tr -d '"')
             debug_log "ERROR" "GitHub API error: $error_msg"
+            rm -f "$temp_file" 2>/dev/null
             return 3
         fi
 
@@ -412,10 +447,11 @@ github_api_request() {
         
         # 成功
         echo "$response"
+        rm -f "$temp_file" 2>/dev/null
         return 0
     else
         debug_log "DEBUG" "No token found, using unauthenticated request"
-        wget -q --no-check-certificate -O- "https://api.github.com/$endpoint" 2>/dev/null
+        $BASE_WGET -O - "https://api.github.com/$endpoint" 2>/dev/null
         return $?
     fi
 }
@@ -504,7 +540,6 @@ setup_github_token() {
 
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
-# API制限の回復までの残り時間を表示する関数
 # API制限の回復までの残り時間を表示する関数（POSIX準拠改良版）
 check_api_rate_limit() {
     local token="$(get_github_token)"
@@ -521,23 +556,32 @@ check_api_rate_limit() {
     
     # APIリクエスト実行
     if [ -n "$token" ]; then
-        debug_log "DEBUG" "Making authenticated API request"
-        wget -q --no-check-certificate -O "$temp_file" --header="Authorization: token $token" \
-             "https://api.github.com/rate_limit" 2>/dev/null
+        debug_log "DEBUG" "Making authenticated API request with Bearer token"
+        # Bearer認証を使用
+        eval $BASE_WGET_AUTH_BEARER "$temp_file" "$token" "https://api.github.com/rate_limit" 2>/dev/null
              
         # レスポンスを検証
         if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials" "$temp_file"; then
-            auth_method="token"
-            debug_log "DEBUG" "Successfully authenticated with token"
+            auth_method="bearer"
+            debug_log "DEBUG" "Successfully authenticated with Bearer token"
         else
-            debug_log "DEBUG" "Authentication failed, falling back to direct access"
+            debug_log "DEBUG" "Bearer auth failed, trying token auth"
+            # 従来のtoken認証も試行
+            eval $BASE_WGET_AUTH_TOKEN "$temp_file" "$token" "https://api.github.com/rate_limit" 2>/dev/null
+            
+            if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials" "$temp_file"; then
+                auth_method="token"
+                debug_log "DEBUG" "Successfully authenticated with token format"
+            else
+                debug_log "DEBUG" "All authentication methods failed, falling back to direct access"
+            fi
         fi
     fi
     
     # 非認証リクエスト（必要な場合）
     if [ "$auth_method" = "direct" ]; then
         debug_log "DEBUG" "Making direct API request"
-        wget -q --no-check-certificate -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
+        $BASE_WGET -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
     fi
     
     # レスポンス解析
@@ -578,7 +622,7 @@ check_api_rate_limit() {
         else
             debug_log "DEBUG" "Invalid or missing reset timestamp: '$core_reset'"
             # デフォルト値を使用
-            if [ "$auth_method" = "token" ]; then
+            if [ "$auth_method" = "token" ] || [ "$auth_method" = "bearer" ]; then
                 reset_minutes="60"
             else
                 reset_minutes="5"
@@ -588,7 +632,7 @@ check_api_rate_limit() {
     else
         debug_log "WARN" "Failed to get API rate limit information"
         # ファイルが存在しない、または空の場合
-        if [ "$auth_method" = "token" ]; then
+        if [ "$auth_method" = "token" ] || [ "$auth_method" = "bearer" ]; then
             core_limit="5000"
             core_remaining="?"
             reset_minutes="60"
@@ -603,16 +647,16 @@ check_api_rate_limit() {
     [ -z "$core_limit" ] && core_limit="?"
     [ -z "$core_remaining" ] && core_remaining="?"
     
-    # APIステータスの生成
-    if [ "$auth_method" = "token" ] || [ -n "$core_remaining" -a -n "$core_limit" ]; then
-        # トークン認証または有効な制限情報がある場合
+    # APIステータスの生成 - 認証方法と値の有無に基づく適切な表示
+    if [ -n "$core_remaining" ] && [ -n "$core_limit" ] && [ "$core_remaining" != "?" ] && [ "$core_limit" != "?" ]; then
+        # 有効なAPI制限情報がある場合は表示（認証方法に関わらず）
         status_text="API: ${core_remaining}/${core_limit} TTL:${reset_minutes}m"
     else
         # 情報が取得できない場合
         status_text="API: N/A TTL:${reset_minutes}m"
     fi
     
-    debug_log "DEBUG" "Final API status: $status_text"
+    debug_log "DEBUG" "Final API status: $status_text (auth_method=$auth_method)"
     
     # 一時ファイル削除
     [ -f "$temp_file" ] && rm -f "$temp_file"
@@ -666,23 +710,29 @@ get_commit_version() {
     if [ -n "$token" ]; then
         debug_log "DEBUG" "Using token authentication for API request"
         
-        # 中間結果をログに記録しない、静かに失敗するように設計
-        if wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/$api_url" 2>/dev/null; then
-            # wget成功の場合
-            auth_method="token"
-            if ! grep -q '"sha"' "$temp_file"; then
-                # APIエラーまたは応答無効の場合
-                wget -q -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
+        # Bearer認証を試行
+        eval $BASE_WGET_AUTH_BEARER "$temp_file" "$token" "https://api.github.com/$api_url" 2>/dev/null
+        
+        # wget成功の場合
+        if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials" "$temp_file"; then
+            auth_method="bearer"
+            debug_log "DEBUG" "Bearer authentication successful"
+        else
+            # token認証を試行
+            eval $BASE_WGET_AUTH_TOKEN "$temp_file" "$token" "https://api.github.com/$api_url" 2>/dev/null
+            
+            if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials" "$temp_file"; then
+                auth_method="token"
+                debug_log "DEBUG" "Token authentication successful"
+            else
+                debug_log "DEBUG" "Authentication failed, falling back to direct access"
+                $BASE_WGET -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
                 auth_method="direct"
             fi
-        else
-            # wget失敗の場合は匿名アクセスを試行
-            wget -q -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
-            auth_method="direct"
         fi
     else
         debug_log "DEBUG" "No token available, making direct API request"
-        wget -q -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
+        $BASE_WGET -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
         auth_method="direct"
     fi
     
@@ -691,7 +741,7 @@ get_commit_version() {
         debug_log "DEBUG" "Empty response from GitHub API. Attempting direct file download"
         # APIに失敗した場合は直接ファイルをダウンロード
         local direct_file="/tmp/aios_direct_file.tmp"
-        if wget -q -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
+        if $BASE_WGET -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
             # ファイルからハッシュを生成（最初の7文字だけ使用）
             local file_hash=$(sha256sum "$direct_file" 2>/dev/null | cut -c1-7)
             rm -f "$direct_file" 2>/dev/null
@@ -713,7 +763,7 @@ get_commit_version() {
         debug_log "WARN" "GitHub API rate limit exceeded. Attempting direct file download"
         # 直接ファイル取得にフォールバック
         local direct_file="/tmp/aios_direct_file.tmp"
-        if wget -q -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
+        if $BASE_WGET -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
             local file_hash=$(sha256sum "$direct_file" 2>/dev/null | cut -c1-7)
             rm -f "$direct_file" 2>/dev/null
             rm -f "$temp_file" 2>/dev/null
@@ -976,23 +1026,18 @@ download_check_version() {
     return 0
 }
 
-# 改善版ファイルダウンロードと検証関数
+# ファイルダウンロードと検証関数
 download_fetch_file() {
     local file_name="$1"
     local clean_remote_version="$2"
     local chmod_mode="$3"
     local install_path="${BASE_DIR}/$file_name"
     local script_file="${CACHE_DIR}/script.ch"
-    local temp_file="${install_path}.tmp"
-    local retry_count=3
-    local success=false
-    local i=0
     local remote_url=""
-    local cache_bust="?cache_bust=$(date +%s)"
     
     # 直接ダウンロード時のみキャッシュバスティングを適用
     if echo "$clean_remote_version" | grep -q "direct"; then
-        remote_url="${BASE_URL}/$file_name$cache_bust"
+        remote_url="${BASE_URL}/$file_name${CACHE_BUST}"
         debug_log "DEBUG" "Using cache-busted URL for direct download: $file_name"
     else
         remote_url="${BASE_URL}/$file_name"
@@ -1000,73 +1045,16 @@ download_fetch_file() {
     
     debug_log "DEBUG" "Downloading file: $file_name from $remote_url"
     
-    # ファイルダウンロード（一時ファイルに）
-    while [ $i -lt $retry_count ] && [ "$success" = "false" ]; do
-        if $BASE_WGET "$temp_file" "$remote_url"; then
-            # ファイルサイズチェック
-            if [ -s "$temp_file" ]; then
-                success=true
-                debug_log "DEBUG" "Download successful on attempt $((i+1))"
-            else
-                debug_log "WARN" "Downloaded file is empty on attempt $((i+1))"
-                rm -f "$temp_file" 2>/dev/null
-            fi
-        else
-            debug_log "WARN" "Download failed on attempt $((i+1))"
-        fi
-        
-        i=$((i+1))
-        [ "$success" = "false" ] && [ $i -lt $retry_count ] && sleep 2
-    done
-    
-    if [ "$success" = "false" ]; then
-        debug_log "ERROR" "Download failed after $retry_count attempts: $file_name"
+    # ファイルをダウンロード
+    if ! $BASE_WGET -O "$install_path" "$remote_url"; then
+        debug_log "ERROR" "Download failed: $file_name"
         return 1
     fi
     
-    # 既存ファイルとの比較（存在する場合）
-    if [ -f "$install_path" ]; then
-        # ファイルサイズが同じかチェック
-        local old_size=$(wc -c < "$install_path")
-        local new_size=$(wc -c < "$temp_file")
-        
-        if [ "$old_size" = "$new_size" ]; then
-            # サイズが同じなら内容ハッシュも比較（差分検出精度向上）
-            local old_hash=$(sha256sum "$install_path" 2>/dev/null | cut -d' ' -f1)
-            local new_hash=$(sha256sum "$temp_file" 2>/dev/null | cut -d' ' -f1)
-            
-            if [ "$old_hash" = "$new_hash" ]; then
-                debug_log "DEBUG" "File content unchanged (verified by hash)"
-                rm -f "$temp_file" 2>/dev/null
-                
-                # バージョン情報だけ更新
-                save_version_to_cache "$file_name" "$clean_remote_version" "$script_file"
-                return 0
-            else
-                debug_log "DEBUG" "File content changed (different hash)"
-            fi
-        else
-            debug_log "DEBUG" "File size changed: old=$old_size, new=$new_size"
-        fi
-    fi
-    
-    # 新ファイルを適用
-    mv "$temp_file" "$install_path"
-    
-    # ファイル検証（最終チェック）
+    # ファイル検証
     if [ ! -s "$install_path" ]; then
-        debug_log "ERROR" "Verification failed: $file_name is empty"
+        debug_log "ERROR" "Downloaded file is empty: $file_name"
         return 1
-    fi
-    
-    # シンタックスエラーチェック（シェルスクリプトの場合）
-    if [ "$chmod_mode" = "true" ] && echo "$file_name" | grep -q "\.sh$"; then
-        if sh -n "$install_path" 2>/dev/null; then
-            debug_log "DEBUG" "Syntax check passed for $file_name"
-        else
-            debug_log "WARN" "Syntax warning in $file_name, but continuing"
-            # エラーがあっても続行（APIの問題で誤検出の可能性があるため）
-        fi
     fi
     
     # 権限設定
