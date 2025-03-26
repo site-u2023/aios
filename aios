@@ -529,7 +529,7 @@ setup_github_token() {
         echo "API requests will be limited to 60 calls per hour."
         echo ""
         echo "This limitation is common on OpenWrt 19.07 and earlier versions."
-        debug_log "ERROR" "Token authentication not supported due to limited wget capabilities"
+        debug_log "DEBUG" "Token authentication not supported due to limited wget capabilities"
         return 1
     fi
     
