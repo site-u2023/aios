@@ -187,7 +187,7 @@ feed_package() {
   debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
   debug_log "DEBUG" "DOWNLOAD URL: $DOWNLOAD_URL"
 
-  BASE_WGET "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # エラーが発生しても処理を継続
+  $BASE_WGET "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # エラーが発生しても処理を継続
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   
@@ -297,7 +297,7 @@ feed_package_release() {
   debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
   debug_log "DEBUG" "DOWNLOAD URL: $DOWNLOAD_URL"
 
-  ${BASE_WGET} "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0
+  $BASE_WGET "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
 
