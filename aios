@@ -543,19 +543,28 @@ check_api_rate_limit() {
         core_remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+' | head -1)
         core_reset=$(grep -A3 '"core"' "$temp_file" | grep '"reset"' | head -1 | grep -o '[0-9]\+' | head -1)
         
-    # リセット時間を分に変換
-    if [ -n "$core_reset" ]; then
-        now_time=$(date +%s)
-        if [ "$core_reset" -gt "$now_time" ]; then
-            reset_seconds=$(expr "$core_reset" - "$now_time")
-            reset_minutes=$(expr "$reset_seconds" / 60)
-            # 最低1分を保証
-            [ "$reset_minutes" -eq 0 ] && reset_minutes="1"
+        # リセット時間を分に変換
+        if [ -n "$core_reset" ]; then
+            now_time=$(date +%s)
+            if [ "$core_reset" -gt "$now_time" ]; then
+                reset_seconds=$(expr "$core_reset" - "$now_time")
+                reset_minutes=$(expr "$reset_seconds" / 60)
+                # 最低1分を保証
+                [ "$reset_minutes" -eq 0 ] && reset_minutes="1"
+            else
+                reset_minutes="1"  # 0分ではなく1分に設定
+            fi
         else
-            reset_minutes="1"  # 0分ではなく1分に設定
+            reset_minutes="60"  # 不明な場合は60分と表示
         fi
+        
+        debug_log "DEBUG" "API status: auth=$auth_method limit=$core_limit remaining=$core_remaining reset=${reset_minutes}m"
+        rm -f "$temp_file" 2>/dev/null
     else
-        reset_minutes="60"  # 不明な場合は60分と表示
+        debug_log "WARN" "Failed to get API rate limit information"
+        core_limit="?"
+        core_remaining="?"
+        reset_minutes="60"
     fi
     
     # APIステータステキストの生成
