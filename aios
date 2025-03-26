@@ -83,11 +83,11 @@ GITHUB_TOKEN_FILE="/etc/aios_token"
 MSG_MEMORY=""
 
 # APIレート情報のグローバルキャッシュ
-API_REMAINING="4781"
-API_LIMIT="5000"
-API_RESET_TIME="26"
-API_AUTH_METHOD="token"
-API_LAST_CHECK="1616745600"
+API_REMAINING=""
+API_LIMIT=""
+API_RESET_TIME=""
+API_AUTH_METHOD=""
+API_LAST_CHECK=""
 API_CACHE_TTL=60
 
 # 🔵　エラー・デバッグ　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
