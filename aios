@@ -815,9 +815,6 @@ check_api_rate_limit() {
         # 値のチェックと整形
         [ -z "$API_LIMIT" ] && API_LIMIT="?"
         [ -z "$API_REMAINING" ] && API_REMAINING="?"
-        
-        # キャッシュファイルに保存 ★追加
-        save_api_rate_cache
     else
         # 情報取得失敗時のデフォルト値
         if [ "$auth_method" != "direct" ]; then
@@ -831,9 +828,6 @@ check_api_rate_limit() {
         fi
         API_AUTH_METHOD=$auth_method
         API_LAST_CHECK=$current_time
-        
-        # キャッシュファイルに保存 ★追加
-        save_api_rate_cache
     fi
     
     # 結果文字列の生成
