@@ -605,13 +605,13 @@ handle_user_selection() {
         *)
             # 数値チェック
             if ! echo "$choice" | grep -q '^[0-9][0-9]*$'; then
-                printf "\n%s\n\n\n" "$(color red "$error_msg")"
+                printf "\n%s" "$(color red "$error_msg")"
                 return 0 # リトライが必要
             fi
         
             # 選択範囲チェック（通常メニュー項目のみ）
             if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_choices" ]; then
-                printf "\n%s\n\n\n" "$(color red "$error_msg")"
+                printf "\n%s" "$(color red "$error_msg")"
                 return 0 # リトライが必要
             fi
         
