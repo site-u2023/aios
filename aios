@@ -88,7 +88,7 @@ API_LIMIT=""
 API_RESET_TIME=""
 API_AUTH_METHOD=""
 API_LAST_CHECK=0
-
+API_CACHE_TTL=60
 
 # 🔵　エラー・デバッグ　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -348,7 +348,7 @@ github_api_request() {
     local token=$(get_github_token)
     local response=""
     local auth_method="direct"
-    local temp_file="/tmp/github_api_request.tmp"
+    local temp_file="${CACHE_DIR}/api_request.tmp"
     
     # wgetの機能チェック
     if [ -z "$WGET_SUPPORTS_HEADER" ]; then
@@ -653,8 +653,8 @@ version_is_newer() {
 detect_wget_capabilities() {
     debug_log "DEBUG" "Detecting wget capabilities for current environment"
     
-    local temp_file="/tmp/wget_help.tmp"
-    local test_file="/tmp/wget_test_header.tmp"
+    local temp_file="${CACHE_DIR}/wget_help.tmp"
+    local test_file="${CACHE_DIR}/wget_test_header.tmp"
     local header_support="no"
     local user_support="no"
     
@@ -710,7 +710,7 @@ detect_wget_capabilities() {
 # APIレート制限情報のチェックと取得（キャッシュ機能付き）
 check_api_rate_limit() {
     local token="$(get_github_token)"
-    local temp_file="/tmp/aios_api_limit.tmp"
+    local temp_file="${CACHE_DIR}/api_limit.tmp"
     local auth_method="direct"
     local current_time=$(date +%s)
     
@@ -868,12 +868,13 @@ clean_version_string() {
 # 統一されたファイルバージョン取得関数
 get_commit_version() {
     local file_path="$1"
-    
+    local temp_file="${CACHE_DIR}/commit_info.tmp" 
+    local direct_file="${CACHE_DIR}/direct_file.tmp"  
+
     # リポジトリ情報
     local repo_owner="site-u2023"
     local repo_name="aios"
     local api_url="repos/${repo_owner}/${repo_name}/commits?path=${file_path}&per_page=1"
-    local temp_file="/tmp/aios_commit_info.tmp"
     local auth_method="direct"
     
     # APIレート制限のチェック（全体の処理の一部として使用）
@@ -911,7 +912,6 @@ get_commit_version() {
     if [ ! -s "$temp_file" ] || grep -q "API rate limit exceeded" "$temp_file"; then
         debug_log "DEBUG" "API call failed or rate limit reached, falling back to direct file check"
         # APIに失敗した場合は直接ファイルをダウンロード
-        local direct_file="/tmp/aios_direct_file.tmp"
         
         if wget -q --no-check-certificate -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
             # ファイルからハッシュを生成（最初の7文字だけ使用）
