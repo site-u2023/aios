@@ -545,40 +545,43 @@ check_api_rate_limit() {
         
         debug_log "DEBUG" "Raw reset value from API: $core_reset"
         
-        # リセット時間を分に変換（修正部分）
+        # リセット時間を分に変換
         if [ -n "$core_reset" ]; then
             now_time=$(date +%s)
+            debug_log "DEBUG" "Current timestamp: $now_time, Reset timestamp: $core_reset" 
             if [ "$core_reset" -gt "$now_time" ]; then
                 reset_seconds=$(expr "$core_reset" - "$now_time")
                 reset_minutes=$(expr "$reset_seconds" / 60)
                 # 最低1分を保証
                 [ "$reset_minutes" -eq 0 ] && reset_minutes="1"
-                debug_log "DEBUG" "Time difference calculation: $reset_seconds seconds ($reset_minutes minutes)"
+                debug_log "DEBUG" "Calculated remaining time: $reset_seconds seconds ($reset_minutes minutes)"
             else
-                reset_minutes="1"  # 既に期限切れの場合は1分と表示
-                debug_log "DEBUG" "Reset time appears to be in the past, using 1 minute"
+                reset_minutes="1"
+                debug_log "DEBUG" "Reset time is in the past, defaulting to 1 minute"
             fi
         else
-            # どちらの場合も最大値の60分をデフォルトに設定
-            reset_minutes="60"  # 不明な場合は最大制限時間を想定
-            debug_log "DEBUG" "Unable to determine reset time, using maximum window of 60 minutes"
+            reset_minutes="60"
+            debug_log "DEBUG" "No reset time found, using maximum window (60 minutes)"
         fi
         
         debug_log "DEBUG" "API status: auth=$auth_method limit=$core_limit remaining=$core_remaining reset=${reset_minutes}m"
         rm -f "$temp_file" 2>/dev/null
     else
         debug_log "WARN" "Failed to get API rate limit information"
-        core_limit="?"
-        core_remaining="?"
-        reset_minutes="60"  # 情報取得失敗時も最大時間を想定
+        if [ "$auth_method" = "token" ]; then
+            core_limit="5000"
+            core_remaining="?"
+        else
+            core_limit="60"
+            core_remaining="?"
+        fi
+        reset_minutes="60"
     fi
     
     # APIステータステキストの生成
     if [ "$auth_method" = "token" ] || [ "$auth_method" = "header" ] || [ "$auth_method" = "user" ]; then
-        # 認証API表示
         status_text="API: ${core_remaining}/${core_limit} TTL:${reset_minutes}m"
     else
-        # 直接ダウンロード時
         status_text="API: N/A TTL:${reset_minutes}m"
     fi
     
