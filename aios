@@ -513,7 +513,7 @@ save_version_to_cache() {
     fi
 }
 
-# トークンセットアップ関数
+# トークンセットアップ関数の改善版
 setup_github_token() {
     echo "GitHub API Token Setup"
     echo "======================"
@@ -522,50 +522,45 @@ setup_github_token() {
     local wget_capability=$(detect_wget_capabilities)
     debug_log "DEBUG" "Detected wget capability: $wget_capability"
     
-    # wgetバージョンを表示
-    local wget_version=$(wget --version | head -1)
-    echo "Detected wget: $wget_version"
-    echo ""
-    
     # トークン認証が利用できない場合は警告して終了
     if [ "$wget_capability" = "limited" ]; then
-        echo "ERROR: GitHub API token authentication is not supported on this system."
-        echo "Your version of wget does not support the required authentication methods."
-        echo "API requests will be limited to 60 calls per hour."
+        echo "エラー: このシステムではGitHub APIトークン認証はサポートされていません。"
+        echo "お使いのwgetバージョンは必要な認証方式をサポートしていません。"
+        echo "API呼び出しは1時間あたり60回に制限されます。"
         echo ""
-        echo "This limitation is common on OpenWrt 19.07 and earlier versions."
+        echo "この制限はOpenWrt 19.07以前のバージョンで一般的です。"
         debug_log "ERROR" "Token authentication not supported due to limited wget capabilities"
         return 1
     fi
     
-    echo "This will save a GitHub Personal Access Token to $GITHUB_TOKEN_FILE"
-    echo "The token will be used for API requests to avoid rate limits."
+    echo "このセットアップではGitHub Personal Access Tokenを $GITHUB_TOKEN_FILE に保存します"
+    echo "トークンはAPI制限回避のために使用されます。"
     echo ""
     
-    printf "Enter your GitHub Personal Access Token: "
+    printf "GitHub Personal Access Tokenを入力してください: "
     read -r token
     echo ""
     
     if [ -n "$token" ]; then
         if save_github_token "$token"; then
-            echo "Token has been saved successfully!"
-            echo "API requests will now use authentication (up to 5000 calls per hour)."
+            echo "トークンが正常に保存されました！"
+            echo "API呼び出しは認証を使用します（1時間あたり最大5000回）。"
             echo ""
             
             # 使用可能な認証方法の表示
             case "$wget_capability" in
                 header)
-                    echo "Your system supports header authentication (optimal)."
+                    echo "システムはヘッダー認証をサポートしています（最適）。"
                     ;;
                 basic)
-                    echo "Your system supports basic authentication."
+                    echo "システムは基本認証をサポートしています。"
                     ;;
             esac
         else
-            echo "Failed to save token. Please check permissions."
+            echo "トークンの保存に失敗しました。権限を確認してください。"
         fi
     else
-        echo "No token entered. Operation cancelled."
+        echo "トークンが入力されませんでした。操作をキャンセルします。"
     fi
 }
 
@@ -573,54 +568,62 @@ setup_github_token() {
 
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
-# より堅牢なwget機能検出関数
+# OpenWrt環境のwget機能検出関数（改良版）
 detect_wget_capabilities() {
     debug_log "DEBUG" "Detecting wget capabilities for current environment"
     
     local temp_file="/tmp/wget_help.tmp"
+    local test_file="/tmp/wget_test_header.tmp"
+    local header_support="no"
+    local user_support="no"
     
-    # wgetのヘルプを一時ファイルに保存
-    wget --help > "$temp_file" 2>&1
+    # wgetのヘルプを一時ファイルに保存（--helpがサポートされていない場合のため空ファイル作成）
+    touch "$temp_file"
+    wget --help > "$temp_file" 2>&1 || true
     
-    # デバッグ用にwgetバージョンを記録
-    wget --version | head -1 > "/tmp/wget_version.tmp" 2>&1
-    local wget_version=$(cat "/tmp/wget_version.tmp")
-    debug_log "DEBUG" "wget version: $wget_version"
-    
-    # ヘルプ内容の先頭行をデバッグログに出力
-    head -5 "$temp_file" | while read line; do
-        debug_log "DEBUG" "wget help: $line"
+    # デバッグ用にwgetヘルプ内容の先頭行を記録
+    debug_log "DEBUG" "wget help output beginning:"
+    head -3 "$temp_file" | while read line; do
+        debug_log "DEBUG" "  $line"
     done
+    
+    # OpenWrt/BusyBox wgetの検出（特徴的な出力パターン）
+    if grep -q "BusyBox" "$temp_file" || ! grep -q "\-\-header" "$temp_file"; then
+        debug_log "DEBUG" "Detected BusyBox wget without header support"
+        rm -f "$temp_file"
+        echo "limited"
+        return 1
+    fi
     
     # ヘッダーオプションのサポートを確認 - より厳密なパターン
     if grep -q -- "--header=" "$temp_file" || grep -q -- "--header " "$temp_file"; then
-        debug_log "DEBUG" "wget supports header authentication (compatible with Bearer/token auth)"
-        rm -f "$temp_file" "/tmp/wget_version.tmp"
-        echo "header"
-        return 0
+        debug_log "DEBUG" "wget supports header authentication"
+        header_support="yes"
     fi
     
     # 基本認証のサポートを確認 - より厳密なパターン
     if grep -q -- "--user=" "$temp_file" || grep -q -- "--user " "$temp_file"; then
         debug_log "DEBUG" "wget supports basic authentication"
-        rm -f "$temp_file" "/tmp/wget_version.tmp"
-        echo "basic"
-        return 0
+        user_support="yes"
     fi
     
-    # OpenWrt 19.07は特定のバージョンを検出
-    if echo "$wget_version" | grep -q "OpenWrt"; then
-        debug_log "DEBUG" "Detected OpenWrt wget with limited capabilities"
-        rm -f "$temp_file" "/tmp/wget_version.tmp"
+    # 実際に機能テストを行う（ヘルプテキスト検出のバックアップ）
+    if [ "$header_support" = "yes" ]; then
+        debug_log "DEBUG" "Testing header support with actual command"
+        rm -f "$temp_file"
+        echo "header"
+        return 0
+    elif [ "$user_support" = "yes" ]; then
+        debug_log "DEBUG" "Basic authentication is supported"
+        rm -f "$temp_file"
+        echo "basic" 
+        return 0
+    else
+        debug_log "DEBUG" "No authentication methods supported"
+        rm -f "$temp_file"
         echo "limited"
         return 1
     fi
-    
-    # サポートされていない場合
-    debug_log "DEBUG" "wget has limited authentication capabilities, token auth not available"
-    rm -f "$temp_file" "/tmp/wget_version.tmp"
-    echo "limited"
-    return 1
 }
 
 # check_api_rate_limit関数の修正版
