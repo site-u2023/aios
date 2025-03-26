@@ -381,7 +381,7 @@ github_api_request() {
                             debug_log "DEBUG" "Token authentication failed, trying user auth"
                         fi
                     fi
-                }
+                fi
             else
                 debug_log "DEBUG" "Empty response from Bearer authentication"
             fi
