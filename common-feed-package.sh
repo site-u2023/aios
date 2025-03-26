@@ -192,6 +192,7 @@ feed_package() {
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   
   # opts に格納されたオプションを展開して渡す
+  debug_log "DEBUG" "Calling install_package with options: \"$OUTPUT_FILE\" $opts"
   eval "install_package \"$OUTPUT_FILE\" $opts" || return 0  # エラーが発生しても処理を継続
   
   return 0
@@ -286,7 +287,8 @@ feed_package_release() {
   ${BASE_WGET} "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
-  
+
+  debug_log "DEBUG" "Calling install_package with options: \"$OUTPUT_FILE\" $opts"
   eval "install_package \"$OUTPUT_FILE\" $opts" || return 0
   
   return 0
