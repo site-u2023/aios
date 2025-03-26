@@ -137,7 +137,9 @@ packages_19() {
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf hidden
     feed_package gSpotx2f packages-openwrt 19.07 luci-app-cpu-status-mini hidden   
     feed_package gSpotx2f packages-openwrt 19.07 luci-app-log hidden
+    
     feed_package_release lisaac luci-app-diskman hidden disabled
+    
     feed_package_release jerrykuku luci-theme-argon hidden disabled
     
     return 0
