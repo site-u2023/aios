@@ -127,7 +127,7 @@ packages_19() {
     install_package git-http yn hidden
     install_package ca-certificates yn hidden
     install_package jq yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf ynhidden
+    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
     feed_package gSpotx2f packages-openwrt 19.07 luci-app-cpu-status-mini yn hidden   
     feed_package gSpotx2f packages-openwrt 19.07 luci-app-log yn hidden
     feed_package_release lisaac luci-app-diskman yn hidden disabled
