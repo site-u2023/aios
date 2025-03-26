@@ -191,9 +191,22 @@ feed_package() {
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   
-  # opts に格納されたオプションを展開して渡す
-  debug_log "DEBUG" "Calling install_package with options: \"$OUTPUT_FILE\" $opts"
-  eval "install_package \"$OUTPUT_FILE\" $opts" || return 0  # エラーが発生しても処理を継続
+  debug_log "DEBUG" "Attempting to install package: $PKG_PREFIX"
+
+  # install_packageの呼び出し（evalを使用せず直接呼び出し）
+  if [ -f "$OUTPUT_FILE" ]; then
+      # optsの内容を空白で区切って処理
+      set -- "$OUTPUT_FILE" $opts
+      install_package "$@" || {
+          debug_log "DEBUG" "Failed to install package: $PKG_PREFIX"
+          return 1
+      }
+  else
+      debug_log "DEBUG" "Package file not found: $OUTPUT_FILE"
+      return 1
+  fi
+
+  debug_log "DEBUG" "Package installation process completed for: $PKG_PREFIX"
   
   return 0
 }
@@ -288,8 +301,22 @@ feed_package_release() {
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
 
-  debug_log "DEBUG" "Calling install_package with options: \"$OUTPUT_FILE\" $opts"
-  eval "install_package \"$OUTPUT_FILE\" $opts" || return 0
+  debug_log "DEBUG" "Attempting to install package: $PKG_PREFIX"
+
+  # install_packageの呼び出し（evalを使用せず直接呼び出し）
+  if [ -f "$OUTPUT_FILE" ]; then
+      # optsの内容を空白で区切って処理
+      set -- "$OUTPUT_FILE" $opts
+      install_package "$@" || {
+          debug_log "DEBUG" "Failed to install package: $PKG_PREFIX"
+          return 1
+      }
+  else
+      debug_log "DEBUG" "Package file not found: $OUTPUT_FILE"
+      return 1
+  fi
+
+  debug_log "DEBUG" "Package installation process completed for: $PKG_PREFIX"
   
   return 0
 }
