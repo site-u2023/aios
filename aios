@@ -1029,18 +1029,6 @@ download_check_version() {
     local script_file="${CACHE_DIR}/script.ch"
     local dummy_version="No version control"
 
-    # API呼び出し回数を減らすためキャッシュを先に確認
-    if [ -f "$script_file" ] && [ "$FORCE" != "true" ]; then
-        local cached_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
-        if [ -n "$cached_version" ] && [ $(( $(date +%s) - $(date -r "$script_file" +%s) )) -lt $API_CACHE_TTL ]; then
-            # キャッシュが有効期間内なら利用
-            debug_log "DEBUG" "Using cached version info for $file_name: $cached_version"
-            local clean_cached_version=$(clean_version_string "$cached_version")
-            echo "false|$clean_cached_version|$clean_cached_version|via cache"
-            return 0
-        fi
-    fi
-
     # API制限チェック（デバッグモード時のみ）
     [ "$DEBUG_MODE" = "true" ] && check_api_rate_limit
     
