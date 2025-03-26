@@ -559,14 +559,9 @@ check_api_rate_limit() {
                 debug_log "DEBUG" "Reset time appears to be in the past, using 1 minute"
             fi
         else
-            # auth_methodに応じてデフォルト値を設定
-            if [ "$auth_method" = "token" ]; then
-                reset_minutes="30"  # トークン認証時のデフォルトは30分
-                debug_log "DEBUG" "Using default reset time for token auth: 30 minutes"
-            else
-                reset_minutes="5"   # 非認証時のデフォルトは5分
-                debug_log "DEBUG" "Using default reset time for direct access: 5 minutes"
-            fi
+            # どちらの場合も最大値の60分をデフォルトに設定
+            reset_minutes="60"  # 不明な場合は最大制限時間を想定
+            debug_log "DEBUG" "Unable to determine reset time, using maximum window of 60 minutes"
         fi
         
         debug_log "DEBUG" "API status: auth=$auth_method limit=$core_limit remaining=$core_remaining reset=${reset_minutes}m"
@@ -575,7 +570,7 @@ check_api_rate_limit() {
         debug_log "WARN" "Failed to get API rate limit information"
         core_limit="?"
         core_remaining="?"
-        reset_minutes="5"
+        reset_minutes="60"  # 情報取得失敗時も最大時間を想定
     fi
     
     # APIステータステキストの生成
