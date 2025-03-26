@@ -90,7 +90,6 @@ packages() {
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-status hidden
     feed_package gSpotx2f packages-openwrt current luci-app-temp-status hidden
     feed_package gSpotx2f packages-openwrt current luci-app-log-viewer hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-log hidden
     feed_package gSpotx2f packages-openwrt current internet-detector hidden disabled
 
     feed_package_release lisaac luci-app-diskman hidden disabled
@@ -135,6 +134,12 @@ packages_19() {
     install_package ca-certificates hidden
     install_package jq hidden
 
+    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf hidden
+    feed_package gSpotx2f packages-openwrt 19.07 luci-app-cpu-status-mini hidden   
+    feed_package gSpotx2f packages-openwrt 19.07 luci-app-log hidden
+    feed_package_release lisaac luci-app-diskman hidden disabled
+    feed_package_release jerrykuku luci-theme-argon hidden disabled
+    
     return 0
 }
 
