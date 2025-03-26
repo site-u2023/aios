@@ -306,6 +306,29 @@ get_message() {
 
 # 🔵　トークン系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
+format_api_status() {
+    local auth_method="$1"
+    local remaining="$2"
+    local limit="$3"
+    local reset_minutes="$4"
+    local status_text=""
+    
+    debug_log "DEBUG" "Formatting API status with auth_method=$auth_method, remaining=$remaining, limit=$limit, reset_minutes=$reset_minutes"
+    
+    if [ "$auth_method" = "token" ] || [ "$auth_method" = "header" ] || [ "$auth_method" = "user" ]; then
+        # 認証API表示
+        status_text="API: ${remaining}/${limit} TTL:${reset_minutes}m"
+    elif [ "$auth_method" = "direct" ] && [ -n "$remaining" ] && [ -n "$limit" ]; then
+        # 未認証APIでも残り回数が分かる場合
+        status_text="API: ${remaining}/${limit} TTL:${reset_minutes}m"
+    else
+        # 直接ダウンロード時
+        status_text="API: N/A Reset:${reset_minutes}m"
+    fi
+    
+    echo "$status_text"
+}
+
 github_api_request() {
     local endpoint="$1"
     local token=$(get_github_token)
@@ -331,8 +354,8 @@ github_api_request() {
                           --header="Accept: application/vnd.github.v3+json" \
                           -O- "https://api.github.com/$endpoint" 2>/dev/null)
                           
-            if [ -n "$response" ] && echo "$response" | grep -q "\"resources\""; then
-                auth_method="header"
+            if [ -n "$response" ] && ! echo "$response" | grep -q '"message":"Bad credentials"'; then
+                auth_method="token"
                 debug_log "DEBUG" "Header authentication successful"
             else
                 debug_log "DEBUG" "Header authentication failed, trying user auth"
@@ -340,12 +363,12 @@ github_api_request() {
         fi
         
         # 認証方法2: wgetのユーザー認証 (19.07)
-        if [ -z "$response" ]; then
+        if [ "$auth_method" = "direct" ]; then
             debug_log "DEBUG" "Trying user authentication"
             response=$(wget -q --no-check-certificate --user="$token" --password="x-oauth-basic" \
                          -O- "https://api.github.com/$endpoint" 2>/dev/null)
                          
-            if [ -n "$response" ] && echo "$response" | grep -q "\"resources\""; then
+            if [ -n "$response" ] && ! echo "$response" | grep -q '"message":"Bad credentials"'; then
                 auth_method="user"
                 debug_log "DEBUG" "User authentication successful"
             else
@@ -354,10 +377,9 @@ github_api_request() {
         fi
         
         # 認証方法3: フォールバック（直接アクセス）
-        if [ -z "$response" ]; then
+        if [ "$auth_method" = "direct" ]; then
             debug_log "DEBUG" "Falling back to direct access"
             response=$(wget -q --no-check-certificate -O- "https://api.github.com/$endpoint" 2>/dev/null)
-            auth_method="direct"
         fi
             
         # レスポンス検証
@@ -482,67 +504,70 @@ setup_github_token() {
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 check_api_rate_limit() {
-    if [ "$DEBUG_MODE" = "true" ]; then
-        local token="$(get_github_token)"
-        local temp_file="/tmp/aios_api_limit.tmp"
-        
-        # APIレスポンスを一時ファイルに保存
-        if [ -n "$token" ]; then
-            wget -q -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/rate_limit" 2>/dev/null
+    local token=$(get_github_token)
+    local temp_file="/tmp/aios_api_limit.tmp"
+    local auth_method="direct"
+    local core_limit=""
+    local core_remaining=""
+    local reset_minutes=""
+    
+    debug_log "DEBUG" "Checking API rate limit"
+    
+    # wgetの機能チェック（初回のみ）
+    if [ -z "$WGET_SUPPORTS_HEADER" ]; then
+        if wget --help 2>&1 | grep -q -- "--header"; then
+            export WGET_SUPPORTS_HEADER=1
         else
-            wget -q -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
-        fi
-        
-        if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-            local core_limit=""
-            local core_remaining=""
-            local core_reset=""
-            local now_time=""
-            local diff_sec=""
-            local mins=""
-            local secs=""
-            local auth_text=""
-            
-            # POSIXシェルコマンドのみでJSONパース
-            core_limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+' | head -1)
-            core_remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+' | head -1)
-            core_reset=$(grep -A3 '"core"' "$temp_file" | grep '"reset"' | head -1 | grep -o '[0-9]\+' | head -1)
-            
-            # 時間計算
-            now_time=$(date +%s)
-            
-            # 数値として比較可能な形に確実に変換
-            if [ -n "$core_reset" ] && [ -n "$now_time" ]; then
-                core_reset=$(echo "$core_reset" | tr -cd '0-9')
-                now_time=$(echo "$now_time" | tr -cd '0-9')
-                
-                if [ "$core_reset" -gt "$now_time" ]; then
-                    diff_sec=$(expr "$core_reset" - "$now_time")
-                    mins=$(expr "$diff_sec" / 60)
-                    secs=$(expr "$diff_sec" % 60)
-                else
-                    mins="0"
-                    secs="0"
-                fi
-            else
-                mins="0"
-                secs="0"
-            fi
-            
-            # 認証状態判定
-            if [ "$core_limit" = "5000" ]; then
-                auth_text="authenticated"
-            else
-                auth_text="anonymous"
-            fi
-            
-            debug_log "DEBUG" "API Limits: Core $core_remaining/$core_limit ($auth_text), Reset in ${mins}m ${secs}s"
-            
-            # 一時ファイル削除
-            rm -f "$temp_file"
+            export WGET_SUPPORTS_HEADER=0
         fi
     fi
-    return 0
+    
+    # APIレスポンスを取得
+    if [ -n "$token" ] && [ "$WGET_SUPPORTS_HEADER" = "1" ]; then
+        wget -q --no-check-certificate -O "$temp_file" --header="Authorization: token $token" \
+             "https://api.github.com/rate_limit" 2>/dev/null
+        if [ -s "$temp_file" ] && ! grep -q "Bad credentials" "$temp_file"; then
+            auth_method="token"
+        fi
+    fi
+    
+    # 認証失敗または非対応の場合は直接アクセス
+    if [ "$auth_method" = "direct" ]; then
+        wget -q --no-check-certificate -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
+    fi
+    
+    # レート情報の抽出
+    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+        # POSIXシェルコマンドのみでJSONパース
+        core_limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+' | head -1)
+        core_remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+' | head -1)
+        core_reset=$(grep -A3 '"core"' "$temp_file" | grep '"reset"' | head -1 | grep -o '[0-9]\+' | head -1)
+        
+        # リセット時間を分に変換
+        if [ -n "$core_reset" ]; then
+            now_time=$(date +%s)
+            if [ "$core_reset" -gt "$now_time" ]; then
+                reset_seconds=$(expr "$core_reset" - "$now_time")
+                reset_minutes=$(expr "$reset_seconds" / 60)
+            else
+                reset_minutes="0"
+            fi
+        else
+            reset_minutes="?"
+        fi
+        
+        debug_log "DEBUG" "API status: auth=$auth_method limit=$core_limit remaining=$core_remaining reset=${reset_minutes}m"
+        rm -f "$temp_file" 2>/dev/null
+    else
+        debug_log "WARN" "Failed to get API rate limit information"
+        core_limit="?"
+        core_remaining="?"
+        reset_minutes="?"
+    fi
+    
+    # 状態テキストを返す
+    local status_text=$(format_api_status "$auth_method" "$core_remaining" "$core_limit" "$reset_minutes")
+    echo "$status_text"
 }
 
 clean_version_string() {
@@ -929,34 +954,36 @@ download_fetch_file() {
     return 0
 }
 
-# 結果表示とファイル読み込み関数
 download_finalize() {
     local file_name="$1"
     local status_message="$2"
     local clean_remote_version="$3"
-    local auth_message="$4"
+    local auth_method="$4"  # tokenやdirectなどの認証方法
     local load_mode="$5"
     local hidden_mode="$6"
     local status_type="$7"
     local install_path="${BASE_DIR}/$file_name"
+    
+    # APIレート情報を取得
+    local api_status=$(check_api_rate_limit)
     
     # 読み込みが必要かどうかのフラグ設定
     local should_load="false"
     local action_message=""
     if [ "$load_mode" = "true" ] || echo "$file_name" | grep -q ".*\\.sh"; then
         should_load="true"
-        action_message="Loaded"
+        action_message="(Loaded)"
     fi
     
     # 出力メッセージの作成
-    local message="${status_message} ${file_name} ${clean_remote_version} ${auth_message}"
+    local message="${status_message} ${file_name} ${clean_remote_version} ${api_status}"
     if [ -n "$action_message" ]; then
-        message="${message} (${action_message})"
+        message="${message} ${action_message}"
     fi
 
-    # メッセージ出力を先に行う
+    # メッセージ出力
     if [ "$hidden_mode" = "true" ]; then
-        debug_log "DEBUG" "$(color white "Quiet mode ${message}")"
+        debug_log "DEBUG" "Quiet mode ${message}"
     else
         if [ "$status_type" = "success" ]; then
             printf "%s\n" "$(color white "${message}")"
@@ -965,7 +992,7 @@ download_finalize() {
         fi
     fi
     
-    # メッセージ表示後にファイル読み込み処理を実行
+    # ファイル読み込み処理を実行
     if [ "$should_load" = "true" ]; then
         debug_log "DEBUG" "Now loading source file: $file_name"
         . "$install_path"
