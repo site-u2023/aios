@@ -79,23 +79,18 @@ packages() {
     install_package attendedsysupgrade-common yn hidden
     install_package luci-app-attendedsysupgrade yn hidden
     install_package luci-i18n-attendedsysupgrade yn hidden   
-
     install_package usleep yn hidden
     install_package git yn hidden
     install_package git-http yn hidden
     install_package ca-certificates yn hidden
     install_package jq yn hidden
-
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden
     feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden
     feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden
     feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled
-
     feed_package_release lisaac luci-app-diskman yn hidden disabled
-
     feed_package_release jerrykuku luci-theme-argon yn hidden disabled
-
     return 0
 }
 
@@ -127,21 +122,16 @@ packages_19() {
     install_package attendedsysupgrade-common yn hidden
     install_package luci-app-attendedsysupgrade yn hidden
     install_package luci-i18n-attendedsysupgrade yn hidden   
-
     install_package usleep yn hidden
     install_package git yn hidden
     install_package git-http yn hidden
     install_package ca-certificates yn hidden
     install_package jq yn hidden
-
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf ynhidden
     feed_package gSpotx2f packages-openwrt 19.07 luci-app-cpu-status-mini yn hidden   
     feed_package gSpotx2f packages-openwrt 19.07 luci-app-log yn hidden
-    
     feed_package_release lisaac luci-app-diskman yn hidden disabled
-    
     feed_package_release jerrykuku luci-theme-argon yn hidden disabled
-    
     return 0
 }
 
@@ -174,13 +164,11 @@ packages_snaphot() {
     install_package attendedsysupgrade-common yn hidden
     install_package luci-app-attendedsysupgrade yn hidden
     install_package luci-i18n-attendedsysupgrade yn hidden   
-
     install_package usleep yn hidden
     install_package git yn hidden
     install_package git-http yn hidden
     install_package ca-certificates yn hidden
     install_package jq yn hidden
-
     return 0
 }
 
@@ -206,12 +194,10 @@ packages_usb() {
     install_package hfsfsck yn hidden 
     install_package kmod-fs-hfs yn hidden 
     install_package kmod-fs-hfsplus yn hidden 
-
     install_package hdparm yn hidden 
     install_package hd-idle yn hidden 
     install_package luci-app-hd-idle yn hidden 
     install_package luci-i18n-hd-idle yn hidden 
-
     return 0
 }
 
@@ -219,13 +205,11 @@ package_samba() {
     install_package luci-app-samba4 yn hidden 
     install_package luci-i18n-samba4-ja yn hidden 
     install_package wsdd2 yn hidden
-
     return 0
 }
 
 package_list() {
     check_install_list
-
     return 0
 }
 
