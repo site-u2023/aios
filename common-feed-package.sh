@@ -192,7 +192,7 @@ feed_package() {
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   
   # opts に格納されたオプションを展開して渡す
-  install_package "$OUTPUT_FILE" $opts || return 0  # エラーが発生しても処理を継続
+  eval "install_package \"$OUTPUT_FILE\" $opts" || return 0  # エラーが発生しても処理を継続
   
   return 0
 }
