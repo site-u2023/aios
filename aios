@@ -678,7 +678,7 @@ check_api_rate_limit() {
                 debug_log "DEBUG" "Token authentication not supported on this system"
                 # トークンが設定されていても認証機能が使えない場合、警告を表示
                 if [ -f "$GITHUB_TOKEN_FILE" ]; then
-                    debug_log "WARN" "GitHub token is set but authentication is not supported with current wget version"
+                    debug_log "DEBUG" "GitHub token is set but authentication is not supported with current wget version"
                 fi
                 ;;
         esac
