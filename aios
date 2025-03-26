@@ -524,43 +524,43 @@ setup_github_token() {
     
     # トークン認証が利用できない場合は警告して終了
     if [ "$wget_capability" = "limited" ]; then
-        echo "エラー: このシステムではGitHub APIトークン認証はサポートされていません。"
-        echo "お使いのwgetバージョンは必要な認証方式をサポートしていません。"
-        echo "API呼び出しは1時間あたり60回に制限されます。"
+        echo "ERROR: GitHub API token authentication is not supported on this system."
+        echo "Your version of wget does not support the required authentication methods."
+        echo "API requests will be limited to 60 calls per hour."
         echo ""
-        echo "この制限はOpenWrt 19.07以前のバージョンで一般的です。"
+        echo "This limitation is common on OpenWrt 19.07 and earlier versions."
         debug_log "ERROR" "Token authentication not supported due to limited wget capabilities"
         return 1
     fi
     
-    echo "このセットアップではGitHub Personal Access Tokenを $GITHUB_TOKEN_FILE に保存します"
-    echo "トークンはAPI制限回避のために使用されます。"
+    echo "This will save a GitHub Personal Access Token to $GITHUB_TOKEN_FILE"
+    echo "The token will be used for API requests to avoid rate limits."
     echo ""
     
-    printf "GitHub Personal Access Tokenを入力してください: "
+    printf "Enter your GitHub Personal Access Token: "
     read -r token
     echo ""
     
     if [ -n "$token" ]; then
         if save_github_token "$token"; then
-            echo "トークンが正常に保存されました！"
-            echo "API呼び出しは認証を使用します（1時間あたり最大5000回）。"
+            echo "Token has been saved successfully!"
+            echo "API requests will now use authentication (up to 5000 calls per hour)."
             echo ""
             
             # 使用可能な認証方法の表示
             case "$wget_capability" in
                 header)
-                    echo "システムはヘッダー認証をサポートしています（最適）。"
+                    echo "Your system supports header authentication (optimal)."
                     ;;
                 basic)
-                    echo "システムは基本認証をサポートしています。"
+                    echo "Your system supports basic authentication."
                     ;;
             esac
         else
-            echo "トークンの保存に失敗しました。権限を確認してください。"
+            echo "Failed to save token. Please check permissions."
         fi
     else
-        echo "トークンが入力されませんでした。操作をキャンセルします。"
+        echo "No token entered. Operation cancelled."
     fi
 }
 
