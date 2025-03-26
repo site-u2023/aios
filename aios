@@ -503,88 +503,134 @@ setup_github_token() {
 
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
+# API制限の回復までの残り時間を表示する関数
 check_api_rate_limit() {
-    local token=$(get_github_token)
+    local token="$(get_github_token)"
     local temp_file="/tmp/aios_api_limit.tmp"
     local auth_method="direct"
     local core_limit=""
     local core_remaining=""
-    local reset_minutes=""
+    local reset_minutes="60"  # デフォルト値
     
     debug_log "DEBUG" "Checking API rate limit"
     
-    # wgetの機能チェック（初回のみ）
-    if [ -z "$WGET_SUPPORTS_HEADER" ]; then
-        if wget --help 2>&1 | grep -q -- "--header"; then
-            export WGET_SUPPORTS_HEADER=1
-        else
-            export WGET_SUPPORTS_HEADER=0
-        fi
-    fi
+    # 既存のファイルを削除
+    [ -f "$temp_file" ] && rm -f "$temp_file"
     
-    # APIレスポンスを取得
-    if [ -n "$token" ] && [ "$WGET_SUPPORTS_HEADER" = "1" ]; then
+    # APIリクエスト実行
+    if [ -n "$token" ]; then
+        debug_log "DEBUG" "Making authenticated API request"
         wget -q --no-check-certificate -O "$temp_file" --header="Authorization: token $token" \
              "https://api.github.com/rate_limit" 2>/dev/null
-        if [ -s "$temp_file" ] && ! grep -q "Bad credentials" "$temp_file"; then
+             
+        # レスポンスを検証
+        if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials" "$temp_file"; then
             auth_method="token"
+            debug_log "DEBUG" "Successfully authenticated with token"
+        else
+            debug_log "DEBUG" "Authentication failed, falling back to direct access"
         fi
     fi
     
-    # 認証失敗または非対応の場合は直接アクセス
+    # 非認証リクエスト（必要な場合）
     if [ "$auth_method" = "direct" ]; then
+        debug_log "DEBUG" "Making direct API request"
         wget -q --no-check-certificate -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
     fi
     
-    # レート情報の抽出
+    # レスポンス全体をデバッグ表示
     if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-        # POSIXシェルコマンドのみでJSONパース
-        core_limit=$(grep -A3 '"core"' "$temp_file" | grep '"limit"' | head -1 | grep -o '[0-9]\+' | head -1)
-        core_remaining=$(grep -A3 '"core"' "$temp_file" | grep '"remaining"' | head -1 | grep -o '[0-9]\+' | head -1)
-        core_reset=$(grep -A3 '"core"' "$temp_file" | grep '"reset"' | head -1 | grep -o '[0-9]\+' | head -1)
+        debug_log "DEBUG" "API response received (first 5 lines):"
+        head -n 5 "$temp_file" | while read -r line; do
+            debug_log "DEBUG" "RESPONSE: $line"
+        done
         
-        debug_log "DEBUG" "Raw reset value from API: $core_reset"
+        # reset行を抽出して表示（JSONの構造確認）
+        debug_log "DEBUG" "Looking for reset timestamp in response:"
+        grep -n "reset" "$temp_file" | head -n 3 | while read -r line; do
+            debug_log "DEBUG" "RESET LINE: $line"
+        done
+    fi
+    
+    # レスポンス解析
+    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+        # レート情報の抽出（より堅牢なパターン）
+        core_limit=$(grep -o '"limit"[ ]*:[ ]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
+        core_remaining=$(grep -o '"remaining"[ ]*:[ ]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
+        core_reset=$(grep -o '"reset"[ ]*:[ ]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
         
-        # リセット時間を分に変換
-        if [ -n "$core_reset" ]; then
-            now_time=$(date +%s)
-            debug_log "DEBUG" "Current timestamp: $now_time, Reset timestamp: $core_reset" 
-            if [ "$core_reset" -gt "$now_time" ]; then
-                reset_seconds=$(expr "$core_reset" - "$now_time")
-                reset_minutes=$(expr "$reset_seconds" / 60)
-                # 最低1分を保証
-                [ "$reset_minutes" -eq 0 ] && reset_minutes="1"
-                debug_log "DEBUG" "Calculated remaining time: $reset_seconds seconds ($reset_minutes minutes)"
-            else
-                reset_minutes="1"
-                debug_log "DEBUG" "Reset time is in the past, defaulting to 1 minute"
-            fi
-        else
-            reset_minutes="60"
-            debug_log "DEBUG" "No reset time found, using maximum window (60 minutes)"
+        # コアセクションを優先的に検索（値が見つからない場合）
+        if [ -z "$core_limit" ] || [ -z "$core_remaining" ] || [ -z "$core_reset" ]; then
+            debug_log "DEBUG" "Trying alternative extraction pattern for core section"
+            core_section=$(sed -n '/"core":/,/},/p' "$temp_file")
+            [ -z "$core_limit" ] && core_limit=$(echo "$core_section" | grep -o '"limit"[ ]*:[ ]*[0-9]\+' | head -1 | grep -o '[0-9]\+')
+            [ -z "$core_remaining" ] && core_remaining=$(echo "$core_section" | grep -o '"remaining"[ ]*:[ ]*[0-9]\+' | head -1 | grep -o '[0-9]\+')
+            [ -z "$core_reset" ] && core_reset=$(echo "$core_section" | grep -o '"reset"[ ]*:[ ]*[0-9]\+' | head -1 | grep -o '[0-9]\+')
         fi
         
-        debug_log "DEBUG" "API status: auth=$auth_method limit=$core_limit remaining=$core_remaining reset=${reset_minutes}m"
-        rm -f "$temp_file" 2>/dev/null
+        debug_log "DEBUG" "Extracted values - limit:$core_limit remaining:$core_remaining reset:$core_reset"
+        
+        # リセット時間の処理
+        if [ -n "$core_reset" ] && [ "$core_reset" -gt 1000000000 ]; then
+            # 現在時刻を取得
+            now_time=$(date +%s)
+            debug_log "DEBUG" "Current time: $now_time, Reset time: $core_reset"
+            
+            # 残り時間を計算
+            if [ "$core_reset" -gt "$now_time" ]; then
+                reset_seconds=$(( core_reset - now_time ))
+                reset_minutes=$(( reset_seconds / 60 ))
+                [ "$reset_minutes" -lt 1 ] && reset_minutes="1"
+                debug_log "DEBUG" "Time until API limit reset: $reset_seconds seconds ($reset_minutes minutes)"
+            else
+                # リセット時刻が過去の場合
+                reset_minutes="0"
+                debug_log "DEBUG" "Reset time is in the past, API should be refreshed"
+            fi
+        else
+            debug_log "DEBUG" "Invalid or missing reset timestamp: '$core_reset'"
+            # デフォルト値を使用
+            if [ "$auth_method" = "token" ]; then
+                reset_minutes="60"
+            else
+                reset_minutes="5"
+            fi
+            debug_log "DEBUG" "Using default reset time: $reset_minutes minutes"
+        fi
     else
         debug_log "WARN" "Failed to get API rate limit information"
+        # ファイルが存在しない、または空の場合
         if [ "$auth_method" = "token" ]; then
             core_limit="5000"
             core_remaining="?"
+            reset_minutes="60"
         else
             core_limit="60"
             core_remaining="?"
+            reset_minutes="5"
         fi
-        reset_minutes="60"
     fi
     
-    # APIステータステキストの生成
-    if [ "$auth_method" = "token" ] || [ "$auth_method" = "header" ] || [ "$auth_method" = "user" ]; then
+    # 空値のチェック
+    [ -z "$core_limit" ] && core_limit="?"
+    [ -z "$core_remaining" ] && core_remaining="?"
+    
+    # APIステータスの生成
+    if [ "$auth_method" = "token" ]; then
         status_text="API: ${core_remaining}/${core_limit} TTL:${reset_minutes}m"
     else
         status_text="API: N/A TTL:${reset_minutes}m"
     fi
     
+    debug_log "DEBUG" "Final API status: $status_text"
+    
+    # JSONファイルをデバッグファイルにコピー（検証用）
+    if [ -f "$temp_file" ]; then
+        cp "$temp_file" "$TEST_DIR/last_response.json"
+        debug_log "DEBUG" "Saved response to $TEST_DIR/last_response.json"
+    fi
+    
+    # 結果を返す
     echo "$status_text"
 }
 
