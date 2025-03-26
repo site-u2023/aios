@@ -287,7 +287,7 @@ feed_package_release() {
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   
-  install_package "$OUTPUT_FILE" $opts || return 0
+  eval "install_package \"$OUTPUT_FILE\" $opts" || return 0
   
   return 0
 }
