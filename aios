@@ -604,9 +604,11 @@ check_api_rate_limit() {
     [ -z "$core_remaining" ] && core_remaining="?"
     
     # APIステータスの生成
-    if [ "$auth_method" = "token" ]; then
+    if [ "$auth_method" = "token" ] || [ -n "$core_remaining" -a -n "$core_limit" ]; then
+        # トークン認証または有効な制限情報がある場合
         status_text="API: ${core_remaining}/${core_limit} TTL:${reset_minutes}m"
     else
+        # 情報が取得できない場合
         status_text="API: N/A TTL:${reset_minutes}m"
     fi
     
