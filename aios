@@ -88,7 +88,7 @@ API_LIMIT=""
 API_RESET_TIME=""
 API_AUTH_METHOD=""
 API_LAST_CHECK=""
-API_CACHE_TTL=60
+API_CACHE_TTL="60"
 
 # 🔵　エラー・デバッグ　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -714,9 +714,15 @@ check_api_rate_limit() {
     local auth_method="direct"
     local current_time=$(date +%s)
     
-    # キャッシュ有効期間（30秒）内の場合は保存値を返す
-    if [ -n "$API_REMAINING" ] && [ $(( current_time - API_LAST_CHECK )) -lt 30 ]; then
-        debug_log "DEBUG" "Using cached API rate limit info: $API_REMAINING/$API_LIMIT"
+    # 先にキャッシュファイルをロード（初回実行時）
+    if [ -z "$API_LAST_CHECK" ] && [ -f "${CACHE_DIR}/api_rate.ch" ]; then
+        debug_log "DEBUG" "Loading API rate information from cache file"
+        . "${CACHE_DIR}/api_rate.ch"
+    fi
+    
+    # キャッシュ有効期間内の場合は保存値を返す
+    if [ -n "$API_REMAINING" ] && [ $(( current_time - API_LAST_CHECK )) -lt ${API_CACHE_TTL:-60} ]; then
+        debug_log "DEBUG" "Using cached API rate limit info: $API_REMAINING/$API_LIMIT, age: $(( current_time - API_LAST_CHECK ))s"
         echo "API: ${API_REMAINING}/${API_LIMIT} TTL:${API_RESET_TIME}m"
         return 0
     fi
@@ -809,6 +815,9 @@ check_api_rate_limit() {
         # 値のチェックと整形
         [ -z "$API_LIMIT" ] && API_LIMIT="?"
         [ -z "$API_REMAINING" ] && API_REMAINING="?"
+        
+        # キャッシュファイルに保存 ★追加
+        save_api_rate_cache
     else
         # 情報取得失敗時のデフォルト値
         if [ "$auth_method" != "direct" ]; then
@@ -822,6 +831,9 @@ check_api_rate_limit() {
         fi
         API_AUTH_METHOD=$auth_method
         API_LAST_CHECK=$current_time
+        
+        # キャッシュファイルに保存 ★追加
+        save_api_rate_cache
     fi
     
     # 結果文字列の生成
