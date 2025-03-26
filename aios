@@ -323,7 +323,7 @@ format_api_status() {
         status_text="API: ${remaining}/${limit} TTL:${reset_minutes}m"
     else
         # 直接ダウンロード時
-        status_text="API: N/A Reset:${reset_minutes}m"
+        status_text="API: N/A TTL:${reset_minutes}m"
     fi
     
     echo "$status_text"
@@ -573,7 +573,7 @@ check_api_rate_limit() {
         status_text="API: ${core_remaining}/${core_limit} TTL:${reset_minutes}m"
     else
         # 直接ダウンロード時
-        status_text="API: N/A Reset:${reset_minutes}m"
+        status_text="API: N/A TTL:${reset_minutes}m"
     fi
     
     echo "$status_text"
