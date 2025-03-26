@@ -101,6 +101,7 @@ packages() {
 }
 
 packages_19() {
+    install_package wget hidden
     install_package luci-i18n-base hidden
     install_package luci-i18n-opkg hidden
     install_package luci-i18n-firewall hidden
