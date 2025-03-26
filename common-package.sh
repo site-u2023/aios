@@ -72,7 +72,7 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 
 # インストール後のパッケージリストを表示
 check_install_list() {
-    printf "%s\n" "$(color blue "Packages installed after flashing")"
+    printf "\n%s\n" "$(color blue "Packages installed after flashing")"
 
     FLASH_TIME="$(awk '
     $1 == "Installed-Time:" && ($2 < OLDEST || OLDEST=="") {
