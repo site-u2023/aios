@@ -48,9 +48,6 @@ JP|MSG_INSTALL_COMPLETED=パッケージのインストールが正常に完了�
 # package-manual.sh
 # =======================
 
-US|MSG_CONFIRM_INSTALL_PACKAGES=Install packages for your system? [y/N]
-JP|MSG_CONFIRM_INSTALL_PACKAGES=システムにパッケージをインストールしますか？ [y/N]
-
 US|PKG_SECTION_BASIC=Basic System Functions
 JP|PKG_SECTION_BASIC=基本システム機能
 
@@ -117,6 +114,12 @@ JP|MSG_UNDER_TEST=👹 試験中
 
 #US|CONFIG_SECTION_TITLE={0}
 #JP|CONFIG_SECTION_TITLE={0}
+
+US|MSG_CONFIRM_INSTALL=Do you want to proceed with this operation? (y/n):
+JP|MSG_CONFIRM_INSTALL=この操作を実行しますか？ (y/n):
+
+US|MSG_ACTION_CANCELLED=Operation cancelled.
+JP|MSG_ACTION_CANCELLED=操作はキャンセルされました。
 
 #US|CONFIG_SEPARATOR=---------------------------------------
 #JP|CONFIG_SEPARATOR=---------------------------------------
