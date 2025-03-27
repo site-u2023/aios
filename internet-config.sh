@@ -60,7 +60,7 @@ MAIN_MENU="openwrt-config.sh"
 SELECTOR_MENU="internet-config.sh"
 
 # メイン関数
-main() {
+internet_config_main() {
     # デバッグモードでmenu.dbの内容を確認
     if [ "$DEBUG_MODE" = "true" ]; then
         if [ -f "${BASE_DIR}/menu.db" ]; then
@@ -86,4 +86,4 @@ main() {
     done
 }
 
-main "$@"
+internet_config_main "$@"
