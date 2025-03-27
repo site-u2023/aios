@@ -385,7 +385,7 @@ packages() {
 }
 
 # メイン処理
-main() {
+system_config_main() {
     #information
     #set_device_name_password
     #set_wifi_ssid_password
@@ -394,4 +394,4 @@ main() {
 }
 
 # スクリプトの実行
-main "$@"
+system_config_main "$@"
