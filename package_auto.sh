@@ -232,6 +232,7 @@ install_packages_by_version() {
     if [ ! -f "${CACHE_DIR}/osversion.ch" ]; then
         debug_log "DEBUG" "OS version file not found, using default package function"
         packages
+        
         return 0
     fi
 
@@ -268,6 +269,7 @@ install_usb_packages() {
     # USBデバイスのキャッシュファイルを確認
     if [ ! -f "${CACHE_DIR}/usbdevice.ch" ]; then
         debug_log "DEBUG" "USB device cache file not found, skipping USB detection"
+        
         return 0
     fi
     
