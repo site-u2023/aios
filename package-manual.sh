@@ -52,85 +52,115 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
 packages() {
-    install_package luci-i18n-base yn hidden
-    install_package ttyd yn hidden
-    install_package openssh-sftp-server yn hidden
-    install_package luci-mod-dashboard yn hidden
-    install_package coreutils yn hidden
-    install_package irqbalance yn hidden
-    install_package luci-app-sqm yn hidden
-    install_package luci-app-qos yn hidden
-    install_package luci-i18n-statistics yn hidden
-    install_package luci-i18n-nlbwmon yn hidden
-    install_package wifischedule yn hidden
-    install_package luci-theme-openwrt yn hidden
-    install_package attendedsysupgrade-common yn hidden
+    # === 基本システム機能 ===
+    install_package luci-i18n-base yn hidden        # 基本UI言語パック
+    install_package ttyd yn hidden                  # ウェブターミナル
+    install_package openssh-sftp-server yn hidden   # ファイル転送
+    install_package coreutils yn hidden             # 基本コマンド群
     
-    install_package usleep yn hidden
-    install_package git yn hidden
+    # === システム管理 ===
+    install_package irqbalance yn hidden            # CPU負荷分散
+    install_package luci-mod-dashboard yn hidden    # ダッシュボード
     
-    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden
-    feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled
+    # === ネットワーク管理 ===
+    install_package luci-app-sqm yn hidden          # QoSスマートキューイング
+    install_package luci-app-qos yn hidden          # 基本的なQoS
+    install_package luci-i18n-statistics yn hidden  # 統計情報
+    install_package luci-i18n-nlbwmon yn hidden     # 帯域監視
+    install_package wifischedule yn hidden          # WiFiスケジュール
     
-    feed_package_release lisaac luci-app-diskman yn hidden disabled
+    # === システム監視 ===
+    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden      # CPU性能
+    feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden    # CPUステータス
+    feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden   # 温度ステータス
+    feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden    # ログビューア
     
-    feed_package_release jerrykuku luci-theme-argon yn hidden disabled
+    # === テーマおよび見た目 ===
+    install_package luci-theme-openwrt yn hidden    # 標準テーマ
     
+    # === ユーティリティ ===
+    install_package attendedsysupgrade-common yn hidden  # システムアップグレード
+    install_package usleep yn hidden                # スリープユーティリティ
+    install_package git yn hidden                   # バージョン管理
+    
+    # === 追加機能（デフォルトで無効） ===
+    feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled     # インターネット検知
+    feed_package_release lisaac luci-app-diskman yn hidden disabled                         # ディスク管理
+    feed_package_release jerrykuku luci-theme-argon yn hidden disabled                      # Argonテーマ
+    
+    debug_log "DEBUG" "Standard packages installation process completed"
     return 0
 }
 
 packages_19() {
-    install_package wget yn hidden
-    install_package luci-i18n-base yn hidden
-    install_package ttyd yn hidden
-    install_package openssh-sftp-server yn hidden
-    install_package luci-i18n-dashboard yn hidden
-    install_package coreutils yn hidden
-    install_package irqbalance yn hidden
-    install_package luci-app-sqm yn hidden
-    install_package luci-app-qos yn hidden
-    install_package luci-i18n-statistics yn hidden
-    install_package luci-i18n-nlbwmon yn hidden
-    install_package wifischedule yn hidden
-    install_package luci-theme-openwrt yn hidden
-    install_package attendedsysupgrade-common yn hidden
+    # === 基本システム機能 ===
+    install_package wget yn hidden                  # 基本ダウンローダー(19.07必須)
+    install_package luci-i18n-base yn hidden        # 基本UI言語パック
+    install_package ttyd yn hidden                  # ウェブターミナル
+    install_package openssh-sftp-server yn hidden   # ファイル転送
+    install_package coreutils yn hidden             # 基本コマンド群
     
-    install_package usleep yn hidden
-    install_package git yn hidden
+    # === システム管理 ===
+    install_package irqbalance yn hidden            # CPU負荷分散
+    install_package luci-i18n-dashboard yn hidden   # ダッシュボード(19.07版)
     
-    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
-    feed_package gSpotx2f packages-openwrt 19.07 luci-app-cpu-status-mini yn hidden   
-    feed_package gSpotx2f packages-openwrt 19.07 luci-app-log yn hidden
+    # === ネットワーク管理 ===
+    install_package luci-app-sqm yn hidden          # QoSスマートキューイング
+    install_package luci-app-qos yn hidden          # 基本的なQoS
+    install_package luci-i18n-statistics yn hidden  # 統計情報
+    install_package luci-i18n-nlbwmon yn hidden     # 帯域監視
+    install_package wifischedule yn hidden          # WiFiスケジュール
     
-    feed_package_release lisaac luci-app-diskman yn hidden disabled
+    # === テーマおよび見た目 ===
+    install_package luci-theme-openwrt yn hidden    # 標準テーマ
     
-    # feed_package_release jerrykuku luci-theme-argon yn hidden disabled
+    # === システム監視 (19.07特有版) ===
+    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden     # CPU性能
+    feed_package gSpotx2f packages-openwrt 19.07 luci-app-cpu-status-mini yn hidden # CPU状態(19.07用)
+    feed_package gSpotx2f packages-openwrt 19.07 luci-app-log yn hidden            # ログビューア(19.07用)
     
+    # === ユーティリティ ===
+    install_package attendedsysupgrade-common yn hidden  # システムアップグレード
+    install_package usleep yn hidden                # スリープユーティリティ
+    install_package git yn hidden                   # バージョン管理
+    
+    # === 追加機能（デフォルトで無効） ===
+    feed_package_release lisaac luci-app-diskman yn hidden disabled    # ディスク管理
+    
+    # feed_package_release jerrykuku luci-theme-argon yn hidden disabled # Argonテーマ
+    
+    debug_log "DEBUG" "19.07 specific packages installation process completed"
     return 0
 }
 
 packages_snaphot() {
-    install_package luci yn hidden
-    install_package luci-i18n-base yn hidden
-    install_package ttyd yn hidden
-    install_package openssh-sftp-server yn hidden
-    install_package luci-mod-dashboard yn hidden
-    install_package coreutils yn hidden
-    install_package irqbalance yn hidden
-    install_package luci-app-sqm yn hidden
-    install_package luci-app-qos yn hidden
-    install_package luci-i18n-statistics yn hidden
-    install_package luci-i18n-nlbwmon yn hidden
-    install_package wifischedule yn hidden
-    install_package luci-theme-openwrt yn hidden
-    install_package attendedsysupgrade-common yn hidden
+    # === 基本システム機能 ===
+    install_package luci yn hidden                  # 基本LuCIパッケージ(SNAPSHOT用)
+    install_package luci-i18n-base yn hidden        # 基本UI言語パック
+    install_package ttyd yn hidden                  # ウェブターミナル
+    install_package openssh-sftp-server yn hidden   # ファイル転送
+    install_package coreutils yn hidden             # 基本コマンド群
     
-    install_package usleep yn hidden
-    install_package git yn hidden
+    # === システム管理 ===
+    install_package irqbalance yn hidden            # CPU負荷分散
+    install_package luci-mod-dashboard yn hidden    # ダッシュボード
     
+    # === ネットワーク管理 ===
+    install_package luci-app-sqm yn hidden          # QoSスマートキューイング
+    install_package luci-app-qos yn hidden          # 基本的なQoS
+    install_package luci-i18n-statistics yn hidden  # 統計情報
+    install_package luci-i18n-nlbwmon yn hidden     # 帯域監視
+    install_package wifischedule yn hidden          # WiFiスケジュール
+    
+    # === テーマおよび見た目 ===
+    install_package luci-theme-openwrt yn hidden    # 標準テーマ
+    
+    # === ユーティリティ ===
+    install_package attendedsysupgrade-common yn hidden  # システムアップグレード
+    install_package usleep yn hidden                # スリープユーティリティ
+    install_package git yn hidden                   # バージョン管理
+    
+    debug_log "DEBUG" "SNAPSHOT specific packages installation process completed"
     return 0
 }
 
