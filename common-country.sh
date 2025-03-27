@@ -100,6 +100,14 @@ normalize_input() {
     printf '%s' "$output"
 }
 
+# 改行文字を処理するための関数
+process_newlines() {
+    local input="$1"
+    # \nを実際の改行に変換
+    printf "%b" "$input"
+}
+
+# 確認入力処理関数（改行対応版）
 confirm() {
     local msg_key="${1:-MSG_CONFIRM_DEFAULT}"  # デフォルトのメッセージキー
     local input_type="yn"  # デフォルトの入力タイプ
@@ -143,10 +151,10 @@ confirm() {
         debug_log "DEBUG" "Running in YN mode with message: $msg_key"
     fi
     
-    # ユーザー入力ループ（以下は変更なし）
+    # ユーザー入力ループ
     while true; do
-        # プロンプト表示
-        printf "%s " "$(color white "$msg")"
+        # プロンプト表示（改行対応版）
+        process_newlines "$(color white "$msg") "
         
         # 入力を読み取り
         if ! read -r yn; then
@@ -177,9 +185,8 @@ confirm() {
                     CONFIRM_RESULT="R"
                     return 2
                 fi
-                # YNモードではRを無効として処理（エラーとして処理）
+                # YNモードではRを無効として処理
                 debug_log "DEBUG" "Return option not allowed in YN mode"
-                # エラーメッセージを表示して次のループへ
                 show_invalid_input_error "$input_type"
                 continue
                 ;;
