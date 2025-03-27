@@ -42,8 +42,8 @@ DEV_NULL="${DEV_NULL:-on}"
 # unset DEV_NULL
 
 # 基本定数の設定 
-BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q -O}"
-# BASE_WGET="${BASE_WGET:-wget -O}"
+BASE_WGET="wget --no-check-certificate -q -O"
+# BASE_WGET="wget -O"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 BIN_PATH=$(readlink -f "$0")
 BIN_DIR="$(dirname "$BIN_PATH")"
