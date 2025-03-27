@@ -100,26 +100,38 @@ normalize_input() {
     printf '%s' "$output"
 }
 
-# 確認入力処理関数
 confirm() {
     local msg_key="${1:-MSG_CONFIRM_DEFAULT}"  # デフォルトのメッセージキー
-    local param_name="$2"    # パラメータ名（置換用）
-    local param_value="$3"   # パラメータ値（置換用）
-    local direct_msg="$4"    # 直接メッセージ
-    local input_type="${5:-yn}"  # 入力タイプ: yn (デフォルト) または ynr
+    local input_type="yn"  # デフォルトの入力タイプ
     local msg=""
     local yn=""
     
     # メッセージの取得
     if [ -n "$msg_key" ]; then
         msg=$(get_message "$msg_key")
-        if [ -n "$param_name" ] && [ -n "$param_value" ]; then
-            local safe_value=$(echo "$param_value" | sed 's/[\/&]/\\&/g')
-            msg=$(echo "$msg" | sed "s|{$param_name}|$safe_value|g")
+        
+        # パラメータの処理（複数のプレースホルダー対応）
+        shift
+        while [ $# -ge 2 ]; do
+            local param_name="$1"
+            local param_value="$2"
+            
+            if [ -n "$param_name" ] && [ -n "$param_value" ]; then
+                local safe_value=$(echo "$param_value" | sed 's/[\/&]/\\&/g')
+                msg=$(echo "$msg" | sed "s|{$param_name}|$safe_value|g")
+                debug_log "DEBUG" "Replaced placeholder {$param_name} with value: $param_value"
+            fi
+            
+            shift 2
+        done
+        
+        # 最後の引数が残っている場合、入力タイプとして処理
+        if [ $# -eq 1 ]; then
+            input_type="$1"
         fi
     else
-        msg="$direct_msg"
-        debug_log "DEBUG" "Using direct message instead of message key"
+        debug_log "ERROR" "No message key specified for confirmation"
+        return 1
     fi
     
     # 入力タイプに基づき適切な表示形式に置き換え
@@ -131,7 +143,7 @@ confirm() {
         debug_log "DEBUG" "Running in YN mode with message: $msg_key"
     fi
     
-    # ユーザー入力ループ
+    # ユーザー入力ループ（以下は変更なし）
     while true; do
         # プロンプト表示
         printf "%s " "$(color white "$msg")"
@@ -172,7 +184,7 @@ confirm() {
                 continue
                 ;;
             *)
-                # エラーメッセージ表示（行間詰め）
+                # エラーメッセージ表示
                 show_invalid_input_error "$input_type"
                 debug_log "DEBUG" "Invalid input detected for $input_type mode"
                 ;;
