@@ -68,7 +68,12 @@ packages() {
     install_package luci-i18n-statistics yn hidden  # 統計情報
     install_package luci-i18n-nlbwmon yn hidden     # 帯域監視
     install_package wifischedule yn hidden          # WiFiスケジュール
-    
+
+    # === セキュリティツール ===
+    install_package fail2ban yn hidden                # 不正アクセス防止
+    install_package banip yn hidden                   # IPブロック
+    install_package https-dns-proxy yn hidden         # DNS over HTTPS
+
     # === システム監視 ===
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden      # CPU性能
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden    # CPUステータス
@@ -110,6 +115,11 @@ packages_19() {
     install_package luci-i18n-statistics yn hidden  # 統計情報
     install_package luci-i18n-nlbwmon yn hidden     # 帯域監視
     install_package wifischedule yn hidden          # WiFiスケジュール
+
+        # === セキュリティツール ===
+    install_package fail2ban yn hidden                # 不正アクセス防止
+    install_package banip yn hidden                   # IPブロック
+    install_package https-dns-proxy yn hidden         # DNS over HTTPS
     
     # === テーマおよび見た目 ===
     install_package luci-theme-openwrt yn hidden    # 標準テーマ
@@ -151,6 +161,11 @@ packages_snaphot() {
     install_package luci-i18n-statistics yn hidden  # 統計情報
     install_package luci-i18n-nlbwmon yn hidden     # 帯域監視
     install_package wifischedule yn hidden          # WiFiスケジュール
+
+        # === セキュリティツール ===
+    install_package fail2ban yn hidden                # 不正アクセス防止
+    install_package banip yn hidden                   # IPブロック
+    install_package https-dns-proxy yn hidden         # DNS over HTTPS
     
     # === テーマおよび見た目 ===
     install_package luci-theme-openwrt yn hidden    # 標準テーマ
