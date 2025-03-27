@@ -555,33 +555,6 @@ process_menu_yn() {
     return 0
 }
 
-# コマンド文字列からmenu_ynオプションを検出する関数
-has_menu_yn() {
-    local cmd_str="$1"
-    
-    debug_log "DEBUG" "Checking for menu_yn option in command string"
-    
-    # menu_ynが含まれるか単純にチェック
-    if echo "$cmd_str" | grep -q "menu_yn"; then
-        return 0  # 存在する場合は真
-    else
-        return 1  # 存在しない場合は偽
-    fi
-}
-
-# menu_ynオプションをコマンド文字列から削除する関数
-remove_menu_yn() {
-    local cmd_str="$1"
-    
-    debug_log "DEBUG" "Removing menu_yn option from command string"
-    
-    # menu_ynをコマンド文字列から除去
-    local cleaned_cmd=$(echo "$cmd_str" | sed 's/menu_yn//g')
-    
-    debug_log "DEBUG" "Command string after removing menu_yn: $cleaned_cmd"
-    echo "$cleaned_cmd"
-}
-
 # ユーザー選択処理関数
 handle_user_selection() {
     local section_name="$1"
