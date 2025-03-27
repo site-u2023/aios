@@ -101,6 +101,7 @@ packages() {
     install_package ca-certificates hidden            # CA証明書
 
     # === システム監視 ===
+    install_package htop hidden                    # インタラクティブプロセスビューア
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf hidden      # CPU性能監視
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-status hidden    # CPUステータス
     feed_package gSpotx2f packages-openwrt current luci-app-temp-status hidden   # 温度ステータス
@@ -165,6 +166,7 @@ packages_19() {
     install_package ca-certificates hidden            # CA証明書
 
     # === システム監視 (19.07特有版) ===
+    install_package htop hidden                    # インタラクティブプロセスビューア
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf hidden      # CPU性能監視
     feed_package gSpotx2f packages-openwrt 19.07 luci-app-cpu-status-mini hidden # CPU状態(19.07用)
     feed_package gSpotx2f packages-openwrt 19.07 luci-app-log hidden             # ログビューア(19.07用)
@@ -221,6 +223,9 @@ packages_snaphot() {
     install_package luci-app-attendedsysupgrade hidden     # システムアップグレードUI
     install_package luci-i18n-attendedsysupgrade hidden    # システムアップグレード言語パック
 
+    # === システム監視 ===
+    install_package htop hidden                    # インタラクティブプロセスビューア
+    
     # === ユーティリティ ===
     install_package usleep hidden                     # スリープユーティリティ
     install_package git hidden                        # バージョン管理
