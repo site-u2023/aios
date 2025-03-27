@@ -525,7 +525,7 @@ add_special_menu_items() {
     echo "$special_items_count $menu_count"
 }
 
-# menu_ynオプションを処理する新関数
+# menu_ynオプションを処理する関数
 process_menu_yn() {
     local cmd_str="$1"
     
@@ -553,12 +553,6 @@ process_menu_yn() {
     
     echo "$cleaned_cmd"
     return 0
-
-    # menu_ynオプションの処理（新関数を使用）
-    #selected_cmd=$(process_menu_yn "$selected_cmd")
-    #if [ $? -ne 0 ]; then
-    #    return 0  # キャンセルされた場合はメニューに戻る
-    #fi
 }
 
 # ユーザー選択処理関数
