@@ -525,6 +525,36 @@ add_special_menu_items() {
     echo "$special_items_count $menu_count"
 }
 
+# menu_ynオプションを処理する新関数
+process_menu_yn() {
+    local cmd_str="$1"
+    
+    debug_log "DEBUG" "Processing menu_yn option if present"
+    
+    # menu_ynオプションがない場合はそのまま返す
+    if ! echo "$cmd_str" | grep -q "menu_yn"; then
+        debug_log "DEBUG" "No menu_yn option found, returning original command"
+        echo "$cmd_str"
+        return 0
+    fi
+    
+    debug_log "DEBUG" "Found menu_yn option in command, requesting confirmation"
+    
+    # 既存のconfirm関数を使用して確認
+    if ! confirm "MSG_CONFIRM_INSTALL"; then
+        debug_log "DEBUG" "User declined confirmation"
+        printf "%s\n" "$(color yellow "$(get_message "MSG_ACTION_CANCELLED")")"
+        return 1
+    fi
+    
+    # 確認OKの場合、コマンド文字列からmenu_ynオプションを削除
+    local cleaned_cmd=$(echo "$cmd_str" | sed 's/menu_yn//g')
+    debug_log "DEBUG" "User confirmed, returning cleaned command: $cleaned_cmd"
+    
+    echo "$cleaned_cmd"
+    return 0
+}
+
 # コマンド文字列からmenu_ynオプションを検出する関数
 has_menu_yn() {
     local cmd_str="$1"
@@ -670,20 +700,10 @@ handle_user_selection() {
     debug_log "DEBUG" "Selected color: $selected_color"
     debug_log "DEBUG" "Original command: $selected_cmd"
     
-    # menu_ynオプションの処理
-    if has_menu_yn "$selected_cmd"; then
-        debug_log "DEBUG" "Found menu_yn option in command"
-        
-        # 既存のconfirm関数を使用
-        if ! confirm "MSG_CONFIRM_INSTALL"; then
-            debug_log "DEBUG" "User declined confirmation, returning to menu"
-            printf "%s\n" "$(color yellow "$(get_message "MSG_ACTION_CANCELLED")")"
-            return 0 # メニューに戻る（リトライ）
-        fi
-        
-        # コマンド文字列からmenu_ynオプションを削除
-        selected_cmd=$(remove_menu_yn "$selected_cmd")
-        debug_log "DEBUG" "User confirmed, executing command: $selected_cmd"
+    # menu_ynオプションの処理（新関数を使用）
+    selected_cmd=$(process_menu_yn "$selected_cmd")
+    if [ $? -ne 0 ]; then
+        return 0  # キャンセルされた場合はメニューに戻る
     fi
     
     # コマンド実行 - セレクターコマンドの特別処理
