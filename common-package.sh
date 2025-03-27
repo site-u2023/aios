@@ -357,7 +357,7 @@ configure_service() {
 
 # オプション解析
 parse_package_options() {
-    # 変数初期化
+    # 変数初期化（既存の変数）
     PKG_OPTIONS_CONFIRM="no"
     PKG_OPTIONS_SKIP_LANG="no"
     PKG_OPTIONS_FORCE="no"
@@ -370,6 +370,9 @@ parse_package_options() {
     PKG_OPTIONS_LIST="no"
     PKG_OPTIONS_PACKAGE_NAME=""
     
+    # 新しい変数：説明文用
+    PKG_OPTIONS_DESCRIPTION=""
+    
     # オプション解析
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -380,6 +383,11 @@ parse_package_options() {
             disabled) PKG_OPTIONS_DISABLED="yes" ;;
             hidden) PKG_OPTIONS_HIDDEN="yes" ;;
             test) PKG_OPTIONS_TEST="yes" ;;
+            desc:*) 
+                # 説明文オプション処理 - "desc:" 以降の文字列を取得
+                PKG_OPTIONS_DESCRIPTION="${1#desc:}"
+                debug_log "DEBUG" "Package description set to: $PKG_OPTIONS_DESCRIPTION" 
+                ;;
             update)
                 PKG_OPTIONS_UPDATE="yes"
                 shift
@@ -399,7 +407,14 @@ parse_package_options() {
                 if [ -z "$PKG_OPTIONS_PACKAGE_NAME" ]; then
                     PKG_OPTIONS_PACKAGE_NAME="$1"
                 else
-                    debug_log "DEBUG" "Unexpected additional argument: $1"
+                    debug_log "DEBUG" "Additional argument will be treated as description: $1"
+                    # 説明文がまだ設定されていなければ、2番目の引数を説明文として扱う
+                    if [ -z "$PKG_OPTIONS_DESCRIPTION" ]; then
+                        PKG_OPTIONS_DESCRIPTION="$1"
+                        debug_log "DEBUG" "Package description set from positional argument: $PKG_OPTIONS_DESCRIPTION"
+                    else
+                        debug_log "DEBUG" "Unexpected additional argument: $1"
+                    fi
                 fi
                 ;;
         esac
@@ -445,7 +460,7 @@ process_package() {
         debug_log "DEBUG" "Test mode enabled, skipping pre-install checks"
     fi
     
-    # **YN確認 (オプションで有効時のみ)**
+    # YN確認 (オプションで有効時のみ)
     if [ "$confirm_install" = "yes" ]; then
         # パッケージ名からパスと拡張子を除去した表示用の名前を作成
         local display_name
@@ -454,8 +469,20 @@ process_package() {
 
         debug_log "DEBUG" "Original package name: $package_name"
         debug_log "DEBUG" "Displaying package name: $display_name"
-        
-        if ! confirm "MSG_CONFIRM_INSTALL" "pkg" "$display_name"; then
+    
+        # 説明文があれば表示メッセージに含める
+        local confirm_msg
+        if [ -n "$PKG_OPTIONS_DESCRIPTION" ]; then
+            confirm_msg="$(get_message "MSG_CONFIRM_INSTALL_WITH_DESC")"
+            # フォーマット: パッケージ NAME 説明: DESC をインストールしますか？
+            confirm_msg=$(printf "$confirm_msg" "$display_name" "$PKG_OPTIONS_DESCRIPTION")
+        else
+            confirm_msg="$(get_message "MSG_CONFIRM_INSTALL")"
+            # 従来のフォーマット: パッケージ NAME をインストールしますか？
+            confirm_msg=$(printf "$confirm_msg" "$display_name")
+        fi
+    
+        if ! confirm_with_message "$confirm_msg"; then
             debug_log "DEBUG" "User declined installation of $display_name"
             return 0
         fi
