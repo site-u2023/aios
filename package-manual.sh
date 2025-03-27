@@ -341,8 +341,7 @@ install_usb_packages() {
 }
 
 # メイン処理
-# メイン処理
-main() {
+package_manual_main() {
     print_information
     
     # パッケージインストールの確認
@@ -361,4 +360,4 @@ main() {
 }
 
 # スクリプトの実行
-# main "$@"
+# package_manual_main "$@"
