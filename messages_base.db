@@ -118,9 +118,6 @@ JP|MSG_UNDER_TEST=👹 試験中
 #US|CONFIG_SECTION_TITLE={0}
 #JP|CONFIG_SECTION_TITLE={0}
 
-US|MSG_CONFIRM_INSTALL=Do you want to proceed with this operation? (y/n):
-JP|MSG_CONFIRM_INSTALL=この操作を実行しますか？ (y/n):
-
 US|MSG_ACTION_CANCELLED=Operation cancelled.
 JP|MSG_ACTION_CANCELLED=操作はキャンセルされました。
 
