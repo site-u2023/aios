@@ -470,15 +470,15 @@ process_package() {
         debug_log "DEBUG" "Original package name: $package_name"
         debug_log "DEBUG" "Displaying package name: $display_name"
     
-        # 説明文があれば専用のconfirm関数を使用
+        # 説明文があれば専用のメッセージキーを使用、プレースホルダー名を統一
         if [ -n "$PKG_OPTIONS_DESCRIPTION" ]; then
-            # 説明文付きの確認（既存のconfirm関数を適切に使用）
-            if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg" "$display_name" "$PKG_OPTIONS_DESCRIPTION"; then
+            # 説明文付きの確認メッセージ（プレースホルダー名を{pkg}に統一）
+            if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg" "$display_name" "desc" "$PKG_OPTIONS_DESCRIPTION"; then
                 debug_log "DEBUG" "User declined installation of $display_name with description"
                 return 0
             fi
         else
-            # 通常の確認（既存のconfirm関数を使用）
+            # 通常の確認メッセージ
             if ! confirm "MSG_CONFIRM_INSTALL" "pkg" "$display_name"; then
                 debug_log "DEBUG" "User declined installation of $display_name"
                 return 0
