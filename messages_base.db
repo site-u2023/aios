@@ -8,6 +8,42 @@ SUPPORTED_LANGUAGE_JP="JP"
 # フォーマット: 言語コード|メッセージキー=メッセージ
 
 # =======================
+# package-manual.sh
+# =======================
+US|PKG_SECTION_BASIC=Basic System Functions
+JP|PKG_SECTION_BASIC=基本システム機能
+
+US|PKG_SECTION_SYSADMIN=System Administration
+JP|PKG_SECTION_SYSADMIN=システム管理
+
+US|PKG_SECTION_NETWORK=Network Management
+JP|PKG_SECTION_NETWORK=ネットワーク管理
+
+US|PKG_SECTION_SECURITY=Security Tools
+JP|PKG_SECTION_SECURITY=セキュリティツール
+
+US|PKG_SECTION_MONITORING=System Monitoring
+JP|PKG_SECTION_MONITORING=システム監視
+
+US|PKG_SECTION_NETWORK_DIAG=Network Diagnostics
+JP|PKG_SECTION_NETWORK_DIAG=ネットワーク診断ツール
+
+US|PKG_SECTION_THEME=Themes and Appearance
+JP|PKG_SECTION_THEME=テーマおよび見た目
+
+US|PKG_SECTION_UTILITY=Utility Tools
+JP|PKG_SECTION_UTILITY=ユーティリティ
+
+US|PKG_SECTION_ADDITION=Additional Features
+JP|PKG_SECTION_ADDITION=追加機能
+
+US|PKG_SECTION_USB=USB Storage
+JP|PKG_SECTION_USB=USBストレージ
+
+US|PKG_SECTION_SAMBA=File Sharing
+JP|PKG_SECTION_SAMBA=ファイル共有
+
+# =======================
 # dynamic-system-info.sh
 # =======================
 
