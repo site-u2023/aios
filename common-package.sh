@@ -440,28 +440,6 @@ process_package() {
     local set_disabled="$6"
     local test_mode="$7"
     local lang_code="$8"
-    
-    # オプション変数の初期化
-    PKG_OPTIONS_DESCRIPTION=""
-    PKG_OPTIONS_HIDDEN=""
-    
-    # 9番目以降の引数を処理してオプションを抽出
-    shift 8
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            desc=*)
-                # desc=形式のオプションを検出
-                PKG_OPTIONS_DESCRIPTION="${1#desc=}"
-                debug_log "DEBUG" "Description option detected: $PKG_OPTIONS_DESCRIPTION"
-                ;;
-            hidden)
-                # hiddenオプションを検出
-                PKG_OPTIONS_HIDDEN="yes"
-                debug_log "DEBUG" "Hidden option enabled"
-                ;;
-        esac
-        shift
-    done
 
     # 言語パッケージか通常パッケージかを判別
     case "$base_name" in
@@ -483,7 +461,7 @@ process_package() {
     fi
     
     # YN確認 (オプションで有効時のみ)
-    if [ "$confirm_install" = "yes" ] && [ "$PKG_OPTIONS_HIDDEN" != "yes" ]; then
+    if [ "$confirm_install" = "yes" ]; then
         # パッケージ名からパスと拡張子を除去した表示用の名前を作成
         local display_name
         display_name=$(basename "$package_name")
@@ -492,17 +470,15 @@ process_package() {
         debug_log "DEBUG" "Original package name: $package_name"
         debug_log "DEBUG" "Displaying package name: $display_name"
     
-        # 説明文があるかどうかで処理を分ける
+        # 説明文があれば専用のメッセージキーを使用、プレースホルダー名を統一
         if [ -n "$PKG_OPTIONS_DESCRIPTION" ]; then
-            debug_log "DEBUG" "Using confirm function with description"
-            
-            # 既存のconfirm関数を使用
+            # 説明文付きの確認メッセージ（プレースホルダー名を{pkg}に統一）
             if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg" "$display_name" "desc" "$PKG_OPTIONS_DESCRIPTION"; then
-                debug_log "DEBUG" "User declined installation of $display_name"
+                debug_log "DEBUG" "User declined installation of $display_name with description"
                 return 0
             fi
         else
-            # 通常の確認
+            # 通常の確認メッセージ
             if ! confirm "MSG_CONFIRM_INSTALL" "pkg" "$display_name"; then
                 debug_log "DEBUG" "User declined installation of $display_name"
                 return 0
@@ -516,7 +492,7 @@ process_package() {
         return 1
     fi
 
-    # ローカルパッケージDBの適用
+    # **ローカルパッケージDBの適用 (インストール成功後に実行)**
     if [ "$skip_package_db" != "yes" ]; then
         local_package_db "$base_name"
     else
