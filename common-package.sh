@@ -456,7 +456,6 @@ process_package() {
         debug_log "DEBUG" "Displaying package name: $display_name"
         
         if ! confirm "MSG_CONFIRM_INSTALL" "pkg" "$display_name"; then
-        # if ! confirm "MSG_CONFIRM_INSTALL" "pkg" "$package_name"; then
             debug_log "DEBUG" "User declined installation of $display_name"
             return 0
         fi
