@@ -558,7 +558,7 @@ remove_menu_yn() {
     echo "$cleaned_cmd"
 }
 
-# ユーザー選択処理関数（menu_yn対応版）
+# ユーザー選択処理関数（confirm関数を活用）
 handle_user_selection() {
     local section_name="$1"
     local is_main_menu="$2"
@@ -677,18 +677,21 @@ handle_user_selection() {
     debug_log "DEBUG" "Original command: $selected_cmd"
     
     # menu_ynオプションの処理
-    local yn_msg_key=$(parse_menu_yn "$selected_cmd")
-    if [ -n "$yn_msg_key" ]; then
-        debug_log "DEBUG" "Found menu_yn option with key: $yn_msg_key"
-        # 確認ダイアログを表示
-        if ! confirm "$yn_msg_key"; then
-            debug_log "DEBUG" "User declined confirmation, returning to menu"
+    if echo "$selected_cmd" | grep -q "menu_yn"; then
+        # menu_ynオプションからメッセージキーを抽出
+        local msg_key=$(echo "$selected_cmd" | sed -n 's/.*menu_yn \([^ ;]*\).*/\1/p')
+        debug_log "DEBUG" "Found menu_yn with message key: $msg_key"
+        
+        # 既存のconfirm関数を使用してYN確認を実行
+        if ! confirm "$msg_key"; then
+            debug_log "DEBUG" "Confirmation declined by user"
             printf "%s\n" "$(color yellow "$(get_message "MSG_ACTION_CANCELLED")")"
             return 0 # メニューに戻る（リトライ）
         fi
-        # コマンド文字列からmenu_ynオプションを削除
-        selected_cmd=$(remove_menu_yn "$selected_cmd")
-        debug_log "DEBUG" "User confirmed, executing command: $selected_cmd"
+        
+        # 確認が成功した場合、menu_ynオプションを削除
+        selected_cmd=$(echo "$selected_cmd" | sed 's/menu_yn [^ ;]* *//')
+        debug_log "DEBUG" "Command after removing menu_yn: $selected_cmd"
     fi
     
     # コマンド実行 - セレクターコマンドの特別処理
