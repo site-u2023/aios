@@ -525,21 +525,17 @@ add_special_menu_items() {
     echo "$special_items_count $menu_count"
 }
 
-# コマンド文字列からmenu_ynオプションを解析する関数
-parse_menu_yn() {
+# コマンド文字列からmenu_ynオプションを検出する関数
+has_menu_yn() {
     local cmd_str="$1"
     
-    debug_log "DEBUG" "Parsing menu_yn option from command string"
+    debug_log "DEBUG" "Checking for menu_yn option in command string"
     
-    # menu_ynオプションとメッセージキーを抽出
+    # menu_ynが含まれるか単純にチェック
     if echo "$cmd_str" | grep -q "menu_yn"; then
-        # menu_ynオプションが存在する
-        debug_log "DEBUG" "Found menu_yn option in command string"
-        echo "true"
+        return 0  # 存在する場合は真
     else
-        # menu_ynオプションが存在しない
-        debug_log "DEBUG" "No menu_yn option found in command string"
-        echo ""
+        return 1  # 存在しない場合は偽
     fi
 }
 
@@ -549,14 +545,14 @@ remove_menu_yn() {
     
     debug_log "DEBUG" "Removing menu_yn option from command string"
     
-    # menu_ynオプションをコマンド文字列から除去
-    local cleaned_cmd=$(echo "$cmd_str" | sed 's/menu_yn //g')
+    # menu_ynをコマンド文字列から除去
+    local cleaned_cmd=$(echo "$cmd_str" | sed 's/menu_yn//g')
     
     debug_log "DEBUG" "Command string after removing menu_yn: $cleaned_cmd"
     echo "$cleaned_cmd"
 }
 
-# ユーザー選択処理関数（menu_yn対応版）
+# ユーザー選択処理関数
 handle_user_selection() {
     local section_name="$1"
     local is_main_menu="$2"
@@ -675,11 +671,10 @@ handle_user_selection() {
     debug_log "DEBUG" "Original command: $selected_cmd"
     
     # menu_ynオプションの処理
-    local has_menu_yn=$(parse_menu_yn "$selected_cmd")
-    if [ -n "$has_menu_yn" ]; then
+    if has_menu_yn "$selected_cmd"; then
         debug_log "DEBUG" "Found menu_yn option in command"
         
-        # 確認ダイアログを表示（汎用メッセージを使用）
+        # 既存のconfirm関数を使用
         if ! confirm "MSG_CONFIRM_INSTALL"; then
             debug_log "DEBUG" "User declined confirmation, returning to menu"
             printf "%s\n" "$(color yellow "$(get_message "MSG_ACTION_CANCELLED")")"
