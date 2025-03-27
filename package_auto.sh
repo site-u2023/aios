@@ -80,9 +80,8 @@ packages() {
     install_package luci-i18n-wifischedule hidden    # WiFiスケジュール言語パック
 
     # === セキュリティツール ===
-    install_package fail2ban hidden                # 不正アクセス防止
-    install_package banip hidden                   # IPブロック
-    install_package https-dns-proxy hidden         # DNS over HTTPS
+    install_package znc-mod-fail2ban hidden      # 不正アクセス防止
+    install_package banip hidden                 # IPブロック
     
     # === テーマおよび見た目 ===
     install_package luci-theme-openwrt hidden        # 標準OpenWrtテーマ
@@ -106,6 +105,11 @@ packages() {
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-status hidden    # CPUステータス
     feed_package gSpotx2f packages-openwrt current luci-app-temp-status hidden   # 温度ステータス
     feed_package gSpotx2f packages-openwrt current luci-app-log-viewer hidden    # ログビューア
+
+    # === ネットワーク診断ツール ===
+    install_package mtr hidden                     # 高機能traceroute
+    install_package nmap hidden                    # ネットワークスキャン
+    install_package tcpdump hidden                 # パケットキャプチャ
 
     # === 追加機能（デフォルトで無効） ===
     feed_package gSpotx2f packages-openwrt current internet-detector hidden disabled    # インターネット検知
@@ -144,10 +148,8 @@ packages_19() {
     install_package luci-app-wifischedule hidden     # WiFiスケジュールUI
     install_package luci-i18n-wifischedule hidden    # WiFiスケジュール言語パック
 
-    # === セキュリティツール ===
-    install_package fail2ban hidden                # 不正アクセス防止
-    install_package banip hidden                   # IPブロック
-    install_package https-dns-proxy hidden         # DNS over HTTPS
+    install_package znc-mod-fail2ban hidden      # 不正アクセス防止
+    install_package banip hidden                 # IPブロック
     
     # === テーマおよび見た目 ===
     install_package luci-theme-openwrt hidden        # 標準OpenWrtテーマ
@@ -170,6 +172,11 @@ packages_19() {
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf hidden      # CPU性能監視
     feed_package gSpotx2f packages-openwrt 19.07 luci-app-cpu-status-mini hidden # CPU状態(19.07用)
     feed_package gSpotx2f packages-openwrt 19.07 luci-app-log hidden             # ログビューア(19.07用)
+
+    # === ネットワーク診断ツール ===
+    install_package mtr hidden                     # 高機能traceroute
+    install_package nmap hidden                    # ネットワークスキャン
+    install_package tcpdump hidden                 # パケットキャプチャ
     
     # === 追加機能（デフォルトで無効） ===
     feed_package_release lisaac luci-app-diskman hidden disabled                 # ディスク管理
@@ -208,10 +215,8 @@ packages_snaphot() {
     install_package luci-app-wifischedule hidden     # WiFiスケジュールUI
     install_package luci-i18n-wifischedule hidden    # WiFiスケジュール言語パック
 
-    # === セキュリティツール ===
-    install_package fail2ban hidden                # 不正アクセス防止
-    install_package banip hidden                   # IPブロック
-    install_package https-dns-proxy hidden         # DNS over HTTPS
+    install_package znc-mod-fail2ban hidden      # 不正アクセス防止
+    install_package banip hidden                 # IPブロック
     
     # === テーマおよび見た目 ===
     install_package luci-theme-openwrt hidden        # 標準OpenWrtテーマ
@@ -225,6 +230,11 @@ packages_snaphot() {
 
     # === システム監視 ===
     install_package htop hidden                    # インタラクティブプロセスビューア
+
+    # === ネットワーク診断ツール ===
+    install_package mtr hidden                     # 高機能traceroute
+    install_package nmap hidden                    # ネットワークスキャン
+    install_package tcpdump hidden                 # パケットキャプチャ
     
     # === ユーティリティ ===
     install_package usleep hidden                     # スリープユーティリティ
