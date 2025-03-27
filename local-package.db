@@ -1,6 +1,20 @@
-SCRIPT_VERSION="2025.03.03-00-01"
+SCRIPT_VERSION="2025.03.27-00-01"
+
+[git]
+install_package git-http hidden
+install_package ca-certificates hidden
+
+[luci-i18n-base]
+install_package luci-i18n-opkg hidden
+install_package luci-i18n-firewall hidden
+
+[luci-mod-dashboard]
+install_package luci-i18n-dashboard hidden
 
 [ttyd]
+install_package luci-app-ttyd hidden
+install_package luci-i18n-ttyd hidden
+
 uci delete ttyd.ttyd 2>/dev/null
 uci delete ttyd.@ttyd[-1] 2>/dev/null
 
@@ -61,6 +75,9 @@ install_package luci-lib-ipkg hidden
 feed_package_release yn kiddin9 luci-theme-edge
 
 [samba4]
+install_package luci-i18n-samba4 hidden
+install_package wsdd2 hidden
+
 NAS="openwrt"
 MNT="/mnt/sda"
 uci set samba4.@samba[0]=samba
@@ -80,4 +97,54 @@ uci set samba4.sambashare.create_mask='0777'
 uci set samba4.sambashare.dir_mask='0777'
 uci commit samba4
 
+[luci-app-sqm]
+install_package luci-i18n-sqm hidden
+install_package tc-mod-iptables hidden
 
+[luci-app-qos]
+install_package luci-i18n-qos hidden
+
+[wifischedule]
+install_package luci-app-wifischedule hidden
+install_package luci-i18n-wifischedule hidden
+
+[luci-theme-openwrt]
+install_package luci-theme-material hidden
+install_package luci-theme-openwrt-2020 hidden
+
+[attendedsysupgrade-common]
+install_package luci-app-attendedsysupgrade hidden
+install_package luci-i18n-attendedsysupgrade hidden
+
+[kmod-usb-storage]
+install_package block-mount hidden
+install_package kmod-usb-storage-uas hidden
+install_package usbutils hidden
+install_package libblkid1 hidden
+install_package gdisk yn hidden 
+install_package kmod-usb-ledtrig-usb yn hidden port
+install_package luci-app-ledtrig-usbport yn hidden 
+
+[dosfstools]
+install_package kmod-fs-vfat hidden
+
+[e2fsprogs]
+install_package kmod-fs-ext4 hidden
+
+[f2fs-tools]
+install_package kmod-fs-f2fs hidden
+
+[exfat-fsck]
+install_package kmod-fs-exfat hidden
+
+[ntfs-3g]
+install_package kmod-fs-ntfs3 hidden
+
+[hfsfsck]
+install_package kmod-fs-hfs hidden
+install_package kmod-fs-hfsplus hidden
+
+[hdparm]
+install_package hd-idle hidden
+install_package luci-app-hd-idle hidden
+install_package luci-i18n-hd-idle hidden
