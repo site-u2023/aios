@@ -525,7 +525,40 @@ add_special_menu_items() {
     echo "$special_items_count $menu_count"
 }
 
-# ユーザー選択処理関数（実行中表示を削除したバージョン）
+# コマンド文字列からmenu_ynオプションを解析する関数
+parse_menu_yn() {
+    local cmd_str="$1"
+    
+    debug_log "DEBUG" "Parsing menu_yn option from command string"
+    
+    # menu_ynオプションとメッセージキーを抽出
+    # 形式: menu_yn MSG_CONFIRM_KEY
+    if echo "$cmd_str" | grep -q "menu_yn "; then
+        # menu_ynオプションが存在する
+        local msg_key=$(echo "$cmd_str" | sed -n 's/.*menu_yn \([^ ;]*\).*/\1/p')
+        debug_log "DEBUG" "Found menu_yn option with message key: $msg_key"
+        echo "$msg_key"
+    else
+        # menu_ynオプションが存在しない
+        debug_log "DEBUG" "No menu_yn option found in command string"
+        echo ""
+    fi
+}
+
+# menu_ynオプションをコマンド文字列から削除する関数
+remove_menu_yn() {
+    local cmd_str="$1"
+    
+    debug_log "DEBUG" "Removing menu_yn option from command string"
+    
+    # menu_ynオプションとメッセージキーをコマンド文字列から除去
+    local cleaned_cmd=$(echo "$cmd_str" | sed 's/menu_yn [^ ;]* *//')
+    
+    debug_log "DEBUG" "Command string after removing menu_yn: $cleaned_cmd"
+    echo "$cleaned_cmd"
+}
+
+# ユーザー選択処理関数（menu_yn対応版）
 handle_user_selection() {
     local section_name="$1"
     local is_main_menu="$2"
@@ -641,7 +674,22 @@ handle_user_selection() {
     
     debug_log "DEBUG" "Selected key: $selected_key"
     debug_log "DEBUG" "Selected color: $selected_color"
-    debug_log "DEBUG" "Executing command: $selected_cmd"
+    debug_log "DEBUG" "Original command: $selected_cmd"
+    
+    # menu_ynオプションの処理
+    local yn_msg_key=$(parse_menu_yn "$selected_cmd")
+    if [ -n "$yn_msg_key" ]; then
+        debug_log "DEBUG" "Found menu_yn option with key: $yn_msg_key"
+        # 確認ダイアログを表示
+        if ! confirm "$yn_msg_key"; then
+            debug_log "DEBUG" "User declined confirmation, returning to menu"
+            printf "%s\n" "$(color yellow "$(get_message "MSG_ACTION_CANCELLED")")"
+            return 0 # メニューに戻る（リトライ）
+        fi
+        # コマンド文字列からmenu_ynオプションを削除
+        selected_cmd=$(remove_menu_yn "$selected_cmd")
+        debug_log "DEBUG" "User confirmed, executing command: $selected_cmd"
+    fi
     
     # コマンド実行 - セレクターコマンドの特別処理
     if echo "$selected_cmd" | grep -q "^selector "; then
