@@ -8,6 +8,34 @@ SUPPORTED_LANGUAGE_JP="JP"
 # フォーマット: 言語コード|メッセージキー=メッセージ
 
 # =======================
+# package_auto.sh
+# =======================
+
+US|MSG_PACKAGE_AUTO_SELECT=Select installation type:
+JP|MSG_PACKAGE_AUTO_SELECT=インストールタイプを選択してください:
+
+US|MSG_PACKAGE_STANDARD=Standard Installation (Recommended)
+JP|MSG_PACKAGE_STANDARD=標準インストール（推奨）
+
+US|MSG_PACKAGE_MINIMAL=Minimal Installation (Essential Only)
+JP|MSG_PACKAGE_MINIMAL=最小限インストール（必須のみ）
+
+US|MSG_PACKAGE_FULL=Full Installation (All Features)
+JP|MSG_PACKAGE_FULL=フルインストール（全機能）
+
+US|MSG_PACKAGE_SKIP=Skip Installation
+JP|MSG_PACKAGE_SKIP=インストールをスキップ
+
+US|MSG_PACKAGE_AUTO_SKIPPED=Package installation was skipped
+JP|MSG_PACKAGE_AUTO_SKIPPED=パッケージインストールはスキップされました
+
+US|MSG_INSTALLING_PACKAGES=Installing packages...
+JP|MSG_INSTALLING_PACKAGES=パッケージをインストールしています...
+
+US|MSG_INSTALL_COMPLETED=Package installation completed successfully
+JP|MSG_INSTALL_COMPLETED=パッケージのインストールが正常に完了しました
+
+# =======================
 # package-manual.sh
 # =======================
 
