@@ -148,3 +148,7 @@ install_package kmod-fs-hfsplus hidden
 install_package hd-idle hidden
 install_package luci-app-hd-idle hidden
 install_package luci-i18n-hd-idle hidden
+
+[htop]
+install_package collectd hidden                
+install_package collectd-mod-thermal hidden 
