@@ -138,7 +138,7 @@ packages_19() {
     
     feed_package_release lisaac luci-app-diskman hidden disabled
     
-    feed_package_release jerrykuku luci-theme-argon hidden disabled
+    # feed_package_release jerrykuku luci-theme-argon hidden disabled
     
     return 0
 }
