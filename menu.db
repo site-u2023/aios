@@ -61,6 +61,6 @@ MENU_LED_CONFIG download "system-led.sh" "chmod" "load"
 MENU_REBOOT_CONFIG download "system-reboot.sh" "chmod" "load"
 
 [MENU_PACKAGES_AUTO_INSTALL]
-MENU_PACKAGE_STANDARD download "package-auto.sh" "chmod" "load"; detect_and_run_installer standard
-MENU_PACKAGE_MINIMAL download "package-auto.sh" "chmod" "load"; detect_and_run_installer minimal
-MENU_PACKAGE_FULL download "package-auto.sh" "chmod" "load"; detect_and_run_installer full
+MENU_PACKAGE_STANDARD menu_yn download "package-auto.sh" "chmod" "load"; detect_and_run_installer standard
+MENU_PACKAGE_MINIMAL menu_yn download "package-auto.sh" "chmod" "load"; detect_and_run_installer minimal
+MENU_PACKAGE_FULL menu_yn download "package-auto.sh" "chmod" "load"; detect_and_run_installer full
