@@ -383,9 +383,9 @@ parse_package_options() {
             disabled) PKG_OPTIONS_DISABLED="yes" ;;
             hidden) PKG_OPTIONS_HIDDEN="yes" ;;
             test) PKG_OPTIONS_TEST="yes" ;;
-            desc:*) 
-                # 説明文オプション処理 - "desc:" 以降の文字列を取得
-                PKG_OPTIONS_DESCRIPTION="${1#desc:}"
+            desc=*) 
+                # 説明文オプション処理 - "desc=" 以降の文字列を取得
+                PKG_OPTIONS_DESCRIPTION="${1#desc=}"
                 debug_log "DEBUG" "Package description set to: $PKG_OPTIONS_DESCRIPTION" 
                 ;;
             update)
