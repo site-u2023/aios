@@ -23,8 +23,8 @@ MENU_LED selector system-led
 MENU_REBOOT selector system-reboot
 
 [MENU_PACKAGES]
-MENU_PACKAGES_AUTO_INSTALL download "package-auto.sh" "chmod" "load"; print_information; install_packages_by_version; install_usb_packages
-MENU_PACKAGES_MANUAL_INSTALL download "package-manual.sh" "chmod" "load"; print_information; install_packages_by_version; install_usb_packages
+MENU_PACKAGES_AUTO_INSTALL download "package-auto.sh" "chmod" "load"; package_auto_main
+MENU_PACKAGES_MANUAL_INSTALL download "package-manual.sh" "chmod" "load"; package_manual_main
 MENU_PACKAGES_SAMBA download "package-manual.sh" "chmod" "load"; package_samba
 MENU_PACKAGES_LIST download "package-manual.sh" "chmod" "load"; package_list
 
