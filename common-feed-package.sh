@@ -41,9 +41,9 @@ DEV_NULL="${DEV_NULL:-on}"
 # 通常モード
 # unset DEV_NULL
 
-# 基本定数の設定 
-BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q -O}"
-# BASE_WGET="${BASE_WGET:-wget -O}"
+# 基本定数の設定
+BASE_WGET="wget --no-check-certificate -q -O"
+# BASE_WGET="wget -O"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
@@ -52,6 +52,9 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
 PACKAGE_EXTENSION="${PACKAGE_EXTENSION:-ipk}"
+
+debug_log "DEBUG" "Installing required package: jq"
+install_package jq hidden
 
 #########################################################################
 # Last Update: 2025-03-04 10:00:00 (JST) 🚀
@@ -140,8 +143,6 @@ feed_package() {
   local PKG_PREFIX="$4"
   local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.${PACKAGE_EXTENSION}"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
-
-  install_package jq hidden
   
   debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
 
@@ -190,23 +191,9 @@ feed_package() {
   $BASE_WGET "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # エラーが発生しても処理を継続
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
-  
   debug_log "DEBUG" "Attempting to install package: $PKG_PREFIX"
 
-  # install_packageの呼び出し（evalを使用せず直接呼び出し）
-  if [ -f "$OUTPUT_FILE" ]; then
-      # optsの内容を空白で区切って処理
-      set -- "$OUTPUT_FILE" $opts
-      install_package "$@" || {
-          debug_log "DEBUG" "Failed to install package: $PKG_PREFIX"
-          return 1
-      }
-  else
-      debug_log "DEBUG" "Package file not found: $OUTPUT_FILE"
-      return 1
-  fi
-
-  debug_log "DEBUG" "Package installation process completed for: $PKG_PREFIX"
+  eval "install_package \"$OUTPUT_FILE\" $opts" || return 0
   
   return 0
 }
@@ -260,8 +247,6 @@ feed_package_release() {
   local PKG_PREFIX="${REPO_NAME}"
   local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.${PACKAGE_EXTENSION}"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases"
-
-  install_package jq hidden
   
   debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
 
@@ -297,26 +282,12 @@ feed_package_release() {
   debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
   debug_log "DEBUG" "DOWNLOAD URL: $DOWNLOAD_URL"
 
-  $BASE_WGET "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0
+  $BASE_WGET "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # エラーが発生しても処理を継続
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
-
   debug_log "DEBUG" "Attempting to install package: $PKG_PREFIX"
 
-  # install_packageの呼び出し（evalを使用せず直接呼び出し）
-  if [ -f "$OUTPUT_FILE" ]; then
-      # optsの内容を空白で区切って処理
-      set -- "$OUTPUT_FILE" $opts
-      install_package "$@" || {
-          debug_log "DEBUG" "Failed to install package: $PKG_PREFIX"
-          return 1
-      }
-  else
-      debug_log "DEBUG" "Package file not found: $OUTPUT_FILE"
-      return 1
-  fi
-
-  debug_log "DEBUG" "Package installation process completed for: $PKG_PREFIX"
+  eval "install_package \"$OUTPUT_FILE\" $opts" || return 0
   
   return 0
 }
