@@ -48,8 +48,8 @@ JP|MSG_INSTALL_COMPLETED=パッケージのインストールが正常に完了�
 # package-manual.sh
 # =======================
 
-US|MSG_CONFIRM_INSTALL_PACKAGES=Do you want to install these packages? (y/n):
-JP|MSG_CONFIRM_INSTALL_PACKAGES=これらのパッケージをインストールしますか？ (y/n):
+US|MSG_CONFIRM_INSTALL_PACKAGES=Do you want to install the package? (y/n):
+JP|MSG_CONFIRM_INSTALL_PACKAGES=パッケージをインストールしますか？ (y/n):
 
 US|PKG_SECTION_BASIC=Basic System Functions
 JP|PKG_SECTION_BASIC=基本システム機能
