@@ -53,9 +53,6 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 
 PACKAGE_EXTENSION="${PACKAGE_EXTENSION:-ipk}"
 
-debug_log "DEBUG" "Installing required package: jq"
-install_package jq hidden
-
 #########################################################################
 # Last Update: 2025-03-04 10:00:00 (JST) 🚀
 # install_build: パッケージのビルド処理 (OpenWrt / Alpine Linux)
