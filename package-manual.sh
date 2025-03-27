@@ -70,9 +70,8 @@ packages() {
     install_package wifischedule yn hidden          # WiFiスケジュール
 
     # === セキュリティツール ===
-    install_package fail2ban yn hidden                # 不正アクセス防止
-    install_package banip yn hidden                   # IPブロック
-    install_package https-dns-proxy yn hidden         # DNS over HTTPS
+    install_package znc-mod-fail2ban yn hidden      # 不正アクセス防止
+    install_package banip yn hidden                 # IPブロック
 
     # === システム監視 ===
     install_package htop yn hidden                    # インタラクティブプロセスビューア
@@ -117,10 +116,9 @@ packages_19() {
     install_package luci-i18n-nlbwmon yn hidden     # 帯域監視
     install_package wifischedule yn hidden          # WiFiスケジュール
 
-        # === セキュリティツール ===
-    install_package fail2ban yn hidden                # 不正アクセス防止
-    install_package banip yn hidden                   # IPブロック
-    install_package https-dns-proxy yn hidden         # DNS over HTTPS
+    # === セキュリティツール ===
+    install_package znc-mod-fail2ban yn hidden      # 不正アクセス防止
+    install_package banip yn hidden                 # IPブロック
     
     # === テーマおよび見た目 ===
     install_package luci-theme-openwrt yn hidden    # 標準テーマ
@@ -165,12 +163,11 @@ packages_snaphot() {
     install_package wifischedule yn hidden          # WiFiスケジュール
 
     # === システム監視 (19.07特有版) ===
-    install_package htop yn hidden                    # インタラクティブプロセスビューア
+    install_package htop yn hidden                  # インタラクティブプロセスビューア
     
         # === セキュリティツール ===
-    install_package fail2ban yn hidden                # 不正アクセス防止
-    install_package banip yn hidden                   # IPブロック
-    install_package https-dns-proxy yn hidden         # DNS over HTTPS
+    install_package znc-mod-fail2ban yn hidden      # 不正アクセス防止
+    install_package banip yn hidden                 # IPブロック
     
     # === テーマおよび見た目 ===
     install_package luci-theme-openwrt yn hidden    # 標準テーマ
