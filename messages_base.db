@@ -352,6 +352,9 @@ JP|MSG_ERROR_NO_PACKAGE_MANAGER=パッケージマネージャーが見つかり
 US|MSG_CONFIRM_INSTALL=Do you want to install: {pkg}?
 JP|MSG_CONFIRM_INSTALL=パッケージ: {pkg} をインストールしますか？
 
+US|MSG_CONFIRM_INSTALL_WITH_DESC=Install package %s with description: %s?
+JP|MSG_CONFIRM_INSTALL_WITH_DESC=パッケージ %s 説明: %s をインストールしますか？
+
 # =======================
 # system-config.sh
 # =======================
