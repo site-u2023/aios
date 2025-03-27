@@ -79,6 +79,11 @@ packages() {
     install_package luci-app-wifischedule hidden     # WiFiスケジュールUI
     install_package luci-i18n-wifischedule hidden    # WiFiスケジュール言語パック
 
+    # === セキュリティツール ===
+    install_package fail2ban hidden                # 不正アクセス防止
+    install_package banip hidden                   # IPブロック
+    install_package https-dns-proxy hidden         # DNS over HTTPS
+    
     # === テーマおよび見た目 ===
     install_package luci-theme-openwrt hidden        # 標準OpenWrtテーマ
     install_package luci-theme-material hidden       # マテリアルテーマ
@@ -138,6 +143,11 @@ packages_19() {
     install_package luci-app-wifischedule hidden     # WiFiスケジュールUI
     install_package luci-i18n-wifischedule hidden    # WiFiスケジュール言語パック
 
+    # === セキュリティツール ===
+    install_package fail2ban hidden                # 不正アクセス防止
+    install_package banip hidden                   # IPブロック
+    install_package https-dns-proxy hidden         # DNS over HTTPS
+    
     # === テーマおよび見た目 ===
     install_package luci-theme-openwrt hidden        # 標準OpenWrtテーマ
     install_package luci-theme-material hidden       # マテリアルテーマ
@@ -196,6 +206,11 @@ packages_snaphot() {
     install_package luci-app-wifischedule hidden     # WiFiスケジュールUI
     install_package luci-i18n-wifischedule hidden    # WiFiスケジュール言語パック
 
+    # === セキュリティツール ===
+    install_package fail2ban hidden                # 不正アクセス防止
+    install_package banip hidden                   # IPブロック
+    install_package https-dns-proxy hidden         # DNS over HTTPS
+    
     # === テーマおよび見た目 ===
     install_package luci-theme-openwrt hidden        # 標準OpenWrtテーマ
     install_package luci-theme-material hidden       # マテリアルテーマ
