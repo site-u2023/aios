@@ -344,14 +344,19 @@ install_usb_packages() {
 package_manual_main() {
     print_information
     
-    # OSバージョンに基づいたパッケージインストール
-    install_packages_by_version
+    # パッケージインストールの確認
+    if confirm "MSG_CONFIRM_INSTALL_PACKAGES"; then
+        debug_log "DEBUG" "User confirmed package installation, proceeding"
         
-    # USB関連パッケージのインストール
-    install_usb_packages
-
-    debug_log "DEBUG" "User confirmed package installation, proceeding"
+        # OSバージョンに基づいたパッケージインストール
+        install_packages_by_version
+        
+        # USB関連パッケージのインストール
+        install_usb_packages
+    else
+        debug_log "DEBUG" "User declined package installation, skipping"
+        # ユーザーが拒否した場合は何もせずに終了
+    fi
 }
-
 # スクリプトの実行
 # package_manual_main "$@"
