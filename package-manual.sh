@@ -52,17 +52,28 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
 packages() {
+    # セクションヘッダーを表示する関数
+    print_section_header() {
+        local section_key="$1"
+        local header_text=$(get_message "$section_key")
+        printf "\n%s\n" "$(color blue "$header_text")"
+    }
+
     # === 基本システム機能 ===
+    print_section_header "PKG_SECTION_BASIC"
     install_package luci-i18n-base yn hidden        # 基本UI言語パック
     install_package ttyd yn hidden                  # ウェブターミナル
     install_package openssh-sftp-server yn hidden   # ファイル転送
     install_package coreutils yn hidden             # 基本コマンド群
     
     # === システム管理 ===
+    print_section_header "PKG_SECTION_SYSADMIN"
     install_package irqbalance yn hidden            # CPU負荷分散
     install_package luci-mod-dashboard yn hidden    # ダッシュボード
+    feed_package_release lisaac luci-app-diskman yn hidden disabled # ディスク管理
     
     # === ネットワーク管理 ===
+    print_section_header "PKG_SECTION_NETWORK"
     install_package luci-app-sqm yn hidden          # QoSスマートキューイング
     install_package luci-app-qos yn hidden          # 基本的なQoS
     install_package luci-i18n-statistics yn hidden  # 統計情報
@@ -70,40 +81,53 @@ packages() {
     install_package wifischedule yn hidden          # WiFiスケジュール
 
     # === セキュリティツール ===
+    print_section_header "PKG_SECTION_SECURITY"
     install_package znc-mod-fail2ban yn hidden      # 不正アクセス防止
     install_package banip yn hidden                 # IPブロック
 
     # === システム監視 ===
+    print_section_header "PKG_SECTION_MONITORING"
     install_package htop yn hidden                    # インタラクティブプロセスビューア
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden      # CPU性能
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden    # CPUステータス
     feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden   # 温度ステータス
+    feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled # インターネット検知
     feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden    # ログビューア
 
-        # === ネットワーク診断ツール ===
+    # === ネットワーク診断ツール ===
+    print_section_header "PKG_SECTION_NETWORK_DIAG"
     install_package mtr yn hidden                     # 高機能traceroute
     install_package nmap yn hidden                    # ネットワークスキャン
     install_package tcpdump yn hidden                 # パケットキャプチャ
     
     # === テーマおよび見た目 ===
+    print_section_header "PKG_SECTION_THEME"
     install_package luci-theme-openwrt yn hidden    # 標準テーマ
+    feed_package_release jerrykuku luci-theme-argon yn hidden disabled # Argonテーマ
 
     # === ユーティリティ ===
+    print_section_header "PKG_SECTION_UTILITY"
     install_package attendedsysupgrade-common yn hidden  # システムアップグレード
     install_package usleep yn hidden                # スリープユーティリティ
     install_package git yn hidden                   # バージョン管理
     
-    # === 追加機能（デフォルトで無効） ===
-    feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled     # インターネット検知
-    feed_package_release lisaac luci-app-diskman yn hidden disabled                         # ディスク管理
-    feed_package_release jerrykuku luci-theme-argon yn hidden disabled                      # Argonテーマ
+    # === 追加機能 ===
+    # print_section_header "PKG_SECTION_ADDITION"
     
     debug_log "DEBUG" "Standard packages installation process completed"
     return 0
 }
 
 packages_19() {
+    # セクションヘッダーを表示する関数
+    print_section_header() {
+        local section_key="$1"
+        local header_text=$(get_message "$section_key")
+        printf "\n%s\n" "$(color blue "$header_text")"
+    }
+
     # === 基本システム機能 ===
+    print_section_header "PKG_SECTION_BASIC"
     install_package wget yn hidden                  # 基本ダウンローダー(19.07必須)
     install_package luci-i18n-base yn hidden        # 基本UI言語パック
     install_package ttyd yn hidden                  # ウェブターミナル
@@ -111,10 +135,12 @@ packages_19() {
     install_package coreutils yn hidden             # 基本コマンド群
     
     # === システム管理 ===
+    print_section_header "PKG_SECTION_SYSADMIN"
     install_package irqbalance yn hidden            # CPU負荷分散
     install_package luci-i18n-dashboard yn hidden   # ダッシュボード(19.07版)
     
     # === ネットワーク管理 ===
+    print_section_header "PKG_SECTION_NETWORK"
     install_package luci-app-sqm yn hidden          # QoSスマートキューイング
     install_package luci-app-qos yn hidden          # 基本的なQoS
     install_package luci-i18n-statistics yn hidden  # 統計情報
@@ -122,29 +148,35 @@ packages_19() {
     install_package wifischedule yn hidden          # WiFiスケジュール
 
     # === セキュリティツール ===
+    print_section_header "PKG_SECTION_SECURITY"
     install_package znc-mod-fail2ban yn hidden      # 不正アクセス防止
     install_package banip yn hidden                 # IPブロック
     
     # === システム監視 (19.07特有版) ===
+    print_section_header "PKG_SECTION_MONITORING"
     install_package htop yn hidden                    # インタラクティブプロセスビューア
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden     # CPU性能
     feed_package gSpotx2f packages-openwrt 19.07 luci-app-cpu-status-mini yn hidden # CPU状態(19.07用)
     feed_package gSpotx2f packages-openwrt 19.07 luci-app-log yn hidden            # ログビューア(19.07用)
 
-        # === ネットワーク診断ツール ===
+    # === ネットワーク診断ツール ===
+    print_section_header "PKG_SECTION_NETWORK_DIAG"
     install_package mtr yn hidden                     # 高機能traceroute
     install_package nmap yn hidden                    # ネットワークスキャン
     install_package tcpdump yn hidden                 # パケットキャプチャ
 
     # === テーマおよび見た目 ===
+    print_section_header "PKG_SECTION_THEME"
     install_package luci-theme-openwrt yn hidden    # 標準テーマ
     
     # === ユーティリティ ===
+    print_section_header "PKG_SECTION_UTILITY"
     install_package attendedsysupgrade-common yn hidden  # システムアップグレード
     install_package usleep yn hidden                # スリープユーティリティ
     install_package git yn hidden                   # バージョン管理
     
     # === 追加機能（デフォルトで無効） ===
+    print_section_header "PKG_SECTION_ADDITION"
     feed_package_release lisaac luci-app-diskman yn hidden disabled    # ディスク管理
     
     # feed_package_release jerrykuku luci-theme-argon yn hidden disabled # Argonテーマ
@@ -154,7 +186,15 @@ packages_19() {
 }
 
 packages_snaphot() {
+    # セクションヘッダーを表示する関数
+    print_section_header() {
+        local section_key="$1"
+        local header_text=$(get_message "$section_key")
+        printf "\n%s\n" "$(color blue "$header_text")"
+    }
+
     # === 基本システム機能 ===
+    print_section_header "PKG_SECTION_BASIC"
     install_package luci yn hidden                  # 基本LuCIパッケージ(SNAPSHOT用)
     install_package luci-i18n-base yn hidden        # 基本UI言語パック
     install_package ttyd yn hidden                  # ウェブターミナル
@@ -162,32 +202,39 @@ packages_snaphot() {
     install_package coreutils yn hidden             # 基本コマンド群
     
     # === システム管理 ===
+    print_section_header "PKG_SECTION_SYSADMIN"
     install_package irqbalance yn hidden            # CPU負荷分散
     install_package luci-mod-dashboard yn hidden    # ダッシュボード
     
     # === ネットワーク管理 ===
+    print_section_header "PKG_SECTION_NETWORK"
     install_package luci-app-sqm yn hidden          # QoSスマートキューイング
     install_package luci-app-qos yn hidden          # 基本的なQoS
     install_package luci-i18n-statistics yn hidden  # 統計情報
     install_package luci-i18n-nlbwmon yn hidden     # 帯域監視
     install_package wifischedule yn hidden          # WiFiスケジュール
 
-    # === システム監視 (19.07特有版) ===
+    # === システム監視 ===
+    print_section_header "PKG_SECTION_MONITORING"
     install_package htop yn hidden                  # インタラクティブプロセスビューア
     
-        # === セキュリティツール ===
+    # === セキュリティツール ===
+    print_section_header "PKG_SECTION_SECURITY"
     install_package znc-mod-fail2ban yn hidden      # 不正アクセス防止
     install_package banip yn hidden                 # IPブロック
 
-        # === ネットワーク診断ツール ===
+    # === ネットワーク診断ツール ===
+    print_section_header "PKG_SECTION_NETWORK_DIAG"
     install_package mtr yn hidden                     # 高機能traceroute
     install_package nmap yn hidden                    # ネットワークスキャン
     install_package tcpdump yn hidden                 # パケットキャプチャ
     
     # === テーマおよび見た目 ===
+    print_section_header "PKG_SECTION_THEME"
     install_package luci-theme-openwrt yn hidden    # 標準テーマ
     
     # === ユーティリティ ===
+    print_section_header "PKG_SECTION_UTILITY"
     install_package attendedsysupgrade-common yn hidden  # システムアップグレード
     install_package usleep yn hidden                # スリープユーティリティ
     install_package git yn hidden                   # バージョン管理
@@ -197,21 +244,41 @@ packages_snaphot() {
 }
 
 packages_usb() {
-    install_package kmod-usb-storage yn hidden 
-    install_package dosfstools yn hidden 
-    install_package e2fsprogs yn hidden 
-    install_package f2fs-tools yn hidden 
-    install_package exfat-fsck yn hidden 
-    install_package ntfs-3g yn hidden 
-    install_package hfsfsck yn hidden 
-    install_package hdparm yn hidden 
+    # セクションヘッダーを表示する関数
+    print_section_header() {
+        local section_key="$1"
+        local header_text=$(get_message "$section_key")
+        printf "\n%s\n" "$(color blue "$header_text")"
+    }
+
+    # === USBストレージ ===
+    print_section_header "PKG_SECTION_USB"
+    install_package kmod-usb-storage yn hidden      # USBストレージ基本ドライバ
+    install_package dosfstools yn hidden            # FAT32ファイルシステム
+    install_package e2fsprogs yn hidden             # ext2/3/4ファイルシステム
+    install_package f2fs-tools yn hidden            # F2FSファイルシステム
+    install_package exfat-fsck yn hidden            # exFATファイルシステム
+    install_package ntfs-3g yn hidden               # NTFSファイルシステム
+    install_package hfsfsck yn hidden               # HFSファイルシステム
+    install_package hdparm yn hidden                # ディスク管理
     
+    debug_log "DEBUG" "USB and storage related packages installation process completed"
     return 0
 }
 
 package_samba() {
-    install_package luci-app-samba4 yn hidden 
+    # セクションヘッダーを表示する関数
+    print_section_header() {
+        local section_key="$1"
+        local header_text=$(get_message "$section_key")
+        printf "\n%s\n" "$(color blue "$header_text")"
+    }
+
+    # === ファイル共有 ===
+    print_section_header "PKG_SECTION_SAMBA"
+    install_package luci-app-samba4 yn hidden       # Windowsファイル共有
     
+    debug_log "DEBUG" "Samba file sharing packages installation process completed"
     return 0
 }
 
