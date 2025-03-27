@@ -10,6 +10,10 @@ SUPPORTED_LANGUAGE_JP="JP"
 # =======================
 # package-manual.sh
 # =======================
+
+US|MSG_CONFIRM_INSTALL_PACKAGES=Install packages for your system? [y/N]
+JP|MSG_CONFIRM_INSTALL_PACKAGES=システムにパッケージをインストールしますか？ [y/N]
+
 US|PKG_SECTION_BASIC=Basic System Functions
 JP|PKG_SECTION_BASIC=基本システム機能
 
