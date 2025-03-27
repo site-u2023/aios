@@ -42,8 +42,8 @@ DEV_NULL="${DEV_NULL:-on}"
 # unset DEV_NULL
 
 # 基本定数の設定 
-BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q -O}"
-# BASE_WGET="${BASE_WGET:-wget -O}"
+BASE_WGET="wget --no-check-certificate -q -O"
+# BASE_WGET="wget -O"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
