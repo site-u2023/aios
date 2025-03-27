@@ -447,6 +447,14 @@ process_package() {
     
     # **YN確認 (オプションで有効時のみ)**
     if [ "$confirm_install" = "yes" ]; then
+        # パッケージ名からパスと拡張子を除去した表示用の名前を作成
+        local display_name
+        display_name=$(basename "$package_name")
+        display_name=${display_name%.*}  # 拡張子を除去
+
+        debug_log "DEBUG" "Original package name: $package_name"
+        debug_log "DEBUG" "Displaying package name: $display_name"
+        
         if ! confirm "MSG_CONFIRM_INSTALL" "pkg" "$package_name"; then
             debug_log "DEBUG" "User declined installation of $package_name"
             return 0
