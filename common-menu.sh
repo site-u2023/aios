@@ -553,6 +553,12 @@ process_menu_yn() {
     
     echo "$cleaned_cmd"
     return 0
+
+    # menu_ynオプションの処理（新関数を使用）
+    #selected_cmd=$(process_menu_yn "$selected_cmd")
+    #if [ $? -ne 0 ]; then
+    #    return 0  # キャンセルされた場合はメニューに戻る
+    #fi
 }
 
 # ユーザー選択処理関数
@@ -672,12 +678,6 @@ handle_user_selection() {
     debug_log "DEBUG" "Selected key: $selected_key"
     debug_log "DEBUG" "Selected color: $selected_color"
     debug_log "DEBUG" "Original command: $selected_cmd"
-    
-    # menu_ynオプションの処理（新関数を使用）
-    selected_cmd=$(process_menu_yn "$selected_cmd")
-    if [ $? -ne 0 ]; then
-        return 0  # キャンセルされた場合はメニューに戻る
-    fi
     
     # コマンド実行 - セレクターコマンドの特別処理
     if echo "$selected_cmd" | grep -q "^selector "; then
