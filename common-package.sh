@@ -482,7 +482,7 @@ process_package() {
             confirm_msg=$(printf "$confirm_msg" "$display_name")
         fi
     
-        if ! confirm_with_message "$confirm_msg"; then
+        if ! confirm "MSG_CONFIRM_INSTALL" "pkg" "$display_name"; then
             debug_log "DEBUG" "User declined installation of $display_name"
             return 0
         fi
