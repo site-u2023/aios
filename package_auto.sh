@@ -298,6 +298,27 @@ package_list() {
     return 0
 }
 
+# USBデバイスを検出し、必要なパッケージをインストールする関数
+check_and_install_usb() {
+    debug_log "DEBUG" "Checking for USB devices"
+    
+    # USBデバイスのキャッシュファイルを確認
+    if [ ! -f "${CACHE_DIR}/usbdevice.ch" ]; then
+        debug_log "DEBUG" "USB device cache file not found, skipping USB detection"
+        return 0
+    fi
+    
+    # USBデバイスが検出されているか確認
+    if [ "$(cat "${CACHE_DIR}/usbdevice.ch")" = "detected" ]; then
+        debug_log "DEBUG" "USB device detected, installing USB packages"
+        packages_usb
+    else
+        debug_log "DEBUG" "No USB device detected, skipping USB packages"
+    fi
+    
+    return 0
+}
+
 # OSバージョンに基づいて適切なパッケージ関数を実行する
 install_packages_by_version() {
     # OSバージョンファイルの確認
@@ -336,33 +357,133 @@ install_packages_by_version() {
     return 0
 }
 
-# USBデバイスを検出し、必要なパッケージをインストールする関数
-install_usb_packages() {
-    # USBデバイスのキャッシュファイルを確認
-    if [ ! -f "${CACHE_DIR}/usbdevice.ch" ]; then
-        debug_log "DEBUG" "USB device cache file not found, skipping USB detection"
-        
-        return 0
-    fi
+install_minimal_packages() {
+    debug_log "DEBUG" "Installing minimal essential packages"
     
-    # USBデバイスが検出されているか確認
-    if [ "$(cat "${CACHE_DIR}/usbdevice.ch")" = "detected" ]; then
-        debug_log "DEBUG" "USB device detected, installing USB packages"
-        packages_usb
-    else
-        debug_log "DEBUG" "No USB device detected, skipping USB packages"
-    fi
+    # === 基本システム・UI機能（最小限） ===
+    install_package luci-i18n-base hidden            # 基本UI言語パック
+    install_package luci-i18n-firewall hidden        # ファイアウォールUI言語パック
+    install_package ttyd hidden                      # ウェブターミナル
+    install_package openssh-sftp-server hidden       # ファイル転送サーバー
+    install_package coreutils hidden                 # 基本コマンド群
+
+    # === ネットワーク管理（最小限） ===
+    install_package luci-app-sqm hidden              # QoSスマートキューイング
+    
+    # === テーマ（最小限） ===
+    install_package luci-theme-openwrt hidden        # 標準OpenWrtテーマ
+    
+    debug_log "DEBUG" "Minimal package installation completed"
+    return 0
+}
+
+install_full_packages() {
+    debug_log "DEBUG" "Installing full package set"
+    
+    # 標準パッケージをインストール
+    install_packages_by_version
+    
+    # 追加のパッケージ（通常は無効なもの）をインストールして有効化
+    install_additional_packages
+    
+    debug_log "DEBUG" "Full package installation completed"
+    return 0
+}
+
+install_additional_packages() {
+    debug_log "DEBUG" "Installing and enabling additional packages"
+    
+    # === 追加機能（通常は無効だが、フルインストールでは有効化） ===
+    feed_package gSpotx2f packages-openwrt current internet-detector hidden       # インターネット検知（有効化）
+    feed_package_release lisaac luci-app-diskman hidden                           # ディスク管理（有効化）
+    feed_package_release jerrykuku luci-theme-argon hidden                        # Argonテーマ（有効化）
+    
+    debug_log "DEBUG" "Additional package installation completed"
+    return 0
+}
+
+package_auto_install() {
+    local install_type="$1"
+    
+    # インストール開始メッセージ
+    printf "\n%s\n" "$(color blue "$(get_message "MSG_INSTALLING_PACKAGES")")"
+    
+    # タイプ別のインストール処理
+    case "$install_type" in
+        standard)
+            # 標準インストール
+            debug_log "DEBUG" "Proceeding with standard installation"
+            install_packages_by_version
+            check_and_install_usb
+            ;;
+        minimal)
+            # 必須（最小）インストール
+            debug_log "DEBUG" "Proceeding with minimal installation"
+            install_minimal_packages
+            check_and_install_usb
+            ;;
+        full)
+            # フル（全部）インストール
+            debug_log "DEBUG" "Proceeding with full installation"
+            install_full_packages
+            check_and_install_usb
+            install_package_samba
+            ;;
+    esac
+    
+    # インストール完了メッセージ
+    printf "\n%s\n" "$(color green "$(get_message "MSG_INSTALL_COMPLETED")")"
     
     return 0
 }
 
 # メイン処理
 package_auto_main() {
+    local install_type=""
     print_information
-    # OSバージョンに基づいたパッケージインストール
-    install_packages_by_version
-    # USB関連パッケージのインストール
-    install_usb_packages
+    
+    # インストールタイプの選択
+    printf "%s\n" "$(color white "$(get_message "MSG_PACKAGE_AUTO_SELECT")")"
+    printf "[1] %s\n" "$(color white "$(get_message "MSG_PACKAGE_STANDARD")")"
+    printf "[2] %s\n" "$(color yellow "$(get_message "MSG_PACKAGE_MINIMAL")")"
+    printf "[3] %s\n" "$(color green "$(get_message "MSG_PACKAGE_FULL")")"
+    printf "[0] %s\n" "$(color red "$(get_message "MSG_PACKAGE_SKIP")")"
+    
+    # ユーザー入力の取得
+    printf "%s " "$(color white "$(get_message "MSG_SELECT_NUMBER")")"
+    read -r selection
+    
+    # 入力を正規化
+    selection=$(normalize_input "$selection")
+    
+    case "$selection" in
+        1|"")  # デフォルト選択
+            debug_log "DEBUG" "User selected standard installation"
+            install_type="standard"
+            ;;
+        2)
+            debug_log "DEBUG" "User selected minimal installation"
+            install_type="minimal"
+            ;;
+        3)
+            debug_log "DEBUG" "User selected full installation"
+            install_type="full"
+            ;;
+        0|[Nn])
+            debug_log "DEBUG" "User skipped package installation"
+            printf "%s\n" "$(color yellow "$(get_message "MSG_PACKAGE_AUTO_SKIPPED")")"
+            return 0
+            ;;
+        *)
+            debug_log "DEBUG" "Invalid selection, defaulting to standard installation"
+            install_type="standard"
+            ;;
+    esac
+    
+    # 選択に基づいてインストールを実行
+    package_auto_install "$install_type"
+    
+    return 0
 }
 
 # スクリプトの実行
