@@ -75,6 +75,7 @@ packages() {
     install_package https-dns-proxy yn hidden         # DNS over HTTPS
 
     # === システム監視 ===
+    install_package htop yn hidden                    # インタラクティブプロセスビューア
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden      # CPU性能
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden    # CPUステータス
     feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden   # 温度ステータス
@@ -125,6 +126,7 @@ packages_19() {
     install_package luci-theme-openwrt yn hidden    # 標準テーマ
     
     # === システム監視 (19.07特有版) ===
+    install_package htop yn hidden                    # インタラクティブプロセスビューア
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden     # CPU性能
     feed_package gSpotx2f packages-openwrt 19.07 luci-app-cpu-status-mini yn hidden # CPU状態(19.07用)
     feed_package gSpotx2f packages-openwrt 19.07 luci-app-log yn hidden            # ログビューア(19.07用)
@@ -162,6 +164,9 @@ packages_snaphot() {
     install_package luci-i18n-nlbwmon yn hidden     # 帯域監視
     install_package wifischedule yn hidden          # WiFiスケジュール
 
+    # === システム監視 (19.07特有版) ===
+    install_package htop yn hidden                    # インタラクティブプロセスビューア
+    
         # === セキュリティツール ===
     install_package fail2ban yn hidden                # 不正アクセス防止
     install_package banip yn hidden                   # IPブロック
