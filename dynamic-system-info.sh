@@ -695,11 +695,11 @@ debug_info() {
 }
 
 # メイン処理
-main() {
+dynamic_system_info_main() {
     init_device_cache
     get_usb_devices
     detect_and_save_package_manager
 }
 
 # スクリプトの実行
-main "$@"
+dynamic_system_info_main "$@"
