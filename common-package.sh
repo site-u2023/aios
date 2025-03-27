@@ -470,21 +470,19 @@ process_package() {
         debug_log "DEBUG" "Original package name: $package_name"
         debug_log "DEBUG" "Displaying package name: $display_name"
     
-        # 説明文があれば表示メッセージに含める
-        local confirm_msg
+        # 説明文があれば専用のconfirm関数を使用
         if [ -n "$PKG_OPTIONS_DESCRIPTION" ]; then
-            confirm_msg="$(get_message "MSG_CONFIRM_INSTALL_WITH_DESC")"
-            # フォーマット: パッケージ NAME 説明: DESC をインストールしますか？
-            confirm_msg=$(printf "$confirm_msg" "$display_name" "$PKG_OPTIONS_DESCRIPTION")
+            # 説明文付きの確認（既存のconfirm関数を適切に使用）
+            if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg" "$display_name" "$PKG_OPTIONS_DESCRIPTION"; then
+                debug_log "DEBUG" "User declined installation of $display_name with description"
+                return 0
+            fi
         else
-            confirm_msg="$(get_message "MSG_CONFIRM_INSTALL")"
-            # 従来のフォーマット: パッケージ NAME をインストールしますか？
-            confirm_msg=$(printf "$confirm_msg" "$display_name")
-        fi
-    
-        if ! confirm "MSG_CONFIRM_INSTALL" "pkg" "$display_name"; then
-            debug_log "DEBUG" "User declined installation of $display_name"
-            return 0
+            # 通常の確認（既存のconfirm関数を使用）
+            if ! confirm "MSG_CONFIRM_INSTALL" "pkg" "$display_name"; then
+                debug_log "DEBUG" "User declined installation of $display_name"
+                return 0
+            fi
         fi
     fi
     
