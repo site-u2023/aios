@@ -494,33 +494,16 @@ process_package() {
     
         # 説明文があるかどうかで処理を分ける
         if [ -n "$PKG_OPTIONS_DESCRIPTION" ]; then
-            # メッセージのテンプレートを取得
-            local msg
-            msg=$(get_message "MSG_CONFIRM_INSTALL_WITH_DESC")
+            debug_log "DEBUG" "Using confirm function with description"
             
-            # プレースホルダーを置換
-            msg=$(echo "$msg" | sed "s/{pkg}/$display_name/g")
-            msg=$(echo "$msg" | sed "s/{desc}/$PKG_OPTIONS_DESCRIPTION/g")
-            
-            debug_log "DEBUG" "Displaying confirmation with description"
-            
-            # ユーザー確認
-            if ! confirm "$msg"; then
+            # 既存のconfirm関数を使用
+            if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg" "$display_name" "desc" "$PKG_OPTIONS_DESCRIPTION"; then
                 debug_log "DEBUG" "User declined installation of $display_name"
                 return 0
             fi
         else
-            # メッセージのテンプレートを取得
-            local msg
-            msg=$(get_message "MSG_CONFIRM_INSTALL")
-            
-            # プレースホルダーを置換
-            msg=$(echo "$msg" | sed "s/{pkg}/$display_name/g")
-            
-            debug_log "DEBUG" "Displaying standard confirmation"
-            
-            # ユーザー確認
-            if ! confirm "$msg"; then
+            # 通常の確認
+            if ! confirm "MSG_CONFIRM_INSTALL" "pkg" "$display_name"; then
                 debug_log "DEBUG" "User declined installation of $display_name"
                 return 0
             fi
