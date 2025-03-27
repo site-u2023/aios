@@ -133,7 +133,10 @@ feed_package() {
       debug_log "DEBUG" "File not found or empty: ${CACHE_DIR}/extension.ch"
       return 1
   fi
-    
+
+  debug_log "DEBUG" "Installing required package: jq"
+  install_package jq hidden
+
   local REPO_OWNER="$1"
   local REPO_NAME="$2"
   local DIR_PATH="$3"
