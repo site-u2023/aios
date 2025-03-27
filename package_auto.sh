@@ -357,7 +357,7 @@ install_usb_packages() {
 }
 
 # メイン処理
-main() {
+package_auto_main() {
     print_information
     # OSバージョンに基づいたパッケージインストール
     install_packages_by_version
@@ -366,4 +366,4 @@ main() {
 }
 
 # スクリプトの実行
-# main "$@"
+# package_auto_main "$@"
