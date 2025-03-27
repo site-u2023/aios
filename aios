@@ -61,8 +61,8 @@ DEV_NULL="${DEV_NULL:-on}"
 
 # 基本定数の設定 
 # 基本wgetコマンド - ヘッダー無し
-# BASE_WGET="${BASE_WGET:-wget -O}"
-BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q}"
+BASE_WGET="wget --no-check-certificate -q -O"
+# BASE_WGET="wget -O"
 # Bearer認証用wgetコマンド（トークンは呼び出し時に指定）
 BASE_WGET_AUTH_BEARER='wget --no-check-certificate -q -O "$1" --header="Authorization: Bearer $2" "$3"'
 # 従来のtoken認証用wgetコマンド（トークンは呼び出し時に指定）
