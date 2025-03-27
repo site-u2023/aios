@@ -505,7 +505,7 @@ process_package() {
             debug_log "DEBUG" "Displaying confirmation with description"
             
             # ユーザー確認
-            if ! yn_confirm "$msg"; then
+            if ! confirm "$msg"; then
                 debug_log "DEBUG" "User declined installation of $display_name"
                 return 0
             fi
@@ -520,7 +520,7 @@ process_package() {
             debug_log "DEBUG" "Displaying standard confirmation"
             
             # ユーザー確認
-            if ! yn_confirm "$msg"; then
+            if ! confirm "$msg"; then
                 debug_log "DEBUG" "User declined installation of $display_name"
                 return 0
             fi
