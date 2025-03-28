@@ -188,12 +188,18 @@ process_language_translation() {
     local lang_code=$(cat "${CACHE_DIR}/language.ch")
     debug_log "DEBUG" "Processing translation for language: ${lang_code}"
     
-    # USとJP以外の場合のみ翻訳DBを作成
-    if [ "$lang_code" != "US" ]; then
-        # 翻訳DBを作成
+    # 言語DBが既に存在するか確認
+    local lang_db="${BASE_DIR}/messages_${lang_code}.db"
+    
+    # 言語DBが存在しない場合または強制更新フラグがある場合のみ作成する
+    if [ ! -f "$lang_db" ] || [ -f "${CACHE_DIR}/force_translation_update" ]; then
+        debug_log "DEBUG" "Creating translation DB for language: ${lang_code}"
         create_language_db "$lang_code"
+        
+        # 強制更新フラグがあれば削除
+        [ -f "${CACHE_DIR}/force_translation_update" ] && rm -f "${CACHE_DIR}/force_translation_update"
     else
-        debug_log "DEBUG" "Skipping DB creation for built-in language: ${lang_code}"
+        debug_log "DEBUG" "Translation DB already exists for language: ${lang_code}"
     fi
     
     return 0
