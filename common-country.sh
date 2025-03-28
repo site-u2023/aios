@@ -774,15 +774,15 @@ detect_and_set_location() {
         country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
         
         if [ -n "$country_data" ]; then
-            # プレビュー用に言語設定を適用（キャッシュ以外の場合）
-            if [ "$detection_source" != "cache" ]; then
-                echo "$country_data" > "${CACHE_DIR}/country.tmp"
-                debug_log "DEBUG" "Applying temporary language settings for preview"
-                country_write true && {
-                    preview_applied="true"
-                    debug_log "DEBUG" "Preview language applied from $detection_source detection"
-                }
-            fi
+            ## プレビュー用に言語設定を適用（キャッシュ以外の場合）
+            #if [ "$detection_source" != "cache" ]; then
+            #    echo "$country_data" > "${CACHE_DIR}/country.tmp"
+            #    debug_log "DEBUG" "Applying temporary language settings for preview"
+            #    country_write true && {
+            #        preview_applied="true"
+            #        debug_log "DEBUG" "Preview language applied from $detection_source detection"
+            #    }
+            #fi
 
             debug_log "DEBUG" "Before display - source: $detection_source, country: $detected_country, skip_confirmation: $skip_confirmation"
         
