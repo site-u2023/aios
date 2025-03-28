@@ -24,24 +24,6 @@ TRANSLATION_CACHE_DIR="${BASE_DIR}/translations"
 CURRENT_LANGUAGE="${CURRENT_LANGUAGE:-en}"
 ONLINE_TRANSLATION_ENABLED="${ONLINE_TRANSLATION_ENABLED:-yes}"
 
-#!/bin/sh
-
-# =========================================================
-# 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
-# 🚀 Translation Module Initialization
-#
-# 📢 POSIX Compliance Guidelines:
-# ✅ Use `[` instead of `[[` for conditions
-# ✅ Use $(command) instead of backticks `command`
-# ✅ Use $(( )) for arithmetic instead of let
-# ✅ Define functions as func_name() {} (no function keyword)
-# ✅ No associative arrays (declare -A is NOT supported)
-# ✅ No here-strings (<<< is NOT supported)
-# ✅ No -v flag in test or [[
-#
-# 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
-# =========================================================
-
 # 翻訳モジュール初期化関数
 init_translation() {
     local lang="$1"
