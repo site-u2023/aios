@@ -5,7 +5,7 @@
 # =========================================================
 
 # バージョン情報
-SCRIPT_VERSION="2025-03-28-04"
+SCRIPT_VERSION="2025-03-28-09-15"
 
 # オンライン翻訳を有効化
 ONLINE_TRANSLATION_ENABLED="yes"
@@ -67,10 +67,10 @@ decode_unicode() {
         return 0
     fi
     
-    debug_log "DEBUG" "Decoding Unicode escape sequences with AWK"
+    debug_log "DEBUG" "Decoding Unicode escape sequences"
     
     # AWKでのデコード処理
-    awk '
+    echo "$input" | awk '
     BEGIN {
         for (i = 0; i <= 255; i++)
             ord[sprintf("%c", i)] = i
@@ -113,12 +113,10 @@ decode_unicode() {
         }
         
         print result line
-    }' <<EOF
-$input
-EOF
+    }'
 }
 
-# 言語DBファイルの作成関数
+# 言語DBファイルの作成関数（シンプル最適化版）
 create_language_db() {
     local target_lang="$1"
     local base_db="${BASE_DIR}/messages_base.db"
@@ -134,105 +132,79 @@ create_language_db() {
     fi
     
     # DBファイル作成 (常に新規作成・上書き)
-    : > "$output_db"
-    
-    # ヘッダー情報を書き込み
     cat > "$output_db" << EOF
 SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
 
-SUPPORTED_LANGUAGES="$target_lang"
-SUPPORTED_LANGUAGE_$target_lang="$target_lang"
+SUPPORTED_LANGUAGES="${target_lang}"
+SUPPORTED_LANGUAGE_${target_lang}="${target_lang}"
 
 # ${target_lang}用翻訳データベース (自動生成)
 # フォーマット: 言語コード|メッセージキー=メッセージテキスト
 
 EOF
     
-    # オンライン翻訳が無効なら翻訳せずベースをコピー
-    if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
-        debug_log "DEBUG" "Online translation disabled, using original text"
-        grep "^US|" "$base_db" | sed "s/^US|/$target_lang|/" >> "$output_db"
-        return 0
-    fi
-    
-    # USエントリを抽出して翻訳
-    local temp_us="${TRANSLATION_CACHE_DIR}/us_entries.tmp"
-    grep "^US|" "$base_db" > "$temp_us"
-    
-    # 全エントリー数をカウント
-    local total_entries=$(wc -l < "$temp_us")
-    debug_log "DEBUG" "Total entries to translate: ${total_entries}"
-    
-    # 各行の処理
-    local count=0
-    while IFS= read -r line; do
-        count=$((count + 1))
+    # USエントリを一括で処理（高速化）
+    grep "^US|" "$base_db" | sed 's/^US|//g' | while IFS='=' read -r key value; do
+        debug_log "DEBUG" "Processing key: ${key}"
         
-        # キーと値を抽出
-        local key=$(echo "$line" | sed -n 's/^US|\([^=]*\)=.*/\1/p')
-        local value=$(echo "$line" | sed -n 's/^US|[^=]*=\(.*\)/\1/p')
+        # キャッシュキー生成
+        local cache_key=$(echo "${key}${value}${api_lang}" | md5sum | cut -d' ' -f1)
+        local cache_file="${TRANSLATION_CACHE_DIR}/${target_lang}_${cache_key}.txt"
         
-        if [ -n "$key" ] && [ -n "$value" ]; then
-            debug_log "DEBUG" "Processing entry ${count}/${total_entries}: ${key}"
-            
-            # キャッシュキー生成
-            local cache_key=$(echo "${key}${value}${api_lang}" | md5sum | cut -d' ' -f1)
-            local cache_file="${TRANSLATION_CACHE_DIR}/${target_lang}_${cache_key}.txt"
-            
-            # キャッシュを確認
-            if [ -f "$cache_file" ]; then
-                local translated=$(cat "$cache_file")
-                echo "${target_lang}|${key}=${translated}" >> "$output_db"
-                continue
-            fi
-            
-            # オンライン翻訳
-            local encoded_text=$(urlencode "$value")
-            local translated=""
-            
-            # ネットワーク接続確認
-            if ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
-                # MyMemory APIで翻訳
-                translated=$(curl -s -m 3 "https://api.mymemory.translated.net/get?q=${encoded_text}&langpair=en|${api_lang}" 2>/dev/null | \
-                    sed -n 's/.*"translatedText":"\([^"]*\)".*/\1/p')
-                
-                # APIからの応答処理
-                if [ -n "$translated" ] && [ "$translated" != "$value" ]; then
-                    # Unicodeエスケープシーケンスをデコード
-                    local decoded=$(decode_unicode "$translated")
-                    
-                    # キャッシュに保存
-                    mkdir -p "$(dirname "$cache_file")"
-                    echo "$decoded" > "$cache_file"
-                    
-                    # DBに追加
-                    echo "${target_lang}|${key}=${decoded}" >> "$output_db"
-                    debug_log "DEBUG" "Added translation for key: ${key}"
-                    
-                    # APIレート制限対策
-                    sleep 1
-                else
-                    # 翻訳失敗時は原文をそのまま使用
-                    echo "${target_lang}|${key}=${value}" >> "$output_db"
-                    debug_log "DEBUG" "Translation failed, using original text for key: ${key}"
-                fi
-            else
-                # ネットワーク接続がない場合は原文を使用
-                echo "${target_lang}|${key}=${value}" >> "$output_db"
-                debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
-            fi
+        # キャッシュを確認
+        if [ -f "$cache_file" ]; then
+            local translated=$(cat "$cache_file")
+            echo "${target_lang}|${key}=${translated}" >> "$output_db"
+            continue
         fi
-    done < "$temp_us"
+            
+        # オンライン翻訳が無効なら原文をそのまま使用
+        if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
+            echo "${target_lang}|${key}=${value}" >> "$output_db"
+            continue
+        fi
+        
+        # オンライン翻訳
+        local encoded_text=$(urlencode "$value")
+        local translated=""
+        
+        # ネットワーク接続確認
+        if ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
+            debug_log "DEBUG" "Translating text with API: ${encoded_text}"
+            
+            # MyMemory APIで翻訳
+            translated=$(curl -s -m 5 "https://api.mymemory.translated.net/get?q=${encoded_text}&langpair=en|${api_lang}" 2>/dev/null | \
+                sed -n 's/.*"translatedText":"\([^"]*\)".*/\1/p')
+            
+            # APIからの応答処理
+            if [ -n "$translated" ] && [ "$translated" != "$value" ]; then
+                # Unicodeエスケープシーケンスをデコード
+                local decoded=$(decode_unicode "$translated")
+                
+                # キャッシュに保存
+                mkdir -p "$(dirname "$cache_file")"
+                echo "$decoded" > "$cache_file"
+                
+                # DBに追加
+                echo "${target_lang}|${key}=${decoded}" >> "$output_db"
+                debug_log "DEBUG" "Translation successful for key: ${key}"
+            else
+                # 翻訳失敗時は原文をそのまま使用
+                echo "${target_lang}|${key}=${value}" >> "$output_db"
+                debug_log "DEBUG" "Translation failed, using original text for key: ${key}"
+            fi
+        else
+            # ネットワーク接続がない場合は原文を使用
+            echo "${target_lang}|${key}=${value}" >> "$output_db"
+            debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
+        fi
+    done
     
-    # 一時ファイル削除
-    rm -f "$temp_us"
-    
-    debug_log "DEBUG" "Language DB creation completed for ${target_lang} with ${count} entries"
+    debug_log "DEBUG" "Language DB creation completed for ${target_lang}"
     return 0
 }
 
-# country_write関数の拡張 - この関数は元のcountry_write関数に統合する
-# (normalize_language実行前に翻訳処理を行うサンプル)
+# 言語翻訳処理
 process_language_translation() {
     # 既存の言語コードを取得
     if [ ! -f "${CACHE_DIR}/language.ch" ]; then
@@ -254,11 +226,43 @@ process_language_translation() {
     return 0
 }
 
+# 米国版のみのDBを作成（シンプル版）
+create_us_only_db() {
+    local base_db="${BASE_DIR}/messages_base.db"
+    local output_db="${BASE_DIR}/messages_us_only.db"
+    
+    debug_log "DEBUG" "Creating US-only message database"
+    
+    # ベースDBファイル確認
+    if [ ! -f "$base_db" ]; then
+        debug_log "DEBUG" "Base message DB not found"
+        return 1
+    fi
+    
+    # ヘッダー部分を書き出し
+    cat > "$output_db" << EOF
+SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
+
+SUPPORTED_LANGUAGES="US"
+SUPPORTED_LANGUAGE_US="US CA GB ZA AU NZ TT MU JM BM"
+
+# 英語メッセージデータベース (単一言語版)
+# フォーマット: 言語コード|メッセージキー=メッセージテキスト
+
+EOF
+    
+    # US行のみを抽出して追加（1コマンド）
+    grep "^US|" "$base_db" >> "$output_db"
+    
+    debug_log "DEBUG" "US-only message database created successfully"
+    return 0
+}
+
 # 初期化関数
 init_translation() {
     # キャッシュディレクトリ初期化
     init_translation_cache
-    debug_log "DEBUG" "Translation module initialized successfully"
+    debug_log "DEBUG" "Translation module initialized"
 }
 
 # 初期化実行
