@@ -1037,13 +1037,12 @@ country_write() {
 }
 
 normalize_language() {
-    # 必要なパス定義（message_base.db のみ使用）
+    # 必要なパス定義
     local base_db="${BASE_DIR}/messages_base.db"
     local language_cache="${CACHE_DIR}/language.ch"
     local message_cache="${CACHE_DIR}/message.ch"
     local message_db_ch="${CACHE_DIR}/message_db.ch"
     local country_code=""
-    local selected_language=""
     
     # デバッグログの出力
     debug_log "DEBUG" "Normalizing language settings"
@@ -1059,27 +1058,59 @@ normalize_language() {
     # language.chから国コードを読み込み
     country_code=$(cat "$language_cache")
     debug_log "DEBUG" "Original country code: ${country_code}"
-    
-    # 国コードから言語コードへのマッピング処理
-    selected_language=$(map_country_code "$country_code")
-    debug_log "DEBUG" "Mapped language code: ${selected_language}"
 
-    # 対応するDBファイルを検索（base_db のみ）
+    # 対応するDBファイルを検索
     local target_db=""
     local found=0
     
-    # base_db のみチェック
-    if [ -f "$base_db" ]; then
+    # まず、正確な翻訳DBを確認
+    local translation_db="${BASE_DIR}/messages_${country_code}.db"
+    if [ -f "$translation_db" ]; then
+        # 翻訳DBファイルからSUPPORTED_LANGUAGESを抽出
+        local supported_langs=$(grep "^SUPPORTED_LANGUAGES=" "$translation_db" | cut -d'=' -f2 | tr -d '"')
+        debug_log "DEBUG" "Checking translation DB for language ${country_code}"
+        debug_log "DEBUG" "Translation DB supported languages: ${supported_langs}"
+        
+        # 指定言語がサポートされているか確認
+        if echo " $supported_langs " | grep -q " $country_code "; then
+            target_db="$translation_db"
+            found=1
+            debug_log "DEBUG" "Language ${country_code} supported in translation DB"
+        fi
+    else
+        debug_log "DEBUG" "No specific translation DB found for ${country_code}"
+        
+        # 指定の言語が見つからない場合、他の翻訳DBも検索
+        for db_file in "${BASE_DIR}"/messages_*.db; do
+            # base_dbはスキップ
+            if [ "$db_file" = "$base_db" ]; then
+                continue
+            fi
+            
+            local supported_langs=$(grep "^SUPPORTED_LANGUAGES=" "$db_file" | cut -d'=' -f2 | tr -d '"')
+            debug_log "DEBUG" "Checking DB ${db_file} for language ${country_code}"
+            
+            if echo " $supported_langs " | grep -q " $country_code "; then
+                target_db="$db_file"
+                found=1
+                debug_log "DEBUG" "Language ${country_code} supported in alternative DB: ${db_file}"
+                break
+            fi
+        done
+    fi
+    
+    # 翻訳DBに言語がなかった場合はbase_dbをチェック
+    if [ $found -eq 0 ] && [ -f "$base_db" ]; then
         # DBファイルからSUPPORTED_LANGUAGESを抽出
         local supported_langs=$(grep "^SUPPORTED_LANGUAGES=" "$base_db" | cut -d'=' -f2 | tr -d '"')
-        debug_log "DEBUG" "Checking DB ${base_db} for language ${selected_language}"
+        debug_log "DEBUG" "Checking base DB for language ${country_code}"
         debug_log "DEBUG" "Supported languages: ${supported_langs}"
         
         # 指定言語がサポートされているか確認
-        if echo " $supported_langs " | grep -q " $selected_language "; then
+        if echo " $supported_langs " | grep -q " $country_code "; then
             target_db="$base_db"
             found=1
-            debug_log "DEBUG" "Language ${selected_language} supported in base DB"
+            debug_log "DEBUG" "Language ${country_code} supported in base DB"
         fi
     fi
 
@@ -1088,7 +1119,7 @@ normalize_language() {
         if [ -f "$base_db" ]; then
             target_db="$base_db"
             # 言語をUSに変更（フォールバック処理）
-            selected_language="US"
+            country_code="US"
             debug_log "DEBUG" "Language not supported, falling back to US language"
         else
             debug_log "ERROR" "Base message DB not found"
@@ -1097,12 +1128,12 @@ normalize_language() {
     fi
     
     # 設定を保存
-    echo "$selected_language" > "$message_cache"
+    echo "$country_code" > "$message_cache"
     echo "$target_db" > "$message_db_ch"
-    debug_log "DEBUG" "Updated message_cache=${selected_language}"
+    debug_log "DEBUG" "Updated message_cache=${country_code}"
     debug_log "DEBUG" "Updated message_db_ch with target DB path: ${target_db}"
     
-    ACTIVE_LANGUAGE="$selected_language"
+    ACTIVE_LANGUAGE="$country_code"
     
     return 0
 }
