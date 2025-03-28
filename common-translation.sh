@@ -54,28 +54,46 @@ urlencode() {
     echo "$encoded"
 }
 
-# Unicodeエスケープシーケンスをデコードする関数
-decode_unicode() {
-    local text="$1"
+# Unicodeエスケープシーケンスをデコード
+unicode_to_utf8() {
+    local input="$1"
+    local temp_file="${TRANSLATION_CACHE_DIR}/unicode_temp.txt"
     local result=""
-    local temp_file="${TRANSLATION_CACHE_DIR}/unicode_decode_temp.txt"
     
-    # OpenWrt環境に対応した最もシンプルな方法で実装
-    # printf + echo でデコードを試みる
-    printf "%b" "$(echo "$text" | sed 's/\\u/\\\\u/g')" > "$temp_file" 2>/dev/null
+    # ファイルに書き出してデコード（OpenWrt対応の最も信頼性の高い方法）
+    echo "$input" > "$temp_file"
     
-    if [ -s "$temp_file" ]; then
-        result=$(cat "$temp_file")
-        rm -f "$temp_file"
+    # sedで各エスケープシーケンスを処理
+    # \uXXXXを実際のUTF-8文字にデコード
+    sed -i 's/\\u\([0-9a-fA-F]\{4\}\)/\\\\\\u\1/g' "$temp_file"
+    
+    # エコーでデコード
+    result=$(printf "%b" "$(cat "$temp_file")")
+    rm -f "$temp_file"
+    
+    if [ -n "$result" ]; then
         echo "$result"
     else
         # デコードに失敗した場合は元のテキストを返す
-        debug_log "DEBUG" "Unicode decoding failed, returning original text"
+        echo "$input"
+    fi
+}
+
+# 複数のUnicodeエスケープシーケンスを含むテキストを処理
+decode_unicode_text() {
+    local text="$1"
+    
+    # Unicodeエスケープシーケンスが含まれている場合のみ処理
+    if echo "$text" | grep -q '\\u[0-9a-fA-F]\{4\}'; then
+        debug_log "DEBUG" "Converting Unicode escape sequences to UTF-8"
+        unicode_to_utf8 "$text"
+    else
+        # 通常のテキストはそのまま返す
         echo "$text"
     fi
 }
 
-# 言語DB全体を一括翻訳
+# 翻訳DBを一括で作成
 prepare_translation_db() {
     local target_lang="$1"
     local api_lang=$(get_api_lang_code "$target_lang")
@@ -96,73 +114,147 @@ prepare_translation_db() {
     
     debug_log "DEBUG" "Creating translation cache DB for ${target_lang}"
     
-    # 一時ファイル
-    local temp_db="${TRANSLATION_CACHE_DIR}/temp_${target_lang}.db"
-    
     # US言語のエントリを抽出
-    grep "^US|" "$db_file" > "$temp_db" 2>/dev/null
+    local temp_file="${TRANSLATION_CACHE_DIR}/temp_${target_lang}.txt"
+    grep "^US|" "$db_file" > "$temp_file" 2>/dev/null
     
-    # 各行を処理して翻訳＋DBに追加
-    : > "$cache_db"  # 一旦DBを空にする
+    # DBファイルを初期化
+    : > "$cache_db"
     
-    # 翻訳バッチ作成 - 一度に全メッセージを翻訳
-    local messages_file="${TRANSLATION_CACHE_DIR}/${target_lang}_messages.txt"
-    local keys_file="${TRANSLATION_CACHE_DIR}/${target_lang}_keys.txt"
+    # 行数をカウント
+    local total_lines=$(wc -l < "$temp_file")
+    debug_log "DEBUG" "Preparing to translate ${total_lines} messages"
     
-    # メッセージと対応するキーを抽出
-    sed -n 's/^US|\([^=]*\)=\(.*\)/\2/p' "$temp_db" > "$messages_file"
-    sed -n 's/^US|\([^=]*\)=.*/\1/p' "$temp_db" > "$keys_file"
-    
-    # 行数確認
-    local line_count=$(wc -l < "$messages_file")
-    debug_log "DEBUG" "Processing ${line_count} messages for translation"
-    
-    # 各行を処理
-    local i=1
-    while [ $i -le $line_count ]; do
-        local key=$(sed -n "${i}p" "$keys_file")
-        local value=$(sed -n "${i}p" "$messages_file")
+    # 各行を順次処理
+    local count=0
+    while IFS= read -r line; do
+        count=$((count + 1))
+        
+        # キーと値を抽出
+        local key=$(echo "$line" | sed -n 's/^US|\([^=]*\)=.*/\1/p')
+        local value=$(echo "$line" | sed -n 's/^US|[^=]*=\(.*\)/\1/p')
         
         if [ -n "$key" ] && [ -n "$value" ]; then
-            debug_log "DEBUG" "Translating key: ${key}"
+            debug_log "DEBUG" "Translating message ${count}/${total_lines}: ${key}"
             
-            # APIで翻訳
-            local translated=$(curl -s -m 3 -X POST "https://libretranslate.de/translate" \
-                -H "Content-Type: application/json" \
-                -d "{\"q\":\"$value\",\"source\":\"en\",\"target\":\"$api_lang\",\"format\":\"text\"}" | \
-                sed -n 's/.*"translatedText":"\([^"]*\)".*/\1/p')
+            # 翻訳キャッシュのチェック
+            local cache_key=$(echo "${value}${api_lang}" | md5sum | cut -d' ' -f1)
+            local cache_path="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
             
-            # バックアップAPI
-            if [ -z "$translated" ]; then
-                local encoded_text=$(urlencode "$value")
-                translated=$(curl -s -m 3 "https://api.mymemory.translated.net/get?q=${encoded_text}&langpair=en|${api_lang}" | \
+            # キャッシュファイルの確認
+            if [ -f "$cache_path" ]; then
+                debug_log "DEBUG" "Using cached translation for ${key}"
+                local translated=$(cat "$cache_path")
+                echo "${target_lang}|${key}=${translated}" >> "$cache_db"
+            else
+                # APIで翻訳
+                local translated=""
+                
+                # 翻訳API呼び出し
+                translated=$(curl -s -m 3 "https://api.mymemory.translated.net/get?q=$(urlencode "$value")&langpair=en|${api_lang}" | \
                     sed -n 's/.*"translatedText":"\([^"]*\)".*/\1/p')
-            fi
-            
-            # 翻訳に成功した場合のみDB登録
-            if [ -n "$translated" ] && [ "$translated" != "$value" ]; then
-                # エスケープシーケンスが含まれる場合はデコード
-                if echo "$translated" | grep -q '\\u[0-9a-fA-F]\{4\}'; then
-                    translated=$(decode_unicode "$translated")
+                
+                # バックアップAPI
+                if [ -z "$translated" ] || [ "$translated" = "$value" ]; then
+                    debug_log "DEBUG" "Primary API failed, trying backup API"
+                    translated=$(curl -s -m 3 -X POST "https://libretranslate.de/translate" \
+                        -H "Content-Type: application/json" \
+                        -d "{\"q\":\"$value\",\"source\":\"en\",\"target\":\"$api_lang\",\"format\":\"text\"}" | \
+                        sed -n 's/.*"translatedText":"\([^"]*\)".*/\1/p')
                 fi
                 
-                echo "${target_lang}|${key}=${translated}" >> "$cache_db"
-                debug_log "DEBUG" "Added translation for key: ${key}"
-            else
-                # 翻訳失敗時は原文を使用
-                echo "${target_lang}|${key}=${value}" >> "$cache_db"
-                debug_log "DEBUG" "Using original text for key: ${key}"
+                # 翻訳結果の処理
+                if [ -n "$translated" ] && [ "$translated" != "$value" ]; then
+                    # Unicodeエスケープを実際のUTF-8に変換
+                    local decoded=$(decode_unicode_text "$translated")
+                    
+                    # キャッシュに保存
+                    mkdir -p "${TRANSLATION_CACHE_DIR}"
+                    echo "$decoded" > "$cache_path"
+                    
+                    # DBに書き込み
+                    echo "${target_lang}|${key}=${decoded}" >> "$cache_db"
+                    debug_log "DEBUG" "Translation successful for ${key}"
+                else
+                    # 翻訳失敗時は原文を使用
+                    echo "${target_lang}|${key}=${value}" >> "$cache_db"
+                    debug_log "DEBUG" "Translation failed for ${key}, using original text"
+                fi
+                
+                # API呼び出し間隔を少し空ける（レート制限対策）
+                sleep 0.5
             fi
         fi
-        
-        i=$((i + 1))
-    done
+    done < "$temp_file"
     
     # 一時ファイルを削除
-    rm -f "$temp_db" "$messages_file" "$keys_file"
+    rm -f "$temp_file"
     
-    debug_log "DEBUG" "Translation cache DB created for ${target_lang} with $(grep -c "" "$cache_db") entries"
+    debug_log "DEBUG" "Translation DB created with $(wc -l < "$cache_db") entries"
     return 0
+}
+
+# 単一メッセージの翻訳
+translate_single_message() {
+    local key="$1"
+    local value="$2"
+    local target_lang="$3"
+    local api_lang=$(get_api_lang_code "$target_lang")
+    local cache_db="${TRANSLATION_CACHE_DIR}/${target_lang}_messages.db"
+    
+    # キャッシュキー生成
+    local cache_key=$(echo "${value}${api_lang}" | md5sum | cut -d' ' -f1)
+    local cache_path="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
+    
+    # キャッシュを確認
+    if [ -f "$cache_path" ]; then
+        debug_log "DEBUG" "Using cached translation for single message: ${key}"
+        cat "$cache_path"
+        return 0
+    fi
+    
+    # 翻訳API呼び出し
+    local translated=""
+    debug_log "DEBUG" "Translating single message via API: ${key}"
+    
+    # 主要API
+    translated=$(curl -s -m 3 "https://api.mymemory.translated.net/get?q=$(urlencode "$value")&langpair=en|${api_lang}" | \
+        sed -n 's/.*"translatedText":"\([^"]*\)".*/\1/p')
+    
+    # バックアップAPI
+    if [ -z "$translated" ] || [ "$translated" = "$value" ]; then
+        debug_log "DEBUG" "Primary API failed, trying backup API for single message"
+        translated=$(curl -s -m 3 -X POST "https://libretranslate.de/translate" \
+            -H "Content-Type: application/json" \
+            -d "{\"q\":\"$value\",\"source\":\"en\",\"target\":\"$api_lang\",\"format\":\"text\"}" | \
+            sed -n 's/.*"translatedText":"\([^"]*\)".*/\1/p')
+    fi
+    
+    # 翻訳結果の処理
+    if [ -n "$translated" ] && [ "$translated" != "$value" ]; then
+        # Unicodeエスケープを実際のUTF-8に変換
+        local decoded=$(decode_unicode_text "$translated")
+        
+        # キャッシュに保存
+        mkdir -p "${TRANSLATION_CACHE_DIR}"
+        echo "$decoded" > "$cache_path"
+        
+        # キャッシュDBにも追加
+        if [ -f "$cache_db" ]; then
+            echo "${target_lang}|${key}=${decoded}" >> "$cache_db"
+        else
+            mkdir -p "$(dirname "$cache_db")"
+            echo "${target_lang}|${key}=${decoded}" > "$cache_db"
+        fi
+        
+        echo "$decoded"
+        return 0
+    fi
+    
+    # 翻訳失敗時は原文を返す
+    debug_log "DEBUG" "Translation failed for single message, using original text"
+    echo "$value"
+    return 1
 }
 
 # メッセージ取得関数
@@ -218,12 +310,12 @@ get_message() {
             local us_message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
             if [ -n "$us_message" ]; then
                 debug_log "DEBUG" "No cached translation, using English message for key: ${key}"
-                message="$us_message"
                 
-                # メニューキャッシュに追加（次回以降の参照用）
-                if [ -f "$cache_db" ]; then
-                    echo "${actual_lang}|${key}=${message}" >> "$cache_db"
-                    debug_log "DEBUG" "Added English message to cache for future reference: ${key}"
+                # オンライン翻訳が有効なら翻訳を試みる
+                if [ "$ONLINE_TRANSLATION_ENABLED" = "yes" ] && echo "$key" | grep -q "^MENU_\|^MSG_"; then
+                    message=$(translate_single_message "$key" "$us_message" "$actual_lang")
+                else
+                    message="$us_message"
                 fi
             fi
         fi
@@ -236,8 +328,7 @@ get_message() {
     else
         # Unicodeエスケープシーケンスをデコード
         if echo "$message" | grep -q '\\u[0-9a-fA-F]\{4\}'; then
-            message=$(decode_unicode "$message")
-            debug_log "DEBUG" "Decoded Unicode escape sequences in message for key: ${key}"
+            message=$(decode_unicode_text "$message")
         fi
     fi
     
@@ -266,7 +357,7 @@ init_translation() {
         local lang=$(cat "${CACHE_DIR}/language.ch")
         if [ "$lang" != "US" ] && [ "$lang" != "JP" ]; then
             debug_log "DEBUG" "Starting translation database preparation for ${lang}"
-            prepare_translation_db "$lang" &
+            prepare_translation_db "$lang" > /dev/null 2>&1 &
         fi
     fi
     
