@@ -22,14 +22,14 @@ translate_text() {
         debug_log "DEBUG" "Using cached translation for hash: ${cache_key}"
         cat "$cache_file"
         return 0
-    }
+    fi
     
     # ネットワーク確認（1秒タイムアウト）
     if ! ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
         debug_log "DEBUG" "Network unavailable, skipping translation"
         echo "$source_text"
         return 1
-    }
+    fi
     
     debug_log "DEBUG" "Attempting translation of text to ${target_lang}"
     mkdir -p "$cache_dir"
@@ -52,13 +52,13 @@ translate_text() {
             -H "Content-Type: application/json" \
             -d "{\"q\":\"$source_text\",\"source\":\"en\",\"target\":\"$api_lang\",\"format\":\"text\"}" | \
             sed -n 's/.*"translatedText":"\([^"]*\)".*/\1/p')
-    }
+    fi
     
     # API 2: MyMemory API (1,000 words/day)
     if [ -z "$translation" ]; then
         translation=$(curl -s -m 3 "https://api.mymemory.translated.net/get?q=$source_text&langpair=en|$api_lang" | \
             sed -n 's/.*"translatedText":"\([^"]*\)".*/\1/p')
-    }
+    fi
     
     # 翻訳成功確認
     if [ -n "$translation" ]; then
@@ -66,11 +66,11 @@ translate_text() {
         echo "$translation" > "$cache_file"
         echo "$translation"
         return 0
-    } else {
+    else
         debug_log "DEBUG" "Translation failed, returning original text"
         echo "$source_text"
         return 1
-    }
+    fi
 }
 
 # URL安全にエンコードする関数
