@@ -1036,62 +1036,12 @@ country_write() {
     return 0
 }
 
-# 国コードから言語コードへのマッピング関数
-map_country_code() {
-    local country_code="$1"
-    local db_dir="${BASE_DIR}"
-    
-    # デバッグ出力
-    debug_log "DEBUG" "Processing country code: $country_code"
-    
-    # 各DBファイルを順に確認して言語マッピングを検索
-    local db_files="messages_base.db"
-    
-    for db_file in $db_files; do
-        local full_path="${db_dir}/${db_file}"
-        
-        if [ -f "$full_path" ]; then
-            # ファイル先頭の20行を取得
-            local header=$(head -n 20 "$full_path")
-            
-            # サポート言語リストを取得
-            local langs=$(echo "$header" | grep "SUPPORTED_LANGUAGES" | cut -d'"' -f2)
-            
-            # まず直接一致するか確認
-            if echo " $langs " | grep -q " $country_code "; then
-                debug_log "DEBUG" "Direct language match: $country_code in $db_file"
-                echo "$country_code"
-                return 0
-            fi
-            
-            # マッピングを確認
-            for lang in $langs; do
-                local map_line=$(echo "$header" | grep "SUPPORTED_LANGUAGE_${lang}=" | head -1)
-                
-                if [ -n "$map_line" ]; then
-                    local countries=$(echo "$map_line" | cut -d'"' -f2)
-                    
-                    if echo " $countries " | grep -q " $country_code "; then
-                        debug_log "DEBUG" "Found mapping: $country_code -> $lang in $db_file"
-                        echo "$lang"
-                        return 0
-                    fi
-                fi
-            done
-        fi
-    done
-    
-    # マッピングが見つからない場合は元の値を返す
-    debug_log "DEBUG" "No mapping found for country code: $country_code, using as is"
-    echo "$country_code"
-    return 0
-}
-
 normalize_language() {
-    # 必要なパス定義
+    # 必要なパス定義（message_base.db のみ使用）
     local base_db="${BASE_DIR}/messages_base.db"
     local language_cache="${CACHE_DIR}/language.ch"
     local message_cache="${CACHE_DIR}/message.ch"
+    local message_db_ch="${CACHE_DIR}/message_db.ch"
     local country_code=""
     local selected_language=""
     
@@ -1114,37 +1064,34 @@ normalize_language() {
     selected_language=$(map_country_code "$country_code")
     debug_log "DEBUG" "Mapped language code: ${selected_language}"
 
-    # 対応するDBファイルを検索
+    # 対応するDBファイルを検索（base_db のみ）
     local target_db=""
     local found=0
     
-    # 各DBファイルをチェック
-    for db_file in "$base_db"; do
-        if [ -f "$db_file" ]; then
-            # DBファイルからSUPPORTED_LANGUAGESを抽出
-            local supported_langs=$(grep "^SUPPORTED_LANGUAGES=" "$db_file" | cut -d'=' -f2 | tr -d '"')
-            debug_log "DEBUG" "Checking DB ${db_file} for language ${selected_language}"
-            debug_log "DEBUG" "Supported languages: ${supported_langs}"
-            
-            # 指定言語がサポートされているか確認
-            if echo " $supported_langs " | grep -q " $selected_language "; then
-                target_db="$db_file"
-                found=1
-                debug_log "DEBUG" "Found matching DB: ${target_db}"
-                break
-            fi
+    # base_db のみチェック
+    if [ -f "$base_db" ]; then
+        # DBファイルからSUPPORTED_LANGUAGESを抽出
+        local supported_langs=$(grep "^SUPPORTED_LANGUAGES=" "$base_db" | cut -d'=' -f2 | tr -d '"')
+        debug_log "DEBUG" "Checking DB ${base_db} for language ${selected_language}"
+        debug_log "DEBUG" "Supported languages: ${supported_langs}"
+        
+        # 指定言語がサポートされているか確認
+        if echo " $supported_langs " | grep -q " $selected_language "; then
+            target_db="$base_db"
+            found=1
+            debug_log "DEBUG" "Language ${selected_language} supported in base DB"
         fi
-    done
+    fi
 
-    # DBが見つからなかった場合はUSにフォールバック
+    # 言語が見つからなかった場合はUSにフォールバック
     if [ $found -eq 0 ]; then
         if [ -f "$base_db" ]; then
             target_db="$base_db"
             # 言語をUSに変更（フォールバック処理）
             selected_language="US"
-            debug_log "DEBUG" "Language not found in any DB, falling back to US language with base_db"
+            debug_log "DEBUG" "Language not supported, falling back to US language"
         else
-            debug_log "ERROR" "No valid message DB found"
+            debug_log "ERROR" "Base message DB not found"
             return 1
         fi
     fi
