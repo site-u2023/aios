@@ -1452,6 +1452,7 @@ check_common() {
             ;;
         full)
             download "dynamic-system-info.sh" "chmod" "load"
+            download "common-translation.sh" "chmod" "load"
             download "common-color.sh" "chmod" "load"
             download "common-country.sh" "chmod" "load"
             download "common-menu.sh" "chmod" "load"
@@ -1460,9 +1461,9 @@ check_common() {
             download "menu.db"
             download "country.db"
             download "messages_base.db"
-            download "messages_asian.db"
-            download "messages_euro.db"
-            download "messages_etc.db"
+            # download "messages_asian.db"
+            # download "messages_euro.db"
+            # download "messages_etc.db"
             download "local-package.db"
             download "custom-package.db"
             print_banner
