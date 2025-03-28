@@ -266,7 +266,7 @@ get_set_translation_cache() {
         # キャッシュファイルが存在するかチェック
         if [ -f "$cache_file" ]; then
             # キャッシュからデータを取得
-            local cached_value=$(grep "^${key}=" "$cache_file" | cut -d'=' -f2-)
+            local cached_value=$(grep "^${key}=" "$cache_file" 2>/dev/null | cut -d'=' -f2-)
             if [ -n "$cached_value" ]; then
                 debug_log "DEBUG" "Cache hit for ${text} in language ${lang}"
                 echo "$cached_value"
@@ -282,7 +282,8 @@ get_set_translation_cache() {
         
         # 既存のエントリを削除（もしあれば）
         if grep -q "^${key}=" "$cache_file" 2>/dev/null; then
-            sed -i "/^${key}=/d" "$cache_file"
+            grep -v "^${key}=" "$cache_file" > "${cache_file}.tmp"
+            mv "${cache_file}.tmp" "$cache_file"
         fi
         
         # 新しいエントリを追加
@@ -461,14 +462,137 @@ set_language() {
     return 0
 }
 
-# エクスポートする関数
-export -f urlencode
-export -f decode_unicode_awk
-export -f translate_with_mymemory
-export -f translate_with_libretranslate
-export -f get_set_translation_cache
-export -f get_message_translation
-export -f translate_text
-export -f translate
-export -f get_message
-export -f set_language
+# POSIXシェル環境のためにexport -fの代わりに関数スクリプトを作成
+cat > "${CACHE_DIR}/common_translation_functions.sh" << 'EOF'
+urlencode() {
+    local string="$1"
+    local encoded=""
+    local i=0
+    local c=""
+    
+    for i in $(seq 0 $((${#string} - 1))); do
+        c="${string:$i:1}"
+        case "$c" in
+            [a-zA-Z0-9.~_-]) encoded="${encoded}$c" ;;
+            " ") encoded="${encoded}%20" ;;
+            *) encoded="${encoded}$(printf "%%%02X" "'$c")" ;;
+        esac
+    done
+    
+    echo "$encoded"
+}
+
+decode_unicode_awk() {
+    local input="$1"
+    
+    case "$input" in
+        *\\u*)
+            ;;
+        *)
+            echo "$input"
+            return 0
+            ;;
+    esac
+    
+    echo "$input" | awk '
+    BEGIN { }
+    
+    function decode(str) {
+        result = ""
+        i = 1
+        len = length(str)
+        
+        while (i <= len) {
+            char = substr(str, i, 1)
+            if (char == "\\") {
+                if (substr(str, i+1, 1) == "u") {
+                    hex = substr(str, i+2, 4)
+                    i += 6
+                    
+                    code = strtonum("0x" hex)
+                    
+                    if (code <= 0x7F) {
+                        result = result sprintf("%c", code)
+                    } else if (code <= 0x7FF) {
+                        byte1 = 0xC0 + int(code / 64)
+                        byte2 = 0x80 + (code % 64)
+                        result = result sprintf("%c%c", byte1, byte2)
+                    } else if (code <= 0xFFFF) {
+                        byte1 = 0xE0 + int(code / 4096)
+                        byte2 = 0x80 + int((code % 4096) / 64)
+                        byte3 = 0x80 + (code % 64)
+                        result = result sprintf("%c%c%c", byte1, byte2, byte3)
+                    } else {
+                        result = result "?"
+                    }
+                    i--
+                } else {
+                    result = result char
+                    i++
+                }
+            } else {
+                result = result char
+            }
+            i++
+        }
+        return result
+    }
+    
+    { print decode($0) }
+    '
+}
+
+translate() {
+    local text="$1"
+    local lang="${2:-$CURRENT_LANGUAGE}"
+    
+    if [ "$lang" = "en" ] || [ -z "$text" ]; then
+        echo "$text"
+        return 0
+    fi
+    
+    if echo "$text" | grep -q '\\u'; then
+        local decoded=$(decode_unicode_awk "$text")
+        echo "$decoded"
+    else
+        . "${CACHE_DIR}/common_translation_functions.sh"
+        local translated=$(translate_text "$text" "$lang")
+        echo "$translated"
+    fi
+}
+
+get_message() {
+    local key="$1"
+    local default="${2:-$key}"
+    local lang="${3:-$CURRENT_LANGUAGE}"
+    
+    if [ "$lang" = "en" ]; then
+        echo "$default"
+        return 0
+    fi
+    
+    local message=$(get_message_translation "$key" "$lang" "")
+    
+    if [ -z "$message" ]; then
+        echo "$default"
+        return 1
+    fi
+    
+    echo "$message"
+    return 0
+}
+
+set_language() {
+    local lang="$1"
+    
+    if [ -z "$lang" ]; then
+        echo "$CURRENT_LANGUAGE"
+        return 0
+    fi
+    
+    CURRENT_LANGUAGE="$lang"
+    return 0
+}
+EOF
+
+debug_log "INFO" "Created common translation functions script for sourcing"
