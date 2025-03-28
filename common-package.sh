@@ -111,39 +111,74 @@ update_package_list() {
     # キャッシュディレクトリの作成
     mkdir -p "$CACHE_DIR"
 
-    # パッケージリストファイルの存在確認
+    # パッケージキャッシュファイルの存在確認
     if [ ! -f "$package_cache" ]; then
-        debug_log "DEBUG" "Package list file not found. Forcing update."
-        cache_time=0  # 強制的に更新
-    # キャッシュのタイムスタンプがある場合は取得
+        debug_log "DEBUG" "Package list cache not found. Will create it now."
     elif [ -f "$update_cache" ]; then
+        # キャッシュが存在する場合、最終更新時刻を取得
         cache_time=$(date -r "$update_cache" '+%s' 2>/dev/null || echo 0)
-    fi
-
-    # キャッシュが最新なら `opkg update` をスキップ
-    if [ $((current_time - cache_time)) -lt $max_age ] && [ -f "$package_cache" ]; then
-        debug_log "DEBUG" "Package list was updated within 24 hours. Skipping update."
-        return 0
+        
+        # キャッシュが最新なら `opkg update` をスキップ
+        if [ $((current_time - cache_time)) -lt $max_age ]; then
+            debug_log "DEBUG" "Package list was updated within 24 hours. Skipping update."
+            return 0
+        fi
     fi
 
     # スピナー開始
     start_spinner "$(color yellow "$(get_message "MSG_RUNNING_UPDATE")")"
 
+    # パッケージマネージャーの確認
+    if [ -z "$PACKAGE_MANAGER" ]; then
+        if command -v opkg >/dev/null 2>&1; then
+            debug_log "DEBUG" "Detected opkg package manager"
+            PACKAGE_MANAGER="opkg"
+            # パッケージマネージャー情報をキャッシュに保存
+            echo "$PACKAGE_MANAGER" > "${CACHE_DIR}/package_manager.ch"
+        elif command -v apk >/dev/null 2>&1; then
+            debug_log "DEBUG" "Detected apk package manager"
+            PACKAGE_MANAGER="apk"
+            # パッケージマネージャー情報をキャッシュに保存
+            echo "$PACKAGE_MANAGER" > "${CACHE_DIR}/package_manager.ch"
+        else
+            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            debug_log "ERROR" "No supported package manager found"
+            return 1
+        fi
+    fi
+
     # **パッケージリストの取得 & 保存**
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        debug_log "DEBUG" "Running opkg update and saving package list"
         opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
             stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
             debug_log "ERROR" "Failed to update package lists with opkg"
             return 1
         }
-        opkg list > "$package_cache" 2>/dev/null
+        opkg list > "$package_cache" 2>/dev/null || {
+            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            debug_log "ERROR" "Failed to save package list with opkg"
+            return 1
+        }
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        debug_log "DEBUG" "Running apk update and saving package list"
         apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
             stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
             debug_log "ERROR" "Failed to update package lists with apk"
             return 1
         }
-        apk search > "$package_cache" 2>/dev/null
+        apk search > "$package_cache" 2>/dev/null || {
+            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            debug_log "ERROR" "Failed to save package list with apk"
+            return 1
+        }
+    fi
+
+    # パッケージリストファイルの存在確認
+    if [ ! -f "$package_cache" ]; then
+        stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+        debug_log "ERROR" "Failed to create package list file"
+        return 1
     fi
 
     # スピナー停止 (成功メッセージを表示)
@@ -154,6 +189,10 @@ update_package_list() {
         debug_log "ERROR" "Failed to write to cache file: $update_cache"
         return 1
     }
+
+    # デバッグ情報
+    local list_count=$(wc -l < "$package_cache" 2>/dev/null || echo 0)
+    debug_log "DEBUG" "Package list updated with $list_count entries"
 
     return 0
 }
