@@ -261,77 +261,73 @@ US|CONFIG_DOWNLOAD_UNNECESSARY=No update needed:"
     debug_log "DEBUG" "Messages loaded into memory"
 }
 
-# 翻訳機能付きget_message関数
+# get_message関数の修正（時計回りに改善）
 get_message() {
     local key="$1"
     local params="$2"
-    local message=""
     local actual_lang=""
     local db_lang=""
     
-    # 実際に選択された言語（language.ch）の取得
+    # 実際の言語コード取得
     if [ -f "${CACHE_DIR}/language.ch" ]; then
         actual_lang=$(cat "${CACHE_DIR}/language.ch")
     else
         actual_lang="US"
     fi
     
-    # 利用可能な言語（message.ch）の取得
+    # メッセージDB言語コード取得
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         db_lang=$(cat "${CACHE_DIR}/message.ch")
     else
         db_lang="US"
     fi
     
-    # DB用メッセージファイルのパス取得
+    # DBファイル取得
     local db_file="${BASE_DIR}/messages_base.db"
     if [ -f "${CACHE_DIR}/message_db.ch" ]; then
         db_file=$(cat "${CACHE_DIR}/message_db.ch")
     fi
     
-    # メッセージのルックアップ
-    # 1. まずDBから直接検索
-    message=$(grep "^${db_lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+    # まずDBからメッセージを取得
+    local message=$(grep "^${db_lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
     
-    # 2. 英語がデフォルト言語でない場合、自動翻訳を考慮
-    if [ "$actual_lang" != "US" ] && [ "$db_lang" = "US" ] && [ "$ONLINE_TRANSLATION_ENABLED" = "yes" ] && [ -n "$message" ]; then
-        debug_log "DEBUG" "Selected language ($actual_lang) differs from available language ($db_lang). Attempting translation."
+    # 翻訳処理（DBから見つからない場合かつ翻訳が有効な場合）
+    if [ -z "$message" ] && [ "$db_lang" = "US" ] && [ "$actual_lang" != "US" ] && [ "$ONLINE_TRANSLATION_ENABLED" = "yes" ]; then
+        # 英語メッセージを取得
+        local english_message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
         
-        # 翻訳実行
-        local translated_text=$(translate_text "$message" "$actual_lang")
-        
-        # 翻訳が成功した場合のみ使用
-        if [ $? -eq 0 ] && [ -n "$translated_text" ] && [ "$translated_text" != "$message" ]; then
-            debug_log "DEBUG" "Translation successful for key: $key"
-            message="$translated_text"
+        if [ -n "$english_message" ]; then
+            debug_log "DEBUG" "Message '$key' found in English. Attempting translation to $actual_lang"
             
-            # キャッシュに保存（オプション）
-            local cache_dir="${CACHE_DIR}/translations/${actual_lang}"
-            local cache_key=$(echo "$key" | md5sum | cut -d' ' -f1)
-            mkdir -p "$cache_dir"
-            echo "$translated_text" > "${cache_dir}/${cache_key}"
-        else
-            debug_log "DEBUG" "Translation failed or unchanged, using original message"
+            # 翻訳実行
+            message=$(translate_text "$english_message" "$actual_lang")
+            
+            if [ $? -eq 0 ] && [ -n "$message" ] && [ "$message" != "$english_message" ]; then
+                debug_log "DEBUG" "Translation successful for key: $key"
+            else
+                message="$english_message"
+                debug_log "DEBUG" "Translation failed, using English text for key: $key"
+            fi
         fi
-    fi
+    } else {
+        # 英語にフォールバック
+        if [ -z "$message" ] && [ "$db_lang" != "US" ]; then
+            message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        }
+    }
     
-    # メッセージが空の場合はキーを返す
+    # キーをそのまま返す
     if [ -z "$message" ]; then
-        debug_log "WARNING" "Message not found for key: $key"
         message="$key"
-    fi
+    }
     
-    # パラメータ置換処理
+    # パラメータ置換
     if [ -n "$params" ]; then
         var_name=$(echo "$params" | cut -d'=' -f1)
         var_value=$(echo "$params" | cut -d'=' -f2-)
         
-        if [ -n "$var_name" ] && [ -n "$var_value" ]; then
-            debug_log "DEBUG" "Replacing placeholder {$var_name} with value"
-            var_value_esc=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
-            message=$(echo "$message" | sed "s|{$var_name}|$var_value_esc|g")
-        fi
-    fi
+        message=$(echo "$message" | sed "s|{$var_name}|$var_value|g")
+    }
     
     echo "$message"
 }
