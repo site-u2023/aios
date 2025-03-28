@@ -1018,8 +1018,11 @@ country_write() {
     # LuCI言語コードをキャッシュに保存
     echo "$luci_code" > "$cache_luci"
     debug_log "DEBUG" "LuCI language code written to cache: $luci_code"
+
+    # 翻訳処理（normalize_language前）
+    process_language_translation
     
-    # 言語を正規化（この行を追加）
+    # 言語を正規化
     debug_log "DEBUG" "Calling normalize_language to process language code"
     normalize_language
     
