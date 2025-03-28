@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-03-28-12-25"
+SCRIPT_VERSION="2025-03-28-12-35"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -34,8 +34,8 @@ TRANSLATION_CACHE_DIR="${BASE_DIR:-/tmp/aios}/translations"
 TRANSLATION_API="${TRANSLATION_API:-mymemory}"
 API_LIMIT_FILE="${CACHE_DIR}/api_limit.txt"
 
-# APIステータス表示フラグ（同じセッションで一度だけ表示）
-API_STATUS_SHOWN=0
+# APIステータス表示フラグ
+API_STATUS_CHECKED=0
 
 # 翻訳キャッシュの初期化
 init_translation_cache() {
@@ -47,7 +47,7 @@ init_translation_cache() {
 check_api_limit() {
     local api_name="$1"
     local now=$(date +%s)
-    local show_log="${2:-0}"
+    local show_log="${2:-1}"  # デフォルトは表示する
     
     if [ -f "$API_LIMIT_FILE" ]; then
         local api_data=$(grep "^${api_name}:" "$API_LIMIT_FILE" 2>/dev/null)
@@ -57,22 +57,25 @@ check_api_limit() {
             local remaining=$(( limit_until - now ))
             
             if [ $remaining -gt 0 ]; then
-                # 冗長なログを抑制 - show_logが1の場合のみ表示
-                if [ "$show_log" = "1" ] && [ "$API_STATUS_SHOWN" = "0" ]; then
+                if [ "$show_log" = "1" ]; then
                     local hours=$(( remaining / 3600 ))
                     local minutes=$(( (remaining % 3600) / 60 ))
                     local seconds=$(( remaining % 60 ))
-                    debug_log "INFO" "${api_name} quota limit: ${hours}h ${minutes}m ${seconds}s remaining until reset"
+                    debug_log "INFO" "${api_name} API quota exceeded: ${hours}h ${minutes}m ${seconds}s remaining until reset"
                 fi
                 return 1
             else
                 # 制限が解除されたので、ファイルから削除
                 sed -i "/^${api_name}:/d" "$API_LIMIT_FILE" 2>/dev/null
                 if [ "$show_log" = "1" ]; then
-                    debug_log "INFO" "${api_name} quota limit has been reset"
+                    debug_log "INFO" "${api_name} API quota has been reset and is now available"
                 fi
             fi
+        elif [ "$show_log" = "1" ]; then
+            debug_log "INFO" "${api_name} API is available for translation requests"
         fi
+    elif [ "$show_log" = "1" ]; then
+        debug_log "INFO" "${api_name} API has no recorded usage limits"
     fi
     
     return 0
@@ -187,7 +190,7 @@ translate_mymemory() {
     local encoded_text=$(urlencode "$text")
     local translated=""
     
-    # API制限をチェック - 冗長なログは出力しない
+    # API制限をチェック
     if ! check_api_limit "mymemory" 0; then
         debug_log "DEBUG" "MyMemory API quota still exceeded, skipping"
         return 1
@@ -224,7 +227,7 @@ translate_libretranslate() {
     local target_lang="$2"
     local translated=""
     
-    # API制限をチェック - 冗長なログは出力しない
+    # API制限をチェック
     if ! check_api_limit "libretranslate" 0; then
         debug_log "DEBUG" "LibreTranslate API quota still exceeded, skipping"
         return 1
@@ -283,7 +286,7 @@ translate_text() {
         return 1
     fi
     
-    # 各APIを順番に試す - 静かに失敗する
+    # 各APIを順番に試す
     case "$TRANSLATION_API" in
         mymemory)
             result=$(translate_mymemory "$text" "$target_lang")
@@ -294,7 +297,7 @@ translate_text() {
             
             # MyMemoryが失敗したらLibreTranslateを試す
             TRANSLATION_API="libretranslate"
-            debug_log "DEBUG" "Switching to LibreTranslate API"
+            debug_log "INFO" "Switching to LibreTranslate API after MyMemory API failure"
             ;;
     esac
     
@@ -305,54 +308,64 @@ translate_text() {
         return 0
     fi
     
-    # すべて失敗した場合は元のテキストを返す - 静かに失敗
+    # すべて失敗した場合は元のテキストを返す
+    debug_log "WARNING" "All translation APIs failed, using original text"
     echo "$text"
     return 1
 }
 
-# オンライン翻訳が利用可能か確認
-is_online_translation_available() {
-    # オンライン翻訳が無効ならfalse
-    if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
-        debug_log "DEBUG" "Online translation is disabled"
-        return 1
-    fi
-    
-    # ネットワーク接続確認
-    if ! ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
-        debug_log "WARNING" "Network unavailable for translation"
-        return 1
-    fi
-    
-    # 一度だけAPIステータスを詳細表示
-    if [ "$API_STATUS_SHOWN" = "0" ]; then
-        API_STATUS_SHOWN=1
+# 全APIの状態を確認して表示する
+check_all_apis() {
+    if [ "$API_STATUS_CHECKED" = "0" ]; then
+        API_STATUS_CHECKED=1
         
-        # API制限の状態を表示
-        debug_log "INFO" "Checking translation API status"
+        debug_log "INFO" "Checking all translation APIs status"
+        
+        # オンライン翻訳が無効の場合
+        if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
+            debug_log "INFO" "Online translation is disabled in configuration"
+            return 1
+        fi
+        
+        # ネットワーク接続確認
+        if ! ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
+            debug_log "WARNING" "Network is unavailable - cannot use online translation APIs"
+            return 1
+        fi
+        
+        # オフライン翻訳の状態を確認
+        local api_lang=$(get_api_lang_code)
+        local dictionary_file="${BASE_DIR}/dictionary_${api_lang}.txt"
+        
+        if [ -f "$dictionary_file" ]; then
+            local dict_entries=$(grep -c "=" "$dictionary_file" 2>/dev/null)
+            debug_log "INFO" "Offline dictionary for ${api_lang} is available with ${dict_entries} entries"
+        else
+            debug_log "INFO" "No offline dictionary found for ${api_lang}"
+        fi
+        
+        # 各APIの状態を確認
         local mymemory_available=0
         local libretranslate_available=0
         
-        # API制限をチェック
-        check_api_limit "mymemory" 1 || mymemory_available=1
-        check_api_limit "libretranslate" 1 || libretranslate_available=1
+        check_api_limit "mymemory" 1 && mymemory_available=1
+        check_api_limit "libretranslate" 1 && libretranslate_available=1
         
-        if [ $mymemory_available -eq 0 ] && [ $libretranslate_available -eq 0 ]; then
-            debug_log "WARNING" "All translation APIs are unavailable"
-            return 1
+        # 使用するAPIを決定
+        if [ $mymemory_available -eq 1 ]; then
+            TRANSLATION_API="mymemory"
+            debug_log "INFO" "Selected MyMemory as primary translation API"
+        elif [ $libretranslate_available -eq 1 ]; then
+            TRANSLATION_API="libretranslate"
+            debug_log "INFO" "Selected LibreTranslate as primary translation API"
         else
-            # 少なくとも1つのAPIが利用可能
-            if [ $mymemory_available -eq 0 ]; then
-                TRANSLATION_API="libretranslate"
-                debug_log "INFO" "Using LibreTranslate API"
-            else
-                TRANSLATION_API="mymemory"
-                debug_log "INFO" "Using MyMemory API"
-            fi
-            return 0
+            debug_log "WARNING" "No translation APIs are available - translation will be limited"
+            return 1
         fi
+        
+        return 0
     else
-        # 2回目以降は簡易チェックのみ
+        # 2回目以降は簡易チェックのみで詳細なログは出力しない
         if check_api_limit "mymemory" 0; then
             TRANSLATION_API="mymemory"
             return 0
@@ -363,6 +376,17 @@ is_online_translation_available() {
             return 1
         fi
     fi
+}
+
+# オンライン翻訳が利用可能か確認
+is_online_translation_available() {
+    # オンライン翻訳が有効で、ネットワークが利用可能で、少なくとも1つのAPIが使用可能
+    if [ "$ONLINE_TRANSLATION_ENABLED" = "yes" ] && ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
+        if check_api_limit "mymemory" 0 || check_api_limit "libretranslate" 0; then
+            return 0
+        fi
+    fi
+    return 1
 }
 
 # 最適化された言語DB作成関数
@@ -381,8 +405,10 @@ create_language_db() {
         return 1
     fi
     
+    # すべてのAPIの状態を確認
+    check_all_apis
+    
     # オンライン翻訳が利用可能か確認
-    # 利用できない場合はDBを作成せず終了
     if ! is_online_translation_available; then
         debug_log "WARNING" "Online translation unavailable. Skipping DB creation for ${target_lang}"
         return 1
@@ -464,7 +490,11 @@ EOF
     cat "$temp_file" >> "$output_db"
     rm -f "$temp_file"
     
-    debug_log "DEBUG" "Language DB creation completed in ${duration} seconds with ${successful_translations} translations"
+    debug_log "INFO" "Language DB creation completed in ${duration} seconds with ${successful_translations} translations"
+    
+    # 最終的に使用したAPIを表示
+    debug_log "INFO" "Translation completed using ${TRANSLATION_API} API"
+    
     return 0
 }
 
@@ -477,18 +507,18 @@ process_language_translation() {
     fi
     
     local lang_code=$(cat "${CACHE_DIR}/language.ch")
-    debug_log "DEBUG" "Processing translation for language: ${lang_code}"
+    debug_log "INFO" "Processing translation for language: ${lang_code}"
     
     # 言語DBの存在確認
     local lang_db="${BASE_DIR}/messages_${lang_code}.db"
     
     # 言語DBが存在しない場合または強制更新フラグがある場合のみ作成
     if [ ! -f "$lang_db" ] || [ -f "${CACHE_DIR}/force_translation_update" ]; then
-        debug_log "DEBUG" "Attempting to create translation DB for language: ${lang_code}"
+        debug_log "INFO" "Attempting to create translation DB for language: ${lang_code}"
         
         # create_language_dbが失敗した場合（APIが使えない場合など）はメッセージDBを作成しない
         if create_language_db "$lang_code"; then
-            debug_log "DEBUG" "Translation DB created successfully"
+            debug_log "INFO" "Translation DB created successfully for ${lang_code}"
         else
             debug_log "WARNING" "Translation DB creation failed, will use base messages"
         fi
@@ -496,7 +526,7 @@ process_language_translation() {
         # 強制更新フラグがあれば削除
         [ -f "${CACHE_DIR}/force_translation_update" ] && rm -f "${CACHE_DIR}/force_translation_update"
     else
-        debug_log "DEBUG" "Translation DB already exists for language: ${lang_code}"
+        debug_log "INFO" "Translation DB already exists for language: ${lang_code}"
     fi
     
     return 0
@@ -510,35 +540,55 @@ init_translation() {
     # 言語翻訳処理を実行
     process_language_translation
     
-    debug_log "DEBUG" "Translation module initialized with fallback to base messages when API is unavailable"
+    debug_log "INFO" "Translation module initialized - using available APIs and fallback when needed"
     return 0
 }
 
 # デバッグ用：APIの制限状態を表示
 show_api_limit_status() {
-    if [ ! -f "$API_LIMIT_FILE" ]; then
-        echo "No API limits set"
+    debug_log "INFO" "===== Translation API Status ====="
+    
+    if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
+        debug_log "INFO" "Online translation is disabled in configuration"
         return 0
+    fi
+    
+    # ネットワーク接続確認
+    if ! ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
+        debug_log "WARNING" "Network is unavailable - cannot use online translation APIs"
+        return 1
     fi
     
     local now=$(date +%s)
     
-    echo "===== API Quota Status ====="
-    while IFS=: read -r api_name limit_until; do
-        if [ -n "$api_name" ] && [ -n "$limit_until" ]; then
-            local remaining=$(( limit_until - now ))
-            
-            if [ $remaining -gt 0 ]; then
-                local hours=$(( remaining / 3600 ))
-                local minutes=$(( (remaining % 3600) / 60 ))
-                local seconds=$(( remaining % 60 ))
-                echo "${api_name}: Quota exceeded - Reset in ${hours}h ${minutes}m ${seconds}s"
-            else
-                echo "${api_name}: Quota available"
+    if [ ! -f "$API_LIMIT_FILE" ]; then
+        debug_log "INFO" "No API usage limits are currently set - all APIs should be available"
+    else
+        while IFS=: read -r api_name limit_until; do
+            if [ -n "$api_name" ] && [ -n "$limit_until" ]; then
+                local remaining=$(( limit_until - now ))
+                
+                if [ $remaining -gt 0 ]; then
+                    local hours=$(( remaining / 3600 ))
+                    local minutes=$(( (remaining % 3600) / 60 ))
+                    local seconds=$(( remaining % 60 ))
+                    debug_log "INFO" "${api_name}: Quota exceeded - Reset in ${hours}h ${minutes}m ${seconds}s"
+                else
+                    debug_log "INFO" "${api_name}: Quota available"
+                fi
             fi
-        fi
-    done < "$API_LIMIT_FILE"
-    echo "============================="
+        done < "$API_LIMIT_FILE"
+    fi
+    
+    # 使用するAPIを表示
+    if is_online_translation_available; then
+        debug_log "INFO" "Using ${TRANSLATION_API} API for translation"
+    else
+        debug_log "WARNING" "No translation APIs are currently available"
+    fi
+    
+    debug_log "INFO" "=================================="
+    return 0
 }
 
 # 初期化は外部から呼び出す
