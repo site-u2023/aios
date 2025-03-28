@@ -54,7 +54,28 @@ urlencode() {
     echo "$encoded"
 }
 
-# 言語DB全体を一度に翻訳
+# Unicodeエスケープシーケンスをデコードする関数
+decode_unicode() {
+    local text="$1"
+    local result=""
+    local temp_file="${TRANSLATION_CACHE_DIR}/unicode_decode_temp.txt"
+    
+    # OpenWrt環境に対応した最もシンプルな方法で実装
+    # printf + echo でデコードを試みる
+    printf "%b" "$(echo "$text" | sed 's/\\u/\\\\u/g')" > "$temp_file" 2>/dev/null
+    
+    if [ -s "$temp_file" ]; then
+        result=$(cat "$temp_file")
+        rm -f "$temp_file"
+        echo "$result"
+    else
+        # デコードに失敗した場合は元のテキストを返す
+        debug_log "DEBUG" "Unicode decoding failed, returning original text"
+        echo "$text"
+    fi
+}
+
+# 言語DB全体を一括翻訳
 prepare_translation_db() {
     local target_lang="$1"
     local api_lang=$(get_api_lang_code "$target_lang")
@@ -75,21 +96,35 @@ prepare_translation_db() {
     
     debug_log "DEBUG" "Creating translation cache DB for ${target_lang}"
     
+    # 一時ファイル
+    local temp_db="${TRANSLATION_CACHE_DIR}/temp_${target_lang}.db"
+    
     # US言語のエントリを抽出
-    local temp_file="${TRANSLATION_CACHE_DIR}/temp_${target_lang}.txt"
-    grep "^US|" "$db_file" > "$temp_file" 2>/dev/null
+    grep "^US|" "$db_file" > "$temp_db" 2>/dev/null
     
-    # 結果DB作成開始
-    : > "$cache_db"
+    # 各行を処理して翻訳＋DBに追加
+    : > "$cache_db"  # 一旦DBを空にする
     
-    # 各行を処理して翻訳
-    while IFS= read -r line; do
-        # キーと値を抽出
-        local key=$(echo "$line" | sed -n 's/^US|\([^=]*\)=.*/\1/p')
-        local value=$(echo "$line" | sed -n 's/^US|[^=]*=\(.*\)/\1/p')
+    # 翻訳バッチ作成 - 一度に全メッセージを翻訳
+    local messages_file="${TRANSLATION_CACHE_DIR}/${target_lang}_messages.txt"
+    local keys_file="${TRANSLATION_CACHE_DIR}/${target_lang}_keys.txt"
+    
+    # メッセージと対応するキーを抽出
+    sed -n 's/^US|\([^=]*\)=\(.*\)/\2/p' "$temp_db" > "$messages_file"
+    sed -n 's/^US|\([^=]*\)=.*/\1/p' "$temp_db" > "$keys_file"
+    
+    # 行数確認
+    local line_count=$(wc -l < "$messages_file")
+    debug_log "DEBUG" "Processing ${line_count} messages for translation"
+    
+    # 各行を処理
+    local i=1
+    while [ $i -le $line_count ]; do
+        local key=$(sed -n "${i}p" "$keys_file")
+        local value=$(sed -n "${i}p" "$messages_file")
         
         if [ -n "$key" ] && [ -n "$value" ]; then
-            debug_log "DEBUG" "Translating message key: ${key}"
+            debug_log "DEBUG" "Translating key: ${key}"
             
             # APIで翻訳
             local translated=$(curl -s -m 3 -X POST "https://libretranslate.de/translate" \
@@ -106,22 +141,31 @@ prepare_translation_db() {
             
             # 翻訳に成功した場合のみDB登録
             if [ -n "$translated" ] && [ "$translated" != "$value" ]; then
+                # エスケープシーケンスが含まれる場合はデコード
+                if echo "$translated" | grep -q '\\u[0-9a-fA-F]\{4\}'; then
+                    translated=$(decode_unicode "$translated")
+                fi
+                
                 echo "${target_lang}|${key}=${translated}" >> "$cache_db"
+                debug_log "DEBUG" "Added translation for key: ${key}"
             else
                 # 翻訳失敗時は原文を使用
                 echo "${target_lang}|${key}=${value}" >> "$cache_db"
+                debug_log "DEBUG" "Using original text for key: ${key}"
             fi
         fi
-    done < "$temp_file"
+        
+        i=$((i + 1))
+    done
     
     # 一時ファイルを削除
-    rm -f "$temp_file"
+    rm -f "$temp_db" "$messages_file" "$keys_file"
     
     debug_log "DEBUG" "Translation cache DB created for ${target_lang} with $(grep -c "" "$cache_db") entries"
     return 0
 }
 
-# メッセージ取得関数 - `get_message` を実装
+# メッセージ取得関数
 get_message() {
     local key="$1"
     local params="$2"
@@ -175,6 +219,12 @@ get_message() {
             if [ -n "$us_message" ]; then
                 debug_log "DEBUG" "No cached translation, using English message for key: ${key}"
                 message="$us_message"
+                
+                # メニューキャッシュに追加（次回以降の参照用）
+                if [ -f "$cache_db" ]; then
+                    echo "${actual_lang}|${key}=${message}" >> "$cache_db"
+                    debug_log "DEBUG" "Added English message to cache for future reference: ${key}"
+                fi
             fi
         fi
     fi
@@ -183,6 +233,12 @@ get_message() {
     if [ -z "$message" ]; then
         debug_log "DEBUG" "No message found for key: ${key}, using key as display text"
         message="$key"
+    else
+        # Unicodeエスケープシーケンスをデコード
+        if echo "$message" | grep -q '\\u[0-9a-fA-F]\{4\}'; then
+            message=$(decode_unicode "$message")
+            debug_log "DEBUG" "Decoded Unicode escape sequences in message for key: ${key}"
+        fi
     fi
     
     # パラメータ置換処理
