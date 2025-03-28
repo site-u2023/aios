@@ -1,10 +1,10 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-03-28-11-58"
+SCRIPT_VERSION="2025-03-28-12-15"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
-# 🚀 Last Update: 2025-03-14
+# 🚀 Last Update: 2025-03-28
 #
 # 🏷️ License: CC0 (Public Domain)
 # 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
@@ -12,25 +12,6 @@ SCRIPT_VERSION="2025-03-28-11-58"
 # ⚠️ IMPORTANT NOTICE:
 # OpenWrt OS exclusively uses **Almquist Shell (ash)** and
 # is **NOT** compatible with Bourne-Again Shell (bash).
-#
-# 📢 POSIX Compliance Guidelines:
-# ✅ Use `[` instead of `[[` for conditions
-# ✅ Use $(command) instead of backticks `command`
-# ✅ Use $(( )) for arithmetic instead of let
-# ✅ Define functions as func_name() {} (no function keyword)
-# ✅ No associative arrays (declare -A is NOT supported)
-# ✅ No here-strings (<<< is NOT supported)
-# ✅ No -v flag in test or [[
-# ✅ Avoid bash-specific string operations like ${var:0:3}
-# ✅ Avoid arrays entirely when possible (even indexed arrays can be problematic)
-# ✅ Use printf followed by read instead of read -p
-# ✅ Use printf instead of echo -e for portable formatting
-# ✅ Avoid process substitution <() and >()
-# ✅ Prefer case statements over complex if/elif chains
-# ✅ Use command -v instead of which or type for command existence checks
-# ✅ Keep scripts modular with small, focused functions
-# ✅ Use simple error handling instead of complex traps
-# ✅ Test scripts with ash/dash explicitly, not just bash
 #
 # 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
 
@@ -306,9 +287,32 @@ translate_text() {
     fi
     
     # すべて失敗した場合は元のテキストを返す
-    debug_log "WARNING" "All translation APIs failed, using original text"
+    debug_log "DEBUG" "All translation APIs failed, using original text"
     echo "$text"
     return 1
+}
+
+# オンライン翻訳が利用可能か確認
+is_online_translation_available() {
+    # オンライン翻訳が無効ならfalse
+    if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
+        debug_log "DEBUG" "Online translation is disabled"
+        return 1
+    fi
+    
+    # ネットワーク接続確認
+    if ! ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
+        debug_log "WARNING" "Network unavailable for translation"
+        return 1
+    fi
+    
+    # API制限を確認
+    if ! check_api_limit "mymemory" && ! check_api_limit "libretranslate"; then
+        debug_log "WARNING" "All translation APIs are quota limited"
+        return 1
+    fi
+    
+    return 0
 }
 
 # 最適化された言語DB作成関数
@@ -327,6 +331,13 @@ create_language_db() {
         return 1
     fi
     
+    # オンライン翻訳が利用可能か確認
+    # 利用できない場合はDBを作成せず終了
+    if ! is_online_translation_available; then
+        debug_log "WARNING" "Online translation unavailable. Skipping DB creation for ${target_lang}"
+        return 1
+    fi
+    
     # DBファイル作成 (常に新規作成・上書き)
     cat > "$output_db" << EOF
 SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
@@ -338,13 +349,6 @@ SUPPORTED_LANGUAGE_${target_lang}="${target_lang}"
 # フォーマット: 言語コード|メッセージキー=メッセージテキスト
 
 EOF
-    
-    # オンライン翻訳が無効なら翻訳せず置換するだけ
-    if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
-        debug_log "DEBUG" "Online translation disabled, using original text"
-        grep "^US|" "$base_db" | sed "s/^US|/${target_lang}|/" >> "$output_db"
-        return 0
-    fi
     
     # API制限の状態を表示
     debug_log "INFO" "Checking API limits before translation"
@@ -358,6 +362,7 @@ EOF
     
     # 処理時間を計測開始
     local start_time=$(date +%s)
+    local successful_translations=0
     
     # 各エントリを処理
     grep "^US|" "$base_db" | while IFS= read -r line; do
@@ -374,6 +379,7 @@ EOF
                 local translated=$(cat "$cache_file")
                 echo "${target_lang}|${key}=${translated}" >> "$temp_file"
                 debug_log "DEBUG" "Using cached translation for: ${key}"
+                successful_translations=$((successful_translations + 1))
             else
                 # キャッシュになければオンライン翻訳を実行
                 local translated=$(translate_text "$value" "$api_lang")
@@ -387,6 +393,7 @@ EOF
                     # DBに追加
                     echo "${target_lang}|${key}=${translated}" >> "$temp_file"
                     debug_log "DEBUG" "Added new translation for: ${key}"
+                    successful_translations=$((successful_translations + 1))
                 else
                     # 翻訳失敗時は原文をそのまま使用
                     echo "${target_lang}|${key}=${value}" >> "$temp_file"
@@ -400,6 +407,14 @@ EOF
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
     
+    # 成功した翻訳が少なすぎる場合はDBを作成しない
+    if [ "$successful_translations" -lt 10 ]; then
+        debug_log "WARNING" "Too few successful translations (${successful_translations}). Removing incomplete DB."
+        rm -f "$output_db"
+        rm -f "$temp_file"
+        return 1
+    fi
+    
     # 結果をDBに追加
     cat "$temp_file" >> "$output_db"
     rm -f "$temp_file"
@@ -409,7 +424,7 @@ EOF
     check_api_limit "mymemory"
     check_api_limit "libretranslate"
     
-    debug_log "DEBUG" "Language DB creation completed in ${duration} seconds"
+    debug_log "DEBUG" "Language DB creation completed in ${duration} seconds with ${successful_translations} translations"
     return 0
 }
 
@@ -429,8 +444,14 @@ process_language_translation() {
     
     # 言語DBが存在しない場合または強制更新フラグがある場合のみ作成
     if [ ! -f "$lang_db" ] || [ -f "${CACHE_DIR}/force_translation_update" ]; then
-        debug_log "DEBUG" "Creating translation DB for language: ${lang_code}"
-        create_language_db "$lang_code"
+        debug_log "DEBUG" "Attempting to create translation DB for language: ${lang_code}"
+        
+        # create_language_dbが失敗した場合（APIが使えない場合など）はメッセージDBを作成しない
+        if create_language_db "$lang_code"; then
+            debug_log "DEBUG" "Translation DB created successfully"
+        else
+            debug_log "WARNING" "Translation DB creation failed, will use base messages"
+        fi
         
         # 強制更新フラグがあれば削除
         [ -f "${CACHE_DIR}/force_translation_update" ] && rm -f "${CACHE_DIR}/force_translation_update"
@@ -449,7 +470,7 @@ init_translation() {
     # 言語翻訳処理を実行
     process_language_translation
     
-    debug_log "DEBUG" "Translation module initialized with performance optimizations"
+    debug_log "DEBUG" "Translation module initialized with fallback to base messages when API is unavailable"
     return 0
 }
 
