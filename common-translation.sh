@@ -58,7 +58,7 @@ urlencode() {
 unicode_decode() {
     local text="$1"
     
-    # シェル互換のユニコードデコード
+    # シンプルなパターン置換方式
     echo "$text" | sed 's/\\u\([0-9a-fA-F]\{4\}\)/\\\\\\U\1/g' | xargs -0 printf "%b"
 }
 
@@ -110,7 +110,7 @@ prepare_translation_db() {
     local value=""
     local translated=""
     
-    while [ $i -le "$line_count" ]; then
+    while [ $i -le "$line_count" ]; do
         key=$(sed -n "${i}p" "$keys_file")
         value=$(sed -n "${i}p" "$values_file")
         
@@ -314,16 +314,17 @@ get_message() {
     echo "$message"
 }
 
-# 初期化関数
+# 初期化関数 - バックグラウンドで翻訳DBを事前作成
 init_translation() {
+    # キャッシュディレクトリ初期化
     init_translation_cache
     
     # 言語設定の取得
     if [ -f "${CACHE_DIR}/language.ch" ]; then
         local lang=$(cat "${CACHE_DIR}/language.ch")
         if [ "$lang" != "US" ] && [ "$lang" != "JP" ]; then
-            # JP/US以外の言語の場合、バックグラウンドで翻訳DBを事前作成
-            (prepare_translation_db "$lang" > /dev/null 2>&1 &)
+            # 非同期処理は &で実行
+            prepare_translation_db "$lang" > /dev/null 2>&1 &
         fi
     fi
     
