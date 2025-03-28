@@ -1140,22 +1140,24 @@ normalize_language() {
         fi
     done
 
-    # DBが見つからなかった場合はデフォルトを使用
+    # DBが見つからなかった場合はUSにフォールバック
     if [ $found -eq 0 ]; then
         if [ -f "$base_db" ]; then
             target_db="$base_db"
-            debug_log "DEBUG" "Language not found in any DB, using base_db"
+            # 言語をUSに変更（フォールバック処理）
+            selected_language="US"
+            debug_log "DEBUG" "Language not found in any DB, falling back to US language with base_db"
         else
             debug_log "ERROR" "No valid message DB found"
             return 1
         fi
     fi
     
-    # 設定を保存（許可されたファイルのみ - message.chとmessage_db.ch）
+    # 設定を保存
     echo "$selected_language" > "$message_cache"
-    echo "$target_db" > "$message_db_ch"  # ここで.chファイルに書き込む
+    echo "$target_db" > "$message_db_ch"
     debug_log "DEBUG" "Updated message_cache=${selected_language}"
-    debug_log "DEBUG" "Updated message_db_ch with target DB path"
+    debug_log "DEBUG" "Updated message_db_ch with target DB path: ${target_db}"
     
     ACTIVE_LANGUAGE="$selected_language"
     
