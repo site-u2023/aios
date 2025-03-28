@@ -234,7 +234,11 @@ process_language_translation() {
 init_translation() {
     # キャッシュディレクトリ初期化
     init_translation_cache
-    debug_log "DEBUG" "Translation module initialized"
+    
+    # 言語翻訳処理を実行
+    process_language_translation
+    
+    debug_log "DEBUG" "Translation module initialized with language processing"
 }
 
 # 初期化実行
