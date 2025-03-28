@@ -597,17 +597,24 @@ detect_and_save_package_manager() {
         if command -v opkg >/dev/null 2>&1; then
             echo "opkg" > "${CACHE_DIR}/package_manager.ch"
             echo "ipk" > "${CACHE_DIR}/extension.ch"
+            PACKAGE_MANAGER="opkg"  # グローバル変数を設定
             debug_log "DEBUG" "Detected and saved package manager: opkg"
         elif command -v apk >/dev/null 2>&1; then
             echo "apk" > "${CACHE_DIR}/package_manager.ch"
             echo "apk" > "${CACHE_DIR}/extension.ch"
-            debug_log "DEBUG" "Detected and saved package manager: apk"
+            PACKAGE_MANAGER="apk"  # グローバル変数を設定
+            debug_log "DEBUG" "Detected and saved package manager: apk" 
         else
             # デフォルトとしてopkgを使用
             echo "opkg" > "${CACHE_DIR}/package_manager.ch"
             echo "ipk" > "${CACHE_DIR}/extension.ch"
-            echo "WARN: No package manager detected, using opkg as default"
+            PACKAGE_MANAGER="opkg"  # グローバル変数を設定
+            debug_log "WARN" "No package manager detected, using opkg as default"
         fi
+    else
+        # すでにファイルが存在する場合は、グローバル変数を設定
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/package_manager.ch")
+        debug_log "DEBUG" "Loaded package manager from cache: $PACKAGE_MANAGER"
     fi
 }
 
