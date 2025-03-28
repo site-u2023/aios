@@ -220,7 +220,7 @@ process_language_translation() {
     debug_log "DEBUG" "Processing translation for language: ${lang_code}"
     
     # USとJP以外の場合のみ翻訳DBを作成
-    if [ "$lang_code" != "US" ] && [ "$lang_code" != "JP" ]; then
+    if [ "$lang_code" != "US" ]; then
         # 翻訳DBを作成
         create_language_db "$lang_code"
     else
