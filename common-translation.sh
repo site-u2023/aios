@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # オンライン翻訳の有効/無効フラグ（デフォルトでは無効）
-ONLINE_TRANSLATION_ENABLED="${ONLINE_TRANSLATION_ENABLED:-no}"
+ONLINE_TRANSLATION_ENABLED="${ONLINE_TRANSLATION_ENABLED:-yes}"
 
 # 翻訳キャッシュ初期化
 init_translation_cache() {
