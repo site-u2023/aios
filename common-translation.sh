@@ -181,28 +181,35 @@ EOF
 process_language_translation() {
     # 既存の言語コードを取得
     if [ ! -f "${CACHE_DIR}/language.ch" ]; then
-        debug_log "DEBUG" "No language code found in cache"
+        debug_log "ERROR" "No language code file found at ${CACHE_DIR}/language.ch"
         return 1
     fi
     
     local lang_code=$(cat "${CACHE_DIR}/language.ch")
-    debug_log "DEBUG" "Processing translation for language: ${lang_code}"
+    debug_log "DEBUG" "Processing translation for language code: ${lang_code}"
     
-    # 言語DBが既に存在するか確認
-    local lang_db="${BASE_DIR}/messages_${lang_code}.db"
-    
-    # 言語DBが存在しない場合または強制更新フラグがある場合のみ作成する
-    if [ ! -f "$lang_db" ] || [ -f "${CACHE_DIR}/force_translation_update" ]; then
-        debug_log "DEBUG" "Creating translation DB for language: ${lang_code}"
-        create_language_db "$lang_code"
-        
-        # 強制更新フラグがあれば削除
-        [ -f "${CACHE_DIR}/force_translation_update" ] && rm -f "${CACHE_DIR}/force_translation_update"
-    else
-        debug_log "DEBUG" "Translation DB already exists for language: ${lang_code}"
+    # ベースDBファイルの存在確認
+    local base_db="${BASE_DIR}/messages_base.db"
+    if [ ! -f "$base_db" ]; then
+        debug_log "ERROR" "Base message database not found at ${base_db}"
+        return 1
     fi
     
-    return 0
+    # 言語コードに応じたDBファイル
+    local lang_db="${BASE_DIR}/messages_${lang_code}.db"
+    
+    # 翻訳ファイルの作成または更新
+    debug_log "DEBUG" "Creating/updating translation DB for ${lang_code}"
+    create_language_db "$lang_code"
+    
+    # 作成されたDBファイルの確認
+    if [ -f "$lang_db" ]; then
+        debug_log "DEBUG" "Successfully created translation DB at ${lang_db}"
+        return 0
+    else
+        debug_log "ERROR" "Failed to create translation DB for ${lang_code}"
+        return 1
+    fi
 }
 
 # 初期化関数
