@@ -146,9 +146,6 @@ batch_translate() {
                             echo "${target_lang}|${key}=${value}" >> "$result_file"
                             debug_log "DEBUG" "Translation failed, using original text for key: ${key}"
                         fi
-                        
-                        # APIレート制限対策 (短い待機時間)
-                        #sleep 0.5
                     else
                         # ネットワーク接続がない場合は原文を使用
                         echo "${target_lang}|${key}=${value}" >> "$result_file"
