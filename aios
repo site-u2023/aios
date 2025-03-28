@@ -1447,6 +1447,7 @@ check_common() {
             print_banner
             print_information
             select_country "$lang_code"
+            update_package_list
             selector "$MAIN_MENU" 
             ;;
         full)
@@ -1467,6 +1468,7 @@ check_common() {
             print_banner
             print_information
             select_country "$lang_code"
+            update_package_list
             selector "$MAIN_MENU"
             ;;
         update)
