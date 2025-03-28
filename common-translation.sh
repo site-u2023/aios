@@ -259,58 +259,87 @@ translate_libretranslate() {
     return 1
 }
 
-# テキストを翻訳する関数（複数のAPIに対応）
 translate_text() {
     local text="$1"
-    local target_lang="$2"
-    local result=""
+    local lang="$2"
+    local retry_count=0
+    local max_retries=2  # 最大リトライ回数
+    local tried_apis=""
     
-    # 空のテキストは処理しない
-    if [ -z "$text" ]; then
-        echo ""
-        return 0
-    fi
+    debug_log "DEBUG" "Translating text to ${lang}..."
     
-    # まずオフライン翻訳を試みる
-    result=$(translate_offline "$text" "$target_lang")
-    if [ "$result" != "$text" ]; then
-        debug_log "DEBUG" "Using offline translation"
-        echo "$result"
-        return 0
-    fi
-    
-    # ネットワーク接続確認
-    if ! ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
-        debug_log "WARNING" "Network unavailable, cannot translate online"
-        echo "$text"
-        return 1
-    fi
-    
-    # 各APIを順番に試す
-    case "$TRANSLATION_API" in
-        mymemory)
-            result=$(translate_mymemory "$text" "$target_lang")
-            if [ $? -eq 0 ]; then
-                echo "$result"
-                return 0
+    # リトライループ（最大回数までに制限）
+    while [ $retry_count -lt $max_retries ]; do
+        if [ "$TRANSLATION_API" = "mymemory" ]; then
+            # MyMemoryが既に試されたかチェック
+            if echo "$tried_apis" | grep -q "mymemory"; then
+                # 以前既に試したAPIなので、次へ進むか終了
+                if echo "$tried_apis" | grep -q "libretranslate"; then
+                    # 両方のAPIを試したがどちらも失敗
+                    debug_log "WARNING" "Both translation APIs failed, giving up"
+                    break
+                else
+                    # LibreTranslateを試す
+                    TRANSLATION_API="libretranslate"
+                    tried_apis="${tried_apis} libretranslate"
+                    debug_log "INFO" "Switching to LibreTranslate API after MyMemory API failure"
+                fi
+            else
+                # MyMemoryを試す
+                tried_apis="${tried_apis} mymemory"
+                local result=$(translate_with_mymemory "$text" "$lang")
+                
+                if [ -n "$result" ]; then
+                    echo "$result"
+                    return 0
+                else
+                    # 失敗したら別のAPIを試す
+                    TRANSLATION_API="libretranslate"
+                    debug_log "INFO" "Switching to LibreTranslate API after MyMemory API failure"
+                fi
             fi
-            
-            # MyMemoryが失敗したらLibreTranslateを試す
-            TRANSLATION_API="libretranslate"
-            debug_log "INFO" "Switching to LibreTranslate API after MyMemory API failure"
-            ;;
-    esac
+        elif [ "$TRANSLATION_API" = "libretranslate" ]; then
+            # LibreTranslateが既に試されたかチェック
+            if echo "$tried_apis" | grep -q "libretranslate"; then
+                # 以前既に試したAPIなので、次へ進むか終了
+                if echo "$tried_apis" | grep -q "mymemory"; then
+                    # 両方のAPIを試したがどちらも失敗
+                    debug_log "WARNING" "Both translation APIs failed, giving up"
+                    break
+                else
+                    # MyMemoryを試す
+                    TRANSLATION_API="mymemory"
+                    tried_apis="${tried_apis} mymemory"
+                    debug_log "INFO" "Switching to MyMemory API after LibreTranslate API failure"
+                fi
+            else
+                # LibreTranslateを試す
+                tried_apis="${tried_apis} libretranslate"
+                local result=$(translate_with_libretranslate "$text" "$lang")
+                
+                if [ -n "$result" ]; then
+                    echo "$result"
+                    return 0
+                else
+                    # 失敗したら別のAPIを試す
+                    TRANSLATION_API="mymemory"
+                    debug_log "INFO" "Switching to MyMemory API after LibreTranslate API failure"
+                fi
+            fi
+        fi
+        
+        # リトライ回数を増やす
+        retry_count=$((retry_count + 1))
+        
+        # 最大リトライ回数に達したかチェック
+        if [ $retry_count -ge $max_retries ]; then
+            debug_log "WARNING" "Maximum retry count reached, translation failed"
+            break
+        fi
+    done
     
-    # LibreTranslateを試す
-    result=$(translate_libretranslate "$text" "$target_lang")
-    if [ $? -eq 0 ]; then
-        echo "$result"
-        return 0
-    fi
-    
-    # すべて失敗した場合は元のテキストを返す
-    debug_log "WARNING" "All translation APIs failed, using original text"
-    echo "$text"
+    # すべてのAPIが失敗した場合
+    debug_log "WARNING" "All translation attempts failed"
     return 1
 }
 
@@ -403,12 +432,15 @@ create_language_db() {
     local output_db="${BASE_DIR}/messages_${target_lang}.db"
     local api_lang=$(get_api_lang_code)
     local temp_file="${TRANSLATION_CACHE_DIR}/translations_temp.txt"
+    local api_failure_count=0
+    local max_api_failures=3  # 連続失敗の許容回数
     
     debug_log "DEBUG" "Creating language DB for ${target_lang} with API language code ${api_lang}"
     
     # ベースDBファイル確認
     if [ ! -f "$base_db" ]; then
         debug_log "ERROR" "Base message DB not found at ${base_db}"
+        normalize_language
         return 1
     fi
     
@@ -418,7 +450,6 @@ create_language_db() {
     # オンライン翻訳が利用可能か確認
     if ! is_online_translation_available; then
         debug_log "WARNING" "Online translation unavailable. Skipping DB creation for ${target_lang}"
-        # APIが使えない場合は normalize_language 呼び出し
         normalize_language
         return 1
     fi
@@ -474,10 +505,22 @@ EOF
                     echo "${target_lang}|${key}=${translated}" >> "$temp_file"
                     debug_log "DEBUG" "Added new translation for: ${key}"
                     successful_translations=$((successful_translations + 1))
+                    
+                    # API失敗カウンターをリセット
+                    api_failure_count=0
                 else
                     # 翻訳失敗時は原文をそのまま使用
                     echo "${target_lang}|${key}=${value}" >> "$temp_file"
                     debug_log "DEBUG" "Translation failed for: ${key}, using original text"
+                    
+                    # API失敗カウンターを増やす
+                    api_failure_count=$((api_failure_count + 1))
+                    
+                    # 連続した失敗が多すぎる場合は中断
+                    if [ $api_failure_count -ge $max_api_failures ]; then
+                        debug_log "WARNING" "Too many consecutive API failures (${api_failure_count}). Aborting translation."
+                        break
+                    fi
                 fi
             fi
         fi
@@ -493,7 +536,8 @@ EOF
         rm -f "$output_db"
         rm -f "$temp_file"
         
-        # 翻訳に失敗した場合は normalize_language 呼び出し
+        # 翻訳に失敗した場合はnormalize_language呼び出し
+        debug_log "INFO" "Falling back to default language"
         normalize_language
         
         return 1
