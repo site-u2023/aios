@@ -440,14 +440,14 @@ get_package_description() {
     if [ ! -f "$package_cache" ]; then
         debug_log "DEBUG" "Package cache not found. Cannot retrieve description."
         return 1
-    }
+    fi
     
     # パッケージ名に一致する行を取得
     local package_line=$(grep "^$package_name " "$package_cache" 2>/dev/null)
     if [ -z "$package_line" ]; then
         debug_log "DEBUG" "Package $package_name not found in cache."
         return 1
-    }
+    fi
     
     # 説明部分を抽出（3番目のフィールド: 2つ目の '-' 以降、3つ目の '-' 以前）
     description=$(echo "$package_line" | awk -F' - ' '{if (NF >= 3) print $3}')
