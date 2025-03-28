@@ -148,7 +148,7 @@ batch_translate() {
                         fi
                         
                         # APIレート制限対策 (短い待機時間)
-                        sleep 0.5
+                        #sleep 0.5
                     else
                         # ネットワーク接続がない場合は原文を使用
                         echo "${target_lang}|${key}=${value}" >> "$result_file"
