@@ -262,7 +262,7 @@ US|CONFIG_DOWNLOAD_UNNECESSARY=No update needed:"
 }
 
 # メッセージを取得する関数
-OK_get_message() {
+get_message() {
     local key="$1"
     local params="$2"  # パラメータ文字列
     local lang="${lang:-US}" 
