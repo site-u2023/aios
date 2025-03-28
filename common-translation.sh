@@ -9,6 +9,24 @@ init_translation_cache() {
     debug_log "DEBUG" "Translation cache directory initialized"
 }
 
+# common-translation.sh内に追加
+init_translation() {
+    # キャッシュディレクトリの作成
+    mkdir -p "${CACHE_DIR}/translations"
+    
+    # 設定ファイルの読み込み
+    if [ -f "${CACHE_DIR}/config/translation.conf" ]; then
+        . "${CACHE_DIR}/config/translation.conf"
+    else
+        # デフォルト設定を作成
+        mkdir -p "${CACHE_DIR}/config"
+        echo "ONLINE_TRANSLATION_ENABLED=\"yes\"" > "${CACHE_DIR}/config/translation.conf"
+        ONLINE_TRANSLATION_ENABLED="yes"
+    fi
+    
+    debug_log "DEBUG" "Online translation initialized. Status: $ONLINE_TRANSLATION_ENABLED"
+}
+
 # 高信頼性翻訳関数
 translate_text() {
     local source_text="$1"
@@ -206,3 +224,6 @@ clear_translation_cache() {
     mkdir -p "${CACHE_DIR}/translations"
     debug_log "INFO" "Translation cache cleared"
 }
+
+# スクリプトロード時に自動実行
+init_translation
