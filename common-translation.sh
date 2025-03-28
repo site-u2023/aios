@@ -314,7 +314,6 @@ translate_text() {
     return 1
 }
 
-# 全APIの状態を確認して表示する
 check_all_apis() {
     if [ "$API_STATUS_CHECKED" = "0" ]; then
         API_STATUS_CHECKED=1
@@ -324,12 +323,16 @@ check_all_apis() {
         # オンライン翻訳が無効の場合
         if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
             debug_log "INFO" "Online translation is disabled in configuration"
+            # API無効の場合は normalize_language を呼び出し
+            normalize_language
             return 1
         fi
         
         # ネットワーク接続確認
         if ! ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
             debug_log "WARNING" "Network is unavailable - cannot use online translation APIs"
+            # ネットワーク接続できない場合は normalize_language を呼び出し
+            normalize_language
             return 1
         fi
         
@@ -360,12 +363,7 @@ check_all_apis() {
             debug_log "INFO" "Selected LibreTranslate as primary translation API"
         else
             debug_log "WARNING" "No translation APIs are available - using default US language"
-            # APIが使えない場合はUSを設定してnormalize_language呼び出し
-            local SELECT_LANGUAGE="US"
-            debug_log "INFO" "Setting SELECT_LANGUAGE to US and calling normalize_language"
-            if [ -f "${CACHE_DIR}/language.ch" ]; then
-                echo "$SELECT_LANGUAGE" > "${CACHE_DIR}/language.ch"
-            fi
+            # APIが使えない場合は normalize_language を呼び出し
             normalize_language
             return 1
         fi
@@ -380,12 +378,8 @@ check_all_apis() {
             TRANSLATION_API="libretranslate"
             return 0
         else
-            # すべてのAPIが利用不可の場合はUSを設定してnormalize_language呼び出し
-            local SELECT_LANGUAGE="US"
-            debug_log "WARNING" "All translation APIs are unavailable, using US language"
-            if [ -f "${CACHE_DIR}/language.ch" ]; then
-                echo "$SELECT_LANGUAGE" > "${CACHE_DIR}/language.ch"
-            fi
+            # すべてのAPIが利用不可の場合は normalize_language 呼び出し
+            debug_log "WARNING" "All translation APIs are unavailable, using default language"
             normalize_language
             return 1
         fi
@@ -403,7 +397,6 @@ is_online_translation_available() {
     return 1
 }
 
-# 最適化された言語DB作成関数
 create_language_db() {
     local target_lang="$1"
     local base_db="${BASE_DIR}/messages_base.db"
@@ -425,12 +418,7 @@ create_language_db() {
     # オンライン翻訳が利用可能か確認
     if ! is_online_translation_available; then
         debug_log "WARNING" "Online translation unavailable. Skipping DB creation for ${target_lang}"
-        # APIが使えない場合はUSを設定してnormalize_language呼び出し
-        local SELECT_LANGUAGE="US"
-        debug_log "INFO" "Setting SELECT_LANGUAGE to US due to unavailable APIs"
-        if [ -f "${CACHE_DIR}/language.ch" ]; then
-            echo "$SELECT_LANGUAGE" > "${CACHE_DIR}/language.ch"
-        fi
+        # APIが使えない場合は normalize_language 呼び出し
         normalize_language
         return 1
     fi
@@ -505,12 +493,7 @@ EOF
         rm -f "$output_db"
         rm -f "$temp_file"
         
-        # 翻訳に失敗した場合はUSを設定してnormalize_language呼び出し
-        local SELECT_LANGUAGE="US"
-        debug_log "INFO" "Setting SELECT_LANGUAGE to US due to insufficient translations"
-        if [ -f "${CACHE_DIR}/language.ch" ]; then
-            echo "$SELECT_LANGUAGE" > "${CACHE_DIR}/language.ch"
-        fi
+        # 翻訳に失敗した場合は normalize_language 呼び出し
         normalize_language
         
         return 1
@@ -528,7 +511,6 @@ EOF
     return 0
 }
 
-# 言語翻訳処理
 process_language_translation() {
     # 既存の言語コードを取得
     if [ ! -f "${CACHE_DIR}/language.ch" ]; then
@@ -547,15 +529,11 @@ process_language_translation() {
         debug_log "INFO" "Attempting to create translation DB for language: ${lang_code}"
         
         # create_language_dbが失敗した場合（APIが使えない場合など）は
-        # USを設定してnormalize_language呼び出し
+        # normalize_language 呼び出し
         if create_language_db "$lang_code"; then
             debug_log "INFO" "Translation DB created successfully for ${lang_code}"
         else
-            debug_log "WARNING" "Translation DB creation failed, using default language (US)"
-            local SELECT_LANGUAGE="US"
-            if [ -f "${CACHE_DIR}/language.ch" ]; then
-                echo "$SELECT_LANGUAGE" > "${CACHE_DIR}/language.ch"
-            fi
+            debug_log "WARNING" "Translation DB creation failed, using default language"
             normalize_language
         fi
         
