@@ -5,13 +5,13 @@
 # =========================================================
 
 # バージョン情報
-SCRIPT_VERSION="2025-03-28-09-35"
+SCRIPT_VERSION="2025-03-28-09-36"
 
 # オンライン翻訳を有効化
 ONLINE_TRANSLATION_ENABLED="yes"
 
 # 翻訳キャッシュディレクトリ
-TRANSLATION_CACHE_DIR="${CACHE_DIR}/translations"
+TRANSLATION_CACHE_DIR="${BASE_DIR:-/tmp/aios}/translations"
 
 # 翻訳キャッシュの初期化
 init_translation_cache() {
