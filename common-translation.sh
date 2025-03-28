@@ -43,6 +43,81 @@ init_translation_cache() {
     debug_log "DEBUG" "Translation cache directory initialized"
 }
 
+translate_with_mymemory() {
+    local text="$1"
+    local lang="$2"
+    
+    # Langdirはja_JPのような形式からja形式に変換
+    local lang_short=$(echo "$lang" | cut -d'_' -f1)
+    
+    debug_log "DEBUG" "Using MyMemory API to translate to ${lang_short}"
+    
+    # 翻訳リクエストを制限するためにキーを作成
+    local api_key="demo"
+    local email="demo@example.com"
+    
+    # URLエンコード
+    local encoded_text=$(urlencode "$text")
+    
+    # MyMemory APIへのリクエスト
+    local url="https://api.mymemory.translated.net/get?q=${encoded_text}&langpair=en|${lang_short}&key=${api_key}&de=${email}"
+    
+    # curlリクエスト実行（タイムアウト3秒設定）
+    local response
+    response=$(curl -s -m 3 "$url" 2>/dev/null)
+    
+    # レスポンス解析
+    if [ -n "$response" ] && echo "$response" | grep -q '"responseStatus":200'; then
+        # 翻訳テキスト抽出
+        local translated=$(echo "$response" | sed 's/.*"translatedText":"\([^"]*\)".*/\1/')
+        
+        # 翻訳が空かチェック
+        if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
+            echo "$translated"
+            return 0
+        fi
+    fi
+    
+    debug_log "WARNING" "MyMemory API translation failed"
+    return 1
+}
+
+translate_with_libretranslate() {
+    local text="$1"
+    local lang="$2"
+    
+    # Langdirはja_JPのような形式からja形式に変換
+    local lang_short=$(echo "$lang" | cut -d'_' -f1)
+    
+    debug_log "DEBUG" "Using LibreTranslate API to translate to ${lang_short}"
+    
+    # URLエンコード
+    local encoded_text=$(urlencode "$text")
+    
+    # LibreTranslate APIへのリクエスト
+    local url="https://libretranslate.com/translate"
+    local data="q=${encoded_text}&source=en&target=${lang_short}&format=text"
+    
+    # curlリクエスト実行（タイムアウト3秒設定）
+    local response
+    response=$(curl -s -m 3 -X POST -d "$data" "$url" 2>/dev/null)
+    
+    # レスポンス解析
+    if [ -n "$response" ] && echo "$response" | grep -q '"translatedText"'; then
+        # 翻訳テキスト抽出
+        local translated=$(echo "$response" | sed 's/.*"translatedText":"\([^"]*\)".*/\1/')
+        
+        # 翻訳が空かチェック
+        if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
+            echo "$translated"
+            return 0
+        fi
+    fi
+    
+    debug_log "WARNING" "LibreTranslate API translation failed"
+    return 1
+}
+
 # APIの使用制限ステータスを確認
 check_api_limit() {
     local api_name="$1"
