@@ -9,61 +9,68 @@ init_translation_cache() {
     debug_log "DEBUG" "Translation cache directory initialized"
 }
 
-# テキスト翻訳関数
+# 高信頼性翻訳関数
 translate_text() {
     local source_text="$1"
-    local target_lang="${2:-ja}"
-    local cache_key=$(echo "$source_text" | md5sum | cut -d' ' -f1)
+    local target_lang="$2"
+    local cache_key=$(echo "${source_text}${target_lang}" | md5sum | cut -d' ' -f1)
     local cache_dir="${CACHE_DIR}/translations/${target_lang}"
     local cache_file="${cache_dir}/${cache_key}"
     
     # キャッシュ確認
     if [ -f "$cache_file" ]; then
-        debug_log "DEBUG" "Using cached translation for text hash: ${cache_key}"
+        debug_log "DEBUG" "Using cached translation for hash: ${cache_key}"
         cat "$cache_file"
         return 0
-    fi
+    }
     
-    # ネットワーク接続確認
-    if ! ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
-        debug_log "DEBUG" "Network unavailable, using original text"
+    # ネットワーク確認（1秒タイムアウト）
+    if ! ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
+        debug_log "DEBUG" "Network unavailable, skipping translation"
         echo "$source_text"
         return 1
-    fi
+    }
     
-    debug_log "DEBUG" "Attempting translation with public APIs"
+    debug_log "DEBUG" "Attempting translation of text to ${target_lang}"
     mkdir -p "$cache_dir"
     
     # 翻訳結果変数
     local translation=""
     
+    # マッピングテーブル（message.chの言語コードをAPIの言語コードに変換）
+    case "$target_lang" in
+        "JP") api_lang="ja" ;;
+        "US") api_lang="en" ;;
+        "EG") api_lang="ar" ;;
+        "ES") api_lang="es" ;;
+        *) api_lang="$target_lang" ;;
+    esac
+    
     # API 1: LibreTranslate公開インスタンス
     if [ -z "$translation" ]; then
-        debug_log "DEBUG" "Trying LibreTranslate public API"
-        translation=$(curl -s -m 5 -X POST "https://libretranslate.de/translate" \
+        translation=$(curl -s -m 3 -X POST "https://libretranslate.de/translate" \
             -H "Content-Type: application/json" \
-            -d "{\"q\":\"$source_text\",\"source\":\"en\",\"target\":\"$target_lang\",\"format\":\"text\"}" | \
+            -d "{\"q\":\"$source_text\",\"source\":\"en\",\"target\":\"$api_lang\",\"format\":\"text\"}" | \
             sed -n 's/.*"translatedText":"\([^"]*\)".*/\1/p')
-    fi
+    }
     
-    # API 2: MyMemory API (1,000 words/day, no API key)
+    # API 2: MyMemory API (1,000 words/day)
     if [ -z "$translation" ]; then
-        debug_log "DEBUG" "Trying MyMemory public API"
-        translation=$(curl -s -m 5 "https://api.mymemory.translated.net/get?q=$(urlencode "$source_text")&langpair=en|$target_lang" | \
+        translation=$(curl -s -m 3 "https://api.mymemory.translated.net/get?q=$source_text&langpair=en|$api_lang" | \
             sed -n 's/.*"translatedText":"\([^"]*\)".*/\1/p')
-    fi
+    }
     
-    # 翻訳結果の確認と保存
+    # 翻訳成功確認
     if [ -n "$translation" ]; then
         debug_log "DEBUG" "Translation successful, caching result"
         echo "$translation" > "$cache_file"
         echo "$translation"
         return 0
-    else
-        debug_log "DEBUG" "All translation attempts failed, using original text"
+    } else {
+        debug_log "DEBUG" "Translation failed, returning original text"
         echo "$source_text"
         return 1
-    fi
+    }
 }
 
 # URL安全にエンコードする関数
