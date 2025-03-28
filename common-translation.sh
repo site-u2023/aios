@@ -54,6 +54,14 @@ urlencode() {
     echo "$encoded"
 }
 
+# ユニコードエスケープシーケンスをデコード
+unicode_decode() {
+    local text="$1"
+    
+    # Unicodeエスケープシーケンス(\uXXXX)をデコード
+    echo "$text" | sed 's/\\u\([0-9a-fA-F]\{4\}\)/\\\\\\U\1/g' | xargs -0 printf "%b"
+}
+
 # オンライン翻訳実行
 translate_text() {
     local source_text="$1"
@@ -107,6 +115,12 @@ translate_text() {
         debug_log "DEBUG" "Trying MyMemory API"
         translation=$(curl -s -m 3 "https://api.mymemory.translated.net/get?q=${encoded_text}&langpair=en|${api_lang}" | \
             sed -n 's/.*"translatedText":"\([^"]*\)".*/\1/p')
+    fi
+    
+    # Unicodeエスケープシーケンスをデコード
+    if [ -n "$translation" ] && echo "$translation" | grep -q '\\u[0-9a-fA-F]\{4\}'; then
+        debug_log "DEBUG" "Decoding Unicode escape sequences"
+        translation=$(unicode_decode "$translation")
     fi
     
     # 翻訳成功確認
