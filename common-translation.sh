@@ -43,6 +43,7 @@ init_translation_cache() {
     debug_log "DEBUG" "Translation cache directory initialized"
 }
 
+# MyMemory APIを使用した翻訳関数の修正
 translate_with_mymemory() {
     local text="$1"
     local lang="$2"
@@ -62,14 +63,18 @@ translate_with_mymemory() {
     # MyMemory APIへのリクエスト
     local url="https://api.mymemory.translated.net/get?q=${encoded_text}&langpair=en|${lang_short}&key=${api_key}&de=${email}"
     
-    # curlリクエスト実行（タイムアウト3秒設定）
+    # curlリクエスト実行（タイムアウト5秒に延長）
     local response
-    response=$(curl -s -m 3 "$url" 2>/dev/null)
+    response=$(curl -s -m 5 "$url" 2>/dev/null)
     
-    # レスポンス解析
+    # レスポンスのデバッグ出力
+    debug_log "DEBUG" "API Response (first 100 chars): ${response:0:100}"
+    
+    # レスポンス解析（sedパターンを修正）
     if [ -n "$response" ] && echo "$response" | grep -q '"responseStatus":200'; then
-        # 翻訳テキスト抽出
-        local translated=$(echo "$response" | sed 's/.*"translatedText":"\([^"]*\)".*/\1/')
+        # 翻訳テキスト抽出（修正版）
+        local translated=""
+        translated=$(echo "$response" | grep -o '"translatedText":"[^"]*"' | sed 's/"translatedText":"//;s/"$//')
         
         # 翻訳が空かチェック
         if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
@@ -78,10 +83,13 @@ translate_with_mymemory() {
         fi
     fi
     
-    debug_log "WARNING" "MyMemory API translation failed"
+    # 失敗時の詳細なデバッグ情報
+    debug_log "WARNING" "MyMemory API translation failed for text: ${text}"
+    debug_log "DEBUG" "Response: ${response}"
     return 1
 }
 
+# LibreTranslate APIを使用した翻訳関数の修正
 translate_with_libretranslate() {
     local text="$1"
     local lang="$2"
@@ -94,18 +102,22 @@ translate_with_libretranslate() {
     # URLエンコード
     local encoded_text=$(urlencode "$text")
     
-    # LibreTranslate APIへのリクエスト
-    local url="https://libretranslate.com/translate"
+    # LibreTranslate APIへのリクエスト（URLを更新）
+    local url="https://libretranslate.de/translate"
     local data="q=${encoded_text}&source=en&target=${lang_short}&format=text"
     
-    # curlリクエスト実行（タイムアウト3秒設定）
+    # curlリクエスト実行（タイムアウト5秒に延長）
     local response
-    response=$(curl -s -m 3 -X POST -d "$data" "$url" 2>/dev/null)
+    response=$(curl -s -m 5 -X POST -d "$data" "$url" 2>/dev/null)
     
-    # レスポンス解析
+    # レスポンスのデバッグ出力
+    debug_log "DEBUG" "API Response (first 100 chars): ${response:0:100}"
+    
+    # レスポンス解析（sedパターンを修正）
     if [ -n "$response" ] && echo "$response" | grep -q '"translatedText"'; then
-        # 翻訳テキスト抽出
-        local translated=$(echo "$response" | sed 's/.*"translatedText":"\([^"]*\)".*/\1/')
+        # 翻訳テキスト抽出（修正版）
+        local translated=""
+        translated=$(echo "$response" | grep -o '"translatedText":"[^"]*"' | sed 's/"translatedText":"//;s/"$//')
         
         # 翻訳が空かチェック
         if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
@@ -114,7 +126,9 @@ translate_with_libretranslate() {
         fi
     fi
     
-    debug_log "WARNING" "LibreTranslate API translation failed"
+    # 失敗時の詳細なデバッグ情報
+    debug_log "WARNING" "LibreTranslate API translation failed for text: ${text}"
+    debug_log "DEBUG" "Response: ${response}"
     return 1
 }
 
@@ -337,58 +351,75 @@ translate_libretranslate() {
 translate_text() {
     local text="$1"
     local lang="$2"
-    local tried_mymemory=0
-    local tried_libretranslate=0
-    local max_retries=2
     local retry_count=0
+    local max_retries=2  # 最大リトライ回数
+    local tried_apis=""
+    local current_api=""
     
-    debug_log "DEBUG" "Translating text to ${lang}..."
+    debug_log "DEBUG" "Translating text to ${lang}: ${text}"
     
-    # まず1つ目のAPIを試す
+    # APIが未選択の場合は選択する
+    if [ -z "$TRANSLATION_API" ] || [ "$TRANSLATION_API" != "mymemory" ] && [ "$TRANSLATION_API" != "libretranslate" ]; then
+        TRANSLATION_API="mymemory"  # デフォルト
+        debug_log "DEBUG" "No API selected, defaulting to ${TRANSLATION_API}"
+    fi
+    
+    # リトライループ
     while [ $retry_count -lt $max_retries ]; do
-        # MyMemory APIをまだ試していなければ試す
-        if [ $tried_mymemory -eq 0 ]; then
-            debug_log "DEBUG" "Trying MyMemory API..."
-            tried_mymemory=1
-            local result=$(translate_with_mymemory "$text" "$lang")
-            
-            if [ -n "$result" ]; then
-                debug_log "DEBUG" "MyMemory translation successful"
-                echo "$result"
-                return 0
+        current_api="$TRANSLATION_API"
+        debug_log "DEBUG" "Try #$((retry_count + 1)) with $current_api API"
+        
+        # 既に試したAPIかどうかチェック
+        if echo "$tried_apis" | grep -q "$current_api"; then
+            debug_log "DEBUG" "API $current_api already tried, switching APIs"
+            # 別のAPIに切り替え
+            if [ "$current_api" = "mymemory" ]; then
+                TRANSLATION_API="libretranslate"
+            else
+                TRANSLATION_API="mymemory"
             fi
+        else
+            # このAPIはまだ試していない
+            tried_apis="${tried_apis} ${current_api}"
             
-            debug_log "WARNING" "MyMemory API failed: $(curl -s -v -m 3 "https://api.mymemory.translated.net/get?q=test&langpair=en|ja" 2>&1 | grep -E "< HTTP|error|failed")"
+            local result=""
+            if [ "$current_api" = "mymemory" ]; then
+                result=$(translate_with_mymemory "$text" "$lang")
+                if [ -n "$result" ]; then
+                    debug_log "DEBUG" "MyMemory translation successful"
+                    echo "$result"
+                    return 0
+                else
+                    debug_log "INFO" "Switching to LibreTranslate API after MyMemory API failure"
+                    TRANSLATION_API="libretranslate"
+                fi
+            elif [ "$current_api" = "libretranslate" ]; then
+                result=$(translate_with_libretranslate "$text" "$lang")
+                if [ -n "$result" ]; then
+                    debug_log "DEBUG" "LibreTranslate translation successful"
+                    echo "$result"
+                    return 0
+                else
+                    debug_log "INFO" "Switching to MyMemory API after LibreTranslate API failure"
+                    TRANSLATION_API="mymemory"
+                fi
+            fi
         fi
         
-        # LibreTranslate APIをまだ試していなければ試す
-        if [ $tried_libretranslate -eq 0 ]; then
-            debug_log "DEBUG" "Trying LibreTranslate API..."
-            tried_libretranslate=1
-            local result=$(translate_with_libretranslate "$text" "$lang")
-            
-            if [ -n "$result" ]; then
-                debug_log "DEBUG" "LibreTranslate translation successful"
-                echo "$result"
-                return 0
-            fi
-            
-            debug_log "WARNING" "LibreTranslate API failed: $(curl -s -v -m 3 -X POST 'https://libretranslate.de/translate' -H 'Content-Type: application/json' -d "{\"q\":\"test\",\"source\":\"en\",\"target\":\"$lang\",\"format\":\"text\"}" 2>&1 | grep -E "< HTTP|error|failed")"
-        fi
-        
-        # 両方のAPIを試した場合
-        if [ $tried_mymemory -eq 1 ] && [ $tried_libretranslate -eq 1 ]; then
-            # タイムアウトを長くして再試行
-            if [ $retry_count -lt $((max_retries - 1)) ]; then
-                debug_log "WARNING" "Both APIs failed, retrying with longer timeout..."
-                sleep 2  # 少し待ってから再試行
-            fi
-            tried_mymemory=0
-            tried_libretranslate=0
+        # 両方のAPIを試したか確認
+        if echo "$tried_apis" | grep -q "mymemory" && echo "$tried_apis" | grep -q "libretranslate"; then
+            debug_log "DEBUG" "Both APIs tried in this cycle"
             retry_count=$((retry_count + 1))
+            
+            if [ $retry_count -lt $max_retries ]; then
+                debug_log "DEBUG" "Retrying translation after a short pause"
+                sleep 2  # 少し待ってからリトライ
+                tried_apis=""  # リセットして再試行
+            fi
         fi
     done
     
+    # すべての試行が失敗
     debug_log "ERROR" "All translation attempts failed for text: ${text}"
     debug_log "INFO" "Internet connectivity test: $(ping -c 1 -W 2 8.8.8.8 2>&1)"
     debug_log "INFO" "DNS resolution test: $(nslookup api.mymemory.translated.net 2>&1 | grep -E "Address|error")"
