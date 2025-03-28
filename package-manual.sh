@@ -70,7 +70,7 @@ packages() {
     print_section_header "PKG_SECTION_SYSADMIN"
     install_package irqbalance yn hidden
     install_package luci-mod-dashboard yn hidden
-    feed_package_release lisaac luci-app-diskman yn hidden disabled
+    feed_package_release lisaac luci-app-diskman yn hidden disabled desc=テスト
     
     # === ネットワーク管理 ===
     print_section_header "PKG_SECTION_NETWORK"
@@ -88,11 +88,11 @@ packages() {
     # === システム監視 ===
     print_section_header "PKG_SECTION_MONITORING"
     install_package htop yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden
-    feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled
-    feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden
+    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden desc=テスト
+    feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden desc=テスト
+    feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden desc=テスト
+    feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled desc=テスト
+    feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden desc=テスト
 
     # === ネットワーク診断ツール ===
     print_section_header "PKG_SECTION_NETWORK_DIAG"
@@ -103,7 +103,7 @@ packages() {
     # === テーマおよび見た目 ===
     print_section_header "PKG_SECTION_THEME"
     install_package luci-theme-openwrt yn hidden
-    feed_package_release jerrykuku luci-theme-argon yn hidden disabled
+    feed_package_release jerrykuku luci-theme-argon yn hidden disabled desc=テスト
 
     # === ユーティリティ ===
     print_section_header "PKG_SECTION_UTILITY"
