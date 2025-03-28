@@ -51,41 +51,43 @@ translate_with_mymemory() {
     # Langdirはja_JPのような形式からja形式に変換
     local lang_short=$(echo "$lang" | cut -d'_' -f1)
     
-    debug_log "DEBUG" "Using MyMemory API to translate to ${lang_short}"
-    
-    # 翻訳リクエストを制限するためにキーを作成
-    local api_key="demo"
-    local email="demo@example.com"
+    debug_log "DEBUG" "Using MyMemory API with wget to translate to ${lang_short}"
     
     # URLエンコード
     local encoded_text=$(urlencode "$text")
     
-    # MyMemory APIへのリクエスト
-    local url="https://api.mymemory.translated.net/get?q=${encoded_text}&langpair=en|${lang_short}&key=${api_key}&de=${email}"
+    # MyMemory APIへのリクエスト（認証情報なし）
+    local url="https://api.mymemory.translated.net/get?q=${encoded_text}&langpair=en|${lang_short}"
     
-    # curlリクエスト実行（タイムアウト5秒に延長）
-    local response
-    response=$(curl -s -m 5 "$url" 2>/dev/null)
+    # 一時ファイル作成
+    local temp_file="${CACHE_DIR}/mymemory_temp.json"
     
-    # レスポンスのデバッグ出力
-    debug_log "DEBUG" "API Response (first 100 chars): ${response:0:100}"
+    # wgetでリクエスト実行
+    wget -q -T 15 -O "$temp_file" "$url" 2>/dev/null
     
-    # レスポンス解析（sedパターンを修正）
-    if [ -n "$response" ] && echo "$response" | grep -q '"responseStatus":200'; then
-        # 翻訳テキスト抽出（修正版）
-        local translated=""
-        translated=$(echo "$response" | grep -o '"translatedText":"[^"]*"' | sed 's/"translatedText":"//;s/"$//')
+    # 失敗した場合
+    if [ $? -ne 0 ] || [ ! -s "$temp_file" ]; then
+        debug_log "WARNING" "MyMemory API request failed"
+        rm -f "$temp_file"
+        return 1
+    fi
+    
+    # レスポンス解析
+    if grep -q '"responseStatus":200' "$temp_file"; then
+        # 翻訳テキスト抽出
+        local translated=$(grep -o '"translatedText":"[^"]*"' "$temp_file" | head -1 | sed 's/"translatedText":"//;s/"$//')
         
         # 翻訳が空かチェック
         if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
+            debug_log "DEBUG" "MyMemory API translation successful"
+            rm -f "$temp_file"
             echo "$translated"
             return 0
         fi
     fi
     
-    # 失敗時の詳細なデバッグ情報
-    debug_log "WARNING" "MyMemory API translation failed for text: ${text}"
-    debug_log "DEBUG" "Response: ${response}"
+    rm -f "$temp_file"
+    debug_log "WARNING" "MyMemory API translation failed"
     return 1
 }
 
@@ -97,38 +99,52 @@ translate_with_libretranslate() {
     # Langdirはja_JPのような形式からja形式に変換
     local lang_short=$(echo "$lang" | cut -d'_' -f1)
     
-    debug_log "DEBUG" "Using LibreTranslate API to translate to ${lang_short}"
+    debug_log "DEBUG" "Using LibreTranslate API with wget to translate to ${lang_short}"
+    
+    # エンドポイントの指定（動作確認済み）
+    local endpoint="https://translate.argosopentech.com/translate"
     
     # URLエンコード
     local encoded_text=$(urlencode "$text")
     
-    # LibreTranslate APIへのリクエスト（URLを更新）
-    local url="https://libretranslate.de/translate"
-    local data="q=${encoded_text}&source=en&target=${lang_short}&format=text"
+    # POSTデータ作成
+    local post_data="q=${encoded_text}&source=en&target=${lang_short}&format=text"
+    local post_file="${CACHE_DIR}/libretranslate_post.txt"
+    local temp_file="${CACHE_DIR}/libretranslate_temp.json"
     
-    # curlリクエスト実行（タイムアウト5秒に延長）
-    local response
-    response=$(curl -s -m 5 -X POST -d "$data" "$url" 2>/dev/null)
+    # POSTデータをファイルに書き込み
+    echo "$post_data" > "$post_file"
     
-    # レスポンスのデバッグ出力
-    debug_log "DEBUG" "API Response (first 100 chars): ${response:0:100}"
+    # wgetでPOSTリクエスト実行
+    wget -q -T 15 --post-file="$post_file" -O "$temp_file" "$endpoint" 2>/dev/null
     
-    # レスポンス解析（sedパターンを修正）
-    if [ -n "$response" ] && echo "$response" | grep -q '"translatedText"'; then
-        # 翻訳テキスト抽出（修正版）
-        local translated=""
-        translated=$(echo "$response" | grep -o '"translatedText":"[^"]*"' | sed 's/"translatedText":"//;s/"$//')
-        
-        # 翻訳が空かチェック
-        if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
-            echo "$translated"
-            return 0
-        fi
+    # 失敗した場合
+    if [ $? -ne 0 ] || [ ! -s "$temp_file" ]; then
+        debug_log "WARNING" "LibreTranslate API request failed"
+        rm -f "$temp_file" "$post_file"
+        return 1
     fi
     
-    # 失敗時の詳細なデバッグ情報
-    debug_log "WARNING" "LibreTranslate API translation failed for text: ${text}"
-    debug_log "DEBUG" "Response: ${response}"
+    # エラーレスポンスのチェック
+    if grep -q "Too many requests\|Error\|error" "$temp_file"; then
+        debug_log "WARNING" "LibreTranslate API returned error response"
+        rm -f "$temp_file" "$post_file"
+        return 1
+    fi
+    
+    # 翻訳テキスト抽出
+    local translated=$(grep -o '"translatedText":"[^"]*"' "$temp_file" | head -1 | sed 's/"translatedText":"//;s/"$//')
+    
+    # 翻訳が空かチェック
+    if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
+        debug_log "DEBUG" "LibreTranslate API translation successful"
+        rm -f "$temp_file" "$post_file"
+        echo "$translated"
+        return 0
+    fi
+    
+    rm -f "$temp_file" "$post_file"
+    debug_log "WARNING" "LibreTranslate API translation failed"
     return 1
 }
 
