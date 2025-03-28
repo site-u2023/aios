@@ -1045,7 +1045,7 @@ map_country_code() {
     debug_log "DEBUG" "Processing country code: $country_code"
     
     # 各DBファイルを順に確認して言語マッピングを検索
-    local db_files="messages_etc.db messages_euro.db messages_asian.db messages_base.db"
+    local db_files="messages_base.db"
     
     for db_file in $db_files; do
         local full_path="${db_dir}/${db_file}"
@@ -1090,12 +1090,8 @@ map_country_code() {
 normalize_language() {
     # 必要なパス定義
     local base_db="${BASE_DIR}/messages_base.db"
-    local asian_db="${BASE_DIR}/messages_asian.db"
-    local euro_db="${BASE_DIR}/messages_euro.db"
-    local etc_db="${BASE_DIR}/messages_etc.db" 
     local language_cache="${CACHE_DIR}/language.ch"
     local message_cache="${CACHE_DIR}/message.ch"
-    local message_db_ch="${CACHE_DIR}/message_db.ch"
     local country_code=""
     local selected_language=""
     
@@ -1123,7 +1119,7 @@ normalize_language() {
     local found=0
     
     # 各DBファイルをチェック
-    for db_file in "$etc_db" "$euro_db" "$asian_db" "$base_db"; do
+    for db_file in "$base_db"; do
         if [ -f "$db_file" ]; then
             # DBファイルからSUPPORTED_LANGUAGESを抽出
             local supported_langs=$(grep "^SUPPORTED_LANGUAGES=" "$db_file" | cut -d'=' -f2 | tr -d '"')
