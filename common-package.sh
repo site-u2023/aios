@@ -111,13 +111,17 @@ update_package_list() {
     # キャッシュディレクトリの作成
     mkdir -p "$CACHE_DIR"
 
-    # キャッシュが存在する場合、最終更新時刻を取得
-    if [ -f "$update_cache" ]; then
+    # パッケージリストファイルの存在確認
+    if [ ! -f "$package_cache" ]; then
+        debug_log "DEBUG" "Package list file not found. Forcing update."
+        cache_time=0  # 強制的に更新
+    # キャッシュのタイムスタンプがある場合は取得
+    elif [ -f "$update_cache" ]; then
         cache_time=$(date -r "$update_cache" '+%s' 2>/dev/null || echo 0)
     fi
 
     # キャッシュが最新なら `opkg update` をスキップ
-    if [ $((current_time - cache_time)) -lt $max_age ]; then
+    if [ $((current_time - cache_time)) -lt $max_age ] && [ -f "$package_cache" ]; then
         debug_log "DEBUG" "Package list was updated within 24 hours. Skipping update."
         return 0
     fi
@@ -227,14 +231,23 @@ package_pre_install() {
     debug_log "DEBUG" "Checking repository for package: $check_extension"
 
     if [ ! -f "$package_cache" ]; then
-        debug_log "ERROR" "Package cache not found! Run update_package_list() first"
-        return 1
+        debug_log "DEBUG" "Package cache not found. Attempting to update."
+        update_package_list >/dev/null 2>&1
+        
+        # 更新後も存在しない場合は警告を出すが処理は継続
+        if [ ! -f "$package_cache" ]; then
+            debug_log "WARNING" "Package cache still not available after update attempt"
+            # キャッシュがなくてもインストール処理は続行（ローカルファイル等の場合）
+        fi
     fi
 
-    # パッケージがキャッシュ内に存在するか確認
-    if grep -q "^$package_name " "$package_cache"; then
-        debug_log "DEBUG" "Package $package_name found in repository"
-        return 0  # パッケージが存在するのでOK
+    # パッケージキャッシュが存在する場合のみチェック
+    if [ -f "$package_cache" ]; then
+        # パッケージがキャッシュ内に存在するか確認
+        if grep -q "^$package_name " "$package_cache"; then
+            debug_log "DEBUG" "Package $package_name found in repository"
+            return 0  # パッケージが存在するのでOK
+        fi
     fi
 
     # キャッシュに存在しない場合、FEED_DIR内を探してみる
@@ -244,7 +257,9 @@ package_pre_install() {
     fi
 
     debug_log "DEBUG" "Package $package_name not found in repository or FEED_DIR"
-    return 1  # パッケージが見つからなかった
+    # パッケージが見つからない場合でも強制的に1を返さずに0を返し、インストールを試みる
+    # ユーザーが直接ファイルパスを指定している場合などに対応
+    return 0
 }
 
 # 通常パッケージのインストール処理
