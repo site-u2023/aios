@@ -5,7 +5,7 @@
 # =========================================================
 
 # バージョン情報
-SCRIPT_VERSION="2025-03-28-11-32"
+SCRIPT_VERSION="2025-03-28-11-42"
 
 # オンライン翻訳を有効化
 ONLINE_TRANSLATION_ENABLED="yes"
@@ -189,7 +189,7 @@ process_language_translation() {
     debug_log "DEBUG" "Processing translation for language: ${lang_code}"
     
     # USとJP以外の場合のみ翻訳DBを作成
-    if [ "$lang_code" != "US" ] && [ "$lang_code" != "JP" ]; then
+    if [ "$lang_code" != "US" ]; then
         # 翻訳DBを作成
         create_language_db "$lang_code"
     else
@@ -204,11 +204,13 @@ init_translation() {
     # キャッシュディレクトリ初期化
     init_translation_cache
     
-    # 言語翻訳処理を実行
+    # 言語翻訳処理を実行（必ず実行されるように修正）
     process_language_translation
     
+    # 明示的に成功を示す
     debug_log "DEBUG" "Translation module initialized with performance optimizations"
+    return 0
 }
 
-# 初期化実行
-init_translation
+# 初期化は自動的に実行しない
+# init_translation
