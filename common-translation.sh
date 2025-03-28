@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-03-28-12-15"
+SCRIPT_VERSION="2025-03-28-12-25"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -12,6 +12,15 @@ SCRIPT_VERSION="2025-03-28-12-15"
 # ⚠️ IMPORTANT NOTICE:
 # OpenWrt OS exclusively uses **Almquist Shell (ash)** and
 # is **NOT** compatible with Bourne-Again Shell (bash).
+#
+# 📢 POSIX Compliance Guidelines:
+# ✅ Use `[` instead of `[[` for conditions
+# ✅ Use $(command) instead of backticks `command`
+# ✅ Use $(( )) for arithmetic instead of let
+# ✅ Define functions as func_name() {} (no function keyword)
+# ✅ No associative arrays (declare -A is NOT supported)
+# ✅ No here-strings (<<< is NOT supported)
+# ✅ No -v flag in test or [[
 #
 # 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
 
@@ -25,6 +34,9 @@ TRANSLATION_CACHE_DIR="${BASE_DIR:-/tmp/aios}/translations"
 TRANSLATION_API="${TRANSLATION_API:-mymemory}"
 API_LIMIT_FILE="${CACHE_DIR}/api_limit.txt"
 
+# APIステータス表示フラグ（同じセッションで一度だけ表示）
+API_STATUS_SHOWN=0
+
 # 翻訳キャッシュの初期化
 init_translation_cache() {
     mkdir -p "${TRANSLATION_CACHE_DIR}"
@@ -35,6 +47,7 @@ init_translation_cache() {
 check_api_limit() {
     local api_name="$1"
     local now=$(date +%s)
+    local show_log="${2:-0}"
     
     if [ -f "$API_LIMIT_FILE" ]; then
         local api_data=$(grep "^${api_name}:" "$API_LIMIT_FILE" 2>/dev/null)
@@ -44,14 +57,20 @@ check_api_limit() {
             local remaining=$(( limit_until - now ))
             
             if [ $remaining -gt 0 ]; then
-                local hours=$(( remaining / 3600 ))
-                local minutes=$(( (remaining % 3600) / 60 ))
-                local seconds=$(( remaining % 60 ))
-                debug_log "INFO" "${api_name} quota limit: ${hours}h ${minutes}m ${seconds}s remaining until reset"
+                # 冗長なログを抑制 - show_logが1の場合のみ表示
+                if [ "$show_log" = "1" ] && [ "$API_STATUS_SHOWN" = "0" ]; then
+                    local hours=$(( remaining / 3600 ))
+                    local minutes=$(( (remaining % 3600) / 60 ))
+                    local seconds=$(( remaining % 60 ))
+                    debug_log "INFO" "${api_name} quota limit: ${hours}h ${minutes}m ${seconds}s remaining until reset"
+                fi
                 return 1
             else
                 # 制限が解除されたので、ファイルから削除
                 sed -i "/^${api_name}:/d" "$API_LIMIT_FILE" 2>/dev/null
+                if [ "$show_log" = "1" ]; then
+                    debug_log "INFO" "${api_name} quota limit has been reset"
+                fi
             fi
         fi
     fi
@@ -168,8 +187,8 @@ translate_mymemory() {
     local encoded_text=$(urlencode "$text")
     local translated=""
     
-    # API制限をチェック
-    if ! check_api_limit "mymemory"; then
+    # API制限をチェック - 冗長なログは出力しない
+    if ! check_api_limit "mymemory" 0; then
         debug_log "DEBUG" "MyMemory API quota still exceeded, skipping"
         return 1
     fi
@@ -205,8 +224,8 @@ translate_libretranslate() {
     local target_lang="$2"
     local translated=""
     
-    # API制限をチェック
-    if ! check_api_limit "libretranslate"; then
+    # API制限をチェック - 冗長なログは出力しない
+    if ! check_api_limit "libretranslate" 0; then
         debug_log "DEBUG" "LibreTranslate API quota still exceeded, skipping"
         return 1
     fi
@@ -264,7 +283,7 @@ translate_text() {
         return 1
     fi
     
-    # 各APIを順番に試す
+    # 各APIを順番に試す - 静かに失敗する
     case "$TRANSLATION_API" in
         mymemory)
             result=$(translate_mymemory "$text" "$target_lang")
@@ -286,8 +305,7 @@ translate_text() {
         return 0
     fi
     
-    # すべて失敗した場合は元のテキストを返す
-    debug_log "DEBUG" "All translation APIs failed, using original text"
+    # すべて失敗した場合は元のテキストを返す - 静かに失敗
     echo "$text"
     return 1
 }
@@ -306,13 +324,45 @@ is_online_translation_available() {
         return 1
     fi
     
-    # API制限を確認
-    if ! check_api_limit "mymemory" && ! check_api_limit "libretranslate"; then
-        debug_log "WARNING" "All translation APIs are quota limited"
-        return 1
+    # 一度だけAPIステータスを詳細表示
+    if [ "$API_STATUS_SHOWN" = "0" ]; then
+        API_STATUS_SHOWN=1
+        
+        # API制限の状態を表示
+        debug_log "INFO" "Checking translation API status"
+        local mymemory_available=0
+        local libretranslate_available=0
+        
+        # API制限をチェック
+        check_api_limit "mymemory" 1 || mymemory_available=1
+        check_api_limit "libretranslate" 1 || libretranslate_available=1
+        
+        if [ $mymemory_available -eq 0 ] && [ $libretranslate_available -eq 0 ]; then
+            debug_log "WARNING" "All translation APIs are unavailable"
+            return 1
+        else
+            # 少なくとも1つのAPIが利用可能
+            if [ $mymemory_available -eq 0 ]; then
+                TRANSLATION_API="libretranslate"
+                debug_log "INFO" "Using LibreTranslate API"
+            else
+                TRANSLATION_API="mymemory"
+                debug_log "INFO" "Using MyMemory API"
+            fi
+            return 0
+        fi
+    else
+        # 2回目以降は簡易チェックのみ
+        if check_api_limit "mymemory" 0; then
+            TRANSLATION_API="mymemory"
+            return 0
+        elif check_api_limit "libretranslate" 0; then
+            TRANSLATION_API="libretranslate"
+            return 0
+        else
+            return 1
+        fi
     fi
-    
-    return 0
 }
 
 # 最適化された言語DB作成関数
@@ -349,11 +399,6 @@ SUPPORTED_LANGUAGE_${target_lang}="${target_lang}"
 # フォーマット: 言語コード|メッセージキー=メッセージテキスト
 
 EOF
-    
-    # API制限の状態を表示
-    debug_log "INFO" "Checking API limits before translation"
-    check_api_limit "mymemory"
-    check_api_limit "libretranslate"
     
     # 全エントリを抽出
     : > "$temp_file"
@@ -418,11 +463,6 @@ EOF
     # 結果をDBに追加
     cat "$temp_file" >> "$output_db"
     rm -f "$temp_file"
-    
-    # API制限の状態を再度表示
-    debug_log "INFO" "Checking API limits after translation"
-    check_api_limit "mymemory"
-    check_api_limit "libretranslate"
     
     debug_log "DEBUG" "Language DB creation completed in ${duration} seconds with ${successful_translations} translations"
     return 0
