@@ -24,14 +24,269 @@ TRANSLATION_CACHE_DIR="${BASE_DIR}/translations"
 CURRENT_LANGUAGE="${CURRENT_LANGUAGE:-en}"
 ONLINE_TRANSLATION_ENABLED="${ONLINE_TRANSLATION_ENABLED:-yes}"
 
-# デバッグログ関数
-debug_log() {
-    if [ "$DEBUG" -ge 1 ]; then
-        local level="$1"
-        local message="$2"
-        local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-        echo "[${timestamp}] ${level}: ${message}" >&2
+#!/bin/sh
+
+# =========================================================
+# 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
+# 🚀 Translation Module Initialization
+#
+# 📢 POSIX Compliance Guidelines:
+# ✅ Use `[` instead of `[[` for conditions
+# ✅ Use $(command) instead of backticks `command`
+# ✅ Use $(( )) for arithmetic instead of let
+# ✅ Define functions as func_name() {} (no function keyword)
+# ✅ No associative arrays (declare -A is NOT supported)
+# ✅ No here-strings (<<< is NOT supported)
+# ✅ No -v flag in test or [[
+#
+# 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
+# =========================================================
+
+# 翻訳モジュール初期化関数
+init_translation() {
+    local lang="$1"
+    local verbose="${2:-0}"
+    
+    # 環境変数設定
+    CURRENT_LANGUAGE="$lang"
+    ONLINE_TRANSLATION_ENABLED="yes"
+    
+    # 翻訳ディレクトリ確保
+    mkdir -p "${BASE_DIR}/translations" 2>/dev/null
+    
+    if [ "$verbose" -eq 1 ]; then
+        debug_log "INFO" "Processing translation for language: ${lang}"
+        debug_log "INFO" "Attempting to create translation DB for language: ${lang}"
     fi
+    
+    # APIステータスチェック
+    check_translation_api_status "$lang" "$verbose"
+    
+    # メッセージファイルの存在確認
+    if [ -f "${BASE_DIR}/messages.txt" ]; then
+        if [ "$verbose" -eq 1 ]; then
+            debug_log "INFO" "Message file found, using static translations where available"
+        fi
+    else
+        if [ "$verbose" -eq 1 ]; then
+            debug_log "WARNING" "No message file found, will rely on online translation only"
+        fi
+    fi
+    
+    # オフラインディクショナリチェック
+    check_offline_dictionary "$lang" "$verbose"
+    
+    # 言語キャッシュディレクトリ作成
+    local cache_file="${BASE_DIR}/translations/${lang}.cache"
+    touch "$cache_file" 2>/dev/null
+    
+    if [ "$verbose" -eq 1 ]; then
+        debug_log "INFO" "Translation module initialized - using available APIs and fallback when needed"
+    fi
+    
+    return 0
+}
+
+# API状態チェック関数
+check_translation_api_status() {
+    local lang="$1"
+    local verbose="${2:-0}"
+    
+    if [ "$verbose" -eq 1 ]; then
+        debug_log "INFO" "Checking all translation APIs status"
+    fi
+    
+    # 言語コードの短縮形を取得（ja_JP -> ja）
+    local lang_short=$(echo "$lang" | cut -d'_' -f1)
+    
+    # オフラインディクショナリのチェック
+    if [ -f "${BASE_DIR}/dictionaries/${lang_short}.txt" ]; then
+        if [ "$verbose" -eq 1 ]; then
+            debug_log "INFO" "Found offline dictionary for ${lang_short}"
+        fi
+    else
+        if [ "$verbose" -eq 1 ]; then
+            debug_log "INFO" "No offline dictionary found for ${lang_short}"
+        fi
+    fi
+    
+    # オンラインAPIの使用制限をチェック
+    local api_limit_file="${CACHE_DIR}/api_limit.txt"
+    
+    # MyMemory API チェック
+    if grep -q "mymemory_limit" "$api_limit_file" 2>/dev/null; then
+        if [ "$verbose" -eq 1 ]; then
+            debug_log "INFO" "MyMemory API has usage limits recorded"
+        fi
+    else
+        if [ "$verbose" -eq 1 ]; then
+            debug_log "INFO" "mymemory API has no recorded usage limits"
+        fi
+    fi
+    
+    # LibreTranslate API チェック
+    if grep -q "libretranslate_limit" "$api_limit_file" 2>/dev/null; then
+        if [ "$verbose" -eq 1 ]; then
+            debug_log "INFO" "LibreTranslate API has usage limits recorded"
+        fi
+    else
+        if [ "$verbose" -eq 1 ]; then
+            debug_log "INFO" "libretranslate API has no recorded usage limits"
+        fi
+    fi
+    
+    # API優先度設定
+    if [ "$verbose" -eq 1 ]; then
+        debug_log "INFO" "Selected MyMemory as primary translation API"
+    fi
+    
+    return 0
+}
+
+# オフラインディクショナリチェック関数
+check_offline_dictionary() {
+    local lang="$1"
+    local verbose="${2:-0}"
+    
+    # 言語コードの短縮形を取得（ja_JP -> ja）
+    local lang_short=$(echo "$lang" | cut -d'_' -f1)
+    
+    # ディクショナリディレクトリとファイル
+    local dict_dir="${BASE_DIR}/dictionaries"
+    local dict_file="${dict_dir}/${lang_short}.txt"
+    
+    mkdir -p "$dict_dir" 2>/dev/null
+    
+    # ディクショナリファイルが存在するかチェック
+    if [ -f "$dict_file" ]; then
+        if [ "$verbose" -eq 1 ]; then
+            local entries=$(wc -l < "$dict_file")
+            debug_log "INFO" "Found offline dictionary for ${lang_short} with ${entries} entries"
+        fi
+        return 0
+    fi
+    
+    # 存在しない場合は空のファイルを作成
+    touch "$dict_file" 2>/dev/null
+    
+    return 1
+}
+
+# ネットワーク接続テスト関数
+test_network_connectivity() {
+    local verbose="${1:-0}"
+    
+    if [ "$verbose" -eq 1 ]; then
+        debug_log "INFO" "Internet connectivity test: $(ping -c 1 8.8.8.8 2>&1)"
+    else
+        ping -c 1 8.8.8.8 >/dev/null 2>&1
+    fi
+    
+    local ping_status=$?
+    
+    if [ $ping_status -ne 0 ]; then
+        if [ "$verbose" -eq 1 ]; then
+            debug_log "WARNING" "No internet connectivity detected"
+        fi
+        return 1
+    fi
+    
+    # DNSテスト
+    if [ "$verbose" -eq 1 ]; then
+        debug_log "INFO" "DNS resolution test: $(nslookup amazon.com 2>&1)"
+    else
+        nslookup amazon.com >/dev/null 2>&1
+    fi
+    
+    local dns_status=$?
+    
+    if [ $dns_status -ne 0 ]; then
+        if [ "$verbose" -eq 1 ]; then
+            debug_log "WARNING" "DNS resolution failed"
+        fi
+        return 1
+    fi
+    
+    return 0
+}
+
+# 翻訳用のAWKユーティリティ関数
+decode_unicode_awk() {
+    local input="$1"
+    
+    # ユニコードエスケープがない場合は早期リターン
+    case "$input" in
+        *\\u*)
+            debug_log "DEBUG" "Decoding unicode escape sequences with awk"
+            ;;
+        *)
+            echo "$input"
+            return 0
+            ;;
+    esac
+    
+    # awkスクリプトでデコード
+    echo "$input" | awk '
+    BEGIN {
+        # 初期化
+    }
+    
+    function decode(str) {
+        result = ""
+        i = 1
+        len = length(str)
+        
+        while (i <= len) {
+            char = substr(str, i, 1)
+            if (char == "\\") {
+                if (substr(str, i+1, 1) == "u") {
+                    # ユニコードエスケープシーケンス (\uXXXX) を検出
+                    hex = substr(str, i+2, 4)
+                    i += 6
+                    
+                    # 16進数をコードポイントに変換
+                    code = strtonum("0x" hex)
+                    
+                    # UTF-8エンコーディングに変換
+                    if (code <= 0x7F) {
+                        # 1バイト文字 (0xxxxxxx)
+                        result = result sprintf("%c", code)
+                    } else if (code <= 0x7FF) {
+                        # 2バイト文字 (110xxxxx 10xxxxxx)
+                        byte1 = 0xC0 + int(code / 64)
+                        byte2 = 0x80 + (code % 64)
+                        result = result sprintf("%c%c", byte1, byte2)
+                    } else if (code <= 0xFFFF) {
+                        # 3バイト文字 (1110xxxx 10xxxxxx 10xxxxxx)
+                        byte1 = 0xE0 + int(code / 4096)
+                        byte2 = 0x80 + int((code % 4096) / 64)
+                        byte3 = 0x80 + (code % 64)
+                        result = result sprintf("%c%c%c", byte1, byte2, byte3)
+                    } else {
+                        # 4バイト文字 (11110xxx 10xxxxxx 10xxxxxx 10xxxxxx)
+                        # ほとんど使われないため、簡略化
+                        result = result "?"
+                    }
+                    i--  # ループで増加するため調整
+                } else {
+                    # その他のエスケープシーケンス
+                    result = result char
+                    i++
+                }
+            } else {
+                # 通常の文字
+                result = result char
+            }
+            i++
+        }
+        return result
+    }
+    
+    {
+        # 各行をデコードして出力
+        print decode($0)
+    }
+    '
 }
 
 # ディレクトリの作成
