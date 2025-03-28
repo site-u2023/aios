@@ -274,9 +274,8 @@ package_pre_install() {
     fi
 
     debug_log "DEBUG" "Package $package_name not found in repository or FEED_DIR"
-    # パッケージが見つからない場合でも強制的に1を返さずに0を返し、インストールを試みる
-    # ユーザーが直接ファイルパスを指定している場合などに対応
-    return 0
+    # リポジトリにもFEED_DIRにも存在しないパッケージはスキップする
+    return 1  # 修正: 0から1に変更
 }
 
 # 通常パッケージのインストール処理
