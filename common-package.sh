@@ -430,7 +430,39 @@ parse_package_options() {
     return 0
 }
 
-# パッケージ処理メイン部分
+# パッケージリストから説明を取得する関数
+get_package_description() {
+    local package_name="$1"
+    local package_cache="${CACHE_DIR}/package_list.ch"
+    local description=""
+    
+    # パッケージキャッシュの存在確認
+    if [ ! -f "$package_cache" ]; then
+        debug_log "DEBUG" "Package cache not found. Cannot retrieve description."
+        return 1
+    }
+    
+    # パッケージ名に一致する行を取得
+    local package_line=$(grep "^$package_name " "$package_cache" 2>/dev/null)
+    if [ -z "$package_line" ]; then
+        debug_log "DEBUG" "Package $package_name not found in cache."
+        return 1
+    }
+    
+    # 説明部分を抽出（3番目のフィールド: 2つ目の '-' 以降、3つ目の '-' 以前）
+    description=$(echo "$package_line" | awk -F' - ' '{if (NF >= 3) print $3}')
+    
+    # 説明が見つかった場合は出力
+    if [ -n "$description" ]; then
+        echo "$description"
+        return 0
+    fi
+    
+    debug_log "DEBUG" "No description found for package $package_name"
+    return 1
+}
+
+# パッケージ処理メイン部分の修正
 process_package() {
     local package_name="$1"
     local base_name="$2"
@@ -440,6 +472,7 @@ process_package() {
     local set_disabled="$6"
     local test_mode="$7"
     local lang_code="$8"
+    local description=""
 
     # 言語パッケージか通常パッケージかを判別
     case "$base_name" in
@@ -470,10 +503,13 @@ process_package() {
         debug_log "DEBUG" "Original package name: $package_name"
         debug_log "DEBUG" "Displaying package name: $display_name"
     
+        # パッケージリストから説明を取得
+        description=$(get_package_description "$package_name")
+        
         # 説明文があれば専用のメッセージキーを使用、プレースホルダー名を統一
-        if [ -n "$PKG_OPTIONS_DESCRIPTION" ]; then
-            # 説明文付きの確認メッセージ（プレースホルダー名を{pkg}に統一）
-            if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg" "$display_name" "desc" "$PKG_OPTIONS_DESCRIPTION"; then
+        if [ -n "$description" ]; then
+            # 説明文付きの確認メッセージ（プレースホルダー名を{pkg}と{desc}に統一）
+            if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg" "$display_name" "desc" "$description"; then
                 debug_log "DEBUG" "User declined installation of $display_name with description"
                 return 0
             fi
