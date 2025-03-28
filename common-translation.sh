@@ -54,7 +54,7 @@ urlencode() {
     echo "$encoded"
 }
 
-# 言語DB全体を一括翻訳してキャッシュ
+# 言語DB全体を一度に翻訳
 prepare_translation_db() {
     local target_lang="$1"
     local api_lang=$(get_api_lang_code "$target_lang")
@@ -75,49 +75,24 @@ prepare_translation_db() {
     
     debug_log "DEBUG" "Creating translation cache DB for ${target_lang}"
     
-    # 一時ファイル
-    local temp_db="${TRANSLATION_CACHE_DIR}/temp_${target_lang}.db"
-    
     # US言語のエントリを抽出
-    grep "^US|" "$db_file" > "$temp_db" 2>/dev/null
-    
-    # 翻訳バッチ処理用の一時ファイルを準備
-    local keys_file="${TRANSLATION_CACHE_DIR}/keys_${target_lang}.txt"
-    local values_file="${TRANSLATION_CACHE_DIR}/values_${target_lang}.txt"
-    
-    # キーと値を別々に抽出
-    sed -n 's/^US|\([^=]*\)=\(.*\)/\1/p' "$temp_db" > "$keys_file"
-    sed -n 's/^US|\([^=]*\)=\(.*\)/\2/p' "$temp_db" > "$values_file"
-    
-    # 値の配列を作成して翻訳
-    local line_count=$(wc -l < "$values_file")
-    debug_log "DEBUG" "Translating ${line_count} messages for ${target_lang}"
+    local temp_file="${TRANSLATION_CACHE_DIR}/temp_${target_lang}.txt"
+    grep "^US|" "$db_file" > "$temp_file" 2>/dev/null
     
     # 結果DB作成開始
     : > "$cache_db"
     
-    # 各行を処理
-    local i=1
-    local key=""
-    local value=""
-    local translated=""
-    
-    while [ $i -le "$line_count" ]; do
-        key=$(sed -n "${i}p" "$keys_file")
-        value=$(sed -n "${i}p" "$values_file")
+    # 各行を処理して翻訳
+    while IFS= read -r line; do
+        # キーと値を抽出
+        local key=$(echo "$line" | sed -n 's/^US|\([^=]*\)=.*/\1/p')
+        local value=$(echo "$line" | sed -n 's/^US|[^=]*=\(.*\)/\1/p')
         
-        # 既存の翻訳キャッシュを確認
-        local cache_key=$(echo "${value}${api_lang}" | md5sum | cut -d' ' -f1)
-        local value_cache="${TRANSLATION_CACHE_DIR}/${api_lang}/${cache_key}"
-        
-        if [ -f "$value_cache" ]; then
-            translated=$(cat "$value_cache")
-            debug_log "DEBUG" "Using cached translation for key: ${key}"
-        else
+        if [ -n "$key" ] && [ -n "$value" ]; then
             debug_log "DEBUG" "Translating message key: ${key}"
             
             # APIで翻訳
-            translated=$(curl -s -m 3 -X POST "https://libretranslate.de/translate" \
+            local translated=$(curl -s -m 3 -X POST "https://libretranslate.de/translate" \
                 -H "Content-Type: application/json" \
                 -d "{\"q\":\"$value\",\"source\":\"en\",\"target\":\"$api_lang\",\"format\":\"text\"}" | \
                 sed -n 's/.*"translatedText":"\([^"]*\)".*/\1/p')
@@ -129,95 +104,24 @@ prepare_translation_db() {
                     sed -n 's/.*"translatedText":"\([^"]*\)".*/\1/p')
             fi
             
-            # キャッシュに保存
+            # 翻訳に成功した場合のみDB登録
             if [ -n "$translated" ] && [ "$translated" != "$value" ]; then
-                mkdir -p "${TRANSLATION_CACHE_DIR}/${api_lang}"
-                echo "$translated" > "$value_cache"
+                echo "${target_lang}|${key}=${translated}" >> "$cache_db"
             else
-                translated="$value"  # 翻訳失敗時は原文を使用
+                # 翻訳失敗時は原文を使用
+                echo "${target_lang}|${key}=${value}" >> "$cache_db"
             fi
         fi
-        
-        # DBに書き込み - エスケープシーケンスを処理せず直接書き込み
-        echo "${target_lang}|${key}=${translated}" >> "$cache_db"
-        
-        i=$((i + 1))
-    done
+    done < "$temp_file"
     
     # 一時ファイルを削除
-    rm -f "$temp_db" "$keys_file" "$values_file"
+    rm -f "$temp_file"
     
-    debug_log "DEBUG" "Translation cache DB created for ${target_lang}"
+    debug_log "DEBUG" "Translation cache DB created for ${target_lang} with $(grep -c "" "$cache_db") entries"
     return 0
 }
 
-# 特定のメッセージキーを翻訳
-translate_message_key() {
-    local key="$1"
-    local target_lang="$2"
-    local value="$3"
-    
-    # キャッシュDBのパス
-    local cache_db="${TRANSLATION_CACHE_DIR}/${target_lang}_messages.db"
-    
-    # キャッシュDBからメッセージを検索
-    if [ -f "$cache_db" ]; then
-        local cached_msg=$(grep "^${target_lang}|${key}=" "$cache_db" 2>/dev/null | cut -d'=' -f2-)
-        if [ -n "$cached_msg" ]; then
-            debug_log "DEBUG" "Found cached translation for key: ${key}"
-            echo "$cached_msg"
-            return 0
-        fi
-    fi
-    
-    # APIで単一メッセージを翻訳
-    debug_log "DEBUG" "Translating single message for key: ${key}"
-    local api_lang=$(get_api_lang_code "$target_lang")
-    local translated=""
-    
-    # キャッシュキーと保存先
-    local cache_key=$(echo "${value}${api_lang}" | md5sum | cut -d' ' -f1)
-    local cache_dir="${TRANSLATION_CACHE_DIR}/${api_lang}"
-    local value_cache="${cache_dir}/${cache_key}"
-    
-    # 単一メッセージのキャッシュを確認
-    if [ -f "$value_cache" ]; then
-        debug_log "DEBUG" "Using cached single translation"
-        translated=$(cat "$value_cache")
-    else
-        # APIで翻訳
-        translated=$(curl -s -m 3 -X POST "https://libretranslate.de/translate" \
-            -H "Content-Type: application/json" \
-            -d "{\"q\":\"$value\",\"source\":\"en\",\"target\":\"$api_lang\",\"format\":\"text\"}" | \
-            sed -n 's/.*"translatedText":"\([^"]*\)".*/\1/p')
-        
-        # バックアップAPI
-        if [ -z "$translated" ]; then
-            local encoded_text=$(urlencode "$value")
-            translated=$(curl -s -m 3 "https://api.mymemory.translated.net/get?q=${encoded_text}&langpair=en|${api_lang}" | \
-                sed -n 's/.*"translatedText":"\([^"]*\)".*/\1/p')
-        fi
-        
-        # キャッシュに保存
-        if [ -n "$translated" ] && [ "$translated" != "$value" ]; then
-            mkdir -p "$cache_dir"
-            echo "$translated" > "$value_cache"
-            
-            # キャッシュDBにも追加
-            if [ ! -f "$cache_db" ]; then
-                mkdir -p "$(dirname "$cache_db")"
-                : > "$cache_db"
-            fi
-            echo "${target_lang}|${key}=${translated}" >> "$cache_db"
-        else
-            translated="$value"  # 翻訳失敗時は原文を使用
-        fi
-    fi
-    
-    echo "$translated"
-}
-
-# メッセージ取得関数
+# メッセージ取得関数 - `get_message` を実装
 get_message() {
     local key="$1"
     local params="$2"
@@ -265,12 +169,12 @@ get_message() {
             fi
         fi
         
-        # キャッシュにもなければ英語から翻訳
+        # キャッシュになければ英語から単一メッセージ翻訳
         if [ -z "$message" ]; then
             local us_message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
             if [ -n "$us_message" ]; then
-                debug_log "DEBUG" "Translating message key: ${key}"
-                message=$(translate_message_key "$key" "$actual_lang" "$us_message")
+                debug_log "DEBUG" "No cached translation, using English message for key: ${key}"
+                message="$us_message"
             fi
         fi
     fi
@@ -296,7 +200,7 @@ get_message() {
     echo "$message"
 }
 
-# 初期化関数 - バックグラウンドで翻訳DBを事前作成
+# 初期化関数
 init_translation() {
     # キャッシュディレクトリ初期化
     init_translation_cache
@@ -305,12 +209,8 @@ init_translation() {
     if [ -f "${CACHE_DIR}/language.ch" ]; then
         local lang=$(cat "${CACHE_DIR}/language.ch")
         if [ "$lang" != "US" ] && [ "$lang" != "JP" ]; then
-            # 非同期処理は &で実行（オプション）
-            # prepare_translation_db "$lang" > /dev/null 2>&1 &
-            
-            # OpenWrt環境では同期実行が安全
             debug_log "DEBUG" "Starting translation database preparation for ${lang}"
-            prepare_translation_db "$lang"
+            prepare_translation_db "$lang" &
         fi
     fi
     
