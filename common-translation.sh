@@ -43,6 +43,77 @@ init_translation_cache() {
     debug_log "DEBUG" "Translation cache directory initialized"
 }
 
+# ユニコードエスケープシーケンスをデコードする関数（awk使用）
+decode_unicode_awk() {
+    local text="$1"
+    
+    # Unicode エスケープがない場合はそのまま返す
+    case "$text" in
+        *\\u*)
+            debug_log "DEBUG" "Decoding Unicode escape sequences with awk"
+            ;;
+        *)
+            echo "$text"
+            return 0
+            ;;
+    esac
+    
+    # awkを使ってユニコードエスケープをデコード
+    echo "$text" | awk '
+        BEGIN {
+            for(i=0; i<256; i++)
+                ord[sprintf("%c",i)] = i;
+        }
+        
+        function decode(s) {
+            out = "";
+            for(i=1; i<=length(s); i++) {
+                c = substr(s, i, 1);
+                if(c == "\\") {
+                    if(substr(s, i+1, 1) == "u") {
+                        hex = substr(s, i+2, 4);
+                        i += 5;
+                        # Convert hex to UTF-8
+                        code = strtonum("0x" hex);
+                        if(code <= 0x7F) {
+                            out = out sprintf("%c", code);
+                        } else if(code <= 0x7FF) {
+                            out = out sprintf("%c%c", 0xC0 + int(code/64), 0x80 + (code % 64));
+                        } else {
+                            out = out sprintf("%c%c%c", 0xE0 + int(code/4096), 0x80 + int((code % 4096)/64), 0x80 + (code % 64));
+                        }
+                    } else {
+                        out = out c;
+                        i++;
+                    }
+                } else {
+                    out = out c;
+                }
+            }
+            return out;
+        }
+        
+        {
+            print decode($0);
+        }
+    '
+}
+
+process_translation() {
+    local key="$1"
+    local value="$2"
+    
+    # メッセージファイルからの翻訳の場合（ユニコードエスケープを含む）
+    if echo "$value" | grep -q '\\u'; then
+        debug_log "DEBUG" "Processing message with Unicode escapes"
+        echo $(decode_unicode_awk "$value")
+        return 0
+    fi
+    
+    # それ以外の場合（APIからの翻訳など）はそのまま返す
+    echo "$value"
+}
+
 # MyMemory APIを使用した翻訳関数の修正
 translate_with_mymemory() {
     local text="$1"
