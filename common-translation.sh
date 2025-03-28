@@ -54,15 +54,7 @@ urlencode() {
     echo "$encoded"
 }
 
-# ユニコードエスケープシーケンスをデコード
-unicode_decode() {
-    local text="$1"
-    
-    # シンプルなパターン置換方式
-    echo "$text" | sed 's/\\u\([0-9a-fA-F]\{4\}\)/\\\\\\U\1/g' | xargs -0 printf "%b"
-}
-
-# 言語DB全体を事前に翻訳してキャッシュ
+# 言語DB全体を一括翻訳してキャッシュ
 prepare_translation_db() {
     local target_lang="$1"
     local api_lang=$(get_api_lang_code "$target_lang")
@@ -137,11 +129,6 @@ prepare_translation_db() {
                     sed -n 's/.*"translatedText":"\([^"]*\)".*/\1/p')
             fi
             
-            # Unicodeデコード
-            if [ -n "$translated" ] && echo "$translated" | grep -q '\\u[0-9a-fA-F]\{4\}'; then
-                translated=$(unicode_decode "$translated")
-            fi
-            
             # キャッシュに保存
             if [ -n "$translated" ] && [ "$translated" != "$value" ]; then
                 mkdir -p "${TRANSLATION_CACHE_DIR}/${api_lang}"
@@ -151,7 +138,7 @@ prepare_translation_db() {
             fi
         fi
         
-        # DBに書き込み
+        # DBに書き込み - エスケープシーケンスを処理せず直接書き込み
         echo "${target_lang}|${key}=${translated}" >> "$cache_db"
         
         i=$((i + 1))
@@ -211,11 +198,6 @@ translate_message_key() {
                 sed -n 's/.*"translatedText":"\([^"]*\)".*/\1/p')
         fi
         
-        # Unicodeデコード
-        if [ -n "$translated" ] && echo "$translated" | grep -q '\\u[0-9a-fA-F]\{4\}'; then
-            translated=$(unicode_decode "$translated")
-        fi
-        
         # キャッシュに保存
         if [ -n "$translated" ] && [ "$translated" != "$value" ]; then
             mkdir -p "$cache_dir"
@@ -271,7 +253,7 @@ get_message() {
         local cache_db="${TRANSLATION_CACHE_DIR}/${actual_lang}_messages.db"
         
         if [ ! -f "$cache_db" ]; then
-            debug_log "DEBUG" "Translation cache DB not found for ${actual_lang}"
+            debug_log "DEBUG" "Translation cache DB not found for ${actual_lang}, creating it now"
             prepare_translation_db "$actual_lang"
         fi
         
@@ -323,8 +305,12 @@ init_translation() {
     if [ -f "${CACHE_DIR}/language.ch" ]; then
         local lang=$(cat "${CACHE_DIR}/language.ch")
         if [ "$lang" != "US" ] && [ "$lang" != "JP" ]; then
-            # 非同期処理は &で実行
-            prepare_translation_db "$lang" > /dev/null 2>&1 &
+            # 非同期処理は &で実行（オプション）
+            # prepare_translation_db "$lang" > /dev/null 2>&1 &
+            
+            # OpenWrt環境では同期実行が安全
+            debug_log "DEBUG" "Starting translation database preparation for ${lang}"
+            prepare_translation_db "$lang"
         fi
     fi
     
