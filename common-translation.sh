@@ -6,7 +6,7 @@
 # =========================================================
 
 # オンライン翻訳の有効/無効フラグ（デフォルトでは有効）
-ONLINE_TRANSLATION_ENABLED="${ONLINE_TRANSLATION_ENABLED:-yes}"
+ONLINE_TRANSLATION_ENABLED="yes"
 
 # 翻訳キャッシュディレクトリ
 TRANSLATION_CACHE_DIR="${CACHE_DIR}/translations"
@@ -107,6 +107,7 @@ translate_text() {
     local encoded_text=$(urlencode "$source_text")
     
     # LibreTranslate API
+    debug_log "DEBUG" "Trying LibreTranslate API"
     translation=$(curl -s -m 3 -X POST "https://libretranslate.de/translate" \
         -H "Content-Type: application/json" \
         -d "{\"q\":\"$source_text\",\"source\":\"en\",\"target\":\"$api_lang\",\"format\":\"text\"}" | \
@@ -126,7 +127,7 @@ translate_text() {
         echo "$translation"
         return 0
     else
-        debug_log "DEBUG" "Translation failed, using original text"
+        debug_log "DEBUG" "Translation failed or unchanged, using original text"
         echo "$source_text"
         return 1
     fi
@@ -161,13 +162,13 @@ get_message() {
     
     message=$(grep "^${db_lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
     
-    # 翻訳処理
-    if [ -z "$message" ] && [ "$db_lang" = "US" ] && [ "$actual_lang" != "US" ] && [ "$ONLINE_TRANSLATION_ENABLED" = "yes" ]; then
+    # メッセージがなく、ユーザー言語がUSと違う場合に翻訳を試みる
+    if [ -z "$message" ] && [ "$actual_lang" != "US" ] && [ "$ONLINE_TRANSLATION_ENABLED" = "yes" ]; then
         # 英語メッセージを取得
         message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
         
         if [ -n "$message" ]; then
-            debug_log "DEBUG" "Message found in English, attempting translation to ${actual_lang}"
+            debug_log "DEBUG" "Found English message for key: ${key}, attempting translation to ${actual_lang}"
             
             # 翻訳実行
             local translated_message=$(translate_text "$message" "$actual_lang")
@@ -183,6 +184,7 @@ get_message() {
     
     # メッセージが見つからない場合は、キーをそのまま返す
     if [ -z "$message" ]; then
+        debug_log "DEBUG" "No message found for key: ${key}, using key as display text"
         message="$key"
     fi
     
