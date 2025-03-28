@@ -238,4 +238,4 @@ init_translation() {
 }
 
 # 初期化実行
-init_translation
+# init_translation
