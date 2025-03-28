@@ -1,11 +1,10 @@
 #!/bin/sh
 
 # =========================================================
-# 📌 OpenWrt / Alpine Linux POSIX準拠シェルスクリプト
-# オンライン翻訳モジュール
+# 📌 OpenWrt用オンライン翻訳モジュール (POSIX準拠)
 # =========================================================
 
-# オンライン翻訳の有効/無効フラグ（デフォルトでは有効）
+# オンライン翻訳を常に有効化
 ONLINE_TRANSLATION_ENABLED="yes"
 
 # 翻訳キャッシュディレクトリ
@@ -17,36 +16,26 @@ init_translation_cache() {
     debug_log "DEBUG" "Translation cache directory initialized"
 }
 
-# 言語コード取得（動的マッピング）
+# APIで使用する言語コードを取得
 get_api_lang_code() {
-    local openwrt_code="$1"
-    local api_code=""
+    local target_lang="$1"
+    local api_lang=""
     
-    # luci.chからのマッピングを優先
+    # luci.ch (APIで使用する言語コード) を優先使用
     if [ -f "${CACHE_DIR}/luci.ch" ]; then
-        api_code=$(cat "${CACHE_DIR}/luci.ch")
-        debug_log "DEBUG" "Using language code from luci.ch: ${api_code}"
-        echo "$api_code"
+        api_lang=$(cat "${CACHE_DIR}/luci.ch")
+        debug_log "DEBUG" "Using language code from luci.ch: ${api_lang}"
+        echo "$api_lang"
         return 0
     fi
     
-    # 動的マッピングファイルがあれば使用
-    if [ -f "${CACHE_DIR}/lang_mapping.conf" ]; then
-        api_code=$(grep "^${openwrt_code}=" "${CACHE_DIR}/lang_mapping.conf" 2>/dev/null | cut -d'=' -f2)
-        if [ -n "$api_code" ]; then
-            debug_log "DEBUG" "Found mapping in lang_mapping.conf: ${openwrt_code} -> ${api_code}"
-            echo "$api_code"
-            return 0
-        fi
-    fi
-    
-    # 最後の手段として小文字変換
-    api_code=$(echo "$openwrt_code" | tr '[:upper:]' '[:lower:]')
-    debug_log "DEBUG" "Using lowercase conversion: ${openwrt_code} -> ${api_code}"
-    echo "$api_code"
+    # luci.chがない場合は小文字変換
+    api_lang=$(echo "$target_lang" | tr '[:upper:]' '[:lower:]')
+    debug_log "DEBUG" "Using lowercase language code: ${api_lang}"
+    echo "$api_lang"
 }
 
-# URL安全エンコード関数（POSIX準拠）
+# URL安全エンコード関数
 urlencode() {
     local string="$1"
     local encoded=""
@@ -77,7 +66,7 @@ translate_text() {
         return 1
     fi
     
-    # API用言語コード取得
+    # API用言語コード取得 (luci.chから)
     local api_lang=$(get_api_lang_code "$target_lang")
     
     # キャッシュキー生成
@@ -127,13 +116,13 @@ translate_text() {
         echo "$translation"
         return 0
     else
-        debug_log "DEBUG" "Translation failed or unchanged, using original text"
+        debug_log "DEBUG" "Translation failed, using original text"
         echo "$source_text"
         return 1
     fi
 }
 
-# get_message関数の拡張版
+# get_message関数 - メッセージキーからテキストを取得し必要に応じて翻訳
 get_message() {
     local key="$1"
     local params="$2"
@@ -160,15 +149,16 @@ get_message() {
         db_file=$(cat "${CACHE_DIR}/message_db.ch")
     fi
     
+    # 現在の言語でメッセージを検索
     message=$(grep "^${db_lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
     
-    # メッセージがなく、ユーザー言語がUSと違う場合に翻訳を試みる
-    if [ -z "$message" ] && [ "$actual_lang" != "US" ] && [ "$ONLINE_TRANSLATION_ENABLED" = "yes" ]; then
-        # 英語メッセージを取得
+    # メッセージが見つからず、オンライン翻訳が有効な場合
+    if [ -z "$message" ] && [ "$ONLINE_TRANSLATION_ENABLED" = "yes" ]; then
+        # US言語からメッセージを取得
         message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
         
-        if [ -n "$message" ]; then
-            debug_log "DEBUG" "Found English message for key: ${key}, attempting translation to ${actual_lang}"
+        if [ -n "$message" ] && [ "$actual_lang" != "US" ]; then
+            debug_log "DEBUG" "Found English message, attempting translation for key: ${key}"
             
             # 翻訳実行
             local translated_message=$(translate_text "$message" "$actual_lang")
@@ -177,12 +167,12 @@ get_message() {
                 debug_log "DEBUG" "Translation successful for key: ${key}"
                 message="$translated_message"
             else
-                debug_log "DEBUG" "Translation failed, using English message for key: ${key}"
+                debug_log "DEBUG" "Translation failed for key: ${key}, using English message"
             fi
         fi
     fi
     
-    # メッセージが見つからない場合は、キーをそのまま返す
+    # メッセージが見つからない場合はキーをそのまま返す
     if [ -z "$message" ]; then
         debug_log "DEBUG" "No message found for key: ${key}, using key as display text"
         message="$key"
