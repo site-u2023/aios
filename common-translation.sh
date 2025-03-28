@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-03-28-12-35"
+SCRIPT_VERSION="2025-03-28-12-45"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -359,7 +359,14 @@ check_all_apis() {
             TRANSLATION_API="libretranslate"
             debug_log "INFO" "Selected LibreTranslate as primary translation API"
         else
-            debug_log "WARNING" "No translation APIs are available - translation will be limited"
+            debug_log "WARNING" "No translation APIs are available - using default US language"
+            # APIが使えない場合はUSを設定してnormalize_language呼び出し
+            local SELECT_LANGUAGE="US"
+            debug_log "INFO" "Setting SELECT_LANGUAGE to US and calling normalize_language"
+            if [ -f "${CACHE_DIR}/language.ch" ]; then
+                echo "$SELECT_LANGUAGE" > "${CACHE_DIR}/language.ch"
+            fi
+            normalize_language
             return 1
         fi
         
@@ -373,6 +380,13 @@ check_all_apis() {
             TRANSLATION_API="libretranslate"
             return 0
         else
+            # すべてのAPIが利用不可の場合はUSを設定してnormalize_language呼び出し
+            local SELECT_LANGUAGE="US"
+            debug_log "WARNING" "All translation APIs are unavailable, using US language"
+            if [ -f "${CACHE_DIR}/language.ch" ]; then
+                echo "$SELECT_LANGUAGE" > "${CACHE_DIR}/language.ch"
+            fi
+            normalize_language
             return 1
         fi
     fi
@@ -411,6 +425,13 @@ create_language_db() {
     # オンライン翻訳が利用可能か確認
     if ! is_online_translation_available; then
         debug_log "WARNING" "Online translation unavailable. Skipping DB creation for ${target_lang}"
+        # APIが使えない場合はUSを設定してnormalize_language呼び出し
+        local SELECT_LANGUAGE="US"
+        debug_log "INFO" "Setting SELECT_LANGUAGE to US due to unavailable APIs"
+        if [ -f "${CACHE_DIR}/language.ch" ]; then
+            echo "$SELECT_LANGUAGE" > "${CACHE_DIR}/language.ch"
+        fi
+        normalize_language
         return 1
     fi
     
@@ -483,6 +504,15 @@ EOF
         debug_log "WARNING" "Too few successful translations (${successful_translations}). Removing incomplete DB."
         rm -f "$output_db"
         rm -f "$temp_file"
+        
+        # 翻訳に失敗した場合はUSを設定してnormalize_language呼び出し
+        local SELECT_LANGUAGE="US"
+        debug_log "INFO" "Setting SELECT_LANGUAGE to US due to insufficient translations"
+        if [ -f "${CACHE_DIR}/language.ch" ]; then
+            echo "$SELECT_LANGUAGE" > "${CACHE_DIR}/language.ch"
+        fi
+        normalize_language
+        
         return 1
     fi
     
@@ -516,11 +546,17 @@ process_language_translation() {
     if [ ! -f "$lang_db" ] || [ -f "${CACHE_DIR}/force_translation_update" ]; then
         debug_log "INFO" "Attempting to create translation DB for language: ${lang_code}"
         
-        # create_language_dbが失敗した場合（APIが使えない場合など）はメッセージDBを作成しない
+        # create_language_dbが失敗した場合（APIが使えない場合など）は
+        # USを設定してnormalize_language呼び出し
         if create_language_db "$lang_code"; then
             debug_log "INFO" "Translation DB created successfully for ${lang_code}"
         else
-            debug_log "WARNING" "Translation DB creation failed, will use base messages"
+            debug_log "WARNING" "Translation DB creation failed, using default language (US)"
+            local SELECT_LANGUAGE="US"
+            if [ -f "${CACHE_DIR}/language.ch" ]; then
+                echo "$SELECT_LANGUAGE" > "${CACHE_DIR}/language.ch"
+            fi
+            normalize_language
         fi
         
         # 強制更新フラグがあれば削除
@@ -585,6 +621,7 @@ show_api_limit_status() {
         debug_log "INFO" "Using ${TRANSLATION_API} API for translation"
     else
         debug_log "WARNING" "No translation APIs are currently available"
+        debug_log "INFO" "Will use default language (US) if needed"
     fi
     
     debug_log "INFO" "=================================="
