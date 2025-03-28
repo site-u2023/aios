@@ -462,7 +462,7 @@ get_package_description() {
     return 1
 }
 
-# パッケージ処理メイン部分の修正
+# パッケージ処理メイン部分
 process_package() {
     local package_name="$1"
     local base_name="$2"
@@ -503,12 +503,21 @@ process_package() {
         debug_log "DEBUG" "Original package name: $package_name"
         debug_log "DEBUG" "Displaying package name: $display_name"
     
-        # パッケージリストから説明を取得
-        description=$(get_package_description "$package_name")
+        # 説明文の優先順位：
+        # 1. パラメータで指定された説明（PKG_OPTIONS_DESCRIPTION）があれば優先
+        # 2. なければパッケージリストから取得
+        if [ -n "$PKG_OPTIONS_DESCRIPTION" ]; then
+            description="$PKG_OPTIONS_DESCRIPTION"
+            debug_log "DEBUG" "Using manually provided description: $description"
+        else
+            # パッケージリストから説明を取得
+            description=$(get_package_description "$package_name")
+            debug_log "DEBUG" "Using repository description: $description"
+        fi
         
-        # 説明文があれば専用のメッセージキーを使用、プレースホルダー名を統一
+        # 説明文があれば専用のメッセージキーを使用
         if [ -n "$description" ]; then
-            # 説明文付きの確認メッセージ（プレースホルダー名を{pkg}と{desc}に統一）
+            # 説明文付きの確認メッセージ
             if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg" "$display_name" "desc" "$description"; then
                 debug_log "DEBUG" "User declined installation of $display_name with description"
                 return 0
