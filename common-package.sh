@@ -133,7 +133,7 @@ update_package_list() {
     fi
 
     # スピナー開始
-    start_spinner "$(color yellow "$(get_message "MSG_RUNNING_UPDATE")")"
+    start_spinner "$(color blue "$(get_message "MSG_RUNNING_UPDATE")")"
 
     # PACKAGE_MANAGERの使用（既存の情報を尊重）
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
@@ -285,7 +285,7 @@ install_normal_package() {
 
     debug_log "DEBUG" "Starting installation process for: $package_name"
 
-    start_spinner "$(color yellow "$package_name $(get_message "MSG_INSTALLING_PACKAGE")")"
+    start_spinner "$(color blue "$package_name $(get_message "MSG_INSTALLING_PACKAGE")")"
 
     if [ "$force_install" = "yes" ]; then
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
