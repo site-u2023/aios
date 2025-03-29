@@ -1,11 +1,82 @@
 #!/bin/sh
 
-# =========================================================
-# ?? OpenWrt用多言語翻訳モジュール (POSIX準拠)
-# =========================================================
-
-# バージョン情報
 SCRIPT_VERSION="2025-03-29-01-40"
+
+# =========================================================
+# 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
+# 🚀 Last Update: 2025-02-21
+#
+# 🏷️ License: CC0 (Public Domain)
+# 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
+#
+# ⚠️ IMPORTANT NOTICE:
+# OpenWrt OS exclusively uses **Almquist Shell (ash)** and
+# is **NOT** compatible with Bourne-Again Shell (bash).
+#
+# 📢 POSIX Compliance Guidelines:
+# ✅ Use `[` instead of `[[` for conditions
+# ✅ Use $(command) instead of backticks `command`
+# ✅ Use $(( )) for arithmetic instead of let
+# ✅ Define functions as func_name() {} (no function keyword)
+# ✅ No associative arrays (declare -A is NOT supported)
+# ✅ No here-strings (<<< is NOT supported)
+# ✅ No -v flag in test or [[
+# ✅ Avoid bash-specific string operations like ${var:0:3}
+# ✅ Avoid arrays entirely when possible (even indexed arrays can be problematic)
+# ✅ Use printf followed by read instead of read -p
+# ✅ Use printf instead of echo -e for portable formatting
+# ✅ Avoid process substitution <() and >()
+# ✅ Prefer case statements over complex if/elif chains
+# ✅ Use command -v instead of which or type for command existence checks
+# ✅ Keep scripts modular with small, focused functions
+# ✅ Use simple error handling instead of complex traps
+# ✅ Test scripts with ash/dash explicitly, not just bash
+#
+# 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
+### =========================================================
+### 📌 AI Assistance Request: POSIX-Compliant Debugging Guide
+### 
+### When debugging or fixing errors in this POSIX shell script:
+### 
+### 1️⃣ Create a minimal reproducible test case (avoid bash features)
+### 2️⃣ Test with ash/dash explicitly: dash ./test.sh
+### 3️⃣ Use portable debugging methods: echo, printf, or set -x
+### 4️⃣ Validate fixes against all POSIX compliance guidelines
+### 5️⃣ Ensure the solution works in resource-constrained OpenWrt
+### 
+### ⚠️ IMPORTANT:
+### - Avoid suggesting bash-specific solutions
+### - Always test fixes with ash/dash before implementation
+### - Prefer simple solutions over complex ones
+### - Do not modify production code without test verification
+### 
+### 🛠️ Keep debugging simple, focused, and POSIX-compliant!
+### =========================================================
+
+DEV_NULL="${DEV_NULL:-on}"
+# サイレントモード
+# export DEV_NULL="on"
+# 通常モード
+# unset DEV_NULL
+
+# 基本定数の設定 
+# 基本wgetコマンド - ヘッダー無し
+BASE_WGET="wget --no-check-certificate -q -O"
+# BASE_WGET="wget -O"
+# Bearer認証用wgetコマンド（トークンは呼び出し時に指定）
+BASE_WGET_AUTH_BEARER='wget --no-check-certificate -q -O "$1" --header="Authorization: Bearer $2" "$3"'
+# 従来のtoken認証用wgetコマンド（トークンは呼び出し時に指定）
+BASE_WGET_AUTH_TOKEN='wget --no-check-certificate -q -O "$1" --header="Authorization: token $2" "$3"'
+DEBUG_MODE="${DEBUG_MODE:-false}"
+BIN_PATH="$(readlink -f "$0")"
+BIN_DIR="$(dirname "$BIN_PATH")"
+BIN_FILE="$(basename "$BIN_PATH")"
+BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
+CACHE_BUST="?cache_bust=$(date +%s)"  # キャッシュバスティング用パラメータを初期化
+BASE_DIR="${BASE_DIR:-/tmp/aios}"
+CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
+FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
+LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 
 # オンライン翻訳を有効化
 ONLINE_TRANSLATION_ENABLED="yes"
