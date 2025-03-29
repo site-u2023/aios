@@ -298,15 +298,15 @@ translate_text() {
     return 1
 }
 
-# 言語DBファイル作成関数（行単位の安全な一括翻訳）
+# 言語DBファイル作成関数（行に一意の番号を振って管理する実装）
 create_language_db() {
     local target_lang="$1"
     local base_db="${BASE_DIR:-/tmp/aios}/messages_base.db"
     local api_lang=$(get_api_lang_code)
     local output_db="${BASE_DIR:-/tmp/aios}/messages_${api_lang}.db"
     local temp_dir="${TRANSLATION_CACHE_DIR}/temp_$$"
-    local msg_file="${temp_dir}/messages.txt"
-    local key_file="${temp_dir}/keys.txt"
+    local msg_file="${temp_dir}/all_messages.txt"
+    local map_file="${temp_dir}/id_mapping.txt"
     
     debug_log "DEBUG" "Creating language DB for ${target_lang}"
     
@@ -315,7 +315,7 @@ create_language_db() {
     
     # ベースDBファイル確認
     if [ ! -f "$base_db" ]; then
-        debug_log "DEBUG" "Base message DB not found at: $base_db"
+        debug_log "DEBUG" "Base message DB not found"
         rm -rf "$temp_dir"
         return 1
     fi
@@ -329,125 +329,119 @@ SUPPORTED_LANGUAGE_${target_lang}="${target_lang}"
 
 EOF
     
-    # オンライン翻訳が無効なら翻訳せず置換するだけ
-    if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
-        debug_log "DEBUG" "Online translation disabled, using original text"
-        grep "^US|" "$base_db" | sed "s/^US|/${target_lang}|/" >> "$output_db"
+    # キャッシュキー生成
+    local cache_key=$(md5sum "$base_db" | cut -d' ' -f1)
+    local cache_file="${TRANSLATION_CACHE_DIR}/${target_lang}_${cache_key}.cache"
+    
+    # キャッシュがあれば使用
+    if [ -f "$cache_file" ]; then
+        debug_log "DEBUG" "Using cached translation"
+        cat "$cache_file" >> "$output_db"
         rm -rf "$temp_dir"
         return 0
     fi
     
-    # エントリ抽出とキャッシュ準備
-    local entries_count=0
-    local cache_file="${TRANSLATION_CACHE_DIR}/${target_lang}_messages.cache"
-    touch "$cache_file"
+    # オンライン翻訳が無効なら翻訳せず置換するだけ
+    if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
+        debug_log "DEBUG" "Online translation disabled, using original text"
+        grep "^US|" "$base_db" | sed "s/^US|/${target_lang}|/" >> "$output_db"
+        cp "$output_db" "$cache_file"
+        rm -rf "$temp_dir"
+        return 0
+    fi
     
-    # メッセージとキーを個別のファイルに抽出
+    # 翻訳対象メッセージ値を抽出し、各行に一意の番号を振る
+    debug_log "DEBUG" "Extracting messages and assigning unique IDs to each line"
     : > "$msg_file"
-    : > "$key_file"
+    : > "$map_file"
     
-    debug_log "DEBUG" "Extracting message entries from base DB"
-    
+    line_id=1
     grep "^US|" "$base_db" | while IFS= read -r line; do
         # キーと値を抽出
         local key_part=$(printf "%s" "$line" | sed 's/^US|\([^=]*\)=.*/\1/')
         local value_part=$(printf "%s" "$line" | sed 's/^US|[^=]*=\(.*\)/\1/')
         
-        # キャッシュで既に翻訳済みかチェック
-        local cache_key="${key_part}=${value_part}"
-        local cache_hit=$(grep -F -x -m 1 "CACHE:${cache_key}=" "$cache_file" | sed 's/^CACHE:[^=]*=\(.*\)/\1/')
+        # 一意のIDを付与してマッピングファイルに保存
+        printf "ID:%d|KEY:%s|VALUE:%s\n" "$line_id" "$key_part" "$value_part" >> "$map_file"
         
-        if [ -n "$cache_hit" ]; then
-            # キャッシュヒット
-            debug_log "DEBUG" "Cache hit for: $key_part"
-            printf "%s|%s=%s\n" "$target_lang" "$key_part" "$cache_hit" >> "$output_db"
-        else
-            # 翻訳対象に追加
-            printf "%s\n" "$value_part" >> "$msg_file"
-            printf "%s\n" "$key_part" >> "$key_file"
-            entries_count=$((entries_count + 1))
-        fi
+        # 翻訳対象のテキストに行番号プレフィックスを追加
+        printf "L%d:%s\n" "$line_id" "$value_part" >> "$msg_file"
+        
+        line_id=$((line_id + 1))
     done
-    
-    # 翻訳が必要なエントリがなければ終了
-    if [ "$entries_count" -eq 0 ]; then
-        debug_log "DEBUG" "No entries need translation, using cached results"
-        rm -rf "$temp_dir"
-        return 0
-    fi
-    
-    debug_log "DEBUG" "Found $entries_count entries requiring translation"
     
     # スピナー開始
     start_spinner "Processing translation..." "dot" "blue"
     
-    # ファイル全体を翻訳
-    local original_content=$(cat "$msg_file")
-    local translated_content=""
+    local translation_file="${temp_dir}/translated.txt"
     
     # ネットワーク接続確認
     if ping -c 1 -W 1 one.one.one.one >/dev/null 2>&1; then
-        debug_log "DEBUG" "Network available, performing translation"
+        debug_log "DEBUG" "Network available, performing single batch translation"
         
-        # Google API で翻訳を試みる
-        translated_content=$(translate_with_google "$original_content" "en" "$api_lang" 2>/dev/null)
+        # 翻訳対象テキスト（行番号付き）を取得
+        local all_content=$(cat "$msg_file")
+        local translated_content=""
         
-        # 結果が空の場合は MyMemory API を試す
-        if [ -z "$translated_content" ]; then
-            debug_log "DEBUG" "Google API failed, trying MyMemory API"
-            translated_content=$(translate_with_mymemory "$original_content" "en" "$api_lang" 2>/dev/null)
-        fi
+        # Google API で翻訳（1回のAPI呼び出し）
+        translated_content=$(translate_with_google "$all_content" "en" "$api_lang" 2>/dev/null)
         
-        # それでも失敗した場合は原文を使用
-        if [ -z "$translated_content" ]; then
-            debug_log "DEBUG" "All translation APIs failed, using original text"
-            translated_content="$original_content"
+        if [ -n "$translated_content" ]; then
+            printf "%s" "$translated_content" > "$translation_file"
+            debug_log "DEBUG" "Translation successful with Google API"
         else
-            debug_log "DEBUG" "Translation succeeded with API"
+            debug_log "DEBUG" "Google translation failed, trying MyMemory API"
+            
+            # MyMemory API でバックアップ翻訳
+            translated_content=$(translate_with_mymemory "$all_content" "en" "$api_lang" 2>/dev/null)
+            
+            if [ -n "$translated_content" ]; then
+                printf "%s" "$translated_content" > "$translation_file"
+                debug_log "DEBUG" "Translation successful with MyMemory API"
+            else
+                debug_log "DEBUG" "All translation APIs failed, using original content"
+                cp "$msg_file" "$translation_file"
+            fi
         fi
     else
-        debug_log "DEBUG" "Network unavailable, using original text"
-        translated_content="$original_content"
+        debug_log "DEBUG" "Network unavailable, using original content"
+        cp "$msg_file" "$translation_file"
     fi
     
-    # 翻訳結果を一時ファイルに保存
-    local trans_file="${temp_dir}/translated.txt"
-    printf "%s" "$translated_content" > "$trans_file"
+    # 翻訳結果から行番号と翻訳テキストを抽出
+    debug_log "DEBUG" "Extracting translated content with line IDs"
+    : > "$cache_file"
     
-    # 翻訳結果を行単位で分割
-    local split_dir="${temp_dir}/split"
-    mkdir -p "$split_dir"
-    
-    # 各行を個別のファイルに分割
-    awk '{print > "'$split_dir'/line_" NR}' "$trans_file"
-    
-    # キーと翻訳結果を組み合わせてDBに書き込み
-    debug_log "DEBUG" "Combining keys with translated values"
-    
-    local line_count=0
-    while IFS= read -r key; do
-        line_count=$((line_count + 1))
-        local split_file="${split_dir}/line_${line_count}"
+    # マッピングファイルから各行を処理
+    while IFS= read -r map_line; do
+        # マッピング情報を抽出
+        local line_id=$(echo "$map_line" | sed 's/ID:\([0-9]*\)|.*/\1/')
+        local key_part=$(echo "$map_line" | sed 's/.*|KEY:\([^|]*\)|.*/\1/')
         
-        if [ -f "$split_file" ]; then
-            local trans_value=$(cat "$split_file")
-            # 空の翻訳結果は元の値を使用
-            if [ -z "$trans_value" ]; then
-                debug_log "DEBUG" "Empty translation for key: $key, using original"
-                local orig_value=$(grep "^US|${key}=" "$base_db" | sed 's/^US|[^=]*=\(.*\)/\1/')
-                trans_value="$orig_value"
-            fi
+        # 翻訳ファイルから対応する行を探す
+        local trans_line=$(grep "^L${line_id}:" "$translation_file" 2>/dev/null)
+        
+        if [ -n "$trans_line" ]; then
+            # 翻訳テキストを抽出（行番号プレフィックスを除去）
+            local trans_value=$(echo "$trans_line" | sed "s/^L${line_id}:\(.*\)/\1/")
             
-            # DBファイルとキャッシュに書き込み
-            printf "%s|%s=%s\n" "$target_lang" "$key" "$trans_value" >> "$output_db"
-            printf "CACHE:%s=%s=%s\n" "$key" "$(grep "^US|${key}=" "$base_db" | sed 's/^US|[^=]*=\(.*\)/\1/')" "$trans_value" >> "$cache_file"
+            # 空の場合は元の値を使用
+            if [ -z "$trans_value" ]; then
+                local orig_value=$(echo "$map_line" | sed 's/.*|VALUE:\(.*\)/\1/')
+                trans_value="$orig_value"
+                debug_log "DEBUG" "Empty translation result for ID:${line_id}, using original text"
+            fi
         else
-            debug_log "DEBUG" "Missing translation file for key: $key"
-            # 対応する翻訳ファイルがない場合は元の値を使用
-            local orig_value=$(grep "^US|${key}=" "$base_db" | sed 's/^US|[^=]*=\(.*\)/\1/')
-            printf "%s|%s=%s\n" "$target_lang" "$key" "$orig_value" >> "$output_db"
+            # 対応する翻訳が見つからない場合は元の値を使用
+            local orig_value=$(echo "$map_line" | sed 's/.*|VALUE:\(.*\)/\1/')
+            trans_value="$orig_value"
+            debug_log "DEBUG" "No translation found for ID:${line_id}, using original text"
         fi
-    done < "$key_file"
+        
+        # DBとキャッシュに書き込み
+        printf "%s|%s=%s\n" "$target_lang" "$key_part" "$trans_value" >> "$output_db"
+        printf "%s|%s=%s\n" "$target_lang" "$key_part" "$trans_value" >> "$cache_file"
+    done < "$map_file"
     
     # スピナー停止
     stop_spinner "Translation complete" "success"
