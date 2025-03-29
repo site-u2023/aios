@@ -181,34 +181,46 @@ decode_unicode() {
     rm -f "$temp_file"
 }
 
-# プレースホルダーを一時的なトークンに変換する関数
+# プレースホルダーを保護するヘルパー関数
 protect_placeholders() {
     local input="$1"
     local output="$input"
     local placeholder_map="${TRANSLATION_CACHE_DIR}/placeholder_map.txt"
-    local counter=0
     
     # マッピングファイルをクリア
     > "$placeholder_map"
     
-    # {xxx} パターンを検出して置換
+    # カウンター初期化
+    local counter=0
+    
+    # {xxx} パターンのプレースホルダーを検出して置換
     while echo "$output" | grep -q '{[^{}]*}'; do
         # 最初のプレースホルダーを抽出
-        local full_placeholder=$(echo "$output" | sed -n 's/.*\({[^{}]*}\).*/\1/p')
-        counter=$((counter + 1))
-        local token="__PH${counter}__"
+        local placeholder_pattern='{[^{}]*}'
+        local full_placeholder=$(echo "$output" | grep -o "$placeholder_pattern" | head -1)
         
-        # マッピングを保存
-        echo "$token|$full_placeholder" >> "$placeholder_map"
-        
-        # 置換実行（sedの区切り文字を#に変更）
-        output=$(echo "$output" | sed "s#$full_placeholder#$token#")
+        if [ -n "$full_placeholder" ]; then
+            # トークン生成
+            counter=$((counter + 1))
+            local token="__PLACEHOLDER_${counter}__"
+            
+            # マッピングを保存
+            echo "$token|$full_placeholder" >> "$placeholder_map"
+            
+            # 置換実行（sedの区切り文字を#に変更して特殊文字の問題を回避）
+            output=$(echo "$output" | sed "s#$full_placeholder#$token#")
+            
+            debug_log "DEBUG" "Protected placeholder: $full_placeholder with token: $token"
+        else
+            # マッチするプレースホルダーがなければループ終了
+            break
+        fi
     done
     
-    printf "%s" "$output"
+    printf "%s\n" "$output"
 }
 
-# トークンをプレースホルダーに戻す関数
+# 保護されたプレースホルダーを元に戻す関数
 restore_placeholders() {
     local input="$1"
     local output="$input"
@@ -219,10 +231,11 @@ restore_placeholders() {
         while IFS='|' read -r token placeholder; do
             # 置換実行（sedの区切り文字を#に変更）
             output=$(echo "$output" | sed "s#$token#$placeholder#g")
+            debug_log "DEBUG" "Restored token: $token back to placeholder: $placeholder"
         done < "$placeholder_map"
     fi
     
-    printf "%s" "$output"
+    printf "%s\n" "$output"
 }
 
 # Google翻訳API (非公式) での翻訳
@@ -260,7 +273,7 @@ translate_with_google() {
         rm -f "$temp_file"
         
         if [ -n "$translated" ] && [ "$translated" != "$protected_text" ]; then
-            # プレースホルダーを元に戻す
+            # プレースホルダーを元に戻す処理を追加
             translated=$(restore_placeholders "$translated")
             
             # Google翻訳API進捗表示
@@ -301,7 +314,7 @@ translate_with_mymemory() {
         rm -f "$temp_file"
         
         if [ -n "$translated" ] && [ "$translated" != "$protected_text" ]; then
-            # プレースホルダーを元に戻す
+            # プレースホルダーを元に戻す処理を追加
             translated=$(restore_placeholders "$translated")
             
             # MyMemoryAPI進捗表示
