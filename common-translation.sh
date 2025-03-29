@@ -181,12 +181,59 @@ decode_unicode() {
     rm -f "$temp_file"
 }
 
+# プレースホルダーを一時的なトークンに変換する関数
+protect_placeholders() {
+    local input="$1"
+    local output="$input"
+    local placeholder_map="${TRANSLATION_CACHE_DIR}/placeholder_map.txt"
+    local counter=0
+    
+    # マッピングファイルをクリア
+    > "$placeholder_map"
+    
+    # {xxx} パターンを検出して置換
+    while echo "$output" | grep -q '{[^{}]*}'; do
+        # 最初のプレースホルダーを抽出
+        local full_placeholder=$(echo "$output" | sed -n 's/.*\({[^{}]*}\).*/\1/p')
+        counter=$((counter + 1))
+        local token="__PH${counter}__"
+        
+        # マッピングを保存
+        echo "$token|$full_placeholder" >> "$placeholder_map"
+        
+        # 置換実行（sedの区切り文字を#に変更）
+        output=$(echo "$output" | sed "s#$full_placeholder#$token#")
+    done
+    
+    printf "%s" "$output"
+}
+
+# トークンをプレースホルダーに戻す関数
+restore_placeholders() {
+    local input="$1"
+    local output="$input"
+    local placeholder_map="${TRANSLATION_CACHE_DIR}/placeholder_map.txt"
+    
+    # マッピングファイルから置換を実行
+    if [ -f "$placeholder_map" ]; then
+        while IFS='|' read -r token placeholder; do
+            # 置換実行（sedの区切り文字を#に変更）
+            output=$(echo "$output" | sed "s#$token#$placeholder#g")
+        done < "$placeholder_map"
+    fi
+    
+    printf "%s" "$output"
+}
+
 # Google翻訳API (非公式) での翻訳
 translate_with_google() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
-    local encoded_text=$(urlencode "$text")
+    
+    # プレースホルダー保護処理を追加
+    local protected_text=$(protect_placeholders "$text")
+    local encoded_text=$(urlencode "$protected_text")
     local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
     
     # Google翻訳API進捗表示
@@ -212,7 +259,10 @@ translate_with_google() {
         
         rm -f "$temp_file"
         
-        if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
+        if [ -n "$translated" ] && [ "$translated" != "$protected_text" ]; then
+            # プレースホルダーを元に戻す
+            translated=$(restore_placeholders "$translated")
+            
             # Google翻訳API進捗表示
             debug_log "DEBUG" "Google Translate API: Translation successful"
             printf "%s\n" "$translated"
@@ -232,7 +282,10 @@ translate_with_mymemory() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
-    local encoded_text=$(urlencode "$text")
+    
+    # プレースホルダー保護処理を追加
+    local protected_text=$(protect_placeholders "$text")
+    local encoded_text=$(urlencode "$protected_text")
     local temp_file="${TRANSLATION_CACHE_DIR}/mymemory_response.tmp"
     
     # MyMemoryAPI進捗表示
@@ -247,7 +300,10 @@ translate_with_mymemory() {
         local translated=$(grep -o '"translatedText":"[^"]*"' "$temp_file" | head -1 | sed 's/"translatedText":"//;s/"$//')
         rm -f "$temp_file"
         
-        if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
+        if [ -n "$translated" ] && [ "$translated" != "$protected_text" ]; then
+            # プレースホルダーを元に戻す
+            translated=$(restore_placeholders "$translated")
+            
             # MyMemoryAPI進捗表示
             debug_log "DEBUG" "MyMemory API: Translation successful"
             printf "%s\n" "$translated"
