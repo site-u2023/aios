@@ -333,7 +333,7 @@ EOF
     fi
     
     # 翻訳処理開始
-    printf "Starting database creation for language: %s\n" "$api_lang"
+    printf "Creating translation DB using API: %s...\n" "$api_lang"
     
     # 初期APIを決定
     if printf "%s" "$API_LIST" | grep -q "google"; then
