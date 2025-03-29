@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-03-29-03-11"
+SCRIPT_VERSION="2025-03-29-03-40"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -35,16 +35,8 @@ SCRIPT_VERSION="2025-03-29-03-11"
 # 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
 ### =========================================================
 
-DEV_NULL="${DEV_NULL:-on}"
-# サイレントモード
-# export DEV_NULL="on"
-# 通常モード
-# unset DEV_NULL
-
 # 基本定数の設定 
-# 基本wgetコマンド - ヘッダー無し
 BASE_WGET="wget --no-check-certificate -q -O"
-# BASE_WGET="wget -O"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 BIN_PATH="$(readlink -f "$0")"
 BIN_DIR="$(dirname "$BIN_PATH")"
@@ -124,18 +116,14 @@ check_charset_support() {
     # システムのロケールとエンコーディングを確認
     local current_locale=$(locale charmap 2>/dev/null || printf "Unknown")
     
-    if [ "$DEV_NULL" != "on" ]; then
-        printf "システム文字セットの確認中...\n"
-        printf "現在のシステム文字セット: %s\n" "$current_locale"
-        printf "非ASCII文字のテスト表示: あいうえお Ää Çç Привет مرحبا\n"
-    fi
+    printf "Checking system charset...\n"
+    printf "Current system charset: %s\n" "$current_locale"
+    printf "Non-ASCII character test: あいうえお Ää Çç Привет مرحبا\n"
     debug_log "DEBUG" "System charset detected: ${current_locale}"
     
     # UTF-8でない場合は警告
     if [ "$current_locale" != "UTF-8" ] && [ "$current_locale" != "utf8" ]; then
-        if [ "$DEV_NULL" != "on" ]; then
-            printf "警告: システムがUTF-8を使用していないため、一部の言語が正しく表示されない可能性があります。\n"
-        fi
+        printf "WARNING: System is not using UTF-8, some languages may not display correctly.\n"
         debug_log "WARNING" "Non-UTF-8 charset may cause display issues with some languages"
     fi
 }
@@ -151,9 +139,7 @@ decode_unicode() {
         return 0
     fi
     
-    if [ "$DEV_NULL" != "on" ]; then
-        printf "Unicodeエスケープシーケンスをデコードしています...\n"
-    fi
+    printf "Decoding Unicode escape sequences...\n"
     debug_log "DEBUG" "Decoding Unicode escape sequences in translation response"
     
     # BusyBoxのawkによるUnicodeデコード処理
@@ -229,9 +215,7 @@ translate_with_google() {
     local encoded_text=$(urlencode "$text")
     local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
     
-    if [ "$DEV_NULL" != "on" ]; then
-        printf "Google翻訳API: %s から %s へ翻訳中...\n" "$source_lang" "$target_lang"
-    fi
+    printf "Using Google Translate API: translating from %s to %s\n" "$source_lang" "$target_lang"
     debug_log "DEBUG" "Using Google Translate API: ${source_lang} to ${target_lang}"
     
     # ユーザーエージェントを設定
@@ -255,18 +239,14 @@ translate_with_google() {
         rm -f "$temp_file"
         
         if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
-            if [ "$DEV_NULL" != "on" ]; then
-                printf "Google翻訳API: 翻訳成功\n"
-            fi
+            printf "Google Translate API: Translation successful\n"
             debug_log "DEBUG" "Google Translate API: Translation successful"
             printf "%s\n" "$translated"
             return 0
         fi
     fi
     
-    if [ "$DEV_NULL" != "on" ]; then
-        printf "Google翻訳API: 翻訳失敗\n"
-    fi
+    printf "Google Translate API: Translation failed\n"
     debug_log "DEBUG" "Google Translate API: Translation failed"
     rm -f "$temp_file"
     return 1
@@ -281,9 +261,7 @@ translate_with_mymemory() {
     local temp_file="${TRANSLATION_CACHE_DIR}/mymemory_response.tmp"
     
     # APIステータス表示
-    if [ "$DEV_NULL" != "on" ]; then
-        printf "MyMemory API: %s から %s へ翻訳中...\n" "$source_lang" "$target_lang"
-    fi
+    printf "Using MyMemory API: translating from %s to %s\n" "$source_lang" "$target_lang"
     debug_log "DEBUG" "Using MyMemory API: ${source_lang} to ${target_lang}"
     
     # リクエスト送信
@@ -296,18 +274,14 @@ translate_with_mymemory() {
         rm -f "$temp_file"
         
         if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
-            if [ "$DEV_NULL" != "on" ]; then
-                printf "MyMemory API: 翻訳成功\n"
-            fi
+            printf "MyMemory API: Translation successful\n"
             debug_log "DEBUG" "MyMemory API: Translation successful"
             printf "%s\n" "$translated"
             return 0
         fi
     fi
     
-    if [ "$DEV_NULL" != "on" ]; then
-        printf "MyMemory API: 翻訳失敗\n"
-    fi
+    printf "MyMemory API: Translation failed\n"
     debug_log "DEBUG" "MyMemory API: Translation failed"
     rm -f "$temp_file"
     return 1
@@ -321,9 +295,7 @@ translate_text() {
     local result=""
     
     # API実行開始メッセージ
-    if [ "$DEV_NULL" != "on" ]; then
-        printf "翻訳プロセスを開始します (API優先順位: %s)\n" "$API_LIST"
-    fi
+    printf "Starting translation process with API priority: %s\n" "$API_LIST"
     debug_log "DEBUG" "Starting translation process with API priority: ${API_LIST}"
     
     # Google API を試行
@@ -347,9 +319,7 @@ translate_text() {
     fi
     
     # すべて失敗した場合
-    if [ "$DEV_NULL" != "on" ]; then
-        printf "すべての翻訳APIが失敗しました - 翻訳結果を取得できませんでした\n"
-    fi
+    printf "All translation APIs failed - no translation result obtained\n"
     debug_log "DEBUG" "All translation APIs failed - no translation result obtained"
     return 1
 }
@@ -412,9 +382,7 @@ EOF
                 debug_log "DEBUG" "Translating text for key: ${key}"
                 
                 # 複数APIで翻訳を試行
-                if [ "$DEV_NULL" != "on" ]; then
-                    printf "キー「%s」の翻訳中...\n" "$key"
-                fi
+                printf "Translating key '%s'...\n" "$key"
                 local translated=$(translate_text "$value" "en" "$api_lang")
                 
                 # 翻訳結果処理
@@ -463,9 +431,7 @@ process_language_translation() {
     # USとJP以外の場合のみ翻訳DBを作成
     if [ "$lang_code" != "US" ]; then
         # 翻訳DBを作成
-        if [ "$DEV_NULL" != "on" ]; then
-            printf "言語 %s の翻訳データベースを作成中...\n" "$lang_code"
-        fi
+        printf "Creating translation database for language %s...\n" "$lang_code"
         create_language_db "$lang_code"
     else
         debug_log "DEBUG" "Skipping DB creation for built-in language: ${lang_code}"
@@ -483,15 +449,11 @@ init_translation() {
     check_charset_support
     
     # 言語翻訳処理を実行
-    if [ "$DEV_NULL" != "on" ]; then
-        printf "翻訳モジュールを初期化中...\n"
-    fi
+    printf "Initializing translation module...\n"
     process_language_translation
     
     debug_log "DEBUG" "Translation module initialized with language processing"
-    if [ "$DEV_NULL" != "on" ]; then
-        printf "翻訳モジュールの初期化が完了しました\n"
-    fi
+    printf "Translation module initialization complete\n"
 }
 
 # スクリプト初期化（自動実行）
