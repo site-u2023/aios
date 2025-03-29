@@ -298,7 +298,7 @@ translate_text() {
     return 1
 }
 
-# 言語DBファイル作成（paste不使用版 - OpenWrt完全互換）
+# 言語DBファイル作成（基本コマンドのみ版 - 完全なOpenWrt互換）
 create_language_db() {
     local target_lang="$1"
     local base_db="${BASE_DIR:-/tmp/aios}/messages_base.db"
@@ -308,7 +308,7 @@ create_language_db() {
     local valid_cache_file="${TRANSLATION_CACHE_DIR}/${target_lang}_valid.cache"
     local chunk_size=10  # チャンクサイズ
     
-    debug_log "DEBUG" "Creating language DB for ${target_lang} without paste dependency"
+    debug_log "DEBUG" "Creating language DB for ${target_lang} using basic commands only"
     
     # 一時ディレクトリ作成
     mkdir -p "$temp_dir"
@@ -337,7 +337,10 @@ EOF
         return 0
     fi
     
-    # メッセージ処理用ファイル
+    # キャッシュファイル確認
+    touch "$valid_cache_file" 2>/dev/null || true
+    
+    # メッセージマッピングファイル作成
     local mapping_file="${temp_dir}/mapping.txt"
     : > "$mapping_file"
     
@@ -347,7 +350,7 @@ EOF
         local value_part=$(printf "%s" "$line" | sed 's/^US|[^=]*=\(.*\)/\1/')
         
         # 既に有効なキャッシュがあるか確認
-        if [ -f "$valid_cache_file" ] && grep -q "^${key_part}|" "$valid_cache_file"; then
+        if grep -q "^${key_part}|" "$valid_cache_file" 2>/dev/null; then
             # キャッシュから翻訳を取得
             local cached_trans=$(grep "^${key_part}|" "$valid_cache_file" | cut -d'|' -f2-)
             printf "%s|%s=%s\n" "$target_lang" "$key_part" "$cached_trans" >> "$output_db"
@@ -359,7 +362,7 @@ EOF
     done
     
     # 翻訳が必要なエントリ数をカウント
-    local total_lines=$(wc -l < "$mapping_file")
+    local total_lines=$(grep -c "" "$mapping_file")
     
     # 翻訳が必要なエントリがなければ終了
     if [ "$total_lines" -eq 0 ]; then
@@ -386,119 +389,110 @@ EOF
     
     debug_log "DEBUG" "Network available, processing in chunks of $chunk_size"
     
-    # チャンク処理用ディレクトリ
-    local chunks_dir="${temp_dir}/chunks"
-    mkdir -p "$chunks_dir"
+    # 手動でチャンク処理（splitコマンドを使わない）
+    local line_num=0
+    local chunk_num=1
+    local current_chunk="${temp_dir}/current_chunk.txt"
+    local keys_file="${temp_dir}/current_keys.txt"
+    local values_file="${temp_dir}/current_values.txt"
     
-    # マッピングファイルをチャンクに分割
-    split -l "$chunk_size" "$mapping_file" "${chunks_dir}/chunk_"
-    
-    # 各チャンクを処理
-    for chunk_file in "${chunks_dir}"/chunk_*; do
-        local chunk_num=$(basename "$chunk_file" | sed 's/chunk_//')
-        local values_file="${temp_dir}/values_${chunk_num}.txt"
-        local keys_file="${temp_dir}/keys_${chunk_num}.txt"
-        
-        # キーと値を分離（pasteの代わりにcutとawkを使用）
-        : > "$values_file"
-        : > "$keys_file"
-        
-        while IFS='|' read -r key value; do
-            printf "%s\n" "$key" >> "$keys_file"
-            printf "%s\n" "$value" >> "$values_file"
-        done < "$chunk_file"
-        
-        # 値のみを翻訳
-        local chunk_values=$(cat "$values_file")
-        
-        # 翻訳処理（最大3回リトライ）
-        local translated_content=""
-        local retry=0
-        local max_retries=3
-        
-        while [ "$retry" -lt "$max_retries" ] && [ -z "$translated_content" ]; do
-            retry=$((retry + 1))
-            debug_log "DEBUG" "Translation attempt $retry for chunk $chunk_num"
-            
-            # Google翻訳を試す
-            translated_content=$(translate_with_google "$chunk_values" "en" "$api_lang" 2>/dev/null)
-            
-            # 失敗したらMyMemory翻訳を試す
-            if [ -z "$translated_content" ]; then
-                debug_log "DEBUG" "Google translation failed, trying MyMemory (attempt $retry)"
-                translated_content=$(translate_with_mymemory "$chunk_values" "en" "$api_lang" 2>/dev/null)
-            fi
-            
-            # リトライ前に少し待機
-            if [ -z "$translated_content" ] && [ "$retry" -lt "$max_retries" ]; then
-                sleep 2
-            fi
-        done
-        
-        # 翻訳結果を一時ファイルに保存
-        local trans_file="${temp_dir}/translated_${chunk_num}.txt"
-        
-        if [ -n "$translated_content" ]; then
-            debug_log "DEBUG" "Translation successful for chunk $chunk_num"
-            printf "%s" "$translated_content" > "$trans_file"
-        else
-            debug_log "DEBUG" "All translation attempts failed, using original text"
-            cp "$values_file" "$trans_file"
+    # マッピングファイルを1行ずつ読み込んでチャンク処理
+    while IFS='|' read -r key value; do
+        # 新しいチャンク開始時にファイルをリセット
+        if [ "$((line_num % chunk_size))" -eq 0 ]; then
+            : > "$current_chunk"
+            : > "$keys_file"
+            : > "$values_file"
         fi
         
-        # 翻訳結果を行に分割（慎重に処理）
-        local trans_lines_file="${temp_dir}/trans_lines_${chunk_num}.txt"
-        cat "$trans_file" | awk '{print}' > "$trans_lines_file"
+        # 現在のチャンクにキーと値を追加
+        printf "%s\n" "$key" >> "$keys_file"
+        printf "%s\n" "$value" >> "$values_file"
         
-        # 行数チェックと調整
-        local trans_line_count=$(wc -l < "$trans_lines_file")
-        local orig_line_count=$(wc -l < "$keys_file")
+        line_num=$((line_num + 1))
         
-        if [ "$trans_line_count" -ne "$orig_line_count" ]; then
-            debug_log "DEBUG" "Translation line count mismatch: $trans_line_count vs $orig_line_count"
-            # 不足分は元の値で補完
-            if [ "$trans_line_count" -lt "$orig_line_count" ]; then
-                local lines_diff=$((orig_line_count - trans_line_count))
-                tail -n "$lines_diff" "$values_file" >> "$trans_lines_file"
-            fi
-            # 余分な行は無視される（キーファイルの行数が基準）
-        fi
-        
-        # キーと翻訳結果を対応付け
-        # paste不使用で実装
-        local key_idx=1
-        local trans_idx=1
-        
-        while [ "$key_idx" -le "$orig_line_count" ]; do
-            local key=$(sed -n "${key_idx}p" "$keys_file")
-            local trans_value=$(sed -n "${trans_idx}p" "$trans_lines_file")
+        # チャンクサイズに達したか、最後の行ならチャンクを処理
+        if [ "$((line_num % chunk_size))" -eq 0 ] || [ "$line_num" -eq "$total_lines" ]; then
+            debug_log "DEBUG" "Processing chunk $chunk_num with $(wc -l < "$values_file") entries"
             
-            # 空の翻訳結果は元の値を使用
-            if [ -z "$trans_value" ]; then
-                local orig_value=$(grep "^US|${key}=" "$base_db" | sed 's/^US|[^=]*=\(.*\)/\1/')
-                if [ -n "$orig_value" ]; then
-                    trans_value="$orig_value"
-                else
-                    trans_value=$(sed -n "${key_idx}p" "$values_file")
+            # 値のみをチャンクとして準備
+            local chunk_content=$(cat "$values_file")
+            
+            # 翻訳処理（最大3回リトライ）
+            local translated_content=""
+            local retry=0
+            local max_retries=3
+            
+            while [ "$retry" -lt "$max_retries" ] && [ -z "$translated_content" ]; do
+                retry=$((retry + 1))
+                debug_log "DEBUG" "Translation attempt $retry for chunk $chunk_num"
+                
+                # Google翻訳を試す
+                translated_content=$(translate_with_google "$chunk_content" "en" "$api_lang" 2>/dev/null)
+                
+                # 失敗したらMyMemory翻訳を試す
+                if [ -z "$translated_content" ]; then
+                    debug_log "DEBUG" "Google API failed, trying MyMemory (attempt $retry)"
+                    translated_content=$(translate_with_mymemory "$chunk_content" "en" "$api_lang" 2>/dev/null)
                 fi
-                debug_log "DEBUG" "Empty translation for key: $key, using original"
+                
+                # リトライ前に少し待機
+                if [ -z "$translated_content" ] && [ "$retry" -lt "$max_retries" ]; then
+                    sleep 2
+                fi
+            done
+            
+            # 翻訳結果を一時ファイルに保存
+            local trans_file="${temp_dir}/translated_${chunk_num}.txt"
+            
+            if [ -n "$translated_content" ]; then
+                debug_log "DEBUG" "Translation successful for chunk $chunk_num"
+                printf "%s" "$translated_content" > "$trans_file"
+            else
+                debug_log "DEBUG" "All translation attempts failed, using original text"
+                cp "$values_file" "$trans_file"
             fi
             
-            # 有効なキャッシュに保存
-            printf "%s|%s\n" "$key" "$trans_value" >> "$valid_cache_file"
+            # 翻訳結果を行に分割
+            local trans_lines_file="${temp_dir}/trans_lines_${chunk_num}.txt"
+            cat "$trans_file" | awk '{print}' > "$trans_lines_file"
             
-            # DBに書き込み
-            printf "%s|%s=%s\n" "$target_lang" "$key" "$trans_value" >> "$output_db"
+            # キーと翻訳結果を対応付け
+            local keys_count=$(grep -c "" "$keys_file")
+            local trans_count=$(grep -c "" "$trans_lines_file")
             
-            key_idx=$((key_idx + 1))
-            trans_idx=$((trans_idx + 1))
+            debug_log "DEBUG" "Keys: $keys_count, Translations: $trans_count"
             
-            # 翻訳行数が不足していれば元の値でインデックスを調整
-            if [ "$trans_idx" -gt "$trans_line_count" ] && [ "$key_idx" -le "$orig_line_count" ]; then
-                trans_idx="$key_idx"
+            # 行数の調整が必要か確認
+            if [ "$trans_count" -lt "$keys_count" ]; then
+                debug_log "DEBUG" "Adding missing translations from original text"
+                # 不足分を元のテキストで補完
+                local missing=$((keys_count - trans_count))
+                tail -n "$missing" "$values_file" >> "$trans_lines_file"
             fi
-        done
-    done
+            
+            # キーと翻訳を1行ずつ対応付け
+            local i=1
+            while [ "$i" -le "$keys_count" ]; do
+                local this_key=$(sed -n "${i}p" "$keys_file")
+                local this_trans=$(sed -n "${i}p" "$trans_lines_file")
+                
+                # 空の翻訳結果は元の値を使用
+                if [ -z "$this_trans" ]; then
+                    this_trans=$(sed -n "${i}p" "$values_file")
+                    debug_log "DEBUG" "Empty translation for key: $this_key, using original"
+                fi
+                
+                # DBとキャッシュに書き込み
+                printf "%s|%s=%s\n" "$target_lang" "$this_key" "$this_trans" >> "$output_db"
+                printf "%s|%s\n" "$this_key" "$this_trans" >> "$valid_cache_file"
+                
+                i=$((i + 1))
+            done
+            
+            chunk_num=$((chunk_num + 1))
+        fi
+    done < "$mapping_file"
     
     # スピナー停止
     stop_spinner "Translation complete" "success"
