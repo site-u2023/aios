@@ -302,7 +302,7 @@ translate_text() {
 create_language_db() {
     local target_lang="$1"
     local base_db="${BASE_DIR:-/tmp/aios}/messages_base.db"
-    local output_db="${BASE_DIR:-/tmp/aios}/messages_${target_lang}.db"
+    local output_db="${BASE_DIR:-/tmp/aios}/messages_${api_lang}.db"
     local api_lang=$(get_api_lang_code)
     local temp_file="${TRANSLATION_CACHE_DIR}/temp_translation_output.txt"
     local cleaned_translation=""
