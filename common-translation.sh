@@ -190,34 +190,29 @@ protect_placeholders() {
     # マッピングファイルをクリア
     > "$placeholder_map"
     
-    # カウンター初期化
-    local counter=0
-    
     # {xxx} パターンのプレースホルダーを検出して置換
+    local counter=0
     while echo "$output" | grep -q '{[^{}]*}'; do
-        # 最初のプレースホルダーを抽出
-        local placeholder_pattern='{[^{}]*}'
-        local full_placeholder=$(echo "$output" | grep -o "$placeholder_pattern" | head -1)
+        # プレースホルダーを抽出
+        local full_placeholder=$(echo "$output" | grep -o '{[^{}]*}' | head -1)
         
         if [ -n "$full_placeholder" ]; then
             # トークン生成
             counter=$((counter + 1))
-            local token="__PLACEHOLDER_${counter}__"
+            local token="__PH${counter}__"
             
             # マッピングを保存
             echo "$token|$full_placeholder" >> "$placeholder_map"
             
-            # 置換実行（sedの区切り文字を#に変更して特殊文字の問題を回避）
+            # 置換実行（sedの区切り文字を#に変更して特殊文字問題を回避）
             output=$(echo "$output" | sed "s#$full_placeholder#$token#")
-            
             debug_log "DEBUG" "Protected placeholder: $full_placeholder with token: $token"
         else
-            # マッチするプレースホルダーがなければループ終了
             break
         fi
     done
     
-    printf "%s\n" "$output"
+    printf "%s" "$output"
 }
 
 # 保護されたプレースホルダーを元に戻す関数
@@ -235,10 +230,10 @@ restore_placeholders() {
         done < "$placeholder_map"
     fi
     
-    printf "%s\n" "$output"
+    printf "%s" "$output"
 }
 
-# Google翻訳API (非公式) での翻訳
+# Google翻訳API関数修正
 translate_with_google() {
     local text="$1"
     local source_lang="$2"
@@ -249,7 +244,7 @@ translate_with_google() {
     local encoded_text=$(urlencode "$protected_text")
     local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
     
-    # Google翻訳API進捗表示
+    # 以下既存コード
     debug_log "DEBUG" "Using Google Translate API: ${source_lang} to ${target_lang}"
     
     # ユーザーエージェントを設定
@@ -290,7 +285,7 @@ translate_with_google() {
     return 1
 }
 
-# MyMemoryで翻訳を取得
+# MyMemory API関数修正（同様の修正）
 translate_with_mymemory() {
     local text="$1"
     local source_lang="$2"
@@ -301,7 +296,7 @@ translate_with_mymemory() {
     local encoded_text=$(urlencode "$protected_text")
     local temp_file="${TRANSLATION_CACHE_DIR}/mymemory_response.tmp"
     
-    # MyMemoryAPI進捗表示
+    # 以下既存コード
     debug_log "DEBUG" "Using MyMemory API: ${source_lang} to ${target_lang}"
     
     # リクエスト送信
