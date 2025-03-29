@@ -431,9 +431,6 @@ EOF
                     printf "%s|%s=%s\n" "$target_lang" "$key" "$value" >> "$output_db"
                     debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}" 
                 fi
-                
-                # APIレート制限対策
-                sleep 1
             else
                 # ネットワーク接続がない場合は原文を使用
                 printf "%s|%s=%s\n" "$target_lang" "$key" "$value" >> "$output_db"
