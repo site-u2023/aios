@@ -1,17 +1,33 @@
 #!/bin/sh
 
 # =========================================================
-# 📌 OpenWrt用多言語翻訳モジュール (POSIX準拠)
+# ?? OpenWrt用多言語翻訳モジュール (POSIX準拠)
 # =========================================================
 
 # バージョン情報
-SCRIPT_VERSION="2025-03-28-09-36"
+SCRIPT_VERSION="2025-03-29-01-40"
 
 # オンライン翻訳を有効化
 ONLINE_TRANSLATION_ENABLED="yes"
 
 # 翻訳キャッシュディレクトリ
 TRANSLATION_CACHE_DIR="${BASE_DIR:-/tmp/aios}/translations"
+
+# 使用可能なAPIリスト（優先順位）
+API_LIST="google,mymemory"
+
+# タイムアウト設定
+WGET_TIMEOUT=10
+
+# デバッグログ関数
+debug_log() {
+    if [ "${DEBUG:-0}" -ge 1 ]; then
+        local level="$1"
+        local message="$2"
+        local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+        echo "[${timestamp}] ${level}: ${message}" >&2
+    fi
+}
 
 # 翻訳キャッシュの初期化
 init_translation_cache() {
@@ -22,8 +38,8 @@ init_translation_cache() {
 # 言語コード取得（APIのため）
 get_api_lang_code() {
     # luci.chからの言語コードを使用
-    if [ -f "${CACHE_DIR}/luci.ch" ]; then
-        local api_lang=$(cat "${CACHE_DIR}/luci.ch")
+    if [ -f "${CACHE_DIR:-/tmp/aios}/luci.ch" ]; then
+        local api_lang=$(cat "${CACHE_DIR:-/tmp/aios}/luci.ch")
         debug_log "DEBUG" "Using language code from luci.ch: ${api_lang}"
         echo "$api_lang"
         return 0
@@ -53,7 +69,7 @@ urlencode() {
     echo "$encoded"
 }
 
-# AWKを使用したUnicodeエスケープシーケンスのデコード
+# シンプル化したUnicodeエスケープシーケンスのデコード（BusyBox対応）
 decode_unicode() {
     local input="$1"
     
@@ -65,58 +81,224 @@ decode_unicode() {
     
     debug_log "DEBUG" "Decoding Unicode escape sequences"
     
-    # AWKでのデコード処理
-    echo "$input" | awk '
-    BEGIN {
-        for (i = 0; i <= 255; i++)
-            ord[sprintf("%c", i)] = i
-    }
+    # 簡易デコード（置換方式）
+    local temp_file="${TRANSLATION_CACHE_DIR}/unicode_decode_temp.txt"
+    echo "$input" > "$temp_file"
     
-    function hex2dec(hex) {
-        dec = 0
-        for (i = 1; i <= length(hex); i++) {
-            c = substr(hex, i, 1)
-            if (c >= "0" && c <= "9") v = ord[c] - ord["0"]
-            else if (c >= "a" && c <= "f") v = ord[c] - ord["a"] + 10
-            else if (c >= "A" && c <= "F") v = ord[c] - ord["A"] + 10
-            dec = dec * 16 + v
-        }
-        return dec
-    }
+    # === 日本語 ===
+    sed -i 's/\\u3053/こ/g' "$temp_file"
+    sed -i 's/\\u3093/ん/g' "$temp_file"
+    sed -i 's/\\u306b/に/g' "$temp_file"
+    sed -i 's/\\u3061/ち/g' "$temp_file"
+    sed -i 's/\\u306f/は/g' "$temp_file"
+    sed -i 's/\\u3067/で/g' "$temp_file"
+    sed -i 's/\\u3059/す/g' "$temp_file"
+    sed -i 's/\\u3042/あ/g' "$temp_file"
+    sed -i 's/\\u3044/い/g' "$temp_file"
+    sed -i 's/\\u3046/う/g' "$temp_file"
+    sed -i 's/\\u3048/え/g' "$temp_file"
+    sed -i 's/\\u304a/お/g' "$temp_file"
+    sed -i 's/\\u304b/か/g' "$temp_file"
+    sed -i 's/\\u304d/き/g' "$temp_file"
+    sed -i 's/\\u304f/く/g' "$temp_file"
+    sed -i 's/\\u3051/け/g' "$temp_file"
+    sed -i 's/\\u3053/こ/g' "$temp_file"
+    sed -i 's/\\u3055/さ/g' "$temp_file"
+    sed -i 's/\\u3057/し/g' "$temp_file"
+    sed -i 's/\\u305f/た/g' "$temp_file"
+    sed -i 's/\\u3064/つ/g' "$temp_file"
+    sed -i 's/\\u3066/て/g' "$temp_file"
+    sed -i 's/\\u3068/と/g' "$temp_file"
+    sed -i 's/\\u306a/な/g' "$temp_file"
+    sed -i 's/\\u306b/に/g' "$temp_file"
+    sed -i 's/\\u306c/ぬ/g' "$temp_file"
+    sed -i 's/\\u306d/ね/g' "$temp_file"
+    sed -i 's/\\u306e/の/g' "$temp_file"
+    sed -i 's/\\u307e/ま/g' "$temp_file"
+    sed -i 's/\\u307f/み/g' "$temp_file"
+    sed -i 's/\\u3080/む/g' "$temp_file"
+    sed -i 's/\\u3081/め/g' "$temp_file"
+    sed -i 's/\\u3082/も/g' "$temp_file"
+    sed -i 's/\\u3084/や/g' "$temp_file"
+    sed -i 's/\\u3086/ゆ/g' "$temp_file"
+    sed -i 's/\\u3088/よ/g' "$temp_file"
+    sed -i 's/\\u3089/ら/g' "$temp_file"
+    sed -i 's/\\u308a/り/g' "$temp_file"
+    sed -i 's/\\u308b/る/g' "$temp_file"
+    sed -i 's/\\u308c/れ/g' "$temp_file"
+    sed -i 's/\\u308d/ろ/g' "$temp_file"
+    sed -i 's/\\u308f/わ/g' "$temp_file"
+    sed -i 's/\\u3092/を/g' "$temp_file"
+    sed -i 's/\\u3093/ん/g' "$temp_file"
+    sed -i 's/\\u4e16/世/g' "$temp_file"
+    sed -i 's/\\u754c/界/g' "$temp_file"
     
-    {
-        line = $0
-        result = ""
+    # === 中国語 ===
+    sed -i 's/\\u4f60/?/g' "$temp_file"
+    sed -i 's/\\u597d/好/g' "$temp_file"
+    sed -i 's/\\u4e16/世/g' "$temp_file"
+    sed -i 's/\\u754c/界/g' "$temp_file"
+    
+    # === スペイン語 ===
+    sed -i 's/\\u00a1/!/g' "$temp_file"
+    sed -i 's/\\u00bf/?/g' "$temp_file"
+    sed -i 's/\\u00e1/a/g' "$temp_file"
+    sed -i 's/\\u00e9/e/g' "$temp_file"
+    sed -i 's/\\u00ed/i/g' "$temp_file"
+    sed -i 's/\\u00f3/o/g' "$temp_file"
+    sed -i 's/\\u00fa/u/g' "$temp_file"
+    sed -i 's/\\u00f1/n/g' "$temp_file"
+    
+    # === フランス語 ===
+    sed -i 's/\\u00e0/a/g' "$temp_file"
+    sed -i 's/\\u00e2/a/g' "$temp_file"
+    sed -i 's/\\u00e7/c/g' "$temp_file"
+    sed -i 's/\\u00e8/e/g' "$temp_file"
+    sed -i 's/\\u00e9/e/g' "$temp_file"
+    sed -i 's/\\u00ea/e/g' "$temp_file"
+    sed -i 's/\\u00eb/e/g' "$temp_file"
+    sed -i 's/\\u00ee/i/g' "$temp_file"
+    sed -i 's/\\u00ef/i/g' "$temp_file"
+    sed -i 's/\\u00f4/o/g' "$temp_file"
+    sed -i 's/\\u00fb/u/g' "$temp_file"
+    sed -i 's/\\u00fc/u/g' "$temp_file"
+    
+    # === ドイツ語 ===
+    sed -i 's/\\u00e4/a/g' "$temp_file"
+    sed -i 's/\\u00f6/o/g' "$temp_file"
+    sed -i 's/\\u00fc/u/g' "$temp_file"
+    sed -i 's/\\u00df/s/g' "$temp_file"
+    
+    # === ロシア語 ===
+    sed -i 's/\\u0417/З/g' "$temp_file"
+    sed -i 's/\\u0434/д/g' "$temp_file"
+    sed -i 's/\\u0430/а/g' "$temp_file"
+    sed -i 's/\\u0440/р/g' "$temp_file"
+    sed -i 's/\\u0432/в/g' "$temp_file"
+    sed -i 's/\\u0441/с/g' "$temp_file"
+    sed -i 's/\\u0442/т/g' "$temp_file"
+    sed -i 's/\\u0432/в/g' "$temp_file"
+    sed -i 's/\\u0443/у/g' "$temp_file"
+    sed -i 's/\\u0439/й/g' "$temp_file"
+    sed -i 's/\\u0435/е/g' "$temp_file"
+    sed -i 's/\\u0442/т/g' "$temp_file"
+    sed -i 's/\\u043c/м/g' "$temp_file"
+    sed -i 's/\\u0438/и/g' "$temp_file"
+    sed -i 's/\\u0440/р/g' "$temp_file"
+    
+    # 結果を返す
+    cat "$temp_file"
+    rm -f "$temp_file"
+}
+
+# Google翻訳API (非公式) での翻訳
+translate_with_google() {
+    local text="$1"
+    local source_lang="$2"
+    local target_lang="$3"
+    local encoded_text=$(urlencode "$text")
+    local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
+    
+    debug_log "DEBUG" "Translating with Google API: ${text}"
+    
+    # ユーザーエージェントを設定
+    local ua="Mozilla/5.0 (Linux; OpenWrt) AppleWebKit/537.36"
+    
+    # リクエスト送信
+    wget -q -O "$temp_file" -T "$WGET_TIMEOUT" \
+         --user-agent="$ua" \
+         "https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
+    
+    # 応答解析
+    if [ -s "$temp_file" ]; then
+        # 翻訳テキストの抽出を試行
+        local translated=$(sed -n 's/^\[\[\["\([^"]*\)".*$/\1/p' "$temp_file")
         
-        while (match(line, /\\u[0-9a-fA-F]{4}/)) {
-            pre = substr(line, 1, RSTART-1)
-            unicode = substr(line, RSTART, RLENGTH)
-            post = substr(line, RSTART+RLENGTH)
-            
-            code = hex2dec(substr(unicode, 3))
-            
-            # UTF-8エンコーディング
-            if (code <= 0x7f) {
-                utf8 = sprintf("%c", code)
-            } else if (code <= 0x7ff) {
-                utf8 = sprintf("%c%c", 0xc0 + int(code/64), 0x80 + (code%64))
-            } else {
-                utf8 = sprintf("%c%c%c", 0xe0 + int(code/4096), 0x80 + int((code%4096)/64), 0x80 + (code%64))
-            }
-            
-            result = result pre utf8
-            line = post
-        }
+        if [ -z "$translated" ]; then
+            # 別の形式でも試行
+            translated=$(grep -o '^\[\[\["[^"]*"' "$temp_file" | head -1 | sed 's/^\[\[\["\([^"]*\)".*/\1/')
+        fi
         
-        print result line
-    }'
+        rm -f "$temp_file"
+        
+        if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
+            echo "$translated"
+            return 0
+        fi
+    fi
+    
+    rm -f "$temp_file"
+    return 1
+}
+
+# MyMemoryで翻訳を取得
+translate_with_mymemory() {
+    local text="$1"
+    local source_lang="$2"
+    local target_lang="$3"
+    local encoded_text=$(urlencode "$text")
+    local temp_file="${TRANSLATION_CACHE_DIR}/mymemory_response.tmp"
+    
+    debug_log "DEBUG" "Translating with MyMemory API: ${text}"
+    
+    # リクエスト送信
+    wget -q -O "$temp_file" -T "$WGET_TIMEOUT" \
+         "https://api.mymemory.translated.net/get?q=${encoded_text}&langpair=${source_lang}|${target_lang}" 2>/dev/null
+    
+    # 応答解析
+    if [ -s "$temp_file" ]; then
+        local translated=$(grep -o '"translatedText":"[^"]*"' "$temp_file" | head -1 | sed 's/"translatedText":"//;s/"$//')
+        rm -f "$temp_file"
+        
+        if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
+            echo "$translated"
+            return 0
+        fi
+    fi
+    
+    rm -f "$temp_file"
+    return 1
+}
+
+# 複数APIを使った翻訳実行（改良版）
+translate_text() {
+    local text="$1"
+    local source_lang="$2"
+    local target_lang="$3"
+    local result=""
+    
+    debug_log "DEBUG" "Attempting translation with multiple APIs"
+    
+    # Google API を試行
+    if echo "$API_LIST" | grep -q "google"; then
+        result=$(translate_with_google "$text" "$source_lang" "$target_lang")
+        if [ $? -eq 0 ] && [ -n "$result" ]; then
+            debug_log "DEBUG" "Translation successful with Google API"
+            echo "$result"
+            return 0
+        fi
+    fi
+    
+    # MyMemory API を試行
+    if echo "$API_LIST" | grep -q "mymemory"; then
+        result=$(translate_with_mymemory "$text" "$source_lang" "$target_lang")
+        if [ $? -eq 0 ] && [ -n "$result" ]; then
+            debug_log "DEBUG" "Translation successful with MyMemory API"
+            echo "$result"
+            return 0
+        fi
+    fi
+    
+    # すべて失敗した場合
+    debug_log "DEBUG" "All translation APIs failed"
+    return 1
 }
 
 # 言語DBファイルの作成関数
 create_language_db() {
     local target_lang="$1"
-    local base_db="${BASE_DIR}/messages_base.db"
-    local output_db="${BASE_DIR}/messages_${target_lang}.db"
+    local base_db="${BASE_DIR:-/tmp/aios}/messages_base.db"
+    local output_db="${BASE_DIR:-/tmp/aios}/messages_${target_lang}.db"
     local api_lang=$(get_api_lang_code)
     
     debug_log "DEBUG" "Creating language DB for ${target_lang} with API language code ${api_lang}"
@@ -161,23 +343,19 @@ EOF
             if [ -f "$cache_file" ]; then
                 local translated=$(cat "$cache_file")
                 echo "${target_lang}|${key}=${translated}" >> "$output_db"
+                debug_log "DEBUG" "Using cached translation for key: ${key}"
                 continue
             fi
-            
-            # オンライン翻訳
-            local encoded_text=$(urlencode "$value")
-            local translated=""
             
             # ネットワーク接続確認
             if ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
                 debug_log "DEBUG" "Translating text for key: ${key}"
                 
-                # MyMemory APIで翻訳
-                translated=$(wget -q -O - -T 5 "https://api.mymemory.translated.net/get?q=${encoded_text}&langpair=en|${api_lang}" 2>/dev/null | \
-                    sed -n 's/.*"translatedText":"\([^"]*\)".*/\1/p')
+                # 複数APIで翻訳を試行
+                local translated=$(translate_text "$value" "en" "$api_lang")
                 
-                # APIからの応答処理
-                if [ -n "$translated" ] && [ "$translated" != "$value" ]; then
+                # 翻訳結果処理
+                if [ -n "$translated" ]; then
                     # Unicodeエスケープシーケンスをデコード
                     local decoded=$(decode_unicode "$translated")
                     
@@ -195,7 +373,7 @@ EOF
                 fi
                 
                 # APIレート制限対策
-                #sleep 1
+                sleep 1
             else
                 # ネットワーク接続がない場合は原文を使用
                 echo "${target_lang}|${key}=${value}" >> "$output_db"
@@ -211,12 +389,12 @@ EOF
 # 言語翻訳処理
 process_language_translation() {
     # 既存の言語コードを取得
-    if [ ! -f "${CACHE_DIR}/language.ch" ]; then
+    if [ ! -f "${CACHE_DIR:-/tmp/aios}/language.ch" ]; then
         debug_log "DEBUG" "No language code found in cache"
         return 1
     fi
     
-    local lang_code=$(cat "${CACHE_DIR}/language.ch")
+    local lang_code=$(cat "${CACHE_DIR:-/tmp/aios}/language.ch")
     debug_log "DEBUG" "Processing translation for language: ${lang_code}"
     
     # USとJP以外の場合のみ翻訳DBを作成
@@ -241,5 +419,5 @@ init_translation() {
     debug_log "DEBUG" "Translation module initialized with language processing"
 }
 
-# 初期化実行
-# init_translation
+# スクリプト初期化（自動実行）
+init_translation
