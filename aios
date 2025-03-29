@@ -302,7 +302,10 @@ get_message() {
         message="$key"
     fi
     
-    # パラメータ置換処理
+    # 特殊プレースホルダー処理（コロンなど）
+    message=$(echo "$message" | sed 's/{NOTR_:_NOTR}/:/g')
+    
+    # パラメータ置換処理（既存の処理を維持）
     if [ -n "$params" ]; then
         local var_name=$(echo "$params" | cut -d'=' -f1)
         local var_value=$(echo "$params" | cut -d'=' -f2-)
