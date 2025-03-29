@@ -356,6 +356,7 @@ EOF
     
     # 翻訳処理開始
     printf "Starting database creation for language: %s\n" "$target_lang"
+    printf "Using translation APIs in this order: %s\n" "$API_LIST"
     
     # USエントリを抽出
     grep "^US|" "$base_db" | while IFS= read -r line; do
