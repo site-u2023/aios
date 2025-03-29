@@ -187,7 +187,7 @@ protect_placeholders() {
     local output="$input"
     local placeholder_map="${TRANSLATION_CACHE_DIR}/placeholder_map.txt"
     
-    # マッピングファイルをクリア 
+    # マッピングファイルをクリア
     > "$placeholder_map"
     
     # カウンター初期化
@@ -207,7 +207,7 @@ protect_placeholders() {
             echo "$token|$notr_placeholder" >> "$placeholder_map"
             
             # 置換実行（sedの区切り文字を#に変更して特殊文字問題を回避）
-            output=$(echo "$output" | sed "s#$notr_placeholder#$token#")
+            output=$(echo "$output" | sed "s#$notr_placeholder#$token#g")
             debug_log "DEBUG" "Protected NOTR placeholder: $notr_placeholder with token: $token"
         else
             break
