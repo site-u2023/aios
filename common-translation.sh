@@ -429,7 +429,7 @@ EOF
                 else
                     # 翻訳失敗時は原文をそのまま使用
                     printf "%s|%s=%s\n" "$target_lang" "$key" "$value" >> "$output_db"
-                    debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}"
+                    debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}" 
                 fi
                 
                 # APIレート制限対策
