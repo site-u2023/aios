@@ -457,4 +457,4 @@ init_translation() {
 }
 
 # スクリプト初期化（自動実行）
-init_translation
+# init_translation
