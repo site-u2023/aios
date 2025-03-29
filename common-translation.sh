@@ -298,8 +298,171 @@ translate_text() {
     return 1
 }
 
-# 言語DBファイルの作成関数
+# 言語DBファイル作成（最適化バッチ処理版）
 create_language_db() {
+    local target_lang="$1"
+    local base_db="${BASE_DIR:-/tmp/aios}/messages_base.db"
+    local api_lang=$(get_api_lang_code)
+    local output_db="${BASE_DIR:-/tmp/aios}/messages_${api_lang}.db"
+    local temp_dir="${TRANSLATION_CACHE_DIR}/temp_$$"
+    local batch_file="${temp_dir}/batch.txt"
+    local keys_file="${temp_dir}/keys.txt"
+    
+    debug_log "DEBUG" "Creating language DB for ${target_lang} using optimized batch processing"
+    
+    # 一時ディレクトリ作成
+    mkdir -p "$temp_dir"
+    
+    # ベースDBファイル確認
+    if [ ! -f "$base_db" ]; then
+        debug_log "DEBUG" "Base message DB not found"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    # DBファイル作成 (常に新規作成・上書き)
+    cat > "$output_db" << EOF
+SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
+
+SUPPORTED_LANGUAGES="${target_lang}"
+SUPPORTED_LANGUAGE_${target_lang}="${target_lang}"
+
+EOF
+    
+    # キャッシュキー生成
+    local cache_key=$(md5sum "$base_db" | cut -d' ' -f1)
+    local cache_file="${TRANSLATION_CACHE_DIR}/${target_lang}_${cache_key}.cache"
+    
+    # キャッシュがあれば使用
+    if [ -f "$cache_file" ]; then
+        debug_log "DEBUG" "Using cached translation"
+        cat "$cache_file" >> "$output_db"
+        rm -rf "$temp_dir"
+        return 0
+    fi
+    
+    # オンライン翻訳が無効なら翻訳せず置換するだけ
+    if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
+        debug_log "DEBUG" "Online translation disabled, using original text"
+        grep "^US|" "$base_db" | sed "s/^US|/${target_lang}|/" >> "$output_db"
+        cp "$output_db" "$cache_file"
+        rm -rf "$temp_dir"
+        return 0
+    fi
+    
+    # 翻訳対象メッセージと対応するキー情報を抽出
+    debug_log "DEBUG" "Extracting messages for batch translation"
+    : > "$batch_file"
+    : > "$keys_file"
+    
+    # 翻訳対象抽出
+    grep "^US|" "$base_db" | while IFS= read -r line; do
+        # キーと値を抽出
+        local key_part=$(printf "%s" "$line" | sed 's/^US|\([^=]*\)=.*/\1/')
+        local value_part=$(printf "%s" "$line" | sed 's/^US|[^=]*=\(.*\)/\1/')
+        
+        # 特殊な接頭辞を付けてバッチファイルに追加（★行区切り識別子として使用★）
+        printf "##MSG_START##%s\n" "$value_part" >> "$batch_file"
+        
+        # キーをキーファイルに保存
+        printf "%s\n" "$key_part" >> "$keys_file"
+    done
+    
+    debug_log "DEBUG" "Prepared batch file with specially marked message boundaries"
+    
+    # スピナー開始
+    start_spinner "Processing translation..." "dot" "blue"
+    
+    # ネットワーク接続確認
+    if ping -c 1 -W 1 one.one.one.one >/dev/null 2>&1; then
+        debug_log "DEBUG" "Network available, performing batch translation"
+        
+        # ファイル全体を一括翻訳
+        local batch_content=$(cat "$batch_file")
+        local translated_content=""
+        
+        # まずGoogleAPIを試す（一回のAPIリクエストで全体を翻訳）
+        debug_log "DEBUG" "Sending single batch request to translation API"
+        translated_content=$(translate_with_google "$batch_content" "en" "$api_lang" 2>/dev/null)
+        
+        # Googleが失敗したらMyMemoryを試す
+        if [ -z "$translated_content" ]; then
+            debug_log "DEBUG" "Google API failed, trying MyMemory API"
+            translated_content=$(translate_with_mymemory "$batch_content" "en" "$api_lang" 2>/dev/null)
+            
+            # それでも失敗したら元のテキストを使用
+            if [ -z "$translated_content" ]; then
+                debug_log "DEBUG" "All translation APIs failed, using original text"
+                translated_content="$batch_content"
+            fi
+        fi
+        
+        # 翻訳結果を一時ファイルに保存
+        local trans_file="${temp_dir}/translated.txt"
+        printf "%s" "$translated_content" > "$trans_file"
+        
+        # ★重要★: 翻訳結果から境界マーカーの位置を特定し、個別メッセージを抽出
+        debug_log "DEBUG" "Extracting individual messages from batch translation result"
+        
+        # マーカー行を分割して別ファイルに保存
+        local split_dir="${temp_dir}/split"
+        mkdir -p "$split_dir"
+        
+        # スペシャルマーカーで分割（改行に注意）
+        awk 'BEGIN{RS="##MSG_START##"; i=0} NR>1 {print $0 > "'$split_dir'/msg_"i; i++}' "$trans_file"
+        
+        # キーと翻訳結果をマッチングしてDBに書き込み
+        debug_log "DEBUG" "Combining keys with translated values"
+        file_count=0
+        
+        while IFS= read -r key; do
+            msg_file="${split_dir}/msg_${file_count}"
+            
+            if [ -f "$msg_file" ]; then
+                # ファイルから翻訳された値を読み込み
+                trans_value=$(cat "$msg_file")
+                # 値の先頭の改行を削除
+                trans_value=$(printf "%s" "$trans_value" | sed '1s/^\n//')
+                
+                # 空の場合は原文を使用
+                if [ -z "$trans_value" ]; then
+                    orig_value=$(grep "^US|${key}=" "$base_db" | sed 's/^US|[^=]*=\(.*\)/\1/')
+                    trans_value="$orig_value"
+                    debug_log "DEBUG" "Empty translation for key: $key, using original"
+                fi
+                
+                # DBとキャッシュに書き込み
+                printf "%s|%s=%s\n" "$target_lang" "$key" "$trans_value" >> "$output_db"
+                printf "%s|%s=%s\n" "$target_lang" "$key" "$trans_value" >> "$cache_file"
+            else
+                # ファイルがない場合は原文を使用
+                orig_value=$(grep "^US|${key}=" "$base_db" | sed 's/^US|[^=]*=\(.*\)/\1/')
+                printf "%s|%s=%s\n" "$target_lang" "$key" "$orig_value" >> "$output_db"
+                printf "%s|%s=%s\n" "$target_lang" "$key" "$orig_value" >> "$cache_file"
+                debug_log "DEBUG" "Missing translation for key: $key, using original"
+            fi
+            
+            file_count=$((file_count + 1))
+        done < "$keys_file"
+    else
+        debug_log "DEBUG" "Network unavailable, using original text"
+        # ネットワーク接続がない場合は原文を使用
+        grep "^US|" "$base_db" | sed "s/^US|/${target_lang}|/" >> "$output_db"
+        cp "$output_db" "$cache_file"
+    fi
+    
+    # スピナー停止
+    stop_spinner "Translation complete" "success"
+    
+    # 一時ファイル削除
+    rm -rf "$temp_dir"
+    
+    debug_log "DEBUG" "Language DB creation completed for ${target_lang}"
+    return 0
+}
+
+# 言語DBファイルの作成関数
+OK_create_language_db() {
     local target_lang="$1"
     local base_db="${BASE_DIR:-/tmp/aios}/messages_base.db"
     local api_lang=$(get_api_lang_code)
