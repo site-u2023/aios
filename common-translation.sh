@@ -1,10 +1,10 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-03-29-01-40"
+SCRIPT_VERSION="2025-03-29-03-11"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
-# 🚀 Last Update: 2025-02-21
+# 🚀 Last Update: 2025-03-29
 #
 # 🏷️ License: CC0 (Public Domain)
 # 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
@@ -33,24 +33,6 @@ SCRIPT_VERSION="2025-03-29-01-40"
 # ✅ Test scripts with ash/dash explicitly, not just bash
 #
 # 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
-### =========================================================
-### 📌 AI Assistance Request: POSIX-Compliant Debugging Guide
-### 
-### When debugging or fixing errors in this POSIX shell script:
-### 
-### 1️⃣ Create a minimal reproducible test case (avoid bash features)
-### 2️⃣ Test with ash/dash explicitly: dash ./test.sh
-### 3️⃣ Use portable debugging methods: echo, printf, or set -x
-### 4️⃣ Validate fixes against all POSIX compliance guidelines
-### 5️⃣ Ensure the solution works in resource-constrained OpenWrt
-### 
-### ⚠️ IMPORTANT:
-### - Avoid suggesting bash-specific solutions
-### - Always test fixes with ash/dash before implementation
-### - Prefer simple solutions over complex ones
-### - Do not modify production code without test verification
-### 
-### 🛠️ Keep debugging simple, focused, and POSIX-compliant!
 ### =========================================================
 
 DEV_NULL="${DEV_NULL:-on}"
@@ -91,7 +73,7 @@ debug_log() {
         local level="$1"
         local message="$2"
         local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-        echo "[${timestamp}] ${level}: ${message}" >&2
+        printf "[%s] %s: %s\n" "$timestamp" "$level" "$message" >&2
     fi
 }
 
@@ -107,13 +89,13 @@ get_api_lang_code() {
     if [ -f "${CACHE_DIR:-/tmp/aios}/luci.ch" ]; then
         local api_lang=$(cat "${CACHE_DIR:-/tmp/aios}/luci.ch")
         debug_log "DEBUG" "Using language code from luci.ch: ${api_lang}"
-        echo "$api_lang"
+        printf "%s\n" "$api_lang"
         return 0
     fi
     
     # luci.chがない場合はデフォルトで英語
     debug_log "DEBUG" "No luci.ch found, defaulting to en"
-    echo "en"
+    printf "en\n"
 }
 
 # URL安全エンコード関数
@@ -132,29 +114,27 @@ urlencode() {
         esac
     done
     
-    echo "$encoded"
+    printf "%s\n" "$encoded"
 }
 
 # 文字コードの検出と表示
 check_charset_support() {
-    if [ "$DEV_NULL" != "on" ]; then
-        echo "Checking console charset support..."
-    fi
     debug_log "DEBUG" "Checking system locale and charset support"
     
     # システムのロケールとエンコーディングを確認
-    local current_locale=$(locale charmap 2>/dev/null || echo "Unknown")
+    local current_locale=$(locale charmap 2>/dev/null || printf "Unknown")
     
     if [ "$DEV_NULL" != "on" ]; then
-        echo "現在のシステム文字セット: ${current_locale}"
-        echo "非ASCII文字のテスト表示: あいうえお Ää Çç Привет مرحبا"
+        printf "システム文字セットの確認中...\n"
+        printf "現在のシステム文字セット: %s\n" "$current_locale"
+        printf "非ASCII文字のテスト表示: あいうえお Ää Çç Привет مرحبا\n"
     fi
     debug_log "DEBUG" "System charset detected: ${current_locale}"
     
     # UTF-8でない場合は警告
     if [ "$current_locale" != "UTF-8" ] && [ "$current_locale" != "utf8" ]; then
         if [ "$DEV_NULL" != "on" ]; then
-            echo "警告: システムがUTF-8を使用していないため、一部の言語が正しく表示されない可能性があります。"
+            printf "警告: システムがUTF-8を使用していないため、一部の言語が正しく表示されない可能性があります。\n"
         fi
         debug_log "WARNING" "Non-UTF-8 charset may cause display issues with some languages"
     fi
@@ -166,19 +146,18 @@ decode_unicode() {
     local temp_file="${TRANSLATION_CACHE_DIR}/unicode_decode.temp"
     
     # エスケープシーケンスがなければそのまま返す
-    if ! echo "$input" | grep -q '\\u[0-9a-fA-F]\{4\}'; then
-        echo "$input"
+    if ! printf "%s" "$input" | grep -q '\\u[0-9a-fA-F]\{4\}'; then
+        printf "%s\n" "$input"
         return 0
     fi
     
     if [ "$DEV_NULL" != "on" ]; then
-        echo "Unicodeエスケープシーケンスをデコードしています..."
+        printf "Unicodeエスケープシーケンスをデコードしています...\n"
     fi
     debug_log "DEBUG" "Decoding Unicode escape sequences in translation response"
     
     # BusyBoxのawkによるUnicodeデコード処理
-    # より確実なデコード方法を使用
-    echo "$input" | awk '
+    printf "%s" "$input" | awk '
     BEGIN {
         # 16進数変換テーブル
         for (i = 0; i <= 9; i++) hex[i] = i
@@ -251,7 +230,7 @@ translate_with_google() {
     local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
     
     if [ "$DEV_NULL" != "on" ]; then
-        echo "Google翻訳APIを使用中: ${source_lang} から ${target_lang} へ翻訳"
+        printf "Google翻訳API: %s から %s へ翻訳中...\n" "$source_lang" "$target_lang"
     fi
     debug_log "DEBUG" "Using Google Translate API: ${source_lang} to ${target_lang}"
     
@@ -277,16 +256,16 @@ translate_with_google() {
         
         if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
             if [ "$DEV_NULL" != "on" ]; then
-                echo "Google翻訳API: 翻訳成功"
+                printf "Google翻訳API: 翻訳成功\n"
             fi
             debug_log "DEBUG" "Google Translate API: Translation successful"
-            echo "$translated"
+            printf "%s\n" "$translated"
             return 0
         fi
     fi
     
     if [ "$DEV_NULL" != "on" ]; then
-        echo "Google翻訳API: 翻訳失敗"
+        printf "Google翻訳API: 翻訳失敗\n"
     fi
     debug_log "DEBUG" "Google Translate API: Translation failed"
     rm -f "$temp_file"
@@ -301,11 +280,11 @@ translate_with_mymemory() {
     local encoded_text=$(urlencode "$text")
     local temp_file="${TRANSLATION_CACHE_DIR}/mymemory_response.tmp"
     
-    # 英語でのAPIステータス表示
+    # APIステータス表示
     if [ "$DEV_NULL" != "on" ]; then
-        echo "Using MyMemory API: ${source_lang} to ${target_lang}"
+        printf "MyMemory API: %s から %s へ翻訳中...\n" "$source_lang" "$target_lang"
     fi
-    debug_log "DEBUG" "Translating with MyMemory API: ${text}"
+    debug_log "DEBUG" "Using MyMemory API: ${source_lang} to ${target_lang}"
     
     # リクエスト送信
     wget -q -O "$temp_file" -T "$WGET_TIMEOUT" \
@@ -318,16 +297,18 @@ translate_with_mymemory() {
         
         if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
             if [ "$DEV_NULL" != "on" ]; then
-                echo "MyMemory API: Translation successful"
+                printf "MyMemory API: 翻訳成功\n"
             fi
-            echo "$translated"
+            debug_log "DEBUG" "MyMemory API: Translation successful"
+            printf "%s\n" "$translated"
             return 0
         fi
     fi
     
     if [ "$DEV_NULL" != "on" ]; then
-        echo "MyMemory API: Translation failed"
+        printf "MyMemory API: 翻訳失敗\n"
     fi
+    debug_log "DEBUG" "MyMemory API: Translation failed"
     rm -f "$temp_file"
     return 1
 }
@@ -341,35 +322,35 @@ translate_text() {
     
     # API実行開始メッセージ
     if [ "$DEV_NULL" != "on" ]; then
-        echo "Starting translation process with API priority: ${API_LIST}"
+        printf "翻訳プロセスを開始します (API優先順位: %s)\n" "$API_LIST"
     fi
-    debug_log "DEBUG" "Attempting translation with multiple APIs"
+    debug_log "DEBUG" "Starting translation process with API priority: ${API_LIST}"
     
     # Google API を試行
-    if echo "$API_LIST" | grep -q "google"; then
+    if printf "%s" "$API_LIST" | grep -q "google"; then
         result=$(translate_with_google "$text" "$source_lang" "$target_lang")
         if [ $? -eq 0 ] && [ -n "$result" ]; then
             debug_log "DEBUG" "Translation successful with Google API"
-            echo "$result"
+            printf "%s\n" "$result"
             return 0
         fi
     fi
     
     # MyMemory API を試行
-    if echo "$API_LIST" | grep -q "mymemory"; then
+    if printf "%s" "$API_LIST" | grep -q "mymemory"; then
         result=$(translate_with_mymemory "$text" "$source_lang" "$target_lang")
         if [ $? -eq 0 ] && [ -n "$result" ]; then
             debug_log "DEBUG" "Translation successful with MyMemory API"
-            echo "$result"
+            printf "%s\n" "$result"
             return 0
         fi
     fi
     
     # すべて失敗した場合
     if [ "$DEV_NULL" != "on" ]; then
-        echo "All translation APIs failed - no translation result obtained"
+        printf "すべての翻訳APIが失敗しました - 翻訳結果を取得できませんでした\n"
     fi
-    debug_log "DEBUG" "All translation APIs failed"
+    debug_log "DEBUG" "All translation APIs failed - no translation result obtained"
     return 1
 }
 
@@ -410,18 +391,18 @@ EOF
     # USエントリを抽出
     grep "^US|" "$base_db" | while IFS= read -r line; do
         # キーと値を抽出
-        local key=$(echo "$line" | sed -n 's/^US|\([^=]*\)=.*/\1/p')
-        local value=$(echo "$line" | sed -n 's/^US|[^=]*=\(.*\)/\1/p')
+        local key=$(printf "%s" "$line" | sed -n 's/^US|\([^=]*\)=.*/\1/p')
+        local value=$(printf "%s" "$line" | sed -n 's/^US|[^=]*=\(.*\)/\1/p')
         
         if [ -n "$key" ] && [ -n "$value" ]; then
             # キャッシュキー生成
-            local cache_key=$(echo "${key}${value}${api_lang}" | md5sum | cut -d' ' -f1)
+            local cache_key=$(printf "%s%s%s" "$key" "$value" "$api_lang" | md5sum | cut -d' ' -f1)
             local cache_file="${TRANSLATION_CACHE_DIR}/${target_lang}_${cache_key}.txt"
             
             # キャッシュを確認
             if [ -f "$cache_file" ]; then
                 local translated=$(cat "$cache_file")
-                echo "${target_lang}|${key}=${translated}" >> "$output_db"
+                printf "%s|%s=%s\n" "$target_lang" "$key" "$translated" >> "$output_db"
                 debug_log "DEBUG" "Using cached translation for key: ${key}"
                 continue
             fi
@@ -431,6 +412,9 @@ EOF
                 debug_log "DEBUG" "Translating text for key: ${key}"
                 
                 # 複数APIで翻訳を試行
+                if [ "$DEV_NULL" != "on" ]; then
+                    printf "キー「%s」の翻訳中...\n" "$key"
+                fi
                 local translated=$(translate_text "$value" "en" "$api_lang")
                 
                 # 翻訳結果処理
@@ -440,14 +424,14 @@ EOF
                     
                     # キャッシュに保存
                     mkdir -p "$(dirname "$cache_file")"
-                    echo "$decoded" > "$cache_file"
+                    printf "%s\n" "$decoded" > "$cache_file"
                     
                     # DBに追加
-                    echo "${target_lang}|${key}=${decoded}" >> "$output_db"
+                    printf "%s|%s=%s\n" "$target_lang" "$key" "$decoded" >> "$output_db"
                     debug_log "DEBUG" "Added translation for key: ${key}"
                 else
                     # 翻訳失敗時は原文をそのまま使用
-                    echo "${target_lang}|${key}=${value}" >> "$output_db"
+                    printf "%s|%s=%s\n" "$target_lang" "$key" "$value" >> "$output_db"
                     debug_log "DEBUG" "Translation failed, using original text for key: ${key}"
                 fi
                 
@@ -455,7 +439,7 @@ EOF
                 sleep 1
             else
                 # ネットワーク接続がない場合は原文を使用
-                echo "${target_lang}|${key}=${value}" >> "$output_db"
+                printf "%s|%s=%s\n" "$target_lang" "$key" "$value" >> "$output_db"
                 debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
             fi
         fi
@@ -479,6 +463,9 @@ process_language_translation() {
     # USとJP以外の場合のみ翻訳DBを作成
     if [ "$lang_code" != "US" ]; then
         # 翻訳DBを作成
+        if [ "$DEV_NULL" != "on" ]; then
+            printf "言語 %s の翻訳データベースを作成中...\n" "$lang_code"
+        fi
         create_language_db "$lang_code"
     else
         debug_log "DEBUG" "Skipping DB creation for built-in language: ${lang_code}"
@@ -492,10 +479,19 @@ init_translation() {
     # キャッシュディレクトリ初期化
     init_translation_cache
     
+    # システム文字セットの確認
+    check_charset_support
+    
     # 言語翻訳処理を実行
+    if [ "$DEV_NULL" != "on" ]; then
+        printf "翻訳モジュールを初期化中...\n"
+    fi
     process_language_translation
     
     debug_log "DEBUG" "Translation module initialized with language processing"
+    if [ "$DEV_NULL" != "on" ]; then
+        printf "翻訳モジュールの初期化が完了しました\n"
+    fi
 }
 
 # スクリプト初期化（自動実行）
