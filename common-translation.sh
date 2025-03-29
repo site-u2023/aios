@@ -135,122 +135,69 @@ urlencode() {
     echo "$encoded"
 }
 
-# シンプル化したUnicodeエスケープシーケンスのデコード（BusyBox対応）
+# シンプル化したUnicodeデコード関数
 decode_unicode() {
     local input="$1"
+    local temp_file="${TRANSLATION_CACHE_DIR}/unicode_decode_temp.txt"
     
-    # Unicodeエスケープシーケンスがない場合はそのまま返す
+    # エスケープシーケンスがなければそのまま返す
     if ! echo "$input" | grep -q '\\u[0-9a-fA-F]\{4\}'; then
         echo "$input"
         return 0
     fi
     
-    debug_log "DEBUG" "Decoding Unicode escape sequences"
+    if [ "$DEV_NULL" != "on" ]; then
+        echo "Decoding Unicode escape sequences in translation response"
+    fi
+    debug_log "DEBUG" "Starting Unicode decode process"
     
-    # 簡易デコード（置換方式）
-    local temp_file="${TRANSLATION_CACHE_DIR}/unicode_decode_temp.txt"
-    echo "$input" > "$temp_file"
+    # AWKを使用した汎用的なUnicodeデコード
+    # ASH/BusyBox環境でも動作する簡易実装
+    echo "$input" | awk '
+    BEGIN {
+        # 16進数から10進数への変換テーブル
+        for (i = 0; i <= 9; i++) hex_to_dec[i] = i
+        hex_to_dec["A"] = hex_to_dec["a"] = 10
+        hex_to_dec["B"] = hex_to_dec["b"] = 11
+        hex_to_dec["C"] = hex_to_dec["c"] = 12
+        hex_to_dec["D"] = hex_to_dec["d"] = 13
+        hex_to_dec["E"] = hex_to_dec["e"] = 14
+        hex_to_dec["F"] = hex_to_dec["f"] = 15
+    }
     
-    # === 日本語 ===
-    sed -i 's/\\u3053/こ/g' "$temp_file"
-    sed -i 's/\\u3093/ん/g' "$temp_file"
-    sed -i 's/\\u306b/に/g' "$temp_file"
-    sed -i 's/\\u3061/ち/g' "$temp_file"
-    sed -i 's/\\u306f/は/g' "$temp_file"
-    sed -i 's/\\u3067/で/g' "$temp_file"
-    sed -i 's/\\u3059/す/g' "$temp_file"
-    sed -i 's/\\u3042/あ/g' "$temp_file"
-    sed -i 's/\\u3044/い/g' "$temp_file"
-    sed -i 's/\\u3046/う/g' "$temp_file"
-    sed -i 's/\\u3048/え/g' "$temp_file"
-    sed -i 's/\\u304a/お/g' "$temp_file"
-    sed -i 's/\\u304b/か/g' "$temp_file"
-    sed -i 's/\\u304d/き/g' "$temp_file"
-    sed -i 's/\\u304f/く/g' "$temp_file"
-    sed -i 's/\\u3051/け/g' "$temp_file"
-    sed -i 's/\\u3053/こ/g' "$temp_file"
-    sed -i 's/\\u3055/さ/g' "$temp_file"
-    sed -i 's/\\u3057/し/g' "$temp_file"
-    sed -i 's/\\u305f/た/g' "$temp_file"
-    sed -i 's/\\u3064/つ/g' "$temp_file"
-    sed -i 's/\\u3066/て/g' "$temp_file"
-    sed -i 's/\\u3068/と/g' "$temp_file"
-    sed -i 's/\\u306a/な/g' "$temp_file"
-    sed -i 's/\\u306b/に/g' "$temp_file"
-    sed -i 's/\\u306c/ぬ/g' "$temp_file"
-    sed -i 's/\\u306d/ね/g' "$temp_file"
-    sed -i 's/\\u306e/の/g' "$temp_file"
-    sed -i 's/\\u307e/ま/g' "$temp_file"
-    sed -i 's/\\u307f/み/g' "$temp_file"
-    sed -i 's/\\u3080/む/g' "$temp_file"
-    sed -i 's/\\u3081/め/g' "$temp_file"
-    sed -i 's/\\u3082/も/g' "$temp_file"
-    sed -i 's/\\u3084/や/g' "$temp_file"
-    sed -i 's/\\u3086/ゆ/g' "$temp_file"
-    sed -i 's/\\u3088/よ/g' "$temp_file"
-    sed -i 's/\\u3089/ら/g' "$temp_file"
-    sed -i 's/\\u308a/り/g' "$temp_file"
-    sed -i 's/\\u308b/る/g' "$temp_file"
-    sed -i 's/\\u308c/れ/g' "$temp_file"
-    sed -i 's/\\u308d/ろ/g' "$temp_file"
-    sed -i 's/\\u308f/わ/g' "$temp_file"
-    sed -i 's/\\u3092/を/g' "$temp_file"
-    sed -i 's/\\u3093/ん/g' "$temp_file"
-    sed -i 's/\\u4e16/世/g' "$temp_file"
-    sed -i 's/\\u754c/界/g' "$temp_file"
+    # 16進数文字列を10進数に変換
+    function hex_to_int(hex) {
+        result = 0
+        for (i = 1; i <= length(hex); i++) {
+            result = result * 16 + hex_to_dec[substr(hex, i, 1)]
+        }
+        return result
+    }
     
-    # === 中国語 ===
-    sed -i 's/\\u4f60/?/g' "$temp_file"
-    sed -i 's/\\u597d/好/g' "$temp_file"
-    sed -i 's/\\u4e16/世/g' "$temp_file"
-    sed -i 's/\\u754c/界/g' "$temp_file"
-    
-    # === スペイン語 ===
-    sed -i 's/\\u00a1/!/g' "$temp_file"
-    sed -i 's/\\u00bf/?/g' "$temp_file"
-    sed -i 's/\\u00e1/a/g' "$temp_file"
-    sed -i 's/\\u00e9/e/g' "$temp_file"
-    sed -i 's/\\u00ed/i/g' "$temp_file"
-    sed -i 's/\\u00f3/o/g' "$temp_file"
-    sed -i 's/\\u00fa/u/g' "$temp_file"
-    sed -i 's/\\u00f1/n/g' "$temp_file"
-    
-    # === フランス語 ===
-    sed -i 's/\\u00e0/a/g' "$temp_file"
-    sed -i 's/\\u00e2/a/g' "$temp_file"
-    sed -i 's/\\u00e7/c/g' "$temp_file"
-    sed -i 's/\\u00e8/e/g' "$temp_file"
-    sed -i 's/\\u00e9/e/g' "$temp_file"
-    sed -i 's/\\u00ea/e/g' "$temp_file"
-    sed -i 's/\\u00eb/e/g' "$temp_file"
-    sed -i 's/\\u00ee/i/g' "$temp_file"
-    sed -i 's/\\u00ef/i/g' "$temp_file"
-    sed -i 's/\\u00f4/o/g' "$temp_file"
-    sed -i 's/\\u00fb/u/g' "$temp_file"
-    sed -i 's/\\u00fc/u/g' "$temp_file"
-    
-    # === ドイツ語 ===
-    sed -i 's/\\u00e4/a/g' "$temp_file"
-    sed -i 's/\\u00f6/o/g' "$temp_file"
-    sed -i 's/\\u00fc/u/g' "$temp_file"
-    sed -i 's/\\u00df/s/g' "$temp_file"
-    
-    # === ロシア語 ===
-    sed -i 's/\\u0417/З/g' "$temp_file"
-    sed -i 's/\\u0434/д/g' "$temp_file"
-    sed -i 's/\\u0430/а/g' "$temp_file"
-    sed -i 's/\\u0440/р/g' "$temp_file"
-    sed -i 's/\\u0432/в/g' "$temp_file"
-    sed -i 's/\\u0441/с/g' "$temp_file"
-    sed -i 's/\\u0442/т/g' "$temp_file"
-    sed -i 's/\\u0432/в/g' "$temp_file"
-    sed -i 's/\\u0443/у/g' "$temp_file"
-    sed -i 's/\\u0439/й/g' "$temp_file"
-    sed -i 's/\\u0435/е/g' "$temp_file"
-    sed -i 's/\\u0442/т/g' "$temp_file"
-    sed -i 's/\\u043c/м/g' "$temp_file"
-    sed -i 's/\\u0438/и/g' "$temp_file"
-    sed -i 's/\\u0440/р/g' "$temp_file"
+    {
+        result = ""
+        str = $0
+        
+        while (match(str, /\\u[0-9a-fA-F]{4}/)) {
+            # エスケープシーケンスの前の部分
+            result = result substr(str, 1, RSTART - 1)
+            
+            # Unicodeコードポイント（16進数）
+            hex = substr(str, RSTART + 2, 4)
+            
+            # 対応する文字をそのまま追加
+            # printfを使うとUTF-8として出力される
+            printf "%s", result
+            printf "%c", hex_to_int("0x" hex)
+            
+            # 残りの文字列を更新
+            result = ""
+            str = substr(str, RSTART + RLENGTH)
+        }
+        
+        # 残りの部分を出力
+        print result str
+    }' > "$temp_file"
     
     # 結果を返す
     cat "$temp_file"
@@ -265,9 +212,11 @@ translate_with_google() {
     local encoded_text=$(urlencode "$text")
     local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
     
+    # 英語でのAPIステータス表示
+    if [ "$DEV_NULL" != "on" ]; then
+        echo "Using Google Translate API: ${source_lang} to ${target_lang}"
+    fi
     debug_log "DEBUG" "Translating with Google API: ${text}"
-    # API実行時の機能的なエコー表示
-    [ "$DEV_NULL" != "on" ] && echo "[ Google Translate API ] Translating from ${source_lang} to ${target_lang}"
     
     # ユーザーエージェントを設定
     local ua="Mozilla/5.0 (Linux; OpenWrt) AppleWebKit/537.36"
@@ -290,13 +239,17 @@ translate_with_google() {
         rm -f "$temp_file"
         
         if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
-            [ "$DEV_NULL" != "on" ] && echo "[ Google Translate API ] Translation successful"
+            if [ "$DEV_NULL" != "on" ]; then
+                echo "Google Translate API: Translation successful"
+            fi
             echo "$translated"
             return 0
         fi
     fi
     
-    [ "$DEV_NULL" != "on" ] && echo "[ Google Translate API ] Translation failed"
+    if [ "$DEV_NULL" != "on" ]; then
+        echo "Google Translate API: Translation failed"
+    fi
     rm -f "$temp_file"
     return 1
 }
@@ -309,9 +262,11 @@ translate_with_mymemory() {
     local encoded_text=$(urlencode "$text")
     local temp_file="${TRANSLATION_CACHE_DIR}/mymemory_response.tmp"
     
+    # 英語でのAPIステータス表示
+    if [ "$DEV_NULL" != "on" ]; then
+        echo "Using MyMemory API: ${source_lang} to ${target_lang}"
+    fi
     debug_log "DEBUG" "Translating with MyMemory API: ${text}"
-    # API実行時の機能的なエコー表示
-    [ "$DEV_NULL" != "on" ] && echo "[ MyMemory API ] Translating from ${source_lang} to ${target_lang}"
     
     # リクエスト送信
     wget -q -O "$temp_file" -T "$WGET_TIMEOUT" \
@@ -323,36 +278,36 @@ translate_with_mymemory() {
         rm -f "$temp_file"
         
         if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
-            [ "$DEV_NULL" != "on" ] && echo "[ MyMemory API ] Translation successful"
+            if [ "$DEV_NULL" != "on" ]; then
+                echo "MyMemory API: Translation successful"
+            fi
             echo "$translated"
             return 0
         fi
     fi
     
-    [ "$DEV_NULL" != "on" ] && echo "[ MyMemory API ] Translation failed"
+    if [ "$DEV_NULL" != "on" ]; then
+        echo "MyMemory API: Translation failed"
+    fi
     rm -f "$temp_file"
     return 1
 }
 
-# 複数APIを使った翻訳実行（改良版）
-# 優先順位に従って各APIを試し、成功したら結果を返す
+# 複数APIを使った翻訳実行
 translate_text() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
     local result=""
     
-    # APIの実行状況を英語でエコー表示
+    # API実行開始メッセージ
     if [ "$DEV_NULL" != "on" ]; then
-        echo "Starting translation process with configured APIs: ${API_LIST}"
+        echo "Starting translation process with API priority: ${API_LIST}"
     fi
-    debug_log "DEBUG" "Attempting translation with multiple APIs in sequence"
+    debug_log "DEBUG" "Attempting translation with multiple APIs"
     
     # Google API を試行
     if echo "$API_LIST" | grep -q "google"; then
-        if [ "$DEV_NULL" != "on" ]; then
-            echo "Trying Google Translate API as primary option"
-        fi
         result=$(translate_with_google "$text" "$source_lang" "$target_lang")
         if [ $? -eq 0 ] && [ -n "$result" ]; then
             debug_log "DEBUG" "Translation successful with Google API"
@@ -363,9 +318,6 @@ translate_text() {
     
     # MyMemory API を試行
     if echo "$API_LIST" | grep -q "mymemory"; then
-        if [ "$DEV_NULL" != "on" ]; then
-            echo "Trying MyMemory API as fallback option"
-        fi
         result=$(translate_with_mymemory "$text" "$source_lang" "$target_lang")
         if [ $? -eq 0 ] && [ -n "$result" ]; then
             debug_log "DEBUG" "Translation successful with MyMemory API"
@@ -376,7 +328,7 @@ translate_text() {
     
     # すべて失敗した場合
     if [ "$DEV_NULL" != "on" ]; then
-        echo "All translation APIs failed - no result obtained"
+        echo "All translation APIs failed - no translation result obtained"
     fi
     debug_log "DEBUG" "All translation APIs failed"
     return 1
