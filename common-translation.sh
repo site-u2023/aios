@@ -298,17 +298,18 @@ translate_text() {
     return 1
 }
 
-# 言語DBファイルの作成関数
+# 言語DBファイルの作成関数（一括翻訳）
 create_language_db() {
     local target_lang="$1"
     local base_db="${BASE_DIR:-/tmp/aios}/messages_base.db"
     local api_lang=$(get_api_lang_code)
     local output_db="${BASE_DIR:-/tmp/aios}/messages_${api_lang}.db"
-    local temp_file="${TRANSLATION_CACHE_DIR}/temp_translation_output.txt"
-    local cleaned_translation=""
-    local current_api=""
+    local temp_values="${TRANSLATION_CACHE_DIR}/values_to_translate.txt"
+    local temp_keys="${TRANSLATION_CACHE_DIR}/keys_in_order.txt"
+    local temp_translated="${TRANSLATION_CACHE_DIR}/translated_values.txt"
+    local batch_cache_key=""
     
-    debug_log "DEBUG" "Creating language DB for ${target_lang} with API language code ${api_lang}"
+    debug_log "DEBUG" "Creating language DB for ${target_lang} with batch translation"
     
     # ベースDBファイル確認
     if [ ! -f "$base_db" ]; then
@@ -325,6 +326,17 @@ SUPPORTED_LANGUAGE_${target_lang}="${target_lang}"
 
 EOF
     
+    # キャッシュキー生成（ファイル全体のハッシュ）
+    batch_cache_key=$(md5sum "$base_db" | cut -d' ' -f1)
+    local batch_cache_file="${TRANSLATION_CACHE_DIR}/${target_lang}_batch_${batch_cache_key}.txt"
+    
+    # キャッシュがあれば使用
+    if [ -f "$batch_cache_file" ]; then
+        debug_log "DEBUG" "Using cached batch translation"
+        cat "$batch_cache_file" >> "$output_db"
+        return 0
+    fi
+    
     # オンライン翻訳が無効なら翻訳せず置換するだけ
     if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
         debug_log "DEBUG" "Online translation disabled, using original text"
@@ -333,118 +345,104 @@ EOF
     fi
     
     # 翻訳処理開始
-    printf "Creating translation DB using API: %s...\n" "$api_lang"
+    printf "Creating translation DB using API: %s\n" "$api_lang"
     
-    # 初期APIを決定
-    if printf "%s" "$API_LIST" | grep -q "google"; then
-        current_api="Google Translate API"
-    elif printf "%s" "$API_LIST" | grep -q "mymemory"; then
-        current_api="MyMemory API"
-    else
-        current_api="No API available"
-    fi
+    # USエントリを抽出し、キーと値を分離
+    rm -f "$temp_values" "$temp_keys"
     
-    # スピナーを開始し、使用中のAPIを表示（英語で表示）
-    start_spinner "$(color blue "Using API: $current_api")" "dot"
-    
-    # USエントリを抽出
+    # 翻訳対象の値だけを抽出して一時ファイルに保存
+    debug_log "DEBUG" "Extracting message values for batch translation"
     grep "^US|" "$base_db" | while IFS= read -r line; do
         # キーと値を抽出
         local key=$(printf "%s" "$line" | sed -n 's/^US|\([^=]*\)=.*/\1/p')
         local value=$(printf "%s" "$line" | sed -n 's/^US|[^=]*=\(.*\)/\1/p')
         
         if [ -n "$key" ] && [ -n "$value" ]; then
-            # キャッシュキー生成
-            local cache_key=$(printf "%s%s%s" "$key" "$value" "$api_lang" | md5sum | cut -d' ' -f1)
-            local cache_file="${TRANSLATION_CACHE_DIR}/${target_lang}_${cache_key}.txt"
+            # 元のキーを順番通り保存
+            printf "%s\n" "$key" >> "$temp_keys"
             
-            # キャッシュを確認
-            if [ -f "$cache_file" ]; then
-                local translated=$(cat "$cache_file")
-                printf "%s|%s=%s\n" "$target_lang" "$key" "$translated" >> "$output_db"
-                debug_log "DEBUG" "Using cached translation for key: ${key}"
-                continue
-            fi
-            
-            # ネットワーク接続確認
-            if ping -c 1 -W 1 one.one.one.one >/dev/null 2>&1; then
-                debug_log "DEBUG" "Translating text for key: ${key}"
-                
-                # 複数APIで翻訳を試行
-                local google_failed=0
-                
-                # Google API を試行
-                if printf "%s" "$API_LIST" | grep -q "google"; then
-                    # スピナー更新（もし前回と異なるAPIが使われる場合）
-                    if [ "$current_api" != "Google Translate API" ]; then
-                        stop_spinner "Switching API" "success"
-                        current_api="Google Translate API"
-                        start_spinner "$(color blue "Using API: $current_api")" "dot"
-                        debug_log "DEBUG" "Switching to Google Translate API"
-                    fi
-                    
-                    result=$(translate_with_google "$value" "en" "$api_lang" 2>/dev/null)
-                    
-                    if [ $? -eq 0 ] && [ -n "$result" ]; then
-                        cleaned_translation="$result"
-                        debug_log "DEBUG" "Google Translate API succeeded for key: ${key}"
-                    else
-                        google_failed=1
-                        debug_log "DEBUG" "Google Translate API failed for key: ${key}"
-                    fi
-                fi
-                
-                # Google APIが失敗または利用不可の場合は、MyMemory APIを試行
-                if { [ "$google_failed" -eq 1 ] || ! printf "%s" "$API_LIST" | grep -q "google"; } && printf "%s" "$API_LIST" | grep -q "mymemory"; then
-                    if [ "$current_api" != "MyMemory API" ]; then
-                        stop_spinner "Google API failed, switching to MyMemory API" "error" 
-                        current_api="MyMemory API"
-                        start_spinner "$(color blue "Using API: $current_api")" "dot"
-                        debug_log "DEBUG" "Switching to MyMemory API"
-                    fi
-                    
-                    result=$(translate_with_mymemory "$value" "en" "$api_lang" 2>/dev/null)
-                    
-                    if [ $? -eq 0 ] && [ -n "$result" ]; then
-                        cleaned_translation="$result"
-                        debug_log "DEBUG" "MyMemory API succeeded for key: ${key}"
-                    else
-                        cleaned_translation=""
-                        debug_log "DEBUG" "MyMemory API failed for key: ${key}"
-                    fi
-                fi
-                
-                # 翻訳結果処理
-                if [ -n "$cleaned_translation" ]; then
-                    # Unicodeエスケープシーケンスをデコード
-                    local decoded=$(decode_unicode "$cleaned_translation")
-                    
-                    # キャッシュに保存
-                    mkdir -p "$(dirname "$cache_file")"
-                    printf "%s\n" "$decoded" > "$cache_file"
-                    
-                    # DBに追加
-                    printf "%s|%s=%s\n" "$target_lang" "$key" "$decoded" >> "$output_db"
-                    debug_log "DEBUG" "Added translation for key: ${key}"
-                else
-                    # 翻訳失敗時は原文をそのまま使用
-                    printf "%s|%s=%s\n" "$target_lang" "$key" "$value" >> "$output_db"
-                    debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}" 
-                fi
-            else
-                # ネットワーク接続がない場合は原文を使用
-                printf "%s|%s=%s\n" "$target_lang" "$key" "$value" >> "$output_db"
-                debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
-            fi
+            # 翻訳対象の値を連続して保存（区切り記号付き）
+            printf "%s\n===MSGSEP===\n" "$value" >> "$temp_values"
         fi
     done
     
-    # スピナー停止
-    stop_spinner "Translation completed" "success"
+    # スピナー開始
+    start_spinner "一括翻訳処理中..." "dot" "blue"
     
-    # 翻訳処理終了
-    printf "Database creation completed for language: %s\n" "${api_lang}"
-    debug_log "DEBUG" "Language DB creation completed for ${target_lang}"
+    # ネットワーク接続確認
+    if ping -c 1 -W 1 one.one.one.one >/dev/null 2>&1; then
+        debug_log "DEBUG" "Performing batch translation with Google API"
+        
+        # ファイルの内容を読み込み
+        local all_values=$(cat "$temp_values")
+        
+        # Google API で一括翻訳
+        local translated_batch=""
+        translated_batch=$(translate_with_google "$all_values" "en" "$api_lang" 2>/dev/null)
+        
+        # 翻訳結果を一時ファイルに保存
+        if [ -n "$translated_batch" ]; then
+            printf "%s" "$translated_batch" > "$temp_translated"
+            debug_log "DEBUG" "Batch translation completed successfully"
+        else
+            debug_log "DEBUG" "Batch translation failed, trying MyMemory API"
+            # Google API 失敗時は MyMemory API を試行
+            translated_batch=$(translate_with_mymemory "$all_values" "en" "$api_lang" 2>/dev/null)
+            
+            if [ -n "$translated_batch" ]; then
+                printf "%s" "$translated_batch" > "$temp_translated"
+                debug_log "DEBUG" "MyMemory batch translation completed"
+            else
+                debug_log "DEBUG" "All batch translation APIs failed"
+                # 失敗時は元の値をそのままコピー
+                cp "$temp_values" "$temp_translated"
+            fi
+        fi
+        
+        # 翻訳結果をUnicodeデコード
+        local decoded_file="${TRANSLATION_CACHE_DIR}/decoded_translation.txt"
+        decode_unicode "$(cat "$temp_translated")" > "$decoded_file"
+        
+        # 翻訳結果を分割し、元のキーと組み合わせてDBに書き込む
+        debug_log "DEBUG" "Recombining keys with translated values"
+        
+        # 翻訳結果を区切り記号で分割
+        awk 'BEGIN{RS="===MSGSEP===\n"; i=0} {print > "/tmp/aios/translations/split_" i++}' "$decoded_file"
+        
+        # キーと翻訳結果を組み合わせる
+        local i=0
+        while IFS= read -r key; do
+            local split_file="/tmp/aios/translations/split_$i"
+            if [ -f "$split_file" ]; then
+                local trans_value=$(cat "$split_file")
+                printf "%s|%s=%s\n" "$target_lang" "$key" "$trans_value" >> "$output_db"
+                printf "%s|%s=%s\n" "$target_lang" "$key" "$trans_value" >> "$batch_cache_file"
+            else
+                debug_log "DEBUG" "Missing translation for key: $key"
+                # 翻訳が見つからない場合は元の値を使用
+                local orig_value=$(grep "^US|$key=" "$base_db" | sed -n 's/^US|[^=]*=\(.*\)/\1/p')
+                printf "%s|%s=%s\n" "$target_lang" "$key" "$orig_value" >> "$output_db"
+                printf "%s|%s=%s\n" "$target_lang" "$key" "$orig_value" >> "$batch_cache_file"
+            fi
+            i=$((i + 1))
+        done < "$temp_keys"
+        
+        # 分割ファイルを削除
+        rm -f /tmp/aios/translations/split_*
+        
+    else
+        debug_log "DEBUG" "Network unavailable, using original text"
+        # ネットワーク接続がない場合は原文を使用
+        grep "^US|" "$base_db" | sed "s/^US|/${target_lang}|/" >> "$output_db"
+    fi
+    
+    # スピナー停止
+    stop_spinner "翻訳完了" "success"
+    
+    # 一時ファイル削除
+    rm -f "$temp_values" "$temp_keys" "$temp_translated" "${TRANSLATION_CACHE_DIR}/decoded_translation.txt"
+    
+    debug_log "DEBUG" "Batch language DB creation completed for ${target_lang}"
     return 0
 }
 
