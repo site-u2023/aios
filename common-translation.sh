@@ -59,6 +59,9 @@ API_LIST="google,mymemory"
 # タイムアウト設定
 WGET_TIMEOUT=10
 
+# 現在使用中のAPI情報を格納する変数
+CURRENT_API=""
+
 # 翻訳キャッシュの初期化
 init_translation_cache() {
     mkdir -p "${TRANSLATION_CACHE_DIR}"
@@ -97,25 +100,6 @@ urlencode() {
     done
     
     printf "%s\n" "$encoded"
-}
-
-# 文字コードの検出と表示
-check_charset_support() {
-    debug_log "DEBUG" "Checking system locale and charset support"
-    
-    # システムのロケールとエンコーディングを確認
-    local current_locale=$(locale charmap 2>/dev/null || printf "Unknown")
-    
-    printf "Checking system charset...\n"
-    printf "Current system charset: %s\n" "$current_locale"
-    printf "Non-ASCII character test: あいうえお Ää Çç Привет مرحبا\n"
-    debug_log "DEBUG" "System charset detected: ${current_locale}"
-    
-    # UTF-8でない場合は警告
-    if [ "$current_locale" != "UTF-8" ] && [ "$current_locale" != "utf8" ]; then
-        printf "WARNING: System is not using UTF-8, some languages may not display correctly.\n"
-        debug_log "WARNING" "Non-UTF-8 charset may cause display issues with some languages"
-    fi
 }
 
 # 改良版Unicodeデコード関数
@@ -206,7 +190,6 @@ translate_with_google() {
     local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
     
     # Google翻訳API進捗表示
-    printf "Using Google Translate API: translating from %s to %s\n" "$source_lang" "$target_lang"
     debug_log "DEBUG" "Using Google Translate API: ${source_lang} to ${target_lang}"
     
     # ユーザーエージェントを設定
@@ -254,7 +237,6 @@ translate_with_mymemory() {
     local temp_file="${TRANSLATION_CACHE_DIR}/mymemory_response.tmp"
     
     # MyMemoryAPI進捗表示
-    printf "Using MyMemory API: translating from %s to %s\n" "$source_lang" "$target_lang"
     debug_log "DEBUG" "Using MyMemory API: ${source_lang} to ${target_lang}"
     
     # リクエスト送信
@@ -282,8 +264,71 @@ translate_with_mymemory() {
     return 1
 }
 
+# 現在使用中のAPI情報を格納する変数
+CURRENT_API=""
+
 # 複数APIを使った翻訳実行
 translate_text() {
+    local text="$1"
+    local source_lang="$2"
+    local target_lang="$3"
+    local result=""
+    
+    # 全体進捗表示
+    debug_log "DEBUG" "Starting translation process with API priority: ${API_LIST}"
+    
+    # Google API を試行
+    if printf "%s" "$API_LIST" | grep -q "google"; then
+        # 現在のAPIを設定
+        CURRENT_API="Google Translate API"
+        
+        # スピナー開始
+        start_spinner "Now using: $CURRENT_API" "dot"
+        
+        result=$(translate_with_google "$text" "$source_lang" "$target_lang")
+        
+        if [ $? -eq 0 ] && [ -n "$result" ]; then
+            # スピナー停止（成功）
+            stop_spinner "$CURRENT_API: Translation successful" "success"
+            debug_log "DEBUG" "Translation successful with Google API"
+            printf "%s\n" "$result"
+            return 0
+        else
+            # スピナー停止（失敗）
+            stop_spinner "$CURRENT_API: Translation failed" "error"
+        fi
+    fi
+    
+    # MyMemory API を試行
+    if printf "%s" "$API_LIST" | grep -q "mymemory"; then
+        # 現在のAPIを設定
+        CURRENT_API="MyMemory API"
+        
+        # スピナー開始
+        start_spinner "Now using: $CURRENT_API" "dot"
+        
+        result=$(translate_with_mymemory "$text" "$source_lang" "$target_lang")
+        
+        if [ $? -eq 0 ] && [ -n "$result" ]; then
+            # スピナー停止（成功）
+            stop_spinner "$CURRENT_API: Translation successful" "success"
+            debug_log "DEBUG" "Translation successful with MyMemory API"
+            printf "%s\n" "$result"
+            return 0
+        else
+            # スピナー停止（失敗）
+            stop_spinner "$CURRENT_API: Translation failed" "error"
+        fi
+    fi
+    
+    # 全体進捗表示
+    printf "All translation APIs failed - no translation result obtained\n"
+    debug_log "DEBUG" "All translation APIs failed - no translation result obtained"
+    return 1
+}
+
+# 複数APIを使った翻訳実行
+OK_translate_text() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
@@ -449,9 +494,6 @@ process_language_translation() {
 init_translation() {
     # キャッシュディレクトリ初期化
     init_translation_cache
-    
-    # システム文字セットの確認
-    check_charset_support
     
     # 言語翻訳処理を実行
     printf "Initializing translation module...\n"
