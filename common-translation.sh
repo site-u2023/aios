@@ -298,7 +298,7 @@ translate_text() {
     return 1
 }
 
-# 言語DBファイル作成（改良版 - キャッシュ管理と確実な翻訳）
+# 言語DBファイル作成（paste不使用版 - OpenWrt完全互換）
 create_language_db() {
     local target_lang="$1"
     local base_db="${BASE_DIR:-/tmp/aios}/messages_base.db"
@@ -306,9 +306,9 @@ create_language_db() {
     local output_db="${BASE_DIR:-/tmp/aios}/messages_${api_lang}.db"
     local temp_dir="${TRANSLATION_CACHE_DIR}/temp_$$"
     local valid_cache_file="${TRANSLATION_CACHE_DIR}/${target_lang}_valid.cache"
-    local chunk_size=10  # チャンクサイズ（必要に応じて調整）
+    local chunk_size=10  # チャンクサイズ
     
-    debug_log "DEBUG" "Creating language DB for ${target_lang}"
+    debug_log "DEBUG" "Creating language DB for ${target_lang} without paste dependency"
     
     # 一時ディレクトリ作成
     mkdir -p "$temp_dir"
@@ -337,32 +337,29 @@ EOF
         return 0
     fi
     
-    # メッセージとキーの抽出
-    debug_log "DEBUG" "Extracting messages and keys"
-    local keys_file="${temp_dir}/keys.txt"
-    local values_file="${temp_dir}/values.txt"
-    : > "$keys_file"
-    : > "$values_file"
+    # メッセージ処理用ファイル
+    local mapping_file="${temp_dir}/mapping.txt"
+    : > "$mapping_file"
     
+    # 翻訳対象を識別し、マッピングファイルに保存
     grep "^US|" "$base_db" | while IFS= read -r line; do
         local key_part=$(printf "%s" "$line" | sed 's/^US|\([^=]*\)=.*/\1/')
         local value_part=$(printf "%s" "$line" | sed 's/^US|[^=]*=\(.*\)/\1/')
         
         # 既に有効なキャッシュがあるか確認
-        if grep -q "^${key_part}|" "$valid_cache_file" 2>/dev/null; then
+        if [ -f "$valid_cache_file" ] && grep -q "^${key_part}|" "$valid_cache_file"; then
             # キャッシュから翻訳を取得
             local cached_trans=$(grep "^${key_part}|" "$valid_cache_file" | cut -d'|' -f2-)
             printf "%s|%s=%s\n" "$target_lang" "$key_part" "$cached_trans" >> "$output_db"
             debug_log "DEBUG" "Using cached translation for: ${key_part}"
         else
-            # 翻訳が必要なものを追加
-            printf "%s\n" "$key_part" >> "$keys_file"
-            printf "%s\n" "$value_part" >> "$values_file"
+            # 翻訳が必要なものをマッピングに追加
+            printf "%s|%s\n" "$key_part" "$value_part" >> "$mapping_file"
         fi
     done
     
     # 翻訳が必要なエントリ数をカウント
-    local total_lines=$(wc -l < "$keys_file")
+    local total_lines=$(wc -l < "$mapping_file")
     
     # 翻訳が必要なエントリがなければ終了
     if [ "$total_lines" -eq 0 ]; then
@@ -379,9 +376,9 @@ EOF
     # ネットワーク接続確認
     if ! ping -c 1 -W 1 one.one.one.one >/dev/null 2>&1; then
         debug_log "DEBUG" "Network unavailable, using original text"
-        paste -d'=' "$keys_file" "$values_file" | while IFS='=' read -r key value; do
+        while IFS='|' read -r key value; do
             printf "%s|%s=%s\n" "$target_lang" "$key" "$value" >> "$output_db"
-        done
+        done < "$mapping_file"
         stop_spinner "Translation skipped (no network)" "warning"
         rm -rf "$temp_dir"
         return 0
@@ -389,32 +386,30 @@ EOF
     
     debug_log "DEBUG" "Network available, processing in chunks of $chunk_size"
     
-    # 行数を基にループ回数を計算
-    local chunk_count=$(( (total_lines + chunk_size - 1) / chunk_size ))
-    debug_log "DEBUG" "Will process $chunk_count chunks"
+    # チャンク処理用ディレクトリ
+    local chunks_dir="${temp_dir}/chunks"
+    mkdir -p "$chunks_dir"
     
-    # チャンク単位で処理
-    for chunk_num in $(seq 1 $chunk_count); do
-        local start_line=$(( (chunk_num - 1) * chunk_size + 1 ))
-        local end_line=$(( chunk_num * chunk_size ))
+    # マッピングファイルをチャンクに分割
+    split -l "$chunk_size" "$mapping_file" "${chunks_dir}/chunk_"
+    
+    # 各チャンクを処理
+    for chunk_file in "${chunks_dir}"/chunk_*; do
+        local chunk_num=$(basename "$chunk_file" | sed 's/chunk_//')
+        local values_file="${temp_dir}/values_${chunk_num}.txt"
+        local keys_file="${temp_dir}/keys_${chunk_num}.txt"
         
-        # 最後のチャンクは行数調整
-        if [ "$end_line" -gt "$total_lines" ]; then
-            end_line=$total_lines
-        fi
+        # キーと値を分離（pasteの代わりにcutとawkを使用）
+        : > "$values_file"
+        : > "$keys_file"
         
-        debug_log "DEBUG" "Processing chunk $chunk_num/$chunk_count (lines $start_line-$end_line)"
+        while IFS='|' read -r key value; do
+            printf "%s\n" "$key" >> "$keys_file"
+            printf "%s\n" "$value" >> "$values_file"
+        done < "$chunk_file"
         
-        # 現在のチャンク用の一時ファイル
-        local chunk_values="${temp_dir}/chunk_values_${chunk_num}.txt"
-        local chunk_keys="${temp_dir}/chunk_keys_${chunk_num}.txt"
-        
-        # 対象行を抽出
-        sed -n "${start_line},${end_line}p" "$values_file" > "$chunk_values"
-        sed -n "${start_line},${end_line}p" "$keys_file" > "$chunk_keys"
-        
-        # チャンクの内容を取得
-        local chunk_content=$(cat "$chunk_values")
+        # 値のみを翻訳
+        local chunk_values=$(cat "$values_file")
         
         # 翻訳処理（最大3回リトライ）
         local translated_content=""
@@ -426,12 +421,12 @@ EOF
             debug_log "DEBUG" "Translation attempt $retry for chunk $chunk_num"
             
             # Google翻訳を試す
-            translated_content=$(translate_with_google "$chunk_content" "en" "$api_lang" 2>/dev/null)
+            translated_content=$(translate_with_google "$chunk_values" "en" "$api_lang" 2>/dev/null)
             
             # 失敗したらMyMemory翻訳を試す
             if [ -z "$translated_content" ]; then
                 debug_log "DEBUG" "Google translation failed, trying MyMemory (attempt $retry)"
-                translated_content=$(translate_with_mymemory "$chunk_content" "en" "$api_lang" 2>/dev/null)
+                translated_content=$(translate_with_mymemory "$chunk_values" "en" "$api_lang" 2>/dev/null)
             fi
             
             # リトライ前に少し待機
@@ -448,30 +443,44 @@ EOF
             printf "%s" "$translated_content" > "$trans_file"
         else
             debug_log "DEBUG" "All translation attempts failed, using original text"
-            cp "$chunk_values" "$trans_file"
+            cp "$values_file" "$trans_file"
         fi
         
         # 翻訳結果を行に分割（慎重に処理）
         local trans_lines_file="${temp_dir}/trans_lines_${chunk_num}.txt"
-        cat "$trans_file" | tr '\n' '\001' | sed 's/\001/\\n/g' | tr '\001' '\n' > "$trans_lines_file"
+        cat "$trans_file" | awk '{print}' > "$trans_lines_file"
         
-        # 行数チェックとパディング
+        # 行数チェックと調整
         local trans_line_count=$(wc -l < "$trans_lines_file")
-        local orig_line_count=$(wc -l < "$chunk_keys")
+        local orig_line_count=$(wc -l < "$keys_file")
         
-        if [ "$trans_line_count" -lt "$orig_line_count" ]; then
-            debug_log "DEBUG" "Translation result has fewer lines ($trans_line_count) than original ($orig_line_count)"
-            # 不足行を元の値で埋める
-            local lines_to_add=$((orig_line_count - trans_line_count))
-            tail -n "$lines_to_add" "$chunk_values" >> "$trans_lines_file"
+        if [ "$trans_line_count" -ne "$orig_line_count" ]; then
+            debug_log "DEBUG" "Translation line count mismatch: $trans_line_count vs $orig_line_count"
+            # 不足分は元の値で補完
+            if [ "$trans_line_count" -lt "$orig_line_count" ]; then
+                local lines_diff=$((orig_line_count - trans_line_count))
+                tail -n "$lines_diff" "$values_file" >> "$trans_lines_file"
+            fi
+            # 余分な行は無視される（キーファイルの行数が基準）
         fi
         
-        # キーと翻訳結果を対応付けてDBとキャッシュに書き込み
-        paste -d'|' "$chunk_keys" "$trans_lines_file" | while IFS='|' read -r key trans_value; do
+        # キーと翻訳結果を対応付け
+        # paste不使用で実装
+        local key_idx=1
+        local trans_idx=1
+        
+        while [ "$key_idx" -le "$orig_line_count" ]; do
+            local key=$(sed -n "${key_idx}p" "$keys_file")
+            local trans_value=$(sed -n "${trans_idx}p" "$trans_lines_file")
+            
             # 空の翻訳結果は元の値を使用
             if [ -z "$trans_value" ]; then
-                orig_value=$(grep "^US|${key}=" "$base_db" | sed 's/^US|[^=]*=\(.*\)/\1/')
-                trans_value="$orig_value"
+                local orig_value=$(grep "^US|${key}=" "$base_db" | sed 's/^US|[^=]*=\(.*\)/\1/')
+                if [ -n "$orig_value" ]; then
+                    trans_value="$orig_value"
+                else
+                    trans_value=$(sed -n "${key_idx}p" "$values_file")
+                fi
                 debug_log "DEBUG" "Empty translation for key: $key, using original"
             fi
             
@@ -480,6 +489,14 @@ EOF
             
             # DBに書き込み
             printf "%s|%s=%s\n" "$target_lang" "$key" "$trans_value" >> "$output_db"
+            
+            key_idx=$((key_idx + 1))
+            trans_idx=$((trans_idx + 1))
+            
+            # 翻訳行数が不足していれば元の値でインデックスを調整
+            if [ "$trans_idx" -gt "$trans_line_count" ] && [ "$key_idx" -le "$orig_line_count" ]; then
+                trans_idx="$key_idx"
+            fi
         done
     done
     
