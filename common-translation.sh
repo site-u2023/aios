@@ -411,6 +411,7 @@ EOF
     
     # 翻訳処理終了
     printf "Database creation completed for language: %s\n" "$target_lang"
+    printf "Translation APIs used: %s\n" "$API_LIST"
     debug_log "DEBUG" "Language DB creation completed for ${target_lang}"
     return 0
 }
