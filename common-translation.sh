@@ -187,7 +187,7 @@ protect_placeholders() {
     local output="$input"
     local placeholder_map="${TRANSLATION_CACHE_DIR}/placeholder_map.txt"
     
-    # マッピングファイルをクリア
+    # マッピングファイルをクリア 
     > "$placeholder_map"
     
     # カウンター初期化
