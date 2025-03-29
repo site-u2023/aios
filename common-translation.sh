@@ -382,7 +382,8 @@ EOF
                 debug_log "DEBUG" "Translating text for key: ${key}"
                 
                 # 複数APIで翻訳を試行（一時ファイルに出力）
-                translate_text "$value" "en" "$api_lang" > "$temp_file" 2>&1
+                #translate_text "$value" "en" "$api_lang" > "$temp_file" 2>&1
+                translate_text "$value" "en" "$api_lang" | tee "$temp_file"
                 
                 # APIメッセージを取り除いて実際の翻訳結果のみ取得
                 cleaned_translation=$(grep -v "Using Google Translate API:" "$temp_file" | grep -v "Google Translate API: Translation" | grep -v "Using MyMemory API:" | grep -v "MyMemory API: Translation")
