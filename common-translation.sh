@@ -324,6 +324,8 @@ create_language_db() {
     local base_db="${BASE_DIR:-/tmp/aios}/messages_base.db"
     local output_db="${BASE_DIR:-/tmp/aios}/messages_${target_lang}.db"
     local api_lang=$(get_api_lang_code)
+    local temp_file="${TRANSLATION_CACHE_DIR}/temp_translation_output.txt"
+    local cleaned_translation=""
     
     debug_log "DEBUG" "Creating language DB for ${target_lang} with API language code ${api_lang}"
     
@@ -378,13 +380,16 @@ EOF
             if ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
                 debug_log "DEBUG" "Translating text for key: ${key}"
                 
-                # 複数APIで翻訳を試行
-                local translated=$(translate_text "$value" "en" "$api_lang")
+                # 複数APIで翻訳を試行（一時ファイルに出力）
+                translate_text "$value" "en" "$api_lang" > "$temp_file" 2>&1
+                
+                # APIメッセージを取り除いて実際の翻訳結果のみ取得
+                cleaned_translation=$(grep -v "Using Google Translate API:" "$temp_file" | grep -v "Google Translate API: Translation" | grep -v "Using MyMemory API:" | grep -v "MyMemory API: Translation")
                 
                 # 翻訳結果処理
-                if [ -n "$translated" ]; then
+                if [ -n "$cleaned_translation" ]; then
                     # Unicodeエスケープシーケンスをデコード
-                    local decoded=$(decode_unicode "$translated")
+                    local decoded=$(decode_unicode "$cleaned_translation")
                     
                     # キャッシュに保存
                     mkdir -p "$(dirname "$cache_file")"
