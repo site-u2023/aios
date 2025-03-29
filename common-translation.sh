@@ -264,71 +264,8 @@ translate_with_mymemory() {
     return 1
 }
 
-# 現在使用中のAPI情報を格納する変数
-CURRENT_API=""
-
 # 複数APIを使った翻訳実行
 translate_text() {
-    local text="$1"
-    local source_lang="$2"
-    local target_lang="$3"
-    local result=""
-    
-    # 全体進捗表示
-    debug_log "DEBUG" "Starting translation process with API priority: ${API_LIST}"
-    
-    # Google API を試行
-    if printf "%s" "$API_LIST" | grep -q "google"; then
-        # 現在のAPIを設定
-        CURRENT_API="Google Translate API"
-        
-        # スピナー開始
-        start_spinner "Now using: $CURRENT_API" "dot"
-        
-        result=$(translate_with_google "$text" "$source_lang" "$target_lang")
-        
-        if [ $? -eq 0 ] && [ -n "$result" ]; then
-            # スピナー停止（成功）
-            stop_spinner "$CURRENT_API: Translation successful" "success"
-            debug_log "DEBUG" "Translation successful with Google API"
-            printf "%s\n" "$result"
-            return 0
-        else
-            # スピナー停止（失敗）
-            stop_spinner "$CURRENT_API: Translation failed" "error"
-        fi
-    fi
-    
-    # MyMemory API を試行
-    if printf "%s" "$API_LIST" | grep -q "mymemory"; then
-        # 現在のAPIを設定
-        CURRENT_API="MyMemory API"
-        
-        # スピナー開始
-        start_spinner "Now using: $CURRENT_API" "dot"
-        
-        result=$(translate_with_mymemory "$text" "$source_lang" "$target_lang")
-        
-        if [ $? -eq 0 ] && [ -n "$result" ]; then
-            # スピナー停止（成功）
-            stop_spinner "$CURRENT_API: Translation successful" "success"
-            debug_log "DEBUG" "Translation successful with MyMemory API"
-            printf "%s\n" "$result"
-            return 0
-        else
-            # スピナー停止（失敗）
-            stop_spinner "$CURRENT_API: Translation failed" "error"
-        fi
-    fi
-    
-    # 全体進捗表示
-    printf "All translation APIs failed - no translation result obtained\n"
-    debug_log "DEBUG" "All translation APIs failed - no translation result obtained"
-    return 1
-}
-
-# 複数APIを使った翻訳実行
-OK_translate_text() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
@@ -371,6 +308,7 @@ create_language_db() {
     local api_lang=$(get_api_lang_code)
     local temp_file="${TRANSLATION_CACHE_DIR}/temp_translation_output.txt"
     local cleaned_translation=""
+    local current_api=""
     
     debug_log "DEBUG" "Creating language DB for ${target_lang} with API language code ${api_lang}"
     
@@ -387,8 +325,172 @@ SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
 SUPPORTED_LANGUAGES="${target_lang}"
 SUPPORTED_LANGUAGE_${target_lang}="${target_lang}"
 
-# ${target_lang}用翻訳データベース (自動生成)
-# フォーマット: 言語コード|メッセージキー=メッセージテキスト
+EOF
+    
+    # オンライン翻訳が無効なら翻訳せず置換するだけ
+    if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
+        debug_log "DEBUG" "Online translation disabled, using original text"
+        grep "^US|" "$base_db" | sed "s/^US|/${target_lang}|/" >> "$output_db"
+        return 0
+    fi
+    
+    # 翻訳処理開始
+    printf "言語データベース作成開始: %s\n" "$target_lang"
+    
+    # 使用するAPIを表示（最初に一度だけ）
+    if printf "%s" "$API_LIST" | grep -q "google"; then
+        current_api="Google Translate API"
+    fi
+    
+    # スピナーを開始し、使用中のAPIを表示
+    start_spinner "翻訳に使用するAPI: $current_api" "dot"
+    
+    # USエントリを抽出
+    grep "^US|" "$base_db" | while IFS= read -r line; do
+        # キーと値を抽出
+        local key=$(printf "%s" "$line" | sed -n 's/^US|\([^=]*\)=.*/\1/p')
+        local value=$(printf "%s" "$line" | sed -n 's/^US|[^=]*=\(.*\)/\1/p')
+        
+        if [ -n "$key" ] && [ -n "$value" ]; then
+            # キャッシュキー生成
+            local cache_key=$(printf "%s%s%s" "$key" "$value" "$api_lang" | md5sum | cut -d' ' -f1)
+            local cache_file="${TRANSLATION_CACHE_DIR}/${target_lang}_${cache_key}.txt"
+            
+            # キャッシュを確認
+            if [ -f "$cache_file" ]; then
+                local translated=$(cat "$cache_file")
+                printf "%s|%s=%s\n" "$target_lang" "$key" "$translated" >> "$output_db"
+                debug_log "DEBUG" "Using cached translation for key: ${key}"
+                continue
+            fi
+            
+            # ネットワーク接続確認
+            if ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
+                debug_log "DEBUG" "Translating text for key: ${key}"
+                
+                # Google API を試行
+                if printf "%s" "$API_LIST" | grep -q "google"; then
+                    # Google翻訳APIを使用中
+                    if [ "$current_api" != "Google Translate API" ]; then
+                        # APIが変わった場合、スピナーを停止して新しいAPIでスピナーを開始
+                        stop_spinner "翻訳API切り替え" "success"
+                        current_api="Google Translate API"
+                        start_spinner "翻訳に使用するAPI: $current_api" "dot"
+                    fi
+                    
+                    # 翻訳実行
+                    local result=$(translate_with_google "$value" "en" "$api_lang" 2>/dev/null)
+                    
+                    if [ $? -eq 0 ] && [ -n "$result" ]; then
+                        # 翻訳成功
+                        cleaned_translation="$result"
+                    else
+                        # Google APIが失敗した場合、MyMemory APIを試す
+                        if printf "%s" "$API_LIST" | grep -q "mymemory"; then
+                            # APIが変わることを通知
+                            stop_spinner "Google API失敗、MyMemory APIに切り替え" "error"
+                            current_api="MyMemory API"
+                            start_spinner "翻訳に使用するAPI: $current_api" "dot"
+                            
+                            # MyMemory APIで翻訳を試行
+                            result=$(translate_with_mymemory "$value" "en" "$api_lang" 2>/dev/null)
+                            
+                            if [ $? -eq 0 ] && [ -n "$result" ]; then
+                                # 翻訳成功
+                                cleaned_translation="$result"
+                            else
+                                # すべてのAPIが失敗
+                                cleaned_translation=""
+                            fi
+                        else
+                            # MyMemory APIが無効
+                            cleaned_translation=""
+                        fi
+                    fi
+                elif printf "%s" "$API_LIST" | grep -q "mymemory"; then
+                    # Google APIがなく、MyMemory APIのみ使用する場合
+                    if [ "$current_api" != "MyMemory API" ]; then
+                        # APIが変わった場合、スピナーを停止して新しいAPIでスピナーを開始
+                        stop_spinner "翻訳API切り替え" "success"
+                        current_api="MyMemory API"
+                        start_spinner "翻訳に使用するAPI: $current_api" "dot"
+                    fi
+                    
+                    # 翻訳実行
+                    local result=$(translate_with_mymemory "$value" "en" "$api_lang" 2>/dev/null)
+                    
+                    if [ $? -eq 0 ] && [ -n "$result" ]; then
+                        # 翻訳成功
+                        cleaned_translation="$result"
+                    else
+                        # 翻訳失敗
+                        cleaned_translation=""
+                    fi
+                else
+                    # 有効なAPIがない
+                    cleaned_translation=""
+                fi
+                
+                # 翻訳結果処理
+                if [ -n "$cleaned_translation" ]; then
+                    # Unicodeエスケープシーケンスをデコード
+                    local decoded=$(decode_unicode "$cleaned_translation")
+                    
+                    # キャッシュに保存
+                    mkdir -p "$(dirname "$cache_file")"
+                    printf "%s\n" "$decoded" > "$cache_file"
+                    
+                    # DBに追加
+                    printf "%s|%s=%s\n" "$target_lang" "$key" "$decoded" >> "$output_db"
+                    debug_log "DEBUG" "Added translation for key: ${key}"
+                else
+                    # 翻訳失敗時は原文をそのまま使用
+                    printf "%s|%s=%s\n" "$target_lang" "$key" "$value" >> "$output_db"
+                    debug_log "DEBUG" "Translation failed, using original text for key: ${key}"
+                }
+                
+                # APIレート制限対策
+                sleep 1
+            else
+                # ネットワーク接続がない場合は原文を使用
+                printf "%s|%s=%s\n" "$target_lang" "$key" "$value" >> "$output_db"
+                debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
+            fi
+        fi
+    done
+    
+    # スピナー停止
+    stop_spinner "翻訳が完了しました" "success"
+    
+    # 翻訳処理終了
+    printf "言語データベース作成完了: %s\n" "$target_lang"
+    debug_log "DEBUG" "Language DB creation completed for ${target_lang}"
+    return 0
+}
+
+# 言語DBファイルの作成関数
+OK_create_language_db() {
+    local target_lang="$1"
+    local base_db="${BASE_DIR:-/tmp/aios}/messages_base.db"
+    local output_db="${BASE_DIR:-/tmp/aios}/messages_${target_lang}.db"
+    local api_lang=$(get_api_lang_code)
+    local temp_file="${TRANSLATION_CACHE_DIR}/temp_translation_output.txt"
+    local cleaned_translation=""
+    
+    debug_log "DEBUG" "Creating language DB for ${target_lang} with API language code ${api_lang}"
+    
+    # ベースDBファイル確認
+    if [ ! -f "$base_db" ]; then
+        debug_log "DEBUG" "Base message DB not found"
+        return 1
+    fi
+    
+    # DBファイル作成 (常に新規作成・上書き)
+    cat > "$output_db" << EOF
+SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
+
+SUPPORTED_LANGUAGES="${target_lang}"
+SUPPORTED_LANGUAGE_${target_lang}="${target_lang}"
 
 EOF
     
