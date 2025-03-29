@@ -645,6 +645,7 @@ display_detected_location() {
 #      "skip_all" - すべての検出をスキップ
 #      未指定の場合はすべての検出方法を試行
 # システムの地域情報を検出し設定する関数
+# システムの地域情報を検出し設定する関数
 detect_and_set_location() {
     # デバッグログ出力
     debug_log "DEBUG" "Running detect_and_set_location() with skip flags: cache=$SKIP_CACHE_DETECTION, device=$SKIP_DEVICE_DETECTION, cache-device=$SKIP_CACHE_DEVICE_DETECTION, ip=$SKIP_IP_DETECTION, all=$SKIP_ALL_DETECTION"
@@ -696,7 +697,25 @@ detect_and_set_location() {
             if [ -n "$detected_country" ] && [ -n "$detected_timezone" ] && [ -n "$detected_zonename" ]; then
                 country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
                 debug_log "DEBUG" "Country data retrieved from database for display"
-            
+                
+                # キャッシュ使用時も言語処理を確実に実行
+                debug_log "DEBUG" "Ensuring language processing for cached location"
+                
+                # 国情報を一時ファイルに書き出し
+                if [ -n "$country_data" ]; then
+                    echo "$country_data" > "${CACHE_DIR}/country.tmp"
+                    
+                    # 翻訳処理のために country_write を呼び出す
+                    # suppress_message=true で成功メッセージをスキップ
+                    country_write true || {
+                        debug_log "WARNING" "Failed to write country data from cache, but continuing"
+                    }
+                    
+                    # 言語翻訳処理の明示的な実行
+                    process_language_translation
+                    debug_log "DEBUG" "Translation process executed for cached location data"
+                fi
+                
                 # 共通関数を使用して検出情報と成功メッセージを表示
                 display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "true"
             
@@ -774,16 +793,6 @@ detect_and_set_location() {
         country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
         
         if [ -n "$country_data" ]; then
-            ## プレビュー用に言語設定を適用（キャッシュ以外の場合）
-            #if [ "$detection_source" != "cache" ]; then
-            #    echo "$country_data" > "${CACHE_DIR}/country.tmp"
-            #    debug_log "DEBUG" "Applying temporary language settings for preview"
-            #    country_write true && {
-            #        preview_applied="true"
-            #        debug_log "DEBUG" "Preview language applied from $detection_source detection"
-            #    }
-            #fi
-
             debug_log "DEBUG" "Before display - source: $detection_source, country: $detected_country, skip_confirmation: $skip_confirmation"
         
             # 共通関数を使用して検出情報を表示（成功メッセージなし）
@@ -817,6 +826,10 @@ detect_and_set_location() {
                         debug_log "ERROR" "Failed to write country data"
                         return 1
                     }
+                    
+                    # 非キャッシュ検出時にも明示的に翻訳処理を実行
+                    process_language_translation
+                    debug_log "DEBUG" "Translation process executed for non-cache detection"
                 fi
                 
                 # 国選択完了メッセージを表示
