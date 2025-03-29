@@ -261,53 +261,54 @@ US|CONFIG_DOWNLOAD_UNNECESSARY=No update needed:"
     debug_log "DEBUG" "Messages loaded into memory"
 }
 
-# メッセージを取得する関数
 get_message() {
     local key="$1"
     local params="$2"  # パラメータ文字列
-    local lang="${lang:-US}" 
-    local db_file="${db_file:-${BASE_DIR}/messages_base.db}" 
+    local lang="US"    # デフォルト言語
+    local db_file="${BASE_DIR}/messages_base.db"  # デフォルトDB
     local message=""
-
-    # メッセージDBがダウンロードされた後の言語設定処理
+    
+    # 言語コードの取得
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang=$(cat "${CACHE_DIR}/message.ch")
-    elif [ -n "$ACTIVE_LANGUAGE" ]; then
-        lang="$ACTIVE_LANGUAGE"
+        debug_log "DEBUG" "Using language from cache: $lang"
     fi
     
     # インメモリメッセージから検索
     into_memory_message
     if [ -n "$MSG_MEMORY" ]; then
-        # 言語固有のメモリ内メッセージを検索
         message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
     fi
-
-    # メッセージが見つからなかった場合かつDBファイルが存在する場合は検索
-    if [ -z "$message" ] && [ -f "$db_file" ]; then
-        # 現在の言語でDBファイルを検索
-        message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
-        
-        # 言語固有のメッセージが見つからない場合、英語をチェック
-        if [ -z "$message" ] && [ "$lang" != "US" ]; then
-            message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
-        fi
+    
+    # DBファイル選択
+    if [ "$lang" != "US" ] && [ -f "${BASE_DIR}/messages_${lang}.db" ]; then
+        db_file="${BASE_DIR}/messages_${lang}.db"
     fi
     
-    # メッセージが見つからなかった場合はキーをそのまま返す
+    # DBファイルから検索（メモリに見つからない場合）
+    if [ -z "$message" ] && [ -f "$db_file" ]; then
+        message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+    fi
+    
+    # USにフォールバック（非US言語で見つからない場合）
+    if [ -z "$message" ] && [ "$lang" != "US" ] && [ -f "$db_file" ]; then
+        message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        debug_log "DEBUG" "Key not found in $lang, using US fallback for: $key"
+    fi
+    
+    # メッセージが見つからない場合はキーをそのまま返す
     if [ -z "$message" ]; then
-        debug_log "WARNING" "Message not found for key: ${key}"
+        debug_log "DEBUG" "Message not found for key: $key, using key as fallback"
         message="$key"
     fi
     
     # パラメータ置換処理
     if [ -n "$params" ]; then
-        var_name=$(echo "$params" | cut -d'=' -f1)
-        var_value=$(echo "$params" | cut -d'=' -f2-)
+        local var_name=$(echo "$params" | cut -d'=' -f1)
+        local var_value=$(echo "$params" | cut -d'=' -f2-)
         
         if [ -n "$var_name" ] && [ -n "$var_value" ]; then
-            debug_log "DEBUG" "Replacing placeholder {$var_name} with value"
-            var_value_esc=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
+            local var_value_esc=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
             message=$(echo "$message" | sed "s|{$var_name}|$var_value_esc|g")
         fi
     fi
