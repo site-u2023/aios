@@ -333,7 +333,7 @@ EOF
     fi
     
     # 翻訳処理開始
-    printf "Starting database creation for language: %s\n" "$target_lang"
+    printf "Starting database creation for language: %s\n" "$api_lang"
     
     # 初期APIを決定
     if printf "%s" "$API_LIST" | grep -q "google"; then
@@ -345,7 +345,7 @@ EOF
     fi
     
     # スピナーを開始し、使用中のAPIを表示（英語で表示）
-    start_spinner "Using API: $current_api" "dot"
+    start_spinner "$(color blue "Using API: $current_api")" "dot"
     
     # USエントリを抽出
     grep "^US|" "$base_db" | while IFS= read -r line; do
@@ -379,7 +379,7 @@ EOF
                     if [ "$current_api" != "Google Translate API" ]; then
                         stop_spinner "Switching API" "success"
                         current_api="Google Translate API"
-                        start_spinner "Using API: $current_api" "dot"
+                        start_spinner "$(color blue "Using API: $current_api")" "dot"
                         debug_log "DEBUG" "Switching to Google Translate API"
                     fi
                     
@@ -399,7 +399,7 @@ EOF
                     if [ "$current_api" != "MyMemory API" ]; then
                         stop_spinner "Google API failed, switching to MyMemory API" "error" 
                         current_api="MyMemory API"
-                        start_spinner "Using API: $current_api" "dot"
+                        start_spinner "$(color blue "Using API: $current_api")" "dot"
                         debug_log "DEBUG" "Switching to MyMemory API"
                     fi
                     
@@ -446,7 +446,7 @@ EOF
     stop_spinner "Translation completed" "success"
     
     # 翻訳処理終了
-    printf "Database creation completed for language: %s\n" "$target_lang"
+    printf "Database creation completed for language: %s\n" "${api_lang}"
     debug_log "DEBUG" "Language DB creation completed for ${target_lang}"
     return 0
 }
