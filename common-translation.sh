@@ -21,7 +21,7 @@ SCRIPT_VERSION="2025-03-29-03-40"
 # ✅ No associative arrays (declare -A is NOT supported)
 # ✅ No here-strings (<<< is NOT supported)
 # ✅ No -v flag in test or [[
-# ✅ Avoid bash-specific string operations like ${var:0:3}
+# ✅ Avoid bash-specific string operations like ${var:0:3}　
 # ✅ Avoid arrays entirely when possible (even indexed arrays can be problematic)
 # ✅ Use printf followed by read instead of read -p
 # ✅ Use printf instead of echo -e for portable formatting
