@@ -190,23 +190,25 @@ protect_placeholders() {
     # マッピングファイルをクリア
     > "$placeholder_map"
     
-    # {xxx} パターンのプレースホルダーを検出して置換
+    # カウンター初期化
     local counter=0
-    while echo "$output" | grep -q '{[^{}]*}'; do
+    
+    # {NOTR_xxx_NOTR} パターンを検出して保護
+    while echo "$output" | grep -q '{NOTR_[^{}]*_NOTR}'; do
         # プレースホルダーを抽出
-        local full_placeholder=$(echo "$output" | grep -o '{[^{}]*}' | head -1)
+        local notr_placeholder=$(echo "$output" | grep -o '{NOTR_[^{}]*_NOTR}' | head -1)
         
-        if [ -n "$full_placeholder" ]; then
+        if [ -n "$notr_placeholder" ]; then
             # トークン生成
             counter=$((counter + 1))
-            local token="__PH${counter}__"
+            local token="__NOTRPH${counter}__"
             
             # マッピングを保存
-            echo "$token|$full_placeholder" >> "$placeholder_map"
+            echo "$token|$notr_placeholder" >> "$placeholder_map"
             
             # 置換実行（sedの区切り文字を#に変更して特殊文字問題を回避）
-            output=$(echo "$output" | sed "s#$full_placeholder#$token#")
-            debug_log "DEBUG" "Protected placeholder: $full_placeholder with token: $token"
+            output=$(echo "$output" | sed "s#$notr_placeholder#$token#")
+            debug_log "DEBUG" "Protected NOTR placeholder: $notr_placeholder with token: $token"
         else
             break
         fi
@@ -285,7 +287,7 @@ translate_with_google() {
     return 1
 }
 
-# MyMemory API関数修正（同様の修正）
+# MyMemory API関数修正
 translate_with_mymemory() {
     local text="$1"
     local source_lang="$2"
