@@ -320,7 +320,7 @@ create_language_db() {
         debug_log "DEBUG" "Base message DB not found"
         rm -rf "$temp_dir"
         return 1
-    }
+    fi
     
     # DBファイル作成 (新規作成・上書き)
     cat > "$output_db" << EOF
