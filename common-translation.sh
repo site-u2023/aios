@@ -135,10 +135,35 @@ urlencode() {
     echo "$encoded"
 }
 
-# シンプル化したUnicodeデコード関数
+# 文字コードの検出と表示
+check_charset_support() {
+    if [ "$DEV_NULL" != "on" ]; then
+        echo "Checking console charset support..."
+    fi
+    debug_log "DEBUG" "Checking system locale and charset support"
+    
+    # システムのロケールとエンコーディングを確認
+    local current_locale=$(locale charmap 2>/dev/null || echo "Unknown")
+    
+    if [ "$DEV_NULL" != "on" ]; then
+        echo "現在のシステム文字セット: ${current_locale}"
+        echo "非ASCII文字のテスト表示: あいうえお Ää Çç Привет مرحبا"
+    fi
+    debug_log "DEBUG" "System charset detected: ${current_locale}"
+    
+    # UTF-8でない場合は警告
+    if [ "$current_locale" != "UTF-8" ] && [ "$current_locale" != "utf8" ]; then
+        if [ "$DEV_NULL" != "on" ]; then
+            echo "警告: システムがUTF-8を使用していないため、一部の言語が正しく表示されない可能性があります。"
+        fi
+        debug_log "WARNING" "Non-UTF-8 charset may cause display issues with some languages"
+    fi
+}
+
+# 改良版Unicodeデコード関数
 decode_unicode() {
     local input="$1"
-    local temp_file="${TRANSLATION_CACHE_DIR}/unicode_decode_temp.txt"
+    local temp_file="${TRANSLATION_CACHE_DIR}/unicode_decode.temp"
     
     # エスケープシーケンスがなければそのまま返す
     if ! echo "$input" | grep -q '\\u[0-9a-fA-F]\{4\}'; then
@@ -147,56 +172,69 @@ decode_unicode() {
     fi
     
     if [ "$DEV_NULL" != "on" ]; then
-        echo "Decoding Unicode escape sequences in translation response"
+        echo "Unicodeエスケープシーケンスをデコードしています..."
     fi
-    debug_log "DEBUG" "Starting Unicode decode process"
+    debug_log "DEBUG" "Decoding Unicode escape sequences in translation response"
     
-    # AWKを使用した汎用的なUnicodeデコード
-    # ASH/BusyBox環境でも動作する簡易実装
+    # BusyBoxのawkによるUnicodeデコード処理
+    # より確実なデコード方法を使用
     echo "$input" | awk '
     BEGIN {
-        # 16進数から10進数への変換テーブル
-        for (i = 0; i <= 9; i++) hex_to_dec[i] = i
-        hex_to_dec["A"] = hex_to_dec["a"] = 10
-        hex_to_dec["B"] = hex_to_dec["b"] = 11
-        hex_to_dec["C"] = hex_to_dec["c"] = 12
-        hex_to_dec["D"] = hex_to_dec["d"] = 13
-        hex_to_dec["E"] = hex_to_dec["e"] = 14
-        hex_to_dec["F"] = hex_to_dec["f"] = 15
+        # 16進数変換テーブル
+        for (i = 0; i <= 9; i++) hex[i] = i
+        hex["A"] = hex["a"] = 10
+        hex["B"] = hex["b"] = 11
+        hex["C"] = hex["c"] = 12
+        hex["D"] = hex["d"] = 13
+        hex["E"] = hex["e"] = 14
+        hex["F"] = hex["f"] = 15
     }
     
-    # 16進数文字列を10進数に変換
-    function hex_to_int(hex) {
+    # 16進数を10進数に変換
+    function hex_to_int(hex_str) {
         result = 0
-        for (i = 1; i <= length(hex); i++) {
-            result = result * 16 + hex_to_dec[substr(hex, i, 1)]
+        n = length(hex_str)
+        for (i = 1; i <= n; i++) {
+            result = result * 16 + hex[substr(hex_str, i, 1)]
         }
         return result
     }
     
     {
+        line = $0
         result = ""
-        str = $0
         
-        while (match(str, /\\u[0-9a-fA-F]{4}/)) {
-            # エスケープシーケンスの前の部分
-            result = result substr(str, 1, RSTART - 1)
+        while (match(line, /\\u[0-9a-fA-F]{4}/)) {
+            # マッチ前の部分を追加
+            result = result substr(line, 1, RSTART-1)
             
-            # Unicodeコードポイント（16進数）
-            hex = substr(str, RSTART + 2, 4)
+            # Unicodeコードポイントを抽出
+            hex_val = substr(line, RSTART+2, 4)
+            code = hex_to_int(hex_val)
             
-            # 対応する文字をそのまま追加
-            # printfを使うとUTF-8として出力される
-            printf "%s", result
-            printf "%c", hex_to_int("0x" hex)
+            # UTF-8エンコーディングに変換
+            if (code <= 0x7F) {
+                # ASCII範囲
+                result = result sprintf("%c", code)
+            } else if (code <= 0x7FF) {
+                # 2バイトシーケンス
+                byte1 = 0xC0 + int(code / 64)
+                byte2 = 0x80 + (code % 64)
+                result = result sprintf("%c%c", byte1, byte2)
+            } else {
+                # 3バイトシーケンス
+                byte1 = 0xE0 + int(code / 4096)
+                byte2 = 0x80 + int((code % 4096) / 64)
+                byte3 = 0x80 + (code % 64)
+                result = result sprintf("%c%c%c", byte1, byte2, byte3)
+            }
             
-            # 残りの文字列を更新
-            result = ""
-            str = substr(str, RSTART + RLENGTH)
+            # 残りの部分を更新
+            line = substr(line, RSTART + RLENGTH)
         }
         
-        # 残りの部分を出力
-        print result str
+        # 残りの部分を追加
+        print result line
     }' > "$temp_file"
     
     # 結果を返す
@@ -212,16 +250,15 @@ translate_with_google() {
     local encoded_text=$(urlencode "$text")
     local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
     
-    # 英語でのAPIステータス表示
     if [ "$DEV_NULL" != "on" ]; then
-        echo "Using Google Translate API: ${source_lang} to ${target_lang}"
+        echo "Google翻訳APIを使用中: ${source_lang} から ${target_lang} へ翻訳"
     fi
-    debug_log "DEBUG" "Translating with Google API: ${text}"
+    debug_log "DEBUG" "Using Google Translate API: ${source_lang} to ${target_lang}"
     
     # ユーザーエージェントを設定
     local ua="Mozilla/5.0 (Linux; OpenWrt) AppleWebKit/537.36"
     
-    # リクエスト送信
+    # API応答のエンコーディングを指定
     wget -q -O "$temp_file" -T "$WGET_TIMEOUT" \
          --user-agent="$ua" \
          "https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
@@ -240,16 +277,18 @@ translate_with_google() {
         
         if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
             if [ "$DEV_NULL" != "on" ]; then
-                echo "Google Translate API: Translation successful"
+                echo "Google翻訳API: 翻訳成功"
             fi
+            debug_log "DEBUG" "Google Translate API: Translation successful"
             echo "$translated"
             return 0
         fi
     fi
     
     if [ "$DEV_NULL" != "on" ]; then
-        echo "Google Translate API: Translation failed"
+        echo "Google翻訳API: 翻訳失敗"
     fi
+    debug_log "DEBUG" "Google Translate API: Translation failed"
     rm -f "$temp_file"
     return 1
 }
