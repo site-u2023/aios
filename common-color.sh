@@ -64,7 +64,7 @@ BOX_ENABLED="0"         # ボックス表示有効/無効
 # スピナーデフォルト設定
 SPINNER_DELAY="1" # デフォルトは秒単位
 SPINNER_USLEEP_VALUE="1000000" # 1秒（マイクロ秒）
-SPINNER_COLOR="green" # デフォルトのスピナー色
+SPINNER_COLOR="yellow" # デフォルトのスピナー色
 ANIMATION_ENABLED="1" # アニメーション有効/無効フラグ
 
 # コマンドラインオプション処理関数
@@ -472,10 +472,12 @@ load_display_settings() {
 start_spinner() {
     message="$1"
     anim_type="${2:-dot}"
-
+    spinner_color="${3:-$SPINNER_COLOR}"
+    
     SPINNER_MESSAGE="$message"
     SPINNER_TYPE="$anim_type"
-
+    SPINNER_COLOR="$spinner_color"
+    
     if [ "$ANIMATION_ENABLED" -eq "0" ]; then
         debug_log  "$message"
         return
@@ -519,7 +521,7 @@ start_spinner() {
         i=0
         while true; do
             for char in $SPINNER_CHARS; do
-                printf "\r\033[K%s %s" "$SPINNER_MESSAGE" "$char"
+                printf "\r\033[K%s %s" "$SPINNER_MESSAGE" "$(color "$SPINNER_COLOR" "$char")"
 
                 if command -v usleep >/dev/null 2>&1; then
                     usleep "$SPINNER_USLEEP_VALUE"  # マイクロ秒単位のディレイ
