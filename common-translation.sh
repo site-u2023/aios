@@ -59,16 +59,6 @@ API_LIST="google,mymemory"
 # タイムアウト設定
 WGET_TIMEOUT=10
 
-# デバッグログ関数
-debug_log() {
-    if [ "${DEBUG:-0}" -ge 1 ]; then
-        local level="$1"
-        local message="$2"
-        local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-        printf "[%s] %s: %s\n" "$timestamp" "$level" "$message" >&2
-    fi
-}
-
 # 翻訳キャッシュの初期化
 init_translation_cache() {
     mkdir -p "${TRANSLATION_CACHE_DIR}"
