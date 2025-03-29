@@ -367,7 +367,7 @@ EOF
             fi
             
             # ネットワーク接続確認
-            if ping -c 1 -W 1 1.1.1.1 >/dev/null 2>&1; then
+            if ping -c 1 -W 1 one.one.one.one >/dev/null 2>&1; then
                 debug_log "DEBUG" "Translating text for key: ${key}"
                 
                 # 複数APIで翻訳を試行
