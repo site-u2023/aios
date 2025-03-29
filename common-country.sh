@@ -818,8 +818,8 @@ detect_and_set_location() {
                     }
                     
                     # 非キャッシュ検出時にも明示的に翻訳処理を実行
-                    process_language_translation
-                    debug_log "DEBUG" "Translation process executed for non-cache detection"
+                    # process_language_translation
+                    # debug_log "DEBUG" "Translation process executed for non-cache detection"
                 fi
                 
                 # 国選択完了メッセージを表示
