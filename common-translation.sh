@@ -63,16 +63,11 @@ DEV_NULL="${DEV_NULL:-on}"
 # 基本wgetコマンド - ヘッダー無し
 BASE_WGET="wget --no-check-certificate -q -O"
 # BASE_WGET="wget -O"
-# Bearer認証用wgetコマンド（トークンは呼び出し時に指定）
-BASE_WGET_AUTH_BEARER='wget --no-check-certificate -q -O "$1" --header="Authorization: Bearer $2" "$3"'
-# 従来のtoken認証用wgetコマンド（トークンは呼び出し時に指定）
-BASE_WGET_AUTH_TOKEN='wget --no-check-certificate -q -O "$1" --header="Authorization: token $2" "$3"'
 DEBUG_MODE="${DEBUG_MODE:-false}"
 BIN_PATH="$(readlink -f "$0")"
 BIN_DIR="$(dirname "$BIN_PATH")"
 BIN_FILE="$(basename "$BIN_PATH")"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
-CACHE_BUST="?cache_bust=$(date +%s)"  # キャッシュバスティング用パラメータを初期化
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
