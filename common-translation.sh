@@ -106,15 +106,13 @@ check_charset_support() {
     # システムのロケールとエンコーディングを確認
     local current_locale=$(locale charmap 2>/dev/null || printf "Unknown")
     
-    printf "Checking system charset...\n"
-    printf "Current system charset: %s\n" "$current_locale"
-    printf "Non-ASCII character test: あいうえお Ää Çç Привет مرحبا\n"
+    debug_log "INFO" "Current system charset: ${current_locale}"
+    debug_log "DEBUG" "Non-ASCII character test: あいうえお Ää Çç Привет مرحبا"
     debug_log "DEBUG" "System charset detected: ${current_locale}"
     
     # UTF-8でない場合は警告
     if [ "$current_locale" != "UTF-8" ] && [ "$current_locale" != "utf8" ]; then
-        printf "WARNING: System is not using UTF-8, some languages may not display correctly.\n"
-        debug_log "WARNING" "Non-UTF-8 charset may cause display issues with some languages"
+        debug_log "WARNING" "System is not using UTF-8, some languages may not display correctly"
     fi
 }
 
@@ -129,7 +127,6 @@ decode_unicode() {
         return 0
     fi
     
-    printf "Decoding Unicode escape sequences...\n"
     debug_log "DEBUG" "Decoding Unicode escape sequences in translation response"
     
     # BusyBoxのawkによるUnicodeデコード処理
@@ -205,8 +202,7 @@ translate_with_google() {
     local encoded_text=$(urlencode "$text")
     local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
     
-    printf "Using Google Translate API: translating from %s to %s\n" "$source_lang" "$target_lang"
-    debug_log "DEBUG" "Using Google Translate API: ${source_lang} to ${target_lang}"
+    debug_log "INFO" "Using Google Translate API: ${source_lang} to ${target_lang}"
     
     # ユーザーエージェントを設定
     local ua="Mozilla/5.0 (Linux; OpenWrt) AppleWebKit/537.36"
@@ -229,14 +225,12 @@ translate_with_google() {
         rm -f "$temp_file"
         
         if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
-            printf "Google Translate API: Translation successful\n"
             debug_log "DEBUG" "Google Translate API: Translation successful"
             printf "%s\n" "$translated"
             return 0
         fi
     fi
     
-    printf "Google Translate API: Translation failed\n"
     debug_log "DEBUG" "Google Translate API: Translation failed"
     rm -f "$temp_file"
     return 1
@@ -251,8 +245,7 @@ translate_with_mymemory() {
     local temp_file="${TRANSLATION_CACHE_DIR}/mymemory_response.tmp"
     
     # APIステータス表示
-    printf "Using MyMemory API: translating from %s to %s\n" "$source_lang" "$target_lang"
-    debug_log "DEBUG" "Using MyMemory API: ${source_lang} to ${target_lang}"
+    debug_log "INFO" "Using MyMemory API: ${source_lang} to ${target_lang}"
     
     # リクエスト送信
     wget -q -O "$temp_file" -T "$WGET_TIMEOUT" \
@@ -264,14 +257,12 @@ translate_with_mymemory() {
         rm -f "$temp_file"
         
         if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
-            printf "MyMemory API: Translation successful\n"
             debug_log "DEBUG" "MyMemory API: Translation successful"
             printf "%s\n" "$translated"
             return 0
         fi
     fi
     
-    printf "MyMemory API: Translation failed\n"
     debug_log "DEBUG" "MyMemory API: Translation failed"
     rm -f "$temp_file"
     return 1
@@ -285,8 +276,7 @@ translate_text() {
     local result=""
     
     # API実行開始メッセージ
-    printf "Starting translation process with API priority: %s\n" "$API_LIST"
-    debug_log "DEBUG" "Starting translation process with API priority: ${API_LIST}"
+    debug_log "INFO" "Starting translation process with API priority: ${API_LIST}"
     
     # Google API を試行
     if printf "%s" "$API_LIST" | grep -q "google"; then
@@ -309,8 +299,7 @@ translate_text() {
     fi
     
     # すべて失敗した場合
-    printf "All translation APIs failed - no translation result obtained\n"
-    debug_log "DEBUG" "All translation APIs failed - no translation result obtained"
+    debug_log "WARNING" "All translation APIs failed - no translation result obtained"
     return 1
 }
 
@@ -372,7 +361,7 @@ EOF
                 debug_log "DEBUG" "Translating text for key: ${key}"
                 
                 # 複数APIで翻訳を試行
-                printf "Translating key '%s'...\n" "$key"
+                debug_log "INFO" "Translating key: ${key}"
                 local translated=$(translate_text "$value" "en" "$api_lang")
                 
                 # 翻訳結果処理
@@ -421,7 +410,7 @@ process_language_translation() {
     # USとJP以外の場合のみ翻訳DBを作成
     if [ "$lang_code" != "US" ]; then
         # 翻訳DBを作成
-        printf "Creating translation database for language %s...\n" "$lang_code"
+        debug_log "INFO" "Creating translation database for language ${lang_code}"
         create_language_db "$lang_code"
     else
         debug_log "DEBUG" "Skipping DB creation for built-in language: ${lang_code}"
@@ -439,11 +428,11 @@ init_translation() {
     check_charset_support
     
     # 言語翻訳処理を実行
-    printf "Initializing translation module...\n"
+    debug_log "INFO" "Initializing translation module"
     process_language_translation
     
     debug_log "DEBUG" "Translation module initialized with language processing"
-    printf "Translation module initialization complete\n"
+    debug_log "INFO" "Translation module initialization complete"
 }
 
 # スクリプト初期化（自動実行）
