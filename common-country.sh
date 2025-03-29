@@ -707,9 +707,9 @@ detect_and_set_location() {
                     
                     # 翻訳処理のために country_write を呼び出す
                     # suppress_message=true で成功メッセージをスキップ
-                    country_write true || {
-                        debug_log "WARNING" "Failed to write country data from cache, but continuing"
-                    }
+                    #country_write true || {
+                    #   debug_log "WARNING" "Failed to write country data from cache, but continuing"
+                    #}
                     
                     # 言語翻訳処理の明示的な実行
                     process_language_translation
