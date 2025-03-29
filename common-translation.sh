@@ -266,6 +266,8 @@ translate_with_google() {
     local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
     
     debug_log "DEBUG" "Translating with Google API: ${text}"
+    # API実行時の機能的なエコー表示
+    [ "$DEV_NULL" != "on" ] && echo "[ Google Translate API ] Translating from ${source_lang} to ${target_lang}"
     
     # ユーザーエージェントを設定
     local ua="Mozilla/5.0 (Linux; OpenWrt) AppleWebKit/537.36"
@@ -288,11 +290,13 @@ translate_with_google() {
         rm -f "$temp_file"
         
         if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
+            [ "$DEV_NULL" != "on" ] && echo "[ Google Translate API ] Translation successful"
             echo "$translated"
             return 0
         fi
     fi
     
+    [ "$DEV_NULL" != "on" ] && echo "[ Google Translate API ] Translation failed"
     rm -f "$temp_file"
     return 1
 }
@@ -306,6 +310,8 @@ translate_with_mymemory() {
     local temp_file="${TRANSLATION_CACHE_DIR}/mymemory_response.tmp"
     
     debug_log "DEBUG" "Translating with MyMemory API: ${text}"
+    # API実行時の機能的なエコー表示
+    [ "$DEV_NULL" != "on" ] && echo "[ MyMemory API ] Translating from ${source_lang} to ${target_lang}"
     
     # リクエスト送信
     wget -q -O "$temp_file" -T "$WGET_TIMEOUT" \
@@ -317,26 +323,36 @@ translate_with_mymemory() {
         rm -f "$temp_file"
         
         if [ -n "$translated" ] && [ "$translated" != "$text" ]; then
+            [ "$DEV_NULL" != "on" ] && echo "[ MyMemory API ] Translation successful"
             echo "$translated"
             return 0
         fi
     fi
     
+    [ "$DEV_NULL" != "on" ] && echo "[ MyMemory API ] Translation failed"
     rm -f "$temp_file"
     return 1
 }
 
 # 複数APIを使った翻訳実行（改良版）
+# 優先順位に従って各APIを試し、成功したら結果を返す
 translate_text() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
     local result=""
     
-    debug_log "DEBUG" "Attempting translation with multiple APIs"
+    # APIの実行状況を英語でエコー表示
+    if [ "$DEV_NULL" != "on" ]; then
+        echo "Starting translation process with configured APIs: ${API_LIST}"
+    fi
+    debug_log "DEBUG" "Attempting translation with multiple APIs in sequence"
     
     # Google API を試行
     if echo "$API_LIST" | grep -q "google"; then
+        if [ "$DEV_NULL" != "on" ]; then
+            echo "Trying Google Translate API as primary option"
+        fi
         result=$(translate_with_google "$text" "$source_lang" "$target_lang")
         if [ $? -eq 0 ] && [ -n "$result" ]; then
             debug_log "DEBUG" "Translation successful with Google API"
@@ -347,6 +363,9 @@ translate_text() {
     
     # MyMemory API を試行
     if echo "$API_LIST" | grep -q "mymemory"; then
+        if [ "$DEV_NULL" != "on" ]; then
+            echo "Trying MyMemory API as fallback option"
+        fi
         result=$(translate_with_mymemory "$text" "$source_lang" "$target_lang")
         if [ $? -eq 0 ] && [ -n "$result" ]; then
             debug_log "DEBUG" "Translation successful with MyMemory API"
@@ -356,6 +375,9 @@ translate_text() {
     fi
     
     # すべて失敗した場合
+    if [ "$DEV_NULL" != "on" ]; then
+        echo "All translation APIs failed - no result obtained"
+    fi
     debug_log "DEBUG" "All translation APIs failed"
     return 1
 }
