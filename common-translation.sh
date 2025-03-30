@@ -53,9 +53,9 @@ ONLINE_TRANSLATION_ENABLED="yes"
 # 翻訳キャッシュディレクトリ
 TRANSLATION_CACHE_DIR="${BASE_DIR:-/tmp/aios}/translations"
 
-# 使用可能なAPIリスト（優先順位）
-# API_LIST="google,mymemory"
-API_LIST="mymemory,google"
+# 使用可能なAPIリスト
+# API_LIST="mymemory"
+API_LIST="google"
 
 # タイムアウト設定
 WGET_TIMEOUT=10
@@ -226,64 +226,58 @@ translate_with_google() {
     return 1
 }
 
-# 修正版フォールバック処理関数
+# translate_text関数
 translate_text() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
     local result=""
-    local api_status=0
     
-    echo "DEBUG: Starting translation process with fallback"
+    echo "DEBUG: Starting translation using single API mode"
     
-    # APIリストをPOSIX互換で展開
-    local old_ifs="$IFS"
-    IFS=","
-    set -- $API_LIST
-    IFS="$old_ifs"
+    # 設定されたAPIを取得（カンマ区切りの最初の項目のみ使用）
+    local api=$(echo "$API_LIST" | cut -d ',' -f1)
+    CURRENT_API="$api"
     
-    # 各APIを順番に試行し、一度だけ処理する
-    while [ $# -gt 0 ]; do
-        CURRENT_API="$1"
-        echo "DEBUG: Trying API: $CURRENT_API"
-        
-        case "$CURRENT_API" in
-            mymemory)
-                result=$(translate_with_mymemory "$text" "$source_lang" "$target_lang")
-                api_status=$?
-                
-                if [ $api_status -eq 0 ] && [ -n "$result" ]; then
-                    echo "DEBUG: MyMemory translation successful"
-                    echo "【MyMemory翻訳結果】: $result"
-                    return 0
-                fi
-                
-                echo "Switching API"
-                ;;
-                
-            google)
-                echo "Using API: Google Translate API"
-                
-                result=$(translate_with_google "$text" "$source_lang" "$target_lang")
-                api_status=$?
-                
-                if [ $api_status -eq 0 ] && [ -n "$result" ]; then
-                    echo "DEBUG: Google translation successful"
-                    echo "【Google翻訳結果】: $result"
-                    return 0
-                else
-                    echo "DEBUG: Google API translation failed"
-                fi
-                ;;
-        esac
-        
-        # 次のAPIへ移動（重要: 必ずshiftすること）
-        shift
-    done
+    echo "DEBUG: Selected API: $CURRENT_API"
     
-    echo "DEBUG: All translation APIs failed"
-    echo "【エラー】翻訳できませんでした"
-    return 1
+    case "$CURRENT_API" in
+        mymemory)
+            echo "DEBUG: Using MyMemory API"
+            result=$(translate_with_mymemory "$text" "$source_lang" "$target_lang")
+            
+            if [ $? -eq 0 ] && [ -n "$result" ]; then
+                echo "DEBUG: MyMemory translation completed"
+                echo "【MyMemory翻訳結果】: $result"
+                return 0
+            else
+                echo "DEBUG: MyMemory translation failed"
+                echo "【エラー】MyMemory APIでの翻訳に失敗しました。"
+                return 1
+            fi
+            ;;
+            
+        google)
+            echo "DEBUG: Using Google Translate API"
+            result=$(translate_with_google "$text" "$source_lang" "$target_lang")
+            
+            if [ $? -eq 0 ] && [ -n "$result" ]; then
+                echo "DEBUG: Google translation completed"
+                echo "【Google翻訳結果】: $result"
+                return 0
+            else
+                echo "DEBUG: Google translation failed"
+                echo "【エラー】Google翻訳APIでの翻訳に失敗しました。"
+                return 1
+            fi
+            ;;
+            
+        *)
+            echo "DEBUG: Unknown or invalid API specified: $CURRENT_API"
+            echo "【エラー】指定されたAPI「$CURRENT_API」は無効です。API_LIST設定を確認してください。"
+            return 1
+            ;;
+    esac
 }
 
 translate_with_mymemory() {
