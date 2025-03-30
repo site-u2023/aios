@@ -55,6 +55,30 @@ OSVERSION="${CACHE_DIR}/osversion.ch"
 PACKAGE_MANAGER="${CACHE_DIR}/package_manager.ch"
 PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
 
+check_network_connectivity() {
+    local ip_check_file="${CACHE_DIR}/network.ch"
+    local ret4=1
+    local ret6=1
+
+    echo "DEBUG: Checking IPv4 connectivity"
+    ping -c 1 -w 3 8.8.8.8 >/dev/null 2>&1
+    ret4=$?
+
+    echo "DEBUG: Checking IPv6 connectivity"
+    ping6 -c 1 -w 3 2001:4860:4860::8888 >/dev/null 2>&1
+    ret6=$?
+
+    if [ "$ret4" -eq 0 ] && [ "$ret6" -eq 0 ]; then
+        echo "v4v6" > "${ip_check_file}"
+    elif [ "$ret4" -eq 0 ]; then
+        echo "v4" > "${ip_check_file}"
+    elif [ "$ret6" -eq 0 ]; then
+        echo "v6" > "${ip_check_file}"
+    else
+        echo "" > "${ip_check_file}"
+    fi
+}
+
 # キャッシュファイルの存在と有効性を確認する関数
 check_location_cache() {
     local cache_language="${CACHE_DIR}/language.ch"
