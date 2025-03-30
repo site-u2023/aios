@@ -564,7 +564,7 @@ process_package() {
     
     # パッケージのインストール
     if ! install_normal_package "$package_name" "$force_install"; then
-        debug_log "ERROR" "Failed to install package: $package_name"
+        debug_log "DEGUB" "Failed to install package: $package_name"
         return 1
     fi
 
