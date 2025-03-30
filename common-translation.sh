@@ -277,7 +277,7 @@ translate_with_mymemory() {
 translate_text() {
     local text="$1"
     local source_lang="$2"
-    local target_lang="$3"
+    local target_lang="$3" 
     local result=""
     
     # 全体進捗表示
