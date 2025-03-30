@@ -60,11 +60,11 @@ check_network_connectivity() {
     local ret4=1
     local ret6=1
 
-    echo "DEBUG: Checking IPv4 connectivity"
+    debug_log "DEBUG: Checking IPv4 connectivity"
     ping -c 1 -w 3 8.8.8.8 >/dev/null 2>&1
     ret4=$?
 
-    echo "DEBUG: Checking IPv6 connectivity"
+    debug_log "DEBUG: Checking IPv6 connectivity"
     ping6 -c 1 -w 3 2001:4860:4860::8888 >/dev/null 2>&1
     ret6=$?
 
@@ -727,6 +727,7 @@ debug_info() {
 
 # メイン処理
 dynamic_system_info_main() {
+    check_network_connectivity
     init_device_cache
     get_usb_devices
     detect_and_save_package_manager
