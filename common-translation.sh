@@ -103,91 +103,13 @@ urlencode() {
     printf "%s\n" "$encoded"
 }
 
-# 改良版Unicodeデコード関数
-decode_unicode() {
-    local input="$1"
-    local temp_file="${TRANSLATION_CACHE_DIR}/unicode_decode.temp"
-    
-    # エスケープシーケンスがなければそのまま返す
-    if ! printf "%s" "$input" | grep -q '\\u[0-9a-fA-F]\{4\}'; then
-        printf "%s\n" "$input"
-        return 0
-    fi
-    
-    debug_log "DEBUG" "Decoding Unicode escape sequences in translation response"
-    
-    # BusyBoxのawkによるUnicodeデコード処理
-    printf "%s" "$input" | awk '
-    BEGIN {
-        # 16進数変換テーブル
-        for (i = 0; i <= 9; i++) hex[i] = i
-        hex["A"] = hex["a"] = 10
-        hex["B"] = hex["b"] = 11
-        hex["C"] = hex["c"] = 12
-        hex["D"] = hex["d"] = 13
-        hex["E"] = hex["e"] = 14
-        hex["F"] = hex["f"] = 15
-    }
-    
-    # 16進数を10進数に変換
-    function hex_to_int(hex_str) {
-        result = 0
-        n = length(hex_str)
-        for (i = 1; i <= n; i++) {
-            result = result * 16 + hex[substr(hex_str, i, 1)]
-        }
-        return result
-    }
-    
-    {
-        line = $0
-        result = ""
-        
-        while (match(line, /\\u[0-9a-fA-F]{4}/)) {
-            # マッチ前の部分を追加
-            result = result substr(line, 1, RSTART-1)
-            
-            # Unicodeコードポイントを抽出
-            hex_val = substr(line, RSTART+2, 4)
-            code = hex_to_int(hex_val)
-            
-            # UTF-8エンコーディングに変換
-            if (code <= 0x7F) {
-                # ASCII範囲
-                result = result sprintf("%c", code)
-            } else if (code <= 0x7FF) {
-                # 2バイトシーケンス
-                byte1 = 0xC0 + int(code / 64)
-                byte2 = 0x80 + (code % 64)
-                result = result sprintf("%c%c", byte1, byte2)
-            } else {
-                # 3バイトシーケンス
-                byte1 = 0xE0 + int(code / 4096)
-                byte2 = 0x80 + int((code % 4096) / 64)
-                byte3 = 0x80 + (code % 64)
-                result = result sprintf("%c%c%c", byte1, byte2, byte3)
-            }
-            
-            # 残りの部分を更新
-            line = substr(line, RSTART + RLENGTH)
-        }
-        
-        # 残りの部分を追加
-        print result line
-    }' > "$temp_file"
-    
-    # 結果を返す
-    cat "$temp_file"
-    rm -f "$temp_file"
-}
-
-# 修正版 translate_with_google 関数
+# 修正版：translate_with_google関数
 translate_with_google() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
     
-    echo "DEBUG: Starting Google Translate API request"
+    debug_log "DEBUG" "Starting Google Translate API request"
     
     # URLエンコード
     local encoded_text=$(urlencode "$text")
@@ -198,200 +120,69 @@ translate_with_google() {
          "https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
     
     local wget_status=$?
-    echo "DEBUG: wget exit code: $wget_status"
+    debug_log "DEBUG" "wget exit code: $wget_status"
     
-    # 応答の品質チェック
+    # レスポンスチェック
     if [ -s "$temp_file" ]; then
-        # 1. 基本的なJSONフォーマットチェック
+        # JSONフォーマットチェック
         if grep -q '\[\[\["' "$temp_file"; then
             local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
             
-            # 2. デコード結果の品質チェック (最低限の文字が読める)
-            if [ -n "$translated" ] && ! echo "$translated" | grep -q '^\s*$'; then
-                echo "DEBUG: Google API returned valid translation"
+            # 結果確認
+            if [ -n "$translated" ]; then
+                debug_log "DEBUG" "Google API returned valid translation"
                 echo "$translated"
                 rm -f "$temp_file"
                 return 0
             else
-                echo "DEBUG: Google API response could not be properly decoded"
+                debug_log "DEBUG" "Google API returned empty translation"
             fi
         else
-            echo "DEBUG: Google API response is malformed"
+            debug_log "DEBUG" "Google API response is malformed"
         fi
     else
-        echo "DEBUG: Google API response file is empty or missing"
+        debug_log "DEBUG" "Google API response file is empty or missing"
     fi
     
     rm -f "$temp_file" 2>/dev/null
     return 1
 }
 
-# translate_text関数
+# フォールバック機能なし版：translate_text関数
 translate_text() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
     local result=""
     
-    echo "DEBUG: Starting translation using single API mode"
+    debug_log "DEBUG" "Starting translation using single API mode"
     
     # 設定されたAPIを取得（カンマ区切りの最初の項目のみ使用）
     local api=$(echo "$API_LIST" | cut -d ',' -f1)
     CURRENT_API="$api"
     
-    echo "DEBUG: Selected API: $CURRENT_API"
+    debug_log "DEBUG" "Selected API: $CURRENT_API"
     
-    case "$CURRENT_API" in
-        mymemory)
-            echo "DEBUG: Using MyMemory API"
-            result=$(translate_with_mymemory "$text" "$source_lang" "$target_lang")
-            
-            if [ $? -eq 0 ] && [ -n "$result" ]; then
-                echo "DEBUG: MyMemory translation completed"
-                echo "【MyMemory翻訳結果】: $result"
-                return 0
-            else
-                echo "DEBUG: MyMemory translation failed"
-                echo "【エラー】MyMemory APIでの翻訳に失敗しました。"
-                return 1
-            fi
-            ;;
-            
+    case "$CURRENT_API" in          
         google)
-            echo "DEBUG: Using Google Translate API"
+            debug_log "DEBUG" "Using Google Translate API"
             result=$(translate_with_google "$text" "$source_lang" "$target_lang")
             
             if [ $? -eq 0 ] && [ -n "$result" ]; then
-                echo "DEBUG: Google translation completed"
-                echo "【Google翻訳結果】: $result"
+                debug_log "DEBUG" "Google translation completed"
+                echo "$result"
                 return 0
             else
-                echo "DEBUG: Google translation failed"
-                echo "【エラー】Google翻訳APIでの翻訳に失敗しました。"
+                debug_log "DEBUG" "Google translation failed"
                 return 1
             fi
             ;;
             
         *)
-            echo "DEBUG: Unknown or invalid API specified: $CURRENT_API"
-            echo "【エラー】指定されたAPI「$CURRENT_API」は無効です。API_LIST設定を確認してください。"
+            debug_log "DEBUG" "Unknown or invalid API specified: $CURRENT_API"
             return 1
             ;;
     esac
-}
-
-translate_with_mymemory() {
-    local text="$1"
-    local source_lang="$2"
-    local target_lang="$3"
-    
-    # プレースホルダー保護処理を無効化（元の形式をそのまま使用）
-    # local protected_text=$(protect_placeholders "$text")
-    local encoded_text=$(urlencode "$text")  # 変更点: 直接テキストをエンコード
-    local temp_file="${TRANSLATION_CACHE_DIR}/mymemory_response.tmp"
-    
-    # 以下既存コード
-    debug_log "DEBUG" "Using MyMemory API: ${source_lang} to ${target_lang}"
-    
-    # リクエスト送信
-    wget -q -O "$temp_file" -T "$WGET_TIMEOUT" \
-         "https://api.mymemory.translated.net/get?q=${encoded_text}&langpair=${source_lang}|${target_lang}" 2>/dev/null
-    
-    # 応答解析
-    if [ -s "$temp_file" ]; then
-        local translated=$(grep -o '"translatedText":"[^"]*"' "$temp_file" | head -1 | sed 's/"translatedText":"//;s/"$//')
-        rm -f "$temp_file"
-        
-        if [ -n "$translated" ] && [ "$translated" != "$text" ]; then  # 変更点: 比較元を変更
-            # プレースホルダーを元に戻す処理を削除
-            # translated=$(restore_placeholders "$translated")
-            
-            # MyMemoryAPI進捗表示
-            debug_log "DEBUG" "MyMemory API: Translation successful"
-            printf "%s\n" "$translated"
-            return 0
-        fi
-    fi
-    
-    # MyMemoryAPI進捗表示
-    printf "MyMemory API: Translation failed\n"
-    debug_log "DEBUG" "MyMemory API: Translation failed"
-    rm -f "$temp_file"
-    return 1
-}
-
-# フォールバック機能修正したtranslate_text関数
-translate_text() {
-    local text="$1"
-    local source_lang="$2"
-    local target_lang="$3"
-    local result=""
-    local api_used=""
-    local api_tried=0
-    
-    echo "DEBUG: Starting translation with fallback system"
-    
-    # APIリストをPOSIX互換の方法で展開
-    local api_list="$API_LIST"
-    local old_ifs="$IFS"
-    IFS=","
-    set -- $api_list
-    IFS="$old_ifs"
-    
-    # 各APIを順番に試行
-    while [ $# -gt 0 ]; do
-        api_tried=1
-        CURRENT_API="$1"
-        
-        case "$CURRENT_API" in
-            mymemory)
-                echo "DEBUG: Attempting translation with MyMemory API"
-                result=$(translate_with_mymemory "$text" "$source_lang" "$target_lang")
-                api_used="MyMemory"
-                
-                # 成功判定
-                if [ $? -eq 0 ] && [ -n "$result" ]; then
-                    echo "DEBUG: MyMemory translation successful"
-                    echo "$result"
-                    return 0
-                fi
-                
-                # 失敗時のメッセージ
-                echo "Switching API"
-                ;;
-                
-            google)
-                echo "Using API: Google Translate API"
-                result=$(translate_with_google "$text" "$source_lang" "$target_lang")
-                api_used="Google"
-                
-                # 成功判定
-                if [ $? -eq 0 ] && [ -n "$result" ]; then
-                    echo "DEBUG: Google translation successful"
-                    echo "$result"
-                    return 0
-                fi
-                
-                # 失敗時のメッセージ
-                echo "DEBUG: Google API failed"
-                ;;
-        esac
-        
-        # 次のAPIへ（重要：これがないと無限ループになる）
-        shift
-        
-        # 進行状況表示
-        [ $# -gt 0 ] && echo "DEBUG: Moving to next API in list"
-    done
-    
-    # すべてのAPIが失敗した場合
-    if [ $api_tried -eq 1 ]; then
-        echo "DEBUG: All translation APIs failed"
-    else
-        echo "DEBUG: No valid translation APIs found in list"
-    fi
-    
-    return 1
 }
 
 # 言語DBファイルの作成関数
