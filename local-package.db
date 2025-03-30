@@ -99,7 +99,7 @@ uci commit samba4
 
 [luci-app-sqm]
 install_package luci-i18n-sqm hidden
-install_package tc-mod-iptables hidden
+install_package tc-full hidden
 
 [luci-app-qos]
 install_package luci-i18n-qos hidden
