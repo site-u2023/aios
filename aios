@@ -302,8 +302,12 @@ get_message() {
         message="$key"
     fi
     
-    # 特殊プレースホルダー処理（コロンなど）
-    message=$(echo "$message" | sed 's/{NOTR_:_NOTR}/:/g')
+    # プレースホルダー処理
+    # 1. {notr_colon_notr} を : に変換
+    message=$(echo "$message" | sed 's/{notr_colon_notr}/:/g')
+    
+    # 2. その他の {notr_*_notr} パターンを {*} に変換
+    message=$(echo "$message" | sed 's/{notr_\([^_]*\)_notr}/{\\1}/g')
     
     # パラメータ置換処理（既存の処理を維持）
     if [ -n "$params" ]; then
