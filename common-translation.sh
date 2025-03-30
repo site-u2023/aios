@@ -54,7 +54,8 @@ ONLINE_TRANSLATION_ENABLED="yes"
 TRANSLATION_CACHE_DIR="${BASE_DIR:-/tmp/aios}/translations"
 
 # 使用可能なAPIリスト（優先順位）
-API_LIST="google,mymemory"
+# API_LIST="google,mymemory"
+API_LIST="mymemory,google"
 
 # タイムアウト設定
 WGET_TIMEOUT=10
