@@ -138,7 +138,7 @@ packages_19() {
     
     # === ネットワーク管理 ===
     print_section_header "PKG_SECTION_NETWORK"
-    install_package luci-app-sqm yn hidden
+    #install_package luci-app-sqm yn hidden
     install_package luci-app-qos yn hidden
     install_package luci-i18n-statistics yn hidden
     install_package luci-i18n-nlbwmon yn hidden
