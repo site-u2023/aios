@@ -108,6 +108,7 @@ US|MSG_BANNER_DECCRIPTION=Dedicated configuration software for OpenWRT
 US|MSG_BANNER_NAME=All-in-One Scripts
 US|MSG_BANNER_DISCLAIMER=Disclaimer{notr_colon_notr} Use this script at your own risk
 US|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared.
+US|MSG_DELETE_COMPLETE=Delete completed. All based data has been cleared.
 US|MSG_DOWNLOAD_FAILED=Download failed{notr_colon_notr} {notr_file_notr}
 US|MSG_DOWNLOAD_SUCCESS=Download successful{notr_colon_notr} {notr_file_notr}
 US|MSG_ERROR_OCCURRED=An error occurred.
