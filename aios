@@ -314,7 +314,6 @@ get_message() {
         local placeholder=$(echo "$message" | grep -o "{notr_[^_]*_notr}" | head -1)
         local name=$(echo "$placeholder" | sed 's/{notr_\(.*\)_notr}/\1/')
         message=$(echo "$message" | sed "s/$placeholder/{$name}/g")
-        debug_log "DEBUG" "Processed placeholder: $placeholder -> {$name}"
     done
     
     # パラメータ置換処理
@@ -325,11 +324,10 @@ get_message() {
         if [ -n "$var_name" ] && [ -n "$var_value" ]; then
             local var_value_esc=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
             message=$(echo "$message" | sed "s|{$var_name}|$var_value_esc|g")
-            debug_log "DEBUG" "Replaced parameter placeholder: {$var_name}"
         fi
     fi
     
-    # エスケープシーケンス（\nなど）を実際の文字に変換
+    # 最後にエスケープシーケンス（\nなど）を処理して出力
     printf "%b" "$message"
     return 0
 }
