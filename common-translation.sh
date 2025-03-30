@@ -181,54 +181,108 @@ decode_unicode() {
     rm -f "$temp_file"
 }
 
+# 修正版 translate_with_google 関数
 translate_with_google() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
     
-    # プレースホルダー保護処理を無効化（元の形式をそのまま使用）
-    # local protected_text=$(protect_placeholders "$text")
-    local encoded_text=$(urlencode "$text")  # 変更点: 直接テキストをエンコード
-    local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
+    echo "DEBUG: Starting Google Translate API request"
     
-    # 以下既存コード
-    debug_log "DEBUG" "Using Google Translate API: ${source_lang} to ${target_lang}"
+    # URLエンコード
+    local encoded_text=$(urlencode "$text")
+    local temp_file="/tmp/aios/translations/google_response.tmp"
     
-    # ユーザーエージェントを設定
-    local ua="Mozilla/5.0 (Linux; OpenWrt) AppleWebKit/537.36"
-    
-    # API応答のエンコーディングを指定
-    wget -q -O "$temp_file" -T "$WGET_TIMEOUT" \
-         --user-agent="$ua" \
+    wget -q -O "$temp_file" -T 10 \
+         --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
          "https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
     
-    # 応答解析
+    local wget_status=$?
+    echo "DEBUG: wget exit code: $wget_status"
+    
+    # 応答の品質チェック
     if [ -s "$temp_file" ]; then
-        # 翻訳テキストの抽出を試行
-        local translated=$(sed -n 's/^\[\[\["\([^"]*\)".*$/\1/p' "$temp_file")
-        
-        if [ -z "$translated" ]; then
-            # 別の形式でも試行
-            translated=$(grep -o '^\[\[\["[^"]*"' "$temp_file" | head -1 | sed 's/^\[\[\["\([^"]*\)".*/\1/')
-        fi
-        
-        rm -f "$temp_file"
-        
-        if [ -n "$translated" ] && [ "$translated" != "$text" ]; then  # 変更点: 比較元を変更
-            # プレースホルダーを元に戻す処理を削除
-            # translated=$(restore_placeholders "$translated")
+        # 1. 基本的なJSONフォーマットチェック
+        if grep -q '\[\[\["' "$temp_file"; then
+            local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
             
-            # Google翻訳API進捗表示
-            debug_log "DEBUG" "Google Translate API: Translation successful"
-            printf "%s\n" "$translated"
-            return 0
+            # 2. デコード結果の品質チェック (最低限の文字が読める)
+            if [ -n "$translated" ] && ! echo "$translated" | grep -q '^\s*$'; then
+                echo "DEBUG: Google API returned valid translation"
+                echo "$translated"
+                rm -f "$temp_file"
+                return 0
+            else
+                echo "DEBUG: Google API response could not be properly decoded"
+            fi
+        else
+            echo "DEBUG: Google API response is malformed"
         fi
+    else
+        echo "DEBUG: Google API response file is empty or missing"
     fi
     
-    # Google翻訳API進捗表示
-    printf "Google Translate API: Translation failed\n"
-    debug_log "DEBUG" "Google Translate API: Translation failed"
-    rm -f "$temp_file"
+    rm -f "$temp_file" 2>/dev/null
+    return 1
+}
+
+# 修正版フォールバック処理関数
+translate_text() {
+    local text="$1"
+    local source_lang="$2"
+    local target_lang="$3"
+    local result=""
+    local api_status=0
+    
+    echo "DEBUG: Starting translation process with fallback"
+    
+    # APIリストをPOSIX互換で展開
+    local old_ifs="$IFS"
+    IFS=","
+    set -- $API_LIST
+    IFS="$old_ifs"
+    
+    # 各APIを順番に試行し、一度だけ処理する
+    while [ $# -gt 0 ]; do
+        CURRENT_API="$1"
+        echo "DEBUG: Trying API: $CURRENT_API"
+        
+        case "$CURRENT_API" in
+            mymemory)
+                result=$(translate_with_mymemory "$text" "$source_lang" "$target_lang")
+                api_status=$?
+                
+                if [ $api_status -eq 0 ] && [ -n "$result" ]; then
+                    echo "DEBUG: MyMemory translation successful"
+                    echo "【MyMemory翻訳結果】: $result"
+                    return 0
+                fi
+                
+                echo "Switching API"
+                ;;
+                
+            google)
+                echo "Using API: Google Translate API"
+                
+                result=$(translate_with_google "$text" "$source_lang" "$target_lang")
+                api_status=$?
+                
+                if [ $api_status -eq 0 ] && [ -n "$result" ]; then
+                    echo "DEBUG: Google translation successful"
+                    echo "【Google翻訳結果】: $result"
+                    return 0
+                else
+                    echo "DEBUG: Google API translation failed"
+                fi
+                ;;
+        esac
+        
+        # 次のAPIへ移動（重要: 必ずshiftすること）
+        shift
+    done
+    
+    echo "DEBUG: All translation APIs failed"
+    echo "【エラー】翻訳できませんでした"
     return 1
 }
 
