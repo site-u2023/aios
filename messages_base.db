@@ -48,8 +48,12 @@ US|MSG_UNDER_TEST=👽 Under test
 # =======================
 # common-menu.sh
 # =======================
+US|MENU_PACKAGES_AUTO_INSTALL=Automatic installation of packages.
+US|MENU_PACKAGES_MANUAL_INSTALL=Manual installation of packages.
+US|MENU_PACKAGES_SAMBA=Installation of SAMBA4.
+US|MENU_PACKAGES_LIST=Verification of installed packages.
 US|MSG_ACTION_CANCELLED=Operation cancelled.
-US|CONFIG_LOADING_COMPLETE=Loading completed
+US|CONFIG_LOADING_COMPLETE=Loading completed.
 US|CONFIG_COMMAND_SUCCESS=Process completed successfully
 US|CONFIG_COMMAND_FAILED=Process failed
 US|MAIN_MENU_NAME=Main menu
@@ -70,7 +74,7 @@ US|CONFIG_CONFIRM_DELETE=Do you want to delete this script and related directori
 US|CONFIG_DELETE_CONFIRMED=Script and related directories have been deleted. Goodbye!
 US|CONFIG_DELETE_CANCELED=Deletion canceled. Returning to menu.
 US|CONFIG_EXIT_CONFIRMED=Exiting script. Goodbye!
-US|CONFIG_RETURN_TO_MAIN=Returning to main menu...
+US|CONFIG_RETURN_TO_MAIN=Returning to main menu
 US|CONFIG_DOWNLOADING=Executing{notr_colon_notr} {notr_0_notr}
 US|CONFIG_DOWNLOAD_FAILED=Failed to download{notr_colon_notr} {notr_0_notr}
 
