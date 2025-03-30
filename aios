@@ -1353,9 +1353,12 @@ check_option() {
             -cd|--cd|-common_debug|--common_debug|--common_debug)
                 MODE="debug"
                 ;;
-            -r|--r|-reset|--reset|-resrt|--resrt)
+            -r|--r|-resrt|--resrt)
                 MODE="reset"
                 RESET="true"
+                ;;
+            -del|--del|-delete|--delete)
+                MODE="delete"
                 ;;
             -f|--f|-force|--force)
                 FORCE="true"
@@ -1443,6 +1446,20 @@ check_common() {
                 printf "%s%s%s\n" "$(color yellow "Reset partially failed: Cache removed but could not be recreated.")"
             }
             printf "%s%s%s\n" "$(color yellow "$(get_message "MSG_RESET_COMPLETE")")"
+            exit 0
+            ;;
+        delete)
+            if ! rm -rf "${BASE_DIR}"; then
+                debug_log "ERROR" "Failed to remove base directory: ${BASE_DIR}"
+                printf "%s%s%s\n" "$(color yellow "Reset failed: Could not remove base directory.")"
+                return 1
+            fi
+            # キャッシュディレクトリを再作成
+            mkdir -p "${BASE_DIR}" || {
+                debug_log "ERROR" "Failed to recreate base directory: ${CACHE_DIR}"
+                printf "%s%s%s\n" "$(color yellow "Reset partially failed: Base removed but could not be recreated.")"
+            }
+            printf "%s%s%s\n" "$(color yellow "$(get_message "MSG_DELETE_COMPLETE")")"
             exit 0
             ;;
         debug)
