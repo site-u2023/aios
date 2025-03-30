@@ -103,19 +103,56 @@ urlencode() {
     printf "%s\n" "$encoded"
 }
 
-# 修正版：translate_with_google関数
+# Google APIを使用した翻訳関数（IPv4/IPv6対応）
 translate_with_google() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
+    local ip_check_file="${CACHE_DIR}/network.ch"
+    local wget_options=""
     
     debug_log "DEBUG" "Starting Google Translate API request"
+    
+    # ネットワーク接続状態ファイルが存在しない場合は接続確認を実行
+    if [ ! -f "$ip_check_file" ]; then
+        debug_log "DEBUG" "Network connectivity status file not found, checking connectivity"
+        check_network_connectivity
+    fi
+    
+    # ネットワーク接続状態に基づいてwgetオプションを設定
+    if [ -f "$ip_check_file" ]; then
+        local network_type=$(cat "$ip_check_file")
+        debug_log "DEBUG" "Detected network type: $network_type"
+        
+        case "$network_type" in
+            "v4")
+                wget_options="-4"  # IPv4のみ使用
+                debug_log "DEBUG" "Using IPv4 for API request"
+                ;;
+            "v6")
+                wget_options="-6"  # IPv6のみ使用
+                debug_log "DEBUG" "Using IPv6 for API request"
+                ;;
+            "v4v6")
+                # IPv4を優先使用（両方可能な場合はIPv4を使用）
+                wget_options="-4"
+                debug_log "DEBUG" "Both available, prioritizing IPv4 for API request"
+                ;;
+            *)
+                debug_log "DEBUG" "No network connectivity, API request may fail"
+                ;;
+        esac
+    fi
     
     # URLエンコード
     local encoded_text=$(urlencode "$text")
     local temp_file="/tmp/aios/translations/google_response.tmp"
     
-    wget -q -O "$temp_file" -T 10 \
+    # ディレクトリが存在しなければ作成
+    mkdir -p "$(dirname "$temp_file")" 2>/dev/null
+    
+    debug_log "DEBUG" "Sending request to Google Translate API"
+    wget $wget_options -q -O "$temp_file" -T 10 \
          --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
          "https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
     
@@ -178,7 +215,7 @@ translate_text() {
     esac
 }
 
-# create_language_db関数の修正版（decode_unicodeエラー解消）
+# create_language_db関数の修正版（pingを削除し、network.ch利用）
 create_language_db() {
     local target_lang="$1"
     local base_db="${BASE_DIR:-/tmp/aios}/messages_base.db"
@@ -187,6 +224,7 @@ create_language_db() {
     local temp_file="${TRANSLATION_CACHE_DIR}/temp_translation_output.txt"
     local cleaned_translation=""
     local current_api=""
+    local ip_check_file="${CACHE_DIR}/network.ch"
     
     debug_log "DEBUG" "Creating language DB for ${target_lang} with API language code ${api_lang}"
     
@@ -214,6 +252,21 @@ EOF
     
     # 翻訳処理開始
     printf "Creating translation DB using API: %s\n" "$api_lang"
+    
+    # ネットワーク接続状態を確認
+    if [ ! -f "$ip_check_file" ]; then
+        debug_log "DEBUG" "Network status file not found, checking connectivity"
+        check_network_connectivity
+    fi
+    
+    # ネットワーク接続状態を取得
+    local network_status=""
+    if [ -f "$ip_check_file" ]; then
+        network_status=$(cat "$ip_check_file")
+        debug_log "DEBUG" "Network status: ${network_status}"
+    else
+        debug_log "DEBUG" "Could not determine network status"
+    fi
     
     # API_LISTから初期APIを決定（試行する最初のAPI）
     # 単純に最初のAPIを取得
@@ -248,7 +301,7 @@ EOF
             fi
             
             # ネットワーク接続確認
-            if ping -c 1 -W 1 one.one.one.one >/dev/null 2>&1; then
+            if [ -n "$network_status" ] && [ "$network_status" != "" ]; then
                 debug_log "DEBUG" "Translating text for key: ${key}"
                 
                 # APIリストを解析して順番に試行
