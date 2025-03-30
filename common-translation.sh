@@ -54,8 +54,8 @@ ONLINE_TRANSLATION_ENABLED="yes"
 TRANSLATION_CACHE_DIR="${BASE_DIR:-/tmp/aios}/translations"
 
 # 使用可能なAPIリスト（優先順位）
-API_LIST="google,mymemory"
-# API_LIST="mymemory,google"
+# API_LIST="google,mymemory"
+API_LIST="mymemory,google"
 
 # タイムアウト設定
 WGET_TIMEOUT=10
@@ -114,7 +114,6 @@ decode_unicode() {
         return 0
     fi
     
-    printf "Decoding Unicode escape sequences...\n"
     debug_log "DEBUG" "Decoding Unicode escape sequences in translation response"
     
     # BusyBoxのawkによるUnicodeデコード処理
