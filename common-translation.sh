@@ -272,51 +272,44 @@ translate_with_mymemory() {
     return 1
 }
 
-# 複数APIを使った翻訳実行
+# 修正したフォールバック機能を持つ翻訳関数
 translate_text() {
     local text="$1"
     local source_lang="$2"
-    local target_lang="$3" 
+    local target_lang="$3"
     local result=""
     
-    # 全体進捗表示
-    debug_log "DEBUG" "Starting translation process with API priority: ${API_LIST}"
+    debug_log "DEBUG" "Starting translation process with fallback mechanism"
     
-    # API_LISTからAPIを分割して処理
-    local api
-    for api in $(echo "$API_LIST" | tr ',' ' '); do
-        case "$api" in
-            google)
-                debug_log "DEBUG" "Trying Google Translate API"
-                # 実行時のCURRENT_API更新
-                CURRENT_API="Google Translate API"
-                
-                result=$(translate_with_google "$text" "$source_lang" "$target_lang")
-                if [ $? -eq 0 ] && [ -n "$result" ]; then
-                    debug_log "DEBUG" "Translation successful with Google API"
-                    printf "%s\n" "$result"
-                    return 0
-                fi
-                ;;
-                
+    # APIリストを展開
+    local api_list="$API_LIST"
+    local api=""
+    local IFS=","
+    for api in $api_list; do
+        CURRENT_API="$api"
+        debug_log "DEBUG" "Trying translation API: $CURRENT_API"
+        
+        case "$CURRENT_API" in
             mymemory)
-                debug_log "DEBUG" "Trying MyMemory API"
-                # 実行時のCURRENT_API更新
-                CURRENT_API="MyMemory API"
-                
                 result=$(translate_with_mymemory "$text" "$source_lang" "$target_lang")
                 if [ $? -eq 0 ] && [ -n "$result" ]; then
-                    debug_log "DEBUG" "Translation successful with MyMemory API"
-                    printf "%s\n" "$result"
+                    echo "$result"
                     return 0
                 fi
+                debug_log "DEBUG" "MyMemory API failed, falling back to next API"
+                ;;
+            google)
+                result=$(translate_with_google "$text" "$source_lang" "$target_lang")
+                if [ $? -eq 0 ] && [ -n "$result" ]; then
+                    echo "$result"
+                    return 0
+                fi
+                debug_log "DEBUG" "Google API failed"
                 ;;
         esac
     done
     
-    # 全体進捗表示
-    printf "All translation APIs failed - no translation result obtained\n"
-    debug_log "DEBUG" "All translation APIs failed - no translation result obtained"
+    debug_log "DEBUG" "All translation APIs failed"
     return 1
 }
 
