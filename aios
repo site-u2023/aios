@@ -306,7 +306,14 @@ get_message() {
     # 1. {notr_colon_notr} を : に変換
     message=$(echo "$message" | sed 's/{notr_colon_notr}/:/g')
     
-    # 2. その他の {notr_*_notr} を {*} に変換
+    # 2. {notr_newline_notr} を改行に変換
+    message=$(echo "$message" | tr '\n' '\1' | sed 's/{notr_newline_notr}/\\n/g' | tr '\1' '\n')
+    
+    # 3. エスケープされた \n を本物の改行に変換
+    # printf経由で処理してエスケープシーケンスを解釈させる
+    message=$(printf "%b" "$message")
+    
+    # 4. その他の {notr_*_notr} を {*} に変換
     # 例: {notr_file_notr} → {file}
     while echo "$message" | grep -q "{notr_.*_notr}"; do
         local placeholder=$(echo "$message" | grep -o "{notr_[^_]*_notr}" | head -1)
