@@ -283,25 +283,37 @@ translate_text() {
     # 全体進捗表示
     debug_log "DEBUG" "Starting translation process with API priority: ${API_LIST}"
     
-    # Google API を試行
-    if printf "%s" "$API_LIST" | grep -q "google"; then
-        result=$(translate_with_google "$text" "$source_lang" "$target_lang")
-        if [ $? -eq 0 ] && [ -n "$result" ]; then
-            debug_log "DEBUG" "Translation successful with Google API"
-            printf "%s\n" "$result"
-            return 0
-        fi
-    fi
-    
-    # MyMemory API を試行
-    if printf "%s" "$API_LIST" | grep -q "mymemory"; then
-        result=$(translate_with_mymemory "$text" "$source_lang" "$target_lang")
-        if [ $? -eq 0 ] && [ -n "$result" ]; then
-            debug_log "DEBUG" "Translation successful with MyMemory API"
-            printf "%s\n" "$result"
-            return 0
-        fi
-    fi
+    # API_LISTからAPIを分割して処理
+    local api
+    for api in $(echo "$API_LIST" | tr ',' ' '); do
+        case "$api" in
+            google)
+                debug_log "DEBUG" "Trying Google Translate API"
+                # 実行時のCURRENT_API更新
+                CURRENT_API="Google Translate API"
+                
+                result=$(translate_with_google "$text" "$source_lang" "$target_lang")
+                if [ $? -eq 0 ] && [ -n "$result" ]; then
+                    debug_log "DEBUG" "Translation successful with Google API"
+                    printf "%s\n" "$result"
+                    return 0
+                fi
+                ;;
+                
+            mymemory)
+                debug_log "DEBUG" "Trying MyMemory API"
+                # 実行時のCURRENT_API更新
+                CURRENT_API="MyMemory API"
+                
+                result=$(translate_with_mymemory "$text" "$source_lang" "$target_lang")
+                if [ $? -eq 0 ] && [ -n "$result" ]; then
+                    debug_log "DEBUG" "Translation successful with MyMemory API"
+                    printf "%s\n" "$result"
+                    return 0
+                fi
+                ;;
+        esac
+    done
     
     # 全体進捗表示
     printf "All translation APIs failed - no translation result obtained\n"
@@ -346,16 +358,18 @@ EOF
     # 翻訳処理開始
     printf "Creating translation DB using API: %s\n" "$api_lang"
     
-    # 初期APIを決定
-    if printf "%s" "$API_LIST" | grep -q "google"; then
-        current_api="Google Translate API"
-    elif printf "%s" "$API_LIST" | grep -q "mymemory"; then
-        current_api="MyMemory API"
-    else
-        current_api="No API available"
-    fi
+    # API_LISTから初期APIを決定（試行する最初のAPI）
+    # 単純に最初のAPIを取得
+    local first_api=$(echo "$API_LIST" | cut -d',' -f1)
+    case "$first_api" in
+        google) current_api="Google Translate API" ;;
+        mymemory) current_api="MyMemory API" ;;
+        *) current_api="Unknown API" ;;
+    esac
     
-    # スピナーを開始し、使用中のAPIを表示（英語で表示）
+    debug_log "DEBUG" "Initial API based on API_LIST priority: $current_api"
+    
+    # スピナーを開始し、使用中のAPIを表示
     start_spinner "$(color blue "Using API: $current_api")" "dot"
     
     # USエントリを抽出
@@ -381,49 +395,51 @@ EOF
             if ping -c 1 -W 1 one.one.one.one >/dev/null 2>&1; then
                 debug_log "DEBUG" "Translating text for key: ${key}"
                 
-                # 複数APIで翻訳を試行
-                local google_failed=0
-                
-                # Google API を試行
-                if printf "%s" "$API_LIST" | grep -q "google"; then
-                    # スピナー更新（もし前回と異なるAPIが使われる場合）
-                    if [ "$current_api" != "Google Translate API" ]; then
-                        stop_spinner "Switching API" "success"
-                        current_api="Google Translate API"
-                        start_spinner "$(color blue "Using API: $current_api")" "dot"
-                        debug_log "DEBUG" "Switching to Google Translate API"
-                    fi
-                    
-                    result=$(translate_with_google "$value" "en" "$api_lang" 2>/dev/null)
-                    
-                    if [ $? -eq 0 ] && [ -n "$result" ]; then
-                        cleaned_translation="$result"
-                        debug_log "DEBUG" "Google Translate API succeeded for key: ${key}"
-                    else
-                        google_failed=1
-                        debug_log "DEBUG" "Google Translate API failed for key: ${key}"
-                    fi
-                fi
-                
-                # Google APIが失敗または利用不可の場合は、MyMemory APIを試行
-                if { [ "$google_failed" -eq 1 ] || ! printf "%s" "$API_LIST" | grep -q "google"; } && printf "%s" "$API_LIST" | grep -q "mymemory"; then
-                    if [ "$current_api" != "MyMemory API" ]; then
-                        stop_spinner "Google API failed, switching to MyMemory API" "error" 
-                        current_api="MyMemory API"
-                        start_spinner "$(color blue "Using API: $current_api")" "dot"
-                        debug_log "DEBUG" "Switching to MyMemory API"
-                    fi
-                    
-                    result=$(translate_with_mymemory "$value" "en" "$api_lang" 2>/dev/null)
-                    
-                    if [ $? -eq 0 ] && [ -n "$result" ]; then
-                        cleaned_translation="$result"
-                        debug_log "DEBUG" "MyMemory API succeeded for key: ${key}"
-                    else
-                        cleaned_translation=""
-                        debug_log "DEBUG" "MyMemory API failed for key: ${key}"
-                    fi
-                fi
+                # APIリストを解析して順番に試行
+                local api
+                for api in $(echo "$API_LIST" | tr ',' ' '); do
+                    case "$api" in
+                        google)
+                            # 表示APIとの不一致チェック（表示更新）
+                            if [ "$current_api" != "Google Translate API" ]; then
+                                stop_spinner "Switching API" "info"
+                                current_api="Google Translate API"
+                                start_spinner "$(color blue "Using API: $current_api")" "dot"
+                                debug_log "DEBUG" "Switching to Google Translate API"
+                            fi
+                            
+                            result=$(translate_with_google "$value" "en" "$api_lang" 2>/dev/null)
+                            
+                            if [ $? -eq 0 ] && [ -n "$result" ]; then
+                                cleaned_translation="$result"
+                                debug_log "DEBUG" "Google Translate API succeeded for key: ${key}"
+                                break
+                            else
+                                debug_log "DEBUG" "Google Translate API failed for key: ${key}"
+                            fi
+                            ;;
+                            
+                        mymemory)
+                            # 表示APIとの不一致チェック（表示更新）
+                            if [ "$current_api" != "MyMemory API" ]; then
+                                stop_spinner "Switching API" "info"
+                                current_api="MyMemory API"
+                                start_spinner "$(color blue "Using API: $current_api")" "dot"
+                                debug_log "DEBUG" "Switching to MyMemory API"
+                            fi
+                            
+                            result=$(translate_with_mymemory "$value" "en" "$api_lang" 2>/dev/null)
+                            
+                            if [ $? -eq 0 ] && [ -n "$result" ]; then
+                                cleaned_translation="$result"
+                                debug_log "DEBUG" "MyMemory API succeeded for key: ${key}"
+                                break
+                            else
+                                debug_log "DEBUG" "MyMemory API failed for key: ${key}"
+                            fi
+                            ;;
+                    esac
+                done
                 
                 # 翻訳結果処理
                 if [ -n "$cleaned_translation" ]; then
