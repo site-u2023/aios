@@ -272,44 +272,77 @@ translate_with_mymemory() {
     return 1
 }
 
-# 修正したフォールバック機能を持つ翻訳関数
+# フォールバック機能修正したtranslate_text関数
 translate_text() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
     local result=""
+    local api_used=""
+    local api_tried=0
     
-    debug_log "DEBUG" "Starting translation process with fallback mechanism"
+    echo "DEBUG: Starting translation with fallback system"
     
-    # APIリストを展開
+    # APIリストをPOSIX互換の方法で展開
     local api_list="$API_LIST"
-    local api=""
-    local IFS=","
-    for api in $api_list; do
-        CURRENT_API="$api"
-        debug_log "DEBUG" "Trying translation API: $CURRENT_API"
+    local old_ifs="$IFS"
+    IFS=","
+    set -- $api_list
+    IFS="$old_ifs"
+    
+    # 各APIを順番に試行
+    while [ $# -gt 0 ]; do
+        api_tried=1
+        CURRENT_API="$1"
         
         case "$CURRENT_API" in
             mymemory)
+                echo "DEBUG: Attempting translation with MyMemory API"
                 result=$(translate_with_mymemory "$text" "$source_lang" "$target_lang")
+                api_used="MyMemory"
+                
+                # 成功判定
                 if [ $? -eq 0 ] && [ -n "$result" ]; then
+                    echo "DEBUG: MyMemory translation successful"
                     echo "$result"
                     return 0
                 fi
-                debug_log "DEBUG" "MyMemory API failed, falling back to next API"
+                
+                # 失敗時のメッセージ
+                echo "Switching API"
                 ;;
+                
             google)
+                echo "Using API: Google Translate API"
                 result=$(translate_with_google "$text" "$source_lang" "$target_lang")
+                api_used="Google"
+                
+                # 成功判定
                 if [ $? -eq 0 ] && [ -n "$result" ]; then
+                    echo "DEBUG: Google translation successful"
                     echo "$result"
                     return 0
                 fi
-                debug_log "DEBUG" "Google API failed"
+                
+                # 失敗時のメッセージ
+                echo "DEBUG: Google API failed"
                 ;;
         esac
+        
+        # 次のAPIへ（重要：これがないと無限ループになる）
+        shift
+        
+        # 進行状況表示
+        [ $# -gt 0 ] && echo "DEBUG: Moving to next API in list"
     done
     
-    debug_log "DEBUG" "All translation APIs failed"
+    # すべてのAPIが失敗した場合
+    if [ $api_tried -eq 1 ]; then
+        echo "DEBUG: All translation APIs failed"
+    else
+        echo "DEBUG: No valid translation APIs found in list"
+    fi
+    
     return 1
 }
 
