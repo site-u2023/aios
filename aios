@@ -302,14 +302,20 @@ get_message() {
         message="$key"
     fi
     
-    # プレースホルダー処理
+    # 特殊プレースホルダー処理
     # 1. {notr_colon_notr} を : に変換
     message=$(echo "$message" | sed 's/{notr_colon_notr}/:/g')
     
-    # 2. その他の {notr_*_notr} パターンを {*} に変換
-    message=$(echo "$message" | sed 's/{notr_\([^_]*\)_notr}/{\\1}/g')
+    # 2. その他の {notr_*_notr} を {*} に変換
+    # 例: {notr_file_notr} → {file}
+    while echo "$message" | grep -q "{notr_.*_notr}"; do
+        local placeholder=$(echo "$message" | grep -o "{notr_[^_]*_notr}" | head -1)
+        local name=$(echo "$placeholder" | sed 's/{notr_\(.*\)_notr}/\1/')
+        message=$(echo "$message" | sed "s/$placeholder/{$name}/g")
+        debug_log "DEBUG" "Processed placeholder: $placeholder -> {$name}"
+    done
     
-    # パラメータ置換処理（既存の処理を維持）
+    # パラメータ置換処理
     if [ -n "$params" ]; then
         local var_name=$(echo "$params" | cut -d'=' -f1)
         local var_value=$(echo "$params" | cut -d'=' -f2-)
@@ -317,6 +323,7 @@ get_message() {
         if [ -n "$var_name" ] && [ -n "$var_value" ]; then
             local var_value_esc=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
             message=$(echo "$message" | sed "s|{$var_name}|$var_value_esc|g")
+            debug_log "DEBUG" "Replaced parameter placeholder: {$var_name}"
         fi
     fi
     
