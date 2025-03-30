@@ -151,8 +151,8 @@ US|MSG_INSTALLING_PACKAGE=Installing package
 US|MSG_INSTALL_SUCCESS=Installation completed successfully.
 US|MSG_UNKNOWN_OPTION=Unknown option{NOTR_:_NOTR} {option}
 US|MSG_ERROR_NO_PACKAGE_MANAGER=No package manager found in cache.
-US|MSG_CONFIRM_INSTALL=\n\nPackage{NOTR_:_NOTR} {NOTR_pkg_NOTR}\nDo you want to install? (y/n){NOTR_:_NOTR}
-US|MSG_CONFIRM_INSTALL_WITH_DESC=\n\nPackage{NOTR_:_NOTR} {NOTR_pkg_NOTR}\nDescription{NOTR_:_NOTR} {NOTR_desc_NOTR}\nDo you want to install? (y/n){NOTR_:_NOTR}
+US|MSG_CONFIRM_INSTALL=\nPackage{NOTR_:_NOTR} {NOTR_pkg_NOTR}\nDo you want to install? (y/n){NOTR_:_NOTR}
+US|MSG_CONFIRM_INSTALL_WITH_DESC=\nPackage{NOTR_:_NOTR} {NOTR_pkg_NOTR}\nDescription{NOTR_:_NOTR} {NOTR_desc_NOTR}\nDo you want to install? (y/n){NOTR_:_NOTR}
 
 # =======================
 # system-config.sh
