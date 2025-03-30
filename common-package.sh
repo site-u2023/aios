@@ -290,24 +290,24 @@ install_normal_package() {
     if [ "$force_install" = "yes" ]; then
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
             opkg install --force-reinstall "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "❌ Failed to install package $package_name")"
+                stop_spinner "$(color red "Failed to install package $package_name")"
                 return 1
             }
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
             apk add --force-reinstall "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "❌ Failed to install package $package_name")"
+                stop_spinner "$(color red "Failed to install package $package_name")"
                 return 1
             }
         fi
     else
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
             opkg install "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "❌ Failed to install package $package_name")"
+                stop_spinner "$(color red "Failed to install package $package_name")"
                 return 1
             }
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
             apk add "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "❌ Failed to install package $package_name")"
+                stop_spinner "$(color red "Failed to install package $package_name")"
                 return 1
             }
         fi
