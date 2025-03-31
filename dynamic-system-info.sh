@@ -727,6 +727,7 @@ debug_info() {
 
 # メイン処理
 dynamic_system_info_main() {
+    debug_info
     check_network_connectivity
     init_device_cache
     get_usb_devices
