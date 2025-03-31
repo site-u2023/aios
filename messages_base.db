@@ -112,6 +112,8 @@ US|MSG_DELETE_COMPLETE=Delete completed. All based data has been cleared.
 US|MSG_DOWNLOAD_FAILED=Download failed{notr_colon_notr} {notr_file_notr}
 US|MSG_DOWNLOAD_SUCCESS=Download successful{notr_colon_notr} {notr_file_notr}
 US|MSG_ERROR_OCCURRED=An error occurred.
+US|MSG_CACHE_DISABLED=Cache disabled: Using direct GitHub API requests.
+US|MSG_CACHE_ENABLED=Cache enabled: Using cached version information when available.
 
 # =======================
 # common-country.sh
