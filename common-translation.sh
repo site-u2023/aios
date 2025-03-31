@@ -218,10 +218,9 @@ translate_text() {
     esac
 }
 
-# create_language_db関数の修正版（pingを削除し、network.ch利用）
 create_language_db() {
     local target_lang="$1"
-    local base_db="${BASE_DIR:-/tmp/aios}/messages_base.db"
+    local base_db="${BASE_DIR:-/tmp/aios}/messages_${DEFAULT_LANGUAGE}.db"
     local api_lang=$(get_api_lang_code)
     local output_db="${BASE_DIR:-/tmp/aios}/messages_${api_lang}.db"
     local temp_file="${TRANSLATION_CACHE_DIR}/temp_translation_output.txt"
@@ -240,13 +239,12 @@ create_language_db() {
     # DBファイル作成 (常に新規作成・上書き)
     cat > "$output_db" << EOF
 SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
-
 EOF
     
     # オンライン翻訳が無効なら翻訳せず置換するだけ
     if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
         debug_log "DEBUG" "Online translation disabled, using original text"
-        grep "^US|" "$base_db" | sed "s/^US|/${target_lang}|/" >> "$output_db"
+        grep "^${DEFAULT_LANGUAGE}|" "$base_db" | sed "s/^${DEFAULT_LANGUAGE}|/${target_lang}|/" >> "$output_db"
         return 0
     fi
     
@@ -281,11 +279,11 @@ EOF
     # スピナーを開始し、使用中のAPIを表示
     start_spinner "$(color blue "Using API: $current_api")" "dot"
     
-    # USエントリを抽出
-    grep "^US|" "$base_db" | while IFS= read -r line; do
+    # 言語エントリを抽出
+    grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
         # キーと値を抽出
-        local key=$(printf "%s" "$line" | sed -n 's/^US|\([^=]*\)=.*/\1/p')
-        local value=$(printf "%s" "$line" | sed -n 's/^US|[^=]*=\(.*\)/\1/p')
+        local key=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|\([^=]*\)=.*/\1/p")
+        local value=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|[^=]*=\(.*\)/\1/p")
         
         if [ -n "$key" ] && [ -n "$value" ]; then
             # キャッシュキー生成
@@ -317,7 +315,7 @@ EOF
                                 debug_log "DEBUG" "Switching to Google Translate API"
                             fi
                             
-                            result=$(translate_with_google "$value" "en" "$api_lang" 2>/dev/null)
+                            result=$(translate_with_google "$value" "$DEFAULT_LANGUAGE" "$api_lang" 2>/dev/null)
                             
                             if [ $? -eq 0 ] && [ -n "$result" ]; then
                                 cleaned_translation="$result"
@@ -334,7 +332,6 @@ EOF
                 
                 # 翻訳結果処理
                 if [ -n "$cleaned_translation" ]; then
-                    # decode_unicodeの代わりに簡易処理を適用
                     # 基本的なエスケープシーケンスの処理
                     local decoded="$cleaned_translation"
                     
@@ -378,12 +375,12 @@ process_language_translation() {
     local lang_code=$(cat "${CACHE_DIR:-/tmp/aios}/language.ch")
     debug_log "DEBUG" "Processing translation for language: ${lang_code}"
     
-    # US以外の場合のみ翻訳DBを作成
-    if [ "$lang_code" != "US" ]; then
+    # デフォルト言語以外の場合のみ翻訳DBを作成
+    if [ "$lang_code" != "$DEFAULT_LANGUAGE" ]; then  # 変更点: USからDEFAULT_LANGUAGEへ
         # 翻訳DBを作成
         create_language_db "$lang_code"
     else
-        debug_log "DEBUG" "Skipping DB creation for built-in language: ${lang_code}"
+        debug_log "DEBUG" "Skipping DB creation for default language: ${lang_code}"
     fi
     
     return 0
