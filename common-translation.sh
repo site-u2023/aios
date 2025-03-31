@@ -35,9 +35,6 @@ SCRIPT_VERSION="2025-03-29-03-40"
 # 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
 ### =========================================================
 
-# デフォルト言語設定（ユーザーが簡単に変更可能）
-DEFAULT_LANGUAGE="${DEFAULT_LANGUAGE:-en}"
-
 # 基本定数の設定 
 BASE_WGET="wget --no-check-certificate -q -O"
 DEBUG_MODE="${DEBUG_MODE:-false}"
@@ -376,7 +373,7 @@ process_language_translation() {
     debug_log "DEBUG" "Processing translation for language: ${lang_code}"
     
     # デフォルト言語以外の場合のみ翻訳DBを作成
-    if [ "$lang_code" != "$DEFAULT_LANGUAGE" ]; then  # 変更点: USからDEFAULT_LANGUAGEへ
+    if [ "$lang_code" != "$DEFAULT_LANGUAGE" ]; then  # USからDEFAULT_LANGUAGEに変更
         # 翻訳DBを作成
         create_language_db "$lang_code"
     else
