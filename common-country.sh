@@ -1080,14 +1080,6 @@ normalize_language() {
             target_db="$english_db"
             found=1
             debug_log "DEBUG" "Using English DB: ${english_db}"
-        else
-            # 後方互換性のためのチェック - messages_base.db
-            local base_db="${BASE_DIR}/messages_base.db" 
-            if [ -f "$base_db" ]; then
-                target_db="$base_db"
-                found=1
-                debug_log "DEBUG" "Using legacy base DB: ${base_db}"
-            fi
         fi
     fi
 
