@@ -1527,13 +1527,13 @@ download() {
     return 0
 }
 
-# バージョンチェック関数
+# バージョンチェック関数の修正
 download_check_version() {
     local file_name="$1"
     local script_file="${CACHE_DIR}/script.ch"
     local dummy_version="No version control"
 
-    # API制限チェック（デバッグモード時のみ）
+    # API制限チェック（デバッグモード時も通常処理）
     [ "$DEBUG_MODE" = "true" ] && check_api_rate_limit
     
     # バージョン情報の取得
@@ -1562,7 +1562,11 @@ download_check_version() {
     # バージョン比較とダウンロード判断
     local update_required=false
     
-    if [ "$local_version" = "$dummy_version" ]; then
+    # デバッグモードの場合は常にダウンロードする
+    if [ "$DEBUG_MODE" = "true" ]; then
+        update_required=true
+        echo "DEBUG: Forced update for debug mode: $file_name" >> /tmp/aios_debug.log
+    elif [ "$local_version" = "$dummy_version" ]; then
         debug_log "DEBUG" "First download: $file_name"
         update_required=true
     elif [ "$clean_remote_version" = "$clean_local_version" ]; then
