@@ -350,39 +350,48 @@ get_message() {
         lang=$(cat "${CACHE_DIR}/message.ch")
     fi
     
+    echo "DEBUG: get_message called for key='${key}' lang='${lang}'" >> /tmp/aios_debug.log
+    
     # まずDBファイルから検索（メイン）
     local db_file=$(check_message_cache "$lang")
     if [ -n "$db_file" ] && [ -f "$db_file" ]; then
+        echo "DEBUG: Searching in DB file: ${db_file}" >> /tmp/aios_debug.log
+        # grepの結果を正しく処理
         message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
         if [ -n "$message" ]; then
-            echo "DEBUG: Message found in DB file for key: $key" >> "${LOG_DIR}/debug.log"
+            echo "DEBUG: Message found in DB file for key: $key" >> /tmp/aios_debug.log
         elif [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
             # デフォルト言語にフォールバック
             message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
             if [ -n "$message" ]; then
-                echo "DEBUG: Using fallback language for key: $key" >> "${LOG_DIR}/debug.log"
+                echo "DEBUG: Using fallback language for key: $key" >> /tmp/aios_debug.log
             fi
         fi
     fi
     
     # DBに見つからない場合、メモリからの検索（補助）
     if [ -z "$message" ]; then
-        # メモリメッセージを初期化（必要な場合のみ）
+        # メモリメッセージが初期化されていなければ初期化
         if [ "$MSG_MEMORY_INITIALIZED" != "true" ] || [ "$MSG_MEMORY_LANG" != "$lang" ]; then
             into_memory_message
         fi
         
         if [ -n "$MSG_MEMORY" ]; then
-            # 改行を考慮したメッセージ検索
-            message=$(printf '%s\n' "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | head -1 | sed "s/^${lang}|${key}=//")
+            echo "DEBUG: Searching in memory for key: ${key}" >> /tmp/aios_debug.log
+            message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+            if [ -n "$message" ]; then
+                echo "DEBUG: Message found in memory for key: $key" >> /tmp/aios_debug.log
+            fi
         fi
     fi
     
     # メッセージが見つからない場合はキーをそのまま返す
     if [ -z "$message" ]; then
-        echo "DEBUG: Message not found for key: $key, using key as fallback" >> "${LOG_DIR}/debug.log"
+        echo "DEBUG: Message not found for key: $key, using key as fallback" >> /tmp/aios_debug.log
         message="$key"
     fi
+    
+    echo "DEBUG: Final message for key '${key}': '${message}'" >> /tmp/aios_debug.log
     
     # プレースホルダーの処理
     message=$(echo "$message" | sed 's/{notr_colon_notr}/:/g')
