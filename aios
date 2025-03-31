@@ -275,22 +275,21 @@ into_memory_message() {
         lang=$(cat "${CACHE_DIR}/message.ch")
     fi
     
-    # 基本メッセージの初期化 - 改行なしで正しく設定
+    # メモリメッセージの初期化 - 基本的な補助メッセージのみを保持
     MSG_MEMORY=""
     
-    # 各メッセージを個別に追加（区切り文字として改行を使用）
+    # 基本メッセージの設定
     MSG_MEMORY="${MSG_MEMORY}${lang}|CONFIG_DOWNLOAD_SUCCESS=File downloaded successfully:"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|CONFIG_DOWNLOAD_UNNECESSARY=File already up to date:"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_DELETE_COMPLETE=Delete completed. All based data has been cleared"
     
-    # その他の処理...
+    # DBファイルの内容を追加しない - DBファイルが主要ソース
     
-    # 初期化フラグを設定
     MSG_MEMORY_INITIALIZED="true"
     MSG_MEMORY_LANG="$lang"
     
-    debug_log "DEBUG" "Memory messages initialized for language: ${lang}"
+    echo "DEBUG: Memory messages initialized for language: ${lang}" >> "${LOG_DIR}/debug.log"
 }
 
 # 翻訳システムを初期化する関数
@@ -353,43 +352,40 @@ get_message() {
         lang=$(cat "${CACHE_DIR}/message.ch")
     fi
     
-    # メモリメッセージを初期化
-    if [ "$MSG_MEMORY_INITIALIZED" != "true" ] || [ "$MSG_MEMORY_LANG" != "$lang" ]; then
-        into_memory_message
-    fi
-    
-    # インメモリメッセージから検索
-    if [ -n "$MSG_MEMORY" ]; then
-        # 修正: 改行を含むメッセージ処理の改善
-        # エスケープ文字を使って改行をパターン検索から分離
-        message=$(printf '%s\n' "$MSG_MEMORY" | sed -n "/^${lang}|${key}=/s/^${lang}|${key}=//p" 2>/dev/null)
-        
-        # 見つからなかった場合は最初の一致だけを取得（改行が混ざっている場合に有効）
-        if [ -z "$message" ]; then
-            message=$(printf '%s\n' "$MSG_MEMORY" | grep -m1 "^${lang}|${key}=" 2>/dev/null | sed "s/^${lang}|${key}=//")
+    # まずDBファイルから検索（メイン）
+    local db_file=$(check_message_cache "$lang")
+    if [ -n "$db_file" ] && [ -f "$db_file" ]; then
+        message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        if [ -n "$message" ]; then
+            echo "DEBUG: Message found in DB file for key: $key" >> "${LOG_DIR}/debug.log"
+        elif [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
+            # デフォルト言語にフォールバック
+            message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+            if [ -n "$message" ]; then
+                echo "DEBUG: Using fallback language for key: $key" >> "${LOG_DIR}/debug.log"
+            fi
         fi
     fi
     
-    # メモリに見つからない場合、DBファイルから直接検索
+    # DBに見つからない場合、メモリからの検索（補助）
     if [ -z "$message" ]; then
-        local db_file=$(check_message_cache "$lang")
-        if [ -n "$db_file" ]; then
-            message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        # メモリメッセージを初期化（必要な場合のみ）
+        if [ "$MSG_MEMORY_INITIALIZED" != "true" ] || [ "$MSG_MEMORY_LANG" != "$lang" ]; then
+            into_memory_message
+        fi
+        
+        if [ -n "$MSG_MEMORY" ]; then
+            # 改行を考慮したメッセージ検索
+            message=$(printf '%s\n' "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | head -1 | sed "s/^${lang}|${key}=//")
             if [ -n "$message" ]; then
-                debug_log "DEBUG" "Message found in DB file for key: $key"
-            elif [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
-                # デフォルト言語にフォールバック
-                message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
-                if [ -n "$message" ]; then
-                    debug_log "DEBUG" "Using fallback language for key: $key"
-                fi
+                echo "DEBUG: Message found in memory for key: $key" >> "${LOG_DIR}/debug.log"
             fi
         fi
     fi
     
     # メッセージが見つからない場合はキーをそのまま返す
     if [ -z "$message" ]; then
-        debug_log "DEBUG" "Message not found for key: $key, using key as fallback"
+        echo "DEBUG: Message not found for key: $key, using key as fallback" >> "${LOG_DIR}/debug.log"
         message="$key"
     fi
     
