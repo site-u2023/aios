@@ -1037,40 +1037,53 @@ country_write() {
     return 0
 }
 
+# 言語コードを正規化する関数
 normalize_language() {
-    debug_log "DEBUG" "Normalizing language settings"
+    echo "DEBUG: Normalizing language settings from country code to language code" >> /tmp/aios_debug.log
     
-    # language.chファイルの存在確認
-    if [ ! -f "${CACHE_DIR}/language.ch" ]; then
-        debug_log "DEBUG" "language.ch not found. Cannot determine language."
+    # 必要なファイルの存在確認
+    if [ ! -f "${CACHE_DIR}/language.ch" ] || [ ! -f "${BASE_DIR}/country.db" ]; then
+        echo "DEBUG: Required files missing for language normalization" >> /tmp/aios_debug.log
         return 1
     fi
 
     # language.chから国コードを読み込み
     local country_code=$(cat "${CACHE_DIR}/language.ch")
-    debug_log "DEBUG" "Original country code: ${country_code}"
-
-    # 改名した共通関数を使って対応するDBを検索
-    local target_db=$(check_message_cache "$country_code")
-    if [ $? -ne 0 ]; then
-        debug_log "ERROR" "Failed to find message DB for language: $country_code"
-        return 1
+    echo "DEBUG: Read country code from language.ch: ${country_code}" >> /tmp/aios_debug.log
+    
+    # country.dbから該当する国コードのエントリを検索し、言語コードを抽出
+    local lang_code=$(awk -v cc="$country_code" '$5 == cc {print $4; exit}' "${BASE_DIR}/country.db")
+    
+    # 言語コードが見つかったかチェック
+    if [ -n "$lang_code" ]; then
+        echo "DEBUG: Found language code ${lang_code} for country code ${country_code}" >> /tmp/aios_debug.log
+        
+        # message.chに言語コードを保存
+        echo "$lang_code" > "${CACHE_DIR}/message.ch"
+        echo "DEBUG: Saved language code ${lang_code} to message.ch" >> /tmp/aios_debug.log
+    else
+        # 該当する言語コードが見つからない場合はデフォルト言語を使用
+        echo "DEBUG: No language code found for country code ${country_code}, using default: ${DEFAULT_LANGUAGE}" >> /tmp/aios_debug.log
+        echo "$DEFAULT_LANGUAGE" > "${CACHE_DIR}/message.ch"
     fi
     
-    # 設定を保存
-    echo "$country_code" > "${CACHE_DIR}/message.ch"
-    echo "$target_db" > "${CACHE_DIR}/message_db.ch"
-    debug_log "DEBUG" "Updated message.ch=${country_code}"
-    debug_log "DEBUG" "Updated message_db.ch with target DB path: ${target_db}"
+    # メッセージDBのパスを取得
+    local msg_lang=$(cat "${CACHE_DIR}/message.ch")
+    local db_file="${BASE_DIR}/message_${msg_lang}.db"
     
-    # グローバル変数を更新
-    ACTIVE_LANGUAGE="$country_code"
+    # DBファイルの存在確認
+    if [ -f "$db_file" ]; then
+        echo "DEBUG: Message DB file exists: ${db_file}" >> /tmp/aios_debug.log
+    else
+        echo "DEBUG: Message DB file not found: ${db_file}, using default language" >> /tmp/aios_debug.log
+        echo "$DEFAULT_LANGUAGE" > "${CACHE_DIR}/message.ch"
+    fi
     
     # メモリキャッシュをリセット
     MSG_MEMORY=""
     MSG_MEMORY_INITIALIZED="false"
     MSG_MEMORY_LANG=""
-    debug_log "DEBUG" "Cleared memory messages to force DB lookup"
+    echo "DEBUG: Message memory cache cleared to force DB lookup" >> /tmp/aios_debug.log
     
     return 0
 }
