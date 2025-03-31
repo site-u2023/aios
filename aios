@@ -83,6 +83,7 @@ UPDATE_CACHE="${CACHE_DIR}/update.ch" # 更新情報キャッシュ
 
 # デフォルト言語設定
 DEFAULT_LANGUAGE="${DEFAULT_LANGUAGE:-en}"  # デフォルトは英語
+MSG_MEMORY_INITIALIZED="false"
 
 # メッセージキャッシュ
 MSG_MEMORY=""
@@ -281,30 +282,17 @@ en|CONFIG_DOWNLOAD_UNNECESSARY=File already up to date:
 en|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared.
 en|MSG_DELETE_COMPLETE=Delete completed. All based data has been cleared."
     
-    # 言語DBファイルを決定
-    local db_file="${BASE_DIR}/messages_${DEFAULT_LANGUAGE}.db"
-    if [ -f "${CACHE_DIR}/message_db.ch" ]; then
-        db_file=$(cat "${CACHE_DIR}/message_db.ch")
-    elif [ -f "${BASE_DIR}/messages_${lang}.db" ]; then
-        db_file="${BASE_DIR}/messages_${lang}.db"
+    # 日本語メッセージ（基本セット）
+    if [ "$lang" = "JP" ] || [ "$lang" = "ja" ]; then
+        MSG_MEMORY="${MSG_MEMORY}
+JP|CONFIG_DOWNLOAD_SUCCESS=ダウンロードが完了しました:
+JP|CONFIG_DOWNLOAD_UNNECESSARY=ファイルは最新です:
+JP|MSG_RESET_COMPLETE=リセットが完了しました。キャッシュデータはすべてクリアされました。
+JP|MSG_DELETE_COMPLETE=削除が完了しました。すべての基本データがクリアされました。"
     fi
     
-    # 翻訳されたメッセージを追加（enと異なる言語の場合）
-    if [ "$lang" != "$DEFAULT_LANGUAGE" ] && [ -f "$db_file" ]; then
-        # 頻繁に使われるメッセージのリスト
-        local key_list="CONFIG_DOWNLOAD_SUCCESS CONFIG_DOWNLOAD_UNNECESSARY MSG_RESET_COMPLETE MSG_DELETE_COMPLETE"
-        
-        # 各メッセージに対して翻訳を検索
-        for key in $key_list; do
-            local translated_msg=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
-            if [ -n "$translated_msg" ]; then
-                # 翻訳がある場合はメモリに追加
-                MSG_MEMORY="${MSG_MEMORY}
-${lang}|${key}=${translated_msg}"
-                debug_log "DEBUG" "Added translated message: $key in $lang"
-            fi
-        done
-    fi
+    # メモリ初期化フラグを設定
+    MSG_MEMORY_INITIALIZED="true"
     
     debug_log "DEBUG" "Messages loaded into memory for language: $lang"
 }
@@ -376,18 +364,18 @@ get_message() {
     local message=""
     
     # メモリ初期化状態の確認
-    if [ -z "$MSG_MEMORY" ]; then
+    if [ "$MSG_MEMORY_INITIALIZED" != "true" ]; then
         debug_log "DEBUG" "Initializing memory messages"
         into_memory_message
     fi
     
-    # 言語コードの取得（キャッシュチェックを最初に行う）
+    # 言語コードの取得（キャッシュチェック）
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang=$(cat "${CACHE_DIR}/message.ch")
         debug_log "DEBUG" "Using language from cache: $lang"
     fi
     
-    # 言語DBファイルの選択（キャッシュ情報を最優先）
+    # 言語DBファイルの選択
     if [ -f "${CACHE_DIR}/message_db.ch" ]; then
         db_file=$(cat "${CACHE_DIR}/message_db.ch")
         debug_log "DEBUG" "Using message DB from cache: $db_file"
@@ -410,11 +398,19 @@ get_message() {
         fi
     fi
     
-    # デフォルト言語にフォールバック（非デフォルト言語で見つからない場合）
+    # デフォルト言語にフォールバック（見つからない場合）
     if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ] && [ -f "$db_file" ]; then
         message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
         if [ -n "$message" ]; then
             debug_log "DEBUG" "Using fallback language for key: $key"
+        fi
+    fi
+    
+    # 英語にフォールバック（デフォルト言語でも見つからない場合）
+    if [ -z "$message" ] && [ "$DEFAULT_LANGUAGE" != "en" ] && [ -f "${BASE_DIR}/messages_en.db" ]; then
+        message=$(grep "^en|${key}=" "${BASE_DIR}/messages_en.db" 2>/dev/null | cut -d'=' -f2-)
+        if [ -n "$message" ]; then
+            debug_log "DEBUG" "Using English fallback for key: $key"
         fi
     fi
     
