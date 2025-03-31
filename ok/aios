@@ -262,6 +262,36 @@ color() {
 
 # 🔵　メッセージ系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
+# メッセージDBファイルのパスを確認する関数
+check_message_cache() {
+    local lang="$1"
+    
+    # キャッシュDBパス確認
+    if [ -f "${CACHE_DIR}/message_db.ch" ]; then
+        local db_path=$(cat "${CACHE_DIR}/message_db.ch")
+        if [ -f "$db_path" ]; then
+            echo "$db_path"
+            return 0
+        fi
+    fi
+    
+    # 言語固有DBの確認
+    if [ -f "${BASE_DIR}/message_${lang}.db" ]; then
+        echo "${BASE_DIR}/message_${lang}.db"
+        return 0
+    fi
+    
+    # デフォルト言語DBの確認
+    if [ -f "${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db" ]; then
+        echo "${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
+        return 0
+    fi
+    
+    # 何も見つからない場合は空文字列
+    echo ""
+    return 0
+}
+
 # メッセージをメモリにロードする関数
 into_memory_message() {
     local lang="US"
@@ -325,11 +355,11 @@ reset_message_cache() {
     debug_log "DEBUG" "Message cache reset requested"
 }
 
+# メッセージ取得関数
 get_message() {
     local key="$1"
     local params="$2"  # パラメータ文字列
     local lang="US"    # デフォルト言語
-    local db_file="${BASE_DIR}/messages_base.db"  # デフォルトDB
     local message=""
     
     # 言語コードを確認
@@ -342,14 +372,8 @@ get_message() {
         into_memory_message
     fi
     
-    # 言語DBファイルの選択
-    if [ "$lang" != "US" ]; then
-        if [ -f "${CACHE_DIR}/message_db.ch" ]; then
-            db_file=$(cat "${CACHE_DIR}/message_db.ch")
-        elif [ -f "${BASE_DIR}/messages_${lang}.db" ]; then
-            db_file="${BASE_DIR}/messages_${lang}.db"
-        fi
-    fi
+    # チェックメッセージキャッシュ関数を使用してDBファイルを取得
+    local db_file=$(check_message_cache "$lang")
     
     # インメモリメッセージから検索
     if [ -n "$MSG_MEMORY" ]; then
