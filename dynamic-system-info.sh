@@ -79,6 +79,45 @@ check_network_connectivity() {
     fi
 }
 
+# メッセージDBファイルを検索し、有効なパスを返す関数
+check_message_cache() {
+    local lang="${1:-$DEFAULT_LANGUAGE}"
+    
+    debug_log "DEBUG" "Checking message cache for language: ${lang}"
+    
+    # 1. キャッシュから取得（最優先）
+    if [ -f "${CACHE_DIR}/message_db.ch" ]; then
+        local cached_path=$(cat "${CACHE_DIR}/message_db.ch")
+        if [ -f "$cached_path" ]; then
+            debug_log "DEBUG" "Using message DB from cache: $cached_path"
+            echo "$cached_path"
+            return 0
+        else
+            debug_log "DEBUG" "Cached DB path is invalid: $cached_path"
+        fi
+    fi
+    
+    # 2. 指定された言語のDBを確認
+    local lang_db="${BASE_DIR}/message_${lang}.db"
+    if [ -f "$lang_db" ]; then
+        debug_log "DEBUG" "Found specific language DB: $lang_db"
+        echo "$lang_db"
+        return 0
+    fi
+    
+    # 3. デフォルト言語のDBを確認
+    local default_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
+    if [ -f "$default_db" ]; then
+        debug_log "DEBUG" "Using default language DB: $default_db"
+        echo "$default_db"
+        return 0
+    fi
+    
+    # 4. 見つからない場合はエラー
+    debug_log "ERROR" "No message database found for any language"
+    return 0
+}
+
 # キャッシュファイルの存在と有効性を確認する関数
 check_location_cache() {
     local cache_language="${CACHE_DIR}/language.ch"
