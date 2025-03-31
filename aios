@@ -323,25 +323,20 @@ init_translation() {
     if [ ! -d "$CACHE_DIR" ]; then
         mkdir -p "$CACHE_DIR"
         debug_log "DEBUG" "Created cache directory: $CACHE_DIR"
-    }
+    fi
     
     # メッセージDBが存在するがmessage.chが無い場合、デフォルト言語を設定
-    if [ ! -f "${CACHE_DIR}/message.ch" ] && { [ -f "${BASE_DIR}/messages_en.db" ] || [ -f "${BASE_DIR}/messages_base.db" ]; }; then
-        echo "US" > "${CACHE_DIR}/message.ch"
-        
-        if [ -f "${BASE_DIR}/messages_en.db" ]; then
-            echo "${BASE_DIR}/messages_en.db" > "${CACHE_DIR}/message_db.ch"
-        else
-            echo "${BASE_DIR}/messages_base.db" > "${CACHE_DIR}/message_db.ch"
-        }
-        
-        debug_log "DEBUG" "Created default language settings: US"
-    }
+    if [ ! -f "${CACHE_DIR}/message.ch" ] && [ -f "${BASE_DIR}/messages_${DEFAULT_LANGUAGE}.db" ]; then
+        echo "$DEFAULT_LANGUAGE" > "${CACHE_DIR}/message.ch"
+        echo "${BASE_DIR}/messages_${DEFAULT_LANGUAGE}.db" > "${CACHE_DIR}/message_db.ch"
+        debug_log "DEBUG" "Created default language settings: $DEFAULT_LANGUAGE"
+    fi
     
     # メモリ内メッセージの初期化
     into_memory_message
     
     debug_log "DEBUG" "Translation module initialization complete"
+    return 0
 }
 
 migrate_message_db() {
@@ -376,8 +371,8 @@ migrate_message_db() {
 get_message() {
     local key="$1"
     local params="$2"  # パラメータ文字列
-    local lang="US"    # デフォルト言語
-    local db_file="${BASE_DIR}/messages_en.db"  # デフォルトDB
+    local lang="$DEFAULT_LANGUAGE"  # デフォルト言語
+    local db_file="${BASE_DIR}/messages_${DEFAULT_LANGUAGE}.db"  # デフォルトDB
     local message=""
     
     # メモリ初期化状態の確認
@@ -399,17 +394,13 @@ get_message() {
     elif [ -f "${BASE_DIR}/messages_${lang}.db" ]; then
         db_file="${BASE_DIR}/messages_${lang}.db"
         debug_log "DEBUG" "Using specific language DB: $db_file"
-    elif [ -f "${BASE_DIR}/messages_base.db" ] && [ ! -f "${BASE_DIR}/messages_en.db" ]; then
-        # 後方互換性のため
-        db_file="${BASE_DIR}/messages_base.db"
-        debug_log "DEBUG" "Using legacy base DB: $db_file"
-    }
+    fi
     
     # インメモリメッセージから検索
     if [ -n "$MSG_MEMORY" ]; then
         message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
         [ -n "$message" ] && debug_log "DEBUG" "Message found in memory: $key"
-    }
+    fi
     
     # DBファイルから検索（メモリに見つからない場合）
     if [ -z "$message" ] && [ -f "$db_file" ]; then
@@ -417,21 +408,21 @@ get_message() {
         if [ -n "$message" ]; then
             debug_log "DEBUG" "Message found in DB file: $key, lang: $lang"
         fi
-    }
+    fi
     
-    # USにフォールバック（非US言語で見つからない場合）
-    if [ -z "$message" ] && [ "$lang" != "US" ] && [ -f "$db_file" ]; then
-        message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+    # デフォルト言語にフォールバック（非デフォルト言語で見つからない場合）
+    if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ] && [ -f "$db_file" ]; then
+        message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
         if [ -n "$message" ]; then
-            debug_log "DEBUG" "Using US fallback for key: $key"
+            debug_log "DEBUG" "Using fallback language for key: $key"
         fi
-    }
+    fi
     
     # メッセージが見つからない場合はキーをそのまま返す
     if [ -z "$message" ]; then
         debug_log "DEBUG" "Message not found for key: $key, using key as fallback"
         message="$key"
-    }
+    fi
     
     # プレースホルダーの処理
     # 1. {notr_colon_notr} を : に変換
@@ -455,8 +446,8 @@ get_message() {
         if [ -n "$var_name" ] && [ -n "$var_value" ]; then
             local var_value_esc=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
             message=$(echo "$message" | sed "s|{$var_name}|$var_value_esc|g")
-        }
-    }
+        fi
+    fi
     
     # 最後にエスケープシーケンス（\nなど）を処理して出力
     printf "%b" "$message"
