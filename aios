@@ -1463,20 +1463,15 @@ get_commit_version() {
 
 # download関数の修正 - デバッグモード時は常にダウンロード実行
 download() {
-    # ファイル名を最初の引数として処理、残りはオプション
+    # ファイル名を最初の引数として処理
     local file_name="$1"
     shift
 
-    echo "DEBUG: DOWNLOAD CALLED: filename='${file_name}' timestamp=$(date +%s)" >> /tmp/aios_debug.log
+    echo "DEBUG: Download function called for file='${file_name}'" >> /tmp/aios_debug.log
     
     # 空ファイル名のチェック
     if [ -z "$file_name" ]; then
-        echo "ERROR: Empty filename detected in download call" >> /tmp/aios_debug.log
-        # スタックトレース（可能な場合）
-        i=0
-        while caller $i >> /tmp/aios_debug.log 2>/dev/null; do
-            i=$((i+1))
-        done
+        echo "ERROR: Empty filename detected in download function call" >> /tmp/aios_debug.log
         return 1
     fi
 
@@ -1500,30 +1495,38 @@ download() {
         shift
     done
     
-    # バージョンチェック処理
+    # バージョン情報取得
     local version_data
     version_data=$(download_check_version "$file_name")
     
-    # デバッグモード時は常にダウンロード実行
-    local update_required
-    if [ "$DEBUG_MODE" = "true" ]; then
-        update_required="true"
-        echo "DEBUG: Force download in debug mode for ${file_name}" >> /tmp/aios_debug.log
-    else
-        update_required=$(echo "$version_data" | cut -d'|' -f1)
-    fi
-    
+    local update_required=$(echo "$version_data" | cut -d'|' -f1)
     local clean_remote_version=$(echo "$version_data" | cut -d'|' -f2)
     local clean_local_version=$(echo "$version_data" | cut -d'|' -f3)
     local auth_message=$(echo "$version_data" | cut -d'|' -f4)
+    
+    # ファイルの存在確認を追加
+    local file_exists="true"
+    if [ ! -f "${BASE_DIR}/$file_name" ]; then
+        echo "DEBUG: File ${BASE_DIR}/$file_name does not exist, forcing download" >> /tmp/aios_debug.log
+        file_exists="false"
+        update_required="true"
+    elif [ ! -s "${BASE_DIR}/$file_name" ]; then
+        echo "DEBUG: File ${BASE_DIR}/$file_name exists but is empty, forcing download" >> /tmp/aios_debug.log
+        file_exists="false"
+        update_required="true"
+    fi
+    
+    # デバッグモード時は常にダウンロード
+    if [ "$DEBUG_MODE" = "true" ]; then
+        echo "DEBUG: Debug mode enabled, forcing download for ${file_name}" >> /tmp/aios_debug.log
+        update_required="true"
+    fi
     
     # ファイルダウンロード処理
     local status_type="no_update"
     local status_message="$(get_message "CONFIG_DOWNLOAD_UNNECESSARY")"
     
-    echo "DEBUG: update_required=${update_required} for ${file_name}" >> /tmp/aios_debug.log
-    
-    if [ "$update_required" = "true" ]; then
+    if [ "$update_required" = "true" ] || [ "$file_exists" = "false" ]; then
         echo "DEBUG: Executing download_fetch_file for ${file_name}" >> /tmp/aios_debug.log
         if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode"; then
             debug_log "ERROR" "Download process failed for $file_name"
@@ -1533,7 +1536,14 @@ download() {
         status_type="success"
         status_message="$(get_message "CONFIG_DOWNLOAD_SUCCESS")"
     else
-        echo "DEBUG: Skipping download as update_required=false for ${file_name}" >> /tmp/aios_debug.log
+        echo "DEBUG: Skipping download for ${file_name} (not needed)" >> /tmp/aios_debug.log
+    fi
+    
+    # ファイルの存在を再確認
+    if [ ! -f "${BASE_DIR}/$file_name" ]; then
+        echo "ERROR: File ${BASE_DIR}/$file_name still does not exist after download attempt" >> /tmp/aios_debug.log
+        debug_log "ERROR" "File not found after download attempt: $file_name"
+        return 1
     fi
     
     # 結果表示とファイル読み込み
@@ -1542,16 +1552,12 @@ download() {
     return 0
 }
 
-# バージョンチェック関数
 download_check_version() {
     local file_name="$1"
     local script_file="${CACHE_DIR}/script.ch"
     local dummy_version="No version control"
 
-    # APIレート制限チェック
-    check_api_rate_limit
-    
-    # バージョン情報の取得
+    # バージョン情報の取得（デバッグモードの特別処理なし）
     local remote_version_info=$(get_commit_version "$file_name")
     local remote_version=$(printf "%s" "$remote_version_info" | cut -d' ' -f1)
     local auth_method=$(printf "%s" "$remote_version_info" | cut -d' ' -f2)
