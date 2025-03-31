@@ -215,11 +215,13 @@ translate_text() {
     esac
 }
 
+# 言語データベース作成関数
+# 特定の言語向けのメッセージDBを作成します
 create_language_db() {
     local target_lang="$1"
-    local base_db="${BASE_DIR:-/tmp/aios}/messages_${DEFAULT_LANGUAGE}.db"
+    local base_db="${BASE_DIR:-/tmp/aios}/message_${DEFAULT_LANGUAGE}.db"
     local api_lang=$(get_api_lang_code)
-    local output_db="${BASE_DIR:-/tmp/aios}/messages_${api_lang}.db"
+    local output_db="${BASE_DIR:-/tmp/aios}/message_${api_lang}.db"
     local temp_file="${TRANSLATION_CACHE_DIR}/temp_translation_output.txt"
     local cleaned_translation=""
     local current_api=""
@@ -246,7 +248,7 @@ EOF
     fi
     
     # 翻訳処理開始
-    printf "Creating translation DB using API: %s\n" "$api_lang"
+    printf "言語データベースをAPIで作成中: %s\n" "$api_lang"
     
     # ネットワーク接続状態を確認
     if [ ! -f "$ip_check_file" ]; then
@@ -267,14 +269,14 @@ EOF
     # 単純に最初のAPIを取得
     local first_api=$(echo "$API_LIST" | cut -d',' -f1)
     case "$first_api" in
-        google) current_api="Google Translate API" ;;
-        *) current_api="Unknown API" ;;
+        google) current_api="Google翻訳API" ;;
+        *) current_api="不明なAPI" ;;
     esac
     
     debug_log "DEBUG" "Initial API based on API_LIST priority: $current_api"
     
     # スピナーを開始し、使用中のAPIを表示
-    start_spinner "$(color blue "Using API: $current_api")" "dot"
+    start_spinner "$(color blue "使用中のAPI: $current_api")" "dot"
     
     # 言語エントリを抽出
     grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
@@ -305,10 +307,10 @@ EOF
                     case "$api" in
                         google)
                             # 表示APIとの不一致チェック（表示更新）
-                            if [ "$current_api" != "Google Translate API" ]; then
-                                stop_spinner "Switching API" "info"
-                                current_api="Google Translate API"
-                                start_spinner "$(color blue "Using API: $current_api")" "dot"
+                            if [ "$current_api" != "Google翻訳API" ]; then
+                                stop_spinner "APIを切り替えています" "info"
+                                current_api="Google翻訳API"
+                                start_spinner "$(color blue "使用中のAPI: $current_api")" "dot"
                                 debug_log "DEBUG" "Switching to Google Translate API"
                             fi
                             
@@ -353,10 +355,10 @@ EOF
     done
     
     # スピナー停止
-    stop_spinner "Translation completed" "success"
+    stop_spinner "翻訳が完了しました" "success"
     
     # 翻訳処理終了
-    printf "Database creation completed for language: %s\n" "${api_lang}"
+    printf "言語 %s のデータベース作成が完了しました\n" "${api_lang}"
     debug_log "DEBUG" "Language DB creation completed for ${target_lang}"
     return 0
 }
@@ -373,7 +375,7 @@ process_language_translation() {
     debug_log "DEBUG" "Processing translation for language: ${lang_code}"
     
     # デフォルト言語以外の場合のみ翻訳DBを作成
-    if [ "$lang_code" != "$DEFAULT_LANGUAGE" ]; then  # USからDEFAULT_LANGUAGEに変更
+    if [ "$lang_code" != "$DEFAULT_LANGUAGE" ]; then
         # 翻訳DBを作成
         create_language_db "$lang_code"
     else
