@@ -80,7 +80,11 @@ BASE_WGET_AUTH_TOKEN='wget --no-check-certificate -q -O "$1" --header="Authoriza
 # GitHub API認証関連
 GITHUB_TOKEN_FILE="/etc/aios_token" # GitHubトークン保存ファイル
 UPDATE_CACHE="${CACHE_DIR}/update.ch" # 更新情報キャッシュ
-MSG_MEMORY=""                          # メッセージキャッシュ
+
+# メッセージキャッシュ
+MSG_MEMORY=""
+MSG_MEMORY_INITIALIZED="false"
+MSG_MEMORY_LANG=""
 
 # GitHub APIレート制限情報
 API_REMAINING=""       # 残りAPI呼び出し回数
@@ -258,16 +262,67 @@ color() {
 
 # 🔵　メッセージ系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
+# メッセージをメモリにロードする関数
 into_memory_message() {
+    local lang="US"
     
-    # 基本メッセージ（英語）
+    # キャッシュから現在の言語を取得
+    if [ -f "${CACHE_DIR}/message.ch" ]; then
+        lang=$(cat "${CACHE_DIR}/message.ch")
+        debug_log "DEBUG" "Loading messages into memory for language: $lang"
+    fi
+    
+    # 既に初期化済みで同じ言語なら処理をスキップ
+    if [ "$MSG_MEMORY_INITIALIZED" = "true" ] && [ "$MSG_MEMORY_LANG" = "$lang" ]; then
+        debug_log "DEBUG" "Memory messages already initialized for $lang"
+        return 0
+    fi
+    
+    # 基本メッセージの設定（英語）
     MSG_MEMORY="
-US|CONFIG_DOWNLOAD_SUCCESS=Download completed:
-US|CONFIG_DOWNLOAD_UNNECESSARY=No update needed:
+US|CONFIG_DOWNLOAD_SUCCESS=File downloaded successfully:
+US|CONFIG_DOWNLOAD_UNNECESSARY=File already up to date:
 US|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared.
 US|MSG_DELETE_COMPLETE=Delete completed. All based data has been cleared."
     
-    debug_log "DEBUG" "Messages loaded into memory for language: $lang"
+    # 言語がUS以外かつ翻訳DBが存在する場合
+    if [ "$lang" != "US" ]; then
+        local db_file="${BASE_DIR}/messages_base.db"
+        
+        # メッセージDBのパスを取得
+        if [ -f "${CACHE_DIR}/message_db.ch" ]; then
+            db_file=$(cat "${CACHE_DIR}/message_db.ch")
+        elif [ -f "${BASE_DIR}/messages_${lang}.db" ]; then
+            db_file="${BASE_DIR}/messages_${lang}.db"
+        fi
+        
+        # 頻繁に使用されるメッセージキーのリスト
+        local key_list="CONFIG_DOWNLOAD_SUCCESS CONFIG_DOWNLOAD_UNNECESSARY MSG_RESET_COMPLETE MSG_DELETE_COMPLETE"
+        
+        # DBから翻訳を抽出し追加
+        for key in $key_list; do
+            if [ -f "$db_file" ]; then
+                local translated=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+                if [ -n "$translated" ]; then
+                    MSG_MEMORY="${MSG_MEMORY}
+${lang}|${key}=${translated}"
+                    debug_log "DEBUG" "Added translation for $key in $lang"
+                fi
+            fi
+        done
+    fi
+    
+    # 初期化フラグと言語を保存
+    MSG_MEMORY_INITIALIZED="true"
+    MSG_MEMORY_LANG="$lang"
+    debug_log "DEBUG" "Memory messages initialized for language: $lang"
+}
+
+# 言語変更時にキャッシュをリセットする関数
+reset_message_cache() {
+    MSG_MEMORY_INITIALIZED="false"
+    MSG_MEMORY_LANG=""
+    debug_log "DEBUG" "Message cache reset requested"
 }
 
 get_message() {
@@ -277,29 +332,22 @@ get_message() {
     local db_file="${BASE_DIR}/messages_base.db"  # デフォルトDB
     local message=""
     
-    # メモリ初期化状態の確認
-    if [ -z "$MSG_MEMORY_INITIALIZED" ] || [ "$MSG_MEMORY_INITIALIZED" != "true" ]; then
-        debug_log "DEBUG" "Initializing memory messages"
-        into_memory_message
-        MSG_MEMORY_INITIALIZED="true"
-    fi
-    
-    # 言語コードの取得（キャッシュチェックを最初に行う）
+    # 言語コードを確認
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang=$(cat "${CACHE_DIR}/message.ch")
-        debug_log "DEBUG" "Using language from cache: $lang"
     fi
     
-    # 言語DBファイルの選択（キャッシュ情報を最優先）
+    # メモリメッセージを初期化
+    if [ "$MSG_MEMORY_INITIALIZED" != "true" ] || [ "$MSG_MEMORY_LANG" != "$lang" ]; then
+        into_memory_message
+    fi
+    
+    # 言語DBファイルの選択
     if [ "$lang" != "US" ]; then
         if [ -f "${CACHE_DIR}/message_db.ch" ]; then
-            # キャッシュに保存されたDBパスを使用（最優先）
             db_file=$(cat "${CACHE_DIR}/message_db.ch")
-            debug_log "DEBUG" "Using message DB from cache: $db_file"
         elif [ -f "${BASE_DIR}/messages_${lang}.db" ]; then
-            # 言語固有DBを使用
             db_file="${BASE_DIR}/messages_${lang}.db"
-            debug_log "DEBUG" "Using language specific DB: $db_file"
         fi
     fi
     
