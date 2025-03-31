@@ -292,6 +292,7 @@ check_network_connectivity() {
     fi
 }
 
+# into_memory_message関数の修正例
 into_memory_message() {
     local lang="$DEFAULT_LANGUAGE"
     
@@ -316,12 +317,8 @@ en|MSG_DELETE_COMPLETE=Delete completed. All based data has been cleared."
     
     # check_message_cache関数を使用してDBファイルパスを取得
     local db_file=$(check_message_cache "$lang")
-    if [ $? -ne 0 ]; then
-        debug_log "DEBUG" "Failed to find message DB, using only basic English messages"
-        db_file=""
-    }
     
-    # 翻訳されたメッセージを追加（デフォルト言語と異なる場合）
+    # 翻訳されたメッセージを追加（デフォルト言語と異なり、かつDBファイルが存在する場合）
     if [ "$lang" != "$DEFAULT_LANGUAGE" ] && [ -f "$db_file" ]; then
         # 頻繁に使われるメッセージキーのリスト
         local key_list="CONFIG_DOWNLOAD_SUCCESS CONFIG_DOWNLOAD_UNNECESSARY MSG_RESET_COMPLETE MSG_DELETE_COMPLETE"
