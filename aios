@@ -507,6 +507,12 @@ github_api_request() {
     local auth_method="direct"
     local temp_file="${CACHE_DIR}/api_request.tmp"
     
+    # IPバージョン設定の初期化確認
+    if [ -z "$WGET_IPV_OPT" ]; then
+        setup_wget_options
+        debug_log "DEBUG" "Initialized wget IP options before API request"
+    fi
+    
     # wgetの機能チェック
     if [ -z "$WGET_SUPPORTS_HEADER" ]; then
         if wget --help 2>&1 | grep -q -- "--header"; then
@@ -555,8 +561,10 @@ github_api_request() {
         # 認証方法2: wgetのユーザー認証（ヘッダーがサポートされていない場合）
         if [ "$auth_method" = "direct" ] && [ "$WGET_SUPPORTS_HEADER" = "0" ]; then
             debug_log "DEBUG" "Trying user authentication"
-            $BASE_WGET -O "$temp_file" --user="$token" --password="x-oauth-basic" \
-                     "https://api.github.com/$endpoint" 2>/dev/null
+            
+            # IPバージョン対応のwget呼び出し
+            $BASE_WGET "$temp_file" --user="$token" --password="x-oauth-basic" \
+                    "https://api.github.com/$endpoint" 2>/dev/null
                      
             if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
                 response=$(cat "$temp_file")
@@ -572,7 +580,9 @@ github_api_request() {
         # 認証方法3: フォールバック（直接アクセス）
         if [ "$auth_method" = "direct" ]; then
             debug_log "DEBUG" "Falling back to direct access"
-            $BASE_WGET -O "$temp_file" "https://api.github.com/$endpoint" 2>/dev/null
+            
+            # IPバージョン対応のwget呼び出し
+            $BASE_WGET "$temp_file" "https://api.github.com/$endpoint" 2>/dev/null
             
             if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
                 response=$(cat "$temp_file")
@@ -616,7 +626,9 @@ github_api_request() {
         return 0
     else
         debug_log "DEBUG" "No token found, using unauthenticated request"
-        $BASE_WGET -O - "https://api.github.com/$endpoint" 2>/dev/null
+        
+        # IPバージョン対応のwget呼び出し
+        $BASE_WGET "-" "https://api.github.com/$endpoint" 2>/dev/null
         return $?
     fi
 }
