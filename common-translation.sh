@@ -35,6 +35,9 @@ SCRIPT_VERSION="2025-03-29-03-40"
 # 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
 ### =========================================================
 
+# デフォルト言語設定（ユーザーが簡単に変更可能）
+DEFAULT_LANGUAGE="${DEFAULT_LANGUAGE:-en}"
+
 # 基本定数の設定 
 BASE_WGET="wget --no-check-certificate -q -O"
 DEBUG_MODE="${DEBUG_MODE:-false}"
