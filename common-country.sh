@@ -1137,6 +1137,10 @@ normalize_language() {
     debug_log "DEBUG" "Updated message_db_ch with target DB path: ${target_db}"
     
     ACTIVE_LANGUAGE="$country_code"
+
+    # インメモリメッセージをクリア
+    MSG_MEMORY=""
+    debug_log "DEBUG" "Cleared memory messages to force DB lookup"
     
     return 0
 }
