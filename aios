@@ -272,7 +272,7 @@ color() {
 into_memory_message() {
     local lang="$DEFAULT_LANGUAGE"
 
-    echo "INTO_MEMORY_MESSAGE: start with DEFAULT_LANGUAGE=${DEFAULT_LANGUAGE}" >> /tmp/aios_debug.log
+    echo "INTO_MEMORY_MESSAGE: start with DEFAULT_LANGUAGE=${DEFAULT_LANGUAGE}" >> ${LOG_DIR}/debug.log　
     
     # キャッシュから現在の言語を取得
     if [ -f "${CACHE_DIR}/message.ch" ]; then
