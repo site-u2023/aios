@@ -1065,7 +1065,7 @@ normalize_language() {
     local target_db=""
     local found=0
     
-    # まず、正確な翻訳DBを確認 (messages_XX.db 形式)
+    # まず、正確な翻訳DBを確認
     local translation_db="${BASE_DIR}/messages_${country_code}.db"
     if [ -f "$translation_db" ]; then
         target_db="$translation_db"
@@ -1097,8 +1097,9 @@ normalize_language() {
     
     ACTIVE_LANGUAGE="$country_code"
     
-    # インメモリメッセージをクリア
+    # インメモリメッセージをリセット
     MSG_MEMORY=""
+    MSG_MEMORY_INITIALIZED="false"
     debug_log "DEBUG" "Cleared memory messages to force DB lookup"
     
     return 0
