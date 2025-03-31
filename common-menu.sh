@@ -404,7 +404,7 @@ process_menu_items() {
             # メッセージファイルから直接検索（特殊文字対応）
             debug_log "DEBUG" "Direct search for message key: $key"
             
-            for msg_file in "${BASE_DIR}"/messages_*.db; do
+            for msg_file in "${BASE_DIR}"/message_*.db; do
                 if [ -f "$msg_file" ]; then
                     # -Fオプションで特殊文字をリテラルとして扱う
                     local msg_value=$(grep -F "$current_lang|$key=" "$msg_file" 2>/dev/null | cut -d'=' -f2-)
