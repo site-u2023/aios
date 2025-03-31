@@ -40,7 +40,7 @@ en|PKG_SECTION_SAMBA=File Sharing
 # dynamic-system-info.sh
 # =======================
 en|CONFIG_DOWNLOAD_SUCCESS=Download completed{notr_colon_notr}
-en|CONFIG_DOWNLOAD_UNNECESSARY=File already up to date{notr_colon_notr}
+en|CONFIG_DOWNLOAD_UNNECESSARY=Already using latest version of{notr_colon_notr}
 
 # =======================
 # common-menu.sh
@@ -103,7 +103,7 @@ en|MSG_HELP_DEBUG_STANDARD=-d, --debug           # Standard debug info
 en|MSG_HELP_DEBUG_VERBOSE=-d2, --debug2         # Verbose debug info
 en|MSG_BANNER_DECCRIPTION=Dedicated configuration software for OpenWRT
 en|MSG_BANNER_NAME=All-in-One Scripts
-en|MSG_BANNER_DISCLAIMER=Disclaimer{notr_colon_notr} Use this script at your own risk
+en|MSG_BANNER_DISCLAIMER=Warning{notr_colon_notr} This script is used at your own risk
 en|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared
 en|MSG_DELETE_COMPLETE=Delete completed. All base data has been cleared
 en|MSG_DOWNLOAD_FAILED=Download failed{notr_colon_notr} {notr_file_notr}
