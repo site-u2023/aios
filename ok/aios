@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.26-00-00"
+SCRIPT_VERSION="2025.03.31-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -53,34 +53,51 @@ SCRIPT_VERSION="2025.03.26-00-00"
 ### 🛠️ Keep debugging simple, focused, and POSIX-compliant!
 ### =========================================================
 
-DEV_NULL="${DEV_NULL:-on}"
-# サイレントモード
-# export DEV_NULL="on"
-# 通常モード
-# unset DEV_NULL
+# システム制御
+DEV_NULL="${DEV_NULL:-on}"       # サイレントモード制御（on=有効, unset=無効）
+DEBUG_MODE="${DEBUG_MODE:-false}" # デバッグモード（true=有効, false=無効）
 
-# 基本定数の設定 
-# 基本wgetコマンド - ヘッダー無し
-# BASE_WGET="${BASE_WGET:-wget -O}"
-BASE_WGET="${BASE_WGET:-wget --no-check-certificate -q}"
-# Bearer認証用wgetコマンド（トークンは呼び出し時に指定）
-BASE_WGET_AUTH_BEARER='wget --no-check-certificate -q -O "$1" --header="Authorization: Bearer $2" "$3"'
-# 従来のtoken認証用wgetコマンド（トークンは呼び出し時に指定）
-BASE_WGET_AUTH_TOKEN='wget --no-check-certificate -q -O "$1" --header="Authorization: token $2" "$3"'
-DEBUG_MODE="${DEBUG_MODE:-false}"
-BIN_PATH="$(readlink -f "$0")"
-BIN_DIR="$(dirname "$BIN_PATH")"
-BIN_FILE="$(basename "$BIN_PATH")"
-BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
-CACHE_BUST="?cache_bust=$(date +%s)"  # キャッシュバスティング用パラメータを初期化
-BASE_DIR="${BASE_DIR:-/tmp/aios}"
-CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
-FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
-LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
+# パス・ファイル関連
+BIN_PATH="$(readlink -f "$0")"   # 実行ファイルの絶対パス
+BIN_DIR="$(dirname "$BIN_PATH")" # 実行ファイルのディレクトリ
+BIN_FILE="$(basename "$BIN_PATH")" # 実行ファイル名
 
-UPDATE_CACHE="${CACHE_DIR}/update.ch"
-GITHUB_TOKEN_FILE="/etc/aios_token"
+# ベースディレクトリ設定
+BASE_DIR="${BASE_DIR:-/tmp/aios}"      # 基本ディレクトリ
+CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}" # キャッシュディレクトリ
+FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}" # フィードディレクトリ
+LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"   # ログディレクトリ
+
+# ダウンロード関連設定
+BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}" # 基本URL
+CACHE_BUST="?cache_bust=$(date +%s)" # キャッシュバスティングパラメータ
+
+# wget関連設定
+BASE_WGET="wget --no-check-certificate -q -O" # 基本wgetコマンド
+BASE_WGET_AUTH_BEARER='wget --no-check-certificate -q -O "$1" --header="Authorization: Bearer $2" "$3"' # Bearer認証用
+BASE_WGET_AUTH_TOKEN='wget --no-check-certificate -q -O "$1" --header="Authorization: token $2" "$3"'   # Token認証用
+
+# GitHub API認証関連
+GITHUB_TOKEN_FILE="/etc/aios_token" # GitHubトークン保存ファイル
+UPDATE_CACHE="${CACHE_DIR}/update.ch" # 更新情報キャッシュ
+
+# メッセージキャッシュ
 MSG_MEMORY=""
+MSG_MEMORY_INITIALIZED="false"
+MSG_MEMORY_LANG=""
+
+# GitHub APIレート制限情報
+API_REMAINING=""       # 残りAPI呼び出し回数
+API_LIMIT=""           # APIレート制限値
+API_RESET_TIME=""      # API制限リセット時間（分）
+API_AUTH_METHOD=""     # 認証方法（token/bearer/direct）
+API_LAST_CHECK=""      # 最終API確認時間（Unix時間）
+API_CACHE_TTL="60"     # APIキャッシュ有効期間（秒）
+
+# コミット情報キャッシュ関連
+COMMIT_CACHE_DIR="${CACHE_DIR}/commits" # コミット情報キャッシュディレクトリ
+COMMIT_CACHE_TTL="1800" # コミットキャッシュ有効期間（30分=1800秒）
+SKIP_CACHE="false"     # キャッシュスキップフラグ（true=キャッシュ無視）
 
 # 🔵　エラー・デバッグ　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -206,6 +223,7 @@ print_help() {
     printf "  %-25s %s\n" "-cl, --common_light" "$(get_message "MSG_HELP_LIGHT")"
     printf "  %-25s %s\n" "-cd, --common_debug" "$(get_message "MSG_HELP_COMMON_DEBUG")"
     printf "  %-25s %s\n" "-dr, --dry-run" "$(get_message "MSG_HELP_DRY_RUN")"
+    printf "  %-25s %s\n" "-nc, --no-cache" "Skip using cached version data"
     
     printf "\n%s\n" "$(get_message "MSG_HELP_LANGUAGE_HEADER")"
     printf "  %-25s %s\n" "US, JP, ..." "$(get_message "MSG_HELP_LANGUAGE")"
@@ -244,73 +262,216 @@ color() {
 
 # 🔵　メッセージ系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
+# メッセージをメモリにロードする関数
 into_memory_message() {
-    # メッセージを文字列としてMSG_MEMORYに追加する
+    local lang="US"
+    
+    # キャッシュから現在の言語を取得
+    if [ -f "${CACHE_DIR}/message.ch" ]; then
+        lang=$(cat "${CACHE_DIR}/message.ch")
+        debug_log "DEBUG" "Loading messages into memory for language: $lang"
+    fi
+    
+    # 既に初期化済みで同じ言語なら処理をスキップ
+    if [ "$MSG_MEMORY_INITIALIZED" = "true" ] && [ "$MSG_MEMORY_LANG" = "$lang" ]; then
+        debug_log "DEBUG" "Memory messages already initialized for $lang"
+        return 0
+    fi
+    
+    # 基本メッセージの設定（英語）
     MSG_MEMORY="
-US|CONFIG_DOWNLOAD_SUCCESS=Download completed:
-US|CONFIG_DOWNLOAD_UNNECESSARY=No update needed:"
-
-    debug_log "DEBUG" "Messages loaded into memory"
+US|CONFIG_DOWNLOAD_SUCCESS=File downloaded successfully:
+US|CONFIG_DOWNLOAD_UNNECESSARY=File already up to date:
+US|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared.
+US|MSG_DELETE_COMPLETE=Delete completed. All based data has been cleared."
+    
+    # 言語がUS以外かつ翻訳DBが存在する場合
+    if [ "$lang" != "US" ]; then
+        local db_file="${BASE_DIR}/messages_base.db"
+        
+        # メッセージDBのパスを取得
+        if [ -f "${CACHE_DIR}/message_db.ch" ]; then
+            db_file=$(cat "${CACHE_DIR}/message_db.ch")
+        elif [ -f "${BASE_DIR}/messages_${lang}.db" ]; then
+            db_file="${BASE_DIR}/messages_${lang}.db"
+        fi
+        
+        # 頻繁に使用されるメッセージキーのリスト
+        local key_list="CONFIG_DOWNLOAD_SUCCESS CONFIG_DOWNLOAD_UNNECESSARY MSG_RESET_COMPLETE MSG_DELETE_COMPLETE"
+        
+        # DBから翻訳を抽出し追加
+        for key in $key_list; do
+            if [ -f "$db_file" ]; then
+                local translated=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+                if [ -n "$translated" ]; then
+                    MSG_MEMORY="${MSG_MEMORY}
+${lang}|${key}=${translated}"
+                    debug_log "DEBUG" "Added translation for $key in $lang"
+                fi
+            fi
+        done
+    fi
+    
+    # 初期化フラグと言語を保存
+    MSG_MEMORY_INITIALIZED="true"
+    MSG_MEMORY_LANG="$lang"
+    debug_log "DEBUG" "Memory messages initialized for language: $lang"
 }
 
-# メッセージを取得する関数
+# 言語変更時にキャッシュをリセットする関数
+reset_message_cache() {
+    MSG_MEMORY_INITIALIZED="false"
+    MSG_MEMORY_LANG=""
+    debug_log "DEBUG" "Message cache reset requested"
+}
+
 get_message() {
     local key="$1"
     local params="$2"  # パラメータ文字列
-    local lang="${lang:-US}" 
-    local db_file="${db_file:-${BASE_DIR}/messages_base.db}" 
+    local lang="US"    # デフォルト言語
+    local db_file="${BASE_DIR}/messages_base.db"  # デフォルトDB
     local message=""
-
-    # メッセージDBがダウンロードされた後の言語設定処理
+    
+    # 言語コードを確認
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang=$(cat "${CACHE_DIR}/message.ch")
-    elif [ -n "$ACTIVE_LANGUAGE" ]; then
-        lang="$ACTIVE_LANGUAGE"
     fi
     
-    # インメモリメッセージから検索
-    into_memory_message
-    if [ -n "$MSG_MEMORY" ]; then
-        # 言語固有のメモリ内メッセージを検索
-        message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+    # メモリメッセージを初期化
+    if [ "$MSG_MEMORY_INITIALIZED" != "true" ] || [ "$MSG_MEMORY_LANG" != "$lang" ]; then
+        into_memory_message
     fi
-
-    # メッセージが見つからなかった場合かつDBファイルが存在する場合は検索
-    if [ -z "$message" ] && [ -f "$db_file" ]; then
-        # 現在の言語でDBファイルを検索
-        message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
-        
-        # 言語固有のメッセージが見つからない場合、英語をチェック
-        if [ -z "$message" ] && [ "$lang" != "US" ]; then
-            message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+    
+    # 言語DBファイルの選択
+    if [ "$lang" != "US" ]; then
+        if [ -f "${CACHE_DIR}/message_db.ch" ]; then
+            db_file=$(cat "${CACHE_DIR}/message_db.ch")
+        elif [ -f "${BASE_DIR}/messages_${lang}.db" ]; then
+            db_file="${BASE_DIR}/messages_${lang}.db"
         fi
     fi
     
-    # メッセージが見つからなかった場合はキーをそのまま返す
+    # インメモリメッセージから検索
+    if [ -n "$MSG_MEMORY" ]; then
+        message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+    fi
+    
+    # DBファイルから検索（メモリに見つからない場合）
+    if [ -z "$message" ] && [ -f "$db_file" ]; then
+        message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        debug_log "DEBUG" "Message found in DB file for key: $key, lang: $lang"
+    fi
+    
+    # USにフォールバック（非US言語で見つからない場合）
+    if [ -z "$message" ] && [ "$lang" != "US" ] && [ -f "$db_file" ]; then
+        message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        debug_log "DEBUG" "Key not found in $lang, using US fallback for: $key"
+    fi
+    
+    # メッセージが見つからない場合はキーをそのまま返す
     if [ -z "$message" ]; then
-        debug_log "WARNING" "Message not found for key: ${key}"
+        debug_log "DEBUG" "Message not found for key: $key, using key as fallback"
         message="$key"
     fi
     
+    # プレースホルダーの処理
+    # 1. {notr_colon_notr} を : に変換
+    message=$(echo "$message" | sed 's/{notr_colon_notr}/:/g')
+    
+    # 2. {notr_newline_notr} を \n に変換
+    message=$(echo "$message" | sed 's/{notr_newline_notr}/\\n/g')
+    
+    # 3. その他の {notr_*_notr} を {*} に変換
+    while echo "$message" | grep -q "{notr_.*_notr}"; do
+        local placeholder=$(echo "$message" | grep -o "{notr_[^_]*_notr}" | head -1)
+        local name=$(echo "$placeholder" | sed 's/{notr_\(.*\)_notr}/\1/')
+        message=$(echo "$message" | sed "s/$placeholder/{$name}/g")
+    done
+    
     # パラメータ置換処理
     if [ -n "$params" ]; then
-        var_name=$(echo "$params" | cut -d'=' -f1)
-        var_value=$(echo "$params" | cut -d'=' -f2-)
+        local var_name=$(echo "$params" | cut -d'=' -f1)
+        local var_value=$(echo "$params" | cut -d'=' -f2-)
         
         if [ -n "$var_name" ] && [ -n "$var_value" ]; then
-            debug_log "DEBUG" "Replacing placeholder {$var_name} with value"
-            var_value_esc=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
+            local var_value_esc=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
             message=$(echo "$message" | sed "s|{$var_name}|$var_value_esc|g")
         fi
     fi
     
-    echo "$message"
+    # 最後にエスケープシーケンス（\nなど）を処理して出力
+    printf "%b" "$message"
     return 0
 }
 
 # 🔴　メッセージ系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
 
 # 🔵　トークン系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
+
+# コミット情報をキャッシュに保存する関数
+save_commit_to_cache() {
+    local file_path="$1"
+    local version="$2"
+    local auth_method="$3"
+    local cache_file="${COMMIT_CACHE_DIR}/$(echo "$file_path" | tr '/' '_').commit"
+    local timestamp=$(date +%s)
+    
+    debug_log "DEBUG" "Saving commit info to cache: $file_path -> $cache_file"
+    
+    # キャッシュフォルダがなければ作成
+    [ -d "${COMMIT_CACHE_DIR}" ] || mkdir -p "${COMMIT_CACHE_DIR}"
+    
+    # キャッシュファイルに情報を書き込み
+    {
+        echo "VERSION=$version"
+        echo "AUTH_METHOD=$auth_method"
+        echo "TIMESTAMP=$timestamp"
+        echo "TTL=$COMMIT_CACHE_TTL"
+        echo "FILE_PATH=$file_path"
+    } > "$cache_file"
+    
+    return 0
+}
+
+# キャッシュからコミット情報を取得する関数
+get_commit_from_cache() {
+    local file_path="$1"
+    local force="$2"  # キャッシュ強制無視フラグ
+    local cache_file="${COMMIT_CACHE_DIR}/$(echo "$file_path" | tr '/' '_').commit"
+    local current_time=$(date +%s)
+    
+    # キャッシュスキップが有効またはforceフラグが指定されている場合はキャッシュを無視
+    if [ "$SKIP_CACHE" = "true" ] || [ "$force" = "true" ] || [ "$FORCE" = "true" ]; then
+        debug_log "DEBUG" "Skipping cache for $file_path (forced)"
+        return 1
+    fi
+    
+    # キャッシュファイルが存在しない場合
+    if [ ! -f "$cache_file" ]; then
+        debug_log "DEBUG" "No cache found for $file_path"
+        return 1
+    fi
+    
+    # キャッシュファイルから情報を読み込む
+    . "$cache_file"
+    
+    # 必須変数が設定されているか確認
+    if [ -z "$VERSION" ] || [ -z "$TIMESTAMP" ] || [ -z "$TTL" ]; then
+        debug_log "WARN" "Invalid cache file for $file_path"
+        return 1
+    fi
+    
+    # キャッシュが有効期限内かチェック
+    if [ $(( current_time - TIMESTAMP )) -gt "$TTL" ]; then
+        debug_log "DEBUG" "Cache expired for $file_path ($(( (current_time - TIMESTAMP) / 60 )) minutes old)"
+        return 1
+    fi
+    
+    # キャッシュが有効な場合は結果を返す
+    debug_log "DEBUG" "Using cached commit info for $file_path: $VERSION (age: $(( (current_time - TIMESTAMP) / 60 )) minutes)"
+    echo "$VERSION $AUTH_METHOD"
+    return 0
+}
 
 format_api_status() {
     local auth_method="$1"
@@ -340,7 +501,7 @@ github_api_request() {
     local token=$(get_github_token)
     local response=""
     local auth_method="direct"
-    local temp_file="/tmp/github_api_request.tmp"
+    local temp_file="${CACHE_DIR}/api_request.tmp"
     
     # wgetの機能チェック
     if [ -z "$WGET_SUPPORTS_HEADER" ]; then
@@ -568,384 +729,220 @@ setup_github_token() {
 
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
-# OpenWrt環境のwget機能検出関数（改良版）
-detect_wget_capabilities() {
-    debug_log "DEBUG" "Detecting wget capabilities for current environment"
+check_network_connectivity() {
+    local ip_check_file="${CACHE_DIR}/network.ch"
+    local ret4=1
+    local ret6=1
+
+    debug_log "DEBUG: Checking IPv4 connectivity"
+    ping -c 1 -w 3 8.8.8.8 >/dev/null 2>&1
+    ret4=$?
+
+    debug_log "DEBUG: Checking IPv6 connectivity"
+    ping6 -c 1 -w 3 2001:4860:4860::8888 >/dev/null 2>&1
+    ret6=$?
+
+    if [ "$ret4" -eq 0 ] && [ "$ret6" -eq 0 ]; then
+        echo "v4v6" > "${ip_check_file}"
+    elif [ "$ret4" -eq 0 ]; then
+        echo "v4" > "${ip_check_file}"
+    elif [ "$ret6" -eq 0 ]; then
+        echo "v6" > "${ip_check_file}"
+    else
+        echo "" > "${ip_check_file}"
+    fi
+}
+
+# wget接続オプションをネットワーク状況に応じて設定する関数
+setup_wget_options() {
+    # ネットワーク状態をキャッシュファイルから取得
+    local network_type=""
+    if [ -f "${CACHE_DIR}/network.ch" ]; then
+        network_type=$(cat "${CACHE_DIR}/network.ch")
+    fi
     
-    local temp_file="/tmp/wget_help.tmp"
-    local test_file="/tmp/wget_test_header.tmp"
-    local header_support="no"
-    local user_support="no"
+    # デフォルトのIPバージョンオプション（空=システム設定に従う）
+    WGET_IPV_OPT=""
     
-    # wgetのヘルプを一時ファイルに保存（--helpがサポートされていない場合のため空ファイル作成）
-    touch "$temp_file"
-    wget --help > "$temp_file" 2>&1 || true
+    # ネットワーク状態に応じてIPバージョンオプションを設定
+    case "$network_type" in
+        v4)
+            WGET_IPV_OPT="-4"
+            debug_log "DEBUG" "Setting wget to use IPv4 only"
+            ;;
+        v6)
+            WGET_IPV_OPT="-6"
+            debug_log "DEBUG" "Setting wget to use IPv6 only"
+            ;;
+        v4v6|*)
+            # デュアルスタック環境またはデフォルト
+            WGET_IPV_OPT=""
+            debug_log "DEBUG" "Using system default IP settings for wget"
+            ;;
+    esac
     
-    # デバッグ用にwgetヘルプ内容の先頭行を記録
-    debug_log "DEBUG" "wget help output beginning:"
-    head -3 "$temp_file" | while read line; do
-        debug_log "DEBUG" "  $line"
+    # wgetコマンドのグローバル変数を更新（全関数で共有される）
+    BASE_WGET="wget --no-check-certificate -q ${WGET_IPV_OPT} -O"
+    BASE_WGET_AUTH_BEARER="wget --no-check-certificate -q ${WGET_IPV_OPT} -O \"\$1\" --header=\"Authorization: Bearer \$2\" \"\$3\""
+    BASE_WGET_AUTH_TOKEN="wget --no-check-certificate -q ${WGET_IPV_OPT} -O \"\$1\" --header=\"Authorization: token \$2\" \"\$3\""
+    
+    debug_log "DEBUG" "wget commands updated with IP version preference: ${network_type}"
+}
+
+# GitHub API接続の強化版
+github_api_request() {
+    local endpoint="$1"
+    local token=$(get_github_token)
+    local response=""
+    local auth_method="direct"
+    local temp_file="${CACHE_DIR}/api_request.tmp"
+    local retry_count=0
+    local max_retries=2
+    
+    # wgetの機能チェック
+    if [ -z "$WGET_SUPPORTS_HEADER" ]; then
+        if wget --help 2>&1 | grep -q -- "--header"; then
+            export WGET_SUPPORTS_HEADER=1
+        else
+            export WGET_SUPPORTS_HEADER=0
+        fi
+    fi
+    
+    # GitHub API呼び出しを試行（リトライロジック付き）
+    while [ $retry_count -le $max_retries ]; do
+        if [ $retry_count -gt 0 ]; then
+            debug_log "DEBUG" "Retry attempt $retry_count for API request: $endpoint"
+            sleep 2  # リトライ間隔
+        fi
+        
+        if [ -n "$token" ]; then
+            debug_log "DEBUG" "Using token authentication for API request"
+            
+            # 認証方法1: Bearerヘッダー認証
+            if [ "$WGET_SUPPORTS_HEADER" = "1" ]; then
+                debug_log "DEBUG" "Trying Bearer authentication"
+                
+                # 現在の$BASE_WGET_AUTH_BEARERを使用（IPバージョンが自動的に適用される）
+                eval $BASE_WGET_AUTH_BEARER "$temp_file" "$token" "https://api.github.com/$endpoint" 2>/dev/null
+                
+                if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+                    response=$(cat "$temp_file")
+                    if ! echo "$response" | grep -q '"message":"Bad credentials"'; then
+                        auth_method="bearer"
+                        debug_log "DEBUG" "Bearer authentication successful"
+                        break  # 成功したらループを抜ける
+                    else
+                        debug_log "DEBUG" "Bearer authentication failed, trying token auth"
+                        
+                        # 従来のtoken認証も試行
+                        eval $BASE_WGET_AUTH_TOKEN "$temp_file" "$token" "https://api.github.com/$endpoint" 2>/dev/null
+                        
+                        if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+                            response=$(cat "$temp_file")
+                            if ! echo "$response" | grep -q '"message":"Bad credentials"'; then
+                                auth_method="token"
+                                debug_log "DEBUG" "Token authentication successful"
+                                break  # 成功したらループを抜ける
+                            else
+                                debug_log "DEBUG" "Token authentication failed"
+                            fi
+                        fi
+                    fi
+                else
+                    debug_log "DEBUG" "Empty response from Bearer authentication"
+                fi
+            fi
+            
+            # 認証方法2: wgetのユーザー認証（ヘッダーがサポートされていない場合）
+            if [ "$auth_method" = "direct" ] && [ "$WGET_SUPPORTS_HEADER" = "0" ]; then
+                debug_log "DEBUG" "Trying user authentication"
+                $BASE_WGET "$temp_file" --user="$token" --password="x-oauth-basic" \
+                         "https://api.github.com/$endpoint" 2>/dev/null
+                         
+                if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+                    response=$(cat "$temp_file")
+                    if ! echo "$response" | grep -q '"message":"Bad credentials"'; then
+                        auth_method="user"
+                        debug_log "DEBUG" "User authentication successful"
+                        break  # 成功したらループを抜ける
+                    else
+                        debug_log "DEBUG" "User authentication failed"
+                    fi
+                fi
+            fi
+        fi
+        
+        # 認証方法3: フォールバック（直接アクセス）
+        if [ "$auth_method" = "direct" ]; then
+            debug_log "DEBUG" "Falling back to direct access"
+            $BASE_WGET "$temp_file" "https://api.github.com/$endpoint" 2>/dev/null
+            
+            if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+                response=$(cat "$temp_file")
+                if ! echo "$response" | grep -q '"message":"API rate limit exceeded'; then
+                    debug_log "DEBUG" "Direct access successful"
+                    break  # 成功したらループを抜ける
+                fi
+            fi
+        fi
+        
+        # リトライ時の接続方法を変更
+        if [ $retry_count -eq 0 ] && [ -f "${CACHE_DIR}/network.ch" ]; then
+            local current_network=$(cat "${CACHE_DIR}/network.ch")
+            
+            if [ "$current_network" = "v4v6" ]; then
+                # デュアルスタックの場合、IPv4がデフォルト。失敗したらIPv6を試す
+                WGET_IPV_OPT="-6"
+                # グローバル変数を更新（これ以降の全wgetコマンドに影響）
+                BASE_WGET="wget --no-check-certificate -q ${WGET_IPV_OPT} -O"
+                BASE_WGET_AUTH_BEARER="wget --no-check-certificate -q ${WGET_IPV_OPT} -O \"\$1\" --header=\"Authorization: Bearer \$2\" \"\$3\""
+                BASE_WGET_AUTH_TOKEN="wget --no-check-certificate -q ${WGET_IPV_OPT} -O \"\$1\" --header=\"Authorization: token \$2\" \"\$3\""
+                debug_log "DEBUG" "Switching to IPv6 for retry"
+            elif [ "$current_network" = "v4" ] || [ "$current_network" = "v6" ]; then
+                # シングルスタックの場合はタイムアウト値を増やす
+                export WGET_TIMEOUT="--timeout=30"
+                debug_log "DEBUG" "Increasing timeout for retry"
+            fi
+        fi
+        
+        retry_count=$((retry_count + 1))
     done
     
-    # OpenWrt/BusyBox wgetの検出（特徴的な出力パターン）
-    if grep -q "BusyBox" "$temp_file" || ! grep -q "\-\-header" "$temp_file"; then
-        debug_log "DEBUG" "Detected BusyBox wget without header support"
-        rm -f "$temp_file"
-        echo "limited"
-        return 1
-    fi
-    
-    # ヘッダーオプションのサポートを確認 - より厳密なパターン
-    if grep -q -- "--header=" "$temp_file" || grep -q -- "--header " "$temp_file"; then
-        debug_log "DEBUG" "wget supports header authentication"
-        header_support="yes"
-    fi
-    
-    # 基本認証のサポートを確認 - より厳密なパターン
-    if grep -q -- "--user=" "$temp_file" || grep -q -- "--user " "$temp_file"; then
-        debug_log "DEBUG" "wget supports basic authentication"
-        user_support="yes"
-    fi
-    
-    # 実際に機能テストを行う（ヘルプテキスト検出のバックアップ）
-    if [ "$header_support" = "yes" ]; then
-        debug_log "DEBUG" "Testing header support with actual command"
-        rm -f "$temp_file"
-        echo "header"
-        return 0
-    elif [ "$user_support" = "yes" ]; then
-        debug_log "DEBUG" "Basic authentication is supported"
-        rm -f "$temp_file"
-        echo "basic" 
-        return 0
-    else
-        debug_log "DEBUG" "No authentication methods supported"
-        rm -f "$temp_file"
-        echo "limited"
-        return 1
-    fi
-}
-
-# check_api_rate_limit関数の修正版
-check_api_rate_limit() {
-    local token="$(get_github_token)"
-    local temp_file="/tmp/aios_api_limit.tmp"
-    local auth_method="direct"
-    local core_limit=""
-    local core_remaining=""
-    local reset_minutes="60"  # デフォルト値
-    
-    debug_log "DEBUG" "Checking API rate limit"
-    
-    # 既存のファイルを削除
-    [ -f "$temp_file" ] && rm -f "$temp_file"
-    
-    # wget機能チェック
-    local wget_capability=""
-    if [ -n "$token" ]; then
-        wget_capability=$(detect_wget_capabilities)
-        debug_log "DEBUG" "wget capability: $wget_capability"
-        
-        # トークンがあり、機能が利用可能な場合のみ認証を試みる
-        case "$wget_capability" in
-            header)
-                debug_log "DEBUG" "Trying token authentication with header"
-                wget -q --no-check-certificate -O "$temp_file" --header="Authorization: token $token" \
-                     "https://api.github.com/rate_limit" 2>/dev/null
-                     
-                if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials\|Unauthorized" "$temp_file"; then
-                    auth_method="token"
-                    debug_log "DEBUG" "Successfully authenticated with token header"
-                else
-                    debug_log "DEBUG" "Token header authentication failed, falling back to direct access"
-                fi
-                ;;
-                
-            basic)
-                debug_log "DEBUG" "Trying basic authentication"
-                wget -q --no-check-certificate -O "$temp_file" --user="$token" --password="x-oauth-basic" \
-                     "https://api.github.com/rate_limit" 2>/dev/null
-                     
-                if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials\|Unauthorized" "$temp_file"; then
-                    auth_method="basic"
-                    debug_log "DEBUG" "Successfully authenticated with basic auth"
-                else
-                    debug_log "DEBUG" "Basic authentication failed, falling back to direct access"
-                fi
-                ;;
-                
-            limited|*)
-                debug_log "DEBUG" "Token authentication not supported on this system"
-                # トークンが設定されていても認証機能が使えない場合、警告を表示
-                if [ -f "$GITHUB_TOKEN_FILE" ]; then
-                    debug_log "DEBUG" "GitHub token is set but authentication is not supported with current wget version"
-                fi
-                ;;
-        esac
-    fi
-    
-    # 非認証リクエスト（認証に失敗した場合または認証なしの場合）
-    if [ "$auth_method" = "direct" ]; then
-        debug_log "DEBUG" "Making direct API request"
-        wget -q --no-check-certificate -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
-    fi
-    
-    # レスポンス解析（既存コードと同様）
-    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-        # レート情報の抽出（より堅牢なパターン）
-        core_limit=$(grep -o '"limit"[ ]*:[ ]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
-        core_remaining=$(grep -o '"remaining"[ ]*:[ ]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
-        core_reset=$(grep -o '"reset"[ ]*:[ ]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
-        
-        # コアセクションを優先的に検索（値が見つからない場合）
-        if [ -z "$core_limit" ] || [ -z "$core_remaining" ] || [ -z "$core_reset" ]; then
-            debug_log "DEBUG" "Trying alternative extraction pattern for core section"
-            core_section=$(sed -n '/"core":/,/},/p' "$temp_file")
-            [ -z "$core_limit" ] && core_limit=$(echo "$core_section" | grep -o '"limit"[ ]*:[ ]*[0-9]\+' | head -1 | grep -o '[0-9]\+')
-            [ -z "$core_remaining" ] && core_remaining=$(echo "$core_section" | grep -o '"remaining"[ ]*:[ ]*[0-9]\+' | head -1 | grep -o '[0-9]\+')
-            [ -z "$core_reset" ] && core_reset=$(echo "$core_section" | grep -o '"reset"[ ]*:[ ]*[0-9]\+' | head -1 | grep -o '[0-9]\+')
-        fi
-        
-        debug_log "DEBUG" "Extracted values - limit:$core_limit remaining:$core_remaining reset:$core_reset"
-        
-        # リセット時間の処理（既存コードと同様）
-        if [ -n "$core_reset" ] && [ "$core_reset" -gt 1000000000 ]; then
-            # 現在時刻を取得
-            now_time=$(date +%s)
-            debug_log "DEBUG" "Current time: $now_time, Reset time: $core_reset"
-            
-            # 残り時間を計算
-            if [ "$core_reset" -gt "$now_time" ]; then
-                reset_seconds=$(( core_reset - now_time ))
-                reset_minutes=$(( reset_seconds / 60 ))
-                [ "$reset_minutes" -lt 1 ] && reset_minutes="1"
-                debug_log "DEBUG" "Time until API limit reset: $reset_seconds seconds ($reset_minutes minutes)"
-            else
-                # リセット時刻が過去の場合（APIが更新されていない可能性）
-                reset_minutes="0"
-                debug_log "DEBUG" "Reset time is in the past, API should be refreshed"
-            fi
-        else
-            debug_log "DEBUG" "Invalid or missing reset timestamp: '$core_reset'"
-            # デフォルト値を使用
-            if [ "$auth_method" != "direct" ]; then
-                reset_minutes="60"
-            else
-                reset_minutes="5"
-            fi
-            debug_log "DEBUG" "Using default reset time: $reset_minutes minutes"
-        fi
-    else
-        debug_log "WARN" "Failed to get API rate limit information"
-        # ファイルが存在しない、または空の場合
-        if [ "$auth_method" != "direct" ]; then
-            core_limit="5000"
-            core_remaining="?"
-            reset_minutes="60"
-        else
-            core_limit="60"
-            core_remaining="?"
-            reset_minutes="5"
-        fi
-    fi
-    
-    # 空値のチェック
-    [ -z "$core_limit" ] && core_limit="?"
-    [ -z "$core_remaining" ] && core_remaining="?"
-    
-    # APIステータスの生成 - 認証が使えない場合でも正確に表示
-    if [ "$auth_method" != "direct" ]; then
-        # 認証されている場合
-        status_text="API: ${core_remaining}/${core_limit} TTL:${reset_minutes}m"
-    elif [ -n "$core_remaining" ] && [ -n "$core_limit" ] && [ "$core_remaining" != "?" ] && [ "$core_limit" != "?" ]; then
-        # 直接アクセスでも値が取得できた場合
-        status_text="API: ${core_remaining}/${core_limit} TTL:${reset_minutes}m"
-    else
-        # 値が取得できなかった場合
-        status_text="API: N/A TTL:${reset_minutes}m"
-    fi
-    
-    debug_log "DEBUG" "Final API status: $status_text (auth_method=$auth_method)"
-    
-    # 一時ファイル削除
-    [ -f "$temp_file" ] && rm -f "$temp_file"
-    
-    # 結果を返す
-    echo "$status_text"
-}
-
-clean_version_string() {
-    local version_str="$1"
-    
-    # 1. 改行と復帰を削除
-    local cleaned=$(printf "%s" "$version_str" | tr -d '\n\r')
-    
-    # 2. 角括弧を削除
-    cleaned=$(printf "%s" "$cleaned" | sed 's/\[//g; s/\]//g')
-    
-    # 3. ANSIエスケープコードを削除
-    cleaned=$(printf "%s" "$cleaned" | sed 's/\x1b\[[0-9;]*[mK]//g')
-    
-    # 4. バージョン番号の抽出（シンプルな方法）
-    if echo "$cleaned" | grep -q '20[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]'; then
-        # 年.月.日 形式のバージョンを抽出
-        local date_part=$(printf "%s" "$cleaned" | grep -o '20[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]')
-        
-        # バージョン文字列の残りの部分があれば追加
-        if echo "$cleaned" | grep -q "${date_part}-"; then
-            local remainder=$(printf "%s" "$cleaned" | sed "s/.*${date_part}-//; s/[^0-9a-zA-Z-].*//")
-            printf "%s-%s" "$date_part" "$remainder"
-        else
-            printf "%s" "$date_part"
-        fi
-    else
-        # バージョンが見つからない場合は元の文字列をクリーニングしたものを返す
-        printf "%s" "$cleaned"
-    fi
-}
-
-get_commit_version() {
-    local file_path="$1"
-    
-    # リポジトリ情報
-    local repo_owner="site-u2023"
-    local repo_name="aios"
-    local api_url="repos/${repo_owner}/${repo_name}/commits?path=${file_path}&per_page=1"
-    local temp_file="/tmp/aios_commit_info.tmp"
-    local auth_method="direct"
-    
-    # トークン取得とリクエスト
-    local token="$(get_github_token)"
-    if [ -n "$token" ]; then
-        debug_log "DEBUG" "Using token authentication for API request"
-        
-        # Bearer認証を試行
-        eval $BASE_WGET_AUTH_BEARER "$temp_file" "$token" "https://api.github.com/$api_url" 2>/dev/null
-        
-        # wget成功の場合
-        if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials" "$temp_file"; then
-            auth_method="bearer"
-            debug_log "DEBUG" "Bearer authentication successful"
-        else
-            # token認証を試行
-            eval $BASE_WGET_AUTH_TOKEN "$temp_file" "$token" "https://api.github.com/$api_url" 2>/dev/null
-            
-            if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials" "$temp_file"; then
-                auth_method="token"
-                debug_log "DEBUG" "Token authentication successful"
-            else
-                debug_log "DEBUG" "Authentication failed, falling back to direct access"
-                $BASE_WGET -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
-                auth_method="direct"
-            fi
-        fi
-    else
-        debug_log "DEBUG" "No token available, making direct API request"
-        $BASE_WGET -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
-        auth_method="direct"
-    fi
-    
-    # 応答の確認
-    if [ ! -s "$temp_file" ]; then
-        debug_log "DEBUG" "Empty response from GitHub API. Attempting direct file download"
-        # APIに失敗した場合は直接ファイルをダウンロード
-        local direct_file="/tmp/aios_direct_file.tmp"
-        if $BASE_WGET -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
-            # ファイルからハッシュを生成（最初の7文字だけ使用）
-            local file_hash=$(sha256sum "$direct_file" 2>/dev/null | cut -c1-7)
-            rm -f "$direct_file" 2>/dev/null
-            rm -f "$temp_file" 2>/dev/null
-            local today=$(date +%Y.%m.%d)
-            echo "$today-$file_hash direct"
-            return 0
-        else
-            debug_log "ERROR" "Failed to directly download file"
-            rm -f "$direct_file" 2>/dev/null
-            rm -f "$temp_file" 2>/dev/null
-            echo "$(date +%Y.%m.%d)-unknown $auth_method"
-            return 1
-        fi
-    fi
-    
-    # APIエラーチェック
-    if grep -q "API rate limit exceeded" "$temp_file"; then
-        debug_log "WARN" "GitHub API rate limit exceeded. Attempting direct file download"
-        # 直接ファイル取得にフォールバック
-        local direct_file="/tmp/aios_direct_file.tmp"
-        if $BASE_WGET -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
-            local file_hash=$(sha256sum "$direct_file" 2>/dev/null | cut -c1-7)
-            rm -f "$direct_file" 2>/dev/null
-            rm -f "$temp_file" 2>/dev/null
-            local today=$(date +%Y.%m.%d)
-            echo "$today-$file_hash direct"
-            return 0
-        else
-            debug_log "ERROR" "Failed to directly download file"
-            rm -f "$direct_file" 2>/dev/null
-            rm -f "$temp_file" 2>/dev/null
-            echo "$(date +%Y.%m.%d)-ratelimit $auth_method"
-            return 2
-        fi
-    fi
-    
-    # コミット情報抽出（jq非依存の堅牢方式）
-    local commit_date=""
-    local commit_sha=""
-    
-    # 1. SHA情報の抽出（より堅牢な複数パターン対応）
-    commit_sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\+' "$temp_file" | head -1 | grep -o '[a-f0-9]\{7,40\}' | head -c 7)
-    
-    if [ -z "$commit_sha" ]; then
-        # バックアップパターン
-        commit_sha=$(grep -o '[a-f0-9]\{40\}' "$temp_file" | head -1 | head -c 7)
-    fi
-    
-    # 2. 日付情報の抽出（より堅牢な複数パターン対応）
-    # パターン1: "date": "YYYY-MM-DD..."
-    commit_date=$(grep -o '"date"[[:space:]]*:[[:space:]]*"[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' "$temp_file" | 
-                  head -1 | 
-                  grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}')
-    
-    if [ -z "$commit_date" ]; then
-        # パターン2: YYYY-MM-DDTHH:MM:SSZ形式
-        commit_date=$(grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}Z' "$temp_file" | 
-                     head -1 | 
-                     grep -o '^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}')
-    fi
-    
-    if [ -z "$commit_date" ] || [ -z "$commit_sha" ]; then
-        debug_log "WARN" "Failed to extract commit information. Trying more robust method"
-        
-        # 最終手段: 全テキスト検索
-        commit_sha=$(tr -cd 'a-f0-9' < "$temp_file" | grep -o '[a-f0-9]\{40\}' | head -1 | head -c 7)
-        commit_date=$(grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' "$temp_file" | head -1)
-        
-        if [ -z "$commit_sha" ]; then
-            commit_sha="unknown"
-        fi
-        
-        if [ -z "$commit_date" ]; then
-            commit_date=$(date +%Y-%m-%d)
-        fi
-    fi
-    
-    # バージョン文字列構築と結果返却
-    if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
-        # 日付フォーマットを変換（YYYY-MM-DD → YYYY.MM.DD）
-        local formatted_date=$(echo "$commit_date" | tr '-' '.')
-        local version="${formatted_date}-${commit_sha}"
-        
-        debug_log "DEBUG" "Successfully extracted commit info: $version (via $auth_method)"
+    # リトライ後の最終結果確認
+    if [ -z "$response" ]; then
+        debug_log "WARN" "Empty response from API request after $max_retries retries"
         rm -f "$temp_file" 2>/dev/null
-        echo "$version $auth_method"
-        return 0
+        return 1
     fi
     
-    # 全ての方法が失敗した場合
-    debug_log "ERROR" "All methods failed to get commit information"
+    if echo "$response" | grep -q '"message":"API rate limit exceeded'; then
+        debug_log "WARN" "GitHub API rate limit exceeded"
+        rm -f "$temp_file" 2>/dev/null
+        return 1
+    fi
+    
+    # 認証エラーチェック
+    if echo "$response" | grep -q '"message":"Bad credentials"'; then
+        debug_log "ERROR" "GitHub API authentication failed: Bad credentials"
+        rm -f "$temp_file" 2>/dev/null
+        return 2
+    fi
+    
+    # その他エラーチェック
+    if echo "$response" | grep -q '"message":"'; then
+        local error_msg=$(echo "$response" | grep -o '"message":"[^"]*"' | cut -d':' -f2- | tr -d '"')
+        debug_log "ERROR" "GitHub API error: $error_msg"
+        rm -f "$temp_file" 2>/dev/null
+        return 3
+    fi
+
+    # 成功
+    echo "$response"
     rm -f "$temp_file" 2>/dev/null
-    echo "$(date +%Y.%m.%d)-fallback $auth_method"
-    return 1
+    
+    # wget設定を元に戻す
+    setup_wget_options
+    return 0
 }
 
 version_is_newer() {
@@ -1021,6 +1018,413 @@ version_is_newer() {
     return 1  # 同一バージョン
 }
 
+# OpenWrt環境のwget機能検出関数（改良版）
+detect_wget_capabilities() {
+    debug_log "DEBUG" "Detecting wget capabilities for current environment"
+    
+    local temp_file="${CACHE_DIR}/wget_help.tmp"
+    local test_file="${CACHE_DIR}/wget_test_header.tmp"
+    local header_support="no"
+    local user_support="no"
+    
+    # wgetのヘルプを一時ファイルに保存（--helpがサポートされていない場合のため空ファイル作成）
+    touch "$temp_file"
+    wget --help > "$temp_file" 2>&1 || true
+    
+    # デバッグ用にwgetヘルプ内容の先頭行を記録
+    debug_log "DEBUG" "wget help output beginning:"
+    head -3 "$temp_file" | while read line; do
+        debug_log "DEBUG" "  $line"
+    done
+    
+    # OpenWrt/BusyBox wgetの検出（特徴的な出力パターン）
+    if grep -q "BusyBox" "$temp_file" || ! grep -q "\-\-header" "$temp_file"; then
+        debug_log "DEBUG" "Detected BusyBox wget without header support"
+        rm -f "$temp_file"
+        echo "limited"
+        return 1
+    fi
+    
+    # ヘッダーオプションのサポートを確認 - より厳密なパターン
+    if grep -q -- "--header=" "$temp_file" || grep -q -- "--header " "$temp_file"; then
+        debug_log "DEBUG" "wget supports header authentication"
+        header_support="yes"
+    fi
+    
+    # 基本認証のサポートを確認 - より厳密なパターン
+    if grep -q -- "--user=" "$temp_file" || grep -q -- "--user " "$temp_file"; then
+        debug_log "DEBUG" "wget supports basic authentication"
+        user_support="yes"
+    fi
+    
+    # 実際に機能テストを行う（ヘルプテキスト検出のバックアップ）
+    if [ "$header_support" = "yes" ]; then
+        debug_log "DEBUG" "Testing header support with actual command"
+        rm -f "$temp_file"
+        echo "header"
+        return 0
+    elif [ "$user_support" = "yes" ]; then
+        debug_log "DEBUG" "Basic authentication is supported"
+        rm -f "$temp_file"
+        echo "basic" 
+        return 0
+    else
+        debug_log "DEBUG" "No authentication methods supported"
+        rm -f "$temp_file"
+        echo "limited"
+        return 1
+    fi
+}
+
+# APIレート制限情報のチェックと取得（キャッシュ機能付き）
+check_api_rate_limit() {
+    local token="$(get_github_token)"
+    local temp_file="${CACHE_DIR}/api_limit.tmp"
+    local auth_method="direct"
+    local current_time=$(date +%s)
+    
+    # 先にキャッシュファイルをロード（初回実行時）
+    if [ -z "$API_LAST_CHECK" ] && [ -f "${CACHE_DIR}/api_rate.ch" ]; then
+        debug_log "DEBUG" "Loading API rate information from cache file"
+        . "${CACHE_DIR}/api_rate.ch"
+    fi
+    
+    # キャッシュ有効期間内の場合は保存値を返す
+    if [ -n "$API_REMAINING" ] && [ $(( current_time - API_LAST_CHECK )) -lt ${API_CACHE_TTL:-60} ]; then
+        debug_log "DEBUG" "Using cached API rate limit info: $API_REMAINING/$API_LIMIT, age: $(( current_time - API_LAST_CHECK ))s"
+        echo "API: ${API_REMAINING}/${API_LIMIT} TTL:${API_RESET_TIME}m"
+        return 0
+    fi
+    
+    # 既存のファイルを削除
+    [ -f "$temp_file" ] && rm -f "$temp_file"
+    
+    # wget機能と認証方法の検出（一度だけ実行）
+    if [ -z "$WGET_CAPABILITY" ] && [ -n "$token" ]; then
+        WGET_CAPABILITY=$(detect_wget_capabilities)
+        debug_log "DEBUG" "Detected wget capability: $WGET_CAPABILITY"
+        
+        # トークンが設定されていても認証機能が使えない場合、警告表示
+        if [ "$WGET_CAPABILITY" = "limited" ] && [ -f "$GITHUB_TOKEN_FILE" ]; then
+            debug_log "WARN" "GitHub token is set but authentication is not supported with current wget version"
+        fi
+    fi
+    
+    # 認証方法の選択
+    if [ -n "$token" ] && [ "$WGET_CAPABILITY" != "limited" ]; then
+        if [ "$WGET_CAPABILITY" = "header" ]; then
+            # ヘッダー認証（最適）
+            wget -q --no-check-certificate -O "$temp_file" --header="Authorization: token $token" \
+                 "https://api.github.com/rate_limit" 2>/dev/null
+            
+            if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials\|Unauthorized" "$temp_file"; then
+                auth_method="token"
+                debug_log "DEBUG" "Successfully authenticated with token header"
+            fi
+        elif [ "$WGET_CAPABILITY" = "basic" ]; then
+            # 基本認証
+            wget -q --no-check-certificate -O "$temp_file" --user="$token" --password="x-oauth-basic" \
+                 "https://api.github.com/rate_limit" 2>/dev/null
+                 
+            if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials\|Unauthorized" "$temp_file"; then
+                auth_method="basic"
+                debug_log "DEBUG" "Successfully authenticated with basic auth"
+            fi
+        fi
+    fi
+    
+    # 非認証リクエスト（認証に失敗した場合または認証なしの場合）
+    if [ "$auth_method" = "direct" ]; then
+        debug_log "DEBUG" "Making direct API request"
+        wget -q --no-check-certificate -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
+    fi
+    
+    # レスポンス解析
+    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+        # レート情報の抽出
+        local core_limit=$(grep -o '"limit"[ ]*:[ ]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
+        local core_remaining=$(grep -o '"remaining"[ ]*:[ ]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
+        local core_reset=$(grep -o '"reset"[ ]*:[ ]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
+        
+        # コアセクション優先
+        if [ -z "$core_limit" ] || [ -z "$core_remaining" ] || [ -z "$core_reset" ]; then
+            local core_section=$(sed -n '/"core":/,/},/p' "$temp_file")
+            [ -z "$core_limit" ] && core_limit=$(echo "$core_section" | grep -o '"limit"[ ]*:[ ]*[0-9]\+' | head -1 | grep -o '[0-9]\+')
+            [ -z "$core_remaining" ] && core_remaining=$(echo "$core_section" | grep -o '"remaining"[ ]*:[ ]*[0-9]\+' | head -1 | grep -o '[0-9]\+')
+            [ -z "$core_reset" ] && core_reset=$(echo "$core_section" | grep -o '"reset"[ ]*:[ ]*[0-9]\+' | head -1 | grep -o '[0-9]\+')
+        fi
+        
+        # リセット時間の計算
+        local reset_minutes=60
+        if [ -n "$core_reset" ] && [ "$core_reset" -gt 1000000000 ]; then
+            local now_time=$(date +%s)
+            if [ "$core_reset" -gt "$now_time" ]; then
+                local reset_seconds=$(( core_reset - now_time ))
+                reset_minutes=$(( reset_seconds / 60 ))
+                [ "$reset_minutes" -lt 1 ] && reset_minutes=1
+            else
+                reset_minutes=0
+            fi
+        else
+            # デフォルト値の設定
+            if [ "$auth_method" != "direct" ]; then
+                reset_minutes=60
+            else
+                reset_minutes=5
+            fi
+        fi
+        
+        # グローバル変数に保存（キャッシュ）
+        API_REMAINING=$core_remaining
+        API_LIMIT=$core_limit
+        API_RESET_TIME=$reset_minutes
+        API_AUTH_METHOD=$auth_method
+        API_LAST_CHECK=$current_time
+        
+        # 値のチェックと整形
+        [ -z "$API_LIMIT" ] && API_LIMIT="?"
+        [ -z "$API_REMAINING" ] && API_REMAINING="?"
+    else
+        # 情報取得失敗時のデフォルト値
+        if [ "$auth_method" != "direct" ]; then
+            API_LIMIT="5000"
+            API_REMAINING="?"
+            API_RESET_TIME="60"
+        else
+            API_LIMIT="60"
+            API_REMAINING="?"
+            API_RESET_TIME="5"
+        fi
+        API_AUTH_METHOD=$auth_method
+        API_LAST_CHECK=$current_time
+    fi
+    
+    # 結果文字列の生成
+    local status_text="API: ${API_REMAINING}/${API_LIMIT} TTL:${API_RESET_TIME}m"
+    debug_log "DEBUG" "Final API status: $status_text (auth_method=$auth_method)"
+    
+    # 一時ファイル削除
+    [ -f "$temp_file" ] && rm -f "$temp_file"
+    
+    # 結果を返す
+    echo "$status_text"
+}
+
+clean_version_string() {
+    local version_str="$1"
+    
+    # 1. 改行と復帰を削除
+    local cleaned=$(printf "%s" "$version_str" | tr -d '\n\r')
+    
+    # 2. 角括弧を削除
+    cleaned=$(printf "%s" "$cleaned" | sed 's/\[//g; s/\]//g')
+    
+    # 3. ANSIエスケープコードを削除
+    cleaned=$(printf "%s" "$cleaned" | sed 's/\x1b\[[0-9;]*[mK]//g')
+    
+    # 4. バージョン番号の抽出（シンプルな方法）
+    if echo "$cleaned" | grep -q '20[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]'; then
+        # 年.月.日 形式のバージョンを抽出
+        local date_part=$(printf "%s" "$cleaned" | grep -o '20[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]')
+        
+        # バージョン文字列の残りの部分があれば追加
+        if echo "$cleaned" | grep -q "${date_part}-"; then
+            local remainder=$(printf "%s" "$cleaned" | sed "s/.*${date_part}-//; s/[^0-9a-zA-Z-].*//")
+            printf "%s-%s" "$date_part" "$remainder"
+        else
+            printf "%s" "$date_part"
+        fi
+    else
+        # バージョンが見つからない場合は元の文字列をクリーニングしたものを返す
+        printf "%s" "$cleaned"
+    fi
+}
+
+# コミット情報取得関数の改良版
+get_commit_version() {
+    local file_path="$1"
+    local force_refresh="$2"  # キャッシュ強制更新フラグ
+    local temp_file="${CACHE_DIR}/commit_info.tmp" 
+    local direct_file="${CACHE_DIR}/direct_file.tmp"
+
+    # キャッシュ使用時、まずキャッシュから情報を取得
+    if [ "$SKIP_CACHE" != "true" ] && [ "$force_refresh" != "true" ] && [ "$FORCE" != "true" ]; then
+        get_commit_from_cache "$file_path"
+        if [ $? -eq 0 ]; then
+            return 0  # キャッシュからの情報取得に成功した場合終了
+        fi
+    fi
+
+    # リポジトリ情報
+    local repo_owner="site-u2023"
+    local repo_name="aios"
+    local api_url="repos/${repo_owner}/${repo_name}/commits?path=${file_path}&per_page=1"
+    local auth_method="direct"
+    local retry_count=0
+    local max_retries=2
+    
+    # トークン取得とAPIリクエスト
+    local token="$(get_github_token)"
+    
+    # API呼び出しを試行（リトライロジック付き）
+    while [ $retry_count -le $max_retries ]; do
+        if [ $retry_count -gt 0 ]; then
+            debug_log "DEBUG" "Retry attempt $retry_count for commit version request: $file_path"
+            sleep 2  # リトライ間隔
+        fi
+        
+        # 認証方法に応じたAPI呼び出し
+        if [ -n "$token" ] && [ "$API_AUTH_METHOD" != "direct" ]; then
+            if [ "$API_AUTH_METHOD" = "token" ] || [ "$WGET_CAPABILITY" = "header" ]; then
+                # トークン認証でGitHub APIにアクセス
+                $BASE_WGET "$temp_file" --header="Authorization: token $token" \
+                     "https://api.github.com/$api_url" 2>/dev/null
+                auth_method="token"
+            elif [ "$API_AUTH_METHOD" = "basic" ] || [ "$WGET_CAPABILITY" = "basic" ]; then
+                # 基本認証でGitHub APIにアクセス
+                $BASE_WGET "$temp_file" --user="$token" --password="x-oauth-basic" \
+                     "https://api.github.com/$api_url" 2>/dev/null
+                auth_method="basic"
+            else
+                # 認証なしでアクセス
+                $BASE_WGET "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
+                auth_method="direct"
+            fi
+        else
+            # 認証なしでアクセス
+            $BASE_WGET "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
+            auth_method="direct"
+        fi
+        
+        # 応答チェック
+        if [ -s "$temp_file" ] && ! grep -q "API rate limit exceeded\|Not Found" "$temp_file"; then
+            debug_log "DEBUG" "Successfully retrieved commit information"
+            break  # 成功したらループを抜ける
+        fi
+        
+        # リトライ時の接続方法を変更
+        if [ $retry_count -eq 0 ] && [ -f "${CACHE_DIR}/network.ch" ]; then
+            local current_network=$(cat "${CACHE_DIR}/network.ch")
+            
+            if [ "$current_network" = "v4v6" ]; then
+                # IPv6を試す
+                WGET_IPV_OPT="-6"
+                BASE_WGET="wget --no-check-certificate -q ${WGET_IPV_OPT} -O"
+                debug_log "DEBUG" "Switching to IPv6 for retry"
+            elif [ "$current_network" = "v4" ] || [ "$current_network" = "v6" ]; then
+                # シングルスタックの場合は直接ダウンロードを試す
+                debug_log "DEBUG" "Switching to direct file download"
+                break
+            fi
+        fi
+        
+        retry_count=$((retry_count + 1))
+    done
+    
+    # APIでの取得に失敗した場合は直接ファイルダウンロードを試行
+    if [ ! -s "$temp_file" ] || grep -q "API rate limit exceeded\|Not Found" "$temp_file"; then
+        debug_log "DEBUG" "API call failed, falling back to direct file check"
+        
+        # 直接ファイルダウンロードもIPv4/IPv6両方を試す
+        retry_count=0
+        while [ $retry_count -le 1 ]; do
+            if $BASE_WGET "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
+                if [ -s "$direct_file" ]; then
+                    # ファイルからハッシュを生成
+                    local file_hash=$(sha256sum "$direct_file" 2>/dev/null | cut -c1-7)
+                    rm -f "$direct_file" "$temp_file" 2>/dev/null
+                    local today=$(date +%Y.%m.%d)
+                    
+                    # バージョン情報を取得
+                    local version="$today-$file_hash"
+                    auth_method="direct"
+                    
+                    # wget設定を元に戻す
+                    setup_wget_options
+                    
+                    # キャッシュに保存
+                    save_commit_to_cache "$file_path" "$version" "$auth_method"
+                    
+                    echo "$version $auth_method"
+                    return 0
+                fi
+            fi
+            
+            # 直接ダウンロードのリトライも接続方法を変更
+            if [ $retry_count -eq 0 ] && [ -f "${CACHE_DIR}/network.ch" ]; then
+                local current_network=$(cat "${CACHE_DIR}/network.ch")
+                if [ "$current_network" = "v4v6" ]; then
+                    WGET_IPV_OPT="-6"
+                    BASE_WGET="wget --no-check-certificate -q ${WGET_IPV_OPT} -O"
+                    debug_log "DEBUG" "Switching to IPv6 for direct file download retry"
+                fi
+            fi
+            
+            retry_count=$((retry_count + 1))
+        done
+        
+        debug_log "ERROR" "Failed to download file: $file_path"
+        rm -f "$direct_file" "$temp_file" 2>/dev/null
+        
+        # wget設定を元に戻す
+        setup_wget_options
+        echo "$(date +%Y.%m.%d)-unknown $auth_method"
+        return 1
+    fi
+    
+    # APIレスポンスからコミット情報を抽出
+    local commit_date=""
+    local commit_sha=""
+    
+    # SHA情報の抽出（複数パターン対応）
+    commit_sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\+' "$temp_file" | head -1 | grep -o '[a-f0-9]\{7,40\}' | head -c 7)
+    if [ -z "$commit_sha" ]; then
+        commit_sha=$(grep -o '[a-f0-9]\{40\}' "$temp_file" | head -1 | head -c 7)
+    fi
+    
+    # 日付情報の抽出（複数パターン対応）
+    commit_date=$(grep -o '"date"[[:space:]]*:[[:space:]]*"[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' "$temp_file" | head -1 | grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}')
+    if [ -z "$commit_date" ]; then
+        commit_date=$(grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}Z' "$temp_file" | head -1 | grep -o '^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}')
+    fi
+    
+    # 情報が取得できない場合はフォールバック
+    if [ -z "$commit_date" ] || [ -z "$commit_sha" ]; then
+        debug_log "WARN" "Failed to extract commit information. Using fallback method."
+        commit_sha=$(tr -cd 'a-f0-9' < "$temp_file" | grep -o '[a-f0-9]\{40\}' | head -1 | head -c 7)
+        commit_date=$(grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' "$temp_file" | head -1)
+        
+        [ -z "$commit_sha" ] && commit_sha="unknown"
+        [ -z "$commit_date" ] && commit_date=$(date +%Y-%m-%d)
+    fi
+    
+    # 結果の組み立て
+    if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
+        # 日付フォーマットを変換
+        local formatted_date=$(echo "$commit_date" | tr '-' '.')
+        local version="${formatted_date}-${commit_sha}"
+        
+        rm -f "$temp_file" 2>/dev/null
+        
+        # wget設定を元に戻す
+        setup_wget_options
+        
+        # キャッシュに保存
+        save_commit_to_cache "$file_path" "$version" "$auth_method"
+        
+        echo "$version $auth_method"
+        return 0
+    fi
+    
+    # 全ての方法が失敗した場合
+    rm -f "$temp_file" 2>/dev/null
+    
+    # wget設定を元に戻す
+    setup_wget_options
+    echo "$(date +%Y.%m.%d)-fallback $auth_method" 
+    return 1
+}
+
 # メインのダウンロード関数 - オプション解析も担当
 download() {
     # ファイル名を最初の引数として処理、残りはオプション
@@ -1078,7 +1482,7 @@ download_check_version() {
     local file_name="$1"
     local script_file="${CACHE_DIR}/script.ch"
     local dummy_version="No version control"
-    
+
     # API制限チェック（デバッグモード時のみ）
     [ "$DEBUG_MODE" = "true" ] && check_api_rate_limit
     
@@ -1135,27 +1539,27 @@ download_check_version() {
     return 0
 }
 
-# ファイルダウンロードと検証関数
+# 統一されたファイルダウンロード処理
 download_fetch_file() {
     local file_name="$1"
     local clean_remote_version="$2"
     local chmod_mode="$3"
     local install_path="${BASE_DIR}/$file_name"
     local script_file="${CACHE_DIR}/script.ch"
-    local remote_url=""
     
-    # 直接ダウンロード時のみキャッシュバスティングを適用
-    if echo "$clean_remote_version" | grep -q "direct"; then
-        remote_url="${BASE_URL}/$file_name${CACHE_BUST}"
-        debug_log "DEBUG" "Using cache-busted URL for direct download: $file_name"
-    else
-        remote_url="${BASE_URL}/$file_name"
+    # 常に直接ダウンロードURL方式を使用（API呼び出し回避）
+    local remote_url="${BASE_URL}/$file_name"
+    
+    # キャッシュバスティングの適用
+    if [ "$FORCE" = "true" ] || echo "$clean_remote_version" | grep -q "direct"; then
+        remote_url="${remote_url}${CACHE_BUST}"
+        debug_log "DEBUG" "Using cache-busted URL for download: $file_name"
     fi
     
-    debug_log "DEBUG" "Downloading file: $file_name from $remote_url"
+    debug_log "DEBUG" "Downloading file directly: $file_name from $remote_url"
     
-    # ファイルをダウンロード
-    if ! $BASE_WGET -O "$install_path" "$remote_url"; then
+    # ファイルをダウンロード（常に直接URL方式）
+    if ! wget -q --no-check-certificate -O "$install_path" "$remote_url"; then
         debug_log "ERROR" "Download failed: $file_name"
         return 1
     fi
@@ -1172,7 +1576,7 @@ download_fetch_file() {
         debug_log "DEBUG" "chmod +x applied to $file_name"
     fi
     
-    # バージョン情報の更新
+    # バージョン情報をキャッシュに保存
     save_version_to_cache "$file_name" "$clean_remote_version" "$script_file"
     
     return 0
@@ -1304,11 +1708,13 @@ print_banner_unicode() {
 }
 
 print_information() {
+    local network=$(cat "${CACHE_DIR}/network.ch")
     local architecture=$(cat "${CACHE_DIR}/architecture.ch")
     local osversion=$(cat "${CACHE_DIR}/osversion.ch")
     local package_manager=$(cat "${CACHE_DIR}/package_manager.ch")
     local usbdevice=$(cat "${CACHE_DIR}/usbdevice.ch")
 
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_NETWORK" "info=$network")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_ARCHITECTURE" "info=$architecture")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_OSVERSION" "info=$osversion")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_PACKAGEMANAGER" "info=$package_manager")")"
@@ -1340,7 +1746,6 @@ print_country() {
 # 🔵　メイン　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 check_option() {
-
     # デフォルト値の設定
     ORIGINAL_ARGS="$@"
     MODE="${MODE:-update}"
@@ -1355,6 +1760,7 @@ check_option() {
     SKIP_DEVICE_DETECTION="false"
     SKIP_IP_DETECTION="false"
     SKIP_ALL_DETECTION="false"
+    SKIP_CACHE="false"
 
     # 言語およびオプション引数の処理
     while [ "$#" -gt 0 ]; do
@@ -1381,9 +1787,12 @@ check_option() {
             -cd|--cd|-common_debug|--common_debug|--common_debug)
                 MODE="debug"
                 ;;
-            -r|--r|-reset|--reset|-resrt|--resrt)
+            -r|--r|-resrt|--resrt)
                 MODE="reset"
                 RESET="true"
+                ;;
+            -del|--del|-delete|--delete)
+                MODE="delete"
                 ;;
             -f|--f|-force|--force)
                 FORCE="true"
@@ -1426,6 +1835,10 @@ check_option() {
             -sa|--sa|-skip-all|--skip-all)
                 SKIP_ALL_DETECTION="true"
                 ;;
+            -nc|--nc|-no-cache|--no-cache)
+                SKIP_CACHE="true"
+                debug_log "DEBUG" "Cache disabled by command line option"
+                ;;
             -*)
                 echo "Warning: Unknown option: $1" >&2
                 ;;
@@ -1439,12 +1852,12 @@ check_option() {
     done
 
     # 環境変数設定
-    export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET HELP
+    export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET HELP SKIP_CACHE
 
     # デバッグ情報を出力
     debug_log "DEBUG" "$BIN_FILE: $SCRIPT_VERSION"
-    debug_log "DEBUG" "check_option received before args: $ORIGINAL_ARGS"
-    debug_log "DEBUG" "check_option: MODE=$MODE, SELECTED_LANGUAGE=$SELECTED_LANGUAGE DEBUG_MODE=$DEBUG_MODE DEBUG_LEVEL=$DEBUG_LEVEL DRY_RUN=$DRY_RUN LOGFILE=$LOGFILE FORCE=$FORCE RESET=$RESET HELP=$HELP"
+    debug_log "DEBUG" "check_option received args: $ORIGINAL_ARGS"
+    debug_log "DEBUG" "check_option: MODE=$MODE, SKIP_CACHE=$SKIP_CACHE, SELECTED_LANGUAGE=$SELECTED_LANGUAGE"
 
     # 設定された言語を `check_common()` に渡す
     check_common "$SELECTED_LANGUAGE" "$MODE"
@@ -1456,6 +1869,13 @@ check_common() {
 
     debug_log "DEBUG" "check_common: MODE=$MODE"
     debug_log "DEBUG" "check_common: mode=$mode"
+
+    # 言語設定の早期読み込み（追加）
+    if [ -f "${CACHE_DIR}/message.ch" ]; then
+        debug_log "DEBUG" "Early loading language settings from cache"
+        # 初期化フラグを設定して二重初期化を防止
+        EARLY_LANG_LOADED=1
+    fi
 
     # モードごとの処理
     case "$mode" in
@@ -1471,6 +1891,20 @@ check_common() {
                 printf "%s%s%s\n" "$(color yellow "Reset partially failed: Cache removed but could not be recreated.")"
             }
             printf "%s%s%s\n" "$(color yellow "$(get_message "MSG_RESET_COMPLETE")")"
+            exit 0
+            ;;
+        delete)
+            if ! rm -rf "${BASE_DIR}"; then
+                debug_log "ERROR" "Failed to remove base directory: ${BASE_DIR}"
+                printf "%s%s%s\n" "$(color yellow "Reset failed: Could not remove base directory.")"
+                return 1
+            fi
+            # キャッシュディレクトリを再作成
+            mkdir -p "${BASE_DIR}" || {
+                debug_log "ERROR" "Failed to recreate base directory: ${CACHE_DIR}"
+                printf "%s%s%s\n" "$(color yellow "Reset partially failed: Base removed but could not be recreated.")"
+            }
+            printf "%s%s%s\n" "$(color yellow "$(get_message "MSG_DELETE_COMPLETE")")"
             exit 0
             ;;
         debug)
@@ -1491,10 +1925,12 @@ check_common() {
             print_banner
             print_information
             select_country "$lang_code"
+            update_package_list
             selector "$MAIN_MENU" 
             ;;
         full)
             download "dynamic-system-info.sh" "chmod" "load"
+            download "common-translation.sh" "chmod" "load"
             download "common-color.sh" "chmod" "load"
             download "common-country.sh" "chmod" "load"
             download "common-menu.sh" "chmod" "load"
@@ -1503,14 +1939,15 @@ check_common() {
             download "menu.db"
             download "country.db"
             download "messages_base.db"
-            download "messages_asian.db"
-            download "messages_euro.db"
-            download "messages_etc.db"
+            # download "messages_asian.db"
+            # download "messages_euro.db"
+            # download "messages_etc.db"
             download "local-package.db"
             download "custom-package.db"
             print_banner
             print_information
             select_country "$lang_code"
+            update_package_list
             selector "$MAIN_MENU"
             ;;
         update)
@@ -1549,10 +1986,17 @@ delete_aios() {
 
 # 必要ディレクトリ作成
 make_directory() {
-    if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"; then
+    if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR" "${CACHE_DIR}/commits"; then
         debug_log "ERROR" "Failed to create required directories"
         return 1
     fi
+    
+    # .gitignoreファイルの作成（キャッシュディレクトリの内容をgitで無視する）
+    if [ ! -f "${CACHE_DIR}/.gitignore" ]; then
+        echo "*" > "${CACHE_DIR}/.gitignore" 2>/dev/null
+    fi
+    
+    return 0
 }
 
 # アップデート状態確認
@@ -1615,6 +2059,10 @@ main() {
         debug_log "ERROR" "Failed to create required directories"
         return 1
     fi
+
+    check_network_connectivity
+
+    setup_wget_options
 
     check_option "$@"
 }
