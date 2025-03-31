@@ -992,9 +992,7 @@ country_write() {
     
     # 一時ファイルが存在するか確認
     if [ ! -f "$tmp_country" ]; then
-        local err_msg=$(get_message "ERR_FILE_NOT_FOUND")
-        local err_msg_final=$(echo "$err_msg" | sed "s/{file}/$tmp_country/g")
-        printf "%s\n" "$(color red "$err_msg_final")"
+        debug_log "ERROR" "File not found: $tmp_country"
         return 1
     fi
     
@@ -1038,7 +1036,6 @@ country_write() {
     
     return 0
 }
-
 
 normalize_language() {
     # 必要なパス定義
@@ -1108,7 +1105,6 @@ normalize_language() {
     return 0
 }
 
-# タイムゾーン情報をキャッシュに書き込む関数
 zone_write() {
     debug_log "DEBUG" "Entering zone_write()"
     
@@ -1128,9 +1124,7 @@ zone_write() {
         # 両方とも利用できない場合はエラー
         debug_log "ERROR" "No timezone data provided and no temporary file found"
         local safe_filename=$(escape_for_sed "$tmp_zone")
-        local err_msg=$(get_message "ERR_FILE_NOT_FOUND")
-        err_msg=$(echo "$err_msg" | sed "s/{file}/$safe_filename/g")
-        printf "%s\n" "$(color red "$err_msg")"
+        debug_log "ERROR" "File not found: $safe_filename"
         return 1
     fi
     
@@ -1160,7 +1154,7 @@ zone_write() {
         return 0
     else
         debug_log "ERROR" "Empty timezone string provided"
-        printf "%s\n" "$(color red "$(get_message "MSG_ERROR_OCCURRED")")"
+        debug_log "ERROR" "An error occurred during timezone processing"
         return 1
     fi
 }
