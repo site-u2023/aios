@@ -81,9 +81,11 @@ BASE_WGET_AUTH_TOKEN='wget --no-check-certificate -q -O "$1" --header="Authoriza
 GITHUB_TOKEN_FILE="/etc/aios_token" # GitHubトークン保存ファイル
 UPDATE_CACHE="${CACHE_DIR}/update.ch" # 更新情報キャッシュ
 
-# デフォルト言語設定
-DEFAULT_LANGUAGE="${DEFAULT_LANGUAGE:-en}"  # デフォルトは英語
-MSG_MEMORY_INITIALIZED="false"
+# メッセージ翻訳システムの設定
+DEFAULT_LANGUAGE="${DEFAULT_LANGUAGE:-en}"  # デフォルト言語
+MSG_MEMORY=""                          # メッセージキャッシュ
+MSG_MEMORY_INITIALIZED="false"         # メモリキャッシュ初期化フラグ
+MSG_MEMORY_LANG=""                     # メモリキャッシュの言語
 
 # メッセージキャッシュ
 MSG_MEMORY=""
