@@ -298,7 +298,6 @@ EOF
             
             # ネットワーク接続確認
             if [ -n "$network_status" ] && [ "$network_status" != "" ]; then
-                debug_log "DEBUG" "Translating text for key: ${key}"
                 
                 # APIリストを解析して順番に試行
                 local api
@@ -317,7 +316,6 @@ EOF
                             
                             if [ $? -eq 0 ] && [ -n "$result" ]; then
                                 cleaned_translation="$result"
-                                debug_log "DEBUG" "Google Translate API succeeded for key: ${key}"
                                 break
                             else
                                 debug_log "DEBUG" "Google Translate API failed for key: ${key}"
@@ -339,7 +337,6 @@ EOF
                     
                     # DBに追加
                     printf "%s|%s=%s\n" "$target_lang" "$key" "$decoded" >> "$output_db"
-                    debug_log "DEBUG" "Added translation for key: ${key}"
                 else
                     # 翻訳失敗時は原文をそのまま使用
                     printf "%s|%s=%s\n" "$target_lang" "$key" "$value" >> "$output_db"
