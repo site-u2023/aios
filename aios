@@ -1617,20 +1617,27 @@ download_fetch_file() {
     return 0
 }
 
+# download_finalize関数の修正
 download_finalize() {
     local file_name="$1"
     local status_message="$2"
     local clean_remote_version="$3"
-    local auth_method="$4"  # tokenやdirectなどの認証方法
+    local auth_method="$4"
     local load_mode="$5"
     local hidden_mode="$6"
     local status_type="$7"
     local install_path="${BASE_DIR}/$file_name"
     
+    # 空のファイル名チェック（防御策）
+    if [ -z "$file_name" ]; then
+        debug_log "ERROR" "Empty filename provided to download_finalize. Skipping display."
+        return 0
+    fi
+    
     # APIレート情報を取得
     local api_status=$(check_api_rate_limit)
     
-    # 読み込みが必要かどうかのフラグ設定
+    # 読み込みが必要かのフラグ設定
     local should_load="false"
     local action_message=""
     if [ "$load_mode" = "true" ] || echo "$file_name" | grep -q ".*\\.sh"; then
@@ -1638,24 +1645,22 @@ download_finalize() {
         action_message="(Loaded)"
     fi
     
-    # 出力メッセージの作成
+    # メッセージ構築
     local message="${status_message} ${file_name} ${clean_remote_version} ${api_status}"
     if [ -n "$action_message" ]; then
         message="${message} ${action_message}"
     fi
 
-    # メッセージ出力
+    # メッセージ出力（条件分岐の構造を整理）
     if [ "$hidden_mode" = "true" ]; then
+        # 非表示モードの場合はデバッグログのみ
         debug_log "DEBUG" "Quiet mode ${message}"
     else
-        if [ "$status_type" = "success" ]; then
-            printf "%s\n" "$(color white "${message}")"
-        else
-            printf "%s\n" "$(color white "${message}")" 
-        fi
+        # 通常出力モード
+        printf "%s\n" "$(color white "${message}")"
     fi
     
-    # ファイル読み込み処理を実行
+    # ファイル読み込み処理
     if [ "$should_load" = "true" ]; then
         debug_log "DEBUG" "Now loading source file: $file_name"
         . "$install_path"
@@ -1970,8 +1975,8 @@ check_common() {
             download "common-feed-package.sh" "chmod" "load"
             download "menu.db"
             download "country.db"
-            # download "message_${DEFAULT_LANGUAGE}.db"
-            download "message_en.db"
+            download "message_${DEFAULT_LANGUAGE}.db"
+            # download "message_en.db"
             download "local-package.db"
             download "custom-package.db"
             print_banner
