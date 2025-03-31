@@ -78,6 +78,11 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 
+# コミットキャッシュ関連の設定
+COMMIT_CACHE_DIR="${CACHE_DIR}/commits"
+COMMIT_CACHE_TTL="1800"  # キャッシュの有効期間（30分 = 1800秒）
+SKIP_CACHE="false"       # キャッシュスキップのデフォルト値
+
 UPDATE_CACHE="${CACHE_DIR}/update.ch"
 GITHUB_TOKEN_FILE="/etc/aios_token"
 MSG_MEMORY=""
@@ -214,6 +219,7 @@ print_help() {
     printf "  %-25s %s\n" "-cl, --common_light" "$(get_message "MSG_HELP_LIGHT")"
     printf "  %-25s %s\n" "-cd, --common_debug" "$(get_message "MSG_HELP_COMMON_DEBUG")"
     printf "  %-25s %s\n" "-dr, --dry-run" "$(get_message "MSG_HELP_DRY_RUN")"
+    printf "  %-25s %s\n" "-nc, --no-cache" "Skip using cached version data"
     
     printf "\n%s\n" "$(get_message "MSG_HELP_LANGUAGE_HEADER")"
     printf "  %-25s %s\n" "US, JP, ..." "$(get_message "MSG_HELP_LANGUAGE")"
@@ -336,6 +342,71 @@ get_message() {
 # 🔴　メッセージ系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
 
 # 🔵　トークン系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
+
+# コミット情報をキャッシュに保存する関数
+save_commit_to_cache() {
+    local file_path="$1"
+    local version="$2"
+    local auth_method="$3"
+    local cache_file="${COMMIT_CACHE_DIR}/$(echo "$file_path" | tr '/' '_').commit"
+    local timestamp=$(date +%s)
+    
+    debug_log "DEBUG" "Saving commit info to cache: $file_path -> $cache_file"
+    
+    # キャッシュフォルダがなければ作成
+    [ -d "${COMMIT_CACHE_DIR}" ] || mkdir -p "${COMMIT_CACHE_DIR}"
+    
+    # キャッシュファイルに情報を書き込み
+    {
+        echo "VERSION=$version"
+        echo "AUTH_METHOD=$auth_method"
+        echo "TIMESTAMP=$timestamp"
+        echo "TTL=$COMMIT_CACHE_TTL"
+        echo "FILE_PATH=$file_path"
+    } > "$cache_file"
+    
+    return 0
+}
+
+# キャッシュからコミット情報を取得する関数
+get_commit_from_cache() {
+    local file_path="$1"
+    local force="$2"  # キャッシュ強制無視フラグ
+    local cache_file="${COMMIT_CACHE_DIR}/$(echo "$file_path" | tr '/' '_').commit"
+    local current_time=$(date +%s)
+    
+    # キャッシュスキップが有効またはforceフラグが指定されている場合はキャッシュを無視
+    if [ "$SKIP_CACHE" = "true" ] || [ "$force" = "true" ] || [ "$FORCE" = "true" ]; then
+        debug_log "DEBUG" "Skipping cache for $file_path (forced)"
+        return 1
+    fi
+    
+    # キャッシュファイルが存在しない場合
+    if [ ! -f "$cache_file" ]; then
+        debug_log "DEBUG" "No cache found for $file_path"
+        return 1
+    fi
+    
+    # キャッシュファイルから情報を読み込む
+    . "$cache_file"
+    
+    # 必須変数が設定されているか確認
+    if [ -z "$VERSION" ] || [ -z "$TIMESTAMP" ] || [ -z "$TTL" ]; then
+        debug_log "WARN" "Invalid cache file for $file_path"
+        return 1
+    fi
+    
+    # キャッシュが有効期限内かチェック
+    if [ $(( current_time - TIMESTAMP )) -gt "$TTL" ]; then
+        debug_log "DEBUG" "Cache expired for $file_path ($(( (current_time - TIMESTAMP) / 60 )) minutes old)"
+        return 1
+    fi
+    
+    # キャッシュが有効な場合は結果を返す
+    debug_log "DEBUG" "Using cached commit info for $file_path: $VERSION (age: $(( (current_time - TIMESTAMP) / 60 )) minutes)"
+    echo "$VERSION $AUTH_METHOD"
+    return 0
+}
 
 format_api_status() {
     local auth_method="$1"
@@ -1107,8 +1178,17 @@ clean_version_string() {
 # コミット情報取得関数の改良版
 get_commit_version() {
     local file_path="$1"
+    local force_refresh="$2"  # キャッシュ強制更新フラグ
     local temp_file="${CACHE_DIR}/commit_info.tmp" 
     local direct_file="${CACHE_DIR}/direct_file.tmp"
+
+    # キャッシュ使用時、まずキャッシュから情報を取得
+    if [ "$SKIP_CACHE" != "true" ] && [ "$force_refresh" != "true" ] && [ "$FORCE" != "true" ]; then
+        get_commit_from_cache "$file_path"
+        if [ $? -eq 0 ]; then
+            return 0  # キャッシュからの情報取得に成功した場合終了
+        fi
+    fi
 
     # リポジトリ情報
     local repo_owner="site-u2023"
@@ -1190,9 +1270,17 @@ get_commit_version() {
                     rm -f "$direct_file" "$temp_file" 2>/dev/null
                     local today=$(date +%Y.%m.%d)
                     
+                    # バージョン情報を取得
+                    local version="$today-$file_hash"
+                    auth_method="direct"
+                    
                     # wget設定を元に戻す
                     setup_wget_options
-                    echo "$today-$file_hash direct"
+                    
+                    # キャッシュに保存
+                    save_commit_to_cache "$file_path" "$version" "$auth_method"
+                    
+                    echo "$version $auth_method"
                     return 0
                 fi
             fi
@@ -1255,6 +1343,10 @@ get_commit_version() {
         
         # wget設定を元に戻す
         setup_wget_options
+        
+        # キャッシュに保存
+        save_commit_to_cache "$file_path" "$version" "$auth_method"
+        
         echo "$version $auth_method"
         return 0
     fi
@@ -1589,7 +1681,6 @@ print_country() {
 # 🔵　メイン　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 check_option() {
-
     # デフォルト値の設定
     ORIGINAL_ARGS="$@"
     MODE="${MODE:-update}"
@@ -1604,6 +1695,7 @@ check_option() {
     SKIP_DEVICE_DETECTION="false"
     SKIP_IP_DETECTION="false"
     SKIP_ALL_DETECTION="false"
+    SKIP_CACHE="false"
 
     # 言語およびオプション引数の処理
     while [ "$#" -gt 0 ]; do
@@ -1678,6 +1770,10 @@ check_option() {
             -sa|--sa|-skip-all|--skip-all)
                 SKIP_ALL_DETECTION="true"
                 ;;
+            -nc|--nc|-no-cache|--no-cache)
+                SKIP_CACHE="true"
+                debug_log "DEBUG" "Cache disabled by command line option"
+                ;;
             -*)
                 echo "Warning: Unknown option: $1" >&2
                 ;;
@@ -1691,111 +1787,15 @@ check_option() {
     done
 
     # 環境変数設定
-    export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET HELP
+    export SELECTED_LANGUAGE DEBUG_MODE DEBUG_LEVEL MODE DRY_RUN LOGFILE FORCE RESET HELP SKIP_CACHE
 
     # デバッグ情報を出力
     debug_log "DEBUG" "$BIN_FILE: $SCRIPT_VERSION"
-    debug_log "DEBUG" "check_option received before args: $ORIGINAL_ARGS"
-    debug_log "DEBUG" "check_option: MODE=$MODE, SELECTED_LANGUAGE=$SELECTED_LANGUAGE DEBUG_MODE=$DEBUG_MODE DEBUG_LEVEL=$DEBUG_LEVEL DRY_RUN=$DRY_RUN LOGFILE=$LOGFILE FORCE=$FORCE RESET=$RESET HELP=$HELP"
+    debug_log "DEBUG" "check_option received args: $ORIGINAL_ARGS"
+    debug_log "DEBUG" "check_option: MODE=$MODE, SKIP_CACHE=$SKIP_CACHE, SELECTED_LANGUAGE=$SELECTED_LANGUAGE"
 
     # 設定された言語を `check_common()` に渡す
     check_common "$SELECTED_LANGUAGE" "$MODE"
-}
-
-check_common() {
-    local lang_code="$SELECTED_LANGUAGE"
-    local mode="$MODE"
-
-    debug_log "DEBUG" "check_common: MODE=$MODE"
-    debug_log "DEBUG" "check_common: mode=$mode"
-
-    # モードごとの処理
-    case "$mode" in
-        reset|return)
-            if ! rm -rf "${CACHE_DIR}"; then
-                debug_log "ERROR" "Failed to remove cache directory: ${CACHE_DIR}"
-                printf "%s%s%s\n" "$(color yellow "Reset failed: Could not remove cache directory.")"
-                return 1
-            fi
-            # キャッシュディレクトリを再作成
-            mkdir -p "${CACHE_DIR}" || {
-                debug_log "ERROR" "Failed to recreate cache directory: ${CACHE_DIR}"
-                printf "%s%s%s\n" "$(color yellow "Reset partially failed: Cache removed but could not be recreated.")"
-            }
-            printf "%s%s%s\n" "$(color yellow "$(get_message "MSG_RESET_COMPLETE")")"
-            exit 0
-            ;;
-        delete)
-            if ! rm -rf "${BASE_DIR}"; then
-                debug_log "ERROR" "Failed to remove base directory: ${BASE_DIR}"
-                printf "%s%s%s\n" "$(color yellow "Reset failed: Could not remove base directory.")"
-                return 1
-            fi
-            # キャッシュディレクトリを再作成
-            mkdir -p "${BASE_DIR}" || {
-                debug_log "ERROR" "Failed to recreate base directory: ${CACHE_DIR}"
-                printf "%s%s%s\n" "$(color yellow "Reset partially failed: Base removed but could not be recreated.")"
-            }
-            printf "%s%s%s\n" "$(color yellow "$(get_message "MSG_DELETE_COMPLETE")")"
-            exit 0
-            ;;
-        debug)
-            download "dynamic-system-info.sh" "hidden" "chmod" "load"
-            download "common-color.sh" "hidden" "chmod" "load"
-            download "common-country.sh" "hidden" "chmod" "load"
-            download "common-country.sh" "hidden" "chmod" "load"
-            download "common-package.sh" "hidden" "chmod" "load"
-            download "common-feed-package.sh" "hidden" "chmod" "load"
-            download "menu.db" "hidden"
-            download "country.db" "hidden"
-            download "messages_base.db" "hidden"
-            download "messages_asian.db" "hidden"
-            download "messages_euro.db" "hidden"
-            download "messages_etc.db" "hidden"
-            download "local-package.db" "hidden"
-            download "custom-package.db" "hidden"
-            print_banner
-            print_information
-            select_country "$lang_code"
-            update_package_list
-            selector "$MAIN_MENU" 
-            ;;
-        full)
-            download "dynamic-system-info.sh" "chmod" "load"
-            download "common-translation.sh" "chmod" "load"
-            download "common-color.sh" "chmod" "load"
-            download "common-country.sh" "chmod" "load"
-            download "common-menu.sh" "chmod" "load"
-            download "common-package.sh" "chmod" "load"
-            download "common-feed-package.sh" "chmod" "load"
-            download "menu.db"
-            download "country.db"
-            download "messages_base.db"
-            # download "messages_asian.db"
-            # download "messages_euro.db"
-            # download "messages_etc.db"
-            download "local-package.db"
-            download "custom-package.db"
-            print_banner
-            print_information
-            select_country "$lang_code"
-            update_package_list
-            selector "$MAIN_MENU"
-            ;;
-        update)
-            check_update "$ORIGINAL_ARGS"
-            ;;
-        light)
-            ;;
-        test_api)
-            download "github_api_test.sh" "chmod" "load"
-            exit 0
-            ;;
-        *)
-            ;;
-    esac
-    
-    return 0
 }
 
 # 実行権限の設定
@@ -1818,10 +1818,17 @@ delete_aios() {
 
 # 必要ディレクトリ作成
 make_directory() {
-    if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR"; then
+    if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR" "${CACHE_DIR}/commits"; then
         debug_log "ERROR" "Failed to create required directories"
         return 1
     fi
+    
+    # .gitignoreファイルの作成（キャッシュディレクトリの内容をgitで無視する）
+    if [ ! -f "${CACHE_DIR}/.gitignore" ]; then
+        echo "*" > "${CACHE_DIR}/.gitignore" 2>/dev/null
+    fi
+    
+    return 0
 }
 
 # アップデート状態確認
