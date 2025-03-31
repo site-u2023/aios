@@ -277,6 +277,13 @@ get_message() {
     local db_file="${BASE_DIR}/messages_base.db"  # デフォルトDB
     local message=""
     
+    # メモリ初期化状態の確認
+    if [ -z "$MSG_MEMORY_INITIALIZED" ] || [ "$MSG_MEMORY_INITIALIZED" != "true" ]; then
+        debug_log "DEBUG" "Initializing memory messages"
+        into_memory_message
+        MSG_MEMORY_INITIALIZED="true"
+    fi
+    
     # 言語コードの取得（キャッシュチェックを最初に行う）
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang=$(cat "${CACHE_DIR}/message.ch")
