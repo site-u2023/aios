@@ -627,7 +627,6 @@ display_detected_location() {
     # 成功メッセージの表示（オプション）
     if [ "$show_success_message" = "true" ]; then
         printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
-        printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SET")")"
         printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
         EXTRA_SPACING_NEEDED="yes"
         debug_log "DEBUG" "Success messages displayed"
@@ -824,7 +823,6 @@ detect_and_set_location() {
                 
                 # 国選択完了メッセージを表示
                 printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
-                printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SET")")"
                 
                 # タイムゾーン設定（キャッシュ以外の場合のみ）
                 if [ "$detection_source" != "cache" ]; then
@@ -1031,7 +1029,6 @@ country_write() {
     if [ "$skip_message" = "false" ]; then
         # 国と言語の選択完了メッセージを表示
         printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
-        printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SET")")"
     fi
     
     return 0
