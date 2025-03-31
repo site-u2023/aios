@@ -720,14 +720,12 @@ debug_info() {
         echo "Package Manager: $(get_package_manager)"
         echo "Current Zonename: $(get_zonename_info)"
         echo "Current Timezone: $(get_timezone_info)"
-        echo "Available Languages: $(get_available_language_packages)"
         echo "==========================="
     fi
 }
 
 # メイン処理
 dynamic_system_info_main() {
-    debug_info
     check_network_connectivity
     init_device_cache
     get_usb_devices
