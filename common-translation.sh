@@ -226,7 +226,7 @@ create_language_db() {
     local current_api=""
     local ip_check_file="${CACHE_DIR}/network.ch"
     
-    debug_log "DEBUG" "Creating language DB for ${target_lang} with API language code ${api_lang}"
+    debug_log "DEBUG" "Creating language DB for target ${target_lang} with API language code ${api_lang}"
     
     # ベースDBファイル確認
     if [ ! -f "$base_db" ]; then
@@ -242,7 +242,7 @@ EOF
     # オンライン翻訳が無効なら翻訳せず置換するだけ
     if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
         debug_log "DEBUG" "Online translation disabled, using original text"
-        grep "^${DEFAULT_LANGUAGE}|" "$base_db" | sed "s/^${DEFAULT_LANGUAGE}|/${target_lang}|/" >> "$output_db"
+        grep "^${DEFAULT_LANGUAGE}|" "$base_db" | sed "s/^${DEFAULT_LANGUAGE}|/${api_lang}|/" >> "$output_db"
         return 0
     fi
     
@@ -264,8 +264,7 @@ EOF
         debug_log "DEBUG" "Could not determine network status"
     fi
     
-    # API_LISTから初期APIを決定（試行する最初のAPI）
-    # 単純に最初のAPIを取得
+    # API_LISTから初期APIを決定
     local first_api=$(echo "$API_LIST" | cut -d',' -f1)
     case "$first_api" in
         google) current_api="Google Translate API" ;;
@@ -286,12 +285,13 @@ EOF
         if [ -n "$key" ] && [ -n "$value" ]; then
             # キャッシュキー生成
             local cache_key=$(printf "%s%s%s" "$key" "$value" "$api_lang" | md5sum | cut -d' ' -f1)
-            local cache_file="${TRANSLATION_CACHE_DIR}/${target_lang}_${cache_key}.txt"
+            local cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
             
             # キャッシュを確認
             if [ -f "$cache_file" ]; then
                 local translated=$(cat "$cache_file")
-                printf "%s|%s=%s\n" "$target_lang" "$key" "$translated" >> "$output_db"
+                # APIから取得した言語コードを使用
+                printf "%s|%s=%s\n" "$api_lang" "$key" "$translated" >> "$output_db"
                 debug_log "DEBUG" "Using cached translation for key: ${key}"
                 continue
             fi
@@ -321,8 +321,6 @@ EOF
                                 debug_log "DEBUG" "Google Translate API failed for key: ${key}"
                             fi
                             ;;
-                            
-                        # 将来的に他のAPIを追加できるようにループ構造は維持
                     esac
                 done
                 
@@ -335,16 +333,16 @@ EOF
                     mkdir -p "$(dirname "$cache_file")"
                     printf "%s\n" "$decoded" > "$cache_file"
                     
-                    # DBに追加
-                    printf "%s|%s=%s\n" "$target_lang" "$key" "$decoded" >> "$output_db"
+                    # APIから取得した言語コードを使用してDBに追加
+                    printf "%s|%s=%s\n" "$api_lang" "$key" "$decoded" >> "$output_db"
                 else
                     # 翻訳失敗時は原文をそのまま使用
-                    printf "%s|%s=%s\n" "$target_lang" "$key" "$value" >> "$output_db"
+                    printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
                     debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}" 
                 fi
             else
                 # ネットワーク接続がない場合は原文を使用
-                printf "%s|%s=%s\n" "$target_lang" "$key" "$value" >> "$output_db"
+                printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
                 debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
             fi
         fi
@@ -355,7 +353,7 @@ EOF
     
     # 翻訳処理終了
     printf "Database creation completed for language: %s\n" "${api_lang}"
-    debug_log "DEBUG" "Language DB creation completed for ${target_lang}"
+    debug_log "DEBUG" "Language DB creation completed for ${api_lang}"
     return 0
 }
 
