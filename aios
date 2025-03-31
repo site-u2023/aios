@@ -316,6 +316,63 @@ reset_message_cache() {
     debug_log "DEBUG" "Message cache reset requested"
 }
 
+init_translation() {
+    debug_log "DEBUG" "Initializing translation system"
+    
+    # キャッシュフォルダがなければ作成
+    if [ ! -d "$CACHE_DIR" ]; then
+        mkdir -p "$CACHE_DIR"
+        debug_log "DEBUG" "Created cache directory: $CACHE_DIR"
+    }
+    
+    # メッセージDBが存在するがmessage.chが無い場合、デフォルト言語を設定
+    if [ ! -f "${CACHE_DIR}/message.ch" ] && { [ -f "${BASE_DIR}/messages_en.db" ] || [ -f "${BASE_DIR}/messages_base.db" ]; }; then
+        echo "US" > "${CACHE_DIR}/message.ch"
+        
+        if [ -f "${BASE_DIR}/messages_en.db" ]; then
+            echo "${BASE_DIR}/messages_en.db" > "${CACHE_DIR}/message_db.ch"
+        else
+            echo "${BASE_DIR}/messages_base.db" > "${CACHE_DIR}/message_db.ch"
+        }
+        
+        debug_log "DEBUG" "Created default language settings: US"
+    }
+    
+    # メモリ内メッセージの初期化
+    into_memory_message
+    
+    debug_log "DEBUG" "Translation module initialization complete"
+}
+
+migrate_message_db() {
+    # base.dbからen.dbへの移行用関数（必要な場合のみ使用）
+    if [ -f "${BASE_DIR}/messages_base.db" ] && [ ! -f "${BASE_DIR}/messages_en.db" ]; then
+        debug_log "DEBUG" "Migrating messages_base.db to messages_en.db"
+        
+        # ファイルをコピー
+        cp "${BASE_DIR}/messages_base.db" "${BASE_DIR}/messages_en.db"
+        
+        # コピー成功確認
+        if [ -f "${BASE_DIR}/messages_en.db" ]; then
+            debug_log "DEBUG" "Migration successful"
+            
+            # message_db.chに新しいパスを設定
+            if [ -f "${CACHE_DIR}/message_db.ch" ] && grep -q "messages_base.db" "${CACHE_DIR}/message_db.ch"; then
+                echo "${BASE_DIR}/messages_en.db" > "${CACHE_DIR}/message_db.ch"
+                debug_log "DEBUG" "Updated message_db.ch to use messages_en.db"
+            }
+            
+            return 0
+        else
+            debug_log "ERROR" "Failed to create messages_en.db"
+            return 1
+        }
+    }
+    
+    debug_log "DEBUG" "No migration needed"
+    return 0
+}
+
 get_message() {
     local key="$1"
     local params="$2"  # パラメータ文字列
