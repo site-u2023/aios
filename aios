@@ -271,6 +271,8 @@ color() {
 # メッセージをメモリに読み込む関数
 into_memory_message() {
     local lang="$DEFAULT_LANGUAGE"
+
+    echo "INTO_MEMORY_MESSAGE: start with DEFAULT_LANGUAGE=${DEFAULT_LANGUAGE}" >> /tmp/aios_debug.log
     
     # キャッシュから現在の言語を取得
     if [ -f "${CACHE_DIR}/message.ch" ]; then
@@ -1461,22 +1463,24 @@ get_commit_version() {
 
 # メインのダウンロード関数 - オプション解析も担当
 download() {
+
+    # ファイル名を最初の引数として処理、残りはオプション
     local file_name="$1"
+    shift
+
+    echo "DOWNLOAD CALLED: filename='${file_name}' timestamp=$(date +%s)" >> /tmp/aios_debug.log
+    
+    # 空ファイル名のチェック
     if [ -z "$file_name" ]; then
-        echo "ERROR: Empty filename detected in download call" >&2
-        # 呼び出し元情報（どこから呼ばれたか）
-        echo "Backtrace information (if available):" >&2
+        echo "ERROR: Empty filename detected in download call" >> /tmp/aios_debug.log
+        # スタックトレース（可能な場合）
         i=0
-        while caller $i >&2 2>/dev/null; do
+        while caller $i >> /tmp/aios_debug.log 2>/dev/null; do
             i=$((i+1))
         done
         return 1
     fi
 
-    # ファイル名を最初の引数として処理、残りはオプション
-    local file_name="$1"
-    shift
-    
     # 設定変数の初期化
     local hidden_mode="false"
     local quiet_mode="${QUIET_MODE:-false}"
