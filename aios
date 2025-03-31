@@ -268,6 +268,27 @@ color() {
 
 # 🔵　メッセージ系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
+# メッセージDBパスを取得する関数
+get_message_db_path() {
+    local lang="${1:-$DEFAULT_LANGUAGE}"
+    
+    # 1. キャッシュから取得（最優先）
+    if [ -f "${CACHE_DIR}/message_db.ch" ]; then
+        cat "${CACHE_DIR}/message_db.ch"
+        return 0
+    fi
+    
+    # 2. 指定された言語のDBを確認
+    if [ -f "${BASE_DIR}/message_${lang}.db" ]; then
+        echo "${BASE_DIR}/message_${lang}.db"
+        return 0
+    fi
+    
+    # 3. デフォルト言語のDBを返す
+    echo "${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
+    return 0
+}
+
 into_memory_message() {
     local lang="$DEFAULT_LANGUAGE"
     
@@ -290,13 +311,8 @@ en|CONFIG_DOWNLOAD_UNNECESSARY=File already up to date:
 en|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared.
 en|MSG_DELETE_COMPLETE=Delete completed. All based data has been cleared."
     
-    # 言語DBファイルを決定
-    local db_file="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
-    if [ -f "${CACHE_DIR}/message_db.ch" ]; then
-        db_file=$(cat "${CACHE_DIR}/message_db.ch")
-    elif [ -f "${BASE_DIR}/message_${lang}.db" ]; then
-        db_file="${BASE_DIR}/message_${lang}.db"
-    fi
+    # DBファイルパスを取得（単一の関数を使用）
+    local db_file=$(get_message_db_path "$lang")
     
     # 翻訳されたメッセージを追加（デフォルト言語と異なる場合）
     if [ "$lang" != "$DEFAULT_LANGUAGE" ] && [ -f "$db_file" ]; then
@@ -368,16 +384,9 @@ get_message() {
         into_memory_message
     fi
     
-    # 言語DBファイルの選択（キャッシュ情報を最優先）
-    if [ -f "${CACHE_DIR}/message_db.ch" ]; then
-        # キャッシュに保存されたDBパスを使用（最優先）
-        db_file=$(cat "${CACHE_DIR}/message_db.ch")
-        debug_log "DEBUG" "Using message DB from cache: $db_file"
-    elif [ -f "${BASE_DIR}/message_${lang}.db" ]; then
-        # 言語固有DBを使用
-        db_file="${BASE_DIR}/message_${lang}.db"
-        debug_log "DEBUG" "Using language specific DB: $db_file"
-    fi
+    # DBファイルパスを取得（単一の関数を使用）
+    local db_file=$(get_message_db_path "$lang")
+    debug_log "DEBUG" "Using message DB: $db_file"
     
     # インメモリメッセージから検索
     if [ -n "$MSG_MEMORY" ]; then
