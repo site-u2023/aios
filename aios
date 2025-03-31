@@ -268,56 +268,29 @@ color() {
 
 # 🔵　メッセージ系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
-# メッセージをメモリに読み込む関数
+# メモリへのメッセージ読み込み関数
 into_memory_message() {
     local lang="$DEFAULT_LANGUAGE"
-
-    echo "INTO_MEMORY_MESSAGE: start with DEFAULT_LANGUAGE=${DEFAULT_LANGUAGE}" >> ${LOG_DIR}/debug.log　
-    
-    # キャッシュから現在の言語を取得
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang=$(cat "${CACHE_DIR}/message.ch")
-        debug_log "DEBUG" "Loading messages into memory for language: $lang"
     fi
     
-    # メモリメッセージが既に初期化されていれば処理をスキップ
-    if [ "$MSG_MEMORY_INITIALIZED" = "true" ] && [ "$MSG_MEMORY_LANG" = "$lang" ]; then
-        debug_log "DEBUG" "Memory messages already initialized for $lang"
-        return 0
-    fi
+    # 基本メッセージの初期化 - 改行なしで正しく設定
+    MSG_MEMORY=""
     
-    # 基本メッセージ（英語）- 個別定義
-    MSG_MEMORY="en|CONFIG_DOWNLOAD_SUCCESS=File downloaded successfully:"
-    MSG_MEMORY="${MSG_MEMORY} en|CONFIG_DOWNLOAD_UNNECESSARY=File already up to date:"
-    MSG_MEMORY="${MSG_MEMORY} en|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared"
-    MSG_MEMORY="${MSG_MEMORY} en|MSG_DELETE_COMPLETE=Delete completed. All based data has been cleared"
+    # 各メッセージを個別に追加（区切り文字として改行を使用）
+    MSG_MEMORY="${MSG_MEMORY}${lang}|CONFIG_DOWNLOAD_SUCCESS=File downloaded successfully:"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|CONFIG_DOWNLOAD_UNNECESSARY=File already up to date:"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared."$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_DELETE_COMPLETE=Delete completed. All based data has been cleared."
     
-    # メッセージDBファイルのパスを取得
-    local db_file=$(check_message_cache "$lang")
+    # その他の処理...
     
-    # DBファイルが存在すれば、該当言語の翻訳をすべて取得
-    if [ -n "$db_file" ] && [ -f "$db_file" ]; then
-        debug_log "DEBUG" "Adding translations from file: $db_file"
-        
-        # DBから対象言語の翻訳をすべて取得して追加
-        local translations=$(grep "^${lang}|" "$db_file" 2>/dev/null)
-        if [ -n "$translations" ]; then
-            # 改行を入れずに連結（改行が必要な場合のみ追加）
-            if [ -n "$MSG_MEMORY" ] && [ -n "$translations" ]; then
-                MSG_MEMORY="${MSG_MEMORY}
-${translations}"
-            elif [ -n "$translations" ]; then
-                MSG_MEMORY="${translations}"
-            fi
-            debug_log "DEBUG" "Added translations for language: $lang"
-        fi
-    fi
-    
-    # 初期化フラグと言語を設定
+    # 初期化フラグを設定
     MSG_MEMORY_INITIALIZED="true"
     MSG_MEMORY_LANG="$lang"
-    echo "DEBUG: Memory messages initialized for language: ${lang}" >> "${LOG_DIR}/debug.log"
-    return 0
+    
+    debug_log "DEBUG" "Memory messages initialized for language: ${lang}"
 }
 
 # 翻訳システムを初期化する関数
@@ -387,8 +360,14 @@ get_message() {
     
     # インメモリメッセージから検索
     if [ -n "$MSG_MEMORY" ]; then
-        # 問題修正: 改行を含むメッセージ処理を修正
-        message=$(echo "$MSG_MEMORY" | tr '\n' ' ' | grep -o "${lang}|${key}=[^ ]*" 2>/dev/null | cut -d'=' -f2-)
+        # 修正: 改行を含むメッセージ処理の改善
+        # エスケープ文字を使って改行をパターン検索から分離
+        message=$(printf '%s\n' "$MSG_MEMORY" | sed -n "/^${lang}|${key}=/s/^${lang}|${key}=//p" 2>/dev/null)
+        
+        # 見つからなかった場合は最初の一致だけを取得（改行が混ざっている場合に有効）
+        if [ -z "$message" ]; then
+            message=$(printf '%s\n' "$MSG_MEMORY" | grep -m1 "^${lang}|${key}=" 2>/dev/null | sed "s/^${lang}|${key}=//")
+        fi
     fi
     
     # メモリに見つからない場合、DBファイルから直接検索
@@ -1666,7 +1645,7 @@ download_fetch_file() {
     return 0
 }
 
-# download_finalize関数の修正
+# ダウンロード完了処理
 download_finalize() {
     local file_name="$1"
     local status_message="$2" 
@@ -1676,40 +1655,44 @@ download_finalize() {
     local hidden_mode="$6"
     local status_type="$7"
     
-    echo "DEBUG: Finalizing download for ${file_name}, status=${status_type}" >> "${LOG_DIR}/debug.log"
+    debug_log "DEBUG" "Finalizing download for ${file_name}, status=${status_type}"
     
     # ファイルが実際に存在するか確認
     if [ ! -f "${BASE_DIR}/${file_name}" ]; then
-        echo "ERROR: File not found: ${BASE_DIR}/${file_name}" >> "${LOG_DIR}/debug.log"
+        debug_log "ERROR" "File not found: ${BASE_DIR}/${file_name}"
         return 1
     fi
     
     # 隠しモードチェック
     if [ "$hidden_mode" = "true" ]; then
-        echo "DEBUG: Hidden mode is active, skipping status message" >> "${LOG_DIR}/debug.log"
+        debug_log "DEBUG" "Hidden mode is active, skipping status message"
         # 隠しモードの場合はメッセージを表示しない
-    else
-        # DBファイル処理のデバッグ出力のみを保持
-        if echo "$file_name" | grep -q "\.db$"; then
-            echo "DEBUG: DB file handling for ${file_name}" >> "${LOG_DIR}/debug.log"
-            # DBファイルは通常処理と同様にする（特別な処理を削除）
+    else        
+        # 空行出力を防止するため、status_messageが空でないことを確認
+        if [ -z "$status_message" ]; then
+            status_message="File downloaded successfully"
+            debug_log "DEBUG" "Empty status message detected, using fallback"
         fi
         
-        # status_messageがAPIステータスを含むことを確認
-        local full_message="${status_message}: ${file_name} ${clean_remote_version} ${API_STATUS}${load_mode:+ (Loaded)}"
-        echo "${full_message}"
+        # DBファイル処理のデバッグ出力
+        if echo "$file_name" | grep -q "\.db$"; then
+            debug_log "DEBUG" "DB file handling for ${file_name}"
+        fi
+        
+        # 一貫したフォーマットでメッセージを出力
+        echo "${status_message}: ${file_name} ${clean_remote_version} ${auth_message}${load_mode:+ (Loaded)}"
     fi
     
     # ファイル読込み処理
     if [ "$load_mode" = "true" ]; then
-        echo "DEBUG: Loading file: ${BASE_DIR}/${file_name}" >> "${LOG_DIR}/debug.log"
+        debug_log "DEBUG" "Loading file: ${BASE_DIR}/${file_name}"
         
         if [ -s "${BASE_DIR}/${file_name}" ]; then
             # shellcheck source=/dev/null
             . "${BASE_DIR}/${file_name}"
-            echo "DEBUG: File loaded successfully: ${file_name}" >> "${LOG_DIR}/debug.log"
+            debug_log "DEBUG" "File loaded successfully: ${file_name}"
         else
-            echo "ERROR: Cannot load empty file: ${file_name}" >> "${LOG_DIR}/debug.log"
+            debug_log "ERROR" "Cannot load empty file: ${file_name}"
             return 1
         fi
     fi
