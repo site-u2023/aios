@@ -39,7 +39,7 @@ en|PKG_SECTION_SAMBA=File Sharing
 # =======================
 # dynamic-system-info.sh
 # =======================
-en|CONFIG_DOWNLOAD_SUCCESS=File downloaded successfully{notr_colon_notr}
+en|CONFIG_DOWNLOAD_SUCCESS=Download completed{notr_colon_notr}
 en|CONFIG_DOWNLOAD_UNNECESSARY=File already up to date{notr_colon_notr}
 
 # =======================
@@ -60,7 +60,7 @@ en|MENU_PACKAGES=Package management
 en|MENU_ADBLOCKER=Ad Blocker and DNS Encryption
 en|MENU_ACCESSPOINT=Access point settings
 en|MENU_OTHERS=Other utilities (Button settings, IPERF3, SAMBA4)
-en|MENU_EXIT=Exit
+en|MENU_EXIT=Close
 en|MENU_REMOVE=Exit and remove script
 en|MENU_BACK=Back
 en|MENU_V&MIG=IPv6 Migration Standard Provisioning
@@ -70,7 +70,7 @@ en|CONFIG_ERROR_NOT_NUMBER=Please enter a valid number
 en|CONFIG_CONFIRM_DELETE=Do you want to delete this script and related directories? (y/n){notr_colon_notr}
 en|CONFIG_DELETE_CONFIRMED=Script and related directories have been deleted. Goodbye!
 en|CONFIG_DELETE_CANCELED=Deletion canceled. Returning to menu
-en|CONFIG_EXIT_CONFIRMED=Exiting script. Goodbye!
+en|CONFIG_EXIT_CONFIRMED=Script closed. Goodbye!
 en|CONFIG_RETURN_TO_MAIN=Returning to main menu
 en|CONFIG_DOWNLOADING=Executing{notr_colon_notr} {notr_0_notr}
 en|CONFIG_DOWNLOAD_FAILED=Failed to download{notr_colon_notr} {notr_0_notr}
