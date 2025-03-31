@@ -141,7 +141,6 @@ en|MSG_SELECTED_ZONE=Selected zone{notr_colon_notr} {notr_item_notr}
 en|MSG_SELECTED_ITEM=Selected{notr_colon_notr} {notr_item_notr}
 en|MSG_SELECT_TIMEZONE=Please select your zone from the list
 en|ERR_FILE_NOT_FOUND=Error{notr_colon_notr} File not found{notr_colon_notr} {notr_file_notr}
-en|MSG_LANGUAGE_SET=Script language settings completed successfully
 
 # =======================
 # common-package.sh
