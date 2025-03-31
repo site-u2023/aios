@@ -268,16 +268,13 @@ color() {
 
 # 🔵　メッセージ系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
-# メッセージDBのパスをチェックする関数
+# メッセージDBファイルのパスをチェックする関数
 check_message_cache() {
     local lang="$1"
-    local db_path=""
-    
-    debug_log "DEBUG" "Looking for message DB for language: $lang"
     
     # キャッシュDBパス確認
     if [ -f "${CACHE_DIR}/message_db.ch" ]; then
-        db_path=$(cat "${CACHE_DIR}/message_db.ch")
+        local db_path=$(cat "${CACHE_DIR}/message_db.ch")
         if [ -f "$db_path" ]; then
             echo "$db_path"
             return 0
@@ -298,6 +295,7 @@ check_message_cache() {
     
     # 何も見つからない場合は空文字列
     echo ""
+    return 0
 }
 
 # into_memory_message関数の修正版
@@ -375,10 +373,10 @@ init_translation() {
 get_message() {
     local key="$1"
     local params="$2"  # パラメータ文字列
-    local lang="US"    # デフォルト言語
+    local lang="$DEFAULT_LANGUAGE"    # デフォルト言語
     local message=""
     
-    # 言語コードを確認
+    # 言語コードの取得
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang=$(cat "${CACHE_DIR}/message.ch")
     fi
@@ -388,7 +386,7 @@ get_message() {
         into_memory_message
     fi
     
-    # チェックメッセージキャッシュ関数を使用してDBファイルを取得
+    # check_message_cache関数を使用してDBファイルパスを取得
     local db_file=$(check_message_cache "$lang")
     
     # インメモリメッセージから検索
@@ -402,10 +400,10 @@ get_message() {
         debug_log "DEBUG" "Message found in DB file for key: $key, lang: $lang"
     fi
     
-    # USにフォールバック（非US言語で見つからない場合）
-    if [ -z "$message" ] && [ "$lang" != "US" ] && [ -f "$db_file" ]; then
-        message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
-        debug_log "DEBUG" "Key not found in $lang, using US fallback for: $key"
+    # デフォルト言語にフォールバック（見つからない場合）
+    if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ] && [ -f "$db_file" ]; then
+        message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        debug_log "DEBUG" "Key not found in $lang, using fallback for: $key"
     fi
     
     # メッセージが見つからない場合はキーをそのまま返す
