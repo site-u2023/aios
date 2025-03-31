@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.14-01-01"
+SCRIPT_VERSION="2025.03.31-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1074,12 +1074,12 @@ normalize_language() {
     else
         debug_log "DEBUG" "No specific translation DB found for ${country_code}"
         
-        # 英語版のDBを確認
-        local english_db="${BASE_DIR}/messages_en.db"
-        if [ -f "$english_db" ]; then
-            target_db="$english_db"
+        # デフォルト言語のDBを確認
+        local default_db="${BASE_DIR}/messages_${DEFAULT_LANGUAGE}.db"
+        if [ -f "$default_db" ]; then
+            target_db="$default_db"
             found=1
-            debug_log "DEBUG" "Using English DB: ${english_db}"
+            debug_log "DEBUG" "Using default language DB: ${default_db}"
         fi
     fi
 
