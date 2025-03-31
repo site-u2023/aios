@@ -375,8 +375,6 @@ get_message() {
         if [ -n "$MSG_MEMORY" ]; then
             # 改行を考慮したメッセージ検索
             message=$(printf '%s\n' "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | head -1 | sed "s/^${lang}|${key}=//")
-            if [ -n "$message" ]; then
-            fi
         fi
     fi
     
