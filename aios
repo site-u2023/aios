@@ -287,11 +287,10 @@ into_memory_message() {
     fi
     
     # 基本メッセージ（英語）- 個別定義
-    MSG_MEMORY=""
-    MSG_MEMORY="${MSG_MEMORY}en|CONFIG_DOWNLOAD_SUCCESS=File downloaded successfully: "
-    MSG_MEMORY="${MSG_MEMORY}en|CONFIG_DOWNLOAD_UNNECESSARY=File already up to date: "
-    MSG_MEMORY="${MSG_MEMORY}en|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared. "
-    MSG_MEMORY="${MSG_MEMORY}en|MSG_DELETE_COMPLETE=Delete completed. All based data has been cleared."
+    MSG_MEMORY="en|CONFIG_DOWNLOAD_SUCCESS=File downloaded successfully:"
+    MSG_MEMORY="${MSG_MEMORY} en|CONFIG_DOWNLOAD_UNNECESSARY=File already up to date:"
+    MSG_MEMORY="${MSG_MEMORY} en|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared"
+    MSG_MEMORY="${MSG_MEMORY} en|MSG_DELETE_COMPLETE=Delete completed. All based data has been cleared"
     
     # メッセージDBファイルのパスを取得
     local db_file=$(check_message_cache "$lang")
@@ -317,7 +316,7 @@ ${translations}"
     # 初期化フラグと言語を設定
     MSG_MEMORY_INITIALIZED="true"
     MSG_MEMORY_LANG="$lang"
-    debug_log "DEBUG" "Memory messages initialized for language: $lang"
+    echo "DEBUG: Memory messages initialized for language: ${lang}" >> "${LOG_DIR}/debug.log"
     return 0
 }
 
@@ -1677,38 +1676,40 @@ download_finalize() {
     local hidden_mode="$6"
     local status_type="$7"
     
-    echo "DEBUG: Finalizing download for ${file_name}, status=${status_type}" >> ${LOG_DIR}/debug.log
+    echo "DEBUG: Finalizing download for ${file_name}, status=${status_type}" >> "${LOG_DIR}/debug.log"
     
     # ファイルが実際に存在するか確認
     if [ ! -f "${BASE_DIR}/${file_name}" ]; then
-        echo "ERROR: File not found: ${BASE_DIR}/${file_name}" >> ${LOG_DIR}/debug.log
+        echo "ERROR: File not found: ${BASE_DIR}/${file_name}" >> "${LOG_DIR}/debug.log"
         return 1
     fi
     
     # 隠しモードチェック
     if [ "$hidden_mode" = "true" ]; then
-        echo "DEBUG: Hidden mode is active, skipping status message" >> ${LOG_DIR}/debug.log
+        echo "DEBUG: Hidden mode is active, skipping status message" >> "${LOG_DIR}/debug.log"
         # 隠しモードの場合はメッセージを表示しない
-    else        
-        # ファイル名がDBファイルかどうかをチェック (.db拡張子)
+    else
+        # DBファイル処理のデバッグ出力のみを保持
         if echo "$file_name" | grep -q "\.db$"; then
-            echo "DEBUG: DB file handling for ${file_name}" >> ${LOG_DIR}/debug.log
+            echo "DEBUG: DB file handling for ${file_name}" >> "${LOG_DIR}/debug.log"
+            # DBファイルは通常処理と同様にする（特別な処理を削除）
         fi
         
-        # 統一されたメッセージフォーマットで一度だけ出力
-        echo "${status_message}: ${file_name} ${clean_remote_version} ${API_STATUS}${load_mode:+ (Loaded)}"
+        # status_messageがAPIステータスを含むことを確認
+        local full_message="${status_message}: ${file_name} ${clean_remote_version} ${API_STATUS}${load_mode:+ (Loaded)}"
+        echo "${full_message}"
     fi
     
     # ファイル読込み処理
     if [ "$load_mode" = "true" ]; then
-        echo "DEBUG: Loading file: ${BASE_DIR}/${file_name}" >> ${LOG_DIR}/debug.log
+        echo "DEBUG: Loading file: ${BASE_DIR}/${file_name}" >> "${LOG_DIR}/debug.log"
         
         if [ -s "${BASE_DIR}/${file_name}" ]; then
             # shellcheck source=/dev/null
             . "${BASE_DIR}/${file_name}"
-            echo "DEBUG: File loaded successfully: ${file_name}" >> ${LOG_DIR}/debug.log
+            echo "DEBUG: File loaded successfully: ${file_name}" >> "${LOG_DIR}/debug.log"
         else
-            echo "ERROR: Cannot load empty file: ${file_name}" >> ${LOG_DIR}/debug.log
+            echo "ERROR: Cannot load empty file: ${file_name}" >> "${LOG_DIR}/debug.log"
             return 1
         fi
     fi
