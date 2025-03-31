@@ -1467,11 +1467,11 @@ download() {
     local file_name="$1"
     shift
 
-    echo "DEBUG: Download function called for file='${file_name}'" >> /tmp/aios_debug.log
+    echo "DEBUG: Download function called for file='${file_name}'" >> ${LOG_DIR}/debug.log
     
     # 空ファイル名のチェック
     if [ -z "$file_name" ]; then
-        echo "ERROR: Empty filename detected in download function call" >> /tmp/aios_debug.log
+        echo "ERROR: Empty filename detected in download function call" >> ${LOG_DIR}/debug.log
         return 1
     fi
 
@@ -1507,18 +1507,18 @@ download() {
     # ファイルの存在確認を追加
     local file_exists="true"
     if [ ! -f "${BASE_DIR}/$file_name" ]; then
-        echo "DEBUG: File ${BASE_DIR}/$file_name does not exist, forcing download" >> /tmp/aios_debug.log
+        echo "DEBUG: File ${BASE_DIR}/$file_name does not exist, forcing download" >> ${LOG_DIR}/debug.log
         file_exists="false"
         update_required="true"
     elif [ ! -s "${BASE_DIR}/$file_name" ]; then
-        echo "DEBUG: File ${BASE_DIR}/$file_name exists but is empty, forcing download" >> /tmp/aios_debug.log
+        echo "DEBUG: File ${BASE_DIR}/$file_name exists but is empty, forcing download" >> ${LOG_DIR}/debug.log
         file_exists="false"
         update_required="true"
     fi
     
     # デバッグモード時は常にダウンロード
     if [ "$DEBUG_MODE" = "true" ]; then
-        echo "DEBUG: Debug mode enabled, forcing download for ${file_name}" >> /tmp/aios_debug.log
+        echo "DEBUG: Debug mode enabled, forcing download for ${file_name}" >> ${LOG_DIR}/debug.log
         update_required="true"
     fi
     
@@ -1530,22 +1530,24 @@ download() {
         echo "DEBUG: Executing download_fetch_file for ${file_name}" >> /tmp/aios_debug.log
         if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode"; then
             debug_log "ERROR" "Download process failed for $file_name"
-            echo "ERROR: download_fetch_file failed for ${file_name}" >> /tmp/aios_debug.log
+            echo "ERROR: download_fetch_file failed for ${file_name}" >> ${LOG_DIR}/debug.log
             return 1
         fi
         status_type="success"
         status_message="$(get_message "CONFIG_DOWNLOAD_SUCCESS")"
     else
-        echo "DEBUG: Skipping download for ${file_name} (not needed)" >> /tmp/aios_debug.log
+        echo "DEBUG: Skipping download for ${file_name} (not needed)" >> ${LOG_DIR}/debug.log
     fi
     
     # ファイルの存在を再確認
     if [ ! -f "${BASE_DIR}/$file_name" ]; then
-        echo "ERROR: File ${BASE_DIR}/$file_name still does not exist after download attempt" >> /tmp/aios_debug.log
+        echo "ERROR: File ${BASE_DIR}/$file_name still does not exist after download attempt" >> ${LOG_DIR}/debug.log
         debug_log "ERROR" "File not found after download attempt: $file_name"
         return 1
     fi
-    
+
+    echo "DEBUG: Calling download_finalize with file=${file_name}, status=${status_type}" >> ${LOG_DIR}/debug.log
+
     # 結果表示とファイル読み込み
     download_finalize "$file_name" "$status_message" "$clean_remote_version" "$auth_message" "$load_mode" "$hidden_mode" "$status_type"
     
@@ -1617,7 +1619,7 @@ download_fetch_file() {
     local install_path="${BASE_DIR}/$file_name"
     local script_file="${CACHE_DIR}/script.ch"
     
-    echo "DEBUG: download_fetch_file called for ${file_name}" >> /tmp/aios_debug.log
+    echo "DEBUG: download_fetch_file called for ${file_name}" >> ${LOG_DIR}/debug.log
     
     # ダウンロードURLの設定
     local remote_url="${BASE_URL}/$file_name"
@@ -1627,7 +1629,7 @@ download_fetch_file() {
         remote_url="${remote_url}${CACHE_BUST}"
     fi
     
-    echo "DEBUG: Downloading from ${remote_url} to ${install_path}" >> /tmp/aios_debug.log
+    echo "DEBUG: Downloading from ${remote_url} to ${install_path}" >> ${LOG_DIR}/debug.log
     
     # ファイルをダウンロード
     if ! wget -q --no-check-certificate -O "$install_path" "$remote_url"; then
@@ -1638,18 +1640,18 @@ download_fetch_file() {
     
     # ファイル検証
     if [ ! -f "$install_path" ]; then
-        echo "ERROR: File not found after download: ${install_path}" >> /tmp/aios_debug.log
+        echo "ERROR: File not found after download: ${install_path}" >> ${LOG_DIR}/debug.log
         debug_log "ERROR" "Downloaded file not found: $file_name"
         return 1
     fi
     
     if [ ! -s "$install_path" ]; then
-        echo "ERROR: Empty file downloaded: ${install_path}" >> /tmp/aios_debug.log
+        echo "ERROR: Empty file downloaded: ${install_path}" >> ${LOG_DIR}/debug.log
         debug_log "ERROR" "Downloaded file is empty: $file_name"
         return 1
     fi
     
-    echo "DEBUG: File successfully downloaded to ${install_path}" >> /tmp/aios_debug.log
+    echo "DEBUG: File successfully downloaded to ${install_path}" >> ${LOG_DIR}/debug.log
     
     # 権限設定
     if [ "$chmod_mode" = "true" ]; then
@@ -1666,51 +1668,47 @@ download_fetch_file() {
 # download_finalize関数の修正
 download_finalize() {
     local file_name="$1"
-    local status_message="$2"
+    local status_message="$2" 
     local clean_remote_version="$3"
-    local auth_method="$4"
+    local auth_message="$4"
     local load_mode="$5"
     local hidden_mode="$6"
     local status_type="$7"
-    local install_path="${BASE_DIR}/$file_name"
     
-    # 空のファイル名チェック（防御策）
-    if [ -z "$file_name" ]; then
-        debug_log "ERROR" "Empty filename provided to download_finalize. Skipping display."
-        return 0
+    echo "DEBUG: Finalizing download for ${file_name}, status=${status_type}" >> ${LOG_DIR}/debug.log
+    
+    # ファイルが実際に存在するか確認
+    if [ ! -f "${BASE_DIR}/${file_name}" ]; then
+        echo "ERROR: File not found: ${BASE_DIR}/${file_name}" >> ${LOG_DIR}/debug.log
+        return 1
     fi
     
-    # APIレート情報を取得
-    local api_status=$(check_api_rate_limit)
-    
-    # 読み込みが必要かのフラグ設定
-    local should_load="false"
-    local action_message=""
-    if [ "$load_mode" = "true" ] || echo "$file_name" | grep -q ".*\\.sh"; then
-        should_load="true"
-        action_message="(Loaded)"
-    fi
-    
-    # メッセージ構築
-    local message="${status_message} ${file_name} ${clean_remote_version} ${api_status}"
-    if [ -n "$action_message" ]; then
-        message="${message} ${action_message}"
-    fi
-
-    # メッセージ出力（条件分岐の構造を整理）
+    # 隠しモードチェック
     if [ "$hidden_mode" = "true" ]; then
-        # 非表示モードの場合はデバッグログのみ
-        debug_log "DEBUG" "Quiet mode ${message}"
-    else
-        # 通常出力モード
-        printf "%s\n" "$(color white "${message}")"
+        echo "DEBUG: Hidden mode is active, skipping status message" >> ${LOG_DIR}/debug.log
+        # 隠しモードの場合はメッセージを表示しない
+    else        
+        # ファイル名がDBファイルかどうかをチェック (.db拡張子)
+        if echo "$file_name" | grep -q "\.db$"; then
+            echo "DEBUG: DB file handling for ${file_name}" >> ${LOG_DIR}/debug.log
+        fi
+        
+        # 統一されたメッセージフォーマットで一度だけ出力
+        echo "${status_message}: ${file_name} ${clean_remote_version} ${API_STATUS}${load_mode:+ (Loaded)}"
     fi
     
-    # ファイル読み込み処理
-    if [ "$should_load" = "true" ]; then
-        debug_log "DEBUG" "Now loading source file: $file_name"
-        . "$install_path"
-        debug_log "DEBUG" "Successfully loaded: $file_name"
+    # ファイル読込み処理
+    if [ "$load_mode" = "true" ]; then
+        echo "DEBUG: Loading file: ${BASE_DIR}/${file_name}" >> ${LOG_DIR}/debug.log
+        
+        if [ -s "${BASE_DIR}/${file_name}" ]; then
+            # shellcheck source=/dev/null
+            . "${BASE_DIR}/${file_name}"
+            echo "DEBUG: File loaded successfully: ${file_name}" >> ${LOG_DIR}/debug.log
+        else
+            echo "ERROR: Cannot load empty file: ${file_name}" >> ${LOG_DIR}/debug.log
+            return 1
+        fi
     fi
     
     return 0
