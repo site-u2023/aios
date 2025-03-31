@@ -1461,18 +1461,24 @@ get_commit_version() {
     return 1
 }
 
+# download関数の修正 - デバッグモード時は常にダウンロード実行
 download() {
-    # ファイル名を最初の引数として処理
+    # ファイル名を最初の引数として処理、残りはオプション
     local file_name="$1"
     shift
 
-    echo "DEBUG: DOWNLOAD CALLED: filename='${file_name}'" >> /tmp/aios_debug.log
+    echo "DEBUG: DOWNLOAD CALLED: filename='${file_name}' timestamp=$(date +%s)" >> /tmp/aios_debug.log
     
     # 空ファイル名のチェック
     if [ -z "$file_name" ]; then
         echo "ERROR: Empty filename detected in download call" >> /tmp/aios_debug.log
+        # スタックトレース（可能な場合）
+        i=0
+        while caller $i >> /tmp/aios_debug.log 2>/dev/null; do
+            i=$((i+1))
+        done
         return 1
-    fi
+    }
 
     # 設定変数の初期化
     local hidden_mode="false"
@@ -1498,7 +1504,7 @@ download() {
     local version_data
     version_data=$(download_check_version "$file_name")
     
-    # デバッグモードではスキップ判定を無視して常にダウンロード
+    # デバッグモード時は常にダウンロード実行
     local update_required
     if [ "$DEBUG_MODE" = "true" ]; then
         update_required="true"
@@ -1603,6 +1609,7 @@ download_fetch_file() {
     local clean_remote_version="$2"
     local chmod_mode="$3"
     local install_path="${BASE_DIR}/$file_name"
+    local script_file="${CACHE_DIR}/script.ch"
     
     echo "DEBUG: download_fetch_file called for ${file_name}" >> /tmp/aios_debug.log
     
@@ -1626,13 +1633,13 @@ download_fetch_file() {
     # ファイル検証
     if [ ! -f "$install_path" ]; then
         echo "ERROR: File not found after download: ${install_path}" >> /tmp/aios_debug.log
-        debug_log "ERROR" "ダウンロードファイルが存在しません: $file_name"
+        debug_log "ERROR" "Downloaded file not found: $file_name"
         return 1
     fi
     
     if [ ! -s "$install_path" ]; then
         echo "ERROR: Empty file downloaded: ${install_path}" >> /tmp/aios_debug.log
-        debug_log "ERROR" "ダウンロードファイルが空です: $file_name"
+        debug_log "ERROR" "Downloaded file is empty: $file_name"
         return 1
     fi
     
