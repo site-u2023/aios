@@ -350,36 +350,6 @@ init_translation() {
     return 0
 }
 
-migrate_message_db() {
-    # base.dbからen.dbへの移行用関数（必要な場合のみ使用）
-    if [ -f "${BASE_DIR}/message_base.db" ] && [ ! -f "${BASE_DIR}/message_en.db" ]; then
-        debug_log "DEBUG" "Migrating messages_base.db to message_en.db"
-        
-        # ファイルをコピー
-        cp "${BASE_DIR}/messages_base.db" "${BASE_DIR}/message_en.db"
-        
-        # コピー成功確認
-        if [ -f "${BASE_DIR}/message_en.db" ]; then
-            debug_log "DEBUG" "Migration successful"
-            
-            # message_db.chに新しいパスを設定
-            if [ -f "${CACHE_DIR}/message_db.ch" ] && grep -q "messages_base.db" "${CACHE_DIR}/message_db.ch"; then
-                echo "${BASE_DIR}/message_en.db" > "${CACHE_DIR}/message_db.ch"
-                debug_log "DEBUG" "Updated message_db.ch to use message_en.db"
-            fi
-            
-            return 0
-        else
-            debug_log "ERROR" "Failed to create message_en.db"
-            return 1
-        fi
-    fi
-    
-    debug_log "DEBUG" "No migration needed"
-    return 0
-}
-
-
 get_message() {
     local key="$1"
     local params="$2"  # パラメータ文字列
