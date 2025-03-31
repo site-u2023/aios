@@ -352,25 +352,25 @@ get_message() {
     
     echo "DEBUG: get_message called for key='${key}' lang='${lang}'" >> /tmp/aios_debug.log
     
-    # メモリメッセージを初期化
-    if [ "$MSG_MEMORY_INITIALIZED" != "true" ] || [ "$MSG_MEMORY_LANG" != "$lang" ]; then
-        into_memory_message
+    # DBファイルから直接検索（最優先）
+    local db_file=$(check_message_cache "$lang")
+    if [ -n "$db_file" ] && [ -f "$db_file" ]; then
+        message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
+            # デフォルト言語にフォールバック
+            message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        fi
     fi
     
-    # インメモリメッセージから検索
-    if [ -n "$MSG_MEMORY" ]; then
-        message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
-    fi
-    
-    # メモリに見つからない場合、DBファイルから直接検索
+    # メモリキャッシュから検索（最後の手段として）
     if [ -z "$message" ]; then
-        local db_file=$(check_message_cache "$lang")
-        if [ -n "$db_file" ]; then
-            message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
-            if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
-                # デフォルト言語にフォールバック
-                message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
-            fi
+        # メモリメッセージを初期化
+        if [ "$MSG_MEMORY_INITIALIZED" != "true" ] || [ "$MSG_MEMORY_LANG" != "$lang" ]; then
+            into_memory_message
+        fi
+        
+        if [ -n "$MSG_MEMORY" ]; then
+            message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
         fi
     fi
     
