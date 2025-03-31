@@ -291,11 +291,11 @@ en|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared.
 en|MSG_DELETE_COMPLETE=Delete completed. All based data has been cleared."
     
     # 言語DBファイルを決定
-    local db_file="${BASE_DIR}/messages_${DEFAULT_LANGUAGE}.db"
+    local db_file="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
     if [ -f "${CACHE_DIR}/message_db.ch" ]; then
         db_file=$(cat "${CACHE_DIR}/message_db.ch")
-    elif [ -f "${BASE_DIR}/messages_${lang}.db" ]; then
-        db_file="${BASE_DIR}/messages_${lang}.db"
+    elif [ -f "${BASE_DIR}/message_${lang}.db" ]; then
+        db_file="${BASE_DIR}/message_${lang}.db"
     fi
     
     # 翻訳されたメッセージを追加（デフォルト言語と異なる場合）
@@ -337,9 +337,9 @@ init_translation() {
     fi
     
     # メッセージDBが存在するがmessage.chが無い場合、デフォルト言語を設定
-    if [ ! -f "${CACHE_DIR}/message.ch" ] && [ -f "${BASE_DIR}/messages_${DEFAULT_LANGUAGE}.db" ]; then
+    if [ ! -f "${CACHE_DIR}/message.ch" ] && [ -f "${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db" ]; then
         echo "$DEFAULT_LANGUAGE" > "${CACHE_DIR}/message.ch"
-        echo "${BASE_DIR}/messages_${DEFAULT_LANGUAGE}.db" > "${CACHE_DIR}/message_db.ch"
+        echo "${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db" > "${CACHE_DIR}/message_db.ch"
         debug_log "DEBUG" "Created default language settings: $DEFAULT_LANGUAGE"
     fi
     
@@ -352,25 +352,25 @@ init_translation() {
 
 migrate_message_db() {
     # base.dbからen.dbへの移行用関数（必要な場合のみ使用）
-    if [ -f "${BASE_DIR}/messages_base.db" ] && [ ! -f "${BASE_DIR}/messages_en.db" ]; then
-        debug_log "DEBUG" "Migrating messages_base.db to messages_en.db"
+    if [ -f "${BASE_DIR}/message_base.db" ] && [ ! -f "${BASE_DIR}/message_en.db" ]; then
+        debug_log "DEBUG" "Migrating messages_base.db to message_en.db"
         
         # ファイルをコピー
-        cp "${BASE_DIR}/messages_base.db" "${BASE_DIR}/messages_en.db"
+        cp "${BASE_DIR}/messages_base.db" "${BASE_DIR}/message_en.db"
         
         # コピー成功確認
-        if [ -f "${BASE_DIR}/messages_en.db" ]; then
+        if [ -f "${BASE_DIR}/message_en.db" ]; then
             debug_log "DEBUG" "Migration successful"
             
             # message_db.chに新しいパスを設定
             if [ -f "${CACHE_DIR}/message_db.ch" ] && grep -q "messages_base.db" "${CACHE_DIR}/message_db.ch"; then
-                echo "${BASE_DIR}/messages_en.db" > "${CACHE_DIR}/message_db.ch"
-                debug_log "DEBUG" "Updated message_db.ch to use messages_en.db"
+                echo "${BASE_DIR}/message_en.db" > "${CACHE_DIR}/message_db.ch"
+                debug_log "DEBUG" "Updated message_db.ch to use message_en.db"
             fi
             
             return 0
         else
-            debug_log "ERROR" "Failed to create messages_en.db"
+            debug_log "ERROR" "Failed to create message_en.db"
             return 1
         fi
     fi
@@ -384,7 +384,7 @@ get_message() {
     local key="$1"
     local params="$2"  # パラメータ文字列
     local lang="$DEFAULT_LANGUAGE"    # デフォルト言語
-    local db_file="${BASE_DIR}/messages_${DEFAULT_LANGUAGE}.db"  # デフォルトDB
+    local db_file="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"  # デフォルトDB
     local message=""
     
     # 言語コードの取得（キャッシュチェックを最初に行う）
@@ -403,9 +403,9 @@ get_message() {
         # キャッシュに保存されたDBパスを使用（最優先）
         db_file=$(cat "${CACHE_DIR}/message_db.ch")
         debug_log "DEBUG" "Using message DB from cache: $db_file"
-    elif [ -f "${BASE_DIR}/messages_${lang}.db" ]; then
+    elif [ -f "${BASE_DIR}/message_${lang}.db" ]; then
         # 言語固有DBを使用
-        db_file="${BASE_DIR}/messages_${lang}.db"
+        db_file="${BASE_DIR}/message_${lang}.db"
         debug_log "DEBUG" "Using language specific DB: $db_file"
     fi
     
@@ -1974,7 +1974,7 @@ check_common() {
             download "common-feed-package.sh" "hidden" "chmod" "load"
             download "menu.db" "hidden"
             download "country.db" "hidden"
-            download "messages_${DEFAULT_LANGUAGE}.db" "hidden"
+            download "message_${DEFAULT_LANGUAGE}.db" "hidden"
             download "local-package.db" "hidden"
             download "custom-package.db" "hidden"
             print_banner
@@ -1993,7 +1993,7 @@ check_common() {
             download "common-feed-package.sh" "chmod" "load"
             download "menu.db"
             download "country.db"
-            download "messages_${DEFAULT_LANGUAGE}.db"
+            download "message_${DEFAULT_LANGUAGE}.db"
             download "local-package.db"
             download "custom-package.db"
             print_banner
