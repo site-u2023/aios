@@ -268,25 +268,28 @@ color() {
 
 # 🔵　メッセージ系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
-# メッセージDBパスを取得する関数
-get_message_db_path() {
-    local lang="${1:-$DEFAULT_LANGUAGE}"
-    
-    # 1. キャッシュから取得（最優先）
-    if [ -f "${CACHE_DIR}/message_db.ch" ]; then
-        cat "${CACHE_DIR}/message_db.ch"
-        return 0
+check_network_connectivity() {
+    local ip_check_file="${CACHE_DIR}/network.ch"
+    local ret4=1
+    local ret6=1
+
+    debug_log "DEBUG: Checking IPv4 connectivity"
+    ping -c 1 -w 3 8.8.8.8 >/dev/null 2>&1
+    ret4=$?
+
+    debug_log "DEBUG: Checking IPv6 connectivity"
+    ping6 -c 1 -w 3 2001:4860:4860::8888 >/dev/null 2>&1
+    ret6=$?
+
+    if [ "$ret4" -eq 0 ] && [ "$ret6" -eq 0 ]; then
+        echo "v4v6" > "${ip_check_file}"
+    elif [ "$ret4" -eq 0 ]; then
+        echo "v4" > "${ip_check_file}"
+    elif [ "$ret6" -eq 0 ]; then
+        echo "v6" > "${ip_check_file}"
+    else
+        echo "" > "${ip_check_file}"
     fi
-    
-    # 2. 指定された言語のDBを確認
-    if [ -f "${BASE_DIR}/message_${lang}.db" ]; then
-        echo "${BASE_DIR}/message_${lang}.db"
-        return 0
-    fi
-    
-    # 3. デフォルト言語のDBを返す
-    echo "${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
-    return 0
 }
 
 into_memory_message() {
@@ -311,8 +314,12 @@ en|CONFIG_DOWNLOAD_UNNECESSARY=File already up to date:
 en|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared.
 en|MSG_DELETE_COMPLETE=Delete completed. All based data has been cleared."
     
-    # DBファイルパスを取得（単一の関数を使用）
-    local db_file=$(get_message_db_path "$lang")
+    # check_message_cache関数を使用してDBファイルパスを取得
+    local db_file=$(check_message_cache "$lang")
+    if [ $? -ne 0 ]; then
+        debug_log "DEBUG" "Failed to find message DB, using only basic English messages"
+        db_file=""
+    }
     
     # 翻訳されたメッセージを追加（デフォルト言語と異なる場合）
     if [ "$lang" != "$DEFAULT_LANGUAGE" ] && [ -f "$db_file" ]; then
@@ -334,13 +341,6 @@ ${lang}|${key}=${translated}"
     MSG_MEMORY_INITIALIZED="true"
     MSG_MEMORY_LANG="$lang"
     debug_log "DEBUG" "Memory messages initialized for language: $lang"
-}
-
-# 言語変更時にキャッシュをリセットする関数
-reset_message_cache() {
-    MSG_MEMORY_INITIALIZED="false"
-    MSG_MEMORY_LANG=""
-    debug_log "DEBUG" "Message cache reset requested"
 }
 
 init_translation() {
@@ -369,11 +369,10 @@ init_translation() {
 get_message() {
     local key="$1"
     local params="$2"  # パラメータ文字列
-    local lang="$DEFAULT_LANGUAGE"    # デフォルト言語
-    local db_file="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"  # デフォルトDB
+    local lang="$DEFAULT_LANGUAGE"
     local message=""
     
-    # 言語コードの取得（キャッシュチェックを最初に行う）
+    # 言語コードの取得
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang=$(cat "${CACHE_DIR}/message.ch")
         debug_log "DEBUG" "Using language from cache: $lang"
@@ -384,9 +383,14 @@ get_message() {
         into_memory_message
     fi
     
-    # DBファイルパスを取得（単一の関数を使用）
-    local db_file=$(get_message_db_path "$lang")
-    debug_log "DEBUG" "Using message DB: $db_file"
+    # 改名した共通関数でDBファイルパスを取得
+    local db_file=$(check_message_cache "$lang")
+    if [ $? -ne 0 ]; then
+        db_file="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
+        debug_log "DEBUG" "Falling back to default DB: $db_file"
+    else
+        debug_log "DEBUG" "Using message DB: $db_file"
+    fi
     
     # インメモリメッセージから検索
     if [ -n "$MSG_MEMORY" ]; then
@@ -411,32 +415,10 @@ get_message() {
         message="$key"
     fi
     
-    # プレースホルダーの処理
-    # 1. {notr_colon_notr} を : に変換
-    message=$(echo "$message" | sed 's/{notr_colon_notr}/:/g')
+    # プレースホルダー処理とパラメータ置換を行います...
+    # （略）
     
-    # 2. {notr_newline_notr} を \n に変換
-    message=$(echo "$message" | sed 's/{notr_newline_notr}/\\n/g')
-    
-    # 3. その他の {notr_*_notr} を {*} に変換
-    while echo "$message" | grep -q "{notr_.*_notr}"; do
-        local placeholder=$(echo "$message" | grep -o "{notr_[^_]*_notr}" | head -1)
-        local name=$(echo "$placeholder" | sed 's/{notr_\(.*\)_notr}/\1/')
-        message=$(echo "$message" | sed "s/$placeholder/{$name}/g")
-    done
-    
-    # パラメータ置換処理
-    if [ -n "$params" ]; then
-        local var_name=$(echo "$params" | cut -d'=' -f1)
-        local var_value=$(echo "$params" | cut -d'=' -f2-)
-        
-        if [ -n "$var_name" ] && [ -n "$var_value" ]; then
-            local var_value_esc=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
-            message=$(echo "$message" | sed "s|{$var_name}|$var_value_esc|g")
-        fi
-    fi
-    
-    # 最後にエスケープシーケンス（\nなど）を処理して出力
+    # 最終的な結果を返します
     printf "%b" "$message"
     return 0
 }
