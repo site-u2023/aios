@@ -355,14 +355,14 @@ migrate_message_db() {
             if [ -f "${CACHE_DIR}/message_db.ch" ] && grep -q "messages_base.db" "${CACHE_DIR}/message_db.ch"; then
                 echo "${BASE_DIR}/messages_en.db" > "${CACHE_DIR}/message_db.ch"
                 debug_log "DEBUG" "Updated message_db.ch to use messages_en.db"
-            }
+            fi
             
             return 0
         else
             debug_log "ERROR" "Failed to create messages_en.db"
             return 1
-        }
-    }
+        fi
+    fi
     
     debug_log "DEBUG" "No migration needed"
     return 0
