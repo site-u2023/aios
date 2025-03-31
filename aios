@@ -288,8 +288,6 @@ into_memory_message() {
     
     MSG_MEMORY_INITIALIZED="true"
     MSG_MEMORY_LANG="$lang"
-    
-    echo "DEBUG: Memory messages initialized for language: ${lang}" >> "${LOG_DIR}/debug.log"
 }
 
 # 翻訳システムを初期化する関数
@@ -378,7 +376,6 @@ get_message() {
             # 改行を考慮したメッセージ検索
             message=$(printf '%s\n' "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | head -1 | sed "s/^${lang}|${key}=//")
             if [ -n "$message" ]; then
-                echo "DEBUG: Message found in memory for key: $key" >> "${LOG_DIR}/debug.log"
             fi
         fi
     fi
