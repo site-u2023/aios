@@ -298,19 +298,17 @@ check_message_cache() {
     return 0
 }
 
-# into_memory_message関数の修正版
+# メッセージをメモリに読み込む関数
 into_memory_message() {
     local lang="$DEFAULT_LANGUAGE"
     
     # キャッシュから現在の言語を取得
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang=$(cat "${CACHE_DIR}/message.ch")
-        debug_log "DEBUG" "Loading messages into memory for language: $lang"
-    fi
+    }
     
     # メモリメッセージが既に初期化されていれば処理をスキップ
     if [ "$MSG_MEMORY_INITIALIZED" = "true" ] && [ "$MSG_MEMORY_LANG" = "$lang" ]; then
-        debug_log "DEBUG" "Memory messages already initialized for $lang"
         return 0
     fi
     
@@ -321,29 +319,22 @@ en|CONFIG_DOWNLOAD_UNNECESSARY=File already up to date:
 en|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared.
 en|MSG_DELETE_COMPLETE=Delete completed. All based data has been cleared."
     
-    # check_message_cache関数を使用してDBファイルパスを取得
+    # DBファイルを決定
     local db_file=$(check_message_cache "$lang")
     
-    # 翻訳されたメッセージを追加（デフォルト言語と異なり、かつDBファイルが存在する場合）
+    # 翻訳されたメッセージを追加（デフォルト言語と異なる場合）
     if [ "$lang" != "$DEFAULT_LANGUAGE" ] && [ -f "$db_file" ]; then
-        # 頻繁に使われるメッセージキーのリスト
-        local key_list="CONFIG_DOWNLOAD_SUCCESS CONFIG_DOWNLOAD_UNNECESSARY MSG_RESET_COMPLETE MSG_DELETE_COMPLETE"
-        
-        # DBから翻訳を抽出して追加
-        for key in $key_list; do
-            local translated=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
-            if [ -n "$translated" ]; then
-                MSG_MEMORY="${MSG_MEMORY}
-${lang}|${key}=${translated}"
-                debug_log "DEBUG" "Added translation for $key in $lang"
-            fi
-        done
+        # 頻繁に使われるメッセージキーに対応する翻訳を追加
+        MSG_MEMORY="${MSG_MEMORY}
+$(grep "^${lang}|CONFIG_DOWNLOAD_SUCCESS=" "$db_file" 2>/dev/null)
+$(grep "^${lang}|CONFIG_DOWNLOAD_UNNECESSARY=" "$db_file" 2>/dev/null)
+$(grep "^${lang}|MSG_RESET_COMPLETE=" "$db_file" 2>/dev/null)
+$(grep "^${lang}|MSG_DELETE_COMPLETE=" "$db_file" 2>/dev/null)"
     fi
     
     # 初期化フラグと言語を設定
     MSG_MEMORY_INITIALIZED="true"
     MSG_MEMORY_LANG="$lang"
-    debug_log "DEBUG" "Memory messages initialized for language: $lang"
 }
 
 init_translation() {
