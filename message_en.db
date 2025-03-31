@@ -40,7 +40,7 @@ en|PKG_SECTION_SAMBA=File Sharing
 # dynamic-system-info.sh
 # =======================
 en|CONFIG_DOWNLOAD_SUCCESS=Download completed{notr_colon_notr}
-en|CONFIG_DOWNLOAD_UNNECESSARY=Already using latest version of{notr_colon_notr}
+en|CONFIG_DOWNLOAD_UNNECESSARY=File already up to date{notr_colon_notr}
 
 # =======================
 # common-menu.sh
