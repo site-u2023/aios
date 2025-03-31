@@ -388,14 +388,8 @@ get_message() {
         into_memory_message
     fi
     
-    # 改名した共通関数でDBファイルパスを取得
+    # メッセージDBファイルのパスを取得
     local db_file=$(check_message_cache "$lang")
-    if [ $? -ne 0 ]; then
-        db_file="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
-        debug_log "DEBUG" "Falling back to default DB: $db_file"
-    else
-        debug_log "DEBUG" "Using message DB: $db_file"
-    fi
     
     # インメモリメッセージから検索
     if [ -n "$MSG_MEMORY" ]; then
@@ -420,12 +414,35 @@ get_message() {
         message="$key"
     fi
     
-    # プレースホルダー処理とパラメータ置換を行います...
-    # （略）
+    # プレースホルダー処理 - {notr_XXX_notr}は翻訳しないプレースホルダーを表す
+    if [ -n "$params" ]; then
+        debug_log "DEBUG" "Processing placeholders with params: $params"
+        
+        # パラメータを分割して処理
+        IFS=',' read -r -a param_array <<EOF
+$params
+EOF
+        
+        for param in "${param_array[@]}"; do
+            # キーと値を分割
+            key_val=$(echo "$param" | tr -d ' ')
+            p_key=$(echo "$key_val" | cut -d'=' -f1)
+            p_value=$(echo "$key_val" | cut -d'=' -f2-)
+            
+            if [ -n "$p_key" ] && [ -n "$p_value" ]; then
+                # 通常のプレースホルダー置換処理
+                message=$(echo "$message" | sed "s/{$p_key}/$p_value/g")
+                
+                # 翻訳しないプレースホルダー処理 {notr_XXX_notr}
+                message=$(echo "$message" | sed "s/{notr_${p_key}_notr}/$p_value/g")
+            fi
+        done
+        
+        debug_log "DEBUG" "Placeholders processed for message"
+    fi
     
     # 最終的な結果を返します
-    printf "%b" "$message"
-    return 0
+    printf "%s" "$message"
 }
 
 # 🔴　メッセージ系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
