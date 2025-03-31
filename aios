@@ -284,9 +284,8 @@ into_memory_message() {
         return 0
     fi
     
-    # 基本メッセージ（英語）
-    MSG_MEMORY="
-en|CONFIG_DOWNLOAD_SUCCESS=File downloaded successfully:
+    # 基本メッセージ（英語）- 末尾の改行を削除
+    MSG_MEMORY="en|CONFIG_DOWNLOAD_SUCCESS=File downloaded successfully:
 en|CONFIG_DOWNLOAD_UNNECESSARY=File already up to date:
 en|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared.
 en|MSG_DELETE_COMPLETE=Delete completed. All based data has been cleared."
@@ -295,14 +294,19 @@ en|MSG_DELETE_COMPLETE=Delete completed. All based data has been cleared."
     local db_file=$(check_message_cache "$lang")
     
     # DBファイルが存在すれば、該当言語の翻訳をすべて取得
-    if [ -n "$db_file" ]; then
+    if [ -n "$db_file" ] && [ -f "$db_file" ]; then
         debug_log "DEBUG" "Adding translations from file: $db_file"
         
         # DBから対象言語の翻訳をすべて取得して追加
         local translations=$(grep "^${lang}|" "$db_file" 2>/dev/null)
         if [ -n "$translations" ]; then
-            MSG_MEMORY="${MSG_MEMORY}
+            # 改行を入れずに連結（改行が必要な場合のみ追加）
+            if [ -n "$MSG_MEMORY" ] && [ -n "$translations" ]; then
+                MSG_MEMORY="${MSG_MEMORY}
 ${translations}"
+            elif [ -n "$translations" ]; then
+                MSG_MEMORY="${translations}"
+            fi
             debug_log "DEBUG" "Added translations for language: $lang"
         fi
     fi
