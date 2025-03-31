@@ -55,43 +55,28 @@ OSVERSION="${CACHE_DIR}/osversion.ch"
 PACKAGE_MANAGER="${CACHE_DIR}/package_manager.ch"
 PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
 
-# メッセージDBファイルを検索し、有効なパスを返す関数
-check_message_cache() {
-    local lang="${1:-$DEFAULT_LANGUAGE}"
-    
-    debug_log "DEBUG" "Checking message cache for language: ${lang}"
-    
-    # 1. キャッシュから取得（最優先）
-    if [ -f "${CACHE_DIR}/message_db.ch" ]; then
-        local cached_path=$(cat "${CACHE_DIR}/message_db.ch")
-        if [ -f "$cached_path" ]; then
-            debug_log "DEBUG" "Using message DB from cache: $cached_path"
-            echo "$cached_path"
-            return 0
-        else
-            debug_log "DEBUG" "Cached DB path is invalid: $cached_path"
-        fi
+check_network_connectivity() {
+    local ip_check_file="${CACHE_DIR}/network.ch"
+    local ret4=1
+    local ret6=1
+
+    debug_log "DEBUG: Checking IPv4 connectivity"
+    ping -c 1 -w 3 8.8.8.8 >/dev/null 2>&1
+    ret4=$?
+
+    debug_log "DEBUG: Checking IPv6 connectivity"
+    ping6 -c 1 -w 3 2001:4860:4860::8888 >/dev/null 2>&1
+    ret6=$?
+
+    if [ "$ret4" -eq 0 ] && [ "$ret6" -eq 0 ]; then
+        echo "v4v6" > "${ip_check_file}"
+    elif [ "$ret4" -eq 0 ]; then
+        echo "v4" > "${ip_check_file}"
+    elif [ "$ret6" -eq 0 ]; then
+        echo "v6" > "${ip_check_file}"
+    else
+        echo "" > "${ip_check_file}"
     fi
-    
-    # 2. 指定された言語のDBを確認
-    local lang_db="${BASE_DIR}/message_${lang}.db"
-    if [ -f "$lang_db" ]; then
-        debug_log "DEBUG" "Found specific language DB: $lang_db"
-        echo "$lang_db"
-        return 0
-    fi
-    
-    # 3. デフォルト言語のDBを確認
-    local default_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
-    if [ -f "$default_db" ]; then
-        debug_log "DEBUG" "Using default language DB: $default_db"
-        echo "$default_db"
-        return 0
-    fi
-    
-    # 4. 見つからない場合はエラー
-    debug_log "ERROR" "No message database found for any language"
-    return 0
 }
 
 # キャッシュファイルの存在と有効性を確認する関数
