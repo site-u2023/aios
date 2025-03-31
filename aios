@@ -259,13 +259,49 @@ color() {
 # 🔵　メッセージ系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 into_memory_message() {
-    # メッセージを文字列としてMSG_MEMORYに追加する
+    # 現在の言語を取得
+    local lang="US"    # デフォルト言語
+    if [ -f "${CACHE_DIR}/message.ch" ]; then
+        lang=$(cat "${CACHE_DIR}/message.ch")
+        debug_log "DEBUG" "Using language from cache for memory messages: $lang"
+    fi
+    
+    # 基本メッセージ（英語）
     MSG_MEMORY="
 US|CONFIG_DOWNLOAD_SUCCESS=Download completed:
 US|CONFIG_DOWNLOAD_UNNECESSARY=No update needed:
 US|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared.
 US|MSG_DELETE_COMPLETE=Delete completed. All based data has been cleared."
-    debug_log "DEBUG" "Messages loaded into memory"
+    
+    # 言語がUSでない場合、翻訳されたメッセージをDBから追加
+    if [ "$lang" != "US" ] && [ -f "${BASE_DIR}/messages_base.db" ]; then
+        # メッセージDBのパスを取得
+        local db_file="${BASE_DIR}/messages_base.db"
+        if [ -f "${CACHE_DIR}/message_db.ch" ]; then
+            db_file=$(cat "${CACHE_DIR}/message_db.ch")
+        elif [ -f "${BASE_DIR}/messages_${lang}.db" ]; then
+            db_file="${BASE_DIR}/messages_${lang}.db"
+        fi
+        
+        # DBから追加メッセージを読み込み
+        if [ -f "$db_file" ]; then
+            # 主要メッセージキーのリスト
+            local key_list="CONFIG_DOWNLOAD_SUCCESS CONFIG_DOWNLOAD_UNNECESSARY MSG_RESET_COMPLETE MSG_DELETE_COMPLETE"
+            
+            # 各キーについて翻訳を追加
+            for key in $key_list; do
+                local translated_msg=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+                if [ -n "$translated_msg" ]; then
+                    # 翻訳が見つかった場合、メモリに追加
+                    MSG_MEMORY="${MSG_MEMORY}
+${lang}|${key}=${translated_msg}"
+                    debug_log "DEBUG" "Added translated message for $lang: $key"
+                fi
+            done
+        fi
+    fi
+    
+    debug_log "DEBUG" "Messages loaded into memory for language: $lang"
 }
 
 get_message() {
