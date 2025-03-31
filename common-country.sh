@@ -1039,6 +1039,8 @@ country_write() {
     return 0
 }
 
+
+# 言語の正規化処理関数
 normalize_language() {
     # 必要なパス定義
     local language_cache="${CACHE_DIR}/language.ch"
@@ -1061,25 +1063,52 @@ normalize_language() {
     country_code=$(cat "$language_cache")
     debug_log "DEBUG" "Original country code: ${country_code}"
 
+    # JP言語コードをjaに自動変換（APIの要件に合わせる）
+    local api_lang="$country_code"
+    if [ "$country_code" = "JP" ]; then
+        api_lang="ja"
+        debug_log "DEBUG" "Converting JP to ja for API compatibility"
+    fi
+
     # 対応するDBファイルを検索
     local target_db=""
     local found=0
     
-    # まず、正確な翻訳DBを確認
-    local translation_db="${BASE_DIR}/messages_${country_code}.db"
+    # まず、特定の言語DBを確認 (messages_XX.db 形式)
+    local translation_db="${BASE_DIR}/messages_${api_lang}.db"
     if [ -f "$translation_db" ]; then
         target_db="$translation_db"
         found=1
         debug_log "DEBUG" "Found exact translation DB: ${translation_db}"
     else
-        debug_log "DEBUG" "No specific translation DB found for ${country_code}"
+        debug_log "DEBUG" "Translation DB not found for ${api_lang}, checking ${country_code}"
         
-        # デフォルト言語のDBを確認
-        local default_db="${BASE_DIR}/messages_${DEFAULT_LANGUAGE}.db"
-        if [ -f "$default_db" ]; then
-            target_db="$default_db"
+        # 国コードでも検索
+        translation_db="${BASE_DIR}/messages_${country_code}.db"
+        if [ -f "$translation_db" ]; then
+            target_db="$translation_db"
             found=1
-            debug_log "DEBUG" "Using default language DB: ${default_db}"
+            debug_log "DEBUG" "Found country-based translation DB: ${translation_db}"
+        else
+            debug_log "DEBUG" "No translation DB found, will use default language DB"
+            
+            # デフォルト言語DBを使用
+            local default_db="${BASE_DIR}/messages_${DEFAULT_LANGUAGE}.db"
+            if [ -f "$default_db" ]; then
+                target_db="$default_db"
+                found=1
+                debug_log "DEBUG" "Using default language DB: ${default_db}"
+                
+                # 翻訳APIが有効なら、不足している言語DBを作成
+                if [ "$ONLINE_TRANSLATION_ENABLED" = "yes" ] && [ "$country_code" != "$DEFAULT_LANGUAGE" ] && [ "$country_code" != "US" ]; then
+                    debug_log "DEBUG" "Will attempt to create translation DB for ${country_code}"
+                    
+                    # 非ブロッキングで翻訳DBを作成（バックグラウンド処理）
+                    (process_language_translation "$country_code" &)
+                fi
+            else
+                debug_log "ERROR" "Default language DB not found: $default_db"
+            fi
         fi
     fi
 
