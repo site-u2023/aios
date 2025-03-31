@@ -53,47 +53,47 @@ SCRIPT_VERSION="2025.03.31-00-00"
 ### 🛠️ Keep debugging simple, focused, and POSIX-compliant!
 ### =========================================================
 
-DEV_NULL="${DEV_NULL:-on}"
-# サイレントモード
-# export DEV_NULL="on"
-# 通常モード
-# unset DEV_NULL
+# システム制御
+DEV_NULL="${DEV_NULL:-on}"       # サイレントモード制御（on=有効, unset=無効）
+DEBUG_MODE="${DEBUG_MODE:-false}" # デバッグモード（true=有効, false=無効）
 
-# 基本定数の設定 
-# 基本wgetコマンド - ヘッダー無し
-BASE_WGET="wget --no-check-certificate -q -O"
-# BASE_WGET="wget -O"
-# Bearer認証用wgetコマンド（トークンは呼び出し時に指定）
-BASE_WGET_AUTH_BEARER='wget --no-check-certificate -q -O "$1" --header="Authorization: Bearer $2" "$3"'
-# 従来のtoken認証用wgetコマンド（トークンは呼び出し時に指定）
-BASE_WGET_AUTH_TOKEN='wget --no-check-certificate -q -O "$1" --header="Authorization: token $2" "$3"'
-DEBUG_MODE="${DEBUG_MODE:-false}"
-BIN_PATH="$(readlink -f "$0")"
-BIN_DIR="$(dirname "$BIN_PATH")"
-BIN_FILE="$(basename "$BIN_PATH")"
-BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
-CACHE_BUST="?cache_bust=$(date +%s)"  # キャッシュバスティング用パラメータを初期化
-BASE_DIR="${BASE_DIR:-/tmp/aios}"
-CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
-FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
-LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
+# パス・ファイル関連
+BIN_PATH="$(readlink -f "$0")"   # 実行ファイルの絶対パス
+BIN_DIR="$(dirname "$BIN_PATH")" # 実行ファイルのディレクトリ
+BIN_FILE="$(basename "$BIN_PATH")" # 実行ファイル名
 
-# コミットキャッシュ関連の設定
-COMMIT_CACHE_DIR="${CACHE_DIR}/commits"
-COMMIT_CACHE_TTL="1800"  # キャッシュの有効期間（30分 = 1800秒）
-SKIP_CACHE="false"       # キャッシュスキップのデフォルト値
+# ベースディレクトリ設定
+BASE_DIR="${BASE_DIR:-/tmp/aios}"      # 基本ディレクトリ
+CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}" # キャッシュディレクトリ
+FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}" # フィードディレクトリ
+LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"   # ログディレクトリ
 
-UPDATE_CACHE="${CACHE_DIR}/update.ch"
-GITHUB_TOKEN_FILE="/etc/aios_token"
-MSG_MEMORY=""
+# ダウンロード関連設定
+BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}" # 基本URL
+CACHE_BUST="?cache_bust=$(date +%s)" # キャッシュバスティングパラメータ
 
-# APIレート情報のグローバルキャッシュ
-API_REMAINING=""
-API_LIMIT=""
-API_RESET_TIME=""
-API_AUTH_METHOD=""
-API_LAST_CHECK=""
-API_CACHE_TTL="60"
+# wget関連設定
+BASE_WGET="wget --no-check-certificate -q -O" # 基本wgetコマンド
+BASE_WGET_AUTH_BEARER='wget --no-check-certificate -q -O "$1" --header="Authorization: Bearer $2" "$3"' # Bearer認証用
+BASE_WGET_AUTH_TOKEN='wget --no-check-certificate -q -O "$1" --header="Authorization: token $2" "$3"'   # Token認証用
+
+# GitHub API認証関連
+GITHUB_TOKEN_FILE="/etc/aios_token" # GitHubトークン保存ファイル
+UPDATE_CACHE="${CACHE_DIR}/update.ch" # 更新情報キャッシュ
+MSG_MEMORY=""                          # メッセージキャッシュ
+
+# GitHub APIレート制限情報
+API_REMAINING=""       # 残りAPI呼び出し回数
+API_LIMIT=""           # APIレート制限値
+API_RESET_TIME=""      # API制限リセット時間（分）
+API_AUTH_METHOD=""     # 認証方法（token/bearer/direct）
+API_LAST_CHECK=""      # 最終API確認時間（Unix時間）
+API_CACHE_TTL="60"     # APIキャッシュ有効期間（秒）
+
+# コミット情報キャッシュ関連
+COMMIT_CACHE_DIR="${CACHE_DIR}/commits" # コミット情報キャッシュディレクトリ
+COMMIT_CACHE_TTL="1800" # コミットキャッシュ有効期間（30分=1800秒）
+SKIP_CACHE="false"     # キャッシュスキップフラグ（true=キャッシュ無視）
 
 # 🔵　エラー・デバッグ　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
 
