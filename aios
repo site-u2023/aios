@@ -356,6 +356,8 @@ migrate_message_db() {
     return 0
 }
 
+
+# メッセージを取得する関数
 get_message() {
     local key="$1"
     local params="$2"  # パラメータ文字列
