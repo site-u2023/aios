@@ -1,8 +1,5 @@
 SCRIPT_VERSION="2025-03-31-00-00"
 
-SUPPORTED_LANGUAGES="US"
-SUPPORTED_LANGUAGE_US="US CA GB ZA AU NZ TT MU JM BM"
-
 # =======================
 # デバッグテスト
 # =======================
