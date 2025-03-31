@@ -1593,7 +1593,7 @@ download_fetch_file() {
     debug_log "DEBUG" "Downloading file directly: $file_name from $remote_url"
     
     # ファイルをダウンロード（常に直接URL方式）
-    debug_log "Downloading file (filename=$filename)"
+    debug_log "DEBUG" "Downloading file (filename=$filename)"
     if ! wget -q --no-check-certificate -O "$install_path" "$remote_url"; then
         debug_log "ERROR" "Download failed: $file_name"
         return 1
