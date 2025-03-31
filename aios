@@ -286,11 +286,11 @@ into_memory_message() {
         return 0
     fi
     
-    # 基本メッセージ（英語）- 末尾の改行を削除
-    MSG_MEMORY="en|CONFIG_DOWNLOAD_SUCCESS=File downloaded successfully:
-en|CONFIG_DOWNLOAD_UNNECESSARY=File already up to date:
-en|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared.
-en|MSG_DELETE_COMPLETE=Delete completed. All based data has been cleared."
+    # 基本メッセージ（英語）- 改行をスペースに置き換え
+    MSG_MEMORY="en|CONFIG_DOWNLOAD_SUCCESS=File downloaded successfully: \
+    en|CONFIG_DOWNLOAD_UNNECESSARY=File already up to date: \
+    en|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared. \
+    en|MSG_DELETE_COMPLETE=Delete completed. All based data has been cleared."
     
     # メッセージDBファイルのパスを取得
     local db_file=$(check_message_cache "$lang")
