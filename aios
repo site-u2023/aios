@@ -277,26 +277,34 @@ get_message() {
     local db_file="${BASE_DIR}/messages_base.db"  # デフォルトDB
     local message=""
     
-    # 言語コードの取得
+    # 言語コードの取得（キャッシュチェックを最初に行う）
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang=$(cat "${CACHE_DIR}/message.ch")
         debug_log "DEBUG" "Using language from cache: $lang"
     fi
     
-    # インメモリメッセージから検索
-    into_memory_message
-    if [ -n "$MSG_MEMORY" ]; then
-        message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+    # 言語DBファイルの選択（キャッシュ情報を最優先）
+    if [ "$lang" != "US" ]; then
+        if [ -f "${CACHE_DIR}/message_db.ch" ]; then
+            # キャッシュに保存されたDBパスを使用（最優先）
+            db_file=$(cat "${CACHE_DIR}/message_db.ch")
+            debug_log "DEBUG" "Using message DB from cache: $db_file"
+        elif [ -f "${BASE_DIR}/messages_${lang}.db" ]; then
+            # 言語固有DBを使用
+            db_file="${BASE_DIR}/messages_${lang}.db"
+            debug_log "DEBUG" "Using language specific DB: $db_file"
+        fi
     fi
     
-    # DBファイル選択
-    if [ "$lang" != "US" ] && [ -f "${BASE_DIR}/messages_${lang}.db" ]; then
-        db_file="${BASE_DIR}/messages_${lang}.db"
+    # インメモリメッセージから検索
+    if [ -n "$MSG_MEMORY" ]; then
+        message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
     fi
     
     # DBファイルから検索（メモリに見つからない場合）
     if [ -z "$message" ] && [ -f "$db_file" ]; then
         message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        debug_log "DEBUG" "Message found in DB file for key: $key, lang: $lang"
     fi
     
     # USにフォールバック（非US言語で見つからない場合）
@@ -1806,6 +1814,13 @@ check_common() {
 
     debug_log "DEBUG" "check_common: MODE=$MODE"
     debug_log "DEBUG" "check_common: mode=$mode"
+
+    # 言語設定の早期読み込み（追加）
+    if [ -f "${CACHE_DIR}/message.ch" ]; then
+        debug_log "DEBUG" "Early loading language settings from cache"
+        # 初期化フラグを設定して二重初期化を防止
+        EARLY_LANG_LOADED=1
+    fi
 
     # モードごとの処理
     case "$mode" in
