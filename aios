@@ -1478,7 +1478,7 @@ download() {
             i=$((i+1))
         done
         return 1
-    }
+    fi
 
     # 設定変数の初期化
     local hidden_mode="false"
