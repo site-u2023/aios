@@ -1038,60 +1038,30 @@ country_write() {
 }
 
 normalize_language() {
-    # 必要なパス定義
-    local language_cache="${CACHE_DIR}/language.ch"
-    local message_cache="${CACHE_DIR}/message.ch"
-    local message_db_ch="${CACHE_DIR}/message_db.ch"
-    local country_code=""
-    
-    # デバッグログの出力
     debug_log "DEBUG" "Normalizing language settings"
-    debug_log "DEBUG" "language_cache=${language_cache}"
-    debug_log "DEBUG" "message_cache=${message_cache}"
     
     # language.chファイルの存在確認
-    if [ ! -f "$language_cache" ]; then
+    if [ ! -f "${CACHE_DIR}/language.ch" ]; then
         debug_log "DEBUG" "language.ch not found. Cannot determine language."
         return 1
     fi
 
     # language.chから国コードを読み込み
-    country_code=$(cat "$language_cache")
+    local country_code=$(cat "${CACHE_DIR}/language.ch")
     debug_log "DEBUG" "Original country code: ${country_code}"
 
-    # 対応するDBファイルを検索
-    local target_db=""
-    local found=0
-    
-    # 正確な翻訳DBを確認
-    local translation_db="${BASE_DIR}/message_${country_code}.db"
-    if [ -f "$translation_db" ]; then
-        target_db="$translation_db"
-        found=1
-        debug_log "DEBUG" "Found exact translation DB: ${translation_db}"
-    else
-        debug_log "DEBUG" "No specific translation DB found for ${country_code}"
-        
-        # デフォルト言語のDBを確認
-        local default_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
-        if [ -f "$default_db" ]; then
-            target_db="$default_db"
-            found=1
-            debug_log "DEBUG" "Using default language DB: ${default_db}"
-        fi
-    fi
-
-    # 言語DBが見つからなかった場合はエラー
-    if [ $found -eq 0 ]; then
-        debug_log "ERROR" "No message database found for any language"
+    # 改名した共通関数を使って対応するDBを検索
+    local target_db=$(check_message_cache "$country_code")
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "Failed to find message DB for language: $country_code"
         return 1
     fi
     
     # 設定を保存
-    echo "$country_code" > "$message_cache"
-    echo "$target_db" > "$message_db_ch"
-    debug_log "DEBUG" "Updated message_cache=${country_code}"
-    debug_log "DEBUG" "Updated message_db_ch with target DB path: ${target_db}"
+    echo "$country_code" > "${CACHE_DIR}/message.ch"
+    echo "$target_db" > "${CACHE_DIR}/message_db.ch"
+    debug_log "DEBUG" "Updated message.ch=${country_code}"
+    debug_log "DEBUG" "Updated message_db.ch with target DB path: ${target_db}"
     
     # グローバル変数を更新
     ACTIVE_LANGUAGE="$country_code"
