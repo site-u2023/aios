@@ -371,16 +371,16 @@ init_translation() {
     return 0
 }
 
+# メッセージ取得関数
 get_message() {
     local key="$1"
     local params="$2"  # パラメータ文字列
-    local lang="$DEFAULT_LANGUAGE"
+    local lang="US"    # デフォルト言語
     local message=""
     
-    # 言語コードの取得
+    # 言語コードを確認
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang=$(cat "${CACHE_DIR}/message.ch")
-        debug_log "DEBUG" "Using language from cache: $lang"
     fi
     
     # メモリメッセージを初期化
@@ -388,7 +388,7 @@ get_message() {
         into_memory_message
     fi
     
-    # メッセージDBファイルのパスを取得
+    # チェックメッセージキャッシュ関数を使用してDBファイルを取得
     local db_file=$(check_message_cache "$lang")
     
     # インメモリメッセージから検索
@@ -402,10 +402,10 @@ get_message() {
         debug_log "DEBUG" "Message found in DB file for key: $key, lang: $lang"
     fi
     
-    # デフォルト言語にフォールバック（見つからない場合）
-    if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ] && [ -f "$db_file" ]; then
-        message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
-        debug_log "DEBUG" "Key not found in $lang, using fallback for: $key"
+    # USにフォールバック（非US言語で見つからない場合）
+    if [ -z "$message" ] && [ "$lang" != "US" ] && [ -f "$db_file" ]; then
+        message=$(grep "^US|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        debug_log "DEBUG" "Key not found in $lang, using US fallback for: $key"
     fi
     
     # メッセージが見つからない場合はキーをそのまま返す
@@ -414,35 +414,34 @@ get_message() {
         message="$key"
     fi
     
-    # プレースホルダー処理 - {notr_XXX_notr}は翻訳しないプレースホルダーを表す
+    # プレースホルダーの処理
+    # 1. {notr_colon_notr} を : に変換
+    message=$(echo "$message" | sed 's/{notr_colon_notr}/:/g')
+    
+    # 2. {notr_newline_notr} を \n に変換
+    message=$(echo "$message" | sed 's/{notr_newline_notr}/\\n/g')
+    
+    # 3. その他の {notr_*_notr} を {*} に変換
+    while echo "$message" | grep -q "{notr_.*_notr}"; do
+        local placeholder=$(echo "$message" | grep -o "{notr_[^_]*_notr}" | head -1)
+        local name=$(echo "$placeholder" | sed 's/{notr_\(.*\)_notr}/\1/')
+        message=$(echo "$message" | sed "s/$placeholder/{$name}/g")
+    done
+    
+    # パラメータ置換処理
     if [ -n "$params" ]; then
-        debug_log "DEBUG" "Processing placeholders with params: $params"
+        local var_name=$(echo "$params" | cut -d'=' -f1)
+        local var_value=$(echo "$params" | cut -d'=' -f2-)
         
-        # パラメータを分割して処理
-        IFS=',' read -r -a param_array <<EOF
-$params
-EOF
-        
-        for param in "${param_array[@]}"; do
-            # キーと値を分割
-            key_val=$(echo "$param" | tr -d ' ')
-            p_key=$(echo "$key_val" | cut -d'=' -f1)
-            p_value=$(echo "$key_val" | cut -d'=' -f2-)
-            
-            if [ -n "$p_key" ] && [ -n "$p_value" ]; then
-                # 通常のプレースホルダー置換処理
-                message=$(echo "$message" | sed "s/{$p_key}/$p_value/g")
-                
-                # 翻訳しないプレースホルダー処理 {notr_XXX_notr}
-                message=$(echo "$message" | sed "s/{notr_${p_key}_notr}/$p_value/g")
-            fi
-        done
-        
-        debug_log "DEBUG" "Placeholders processed for message"
+        if [ -n "$var_name" ] && [ -n "$var_value" ]; then
+            local var_value_esc=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
+            message=$(echo "$message" | sed "s|{$var_name}|$var_value_esc|g")
+        fi
     fi
     
-    # 最終的な結果を返します
-    printf "%s" "$message"
+    # 最後にエスケープシーケンス（\nなど）を処理して出力
+    printf "%b" "$message"
+    return 0
 }
 
 # 🔴　メッセージ系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
