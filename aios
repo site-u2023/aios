@@ -388,7 +388,8 @@ get_message() {
     
     # インメモリメッセージから検索
     if [ -n "$MSG_MEMORY" ]; then
-        message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+        # 問題修正: 改行を含むメッセージ処理を修正
+        message=$(echo "$MSG_MEMORY" | tr '\n' ' ' | grep -o "${lang}|${key}=[^ ]*" 2>/dev/null | cut -d'=' -f2-)
     fi
     
     # メモリに見つからない場合、DBファイルから直接検索
