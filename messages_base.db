@@ -165,7 +165,7 @@ US|MSG_CONFIRM_INSTALL_WITH_DESC=Package{notr_colon_notr} {notr_pkg_notr}{notr_n
 # system-config.sh
 # =======================
 US|MSG_INFO_NET_COUNTRY=IP geolocation
-US|MSG_INFO_NETWORK=Network{notr_colon_notr} {notr_info_notr}
+US|MSG_INFO_NETWORK=Network lines{notr_colon_notr} {notr_info_notr}
 US|MSG_INFO_ARCHITECTURE=Architecture{notr_colon_notr} {notr_info_notr}
 US|MSG_INFO_OSVERSION=OS Version{notr_colon_notr} {notr_info_notr}
 US|MSG_INFO_PACKAGEMANAGER=Package manager{notr_colon_notr} {notr_info_notr}
