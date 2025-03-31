@@ -238,9 +238,6 @@ create_language_db() {
     cat > "$output_db" << EOF
 SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
 
-SUPPORTED_LANGUAGES="${target_lang}"
-SUPPORTED_LANGUAGE_${target_lang}="${target_lang}"
-
 EOF
     
     # オンライン翻訳が無効なら翻訳せず置換するだけ
