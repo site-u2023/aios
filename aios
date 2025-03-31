@@ -268,31 +268,39 @@ color() {
 
 # 🔵　メッセージ系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
-check_network_connectivity() {
-    local ip_check_file="${CACHE_DIR}/network.ch"
-    local ret4=1
-    local ret6=1
-
-    debug_log "DEBUG: Checking IPv4 connectivity"
-    ping -c 1 -w 3 8.8.8.8 >/dev/null 2>&1
-    ret4=$?
-
-    debug_log "DEBUG: Checking IPv6 connectivity"
-    ping6 -c 1 -w 3 2001:4860:4860::8888 >/dev/null 2>&1
-    ret6=$?
-
-    if [ "$ret4" -eq 0 ] && [ "$ret6" -eq 0 ]; then
-        echo "v4v6" > "${ip_check_file}"
-    elif [ "$ret4" -eq 0 ]; then
-        echo "v4" > "${ip_check_file}"
-    elif [ "$ret6" -eq 0 ]; then
-        echo "v6" > "${ip_check_file}"
-    else
-        echo "" > "${ip_check_file}"
+# メッセージDBのパスをチェックする関数
+check_message_cache() {
+    local lang="$1"
+    local db_path=""
+    
+    debug_log "DEBUG" "Looking for message DB for language: $lang"
+    
+    # キャッシュDBパス確認
+    if [ -f "${CACHE_DIR}/message_db.ch" ]; then
+        db_path=$(cat "${CACHE_DIR}/message_db.ch")
+        if [ -f "$db_path" ]; then
+            echo "$db_path"
+            return 0
+        fi
     fi
+    
+    # 言語固有DBの確認
+    if [ -f "${BASE_DIR}/message_${lang}.db" ]; then
+        echo "${BASE_DIR}/message_${lang}.db"
+        return 0
+    fi
+    
+    # デフォルト言語DBの確認
+    if [ -f "${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db" ]; then
+        echo "${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
+        return 0
+    fi
+    
+    # 何も見つからない場合は空文字列
+    echo ""
 }
 
-# into_memory_message関数の修正例
+# into_memory_message関数の修正版
 into_memory_message() {
     local lang="$DEFAULT_LANGUAGE"
     
