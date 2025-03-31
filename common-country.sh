@@ -1067,7 +1067,7 @@ normalize_language() {
     local found=0
     
     # 正確な翻訳DBを確認
-    local translation_db="${BASE_DIR}/messages_${country_code}.db"
+    local translation_db="${BASE_DIR}/message_${country_code}.db"
     if [ -f "$translation_db" ]; then
         target_db="$translation_db"
         found=1
@@ -1076,7 +1076,7 @@ normalize_language() {
         debug_log "DEBUG" "No specific translation DB found for ${country_code}"
         
         # デフォルト言語のDBを確認
-        local default_db="${BASE_DIR}/messages_${DEFAULT_LANGUAGE}.db"
+        local default_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
         if [ -f "$default_db" ]; then
             target_db="$default_db"
             found=1
