@@ -121,6 +121,8 @@ get_country_code() {
     local worldtime_ip=""
     local timeout_sec=15
     local network_type=""
+    local api_msg=""
+    local success_msg=""
     local tmp_file=""
     
     # API URLを定数化
@@ -157,14 +159,15 @@ get_country_code() {
     fi
     
     # スピナー開始 - 地域情報取得開始
-    start_spinner "$(color blue "地域情報取得中...")" "dot" "blue"
+    start_spinner "$(color blue "$(get_message "MSG_RETRIEVING_INFO")")" "dot" "blue"
     debug_log "DEBUG: Starting location info retrieval process"
     
     # ネットワーク状況に応じたIPアドレス取得
     if [ "$network_type" = "v4" ] || [ "$network_type" = "v4v6" ]; then
         # IPv4アドレスの取得を試行
-        update_spinner "$(color blue "API接続中: $API_IPV4 (IPv4)")"
-        debug_log "DEBUG: Attempting to retrieve IPv4 address from $API_IPV4"
+        stop_spinner
+        start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_IPV4" "network=IPv4")")" "dot" "blue"
+        debug_log "DEBUG: Attempting to retrieve IPv4 address"
         
         # BASE_WGETを使用
         tmp_file="${CACHE_DIR}/ipv4_$$.tmp"
@@ -175,10 +178,11 @@ get_country_code() {
         fi
         
         if [ -n "$ip_v4" ]; then
+            stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_IPV4" "network=IPv4")")" "success"
             debug_log "DEBUG: IPv4 address retrieved: $ip_v4"
             
             # WorldTimeAPIからタイムゾーン情報を取得
-            update_spinner "$(color blue "API接続中: $API_WORLDTIME (IPv4)")"
+            start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_WORLDTIME" "network=IPv4")")" "dot" "blue"
             debug_log "DEBUG: Trying WorldTimeAPI with IPv4 address"
             
             # BASE_WGETを使用
@@ -192,11 +196,14 @@ get_country_code() {
             if [ -n "$SELECT_ZONE" ]; then
                 select_ip="$ip_v4"
                 select_ip_ver="IPv4"
+                stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_WORLDTIME" "network=IPv4")")" "success"
                 debug_log "DEBUG: WorldTimeAPI responded successfully using IPv4"
             else
+                stop_spinner "$(color red "$(get_message "MSG_NOT_RETRIEVED")")" "error"
                 debug_log "DEBUG: WorldTimeAPI failed with IPv4, response is empty"
             fi
         else
+            stop_spinner "$(color red "$(get_message "MSG_NOT_RETRIEVED")")" "error"
             debug_log "DEBUG: Failed to retrieve IPv4 address"
         fi
     fi
@@ -207,8 +214,8 @@ get_country_code() {
         
         # IPv6アドレスの取得を試行
         if [ -z "$ip_v6" ]; then
-            update_spinner "$(color blue "API接続中: $API_IPV6 (IPv6)")"
-            debug_log "DEBUG: Attempting to retrieve IPv6 address from $API_IPV6"
+            start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_IPV6" "network=IPv6")")" "dot" "blue"
+            debug_log "DEBUG: Attempting to retrieve IPv6 address"
             
             # BASE_WGETを使用
             tmp_file="${CACHE_DIR}/ipv6_$$.tmp"
@@ -219,14 +226,16 @@ get_country_code() {
             fi
             
             if [ -n "$ip_v6" ]; then
+                stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_IPV6" "network=IPv6")")" "success"
                 debug_log "DEBUG: IPv6 address retrieved: $ip_v6"
             else
+                stop_spinner "$(color red "$(get_message "MSG_NOT_RETRIEVED")")" "error"
                 debug_log "DEBUG: Failed to retrieve IPv6 address"
             fi
         fi
         
         if [ -n "$ip_v6" ]; then
-            update_spinner "$(color blue "API接続中: $API_WORLDTIME (IPv6)")"
+            start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_WORLDTIME" "network=IPv6")")" "dot" "blue"
             debug_log "DEBUG: Querying WorldTimeAPI with IPv6"
             
             # BASE_WGETを使用
@@ -240,8 +249,10 @@ get_country_code() {
             if [ -n "$SELECT_ZONE" ]; then
                 select_ip="$ip_v6"
                 select_ip_ver="IPv6"
+                stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_WORLDTIME" "network=IPv6")")" "success"
                 debug_log "DEBUG: WorldTimeAPI responded successfully using IPv6"
             else
+                stop_spinner "$(color red "$(get_message "MSG_NOT_RETRIEVED")")" "error"
                 debug_log "DEBUG: WorldTimeAPI also failed with IPv6"
             fi
         fi
@@ -278,7 +289,7 @@ get_country_code() {
         
         # WorldTimeAPIから得たIPを使ってIP-APIから国コードを取得
         if [ -n "$worldtime_ip" ]; then
-            update_spinner "$(color blue "API接続中: $API_IPAPI ($select_ip_ver)")"
+            start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_IPAPI" "network=$select_ip_ver")")" "dot" "blue"
             debug_log "DEBUG: Using WorldTimeAPI-provided IP for country code lookup"
             
             # BASE_WGETを使用
@@ -291,14 +302,18 @@ get_country_code() {
                 if [ -n "$country_data" ]; then
                     SELECT_COUNTRY=$(echo "$country_data" | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
                     if [ -n "$SELECT_COUNTRY" ]; then
+                        stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_IPAPI" "network=$select_ip_ver")")" "success"
                         debug_log "DEBUG: Country code retrieved using WorldTimeAPI IP: $SELECT_COUNTRY"
                     else
+                        stop_spinner "$(color red "$(get_message "MSG_NOT_RETRIEVED")")" "error"
                         debug_log "DEBUG: Failed to get country code using WorldTimeAPI IP"
                     fi
                 else
+                    stop_spinner "$(color red "$(get_message "MSG_NOT_RETRIEVED")")" "error"
                     debug_log "DEBUG: IP-API request returned empty response"
                 fi
             else
+                stop_spinner "$(color red "$(get_message "MSG_NOT_RETRIEVED")")" "error"
                 debug_log "DEBUG: IP-API request failed"
             fi
         fi
@@ -319,7 +334,7 @@ get_country_code() {
         fi
         
         if [ -n "$fallback_ip" ]; then
-            update_spinner "$(color blue "API接続中: $API_IPAPI ($fallback_network)")"
+            start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_IPAPI" "network=$fallback_network")")" "dot" "blue"
             debug_log "DEBUG: Querying IP-API directly with local IP: $fallback_ip"
             
             # BASE_WGETを使用
@@ -332,12 +347,14 @@ get_country_code() {
                 if [ -n "$fallback_data" ]; then
                     SELECT_COUNTRY=$(echo "$fallback_data" | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
                     if [ -n "$SELECT_COUNTRY" ]; then
+                        stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_IPAPI" "network=$fallback_network")")" "success"
                         debug_log "DEBUG: Country code retrieved using direct IP query: $SELECT_COUNTRY"
                     else
+                        stop_spinner "$(color red "$(get_message "MSG_NOT_RETRIEVED")")" "error"
                         debug_log "DEBUG: Failed to get country code using direct IP query"
                         
                         # ipinfo.ioをさらにフォールバックとして使用
-                        update_spinner "$(color blue "API接続中: $API_IPINFO ($fallback_network)")"
+                        start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_IPINFO" "network=$fallback_network")")" "dot" "blue"
                         debug_log "DEBUG: Trying ipinfo.io as last resort"
                         
                         # BASE_WGETを使用
@@ -350,21 +367,27 @@ get_country_code() {
                             if [ -n "$ipinfo_data" ]; then
                                 SELECT_COUNTRY=$(echo "$ipinfo_data" | grep -o '"country"[ ]*:[ ]*"[^"]*' | awk -F'"' '{print $4}')
                                 if [ -n "$SELECT_COUNTRY" ]; then
+                                    stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_IPINFO" "network=$fallback_network")")" "success"
                                     debug_log "DEBUG: Country code retrieved from ipinfo.io: $SELECT_COUNTRY"
                                 else
+                                    stop_spinner "$(color red "$(get_message "MSG_NOT_RETRIEVED")")" "error"
                                     debug_log "DEBUG: Failed to get country code from ipinfo.io"
                                 fi
                             else
+                                stop_spinner "$(color red "$(get_message "MSG_NOT_RETRIEVED")")" "error"
                                 debug_log "DEBUG: ipinfo.io request returned empty response"
                             fi
                         else
+                            stop_spinner "$(color red "$(get_message "MSG_NOT_RETRIEVED")")" "error"
                             debug_log "DEBUG: ipinfo.io request failed"
                         fi
                     fi
                 else
+                    stop_spinner "$(color red "$(get_message "MSG_NOT_RETRIEVED")")" "error"
                     debug_log "DEBUG: IP-API fallback request returned empty response"
                 fi
             else
+                stop_spinner "$(color red "$(get_message "MSG_NOT_RETRIEVED")")" "error"
                 debug_log "DEBUG: IP-API fallback request failed"
             fi
         fi
@@ -373,17 +396,13 @@ get_country_code() {
     # 一時ファイルのクリーンアップ（念のため）
     rm -f "${CACHE_DIR}/*_$$.tmp" 2>/dev/null
     
-    # 最終結果の表示
-    if [ -n "$SELECT_ZONENAME" ] && [ -n "$SELECT_TIMEZONE" ] && [ -n "$SELECT_COUNTRY" ]; then
-        # 成功時
-        stop_spinner "$(color green "情報取得完了")" "success"
-        debug_log "DEBUG: Successfully retrieved all required information"
-        return 0
-    else
-        # 失敗時
-        stop_spinner "$(color red "取得失敗")" "error"
+    # 結果の確認
+    if [ -z "$SELECT_ZONENAME" ] || [ -z "$SELECT_TIMEZONE" ] || [ -z "$SELECT_COUNTRY" ]; then
         debug_log "DEBUG: Failed to retrieve all required information"
         return 1
+    else
+        debug_log "DEBUG: Successfully retrieved all required information"
+        return 0
     fi
 }
 
