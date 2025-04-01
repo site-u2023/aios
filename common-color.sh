@@ -531,8 +531,51 @@ start_spinner() {
         fi
     fi
 
-    # バックグラウンドでスピナーを実行せず、直接実行
-    return
+    # メッセージ用の一時ファイル
+    SPINNER_MSG_FILE="${CACHE_DIR}/spinner_msg_$$.tmp"
+    mkdir -p "${CACHE_DIR}" 2>/dev/null
+    
+    # 初期メッセージを書き込む
+    printf "%s" "$message" > "$SPINNER_MSG_FILE"
+
+    # バックグラウンドでスピナーを実行
+    (
+        local curr_message="$message"
+        local i=0
+        
+        while true; do
+            # 新しいメッセージをチェック
+            if [ -f "$SPINNER_MSG_FILE" ]; then
+                new_message=$(cat "$SPINNER_MSG_FILE" 2>/dev/null)
+                if [ -n "$new_message" ] && [ "$new_message" != "$curr_message" ]; then
+                    curr_message="$new_message"
+                    debug_log "DEBUG: Spinner updated message to: $curr_message"
+                fi
+            fi
+            
+            for char in $SPINNER_CHARS; do
+                printf "\r\033[K%s %s" "$curr_message" "$(color "$SPINNER_COLOR" "$char")"
+                
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$SPINNER_USLEEP_VALUE"
+                else
+                    sleep "$SPINNER_DELAY"
+                fi
+                
+                # チェックポイントでメッセージを確認
+                if [ -f "$SPINNER_MSG_FILE" ]; then
+                    new_message=$(cat "$SPINNER_MSG_FILE" 2>/dev/null)
+                    if [ -n "$new_message" ] && [ "$new_message" != "$curr_message" ]; then
+                        curr_message="$new_message"
+                        debug_log "DEBUG: Spinner updated message to: $curr_message"
+                        break  # 新しいメッセージがあれば次のサイクルへ
+                    fi
+                fi
+            done
+        done
+    ) &
+    SPINNER_PID=$!
+    debug_log "DEBUG: Spinner started with PID: $SPINNER_PID, msg file: $SPINNER_MSG_FILE"
 }
 
 # スピナーメッセージ更新関数
@@ -545,24 +588,21 @@ update_spinner() {
         return
     fi
     
+    debug_log "DEBUG: Updating spinner message to: $message"
+    
     # 色が指定されている場合のみ更新
     if [ -n "$spinner_color" ]; then
         SPINNER_COLOR="$spinner_color"
     fi
     
-    # ワンサイクルのアニメーションを表示
-    printf "\r\033[K%s " "$message"
-    for char in $SPINNER_CHARS; do
-        printf "\r\033[K%s %s" "$message" "$(color "$spinner_color" "$char")"
-        
-        if command -v usleep >/dev/null 2>&1; then
-            usleep "$SPINNER_USLEEP_VALUE"  # マイクロ秒単位のディレイ
-        else
-            sleep "$SPINNER_DELAY"  # 秒単位のディレイ
-        fi
-    done
-    
-    debug_log "DEBUG: Displayed animation cycle for message: $message"
+    # メッセージファイルが存在するかチェック
+    if [ -f "$SPINNER_MSG_FILE" ]; then
+        # メッセージを書き込む
+        printf "%s" "$message" > "$SPINNER_MSG_FILE"
+        debug_log "DEBUG: Updated spinner message file: $SPINNER_MSG_FILE"
+    else
+        debug_log "DEBUG: Spinner message file not found: $SPINNER_MSG_FILE"
+    fi
 }
 
 # 改良されたスピナー停止関数
@@ -577,15 +617,38 @@ stop_spinner() {
 
     debug_log "DEBUG: Stopping spinner with message: $message, status: $status"
 
-    # 行をクリア
-    printf "\r\033[K"
-    
-    # 成功/失敗に応じたメッセージカラー
-    if [ "$status" = "success" ]; then
-        printf "%s\n" "$(color green "$message")"
-    else
-        printf "%s\n" "$(color yellow "$message")"
+    # メッセージファイルを削除
+    if [ -f "$SPINNER_MSG_FILE" ]; then
+        rm -f "$SPINNER_MSG_FILE" 2>/dev/null
+        debug_log "DEBUG: Removed spinner message file: $SPINNER_MSG_FILE"
     fi
+
+    # プロセスが存在するか確認
+    if [ -n "$SPINNER_PID" ]; then
+        # プロセスが実際に存在するか確認
+        ps | grep -v grep | grep -q "$SPINNER_PID" 2>/dev/null
+        if [ $? -eq 0 ]; then
+            debug_log "DEBUG: Process found, killing PID: $SPINNER_PID"
+            kill "$SPINNER_PID" >/dev/null 2>&1
+            wait "$SPINNER_PID" 2>/dev/null || true
+            printf "\r\033[K"  # 行をクリア
+            
+            # 成功/失敗に応じたメッセージカラー
+            if [ "$status" = "success" ]; then
+                printf "%s\n" "$(color green "$message")"
+            else
+                printf "%s\n" "$(color yellow "$message")"
+            fi
+        else
+            debug_log "DEBUG: Process not found for PID: $SPINNER_PID"
+            printf "\r\033[K%s\n" "$(color "$status" "$message")"
+        fi
+    else
+        printf "\r\033[K%s\n" "$(color "$status" "$message")"
+    fi
+    
+    # PID変数をクリア
+    unset SPINNER_PID
     
     # カーソル表示
     printf "\033[?25h"
