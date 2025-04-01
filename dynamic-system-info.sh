@@ -404,7 +404,7 @@ get_country_code() {
         debug_log "DEBUG: Successfully retrieved all required information"
         return 0
     fi
-}
+} 
 
 # 国コードとタイムゾーン情報を一括取得する関数（ネットワーク接続状況を考慮した改良版）
 OK_get_country_code() {
