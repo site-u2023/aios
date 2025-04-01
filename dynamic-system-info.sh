@@ -108,9 +108,9 @@ check_location_cache() {
     return 1  # キャッシュ無効または不完全
 }
 
-# 国コードとタイムゾーン情報を一括取得する関数（スピナー実装版）
+# Retrieve country code and timezone information (with spinner implementation)
 get_country_code() {
-    # ローカル変数の宣言
+    # Local variable declaration
     local ip_v4=""
     local ip_v6=""
     local select_ip=""
@@ -124,24 +124,24 @@ get_country_code() {
     local api_msg=""
     local tmp_file=""
     
-    # API URLを定数化
+    # API URL constants
     local API_IPV4="https://api.ipify.org"
     local API_IPV6="https://api64.ipify.org"
     local API_WORLDTIME="http://worldtimeapi.org/api/ip"
     local API_IPAPI="http://ip-api.com/json"
     local API_IPINFO="https://ipinfo.io"
     
-    # グローバル変数の初期化
+    # Initialize global variables
     SELECT_ZONE=""
     SELECT_ZONENAME=""
     SELECT_TIMEZONE=""
     SELECT_COUNTRY=""
     SELECT_POSIX_TZ=""
     
-    # キャッシュディレクトリの確認
+    # Check cache directory
     [ -d "${CACHE_DIR}" ] || mkdir -p "${CACHE_DIR}"
     
-    # ネットワーク接続状況の確認
+    # Check network connectivity
     if [ -f "${CACHE_DIR}/network.ch" ]; then
         network_type=$(cat "${CACHE_DIR}/network.ch")
         debug_log "DEBUG: Network connectivity type detected: $network_type"
@@ -157,14 +157,14 @@ get_country_code() {
         fi
     fi
     
-    # ネットワーク状況に応じたIPアドレス取得
+    # Try to get IP address based on network connectivity
     if [ "$network_type" = "v4" ] || [ "$network_type" = "v4v6" ]; then
-        # IPv4アドレスの取得を試行
+        # Try to get IPv4 address
         api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{api}|$API_IPV4|g" | sed "s|{network}|$network_type|g")
         start_spinner "$api_msg" "dot" "blue"
         debug_log "DEBUG: Attempting to retrieve IPv4 address"
         
-        # BASE_WGETを使用
+        # Use BASE_WGET
         tmp_file="${CACHE_DIR}/ipv4_$$.tmp"
         $BASE_WGET "$tmp_file" "$API_IPV4" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
         if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
@@ -176,12 +176,12 @@ get_country_code() {
             stop_spinner "IPv4: $ip_v4 - $MSG_RETRIEVED" "success"
             debug_log "DEBUG: IPv4 address retrieved: $ip_v4"
             
-            # WorldTimeAPIからタイムゾーン情報を取得
+            # Get timezone information from WorldTimeAPI
             api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{api}|$API_WORLDTIME|g" | sed "s|{network}|$network_type|g")
             start_spinner "$api_msg" "dot" "blue"
             debug_log "DEBUG: Trying WorldTimeAPI with IPv4 address"
             
-            # BASE_WGETを使用
+            # Use BASE_WGET
             tmp_file="${CACHE_DIR}/worldtime_$$.tmp"
             $BASE_WGET "$tmp_file" "$API_WORLDTIME" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
             if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
@@ -192,10 +192,10 @@ get_country_code() {
             if [ -n "$SELECT_ZONE" ]; then
                 select_ip="$ip_v4"
                 select_ip_ver="IPv4"
-                stop_spinner "WorldTimeAPI - $MSG_RETRIEVED" "success"
+                stop_spinner "WorldTime API - $MSG_RETRIEVED" "success"
                 debug_log "DEBUG: WorldTimeAPI responded successfully using IPv4"
             else
-                stop_spinner "WorldTimeAPI - $MSG_NOT_RETRIEVED" "error"
+                stop_spinner "WorldTime API - $MSG_NOT_RETRIEVED" "error"
                 debug_log "DEBUG: WorldTimeAPI failed with IPv4, response is empty"
             fi
         else
@@ -204,17 +204,17 @@ get_country_code() {
         fi
     fi
     
-    # IPv4で取得できなかった場合やデータが不完全な場合はIPv6を試す
+    # Try IPv6 if IPv4 failed or data is incomplete
     if { [ -z "$SELECT_ZONE" ] || ! echo "$SELECT_ZONE" | grep -q '"timezone"' || ! echo "$SELECT_ZONE" | grep -q '"abbreviation"' || ! echo "$SELECT_ZONE" | grep -q '"utc_offset"'; } && { [ "$network_type" = "v6" ] || [ "$network_type" = "v4v6" ]; }; then
         debug_log "DEBUG: Trying WorldTimeAPI with IPv6 address"
         
-        # IPv6アドレスの取得を試行
+        # Try to get IPv6 address
         if [ -z "$ip_v6" ]; then
             api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{api}|$API_IPV6|g" | sed "s|{network}|$network_type|g")
             start_spinner "$api_msg" "dot" "blue"
             debug_log "DEBUG: Attempting to retrieve IPv6 address"
             
-            # BASE_WGETを使用
+            # Use BASE_WGET
             tmp_file="${CACHE_DIR}/ipv6_$$.tmp"
             $BASE_WGET "$tmp_file" "$API_IPV6" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
             if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
@@ -235,7 +235,7 @@ get_country_code() {
             api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{api}|$API_WORLDTIME|g" | sed "s|{network}|$network_type|g")
             start_spinner "$api_msg" "dot" "blue"
             
-            # BASE_WGETを使用
+            # Use BASE_WGET
             tmp_file="${CACHE_DIR}/worldtime_v6_$$.tmp"
             $BASE_WGET "$tmp_file" "$API_WORLDTIME" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
             if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
@@ -246,18 +246,18 @@ get_country_code() {
             if [ -n "$SELECT_ZONE" ]; then
                 select_ip="$ip_v6"
                 select_ip_ver="IPv6"
-                stop_spinner "WorldTimeAPI - $MSG_RETRIEVED" "success"
+                stop_spinner "WorldTime API - $MSG_RETRIEVED" "success"
                 debug_log "DEBUG: WorldTimeAPI responded successfully using IPv6"
             else
-                stop_spinner "WorldTimeAPI - $MSG_NOT_RETRIEVED" "error"
+                stop_spinner "WorldTime API - $MSG_NOT_RETRIEVED" "error"
                 debug_log "DEBUG: WorldTimeAPI also failed with IPv6"
             fi
         fi
     fi
     
-    # WorldTimeAPIからのデータを処理
+    # Process data from WorldTimeAPI
     if [ -n "$SELECT_ZONE" ]; then
-        # タイムゾーン情報を抽出
+        # Extract timezone information
         SELECT_ZONENAME=$(echo "$SELECT_ZONE" | grep -o '"timezone":"[^"]*' | awk -F'"' '{print $4}')
         SELECT_TIMEZONE=$(echo "$SELECT_ZONE" | grep -o '"abbreviation":"[^"]*' | awk -F'"' '{print $4}')
         utc_offset=$(echo "$SELECT_ZONE" | grep -o '"utc_offset":"[^"]*' | awk -F'"' '{print $4}')
@@ -265,17 +265,17 @@ get_country_code() {
         
         debug_log "DEBUG: Data extracted from WorldTimeAPI - ZoneName: $SELECT_ZONENAME, TZ: $SELECT_TIMEZONE, Offset: $utc_offset, IP: $worldtime_ip"
         
-        # すべての時間情報が揃っているか確認
+        # Check if all time information is available
         if [ -n "$SELECT_ZONENAME" ] && [ -n "$SELECT_TIMEZONE" ] && [ -n "$utc_offset" ]; then
-            # POSIX形式のタイムゾーン文字列を生成（例：JST-9）
+            # Generate POSIX timezone string (e.g., JST-9)
             offset_sign=$(echo "$utc_offset" | cut -c1)
             offset_hours=$(echo "$utc_offset" | cut -c2-3 | sed 's/^0//')
             
             if [ "$offset_sign" = "+" ]; then
-                # +9 -> -9（POSIXでは符号が反転）
+                # +9 -> -9 (sign is reversed in POSIX format)
                 SELECT_POSIX_TZ="${SELECT_TIMEZONE}-${offset_hours}"
             else
-                # -5 -> 5（POSIXではプラスの符号は省略）
+                # -5 -> 5 (plus sign is omitted in POSIX format)
                 SELECT_POSIX_TZ="${SELECT_TIMEZONE}${offset_hours}"
             fi
             
@@ -284,13 +284,13 @@ get_country_code() {
             debug_log "DEBUG: WorldTimeAPI response incomplete, missing required timezone data"
         fi
         
-        # WorldTimeAPIから得たIPを使ってIP-APIから国コードを取得
+        # Get country code from IP-API using IP from WorldTimeAPI
         if [ -n "$worldtime_ip" ]; then
             api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{api}|$API_IPAPI|g" | sed "s|{network}|$network_type|g")
             start_spinner "$api_msg" "dot" "blue"
             debug_log "DEBUG: Using WorldTimeAPI-provided IP for country code lookup"
             
-            # BASE_WGETを使用
+            # Use BASE_WGET
             tmp_file="${CACHE_DIR}/country_$$.tmp"
             $BASE_WGET "$tmp_file" "${API_IPAPI}/${worldtime_ip}" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
             if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
@@ -319,11 +319,11 @@ get_country_code() {
         debug_log "DEBUG: Failed to get any valid response from WorldTimeAPI"
     fi
     
-    # WorldTimeAPIからIPが取得できなかった場合やIP-APIが失敗した場合のフォールバック
+    # Fallback if WorldTimeAPI IP or IP-API failed
     if [ -z "$SELECT_COUNTRY" ]; then
         debug_log "DEBUG: Using fallback method for country code"
         
-        # 使用可能なIP（IPv4優先）をIP-APIに渡す
+        # Use available IP (IPv4 preferred) for IP-API
         local fallback_ip="$ip_v6"
         if [ -n "$ip_v4" ]; then
             fallback_ip="$ip_v4"
@@ -334,7 +334,7 @@ get_country_code() {
             start_spinner "$api_msg" "dot" "blue"
             debug_log "DEBUG: Querying IP-API directly with local IP: $fallback_ip"
             
-            # BASE_WGETを使用
+            # Use BASE_WGET
             tmp_file="${CACHE_DIR}/country_fallback_$$.tmp"
             $BASE_WGET "$tmp_file" "${API_IPAPI}/${fallback_ip}" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
             if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
@@ -350,12 +350,12 @@ get_country_code() {
                         stop_spinner "Country code - $MSG_NOT_RETRIEVED" "error"
                         debug_log "DEBUG: Failed to get country code using direct IP query"
                         
-                        # ipinfo.ioをさらにフォールバックとして使用
+                        # Use ipinfo.io as additional fallback
                         api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{api}|$API_IPINFO|g" | sed "s|{network}|$network_type|g")
                         start_spinner "$api_msg" "dot" "blue"
                         debug_log "DEBUG: Trying ipinfo.io as last resort"
                         
-                        # BASE_WGETを使用
+                        # Use BASE_WGET
                         tmp_file="${CACHE_DIR}/ipinfo_$$.tmp"
                         $BASE_WGET "$tmp_file" "${API_IPINFO}/${fallback_ip}/json" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
                         if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
@@ -391,10 +391,10 @@ get_country_code() {
         fi
     fi
     
-    # 一時ファイルのクリーンアップ（念のため）
+    # Cleanup temporary files
     rm -f "${CACHE_DIR}/*_$$.tmp" 2>/dev/null
     
-    # 結果の確認
+    # Check results
     if [ -z "$SELECT_ZONENAME" ] || [ -z "$SELECT_TIMEZONE" ] || [ -z "$SELECT_COUNTRY" ]; then
         debug_log "DEBUG: Failed to retrieve all required information"
         return 1
