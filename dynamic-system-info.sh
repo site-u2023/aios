@@ -140,7 +140,16 @@ get_country_code() {
         debug_log "DEBUG: Network connectivity type detected: $network_type"
     else
         debug_log "DEBUG: Network connectivity information not available"
-        network_type="v4"  # デフォルトでIPv4を試行
+        network_type="unknown"  # 接続タイプ不明
+    
+        # スピナー開始（初期メッセージ - 青色テキスト、黄色アニメーション）
+        start_spinner "$(color "blue" "$(get_message "MSG_NETWORK_UNAVAILABLE")")" "dot" "yellow"
+    
+        # エラーメッセージを表示して終了
+        local fail_msg=$(get_message "MSG_LOCATION_RESULT" "status=network unavailable")
+        stop_spinner "$fail_msg" "failed"
+        debug_log "DEBUG: Cannot proceed without network information"
+        return 1
     fi
     
     # スピナー開始（初期メッセージ - 青色テキスト、黄色アニメーション）
@@ -166,11 +175,9 @@ get_country_code() {
         if ping -c 1 -W 2 ipv6.ipify.org >/dev/null 2>&1; then
             debug_log "DEBUG: IPv6 connectivity confirmed, using IPv6 API"
             api_url="$API_IPV6"
-            network_type="v6"  # 表示用に一時的に更新
         else
             debug_log "DEBUG: IPv6 connectivity failed, using IPv4 API"
             api_url="$API_IPV4"
-            network_type="v4"  # 表示用に一時的に更新
         fi
         
         # 接続タイプに応じてメッセージを更新
