@@ -390,6 +390,7 @@ init_translation() {
     
     debug_log "DEBUG" "Translation module initialized with language processing"
     printf "Translation module initialization complete\n"
+    printf "\n"
 }
 
 # スクリプト初期化（自動実行）
