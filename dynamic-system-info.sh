@@ -227,7 +227,8 @@ get_country_code() {
     
     # スピナー開始（初期メッセージ）
     local init_msg=$(get_message "MSG_QUERY_INFO" "type=IP address" "api=ipify.org" "network=$network_type")
-    start_spinner "$init_msg" "dot" "blue"
+    # メッセージは青色、アニメーションは黄色に設定
+    start_spinner "$(color "blue" "$init_msg")" "dot" "yellow"
     spinner_active=1
     debug_log "DEBUG: Starting IP and location detection process"
     
@@ -245,9 +246,9 @@ get_country_code() {
             network_label="IPv4"
             api_url="$API_IPV4"
             
-            # メッセージ更新
+            # メッセージ更新（青色テキスト、黄色アニメーション）
             local fallback_msg=$(get_message "MSG_QUERY_INFO" "type=IP address" "api=ipify.org" "network=$network_label")
-            update_spinner "$fallback_msg"
+            update_spinner "$(color "blue" "$fallback_msg")" "yellow"
             debug_log "DEBUG: Trying fallback: Querying IP address from ipify.org via $network_label"
             
             tmp_file="$(mktemp -t location.XXXXXX)"
@@ -304,7 +305,8 @@ get_country_code() {
     
     # 国コードの取得（メッセージ更新）
     local country_msg=$(get_message "MSG_QUERY_INFO" "type=country code" "api=ip-api.com" "network=$network_label")
-    update_spinner "$country_msg" "blue"
+    # 青色テキスト、黄色アニメーションに更新
+    update_spinner "$(color "blue" "$country_msg")" "yellow"
     debug_log "DEBUG: Querying country code from ip-api.com via $network_label"
     
     tmp_file="$(mktemp -t location.XXXXXX)"
@@ -321,7 +323,8 @@ get_country_code() {
     
     # タイムゾーン情報の取得（メッセージ更新）
     local tz_msg=$(get_message "MSG_QUERY_INFO" "type=timezone" "api=worldtimeapi.org" "network=$network_label")
-    update_spinner "$tz_msg" "blue"
+    # 青色テキスト、黄色アニメーションに更新
+    update_spinner "$(color "blue" "$tz_msg")" "yellow"
     debug_log "DEBUG: Querying timezone from worldtimeapi.org via $network_label"
     
     tmp_file="$(mktemp -t location.XXXXXX)"
