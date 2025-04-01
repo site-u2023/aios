@@ -64,7 +64,7 @@ BOX_ENABLED="0"         # ボックス表示有効/無効
 # スピナーデフォルト設定
 SPINNER_DELAY="1" # デフォルトは秒単位
 SPINNER_USLEEP_VALUE="1000000" # 1秒（マイクロ秒）
-SPINNER_COLOR="yellow" # デフォルトのスピナー色
+SPINNER_COLOR="white" # デフォルトのスピナー色
 ANIMATION_ENABLED="1" # アニメーション有効/無効フラグ
 
 # コマンドラインオプション処理関数
