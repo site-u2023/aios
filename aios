@@ -1816,6 +1816,7 @@ print_information() {
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_OSVERSION" "info=$osversion")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_PACKAGEMANAGER" "info=$package_manager")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_USBDEVICE" "info=$usbdevice")")"
+    printf "\n"
 }
 
 print_country() {
