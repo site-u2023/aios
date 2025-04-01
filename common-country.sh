@@ -346,9 +346,6 @@ select_country() {
                 return 1
             }
             
-            # 言語を正規化（メッセージキャッシュを作成）
-            normalize_language
-            
             # 言語に対応するタイムゾーン情報を取得
             echo "$(echo "$lang_match" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone.tmp"
             
@@ -471,9 +468,6 @@ select_country() {
                     debug_log "ERROR" "Failed to write country data"
                     return 1
                 }
-
-                # 言語を正規化
-                normalize_language
                 
                 # zone_write関数に処理を委譲
                 echo "$(echo "$full_results" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone.tmp"
@@ -551,9 +545,6 @@ select_country() {
                     debug_log "ERROR" "Failed to write country data"
                     return 1
                 }
-                
-                # 言語を正規化
-                normalize_language
                 
                 # zone_write関数に処理を委譲
                 echo "$(echo "$selected_full" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone.tmp"
@@ -987,6 +978,7 @@ country_write() {
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_language="${CACHE_DIR}/language.ch"
     local cache_luci="${CACHE_DIR}/luci.ch"
+    local cache_message="${CACHE_DIR}/message.ch"  # message.chのパスを追加
     
     # 一時ファイルが存在するか確認
     if [ ! -f "$tmp_country" ]; then
@@ -1017,13 +1009,13 @@ country_write() {
     # LuCI言語コードをキャッシュに保存
     echo "$luci_code" > "$cache_luci"
     debug_log "DEBUG" "LuCI language code written to cache: $luci_code"
-
-    # 翻訳処理（normalize_language前）
-    init_translation
     
-    # 言語を正規化
-    debug_log "DEBUG" "Calling normalize_language to process language code"
-    normalize_language
+    # メッセージ言語コードを保存（LuCI言語コードと同じ）
+    echo "$luci_code" > "$cache_message"
+    debug_log "DEBUG" "Message language code written to cache: $luci_code"
+
+    # 翻訳処理
+    init_translation
     
     # 成功メッセージを表示（スキップフラグが設定されていない場合のみ）
     if [ "$skip_message" = "false" ]; then
