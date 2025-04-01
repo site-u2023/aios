@@ -216,7 +216,7 @@ get_country_code() {
     # キャッシュディレクトリの確認
     [ -d "${CACHE_DIR}" ] || mkdir -p "${CACHE_DIR}"
     
-    # ネットワーク接続状況の取得
+    # ネットワーク接続状況の取得 - そのまま使用する
     if [ -f "${CACHE_DIR}/network.ch" ]; then
         network_type=$(cat "${CACHE_DIR}/network.ch")
         debug_log "DEBUG: Network connectivity type detected: $network_type"
@@ -225,9 +225,8 @@ get_country_code() {
         network_type="v4"  # デフォルトでIPv4を試行
     fi
     
-    # スピナー開始（初期メッセージ）
+    # スピナー開始（初期メッセージ - 青色テキスト、黄色アニメーション）
     local init_msg=$(get_message "MSG_QUERY_INFO" "type=IP address" "api=ipify.org" "network=$network_type")
-    # メッセージは青色、アニメーションは黄色に設定
     start_spinner "$(color "blue" "$init_msg")" "dot" "yellow"
     spinner_active=1
     debug_log "DEBUG: Starting IP and location detection process"
@@ -303,29 +302,27 @@ get_country_code() {
         return 1
     fi
     
-    # 国コードの取得（メッセージ更新）
-    local country_msg=$(get_message "MSG_QUERY_INFO" "type=country code" "api=ip-api.com" "network=$network_label")
-    # 青色テキスト、黄色アニメーションに更新
+    # 国コードの取得（メッセージ更新 - 青色テキスト、黄色アニメーション）
+    local country_msg=$(get_message "MSG_QUERY_INFO" "type=country code" "api=ip-api.com" "network=$network_type")
     update_spinner "$(color "blue" "$country_msg")" "yellow"
-    debug_log "DEBUG: Querying country code from ip-api.com via $network_label"
+    debug_log "DEBUG: Querying country code from ip-api.com via $network_type"
     
     tmp_file="$(mktemp -t location.XXXXXX)"
     $BASE_WGET "$tmp_file" "${API_IPAPI}/${ip_address}" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
     
     if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
         SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
-        debug_log "DEBUG: Retrieved country code: $SELECT_COUNTRY from ip-api.com via $network_label"
+        debug_log "DEBUG: Retrieved country code: $SELECT_COUNTRY from ip-api.com via $network_type"
         rm -f "$tmp_file"
     else
         debug_log "DEBUG: Country code query failed"
         rm -f "$tmp_file" 2>/dev/null
     fi
     
-    # タイムゾーン情報の取得（メッセージ更新）
-    local tz_msg=$(get_message "MSG_QUERY_INFO" "type=timezone" "api=worldtimeapi.org" "network=$network_label")
-    # 青色テキスト、黄色アニメーションに更新
+    # タイムゾーン情報の取得（メッセージ更新 - 青色テキスト、黄色アニメーション）
+    local tz_msg=$(get_message "MSG_QUERY_INFO" "type=timezone" "api=worldtimeapi.org" "network=$network_type")
     update_spinner "$(color "blue" "$tz_msg")" "yellow"
-    debug_log "DEBUG: Querying timezone from worldtimeapi.org via $network_label"
+    debug_log "DEBUG: Querying timezone from worldtimeapi.org via $network_type"
     
     tmp_file="$(mktemp -t location.XXXXXX)"
     $BASE_WGET "$tmp_file" "$API_WORLDTIME" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
@@ -335,7 +332,7 @@ get_country_code() {
         SELECT_TIMEZONE=$(grep -o '"abbreviation":"[^"]*' "$tmp_file" | sed 's/"abbreviation":"//')
         local utc_offset=$(grep -o '"utc_offset":"[^"]*' "$tmp_file" | sed 's/"utc_offset":"//')
         
-        debug_log "DEBUG: Retrieved timezone data: $SELECT_ZONENAME ($SELECT_TIMEZONE), UTC offset: $utc_offset from worldtimeapi.org via $network_label"
+        debug_log "DEBUG: Retrieved timezone data: $SELECT_ZONENAME ($SELECT_TIMEZONE), UTC offset: $utc_offset from worldtimeapi.org via $network_type"
         
         # POSIX形式のタイムゾーン文字列を生成
         if [ -n "$SELECT_TIMEZONE" ] && [ -n "$utc_offset" ]; then
