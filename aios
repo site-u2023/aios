@@ -338,19 +338,17 @@ check_message_cache() {
     return 0
 }
 
-# メッセージ取得関数（複数プレースホルダー対応版）
+# メッセージ取得関数（複数プレースホルダー対応版 - シンプル）
 get_message() {
     local key="$1"
-    shift  # 最初の引数（キー）を除去
-    local lang="$DEFAULT_LANGUAGE"    # デフォルト言語
+    local params="$2"  # すべてのパラメータを一つの引数として受け取る
+    local lang="$DEFAULT_LANGUAGE"
     local message=""
     
     # 言語コードの取得
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang=$(cat "${CACHE_DIR}/message.ch")
     fi
-    
-    debug_log "DEBUG" "get_message called for key='${key}' lang='${lang}' with params: $*"
     
     # DBファイルを確認して検索
     local db_file="$(check_message_cache "$lang")"
@@ -364,13 +362,11 @@ get_message() {
         fi
     else
         # DBファイルが存在しない場合のみ、メモリキャッシュを参照
-        # メモリキャッシュが初期化されていなければ初期化
         if [ "$MSG_MEMORY_INITIALIZED" != "true" ]; then
             into_memory_message
         fi
         
         if [ -n "$MSG_MEMORY" ]; then
-            # メモリからデフォルト言語のメッセージを検索
             message=$(echo "$MSG_MEMORY" | grep "^${DEFAULT_LANGUAGE}|${key}=" 2>/dev/null | cut -d'=' -f2-)
         fi
     fi
@@ -381,7 +377,7 @@ get_message() {
         message="$key"
     fi
     
-    # プレースホルダーの処理（既存コードと同じ）
+    # プレースホルダーの処理
     message=$(echo "$message" | sed 's/{notr_colon_notr}/:/g')
     message=$(echo "$message" | sed 's/{notr_yn_notr}/(y\/n)/g') 
     message=$(echo "$message" | sed 's/{notr_newline_notr}/\\n/g')
@@ -393,17 +389,22 @@ get_message() {
         message=$(echo "$message" | sed "s/$placeholder/{$name}/g")
     done
     
-    # 複数パラメータ置換処理
-    for param in "$@"; do
-        local var_name=$(echo "$param" | cut -d'=' -f1)
-        local var_value=$(echo "$param" | cut -d'=' -f2-)
-        
-        if [ -n "$var_name" ] && [ -n "$var_value" ]; then
-            local var_value_esc=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
-            message=$(echo "$message" | sed "s|{$var_name}|$var_value_esc|g")
-            debug_log "DEBUG" "Replacing placeholder {$var_name} with $var_value_esc"
-        fi
-    done
+    # パラメータ置換処理 - シンプルに全パラメータを個別に処理
+    if [ -n "$params" ]; then
+        # スペースで区切られたパラメータを処理
+        for param in $(echo "$params" | tr ' ' '\n'); do
+            var_name=$(echo "$param" | cut -d'=' -f1)
+            var_value=$(echo "$param" | cut -d'=' -f2-)
+            
+            if [ -n "$var_name" ] && [ -n "$var_value" ]; then
+                # エスケープ処理
+                var_value_esc=$(echo "$var_value" | sed 's/[\/&]/\\&/g')
+                # 置換実行
+                message=$(echo "$message" | sed "s|{$var_name}|$var_value_esc|g")
+                debug_log "DEBUG" "Replaced {$var_name} with $var_value_esc"
+            fi
+        done
+    fi
     
     # 最後にエスケープシーケンスを処理して出力
     printf "%b" "$message"
