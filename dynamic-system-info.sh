@@ -155,8 +155,9 @@ get_country_code() {
         fi
     fi
     
-    # 進行状況を1行で表示するためのスピナー開始
+    # スピナー開始 - 初期メッセージ
     start_spinner "$(color blue "接続情報取得中...")" "dot" "blue"
+    debug_log "DEBUG: Starting location info retrieval process"
     
     # ネットワーク状況に応じたIPアドレス取得
     if [ "$network_type" = "v4" ] || [ "$network_type" = "v4v6" ]; then
@@ -175,6 +176,7 @@ get_country_code() {
         if [ -n "$ip_v4" ]; then
             SPINNER_MESSAGE="$(color green "$API_IPV4 $network_type retrieved successfully")"
             debug_log "DEBUG: IPv4 address retrieved: $ip_v4"
+            sleep 1  # 短い間表示
             
             # WorldTimeAPIからタイムゾーン情報を取得
             SPINNER_MESSAGE="$(color blue "$API_WORLDTIME $network_type ...")"
@@ -192,13 +194,16 @@ get_country_code() {
                 select_ip="$ip_v4"
                 SPINNER_MESSAGE="$(color green "$API_WORLDTIME $network_type retrieved successfully")"
                 debug_log "DEBUG: WorldTimeAPI responded successfully using IPv4"
+                sleep 1  # 短い間表示
             else
                 SPINNER_MESSAGE="$(color red "WorldTimeAPI request failed")"
                 debug_log "DEBUG: WorldTimeAPI failed with IPv4, response is empty"
+                sleep 1  # 短い間表示
             fi
         else
             SPINNER_MESSAGE="$(color red "IPv4 retrieval failed")"
             debug_log "DEBUG: Failed to retrieve IPv4 address"
+            sleep 1  # 短い間表示
         fi
     fi
     
@@ -222,9 +227,11 @@ get_country_code() {
             if [ -n "$ip_v6" ]; then
                 SPINNER_MESSAGE="$(color green "$API_IPV6 $network_type retrieved successfully")"
                 debug_log "DEBUG: IPv6 address retrieved: $ip_v6"
+                sleep 1  # 短い間表示
             else
                 SPINNER_MESSAGE="$(color red "IPv6 retrieval failed")"
                 debug_log "DEBUG: Failed to retrieve IPv6 address"
+                sleep 1  # 短い間表示
             fi
         fi
         
@@ -244,9 +251,11 @@ get_country_code() {
                 select_ip="$ip_v6"
                 SPINNER_MESSAGE="$(color green "$API_WORLDTIME $network_type retrieved successfully")"
                 debug_log "DEBUG: WorldTimeAPI responded successfully using IPv6"
+                sleep 1  # 短い間表示
             else
                 SPINNER_MESSAGE="$(color red "WorldTimeAPI request failed")"
                 debug_log "DEBUG: WorldTimeAPI also failed with IPv6"
+                sleep 1  # 短い間表示
             fi
         fi
     fi
@@ -299,17 +308,21 @@ get_country_code() {
                     if [ -n "$SELECT_COUNTRY" ]; then
                         SPINNER_MESSAGE="$(color green "$API_IPAPI $network_type retrieved successfully")"
                         debug_log "DEBUG: Country code retrieved using WorldTimeAPI IP: $SELECT_COUNTRY"
+                        sleep 1  # 短い間表示
                     else
                         SPINNER_MESSAGE="$(color red "Country code retrieval failed")"
                         debug_log "DEBUG: Failed to get country code using WorldTimeAPI IP"
+                        sleep 1  # 短い間表示
                     fi
                 else
                     SPINNER_MESSAGE="$(color red "IP-API request returned empty response")"
                     debug_log "DEBUG: IP-API request returned empty response"
+                    sleep 1  # 短い間表示
                 fi
             else
                 SPINNER_MESSAGE="$(color red "IP-API request failed")"
                 debug_log "DEBUG: IP-API request failed"
+                sleep 1  # 短い間表示
             fi
         fi
     else
@@ -342,9 +355,11 @@ get_country_code() {
                     if [ -n "$SELECT_COUNTRY" ]; then
                         SPINNER_MESSAGE="$(color green "$API_IPAPI $network_type retrieved successfully")"
                         debug_log "DEBUG: Country code retrieved using direct IP query: $SELECT_COUNTRY"
+                        sleep 1  # 短い間表示
                     else
                         SPINNER_MESSAGE="$(color red "Country code retrieval failed")"
                         debug_log "DEBUG: Failed to get country code using direct IP query"
+                        sleep 1  # 短い間表示
                         
                         # ipinfo.ioをさらにフォールバックとして使用
                         SPINNER_MESSAGE="$(color blue "$API_IPINFO $network_type ...")"
@@ -362,26 +377,32 @@ get_country_code() {
                                 if [ -n "$SELECT_COUNTRY" ]; then
                                     SPINNER_MESSAGE="$(color green "$API_IPINFO $network_type retrieved successfully")"
                                     debug_log "DEBUG: Country code retrieved from ipinfo.io: $SELECT_COUNTRY"
+                                    sleep 1  # 短い間表示
                                 else
                                     SPINNER_MESSAGE="$(color red "Country code retrieval from ipinfo.io failed")"
                                     debug_log "DEBUG: Failed to get country code from ipinfo.io"
+                                    sleep 1  # 短い間表示
                                 fi
                             else
                                 SPINNER_MESSAGE="$(color red "ipinfo.io request returned empty response")"
                                 debug_log "DEBUG: ipinfo.io request returned empty response"
+                                sleep 1  # 短い間表示
                             fi
                         else
                             SPINNER_MESSAGE="$(color red "ipinfo.io request failed")"
                             debug_log "DEBUG: ipinfo.io request failed"
+                            sleep 1  # 短い間表示
                         fi
                     fi
                 else
                     SPINNER_MESSAGE="$(color red "IP-API fallback request returned empty response")"
                     debug_log "DEBUG: IP-API fallback request returned empty response"
+                    sleep 1  # 短い間表示
                 fi
             else
                 SPINNER_MESSAGE="$(color red "IP-API fallback request failed")"
                 debug_log "DEBUG: IP-API fallback request failed"
+                sleep 1  # 短い間表示
             fi
         fi
     fi
