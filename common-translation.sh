@@ -248,7 +248,7 @@ EOF
     
     # 翻訳処理開始
     printf "\n"
-    printf "Creating translation DB using API: %s\n" "$api_lang"
+    # printf "Creating translation DB using API: %s\n" "$api_lang"
         
     # ネットワーク接続状態を確認
     if [ ! -f "$ip_check_file" ]; then
