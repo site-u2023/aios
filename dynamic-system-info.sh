@@ -108,88 +108,6 @@ check_location_cache() {
     return 1  # キャッシュ無効または不完全
 }
 
-# 並列リクエスト関数（IPv4/IPv6同時試行）- v4v6環境専用
-parallel_ip_request() {
-    local ipv4_file="$(mktemp -t location-ipv4.XXXXXX)"
-    local ipv6_file="$(mktemp -t location-ipv6.XXXXXX)"
-    local ipv4_pid=0
-    local ipv6_pid=0
-       
-    debug_log "DEBUG: Starting parallel requests for IPv4 and IPv6 addresses"
-        
-    # IPv4リクエスト（バックグラウンド）
-    $BASE_WGET "$ipv4_file" "$API_IPV4" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null &
-    ipv4_pid=$!
-     
-    # IPv6リクエスト（バックグラウンド）
-    $BASE_WGET "$ipv6_file" "$API_IPV6" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null &
-    ipv6_pid=$!
-        
-    # 両方完了まで待機（最大タイムアウト+2秒）
-    local wait_time=0
-    local max_wait=$(( timeout_sec + 2 ))
-    local completed_ipv4=0
-    local completed_ipv6=0
-        
-    while [ $wait_time -lt $max_wait ] && ([ $completed_ipv4 -eq 0 ] || [ $completed_ipv6 -eq 0 ]); do
-        # IPv4プロセスチェック
-        if [ $completed_ipv4 -eq 0 ]; then
-            ps | grep -v grep | grep -q "$ipv4_pid" 2>/dev/null || completed_ipv4=1
-        fi
-            
-        # IPv6プロセスチェック
-        if [ $completed_ipv6 -eq 0 ]; then
-            ps | grep -v grep | grep -q "$ipv6_pid" 2>/dev/null || completed_ipv6=1
-        fi
-            
-        # 両方完了していればループを抜ける
-        if [ $completed_ipv4 -eq 1 ] && [ $completed_ipv6 -eq 1 ]; then
-            break
-        fi
-            
-        sleep 1
-        wait_time=$(( wait_time + 1 ))
-    done
-        
-    # タイムアウトしたプロセスを強制終了
-    if [ $completed_ipv4 -eq 0 ]; then
-        kill $ipv4_pid 2>/dev/null || true
-        debug_log "DEBUG: IPv4 request timed out after ${wait_time}s, terminating process"
-    fi
-        
-    if [ $completed_ipv6 -eq 0 ]; then
-        kill $ipv6_pid 2>/dev/null || true
-        debug_log "DEBUG: IPv6 request timed out after ${wait_time}s, terminating process"
-    fi
-        
-    # 結果の確認（IPv6を優先）
-    local ip_address=""
-    local network_used=""
-        
-    if [ -f "$ipv6_file" ] && [ -s "$ipv6_file" ]; then
-        ip_address=$(cat "$ipv6_file")
-        network_used="IPv6"
-        debug_log "DEBUG: IPv6 request completed successfully: $ip_address"
-    elif [ -f "$ipv4_file" ] && [ -s "$ipv4_file" ]; then
-        ip_address=$(cat "$ipv4_file")
-        network_used="IPv4"
-        debug_log "DEBUG: IPv4 request completed successfully: $ip_address"
-    else
-        debug_log "DEBUG: Both IPv4 and IPv6 requests failed"
-    fi
-        
-    # 一時ファイルの削除
-    rm -f "$ipv4_file" "$ipv6_file" 2>/dev/null
-        
-    # 結果を返す
-    if [ -n "$ip_address" ]; then
-        echo "$ip_address:$network_used"
-        return 0
-    else
-        return 1
-    fi
-}
-    
 # 国コードとタイムゾーン情報を取得する関数
 get_country_code() {
     # 変数宣言
@@ -216,7 +134,7 @@ get_country_code() {
     # キャッシュディレクトリの確認
     [ -d "${CACHE_DIR}" ] || mkdir -p "${CACHE_DIR}"
     
-    # ネットワーク接続状況の取得 - そのまま使用する
+    # ネットワーク接続状況の取得
     if [ -f "${CACHE_DIR}/network.ch" ]; then
         network_type=$(cat "${CACHE_DIR}/network.ch")
         debug_log "DEBUG: Network connectivity type detected: $network_type"
@@ -231,64 +149,48 @@ get_country_code() {
     spinner_active=1
     debug_log "DEBUG: Starting IP and location detection process"
     
-    # IPアドレスの取得（v4v6環境なら並列処理）
-    if [ "$network_type" = "v4v6" ]; then
-        debug_log "DEBUG: Dual-stack network detected, using parallel IP requests"
-        local result=$(parallel_ip_request)
-        if [ $? -eq 0 ] && [ -n "$result" ]; then
-            ip_address=$(echo "$result" | cut -d ':' -f1)
-            network_label=$(echo "$result" | cut -d ':' -f2)
-            debug_log "DEBUG: Parallel request successful, using $network_label: $ip_address"
-        else
-            debug_log "DEBUG: Parallel IP request failed, falling back to sequential mode"
-            # 並列処理失敗時はIPv4を使用する
-            network_label="IPv4"
-            api_url="$API_IPV4"
-            
-            # メッセージ更新（青色テキスト、黄色アニメーション）
-            local fallback_msg=$(get_message "MSG_QUERY_INFO" "type=IP address" "api=ipify.org" "network=$network_label")
-            update_spinner "$(color "blue" "$fallback_msg")" "yellow"
-            debug_log "DEBUG: Trying fallback: Querying IP address from ipify.org via $network_label"
-            
-            tmp_file="$(mktemp -t location.XXXXXX)"
-            $BASE_WGET "$tmp_file" "$api_url" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
-            
-            if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-                ip_address=$(cat "$tmp_file")
-                rm -f "$tmp_file"
-                debug_log "DEBUG: Retrieved IP address: $ip_address from ipify.org via $network_label"
-            else
-                debug_log "DEBUG: IP address query failed via $network_label"
-                rm -f "$tmp_file" 2>/dev/null
-            fi
-        fi
+    # IPアドレスの取得（ネットワークタイプに応じて適切なAPIを選択）
+    if [ "$network_type" = "v4" ]; then
+        # IPv4のみ
+        debug_log "DEBUG: IPv4-only environment detected, using IPv4 API"
+        api_url="$API_IPV4"
+    elif [ "$network_type" = "v6" ]; then
+        # IPv6のみ
+        debug_log "DEBUG: IPv6-only environment detected, using IPv6 API"
+        api_url="$API_IPV6"
     else
-        # 通常の処理（元のコード通り）
-        # ネットワークタイプに応じてIPアドレス取得API選択
-        if [ "$network_type" = "v6" ]; then
-            # IPv6のみ
-            network_label="IPv6"
+        # v4v6の場合はデュアルスタック
+        debug_log "DEBUG: Dual-stack environment detected, selecting appropriate API based on connectivity"
+        
+        # ホスト名の接続性テスト
+        if ping -c 1 -W 2 ipv6.ipify.org >/dev/null 2>&1; then
+            debug_log "DEBUG: IPv6 connectivity confirmed, using IPv6 API"
             api_url="$API_IPV6"
+            network_type="v6"  # 表示用に一時的に更新
         else
-            # IPv4
-            network_label="IPv4"
+            debug_log "DEBUG: IPv6 connectivity failed, using IPv4 API"
             api_url="$API_IPV4"
+            network_type="v4"  # 表示用に一時的に更新
         fi
         
-        debug_log "DEBUG: Single-stack network detected ($network_type), using sequential mode"
-        debug_log "DEBUG: Querying IP address from ipify.org via $network_label"
-        
-        tmp_file="$(mktemp -t location.XXXXXX)"
-        $BASE_WGET "$tmp_file" "$api_url" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
-        
-        if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-            ip_address=$(cat "$tmp_file")
-            rm -f "$tmp_file"
-            debug_log "DEBUG: Retrieved IP address: $ip_address from ipify.org via $network_label"
-        else
-            debug_log "DEBUG: IP address query failed via $network_label"
-            rm -f "$tmp_file" 2>/dev/null
-        fi
+        # 接続タイプに応じてメッセージを更新
+        local conn_msg=$(get_message "MSG_QUERY_INFO" "type=IP address" "api=ipify.org" "network=$network_type")
+        update_spinner "$(color "blue" "$conn_msg")" "yellow"
+    fi
+    
+    # 選択したAPIを使用してIPアドレスを取得
+    debug_log "DEBUG: Querying IP address from $api_url"
+    
+    tmp_file="$(mktemp -t location.XXXXXX)"
+    $BASE_WGET "$tmp_file" "$api_url" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
+    
+    if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+        ip_address=$(cat "$tmp_file")
+        rm -f "$tmp_file"
+        debug_log "DEBUG: Retrieved IP address: $ip_address from $api_url"
+    else
+        debug_log "DEBUG: IP address query failed for $api_url"
+        rm -f "$tmp_file" 2>/dev/null
     fi
     
     # IPアドレスが取得できたかチェック
@@ -312,7 +214,7 @@ get_country_code() {
     
     if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
         SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
-        debug_log "DEBUG: Retrieved country code: $SELECT_COUNTRY from ip-api.com via $network_type"
+        debug_log "DEBUG: Retrieved country code: $SELECT_COUNTRY from ip-api.com"
         rm -f "$tmp_file"
     else
         debug_log "DEBUG: Country code query failed"
@@ -332,7 +234,7 @@ get_country_code() {
         SELECT_TIMEZONE=$(grep -o '"abbreviation":"[^"]*' "$tmp_file" | sed 's/"abbreviation":"//')
         local utc_offset=$(grep -o '"utc_offset":"[^"]*' "$tmp_file" | sed 's/"utc_offset":"//')
         
-        debug_log "DEBUG: Retrieved timezone data: $SELECT_ZONENAME ($SELECT_TIMEZONE), UTC offset: $utc_offset from worldtimeapi.org via $network_type"
+        debug_log "DEBUG: Retrieved timezone data: $SELECT_ZONENAME ($SELECT_TIMEZONE), UTC offset: $utc_offset from worldtimeapi.org"
         
         # POSIX形式のタイムゾーン文字列を生成
         if [ -n "$SELECT_TIMEZONE" ] && [ -n "$utc_offset" ]; then
