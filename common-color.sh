@@ -468,8 +468,149 @@ load_display_settings() {
     fi
 }
 
-# スピナー開始関数
+# 改良されたスピナー開始関数 - メッセージ更新に対応
 start_spinner() {
+    local message="$1"
+    local anim_type="${2:-dot}"
+    local spinner_color="${3:-$SPINNER_COLOR}"
+    
+    # グローバル変数を設定
+    SPINNER_MESSAGE="$message"
+    SPINNER_TYPE="$anim_type"
+    SPINNER_COLOR="$spinner_color"
+    
+    if [ "$ANIMATION_ENABLED" -eq "0" ]; then
+        debug_log "DEBUG: Animation disabled, showing static message"
+        return
+    fi
+
+    if command -v usleep >/dev/null 2>&1; then
+        SPINNER_USLEEP_VALUE="300000"  # 300000マイクロ秒 = 0.3秒
+        SPINNER_DELAY="300000"         # アニメーションディレイ値
+        debug_log "DEBUG: Using fast animation mode (0.3s) with usleep"
+    else
+        SPINNER_DELAY="1"              # アニメーションディレイ値（秒）
+        debug_log "DEBUG: Using standard animation mode (1s)"
+    fi
+
+    # カーソル非表示
+    printf "\033[?25l"
+
+    # アニメーションタイプに応じた文字セット
+    case "$anim_type" in
+        spinner)
+            SPINNER_CHARS="- \\ | /"
+            ;;
+        dot)
+            SPINNER_CHARS=". .. ... ....  "
+            ;;
+        bar)
+            SPINNER_CHARS="[=] => ->"
+            ;;
+        pulse)
+            SPINNER_CHARS="◯ ◎"
+            ;;
+        emoji)
+            SPINNER_CHARS="🤖 👺 😀 👽 😈 💀"
+            ;;
+        *)
+            SPINNER_CHARS="- \\ | /"
+            ;;
+    esac
+
+    debug_log "DEBUG: Starting spinner with message: $message, type: $anim_type, delay: $SPINNER_DELAY"
+
+    # 直前のスピナープロセスがまだ実行中の場合は停止
+    if [ -n "$SPINNER_PID" ]; then
+        ps | grep -v grep | grep -q "$SPINNER_PID" 2>/dev/null
+        if [ $? -eq 0 ]; then
+            debug_log "DEBUG: Stopping previous spinner process PID: $SPINNER_PID"
+            kill "$SPINNER_PID" >/dev/null 2>&1
+            wait "$SPINNER_PID" 2>/dev/null || true
+        fi
+    fi
+
+    # バックグラウンドでスピナーを実行
+    (
+        i=0
+        while true; do
+            for char in $SPINNER_CHARS; do
+                printf "\r\033[K%s %s" "$SPINNER_MESSAGE" "$(color "$SPINNER_COLOR" "$char")"
+
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$SPINNER_USLEEP_VALUE"  # マイクロ秒単位のディレイ
+                else
+                    sleep "$SPINNER_DELAY"  # 秒単位のディレイ
+                fi
+            done
+        done
+    ) &
+    SPINNER_PID=$!
+    debug_log "DEBUG: Spinner started with PID: $SPINNER_PID"
+}
+
+# 改良されたスピナー停止関数
+stop_spinner() {
+    local message="$1"
+    local status="${2:-success}"
+
+    if [ "$ANIMATION_ENABLED" -eq "0" ]; then
+        printf "%s\n" "$message"
+        return
+    fi
+
+    debug_log "DEBUG: Stopping spinner with message: $message, status: $status"
+
+    # プロセスが存在するか確認
+    if [ -n "$SPINNER_PID" ]; then
+        # プロセスが実際に存在するか確認
+        ps | grep -v grep | grep -q "$SPINNER_PID" 2>/dev/null
+        if [ $? -eq 0 ]; then
+            debug_log "DEBUG: Process found, killing PID: $SPINNER_PID"
+            kill "$SPINNER_PID" >/dev/null 2>&1
+            wait "$SPINNER_PID" 2>/dev/null || true
+            unset SPINNER_PID
+            printf "\r\033[K"  # 行をクリア
+            
+            # 成功/失敗に応じたメッセージカラー
+            if [ "$status" = "success" ]; then
+                printf "%s\n" "$(color green "$message")"
+            else
+                printf "%s\n" "$(color yellow "$message")"
+            fi
+        else
+            debug_log "DEBUG: Process not found for PID: $SPINNER_PID"
+            unset SPINNER_PID
+        fi
+    fi
+    
+    # カーソル表示
+    printf "\033[?25h"
+}
+
+# スピナーメッセージ更新関数（新規追加）
+update_spinner() {
+    local message="$1"
+    local spinner_color="${2:-$SPINNER_COLOR}"
+    
+    if [ "$ANIMATION_ENABLED" -eq "0" ]; then
+        debug_log "DEBUG: Animation disabled, not updating spinner message"
+        return
+    fi
+    
+    # メッセージと色を更新
+    SPINNER_MESSAGE="$message"
+    
+    # 色が指定されている場合のみ更新
+    if [ -n "$spinner_color" ]; then
+        SPINNER_COLOR="$spinner_color"
+    fi
+    
+    debug_log "DEBUG: Updated spinner message to: $message"
+}
+
+# スピナー開始関数
+OK_start_spinner() {
     message="$1"
     anim_type="${2:-dot}"
     spinner_color="${3:-$SPINNER_COLOR}"
@@ -536,7 +677,7 @@ start_spinner() {
 }
 
 # スピナー停止関数
-stop_spinner() {
+OK_stop_spinner() {
     local message="$1"
     local status="${2:-success}"
 
