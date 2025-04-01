@@ -363,7 +363,16 @@ get_message() {
             message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
         fi
     else
-        # 省略...（既存コードと同じ）
+        # DBファイルが存在しない場合のみ、メモリキャッシュを参照
+        # メモリキャッシュが初期化されていなければ初期化
+        if [ "$MSG_MEMORY_INITIALIZED" != "true" ]; then
+            into_memory_message
+        fi
+        
+        if [ -n "$MSG_MEMORY" ]; then
+            # メモリからデフォルト言語のメッセージを検索
+            message=$(echo "$MSG_MEMORY" | grep "^${DEFAULT_LANGUAGE}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+        fi
     fi
     
     # メッセージが見つからない場合はキーをそのまま返す
