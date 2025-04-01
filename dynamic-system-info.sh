@@ -108,8 +108,13 @@ check_location_cache() {
     return 1  # キャッシュ無効または不完全
 }
 
-# 国コードとタイムゾーン情報を一括取得する関数
+# 国コードとタイムゾーン情報を一括取得する関数（スピナー実装版）
 get_country_code() {
+    # メッセージキーをローカルで定義（関数内に配置）
+    local MSG_API_ACCESS="API接続中: {api} ({network})"
+    local MSG_RETRIEVED="{api} ({network}) 取得完了"
+    local MSG_NOT_RETRIEVED="取得失敗"
+    
     # ローカル変数の宣言
     local ip_v4=""
     local ip_v6=""
@@ -161,7 +166,7 @@ get_country_code() {
     # ネットワーク状況に応じたIPアドレス取得
     if [ "$network_type" = "v4" ] || [ "$network_type" = "v4v6" ]; then
         # IPv4アドレスの取得を試行
-        api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{notr_api_notr}|$API_IPV4|g" | sed "s|{notr_network_notr}|IPv4|g")
+        api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{api}|$API_IPV4|g" | sed "s|{network}|IPv4|g")
         start_spinner "$api_msg" "dot" "blue"
         debug_log "DEBUG: Attempting to retrieve IPv4 address"
         
@@ -179,7 +184,7 @@ get_country_code() {
             debug_log "DEBUG: IPv4 address retrieved: $ip_v4"
             
             # WorldTimeAPIからタイムゾーン情報を取得
-            api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{notr_api_notr}|$API_WORLDTIME|g" | sed "s|{notr_network_notr}|IPv4|g")
+            api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{api}|$API_WORLDTIME|g" | sed "s|{network}|IPv4|g")
             start_spinner "$api_msg" "dot" "blue"
             debug_log "DEBUG: Trying WorldTimeAPI with IPv4 address"
             
@@ -213,7 +218,7 @@ get_country_code() {
         
         # IPv6アドレスの取得を試行
         if [ -z "$ip_v6" ]; then
-            api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{notr_api_notr}|$API_IPV6|g" | sed "s|{notr_network_notr}|IPv6|g")
+            api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{api}|$API_IPV6|g" | sed "s|{network}|IPv6|g")
             start_spinner "$api_msg" "dot" "blue"
             debug_log "DEBUG: Attempting to retrieve IPv6 address"
             
@@ -236,7 +241,7 @@ get_country_code() {
         fi
         
         if [ -n "$ip_v6" ]; then
-            api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{notr_api_notr}|$API_WORLDTIME|g" | sed "s|{notr_network_notr}|IPv6|g")
+            api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{api}|$API_WORLDTIME|g" | sed "s|{network}|IPv6|g")
             start_spinner "$api_msg" "dot" "blue"
             
             # BASE_WGETを使用
@@ -254,7 +259,7 @@ get_country_code() {
                 stop_spinner "$success_msg" "success"
                 debug_log "DEBUG: WorldTimeAPI responded successfully using IPv6"
             else
-                stop_spinner "$MSG_NOT_RETRIEVED" "error"
+                stop_spinner "$MSG_NOT_RETRIEVED" "error" 
                 debug_log "DEBUG: WorldTimeAPI also failed with IPv6"
             fi
         fi
@@ -291,7 +296,7 @@ get_country_code() {
         
         # WorldTimeAPIから得たIPを使ってIP-APIから国コードを取得
         if [ -n "$worldtime_ip" ]; then
-            api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{notr_api_notr}|$API_IPAPI|g" | sed "s|{notr_network_notr}|$select_ip_ver|g")
+            api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{api}|$API_IPAPI|g" | sed "s|{network}|$select_ip_ver|g")
             start_spinner "$api_msg" "dot" "blue"
             debug_log "DEBUG: Using WorldTimeAPI-provided IP for country code lookup"
             
@@ -338,7 +343,7 @@ get_country_code() {
         fi
         
         if [ -n "$fallback_ip" ]; then
-            api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{notr_api_notr}|$API_IPAPI|g" | sed "s|{notr_network_notr}|$fallback_network|g")
+            api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{api}|$API_IPAPI|g" | sed "s|{network}|$fallback_network|g")
             start_spinner "$api_msg" "dot" "blue"
             debug_log "DEBUG: Querying IP-API directly with local IP: $fallback_ip"
             
@@ -360,7 +365,7 @@ get_country_code() {
                         debug_log "DEBUG: Failed to get country code using direct IP query"
                         
                         # ipinfo.ioをさらにフォールバックとして使用
-                        api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{notr_api_notr}|$API_IPINFO|g" | sed "s|{notr_network_notr}|$fallback_network|g")
+                        api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{api}|$API_IPINFO|g" | sed "s|{network}|$fallback_network|g")
                         start_spinner "$api_msg" "dot" "blue"
                         debug_log "DEBUG: Trying ipinfo.io as last resort"
                         
