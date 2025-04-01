@@ -248,7 +248,8 @@ EOF
     
     # 翻訳処理開始
     printf "Creating translation DB using API: %s\n" "$api_lang"
-    
+    printf "\n"
+        
     # ネットワーク接続状態を確認
     if [ ! -f "$ip_check_file" ]; then
         debug_log "DEBUG" "Network status file not found, checking connectivity"
