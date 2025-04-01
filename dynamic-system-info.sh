@@ -114,7 +114,6 @@ get_country_code() {
     local ip_v4=""
     local ip_v6=""
     local select_ip=""
-    local select_ip_ver=""
     local utc_offset=""
     local offset_sign=""
     local offset_hours=""
@@ -122,7 +121,6 @@ get_country_code() {
     local timeout_sec=15
     local network_type=""
     local tmp_file=""
-    local network_display=""  # ネットワーク表示用
     
     # API URLの定数化
     local API_IPV4="https://api.ipify.org"
@@ -157,22 +155,6 @@ get_country_code() {
         fi
     fi
     
-    # ネットワークタイプに応じた表示用文字列の設定
-    case "$network_type" in
-        "v4")
-            network_display="IPv4"
-            ;;
-        "v6")
-            network_display="IPv6"
-            ;;
-        "v4v6")
-            network_display="IPv4/IPv6"
-            ;;
-        *)
-            network_display="Unknown"
-            ;;
-    esac
-    
     # スピナー開始 - 地域情報取得開始
     start_spinner "$(color blue "$(get_message "MSG_RETRIEVING_INFO")")" "dot" "blue"
     debug_log "DEBUG: Starting location info retrieval process"
@@ -181,7 +163,7 @@ get_country_code() {
     if [ "$network_type" = "v4" ] || [ "$network_type" = "v4v6" ]; then
         # IPv4アドレスの取得を試行
         stop_spinner
-        start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_IPV4" "network=IPv4")")" "dot" "blue"
+        start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_IPV4" "network=$network_type")")" "dot" "blue"
         debug_log "DEBUG: Attempting to retrieve IPv4 address"
         
         # BASE_WGETを使用
@@ -193,11 +175,11 @@ get_country_code() {
         fi
         
         if [ -n "$ip_v4" ]; then
-            stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_IPV4" "network=IPv4")")" "success"
+            stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_IPV4" "network=$network_type")")" "success"
             debug_log "DEBUG: IPv4 address retrieved: $ip_v4"
             
             # WorldTimeAPIからタイムゾーン情報を取得
-            start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_WORLDTIME" "network=IPv4")")" "dot" "blue"
+            start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_WORLDTIME" "network=$network_type")")" "dot" "blue"
             debug_log "DEBUG: Trying WorldTimeAPI with IPv4 address"
             
             # BASE_WGETを使用
@@ -210,8 +192,7 @@ get_country_code() {
             
             if [ -n "$SELECT_ZONE" ]; then
                 select_ip="$ip_v4"
-                select_ip_ver="IPv4"
-                stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_WORLDTIME" "network=IPv4")")" "success"
+                stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_WORLDTIME" "network=$network_type")")" "success"
                 debug_log "DEBUG: WorldTimeAPI responded successfully using IPv4"
             else
                 stop_spinner "$(color red "$(get_message "MSG_NOT_RETRIEVED")")" "error"
@@ -229,7 +210,7 @@ get_country_code() {
         
         # IPv6アドレスの取得を試行
         if [ -z "$ip_v6" ]; then
-            start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_IPV6" "network=IPv6")")" "dot" "blue"
+            start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_IPV6" "network=$network_type")")" "dot" "blue"
             debug_log "DEBUG: Attempting to retrieve IPv6 address"
             
             # BASE_WGETを使用
@@ -241,7 +222,7 @@ get_country_code() {
             fi
             
             if [ -n "$ip_v6" ]; then
-                stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_IPV6" "network=IPv6")")" "success"
+                stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_IPV6" "network=$network_type")")" "success"
                 debug_log "DEBUG: IPv6 address retrieved: $ip_v6"
             else
                 stop_spinner "$(color red "$(get_message "MSG_NOT_RETRIEVED")")" "error"
@@ -250,7 +231,7 @@ get_country_code() {
         fi
         
         if [ -n "$ip_v6" ]; then
-            start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_WORLDTIME" "network=IPv6")")" "dot" "blue"
+            start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_WORLDTIME" "network=$network_type")")" "dot" "blue"
             debug_log "DEBUG: Querying WorldTimeAPI with IPv6"
             
             # BASE_WGETを使用
@@ -263,8 +244,7 @@ get_country_code() {
             
             if [ -n "$SELECT_ZONE" ]; then
                 select_ip="$ip_v6"
-                select_ip_ver="IPv6"
-                stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_WORLDTIME" "network=IPv6")")" "success"
+                stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_WORLDTIME" "network=$network_type")")" "success"
                 debug_log "DEBUG: WorldTimeAPI responded successfully using IPv6"
             else
                 stop_spinner "$(color red "$(get_message "MSG_NOT_RETRIEVED")")" "error"
@@ -304,7 +284,7 @@ get_country_code() {
         
         # WorldTimeAPIから得たIPを使ってIP-APIから国コードを取得
         if [ -n "$worldtime_ip" ]; then
-            start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_IPAPI" "network=$select_ip_ver")")" "dot" "blue"
+            start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_IPAPI" "network=$network_type")")" "dot" "blue"
             debug_log "DEBUG: Using WorldTimeAPI-provided IP for country code lookup"
             
             # BASE_WGETを使用
@@ -317,7 +297,7 @@ get_country_code() {
                 if [ -n "$country_data" ]; then
                     SELECT_COUNTRY=$(echo "$country_data" | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
                     if [ -n "$SELECT_COUNTRY" ]; then
-                        stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_IPAPI" "network=$select_ip_ver")")" "success"
+                        stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_IPAPI" "network=$network_type")")" "success"
                         debug_log "DEBUG: Country code retrieved using WorldTimeAPI IP: $SELECT_COUNTRY"
                     else
                         stop_spinner "$(color red "$(get_message "MSG_NOT_RETRIEVED")")" "error"
@@ -342,14 +322,12 @@ get_country_code() {
         
         # 使用可能なIP（IPv4優先）をIP-APIに渡す
         local fallback_ip="$ip_v6"
-        local fallback_network="IPv6"
         if [ -n "$ip_v4" ]; then
             fallback_ip="$ip_v4"
-            fallback_network="IPv4"
         fi
         
         if [ -n "$fallback_ip" ]; then
-            start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_IPAPI" "network=$fallback_network")")" "dot" "blue"
+            start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_IPAPI" "network=$network_type")")" "dot" "blue"
             debug_log "DEBUG: Querying IP-API directly with local IP: $fallback_ip"
             
             # BASE_WGETを使用
@@ -362,14 +340,14 @@ get_country_code() {
                 if [ -n "$fallback_data" ]; then
                     SELECT_COUNTRY=$(echo "$fallback_data" | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
                     if [ -n "$SELECT_COUNTRY" ]; then
-                        stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_IPAPI" "network=$fallback_network")")" "success"
+                        stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_IPAPI" "network=$network_type")")" "success"
                         debug_log "DEBUG: Country code retrieved using direct IP query: $SELECT_COUNTRY"
                     else
                         stop_spinner "$(color red "$(get_message "MSG_NOT_RETRIEVED")")" "error"
                         debug_log "DEBUG: Failed to get country code using direct IP query"
                         
                         # ipinfo.ioをさらにフォールバックとして使用
-                        start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_IPINFO" "network=$fallback_network")")" "dot" "blue"
+                        start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_IPINFO" "network=$network_type")")" "dot" "blue"
                         debug_log "DEBUG: Trying ipinfo.io as last resort"
                         
                         # BASE_WGETを使用
@@ -382,7 +360,7 @@ get_country_code() {
                             if [ -n "$ipinfo_data" ]; then
                                 SELECT_COUNTRY=$(echo "$ipinfo_data" | grep -o '"country"[ ]*:[ ]*"[^"]*' | awk -F'"' '{print $4}')
                                 if [ -n "$SELECT_COUNTRY" ]; then
-                                    stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_IPINFO" "network=$fallback_network")")" "success"
+                                    stop_spinner "$(color green "$(get_message "MSG_RETRIEVED" "api=$API_IPINFO" "network=$network_type")")" "success"
                                     debug_log "DEBUG: Country code retrieved from ipinfo.io: $SELECT_COUNTRY"
                                 else
                                     stop_spinner "$(color red "$(get_message "MSG_NOT_RETRIEVED")")" "error"
@@ -414,14 +392,14 @@ get_country_code() {
     # 結果表示の前にスピナーを停止
     stop_spinner
     
-    # 結果の表示（ネットワークタイプを含む）
+    # 結果の表示（network.chの値をそのまま使用）
     if [ -n "$SELECT_ZONENAME" ] && [ -n "$SELECT_TIMEZONE" ] && [ -n "$SELECT_COUNTRY" ]; then
-        echo "$(color green "$(get_message "MSG_INFO_RETRIEVED" "network=$network_display")")"
-        debug_log "DEBUG: Successfully retrieved all required information (Network: $network_display)"
+        echo "$(color green "$(get_message "MSG_INFO_RETRIEVED" "network=$network_type")")"
+        debug_log "DEBUG: Successfully retrieved all required information"
         return 0
     else
-        echo "$(color red "$(get_message "MSG_RETRIEVAL_FAILED" "network=$network_display")")"
-        debug_log "DEBUG: Failed to retrieve all required information (Network: $network_display)"
+        echo "$(color red "$(get_message "MSG_RETRIEVAL_FAILED" "network=$network_type")")"
+        debug_log "DEBUG: Failed to retrieve all required information"
         return 1
     fi
 }
