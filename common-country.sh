@@ -617,8 +617,8 @@ display_detected_location() {
     
     # 成功メッセージの表示（オプション）
     if [ "$show_success_message" = "true" ]; then
-        printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
-        printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+        printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
+        printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
         printf "\n"
         EXTRA_SPACING_NEEDED="yes"
         debug_log "DEBUG" "Success messages displayed"
@@ -814,7 +814,7 @@ detect_and_set_location() {
                 fi
                 
                 # 国選択完了メッセージを表示
-                printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
+                printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
                 
                 # タイムゾーン設定（キャッシュ以外の場合のみ）
                 if [ "$detection_source" != "cache" ]; then
@@ -836,7 +836,7 @@ detect_and_set_location() {
                 fi
                 
                 # ゾーン選択完了メッセージを表示
-                printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+                printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
                 printf "\n"
                 EXTRA_SPACING_NEEDED="yes"
                 
@@ -909,7 +909,7 @@ select_zone() {
         
         # メッセージを表示（スキップフラグが設定されていない場合のみ）
         if [ "$skip_message" = "false" ]; then
-            printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+            printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
             printf "\n"
         fi
         
@@ -952,7 +952,7 @@ select_zone() {
             }
             
             # 成功メッセージを表示
-            printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+            printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
             printf "\n"
             return 0
             ;;
@@ -1024,7 +1024,7 @@ country_write() {
     # 成功メッセージを表示（スキップフラグが設定されていない場合のみ）
     if [ "$skip_message" = "false" ]; then
         # 国と言語の選択完了メッセージを表示
-        printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
+        printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
     fi
     
     return 0
