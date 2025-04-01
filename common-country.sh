@@ -610,7 +610,7 @@ display_detected_location() {
     # 検出情報表示
     local msg_info=$(get_message "MSG_USE_DETECTED_INFORMATION")
     msg_info=$(echo "$msg_info" | sed "s/{info}/$detection_source/g")
-    printf "\n%s\n" "$(color white "$msg_info")"
+    printf "%s\n" "$(color white "$msg_info")"
     printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$detected_country")"
     printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONENAME")")" "$(color white "$detected_zonename")"
     printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color white "$detected_timezone")"
