@@ -39,6 +39,9 @@ en|PKG_SECTION_SAMBA=File Sharing
 # =======================
 # dynamic-system-info.sh
 # =======================
+en|MSG_QUERY_INFO=Querying {notr_type_notr}: {notr_api_notr} via {notr_network_notr}
+en|MSG_LOCATION_RESULT=Location information retrieval {notr_status_notr}
+
 en|MSG_API_ACCESS=Accessing API: {notr_api_notr} Network: {notr_network_notr}
 en|MSG_RETRIEVED={notr_api_notr} {notr_network_notr} retrieved successfully
 en|MSG_RETRIEVAL_FAILED=Failed to retrieve location information
