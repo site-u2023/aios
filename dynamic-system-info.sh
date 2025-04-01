@@ -146,7 +146,7 @@ get_country_code() {
     # スピナー開始
     start_spinner
     spinner_pid=$!
-    debug_log "DEBUG" "Starting location info retrieval process"
+    debug_log "DEBUG" "Starting IP and location detection process"
     
     # ネットワークタイプに応じてIPアドレス取得API選択
     if [ "$network_type" = "v6" ] || [ "$network_type" = "v4v6" ]; then
@@ -185,7 +185,7 @@ get_country_code() {
             fi
             
             get_message "MSG_QUERY_INFO" "type=IP address" "api=ipify.org" "network=$network_label"
-            debug_log "DEBUG" "Trying alternative network: Querying IP address via $network_label"
+            debug_log "DEBUG" "Trying alternative network: Querying IP address from ipify.org via $network_label"
             
             tmp_file="$(mktemp -t location.XXXXXX)"
             $BASE_WGET "$tmp_file" "$api_url" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
@@ -218,7 +218,7 @@ get_country_code() {
     
     if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
         SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
-        debug_log "DEBUG" "Extracted country code: $SELECT_COUNTRY"
+        debug_log "DEBUG" "Retrieved country code: $SELECT_COUNTRY from ip-api.com via $network_label"
         rm -f "$tmp_file"
     else
         debug_log "DEBUG" "Country code query failed"
@@ -237,7 +237,7 @@ get_country_code() {
         SELECT_TIMEZONE=$(grep -o '"abbreviation":"[^"]*' "$tmp_file" | sed 's/"abbreviation":"//')
         local utc_offset=$(grep -o '"utc_offset":"[^"]*' "$tmp_file" | sed 's/"utc_offset":"//')
         
-        debug_log "DEBUG" "Extracted timezone: $SELECT_ZONENAME ($SELECT_TIMEZONE), UTC offset: $utc_offset"
+        debug_log "DEBUG" "Retrieved timezone data: $SELECT_ZONENAME ($SELECT_TIMEZONE), UTC offset: $utc_offset from worldtimeapi.org via $network_label"
         
         # POSIX形式のタイムゾーン文字列を生成
         if [ -n "$SELECT_TIMEZONE" ] && [ -n "$utc_offset" ]; then
@@ -266,11 +266,11 @@ get_country_code() {
     # 結果のチェック
     if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ] && [ -n "$SELECT_TIMEZONE" ]; then
         get_message "MSG_LOCATION_RESULT" "status=completed successfully"
-        debug_log "DEBUG" "Location information retrieval completed successfully"
+        debug_log "DEBUG" "Location information process completed with status: success"
         return 0
     else
         get_message "MSG_LOCATION_RESULT" "status=failed"
-        debug_log "DEBUG" "Location information retrieval failed"
+        debug_log "DEBUG" "Location information process completed with status: failed"
         return 1
     fi
 }
