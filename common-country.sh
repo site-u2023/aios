@@ -619,6 +619,7 @@ display_detected_location() {
     if [ "$show_success_message" = "true" ]; then
         printf "%s\n" "$(color white "$(get_message "MSG_COUNTRY_SUCCESS")")"
         printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+        printf "\n"
         EXTRA_SPACING_NEEDED="yes"
         debug_log "DEBUG" "Success messages displayed"
     fi
@@ -836,6 +837,7 @@ detect_and_set_location() {
                 
                 # ゾーン選択完了メッセージを表示
                 printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+                printf "\n"
                 EXTRA_SPACING_NEEDED="yes"
                 
                 debug_log "DEBUG" "$detection_source-based location settings have been applied successfully"
@@ -908,6 +910,7 @@ select_zone() {
         # メッセージを表示（スキップフラグが設定されていない場合のみ）
         if [ "$skip_message" = "false" ]; then
             printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+            printf "\n"
         fi
         
         return 0
@@ -950,6 +953,7 @@ select_zone() {
             
             # 成功メッセージを表示
             printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+            printf "\n"
             return 0
             ;;
             
