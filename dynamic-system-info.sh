@@ -121,8 +121,6 @@ get_country_code() {
     local worldtime_ip=""
     local timeout_sec=15
     local network_type=""
-    local api_msg=""
-    local success_msg=""
     local tmp_file=""
     
     # API URLを定数化
@@ -167,7 +165,7 @@ get_country_code() {
         # IPv4アドレスの取得を試行
         stop_spinner
         start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_IPV4" "network=IPv4")")" "dot" "blue"
-        debug_log "DEBUG: Attempting to retrieve IPv4 address"
+        debug_log "DEBUG: Attempting to retrieve IPv4 address from $API_IPV4"
         
         # BASE_WGETを使用
         tmp_file="${CACHE_DIR}/ipv4_$$.tmp"
@@ -215,7 +213,7 @@ get_country_code() {
         # IPv6アドレスの取得を試行
         if [ -z "$ip_v6" ]; then
             start_spinner "$(color blue "$(get_message "MSG_API_ACCESS" "api=$API_IPV6" "network=IPv6")")" "dot" "blue"
-            debug_log "DEBUG: Attempting to retrieve IPv6 address"
+            debug_log "DEBUG: Attempting to retrieve IPv6 address from $API_IPV6"
             
             # BASE_WGETを使用
             tmp_file="${CACHE_DIR}/ipv6_$$.tmp"
@@ -396,15 +394,17 @@ get_country_code() {
     # 一時ファイルのクリーンアップ（念のため）
     rm -f "${CACHE_DIR}/*_$$.tmp" 2>/dev/null
     
-    # 結果の確認
-    if [ -z "$SELECT_ZONENAME" ] || [ -z "$SELECT_TIMEZONE" ] || [ -z "$SELECT_COUNTRY" ]; then
-        debug_log "DEBUG: Failed to retrieve all required information"
-        return 1
-    else
+    # 最終結果の確認
+    if [ -n "$SELECT_ZONENAME" ] && [ -n "$SELECT_TIMEZONE" ] && [ -n "$SELECT_COUNTRY" ]; then
+        start_spinner "$(color green "$(get_message "MSG_INFO_RETRIEVED")")" "dot" "green"
         debug_log "DEBUG: Successfully retrieved all required information"
         return 0
+    else
+        start_spinner "$(color red "$(get_message "MSG_RETRIEVAL_FAILED")")" "dot" "red"
+        debug_log "DEBUG: Failed to retrieve all required information"
+        return 1
     fi
-} 
+}
 
 # 国コードとタイムゾーン情報を一括取得する関数（ネットワーク接続状況を考慮した改良版）
 OK_get_country_code() {
