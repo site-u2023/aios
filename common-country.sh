@@ -713,26 +713,26 @@ detect_and_set_location() {
     fi
 
     # 2. デバイス内情報の検出（キャッシュが見つからない場合）
-    if [ -z "$detected_country" ] && [ "$SKIP_DEVICE_DETECTION" != "true" ] && [ "$SKIP_CACHE_DEVICE_DETECTION" != "true" ]; then
-        debug_log "DEBUG" "Attempting device-based information detection"
-        
-        if [ -f "$BASE_DIR/dynamic-system-info.sh" ]; then
-            if ! command -v get_country_info >/dev/null 2>&1; then
-                debug_log "DEBUG" "Loading dynamic-system-info.sh"
-                . "$BASE_DIR/dynamic-system-info.sh"
-            fi
-
-            # 情報の取得
-            detected_country=$(get_country_info)
-            detected_timezone=$(get_timezone_info)
-            detected_zonename=$(get_zonename_info)
-            detection_source="device"
-            
-            debug_log "DEBUG" "Device detection results - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
-        else
-            debug_log "DEBUG" "dynamic-system-info.sh not found. Cannot use system detection."
-        fi
-    fi
+    #if [ -z "$detected_country" ] && [ "$SKIP_DEVICE_DETECTION" != "true" ] && [ "$SKIP_CACHE_DEVICE_DETECTION" != "true" ]; then
+    #    debug_log "DEBUG" "Attempting device-based information detection"
+    #    
+    #    if [ -f "$BASE_DIR/dynamic-system-info.sh" ]; then
+    #        if ! command -v get_country_info >/dev/null 2>&1; then
+    #            debug_log "DEBUG" "Loading dynamic-system-info.sh"
+    #            . "$BASE_DIR/dynamic-system-info.sh"
+    #        fi
+    #
+    #        # 情報の取得
+    #        detected_country=$(get_country_info)
+    #        detected_timezone=$(get_timezone_info)
+    #        detected_zonename=$(get_zonename_info)
+    #        detection_source="device"
+    #        
+    #        debug_log "DEBUG" "Device detection results - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
+    #    else
+    #        debug_log "DEBUG" "dynamic-system-info.sh not found. Cannot use system detection."
+    #    fi
+    #fi
     
     # 3. IPアドレスによる検出（情報が揃っていない場合のみ）
     if [ -z "$detected_country" ] && [ "$SKIP_IP_DETECTION" != "true" ]; then
