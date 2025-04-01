@@ -160,7 +160,7 @@ get_country_code() {
     # ネットワーク状況に応じたIPアドレス取得
     if [ "$network_type" = "v4" ] || [ "$network_type" = "v4v6" ]; then
         # IPv4アドレスの取得を試行
-        api_msg=$(echo "$MSG_API_ACCESS" | sed "s/{api}/$API_IPV4/g")
+        api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{api}|$API_IPV4|g" | sed "s|{network}|$network_type|g")
         start_spinner "$api_msg" "dot" "blue"
         debug_log "DEBUG: Attempting to retrieve IPv4 address"
         
@@ -177,7 +177,7 @@ get_country_code() {
             debug_log "DEBUG: IPv4 address retrieved: $ip_v4"
             
             # WorldTimeAPIからタイムゾーン情報を取得
-            api_msg=$(echo "$MSG_API_ACCESS" | sed "s/{api}/$API_WORLDTIME/g")
+            api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{api}|$API_WORLDTIME|g" | sed "s|{network}|$network_type|g")
             start_spinner "$api_msg" "dot" "blue"
             debug_log "DEBUG: Trying WorldTimeAPI with IPv4 address"
             
@@ -210,7 +210,7 @@ get_country_code() {
         
         # IPv6アドレスの取得を試行
         if [ -z "$ip_v6" ]; then
-            api_msg=$(echo "$MSG_API_ACCESS" | sed "s/{api}/$API_IPV6/g")
+            api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{api}|$API_IPV6|g" | sed "s|{network}|$network_type|g")
             start_spinner "$api_msg" "dot" "blue"
             debug_log "DEBUG: Attempting to retrieve IPv6 address"
             
@@ -232,7 +232,7 @@ get_country_code() {
         fi
         
         if [ -n "$ip_v6" ]; then
-            api_msg=$(echo "$MSG_API_ACCESS" | sed "s/{api}/$API_WORLDTIME/g")
+            api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{api}|$API_WORLDTIME|g" | sed "s|{network}|$network_type|g")
             start_spinner "$api_msg" "dot" "blue"
             
             # BASE_WGETを使用
@@ -286,7 +286,7 @@ get_country_code() {
         
         # WorldTimeAPIから得たIPを使ってIP-APIから国コードを取得
         if [ -n "$worldtime_ip" ]; then
-            api_msg=$(echo "$MSG_API_ACCESS" | sed "s/{api}/$API_IPAPI/g")
+            api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{api}|$API_IPAPI|g" | sed "s|{network}|$network_type|g")
             start_spinner "$api_msg" "dot" "blue"
             debug_log "DEBUG: Using WorldTimeAPI-provided IP for country code lookup"
             
@@ -330,7 +330,7 @@ get_country_code() {
         fi
         
         if [ -n "$fallback_ip" ]; then
-            api_msg=$(echo "$MSG_API_ACCESS" | sed "s/{api}/$API_IPAPI/g")
+            api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{api}|$API_IPAPI|g" | sed "s|{network}|$network_type|g")
             start_spinner "$api_msg" "dot" "blue"
             debug_log "DEBUG: Querying IP-API directly with local IP: $fallback_ip"
             
@@ -351,7 +351,7 @@ get_country_code() {
                         debug_log "DEBUG: Failed to get country code using direct IP query"
                         
                         # ipinfo.ioをさらにフォールバックとして使用
-                        api_msg=$(echo "$MSG_API_ACCESS" | sed "s/{api}/$API_IPINFO/g")
+                        api_msg=$(echo "$MSG_API_ACCESS" | sed "s|{api}|$API_IPINFO|g" | sed "s|{network}|$network_type|g")
                         start_spinner "$api_msg" "dot" "blue"
                         debug_log "DEBUG: Trying ipinfo.io as last resort"
                         
@@ -405,7 +405,7 @@ get_country_code() {
 }
 
 # 国コードとタイムゾーン情報を一括取得する関数（ネットワーク接続状況を考慮した改良版）
-PK_get_country_code() {
+OK_get_country_code() {
     # ローカル変数の宣言
     local ip_v4=""
     local ip_v6=""
