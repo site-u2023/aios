@@ -530,17 +530,42 @@ start_spinner() {
         fi
     fi
 
+    # メッセージファイルの設定
+    SPINNER_MSG_FILE="${CACHE_DIR}/spinner_msg_$$.tmp"
+    mkdir -p "${CACHE_DIR}" 2>/dev/null
+    printf "%s" "$message" > "$SPINNER_MSG_FILE"
+    debug_log "DEBUG: Created spinner message file: $SPINNER_MSG_FILE"
+
     # バックグラウンドでスピナーを実行
     (
         i=0
+        local curr_msg="$message"
+        
         while true; do
+            # ファイルから新しいメッセージを読み取る
+            if [ -f "$SPINNER_MSG_FILE" ]; then
+                new_msg=$(cat "$SPINNER_MSG_FILE" 2>/dev/null)
+                if [ -n "$new_msg" ] && [ "$new_msg" != "$curr_msg" ]; then
+                    curr_msg="$new_msg"
+                fi
+            fi
+            
             for char in $SPINNER_CHARS; do
-                printf "\r\033[K%s %s" "$SPINNER_MESSAGE" "$(color "$SPINNER_COLOR" "$char")"
+                printf "\r\033[K%s %s" "$curr_msg" "$(color "$SPINNER_COLOR" "$char")"
 
                 if command -v usleep >/dev/null 2>&1; then
                     usleep "$SPINNER_USLEEP_VALUE"  # マイクロ秒単位のディレイ
                 else
                     sleep "$SPINNER_DELAY"  # 秒単位のディレイ
+                fi
+                
+                # アニメーションサイクル中のメッセージ更新チェック
+                if [ -f "$SPINNER_MSG_FILE" ]; then
+                    new_msg=$(cat "$SPINNER_MSG_FILE" 2>/dev/null)
+                    if [ -n "$new_msg" ] && [ "$new_msg" != "$curr_msg" ]; then
+                        curr_msg="$new_msg"
+                        break  # 新しいメッセージがあれば次のサイクルへ
+                    fi
                 fi
             done
         done
@@ -560,6 +585,12 @@ stop_spinner() {
     fi
 
     debug_log "DEBUG: Stopping spinner with message: $message, status: $status"
+
+    # メッセージファイルを削除
+    if [ -f "$SPINNER_MSG_FILE" ]; then
+        rm -f "$SPINNER_MSG_FILE" 2>/dev/null
+        debug_log "DEBUG: Removed spinner message file: $SPINNER_MSG_FILE"
+    fi
 
     # プロセスが存在するか確認
     if [ -n "$SPINNER_PID" ]; then
@@ -606,7 +637,13 @@ update_spinner() {
         SPINNER_COLOR="$spinner_color"
     fi
     
-    debug_log "DEBUG: Updated spinner message to: $message"
+    # メッセージファイルを更新
+    if [ -f "$SPINNER_MSG_FILE" ]; then
+        printf "%s" "$message" > "$SPINNER_MSG_FILE"
+        debug_log "DEBUG: Updated spinner message file with: $message"
+    else
+        debug_log "DEBUG: Spinner message file not found: $SPINNER_MSG_FILE"
+    fi
 }
 
 # 改良されたスピナー開始関数 - メッセージ更新に対応
