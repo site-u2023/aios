@@ -192,14 +192,14 @@ get_country_code() {
             if [ -n "$SELECT_ZONE" ]; then
                 select_ip="$ip_v4"
                 select_ip_ver="IPv4"
-                stop_spinner "$api_msg: OK" "success"
+                stop_spinner "$MSG_SUCCESS" "success"
                 debug_log "DEBUG: WorldTimeAPI responded successfully using IPv4"
             else
-                stop_spinner "$api_msg: Failed" "error"
+                stop_spinner "$MSG_FAILED" "error"
                 debug_log "DEBUG: WorldTimeAPI failed with IPv4, response is empty"
             fi
         else
-            stop_spinner "$api_msg: Failed" "error"
+            stop_spinner "$MSG_FAILED" "error"
             debug_log "DEBUG: Failed to retrieve IPv4 address"
         fi
     fi
@@ -226,7 +226,7 @@ get_country_code() {
                 stop_spinner "IPv6: $ip_v6" "success"
                 debug_log "DEBUG: IPv6 address retrieved: $ip_v6"
             else
-                stop_spinner "$api_msg: Failed" "error"
+                stop_spinner "$MSG_FAILED" "error"
                 debug_log "DEBUG: Failed to retrieve IPv6 address"
             fi
         fi
@@ -246,10 +246,10 @@ get_country_code() {
             if [ -n "$SELECT_ZONE" ]; then
                 select_ip="$ip_v6"
                 select_ip_ver="IPv6"
-                stop_spinner "$api_msg: OK" "success"
+                stop_spinner "$MSG_SUCCESS" "success"
                 debug_log "DEBUG: WorldTimeAPI responded successfully using IPv6"
             else
-                stop_spinner "$api_msg: Failed" "error"
+                stop_spinner "$MSG_FAILED" "error"
                 debug_log "DEBUG: WorldTimeAPI also failed with IPv6"
             fi
         fi
@@ -300,18 +300,18 @@ get_country_code() {
                 if [ -n "$country_data" ]; then
                     SELECT_COUNTRY=$(echo "$country_data" | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
                     if [ -n "$SELECT_COUNTRY" ]; then
-                        stop_spinner "Country: $SELECT_COUNTRY" "success"
+                        stop_spinner "国コード: $SELECT_COUNTRY" "success"
                         debug_log "DEBUG: Country code retrieved using WorldTimeAPI IP: $SELECT_COUNTRY"
                     else
-                        stop_spinner "$api_msg: No country code" "error"
+                        stop_spinner "国コードなし" "error"
                         debug_log "DEBUG: Failed to get country code using WorldTimeAPI IP"
                     fi
                 else
-                    stop_spinner "$api_msg: Failed" "error"
+                    stop_spinner "$MSG_FAILED" "error"
                     debug_log "DEBUG: IP-API request returned empty response"
                 fi
             else
-                stop_spinner "$api_msg: Failed" "error"
+                stop_spinner "$MSG_FAILED" "error"
                 debug_log "DEBUG: IP-API request failed"
             fi
         fi
@@ -344,10 +344,10 @@ get_country_code() {
                 if [ -n "$fallback_data" ]; then
                     SELECT_COUNTRY=$(echo "$fallback_data" | grep -o '"countryCode":"[^"]*' | awk -F'"' '{print $4}')
                     if [ -n "$SELECT_COUNTRY" ]; then
-                        stop_spinner "Country: $SELECT_COUNTRY" "success"
+                        stop_spinner "国コード: $SELECT_COUNTRY" "success"
                         debug_log "DEBUG: Country code retrieved using direct IP query: $SELECT_COUNTRY"
                     else
-                        stop_spinner "$api_msg: No country code" "error"
+                        stop_spinner "国コードなし" "error"
                         debug_log "DEBUG: Failed to get country code using direct IP query"
                         
                         # ipinfo.ioをさらにフォールバックとして使用
@@ -365,27 +365,27 @@ get_country_code() {
                             if [ -n "$ipinfo_data" ]; then
                                 SELECT_COUNTRY=$(echo "$ipinfo_data" | grep -o '"country"[ ]*:[ ]*"[^"]*' | awk -F'"' '{print $4}')
                                 if [ -n "$SELECT_COUNTRY" ]; then
-                                    stop_spinner "Country: $SELECT_COUNTRY" "success"
+                                    stop_spinner "国コード: $SELECT_COUNTRY" "success"
                                     debug_log "DEBUG: Country code retrieved from ipinfo.io: $SELECT_COUNTRY"
                                 else
-                                    stop_spinner "$api_msg: No country code" "error"
+                                    stop_spinner "国コードなし" "error" 
                                     debug_log "DEBUG: Failed to get country code from ipinfo.io"
                                 fi
                             else
-                                stop_spinner "$api_msg: Failed" "error"
+                                stop_spinner "$MSG_FAILED" "error"
                                 debug_log "DEBUG: ipinfo.io request returned empty response"
                             fi
                         else
-                            stop_spinner "$api_msg: Failed" "error"
+                            stop_spinner "$MSG_FAILED" "error"
                             debug_log "DEBUG: ipinfo.io request failed"
                         fi
                     fi
                 else
-                    stop_spinner "$api_msg: Failed" "error"
+                    stop_spinner "$MSG_FAILED" "error"
                     debug_log "DEBUG: IP-API fallback request returned empty response"
                 fi
             else
-                stop_spinner "$api_msg: Failed" "error"
+                stop_spinner "$MSG_FAILED" "error"
                 debug_log "DEBUG: IP-API fallback request failed"
             fi
         fi
