@@ -117,6 +117,7 @@ get_country_code() {
     local tmp_file=""
     local spinner_pid=0
     local api_url=""
+    local message_line=""
     
     # API URLの定数化
     local API_IPV4="https://api.ipify.org"
@@ -143,7 +144,8 @@ get_country_code() {
         network_type="v4"  # デフォルトでIPv4を試行
     fi
     
-    # スピナー開始
+    # スピナー開始（新しい行に配置）
+    printf "\n"  # 新しい行を確保
     start_spinner
     spinner_pid=$!
     debug_log "DEBUG" "Starting IP and location detection process"
@@ -159,8 +161,9 @@ get_country_code() {
         api_url="$API_IPV4"
     fi
     
-    # IPアドレスの取得
-    get_message "MSG_QUERY_INFO" "type=IP address" "api=ipify.org" "network=$network_label"
+    # IPアドレスの取得（メッセージを固定表示）
+    message_line=$(get_message "MSG_QUERY_INFO" "type=IP address" "api=ipify.org" "network=$network_label")
+    printf "\r%-60s\n" "$message_line"  # 幅60文字で右側に空白を追加して固定表示
     debug_log "DEBUG" "Querying IP address from ipify.org via $network_label"
     
     tmp_file="$(mktemp -t location.XXXXXX)"
@@ -184,7 +187,8 @@ get_country_code() {
                 api_url="$API_IPV6"
             fi
             
-            get_message "MSG_QUERY_INFO" "type=IP address" "api=ipify.org" "network=$network_label"
+            message_line=$(get_message "MSG_QUERY_INFO" "type=IP address" "api=ipify.org" "network=$network_label")
+            printf "\r%-60s\n" "$message_line"  # 幅60文字で右側に空白を追加して固定表示
             debug_log "DEBUG" "Trying alternative network: Querying IP address from ipify.org via $network_label"
             
             tmp_file="$(mktemp -t location.XXXXXX)"
@@ -205,12 +209,14 @@ get_country_code() {
     if [ -z "$ip_address" ]; then
         debug_log "DEBUG" "Failed to retrieve any IP address"
         stop_spinner "$spinner_pid"
-        get_message "MSG_LOCATION_RESULT" "status=failed"
+        message_line=$(get_message "MSG_LOCATION_RESULT" "status=failed")
+        printf "\r%-60s\n" "$message_line"  # 幅60文字で固定表示
         return 1
     fi
     
-    # 国コードの取得
-    get_message "MSG_QUERY_INFO" "type=country code" "api=ip-api.com" "network=$network_label"
+    # 国コードの取得（メッセージを固定表示）
+    message_line=$(get_message "MSG_QUERY_INFO" "type=country code" "api=ip-api.com" "network=$network_label")
+    printf "\r%-60s\n" "$message_line"  # 幅60文字で固定表示
     debug_log "DEBUG" "Querying country code from ip-api.com via $network_label"
     
     tmp_file="$(mktemp -t location.XXXXXX)"
@@ -225,8 +231,9 @@ get_country_code() {
         rm -f "$tmp_file" 2>/dev/null
     fi
     
-    # タイムゾーン情報の取得
-    get_message "MSG_QUERY_INFO" "type=timezone" "api=worldtimeapi.org" "network=$network_label"
+    # タイムゾーン情報の取得（メッセージを固定表示）
+    message_line=$(get_message "MSG_QUERY_INFO" "type=timezone" "api=worldtimeapi.org" "network=$network_label")
+    printf "\r%-60s\n" "$message_line"  # 幅60文字で固定表示
     debug_log "DEBUG" "Querying timezone from worldtimeapi.org via $network_label"
     
     tmp_file="$(mktemp -t location.XXXXXX)"
@@ -260,16 +267,18 @@ get_country_code() {
         rm -f "$tmp_file" 2>/dev/null
     fi
     
-    # スピナー停止と最終結果の表示
+    # スピナー停止
     stop_spinner "$spinner_pid"
     
-    # 結果のチェック
+    # 結果のチェックと表示（確実に表示されるよう固定表示）
     if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ] && [ -n "$SELECT_TIMEZONE" ]; then
-        get_message "MSG_LOCATION_RESULT" "status=completed successfully"
+        message_line=$(get_message "MSG_LOCATION_RESULT" "status=completed successfully")
+        printf "\r%-60s\n\n" "$message_line"  # 幅60文字で固定表示、その後に空行を追加
         debug_log "DEBUG" "Location information process completed with status: success"
         return 0
     else
-        get_message "MSG_LOCATION_RESULT" "status=failed"
+        message_line=$(get_message "MSG_LOCATION_RESULT" "status=failed")
+        printf "\r%-60s\n\n" "$message_line"  # 幅60文字で固定表示、その後に空行を追加
         debug_log "DEBUG" "Location information process completed with status: failed"
         return 1
     fi
