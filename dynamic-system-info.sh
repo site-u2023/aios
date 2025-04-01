@@ -105,7 +105,7 @@ check_location_cache() {
     return 1  # キャッシュ無効または不完全
 }
 
-# 国コードとタイムゾーン情報を一括取得する関数
+# 国コードとタイムゾーン情報を一括取得する関数（ネットワーク接続状況を考慮した改良版）
 get_country_code() {
     # ローカル変数の宣言
     local ip_v4=""
@@ -117,6 +117,7 @@ get_country_code() {
     local offset_hours=""
     local worldtime_ip=""
     local timeout_sec=15
+    local network_type=""
     
     # グローバル変数の初期化
     SELECT_ZONE=""
@@ -128,55 +129,71 @@ get_country_code() {
     # キャッシュディレクトリの確認
     [ -d "${CACHE_DIR}" ] || mkdir -p "${CACHE_DIR}"
     
-    # IPv4アドレスの取得を試行（タイムアウト設定追加）
-    debug_log "DEBUG: Attempting to retrieve IPv4 address"
-    ip_v4=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- https://api.ipify.org 2>/dev/null || echo "")
-    
-    # IPv6アドレスの取得を試行（タイムアウト設定追加）
-    debug_log "DEBUG: Attempting to retrieve IPv6 address"
-    ip_v6=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- https://api64.ipify.org 2>/dev/null || echo "")
-    
-    # 取得したIPアドレスの確認
-    if [ -n "$ip_v4" ]; then
-        debug_log "DEBUG: IPv4 address retrieved: $ip_v4"
-    fi
-    
-    if [ -n "$ip_v6" ]; then
-        debug_log "DEBUG: IPv6 address retrieved: $ip_v6"
-    fi
-    
-    # いずれかのIPアドレスが取得できたか確認
-    if [ -z "$ip_v4" ] && [ -z "$ip_v6" ]; then
-        debug_log "DEBUG: Failed to retrieve any IP address"
-        return 1
-    fi
-    
-    # IPv4を使用してWorldTimeAPIからタイムゾーン情報を取得（タイムアウト設定追加）
-    if [ -n "$ip_v4" ]; then
-        debug_log "DEBUG: Trying WorldTimeAPI with IPv4 address"
-        SELECT_ZONE=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- "http://worldtimeapi.org/api/ip" 2>/dev/null || echo "")
-        
-        if [ -n "$SELECT_ZONE" ]; then
-            select_ip="$ip_v4"
-            select_ip_ver="IPv4"
-            debug_log "DEBUG: WorldTimeAPI responded successfully using IPv4"
+    # ネットワーク接続状況の確認
+    if [ -f "${CACHE_DIR}/network.ch" ]; then
+        network_type=$(cat "${CACHE_DIR}/network.ch")
+        debug_log "DEBUG: Network connectivity type detected: $network_type"
+    else
+        debug_log "DEBUG: Network connectivity information not available, checking now"
+        check_network_connectivity
+        if [ -f "${CACHE_DIR}/network.ch" ]; then
+            network_type=$(cat "${CACHE_DIR}/network.ch")
+            debug_log "DEBUG: Network connectivity checked and type is: $network_type"
         else
-            debug_log "DEBUG: WorldTimeAPI failed with IPv4, response is empty"
+            network_type=""
+            debug_log "DEBUG: Failed to detect network connectivity type"
+        fi
+    fi
+    
+    # ネットワーク状況に応じたIPアドレス取得
+    if [ "$network_type" = "v4" ] || [ "$network_type" = "v4v6" ]; then
+        # IPv4アドレスの取得を試行
+        debug_log "DEBUG: Attempting to retrieve IPv4 address"
+        ip_v4=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- https://api.ipify.org 2>/dev/null || echo "")
+        
+        if [ -n "$ip_v4" ]; then
+            debug_log "DEBUG: IPv4 address retrieved: $ip_v4"
+            
+            # WorldTimeAPIからタイムゾーン情報を取得
+            debug_log "DEBUG: Trying WorldTimeAPI with IPv4 address"
+            SELECT_ZONE=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- "http://worldtimeapi.org/api/ip" 2>/dev/null || echo "")
+            
+            if [ -n "$SELECT_ZONE" ]; then
+                select_ip="$ip_v4"
+                select_ip_ver="IPv4"
+                debug_log "DEBUG: WorldTimeAPI responded successfully using IPv4"
+            else
+                debug_log "DEBUG: WorldTimeAPI failed with IPv4, response is empty"
+            fi
+        else
+            debug_log "DEBUG: Failed to retrieve IPv4 address"
         fi
     fi
     
     # IPv4で取得できなかった場合やデータが不完全な場合はIPv6を試す
-    if { [ -z "$SELECT_ZONE" ] || ! echo "$SELECT_ZONE" | grep -q '"timezone"' || ! echo "$SELECT_ZONE" | grep -q '"abbreviation"' || ! echo "$SELECT_ZONE" | grep -q '"utc_offset"'; } && [ -n "$ip_v6" ]; then
+    if { [ -z "$SELECT_ZONE" ] || ! echo "$SELECT_ZONE" | grep -q '"timezone"' || ! echo "$SELECT_ZONE" | grep -q '"abbreviation"' || ! echo "$SELECT_ZONE" | grep -q '"utc_offset"'; } && { [ "$network_type" = "v6" ] || [ "$network_type" = "v4v6" ]; }; then
         debug_log "DEBUG: Trying WorldTimeAPI with IPv6 address"
         
-        SELECT_ZONE=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- "http://worldtimeapi.org/api/ip" 2>/dev/null || echo "")
+        # IPv6アドレスの取得を試行
+        if [ -z "$ip_v6" ]; then
+            debug_log "DEBUG: Attempting to retrieve IPv6 address"
+            ip_v6=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- https://api64.ipify.org 2>/dev/null || echo "")
+        fi
         
-        if [ -n "$SELECT_ZONE" ]; then
-            select_ip="$ip_v6"
-            select_ip_ver="IPv6"
-            debug_log "DEBUG: WorldTimeAPI responded successfully using IPv6"
+        if [ -n "$ip_v6" ]; then
+            debug_log "DEBUG: IPv6 address retrieved: $ip_v6"
+            
+            SELECT_ZONE=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- "http://worldtimeapi.org/api/ip" 2>/dev/null || echo "")
+            
+            if [ -n "$SELECT_ZONE" ]; then
+                select_ip="$ip_v6"
+                select_ip_ver="IPv6"
+                debug_log "DEBUG: WorldTimeAPI responded successfully using IPv6"
+            else
+                debug_log "DEBUG: WorldTimeAPI also failed with IPv6"
+            fi
         else
-            debug_log "DEBUG: WorldTimeAPI also failed with IPv6"
+            debug_log "DEBUG: Failed to retrieve IPv6 address"
         fi
     fi
     
@@ -209,7 +226,7 @@ get_country_code() {
             debug_log "DEBUG: WorldTimeAPI response incomplete, missing required timezone data"
         fi
         
-        # WorldTimeAPIから得たIPを使ってIP-APIから国コードを取得（タイムアウト設定追加）
+        # WorldTimeAPIから得たIPを使ってIP-APIから国コードを取得
         if [ -n "$worldtime_ip" ]; then
             debug_log "DEBUG: Using WorldTimeAPI-provided IP for country code lookup"
             local country_data=$(wget --timeout=$timeout_sec -T $timeout_sec -qO- "http://ip-api.com/json/$worldtime_ip" 2>/dev/null || echo "")
