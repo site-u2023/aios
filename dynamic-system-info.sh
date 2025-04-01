@@ -227,7 +227,7 @@ get_country_code() {
     
     # スピナー開始（初期メッセージ）
     local init_msg=$(get_message "MSG_QUERY_INFO" "type=IP address" "api=ipify.org" "network=$network_type")
-    start_spinner "$init_msg" "dot"
+    start_spinner "$init_msg" "dot" "blue"
     spinner_active=1
     debug_log "DEBUG: Starting IP and location detection process"
     
@@ -304,7 +304,7 @@ get_country_code() {
     
     # 国コードの取得（メッセージ更新）
     local country_msg=$(get_message "MSG_QUERY_INFO" "type=country code" "api=ip-api.com" "network=$network_label")
-    update_spinner "$country_msg"
+    update_spinner "$country_msg" "blue"
     debug_log "DEBUG: Querying country code from ip-api.com via $network_label"
     
     tmp_file="$(mktemp -t location.XXXXXX)"
@@ -321,7 +321,7 @@ get_country_code() {
     
     # タイムゾーン情報の取得（メッセージ更新）
     local tz_msg=$(get_message "MSG_QUERY_INFO" "type=timezone" "api=worldtimeapi.org" "network=$network_label")
-    update_spinner "$tz_msg"
+    update_spinner "$tz_msg" "blue"
     debug_log "DEBUG: Querying timezone from worldtimeapi.org via $network_label"
     
     tmp_file="$(mktemp -t location.XXXXXX)"
