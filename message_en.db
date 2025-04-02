@@ -39,6 +39,11 @@ en|PKG_SECTION_SAMBA=File Sharing
 # =======================
 # dynamic-system-info.sh
 # =======================
+en|MSG_DOWNLOADING_ISP_DB=Downloading ISP database...
+en|MSG_ISP_DB_SUCCESS=ISP database downloaded successfully
+en|MSG_ISP_DB_FAILED=Failed to download ISP database
+en|MSG_ISP_DB_RESTORED=Restored from backup database
+
 en|MSG_FETCHING_ISP_INFO=Retrieving ISP information
 en|MSG_ISP_INFO_SUCCESS=ISP information retrieved successfully
 en|MSG_ISP_INFO_FAILED=Failed to retrieve ISP informatio
