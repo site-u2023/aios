@@ -6,6 +6,15 @@ SCRIPT_VERSION="2025-03-31-00-00"
 en|MSG_UNDER_TEST=👽 Under test
 
 # =======================
+# common-translation.sh
+# =======================
+en|MSG_TRANSLATION_INFO=Translation Source{notr_colon_notr} {notr_info_notr}
+en|MSG_LANGUAGE_CODE=Language code
+en|MSG_DATABASE_FILE=Database file
+en|MSG_SOURCE_LANGUAGE=Source language
+en|MSG_TRANSLATION_SUCCESS=Translation processing completed successfully
+
+# =======================
 # package_auto.sh
 # =======================
 en|MENU_PACKAGE_STANDARD=Standard Installation (Recommended)
@@ -55,7 +64,7 @@ en|MSG_ISP_ORG=Organization{notr_colon_notr}
 en|MSG_ISP_SUCCESS=ISP information detection completed successfully
 
 en|MSG_QUERY_INFO=Querying {notr_type_notr}: {notr_api_notr} via {notr_network_notr}
-en|MSG_LOCATION_RESULT=Location information retrieval {notr_status_notr}
+en|MSG_LOCATION_RESULT=Location information retrieved {notr_status_notr}
 en|CONFIG_DOWNLOAD_SUCCESS=Downloaded{notr_colon_notr}
 en|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{notr_colon_notr}
 
@@ -132,12 +141,6 @@ en|MSG_CACHE_ENABLED=Cache enabled: Using cached version information when availa
 # =======================
 # common-country.sh
 # =======================
-en|MSG_TRANSLATION_INFO=Translation Source{notr_colon_notr} {notr_info_notr}
-en|MSG_LANGUAGE_CODE=Language code
-en|MSG_DATABASE_FILE=Database file
-en|MSG_SOURCE_LANGUAGE=Source language
-en|MSG_TRANSLATION_SUCCESS=Translation processing completed successfully
-
 en|MSG_CONFIRM_DEFAULT=Confirm? {notr_type_notr}
 en|MSG_CONFIRM_SELECT=Confirm this selection? {notr_type_notr}
 en|MSG_INVALID_INPUT=Invalid input. Please enter {notr_type_notr}
