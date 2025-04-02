@@ -790,7 +790,6 @@ check_network_connectivity() {
     fi
 }
 
-# wget接続オプションをネットワーク状況に応じて設定する関数
 setup_wget_options() {
     # ネットワーク状態をキャッシュファイルから取得
     local network_type=""
@@ -818,12 +817,7 @@ setup_wget_options() {
             ;;
     esac
     
-    # wgetコマンドのグローバル変数を更新（全関数で共有される）
-    BASE_WGET="wget --no-check-certificate -q ${WGET_IPV_OPT} -O"
-    BASE_WGET_AUTH_BEARER="wget --no-check-certificate -q ${WGET_IPV_OPT} -O \"\$1\" --header=\"Authorization: Bearer \$2\" \"\$3\""
-    BASE_WGET_AUTH_TOKEN="wget --no-check-certificate -q ${WGET_IPV_OPT} -O \"\$1\" --header=\"Authorization: token \$2\" \"\$3\""
-    
-    debug_log "DEBUG" "wget commands updated with IP version preference: ${network_type}"
+    debug_log "DEBUG" "wget IP version updated to: ${WGET_IPV_OPT}"
 }
 
 version_is_newer() {
