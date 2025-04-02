@@ -800,7 +800,7 @@ setup_wget_options() {
     # デフォルトのIPバージョンオプション（空=システム設定に従う）
     WGET_IPV_OPT=""
     
-    # ネットワーク状態に応じてIPバージョンオプションを設定
+    # ネットワーク状態に応じてIPバージョンオプションを設定 
     case "$network_type" in
         v4)
             WGET_IPV_OPT="-4"
