@@ -39,6 +39,15 @@ en|PKG_SECTION_SAMBA=File Sharing
 # =======================
 # dynamic-system-info.sh
 # =======================
+en|MSG_FETCHING_ISP_INFO=Retrieving ISP information
+en|MSG_ISP_INFO_SUCCESS=ISP information retrieved successfully
+en|MSG_ISP_INFO_FAILED=Failed to retrieve ISP information
+en|MSG_USE_DETECTED_ISP_INFORMATION=Detected information{notr_colon_notr} {notr_info_notr}
+en|MSG_DETECTED_ISP=ISP Provider{notr_colon_notr}
+en|MSG_ISP_AS=AS Number{notr_colon_notr}
+en|MSG_ISP_ORG=Organization{notr_colon_notr}
+en|MSG_ISP_SUCCESS=ISP information detection completed successfully
+
 en|MSG_QUERY_INFO=Querying {notr_type_notr}: {notr_api_notr} via {notr_network_notr}
 en|MSG_LOCATION_RESULT=Location information retrieval {notr_status_notr}
 en|CONFIG_DOWNLOAD_SUCCESS=Download completed{notr_colon_notr}
