@@ -58,7 +58,7 @@ TRANSLATION_CACHE_DIR="${BASE_DIR:-/tmp/aios}/translations"
 API_LIST="google"
 
 # タイムアウト設定（秒）
-LOCATION_API_TIMEOUT=5
+LOCATION_API_TIMEOUT="${AIOS_API_TIMEOUT:-5}"
 
 # 現在使用中のAPI情報を格納する変数
 CURRENT_API=""
