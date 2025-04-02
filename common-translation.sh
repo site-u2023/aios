@@ -353,7 +353,6 @@ EOF
     stop_spinner "Translation completed" "success"
     
     # 翻訳処理終了
-    printf "Database creation completed for language: %s\n" "${api_lang}"
     debug_log "DEBUG" "Language DB creation completed for ${api_lang}"
     return 0
 }
