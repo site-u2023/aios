@@ -108,15 +108,44 @@ check_location_cache() {
     return 1  # キャッシュ無効または不完全
 }
 
-# 使用例
-# get_isp_info
-# echo "ISP名: $ISP_NAME"
-# echo "AS番号: $ISP_AS"
-# echo "組織名: $ISP_ORG"
+# 検出した地域情報を表示する共通関数
+display_detected_isp() {
+    local detection_isp="$1"
+    local detected_isp="$2"
+    local detected_as="$3"
+    local detected_org="$4"
+    local show_success_message="${5:-false}"
+    
+    debug_log "DEBUG" "Displaying ISP information from source: $detection_isp"
+    
+    # 検出情報表示
+    local msg_info=$(get_message "MSG_USE_DETECTED_ISP_INFORMATION" "info=$detection_isp")
+    printf "%s\n" "$(color white "$msg_info")"
+    
+    # ISP情報の詳細表示
+    if [ -n "$detected_isp" ]; then
+        printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ISP")")" "$(color white "$detected_isp")"
+    fi
+    
+    if [ -n "$detected_as" ]; then
+        printf "%s %s\n" "$(color white "$(get_message "MSG_ISP_AS")")" "$(color white "$detected_as")"
+    fi
+    
+    if [ -n "$detected_org" ]; then
+        printf "%s %s\n" "$(color white "$(get_message "MSG_ISP_ORG")")" "$(color white "$detected_org")"
+    fi
+    
+    # 成功メッセージの表示（オプション）
+    if [ "$show_success_message" = "true" ]; then
+        printf "%s\n" "$(color green "$(get_message "MSG_ISP_SUCCESS")")"
+        printf "\n"
+        EXTRA_SPACING_NEEDED="yes"
+        debug_log "DEBUG" "Success messages displayed"
+    fi
+    
+    debug_log "DEBUG" "ISP information displayed successfully"
+}
 
-# ローカルデータベース使用例
-# get_isp_info --local
-# echo "ISP名: $ISP_NAME"
 # ISP情報取得関数
 get_isp_info() {
     # 変数宣言
@@ -184,7 +213,7 @@ get_isp_info() {
     
     # ローカルDBモードの処理
     if [ $use_local_db -eq 1 ]; then
-        if [ -f "${BASE_DIR}/isp_db.txt" ]; then
+        if [ -f "${BASE_DIR}/isp.db" ]; then
             debug_log "DEBUG: Processing with local database"
             # 実際のローカルDB処理はここに実装 (ローカルIPとISPマッピング)
             
@@ -221,10 +250,9 @@ get_isp_info() {
         fi
     fi
     
-    # スピナー開始（初期メッセージ - 青色テキスト、黄色アニメーション）
+    # スピナー開始（初期メッセージ）
     if type start_spinner >/dev/null 2>&1; then
-        local init_msg="ISPの情報を取得しています..."
-        start_spinner "$(color "blue" "$init_msg")" "dot" "yellow"
+        start_spinner "$(color "blue" "$(get_message "MSG_FETCHING_ISP_INFO")")" "dot" "yellow"
         spinner_active=1
         debug_log "DEBUG: Starting ISP detection process"
     fi
@@ -278,16 +306,15 @@ get_isp_info() {
     if [ -z "$ip_address" ]; then
         debug_log "DEBUG: Failed to retrieve any IP address"
         if [ $spinner_active -eq 1 ] && type stop_spinner >/dev/null 2>&1; then
-            stop_spinner "IPアドレスの取得に失敗しました" "failed"
+            stop_spinner "$(get_message "MSG_ISP_INFO_FAILED")" "failed"
             spinner_active=0
         fi
         return 1
     fi
     
-    # スピナー更新
+    # スピナー更新（APIクエリ中）
     if [ $spinner_active -eq 1 ] && type update_spinner >/dev/null 2>&1; then
-        local update_msg="ISP情報を解析しています..."
-        update_spinner "$(color "blue" "$update_msg")" "yellow"
+        update_spinner "$(color "blue" "$(get_message "MSG_FETCHING_ISP_INFO")")" "yellow"
     fi
     
     # ISP情報の取得
@@ -320,10 +347,10 @@ get_isp_info() {
     # 結果のチェックとスピナー停止
     if [ $spinner_active -eq 1 ] && type stop_spinner >/dev/null 2>&1; then
         if [ -n "$ISP_NAME" ]; then
-            stop_spinner "ISP情報を取得しました: $ISP_NAME" "success"
+            stop_spinner "$(get_message "MSG_ISP_INFO_SUCCESS")" "success"
             debug_log "DEBUG: ISP information process completed with status: success"
         else
-            stop_spinner "ISP情報の取得に失敗しました" "failed"
+            stop_spinner "$(get_message "MSG_ISP_INFO_FAILED")" "failed"
             debug_log "DEBUG: ISP information process completed with status: failed"
         fi
     fi
@@ -338,8 +365,8 @@ get_isp_info() {
 
 # ローカルISPデータベースをダウンロードする関数
 download_isp_database() {
-    local db_url="${BASE_URL}/isp_db.txt"
-    local db_file="${BASE_DIR}/isp_db.txt"
+    local db_url="${BASE_URL}/isp.db"
+    local db_file="${BASE_DIR}/isp.db"
     local tmp_file
     local timeout_sec=30
     
