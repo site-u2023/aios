@@ -301,7 +301,7 @@ get_isp_info() {
     debug_log "DEBUG: Querying IP address from $api_url"
     
     tmp_file="$(mktemp -t isp.XXXXXX)"
-    $BASE_WGET =O "$tmp_file" "$api_url" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
+    $BASE_WGET -O "$tmp_file" "$api_url" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
     
     if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
         ip_address=$(cat "$tmp_file")
@@ -317,7 +317,7 @@ get_isp_info() {
             debug_log "DEBUG: Trying IPv6 fallback"
             
             tmp_file="$(mktemp -t isp.XXXXXX)"
-            $BASE_WGET "$tmp_file" "$api_url" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
+            $BASE_WGET -O "$tmp_file" "$api_url" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
             
             if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
                 ip_address=$(cat "$tmp_file")
