@@ -502,6 +502,12 @@ github_api_request() {
     local retry_count=0
     local max_retries=2
     
+    # 関数内でのwgetコマンド用のローカル変数を定義
+    local local_wget_ipv_opt="$WGET_IPV_OPT"
+    local local_base_wget="$BASE_WGET"
+    local local_base_wget_auth_bearer="$BASE_WGET_AUTH_BEARER"
+    local local_base_wget_auth_token="$BASE_WGET_AUTH_TOKEN"
+    
     # wgetの機能チェック
     if [ -z "$WGET_SUPPORTS_HEADER" ]; then
         if wget --help 2>&1 | grep -q -- "--header"; then
@@ -514,61 +520,62 @@ github_api_request() {
     # GitHub API呼び出しを試行（リトライロジック付き）
     while [ $retry_count -le $max_retries ]; do
         if [ $retry_count -gt 0 ]; then
-            debug_log "DEBUG: Retry attempt $retry_count for API request: $endpoint"
+            debug_log "DEBUG" "Retry attempt $retry_count for API request: $endpoint"
             sleep 2  # リトライ間隔
         fi
         
         if [ -n "$token" ]; then
-            debug_log "DEBUG: Using token authentication for API request"
+            debug_log "DEBUG" "Using token authentication for API request"
             
             # 認証方法1: Bearerヘッダー認証
             if [ "$WGET_SUPPORTS_HEADER" = "1" ]; then
-                debug_log "DEBUG: Trying Bearer authentication"
+                debug_log "DEBUG" "Trying Bearer authentication"
                 
-                # 現在の$BASE_WGET_AUTH_BEARERを使用（IPバージョンが自動的に適用される）
-                eval $BASE_WGET_AUTH_BEARER -O "$temp_file" "$token" "https://api.github.com/$endpoint" 2>/dev/null
+                # ローカル変数のBearer認証設定を使用
+                eval $local_base_wget_auth_bearer "$temp_file" "$token" "https://api.github.com/$endpoint" 2>/dev/null
                 
                 if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
                     response=$(cat "$temp_file")
                     if ! echo "$response" | grep -q '"message":"Bad credentials"'; then
                         auth_method="bearer"
-                        debug_log "DEBUG: Bearer authentication successful"
+                        debug_log "DEBUG" "Bearer authentication successful"
                         break  # 成功したらループを抜ける
                     else
-                        debug_log "DEBUG: Bearer authentication failed, trying token auth"
+                        debug_log "DEBUG" "Bearer authentication failed, trying token auth"
                         
-                        # 従来のtoken認証も試行
-                        eval $BASE_WGET_AUTH_TOKEN -O "$temp_file" "$token" "https://api.github.com/$endpoint" 2>/dev/null
+                        # ローカル変数のToken認証設定を使用
+                        eval $local_base_wget_auth_token "$temp_file" "$token" "https://api.github.com/$endpoint" 2>/dev/null
                         
                         if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
                             response=$(cat "$temp_file")
                             if ! echo "$response" | grep -q '"message":"Bad credentials"'; then
                                 auth_method="token"
-                                debug_log "DEBUG: Token authentication successful"
+                                debug_log "DEBUG" "Token authentication successful"
                                 break  # 成功したらループを抜ける
                             else
-                                debug_log "DEBUG: Token authentication failed"
+                                debug_log "DEBUG" "Token authentication failed"
                             fi
                         fi
                     fi
                 else
-                    debug_log "DEBUG: Empty response from Bearer authentication"
+                    debug_log "DEBUG" "Empty response from Bearer authentication"
                 fi
             fi
             
             # 認証方法2: wgetのユーザー認証（ヘッダーがサポートされていない場合）
             if [ "$auth_method" = "direct" ] && [ "$WGET_SUPPORTS_HEADER" = "0" ]; then
-                debug_log "DEBUG: Trying user authentication"
-                $BASE_WGET -O "$temp_file" --user="$token" --password="x-oauth-basic" "https://api.github.com/$endpoint" 2>/dev/null
+                debug_log "DEBUG" "Trying user authentication"
+                $local_base_wget "$temp_file" --user="$token" --password="x-oauth-basic" \
+                         "https://api.github.com/$endpoint" 2>/dev/null
                          
                 if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
                     response=$(cat "$temp_file")
                     if ! echo "$response" | grep -q '"message":"Bad credentials"'; then
                         auth_method="user"
-                        debug_log "DEBUG: User authentication successful"
+                        debug_log "DEBUG" "User authentication successful"
                         break  # 成功したらループを抜ける
                     else
-                        debug_log "DEBUG: User authentication failed"
+                        debug_log "DEBUG" "User authentication failed"
                     fi
                 fi
             fi
@@ -576,34 +583,34 @@ github_api_request() {
         
         # 認証方法3: フォールバック（直接アクセス）
         if [ "$auth_method" = "direct" ]; then
-            debug_log "DEBUG: Falling back to direct access"
-            $BASE_WGET -O "$temp_file" "https://api.github.com/$endpoint" 2>/dev/null
+            debug_log "DEBUG" "Falling back to direct access"
+            $local_base_wget "$temp_file" "https://api.github.com/$endpoint" 2>/dev/null
             
             if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
                 response=$(cat "$temp_file")
                 if ! echo "$response" | grep -q '"message":"API rate limit exceeded'; then
-                    debug_log "DEBUG: Direct access successful"
+                    debug_log "DEBUG" "Direct access successful"
                     break  # 成功したらループを抜ける
                 fi
             fi
         fi
         
-        # リトライ時の接続方法を変更
+        # リトライ時の接続方法を変更（ローカル変数のみ更新）
         if [ $retry_count -eq 0 ] && [ -f "${CACHE_DIR}/network.ch" ]; then
             local current_network=$(cat "${CACHE_DIR}/network.ch")
             
             if [ "$current_network" = "v4v6" ]; then
                 # デュアルスタックの場合、IPv4がデフォルト。失敗したらIPv6を試す
-                WGET_IPV_OPT="-6"
-                # グローバル変数を更新（これ以降の全wgetコマンドに影響）
-                BASE_WGET="wget --no-check-certificate -q ${WGET_IPV_OPT}"
-                BASE_WGET_AUTH_BEARER="wget --no-check-certificate -q ${WGET_IPV_OPT} -O \"\$1\" --header=\"Authorization: Bearer \$2\" \"\$3\""
-                BASE_WGET_AUTH_TOKEN="wget --no-check-certificate -q ${WGET_IPV_OPT} -O \"\$1\" --header=\"Authorization: token \$2\" \"\$3\""
-                debug_log "DEBUG: Switching to IPv6 for retry"
+                local_wget_ipv_opt="-6"
+                # ローカル変数を更新（関数内でのみ有効）
+                local_base_wget="wget --no-check-certificate -q ${local_wget_ipv_opt} -O"
+                local_base_wget_auth_bearer="wget --no-check-certificate -q ${local_wget_ipv_opt} -O \"\$1\" --header=\"Authorization: Bearer \$2\" \"\$3\""
+                local_base_wget_auth_token="wget --no-check-certificate -q ${local_wget_ipv_opt} -O \"\$1\" --header=\"Authorization: token \$2\" \"\$3\""
+                debug_log "DEBUG" "Switching to IPv6 for retry"
             elif [ "$current_network" = "v4" ] || [ "$current_network" = "v6" ]; then
                 # シングルスタックの場合はタイムアウト値を増やす
                 export WGET_TIMEOUT="--timeout=30"
-                debug_log "DEBUG: Increasing timeout for retry"
+                debug_log "DEBUG" "Increasing timeout for retry"
             fi
         fi
         
@@ -612,20 +619,20 @@ github_api_request() {
     
     # リトライ後の最終結果確認
     if [ -z "$response" ]; then
-        debug_log "WARN: Empty response from API request after $max_retries retries"
+        debug_log "WARN" "Empty response from API request after $max_retries retries"
         rm -f "$temp_file" 2>/dev/null
         return 1
     fi
     
     if echo "$response" | grep -q '"message":"API rate limit exceeded'; then
-        debug_log "WARN: GitHub API rate limit exceeded"
+        debug_log "WARN" "GitHub API rate limit exceeded"
         rm -f "$temp_file" 2>/dev/null
         return 1
     fi
     
     # 認証エラーチェック
     if echo "$response" | grep -q '"message":"Bad credentials"'; then
-        debug_log "ERROR: GitHub API authentication failed: Bad credentials"
+        debug_log "ERROR" "GitHub API authentication failed: Bad credentials"
         rm -f "$temp_file" 2>/dev/null
         return 2
     fi
@@ -633,7 +640,7 @@ github_api_request() {
     # その他エラーチェック
     if echo "$response" | grep -q '"message":"'; then
         local error_msg=$(echo "$response" | grep -o '"message":"[^"]*"' | cut -d':' -f2- | tr -d '"')
-        debug_log "ERROR: GitHub API error: $error_msg"
+        debug_log "ERROR" "GitHub API error: $error_msg"
         rm -f "$temp_file" 2>/dev/null
         return 3
     fi
@@ -642,7 +649,7 @@ github_api_request() {
     echo "$response"
     rm -f "$temp_file" 2>/dev/null
     
-    # wget設定を元に戻す
+    # wget設定を元に戻す関数を呼び出し
     setup_wget_options
     return 0
 }
@@ -817,162 +824,6 @@ setup_wget_options() {
     BASE_WGET_AUTH_TOKEN="wget --no-check-certificate -q ${WGET_IPV_OPT} -O \"\$1\" --header=\"Authorization: token \$2\" \"\$3\""
     
     debug_log "DEBUG" "wget commands updated with IP version preference: ${network_type}"
-}
-
-# GitHub API接続の強化版
-github_api_request() {
-    local endpoint="$1"
-    local token=$(get_github_token)
-    local response=""
-    local auth_method="direct"
-    local temp_file="${CACHE_DIR}/api_request.tmp"
-    local retry_count=0
-    local max_retries=2
-    
-    # wgetの機能チェック
-    if [ -z "$WGET_SUPPORTS_HEADER" ]; then
-        if wget --help 2>&1 | grep -q -- "--header"; then
-            export WGET_SUPPORTS_HEADER=1
-        else
-            export WGET_SUPPORTS_HEADER=0
-        fi
-    fi
-    
-    # GitHub API呼び出しを試行（リトライロジック付き）
-    while [ $retry_count -le $max_retries ]; do
-        if [ $retry_count -gt 0 ]; then
-            debug_log "DEBUG" "Retry attempt $retry_count for API request: $endpoint"
-            sleep 2  # リトライ間隔
-        fi
-        
-        if [ -n "$token" ]; then
-            debug_log "DEBUG" "Using token authentication for API request"
-            
-            # 認証方法1: Bearerヘッダー認証
-            if [ "$WGET_SUPPORTS_HEADER" = "1" ]; then
-                debug_log "DEBUG" "Trying Bearer authentication"
-                
-                # 現在の$BASE_WGET_AUTH_BEARERを使用（IPバージョンが自動的に適用される）
-                eval $BASE_WGET_AUTH_BEARER "$temp_file" "$token" "https://api.github.com/$endpoint" 2>/dev/null
-                
-                if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-                    response=$(cat "$temp_file")
-                    if ! echo "$response" | grep -q '"message":"Bad credentials"'; then
-                        auth_method="bearer"
-                        debug_log "DEBUG" "Bearer authentication successful"
-                        break  # 成功したらループを抜ける
-                    else
-                        debug_log "DEBUG" "Bearer authentication failed, trying token auth"
-                        
-                        # 従来のtoken認証も試行
-                        eval $BASE_WGET_AUTH_TOKEN "$temp_file" "$token" "https://api.github.com/$endpoint" 2>/dev/null
-                        
-                        if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-                            response=$(cat "$temp_file")
-                            if ! echo "$response" | grep -q '"message":"Bad credentials"'; then
-                                auth_method="token"
-                                debug_log "DEBUG" "Token authentication successful"
-                                break  # 成功したらループを抜ける
-                            else
-                                debug_log "DEBUG" "Token authentication failed"
-                            fi
-                        fi
-                    fi
-                else
-                    debug_log "DEBUG" "Empty response from Bearer authentication"
-                fi
-            fi
-            
-            # 認証方法2: wgetのユーザー認証（ヘッダーがサポートされていない場合）
-            if [ "$auth_method" = "direct" ] && [ "$WGET_SUPPORTS_HEADER" = "0" ]; then
-                debug_log "DEBUG" "Trying user authentication"
-                $BASE_WGET -O "$temp_file" --user="$token" --password="x-oauth-basic" \
-                         "https://api.github.com/$endpoint" 2>/dev/null
-                         
-                if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-                    response=$(cat "$temp_file")
-                    if ! echo "$response" | grep -q '"message":"Bad credentials"'; then
-                        auth_method="user"
-                        debug_log "DEBUG" "User authentication successful"
-                        break  # 成功したらループを抜ける
-                    else
-                        debug_log "DEBUG" "User authentication failed"
-                    fi
-                fi
-            fi
-        fi
-        
-        # 認証方法3: フォールバック（直接アクセス）
-        if [ "$auth_method" = "direct" ]; then
-            debug_log "DEBUG" "Falling back to direct access"
-            $BASE_WGET -O "$temp_file" "https://api.github.com/$endpoint" 2>/dev/null
-            
-            if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-                response=$(cat "$temp_file")
-                if ! echo "$response" | grep -q '"message":"API rate limit exceeded'; then
-                    debug_log "DEBUG" "Direct access successful"
-                    break  # 成功したらループを抜ける
-                fi
-            fi
-        fi
-        
-        # リトライ時の接続方法を変更
-        if [ $retry_count -eq 0 ] && [ -f "${CACHE_DIR}/network.ch" ]; then
-            local current_network=$(cat "${CACHE_DIR}/network.ch")
-            
-            if [ "$current_network" = "v4v6" ]; then
-                # デュアルスタックの場合、IPv4がデフォルト。失敗したらIPv6を試す
-                WGET_IPV_OPT="-6"
-                # グローバル変数を更新（これ以降の全wgetコマンドに影響）
-                BASE_WGET="wget --no-check-certificate -q ${WGET_IPV_OPT} -O"
-                BASE_WGET_AUTH_BEARER="wget --no-check-certificate -q ${WGET_IPV_OPT} -O \"\$1\" --header=\"Authorization: Bearer \$2\" \"\$3\""
-                BASE_WGET_AUTH_TOKEN="wget --no-check-certificate -q ${WGET_IPV_OPT} -O \"\$1\" --header=\"Authorization: token \$2\" \"\$3\""
-                debug_log "DEBUG" "Switching to IPv6 for retry"
-            elif [ "$current_network" = "v4" ] || [ "$current_network" = "v6" ]; then
-                # シングルスタックの場合はタイムアウト値を増やす
-                export WGET_TIMEOUT="--timeout=30"
-                debug_log "DEBUG" "Increasing timeout for retry"
-            fi
-        fi
-        
-        retry_count=$((retry_count + 1))
-    done
-    
-    # リトライ後の最終結果確認
-    if [ -z "$response" ]; then
-        debug_log "WARN" "Empty response from API request after $max_retries retries"
-        rm -f "$temp_file" 2>/dev/null
-        return 1
-    fi
-    
-    if echo "$response" | grep -q '"message":"API rate limit exceeded'; then
-        debug_log "WARN" "GitHub API rate limit exceeded"
-        rm -f "$temp_file" 2>/dev/null
-        return 1
-    fi
-    
-    # 認証エラーチェック
-    if echo "$response" | grep -q '"message":"Bad credentials"'; then
-        debug_log "ERROR" "GitHub API authentication failed: Bad credentials"
-        rm -f "$temp_file" 2>/dev/null
-        return 2
-    fi
-    
-    # その他エラーチェック
-    if echo "$response" | grep -q '"message":"'; then
-        local error_msg=$(echo "$response" | grep -o '"message":"[^"]*"' | cut -d':' -f2- | tr -d '"')
-        debug_log "ERROR" "GitHub API error: $error_msg"
-        rm -f "$temp_file" 2>/dev/null
-        return 3
-    fi
-
-    # 成功
-    echo "$response"
-    rm -f "$temp_file" 2>/dev/null
-    
-    # wget設定を元に戻す
-    setup_wget_options
-    return 0
 }
 
 version_is_newer() {
