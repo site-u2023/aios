@@ -471,7 +471,7 @@ load_display_settings() {
 # スピナー開始関数
 start_spinner() {
     local message="$1"
-    local anim_type="${2:-dot}"
+    local anim_type="${2:-emoji}"
     local spinner_color="${3:-$SPINNER_COLOR}"
     
     # グローバル変数を設定
