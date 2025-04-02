@@ -1180,22 +1180,22 @@ get_commit_version() {
         if [ -n "$token" ] && [ "$API_AUTH_METHOD" != "direct" ]; then
             if [ "$API_AUTH_METHOD" = "token" ] || [ "$WGET_CAPABILITY" = "header" ]; then
                 # トークン認証でGitHub APIにアクセス
-                $BASE_WGET -O "$temp_file" --header="Authorization: token $token" \
+                wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$temp_file" --header="Authorization: token $token" \
                      "https://api.github.com/$api_url" 2>/dev/null
                 auth_method="token"
             elif [ "$API_AUTH_METHOD" = "basic" ] || [ "$WGET_CAPABILITY" = "basic" ]; then
                 # 基本認証でGitHub APIにアクセス
-                $BASE_WGET -O "$temp_file" --user="$token" --password="x-oauth-basic" \
+                wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$temp_file" --user="$token" --password="x-oauth-basic" \
                      "https://api.github.com/$api_url" 2>/dev/null
                 auth_method="basic"
             else
                 # 認証なしでアクセス
-                $BASE_WGET -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
+                wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
                 auth_method="direct"
             fi
         else
             # 認証なしでアクセス
-            $BASE_WGET -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
+            wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
             auth_method="direct"
         fi
         
@@ -1231,7 +1231,7 @@ get_commit_version() {
         # 直接ファイルダウンロードもIPv4/IPv6両方を試す
         retry_count=0
         while [ $retry_count -le 1 ]; do
-            if $BASE_WGET -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
+            if wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
                 if [ -s "$direct_file" ]; then
                     # ファイルからハッシュを生成
                     local file_hash=$(sha256sum "$direct_file" 2>/dev/null | cut -c1-7)
@@ -1495,8 +1495,8 @@ download_fetch_file() {
         setup_wget_options
     fi
     
-    # -Oオプションを追加して正しくwgetを実行
-    if ! $BASE_WGET -O "$install_path" "$remote_url"; then
+    # BusyBox wget向けに最適化した明示的なコマンド構文
+    if ! wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$install_path" "$remote_url" 2>/dev/null; then
         debug_log "ERROR" "Download failed: $file_name"
         return 1
     fi
