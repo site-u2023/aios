@@ -394,33 +394,57 @@ display_detected_translation() {
     debug_log "DEBUG" "Translation information displayed successfully"
 }
 
-# 言語翻訳処理
-process_language_translation() {
-    # 既存の言語コードを取得
-    if [ ! -f "${CACHE_DIR}/language.ch" ]; then
-        debug_log "DEBUG" "No language code found in cache"
-        return 1
+# 翻訳情報表示関数
+display_detected_translation() {
+    # 引数の取得
+    local show_success_message="${1:-false}"  # 成功メッセージ表示フラグ
+    
+    # get_api_lang_code()関数を使用して言語コードを取得
+    local lang_code="$(get_api_lang_code)"
+    local source_lang="$DEFAULT_LANGUAGE"  # ソース言語
+    
+    debug_log "DEBUG" "Displaying translation information for language code: $lang_code"
+    
+    # 成功メッセージの表示（オプション）
+    if [ "$show_success_message" = "true" ]; then
+        printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_SUCCESS")")"
     fi
     
-    local lang_code=$(cat "${CACHE_DIR}/language.ch")
-    debug_log "DEBUG" "Processing translation for language: ${lang_code}"
+    # 翻訳ソース情報表示
+    local db_file="message_${lang_code}.db"
+    printf "%s %s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE")")" "$(color white "$db_file")"
+    
+    # 言語ソース情報表示
+    printf "%s %s\n" "$(color white "$(get_message "MSG_LANGUAGE_SOURCE")")" "$(color white "$source_lang")"
+    
+    # 言語コード情報表示
+    printf "%s %s\n" "$(color white "$(get_message "MSG_LANGUAGE_CODE")")" "$(color white "$lang_code")"
+    
+    debug_log "DEBUG" "Translation information displayed successfully"
+}
+
+# 言語翻訳処理
+process_language_translation() {
+    # get_api_lang_code()関数を使用して言語コードを取得
+    local lang_code="$(get_api_lang_code)"
+    
+    debug_log "DEBUG" "Processing translation for language code: ${lang_code}"
     
     # デフォルト言語以外の場合のみ翻訳DBを作成
     if [ "$lang_code" != "$DEFAULT_LANGUAGE" ]; then
         # 翻訳DBを作成
         create_language_db "$lang_code"
         
-        # データベースファイルパスの設定
-        local db_file="${BASE_DIR:-/tmp/aios}/message_${lang_code}.db"
-        
-        # 翻訳情報表示（成功メッセージあり）
-        display_detected_translation "$lang_code" "$db_file" "$DEFAULT_LANGUAGE" "true"
+        # 翻訳情報表示（成功メッセージなし）
+        display_detected_translation "false"
     else
         debug_log "DEBUG" "Skipping DB creation for default language: ${lang_code}"
         
-        # デフォルト言語の場合は簡易表示（成功メッセージなし）
-        display_detected_translation "$lang_code" "" "" "false"
+        # デフォルト言語の場合も情報を表示（成功メッセージなし）
+        display_detected_translation "false"
     fi
+    
+    printf "\n"
     
     return 0
 }
