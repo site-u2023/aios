@@ -281,7 +281,7 @@ get_isp_info() {
     
     # スピナー開始（初期メッセージ）
     if type start_spinner >/dev/null 2>&1; then
-        start_spinner "$(color "blue" "$(get_message "MSG_FETCHING_ISP_INFO")")" "dot" "yellow"
+        start_spinner "$(color "blue" "$(get_message "MSG_FETCHING_ISP_INFO")")" "yellow"
         spinner_active=1
         debug_log "DEBUG: Starting ISP detection process"
     fi
@@ -406,7 +406,7 @@ download_isp_database() {
     
     # スピナー開始（利用可能な場合）
     if type start_spinner >/dev/null 2>&1; then
-        start_spinner "$(color "blue" "$(get_message "MSG_DOWNLOADING_ISP_DB")")" "dot" "yellow"
+        start_spinner "$(color "blue" "$(get_message "MSG_DOWNLOADING_ISP_DB")")" "yellow"
     fi
     
     # 既存DBファイルのバックアップ（存在する場合）
@@ -510,7 +510,7 @@ get_country_code() {
     
     # スピナー開始
     local init_msg=$(get_message "MSG_QUERY_INFO" "type=IP address" "api=ipify.org" "network=$network_type")
-    start_spinner "$(color "blue" "$init_msg")" "dot" "yellow"
+    start_spinner "$(color "blue" "$init_msg")" "yellow"
     spinner_active=1
     debug_log "DEBUG: Starting IP and location detection process"
     
