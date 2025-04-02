@@ -443,7 +443,7 @@ start_spinner() {
             SPINNER_CHARS="- \\ | /"
             ;;
         dot)
-            SPINNER_CHARS=". .. ... .... ....."
+            SPINNER_CHARS="    　. .. ... .... ....."
             ;;
         bar)
             SPINNER_CHARS="[=] => ->"
@@ -452,7 +452,10 @@ start_spinner() {
             SPINNER_CHARS="◯ ◎"
             ;;
         emoji)
-            SPINNER_CHARS="🤖 👺 😀 👽 😈 💀"
+            SPINNER_CHARS="    　🌞 👺 😀 👽 😈 💀 🤡 🌚"
+            ;;
+        moon)
+            SPINNER_CHARS="🌝 🌜 🌚 🌛"
             ;;
         *)
             SPINNER_CHARS="- \\ | /"
