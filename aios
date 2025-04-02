@@ -1651,7 +1651,7 @@ download_fetch_file() {
     fi
     
     # 設定されたwgetオプションを使用してファイルをダウンロード
-    if ! $BASE_WGET -O "$install_path" "$remote_url"; then
+    if ! $BASE_WGET "$install_path" "$remote_url"; then
         echo "ERROR: wget command failed for ${file_name}" >> /tmp/aios_debug.log
         debug_log "ERROR" "Download failed: $file_name"
         return 1
