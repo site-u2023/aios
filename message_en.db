@@ -48,7 +48,7 @@ en|MSG_FETCHING_ISP_INFO=Retrieving ISP information
 en|MSG_ISP_INFO_SUCCESS=ISP information retrieved successfully
 en|MSG_ISP_INFO_FAILED=Failed to retrieve ISP informatio
 
-en|MSG_USE_DETECTED_ISP_INFORMATION=ISP information{notr_colon_notr} {notr_info_notr}
+en|MSG_USE_DETECTED_ISP_INFORMATION=ISP Sources{notr_colon_notr} {notr_info_notr}
 en|MSG_DETECTED_ISP=ISP Provider{notr_colon_notr}
 en|MSG_ISP_AS=AS Number{notr_colon_notr}
 en|MSG_ISP_ORG=Organization{notr_colon_notr}
@@ -132,7 +132,7 @@ en|MSG_CACHE_ENABLED=Cache enabled: Using cached version information when availa
 # =======================
 # common-country.sh
 # =======================
-en|MSG_TRANSLATION_INFO=Translation information
+en|MSG_TRANSLATION_INFO=Translation Source{notr_colon_notr} {notr_info_notr}
 en|MSG_LANGUAGE_CODE=Language code
 en|MSG_DATABASE_FILE=Database file
 en|MSG_SOURCE_LANGUAGE=Source language
@@ -147,7 +147,7 @@ en|MSG_COUNTRY_NOT_FOUND=No matching country found for '{notr_0_notr}'. Please t
 en|MSG_SINGLE_MATCH_FOUND=Found single match{notr_colon_notr} {notr_0_notr}
 en|MSG_COUNTRY_SUCCESS=Country and language selection completed successfully
 en|MSG_USE_DETECTED_SETTINGS=Do you want to use these settings?
-en|MSG_USE_DETECTED_INFORMATION=Country information{notr_colon_notr} {notr_info_notr}
+en|MSG_USE_DETECTED_INFORMATION=Country Sources{notr_colon_notr} {notr_info_notr}
 en|MSG_DETECTED_COUNTRY=Country{notr_colon_notr}
 en|MSG_DETECTED_TIMEZONE=Timezone{notr_colon_notr}
 en|MSG_DETECTED_ZONENAME=Zone name{notr_colon_notr}
