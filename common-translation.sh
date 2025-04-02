@@ -134,8 +134,8 @@ translate_with_google() {
                 debug_log "DEBUG" "Using IPv6 for API request"
                 ;;
             "v4v6")
-                # IPv4を優先使用（両方可能な場合はIPv4を使用）
-                wget_options="-4"
+                # IPv4を優先使用（両方可能な場合はIPv64を使用）
+                wget_options="-6"
                 debug_log "DEBUG" "Both available, prioritizing IPv4 for API request"
                 ;;
             *)
@@ -218,9 +218,9 @@ translate_text() {
 # 言語データベース作成関数
 create_language_db() {
     local target_lang="$1"
-    local base_db="${BASE_DIR:-/tmp/aios}/message_${DEFAULT_LANGUAGE}.db"
+    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
     local api_lang=$(get_api_lang_code)
-    local output_db="${BASE_DIR:-/tmp/aios}/message_${api_lang}.db"
+    local output_db="${BASE_DIR}/message_${api_lang}.db"
     local temp_file="${TRANSLATION_CACHE_DIR}/translation_output.tmp"
     local cleaned_translation=""
     local current_api=""
