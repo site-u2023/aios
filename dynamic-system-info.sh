@@ -210,7 +210,7 @@ get_isp_info() {
                     
                     # キャッシュからの結果表示（オプション）
                     if [ "$show_result" = "true" ] && type display_detected_isp >/dev/null 2>&1; then
-                        display_detected_isp "Cache" "$ISP_NAME" "$ISP_AS" "$ISP_ORG" "true"
+                        display_detected_isp "Cache" "$ISP_NAME" "$ISP_AS" "$ISP_ORG" "false"
                     fi
                     
                     return 0
@@ -243,7 +243,7 @@ get_isp_info() {
             
             # ローカルDBからの結果表示（オプション）
             if [ "$show_result" = "true" ] && type display_detected_isp >/dev/null 2>&1; then
-                display_detected_isp "Local DB" "$ISP_NAME" "$ISP_AS" "$ISP_ORG" "true"
+                display_detected_isp "Local DB" "$ISP_NAME" "$ISP_AS" "$ISP_ORG" "false"
             fi
             
             return 0
@@ -374,7 +374,7 @@ get_isp_info() {
     # 成功した場合、結果表示
     if [ -n "$ISP_NAME" ]; then
         if [ "$show_result" = "true" ] && type display_detected_isp >/dev/null 2>&1; then
-            display_detected_isp "OnlineAPI" "$ISP_NAME" "$ISP_AS" "$ISP_ORG" "true"
+            display_detected_isp "OnlineAPI" "$ISP_NAME" "$ISP_AS" "$ISP_ORG" "false"
         fi
         return 0
     else
