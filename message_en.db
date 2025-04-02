@@ -41,7 +41,8 @@ en|PKG_SECTION_SAMBA=File Sharing
 # =======================
 en|MSG_FETCHING_ISP_INFO=Retrieving ISP information
 en|MSG_ISP_INFO_SUCCESS=ISP information retrieved successfully
-en|MSG_ISP_INFO_FAILED=Failed to retrieve ISP information
+en|MSG_ISP_INFO_FAILED=Failed to retrieve ISP informatio
+
 en|MSG_USE_DETECTED_ISP_INFORMATION=Detected information{notr_colon_notr} {notr_info_notr}
 en|MSG_DETECTED_ISP=ISP Provider{notr_colon_notr}
 en|MSG_ISP_AS=AS Number{notr_colon_notr}
