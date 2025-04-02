@@ -138,10 +138,11 @@ display_detected_isp() {
     # 成功メッセージの表示（オプション）
     if [ "$show_success_message" = "true" ]; then
         printf "%s\n" "$(color green "$(get_message "MSG_ISP_SUCCESS")")"
-        printf "\n"
         EXTRA_SPACING_NEEDED="yes"
         debug_log "DEBUG" "Success messages displayed"
     fi
+
+    printf "\n"
     
     debug_log "DEBUG" "ISP information displayed successfully"
 }
