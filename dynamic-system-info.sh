@@ -108,6 +108,290 @@ check_location_cache() {
     return 1  # キャッシュ無効または不完全
 }
 
+# 使用例
+# get_isp_info
+# echo "ISP名: $ISP_NAME"
+# echo "AS番号: $ISP_AS"
+# echo "組織名: $ISP_ORG"
+
+# ローカルデータベース使用例
+# get_isp_info --local
+# echo "ISP名: $ISP_NAME"
+# ISP情報取得関数
+get_isp_info() {
+    # 変数宣言
+    local ip_address=""
+    local network_type=""
+    local timeout_sec=10
+    local tmp_file=""
+    local api_url=""
+    local spinner_active=0
+    local cache_file="${CACHE_DIR}/isp_info.ch"
+    local cache_timeout=86400  # キャッシュ有効期間（24時間）
+    local use_local_db=0  # ローカルDB使用フラグ
+    
+    # パラメータ処理
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --local|-l)
+                use_local_db=1
+                debug_log "DEBUG: Using local database mode"
+                ;;
+            --cache-timeout=*)
+                cache_timeout="${1#*=}"
+                debug_log "DEBUG: Custom cache timeout: $cache_timeout seconds"
+                ;;
+            --no-cache)
+                cache_timeout=0
+                debug_log "DEBUG: Cache disabled"
+                ;;
+        esac
+        shift
+    done
+    
+    # グローバル変数の初期化
+    ISP_NAME=""
+    ISP_AS=""
+    ISP_ORG=""
+    
+    # キャッシュディレクトリの確認
+    [ -d "${CACHE_DIR}" ] || mkdir -p "${CACHE_DIR}"
+    
+    # キャッシュチェック（キャッシュタイムアウトが0でない場合）
+    if [ $cache_timeout -ne 0 ] && [ -f "$cache_file" ]; then
+        local cache_time=$(stat -c %Y "$cache_file" 2>/dev/null || date +%s)
+        local current_time=$(date +%s)
+        local cache_age=$(($current_time - $cache_time))
+        
+        if [ $cache_age -lt $cache_timeout ]; then
+            debug_log "DEBUG: Using cached ISP information ($cache_age seconds old)"
+            # キャッシュから情報読み込み
+            if [ -s "$cache_file" ]; then
+                ISP_NAME=$(sed -n '1p' "$cache_file")
+                ISP_AS=$(sed -n '2p' "$cache_file")
+                ISP_ORG=$(sed -n '3p' "$cache_file")
+                
+                if [ -n "$ISP_NAME" ]; then
+                    debug_log "DEBUG: Loaded from cache - ISP: $ISP_NAME, AS: $ISP_AS"
+                    return 0
+                fi
+            fi
+            debug_log "DEBUG: Cache file invalid or empty"
+        else
+            debug_log "DEBUG: Cache expired ($cache_age seconds old)"
+        fi
+    fi
+    
+    # ローカルDBモードの処理
+    if [ $use_local_db -eq 1 ]; then
+        if [ -f "${BASE_DIR}/isp_db.txt" ]; then
+            debug_log "DEBUG: Processing with local database"
+            # 実際のローカルDB処理はここに実装 (ローカルIPとISPマッピング)
+            
+            # 仮実装：ローカルIPからISP情報を取得できたとする
+            ISP_NAME="Local ISP Database"
+            ISP_AS="AS12345"
+            ISP_ORG="Example Local Organization"
+            
+            # キャッシュに保存
+            if [ $cache_timeout -ne 0 ]; then
+                echo "$ISP_NAME" > "$cache_file"
+                echo "$ISP_AS" >> "$cache_file"
+                echo "$ISP_ORG" >> "$cache_file"
+                debug_log "DEBUG: Saved local DB results to cache"
+            fi
+            
+            return 0
+        else
+            debug_log "DEBUG: Local database not found, falling back to online API"
+        fi
+    fi
+    
+    # ネットワーク接続状況の取得
+    if [ -f "${CACHE_DIR}/network.ch" ]; then
+        network_type=$(cat "${CACHE_DIR}/network.ch")
+        debug_log "DEBUG: Network connectivity type detected: $network_type"
+    else
+        debug_log "DEBUG: Network connectivity information not available, checking..."
+        check_network_connectivity
+        if [ -f "${CACHE_DIR}/network.ch" ]; then
+            network_type=$(cat "${CACHE_DIR}/network.ch")
+        else
+            network_type="v4"  # デフォルトでIPv4を試行
+        fi
+    fi
+    
+    # スピナー開始（初期メッセージ - 青色テキスト、黄色アニメーション）
+    if type start_spinner >/dev/null 2>&1; then
+        local init_msg="ISPの情報を取得しています..."
+        start_spinner "$(color "blue" "$init_msg")" "dot" "yellow"
+        spinner_active=1
+        debug_log "DEBUG: Starting ISP detection process"
+    fi
+    
+    # IPアドレスの取得（ネットワークタイプに応じて適切なAPIを選択）
+    if [ "$network_type" = "v4" ] || [ "$network_type" = "v4v6" ]; then
+        # IPv4優先
+        api_url="https://api.ipify.org"
+    elif [ "$network_type" = "v6" ]; then
+        # IPv6のみ
+        api_url="https://api64.ipify.org"
+    else
+        # デフォルト
+        api_url="https://api.ipify.org"
+    fi
+    
+    # IPアドレスの取得
+    debug_log "DEBUG: Querying IP address from $api_url"
+    
+    tmp_file="$(mktemp -t isp.XXXXXX)"
+    $BASE_WGET "$tmp_file" "$api_url" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
+    
+    if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+        ip_address=$(cat "$tmp_file")
+        rm -f "$tmp_file"
+        debug_log "DEBUG: Retrieved IP address: $ip_address"
+    else
+        debug_log "DEBUG: IP address query failed"
+        rm -f "$tmp_file" 2>/dev/null
+        
+        # IPv6にフォールバック試行（IPv4が失敗した場合）
+        if [ "$network_type" = "v4v6" ]; then
+            api_url="https://api64.ipify.org"
+            debug_log "DEBUG: Trying IPv6 fallback"
+            
+            tmp_file="$(mktemp -t isp.XXXXXX)"
+            $BASE_WGET "$tmp_file" "$api_url" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
+            
+            if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+                ip_address=$(cat "$tmp_file")
+                rm -f "$tmp_file"
+                debug_log "DEBUG: Retrieved IP address (IPv6): $ip_address"
+            else
+                debug_log "DEBUG: IPv6 address query also failed"
+                rm -f "$tmp_file" 2>/dev/null
+            fi
+        fi
+    fi
+    
+    # IPアドレスが取得できたかチェック
+    if [ -z "$ip_address" ]; then
+        debug_log "DEBUG: Failed to retrieve any IP address"
+        if [ $spinner_active -eq 1 ] && type stop_spinner >/dev/null 2>&1; then
+            stop_spinner "IPアドレスの取得に失敗しました" "failed"
+            spinner_active=0
+        fi
+        return 1
+    fi
+    
+    # スピナー更新
+    if [ $spinner_active -eq 1 ] && type update_spinner >/dev/null 2>&1; then
+        local update_msg="ISP情報を解析しています..."
+        update_spinner "$(color "blue" "$update_msg")" "yellow"
+    fi
+    
+    # ISP情報の取得
+    debug_log "DEBUG: Querying ISP information for IP: $ip_address"
+    
+    tmp_file="$(mktemp -t isp.XXXXXX)"
+    $BASE_WGET "$tmp_file" "http://ip-api.com/json/${ip_address}?fields=isp,as,org" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
+    
+    if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+        # JSON解析
+        ISP_NAME=$(grep -o '"isp":"[^"]*' "$tmp_file" | sed 's/"isp":"//')
+        ISP_AS=$(grep -o '"as":"[^"]*' "$tmp_file" | sed 's/"as":"//')
+        ISP_ORG=$(grep -o '"org":"[^"]*' "$tmp_file" | sed 's/"org":"//')
+        
+        debug_log "DEBUG: Retrieved ISP info - Name: $ISP_NAME, AS: $ISP_AS, Organization: $ISP_ORG"
+        rm -f "$tmp_file"
+        
+        # キャッシュに保存（キャッシュタイムアウトが0でない場合）
+        if [ $cache_timeout -ne 0 ]; then
+            echo "$ISP_NAME" > "$cache_file"
+            echo "$ISP_AS" >> "$cache_file"
+            echo "$ISP_ORG" >> "$cache_file"
+            debug_log "DEBUG: Saved ISP information to cache"
+        fi
+    else
+        debug_log "DEBUG: ISP information query failed"
+        rm -f "$tmp_file" 2>/dev/null
+    fi
+    
+    # 結果のチェックとスピナー停止
+    if [ $spinner_active -eq 1 ] && type stop_spinner >/dev/null 2>&1; then
+        if [ -n "$ISP_NAME" ]; then
+            stop_spinner "ISP情報を取得しました: $ISP_NAME" "success"
+            debug_log "DEBUG: ISP information process completed with status: success"
+        else
+            stop_spinner "ISP情報の取得に失敗しました" "failed"
+            debug_log "DEBUG: ISP information process completed with status: failed"
+        fi
+    fi
+    
+    # 結果返却
+    if [ -n "$ISP_NAME" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# ローカルISPデータベースをダウンロードする関数
+download_isp_database() {
+    local db_url="${BASE_URL}/isp_db.txt"
+    local db_file="${BASE_DIR}/isp_db.txt"
+    local tmp_file
+    local timeout_sec=30
+    
+    debug_log "DEBUG: Downloading ISP database from $db_url"
+    
+    # スピナー開始（利用可能な場合）
+    if type start_spinner >/dev/null 2>&1; then
+        start_spinner "ISPデータベースをダウンロードしています..." "dot" "yellow"
+    fi
+    
+    # 既存DBファイルのバックアップ（存在する場合）
+    if [ -f "$db_file" ]; then
+        mv "$db_file" "${db_file}.bak"
+        debug_log "DEBUG: Backed up existing ISP database"
+    fi
+    
+    # データベースのダウンロード
+    tmp_file="$(mktemp -t ispdb.XXXXXX)"
+    $BASE_WGET "$tmp_file" "$db_url" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
+    
+    # ダウンロード結果の確認
+    if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+        # 一時ファイルを移動
+        mv "$tmp_file" "$db_file"
+        
+        # スピナー停止（利用可能な場合）
+        if type stop_spinner >/dev/null 2>&1; then
+            stop_spinner "ISPデータベースのダウンロードが完了しました" "success"
+        fi
+        
+        debug_log "DEBUG: ISP database downloaded successfully"
+        return 0
+    else
+        # 失敗した場合、バックアップから復元
+        if [ -f "${db_file}.bak" ]; then
+            mv "${db_file}.bak" "$db_file"
+            debug_log "DEBUG: Restored ISP database from backup"
+        fi
+        
+        # 一時ファイル削除
+        rm -f "$tmp_file" 2>/dev/null
+        
+        # スピナー停止（利用可能な場合）
+        if type stop_spinner >/dev/null 2>&1; then
+            stop_spinner "ISPデータベースのダウンロードに失敗しました" "failed"
+        fi
+        
+        debug_log "DEBUG: Failed to download ISP database"
+        return 1
+    fi
+}
+
 # 国コードとタイムゾーン情報を取得する関数
 get_country_code() {
     # 変数宣言
