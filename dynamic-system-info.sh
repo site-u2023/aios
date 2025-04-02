@@ -158,6 +158,7 @@ get_isp_info() {
     local cache_file="${CACHE_DIR}/isp_info.ch"
     local cache_timeout=86400  # キャッシュ有効期間（24時間）
     local use_local_db=0  # ローカルDB使用フラグ
+    local show_result="${1:-true}"  # 結果表示フラグ（デフォルトはtrue）
     
     # パラメータ処理
     while [ $# -gt 0 ]; do
@@ -173,6 +174,10 @@ get_isp_info() {
             --no-cache)
                 cache_timeout=0
                 debug_log "DEBUG: Cache disabled"
+                ;;
+            --no-display)
+                show_result="false"
+                debug_log "DEBUG: Result display disabled"
                 ;;
         esac
         shift
@@ -202,6 +207,12 @@ get_isp_info() {
                 
                 if [ -n "$ISP_NAME" ]; then
                     debug_log "DEBUG: Loaded from cache - ISP: $ISP_NAME, AS: $ISP_AS"
+                    
+                    # キャッシュからの結果表示（オプション）
+                    if [ "$show_result" = "true" ] && type display_detected_isp >/dev/null 2>&1; then
+                        display_detected_isp "キャッシュ" "$ISP_NAME" "$ISP_AS" "$ISP_ORG" "true"
+                    fi
+                    
                     return 0
                 fi
             fi
@@ -228,6 +239,11 @@ get_isp_info() {
                 echo "$ISP_AS" >> "$cache_file"
                 echo "$ISP_ORG" >> "$cache_file"
                 debug_log "DEBUG: Saved local DB results to cache"
+            fi
+            
+            # ローカルDBからの結果表示（オプション）
+            if [ "$show_result" = "true" ] && type display_detected_isp >/dev/null 2>&1; then
+                display_detected_isp "ローカルDB" "$ISP_NAME" "$ISP_AS" "$ISP_ORG" "true"
             fi
             
             return 0
@@ -355,8 +371,11 @@ get_isp_info() {
         fi
     fi
     
-    # 結果返却
+    # 成功した場合、結果表示
     if [ -n "$ISP_NAME" ]; then
+        if [ "$show_result" = "true" ] && type display_detected_isp >/dev/null 2>&1; then
+            display_detected_isp "オンラインAPI" "$ISP_NAME" "$ISP_AS" "$ISP_ORG" "true"
+        fi
         return 0
     else
         return 1
@@ -374,7 +393,7 @@ download_isp_database() {
     
     # スピナー開始（利用可能な場合）
     if type start_spinner >/dev/null 2>&1; then
-        start_spinner "ISPデータベースをダウンロードしています..." "dot" "yellow"
+        start_spinner "$(color "blue" "$(get_message "MSG_DOWNLOADING_ISP_DB")")" "dot" "yellow"
     fi
     
     # 既存DBファイルのバックアップ（存在する場合）
@@ -394,7 +413,7 @@ download_isp_database() {
         
         # スピナー停止（利用可能な場合）
         if type stop_spinner >/dev/null 2>&1; then
-            stop_spinner "ISPデータベースのダウンロードが完了しました" "success"
+            stop_spinner "$(get_message "MSG_ISP_DB_SUCCESS")" "success"
         fi
         
         debug_log "DEBUG: ISP database downloaded successfully"
@@ -404,6 +423,11 @@ download_isp_database() {
         if [ -f "${db_file}.bak" ]; then
             mv "${db_file}.bak" "$db_file"
             debug_log "DEBUG: Restored ISP database from backup"
+            
+            # 復元メッセージ（オプション）
+            if type update_spinner >/dev/null 2>&1; then
+                update_spinner "$(get_message "MSG_ISP_DB_RESTORED")" "yellow"
+            fi
         fi
         
         # 一時ファイル削除
@@ -411,7 +435,7 @@ download_isp_database() {
         
         # スピナー停止（利用可能な場合）
         if type stop_spinner >/dev/null 2>&1; then
-            stop_spinner "ISPデータベースのダウンロードに失敗しました" "failed"
+            stop_spinner "$(get_message "MSG_ISP_DB_FAILED")" "failed"
         fi
         
         debug_log "DEBUG: Failed to download ISP database"
