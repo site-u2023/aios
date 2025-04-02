@@ -565,7 +565,7 @@ github_api_request() {
             # 認証方法2: wgetのユーザー認証（ヘッダーがサポートされていない場合）
             if [ "$auth_method" = "direct" ] && [ "$WGET_SUPPORTS_HEADER" = "0" ]; then
                 debug_log "DEBUG" "Trying user authentication"
-                $local_base_wget "$temp_file" --user="$token" --password="x-oauth-basic" \
+                $local_base_wget -O "$temp_file" --user="$token" --password="x-oauth-basic" \
                          "https://api.github.com/$endpoint" 2>/dev/null
                          
                 if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
@@ -584,7 +584,7 @@ github_api_request() {
         # 認証方法3: フォールバック（直接アクセス）
         if [ "$auth_method" = "direct" ]; then
             debug_log "DEBUG" "Falling back to direct access"
-            $local_base_wget "$temp_file" "https://api.github.com/$endpoint" 2>/dev/null
+            $local_base_wget -O "$temp_file" "https://api.github.com/$endpoint" 2>/dev/null
             
             if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
                 response=$(cat "$temp_file")
