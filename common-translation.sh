@@ -1,10 +1,10 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-02-00-00"
+SCRIPT_VERSION="2025-04-02-07-59"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
-# 🚀 Last Update: 2025-03-29
+# 🚀 Last Update: 2025-04-02
 #
 # 🏷️ License: CC0 (Public Domain)
 # 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
@@ -13,26 +13,16 @@ SCRIPT_VERSION="2025-04-02-00-00"
 # OpenWrt OS exclusively uses **Almquist Shell (ash)** and
 # is **NOT** compatible with Bourne-Again Shell (bash).
 #
-# 📢 POSIX Compliance Guidelines:
-# ✅ Use `[` instead of `[[` for conditions
-# ✅ Use $(command) instead of backticks `command`
-# ✅ Use $(( )) for arithmetic instead of let
-# ✅ Define functions as func_name() {} (no function keyword)
-# ✅ No associative arrays (declare -A is NOT supported)
-# ✅ No here-strings (<<< is NOT supported)
-# ✅ No -v flag in test or [[
-# ✅ Avoid bash-specific string operations like ${var:0:3}　
-# ✅ Avoid arrays entirely when possible (even indexed arrays can be problematic)
-# ✅ Use printf followed by read instead of read -p
-# ✅ Use printf instead of echo -e for portable formatting
-# ✅ Avoid process substitution <() and >()
-# ✅ Prefer case statements over complex if/elif chains
-# ✅ Use command -v instead of which or type for command existence checks
-# ✅ Keep scripts modular with small, focused functions
-# ✅ Use simple error handling instead of complex traps
-# ✅ Test scripts with ash/dash explicitly, not just bash
+# 📢 POSIX準拠ガイドライン:
+# ✅ `[[` ではなく `[` を条件に使用する
+# ✅ バッククォート `` `command` `` ではなく `$(command)` を使用する
+# ✅ `let` の代わりに `$(( ))` を算術演算に使用する
+# ✅ `function` キーワードなしで関数を `func_name() {}` と定義する
+# ✅ 連想配列は使用しない (`declare -A` はサポートされていない)
+# ✅ ヒアストリングは使用しない (`<<<` はサポートされていない)
+# ✅ `test` または `[[` で `-v` フラグを使用しない
 #
-# 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
+# 🛠️ OpenWrtのためにシンプルで、POSIX準拠、軽量に保つ!
 ### =========================================================
 
 # 基本定数の設定 
@@ -57,8 +47,14 @@ TRANSLATION_CACHE_DIR="${BASE_DIR:-/tmp/aios}/translations"
 # API_LIST="mymemory"
 API_LIST="google"
 
-# タイムアウト設定（秒）
-LOCATION_API_TIMEOUT="${AIOS_API_TIMEOUT:-5}"
+# タイムアウト設定（秒） - ユーザー定義可能
+WGET_TIMEOUT="${AIOS_API_TIMEOUT:-5}"
+
+# APIリクエストのリトライ回数設定 - ユーザー定義可能
+API_MAX_RETRIES="${AIOS_API_RETRIES:-3}"
+
+# リトライ間隔（秒）
+API_RETRY_DELAY=1
 
 # 現在使用中のAPI情報を格納する変数
 CURRENT_API=""
@@ -71,16 +67,16 @@ init_translation_cache() {
 
 # 言語コード取得（APIのため）
 get_api_lang_code() {
-    # luci.chからの言語コードを使用
-    if [ -f "${CACHE_DIR:-/tmp/aios}/luci.ch" ]; then
-        local api_lang=$(cat "${CACHE_DIR:-/tmp/aios}/luci.ch")
-        debug_log "DEBUG" "Using language code from luci.ch: ${api_lang}"
+    # message.chからの言語コードを使用
+    if [ -f "${CACHE_DIR}/message.ch" ]; then
+        local api_lang=$(cat "${CACHE_DIR}/message.ch")
+        debug_log "DEBUG" "Using language code from message.ch: ${api_lang}"
         printf "%s\n" "$api_lang"
         return 0
     fi
     
-    # luci.chがない場合はデフォルトで英語
-    debug_log "DEBUG" "No luci.ch found, defaulting to en"
+    # message.chがない場合はデフォルトで英語
+    debug_log "DEBUG" "No message.ch found, defaulting to en"
     printf "en\n"
 }
 
@@ -110,6 +106,8 @@ translate_with_google() {
     local target_lang="$3"
     local ip_check_file="${CACHE_DIR}/network.ch"
     local wget_options=""
+    local retry_count=0
+    local max_retries=2
     
     debug_log "DEBUG" "Starting Google Translate API request"
     
@@ -134,47 +132,70 @@ translate_with_google() {
                 debug_log "DEBUG" "Using IPv6 for API request"
                 ;;
             "v4v6")
-                # デュアルスタックの場合は常にIPv4を優先
-                wget_options="-4"
-                debug_log "DEBUG" "Dual-stack environment, prioritizing IPv4 for API request"
+                # IPv4を優先使用（両方可能な場合はIPv4を使用）
+                wget_options="-4"  # 修正: IPv4を優先
+                debug_log "DEBUG" "Both available, prioritizing IPv4 for API request"
                 ;;
             *)
-                debug_log "DEBUG" "No network connectivity, API request may fail"
+                debug_log "DEBUG" "No network connectivity info, API request may fail"
                 ;;
         esac
     fi
     
     # URLエンコード
     local encoded_text=$(urlencode "$text")
-    local temp_file="/tmp/aios/translations/google_response.tmp"
+    local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
     
     # ディレクトリが存在しなければ作成
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
     
-    debug_log "DEBUG" "Sending request to Google Translate API"
-    wget $wget_options -q -O "$temp_file" -T $LOCATION_API_TIMEOUT \
-         --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
-         "https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
-    
-    local wget_status=$?
-    debug_log "DEBUG" "wget exit code: $wget_status"
-    
-    # レスポンスチェック
-    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-        if grep -q '\[\[\["' "$temp_file"; then
-            local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
-            
-            if [ -n "$translated" ]; then
-                debug_log "DEBUG" "Google API returned valid translation"
-                echo "$translated"
-                rm -f "$temp_file"
-                return 0
+    # リトライループ
+    while [ $retry_count -le $max_retries ]; do
+        if [ $retry_count -gt 0 ]; then
+            debug_log "DEBUG" "Retry attempt $retry_count for Google Translate API"
+            # デュアルスタック環境でIPバージョンを切り替え
+            if [ "$network_type" = "v4v6" ]; then
+                if [ "$wget_options" = "-4" ]; then
+                    wget_options="-6"
+                    debug_log "DEBUG" "Switching to IPv6 for retry"
+                else
+                    wget_options="-4"
+                    debug_log "DEBUG" "Switching to IPv4 for retry"
+                fi
             fi
         fi
-    fi
+        
+        debug_log "DEBUG" "Sending request to Google Translate API with options: $wget_options"
+        wget $wget_options -q -O "$temp_file" -T 15 \
+             --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
+             "https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
+        
+        local wget_status=$?
+        debug_log "DEBUG" "wget exit code: $wget_status"
+        
+        # レスポンスチェック
+        if [ -s "$temp_file" ]; then
+            if grep -q '\[\[\["' "$temp_file"; then
+                local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
+                
+                if [ -n "$translated" ]; then
+                    debug_log "DEBUG" "Google API returned valid translation"
+                    echo "$translated"
+                    rm -f "$temp_file"
+                    return 0
+                fi
+            fi
+        fi
+        
+        debug_log "DEBUG" "Google API translation attempt failed"
+        rm -f "$temp_file" 2>/dev/null
+        retry_count=$((retry_count + 1))
+        
+        # 一定時間待機してからリトライ
+        [ $retry_count -le $max_retries ] && sleep 2
+    done
     
-    debug_log "DEBUG" "Google API translation failed"
-    rm -f "$temp_file" 2>/dev/null
+    debug_log "DEBUG" "Google API translation failed after all retry attempts"
     return 1
 }
 
@@ -248,7 +269,8 @@ EOF
     
     # 翻訳処理開始
     printf "\n"
-    
+    # printf "Creating translation DB using API: %s\n" "$api_lang"
+        
     # ネットワーク接続状態を確認
     if [ ! -f "$ip_check_file" ]; then
         debug_log "DEBUG" "Network status file not found, checking connectivity"
@@ -274,7 +296,7 @@ EOF
     debug_log "DEBUG" "Initial API based on API_LIST priority: $current_api"
     
     # スピナーを開始し、使用中のAPIを表示
-    start_spinner "$(color blue "APIを使用中: $current_api")" "dot"
+    start_spinner "$(color blue "Using API: $current_api")" "dot"
     
     # 言語エントリを抽出
     grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
@@ -306,9 +328,9 @@ EOF
                         google)
                             # 表示APIとの不一致チェック（表示更新）
                             if [ "$current_api" != "Google Translate API" ]; then
-                                stop_spinner "APIの切り替え中" "info"
+                                stop_spinner "Switching API" "info"
                                 current_api="Google Translate API"
-                                start_spinner "$(color blue "APIを使用中: $current_api")" "dot"
+                                start_spinner "$(color blue "Using API: $current_api")" "dot"
                                 debug_log "DEBUG" "Switching to Google Translate API"
                             fi
                             
@@ -349,13 +371,13 @@ EOF
     done
     
     # スピナー停止
-    stop_spinner "翻訳が完了しました" "success"
+    stop_spinner "Translation completed" "success"
     
     # 翻訳処理終了 - message.dbの仕様に合わせた形式で表示
-    printf "翻訳完了\n"
-    printf "翻訳ソース: $(color info "message_${api_lang}.db")\n"
-    printf "言語ソース: $(color info "${DEFAULT_LANGUAGE}")\n"
-    printf "言語コード: $(color info "${api_lang}")\n"
+    printf "Translation completed\n"
+    printf "Translation source: $(color info "message_${api_lang}.db")\n"
+    printf "Language source: $(color info "${DEFAULT_LANGUAGE}")\n" 
+    printf "Language code: $(color info "${api_lang}")\n"
     
     debug_log "DEBUG" "Language DB creation completed for ${api_lang}"
     return 0
@@ -363,22 +385,31 @@ EOF
 
 # 言語翻訳処理
 process_language_translation() {
-    # 既存の言語コードを取得
-    if [ ! -f "${CACHE_DIR:-/tmp/aios}/language.ch" ]; then
-        debug_log "DEBUG" "No language code found in cache"
-        return 1
+    # 言語コードの取得
+    local lang_code=""
+    if [ -f "${CACHE_DIR}/message.ch" ]; then
+        lang_code=$(cat "${CACHE_DIR}/message.ch")
+        debug_log "DEBUG" "Processing translation for language code: ${lang_code}"
+    else
+        debug_log "DEBUG" "No language code found in message.ch"
+        lang_code="$DEFAULT_LANGUAGE"
     fi
-    
-    local lang_code=$(cat "${CACHE_DIR:-/tmp/aios}/language.ch")
-    debug_log "DEBUG" "Processing translation for language: ${lang_code}"
     
     # デフォルト言語以外の場合のみ翻訳DBを作成
     if [ "$lang_code" != "$DEFAULT_LANGUAGE" ]; then
         # 翻訳DBを作成
         create_language_db "$lang_code"
+        
+        # 翻訳情報表示（成功メッセージなし）
+        display_detected_translation "false"
     else
         debug_log "DEBUG" "Skipping DB creation for default language: ${lang_code}"
+        
+        # デフォルト言語の場合も情報を表示（成功メッセージなし）
+        display_detected_translation "false"
     fi
+    
+    printf "\n"
     
     return 0
 }
@@ -392,8 +423,6 @@ init_translation() {
     process_language_translation
     
     debug_log "DEBUG" "Translation module initialized with language processing"
-    printf "翻訳モジュールの初期化が完了しました\n"
-    printf "\n"
 }
 
 # スクリプト初期化（自動実行）
