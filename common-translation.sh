@@ -358,6 +358,42 @@ EOF
     return 0
 }
 
+# 検出した翻訳情報を表示する共通関数
+display_detected_translation() {
+    local lang_code="$1"            # 言語コード
+    local db_file="$2"              # データベースファイル名
+    local source_lang="$3"          # ソース言語
+    local show_success_message="${4:-false}"  # 成功メッセージ表示フラグ
+    
+    debug_log "DEBUG" "Displaying translation information for language: $lang_code"
+    
+    # 検出情報表示
+    local msg_info=$(get_message "MSG_TRANSLATION_INFO")
+    printf "%s\n" "$(color white "$msg_info")"
+    
+    if [ -n "$lang_code" ]; then
+        printf "%s %s\n" "$(color white "$(get_message "MSG_LANGUAGE_CODE"):")" "$(color white "$lang_code")"
+    fi
+    
+    if [ -n "$db_file" ]; then
+        printf "%s %s\n" "$(color white "$(get_message "MSG_DATABASE_FILE"):")" "$(color white "$db_file")"
+    fi
+    
+    if [ -n "$source_lang" ]; then
+        printf "%s %s\n" "$(color white "$(get_message "MSG_SOURCE_LANGUAGE"):")" "$(color white "$source_lang")"
+    fi
+    
+    # 成功メッセージの表示（オプション）
+    if [ "$show_success_message" = "true" ]; then
+        printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_SUCCESS")")"
+        printf "\n"
+        EXTRA_SPACING_NEEDED="yes"
+        debug_log "DEBUG" "Translation success message displayed"
+    fi
+    
+    debug_log "DEBUG" "Translation information displayed successfully"
+}
+
 # 言語翻訳処理
 process_language_translation() {
     # 既存の言語コードを取得
@@ -373,8 +409,17 @@ process_language_translation() {
     if [ "$lang_code" != "$DEFAULT_LANGUAGE" ]; then
         # 翻訳DBを作成
         create_language_db "$lang_code"
+        
+        # データベースファイルパスの設定
+        local db_file="${BASE_DIR:-/tmp/aios}/message_${lang_code}.db"
+        
+        # 翻訳情報表示（成功メッセージあり）
+        display_detected_translation "$lang_code" "$db_file" "$DEFAULT_LANGUAGE" "true"
     else
         debug_log "DEBUG" "Skipping DB creation for default language: ${lang_code}"
+        
+        # デフォルト言語の場合は簡易表示（成功メッセージなし）
+        display_detected_translation "$lang_code" "" "" "false"
     fi
     
     return 0
@@ -389,8 +434,6 @@ init_translation() {
     process_language_translation
     
     debug_log "DEBUG" "Translation module initialized with language processing"
-    printf "Translation module initialization complete\n"
-    printf "\n"
 }
 
 # スクリプト初期化（自動実行）
