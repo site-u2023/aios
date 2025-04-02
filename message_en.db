@@ -132,6 +132,12 @@ en|MSG_CACHE_ENABLED=Cache enabled: Using cached version information when availa
 # =======================
 # common-country.sh
 # =======================
+en|MSG_TRANSLATION_INFO=Translation information
+en|MSG_LANGUAGE_CODE=Language code
+en|MSG_DATABASE_FILE=Database file
+en|MSG_SOURCE_LANGUAGE=Source language
+en|MSG_TRANSLATION_SUCCESS=Translation processing completed successfully
+
 en|MSG_CONFIRM_DEFAULT=Confirm? {notr_type_notr}
 en|MSG_CONFIRM_SELECT=Confirm this selection? {notr_type_notr}
 en|MSG_INVALID_INPUT=Invalid input. Please enter {notr_type_notr}
