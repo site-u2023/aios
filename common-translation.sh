@@ -57,8 +57,8 @@ TRANSLATION_CACHE_DIR="${BASE_DIR}/translations"
 # API_LIST="mymemory"
 API_LIST="google"
 
-# タイムアウト設定
-WGET_TIMEOUT=10
+# 翻訳情報取得用タイムアウト設定（秒）
+TRANSLATION_API_TIMEOUT=15
 
 # 現在使用中のAPI情報を格納する変数
 CURRENT_API=""
