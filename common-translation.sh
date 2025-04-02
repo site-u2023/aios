@@ -51,7 +51,7 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 ONLINE_TRANSLATION_ENABLED="yes"
 
 # 翻訳キャッシュディレクトリ
-TRANSLATION_CACHE_DIR="${BASE_DIR:-/tmp/aios}/translations"
+TRANSLATION_CACHE_DIR="${BASE_DIR}/translations"
 
 # 使用可能なAPIリスト
 # API_LIST="mymemory"
@@ -72,8 +72,8 @@ init_translation_cache() {
 # 言語コード取得（APIのため）
 get_api_lang_code() {
     # luci.chからの言語コードを使用
-    if [ -f "${CACHE_DIR:-/tmp/aios}/luci.ch" ]; then
-        local api_lang=$(cat "${CACHE_DIR:-/tmp/aios}/luci.ch")
+    if [ -f "${CACHE_DIR}/message.ch" ]; then
+        local api_lang=$(cat "${CACHE_DIR}/message.ch")
         debug_log "DEBUG" "Using language code from luci.ch: ${api_lang}"
         printf "%s\n" "$api_lang"
         return 0
@@ -146,7 +146,7 @@ translate_with_google() {
     
     # URLエンコード
     local encoded_text=$(urlencode "$text")
-    local temp_file="/tmp/aios/translations/google_response.tmp"
+    local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
     
     # ディレクトリが存在しなければ作成
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
@@ -221,7 +221,7 @@ create_language_db() {
     local base_db="${BASE_DIR:-/tmp/aios}/message_${DEFAULT_LANGUAGE}.db"
     local api_lang=$(get_api_lang_code)
     local output_db="${BASE_DIR:-/tmp/aios}/message_${api_lang}.db"
-    local temp_file="${TRANSLATION_CACHE_DIR}/temp_translation_output.txt"
+    local temp_file="${TRANSLATION_CACHE_DIR}/translation_output.tmp"
     local cleaned_translation=""
     local current_api=""
     local ip_check_file="${CACHE_DIR}/network.ch"
@@ -397,12 +397,12 @@ display_detected_translation() {
 # 言語翻訳処理
 process_language_translation() {
     # 既存の言語コードを取得
-    if [ ! -f "${CACHE_DIR:-/tmp/aios}/language.ch" ]; then
+    if [ ! -f "${CACHE_DIR}/language.ch" ]; then
         debug_log "DEBUG" "No language code found in cache"
         return 1
     fi
     
-    local lang_code=$(cat "${CACHE_DIR:-/tmp/aios}/language.ch")
+    local lang_code=$(cat "${CACHE_DIR}/language.ch")
     debug_log "DEBUG" "Processing translation for language: ${lang_code}"
     
     # デフォルト言語以外の場合のみ翻訳DBを作成
