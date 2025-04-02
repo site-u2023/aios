@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-03-29-03-40"
+SCRIPT_VERSION="2025-04-02-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -51,14 +51,14 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 ONLINE_TRANSLATION_ENABLED="yes"
 
 # 翻訳キャッシュディレクトリ
-TRANSLATION_CACHE_DIR="${BASE_DIR}/translations"
+TRANSLATION_CACHE_DIR="${BASE_DIR:-/tmp/aios}/translations"
 
 # 使用可能なAPIリスト
 # API_LIST="mymemory"
 API_LIST="google"
 
-# タイムアウト設定
-WGET_TIMEOUT=10
+# タイムアウト設定（秒）
+LOCATION_API_TIMEOUT=15
 
 # 現在使用中のAPI情報を格納する変数
 CURRENT_API=""
@@ -71,16 +71,16 @@ init_translation_cache() {
 
 # 言語コード取得（APIのため）
 get_api_lang_code() {
-    # message.chからの言語コードを使用
-    if [ -f "${CACHE_DIR}/message.ch" ]; then
-        local api_lang=$(cat "${CACHE_DIR}/message.ch")
-        debug_log "DEBUG" "Using language code from message.ch: ${api_lang}"
+    # luci.chからの言語コードを使用
+    if [ -f "${CACHE_DIR:-/tmp/aios}/luci.ch" ]; then
+        local api_lang=$(cat "${CACHE_DIR:-/tmp/aios}/luci.ch")
+        debug_log "DEBUG" "Using language code from luci.ch: ${api_lang}"
         printf "%s\n" "$api_lang"
         return 0
     fi
     
-    # message.chがない場合はデフォルトで英語
-    debug_log "DEBUG" "No message.ch found, defaulting to en"
+    # luci.chがない場合はデフォルトで英語
+    debug_log "DEBUG" "No luci.ch found, defaulting to en"
     printf "en\n"
 }
 
@@ -134,9 +134,9 @@ translate_with_google() {
                 debug_log "DEBUG" "Using IPv6 for API request"
                 ;;
             "v4v6")
-                # IPv4を優先使用（両方可能な場合はIPv4を使用）
+                # デュアルスタックの場合は常にIPv4を優先
                 wget_options="-4"
-                debug_log "DEBUG" "Both available, prioritizing IPv4 for API request"
+                debug_log "DEBUG" "Dual-stack environment, prioritizing IPv4 for API request"
                 ;;
             *)
                 debug_log "DEBUG" "No network connectivity, API request may fail"
@@ -146,13 +146,13 @@ translate_with_google() {
     
     # URLエンコード
     local encoded_text=$(urlencode "$text")
-    local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
+    local temp_file="/tmp/aios/translations/google_response.tmp"
     
     # ディレクトリが存在しなければ作成
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
     
     debug_log "DEBUG" "Sending request to Google Translate API"
-    wget $wget_options -q -O "$temp_file" -T 10 \
+    wget $wget_options -q -O "$temp_file" -T $LOCATION_API_TIMEOUT \
          --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
          "https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
     
@@ -160,7 +160,7 @@ translate_with_google() {
     debug_log "DEBUG" "wget exit code: $wget_status"
     
     # レスポンスチェック
-    if [ -s "$temp_file" ]; then
+    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
         if grep -q '\[\[\["' "$temp_file"; then
             local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
             
@@ -218,10 +218,10 @@ translate_text() {
 # 言語データベース作成関数
 create_language_db() {
     local target_lang="$1"
-    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
+    local base_db="${BASE_DIR:-/tmp/aios}/message_${DEFAULT_LANGUAGE}.db"
     local api_lang=$(get_api_lang_code)
-    local output_db="${BASE_DIR}/message_${api_lang}.db"
-    local temp_file="${TRANSLATION_CACHE_DIR}/translation_output.tmp"
+    local output_db="${BASE_DIR:-/tmp/aios}/message_${api_lang}.db"
+    local temp_file="${TRANSLATION_CACHE_DIR}/temp_translation_output.txt"
     local cleaned_translation=""
     local current_api=""
     local ip_check_file="${CACHE_DIR}/network.ch"
@@ -248,8 +248,7 @@ EOF
     
     # 翻訳処理開始
     printf "\n"
-    # printf "Creating translation DB using API: %s\n" "$api_lang"
-        
+    
     # ネットワーク接続状態を確認
     if [ ! -f "$ip_check_file" ]; then
         debug_log "DEBUG" "Network status file not found, checking connectivity"
@@ -275,7 +274,7 @@ EOF
     debug_log "DEBUG" "Initial API based on API_LIST priority: $current_api"
     
     # スピナーを開始し、使用中のAPIを表示
-    start_spinner "$(color blue "Using API: $current_api")" "dot"
+    start_spinner "$(color blue "APIを使用中: $current_api")" "dot"
     
     # 言語エントリを抽出
     grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
@@ -307,9 +306,9 @@ EOF
                         google)
                             # 表示APIとの不一致チェック（表示更新）
                             if [ "$current_api" != "Google Translate API" ]; then
-                                stop_spinner "Switching API" "info"
+                                stop_spinner "APIの切り替え中" "info"
                                 current_api="Google Translate API"
-                                start_spinner "$(color blue "Using API: $current_api")" "dot"
+                                start_spinner "$(color blue "APIを使用中: $current_api")" "dot"
                                 debug_log "DEBUG" "Switching to Google Translate API"
                             fi
                             
@@ -350,64 +349,36 @@ EOF
     done
     
     # スピナー停止
-    stop_spinner "Translation completed" "success"
+    stop_spinner "翻訳が完了しました" "success"
     
-    # 翻訳処理終了
+    # 翻訳処理終了 - message.dbの仕様に合わせた形式で表示
+    printf "翻訳完了\n"
+    printf "翻訳ソース: $(color info "message_${api_lang}.db")\n"
+    printf "言語ソース: $(color info "${DEFAULT_LANGUAGE}")\n"
+    printf "言語コード: $(color info "${api_lang}")\n"
+    
     debug_log "DEBUG" "Language DB creation completed for ${api_lang}"
     return 0
 }
 
-# 翻訳情報表示関数
-display_detected_translation() {
-    # 引数の取得
-    local show_success_message="${1:-false}"  # 成功メッセージ表示フラグ
-    
-    # get_api_lang_code()関数を使用して言語コードを取得
-    local lang_code="$(get_api_lang_code)"
-    local source_lang="$DEFAULT_LANGUAGE"  # ソース言語
-    
-    debug_log "DEBUG" "Displaying translation information for language code: $lang_code"
-    
-    # 成功メッセージの表示（オプション）
-    if [ "$show_success_message" = "true" ]; then
-        printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_SUCCESS")")"
-    fi
-    
-    # 翻訳ソース情報表示
-    local db_file="message_${lang_code}.db"
-    printf "%s %s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE")")" "$(color white "$db_file")"
-    
-    # 言語ソース情報表示
-    printf "%s %s\n" "$(color white "$(get_message "MSG_LANGUAGE_SOURCE")")" "$(color white "$source_lang")"
-    
-    # 言語コード情報表示
-    printf "%s %s\n" "$(color white "$(get_message "MSG_LANGUAGE_CODE")")" "$(color white "$lang_code")"
-    
-    debug_log "DEBUG" "Translation information displayed successfully"
-}
-
 # 言語翻訳処理
 process_language_translation() {
-    # get_api_lang_code()関数を使用して言語コードを取得
-    local lang_code="$(get_api_lang_code)"
+    # 既存の言語コードを取得
+    if [ ! -f "${CACHE_DIR:-/tmp/aios}/language.ch" ]; then
+        debug_log "DEBUG" "No language code found in cache"
+        return 1
+    fi
     
-    debug_log "DEBUG" "Processing translation for language code: ${lang_code}"
+    local lang_code=$(cat "${CACHE_DIR:-/tmp/aios}/language.ch")
+    debug_log "DEBUG" "Processing translation for language: ${lang_code}"
     
     # デフォルト言語以外の場合のみ翻訳DBを作成
     if [ "$lang_code" != "$DEFAULT_LANGUAGE" ]; then
         # 翻訳DBを作成
         create_language_db "$lang_code"
-        
-        # 翻訳情報表示（成功メッセージなし）
-        display_detected_translation "false"
     else
         debug_log "DEBUG" "Skipping DB creation for default language: ${lang_code}"
-        
-        # デフォルト言語の場合も情報を表示（成功メッセージなし）
-        display_detected_translation "false"
     fi
-    
-    printf "\n"
     
     return 0
 }
@@ -421,6 +392,8 @@ init_translation() {
     process_language_translation
     
     debug_log "DEBUG" "Translation module initialized with language processing"
+    printf "翻訳モジュールの初期化が完了しました\n"
+    printf "\n"
 }
 
 # スクリプト初期化（自動実行）
