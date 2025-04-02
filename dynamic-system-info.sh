@@ -58,7 +58,7 @@ PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
 # ロケーション情報取得用タイムアウト設定（秒）
 LOCATION_API_TIMEOUT="${LOCATION_API_TIMEOUT:-5}"
 # リトライ回数の設定
-LOCATION_API_MAX_RETRIES="${LOCATION_API_MAX_RETRIES:-3}"
+LOCATION_API_MAX_RETRIES="${LOCATION_API_MAX_RETRIES:-2}"
 
 # ネットワーク接続状態を確認する関数
 check_network_connectivity() {
