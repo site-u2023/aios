@@ -164,8 +164,8 @@ translate_with_google() {
         
         debug_log "DEBUG" "Sending request to Google Translate API with options: $wget_options"
         
-        # BASE_WGETを使用し、タイムアウト値をグローバル変数から取得
-        ${BASE_WGET//-O/} $wget_options -T $TRANSLATION_API_TIMEOUT -O "$temp_file" \
+        # 修正: BASE_WGETの変更に対応した書き方
+        $BASE_WGET $wget_options -T $TRANSLATION_API_TIMEOUT -O "$temp_file" \
              --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
              "https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
         
@@ -391,6 +391,8 @@ display_detected_translation() {
     fi
     
     local source_lang="$DEFAULT_LANGUAGE"  # ソース言語
+    local source_db="message_${source_lang}.db"
+    local target_db="message_${lang_code}.db"
     
     debug_log "DEBUG" "Displaying translation information for language code: $lang_code"
     
@@ -399,14 +401,12 @@ display_detected_translation() {
         printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_SUCCESS")")"
     fi
     
-    # 翻訳ソース情報表示 - get_message関数にプレースホルダーの値を直接渡す
-    local db_file="message_${lang_code}.db"
-    printf "%s\n" "$(get_message "MSG_TRANSLATION_SOURCE" "info=$db_file")"
+    # 翻訳ソース情報表示
+    printf "%s\n" "$(get_message "MSG_TRANSLATION_SOURCE_ORIGINAL" "info=$source_db")"
+    printf "%s\n" "$(get_message "MSG_TRANSLATION_SOURCE_CURRENT" "info=$target_db")"
     
-    # 言語ソース情報表示 - 同様に直接引数として渡す
+    # 言語コード情報表示
     printf "%s\n" "$(get_message "MSG_LANGUAGE_SOURCE" "info=$source_lang")"
-    
-    # 言語コード情報表示 - 同様に直接引数として渡す
     printf "%s\n" "$(get_message "MSG_LANGUAGE_CODE" "info=$lang_code")"
     
     debug_log "DEBUG" "Translation information displayed successfully"
