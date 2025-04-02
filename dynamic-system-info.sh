@@ -375,7 +375,7 @@ get_isp_info() {
     # 成功した場合、結果表示
     if [ -n "$ISP_NAME" ]; then
         if [ "$show_result" = "true" ] && type display_detected_isp >/dev/null 2>&1; then
-            display_detected_isp "OnlineAPI" "$ISP_NAME" "$ISP_AS" "$ISP_ORG" "false"
+            display_detected_isp "Online API" "$ISP_NAME" "$ISP_AS" "$ISP_ORG" "false"
         fi
         return 0
     else
