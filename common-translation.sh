@@ -406,13 +406,13 @@ display_detected_translation() {
     
     # 翻訳ソース情報表示
     local db_file="message_${lang_code}.db"
-    printf "%s %s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE")")" "$(color white "$db_file")"
+    printf "%s %s\n" "$(get_message "MSG_TRANSLATION_SOURCE")" "{info=$db_file}"
     
     # 言語ソース情報表示
-    printf "%s %s\n" "$(color white "$(get_message "MSG_LANGUAGE_SOURCE")")" "$(color white "$source_lang")"
+    printf "%s %s\n" "$(get_message "MSG_LANGUAGE_SOURCE")" "{info=$source_lang}"
     
     # 言語コード情報表示
-    printf "%s %s\n" "$(color white "$(get_message "MSG_LANGUAGE_CODE")")" "$(color white "$lang_code")"
+    printf "%s %s\n" "$(get_message "MSG_LANGUAGE_CODE")" "{info=$lang_code}"
     
     debug_log "DEBUG" "Translation information displayed successfully"
 }
