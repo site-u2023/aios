@@ -452,10 +452,10 @@ start_spinner() {
             SPINNER_CHARS="◯ ◎"
             ;;
         emoji)
-            SPINNER_CHARS="🤖 👺 😀 👽 😈 💀"
+            SPINNER_CHARS="'🤖' '👺' '😀' '👽' '😈' '💀'"
             ;;
         *)
-            SPINNER_CHARS="◯ ◎"
+            SPINNER_CHARS="- \\ | /"
             ;;
     esac
 
