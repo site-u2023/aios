@@ -886,7 +886,7 @@ github_api_request() {
             # 認証方法2: wgetのユーザー認証（ヘッダーがサポートされていない場合）
             if [ "$auth_method" = "direct" ] && [ "$WGET_SUPPORTS_HEADER" = "0" ]; then
                 debug_log "DEBUG" "Trying user authentication"
-                $BASE_WGET "$temp_file" --user="$token" --password="x-oauth-basic" \
+                $BASE_WGET -O "$temp_file" --user="$token" --password="x-oauth-basic" \
                          "https://api.github.com/$endpoint" 2>/dev/null
                          
                 if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
@@ -905,7 +905,7 @@ github_api_request() {
         # 認証方法3: フォールバック（直接アクセス）
         if [ "$auth_method" = "direct" ]; then
             debug_log "DEBUG" "Falling back to direct access"
-            $BASE_WGET "$temp_file" "https://api.github.com/$endpoint" 2>/dev/null
+            $BASE_WGET -O "$temp_file" "https://api.github.com/$endpoint" 2>/dev/null
             
             if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
                 response=$(cat "$temp_file")
@@ -1150,7 +1150,7 @@ check_api_rate_limit() {
     if [ -n "$token" ] && [ "$WGET_CAPABILITY" != "limited" ]; then
         if [ "$WGET_CAPABILITY" = "header" ]; then
             # ヘッダー認証（最適）
-            $BASE_WGET "$temp_file" --header="Authorization: token $token" \
+            $BASE_WGET -O "$temp_file" --header="Authorization: token $token" \
                  "https://api.github.com/rate_limit" 2>/dev/null
             
             if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials\|Unauthorized" "$temp_file"; then
@@ -1159,7 +1159,7 @@ check_api_rate_limit() {
             fi
         elif [ "$WGET_CAPABILITY" = "basic" ]; then
             # 基本認証
-            $BASE_WGET "$temp_file" --user="$token" --password="x-oauth-basic" \
+            $BASE_WGET -O "$temp_file" --user="$token" --password="x-oauth-basic" \
                  "https://api.github.com/rate_limit" 2>/dev/null
                  
             if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials\|Unauthorized" "$temp_file"; then
@@ -1172,7 +1172,7 @@ check_api_rate_limit() {
     # 非認証リクエスト（認証に失敗した場合または認証なしの場合）
     if [ "$auth_method" = "direct" ]; then
         debug_log "DEBUG" "Making direct API request"
-        $BASE_WGET "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
+        $BASE_WGET -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
     fi
     
     # レスポンス解析
@@ -1367,7 +1367,7 @@ get_commit_version() {
             if [ "$current_network" = "v4v6" ]; then
                 # IPv6を試す
                 WGET_IPV_OPT="-6"
-                BASE_WGET="wget --no-check-certificate -q ${WGET_IPV_OPT}"
+                BASE_WGET="wget --no-check-certificate -q ${WGET_IPV_OPT} -O"
                 debug_log "DEBUG" "Switching to IPv6 for retry"
             elif [ "$current_network" = "v4" ] || [ "$current_network" = "v6" ]; then
                 # シングルスタックの場合は直接ダウンロードを試す
@@ -1413,7 +1413,7 @@ get_commit_version() {
                 local current_network=$(cat "${CACHE_DIR}/network.ch")
                 if [ "$current_network" = "v4v6" ]; then
                     WGET_IPV_OPT="-6"
-                    BASE_WGET="wget --no-check-certificate -q ${WGET_IPV_OPT}"
+                    BASE_WGET="wget --no-check-certificate -q ${WGET_IPV_OPT} -O"
                     debug_log "DEBUG" "Switching to IPv6 for direct file download retry"
                 fi
             fi
