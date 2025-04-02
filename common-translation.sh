@@ -396,6 +396,8 @@ display_detected_translation() {
     fi
     
     local source_lang="$DEFAULT_LANGUAGE"  # ソース言語
+    local source_db="message_${source_lang}.db"
+    local target_db="message_${lang_code}.db"
     
     debug_log "DEBUG" "Displaying translation information for language code: $lang_code"
     
@@ -404,9 +406,11 @@ display_detected_translation() {
         printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_SUCCESS")")"
     fi
     
-    # 翻訳ソース情報表示
-    local db_file="message_${lang_code}.db"
-    printf "%s %s\n" "$(get_message "MSG_TRANSLATION_SOURCE")" "{info=$db_file}"
+    # 翻訳元ソース
+    printf "%s %s\n" "$(get_message "MSG_TRANSLATION_SOURCE_ORIGINAL")" "{info=$source_db}"
+
+    # 翻訳後ソース
+    printf "%s %s\n" "$(get_message "MSG_TRANSLATION_SOURCE_CURRENT")" "{info=$target_db}"
     
     # 言語ソース情報表示
     printf "%s %s\n" "$(get_message "MSG_LANGUAGE_SOURCE")" "{info=$source_lang}"
