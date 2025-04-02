@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.14-01-01"
+SCRIPT_VERSION="2025.04.01-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX準拠シェルスクリプト
@@ -42,7 +42,7 @@ DEV_NULL="${DEV_NULL:-on}"
 # unset DEV_NULL
 
 # 基本定数の設定 
-BASE_WGET="wget --no-check-certificate -q -O"
+BASE_WGET="wget --no-check-certificate -q"
 # BASE_WGET="wget -O"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
@@ -55,11 +55,10 @@ OSVERSION="${CACHE_DIR}/osversion.ch"
 PACKAGE_MANAGER="${CACHE_DIR}/package_manager.ch"
 PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
 
-# wget関連設定
-BASE_WGET="wget --no-check-certificate -q -O" # 基本wgetコマンド
-
 # ロケーション情報取得用タイムアウト設定（秒）
-LOCATION_API_TIMEOUT=15
+LOCATION_API_TIMEOUT="${LOCATION_API_TIMEOUT:-5}"
+# リトライ回数の設定
+LOCATION_API_MAX_RETRIES="${LOCATION_API_MAX_RETRIES:-3}"
 
 # ネットワーク接続状態を確認する関数
 check_network_connectivity() {
@@ -464,13 +463,14 @@ get_country_code() {
     local tmp_file=""
     local api_url=""
     local spinner_active=0
+    local retry_count=0
     
     # API URLの定数化
     local API_IPV4="https://api.ipify.org"
     local API_IPV6="https://api64.ipify.org"
     local API_WORLDTIME="http://worldtimeapi.org/api/ip"
     local API_IPAPI="http://ip-api.com/json"
-    
+      
     # グローバル変数の初期化
     SELECT_ZONE=""
     SELECT_ZONENAME=""
@@ -529,26 +529,32 @@ get_country_code() {
         api_url="$API_IPV4"
     fi
     
-    # 選択したAPIを使用してIPアドレスを取得
+    # 選択したAPIを使用してIPアドレスを取得（リトライロジック付き）
     debug_log "DEBUG: Querying IP address from $api_url"
     
-    tmp_file="$(mktemp -t location.XXXXXX)"
-    $BASE_WGET "$tmp_file" "$api_url" --timeout=$LOCATION_API_TIMEOUT -T $LOCATION_API_TIMEOUT 2>/dev/null
-    wget_status=$?
-    debug_log "DEBUG: wget exit code: $wget_status"
-    
-    if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-        ip_address=$(cat "$tmp_file")
-        rm -f "$tmp_file"
-        debug_log "DEBUG: Retrieved IP address: $ip_address from $api_url"
-    else
-        debug_log "DEBUG: IP address query failed for $api_url"
-        rm -f "$tmp_file" 2>/dev/null
-    fi
+    retry_count=0
+    while [ $retry_count -lt $LOCATION_API_MAX_RETRIES ]; do
+        tmp_file="$(mktemp -t location.XXXXXX)"
+        $BASE_WGET "$tmp_file" "$api_url" -T $LOCATION_API_TIMEOUT 2>/dev/null
+        wget_status=$?
+        debug_log "DEBUG: wget exit code: $wget_status (attempt: $((retry_count+1))/$LOCATION_API_MAX_RETRIES)"
+        
+        if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+            ip_address=$(cat "$tmp_file")
+            rm -f "$tmp_file"
+            debug_log "DEBUG: Retrieved IP address: $ip_address from $api_url"
+            break
+        else
+            debug_log "DEBUG: IP address query failed for $api_url, retrying..."
+            rm -f "$tmp_file" 2>/dev/null
+            retry_count=$((retry_count + 1))
+            sleep 1
+        fi
+    done
     
     # IPアドレスが取得できたかチェック
     if [ -z "$ip_address" ]; then
-        debug_log "DEBUG: Failed to retrieve IP address"
+        debug_log "DEBUG: Failed to retrieve IP address after $LOCATION_API_MAX_RETRIES attempts"
         if [ $spinner_active -eq 1 ]; then
             local fail_msg=$(get_message "MSG_LOCATION_RESULT" "status=failed")
             stop_spinner "$fail_msg" "failed"
@@ -557,67 +563,79 @@ get_country_code() {
         return 1
     fi
     
-    # 国コードの取得
+    # 国コードの取得（リトライロジック付き）
     local country_msg=$(get_message "MSG_QUERY_INFO" "type=country code" "api=ip-api.com" "network=$network_type")
     update_spinner "$(color "blue" "$country_msg")" "yellow"
     debug_log "DEBUG: Querying country code from ip-api.com for IP: $ip_address"
     
-    tmp_file="$(mktemp -t location.XXXXXX)"
-    $BASE_WGET "$tmp_file" "${API_IPAPI}/${ip_address}" --timeout=$LOCATION_API_TIMEOUT -T $LOCATION_API_TIMEOUT 2>/dev/null
-    wget_status=$?
-    debug_log "DEBUG: wget exit code for country query: $wget_status"
+    retry_count=0
+    while [ $retry_count -lt $LOCATION_API_MAX_RETRIES ]; do
+        tmp_file="$(mktemp -t location.XXXXXX)"
+        $BASE_WGET "$tmp_file" "${API_IPAPI}/${ip_address}" -T $LOCATION_API_TIMEOUT 2>/dev/null
+        wget_status=$?
+        debug_log "DEBUG: wget exit code for country query: $wget_status (attempt: $((retry_count+1))/$LOCATION_API_MAX_RETRIES)"
+        
+        if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+            SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
+            debug_log "DEBUG: Retrieved country code: $SELECT_COUNTRY"
+            rm -f "$tmp_file"
+            break
+        else
+            debug_log "DEBUG: Country code query failed, retrying..."
+            rm -f "$tmp_file" 2>/dev/null
+            retry_count=$((retry_count + 1))
+            sleep 1
+        fi
+    done
     
-    if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-        SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
-        debug_log "DEBUG: Retrieved country code: $SELECT_COUNTRY"
-        rm -f "$tmp_file"
-    else
-        debug_log "DEBUG: Country code query failed"
-        rm -f "$tmp_file" 2>/dev/null
-    fi
-    
-    # タイムゾーン情報の取得
+    # タイムゾーン情報の取得（リトライロジック付き）
     local tz_msg=$(get_message "MSG_QUERY_INFO" "type=timezone" "api=worldtimeapi.org" "network=$network_type")
     update_spinner "$(color "blue" "$tz_msg")" "yellow"
     debug_log "DEBUG: Querying timezone from worldtimeapi.org"
     
-    tmp_file="$(mktemp -t location.XXXXXX)"
-    $BASE_WGET "$tmp_file" "$API_WORLDTIME" --timeout=$LOCATION_API_TIMEOUT -T $LOCATION_API_TIMEOUT 2>/dev/null
-    wget_status=$?
-    debug_log "DEBUG: wget exit code for timezone query: $wget_status"
-    
-    if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-        SELECT_ZONENAME=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//')
-        SELECT_TIMEZONE=$(grep -o '"abbreviation":"[^"]*' "$tmp_file" | sed 's/"abbreviation":"//')
-        local utc_offset=$(grep -o '"utc_offset":"[^"]*' "$tmp_file" | sed 's/"utc_offset":"//')
+    retry_count=0
+    while [ $retry_count -lt $LOCATION_API_MAX_RETRIES ]; do
+        tmp_file="$(mktemp -t location.XXXXXX)"
+        $BASE_WGET "$tmp_file" "$API_WORLDTIME" -T $LOCATION_API_TIMEOUT 2>/dev/null
+        wget_status=$?
+        debug_log "DEBUG: wget exit code for timezone query: $wget_status (attempt: $((retry_count+1))/$LOCATION_API_MAX_RETRIES)"
         
-        debug_log "DEBUG: Retrieved timezone data: $SELECT_ZONENAME ($SELECT_TIMEZONE), UTC offset: $utc_offset"
-        
-        # POSIX形式のタイムゾーン文字列を生成
-        if [ -n "$SELECT_TIMEZONE" ] && [ -n "$utc_offset" ]; then
-            local offset_sign=$(echo "$utc_offset" | cut -c1)
-            local offset_hours=$(echo "$utc_offset" | cut -c2-3 | sed 's/^0//')
+        if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+            SELECT_ZONENAME=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//')
+            SELECT_TIMEZONE=$(grep -o '"abbreviation":"[^"]*' "$tmp_file" | sed 's/"abbreviation":"//')
+            local utc_offset=$(grep -o '"utc_offset":"[^"]*' "$tmp_file" | sed 's/"utc_offset":"//')
             
-            if [ "$offset_sign" = "+" ]; then
-                # +9 -> -9（POSIXでは符号が反転）
-                SELECT_POSIX_TZ="${SELECT_TIMEZONE}-${offset_hours}"
-            else
-                # -5 -> 5（POSIXではプラスの符号は省略）
-                SELECT_POSIX_TZ="${SELECT_TIMEZONE}${offset_hours}"
+            debug_log "DEBUG: Retrieved timezone data: $SELECT_ZONENAME ($SELECT_TIMEZONE), UTC offset: $utc_offset"
+            
+            # POSIX形式のタイムゾーン文字列を生成
+            if [ -n "$SELECT_TIMEZONE" ] && [ -n "$utc_offset" ]; then
+                local offset_sign=$(echo "$utc_offset" | cut -c1)
+                local offset_hours=$(echo "$utc_offset" | cut -c2-3 | sed 's/^0//')
+                
+                if [ "$offset_sign" = "+" ]; then
+                    # +9 -> -9（POSIXでは符号が反転）
+                    SELECT_POSIX_TZ="${SELECT_TIMEZONE}-${offset_hours}"
+                else
+                    # -5 -> 5（POSIXではプラスの符号は省略）
+                    SELECT_POSIX_TZ="${SELECT_TIMEZONE}${offset_hours}"
+                fi
+                
+                debug_log "DEBUG: Generated POSIX timezone: $SELECT_POSIX_TZ"
             fi
-            
-            debug_log "DEBUG: Generated POSIX timezone: $SELECT_POSIX_TZ"
+            rm -f "$tmp_file"
+            break
+        else
+            debug_log "DEBUG: Timezone query failed, retrying..."
+            rm -f "$tmp_file" 2>/dev/null
+            retry_count=$((retry_count + 1))
+            sleep 1
         fi
-        rm -f "$tmp_file"
-    else
-        debug_log "DEBUG: Timezone query failed"
-        rm -f "$tmp_file" 2>/dev/null
-    fi
+    done
     
     # 結果のチェックとスピナー停止
     if [ $spinner_active -eq 1 ]; then
         if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ] && [ -n "$SELECT_TIMEZONE" ]; then
-            local success_msg=$(get_message "MSG_LOCATION_RESULT" "status=successfully")
+            local success_msg=$(get_message "MSG_LOCATION_RESULT" "status=completed successfully")
             stop_spinner "$success_msg" "success"
             debug_log "DEBUG: Location information process completed successfully"
             return 0
