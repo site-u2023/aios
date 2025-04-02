@@ -36,7 +36,7 @@ SCRIPT_VERSION="2025-03-29-03-40"
 ### =========================================================
 
 # 基本定数の設定 
-BASE_WGET="wget --no-check-certificate -q -O"
+BASE_WGET="wget --no-check-certificate -q"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 BIN_PATH="$(readlink -f "$0")"
 BIN_DIR="$(dirname "$BIN_PATH")"
