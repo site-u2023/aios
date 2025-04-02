@@ -10,9 +10,9 @@ en|MSG_UNDER_TEST=👽 Under test
 # =======================
 en|MSG_TRANSLATION_SOURCE_ORIGINAL=Original source{notr_colon_notr} {notr_info_notr}
 en|MSG_TRANSLATION_SOURCE_CURRENT=Translated source{notr_colon_notr} {notr_info_notr}
-en|MSG_LANGUAGE_SOURCE=Language Source{notr_colon_notr} {notr_info_notr}
-en|MSG_LANGUAGE_CODE=Language code{notr_colon_notr} {notr_info_notr}
-en|MSG_TRANSLATION_SUCCESS=Translation completed successfully
+en|MSG_LANGUAGE_SOURCE=Original Language Code{notr_colon_notr} {notr_info_notr}
+en|MSG_LANGUAGE_CODE=Translated Language Code{notr_colon_notr} {notr_info_notr}
+en|MSG_TRANSLATION_SUCCESS=Translation successfully
 
 # =======================
 # package_auto.sh
