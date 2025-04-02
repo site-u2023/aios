@@ -617,7 +617,7 @@ get_country_code() {
     # 結果のチェックとスピナー停止
     if [ $spinner_active -eq 1 ]; then
         if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ] && [ -n "$SELECT_TIMEZONE" ]; then
-            local success_msg=$(get_message "MSG_LOCATION_RESULT" "status=completed successfully")
+            local success_msg=$(get_message "MSG_LOCATION_RESULT" "status=successfully")
             stop_spinner "$success_msg" "success"
             debug_log "DEBUG: Location information process completed successfully"
             return 0
