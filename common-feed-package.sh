@@ -42,7 +42,7 @@ DEV_NULL="${DEV_NULL:-on}"
 # unset DEV_NULL
 
 # 基本定数の設定
-BASE_WGET="wget --no-check-certificate -q -O"
+BASE_WGET="wget --no-check-certificate -q"
 # BASE_WGET="wget -O"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
@@ -188,7 +188,7 @@ feed_package() {
   debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
   debug_log "DEBUG" "DOWNLOAD URL: $DOWNLOAD_URL"
 
-  eval "$BASE_WGET" "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # エラーが発生しても処理を継続
+  eval "$BASE_WGET" -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # エラーが発生しても処理を継続
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   debug_log "DEBUG" "Attempting to install package: $PKG_PREFIX"
@@ -282,7 +282,7 @@ feed_package_release() {
   debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
   debug_log "DEBUG" "DOWNLOAD URL: $DOWNLOAD_URL"
 
-  eval "$BASE_WGET" "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # エラーが発生しても処理を継続
+  eval "$BASE_WGET" -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # エラーが発生しても処理を継続
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   debug_log "DEBUG" "Attempting to install package: $PKG_PREFIX"
