@@ -295,7 +295,7 @@ EOF
     debug_log "DEBUG" "Initial API based on API_LIST priority: $current_api"
     
     # スピナーを開始し、使用中のAPIを表示
-    start_spinner "$(color blue "Using API: $current_api")" "dot"
+    start_spinner "$(color blue "Using API: $current_api")"
     
     # 言語エントリを抽出
     grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
@@ -329,7 +329,7 @@ EOF
                             if [ "$current_api" != "Google Translate API" ]; then
                                 stop_spinner "Switching API" "info"
                                 current_api="Google Translate API"
-                                start_spinner "$(color blue "Using API: $current_api")" "dot"
+                                start_spinner "$(color blue "Using API: $current_api")"
                                 debug_log "DEBUG" "Switching to Google Translate API"
                             fi
                             
