@@ -103,6 +103,7 @@ en|CONFIG_DOWNLOAD_FAILED=Failed to download{notr_colon_notr} {notr_0_notr}
 # =======================
 # aios
 # =======================
+en|MSG_INFO_DEVICE=Device information retrieved successfully
 en|MSG_HELP_USAGE=Usage{notr_colon_notr} aios [OPTIONS] [LANGUAGE]
 en|MSG_HELP_OPTIONS_HEADER=Options{notr_colon_notr}
 en|MSG_HELP_HELP=Show this help message
