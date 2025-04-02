@@ -51,8 +51,8 @@ en|MSG_ISP_SUCCESS=ISP information detection completed successfully
 
 en|MSG_QUERY_INFO=Querying {notr_type_notr}: {notr_api_notr} via {notr_network_notr}
 en|MSG_LOCATION_RESULT=Location information retrieval {notr_status_notr}
-en|CONFIG_DOWNLOAD_SUCCESS=Download completed{notr_colon_notr}
-en|CONFIG_DOWNLOAD_UNNECESSARY=File already up to date{notr_colon_notr}
+en|CONFIG_DOWNLOAD_SUCCESS=Downloaded{notr_colon_notr}
+en|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{notr_colon_notr}
 
 # =======================
 # common-menu.sh
