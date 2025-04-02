@@ -466,8 +466,8 @@ get_country_code() {
     local retry_count=0
     
     # API URLの定数化
-    local API_IPV4="https://api.ipify.org"
-    local API_IPV6="https://api64.ipify.org"
+    local API_IPV4="http://api.ipify.org"
+    local API_IPV6="http://api64.ipify.org"
     local API_WORLDTIME="http://worldtimeapi.org/api/ip"
     local API_IPAPI="http://ip-api.com/json"
       
