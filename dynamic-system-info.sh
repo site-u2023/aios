@@ -301,7 +301,7 @@ get_isp_info() {
     debug_log "DEBUG: Querying IP address from $api_url"
     
     tmp_file="$(mktemp -t isp.XXXXXX)"
-    $BASE_WGET "$tmp_file" "$api_url" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
+    $BASE_WGET =O "$tmp_file" "$api_url" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
     
     if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
         ip_address=$(cat "$tmp_file")
@@ -349,7 +349,7 @@ get_isp_info() {
     debug_log "DEBUG: Querying ISP information for IP: $ip_address"
     
     tmp_file="$(mktemp -t isp.XXXXXX)"
-    $BASE_WGET "$tmp_file" "http://ip-api.com/json/${ip_address}?fields=isp,as,org" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
+    $BASE_WGET -O "$tmp_file" "http://ip-api.com/json/${ip_address}?fields=isp,as,org" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
     
     if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
         # JSON解析
@@ -416,7 +416,7 @@ download_isp_database() {
     
     # データベースのダウンロード
     tmp_file="$(mktemp -t ispdb.XXXXXX)"
-    $BASE_WGET "$tmp_file" "$db_url" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
+    $BASE_WGET -O "$tmp_file" "$db_url" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
     
     # ダウンロード結果の確認
     if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
@@ -535,7 +535,7 @@ get_country_code() {
     retry_count=0
     while [ $retry_count -lt $LOCATION_API_MAX_RETRIES ]; do
         tmp_file="$(mktemp -t location.XXXXXX)"
-        $BASE_WGET "$tmp_file" "$api_url" -T $LOCATION_API_TIMEOUT 2>/dev/null
+        $BASE_WGET -O "$tmp_file" "$api_url" -T $LOCATION_API_TIMEOUT 2>/dev/null
         wget_status=$?
         debug_log "DEBUG: wget exit code: $wget_status (attempt: $((retry_count+1))/$LOCATION_API_MAX_RETRIES)"
         
@@ -571,7 +571,7 @@ get_country_code() {
     retry_count=0
     while [ $retry_count -lt $LOCATION_API_MAX_RETRIES ]; do
         tmp_file="$(mktemp -t location.XXXXXX)"
-        $BASE_WGET "$tmp_file" "${API_IPAPI}/${ip_address}" -T $LOCATION_API_TIMEOUT 2>/dev/null
+        $BASE_WGET -O "$tmp_file" "${API_IPAPI}/${ip_address}" -T $LOCATION_API_TIMEOUT 2>/dev/null
         wget_status=$?
         debug_log "DEBUG: wget exit code for country query: $wget_status (attempt: $((retry_count+1))/$LOCATION_API_MAX_RETRIES)"
         
@@ -596,7 +596,7 @@ get_country_code() {
     retry_count=0
     while [ $retry_count -lt $LOCATION_API_MAX_RETRIES ]; do
         tmp_file="$(mktemp -t location.XXXXXX)"
-        $BASE_WGET "$tmp_file" "$API_WORLDTIME" -T $LOCATION_API_TIMEOUT 2>/dev/null
+        $BASE_WGET -O "$tmp_file" "$API_WORLDTIME" -T $LOCATION_API_TIMEOUT 2>/dev/null
         wget_status=$?
         debug_log "DEBUG: wget exit code for timezone query: $wget_status (attempt: $((retry_count+1))/$LOCATION_API_MAX_RETRIES)"
         
