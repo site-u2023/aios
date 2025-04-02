@@ -8,11 +8,10 @@ en|MSG_UNDER_TEST=👽 Under test
 # =======================
 # common-translation.sh
 # =======================
-en|MSG_TRANSLATION_INFO=Translation Source{notr_colon_notr} {notr_info_notr}
-en|MSG_LANGUAGE_CODE=Language code
-en|MSG_DATABASE_FILE=Database file
-en|MSG_SOURCE_LANGUAGE=Source language
-en|MSG_TRANSLATION_SUCCESS=Translation processing completed successfully
+en|MSG_TRANSLATION_SOURCE=Translation Source{notr_colon_notr} {notr_info_notr}
+en|MSG_LANGUAGE_SOURCE=Language Source{notr_colon_notr} {notr_info_notr}
+en|MSG_LANGUAGE_CODE=Language code{notr_colon_notr} {notr_info_notr}
+en|MSG_TRANSLATION_SUCCESS=Translation completed successfully
 
 # =======================
 # package_auto.sh
