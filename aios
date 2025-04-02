@@ -1484,7 +1484,7 @@ download_fetch_file() {
     local install_path="${BASE_DIR}/$file_name"
     local script_file="${CACHE_DIR}/script.ch"
     
-    echo "DEBUG: download_fetch_file called for ${file_name}" >> ${LOG_DIR}/debug.log
+    debug_log "DEBUG" "download_fetch_file called for ${file_name}"
     
     # ダウンロードURLの設定
     local remote_url="${BASE_URL}/$file_name"
@@ -1494,34 +1494,31 @@ download_fetch_file() {
         remote_url="${remote_url}${CACHE_BUST}"
     fi
     
-    echo "DEBUG: Downloading from ${remote_url} to ${install_path}" >> ${LOG_DIR}/debug.log
+    debug_log "DEBUG" "Downloading from ${remote_url} to ${install_path}"
     
     # IPバージョン設定が初期化されていない場合は設定する
     if [ -z "$WGET_IPV_OPT" ]; then
         setup_wget_options
     fi
     
-    # 設定されたwgetオプションを使用してファイルをダウンロード
-    if ! $BASE_WGET "$install_path" "$remote_url"; then
-        echo "ERROR: wget command failed for ${file_name}" >> /tmp/aios_debug.log
+    # -Oオプションを追加して正しくwgetを実行
+    if ! $BASE_WGET -O "$install_path" "$remote_url"; then
         debug_log "ERROR" "Download failed: $file_name"
         return 1
     fi
     
     # ファイル検証
     if [ ! -f "$install_path" ]; then
-        echo "ERROR: File not found after download: ${install_path}" >> ${LOG_DIR}/debug.log
         debug_log "ERROR" "Downloaded file not found: $file_name"
         return 1
     fi
     
     if [ ! -s "$install_path" ]; then
-        echo "ERROR: Empty file downloaded: ${install_path}" >> ${LOG_DIR}/debug.log
         debug_log "ERROR" "Downloaded file is empty: $file_name"
         return 1
     fi
     
-    echo "DEBUG: File successfully downloaded to ${install_path}" >> ${LOG_DIR}/debug.log
+    debug_log "DEBUG" "File successfully downloaded to ${install_path}"
     
     # 権限設定
     if [ "$chmod_mode" = "true" ]; then
