@@ -71,16 +71,16 @@ init_translation_cache() {
 
 # 言語コード取得（APIのため）
 get_api_lang_code() {
-    # luci.chからの言語コードを使用
+    # message.chからの言語コードを使用
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         local api_lang=$(cat "${CACHE_DIR}/message.ch")
-        debug_log "DEBUG" "Using language code from luci.ch: ${api_lang}"
+        debug_log "DEBUG" "Using language code from message.ch: ${api_lang}"
         printf "%s\n" "$api_lang"
         return 0
     fi
     
-    # luci.chがない場合はデフォルトで英語
-    debug_log "DEBUG" "No luci.ch found, defaulting to en"
+    # message.chがない場合はデフォルトで英語
+    debug_log "DEBUG" "No message.ch found, defaulting to en"
     printf "en\n"
 }
 
@@ -134,8 +134,8 @@ translate_with_google() {
                 debug_log "DEBUG" "Using IPv6 for API request"
                 ;;
             "v4v6")
-                # IPv4を優先使用（両方可能な場合はIPv64を使用）
-                wget_options="-6"
+                # IPv4を優先使用（両方可能な場合はIPv4を使用）
+                wget_options="-4"
                 debug_log "DEBUG" "Both available, prioritizing IPv4 for API request"
                 ;;
             *)
@@ -355,42 +355,6 @@ EOF
     # 翻訳処理終了
     debug_log "DEBUG" "Language DB creation completed for ${api_lang}"
     return 0
-}
-
-# 検出した翻訳情報を表示する共通関数
-display_detected_translation() {
-    local lang_code="$1"            # 言語コード
-    local db_file="$2"              # データベースファイル名
-    local source_lang="$3"          # ソース言語
-    local show_success_message="${4:-false}"  # 成功メッセージ表示フラグ
-    
-    debug_log "DEBUG" "Displaying translation information for language: $lang_code"
-    
-    # 検出情報表示
-    local msg_info=$(get_message "MSG_TRANSLATION_INFO")
-    printf "%s\n" "$(color white "$msg_info")"
-    
-    if [ -n "$lang_code" ]; then
-        printf "%s %s\n" "$(color white "$(get_message "MSG_LANGUAGE_CODE"):")" "$(color white "$lang_code")"
-    fi
-    
-    if [ -n "$db_file" ]; then
-        printf "%s %s\n" "$(color white "$(get_message "MSG_DATABASE_FILE"):")" "$(color white "$db_file")"
-    fi
-    
-    if [ -n "$source_lang" ]; then
-        printf "%s %s\n" "$(color white "$(get_message "MSG_SOURCE_LANGUAGE"):")" "$(color white "$source_lang")"
-    fi
-    
-    # 成功メッセージの表示（オプション）
-    if [ "$show_success_message" = "true" ]; then
-        printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_SUCCESS")")"
-        printf "\n"
-        EXTRA_SPACING_NEEDED="yes"
-        debug_log "DEBUG" "Translation success message displayed"
-    fi
-    
-    debug_log "DEBUG" "Translation information displayed successfully"
 }
 
 # 翻訳情報表示関数
