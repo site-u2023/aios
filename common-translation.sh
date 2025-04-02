@@ -50,18 +50,12 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 # オンライン翻訳を有効化
 ONLINE_TRANSLATION_ENABLED="yes"
 
-# 翻訳キャッシュディレクトリ
+# 翻訳API設定
+TRANSLATION_API_TIMEOUT="${TRANSLATION_API_TIMEOUT:-5}"
+TRANSLATION_API_MAX_RETRIES="${TRANSLATION_API_MAX_RETRIES:-3}"
 TRANSLATION_CACHE_DIR="${BASE_DIR}/translations"
-
-# 使用可能なAPIリスト
-# API_LIST="mymemory"
-API_LIST="google"
-
-# 翻訳情報取得用タイムアウト設定（秒）
-TRANSLATION_API_TIMEOUT=15
-
-# 現在使用中のAPI情報を格納する変数
 CURRENT_API=""
+API_LIST="google" # API_LIST="mymemory"
 
 # 翻訳キャッシュの初期化
 init_translation_cache() {
@@ -111,7 +105,6 @@ translate_with_google() {
     local ip_check_file="${CACHE_DIR}/network.ch"
     local wget_options=""
     local retry_count=0
-    local max_retries=2
     
     debug_log "DEBUG" "Starting Google Translate API request"
     
@@ -136,8 +129,8 @@ translate_with_google() {
                 debug_log "DEBUG" "Using IPv6 for API request"
                 ;;
             "v4v6")
-                # IPv4を優先使用（両方可能な場合はIPv4を使用）
-                wget_options="-4"  # 修正: IPv4を優先
+                # IPv4を優先使用
+                wget_options="-4"
                 debug_log "DEBUG" "Both available, prioritizing IPv4 for API request"
                 ;;
             *)
@@ -154,7 +147,7 @@ translate_with_google() {
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
     
     # リトライループ
-    while [ $retry_count -le $max_retries ]; do
+    while [ $retry_count -le $TRANSLATION_API_MAX_RETRIES ]; do
         if [ $retry_count -gt 0 ]; then
             debug_log "DEBUG" "Retry attempt $retry_count for Google Translate API"
             # デュアルスタック環境でIPバージョンを切り替え
@@ -170,7 +163,9 @@ translate_with_google() {
         fi
         
         debug_log "DEBUG" "Sending request to Google Translate API with options: $wget_options"
-        wget $wget_options -q -O "$temp_file" -T 15 \
+        
+        # BASE_WGETを使用し、タイムアウト値をグローバル変数から取得
+        ${BASE_WGET//-O/} $wget_options -T $TRANSLATION_API_TIMEOUT -O "$temp_file" \
              --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
              "https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
         
@@ -196,7 +191,7 @@ translate_with_google() {
         retry_count=$((retry_count + 1))
         
         # 一定時間待機してからリトライ
-        [ $retry_count -le $max_retries ] && sleep 2
+        [ $retry_count -le $TRANSLATION_API_MAX_RETRIES ] && sleep 2
     done
     
     debug_log "DEBUG" "Google API translation failed after all retry attempts"
