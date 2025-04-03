@@ -407,12 +407,12 @@ display_detected_translation() {
     fi
     
     # 翻訳ソース情報表示
-    printf "%s\n" "$(get_message "MSG_TRANSLATION_SOURCE_ORIGINAL" "info=$source_db")"
-    printf "%s\n" "$(get_message "MSG_TRANSLATION_SOURCE_CURRENT" "info=$target_db")"
+    printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE_ORIGINAL" "info=$source_db")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE_CURRENT" "info=$target_db")")"
     
     # 言語コード情報表示
-    printf "%s\n" "$(get_message "MSG_LANGUAGE_SOURCE" "info=$source_lang")"
-    printf "%s\n" "$(get_message "MSG_LANGUAGE_CODE" "info=$lang_code")"
+    printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SOURCE" "info=$source_lang")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_CODE" "info=$lang_code")")"
     
     debug_log "DEBUG" "Translation information display completed for ${lang_code}"
 }
