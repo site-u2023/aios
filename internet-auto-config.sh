@@ -569,13 +569,11 @@ detect_isp_type() {
 display_isp_info() {
     local provider="$1"
     local source="$2"
-    
-    # printf "%s\n" "$(color blue "========= ISP接続判定結果 =========")"
-    
+
     if [ "$source" = "cached" ]; then
-        printf "%s\n" "$(color white "$(get_message "MSG_ISP_INFO_SOURCE" "source=キャッシュ")")"
+        printf "%s\n" "$(color white "$(get_message "MSG_ISP_INFO_SOURCE" "source=Cache")")"
     else
-        printf "%s\n" "$(color white "$(get_message "MSG_ISP_INFO_SOURCE" "source=検出")")"
+        printf "%s\n" "$(color white "$(get_message "MSG_ISP_INFO_SOURCE" "source=detected")")"
     fi
     
     printf "%s\n" "$(color white "$(get_message "MSG_ISP_TYPE" "provider=$provider")")"
@@ -712,11 +710,6 @@ display_isp_info() {
             printf "%s\n" "$(color yellow "ご契約のインターネットプロバイダに確認してください。")"
             ;;
     esac
-    
-    # printf "\n%s\n" "$(color blue "====================================")"
-    
-    # キャッシュファイルの場所を表示
-    printf "%s %s\n\n" "$(get_message "MSG_ISP_CACHE_PATH")" "$(color "green" "${CACHE_DIR}/isp.ch")"
 }
 
 detect_isp_type "$@"
