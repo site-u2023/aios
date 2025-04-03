@@ -573,12 +573,12 @@ display_isp_info() {
     # printf "%s\n" "$(color blue "========= ISP接続判定結果 =========")"
     
     if [ "$source" = "cached" ]; then
-        printf "%s\n" "$(get_message "MSG_ISP_INFO_SOURCE" "source=キャッシュ")"
+        printf "%s\n" "$(color white "$(get_message "MSG_ISP_INFO_SOURCE" "source=キャッシュ")")"
     else
-        printf "%s\n" "$(get_message "MSG_ISP_INFO_SOURCE" "source=検出")"
+        printf "%s\n" "$(color white "$(get_message "MSG_ISP_INFO_SOURCE" "source=検出")")"
     fi
     
-    printf "%s %s\n" "$(get_message "MSG_ISP_TYPE")" "$(color cyan "$provider")"
+    printf "%s\n" "$(color white "$(get_message "MSG_ISP_TYPE" "provider=$provider")")"
     
     case "$provider" in
         mape_ocn)
