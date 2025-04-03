@@ -22,11 +22,6 @@ CACHE_DIR="/tmp/v6mig_cache"         # キャッシュディレクトリ
 DNS_SERVERS="8.8.8.8 1.1.1.1 9.9.9.9" # 代替DNSサーバーリスト
 PROV_DOMAINS="4over6.info v6mig.transix.jp" # プロビジョニングドメイン
 
-# デバッグログ関数
-debug_log() {
-    [ "$DEBUG" = "1" ] && echo "INFO: $1" >&2
-}
-
 # エラー出力関数
 print_error() {
     echo "エラー: $1" >&2
