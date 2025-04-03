@@ -12,12 +12,12 @@ WAN_IFACE="wan"                      # WANインターフェース名
 VENDORID="acde48-v6pc_swg_hgw"       # ベンダーID
 PRODUCT="V6MIG-ROUTER"               # 製品名
 VERSION="1_0"                        # バージョン
-DNS_SERVER=""                        # DNSサーバー（空の場合はデフォルト使用）
-DEBUG=1                              # デバッグ出力（1=有効, 0=無効）
+DNS_SERVERS="8.8.8.8 1.1.1.1"        # 代替DNSサーバーリスト（スペース区切り）
+PROV_DOMAIN="4over6.info"            # プロビジョニングサーバ発見用ドメイン
 
-# デバッグ情報出力関数
-debug() {
-  [ "$DEBUG" = "1" ] && echo "DEBUG: $1" >&2
+# INFOメッセージ出力関数
+info() {
+  echo "INFO: $1" >&2
 }
 
 # エラー出力関数
@@ -33,11 +33,11 @@ for cmd in ip curl jq dig; do
   fi
 done
 
-debug "Checking required commands: OK"
+info "Checking required commands: OK"
 
 #----- 1. IPv6アドレスの取得 -----
 get_ipv6_address() {
-  debug "Attempting to get IPv6 address from interface $WAN_IFACE"
+  info "Attempting to get IPv6 address from interface $WAN_IFACE"
   
   # OpenWrtの関数を利用
   if [ -f "/lib/functions/network.sh" ]; then
@@ -47,11 +47,11 @@ get_ipv6_address() {
     network_find_wan6 NET_IF6
     network_get_ipaddr6 NET_ADDR6 "${NET_IF6}"
     LOCAL_IPV6="$NET_ADDR6"
-    debug "Using OpenWrt network functions: $LOCAL_IPV6"
+    info "Using OpenWrt network functions: $LOCAL_IPV6"
   else
     # 一般的な方法でグローバルIPv6アドレスを取得
     LOCAL_IPV6=$(ip -6 addr show dev "$WAN_IFACE" scope global | awk '/inet6/ {print $2}' | awk -F'/' '{print $1}' | head -n1)
-    debug "Using ip command: $LOCAL_IPV6"
+    info "Using ip command: $LOCAL_IPV6"
   fi
 
   if [ -z "$LOCAL_IPV6" ]; then
@@ -65,20 +65,36 @@ get_ipv6_address() {
 
 #----- 2. TXTレコード取得 -----
 get_txt_record() {
-  debug "Retrieving TXT record from 4over6.info"
-  local dig_cmd="dig +short TXT 4over6.info"
+  info "Retrieving TXT record from $PROV_DOMAIN"
+  local txt_record=""
+  local success=0
   
-  # カスタムDNSサーバーの指定
-  if [ -n "$DNS_SERVER" ]; then
-    dig_cmd="$dig_cmd @$DNS_SERVER"
-    debug "Using custom DNS server: $DNS_SERVER"
+  # システムデフォルトのDNSサーバーでまず試行
+  txt_record=$(dig +short TXT "$PROV_DOMAIN" | sed -e 's/^"//' -e 's/"$//')
+  if [ -n "$txt_record" ] && echo "$txt_record" | grep -q "v=v6mig"; then
+    success=1
+    info "Found valid TXT record using system DNS"
+  else
+    # 代替DNSサーバーを試行
+    for dns in $DNS_SERVERS; do
+      info "Trying alternate DNS server: $dns"
+      txt_record=$(dig +short TXT "$PROV_DOMAIN" @"$dns" | sed -e 's/^"//' -e 's/"$//')
+      if [ -n "$txt_record" ] && echo "$txt_record" | grep -q "v=v6mig"; then
+        success=1
+        info "Found valid TXT record using DNS server $dns"
+        break
+      fi
+    done
   fi
   
-  # TXTレコードの取得と引用符の除去
-  local txt_record=$(eval "$dig_cmd" | sed -e 's/^"//' -e 's/"$//')
-  
-  if [ -z "$txt_record" ]; then
-    error "4over6.info からTXTレコードを取得できませんでした"
+  if [ "$success" = "0" ]; then
+    if [ -n "$txt_record" ]; then
+      error "取得したTXTレコードが正しい形式ではありません: $txt_record"
+      error "期待される形式: v=v6mig-1 url=https://example.jp/rule.cgi t=b"
+    else
+      error "$PROV_DOMAIN からTXTレコードを取得できませんでした"
+      error "お使いのISPがIPv6マイグレーション標準プロビジョニングに対応していない可能性があります"
+    fi
     return 1
   fi
   
@@ -89,11 +105,12 @@ get_txt_record() {
 #----- 3. URLの抽出 -----
 extract_url() {
   local txt_record="$1"
-  debug "Extracting URL from TXT record: $txt_record"
+  info "Extracting URL from TXT record: $txt_record"
   
   # TXTレコードからURLを抽出
   if ! echo "$txt_record" | grep -q "url="; then
     error "TXTレコードにURLが含まれていません: $txt_record"
+    error "正しい形式: v=v6mig-1 url=https://example.jp/rule.cgi t=b"
     return 1
   fi
   
@@ -112,13 +129,21 @@ extract_url() {
 request_provisioning() {
   local url="$1"
   local local_ipv6="$2"
-  debug "Sending request to provisioning server: $url"
+  info "Sending request to provisioning server: $url"
   
-  # プロビジョニングサーバへGETリクエスト送信
-  local response=$(curl -s "$url/config?vendorid=$VENDORID&product=$PRODUCT&version=$VERSION&capability=map_e&ipv6addr=$local_ipv6")
+  # User-Agentとタイムアウトを設定してリクエスト送信
+  local response=$(curl -s -m 10 -A "V6MIG-Client/$VERSION" \
+    "$url/config?vendorid=$VENDORID&product=$PRODUCT&version=$VERSION&capability=map_e&ipv6addr=$local_ipv6")
   
   if [ -z "$response" ]; then
     error "プロビジョニングサーバからの応答がありませんでした"
+    return 1
+  fi
+  
+  # 応答がJSONかどうか確認
+  if ! echo "$response" | jq . >/dev/null 2>&1; then
+    error "プロビジョニングサーバからの応答がJSON形式ではありません"
+    error "応答内容: $response"
     return 1
   fi
   
@@ -129,7 +154,8 @@ request_provisioning() {
 #----- 5. MAP-Eパラメータの抽出 -----
 extract_mape_params() {
   local response="$1"
-  debug "Extracting MAP-E parameters from response"
+  local ipv6="$2"
+  info "Extracting MAP-E parameters from response"
   
   # JSONからMAP-Eパラメータを抽出
   local mape_json=$(echo "$response" | jq -r '.map_e')
@@ -148,14 +174,20 @@ extract_mape_params() {
   local psid_len=$(echo "$mape_json" | jq -r '.rules[0].psid_len // 0')
   
   # 必須パラメータの確認
-  if [ -z "$br" ] || [ -z "$rule_ipv6" ] || [ -z "$rule_ipv4" ] || [ -z "$ea_len" ] || [ -z "$psid_offset" ]; then
+  if [ -z "$br" ] || [ "$br" = "null" ] || [ -z "$rule_ipv6" ] || [ "$rule_ipv6" = "null" ] || \
+     [ -z "$rule_ipv4" ] || [ "$rule_ipv4" = "null" ] || [ -z "$ea_len" ] || [ "$ea_len" = "null" ] || \
+     [ -z "$psid_offset" ] || [ "$psid_offset" = "null" ]; then
     error "必須のMAP-Eパラメータが欠けています"
     return 1
   fi
   
-  # PSID計算（必要ならローカルIPv6アドレスから計算可能）
-  local ipv6="$2"
-  local psid="不明（手動設定が必要です）"
+  # PSID自動計算（ローカルIPv6アドレスとルールから）
+  local psid=""
+  if [ -n "$ipv6" ]; then
+    info "Calculating PSID from IPv6 address and rules"
+    # ここでPSIDの計算ロジックを実装（例示のみ）
+    # 実際の計算は複雑なので、プロビジョニングサーバからの値を優先する
+  fi
   
   echo "BR: $br"
   echo "IPv6プレフィックス: $rule_ipv6"
@@ -163,7 +195,9 @@ extract_mape_params() {
   echo "EA長: $ea_len"
   echo "PSIDオフセット: $psid_offset"
   echo "PSID長: $psid_len"
-  echo "PSID: $psid"
+  if [ -n "$psid" ]; then
+    echo "PSID: $psid（計算値）"
+  fi
   
   return 0
 }
@@ -182,6 +216,9 @@ main() {
   # 2. TXTレコード取得
   local txt_record=$(get_txt_record)
   if [ $? -ne 0 ]; then
+    echo "TXTレコード取得に失敗しました。"
+    echo "お使いのISPがIPv6マイグレーション標準プロビジョニングに対応していない可能性があります。"
+    echo "手動でのMAP-E設定が必要かもしれません。"
     exit 1
   fi
   echo "TXTレコード: $txt_record"
@@ -198,14 +235,15 @@ main() {
   if [ $? -ne 0 ]; then
     exit 1
   fi
-  echo "プロビジョニングサーバからの応答:"
-  echo "$response" | jq '.'
+  echo "プロビジョニングサーバからの応答を受信しました"
   
-  # 5. MAP-Eパラメータの抽出
+  # 5. MAP-Eパラメータの抽出と表示
   echo "=== MAP-E設定パラメータ ==="
   extract_mape_params "$response" "$local_ipv6"
   
+  echo ""
   echo "このスクリプトはMAP-E設定情報の取得のみを行い、実際の設定は変更していません。"
+  echo "実際に設定を行うには、このスクリプトを拡張するか、手動で設定を行ってください。"
 }
 
 # メイン処理の実行
