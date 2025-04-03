@@ -698,7 +698,7 @@ detect_and_set_location() {
                 fi
                 
                 # 共通関数を使用して検出情報と成功メッセージを表示
-                display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "true"
+                display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "false"
             
                 debug_log "DEBUG" "Cache-based location settings have been applied successfully"
                 return 0
