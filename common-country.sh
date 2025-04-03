@@ -9,7 +9,7 @@ SCRIPT_VERSION="2025.03.31-00-00"
 # 🏷️ License: CC0 (Public Domain)
 # 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
 #
-# ⚠️ IMPORTANT NOTICE:
+# ⚠️ IMPORTANT NOTICE:cache
 # OpenWrt OS exclusively uses **Almquist Shell (ash)** and
 # is **NOT** compatible with Bourne-Again Shell (bash).
 #
@@ -679,7 +679,7 @@ detect_and_set_location() {
             # タイムゾーン情報の取得
             detected_timezone=$(cat "$cache_timezone" 2>/dev/null)
             detected_zonename=$(cat "$cache_zonename" 2>/dev/null)
-            detection_source="cache"
+            detection_source="Cache"
             skip_confirmation="true"
         
             debug_log "DEBUG" "Cache detection complete - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
@@ -752,7 +752,7 @@ detect_and_set_location() {
                         detected_country=$(cat "${CACHE_DIR}/ip_country.tmp" 2>/dev/null)
                         detected_timezone=$(cat "${CACHE_DIR}/ip_timezone.tmp" 2>/dev/null)
                         detected_zonename=$(cat "${CACHE_DIR}/ip_zonename.tmp" 2>/dev/null)
-                        detection_source="IP address"
+                        detection_source="Location"
                         
                         debug_log "DEBUG" "IP detection results - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
                     else
@@ -799,7 +799,7 @@ detect_and_set_location() {
             # 設定の適用処理（承認された場合）
             if [ "$proceed_with_settings" = "true" ]; then
                 # キャッシュ以外の場合に設定を適用（プレビューで適用済みなら再適用不要）
-                if [ "$detection_source" != "cache" ] && [ "$preview_applied" = "false" ]; then
+                if [ "$detection_source" != "Cache" ] && [ "$preview_applied" = "false" ]; then
                     debug_log "DEBUG" "Writing country data to temporary file"
                     echo "$country_data" > "${CACHE_DIR}/country.tmp"
                     debug_log "DEBUG" "Calling country_write() with suppress_message flag"
@@ -817,11 +817,11 @@ detect_and_set_location() {
                 printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
                 
                 # タイムゾーン設定（キャッシュ以外の場合のみ）
-                if [ "$detection_source" != "cache" ]; then
+                if [ "$detection_source" != "Cache" ]; then
                     local timezone_str="${detected_zonename},${detected_timezone}"
                     debug_log "DEBUG" "Created combined timezone string: ${timezone_str}"
                     
-                    if [ "$detection_source" = "IP address" ]; then
+                    if [ "$detection_source" = "Location" ]; then
                         echo "$timezone_str" > "${CACHE_DIR}/zone.tmp"
                         zone_write || {
                             debug_log "ERROR" "Failed to write timezone data"
@@ -844,7 +844,7 @@ detect_and_set_location() {
                 return 0
             else
                 # 拒否された場合は一時的な言語設定をクリア（キャッシュ以外の場合）
-                if [ "$detection_source" != "cache" ] && [ "$preview_applied" = "true" ]; then
+                if [ "$detection_source" != "Cache" ] && [ "$preview_applied" = "true" ]; then
                     debug_log "DEBUG" "Cleaning up preview language settings"
                     rm -f "${CACHE_DIR}/language.ch" "${CACHE_DIR}/message.ch" "${CACHE_DIR}/country.tmp" 2>/dev/null
                 fi
