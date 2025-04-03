@@ -1,158 +1,212 @@
-#!/bin/ash
+#!/bin/sh
 #===============================================================================
-# MAP-E 自動接続スクリプト
+# IPv6マイグレーション標準プロビジョニング仕様に基づくMAP-E設定取得スクリプト
 #
-# このスクリプトは、IPv6マイグレーション標準プロビジョニング仕様に従い、
-# DNS TXT レコードからプロビジョニングサーバの URL を取得し、
-# プロビジョニングサーバへ GET リクエストを送信して MAP-E のパラメータを取得、
-# さらにローカル IPv6 アドレスと MAP-E ルールからクライアント用 IPv4 アドレスを
-# 計算し、MAP-E トンネルインターフェース (mape0) を設定するサンプルです。
-#
-# ※必要に応じて設定変数等を変更してください。
+# このスクリプトは、DNS TXTレコードからプロビジョニングサーバのURLを取得し、
+# そのサーバにアクセスしてMAP-Eの設定パラメータを取得します。
+# POSIX準拠で実装されており、OpenWrt環境で動作します。
 #===============================================================================
 
 #----- 設定変数 -----
-WAN_IFACE="wan"                      # WAN インターフェース名（グローバルIPv6取得対象）
-VENDORID="acde48-v6pc_swg_hgw"         # ベンダーID（例：ベンダーOUI＋任意文字列）
-PRODUCT="V6MIG-ROUTER"               # 製品名（ASCII 半角英数字、ハイフン、アンダースコア 32文字以内）
-VERSION="1_0"                        # ファームウェアバージョン（数字とアンダースコア、例：1_0）
-PSID=0x35                           # MAP-E 用 PSID（必要に応じて設定、ここでは例として 0x00）
-DNS_SERVER=""                        # カスタムDNSサーバー（空欄の場合はシステムのデフォルトを使用）
+WAN_IFACE="wan"                      # WANインターフェース名
+VENDORID="acde48-v6pc_swg_hgw"       # ベンダーID
+PRODUCT="V6MIG-ROUTER"               # 製品名
+VERSION="1_0"                        # バージョン
+DNS_SERVER=""                        # DNSサーバー（空の場合はデフォルト使用）
+DEBUG=1                              # デバッグ出力（1=有効, 0=無効）
 
-#----- 必要なコマンドの存在チェック -----
-for cmd in ip curl jq dig python3; do
-  if ! command -v "$cmd" >/dev/null 2>&1; then
-    echo "エラー: 必要なコマンド '$cmd' が見つかりません。インストールしてください。" >&2
+# デバッグ情報出力関数
+debug() {
+  [ "$DEBUG" = "1" ] && echo "DEBUG: $1" >&2
+}
+
+# エラー出力関数
+error() {
+  echo "エラー: $1" >&2
+}
+
+# 必要なコマンドの存在確認
+for cmd in ip curl jq dig; do
+  if ! command -v "$cmd" > /dev/null 2>&1; then
+    error "$cmd コマンドが見つかりません。インストールしてください。"
     exit 1
   fi
 done
 
-#----- 1. ローカル IPv6 アドレスの取得 -----
-LOCAL_IPV6=$(ip -6 addr show dev "$WAN_IFACE" scope global | awk '/inet6/ {print $2}' | awk -F'/' '{print $1}' | head -n1)
-if [ -z "$LOCAL_IPV6" ]; then
-  echo "エラー: WAN インターフェース ($WAN_IFACE) のグローバルIPv6アドレスが取得できません。" >&2
-  exit 1
-fi
-echo "Obtained local IPv6 address: $LOCAL_IPV6"
+debug "Checking required commands: OK"
 
-#----- 2. プロビジョニングサーバの TXT レコード取得 -----
-# プロビジョニングサーバ発見用 FQDN: 4over6.info
-DIG_CMD="dig +short TXT 4over6.info"
-if [ -n "$DNS_SERVER" ]; then
-  DIG_CMD="$DIG_CMD @$DNS_SERVER"
-fi
-TXT_RECORD=$($DIG_CMD | sed -e 's/^"//' -e 's/"$//')
-if [ -z "$TXT_RECORD" ]; then
-  echo "エラー: 4over6.info の TXT レコードが取得できませんでした。" >&2
-  exit 1
-fi
-echo "Obtained TXT record: $TXT_RECORD"
+#----- 1. IPv6アドレスの取得 -----
+get_ipv6_address() {
+  debug "Attempting to get IPv6 address from interface $WAN_IFACE"
+  
+  # OpenWrtの関数を利用
+  if [ -f "/lib/functions/network.sh" ]; then
+    . /lib/functions/network.sh
+    . /lib/functions.sh
+    network_flush_cache
+    network_find_wan6 NET_IF6
+    network_get_ipaddr6 NET_ADDR6 "${NET_IF6}"
+    LOCAL_IPV6="$NET_ADDR6"
+    debug "Using OpenWrt network functions: $LOCAL_IPV6"
+  else
+    # 一般的な方法でグローバルIPv6アドレスを取得
+    LOCAL_IPV6=$(ip -6 addr show dev "$WAN_IFACE" scope global | awk '/inet6/ {print $2}' | awk -F'/' '{print $1}' | head -n1)
+    debug "Using ip command: $LOCAL_IPV6"
+  fi
 
-#----- 3. TXT レコードからプロビジョニングサーバ URL を抽出 -----
-# TXT レコード例: v=v6mig-1 url=https://vne.example.jp/rule.cgi t=b
-if ! echo "$TXT_RECORD" | grep -q "url="; then
-  echo "エラー: TXTレコードにURLが含まれていません。レコード形式: $TXT_RECORD" >&2
-  echo "正しいTXTレコードの例: v=v6mig-1 url=https://example.jp/rule.cgi t=b" >&2
-  echo "異なるDNSサーバーを試すには DNS_SERVER 変数を設定してください。" >&2
-  echo "ISPの正しいプロビジョニングサーバーに関する情報を確認してください。" >&2
-  exit 1
-fi
+  if [ -z "$LOCAL_IPV6" ]; then
+    error "インターフェース $WAN_IFACE からIPv6アドレスを取得できませんでした"
+    return 1
+  fi
+  
+  echo "$LOCAL_IPV6"
+  return 0
+}
 
-PROV_URL=$(echo "$TXT_RECORD" | awk '{for(i=1;i<=NF;i++){ if($i ~ /^url=/){split($i,a,"="); print a[2]}}}')
-if [ -z "$PROV_URL" ]; then
-  echo "エラー: プロビジョニングサーバの URL が TXT レコードから抽出できませんでした。" >&2
-  exit 1
-fi
-echo "Provisioning server URL: $PROV_URL"
+#----- 2. TXTレコード取得 -----
+get_txt_record() {
+  debug "Retrieving TXT record from 4over6.info"
+  local dig_cmd="dig +short TXT 4over6.info"
+  
+  # カスタムDNSサーバーの指定
+  if [ -n "$DNS_SERVER" ]; then
+    dig_cmd="$dig_cmd @$DNS_SERVER"
+    debug "Using custom DNS server: $DNS_SERVER"
+  fi
+  
+  # TXTレコードの取得と引用符の除去
+  local txt_record=$(eval "$dig_cmd" | sed -e 's/^"//' -e 's/"$//')
+  
+  if [ -z "$txt_record" ]; then
+    error "4over6.info からTXTレコードを取得できませんでした"
+    return 1
+  fi
+  
+  echo "$txt_record"
+  return 0
+}
 
-#----- 4. プロビジョニングサーバへ GET リクエスト送信 -----
-# capability パラメータに "map_e" を指定（他の技術と併用する場合はカンマ区切りで指定可）
-PROV_RESPONSE=$(curl -s "$PROV_URL/config?vendorid=$VENDORID&product=$PRODUCT&version=$VERSION&capability=map_e")
-if [ -z "$PROV_RESPONSE" ]; then
-  echo "エラー: プロビジョニングサーバからの応答が得られませんでした。" >&2
-  exit 1
-fi
-echo "プロビジョニングサーバからの応答:"
-echo "$PROV_RESPONSE"
+#----- 3. URLの抽出 -----
+extract_url() {
+  local txt_record="$1"
+  debug "Extracting URL from TXT record: $txt_record"
+  
+  # TXTレコードからURLを抽出
+  if ! echo "$txt_record" | grep -q "url="; then
+    error "TXTレコードにURLが含まれていません: $txt_record"
+    return 1
+  fi
+  
+  local url=$(echo "$txt_record" | awk '{for(i=1;i<=NF;i++){ if($i ~ /^url=/){split($i,a,"="); print a[2]}}}')
+  
+  if [ -z "$url" ]; then
+    error "TXTレコードからURLを抽出できませんでした"
+    return 1
+  fi
+  
+  echo "$url"
+  return 0
+}
 
-#----- 5. JSON から MAP-E パラメータを抽出 -----
-# 例として、最初の MAP-E ルールを利用する
-MAPE_JSON=$(echo "$PROV_RESPONSE" | jq -r '.map_e')
-if [ "$MAPE_JSON" = "null" ]; then
-  echo "エラー: プロビジョニング応答に map_e パラメータが含まれていません。" >&2
-  exit 1
-fi
+#----- 4. プロビジョニングサーバへのリクエスト -----
+request_provisioning() {
+  local url="$1"
+  local local_ipv6="$2"
+  debug "Sending request to provisioning server: $url"
+  
+  # プロビジョニングサーバへGETリクエスト送信
+  local response=$(curl -s "$url/config?vendorid=$VENDORID&product=$PRODUCT&version=$VERSION&capability=map_e&ipv6addr=$local_ipv6")
+  
+  if [ -z "$response" ]; then
+    error "プロビジョニングサーバからの応答がありませんでした"
+    return 1
+  fi
+  
+  echo "$response"
+  return 0
+}
 
-BR_IPV6=$(echo "$MAPE_JSON" | jq -r '.br')
-RULE_IPV6=$(echo "$MAPE_JSON" | jq -r '.rules[0].ipv6')
-RULE_IPV4=$(echo "$MAPE_JSON" | jq -r '.rules[0].ipv4')
-EA_LENGTH=$(echo "$MAPE_JSON" | jq -r '.rules[0].ea_length')
-PSID_OFFSET=$(echo "$MAPE_JSON" | jq -r '.rules[0].psid_offset')
+#----- 5. MAP-Eパラメータの抽出 -----
+extract_mape_params() {
+  local response="$1"
+  debug "Extracting MAP-E parameters from response"
+  
+  # JSONからMAP-Eパラメータを抽出
+  local mape_json=$(echo "$response" | jq -r '.map_e')
+  
+  if [ "$mape_json" = "null" ]; then
+    error "応答にMAP-Eパラメータが含まれていません"
+    return 1
+  fi
+  
+  # 各パラメータの抽出
+  local br=$(echo "$mape_json" | jq -r '.br')
+  local rule_ipv6=$(echo "$mape_json" | jq -r '.rules[0].ipv6')
+  local rule_ipv4=$(echo "$mape_json" | jq -r '.rules[0].ipv4')
+  local ea_len=$(echo "$mape_json" | jq -r '.rules[0].ea_length')
+  local psid_offset=$(echo "$mape_json" | jq -r '.rules[0].psid_offset')
+  local psid_len=$(echo "$mape_json" | jq -r '.rules[0].psid_len // 0')
+  
+  # 必須パラメータの確認
+  if [ -z "$br" ] || [ -z "$rule_ipv6" ] || [ -z "$rule_ipv4" ] || [ -z "$ea_len" ] || [ -z "$psid_offset" ]; then
+    error "必須のMAP-Eパラメータが欠けています"
+    return 1
+  fi
+  
+  # PSID計算（必要ならローカルIPv6アドレスから計算可能）
+  local ipv6="$2"
+  local psid="不明（手動設定が必要です）"
+  
+  echo "BR: $br"
+  echo "IPv6プレフィックス: $rule_ipv6"
+  echo "IPv4プレフィックス: $rule_ipv4"
+  echo "EA長: $ea_len"
+  echo "PSIDオフセット: $psid_offset"
+  echo "PSID長: $psid_len"
+  echo "PSID: $psid"
+  
+  return 0
+}
 
-echo "取得した MAP-E パラメータ:"
-echo "  BR のIPv6アドレス: $BR_IPV6"
-echo "  MAP-E ルール (IPv6プレフィックス): $RULE_IPV6"
-echo "  MAP-E ルール (IPv4プレフィックス): $RULE_IPV4"
-echo "  EA ビット長: $EA_LENGTH"
-echo "  PSID オフセット: $PSID_OFFSET"
-echo "  設定済み PSID: $PSID"
+#----- メイン処理 -----
+main() {
+  echo "=== IPv6マイグレーション標準プロビジョニング設定取得 ==="
+  
+  # 1. IPv6アドレス取得
+  local local_ipv6=$(get_ipv6_address)
+  if [ $? -ne 0 ]; then
+    exit 1
+  fi
+  echo "グローバルIPv6アドレス: $local_ipv6"
+  
+  # 2. TXTレコード取得
+  local txt_record=$(get_txt_record)
+  if [ $? -ne 0 ]; then
+    exit 1
+  fi
+  echo "TXTレコード: $txt_record"
+  
+  # 3. URLの抽出
+  local prov_url=$(extract_url "$txt_record")
+  if [ $? -ne 0 ]; then
+    exit 1
+  fi
+  echo "プロビジョニングサーバURL: $prov_url"
+  
+  # 4. プロビジョニングサーバへのリクエスト
+  local response=$(request_provisioning "$prov_url" "$local_ipv6")
+  if [ $? -ne 0 ]; then
+    exit 1
+  fi
+  echo "プロビジョニングサーバからの応答:"
+  echo "$response" | jq '.'
+  
+  # 5. MAP-Eパラメータの抽出
+  echo "=== MAP-E設定パラメータ ==="
+  extract_mape_params "$response" "$local_ipv6"
+  
+  echo "このスクリプトはMAP-E設定情報の取得のみを行い、実際の設定は変更していません。"
+}
 
-#----- 6. MAP-E クライアント用 IPv4 アドレスの計算 -----
-# RULE_IPV6, RULE_IPV4 はそれぞれ CIDR 表記 (例: 2001:db8:1:2000::/52, 203.0.113.0/24)
-RULE_IPV6_PREFIX=$(echo "$RULE_IPV6" | awk -F'/' '{print $1}')
-RULE_IPV6_PLEN=$(echo "$RULE_IPV6" | awk -F'/' '{print $2}')
-RULE_IPV4_NET=$(echo "$RULE_IPV4" | awk -F'/' '{print $1}')
-RULE_IPV4_PLEN=$(echo "$RULE_IPV4" | awk -F'/' '{print $2}')
-
-# Python を利用して MAP-E アルゴリズムに基づく IPv4 アドレスを計算
-COMPUTED_IPV4=$(python3 - <<EOF
-import ipaddress, sys
-
-try:
-    local_ipv6 = ipaddress.IPv6Address("$LOCAL_IPV6")
-    rule_ipv6_net = ipaddress.IPv6Network("$RULE_IPV6", strict=False)
-    rule_ipv4_net = ipaddress.IPv4Network("$RULE_IPV4", strict=False)
-    ea_length = int("$EA_LENGTH")
-    psid_offset = int("$PSID_OFFSET")
-    # ユーザー設定の PSID (16進数または整数)
-    try:
-        psid = int("$PSID", 0)
-    except:
-        psid = 0
-
-    # ローカル IPv6 アドレスがルールの IPv6 ネットワーク内にあるか確認
-    if local_ipv6 not in rule_ipv6_net:
-        sys.exit("Calculation error: Local IPv6 address {} is not within the IPv6 prefix of the rule {}.".format(local_ipv6, rule_ipv6_net))
-    # ルールの IPv6 ネットワークのプレフィックス長から EA ビットを抽出
-    shift = 128 - rule_ipv6_net.prefixlen - ea_length
-    ea_mask = (1 << ea_length) - 1
-    ea_bits = (int(local_ipv6) >> shift) & ea_mask
-
-    # MAP-E の計算式:
-    # クライアントIPv4アドレス = ルールの IPv4ネットワークアドレス + (ea_bits << psid_offset) + psid
-    computed_ipv4_int = int(rule_ipv4_net.network_address) + (ea_bits << psid_offset) + psid
-    computed_ipv4 = ipaddress.IPv4Address(computed_ipv4_int)
-    print(str(computed_ipv4))
-except Exception as e:
-    sys.exit("Calculation error: " + str(e))
-EOF
-)
-
-if [ -z "$COMPUTED_IPV4" ]; then
-  echo "エラー: MAP-E クライアント用 IPv4 アドレスの計算に失敗しました。" >&2
-  exit 1
-fi
-
-echo "Calculated MAP-E client IPv4 address: $COMPUTED_IPV4"
-
-#----- 7. MAP-E トンネルインターフェースの設定 -----
-# ※ここでは mape0 というトンネルインターフェースを作成する例を示す
-echo "MAP-E トンネルインターフェース (mape0) を設定中..."
-ip tunnel add mape0 mode mape local "$LOCAL_IPV6" remote "$BR_IPV6" || { echo "エラー: トンネルインターフェースの作成に失敗しました。"; exit 1; }
-ip addr add "$COMPUTED_IPV4"/"$RULE_IPV4_PLEN" dev mape0 || { echo "エラー: トンネルインターフェースへの IPv4 アドレス設定に失敗しました。"; exit 1; }
-ip link set mape0 up || { echo "エラー: トンネルインターフェースの有効化に失敗しました。"; exit 1; }
-echo "MAP-E トンネルインターフェース mape0 が有効になりました。"
-
-#----- 完了 -----
-echo "MAP-E への自動接続処理が正常に完了しました。"
-exit 0
+# メイン処理の実行
+main
