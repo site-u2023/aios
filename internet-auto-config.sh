@@ -6,32 +6,7 @@
 #
 # 🏷️ License: CC0 (Public Domain)
 # 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
-#
-# ⚠️ IMPORTANT NOTICE:
-# OpenWrt OS exclusively uses **Almquist Shell (ash)** and
-# is **NOT** compatible with Bourne-Again Shell (bash).
-#
-# 📢 POSIX Compliance Guidelines:
-# ✅ Use `[` instead of `[[` for conditions
-# ✅ Use $(command) instead of backticks `` `command` ``
-# ✅ Use $(( )) for arithmetic instead of let
-# ✅ Define functions as func_name() {} (no function keyword)
-# ✅ No associative arrays (declare -A is NOT supported)
-# ✅ No here-strings (<<< is NOT supported)
-# ✅ No -v flag in test or [[
-# ✅ Avoid bash-specific string operations like ${var:0:3}
-# ✅ Avoid arrays entirely when possible (even indexed arrays can be problematic)
-# ✅ Use printf followed by read instead of read -p
-# ✅ Use printf instead of echo -e for portable formatting
-# ✅ Avoid process substitution <() and >()
-# ✅ Prefer case statements over complex if/elif chains
-# ✅ Use command -v instead of which or type for command existence checks
-# ✅ Keep scripts modular with small, focused functions
-# ✅ Use simple error handling instead of complex traps
-# ✅ Test scripts with ash/dash explicitly, not just bash
-#
-# 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
-### =========================================================
+# =========================================================
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -41,7 +16,6 @@ DEV_NULL="${DEV_NULL:-on}"
 
 # 基本定数の設定 
 BASE_WGET="wget --no-check-certificate -q"
-# BASE_WGET="wget -O"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
@@ -49,115 +23,104 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 
-# ISP判定関数（OpenWrt用・POSIX準拠）
-# 使用方法: . ./detect_isp.sh
-
-# IPv6アドレスをOpenWrtの機能から取得
-get_wan_ipv6_address() {
-    debug_log "Retrieving IPv6 address from OpenWrt network functions"
+# WAN/WAN6のインターフェース名とIPアドレスを取得
+get_wan_info() {
+    # 変数初期化
+    local net_if=""
+    local net_if6=""
+    local ipv4_addr=""
+    local ipv6_addr=""
     
-    # OpenWrtのネットワークライブラリ読み込み
-    if [ -f "/lib/functions/network.sh" ]; then
-        debug_log "Loading OpenWrt network libraries"
-        . /lib/functions.sh 2>/dev/null
-        . /lib/functions/network.sh 2>/dev/null
-        . /lib/netifd/netifd-proto.sh 2>/dev/null
-        
-        # キャッシュをクリア
-        network_flush_cache
-        
-        # WAN6インターフェース検出
-        local net_if6=""
-        network_find_wan6 net_if6
-        
-        if [ -n "$net_if6" ]; then
-            debug_log "Found WAN6 interface: $net_if6"
-            
-            # IPv6アドレスを取得
-            local net_addr6=""
-            network_get_ipaddr6 net_addr6 "$net_if6"
-            
-            if [ -n "$net_addr6" ]; then
-                debug_log "Found IPv6 address: $net_addr6"
-                echo "$net_addr6"
-                return 0
-            fi
-            debug_log "No IPv6 address found on interface $net_if6"
-        else
-            debug_log "No WAN6 interface found"
-        fi
-    else
+    # デバッグログ出力
+    debug_log "Getting WAN interfaces and addresses from OpenWrt"
+    
+    # OpenWrtのネットワークライブラリ確認
+    if [ ! -f "/lib/functions/network.sh" ]; then
         debug_log "OpenWrt network libraries not found"
+        return 1
     fi
     
-    # フォールバック: ip コマンド使用
-    if command -v ip >/dev/null 2>&1; then
-        debug_log "Trying ip command fallback for IPv6"
-        local ipv6_addr
-        ipv6_addr=$(ip -6 addr show scope global | grep inet6 | grep -v temporary | head -1 | awk '{print $2}' | cut -d/ -f1)
-        
-        if [ -n "$ipv6_addr" ]; then
-            debug_log "Found global IPv6 via ip command: $ipv6_addr"
-            echo "$ipv6_addr"
-            return 0
-        fi
-    fi
+    # ネットワークライブラリ読み込み
+    debug_log "Loading OpenWrt network libraries"
+    . /lib/functions/network.sh 2>/dev/null
     
-    # 外部APIからIPv6取得を試行
-    debug_log "Attempting to get IPv6 address from external API"
-    local tmp_file
-    tmp_file=$(mktemp -t ipv6.XXXXXX)
+    # ネットワークキャッシュクリア
+    network_flush_cache
     
-    $BASE_WGET -O "$tmp_file" "https://ipv6-test.com/api/myip.php?json" >/dev/null 2>&1
+    # WANインターフェース取得
+    network_find_wan net_if
+    network_find_wan6 net_if6
     
-    if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-        local ipv6_addr
-        ipv6_addr=$(grep -o '"address":"[^"]*' "$tmp_file" | sed 's/"address":"//')
-        rm -f "$tmp_file"
-        
-        if echo "$ipv6_addr" | grep -q ":"; then
-            debug_log "Found IPv6 address from external API: $ipv6_addr"
-            echo "$ipv6_addr"
-            return 0
+    # IPv4アドレス取得
+    if [ -n "$net_if" ]; then
+        debug_log "Found WAN interface: $net_if"
+        network_get_ipaddr ipv4_addr "$net_if"
+        if [ -n "$ipv4_addr" ]; then
+            debug_log "Found IPv4 address: $ipv4_addr"
+        else
+            debug_log "No IPv4 address found on interface $net_if"
         fi
     else
-        rm -f "$tmp_file" 2>/dev/null
+        debug_log "No WAN interface found"
     fi
     
-    debug_log "Failed to get IPv6 address from all sources"
-    return 1
+    # IPv6アドレス取得
+    if [ -n "$net_if6" ]; then
+        debug_log "Found WAN6 interface: $net_if6"
+        network_get_ipaddr6 ipv6_addr "$net_if6"
+        if [ -n "$ipv6_addr" ]; then
+            debug_log "Found IPv6 address: $ipv6_addr"
+        else
+            debug_log "No IPv6 address found on interface $net_if6"
+        fi
+    else
+        debug_log "No WAN6 interface found"
+    fi
+    
+    # 結果を返す
+    echo "WAN_IF=\"$net_if\""
+    echo "WAN_IF6=\"$net_if6\""
+    echo "IPV4_ADDR=\"$ipv4_addr\""
+    echo "IPV6_ADDR=\"$ipv6_addr\""
+    
+    return 0
 }
 
-# AFTRアドレスを検出（DS-LITE用）
+# DS-LITE用のAFTRアドレスを検出
 detect_aftr_address() {
     debug_log "Detecting AFTR address for DS-LITE"
-    local aftr_address=""
     
-    # システムログからの検出
-    if [ -f "/var/log/messages" ]; then
-        aftr_address=$(grep -i "AFTR" /var/log/messages | tail -1 | grep -o '[a-zA-Z0-9\.\-]*\.jp')
-        if [ -n "$aftr_address" ]; then
-            debug_log "Found AFTR address in system logs: $aftr_address"
-            echo "$aftr_address"
-            return 0
-        fi
-    fi
+    # dig/nslookupコマンドでAFTRの候補を調べる
+    local aftr_candidates="mgw.transix.jp dgw.xpass.jp aft.v6connect.net"
+    local aftr_result=""
     
-    # UCI設定からの検出（OpenWrt）
-    if command -v uci >/dev/null 2>&1; then
-        # 全てのWAN6設定を検索
-        config_list=$(uci show network | grep aftr_v4_addr 2>/dev/null)
-        if [ -n "$config_list" ]; then
-            aftr_address=$(echo "$config_list" | head -1 | cut -d= -f2 | tr -d "'" 2>/dev/null)
-            if [ -n "$aftr_address" ]; then
-                debug_log "Found AFTR address in UCI config: $aftr_address"
-                echo "$aftr_address"
+    # digコマンドが使える場合
+    if command -v dig >/dev/null 2>&1; then
+        debug_log "Using dig command to resolve AFTR"
+        for candidate in $aftr_candidates; do
+            debug_log "Checking AFTR candidate: $candidate"
+            if dig AAAA "$candidate" +short 2>/dev/null | grep -q ":" ; then
+                aftr_result="$candidate"
+                debug_log "AFTR found: $aftr_result"
+                echo "$aftr_result"
                 return 0
             fi
-        fi
+        done
+    # nslookupコマンドが使える場合
+    elif command -v nslookup >/dev/null 2>&1; then
+        debug_log "Using nslookup command to resolve AFTR"
+        for candidate in $aftr_candidates; do
+            debug_log "Checking AFTR candidate: $candidate"
+            if nslookup -type=AAAA "$candidate" 2>/dev/null | grep -q "has AAAA address" ; then
+                aftr_result="$candidate"
+                debug_log "AFTR found: $aftr_result"
+                echo "$aftr_result"
+                return 0
+            fi
+        done
     fi
     
-    debug_log "No AFTR address found"
+    debug_log "No AFTR address detected"
     return 1
 }
 
@@ -341,56 +304,7 @@ detect_as_provider() {
             debug_log "Detected So-net from AS number (AS9595/AS9591)"
             ;;
         *)
-            # ISP名/組織名による判定
-            if echo "$isp $org" | grep -i "OCN\|Open Computer Network\|NTT Communications" >/dev/null 2>&1; then
-                provider="mape_ocn"
-                debug_log "Detected OCN from organization name"
-            elif echo "$isp $org" | grep -i "SoftBank\|Yahoo\|BBIX\|ソフトバンク" >/dev/null 2>&1; then
-                provider="mape_v6plus"
-                debug_log "Detected SoftBank from organization name"
-            elif echo "$isp $org" | grep -i "KDDI\|au\|ケーディーディーアイ" >/dev/null 2>&1; then
-                provider="mape_ipv6option"
-                debug_log "Detected KDDI from organization name"
-            elif echo "$isp $org" | grep -i "NURO\|Sony\|So-net\|ソニー\|ソネット" >/dev/null 2>&1; then
-                provider="mape_nuro"
-                debug_log "Detected NURO/So-net from organization name"
-            elif echo "$isp $org" | grep -i "BIGLOBE\|ビッグローブ" >/dev/null 2>&1; then
-                provider="mape_biglobe"
-                debug_log "Detected BIGLOBE from organization name"
-            elif echo "$isp $org" | grep -i "nifty\|ニフティ\|@nifty" >/dev/null 2>&1; then
-                provider="mape_nifty"
-                debug_log "Detected @nifty from organization name"
-            elif echo "$isp $org" | grep -i "Chubu Telecommunications\|CTC\|中部テレコミュニケーション" >/dev/null 2>&1; then
-                provider="pppoe_ctc"
-                debug_log "Detected CTC from organization name"
-            elif echo "$isp $org" | grep -i "NTT East\|NTT東日本" >/dev/null 2>&1; then
-                provider="dslite_east"
-                debug_log "Detected NTT East from organization name"
-            elif echo "$isp $org" | grep -i "NTT West\|NTT西日本" >/dev/null 2>&1; then
-                provider="dslite_west"
-                debug_log "Detected NTT West from organization name"
-            elif echo "$isp $org" | grep -i "NTT\|FLETS\|フレッツ" >/dev/null 2>&1; then
-                # 地域情報から東西判別
-                if [ -n "$region" ] && [ -n "$city" ]; then
-                    debug_log "Trying to determine NTT region from location data: $region, $city"
-                    
-                    # 東日本エリア
-                    if echo "$region $city" | grep -i "Tokyo\|Kanagawa\|Saitama\|Chiba\|Ibaraki\|Tochigi\|Gunma\|Yamanashi\|Nagano\|Niigata\|Hokkaido\|Aomori\|Iwate\|Miyagi\|Akita\|Yamagata\|Fukushima" >/dev/null 2>&1; then
-                        provider="dslite_east"
-                        debug_log "Estimated NTT East from geographic location"
-                    # 西日本エリア
-                    elif echo "$region $city" | grep -i "Osaka\|Kyoto\|Hyogo\|Nara\|Shiga\|Wakayama\|Mie\|Aichi\|Gifu\|Shizuoka\|Toyama\|Ishikawa\|Fukui\|Tottori\|Shimane\|Okayama\|Hiroshima\|Yamaguchi\|Tokushima\|Kagawa\|Ehime\|Kochi\|Fukuoka\|Saga\|Nagasaki\|Kumamoto\|Oita\|Miyazaki\|Kagoshima\|Okinawa" >/dev/null 2>&1; then
-                        provider="dslite_west"
-                        debug_log "Estimated NTT West from geographic location"
-                    else
-                        provider="dslite"
-                        debug_log "Generic NTT/FLETS service detected, but region unknown"
-                    fi
-                else
-                    provider="dslite"
-                    debug_log "Generic NTT/FLETS service detected"
-                fi
-            fi
+            provider="unknown"
             ;;
     esac
     
@@ -398,318 +312,171 @@ detect_as_provider() {
     return 0
 }
 
-# ISP情報を取得してISPタイプを判定
+# IPv6アドレスからISPを判定し、結果をisp.chに書き込む
 detect_isp_type() {
-    local cache_file="${CACHE_DIR}/isp.ch"
-    local cache_timeout=86400  # キャッシュ有効期間（24時間）
+    local ipv6_addr=""
+    local ipv4_addr=""
+    local wan_if=""
+    local wan_if6=""
     local provider="unknown"
-    local show_result=1
-    local use_cache=1
-    local force_update=0
+    local isp_file="${CACHE_DIR}/isp.ch"
+    local aftr_address=""
+    local is_dslite=0
     
-    # パラメータ処理
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            --no-cache)
-                use_cache=0
-                debug_log "Cache disabled"
-                ;;
-            --force-update)
-                force_update=1
-                debug_log "Forcing update of ISP information"
-                ;;
-            --silent)
-                show_result=0
-                debug_log "Silent mode enabled"
-                ;;
-        esac
-        shift
-    done
-    
-    # キャッシュディレクトリ確認
-    [ -d "${CACHE_DIR}" ] || mkdir -p "${CACHE_DIR}"
-    
-    # キャッシュチェック
-    if [ $use_cache -eq 1 ] && [ $force_update -eq 0 ] && [ -f "$cache_file" ]; then
-        local cache_time=$(stat -c %Y "$cache_file" 2>/dev/null || date +%s)
-        local current_time=$(date +%s)
-        local cache_age=$(($current_time - $cache_time))
-        
-        if [ $cache_age -lt $cache_timeout ]; then
-            debug_log "Using cached ISP information ($cache_age seconds old)"
-            provider=$(grep CONNECTION_TYPE "$cache_file" | cut -d= -f2 | tr -d '"')
-            
-            if [ -n "$provider" ] && [ "$provider" != "unknown" ]; then
-                if [ $show_result -eq 1 ]; then
-                    display_isp_info "$provider" "cached"
-                fi
-                return 0
-            fi
-            debug_log "Invalid or incomplete cache data"
+    # スピナー表示開始
+    if type start_spinner >/dev/null 2>&1; then
+        if type get_message >/dev/null 2>&1; then
+            start_spinner "$(get_message "MSG_PROVIDER_ISP_TYPE")" "yellow"
         else
-            debug_log "Cache expired ($cache_age seconds old)"
+            start_spinner "ISPの判別中..." "yellow"
+        fi
+    else
+        if type get_message >/dev/null 2>&1; then
+            echo "$(get_message "MSG_PROVIDER_ISP_TYPE")" >&2
+        else
+            echo "ISPの判別中..." >&2
         fi
     fi
     
-    # スピナー表示開始
-    if [ $show_result -eq 1 ]; then
-        start_spinner "$(color "blue" "$(get_message "MSG_PROVIDER_ISP_TYPE")")" "yellow"
-    fi
+    # WAN情報取得（インターフェースとIPアドレス）
+    debug_log "Starting ISP detection process"
     
-    # IPv6アドレス取得
-    local ipv6_addr
-    ipv6_addr=$(get_wan_ipv6_address)
-    local has_ipv6=0
+    # get_wan_info関数の結果を取得して変数に設定
+    eval "$(get_wan_info)"
+    ipv4_addr="$IPV4_ADDR"
+    ipv6_addr="$IPV6_ADDR"
+    wan_if="$WAN_IF"
+    wan_if6="$WAN_IF6"
     
+    # IPv6アドレスからプロバイダ判定
     if [ -n "$ipv6_addr" ]; then
-        has_ipv6=1
         debug_log "IPv6 address detected: $ipv6_addr"
+        
+        # プレフィックスからプロバイダ判定
         provider=$(detect_ipv6_provider "$ipv6_addr")
-        debug_log "Provider detection from IPv6 result: $provider"
+        debug_log "Provider detection result from IPv6: $provider"
+        
+        # DS-LITEの場合はさらに詳細判定
+        if echo "$provider" | grep -q "dslite"; then
+            debug_log "DS-LITE detected, checking for AFTR"
+            aftr_address=$(detect_aftr_address)
+            
+            if [ -n "$aftr_address" ]; then
+                debug_log "AFTR address detected: $aftr_address"
+                # AFTRからプロバイダの詳細判定
+                if echo "$aftr_address" | grep -i "transix" >/dev/null 2>&1; then
+                    provider="dslite_transix"
+                    debug_log "Identified as transix DS-LITE"
+                elif echo "$aftr_address" | grep -i "xpass" >/dev/null 2>&1; then
+                    provider="dslite_xpass"
+                    debug_log "Identified as xpass DS-LITE"
+                elif echo "$aftr_address" | grep -i "v6connect" >/dev/null 2>&1; then
+                    provider="dslite_v6connect"
+                    debug_log "Identified as v6connect DS-LITE"
+                fi
+            fi
+        fi
     else
         debug_log "No IPv6 address detected"
     fi
     
-    # IPv6で判定できなかった場合はAPIから情報取得
-    if [ "$provider" = "unknown" ] || [ -z "$provider" ]; then
-        debug_log "IPv6 detection failed, trying ISP API"
+    # IPv4アドレスを使った補助判定（IPv6で判別できない場合）
+    if [ "$provider" = "unknown" ] && [ -n "$ipv4_addr" ]; then
+        debug_log "Using IPv4 address for supplementary detection"
         
-        # API情報取得
-        local tmp_file
-        tmp_file=$(mktemp -t isp.XXXXXX)
-        
-        $BASE_WGET -O "$tmp_file" "http://ip-api.com/json?fields=isp,as,org,country,countryCode,regionName,city" >/dev/null 2>&1
-        
-        if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-            # JSONデータを抽出
-            local isp=$(grep -o '"isp":"[^"]*' "$tmp_file" | sed 's/"isp":"//')
-            local as_num=$(grep -o '"as":"[^"]*' "$tmp_file" | sed 's/"as":"//')
-            local org=$(grep -o '"org":"[^"]*' "$tmp_file" | sed 's/"org":"//')
-            local country=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
-            local region=$(grep -o '"regionName":"[^"]*' "$tmp_file" | sed 's/"regionName":"//')
-            local city=$(grep -o '"city":"[^"]*' "$tmp_file" | sed 's/"city":"//')
-            
-            debug_log "Retrieved ISP info - Name: $isp, AS: $as_num, Org: $org, Country: $country"
-            
-            # 日本の場合のみ詳細判定を行う
-            if [ "$country" = "JP" ]; then
-                provider=$(detect_as_provider "$as_num" "$isp" "$org" "$region" "$city")
-                debug_log "Provider detection from AS number: $provider"
+        # プライベートIPv4アドレスでDS-LITE判定
+        if echo "$ipv4_addr" | grep -qE '^(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)'; then
+            debug_log "Private IPv4 detected, likely DS-LITE"
+            provider="dslite"
+            is_dslite=1
+        fi
+    fi
+    
+    # 結果をファイルに書き込み
+    mkdir -p "${CACHE_DIR}"
+    echo "# ISP情報 $(date)" > "$isp_file"
+    echo "CONNECTION_TYPE=\"$provider\"" >> "$isp_file"
+    [ -n "$wan_if" ] && echo "WAN_INTERFACE=\"$wan_if\"" >> "$isp_file"
+    [ -n "$wan_if6" ] && echo "WAN6_INTERFACE=\"$wan_if6\"" >> "$isp_file"
+    [ -n "$ipv4_addr" ] && echo "IPV4_ADDRESS=\"$ipv4_addr\"" >> "$isp_file"
+    [ -n "$ipv6_addr" ] && echo "IPV6_ADDRESS=\"$ipv6_addr\"" >> "$isp_file"
+    [ -n "$aftr_address" ] && echo "AFTR_ADDRESS=\"$aftr_address\"" >> "$isp_file"
+    [ "$is_dslite" = "1" ] && echo "IS_DSLITE=\"$is_dslite\"" >> "$isp_file"
+    
+    debug_log "ISP detection result saved to $isp_file"
+    
+    # スピナー停止と結果表示
+    if type stop_spinner >/dev/null 2>&1; then
+        if [ "$provider" != "unknown" ]; then
+            if type get_message >/dev/null 2>&1; then
+                stop_spinner "$(get_message "MSG_PROVIDER_INFO_SUCCESS")" "success"
             else
-                provider="overseas"
-                debug_log "Non-Japanese ISP detected: $country"
+                stop_spinner "ISPを正常に判別しました" "success"
             fi
-            
-            # キャッシュファイル作成
-            echo "# ISP情報 $(date)" > "$cache_file"
-            echo "ISP_NAME=\"$isp\"" >> "$cache_file"
-            echo "ISP_AS=\"$as_num\"" >> "$cache_file"
-            echo "ISP_ORG=\"$org\"" >> "$cache_file"
-            echo "ISP_COUNTRY=\"$country\"" >> "$cache_file"
-            echo "CONNECTION_TYPE=\"$provider\"" >> "$cache_file"
-            echo "HAS_IPV6=\"$has_ipv6\"" >> "$cache_file"
-            [ -n "$ipv6_addr" ] && echo "IPV6_ADDRESS=\"$ipv6_addr\"" >> "$cache_file"
         else
-            debug_log "Failed to retrieve ISP information from API"
-            rm -f "$tmp_file" 2>/dev/null
+            if type get_message >/dev/null 2>&1; then
+                stop_spinner "$(get_message "MSG_PROVIDER_INFO_FAILED")" "warning"
+            else
+                stop_spinner "ISPの判別に失敗しました" "warning"
+            fi
         fi
-        
-        rm -f "$tmp_file" 2>/dev/null
-    else
-        # IPv6で判定できた場合はより詳細な情報をAPIから取得してキャッシュに保存
-        debug_log "IPv6 detection successful, getting additional ISP info"
-        
-        local tmp_file
-        tmp_file=$(mktemp -t isp.XXXXXX)
-        
-        $BASE_WGET -O "$tmp_file" "http://ip-api.com/json?fields=isp,as,org,country,countryCode" >/dev/null 2>&1
-        
-        if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-            local isp=$(grep -o '"isp":"[^"]*' "$tmp_file" | sed 's/"isp":"//')
-            local as_num=$(grep -o '"as":"[^"]*' "$tmp_file" | sed 's/"as":"//')
-            local org=$(grep -o '"org":"[^"]*' "$tmp_file" | sed 's/"org":"//')
-            local country=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
-            
-            debug_log "Retrieved additional ISP info - Name: $isp, AS: $as_num, Org: $org"
-            
-            # キャッシュファイル作成
-            echo "# ISP情報 $(date)" > "$cache_file"
-            echo "ISP_NAME=\"$isp\"" >> "$cache_file"
-            echo "ISP_AS=\"$as_num\"" >> "$cache_file"
-            echo "ISP_ORG=\"$org\"" >> "$cache_file"
-            echo "ISP_COUNTRY=\"$country\"" >> "$cache_file"
-            echo "CONNECTION_TYPE=\"$provider\"" >> "$cache_file"
-            echo "HAS_IPV6=\"$has_ipv6\"" >> "$cache_file"
-            echo "IPV6_ADDRESS=\"$ipv6_addr\"" >> "$cache_file"
-        else
-            debug_log "Failed to retrieve additional ISP information"
-            rm -f "$tmp_file" 2>/dev/null
-            
-            # 最低限の情報でキャッシュ保存
-            echo "# ISP情報 $(date)" > "$cache_file"
-            echo "CONNECTION_TYPE=\"$provider\"" >> "$cache_file"
-            echo "HAS_IPV6=\"$has_ipv6\"" >> "$cache_file"
-            echo "IPV6_ADDRESS=\"$ipv6_addr\"" >> "$cache_file"
-        fi
-        
-        rm -f "$tmp_file" 2>/dev/null
     fi
     
     # 結果表示
-    if [ $show_result -eq 1 ]; then
-        stop_spinner "$(get_message "MSG_PROVIDER_INFO_SUCCESS")" "success"
-        display_isp_info "$provider" "detected"
-    fi
+    display_isp_info "$provider"
     
-    debug_log "ISP detection completed with result: $provider"
     return 0
 }
 
-# ISP情報の表示
+# ISP情報表示（シンプル版）- メッセージキーを使用するように修正
 display_isp_info() {
     local provider="$1"
-    local source="$2"
+    local display_name=""
 
-    if [ "$source" = "cached" ]; then
-        printf "%s\n" "$(color white "$(get_message "MSG_ISP_INFO_SOURCE" "source=Cache")")"
+    echo "========= ISP判定結果 ========="
+    
+    # メッセージキーを使用（実装があれば）
+    if type get_message >/dev/null 2>&1; then
+        echo "$(get_message "MSG_ISP_INFO_SOURCE" "source=IPv6プレフィックス検出")"
     else
-        printf "%s\n" "$(color white "$(get_message "MSG_ISP_INFO_SOURCE" "source=Prefix")")"
+        echo "情報ソース: IPv6プレフィックス検出"
     fi
     
-    printf "%s\n" "$(color white "$(get_message "MSG_ISP_TYPE" "provider=$provider")")"
-    
+    # プロバイダ名の日本語表示
     case "$provider" in
-        mape_ocn)
-            printf "%s\n" "$(color white "【 OCN IPv6 (MAP-E)接続 】")"
-            printf "%s\n" "$(color white "NTT Communicationsが提供するOCN IPv6サービスです。")"
-            printf "%s\n" "$(color white "IPv4 over IPv6のMAP-E方式を採用しています。")"
-            printf "%s\n" "$(color yellow "設定ポイント: MTU値は1460に設定します。")"
-            ;;
-        mape_v6plus)
-            printf "%s\n" "$(color white "【 SoftBank V6プラス接続 】")"
-            printf "%s\n" "$(color white "SoftBankが提供するIPv6接続サービスです。")"
-            printf "%s\n" "$(color white "MAP-E方式でIPv4 over IPv6通信を行います。")"
-            printf "%s\n" "$(color yellow "設定ポイント: MTU値は1460に設定します。")"
-            ;;
-        mape_ipv6option)
-            printf "%s\n" "$(color white "【 KDDI IPv6オプション接続 】")"
-            printf "%s\n" "$(color white "KDDIが提供するMAP-E方式のIPv6接続サービスです。")"
-            printf "%s\n" "$(color yellow "設定ポイント: MTU値は1460に設定します。")"
-            ;;
-        mape_nuro)
-            printf "%s\n" "$(color white "【 NURO光 MAP-E接続 】")"
-            printf "%s\n" "$(color white "So-netが提供するNURO光のMAP-E接続です。")"
-            printf "%s\n" "$(color yellow "設定ポイント: MTU値は1460に設定します。")"
-            ;;
-        mape_biglobe)
-            printf "%s\n" "$(color white "【 BIGLOBE IPv6接続 】")"
-            printf "%s\n" "$(color white "BIGLOBEが提供するMAP-E方式のIPv6接続サービスです。")"
-            printf "%s\n" "$(color yellow "設定ポイント: MTU値は1460に設定します。")"
-            ;;
-        mape_jpne)
-            printf "%s\n" "$(color white "【 JPNE IPv6接続 】")"
-            printf "%s\n" "$(color white "日本ネットワークイネイブラーが提供するMAP-E接続です。")"
-            printf "%s\n" "$(color yellow "設定ポイント: MTU値は1460に設定します。")"
-            ;;
-        mape_sonet)
-            printf "%s\n" "$(color white "【 So-net IPv6接続 】")"
-            printf "%s\n" "$(color white "So-netが提供するMAP-E方式のIPv6接続サービスです。")"
-            printf "%s\n" "$(color yellow "設定ポイント: MTU値は1460に設定します。")"
-            ;;
-        mape_nifty)
-            printf "%s\n" "$(color white "【 @nifty IPv6接続 】")"
-            printf "%s\n" "$(color white "@niftyが提供するMAP-E方式のIPv6接続サービスです。")"
-            printf "%s\n" "$(color yellow "設定ポイント: MTU値は1460に設定します。")"
-            ;;
-        dslite_east_transix)
-            printf "%s\n" "$(color white "【 NTT東日本 DS-Lite接続 (transix) 】")"
-            printf "%s\n" "$(color white "NTT東日本が提供するIPv6 IPoE + DS-Lite接続です。")"
-            printf "%s\n" "$(color yellow "設定ポイント: AFTRホスト設定")"
-            printf "%s\n" "$(color yellow "・ホスト名: mgw.transix.jp")"
-            printf "%s\n" "$(color yellow "・IPv6アドレス: 2404:8e01::feed:100")"
-            printf "%s\n" "$(color yellow "MTU値は1500のままで構いません。")"
-            ;;
-        dslite_west_transix)
-            printf "%s\n" "$(color white "【 NTT西日本 DS-Lite接続 (transix) 】")"
-            printf "%s\n" "$(color white "NTT西日本が提供するIPv6 IPoE + DS-Lite接続です。")"
-            printf "%s\n" "$(color yellow "設定ポイント: AFTRホスト設定")"
-            printf "%s\n" "$(color yellow "・ホスト名: mgw.transix.jp")"
-            printf "%s\n" "$(color yellow "・IPv6アドレス: 2404:8e00::feed:100")"
-            printf "%s\n" "$(color yellow "MTU値は1500のままで構いません。")"
-            ;;
-        dslite_transix)
-            printf "%s\n" "$(color white "【 DS-Lite接続 (transix) 】")"
-            printf "%s\n" "$(color white "IPv6 IPoE + DS-Lite接続（トランジックス）です。")"
-            printf "%s\n" "$(color yellow "設定ポイント: AFTRホスト設定")"
-            printf "%s\n" "$(color yellow "・東日本の場合: mgw.transix.jp (2404:8e01::feed:100)")"
-            printf "%s\n" "$(color yellow "・西日本の場合: mgw.transix.jp (2404:8e00::feed:100)")"
-            printf "%s\n" "$(color yellow "お住まいの地域により設定が異なります。")"
-            ;;
-        dslite_xpass)
-            printf "%s\n" "$(color white "【 DS-Lite接続 (xpass) 】")"
-            printf "%s\n" "$(color white "IPv6 IPoE + DS-Lite接続（クロスパス）です。")"
-            printf "%s\n" "$(color yellow "設定ポイント: AFTRホスト設定")"
-            printf "%s\n" "$(color yellow "・ホスト名: dgw.xpass.jp")"
-            printf "%s\n" "$(color yellow "MTU値は1500のままで構いません。")"
-            ;;
-        dslite_v6connect)
-            printf "%s\n" "$(color white "【 DS-Lite接続 (v6connect) 】")"
-            printf "%s\n" "$(color white "IPv6 IPoE + DS-Lite接続（V6コネクト）です。")"
-            printf "%s\n" "$(color yellow "設定ポイント: AFTRホスト設定")"
-            printf "%s\n" "$(color yellow "・ホスト名: aft.v6connect.net")"
-            printf "%s\n" "$(color yellow "MTU値は1500のままで構いません。")"
-            ;;
-        dslite_east)
-            printf "%s\n" "$(color white "【 NTT東日本 DS-Lite接続 】")"
-            printf "%s\n" "$(color white "NTT東日本が提供するIPv6 IPoE + DS-Lite接続です。")"
-            printf "%s\n" "$(color yellow "設定ポイント: 主要なAFTRは次のいずれかです。")"
-            printf "%s\n" "$(color yellow "・トランジックス: mgw.transix.jp (2404:8e01::feed:100)")"
-            printf "%s\n" "$(color yellow "・クロスパス: dgw.xpass.jp")"
-            printf "%s\n" "$(color yellow "・V6コネクト: aft.v6connect.net")"
-            printf "%s\n" "$(color yellow "ご利用のプロバイダにより対応するAFTRが異なります。")"
-            ;;
-        dslite_west)
-            printf "%s\n" "$(color white "【 NTT西日本 DS-Lite接続 】")"
-            printf "%s\n" "$(color white "NTT西日本が提供するIPv6 IPoE + DS-Lite接続です。")"
-            printf "%s\n" "$(color yellow "設定ポイント: 主要なAFTRは次のいずれかです。")"
-            printf "%s\n" "$(color yellow "・トランジックス: mgw.transix.jp (2404:8e00::feed:100)")"
-            printf "%s\n" "$(color yellow "・クロスパス: dgw.xpass.jp")"
-            printf "%s\n" "$(color yellow "・V6コネクト: aft.v6connect.net")"
-            printf "%s\n" "$(color yellow "ご利用のプロバイダにより対応するAFTRが異なります。")"
-            ;;
-        dslite*)
-            printf "%s\n" "$(color white "【 DS-LITE接続 】")"
-            printf "%s\n" "$(color white "DS-LITE方式を使用したIPv4 over IPv6接続です。")"
-            printf "%s\n" "$(color white "東西の判定ができませんでした。")"
-            printf "%s\n" "$(color yellow "設定ポイント: 主要なAFTRは次のいずれかです。")"
-            printf "%s\n" "$(color yellow "・トランジックス: mgw.transix.jp")"
-            printf "%s\n" "$(color yellow "  東日本: 2404:8e01::feed:100")"
-            printf "%s\n" "$(color yellow "  西日本: 2404:8e00::feed:100")"
-            printf "%s\n" "$(color yellow "・クロスパス: dgw.xpass.jp")"
-            printf "%s\n" "$(color yellow "・V6コネクト: aft.v6connect.net")"
-            ;;
-        pppoe_ctc)
-            printf "%s\n" "$(color white "【 中部テレコム PPPoE接続 】")"
-            printf "%s\n" "$(color white "中部テレコミュニケーション株式会社が提供するPPPoE接続です。")"
-            printf "%s\n" "$(color yellow "設定ポイント: 標準的なPPPoE設定で問題ありません。")"
-            ;;
-        pppoe_iij)
-            printf "%s\n" "$(color white "【 IIJ PPPoE接続 】")"
-            printf "%s\n" "$(color white "IIJが提供するPPPoE接続です。")"
-            printf "%s\n" "$(color yellow "設定ポイント: 標準的なPPPoE設定で問題ありません。")"
-            ;;
-        overseas)
-            printf "%s\n" "$(color white "【 海外ISP接続 】")"
-            printf "%s\n" "$(color white "日本国外のISPが検出されました。")"
-            printf "%s\n" "$(color white "日本のISP判定には対応していません。")"
-            ;;
-        *)
-            printf "%s\n" "$(color white "【 不明な接続タイプ 】")"
-            printf "%s\n" "$(color white "接続タイプを特定できませんでした。")"
-            printf "%s\n" "$(color white "IPv6プレフィックスやAS情報から判断できません。")"
-            printf "%s\n" "$(color yellow "ご契約のインターネットプロバイダに確認してください。")"
-            ;;
+        mape_ocn)           display_name="MAP-E OCN" ;;
+        mape_v6plus)        display_name="SoftBank V6プラス" ;;
+        mape_ipv6option)    display_name="KDDI IPv6オプション" ;;
+        mape_nuro)          display_name="NURO光 MAP-E" ;;
+        mape_biglobe)       display_name="BIGLOBE IPv6" ;;
+        mape_jpne)          display_name="JPNE IPv6" ;;
+        mape_sonet)         display_name="So-net IPv6" ;;
+        mape_nifty)         display_name="@nifty IPv6" ;;
+        dslite_east_transix) display_name="NTT東日本 DS-Lite (transix)" ;;
+        dslite_west_transix) display_name="NTT西日本 DS-Lite (transix)" ;;
+        dslite_transix)     display_name="DS-Lite (transix)" ;;
+        dslite_xpass)       display_name="DS-Lite (xpass)" ;;
+        dslite_v6connect)   display_name="DS-Lite (v6connect)" ;;
+        dslite_east)        display_name="NTT東日本 DS-Lite" ;;
+        dslite_west)        display_name="NTT西日本 DS-Lite" ;;
+        dslite*)            display_name="DS-LITE" ;;
+        pppoe_ctc)          display_name="中部テレコム PPPoE" ;;
+        pppoe_iij)          display_name="IIJ PPPoE" ;;
+        overseas)           display_name="海外ISP" ;;
+        *)                  display_name="不明" ;;
     esac
+    
+    # メッセージキーを使用（実装があれば）
+    if type get_message >/dev/null 2>&1; then
+        echo "$(get_message "MSG_ISP_TYPE" "type=$display_name")"
+    else
+        echo "接続タイプ: $display_name"
+    fi
+    
+    echo "==============================="
 }
 
-detect_isp_type "$@"
+# メイン処理実行
+if [ "${0##*/}" = "detect_isp.sh" ]; then
+    detect_isp_type "$@"
+fi
