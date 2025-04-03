@@ -9,10 +9,26 @@ MENU_ACCESSPOINT download "accesspoint-setup.sh" "chmod" "load"
 MENU_OTHERS download "other-utilities.sh" "chmod" "load"
 
 [MENU_INTERNET]
-MENU_V&MIG selector MENU_V&MIG
-MENU_MAPE selector MENU_MAPE
-MENU_DSLITE selector MENU_DSLITE
-MENU_PPPOE selector MENU_PPPOE
+MENU_INTERNET_AUTO selector MENU_INTERNET_AUTO
+MENU_INTERNET_V&MIG selector MENU_INTERNET_V&MIG
+MENU_INTERNET_MAPE selector MENU_INTERNET_MAPE
+MENU_INTERNET_DSLITE selector MENU_INTERNET_DSLITE
+MENU_INTERNET_PPPOE selector MENU_INTERNET_PPPOE
+
+[MENU_INTERNET_AUTO]
+MENU_INTERNET_AUTO download "internet-auto-config.sh" "chmod" "load"
+
+[MENU_INTERNET_V&MIG]
+MENU_INTERNET_V&MIG download "v6mig-prov.sh" "chmod" "load"
+
+[MENU_INTERNET_MAPE]
+MENU_INTERNET_MAPE_CONFIG download "map-e.sh" "chmod" "load"
+
+[MENU_INTERNET_DSLITE]
+MENU_INTERNET_DSLITE_CONFIG download "internet-dslite.sh" "chmod" "load"
+
+[MENU_INTERNET_PPPOE]
+MENU_INTERNET_PPPOE_CONFIG download "internet-pppoe.sh" "chmod" "load"
 
 [MENU_SYSTEM]
 MENU_HOSTNAME selector system-hostname
@@ -27,38 +43,6 @@ MENU_PACKAGES_AUTO_INSTALL selector MENU_PACKAGES_AUTO_INSTALL
 MENU_PACKAGES_MANUAL_INSTALL download "package-manual.sh" "chmod" "load"; package_manual_main
 MENU_PACKAGES_SAMBA download "package-manual.sh" "chmod" "load"; package_samba
 MENU_PACKAGES_LIST download "package-manual.sh" "chmod" "load"; package_list
-
-# インターネット設定のサブセクション
-[MENU_V&MIG]
-MENU_V&MIG_CONFIG download "v6mig-prov.sh" "chmod" "load"
-
-[MENU_MAPE]
-MENU_MAPE_CONFIG download "map-e.sh" "chmod" "load"
-
-[MENU_DSLITE]
-MENU_DSLITE_CONFIG download "internet-dslite.sh" "chmod" "load"
-
-[MENU_PPPOE]
-MENU_PPPOE_CONFIG download "internet-pppoe.sh" "chmod" "load"
-
-# システム設定のサブセクション
-[system-hostname]
-MENU_HOSTNAME_CONFIG download "system-hostname.sh" "chmod" "load"
-
-[system-password]
-MENU_PASSWORD_CONFIG download "system-password.sh" "chmod" "load"
-
-[system-wifi]
-MENU_WIFI_CONFIG download "system-wifi.sh" "chmod" "load"
-
-[system-timezone]
-MENU_TIMEZONE_CONFIG download "system-timezone.sh" "chmod" "load"
-
-[system-led]
-MENU_LED_CONFIG download "system-led.sh" "chmod" "load"
-
-[system-reboot]
-MENU_REBOOT_CONFIG download "system-reboot.sh" "chmod" "load"
 
 [MENU_PACKAGES_AUTO_INSTALL]
 MENU_PACKAGE_STANDARD download "package-auto.sh" "chmod" "load"; detect_and_run_installer standard
