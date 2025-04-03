@@ -113,9 +113,8 @@ get_wan_info() {
     return 0
 }
 
-# DS-LITE用のAFTRアドレスを検出
 detect_aftr_address() {
-    debug_log "Detecting AFTR address for DS-LITE"
+    echo "DEBUG: Detecting AFTR address for DS-LITE"
     
     # dig/nslookupコマンドでAFTRの候補を調べる
     local aftr_candidates="mgw.transix.jp dgw.xpass.jp aft.v6connect.net"
@@ -123,145 +122,140 @@ detect_aftr_address() {
     
     # digコマンドが使える場合
     if command -v dig >/dev/null 2>&1; then
-        debug_log "Using dig command to resolve AFTR"
+        echo "DEBUG: Using dig command to resolve AFTR"
         for candidate in $aftr_candidates; do
-            debug_log "Checking AFTR candidate: $candidate"
+            echo "DEBUG: Checking AFTR candidate: $candidate"
             if dig AAAA "$candidate" +short 2>/dev/null | grep -q ":" ; then
                 aftr_result="$candidate"
-                debug_log "AFTR found: $aftr_result"
+                echo "DEBUG: AFTR found: $aftr_result"
                 echo "$aftr_result"
                 return 0
             fi
         done
     # nslookupコマンドが使える場合
     elif command -v nslookup >/dev/null 2>&1; then
-        debug_log "Using nslookup command to resolve AFTR"
+        echo "DEBUG: Using nslookup command to resolve AFTR"
         for candidate in $aftr_candidates; do
-            debug_log "Checking AFTR candidate: $candidate"
+            echo "DEBUG: Checking AFTR candidate: $candidate"
             if nslookup -type=AAAA "$candidate" 2>/dev/null | grep -q "has AAAA address" ; then
                 aftr_result="$candidate"
-                debug_log "AFTR found: $aftr_result"
+                echo "DEBUG: AFTR found: $aftr_result"
                 echo "$aftr_result"
                 return 0
             fi
         done
     fi
     
-    debug_log "No AFTR address detected"
+    # DIG/NSLOOKUPでAFTRが見つからない場合、他の方法でチェック
+    local ping_result
+    if command -v ping6 >/dev/null 2>&1; then
+        echo "DEBUG: Testing AFTR connectivity with ping6"
+        for candidate in $aftr_candidates; do
+            echo "DEBUG: Pinging AFTR candidate: $candidate"
+            if ping6 -c 1 "$candidate" >/dev/null 2>&1; then
+                aftr_result="$candidate"
+                echo "DEBUG: AFTR reachable with ping6: $aftr_result"
+                echo "$aftr_result"
+                return 0
+            fi
+        done
+    fi
+    
+    echo "DEBUG: No AFTR address detected"
     return 1
 }
 
-# IPv6プレフィックスからISPを判定
 detect_ipv6_provider() {
     local ipv6="$1"
     local provider="unknown"
     
     if [ -z "$ipv6" ]; then
-        debug_log "No IPv6 address provided for provider detection"
+        echo "DEBUG: No IPv6 address provided for provider detection"
         return 1
     fi
     
-    # プレフィックスを抽出
+    # プレフィックスのより厳密な抽出
     local prefix
-    prefix=$(echo "$ipv6" | cut -d: -f1-2)
-    debug_log "Extracted IPv6 prefix: $prefix"
+    prefix=$(echo "$ipv6" | sed -E 's/([0-9a-f]+:[0-9a-f]+).*/\1/i')
+    echo "DEBUG: Extracted IPv6 prefix: $prefix"
     
     # 詳細なプレフィックス
     local long_prefix
-    long_prefix=$(echo "$ipv6" | cut -d: -f1-3)
-    debug_log "Extracted long IPv6 prefix: $long_prefix"
+    long_prefix=$(echo "$ipv6" | sed -E 's/([0-9a-f]+:[0-9a-f]+:[0-9a-f]+).*/\1/i')
+    echo "DEBUG: Extracted long IPv6 prefix: $long_prefix"
     
-    # プレフィックスからプロバイダを判定
-    case "$prefix" in
-        # SoftBank（V6プラス）
-        2404:7a)
-            provider="mape_v6plus"
-            debug_log "Detected SoftBank V6plus from IPv6 prefix"
+    # プロバイダー判定の優先順位を明確に
+    case "$long_prefix" in
+        # NTT東日本（DS-Lite - トランジックス）
+        "2404:8e01:"*)
+            provider="dslite_east_transix"
+            echo "DEBUG: Detected NTT East DS-Lite with transix from long prefix"
             ;;
-        # KDDI（IPv6オプション）
-        2001:f9)
-            provider="mape_ipv6option"
-            debug_log "Detected KDDI IPv6option from IPv6 prefix"
-            ;;
-        # OCN
-        2001:0c|2400:38)
-            provider="mape_ocn"
-            debug_log "Detected OCN MAP-E from IPv6 prefix"
-            ;;
-        # ビッグローブ BIGLOBE
-        2001:26|2001:f6)
-            provider="mape_biglobe"
-            debug_log "Detected BIGLOBE from IPv6 prefix"
-            ;;
-        # NURO光
-        240d:00)
-            provider="mape_nuro"
-            debug_log "Detected NURO from IPv6 prefix"
-            ;;
-        # JPNE NGN
-        2404:92)
-            provider="mape_jpne"
-            debug_log "Detected JPNE from IPv6 prefix"
-            ;;
-        # So-net
-        240b:10|240b:11|240b:12|240b:13)
-            provider="mape_sonet"
-            debug_log "Detected So-net from IPv6 prefix"
-            ;;
-        # NTT東日本/西日本（DS-Lite）- トランジックス系
-        2404:8e)
-            if echo "$long_prefix" | grep -q "2404:8e01"; then
-                provider="dslite_east_transix"
-                debug_log "Detected NTT East DS-Lite with transix"
-            elif echo "$long_prefix" | grep -q "2404:8e00"; then
-                provider="dslite_west_transix"
-                debug_log "Detected NTT West DS-Lite with transix"
-            else
-                provider="dslite_transix"
-                debug_log "Detected DS-Lite with transix (unknown region)"
-            fi
-            ;;
-        # クロスパス系
-        2404:92)
-            provider="dslite_xpass"
-            debug_log "Detected DS-Lite with xpass"
-            ;;
-        # v6コネクト系
-        2404:01)
-            provider="dslite_v6connect"
-            debug_log "Detected DS-Lite with v6connect"
-            ;;
-        # @nifty
-        2001:f7)
-            provider="mape_nifty"
-            debug_log "Detected @nifty from IPv6 prefix"
+        # NTT西日本（DS-Lite - トランジックス）
+        "2404:8e00:"*)
+            provider="dslite_west_transix"
+            echo "DEBUG: Detected NTT West DS-Lite with transix from long prefix"
             ;;
         *)
-            provider="unknown"
-            debug_log "Unknown provider for prefix: $prefix"
+            # 短いプレフィックスで判定
+            case "$prefix" in
+                # SoftBank（V6プラス）
+                "2404:7a")
+                    provider="mape_v6plus"
+                    echo "DEBUG: Detected SoftBank V6plus from IPv6 prefix"
+                    ;;
+                # KDDI（IPv6オプション）
+                "2001:f9")
+                    provider="mape_ipv6option"
+                    echo "DEBUG: Detected KDDI IPv6option from IPv6 prefix"
+                    ;;
+                # OCN
+                "2001:0c"|"2400:38")
+                    provider="mape_ocn"
+                    echo "DEBUG: Detected OCN MAP-E from IPv6 prefix"
+                    ;;
+                # ビッグローブ BIGLOBE
+                "2001:26"|"2001:f6")
+                    provider="mape_biglobe"
+                    echo "DEBUG: Detected BIGLOBE from IPv6 prefix"
+                    ;;
+                # NURO光
+                "240d:00")
+                    provider="mape_nuro"
+                    echo "DEBUG: Detected NURO from IPv6 prefix"
+                    ;;
+                # JPNE NGN - これを先に判定
+                "2404:92")
+                    provider="mape_jpne"
+                    echo "DEBUG: Detected JPNE from IPv6 prefix"
+                    ;;
+                # So-net
+                "240b:10"|"240b:11"|"240b:12"|"240b:13")
+                    provider="mape_sonet"
+                    echo "DEBUG: Detected So-net from IPv6 prefix"
+                    ;;
+                # NTT東日本/西日本（DS-Lite）- トランジックス系
+                "2404:8e")
+                    provider="dslite_transix"
+                    echo "DEBUG: Detected DS-Lite with transix (unknown region)"
+                    ;;
+                # v6コネクト系
+                "2404:01")
+                    provider="dslite_v6connect"
+                    echo "DEBUG: Detected DS-Lite with v6connect"
+                    ;;
+                # @nifty
+                "2001:f7")
+                    provider="mape_nifty"
+                    echo "DEBUG: Detected @nifty from IPv6 prefix"
+                    ;;
+                *)
+                    provider="unknown"
+                    echo "DEBUG: Unknown provider for prefix: $prefix"
+                    ;;
+            esac
             ;;
     esac
-    
-    # DS-LITEの場合はAFTRアドレスも検出
-    if echo "$provider" | grep -q "dslite" && echo "$provider" | grep -qv "dslite_east\|dslite_west"; then
-        local aftr_address
-        aftr_address=$(detect_aftr_address)
-        
-        if [ -n "$aftr_address" ]; then
-            debug_log "AFTR address detected: $aftr_address"
-            
-            if echo "$aftr_address" | grep -i "transix" >/dev/null 2>&1; then
-                provider="dslite_transix"
-                debug_log "Identified as transix DS-LITE from AFTR"
-            elif echo "$aftr_address" | grep -i "xpass" >/dev/null 2>&1; then
-                provider="dslite_xpass"
-                debug_log "Identified as xpass DS-LITE from AFTR"
-            elif echo "$aftr_address" | grep -i "v6connect" >/dev/null 2>&1; then
-                provider="dslite_v6connect"
-                debug_log "Identified as v6connect DS-LITE from AFTR"
-            fi
-        fi
-    fi
     
     echo "$provider"
     return 0
@@ -375,7 +369,6 @@ display_isp_info() {
     printf "%s\n" "$(color white "$(get_message "MSG_ISP_TYPE") $display_name")"
 }
 
-# IPv6アドレスからISPを判定し、結果をisp.chに書き込む
 detect_isp_type() {
     local ipv6_addr=""
     local ipv4_addr=""
@@ -394,7 +387,7 @@ detect_isp_type() {
     fi
     
     # WAN情報取得（インターフェースとIPアドレス）
-    debug_log "Starting ISP detection process"
+    echo "DEBUG: Starting ISP detection process"
     
     # get_wan_info関数の結果を取得して変数に設定
     eval "$(get_wan_info)"
@@ -403,47 +396,73 @@ detect_isp_type() {
     wan_if="$WAN_IF"
     wan_if6="$WAN_IF6"
     
+    echo "DEBUG: Interface detection - WAN: $wan_if, WAN6: $wan_if6"
+    echo "DEBUG: Address detection - IPv4: $ipv4_addr, IPv6: $ipv6_addr"
+    
     # IPv6アドレスからプロバイダ判定
     if [ -n "$ipv6_addr" ]; then
-        debug_log "IPv6 address detected: $ipv6_addr"
+        echo "DEBUG: IPv6 address detected: $ipv6_addr"
         
         # プレフィックスからプロバイダ判定
         provider=$(detect_ipv6_provider "$ipv6_addr")
-        debug_log "Provider detection result from IPv6: $provider"
+        echo "DEBUG: Provider detection result from IPv6: $provider"
         
         # DS-LITEの場合はさらに詳細判定
         if echo "$provider" | grep -q "dslite"; then
-            debug_log "DS-LITE detected, checking for AFTR"
+            echo "DEBUG: DS-LITE detected, checking for AFTR"
             aftr_address=$(detect_aftr_address)
             
             if [ -n "$aftr_address" ]; then
-                debug_log "AFTR address detected: $aftr_address"
+                echo "DEBUG: AFTR address detected: $aftr_address"
                 # AFTRからプロバイダの詳細判定
                 if echo "$aftr_address" | grep -i "transix" >/dev/null 2>&1; then
                     provider="dslite_transix"
-                    debug_log "Identified as transix DS-LITE"
+                    echo "DEBUG: Identified as transix DS-LITE"
                 elif echo "$aftr_address" | grep -i "xpass" >/dev/null 2>&1; then
                     provider="dslite_xpass"
-                    debug_log "Identified as xpass DS-LITE"
+                    echo "DEBUG: Identified as xpass DS-LITE"
                 elif echo "$aftr_address" | grep -i "v6connect" >/dev/null 2>&1; then
                     provider="dslite_v6connect"
-                    debug_log "Identified as v6connect DS-LITE"
+                    echo "DEBUG: Identified as v6connect DS-LITE"
                 fi
             fi
         fi
     else
-        debug_log "No IPv6 address detected"
+        echo "DEBUG: No IPv6 address detected"
     fi
     
     # IPv4アドレスを使った補助判定（IPv6で判別できない場合）
     if [ "$provider" = "unknown" ] && [ -n "$ipv4_addr" ]; then
-        debug_log "Using IPv4 address for supplementary detection"
+        echo "DEBUG: Using IPv4 address for supplementary detection: $ipv4_addr"
         
         # プライベートIPv4アドレスでDS-LITE判定
         if echo "$ipv4_addr" | grep -qE '^(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)'; then
-            debug_log "Private IPv4 detected, likely DS-LITE"
+            echo "DEBUG: Private IPv4 detected, likely DS-LITE"
             provider="dslite"
             is_dslite=1
+            
+            # AFTR検出を試みる
+            aftr_address=$(detect_aftr_address)
+            if [ -n "$aftr_address" ]; then
+                echo "DEBUG: AFTR address detected from IPv4 path: $aftr_address"
+                
+                # AFTRからプロバイダの詳細判定
+                if echo "$aftr_address" | grep -i "transix" >/dev/null 2>&1; then
+                    provider="dslite_transix"
+                    echo "DEBUG: Identified as transix DS-LITE from IPv4 path"
+                elif echo "$aftr_address" | grep -i "xpass" >/dev/null 2>&1; then
+                    provider="dslite_xpass"
+                    echo "DEBUG: Identified as xpass DS-LITE from IPv4 path"
+                elif echo "$aftr_address" | grep -i "v6connect" >/dev/null 2>&1; then
+                    provider="dslite_v6connect"
+                    echo "DEBUG: Identified as v6connect DS-LITE from IPv4 path"
+                fi
+            fi
+        else
+            echo "DEBUG: Public IPv4 detected, checking other indicators"
+            
+            # 公開IPv4アドレスを持っている場合の追加チェック
+            # ここに追加のチェックロジックを入れることも可能
         fi
     fi
     
@@ -458,7 +477,7 @@ detect_isp_type() {
     [ -n "$aftr_address" ] && printf "AFTR_ADDRESS=\"%s\"\n" "$aftr_address" >> "$isp_file"
     [ "$is_dslite" = "1" ] && printf "IS_DSLITE=\"%s\"\n" "$is_dslite" >> "$isp_file"
     
-    debug_log "ISP detection result saved to $isp_file"
+    echo "DEBUG: ISP detection result saved to $isp_file with provider=$provider"
     
     # スピナー停止と結果表示
     if type stop_spinner >/dev/null 2>&1; then
