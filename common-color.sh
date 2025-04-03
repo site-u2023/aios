@@ -455,7 +455,7 @@ start_spinner() {
             SPINNER_CHARS="💩 👺 😀 👽 😈 💀"
             ;;
         moon)
-            SPINNER_CHARS="🌑 🌘 🌗 🌖 🌕 🌔 🌓 🌒"
+            SPINNER_CHARS="🌚 🌘 🌗 🌖 🌕 🌔 🌓 🌒 🌑 🌘 🌗 🌖 🌝 🌔 🌓 🌒"
             # SPINNER_CHARS="🌕 🌖 🌗 🌘 🌑 🌒 🌓 🌔"
             ;;
         *)
