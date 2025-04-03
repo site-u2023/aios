@@ -6,6 +6,20 @@ SCRIPT_VERSION="2025-03-31-00-00"
 en|MSG_UNDER_TEST=👽 Under test
 
 # =======================
+# internet-auto-config.sh
+# =======================
+en|MSG_ISP_INFO_SOURCE=Information source{notr_colon_notr} {notr_source_notr}
+en|MSG_ISP_TYPE=Connection type{notr_colon_notr}
+en|MSG_ISP_CACHE_PATH=Cache file path{notr_colon_notr}
+
+# =======================
+# common-isp.sh
+# =======================
+en|MSG_FETCHING_ISP_INFO=Retrieving ISP information
+en|MSG_ISP_INFO_SUCCESS=ISP information retrieved successfully
+en|MSG_ISP_INFO_FAILED=Failed to retrieve ISP informatio
+
+# =======================
 # common-translation.sh
 # =======================
 en|MSG_TRANSLATION_SOURCE_ORIGINAL=Original Language file{notr_colon_notr} {notr_info_notr}
@@ -48,15 +62,6 @@ en|PKG_SECTION_SAMBA=File Sharing
 # =======================
 # dynamic-system-info.sh
 # =======================
-en|MSG_DOWNLOADING_ISP_DB=Downloading ISP database
-en|MSG_ISP_DB_SUCCESS=ISP database downloaded successfully
-en|MSG_ISP_DB_FAILED=Failed to download ISP database
-en|MSG_ISP_DB_RESTORED=Restored from backup database
-
-en|MSG_FETCHING_ISP_INFO=Retrieving ISP information
-en|MSG_ISP_INFO_SUCCESS=ISP information retrieved successfully
-en|MSG_ISP_INFO_FAILED=Failed to retrieve ISP informatio
-
 en|MSG_USE_DETECTED_ISP_INFORMATION=ISP Sources{notr_colon_notr} {notr_info_notr}
 en|MSG_DETECTED_ISP=ISP Provider{notr_colon_notr}
 en|MSG_ISP_AS=AS Number{notr_colon_notr}
