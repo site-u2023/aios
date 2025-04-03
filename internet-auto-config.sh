@@ -453,7 +453,7 @@ detect_isp_type() {
     
     # スピナー表示開始
     if [ $show_result -eq 1 ]; then
-        start_spinner "$(color "blue" "$(get_message "MSG_DETECTING_ISP_TYPE")")" "yellow"
+        start_spinner "$(color "blue" "$(get_message "MSG_PROVIDER_ISP_TYPE")")" "yellow"
     fi
     
     # IPv6アドレス取得
@@ -557,7 +557,7 @@ detect_isp_type() {
     
     # 結果表示
     if [ $show_result -eq 1 ]; then
-        stop_spinner "$(get_message "MSG_ISP_INFO_SUCCESS")" "success"
+        stop_spinner "$(get_message "MSG_PROVIDER_INFO_SUCCESS")" "success"
         display_isp_info "$provider" "detected"
     fi
     
