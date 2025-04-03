@@ -394,7 +394,12 @@ display_detected_translation() {
     local source_db="message_${source_lang}.db"
     local target_db="message_${lang_code}.db"
     
-    debug_log "DEBUG" "Displaying translation information for language code: $lang_code"
+    debug_log "DEBUG" "Displaying translation information for language code: ${lang_code}"
+    
+    # 同じ言語でDB作成をスキップする場合もチェック
+    if [ "$source_lang" = "$lang_code" ] && [ "$source_db" = "$target_db" ]; then
+        debug_log "DEBUG" "Source and target languages are identical: ${lang_code}"
+    fi
     
     # 成功メッセージの表示（オプション）
     if [ "$show_success_message" = "true" ]; then
@@ -409,7 +414,7 @@ display_detected_translation() {
     printf "%s\n" "$(get_message "MSG_LANGUAGE_SOURCE" "info=$source_lang")"
     printf "%s\n" "$(get_message "MSG_LANGUAGE_CODE" "info=$lang_code")"
     
-    debug_log "DEBUG" "Translation information displayed successfully"
+    debug_log "DEBUG" "Translation information display completed for ${lang_code}"
 }
 
 # 言語翻訳処理
@@ -420,22 +425,37 @@ process_language_translation() {
         lang_code=$(cat "${CACHE_DIR}/message.ch")
         debug_log "DEBUG" "Processing translation for language code: ${lang_code}"
     else
-        debug_log "DEBUG" "No language code found in message.ch"
+        debug_log "DEBUG" "No language code found in message.ch, using default"
         lang_code="$DEFAULT_LANGUAGE"
     fi
     
+    # 選択言語とデフォルト言語の一致フラグ
+    local is_default_language=false
+    if [ "$lang_code" = "$DEFAULT_LANGUAGE" ]; then
+        is_default_language=true
+        debug_log "DEBUG" "Selected language is the default language (${lang_code})"
+    fi
+    
     # デフォルト言語以外の場合のみ翻訳DBを作成
-    if [ "$lang_code" != "$DEFAULT_LANGUAGE" ]; then
+    if [ "$is_default_language" = "false" ]; then
         # 翻訳DBを作成
         create_language_db "$lang_code"
         
         # 翻訳情報表示（成功メッセージなし）
         display_detected_translation "false"
     else
+        # デフォルト言語の場合はDB作成をスキップ
         debug_log "DEBUG" "Skipping DB creation for default language: ${lang_code}"
         
-        # デフォルト言語の場合も情報を表示（成功メッセージなし）
-        display_detected_translation "false"
+        # 表示は1回だけ行う（静的フラグを使用）
+        if [ "${DEFAULT_LANG_DISPLAYED:-false}" = "false" ]; then
+            debug_log "DEBUG" "Displaying information for default language once"
+            display_detected_translation "false"
+            # 表示済みフラグを設定（POSIX準拠）
+            DEFAULT_LANG_DISPLAYED=true
+        else
+            debug_log "DEBUG" "Default language info already displayed, skipping"
+        fi
     fi
     
     printf "\n"
