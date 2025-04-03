@@ -719,7 +719,4 @@ display_isp_info() {
     printf "%s %s\n\n" "$(get_message "MSG_ISP_CACHE_PATH")" "$(color "green" "${CACHE_DIR}/isp.ch")"
 }
 
-# 単体実行時の処理
-if [ "$(basename "$0")" = "internet-auto.sh" ]; then
-    detect_isp_type "$@"
-fi
+detect_isp_type "$@"
