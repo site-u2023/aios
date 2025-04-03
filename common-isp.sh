@@ -60,6 +60,39 @@ LOCATION_API_TIMEOUT="${LOCATION_API_TIMEOUT:-3}"
 # リトライ回数の設定
 LOCATION_API_MAX_RETRIES="${LOCATION_API_MAX_RETRIES:-5}"
 
+# ネットワーク接続状態を確認する関数
+check_network_connectivity() {
+    local ip_check_file="${CACHE_DIR}/network.ch"
+    local ret4=1
+    local ret6=1
+
+    debug_log "DEBUG: Checking IPv4 connectivity"
+    ping -c 1 -w 3 8.8.8.8 >/dev/null 2>&1
+    ret4=$?
+
+    debug_log "DEBUG: Checking IPv6 connectivity"
+    ping6 -c 1 -w 3 2001:4860:4860::8888 >/dev/null 2>&1
+    ret6=$?
+
+    if [ "$ret4" -eq 0 ] && [ "$ret6" -eq 0 ]; then
+        # v4v6デュアルスタック - 両方成功
+        echo "v4v6" > "${ip_check_file}"
+        debug_log "DEBUG: Dual-stack (v4v6) connectivity detected"
+    elif [ "$ret4" -eq 0 ]; then
+        # IPv4のみ成功
+        echo "v4" > "${ip_check_file}"
+        debug_log "DEBUG: IPv4-only connectivity detected"
+    elif [ "$ret6" -eq 0 ]; then
+        # IPv6のみ成功
+        echo "v6" > "${ip_check_file}"
+        debug_log "DEBUG: IPv6-only connectivity detected"
+    else
+        # 両方失敗
+        echo "" > "${ip_check_file}"
+        debug_log "DEBUG: No network connectivity detected"
+    fi
+}
+
 # 国コードとタイムゾーン情報を取得する関数
 get_country_code() {
     # 変数宣言
