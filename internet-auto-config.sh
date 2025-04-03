@@ -1,12 +1,39 @@
 #!/bin/sh
 
+SCRIPT_VERSION="2025.04.01-00-00"
+
 # =========================================================
-# 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
-# 🚀 Last Update: 2025-04-03
+# 📌 OpenWrt / Alpine Linux POSIX準拠シェルスクリプト
+# 🚀 最終更新日: 2025-03-14
 #
-# 🏷️ License: CC0 (Public Domain)
-# 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
-# =========================================================
+# 🏷️ ライセンス: CC0 (パブリックドメイン)
+# 🎯 互換性: OpenWrt >= 19.07 (24.10.0でテスト済み)
+#
+# ⚠️ 重要な注意事項:
+# OpenWrtは**Almquistシェル(ash)**のみを使用し、
+# **Bourne-Again Shell(bash)**とは互換性がありません。
+#
+# 📢 POSIX準拠ガイドライン:
+# ✅ 条件には `[[` ではなく `[` を使用する
+# ✅ バックティック ``command`` ではなく `$(command)` を使用する
+# ✅ `let` の代わりに `$(( ))` を使用して算術演算を行う
+# ✅ 関数は `function` キーワードなしで `func_name() {}` と定義する
+# ✅ 連想配列は使用しない (`declare -A` はサポートされていない)
+# ✅ ヒアストリングは使用しない (`<<<` はサポートされていない)
+# ✅ `test` や `[[` で `-v` フラグを使用しない
+# ✅ `${var:0:3}` のようなbash特有の文字列操作を避ける
+# ✅ 配列はできるだけ避ける（インデックス配列でも問題が発生する可能性がある）
+# ✅ `read -p` の代わりに `printf` の後に `read` を使用する
+# ✅ フォーマットには `echo -e` ではなく `printf` を使用する
+# ✅ プロセス置換 `<()` や `>()` を避ける
+# ✅ 複雑なif/elifチェーンよりもcaseステートメントを優先する
+# ✅ コマンドの存在確認には `which` や `type` ではなく `command -v` を使用する
+# ✅ スクリプトをモジュール化し、小さな焦点を絞った関数を保持する
+# ✅ 複雑なtrapの代わりに単純なエラー処理を使用する
+# ✅ スクリプトはbashだけでなく、明示的にash/dashでテストする
+#
+# 🛠️ OpenWrt向けにシンプル、POSIX準拠、軽量に保つ！
+### =========================================================
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -312,6 +339,42 @@ detect_as_provider() {
     return 0
 }
 
+# ISP情報表示（シンプル版）
+display_isp_info() {
+    local provider="$1"
+    local display_name=""
+   
+    # 情報ソースを表示
+    printf "%s\n" "$(color white "$(get_message "MSG_ISP_INFO_SOURCE" "source=IPv6プレフィックス検出")")"
+    
+    # プロバイダ名の日本語表示
+    case "$provider" in
+        mape_ocn)           display_name="MAP-E OCN" ;;
+        mape_v6plus)        display_name="SoftBank V6プラス" ;;
+        mape_ipv6option)    display_name="KDDI IPv6オプション" ;;
+        mape_nuro)          display_name="NURO光 MAP-E" ;;
+        mape_biglobe)       display_name="BIGLOBE IPv6" ;;
+        mape_jpne)          display_name="JPNE IPv6" ;;
+        mape_sonet)         display_name="So-net IPv6" ;;
+        mape_nifty)         display_name="@nifty IPv6" ;;
+        dslite_east_transix) display_name="NTT東日本 DS-Lite (transix)" ;;
+        dslite_west_transix) display_name="NTT西日本 DS-Lite (transix)" ;;
+        dslite_transix)     display_name="DS-Lite (transix)" ;;
+        dslite_xpass)       display_name="DS-Lite (xpass)" ;;
+        dslite_v6connect)   display_name="DS-Lite (v6connect)" ;;
+        dslite_east)        display_name="NTT東日本 DS-Lite" ;;
+        dslite_west)        display_name="NTT西日本 DS-Lite" ;;
+        dslite*)            display_name="DS-LITE" ;;
+        pppoe_ctc)          display_name="中部テレコム PPPoE" ;;
+        pppoe_iij)          display_name="IIJ PPPoE" ;;
+        overseas)           display_name="海外ISP" ;;
+        *)                  display_name="不明" ;;
+    esac
+    
+    # 接続タイプを表示
+    printf "%s\n" "$(color white "$(get_message "MSG_ISP_TYPE" "type=$display_name")")"
+}
+
 # IPv6アドレスからISPを判定し、結果をisp.chに書き込む
 detect_isp_type() {
     local ipv6_addr=""
@@ -325,17 +388,9 @@ detect_isp_type() {
     
     # スピナー表示開始
     if type start_spinner >/dev/null 2>&1; then
-        if type get_message >/dev/null 2>&1; then
-            start_spinner "$(get_message "MSG_PROVIDER_ISP_TYPE")" "yellow"
-        else
-            start_spinner "ISPの判別中..." "yellow"
-        fi
+        start_spinner "$(color blue "$(get_message "MSG_PROVIDER_ISP_TYPE")")" "yellow"
     else
-        if type get_message >/dev/null 2>&1; then
-            echo "$(get_message "MSG_PROVIDER_ISP_TYPE")" >&2
-        else
-            echo "ISPの判別中..." >&2
-        fi
+        printf "%s\n" "$(get_message "MSG_PROVIDER_ISP_TYPE")" >&2
     fi
     
     # WAN情報取得（インターフェースとIPアドレス）
@@ -394,31 +449,23 @@ detect_isp_type() {
     
     # 結果をファイルに書き込み
     mkdir -p "${CACHE_DIR}"
-    echo "# ISP情報 $(date)" > "$isp_file"
-    echo "CONNECTION_TYPE=\"$provider\"" >> "$isp_file"
-    [ -n "$wan_if" ] && echo "WAN_INTERFACE=\"$wan_if\"" >> "$isp_file"
-    [ -n "$wan_if6" ] && echo "WAN6_INTERFACE=\"$wan_if6\"" >> "$isp_file"
-    [ -n "$ipv4_addr" ] && echo "IPV4_ADDRESS=\"$ipv4_addr\"" >> "$isp_file"
-    [ -n "$ipv6_addr" ] && echo "IPV6_ADDRESS=\"$ipv6_addr\"" >> "$isp_file"
-    [ -n "$aftr_address" ] && echo "AFTR_ADDRESS=\"$aftr_address\"" >> "$isp_file"
-    [ "$is_dslite" = "1" ] && echo "IS_DSLITE=\"$is_dslite\"" >> "$isp_file"
+    printf "# ISP情報 %s\n" "$(date)" > "$isp_file"
+    printf "CONNECTION_TYPE=\"%s\"\n" "$provider" >> "$isp_file"
+    [ -n "$wan_if" ] && printf "WAN_INTERFACE=\"%s\"\n" "$wan_if" >> "$isp_file"
+    [ -n "$wan_if6" ] && printf "WAN6_INTERFACE=\"%s\"\n" "$wan_if6" >> "$isp_file"
+    [ -n "$ipv4_addr" ] && printf "IPV4_ADDRESS=\"%s\"\n" "$ipv4_addr" >> "$isp_file"
+    [ -n "$ipv6_addr" ] && printf "IPV6_ADDRESS=\"%s\"\n" "$ipv6_addr" >> "$isp_file"
+    [ -n "$aftr_address" ] && printf "AFTR_ADDRESS=\"%s\"\n" "$aftr_address" >> "$isp_file"
+    [ "$is_dslite" = "1" ] && printf "IS_DSLITE=\"%s\"\n" "$is_dslite" >> "$isp_file"
     
     debug_log "ISP detection result saved to $isp_file"
     
     # スピナー停止と結果表示
     if type stop_spinner >/dev/null 2>&1; then
         if [ "$provider" != "unknown" ]; then
-            if type get_message >/dev/null 2>&1; then
-                stop_spinner "$(get_message "MSG_PROVIDER_INFO_SUCCESS")" "success"
-            else
-                stop_spinner "ISPを正常に判別しました" "success"
-            fi
+            stop_spinner "$(color green "$(get_message "MSG_PROVIDER_INFO_SUCCESS")")" "success"
         else
-            if type get_message >/dev/null 2>&1; then
-                stop_spinner "$(get_message "MSG_PROVIDER_INFO_FAILED")" "warning"
-            else
-                stop_spinner "ISPの判別に失敗しました" "warning"
-            fi
+            stop_spinner "$(color yellow "$(get_message "MSG_PROVIDER_INFO_FAILED")")" "warning"
         fi
     fi
     
@@ -428,55 +475,5 @@ detect_isp_type() {
     return 0
 }
 
-# ISP情報表示（シンプル版）- メッセージキーを使用するように修正
-display_isp_info() {
-    local provider="$1"
-    local display_name=""
-
-    echo "========= ISP判定結果 ========="
-    
-    # メッセージキーを使用（実装があれば）
-    if type get_message >/dev/null 2>&1; then
-        echo "$(get_message "MSG_ISP_INFO_SOURCE" "source=IPv6プレフィックス検出")"
-    else
-        echo "情報ソース: IPv6プレフィックス検出"
-    fi
-    
-    # プロバイダ名の日本語表示
-    case "$provider" in
-        mape_ocn)           display_name="MAP-E OCN" ;;
-        mape_v6plus)        display_name="SoftBank V6プラス" ;;
-        mape_ipv6option)    display_name="KDDI IPv6オプション" ;;
-        mape_nuro)          display_name="NURO光 MAP-E" ;;
-        mape_biglobe)       display_name="BIGLOBE IPv6" ;;
-        mape_jpne)          display_name="JPNE IPv6" ;;
-        mape_sonet)         display_name="So-net IPv6" ;;
-        mape_nifty)         display_name="@nifty IPv6" ;;
-        dslite_east_transix) display_name="NTT東日本 DS-Lite (transix)" ;;
-        dslite_west_transix) display_name="NTT西日本 DS-Lite (transix)" ;;
-        dslite_transix)     display_name="DS-Lite (transix)" ;;
-        dslite_xpass)       display_name="DS-Lite (xpass)" ;;
-        dslite_v6connect)   display_name="DS-Lite (v6connect)" ;;
-        dslite_east)        display_name="NTT東日本 DS-Lite" ;;
-        dslite_west)        display_name="NTT西日本 DS-Lite" ;;
-        dslite*)            display_name="DS-LITE" ;;
-        pppoe_ctc)          display_name="中部テレコム PPPoE" ;;
-        pppoe_iij)          display_name="IIJ PPPoE" ;;
-        overseas)           display_name="海外ISP" ;;
-        *)                  display_name="不明" ;;
-    esac
-    
-    # メッセージキーを使用（実装があれば）
-    if type get_message >/dev/null 2>&1; then
-        echo "$(get_message "MSG_ISP_TYPE" "type=$display_name")"
-    else
-        echo "接続タイプ: $display_name"
-    fi
-    
-    echo "==============================="
-}
-
 # メイン処理実行
-if [ "${0##*/}" = "detect_isp.sh" ]; then
-    detect_isp_type "$@"
-fi
+detect_isp_type "$@"
