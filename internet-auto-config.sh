@@ -372,7 +372,7 @@ display_isp_info() {
     esac
     
     # 接続タイプを表示
-    printf "%s\n" "$(color white "$(get_message "MSG_ISP_TYPE" "type=$display_name")")"
+    printf "%s %s\n" "$(color white "$(get_message "MSG_ISP_TYPE")")" "$display_name"
 }
 
 # IPv6アドレスからISPを判定し、結果をisp.chに書き込む
