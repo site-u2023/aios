@@ -22,7 +22,7 @@ PSID=0x35                           # MAP-E 用 PSID（必要に応じて設定�
 for cmd in ip curl jq dig python3; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "Error: Required command '$cmd' not found. Please install it." >&2
-    exit 1
+    return 1
   fi
 done
 
@@ -30,7 +30,7 @@ done
 LOCAL_IPV6=$(ip -6 addr show dev "$WAN_IFACE" scope global | awk '/inet6/ {print $2}' | awk -F'/' '{print $1}' | head -n1)
 if [ -z "$LOCAL_IPV6" ]; then
   echo "Error: Failed to get the global IPv6 address of the WAN interface ($WAN_IFACE)." >&2
-  exit 1
+  return 1
 fi
 echo "Obtained local IPv6 address: $LOCAL_IPV6"
 
@@ -39,7 +39,7 @@ echo "Obtained local IPv6 address: $LOCAL_IPV6"
 TXT_RECORD=$(dig +short TXT 4over6.info | sed -e 's/^"//' -e 's/"$//')
 if [ -z "$TXT_RECORD" ]; then
   echo "Error: Failed to get the TXT record of 4over6.info." >&2
-  exit 1
+  return 1
 fi
 echo "Obtained TXT record: $TXT_RECORD"
 
@@ -48,7 +48,7 @@ echo "Obtained TXT record: $TXT_RECORD"
 PROV_URL=$(echo "$TXT_RECORD" | awk '{for(i=1;i<=NF;i++){ if($i ~ /^url=/){split($i,a,"="); print a[2]}}}')
 if [ -z "$PROV_URL" ]; then
   echo "Error: Failed to extract the URL of the provisioning server from the TXT record." >&2
-  exit 1
+  return 1
 fi
 echo "Provisioning server URL: $PROV_URL"
 
@@ -57,7 +57,7 @@ echo "Provisioning server URL: $PROV_URL"
 PROV_RESPONSE=$(curl -s "$PROV_URL/config?vendorid=$VENDORID&product=$PRODUCT&version=$VERSION&capability=map_e")
 if [ -z "$PROV_RESPONSE" ]; then
   echo "Error: No response received from the provisioning server." >&2
-  exit 1
+  return 1
 fi
 echo "Response from the provisioning server:"
 echo "$PROV_RESPONSE"
@@ -67,7 +67,7 @@ echo "$PROV_RESPONSE"
 MAPE_JSON=$(echo "$PROV_RESPONSE" | jq -r '.map_e')
 if [ "$MAPE_JSON" = "null" ]; then
   echo "Error: The map_e parameter is not included in the provisioning response." >&2
-  exit 1
+  return 1
 fi
 
 BR_IPV6=$(echo "$MAPE_JSON" | jq -r '.br')
@@ -127,7 +127,7 @@ EOF
 
 if [ -z "$COMPUTED_IPV4" ]; then
   echo "Error: Failed to calculate the MAP-E client IPv4 address." >&2
-  exit 1
+  return 1
 fi
 
 echo "Calculated MAP-E client IPv4 address: $COMPUTED_IPV4"
@@ -142,4 +142,4 @@ echo "MAP-E tunnel interface mape0 is now enabled."
 
 #----- 完了 -----
 echo "MAP-E automatic connection process completed successfully."
-exit 0
+return 0
