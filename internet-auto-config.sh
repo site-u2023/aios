@@ -573,7 +573,7 @@ display_isp_info() {
     if [ "$source" = "cached" ]; then
         printf "%s\n" "$(color white "$(get_message "MSG_ISP_INFO_SOURCE" "source=Cache")")"
     else
-        printf "%s\n" "$(color white "$(get_message "MSG_ISP_INFO_SOURCE" "source=detected")")"
+        printf "%s\n" "$(color white "$(get_message "MSG_ISP_INFO_SOURCE" "source=Prefix")")"
     fi
     
     printf "%s\n" "$(color white "$(get_message "MSG_ISP_TYPE" "provider=$provider")")"
