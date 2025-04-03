@@ -9,7 +9,7 @@ en|MSG_UNDER_TEST=👽 Under test
 # internet-auto-config.sh
 # =======================
 en|MSG_PROVIDER_ISP_TYPE=Detecting ISP provider
-en|MSG_PROVIDER_INFO_SUCCES=ISP provider successfully identified
+en|MSG_PROVIDER_INFO_SUCCESS=ISP provider successfully identified
 en|MSG_PROVIDER_INFO_FAILED=Failed to identify ISP provider
 en|MSG_ISP_INFO_SOURCE=Information source{notr_colon_notr} {notr_source_notr}
 en|MSG_ISP_TYPE=Connection type{notr_colon_notr}
