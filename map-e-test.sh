@@ -1246,8 +1246,8 @@ mape_info() {
     dec3=$(printf "%d" "0x$hextet3" 2>/dev/null || echo 0)
     dec4=$(printf "%d" "0x$hextet4" 2>/dev/null || echo 0)
     
-    debug_log "DEBUG" "Extracted hextets: $hextet1:$hextet2:$hextet3:$hextet4"
-    debug_log "DEBUG" "Decimal values: $dec1 $dec2 $dec3 $dec4"
+    echo "# Debug: Extracted hextets: $hextet1:$hextet2:$hextet3:$hextet4"
+    echo "# Debug: Decimal values: $dec1 $dec2 $dec3 $dec4"
     
     # プレフィックス値を計算
     prefix31_dec=$(( (dec1 * 65536) + (dec2 & 65534) ))
@@ -1257,35 +1257,41 @@ mape_info() {
     prefix31=$(printf "0x%x" $prefix31_dec)
     prefix38=$(printf "0x%x" $prefix38_dec)
     
-    debug_log "DEBUG" "Calculated prefix31=$prefix31, prefix38=$prefix38"
+    echo "# Debug: Calculated prefix31=$prefix31, prefix38=$prefix38"
     
     # プレフィックスに対応するIPv4ベースを取得
     ipv4_base=$(get_prefix38_20_base "$prefix38")
     if [ -n "$ipv4_base" ]; then
-        # prefix38_20のエントリに一致
+        # V6プラス/OCN（prefix38_20）
         ip6prefixlen=38
         psidlen=6
-        offset=4
+        offset=6
+        ealen=26
+        ip4prefixlen=20
         ipv4_type="prefix38_20"
-        debug_log "DEBUG" "Found match in prefix38_20 mapping"
+        echo "# Debug: Found match in prefix38_20 mapping"
     else
         ipv4_base=$(get_prefix38_base "$prefix38")
         if [ -n "$ipv4_base" ]; then
-            # prefix38のエントリに一致
+            # JPNE（prefix38）
             ip6prefixlen=38
             psidlen=8
-            offset=4
+            offset=6
+            ealen=26
+            ip4prefixlen=18
             ipv4_type="prefix38"
-            debug_log "DEBUG" "Found match in prefix38 mapping"
+            echo "# Debug: Found match in prefix38 mapping"
         else
             ipv4_base=$(get_prefix31_base "$prefix31")
             if [ -n "$ipv4_base" ]; then
-                # prefix31のエントリに一致
+                # トランスウェア/IIJmio（prefix31）
                 ip6prefixlen=31
                 psidlen=8
-                offset=4
+                offset=6
+                ealen=33
+                ip4prefixlen=25
                 ipv4_type="prefix31"
-                debug_log "DEBUG" "Found match in prefix31 mapping"
+                echo "# Debug: Found match in prefix31 mapping"
             else
                 echo "未対応のプレフィックスです"
                 return 1
@@ -1293,11 +1299,7 @@ mape_info() {
         fi
     fi
     
-    # 他のパラメータを計算
-    ealen=$(( 64 - ip6prefixlen ))
-    ip4prefixlen=$(( 32 - (ealen - psidlen) ))
-    
-    debug_log "DEBUG" "ip6prefixlen=$ip6prefixlen, psidlen=$psidlen, ealen=$ealen, ip4prefixlen=$ip4prefixlen"
+    echo "# Debug: ip6prefixlen=$ip6prefixlen, psidlen=$psidlen, ealen=$ealen, ip4prefixlen=$ip4prefixlen, offset=$offset"
     
     # PSID計算
     if [ "$psidlen" = "6" ]; then
@@ -1309,7 +1311,7 @@ mape_info() {
         return 1
     fi
     
-    debug_log "DEBUG" "PSID=$psid (hex: $(printf "0x%x" $psid))"
+    echo "# Debug: PSID=$psid (hex: $(printf "0x%x" $psid))"
     
     # IPv4オクテットの計算
     IFS=',' read -r octet1 octet2 octet3 <<EOF
@@ -1325,13 +1327,13 @@ EOF
         octet3=$(( octet3 | ((dec3 & 0x0300) >> 8) ))
         octet4=$(( dec3 & 0x00ff ))
     elif [ "$ipv4_type" = "prefix31" ]; then
-        # トランスウェアのPrefix31マッピングロジック
+        # トランスウェア/IIJmioのPrefix31マッピングロジック
         octet2=$(( octet2 | (dec2 & 0x0001) ))
         octet3=$(( (dec3 & 0xff00) >> 8 ))
         octet4=$(( dec3 & 0x00ff ))
     fi
     
-    debug_log "DEBUG" "Adjusted octets: $octet1,$octet2,$octet3,$octet4"
+    echo "# Debug: Adjusted octets: $octet1,$octet2,$octet3,$octet4"
     
     # ブロードバンドルーターのアドレスを取得
     br_addr=$(get_br_addr "$prefix31")
@@ -1345,15 +1347,27 @@ EOF
     echo "  プレフィックス31: $prefix31"
     echo "  プレフィックス38: $prefix38"
     echo "MAP-E設定情報:"
-    echo "  プレフィックス長: $ip6prefixlen"
-    echo "  PSIDビット長: $psidlen"
+    echo "  IPv4アドレス: $ipv4"
+    echo "  IPv4プレフィックス長: $ip4prefixlen"
+    echo "  IPv6プレフィックス長: $ip6prefixlen"
     echo "  EA-bitsビット長: $ealen"
-    echo "  オフセット: $offset"
+    echo "  PSIDビット長: $psidlen"
+    echo "  PSIDオフセット: $offset"
     echo "抽出情報:"
     echo "  PSID値: $psid"
     echo "変換結果:"
-    echo "  IPv4アドレス: $ipv4"
     echo "  ブロードバンドルーター: $br_addr"
+    
+    # OpenWrt設定値
+    echo ""
+    echo "OpenWrt設定値:"
+    echo "  option ipaddr $ipv4"
+    echo "  option ip4prefixlen $ip4prefixlen"
+    echo "  option ip6prefix $new_ip6_prefix"
+    echo "  option ip6prefixlen $ip6prefixlen"
+    echo "  option ealen $ealen"
+    echo "  option psidlen $psidlen"
+    echo "  option offset $offset"
     
     # 利用可能なポート範囲の計算
     max_port_blocks=$(( 1 << offset ))
