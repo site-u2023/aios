@@ -70,9 +70,9 @@ get_address() {
                 debug_log "DEBUG" "Trying service: $ip_service"
                 
                 if [ "$ip_service" = "$cloudflare" ]; then
-                    ipv4_addr=$($BASE_WGET -$iptype -T "$timeout" -O- "https://$ip_service" 2>/dev/null | grep "ip=" | cut -d= -f2)
+                    ipv4_addr=$($BASE_WGET -$iptype -T "$timeout" -O- "http://$ip_service" 2>/dev/null | grep "ip=" | cut -d= -f2)
                 else
-                    ipv4_addr=$($BASE_WGET -$iptype -T "$timeout" -O- "https://$ip_service" 2>/dev/null)
+                    ipv4_addr=$($BASE_WGET -$iptype -T "$timeout" -O- "http://$ip_service" 2>/dev/null)
                 fi
                 
                 if [ -n "$ipv4_addr" ]; then
@@ -92,9 +92,9 @@ get_address() {
                 debug_log "DEBUG" "Trying service: $ip_service"
                 
                 if [ "$ip_service" = "$cloudflare" ]; then
-                    ipv6_addr=$($BASE_WGET -$iptype -T "$timeout" -O- "https://$ip_service" 2>/dev/null | grep "ip=" | cut -d= -f2)
+                    ipv6_addr=$($BASE_WGET -$iptype -T "$timeout" -O- "http://$ip_service" 2>/dev/null | grep "ip=" | cut -d= -f2)
                 else
-                    ipv6_addr=$($BASE_WGET -$iptype -T "$timeout" -O- "https://$ip_service" 2>/dev/null)
+                    ipv6_addr=$($BASE_WGET -$iptype -T "$timeout" -O- "http://$ip_service" 2>/dev/null)
                 fi
                 
                 if [ -n "$ipv6_addr" ]; then
