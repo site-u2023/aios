@@ -138,6 +138,62 @@ extract_map_e_info() {
     echo "  PSID値: $psid"
     echo "  EA-bits: $ea_bits"
     echo "注意: IPv4アドレス計算にはISP固有のマッピングルールが必要です"
+
+        # IPv4アドレスの計算
+    ipv4=$(generate_ipv4_from_prefix "$prefix38" "$psid")
+    if [ $? -eq 0 ]; then
+        echo "変換結果:"
+        echo "  IPv4アドレス: $ipv4"
+    else
+        echo "注意: このプレフィックス($prefix38)とPSID($psid)の組み合わせに対応するIPv4アドレスが見つかりませんでした。"
+        echo "      ISP固有のマッピングルールを確認してください。"
+    fi
+}
+
+# プレフィックスとPSIDからIPv4アドレスを生成する関数
+generate_ipv4_from_prefix() {
+    local prefix="$1"
+    local psid="$2"
+    
+    echo "# Debug: Generating IPv4 address from prefix:$prefix, PSID:$psid"
+    
+    # prefix38からIPv4アドレスの前半部分を生成
+    case "$prefix" in
+        "0x2400415180")
+            echo "# Debug: Found matching prefix for 0x2400415180"
+            local base_ip="153.187.0"
+            echo "${base_ip}.${psid}"
+            return 0
+            ;;
+        "0x2400405000")
+            echo "# Debug: Found matching prefix for 0x2400405000"
+            local base_ip="153.240.0"
+            echo "${base_ip}.${psid}"
+            return 0
+            ;;
+        "0x2400405080")
+            echo "# Debug: Found matching prefix for 0x2400405080"
+            local base_ip="153.242.0"
+            echo "${base_ip}.${psid}"
+            return 0
+            ;;
+        # 必要に応じて他のプレフィックスを追加
+        *)
+            # 環境変数からの取得を試みる
+            local var_name="ruleprefix38_20_${prefix}"
+            local ip_base=$(eval echo \$${var_name})
+            
+            if [ -n "$ip_base" ]; then
+                echo "# Debug: Found base IP in environment variable: $ip_base"
+                local formatted_ip=$(echo "$ip_base" | tr ',' '.')
+                echo "${formatted_ip}.${psid}"
+                return 0
+            fi
+            
+            echo "# Debug: No mapping found for prefix $prefix"
+            return 1
+            ;;
+    esac
 }
 
 # 実行
