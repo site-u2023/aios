@@ -1319,7 +1319,7 @@ mape_info() {
     # プレフィックスに対応するMAP-E設定を取得
     map_e_info=$(get_base_mapping "$prefix_head")
     if [ -z "$map_e_info" ]; then
-        echo "未対応のプレフィックスです"
+        printf "%s\n" "$(color yellow "未対応のプレフィックスです $map_e_info")"
         return 1
     fi
     
@@ -1336,7 +1336,7 @@ EOF
     elif [ "$psidlen" = "8" ]; then
         psid=$(( (dec4 >> 8) & 0xff ))
     else
-        echo "エラー: 未対応のPSID長です: $psidlen"
+        printf "%s\n" "$(color yellow "エラー: 未対応のPSID長です: $psidlen")"
         return 1
     fi
     
