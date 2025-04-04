@@ -1218,15 +1218,79 @@ get_br_addr() {
     esac
 }
 
+# プレフィックスに対応するIPv4ベースアドレスとMAP-E設定を取得する関数
+get_base_mapping() {
+    local prefix_head="$1"
+    local provider_type=""
+    local ipv4_base=""
+    local ip6prefixlen=""
+    local psidlen=""
+    local offset=""
+    local ealen=""
+    local ip4prefixlen=""
+    
+    # echo "# Debug: Checking mapping for prefix head $prefix_head"
+    
+    case "$prefix_head" in
+        "2400:4151")
+            # V6プラス/OCN (2400:4151::/32)
+            provider_type="v6plus_ocn"
+            ipv4_base="153,187,0"
+            ip6prefixlen="38"
+            psidlen="6"
+            offset="6"
+            ealen="18"
+            ip4prefixlen="20"
+            ;;
+        "2400:4050")
+            # V6プラス/OCN (2400:4050::/32)
+            provider_type="v6plus_ocn"
+            ipv4_base="153,240,0"
+            ip6prefixlen="38"
+            psidlen="6"
+            offset="6"
+            ealen="18"
+            ip4prefixlen="20"
+            ;;
+        "2404:7a82")
+            # JPNE (2404:7a82::/32)
+            provider_type="jpne"
+            ipv4_base="125,196,208"
+            ip6prefixlen="38"
+            psidlen="8"
+            offset="6"
+            ealen="20"
+            ip4prefixlen="18"
+            ;;
+        "240b:00")
+            # トランスウェア/IIJmio (240b::/31)
+            provider_type="transware"
+            ipv4_base="106,72"
+            ip6prefixlen="31"
+            psidlen="8"
+            offset="6"
+            ealen="25"
+            ip4prefixlen="25"
+            ;;
+        *)
+            # 未知のプレフィックス
+            echo "# Debug: Unknown prefix pattern $prefix_head"
+            return 1
+            ;;
+    esac
+    
+    echo "$ipv4_base|$ip6prefixlen|$psidlen|$offset|$ealen|$ip4prefixlen"
+}
+
 # IPv6プレフィックスからMAP-E関連情報を抽出する関数
 mape_info() {
     local ip6_prefix_tmp hextet1 hextet2 hextet3 hextet4
-    local dec1 dec2 dec3 dec4 prefix31 prefix38
+    local dec1 dec2 dec3 dec4
     local ip6prefixlen psidlen offset ealen ip4prefixlen
-    local ipv4_base ipv4_type
+    local ipv4_base provider_type
     
     # ::を:0::に変換してフォーマットを統一
-    ip6_prefix_tmp=$(echo ${new_ip6_prefix} | sed 's/::/:0::/g')
+    ip6_prefix_tmp=$(echo "${new_ip6_prefix}" | sed 's/::/:0::/g')
     
     # 各16ビット（ヘクステット）を抽出
     hextet1=$(echo "$ip6_prefix_tmp" | cut -d':' -f1)
@@ -1249,39 +1313,14 @@ mape_info() {
     echo "# Debug: Extracted hextets: $hextet1:$hextet2:$hextet3:$hextet4"
     echo "# Debug: Decimal values: $dec1 $dec2 $dec3 $dec4"
     
-    # プレフィックス値を計算
-    prefix31_dec=$(( (dec1 * 65536) + (dec2 & 65534) ))
-    prefix38_dec=$(( (dec1 * 16777216) + (dec2 * 256) + ((dec3 & 64512) >> 8) ))
+    # プレフィックスパターンを識別
+    prefix_head="${hextet1}:${hextet2}"
     
-    # 16進数に変換
-    prefix31=$(printf "0x%x" $prefix31_dec)
-    prefix38=$(printf "0x%x" $prefix38_dec)
-    
-    echo "# Debug: Calculated prefix31=$prefix31, prefix38=$prefix38"
-    
-    # プレフィックスに対応するIPv4ベースとMAP-E設定を取得
-    map_e_info=$(get_prefix38_20_base "$prefix38")
-    if [ -n "$map_e_info" ]; then
-        # V6プラス/OCN（prefix38_20）
-        ipv4_type="prefix38_20"
-        echo "# Debug: Found match in prefix38_20 mapping"
-    else
-        map_e_info=$(get_prefix38_base "$prefix38")
-        if [ -n "$map_e_info" ]; then
-            # JPNE（prefix38）
-            ipv4_type="prefix38"
-            echo "# Debug: Found match in prefix38 mapping"
-        else
-            map_e_info=$(get_prefix31_base "$prefix31")
-            if [ -n "$map_e_info" ]; then
-                # トランスウェア/IIJmio（prefix31）
-                ipv4_type="prefix31"
-                echo "# Debug: Found match in prefix31 mapping"
-            else
-                echo "未対応のプレフィックスです"
-                return 1
-            fi
-        fi
+    # プレフィックスに対応するMAP-E設定を取得
+    map_e_info=$(get_base_mapping "$prefix_head")
+    if [ -z "$map_e_info" ]; then
+        echo "未対応のプレフィックスです"
+        return 1
     fi
     
     # MAP-E情報をパース
@@ -1308,25 +1347,47 @@ EOF
 $ipv4_base
 EOF
     
-    if [ "$ipv4_type" = "prefix38_20" ]; then
-        # V6プラス/OCNの計算ロジック
-        octet3=$(( octet3 | ((dec3 & 0x03c0) >> 6) ))
-        octet4=$(( ((dec3 & 0x003f) << 2) | ((dec4 & 0xc000) >> 14) ))
-    elif [ "$ipv4_type" = "prefix38" ]; then
-        # JPNEのPrefix38マッピングロジック
-        octet3=$(( octet3 | ((dec3 & 0x0300) >> 8) ))
-        octet4=$(( dec3 & 0x00ff ))
-    elif [ "$ipv4_type" = "prefix31" ]; then
-        # トランスウェア/IIJmioのPrefix31マッピングロジック
-        octet2=$(( octet2 | (dec2 & 0x0001) ))
-        octet3=$(( (dec3 & 0xff00) >> 8 ))
-        octet4=$(( dec3 & 0x00ff ))
-    fi
+    # プレフィックスタイプ判別
+    case "$prefix_head" in
+        "2400:4151"|"2400:4050")
+            # V6プラス/OCNの計算ロジック
+            octet3=$(( octet3 | ((dec3 & 0x03c0) >> 6) ))
+            octet4=$(( ((dec3 & 0x003f) << 2) | ((dec4 & 0xc000) >> 14) ))
+            provider_type="v6plus_ocn"
+            ;;
+        "2404:7a82")
+            # JPNEのPrefix38マッピングロジック
+            octet3=$(( octet3 | ((dec3 & 0x0300) >> 8) ))
+            octet4=$(( dec3 & 0x00ff ))
+            provider_type="jpne"
+            ;;
+        "240b:00")
+            # トランスウェア/IIJmioのPrefix31マッピングロジック
+            octet2=$(( octet2 | (dec2 & 0x0001) ))
+            octet3=$(( (dec3 & 0xff00) >> 8 ))
+            octet4=$(( dec3 & 0x00ff ))
+            provider_type="transware"
+            ;;
+    esac
     
+    echo "# Debug: Provider type: $provider_type"
     echo "# Debug: Adjusted octets: $octet1,$octet2,$octet3,$octet4"
     
     # ブロードバンドルーターのアドレスを取得
-    br_addr=$(get_br_addr "$prefix31")
+    case "$provider_type" in
+        "v6plus_ocn")
+            br_addr="2001:380:a120::9"
+            ;;
+        "jpne")
+            br_addr="2404:7a81::3"
+            ;;
+        "transware")
+            br_addr="240b:10:8000::1"
+            ;;
+        *)
+            br_addr="不明"
+            ;;
+    esac
     
     # 最終的なIPv4アドレスを構築
     ipv4="${octet1}.${octet2}.${octet3}.${octet4}"
@@ -1334,8 +1395,7 @@ EOF
     # 結果表示（日本語）
     echo "プレフィックス情報:"
     echo "  IPv6プレフィックス: $new_ip6_prefix"
-    echo "  プレフィックス31: $prefix31"
-    echo "  プレフィックス38: $prefix38"
+    echo "  プロバイダタイプ: $provider_type"
     echo "MAP-E設定情報:"
     echo "  IPv4アドレス: $ipv4"
     echo "  IPv4プレフィックス長: $ip4prefixlen"
@@ -1351,6 +1411,7 @@ EOF
     # OpenWrt設定値
     echo ""
     echo "OpenWrt設定値:"
+    echo "  option peeraddr $br_addr"
     echo "  option ipaddr $ipv4"
     echo "  option ip4prefixlen $ip4prefixlen"
     echo "  option ip6prefix $new_ip6_prefix"
@@ -1358,6 +1419,7 @@ EOF
     echo "  option ealen $ealen"
     echo "  option psidlen $psidlen"
     echo "  option offset $offset"
+    echo "  export LEGACY=1"
     
     # 利用可能なポート範囲の計算
     max_port_blocks=$(( 1 << offset ))
