@@ -1,14 +1,39 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.04-10-46"
+SCRIPT_VERSION="2025.04.04-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX準拠シェルスクリプト
-# 🚀 最終更新日: 2025-04-04
+# 🚀 最終更新日: 2025-03-14
 #
 # 🏷️ ライセンス: CC0 (パブリックドメイン)
 # 🎯 互換性: OpenWrt >= 19.07 (24.10.0でテスト済み)
-# =========================================================
+#
+# ⚠️ 重要な注意事項:
+# OpenWrtは**Almquistシェル(ash)**のみを使用し、
+# **Bourne-Again Shell(bash)**とは互換性がありません。
+#
+# 📢 POSIX準拠ガイドライン:
+# ✅ 条件には `[[` ではなく `[` を使用する
+# ✅ バックティック ``command`` ではなく `$(command)` を使用する
+# ✅ `let` の代わりに `$(( ))` を使用して算術演算を行う
+# ✅ 関数は `function` キーワードなしで `func_name() {}` と定義する
+# ✅ 連想配列は使用しない (`declare -A` はサポートされていない)
+# ✅ ヒアストリングは使用しない (`<<<` はサポートされていない)
+# ✅ `test` や `[[` で `-v` フラグを使用しない
+# ✅ `${var:0:3}` のようなbash特有の文字列操作を避ける
+# ✅ 配列はできるだけ避ける（インデックス配列でも問題が発生する可能性がある）
+# ✅ `read -p` の代わりに `printf` の後に `read` を使用する
+# ✅ フォーマットには `echo -e` ではなく `printf` を使用する
+# ✅ プロセス置換 `<()` や `>()` を避ける
+# ✅ 複雑なif/elifチェーンよりもcaseステートメントを優先する
+# ✅ コマンドの存在確認には `which` や `type` ではなく `command -v` を使用する
+# ✅ スクリプトをモジュール化し、小さな焦点を絞った関数を保持する
+# ✅ 複雑なtrapの代わりに単純なエラー処理を使用する
+# ✅ スクリプトはbashだけでなく、明示的にash/dashでテストする
+#
+# 🛠️ OpenWrt向けにシンプル、POSIX準拠、軽量に保つ！
+### =========================================================
 
 # OpenWrt関数をロード
 . /lib/functions.sh
@@ -21,7 +46,7 @@ network_find_wan6 NET_IF6
 network_get_ipaddr6 NET_ADDR6 "${NET_IF6}"
 new_ip6_prefix=${NET_ADDR6}
 
-echo "# Debug: Working with IPv6 prefix: $new_ip6_prefix"
+debug_log "DEBUG" "Working with IPv6 prefix: $new_ip6_prefix"
 
 # プレフィックスに対応するIPv4ベースアドレスを取得（prefix31用）
 get_prefix31_base() {
@@ -1221,8 +1246,8 @@ extract_map_e_info() {
     dec3=$(printf "%d" "0x$hextet3" 2>/dev/null || echo 0)
     dec4=$(printf "%d" "0x$hextet4" 2>/dev/null || echo 0)
     
-    echo "# Debug: Extracted hextets: $hextet1:$hextet2:$hextet3:$hextet4"
-    echo "# Debug: Decimal values: $dec1 $dec2 $dec3 $dec4"
+    debug_log "DEBUG" "Extracted hextets: $hextet1:$hextet2:$hextet3:$hextet4"
+    debug_log "DEBUG" "Decimal values: $dec1 $dec2 $dec3 $dec4"
     
     # プレフィックス値を計算
     prefix31_dec=$(( (dec1 * 65536) + (dec2 & 65534) ))
@@ -1232,7 +1257,7 @@ extract_map_e_info() {
     prefix31=$(printf "0x%x" $prefix31_dec)
     prefix38=$(printf "0x%x" $prefix38_dec)
     
-    echo "# Debug: Calculated prefix31=$prefix31, prefix38=$prefix38"
+    debug_log "DEBUG" "Calculated prefix31=$prefix31, prefix38=$prefix38"
     
     # プレフィックスに対応するIPv4ベースを取得
     ipv4_base=$(get_prefix38_20_base "$prefix38")
@@ -1242,7 +1267,7 @@ extract_map_e_info() {
         psidlen=6
         offset=4
         ipv4_type="prefix38_20"
-        echo "# Debug: Found match in prefix38_20 mapping"
+        debug_log "DEBUG" "Found match in prefix38_20 mapping"
     else
         ipv4_base=$(get_prefix38_base "$prefix38")
         if [ -n "$ipv4_base" ]; then
@@ -1251,7 +1276,7 @@ extract_map_e_info() {
             psidlen=8
             offset=4
             ipv4_type="prefix38"
-            echo "# Debug: Found match in prefix38 mapping"
+            debug_log "DEBUG" "Found match in prefix38 mapping"
         else
             ipv4_base=$(get_prefix31_base "$prefix31")
             if [ -n "$ipv4_base" ]; then
@@ -1260,7 +1285,7 @@ extract_map_e_info() {
                 psidlen=8
                 offset=4
                 ipv4_type="prefix31"
-                echo "# Debug: Found match in prefix31 mapping"
+                debug_log "DEBUG" "Found match in prefix31 mapping"
             else
                 echo "未対応のプレフィックスです"
                 return 1
@@ -1272,7 +1297,7 @@ extract_map_e_info() {
     ealen=$(( 64 - ip6prefixlen ))
     ip4prefixlen=$(( 32 - (ealen - psidlen) ))
     
-    echo "# Debug: ip6prefixlen=$ip6prefixlen, psidlen=$psidlen, ealen=$ealen, ip4prefixlen=$ip4prefixlen"
+    debug_log "DEBUG" "ip6prefixlen=$ip6prefixlen, psidlen=$psidlen, ealen=$ealen, ip4prefixlen=$ip4prefixlen"
     
     # PSID計算
     if [ "$psidlen" = "6" ]; then
@@ -1284,7 +1309,7 @@ extract_map_e_info() {
         return 1
     fi
     
-    echo "# Debug: PSID=$psid (hex: $(printf "0x%x" $psid))"
+    debug_log "DEBUG" "PSID=$psid (hex: $(printf "0x%x" $psid))"
     
     # IPv4オクテットの計算
     IFS=',' read -r octet1 octet2 octet3 <<EOF
@@ -1306,7 +1331,7 @@ EOF
         octet4=$(( dec3 & 0x00ff ))
     fi
     
-    echo "# Debug: Adjusted octets: $octet1,$octet2,$octet3,$octet4"
+    debug_log "DEBUG" "Adjusted octets: $octet1,$octet2,$octet3,$octet4"
     
     # ブロードバンドルーターのアドレスを取得
     br_addr=$(get_br_addr "$prefix31")
@@ -1356,6 +1381,4 @@ EOF
 }
 
 # 実行
-echo "=== MAP-E情報抽出を実行します ==="
 extract_map_e_info
-echo "=== 抽出処理完了 ==="
