@@ -353,13 +353,121 @@ detect_dslite_provider() {
     return 0
 }
 
-# ISP情報表示（拡張版）
+detect_mobile_from_cache() {
+    local ip_cache="$CACHE_DIR/ip_address.ch"
+    local provider_cache="$CACHE_DIR/mobile_provider.ch"
+    local ipv4_addr=""
+    local provider="unknown"
+    
+    # キャッシュが存在しなければアドレス取得を実行
+    if [ ! -f "$ip_cache" ]; then
+        debug_log "DEBUG" "No IP address cache found. Running get_address()"
+        get_address
+    fi
+    
+    # キャッシュからIPv4アドレスを読み込み
+    if [ -f "$ip_cache" ]; then
+        # シェルスクリプトから変数を読み込む
+        . "$ip_cache"
+        ipv4_addr="$IPV4_ADDR"
+        
+        if [ -n "$ipv4_addr" ]; then
+            debug_log "DEBUG" "Found IPv4 address in cache: $ipv4_addr"
+            provider=$(detect_mobile_provider "$ipv4_addr")
+            
+            # プロバイダー情報をキャッシュに保存（モバイルキャリアのみ）
+            if [ "$provider" != "unknown" ]; then
+                {
+                    echo "MOBILE_PROVIDER=\"$provider\""
+                    echo "MOBILE_UPDATE_TIME=\"$(date '+%Y-%m-%d %H:%M:%S')\""
+                } > "$provider_cache"
+                
+                debug_log "DEBUG" "Mobile carrier information saved to cache: $provider_cache"
+            else
+                debug_log "DEBUG" "No mobile carrier detected for this IPv4 address"
+            fi
+        else
+            debug_log "DEBUG" "No IPv4 address found in cache"
+        fi
+    else
+        debug_log "DEBUG" "Failed to read IP address cache"
+    fi
+    
+    echo "$provider"
+    return 0
+}
+
+detect_mobile_provider() {
+    local ipv4="$1"
+    local provider="unknown"
+    
+    if [ -z "$ipv4" ]; then
+        debug_log "DEBUG" "No IPv4 address provided for mobile carrier detection"
+        return 1
+    fi
+    
+    # IPv4アドレス範囲によるモバイルキャリア判定
+    debug_log "DEBUG" "Analyzing IPv4 address for mobile carrier: $ipv4"
+    
+    # モバイル通信事業者のIPアドレス範囲での判定
+    case "$ipv4" in
+        # NTTドコモ (docomo)
+        1.66.*|1.72.*|1.79.*|110.163.*|110.164.*)
+            provider="mobile_docomo"
+            debug_log "DEBUG" "Detected NTT docomo mobile connection"
+            ;;
+        # KDDI (au)
+        106.128.*|106.129.*|106.130.*|106.131.*|106.132.*|106.133.*)
+            provider="mobile_au"
+            debug_log "DEBUG" "Detected KDDI (au) mobile connection"
+            ;;
+        # ソフトバンク (SoftBank)
+        126.78.*|126.79.*|126.80.*|126.81.*|126.82.*|126.83.*|126.84.*|126.85.*|126.86.*|126.87.*|126.88.*|126.89.*)
+            provider="mobile_softbank"
+            debug_log "DEBUG" "Detected SoftBank mobile connection"
+            ;;
+        # 楽天モバイル (Rakuten)
+        133.106.*|133.107.*|133.108.*|133.109.*)
+            provider="mobile_rakuten"
+            debug_log "DEBUG" "Detected Rakuten mobile connection"
+            ;;
+        # ahamo (ドコモサブブランド)
+        1.73.*|1.74.*|1.75.*|1.76.*|1.77.*)
+            provider="mobile_ahamo"
+            debug_log "DEBUG" "Detected ahamo (docomo sub-brand) mobile connection"
+            ;;
+        # UQモバイル (KDDIサブブランド)
+        106.134.*|106.135.*|106.136.*|106.137.*|106.138.*|106.139.*)
+            provider="mobile_uq"
+            debug_log "DEBUG" "Detected UQ mobile (KDDI sub-brand) connection"
+            ;;
+        # Y!mobile (ソフトバンクサブブランド)
+        126.90.*|126.91.*|126.92.*|126.93.*|126.94.*|126.95.*)
+            provider="mobile_ymobile"
+            debug_log "DEBUG" "Detected Y!mobile (SoftBank sub-brand) connection"
+            ;;
+        # その他のモバイル通信と思われるIP範囲
+        10.*)
+            # プライベートIPを使う可能性が高いモバイル回線
+            provider="mobile_generic"
+            debug_log "DEBUG" "Detected generic mobile connection (private IP range)"
+            ;;
+        *)
+            provider="unknown"
+            debug_log "DEBUG" "No mobile carrier detected for this IPv4 address range"
+            ;;
+    esac
+    
+    echo "$provider"
+    return 0
+}
+
 display_isp_info() {
     local provider="$1"
     local display_name=""
    
     # 情報ソースを表示
-    printf "%s\n" "$(color white "$(get_message "MSG_ISP_INFO_SOURCE" "source=IPv6プレフィックス検出")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_ISP_INFO_SOURCE" "source=IPアドレス検出")")"
     
     debug_log "DEBUG" "Mapping provider ID to display name: $provider"
     
@@ -395,7 +503,34 @@ display_isp_info() {
         
         # PPPoE系サービス
         pppoe_ctc)          display_name="中部テレコム PPPoE" ;;
+        pppoe_commufa)      display_name="コミュファ光 PPPoE" ;;
         pppoe_iij)          display_name="IIJ PPPoE" ;;
+        pppoe_ocn)          display_name="OCN PPPoE" ;;
+        pppoe_biglobe)      display_name="BIGLOBE PPPoE" ;;
+        pppoe_sonet)        display_name="So-net PPPoE" ;;
+        pppoe_asahi)        display_name="ASAHIネット PPPoE" ;;
+        pppoe_ntt)          display_name="フレッツ光 PPPoE" ;;
+        pppoe_au_hikari)    display_name="auひかり PPPoE" ;;
+        pppoe_kddi)         display_name="KDDI PPPoE" ;;
+        pppoe_bbiq)         display_name="BBIQ PPPoE" ;;
+        pppoe_tepco)        display_name="TEPCO PPPoE" ;;
+        pppoe_power_company) display_name="電力系 PPPoE" ;;
+        pppoe_jcom)         display_name="J:COM PPPoE" ;;
+        pppoe_cable)        display_name="ケーブルTV PPPoE" ;;
+        pppoe_zaq)          display_name="ZAQ PPPoE" ;;
+        pppoe_tohoku_electric) display_name="東北電力 PPPoE" ;;
+        pppoe_*)            display_name="一般 PPPoE" ;;
+        
+        # モバイル通信
+        mobile_docomo)      display_name="NTTドコモ モバイル" ;;
+        mobile_au)          display_name="au（KDDI）モバイル" ;;
+        mobile_softbank)    display_name="ソフトバンク モバイル" ;;
+        mobile_rakuten)     display_name="楽天モバイル" ;;
+        mobile_ahamo)       display_name="ahamo（ドコモ系）" ;;
+        mobile_uq)          display_name="UQモバイル（KDDI系）" ;;
+        mobile_ymobile)     display_name="ワイモバイル（SB系）" ;;
+        mobile_generic)     display_name="モバイル通信" ;;
+        mobile_*)           display_name="モバイル通信" ;;
         
         # 海外ISP
         overseas)           display_name="海外ISP" ;;
@@ -435,19 +570,42 @@ detect_isp_type() {
         return 1
     fi
     
-    # IPv6アドレスがある場合はプロバイダ判定を試みる
+    # 検出順序： MAP-E → DS-Lite → PPPoE → モバイル
+    
+    # 1. MAP-E検出（IPv6アドレスが必要）
     if [ -n "$ipv6_addr" ]; then
-        # MAP-E判定を優先
+        debug_log "DEBUG" "Checking for MAP-E provider"
         provider=$(detect_mape_provider "$ipv6_addr")
-        
-        # MAP-Eでない場合はDS-Liteを試す
-        if [ "$provider" = "unknown" ]; then
-            provider=$(detect_dslite_provider "$ipv6_addr")
-        fi
-        
-        # 海外ISP判定（日本以外のIPアドレスか確認）
-        if [ "$provider" = "unknown" ] && [ -n "$ipv4_addr" ]; then
-            # IPアドレス国判定関数が実装されていると仮定
+        debug_log "DEBUG" "MAP-E detection result: $provider"
+    else
+        debug_log "DEBUG" "No IPv6 address, skipping MAP-E detection"
+    fi
+    
+    # 2. MAP-Eで検出できなかった場合、DS-Lite検出（IPv6アドレスが必要）
+    if [ "$provider" = "unknown" ] && [ -n "$ipv6_addr" ]; then
+        debug_log "DEBUG" "Checking for DS-Lite provider"
+        provider=$(detect_dslite_provider "$ipv6_addr")
+        debug_log "DEBUG" "DS-Lite detection result: $provider"
+    fi
+    
+    # 3. PPPoE検出（IPv4アドレスが必要）
+    if [ "$provider" = "unknown" ] && [ -n "$ipv4_addr" ]; then
+        debug_log "DEBUG" "Checking for PPPoE provider"
+        provider=$(detect_pppoe_provider "$ipv4_addr")
+        debug_log "DEBUG" "PPPoE detection result: $provider"
+    fi
+    
+    # 4. モバイル検出（IPv4アドレスが必要）
+    if [ "$provider" = "unknown" ] && [ -n "$ipv4_addr" ]; then
+        debug_log "DEBUG" "Checking for mobile carrier"
+        provider=$(detect_mobile_provider "$ipv4_addr")
+        debug_log "DEBUG" "Mobile carrier detection result: $provider"
+    fi
+    
+    # 5. 海外ISP判定（オプション）
+    if [ "$provider" = "unknown" ] && [ -n "$ipv4_addr" ]; then
+        # IPアドレス国判定関数がある場合の処理
+        if command -v detect_ip_country >/dev/null 2>&1; then
             is_japan=$(detect_ip_country "$ipv4_addr")
             if [ "$is_japan" = "false" ]; then
                 provider="overseas"
