@@ -1222,7 +1222,7 @@ get_br_addr() {
 mape_info() {
     local ip6_prefix_tmp hextet1 hextet2 hextet3 hextet4
     local dec1 dec2 dec3 dec4 prefix31 prefix38
-    local ip6prefixlen psidlen ealen ip4prefixlen offset
+    local ip6prefixlen psidlen offset ealen ip4prefixlen
     local ipv4_base ipv4_type
     
     # ::を:0::に変換してフォーマットを統一
@@ -1259,37 +1259,22 @@ mape_info() {
     
     echo "# Debug: Calculated prefix31=$prefix31, prefix38=$prefix38"
     
-    # プレフィックスに対応するIPv4ベースを取得
-    ipv4_base=$(get_prefix38_20_base "$prefix38")
-    if [ -n "$ipv4_base" ]; then
+    # プレフィックスに対応するIPv4ベースとMAP-E設定を取得
+    map_e_info=$(get_prefix38_20_base "$prefix38")
+    if [ -n "$map_e_info" ]; then
         # V6プラス/OCN（prefix38_20）
-        ip6prefixlen=38
-        psidlen=6
-        offset=6
-        ealen=26
-        ip4prefixlen=20
         ipv4_type="prefix38_20"
         echo "# Debug: Found match in prefix38_20 mapping"
     else
-        ipv4_base=$(get_prefix38_base "$prefix38")
-        if [ -n "$ipv4_base" ]; then
+        map_e_info=$(get_prefix38_base "$prefix38")
+        if [ -n "$map_e_info" ]; then
             # JPNE（prefix38）
-            ip6prefixlen=38
-            psidlen=8
-            offset=6
-            ealen=26
-            ip4prefixlen=18
             ipv4_type="prefix38"
             echo "# Debug: Found match in prefix38 mapping"
         else
-            ipv4_base=$(get_prefix31_base "$prefix31")
-            if [ -n "$ipv4_base" ]; then
+            map_e_info=$(get_prefix31_base "$prefix31")
+            if [ -n "$map_e_info" ]; then
                 # トランスウェア/IIJmio（prefix31）
-                ip6prefixlen=31
-                psidlen=8
-                offset=6
-                ealen=33
-                ip4prefixlen=25
                 ipv4_type="prefix31"
                 echo "# Debug: Found match in prefix31 mapping"
             else
@@ -1299,7 +1284,12 @@ mape_info() {
         fi
     fi
     
-    echo "# Debug: ip6prefixlen=$ip6prefixlen, psidlen=$psidlen, ealen=$ealen, ip4prefixlen=$ip4prefixlen, offset=$offset"
+    # MAP-E情報をパース
+    IFS='|' read -r ipv4_base ip6prefixlen psidlen offset ealen ip4prefixlen <<EOF
+$map_e_info
+EOF
+    
+    echo "# Debug: ip6prefixlen=$ip6prefixlen, psidlen=$psidlen, offset=$offset, ealen=$ealen, ip4prefixlen=$ip4prefixlen"
     
     # PSID計算
     if [ "$psidlen" = "6" ]; then
@@ -1341,7 +1331,7 @@ EOF
     # 最終的なIPv4アドレスを構築
     ipv4="${octet1}.${octet2}.${octet3}.${octet4}"
     
-    # 結果表示
+    # 結果表示（日本語）
     echo "プレフィックス情報:"
     echo "  IPv6プレフィックス: $new_ip6_prefix"
     echo "  プレフィックス31: $prefix31"
