@@ -1219,7 +1219,7 @@ get_br_addr() {
 }
 
 # IPv6プレフィックスからMAP-E関連情報を抽出する関数
-extract_map_e_info() {
+mape_info() {
     local ip6_prefix_tmp hextet1 hextet2 hextet3 hextet4
     local dec1 dec2 dec3 dec4 prefix31 prefix38
     local ip6prefixlen psidlen ealen ip4prefixlen offset
@@ -1380,5 +1380,97 @@ EOF
     echo "$port_ranges" | sed 's/\\n/\n/g'
 }
 
+# MAP-E設定を適用
+mape_config() {
+    local ipv6_prefix="$1"
+    local ipv4_prefix="$2"
+    local os_version=""
+
+    # map インストール
+    install_package map
+    
+    # MAP-E固定パラメータ（ローカル変数）
+    local br_address="2404:7a80::feed"
+    local ipv4_prefix="49.128.0.0/10"
+    local ea_length="14"
+    local psid_offset="4"
+    local psid_len="6"
+    local ipv6_prefix_length="28"
+    local wan_iface="wan"
+    local wan6_iface="wan6"
+    local mape_iface="mape"
+
+    local ipv6_prefix_clean=$(echo "$ipv6_prefix" | sed 's/\/.*$//')
+    local ipv4_prefix_len=$(echo "$ipv4_prefix" | cut -d/ -f2)
+    
+    printf "%s\n" "$(color green "OCN MAP-E設定をOpenWrt $major_version向けに適用します...")"
+    
+    # 設定のバックアップ作成
+    cp /etc/config/network /etc/config/network.mape.bak 2>/dev/null
+    cp /etc/config/firewall /etc/config/firewall.mape.bak 2>/dev/null
+    cp /etc/config/dhcp /etc/config/dhcp.mape.bak 2>/dev/null
+    
+    # WAN設定
+    uci set network.wan.auto='0'
+    
+    # MAP-E設定
+    uci set network.${mape_iface}=interface
+    uci set network.${mape_iface}.proto='map'
+    uci set network.${mape_iface}.maptype='map-e'
+    uci set network.${mape_iface}.peeraddr="$br_address"
+    uci set network.${mape_iface}.ipaddr="${ipv4_prefix%/*}"
+    uci set network.${mape_iface}.ip4prefixlen="$ipv4_prefix_len"
+    uci set network.${mape_iface}.ip6prefix="$ipv6_prefix_clean"
+    uci set network.${mape_iface}.ip6prefixlen="$ipv6_prefix_length"
+    uci set network.${mape_iface}.ealen="$ea_length"
+    uci set network.${mape_iface}.psidlen="$psid_len"
+    uci set network.${mape_iface}.offset="$psid_offset"
+    uci set network.${mape_iface}.tunlink="$wan6_iface"
+    uci set network.${mape_iface}.mtu='1460'
+    uci set network.${mape_iface}.encaplimit='ignore'
+
+    os_version=$(cat "${CACHE_DIR}/osversion.ch")
+    debug_log "DEBUG" "Detected OS version: $os_version"
+
+    if echo "$os_version" | grep -q "^19\."; then
+        debug_log "DEBUG" "Setting OpenWrt 19 specific options"
+        uci add_list network.${mape_iface}.tunlink='wan6'
+    else
+        debug_log "DEBUG" "Setting OpenWrt $os_version specific options"
+        uci set network.${mape_iface}.legacymap='1'
+        uci set dhcp.wan6.interface='wan6'
+        uci set dhcp.wan6.ignore='1'    
+    fi
+    
+    # DHCP設定
+    uci set dhcp.wan6=dhcp
+    uci set dhcp.wan6.master='1'
+    uci set dhcp.wan6.ra='relay'
+    uci set dhcp.wan6.dhcpv6='relay'
+    uci set dhcp.wan6.ndp='relay'
+    
+    # ファイアウォール設定
+    uci del_list firewall.@zone[1].network='wan' 2>/dev/null
+    uci add_list firewall.@zone[1].network="$mape_iface"
+    
+    # 設定の保存と適用
+    uci commit network
+    uci commit firewall
+    uci commit dhcp
+    
+    printf "%s\n" "$(color green "OCN MAP-E設定を適用しました")"
+    printf "%s: %s\n" "$(color cyan "IPv6プレフィックス")" "$ipv6_prefix"
+    printf "%s: %s\n" "$(color cyan "ブリッジルータアドレス")" "$br_address"
+    printf "%s: %s\n" "$(color cyan "IPv4プレフィックス")" "$ipv4_prefix"
+    printf "%s\n" "$(color yellow "設定を有効にするためシステムを再起動します...")"
+    
+    # 3秒待ってから再起動
+    sleep 3
+    reboot
+    
+    return 0
+}
+
 # 実行
-extract_map_e_info
+mape_info
+# mape_config
