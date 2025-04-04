@@ -65,49 +65,49 @@ get_address() {
     
     # IPv4取得処理 - Cloudflare
     debug_log "DEBUG" "Testing IPv4 via Cloudflare"
-    result=$(wget --no-check-certificate -q -4 -T "$timeout" -O- "https://$cloudflare" 2>/dev/null)
+    result=$($BASE_WGET -4 -T "$timeout" -O- "https://$cloudflare" 2>/dev/null)
     if [ -n "$result" ]; then
         ipv4_addr=$(echo "$result" | grep "ip=" | cut -d= -f2)
         debug_log "DEBUG" "Cloudflare IPv4 result: $ipv4_addr"
     fi
     
-    # IPv4取得処理 - icanhazip（Cloudflareで取得できない場合）
+    # IPv4取得処理 - icanhazip
     if [ -z "$ipv4_addr" ]; then
         debug_log "DEBUG" "Testing IPv4 via icanhazip"
-        ipv4_addr=$(wget --no-check-certificate -q -4 -T "$timeout" -O- "https://$icanhazip" 2>/dev/null)
+        ipv4_addr=$($BASE_WGET -4 -T "$timeout" -O- "https://$icanhazip" 2>/dev/null)
         debug_log "DEBUG" "icanhazip IPv4 result: $ipv4_addr"
     fi
     
-    # IPv4取得処理 - ifconfig.me（他の方法で取得できない場合）
+    # IPv4取得処理 - ifconfig.me
     if [ -z "$ipv4_addr" ]; then
         debug_log "DEBUG" "Testing IPv4 via ifconfig.me"
-        ipv4_addr=$(wget --no-check-certificate -q -4 -T "$timeout" -O- "https://$ifconfig" 2>/dev/null)
+        ipv4_addr=$($BASE_WGET -4 -T "$timeout" -O- "https://$ifconfig" 2>/dev/null)
         debug_log "DEBUG" "ifconfig.me IPv4 result: $ipv4_addr"
     fi
     
     # IPv6取得処理 - Cloudflare
     debug_log "DEBUG" "Testing IPv6 via Cloudflare"
-    result=$(wget --no-check-certificate -q -6 -T "$timeout" -O- "https://$cloudflare" 2>/dev/null)
+    result=$($BASE_WGET -6 -T "$timeout" -O- "https://$cloudflare" 2>/dev/null)
     if [ -n "$result" ]; then
         ipv6_addr=$(echo "$result" | grep "ip=" | cut -d= -f2)
         debug_log "DEBUG" "Cloudflare IPv6 result: $ipv6_addr"
     fi
     
-    # IPv6取得処理 - icanhazip（Cloudflareで取得できない場合）
+    # IPv6取得処理 - icanhazip
     if [ -z "$ipv6_addr" ]; then
         debug_log "DEBUG" "Testing IPv6 via icanhazip"
-        ipv6_addr=$(wget --no-check-certificate -q -6 -T "$timeout" -O- "https://$icanhazip" 2>/dev/null)
+        ipv6_addr=$($BASE_WGET -6 -T "$timeout" -O- "https://$icanhazip" 2>/dev/null)
         debug_log "DEBUG" "icanhazip IPv6 result: $ipv6_addr"
     fi
     
-    # IPv6取得処理 - ifconfig.me（他の方法で取得できない場合）
+    # IPv6取得処理 - ifconfig.me
     if [ -z "$ipv6_addr" ]; then
         debug_log "DEBUG" "Testing IPv6 via ifconfig.me"
-        ipv6_addr=$(wget --no-check-certificate -q -6 -T "$timeout" -O- "https://$ifconfig" 2>/dev/null)
+        ipv6_addr=$($BASE_WGET -6 -T "$timeout" -O- "https://$ifconfig" 2>/dev/null)
         debug_log "DEBUG" "ifconfig.me IPv6 result: $ipv6_addr"
     fi
     
-    # 結果のクリーニング（余分な改行を削除）
+    # 結果のクリーニング
     if [ -n "$ipv4_addr" ]; then
         ipv4_addr=$(echo "$ipv4_addr" | tr -d '\r\n')
         debug_log "DEBUG" "Cleaned IPv4 address: $ipv4_addr"
