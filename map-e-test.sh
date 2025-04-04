@@ -1229,7 +1229,7 @@ get_base_mapping() {
     local ealen=""
     local ip4prefixlen=""
     
-    # echo "# Debug: Checking mapping for prefix head $prefix_head"
+    # debug_log "DEBUG" "Checking mapping for prefix head $prefix_head"
     
     case "$prefix_head" in
         "2400:4151")
@@ -1274,7 +1274,7 @@ get_base_mapping() {
             ;;
         *)
             # 未知のプレフィックス
-            echo "# Debug: Unknown prefix pattern $prefix_head"
+            debug_log "DEBUG" "Unknown prefix pattern $prefix_head"
             return 1
             ;;
     esac
@@ -1310,8 +1310,8 @@ mape_info() {
     dec3=$(printf "%d" "0x$hextet3" 2>/dev/null || echo 0)
     dec4=$(printf "%d" "0x$hextet4" 2>/dev/null || echo 0)
     
-    echo "# Debug: Extracted hextets: $hextet1:$hextet2:$hextet3:$hextet4"
-    echo "# Debug: Decimal values: $dec1 $dec2 $dec3 $dec4"
+    debug_log "DEBUG" "Extracted hextets: $hextet1:$hextet2:$hextet3:$hextet4"
+    debug_log "DEBUG" "Decimal values: $dec1 $dec2 $dec3 $dec4"
     
     # プレフィックスパターンを識別
     prefix_head="${hextet1}:${hextet2}"
@@ -1328,7 +1328,7 @@ mape_info() {
 $map_e_info
 EOF
     
-    echo "# Debug: ip6prefixlen=$ip6prefixlen, psidlen=$psidlen, offset=$offset, ealen=$ealen, ip4prefixlen=$ip4prefixlen"
+    debug_log "DEBUG" "ip6prefixlen=$ip6prefixlen, psidlen=$psidlen, offset=$offset, ealen=$ealen, ip4prefixlen=$ip4prefixlen"
     
     # PSID計算
     if [ "$psidlen" = "6" ]; then
@@ -1340,7 +1340,7 @@ EOF
         return 1
     fi
     
-    echo "# Debug: PSID=$psid (hex: $(printf "0x%x" $psid))"
+    debug_log "DEBUG" "PSID=$psid (hex: $(printf "0x%x" $psid))"
     
     # IPv4オクテットの計算
     IFS=',' read -r octet1 octet2 octet3 <<EOF
@@ -1370,8 +1370,8 @@ EOF
             ;;
     esac
     
-    echo "# Debug: Provider type: $provider_type"
-    echo "# Debug: Adjusted octets: $octet1,$octet2,$octet3,$octet4"
+    debug_log "DEBUG" "Provider type: $provider_type"
+    debug_log "DEBUG" "Adjusted octets: $octet1,$octet2,$octet3,$octet4"
     
     # ブロードバンドルーターのアドレスを取得
     case "$provider_type" in
