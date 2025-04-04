@@ -22,7 +22,7 @@ MENU_INTERNET_AUTO download "internet-auto-config.sh" "chmod" "load"
 MENU_INTERNET_V&MIG download "v6mig-prov.sh" "chmod" "load"
 
 [MENU_INTERNET_MAPE]
-MENU_INTERNET_MAPE_CONFIG download "map-e.sh" "chmod" "load"
+MENU_INTERNET_MAPE_CONFIG download "map-e-test.sh" "chmod" "load"
 
 [MENU_INTERNET_DSLITE]
 MENU_INTERNET_DSLITE_CONFIG download "internet-dslite.sh" "chmod" "load"
