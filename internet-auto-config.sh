@@ -54,56 +54,69 @@ get_address() {
     # 変数初期化
     local ipv4_addr=""
     local ipv6_addr=""
-    local ip_service=""
+    local result=""
     local cloudflare="one.one.one.one/cdn-cgi/trace"
     local ifconfig="ifconfig.me/ip"
     local icanhazip="icanhazip.com"
     local timeout=5
     local ip_cache="$CACHE_DIR/ip_address.ch"
     
-    # IPv4取得処理
-    for iptype in "-4"; do
-        debug_log "DEBUG" "Attempting to retrieve IPv4 address"
-        
-        for ip_service in "$cloudflare" "$ifconfig" "$icanhazip"; do
-            if [ -z "$ipv4_addr" ]; then
-                debug_log "DEBUG" "Trying service: $ip_service"
-                
-                if [ "$ip_service" = "$cloudflare" ]; then
-                    ipv4_addr=$($BASE_WGET -$iptype -T "$timeout" -O- "http://$ip_service" 2>/dev/null | grep "ip=" | cut -d= -f2)
-                else
-                    ipv4_addr=$($BASE_WGET -$iptype -T "$timeout" -O- "http://$ip_service" 2>/dev/null)
-                fi
-                
-                if [ -n "$ipv4_addr" ]; then
-                    debug_log "DEBUG" "Successfully retrieved IPv4: $ipv4_addr"
-                    break
-                fi
-            fi
-        done
-    done
+    debug_log "DEBUG" "Starting IP address detection"
     
-    # IPv6取得処理
-    for iptype in "-6"; do
-        debug_log "DEBUG" "Attempting to retrieve IPv6 address"
-        
-        for ip_service in "$cloudflare" "$ifconfig" "$icanhazip"; do
-            if [ -z "$ipv6_addr" ]; then
-                debug_log "DEBUG" "Trying service: $ip_service"
-                
-                if [ "$ip_service" = "$cloudflare" ]; then
-                    ipv6_addr=$($BASE_WGET -$iptype -T "$timeout" -O- "http://$ip_service" 2>/dev/null | grep "ip=" | cut -d= -f2)
-                else
-                    ipv6_addr=$($BASE_WGET -$iptype -T "$timeout" -O- "http://$ip_service" 2>/dev/null)
-                fi
-                
-                if [ -n "$ipv6_addr" ]; then
-                    debug_log "DEBUG" "Successfully retrieved IPv6: $ipv6_addr"
-                    break
-                fi
-            fi
-        done
-    done
+    # IPv4取得処理 - Cloudflare
+    debug_log "DEBUG" "Testing IPv4 via Cloudflare"
+    result=$(wget --no-check-certificate -q -4 -T "$timeout" -O- "https://$cloudflare" 2>/dev/null)
+    if [ -n "$result" ]; then
+        ipv4_addr=$(echo "$result" | grep "ip=" | cut -d= -f2)
+        debug_log "DEBUG" "Cloudflare IPv4 result: $ipv4_addr"
+    fi
+    
+    # IPv4取得処理 - icanhazip（Cloudflareで取得できない場合）
+    if [ -z "$ipv4_addr" ]; then
+        debug_log "DEBUG" "Testing IPv4 via icanhazip"
+        ipv4_addr=$(wget --no-check-certificate -q -4 -T "$timeout" -O- "https://$icanhazip" 2>/dev/null)
+        debug_log "DEBUG" "icanhazip IPv4 result: $ipv4_addr"
+    fi
+    
+    # IPv4取得処理 - ifconfig.me（他の方法で取得できない場合）
+    if [ -z "$ipv4_addr" ]; then
+        debug_log "DEBUG" "Testing IPv4 via ifconfig.me"
+        ipv4_addr=$(wget --no-check-certificate -q -4 -T "$timeout" -O- "https://$ifconfig" 2>/dev/null)
+        debug_log "DEBUG" "ifconfig.me IPv4 result: $ipv4_addr"
+    fi
+    
+    # IPv6取得処理 - Cloudflare
+    debug_log "DEBUG" "Testing IPv6 via Cloudflare"
+    result=$(wget --no-check-certificate -q -6 -T "$timeout" -O- "https://$cloudflare" 2>/dev/null)
+    if [ -n "$result" ]; then
+        ipv6_addr=$(echo "$result" | grep "ip=" | cut -d= -f2)
+        debug_log "DEBUG" "Cloudflare IPv6 result: $ipv6_addr"
+    fi
+    
+    # IPv6取得処理 - icanhazip（Cloudflareで取得できない場合）
+    if [ -z "$ipv6_addr" ]; then
+        debug_log "DEBUG" "Testing IPv6 via icanhazip"
+        ipv6_addr=$(wget --no-check-certificate -q -6 -T "$timeout" -O- "https://$icanhazip" 2>/dev/null)
+        debug_log "DEBUG" "icanhazip IPv6 result: $ipv6_addr"
+    fi
+    
+    # IPv6取得処理 - ifconfig.me（他の方法で取得できない場合）
+    if [ -z "$ipv6_addr" ]; then
+        debug_log "DEBUG" "Testing IPv6 via ifconfig.me"
+        ipv6_addr=$(wget --no-check-certificate -q -6 -T "$timeout" -O- "https://$ifconfig" 2>/dev/null)
+        debug_log "DEBUG" "ifconfig.me IPv6 result: $ipv6_addr"
+    fi
+    
+    # 結果のクリーニング（余分な改行を削除）
+    if [ -n "$ipv4_addr" ]; then
+        ipv4_addr=$(echo "$ipv4_addr" | tr -d '\r\n')
+        debug_log "DEBUG" "Cleaned IPv4 address: $ipv4_addr"
+    fi
+    
+    if [ -n "$ipv6_addr" ]; then
+        ipv6_addr=$(echo "$ipv6_addr" | tr -d '\r\n')
+        debug_log "DEBUG" "Cleaned IPv6 address: $ipv6_addr"
+    fi
     
     # キャッシュファイルに結果を書き込み
     {
