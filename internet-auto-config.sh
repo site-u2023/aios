@@ -174,6 +174,7 @@ detect_mape_from_cache() {
     return 0
 }
 
+# 日本の主要MAP-E接続を正確に検出する関数
 detect_mape_provider() {
     local ipv6="$1"
     local provider="unknown"
@@ -188,48 +189,88 @@ detect_mape_provider() {
     prefix=$(echo "$ipv6" | sed -E 's/([0-9a-f]+:[0-9a-f]+).*/\1/i')
     debug_log "DEBUG" "Extracted IPv6 prefix: $prefix"
     
-    # MAP-Eプロバイダー判定（MAP-E技術を使用しているプロバイダーのみ）
+    # 正確なMAP-E対応ISP判定
     case "$prefix" in
-        # SoftBank（V6プラス）- MAP-E
+        # === OCNバーチャルConnect系（MAP-E） - NTT Com ===
         "2404:7a")
-            provider="mape_v6plus"
-            debug_log "DEBUG" "Detected SoftBank V6plus (MAP-E) from prefix"
+            provider="mape_ocn_virtual"
+            debug_log "DEBUG" "Detected OCN Virtual Connect MAP-E"
             ;;
-        # KDDI（IPv6オプション）- MAP-E
+            
+        # === V6プラス系（MAP-E） - JPIX ===
+        # SoftBank系
+        "240b:10"|"240b:11"|"240b:12"|"240b:13"|"240b:250"|"240b:251"|"240b:252"|"240b:253")
+            provider="mape_v6plus_softbank"
+            debug_log "DEBUG" "Detected V6plus/SoftBank MAP-E"
+            ;;
+            
+        # So-net系
+        "240b:10"|"240b:11"|"240b:12"|"240b:13")
+            provider="mape_v6plus_sonet"
+            debug_log "DEBUG" "Detected V6plus/So-net MAP-E"
+            ;;
+            
+        # @nifty系
+        "2001:f7")
+            provider="mape_v6plus_nifty"
+            debug_log "DEBUG" "Detected V6plus/@nifty MAP-E"
+            ;;
+            
+        # GMOとくとくBB系
+        "2400:09")
+            provider="mape_v6plus_gmobb"
+            debug_log "DEBUG" "Detected V6plus/GMO TokuToku BB MAP-E"
+            ;;
+            
+        # DMM光系
+        "2400:2c")
+            provider="mape_v6plus_dmm"
+            debug_log "DEBUG" "Detected V6plus/DMM MAP-E"
+            ;;
+            
+        # Tigers-net系
+        "2404:5200")
+            provider="mape_v6plus_tigers"
+            debug_log "DEBUG" "Detected V6plus/Tigers-net MAP-E"
+            ;;
+            
+        # === その他の主要MAP-E接続 ===
+        # KDDI IPv6オプション
         "2001:f9")
-            provider="mape_ipv6option"
-            debug_log "DEBUG" "Detected KDDI IPv6option (MAP-E) from prefix"
+            provider="mape_ipv6option_kddi"
+            debug_log "DEBUG" "Detected KDDI IPv6option MAP-E"
             ;;
-        # OCN - MAP-E
-        "2001:0c"|"2400:38")
-            provider="mape_ocn"
-            debug_log "DEBUG" "Detected OCN MAP-E from prefix"
-            ;;
-        # BIGLOBE - MAP-E
+            
+        # BIGLOBEのIPv6オプション
         "2001:26"|"2001:f6")
-            provider="mape_biglobe"
-            debug_log "DEBUG" "Detected BIGLOBE MAP-E from prefix"
+            provider="mape_ipv6option_biglobe"
+            debug_log "DEBUG" "Detected BIGLOBE IPv6option MAP-E"
             ;;
-        # NURO光 - MAP-E
+            
+        # NURO光
         "240d:00")
             provider="mape_nuro"
-            debug_log "DEBUG" "Detected NURO MAP-E from prefix"
+            debug_log "DEBUG" "Detected NURO MAP-E"
             ;;
-        # JPNE NGN - MAP-E
-        "2404:92")
-            provider="mape_jpne"
-            debug_log "DEBUG" "Detected JPNE MAP-E from prefix"
+            
+        # IIJmio（フレッツ系・MAP-E）
+        "2400:41")
+            provider="mape_iijmio"
+            debug_log "DEBUG" "Detected IIJmio MAP-E"
             ;;
-        # So-net - MAP-E
-        "240b:10"|"240b:11"|"240b:12"|"240b:13")
-            provider="mape_sonet"
-            debug_log "DEBUG" "Detected So-net MAP-E from prefix"
+            
+        # ぷらら光（フレッツ系・MAP-E）
+        "2400:31")
+            provider="mape_plala"
+            debug_log "DEBUG" "Detected Plala MAP-E"
             ;;
-        # @nifty - MAP-E
-        "2001:f7")
-            provider="mape_nifty"
-            debug_log "DEBUG" "Detected @nifty MAP-E from prefix"
+            
+        # hi-ho光（フレッツ系・MAP-E）
+        "2001:378")
+            provider="mape_hiho"
+            debug_log "DEBUG" "Detected hi-ho MAP-E"
             ;;
+            
         *)
             provider="unknown"
             debug_log "DEBUG" "No MAP-E provider detected for prefix: $prefix"
