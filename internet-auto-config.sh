@@ -353,6 +353,199 @@ detect_dslite_provider() {
     return 0
 }
 
+detect_pppoe_from_cache() {
+    local ip_cache="$CACHE_DIR/ip_address.ch"
+    local provider_cache="$CACHE_DIR/pppoe_provider.ch"
+    local ipv4_addr=""
+    local provider="unknown"
+    
+    # キャッシュが存在しなければアドレス取得を実行
+    if [ ! -f "$ip_cache" ]; then
+        debug_log "DEBUG" "No IP address cache found. Running get_address()"
+        get_address
+    fi
+    
+    # キャッシュからIPv4アドレスを読み込み
+    if [ -f "$ip_cache" ]; then
+        # シェルスクリプトから変数を読み込む
+        . "$ip_cache"
+        ipv4_addr="$IPV4_ADDR"
+        
+        if [ -n "$ipv4_addr" ]; then
+            debug_log "DEBUG" "Found IPv4 address in cache: $ipv4_addr"
+            provider=$(detect_pppoe_provider "$ipv4_addr")
+            
+            # プロバイダー情報をキャッシュに保存
+            if [ "$provider" != "unknown" ]; then
+                {
+                    echo "PPPOE_PROVIDER=\"$provider\""
+                    echo "PPPOE_UPDATE_TIME=\"$(date '+%Y-%m-%d %H:%M:%S')\""
+                } > "$provider_cache"
+                
+                debug_log "DEBUG" "PPPoE provider information saved to cache: $provider_cache"
+            else
+                debug_log "DEBUG" "No specific PPPoE provider detected for this IPv4 address"
+            fi
+        else
+            debug_log "DEBUG" "No IPv4 address found in cache"
+        fi
+    else
+        debug_log "DEBUG" "Failed to read IP address cache"
+    fi
+    
+    echo "$provider"
+    return 0
+}
+
+detect_pppoe_provider() {
+    local ipv4="$1"
+    local provider="unknown"
+    
+    if [ -z "$ipv4" ]; then
+        debug_log "DEBUG" "No IPv4 address provided for PPPoE ISP detection"
+        return 1
+    fi
+    
+    # IPv4アドレス範囲によるISP判定
+    # 先頭オクテットによる大まかな分類
+    local first_octet
+    first_octet=$(echo "$ipv4" | cut -d. -f1)
+    
+    debug_log "DEBUG" "Analyzing IPv4 address: $ipv4 (first octet: $first_octet)"
+    
+    # まず大まかなIPv4範囲で判定
+    case "$first_octet" in
+        60)
+            # J:COMなどケーブルTV系
+            case "$ipv4" in
+                60.33.*|60.34.*|60.112.*|60.116.*)
+                    provider="pppoe_jcom"
+                    debug_log "DEBUG" "Detected J:COM cable PPPoE connection"
+                    ;;
+                60.236.*|60.237.*)
+                    provider="pppoe_cnci"
+                    debug_log "DEBUG" "Detected CNCI cable PPPoE connection"
+                    ;;
+                *)
+                    provider="pppoe_cable"
+                    debug_log "DEBUG" "Detected generic cable TV PPPoE connection"
+                    ;;
+            esac
+            ;;
+        61)
+            # 電力系ISP
+            case "$ipv4" in
+                61.7.*|61.8.*)
+                    provider="pppoe_tepco"
+                    debug_log "DEBUG" "Detected TEPCO (Tokyo Electric) PPPoE connection"
+                    ;;
+                61.119.*|61.120.*)
+                    provider="pppoe_energy"
+                    debug_log "DEBUG" "Detected energy company PPPoE connection"
+                    ;;
+                *)
+                    provider="pppoe_power_company"
+                    debug_log "DEBUG" "Detected power company ISP PPPoE connection"
+                    ;;
+            esac
+            ;;
+        101)
+            # KDDI系
+            provider="pppoe_kddi"
+            debug_log "DEBUG" "Detected KDDI PPPoE connection"
+            ;;
+        111)
+            # KDDI系(auひかり)
+            provider="pppoe_au_hikari"
+            debug_log "DEBUG" "Detected au Hikari PPPoE connection"
+            ;;
+        114|119)
+            # NTT系
+            provider="pppoe_ntt"
+            debug_log "DEBUG" "Detected NTT PPPoE connection"
+            ;;
+        118)
+            # BBIQ(九州電力系)
+            provider="pppoe_bbiq"
+            debug_log "DEBUG" "Detected BBIQ (Kyushu Electric) PPPoE connection"
+            ;;
+        183)
+            # 中部テレコム/コミュファ関連
+            case "$ipv4" in
+                183.177.*)
+                    provider="pppoe_commufa"
+                    debug_log "DEBUG" "Detected Commufa (CTC) PPPoE connection"
+                    ;;
+                *)
+                    provider="pppoe_ctc"
+                    debug_log "DEBUG" "Detected CTC PPPoE connection"
+                    ;;
+            esac
+            ;;
+        202)
+            # IIJ/ASAHIネット
+            case "$ipv4" in
+                202.232.*)
+                    provider="pppoe_iij"
+                    debug_log "DEBUG" "Detected IIJ PPPoE connection"
+                    ;;
+                202.222.*)
+                    provider="pppoe_asahi"
+                    debug_log "DEBUG" "Detected Asahi-net PPPoE connection"
+                    ;;
+            esac
+            ;;
+        203)
+            # ケーブルTV/地域系
+            case "$ipv4" in
+                203.139.*)
+                    provider="pppoe_cable_media"
+                    debug_log "DEBUG" "Detected cable TV media PPPoE connection"
+                    ;;
+                203.141.*)
+                    provider="pppoe_zaq"
+                    debug_log "DEBUG" "Detected ZAQ cable PPPoE connection"
+                    ;;
+            esac
+            ;;
+        210)
+            # OCN
+            provider="pppoe_ocn"
+            debug_log "DEBUG" "Detected OCN PPPoE connection"
+            ;;
+        218)
+            # 東北電力/コミュファ
+            case "$ipv4" in
+                218.222.*)
+                    provider="pppoe_commufa" 
+                    debug_log "DEBUG" "Detected Commufa PPPoE connection"
+                    ;;
+                218.30.*|218.31.*)
+                    provider="pppoe_tohoku_electric"
+                    debug_log "DEBUG" "Detected Tohoku Electric PPPoE connection"
+                    ;;
+            esac
+            ;;
+        219)
+            # BIGLOBE
+            provider="pppoe_biglobe"
+            debug_log "DEBUG" "Detected BIGLOBE PPPoE connection"
+            ;;
+        220)
+            # So-net
+            provider="pppoe_sonet"
+            debug_log "DEBUG" "Detected So-net PPPoE connection"
+            ;;
+        *)
+            provider="unknown"
+            debug_log "DEBUG" "Unknown ISP for IPv4 address range"
+            ;;
+    esac
+    
+    echo "$provider"
+    return 0
+}
+
 detect_mobile_from_cache() {
     local ip_cache="$CACHE_DIR/ip_address.ch"
     local provider_cache="$CACHE_DIR/mobile_provider.ch"
