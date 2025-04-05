@@ -1413,12 +1413,13 @@ EOF
     return 0
 }
 
-# MAP-E設定情報を表示する関数
+# MAP-E設定情報を表示する関数（修正版）
 mape_display() { 
     echo ""
     echo "プレフィックス情報:"
     echo "  IPv6プレフィックス: $NEW_IP6_PREFIX"
     echo "  CE IPv6アドレス: $CE_ADDR/64"
+    echo "  IPv4アドレス: $IPV4"
     echo "  PSID値(10進数): $PSID"
     
     echo ""
