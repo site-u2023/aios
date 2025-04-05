@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.05-01-03"
+SCRIPT_VERSION="2025.04.05-01-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX準拠シェルスクリプト
@@ -1430,13 +1430,18 @@ EOF
         CE_IPv6_PREFIX="$(printf "%x:%x::" $HEXTET2_0 $HEXTET2_1)"
     fi
     
-    # PEER ADDRの設定
+    # PEERADDRの設定 - 10進数を使用して比較
     PEERADDR=""
-    if [ "$PREFIX31" -ge 0x24047a80 ] && [ "$PREFIX31" -lt 0x24047a84 ]; then
+    # 0x24047a80 = 605254272, 0x24047a84 = 605254276
+    if [ "$PREFIX31" -ge 605254272 ] && [ "$PREFIX31" -lt 605254276 ]; then
         PEERADDR="2001:260:700:1::1:275"
-    elif [ "$PREFIX31" -ge 0x24047a84 ] && [ "$PREFIX31" -lt 0x24047a88 ]; then
+    # 0x24047a84 = 605254276, 0x24047a88 = 605254280
+    elif [ "$PREFIX31" -ge 605254276 ] && [ "$PREFIX31" -lt 605254280 ]; then
         PEERADDR="2001:260:700:1::1:276"
-    elif { [ "$PREFIX31" -ge 0x240b0010 ] && [ "$PREFIX31" -lt 0x240b0014 ]; } || { [ "$PREFIX31" -ge 0x240b0250 ] && [ "$PREFIX31" -lt 0x240b0254 ]; }; then
+    # 0x240b0010 = 605028368, 0x240b0014 = 605028372
+    # 0x240b0250 = 605028944, 0x240b0254 = 605028948
+    elif { [ "$PREFIX31" -ge 605028368 ] && [ "$PREFIX31" -lt 605028372 ]; } || \
+         { [ "$PREFIX31" -ge 605028944 ] && [ "$PREFIX31" -lt 605028948 ]; }; then
         PEERADDR="2404:9200:225:100::64"
     elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
         PEERADDR="2001:380:a120::9"
