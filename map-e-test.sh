@@ -1289,7 +1289,7 @@ EOF
 
     # ポート範囲の計算
     PORTS=""
-    AMAX=$(( $(( 1 << $OFFSET )) -1 ));
+    AMAX=$(( $(( 1 << $OFFSET )) -1 ))
     for A in $(seq 1 $AMAX); do
         local port=$(( $(( $A << $((16 - $OFFSET)) )) | $(( $PSID << $(( 16 - $OFFSET - $PSIDLEN )) )) ))
         PORTS="${PORTS}${port}-$(( $port + $(( $(( 1 << $(( 16 - $OFFSET - $PSIDLEN )) )) - 1 ))  ))"
@@ -1325,31 +1325,34 @@ EOF
         HEXTET[7]=$(($PSID << 8))
     fi
 
-    # CE情報の生成
-    CE=()
-    for i in 0 1 2 3; do
-        CE[$i]=$(printf %x ${HEXTET[$i]})
-    done
+    # CE情報の生成（POSIX準拠の方法）
+    CE_0=$(printf %x ${HEXTET[0]})
+    CE_1=$(printf %x ${HEXTET[1]})
+    CE_2=$(printf %x ${HEXTET[2]})
+    CE_3=$(printf %x ${HEXTET[3]})
+    debug_log "DEBUG" "Generated CE address components: $CE_0:$CE_1:$CE_2:$CE_3"
 
     # EALENとプレフィックス長の計算
     EALEN=$(( 56 - $IP6PREFIXLEN ))
     IP4PREFIXLEN=$(( 32 - $(($EALEN - $PSIDLEN))  ))
 
-    # IPv6プレフィックスの計算
-    IP6PREFIX=()
+    # IPv6プレフィックスの計算（POSIX準拠の方法）
     if [ $IP6PREFIXLEN -eq 38 ]; then
         local hextet2_0=${HEXTET[0]}
         local hextet2_1=${HEXTET[1]}
         local hextet2_2=$(( ${HEXTET[2]} & 0xfc00))
-        IP6PREFIX[0]=$(printf %x $hextet2_0)
-        IP6PREFIX[1]=$(printf %x $hextet2_1)
-        IP6PREFIX[2]=$(printf %x $hextet2_2)
+        IP6_0=$(printf %x $hextet2_0)
+        IP6_1=$(printf %x $hextet2_1)
+        IP6_2=$(printf %x $hextet2_2)
+        IP6PFX="${IP6_0}:${IP6_1}:${IP6_2}"
     elif [ $IP6PREFIXLEN -eq 31 ]; then
         local hextet2_0=${HEXTET[0]}
         local hextet2_1=$(( ${HEXTET[1]} & 0xfffe ))
-        IP6PREFIX[0]=$(printf %x $hextet2_0)
-        IP6PREFIX[1]=$(printf %x $hextet2_1)
+        IP6_0=$(printf %x $hextet2_0)
+        IP6_1=$(printf %x $hextet2_1)
+        IP6PFX="${IP6_0}:${IP6_1}"
     fi
+    debug_log "DEBUG" "Generated IPv6 prefix: $IP6PFX with length $IP6PREFIXLEN"
 
     # ブロードバンドルーターアドレスの判定（POSIX準拠の方法）
     local prefix31_hex_val=$(printf 0x%x $PREFIX31)
@@ -1369,18 +1372,12 @@ EOF
     else
         PEERADDR=""
     fi
+    debug_log "DEBUG" "Selected peer address: $PEERADDR"
 
     # 変数の生成
     IPADDR_ARRAY="$octet1,$octet2,$octet3,$octet4"
     IPV4="$octet1.$octet2.$octet3.$octet4"
-    IP6PFX=""
-    for i in $(seq 0 $((${#IP6PREFIX[@]}-1))); do
-        if [ $i -gt 0 ]; then
-            IP6PFX="${IP6PFX}:"
-        fi
-        IP6PFX="${IP6PFX}${IP6PREFIX[$i]}"
-    done
-    CE_ADDR="${CE[0]}:${CE[1]}:${CE[2]}:${CE[3]}"
+    CE_ADDR="${CE_0}:${CE_1}:${CE_2}:${CE_3}"
     BR=$PEERADDR
 
     return 0
