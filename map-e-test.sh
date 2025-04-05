@@ -1199,7 +1199,6 @@ mape_mold() {
     ip6_prefix_tmp="$(echo "${NEW_IP6_PREFIX/::/:0::}")"
 
     # IPv6プレフィックス解析(上位4 HEXTET取得)
-    # ↓ デバッグ追加
     debug_log "DEBUG" "NEW_IP6_PREFIX=${NEW_IP6_PREFIX}, ip6_prefix_tmp=${ip6_prefix_tmp}"
 
     if echo "$ip6_prefix_tmp" | grep -E '^([0-9a-f]{1,4}):([0-9a-f]{1,4}):([0-9a-f]{1,4}):([0-9a-f]{0,4})' >/dev/null; then
@@ -1225,18 +1224,16 @@ mape_mold() {
                 fi
             fi
         done
-        # ↓ デバッグ追加
         debug_log "DEBUG" "Parsed IPv6 prefix HEXTETs: HEXTET0=$HEXTET0, HEXTET1=$HEXTET1, HEXTET2=$HEXTET2, HEXTET3=$HEXTET3"
     else
         echo "$(get_message "prefix_not_recognized")"
         echo "$(get_message "direct_onu_connection")"
         echo "$(get_message "exiting")"
-        # ↓ デバッグ追加
         debug_log "ERROR" "Failed to parse IPv6 prefix in mape_mold()"
         return 1
     fi
 
-    # 必要パラメータ計算
+    # JavaScriptに合わせたパラメータ計算
     local h0_mul=$(( HEXTET0 * 65536 ))
     local h1_masked=$(( HEXTET1 & 65534 ))
     PREFIX31=$(( h0_mul + h1_masked ))
@@ -1251,7 +1248,7 @@ mape_mold() {
 
     # RFC, OFFSET の初期値設定 - JavaScriptソースと同じ値に設定
     RFC=false
-    OFFSET=6  # JavaScript: var offset = 6; に合わせる
+    OFFSET=6  # JavaScriptソースと同じ: var offset = 6;
     debug_log "DEBUG" "Set initial RFC=$RFC, OFFSET=$OFFSET"
 
     local prefix31_hex
@@ -1260,37 +1257,31 @@ mape_mold() {
     prefix38_hex="$(printf 0x%x "$PREFIX38")"
     debug_log "DEBUG" "prefix31_hex=$prefix31_hex, prefix38_hex=$prefix38_hex"
 
-    # ruleprefix判定ロジック例
+    # JavaScriptに合わせたruleprefix判定ロジック
     if [ -n "$(get_ruleprefix38_value "$prefix38_hex")" ]; then
         debug_log "DEBUG" "ruleprefix38 block triggered"
         local octet
         octet="$(get_ruleprefix38_value "$prefix38_hex")"
         
-        # ここで明示的に変数をクリア
-        local octet1="" octet2="" octet3=""
-        
-        # 明示的に変数読み取り処理
+        # JavaScriptのconcat()と同様の操作
+        local octet1 octet2 octet3
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
-        # ↓ DEBUG追加
         debug_log "DEBUG" "octet1=$octet1, octet2=$octet2, octet3=$octet3"
         
-        # octet3が空の場合の処理
-        if [ -z "$octet3" ]; then
-            debug_log "WARN" "octet3 is empty, setting to 0"
-            octet3=0
-        fi
-
-        local temp1=$(( HEXTET2 & 768 ))
+        # JavaScriptの処理に合わせる
+        # octet[2] |= (hextet[2] & 0x0300) >> 8;
+        # octet[3] =   hextet[2] & 0x00ff;
+        local temp1=$(( HEXTET2 & 768 ))  # 0x0300 = 768
         local temp2=$(( temp1 >> 8 ))
         octet3=$(( octet3 | temp2 ))
-        octet4=$(( HEXTET2 & 255 ))
+        octet4=$(( HEXTET2 & 255 ))      # 0x00ff = 255
 
         IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
         IP6PREFIXLEN=38
         PSIDLEN=8
-        OFFSET=4  # JavaScript: offset = 4; に合わせる
+        OFFSET=4  # offset = 4; と同じ
         debug_log "DEBUG" "Calculated IPADDR=$IPADDR, IP6PREFIXLEN=$IP6PREFIXLEN, PSIDLEN=$PSIDLEN, OFFSET=$OFFSET"
 
     elif [ -n "$(get_ruleprefix31_value "$prefix31_hex")" ]; then
@@ -1298,29 +1289,25 @@ EOF
         local octet
         octet="$(get_ruleprefix31_value "$prefix31_hex")"
         
-        # ここで明示的に変数をクリア
-        local octet1="" octet2=""
-        
-        # 明示的に変数読み取り処理
+        # JavaScriptのconcat()と同様の操作
+        local octet1 octet2
         IFS=',' read -r octet1 octet2 <<EOF
 $octet
 EOF
         debug_log "DEBUG" "octet1=$octet1, octet2=$octet2"
         
-        # octet2が空の場合の処理
-        if [ -z "$octet2" ]; then
-            debug_log "WARN" "octet2 is empty, setting to 0"
-            octet2=0
-        fi
-        
+        # JavaScriptの処理に合わせる
+        # octet[1] |= hextet[1] & 0x0001;
+        # octet[2] = (hextet[2] & 0xff00) >> 8;
+        # octet[3] =  hextet[2] & 0x00ff;
         octet2=$(( octet2 | (HEXTET1 & 1) ))
-        local temp1=$(( HEXTET2 & 65280 ))
-        local temp2m=$(( temp1 >> 8 ))
-        local temp3=$(( HEXTET2 & 255 ))
-        IPADDR="${octet1}.${octet2}.${temp2m}.${temp3}"
+        local octet3=$(( (HEXTET2 & 65280) >> 8 ))  # 0xff00 = 65280
+        local octet4=$(( HEXTET2 & 255 ))          # 0x00ff = 255
+
+        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
         IP6PREFIXLEN=31
         PSIDLEN=8
-        OFFSET=4  # JavaScript: offset = 4; に合わせる
+        OFFSET=4  # offset = 4; と同じ
         debug_log "DEBUG" "Calculated IPADDR=$IPADDR, IP6PREFIXLEN=$IP6PREFIXLEN, PSIDLEN=$PSIDLEN, OFFSET=$OFFSET"
 
     elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
@@ -1328,36 +1315,31 @@ EOF
         local octet
         octet="$(get_ruleprefix38_20_value "$prefix38_hex")"
         
-        # ここで明示的に変数をクリア
-        local octet1="" octet2="" octet3=""
-        
-        # 明示的に変数読み取り処理
+        # JavaScriptのconcat()と同様の操作
+        local octet1 octet2 octet3
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
         debug_log "DEBUG" "octet1=$octet1, octet2=$octet2, octet3=$octet3"
         
-        # octet3が空の場合の処理
-        if [ -z "$octet3" ]; then
-            debug_log "WARN" "octet3 is empty, setting to 0"
-            octet3=0
-        fi
-
-        local temp1=$(( HEXTET2 & 960 ))
+        # JavaScriptの処理に合わせる
+        # octet[2] |= (hextet[2] & 0x03c0) >> 6;
+        # octet[3] = ((hextet[2] & 0x003f) << 2) | ((hextet[3] & 0xc000) >> 14);
+        local temp1=$(( HEXTET2 & 960 ))       # 0x03c0 = 960
         local temp2=$(( temp1 >> 6 ))
         octet3=$(( octet3 | temp2 ))
         
-        local temp3=$(( HEXTET2 & 63 ))
+        local temp3=$(( HEXTET2 & 63 ))        # 0x003f = 63
         local temp4=$(( temp3 << 2 ))
-        local temp5=$(( HEXTET3 & 49152 ))
+        local temp5=$(( HEXTET3 & 49152 ))     # 0xc000 = 49152
         local temp6=$(( temp5 >> 14 ))
-        octet4=$(( temp4 | temp6 ))
+        local octet4=$(( temp4 | temp6 ))
 
         IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
         IP6PREFIXLEN=38
         PSIDLEN=6
-        # JavaScript では offset を変更していないため、明示的な変更を削除
-        debug_log "DEBUG" "Calculated IPADDR=$IPADDR, IP6PREFIXLEN=$IP6PREFIXLEN, PSIDLEN=$PSIDLEN, OFFSET=$OFFSET (unchanged)"
+        # JavaScriptでは offset を変更していないので、初期値(6)のままとする
+        debug_log "DEBUG" "Calculated IPADDR=$IPADDR, IP6PREFIXLEN=$IP6PREFIXLEN, PSIDLEN=$PSIDLEN, OFFSET=$OFFSET"
 
     else
         debug_log "ERROR" "No matching ruleprefix found in mape_mold()"
@@ -1365,48 +1347,40 @@ EOF
         return 1
     fi
 
-    # PSID計算
+    # PSID計算 - JavaScriptと完全に同じ
     debug_log "DEBUG" "HEXTET3=$HEXTET3 (0x$(printf '%x' $HEXTET3))"
     
     if [ "$PSIDLEN" -eq 8 ]; then
-        local mask=$((0xff00))
-        local masked_value=$(( HEXTET3 & mask ))
-        PSID=$(( masked_value >> 8 ))
-        debug_log "DEBUG" "PSID calculation: (HEXTET3 & 0xff00) >> 8 = ($HEXTET3 & $mask) >> 8 = $masked_value >> 8 = $PSID"
+        # var psid = (hextet[3] & 0xff00) >> 8;
+        PSID=$(( (HEXTET3 & 0xff00) >> 8 ))
+        debug_log "DEBUG" "PSID calculation: (HEXTET3 & 0xff00) >> 8 = $PSID"
     elif [ "$PSIDLEN" -eq 6 ]; then
-        local mask=$((0x3f00))
-        local masked_value=$(( HEXTET3 & mask ))
-        PSID=$(( masked_value >> 8 ))
-        debug_log "DEBUG" "PSID calculation: (HEXTET3 & 0x3f00) >> 8 = ($HEXTET3 & $mask) >> 8 = $masked_value >> 8 = $PSID"
+        # var psid = (hextet[3] & 0x3f00) >> 8;
+        PSID=$(( (HEXTET3 & 0x3f00) >> 8 ))
+        debug_log "DEBUG" "PSID calculation: (HEXTET3 & 0x3f00) >> 8 = $PSID"
     else
         PSID=0
         debug_log "DEBUG" "PSIDLEN=$PSIDLEN is neither 8 nor 6, PSID set to 0"
     fi
     debug_log "DEBUG" "Final PSID=$PSID for PSIDLEN=$PSIDLEN"
 
-    # ポート範囲計算
+    # ポート範囲計算 - JavaScriptと完全に同じ
     local AMAX=$(( (1 << OFFSET) - 1 ))
     debug_log "DEBUG" "AMAX calculation: (1 << $OFFSET) - 1 = $AMAX"
     
     PORTS=""
     local A
     for A in $(seq 1 "$AMAX"); do
+        # var port = (A << (16 - offset)) | (psid << (16 - offset - psidlen));
         local shift_bits=$(( 16 - OFFSET ))
         local port_base=$(( A << shift_bits ))
         local psid_shift=$(( 16 - OFFSET - PSIDLEN ))
-        
-        # psid_shiftが負の値になる場合の対策
-        if [ "$psid_shift" -lt 0 ]; then
-            debug_log "WARN" "psid_shift calculated as $psid_shift (negative), forcing to 0"
-            psid_shift=0
-        fi
-        
         local psid_part=$(( PSID << psid_shift ))
         local port=$(( port_base | psid_part ))
         local port_range_size=$(( 1 << psid_shift ))
         local port_end=$(( port + port_range_size - 1 ))
 
-        # 初回イテレーションでは詳細なデバッグ情報を出力
+        # 最初の反復で詳細なデバッグ情報を出力
         if [ "$A" -eq 1 ]; then
             debug_log "DEBUG" "Port calculation details (first iteration):"
             debug_log "DEBUG" "  shift_bits = 16 - $OFFSET = $shift_bits"
@@ -1418,8 +1392,10 @@ EOF
             debug_log "DEBUG" "  port_end = $port + $port_range_size - 1 = $port_end"
         fi
 
+        # ports += port + "-" + (port + (1 << (16 - offset - psidlen)) - 1);
         PORTS="${PORTS}${port}-${port_end}"
         if [ "$A" -lt "$AMAX" ]; then
+            # ports += (A % 3) ? " " : "\n";
             if [ $(( A % 3 )) -eq 0 ]; then
                 PORTS="${PORTS}\\n"
             else
@@ -1429,17 +1405,41 @@ EOF
     done
     debug_log "DEBUG" "Calculated port range string with $AMAX ranges"
 
-    # CEアドレス生成
+    # CE IPv6アドレスとプレフィックス生成
+    # JavaScriptのealen、ip4prefixlen計算と同じ
     EALEN=$(( 56 - IP6PREFIXLEN ))
     IP4PREFIXLEN=$(( 32 - (EALEN - PSIDLEN) ))
     debug_log "DEBUG" "EALEN=$EALEN, IP4PREFIXLEN=$IP4PREFIXLEN"
-
-    if [ "$RFC" = true ]; then
-        debug_log "DEBUG" "CE address generation (RFC=true)"
-        # ...
-    else
-        debug_log "DEBUG" "CE address generation (RFC=false)"
-        # ...
+    
+    # IPv6プレフィックスの計算 - JavaScriptと同じロジック
+    local HEXTET2_0 HEXTET2_1 HEXTET2_2
+    if [ "$IP6PREFIXLEN" -eq 38 ]; then
+        HEXTET2_0=$HEXTET0
+        HEXTET2_1=$HEXTET1
+        HEXTET2_2=$(( HEXTET2 & 0xfc00 ))  # 0xfc00 = 64512
+    elif [ "$IP6PREFIXLEN" -eq 31 ]; then
+        HEXTET2_0=$HEXTET0
+        HEXTET2_1=$(( HEXTET1 & 0xfffe ))  # 0xfffe = 65534
+    fi
+    
+    # CE IPv6アドレスの生成
+    # JavaScriptの処理を簡略化
+    if [ "$IP6PREFIXLEN" -eq 38 ]; then
+        CE_IPv6_PREFIX="$(printf "%x:%x:%x::" $HEXTET2_0 $HEXTET2_1 $HEXTET2_2)"
+    elif [ "$IP6PREFIXLEN" -eq 31 ]; then
+        CE_IPv6_PREFIX="$(printf "%x:%x::" $HEXTET2_0 $HEXTET2_1)"
+    fi
+    
+    # PEER ADDRの設定
+    PEERADDR=""
+    if [ "$PREFIX31" -ge 0x24047a80 ] && [ "$PREFIX31" -lt 0x24047a84 ]; then
+        PEERADDR="2001:260:700:1::1:275"
+    elif [ "$PREFIX31" -ge 0x24047a84 ] && [ "$PREFIX31" -lt 0x24047a88 ]; then
+        PEERADDR="2001:260:700:1::1:276"
+    elif { [ "$PREFIX31" -ge 0x240b0010 ] && [ "$PREFIX31" -lt 0x240b0014 ]; } || { [ "$PREFIX31" -ge 0x240b0250 ] && [ "$PREFIX31" -lt 0x240b0254 ]; }; then
+        PEERADDR="2404:9200:225:100::64"
+    elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
+        PEERADDR="2001:380:a120::9"
     fi
 
     # ↓ デバッグ終了ログ
