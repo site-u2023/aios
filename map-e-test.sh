@@ -1238,75 +1238,74 @@ mape_mold() {
     OFFSET=6  # デフォルト値
     RFC=false
 
-# プレフィックス値に対応するデータを取得
-local prefix31_hex=$(printf 0x%x $PREFIX31)
-local prefix38_hex=$(printf 0x%x $PREFIX38)
-debug_log "DEBUG" "Processing prefix31=$prefix31_hex, prefix38=$prefix38_hex"
+    # プレフィックス値に対応するデータを取得
+    local prefix31_hex=$(printf 0x%x $PREFIX31)
+    local prefix38_hex=$(printf 0x%x $PREFIX38)
+    debug_log "DEBUG" "Processing prefix31=$prefix31_hex, prefix38=$prefix38_hex"
 
-# JavaScriptと同じ優先順位に修正:
-# 1. ruleprefix38の値を先にチェック
-if [ -n "$(get_ruleprefix38_value "$prefix38_hex")" ]; then
-    local octet="$(get_ruleprefix38_value "$prefix38_hex")"
-    debug_log "DEBUG" "Found match in ruleprefix38: $octet"
-    IFS=',' read -r octet1 octet2 octet3 <<EOF
+    # JavaScriptと同じ優先順序: ruleprefix38 → ruleprefix31 → ruleprefix38_20
+    if [ -n "$(get_ruleprefix38_value "$prefix38_hex")" ]; then
+        local octet="$(get_ruleprefix38_value "$prefix38_hex")"
+        debug_log "DEBUG" "Found match in ruleprefix38: $octet"
+        IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
-    # ビット操作を分割
-    local temp1=$(( HEXTET2 & 768 ))    # 0x0300
-    local temp2=$(( temp1 >> 8 ))
-    octet3=$(( octet3 | temp2 ))
-    
-    octet4=$(( HEXTET2 & 255 ))         # 0x00ff
-    
-    IPADDR="${octet1}.${octet2}.${octet3}.0"
-    IP6PREFIXLEN=38
-    PSIDLEN=8
-    OFFSET=4
-# 2. 次にruleprefix31の値を取得
-elif [ -n "$(get_ruleprefix31_value "$prefix31_hex")" ]; then
-    local octet="$(get_ruleprefix31_value "$prefix31_hex")"
-    debug_log "DEBUG" "Found match in ruleprefix31: $octet"
-    IFS=',' read -r octet1 octet2 <<EOF
+        # ビット操作を分割
+        local temp1=$(( HEXTET2 & 768 ))    # 0x0300
+        local temp2=$(( temp1 >> 8 ))
+        octet3=$(( octet3 | temp2 ))
+        
+        octet4=$(( HEXTET2 & 255 ))         # 0x00ff
+        
+        IPADDR="${octet1}.${octet2}.${octet3}.0"
+        IP6PREFIXLEN=38
+        PSIDLEN=8
+        OFFSET=4
+    # 次にruleprefix31の値を取得
+    elif [ -n "$(get_ruleprefix31_value "$prefix31_hex")" ]; then
+        local octet="$(get_ruleprefix31_value "$prefix31_hex")"
+        debug_log "DEBUG" "Found match in ruleprefix31: $octet"
+        IFS=',' read -r octet1 octet2 <<EOF
 $octet
 EOF
-    octet2=$(( octet2 | (HEXTET1 & 1) )) # 0x0001
-    
-    local temp1=$(( HEXTET2 & 65280 ))  # 0xff00
-    octet3=$(( temp1 >> 8 ))
-    
-    octet4=$(( HEXTET2 & 255 ))         # 0x00ff
-    
-    IPADDR="${octet1}.${octet2}.0.0"
-    IP6PREFIXLEN=31
-    PSIDLEN=8
-    OFFSET=4
-# 3. 最後にruleprefix38_20の値を取得
-elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
-    local octet="$(get_ruleprefix38_20_value "$prefix38_hex")"
-    debug_log "DEBUG" "Found match in ruleprefix38_20: $octet"
-    IFS=',' read -r octet1 octet2 octet3 <<EOF
+        octet2=$(( octet2 | (HEXTET1 & 1) )) # 0x0001
+        
+        local temp1=$(( HEXTET2 & 65280 ))  # 0xff00
+        octet3=$(( temp1 >> 8 ))
+        
+        octet4=$(( HEXTET2 & 255 ))         # 0x00ff
+        
+        IPADDR="${octet1}.${octet2}.0.0"
+        IP6PREFIXLEN=31
+        PSIDLEN=8
+        OFFSET=4
+    # 最後にruleprefix38_20の値を取得
+    elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
+        local octet="$(get_ruleprefix38_20_value "$prefix38_hex")"
+        debug_log "DEBUG" "Found match in ruleprefix38_20: $octet"
+        IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
-    # ビット操作を分割
-    local temp1=$(( HEXTET2 & 960 ))    # 0x03c0
-    local temp2=$(( temp1 >> 6 ))
-    octet3=$(( octet3 | temp2 ))
-    
-    local temp3=$(( HEXTET2 & 63 ))     # 0x003f
-    local temp4=$(( temp3 << 2 ))
-    local temp5=$(( HEXTET3 & 49152 ))  # 0xc000
-    local temp6=$(( temp5 >> 14 ))
-    octet4=$(( temp4 | temp6 ))
-    
-    # JSコードと同じbaseアドレス設定
-    IPADDR="${octet1}.${octet2}.0.0"
-    IP6PREFIXLEN=38
-    PSIDLEN=6
-    OFFSET=6  # ruleprefix38_20では offset=6 を使用
-else
-    echo "未対応のプレフィックス"
-    return 1
-fi
+        # ビット操作を分割
+        local temp1=$(( HEXTET2 & 960 ))    # 0x03c0
+        local temp2=$(( temp1 >> 6 ))
+        octet3=$(( octet3 | temp2 ))
+        
+        local temp3=$(( HEXTET2 & 63 ))     # 0x003f
+        local temp4=$(( temp3 << 2 ))
+        local temp5=$(( HEXTET3 & 49152 ))  # 0xc000
+        local temp6=$(( temp5 >> 14 ))
+        octet4=$(( temp4 | temp6 ))
+        
+        # 修正: JavaScriptと同様に octet3 も含める
+        IPADDR="${octet1}.${octet2}.${octet3}.0"
+        IP6PREFIXLEN=38
+        PSIDLEN=6
+        OFFSET=6  # ruleprefix38_20では offset=6 を使用
+    else
+        echo "未対応のプレフィックス"
+        return 1
+    fi
 
     # PSID計算
     if [ $PSIDLEN -eq 8 ]; then
