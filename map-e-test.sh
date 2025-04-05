@@ -1308,16 +1308,17 @@ EOF
         return 1
     fi
 
-    # PSIDの計算
+    # PSID計算部分の修正
     if [ $PSIDLEN -eq 8 ]; then
-        local temp=$(( HEXTET3 & 65280 ))    # 0xff00
-        PSID=$(( temp >> 8 ))
+        PSID=$(( (HEXTET3 & 65280) >> 8 ))
+        debug_log "DEBUG" "PSID calculation for PSIDLEN=8: HEXTET3=0x$(printf %x $HEXTET3), PSID=$PSID"
     elif [ $PSIDLEN -eq 6 ]; then
-        # 元の式を維持（テスト結果で確認済み）
-        # 元サイトと結果が一致する方法
-        PSID=$(( (HEXTET3 & 0x3f00) >> 8 ))
+        # 元サイトと一致する計算式 (0x3f00 >> 8)
+        # 10進数値で指定 (16128 = 0x3f00)
+        local temp=$(( HEXTET3 & 16128 ))
+        PSID=$(( temp >> 8 ))
+        debug_log "DEBUG" "PSID calculation for PSIDLEN=6: HEXTET3=0x$(printf %x $HEXTET3), mask=0x3f00, PSID=$PSID"
     fi
-    debug_log "DEBUG" "Calculated PSID=$PSID with PSIDLEN=$PSIDLEN"
 
     # ポート範囲の計算
     PORTS=""
