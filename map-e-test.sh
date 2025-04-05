@@ -1309,7 +1309,7 @@ EOF
         return 1
     fi
 
-    # PSID計算 - 元のJavaScriptとBash実装に合わせる
+    # PSID計算
     if [ $PSIDLEN -eq 8 ]; then
         PSID=$(( (HEXTET3 & 0xff00) >> 8 ))              # 0xff00 >> 8
         debug_log "DEBUG" "PSID calculation for PSIDLEN=8: (0xff00 >> 8) = $PSID"
