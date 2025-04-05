@@ -47,7 +47,7 @@ network_get_ipaddr6 NET_ADDR6 "${NET_IF6}"
 NEW_IP6_PREFIX=${NET_ADDR6}
 
 # プレフィックスに対応するIPv4ベースアドレスを取得（prefix31用）
-get_prefix31_base() {
+get_ruleprefix31_value() {
     local prefix="$1"
     
     case "$prefix" in
@@ -62,7 +62,7 @@ get_prefix31_base() {
 }
 
 # プレフィックスに対応するIPv4ベースアドレスを取得（prefix38用）
-get_prefix38_base() {
+get_ruleprefix38_value() {
     local prefix="$1"
 
     case "$prefix" in
@@ -755,7 +755,7 @@ get_prefix38_base() {
 }
 
 # プレフィックスに対応するIPv4ベースアドレスを取得（prefix38_20用）
-get_prefix38_20_base() {
+get_ruleprefix38_20_value() {
     local prefix="$1"
 
     case "$prefix" in
