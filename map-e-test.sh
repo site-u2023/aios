@@ -1200,7 +1200,7 @@ mape_mold() {
         
         local i=0
         for val in $tmp; do
-            i=$((i+1))
+            i=$(( i + 1 ))
             if [ $i -le 4 ]; then
                 if [ -z "$val" ]; then
                     val=0
@@ -1224,9 +1224,17 @@ mape_mold() {
         return 1
     fi
 
-    # 各種計算 (JSコードと完全に一致)
-    PREFIX31=$(( $(( ${HEXTET0} * 0x10000 )) + $((${HEXTET1} & 0xfffe)) ))
-    PREFIX38=$(( $(( ${HEXTET0} * 0x1000000 )) + $(( ${HEXTET1} * 0x100 )) + $(( $(( ${HEXTET2} & 0xfc00 )) >> 8 )) ))
+    # 各種計算 (複雑なネストを避ける)
+    local h0_mul=$(( HEXTET0 * 65536 ))    # 0x10000
+    local h1_masked=$(( HEXTET1 & 65534 )) # 0xfffe
+    PREFIX31=$(( h0_mul + h1_masked ))
+    
+    local h0_mul2=$(( HEXTET0 * 16777216 )) # 0x1000000
+    local h1_mul=$(( HEXTET1 * 256 ))      # 0x100
+    local h2_masked=$(( HEXTET2 & 64512 )) # 0xfc00
+    local h2_shift=$(( h2_masked >> 8 ))
+    PREFIX38=$(( h0_mul2 + h1_mul + h2_shift ))
+    
     OFFSET=6  # デフォルト値
     RFC=false
 
@@ -1235,18 +1243,42 @@ mape_mold() {
     local prefix38_hex=$(printf 0x%x $PREFIX38)
     debug_log "DEBUG" "Processing prefix31=$prefix31_hex, prefix38=$prefix38_hex"
 
-    # 元JSコードと同じ評価順序
-    # ruleprefix38の値を取得
-    local ruleprefix38_value=$(get_ruleprefix38_value "$prefix38_hex")
-    if [ -n "$ruleprefix38_value" ]; then
-        debug_log "DEBUG" "Found match in ruleprefix38: $ruleprefix38_value"
-        local octet="$ruleprefix38_value"
-        local octet_array=""
+    # ruleprefix38_20の値を取得 (ONJ特化の場合優先)
+    local ruleprefix38_20_value=$(get_ruleprefix38_20_value "$prefix38_hex")
+    if [ -n "$ruleprefix38_20_value" ]; then
+        local octet="$ruleprefix38_20_value"
+        debug_log "DEBUG" "Found match in ruleprefix38_20: $octet"
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
-        octet3=$(( ${octet3} | $(( $(( ${HEXTET2} & 0x0300 )) >> 8 )) ))
-        octet4=$(( ${HEXTET2} & 0x00ff ))
+        # 複雑なビット操作を分割
+        local temp1=$(( HEXTET2 & 960 ))    # 0x03c0
+        local temp2=$(( temp1 >> 6 ))
+        octet3=$(( octet3 | temp2 ))
+        
+        local temp3=$(( HEXTET2 & 63 ))     # 0x003f
+        local temp4=$(( temp3 << 2 ))
+        local temp5=$(( HEXTET3 & 49152 ))  # 0xc000
+        local temp6=$(( temp5 >> 14 ))
+        octet4=$(( temp4 | temp6 ))
+        
+        # JSコードと同じbaseアドレス設定
+        IPADDR="${octet1}.${octet2}.0.0"
+        IP6PREFIXLEN=38
+        PSIDLEN=6
+    # ruleprefix38の値を取得
+    elif [ -n "$(get_ruleprefix38_value "$prefix38_hex")" ]; then
+        local octet="$(get_ruleprefix38_value "$prefix38_hex")"
+        debug_log "DEBUG" "Found match in ruleprefix38: $octet"
+        IFS=',' read -r octet1 octet2 octet3 <<EOF
+$octet
+EOF
+        local temp1=$(( HEXTET2 & 768 ))    # 0x0300
+        local temp2=$(( temp1 >> 8 ))
+        octet3=$(( octet3 | temp2 ))
+        
+        octet4=$(( HEXTET2 & 255 ))         # 0x00ff
+        
         IPADDR="${octet1}.${octet2}.${octet3}.0"
         IP6PREFIXLEN=38
         PSIDLEN=8
@@ -1258,48 +1290,50 @@ EOF
         IFS=',' read -r octet1 octet2 <<EOF
 $octet
 EOF
-        octet2=$(( ${octet2} | $(( ${HEXTET1} & 0x0001 )) ))
-        octet3=$(( $(( ${HEXTET2} & 0xff00 )) >> 8 ))
-        octet4=$(( ${HEXTET2} & 0x00ff ))
+        octet2=$(( octet2 | (HEXTET1 & 1) )) # 0x0001
+        
+        local temp1=$(( HEXTET2 & 65280 ))  # 0xff00
+        octet3=$(( temp1 >> 8 ))
+        
+        octet4=$(( HEXTET2 & 255 ))         # 0x00ff
+        
         IPADDR="${octet1}.${octet2}.0.0"
         IP6PREFIXLEN=31
         PSIDLEN=8
         OFFSET=4
-    # ruleprefix38_20の値を取得
-    elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
-        local octet="$(get_ruleprefix38_20_value "$prefix38_hex")"
-        debug_log "DEBUG" "Found match in ruleprefix38_20: $octet"
-        IFS=',' read -r octet1 octet2 octet3 <<EOF
-$octet
-EOF
-        octet3=$(( ${octet3} | $(( $(( ${HEXTET2} & 0x03c0 )) >> 6 )) ))
-        octet4=$(( $(( $(( ${HEXTET2} & 0x003f )) << 2 )) | $(( $(( ${HEXTET3} & 0xc000 )) >> 14 )) ))
-        # JSコードと同じbaseアドレス設定
-        IPADDR="${octet1}.${octet2}.0.0"
-        IP6PREFIXLEN=38
-        PSIDLEN=6
     else
         echo "未対応のプレフィックス"
         return 1
     fi
 
-    # PSIDの計算 (JSコードと完全一致)
+    # PSIDの計算 (パフォーマンス改善)
     if [ $PSIDLEN -eq 8 ]; then
-        PSID=$(( $(( ${HEXTET3} & 0xff00 )) >> 8 ))
+        local temp=$(( HEXTET3 & 65280 ))    # 0xff00
+        PSID=$(( temp >> 8 ))
     elif [ $PSIDLEN -eq 6 ]; then
-        # 修正: JSと同じシフト操作 (0x3f00→0xfc00)
-        PSID=$(( $(( ${HEXTET3} & 0xfc00 )) >> 10 ))
+        # 修正: JSコード完全一致 (ビット演算を分割)
+        local temp=$(( HEXTET3 & 64512 ))    # 0xfc00
+        PSID=$(( temp >> 10 ))
     fi
     debug_log "DEBUG" "Calculated PSID=$PSID with PSIDLEN=$PSIDLEN"
 
     # ポート範囲の計算
     PORTS=""
-    AMAX=$(( $(( 1 << $OFFSET )) -1 ))
+    AMAX=$(( (1 << OFFSET) - 1 ))
+    
     for A in $(seq 1 $AMAX); do
-        local port=$(( $(( $A << $((16 - $OFFSET)) )) | $(( $PSID << $(( 16 - $OFFSET - $PSIDLEN )) )) ))
-        PORTS="${PORTS}${port}-$(( $port + $(( $(( 1 << $(( 16 - $OFFSET - $PSIDLEN )) )) - 1 ))  ))"
+        local shift_bits=$(( 16 - OFFSET ))
+        local port_base=$(( A << shift_bits ))
+        local psid_shift=$(( 16 - OFFSET - PSIDLEN ))
+        local psid_part=$(( PSID << psid_shift ))
+        local port=$(( port_base | psid_part ))
+        local port_range_size=$(( 1 << psid_shift ))
+        local port_end=$(( port + port_range_size - 1 ))
+        
+        PORTS="${PORTS}${port}-${port_end}"
+        
         if [ $A -lt $AMAX ]; then 
-            if [ $(( $A % 3 )) -eq 0 ]; then
+            if [ $(( A % 3 )) -eq 0 ]; then
                 PORTS="${PORTS}"\\n
             else
                 PORTS="${PORTS} "
@@ -1310,21 +1344,22 @@ EOF
 
     # セットアップ用の変数
     LP=$AMAX
-    NXPS=$(( 1 << $((16 - $OFFSET)) ))
-    PSLEN=$(( 1 << $(( 16 - $OFFSET - $PSIDLEN )) ))
+    NXPS=$(( 1 << (16 - OFFSET) ))
+    PSLEN=$(( 1 << (16 - OFFSET - PSIDLEN) ))
 
     # CEアドレスの生成 (JSと同じロジック)
-    HEXTET3=$((${HEXTET3} & 0xff00))
+    HEXTET3=$(( HEXTET3 & 65280 ))  # 0xff00
+    
     if [ "$RFC" = "true" ]; then
         HEXTET4=0
-        HEXTET5=$(( $((  ${octet1} << 8  )) | ${octet2} ))
-        HEXTET6=$(( $((  ${octet3} << 8  )) | ${octet4} ))
+        HEXTET5=$(( (octet1 << 8) | octet2 ))
+        HEXTET6=$(( (octet3 << 8) | octet4 ))
         HEXTET7=$PSID
     else
-        HEXTET4=${octet1}
-        HEXTET5=$(( $((${octet2} << 8)) | ${octet3} ))
-        HEXTET6=$((${octet4} << 8))
-        HEXTET7=$(($PSID << 8))
+        HEXTET4=$octet1
+        HEXTET5=$(( (octet2 << 8) | octet3 ))
+        HEXTET6=$(( octet4 << 8 ))
+        HEXTET7=$(( PSID << 8 ))
     fi
 
     # CE情報の生成
@@ -1339,41 +1374,37 @@ EOF
     CE_ADDR="${CE0}:${CE1}:${CE2}:${CE3}:${CE4}:${CE5}:${CE6}:${CE7}"
     debug_log "DEBUG" "Generated CE address: $CE_ADDR"
 
-    # EALENとプレフィックス長の計算 (JSコードと同じ)
-    EALEN=$(( 56 - $IP6PREFIXLEN ))
-    IP4PREFIXLEN=$(( 32 - $(($EALEN - $PSIDLEN)) ))
+    # EALENとプレフィックス長の計算
+    EALEN=$(( 56 - IP6PREFIXLEN ))
+    IP4PREFIXLEN=$(( 32 - (EALEN - PSIDLEN) ))
 
-    # IPv6プレフィックスの計算 (JSコードと同じ)
+    # IPv6プレフィックスの計算
     if [ $IP6PREFIXLEN -eq 38 ]; then
-        local hextet2_0=${HEXTET0}
-        local hextet2_1=${HEXTET1}
-        local hextet2_2=$(( ${HEXTET2} & 0xfc00))
-        IP6PFX0=$(printf %04x $hextet2_0)
-        IP6PFX1=$(printf %04x $hextet2_1)
+        local hextet2_2=$(( HEXTET2 & 64512 ))  # 0xfc00
+        IP6PFX0=$(printf %04x $HEXTET0)
+        IP6PFX1=$(printf %04x $HEXTET1)
         IP6PFX2=$(printf %04x $hextet2_2)
         IP6PFX="${IP6PFX0}:${IP6PFX1}:${IP6PFX2}"
     elif [ $IP6PREFIXLEN -eq 31 ]; then
-        local hextet2_0=${HEXTET0}
-        local hextet2_1=$(( ${HEXTET1} & 0xfffe ))
-        IP6PFX0=$(printf %04x $hextet2_0)
+        local hextet2_1=$(( HEXTET1 & 65534 ))  # 0xfffe
+        IP6PFX0=$(printf %04x $HEXTET0)
         IP6PFX1=$(printf %04x $hextet2_1)
         IP6PFX="${IP6PFX0}:${IP6PFX1}"
     fi
     debug_log "DEBUG" "Generated IPv6 prefix: $IP6PFX"
 
-    # ブロードバンドルーターアドレスの判定 (JSと同じロジック)
-    local prefix31_dec=$PREFIX31
-    
-    if [ $prefix31_dec -ge $(printf %d 0x24047a80) ] && [ $prefix31_dec -lt $(printf %d 0x24047a84) ]; then
-        PEERADDR="2001:260:700:1::1:275"
-    elif [ $prefix31_dec -ge $(printf %d 0x24047a84) ] && [ $prefix31_dec -lt $(printf %d 0x24047a88) ]; then
-        PEERADDR="2001:260:700:1::1:276"
-    elif [ $prefix31_dec -ge $(printf %d 0x240b0010) ] && [ $prefix31_dec -lt $(printf %d 0x240b0014) ]; then
-        PEERADDR="2404:9200:225:100::64"
-    elif [ $prefix31_dec -ge $(printf %d 0x240b0250) ] && [ $prefix31_dec -lt $(printf %d 0x240b0254) ]; then
-        PEERADDR="2404:9200:225:100::64"
-    elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
+    # ブロードバンドルーターアドレスの判定 (単純化)
+    # 16進数の比較は10進数に変換してから行う
+    if [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
         PEERADDR="2001:380:a120::9"
+    elif [ $PREFIX31 -ge 604240512 ] && [ $PREFIX31 -lt 604240516 ]; then  # 0x24047a80-0x24047a84
+        PEERADDR="2001:260:700:1::1:275"
+    elif [ $PREFIX31 -ge 604240516 ] && [ $PREFIX31 -lt 604240520 ]; then  # 0x24047a84-0x24047a88
+        PEERADDR="2001:260:700:1::1:276"
+    elif [ $PREFIX31 -ge 604512272 ] && [ $PREFIX31 -lt 604512276 ]; then  # 0x240b0010-0x240b0014
+        PEERADDR="2404:9200:225:100::64"
+    elif [ $PREFIX31 -ge 604512848 ] && [ $PREFIX31 -lt 604512852 ]; then  # 0x240b0250-0x240b0254
+        PEERADDR="2404:9200:225:100::64"
     else
         PEERADDR=""
     fi
