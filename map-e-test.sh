@@ -44,9 +44,7 @@ SCRIPT_VERSION="2025.04.04-00-00"
 network_flush_cache
 network_find_wan6 NET_IF6
 network_get_ipaddr6 NET_ADDR6 "${NET_IF6}"
-new_ip6_prefix=${NET_ADDR6}
-
-debug_log "DEBUG" "Working with IPv6 prefix: $new_ip6_prefix"
+NEW_IP6_PREFIX=${NET_ADDR6}
 
 # プレフィックスに対応するIPv4ベースアドレスを取得（prefix31用）
 get_prefix31_base() {
@@ -1193,350 +1191,346 @@ get_prefix38_20_base() {
     esac
 }
 
-# ブロードバンドルーターのアドレスを取得
-get_br_addr() {
-    local prefix="$1"
-    
-    case "$prefix" in
-        "0x24047a80"|"0x24047a82")
-            echo "2001:260:700:1::1:275"
-            ;;
-        "0x24047a84"|"0x24047a86")
-            echo "2001:260:700:1::1:276"
-            ;;
-        "0x240b0010"|"0x240b0250")
-            echo "2404:9200:225:100::64"
-            ;;
-        *)
-            # prefix_headが0x2400で始まる場合（V6プラス/OCN）
-            if [ "$(echo "$prefix" | cut -c 1-6)" = "0x2400" ]; then
-                echo "2001:380:a120::9"
-            else
-                echo ""
+# MAP-E情報取得と計算
+mape_mold() {
+    # map-e.shと同様の処理開始
+    local ip6_prefix_tmp=$(echo ${NEW_IP6_PREFIX/::/:0::})
+    if echo "$ip6_prefix_tmp" | grep -E '^([0-9a-f]{1,4}):([0-9a-f]{1,4}):([0-9a-f]{1,4}):([0-9a-f]{0,4})' >/dev/null; then
+        local tmp=$(echo ${ip6_prefix_tmp} | sed -e "s|:| |g")
+        
+        local i=0
+        for val in $tmp; do
+            i=$((i+1))
+            if [ $i -le 4 ]; then
+                if [ -z "$val" ]; then
+                    val=0
+                fi
+                if [ $i -eq 1 ]; then
+                    HEXTET[0]=$(printf %d 0x${val})
+                elif [ $i -eq 2 ]; then
+                    HEXTET[1]=$(printf %d 0x${val})
+                elif [ $i -eq 3 ]; then
+                    HEXTET[2]=$(printf %d 0x${val})
+                elif [ $i -eq 4 ]; then
+                    HEXTET[3]=$(printf %d 0x${val})
+                fi
             fi
-            ;;
-    esac
-}
-
-# プレフィックスに対応するIPv4ベースアドレスとMAP-E設定を取得する関数
-get_base_mapping() {
-    local prefix_head="$1"
-    local provider_type=""
-    local ipv4_base=""
-    local ip6prefixlen=""
-    local psidlen=""
-    local offset=""
-    local ealen=""
-    local ip4prefixlen=""
-    
-    # debug_log "DEBUG" "Checking mapping for prefix head $prefix_head"
-    
-    case "$prefix_head" in
-        "2400:4151")
-            # V6プラス/OCN (2400:4151::/32)
-            provider_type="v6plus_ocn"
-            ipv4_base="153,187,0"
-            ip6prefixlen="38"
-            psidlen="6"
-            offset="6"
-            ealen="18"
-            ip4prefixlen="20"
-            ;;
-        "2400:4050")
-            # V6プラス/OCN (2400:4050::/32)
-            provider_type="v6plus_ocn"
-            ipv4_base="153,240,0"
-            ip6prefixlen="38"
-            psidlen="6"
-            offset="6"
-            ealen="18"
-            ip4prefixlen="20"
-            ;;
-        "2404:7a82")
-            # JPNE (2404:7a82::/32)
-            provider_type="jpne"
-            ipv4_base="125,196,208"
-            ip6prefixlen="38"
-            psidlen="8"
-            offset="6"
-            ealen="20"
-            ip4prefixlen="18"
-            ;;
-        "240b:00")
-            # トランスウェア/IIJmio (240b::/31)
-            provider_type="transware"
-            ipv4_base="106,72"
-            ip6prefixlen="31"
-            psidlen="8"
-            offset="6"
-            ealen="25"
-            ip4prefixlen="25"
-            ;;
-        *)
-            # 未知のプレフィックス
-            debug_log "DEBUG" "Unknown prefix pattern $prefix_head"
-            return 1
-            ;;
-    esac
-    
-    echo "$ipv4_base|$ip6prefixlen|$psidlen|$offset|$ealen|$ip4prefixlen"
-}
-
-# IPv6プレフィックスからMAP-E関連情報を抽出する関数
-mape_info() {
-    local ip6_prefix_tmp hextet1 hextet2 hextet3 hextet4
-    local dec1 dec2 dec3 dec4
-    local ip6prefixlen psidlen offset ealen ip4prefixlen
-    local ipv4_base provider_type
-    
-    # ::を:0::に変換してフォーマットを統一
-    ip6_prefix_tmp=$(echo "${new_ip6_prefix}" | sed 's/::/:0::/g')
-    
-    # 各16ビット（ヘクステット）を抽出
-    hextet1=$(echo "$ip6_prefix_tmp" | cut -d':' -f1)
-    hextet2=$(echo "$ip6_prefix_tmp" | cut -d':' -f2)
-    hextet3=$(echo "$ip6_prefix_tmp" | cut -d':' -f3)
-    hextet4=$(echo "$ip6_prefix_tmp" | cut -d':' -f4)
-    
-    # 空の場合は0を設定
-    [ -z "$hextet1" ] && hextet1=0
-    [ -z "$hextet2" ] && hextet2=0
-    [ -z "$hextet3" ] && hextet3=0
-    [ -z "$hextet4" ] && hextet4=0
-    
-    # 10進数に変換
-    dec1=$(printf "%d" "0x$hextet1" 2>/dev/null || echo 0)
-    dec2=$(printf "%d" "0x$hextet2" 2>/dev/null || echo 0)
-    dec3=$(printf "%d" "0x$hextet3" 2>/dev/null || echo 0)
-    dec4=$(printf "%d" "0x$hextet4" 2>/dev/null || echo 0)
-    
-    debug_log "DEBUG" "Extracted hextets: $hextet1:$hextet2:$hextet3:$hextet4"
-    debug_log "DEBUG" "Decimal values: $dec1 $dec2 $dec3 $dec4"
-    
-    # プレフィックスパターンを識別
-    prefix_head="${hextet1}:${hextet2}"
-    
-    # プレフィックスに対応するMAP-E設定を取得
-    map_e_info=$(get_base_mapping "$prefix_head")
-    if [ -z "$map_e_info" ]; then
-        printf "%s\n" "$(color yellow "未対応のプレフィックスです $map_e_info")"
-        return 1
-    fi
-    
-    # MAP-E情報をパース
-    IFS='|' read -r ipv4_base ip6prefixlen psidlen offset ealen ip4prefixlen <<EOF
-$map_e_info
-EOF
-    
-    debug_log "DEBUG" "ip6prefixlen=$ip6prefixlen, psidlen=$psidlen, offset=$offset, ealen=$ealen, ip4prefixlen=$ip4prefixlen"
-    
-    # PSID計算
-    if [ "$psidlen" = "6" ]; then
-        psid=$(( (dec4 >> 8) & 0x3f ))
-    elif [ "$psidlen" = "8" ]; then
-        psid=$(( (dec4 >> 8) & 0xff ))
+        done
     else
-        printf "%s\n" "$(color yellow "エラー: 未対応のPSID長です: $psidlen")"
-        return 1
+        echo "プレフィックスを認識できません"
+        echo "ONUに直接接続していますか"
+        echo "終了します"
+        exit 1
     fi
-    
-    debug_log "DEBUG" "PSID=$psid (hex: $(printf "0x%x" $psid))"
-    
-    # IPv4オクテットの計算
-    IFS=',' read -r octet1 octet2 octet3 <<EOF
-$ipv4_base
+
+    # 各種計算
+    PREFIX31=$(( $(( ${HEXTET[0]} * 0x10000 )) + $((${HEXTET[1]} & 0xfffe)) ))
+    PREFIX38=$(( $(( ${HEXTET[0]} * 0x1000000 )) + $(( ${HEXTET[1]} * 0x100 )) + $(( $(( ${HEXTET[2]} & 0xfc00 )) >> 8 )) ))
+    OFFSET=6
+    RFC=false
+
+    # プレフィックス値に対応するデータを取得
+    local prefix31_hex=$(printf 0x%x $PREFIX31)
+    local prefix38_hex=$(printf 0x%x $PREFIX38)
+    debug_log "DEBUG" "Processing prefix31=$prefix31_hex, prefix38=$prefix38_hex"
+
+    # ruleprefix38の値を取得
+    local ruleprefix38_value=$(get_ruleprefix38_value "$prefix38_hex")
+    if [ -n "$ruleprefix38_value" ]; then
+        debug_log "DEBUG" "Found match in ruleprefix38: $ruleprefix38_value"
+        local octet="$ruleprefix38_value"
+        local octet_array=""
+        IFS=',' read -r octet1 octet2 octet3 <<EOF
+$octet
 EOF
-    
-    # プレフィックスタイプ判別
-    case "$prefix_head" in
-        "2400:4151"|"2400:4050")
-            # V6プラス/OCNの計算ロジック
-            octet3=$(( octet3 | ((dec3 & 0x03c0) >> 6) ))
-            octet4=$(( ((dec3 & 0x003f) << 2) | ((dec4 & 0xc000) >> 14) ))
-            provider_type="v6plus_ocn"
-            ;;
-        "2404:7a82")
-            # JPNEのPrefix38マッピングロジック
-            octet3=$(( octet3 | ((dec3 & 0x0300) >> 8) ))
-            octet4=$(( dec3 & 0x00ff ))
-            provider_type="jpne"
-            ;;
-        "240b:00")
-            # トランスウェア/IIJmioのPrefix31マッピングロジック
-            octet2=$(( octet2 | (dec2 & 0x0001) ))
-            octet3=$(( (dec3 & 0xff00) >> 8 ))
-            octet4=$(( dec3 & 0x00ff ))
-            provider_type="transware"
-            ;;
-    esac
-    
-    debug_log "DEBUG" "Provider type: $provider_type"
-    debug_log "DEBUG" "Adjusted octets: $octet1,$octet2,$octet3,$octet4"
-    
-    # ブロードバンドルーターのアドレスを取得
-    case "$provider_type" in
-        "v6plus_ocn")
-            br_addr="2001:380:a120::9"
-            ;;
-        "jpne")
-            br_addr="2404:7a81::3"
-            ;;
-        "transware")
-            br_addr="240b:10:8000::1"
-            ;;
-        *)
-            br_addr="不明"
-            ;;
-    esac
-    
-    # 最終的なIPv4アドレスを構築
-    ipv4="${octet1}.${octet2}.${octet3}.${octet4}"
-    
-    # 結果表示（日本語）
+        octet3=$(( ${octet3} | $(( $(( ${HEXTET[2]} & 0x0300 )) >> 8 )) ))
+        octet4=$(( ${HEXTET[2]} & 0x00ff ))
+        IPADDR="${octet1}.${octet2}.${octet3}.0"
+        IP6PREFIXLEN=38
+        PSIDLEN=8
+        OFFSET=4
+    # ruleprefix31の値を取得
+    elif [ -n "$(get_ruleprefix31_value "$prefix31_hex")" ]; then
+        local octet="$(get_ruleprefix31_value "$prefix31_hex")"
+        debug_log "DEBUG" "Found match in ruleprefix31: $octet"
+        IFS=',' read -r octet1 octet2 <<EOF
+$octet
+EOF
+        octet2=$(( ${octet2} | $(( ${HEXTET[1]} & 0x0001 )) ))
+        octet3=$(( $(( ${HEXTET[2]} & 0xff00 )) >> 8 ))
+        octet4=$(( ${HEXTET[2]} & 0x00ff ))
+        IPADDR="${octet1}.${octet2}.0.0"
+        IP6PREFIXLEN=31
+        PSIDLEN=8
+        OFFSET=4
+    # ruleprefix38_20の値を取得
+    elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
+        local octet="$(get_ruleprefix38_20_value "$prefix38_hex")"
+        debug_log "DEBUG" "Found match in ruleprefix38_20: $octet"
+        IFS=',' read -r octet1 octet2 octet3 <<EOF
+$octet
+EOF
+        octet3=$(( ${octet3} | $(( $(( ${HEXTET[2]} & 0x03c0 )) >> 6 )) ))
+        octet4=$(( $(( $(( ${HEXTET[2]} & 0x003f )) << 2 )) | $(( $(( ${HEXTET[3]} & 0xc000 )) >> 14 )) ))
+        IPADDR="${octet1}.${octet2}.${octet3}.0"
+        IP6PREFIXLEN=38
+        PSIDLEN=6
+    else
+        echo "未対応のプレフィックス"
+        exit 1
+    fi
+
+    # PSIDの計算
+    if [ $PSIDLEN -eq 8 ]; then
+        PSID=$(( $(( ${HEXTET[3]} & 0xff00 )) >> 8 ))
+    elif [ $PSIDLEN -eq 6 ]; then
+        PSID=$(( $(( ${HEXTET[3]} & 0x3f00 )) >> 8 ))
+    fi
+
+    # ポート範囲の計算
+    PORTS=""
+    AMAX=$(( $(( 1 << $OFFSET )) -1 ));
+    for A in $(seq 1 $AMAX); do
+        local port=$(( $(( $A << $((16 - $OFFSET)) )) | $(( $PSID << $(( 16 - $OFFSET - $PSIDLEN )) )) ))
+        PORTS="${PORTS}${port}-$(( $port + $(( $(( 1 << $(( 16 - $OFFSET - $PSIDLEN )) )) - 1 ))  ))"
+        if [ $A -lt $AMAX ]; then 
+            if [ $(( $A % 3 )) -eq 0 ]; then
+                PORTS="${PORTS}"\\n
+            else
+                PORTS="${PORTS} "
+            fi
+        fi
+    done
+
+    # セットアップ用の変数
+    LP=$AMAX
+    NXPS=$(( 1 << $((16 - $OFFSET)) ))
+    PSLEN=$(( 1 << $(( 16 - $OFFSET - $PSIDLEN )) ))
+
+    # /64の確認
+    if [ $(( ${HEXTET[3]} & 0xff )) -ne 0 ]; then
+        echo "入力値とCEとで/64が異なる"
+    fi
+
+    HEXTET[3]=$((${HEXTET[3]} & 0xff00))
+    if [ "$RFC" = "true" ]; then
+        HEXTET[4]=0
+        HEXTET[5]=$(( $((  ${octet1} << 8  )) | ${octet2} ))
+        HEXTET[6]=$(( $((  ${octet3} << 8  )) | ${octet4} ))
+        HEXTET[7]=$PSID
+    else
+        HEXTET[4]=${octet1}
+        HEXTET[5]=$(( $((${octet2} << 8)) | ${octet3} ))
+        HEXTET[6]=$((${octet4} << 8))
+        HEXTET[7]=$(($PSID << 8))
+    fi
+
+    # CE情報の生成
+    CE=()
+    for i in 0 1 2 3; do
+        CE[$i]=$(printf %x ${HEXTET[$i]})
+    done
+
+    # EALENとプレフィックス長の計算
+    EALEN=$(( 56 - $IP6PREFIXLEN ))
+    IP4PREFIXLEN=$(( 32 - $(($EALEN - $PSIDLEN))  ))
+
+    # IPv6プレフィックスの計算
+    IP6PREFIX=()
+    if [ $IP6PREFIXLEN -eq 38 ]; then
+        local hextet2_0=${HEXTET[0]}
+        local hextet2_1=${HEXTET[1]}
+        local hextet2_2=$(( ${HEXTET[2]} & 0xfc00))
+        IP6PREFIX[0]=$(printf %x $hextet2_0)
+        IP6PREFIX[1]=$(printf %x $hextet2_1)
+        IP6PREFIX[2]=$(printf %x $hextet2_2)
+    elif [ $IP6PREFIXLEN -eq 31 ]; then
+        local hextet2_0=${HEXTET[0]}
+        local hextet2_1=$(( ${HEXTET[1]} & 0xfffe ))
+        IP6PREFIX[0]=$(printf %x $hextet2_0)
+        IP6PREFIX[1]=$(printf %x $hextet2_1)
+    fi
+
+    # ブロードバンドルーターアドレスの判定（POSIX準拠の方法）
+    local prefix31_hex_val=$(printf 0x%x $PREFIX31)
+    local prefix31_dec=$(printf %d $prefix31_hex_val)
+    PEERADDR=""
+
+    if [ $prefix31_dec -ge $(printf %d 0x24047a80) ] && [ $prefix31_dec -lt $(printf %d 0x24047a84) ]; then
+        PEERADDR="2001:260:700:1::1:275"
+    elif [ $prefix31_dec -ge $(printf %d 0x24047a84) ] && [ $prefix31_dec -lt $(printf %d 0x24047a88) ]; then
+        PEERADDR="2001:260:700:1::1:276"
+    elif [ $prefix31_dec -ge $(printf %d 0x240b0010) ] && [ $prefix31_dec -lt $(printf %d 0x240b0014) ]; then
+        PEERADDR="2404:9200:225:100::64"
+    elif [ $prefix31_dec -ge $(printf %d 0x240b0250) ] && [ $prefix31_dec -lt $(printf %d 0x240b0254) ]; then
+        PEERADDR="2404:9200:225:100::64"
+    elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
+        PEERADDR="2001:380:a120::9"
+    else
+        PEERADDR=""
+    fi
+
+    # 変数の生成
+    IPADDR_ARRAY="$octet1,$octet2,$octet3,$octet4"
+    IPV4="$octet1.$octet2.$octet3.$octet4"
+    IP6PFX=""
+    for i in $(seq 0 $((${#IP6PREFIX[@]}-1))); do
+        if [ $i -gt 0 ]; then
+            IP6PFX="${IP6PFX}:"
+        fi
+        IP6PFX="${IP6PFX}${IP6PREFIX[$i]}"
+    done
+    CE_ADDR="${CE[0]}:${CE[1]}:${CE[2]}:${CE[3]}"
+    BR=$PEERADDR
+
+    return 0
+}
+
+# MAP-E設定情報を表示する関数
+mape_display() { 
+    echo ""
     echo "プレフィックス情報:"
-    echo "  IPv6プレフィックス: $new_ip6_prefix"
-    echo "  プロバイダタイプ: $provider_type"
-    echo "MAP-E設定情報:"
-    echo "  IPv4アドレス: $ipv4"
-    echo "  IPv4プレフィックス長: $ip4prefixlen"
-    echo "  IPv6プレフィックス長: $ip6prefixlen"
-    echo "  EA-bitsビット長: $ealen"
-    echo "  PSIDビット長: $psidlen"
-    echo "  PSIDオフセット: $offset"
-    echo "抽出情報:"
-    echo "  PSID値: $psid"
-    echo "変換結果:"
-    echo "  ブロードバンドルーター: $br_addr"
+    echo "  IPv6プレフィックス: $NEW_IP6_PREFIX"
+    echo "  CE IPv6アドレス: $CE_ADDR::/64"
     
-    # OpenWrt設定値
     echo ""
     echo "OpenWrt設定値:"
-    echo "  option peeraddr $br_addr"
-    echo "  option ipaddr $ipv4"
-    echo "  option ip4prefixlen $ip4prefixlen"
-    echo "  option ip6prefix $new_ip6_prefix"
-    echo "  option ip6prefixlen $ip6prefixlen"
-    echo "  option ealen $ealen"
-    echo "  option psidlen $psidlen"
-    echo "  option offset $offset"
+    echo "  option peeraddr $BR"
+    echo "  option ipaddr $IPV4"
+    echo "  option ip4prefixlen $IP4PREFIXLEN"
+    echo "  option ip6prefix $IP6PFX::"
+    echo "  option ip6prefixlen $IP6PREFIXLEN"
+    echo "  option ealen $EALEN"
+    echo "  option psidlen $PSIDLEN"
+    echo "  option offset $OFFSET"
     echo "  export LEGACY=1"
     
     # 利用可能なポート範囲の計算
-    max_port_blocks=$(( 1 << offset ))
-    ports_per_block=$(( 1 << (16 - offset - psidlen) ))
-    total_ports=$(( ports_per_block * (max_port_blocks - 1) ))
-    port_start=$(( psid << (16 - offset - psidlen) ))
+    local max_port_blocks=$(( 1 << OFFSET ))
+    local ports_per_block=$(( 1 << (16 - OFFSET - PSIDLEN) ))
+    local total_ports=$(( ports_per_block * (max_port_blocks - 1) ))
+    local port_start=$(( PSID << (16 - OFFSET - PSIDLEN) ))
     
+    echo ""
     echo "ポート情報:"
     echo "  利用可能なポート数: $total_ports"
     echo "  基本ポート開始値: $port_start"
     
     # ポート範囲を表示
+    echo ""
     echo "ポート範囲:"
-    port_ranges=""
-    Amax=$(( (1 << offset) - 1 ))
-    for A in $(seq 1 $Amax); do
-        start_port=$(( (A << (16 - offset)) | (psid << (16 - offset - psidlen)) ))
-        end_port=$(( start_port + (1 << (16 - offset - psidlen)) - 1 ))
+    local port_ranges=""
+    local amax_val=$(( (1 << OFFSET) - 1 ))
+    for A in $(seq 1 $amax_val); do
+        local start_port=$(( (A << (16 - OFFSET)) | (PSID << (16 - OFFSET - PSIDLEN)) ))
+        local end_port=$(( start_port + (1 << (16 - OFFSET - PSIDLEN)) - 1 ))
         port_ranges="${port_ranges}${start_port}-${end_port} "
         if [ $(( A % 3 )) -eq 0 ]; then
             port_ranges="${port_ranges}\n"
         fi
     done
     echo "$port_ranges" | sed 's/\\n/\n/g'
+
+    return 0
 }
 
-# MAP-E設定を適用
+# MAP-E設定を適用する関数
 mape_config() {
-    local ipv6_prefix="$1"
-    local ipv4_prefix="$2"
-    local os_version=""
-
-    # map インストール
+    local wanmape='wanmape'
+    local zone_no='1'
+    
+    # mapパッケージのインストール確認
     install_package map
     
-    # MAP-E固定パラメータ（ローカル変数）
-    local br_address="2404:7a80::feed"
-    local ipv4_prefix="49.128.0.0/10"
-    local ea_length="14"
-    local psid_offset="4"
-    local psid_len="6"
-    local ipv6_prefix_length="28"
-    local wan_iface="wan"
-    local wan6_iface="wan6"
-    local mape_iface="mape"
-
-    local ipv6_prefix_clean=$(echo "$ipv6_prefix" | sed 's/\/.*$//')
-    local ipv4_prefix_len=$(echo "$ipv4_prefix" | cut -d/ -f2)
-    
-    printf "%s\n" "$(color green "OCN MAP-E設定をOpenWrt $major_version向けに適用します...")"
-    
     # 設定のバックアップ作成
-    cp /etc/config/network /etc/config/network.mape.bak 2>/dev/null
-    cp /etc/config/firewall /etc/config/firewall.mape.bak 2>/dev/null
-    cp /etc/config/dhcp /etc/config/dhcp.mape.bak 2>/dev/null
+    cp /etc/config/network /etc/config/network.map-e.old
+    cp /etc/config/dhcp /etc/config/dhcp.map-e.old
+    cp /etc/config/firewall /etc/config/firewall.map-e.old
     
     # WAN設定
     uci set network.wan.auto='0'
     
-    # MAP-E設定
-    uci set network.${mape_iface}=interface
-    uci set network.${mape_iface}.proto='map'
-    uci set network.${mape_iface}.maptype='map-e'
-    uci set network.${mape_iface}.peeraddr="$br_address"
-    uci set network.${mape_iface}.ipaddr="${ipv4_prefix%/*}"
-    uci set network.${mape_iface}.ip4prefixlen="$ipv4_prefix_len"
-    uci set network.${mape_iface}.ip6prefix="$ipv6_prefix_clean"
-    uci set network.${mape_iface}.ip6prefixlen="$ipv6_prefix_length"
-    uci set network.${mape_iface}.ealen="$ea_length"
-    uci set network.${mape_iface}.psidlen="$psid_len"
-    uci set network.${mape_iface}.offset="$psid_offset"
-    uci set network.${mape_iface}.tunlink="$wan6_iface"
-    uci set network.${mape_iface}.mtu='1460'
-    uci set network.${mape_iface}.encaplimit='ignore'
+    # DHCP LAN設定
+    uci set dhcp.lan.ra='relay'
+    uci set dhcp.lan.dhcpv6='relay'
+    uci set dhcp.lan.ndp='relay'
+    uci set dhcp.lan.force='1'
 
-    os_version=$(cat "${CACHE_DIR}/osversion.ch")
-    debug_log "DEBUG" "Detected OS version: $os_version"
-
-    if echo "$os_version" | grep -q "^19\."; then
-        debug_log "DEBUG" "Setting OpenWrt 19 specific options"
-        uci add_list network.${mape_iface}.tunlink='wan6'
-    else
-        debug_log "DEBUG" "Setting OpenWrt $os_version specific options"
-        uci set network.${mape_iface}.legacymap='1'
-        uci set dhcp.wan6.interface='wan6'
-        uci set dhcp.wan6.ignore='1'    
-    fi
-    
-    # DHCP設定
+    # DHCP WAN6設定
     uci set dhcp.wan6=dhcp
     uci set dhcp.wan6.master='1'
     uci set dhcp.wan6.ra='relay'
     uci set dhcp.wan6.dhcpv6='relay'
     uci set dhcp.wan6.ndp='relay'
-    
+
+    # WAN6設定
+    uci set network.wan6.proto='dhcpv6'
+    uci set network.wan6.reqaddress='try'
+    uci set network.wan6.reqprefix='auto'
+    uci set network.wan6.ip6prefix=${CE_ADDR}::/64
+
+    # WANMAPE設定
+    uci set network.${wanmape}=interface
+    uci set network.${wanmape}.proto='map'
+    uci set network.${wanmape}.maptype='map-e'
+    uci set network.${wanmape}.peeraddr=${BR}
+    uci set network.${wanmape}.ipaddr=${IPV4}
+    uci set network.${wanmape}.ip4prefixlen=${IP4PREFIXLEN}
+    uci set network.${wanmape}.ip6prefix=${IP6PFX}::
+    uci set network.${wanmape}.ip6prefixlen=${IP6PREFIXLEN}
+    uci set network.${wanmape}.ealen=${EALEN}
+    uci set network.${wanmape}.psidlen=${PSIDLEN}
+    uci set network.${wanmape}.offset=${OFFSET}
+    uci set network.${wanmape}.mtu='1460'
+    uci set network.${wanmape}.encaplimit='ignore'
+
+    # OpenWrtバージョン固有の設定（元のコードをそのまま使用）
+    os_version=$(cat "${CACHE_DIR}/osversion.ch")
+
+    if echo "$os_version" | grep -q "^19\."; then
+        uci add_list network.${wanmape}.tunlink='wan6'
+    else
+        uci set network.${wanmape}.tunlink='wan6'
+        uci set network.${wanmape}.legacymap='1'
+        uci set dhcp.wan6.interface='wan6'
+        uci set dhcp.wan6.ignore='1'    
+    fi
+      
     # ファイアウォール設定
-    uci del_list firewall.@zone[1].network='wan' 2>/dev/null
-    uci add_list firewall.@zone[1].network="$mape_iface"
+    uci del_list firewall.@zone[${zone_no}].network='wan'
+    uci add_list firewall.@zone[${zone_no}].network=${wanmape}
     
-    # 設定の保存と適用
+    # 設定の保存
     uci commit network
     uci commit firewall
     uci commit dhcp
     
-    printf "%s\n" "$(color green "OCN MAP-E設定を適用しました")"
-    printf "%s: %s\n" "$(color cyan "IPv6プレフィックス")" "$ipv6_prefix"
-    printf "%s: %s\n" "$(color cyan "ブリッジルータアドレス")" "$br_address"
-    printf "%s: %s\n" "$(color cyan "IPv4プレフィックス")" "$ipv4_prefix"
-    printf "%s\n" "$(color yellow "設定を有効にするためシステムを再起動します...")"
+    # 設定情報の表示
+    echo -e "\033[1;33m wan ipaddr6: ${NET_ADDR6}\033[0;33m"
+    echo -e "\033[1;32m wan6 ip6prefix: \033[0;39m${CE_ADDR}::/64"
+    echo -e "\033[1;32m ${wanmape} peeraddr: \033[0;39m${BR}"
+    echo -e "\033[1;32m ${wanmape} ip4prefixlen: \033[0;39m${IP4PREFIXLEN}"
+    echo -e "\033[1;32m ${wanmape} ip6pfx: \033[0;39m${IP6PFX}::"
+    echo -e "\033[1;32m ${wanmape} ip6prefixlen: \033[0;39m${IP6PREFIXLEN}"
+    echo -e "\033[1;32m ${wanmape} ealen: \033[0;39m${EALEN}"
+    echo -e "\033[1;32m ${wanmape} psidlen: \033[0;39m${PSIDLEN}"
+    echo -e "\033[1;32m ${wanmape} offset: \033[0;39m${OFFSET}"
     
-    # 3秒待ってから再起動
-    sleep 3
-    reboot
-    
+    echo ""
+    echo "MAP-E設定が完了しました。システムを再起動します..."
+
     return 0
 }
 
+# メイン処理
+echo "MAP-E設定ツール (POSIX準拠バージョン) $SCRIPT_VERSION"
+echo "MAP-E情報を解析しています..."
+
 # 実行
-mape_info
+mape_mold
+mape_display
 # mape_config
+
+echo "3秒後に再起動します..."
+#sleep 3
+#reboot
