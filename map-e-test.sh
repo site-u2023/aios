@@ -1257,7 +1257,7 @@ EOF
         
         octet4=$(( HEXTET2 & 255 ))         # 0x00ff
         
-        IPADDR="${octet1}.${octet2}.${octet3}.0"
+        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
         IP6PREFIXLEN=38
         PSIDLEN=8
         OFFSET=4
@@ -1275,7 +1275,7 @@ EOF
         
         octet4=$(( HEXTET2 & 255 ))         # 0x00ff
         
-        IPADDR="${octet1}.${octet2}.0.0"
+        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
         IP6PREFIXLEN=31
         PSIDLEN=8
         OFFSET=4
@@ -1298,7 +1298,7 @@ EOF
         octet4=$(( temp4 | temp6 ))
         
         # 修正: JavaScriptと同様に octet3 も含める
-        IPADDR="${octet1}.${octet2}.${octet3}.0"
+        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
         IP6PREFIXLEN=38
         PSIDLEN=6
         OFFSET=6  # ruleprefix38_20では offset=6 を使用
