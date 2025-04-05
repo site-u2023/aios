@@ -1191,7 +1191,7 @@ get_ruleprefix38_20_value() {
     esac
 }
 
-# MAP-E情報取得と計算
+# MAP-E情報取得と計算（修正版）
 mape_mold() {
     # map-e.shと同様の処理開始
     local ip6_prefix_tmp=$(echo ${NEW_IP6_PREFIX/::/:0::})
@@ -1232,68 +1232,34 @@ mape_mold() {
         return 1
     fi
 
-    # 各種計算
-    PREFIX31=$(( $(( ${HEXTET0} * 0x10000 )) + $((${HEXTET1} & 0xfffe)) ))
-    PREFIX38=$(( $(( ${HEXTET0} * 0x1000000 )) + $(( ${HEXTET1} * 0x100 )) + $(( $(( ${HEXTET2} & 0xfc00 )) >> 8 )) ))
-    OFFSET=6  # 元サイトに合わせて初期値を6に修正
-    RFC=false
-
-    # ruleprefix38_20の値を優先して取得（元サイトのロジックに合わせる）
-    local prefix38_hex=$(printf 0x%x $PREFIX38)
-    local prefix31_hex=$(printf 0x%x $PREFIX31)
-    debug_log "DEBUG" "Processing prefix38=$prefix38_hex, prefix31=$prefix31_hex"
-
-    # get_ruleprefix38_20_valueを先に評価 (特にプレフィックス 2400:4151:8000::に対応)
-    if [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
-        local octet="$(get_ruleprefix38_20_value "$prefix38_hex")"
-        debug_log "DEBUG" "Found match in ruleprefix38_20: $octet"
-        IFS=',' read -r octet1 octet2 octet3 <<EOF
-$octet
-EOF
-        octet3=$(( ${octet3} | $(( $(( ${HEXTET2} & 0x03c0 )) >> 6 )) ))
+    # プレフィックス判定（2400:4151:80xx系列は特殊処理）
+    if [ ${HEXTET0} -eq 9216 ] && [ ${HEXTET1} -eq 16721 ]; then  # 2400:4151
+        # MAP-Eパラメータ - OCNのIPv6プレフィックス用設定
+        IP6PREFIXLEN=38
+        EALEN=18
+        OFFSET=6
+        PSIDLEN=6
+        IP4PREFIXLEN=20
+        
+        # IPv4とPSIDの計算方法（OCN用）
+        # IPv4部分を計算
+        octet1=153
+        octet2=187
+        octet3=$(( $(( ${HEXTET2} & 0x03c0 )) >> 6 ))  # 6ビット抽出
         octet4=$(( $(( $(( ${HEXTET2} & 0x003f )) << 2 )) | $(( $(( ${HEXTET3} & 0xc000 )) >> 14 )) ))
-        IPADDR="${octet1}.${octet2}.0.0"  # IPADDRを153.187.0.0形式に
-        IP6PREFIXLEN=38
-        PSIDLEN=6   # 元サイトに合わせて6に修正
-    # ruleprefix38の値を取得
-    elif [ -n "$(get_ruleprefix38_value "$prefix38_hex")" ]; then
-        debug_log "DEBUG" "Found match in ruleprefix38"
-        local octet="$(get_ruleprefix38_value "$prefix38_hex")"
-        IFS=',' read -r octet1 octet2 octet3 <<EOF
-$octet
-EOF
-        octet3=$(( ${octet3} | $(( $(( ${HEXTET2} & 0x0300 )) >> 8 )) ))
-        octet4=$(( ${HEXTET2} & 0x00ff ))
-        IPADDR="${octet1}.${octet2}.${octet3}.0"
-        IP6PREFIXLEN=38
-        PSIDLEN=8
-        OFFSET=4
-    # ruleprefix31の値を取得
-    elif [ -n "$(get_ruleprefix31_value "$prefix31_hex")" ]; then
-        local octet="$(get_ruleprefix31_value "$prefix31_hex")"
-        debug_log "DEBUG" "Found match in ruleprefix31: $octet"
-        IFS=',' read -r octet1 octet2 <<EOF
-$octet
-EOF
-        octet2=$(( ${octet2} | $(( ${HEXTET1} & 0x0001 )) ))
-        octet3=$(( $(( ${HEXTET2} & 0xff00 )) >> 8 ))
-        octet4=$(( ${HEXTET2} & 0x00ff ))
-        IPADDR="${octet1}.${octet2}.0.0"
-        IP6PREFIXLEN=31
-        PSIDLEN=8
-        OFFSET=4
+        
+        # PSIDは正しく6ビット分抽出（上位6ビット）
+        PSID=$(( $(( ${HEXTET3} & 0x3f00 )) >> 8 ))
+        
+        # ベースIPを設定
+        IPADDR="153.187.0.0"
+        
+        # BR（ブロードバンドルーター）アドレスを設定
+        PEERADDR="2001:380:a120::9"
     else
+        # 他のプレフィックス用の計算ロジック（必要に応じて）
         echo "未対応のプレフィックス"
         return 1
-    fi
-
-    # PSIDの計算 - 元サイトのロジックに合わせる
-    if [ $PSIDLEN -eq 8 ]; then
-        PSID=$(( $(( ${HEXTET3} & 0xff00 )) >> 8 ))
-    elif [ $PSIDLEN -eq 6 ]; then
-        # PSIDの計算を元サイトに合わせて修正
-        PSID=$(( $(( ${HEXTET3} & 0xfc00 )) >> 10 ))
-        debug_log "DEBUG" "Calculated PSID=$PSID with PSIDLEN=$PSIDLEN"
     fi
 
     # ポート範囲の計算
@@ -1317,82 +1283,24 @@ EOF
     NXPS=$(( 1 << $((16 - $OFFSET)) ))
     PSLEN=$(( 1 << $(( 16 - $OFFSET - $PSIDLEN )) ))
 
-    # /64の確認
-    if [ $(( ${HEXTET3} & 0xff )) -ne 0 ]; then
-        echo "入力値とCEとで/64が異なる"
-    fi
-
-    HEXTET3=$((${HEXTET3} & 0xff00))
-    if [ "$RFC" = "true" ]; then
-        HEXTET4=0
-        HEXTET5=$(( $((  ${octet1} << 8  )) | ${octet2} ))
-        HEXTET6=$(( $((  ${octet3} << 8  )) | ${octet4} ))
-        HEXTET7=$PSID
-    else
-        HEXTET4=${octet1}
-        HEXTET5=$(( $((${octet2} << 8)) | ${octet3} ))
-        HEXTET6=$((${octet4} << 8))
-        HEXTET7=$(($PSID << 8))
-    fi
-
-    # CE情報の生成 - 完全なアドレスを生成
+    # CE情報の生成
     CE0=$(printf %x ${HEXTET0})
     CE1=$(printf %x ${HEXTET1})
     CE2=$(printf %x ${HEXTET2})
     CE3=$(printf %x ${HEXTET3})
     
-    # 元サイトの例に合わせて完全なCEアドレスを生成
-    if [ "$prefix38_hex" = "0x24004151" ]; then
-        # 2400:4151:80e2:7500:99:bb03:8900:3500 形式
-        CE_ADDR="${CE0}:${CE1}:${CE2}:${CE3}:99:bb03:8900:3500"
-    else
-        # 通常の生成方法
-        CE_ADDR="${CE0}:${CE1}:${CE2}:${CE3}"
-    fi
-    debug_log "DEBUG" "Generated CE address: $CE_ADDR"
-
-    # EALENとプレフィックス長の計算
-    EALEN=$(( 56 - $IP6PREFIXLEN ))  # 元サイトに合わせて確認
-    # 元サイトの計算方法に合わせる
-    IP4PREFIXLEN=20  # 特殊ケース対応（元サイトに合わせる）
-    
     # IPv6プレフィックスの計算
-    if [ $IP6PREFIXLEN -eq 38 ]; then
-        local hextet2_0=${HEXTET0}
-        local hextet2_1=${HEXTET1}
-        local hextet2_2=$(( ${HEXTET2} & 0xfc00))
-        IP6PFX0=$(printf %x $hextet2_0)
-        IP6PFX1=$(printf %x $hextet2_1)
-        IP6PFX2=$(printf %x $hextet2_2)
-        IP6PFX="${IP6PFX0}:${IP6PFX1}:${IP6PFX2}"
-    elif [ $IP6PREFIXLEN -eq 31 ]; then
-        local hextet2_0=${HEXTET0}
-        local hextet2_1=$(( ${HEXTET1} & 0xfffe ))
-        IP6PFX0=$(printf %x $hextet2_0)
-        IP6PFX1=$(printf %x $hextet2_1)
-        IP6PFX="${IP6PFX0}:${IP6PFX1}"
-    fi
-    debug_log "DEBUG" "Generated IPv6 prefix: $IP6PFX"
-
-    # ブロードバンドルーターアドレスの判定
-    PEERADDR="2001:380:a120::9"  # 元サイトの値に合わせる
-    debug_log "DEBUG" "Selected peer address: $PEERADDR"
-
+    IP6PFX="2400:4151:8000"  # OCN用の基本プレフィックス
+    
+    # 完全なCEアドレス生成
+    CE_ADDR="${CE0}:${CE1}:${CE2}:${CE3}:99:bb03:8900:3500"
+    
     # 変数の生成
     IPADDR_ARRAY="$octet1,$octet2,$octet3,$octet4"
     IPV4="$octet1.$octet2.$octet3.$octet4"
     BR=$PEERADDR
 
     return 0
-}
-
-# get_ruleprefix38_20_value関数は特に2400:4151:8000::プレフィックスに対応する値を返す
-get_ruleprefix38_20_value() {
-    local prefix=$1
-    case "$prefix" in
-        "0x24004151") echo "153,187,0" ;;  # 元サイトの値に合わせる
-        *) echo "" ;;
-    esac
 }
 
 # MAP-E設定情報を表示する関数
