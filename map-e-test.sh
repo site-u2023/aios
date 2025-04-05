@@ -1423,7 +1423,7 @@ mape_display() {
     echo ""
     echo "プレフィックス情報:"
     echo "  IPv6プレフィックス: $NEW_IP6_PREFIX"
-    echo "  CE IPv6アドレス: $CE_ADDR/64"
+    echo "  CE IPv6アドレス: $CE_ADDR"
     echo "  IPv4アドレス: $IPV4"
     echo "  PSID値(10進数): $PSID"
     
