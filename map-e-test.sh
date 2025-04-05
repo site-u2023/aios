@@ -1216,6 +1216,7 @@ mape_mold() {
                 fi
             fi
         done
+        debug_log "DEBUG" "Parsed IPv6 prefix components successfully"
     else
         echo "プレフィックスを認識できません"
         echo "ONUに直接接続していますか"
@@ -1301,6 +1302,7 @@ EOF
             fi
         fi
     done
+    debug_log "DEBUG" "Calculated port ranges with PSID=$PSID"
 
     # セットアップ用の変数
     LP=$AMAX
@@ -1352,6 +1354,7 @@ EOF
         IP6PFX1=$(printf %x $hextet2_1)
         IP6PFX="${IP6PFX0}:${IP6PFX1}"
     fi
+    debug_log "DEBUG" "Generated IPv6 prefix"
 
     # ブロードバンドルーターアドレスの判定
     local prefix31_hex_val=$(printf 0x%x $PREFIX31)
