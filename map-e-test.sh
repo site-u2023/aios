@@ -1194,10 +1194,13 @@ get_ruleprefix38_20_value() {
 mape_mold() {
     debug_log "DEBUG" "Start mape_mold()"
 
-    # map-e.shと同様の処理開始
-    local ip6_prefix_tmp=$(echo "${NEW_IP6_PREFIX/::/:0::}")
+    local ip6_prefix_tmp
+    ip6_prefix_tmp="$(echo "${NEW_IP6_PREFIX/::/:0::}")"
+
+    # IPv6プレフィックス解析(上位4 HEXTET取得)
     if echo "$ip6_prefix_tmp" | grep -E '^([0-9a-f]{1,4}):([0-9a-f]{1,4}):([0-9a-f]{1,4}):([0-9a-f]{0,4})' >/dev/null; then
-        local tmp=$(echo "$ip6_prefix_tmp" | sed -e "s|:| |g")
+        local tmp
+        tmp="$(echo "$ip6_prefix_tmp" | sed -e "s|:| |g")"
         
         local i=0
         for val in $tmp; do
@@ -1207,13 +1210,13 @@ mape_mold() {
                     val=0
                 fi
                 if [ "$i" -eq 1 ]; then
-                    HEXTET0=$(printf %d 0x"$val")
+                    HEXTET0=$(printf %d "0x$val")
                 elif [ "$i" -eq 2 ]; then
-                    HEXTET1=$(printf %d 0x"$val")
+                    HEXTET1=$(printf %d "0x$val")
                 elif [ "$i" -eq 3 ]; then
-                    HEXTET2=$(printf %d 0x"$val")
+                    HEXTET2=$(printf %d "0x$val")
                 elif [ "$i" -eq 4 ]; then
-                    HEXTET3=$(printf %d 0x"$val")
+                    HEXTET3=$(printf %d "0x$val")
                 fi
             fi
         done
@@ -1225,7 +1228,7 @@ mape_mold() {
         return 1
     fi
 
-    # 各種計算 (複雑なネスト計算を分割)
+    # 必要パラメータ計算 (JavaScriptと同等ロジック)
     local h0_mul=$(( HEXTET0 * 65536 ))    # 0x10000
     local h1_masked=$(( HEXTET1 & 65534 )) # 0xfffe
     PREFIX31=$(( h0_mul + h1_masked ))
@@ -1236,39 +1239,38 @@ mape_mold() {
     local h2_shift=$(( h2_masked >> 8 ))
     PREFIX38=$(( h0_mul2 + h1_mul + h2_shift ))
     
-    # ▼ RFCフラグ。JavaScriptでは rfc=false がデフォルトだが、プレフィックスにより設定を変えたい場合がある
+    # JavaScript側で rfc=false がデフォルト
     RFC=false
+    OFFSET=6
 
-    OFFSET=6  # デフォルト値
-
-    # プレフィックス値に対応するデータを取得 (JavaScriptと同じ優先順序)
     local prefix31_hex
-    prefix31_hex=$(printf 0x%x "$PREFIX31")
+    prefix31_hex="$(printf 0x%x "$PREFIX31")"
     local prefix38_hex
-    prefix38_hex=$(printf 0x%x "$PREFIX38")
+    prefix38_hex="$(printf 0x%x "$PREFIX38")"
     debug_log "DEBUG" "Processing prefix31=$prefix31_hex, prefix38=$prefix38_hex"
 
+    # "ruleprefix38" → "ruleprefix31" → "ruleprefix38_20" の順序で照合
     if [ -n "$(get_ruleprefix38_value "$prefix38_hex")" ]; then
+        # ----- ruleprefix38ブロック -----
         local octet
         octet="$(get_ruleprefix38_value "$prefix38_hex")"
         debug_log "DEBUG" "Found match in ruleprefix38: $octet"
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
-        local temp1=$(( HEXTET2 & 768 ))    # 0x0300
+        local temp1=$(( HEXTET2 & 768 ))  # 0x0300
         local temp2=$(( temp1 >> 8 ))
         octet3=$(( octet3 | temp2 ))
 
-        octet4=$(( HEXTET2 & 255 ))         # 0x00ff
+        octet4=$(( HEXTET2 & 255 ))       # 0x00ff
 
         IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
         IP6PREFIXLEN=38
         PSIDLEN=8
         OFFSET=4
 
-        # 必要に応じてRFC=trueも考えられるが、デフォルトのまま
-        # RFC=true   # ←もしruleprefix38でRFCモードにしたい場合はtrueにする
     elif [ -n "$(get_ruleprefix31_value "$prefix31_hex")" ]; then
+        # ----- ruleprefix31ブロック -----
         local octet
         octet="$(get_ruleprefix31_value "$prefix31_hex")"
         debug_log "DEBUG" "Found match in ruleprefix31: $octet"
@@ -1279,22 +1281,22 @@ EOF
 
         local temp1=$(( HEXTET2 & 65280 ))  # 0xff00
         octet3=$(( temp1 >> 8 ))
-
-        octet4=$(( HEXTET2 & 255 ))         # 0x00ff
+        octet4=$(( HEXTET2 & 255 ))
 
         IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
         IP6PREFIXLEN=31
         PSIDLEN=8
         OFFSET=4
 
-        # 同上、必要ならRFC=true化
     elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
+        # ----- ruleprefix38_20ブロック (20bit IPv4 prefix想定) -----
         local octet
         octet="$(get_ruleprefix38_20_value "$prefix38_hex")"
         debug_log "DEBUG" "Found match in ruleprefix38_20: $octet"
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
+        # JavaScriptと同様: (hextet[2] & 0x03c0) >> 6 → 下位 6bit
         local temp1=$(( HEXTET2 & 960 ))    # 0x03c0
         local temp2=$(( temp1 >> 6 ))
         octet3=$(( octet3 | temp2 ))
@@ -1310,25 +1312,28 @@ EOF
         PSIDLEN=6
         OFFSET=6
 
-        # ruleprefix38_20の場合にRFC=trueにしたければ以下で
-        # RFC=true
+        # IPv4 20bitプレフィックス相当 (例: IP4PREFIXLEN=20 等)
+
     else
+        # マッチしなければエラー終了
         echo "未対応のプレフィックス"
         return 1
     fi
 
-    # PSID計算
+    # PSID計算 (JavaScriptのcalc()相当)
     if [ "$PSIDLEN" -eq 8 ]; then
         PSID=$(( (HEXTET3 & 0xff00) >> 8 ))
-        debug_log "DEBUG" "PSID calculation for PSIDLEN=8: (0xff00 >> 8) = $PSID"
+        debug_log "DEBUG" "PSID calculation for PSIDLEN=8: $PSID"
     elif [ "$PSIDLEN" -eq 6 ]; then
         PSID=$(( (HEXTET3 & 0x3f00) >> 8 ))
-        debug_log "DEBUG" "PSID calculation for PSIDLEN=6: (0x3f00 >> 8) = $PSID"
+        debug_log "DEBUG" "PSID calculation for PSIDLEN=6: $PSID"
     fi
 
+    # ポート範囲計算もJavaScript同等
     PORTS=""
     AMAX=$(( (1 << OFFSET) - 1 ))
 
+    local A
     for A in $(seq 1 "$AMAX"); do
         local shift_bits=$(( 16 - OFFSET ))
         local port_base=$(( A << shift_bits ))
@@ -1340,9 +1345,9 @@ EOF
 
         PORTS="${PORTS}${port}-${port_end}"
 
-        if [ "$A" -lt "$AMAX" ]; then 
+        if [ "$A" -lt "$AMAX" ]; then
             if [ $(( A % 3 )) -eq 0 ]; then
-                PORTS="${PORTS}"\\n
+                PORTS="${PORTS}\\n"
             else
                 PORTS="${PORTS} "
             fi
@@ -1350,45 +1355,42 @@ EOF
     done
     debug_log "DEBUG" "Calculated port ranges with PSID=$PSID"
 
+    # 以降のCEアドレス生成、IPv6 prefix生成など (JSのcalc()に相当)
     LP=$AMAX
     NXPS=$(( 1 << (16 - OFFSET) ))
     PSLEN=$(( 1 << (16 - OFFSET - PSIDLEN) ))
 
-    # CEアドレスの生成 (if (rfc) ... else ... 分岐修正)
-    # JavaScript版では rfc=true かどうかでCEの各HEXTET値の詰め方がやや変わる
     HEXTET3=$(( HEXTET3 & 65280 ))  # 0xff00
 
     if [ "$RFC" = "true" ]; then
-        # RFCの場合
-        debug_log "DEBUG" "CE address generation (RFC=true) block"
+        debug_log "DEBUG" "CE address generation (RFC=true)"
         HEXTET4=0
         HEXTET5=$(( (octet1 << 8) | octet2 ))
         HEXTET6=$(( (octet3 << 8) | octet4 ))
         HEXTET7=$PSID
     else
-        # RFCでないデフォルト処理
-        debug_log "DEBUG" "CE address generation (RFC=false) block"
+        debug_log "DEBUG" "CE address generation (RFC=false)"
         HEXTET4=$octet1
         HEXTET5=$(( (octet2 << 8) | octet3 ))
         HEXTET6=$(( octet4 << 8 ))
         HEXTET7=$(( PSID << 8 ))
     fi
 
-    CE0=$(printf %04x "${HEXTET0}")
-    CE1=$(printf %04x "${HEXTET1}")
-    CE2=$(printf %04x "${HEXTET2}")
-    CE3=$(printf %04x "${HEXTET3}")
-    CE4=$(printf %04x "${HEXTET4}")
-    CE5=$(printf %04x "${HEXTET5}")
-    CE6=$(printf %04x "${HEXTET6}")
-    CE7=$(printf %04x "${HEXTET7}")
+    CE0=$(printf %04x "$HEXTET0")
+    CE1=$(printf %04x "$HEXTET1")
+    CE2=$(printf %04x "$HEXTET2")
+    CE3=$(printf %04x "$HEXTET3")
+    CE4=$(printf %04x "$HEXTET4")
+    CE5=$(printf %04x "$HEXTET5")
+    CE6=$(printf %04x "$HEXTET6")
+    CE7=$(printf %04x "$HEXTET7")
+
     CE_ADDR="${CE0}:${CE1}:${CE2}:${CE3}:${CE4}:${CE5}:${CE6}:${CE7}"
     debug_log "DEBUG" "Generated CE address: $CE_ADDR"
 
     EALEN=$(( 56 - IP6PREFIXLEN ))
     IP4PREFIXLEN=$(( 32 - (EALEN - PSIDLEN) ))
 
-    # IPv6プレフィックスの計算
     if [ "$IP6PREFIXLEN" -eq 38 ]; then
         local hextet2_2=$(( HEXTET2 & 64512 ))  # 0xfc00
         IP6PFX0=$(printf %04x "$HEXTET0")
@@ -1403,16 +1405,16 @@ EOF
     fi
     debug_log "DEBUG" "Generated IPv6 prefix: $IP6PFX"
 
-    # ブロードバンドルーターアドレスの判定 (JavaScript版と同等の判定機構)
+    # BRアドレスなど
     if [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
         PEERADDR="2001:380:a120::9"
-    elif [ "$PREFIX31" -ge 604240512 ] && [ "$PREFIX31" -lt 604240516 ]; then  # 0x24047a80-0x24047a84
+    elif [ "$PREFIX31" -ge 604240512 ] && [ "$PREFIX31" -lt 604240516 ]; then
         PEERADDR="2001:260:700:1::1:275"
-    elif [ "$PREFIX31" -ge 604240516 ] && [ "$PREFIX31" -lt 604240520 ]; then  # 0x24047a84-0x24047a88
+    elif [ "$PREFIX31" -ge 604240516 ] && [ "$PREFIX31" -lt 604240520 ]; then
         PEERADDR="2001:260:700:1::1:276"
-    elif [ "$PREFIX31" -ge 604512272 ] && [ "$PREFIX31" -lt 604512276 ]; then  # 0x240b0010-0x240b0014
+    elif [ "$PREFIX31" -ge 604512272 ] && [ "$PREFIX31" -lt 604512276 ]; then
         PEERADDR="2404:9200:225:100::64"
-    elif [ "$PREFIX31" -ge 604512848 ] && [ "$PREFIX31" -lt 604512852 ]; then  # 0x240b0250-0x240b0254
+    elif [ "$PREFIX31" -ge 604512848 ] && [ "$PREFIX31" -lt 604512852 ]; then
         PEERADDR="2404:9200:225:100::64"
     else
         PEERADDR=""
