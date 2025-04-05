@@ -1206,13 +1206,13 @@ mape_mold() {
                     val=0
                 fi
                 if [ $i -eq 1 ]; then
-                    HEXTET[0]=$(printf %d 0x${val})
+                    HEXTET0=$(printf %d 0x${val})
                 elif [ $i -eq 2 ]; then
-                    HEXTET[1]=$(printf %d 0x${val})
+                    HEXTET1=$(printf %d 0x${val})
                 elif [ $i -eq 3 ]; then
-                    HEXTET[2]=$(printf %d 0x${val})
+                    HEXTET2=$(printf %d 0x${val})
                 elif [ $i -eq 4 ]; then
-                    HEXTET[3]=$(printf %d 0x${val})
+                    HEXTET3=$(printf %d 0x${val})
                 fi
             fi
         done
@@ -1224,8 +1224,8 @@ mape_mold() {
     fi
 
     # 各種計算
-    PREFIX31=$(( $(( ${HEXTET[0]} * 0x10000 )) + $((${HEXTET[1]} & 0xfffe)) ))
-    PREFIX38=$(( $(( ${HEXTET[0]} * 0x1000000 )) + $(( ${HEXTET[1]} * 0x100 )) + $(( $(( ${HEXTET[2]} & 0xfc00 )) >> 8 )) ))
+    PREFIX31=$(( $(( ${HEXTET0} * 0x10000 )) + $((${HEXTET1} & 0xfffe)) ))
+    PREFIX38=$(( $(( ${HEXTET0} * 0x1000000 )) + $(( ${HEXTET1} * 0x100 )) + $(( $(( ${HEXTET2} & 0xfc00 )) >> 8 )) ))
     OFFSET=6
     RFC=false
 
@@ -1243,8 +1243,8 @@ mape_mold() {
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
-        octet3=$(( ${octet3} | $(( $(( ${HEXTET[2]} & 0x0300 )) >> 8 )) ))
-        octet4=$(( ${HEXTET[2]} & 0x00ff ))
+        octet3=$(( ${octet3} | $(( $(( ${HEXTET2} & 0x0300 )) >> 8 )) ))
+        octet4=$(( ${HEXTET2} & 0x00ff ))
         IPADDR="${octet1}.${octet2}.${octet3}.0"
         IP6PREFIXLEN=38
         PSIDLEN=8
@@ -1256,9 +1256,9 @@ EOF
         IFS=',' read -r octet1 octet2 <<EOF
 $octet
 EOF
-        octet2=$(( ${octet2} | $(( ${HEXTET[1]} & 0x0001 )) ))
-        octet3=$(( $(( ${HEXTET[2]} & 0xff00 )) >> 8 ))
-        octet4=$(( ${HEXTET[2]} & 0x00ff ))
+        octet2=$(( ${octet2} | $(( ${HEXTET1} & 0x0001 )) ))
+        octet3=$(( $(( ${HEXTET2} & 0xff00 )) >> 8 ))
+        octet4=$(( ${HEXTET2} & 0x00ff ))
         IPADDR="${octet1}.${octet2}.0.0"
         IP6PREFIXLEN=31
         PSIDLEN=8
@@ -1270,8 +1270,8 @@ EOF
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
-        octet3=$(( ${octet3} | $(( $(( ${HEXTET[2]} & 0x03c0 )) >> 6 )) ))
-        octet4=$(( $(( $(( ${HEXTET[2]} & 0x003f )) << 2 )) | $(( $(( ${HEXTET[3]} & 0xc000 )) >> 14 )) ))
+        octet3=$(( ${octet3} | $(( $(( ${HEXTET2} & 0x03c0 )) >> 6 )) ))
+        octet4=$(( $(( $(( ${HEXTET2} & 0x003f )) << 2 )) | $(( $(( ${HEXTET3} & 0xc000 )) >> 14 )) ))
         IPADDR="${octet1}.${octet2}.${octet3}.0"
         IP6PREFIXLEN=38
         PSIDLEN=6
@@ -1282,9 +1282,9 @@ EOF
 
     # PSIDの計算
     if [ $PSIDLEN -eq 8 ]; then
-        PSID=$(( $(( ${HEXTET[3]} & 0xff00 )) >> 8 ))
+        PSID=$(( $(( ${HEXTET3} & 0xff00 )) >> 8 ))
     elif [ $PSIDLEN -eq 6 ]; then
-        PSID=$(( $(( ${HEXTET[3]} & 0x3f00 )) >> 8 ))
+        PSID=$(( $(( ${HEXTET3} & 0x3f00 )) >> 8 ))
     fi
 
     # ポート範囲の計算
@@ -1308,53 +1308,52 @@ EOF
     PSLEN=$(( 1 << $(( 16 - $OFFSET - $PSIDLEN )) ))
 
     # /64の確認
-    if [ $(( ${HEXTET[3]} & 0xff )) -ne 0 ]; then
+    if [ $(( ${HEXTET3} & 0xff )) -ne 0 ]; then
         echo "入力値とCEとで/64が異なる"
     fi
 
-    HEXTET[3]=$((${HEXTET[3]} & 0xff00))
+    HEXTET3=$((${HEXTET3} & 0xff00))
     if [ "$RFC" = "true" ]; then
-        HEXTET[4]=0
-        HEXTET[5]=$(( $((  ${octet1} << 8  )) | ${octet2} ))
-        HEXTET[6]=$(( $((  ${octet3} << 8  )) | ${octet4} ))
-        HEXTET[7]=$PSID
+        HEXTET4=0
+        HEXTET5=$(( $((  ${octet1} << 8  )) | ${octet2} ))
+        HEXTET6=$(( $((  ${octet3} << 8  )) | ${octet4} ))
+        HEXTET7=$PSID
     else
-        HEXTET[4]=${octet1}
-        HEXTET[5]=$(( $((${octet2} << 8)) | ${octet3} ))
-        HEXTET[6]=$((${octet4} << 8))
-        HEXTET[7]=$(($PSID << 8))
+        HEXTET4=${octet1}
+        HEXTET5=$(( $((${octet2} << 8)) | ${octet3} ))
+        HEXTET6=$((${octet4} << 8))
+        HEXTET7=$(($PSID << 8))
     fi
 
-    # CE情報の生成（POSIX準拠の方法）
-    CE_0=$(printf %x ${HEXTET[0]})
-    CE_1=$(printf %x ${HEXTET[1]})
-    CE_2=$(printf %x ${HEXTET[2]})
-    CE_3=$(printf %x ${HEXTET[3]})
-    debug_log "DEBUG" "Generated CE address components: $CE_0:$CE_1:$CE_2:$CE_3"
+    # CE情報の生成
+    CE0=$(printf %x ${HEXTET0})
+    CE1=$(printf %x ${HEXTET1})
+    CE2=$(printf %x ${HEXTET2})
+    CE3=$(printf %x ${HEXTET3})
+    debug_log "DEBUG" "Generated CE address components"
 
     # EALENとプレフィックス長の計算
     EALEN=$(( 56 - $IP6PREFIXLEN ))
     IP4PREFIXLEN=$(( 32 - $(($EALEN - $PSIDLEN))  ))
 
-    # IPv6プレフィックスの計算（POSIX準拠の方法）
+    # IPv6プレフィックスの計算
     if [ $IP6PREFIXLEN -eq 38 ]; then
-        local hextet2_0=${HEXTET[0]}
-        local hextet2_1=${HEXTET[1]}
-        local hextet2_2=$(( ${HEXTET[2]} & 0xfc00))
-        IP6_0=$(printf %x $hextet2_0)
-        IP6_1=$(printf %x $hextet2_1)
-        IP6_2=$(printf %x $hextet2_2)
-        IP6PFX="${IP6_0}:${IP6_1}:${IP6_2}"
+        local hextet2_0=${HEXTET0}
+        local hextet2_1=${HEXTET1}
+        local hextet2_2=$(( ${HEXTET2} & 0xfc00))
+        IP6PFX0=$(printf %x $hextet2_0)
+        IP6PFX1=$(printf %x $hextet2_1)
+        IP6PFX2=$(printf %x $hextet2_2)
+        IP6PFX="${IP6PFX0}:${IP6PFX1}:${IP6PFX2}"
     elif [ $IP6PREFIXLEN -eq 31 ]; then
-        local hextet2_0=${HEXTET[0]}
-        local hextet2_1=$(( ${HEXTET[1]} & 0xfffe ))
-        IP6_0=$(printf %x $hextet2_0)
-        IP6_1=$(printf %x $hextet2_1)
-        IP6PFX="${IP6_0}:${IP6_1}"
+        local hextet2_0=${HEXTET0}
+        local hextet2_1=$(( ${HEXTET1} & 0xfffe ))
+        IP6PFX0=$(printf %x $hextet2_0)
+        IP6PFX1=$(printf %x $hextet2_1)
+        IP6PFX="${IP6PFX0}:${IP6PFX1}"
     fi
-    debug_log "DEBUG" "Generated IPv6 prefix: $IP6PFX with length $IP6PREFIXLEN"
 
-    # ブロードバンドルーターアドレスの判定（POSIX準拠の方法）
+    # ブロードバンドルーターアドレスの判定
     local prefix31_hex_val=$(printf 0x%x $PREFIX31)
     local prefix31_dec=$(printf %d $prefix31_hex_val)
     PEERADDR=""
@@ -1377,7 +1376,7 @@ EOF
     # 変数の生成
     IPADDR_ARRAY="$octet1,$octet2,$octet3,$octet4"
     IPV4="$octet1.$octet2.$octet3.$octet4"
-    CE_ADDR="${CE_0}:${CE_1}:${CE_2}:${CE_3}"
+    CE_ADDR="${CE0}:${CE1}:${CE2}:${CE3}"
     BR=$PEERADDR
 
     return 0
