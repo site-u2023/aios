@@ -1228,9 +1228,9 @@ mape_mold() {
         # ↓ デバッグ追加
         debug_log "DEBUG" "Parsed IPv6 prefix HEXTETs: HEXTET0=$HEXTET0, HEXTET1=$HEXTET1, HEXTET2=$HEXTET2, HEXTET3=$HEXTET3"
     else
-        echo "プレフィックスを認識できません"
-        echo "ONUに直接接続していますか"
-        echo "終了します"
+        echo "$(get_message "prefix_not_recognized")"
+        echo "$(get_message "direct_onu_connection")"
+        echo "$(get_message "exiting")"
         # ↓ デバッグ追加
         debug_log "ERROR" "Failed to parse IPv6 prefix in mape_mold()"
         return 1
@@ -1249,10 +1249,10 @@ mape_mold() {
 
     debug_log "DEBUG" "Calculated PREFIX31=$PREFIX31, PREFIX38=$PREFIX38"
 
-    # RFC, OFFSET の初期値設定
+    # RFC, OFFSET の初期値設定 - JavaScriptソースと同じ値に設定
     RFC=false
-    OFFSET=6  # JavaScriptソースと同じ初期値
-    debug_log "DEBUG" "Set initial RFC=$RFC, OFFSET=$OFFSET (JavaScript initial value)"
+    OFFSET=6  # JavaScript: var offset = 6; に合わせる
+    debug_log "DEBUG" "Set initial RFC=$RFC, OFFSET=$OFFSET (matching JavaScript)"
 
     local prefix31_hex
     prefix31_hex="$(printf 0x%x "$PREFIX31")"
@@ -1279,7 +1279,7 @@ EOF
         IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
         IP6PREFIXLEN=38
         PSIDLEN=8
-        OFFSET=4  # JavaScriptソースと同様に4に変更
+        OFFSET=4  # JavaScript: offset = 4; に合わせる
         debug_log "DEBUG" "Calculated IPADDR=$IPADDR, IP6PREFIXLEN=$IP6PREFIXLEN, PSIDLEN=$PSIDLEN, OFFSET=$OFFSET"
 
     elif [ -n "$(get_ruleprefix31_value "$prefix31_hex")" ]; then
@@ -1298,7 +1298,7 @@ EOF
         IPADDR="${octet1}.${octet2}.${temp2m}.${temp3}"
         IP6PREFIXLEN=31
         PSIDLEN=8
-        OFFSET=4  # JavaScriptソースと同様に4に変更
+        OFFSET=4  # JavaScript: offset = 4; に合わせる
         debug_log "DEBUG" "Calculated IPADDR=$IPADDR, IP6PREFIXLEN=$IP6PREFIXLEN, PSIDLEN=$PSIDLEN, OFFSET=$OFFSET"
 
     elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
@@ -1323,16 +1323,17 @@ EOF
         IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
         IP6PREFIXLEN=38
         PSIDLEN=6
-        # offset変数はJavaScriptソースでは変更していないので、OFFSET=6の明示的設定を削除
-        debug_log "DEBUG" "Calculated IPADDR=$IPADDR, IP6PREFIXLEN=$IP6PREFIXLEN, PSIDLEN=$PSIDLEN, OFFSET=$OFFSET"
+        # JavaScriptではoffset変数を変更していないため、明示的な代入削除
+        # OFFSET=6 行を削除
+        debug_log "DEBUG" "Calculated IPADDR=$IPADDR, IP6PREFIXLEN=$IP6PREFIXLEN, PSIDLEN=$PSIDLEN, OFFSET=$OFFSET (unchanged)"
 
     else
         debug_log "ERROR" "No matching ruleprefix found in mape_mold()"
-        echo "未対応のプレフィックス"
+        echo "$(get_message "unsupported_prefix")"
         return 1
     fi
 
-    # PSID計算
+    # PSID計算 - テスト結果から16進数表記と10進数表記は同じ結果になることを確認済み
     if [ "$PSIDLEN" -eq 8 ]; then
         PSID=$(( (HEXTET3 & 0xff00) >> 8 ))
         debug_log "DEBUG" "PSID calculation for PSIDLEN=8: (HEXTET3 & 0xff00) >> 8 = $PSID"
@@ -1345,7 +1346,7 @@ EOF
     fi
     debug_log "DEBUG" "Final PSID=$PSID for PSIDLEN=$PSIDLEN"
 
-    # ポート範囲計算
+    # ポート範囲計算 - OFFSETとPSIDLENの値がポート範囲に大きく影響
     local AMAX=$(( (1 << OFFSET) - 1 ))
     debug_log "DEBUG" "AMAX calculation: (1 << $OFFSET) - 1 = $AMAX"
     
@@ -1380,7 +1381,7 @@ EOF
             fi
         fi
     done
-    debug_log "DEBUG" "Calculated port range string contains $(echo "$PORTS" | wc -w) ranges"
+    debug_log "DEBUG" "Calculated port range string with $AMAX ranges"
 
     # CEアドレス生成
     EALEN=$(( 56 - IP6PREFIXLEN ))
@@ -1396,7 +1397,7 @@ EOF
     fi
 
     # ↓ デバッグ終了ログ
-    debug_log "DEBUG" "Exiting mape_mold() function with final values: OFFSET=$OFFSET, PSIDLEN=$PSIDLEN, PSID=$PSID"
+    debug_log "DEBUG" "Exiting mape_mold() function with OFFSET=$OFFSET, PSIDLEN=$PSIDLEN, PSID=$PSID"
     return 0
 }
 
