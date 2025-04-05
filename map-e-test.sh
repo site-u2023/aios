@@ -1308,16 +1308,13 @@ EOF
         return 1
     fi
 
-    # PSID計算部分の修正
+    # PSID計算 - 元のJavaScriptとBash実装に合わせる
     if [ $PSIDLEN -eq 8 ]; then
-        PSID=$(( (HEXTET3 & 65280) >> 8 ))
-        debug_log "DEBUG" "PSID calculation for PSIDLEN=8: HEXTET3=0x$(printf %x $HEXTET3), PSID=$PSID"
+        PSID=$(( (HEXTET3 & 0xff00) >> 8 ))              # 0xff00 >> 8
+        debug_log "DEBUG" "PSID calculation for PSIDLEN=6: (0xff00 >> 8) = $PSID"
     elif [ $PSIDLEN -eq 6 ]; then
-        # 元サイトと一致する計算式 (0x3f00 >> 8)
-        # 10進数値で指定 (16128 = 0x3f00)
-        local temp=$(( HEXTET3 & 16128 ))
-        PSID=$(( temp >> 8 ))
-        debug_log "DEBUG" "PSID calculation for PSIDLEN=6: HEXTET3=0x$(printf %x $HEXTET3), mask=0x3f00, PSID=$PSID"
+        PSID=$(( (HEXTET3 & 0x3f00) >> 8 ))             # 0x3f00 >> 8
+        debug_log "DEBUG" "PSID calculation for PSIDLEN=6: (0x3f00 >> 8) = $PSID"
     fi
 
     # ポート範囲の計算
