@@ -1390,12 +1390,13 @@ mape_display() {
     echo ""
     echo "プレフィックス情報:"
     echo "  IPv6プレフィックス: $NEW_IP6_PREFIX"
-    echo "  CE IPv6アドレス: $CE_ADDR::/64"
+    echo "  CE IPv6アドレス: $CE_ADDR/64"
+    echo "  PSID値(10進数): $PSID"
     
     echo ""
     echo "OpenWrt設定値:"
     echo "  option peeraddr $BR"
-    echo "  option ipaddr $IPV4"
+    echo "  option ipaddr $IPADDR"
     echo "  option ip4prefixlen $IP4PREFIXLEN"
     echo "  option ip6prefix $IP6PFX::"
     echo "  option ip6prefixlen $IP6PREFIXLEN"
@@ -1410,6 +1411,8 @@ mape_display() {
     local total_ports=$(( ports_per_block * (max_port_blocks - 1) ))
     local port_start=$(( PSID << (16 - OFFSET - PSIDLEN) ))
     
+    debug_log "DEBUG" "Calculated port information: blocks=$max_port_blocks, ports_per_block=$ports_per_block, total=$total_ports"
+    
     echo ""
     echo "ポート情報:"
     echo "  利用可能なポート数: $total_ports"
@@ -1418,17 +1421,7 @@ mape_display() {
     # ポート範囲を表示
     echo ""
     echo "ポート範囲:"
-    local port_ranges=""
-    local amax_val=$(( (1 << OFFSET) - 1 ))
-    for A in $(seq 1 $amax_val); do
-        local start_port=$(( (A << (16 - OFFSET)) | (PSID << (16 - OFFSET - PSIDLEN)) ))
-        local end_port=$(( start_port + (1 << (16 - OFFSET - PSIDLEN)) - 1 ))
-        port_ranges="${port_ranges}${start_port}-${end_port} "
-        if [ $(( A % 3 )) -eq 0 ]; then
-            port_ranges="${port_ranges}\n"
-        fi
-    done
-    echo "$port_ranges" | sed 's/\\n/\n/g'
+    echo "$PORTS" | sed 's/\\n/\n/g'
 
     return 0
 }
