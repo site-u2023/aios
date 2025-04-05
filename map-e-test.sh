@@ -1192,6 +1192,228 @@ get_ruleprefix38_20_value() {
 }
 
 mape_mold() {
+    debug_log "DEBUG" "Entering mape_mold() function"
+    
+    local ip6_prefix_tmp
+    ip6_prefix_tmp="$(echo "${NEW_IP6_PREFIX/::/:0::}")"
+
+    debug_log "DEBUG" "NEW_IP6_PREFIX=${NEW_IP6_PREFIX}, ip6_prefix_tmp=${ip6_prefix_tmp}"
+
+    if echo "$ip6_prefix_tmp" | grep -E '^([0-9a-f]{1,4}):([0-9a-f]{1,4}):([0-9a-f]{1,4}):([0-9a-f]{0,4})' >/dev/null; then
+        local tmp
+        tmp="$(echo "$ip6_prefix_tmp" | sed -e 's|:| |g')"
+        
+        local i=0
+        local val
+        for val in $tmp; do
+            i=$((i+1))
+            if [ "$i" -le 4 ]; then
+                if [ -z "$val" ]; then
+                    val=0
+                fi
+                if [ "$i" -eq 1 ]; then
+                    HEXTET0=$(printf %d "0x$val")
+                elif [ "$i" -eq 2 ]; then
+                    HEXTET1=$(printf %d "0x$val")
+                elif [ "$i" -eq 3 ]; then
+                    HEXTET2=$(printf %d "0x$val")
+                elif [ "$i" -eq 4 ]; then
+                    HEXTET3=$(printf %d "0x$val")
+                fi
+            fi
+        done
+        debug_log "DEBUG" "Parsed IPv6 prefix HEXTETs: HEXTET0=$HEXTET0, HEXTET1=$HEXTET1, HEXTET2=$HEXTET2, HEXTET3=$HEXTET3"
+    else
+        echo "$(get_message "prefix_not_recognized")"
+        echo "$(get_message "direct_onu_connection")"
+        echo "$(get_message "exiting")"
+        debug_log "ERROR" "Failed to parse IPv6 prefix in mape_mold()"
+        return 1
+    fi
+
+    local h0_mul=$(( HEXTET0 * 65536 ))
+    local h1_masked=$(( HEXTET1 & 65534 ))
+    PREFIX31=$(( h0_mul + h1_masked ))
+    
+    local h0_mul2=$(( HEXTET0 * 16777216 ))
+    local h1_mul=$(( HEXTET1 * 256 ))
+    local h2_masked=$(( HEXTET2 & 64512 ))
+    local h2_shift=$(( h2_masked >> 8 ))
+    PREFIX38=$(( h0_mul2 + h1_mul + h2_shift ))
+
+    debug_log "DEBUG" "Calculated PREFIX31=$PREFIX31, PREFIX38=$PREFIX38"
+
+    RFC=false
+    OFFSET=6
+    debug_log "DEBUG" "Set initial RFC=$RFC, OFFSET=$OFFSET"
+
+    local prefix31_hex
+    prefix31_hex="$(printf 0x%x "$PREFIX31")"
+    local prefix38_hex
+    prefix38_hex="$(printf 0x%x "$PREFIX38")"
+    debug_log "DEBUG" "prefix31_hex=$prefix31_hex, prefix38_hex=$prefix38_hex"
+
+    if [ -n "$(get_ruleprefix38_value "$prefix38_hex")" ]; then
+        debug_log "DEBUG" "ruleprefix38 block triggered"
+        local octet
+        octet="$(get_ruleprefix38_value "$prefix38_hex")"
+        
+        local octet1 octet2 octet3
+        IFS=',' read -r octet1 octet2 octet3 <<EOF
+$octet
+EOF
+        debug_log "DEBUG" "octet1=$octet1, octet2=$octet2, octet3=$octet3"
+        
+        local temp1=$(( HEXTET2 & 0x0300 ))
+        local temp2=$(( temp1 >> 8 ))
+        octet3=$(( octet3 | temp2 ))
+        local octet4=$(( HEXTET2 & 0x00ff ))
+
+        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
+        IP6PREFIXLEN=38
+        PSIDLEN=8
+        OFFSET=4
+        debug_log "DEBUG" "Calculated IPADDR=$IPADDR, IP6PREFIXLEN=$IP6PREFIXLEN, PSIDLEN=$PSIDLEN, OFFSET=$OFFSET"
+    
+    elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
+        debug_log "DEBUG" "ruleprefix38_20 block triggered"
+        local octet
+        octet="$(get_ruleprefix38_20_value "$prefix38_hex")"
+        
+        local octet1 octet2 octet3
+        IFS=',' read -r octet1 octet2 octet3 <<EOF
+$octet
+EOF
+        debug_log "DEBUG" "octet1=$octet1, octet2=$octet2, octet3=$octet3"
+        
+        local temp1=$(( HEXTET2 & 0x03c0 ))
+        local temp2=$(( temp1 >> 6 ))
+        octet3=$(( octet3 | temp2 ))
+        
+        local temp3=$(( HEXTET2 & 0x003f ))
+        local temp4=$(( temp3 << 2 ))
+        local temp5=$(( HEXTET3 & 0xc000 ))
+        local temp6=$(( temp5 >> 14 ))
+        local octet4=$(( temp4 | temp6 ))
+
+        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
+        IP6PREFIXLEN=38
+        PSIDLEN=6
+        OFFSET=6
+        debug_log "DEBUG" "Calculated IPADDR=$IPADDR, IP6PREFIXLEN=$IP6PREFIXLEN, PSIDLEN=$PSIDLEN, OFFSET=$OFFSET"
+
+    elif [ -n "$(get_ruleprefix31_value "$prefix31_hex")" ]; then
+        debug_log "DEBUG" "ruleprefix31 block triggered"
+        local octet
+        octet="$(get_ruleprefix31_value "$prefix31_hex")"
+        
+        local octet1 octet2
+        IFS=',' read -r octet1 octet2 <<EOF
+$octet
+EOF
+        debug_log "DEBUG" "octet1=$octet1, octet2=$octet2"
+        
+        octet2=$(( octet2 | (HEXTET1 & 1) ))
+        local octet3=$(( (HEXTET2 & 0xff00) >> 8 ))
+        local octet4=$(( HEXTET2 & 0x00ff ))
+
+        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
+        IP6PREFIXLEN=31
+        PSIDLEN=8
+        OFFSET=4
+        debug_log "DEBUG" "Calculated IPADDR=$IPADDR, IP6PREFIXLEN=$IP6PREFIXLEN, PSIDLEN=$PSIDLEN, OFFSET=$OFFSET"
+
+    else
+        debug_log "ERROR" "No matching ruleprefix found in mape_mold()"
+        echo "$(get_message "unsupported_prefix")"
+        return 1
+    fi
+
+    debug_log "DEBUG" "HEXTET3=$HEXTET3 (0x$(printf '%x' $HEXTET3))"
+    
+    if [ "$PSIDLEN" -eq 8 ]; then
+        PSID=$(( (HEXTET3 & 0xff00) >> 8 ))
+        debug_log "DEBUG" "PSID calculation: (HEXTET3 & 0xff00) >> 8 = $PSID"
+    elif [ "$PSIDLEN" -eq 6 ]; then
+        PSID=$(( (HEXTET3 & 0x3f00) >> 8 ))
+        debug_log "DEBUG" "PSID calculation: (HEXTET3 & 0x3f00) >> 8 = $PSID"
+    else
+        PSID=0
+        debug_log "DEBUG" "PSIDLEN=$PSIDLEN is neither 8 nor 6, PSID set to 0"
+    fi
+    debug_log "DEBUG" "Final PSID=$PSID for PSIDLEN=$PSIDLEN"
+
+    local AMAX=$(( (1 << OFFSET) - 1 ))
+    debug_log "DEBUG" "AMAX calculation: (1 << $OFFSET) - 1 = $AMAX"
+    
+    PORTS=""
+    local A
+    for A in $(seq 1 "$AMAX"); do
+        local shift_bits=$(( 16 - OFFSET ))
+        local port_base=$(( A << shift_bits ))
+        local psid_shift=$(( 16 - OFFSET - PSIDLEN ))
+        local psid_part=$(( PSID << psid_shift ))
+        local port=$(( port_base | psid_part ))
+        local port_range_size=$(( 1 << psid_shift ))
+        local port_end=$(( port + port_range_size - 1 ))
+
+        if [ "$A" -eq 1 ]; then
+            debug_log "DEBUG" "Port calculation details (first iteration):"
+            debug_log "DEBUG" "  shift_bits = 16 - $OFFSET = $shift_bits"
+            debug_log "DEBUG" "  port_base = $A << $shift_bits = $port_base (0x$(printf '%x' $port_base))"
+            debug_log "DEBUG" "  psid_shift = 16 - $OFFSET - $PSIDLEN = $psid_shift"
+            debug_log "DEBUG" "  psid_part = $PSID << $psid_shift = $psid_part (0x$(printf '%x' $psid_part))"
+            debug_log "DEBUG" "  port = $port_base | $psid_part = $port (0x$(printf '%x' $port))"
+            debug_log "DEBUG" "  port_range_size = 1 << $psid_shift = $port_range_size"
+            debug_log "DEBUG" "  port_end = $port + $port_range_size - 1 = $port_end"
+        fi
+
+        PORTS="${PORTS}${port}-${port_end}"
+        if [ "$A" -lt "$AMAX" ]; then
+            if [ $(( A % 3 )) -eq 0 ]; then
+                PORTS="${PORTS}\\n"
+            else
+                PORTS="${PORTS} "
+            fi
+        fi
+    done
+    debug_log "DEBUG" "Calculated port range string with $AMAX ranges"
+
+    EALEN=$(( 56 - IP6PREFIXLEN ))
+    IP4PREFIXLEN=$(( 32 - (EALEN - PSIDLEN) ))
+    debug_log "DEBUG" "EALEN=$EALEN, IP4PREFIXLEN=$IP4PREFIXLEN"
+    
+    local HEXTET2_0 HEXTET2_1 HEXTET2_2
+    if [ "$IP6PREFIXLEN" -eq 38 ]; then
+        HEXTET2_0=$HEXTET0
+        HEXTET2_1=$HEXTET1
+        HEXTET2_2=$(( HEXTET2 & 0xfc00 ))
+        CE_IPv6_PREFIX="$(printf "%x:%x:%x::" $HEXTET2_0 $HEXTET2_1 $HEXTET2_2)"
+        debug_log "DEBUG" "Calculated CE_IPv6_PREFIX=$CE_IPv6_PREFIX for IP6PREFIXLEN=38"
+    elif [ "$IP6PREFIXLEN" -eq 31 ]; then
+        HEXTET2_0=$HEXTET0
+        HEXTET2_1=$(( HEXTET1 & 0xfffe ))
+        CE_IPv6_PREFIX="$(printf "%x:%x::" $HEXTET2_0 $HEXTET2_1)"
+        debug_log "DEBUG" "Calculated CE_IPv6_PREFIX=$CE_IPv6_PREFIX for IP6PREFIXLEN=31"
+    fi
+    
+    PEERADDR=""
+    if [ "$PREFIX31" -ge 605254272 ] && [ "$PREFIX31" -lt 605254276 ]; then
+        PEERADDR="2001:260:700:1::1:275"
+    elif [ "$PREFIX31" -ge 605254276 ] && [ "$PREFIX31" -lt 605254280 ]; then
+        PEERADDR="2001:260:700:1::1:276"
+    elif { [ "$PREFIX31" -ge 605028368 ] && [ "$PREFIX31" -lt 605028372 ]; } || \
+         { [ "$PREFIX31" -ge 605028944 ] && [ "$PREFIX31" -lt 605028948 ]; }; then
+        PEERADDR="2404:9200:225:100::64"
+    elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
+        PEERADDR="2001:380:a120::9"
+    fi
+    
+    IP6PREFIX="$CE_IPv6_PREFIX"
+    debug_log "DEBUG" "Exiting mape_mold() function with OFFSET=$OFFSET, PSIDLEN=$PSIDLEN, PSID=$PSID"
+}
+
+OK2_mape_mold() {
     # ↓ デバッグ開始時ログ
     debug_log "DEBUG" "Entering mape_mold() function"
     
