@@ -1191,32 +1191,6 @@ get_ruleprefix38_20_value() {
     esac
 }
 
-# プレフィックスルールテーブル関数
-get_ruleprefix38_value() {
-    local prefix=$1
-    # ここでプレフィックスに対応する値を返す
-    case "$prefix" in
-        # 必要に応じてケースを追加
-        *) echo "" ;;
-    esac
-}
-
-get_ruleprefix31_value() {
-    local prefix=$1
-    case "$prefix" in
-        # 必要に応じてケースを追加
-        *) echo "" ;;
-    esac
-}
-
-get_ruleprefix38_20_value() {
-    local prefix=$1
-    case "$prefix" in
-        "0x24004151") echo "153,187,0" ;;  # OCN対応
-        *) echo "" ;;
-    esac
-}
-
 # MAP-E情報取得と計算
 mape_mold() {
     # map-e.shと同様の処理開始
