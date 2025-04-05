@@ -1221,7 +1221,7 @@ mape_mold() {
         echo "プレフィックスを認識できません"
         echo "ONUに直接接続していますか"
         echo "終了します"
-        exit 1
+        exit
     fi
 
     # 各種計算
@@ -1278,7 +1278,7 @@ EOF
         PSIDLEN=6
     else
         echo "未対応のプレフィックス"
-        exit 1
+        exit
     fi
 
     # PSIDの計算
