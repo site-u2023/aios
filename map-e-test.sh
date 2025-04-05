@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.05-01-01"
+SCRIPT_VERSION="2025.04.05-01-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX準拠シェルスクリプト
@@ -1252,7 +1252,7 @@ mape_mold() {
     # RFC, OFFSET の初期値設定 - JavaScriptソースと同じ値に設定
     RFC=false
     OFFSET=6  # JavaScript: var offset = 6; に合わせる
-    debug_log "DEBUG" "Set initial RFC=$RFC, OFFSET=$OFFSET (matching JavaScript)"
+    debug_log "DEBUG" "Set initial RFC=$RFC, OFFSET=$OFFSET"
 
     local prefix31_hex
     prefix31_hex="$(printf 0x%x "$PREFIX31")"
@@ -1265,11 +1265,22 @@ mape_mold() {
         debug_log "DEBUG" "ruleprefix38 block triggered"
         local octet
         octet="$(get_ruleprefix38_value "$prefix38_hex")"
+        
+        # ここで明示的に変数をクリア
+        local octet1="" octet2="" octet3=""
+        
+        # 明示的に変数読み取り処理
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
         # ↓ DEBUG追加
         debug_log "DEBUG" "octet1=$octet1, octet2=$octet2, octet3=$octet3"
+        
+        # octet3が空の場合の処理
+        if [ -z "$octet3" ]; then
+            debug_log "WARN" "octet3 is empty, setting to 0"
+            octet3=0
+        fi
 
         local temp1=$(( HEXTET2 & 768 ))
         local temp2=$(( temp1 >> 8 ))
@@ -1286,10 +1297,21 @@ EOF
         debug_log "DEBUG" "ruleprefix31 block triggered"
         local octet
         octet="$(get_ruleprefix31_value "$prefix31_hex")"
+        
+        # ここで明示的に変数をクリア
+        local octet1="" octet2=""
+        
+        # 明示的に変数読み取り処理
         IFS=',' read -r octet1 octet2 <<EOF
 $octet
 EOF
         debug_log "DEBUG" "octet1=$octet1, octet2=$octet2"
+        
+        # octet2が空の場合の処理
+        if [ -z "$octet2" ]; then
+            debug_log "WARN" "octet2 is empty, setting to 0"
+            octet2=0
+        fi
         
         octet2=$(( octet2 | (HEXTET1 & 1) ))
         local temp1=$(( HEXTET2 & 65280 ))
@@ -1305,10 +1327,21 @@ EOF
         debug_log "DEBUG" "ruleprefix38_20 block triggered"
         local octet
         octet="$(get_ruleprefix38_20_value "$prefix38_hex")"
+        
+        # ここで明示的に変数をクリア
+        local octet1="" octet2="" octet3=""
+        
+        # 明示的に変数読み取り処理
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
         debug_log "DEBUG" "octet1=$octet1, octet2=$octet2, octet3=$octet3"
+        
+        # octet3が空の場合の処理
+        if [ -z "$octet3" ]; then
+            debug_log "WARN" "octet3 is empty, setting to 0"
+            octet3=0
+        fi
 
         local temp1=$(( HEXTET2 & 960 ))
         local temp2=$(( temp1 >> 6 ))
@@ -1323,8 +1356,7 @@ EOF
         IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
         IP6PREFIXLEN=38
         PSIDLEN=6
-        # JavaScriptではoffset変数を変更していないため、明示的な代入削除
-        # OFFSET=6 行を削除
+        # JavaScript では offset を変更していないため、明示的な変更を削除
         debug_log "DEBUG" "Calculated IPADDR=$IPADDR, IP6PREFIXLEN=$IP6PREFIXLEN, PSIDLEN=$PSIDLEN, OFFSET=$OFFSET (unchanged)"
 
     else
@@ -1333,20 +1365,26 @@ EOF
         return 1
     fi
 
-    # PSID計算 - テスト結果から16進数表記と10進数表記は同じ結果になることを確認済み
+    # PSID計算
+    debug_log "DEBUG" "HEXTET3=$HEXTET3 (0x$(printf '%x' $HEXTET3))"
+    
     if [ "$PSIDLEN" -eq 8 ]; then
-        PSID=$(( (HEXTET3 & 0xff00) >> 8 ))
-        debug_log "DEBUG" "PSID calculation for PSIDLEN=8: (HEXTET3 & 0xff00) >> 8 = $PSID"
+        local mask=$((0xff00))
+        local masked_value=$(( HEXTET3 & mask ))
+        PSID=$(( masked_value >> 8 ))
+        debug_log "DEBUG" "PSID calculation: (HEXTET3 & 0xff00) >> 8 = ($HEXTET3 & $mask) >> 8 = $masked_value >> 8 = $PSID"
     elif [ "$PSIDLEN" -eq 6 ]; then
-        PSID=$(( (HEXTET3 & 0x3f00) >> 8 ))
-        debug_log "DEBUG" "PSID calculation for PSIDLEN=6: (HEXTET3 & 0x3f00) >> 8 = $PSID"
+        local mask=$((0x3f00))
+        local masked_value=$(( HEXTET3 & mask ))
+        PSID=$(( masked_value >> 8 ))
+        debug_log "DEBUG" "PSID calculation: (HEXTET3 & 0x3f00) >> 8 = ($HEXTET3 & $mask) >> 8 = $masked_value >> 8 = $PSID"
     else
         PSID=0
-        debug_log "DEBUG" "PSID set to 0 for PSIDLEN=$PSIDLEN"
+        debug_log "DEBUG" "PSIDLEN=$PSIDLEN is neither 8 nor 6, PSID set to 0"
     fi
     debug_log "DEBUG" "Final PSID=$PSID for PSIDLEN=$PSIDLEN"
 
-    # ポート範囲計算 - OFFSETとPSIDLENの値がポート範囲に大きく影響
+    # ポート範囲計算
     local AMAX=$(( (1 << OFFSET) - 1 ))
     debug_log "DEBUG" "AMAX calculation: (1 << $OFFSET) - 1 = $AMAX"
     
@@ -1356,18 +1394,26 @@ EOF
         local shift_bits=$(( 16 - OFFSET ))
         local port_base=$(( A << shift_bits ))
         local psid_shift=$(( 16 - OFFSET - PSIDLEN ))
+        
+        # psid_shiftが負の値になる場合の対策
+        if [ "$psid_shift" -lt 0 ]; then
+            debug_log "WARN" "psid_shift calculated as $psid_shift (negative), forcing to 0"
+            psid_shift=0
+        fi
+        
         local psid_part=$(( PSID << psid_shift ))
         local port=$(( port_base | psid_part ))
         local port_range_size=$(( 1 << psid_shift ))
         local port_end=$(( port + port_range_size - 1 ))
 
+        # 初回イテレーションでは詳細なデバッグ情報を出力
         if [ "$A" -eq 1 ]; then
             debug_log "DEBUG" "Port calculation details (first iteration):"
             debug_log "DEBUG" "  shift_bits = 16 - $OFFSET = $shift_bits"
-            debug_log "DEBUG" "  port_base = $A << $shift_bits = $port_base"
+            debug_log "DEBUG" "  port_base = $A << $shift_bits = $port_base (0x$(printf '%x' $port_base))"
             debug_log "DEBUG" "  psid_shift = 16 - $OFFSET - $PSIDLEN = $psid_shift"
-            debug_log "DEBUG" "  psid_part = $PSID << $psid_shift = $psid_part"
-            debug_log "DEBUG" "  port = $port_base | $psid_part = $port"
+            debug_log "DEBUG" "  psid_part = $PSID << $psid_shift = $psid_part (0x$(printf '%x' $psid_part))"
+            debug_log "DEBUG" "  port = $port_base | $psid_part = $port (0x$(printf '%x' $port))"
             debug_log "DEBUG" "  port_range_size = 1 << $psid_shift = $port_range_size"
             debug_log "DEBUG" "  port_end = $port + $port_range_size - 1 = $port_end"
         fi
