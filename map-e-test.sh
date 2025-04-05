@@ -1228,9 +1228,9 @@ mape_mold() {
         # ↓ デバッグ追加
         debug_log "DEBUG" "Parsed IPv6 prefix HEXTETs: HEXTET0=$HEXTET0, HEXTET1=$HEXTET1, HEXTET2=$HEXTET2, HEXTET3=$HEXTET3"
     else
-        echo "プレフィックスを認識できません"
-        echo "ONUに直接接続していますか"
-        echo "終了します"
+        echo "$(get_message "prefix_not_recognized")"
+        echo "$(get_message "direct_onu_connection")"
+        echo "$(get_message "exiting")"
         # ↓ デバッグ追加
         debug_log "ERROR" "Failed to parse IPv6 prefix in mape_mold()"
         return 1
@@ -1249,9 +1249,9 @@ mape_mold() {
 
     debug_log "DEBUG" "Calculated PREFIX31=$PREFIX31, PREFIX38=$PREFIX38"
 
-    # RFC, OFFSET の初期値設定
+    # RFC, OFFSET の初期値設定 - JavaScriptソースと同じ値に設定
     RFC=false
-    OFFSET=4
+    OFFSET=6  # JavaScript: var offset = 6; と合わせて修正
     debug_log "DEBUG" "Set initial RFC=$RFC, OFFSET=$OFFSET"
 
     local prefix31_hex
@@ -1279,7 +1279,7 @@ EOF
         IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
         IP6PREFIXLEN=38
         PSIDLEN=8
-        OFFSET=4
+        OFFSET=4  # JavaScript: offset = 4; と合わせて設定
         debug_log "DEBUG" "Calculated IPADDR=$IPADDR, IP6PREFIXLEN=$IP6PREFIXLEN, PSIDLEN=$PSIDLEN, OFFSET=$OFFSET"
 
     elif [ -n "$(get_ruleprefix31_value "$prefix31_hex")" ]; then
@@ -1298,7 +1298,7 @@ EOF
         IPADDR="${octet1}.${octet2}.${temp2m}.${temp3}"
         IP6PREFIXLEN=31
         PSIDLEN=8
-        OFFSET=4
+        OFFSET=4  # JavaScript: offset = 4; と合わせて設定
         debug_log "DEBUG" "Calculated IPADDR=$IPADDR, IP6PREFIXLEN=$IP6PREFIXLEN, PSIDLEN=$PSIDLEN, OFFSET=$OFFSET"
 
     elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
@@ -1323,12 +1323,12 @@ EOF
         IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
         IP6PREFIXLEN=38
         PSIDLEN=6
-        OFFSET=6
+        # OFFSET値の変更なし - JavaScriptソースに合わせる（初期値の6のまま）
         debug_log "DEBUG" "Calculated IPADDR=$IPADDR, IP6PREFIXLEN=$IP6PREFIXLEN, PSIDLEN=$PSIDLEN, OFFSET=$OFFSET"
 
     else
         debug_log "ERROR" "No matching ruleprefix found in mape_mold()"
-        echo "未対応のプレフィックス"
+        echo "$(get_message "unsupported_prefix")"
         return 1
     fi
 
