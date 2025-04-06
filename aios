@@ -1365,7 +1365,7 @@ download() {
             case "$option" in
                 # インタプリタオプション
                 bash)   interpreter_name="bash" ;;
-                python) interpreter_name="python" ;;
+                python3) interpreter_name="python" ;;
                 node)   interpreter_name="node" ;;
                 perl)   interpreter_name="perl" ;;
                 # モードオプション
