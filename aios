@@ -1582,9 +1582,6 @@ download_finalize() {
         fi
     fi
     
-    if [ "$load_mode" = "true" ]; then
-        debug_log "DEBUG" "Loading file: ${BASE_DIR}/${file_name}"
-        
     # ファイル読込み処理
     if [ "$load_mode" = "true" ]; then
         debug_log "DEBUG" "Loading file: ${BASE_DIR}/${file_name}" 
