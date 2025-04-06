@@ -65,6 +65,7 @@ packages() {
     install_package ttyd yn hidden
     install_package openssh-sftp-server yn hidden
     install_package coreutils yn hidden
+    install_package bash yn hidden
     
     # === システム管理 ===
     print_section_header "PKG_SECTION_SYSADMIN"
