@@ -1346,7 +1346,7 @@ download() {
     local quiet_mode="${QUIET_MODE:-false}"
     local chmod_mode="false"
     local load_mode="false"
-    local script_file="${CACHE_DIR}/script.ch"
+    local interpreter="ash"  # デフォルトはash
     
     # オプション引数の処理
     while [ $# -gt 0 ]; do
@@ -1356,6 +1356,11 @@ download() {
             debug)  DEBUG_MODE="true" ;;
             chmod)  chmod_mode="true" ;;
             load)   load_mode="true" ;;
+            # インタプリタオプションの追加
+            bash|python|node|perl)
+                interpreter="$1"
+                debug_log "DEBUG" "Using interpreter: $interpreter"
+                ;;
             *)      debug_log "WARN" "Unknown option: $1, ignoring" ;;
         esac
         shift
@@ -1413,7 +1418,7 @@ download() {
     debug_log "DEBUG" "Calling download_finalize with file=${file_name}, status=${status_type}"
 
     # 結果表示とファイル読み込み
-    download_finalize "$file_name" "$status_message" "$clean_remote_version" "$api_status" "$load_mode" "$hidden_mode" "$status_type"
+    download_finalize "$file_name" "$status_message" "$clean_remote_version" "$api_status" "$load_mode" "$hidden_mode" "$status_type" "$interpreter"
     
     return 0
 }
@@ -1526,7 +1531,6 @@ download_fetch_file() {
     return 0
 }
 
-# ダウンロード完了処理
 download_finalize() {
     local file_name="$1"
     local status_message="$2" 
@@ -1535,6 +1539,7 @@ download_finalize() {
     local load_mode="$5"
     local hidden_mode="$6"
     local status_type="$7"
+    local interpreter="$8"  # インタープリタを第8引数として受け取る
     
     debug_log "DEBUG" "Finalizing download for ${file_name}, status=${status_type}"
     
@@ -1552,18 +1557,20 @@ download_finalize() {
         # ファイル名がDBファイルかどうかをチェック (.db拡張子)
         if echo "$file_name" | grep -q "\.db$"; then
             debug_log "DEBUG" "DB file handling for ${file_name}"
+            
+            # 他のDB関連処理は既存コードのまま維持（ここでは省略）
         fi
         
-        # 元の表示方法に戻す
+        # ステータスメッセージ表示
         if [ "$status_type" = "success" ]; then
-            # ダウンロード成功時
+            # 成功時
             if [ "$load_mode" = "true" ]; then
                 echo "${status_message} ${file_name} ${clean_remote_version} ${api_status} (Loaded)"
             else
                 echo "${status_message} ${file_name} ${clean_remote_version} ${api_status}"
             fi
         else
-            # 更新不要時
+            # 更新不要時など
             if [ "$load_mode" = "true" ]; then
                 echo "${status_message} ${file_name} ${clean_remote_version} ${api_status} (Loaded)"
             else
@@ -1577,8 +1584,16 @@ download_finalize() {
         debug_log "DEBUG" "Loading file: ${BASE_DIR}/${file_name}"
         
         if [ -s "${BASE_DIR}/${file_name}" ]; then
-            # shellcheck source=/dev/null
-            . "${BASE_DIR}/${file_name}"
+            if [ -z "$interpreter" ]; then
+                # インタープリタ未指定の場合は従来通り現在のシェルで実行
+                debug_log "DEBUG" "Loading file in current shell: ${BASE_DIR}/${file_name}"
+                # shellcheck source=/dev/null
+                . "${BASE_DIR}/${file_name}"
+            else
+                # 指定されたインタープリタで実行
+                debug_log "DEBUG" "Executing with ${interpreter}: ${BASE_DIR}/${file_name}"
+                $interpreter "${BASE_DIR}/${file_name}"
+            fi
             debug_log "DEBUG" "File loaded successfully: ${file_name}"
         else
             debug_log "ERROR" "Cannot load empty file: ${file_name}"
