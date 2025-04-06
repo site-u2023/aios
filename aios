@@ -1346,7 +1346,8 @@ download() {
     local quiet_mode="${QUIET_MODE:-false}"
     local chmod_mode="false"
     local load_mode="false"
-    local interpreter="ash"  # デフォルトはash
+    local interpreter_mode="false"
+    local interpreter_name="ash"
     
     # オプション引数の処理
     while [ $# -gt 0 ]; do
@@ -1356,16 +1357,18 @@ download() {
             debug)  DEBUG_MODE="true" ;;
             chmod)  chmod_mode="true" ;;
             load)   load_mode="true" ;;
-            # インタプリタオプションの追加
-            bash|python|node|perl)
-                interpreter="$1"
-                debug_log "DEBUG" "Using interpreter: $interpreter"
-                ;;
+            # インタプリタオプション
+            bash)   interpreter_mode="true"; interpreter_name="bash" ;;
+            python) interpreter_mode="true"; interpreter_name="python" ;;
+            node)   interpreter_mode="true"; interpreter_name="node" ;;
+            perl)   interpreter_mode="true"; interpreter_name="perl" ;;
             *)      debug_log "WARN" "Unknown option: $1, ignoring" ;;
         esac
         shift
     done
-    
+
+    debug_log "DEBUG" "Processing with options: hidden=${hidden_mode}, quiet=${quiet_mode}, chmod=${chmod_mode}, load=${load_mode}, interpreter=${interpreter_name}"
+
     # バージョン情報取得
     local version_data
     version_data=$(download_check_version "$file_name")
@@ -1415,10 +1418,10 @@ download() {
         return 1
     fi
 
-    debug_log "DEBUG" "Calling download_finalize with file=${file_name}, status=${status_type}"
+    debug_log "DEBUG" "Calling download_finalize with file=${file_name}, status=${status_type}, interpreter=${interpreter_name}"
 
     # 結果表示とファイル読み込み
-    download_finalize "$file_name" "$status_message" "$clean_remote_version" "$api_status" "$load_mode" "$hidden_mode" "$status_type" "$interpreter"
+    download_finalize "$file_name" "$status_message" "$clean_remote_version" "$api_status" "$load_mode" "$hidden_mode" "$status_type" "$interpreter_name"
     
     return 0
 }
@@ -1579,6 +1582,9 @@ download_finalize() {
         fi
     fi
     
+    if [ "$load_mode" = "true" ]; then
+        debug_log "DEBUG" "Loading file: ${BASE_DIR}/${file_name}"
+        
     # ファイル読込み処理
     if [ "$load_mode" = "true" ]; then
         debug_log "DEBUG" "Loading file: ${BASE_DIR}/${file_name}" 
