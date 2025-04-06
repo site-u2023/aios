@@ -1347,9 +1347,7 @@ download() {
     local quiet_mode="${QUIET_MODE:-false}"
     local chmod_mode="false"
     local load_mode="false"
-    
-    # グローバル変数のインタープリタを一時保存
-    local original_interpreter="$INTERPRETER"
+    local interpreter_name=""  # デフォルト値を空に
     
     # オプション引数の処理（改善版）
     while [ $# -gt 0 ]; do
@@ -1365,11 +1363,11 @@ download() {
         # オプション判定（値がtrueの場合のみ処理）
         if [ "$value" = "true" ]; then
             case "$option" in
-                # インタプリタオプション - グローバル変数を更新
-                bash)   INTERPRETER="bash" ;;
-                python) INTERPRETER="python" ;;
-                node)   INTERPRETER="node" ;;
-                perl)   INTERPRETER="perl" ;;
+                # インタプリタオプション
+                bash)   interpreter_name="bash" ;;
+                python) interpreter_name="python" ;;
+                node)   interpreter_name="node" ;;
+                perl)   interpreter_name="perl" ;;
                 # モードオプション
                 hidden) hidden_mode="true" ;;
                 quiet)  quiet_mode="true" ;;
@@ -1383,7 +1381,10 @@ download() {
         shift
     done
 
-    debug_log "DEBUG" "Processing with options: hidden=${hidden_mode}, quiet=${quiet_mode}, chmod=${chmod_mode}, load=${load_mode}, interpreter=${INTERPRETER}"
+    # インタプリタが設定されていなければデフォルト値を設定
+    [ -z "$interpreter_name" ] && interpreter_name="ash"
+
+    debug_log "DEBUG" "Processing with options: hidden=${hidden_mode}, quiet=${quiet_mode}, chmod=${chmod_mode}, load=${load_mode}, interpreter=${interpreter_name}"
 
     # バージョン情報取得
     local version_data
@@ -1420,8 +1421,6 @@ download() {
         debug_log "DEBUG" "Executing download_fetch_file for ${file_name}"
         if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode"; then
             debug_log "ERROR" "Download process failed for $file_name"
-            # インタープリタを元に戻す
-            INTERPRETER="$original_interpreter"
             return 1
         fi
         status_type="success"
@@ -1439,18 +1438,13 @@ download() {
     # ファイルの存在を再確認
     if [ ! -f "${BASE_DIR}/$file_name" ]; then
         debug_log "ERROR" "File not found after download attempt: $file_name"
-        # インタープリタを元に戻す
-        INTERPRETER="$original_interpreter"
         return 1
     fi
 
-    debug_log "DEBUG" "Calling download_finalize with file=${file_name}, status=${status_type}, interpreter=${INTERPRETER}"
+    debug_log "DEBUG" "Calling download_finalize with file=${file_name}, status=${status_type}, interpreter=${interpreter_name}"
 
     # 結果表示とファイル読み込み
-    download_finalize "$file_name" "$status_message" "$clean_remote_version" "$api_status" "$load_mode" "$hidden_mode" "$status_type"
-    
-    # インタープリタを元に戻す
-    INTERPRETER="$original_interpreter"
+    download_finalize "$file_name" "$status_message" "$clean_remote_version" "$api_status" "$load_mode" "$hidden_mode" "$status_type" "$interpreter_name"
     
     return 0
 }
@@ -1571,8 +1565,9 @@ download_finalize() {
     local load_mode="$5"
     local hidden_mode="$6"
     local status_type="$7"
+    local interpreter="${8:-ash}"  # デフォルト値をashに設定
     
-    debug_log "DEBUG" "Finalizing download for ${file_name}, status=${status_type}, interpreter=${INTERPRETER}"
+    debug_log "DEBUG" "Finalizing download for ${file_name}, status=${status_type}, interpreter=${interpreter}"
     
     # ファイルが実際に存在するか確認
     if [ ! -f "${BASE_DIR}/${file_name}" ]; then
@@ -1588,8 +1583,6 @@ download_finalize() {
         # ファイル名がDBファイルかどうかをチェック (.db拡張子)
         if echo "$file_name" | grep -q "\.db$"; then
             debug_log "DEBUG" "DB file handling for ${file_name}"
-            
-            # 他のDB関連処理は既存コードのまま維持（ここでは省略）
         fi
         
         # ステータスメッセージ表示
@@ -1612,18 +1605,15 @@ download_finalize() {
     
     # ファイル読込み処理
     if [ "$load_mode" = "true" ]; then
-        debug_log "DEBUG" "Loading file with ${INTERPRETER}: ${BASE_DIR}/${file_name}"
+        debug_log "DEBUG" "Loading file with ${interpreter}: ${BASE_DIR}/${file_name}"
         
         if [ -s "${BASE_DIR}/${file_name}" ]; then
-            # インタープリタに基づいて処理を分岐
-            if [ "$INTERPRETER" = "ash" ]; then
-                # ashの場合はsourceのみ
-                . "${BASE_DIR}/${file_name}"
+            if [ "$interpreter" = "$INTERPRETER" ]; then
                 debug_log "DEBUG" "File loaded with source"
+                . "${BASE_DIR}/${file_name}"
             else
-                # まずsourceで関数を読み込み、次にインタープリタで実行
-                debug_log "DEBUG" "File loaded with source and will execute with ${INTERPRETER}"
-                $INTERPRETER "${BASE_DIR}/${file_name}"
+                debug_log "DEBUG" "Executing with specified interpreter: ${interpreter}"
+                $interpreter "${BASE_DIR}/${file_name}"
             fi
         else
             debug_log "ERROR" "Cannot load empty file: ${file_name}"
