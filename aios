@@ -1612,6 +1612,7 @@ download_finalize() {
             if [ "$interpreter" != "$INTERPRETER" ]; then
                 if ! command -v "$interpreter" > /dev/null 2>&1; then
                     printf "%s\n" "$(color red "Error: Interpreter '${interpreter}' is not installed on this system.")"
+                    install_package ${interpreter} yn hidden
                     return 1
                 fi
             fi
