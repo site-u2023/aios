@@ -1613,16 +1613,22 @@ download_finalize() {
                 if ! command -v "$interpreter" > /dev/null 2>&1; then
                     printf "%s\n" "$(color red "Error: Interpreter '${interpreter}' is not installed on this system.")"
                     install_package ${interpreter} yn hidden
-                    return 1
+                    
+                    # インストール後に再度確認
+                    if ! command -v "$interpreter" > /dev/null 2>&1; then
+                        debug_log "ERROR" "Interpreter still not found after installation attempt: ${interpreter}"
+                        return 1
+                    else
+                        debug_log "DEBUG" "Executing with specified interpreter: ${interpreter}"
+                        $interpreter "${BASE_DIR}/${file_name}"
+                    fi
+                else
+                    debug_log "DEBUG" "Executing with specified interpreter: ${interpreter}"
+                    $interpreter "${BASE_DIR}/${file_name}"
                 fi
-            fi
-            
-            if [ "$interpreter" = "$INTERPRETER" ]; then
+            else
                 debug_log "DEBUG" "File loaded with source"
                 . "${BASE_DIR}/${file_name}"
-            else
-                debug_log "DEBUG" "Executing with specified interpreter: ${interpreter}"
-                $interpreter "${BASE_DIR}/${file_name}"
             fi
         else
             debug_log "ERROR" "Cannot load empty file: ${file_name}"
