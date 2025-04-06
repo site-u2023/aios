@@ -24,7 +24,6 @@ MENU_INTERNET_V&MIG download "v6mig-prov.sh" "chmod" "load"
 [MENU_INTERNET_MAPE]
 MENU_INTERNET_MAPE_ASH_CONFIG download "map-e-ash.sh" "chmod" "load"
 MENU_INTERNET_MAPE_BASH_CONFIG download "map-e-bash.sh" "chmod" "load"
-MENU_INTERNET_MAPE_TEST_CONFIG download "map-e.sh" "chmod" "load"
 
 [MENU_INTERNET_DSLITE]
 MENU_INTERNET_DSLITE_CONFIG download "internet-dslite.sh" "chmod" "load"
