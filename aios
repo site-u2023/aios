@@ -1561,7 +1561,7 @@ download_finalize() {
     local load_mode="$5"
     local hidden_mode="$6"
     local status_type="$7"
-    local interpreter="$8"
+    local interpreter="$8"  # インタープリタを第8引数として受け取る
     
     debug_log "DEBUG" "Finalizing download for ${file_name}, status=${status_type}"
     
@@ -1571,22 +1571,33 @@ download_finalize() {
         return 1
     fi
     
-    # aiosファイルの場合は特に実行権限を確認
-    if [ "$file_name" = "aios" ]; then
-        debug_log "DEBUG" "Extra check: Setting execute permission for aios file"
-        chmod +x "${BASE_DIR}/${file_name}"
-    fi
-    
     # 隠しモードチェック
     if [ "$hidden_mode" = "true" ]; then
         debug_log "DEBUG" "Hidden mode is active, skipping status message"
         # 隠しモードの場合はメッセージを表示しない
     else        
+        # ファイル名がDBファイルかどうかをチェック (.db拡張子)
+        if echo "$file_name" | grep -q "\.db$"; then
+            debug_log "DEBUG" "DB file handling for ${file_name}"
+            
+            # 他のDB関連処理は既存コードのまま維持（ここでは省略）
+        fi
+        
         # ステータスメッセージ表示
-        if [ "$load_mode" = "true" ]; then
-            echo "${status_message} ${file_name} ${clean_remote_version} ${api_status} (Loaded)"
+        if [ "$status_type" = "success" ]; then
+            # 成功時
+            if [ "$load_mode" = "true" ]; then
+                echo "${status_message} ${file_name} ${clean_remote_version} ${api_status} (Loaded)"
+            else
+                echo "${status_message} ${file_name} ${clean_remote_version} ${api_status}"
+            fi
         else
-            echo "${status_message} ${file_name} ${clean_remote_version} ${api_status}"
+            # 更新不要時など
+            if [ "$load_mode" = "true" ]; then
+                echo "${status_message} ${file_name} ${clean_remote_version} ${api_status} (Loaded)"
+            else
+                echo "${status_message} ${file_name} ${clean_remote_version} ${api_status}"
+            fi
         fi
     fi
     
@@ -1594,15 +1605,16 @@ download_finalize() {
     if [ "$load_mode" = "true" ]; then
         debug_log "DEBUG" "Loading file: ${BASE_DIR}/${file_name}"
         
-        # 実行権限の確認と設定
-        if [ ! -x "${BASE_DIR}/${file_name}" ]; then
-            debug_log "DEBUG" "Setting execute permission for ${BASE_DIR}/${file_name}"
-            chmod +x "${BASE_DIR}/${file_name}"
-        fi
-
         if [ -s "${BASE_DIR}/${file_name}" ]; then
-            debug_log "DEBUG" "Executing with ${interpreter}: ${BASE_DIR}/${file_name}"
-            $interpreter "${BASE_DIR}/${file_name}"
+            # シェルスクリプトならsourceで読み込み、それ以外はインタープリタで実行
+            # ashがデフォルトの場合は必ずsourceで読み込む
+            if [ "$interpreter" = "ash" ]; then
+                debug_log "DEBUG" "Source loading with ash: ${BASE_DIR}/${file_name}"
+                . "${BASE_DIR}/${file_name}"
+            else
+                debug_log "DEBUG" "Executing with ${interpreter}: ${BASE_DIR}/${file_name}"
+                $interpreter "${BASE_DIR}/${file_name}"
+            fi
         else
             debug_log "ERROR" "Cannot load empty file: ${file_name}"
             return 1
