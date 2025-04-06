@@ -1603,18 +1603,12 @@ download_finalize() {
     
     # ファイル読込み処理
     if [ "$load_mode" = "true" ]; then
-        debug_log "DEBUG" "Loading file: ${BASE_DIR}/${file_name}"
+        debug_log "DEBUG" "Loading file with ${interpreter}: ${BASE_DIR}/${file_name}"
         
         if [ -s "${BASE_DIR}/${file_name}" ]; then
-            # シェルスクリプトならsourceで読み込み、それ以外はインタープリタで実行
-            # ashがデフォルトの場合は必ずsourceで読み込む
-            if [ "$interpreter" = "ash" ]; then
-                debug_log "DEBUG" "Source loading with ash: ${BASE_DIR}/${file_name}"
-                . "${BASE_DIR}/${file_name}"
-            else
-                debug_log "DEBUG" "Executing with ${interpreter}: ${BASE_DIR}/${file_name}"
-                $interpreter "${BASE_DIR}/${file_name}"
-            fi
+            # 関数を環境に読み込むため、まずインタープリタで実行後にsource
+            $interpreter "${BASE_DIR}/${file_name}"
+            . "${BASE_DIR}/${file_name}"  # 関数を現在の環境に読み込む
         else
             debug_log "ERROR" "Cannot load empty file: ${file_name}"
             return 1
