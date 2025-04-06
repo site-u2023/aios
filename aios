@@ -1581,20 +1581,10 @@ download_finalize() {
     
     # ファイル読込み処理
     if [ "$load_mode" = "true" ]; then
-        debug_log "DEBUG" "Loading file: ${BASE_DIR}/${file_name}"
-        
+        debug_log "DEBUG" "Loading file: ${BASE_DIR}/${file_name}" 
         if [ -s "${BASE_DIR}/${file_name}" ]; then
-            if [ -z "$interpreter" ]; then
-                # インタープリタ未指定の場合は従来通り現在のシェルで実行
-                debug_log "DEBUG" "Loading file in current shell: ${BASE_DIR}/${file_name}"
-                # shellcheck source=/dev/null
-                . "${BASE_DIR}/${file_name}"
-            else
-                # 指定されたインタープリタで実行
-                debug_log "DEBUG" "Executing with ${interpreter}: ${BASE_DIR}/${file_name}"
-                $interpreter "${BASE_DIR}/${file_name}"
-            fi
-            debug_log "DEBUG" "File loaded successfully: ${file_name}"
+            debug_log "DEBUG" "Executing with ${interpreter}: ${BASE_DIR}/${file_name}"
+            $interpreter "${BASE_DIR}/${file_name}"
         else
             debug_log "ERROR" "Cannot load empty file: ${file_name}"
             return 1
