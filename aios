@@ -1358,10 +1358,10 @@ download() {
             chmod)  chmod_mode="true" ;;
             load)   load_mode="true" ;;
             # インタプリタオプション
-            bash)   interpreter_mode="true"; interpreter_name="bash" ;;
-            python) interpreter_mode="true"; interpreter_name="python" ;;
-            node)   interpreter_mode="true"; interpreter_name="node" ;;
-            perl)   interpreter_mode="true"; interpreter_name="perl" ;;
+            bash)   interpreter_name="bash" ;;
+            python) interpreter_name="python" ;;
+            node)   interpreter_name="node" ;;
+            perl)   interpreter_name="perl" ;;
             *)      debug_log "WARN" "Unknown option: $1, ignoring" ;;
         esac
         shift
