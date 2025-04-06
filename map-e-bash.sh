@@ -707,138 +707,234 @@ declare -A ruleprefix38_20=(
 )
 
 ip6_prefix_tmp=`echo ${new_ip6_prefix/::/:0::}`
-if [[ $ip6_prefix_tmp =~ ^([0-9a-f]{1,4}):([0-9a-f]{1,4}):([0-9a-f]{1,4}):([0-9a-f]{0,4}) ]]; then
+debug_log "DEBUG" "NEW_IP6_PREFIX=${new_ip6_prefix}, ip6_prefix_tmp=${ip6_prefix_tmp}"
 
+if [[ $ip6_prefix_tmp =~ ^([0-9a-f]{1,4}):([0-9a-f]{1,4}):([0-9a-f]{1,4}):([0-9a-f]{0,4}) ]]; then
+  # bashの配列構文はそのまま維持
   tmp=( $( echo ${ip6_prefix_tmp} | sed -e "s|:| |g" ) )
 
   for i in {0..3}; do
     if [ -z "${tmp[$i]}" ];then tmp[$i]=0;fi
-    hextet[i]=`printf %d 0x${tmp[$i]}`
+    hextet[$i]=`printf %d 0x${tmp[$i]}`
   done
+  debug_log "DEBUG" "Parsed IPv6 prefix HEXTETs: hextet[0]=${hextet[0]}, hextet[1]=${hextet[1]}, hextet[2]=${hextet[2]}, hextet[3]=${hextet[3]}"
 else
   echo "プレフィックスを認識できません"
   echo "ONUに直接接続していますか"
   echo "終了します"
+  debug_log "ERROR" "Failed to parse IPv6 prefix"
   exit 1  
 fi
 
 prefix31=$(( $(( ${hextet[0]} * 0x10000 )) + $((${hextet[1]} & 0xfffe)) ))
 prefix38=$(( $(( ${hextet[0]} * 0x1000000 )) + $(( ${hextet[1]} * 0x100 )) + $(( $(( ${hextet[2]} & 0xfc00 )) >> 8 )) ))
+debug_log "DEBUG" "Calculated PREFIX31=${prefix31}, PREFIX38=${prefix38}"
+
 offset=6
 rfc=false
+debug_log "DEBUG" "Set initial offset=${offset}, rfc=${rfc}"
+
+prefix31_hex=`printf 0x%x $prefix31`
+prefix38_hex=`printf 0x%x $prefix38`
+debug_log "DEBUG" "prefix31_hex=${prefix31_hex}, prefix38_hex=${prefix38_hex}"
+
+# この順序でマッチングがとても重要
 if [ -n "${ruleprefix38[`printf 0x%x $prefix38`]}" ]; then
+  debug_log "DEBUG" "ruleprefix38 block triggered"
   octet="${ruleprefix38[`printf 0x%x $prefix38`]}"
-# replace "," to the array delimiter " " to split into an array
-  octet=(${octet//,/ }) 
-  octet[2]=$(( ${octet[2]} | $(( $(( ${hextet[2]} & 0x0300 )) >> 8 )) )) 
-  octet[3]=$(( ${hextet[2]} & 0x00ff )) 
-#  echo debug: ${octet[0]} ${octet[1]} ${octet[2]} ${octet[3]} 
+  debug_log "DEBUG" "Original octet string: ${octet}"
+  
+  # カンマをスペースに置き換えて配列に分割
+  octet=(${octet//,/ })
+  debug_log "DEBUG" "octet array: ${octet[0]},${octet[1]},${octet[2]}"
+  
+  # ビット操作
+  octet[2]=$(( ${octet[2]} | $(( $(( ${hextet[2]} & 0x0300 )) >> 8 )) ))
+  octet[3]=$(( ${hextet[2]} & 0x00ff ))
+  debug_log "DEBUG" "Modified octet: octet[2]=${octet[2]}, octet[3]=${octet[3]}"
+  
+  # このフォーマットに注目: ipaddrにはカンマ区切りで0が追加されている
   ipaddr="${ruleprefix38[`printf 0x%x $prefix38`]}",0
+  debug_log "DEBUG" "Generated ipaddr=${ipaddr}"
+  
   ip6prefixlen=38
   psidlen=8 
   offset=4
-elif [ -n "${ruleprefix31[`printf 0x%x $prefix31`]}" ]; then 
-  octet="${ruleprefix31[`printf 0x%x $prefix31`]}" 
-  octet=(${octet//,/ }) 
-  octet[1]=$(( ${octet[1]} | $(( ${hextet[1]} & 0x0001 )) )) 
+  debug_log "DEBUG" "Set ip6prefixlen=${ip6prefixlen}, psidlen=${psidlen}, offset=${offset}"
+
+elif [ -n "${ruleprefix31[`printf 0x%x $prefix31`]}" ]; then
+  debug_log "DEBUG" "ruleprefix31 block triggered"
+  octet="${ruleprefix31[`printf 0x%x $prefix31`]}"
+  debug_log "DEBUG" "Original octet string: ${octet}"
+  
+  octet=(${octet//,/ })
+  debug_log "DEBUG" "octet array: ${octet[0]},${octet[1]}"
+  
+  octet[1]=$(( ${octet[1]} | $(( ${hextet[1]} & 0x0001 )) ))
   octet[2]=$(( $(( ${hextet[2]} & 0xff00 )) >> 8 ))
   octet[3]=$(( ${hextet[2]} & 0x00ff ))
+  debug_log "DEBUG" "Modified octet: octet[1]=${octet[1]}, octet[2]=${octet[2]}, octet[3]=${octet[3]}"
+  
+  # このフォーマットに注目: ipaddr には 0,0 が追加されている
   ipaddr="${ruleprefix31[`printf 0x%x $prefix31`]}",0,0
+  debug_log "DEBUG" "Generated ipaddr=${ipaddr}"
+  
   ip6prefixlen=31
   psidlen=8
   offset=4
-elif [ -n "${ruleprefix38_20[`printf 0x%x $prefix38`]}" ]; then 
+  debug_log "DEBUG" "Set ip6prefixlen=${ip6prefixlen}, psidlen=${psidlen}, offset=${offset}"
+
+elif [ -n "${ruleprefix38_20[`printf 0x%x $prefix38`]}" ]; then
+  debug_log "DEBUG" "ruleprefix38_20 block triggered"
   octet="${ruleprefix38_20[`printf 0x%x $prefix38`]}"
-  octet=(${octet//,/ }) 
+  debug_log "DEBUG" "Original octet string: ${octet}"
+  
+  octet=(${octet//,/ })
+  debug_log "DEBUG" "octet array: ${octet[0]},${octet[1]},${octet[2]}"
+  
+  # ビット操作を詳細にデバッグ
   octet[2]=$(( ${octet[2]} | $(( $(( ${hextet[2]} & 0x03c0 )) >> 6 )) ))
-  octet[3]=$(( $(( $(( ${hextet[2]} & 0x003f )) << 2 )) | $(( $(( ${hextet[3]} & 0xc000 )) >> 14 )) )) 
+  debug_log "DEBUG" "Modified octet[2]=${octet[2]}"
+  
+  octet[3]=$(( $(( $(( ${hextet[2]} & 0x003f )) << 2 )) | $(( $(( ${hextet[3]} & 0xc000 )) >> 14 )) ))
+  debug_log "DEBUG" "Modified octet[3]=${octet[3]}"
+  
+  # このフォーマットに注目: ipaddr には 0 が追加されている
   ipaddr="${ruleprefix38_20[`printf 0x%x $prefix38`]}",0
+  debug_log "DEBUG" "Generated ipaddr=${ipaddr}"
+  
   ip6prefixlen=38
   psidlen=6
+  # 重要: offsetは変更されない (初期値の6のまま)
+  debug_log "DEBUG" "Set ip6prefixlen=${ip6prefixlen}, psidlen=${psidlen}, offset=${offset} (unchanged)"
+
 else
+  debug_log "ERROR" "No matching ruleprefix found"
   echo "未対応のプレフィックス"
   exit 1 
 fi
 
 if [ $psidlen == 8 ]; then
   psid=$(( $(( ${hextet[3]} & 0xff00 )) >> 8 ))
+  debug_log "DEBUG" "PSID calculation for PSIDLEN=8: psid=${psid}"
 elif [ $psidlen == 6 ]; then
   psid=$(( $(( ${hextet[3]} & 0x3f00 )) >> 8 ))
+  debug_log "DEBUG" "PSID calculation for PSIDLEN=6: psid=${psid}"
 fi
 
 ports=""
-Amax=$(( $(( 1 << $offset )) -1 ));
-for (( A=1; A <= $Amax; A++ )) {
+Amax=$(( $(( 1 << $offset )) -1 ))
+debug_log "DEBUG" "AMAX calculation: Amax=${Amax}"
+
+for (( A=1; A <= $Amax; A++ )); do
+  # 最初の反復でのみ詳細なデバッグ情報を出力
+  if [ $A -eq 1 ]; then
+    shift_bits=$((16 - $offset))
+    port_base=$(( $A << $shift_bits ))
+    psid_shift=$(( 16 - $offset - $psidlen ))
+    psid_part=$(( $psid << $psid_shift ))
+    debug_log "DEBUG" "Port calculation details (first iteration):"
+    debug_log "DEBUG" "  shift_bits = ${shift_bits}"
+    debug_log "DEBUG" "  port_base = ${port_base}"
+    debug_log "DEBUG" "  psid_shift = ${psid_shift}"
+    debug_log "DEBUG" "  psid_part = ${psid_part}"
+  fi
+  
   port=$(( $(( $A << $((16 - $offset)) )) | $(( $psid << $(( 16 - $offset - $psidlen )) )) ))
   ports+="$port""-""$(( $port + $(( $(( 1 << $(( 16 - $offset - $psidlen )) )) - 1 ))  ))"
   if [ $A -lt $Amax ]; then 
     if ! ((A % 3)); then ports="$ports"\\n; else ports="$ports ";fi
   fi
-} 
+done
+debug_log "DEBUG" "Calculated port ranges with AMAX=${Amax}"
 
-# vars for bring up the map-e router
+# ルーターセットアップ用変数
 lp=$Amax
 nxps=$(( 1 << $((16 - $offset)) ))
 pslen=$(( 1 << $(( 16 - $offset - $psidlen )) ))
-#echo -e "$ports"
 
-
+# /64の確認
 if [ $(( ${hextet[3]} & 0xff )) != 0 ]; then
+  debug_log "WARN" "Input value and CE /64 differ"
   echo "入力値とCEとで/64が異なる"
 fi
 
+# CE IPアドレス生成
 hextet[3]=$((${hextet[3]} & 0xff00))
+debug_log "DEBUG" "Modified hextet[3]=${hextet[3]}"
+
 if $rfc; then
+  debug_log "DEBUG" "Using RFC mode for address generation"
   hextet[4]=0
   hextet[5]=$(( $((  ${octet[0]} << 8  )) | ${octet[1]} ))
   hextet[6]=$(( $((  ${octet[2]} << 8  )) | ${octet[3]} ))
   hextet[7]=$psid
 else
+  debug_log "DEBUG" "Using non-RFC mode for address generation"
   hextet[4]=${octet[0]}
   hextet[5]=$(( $((${octet[1]} << 8)) | ${octet[2]} ))
   hextet[6]=$((${octet[3]} << 8))
   hextet[7]=$(($psid << 8))
 fi
+debug_log "DEBUG" "Generated hextet values for CE"
 
+# CEアドレスコンポーネントの生成
 declare -a ce
-for ((i=0; i < 4; i++)); do
+for ((i=0; i < 8; i++)); do
   ce[i]=`printf %x ${hextet[$i]}`
+  debug_log "DEBUG" "CE component $i: ${ce[$i]}"
 done
 
+# EALEN計算
 ealen=$(( 56 - $ip6prefixlen ))
 ip4prefixlen=$(( 32 - $(($ealen - $psidlen))  ))
+debug_log "DEBUG" "EALEN=${ealen}, IP4PREFIXLEN=${ip4prefixlen}"
 
+# IP6プレフィックス生成
 declare -a hextet2
 if [ $ip6prefixlen == 38 ]; then
   hextet2[0]=${hextet[0]}
   hextet2[1]=${hextet[1]}
   hextet2[2]=$(( ${hextet[2]} & 0xfc00))
+  debug_log "DEBUG" "IP6PREFIX components for prefixlen=38"
 elif [ $ip6prefixlen == 31 ]; then
   hextet2[0]=${hextet[0]}
   hextet2[1]=$(( ${hextet[1]} & 0xfffe ))
+  debug_log "DEBUG" "IP6PREFIX components for prefixlen=31"
 fi  
 
+# IP6PREFIX文字列生成
 declare -a ip6prefix
 for ((i=0; i < ${#hextet2[@]}; i++)); do
-  ip6prefix[i]=`printf %x ${hextet2[$i]}` 
-done 
+  ip6prefix[i]=`printf %x ${hextet2[$i]}`
+  debug_log "DEBUG" "ip6prefix component $i: ${ip6prefix[$i]}"
+done
 
-prefix31_hex=`printf 0x%x $prefix31`
-if   [[ $prefix31_hex -ge 0x24047a80 ]] && [[ $prefix31_hex -lt 0x24047a84 ]]; then
+# PEERADDRの決定
+debug_log "DEBUG" "Checking peeraddr for prefix31_hex=${prefix31_hex}"
+if [[ $prefix31_hex -ge 0x24047a80 ]] && [[ $prefix31_hex -lt 0x24047a84 ]]; then
   peeraddr="2001:260:700:1::1:275"
+  debug_log "DEBUG" "Selected peeraddr=2001:260:700:1::1:275"
 elif [[ $prefix31_hex -ge 0x24047a84 ]] && [[ $prefix31_hex -lt 0x24047a88 ]]; then
   peeraddr="2001:260:700:1::1:276"
+  debug_log "DEBUG" "Selected peeraddr=2001:260:700:1::1:276"
 elif [[ $prefix31_hex -ge 0x240b0010 ]] && [[ $prefix31_hex -lt 0x240b0014 ]]; then
   peeraddr="2404:9200:225:100::64"
+  debug_log "DEBUG" "Selected peeraddr=2404:9200:225:100::64"
 elif [[ $prefix31_hex -ge 0x240b0250 ]] && [[ $prefix31_hex -lt 0x240b0254 ]]; then
   peeraddr="2404:9200:225:100::64"
+  debug_log "DEBUG" "Selected peeraddr=2404:9200:225:100::64"
 elif [ -n "${ruleprefix38_20[`printf 0x%x $prefix38`]}" ]; then
   peeraddr="2001:380:a120::9"
+  debug_log "DEBUG" "Selected peeraddr=2001:380:a120::9"
 else
   peeraddr=""
+  debug_log "DEBUG" "No matching peeraddr found"
 fi
 
+# 最終出力用のフォーマット処理
 ipaddr=(${ipaddr//,/ })
+debug_log "DEBUG" "Final ipaddr array: ${ipaddr[*]}"
 ip4a="$(IFS="."; echo "${ipaddr[*]}")"
 ip6pfx="$(IFS=":"; echo "${ip6prefix[*]}")" 
 PFX=$new_ip6_prefix
@@ -847,12 +943,15 @@ IPV4=${octet[0]}.${octet[1]}.${octet[2]}.${octet[3]}
 PSID=$psid
 BR=$peeraddr
 
+debug_log "DEBUG" "Final values: ip4a=${ip4a}, ip6pfx=${ip6pfx}, CE=${CE}"
+
+# 設定情報の出力
 echo -e "\033[1;33m wan ipaddr6: ${NET_ADDR6}\033[0;33m"
 echo -e "\033[1;32m wan6 ip6prefix: \033[0;39m"${CE}::/64
-echo -e "\033[1;32m ${WANMAPE} peeraddr: \033[0;39m"${peeraddr}
-echo -e "\033[1;32m ${WANMAPE} ip4prefixlen: \033[0;39m"${ip4prefixlen}
-echo -e "\033[1;32m ${WANMAPE} ip6pfx: \033[0;39m"${ip6pfx}::
-echo -e "\033[1;32m ${WANMAPE} ip6prefixlen: \033[0;39m"${ip6prefixlen}
-echo -e "\033[1;32m ${WANMAPE} ealen: \033[0;39m"${ealen}
-echo -e "\033[1;32m ${WANMAPE} psidlen: \033[0;39m"${psidlen}
-echo -e "\033[1;32m ${WANMAPE} offset: \033[0;39m"${offset}
+echo -e "\033[1;32m ${wan_map_e} peeraddr: \033[0;39m"${peeraddr}
+echo -e "\033[1;32m ${wan_map_e} ip4prefixlen: \033[0;39m"${ip4prefixlen}
+echo -e "\033[1;32m ${wan_map_e} ip6pfx: \033[0;39m"${ip6pfx}::
+echo -e "\033[1;32m ${wan_map_e} ip6prefixlen: \033[0;39m"${ip6prefixlen}
+echo -e "\033[1;32m ${wan_map_e} ealen: \033[0;39m"${ealen}
+echo -e "\033[1;32m ${wan_map_e} psidlen: \033[0;39m"${psidlen}
+echo -e "\033[1;32m ${wan_map_e} offset: \033[0;39m"${offset}
