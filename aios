@@ -1607,7 +1607,7 @@ download_finalize() {
         
         if [ -s "${BASE_DIR}/${file_name}" ]; then
             # 関数を環境に読み込むため、まずインタープリタで実行後にsource
-            $interpreter "${BASE_DIR}/${file_name}"
+            #$interpreter "${BASE_DIR}/${file_name}"
             . "${BASE_DIR}/${file_name}"  # 関数を現在の環境に読み込む
         else
             debug_log "ERROR" "Cannot load empty file: ${file_name}"
