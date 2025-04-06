@@ -1589,16 +1589,16 @@ download_finalize() {
         if [ "$status_type" = "success" ]; then
             # 成功時
             if [ "$load_mode" = "true" ]; then
-                echo "${status_message} ${file_name} ${clean_remote_version} ${api_status} (Loaded)"
+                printf "%s\n" "${status_message} ${file_name} ${clean_remote_version} ${api_status} (Loaded)"
             else
-                echo "${status_message} ${file_name} ${clean_remote_version} ${api_status}"
+                printf "%s\n" "${status_message} ${file_name} ${clean_remote_version} ${api_status}"
             fi
         else
             # 更新不要時など
             if [ "$load_mode" = "true" ]; then
-                echo "${status_message} ${file_name} ${clean_remote_version} ${api_status} (Loaded)"
+                printf "%s\n" "${status_message} ${file_name} ${clean_remote_version} ${api_status} (Loaded)"
             else
-                echo "${status_message} ${file_name} ${clean_remote_version} ${api_status}"
+                printf "%s\n" "${status_message} ${file_name} ${clean_remote_version} ${api_status}"
             fi
         fi
     fi
@@ -1611,8 +1611,7 @@ download_finalize() {
             # インタープリタが存在するか確認
             if [ "$interpreter" != "$INTERPRETER" ]; then
                 if ! command -v "$interpreter" > /dev/null 2>&1; then
-                    debug_log "ERROR" "Interpreter not found: ${interpreter}"
-                    echo "$(color red "Error: Interpreter '${interpreter}' is not installed on this system.")"
+                    printf "%s\n" "$(color red "Error: Interpreter '${interpreter}' is not installed on this system.")"
                     return 1
                 fi
             fi
