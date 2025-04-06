@@ -1588,7 +1588,14 @@ download_finalize() {
     
     # ファイル読込み処理
     if [ "$load_mode" = "true" ]; then
-        debug_log "DEBUG" "Loading file: ${BASE_DIR}/${file_name}" 
+        debug_log "DEBUG" "Loading file: ${BASE_DIR}/${file_name}"
+        
+        # 実行権限の確認と設定
+        if [ ! -x "${BASE_DIR}/${file_name}" ]; then
+            debug_log "DEBUG" "Setting execute permission for ${BASE_DIR}/${file_name}"
+            chmod +x "${BASE_DIR}/${file_name}"
+        fi
+
         if [ -s "${BASE_DIR}/${file_name}" ]; then
             debug_log "DEBUG" "Executing with ${interpreter}: ${BASE_DIR}/${file_name}"
             $interpreter "${BASE_DIR}/${file_name}"
