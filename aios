@@ -58,7 +58,7 @@ DEV_NULL="${DEV_NULL:-on}"       # サイレントモード制御（on=有効, u
 DEBUG_MODE="${DEBUG_MODE:-false}" # デバッグモード（true=有効, false=無効）
 
 # パス・ファイル関連
-INTERPRETER="ash"
+INTERPRETER="${INTERPRETER:-ash}"  # デフォルトインタープリタ
 BIN_PATH="$(readlink -f "$0")"   # 実行ファイルの絶対パス
 BIN_DIR="$(dirname "$BIN_PATH")" # 実行ファイルのディレクトリ
 BIN_FILE="$(basename "$BIN_PATH")" # 実行ファイル名
