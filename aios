@@ -1346,24 +1346,28 @@ download() {
     local quiet_mode="${QUIET_MODE:-false}"
     local chmod_mode="false"
     local load_mode="false"
-    local interpreter_mode="false"
     local interpreter_name="ash"
     
     # オプション引数の処理
     while [ $# -gt 0 ]; do
-        case "$1" in
-            hidden) hidden_mode="true" ;;
-            quiet)  quiet_mode="true" ;;
-            debug)  DEBUG_MODE="true" ;;
-            chmod)  chmod_mode="true" ;;
-            load)   load_mode="true" ;;
-            # インタプリタオプション
-            bash)   interpreter_name="bash" ;;
-            python) interpreter_name="python" ;;
-            node)   interpreter_name="node" ;;
-            perl)   interpreter_name="perl" ;;
-            *)      debug_log "WARN" "Unknown option: $1, ignoring" ;;
-        esac
+        # キー=値形式のパラメータ処理
+        if echo "$1" | grep -q "="; then
+            local param_name=$(echo "$1" | cut -d'=' -f1)
+            local param_value=$(echo "$1" | cut -d'=' -f2)
+            
+            case "$param_name" in
+                bash)   [ "$param_value" = "true" ] && interpreter_name="bash" ;;
+                python) [ "$param_value" = "true" ] && interpreter_name="python" ;;
+                node)   [ "$param_value" = "true" ] && interpreter_name="node" ;;
+                perl)   [ "$param_value" = "true" ] && interpreter_name="perl" ;;
+                hidden) [ "$param_value" = "true" ] && hidden_mode="true" ;;
+                quiet)  [ "$param_value" = "true" ] && quiet_mode="true" ;;
+                debug)  [ "$param_value" = "true" ] && DEBUG_MODE="true" ;;
+                chmod)  [ "$param_value" = "true" ] && chmod_mode="true" ;;
+                load)   [ "$param_value" = "true" ] && load_mode="true" ;;
+                *)      debug_log "WARN" "Unknown option: $1, ignoring" ;;
+            esac
+        fi
         shift
     done
 
