@@ -1347,7 +1347,9 @@ download() {
     local quiet_mode="${QUIET_MODE:-false}"
     local chmod_mode="false"
     local load_mode="false"
-    local interpreter_name="ash"
+    
+    # グローバル変数のインタープリタを一時保存
+    local original_interpreter="$INTERPRETER"
     
     # オプション引数の処理（改善版）
     while [ $# -gt 0 ]; do
@@ -1363,11 +1365,11 @@ download() {
         # オプション判定（値がtrueの場合のみ処理）
         if [ "$value" = "true" ]; then
             case "$option" in
-                # インタプリタオプション
-                bash)   interpreter_name="bash" ;;
-                python) interpreter_name="python" ;;
-                node)   interpreter_name="node" ;;
-                perl)   interpreter_name="perl" ;;
+                # インタプリタオプション - グローバル変数を更新
+                bash)   INTERPRETER="bash" ;;
+                python) INTERPRETER="python" ;;
+                node)   INTERPRETER="node" ;;
+                perl)   INTERPRETER="perl" ;;
                 # モードオプション
                 hidden) hidden_mode="true" ;;
                 quiet)  quiet_mode="true" ;;
@@ -1381,7 +1383,7 @@ download() {
         shift
     done
 
-    debug_log "DEBUG" "Processing with options: hidden=${hidden_mode}, quiet=${quiet_mode}, chmod=${chmod_mode}, load=${load_mode}, interpreter=${interpreter_name}"
+    debug_log "DEBUG" "Processing with options: hidden=${hidden_mode}, quiet=${quiet_mode}, chmod=${chmod_mode}, load=${load_mode}, interpreter=${INTERPRETER}"
 
     # バージョン情報取得
     local version_data
@@ -1418,6 +1420,8 @@ download() {
         debug_log "DEBUG" "Executing download_fetch_file for ${file_name}"
         if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode"; then
             debug_log "ERROR" "Download process failed for $file_name"
+            # インタープリタを元に戻す
+            INTERPRETER="$original_interpreter"
             return 1
         fi
         status_type="success"
@@ -1435,13 +1439,18 @@ download() {
     # ファイルの存在を再確認
     if [ ! -f "${BASE_DIR}/$file_name" ]; then
         debug_log "ERROR" "File not found after download attempt: $file_name"
+        # インタープリタを元に戻す
+        INTERPRETER="$original_interpreter"
         return 1
     fi
 
-    debug_log "DEBUG" "Calling download_finalize with file=${file_name}, status=${status_type}, interpreter=${interpreter_name}"
+    debug_log "DEBUG" "Calling download_finalize with file=${file_name}, status=${status_type}, interpreter=${INTERPRETER}"
 
     # 結果表示とファイル読み込み
-    download_finalize "$file_name" "$status_message" "$clean_remote_version" "$api_status" "$load_mode" "$hidden_mode" "$status_type" "$interpreter_name"
+    download_finalize "$file_name" "$status_message" "$clean_remote_version" "$api_status" "$load_mode" "$hidden_mode" "$status_type"
+    
+    # インタープリタを元に戻す
+    INTERPRETER="$original_interpreter"
     
     return 0
 }
@@ -1562,9 +1571,8 @@ download_finalize() {
     local load_mode="$5"
     local hidden_mode="$6"
     local status_type="$7"
-    local interpreter="$8"  # インタープリタを第8引数として受け取る
     
-    debug_log "DEBUG" "Finalizing download for ${file_name}, status=${status_type}"
+    debug_log "DEBUG" "Finalizing download for ${file_name}, status=${status_type}, interpreter=${INTERPRETER}"
     
     # ファイルが実際に存在するか確認
     if [ ! -f "${BASE_DIR}/${file_name}" ]; then
@@ -1604,12 +1612,20 @@ download_finalize() {
     
     # ファイル読込み処理
     if [ "$load_mode" = "true" ]; then
-        debug_log "DEBUG" "Loading file with ${interpreter}: ${BASE_DIR}/${file_name}"
+        debug_log "DEBUG" "Loading file with ${INTERPRETER}: ${BASE_DIR}/${file_name}"
         
         if [ -s "${BASE_DIR}/${file_name}" ]; then
-            # 関数を環境に読み込むため、まずインタープリタで実行後にsource
-            #$interpreter "${BASE_DIR}/${file_name}"
-            . "${BASE_DIR}/${file_name}"  # 関数を現在の環境に読み込む
+            # インタープリタに基づいて処理を分岐
+            if [ "$INTERPRETER" = "ash" ]; then
+                # ashの場合はsourceのみ
+                . "${BASE_DIR}/${file_name}"
+                debug_log "DEBUG" "File loaded with source"
+            else
+                # まずsourceで関数を読み込み、次にインタープリタで実行
+                . "${BASE_DIR}/${file_name}"
+                debug_log "DEBUG" "File loaded with source and will execute with ${INTERPRETER}"
+                $INTERPRETER "${BASE_DIR}/${file_name}"
+            fi
         else
             debug_log "ERROR" "Cannot load empty file: ${file_name}"
             return 1
