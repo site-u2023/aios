@@ -1622,7 +1622,6 @@ download_finalize() {
                 debug_log "DEBUG" "File loaded with source"
             else
                 # まずsourceで関数を読み込み、次にインタープリタで実行
-                . "${BASE_DIR}/${file_name}"
                 debug_log "DEBUG" "File loaded with source and will execute with ${INTERPRETER}"
                 $INTERPRETER "${BASE_DIR}/${file_name}"
             fi
