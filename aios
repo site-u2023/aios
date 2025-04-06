@@ -1616,7 +1616,7 @@ download_finalize() {
                     
                     # インストール後に再度確認
                     if ! command -v "$interpreter" > /dev/null 2>&1; then
-                        debug_log "ERROR" "Interpreter still not found after installation attempt: ${interpreter}"
+                        debug_log "EBUG" "Interpreter still not found after installation attempt: ${interpreter}"
                         return 1
                     else
                         debug_log "DEBUG" "Executing with specified interpreter: ${interpreter}"
