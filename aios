@@ -1348,29 +1348,32 @@ download() {
     local load_mode="false"
     local interpreter_name="ash"
     
-    # オプション引数の処理（統一版）
+    # オプション引数の処理（改善版）
     while [ $# -gt 0 ]; do
-        local option_name="$1"
-        local option_value="true"
+        local option="$1"
+        local value="true"
         
-        # キー=値形式のパラメータを分解
-        if echo "$option_name" | grep -q "="; then
-            option_value=$(echo "$option_name" | cut -d'=' -f2)
-            option_name=$(echo "$option_name" | cut -d'=' -f1)
+        # キー=値形式の場合は分解処理
+        if echo "$option" | grep -q "="; then
+            value=$(echo "$option" | cut -d'=' -f2)
+            option=$(echo "$option" | cut -d'=' -f1)
         fi
         
-        # 値がtrueの場合のみ処理（キー=値形式とフラグ形式の統一処理）
-        if [ "$option_value" = "true" ]; then
-            case "$option_name" in
+        # オプション判定（値がtrueの場合のみ処理）
+        if [ "$value" = "true" ]; then
+            case "$option" in
+                # インタプリタオプション
                 bash)   interpreter_name="bash" ;;
                 python) interpreter_name="python" ;;
                 node)   interpreter_name="node" ;;
                 perl)   interpreter_name="perl" ;;
+                # モードオプション
                 hidden) hidden_mode="true" ;;
                 quiet)  quiet_mode="true" ;;
                 debug)  DEBUG_MODE="true" ;;
                 chmod)  chmod_mode="true" ;;
                 load)   load_mode="true" ;;
+                # 不明オプション
                 *)      debug_log "WARN" "Unknown option: $1, ignoring" ;;
             esac
         fi
@@ -1418,6 +1421,12 @@ download() {
         fi
         status_type="success"
         status_message="$(get_message "CONFIG_DOWNLOAD_SUCCESS")"
+        
+        # aiosファイルは常に実行権限を設定する（追加）
+        if [ "$file_name" = "aios" ]; then
+            debug_log "DEBUG" "Special handling: Setting execute permission for aios file"
+            chmod +x "${BASE_DIR}/${file_name}"
+        fi
     else
         debug_log "DEBUG" "Skipping download for ${file_name} (not needed)"
     fi
@@ -1552,7 +1561,7 @@ download_finalize() {
     local load_mode="$5"
     local hidden_mode="$6"
     local status_type="$7"
-    local interpreter="$8"  # インタープリタを第8引数として受け取る
+    local interpreter="$8"
     
     debug_log "DEBUG" "Finalizing download for ${file_name}, status=${status_type}"
     
@@ -1562,33 +1571,22 @@ download_finalize() {
         return 1
     fi
     
+    # aiosファイルの場合は特に実行権限を確認
+    if [ "$file_name" = "aios" ]; then
+        debug_log "DEBUG" "Extra check: Setting execute permission for aios file"
+        chmod +x "${BASE_DIR}/${file_name}"
+    fi
+    
     # 隠しモードチェック
     if [ "$hidden_mode" = "true" ]; then
         debug_log "DEBUG" "Hidden mode is active, skipping status message"
         # 隠しモードの場合はメッセージを表示しない
     else        
-        # ファイル名がDBファイルかどうかをチェック (.db拡張子)
-        if echo "$file_name" | grep -q "\.db$"; then
-            debug_log "DEBUG" "DB file handling for ${file_name}"
-            
-            # 他のDB関連処理は既存コードのまま維持（ここでは省略）
-        fi
-        
         # ステータスメッセージ表示
-        if [ "$status_type" = "success" ]; then
-            # 成功時
-            if [ "$load_mode" = "true" ]; then
-                echo "${status_message} ${file_name} ${clean_remote_version} ${api_status} (Loaded)"
-            else
-                echo "${status_message} ${file_name} ${clean_remote_version} ${api_status}"
-            fi
+        if [ "$load_mode" = "true" ]; then
+            echo "${status_message} ${file_name} ${clean_remote_version} ${api_status} (Loaded)"
         else
-            # 更新不要時など
-            if [ "$load_mode" = "true" ]; then
-                echo "${status_message} ${file_name} ${clean_remote_version} ${api_status} (Loaded)"
-            else
-                echo "${status_message} ${file_name} ${clean_remote_version} ${api_status}"
-            fi
+            echo "${status_message} ${file_name} ${clean_remote_version} ${api_status}"
         fi
     fi
     
