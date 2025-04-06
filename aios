@@ -1589,14 +1589,14 @@ download_finalize() {
         if [ "$status_type" = "success" ]; then
             # 成功時
             if [ "$load_mode" = "true" ]; then
-                printf "%s\n" "${status_message} ${file_name} ${clean_remote_version} ${api_status} (Loaded)"
+                printf "%s\n" "${status_message} ${file_name} ${clean_remote_version} ${api_status} Loaded"
             else
                 printf "%s\n" "${status_message} ${file_name} ${clean_remote_version} ${api_status}"
             fi
         else
             # 更新不要時など
             if [ "$load_mode" = "true" ]; then
-                printf "%s\n" "${status_message} ${file_name} ${clean_remote_version} ${api_status} (Loaded)"
+                printf "%s\n" "${status_message} ${file_name} ${clean_remote_version} ${api_status} Loaded"
             else
                 printf "%s\n" "${status_message} ${file_name} ${clean_remote_version} ${api_status}"
             fi
