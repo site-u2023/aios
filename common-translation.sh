@@ -1,10 +1,10 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-08-00-00"
+SCRIPT_VERSION="2025-04-08-00-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
-# 🚀 Last Update: 2025-03-29
+# 🚀 Last Update: 2025-04-07
 #
 # 🏷️ License: CC0 (Public Domain)
 # 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
@@ -57,9 +57,69 @@ TRANSLATION_CACHE_DIR="${BASE_DIR}/translations"
 CURRENT_API=""
 API_LIST="google" # API_LIST="mymemory"
 
+# メモリキャッシュ変数
+MEM_CACHE_KEYS=""
+MEM_CACHE_VALUES=""
+
+# メモリキャッシュの初期化
+init_memory_cache() {
+    MEM_CACHE_KEYS=""
+    MEM_CACHE_VALUES=""
+    debug_log "DEBUG" "Memory translation cache initialized"
+}
+
+# メモリキャッシュに値を保存
+set_memory_cache() {
+    local key="$1"
+    local value="$2"
+    
+    # メモリキャッシュに追加
+    MEM_CACHE_KEYS="${MEM_CACHE_KEYS}${key}|"
+    MEM_CACHE_VALUES="${MEM_CACHE_VALUES}${value}|"
+    
+    debug_log "DEBUG" "Added to memory cache: key=${key}"
+}
+
+# メモリキャッシュから値を取得
+get_memory_cache() {
+    local search_key="$1"
+    local keys="$MEM_CACHE_KEYS"
+    local values="$MEM_CACHE_VALUES"
+    local i=1
+    local current_key=""
+    local current_value=""
+    
+    # キーがなければ見つからなかった
+    if [ -z "$keys" ]; then
+        return 1
+    fi
+    
+    # キーを区切り文字で分割して検索
+    while true; do
+        current_key=$(echo "$keys" | cut -d'|' -f$i)
+        
+        # キーがなくなったら終了
+        if [ -z "$current_key" ]; then
+            break
+        fi
+        
+        # キーが一致したら値を返す
+        if [ "$current_key" = "$search_key" ]; then
+            current_value=$(echo "$values" | cut -d'|' -f$i)
+            printf "%s" "$current_value"
+            return 0
+        fi
+        
+        i=$((i + 1))
+    done
+    
+    return 1
+}
+
 # 翻訳キャッシュの初期化
 init_translation_cache() {
     mkdir -p "${TRANSLATION_CACHE_DIR}"
+    init_memory_cache
     debug_log "DEBUG" "Translation cache directory initialized"
 }
 
@@ -193,7 +253,7 @@ translate_text() {
     esac
 }
 
-# 言語データベース作成関数
+# 言語データベース作成関数（メモリキャッシュ対応版）
 create_language_db() {
     local target_lang="$1"
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
@@ -205,6 +265,9 @@ create_language_db() {
     local ip_check_file="${CACHE_DIR}/network.ch"
     
     debug_log "DEBUG" "Creating language DB for target ${target_lang} with API language code ${api_lang}"
+    
+    # メモリキャッシュを初期化
+    init_memory_cache
     
     # ベースDBファイル確認
     if [ ! -f "$base_db" ]; then
@@ -264,14 +327,24 @@ EOF
         if [ -n "$key" ] && [ -n "$value" ]; then
             # キャッシュキー生成
             local cache_key=$(printf "%s%s%s" "$key" "$value" "$api_lang" | md5sum | cut -d' ' -f1)
-            local cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
             
-            # キャッシュを確認
+            # まずメモリキャッシュを確認
+            local mem_cached_translation=$(get_memory_cache "$cache_key")
+            if [ $? -eq 0 ] && [ -n "$mem_cached_translation" ]; then
+                # メモリキャッシュヒット
+                printf "%s|%s=%s\n" "$api_lang" "$key" "$mem_cached_translation" >> "$output_db"
+                debug_log "DEBUG" "Using memory cached translation for key: ${key}"
+                continue
+            fi
+            
+            # ファイルキャッシュを確認
+            local cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
             if [ -f "$cache_file" ]; then
                 local translated=$(cat "$cache_file")
-                # APIから取得した言語コードを使用
+                # メモリキャッシュに保存してから使用
+                set_memory_cache "$cache_key" "$translated"
                 printf "%s|%s=%s\n" "$api_lang" "$key" "$translated" >> "$output_db"
-                debug_log "DEBUG" "Using cached translation for key: ${key}"
+                debug_log "DEBUG" "Using file cached translation for key: ${key}"
                 continue
             fi
             
@@ -308,9 +381,12 @@ EOF
                     # 基本的なエスケープシーケンスの処理
                     local decoded="$cleaned_translation"
                     
-                    # キャッシュに保存
+                    # ファイルキャッシュに保存
                     mkdir -p "$(dirname "$cache_file")"
                     printf "%s\n" "$decoded" > "$cache_file"
+                    
+                    # メモリキャッシュにも保存
+                    set_memory_cache "$cache_key" "$decoded"
                     
                     # APIから取得した言語コードを使用してDBに追加
                     printf "%s|%s=%s\n" "$api_lang" "$key" "$decoded" >> "$output_db"
