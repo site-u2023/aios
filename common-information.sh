@@ -452,61 +452,6 @@ process_location_info() {
     
     debug_log "DEBUG: Processing location data - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME, Timezone: $SELECT_TIMEZONE"
 
-    # 3つの重要情報が揃っているか確認
-    if [ -z "$SELECT_COUNTRY" ] || [ -z "$SELECT_TIMEZONE" ] || [ -z "$SELECT_ZONENAME" ]; then
-        debug_log "ERROR: Incomplete location data - required information missing"
-        return 1
-    fi
-    
-    debug_log "DEBUG: All required location data available, saving to cache files"
-    
-    # キャッシュディレクトリ確認
-    [ -d "$CACHE_DIR" ] || mkdir -p "$CACHE_DIR"
-    
-    # 注意: 直接キャッシュファイルに書き込まずに一時ファイルに保存
-    # country_write()とzone_write()のみがキャッシュに書き込みを行う
-    
-    # 一時ファイルにデータを保存
-    echo "$SELECT_COUNTRY" > "${CACHE_DIR}/ip_country.tmp"
-    echo "$SELECT_ZONENAME" > "${CACHE_DIR}/ip_zonename.tmp"
-    echo "$SELECT_TIMEZONE" > "${CACHE_DIR}/ip_timezone.tmp"
-    
-    debug_log "DEBUG: Location information saved to temporary files"
-    
-    # ISP情報をキャッシュに保存
-    if [ -n "$ISP_NAME" ] || [ -n "$ISP_AS" ]; then
-        local tmp_isp="${CACHE_DIR}/ip_isp.tmp"
-        local tmp_as="${CACHE_DIR}/ip_as.tmp"
-        echo "$ISP_NAME" > "$tmp_isp"
-        echo "$ISP_AS" > "$tmp_as"
-        debug_log "DEBUG: ISP information saved to temporary files"
-    fi
-    
-    debug_log "DEBUG: Location information processing completed successfully"
-    return 0
-}
-
-# IPアドレスから地域情報を取得しキャッシュファイルに保存する関数
-OK_process_location_info() {
-    local skip_retrieval=0
-    
-    # パラメータ処理（オプション）
-    if [ "$1" = "use_cached" ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_TIMEZONE" ] && [ -n "$SELECT_ZONENAME" ]; then
-        skip_retrieval=1
-        debug_log "DEBUG: Using already retrieved location information"
-    fi
-    
-    # 必要な場合のみget_country_code関数を呼び出し
-    if [ $skip_retrieval -eq 0 ]; then
-        debug_log "DEBUG: Starting IP-based location information retrieval"
-        get_country_code || {
-            debug_log "ERROR: get_country_code failed to retrieve location information"
-            return 1
-        }
-    fi
-    
-    debug_log "DEBUG: Processing location data - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME, Timezone: $SELECT_TIMEZONE"
-
     # キャッシュファイルのパス定義
     local tmp_country="${CACHE_DIR}/ip_country.tmp"
     local tmp_zone="${CACHE_DIR}/ip_zone.tmp"
