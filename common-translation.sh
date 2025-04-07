@@ -78,7 +78,7 @@ get_api_lang_code() {
     printf "en\n"
 }
 
-# URL安全エンコード関数
+# URL安全エンコード関数（効率化版）
 urlencode() {
     local string="$1"
     local encoded=""
@@ -86,8 +86,8 @@ urlencode() {
     local length=$(printf "%s" "$string" | wc -c)
     
     while [ $i -lt $length ]; do
-        # 1文字ずつ抽出するためにcutを使用
-        local c=$(printf "%s" "$string" | dd bs=1 skip=$i count=1 2>/dev/null)
+        # より効率的な文字抽出（cut コマンドを使用）
+        local c=$(printf "%s" "$string" | cut -c $(($i+1)))
         
         case "$c" in
             [a-zA-Z0-9.~_-]) encoded="${encoded}$c" ;;
@@ -95,7 +95,7 @@ urlencode() {
             *) encoded="${encoded}$(printf "%%%02X" "'$c")" ;;
         esac
         
-        i=$((i + 1))
+        i=$(($i + 1))
     done
     
     printf "%s\n" "$encoded"
