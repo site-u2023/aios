@@ -419,12 +419,6 @@ get_country_code() {
             local success_msg=$(get_message "MSG_LOCATION_RESULT" "status=successfully")
             stop_spinner "$success_msg" "success"
             debug_log "DEBUG" "Location information retrieved successfully"
-            
-            # ISP情報も含めて表示（追加）
-            if type display_detected_location >/dev/null 2>&1; then
-                display_detected_location "Location" "$SELECT_COUNTRY" "$SELECT_ZONENAME" "$SELECT_TIMEZONE" "false" "$ISP_NAME" "$ISP_AS"
-            fi
-            
             return 0
         else
             local fail_msg=$(get_message "MSG_LOCATION_RESULT" "status=failed")
