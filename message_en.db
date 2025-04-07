@@ -15,7 +15,7 @@ en|MSG_ISP_INFO_SOURCE=Information source{notr_colon_notr} {notr_source_notr}
 en|MSG_ISP_TYPE=Connection type{notr_colon_notr}
 
 # =======================
-# common-isp.sh
+# common-location.sh
 # =======================
 en|MSG_FETCHING_ISP_INFO=Retrieving ISP information
 en|MSG_ISP_INFO_SUCCESS=ISP information retrieved successfully
