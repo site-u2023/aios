@@ -492,19 +492,19 @@ display_detected_location() {
 get_timezone_worldtime() {
     local tmp_file="$1"      # 一時ファイルパス
     local network_type="$2"  # ネットワークタイプ
-    local api_name="$3"      # API名（ログ用）
+    local api_url="$3"       # API URL（第3引数で受け取る）
     
     local retry_count=0
     local success=0
     
     # スピナー更新メッセージ
-    local tz_msg=$(get_message "MSG_QUERY_INFO" "type=timezone" "api=$api_name" "network=$network_type")
+    local tz_msg=$(get_message "MSG_QUERY_INFO" "type=timezone" "api=worldtimeapi.org" "network=$network_type")
     update_spinner "$(color "blue" "$tz_msg")" "yellow"
     
-    debug_log "DEBUG" "Querying timezone from $api_name"
+    debug_log "DEBUG" "Querying timezone from worldtimeapi.org"
     
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        $BASE_WGET -O "$tmp_file" "http://worldtimeapi.org/api/ip" -T $API_TIMEOUT 2>/dev/null
+        $BASE_WGET -O "$tmp_file" "$api_url" -T $API_TIMEOUT 2>/dev/null
         local wget_status=$?
         debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
@@ -568,7 +568,7 @@ get_timezone_ipinfo() {
     debug_log "DEBUG" "Querying timezone from ipinfo.io"
     
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        $BASE_WGET -O "$tmp_file" "http://ipinfo.io" -T $API_TIMEOUT 2>/dev/null
+        $BASE_WGET -O "$tmp_file" "$api_name" -T $API_TIMEOUT 2>/dev/null
         local wget_status=$?
         debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
@@ -616,24 +616,23 @@ get_country_code() {
     local spinner_active=0
     local retry_count=0
     
-    # API URLの定数化
-    local API_IPV4="https://api.ipify.org"
-    local API_IPV6="https://api64.ipify.org"
-    local API_WORLDTIME="https://worldtimeapi.org/api/ip"
-    local API_IPAPI="https://ip-api.com/json"
-    local API_IPINFO="http://ipinfo.io"
+    # API URLの定数化（汎用的な変数名に変更）
+    local API_IP_V4="http://api.ipify.org"
+    local API_IP_V6="http://api64.ipify.org"
+    local API_TZ_PRIMARY="http://worldtimeapi.org/api/ip"
+    local API_LOCATION="http://ip-api.com/json"
+    local API_TZ_SECONDARY="http://ipinfo.io"
     
     # パラメータ（タイムゾーンAPIの種類）
-    # "https://worldtimeapi.org/api/ip" または "https://timeapi.io/api/Time/current/ip"
-    local timezone_api="${1:-$API_IPINFO}"
+    local timezone_api="${1:-$API_TZ_SECONDARY}"
     
     # タイムゾーンAPIと関数のマッピング
     local tz_func=""
     case "$timezone_api" in
-        "$API_WORLDTIME")
+        "$API_TZ_PRIMARY")
             tz_func="get_timezone_worldtime"
             ;;
-        "$API_IPINFO"|*)
+        *)
             tz_func="get_timezone_ipinfo"
             ;;
     esac
@@ -681,15 +680,15 @@ get_country_code() {
     if [ "$network_type" = "v4" ] || [ "$network_type" = "v4v6" ]; then
         # IPv4を使用（デュアルスタックでも常にIPv4を優先）
         debug_log "DEBUG" "Using IPv4 API (preferred for dual-stack or v4-only)"
-        api_url="$API_IPV4"
+        api_url="$API_IP_V4"
     elif [ "$network_type" = "v6" ]; then
         # IPv6のみ
         debug_log "DEBUG" "Using IPv6 API (v6-only environment)"
-        api_url="$API_IPV6"
+        api_url="$API_IP_V6"
     else
         # 不明なタイプ - デフォルトでIPv4
         debug_log "DEBUG" "Unknown network type, defaulting to IPv4 API"
-        api_url="$API_IPV4"
+        api_url="$API_IP_V4"
     fi
     
     # 選択したAPIを使用してIPアドレスを取得（リトライロジック付き）
@@ -734,7 +733,9 @@ get_country_code() {
     retry_count=0
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
         tmp_file="$(mktemp -t location.XXXXXX)"
-        $BASE_WGET -O "$tmp_file" "${API_IPAPI}/${ip_address}" -T $API_TIMEOUT 2>/dev/null
+        # URLの構築方法を修正
+        debug_log "DEBUG" "Using API URL: ${API_LOCATION}/${ip_address}"
+        $BASE_WGET -O "$tmp_file" "${API_LOCATION}/${ip_address}" -T $API_TIMEOUT 2>/dev/null
         wget_status=$?
         debug_log "DEBUG" "wget exit code for country query: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
