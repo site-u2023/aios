@@ -55,10 +55,9 @@ OSVERSION="${CACHE_DIR}/osversion.ch"
 PACKAGE_MANAGER="${CACHE_DIR}/package_manager.ch"
 PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
 
-# ロケーション情報取得用タイムアウト設定（秒）
-LOCATION_API_TIMEOUT="${LOCATION_API_TIMEOUT:-5}"
-# リトライ回数の設定
-LOCATION_API_MAX_RETRIES="${LOCATION_API_MAX_RETRIES:-5}"
+# API設定
+API_TIMEOUT="${API_TIMEOUT:-5}"
+API_MAX_RETRIES="${API_MAX_RETRIES:-5}"
 
 # 🔵　デバイス　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -218,10 +217,11 @@ get_isp_info() {
     # 変数宣言
     local ip_address=""
     local network_type=""
-    local timeout_sec=10
+    local timeout_sec=$API_TIMEOUT
     local tmp_file=""
     local api_url=""
     local spinner_active=0
+    local retry_count=0
     local cache_file="${CACHE_DIR}/isp_info.ch"
     local cache_timeout=86400  # キャッシュ有効期間（24時間）
     local use_local_db=0  # ローカルDB使用フラグ
@@ -300,7 +300,7 @@ get_isp_info() {
             ISP_AS="AS12345"
             ISP_ORG="Example Local Organization"
             
-            # キャッシュに保存
+            # キャッシュに保存（キャッシュタイムアウトが0でない場合）
             if [ $cache_timeout -ne 0 ]; then
                 echo "$ISP_NAME" > "$cache_file"
                 echo "$ISP_AS" >> "$cache_file"
@@ -352,42 +352,31 @@ get_isp_info() {
         api_url="https://api.ipify.org"
     fi
     
-    # IPアドレスの取得
-    debug_log "DEBUG: Querying IP address from $api_url"
-    
-    tmp_file="$(mktemp -t isp.XXXXXX)"
-    $BASE_WGET -O "$tmp_file" "$api_url" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
-    
-    if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-        ip_address=$(cat "$tmp_file")
-        rm -f "$tmp_file"
-        debug_log "DEBUG: Retrieved IP address: $ip_address"
-    else
-        debug_log "DEBUG: IP address query failed"
-        rm -f "$tmp_file" 2>/dev/null
+    # IPアドレスの取得（リトライロジック追加）
+    retry_count=0
+    while [ $retry_count -lt $API_MAX_RETRIES ]; do
+        debug_log "DEBUG: Querying IP address from $api_url (attempt $(($retry_count+1))/$API_MAX_RETRIES)"
         
-        # IPv6にフォールバック試行（IPv4が失敗した場合）
-        if [ "$network_type" = "v4v6" ]; then
-            api_url="https://api64.ipify.org"
-            debug_log "DEBUG: Trying IPv6 fallback"
-            
-            tmp_file="$(mktemp -t isp.XXXXXX)"
-            $BASE_WGET -O "$tmp_file" "$api_url" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
-            
-            if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-                ip_address=$(cat "$tmp_file")
-                rm -f "$tmp_file"
-                debug_log "DEBUG: Retrieved IP address (IPv6): $ip_address"
-            else
-                debug_log "DEBUG: IPv6 address query also failed"
-                rm -f "$tmp_file" 2>/dev/null
-            fi
+        tmp_file="$(mktemp -t isp.XXXXXX)"
+        $BASE_WGET -O "$tmp_file" "$api_url" -T $timeout_sec 2>/dev/null
+        wget_status=$?
+        
+        if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+            ip_address=$(cat "$tmp_file")
+            rm -f "$tmp_file"
+            debug_log "DEBUG: Retrieved IP address: $ip_address"
+            break
+        else
+            debug_log "DEBUG: IP address query failed, retrying..."
+            rm -f "$tmp_file" 2>/dev/null
+            retry_count=$(($retry_count + 1))
+            [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
         fi
-    fi
+    done
     
     # IPアドレスが取得できたかチェック
     if [ -z "$ip_address" ]; then
-        debug_log "DEBUG: Failed to retrieve any IP address"
+        debug_log "DEBUG: Failed to retrieve any IP address after $API_MAX_RETRIES attempts"
         if [ $spinner_active -eq 1 ] && type stop_spinner >/dev/null 2>&1; then
             stop_spinner "$(get_message "MSG_ISP_INFO_FAILED")" "failed"
             spinner_active=0
@@ -400,32 +389,46 @@ get_isp_info() {
         update_spinner "$(color "blue" "$(get_message "MSG_FETCHING_ISP_INFO")")" "yellow"
     fi
     
-    # ISP情報の取得
-    debug_log "DEBUG: Querying ISP information for IP: $ip_address"
-    
-    tmp_file="$(mktemp -t isp.XXXXXX)"
-    $BASE_WGET -O "$tmp_file" "http://ip-api.com/json/${ip_address}?fields=isp,as,org" --timeout=$timeout_sec -T $timeout_sec 2>/dev/null
-    
-    if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-        # JSON解析
-        ISP_NAME=$(grep -o '"isp":"[^"]*' "$tmp_file" | sed 's/"isp":"//')
-        ISP_AS=$(grep -o '"as":"[^"]*' "$tmp_file" | sed 's/"as":"//')
-        ISP_ORG=$(grep -o '"org":"[^"]*' "$tmp_file" | sed 's/"org":"//')
+    # ISP情報の取得（リトライロジック追加）
+    retry_count=0
+    while [ $retry_count -lt $API_MAX_RETRIES ]; do
+        debug_log "DEBUG: Querying ISP information for IP: $ip_address (attempt $(($retry_count+1))/$API_MAX_RETRIES)"
         
-        debug_log "DEBUG: Retrieved ISP info - Name: $ISP_NAME, AS: $ISP_AS, Organization: $ISP_ORG"
-        rm -f "$tmp_file"
+        tmp_file="$(mktemp -t isp.XXXXXX)"
+        $BASE_WGET -O "$tmp_file" "http://ip-api.com/json/${ip_address}?fields=isp,as,org" -T $timeout_sec 2>/dev/null
+        wget_status=$?
         
-        # キャッシュに保存（キャッシュタイムアウトが0でない場合）
-        if [ $cache_timeout -ne 0 ]; then
-            echo "$ISP_NAME" > "$cache_file"
-            echo "$ISP_AS" >> "$cache_file"
-            echo "$ISP_ORG" >> "$cache_file"
-            debug_log "DEBUG: Saved ISP information to cache"
+        if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+            # JSON解析
+            ISP_NAME=$(grep -o '"isp":"[^"]*' "$tmp_file" | sed 's/"isp":"//')
+            ISP_AS=$(grep -o '"as":"[^"]*' "$tmp_file" | sed 's/"as":"//')
+            ISP_ORG=$(grep -o '"org":"[^"]*' "$tmp_file" | sed 's/"org":"//')
+            
+            debug_log "DEBUG: Retrieved ISP info - Name: $ISP_NAME, AS: $ISP_AS, Organization: $ISP_ORG"
+            rm -f "$tmp_file"
+            
+            # 正常にデータが取得できたかチェック
+            if [ -n "$ISP_NAME" ]; then
+                # キャッシュに保存（キャッシュタイムアウトが0でない場合）
+                if [ $cache_timeout -ne 0 ]; then
+                    echo "$ISP_NAME" > "$cache_file"
+                    echo "$ISP_AS" >> "$cache_file"
+                    echo "$ISP_ORG" >> "$cache_file"
+                    debug_log "DEBUG: Saved ISP information to cache"
+                fi
+                break
+            else
+                debug_log "DEBUG: ISP information retrieved but empty, retrying..."
+                retry_count=$(($retry_count + 1))
+                [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
+            fi
+        else
+            debug_log "DEBUG: ISP information query failed, retrying..."
+            rm -f "$tmp_file" 2>/dev/null
+            retry_count=$(($retry_count + 1))
+            [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
         fi
-    else
-        debug_log "DEBUG: ISP information query failed"
-        rm -f "$tmp_file" 2>/dev/null
-    fi
+    done
     
     # 結果のチェックとスピナー停止
     if [ $spinner_active -eq 1 ] && type stop_spinner >/dev/null 2>&1; then
@@ -561,11 +564,11 @@ get_country_code() {
     debug_log "DEBUG: Querying IP address from $api_url"
     
     retry_count=0
-    while [ $retry_count -lt $LOCATION_API_MAX_RETRIES ]; do
+    while [ $retry_count -lt $API_MAX_RETRIES ]; do
         tmp_file="$(mktemp -t location.XXXXXX)"
-        $BASE_WGET -O "$tmp_file" "$api_url" -T $LOCATION_API_TIMEOUT 2>/dev/null
+        $BASE_WGET -O "$tmp_file" "$api_url" -T $API_TIMEOUT 2>/dev/null
         wget_status=$?
-        debug_log "DEBUG: wget exit code: $wget_status (attempt: $((retry_count+1))/$LOCATION_API_MAX_RETRIES)"
+        debug_log "DEBUG: wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
         if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
             ip_address=$(cat "$tmp_file")
@@ -582,7 +585,7 @@ get_country_code() {
     
     # IPアドレスが取得できたかチェック
     if [ -z "$ip_address" ]; then
-        debug_log "DEBUG: Failed to retrieve IP address after $LOCATION_API_MAX_RETRIES attempts"
+        debug_log "DEBUG: Failed to retrieve IP address after $API_MAX_RETRIES attempts"
         if [ $spinner_active -eq 1 ]; then
             local fail_msg=$(get_message "MSG_LOCATION_RESULT" "status=failed")
             stop_spinner "$fail_msg" "failed"
@@ -597,11 +600,11 @@ get_country_code() {
     debug_log "DEBUG: Querying country code from ip-api.com for IP: $ip_address"
     
     retry_count=0
-    while [ $retry_count -lt $LOCATION_API_MAX_RETRIES ]; do
+    while [ $retry_count -lt $API_MAX_RETRIES ]; do
         tmp_file="$(mktemp -t location.XXXXXX)"
-        $BASE_WGET -O "$tmp_file" "${API_IPAPI}/${ip_address}" -T $LOCATION_API_TIMEOUT 2>/dev/null
+        $BASE_WGET -O "$tmp_file" "${API_IPAPI}/${ip_address}" -T $API_TIMEOUT 2>/dev/null
         wget_status=$?
-        debug_log "DEBUG: wget exit code for country query: $wget_status (attempt: $((retry_count+1))/$LOCATION_API_MAX_RETRIES)"
+        debug_log "DEBUG: wget exit code for country query: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
         if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
             SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
@@ -622,11 +625,11 @@ get_country_code() {
     debug_log "DEBUG: Querying timezone from worldtimeapi.org"
     
     retry_count=0
-    while [ $retry_count -lt $LOCATION_API_MAX_RETRIES ]; do
+    while [ $retry_count -lt $API_MAX_RETRIES ]; do
         tmp_file="$(mktemp -t location.XXXXXX)"
-        $BASE_WGET -O "$tmp_file" "$API_WORLDTIME" -T $LOCATION_API_TIMEOUT 2>/dev/null
+        $BASE_WGET -O "$tmp_file" "$API_WORLDTIME" -T $API_TIMEOUT 2>/dev/null
         wget_status=$?
-        debug_log "DEBUG: wget exit code for timezone query: $wget_status (attempt: $((retry_count+1))/$LOCATION_API_MAX_RETRIES)"
+        debug_log "DEBUG: wget exit code for timezone query: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
         if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
             SELECT_ZONENAME=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//')
