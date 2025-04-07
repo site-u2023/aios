@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.08-00-02"
+SCRIPT_VERSION="2025.04.08-00-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX準拠シェルスクリプト
@@ -507,10 +507,9 @@ get_timezone_ipinfo() {
         debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
         if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-            # JSONデータからタイムゾーン情報を抽出（修正箇所）
-            local ipinfo_timezone=""
-            # 修正: grep の正規表現パターンを変更
-            ipinfo_timezone=$(grep -o '"timezone":"[^"]*"' "$tmp_file" | sed 's/"timezone":"//;s/"$//')
+            # JSONデータからタイムゾーン情報を抽出
+            # 修正箇所: 正規表現パターンを変更
+            local ipinfo_timezone=$(grep -o '"timezone":"[^"]*"' "$tmp_file" | sed 's/"timezone":"//;s/"$//')
             
             # タイムゾーン情報が取得できたか確認
             if [ -n "$ipinfo_timezone" ]; then
