@@ -1896,6 +1896,7 @@ check_common() {
             download "local-package.db" "hidden"
             download "custom-package.db" "hidden"
             print_banner
+            display_detected_device
             get_isp_info
             select_country "$lang_code"
             update_package_list
@@ -1916,6 +1917,7 @@ check_common() {
             download "local-package.db"
             download "custom-package.db"
             print_banner
+            display_detected_device
             get_isp_info
             select_country "$lang_code"
             update_package_list
