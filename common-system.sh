@@ -67,11 +67,13 @@ check_network_connectivity() {
     local ret6=1
 
     debug_log "DEBUG: Checking IPv4 connectivity"
-    ping -c 1 -w 3 8.8.8.8 >/dev/null 2>&1
+    # ping -c 1 -w 3 8.8.8.8 >/dev/null 2>&1
+    ping -4 -c 1 -w 3 one.one.one.one >/dev/null 2>&1
     ret4=$?
 
     debug_log "DEBUG: Checking IPv6 connectivity"
-    ping6 -c 1 -w 3 2001:4860:4860::8888 >/dev/null 2>&1
+    # ping6 -c 1 -w 3 2001:4860:4860::8888 >/dev/null 2>&1
+    ping -6  -c 1 -w 3 one.one.one.one >/dev/null 2>&1
     ret6=$?
 
     if [ "$ret4" -eq 0 ] && [ "$ret6" -eq 0 ]; then
