@@ -616,23 +616,24 @@ get_country_code() {
     local spinner_active=0
     local retry_count=0
     
-    # API URLの定数化（汎用的な変数名に変更）
-    local API_IP_V4="http://api.ipify.org"
-    local API_IP_V6="http://api64.ipify.org"
-    local API_TZ_PRIMARY="http://worldtimeapi.org/api/ip"
-    local API_LOCATION="http://ip-api.com/json"
-    local API_TZ_SECONDARY="http://ipinfo.io"
+    # API URLの定数化
+    local API_IPV4="http://api.ipify.org"
+    local API_IPV6="http://api64.ipify.org"
+    local API_WORLDTIME="http://worldtimeapi.org/api/ip"
+    local API_IPAPI="http://ip-api.com/json"
+    local API_IPINFO="http://ipinfo.io"
     
     # パラメータ（タイムゾーンAPIの種類）
-    local timezone_api="${1:-$API_TZ_SECONDARY}"
+    # "http://worldtimeapi.org/api/ip" または "http://ipinfo.io"
+    local timezone_api="${1:-$API_IPINFO}"
     
     # タイムゾーンAPIと関数のマッピング
     local tz_func=""
     case "$timezone_api" in
-        "$API_TZ_PRIMARY")
+        "$API_WORLDTIME")
             tz_func="get_timezone_worldtime"
             ;;
-        *)
+        "$API_IPINFO")
             tz_func="get_timezone_ipinfo"
             ;;
     esac
