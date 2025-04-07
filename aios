@@ -522,7 +522,7 @@ github_api_request() {
     while [ $retry_count -le $max_retries ]; do
         if [ $retry_count -gt 0 ]; then
             debug_log "DEBUG" "Retry attempt $retry_count for API request: $endpoint"
-            sleep 2  # リトライ間隔
+            sleep 1  # リトライ間隔
         fi
         
         if [ -n "$token" ]; then
@@ -1174,7 +1174,7 @@ get_commit_version() {
     while [ $retry_count -le $max_retries ]; do
         if [ $retry_count -gt 0 ]; then
             debug_log "DEBUG" "Retry attempt $retry_count for commit version request: $file_path"
-            sleep 2  # リトライ間隔
+            sleep 1  # リトライ間隔
         fi
         
         # 認証方法に応じたAPI呼び出し
