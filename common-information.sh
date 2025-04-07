@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.08-00-03"
+SCRIPT_VERSION="2025.04.08-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX準拠シェルスクリプト
@@ -739,10 +739,10 @@ get_timezone_worldtime() {
         debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
         if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-            # JSONデータからタイムゾーン情報を抽出
-            SELECT_ZONENAME=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//')
-            SELECT_TIMEZONE=$(grep -o '"abbreviation":"[^"]*' "$tmp_file" | sed 's/"abbreviation":"//')
-            local utc_offset=$(grep -o '"utc_offset":"[^"]*' "$tmp_file" | sed 's/"utc_offset":"//')
+            # JSONデータからタイムゾーン情報を抽出（修正版）
+            SELECT_ZONENAME=$(grep '"timezone"' "$tmp_file" | sed 's/.*"timezone"[ ]*:[ ]*"\([^"]*\)".*/\1/')
+            SELECT_TIMEZONE=$(grep '"abbreviation"' "$tmp_file" | sed 's/.*"abbreviation"[ ]*:[ ]*"\([^"]*\)".*/\1/')
+            local utc_offset=$(grep '"utc_offset"' "$tmp_file" | sed 's/.*"utc_offset"[ ]*:[ ]*"\([^"]*\)".*/\1/')
             
             # データが正常に取得できたか確認
             if [ -n "$SELECT_ZONENAME" ] && [ -n "$SELECT_TIMEZONE" ]; then
@@ -781,4 +781,5 @@ get_timezone_worldtime() {
         return 1
     fi
 }
+
 # 🔴　ロケーション　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
