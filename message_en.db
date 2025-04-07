@@ -21,6 +21,11 @@ en|MSG_FETCHING_ISP_INFO=Retrieving ISP information
 en|MSG_ISP_INFO_SUCCESS=ISP information retrieved successfully
 en|MSG_ISP_INFO_FAILED=Failed to retrieve ISP informatio
 
+en|MSG_QUERY_INFO=Querying {notr_type_notr}: {notr_api_notr} via {notr_network_notr}
+en|MSG_LOCATION_RESULT=Location information retrieved {notr_status_notr}
+en|CONFIG_DOWNLOAD_SUCCESS=Downloaded{notr_colon_notr}
+en|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{notr_colon_notr}
+
 # =======================
 # common-translation.sh
 # =======================
@@ -69,11 +74,6 @@ en|MSG_DETECTED_ISP=ISP Provider{notr_colon_notr}
 en|MSG_ISP_AS=AS Number{notr_colon_notr}
 en|MSG_ISP_ORG=Organization{notr_colon_notr}
 en|MSG_ISP_SUCCESS=ISP information detection completed successfully
-
-en|MSG_QUERY_INFO=Querying {notr_type_notr}: {notr_api_notr} via {notr_network_notr}
-en|MSG_LOCATION_RESULT=Location information retrieved {notr_status_notr}
-en|CONFIG_DOWNLOAD_SUCCESS=Downloaded{notr_colon_notr}
-en|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{notr_colon_notr}
 
 # =======================
 # common-menu.sh
