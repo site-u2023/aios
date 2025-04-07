@@ -571,13 +571,14 @@ get_country_code() {
     # API URLの定数化
     local API_IPV4="http://api.ipify.org"
     local API_IPV6="http://api64.ipify.org"
-    local API_WORLDTIME="http://worldtimeapi.org/api/ip"
     local API_IPAPI="http://ip-api.com/json"
+    
+    local API_WORLDTIME="http://worldtimeapi.org/api/ip"
     local API_IPINFO="http://ipinfo.io"
     
     # パラメータ（タイムゾーンAPIの種類）
     # "http://worldtimeapi.org/api/ip" または "http://ipinfo.io"
-    local timezone_api="${1:-$API_WORLDTIME}"
+    local timezone_api="${1:-$API_IPINFO}"
     TIMEZONE_API_SOURCE="$timezone_api"
     
     # タイムゾーンAPIと関数のマッピング
