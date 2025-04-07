@@ -72,7 +72,7 @@ en|PKG_SECTION_SAMBA=File Sharing
 # =======================
 en|MSG_USE_DETECTED_ISP_INFORMATION=ISP Sources{notr_colon_notr} {notr_info_notr}
 en|MSG_DETECTED_ISP=ISP Provider{notr_colon_notr}
-en|MSG_ISP_AS=AS number{notr_colon_notr}
+en|MSG_ISP_AS=Autonomous System Number{notr_colon_notr}
 en|MSG_ISP_ORG=Organization{notr_colon_notr}
 en|MSG_ISP_SUCCESS=ISP information detection completed successfully
 
