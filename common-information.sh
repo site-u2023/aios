@@ -504,7 +504,6 @@ display_detected_location() {
     debug_log "DEBUG" "Location information displayed successfully"
 }
 
-# ipinfo.ioからタイムゾーン情報を取得する関数
 get_timezone_ipinfo() {
     local tmp_file="$1"      # 一時ファイルパス
     local network_type="$2"  # ネットワークタイプ
@@ -525,8 +524,7 @@ get_timezone_ipinfo() {
         debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
         if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-            # JSONデータからタイムゾーン情報を抽出（修正箇所）
-            # シンプルなgrepコマンドを使用
+            # JSONデータからタイムゾーン情報を抽出
             local ipinfo_timezone=""
             ipinfo_timezone=$(grep '"timezone"' "$tmp_file" | sed 's/.*"timezone"[ ]*:[ ]*"\([^"]*\)".*/\1/')
             
@@ -536,8 +534,8 @@ get_timezone_ipinfo() {
                 SELECT_ZONENAME="$ipinfo_timezone"
                 debug_log "DEBUG" "Retrieved timezone from ipinfo.io: $SELECT_ZONENAME"
                 
-                # タイムゾーン略称を生成（例：Asia/Tokyo → TOK）
-                SELECT_TIMEZONE=$(echo "$SELECT_ZONENAME" | awk -F'/' '{print $NF}' | cut -c1-3 | tr '[:lower:]' '[:upper:]')
+                # タイムゾーン略称を生成（修正）
+                SELECT_TIMEZONE=$(echo "$SELECT_ZONENAME" | awk -F'/' '{print $NF}' | cut -c1-3 | tr 'a-z' 'A-Z')
                 debug_log "DEBUG" "Generated timezone abbreviation: $SELECT_TIMEZONE"
                 
                 success=1
