@@ -424,7 +424,20 @@ detect_and_set_location() {
                         detected_timezone=$(cat "${CACHE_DIR}/ip_timezone.tmp" 2>/dev/null)
                         detected_zonename=$(cat "${CACHE_DIR}/ip_zonename.tmp" 2>/dev/null)
                         detection_source="Location"
-                        
+                   
+                        # ISP情報を読み取る（追加）
+                        local detected_isp=""
+                        local detected_as=""
+                        if [ -f "${CACHE_DIR}/ip_isp.tmp" ]; then
+                            detected_isp=$(cat "${CACHE_DIR}/ip_isp.tmp" 2>/dev/null)
+                        fi
+                        if [ -f "${CACHE_DIR}/ip_as.tmp" ]; then
+                            detected_as=$(cat "${CACHE_DIR}/ip_as.tmp" 2>/dev/null)
+                        fi
+                    
+                        # ここでAPI情報を含めて表示（追加）
+                        display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "false" "$detected_isp" "$detected_as"
+                                            
                         debug_log "DEBUG" "IP detection results - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
                     else
                         debug_log "DEBUG" "One or more required IP location data files missing"
