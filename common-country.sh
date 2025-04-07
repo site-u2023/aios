@@ -328,6 +328,8 @@ escape_for_sed() {
 #      "skip_cache-device" - cache情報とデバイス内情報の検出をスキップ
 #      "skip_all" - すべての検出をスキップ
 #      未指定の場合はすべての検出方法を試行
+# システムの地域情報を検出し設定する関数
+# システムの地域情報を検出し設定する関数
 detect_and_set_location() {
     # デバッグログ出力
     debug_log "DEBUG" "Running detect_and_set_location() with skip flags: cache=$SKIP_CACHE_DETECTION, device=$SKIP_DEVICE_DETECTION, cache-device=$SKIP_CACHE_DEVICE_DETECTION, ip=$SKIP_IP_DETECTION, all=$SKIP_ALL_DETECTION"
@@ -338,38 +340,81 @@ detect_and_set_location() {
     local detected_zonename=""
     local country_data=""
     local detection_source=""
+    local preview_applied="false"
     local skip_confirmation="false"
-    local detected_isp=""
-    local detected_as=""
     
     # "SKIP_ALL_DETECTION"が指定された場合はすべての検出をスキップ
     if [ "$SKIP_ALL_DETECTION" = "true" ]; then
-        debug_log "DEBUG" "SKIP_ALL_DETECTION is true, skipping all detection methods"
+        debug_log "DEBUG" "SKIP_ALL_DETECTION is true, skipping all detection methods (cache, device, IP)"
         return 1
     fi
     
-    # 1. キャッシュからの情報取得を試みる
+    # キャッシュから情報取得を試みる
     if [ "$SKIP_CACHE_DETECTION" != "true" ] && [ "$SKIP_CACHE_DEVICE_DETECTION" != "true" ]; then
-        debug_log "DEBUG" "Checking location cache"
+        debug_log "DEBUG" "Checking location cache using check_location_cache()"
+    
+        if check_location_cache; then
+            debug_log "DEBUG" "Valid location cache found, loading cache data"
         
-        if check_location_cache && load_cached_location_data; then
+            # キャッシュファイルのパス定義
+            local cache_language="${CACHE_DIR}/language.ch"
+            local cache_luci="${CACHE_DIR}/luci.ch"
+            local cache_timezone="${CACHE_DIR}/timezone.ch"
+            local cache_zonename="${CACHE_DIR}/zonename.ch"
+            local cache_message="${CACHE_DIR}/message.ch"
+        
+            # キャッシュからデータ読み込み
+            if [ -s "$cache_language" ]; then
+                detected_country=$(cat "$cache_language" 2>/dev/null)
+                debug_log "DEBUG" "Country loaded from language.ch: $detected_country"
+            fi
+        
+            # タイムゾーン情報の取得
+            detected_timezone=$(cat "$cache_timezone" 2>/dev/null)
+            detected_zonename=$(cat "$cache_zonename" 2>/dev/null)
             detection_source="Cache"
             skip_confirmation="true"
-            
-            # キャッシュから検出した情報を表示
-            display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "false" "$detected_isp" "$detected_as"
-            
-            debug_log "DEBUG" "Cache-based location settings have been applied successfully"
-            return 0
+
+            # ISP情報の取得を追加
+            local detected_isp=""
+            local detected_as=""
+            if [ -f "${CACHE_DIR}/isp_info.ch" ]; then
+                detected_isp=$(sed -n '1p' "${CACHE_DIR}/isp_info.ch" 2>/dev/null)
+                detected_as=$(sed -n '2p' "${CACHE_DIR}/isp_info.ch" 2>/dev/null)
+            fi
+        
+            debug_log "DEBUG" "Cache detection complete - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
+        
+            # 検出データの検証と表示
+            if [ -n "$detected_country" ] && [ -n "$detected_timezone" ] && [ -n "$detected_zonename" ]; then
+                country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
+                debug_log "DEBUG" "Country data retrieved from database for display"
+                
+                # キャッシュ使用時も言語処理を確実に実行
+                debug_log "DEBUG" "Ensuring language processing for cached location"
+                
+                # 国情報を一時ファイルに書き出し
+                if [ -n "$country_data" ]; then
+                    echo "$country_data" > "${CACHE_DIR}/country.tmp"
+                fi
+                
+                # 共通関数を使用して検出情報と成功メッセージを表示
+                display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "false" "$detected_isp" "$detected_as"
+                
+                debug_log "DEBUG" "Cache-based location settings have been applied successfully"
+                return 0
+            else
+                debug_log "DEBUG" "One or more cache values are empty despite files existing"
+            fi
         else
-            debug_log "DEBUG" "Cache check failed or invalid data, proceeding to next detection method"
+            debug_log "DEBUG" "Cache check failed, proceeding to next detection method"
         fi
     else
         debug_log "DEBUG" "Cache detection skipped due to flag settings"
     fi
     
-    # 2. IPアドレスによる検出
-    if [ "$SKIP_IP_DETECTION" != "true" ]; then
+    # IPアドレスによる検出（情報が揃っていない場合のみ）
+    if [ -z "$detected_country" ] && [ "$SKIP_IP_DETECTION" != "true" ]; then
         debug_log "DEBUG" "Attempting IP-based location detection"
         
         if [ -f "$BASE_DIR/common-system.sh" ]; then
@@ -382,29 +427,28 @@ detect_and_set_location() {
                 if process_location_info; then
                     debug_log "DEBUG" "Successfully retrieved and cached location data"
                     
-                    # process_location_infoで更新されたキャッシュから情報を読み込む
-                    if load_cached_location_data; then
+                    if [ -f "${CACHE_DIR}/ip_country.tmp" ] && [ -f "${CACHE_DIR}/ip_timezone.tmp" ] && [ -f "${CACHE_DIR}/ip_zonename.tmp" ]; then
+                        detected_country=$(cat "${CACHE_DIR}/ip_country.tmp" 2>/dev/null)
+                        detected_timezone=$(cat "${CACHE_DIR}/ip_timezone.tmp" 2>/dev/null)
+                        detected_zonename=$(cat "${CACHE_DIR}/ip_zonename.tmp" 2>/dev/null)
                         detection_source="Location"
-                        
-                        # 検出した情報を表示
-                        display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "false" "$detected_isp" "$detected_as"
-                        
-                        # ユーザーに確認
-                        if confirm "MSG_CONFIRM_ONLY_YN"; then
-                            debug_log "DEBUG" "User accepted IP-based location settings"
-                            
-                            # 国データとタイムゾーンの設定
-                            if apply_location_settings; then
-                                debug_log "DEBUG" "$detection_source-based location settings have been applied successfully"
-                                return 0
-                            else
-                                debug_log "ERROR" "Failed to apply IP-based location settings"
-                            fi
-                        else
-                            debug_log "DEBUG" "User declined IP-based location settings"
+                   
+                        # ISP情報を読み取る
+                        local detected_isp=""
+                        local detected_as=""
+                        if [ -f "${CACHE_DIR}/ip_isp.tmp" ]; then
+                            detected_isp=$(cat "${CACHE_DIR}/ip_isp.tmp" 2>/dev/null)
                         fi
+                        if [ -f "${CACHE_DIR}/ip_as.tmp" ]; then
+                            detected_as=$(cat "${CACHE_DIR}/ip_as.tmp" 2>/dev/null)
+                        fi
+                    
+                        # ここでAPI情報を含めて表示（追加）
+                        # display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "false" "$detected_isp" "$detected_as"
+                                            
+                        debug_log "DEBUG" "IP detection results - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
                     else
-                        debug_log "DEBUG" "Failed to load valid data from IP detection"
+                        debug_log "DEBUG" "One or more required IP location data files missing"
                     fi
                 else
                     debug_log "DEBUG" "process_location_info() failed to retrieve location data"
@@ -415,92 +459,107 @@ detect_and_set_location() {
         else
             debug_log "DEBUG" "common-system.sh not found. Cannot use IP detection."
         fi
-    else
-        debug_log "DEBUG" "IP detection skipped due to flag settings"
     fi
     
-    # 3. すべての検出方法が失敗または拒否された場合
-    debug_log "DEBUG" "All automatic detection methods failed or were skipped, proceeding with manual input"
-    return 1
-}
-
-# キャッシュから地域情報を読み込む補助関数
-load_cached_location_data() {
-    # キャッシュファイルのパス定義
-    local cache_language="${CACHE_DIR}/language.ch"
-    local cache_timezone="${CACHE_DIR}/timezone.ch"
-    local cache_zonename="${CACHE_DIR}/zonename.ch"
-    local cache_isp="${CACHE_DIR}/isp_info.ch"
-    
-    # 必須ファイルの存在確認
-    if [ ! -s "$cache_language" ] || [ ! -s "$cache_timezone" ] || [ ! -s "$cache_zonename" ]; then
-        debug_log "DEBUG" "One or more required cache files are missing or empty"
-        return 1
-    fi
-    
-    # キャッシュからデータ読み込み
-    detected_country=$(cat "$cache_language" 2>/dev/null)
-    detected_timezone=$(cat "$cache_timezone" 2>/dev/null)
-    detected_zonename=$(cat "$cache_zonename" 2>/dev/null)
-    
-    debug_log "DEBUG" "Cache data loaded - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
-    
-    # ISP情報があれば読み込む
-    if [ -f "$cache_isp" ]; then
-        detected_isp=$(sed -n '1p' "$cache_isp" 2>/dev/null)
-        detected_as=$(sed -n '2p' "$cache_isp" 2>/dev/null)
-        debug_log "DEBUG" "ISP info loaded from cache - ISP: $detected_isp, AS: $detected_as"
-    fi
-    
-    # 国情報の検証
+    # 検出した情報の処理（検出ソースに関わらず共通処理）
     if [ -n "$detected_country" ] && [ -n "$detected_timezone" ] && [ -n "$detected_zonename" ]; then
         country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
         
         if [ -n "$country_data" ]; then
-            # 国情報を一時ファイルに書き出し
-            echo "$country_data" > "${CACHE_DIR}/country.tmp"
-            debug_log "DEBUG" "Country data written to temporary file"
-            return 0
+            debug_log "DEBUG" "Before display - source: $detection_source, country: $detected_country, skip_confirmation: $skip_confirmation"
+        
+            # 共通関数を使用して検出情報を表示（成功メッセージなし）
+            display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "false" "$detected_isp" "$detected_as"
+            
+            # ユーザーに確認
+            local proceed_with_settings="false"
+            
+            if [ "$skip_confirmation" = "true" ]; then
+                # キャッシュの場合は自動承認
+                proceed_with_settings="true"
+                debug_log "DEBUG" "Cache-based location settings automatically applied without confirmation"
+            else
+                # キャッシュ以外の場合はユーザーに確認
+                if confirm "MSG_CONFIRM_ONLY_YN"; then
+                    proceed_with_settings="true"
+                    debug_log "DEBUG" "User accepted $detection_source-based location settings"
+                else
+                    debug_log "DEBUG" "User declined $detection_source-based location settings"
+                fi
+            fi
+            
+            # 設定の適用処理（承認された場合）
+            if [ "$proceed_with_settings" = "true" ]; then
+                # キャッシュ以外の場合に設定を適用（プレビューで適用済みなら再適用不要）
+                if [ "$detection_source" != "Cache" ] && [ "$preview_applied" = "false" ]; then
+                    debug_log "DEBUG" "Writing country data to temporary file"
+                    echo "$country_data" > "${CACHE_DIR}/country.tmp"
+                    debug_log "DEBUG" "Calling country_write() with suppress_message flag"
+                    country_write true || {
+                        debug_log "ERROR" "Failed to write country data"
+                        return 1
+                    }
+                    
+                    # 非キャッシュ検出時にも明示的に翻訳処理を実行
+                    # process_language_translation
+                    # debug_log "DEBUG" "Translation process executed for non-cache detection"
+                fi
+                
+                # 国選択完了メッセージを表示
+                printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
+                
+                # タイムゾーン設定（キャッシュ以外の場合のみ）
+                if [ "$detection_source" != "Cache" ]; then
+                    local timezone_str="${detected_zonename},${detected_timezone}"
+                    debug_log "DEBUG" "Created combined timezone string: ${timezone_str}"
+                    
+                    if [ "$detection_source" = "Location" ]; then
+                        echo "$timezone_str" > "${CACHE_DIR}/zone.tmp"
+                        zone_write || {
+                            debug_log "ERROR" "Failed to write timezone data"
+                            return 1
+                        }
+                    else
+                        zone_write "$timezone_str" || {
+                            debug_log "ERROR" "Failed to write timezone data"
+                            return 1
+                        }
+                    fi
+                fi
+                
+                # ゾーン選択完了メッセージを表示
+                printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+                printf "\n"
+                EXTRA_SPACING_NEEDED="yes"
+                
+                debug_log "DEBUG" "$detection_source-based location settings have been applied successfully"
+                return 0
+            else
+                # 拒否された場合は一時的な言語設定をクリア（キャッシュ以外の場合）
+                if [ "$detection_source" != "Cache" ] && [ "$preview_applied" = "true" ]; then
+                    debug_log "DEBUG" "Cleaning up preview language settings"
+                    rm -f "${CACHE_DIR}/language.ch" "${CACHE_DIR}/message.ch" "${CACHE_DIR}/country.tmp" 2>/dev/null
+                fi
+                
+                # リセットして次の検出方法に進む
+                detected_country=""
+                detected_timezone=""
+                detected_zonename=""
+                detection_source=""
+                preview_applied="false"
+                skip_confirmation="false"
+            fi
         else
             debug_log "DEBUG" "No matching entry found for detected country: $detected_country"
-            return 1
         fi
     fi
     
-    debug_log "DEBUG" "One or more required location values are empty or invalid"
-    return 1
-}
-
-# 検出した地域情報を設定する補助関数
-apply_location_settings() {
-    debug_log "DEBUG" "Applying detected location settings"
-    
-    # 国設定の適用
-    country_write true || {
-        debug_log "ERROR" "Failed to write country data"
+    # 継続した検出処理のため、ここで検出ソースが空かどうか確認
+    if [ -z "$detection_source" ]; then
+        debug_log "DEBUG" "All automatic detection methods failed, proceeding with manual input"
         return 1
-    }
+    fi
     
-    # 成功メッセージ
-    printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
-    
-    # タイムゾーン設定の適用
-    local timezone_str="${detected_zonename},${detected_timezone}"
-    debug_log "DEBUG" "Created combined timezone string: ${timezone_str}"
-    
-    # zone.tmpファイルの生成とタイムゾーン設定
-    echo "$timezone_str" > "${CACHE_DIR}/zone.tmp"
-    zone_write || {
-        debug_log "ERROR" "Failed to write timezone data"
-        return 1
-    }
-    
-    # 成功メッセージ
-    printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
-    printf "\n"
-    EXTRA_SPACING_NEEDED="yes"
-    
-    debug_log "DEBUG" "Location settings have been applied successfully"
     return 0
 }
 
