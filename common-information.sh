@@ -575,9 +575,9 @@ get_country_ipinfo() {
         debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
         if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-            # JSONデータから国コードとタイムゾーン情報を抽出
-            SELECT_COUNTRY=$(grep -o '"country":"[^"]*' "$tmp_file" | sed 's/"country":"//')
-            SELECT_ZONENAME=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//')
+            # JSONデータから国コードとタイムゾーン情報を抽出（スペースを許容するパターン）
+            SELECT_COUNTRY=$(grep -o '"country"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"country"[[:space:]]*:[[:space:]]*"//')
+            SELECT_ZONENAME=$(grep -o '"timezone"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"timezone"[[:space:]]*:[[:space:]]*"//')
             
             # データが正常に取得できたか確認
             if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
@@ -614,7 +614,7 @@ get_country_code() {
     local API_IPAPI="http://ip-api.com/json"
     
     # パラメータ（タイムゾーンAPIの種類）
-    local timezone_api="${1:-$API_IPAPI}"
+    local timezone_api="${1:-$API_IPINFO}"
     TIMEZONE_API_SOURCE="$timezone_api"
     
     # タイムゾーンAPIと関数のマッピング
