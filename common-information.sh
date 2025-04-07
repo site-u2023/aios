@@ -83,378 +83,6 @@ display_detected_device() {
 
 # 🔴　デバイス　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
 
-# 🔵　ISP　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
-
-# 検出した地域情報を表示する共通関数　
-display_detected_isp() {
-    local detection_isp="$1"
-    local detected_isp="$2"
-    local detected_as="$3"
-    local detected_org="$4"
-    local show_success_message="${5:-false}"
-    
-    debug_log "DEBUG" "Displaying ISP information from source: $detection_isp"
-    
-    # 検出情報表示
-    local msg_info=$(get_message "MSG_USE_DETECTED_ISP_INFORMATION" "info=$detection_isp")
-    printf "%s\n" "$(color white "$msg_info")"
-    
-    # ISP情報の詳細表示
-    if [ -n "$detected_isp" ]; then
-        printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ISP")")" "$(color white "$detected_isp")"
-    fi
-    
-    if [ -n "$detected_as" ]; then
-        printf "%s %s\n" "$(color white "$(get_message "MSG_ISP_AS")")" "$(color white "$detected_as")"
-    fi
-    
-    if [ -n "$detected_org" ]; then
-        printf "%s %s\n" "$(color white "$(get_message "MSG_ISP_ORG")")" "$(color white "$detected_org")"
-    fi
-    
-    # 成功メッセージの表示（オプション）
-    if [ "$show_success_message" = "true" ]; then
-        printf "%s\n" "$(color green "$(get_message "MSG_ISP_SUCCESS")")"
-        EXTRA_SPACING_NEEDED="yes"
-        debug_log "DEBUG" "Success messages displayed"
-    fi
-
-    printf "\n"
-    
-    debug_log "DEBUG" "ISP information displayed successfully"
-}
-
-# IPアドレスから地域情報を取得しキャッシュファイルに保存する関数
-process_location_info() {
-    local skip_retrieval=0
-    
-    # パラメータ処理（オプション）
-    if [ "$1" = "use_cached" ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_TIMEZONE" ] && [ -n "$SELECT_ZONENAME" ]; then
-        skip_retrieval=1
-        debug_log "DEBUG: Using already retrieved location information"
-    fi
-    
-    # 必要な場合のみget_country_code関数を呼び出し
-    if [ $skip_retrieval -eq 0 ]; then
-        debug_log "DEBUG: Starting IP-based location information retrieval"
-        get_country_code || {
-            debug_log "ERROR: get_country_code failed to retrieve location information"
-            return 1
-        }
-    fi
-    
-    debug_log "DEBUG: Processing location data - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME, Timezone: $SELECT_TIMEZONE"
-
-    # キャッシュファイルのパス定義
-    local tmp_country="${CACHE_DIR}/ip_country.tmp"
-    local tmp_zone="${CACHE_DIR}/ip_zone.tmp"
-    local tmp_timezone="${CACHE_DIR}/ip_timezone.tmp"
-    local tmp_zonename="${CACHE_DIR}/ip_zonename.tmp"
-    
-    # 3つの重要情報が揃っているか確認
-    if [ -z "$SELECT_COUNTRY" ] || [ -z "$SELECT_TIMEZONE" ] || [ -z "$SELECT_ZONENAME" ]; then
-        debug_log "ERROR: Incomplete location data - required information missing"
-        # 既存のファイルを削除してクリーンな状態を確保
-        rm -f "$tmp_country" "$tmp_zone" "$tmp_timezone" "$tmp_zonename" 2>/dev/null
-        return 1
-    fi
-    
-    debug_log "DEBUG: All required location data available, saving to cache files"
-    
-    # 国コードをキャッシュに保存
-    echo "$SELECT_COUNTRY" > "$tmp_country"
-    debug_log "DEBUG: Country code saved to cache: $SELECT_COUNTRY"
-    
-    # 生のゾーン情報（JSON形式）をキャッシュに保存
-    if [ -n "$SELECT_ZONE" ]; then
-        echo "$SELECT_ZONE" > "$tmp_zone"
-        debug_log "DEBUG: Zone data saved to cache (JSON format)"
-    fi
-    
-    # ゾーンネームをキャッシュに保存（例：Asia/Tokyo）
-    echo "$SELECT_ZONENAME" > "$tmp_zonename"
-    debug_log "DEBUG: Zone name saved to cache: $SELECT_ZONENAME"
-    
-    # POSIXタイムゾーン文字列を保存（get_country_code()で生成済み）
-    if [ -n "$SELECT_POSIX_TZ" ]; then
-        echo "$SELECT_POSIX_TZ" > "$tmp_timezone"
-        debug_log "DEBUG: Using pre-generated POSIX timezone: $SELECT_POSIX_TZ"
-    else
-        # 万が一SELECT_POSIX_TZが設定されていない場合の保険
-        local posix_tz="$SELECT_TIMEZONE"
-        local temp_offset=""
-        
-        if [ -n "$SELECT_ZONE" ]; then
-            temp_offset=$(echo "$SELECT_ZONE" | grep -o '"utc_offset":"[^"]*' | awk -F'"' '{print $4}')
-            
-            if [ -n "$temp_offset" ]; then
-                debug_log "DEBUG: Found UTC offset in zone data: $temp_offset"
-                # +09:00のような形式からPOSIX形式（-9）に変換
-                local temp_sign=$(echo "$temp_offset" | cut -c1)
-                local temp_hours=$(echo "$temp_offset" | cut -c2-3 | sed 's/^0//')
-                
-                if [ "$temp_sign" = "+" ]; then
-                    # +9 -> -9（POSIXでは符号が反転）
-                    posix_tz="${SELECT_TIMEZONE}-${temp_hours}"
-                else
-                    # -5 -> 5（POSIXではプラスの符号は省略）
-                    posix_tz="${SELECT_TIMEZONE}${temp_hours}"
-                fi
-                
-                debug_log "DEBUG: Generated POSIX timezone as fallback: $posix_tz"
-            fi
-        fi
-        
-        echo "$posix_tz" > "$tmp_timezone"
-        debug_log "DEBUG: Timezone saved to cache in POSIX format: $posix_tz"
-    fi
-    
-    debug_log "DEBUG: Location information cache process completed successfully"
-    return 0
-}
-
-# ISP情報取得関数
-get_isp_info() {
-    # 変数宣言
-    local ip_address=""
-    local network_type=""
-    local timeout_sec=$API_TIMEOUT
-    local tmp_file=""
-    local api_url=""
-    local spinner_active=0
-    local retry_count=0
-    local cache_file="${CACHE_DIR}/isp_info.ch"
-    local cache_timeout=86400  # キャッシュ有効期間（24時間）
-    local use_local_db=0  # ローカルDB使用フラグ
-    local show_result="${1:-true}"  # 結果表示フラグ（デフォルトはtrue）
-    
-    # パラメータ処理
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            --local|-l)
-                use_local_db=1
-                debug_log "DEBUG: Using local database mode"
-                ;;
-            --cache-timeout=*)
-                cache_timeout="${1#*=}"
-                debug_log "DEBUG: Custom cache timeout: $cache_timeout seconds"
-                ;;
-            --no-cache)
-                cache_timeout=0
-                debug_log "DEBUG: Cache disabled"
-                ;;
-            --no-display)
-                show_result="false"
-                debug_log "DEBUG: Result display disabled"
-                ;;
-        esac
-        shift
-    done
-    
-    # グローバル変数の初期化
-    ISP_NAME=""
-    ISP_AS=""
-    ISP_ORG=""
-    
-    # キャッシュディレクトリの確認
-    [ -d "${CACHE_DIR}" ] || mkdir -p "${CACHE_DIR}"
-    
-    # キャッシュチェック（キャッシュタイムアウトが0でない場合）
-    if [ $cache_timeout -ne 0 ] && [ -f "$cache_file" ]; then
-        local cache_time=$(stat -c %Y "$cache_file" 2>/dev/null || date +%s)
-        local current_time=$(date +%s)
-        local cache_age=$(($current_time - $cache_time))
-        
-        if [ $cache_age -lt $cache_timeout ]; then
-            debug_log "DEBUG: Using cached ISP information ($cache_age seconds old)"
-            # キャッシュから情報読み込み
-            if [ -s "$cache_file" ]; then
-                ISP_NAME=$(sed -n '1p' "$cache_file")
-                ISP_AS=$(sed -n '2p' "$cache_file")
-                ISP_ORG=$(sed -n '3p' "$cache_file")
-                
-                if [ -n "$ISP_NAME" ]; then
-                    debug_log "DEBUG: Loaded from cache - ISP: $ISP_NAME, AS: $ISP_AS"
-                    
-                    # キャッシュからの結果表示（オプション）
-                    if [ "$show_result" = "true" ] && type display_detected_isp >/dev/null 2>&1; then
-                        display_detected_isp "Cache" "$ISP_NAME" "$ISP_AS" "$ISP_ORG" "false"
-                    fi
-                    
-                    return 0
-                fi
-            fi
-            debug_log "DEBUG: Cache file invalid or empty"
-        else
-            debug_log "DEBUG: Cache expired ($cache_age seconds old)"
-        fi
-    fi
-    
-    # ローカルDBモードの処理
-    if [ $use_local_db -eq 1 ]; then
-        if [ -f "${BASE_DIR}/isp.db" ]; then
-            debug_log "DEBUG: Processing with local database"
-            # 実際のローカルDB処理はここに実装 (ローカルIPとISPマッピング)
-            
-            # 仮実装：ローカルIPからISP情報を取得できたとする
-            ISP_NAME="Local ISP Database"
-            ISP_AS="AS12345"
-            ISP_ORG="Example Local Organization"
-            
-            # キャッシュに保存（キャッシュタイムアウトが0でない場合）
-            if [ $cache_timeout -ne 0 ]; then
-                echo "$ISP_NAME" > "$cache_file"
-                echo "$ISP_AS" >> "$cache_file"
-                echo "$ISP_ORG" >> "$cache_file"
-                debug_log "DEBUG: Saved local DB results to cache"
-            fi
-            
-            # ローカルDBからの結果表示（オプション）
-            if [ "$show_result" = "true" ] && type display_detected_isp >/dev/null 2>&1; then
-                display_detected_isp "Local DB" "$ISP_NAME" "$ISP_AS" "$ISP_ORG" "false"
-            fi
-            
-            return 0
-        else
-            debug_log "DEBUG: Local database not found, falling back to online API"
-        fi
-    fi
-    
-    # ネットワーク接続状況の取得
-    if [ -f "${CACHE_DIR}/network.ch" ]; then
-        network_type=$(cat "${CACHE_DIR}/network.ch")
-        debug_log "DEBUG: Network connectivity type detected: $network_type"
-    else
-        debug_log "DEBUG: Network connectivity information not available, checking..."
-        check_network_connectivity
-        if [ -f "${CACHE_DIR}/network.ch" ]; then
-            network_type=$(cat "${CACHE_DIR}/network.ch")
-        else
-            network_type="v4"  # デフォルトでIPv4を試行
-        fi
-    fi
-    
-    # スピナー開始（初期メッセージ）
-    if type start_spinner >/dev/null 2>&1; then
-        start_spinner "$(color "blue" "$(get_message "MSG_FETCHING_ISP_INFO")")" "yellow"
-        spinner_active=1
-        debug_log "DEBUG: Starting ISP detection process"
-    fi
-    
-    # IPアドレスの取得（ネットワークタイプに応じて適切なAPIを選択）
-    if [ "$network_type" = "v4" ] || [ "$network_type" = "v4v6" ]; then
-        # IPv4優先
-        api_url="https://api.ipify.org"
-    elif [ "$network_type" = "v6" ]; then
-        # IPv6のみ
-        api_url="https://api64.ipify.org"
-    else
-        # デフォルト
-        api_url="https://api.ipify.org"
-    fi
-    
-    # IPアドレスの取得（リトライロジック追加）
-    retry_count=0
-    while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        debug_log "DEBUG: Querying IP address from $api_url (attempt $(($retry_count+1))/$API_MAX_RETRIES)"
-        
-        tmp_file="$(mktemp -t isp.XXXXXX)"
-        $BASE_WGET -O "$tmp_file" "$api_url" -T $timeout_sec 2>/dev/null
-        wget_status=$?
-        
-        if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-            ip_address=$(cat "$tmp_file")
-            rm -f "$tmp_file"
-            debug_log "DEBUG: Retrieved IP address: $ip_address"
-            break
-        else
-            debug_log "DEBUG: IP address query failed, retrying..."
-            rm -f "$tmp_file" 2>/dev/null
-            retry_count=$(($retry_count + 1))
-            [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
-        fi
-    done
-    
-    # IPアドレスが取得できたかチェック
-    if [ -z "$ip_address" ]; then
-        debug_log "DEBUG: Failed to retrieve any IP address after $API_MAX_RETRIES attempts"
-        if [ $spinner_active -eq 1 ] && type stop_spinner >/dev/null 2>&1; then
-            stop_spinner "$(get_message "MSG_ISP_INFO_FAILED")" "failed"
-            spinner_active=0
-        fi
-        return 1
-    fi
-    
-    # スピナー更新（APIクエリ中）
-    if [ $spinner_active -eq 1 ] && type update_spinner >/dev/null 2>&1; then
-        update_spinner "$(color "blue" "$(get_message "MSG_FETCHING_ISP_INFO")")" "yellow"
-    fi
-    
-    # ISP情報の取得（リトライロジック追加）
-    retry_count=0
-    while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        debug_log "DEBUG: Querying ISP information for IP: $ip_address (attempt $(($retry_count+1))/$API_MAX_RETRIES)"
-        
-        tmp_file="$(mktemp -t isp.XXXXXX)"
-        $BASE_WGET -O "$tmp_file" "http://ip-api.com/json/${ip_address}?fields=isp,as,org" -T $timeout_sec 2>/dev/null
-        wget_status=$?
-        
-        if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-            # JSON解析
-            ISP_NAME=$(grep -o '"isp":"[^"]*' "$tmp_file" | sed 's/"isp":"//')
-            ISP_AS=$(grep -o '"as":"[^"]*' "$tmp_file" | sed 's/"as":"//')
-            ISP_ORG=$(grep -o '"org":"[^"]*' "$tmp_file" | sed 's/"org":"//')
-            
-            debug_log "DEBUG: Retrieved ISP info - Name: $ISP_NAME, AS: $ISP_AS, Organization: $ISP_ORG"
-            rm -f "$tmp_file"
-            
-            # 正常にデータが取得できたかチェック
-            if [ -n "$ISP_NAME" ]; then
-                # キャッシュに保存（キャッシュタイムアウトが0でない場合）
-                if [ $cache_timeout -ne 0 ]; then
-                    echo "$ISP_NAME" > "$cache_file"
-                    echo "$ISP_AS" >> "$cache_file"
-                    echo "$ISP_ORG" >> "$cache_file"
-                    debug_log "DEBUG: Saved ISP information to cache"
-                fi
-                break
-            else
-                debug_log "DEBUG: ISP information retrieved but empty, retrying..."
-                retry_count=$(($retry_count + 1))
-                [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
-            fi
-        else
-            debug_log "DEBUG: ISP information query failed, retrying..."
-            rm -f "$tmp_file" 2>/dev/null
-            retry_count=$(($retry_count + 1))
-            [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
-        fi
-    done
-    
-    # 結果のチェックとスピナー停止
-    if [ $spinner_active -eq 1 ] && type stop_spinner >/dev/null 2>&1; then
-        if [ -n "$ISP_NAME" ]; then
-            stop_spinner "$(get_message "MSG_ISP_INFO_SUCCESS")" "successfully"
-            debug_log "DEBUG: ISP information process completed with status: successfully"
-        else
-            stop_spinner "$(get_message "MSG_ISP_INFO_FAILED")" "failed"
-            debug_log "DEBUG: ISP information process completed with status: failed"
-        fi
-    fi
-    
-    # 成功した場合、結果表示
-    if [ -n "$ISP_NAME" ]; then
-        if [ "$show_result" = "true" ] && type display_detected_isp >/dev/null 2>&1; then
-            display_detected_isp "Online API" "$ISP_NAME" "$ISP_AS" "$ISP_ORG" "false"
-        fi
-        return 0
-    else
-        return 1
-    fi
-}
-
-# 🔴　ISP　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
-
 # 🔵　ロケーション　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # 検出した地域情報を表示する共通関数
@@ -464,6 +92,8 @@ display_detected_location() {
     local detected_zonename="$3"
     local detected_timezone="$4"
     local show_success_message="${5:-false}"
+    local detected_isp="${6:-}"
+    local detected_as="${7:-}"
     
     debug_log "DEBUG" "Displaying location information from source: $detection_source"
     
@@ -486,6 +116,15 @@ display_detected_location() {
         local api_msg=$(get_message "MSG_TIMEZONE_API")
         api_msg=$(echo "$api_msg" | sed "s/{api}/$domain/g")
         printf "%s\n" "$(color white "$api_msg")"
+    fi
+    
+    # ISP情報の表示（ISP情報がある場合のみ）
+    if [ -n "$detected_isp" ]; then
+        printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ISP")")" "$(color white "$detected_isp")"
+    fi
+    
+    if [ -n "$detected_as" ]; then
+        printf "%s %s\n" "$(color white "$(get_message "MSG_ISP_AS")")" "$(color white "$detected_as")"
     fi
     
     printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$detected_country")"
@@ -530,9 +169,17 @@ get_country_ipapi() {
             SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
             SELECT_ZONENAME=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//')
             
+            # ISP情報も抽出（追加）
+            ISP_NAME=$(grep -o '"isp":"[^"]*' "$tmp_file" | sed 's/"isp":"//')
+            ISP_AS=$(grep -o '"as":"[^"]*' "$tmp_file" | sed 's/"as":"//')
+            ISP_ORG=$(grep -o '"org":"[^"]*' "$tmp_file" | sed 's/"org":"//')
+            
             # データが正常に取得できたか確認
             if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
                 debug_log "DEBUG" "Retrieved from ip-api.com - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
+                if [ -n "$ISP_NAME" ]; then
+                    debug_log "DEBUG" "Retrieved ISP info - Name: $ISP_NAME, AS: $ISP_AS"
+                fi
                 success=1
                 break
             else
@@ -579,9 +226,22 @@ get_country_ipinfo() {
             SELECT_COUNTRY=$(grep -o '"country"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"country"[[:space:]]*:[[:space:]]*"//')
             SELECT_ZONENAME=$(grep -o '"timezone"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"timezone"[[:space:]]*:[[:space:]]*"//')
             
+            # ISP情報も抽出（追加）
+            local org_raw=$(grep -o '"org"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"org"[[:space:]]*:[[:space:]]*"//')
+            
+            # orgフィールドからAS番号とISP名を分離
+            if [ -n "$org_raw" ]; then
+                ISP_AS=$(echo "$org_raw" | awk '{print $1}')
+                ISP_NAME=$(echo "$org_raw" | cut -d' ' -f2-)
+                ISP_ORG="$ISP_NAME"  # ipinfo.ioではISP名と組織名が分かれていないため
+            fi
+            
             # データが正常に取得できたか確認
             if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
                 debug_log "DEBUG" "Retrieved from ipinfo.io - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
+                if [ -n "$ISP_NAME" ]; then
+                    debug_log "DEBUG" "Retrieved ISP info - Name: $ISP_NAME, AS: $ISP_AS"
+                fi
                 success=1
                 break
             else
@@ -634,6 +294,11 @@ get_country_code() {
     SELECT_TIMEZONE=""
     SELECT_COUNTRY=""
     SELECT_POSIX_TZ=""
+    
+    # ISP関連の変数も初期化（追加）
+    ISP_NAME=""
+    ISP_AS=""
+    ISP_ORG=""
     
     # キャッシュディレクトリの確認
     [ -d "${CACHE_DIR}" ] || mkdir -p "${CACHE_DIR}"
@@ -739,12 +404,27 @@ get_country_code() {
         fi
     fi
     
+    # ISP情報をキャッシュに保存（追加）
+    if [ -n "$ISP_NAME" ] || [ -n "$ISP_AS" ]; then
+        local cache_file="${CACHE_DIR}/isp_info.ch"
+        echo "$ISP_NAME" > "$cache_file"
+        echo "$ISP_AS" >> "$cache_file"
+        echo "$ISP_ORG" >> "$cache_file"
+        debug_log "DEBUG" "Saved ISP information to cache"
+    fi
+    
     # 結果のチェックとスピナー停止
     if [ $spinner_active -eq 1 ]; then
         if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ] && [ -n "$SELECT_TIMEZONE" ]; then
             local success_msg=$(get_message "MSG_LOCATION_RESULT" "status=successfully")
             stop_spinner "$success_msg" "success"
             debug_log "DEBUG" "Location information retrieved successfully"
+            
+            # ISP情報も含めて表示（追加）
+            if type display_detected_location >/dev/null 2>&1; then
+                display_detected_location "Location" "$SELECT_COUNTRY" "$SELECT_ZONENAME" "$SELECT_TIMEZONE" "false" "$ISP_NAME" "$ISP_AS"
+            fi
+            
             return 0
         else
             local fail_msg=$(get_message "MSG_LOCATION_RESULT" "status=failed")
@@ -755,6 +435,108 @@ get_country_code() {
     fi
     
     return 1
+}
+
+# IPアドレスから地域情報を取得しキャッシュファイルに保存する関数
+process_location_info() {
+    local skip_retrieval=0
+    
+    # パラメータ処理（オプション）
+    if [ "$1" = "use_cached" ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_TIMEZONE" ] && [ -n "$SELECT_ZONENAME" ]; then
+        skip_retrieval=1
+        debug_log "DEBUG: Using already retrieved location information"
+    fi
+    
+    # 必要な場合のみget_country_code関数を呼び出し
+    if [ $skip_retrieval -eq 0 ]; then
+        debug_log "DEBUG: Starting IP-based location information retrieval"
+        get_country_code || {
+            debug_log "ERROR: get_country_code failed to retrieve location information"
+            return 1
+        }
+    fi
+    
+    debug_log "DEBUG: Processing location data - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME, Timezone: $SELECT_TIMEZONE"
+
+    # キャッシュファイルのパス定義
+    local tmp_country="${CACHE_DIR}/ip_country.tmp"
+    local tmp_zone="${CACHE_DIR}/ip_zone.tmp"
+    local tmp_timezone="${CACHE_DIR}/ip_timezone.tmp"
+    local tmp_zonename="${CACHE_DIR}/ip_zonename.tmp"
+    local tmp_isp="${CACHE_DIR}/ip_isp.tmp"
+    local tmp_as="${CACHE_DIR}/ip_as.tmp"
+    
+    # 3つの重要情報が揃っているか確認
+    if [ -z "$SELECT_COUNTRY" ] || [ -z "$SELECT_TIMEZONE" ] || [ -z "$SELECT_ZONENAME" ]; then
+        debug_log "ERROR: Incomplete location data - required information missing"
+        # 既存のファイルを削除してクリーンな状態を確保
+        rm -f "$tmp_country" "$tmp_zone" "$tmp_timezone" "$tmp_zonename" "$tmp_isp" "$tmp_as" 2>/dev/null
+        return 1
+    fi
+    
+    debug_log "DEBUG: All required location data available, saving to cache files"
+    
+    # 国コードをキャッシュに保存
+    echo "$SELECT_COUNTRY" > "$tmp_country"
+    debug_log "DEBUG: Country code saved to cache: $SELECT_COUNTRY"
+    
+    # 生のゾーン情報（JSON形式）をキャッシュに保存
+    if [ -n "$SELECT_ZONE" ]; then
+        echo "$SELECT_ZONE" > "$tmp_zone"
+        debug_log "DEBUG: Zone data saved to cache (JSON format)"
+    fi
+    
+    # ゾーンネームをキャッシュに保存（例：Asia/Tokyo）
+    echo "$SELECT_ZONENAME" > "$tmp_zonename"
+    debug_log "DEBUG: Zone name saved to cache: $SELECT_ZONENAME"
+    
+    # ISP情報をキャッシュに保存（追加）
+    if [ -n "$ISP_NAME" ]; then
+        echo "$ISP_NAME" > "$tmp_isp"
+        debug_log "DEBUG: ISP name saved to cache: $ISP_NAME"
+    fi
+    
+    if [ -n "$ISP_AS" ]; then
+        echo "$ISP_AS" > "$tmp_as"
+        debug_log "DEBUG: AS number saved to cache: $ISP_AS"
+    fi
+    
+    # POSIXタイムゾーン文字列を保存（get_country_code()で生成済み）
+    if [ -n "$SELECT_POSIX_TZ" ]; then
+        echo "$SELECT_POSIX_TZ" > "$tmp_timezone"
+        debug_log "DEBUG: Using pre-generated POSIX timezone: $SELECT_POSIX_TZ"
+    else
+        # 万が一SELECT_POSIX_TZが設定されていない場合の保険
+        local posix_tz="$SELECT_TIMEZONE"
+        local temp_offset=""
+        
+        if [ -n "$SELECT_ZONE" ]; then
+            temp_offset=$(echo "$SELECT_ZONE" | grep -o '"utc_offset":"[^"]*' | awk -F'"' '{print $4}')
+            
+            if [ -n "$temp_offset" ]; then
+                debug_log "DEBUG: Found UTC offset in zone data: $temp_offset"
+                # +09:00のような形式からPOSIX形式（-9）に変換
+                local temp_sign=$(echo "$temp_offset" | cut -c1)
+                local temp_hours=$(echo "$temp_offset" | cut -c2-3 | sed 's/^0//')
+                
+                if [ "$temp_sign" = "+" ]; then
+                    # +9 -> -9（POSIXでは符号が反転）
+                    posix_tz="${SELECT_TIMEZONE}-${temp_hours}"
+                else
+                    # -5 -> 5（POSIXではプラスの符号は省略）
+                    posix_tz="${SELECT_TIMEZONE}${temp_hours}"
+                fi
+                
+                debug_log "DEBUG: Generated POSIX timezone as fallback: $posix_tz"
+            fi
+        fi
+        
+        echo "$posix_tz" > "$tmp_timezone"
+        debug_log "DEBUG: Timezone saved to cache in POSIX format: $posix_tz"
+    fi
+    
+    debug_log "DEBUG: Location information cache process completed successfully"
+    return 0
 }
 
 # 🔴　ロケーション　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
