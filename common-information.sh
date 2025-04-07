@@ -463,38 +463,26 @@ process_location_info() {
     # キャッシュディレクトリ確認
     [ -d "$CACHE_DIR" ] || mkdir -p "$CACHE_DIR"
     
-    # キャッシュの統一：直接メインのキャッシュファイルに保存
-    # 国コードをキャッシュに保存
-    echo "$SELECT_COUNTRY" > "${CACHE_DIR}/language.ch"
-    debug_log "DEBUG: Country code saved to cache: $SELECT_COUNTRY"
+    # 注意: 直接キャッシュファイルに書き込まずに一時ファイルに保存
+    # country_write()とzone_write()のみがキャッシュに書き込みを行う
     
-    # ゾーンネームをキャッシュに保存（例：Asia/Tokyo）
-    echo "$SELECT_ZONENAME" > "${CACHE_DIR}/zonename.ch"
-    debug_log "DEBUG: Zone name saved to cache: $SELECT_ZONENAME"
+    # 一時ファイルにデータを保存
+    echo "$SELECT_COUNTRY" > "${CACHE_DIR}/ip_country.tmp"
+    echo "$SELECT_ZONENAME" > "${CACHE_DIR}/ip_zonename.tmp"
+    echo "$SELECT_TIMEZONE" > "${CACHE_DIR}/ip_timezone.tmp"
     
-    # タイムゾーン略称をキャッシュに保存（例：JST）
-    echo "$SELECT_TIMEZONE" > "${CACHE_DIR}/timezone.ch"
-    debug_log "DEBUG: Timezone saved to cache: $SELECT_TIMEZONE"
-    
-    # POSIXタイムゾーン文字列を保存
-    if [ -n "$SELECT_POSIX_TZ" ]; then
-        echo "$SELECT_POSIX_TZ" > "${CACHE_DIR}/posix_tz.ch"
-        debug_log "DEBUG: POSIX timezone saved to cache: $SELECT_POSIX_TZ"
-    fi
+    debug_log "DEBUG: Location information saved to temporary files"
     
     # ISP情報をキャッシュに保存
     if [ -n "$ISP_NAME" ] || [ -n "$ISP_AS" ]; then
-        local cache_file="${CACHE_DIR}/isp_info.ch"
-        echo "$ISP_NAME" > "$cache_file"
-        echo "$ISP_AS" >> "$cache_file"
-        echo "$ISP_ORG" >> "$cache_file"
-        debug_log "DEBUG: ISP information saved to cache"
+        local tmp_isp="${CACHE_DIR}/ip_isp.tmp"
+        local tmp_as="${CACHE_DIR}/ip_as.tmp"
+        echo "$ISP_NAME" > "$tmp_isp"
+        echo "$ISP_AS" > "$tmp_as"
+        debug_log "DEBUG: ISP information saved to temporary files"
     fi
     
-    # キャッシュタイムスタンプの更新
-    date "+%Y-%m-%d %H:%M:%S" > "${CACHE_DIR}/timestamp.ch"
-    
-    debug_log "DEBUG: Location information cache process completed successfully"
+    debug_log "DEBUG: Location information processing completed successfully"
     return 0
 }
 
