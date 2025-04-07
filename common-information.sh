@@ -463,6 +463,7 @@ display_detected_location() {
     local detected_zonename="$3"
     local detected_timezone="$4"
     local show_success_message="${5:-false}"
+    local timezone_api="${6:-}"  # 新しいパラメータ: タイムゾーン取得に使用したAPI
     
     debug_log "DEBUG" "Displaying location information from source: $detection_source"
     
@@ -470,6 +471,21 @@ display_detected_location() {
     local msg_info=$(get_message "MSG_USE_DETECTED_INFORMATION")
     msg_info=$(echo "$msg_info" | sed "s/{info}/$detection_source/g")
     printf "%s\n" "$(color white "$msg_info")"
+    
+    # タイムゾーンAPI情報の表示（新機能）- カントリーコードの前に表示
+    if [ -n "$timezone_api" ]; then
+        # APIのURLからドメイン名のみを抽出
+        local domain=$(echo "$timezone_api" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+        
+        if [ -z "$domain" ]; then
+            # URLでない場合はそのまま使用
+            domain="$timezone_api"
+        fi
+        
+        # メッセージキーを使用して表示
+        printf "%s %s\n" "$(color white "$(get_message "MSG_TIMEZONE_API")")" "$(color white "$domain")"
+    fi
+    
     printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$detected_country")"
     printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONENAME")")" "$(color white "$detected_zonename")"
     printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color white "$detected_timezone")"
