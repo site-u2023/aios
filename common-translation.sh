@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-08-00-01"
+SCRIPT_VERSION="2025-04-08-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -57,69 +57,24 @@ TRANSLATION_CACHE_DIR="${BASE_DIR}/translations"
 CURRENT_API=""
 API_LIST="google" # API_LIST="mymemory"
 
-# メモリキャッシュ変数
-MEM_CACHE_KEYS=""
-MEM_CACHE_VALUES=""
+# メモリキャッシュ用変数
+MEMORY_DB=""
 
-# メモリキャッシュの初期化
-init_memory_cache() {
-    MEM_CACHE_KEYS=""
-    MEM_CACHE_VALUES=""
-    debug_log "DEBUG" "Memory translation cache initialized"
+# メモリDBに行を追加
+add_to_memory_db() {
+    local line="$1"
+    MEMORY_DB="${MEMORY_DB}${line}\n"
 }
 
-# メモリキャッシュに値を保存
-set_memory_cache() {
-    local key="$1"
-    local value="$2"
-    
-    # メモリキャッシュに追加
-    MEM_CACHE_KEYS="${MEM_CACHE_KEYS}${key}|"
-    MEM_CACHE_VALUES="${MEM_CACHE_VALUES}${value}|"
-    
-    debug_log "DEBUG" "Added to memory cache: key=${key}"
-}
-
-# メモリキャッシュから値を取得
-get_memory_cache() {
-    local search_key="$1"
-    local keys="$MEM_CACHE_KEYS"
-    local values="$MEM_CACHE_VALUES"
-    local i=1
-    local current_key=""
-    local current_value=""
-    
-    # キーがなければ見つからなかった
-    if [ -z "$keys" ]; then
-        return 1
-    fi
-    
-    # キーを区切り文字で分割して検索
-    while true; do
-        current_key=$(echo "$keys" | cut -d'|' -f$i)
-        
-        # キーがなくなったら終了
-        if [ -z "$current_key" ]; then
-            break
-        fi
-        
-        # キーが一致したら値を返す
-        if [ "$current_key" = "$search_key" ]; then
-            current_value=$(echo "$values" | cut -d'|' -f$i)
-            printf "%s" "$current_value"
-            return 0
-        fi
-        
-        i=$((i + 1))
-    done
-    
-    return 1
+# メモリDBをファイルに書き出し
+flush_memory_db() {
+    local file="$1"
+    printf "%b" "$MEMORY_DB" > "$file"
 }
 
 # 翻訳キャッシュの初期化
 init_translation_cache() {
     mkdir -p "${TRANSLATION_CACHE_DIR}"
-    init_memory_cache
     debug_log "DEBUG" "Translation cache directory initialized"
 }
 
@@ -253,7 +208,7 @@ translate_text() {
     esac
 }
 
-# 言語データベース作成関数（メモリキャッシュ対応版）
+# 言語データベース作成関数
 create_language_db() {
     local target_lang="$1"
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
@@ -266,8 +221,8 @@ create_language_db() {
     
     debug_log "DEBUG" "Creating language DB for target ${target_lang} with API language code ${api_lang}"
     
-    # メモリキャッシュを初期化
-    init_memory_cache
+    # メモリDBを初期化
+    MEMORY_DB=""
     
     # ベースDBファイル確認
     if [ ! -f "$base_db" ]; then
@@ -276,14 +231,16 @@ create_language_db() {
     fi
     
     # DBファイル作成 (常に新規作成・上書き)
-    cat > "$output_db" << EOF
-SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
-EOF
+    add_to_memory_db "SCRIPT_VERSION=\"$(date +%Y.%m.%d-%H-%M)\""
     
     # オンライン翻訳が無効なら翻訳せず置換するだけ
     if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
         debug_log "DEBUG" "Online translation disabled, using original text"
-        grep "^${DEFAULT_LANGUAGE}|" "$base_db" | sed "s/^${DEFAULT_LANGUAGE}|/${api_lang}|/" >> "$output_db"
+        grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
+            add_to_memory_db "$(echo "$line" | sed "s/^${DEFAULT_LANGUAGE}|/${api_lang}|/")"
+        done
+        # メモリからファイルに書き出し
+        flush_memory_db "$output_db"
         return 0
     fi
     
@@ -327,24 +284,14 @@ EOF
         if [ -n "$key" ] && [ -n "$value" ]; then
             # キャッシュキー生成
             local cache_key=$(printf "%s%s%s" "$key" "$value" "$api_lang" | md5sum | cut -d' ' -f1)
-            
-            # まずメモリキャッシュを確認
-            local mem_cached_translation=$(get_memory_cache "$cache_key")
-            if [ $? -eq 0 ] && [ -n "$mem_cached_translation" ]; then
-                # メモリキャッシュヒット
-                printf "%s|%s=%s\n" "$api_lang" "$key" "$mem_cached_translation" >> "$output_db"
-                debug_log "DEBUG" "Using memory cached translation for key: ${key}"
-                continue
-            fi
-            
-            # ファイルキャッシュを確認
             local cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
+            
+            # キャッシュを確認
             if [ -f "$cache_file" ]; then
                 local translated=$(cat "$cache_file")
-                # メモリキャッシュに保存してから使用
-                set_memory_cache "$cache_key" "$translated"
-                printf "%s|%s=%s\n" "$api_lang" "$key" "$translated" >> "$output_db"
-                debug_log "DEBUG" "Using file cached translation for key: ${key}"
+                # メモリDBに追加
+                add_to_memory_db "${api_lang}|${key}=${translated}"
+                debug_log "DEBUG" "Using cached translation for key: ${key}"
                 continue
             fi
             
@@ -381,27 +328,27 @@ EOF
                     # 基本的なエスケープシーケンスの処理
                     local decoded="$cleaned_translation"
                     
-                    # ファイルキャッシュに保存
+                    # キャッシュに保存
                     mkdir -p "$(dirname "$cache_file")"
                     printf "%s\n" "$decoded" > "$cache_file"
                     
-                    # メモリキャッシュにも保存
-                    set_memory_cache "$cache_key" "$decoded"
-                    
-                    # APIから取得した言語コードを使用してDBに追加
-                    printf "%s|%s=%s\n" "$api_lang" "$key" "$decoded" >> "$output_db"
+                    # メモリDBに追加
+                    add_to_memory_db "${api_lang}|${key}=${decoded}"
                 else
                     # 翻訳失敗時は原文をそのまま使用
-                    printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
+                    add_to_memory_db "${api_lang}|${key}=${value}"
                     debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}" 
                 fi
             else
                 # ネットワーク接続がない場合は原文を使用
-                printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
+                add_to_memory_db "${api_lang}|${key}=${value}"
                 debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
             fi
         fi
     done
+    
+    # メモリからファイルに書き出し
+    flush_memory_db "$output_db"
     
     # スピナー停止
     stop_spinner "Translation completed" "success"
