@@ -62,7 +62,7 @@ en|PKG_SECTION_USB=USB Storage
 en|PKG_SECTION_SAMBA=File Sharing
 
 # =======================
-# dynamic-system-info.sh
+# common-system.sh
 # =======================
 en|MSG_USE_DETECTED_ISP_INFORMATION=ISP Sources{notr_colon_notr} {notr_info_notr}
 en|MSG_DETECTED_ISP=ISP Provider{notr_colon_notr}
