@@ -436,7 +436,7 @@ detect_and_set_location() {
                         fi
                     
                         # ここでAPI情報を含めて表示（追加）
-                        display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "false" "$detected_isp" "$detected_as"
+                        # display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "false" "$detected_isp" "$detected_as"
                                             
                         debug_log "DEBUG" "IP detection results - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
                     else
