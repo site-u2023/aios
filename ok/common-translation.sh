@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-08-00-03"
+SCRIPT_VERSION="2025-04-08-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -193,7 +193,7 @@ translate_text() {
     esac
 }
 
-# 言語データベース作成関数
+# 言語データベース作成関数（メモリバッファ最適化版）
 create_language_db() {
     local target_lang="$1"
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
@@ -204,6 +204,9 @@ create_language_db() {
     local current_api=""
     local ip_check_file="${CACHE_DIR}/network.ch"
     
+    # メモリバッファ変数
+    local memory_buffer=""
+    
     debug_log "DEBUG" "Creating language DB for target ${target_lang} with API language code ${api_lang}"
     
     # ベースDBファイル確認
@@ -212,19 +215,27 @@ create_language_db() {
         return 1
     fi
     
-    # 一時バッファファイル（メモリ内書き込み回数削減のため）
-    local buffer_file="${TRANSLATION_CACHE_DIR}/memory_buffer.tmp"
-    
-    # バッファファイル初期化
-    printf "SCRIPT_VERSION=\"%s\"\n" "$(date +%Y.%m.%d-%H-%M)" > "$buffer_file"
+    # DBファイル作成 (メモリバッファに追加)
+    memory_buffer="SCRIPT_VERSION=\"$(date +%Y.%m.%d-%H-%M)\""
     
     # オンライン翻訳が無効なら翻訳せず置換するだけ
     if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
         debug_log "DEBUG" "Online translation disabled, using original text"
-        grep "^${DEFAULT_LANGUAGE}|" "$base_db" | sed "s/^${DEFAULT_LANGUAGE}|/${api_lang}|/" >> "$buffer_file"
-        # 一時バッファをコピー
-        cat "$buffer_file" > "$output_db"
-        rm -f "$buffer_file"
+        
+        # 一時ファイルに抽出して処理（サブシェル問題を回避）
+        grep "^${DEFAULT_LANGUAGE}|" "$base_db" > "$temp_file"
+        
+        # 行ごとに処理してメモリバッファに追加
+        while IFS= read -r line; do
+            memory_buffer="${memory_buffer}
+$(echo "$line" | sed "s/^${DEFAULT_LANGUAGE}|/${api_lang}|/")"
+        done < "$temp_file"
+        
+        # 一時ファイル削除
+        rm -f "$temp_file"
+        
+        # メモリバッファから一度だけ書き出し
+        printf "%s\n" "$memory_buffer" > "$output_db"
         return 0
     fi
     
@@ -258,10 +269,10 @@ create_language_db() {
     # スピナーを開始し、使用中のAPIを表示
     start_spinner "$(color blue "Using API: $current_api")"
     
-    # 翻訳アイテムを一時ファイルに抽出（subshell問題回避のため）
+    # 処理用の一時ファイルを作成（サブシェル問題回避のため）
     grep "^${DEFAULT_LANGUAGE}|" "$base_db" > "$temp_file"
     
-    # 一時ファイルから一行ずつ処理
+    # 翻訳対象を一行ずつ処理
     while IFS= read -r line; do
         # キーと値を抽出
         local key=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|\([^=]*\)=.*/\1/p")
@@ -275,8 +286,9 @@ create_language_db() {
             # キャッシュを確認
             if [ -f "$cache_file" ]; then
                 local translated=$(cat "$cache_file")
-                # メモリバッファに追加（一時ファイルに書き込み）
-                printf "%s|%s=%s\n" "$api_lang" "$key" "$translated" >> "$buffer_file"
+                # APIから取得した言語コードを使用（メモリバッファに追加）
+                memory_buffer="${memory_buffer}
+${api_lang}|${key}=${translated}"
                 debug_log "DEBUG" "Using cached translation for key: ${key}"
                 continue
             fi
@@ -318,16 +330,19 @@ create_language_db() {
                     mkdir -p "$(dirname "$cache_file")"
                     printf "%s\n" "$decoded" > "$cache_file"
                     
-                    # バッファに追加（ファイルには一時的に書き込む）
-                    printf "%s|%s=%s\n" "$api_lang" "$key" "$decoded" >> "$buffer_file"
+                    # APIから取得した言語コードを使用してメモリバッファに追加
+                    memory_buffer="${memory_buffer}
+${api_lang}|${key}=${decoded}"
                 else
-                    # 翻訳失敗時は原文をそのまま使用
-                    printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$buffer_file"
+                    # 翻訳失敗時は原文をそのまま使用（メモリバッファに追加）
+                    memory_buffer="${memory_buffer}
+${api_lang}|${key}=${value}"
                     debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}" 
                 fi
             else
-                # ネットワーク接続がない場合は原文を使用
-                printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$buffer_file"
+                # ネットワーク接続がない場合は原文を使用（メモリバッファに追加）
+                memory_buffer="${memory_buffer}
+${api_lang}|${key}=${value}"
                 debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
             fi
         fi
@@ -336,9 +351,8 @@ create_language_db() {
     # 一時ファイル削除
     rm -f "$temp_file"
     
-    # 完成したバッファを最終出力ファイルにコピー（一度だけの書き込み）
-    cat "$buffer_file" > "$output_db"
-    rm -f "$buffer_file"
+    # メモリバッファから一度だけファイルに書き出し
+    printf "%s\n" "$memory_buffer" > "$output_db"
     
     # スピナー停止
     stop_spinner "Translation completed" "success"
