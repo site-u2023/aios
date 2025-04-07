@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-03-29-03-40"
+SCRIPT_VERSION="2025-04-08-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -97,7 +97,7 @@ urlencode() {
     printf "%s\n" "$encoded"
 }
 
-# Google APIを使用した翻訳関数（IPv4/IPv6対応）
+# Google APIを使用した翻訳関数（高速化版）
 translate_with_google() {
     local text="$1"
     local source_lang="$2"
@@ -106,36 +106,19 @@ translate_with_google() {
     local wget_options=""
     local retry_count=0
     
-    debug_log "DEBUG" "Starting Google Translate API request"
+    debug_log "DEBUG" "Starting Google Translate API request" "true"
     
-    # ネットワーク接続状態ファイルが存在しない場合は接続確認を実行
-    if [ ! -f "$ip_check_file" ]; then
-        debug_log "DEBUG" "Network connectivity status file not found, checking connectivity"
-        check_network_connectivity
-    fi
+    # ネットワーク接続状態を一度だけ確認
+    [ ! -f "$ip_check_file" ] && check_network_connectivity
     
     # ネットワーク接続状態に基づいてwgetオプションを設定
     if [ -f "$ip_check_file" ]; then
         local network_type=$(cat "$ip_check_file")
-        debug_log "DEBUG" "Detected network type: $network_type"
         
         case "$network_type" in
-            "v4")
-                wget_options="-4"  # IPv4のみ使用
-                debug_log "DEBUG" "Using IPv4 for API request"
-                ;;
-            "v6")
-                wget_options="-6"  # IPv6のみ使用
-                debug_log "DEBUG" "Using IPv6 for API request"
-                ;;
-            "v4v6")
-                # IPv4を優先使用
-                wget_options="-4"
-                debug_log "DEBUG" "Both available, prioritizing IPv4 for API request"
-                ;;
-            *)
-                debug_log "DEBUG" "No network connectivity info, API request may fail"
-                ;;
+            "v4") wget_options="-4" ;;
+            "v6") wget_options="-6" ;;
+            "v4v6") wget_options="-4" ;;
         esac
     fi
     
@@ -143,58 +126,33 @@ translate_with_google() {
     local encoded_text=$(urlencode "$text")
     local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
     
-    # ディレクトリが存在しなければ作成
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
     
     # リトライループ
     while [ $retry_count -le $API_MAX_RETRIES ]; do
-        if [ $retry_count -gt 0 ]; then
-            debug_log "DEBUG" "Retry attempt $retry_count for Google Translate API"
-            # デュアルスタック環境でIPバージョンを切り替え
-            if [ "$network_type" = "v4v6" ]; then
-                if [ "$wget_options" = "-4" ]; then
-                    wget_options="-6"
-                    debug_log "DEBUG" "Switching to IPv6 for retry"
-                else
-                    wget_options="-4"
-                    debug_log "DEBUG" "Switching to IPv4 for retry"
-                fi
-            fi
-        fi
+        [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ] && \
+            wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
         
-        debug_log "DEBUG" "Sending request to Google Translate API with options: $wget_options"
-        
-        # 修正: BASE_WGETの変更に対応した書き方
-        $BASE_WGET $wget_options -T $API_TIMEOUT -O "$temp_file" \
+        # APIリクエスト送信 - 待機時間なしのシンプル版
+        $BASE_WGET $wget_options -T $API_TIMEOUT --tries=1 -O "$temp_file" \
              --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
              "https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
         
-        local wget_status=$?
-        debug_log "DEBUG" "wget exit code: $wget_status"
-        
-        # レスポンスチェック
-        if [ -s "$temp_file" ]; then
-            if grep -q '\[\[\["' "$temp_file"; then
-                local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
-                
-                if [ -n "$translated" ]; then
-                    debug_log "DEBUG" "Google API returned valid translation"
-                    echo "$translated"
-                    rm -f "$temp_file"
-                    return 0
-                fi
+        # 効率的なレスポンスチェック
+        if [ -s "$temp_file" ] && grep -q '\[\[\["' "$temp_file"; then
+            local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
+            
+            if [ -n "$translated" ]; then
+                rm -f "$temp_file"
+                printf "%s\n" "$translated"
+                return 0
             fi
         fi
         
-        debug_log "DEBUG" "Google API translation attempt failed"
         rm -f "$temp_file" 2>/dev/null
         retry_count=$((retry_count + 1))
-        
-        # 一定時間待機してからリトライ
-        [ $retry_count -le $API_MAX_RETRIES ] && sleep 2
     done
     
-    debug_log "DEBUG" "Google API translation failed after all retry attempts"
     return 1
 }
 
