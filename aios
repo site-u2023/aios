@@ -1903,7 +1903,7 @@ check_common() {
             ;;
         debug)
             download "common-system.sh" "hidden" "chmod" "load"
-            download "common-location.sh" "hidden" "chmod" "load"
+            download "common-information.sh" "hidden" "chmod" "load"
             download "common-color.sh" "hidden" "chmod" "load"
             download "common-country.sh" "hidden" "chmod" "load"
             download "common-country.sh" "hidden" "chmod" "load"
@@ -1923,7 +1923,7 @@ check_common() {
             ;;
         full)
             download "common-system.sh" "chmod" "load"
-            download "common-location.sh" "chmod" "load"
+            download "common-information.sh" "chmod" "load"
             download "common-translation.sh" "chmod" "load"
             download "common-color.sh" "chmod" "load"
             download "common-country.sh" "chmod" "load"
