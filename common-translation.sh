@@ -133,14 +133,14 @@ translate_with_google() {
         [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ] && \
             wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
         
-        # APIリクエスト送信 - シンプル化
-        $BASE_WGET $wget_options -T $API_TIMEOUT -O "$temp_file" \
+        # APIリクエスト送信 - 待機時間なしのシンプル版
+        $BASE_WGET $wget_options -T $API_TIMEOUT --tries=1 -O "$temp_file" \
              --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
              "https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
         
-        # 効率的なレスポンスチェック - 単一のsedコマンド
+        # 効率的なレスポンスチェック
         if [ -s "$temp_file" ] && grep -q '\[\[\["' "$temp_file"; then
-            local translated=$(sed -n 's/\[\[\["\([^"]*\)",".*/\1/p; s/\\u003d/=/g; s/\\u003c/</g; s/\\u003e/>/g; s/\\u0026/\&/g; s/\\"/"/g' "$temp_file")
+            local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
             
             if [ -n "$translated" ]; then
                 rm -f "$temp_file"
@@ -151,7 +151,6 @@ translate_with_google() {
         
         rm -f "$temp_file" 2>/dev/null
         retry_count=$((retry_count + 1))
-        [ $retry_count -le $API_MAX_RETRIES ] && sleep 2
     done
     
     return 1
