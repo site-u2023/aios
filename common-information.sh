@@ -610,7 +610,6 @@ get_country_code() {
     local spinner_active=0
     
     # API URLの定数化
-    local API_WORLDTIME="http://worldtimeapi.org/api/ip"
     local API_IPINFO="http://ipinfo.io"
     local API_IPAPI="http://ip-api.com/json"
     
@@ -621,9 +620,6 @@ get_country_code() {
     # タイムゾーンAPIと関数のマッピング
     local api_func=""
     case "$timezone_api" in
-        "$API_WORLDTIME")
-            api_func="get_timezone_worldtime"
-            ;;
         "$API_IPINFO")
             api_func="get_country_ipinfo"
             ;;
