@@ -1902,7 +1902,7 @@ check_common() {
             exit 0
             ;;
         debug)
-            download "dynamic-system-info.sh" "hidden" "chmod" "load"
+            download "common-system.sh" "hidden" "chmod" "load"
             download "common-isp.sh" "hidden" "chmod" "load"
             download "common-color.sh" "hidden" "chmod" "load"
             download "common-country.sh" "hidden" "chmod" "load"
@@ -1922,7 +1922,7 @@ check_common() {
             selector "$MAIN_MENU" 
             ;;
         full)
-            download "dynamic-system-info.sh" "chmod" "load"
+            download "common-system.sh" "chmod" "load"
             download "common-isp.sh" "chmod" "load"
             download "common-translation.sh" "chmod" "load"
             download "common-color.sh" "chmod" "load"
