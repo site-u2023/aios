@@ -1,10 +1,10 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-08-00-05" 
+SCRIPT_VERSION="2025-04-08-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
-# 🚀 Last Update: 2025-04-07
+# 🚀 Last Update: 2025-03-29
 #
 # 🏷️ License: CC0 (Public Domain)
 # 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
@@ -56,21 +56,6 @@ API_MAX_RETRIES="${API_MAX_RETRIES:-3}"
 TRANSLATION_CACHE_DIR="${BASE_DIR}/translations"
 CURRENT_API=""
 API_LIST="google" # API_LIST="mymemory"
-
-# メモリキャッシュ用変数
-MEMORY_DB=""
-
-# メモリDBに行を追加
-add_to_memory_db() {
-    local line="$1"
-    MEMORY_DB="${MEMORY_DB}${line}\n"
-}
-
-# メモリDBをファイルに書き出し
-flush_memory_db() {
-    local file="$1"
-    printf "%b" "$MEMORY_DB" > "$file"
-}
 
 # 翻訳キャッシュの初期化
 init_translation_cache() {
@@ -208,7 +193,7 @@ translate_text() {
     esac
 }
 
-# 言語データベース作成関数（メモリバッファ最適化版）
+# 言語データベース作成関数
 create_language_db() {
     local target_lang="$1"
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
@@ -219,9 +204,6 @@ create_language_db() {
     local current_api=""
     local ip_check_file="${CACHE_DIR}/network.ch"
     
-    # メモリバッファ変数
-    local memory_buffer=""
-    
     debug_log "DEBUG" "Creating language DB for target ${target_lang} with API language code ${api_lang}"
     
     # ベースDBファイル確認
@@ -230,32 +212,21 @@ create_language_db() {
         return 1
     fi
     
-    # DBファイル作成 (メモリバッファに追加)
-    memory_buffer="SCRIPT_VERSION=\"$(date +%Y.%m.%d-%H-%M)\""
+    # DBファイル作成 (常に新規作成・上書き)
+    cat > "$output_db" << EOF
+SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
+EOF
     
     # オンライン翻訳が無効なら翻訳せず置換するだけ
     if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
         debug_log "DEBUG" "Online translation disabled, using original text"
-        
-        # 一時ファイルに抽出して処理（サブシェル問題を回避）
-        grep "^${DEFAULT_LANGUAGE}|" "$base_db" > "$temp_file"
-        
-        # 行ごとに処理してメモリバッファに追加
-        while IFS= read -r line; do
-            memory_buffer="${memory_buffer}
-$(echo "$line" | sed "s/^${DEFAULT_LANGUAGE}|/${api_lang}|/")"
-        done < "$temp_file"
-        
-        # 一時ファイル削除
-        rm -f "$temp_file"
-        
-        # メモリバッファから一度だけ書き出し
-        printf "%s\n" "$memory_buffer" > "$output_db"
+        grep "^${DEFAULT_LANGUAGE}|" "$base_db" | sed "s/^${DEFAULT_LANGUAGE}|/${api_lang}|/" >> "$output_db"
         return 0
     fi
     
     # 翻訳処理開始
     printf "\n"
+    # printf "Creating translation DB using API: %s\n" "$api_lang"
         
     # ネットワーク接続状態を確認
     if [ ! -f "$ip_check_file" ]; then
@@ -284,11 +255,8 @@ $(echo "$line" | sed "s/^${DEFAULT_LANGUAGE}|/${api_lang}|/")"
     # スピナーを開始し、使用中のAPIを表示
     start_spinner "$(color blue "Using API: $current_api")"
     
-    # 処理用の一時ファイルを作成（サブシェル問題回避のため）
-    grep "^${DEFAULT_LANGUAGE}|" "$base_db" > "$temp_file"
-    
-    # 翻訳対象を一行ずつ処理
-    while IFS= read -r line; do
+    # 言語エントリを抽出
+    grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
         # キーと値を抽出
         local key=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|\([^=]*\)=.*/\1/p")
         local value=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|[^=]*=\(.*\)/\1/p")
@@ -301,9 +269,8 @@ $(echo "$line" | sed "s/^${DEFAULT_LANGUAGE}|/${api_lang}|/")"
             # キャッシュを確認
             if [ -f "$cache_file" ]; then
                 local translated=$(cat "$cache_file")
-                # APIから取得した言語コードを使用（メモリバッファに追加）
-                memory_buffer="${memory_buffer}
-${api_lang}|${key}=${translated}"
+                # APIから取得した言語コードを使用
+                printf "%s|%s=%s\n" "$api_lang" "$key" "$translated" >> "$output_db"
                 debug_log "DEBUG" "Using cached translation for key: ${key}"
                 continue
             fi
@@ -345,29 +312,20 @@ ${api_lang}|${key}=${translated}"
                     mkdir -p "$(dirname "$cache_file")"
                     printf "%s\n" "$decoded" > "$cache_file"
                     
-                    # APIから取得した言語コードを使用してメモリバッファに追加
-                    memory_buffer="${memory_buffer}
-${api_lang}|${key}=${decoded}"
+                    # APIから取得した言語コードを使用してDBに追加
+                    printf "%s|%s=%s\n" "$api_lang" "$key" "$decoded" >> "$output_db"
                 else
-                    # 翻訳失敗時は原文をそのまま使用（メモリバッファに追加）
-                    memory_buffer="${memory_buffer}
-${api_lang}|${key}=${value}"
+                    # 翻訳失敗時は原文をそのまま使用
+                    printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
                     debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}" 
                 fi
             else
-                # ネットワーク接続がない場合は原文を使用（メモリバッファに追加）
-                memory_buffer="${memory_buffer}
-${api_lang}|${key}=${value}"
+                # ネットワーク接続がない場合は原文を使用
+                printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
                 debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
             fi
         fi
-    done < "$temp_file"
-    
-    # 一時ファイル削除
-    rm -f "$temp_file"
-    
-    # メモリバッファから一度だけファイルに書き出し
-    printf "%s\n" "$memory_buffer" > "$output_db"
+    done
     
     # スピナー停止
     stop_spinner "Translation completed" "success"
