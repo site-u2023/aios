@@ -51,8 +51,8 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 ONLINE_TRANSLATION_ENABLED="yes"
 
 # 翻訳API設定
-TRANSLATION_API_TIMEOUT="${TRANSLATION_API_TIMEOUT:-5}"
-TRANSLATION_API_MAX_RETRIES="${TRANSLATION_API_MAX_RETRIES:-3}"
+API_TIMEOUT="${API_TIMEOUT:-5}"
+API_MAX_RETRIES="${API_MAX_RETRIES:-3}"
 TRANSLATION_CACHE_DIR="${BASE_DIR}/translations"
 CURRENT_API=""
 API_LIST="google" # API_LIST="mymemory"
@@ -147,7 +147,7 @@ translate_with_google() {
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
     
     # リトライループ
-    while [ $retry_count -le $TRANSLATION_API_MAX_RETRIES ]; do
+    while [ $retry_count -le $API_MAX_RETRIES ]; do
         if [ $retry_count -gt 0 ]; then
             debug_log "DEBUG" "Retry attempt $retry_count for Google Translate API"
             # デュアルスタック環境でIPバージョンを切り替え
@@ -165,7 +165,7 @@ translate_with_google() {
         debug_log "DEBUG" "Sending request to Google Translate API with options: $wget_options"
         
         # 修正: BASE_WGETの変更に対応した書き方
-        $BASE_WGET $wget_options -T $TRANSLATION_API_TIMEOUT -O "$temp_file" \
+        $BASE_WGET $wget_options -T $API_TIMEOUT -O "$temp_file" \
              --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
              "https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
         
@@ -191,7 +191,7 @@ translate_with_google() {
         retry_count=$((retry_count + 1))
         
         # 一定時間待機してからリトライ
-        [ $retry_count -le $TRANSLATION_API_MAX_RETRIES ] && sleep 2
+        [ $retry_count -le $API_MAX_RETRIES ] && sleep 2
     done
     
     debug_log "DEBUG" "Google API translation failed after all retry attempts"
