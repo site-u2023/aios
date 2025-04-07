@@ -716,10 +716,10 @@ detect_and_set_location() {
     #if [ -z "$detected_country" ] && [ "$SKIP_DEVICE_DETECTION" != "true" ] && [ "$SKIP_CACHE_DEVICE_DETECTION" != "true" ]; then
     #    debug_log "DEBUG" "Attempting device-based information detection"
     #    
-    #    if [ -f "$BASE_DIR/dynamic-system-info.sh" ]; then
+    #    if [ -f "$BASE_DIR/common-system.sh" ]; then
     #        if ! command -v get_country_info >/dev/null 2>&1; then
-    #            debug_log "DEBUG" "Loading dynamic-system-info.sh"
-    #            . "$BASE_DIR/dynamic-system-info.sh"
+    #            debug_log "DEBUG" "Loading common-system.sh"
+    #            . "$BASE_DIR/common-system.sh"
     #        fi
     #
     #        # 情報の取得
@@ -730,7 +730,7 @@ detect_and_set_location() {
     #        
     #        debug_log "DEBUG" "Device detection results - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
     #    else
-    #        debug_log "DEBUG" "dynamic-system-info.sh not found. Cannot use system detection."
+    #        debug_log "DEBUG" "common-system.sh not found. Cannot use system detection."
     #    fi
     #fi
     
@@ -738,10 +738,10 @@ detect_and_set_location() {
     if [ -z "$detected_country" ] && [ "$SKIP_IP_DETECTION" != "true" ]; then
         debug_log "DEBUG" "Attempting IP-based location detection"
         
-        if [ -f "$BASE_DIR/dynamic-system-info.sh" ]; then
+        if [ -f "$BASE_DIR/common-system.sh" ]; then
             if ! command -v process_location_info >/dev/null 2>&1; then
-                debug_log "DEBUG" "Loading dynamic-system-info.sh for IP detection"
-                . "$BASE_DIR/dynamic-system-info.sh"
+                debug_log "DEBUG" "Loading common-system.sh for IP detection"
+                . "$BASE_DIR/common-system.sh"
             fi
             
             if command -v process_location_info >/dev/null 2>&1; then
@@ -765,7 +765,7 @@ detect_and_set_location() {
                 debug_log "DEBUG" "process_location_info function not available"
             fi
         else
-            debug_log "DEBUG" "dynamic-system-info.sh not found. Cannot use IP detection."
+            debug_log "DEBUG" "common-system.sh not found. Cannot use IP detection."
         fi
     fi
     
@@ -1088,9 +1088,9 @@ zone_write() {
 if [ "$DEBUG_MODE" = "true" ]; then
     debug_log "DEBUG" "common-country.sh loaded with BASE_DIR=$BASE_DIR"
     if type get_device_architecture >/dev/null 2>&1; then
-        debug_log "DEBUG" "dynamic-system-info.sh loaded successfully"
+        debug_log "DEBUG" "common-system.sh loaded successfully"
     else
-        debug_log "DEBUG" "dynamic-system-info.sh not loaded or functions not available"
+        debug_log "DEBUG" "common-system.sh not loaded or functions not available"
     fi
     
     # セキュリティとコード改善に関するデバッグメッセージ
