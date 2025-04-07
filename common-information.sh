@@ -635,20 +635,23 @@ get_country_code() {
     local retry_count=0
     
     # API URLの定数化
-    local api_ipv4="api.ipify.org"
-    local api_ipv6="api64.ipify.org" 
-    local api_ipapi="ip-api.com/json"
+    local API_IPV4="https://api.ipify.org"
+    local API_IPV6="https://api64.ipify.org"
+    local API_WORLDTIME="https://worldtimeapi.org/api/ip"
+    local API_TIMEAPI="https://timeapi.io/api/Time/current/ip"
+    local API_IPAPI="https://ip-api.com/json"
     
     # パラメータ（タイムゾーンAPIの種類）
-    local timezone_api="${1:-timeapi.io}"
+    # "https://worldtimeapi.org/api/ip" または "https://timeapi.io/api/Time/current/ip"
+    local timezone_api="${1:-$API_TIMEAPI}"
     
     # タイムゾーンAPIと関数のマッピング
     local tz_func=""
     case "$timezone_api" in
-        worldtimeapi.org)
+        "$API_WORLDTIME")
             tz_func="get_timezone_worldtime"
             ;;
-        timeapi.io|*)
+        "$API_TIMEAPI"|*)
             tz_func="get_timezone_timeapi"
             ;;
     esac
@@ -696,15 +699,15 @@ get_country_code() {
     if [ "$network_type" = "v4" ] || [ "$network_type" = "v4v6" ]; then
         # IPv4を使用（デュアルスタックでも常にIPv4を優先）
         debug_log "DEBUG" "Using IPv4 API (preferred for dual-stack or v4-only)"
-        api_url="http://${api_ipv4}"
+        api_url="$API_IPV4"
     elif [ "$network_type" = "v6" ]; then
         # IPv6のみ
         debug_log "DEBUG" "Using IPv6 API (v6-only environment)"
-        api_url="http://${api_ipv6}"
+        api_url="$API_IPV6"
     else
         # 不明なタイプ - デフォルトでIPv4
         debug_log "DEBUG" "Unknown network type, defaulting to IPv4 API"
-        api_url="http://${api_ipv4}"
+        api_url="$API_IPV4"
     fi
     
     # 選択したAPIを使用してIPアドレスを取得（リトライロジック付き）
@@ -749,7 +752,7 @@ get_country_code() {
     retry_count=0
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
         tmp_file="$(mktemp -t location.XXXXXX)"
-        $BASE_WGET -O "$tmp_file" "http://${api_ipapi}/${ip_address}" -T $API_TIMEOUT 2>/dev/null
+        $BASE_WGET -O "$tmp_file" "${API_IPAPI}/${ip_address}" -T $API_TIMEOUT 2>/dev/null
         wget_status=$?
         debug_log "DEBUG" "wget exit code for country query: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
@@ -768,7 +771,7 @@ get_country_code() {
     
     # タイムゾーン情報の取得（マッピングした関数を使用）
     tmp_file="$(mktemp -t timezone.XXXXXX)"
-    debug_log "DEBUG" "Calling timezone function for $timezone_api: $tz_func"
+    debug_log "DEBUG" "Calling timezone function: $tz_func for API: $timezone_api"
     
     # 動的に関数を呼び出し
     $tz_func "$tmp_file" "$network_type" "$timezone_api"
@@ -782,7 +785,7 @@ get_country_code() {
         if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ] && [ -n "$SELECT_TIMEZONE" ]; then
             local success_msg=$(get_message "MSG_LOCATION_RESULT" "status=success")
             stop_spinner "$success_msg" "success"
-            debug_log "DEBUG" "Location information retrieved successfully using $timezone_api"
+            debug_log "DEBUG" "Location information retrieved successfully"
             return 0
         else
             local fail_msg=$(get_message "MSG_LOCATION_RESULT" "status=failed")
