@@ -457,57 +457,33 @@ get_isp_info() {
 # 🔵　ロケーション　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # 検出した地域情報を表示する共通関数
-display_detected_isp() {
-    local detection_isp="$1"
-    local detected_isp="$2"
-    local detected_as="$3"
-    local detected_org="$4"
+display_detected_location() {
+    local detection_source="$1"
+    local detected_country="$2"
+    local detected_zonename="$3"
+    local detected_timezone="$4"
     local show_success_message="${5:-false}"
-    local timezone_api="${6:-}"  # 新しいパラメータ: タイムゾーン取得に使用したAPI
     
-    debug_log "DEBUG" "Displaying ISP information from source: $detection_isp"
+    debug_log "DEBUG" "Displaying location information from source: $detection_source"
     
     # 検出情報表示
-    local msg_info=$(get_message "MSG_USE_DETECTED_ISP_INFORMATION" "info=$detection_isp")
+    local msg_info=$(get_message "MSG_USE_DETECTED_INFORMATION")
+    msg_info=$(echo "$msg_info" | sed "s/{info}/$detection_source/g")
     printf "%s\n" "$(color white "$msg_info")"
-    
-    # ISP情報の詳細表示
-    if [ -n "$detected_isp" ]; then
-        printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ISP")")" "$(color white "$detected_isp")"
-    fi
-    
-    if [ -n "$detected_as" ]; then
-        printf "%s %s\n" "$(color white "$(get_message "MSG_ISP_AS")")" "$(color white "$detected_as")"
-    fi
-    
-    if [ -n "$detected_org" ]; then
-        printf "%s %s\n" "$(color white "$(get_message "MSG_ISP_ORG")")" "$(color white "$detected_org")"
-    fi
-    
-    # タイムゾーンAPI情報の表示（新機能）
-    if [ -n "$timezone_api" ]; then
-        # APIのURLからドメイン名のみを抽出
-        local domain=$(echo "$timezone_api" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
-        
-        if [ -z "$domain" ]; then
-            # URLでない場合はそのまま使用
-            domain="$timezone_api"
-        fi
-        
-        # メッセージキーを使用して表示
-        printf "%s %s\n" "$(color white "$(get_message "MSG_TIMEZONE_API")")" "$(color white "$domain")"
-    fi
+    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$detected_country")"
+    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONENAME")")" "$(color white "$detected_zonename")"
+    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color white "$detected_timezone")"
     
     # 成功メッセージの表示（オプション）
     if [ "$show_success_message" = "true" ]; then
-        printf "%s\n" "$(color green "$(get_message "MSG_ISP_SUCCESS")")"
+        printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
+        printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+        printf "\n"
         EXTRA_SPACING_NEEDED="yes"
         debug_log "DEBUG" "Success messages displayed"
     fi
-
-    printf "\n"
     
-    debug_log "DEBUG" "ISP information displayed successfully"
+    debug_log "DEBUG" "Location information displayed successfully"
 }
 
 # ipinfo.ioからタイムゾーン情報を取得する関数
