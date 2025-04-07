@@ -434,8 +434,8 @@ get_isp_info() {
     # 結果のチェックとスピナー停止
     if [ $spinner_active -eq 1 ] && type stop_spinner >/dev/null 2>&1; then
         if [ -n "$ISP_NAME" ]; then
-            stop_spinner "$(get_message "MSG_ISP_INFO_SUCCESS")" "success"
-            debug_log "DEBUG: ISP information process completed with status: success"
+            stop_spinner "$(get_message "MSG_ISP_INFO_SUCCESS")" "successfully"
+            debug_log "DEBUG: ISP information process completed with status: successfully"
         else
             stop_spinner "$(get_message "MSG_ISP_INFO_FAILED")" "failed"
             debug_log "DEBUG: ISP information process completed with status: failed"
@@ -742,7 +742,7 @@ get_country_code() {
     # 結果のチェックとスピナー停止
     if [ $spinner_active -eq 1 ]; then
         if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ] && [ -n "$SELECT_TIMEZONE" ]; then
-            local success_msg=$(get_message "MSG_LOCATION_RESULT" "status=success")
+            local success_msg=$(get_message "MSG_LOCATION_RESULT" "status=successfully")
             stop_spinner "$success_msg" "success"
             debug_log "DEBUG" "Location information retrieved successfully"
             return 0
