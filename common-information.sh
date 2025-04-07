@@ -463,9 +463,7 @@ process_location_info() {
     # キャッシュディレクトリ確認
     [ -d "$CACHE_DIR" ] || mkdir -p "$CACHE_DIR"
     
-    # 統一されたキャッシュファイルを使用
-    # 一時ファイルと通常のキャッシュを同じ場所に保存
-    
+    # キャッシュの統一：直接メインのキャッシュファイルに保存
     # 国コードをキャッシュに保存
     echo "$SELECT_COUNTRY" > "${CACHE_DIR}/language.ch"
     debug_log "DEBUG: Country code saved to cache: $SELECT_COUNTRY"
