@@ -83,15 +83,19 @@ urlencode() {
     local string="$1"
     local encoded=""
     local i=0
-    local c=""
+    local length=$(printf "%s" "$string" | wc -c)
     
-    for i in $(seq 0 $((${#string} - 1))); do
-        c="${string:$i:1}"
+    while [ $i -lt $length ]; do
+        # 1文字ずつ抽出するためにcutを使用
+        local c=$(printf "%s" "$string" | dd bs=1 skip=$i count=1 2>/dev/null)
+        
         case "$c" in
             [a-zA-Z0-9.~_-]) encoded="${encoded}$c" ;;
             " ") encoded="${encoded}%20" ;;
             *) encoded="${encoded}$(printf "%%%02X" "'$c")" ;;
         esac
+        
+        i=$((i + 1))
     done
     
     printf "%s\n" "$encoded"
