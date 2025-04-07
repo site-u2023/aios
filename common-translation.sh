@@ -97,6 +97,66 @@ urlencode() {
     printf "%s\n" "$encoded"
 }
 
+# Google APIを使用した翻訳関数（高速化版）
+translate_with_google() {
+    local text="$1"
+    local source_lang="$2"
+    local target_lang="$3"
+    local ip_check_file="${CACHE_DIR}/network.ch"
+    local wget_options=""
+    local retry_count=0
+    
+    debug_log "DEBUG" "Starting Google Translate API request" "true"
+    
+    # ネットワーク接続状態を一度だけ確認
+    [ ! -f "$ip_check_file" ] && check_network_connectivity
+    
+    # ネットワーク接続状態に基づいてwgetオプションを設定
+    if [ -f "$ip_check_file" ]; then
+        local network_type=$(cat "$ip_check_file")
+        
+        case "$network_type" in
+            "v4") wget_options="-4" ;;
+            "v6") wget_options="-6" ;;
+            "v4v6") wget_options="-4" ;;
+        esac
+    fi
+    
+    # URLエンコード
+    local encoded_text=$(urlencode "$text")
+    local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
+    
+    mkdir -p "$(dirname "$temp_file")" 2>/dev/null
+    
+    # リトライループ
+    while [ $retry_count -le $API_MAX_RETRIES ]; do
+        [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ] && \
+            wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
+        
+        # APIリクエスト送信 - シンプル化
+        $BASE_WGET $wget_options -T $API_TIMEOUT -O "$temp_file" \
+             --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
+             "https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
+        
+        # 効率的なレスポンスチェック - 単一のsedコマンド
+        if [ -s "$temp_file" ] && grep -q '\[\[\["' "$temp_file"; then
+            local translated=$(sed -n 's/\[\[\["\([^"]*\)",".*/\1/p; s/\\u003d/=/g; s/\\u003c/</g; s/\\u003e/>/g; s/\\u0026/\&/g; s/\\"/"/g' "$temp_file")
+            
+            if [ -n "$translated" ]; then
+                rm -f "$temp_file"
+                printf "%s\n" "$translated"
+                return 0
+            fi
+        fi
+        
+        rm -f "$temp_file" 2>/dev/null
+        retry_count=$((retry_count + 1))
+        [ $retry_count -le $API_MAX_RETRIES ] && sleep 2
+    done
+    
+    return 1
+}
+
 # フォールバック廃止版：translate_text関数
 translate_text() {
     local text="$1"
@@ -134,126 +194,7 @@ translate_text() {
     esac
 }
 
-# Google APIを使用した翻訳関数（処理改善版）
-translate_with_google() {
-    local text="$1"
-    local source_lang="$2"
-    local target_lang="$3"
-    local ip_check_file="${CACHE_DIR}/network.ch"
-    local wget_options=""
-    local retry_count=0
-    
-    debug_log "DEBUG" "Starting Google Translate API request"
-    
-    # ネットワーク接続状態ファイルが存在しない場合は接続確認を実行
-    if [ ! -f "$ip_check_file" ]; then
-        debug_log "DEBUG" "Network connectivity status file not found, checking connectivity"
-        check_network_connectivity
-    fi
-    
-    # ネットワーク接続状態に基づいてwgetオプションを設定
-    if [ -f "$ip_check_file" ]; then
-        local network_type=$(cat "$ip_check_file")
-        debug_log "DEBUG" "Detected network type: $network_type"
-        
-        case "$network_type" in
-            "v4")
-                wget_options="-4"  # IPv4のみ使用
-                debug_log "DEBUG" "Using IPv4 for API request"
-                ;;
-            "v6")
-                wget_options="-6"  # IPv6のみ使用
-                debug_log "DEBUG" "Using IPv6 for API request"
-                ;;
-            "v4v6")
-                # IPv4を優先使用
-                wget_options="-4"
-                debug_log "DEBUG" "Both available, prioritizing IPv4 for API request"
-                ;;
-            *)
-                debug_log "DEBUG" "No network connectivity info, API request may fail"
-                ;;
-        esac
-    fi
-    
-    # 長いテキスト処理の最適化
-    local use_post=false
-    if [ ${#text} -gt 1500 ]; then
-        use_post=true
-        debug_log "DEBUG" "Long text detected, using POST method"
-    fi
-    
-    # URLエンコード
-    local encoded_text=$(urlencode "$text")
-    local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
-    
-    # ディレクトリが存在しなければ作成
-    mkdir -p "$(dirname "$temp_file")" 2>/dev/null
-    
-    # リトライループ
-    while [ $retry_count -le $API_MAX_RETRIES ]; do
-        if [ $retry_count -gt 0 ]; then
-            debug_log "DEBUG" "Retry attempt $retry_count for Google Translate API"
-            # デュアルスタック環境でIPバージョンを切り替え
-            if [ "$network_type" = "v4v6" ]; then
-                if [ "$wget_options" = "-4" ]; then
-                    wget_options="-6"
-                    debug_log "DEBUG" "Switching to IPv6 for retry"
-                else
-                    wget_options="-4"
-                    debug_log "DEBUG" "Switching to IPv4 for retry"
-                fi
-            fi
-            # リトライ間隔を追加
-            sleep 1
-        fi
-        
-        debug_log "DEBUG" "Sending request to Google Translate API with options: $wget_options"
-        
-        # POST/GETメソッド分岐
-        if [ "$use_post" = "true" ]; then
-            # POSTリクエストを使用して大きなテキストを送信
-            $BASE_WGET $wget_options -T $API_TIMEOUT -O "$temp_file" \
-                --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
-                --post-data="sl=${source_lang}&tl=${target_lang}&q=${encoded_text}" \
-                "https://translate.googleapis.com/translate_a/single?client=gtx&dt=t" 2>/dev/null
-        else
-            # 通常のGETリクエスト
-            $BASE_WGET $wget_options -T $API_TIMEOUT -O "$temp_file" \
-                --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
-                "https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
-        fi
-        
-        local wget_status=$?
-        debug_log "DEBUG" "wget exit code: $wget_status"
-        
-        # レスポンスチェック
-        if [ -s "$temp_file" ]; then
-            if grep -q '\[\[\["' "$temp_file"; then
-                local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
-                
-                if [ -n "$translated" ]; then
-                    debug_log "DEBUG" "Google API returned valid translation"
-                    echo "$translated"
-                    rm -f "$temp_file"
-                    return 0
-                fi
-            fi
-        fi
-        
-        debug_log "DEBUG" "Google API translation attempt failed"
-        rm -f "$temp_file" 2>/dev/null
-        retry_count=$((retry_count + 1))
-        
-        # 一定時間待機してからリトライ
-        [ $retry_count -le $API_MAX_RETRIES ] && sleep 2
-    done
-    
-    debug_log "DEBUG" "Google API translation failed after all retry attempts"
-    return 1
-}
-
-# 言語データベース作成関数（高速化対応版）
+# 言語データベース作成関数
 create_language_db() {
     local target_lang="$1"
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
@@ -263,8 +204,6 @@ create_language_db() {
     local cleaned_translation=""
     local current_api=""
     local ip_check_file="${CACHE_DIR}/network.ch"
-    local total_lines=0
-    local processed=0
     
     debug_log "DEBUG" "Creating language DB for target ${target_lang} with API language code ${api_lang}"
     
@@ -288,7 +227,8 @@ EOF
     
     # 翻訳処理開始
     printf "\n"
-    
+    # printf "Creating translation DB using API: %s\n" "$api_lang"
+        
     # ネットワーク接続状態を確認
     if [ ! -f "$ip_check_file" ]; then
         debug_log "DEBUG" "Network status file not found, checking connectivity"
@@ -316,22 +256,7 @@ EOF
     # スピナーを開始し、使用中のAPIを表示
     start_spinner "$(color blue "Using API: $current_api")"
     
-    # 全行カウント
-    total_lines=$(grep "^${DEFAULT_LANGUAGE}|" "$base_db" | wc -l)
-    debug_log "DEBUG" "Total entries to translate: $total_lines"
-    
-    # バッチ最適化1: キャッシュの事前チェック
-    debug_log "DEBUG" "Pre-checking translation cache"
-    local cache_hits=0
-    local total_processed=0
-    
-    # テンポラリファイル作成（一時的な処理用）
-    local cached_entries_file="${TRANSLATION_CACHE_DIR}/cached_entries.tmp"
-    local uncached_entries_file="${TRANSLATION_CACHE_DIR}/uncached_entries.tmp"
-    > "$cached_entries_file"
-    > "$uncached_entries_file"
-    
-    # キャッシュ状態のプリスキャン
+    # 言語エントリを抽出
     grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
         # キーと値を抽出
         local key=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|\([^=]*\)=.*/\1/p")
@@ -347,96 +272,64 @@ EOF
                 local translated=$(cat "$cache_file")
                 # APIから取得した言語コードを使用
                 printf "%s|%s=%s\n" "$api_lang" "$key" "$translated" >> "$output_db"
-                printf "%s\n" "$key" >> "$cached_entries_file"
-                cache_hits=$((cache_hits + 1))
-            else
-                # 未キャッシュ項目を記録
-                printf "%s|%s\n" "$key" "$value" >> "$uncached_entries_file"
+                debug_log "DEBUG" "Using cached translation for key: ${key}"
+                continue
             fi
             
-            total_processed=$((total_processed + 1))
-            if [ $((total_processed % 10)) -eq 0 ]; then
-                stop_spinner "Cached: $cache_hits/$total_processed" "info"
-                start_spinner "$(color blue "Using API: $current_api")"
+            # ネットワーク接続確認
+            if [ -n "$network_status" ] && [ "$network_status" != "" ]; then
+                
+                # APIリストを解析して順番に試行
+                local api
+                for api in $(echo "$API_LIST" | tr ',' ' '); do
+                    case "$api" in
+                        google)
+                            # 表示APIとの不一致チェック（表示更新）
+                            if [ "$current_api" != "Google Translate API" ]; then
+                                stop_spinner "Switching API" "info"
+                                current_api="Google Translate API"
+                                start_spinner "$(color blue "Using API: $current_api")"
+                                debug_log "DEBUG" "Switching to Google Translate API"
+                            fi
+                            
+                            result=$(translate_with_google "$value" "$DEFAULT_LANGUAGE" "$api_lang" 2>/dev/null)
+                            
+                            if [ $? -eq 0 ] && [ -n "$result" ]; then
+                                cleaned_translation="$result"
+                                break
+                            else
+                                debug_log "DEBUG" "Google Translate API failed for key: ${key}"
+                            fi
+                            ;;
+                    esac
+                done
+                
+                # 翻訳結果処理
+                if [ -n "$cleaned_translation" ]; then
+                    # 基本的なエスケープシーケンスの処理
+                    local decoded="$cleaned_translation"
+                    
+                    # キャッシュに保存
+                    mkdir -p "$(dirname "$cache_file")"
+                    printf "%s\n" "$decoded" > "$cache_file"
+                    
+                    # APIから取得した言語コードを使用してDBに追加
+                    printf "%s|%s=%s\n" "$api_lang" "$key" "$decoded" >> "$output_db"
+                else
+                    # 翻訳失敗時は原文をそのまま使用
+                    printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
+                    debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}" 
+                fi
+            else
+                # ネットワーク接続がない場合は原文を使用
+                printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
+                debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
             fi
         fi
     done
     
-    debug_log "DEBUG" "Cache pre-check complete. $cache_hits/$total_processed entries cached."
-    stop_spinner "Pre-check: $cache_hits/$total_processed entries already cached" "info"
-    
-    # 翻訳が必要な項目数
-    local uncached_count=$(wc -l < "$uncached_entries_file")
-    
-    if [ $uncached_count -eq 0 ]; then
-        debug_log "DEBUG" "All entries found in cache, no translation needed"
-        start_spinner "$(color blue "Translation completed")"
-        stop_spinner "All translations found in cache" "success"
-        rm -f "$cached_entries_file" "$uncached_entries_file"
-        return 0
-    fi
-    
-    # バッチ最適化2: 未キャッシュ項目を並列処理
-    debug_log "DEBUG" "Processing $uncached_count uncached entries"
-    start_spinner "$(color blue "Translating ${uncached_count} uncached entries")"
-    
-    # 処理カウンター
-    local processed=0
-    
-    # 並列リクエスト最適化バージョン
-    while IFS='|' read -r key value; do
-        debug_log "DEBUG" "Translating key: $key"
-        
-        # 元のテキストをエスケープして安全に処理
-        local safe_value=$(printf "%s" "$value" | sed 's/"/\\"/g')
-        
-        # ネットワーク接続確認
-        if [ -n "$network_status" ] && [ "$network_status" != "" ]; then
-            # APIを使用して翻訳
-            local result=$(translate_with_google "$safe_value" "$DEFAULT_LANGUAGE" "$api_lang" 2>/dev/null)
-            
-            if [ $? -eq 0 ] && [ -n "$result" ]; then
-                # 技術用語対応: "SPLIT"という単語が含まれている場合はそのまま使用
-                if echo "$safe_value" | grep -q "SPLIT"; then
-                    result="$safe_value"
-                fi
-                
-                # キャッシュキー生成
-                local cache_key=$(printf "%s%s%s" "$key" "$value" "$api_lang" | md5sum | cut -d' ' -f1)
-                local cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
-                
-                # キャッシュに保存
-                mkdir -p "$(dirname "$cache_file")"
-                printf "%s\n" "$result" > "$cache_file"
-                
-                # APIから取得した言語コードを使用してDBに追加
-                printf "%s|%s=%s\n" "$api_lang" "$key" "$result" >> "$output_db"
-                debug_log "DEBUG" "Translated key: $key"
-            else
-                # 翻訳失敗時は原文をそのまま使用
-                printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
-                debug_log "DEBUG" "Translation failed for key: $key, using original text"
-            fi
-        else
-            # ネットワーク接続がない場合は原文を使用
-            printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
-            debug_log "DEBUG" "Network unavailable, using original text for key: $key"
-        fi
-        
-        processed=$((processed + 1))
-        
-        # 進捗表示更新
-        if [ $((processed % 5)) -eq 0 ] || [ $processed -eq $uncached_count ]; then
-            stop_spinner "Translated: $processed/$uncached_count" "info"
-            start_spinner "$(color blue "Translating: $processed/$uncached_count")"
-        fi
-    done < "$uncached_entries_file"
-    
-    # 処理完了
-    stop_spinner "Translation completed: $total_processed entries processed" "success"
-    
-    # 一時ファイル削除
-    rm -f "$cached_entries_file" "$uncached_entries_file"
+    # スピナー停止
+    stop_spinner "Translation completed" "success"
     
     # 翻訳処理終了
     debug_log "DEBUG" "Language DB creation completed for ${api_lang}"
