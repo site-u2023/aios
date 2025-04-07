@@ -507,9 +507,10 @@ get_timezone_ipinfo() {
         debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
         if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-            # JSONデータからタイムゾーン情報を抽出
-            # 修正箇所: 正規表現パターンを変更
-            local ipinfo_timezone=$(grep -o '"timezone":"[^"]*"' "$tmp_file" | sed 's/"timezone":"//;s/"$//')
+            # JSONデータからタイムゾーン情報を抽出（修正箇所）
+            # シンプルなgrepコマンドを使用
+            local ipinfo_timezone=""
+            ipinfo_timezone=$(grep '"timezone"' "$tmp_file" | sed 's/.*"timezone"[ ]*:[ ]*"\([^"]*\)".*/\1/')
             
             # タイムゾーン情報が取得できたか確認
             if [ -n "$ipinfo_timezone" ]; then
