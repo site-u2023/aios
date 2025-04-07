@@ -508,8 +508,7 @@ display_detected_location() {
 get_country_ipapi() {
     local tmp_file="$1"      # 一時ファイルパス
     local network_type="$2"  # ネットワークタイプ
-    local api_name="$3"      # API名
-    local ip_address="$4"    # IPアドレス
+    local api_name="$3"      # API名（ログ用）
     
     local retry_count=0
     local success=0
@@ -518,10 +517,11 @@ get_country_ipapi() {
     local country_msg=$(get_message "MSG_QUERY_INFO" "type=country+timezone" "api=ip-api.com" "network=$network_type")
     update_spinner "$(color "blue" "$country_msg")" "yellow"
     
-    debug_log "DEBUG" "Querying country and timezone from ip-api.com for IP: $ip_address"
+    debug_log "DEBUG" "Querying country and timezone from ip-api.com"
     
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        $BASE_WGET -O "$tmp_file" "${api_name}/${ip_address}" -T $API_TIMEOUT 2>/dev/null
+        # 引数なしで呼び出し - 自動的に現在のデバイスの情報を取得
+        $BASE_WGET -O "$tmp_file" "$api_name" -T $API_TIMEOUT 2>/dev/null
         local wget_status=$?
         debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
@@ -557,8 +557,7 @@ get_country_ipapi() {
 get_country_ipinfo() {
     local tmp_file="$1"      # 一時ファイルパス
     local network_type="$2"  # ネットワークタイプ
-    local api_name="$3"      # API名
-    local ip_address="$4"    # IPアドレス（未使用、APIはIPを自動検出）
+    local api_name="$3"      # API名（ログ用）
     
     local retry_count=0
     local success=0
@@ -570,6 +569,7 @@ get_country_ipinfo() {
     debug_log "DEBUG" "Querying country and timezone from ipinfo.io"
     
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
+        # 引数なしで呼び出し - 自動的に現在のデバイスの情報を取得
         $BASE_WGET -O "$tmp_file" "$api_name" -T $API_TIMEOUT 2>/dev/null
         local wget_status=$?
         debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
@@ -605,31 +605,30 @@ get_country_ipinfo() {
 # 国コード・タイムゾーン情報を取得する関数
 get_country_code() {
     # 変数宣言
-    local ip_address=""
     local network_type=""
     local tmp_file=""
-    local api_url=""
     local spinner_active=0
-    local retry_count=0
     
     # API URLの定数化
-    local API_IPV4="http://api.ipify.org"
-    local API_IPV6="http://api64.ipify.org"
-    local API_IPAPI="http://ip-api.com/json" 
+    local API_WORLDTIME="http://worldtimeapi.org/api/ip"
     local API_IPINFO="http://ipinfo.io"
+    local API_IPAPI="http://ip-api.com/json"
     
     # パラメータ（タイムゾーンAPIの種類）
     local timezone_api="${1:-$API_IPINFO}"
     TIMEZONE_API_SOURCE="$timezone_api"
     
     # タイムゾーンAPIと関数のマッピング
-    local tz_func=""
+    local api_func=""
     case "$timezone_api" in
+        "$API_WORLDTIME")
+            api_func="get_timezone_worldtime"
+            ;;
         "$API_IPINFO")
-            tz_func="get_country_ipinfo"
+            api_func="get_country_ipinfo"
             ;;
         "$API_IPAPI")
-            tz_func="get_country_ipapi"
+            api_func="get_country_ipapi"
             ;;
     esac
     
@@ -667,66 +666,17 @@ get_country_code() {
     fi
     
     # スピナー開始
-    local init_msg=$(get_message "MSG_QUERY_INFO" "type=IP address" "api=ipify.org" "network=$network_type")
+    local init_msg=$(get_message "MSG_QUERY_INFO" "type=location information" "api=$timezone_api" "network=$network_type")
     start_spinner "$(color "blue" "$init_msg")" "yellow"
     spinner_active=1
-    debug_log "DEBUG" "Starting IP and location detection process"
+    debug_log "DEBUG" "Starting location detection process"
     
-    # IPアドレスの取得（ネットワークタイプに応じて適切なAPIを選択）
-    if [ "$network_type" = "v4" ] || [ "$network_type" = "v4v6" ]; then
-        # IPv4を使用（デュアルスタックでも常にIPv4を優先）
-        debug_log "DEBUG" "Using IPv4 API (preferred for dual-stack or v4-only)"
-        api_url="$API_IPV4"
-    elif [ "$network_type" = "v6" ]; then
-        # IPv6のみ
-        debug_log "DEBUG" "Using IPv6 API (v6-only environment)"
-        api_url="$API_IPV6"
-    else
-        # 不明なタイプ - デフォルトでIPv4
-        debug_log "DEBUG" "Unknown network type, defaulting to IPv4 API"
-        api_url="$API_IPV4"
-    fi
-    
-    # 選択したAPIを使用してIPアドレスを取得（リトライロジック付き）
-    debug_log "DEBUG" "Querying IP address from $api_url"
-    
-    retry_count=0
-    while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        tmp_file="$(mktemp -t isp.XXXXXX)"
-        $BASE_WGET -O "$tmp_file" "$api_url" -T $API_TIMEOUT 2>/dev/null
-        wget_status=$?
-        debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
-        
-        if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-            ip_address=$(cat "$tmp_file")
-            rm -f "$tmp_file"
-            debug_log "DEBUG" "Retrieved IP address: $ip_address"
-            break
-        else
-            debug_log "DEBUG" "IP address query failed, retrying..."
-            rm -f "$tmp_file" 2>/dev/null
-            retry_count=$((retry_count + 1))
-            sleep 1
-        fi
-    done
-    
-    # IPアドレスが取得できたかチェック
-    if [ -z "$ip_address" ]; then
-        debug_log "DEBUG" "Failed to retrieve IP address after $API_MAX_RETRIES attempts"
-        if [ $spinner_active -eq 1 ]; then
-            local fail_msg=$(get_message "MSG_LOCATION_RESULT" "status=failed")
-            stop_spinner "$fail_msg" "failed"
-            spinner_active=0
-        fi
-        return 1
-    fi
-    
-    # 国コードとタイムゾーン情報の取得（マッピングした関数を使用）
+    # IPアドレス、国コードとタイムゾーン情報の取得
     tmp_file="$(mktemp -t location.XXXXXX)"
-    debug_log "DEBUG" "Calling API function: $tz_func for API: $timezone_api"
+    debug_log "DEBUG" "Calling API function: $api_func for API: $timezone_api"
     
     # 動的に関数を呼び出し
-    $tz_func "$tmp_file" "$network_type" "$timezone_api" "$ip_address"
+    $api_func "$tmp_file" "$network_type" "$timezone_api"
     local api_success=$?
     
     # 一時ファイルの削除
@@ -766,12 +716,30 @@ get_country_code() {
                     debug_log "DEBUG" "Found timezone in country.db: $SELECT_TIMEZONE for zonename: $SELECT_ZONENAME"
                 else
                     debug_log "DEBUG" "No matching timezone pair found in country.db for: $SELECT_ZONENAME"
+                    
+                    # 既存のタイムゾーンがない場合は、ゾーン名から3文字の略称を生成
+                    if [ -z "$SELECT_TIMEZONE" ]; then
+                        SELECT_TIMEZONE=$(echo "$SELECT_ZONENAME" | awk -F'/' '{print $NF}' | cut -c1-3 | tr 'a-z' 'A-Z')
+                        debug_log "DEBUG" "Generated timezone abbreviation: $SELECT_TIMEZONE"
+                    fi
                 fi
             else
                 debug_log "DEBUG" "No matching line found in country.db for: $SELECT_ZONENAME"
+                
+                # 既存のタイムゾーンがない場合は、ゾーン名から3文字の略称を生成
+                if [ -z "$SELECT_TIMEZONE" ]; then
+                    SELECT_TIMEZONE=$(echo "$SELECT_ZONENAME" | awk -F'/' '{print $NF}' | cut -c1-3 | tr 'a-z' 'A-Z')
+                    debug_log "DEBUG" "Generated timezone abbreviation: $SELECT_TIMEZONE"
+                fi
             fi
         else
             debug_log "DEBUG" "country.db not found at: $db_file"
+            
+            # country.dbがない場合も、ゾーン名から3文字の略称を生成
+            if [ -z "$SELECT_TIMEZONE" ]; then
+                SELECT_TIMEZONE=$(echo "$SELECT_ZONENAME" | awk -F'/' '{print $NF}' | cut -c1-3 | tr 'a-z' 'A-Z')
+                debug_log "DEBUG" "Generated timezone abbreviation (no DB): $SELECT_TIMEZONE"
+            fi
         fi
     fi
     
