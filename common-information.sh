@@ -56,8 +56,9 @@ PACKAGE_MANAGER="${CACHE_DIR}/package_manager.ch"
 PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
 
 # API設定
-API_TIMEOUT="${API_TIMEOUT:-6}"
-API_MAX_RETRIES="${API_MAX_RETRIES:-5}"
+API_TIMEOUT="${API_TIMEOUT:-5}"
+API_MAX_RETRIES="${API_MAX_RETRIES:-3}"
+TIMEZONE_API_SOURCE=""
 
 # 🔵　デバイス　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -463,7 +464,6 @@ display_detected_location() {
     local detected_zonename="$3"
     local detected_timezone="$4"
     local show_success_message="${5:-false}"
-    local timezone_api="${6:-}"  # 新しいパラメータ: タイムゾーン取得に使用したAPI
     
     debug_log "DEBUG" "Displaying location information from source: $detection_source"
     
@@ -472,18 +472,20 @@ display_detected_location() {
     msg_info=$(echo "$msg_info" | sed "s/{info}/$detection_source/g")
     printf "%s\n" "$(color white "$msg_info")"
     
-    # タイムゾーンAPI情報の表示（新機能）- カントリーコードの前に表示
-    if [ -n "$timezone_api" ]; then
+    # タイムゾーンAPI情報の表示（グローバル変数を使用）
+    if [ -n "$TIMEZONE_API_SOURCE" ]; then
         # APIのURLからドメイン名のみを抽出
-        local domain=$(echo "$timezone_api" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+        local domain=$(echo "$TIMEZONE_API_SOURCE" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
         
         if [ -z "$domain" ]; then
             # URLでない場合はそのまま使用
-            domain="$timezone_api"
+            domain="$TIMEZONE_API_SOURCE"
         fi
         
-        # メッセージキーを使用して表示
-        printf "%s %s\n" "$(color white "$(get_message "MSG_TIMEZONE_API")")" "$(color white "$domain")"
+        # タイムゾーン取得元の表示（プレースホルダーを使用）
+        local api_msg=$(get_message "MSG_TIMEZONE_API")
+        api_msg=$(echo "$api_msg" | sed "s/{api}/$domain/g")
+        printf "%s\n" "$(color white "$api_msg")"
     fi
     
     printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$detected_country")"
@@ -578,6 +580,7 @@ get_country_code() {
     # パラメータ（タイムゾーンAPIの種類）
     # "http://worldtimeapi.org/api/ip" または "http://ipinfo.io"
     local timezone_api="${1:-$API_IPINFO}"
+    TIMEZONE_API_SOURCE="$timezone_api"
     
     # タイムゾーンAPIと関数のマッピング
     local tz_func=""
