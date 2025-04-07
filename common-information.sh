@@ -579,7 +579,7 @@ get_country_code() {
     
     # パラメータ（タイムゾーンAPIの種類）
     # "http://worldtimeapi.org/api/ip" または "http://ipinfo.io"
-    local timezone_api="${1:-$API_IPINFO}"
+    local timezone_api="${1:-$API_WORLDTIME}"
     TIMEZONE_API_SOURCE="$timezone_api"
     
     # タイムゾーンAPIと関数のマッピング
