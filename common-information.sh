@@ -504,19 +504,70 @@ display_detected_location() {
     debug_log "DEBUG" "Location information displayed successfully"
 }
 
-get_timezone_ipinfo() {
+# ip-api.comから国コードとタイムゾーン情報を取得する関数
+get_country_ipapi() {
     local tmp_file="$1"      # 一時ファイルパス
     local network_type="$2"  # ネットワークタイプ
-    local api_name="$3"      # API名（ログ用）
+    local api_name="$3"      # API名
+    local ip_address="$4"    # IPアドレス
     
     local retry_count=0
     local success=0
     
     # スピナー更新メッセージ
-    local tz_msg=$(get_message "MSG_QUERY_INFO" "type=timezone" "api=ipinfo.io" "network=$network_type")
-    update_spinner "$(color "blue" "$tz_msg")" "yellow"
+    local country_msg=$(get_message "MSG_QUERY_INFO" "type=country+timezone" "api=ip-api.com" "network=$network_type")
+    update_spinner "$(color "blue" "$country_msg")" "yellow"
     
-    debug_log "DEBUG" "Querying timezone from ipinfo.io"
+    debug_log "DEBUG" "Querying country and timezone from ip-api.com for IP: $ip_address"
+    
+    while [ $retry_count -lt $API_MAX_RETRIES ]; do
+        $BASE_WGET -O "$tmp_file" "${api_name}/${ip_address}" -T $API_TIMEOUT 2>/dev/null
+        local wget_status=$?
+        debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
+        
+        if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+            # JSONデータから国コードとタイムゾーン情報を抽出
+            SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
+            SELECT_ZONENAME=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//')
+            
+            # データが正常に取得できたか確認
+            if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
+                debug_log "DEBUG" "Retrieved from ip-api.com - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
+                success=1
+                break
+            else
+                debug_log "DEBUG" "Incomplete country/timezone data from ip-api.com"
+            fi
+        fi
+        
+        debug_log "DEBUG" "ip-api.com query attempt $((retry_count+1)) failed"
+        retry_count=$((retry_count + 1))
+        [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
+    done
+    
+    # 成功した場合は0を、失敗した場合は1を返す
+    if [ $success -eq 1 ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# ipinfo.ioから国コードとタイムゾーン情報を取得する関数
+get_country_ipinfo() {
+    local tmp_file="$1"      # 一時ファイルパス
+    local network_type="$2"  # ネットワークタイプ
+    local api_name="$3"      # API名
+    local ip_address="$4"    # IPアドレス（未使用、APIはIPを自動検出）
+    
+    local retry_count=0
+    local success=0
+    
+    # スピナー更新メッセージ
+    local country_msg=$(get_message "MSG_QUERY_INFO" "type=country+timezone" "api=ipinfo.io" "network=$network_type")
+    update_spinner "$(color "blue" "$country_msg")" "yellow"
+    
+    debug_log "DEBUG" "Querying country and timezone from ipinfo.io"
     
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
         $BASE_WGET -O "$tmp_file" "$api_name" -T $API_TIMEOUT 2>/dev/null
@@ -524,24 +575,17 @@ get_timezone_ipinfo() {
         debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
         if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-            # JSONデータからタイムゾーン情報を抽出
-            local ipinfo_timezone=""
-            ipinfo_timezone=$(grep '"timezone"' "$tmp_file" | sed 's/.*"timezone"[ ]*:[ ]*"\([^"]*\)".*/\1/')
+            # JSONデータから国コードとタイムゾーン情報を抽出
+            SELECT_COUNTRY=$(grep -o '"country":"[^"]*' "$tmp_file" | sed 's/"country":"//')
+            SELECT_ZONENAME=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//')
             
-            # タイムゾーン情報が取得できたか確認
-            if [ -n "$ipinfo_timezone" ]; then
-                # タイムゾーン情報を設定
-                SELECT_ZONENAME="$ipinfo_timezone"
-                debug_log "DEBUG" "Retrieved timezone from ipinfo.io: $SELECT_ZONENAME"
-                
-                # タイムゾーン略称を生成（修正）
-                SELECT_TIMEZONE=$(echo "$SELECT_ZONENAME" | awk -F'/' '{print $NF}' | cut -c1-3 | tr 'a-z' 'A-Z')
-                debug_log "DEBUG" "Generated timezone abbreviation: $SELECT_TIMEZONE"
-                
+            # データが正常に取得できたか確認
+            if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
+                debug_log "DEBUG" "Retrieved from ipinfo.io - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
                 success=1
                 break
             else
-                debug_log "DEBUG" "No timezone data from ipinfo.io response"
+                debug_log "DEBUG" "Incomplete country/timezone data from ipinfo.io"
             fi
         fi
         
@@ -571,24 +615,21 @@ get_country_code() {
     # API URLの定数化
     local API_IPV4="http://api.ipify.org"
     local API_IPV6="http://api64.ipify.org"
-    local API_IPAPI="http://ip-api.com/json"
-    
-    local API_WORLDTIME="http://worldtimeapi.org/api/ip"
+    local API_IPAPI="http://ip-api.com/json" 
     local API_IPINFO="http://ipinfo.io"
     
     # パラメータ（タイムゾーンAPIの種類）
-    # "http://worldtimeapi.org/api/ip" または "http://ipinfo.io"
     local timezone_api="${1:-$API_IPINFO}"
     TIMEZONE_API_SOURCE="$timezone_api"
     
     # タイムゾーンAPIと関数のマッピング
     local tz_func=""
     case "$timezone_api" in
-        "$API_WORLDTIME")
-            tz_func="get_timezone_worldtime"
-            ;;
         "$API_IPINFO")
-            tz_func="get_timezone_ipinfo"
+            tz_func="get_country_ipinfo"
+            ;;
+        "$API_IPAPI")
+            tz_func="get_country_ipapi"
             ;;
     esac
     
@@ -680,43 +721,59 @@ get_country_code() {
         return 1
     fi
     
-    # 国コードの取得（ip-api.comから）
-    local country_msg=$(get_message "MSG_QUERY_INFO" "type=country code" "api=ip-api.com" "network=$network_type")
-    update_spinner "$(color "blue" "$country_msg")" "yellow"
-    debug_log "DEBUG" "Querying country code from ip-api.com for IP: $ip_address"
-    
-    retry_count=0
-    while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        tmp_file="$(mktemp -t location.XXXXXX)"
-        # URLの構築方法を修正
-        debug_log "DEBUG" "Using API URL: ${API_IPAPI}/${ip_address}"
-        $BASE_WGET -O "$tmp_file" "${API_IPAPI}/${ip_address}" -T $API_TIMEOUT 2>/dev/null
-        wget_status=$?
-        debug_log "DEBUG" "wget exit code for country query: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
-        
-        if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-            SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
-            debug_log "DEBUG" "Retrieved country code: $SELECT_COUNTRY"
-            rm -f "$tmp_file"
-            break
-        else
-            debug_log "DEBUG" "Country code query failed, retrying..."
-            rm -f "$tmp_file" 2>/dev/null
-            retry_count=$((retry_count + 1))
-            sleep 1
-        fi
-    done
-    
-    # タイムゾーン情報の取得（マッピングした関数を使用）
-    tmp_file="$(mktemp -t timezone.XXXXXX)"
-    debug_log "DEBUG" "Calling timezone function: $tz_func for API: $timezone_api"
+    # 国コードとタイムゾーン情報の取得（マッピングした関数を使用）
+    tmp_file="$(mktemp -t location.XXXXXX)"
+    debug_log "DEBUG" "Calling API function: $tz_func for API: $timezone_api"
     
     # 動的に関数を呼び出し
-    $tz_func "$tmp_file" "$network_type" "$timezone_api"
-    local tz_success=$?
+    $tz_func "$tmp_file" "$network_type" "$timezone_api" "$ip_address"
+    local api_success=$?
     
     # 一時ファイルの削除
     rm -f "$tmp_file" 2>/dev/null
+    
+    # ゾーン名が取得できている場合は、country.dbからマッピングを試みる
+    if [ -n "$SELECT_ZONENAME" ]; then
+        debug_log "DEBUG" "Trying to map zonename to timezone using country.db"
+        local db_file="${BASE_DIR}/country.db"
+        
+        # country.dbが存在するか確認
+        if [ -f "$db_file" ]; then
+            # ゾーン名からタイムゾーン文字列を検索
+            debug_log "DEBUG" "Searching country.db for zonename: $SELECT_ZONENAME"
+            
+            # 行全体を取得してから、ゾーン名を含む部分のタイムゾーンを抽出
+            local matched_line=$(grep "$SELECT_ZONENAME" "$db_file" | head -1)
+            
+            if [ -n "$matched_line" ]; then
+                # ゾーン名に一致するフィールドを見つける
+                local zone_pairs=$(echo "$matched_line" | cut -d' ' -f5-)
+                local found_tz=""
+                
+                # スペースで区切られた各ペアをチェック
+                for pair in $zone_pairs; do
+                    # ゾーン名とタイムゾーンがカンマで区切られているか確認
+                    if echo "$pair" | grep -q "$SELECT_ZONENAME,"; then
+                        # ゾーン名に続くタイムゾーンを抽出
+                        found_tz=$(echo "$pair" | cut -d',' -f2)
+                        break
+                    fi
+                done
+                
+                if [ -n "$found_tz" ]; then
+                    # SELECT_TIMEZONEを上書き
+                    SELECT_TIMEZONE="$found_tz"
+                    debug_log "DEBUG" "Found timezone in country.db: $SELECT_TIMEZONE for zonename: $SELECT_ZONENAME"
+                else
+                    debug_log "DEBUG" "No matching timezone pair found in country.db for: $SELECT_ZONENAME"
+                fi
+            else
+                debug_log "DEBUG" "No matching line found in country.db for: $SELECT_ZONENAME"
+            fi
+        else
+            debug_log "DEBUG" "country.db not found at: $db_file"
+        fi
+    fi
     
     # 結果のチェックとスピナー停止
     if [ $spinner_active -eq 1 ]; then
@@ -734,70 +791,6 @@ get_country_code() {
     fi
     
     return 1
-}
-
-# worldtimeapi.orgからタイムゾーン情報を取得する関数
-get_timezone_worldtime() {
-    local tmp_file="$1"      # 一時ファイルパス
-    local network_type="$2"  # ネットワークタイプ
-    local api_url="$3"       # API URL（第3引数で受け取る）
-    
-    local retry_count=0
-    local success=0
-    
-    # スピナー更新メッセージ
-    local tz_msg=$(get_message "MSG_QUERY_INFO" "type=timezone" "api=worldtimeapi.org" "network=$network_type")
-    update_spinner "$(color "blue" "$tz_msg")" "yellow"
-    
-    debug_log "DEBUG" "Querying timezone from worldtimeapi.org"
-    
-    while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        $BASE_WGET -O "$tmp_file" "$api_url" -T $API_TIMEOUT 2>/dev/null
-        local wget_status=$?
-        debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
-        
-        if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-            # JSONデータからタイムゾーン情報を抽出（修正版）
-            SELECT_ZONENAME=$(grep '"timezone"' "$tmp_file" | sed 's/.*"timezone"[ ]*:[ ]*"\([^"]*\)".*/\1/')
-            SELECT_TIMEZONE=$(grep '"abbreviation"' "$tmp_file" | sed 's/.*"abbreviation"[ ]*:[ ]*"\([^"]*\)".*/\1/')
-            local utc_offset=$(grep '"utc_offset"' "$tmp_file" | sed 's/.*"utc_offset"[ ]*:[ ]*"\([^"]*\)".*/\1/')
-            
-            # データが正常に取得できたか確認
-            if [ -n "$SELECT_ZONENAME" ] && [ -n "$SELECT_TIMEZONE" ]; then
-                debug_log "DEBUG" "Retrieved timezone from worldtimeapi.org: $SELECT_ZONENAME ($SELECT_TIMEZONE)"
-                
-                # POSIX形式のタイムゾーン文字列を生成
-                if [ -n "$utc_offset" ]; then
-                    local offset_sign=$(echo "$utc_offset" | cut -c1)
-                    local offset_hours=$(echo "$utc_offset" | cut -c2-3 | sed 's/^0//')
-                    
-                    if [ "$offset_sign" = "+" ]; then
-                        SELECT_POSIX_TZ="${SELECT_TIMEZONE}-${offset_hours}"
-                    else
-                        SELECT_POSIX_TZ="${SELECT_TIMEZONE}${offset_hours}"
-                    fi
-                    
-                    debug_log "DEBUG" "Generated POSIX timezone: $SELECT_POSIX_TZ"
-                fi
-                
-                success=1
-                break
-            else
-                debug_log "DEBUG" "Incomplete timezone data from worldtimeapi.org"
-            fi
-        fi
-        
-        debug_log "DEBUG" "worldtimeapi.org query attempt $((retry_count+1)) failed"
-        retry_count=$((retry_count + 1))
-        [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
-    done
-    
-    # 成功した場合は0を、失敗した場合は1を返す（シェルの慣習に合わせる）
-    if [ $success -eq 1 ]; then
-        return 0
-    else
-        return 1
-    fi
 }
 
 # 🔴　ロケーション　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
