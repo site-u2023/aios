@@ -374,6 +374,14 @@ detect_and_set_location() {
             detected_zonename=$(cat "$cache_zonename" 2>/dev/null)
             detection_source="Cache"
             skip_confirmation="true"
+
+            # ISP情報の取得を追加
+            local detected_isp=""
+            local detected_as=""
+            if [ -f "${CACHE_DIR}/isp_info.ch" ]; then
+                detected_isp=$(sed -n '1p' "${CACHE_DIR}/isp_info.ch" 2>/dev/null)
+                detected_as=$(sed -n '2p' "${CACHE_DIR}/isp_info.ch" 2>/dev/null)
+            fi
         
             debug_log "DEBUG" "Cache detection complete - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename"
         
@@ -391,8 +399,8 @@ detect_and_set_location() {
                 fi
                 
                 # 共通関数を使用して検出情報と成功メッセージを表示
-                display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "false"
-            
+                display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "false" "$detected_isp" "$detected_as"
+                
                 debug_log "DEBUG" "Cache-based location settings have been applied successfully"
                 return 0
             else
@@ -425,7 +433,7 @@ detect_and_set_location() {
                         detected_zonename=$(cat "${CACHE_DIR}/ip_zonename.tmp" 2>/dev/null)
                         detection_source="Location"
                    
-                        # ISP情報を読み取る（追加）
+                        # ISP情報を読み取る
                         local detected_isp=""
                         local detected_as=""
                         if [ -f "${CACHE_DIR}/ip_isp.tmp" ]; then
@@ -461,7 +469,7 @@ detect_and_set_location() {
             debug_log "DEBUG" "Before display - source: $detection_source, country: $detected_country, skip_confirmation: $skip_confirmation"
         
             # 共通関数を使用して検出情報を表示（成功メッセージなし）
-            display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone"
+            display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "false" "$detected_isp" "$detected_as"
             
             # ユーザーに確認
             local proceed_with_settings="false"
