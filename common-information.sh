@@ -552,8 +552,8 @@ get_timezone_worldtime() {
     fi
 }
 
-# timeapi.ioからタイムゾーン情報を取得する関数
-get_timezone_timeapi() {
+# ipinfo.ioからタイムゾーン情報を取得する関数
+get_timezone_ipinfo() {
     local tmp_file="$1"      # 一時ファイルパス
     local network_type="$2"  # ネットワークタイプ
     local api_name="$3"      # API名（ログ用）
@@ -562,61 +562,43 @@ get_timezone_timeapi() {
     local success=0
     
     # スピナー更新メッセージ
-    local tz_msg=$(get_message "MSG_QUERY_INFO" "type=timezone" "api=$api_name" "network=$network_type")
+    local tz_msg=$(get_message "MSG_QUERY_INFO" "type=timezone" "api=ipinfo.io" "network=$network_type")
     update_spinner "$(color "blue" "$tz_msg")" "yellow"
     
-    debug_log "DEBUG" "Querying timezone from $api_name"
+    debug_log "DEBUG" "Querying timezone from ipinfo.io"
     
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        $BASE_WGET -O "$tmp_file" "http://timeapi.io/api/Time/current/ip" -T $API_TIMEOUT 2>/dev/null
+        $BASE_WGET -O "$tmp_file" "http://ipinfo.io" -T $API_TIMEOUT 2>/dev/null
         local wget_status=$?
         debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
         if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-            # timeapi.io用のJSONパース（異なるフォーマット）
-            SELECT_ZONENAME=$(grep -o '"timeZone":"[^"]*' "$tmp_file" | sed 's/"timeZone":"//')
-            local utc_offset=$(grep -o '"UTCoffset":"[^"]*' "$tmp_file" | sed 's/"UTCoffset":"//')
+            # JSONデータからタイムゾーン情報を抽出
+            local ipinfo_timezone=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//')
             
-            # データが正常に取得できたか確認
-            if [ -n "$SELECT_ZONENAME" ]; then
-                debug_log "DEBUG" "Retrieved timezone from timeapi.io: $SELECT_ZONENAME"
+            # タイムゾーン情報が取得できたか確認
+            if [ -n "$ipinfo_timezone" ]; then
+                # タイムゾーン情報を設定
+                SELECT_ZONENAME="$ipinfo_timezone"
+                debug_log "DEBUG" "Retrieved timezone from ipinfo.io: $SELECT_ZONENAME"
                 
-                # タイムゾーン略称を生成（例：Asia/Tokyo → JST）
+                # タイムゾーン略称を生成（例：Asia/Tokyo → TOK）
                 SELECT_TIMEZONE=$(echo "$SELECT_ZONENAME" | awk -F'/' '{print $NF}' | cut -c1-3 | tr '[:lower:]' '[:upper:]')
                 debug_log "DEBUG" "Generated timezone abbreviation: $SELECT_TIMEZONE"
-                
-                # POSIX形式のタイムゾーン文字列を生成
-                if [ -n "$utc_offset" ]; then
-                    # "UTC+09:00" → "+9" のような形式に変換
-                    local clean_offset=$(echo "$utc_offset" | sed 's/UTC//' | sed 's/://' | sed 's/00$//')
-                    
-                    if [ -n "$clean_offset" ]; then
-                        local offset_sign=$(echo "$clean_offset" | cut -c1)
-                        local offset_hours=$(echo "$clean_offset" | cut -c2- | sed 's/^0//')
-                        
-                        if [ "$offset_sign" = "+" ]; then
-                            SELECT_POSIX_TZ="${SELECT_TIMEZONE}-${offset_hours}"
-                        else
-                            SELECT_POSIX_TZ="${SELECT_TIMEZONE}${offset_hours}"
-                        fi
-                        
-                        debug_log "DEBUG" "Generated POSIX timezone from timeapi.io: $SELECT_POSIX_TZ"
-                    fi
-                fi
                 
                 success=1
                 break
             else
-                debug_log "DEBUG" "Incomplete timezone data from timeapi.io"
+                debug_log "DEBUG" "No timezone data from ipinfo.io response"
             fi
         fi
         
-        debug_log "DEBUG" "timeapi.io query attempt $((retry_count+1)) failed"
+        debug_log "DEBUG" "ipinfo.io query attempt $((retry_count+1)) failed"
         retry_count=$((retry_count + 1))
         [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
     done
     
-    # 成功した場合は0を、失敗した場合は1を返す（シェルの慣習に合わせる）
+    # 成功した場合は0を、失敗した場合は1を返す
     if [ $success -eq 1 ]; then
         return 0
     else
@@ -638,12 +620,12 @@ get_country_code() {
     local API_IPV4="https://api.ipify.org"
     local API_IPV6="https://api64.ipify.org"
     local API_WORLDTIME="https://worldtimeapi.org/api/ip"
-    local API_TIMEAPI="https://timeapi.io/api/Time/current/ip"
     local API_IPAPI="https://ip-api.com/json"
+    local API_IPINFO="http://ipinfo.io"
     
     # パラメータ（タイムゾーンAPIの種類）
     # "https://worldtimeapi.org/api/ip" または "https://timeapi.io/api/Time/current/ip"
-    local timezone_api="${1:-$API_TIMEAPI}"
+    local timezone_api="${1:-$API_IPINFO}"
     
     # タイムゾーンAPIと関数のマッピング
     local tz_func=""
@@ -651,8 +633,8 @@ get_country_code() {
         "$API_WORLDTIME")
             tz_func="get_timezone_worldtime"
             ;;
-        "$API_TIMEAPI"|*)
-            tz_func="get_timezone_timeapi"
+        "$API_IPINFO"|*)
+            tz_func="get_timezone_ipinfo"
             ;;
     esac
     
