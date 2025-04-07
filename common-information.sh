@@ -56,7 +56,7 @@ PACKAGE_MANAGER="${CACHE_DIR}/package_manager.ch"
 PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
 
 # API設定
-API_TIMEOUT="${API_TIMEOUT:-5}"
+API_TIMEOUT="${API_TIMEOUT:-6}"
 API_MAX_RETRIES="${API_MAX_RETRIES:-5}"
 
 # 🔵　デバイス　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
