@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-08-01-05"
+SCRIPT_VERSION="2025-04-08-01-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -198,7 +198,7 @@ translate_text() {
     esac
 }
 
-# 言語データベース作成関数（並列処理対応版）
+# 言語データベース作成関数（最適化版）
 create_language_db() {
     local target_lang="$1"
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
@@ -259,193 +259,109 @@ EOF
     
     # 並列処理モードの場合
     if [ "$TRANSLATION_PARALLEL_ENABLED" = "yes" ]; then
-        debug_log "DEBUG" "Using parallel translation with ${TRANSLATION_MAX_JOBS} jobs"
+        debug_log "INFO" "Using optimized translation processing"
         
         # 一時ディレクトリ設定
-        local temp_dir="${TRANSLATION_CACHE_DIR}/parallel"
+        local temp_dir="${TRANSLATION_CACHE_DIR}/optimized"
         mkdir -p "$temp_dir"
-        rm -f "$temp_dir"/part_* "$temp_dir"/output_* "$temp_dir"/merged.tmp 2>/dev/null
+        rm -f "$temp_dir"/merged.tmp 2>/dev/null
         
-        # スピナーを開始し、使用中のAPIと並列処理情報を表示
-        start_spinner "$(color blue "Using API: $current_api (Parallel mode: ${TRANSLATION_MAX_JOBS} jobs)")"
+        # スピナーを開始し、API情報を表示
+        start_spinner "$(color blue "Using API: $current_api (Optimized mode)")"
         
-        # 翻訳すべきエントリ全体を取得
-        local all_entries_file="${temp_dir}/all_entries.txt"
-        grep "^${DEFAULT_LANGUAGE}|" "$base_db" > "$all_entries_file"
-        
-        # 全エントリ数を取得
-        local total_entries=$(wc -l < "$all_entries_file")
-        local entries_per_job=$(( (total_entries + TRANSLATION_MAX_JOBS - 1) / TRANSLATION_MAX_JOBS ))
-        
-        debug_log "DEBUG" "Total entries: ${total_entries}, entries per job: ${entries_per_job}"
-        
-        # 手動でファイル分割
-        local current_part=""
-        local part_num=0
-        local line_count=0
-        
-        # 各パート用の分割ファイルを作成
-        cat "$all_entries_file" | while IFS= read -r line; do
-            # 新しいパートファイルが必要かチェック
-            if [ $line_count -eq 0 ]; then
-                part_num=$((part_num + 1))
-                current_part="${temp_dir}/part_${part_num}"
-                debug_log "DEBUG" "Creating new part file: ${current_part}"
-                : > "$current_part"  # ファイルを空で作成
-            fi
-            
-            # 行をパートファイルに書き込む
-            echo "$line" >> "$current_part"
-            line_count=$((line_count + 1))
-            
-            # パートサイズが上限に達したらリセット
-            if [ $line_count -ge $entries_per_job ]; then
-                line_count=0
-            fi
-        done
-        
-        # 作成されたパート数を確認
-        local created_parts=$(ls -1 "${temp_dir}"/part_* 2>/dev/null | wc -l)
-        debug_log "DEBUG" "Created ${created_parts} part files for parallel processing"
-        
-        if [ $created_parts -eq 0 ]; then
-            debug_log "ERROR" "No part files were created, check permissions and disk space"
-            stop_spinner "Translation failed - no entries to process" "error"
-            return 1
-        fi
-        
-        # 各パートファイルを並列処理
-        local job_count=0
-        
-        for part_file in "${temp_dir}"/part_*; do
-            local part_name=$(basename "$part_file")
-            local output_part="${temp_dir}/output_${part_name}"
-            
-            debug_log "DEBUG" "Processing part file: ${part_file}"
-            
-            # バックグラウンド処理開始
-            (
-                debug_log "DEBUG" "Worker started for part: ${part_name}"
-                : > "$output_part"  # 出力ファイルを初期化
-                
-                # このパート内のすべての行を処理
-                while IFS= read -r line; do
-                    # キーと値を抽出
-                    local key=$(echo "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|\([^=]*\)=.*/\1/p")
-                    local value=$(echo "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|[^=]*=\(.*\)/\1/p")
-                    
-                    if [ -n "$key" ] && [ -n "$value" ]; then
-                        # キャッシュキー生成
-                        local cache_key=$(echo "${key}${value}${api_lang}" | md5sum | cut -d' ' -f1)
-                        local cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
-                        
-                        # キャッシュを確認
-                        if [ -f "$cache_file" ]; then
-                            local translated=$(cat "$cache_file")
-                            # APIから取得した言語コードを使用
-                            echo "${api_lang}|${key}=${translated}" >> "$output_part"
-                            debug_log "DEBUG" "Using cached translation for key: ${key}"
-                            continue
-                        fi
-                        
-                        # ネットワーク接続確認
-                        if [ -n "$network_status" ] && [ "$network_status" != "" ]; then
-                            local result=""
-                            local cleaned_translation=""
-                            
-                            # APIリストを解析して順番に試行
-                            local api
-                            for api in $(echo "$API_LIST" | tr ',' ' '); do
-                                case "$api" in
-                                    google)
-                                        result=$(translate_with_google "$value" "$DEFAULT_LANGUAGE" "$api_lang" 2>/dev/null)
-                                        
-                                        if [ $? -eq 0 ] && [ -n "$result" ]; then
-                                            cleaned_translation="$result"
-                                            break
-                                        else
-                                            debug_log "DEBUG" "Google Translate API failed for key: ${key}"
-                                        fi
-                                        ;;
-                                esac
-                            done
-                            
-                            # 翻訳結果処理
-                            if [ -n "$cleaned_translation" ]; then
-                                # 基本的なエスケープシーケンスの処理
-                                local decoded="$cleaned_translation"
-                                
-                                # キャッシュに保存
-                                mkdir -p "$(dirname "$cache_file")"
-                                echo "$decoded" > "$cache_file"
-                                
-                                # APIから取得した言語コードを使用してDBに追加
-                                echo "${api_lang}|${key}=${decoded}" >> "$output_part"
-                                debug_log "DEBUG" "Translated and saved key: ${key}"
-                            else
-                                # 翻訳失敗時は原文をそのまま使用
-                                echo "${api_lang}|${key}=${value}" >> "$output_part"
-                                debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}" 
-                            fi
-                        else
-                            # ネットワーク接続がない場合は原文を使用
-                            echo "${api_lang}|${key}=${value}" >> "$output_part"
-                            debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
-                        fi
-                    fi
-                done < "$part_file"
-                
-                debug_log "DEBUG" "Completed processing part: ${part_name}"
-            ) &
-            
-            # ジョブカウントを更新
-            job_count=$((job_count + 1))
-            
-            # 最大同時実行数を制御
-            if [ "$job_count" -ge "$TRANSLATION_MAX_JOBS" ]; then
-                debug_log "DEBUG" "Reached max jobs (${TRANSLATION_MAX_JOBS}), waiting for one to complete"
-                wait -n  # いずれかのジョブが完了するまで待機
-                job_count=$((job_count - 1))
-            fi
-        done
-        
-        # すべてのバックグラウンドジョブが完了するまで待機
-        debug_log "DEBUG" "Waiting for all translation jobs to complete"
-        wait
-        
-        # === ここからマージ処理の修正部分 ===
-        
-        # 結果のマージ - より堅牢な方法で実装
-        debug_log "DEBUG" "Starting merge process for output files"
-        
-        # マージ用の一時ファイルを作成
+        # 出力バッファの初期化
         local merged_file="${temp_dir}/merged.tmp"
         : > "$merged_file"
         
-        # 各出力ファイルを明示的にリストアップしてマージ
-        for i in $(seq 1 $part_num); do
-            local output_file="${temp_dir}/output_part_${i}"
-            if [ -f "$output_file" ]; then
-                local lines=$(wc -l < "$output_file" 2>/dev/null || echo "0")
-                debug_log "DEBUG" "Found output_part_${i} with ${lines} entries"
+        # 翻訳すべきエントリを取得してメモリ内で処理
+        local total_entries=0
+        local cache_hits=0
+        local translated=0
+        
+        # すべてのエントリを一度に処理
+        grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
+            # キーと値を抽出
+            local key=$(echo "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|\([^=]*\)=.*/\1/p")
+            local value=$(echo "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|[^=]*=\(.*\)/\1/p")
+            
+            total_entries=$((total_entries + 1))
+            
+            if [ -n "$key" ] && [ -n "$value" ]; then
+                # キャッシュキー生成
+                local cache_key=$(echo "${key}${value}${api_lang}" | md5sum | cut -d' ' -f1)
+                local cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
                 
-                # ファイルが存在し、中身があるか確認
-                if [ -s "$output_file" ]; then
-                    cat "$output_file" >> "$merged_file"
-                    debug_log "DEBUG" "Added ${lines} entries from output_part_${i}"
-                else
-                    debug_log "DEBUG" "Skipping empty file: output_part_${i}"
+                # キャッシュを確認
+                if [ -f "$cache_file" ]; then
+                    local translated_text=$(cat "$cache_file")
+                    # APIから取得した言語コードを使用
+                    echo "${api_lang}|${key}=${translated_text}" >> "$merged_file"
+                    cache_hits=$((cache_hits + 1))
+                    
+                    # 10件ごとにスピナーメッセージを更新
+                    if [ $((total_entries % 10)) -eq 0 ]; then
+                        update_spinner "$(color blue "Using API: $current_api (Optimized mode, ${total_entries}/${cache_hits})")"
+                    fi
+                    
+                    continue
                 fi
-            else
-                debug_log "DEBUG" "Output file not found: output_part_${i}"
+                
+                # ネットワーク接続確認
+                if [ -n "$network_status" ] && [ "$network_status" != "" ]; then
+                    local result=""
+                    local cleaned_translation=""
+                    
+                    # APIリストを解析して順番に試行
+                    local api
+                    for api in $(echo "$API_LIST" | tr ',' ' '); do
+                        case "$api" in
+                            google)
+                                result=$(translate_with_google "$value" "$DEFAULT_LANGUAGE" "$api_lang" 2>/dev/null)
+                                
+                                if [ $? -eq 0 ] && [ -n "$result" ]; then
+                                    cleaned_translation="$result"
+                                    translated=$((translated + 1))
+                                    break
+                                else
+                                    debug_log "DEBUG" "Google Translate API failed for key: ${key}"
+                                fi
+                                ;;
+                        esac
+                    done
+                    
+                    # 翻訳結果処理
+                    if [ -n "$cleaned_translation" ]; then
+                        # 基本的なエスケープシーケンスの処理
+                        local decoded="$cleaned_translation"
+                        
+                        # キャッシュに保存
+                        mkdir -p "$(dirname "$cache_file")"
+                        echo "$decoded" > "$cache_file"
+                        
+                        # APIから取得した言語コードを使用してDBに追加
+                        echo "${api_lang}|${key}=${decoded}" >> "$merged_file"
+                        debug_log "DEBUG" "Translated and saved key: ${key}"
+                    else
+                        # 翻訳失敗時は原文をそのまま使用
+                        echo "${api_lang}|${key}=${value}" >> "$merged_file"
+                        debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}" 
+                    fi
+                else
+                    # ネットワーク接続がない場合は原文を使用
+                    echo "${api_lang}|${key}=${value}" >> "$merged_file"
+                    debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
+                fi
             fi
         done
         
-        # マージファイルの内容を確認
-        local total_merged=$(wc -l < "$merged_file" 2>/dev/null || echo "0")
-        debug_log "DEBUG" "Total merged entries: ${total_merged}"
+        # 処理結果をDBに書き込み
+        debug_log "DEBUG" "Writing processed entries to DB file"
         
-        if [ "$total_merged" -gt 0 ]; then
+        # マージ結果を確認
+        local merge_count=$(wc -l < "$merged_file" 2>/dev/null || echo "0")
+        debug_log "DEBUG" "Total processed entries: ${merge_count} (cache hits: ${cache_hits}, new translations: ${translated})"
+        
+        if [ "$merge_count" -gt 0 ]; then
             # 最終DBに結果を書き込み
             cat "$merged_file" >> "$output_db"
             sync  # ファイルシステムを同期
@@ -454,11 +370,7 @@ EOF
             local final_entries=$(grep -c "^${api_lang}|" "$output_db" 2>/dev/null || echo "0")
             debug_log "DEBUG" "Final DB contains ${final_entries} entries"
         else
-            debug_log "ERROR" "No entries were merged, DB may be incomplete"
-            
-            # エラー診断情報
-            debug_log "DEBUG" "Output directory listing:"
-            ls -la "${temp_dir}" >> "${LOG_DIR}/translation_debug.log" 2>&1
+            debug_log "ERROR" "No entries were processed, DB may be incomplete"
         fi
         
         # 一時ファイルのクリーンアップ
