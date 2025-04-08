@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-08-01-03"
+SCRIPT_VERSION="2025-04-08-01-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -413,29 +413,45 @@ EOF
         debug_log "DEBUG" "Waiting for all translation jobs to complete"
         wait
         
-        # 結果のマージ
+        # 結果のマージ - 重要：ここでfinalを介して確実にマージ
         debug_log "DEBUG" "Merging output files into final DB"
+        
+        # マージ用の一時ファイル
+        local final_merge="${temp_dir}/final_merge.db"
+        : > "$final_merge"
+        
+        # 各出力ファイルをマージ用ファイルに結合
         for output_file in "${temp_dir}"/output_*; do
             if [ -f "$output_file" ]; then
-                cat "$output_file" >> "$output_db"
-                debug_log "DEBUG" "Added output file to DB: $(basename "$output_file")"
+                cat "$output_file" >> "$final_merge"
+                file_size=$(wc -c < "$output_file")
+                debug_log "DEBUG" "Added output file to merge: $(basename "$output_file") (${file_size} bytes)"
             else
                 debug_log "ERROR" "Expected output file not found: $(basename "$output_file")"
             fi
         done
         
-        # DBファイルを確認
-        local db_entries=$(grep -c "^${api_lang}|" "$output_db" 2>/dev/null || echo "0")
-        debug_log "DEBUG" "Final DB contains ${db_entries} entries"
+        # マージ結果を確認し、最終DBに追加
+        local merge_size=$(wc -c < "$final_merge" || echo "0")
+        local merge_count=$(wc -l < "$final_merge" || echo "0")
+        debug_log "DEBUG" "Merge file size: ${merge_size} bytes, ${merge_count} lines"
         
-        if [ "$db_entries" = "0" ]; then
-            debug_log "ERROR" "No entries were written to the DB file"
-            cp "${temp_dir}/all_entries.txt" "${temp_dir}/debug_source.txt"
-            cp "$output_db" "${temp_dir}/debug_output.txt"
-            debug_log "DEBUG" "Debug files saved to ${temp_dir}/debug_*.txt"
+        if [ "$merge_count" -gt 0 ]; then
+            # 最終DBにマージ結果を追加 (重要: > ではなく >> を使用)
+            cat "$final_merge" >> "$output_db"
+            
+            # ファイルシステムに確実に書き込み
+            sync
+            
+            # 最終確認
+            db_size=$(wc -c < "$output_db")
+            db_entries=$(grep -c "^${api_lang}|" "$output_db")
+            debug_log "DEBUG" "Final DB file: ${output_db} (${db_size} bytes, ${db_entries} entries)"
+        else
+            debug_log "ERROR" "No entries in merge file, DB may be incomplete"
         fi
         
-        # 一時ファイルのクリーンアップ (デバッグ時にはコメントアウト)
+        # 一時ファイルのクリーンアップ
         rm -rf "$temp_dir"
         
     else
