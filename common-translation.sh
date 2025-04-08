@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-08-00-00"
+SCRIPT_VERSION="2025-04-08-02-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -78,20 +78,25 @@ get_api_lang_code() {
     printf "en\n"
 }
 
-# URL安全エンコード関数
+# 最適化したURL安全エンコード関数
 urlencode() {
     local string="$1"
-    local encoded=""
+    local length=$(printf "%s" "$string" | wc -c)
     local i=0
     local c=""
+    local encoded=""
     
-    for i in $(seq 0 $((${#string} - 1))); do
-        c="${string:$i:1}"
+    while [ $i -lt $length ]; do
+        # より効率的な文字抽出（cut コマンドを使用）
+        c=$(printf "%s" "$string" | cut -c $(($i+1)))
+        
         case "$c" in
             [a-zA-Z0-9.~_-]) encoded="${encoded}$c" ;;
             " ") encoded="${encoded}%20" ;;
-            *) encoded="${encoded}$(printf "%%%02X" "'$c")" ;;
+            *) printf -v encoded "%s%%%02X" "$encoded" "'$c" ;;
         esac
+        
+        i=$(($i + 1))
     done
     
     printf "%s\n" "$encoded"
