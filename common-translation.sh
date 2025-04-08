@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-08-01-07"
+SCRIPT_VERSION="2025-04-08-01-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -198,8 +198,12 @@ translate_text() {
     esac
 }
 
-# 言語データベース作成関数（キーバリュー形式キャッシュ対応版）
+# タイムスタンプ付き言語データベース作成関数
 create_language_db() {
+    # 開始時間記録
+    local main_start=$(date +%s.%N)
+    echo "===== 翻訳処理開始: $(date +%H:%M:%S.%N) ====="
+    
     local target_lang="$1"
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
     local api_lang=$(get_api_lang_code)
@@ -213,6 +217,9 @@ create_language_db() {
     debug_log "DEBUG" "Creating language DB for target ${target_lang} with API language code ${api_lang}"
     
     # ベースDBファイル確認
+    local prep_start=$(date +%s.%N)
+    echo ">> 前処理開始: $(date +%H:%M:%S.%N)"
+    
     if [ ! -f "$base_db" ]; then
         debug_log "DEBUG" "Base message DB not found"
         return 1
@@ -255,132 +262,365 @@ EOF
         *) current_api="Unknown API" ;;
     esac
     
+    local prep_end=$(date +%s.%N)
+    local prep_duration=$(echo "$prep_end - $prep_start" | bc)
+    echo ">> 前処理完了: $(date +%H:%M:%S.%N) (所要時間: ${prep_duration}秒)"
+    
     debug_log "DEBUG" "Initial API based on API_LIST priority: $current_api"
     
-    # キーバリュー形式キャッシュファイルのパス
-    local kv_cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_cache.kv"
-    local temp_output="${TRANSLATION_CACHE_DIR}/output_temp.db"
-    
-    # キャッシュファイルが存在しない場合は作成
-    [ ! -f "$kv_cache_file" ] && touch "$kv_cache_file"
-    
-    # 出力一時ファイルを初期化
-    : > "$temp_output"
-    
-    # スピナーを開始し、使用中のAPIを表示
-    start_spinner "$(color blue "Using API: $current_api (KV-Cache)")"
-    
-    # 統計情報初期化
-    local total_entries=0
-    local cache_hits=0
-    local api_calls=0
-    
-    # 言語エントリを抽出して処理
-    grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
-        # キーと値を抽出
-        local key=$(echo "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|\([^=]*\)=.*/\1/p")
-        local value=$(echo "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|[^=]*=\(.*\)/\1/p")
+    # 並列処理モードの場合
+    if [ "$TRANSLATION_PARALLEL_ENABLED" = "yes" ]; then
+        local parallel_start=$(date +%s.%N)
+        echo ">> 並列処理開始: $(date +%H:%M:%S.%N)"
         
-        total_entries=$((total_entries + 1))
+        debug_log "DEBUG" "Using parallel translation with ${TRANSLATION_MAX_JOBS} jobs"
         
-        # 10件ごとにスピナーメッセージを更新
-        if [ $((total_entries % 10)) -eq 0 ]; then
-            update_spinner "$(color blue "Processing: ${total_entries} entries (${cache_hits} from cache)")"
-        fi
+        # 一時ディレクトリ設定
+        local temp_dir="${TRANSLATION_CACHE_DIR}/parallel"
+        mkdir -p "$temp_dir"
+        rm -f "$temp_dir"/part_* "$temp_dir"/output_* 2>/dev/null
         
-        if [ -n "$key" ] && [ -n "$value" ]; then
-            # キャッシュキー生成（高速検索用）
-            local cache_key="${key}:${value}"
-            
-            # キーバリュー形式キャッシュを検索
-            local cached_translation=$(grep "^${cache_key}=" "$kv_cache_file" 2>/dev/null | cut -d'=' -f2-)
-            
-            if [ -n "$cached_translation" ]; then
-                # キャッシュヒット
-                echo "${api_lang}|${key}=${cached_translation}" >> "$temp_output"
-                cache_hits=$((cache_hits + 1))
-                continue
+        # スピナーを開始し、使用中のAPIと並列処理情報を表示
+        start_spinner "$(color blue "Using API: $current_api (Parallel mode: ${TRANSLATION_MAX_JOBS} jobs)")"
+        
+        # 翻訳すべきエントリ全体を取得
+        local entries_start=$(date +%s.%N)
+        echo ">> エントリ抽出開始: $(date +%H:%M:%S.%N)"
+        
+        local all_entries_file="${temp_dir}/all_entries.txt"
+        grep "^${DEFAULT_LANGUAGE}|" "$base_db" > "$all_entries_file"
+        
+        local entries_end=$(date +%s.%N)
+        local entries_duration=$(echo "$entries_end - $entries_start" | bc)
+        echo ">> エントリ抽出完了: $(date +%H:%M:%S.%N) (所要時間: ${entries_duration}秒)"
+        
+        # 全エントリ数を取得
+        local total_entries=$(wc -l < "$all_entries_file")
+        local entries_per_job=$(( (total_entries + TRANSLATION_MAX_JOBS - 1) / TRANSLATION_MAX_JOBS ))
+        
+        debug_log "DEBUG" "Total entries: ${total_entries}, entries per job: ${entries_per_job}"
+        
+        # 手動でファイル分割
+        local split_start=$(date +%s.%N)
+        echo ">> ファイル分割開始: $(date +%H:%M:%S.%N)"
+        
+        local current_part=""
+        local part_num=0
+        local line_count=0
+        
+        # 各パート用の分割ファイルを作成
+        cat "$all_entries_file" | while IFS= read -r line; do
+            # 新しいパートファイルが必要かチェック
+            if [ $line_count -eq 0 ]; then
+                part_num=$((part_num + 1))
+                current_part="${temp_dir}/part_${part_num}"
+                debug_log "DEBUG" "Creating new part file: ${current_part}"
+                : > "$current_part"  # ファイルを空で作成
             fi
             
-            # ネットワーク接続確認
-            if [ -n "$network_status" ] && [ "$network_status" != "" ]; then
-                local result=""
-                local cleaned_translation=""
+            # 行をパートファイルに書き込む
+            echo "$line" >> "$current_part"
+            line_count=$((line_count + 1))
+            
+            # パートサイズが上限に達したらリセット
+            if [ $line_count -ge $entries_per_job ]; then
+                line_count=0
+            fi
+        done
+        
+        local split_end=$(date +%s.%N)
+        local split_duration=$(echo "$split_end - $split_start" | bc)
+        echo ">> ファイル分割完了: $(date +%H:%M:%S.%N) (所要時間: ${split_duration}秒)"
+        
+        # 作成されたパート数を確認
+        local created_parts=$(ls -1 "${temp_dir}"/part_* 2>/dev/null | wc -l)
+        debug_log "DEBUG" "Created ${created_parts} part files for parallel processing"
+        
+        if [ $created_parts -eq 0 ]; then
+            debug_log "ERROR" "No part files were created, check permissions and disk space"
+            stop_spinner "Translation failed - no entries to process" "error"
+            return 1
+        fi
+        
+        # 各パートファイルを並列処理
+        local job_count=0
+        local process_start=$(date +%s.%N)
+        echo ">> 並列翻訳処理開始: $(date +%H:%M:%S.%N)"
+        
+        for part_file in "${temp_dir}"/part_*; do
+            local part_name=$(basename "$part_file")
+            local output_part="${temp_dir}/output_${part_name}"
+            
+            debug_log "DEBUG" "Processing part file: ${part_file}"
+            
+            # バックグラウンド処理開始
+            (
+                local worker_start=$(date +%s.%N)
+                echo ">>> ワーカー開始 [${part_name}]: $(date +%H:%M:%S.%N)" >&2
                 
-                # APIリストを解析して順番に試行
-                local api
-                for api in $(echo "$API_LIST" | tr ',' ' '); do
-                    case "$api" in
-                        google)
-                            # 表示APIとの不一致チェック（表示更新）
-                            if [ "$current_api" != "Google Translate API" ]; then
-                                stop_spinner "Switching API" "info"
-                                current_api="Google Translate API"
-                                start_spinner "$(color blue "Using API: $current_api (KV-Cache)")"
-                                debug_log "DEBUG" "Switching to Google Translate API"
-                            fi
+                debug_log "DEBUG" "Worker started for part: ${part_name}"
+                : > "$output_part"  # 出力ファイルを初期化
+                
+                local cache_counter=0
+                local api_counter=0
+                
+                # このパート内のすべての行を処理
+                while IFS= read -r line; do
+                    # キーと値を抽出
+                    local key=$(echo "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|\([^=]*\)=.*/\1/p")
+                    local value=$(echo "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|[^=]*=\(.*\)/\1/p")
+                    
+                    if [ -n "$key" ] && [ -n "$value" ]; then
+                        # キャッシュキー生成
+                        local cache_key=$(echo "${key}${value}${api_lang}" | md5sum | cut -d' ' -f1)
+                        local cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
+                        
+                        # キャッシュを確認
+                        if [ -f "$cache_file" ]; then
+                            local translated=$(cat "$cache_file")
+                            # APIから取得した言語コードを使用
+                            echo "${api_lang}|${key}=${translated}" >> "$output_part"
+                            debug_log "DEBUG" "Using cached translation for key: ${key}"
+                            cache_counter=$((cache_counter + 1))
+                            continue
+                        fi
+                        
+                        # ネットワーク接続確認
+                        if [ -n "$network_status" ] && [ "$network_status" != "" ]; then
+                            local result=""
+                            local cleaned_translation=""
                             
-                            result=$(translate_with_google "$value" "$DEFAULT_LANGUAGE" "$api_lang" 2>/dev/null)
+                            # APIリストを解析して順番に試行
+                            local api
+                            for api in $(echo "$API_LIST" | tr ',' ' '); do
+                                case "$api" in
+                                    google)
+                                        local api_call_start=$(date +%s.%N)
+                                        
+                                        result=$(translate_with_google "$value" "$DEFAULT_LANGUAGE" "$api_lang" 2>/dev/null)
+                                        
+                                        local api_call_end=$(date +%s.%N)
+                                        local api_call_duration=$(echo "$api_call_end - $api_call_start" | bc)
+                                        
+                                        if [ $? -eq 0 ] && [ -n "$result" ]; then
+                                            cleaned_translation="$result"
+                                            api_counter=$((api_counter + 1))
+                                            echo ">>> API呼び出し [${key}]: $(date +%H:%M:%S.%N) (所要時間: ${api_call_duration}秒)" >&2
+                                            break
+                                        else
+                                            debug_log "DEBUG" "Google Translate API failed for key: ${key}"
+                                        fi
+                                        ;;
+                                esac
+                            done
                             
-                            if [ $? -eq 0 ] && [ -n "$result" ]; then
-                                cleaned_translation="$result"
-                                api_calls=$((api_calls + 1))
-                                break
+                            # 翻訳結果処理
+                            if [ -n "$cleaned_translation" ]; then
+                                # 基本的なエスケープシーケンスの処理
+                                local decoded="$cleaned_translation"
+                                
+                                # キャッシュに保存
+                                mkdir -p "$(dirname "$cache_file")"
+                                echo "$decoded" > "$cache_file"
+                                
+                                # APIから取得した言語コードを使用してDBに追加
+                                echo "${api_lang}|${key}=${decoded}" >> "$output_part"
+                                debug_log "DEBUG" "Translated and saved key: ${key}"
                             else
-                                debug_log "DEBUG" "Google Translate API failed for key: ${key}"
+                                # 翻訳失敗時は原文をそのまま使用
+                                echo "${api_lang}|${key}=${value}" >> "$output_part"
+                                debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}" 
                             fi
-                            ;;
-                    esac
-                done
+                        else
+                            # ネットワーク接続がない場合は原文を使用
+                            echo "${api_lang}|${key}=${value}" >> "$output_part"
+                            debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
+                        fi
+                    fi
+                done < "$part_file"
                 
-                # 翻訳結果処理
-                if [ -n "$cleaned_translation" ]; then
-                    # 基本的なエスケープシーケンスの処理
-                    local decoded="$cleaned_translation"
-                    
-                    # キーバリューキャッシュに追加
-                    echo "${cache_key}=${decoded}" >> "$kv_cache_file"
-                    
-                    # APIから取得した言語コードを使用してDBに追加
-                    echo "${api_lang}|${key}=${decoded}" >> "$temp_output"
-                    debug_log "DEBUG" "Translated and saved key: ${key}"
-                else
-                    # 翻訳失敗時は原文をそのまま使用
-                    echo "${api_lang}|${key}=${value}" >> "$temp_output"
-                    debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}" 
-                fi
-            else
-                # ネットワーク接続がない場合は原文を使用
-                echo "${api_lang}|${key}=${value}" >> "$temp_output"
-                debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
+                local worker_end=$(date +%s.%N)
+                local worker_duration=$(echo "$worker_end - $worker_start" | bc)
+                echo ">>> ワーカー終了 [${part_name}]: $(date +%H:%M:%S.%N) (所要時間: ${worker_duration}秒, キャッシュヒット: ${cache_counter}, API呼び出し: ${api_counter})" >&2
+                
+                debug_log "DEBUG" "Completed processing part: ${part_name}"
+            ) &
+            
+            # ジョブカウントを更新
+            job_count=$((job_count + 1))
+            
+            # 最大同時実行数を制御
+            if [ "$job_count" -ge "$TRANSLATION_MAX_JOBS" ]; then
+                debug_log "DEBUG" "Reached max jobs (${TRANSLATION_MAX_JOBS}), waiting for one to complete"
+                wait -n  # いずれかのジョブが完了するまで待機
+                job_count=$((job_count - 1))
             fi
+        done
+        
+        # すべてのバックグラウンドジョブが完了するまで待機
+        debug_log "DEBUG" "Waiting for all translation jobs to complete"
+        wait
+        
+        local process_end=$(date +%s.%N)
+        local process_duration=$(echo "$process_end - $process_start" | bc)
+        echo ">> 並列翻訳処理完了: $(date +%H:%M:%S.%N) (所要時間: ${process_duration}秒)"
+        
+        # 結果のマージ
+        local merge_start=$(date +%s.%N)
+        echo ">> 結果マージ開始: $(date +%H:%M:%S.%N)"
+        
+        debug_log "DEBUG" "Merging output files into final DB"
+        for output_file in "${temp_dir}"/output_*; do
+            if [ -f "$output_file" ]; then
+                cat "$output_file" >> "$output_db"
+                debug_log "DEBUG" "Added output file to DB: $(basename "$output_file")"
+            else
+                debug_log "ERROR" "Expected output file not found: $(basename "$output_file")"
+            fi
+        done
+        
+        # DBファイルを確認
+        local db_entries=$(grep -c "^${api_lang}|" "$output_db" 2>/dev/null || echo "0")
+        debug_log "DEBUG" "Final DB contains ${db_entries} entries"
+        
+        local merge_end=$(date +%s.%N)
+        local merge_duration=$(echo "$merge_end - $merge_start" | bc)
+        echo ">> 結果マージ完了: $(date +%H:%M:%S.%N) (所要時間: ${merge_duration}秒)"
+        
+        if [ "$db_entries" = "0" ]; then
+            debug_log "ERROR" "No entries were written to the DB file"
+            cp "${temp_dir}/all_entries.txt" "${temp_dir}/debug_source.txt"
+            cp "$output_db" "${temp_dir}/debug_output.txt"
+            debug_log "DEBUG" "Debug files saved to ${temp_dir}/debug_*.txt"
         fi
-    done
-    
-    # 作成した一時ファイルを最終DBに追加
-    cat "$temp_output" >> "$output_db"
-    
-    # 一時ファイルの削除
-    rm -f "$temp_output" 2>/dev/null
-    
-    # キャッシュファイルの最適化（オプション）
-    if [ "$api_calls" -gt 0 ]; then
-        # 一時ファイルを使用してキャッシュを整理
-        local temp_kv="${TRANSLATION_CACHE_DIR}/temp_kv.cache"
-        sort -u "$kv_cache_file" > "$temp_kv"
-        mv "$temp_kv" "$kv_cache_file"
-        debug_log "DEBUG" "Cache file optimized"
+        
+        # 一時ファイルのクリーンアップ
+        rm -rf "$temp_dir"
+        
+        local parallel_end=$(date +%s.%N)
+        local parallel_duration=$(echo "$parallel_end - $parallel_start" | bc)
+        echo ">> 並列処理完了: $(date +%H:%M:%S.%N) (所要時間: ${parallel_duration}秒)"
+        
+    else
+        # 通常処理モード (既存コードと同じ)
+        local normal_start=$(date +%s.%N)
+        echo ">> 通常処理開始: $(date +%H:%M:%S.%N)"
+        
+        # スピナーを開始し、使用中のAPIを表示
+        start_spinner "$(color blue "Using API: $current_api")"
+        
+        local cache_hits=0
+        local api_calls=0
+        
+        # 言語エントリを抽出
+        grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
+            # キーと値を抽出
+            local key=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|\([^=]*\)=.*/\1/p")
+            local value=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|[^=]*=\(.*\)/\1/p")
+            
+            if [ -n "$key" ] && [ -n "$value" ]; then
+                # キャッシュキー生成
+                local cache_key=$(printf "%s%s%s" "$key" "$value" "$api_lang" | md5sum | cut -d' ' -f1)
+                local cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
+                
+                # キャッシュを確認
+                if [ -f "$cache_file" ]; then
+                    local cache_start=$(date +%s.%N)
+                    
+                    local translated=$(cat "$cache_file")
+                    # APIから取得した言語コードを使用
+                    printf "%s|%s=%s\n" "$api_lang" "$key" "$translated" >> "$output_db"
+                    
+                    local cache_end=$(date +%s.%N)
+                    local cache_duration=$(echo "$cache_end - $cache_start" | bc)
+                    
+                    if [ $((cache_hits % 10)) -eq 0 ]; then
+                        echo ">>> キャッシュ読込 [${key}]: $(date +%H:%M:%S.%N) (所要時間: ${cache_duration}秒)" 
+                    fi
+                    
+                    debug_log "DEBUG" "Using cached translation for key: ${key}"
+                    cache_hits=$((cache_hits + 1))
+                    continue
+                fi
+                
+                # ネットワーク接続確認
+                if [ -n "$network_status" ] && [ "$network_status" != "" ]; then
+                    
+                    # APIリストを解析して順番に試行
+                    local api
+                    for api in $(echo "$API_LIST" | tr ',' ' '); do
+                        case "$api" in
+                            google)
+                                # 表示APIとの不一致チェック（表示更新）
+                                if [ "$current_api" != "Google Translate API" ]; then
+                                    stop_spinner "Switching API" "info"
+                                    current_api="Google Translate API"
+                                    start_spinner "$(color blue "Using API: $current_api")"
+                                    debug_log "DEBUG" "Switching to Google Translate API"
+                                fi
+                                
+                                local api_call_start=$(date +%s.%N)
+                                
+                                result=$(translate_with_google "$value" "$DEFAULT_LANGUAGE" "$api_lang" 2>/dev/null)
+                                
+                                local api_call_end=$(date +%s.%N)
+                                local api_call_duration=$(echo "$api_call_end - $api_call_start" | bc)
+                                echo ">>> API呼び出し [${key}]: $(date +%H:%M:%S.%N) (所要時間: ${api_call_duration}秒)"
+                                
+                                if [ $? -eq 0 ] && [ -n "$result" ]; then
+                                    cleaned_translation="$result"
+                                    api_calls=$((api_calls + 1))
+                                    break
+                                else
+                                    debug_log "DEBUG" "Google Translate API failed for key: ${key}"
+                                fi
+                                ;;
+                        esac
+                    done
+                    
+                    # 翻訳結果処理
+                    if [ -n "$cleaned_translation" ]; then
+                        # 基本的なエスケープシーケンスの処理
+                        local decoded="$cleaned_translation"
+                        
+                        # キャッシュに保存
+                        mkdir -p "$(dirname "$cache_file")"
+                        printf "%s\n" "$decoded" > "$cache_file"
+                        
+                        # APIから取得した言語コードを使用してDBに追加
+                        printf "%s|%s=%s\n" "$api_lang" "$key" "$decoded" >> "$output_db"
+                    else
+                        # 翻訳失敗時は原文をそのまま使用
+                        printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
+                        debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}" 
+                    fi
+                else
+                    # ネットワーク接続がない場合は原文を使用
+                    printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
+                    debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
+                fi
+            fi
+        done
+        
+        local normal_end=$(date +%s.%N)
+        local normal_duration=$(echo "$normal_end - $normal_start" | bc)
+        echo ">> 通常処理完了: $(date +%H:%M:%S.%N) (所要時間: ${normal_duration}秒, キャッシュヒット: ${cache_hits}, API呼び出し: ${api_calls})"
     fi
     
     # スピナー停止
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
-    stop_spinner "Translation completed in ${duration} seconds (${cache_hits}/${total_entries} from cache)" "success"
+    stop_spinner "Translation completed in ${duration} seconds" "success"
     
     # 翻訳処理終了
     debug_log "DEBUG" "Language DB creation completed for ${api_lang} with $(grep -c "^${api_lang}|" "$output_db" 2>/dev/null || echo "0") entries"
+    
+    local main_end=$(date +%s.%N)
+    local main_duration=$(echo "$main_end - $main_start" | bc)
+    echo "===== 翻訳処理完了: $(date +%H:%M:%S.%N) (総所要時間: ${main_duration}秒) ====="
     return 0
 }
+
 # 翻訳情報を表示する関数
 display_detected_translation() {
     # 引数の取得
