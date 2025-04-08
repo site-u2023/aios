@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-08-01-01"
+SCRIPT_VERSION="2025-04-08-01-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -266,25 +266,45 @@ EOF
         mkdir -p "$temp_dir"
         rm -f "$temp_dir/part_"* "$temp_dir/output_"* 2>/dev/null
         
-        # 入力DBを分割
-        local keys_file="${temp_dir}/all_entries.txt"
-        grep "^${DEFAULT_LANGUAGE}|" "$base_db" > "$keys_file"
-        
-        # 全エントリ数を取得して分割数を計算
-        local total_entries=$(wc -l < "$keys_file")
-        local entries_per_job=$(( (total_entries + TRANSLATION_MAX_JOBS - 1) / TRANSLATION_MAX_JOBS ))
-        
         # スピナーを開始し、使用中のAPIと並列処理情報を表示
         start_spinner "$(color blue "Using API: $current_api (Parallel mode: ${TRANSLATION_MAX_JOBS} jobs)")"
         
-        # 全エントリを分割して処理
-        split -l $entries_per_job "$keys_file" "${temp_dir}/part_"
+        # 入力DBからエントリをカウント
+        local total_entries=$(grep "^${DEFAULT_LANGUAGE}|" "$base_db" | wc -l)
+        local entries_per_job=$(( (total_entries + TRANSLATION_MAX_JOBS - 1) / TRANSLATION_MAX_JOBS ))
         
-        # 各部分を並列処理
+        # 各パートのエントリを抽出して処理（split不要）
         local job_count=0
+        local entry_count=0
+        local part_num=1
+        local current_part="${temp_dir}/part_${part_num}"
+        
+        # ファイルを手動で分割
+        grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
+            echo "$line" >> "$current_part"
+            entry_count=$((entry_count + 1))
+            
+            # 指定サイズを超えたら次のパートへ
+            if [ $entry_count -ge $entries_per_job ]; then
+                entry_count=0
+                part_num=$((part_num + 1))
+                current_part="${temp_dir}/part_${part_num}"
+            fi
+        done
+        
+        debug_log "DEBUG" "Created ${part_num} parts for parallel processing" "true"
+        
+        # 各パートファイルを並列処理
         for part in "$temp_dir"/part_*; do
+            if [ ! -f "$part" ]; then
+                debug_log "DEBUG" "Part file not found: $part, skipping" "true"
+                continue
+            fi
+            
             local part_name=$(basename "$part")
             local output_part="$temp_dir/output_${part_name}"
+            
+            debug_log "DEBUG" "Starting job for part: $part_name" "true"
             
             # バックグラウンド処理開始
             (
@@ -364,18 +384,26 @@ EOF
             
             # 最大同時実行数を制御
             if [ "$job_count" -ge "$TRANSLATION_MAX_JOBS" ]; then
+                debug_log "DEBUG" "Reached max jobs (${TRANSLATION_MAX_JOBS}), waiting for completion" "true"
                 wait -n  # いずれかのジョブが完了するまで待機
                 job_count=$((job_count - 1))
             fi
         done
         
         # すべてのバックグラウンドジョブが完了するまで待機
+        debug_log "DEBUG" "Waiting for all jobs to complete" "true"
         wait
         
         # 結果のマージとソート
-        cat "${temp_dir}"/output_* >> "$output_db"
+        for output in "$temp_dir"/output_*; do
+            if [ -f "$output" ]; then
+                debug_log "DEBUG" "Merging output file: $(basename "$output")" "true"
+                cat "$output" >> "$output_db"
+            fi
+        done
         
         # 一時ファイルのクリーンアップ
+        debug_log "DEBUG" "Cleaning up temporary files" "true"
         rm -rf "$temp_dir"
         
     else
