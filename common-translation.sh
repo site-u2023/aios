@@ -612,19 +612,22 @@ init_translation() {
     # キャッシュディレクトリ初期化
     init_translation_cache
     
-    # CPU情報を読み取り、並列ジョブ数を設定
+    # CPU情報を読み取り、並列処理に適用
+    local cpu_cores=""
     if [ -f "${CACHE_DIR}/cpu_core.ch" ]; then
-        local cpu_cores=$(cat "${CACHE_DIR}/cpu_core.ch")
+        cpu_cores=$(cat "${CACHE_DIR}/cpu_core.ch")
         if [ -n "$cpu_cores" ] && [ "$cpu_cores" -gt 0 ]; then
-            TRANSLATION_MAX_JOBS="$cpu_cores"
-            debug_log "INFO" "Using CPU cores from config: ${TRANSLATION_MAX_JOBS}"
+            debug_log "DEBUG" "Found CPU core setting: ${cpu_cores}"
+            # CPUコア数を直接process_language_translationに渡す
+            process_language_translation "$TRANSLATION_PARALLEL_ENABLED" "$cpu_cores"
+            debug_log "DEBUG" "Translation module initialized with CPU cores: ${cpu_cores}"
+            return 0
         fi
     fi
     
-    # 言語翻訳処理を実行（並列処理を有効化）
-    process_language_translation "$TRANSLATION_PARALLEL_ENABLED" "$TRANSLATION_MAX_JOBS"
-    
-    debug_log "DEBUG" "Translation module initialized with parallel processing (${TRANSLATION_MAX_JOBS} cores)"
+    # CPU設定がない場合は通常処理
+    process_language_translation
+    debug_log "DEBUG" "Translation module initialized with default settings"
 }
 
 # スクリプト初期化（自動実行）
