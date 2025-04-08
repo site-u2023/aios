@@ -293,11 +293,10 @@ translate_text() {
     local target_lang="$3"
     local result=""
     
-    debug_log "DEBUG" "Starting translation using single API mode"
+    debug_log "DEBUG" "Starting translation using API: $API_LIST"
     
     case "$API_LIST" in          
         google)
-            debug_log "DEBUG" "Using Google Translate API"
             result=$(translate_with_google "$text" "$source_lang" "$target_lang")
             
             if [ $? -eq 0 ] && [ -n "$result" ]; then
@@ -311,7 +310,6 @@ translate_text() {
             ;;
             
         libretranslate)
-            debug_log "DEBUG" "Using LibreTranslate API"
             result=$(translate_with_libretranslate "$text" "$source_lang" "$target_lang")
             
             if [ $? -eq 0 ] && [ -n "$result" ]; then
@@ -325,7 +323,6 @@ translate_text() {
             ;;
             
         lingva)
-            debug_log "DEBUG" "Using Lingva Translate API"
             result=$(translate_with_lingva "$text" "$source_lang" "$target_lang")
             
             if [ $? -eq 0 ] && [ -n "$result" ]; then
@@ -356,24 +353,12 @@ create_language_db() {
     debug_log "DEBUG" "Creating language database with API language: $api_lang"
     
     # 言語ファイルの各行を処理
-    local current_api=""
     local value=""
     local key=""
     local cleaned_translation=""
     local result=""
     
-    # API設定を表示（単純にデフォルトAPIを使用）
-    local api=$(echo "$API_LIST" | cut -d ',' -f1)
-    CURRENT_API="$api"
-    
-    case "$CURRENT_API" in
-        google) current_api="Google Translate API" ;;
-        libretranslate) current_api="LibreTranslate API" ;;
-        lingva) current_api="Lingva Translate API" ;;
-        *) current_api="Unknown API" ;;
-    esac
-    
-    debug_log "DEBUG" "Using API: $current_api"
+    debug_log "DEBUG" "Using API: $API_LIST"
     
     # message_en.dbの各行を処理
     while IFS= read -r line || [ -n "$line" ]; do
@@ -390,7 +375,7 @@ create_language_db() {
         cleaned_translation=""
         
         # キャッシュをチェック
-        local cache_file="${TRANSLATION_CACHE_DIR}/${CURRENT_API}_${DEFAULT_LANGUAGE}_${api_lang}_$(echo "$value" | md5sum | cut -d ' ' -f1)"
+        local cache_file="${TRANSLATION_CACHE_DIR}/${API_LIST}_${DEFAULT_LANGUAGE}_${api_lang}_$(echo "$value" | md5sum | cut -d ' ' -f1)"
         
         if [ -f "$cache_file" ]; then
             # キャッシュから翻訳を取得
@@ -398,9 +383,9 @@ create_language_db() {
             debug_log "DEBUG" "Using cached translation for: $key"
         else
             # 現在設定されているAPIで翻訳
-            debug_log "DEBUG" "Translating key: $key with $current_api"
+            debug_log "DEBUG" "Translating key: $key with $API_LIST"
             
-            # 単一APIで翻訳（API_LISTの最初のAPIのみ使用）
+            # 単一APIで翻訳
             result=$(translate_text "$value" "$DEFAULT_LANGUAGE" "$api_lang" 2>/dev/null)
             
             if [ $? -eq 0 ] && [ -n "$result" ]; then
@@ -408,7 +393,7 @@ create_language_db() {
                 echo "$cleaned_translation" > "$cache_file"
                 debug_log "DEBUG" "Translation successful and cached"
             else
-                debug_log "DEBUG" "$current_api failed for key: ${key}"
+                debug_log "DEBUG" "Translation failed for key: ${key}"
                 cleaned_translation="$value"  # 翻訳失敗時は元の値を使用
             fi
         fi
