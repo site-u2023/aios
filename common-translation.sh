@@ -97,6 +97,18 @@ urlencode() {
     printf "%s\n" "$encoded"
 }
 
+# Google翻訳APIレスポンス処理の最適化関数
+parse_google_response() {
+    local response="$1"
+    local translated=""
+    
+    if [ -n "$response" ] && echo "$response" | grep -q '\[\[\["'; then
+        translated=$(echo "$response" | sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g')
+    fi
+    
+    printf "%s" "$translated"
+}
+
 # Google APIを使用した翻訳関数（高速化版）
 translate_with_google() {
     local text="$1"
@@ -105,6 +117,7 @@ translate_with_google() {
     local ip_check_file="${CACHE_DIR}/network.ch"
     local wget_options=""
     local retry_count=0
+    local response=""
     
     debug_log "DEBUG" "Starting Google Translate API request" "true"
     
@@ -133,14 +146,17 @@ translate_with_google() {
         [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ] && \
             wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
         
-        # APIリクエスト送信 - 待機時間なしのシンプル版
+        # APIリクエスト送信
         $BASE_WGET $wget_options -T $API_TIMEOUT --tries=1 -O "$temp_file" \
              --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
              "https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
         
-        # 効率的なレスポンスチェック
-        if [ -s "$temp_file" ] && grep -q '\[\[\["' "$temp_file"; then
-            local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
+        # 効率的なレスポンスチェック - ファイルがあり中身がある場合のみ処理
+        if [ -s "$temp_file" ]; then
+            # 一時ファイルの内容を変数に格納
+            response=$(cat "$temp_file")
+            # 専用の関数でレスポンスを処理
+            local translated=$(parse_google_response "$response")
             
             if [ -n "$translated" ]; then
                 rm -f "$temp_file"
