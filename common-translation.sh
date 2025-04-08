@@ -394,9 +394,21 @@ EOF
     fi
     
     debug_log "DEBUG" "Using API from translate_text mapping: $current_api"
-    
+
+    # jqコマンドの有無をチェック
+    has_jq=0
+    command -v jq >/dev/null 2>&1 && has_jq=1
+
+    # jq使用状態に応じたメッセージプレースホルダーを設定
+    if [ $has_jq -eq 1 ]; then
+        jq_info="jq parsing"
+    else
+        jq_info=""
+    fi
+
     # スピナーを開始し、使用中のAPIを表示
-    start_spinner "$(color blue "Using API: $current_api")"
+    #start_spinner "$(color blue "Using API: $current_api")"
+    start_spinner "$(color blue "$(get_message "MSG_TRANSLATION_API" "jq=$jq_info") $current_api")"
     
     # 言語エントリを抽出
     grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
