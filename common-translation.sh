@@ -282,7 +282,7 @@ EOF
     
     # 並列処理モードの場合
     if [ "$parallel" = "yes" ] || [ "$parallel" = "true" ]; then
-        debug_log "INFO" "Using parallel translation mode with ${max_jobs} jobs" "true"
+        debug_log "DEBUG" "Using parallel translation mode with ${max_jobs} jobs" "true"
         
         # 一時ディレクトリ設定
         local temp_dir="${TRANSLATION_CACHE_DIR}/parallel"
