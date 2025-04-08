@@ -295,13 +295,7 @@ translate_text() {
     
     debug_log "DEBUG" "Starting translation using single API mode"
     
-    # 設定されたAPIを取得（カンマ区切りの最初の項目のみ使用）
-    local api=$(echo "$API_LIST" | cut -d ',' -f1)
-    CURRENT_API="$api"
-    
-    debug_log "DEBUG" "Selected API: $CURRENT_API"
-    
-    case "$CURRENT_API" in          
+    case "$API_LIST" in          
         google)
             debug_log "DEBUG" "Using Google Translate API"
             result=$(translate_with_google "$text" "$source_lang" "$target_lang")
@@ -345,7 +339,7 @@ translate_text() {
             ;;
             
         *)
-            debug_log "DEBUG" "Unknown or invalid API specified: $CURRENT_API"
+            debug_log "DEBUG" "Unknown or invalid API specified: $API_LIST"
             return 1
             ;;
     esac
