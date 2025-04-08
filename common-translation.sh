@@ -401,15 +401,6 @@ EOF
         debug_log "DEBUG" "Could not determine network status"
     fi
     
-    # API_LISTから初期APIを決定
-    local first_api=$(echo "$API_LIST" | cut -d',' -f1)
-    case "$first_api" in
-        google) current_api="Google Translate API" ;;
-        *) current_api="Unknown API" ;;
-    esac
-    
-    debug_log "DEBUG" "Initial API based on API_LIST priority: $current_api"
-    
     # スピナーを開始し、使用中のAPIを表示
     start_spinner "$(color blue "Using API: $current_api")"
     
