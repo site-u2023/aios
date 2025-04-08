@@ -61,8 +61,8 @@ GOOGLE_TRANSLATE_URL="${GOOGLE_TRANSLATE_URL:-https://translate.googleapis.com/t
 LIBRETRANSLATE_URL="${LIBRETRANSLATE_URL:-https://translate.argosopentech.com/translate}"
 LINGVA_URL="${LINGVA_URL:-https://lingva.ml/api/v1}"
 ### API_LIST="${API_LIST:-lingva}"
-## API_LIST="${API_LIST:-libretranslate}"
-API_LIST="${API_LIST:-google}"
+API_LIST="${API_LIST:-libretranslate}"
+# API_LIST="${API_LIST:-google}"
 
 # 翻訳キャッシュの初期化
 init_translation_cache() {
@@ -134,11 +134,10 @@ translate_with_libretranslate() {
     
     # 一時ファイル
     local temp_file="${TRANSLATION_CACHE_DIR}/libretranslate_response.tmp"
-    local debug_file="${TRANSLATION_CACHE_DIR}/libretranslate_debug.tmp"
     
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
     
-    # テキストのエスケープ処理を改善
+    # テキストのエスケープ処理
     local escaped_text=$(printf "%s" "$text" | sed 's/"/\\"/g')
     
     # リトライループ
@@ -146,44 +145,31 @@ translate_with_libretranslate() {
         [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ] && \
             wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
         
-        # POSTリクエスト作成 (--save-headers追加でより詳細なデバッグ情報を取得)
+        # POSTリクエスト作成 (リクエスト形式を修正)
         $BASE_WGET $wget_options -T $API_TIMEOUT --tries=1 -O "$temp_file" \
             --header="Content-Type: application/json" \
             --post-data="{\"q\":\"$escaped_text\",\"source\":\"$source_lang\",\"target\":\"$target_lang\",\"format\":\"text\"}" \
-            "${LIBRETRANSLATE_URL}" 2>"$debug_file"
-        
-        # 応答内容をデバッグログに記録（デバッグが必要な場合）
-        if [ "$DEBUG_MODE" = "true" ]; then
-            debug_log "DEBUG" "LibreTranslate API Response: $(cat "$temp_file")"
-            debug_log "DEBUG" "LibreTranslate Debug Info: $(cat "$debug_file")"
-        fi
+            "${LIBRETRANSLATE_URL}" 2>/dev/null
         
         # レスポンスチェック (JSONパース処理を改善)
         if [ -s "$temp_file" ]; then
-            # translatedTextフィールドを確認
             if grep -q "translatedText" "$temp_file"; then
                 # 改善したJSONパース
                 local translated=$(sed -n 's/.*"translatedText"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$temp_file" | sed 's/\\"/"/g')
                 
                 if [ -n "$translated" ]; then
-                    rm -f "$temp_file" "$debug_file" 2>/dev/null
+                    rm -f "$temp_file" 2>/dev/null
                     printf "%s\n" "$translated"
                     return 0
                 fi
-            # エラーチェックを追加
-            elif grep -q "error" "$temp_file"; then
-                local error_msg=$(sed -n 's/.*"error"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$temp_file")
-                debug_log "DEBUG" "LibreTranslate API Error: $error_msg"
             fi
         fi
         
-        rm -f "$temp_file" "$debug_file" 2>/dev/null
+        rm -f "$temp_file" 2>/dev/null
         retry_count=$((retry_count + 1))
-        debug_log "DEBUG" "LibreTranslate retry attempt $retry_count of $API_MAX_RETRIES"
         sleep 1
     done
     
-    debug_log "DEBUG" "LibreTranslate translation failed after $API_MAX_RETRIES attempts"
     return 1
 }
 
