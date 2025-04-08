@@ -171,135 +171,59 @@ translate_with_google() {
     local ip_check_file="${CACHE_DIR}/network.ch"
     local wget_options=""
     local retry_count=0
-    local api_url="${GOOGLE_TRANSLATE_URL}"
-    local has_jq=0
-    local parse_command=""
-    
-    debug_log "DEBUG" "Starting Google Translate API request" "true"
-    
-    # jqコマンドの有無を事前に1回だけチェック
-    command -v jq >/dev/null 2>&1 && has_jq=1
-    [ $has_jq -eq 1 ] && debug_log "DEBUG" "jq available for JSON parsing" "true"
 
-    # パース処理を事前に定義
-    if [ $has_jq -eq 1 ]; then
-        parse_command() {
-            jq -r '.[0][0][0]' "$1" 2>/dev/null
-        }
-    else
-        parse_command() {
-            if grep -q '\[\[\["' "$1"; then
-                sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$1"
-            fi
-        }
-    fi
-    
+    debug_log "DEBUG" "Starting Google Translate API request" "true"
+
+    # レスポンスパース処理を定義
+    parse_response() {
+        sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$1"
+    }
+
     # ネットワーク接続状態を一度だけ確認
     [ ! -f "$ip_check_file" ] && check_network_connectivity
-    
+
     # ネットワーク接続状態に基づいてwgetオプションを設定
     if [ -f "$ip_check_file" ]; then
         local network_type=$(cat "$ip_check_file")
-        
+
         case "$network_type" in
             "v4") wget_options="-4" ;;
             "v6") wget_options="-6" ;;
             "v4v6") wget_options="-4" ;;
         esac
     fi
-    
-    # URLエンコード
-    local encoded_text=$(urlencode "$text")
-    local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
-    
-    mkdir -p "$(dirname "$temp_file")" 2>/dev/null
-    
-    # リトライループ
-    while [ $retry_count -le $API_MAX_RETRIES ]; do
-        [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ] && \
-            wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
-        
-        # APIリクエスト送信
-        $BASE_WGET $wget_options -T $API_TIMEOUT --tries=1 -O "$temp_file" \
-             --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
-             "${api_url}?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
-        
-        # レスポンスのパース
-        if [ -s "$temp_file" ]; then
-            local translated="$(parse_command "$temp_file")"
-            
-            if [ -n "$translated" ]; then
-                rm -f "$temp_file"
-                printf "%s\n" "$translated"
-                return 0
-            fi
-        fi
-        
-        rm -f "$temp_file" 2>/dev/null
-        retry_count=$((retry_count + 1))
-    done
-    
-    debug_log "DEBUG" "Google Translate API request failed after $API_MAX_RETRIES retries" "true"
-    return 1
-}
 
-# Google APIを使用した翻訳関数（高速化版）
-OK_translate_with_google() {
-    local text="$1"
-    local source_lang="$2"
-    local target_lang="$3"
-    local ip_check_file="${CACHE_DIR}/network.ch"
-    local wget_options=""
-    local retry_count=0
-    local api_url="${GOOGLE_TRANSLATE_URL}"
-    
-    debug_log "DEBUG" "Starting Google Translate API request" "true"
-    
-    # ネットワーク接続状態を一度だけ確認
-    [ ! -f "$ip_check_file" ] && check_network_connectivity
-    
-    # ネットワーク接続状態に基づいてwgetオプションを設定
-    if [ -f "$ip_check_file" ]; then
-        local network_type=$(cat "$ip_check_file")
-        
-        case "$network_type" in
-            "v4") wget_options="-4" ;;
-            "v6") wget_options="-6" ;;
-            "v4v6") wget_options="-4" ;;
-        esac
-    fi
-    
     # URLエンコード
     local encoded_text=$(urlencode "$text")
     local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
-    
+
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
-    
+
     # リトライループ
     while [ $retry_count -le $API_MAX_RETRIES ]; do
         [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ] && \
             wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
-        
+
         # APIリクエスト送信 - 待機時間なしのシンプル版
         $BASE_WGET $wget_options -T $API_TIMEOUT --tries=1 -O "$temp_file" \
-             --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
-             "${api_url}?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
-        
-        # 効率的なレスポンスチェック
+            --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
+            "https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
+
+        # 効率的なレスポンスチェックとパース
         if [ -s "$temp_file" ] && grep -q '\[\[\["' "$temp_file"; then
-            local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
-            
+            local translated="$(parse_response "$temp_file")"
+
             if [ -n "$translated" ]; then
                 rm -f "$temp_file"
                 printf "%s\n" "$translated"
                 return 0
             fi
         fi
-        
+
         rm -f "$temp_file" 2>/dev/null
         retry_count=$((retry_count + 1))
     done
-    
+
     return 1
 }
 
@@ -398,19 +322,8 @@ EOF
     
     debug_log "DEBUG" "Using API from translate_text mapping: $current_api"
 
-    # jqコマンドの有無をチェック
-    has_jq=0
-    command -v jq >/dev/null 2>&1 && has_jq=1
-
-    # jq使用状態に応じたメッセージプレースホルダーを設定
-    if [ $has_jq -eq 1 ]; then
-        # スピナーを開始し、jq情報を含めた使用中のAPIを表示
-        start_spinner "$(color blue "$(get_message "MSG_TRANSLATION_API" "jq=jq parsing") $current_api")"
-        debug_log "DEBUG" "Using jq parser for translation"
-    else
-        # スピナーを開始し、通常の使用中のAPIを表示
-        start_spinner "$(color blue "$(get_message "MSG_TRANSLATION_API") $current_api")"
-    fi
+    # スピナーを開始し、使用中のAPIを表示
+    start_spinner "$(color blue "Using API: $current_api")"
     
     # 言語エントリを抽出
     grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
