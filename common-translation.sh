@@ -173,12 +173,26 @@ translate_with_google() {
     local retry_count=0
     local api_url="${GOOGLE_TRANSLATE_URL}"
     local has_jq=0
+    local parse_command=""
     
     debug_log "DEBUG" "Starting Google Translate API request" "true"
     
     # jqコマンドの有無を事前に1回だけチェック
     command -v jq >/dev/null 2>&1 && has_jq=1
     [ $has_jq -eq 1 ] && debug_log "DEBUG" "jq available for JSON parsing" "true"
+
+    # パース処理を事前に定義
+    if [ $has_jq -eq 1 ]; then
+        parse_command() {
+            jq -r '.[0][0][0]' "$1" 2>/dev/null
+        }
+    else
+        parse_command() {
+            if grep -q '\[\[\["' "$1"; then
+                sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$1"
+            fi
+        }
+    fi
     
     # ネットワーク接続状態を一度だけ確認
     [ ! -f "$ip_check_file" ] && check_network_connectivity
@@ -210,20 +224,9 @@ translate_with_google() {
              --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
              "${api_url}?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
         
-        # レスポンスのパース（jqかsedを使用）
+        # レスポンスのパース
         if [ -s "$temp_file" ]; then
-            local translated=""
-            
-            if [ $has_jq -eq 1 ]; then
-                # jqを使用したJSONパース
-                translated=$(jq -r '.[0][0][0]' "$temp_file" 2>/dev/null)
-                [ -n "$translated" ] && debug_log "DEBUG" "Successfully parsed JSON with jq" "true"
-            else
-                # 従来のsedを使用したJSONパース
-                if grep -q '\[\[\["' "$temp_file"; then
-                    translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
-                fi
-            fi
+            local translated="$(parse_command "$temp_file")"
             
             if [ -n "$translated" ]; then
                 rm -f "$temp_file"
