@@ -393,6 +393,30 @@ detect_and_save_package_manager() {
     fi
 }
 
+# OpenWrtでシステムのCPU数を検出する関数
+detect_cpu_cores() {
+    local cpu_count=1
+    
+    # OpenWrtでは/proc/cpuinfoからプロセッサ数を取得
+    if [ -f /proc/cpuinfo ]; then
+        cpu_count=$(grep -c "^processor" /proc/cpuinfo)
+    fi
+    
+    # 不正な値の場合はデフォルト値を使用
+    if [ "$cpu_count" -lt 1 ]; then
+        cpu_count=1
+    fi
+    
+    # グローバル変数にセット
+    CPU_CORES="$cpu_count"
+    
+    # キャッシュファイルに保存
+    mkdir -p "$CACHE_DIR" 2>/dev/null
+    printf "%s\n" "$cpu_count" > "${CACHE_DIR}/cpu_core.ch"
+    
+    debug_log "INFO" "Detected CPU cores: ${cpu_count}"
+}
+
 # 端末の表示能力を検出する関数
 detect_terminal_capability() {
     # 環境変数による明示的指定を最優先
@@ -477,9 +501,10 @@ debug_info() {
 
 # メイン処理
 dynamic_system_info_main() {
-    check_network_connectivity
+    detect_cpu_cores
     init_device_cache
     get_usb_devices
+    check_network_connectivity
     detect_and_save_package_manager
 }
 
