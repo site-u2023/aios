@@ -78,20 +78,23 @@ get_api_lang_code() {
     printf "en\n"
 }
 
-# URL安全エンコード関数
+# URL安全エンコード関数（seqを使わない最適化版）
 urlencode() {
     local string="$1"
     local encoded=""
     local i=0
     local c=""
+    local length=${#string}
     
-    for i in $(seq 0 $((${#string} - 1))); do
+    while [ $i -lt $length ]; do
         c="${string:$i:1}"
         case "$c" in
             [a-zA-Z0-9.~_-]) encoded="${encoded}$c" ;;
             " ") encoded="${encoded}%20" ;;
             *) encoded="${encoded}$(printf "%%%02X" "'$c")" ;;
         esac
+        
+        i=$((i + 1))
     done
     
     printf "%s\n" "$encoded"
