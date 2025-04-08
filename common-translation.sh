@@ -616,10 +616,10 @@ display_detected_translation() {
     debug_log "DEBUG" "Translation information display completed for ${lang_code}"
 }
 
-# 言語翻訳処理（並列処理オプション追加）
+# 言語翻訳処理（並列処理最適化版）
 process_language_translation() {
-    local parallel="${1:-false}"  # 並列処理フラグ
-    local max_jobs="${2:-3}"      # 最大並列ジョブ数
+    local parallel="${1:-true}"   # 並列処理フラグ（デフォルトはtrue）
+    local max_jobs="${2:-4}"      # 最大並列ジョブ数（デフォルトは4）
     
     # 言語コードの取得
     local lang_code=""
@@ -670,8 +670,8 @@ init_translation() {
     # キャッシュディレクトリ初期化
     init_translation_cache
     
-    # 言語翻訳処理を実行
-    process_language_translation
+    # 言語翻訳処理を実行（並列処理有効、4ジョブ）
+    process_language_translation "true" "4"
     
     debug_log "DEBUG" "Translation module initialized with language processing"
 }
