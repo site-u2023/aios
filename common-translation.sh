@@ -399,17 +399,15 @@ EOF
     has_jq=0
     command -v jq >/dev/null 2>&1 && has_jq=1
 
-    # jq使用状態に応じたメッセージの設定
+    # jq使用状態に応じたメッセージプレースホルダーを設定
     if [ $has_jq -eq 1 ]; then
-        # jqが利用可能な場合
-        api_display="$(get_message "MSG_TRANSLATION_API") $current_api (jq parsing)"
+        # スピナーを開始し、jq情報を含めた使用中のAPIを表示
+        start_spinner "$(color blue "$(get_message "MSG_TRANSLATION_API" "jq=jq parsing") $current_api")"
+        debug_log "DEBUG" "Using jq parser for translation"
     else
-        # jqが利用できない場合
-        api_display="$(get_message "MSG_TRANSLATION_API") $current_api"
+        # スピナーを開始し、通常の使用中のAPIを表示
+        start_spinner "$(color blue "$(get_message "MSG_TRANSLATION_API") $current_api")"
     fi
-
-    # スピナーを開始し、使用中のAPIを表示
-    start_spinner "$(color blue "$api_display")"
     
     # 言語エントリを抽出
     grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
