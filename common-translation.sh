@@ -410,6 +410,8 @@ EOF
             
             # ネットワーク接続確認
             if [ -n "$network_status" ] && [ "$network_status" != "" ]; then
+                # ここで実際に翻訳APIを呼び出す（修正部分）
+                cleaned_translation=$(translate_text "$value" "$DEFAULT_LANGUAGE" "$api_lang")
                 
                 # 翻訳結果処理
                 if [ -n "$cleaned_translation" ]; then
