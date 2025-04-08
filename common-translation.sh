@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-08-01-02"
+SCRIPT_VERSION="2025-04-08-01-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -259,73 +259,91 @@ EOF
     
     # 並列処理モードの場合
     if [ "$TRANSLATION_PARALLEL_ENABLED" = "yes" ]; then
-        debug_log "DEBUG" "Using parallel translation with ${TRANSLATION_MAX_JOBS} jobs" "true"
+        debug_log "DEBUG" "Using parallel translation with ${TRANSLATION_MAX_JOBS} jobs"
         
         # 一時ディレクトリ設定
         local temp_dir="${TRANSLATION_CACHE_DIR}/parallel"
         mkdir -p "$temp_dir"
-        rm -f "$temp_dir/part_"* "$temp_dir/output_"* 2>/dev/null
+        rm -f "$temp_dir"/part_* "$temp_dir"/output_* 2>/dev/null
         
         # スピナーを開始し、使用中のAPIと並列処理情報を表示
         start_spinner "$(color blue "Using API: $current_api (Parallel mode: ${TRANSLATION_MAX_JOBS} jobs)")"
         
-        # 入力DBからエントリをカウント
-        local total_entries=$(grep "^${DEFAULT_LANGUAGE}|" "$base_db" | wc -l)
+        # 翻訳すべきエントリ全体を取得
+        local all_entries_file="${temp_dir}/all_entries.txt"
+        grep "^${DEFAULT_LANGUAGE}|" "$base_db" > "$all_entries_file"
+        
+        # 全エントリ数を取得
+        local total_entries=$(wc -l < "$all_entries_file")
         local entries_per_job=$(( (total_entries + TRANSLATION_MAX_JOBS - 1) / TRANSLATION_MAX_JOBS ))
         
-        # 各パートのエントリを抽出して処理（split不要）
-        local job_count=0
-        local entry_count=0
-        local part_num=1
-        local current_part="${temp_dir}/part_${part_num}"
+        debug_log "DEBUG" "Total entries: ${total_entries}, entries per job: ${entries_per_job}"
         
-        # ファイルを手動で分割
-        grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
-            echo "$line" >> "$current_part"
-            entry_count=$((entry_count + 1))
-            
-            # 指定サイズを超えたら次のパートへ
-            if [ $entry_count -ge $entries_per_job ]; then
-                entry_count=0
+        # 手動でファイル分割
+        local current_part=""
+        local part_num=0
+        local line_count=0
+        
+        # 各パート用の分割ファイルを作成
+        cat "$all_entries_file" | while IFS= read -r line; do
+            # 新しいパートファイルが必要かチェック
+            if [ $line_count -eq 0 ]; then
                 part_num=$((part_num + 1))
                 current_part="${temp_dir}/part_${part_num}"
+                debug_log "DEBUG" "Creating new part file: ${current_part}"
+                : > "$current_part"  # ファイルを空で作成
+            fi
+            
+            # 行をパートファイルに書き込む
+            echo "$line" >> "$current_part"
+            line_count=$((line_count + 1))
+            
+            # パートサイズが上限に達したらリセット
+            if [ $line_count -ge $entries_per_job ]; then
+                line_count=0
             fi
         done
         
-        debug_log "DEBUG" "Created ${part_num} parts for parallel processing" "true"
+        # 作成されたパート数を確認
+        local created_parts=$(ls -1 "${temp_dir}"/part_* 2>/dev/null | wc -l)
+        debug_log "DEBUG" "Created ${created_parts} part files for parallel processing"
+        
+        if [ $created_parts -eq 0 ]; then
+            debug_log "ERROR" "No part files were created, check permissions and disk space"
+            stop_spinner "Translation failed - no entries to process" "error"
+            return 1
+        fi
         
         # 各パートファイルを並列処理
-        for part in "$temp_dir"/part_*; do
-            if [ ! -f "$part" ]; then
-                debug_log "DEBUG" "Part file not found: $part, skipping" "true"
-                continue
-            fi
+        local job_count=0
+        
+        for part_file in "${temp_dir}"/part_*; do
+            local part_name=$(basename "$part_file")
+            local output_part="${temp_dir}/output_${part_name}"
             
-            local part_name=$(basename "$part")
-            local output_part="$temp_dir/output_${part_name}"
-            
-            debug_log "DEBUG" "Starting job for part: $part_name" "true"
+            debug_log "DEBUG" "Processing part file: ${part_file}"
             
             # バックグラウンド処理開始
             (
-                debug_log "DEBUG" "Processing part: $part_name" "true"
+                debug_log "DEBUG" "Worker started for part: ${part_name}"
+                : > "$output_part"  # 出力ファイルを初期化
                 
                 # このパート内のすべての行を処理
                 while IFS= read -r line; do
                     # キーと値を抽出
-                    local key=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|\([^=]*\)=.*/\1/p")
-                    local value=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|[^=]*=\(.*\)/\1/p")
+                    local key=$(echo "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|\([^=]*\)=.*/\1/p")
+                    local value=$(echo "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|[^=]*=\(.*\)/\1/p")
                     
                     if [ -n "$key" ] && [ -n "$value" ]; then
                         # キャッシュキー生成
-                        local cache_key=$(printf "%s%s%s" "$key" "$value" "$api_lang" | md5sum | cut -d' ' -f1)
+                        local cache_key=$(echo "${key}${value}${api_lang}" | md5sum | cut -d' ' -f1)
                         local cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
                         
                         # キャッシュを確認
                         if [ -f "$cache_file" ]; then
                             local translated=$(cat "$cache_file")
                             # APIから取得した言語コードを使用
-                            printf "%s|%s=%s\n" "$api_lang" "$key" "$translated" >> "$output_part"
+                            echo "${api_lang}|${key}=${translated}" >> "$output_part"
                             debug_log "DEBUG" "Using cached translation for key: ${key}"
                             continue
                         fi
@@ -359,24 +377,25 @@ EOF
                                 
                                 # キャッシュに保存
                                 mkdir -p "$(dirname "$cache_file")"
-                                printf "%s\n" "$decoded" > "$cache_file"
+                                echo "$decoded" > "$cache_file"
                                 
                                 # APIから取得した言語コードを使用してDBに追加
-                                printf "%s|%s=%s\n" "$api_lang" "$key" "$decoded" >> "$output_part"
+                                echo "${api_lang}|${key}=${decoded}" >> "$output_part"
+                                debug_log "DEBUG" "Translated and saved key: ${key}"
                             else
                                 # 翻訳失敗時は原文をそのまま使用
-                                printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_part"
+                                echo "${api_lang}|${key}=${value}" >> "$output_part"
                                 debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}" 
                             fi
                         else
                             # ネットワーク接続がない場合は原文を使用
-                            printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_part"
+                            echo "${api_lang}|${key}=${value}" >> "$output_part"
                             debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
                         fi
                     fi
-                done < "$part"
+                done < "$part_file"
                 
-                debug_log "DEBUG" "Completed part: $part_name" "true"
+                debug_log "DEBUG" "Completed processing part: ${part_name}"
             ) &
             
             # ジョブカウントを更新
@@ -384,26 +403,39 @@ EOF
             
             # 最大同時実行数を制御
             if [ "$job_count" -ge "$TRANSLATION_MAX_JOBS" ]; then
-                debug_log "DEBUG" "Reached max jobs (${TRANSLATION_MAX_JOBS}), waiting for completion" "true"
+                debug_log "DEBUG" "Reached max jobs (${TRANSLATION_MAX_JOBS}), waiting for one to complete"
                 wait -n  # いずれかのジョブが完了するまで待機
                 job_count=$((job_count - 1))
             fi
         done
         
         # すべてのバックグラウンドジョブが完了するまで待機
-        debug_log "DEBUG" "Waiting for all jobs to complete" "true"
+        debug_log "DEBUG" "Waiting for all translation jobs to complete"
         wait
         
-        # 結果のマージとソート
-        for output in "$temp_dir"/output_*; do
-            if [ -f "$output" ]; then
-                debug_log "DEBUG" "Merging output file: $(basename "$output")" "true"
-                cat "$output" >> "$output_db"
+        # 結果のマージ
+        debug_log "DEBUG" "Merging output files into final DB"
+        for output_file in "${temp_dir}"/output_*; do
+            if [ -f "$output_file" ]; then
+                cat "$output_file" >> "$output_db"
+                debug_log "DEBUG" "Added output file to DB: $(basename "$output_file")"
+            else
+                debug_log "ERROR" "Expected output file not found: $(basename "$output_file")"
             fi
         done
         
-        # 一時ファイルのクリーンアップ
-        debug_log "DEBUG" "Cleaning up temporary files" "true"
+        # DBファイルを確認
+        local db_entries=$(grep -c "^${api_lang}|" "$output_db" 2>/dev/null || echo "0")
+        debug_log "DEBUG" "Final DB contains ${db_entries} entries"
+        
+        if [ "$db_entries" = "0" ]; then
+            debug_log "ERROR" "No entries were written to the DB file"
+            cp "${temp_dir}/all_entries.txt" "${temp_dir}/debug_source.txt"
+            cp "$output_db" "${temp_dir}/debug_output.txt"
+            debug_log "DEBUG" "Debug files saved to ${temp_dir}/debug_*.txt"
+        fi
+        
+        # 一時ファイルのクリーンアップ (デバッグ時にはコメントアウト)
         rm -rf "$temp_dir"
         
     else
@@ -490,7 +522,7 @@ EOF
     stop_spinner "Translation completed in ${duration} seconds" "success"
     
     # 翻訳処理終了
-    debug_log "DEBUG" "Language DB creation completed for ${api_lang}"
+    debug_log "DEBUG" "Language DB creation completed for ${api_lang} with $(grep -c "^${api_lang}|" "$output_db" 2>/dev/null || echo "0") entries"
     return 0
 }
 
