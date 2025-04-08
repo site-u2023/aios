@@ -50,6 +50,7 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 # オンライン翻訳を有効化
 ONLINE_TRANSLATION_ENABLED="yes"
 # 並列処理設定
+
 TRANSLATION_PARALLEL_ENABLED="yes"
 TRANSLATION_MAX_JOBS="4"  # 並列ジョブ数を4に設定
 
