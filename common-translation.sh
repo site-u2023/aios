@@ -551,15 +551,15 @@ display_detected_translation() {
 
 # 言語翻訳処理（並列処理オプション追加）
 process_language_translation() {
-    local parallel="${1:-$TRANSLATION_PARALLEL_ENABLED}"  # グローバル変数をデフォルトに
-    local max_jobs="${2:-$TRANSLATION_MAX_JOBS}"         # グローバル変数をデフォルトに
+    local parallel="${1:-$TRANSLATION_PARALLEL_ENABLED}"
+    local max_jobs="${2:-$TRANSLATION_MAX_JOBS}"
     
-    # CPU設定ファイルの再確認（呼び出し元がinit_translationでない場合のため）
-    if [ -f "${CACHE_DIR}/cpu_core.ch" ] && [ "$max_jobs" = "$TRANSLATION_MAX_JOBS" ]; then
+    # CPU情報を読み取り、並列ジョブ数を設定
+    if [ -f "${CACHE_DIR}/cpu_core.ch" ]; then
         local cpu_cores=$(cat "${CACHE_DIR}/cpu_core.ch")
         if [ -n "$cpu_cores" ] && [ "$cpu_cores" -gt 0 ]; then
             max_jobs="$cpu_cores"
-            debug_log "INFO" "Overriding jobs with CPU cores: ${max_jobs}"
+            debug_log "DEBUG" "Reading CPU cores from config: ${max_jobs}"
         fi
     fi
     
