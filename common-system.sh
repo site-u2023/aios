@@ -414,7 +414,7 @@ detect_cpu_cores() {
     mkdir -p "$CACHE_DIR" 2>/dev/null
     printf "%s\n" "$cpu_count" > "${CACHE_DIR}/cpu_core.ch"
     
-    debug_log "INFO" "Detected CPU cores: ${cpu_count}"
+    debug_log "DEGUB" "Detected CPU cores: ${cpu_count}"
 }
 
 # 端末の表示能力を検出する関数
