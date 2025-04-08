@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-08-01-06"
+SCRIPT_VERSION="2025-04-08-01-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -198,7 +198,7 @@ translate_text() {
     esac
 }
 
-# 言語データベース作成関数（最適化版）
+# 言語データベース作成関数（キーバリュー形式キャッシュ対応版）
 create_language_db() {
     local target_lang="$1"
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
@@ -257,213 +257,130 @@ EOF
     
     debug_log "DEBUG" "Initial API based on API_LIST priority: $current_api"
     
-    # 並列処理モードの場合
-    if [ "$TRANSLATION_PARALLEL_ENABLED" = "yes" ]; then
-        debug_log "INFO" "Using optimized translation processing"
+    # キーバリュー形式キャッシュファイルのパス
+    local kv_cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_cache.kv"
+    local temp_output="${TRANSLATION_CACHE_DIR}/output_temp.db"
+    
+    # キャッシュファイルが存在しない場合は作成
+    [ ! -f "$kv_cache_file" ] && touch "$kv_cache_file"
+    
+    # 出力一時ファイルを初期化
+    : > "$temp_output"
+    
+    # スピナーを開始し、使用中のAPIを表示
+    start_spinner "$(color blue "Using API: $current_api (KV-Cache)")"
+    
+    # 統計情報初期化
+    local total_entries=0
+    local cache_hits=0
+    local api_calls=0
+    
+    # 言語エントリを抽出して処理
+    grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
+        # キーと値を抽出
+        local key=$(echo "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|\([^=]*\)=.*/\1/p")
+        local value=$(echo "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|[^=]*=\(.*\)/\1/p")
         
-        # 一時ディレクトリ設定
-        local temp_dir="${TRANSLATION_CACHE_DIR}/optimized"
-        mkdir -p "$temp_dir"
-        rm -f "$temp_dir"/merged.tmp 2>/dev/null
+        total_entries=$((total_entries + 1))
         
-        # スピナーを開始し、API情報を表示
-        start_spinner "$(color blue "Using API: $current_api (Optimized mode)")"
-        
-        # 出力バッファの初期化
-        local merged_file="${temp_dir}/merged.tmp"
-        : > "$merged_file"
-        
-        # 翻訳すべきエントリを取得してメモリ内で処理
-        local total_entries=0
-        local cache_hits=0
-        local translated=0
-        
-        # すべてのエントリを一度に処理
-        grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
-            # キーと値を抽出
-            local key=$(echo "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|\([^=]*\)=.*/\1/p")
-            local value=$(echo "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|[^=]*=\(.*\)/\1/p")
-            
-            total_entries=$((total_entries + 1))
-            
-            if [ -n "$key" ] && [ -n "$value" ]; then
-                # キャッシュキー生成
-                local cache_key=$(echo "${key}${value}${api_lang}" | md5sum | cut -d' ' -f1)
-                local cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
-                
-                # キャッシュを確認
-                if [ -f "$cache_file" ]; then
-                    local translated_text=$(cat "$cache_file")
-                    # APIから取得した言語コードを使用
-                    echo "${api_lang}|${key}=${translated_text}" >> "$merged_file"
-                    cache_hits=$((cache_hits + 1))
-                    
-                    # 10件ごとにスピナーメッセージを更新
-                    if [ $((total_entries % 10)) -eq 0 ]; then
-                        update_spinner "$(color blue "Using API: $current_api (Optimized mode, ${total_entries}/${cache_hits})")"
-                    fi
-                    
-                    continue
-                fi
-                
-                # ネットワーク接続確認
-                if [ -n "$network_status" ] && [ "$network_status" != "" ]; then
-                    local result=""
-                    local cleaned_translation=""
-                    
-                    # APIリストを解析して順番に試行
-                    local api
-                    for api in $(echo "$API_LIST" | tr ',' ' '); do
-                        case "$api" in
-                            google)
-                                result=$(translate_with_google "$value" "$DEFAULT_LANGUAGE" "$api_lang" 2>/dev/null)
-                                
-                                if [ $? -eq 0 ] && [ -n "$result" ]; then
-                                    cleaned_translation="$result"
-                                    translated=$((translated + 1))
-                                    break
-                                else
-                                    debug_log "DEBUG" "Google Translate API failed for key: ${key}"
-                                fi
-                                ;;
-                        esac
-                    done
-                    
-                    # 翻訳結果処理
-                    if [ -n "$cleaned_translation" ]; then
-                        # 基本的なエスケープシーケンスの処理
-                        local decoded="$cleaned_translation"
-                        
-                        # キャッシュに保存
-                        mkdir -p "$(dirname "$cache_file")"
-                        echo "$decoded" > "$cache_file"
-                        
-                        # APIから取得した言語コードを使用してDBに追加
-                        echo "${api_lang}|${key}=${decoded}" >> "$merged_file"
-                        debug_log "DEBUG" "Translated and saved key: ${key}"
-                    else
-                        # 翻訳失敗時は原文をそのまま使用
-                        echo "${api_lang}|${key}=${value}" >> "$merged_file"
-                        debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}" 
-                    fi
-                else
-                    # ネットワーク接続がない場合は原文を使用
-                    echo "${api_lang}|${key}=${value}" >> "$merged_file"
-                    debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
-                fi
-            fi
-        done
-        
-        # 処理結果をDBに書き込み
-        debug_log "DEBUG" "Writing processed entries to DB file"
-        
-        # マージ結果を確認
-        local merge_count=$(wc -l < "$merged_file" 2>/dev/null || echo "0")
-        debug_log "DEBUG" "Total processed entries: ${merge_count} (cache hits: ${cache_hits}, new translations: ${translated})"
-        
-        if [ "$merge_count" -gt 0 ]; then
-            # 最終DBに結果を書き込み
-            cat "$merged_file" >> "$output_db"
-            sync  # ファイルシステムを同期
-            
-            # 最終確認
-            local final_entries=$(grep -c "^${api_lang}|" "$output_db" 2>/dev/null || echo "0")
-            debug_log "DEBUG" "Final DB contains ${final_entries} entries"
-        else
-            debug_log "ERROR" "No entries were processed, DB may be incomplete"
+        # 10件ごとにスピナーメッセージを更新
+        if [ $((total_entries % 10)) -eq 0 ]; then
+            update_spinner "$(color blue "Processing: ${total_entries} entries (${cache_hits} from cache)")"
         fi
         
-        # 一時ファイルのクリーンアップ
-        rm -rf "$temp_dir"
-        
-    else
-        # 通常処理モード (既存コードと同じ)
-        # スピナーを開始し、使用中のAPIを表示
-        start_spinner "$(color blue "Using API: $current_api")"
-        
-        # 言語エントリを抽出
-        grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
-            # キーと値を抽出
-            local key=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|\([^=]*\)=.*/\1/p")
-            local value=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|[^=]*=\(.*\)/\1/p")
+        if [ -n "$key" ] && [ -n "$value" ]; then
+            # キャッシュキー生成（高速検索用）
+            local cache_key="${key}:${value}"
             
-            if [ -n "$key" ] && [ -n "$value" ]; then
-                # キャッシュキー生成
-                local cache_key=$(printf "%s%s%s" "$key" "$value" "$api_lang" | md5sum | cut -d' ' -f1)
-                local cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
-                
-                # キャッシュを確認
-                if [ -f "$cache_file" ]; then
-                    local translated=$(cat "$cache_file")
-                    # APIから取得した言語コードを使用
-                    printf "%s|%s=%s\n" "$api_lang" "$key" "$translated" >> "$output_db"
-                    debug_log "DEBUG" "Using cached translation for key: ${key}"
-                    continue
-                fi
-                
-                # ネットワーク接続確認
-                if [ -n "$network_status" ] && [ "$network_status" != "" ]; then
-                    
-                    # APIリストを解析して順番に試行
-                    local api
-                    for api in $(echo "$API_LIST" | tr ',' ' '); do
-                        case "$api" in
-                            google)
-                                # 表示APIとの不一致チェック（表示更新）
-                                if [ "$current_api" != "Google Translate API" ]; then
-                                    stop_spinner "Switching API" "info"
-                                    current_api="Google Translate API"
-                                    start_spinner "$(color blue "Using API: $current_api")"
-                                    debug_log "DEBUG" "Switching to Google Translate API"
-                                fi
-                                
-                                result=$(translate_with_google "$value" "$DEFAULT_LANGUAGE" "$api_lang" 2>/dev/null)
-                                
-                                if [ $? -eq 0 ] && [ -n "$result" ]; then
-                                    cleaned_translation="$result"
-                                    break
-                                else
-                                    debug_log "DEBUG" "Google Translate API failed for key: ${key}"
-                                fi
-                                ;;
-                        esac
-                    done
-                    
-                    # 翻訳結果処理
-                    if [ -n "$cleaned_translation" ]; then
-                        # 基本的なエスケープシーケンスの処理
-                        local decoded="$cleaned_translation"
-                        
-                        # キャッシュに保存
-                        mkdir -p "$(dirname "$cache_file")"
-                        printf "%s\n" "$decoded" > "$cache_file"
-                        
-                        # APIから取得した言語コードを使用してDBに追加
-                        printf "%s|%s=%s\n" "$api_lang" "$key" "$decoded" >> "$output_db"
-                    else
-                        # 翻訳失敗時は原文をそのまま使用
-                        printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
-                        debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}" 
-                    fi
-                else
-                    # ネットワーク接続がない場合は原文を使用
-                    printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
-                    debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
-                fi
+            # キーバリュー形式キャッシュを検索
+            local cached_translation=$(grep "^${cache_key}=" "$kv_cache_file" 2>/dev/null | cut -d'=' -f2-)
+            
+            if [ -n "$cached_translation" ]; then
+                # キャッシュヒット
+                echo "${api_lang}|${key}=${cached_translation}" >> "$temp_output"
+                cache_hits=$((cache_hits + 1))
+                continue
             fi
-        done
+            
+            # ネットワーク接続確認
+            if [ -n "$network_status" ] && [ "$network_status" != "" ]; then
+                local result=""
+                local cleaned_translation=""
+                
+                # APIリストを解析して順番に試行
+                local api
+                for api in $(echo "$API_LIST" | tr ',' ' '); do
+                    case "$api" in
+                        google)
+                            # 表示APIとの不一致チェック（表示更新）
+                            if [ "$current_api" != "Google Translate API" ]; then
+                                stop_spinner "Switching API" "info"
+                                current_api="Google Translate API"
+                                start_spinner "$(color blue "Using API: $current_api (KV-Cache)")"
+                                debug_log "DEBUG" "Switching to Google Translate API"
+                            fi
+                            
+                            result=$(translate_with_google "$value" "$DEFAULT_LANGUAGE" "$api_lang" 2>/dev/null)
+                            
+                            if [ $? -eq 0 ] && [ -n "$result" ]; then
+                                cleaned_translation="$result"
+                                api_calls=$((api_calls + 1))
+                                break
+                            else
+                                debug_log "DEBUG" "Google Translate API failed for key: ${key}"
+                            fi
+                            ;;
+                    esac
+                done
+                
+                # 翻訳結果処理
+                if [ -n "$cleaned_translation" ]; then
+                    # 基本的なエスケープシーケンスの処理
+                    local decoded="$cleaned_translation"
+                    
+                    # キーバリューキャッシュに追加
+                    echo "${cache_key}=${decoded}" >> "$kv_cache_file"
+                    
+                    # APIから取得した言語コードを使用してDBに追加
+                    echo "${api_lang}|${key}=${decoded}" >> "$temp_output"
+                    debug_log "DEBUG" "Translated and saved key: ${key}"
+                else
+                    # 翻訳失敗時は原文をそのまま使用
+                    echo "${api_lang}|${key}=${value}" >> "$temp_output"
+                    debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}" 
+                fi
+            else
+                # ネットワーク接続がない場合は原文を使用
+                echo "${api_lang}|${key}=${value}" >> "$temp_output"
+                debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
+            fi
+        fi
+    done
+    
+    # 作成した一時ファイルを最終DBに追加
+    cat "$temp_output" >> "$output_db"
+    
+    # 一時ファイルの削除
+    rm -f "$temp_output" 2>/dev/null
+    
+    # キャッシュファイルの最適化（オプション）
+    if [ "$api_calls" -gt 0 ]; then
+        # 一時ファイルを使用してキャッシュを整理
+        local temp_kv="${TRANSLATION_CACHE_DIR}/temp_kv.cache"
+        sort -u "$kv_cache_file" > "$temp_kv"
+        mv "$temp_kv" "$kv_cache_file"
+        debug_log "DEBUG" "Cache file optimized"
     fi
     
     # スピナー停止
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
-    stop_spinner "Translation completed in ${duration} seconds" "success"
+    stop_spinner "Translation completed in ${duration} seconds (${cache_hits}/${total_entries} from cache)" "success"
     
     # 翻訳処理終了
     debug_log "DEBUG" "Language DB creation completed for ${api_lang} with $(grep -c "^${api_lang}|" "$output_db" 2>/dev/null || echo "0") entries"
     return 0
 }
-
 # 翻訳情報を表示する関数
 display_detected_translation() {
     # 引数の取得
