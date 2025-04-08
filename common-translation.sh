@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-08-01-04"
+SCRIPT_VERSION="2025-04-08-01-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -264,7 +264,7 @@ EOF
         # 一時ディレクトリ設定
         local temp_dir="${TRANSLATION_CACHE_DIR}/parallel"
         mkdir -p "$temp_dir"
-        rm -f "$temp_dir"/part_* "$temp_dir"/output_* 2>/dev/null
+        rm -f "$temp_dir"/part_* "$temp_dir"/output_* "$temp_dir"/merged.tmp 2>/dev/null
         
         # スピナーを開始し、使用中のAPIと並列処理情報を表示
         start_spinner "$(color blue "Using API: $current_api (Parallel mode: ${TRANSLATION_MAX_JOBS} jobs)")"
@@ -413,42 +413,52 @@ EOF
         debug_log "DEBUG" "Waiting for all translation jobs to complete"
         wait
         
-        # 結果のマージ - 重要：ここでfinalを介して確実にマージ
-        debug_log "DEBUG" "Merging output files into final DB"
+        # === ここからマージ処理の修正部分 ===
         
-        # マージ用の一時ファイル
-        local final_merge="${temp_dir}/final_merge.db"
-        : > "$final_merge"
+        # 結果のマージ - より堅牢な方法で実装
+        debug_log "DEBUG" "Starting merge process for output files"
         
-        # 各出力ファイルをマージ用ファイルに結合
-        for output_file in "${temp_dir}"/output_*; do
+        # マージ用の一時ファイルを作成
+        local merged_file="${temp_dir}/merged.tmp"
+        : > "$merged_file"
+        
+        # 各出力ファイルを明示的にリストアップしてマージ
+        for i in $(seq 1 $part_num); do
+            local output_file="${temp_dir}/output_part_${i}"
             if [ -f "$output_file" ]; then
-                cat "$output_file" >> "$final_merge"
-                file_size=$(wc -c < "$output_file")
-                debug_log "DEBUG" "Added output file to merge: $(basename "$output_file") (${file_size} bytes)"
+                local lines=$(wc -l < "$output_file" 2>/dev/null || echo "0")
+                debug_log "DEBUG" "Found output_part_${i} with ${lines} entries"
+                
+                # ファイルが存在し、中身があるか確認
+                if [ -s "$output_file" ]; then
+                    cat "$output_file" >> "$merged_file"
+                    debug_log "DEBUG" "Added ${lines} entries from output_part_${i}"
+                else
+                    debug_log "DEBUG" "Skipping empty file: output_part_${i}"
+                fi
             else
-                debug_log "ERROR" "Expected output file not found: $(basename "$output_file")"
+                debug_log "DEBUG" "Output file not found: output_part_${i}"
             fi
         done
         
-        # マージ結果を確認し、最終DBに追加
-        local merge_size=$(wc -c < "$final_merge" || echo "0")
-        local merge_count=$(wc -l < "$final_merge" || echo "0")
-        debug_log "DEBUG" "Merge file size: ${merge_size} bytes, ${merge_count} lines"
+        # マージファイルの内容を確認
+        local total_merged=$(wc -l < "$merged_file" 2>/dev/null || echo "0")
+        debug_log "DEBUG" "Total merged entries: ${total_merged}"
         
-        if [ "$merge_count" -gt 0 ]; then
-            # 最終DBにマージ結果を追加 (重要: > ではなく >> を使用)
-            cat "$final_merge" >> "$output_db"
-            
-            # ファイルシステムに確実に書き込み
-            sync
+        if [ "$total_merged" -gt 0 ]; then
+            # 最終DBに結果を書き込み
+            cat "$merged_file" >> "$output_db"
+            sync  # ファイルシステムを同期
             
             # 最終確認
-            db_size=$(wc -c < "$output_db")
-            db_entries=$(grep -c "^${api_lang}|" "$output_db")
-            debug_log "DEBUG" "Final DB file: ${output_db} (${db_size} bytes, ${db_entries} entries)"
+            local final_entries=$(grep -c "^${api_lang}|" "$output_db" 2>/dev/null || echo "0")
+            debug_log "DEBUG" "Final DB contains ${final_entries} entries"
         else
-            debug_log "ERROR" "No entries in merge file, DB may be incomplete"
+            debug_log "ERROR" "No entries were merged, DB may be incomplete"
+            
+            # エラー診断情報
+            debug_log "DEBUG" "Output directory listing:"
+            ls -la "${temp_dir}" >> "${LOG_DIR}/translation_debug.log" 2>&1
         fi
         
         # 一時ファイルのクリーンアップ
