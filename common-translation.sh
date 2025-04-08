@@ -215,14 +215,8 @@ translate_text() {
     esac
 }
 
-# 言語データベース作成関数（時間計測追加版）
+# 言語データベース作成関数（ファイル分割処理修正版）
 create_language_db() {
-    # 時間計測用変数を初期化
-    local main_start=$(date +%s)
-    local cache_hits=0
-    local api_calls=0
-    local total_entries=0
-    
     local target_lang="$1"
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
     local api_lang=$(get_api_lang_code)
@@ -236,7 +230,6 @@ create_language_db() {
     local start_time=$(date +%s)
     
     debug_log "DEBUG" "Creating language DB for target ${target_lang} with API language code ${api_lang}"
-    debug_log "INFO" "翻訳処理開始: $(date +%H:%M:%S)"
     
     # ベースDBファイル確認
     if [ ! -f "$base_db" ]; then
@@ -282,14 +275,10 @@ EOF
     esac
     
     debug_log "DEBUG" "Initial API based on API_LIST priority: $current_api"
-    debug_log "INFO" "前処理完了: $(date +%H:%M:%S) ($(( $(date +%s) - main_start ))秒)"
     
     # 並列処理モードの場合
     if [ "$parallel" = "true" ]; then
-        local parallel_start=$(date +%s)
-        debug_log "INFO" "並列処理開始: $(date +%H:%M:%S)"
-        
-        debug_log "DEBUG" "Using parallel translation with ${max_jobs} jobs"
+        debug_log "INFO" "Using parallel translation mode with ${max_jobs} jobs" "true"
         
         # 一時ディレクトリ設定
         local temp_dir="${TRANSLATION_CACHE_DIR}/parallel"
@@ -297,49 +286,53 @@ EOF
         rm -f "$temp_dir/part_"* "$temp_dir/output_"* 2>/dev/null
         
         # 入力DBを分割（キーを抽出）
-        local extraction_start=$(date +%s)
         local keys_file="${temp_dir}/keys.txt"
         grep "^${DEFAULT_LANGUAGE}|" "$base_db" > "${temp_dir}/all_entries.txt"
         
         # 全エントリ数を取得して分割数を計算
-        total_entries=$(wc -l < "${temp_dir}/all_entries.txt")
+        local total_entries=$(wc -l < "${temp_dir}/all_entries.txt")
         local entries_per_job=$(( (total_entries + max_jobs - 1) / max_jobs ))
         
-        debug_log "INFO" "エントリ抽出完了: $(date +%H:%M:%S) ($(( $(date +%s) - extraction_start ))秒) 合計${total_entries}件"
+        debug_log "DEBUG" "Total entries: ${total_entries}, entries per job: ${entries_per_job}"
         
         # スピナーを開始し、使用中のAPIと並列処理情報を表示
         start_spinner "$(color blue "Using API: $current_api (Parallel mode: ${max_jobs} jobs)")"
         
-        # 全エントリを分割して処理
-        local split_start=$(date +%s)
-        split -l $entries_per_job "${temp_dir}/all_entries.txt" "${temp_dir}/part_"
-        local parts=$(ls -1 "${temp_dir}/part_"* 2>/dev/null | wc -l)
-        debug_log "INFO" "ファイル分割完了: $(date +%H:%M:%S) ($(( $(date +%s) - split_start ))秒) ${parts}分割"
+        # splitコマンドを使わずにファイル分割（手動で実装）
+        local line_count=0
+        local file_count=1
+        local current_file="${temp_dir}/part_${file_count}"
         
-        # 統計情報ファイル初期化
-        rm -f "${temp_dir}/stats_part_"* 2>/dev/null
+        # 初期ファイルを作成
+        : > "$current_file"
+        
+        # ファイルから1行ずつ読み取って分割ファイルに書き込む
+        while IFS= read -r line; do
+            # 現在のファイルに行を追加
+            echo "$line" >> "$current_file"
+            line_count=$((line_count + 1))
+            
+            # 指定行数に達したら次のファイルへ
+            if [ $line_count -ge $entries_per_job ]; then
+                line_count=0
+                file_count=$((file_count + 1))
+                current_file="${temp_dir}/part_${file_count}"
+                : > "$current_file"  # 新しいファイルを作成
+            fi
+        done < "${temp_dir}/all_entries.txt"
+        
+        # 分割ファイルの数を確認
+        local part_count=$(ls -1 "$temp_dir"/part_* 2>/dev/null | wc -l)
+        debug_log "DEBUG" "Created ${part_count} part files for parallel processing"
         
         # 各部分を並列処理
         local job_count=0
-        local process_start=$(date +%s)
-        debug_log "INFO" "並列翻訳処理開始: $(date +%H:%M:%S)"
-        
         for part in "$temp_dir"/part_*; do
             local part_name=$(basename "$part")
             local output_part="$temp_dir/output_${part_name}"
-            local stats_file="$temp_dir/stats_${part_name}"
             
             # バックグラウンド処理開始
             (
-                local worker_start=$(date +%s)
-                local worker_cache=0
-                local worker_api=0
-                
-                # 統計情報ファイル初期化
-                echo "0" > "$stats_file"  # キャッシュヒット
-                echo "0" >> "$stats_file" # API呼び出し
-                
-                debug_log "INFO" "ワーカー[${part_name}]開始: $(date +%H:%M:%S)"
                 debug_log "DEBUG" "Processing part: $part_name" "true"
                 
                 # このパート内のすべての行を処理
@@ -359,9 +352,6 @@ EOF
                             # APIから取得した言語コードを使用
                             printf "%s|%s=%s\n" "$api_lang" "$key" "$translated" >> "$output_part"
                             debug_log "DEBUG" "Using cached translation for key: ${key}"
-                            
-                            worker_cache=$((worker_cache + 1))
-                            sed -i "1s/.*/${worker_cache}/" "$stats_file"
                             continue
                         fi
                         
@@ -375,17 +365,7 @@ EOF
                             for api in $(echo "$API_LIST" | tr ',' ' '); do
                                 case "$api" in
                                     google)
-                                        local api_start=$(date +%s)
-                                        
                                         result=$(translate_with_google "$value" "$DEFAULT_LANGUAGE" "$api_lang" 2>/dev/null)
-                                        
-                                        worker_api=$((worker_api + 1))
-                                        sed -i "2s/.*/${worker_api}/" "$stats_file"
-                                        
-                                        # API呼び出し時間を測定（10件ごとに記録）
-                                        if [ $((worker_api % 10)) -eq 0 ]; then
-                                            debug_log "INFO" "API[${part_name}]: ${worker_api}件目 ($(( $(date +%s) - api_start ))秒)"
-                                        fi
                                         
                                         if [ $? -eq 0 ] && [ -n "$result" ]; then
                                             cleaned_translation="$result"
@@ -421,7 +401,6 @@ EOF
                     fi
                 done < "$part"
                 
-                debug_log "INFO" "ワーカー[${part_name}]完了: $(date +%H:%M:%S) ($(( $(date +%s) - worker_start ))秒) キャッシュ=${worker_cache}件, API=${worker_api}件"
                 debug_log "DEBUG" "Completed part: $part_name" "true"
             ) &
             
@@ -438,53 +417,22 @@ EOF
         # すべてのバックグラウンドジョブが完了するまで待機
         wait
         
-        # 統計情報の集計
-        local merge_start=$(date +%s)
-        debug_log "INFO" "結果マージ開始: $(date +%H:%M:%S)"
-        
-        # 並列処理の統計情報を集計
-        for stats_file in "${temp_dir}"/stats_*; do
-            if [ -f "$stats_file" ]; then
-                local part_cache=$(sed -n '1p' "$stats_file" 2>/dev/null || echo 0)
-                local part_api=$(sed -n '2p' "$stats_file" 2>/dev/null || echo 0)
-                
-                cache_hits=$((cache_hits + part_cache))
-                api_calls=$((api_calls + part_api))
-            fi
-        done
-        
-        debug_log "INFO" "統計情報集計: キャッシュヒット=${cache_hits}, API呼び出し=${api_calls}, 総エントリ=${total_entries}"
-        
         # 結果のマージとソート
         cat "${temp_dir}"/output_* >> "$output_db"
         
-        local db_entries=$(grep -c "^${api_lang}|" "$output_db" 2>/dev/null || echo 0)
-        debug_log "INFO" "結果マージ完了: $(date +%H:%M:%S) ($(( $(date +%s) - merge_start ))秒) DB登録件数=${db_entries}"
-        
         # 一時ファイルのクリーンアップ
         rm -rf "$temp_dir"
-        debug_log "INFO" "並列処理完了: $(date +%H:%M:%S) ($(( $(date +%s) - parallel_start ))秒)"
         
     else
-        # 通常処理モード
-        local normal_start=$(date +%s)
-        debug_log "INFO" "通常処理開始: $(date +%H:%M:%S)"
-        
+        # 通常処理モード (既存コードと同じ)
         # スピナーを開始し、使用中のAPIを表示
         start_spinner "$(color blue "Using API: $current_api")"
         
         # 言語エントリを抽出
         grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
-            # エントリカウント
-            total_entries=$((total_entries + 1))
-            
             # キーと値を抽出
             local key=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|\([^=]*\)=.*/\1/p")
             local value=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|[^=]*=\(.*\)/\1/p")
-            
-            if [ $((total_entries % 10)) -eq 0 ]; then
-                update_spinner "$(color blue "Processing: ${total_entries} entries (${cache_hits} from cache)")"
-            fi
             
             if [ -n "$key" ] && [ -n "$value" ]; then
                 # キャッシュキー生成
@@ -497,7 +445,6 @@ EOF
                     # APIから取得した言語コードを使用
                     printf "%s|%s=%s\n" "$api_lang" "$key" "$translated" >> "$output_db"
                     debug_log "DEBUG" "Using cached translation for key: ${key}"
-                    cache_hits=$((cache_hits + 1))
                     continue
                 fi
                 
@@ -517,16 +464,7 @@ EOF
                                     debug_log "DEBUG" "Switching to Google Translate API"
                                 fi
                                 
-                                local api_start=$(date +%s)
-                                
                                 result=$(translate_with_google "$value" "$DEFAULT_LANGUAGE" "$api_lang" 2>/dev/null)
-                                
-                                api_calls=$((api_calls + 1))
-                                
-                                # API呼び出し時間を測定（10件ごとに記録）
-                                if [ $((api_calls % 10)) -eq 0 ]; then
-                                    debug_log "INFO" "API呼び出し: ${api_calls}件目 ($(( $(date +%s) - api_start ))秒)"
-                                fi
                                 
                                 if [ $? -eq 0 ] && [ -n "$result" ]; then
                                     cleaned_translation="$result"
@@ -561,18 +499,15 @@ EOF
                 fi
             fi
         done
-        
-        debug_log "INFO" "通常処理完了: $(date +%H:%M:%S) ($(( $(date +%s) - normal_start ))秒) キャッシュヒット=${cache_hits}, API呼び出し=${api_calls}, 総エントリ=${total_entries}"
     fi
     
     # スピナー停止
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
-    stop_spinner "Translation completed in ${duration} seconds (${cache_hits}/${total_entries} from cache)" "success"
+    stop_spinner "Translation completed in ${duration} seconds" "success"
     
     # 翻訳処理終了
     debug_log "DEBUG" "Language DB creation completed for ${api_lang}"
-    debug_log "INFO" "翻訳処理完了: $(date +%H:%M:%S) 総所要時間=${duration}秒, キャッシュヒット=${cache_hits}, API呼び出し=${api_calls}, 総エントリ=${total_entries}"
     return 0
 }
 
