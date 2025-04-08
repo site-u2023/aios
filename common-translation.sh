@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-08-00-01"
+SCRIPT_VERSION="2025-04-08-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -49,6 +49,9 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 
 # オンライン翻訳を有効化
 ONLINE_TRANSLATION_ENABLED="yes"
+# 並列処理設定
+TRANSLATION_PARALLEL_ENABLED="yes"
+TRANSLATION_MAX_JOBS="4"  # 並列ジョブ数を4に設定
 
 # API設定
 API_TIMEOUT="${API_TIMEOUT:-5}"
@@ -215,7 +218,7 @@ translate_text() {
     esac
 }
 
-# 言語データベース作成関数（ファイル分割処理修正版）
+# 言語データベース作成関数（並列処理対応版）
 create_language_db() {
     local target_lang="$1"
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
@@ -225,8 +228,8 @@ create_language_db() {
     local cleaned_translation=""
     local current_api=""
     local ip_check_file="${CACHE_DIR}/network.ch"
-    local parallel="${2:-false}"  # 並列処理フラグ（デフォルトはfalse）
-    local max_jobs="${3:-3}"      # 最大並列ジョブ数（デフォルトは3）
+    local parallel="${2:-$TRANSLATION_PARALLEL_ENABLED}"  # グローバル変数をデフォルトに
+    local max_jobs="${3:-$TRANSLATION_MAX_JOBS}"         # グローバル変数をデフォルトに
     local start_time=$(date +%s)
     
     debug_log "DEBUG" "Creating language DB for target ${target_lang} with API language code ${api_lang}"
@@ -277,7 +280,7 @@ EOF
     debug_log "DEBUG" "Initial API based on API_LIST priority: $current_api"
     
     # 並列処理モードの場合
-    if [ "$parallel" = "true" ]; then
+    if [ "$parallel" = "yes" ] || [ "$parallel" = "true" ]; then
         debug_log "INFO" "Using parallel translation mode with ${max_jobs} jobs" "true"
         
         # 一時ディレクトリ設定
@@ -293,37 +296,31 @@ EOF
         local total_entries=$(wc -l < "${temp_dir}/all_entries.txt")
         local entries_per_job=$(( (total_entries + max_jobs - 1) / max_jobs ))
         
-        debug_log "DEBUG" "Total entries: ${total_entries}, entries per job: ${entries_per_job}"
-        
         # スピナーを開始し、使用中のAPIと並列処理情報を表示
         start_spinner "$(color blue "Using API: $current_api (Parallel mode: ${max_jobs} jobs)")"
         
-        # splitコマンドを使わずにファイル分割（手動で実装）
+        # splitの代わりに手動でファイル分割
         local line_count=0
         local file_count=1
         local current_file="${temp_dir}/part_${file_count}"
         
-        # 初期ファイルを作成
-        : > "$current_file"
+        # ファイル初期化
+        > "$current_file"
         
-        # ファイルから1行ずつ読み取って分割ファイルに書き込む
+        # 全エントリを分割
         while IFS= read -r line; do
-            # 現在のファイルに行を追加
-            echo "$line" >> "$current_file"
+            # 現在のパートファイルに行を追加
+            printf "%s\n" "$line" >> "$current_file"
             line_count=$((line_count + 1))
             
-            # 指定行数に達したら次のファイルへ
+            # 分割サイズに達したら次のファイルを作成
             if [ $line_count -ge $entries_per_job ]; then
                 line_count=0
                 file_count=$((file_count + 1))
                 current_file="${temp_dir}/part_${file_count}"
-                : > "$current_file"  # 新しいファイルを作成
+                > "$current_file"
             fi
         done < "${temp_dir}/all_entries.txt"
-        
-        # 分割ファイルの数を確認
-        local part_count=$(ls -1 "$temp_dir"/part_* 2>/dev/null | wc -l)
-        debug_log "DEBUG" "Created ${part_count} part files for parallel processing"
         
         # 各部分を並列処理
         local job_count=0
@@ -551,10 +548,10 @@ display_detected_translation() {
     debug_log "DEBUG" "Translation information display completed for ${lang_code}"
 }
 
-# 言語翻訳処理（並列処理最適化版）
+# 言語翻訳処理（並列処理オプション追加）
 process_language_translation() {
-    local parallel="${1:-true}"   # 並列処理フラグ（デフォルトはtrue）
-    local max_jobs="${2:-4}"      # 最大並列ジョブ数（デフォルトは4）
+    local parallel="${1:-false}"  # 並列処理フラグ
+    local max_jobs="${2:-3}"      # 最大並列ジョブ数
     
     # 言語コードの取得
     local lang_code=""
@@ -605,8 +602,8 @@ init_translation() {
     # キャッシュディレクトリ初期化
     init_translation_cache
     
-    # 言語翻訳処理を実行（並列処理有効、4ジョブ）
-    process_language_translation "true" "4"
+    # 言語翻訳処理を実行
+    process_language_translation
     
     debug_log "DEBUG" "Translation module initialized with language processing"
 }
