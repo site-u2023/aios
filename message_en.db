@@ -30,6 +30,7 @@ en|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{notr_colon_notr}
 # =======================
 # common-translation.sh
 # =======================
+en|MSG_TRANSLATION_API=Using API{notr_colon_notr} {notr_jq_notr}
 en|MSG_TRANSLATION_SOURCE_ORIGINAL=Original Language file{notr_colon_notr} {notr_info_notr}
 en|MSG_TRANSLATION_SOURCE_CURRENT=Translated Language file{notr_colon_notr} {notr_info_notr}
 en|MSG_LANGUAGE_SOURCE=Original language code{notr_colon_notr} {notr_info_notr}
