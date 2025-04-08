@@ -551,8 +551,17 @@ display_detected_translation() {
 
 # 言語翻訳処理（並列処理オプション追加）
 process_language_translation() {
-    local parallel="${1:-false}"  # 並列処理フラグ
-    local max_jobs="${2:-3}"      # 最大並列ジョブ数
+    local parallel="${1:-$TRANSLATION_PARALLEL_ENABLED}"  # グローバル変数をデフォルトに
+    local max_jobs="${2:-$TRANSLATION_MAX_JOBS}"         # グローバル変数をデフォルトに
+    
+    # CPU設定ファイルの再確認（呼び出し元がinit_translationでない場合のため）
+    if [ -f "${CACHE_DIR}/cpu_core.ch" ] && [ "$max_jobs" = "$TRANSLATION_MAX_JOBS" ]; then
+        local cpu_cores=$(cat "${CACHE_DIR}/cpu_core.ch")
+        if [ -n "$cpu_cores" ] && [ "$cpu_cores" -gt 0 ]; then
+            max_jobs="$cpu_cores"
+            debug_log "INFO" "Overriding jobs with CPU cores: ${max_jobs}"
+        fi
+    fi
     
     # 言語コードの取得
     local lang_code=""
@@ -603,10 +612,19 @@ init_translation() {
     # キャッシュディレクトリ初期化
     init_translation_cache
     
-    # 言語翻訳処理を実行
-    process_language_translation
+    # CPU情報を読み取り、並列ジョブ数を設定
+    if [ -f "${CACHE_DIR}/cpu_core.ch" ]; then
+        local cpu_cores=$(cat "${CACHE_DIR}/cpu_core.ch")
+        if [ -n "$cpu_cores" ] && [ "$cpu_cores" -gt 0 ]; then
+            TRANSLATION_MAX_JOBS="$cpu_cores"
+            debug_log "INFO" "Using CPU cores from config: ${TRANSLATION_MAX_JOBS}"
+        fi
+    fi
     
-    debug_log "DEBUG" "Translation module initialized with language processing"
+    # 言語翻訳処理を実行（並列処理を有効化）
+    process_language_translation "$TRANSLATION_PARALLEL_ENABLED" "$TRANSLATION_MAX_JOBS"
+    
+    debug_log "DEBUG" "Translation module initialized with parallel processing (${TRANSLATION_MAX_JOBS} cores)"
 }
 
 # スクリプト初期化（自動実行）
