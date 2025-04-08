@@ -113,11 +113,9 @@ translate_with_libretranslate() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
-    local api_url="${LIBRETRANSLATE_URL}"
-    local retry_count=0
-    local temp_file="${TRANSLATION_CACHE_DIR}/libretranslate_response.tmp"
     local ip_check_file="${CACHE_DIR}/network.ch"
     local wget_options=""
+    local retry_count=0
     
     debug_log "DEBUG" "Starting LibreTranslate API request" "true"
     
@@ -135,6 +133,9 @@ translate_with_libretranslate() {
         esac
     fi
     
+    # 一時ファイル
+    local temp_file="${TRANSLATION_CACHE_DIR}/libretranslate_response.tmp"
+    
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
     
     # リトライループ
@@ -146,7 +147,7 @@ translate_with_libretranslate() {
         $BASE_WGET $wget_options -T $API_TIMEOUT --tries=1 -O "$temp_file" \
             --header="Content-Type: application/json" \
             --post-data="{\"q\":\"$text\",\"source\":\"$source_lang\",\"target\":\"$target_lang\",\"format\":\"text\",\"api_key\":\"\"}" \
-            "$api_url" 2>/dev/null
+            "${LIBRETRANSLATE_URL}" 2>/dev/null
         
         # レスポンスチェック
         if [ -s "$temp_file" ] && grep -q "translatedText" "$temp_file"; then
@@ -171,11 +172,9 @@ translate_with_lingva() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
-    local api_url="${LINGVA_URL}"
-    local retry_count=0
-    local temp_file="${TRANSLATION_CACHE_DIR}/lingva_response.tmp"
     local ip_check_file="${CACHE_DIR}/network.ch"
     local wget_options=""
+    local retry_count=0
     
     debug_log "DEBUG" "Starting Lingva Translate API request" "true"
     
@@ -195,6 +194,7 @@ translate_with_lingva() {
     
     # URLエンコード
     local encoded_text=$(urlencode "$text")
+    local temp_file="${TRANSLATION_CACHE_DIR}/lingva_response.tmp"
     
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
     
@@ -203,9 +203,10 @@ translate_with_lingva() {
         [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ] && \
             wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
         
-        # GETリクエスト作成
+        # APIリクエスト送信
         $BASE_WGET $wget_options -T $API_TIMEOUT --tries=1 -O "$temp_file" \
-            "$api_url/$source_lang/$target_lang/$encoded_text" 2>/dev/null
+             --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
+             "${LINGVA_URL}/$source_lang/$target_lang/$encoded_text" 2>/dev/null
         
         # レスポンスチェック
         if [ -s "$temp_file" ] && grep -q "translation" "$temp_file"; then
@@ -285,7 +286,7 @@ translate_with_google() {
     return 1
 }
 
-# フォールバック廃止版：translate_text関数
+# 翻訳実行関数
 translate_text() {
     local text="$1"
     local source_lang="$2"
