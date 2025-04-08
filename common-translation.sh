@@ -58,11 +58,9 @@ CURRENT_API=""
 
 # API設定追加
 GOOGLE_TRANSLATE_URL="${GOOGLE_TRANSLATE_URL:-https://translate.googleapis.com/translate_a/single}"
-LIBRETRANSLATE_URL="${LIBRETRANSLATE_URL:-https://translate.argosopentech.com/translate}"
 LINGVA_URL="${LINGVA_URL:-https://lingva.ml/api/v1}"
-### API_LIST="${API_LIST:-lingva}"
-API_LIST="${API_LIST:-libretranslate}"
-# API_LIST="${API_LIST:-google}"
+# API_LIST="${API_LIST:-lingva}"
+API_LIST="${API_LIST:-google}"
 
 # 翻訳キャッシュの初期化
 init_translation_cache() {
@@ -105,72 +103,6 @@ urlencode() {
     done
     
     printf "%s\n" "$encoded"
-}
-
-# LibreTranslate APIを使用した翻訳関数
-translate_with_libretranslate() {
-    local text="$1"
-    local source_lang="$2"
-    local target_lang="$3"
-    local ip_check_file="${CACHE_DIR}/network.ch"
-    local wget_options=""
-    local retry_count=0
-    
-    debug_log "DEBUG" "Starting LibreTranslate API request" "true"
-    
-    # ネットワーク接続状態を一度だけ確認
-    [ ! -f "$ip_check_file" ] && check_network_connectivity
-    
-    # ネットワーク接続状態に基づいてwgetオプションを設定
-    if [ -f "$ip_check_file" ]; then
-        local network_type=$(cat "$ip_check_file")
-        
-        case "$network_type" in
-            "v4") wget_options="-4" ;;
-            "v6") wget_options="-6" ;;
-            "v4v6") wget_options="-4" ;;
-        esac
-    fi
-    
-    # 一時ファイル
-    local temp_file="${TRANSLATION_CACHE_DIR}/libretranslate_response.tmp"
-    
-    mkdir -p "$(dirname "$temp_file")" 2>/dev/null
-    
-    # テキストのエスケープ処理
-    local escaped_text=$(printf "%s" "$text" | sed 's/"/\\"/g')
-    
-    # リトライループ
-    while [ $retry_count -le $API_MAX_RETRIES ]; do
-        [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ] && \
-            wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
-        
-        # POSTリクエスト作成 (リクエスト形式を修正)
-        $BASE_WGET $wget_options -T $API_TIMEOUT --tries=1 -O "$temp_file" \
-            --header="Content-Type: application/json" \
-            --post-data="{\"q\":\"$escaped_text\",\"source\":\"$source_lang\",\"target\":\"$target_lang\",\"format\":\"text\"}" \
-            "${LIBRETRANSLATE_URL}" 2>/dev/null
-        
-        # レスポンスチェック (JSONパース処理を改善)
-        if [ -s "$temp_file" ]; then
-            if grep -q "translatedText" "$temp_file"; then
-                # 改善したJSONパース
-                local translated=$(sed -n 's/.*"translatedText"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$temp_file" | sed 's/\\"/"/g')
-                
-                if [ -n "$translated" ]; then
-                    rm -f "$temp_file" 2>/dev/null
-                    printf "%s\n" "$translated"
-                    return 0
-                fi
-            fi
-        fi
-        
-        rm -f "$temp_file" 2>/dev/null
-        retry_count=$((retry_count + 1))
-        sleep 1
-    done
-    
-    return 1
 }
 
 # Lingva Translate APIを使用した翻訳関数
@@ -306,10 +238,6 @@ translate_text() {
         google)
             API_NAME="Google Translate API"
             result=$(translate_with_google "$text" "$source_lang" "$target_lang")
-            ;;
-        libretranslate)
-            API_NAME="LibreTranslate API"
-            result=$(translate_with_libretranslate "$text" "$source_lang" "$target_lang")
             ;;
         lingva)
             API_NAME="Lingva Translate API"
