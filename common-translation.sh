@@ -205,7 +205,7 @@ translate_with_google() {
             wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
 
         # APIリクエスト送信 - 待機時間なしのシンプル版
-        $BASE_WGET $wget_options -T $API_TIMEOUT --tries=1 -O "$temp_file" \
+        $BASE_WGET $wget_options -T $API_TIMEOUT --tries=1 -q -O "$temp_file" \
             --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
             "https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
 
