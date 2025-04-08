@@ -164,8 +164,74 @@ translate_with_lingva() {
     return 1
 }
 
-# Google APIを使用した翻訳関数（高速化版）
+# Google翻訳APIを使用した翻訳関数
 translate_with_google() {
+    local text="$1"
+    local source_lang="$2"
+    local target_lang="$3"
+    local ip_check_file="${CACHE_DIR}/network.ch"
+    local wget_options=""
+    local retry_count=0
+    
+    debug_log "DEBUG" "Starting Google Translate API request" "true"
+    
+    # ネットワーク接続状態を一度だけ確認
+    [ ! -f "$ip_check_file" ] && check_network_connectivity
+    
+    # ネットワーク接続状態に基づいてwgetオプションを設定
+    if [ -f "$ip_check_file" ]; then
+        local network_type=$(cat "$ip_check_file")
+        
+        case "$network_type" in
+            "v4") wget_options="-4" ;;
+            "v6") wget_options="-6" ;;
+            "v4v6") wget_options="-4" ;;
+        esac
+    fi
+    
+    # 一時ファイル
+    local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
+    
+    mkdir -p "$(dirname "$temp_file")" 2>/dev/null
+    
+    local encoded_text=$(urlencode "$text")
+    
+    # リトライループ
+    while [ $retry_count -le $API_MAX_RETRIES ]; do
+        [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ] && \
+            wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
+        
+        $BASE_WGET $wget_options -T $API_TIMEOUT --tries=1 -O "$temp_file" \
+            "${GOOGLE_TRANSLATE_URL}?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
+        
+        if [ -s "$temp_file" ]; then
+            local translated=""
+            
+            # jqが利用可能であれば使用、なければ従来の処理
+            if command -v jq >/dev/null 2>&1; then
+                translated=$(jq -r '.[0] | map(.[0]) | join("")' "$temp_file" 2>/dev/null)
+            else
+                translated=$(sed 's/,/\n/g' "$temp_file" | grep -o '"[^"]*"' | sed 's/^"//;s/"$//' | sed -n '1p')
+            fi
+            
+            if [ -n "$translated" ]; then
+                rm -f "$temp_file" 2>/dev/null
+                printf "%s\n" "$translated"
+                return 0
+            fi
+        fi
+        
+        rm -f "$temp_file" 2>/dev/null
+        retry_count=$((retry_count + 1))
+        [ $retry_count -le $API_MAX_RETRIES ] && sleep 1
+    done
+    
+    debug_log "DEBUG" "Google Translate API request failed after $API_MAX_RETRIES retries"
+    return 1
+}
+
+# Google APIを使用した翻訳関数（高速化版）
+OK_translate_with_google() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
