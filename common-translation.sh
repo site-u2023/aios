@@ -62,8 +62,8 @@ LIBRETRANSLATE_URL="${LIBRETRANSLATE_URL:-https://translate.argosopentech.com/tr
 LINGVA_URL="${LINGVA_URL:-https://lingva.ml/api/v1}"
 # API_LIST="${API_LIST:-google,libretranslate,lingva}"
 # API_LIST="${API_LIST:-lingva}"
-API_LIST="${API_LIST:-libretranslate}"
-# API_LIST="${API_LIST:-google}"
+# API_LIST="${API_LIST:-libretranslate}"
+API_LIST="${API_LIST:-google}"
 
 # 翻訳キャッシュの初期化
 init_translation_cache() {
