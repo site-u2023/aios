@@ -185,9 +185,6 @@ update_package_list() {
 
     # スピナー停止 (成功メッセージを表示)
     stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
-
-    # 追加: メッセージ表示後の空白行
-    printf "\n"
     
     # キャッシュのタイムスタンプを更新
     touch "$update_cache" || {
