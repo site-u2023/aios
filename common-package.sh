@@ -153,6 +153,8 @@ update_package_list() {
         return 0
     fi
 
+    printf "  %s\n"
+
     # スピナー開始
     start_spinner "$(color blue "$(get_message "MSG_RUNNING_UPDATE")")"
 
