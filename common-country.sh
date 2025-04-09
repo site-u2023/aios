@@ -293,7 +293,7 @@ select_list() {
         printf "%s\n" "$(color white "$msg_selected")"
         
         # 確認（YNRモードで）
-        confirm "MSG_CONFIRM_SELECT" "type=ynr"
+        confirm "MSG_CONFIRM_SELECT" "ynr"
         local ret=$?
         
         case $ret in
