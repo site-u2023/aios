@@ -480,6 +480,8 @@ detect_and_set_location() {
                 debug_log "DEBUG" "Cache-based location settings automatically applied without confirmation"
             else
                 # キャッシュ以外の場合はユーザーに確認
+                printf "%s\n" "$(color white "$(get_message "MSG_CONFIRM_USE_SETTINGS")")"
+                
                 if confirm "MSG_CONFIRM_ONLY_YN"; then
                     proceed_with_settings="true"
                     debug_log "DEBUG" "User accepted $detection_source-based location settings"
