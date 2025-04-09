@@ -294,8 +294,7 @@ EOF
     
     # 翻訳処理開始
     printf "\n"
-    # printf "Creating translation DB using API: %s\n" "$api_lang"
-        
+    
     # ネットワーク接続状態を確認
     if [ ! -f "$ip_check_file" ]; then
         debug_log "DEBUG" "Network status file not found, checking connectivity"
@@ -323,7 +322,7 @@ EOF
     debug_log "DEBUG" "Using API from translate_text mapping: $current_api"
 
     # スピナーを開始し、使用中のAPIを表示
-    start_spinner "$(color blue "Using API: $current_api")"
+    start_spinner "$(color blue "Currently translating: $current_api")"
     
     # 言語エントリを抽出
     grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
@@ -375,7 +374,7 @@ EOF
     done
     
     # スピナー停止
-    stop_spinner "Translation completed" "success"
+    stop_spinner "Language file created successfully" "success"
     
     # 翻訳処理終了
     debug_log "DEBUG" "Language DB creation completed for ${api_lang}"
