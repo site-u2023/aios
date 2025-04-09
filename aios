@@ -1641,7 +1641,7 @@ download_finalize() {
 
 # 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
-# 🔵　バナー系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
+# 🔵　バナー・デバイス情報　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # メイン関数 - バナー表示の統合関数
 # 引数: 
@@ -1716,7 +1716,28 @@ print_banner_unicode() {
     debug_log "DEBUG" "Block style lowercase aios banner displayed successfully"
 }
 
-# 🔴　バナー系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
+display_detected_device() {
+    local cpucore=$(cat "${CACHE_DIR}/cpu_core.ch")
+    local network=$(cat "${CACHE_DIR}/network.ch")
+    local architecture=$(cat "${CACHE_DIR}/architecture.ch")
+    local osversion=$(cat "${CACHE_DIR}/osversion.ch")
+    local package_manager=$(cat "${CACHE_DIR}/package_manager.ch")
+    local usbdevice=$(cat "${CACHE_DIR}/usbdevice.ch")
+
+    # ファイルが存在しない場合のみメッセージを表示
+    if [ ! -f "${CACHE_DIR}/message.ch" ]; then
+        printf "%s\n" "$(color green "$(get_message "MSG_INFO_DEVICE")")"
+    fi
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_NETWORK" "info=$network")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_CPUCORE" "info=$cpucore")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_ARCHITECTURE" "info=$architecture")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_OSVERSION" "info=$osversion")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_PACKAGEMANAGER" "info=$package_manager")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_USBDEVICE" "info=$usbdevice")")"
+    printf "\n"
+}
+
+# 🔴　バナー・デバイス情報　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # 🔵　メイン　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
