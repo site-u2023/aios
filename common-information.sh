@@ -112,6 +112,9 @@ display_detected_location() {
         printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
         EXTRA_SPACING_NEEDED="yes"
         debug_log "DEBUG" "Success messages displayed"
+    else
+        # 成功メッセージを表示しない場合でも、一貫性のために空白行を追加
+        printf "\n"
     fi
     
     debug_log "DEBUG" "Location information displayed successfully"
