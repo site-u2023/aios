@@ -60,33 +60,6 @@ API_TIMEOUT="${API_TIMEOUT:-5}"
 API_MAX_RETRIES="${API_MAX_RETRIES:-3}"
 TIMEZONE_API_SOURCE=""
 
-# 🔵　デバイス　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
-
-display_detected_device() {
-    local cpucore=$(cat "${CACHE_DIR}/cpu_core.ch")
-    local network=$(cat "${CACHE_DIR}/network.ch")
-    local architecture=$(cat "${CACHE_DIR}/architecture.ch")
-    local osversion=$(cat "${CACHE_DIR}/osversion.ch")
-    local package_manager=$(cat "${CACHE_DIR}/package_manager.ch")
-    local usbdevice=$(cat "${CACHE_DIR}/usbdevice.ch")
-
-    # ファイルが存在しない場合のみメッセージを表示
-    if [ ! -f "${CACHE_DIR}/message.ch" ]; then
-        printf "%s\n" "$(color green "$(get_message "MSG_INFO_DEVICE")")"
-    fi
-    printf "%s\n" "$(color white "$(get_message "MSG_INFO_NETWORK" "info=$network")")"
-    printf "%s\n" "$(color white "$(get_message "MSG_INFO_CPUCORE" "info=$cpucore")")"
-    printf "%s\n" "$(color white "$(get_message "MSG_INFO_ARCHITECTURE" "info=$architecture")")"
-    printf "%s\n" "$(color white "$(get_message "MSG_INFO_OSVERSION" "info=$osversion")")"
-    printf "%s\n" "$(color white "$(get_message "MSG_INFO_PACKAGEMANAGER" "info=$package_manager")")"
-    printf "%s\n" "$(color white "$(get_message "MSG_INFO_USBDEVICE" "info=$usbdevice")")"
-    printf "\n"
-}
-
-# 🔴　デバイス　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
-
-# 🔵　ロケーション　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
-
 # 検出した地域情報を表示する共通関数
 display_detected_location() {
     local detection_source="$1"
@@ -533,5 +506,3 @@ process_location_info() {
     debug_log "DEBUG: Location information cache process completed successfully"
     return 0
 }
-
-# 🔴　ロケーション　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
