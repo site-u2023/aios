@@ -63,6 +63,7 @@ TIMEZONE_API_SOURCE=""
 # 🔵　デバイス　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 display_detected_device() {
+    local cpucore=$(cat "${CACHE_DIR}/cpu_core.ch")
     local network=$(cat "${CACHE_DIR}/network.ch")
     local architecture=$(cat "${CACHE_DIR}/architecture.ch")
     local osversion=$(cat "${CACHE_DIR}/osversion.ch")
@@ -74,6 +75,7 @@ display_detected_device() {
         printf "%s\n" "$(color green "$(get_message "MSG_INFO_DEVICE")")"
     fi
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_NETWORK" "info=$network")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_CPUCORE" "info=$cpucore")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_ARCHITECTURE" "info=$architecture")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_OSVERSION" "info=$osversion")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_PACKAGEMANAGER" "info=$package_manager")")"
