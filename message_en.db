@@ -200,6 +200,7 @@ en|MSG_CONFIRM_INSTALL_WITH_DESC=Package{notr_colon_notr} {notr_pkg_notr}{notr_n
 # =======================
 en|MSG_INFO_NET_COUNTRY=IP location
 en|MSG_INFO_NETWORK=IP Type{notr_colon_notr} {notr_info_notr}
+en|MSG_INFO_CPUCORE=CPU Core{notr_colon_notr} {notr_info_notr}
 en|MSG_INFO_ARCHITECTURE=Architecture{notr_colon_notr} {notr_info_notr}
 en|MSG_INFO_OSVERSION=OS Version{notr_colon_notr} {notr_info_notr}
 en|MSG_INFO_PACKAGEMANAGER=Package manager{notr_colon_notr} {notr_info_notr}
