@@ -73,9 +73,7 @@ display_detected_location() {
     debug_log "DEBUG" "Displaying location information from source: $detection_source"
     
     # 検出情報表示
-    local msg_info=$(get_message "MSG_USE_DETECTED_INFORMATION")
-    msg_info=$(echo "$msg_info" | sed "s/{info}/$detection_source/g")
-    printf "%s\n" "$(color white "$msg_info")"
+    printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_INFORMATION" "i=$detection_source")")"
     
     # タイムゾーンAPI情報の表示（グローバル変数を使用）
     if [ -n "$TIMEZONE_API_SOURCE" ]; then
@@ -88,9 +86,7 @@ display_detected_location() {
         fi
         
         # タイムゾーン取得元の表示（プレースホルダーを使用）
-        local api_msg=$(get_message "MSG_TIMEZONE_API")
-        api_msg=$(echo "$api_msg" | sed "s/{api}/$domain/g")
-        printf "%s\n" "$(color white "$api_msg")"
+        printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_API" "a=$domain")")"
     fi
     
     # ISP情報の表示（ISP情報がある場合のみ）
