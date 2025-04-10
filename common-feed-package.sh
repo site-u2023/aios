@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.06-00-01"
+SCRIPT_VERSION="2025.04.10-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -27,7 +27,7 @@ SCRIPT_VERSION="2025.03.06-00-01"
 # ✅ Use printf instead of echo -e for portable formatting
 # ✅ Avoid process substitution <() and >()
 # ✅ Prefer case statements over complex if/elif chains
-# ✅ Use command -v instead of which or type for command existence checks
+# ✅ Use command -v instead of which or type for command existence check
 # ✅ Keep scripts modular with small, focused functions
 # ✅ Use simple error handling instead of complex traps
 # ✅ Test scripts with ash/dash explicitly, not just bash
@@ -36,12 +36,12 @@ SCRIPT_VERSION="2025.03.06-00-01"
 ### =========================================================
 
 DEV_NULL="${DEV_NULL:-on}"
-# サイレントモード
+# Silent mode
 # export DEV_NULL="on"
-# 通常モード
+# Normal mode
 # unset DEV_NULL
 
-# 基本定数の設定
+# Basic constants setup
 BASE_WGET="wget --no-check-certificate -q"
 # BASE_WGET="wget -O"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
@@ -55,38 +55,38 @@ PACKAGE_EXTENSION="${PACKAGE_EXTENSION:-ipk}"
 
 #########################################################################
 # Last Update: 2025-03-04 10:00:00 (JST) 🚀
-# install_build: パッケージのビルド処理 (OpenWrt / Alpine Linux)
-# GitHub API を利用して指定パッケージの最新ファイルを取得するスクリプト
-# 関数: feed_package
-# 説明:
-#   GitHub API を用いて、指定されたリポジトリの特定ディレクトリ内から、
-#   パッケージ名のプレフィックスに合致するファイル一覧を取得し、アルファベット順で最後のもの（＝最新と仮定）を
-#   ダウンロード先に保存する。
-#   また、DIR_PATHが指定されていない場合、自動的にリポジトリのトップディレクトリを探索し、
-#   該当するディレクトリを自動的に選択する。
+# install_build: Package build processing (OpenWrt / Alpine Linux)
+# Script to retrieve the latest files for a specified package using the GitHub API
+# Function: feed_package
+# Description:
+#   Uses the GitHub API to retrieve a list of files from a specific directory in a specified repository,
+#   matching the package name prefix, and saves the alphabetically last one (assumed to be the latest)
+#   to the download destination.
+#   If DIR_PATH is not specified, it automatically explores the repository's top directory,
+#   and automatically selects the appropriate directory.
 #
-# 引数:
-#   $1 : リポジトリのオーナー（例: gSpotx2f）
-#   $2 : リポジトリ名（例: packages-openwrt）
-#   $3 : ディレクトリパス（例: current）
-#   $4 : パッケージ名のプレフィックス（例: luci-app-cpu-perf）
-#   $5 : ダウンロード後の出力先ファイル（例: /tmp/luci-app-cpu-perf_all.ipk）
+# Arguments:
+#   $1 : Repository owner (e.g., gSpotx2f)
+#   $2 : Repository name (e.g., packages-openwrt)
+#   $3 : Directory path (e.g., current)
+#   $4 : Package name prefix (e.g., luci-app-cpu-perf)
+#   $5 : Output file after download (e.g., /tmp/luci-app-cpu-perf_all.ipk)
 #
-# 使い方
-# feed_package ["yn"] ["hidden"] "リポジトリオーナー" "リポジトリ名" "ディレクトリ" "パッケージ名"
-# 例: デフォルト（確認なしでインストール）
+# Usage:
+# feed_package ["yn"] ["hidden"] "repository_owner" "repository_name" "directory" "package_name"
+# Example: Default (install without confirmation)
 # feed_package "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
-# 例: 確認を取ってインストール
+# Example: Install with confirmation
 # feed_package "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
-# 例: インストール済みならメッセージなし
+# Example: No message if already installed
 # feed_package "hidden" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
-# 例: `yn` と `hidden` を順不同で指定
+# Example: Specify `yn` and `hidden` in any order
 # feed_package "hidden" "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
 #
-# 新仕様:
-# 1. DIR_PATHが空の場合、リポジトリのトップディレクトリを探索し、最適なディレクトリを自動選択。
-# 2. オプション（yn, hidden, force, disabled等）の引数を追加で処理できるように対応。
-# 3. GitHub APIから最新のパッケージ情報を取得し、ダウンロードとインストールを行う。
+# New specifications:
+# 1. If DIR_PATH is empty, explore the repository's top directory and automatically select the optimal directory.
+# 2. Handle additional arguments for options (yn, hidden, force, disabled, etc.).
+# 3. Retrieve the latest package information from GitHub API, download and install.
 #########################################################################
 feed_package() {
   local confirm_install="no"
@@ -95,27 +95,27 @@ feed_package() {
   local skip_package_db="no"
   local set_disabled="no"
   local hidden="no"
-  local opts=""   # オプションを格納する変数
-  local args=""   # 通常引数を格納する変数
+  local opts=""   # Variable to store options
+  local args=""   # Variable to store regular arguments
 
-  # 引数を走査し、オプションと通常引数を分離する
+  # Scan arguments and separate options and regular arguments
   while [ $# -gt 0 ]; do
     case "$1" in
-      yn) confirm_install="yes"; opts="$opts yn" ;;   # ynオプション
-      nolang) skip_lang_pack="yes"; opts="$opts nolang" ;; # nolangオプション
-      force) force_install="yes"; opts="$opts force" ;;   # forceオプション
-      notpack) skip_package_db="yes"; opts="$opts notpack" ;; # notpackオプション
-      disabled) set_disabled="yes"; opts="$opts disabled" ;; # disabledオプション
-      hidden) hidden="yes"; opts="$opts hidden" ;; # hiddenオプション
-      *) args="$args $1" ;;        # 通常引数を格納
+      yn) confirm_install="yes"; opts="$opts yn" ;;   # yn option
+      nolang) skip_lang_pack="yes"; opts="$opts nolang" ;; # nolang option
+      force) force_install="yes"; opts="$opts force" ;;   # force option
+      notpack) skip_package_db="yes"; opts="$opts notpack" ;; # notpack option
+      disabled) set_disabled="yes"; opts="$opts disabled" ;; # disabled option
+      hidden) hidden="yes"; opts="$opts hidden" ;; # hidden option
+      *) args="$args $1" ;;        # Store regular arguments
     esac
     shift
   done
 
-  # 必須引数が4つあるかチェック
+  # Check if there are 4 required arguments
   set -- $args
   if [ "$#" -ne 4 ]; then
-    debug_log "DEBUG" "必要な引数 (REPO_OWNER, REPO_NAME, DIR_PATH, PKG_PREFIX) が不足しています。" >&2
+    debug_log "DEBUG" "Required arguments (REPO_OWNER, REPO_NAME, DIR_PATH, PKG_PREFIX) are missing." >&2
     return 1
   fi
 
@@ -124,7 +124,7 @@ feed_package() {
   if [ -n "$PACKAGE_EXTENSION" ]; then
       debug_log "DEBUG" "Content of PACKAGE_EXTENSION: $PACKAGE_EXTENSION"
       
-      # 将来的に除去するルーチン
+      # Routine to be removed in the future
       if [ "$PACKAGE_EXTENSION" != "ipk" ]; then
           printf "%s\n" "$(color yellow "Currently not supported for apk.")"
           return 1
@@ -144,51 +144,51 @@ feed_package() {
   local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.${PACKAGE_EXTENSION}"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DIR_PATH}"
   
-  debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
+  debug_log "DEBUG" "Fetching data from GitHub API: $API_URL"
 
-  # DIR_PATHが指定されていない場合、自動補完
+  # If DIR_PATH is not specified, auto-completion
   if [ -z "$DIR_PATH" ]; then
-    # ディレクトリが空ならリポジトリのトップディレクトリを探索
+    # If directory is empty, explore the repository's top directory
     API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/"
-    debug_log "DEBUG" "DIR_PATHが指定されていないため、リポジトリのトップディレクトリを探索"
+    debug_log "DEBUG" "DIR_PATH not specified, exploring repository's top directory"
   fi
 
-  # APIからデータを取得
+  # Retrieve data from API
   local JSON
   JSON=$(wget --no-check-certificate -qO- "$API_URL")
 
   if [ -z "$JSON" ]; then
-    debug_log "DEBUG" "APIからデータを取得できませんでした。"
-    echo "APIからデータを取得できませんでした。"
-    return 0  # エラーが発生しても処理を継続
+    debug_log "DEBUG" "Could not retrieve data from API."
+    printf "%s\n" "$(color white "Could not retrieve data from API.")"
+    return 0  # Continue processing even if an error occurs
   fi
 
-  # 最新パッケージファイルの取得
+  # Get the latest package file
   local PKG_FILE
   PKG_FILE=$(echo "$JSON" | jq -r '.[].name' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
 
   if [ -z "$PKG_FILE" ]; then
-    debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
-    [ "$hidden" != "yes" ] && echo "$PKG_PREFIX が見つかりません。"
-    return 0  # エラーが発生しても処理を継続
+    debug_log "DEBUG" "$PKG_PREFIX not found."
+    [ "$hidden" != "yes" ] && printf "%s\n" "$(color white "$PKG_PREFIX not found.")"
+    return 0  # Continue processing even if an error occurs
   fi
 
   debug_log "DEBUG" "NEW PACKAGE: $PKG_FILE"
 
-  # ダウンロードURLの取得
+  # Get download URL
   local DOWNLOAD_URL
   DOWNLOAD_URL=$(echo "$JSON" | jq -r --arg PKG "$PKG_FILE" '.[] | select(.name == $PKG) | .download_url')
 
   if [ -z "$DOWNLOAD_URL" ]; then
-    debug_log "DEBUG" "パッケージ情報の取得に失敗しました。"
-    echo "パッケージ情報の取得に失敗しました。"
-    return 0  # エラーが発生しても処理を継続
+    debug_log "DEBUG" "Failed to retrieve package information."
+    printf "%s\n" "$(color white "Failed to retrieve package information.")"
+    return 0  # Continue processing even if an error occurs
   fi
 
   debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
   debug_log "DEBUG" "DOWNLOAD URL: $DOWNLOAD_URL"
 
-  eval "$BASE_WGET" -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # エラーが発生しても処理を継続
+  eval "$BASE_WGET" -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # Continue processing even if an error occurs
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   debug_log "DEBUG" "Attempting to install package: $PKG_PREFIX"
@@ -223,7 +223,7 @@ feed_package_release() {
 
   set -- $args
   if [ "$#" -lt 2 ]; then
-    debug_log "DEBUG" "必要な引数 (REPO_OWNER, REPO_NAME, PKG_PREFIX) が不足しています。" >&2
+    debug_log "DEBUG" "Required arguments (REPO_OWNER, REPO_NAME, PKG_PREFIX) are missing." >&2
     return 1
   fi
 
@@ -232,7 +232,7 @@ feed_package_release() {
   if [ -n "$PACKAGE_EXTENSION" ]; then
       debug_log "DEBUG" "Content of PACKAGE_EXTENSION: $PACKAGE_EXTENSION"
       
-      # 将来的に除去するルーチン
+      # Routine to be removed in the future
       if [ "$PACKAGE_EXTENSION" != "ipk" ]; then
           printf "%s\n" "$(color yellow "Currently not supported for apk.")"
           return 1
@@ -248,14 +248,14 @@ feed_package_release() {
   local OUTPUT_FILE="${FEED_DIR}/${PKG_PREFIX}.${PACKAGE_EXTENSION}"
   local API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases"
   
-  debug_log "DEBUG" "GitHub API からデータを取得中: $API_URL"
+  debug_log "DEBUG" "Fetching data from GitHub API: $API_URL"
 
   local JSON
   JSON=$(wget --no-check-certificate -qO- "$API_URL")
 
   if [ -z "$JSON" ];then
-    debug_log "DEBUG" "APIからデータを取得できませんでした。"
-    echo "APIからデータを取得できませんでした。"
+    debug_log "DEBUG" "Could not retrieve data from API."
+    printf "%s\n" "$(color white "Could not retrieve data from API.")"
     return 0
   fi
 
@@ -263,8 +263,8 @@ feed_package_release() {
   PKG_FILE=$(echo "$JSON" | jq -r --arg PKG_PREFIX "$PKG_PREFIX" '.[] | .assets[] | select(.name | startswith($PKG_PREFIX)) | .name' | sort | tail -n 1)
 
   if [ -z "$PKG_FILE" ];then
-    debug_log "DEBUG" "$PKG_PREFIX が見つかりません。"
-    [ "$hidden" != "yes" ] && echo "$PKG_PREFIX が見つかりません。"
+    debug_log "DEBUG" "$PKG_PREFIX not found."
+    [ "$hidden" != "yes" ] && printf "%s\n" "$(color white "$PKG_PREFIX not found.")"
     return 0
   fi
 
@@ -274,15 +274,15 @@ feed_package_release() {
   DOWNLOAD_URL=$(echo "$JSON" | jq -r --arg PKG "$PKG_FILE" '.[] | .assets[] | select(.name == $PKG) | .browser_download_url')
 
   if [ -z "$DOWNLOAD_URL" ];then
-    debug_log "DEBUG" "パッケージ情報の取得に失敗しました。"
-    echo "パッケージ情報の取得に失敗しました。"
+    debug_log "DEBUG" "Failed to retrieve package information."
+    printf "%s\n" "$(color white "Failed to retrieve package information.")"
     return 0
   fi
 
   debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
   debug_log "DEBUG" "DOWNLOAD URL: $DOWNLOAD_URL"
 
-  eval "$BASE_WGET" -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # エラーが発生しても処理を継続
+  eval "$BASE_WGET" -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # Continue processing even if an error occurs
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   debug_log "DEBUG" "Attempting to install package: $PKG_PREFIX"
