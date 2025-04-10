@@ -339,7 +339,7 @@ check_message_cache() {
     return 0
 }
 
-# プレースホルダー文字列の正規化関数（最適化版）
+# プレースホルダー文字列の正規化関数
 normalize_message() {
     local input="$1"
     local lang="$2"  # 言語コードを受け取るパラメータ
@@ -356,6 +356,12 @@ normalize_message() {
     # コロン : のノーマライズ
     output=$(echo "$output" | sed 's/：/:/g; s/∶/:/g; s/꞉/:/g; s/ː/:/g')
     
+    # 全角スペースは半角に変換（先に行う）
+    output=$(echo "$output" | sed 's/　/ /g')
+    
+    # バックスラッシュのノーマライズ（全角→半角）
+    output=$(echo "$output" | sed 's/＼/\\/g')
+    
     # プレースホルダー前後の空白を除去
     output=$(echo "$output" | sed 's/{[[:space:]]*\([^{}]*\)[[:space:]]*}/{\1}/g')
     
@@ -363,6 +369,9 @@ normalize_message() {
     while echo "$output" | grep -q '{[^{}]*[[:space:]][^{}]*}'; do
         output=$(echo "$output" | sed 's/\({[^{}]*\)[[:space:]]\([^{}]*}\)/\1\2/g')
     done
+    
+    # 特殊プレースホルダー{\}を改行に変換
+    output=$(echo "$output" | sed 's/{\\}/\\n/g')
     
     # 特殊プレースホルダー{:}を:に変換
     output=$(echo "$output" | sed 's/{:}/:/g')
@@ -376,12 +385,6 @@ normalize_message() {
         # 末尾にコロンを追加
         output="${output}:"
     fi
-    
-    # 特殊プレースホルダー{\}を改行に変換
-    output=$(echo "$output" | sed 's/{\\}/\\n/g')
-    
-    # 全角スペースは半角に変換
-    output=$(echo "$output" | sed 's/　/ /g')
     
     # 言語コードの先頭部分を取得（例: zh-TWからzh）
     local lang_prefix="${lang%%-*}"
