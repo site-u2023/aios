@@ -109,9 +109,10 @@ feed_package() {
       disabled) set_disabled="yes"; opts="$opts disabled" ;; # disabled option
       hidden) hidden="yes"; opts="$opts hidden" ;; # hidden option
       desc=*) 
-        # 説明テキストを取得
+        # 説明文オプション処理 - "desc=" 以降の文字列を取得
         desc_param="$1"
-        # optsには追加しない
+        # optsには追加する（既存の処理を維持）
+        opts="$opts $1"
         ;;
       *) args="$args $1" ;;        # Store regular arguments
     esac
@@ -198,14 +199,9 @@ feed_package() {
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   debug_log "DEBUG" "Attempting to install package: $PKG_PREFIX with options: $opts"
-  
-  if [ -n "$desc_param" ]; then
-    debug_log "DEBUG" "Description parameter: $desc_param"
-    # desc_paramをシングルクォートで囲んで渡す
-    install_package "$OUTPUT_FILE" $opts '$desc_param' || return 0
-  else
-    install_package "$OUTPUT_FILE" $opts || return 0
-  fi
+
+  # install_packageを呼び出す
+  install_package "$OUTPUT_FILE" $opts || return 0
   
   return 0
 }
@@ -230,9 +226,10 @@ feed_package_release() {
       disabled) set_disabled="yes"; opts="$opts disabled" ;;
       hidden) hidden="yes"; opts="$opts hidden" ;;
       desc=*) 
-        # 説明テキストを取得
+        # 説明文オプション処理 - "desc=" 以降の文字列を取得
         desc_param="$1"
-        # optsには追加しない
+        # optsには追加する（既存の処理を維持）
+        opts="$opts $1"
         ;;
       *) args="$args $1" ;;
     esac
@@ -303,15 +300,10 @@ feed_package_release() {
   eval "$BASE_WGET" -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
-  debug_log "DEBUG" "Attempting to install package: $PKG_PREFIX"
+  debug_log "DEBUG" "Attempting to install package: $PKG_PREFIX with options: $opts"
 
-  if [ -n "$desc_param" ]; then
-    debug_log "DEBUG" "Description parameter: $desc_param"
-    # desc_paramをシングルクォートで囲んで渡す
-    install_package "$OUTPUT_FILE" $opts '$desc_param' || return 0
-  else
-    install_package "$OUTPUT_FILE" $opts || return 0
-  fi
+  # install_packageを呼び出す
+  install_package "$OUTPUT_FILE" $opts || return 0
   
   return 0
 }
