@@ -172,6 +172,8 @@ update_package_list() {
         if [ $? -ne 0 ]; then
             stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
             debug_log "ERROR" "Failed to update package lists with opkg"
+            # タイムスタンプファイルを削除して、次回も更新を試みるようにする
+            rm -f "$update_cache" 2>/dev/null
             return 1
         fi
         
@@ -180,6 +182,8 @@ update_package_list() {
         if [ $? -ne 0 ] || [ ! -s "$package_cache" ]; then
             stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
             debug_log "ERROR" "Failed to save package list to $package_cache"
+            # タイムスタンプファイルを削除して、次回も更新を試みるようにする
+            rm -f "$update_cache" 2>/dev/null
             return 1
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
@@ -188,6 +192,8 @@ update_package_list() {
         if [ $? -ne 0 ]; then
             stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
             debug_log "ERROR" "Failed to update package lists with apk"
+            # タイムスタンプファイルを削除して、次回も更新を試みるようにする
+            rm -f "$update_cache" 2>/dev/null
             return 1
         fi
         
@@ -196,11 +202,15 @@ update_package_list() {
         if [ $? -ne 0 ] || [ ! -s "$package_cache" ]; then
             stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
             debug_log "ERROR" "Failed to save package list to $package_cache"
+            # タイムスタンプファイルを削除して、次回も更新を試みるようにする
+            rm -f "$update_cache" 2>/dev/null
             return 1
         fi
     else
         stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
         debug_log "ERROR" "Unknown package manager: $PACKAGE_MANAGER"
+        # タイムスタンプファイルを削除して、次回も更新を試みるようにする
+        rm -f "$update_cache" 2>/dev/null
         return 1
     fi
 
