@@ -351,9 +351,8 @@ normalize_message() {
     # コロン : のノーマライズ - LC_ALL=Cを適用
     output=$(LC_ALL=C echo "$output" | LC_ALL=C sed 's/：/:/g; s/∶/:/g; s/꞉/:/g; s/ː/:/g')
 
-    # プレースホルダー内の空白のみ除去
-    # {と:の間、:と}の間の空白を削除
-    output=$(LC_ALL=C echo "$output" | LC_ALL=C sed 's/{[[:space:]]*:/{:/g; s/:[[:space:]]*}/:/g')
+    # 特殊プレースホルダー{:}を:に変換（空白を考慮）
+    output=$(LC_ALL=C echo "$output" | LC_ALL=C sed 's/{[[:space:]]*:[[:space:]]*}/:/g')
     
     # 全角スペースは半角に変換
     output=$(LC_ALL=C echo "$output" | LC_ALL=C sed 's/　/ /g')
