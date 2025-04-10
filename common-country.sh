@@ -107,7 +107,7 @@ process_newlines() {
     printf "%b" "$input"
 }
 
-# 確認入力処理関数（改行対応版）
+# 確認入力処理関数（パラメータ形式対応版）
 confirm() {
     local msg_key="${1:-MSG_CONFIRM_DEFAULT}"  # デフォルトのメッセージキー
     local input_type="yn"  # デフォルトの入力タイプ
@@ -116,27 +116,39 @@ confirm() {
     
     # メッセージの取得
     if [ -n "$msg_key" ]; then
+        # 最初に基本メッセージを取得
         msg=$(get_message "$msg_key")
         
-        # パラメータの処理（複数のプレースホルダー対応）
+        # パラメータの処理
         shift
-        while [ $# -ge 2 ]; do
-            local param_name="$1"
-            local param_value="$2"
+        while [ $# -gt 0 ]; do
+            local param="$1"
             
-            if [ -n "$param_name" ] && [ -n "$param_value" ]; then
-                local safe_value=$(echo "$param_value" | sed 's/[\/&]/\\&/g')
-                msg=$(echo "$msg" | sed "s|{$param_name}|$safe_value|g")
-                debug_log "DEBUG" "Replaced placeholder {$param_name} with value: $param_value"
-            fi
+            # パラメータ形式の判定（name=value または input_type）
+            case "$param" in
+                *=*)
+                    # name=value形式のパラメータ
+                    local param_name=$(echo "$param" | cut -d'=' -f1)
+                    local param_value=$(echo "$param" | cut -d'=' -f2-)
+                    
+                    if [ -n "$param_name" ] && [ -n "$param_value" ]; then
+                        local safe_value=$(echo "$param_value" | sed 's/[\/&]/\\&/g')
+                        msg=$(echo "$msg" | sed "s|{$param_name}|$safe_value|g")
+                        debug_log "DEBUG" "Replaced placeholder {$param_name} with value: $param_value"
+                    fi
+                    ;;
+                yn|ynr)
+                    # 入力タイプとして処理
+                    input_type="$param"
+                    ;;
+                *)
+                    # その他のパラメータは無視（互換性のため）
+                    debug_log "DEBUG" "Ignoring unknown parameter: $param"
+                    ;;
+            esac
             
-            shift 2
+            shift
         done
-        
-        # 最後の引数が残っている場合、入力タイプとして処理
-        if [ $# -eq 1 ]; then
-            input_type="$1"
-        fi
     else
         debug_log "ERROR" "No message key specified for confirmation"
         return 1
@@ -144,17 +156,19 @@ confirm() {
     
     # 入力タイプに基づき適切な表示形式に置き換え
     if [ "$input_type" = "ynr" ]; then
-        msg=$(get_message "$msg_key" "ynr=(y/n/r)")
+        # (y/n/r)を表示用メッセージに追加
+        msg=$(echo "$msg" | sed 's/{ynr}/(y\/n\/r)/g')
         debug_log "DEBUG" "Running in YNR mode with message: $msg_key" 
     else
-        msg=$(get_message "$msg_key" "yn=(y/n)")
+        # (y/n)を表示用メッセージに追加
+        msg=$(echo "$msg" | sed 's/{yn}/(y\/n)/g')
         debug_log "DEBUG" "Running in YN mode with message: $msg_key"
     fi
     
     # ユーザー入力ループ
     while true; do
-        # プロンプト表示（改行対応版）
-        process_newlines "$(color white "$msg") "
+        # プロンプト表示（改行対応 - printf %bを使用）
+        printf "%b " "$(color white "$msg")"
         
         # 入力を読み取り
         if ! read -r yn; then
