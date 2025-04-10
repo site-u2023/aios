@@ -11,7 +11,7 @@ en|MSG_UNDER_TEST=👽 Under test
 en|MSG_PROVIDER_ISP_TYPE=Detecting ISP provider
 en|MSG_PROVIDER_INFO_SUCCESS=ISP provider successfully identified
 en|MSG_PROVIDER_INFO_FAILED=Failed to identify ISP provider
-en|MSG_ISP_INFO_SOURCE=Information source{:} {source}
+en|MSG_ISP_INFO_SOURCE=Information source{:} {s}
 en|MSG_ISP_TYPE=Connection type{:}
 
 # =======================
@@ -21,9 +21,9 @@ en|MSG_FETCHING_ISP_INFO=Retrieving ISP information
 en|MSG_ISP_INFO_SUCCESS=ISP information retrieved successfully
 en|MSG_ISP_INFO_FAILED=Failed to retrieve ISP informatio
 
-en|MSG_QUERY_INFO=Querying {type}{:} {api} via {network}
-en|MSG_LOCATION_RESULT=Location information retrieved {status}
-en|MSG_TIMEZONE_API=Timezone Source{:} {api}
+en|MSG_QUERY_INFO=Querying {t}{:} {a} via {n}
+en|MSG_LOCATION_RESULT=Location information retrieved {s}
+en|MSG_TIMEZONE_API=Timezone Source{:} {a}
 en|CONFIG_DOWNLOAD_SUCCESS=Downloaded{:}
 en|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{:}
 
@@ -199,12 +199,12 @@ en|MSG_CONFIRM_INSTALL_WITH_DESC=Package{:} {pkg}{newline}Description{:} {desc}{
 # system-config.sh
 # =======================
 en|MSG_INFO_NET_COUNTRY=IP location
-en|MSG_INFO_NETWORK=IP Type{:} {info}
-en|MSG_INFO_CPUCORE=CPU Core{:} {info}
-en|MSG_INFO_ARCHITECTURE=Architecture{:} {info}
-en|MSG_INFO_OSVERSION=OS Version{:} {info}
-en|MSG_INFO_PACKAGEMANAGER=Package manager{:} {info}
-en|MSG_INFO_USBDEVICE=USB device{:} {info}
+en|MSG_INFO_NETWORK=IP Type{:} {i}
+en|MSG_INFO_CPUCORE=CPU Core{:} {i}
+en|MSG_INFO_ARCHITECTURE=Architecture{:} {i}
+en|MSG_INFO_OSVERSION=OS Version{:} {i}
+en|MSG_INFO_PACKAGEMANAGER=Package manager{:} {i}
+en|MSG_INFO_USBDEVICE=USB device{:} {i}
 en|MSG_INFO_COUNTRY=Country code{:} {code}
 en|MSG_INFO_LANGUAGE=Language{:} {code}
 en|MSG_INFO_ZONENAME=Zone name{:} {code}
