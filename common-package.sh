@@ -571,14 +571,14 @@ process_package() {
         
         # 説明文があれば専用のメッセージキーを使用
         if [ -n "$description" ]; then
-            # 説明文付きの確認メッセージ
-            if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg" "$display_name" "desc" "$description"; then
+            # 説明文付きの確認メッセージ - パラメータ形式を修正
+            if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg=$display_name" "desc=$description"; then
                 debug_log "DEBUG" "User declined installation of $display_name with description"
                 return 0
             fi
         else
-            # 通常の確認メッセージ
-            if ! confirm "MSG_CONFIRM_INSTALL" "pkg" "$display_name"; then
+            # 通常の確認メッセージ - パラメータ形式を修正
+            if ! confirm "MSG_CONFIRM_INSTALL" "pkg=$display_name"; then
                 debug_log "DEBUG" "User declined installation of $display_name"
                 return 0
             fi
