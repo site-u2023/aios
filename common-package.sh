@@ -344,38 +344,44 @@ package_pre_install() {
 install_normal_package() {
     local package_name="$1"
     local force_install="$2"
+    
+    # 表示用の名前を作成（パスと拡張子を除去）
+    local display_name
+    display_name=$(basename "$package_name")
+    display_name=${display_name%.*}  # 拡張子を除去
 
     debug_log "DEBUG" "Starting installation process for: $package_name"
+    debug_log "DEBUG" "Display name for messages: $display_name"
 
-    start_spinner "$(color blue "$package_name $(get_message "MSG_INSTALLING_PACKAGE")")"
+    start_spinner "$(color blue "$display_name $(get_message "MSG_INSTALLING_PACKAGE")")"
 
     if [ "$force_install" = "yes" ]; then
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
             opkg install --force-reinstall "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "Failed to install package $package_name")"
+                stop_spinner "$(color red "Failed to install package $display_name")"
                 return 1
             }
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
             apk add --force-reinstall "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "Failed to install package $package_name")"
+                stop_spinner "$(color red "Failed to install package $display_name")"
                 return 1
             }
         fi
     else
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
             opkg install "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "Failed to install package $package_name")"
+                stop_spinner "$(color red "Failed to install package $display_name")"
                 return 1
             }
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
             apk add "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "Failed to install package $package_name")"
+                stop_spinner "$(color red "Failed to install package $display_name")"
                 return 1
             }
         fi
     fi
 
-    stop_spinner "$(color green "$package_name $(get_message "MSG_INSTALL_SUCCESS")")"
+    stop_spinner "$(color green "$display_name $(get_message "MSG_INSTALL_SUCCESS")")"
     return 0
 }
 
