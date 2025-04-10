@@ -144,10 +144,10 @@ confirm() {
     
     # 入力タイプに基づき適切な表示形式に置き換え
     if [ "$input_type" = "ynr" ]; then
-        msg=$(echo "$msg" | sed 's/{type}/(y\/n\/r)/g' | sed 's/{yn}/(y\/n)/g' | sed 's/{ynr}/(y\/n\/r)/g')
+        msg=$(get_message "$msg_key" "ynr=(y/n/r)")
         debug_log "DEBUG" "Running in YNR mode with message: $msg_key" 
     else
-        msg=$(echo "$msg" | sed 's/{type}/(y\/n)/g' | sed 's/{yn}/(y\/n)/g' | sed 's/{ynr}/(y\/n\/r)/g')
+        msg=$(get_message "$msg_key" "yn=(y/n)")
         debug_log "DEBUG" "Running in YN mode with message: $msg_key"
     fi
     
@@ -202,14 +202,16 @@ confirm() {
 # 無効な入力に対するエラーメッセージを表示する関数
 show_invalid_input_error() {
     local input_type="$1"
-    local error_msg=$(get_message "MSG_INVALID_INPUT")
+    local error_msg
+    
     if [ "$input_type" = "ynr" ]; then
-        # YNRモード用の置換
-        error_msg=$(echo "$error_msg" | sed 's/{type}/(y\/n\/r)/g')
+        # YNRモード用のプレースホルダー置換
+        error_msg=$(get_message "MSG_INVALID_INPUT" "ynr=(y/n/r)")
     else
-        # YNモード用の置換
-        error_msg=$(echo "$error_msg" | sed 's/{type}/(y\/n)/g')
+        # YNモード用のプレースホルダー置換
+        error_msg=$(get_message "MSG_INVALID_INPUT" "yn=(y/n)")
     fi
+    
     printf "%s\n" "$(color red "$error_msg")"
 }
 
@@ -287,11 +289,9 @@ select_list() {
             *)       msg_selected=$(get_message "MSG_SELECTED_ITEM") ;;
         esac
         
-        # プレースホルダー置換
-        local safe_item=$(escape_for_sed "$selected_item")
-        msg_selected=$(echo "$msg_selected" | sed "s|{item}|$safe_item|g")
-        printf "%s\n" "$(color white "$msg_selected")"
-        
+        # confirm関数内での使用
+        printf "%s\n" "$(color white "$(get_message "$message_key" "i=$selected_item")")"
+
         # 確認（YNRモードで）
         confirm "MSG_CONFIRM_SELECT" "ynr"
         local ret=$?
