@@ -506,13 +506,13 @@ parse_package_options() {
                 if [ -z "$PKG_OPTIONS_PACKAGE_NAME" ]; then
                     PKG_OPTIONS_PACKAGE_NAME="$1"
                 else
-                    debug_log "DEBUG" "Additional argument will be treated as description: $1"
-                    # 説明文がまだ設定されていなければ、2番目の引数を説明文として扱う
-                    if [ -z "$PKG_OPTIONS_DESCRIPTION" ]; then
-                        PKG_OPTIONS_DESCRIPTION="$1"
-                        debug_log "DEBUG" "Package description set from positional argument: $PKG_OPTIONS_DESCRIPTION"
+                    # 既に説明文が設定されている場合は追加の引数として処理しない
+                    if [ -n "$PKG_OPTIONS_DESCRIPTION" ]; then
+                        debug_log "DEBUG" "Ignoring unexpected additional argument: $1"
                     else
-                        debug_log "DEBUG" "Unexpected additional argument: $1"
+                        # 追加の引数を説明文として扱う（旧動作との互換性のため）
+                        debug_log "DEBUG" "Additional argument will be treated as description: $1"
+                        PKG_OPTIONS_DESCRIPTION="$1"
                     fi
                 fi
                 ;;
