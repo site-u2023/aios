@@ -158,42 +158,71 @@ update_package_list() {
     # スピナー開始
     start_spinner "$(color blue "$(get_message "MSG_RUNNING_UPDATE")")"
 
-    # PACKAGE_MANAGERの使用（既存の情報を尊重）
+    # PACKAGE_MANAGERを取得
+    if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/package_manager.ch")
+    fi
+    
+    debug_log "DEBUG" "Using package manager: $PACKAGE_MANAGER"
+
+    # パッケージリストの更新実行
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        debug_log "DEBUG" "Running opkg update and saving package list"
-        opkg update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
+        debug_log "DEBUG" "Running opkg update"
+        opkg update > "${LOG_DIR}/opkg_update.log" 2>&1
+        if [ $? -ne 0 ]; then
             stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
             debug_log "ERROR" "Failed to update package lists with opkg"
             return 1
-        }
-        opkg list > "$package_cache" 2>/dev/null || {
+        fi
+        
+        debug_log "DEBUG" "Saving package list to $package_cache"
+        opkg list > "$package_cache" 2>/dev/null
+        if [ $? -ne 0 ] || [ ! -s "$package_cache" ]; then
             stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
-            debug_log "ERROR" "Failed to save package list with opkg"
+            debug_log "ERROR" "Failed to save package list to $package_cache"
             return 1
-        }
+        fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        debug_log "DEBUG" "Running apk update and saving package list"
-        apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
+        debug_log "DEBUG" "Running apk update"
+        apk update > "${LOG_DIR}/apk_update.log" 2>&1
+        if [ $? -ne 0 ]; then
             stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
             debug_log "ERROR" "Failed to update package lists with apk"
             return 1
-        }
-        apk search > "$package_cache" 2>/dev/null || {
+        fi
+        
+        debug_log "DEBUG" "Saving package list to $package_cache"
+        apk search > "$package_cache" 2>/dev/null
+        if [ $? -ne 0 ] || [ ! -s "$package_cache" ]; then
             stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
-            debug_log "ERROR" "Failed to save package list with apk"
+            debug_log "ERROR" "Failed to save package list to $package_cache"
             return 1
-        }
+        fi
+    else
+        stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+        debug_log "ERROR" "Unknown package manager: $PACKAGE_MANAGER"
+        return 1
     fi
 
     # スピナー停止 (成功メッセージを表示)
     stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
     
     # キャッシュのタイムスタンプを更新
-    touch "$update_cache" || {
-        debug_log "ERROR" "Failed to write to cache file: $update_cache"
+    touch "$update_cache" 2>/dev/null
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "Failed to create/update cache file: $update_cache"
         # パッケージリストは更新できているのでエラー扱いはしない
         debug_log "WARN" "Cache timestamp could not be updated, next run will force update"
-    }
+    else
+        debug_log "DEBUG" "Cache timestamp updated: $update_cache"
+    fi
+    
+    # package_cacheが作成されたか確認
+    if [ -f "$package_cache" ] && [ -s "$package_cache" ]; then
+        debug_log "DEBUG" "Package list cache successfully created: $package_cache"
+    else
+        debug_log "WARN" "Package list cache not properly created: $package_cache"
+    fi
 
     return 0
 }
