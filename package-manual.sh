@@ -71,7 +71,7 @@ packages() {
     print_section_header "PKG_SECTION_SYSADMIN"
     install_package irqbalance yn hidden
     install_package luci-mod-dashboard yn hidden
-    feed_package_release lisaac luci-app-diskman yn hidden disabled desc=テスト
+    feed_package_release lisaac luci-app-diskman yn hidden disabled desc="A Simple Disk Manager for LuCI, support disk partition and format, support raid / btrfs-raid / btrfs-snapshot"
     
     # === ネットワーク管理 ===
     print_section_header "PKG_SECTION_NETWORK"
@@ -89,11 +89,11 @@ packages() {
     # === システム監視 ===
     print_section_header "PKG_SECTION_MONITORING"
     install_package htop yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden
-    feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled desc=テスト
-    feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden
+    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden desc="CPU performance information and management for LuCI"
+    feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden desc="CPU utilization info for the LuCI status page"
+    feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden desc="Temperature sensors data for the LuCI status page"
+    feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled desc="Internet-detector is an application for checking the availability of the Internet. Performs periodic connections to a known public host and determines the actual Internet"
+    feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden desc="Advanced syslog and kernel log (tail, search, etc) for LuCI"
 
     # === ネットワーク診断ツール ===
     print_section_header "PKG_SECTION_NETWORK_DIAG"
@@ -104,7 +104,7 @@ packages() {
     # === テーマおよび見た目 ===
     print_section_header "PKG_SECTION_THEME"
     install_package luci-theme-openwrt yn hidden
-    feed_package_release jerrykuku luci-theme-argon yn hidden disabled desc=テスト
+    feed_package_release jerrykuku luci-theme-argon yn hidden disabled desc="Argon is a clean and tidy OpenWrt LuCI theme that allows users to customize their login interface with images or videos. It also supports automatic and manual switching between light and dark modes."
 
     # === ユーティリティ ===
     print_section_header "PKG_SECTION_UTILITY"
