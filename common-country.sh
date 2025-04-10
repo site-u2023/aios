@@ -219,7 +219,7 @@ select_list() {
     local tmp_file="$2"
     local type="$3"
     
-    debug_log "DEBUG" "Running select_list() with type=$type"
+    debug_log "DEBUG" "Running select_list() with t=$type"
     
     # メッセージキー設定
     local prompt_msg_key=""
