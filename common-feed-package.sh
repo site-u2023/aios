@@ -192,9 +192,10 @@ feed_package() {
   eval "$BASE_WGET" -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # Continue processing even if an error occurs
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
-  debug_log "DEBUG" "Attempting to install package: $PKG_PREFIX"
+  debug_log "DEBUG" "Attempting to install package: $PKG_PREFIX with options: $opts"
 
-  eval "install_package \"$OUTPUT_FILE\" $opts" || return 0
+  # evalを使わずに直接呼び出し
+  install_package "$OUTPUT_FILE" $opts || return 0
   
   return 0
 }
@@ -289,7 +290,7 @@ feed_package_release() {
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   debug_log "DEBUG" "Attempting to install package: $PKG_PREFIX"
 
-  eval "install_package \"$OUTPUT_FILE\" $opts" || return 0
+  install_package "$OUTPUT_FILE" $opts || return 0
   
   return 0
 }
