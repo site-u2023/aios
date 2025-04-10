@@ -107,6 +107,7 @@ feed_package() {
       notpack) skip_package_db="yes"; opts="$opts notpack" ;; # notpack option
       disabled) set_disabled="yes"; opts="$opts disabled" ;; # disabled option
       hidden) hidden="yes"; opts="$opts hidden" ;; # hidden option
+      desc=*) opts="$opts $1" ;;   # 説明オプション処理を追加
       *) args="$args $1" ;;        # Store regular arguments
     esac
     shift
@@ -216,6 +217,7 @@ feed_package_release() {
       notpack) skip_package_db="yes"; opts="$opts notpack" ;;
       disabled) set_disabled="yes"; opts="$opts disabled" ;;
       hidden) hidden="yes"; opts="$opts hidden" ;;
+      desc=*) opts="$opts $1" ;;
       *) args="$args $1" ;;
     esac
     shift
