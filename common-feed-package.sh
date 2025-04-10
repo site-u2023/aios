@@ -97,6 +97,7 @@ feed_package() {
   local hidden="no"
   local opts=""   # Variable to store options
   local args=""   # Variable to store regular arguments
+  local desc_param=""  # 説明文を格納する変数
 
   # Scan arguments and separate options and regular arguments
   while [ $# -gt 0 ]; do
@@ -107,7 +108,11 @@ feed_package() {
       notpack) skip_package_db="yes"; opts="$opts notpack" ;; # notpack option
       disabled) set_disabled="yes"; opts="$opts disabled" ;; # disabled option
       hidden) hidden="yes"; opts="$opts hidden" ;; # hidden option
-      desc=*) opts="$opts $1" ;;   # 説明オプション処理を追加
+      desc=*) 
+        # 説明テキストを取得
+        desc_param="$1"
+        # optsには追加しない
+        ;;
       *) args="$args $1" ;;        # Store regular arguments
     esac
     shift
@@ -193,22 +198,12 @@ feed_package() {
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   debug_log "DEBUG" "Attempting to install package: $PKG_PREFIX with options: $opts"
-
-  # オプションに説明文があれば、それを単独のパラメータとして適切に引用符で囲む
-  if echo "$opts" | grep -q "desc="; then
-    # desc= パラメータを抽出
-    desc_param=$(echo "$opts" | grep -o "desc=[^ ]*" || echo "$opts" | grep -o "desc=.*")
-    # 他のオプション（desc= 以外）を抽出
-    other_opts=$(echo "$opts" | sed "s/$desc_param//")
-    # desc= パラメータを引用符で囲む
-    quoted_desc=$(printf "%q" "$desc_param")
   
-    debug_log "DEBUG" "Installing with description parameter: $quoted_desc"
-  
-    # 引用符で囲んだdesc=パラメータと他のオプションを組み合わせて呼び出し
-    install_package "$OUTPUT_FILE" $other_opts "$quoted_desc" || return 0
+  if [ -n "$desc_param" ]; then
+    debug_log "DEBUG" "Description parameter: $desc_param"
+    # desc_paramをシングルクォートで囲んで渡す
+    install_package "$OUTPUT_FILE" $opts '$desc_param' || return 0
   else
-    # 通常通り呼び出し
     install_package "$OUTPUT_FILE" $opts || return 0
   fi
   
@@ -224,6 +219,7 @@ feed_package_release() {
   local hidden="no"
   local opts=""
   local args=""
+  local desc_param=""  # 説明文を格納する変数
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -233,7 +229,11 @@ feed_package_release() {
       notpack) skip_package_db="yes"; opts="$opts notpack" ;;
       disabled) set_disabled="yes"; opts="$opts disabled" ;;
       hidden) hidden="yes"; opts="$opts hidden" ;;
-      desc=*) opts="$opts $1" ;;
+      desc=*) 
+        # 説明テキストを取得
+        desc_param="$1"
+        # optsには追加しない
+        ;;
       *) args="$args $1" ;;
     esac
     shift
@@ -300,12 +300,18 @@ feed_package_release() {
   debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
   debug_log "DEBUG" "DOWNLOAD URL: $DOWNLOAD_URL"
 
-  eval "$BASE_WGET" -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # Continue processing even if an error occurs
+  eval "$BASE_WGET" -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   debug_log "DEBUG" "Attempting to install package: $PKG_PREFIX"
 
-  install_package "$OUTPUT_FILE" $opts || return 0
+  if [ -n "$desc_param" ]; then
+    debug_log "DEBUG" "Description parameter: $desc_param"
+    # desc_paramをシングルクォートで囲んで渡す
+    install_package "$OUTPUT_FILE" $opts '$desc_param' || return 0
+  else
+    install_package "$OUTPUT_FILE" $opts || return 0
+  fi
   
   return 0
 }
