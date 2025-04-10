@@ -354,6 +354,9 @@ normalize_message() {
     # 特殊プレースホルダー{:}を:に変換（空白を考慮）
     output=$(LC_ALL=C echo "$output" | LC_ALL=C sed 's/{[[:space:]]*:[[:space:]]*}/:/g')
 
+    # 特殊プレースホルダー{\}を改行に変換（空白を考慮）
+    output=$(LC_ALL=C echo "$output" | LC_ALL=C sed 's/{[[:space:]]*\\[[:space:]]*}/\n/g')
+
     # 新規: 特殊プレースホルダー{;}を末尾位置の:に変換（空白を考慮）- 文字列末尾に移動
     if echo "$output" | LC_ALL=C grep -q '{[[:space:]]*;[[:space:]]*}'; then
         # 末尾の空白を一時的に削除
