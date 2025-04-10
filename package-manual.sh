@@ -89,11 +89,11 @@ packages() {
     # === システム監視 ===
     print_section_header "PKG_SECTION_MONITORING"
     install_package htop yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden desc=テスト
-    feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden desc=テスト
-    feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden desc=テスト
+    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
+    feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden
+    feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden
     feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled desc=テスト
-    feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden desc=テスト
+    feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden
 
     # === ネットワーク診断ツール ===
     print_section_header "PKG_SECTION_NETWORK_DIAG"
