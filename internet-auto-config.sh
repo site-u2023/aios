@@ -714,7 +714,7 @@ display_isp_info() {
     local display_name=""
    
     # 情報ソースを表示
-    printf "%s\n" "$(color white "$(get_message "MSG_ISP_INFO_SOURCE" "source=IPアドレス検出")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_ISP_INFO_SOURCE" "s=IPアドレス検出")")"
     
     debug_log "DEBUG" "Mapping provider ID to display name: $provider"
     
