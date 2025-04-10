@@ -30,10 +30,10 @@ en|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{:}
 # =======================
 # common-translation.sh
 # =======================
-en|MSG_TRANSLATION_SOURCE_ORIGINAL=Original Language file{:} {info}
-en|MSG_TRANSLATION_SOURCE_CURRENT=Translated Language file{:} {info}
-en|MSG_LANGUAGE_SOURCE=Original language code{:} {info}
-en|MSG_LANGUAGE_CODE=Translation language code{:} {info}
+en|MSG_TRANSLATION_SOURCE_ORIGINAL=Original Language file{:} {i}
+en|MSG_TRANSLATION_SOURCE_CURRENT=Translated Language file{:} {i}
+en|MSG_LANGUAGE_SOURCE=Original language code{:} {i}
+en|MSG_LANGUAGE_CODE=Translation language code{:} {i}
 en|MSG_TRANSLATION_SUCCESS=Translation completed
 
 # =======================
