@@ -342,11 +342,7 @@ install_usb_packages() {
 }
 
 # メイン処理
-package_manual_main() {
-    print_information
-    
-    # この関数はすでにダウンロード・確認後に呼ばれるため、
-    # この時点での確認は必要ない
+package_manual_main() {    
     
     # OSバージョンに基づいたパッケージインストール
     install_packages_by_version
