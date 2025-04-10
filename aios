@@ -356,8 +356,14 @@ normalize_message() {
     # コロン : のノーマライズ
     output=$(echo "$output" | sed 's/：/:/g; s/∶/:/g; s/꞉/:/g; s/ː/:/g')
     
+    # セミコロン ; のノーマライズ
+    output=$(echo "$output" | sed 's/；/;/g')
+    
     # 全角スペースは半角に変換（先に行う）
     output=$(echo "$output" | sed 's/　/ /g')
+    
+    # 全角アットマーク＠を半角@に変換
+    output=$(echo "$output" | sed 's/＠/@/g')
     
     # バックスラッシュのノーマライズ（全角→半角）
     output=$(echo "$output" | sed 's/＼/\\/g')
@@ -370,8 +376,8 @@ normalize_message() {
         output=$(echo "$output" | sed 's/\({[^{}]*\)[[:space:]]\([^{}]*}\)/\1\2/g')
     done
     
-    # 特殊プレースホルダー{\}を改行に変換
-    output=$(echo "$output" | sed 's/{\\}/\\n/g')
+    # 特殊プレースホルダー{@}を改行に変換
+    output=$(echo "$output" | sed 's/{@}/\\n/g')
     
     # 特殊プレースホルダー{:}を:に変換
     output=$(echo "$output" | sed 's/{:}/:/g')
