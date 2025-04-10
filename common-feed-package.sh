@@ -194,8 +194,23 @@ feed_package() {
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   debug_log "DEBUG" "Attempting to install package: $PKG_PREFIX with options: $opts"
 
-  # evalを使わずに直接呼び出し
-  install_package "$OUTPUT_FILE" $opts || return 0
+  # オプションに説明文があれば、それを単独のパラメータとして適切に引用符で囲む
+  if echo "$opts" | grep -q "desc="; then
+    # desc= パラメータを抽出
+    desc_param=$(echo "$opts" | grep -o "desc=[^ ]*" || echo "$opts" | grep -o "desc=.*")
+    # 他のオプション（desc= 以外）を抽出
+    other_opts=$(echo "$opts" | sed "s/$desc_param//")
+    # desc= パラメータを引用符で囲む
+    quoted_desc=$(printf "%q" "$desc_param")
+  
+    debug_log "DEBUG" "Installing with description parameter: $quoted_desc"
+  
+    # 引用符で囲んだdesc=パラメータと他のオプションを組み合わせて呼び出し
+    install_package "$OUTPUT_FILE" $other_opts "$quoted_desc" || return 0
+  else
+    # 通常通り呼び出し
+    install_package "$OUTPUT_FILE" $opts || return 0
+  fi
   
   return 0
 }
