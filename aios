@@ -1805,7 +1805,7 @@ print_banner_unicode() {
     debug_log "DEBUG" "Block style lowercase aios banner displayed successfully"
 }
 
-display_detected_device() {
+print_information() {
     local cpucore=$(cat "${CACHE_DIR}/cpu_core.ch")
     local network=$(cat "${CACHE_DIR}/network.ch")
     local architecture=$(cat "${CACHE_DIR}/architecture.ch")
@@ -2006,7 +2006,7 @@ check_common() {
             download "local-package.db" "hidden"
             download "custom-package.db" "hidden"
             print_banner
-            display_detected_device
+            print_information
             select_country "$lang_code"
             update_package_list
             selector "$MAIN_MENU" 
@@ -2026,7 +2026,7 @@ check_common() {
             download "local-package.db"
             download "custom-package.db"
             print_banner
-            display_detected_device
+            print_information
             select_country "$lang_code"
             update_package_list
             selector "$MAIN_MENU"
