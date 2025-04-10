@@ -1,0 +1,266 @@
+SCRIPT_VERSION="2025-03-31-00-00"
+
+# =======================
+# デバッグテスト
+# =======================
+en|MSG_UNDER_TEST=👽 Under test
+
+# =======================
+# internet-auto-config.sh
+# =======================
+en|MSG_PROVIDER_ISP_TYPE=Detecting ISP provider
+en|MSG_PROVIDER_INFO_SUCCESS=ISP provider successfully identified
+en|MSG_PROVIDER_INFO_FAILED=Failed to identify ISP provider
+en|MSG_ISP_INFO_SOURCE=Information source{notr_colon_notr} {notr_source_notr}
+en|MSG_ISP_TYPE=Connection type{notr_colon_notr}
+
+# =======================
+# common-information.sh
+# =======================
+en|MSG_FETCHING_ISP_INFO=Retrieving ISP information
+en|MSG_ISP_INFO_SUCCESS=ISP information retrieved successfully
+en|MSG_ISP_INFO_FAILED=Failed to retrieve ISP informatio
+
+en|MSG_QUERY_INFO=Querying {notr_type_notr}{notr_colon_notr} {notr_api_notr} via {notr_network_notr}
+en|MSG_LOCATION_RESULT=Location information retrieved {notr_status_notr}
+en|MSG_TIMEZONE_API=Timezone Source{notr_colon_notr} {notr_api_notr}
+en|CONFIG_DOWNLOAD_SUCCESS=Downloaded{notr_colon_notr}
+en|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{notr_colon_notr}
+
+# =======================
+# common-translation.sh
+# =======================
+en|MSG_TRANSLATION_SOURCE_ORIGINAL=Original Language file{notr_colon_notr} {notr_info_notr}
+en|MSG_TRANSLATION_SOURCE_CURRENT=Translated Language file{notr_colon_notr} {notr_info_notr}
+en|MSG_LANGUAGE_SOURCE=Original language code{notr_colon_notr} {notr_info_notr}
+en|MSG_LANGUAGE_CODE=Translation language code{notr_colon_notr} {notr_info_notr}
+en|MSG_TRANSLATION_SUCCESS=Translation completed
+
+# =======================
+# package_auto.sh
+# =======================
+en|MENU_PACKAGE_STANDARD=Standard Installation (Recommended)
+en|MENU_PACKAGE_MINIMAL=Minimal Installation (Essential Only)
+en|MENU_PACKAGE_FULL=Full Installation (All Features)
+en|MSG_PACKAGE_AUTO_SELECT=Select installation type{notr_colon_notr}
+en|MSG_PACKAGE_STANDARD=Standard Installation (Recommended)
+en|MSG_PACKAGE_MINIMAL=Minimal Installation (Essential Only)
+en|MSG_PACKAGE_FULL=Full Installation (All Features)
+en|MSG_PACKAGE_SKIP=Skip Installation
+en|MSG_PACKAGE_AUTO_SKIPPED=Package installation was skipped
+en|MSG_INSTALLING_PACKAGES=Installing packages...
+en|MSG_INSTALL_COMPLETED=Package installation completed successfully
+
+# =======================
+# package-manual.sh
+# =======================
+en|MSG_CONFIRM_INSTALL_PACKAGES=Do you want to install this package? {notr_yn_notr}{notr_colon_notr}
+en|PKG_SECTION_BASIC=Basic System Functions
+en|PKG_SECTION_SYSADMIN=System Administration
+en|PKG_SECTION_NETWORK=Network Management
+en|PKG_SECTION_SECURITY=Security Tools
+en|PKG_SECTION_MONITORING=System Monitoring
+en|PKG_SECTION_NETWORK_DIAG=Network Diagnostics
+en|PKG_SECTION_THEME=Themes
+en|PKG_SECTION_UTILITY=Utility Tools
+en|PKG_SECTION_ADDITION=Additional Features
+en|PKG_SECTION_USB=USB Storage
+en|PKG_SECTION_SAMBA=File Sharing
+
+# =======================
+# common-system.sh
+# =======================
+en|MSG_USE_DETECTED_ISP_INFORMATION=ISP Sources{notr_colon_notr} {notr_info_notr}
+en|MSG_DETECTED_ISP=ISP Provider{notr_colon_notr}
+en|MSG_ISP_AS=Autonomous System Number{notr_colon_notr}
+en|MSG_ISP_ORG=Organization{notr_colon_notr}
+en|MSG_ISP_SUCCESS=ISP information detection completed successfully
+
+# =======================
+# common-menu.sh
+# =======================
+en|MENU_PACKAGES_AUTO_INSTALL=Automatic installation of packages
+en|MENU_PACKAGES_MANUAL_INSTALL=Manual installation of packages
+en|MENU_PACKAGES_SAMBA=Install SAMBA4 file sharing
+en|MENU_PACKAGES_LIST=View installed packages
+en|MSG_ACTION_CANCELLED=Operation cancelled
+en|CONFIG_LOADING_COMPLETE=Loading completed
+en|CONFIG_COMMAND_SUCCESS=Process completed successfully
+en|CONFIG_COMMAND_FAILED=Process failed
+en|MAIN_MENU_NAME=Main menu
+en|MENU_INTERNET=Internet settings (Japan only)
+en|MENU_SYSTEM=System settings
+en|MENU_PACKAGES=Package management
+en|MENU_ADBLOCKER=Ad Blocker and DNS Encryption
+en|MENU_ACCESSPOINT=Access point settings
+en|MENU_OTHERS=Other utilities (Button settings, IPERF3, SAMBA4)
+en|MENU_EXIT=Close Script
+en|MENU_REMOVE=Exit and remove script
+en|MENU_BACK=Back
+en|MENU_V&MIG=IPv6 Migration Standard Provisioning
+en|CONFIG_MAIN_SELECT_PROMPT=Please select a number (1-{notr_0_notr}, 10, 00){notr_colon_notr} 
+en|CONFIG_SUB_SELECT_PROMPT=Please select a number (1-{notr_0_notr}, 0, 10){notr_colon_notr} 
+en|CONFIG_ERROR_NOT_NUMBER=Please enter a valid number
+en|CONFIG_CONFIRM_DELETE=Do you want to delete this script and related directories? {notr_yn_notr}{notr_colon_notr}
+en|CONFIG_DELETE_CONFIRMED=Script and related directories have been deleted. Goodbye!
+en|CONFIG_DELETE_CANCELED=Deletion canceled. Returning to menu
+en|CONFIG_EXIT_CONFIRMED=Script closed. Goodbye!
+en|CONFIG_RETURN_TO_MAIN=Returning to main menu
+en|CONFIG_DOWNLOADING=Executing{notr_colon_notr} {notr_0_notr}
+en|CONFIG_DOWNLOAD_FAILED=Failed to download{notr_colon_notr} {notr_0_notr}
+
+# =======================
+# aios
+# =======================
+en|MSG_INFO_DEVICE=Device information retrieved successfully
+en|MSG_HELP_USAGE=Usage{notr_colon_notr} aios [OPTIONS] [LANGUAGE]
+en|MSG_HELP_OPTIONS_HEADER=Options{notr_colon_notr}
+en|MSG_HELP_HELP=Show this help message
+en|MSG_HELP_VERSION=Show script version
+en|MSG_HELP_RESET=Reset all cached data
+en|MSG_HELP_DEBUG=Enable debug mode
+en|MSG_HELP_UPDATE=Update aios script
+en|MSG_HELP_FORCE=Force operations without confirmation
+en|MSG_HELP_TOKEN=Setup GitHub API token
+en|MSG_HELP_FULL=Run in full mode
+en|MSG_HELP_LIGHT=Run in light mode
+en|MSG_HELP_COMMON_DEBUG=Run in debug mode
+en|MSG_HELP_DRY_RUN=Show planned actions without executing them
+en|MSG_HELP_LANGUAGE_HEADER=Language{notr_colon_notr}
+en|MSG_HELP_LANGUAGE=Set user interface language
+en|MSG_HELP_EXAMPLES_HEADER=Examples{notr_colon_notr}
+en|MSG_HELP_EXAMPLE1=sh aios full ja       # Run in full mode with Japanese language
+en|MSG_HELP_EXAMPLE2=sh aios -u            # Update the script to latest version
+en|MSG_HELP_EXAMPLE3=sh aios -r            # Reset all cached data
+en|MSG_HELP_EXAMPLE4=sh aios -d -cf        # Run in full mode with debug output
+en|MSG_HELP_DEBUG_HEADER=Debug levels{notr_colon_notr}
+en|MSG_HELP_DEBUG_STANDARD=-d, --debug           # Standard debug info
+en|MSG_HELP_DEBUG_VERBOSE=-d2, --debug2         # Verbose debug info
+en|MSG_BANNER_DECCRIPTION=Dedicated configuration software for OpenWRT
+en|MSG_BANNER_NAME=All-in-One Scripts
+en|MSG_BANNER_DISCLAIMER=Warning{notr_colon_notr} This script is used at your own risk
+en|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared
+en|MSG_DELETE_COMPLETE=Delete completed. All base data has been cleared
+en|MSG_DOWNLOAD_FAILED=Download failed{notr_colon_notr} {notr_file_notr}
+en|MSG_DOWNLOAD_SUCCESS=Download successful{notr_colon_notr} {notr_file_notr}
+en|MSG_ERROR_OCCURRED=An error has occurred
+en|MSG_CACHE_DISABLED=Cache disabled: Using direct GitHub API requests
+en|MSG_CACHE_ENABLED=Cache enabled: Using cached version information when available
+
+# =======================
+# common-country.sh
+# =======================
+en|MSG_CONFIRM_USE_SETTINGS=Do you want to use these location and timezone settings?
+
+en|MSG_CONFIRM_DEFAULT=Confirm {notr_type_notr}{notr_colon_notr}
+en|MSG_CONFIRM_SELECT=Confirm this selection {notr_type_notr}{notr_colon_notr}
+en|MSG_SINGLE_MATCH_FOUND=Found single match{notr_colon_notr} {notr_0_notr}
+
+en|MSG_INVALID_INPUT=Invalid input. Please enter {notr_type_notr}
+en|MSG_ENTER_COUNTRY=Enter country name, code, or language to search
+en|MSG_SEARCH_KEYWORD=Search (Keyword/Code){notr_colon_notr}
+en|MSG_COUNTRY_NOT_FOUND=No matching country found for '{notr_0_notr}'. Please try again
+en|MSG_COUNTRY_SUCCESS=Country and language selection completed successfully
+en|MSG_USE_DETECTED_SETTINGS=Do you want to use these settings?
+en|MSG_USE_DETECTED_INFORMATION=Country Sources{notr_colon_notr} {notr_info_notr}
+en|MSG_DETECTED_COUNTRY=Country code{notr_colon_notr}
+en|MSG_DETECTED_TIMEZONE=Time zone{notr_colon_notr}
+en|MSG_DETECTED_ZONENAME=Zone name{notr_colon_notr}
+en|MSG_CONFIRM_ONLY_YN=Confirm {notr_yn_notr}{notr_colon_notr}
+en|MSG_TIMEZONE_SUCCESS=Zone selection completed successfully
+en|MSG_INVALID_COUNTRY_NUMBER=Invalid country number. Please try again
+en|MSG_INVALID_ZONE_NUMBER=Invalid zone number. Please try again
+en|MSG_SELECT_COUNTRY_NUMBER=Please select country (Number){notr_colon_notr}
+en|MSG_SELECT_ZONE_NUMBER=Please select zone (number){notr_colon_notr}
+en|MSG_SELECT_NUMBER=Select Number{notr_colon_notr}
+en|MSG_NUMBER_OUT_OF_RANGE=Number out of range. Please select a valid option
+en|MSG_SELECTED_COUNTRY=Selected country{notr_colon_notr} {notr_item_notr}
+en|MSG_SELECTED_ZONE=Selected zone{notr_colon_notr} {notr_item_notr}
+en|MSG_SELECTED_ITEM=Selected{notr_colon_notr} {notr_item_notr}
+en|MSG_SELECT_TIMEZONE=Please select your zone from the list
+en|ERR_FILE_NOT_FOUND=Error{notr_colon_notr} File not found{notr_colon_notr} {notr_file_notr}
+
+# =======================
+# common-package.sh
+# =======================
+en|MSG_RUNNING_UPDATE=Updating package list
+en|MSG_UPDATE_FAILED=Update failed. Check the logs for details
+en|MSG_UPDATE_SUCCESS=Package list has been updated to the latest version
+en|MSG_ERROR_UPDATE_FAILED=Failed to update package list
+en|MSG_ERROR_WRITE_CACHE=Error{notr_colon_notr} Failed to write to cache file
+en|MSG_INSTALLING_PACKAGE=Installing package 
+en|MSG_INSTALL_SUCCESS=Installation completed successfully
+en|MSG_UNKNOWN_OPTION=Unknown option{notr_colon_notr} {notr_option_notr}
+en|MSG_ERROR_NO_PACKAGE_MANAGER=No package manager found in cache
+en|MSG_CONFIRM_INSTALL=Package{notr_colon_notr} {notr_pkg_notr}{notr_newline_notr}Install this package? {notr_yn_notr}{notr_colon_notr}
+en|MSG_CONFIRM_INSTALL_WITH_DESC=Package{notr_colon_notr} {notr_pkg_notr}{notr_newline_notr}Description{notr_colon_notr} {notr_desc_notr}{notr_newline_notr}Install this package? {notr_yn_notr}{notr_colon_notr}
+
+# =======================
+# system-config.sh
+# =======================
+en|MSG_INFO_NET_COUNTRY=IP location
+en|MSG_INFO_NETWORK=IP Type{notr_colon_notr} {notr_info_notr}
+en|MSG_INFO_CPUCORE=CPU Core{notr_colon_notr} {notr_info_notr}
+en|MSG_INFO_ARCHITECTURE=Architecture{notr_colon_notr} {notr_info_notr}
+en|MSG_INFO_OSVERSION=OS Version{notr_colon_notr} {notr_info_notr}
+en|MSG_INFO_PACKAGEMANAGER=Package manager{notr_colon_notr} {notr_info_notr}
+en|MSG_INFO_USBDEVICE=USB device{notr_colon_notr} {notr_info_notr}
+en|MSG_INFO_COUNTRY=Country code{notr_colon_notr} {notr_code_notr}
+en|MSG_INFO_LANGUAGE=Language{notr_colon_notr} {notr_code_notr}
+en|MSG_INFO_ZONENAME=Zone name{notr_colon_notr} {notr_code_notr}
+en|MSG_INFO_TIMEZONE=Timezone{notr_colon_notr} {notr_code_notr}
+en|MSG_ENTER_DEVICE_NAME=Enter the new device name{notr_colon_notr}
+en|MSG_ERROR_EMPTY_INPUT=Input cannot be empty
+en|MSG_ENTER_NEW_PASSWORD=Enter the new password{notr_colon_notr}
+en|MSG_ERROR_PASSWORD_LENGTH=Password must be at least 8 characters long
+en|MSG_CONFIRM_SETTINGS_PREVIEW=Please confirm the following settings{notr_colon_notr}
+en|MSG_PREVIEW_DEVICE_NAME=Device Name{notr_colon_notr} {notr_name_notr}
+en|MSG_PREVIEW_PASSWORD=Password{notr_colon_notr} {notr_password_notr}
+en|MSG_CONFIRM_DEVICE_SETTINGS=Are these settings correct? {notr_yn_notr}{notr_colon_notr}
+en|MSG_UPDATE_CANCELLED=Operation has been canceled
+en|MSG_UPDATE_FAILED_PASSWORD=Failed to update password
+en|MSG_UPDATE_FAILED_DEVICE=Failed to update device name
+en|MSG_UPDATE_FAILED_COMMIT=Failed to commit changes
+en|MSG_SYSTEM_UPDATE_SUCCESS=Password and device name have been successfully updated
+en|MSG_ERROR_NO_COUNTRY_CODE=Error{notr_colon_notr} Country code not found
+en|MSG_NO_WIFI_DEVICES=No Wi-Fi devices found. Exiting
+en|MSG_COMMIT_FAILED_WIFI=Failed to commit wireless settings
+en|MSG_WIFI_SETTINGS_UPDATED=Device {notr_device_notr} settings have been updated
+en|MSG_WIFI_DEVICE_BAND=Device {notr_device_notr} (Band{notr_colon_notr} {notr_band_notr})
+en|MSG_ENABLE_BAND=Enable band {notr_band_notr} on device {notr_device_notr}? {notr_yn_notr}{notr_colon_notr}
+en|MSG_ENTER_SSID=Enter SSID{notr_colon_notr}
+en|MSG_ERROR_EMPTY_SSID=SSID cannot be empty
+en|MSG_ENTER_WIFI_PASSWORD=Enter password (8 or more characters){notr_colon_notr}
+en|MSG_PASSWORD_TOO_SHORT=Password is too short. Please enter at least 8 characters
+en|MSG_WIFI_CONFIG_PREVIEW=WiFi Configuration Preview{notr_colon_notr}
+en|MSG_WIFI_BAND_INFO=Band Type{notr_colon_notr} {notr_band_notr}
+en|MSG_WIFI_HTMODE_INFO=Channel Width Mode{notr_colon_notr} {notr_mode_notr}
+en|MSG_CONFIRM_WIFI_SETTINGS=Configuration{notr_colon_notr} SSID = {notr_ssid_notr}, Password = {notr_password_notr}. Is this correct? {notr_yn_notr}{notr_colon_notr}
+en|MSG_REENTER_INFO=Please re-enter the information
+en|MSG_INVALID_YN=Invalid input. Please enter 'y' or 'n'
+en|MSG_PRESS_KEY_REBOOT=Press any key to reboot the device
+en|MSG_APPLYING_ZONENAME=Applying zone name settings{notr_colon_notr} {notr_zone_notr}
+en|MSG_APPLYING_TIMEZONE=Applying timezone settings{notr_colon_notr} {notr_timezone_notr}
+en|MSG_API_DATA_FAILED=Failed to fetch data from API
+en|MSG_PREFIX_NOT_FOUND=Package prefix {notr_prefix_notr} not found
+en|MSG_PACKAGE_INFO_FAILED=Failed to get package information
+en|MSG_RELEASE_API_FAILED=Failed to fetch release data from API
+en|MSG_NO_RELEASE_FOUND=No releases found for {notr_repo_notr}
+en|MSG_DOWNLOADING_ASSET=Downloading asset{notr_colon_notr} {notr_asset_notr}
+en|MSG_DOWNLOAD_ASSET_FAILED=Failed to download asset{notr_colon_notr} {notr_asset_notr}
+en|MSG_ARCH_DETECTED=Detected architecture{notr_colon_notr} {notr_arch_notr}
+en|MSG_OS_DETECTED=Detected operating system{notr_colon_notr} {notr_os_notr}
+en|MSG_PKG_MANAGER_DETECTED=Detected package manager{notr_colon_notr} {notr_manager_notr}
+en|MSG_PKG_MANAGER_NOT_FOUND=No supported package manager found
+en|MSG_NO_LANGUAGE_PACKAGES=No language packages found
+en|MSG_LANG_PACKAGES_FOUND=Found {notr_count_notr} language packages
+en|MSG_TIMEZONE_DETECTED=Detected timezone{notr_colon_notr} {notr_timezone_notr}
+en|MSG_TIMEZONE_NOT_DETECTED=Could not detect timezone
+en|MSG_TIMEZONE_SET_SUCCESS=Timezone successfully set to {notr_timezone_notr}
+en|MSG_TIMEZONE_SET_FAILED=Failed to set timezone to {notr_timezone_notr}
+en|MSG_LANGUAGE_SET_SUCCESS=System language successfully set to {notr_language_notr}
+en|MSG_LANGUAGE_SET_FAILED=Failed to set system language to {notr_language_notr}
+en|MSG_GENERATING_REPORT=Generating system report...
+en|MSG_REPORT_GENERATED=System report generated{notr_colon_notr} {notr_file_notr}
+en|MSG_DEBUG_INFO_HEADER=System Debug Information
+en|MSG_DEBUG_INFO_FOOTER=End of Debug Information
