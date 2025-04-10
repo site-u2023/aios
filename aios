@@ -2011,7 +2011,7 @@ check_common() {
             print_banner
             print_information
             select_country "$lang_code"
-            update_package_list
+            install_package update
             selector "$MAIN_MENU" 
             ;;
         full)
@@ -2031,7 +2031,7 @@ check_common() {
             print_banner
             print_information
             select_country "$lang_code"
-            update_package_list
+            install_package update
             selector "$MAIN_MENU"
             ;;
         update)
