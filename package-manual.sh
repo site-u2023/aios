@@ -89,7 +89,7 @@ packages() {
     # === システム監視 ===
     print_section_header "PKG_SECTION_MONITORING"
     install_package htop yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden desc="CPU" #performance information and management for LuCI"
+    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden #desc="CPU performance information and management for LuCI"
     feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden desc="CPU" #utilization info for the LuCI status page"
     feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden desc="Temperature sensors data for the LuCI status page"
     feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled desc="Internet-detector is an application for checking the availability of the Internet. Performs periodic connections to a known public host and determines the actual Internet"
