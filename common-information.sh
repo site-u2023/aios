@@ -127,7 +127,7 @@ get_country_ipapi() {
     local success=0
     
     # スピナー更新メッセージ
-    local country_msg=$(get_message "MSG_QUERY_INFO" "type=country+timezone" "api=ip-api.com" "network=$network_type")
+    local country_msg=$(get_message "MSG_QUERY_INFO" "t=country+timezone" "api=ip-api.com" "n=$network_type")
     update_spinner "$(color "blue" "$country_msg")" "yellow"
     
     debug_log "DEBUG" "Querying country and timezone from ip-api.com"
@@ -184,7 +184,7 @@ get_country_ipinfo() {
     local success=0
     
     # スピナー更新メッセージ
-    local country_msg=$(get_message "MSG_QUERY_INFO" "type=country+timezone" "api=ipinfo.io" "network=$network_type")
+    local country_msg=$(get_message "MSG_QUERY_INFO" "t=country+timezone" "a=ipinfo.io" "n=$network_type")
     update_spinner "$(color "blue" "$country_msg")" "yellow"
     
     debug_log "DEBUG" "Querying country and timezone from ipinfo.io"
@@ -301,7 +301,7 @@ get_country_code() {
     fi
     
     # スピナー開始
-    local init_msg=$(get_message "MSG_QUERY_INFO" "type=location information" "api=$timezone_api" "network=$network_type")
+    local init_msg=$(get_message "MSG_QUERY_INFO" "t=location information" "a=$timezone_api" "n=$network_type")
     start_spinner "$(color "blue" "$init_msg")" "yellow"
     spinner_active=1
     debug_log "DEBUG" "Starting location detection process"
@@ -390,12 +390,12 @@ get_country_code() {
     # 結果のチェックとスピナー停止
     if [ $spinner_active -eq 1 ]; then
         if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ] && [ -n "$SELECT_TIMEZONE" ]; then
-            local success_msg=$(get_message "MSG_LOCATION_RESULT" "status=successfully")
+            local success_msg=$(get_message "MSG_LOCATION_RESULT" "s=successfully")
             stop_spinner "$success_msg" "success"
             debug_log "DEBUG" "Location information retrieved successfully"
             return 0
         else
-            local fail_msg=$(get_message "MSG_LOCATION_RESULT" "status=failed")
+            local fail_msg=$(get_message "MSG_LOCATION_RESULT" "s=failed")
             stop_spinner "$fail_msg" "failed"
             debug_log "DEBUG" "Location information process failed - incomplete data received"
             return 1
