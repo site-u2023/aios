@@ -1817,12 +1817,12 @@ display_detected_device() {
     if [ ! -f "${CACHE_DIR}/message.ch" ]; then
         printf "%s\n" "$(color green "$(get_message "MSG_INFO_DEVICE")")"
     fi
-    printf "%s\n" "$(color white "$(get_message "MSG_INFO_NETWORK" "info=$network")")"
-    printf "%s\n" "$(color white "$(get_message "MSG_INFO_CPUCORE" "info=$cpucore")")"
-    printf "%s\n" "$(color white "$(get_message "MSG_INFO_ARCHITECTURE" "info=$architecture")")"
-    printf "%s\n" "$(color white "$(get_message "MSG_INFO_OSVERSION" "info=$osversion")")"
-    printf "%s\n" "$(color white "$(get_message "MSG_INFO_PACKAGEMANAGER" "info=$package_manager")")"
-    printf "%s\n" "$(color white "$(get_message "MSG_INFO_USBDEVICE" "info=$usbdevice")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_NETWORK" "i=$network")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_CPUCORE" "i=$cpucore")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_ARCHITECTURE" "i=$architecture")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_OSVERSION" "i=$osversion")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_PACKAGEMANAGER" "i=$package_manager")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_USBDEVICE" "i=$usbdevice")")"
     printf "\n"
 }
 
