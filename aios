@@ -1423,7 +1423,7 @@ download() {
     local file_name="$1"
     shift
 
-    debug_log "DEBUG" "Download function called for file='${file_name}'"
+    debug_log "DEBUG" "Download function called for f='${file_name}'"
     
     # 空ファイル名のチェック
     if [ -z "$file_name" ]; then
@@ -1530,7 +1530,7 @@ download() {
         return 1
     fi
 
-    debug_log "DEBUG" "Calling download_finalize with file=${file_name}, status=${status_type}, interpreter=${interpreter_name}"
+    debug_log "DEBUG" "Calling download_finalize with f=${file_name}, status=${status_type}, interpreter=${interpreter_name}"
 
     # 結果表示とファイル読み込み
     download_finalize "$file_name" "$status_message" "$clean_remote_version" "$api_status" "$load_mode" "$hidden_mode" "$status_type" "$interpreter_name"
