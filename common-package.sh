@@ -206,7 +206,7 @@ local_package_db() {
 
     # `local-package.db` から `$package_name` に該当するセクションを抽出
     extract_commands() {
-        awk -v pkg="$package_name" '
+        awk -v p="$package_name" '
             $0 ~ "^\\[" pkg "\\]" {flag=1; next}
             $0 ~ "^\\[" {flag=0}
             flag && $0 !~ "^#" {print}
