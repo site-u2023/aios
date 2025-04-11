@@ -58,6 +58,7 @@ PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
 # API設定
 API_TIMEOUT="${API_TIMEOUT:-5}"
 API_MAX_RETRIES="${API_MAX_RETRIES:-3}"
+API_MAX_REDIRECTS="${API_MAX_REDIRECTS:-2}"
 TIMEZONE_API_SOURCE=""
 
 # 検出した地域情報を表示する共通関数
@@ -119,6 +120,9 @@ get_country_ipapi() {
     local network_type="$2"  # ネットワークタイプ
     local api_name="$3"      # API名（ログ用）
     
+    # ローカルでwgetコマンドを設定（リダイレクト対応）
+    local wget_cmd="wget --no-check-certificate -q -L --max-redirect=${API_MAX_REDIRECTS:-2}"
+    
     local retry_count=0
     local success=0
     
@@ -129,9 +133,8 @@ get_country_ipapi() {
     debug_log "DEBUG" "Querying country and timezone from ip-api.com"
     
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        # 引数なしで呼び出し - 自動的に現在のデバイスの情報を取得
-        # リダイレクト対応とHTTPS対応のためのオプションを追加
-        wget --no-check-certificate -q -L --max-redirect=2 -O "$tmp_file" "$api_name" -T $API_TIMEOUT 2>/dev/null
+        # リダイレクト対応のwgetコマンドを使用
+        $wget_cmd -O "$tmp_file" "$api_name" -T $API_TIMEOUT 2>/dev/null
         local wget_status=$?
         debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
@@ -179,6 +182,9 @@ get_country_ipinfo() {
     local network_type="$2"  # ネットワークタイプ
     local api_name="$3"      # API名（ログ用）
     
+    # ローカルでwgetコマンドを設定（リダイレクト対応）
+    local wget_cmd="wget --no-check-certificate -q -L --max-redirect=${API_MAX_REDIRECTS:-2}"
+    
     local retry_count=0
     local success=0
     
@@ -189,9 +195,8 @@ get_country_ipinfo() {
     debug_log "DEBUG" "Querying country and timezone from ipinfo.io"
     
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        # 引数なしで呼び出し - 自動的に現在のデバイスの情報を取得
-        # リダイレクト対応とHTTPS対応のためのオプションを追加
-        wget --no-check-certificate -q -L --max-redirect=2 -O "$tmp_file" "$api_name" -T $API_TIMEOUT 2>/dev/null
+        # リダイレクト対応のwgetコマンドを使用
+        $wget_cmd -O "$tmp_file" "$api_name" -T $API_TIMEOUT 2>/dev/null
         local wget_status=$?
         debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
