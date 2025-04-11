@@ -165,6 +165,10 @@ translate_with_lingva() {
 }
 
 # Google翻訳APIを使用した翻訳関数 (高効率版)
+# グローバルキャッシュ変数（関数の外で定義）
+WGET_CAPABILITY_CACHED=""
+NETWORK_TYPE_CACHED=""
+
 translate_with_google() {
     local text="$1"
     local source_lang="$2"
@@ -172,50 +176,70 @@ translate_with_google() {
     local ip_check_file="${CACHE_DIR}/network.ch"
     local wget_options=""
     local retry_count=0
+    local network_type=""
+    local wget_capability=""
+    local api_url=""
+    local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
 
     debug_log "DEBUG" "Starting Google Translate API request" "true"
 
-    # レスポンスパース処理を定義
-    parse_response() {
-        sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$1"
-    }
-
-    # ネットワーク接続状態を一度だけ確認（グローバルキャッシュを活用）
-    if [ -z "${NETWORK_TYPE:-}" ]; then
-        [ ! -f "$ip_check_file" ] && check_network_connectivity
-        NETWORK_TYPE=$(cat "$ip_check_file" 2>/dev/null || echo "v4")
-        debug_log "DEBUG" "Network type detected and cached: ${NETWORK_TYPE}"
+    # wgetの機能を事前に検出（キャッシュ活用）
+    if [ -z "$WGET_CAPABILITY_CACHED" ]; then
+        WGET_CAPABILITY_CACHED=$(detect_wget_capabilities)
+        debug_log "DEBUG" "Detected wget capability: ${WGET_CAPABILITY_CACHED}"
     fi
+    wget_capability="$WGET_CAPABILITY_CACHED"
+    debug_log "DEBUG" "Using wget capability: ${wget_capability}"
+
+    # 必要なディレクトリを確保
+    mkdir -p "$(dirname "$temp_file")" 2>/dev/null
+
+    # ネットワーク接続状態を確認（キャッシュ活用）
+    if [ -z "$NETWORK_TYPE_CACHED" ]; then
+        [ ! -f "$ip_check_file" ] && check_network_connectivity
+        NETWORK_TYPE_CACHED=$(cat "$ip_check_file" 2>/dev/null || echo "v4")
+        debug_log "DEBUG" "Detected network type: ${NETWORK_TYPE_CACHED}"
+    fi
+    network_type="$NETWORK_TYPE_CACHED"
 
     # ネットワークタイプに基づいてwgetオプションを設定
-    case "$NETWORK_TYPE" in
+    case "$network_type" in
         "v4") wget_options="-4" ;;
         "v6") wget_options="-6" ;;
         *) wget_options="-4" ;;
     esac
 
-    # URLエンコード
+    # wget機能に基づいて追加オプションを設定
+    case "$wget_capability" in
+        "full") 
+            # 完全版wgetの場合、リダイレクトフォローを有効化
+            wget_options="$wget_options -L"
+            ;;
+    esac
+
+    # URLエンコードとAPI URLを事前に構築
     local encoded_text=$(urlencode "$text")
-    local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
+    api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}"
 
-    # 必要なディレクトリを事前準備
-    [ ! -d "$(dirname "$temp_file")" ] && mkdir -p "$(dirname "$temp_file")" 2>/dev/null
-
-    # リトライループ
+    # 最適化されたリトライループ
     while [ $retry_count -le $API_MAX_RETRIES ]; do
-        # v4v6の場合のみネットワークタイプを切り替え
-        [ $retry_count -gt 0 ] && [ "$NETWORK_TYPE" = "v4v6" ] && \
-            wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
+        # v4v6の場合のみネットワークタイプを切り替え（簡易版）
+        if [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ]; then
+            # sedを使わない単純な切り替え
+            wget_options=$([ "$(echo "$wget_options" | grep -o "^-[46]")" = "-4" ] && echo "-6" || echo "-4")
+            # 必要に応じて-Lオプションを再追加
+            [ "$wget_capability" = "full" ] && wget_options="$wget_options -L"
+        fi
 
-        # APIリクエスト送信 - 高速シンプル版
+        # APIリクエスト送信（wget機能に応じてオプション最適化）
         $BASE_WGET $wget_options -T $API_TIMEOUT --tries=1 -q -O "$temp_file" \
             --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
-            "https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
+            "$api_url" 2>/dev/null
 
-        # 効率的なレスポンスチェックとパース
+        # 高速レスポンスチェック
         if [ -s "$temp_file" ] && grep -q '\[\[\["' "$temp_file"; then
-            local translated="$(parse_response "$temp_file")"
-
+            local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
+            
             if [ -n "$translated" ]; then
                 rm -f "$temp_file" 2>/dev/null
                 printf "%s\n" "$translated"
@@ -227,6 +251,7 @@ translate_with_google() {
         retry_count=$((retry_count + 1))
     done
 
+    debug_log "DEBUG" "Google translation failed after ${API_MAX_RETRIES} attempts"
     return 1
 }
 
