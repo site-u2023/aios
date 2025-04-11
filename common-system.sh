@@ -60,6 +60,8 @@ LOCATION_API_TIMEOUT="${LOCATION_API_TIMEOUT:-5}"
 # リトライ回数の設定
 LOCATION_API_MAX_RETRIES="${LOCATION_API_MAX_RETRIES:-5}"
 
+USER_AGENT="${USER_AGENT:-curl/7.74.0}"
+
 # ネットワーク接続状態を確認する関数
 check_network_connectivity() {
     local ip_check_file="${CACHE_DIR}/network.ch"
@@ -496,6 +498,98 @@ debug_info() {
         echo "Current Zonename: $(get_zonename_info)"
         echo "Current Timezone: $(get_timezone_info)"
         echo "==========================="
+    fi
+}
+
+# wgetの機能を検出する関数
+detect_wget_capabilities() {
+    local tmp_file="/tmp/wget_test.tmp"
+    local capability="basic"
+    local redirect_support=0
+    local https_support=0
+    
+    debug_log "DEBUG" "Detecting wget capabilities"
+    
+    # -Lオプション（リダイレクト機能）のサポート検出
+    if wget -L --help 2>&1 | grep -q "unrecognized option"; then
+        debug_log "DEBUG" "wget does not support -L option (BusyBox detected)"
+        redirect_support=0
+    else
+        debug_log "DEBUG" "wget supports -L option (full wget)"
+        redirect_support=1
+    fi
+    
+    # HTTPS直接アクセスのサポート検出（User-Agentを追加）
+    if wget --no-check-certificate -q --header="User-Agent: ${USER_AGENT}" -O "$tmp_file" "https://ipinfo.io" >/dev/null 2>&1; then
+        if [ -s "$tmp_file" ]; then
+            debug_log "DEBUG" "wget supports HTTPS connections"
+            https_support=1
+        else
+            debug_log "DEBUG" "wget HTTPS test returned empty file"
+            https_support=0
+        fi
+    else
+        debug_log "DEBUG" "wget HTTPS test failed"
+        https_support=0
+    fi
+    
+    # 一時ファイルのクリーンアップ
+    rm -f "$tmp_file" 2>/dev/null
+    
+    # 機能に基づいて種類を判定
+    if [ $redirect_support -eq 1 ] && [ $https_support -eq 1 ]; then
+        capability="full"
+    elif [ $https_support -eq 1 ]; then
+        capability="https_only"
+    else
+        capability="basic"
+    fi
+    
+    debug_log "DEBUG" "wget capability detected: $capability"
+    echo "$capability"
+}
+
+# APIリクエストを実行する共通関数
+make_api_request() {
+    # パラメータ
+    local url="$1"
+    local tmp_file="$2"
+    local timeout="${3:-$API_TIMEOUT}"
+    local debug_tag="${4:-API}"
+    
+    # wgetの機能検出
+    local wget_capability=$(detect_wget_capabilities)
+    local used_url="$url"
+    local status=0
+    
+    debug_log "DEBUG" "[$debug_tag] Making API request to: $url"
+    
+    # コマンド構築と実行
+    case "$wget_capability" in
+        "full")
+            # 完全なwgetの場合
+            debug_log "DEBUG" "[$debug_tag] Using full wget with redirect support"
+            wget --no-check-certificate -q -L --max-redirect="${API_MAX_REDIRECTS:-2}" \
+                --header="User-Agent: ${USER_AGENT}" \
+                -O "$tmp_file" "$used_url" -T "$timeout" 2>/dev/null
+            status=$?
+            ;;
+        "https_only"|"basic")
+            # 基本wgetの場合（HTTPSを直接指定）
+            used_url=$(echo "$url" | sed 's|^http:|https:|')
+            debug_log "DEBUG" "[$debug_tag] Using BusyBox wget, forcing HTTPS URL: $used_url"
+            wget --no-check-certificate -q --header="User-Agent: ${USER_AGENT}" \
+                -O "$tmp_file" "$used_url" -T "$timeout" 2>/dev/null
+            status=$?
+            ;;
+    esac
+    
+    if [ $status -eq 0 ] && [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+        debug_log "DEBUG" "[$debug_tag] API request successful"
+        return 0
+    else
+        debug_log "DEBUG" "[$debug_tag] API request failed with status: $status"
+        return $status
     fi
 }
 
