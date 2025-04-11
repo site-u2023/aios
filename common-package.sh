@@ -661,9 +661,6 @@ process_package() {
     local lang_code="$8"
     local description="$9"  # 9番目の引数として説明文を直接受け取る
 
-    # デバッグログの追加
-    debug_log "DEBUG" "process_package: package=$package_name, confirm=$confirm_install, desc='$description'"
-
     # 言語パッケージか通常パッケージかを判別
     case "$base_name" in
         luci-i18n-*)
@@ -707,14 +704,12 @@ process_package() {
         # 説明文があれば専用のメッセージキーを使用
         if [ -n "$description" ]; then
             # 説明文付きの確認メッセージ
-            debug_log "DEBUG" "Showing confirmation with description: $description"
             if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg=$display_name" "desc=$description"; then
                 debug_log "DEBUG" "User declined installation of $display_name with description"
                 return 0
             fi
         else
             # 通常の確認メッセージ
-            debug_log "DEBUG" "Showing confirmation without description"
             if ! confirm "MSG_CONFIRM_INSTALL" "pkg=$display_name"; then
                 debug_log "DEBUG" "User declined installation of $display_name"
                 return 0
@@ -842,9 +837,6 @@ install_package() {
         BASE_NAME=$(basename "$PKG_OPTIONS_PACKAGE_NAME" .ipk)
         BASE_NAME=$(basename "$BASE_NAME" .apk)
     fi
-
-    # 説明文の処理状態をデバッグ出力
-    debug_log "DEBUG" "install_package: base_name=$BASE_NAME, description='$PKG_OPTIONS_DESCRIPTION'"
 
     # update オプション処理
     if [ "$PKG_OPTIONS_UPDATE" = "yes" ]; then
