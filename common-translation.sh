@@ -164,6 +164,7 @@ translate_with_lingva() {
     return 1
 }
 
+# Google翻訳APIを使用した翻訳関数 (高効率版:52秒)
 translate_with_google() {
     local text="$1"
     local source_lang="$2"
