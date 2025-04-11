@@ -610,7 +610,7 @@ detect_wget_capabilities() {
 }
 
 # メイン処理
-common-system_main() {
+common_system_main() {
     detect_cpu_cores
     init_device_cache
     get_usb_devices
@@ -619,4 +619,4 @@ common-system_main() {
 }
 
 # スクリプトの実行
-common-system_main "$@"
+common_system_main "$@"
