@@ -169,6 +169,7 @@ translate_with_google() {
     local source_lang="$2"
     local target_lang="$3"
     local ip_check_file="${CACHE_DIR}/network.ch"
+    local wget_options=""
     local retry_count=0
 
     debug_log "DEBUG" "Starting Google Translate API request" "true"
@@ -192,14 +193,18 @@ translate_with_google() {
 
     # リトライループ
     while [ $retry_count -le $API_MAX_RETRIES ]; do
-        # make_api_request()関数を使用してAPIリクエストを実行
+        # 元のコードのネットワークタイプ切り替え処理を維持
+        [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ] && \
+            wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
+
+        # make_api_request()関数を使用してAPIリクエスト実行
         make_api_request "$api_url" "$temp_file" "$API_TIMEOUT" "TRANSLATE"
         local api_status=$?
-        
+
         # 効率的なレスポンスチェックとパース
         if [ $api_status -eq 0 ] && [ -f "$temp_file" ] && [ -s "$temp_file" ] && grep -q '\[\[\["' "$temp_file"; then
             local translated="$(parse_response "$temp_file")"
-            
+
             if [ -n "$translated" ]; then
                 rm -f "$temp_file" 2>/dev/null
                 printf "%s\n" "$translated"
