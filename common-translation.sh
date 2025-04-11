@@ -89,25 +89,20 @@ urlencode() {
     local i=0
     local c=""
     local length=${#string}
+    local safe_chars="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-_~"
     
     while [ $i -lt $length ]; do
         c="${string:$i:1}"
-        case "$c" in
-            [a-zA-Z0-9.~_-]) encoded="${encoded}$c" ;;
-            " ") encoded="${encoded}%20" ;;
-            "&") encoded="${encoded}%26" ;;
-            "=") encoded="${encoded}%3D" ;;
-            "+") encoded="${encoded}%2B" ;;
-            "/") encoded="${encoded}%2F" ;;
-            ",") encoded="${encoded}%2C" ;;
-            ":") encoded="${encoded}%3A" ;;
-            ";") encoded="${encoded}%3B" ;;
-            "?") encoded="${encoded}%3F" ;;
-            "*") encoded="${encoded}%2A" ;;
-            "#") encoded="${encoded}%23" ;;
-            *) encoded="${encoded}$(printf "%%%02X" "'$c")" ;;
-        esac
-        
+        if [ "${safe_chars#*$c}" != "$safe_chars" ]; then
+            # 安全な文字はそのまま
+            encoded="${encoded}$c"
+        elif [ "$c" = " " ]; then
+            # スペースは特別処理
+            encoded="${encoded}%20"
+        else
+            # その他の文字は16進エンコード
+            encoded="${encoded}$(printf "%%%02X" "'$c")"
+        fi
         i=$((i + 1))
     done
     
