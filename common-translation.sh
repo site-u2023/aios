@@ -164,8 +164,74 @@ translate_with_lingva() {
     return 1
 }
 
-# Google翻訳APIを使用した翻訳関数 (高効率版:54秒)
 translate_with_google() {
+    local text="$1"
+    local source_lang="$2"
+    local target_lang="$3"
+    local ip_check_file="${CACHE_DIR}/network.ch"
+    local wget_options=""
+    local retry_count=0
+    local network_type=""
+    local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
+    local api_url=""
+
+    debug_log "DEBUG" "$(get_message "MSG_GOOGLE_API_START")" "true"
+
+    # 必要なディレクトリを確保
+    mkdir -p "$(dirname "$temp_file")" 2>/dev/null
+
+    # ネットワーク接続状態を確認
+    [ ! -f "$ip_check_file" ] && check_network_connectivity
+    network_type=$(cat "$ip_check_file" 2>/dev/null || echo "v4")
+
+    # ネットワークタイプに基づいてwgetオプションを設定
+    case "$network_type" in
+        "v4") wget_options="-4" ;;
+        "v6") wget_options="-6" ;;
+        *) wget_options="" ;;
+    esac
+
+    # URLエンコードとAPI URLを事前に構築
+    local encoded_text=$(urlencode "$text")
+    api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}"
+
+    # リトライループ
+    while [ $retry_count -lt $API_MAX_RETRIES ]; do
+        # v4v6の場合のみネットワークタイプを切り替え
+        if [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ]; then
+            wget_options=$(echo "$wget_options" | sed 's/-4/-6/;s/-6/-4/')
+        fi
+
+        # 常にOSデフォルトのwgetを使用（シンプルな形式）
+        wget --no-check-certificate $wget_options -T $API_TIMEOUT -q -O "$temp_file" \
+            -U "Mozilla/5.0" \
+            "$api_url" 2>/dev/null
+
+        # レスポンス処理
+        if [ -s "$temp_file" ]; then
+            # レスポンスチェック
+            if grep -q '\[' "$temp_file"; then
+                local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
+                
+                if [ -n "$translated" ]; then
+                    rm -f "$temp_file" 2>/dev/null
+                    printf "%s\n" "$translated"
+                    return 0
+                fi
+            fi
+        fi
+
+        rm -f "$temp_file" 2>/dev/null
+        retry_count=$((retry_count + 1))
+        sleep 1  # 短い待機でAPI制限回避
+    done
+
+    debug_log "DEBUG" "$(get_message "MSG_GOOGLE_API_FAIL" "$API_MAX_RETRIES")"
+    return 1
+}
+
+# Google翻訳APIを使用した翻訳関数 (高効率版:54秒)
+OK_translate_with_google() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
