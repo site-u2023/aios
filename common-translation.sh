@@ -169,67 +169,68 @@ translate_with_google() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
-    local ip_check_file="${CACHE_DIR}/network.ch"
-    local wget_options=""
-    local retry_count=0
-    local network_type=""
-    
-    debug_log "DEBUG" "Starting Google Translate API request" "true"
-    
-    # URLエンコード
     local encoded_text=""
+    local translated=""
+    local api_url=""
+    local temp_output=""
+    local retry_count=0
+    
+    # URLエンコード（事前に一度だけ実行）
     encoded_text=$(urlencode "$text")
-    local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
+    api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}"
     
-    mkdir -p "$(dirname "$temp_file")" 2>/dev/null
-    mkdir -p "$CACHE_DIR" 2>/dev/null
-
-    # ネットワーク接続状態を一度だけ確認
-    if [ ! -f "$ip_check_file" ]; then
-        check_network_connectivity
-    fi
-    network_type=$(cat "$ip_check_file" 2>/dev/null)
-
-    # ネットワーク接続状態に基づいてwgetオプションを設定
-    case "$network_type" in
-        "v4") wget_options="-4" ;;
-        "v6") wget_options="-6" ;;
-        "v4v6"|*) wget_options="-4" ;;
-    esac
-    
-    # APIリクエスト用URL構築
-    local api_url="${GOOGLE_TRANSLATE_URL}?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}"
-
-    # リトライループ
-    while [ $retry_count -le $API_MAX_RETRIES ]; do
-        # ネットワークタイプ切替え（IPv4/IPv6）
-        if [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ]; then
-            wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
+    # ネットワーク設定を一度だけ取得（グローバル変数として保存）
+    if [ -z "$NETWORK_CONFIG_LOADED" ]; then
+        if [ ! -f "${CACHE_DIR}/network.ch" ]; then
+            check_network_connectivity
         fi
         
-        # APIリクエスト実行
-        make_api_request "$api_url" "$temp_file" "$API_TIMEOUT" "TRANSLATE" "$wget_options"
-        local status=$?
+        # ネットワークタイプを読み込み、グローバルに保存
+        NETWORK_TYPE=$(cat "${CACHE_DIR}/network.ch" 2>/dev/null || echo "v4")
+        WGET_OPTIONS=""
         
-        # レスポンスチェックとパース
-        if [ $status -eq 0 ] && [ -f "$temp_file" ] && [ -s "$temp_file" ] && grep -q '\[\[\["' "$temp_file"; then
-            local translated=""
-            translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
+        case "$NETWORK_TYPE" in
+            "v4") WGET_OPTIONS="-4" ;;
+            "v6") WGET_OPTIONS="-6" ;;
+            *) WGET_OPTIONS="-4" ;;
+        esac
+        
+        # 読み込み済みフラグをセット
+        NETWORK_CONFIG_LOADED=1
+    fi
+    
+    # 一時ディレクトリだけ作成（ファイル操作を減らす）
+    mkdir -p "${TRANSLATION_CACHE_DIR}" 2>/dev/null
+    
+    # 高速リトライループ
+    while [ $retry_count -le $API_MAX_RETRIES ]; do
+        # IPバージョン切替（v4v6の場合のみ）
+        current_wget_opts="$WGET_OPTIONS"
+        if [ $retry_count -gt 0 ] && [ "$NETWORK_TYPE" = "v4v6" ]; then
+            current_wget_opts=$([ "$WGET_OPTIONS" = "-4" ] && echo "-6" || echo "-4")
+        fi
+        
+        # APIリクエスト - 出力を直接変数に格納（一時ファイル不使用）
+        temp_output=$($BASE_WGET $current_wget_opts -T $API_TIMEOUT --tries=1 -q -O - \
+            --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
+            "$api_url" 2>/dev/null)
+        
+        # 出力の有効性をチェック
+        if [ -n "$temp_output" ] && echo "$temp_output" | grep -q '\[\[\["'; then
+            # 単一のsedコマンドで全置換処理（パイプなし、より効率的）
+            translated=$(echo "$temp_output" | sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g')
             
             if [ -n "$translated" ]; then
-                rm -f "$temp_file" 2>/dev/null
-                printf "%s\n" "$translated"
+                printf "%s" "$translated"
                 return 0
             fi
         fi
         
-        # 失敗した場合はファイルを削除してリトライ
-        rm -f "$temp_file" 2>/dev/null
         retry_count=$((retry_count + 1))
-        sleep 1
+        [ $retry_count -le $API_MAX_RETRIES ] && sleep 1
     done
     
-    debug_log "DEBUG" "All translation attempts failed"
+    debug_log "DEBUG" "Google translate API request failed after $API_MAX_RETRIES retries"
     return 1
 }
 
