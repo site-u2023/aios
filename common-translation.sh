@@ -173,20 +173,20 @@ translate_with_google() {
     local wget_options=""
     local retry_count=0
     local network_type=""
-    local wget_capability=""
-    local api_url=""
     local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
+    local api_url=""
+    local wget_capability=""
 
     debug_log "DEBUG" "Starting Google Translate API request" "true"
 
-    # wgetの機能を事前に検出（一度だけ実行）
+    # wgetの機能を検出
     wget_capability=$(detect_wget_capabilities)
     debug_log "DEBUG" "Using wget capability: ${wget_capability}"
 
     # 必要なディレクトリを確保
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
 
-    # ネットワーク接続状態を一度だけ確認
+    # ネットワーク接続状態を確認
     [ ! -f "$ip_check_file" ] && check_network_connectivity
     network_type=$(cat "$ip_check_file" 2>/dev/null || echo "v4")
 
@@ -194,41 +194,41 @@ translate_with_google() {
     case "$network_type" in
         "v4") wget_options="-4" ;;
         "v6") wget_options="-6" ;;
-        *) wget_options="-4" ;;
+        *) wget_options="" ;;
     esac
 
-    # wget機能に基づいて追加オプションを設定
-    case "$wget_capability" in
-        "full") 
-            # 完全版wgetの場合、リダイレクトフォローを有効化
-            wget_options="$wget_options -L"
-            ;;
-    esac
-
-    # URLエンコードとAPI URLを事前に構築
+    # URLエンコード
     local encoded_text=$(urlencode "$text")
     api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}"
 
-    # 最適化されたリトライループ
-    while [ $retry_count -le $API_MAX_RETRIES ]; do
-        # v4v6の場合のみネットワークタイプを切り替え
-        if [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ]; then
-            wget_options=$(echo "$wget_options" | sed 's/-4/-6/;s/-6 -L/-4 -L/;t;s/-6/-4/')
-        fi
+    # リトライループ
+    while [ $retry_count -lt $API_MAX_RETRIES ]; do
+        # wget機能に応じてコマンドを構築
+        case "$wget_capability" in
+            "full")
+                # GNU wget用
+                wget --no-check-certificate $wget_options -L -T $API_TIMEOUT -q -O "$temp_file" \
+                    --user-agent="Mozilla/5.0" \
+                    "$api_url" 2>/dev/null
+                ;;
+            *)
+                # BusyBox wget用（シンプルな形式）
+                wget --no-check-certificate $wget_options -O "$temp_file" \
+                    "$api_url" 2>/dev/null
+                ;;
+        esac
 
-        # APIリクエスト送信（wget機能に応じてオプション最適化）
-        $BASE_WGET $wget_options -T $API_TIMEOUT --tries=1 -q -O "$temp_file" \
-            --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
-            "$api_url" 2>/dev/null
-
-        # 高速レスポンスチェック
-        if [ -s "$temp_file" ] && grep -q '\[\[\["' "$temp_file"; then
-            local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
-            
-            if [ -n "$translated" ]; then
-                rm -f "$temp_file" 2>/dev/null
-                printf "%s\n" "$translated"
-                return 0
+        # レスポンス処理（両方のwgetで動作するよう強化）
+        if [ -s "$temp_file" ]; then
+            # より柔軟なレスポンスチェック
+            if grep -q '\[' "$temp_file"; then
+                local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file" 2>/dev/null)
+                
+                if [ -n "$translated" ]; then
+                    rm -f "$temp_file" 2>/dev/null
+                    printf "%s\n" "$translated"
+                    return 0
+                fi
             fi
         fi
 
