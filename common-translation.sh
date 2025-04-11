@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-11-02-00"
+SCRIPT_VERSION="2025-04-11-03-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -177,31 +177,18 @@ translate_with_google() {
     local api_url=""
     local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
 
-    # 空のテキストは早期リターン
-    if [ -z "$text" ]; then
-        debug_log "DEBUG" "Empty text provided, skipping translation"
-        return 1
-    fi
-
     debug_log "DEBUG" "Starting Google Translate API request" "true"
 
-    # wgetの機能を一度だけ検出して保存
-    if [ -z "$GLOBAL_WGET_CAPABILITY" ]; then
-        GLOBAL_WGET_CAPABILITY=$(detect_wget_capabilities)
-        debug_log "DEBUG" "Detected wget capability: ${GLOBAL_WGET_CAPABILITY}"
-    fi
-    wget_capability="$GLOBAL_WGET_CAPABILITY"
+    # wgetの機能を事前に検出（一度だけ実行）
+    wget_capability=$(detect_wget_capabilities)
+    debug_log "DEBUG" "Using wget capability: ${wget_capability}"
 
     # 必要なディレクトリを確保
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
 
-    # ネットワーク接続状態を一度だけ確認して保存
-    if [ -z "$GLOBAL_NETWORK_TYPE" ]; then
-        [ ! -f "$ip_check_file" ] && check_network_connectivity
-        GLOBAL_NETWORK_TYPE=$(cat "$ip_check_file" 2>/dev/null || echo "v4")
-        debug_log "DEBUG" "Network type cached: ${GLOBAL_NETWORK_TYPE}"
-    fi
-    network_type="$GLOBAL_NETWORK_TYPE"
+    # ネットワーク接続状態を一度だけ確認
+    [ ! -f "$ip_check_file" ] && check_network_connectivity
+    network_type=$(cat "$ip_check_file" 2>/dev/null || echo "v4")
 
     # ネットワークタイプに基づいてwgetオプションを設定
     case "$network_type" in
@@ -316,53 +303,6 @@ OK_translate_with_google() {
     return 1
 }
 
-# 翻訳キューとバッチ処理を行う関数
-batch_translate() {
-    local texts="$1"         # 翻訳するテキストの配列（改行区切り）
-    local source_lang="$2"
-    local target_lang="$3"
-    local keys="$4"          # テキストに対応するキーの配列（改行区切り）
-    local results=""
-    local api_list="$API_LIST"
-    local retry_count=0
-    
-    # 各行を処理
-    local i=1
-    echo "$texts" | while IFS= read -r text; do
-        # 対応するキーを取得
-        local key=$(echo "$keys" | sed -n "${i}p")
-        
-        # キャッシュチェック
-        local cache_key=$(printf "%s%s%s" "$key" "$text" "$target_lang" | md5sum | cut -d' ' -f1)
-        local cache_file="${TRANSLATION_CACHE_DIR}/${target_lang}_${cache_key}.txt"
-        
-        if [ -f "$cache_file" ]; then
-            # キャッシュから取得
-            local cached_result=$(cat "$cache_file")
-            results="${results}${cached_result}\n"
-        else
-            # 翻訳APIを呼び出す
-            local translated=$(translate_text "$text" "$source_lang" "$target_lang")
-            
-            if [ -n "$translated" ]; then
-                # キャッシュに保存
-                mkdir -p "$(dirname "$cache_file")"
-                printf "%s\n" "$translated" > "$cache_file"
-                
-                results="${results}${translated}\n"
-            else
-                # 翻訳失敗時は原文
-                results="${results}${text}\n"
-            fi
-        fi
-        
-        i=$((i + 1))
-    done
-    
-    # 結果を返す
-    printf "%s" "$results"
-}
-
 translate_text() {
     local text="$1"
     local source_lang="$2"
@@ -408,11 +348,6 @@ create_language_db() {
     local cleaned_translation=""
     local current_api=""
     local ip_check_file="${CACHE_DIR}/network.ch"
-
-    local batch_size=5   # 一度に処理するエントリ数
-    local current_batch=0
-    local batch_texts=""
-    local batch_keys=""
     
     debug_log "DEBUG" "Creating language DB for target ${target_lang} with API language code ${api_lang}"
     
