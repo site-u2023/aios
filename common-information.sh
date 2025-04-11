@@ -216,11 +216,9 @@ get_country_ipapi() {
     local retry_count=0
     local success=0
     
-    # スピナー更新メッセージ - a=のパラメータをapi_nameから取得
+    # API名からドメイン名を抽出
     local api_domain=$(echo "$api_name" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
     [ -z "$api_domain" ] && api_domain="$api_name"
-    local country_msg=$(get_message "MSG_QUERY_INFO" "t=country+timezone" "a=${api_domain}" "n=$network_type")
-    update_spinner "$(color "blue" "$country_msg")" "yellow"
     
     debug_log "DEBUG" "Querying country and timezone from $api_domain"
     
@@ -277,11 +275,9 @@ get_country_ipinfo() {
     local retry_count=0
     local success=0
     
-    # スピナー更新メッセージ - a=のパラメータをapi_nameから取得
+    # API名からドメイン名を抽出
     local api_domain=$(echo "$api_name" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
     [ -z "$api_domain" ] && api_domain="$api_name"
-    local country_msg=$(get_message "MSG_QUERY_INFO" "t=country+timezone" "a=${api_domain}" "n=$network_type")
-    update_spinner "$(color "blue" "$country_msg")" "yellow"
     
     debug_log "DEBUG" "Querying country and timezone from $api_domain"
     
@@ -334,7 +330,6 @@ get_country_ipinfo() {
     fi
 }
 
-# 国コード・タイムゾーン情報を取得する関数
 get_country_code() {
     # 変数宣言
     local network_type=""
@@ -366,6 +361,10 @@ get_country_code() {
             timezone_api="$API_IPINFO"
             ;;
     esac
+    
+    # APIドメイン名を抽出
+    local api_domain=$(echo "$timezone_api" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+    [ -z "$api_domain" ] && api_domain="$timezone_api"
     
     # グローバル変数の初期化
     SELECT_ZONE=""
@@ -405,9 +404,8 @@ get_country_code() {
         return 1
     fi
     
-    # スピナー開始
-    local init_msg=$(get_message "MSG_QUERY_INFO" "t=location information" "a=$timezone_api" "n=$network_type")
-    start_spinner "$(color "blue" "$init_msg")" "yellow"
+    # スピナー開始 - 翻訳APIスタイルに統一
+    start_spinner "$(color "blue" "Currently querying: $api_domain")" "yellow"
     spinner_active=1
     debug_log "DEBUG" "Starting location detection process"
     
@@ -442,9 +440,8 @@ get_country_code() {
         local alt_api_domain=$(echo "$alt_api" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
         [ -z "$alt_api_domain" ] && alt_api_domain="$alt_api"
 
-        # スピナーメッセージ更新
-        local retry_msg=$(get_message "MSG_QUERY_INFO" "t=location information" "a=${alt_api_domain}" "n=$network_type")
-        update_spinner "$(color "blue" "$retry_msg")" "yellow"
+        # スピナーメッセージ更新 - 翻訳APIスタイルに統一
+        update_spinner "$(color "blue" "Currently querying: $alt_api_domain")" "yellow"
         
         # 代替API呼び出し
         tmp_file="$(mktemp -t location.XXXXXX)"
