@@ -754,6 +754,72 @@ install_package() {
         BASE_NAME=$(basename "$BASE_NAME" .apk)
     fi
 
+    debug_log "DEBUG" "install_package: base_name=$BASE_NAME, description='$PKG_OPTIONS_DESCRIPTION'"
+
+    # update オプション処理
+    if [ "$PKG_OPTIONS_UPDATE" = "yes" ]; then
+        debug_log "DEBUG" "Updating package lists"
+        update_package_list
+        return $?
+    fi
+
+    # パッケージマネージャー確認
+    if ! verify_package_manager; then
+        debug_log "ERROR" "Failed to verify package manager"
+        return 1
+    fi
+
+    # **パッケージリスト更新**
+    update_package_list || return 1
+
+    # 言語コード取得
+    local lang_code
+    lang_code=$(get_language_code)
+    
+    # パッケージ処理 - 説明文も渡す
+    if ! process_package \
+            "$PKG_OPTIONS_PACKAGE_NAME" \
+            "$BASE_NAME" \
+            "$PKG_OPTIONS_CONFIRM" \
+            "$PKG_OPTIONS_FORCE" \
+            "$PKG_OPTIONS_SKIP_PACKAGE_DB" \
+            "$PKG_OPTIONS_DISABLED" \
+            "$PKG_OPTIONS_TEST" \
+            "$lang_code" \
+            "$PKG_OPTIONS_DESCRIPTION"; then
+        return 1
+    fi
+
+    # サービス関連の処理（disabled オプションが有効な場合は全スキップ）
+    if [ "$PKG_OPTIONS_DISABLED" != "yes" ]; then
+        configure_service "$PKG_OPTIONS_PACKAGE_NAME" "$BASE_NAME"
+    else
+        debug_log "DEBUG" "Skipping service handling for $PKG_OPTIONS_PACKAGE_NAME due to disabled option"
+    fi
+    
+    return 0
+}
+
+# **パッケージインストールのメイン関数**
+OK_install_package() {
+    # オプション解析
+    if ! parse_package_options "$@"; then
+        return 1
+    fi
+    
+    # インストール一覧表示モードの場合
+    if [ "$PKG_OPTIONS_LIST" = "yes" ]; then
+        check_install_list
+        return 0
+    fi
+    
+    # **ベースネームを取得**
+    local BASE_NAME
+    if [ -n "$PKG_OPTIONS_PACKAGE_NAME" ]; then
+        BASE_NAME=$(basename "$PKG_OPTIONS_PACKAGE_NAME" .ipk)
+        BASE_NAME=$(basename "$BASE_NAME" .apk)
+    fi
+
     # update オプション処理
     if [ "$PKG_OPTIONS_UPDATE" = "yes" ]; then
         debug_log "DEBUG" "Updating package lists"
