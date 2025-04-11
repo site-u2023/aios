@@ -650,6 +650,95 @@ parse_package_options() {
 }
 
 # パッケージ処理メイン部分
+process_package() {
+    local package_name="$1"
+    local base_name="$2"
+    local confirm_install="$3"
+    local force_install="$4"
+    local skip_package_db="$5"
+    local set_disabled="$6"
+    local test_mode="$7"
+    local lang_code="$8"
+    local description="$9"  # 9番目の引数として説明文を直接受け取る
+
+    # デバッグログの追加
+    debug_log "DEBUG" "process_package: package=$package_name, confirm=$confirm_install, desc='$description'"
+
+    # 言語パッケージか通常パッケージかを判別
+    case "$base_name" in
+        luci-i18n-*)
+            # 言語パッケージの場合、package_name に言語コードを追加
+            package_name="${base_name}-${lang_code}"
+            debug_log "DEBUG" "Language package detected, using: $package_name"
+            ;;
+    esac
+
+    # test_mode が有効でなければパッケージの事前チェックを行う
+    if [ "$test_mode" != "yes" ]; then
+        if ! package_pre_install "$package_name"; then
+            debug_log "DEBUG" "Package $package_name is already installed or not found"
+            return 1
+        fi
+    else
+        debug_log "DEBUG" "Test mode enabled, skipping pre-install checks"
+    fi
+    
+    # YN確認 (オプションで有効時のみ)
+    if [ "$confirm_install" = "yes" ]; then
+        # パッケージ名からパスと拡張子を除去した表示用の名前を作成
+        local display_name
+        display_name=$(basename "$package_name")
+        display_name=${display_name%.*}  # 拡張子を除去
+
+        debug_log "DEBUG" "Original package name: $package_name"
+        debug_log "DEBUG" "Displaying package name: $display_name"
+    
+        # 説明文の優先順位：
+        # 1. 関数の9番目の引数として指定された説明文を優先
+        # 2. なければパッケージリストから取得
+        if [ -n "$description" ]; then
+            debug_log "DEBUG" "Using provided description: $description"
+        else
+            # パッケージリストから説明を取得
+            description=$(get_package_description "$package_name")
+            debug_log "DEBUG" "Using repository description: $description"
+        fi
+        
+        # 説明文があれば専用のメッセージキーを使用
+        if [ -n "$description" ]; then
+            # 説明文付きの確認メッセージ
+            debug_log "DEBUG" "Showing confirmation with description: $description"
+            if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg=$display_name" "desc=$description"; then
+                debug_log "DEBUG" "User declined installation of $display_name with description"
+                return 0
+            fi
+        else
+            # 通常の確認メッセージ
+            debug_log "DEBUG" "Showing confirmation without description"
+            if ! confirm "MSG_CONFIRM_INSTALL" "pkg=$display_name"; then
+                debug_log "DEBUG" "User declined installation of $display_name"
+                return 0
+            fi
+        fi
+    fi
+     
+    # パッケージのインストール
+    if ! install_normal_package "$package_name" "$force_install"; then
+        debug_log "DEBUG" "Failed to install package: $package_name"
+        return 1
+    fi
+
+    # **ローカルパッケージDBの適用 (インストール成功後に実行)**
+    if [ "$skip_package_db" != "yes" ]; then
+        local_package_db "$base_name"
+    else
+        debug_log "DEBUG" "Skipping local-package.db application for $package_name"
+    fi
+    
+    return 0
+}
+
+# パッケージ処理メイン部分
 OK_process_package() {
     local package_name="$1"
     local base_name="$2"
@@ -736,6 +825,73 @@ OK_process_package() {
 
 # **パッケージインストールのメイン関数**
 install_package() {
+    # オプション解析
+    if ! parse_package_options "$@"; then
+        return 1
+    fi
+    
+    # インストール一覧表示モードの場合
+    if [ "$PKG_OPTIONS_LIST" = "yes" ]; then
+        check_install_list
+        return 0
+    fi
+    
+    # **ベースネームを取得**
+    local BASE_NAME
+    if [ -n "$PKG_OPTIONS_PACKAGE_NAME" ]; then
+        BASE_NAME=$(basename "$PKG_OPTIONS_PACKAGE_NAME" .ipk)
+        BASE_NAME=$(basename "$BASE_NAME" .apk)
+    fi
+
+    # 説明文の処理状態をデバッグ出力
+    debug_log "DEBUG" "install_package: base_name=$BASE_NAME, description='$PKG_OPTIONS_DESCRIPTION'"
+
+    # update オプション処理
+    if [ "$PKG_OPTIONS_UPDATE" = "yes" ]; then
+        debug_log "DEBUG" "Updating package lists"
+        update_package_list
+        return $?
+    fi
+
+    # パッケージマネージャー確認
+    if ! verify_package_manager; then
+        debug_log "ERROR" "Failed to verify package manager"
+        return 1
+    fi
+
+    # **パッケージリスト更新**
+    update_package_list || return 1
+
+    # 言語コード取得
+    local lang_code
+    lang_code=$(get_language_code)
+    
+    # パッケージ処理 - 説明文も渡す
+    if ! process_package \
+            "$PKG_OPTIONS_PACKAGE_NAME" \
+            "$BASE_NAME" \
+            "$PKG_OPTIONS_CONFIRM" \
+            "$PKG_OPTIONS_FORCE" \
+            "$PKG_OPTIONS_SKIP_PACKAGE_DB" \
+            "$PKG_OPTIONS_DISABLED" \
+            "$PKG_OPTIONS_TEST" \
+            "$lang_code" \
+            "$PKG_OPTIONS_DESCRIPTION"; then
+        return 1
+    fi
+
+    # サービス関連の処理（disabled オプションが有効な場合は全スキップ）
+    if [ "$PKG_OPTIONS_DISABLED" != "yes" ]; then
+        configure_service "$PKG_OPTIONS_PACKAGE_NAME" "$BASE_NAME"
+    else
+        debug_log "DEBUG" "Skipping service handling for $PKG_OPTIONS_PACKAGE_NAME due to disabled option"
+    fi
+    
+    return 0
+}
+
+# **パッケージインストールのメイン関数**
+OK_install_package() {
     # オプション解析
     if ! parse_package_options "$@"; then
         return 1
