@@ -594,7 +594,7 @@ make_api_request() {
 }
 
 # メイン処理
-dynamic_system_info_main() {
+common-system.sh_main() {
     detect_cpu_cores
     init_device_cache
     get_usb_devices
@@ -603,4 +603,4 @@ dynamic_system_info_main() {
 }
 
 # スクリプトの実行
-dynamic_system_info_main "$@"
+common-system.sh_main "$@"
