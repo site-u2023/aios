@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-12-00-00"
+SCRIPT_VERSION="2025-04-12-00-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -175,12 +175,11 @@ translate_with_google() {
     local network_type=""
     local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
     local api_url=""
-    local wget_capability=""
 
     debug_log "DEBUG" "Starting Google Translate API request" "true"
 
-    # wgetの機能を検出
-    wget_capability=$(detect_wget_capabilities)
+    # wgetの機能を検出（キャッシュ対応版）
+    local wget_capability=$(detect_wget_capabilities)
     debug_log "DEBUG" "Using wget capability: ${wget_capability}"
 
     # 必要なディレクトリを確保
@@ -197,32 +196,37 @@ translate_with_google() {
         *) wget_options="" ;;
     esac
 
-    # URLエンコード
+    # URLエンコードとAPI URLを事前に構築
     local encoded_text=$(urlencode "$text")
     api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}"
 
     # リトライループ
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        # wget機能に応じてコマンドを構築
+        # v4v6の場合のみネットワークタイプを切り替え
+        if [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ]; then
+            wget_options=$(echo "$wget_options" | sed 's/-4/-6/;s/-6/-4/')
+        fi
+
+        # wget機能に基づいてコマンドを構築
         case "$wget_capability" in
             "full")
-                # GNU wget用
+                # 完全版wgetの場合、リダイレクトフォローを有効化
                 wget --no-check-certificate $wget_options -L -T $API_TIMEOUT -q -O "$temp_file" \
                     --user-agent="Mozilla/5.0" \
                     "$api_url" 2>/dev/null
                 ;;
             *)
-                # BusyBox wget用（シンプルな形式）
-                wget --no-check-certificate $wget_options -O "$temp_file" \
+                # BusyBox wgetの場合、最小限のオプションのみ使用
+                wget --no-check-certificate $wget_options -T $API_TIMEOUT -q -O "$temp_file" \
                     "$api_url" 2>/dev/null
                 ;;
         esac
 
-        # レスポンス処理（両方のwgetで動作するよう強化）
+        # レスポンス処理
         if [ -s "$temp_file" ]; then
-            # より柔軟なレスポンスチェック
+            # 柔軟なレスポンスチェック（両方のwget出力に対応）
             if grep -q '\[' "$temp_file"; then
-                local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file" 2>/dev/null)
+                local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
                 
                 if [ -n "$translated" ]; then
                     rm -f "$temp_file" 2>/dev/null
@@ -234,6 +238,7 @@ translate_with_google() {
 
         rm -f "$temp_file" 2>/dev/null
         retry_count=$((retry_count + 1))
+        sleep 1  # 短い待機でAPI制限回避
     done
 
     debug_log "DEBUG" "Google translation failed after ${API_MAX_RETRIES} attempts"
