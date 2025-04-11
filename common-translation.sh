@@ -83,34 +83,8 @@ get_api_lang_code() {
     printf "en\n"
 }
 
-urlencode() {
-    local string="$1"
-    local encoded=""
-    local i=0
-    local c=""
-    local length=${#string}
-    local safe_chars="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-_~"
-    
-    while [ $i -lt $length ]; do
-        c="${string:$i:1}"
-        if [ "${safe_chars#*$c}" != "$safe_chars" ]; then
-            # 安全な文字はそのまま
-            encoded="${encoded}$c"
-        elif [ "$c" = " " ]; then
-            # スペースは特別処理
-            encoded="${encoded}%20"
-        else
-            # その他の文字は16進エンコード
-            encoded="${encoded}$(printf "%%%02X" "'$c")"
-        fi
-        i=$((i + 1))
-    done
-    
-    printf "%s\n" "$encoded"
-}
-
 # URL安全エンコード関数（seqを使わない最適化版）
-OK_urlencode() {
+urlencode() {
     local string="$1"
     local encoded=""
     local i=0
