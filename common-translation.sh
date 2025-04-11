@@ -169,6 +169,56 @@ translate_with_google() {
     local source_lang="$2"
     local target_lang="$3"
     local ip_check_file="${CACHE_DIR}/network.ch"
+    local retry_count=0
+
+    debug_log "DEBUG" "Starting Google Translate API request" "true"
+
+    # レスポンスパース処理を定義
+    parse_response() {
+        sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$1"
+    }
+
+    # ネットワーク接続状態を一度だけ確認
+    [ ! -f "$ip_check_file" ] && check_network_connectivity
+
+    # URLエンコード
+    local encoded_text=$(urlencode "$text")
+    local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
+
+    mkdir -p "$(dirname "$temp_file")" 2>/dev/null
+
+    # APIリクエスト用URL構築
+    local api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}"
+
+    # リトライループ
+    while [ $retry_count -le $API_MAX_RETRIES ]; do
+        # make_api_request()関数を使用してAPIリクエストを実行
+        make_api_request "$api_url" "$temp_file" "$API_TIMEOUT" "TRANSLATE"
+        local api_status=$?
+        
+        # 効率的なレスポンスチェックとパース
+        if [ $api_status -eq 0 ] && [ -f "$temp_file" ] && [ -s "$temp_file" ] && grep -q '\[\[\["' "$temp_file"; then
+            local translated="$(parse_response "$temp_file")"
+            
+            if [ -n "$translated" ]; then
+                rm -f "$temp_file" 2>/dev/null
+                printf "%s\n" "$translated"
+                return 0
+            fi
+        fi
+
+        rm -f "$temp_file" 2>/dev/null
+        retry_count=$((retry_count + 1))
+    done
+
+    return 1
+}
+
+OK_translate_with_google() {
+    local text="$1"
+    local source_lang="$2"
+    local target_lang="$3"
+    local ip_check_file="${CACHE_DIR}/network.ch"
     local wget_options=""
     local retry_count=0
 
