@@ -488,64 +488,6 @@ detect_terminal_capability() {
     echo "$STYLE"
 }
 
-# 📌 デバッグヘルパー関数
-debug_info() {
-    if [ "$DEBUG_MODE" = "true" ]; then
-        echo "===== SYSTEM DEBUG INFO ====="
-        echo "Architecture: $(get_device_architecture)"
-        echo "OS: $(get_os_info)"
-        echo "Package Manager: $(get_package_manager)"
-        echo "Current Zonename: $(get_zonename_info)"
-        echo "Current Timezone: $(get_timezone_info)"
-        echo "==========================="
-    fi
-}
-
-# APIリクエストを実行する共通関数（ネットワークオプション対応版）
-make_api_request() {
-    # パラメータ
-    local url="$1"
-    local tmp_file="$2"
-    local timeout="${3:-$API_TIMEOUT}"
-    local debug_tag="${4:-API}"
-    local net_options="${5:-}"
-    
-    # wgetの機能検出
-    local wget_capability=$(detect_wget_capabilities)
-    local used_url="$url"
-    local status=0
-    
-    debug_log "DEBUG" "[$debug_tag] Making API request to: $url"
-    
-    # コマンド構築と実行
-    case "$wget_capability" in
-        "full")
-            # 完全なwgetの場合
-            debug_log "DEBUG" "[$debug_tag] Using full wget with redirect support"
-            wget $net_options --no-check-certificate -q -L --max-redirect="${API_MAX_REDIRECTS:-2}" \
-                --header="User-Agent: ${USER_AGENT}" \
-                -O "$tmp_file" "$used_url" -T "$timeout" 2>/dev/null
-            status=$?
-            ;;
-        "https_only"|"basic")
-            # 基本wgetの場合（HTTPSを直接指定）
-            used_url=$(echo "$url" | sed 's|^http:|https:|')
-            debug_log "DEBUG" "[$debug_tag] Using BusyBox wget, forcing HTTPS URL: $used_url"
-            wget $net_options --no-check-certificate -q --header="User-Agent: ${USER_AGENT}" \
-                -O "$tmp_file" "$used_url" -T "$timeout" 2>/dev/null
-            status=$?
-            ;;
-    esac
-    
-    if [ $status -eq 0 ] && [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-        debug_log "DEBUG" "[$debug_tag] API request successful"
-        return 0
-    else
-        debug_log "DEBUG" "[$debug_tag] API request failed with status: $status"
-        return $status
-    fi
-}
-
 # wgetの機能を検出する関数（キャッシュ対応版）
 detect_wget_capabilities() {
     local tmp_file="/tmp/wget_test.tmp"
@@ -607,6 +549,19 @@ detect_wget_capabilities() {
     debug_log "DEBUG" "wget capability detected and cached: $capability"
     
     echo "$capability"
+}
+
+# 📌 デバッグヘルパー関数
+debug_info() {
+    if [ "$DEBUG_MODE" = "true" ]; then
+        echo "===== SYSTEM DEBUG INFO ====="
+        echo "Architecture: $(get_device_architecture)"
+        echo "OS: $(get_os_info)"
+        echo "Package Manager: $(get_package_manager)"
+        echo "Current Zonename: $(get_zonename_info)"
+        echo "Current Timezone: $(get_timezone_info)"
+        echo "==========================="
+    fi
 }
 
 # メイン処理
