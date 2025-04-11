@@ -169,71 +169,61 @@ translate_with_google() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
+    local ip_check_file="${CACHE_DIR}/network.ch"
+    local wget_options=""
     local retry_count=0
-    local translated=""
-    local temp_output=""
-    local current_wget_opts=""
+    local network_type=""
+    local api_url=""
+    local encoded_text=""
+    local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
     
-    # URLエンコード（1回だけ実行）
-    local encoded_text=$(urlencode "$text")
-    local api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}"
+    debug_log "DEBUG" "Starting Google Translate API request" "true"
+
+    # 必要なディレクトリを前もって作成（ループ外で1回のみ）
+    [ ! -d "$(dirname "$temp_file")" ] && mkdir -p "$(dirname "$temp_file")" 2>/dev/null
+
+    # ネットワーク設定を事前に読み込み（ループ外で1回のみ）
+    [ ! -f "$ip_check_file" ] && check_network_connectivity
     
-    # 必要なディレクトリを事前に確認
-    [ ! -d "${TRANSLATION_CACHE_DIR}" ] && mkdir -p "${TRANSLATION_CACHE_DIR}" 2>/dev/null
+    # ネットワーク接続状態読み込み（一度だけ）
+    network_type=$(cat "$ip_check_file" 2>/dev/null || echo "v4")
+    case "$network_type" in
+        "v4") wget_options="-4" ;;
+        "v6") wget_options="-6" ;;
+        *) wget_options="-4" ;;
+    esac
     
-    # ネットワーク設定を一度だけ取得（スクリプト全体で保持）
-    if [ -z "${NETWORK_OPTS:-}" ]; then
-        debug_log "DEBUG" "Loading network configuration"
-        
-        # ネットワーク設定ファイルが無い場合は作成
-        if [ ! -f "${CACHE_DIR}/network.ch" ]; then
-            check_network_connectivity
-        fi
-        
-        # ネットワークタイプ取得と設定
-        local network_type=$(cat "${CACHE_DIR}/network.ch" 2>/dev/null || echo "v4")
-        case "$network_type" in
-            "v4") NETWORK_OPTS="-4" ;;
-            "v6") NETWORK_OPTS="-6" ;;
-            "v4v6") NETWORK_OPTS="-4" ;;
-            *) NETWORK_OPTS="-4" ;;
-        esac
-        
-        # ネットワークタイプをグローバル変数として保存
-        NETWORK_TYPE="$network_type"
-        debug_log "DEBUG" "Network configuration loaded: ${NETWORK_TYPE}, options: ${NETWORK_OPTS}"
-    fi
-    
-    # 高速リトライループ
+    # URLエンコードとAPI URLを事前に構築（ループ外で1回のみ）
+    encoded_text=$(urlencode "$text")
+    api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}"
+
+    # リトライループ
     while [ $retry_count -le $API_MAX_RETRIES ]; do
-        # IPバージョン切替（v4v6の場合のみ切替）
-        if [ $retry_count -gt 0 ] && [ "$NETWORK_TYPE" = "v4v6" ]; then
-            NETWORK_OPTS=$([ "$NETWORK_OPTS" = "-4" ] && echo "-6" || echo "-4")
-            debug_log "DEBUG" "Switching network option to: ${NETWORK_OPTS}"
+        # v4v6の場合のみネットワークオプションを切り替え
+        if [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ]; then
+            wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
         fi
-        
-        # APIリクエスト直接処理（一時ファイルなし）
-        temp_output=$($BASE_WGET $NETWORK_OPTS -T $API_TIMEOUT --tries=1 -q -O - \
+
+        # APIリクエスト送信（シンプルかつ効率的）
+        $BASE_WGET $wget_options -T $API_TIMEOUT --tries=1 -q -O "$temp_file" \
             --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
-            "$api_url" 2>/dev/null)
-        
-        # 結果確認と処理
-        if [ -n "$temp_output" ] && echo "$temp_output" | grep -q '\[\[\["'; then
-            translated=$(echo "$temp_output" | sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g')
+            "$api_url" 2>/dev/null
+
+        # レスポンスチェックとパース（直接sedを使用）
+        if [ -s "$temp_file" ] && grep -q '\[\[\["' "$temp_file"; then
+            local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
             
             if [ -n "$translated" ]; then
-                debug_log "DEBUG" "Translation successful on attempt: $((retry_count + 1))"
-                printf "%s" "$translated"
+                rm -f "$temp_file" 2>/dev/null
+                printf "%s\n" "$translated"
                 return 0
             fi
         fi
-        
+
+        rm -f "$temp_file" 2>/dev/null
         retry_count=$((retry_count + 1))
-        # 最終試行でなければ待機
-        [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
     done
-    
-    debug_log "DEBUG" "Translation failed after ${API_MAX_RETRIES} attempts"
+
     return 1
 }
 
