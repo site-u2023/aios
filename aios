@@ -1105,7 +1105,7 @@ check_api_rate_limit() {
         
         # トークンが設定されていても認証機能が使えない場合、警告表示
         if [ "$WGET_CAPABILITY" = "limited" ] && [ -f "$GITHUB_TOKEN_FILE" ]; then
-            debug_log "WARN" "GitHub token is set but authentication is not supported with current wget version"
+            debug_log "DEBUG" "GitHub token is set but authentication is not supported with current wget version"
         fi
     fi
     
