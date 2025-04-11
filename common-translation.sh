@@ -174,14 +174,26 @@ translate_with_google() {
     local network_type=""
 
     debug_log "DEBUG" "Starting Google Translate API request" "true"
+    
+    # レスポンスパース処理を定義 (最適化のため関数として分離)
+    parse_response() {
+        sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$1"
+    }
 
-    # ネットワーク接続状態確認
+    # ネットワーク接続状態を一度だけ確認
     if [ ! -f "$ip_check_file" ]; then
         check_network_connectivity
         network_type=$(cat "$ip_check_file" 2>/dev/null)
     else
         network_type=$(cat "$ip_check_file" 2>/dev/null)
     fi
+
+    # ネットワーク接続状態に基づいてwgetオプションを設定
+    case "$network_type" in
+        "v4") wget_options="-4" ;;
+        "v6") wget_options="-6" ;;
+        "v4v6"|*) wget_options="-4" ;;
+    esac
 
     # URLエンコード
     local encoded_text=""
@@ -200,20 +212,16 @@ translate_with_google() {
             wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
         fi
 
-        # 元のwgetオプションを設定
-        export WGET_EXTRA_OPTIONS="$wget_options --tries=1"
-
-        # make_api_request関数を使用してAPIリクエスト実行
-        make_api_request "$api_url" "$temp_file" "$API_TIMEOUT" "TRANSLATE"
+        # APIリクエスト送信 - 直接wgetコマンドを使用
+        $BASE_WGET $wget_options -T $API_TIMEOUT --tries=1 -q -O "$temp_file" \
+            --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
+            "$api_url" 2>/dev/null
+        
         local api_status=$?
-
-        # 環境変数をクリア
-        unset WGET_EXTRA_OPTIONS
 
         # レスポンスチェックとパース
         if [ $api_status -eq 0 ] && [ -f "$temp_file" ] && [ -s "$temp_file" ] && grep -q '\[\[\["' "$temp_file"; then
-            local translated=""
-            translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
+            local translated="$(parse_response "$temp_file")"
             
             if [ -n "$translated" ]; then
                 rm -f "$temp_file" 2>/dev/null
@@ -227,7 +235,7 @@ translate_with_google() {
         retry_count=$((retry_count + 1))
     done
 
-    debug_log "TRANSLATE" "All translation attempts failed"
+    debug_log "DEBUG" "All translation attempts failed"
     return 1
 }
 
