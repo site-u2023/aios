@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.11-00-01"
+SCRIPT_VERSION="2025.04.11-00-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX準拠シェルスクリプト
@@ -110,6 +110,50 @@ detect_wget_capabilities() {
     echo "$capability"
 }
 
+# APIリクエストを実行する共通関数
+make_api_request() {
+    # パラメータ
+    local url="$1"
+    local tmp_file="$2"
+    local timeout="${3:-$API_TIMEOUT}"
+    local debug_tag="${4:-API}"
+    
+    # wgetの機能検出
+    local wget_capability=$(detect_wget_capabilities)
+    local used_url="$url"
+    local status=0
+    
+    debug_log "DEBUG" "[$debug_tag] Making API request to: $url"
+    
+    # コマンド構築と実行
+    case "$wget_capability" in
+        "full")
+            # 完全なwgetの場合
+            debug_log "DEBUG" "[$debug_tag] Using full wget with redirect support"
+            wget --no-check-certificate -q -L --max-redirect="${API_MAX_REDIRECTS:-2}" \
+                --header="User-Agent: ${USER_AGENT}" \
+                -O "$tmp_file" "$used_url" -T "$timeout" 2>/dev/null
+            status=$?
+            ;;
+        "https_only"|"basic")
+            # 基本wgetの場合（HTTPSを直接指定）
+            used_url=$(echo "$url" | sed 's|^http:|https:|')
+            debug_log "DEBUG" "[$debug_tag] Using BusyBox wget, forcing HTTPS URL: $used_url"
+            wget --no-check-certificate -q --header="User-Agent: ${USER_AGENT}" \
+                -O "$tmp_file" "$used_url" -T "$timeout" 2>/dev/null
+            status=$?
+            ;;
+    esac
+    
+    if [ $status -eq 0 ] && [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+        debug_log "DEBUG" "[$debug_tag] API request successful"
+        return 0
+    else
+        debug_log "DEBUG" "[$debug_tag] API request failed with status: $status"
+        return $status
+    fi
+}
+
 # 検出した地域情報を表示する共通関数
 display_detected_location() {
     local detection_source="$1"
@@ -169,47 +213,24 @@ get_country_ipapi() {
     local network_type="$2"  # ネットワークタイプ
     local api_name="$3"      # API名（ログ用）
     
-    # wgetの機能を検出
-    local wget_capability=$(detect_wget_capabilities)
-    
-    # 環境に応じたwgetコマンドを構築
-    local wget_cmd=""
-    local used_api_url="$api_name"
-    
-    case "$wget_capability" in
-        "full")
-            # フル機能wgetの場合
-            wget_cmd="wget --no-check-certificate -q -L --max-redirect=${API_MAX_REDIRECTS:-2} --header=\"User-Agent: ${USER_AGENT}\""
-            debug_log "DEBUG" "Using full wget with redirect support"
-            ;;
-        "https_only"|"basic")
-            # BusyBox wgetの場合
-            wget_cmd="wget --no-check-certificate -q --header=\"User-Agent: ${USER_AGENT}\""
-            # HTTPSを直接指定（リダイレクトを回避）
-            used_api_url=$(echo "$api_name" | sed 's|^http:|https:|')
-            debug_log "DEBUG" "Using BusyBox wget ($wget_capability), forcing HTTPS URL: $used_api_url"
-            ;;
-    esac
-    
     local retry_count=0
     local success=0
     
-    # スピナー更新メッセージ - a=のパラメータをused_api_urlから取得
-    local api_domain=$(echo "$used_api_url" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
-    [ -z "$api_domain" ] && api_domain="$used_api_url"
+    # スピナー更新メッセージ - a=のパラメータをapi_nameから取得
+    local api_domain=$(echo "$api_name" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+    [ -z "$api_domain" ] && api_domain="$api_name"
     local country_msg=$(get_message "MSG_QUERY_INFO" "t=country+timezone" "a=${api_domain}" "n=$network_type")
     update_spinner "$(color "blue" "$country_msg")" "yellow"
     
     debug_log "DEBUG" "Querying country and timezone from $api_domain"
     
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        # 検出した機能に基づいてwgetを実行
-        # ダブルクォートの扱いに注意（シェル評価でエスケープ）
-        eval $wget_cmd -O "$tmp_file" \"$used_api_url\" -T $API_TIMEOUT 2>/dev/null
-        local wget_status=$?
-        debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
+        # 共通関数を使用してAPIリクエストを実行
+        make_api_request "$api_name" "$tmp_file" "$API_TIMEOUT" "IPAPI"
+        local request_status=$?
+        debug_log "DEBUG" "API request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
-        if [ $wget_status -eq 0 ] && [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+        if [ $request_status -eq 0 ]; then
             # JSONデータから国コードとタイムゾーン情報を抽出
             SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
             SELECT_ZONENAME=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//')
@@ -231,7 +252,7 @@ get_country_ipapi() {
                 debug_log "DEBUG" "Incomplete country/timezone data from $api_domain"
             fi
         else
-            debug_log "DEBUG" "Failed to download data from $api_domain (status: $wget_status)"
+            debug_log "DEBUG" "Failed to download data from $api_domain"
         fi
         
         debug_log "DEBUG" "API query attempt $((retry_count+1)) failed"
@@ -253,47 +274,24 @@ get_country_ipinfo() {
     local network_type="$2"  # ネットワークタイプ
     local api_name="$3"      # API名（ログ用）
     
-    # wgetの機能を検出
-    local wget_capability=$(detect_wget_capabilities)
-    
-    # 環境に応じたwgetコマンドを構築
-    local wget_cmd=""
-    local used_api_url="$api_name"
-    
-    case "$wget_capability" in
-        "full")
-            # フル機能wgetの場合
-            wget_cmd="wget --no-check-certificate -q -L --max-redirect=${API_MAX_REDIRECTS:-2} --header=\"User-Agent: ${USER_AGENT}\""
-            debug_log "DEBUG" "Using full wget with redirect support"
-            ;;
-        "https_only"|"basic")
-            # BusyBox wgetの場合
-            wget_cmd="wget --no-check-certificate -q --header=\"User-Agent: ${USER_AGENT}\""
-            # HTTPSを直接指定（リダイレクトを回避）
-            used_api_url=$(echo "$api_name" | sed 's|^http:|https:|')
-            debug_log "DEBUG" "Using BusyBox wget ($wget_capability), forcing HTTPS URL: $used_api_url"
-            ;;
-    esac
-    
     local retry_count=0
     local success=0
     
-    # スピナー更新メッセージ - a=のパラメータをused_api_urlから取得
-    local api_domain=$(echo "$used_api_url" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
-    [ -z "$api_domain" ] && api_domain="$used_api_url"
+    # スピナー更新メッセージ - a=のパラメータをapi_nameから取得
+    local api_domain=$(echo "$api_name" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+    [ -z "$api_domain" ] && api_domain="$api_name"
     local country_msg=$(get_message "MSG_QUERY_INFO" "t=country+timezone" "a=${api_domain}" "n=$network_type")
     update_spinner "$(color "blue" "$country_msg")" "yellow"
     
     debug_log "DEBUG" "Querying country and timezone from $api_domain"
     
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        # 検出した機能に基づいてwgetを実行
-        # ダブルクォートの扱いに注意（シェル評価でエスケープ）
-        eval $wget_cmd -O "$tmp_file" \"$used_api_url\" -T $API_TIMEOUT 2>/dev/null
-        local wget_status=$?
-        debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
+        # 共通関数を使用してAPIリクエストを実行
+        make_api_request "$api_name" "$tmp_file" "$API_TIMEOUT" "IPINFO"
+        local request_status=$?
+        debug_log "DEBUG" "API request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
-        if [ $wget_status -eq 0 ] && [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+        if [ $request_status -eq 0 ]; then
             # JSONデータから国コードとタイムゾーン情報を抽出（スペースを許容するパターン）
             SELECT_COUNTRY=$(grep -o '"country"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"country"[[:space:]]*:[[:space:]]*"//')
             SELECT_ZONENAME=$(grep -o '"timezone"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"timezone"[[:space:]]*:[[:space:]]*"//')
@@ -320,7 +318,7 @@ get_country_ipinfo() {
                 debug_log "DEBUG" "Incomplete country/timezone data from $api_domain"
             fi
         else
-            debug_log "DEBUG" "Failed to download data from $api_domain (status: $wget_status)"
+            debug_log "DEBUG" "Failed to download data from $api_domain"
         fi
         
         debug_log "DEBUG" "API query attempt $((retry_count+1)) failed"
