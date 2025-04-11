@@ -171,10 +171,25 @@ feed_package() {
   local JSON
   JSON=$(wget --no-check-certificate -qO- "$API_URL")
 
+  # *** ここからエラー処理の改善部分 ***
   if [ -z "$JSON" ]; then
-    debug_log "DEBUG" "Could not retrieve data from API."
-    printf "%s\n" "$(color white "Could not retrieve data from API.")"
-    return 0  # エラーが発生してもプロセスを継続
+    debug_log "DEBUG" "Could not retrieve data from API for package: $PKG_PREFIX from $REPO_OWNER/$REPO_NAME"
+    printf "%s\n" "$(color yellow "パッケージ $PKG_PREFIX の取得に失敗: API接続エラー")"
+    return 0
+  fi
+
+  # APIレート制限エラーを検出
+  if echo "$JSON" | grep -q "API rate limit exceeded"; then
+    debug_log "DEBUG" "GitHub API rate limit exceeded when fetching package: $PKG_PREFIX"
+    printf "%s\n" "$(color yellow "パッケージ $PKG_PREFIX の取得に失敗: GitHub API制限超過")"
+    return 0
+  fi
+
+  # 404エラー（リポジトリやパスが見つからない）を検出
+  if echo "$JSON" | grep -q "Not Found"; then
+    debug_log "DEBUG" "Repository or path not found: $REPO_OWNER/$REPO_NAME/$DIR_PATH"
+    printf "%s\n" "$(color yellow "パッケージ $PKG_PREFIX の取得に失敗: リポジトリまたはパスが見つかりません")"
+    return 0
   fi
 
   # 最新のパッケージファイルを取得
@@ -182,9 +197,9 @@ feed_package() {
   PKG_FILE=$(echo "$JSON" | jq -r '.[].name' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
 
   if [ -z "$PKG_FILE" ]; then
-    debug_log "DEBUG" "$PKG_PREFIX not found."
-    [ "$hidden" != "yes" ] && printf "%s\n" "$(color white "$PKG_PREFIX not found.")"
-    return 0  # エラーが発生してもプロセスを継続
+    debug_log "DEBUG" "Package $PKG_PREFIX not found in repository $REPO_OWNER/$REPO_NAME"
+    [ "$hidden" != "yes" ] && printf "%s\n" "$(color yellow "パッケージ $PKG_PREFIX がリポジトリ内で見つかりません")"
+    return 0
   fi
 
   debug_log "DEBUG" "NEW PACKAGE: $PKG_FILE"
@@ -194,15 +209,16 @@ feed_package() {
   DOWNLOAD_URL=$(echo "$JSON" | jq -r --arg PKG "$PKG_FILE" '.[] | select(.name == $PKG) | .download_url')
 
   if [ -z "$DOWNLOAD_URL" ]; then
-    debug_log "DEBUG" "Failed to retrieve package information."
-    printf "%s\n" "$(color white "Failed to retrieve package information.")"
-    return 0  # エラーが発生してもプロセスを継続
+    debug_log "DEBUG" "Failed to retrieve download URL for package: $PKG_PREFIX"
+    printf "%s\n" "$(color yellow "パッケージ $PKG_PREFIX のダウンロードURLの取得に失敗しました")"
+    return 0
   fi
+  # *** エラー処理の改善部分ここまで ***
 
   debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
   debug_log "DEBUG" "DOWNLOAD URL: $DOWNLOAD_URL"
 
-  eval "$BASE_WGET" -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # エラーが発生してもプロセスを継続
+  eval "$BASE_WGET" -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   
