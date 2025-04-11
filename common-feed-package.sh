@@ -167,28 +167,28 @@ feed_package() {
     debug_log "DEBUG" "DIR_PATH not specified, exploring repository's top directory"
   fi
 
-  # APIからデータを取得
+  # APIからデータを取得 - GitHubはUser-Agentが必須
   local JSON
-  JSON=$(wget --no-check-certificate -qO- "$API_URL")
+  JSON=$(wget --no-check-certificate -q -U "aios-pkg/1.0" -O- "$API_URL")
 
   # *** ここからエラー処理の改善部分 ***
   if [ -z "$JSON" ]; then
     debug_log "DEBUG" "Could not retrieve data from API for package: $PKG_PREFIX from $REPO_OWNER/$REPO_NAME"
-    printf "%s\n" "$(color yellow "パッケージ $PKG_PREFIX の取得に失敗: API接続エラー")"
+    printf "%s\n" "$(color yellow "Failed to retrieve package $PKG_PREFIX: API connection error")"
     return 0
   fi
 
   # APIレート制限エラーを検出
   if echo "$JSON" | grep -q "API rate limit exceeded"; then
     debug_log "DEBUG" "GitHub API rate limit exceeded when fetching package: $PKG_PREFIX"
-    printf "%s\n" "$(color yellow "パッケージ $PKG_PREFIX の取得に失敗: GitHub API制限超過")"
+    printf "%s\n" "$(color yellow "Failed to retrieve package $PKG_PREFIX: GitHub API rate limit exceeded")"
     return 0
   fi
 
   # 404エラー（リポジトリやパスが見つからない）を検出
   if echo "$JSON" | grep -q "Not Found"; then
     debug_log "DEBUG" "Repository or path not found: $REPO_OWNER/$REPO_NAME/$DIR_PATH"
-    printf "%s\n" "$(color yellow "パッケージ $PKG_PREFIX の取得に失敗: リポジトリまたはパスが見つかりません")"
+    printf "%s\n" "$(color yellow "Failed to retrieve package $PKG_PREFIX: Repository or path not found")"
     return 0
   fi
 
@@ -198,7 +198,7 @@ feed_package() {
 
   if [ -z "$PKG_FILE" ]; then
     debug_log "DEBUG" "Package $PKG_PREFIX not found in repository $REPO_OWNER/$REPO_NAME"
-    [ "$hidden" != "yes" ] && printf "%s\n" "$(color yellow "パッケージ $PKG_PREFIX がリポジトリ内で見つかりません")"
+    [ "$hidden" != "yes" ] && printf "%s\n" "$(color yellow "Package $PKG_PREFIX not found in repository")"
     return 0
   fi
 
@@ -210,7 +210,7 @@ feed_package() {
 
   if [ -z "$DOWNLOAD_URL" ]; then
     debug_log "DEBUG" "Failed to retrieve download URL for package: $PKG_PREFIX"
-    printf "%s\n" "$(color yellow "パッケージ $PKG_PREFIX のダウンロードURLの取得に失敗しました")"
+    printf "%s\n" "$(color yellow "Failed to retrieve download URL for package $PKG_PREFIX")"
     return 0
   fi
   # *** エラー処理の改善部分ここまで ***
@@ -301,11 +301,11 @@ feed_package_release() {
   debug_log "DEBUG" "Fetching data from GitHub API: $API_URL"
 
   local JSON
-  JSON=$(wget --no-check-certificate -qO- "$API_URL")
+  JSON=$(wget --no-check-certificate -q -U "aios-pkg/1.0" -O- "$API_URL")
 
   if [ -z "$JSON" ];then
     debug_log "DEBUG" "Could not retrieve data from API."
-    printf "%s\n" "$(color white "Could not retrieve data from API.")"
+    printf "%s\n" "$(color yellow "Could not retrieve data from API.")"
     return 0
   fi
 
@@ -314,7 +314,7 @@ feed_package_release() {
 
   if [ -z "$PKG_FILE" ];then
     debug_log "DEBUG" "$PKG_PREFIX not found."
-    [ "$hidden" != "yes" ] && printf "%s\n" "$(color white "$PKG_PREFIX not found.")"
+    [ "$hidden" != "yes" ] && printf "%s\n" "$(color yellow "$PKG_PREFIX not found.")"
     return 0
   fi
 
@@ -325,7 +325,7 @@ feed_package_release() {
 
   if [ -z "$DOWNLOAD_URL" ];then
     debug_log "DEBUG" "Failed to retrieve package information."
-    printf "%s\n" "$(color white "Failed to retrieve package information.")"
+    printf "%s\n" "$(color yellow "Failed to retrieve package information.")"
     return 0
   fi
 
