@@ -164,6 +164,7 @@ translate_with_lingva() {
     return 1
 }
 
+# Google翻訳APIを使用した翻訳関数 (高効率版)
 translate_with_google() {
     local text="$1"
     local source_lang="$2"
@@ -172,21 +173,22 @@ translate_with_google() {
     local wget_options=""
     local retry_count=0
     local network_type=""
-
+    
     debug_log "DEBUG" "Starting Google Translate API request" "true"
     
-    # レスポンスパース処理を定義 (最適化のため関数として分離)
-    parse_response() {
-        sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$1"
-    }
+    # URLエンコード
+    local encoded_text=""
+    encoded_text=$(urlencode "$text")
+    local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
+    
+    mkdir -p "$(dirname "$temp_file")" 2>/dev/null
+    mkdir -p "$CACHE_DIR" 2>/dev/null
 
     # ネットワーク接続状態を一度だけ確認
     if [ ! -f "$ip_check_file" ]; then
         check_network_connectivity
-        network_type=$(cat "$ip_check_file" 2>/dev/null)
-    else
-        network_type=$(cat "$ip_check_file" 2>/dev/null)
     fi
+    network_type=$(cat "$ip_check_file" 2>/dev/null)
 
     # ネットワーク接続状態に基づいてwgetオプションを設定
     case "$network_type" in
@@ -194,14 +196,7 @@ translate_with_google() {
         "v6") wget_options="-6" ;;
         "v4v6"|*) wget_options="-4" ;;
     esac
-
-    # URLエンコード
-    local encoded_text=""
-    encoded_text=$(urlencode "$text")
-    local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
-
-    mkdir -p "$(dirname "$temp_file")" 2>/dev/null
-
+    
     # APIリクエスト用URL構築
     local api_url="${GOOGLE_TRANSLATE_URL}?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}"
 
@@ -211,17 +206,15 @@ translate_with_google() {
         if [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ]; then
             wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
         fi
-
-        # APIリクエスト送信 - 直接wgetコマンドを使用
-        $BASE_WGET $wget_options -T $API_TIMEOUT --tries=1 -q -O "$temp_file" \
-            --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
-            "$api_url" 2>/dev/null
         
-        local api_status=$?
-
+        # APIリクエスト実行
+        make_api_request "$api_url" "$temp_file" "$API_TIMEOUT" "TRANSLATE" "$wget_options"
+        local status=$?
+        
         # レスポンスチェックとパース
-        if [ $api_status -eq 0 ] && [ -f "$temp_file" ] && [ -s "$temp_file" ] && grep -q '\[\[\["' "$temp_file"; then
-            local translated="$(parse_response "$temp_file")"
+        if [ $status -eq 0 ] && [ -f "$temp_file" ] && [ -s "$temp_file" ] && grep -q '\[\[\["' "$temp_file"; then
+            local translated=""
+            translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
             
             if [ -n "$translated" ]; then
                 rm -f "$temp_file" 2>/dev/null
@@ -229,12 +222,13 @@ translate_with_google() {
                 return 0
             fi
         fi
-
+        
         # 失敗した場合はファイルを削除してリトライ
         rm -f "$temp_file" 2>/dev/null
         retry_count=$((retry_count + 1))
+        sleep 1
     done
-
+    
     debug_log "DEBUG" "All translation attempts failed"
     return 1
 }
