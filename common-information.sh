@@ -351,8 +351,12 @@ get_country_code() {
             alt_func="get_country_ipinfo"
         fi
         
+        # 代替APIのドメイン名を抽出
+        local alt_api_domain=$(echo "$alt_api" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+        [ -z "$alt_api_domain" ] && alt_api_domain="$alt_api"
+
         # スピナーメッセージ更新
-        local retry_msg=$(get_message "MSG_QUERY_INFO" "t=location information" "a=alternative API" "n=$network_type")
+        local retry_msg=$(get_message "MSG_QUERY_INFO" "t=location information" "a=${alt_api_domain}" "n=$network_type")
         update_spinner "$(color "blue" "$retry_msg")" "yellow"
         
         # 代替API呼び出し
