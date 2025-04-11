@@ -126,11 +126,13 @@ get_country_ipapi() {
     local retry_count=0
     local success=0
     
-    # スピナー更新メッセージ
-    local country_msg=$(get_message "MSG_QUERY_INFO" "t=country+timezone" "api=ip-api.com" "n=$network_type")
+    # スピナー更新メッセージ - a=のパラメータをapi_nameから取得
+    local api_domain=$(echo "$api_name" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+    [ -z "$api_domain" ] && api_domain="$api_name"
+    local country_msg=$(get_message "MSG_QUERY_INFO" "t=country+timezone" "a=${api_domain}" "n=$network_type")
     update_spinner "$(color "blue" "$country_msg")" "yellow"
     
-    debug_log "DEBUG" "Querying country and timezone from ip-api.com"
+    debug_log "DEBUG" "Querying country and timezone from $api_domain"
     
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
         # リダイレクト対応のwgetコマンドを使用
@@ -150,20 +152,20 @@ get_country_ipapi() {
             
             # データが正常に取得できたか確認
             if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
-                debug_log "DEBUG" "Retrieved from ip-api.com - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
+                debug_log "DEBUG" "Retrieved from $api_domain - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
                 if [ -n "$ISP_NAME" ]; then
                     debug_log "DEBUG" "Retrieved ISP info - Name: $ISP_NAME, AS: $ISP_AS"
                 fi
                 success=1
                 break
             else
-                debug_log "DEBUG" "Incomplete country/timezone data from ip-api.com"
+                debug_log "DEBUG" "Incomplete country/timezone data from $api_domain"
             fi
         else
-            debug_log "DEBUG" "Failed to download data from ip-api.com (status: $wget_status)"
+            debug_log "DEBUG" "Failed to download data from $api_domain (status: $wget_status)"
         fi
         
-        debug_log "DEBUG" "ip-api.com query attempt $((retry_count+1)) failed"
+        debug_log "DEBUG" "$api_domain query attempt $((retry_count+1)) failed"
         retry_count=$((retry_count + 1))
         [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
     done
@@ -188,11 +190,13 @@ get_country_ipinfo() {
     local retry_count=0
     local success=0
     
-    # スピナー更新メッセージ
-    local country_msg=$(get_message "MSG_QUERY_INFO" "t=country+timezone" "a=ipinfo.io" "n=$network_type")
+    # スピナー更新メッセージ - a=のパラメータをapi_nameから取得
+    local api_domain=$(echo "$api_name" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+    [ -z "$api_domain" ] && api_domain="$api_name"
+    local country_msg=$(get_message "MSG_QUERY_INFO" "t=country+timezone" "a=${api_domain}" "n=$network_type")
     update_spinner "$(color "blue" "$country_msg")" "yellow"
     
-    debug_log "DEBUG" "Querying country and timezone from ipinfo.io"
+    debug_log "DEBUG" "Querying country and timezone from $api_domain"
     
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
         # リダイレクト対応のwgetコマンドを使用
@@ -217,20 +221,20 @@ get_country_ipinfo() {
             
             # データが正常に取得できたか確認
             if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
-                debug_log "DEBUG" "Retrieved from ipinfo.io - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
+                debug_log "DEBUG" "Retrieved from $api_domain - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
                 if [ -n "$ISP_NAME" ]; then
                     debug_log "DEBUG" "Retrieved ISP info - Name: $ISP_NAME, AS: $ISP_AS"
                 fi
                 success=1
                 break
             else
-                debug_log "DEBUG" "Incomplete country/timezone data from ipinfo.io"
+                debug_log "DEBUG" "Incomplete country/timezone data from $api_domain"
             fi
         else
-            debug_log "DEBUG" "Failed to download data from ipinfo.io (status: $wget_status)"
+            debug_log "DEBUG" "Failed to download data from $api_domain (status: $wget_status)"
         fi
         
-        debug_log "DEBUG" "ipinfo.io query attempt $((retry_count+1)) failed"
+        debug_log "DEBUG" "$api_domain query attempt $((retry_count+1)) failed"
         retry_count=$((retry_count + 1))
         [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
     done
