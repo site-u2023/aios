@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-11-01-06"
+SCRIPT_VERSION="2025-04-11-01-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -165,10 +165,6 @@ translate_with_lingva() {
 }
 
 # Google翻訳APIを使用した翻訳関数 (高効率版)
-# グローバルキャッシュ変数（関数の外で定義）
-WGET_CAPABILITY_CACHED=""
-NETWORK_TYPE_CACHED=""
-
 translate_with_google() {
     local text="$1"
     local source_lang="$2"
@@ -183,24 +179,16 @@ translate_with_google() {
 
     debug_log "DEBUG" "Starting Google Translate API request" "true"
 
-    # wgetの機能を事前に検出（キャッシュ活用）
-    if [ -z "$WGET_CAPABILITY_CACHED" ]; then
-        WGET_CAPABILITY_CACHED=$(detect_wget_capabilities)
-        debug_log "DEBUG" "Detected wget capability: ${WGET_CAPABILITY_CACHED}"
-    fi
-    wget_capability="$WGET_CAPABILITY_CACHED"
+    # wgetの機能を事前に検出（一度だけ実行）
+    wget_capability=$(detect_wget_capabilities)
     debug_log "DEBUG" "Using wget capability: ${wget_capability}"
 
     # 必要なディレクトリを確保
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
 
-    # ネットワーク接続状態を確認（キャッシュ活用）
-    if [ -z "$NETWORK_TYPE_CACHED" ]; then
-        [ ! -f "$ip_check_file" ] && check_network_connectivity
-        NETWORK_TYPE_CACHED=$(cat "$ip_check_file" 2>/dev/null || echo "v4")
-        debug_log "DEBUG" "Detected network type: ${NETWORK_TYPE_CACHED}"
-    fi
-    network_type="$NETWORK_TYPE_CACHED"
+    # ネットワーク接続状態を一度だけ確認
+    [ ! -f "$ip_check_file" ] && check_network_connectivity
+    network_type=$(cat "$ip_check_file" 2>/dev/null || echo "v4")
 
     # ネットワークタイプに基づいてwgetオプションを設定
     case "$network_type" in
@@ -223,12 +211,9 @@ translate_with_google() {
 
     # 最適化されたリトライループ
     while [ $retry_count -le $API_MAX_RETRIES ]; do
-        # v4v6の場合のみネットワークタイプを切り替え（簡易版）
+        # v4v6の場合のみネットワークタイプを切り替え
         if [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ]; then
-            # sedを使わない単純な切り替え
-            wget_options=$([ "$(echo "$wget_options" | grep -o "^-[46]")" = "-4" ] && echo "-6" || echo "-4")
-            # 必要に応じて-Lオプションを再追加
-            [ "$wget_capability" = "full" ] && wget_options="$wget_options -L"
+            wget_options=$(echo "$wget_options" | sed 's/-4/-6/;s/-6 -L/-4 -L/;t;s/-6/-4/')
         fi
 
         # APIリクエスト送信（wget機能に応じてオプション最適化）
