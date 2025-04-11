@@ -95,38 +95,38 @@ feed_package() {
   local skip_package_db="no"
   local set_disabled="no"
   local hidden="no"
-  local opts=""   # Variable to store options
-  local args=""   # Variable to store regular arguments
+  local opts=""   # オプションを格納する変数
+  local args=""   # 通常引数を格納する変数
   local desc_flag="no"  # 説明文処理中フラグ
   local desc_value=""   # 説明文の値を保持
 
-  # Scan arguments and separate options and regular arguments
+  # 引数を処理
   while [ $# -gt 0 ]; do
     case "$1" in
-      yn) confirm_install="yes"; opts="$opts yn" ;;   # yn option
-      nolang) skip_lang_pack="yes"; opts="$opts nolang" ;; # nolang option
-      force) force_install="yes"; opts="$opts force" ;;   # force option
-      notpack) skip_package_db="yes"; opts="$opts notpack" ;; # notpack option
-      disabled) set_disabled="yes"; opts="$opts disabled" ;; # disabled option
-      hidden) hidden="yes"; opts="$opts hidden" ;; # hidden option
+      yn) confirm_install="yes"; opts="$opts yn" ;;   # yn オプション
+      nolang) skip_lang_pack="yes"; opts="$opts nolang" ;; # nolang オプション
+      force) force_install="yes"; opts="$opts force" ;;   # force オプション
+      notpack) skip_package_db="yes"; opts="$opts notpack" ;; # notpack オプション
+      disabled) set_disabled="yes"; opts="$opts disabled" ;; # disabled オプション
+      hidden) hidden="yes"; opts="$opts hidden" ;; # hidden オプション
       desc=*)
-        # desc=の後の部分を取得して説明文として保存
+        # desc=の検出時に説明文の処理を開始
         desc_flag="yes"
         desc_value="${1#desc=}"
         ;;
       *)
         if [ "$desc_flag" = "yes" ]; then
-          # 説明文処理中の場合、desc_valueに追加
+          # desc=が既に見つかっている場合、次の引数を説明文の続きとして扱う
           desc_value="$desc_value $1"
         else
-          args="$args $1"  # 通常の引数として保存
+          args="$args $1"  # 通常の引数として格納
         fi
         ;;
     esac
     shift
   done
 
-  # Check if there are 4 required arguments
+  # 必須引数が揃っているかチェック
   set -- $args
   if [ "$#" -ne 4 ]; then
     debug_log "DEBUG" "Required arguments (REPO_OWNER, REPO_NAME, DIR_PATH, PKG_PREFIX) are missing." >&2
@@ -138,7 +138,7 @@ feed_package() {
   if [ -n "$PACKAGE_EXTENSION" ]; then
       debug_log "DEBUG" "Content of PACKAGE_EXTENSION: $PACKAGE_EXTENSION"
       
-      # Routine to be removed in the future
+      # 将来的に削除される予定のルーチン
       if [ "$PACKAGE_EXTENSION" != "ipk" ]; then
           printf "%s\n" "$(color yellow "Currently not supported for apk.")"
           return 1
@@ -160,59 +160,58 @@ feed_package() {
   
   debug_log "DEBUG" "Fetching data from GitHub API: $API_URL"
 
-  # If DIR_PATH is not specified, auto-completion
+  # DIR_PATHが指定されていない場合、自動補完
   if [ -z "$DIR_PATH" ]; then
-    # If directory is empty, explore the repository's top directory
+    # ディレクトリが空の場合、リポジトリのトップディレクトリを探索
     API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/"
     debug_log "DEBUG" "DIR_PATH not specified, exploring repository's top directory"
   fi
 
-  # Retrieve data from API
+  # APIからデータを取得
   local JSON
   JSON=$(wget --no-check-certificate -qO- "$API_URL")
 
   if [ -z "$JSON" ]; then
     debug_log "DEBUG" "Could not retrieve data from API."
     printf "%s\n" "$(color white "Could not retrieve data from API.")"
-    return 0  # Continue processing even if an error occurs
+    return 0  # エラーが発生してもプロセスを継続
   fi
 
-  # Get the latest package file
+  # 最新のパッケージファイルを取得
   local PKG_FILE
   PKG_FILE=$(echo "$JSON" | jq -r '.[].name' | grep "^${PKG_PREFIX}_" | sort | tail -n 1)
 
   if [ -z "$PKG_FILE" ]; then
     debug_log "DEBUG" "$PKG_PREFIX not found."
     [ "$hidden" != "yes" ] && printf "%s\n" "$(color white "$PKG_PREFIX not found.")"
-    return 0  # Continue processing even if an error occurs
+    return 0  # エラーが発生してもプロセスを継続
   fi
 
   debug_log "DEBUG" "NEW PACKAGE: $PKG_FILE"
 
-  # Get download URL
+  # ダウンロードURLを取得
   local DOWNLOAD_URL
   DOWNLOAD_URL=$(echo "$JSON" | jq -r --arg PKG "$PKG_FILE" '.[] | select(.name == $PKG) | .download_url')
 
   if [ -z "$DOWNLOAD_URL" ]; then
     debug_log "DEBUG" "Failed to retrieve package information."
     printf "%s\n" "$(color white "Failed to retrieve package information.")"
-    return 0  # Continue processing even if an error occurs
+    return 0  # エラーが発生してもプロセスを継続
   fi
 
   debug_log "DEBUG" "OUTPUT FILE: $OUTPUT_FILE"
   debug_log "DEBUG" "DOWNLOAD URL: $DOWNLOAD_URL"
 
-  eval "$BASE_WGET" -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # Continue processing even if an error occurs
+  eval "$BASE_WGET" -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0  # エラーが発生してもプロセスを継続
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
   
   # 説明文がある場合はdesc=を追加してインストール
   if [ "$desc_flag" = "yes" ] && [ -n "$desc_value" ]; then
-    debug_log "DEBUG" "Attempting to install package: $PKG_PREFIX with options: $opts and description: $desc_value"
-    # 説明文をクォートで囲んで渡す
+    debug_log "DEBUG" "Installing package with description: $desc_value"
     install_package "$OUTPUT_FILE" $opts "desc=$desc_value" || return 0
   else
-    debug_log "DEBUG" "Attempting to install package: $PKG_PREFIX with options: $opts"
+    debug_log "DEBUG" "Installing package without description"
     install_package "$OUTPUT_FILE" $opts || return 0
   fi
   
@@ -240,16 +239,16 @@ feed_package_release() {
       disabled) set_disabled="yes"; opts="$opts disabled" ;;
       hidden) hidden="yes"; opts="$opts hidden" ;;
       desc=*)
-        # desc=の後の部分を取得して説明文として保存
+        # desc=の検出時に説明文の処理を開始
         desc_flag="yes"
         desc_value="${1#desc=}"
         ;;
       *)
         if [ "$desc_flag" = "yes" ]; then
-          # 説明文処理中の場合、desc_valueに追加
+          # desc=が既に見つかっている場合、次の引数を説明文の続きとして扱う
           desc_value="$desc_value $1"
         else
-          args="$args $1"  # 通常の引数として保存
+          args="$args $1"  # 通常の引数として格納
         fi
         ;;
     esac
@@ -258,7 +257,7 @@ feed_package_release() {
 
   set -- $args
   if [ "$#" -lt 2 ]; then
-    debug_log "DEBUG" "Required arguments (REPO_OWNER, REPO_NAME, PKG_PREFIX) are missing." >&2
+    debug_log "DEBUG" "Required arguments (REPO_OWNER, REPO_NAME) are missing." >&2
     return 1
   fi
 
@@ -267,7 +266,7 @@ feed_package_release() {
   if [ -n "$PACKAGE_EXTENSION" ]; then
       debug_log "DEBUG" "Content of PACKAGE_EXTENSION: $PACKAGE_EXTENSION"
       
-      # Routine to be removed in the future
+      # 将来的に削除される予定のルーチン
       if [ "$PACKAGE_EXTENSION" != "ipk" ]; then
           printf "%s\n" "$(color yellow "Currently not supported for apk.")"
           return 1
@@ -320,14 +319,13 @@ feed_package_release() {
   eval "$BASE_WGET" -O "$OUTPUT_FILE" "$DOWNLOAD_URL" || return 0
 
   debug_log "DEBUG" "$(ls -lh "$OUTPUT_FILE")"
-  debug_log "DEBUG" "Attempting to install package: $PKG_PREFIX"
-
+  
   # 説明文がある場合はdesc=を追加してインストール
   if [ "$desc_flag" = "yes" ] && [ -n "$desc_value" ]; then
-    debug_log "DEBUG" "Installing with description: $desc_value"
-    # 説明文をクォートで囲んで渡す
+    debug_log "DEBUG" "Installing release package with description: $desc_value"
     install_package "$OUTPUT_FILE" $opts "desc=$desc_value" || return 0
   else
+    debug_log "DEBUG" "Installing release package without description"
     install_package "$OUTPUT_FILE" $opts || return 0
   fi
   
