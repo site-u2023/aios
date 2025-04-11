@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-11-00-01"
+SCRIPT_VERSION="2025-04-11-01-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -169,68 +169,71 @@ translate_with_google() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
-    local encoded_text=""
-    local translated=""
-    local api_url=""
-    local temp_output=""
     local retry_count=0
+    local translated=""
+    local temp_output=""
+    local current_wget_opts=""
     
-    # URLエンコード（事前に一度だけ実行）
-    encoded_text=$(urlencode "$text")
-    api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}"
+    # URLエンコード（1回だけ実行）
+    local encoded_text=$(urlencode "$text")
+    local api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}"
     
-    # ネットワーク設定を一度だけ取得（グローバル変数として保存）
-    if [ -z "$NETWORK_CONFIG_LOADED" ]; then
+    # 必要なディレクトリを事前に確認
+    [ ! -d "${TRANSLATION_CACHE_DIR}" ] && mkdir -p "${TRANSLATION_CACHE_DIR}" 2>/dev/null
+    
+    # ネットワーク設定を一度だけ取得（スクリプト全体で保持）
+    if [ -z "${NETWORK_OPTS:-}" ]; then
+        debug_log "DEBUG" "Loading network configuration"
+        
+        # ネットワーク設定ファイルが無い場合は作成
         if [ ! -f "${CACHE_DIR}/network.ch" ]; then
             check_network_connectivity
         fi
         
-        # ネットワークタイプを読み込み、グローバルに保存
-        NETWORK_TYPE=$(cat "${CACHE_DIR}/network.ch" 2>/dev/null || echo "v4")
-        WGET_OPTIONS=""
-        
-        case "$NETWORK_TYPE" in
-            "v4") WGET_OPTIONS="-4" ;;
-            "v6") WGET_OPTIONS="-6" ;;
-            *) WGET_OPTIONS="-4" ;;
+        # ネットワークタイプ取得と設定
+        local network_type=$(cat "${CACHE_DIR}/network.ch" 2>/dev/null || echo "v4")
+        case "$network_type" in
+            "v4") NETWORK_OPTS="-4" ;;
+            "v6") NETWORK_OPTS="-6" ;;
+            "v4v6") NETWORK_OPTS="-4" ;;
+            *) NETWORK_OPTS="-4" ;;
         esac
         
-        # 読み込み済みフラグをセット
-        NETWORK_CONFIG_LOADED=1
+        # ネットワークタイプをグローバル変数として保存
+        NETWORK_TYPE="$network_type"
+        debug_log "DEBUG" "Network configuration loaded: ${NETWORK_TYPE}, options: ${NETWORK_OPTS}"
     fi
-    
-    # 一時ディレクトリだけ作成（ファイル操作を減らす）
-    mkdir -p "${TRANSLATION_CACHE_DIR}" 2>/dev/null
     
     # 高速リトライループ
     while [ $retry_count -le $API_MAX_RETRIES ]; do
-        # IPバージョン切替（v4v6の場合のみ）
-        current_wget_opts="$WGET_OPTIONS"
+        # IPバージョン切替（v4v6の場合のみ切替）
         if [ $retry_count -gt 0 ] && [ "$NETWORK_TYPE" = "v4v6" ]; then
-            current_wget_opts=$([ "$WGET_OPTIONS" = "-4" ] && echo "-6" || echo "-4")
+            NETWORK_OPTS=$([ "$NETWORK_OPTS" = "-4" ] && echo "-6" || echo "-4")
+            debug_log "DEBUG" "Switching network option to: ${NETWORK_OPTS}"
         fi
         
-        # APIリクエスト - 出力を直接変数に格納（一時ファイル不使用）
-        temp_output=$($BASE_WGET $current_wget_opts -T $API_TIMEOUT --tries=1 -q -O - \
+        # APIリクエスト直接処理（一時ファイルなし）
+        temp_output=$($BASE_WGET $NETWORK_OPTS -T $API_TIMEOUT --tries=1 -q -O - \
             --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
             "$api_url" 2>/dev/null)
         
-        # 出力の有効性をチェック
+        # 結果確認と処理
         if [ -n "$temp_output" ] && echo "$temp_output" | grep -q '\[\[\["'; then
-            # 単一のsedコマンドで全置換処理（パイプなし、より効率的）
             translated=$(echo "$temp_output" | sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g')
             
             if [ -n "$translated" ]; then
+                debug_log "DEBUG" "Translation successful on attempt: $((retry_count + 1))"
                 printf "%s" "$translated"
                 return 0
             fi
         fi
         
         retry_count=$((retry_count + 1))
-        [ $retry_count -le $API_MAX_RETRIES ] && sleep 1
+        # 最終試行でなければ待機
+        [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
     done
     
-    debug_log "DEBUG" "Google translate API request failed after $API_MAX_RETRIES retries"
+    debug_log "DEBUG" "Translation failed after ${API_MAX_RETRIES} attempts"
     return 1
 }
 
