@@ -59,6 +59,7 @@ PACKAGE_EXTENSION="${CACHE_DIR}/extension.ch"
 API_TIMEOUT="${API_TIMEOUT:-5}"
 API_MAX_RETRIES="${API_MAX_RETRIES:-3}"
 API_MAX_REDIRECTS="${API_MAX_REDIRECTS:-2}"
+USER_AGENT="${USER_AGENT:-curl/7.74.0}"
 TIMEZONE_API_SOURCE=""
 
 # wgetの機能を検出する関数
@@ -79,8 +80,8 @@ detect_wget_capabilities() {
         redirect_support=1
     fi
     
-    # HTTPS直接アクセスのサポート検出
-    if wget --no-check-certificate -q -O "$tmp_file" "https://ipinfo.io" >/dev/null 2>&1; then
+    # HTTPS直接アクセスのサポート検出（User-Agentを追加）
+    if wget --no-check-certificate -q --header="User-Agent: ${USER_AGENT}" -O "$tmp_file" "https://ipinfo.io" >/dev/null 2>&1; then
         if [ -s "$tmp_file" ]; then
             debug_log "DEBUG" "wget supports HTTPS connections"
             https_support=1
@@ -178,12 +179,12 @@ get_country_ipapi() {
     case "$wget_capability" in
         "full")
             # フル機能wgetの場合
-            wget_cmd="wget --no-check-certificate -q -L --max-redirect=${API_MAX_REDIRECTS:-2}"
+            wget_cmd="wget --no-check-certificate -q -L --max-redirect=${API_MAX_REDIRECTS:-2} --header=\"User-Agent: ${USER_AGENT}\""
             debug_log "DEBUG" "Using full wget with redirect support"
             ;;
         "https_only"|"basic")
             # BusyBox wgetの場合
-            wget_cmd="wget --no-check-certificate -q"
+            wget_cmd="wget --no-check-certificate -q --header=\"User-Agent: ${USER_AGENT}\""
             # HTTPSを直接指定（リダイレクトを回避）
             used_api_url=$(echo "$api_name" | sed 's|^http:|https:|')
             debug_log "DEBUG" "Using BusyBox wget ($wget_capability), forcing HTTPS URL: $used_api_url"
@@ -203,7 +204,8 @@ get_country_ipapi() {
     
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
         # 検出した機能に基づいてwgetを実行
-        $wget_cmd -O "$tmp_file" "$used_api_url" -T $API_TIMEOUT 2>/dev/null
+        # ダブルクォートの扱いに注意（シェル評価でエスケープ）
+        eval $wget_cmd -O "$tmp_file" \"$used_api_url\" -T $API_TIMEOUT 2>/dev/null
         local wget_status=$?
         debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
@@ -261,12 +263,12 @@ get_country_ipinfo() {
     case "$wget_capability" in
         "full")
             # フル機能wgetの場合
-            wget_cmd="wget --no-check-certificate -q -L --max-redirect=${API_MAX_REDIRECTS:-2}"
+            wget_cmd="wget --no-check-certificate -q -L --max-redirect=${API_MAX_REDIRECTS:-2} --header=\"User-Agent: ${USER_AGENT}\""
             debug_log "DEBUG" "Using full wget with redirect support"
             ;;
         "https_only"|"basic")
             # BusyBox wgetの場合
-            wget_cmd="wget --no-check-certificate -q"
+            wget_cmd="wget --no-check-certificate -q --header=\"User-Agent: ${USER_AGENT}\""
             # HTTPSを直接指定（リダイレクトを回避）
             used_api_url=$(echo "$api_name" | sed 's|^http:|https:|')
             debug_log "DEBUG" "Using BusyBox wget ($wget_capability), forcing HTTPS URL: $used_api_url"
@@ -286,7 +288,8 @@ get_country_ipinfo() {
     
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
         # 検出した機能に基づいてwgetを実行
-        $wget_cmd -O "$tmp_file" "$used_api_url" -T $API_TIMEOUT 2>/dev/null
+        # ダブルクォートの扱いに注意（シェル評価でエスケープ）
+        eval $wget_cmd -O "$tmp_file" \"$used_api_url\" -T $API_TIMEOUT 2>/dev/null
         local wget_status=$?
         debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
