@@ -153,10 +153,10 @@ packages_19() {
     # === システム監視 (19.07特有版) ===
     print_section_header "PKG_SECTION_MONITORING"
     install_package htop yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
-    feed_package gSpotx2f packages-openwrt 19.07 luci-app-cpu-status-mini yn hidden
-    feed_package gSpotx2f packages-openwrt 19.07 luci-app-log yn hidden
-
+    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden "desc=CPU performance information and management for LuCI"
+    feed_package gSpotx2f packages-openwrt 19.07 luci-app-cpu-status-mini yn hidden "desc=CPU utilization info for the LuCI status page"
+    feed_package gSpotx2f packages-openwrt 19.07 luci-app-log yn hidden "desc=Advanced syslog and kernel log (tail, search, etc) for LuCI"
+    
     # === ネットワーク診断ツール ===
     print_section_header "PKG_SECTION_NETWORK_DIAG"
     install_package mtr yn hidden
@@ -175,7 +175,7 @@ packages_19() {
     
     # === 追加機能（デフォルトで無効） ===
     print_section_header "PKG_SECTION_ADDITION"
-    feed_package_release lisaac luci-app-diskman yn hidden disabled
+    feed_package_release lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid / btrfs-raid / btrfs-snapshot"
     
     debug_log "DEBUG" "19.07 specific packages installation process completed"
     return 0
