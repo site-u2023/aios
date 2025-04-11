@@ -171,40 +171,50 @@ translate_with_google() {
     local ip_check_file="${CACHE_DIR}/network.ch"
     local wget_options=""
     local retry_count=0
+    local network_type=""
 
     debug_log "DEBUG" "Starting Google Translate API request" "true"
 
-    # レスポンスパース処理を定義
-    parse_response() {
-        sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$1"
-    }
-
-    # ネットワーク接続状態を一度だけ確認
-    [ ! -f "$ip_check_file" ] && check_network_connectivity
+    # ネットワーク接続状態確認
+    if [ ! -f "$ip_check_file" ]; then
+        check_network_connectivity
+        network_type=$(cat "$ip_check_file" 2>/dev/null)
+    else
+        network_type=$(cat "$ip_check_file" 2>/dev/null)
+    fi
 
     # URLエンコード
-    local encoded_text=$(urlencode "$text")
+    local encoded_text=""
+    encoded_text=$(urlencode "$text")
     local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
 
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
 
     # APIリクエスト用URL構築
-    local api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}"
+    local api_url="${GOOGLE_TRANSLATE_URL}?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}"
 
     # リトライループ
     while [ $retry_count -le $API_MAX_RETRIES ]; do
-        # 元のコードのネットワークタイプ切り替え処理を維持
-        [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ] && \
+        # ネットワークタイプ切替え（IPv4/IPv6）
+        if [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ]; then
             wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
+        fi
 
-        # make_api_request()関数を使用してAPIリクエスト実行
+        # 元のwgetオプションを設定
+        export WGET_EXTRA_OPTIONS="$wget_options --tries=1"
+
+        # make_api_request関数を使用してAPIリクエスト実行
         make_api_request "$api_url" "$temp_file" "$API_TIMEOUT" "TRANSLATE"
         local api_status=$?
 
-        # 効率的なレスポンスチェックとパース
-        if [ $api_status -eq 0 ] && [ -f "$temp_file" ] && [ -s "$temp_file" ] && grep -q '\[\[\["' "$temp_file"; then
-            local translated="$(parse_response "$temp_file")"
+        # 環境変数をクリア
+        unset WGET_EXTRA_OPTIONS
 
+        # レスポンスチェックとパース
+        if [ $api_status -eq 0 ] && [ -f "$temp_file" ] && [ -s "$temp_file" ] && grep -q '\[\[\["' "$temp_file"; then
+            local translated=""
+            translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
+            
             if [ -n "$translated" ]; then
                 rm -f "$temp_file" 2>/dev/null
                 printf "%s\n" "$translated"
@@ -212,10 +222,12 @@ translate_with_google() {
             fi
         fi
 
+        # 失敗した場合はファイルを削除してリトライ
         rm -f "$temp_file" 2>/dev/null
         retry_count=$((retry_count + 1))
     done
 
+    debug_log "TRANSLATE" "All translation attempts failed"
     return 1
 }
 
@@ -282,27 +294,28 @@ OK_translate_with_google() {
     return 1
 }
 
-# 翻訳関数
 translate_text() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
     local result=""
     
-    # APIのマッピングを定義
+    # APIのマッピングを定義とドメイン抽出
     API_NAME=""
     
     case "$API_LIST" in
         google)
-            API_NAME="Google Translate API"
+            # ドメイン名を抽出
+            API_NAME="translate.googleapis.com"
             result=$(translate_with_google "$text" "$source_lang" "$target_lang")
             ;;
         lingva)
-            API_NAME="Lingva Translate API"
+            # ドメイン名を抽出
+            API_NAME="lingva.ml"
             result=$(translate_with_lingva "$text" "$source_lang" "$target_lang")
             ;;
         *)
-            API_NAME="Unknown API"
+            API_NAME="translate.googleapis.com"
             # デフォルトでGoogleを使用
             result=$(translate_with_google "$text" "$source_lang" "$target_lang")
             ;;
