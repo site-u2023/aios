@@ -173,48 +173,54 @@ translate_with_google() {
     local wget_options=""
     local retry_count=0
     local network_type=""
+    local wget_capability=""
+    local api_url=""
     local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
-    
+
     debug_log "DEBUG" "Starting Google Translate API request" "true"
-    
+
+    # wgetの機能を事前に検出（一度だけ実行）
+    wget_capability=$(detect_wget_capabilities)
+    debug_log "DEBUG" "Using wget capability: ${wget_capability}"
+
     # 必要なディレクトリを確保
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
-    
+
     # ネットワーク接続状態を一度だけ確認
     [ ! -f "$ip_check_file" ] && check_network_connectivity
-    
-    # ネットワーク設定を一度だけ読み込み
     network_type=$(cat "$ip_check_file" 2>/dev/null || echo "v4")
+
+    # ネットワークタイプに基づいてwgetオプションを設定
     case "$network_type" in
         "v4") wget_options="-4" ;;
         "v6") wget_options="-6" ;;
         *) wget_options="-4" ;;
     esac
-    
-    # wgetの機能を検出して追加オプションを設定
-    if [ -z "${WGET_CAPABILITY:-}" ]; then
-        WGET_CAPABILITY=$(detect_wget_capabilities)
-    fi
-    
-    # URLエンコードと固定部分のURL構築（ループ外で一度だけ実行）
+
+    # wget機能に基づいて追加オプションを設定
+    case "$wget_capability" in
+        "full") 
+            # 完全版wgetの場合、リダイレクトフォローを有効化
+            wget_options="$wget_options -L"
+            ;;
+    esac
+
+    # URLエンコードとAPI URLを事前に構築
     local encoded_text=$(urlencode "$text")
-    local api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}"
-    
-    # 高速リトライループ
+    api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}"
+
+    # 最適化されたリトライループ
     while [ $retry_count -le $API_MAX_RETRIES ]; do
-        # v4v6の場合のみネットワークオプションを切り替え（ループ内で最小限の処理）
+        # v4v6の場合のみネットワークタイプを切り替え
         if [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ]; then
-            wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
+            wget_options=$(echo "$wget_options" | sed 's/-4/-6/;s/-6 -L/-4 -L/;t;s/-6/-4/')
         fi
-        
-        # wgetの機能に応じた追加オプションを追加
-        local full_wget_options="$wget_options -T $API_TIMEOUT --tries=1 -q"
-        
-        # APIリクエスト送信（シンプルかつ直接的）
-        $BASE_WGET $full_wget_options -O "$temp_file" \
+
+        # APIリクエスト送信（wget機能に応じてオプション最適化）
+        $BASE_WGET $wget_options -T $API_TIMEOUT --tries=1 -q -O "$temp_file" \
             --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
             "$api_url" 2>/dev/null
-        
+
         # 高速レスポンスチェック
         if [ -s "$temp_file" ] && grep -q '\[\[\["' "$temp_file"; then
             local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
@@ -225,11 +231,12 @@ translate_with_google() {
                 return 0
             fi
         fi
-        
+
         rm -f "$temp_file" 2>/dev/null
         retry_count=$((retry_count + 1))
     done
-    
+
+    debug_log "DEBUG" "Google translation failed after ${API_MAX_RETRIES} attempts"
     return 1
 }
 
