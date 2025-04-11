@@ -501,13 +501,14 @@ debug_info() {
     fi
 }
 
-# APIリクエストを実行する共通関数
+# APIリクエストを実行する共通関数（ネットワークオプション対応版）
 make_api_request() {
     # パラメータ
     local url="$1"
     local tmp_file="$2"
     local timeout="${3:-$API_TIMEOUT}"
     local debug_tag="${4:-API}"
+    local net_options="${5:-}"
     
     # wgetの機能検出
     local wget_capability=$(detect_wget_capabilities)
@@ -521,7 +522,7 @@ make_api_request() {
         "full")
             # 完全なwgetの場合
             debug_log "DEBUG" "[$debug_tag] Using full wget with redirect support"
-            wget --no-check-certificate -q -L --max-redirect="${API_MAX_REDIRECTS:-2}" \
+            wget $net_options --no-check-certificate -q -L --max-redirect="${API_MAX_REDIRECTS:-2}" \
                 --header="User-Agent: ${USER_AGENT}" \
                 -O "$tmp_file" "$used_url" -T "$timeout" 2>/dev/null
             status=$?
@@ -530,7 +531,7 @@ make_api_request() {
             # 基本wgetの場合（HTTPSを直接指定）
             used_url=$(echo "$url" | sed 's|^http:|https:|')
             debug_log "DEBUG" "[$debug_tag] Using BusyBox wget, forcing HTTPS URL: $used_url"
-            wget --no-check-certificate -q --header="User-Agent: ${USER_AGENT}" \
+            wget $net_options --no-check-certificate -q --header="User-Agent: ${USER_AGENT}" \
                 -O "$tmp_file" "$used_url" -T "$timeout" 2>/dev/null
             status=$?
             ;;
