@@ -130,11 +130,12 @@ get_country_ipapi() {
     
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
         # 引数なしで呼び出し - 自動的に現在のデバイスの情報を取得
-        $BASE_WGET -O "$tmp_file" "$api_name" -T $API_TIMEOUT 2>/dev/null
+        # リダイレクト対応とHTTPS対応のためのオプションを追加
+        wget --no-check-certificate -q -L --max-redirect=2 -O "$tmp_file" "$api_name" -T $API_TIMEOUT 2>/dev/null
         local wget_status=$?
         debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
-        if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+        if [ $wget_status -eq 0 ] && [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
             # JSONデータから国コードとタイムゾーン情報を抽出
             SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
             SELECT_ZONENAME=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//')
@@ -155,6 +156,8 @@ get_country_ipapi() {
             else
                 debug_log "DEBUG" "Incomplete country/timezone data from ip-api.com"
             fi
+        else
+            debug_log "DEBUG" "Failed to download data from ip-api.com (status: $wget_status)"
         fi
         
         debug_log "DEBUG" "ip-api.com query attempt $((retry_count+1)) failed"
@@ -187,11 +190,12 @@ get_country_ipinfo() {
     
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
         # 引数なしで呼び出し - 自動的に現在のデバイスの情報を取得
-        $BASE_WGET -O "$tmp_file" "$api_name" -T $API_TIMEOUT 2>/dev/null
+        # リダイレクト対応とHTTPS対応のためのオプションを追加
+        wget --no-check-certificate -q -L --max-redirect=2 -O "$tmp_file" "$api_name" -T $API_TIMEOUT 2>/dev/null
         local wget_status=$?
         debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
-        if [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+        if [ $wget_status -eq 0 ] && [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
             # JSONデータから国コードとタイムゾーン情報を抽出（スペースを許容するパターン）
             SELECT_COUNTRY=$(grep -o '"country"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"country"[[:space:]]*:[[:space:]]*"//')
             SELECT_ZONENAME=$(grep -o '"timezone"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"timezone"[[:space:]]*:[[:space:]]*"//')
@@ -217,6 +221,8 @@ get_country_ipinfo() {
             else
                 debug_log "DEBUG" "Incomplete country/timezone data from ipinfo.io"
             fi
+        else
+            debug_log "DEBUG" "Failed to download data from ipinfo.io (status: $wget_status)"
         fi
         
         debug_log "DEBUG" "ipinfo.io query attempt $((retry_count+1)) failed"
@@ -240,8 +246,8 @@ get_country_code() {
     local spinner_active=0
     
     # API URLの定数化
-    local API_IPINFO="http://ipinfo.io"
-    local API_IPAPI="http://ip-api.com/json"
+    local API_IPINFO="https://ipinfo.io"
+    local API_IPAPI="https://ip-api.com/json"
     
     # パラメータ（タイムゾーンAPIの種類）
     local timezone_api="${1:-$API_IPINFO}"
@@ -250,11 +256,18 @@ get_country_code() {
     # タイムゾーンAPIと関数のマッピング
     local api_func=""
     case "$timezone_api" in
-        "$API_IPINFO")
+        *"ipinfo.io"*)
             api_func="get_country_ipinfo"
+            timezone_api="$API_IPINFO"
             ;;
-        "$API_IPAPI")
+        *"ip-api.com"*)
             api_func="get_country_ipapi"
+            timezone_api="$API_IPAPI"
+            ;;
+        *)
+            # デフォルトはipinfo.ioを使用
+            api_func="get_country_ipinfo"
+            timezone_api="$API_IPINFO"
             ;;
     esac
     
@@ -312,6 +325,37 @@ get_country_code() {
     
     # 一時ファイルの削除
     rm -f "$tmp_file" 2>/dev/null
+    
+    # API呼び出しが失敗した場合、代替APIを試行
+    if [ $api_success -ne 0 ]; then
+        debug_log "DEBUG" "Primary API failed, trying alternative API"
+        
+        # 代替APIとそれに対応する関数を選択
+        local alt_api=""
+        local alt_func=""
+        
+        if [ "$api_func" = "get_country_ipinfo" ]; then
+            alt_api="$API_IPAPI"
+            alt_func="get_country_ipapi"
+        else
+            alt_api="$API_IPINFO"
+            alt_func="get_country_ipinfo"
+        fi
+        
+        # スピナーメッセージ更新
+        local retry_msg=$(get_message "MSG_QUERY_INFO" "t=location information" "a=alternative API" "n=$network_type")
+        update_spinner "$(color "blue" "$retry_msg")" "yellow"
+        
+        # 代替API呼び出し
+        tmp_file="$(mktemp -t location.XXXXXX)"
+        debug_log "DEBUG" "Calling alternative API function: $alt_func for API: $alt_api"
+        
+        $alt_func "$tmp_file" "$network_type" "$alt_api"
+        api_success=$?
+        
+        # 一時ファイルの削除
+        rm -f "$tmp_file" 2>/dev/null
+    fi
     
     # ゾーン名が取得できている場合は、country.dbからマッピングを試みる
     if [ -n "$SELECT_ZONENAME" ]; then
