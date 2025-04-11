@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-12-00-02"
+SCRIPT_VERSION="2025-04-12-00-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -171,40 +171,39 @@ translate_with_google() {
     local ip_check_file="${CACHE_DIR}/network.ch"
     local wget_options=""
     local retry_count=0
-    
+    local network_type=""
+
     debug_log "DEBUG" "Starting Google Translate API request" "true"
 
     # 必要なディレクトリを確保
-    mkdir -p "${TRANSLATION_CACHE_DIR}" 2>/dev/null
+    mkdir -p "$(dirname "${TRANSLATION_CACHE_DIR}")" 2>/dev/null
     local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
-    
+
     # ネットワーク接続状態を確認
     [ ! -f "$ip_check_file" ] && check_network_connectivity
-    
-    # ネットワーク接続状態に基づいてwgetオプションを設定
-    if [ -f "$ip_check_file" ]; then
-        local network_type=$(cat "$ip_check_file")
-        
-        case "$network_type" in
-            "v4") wget_options="-4" ;;
-            "v6") wget_options="-6" ;;
-            "v4v6") wget_options="-4" ;;
-        esac
-    fi
-    
+    network_type=$(cat "$ip_check_file" 2>/dev/null || echo "v4")
+
+    # ネットワークタイプに基づいてwgetオプションを設定
+    case "$network_type" in
+        "v4") wget_options="-4" ;;
+        "v6") wget_options="-6" ;;
+        "v4v6") wget_options="-4" ;;
+    esac
+
     # URLエンコード
     local encoded_text=$(urlencode "$text")
-    
+
     # リトライループ
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
         [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ] && \
             wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
-        
+
         # APIリクエスト送信 - BusyBox互換方法
+        # -U でユーザーエージェント設定（BusyBox互換）
         wget --no-check-certificate $wget_options -q -O "$temp_file" \
             -U "Mozilla/5.0" \
             "https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}" 2>/dev/null
-        
+
         # レスポンスチェック
         if [ -s "$temp_file" ] && grep -q '\[\[\["' "$temp_file"; then
             local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
@@ -215,11 +214,11 @@ translate_with_google() {
                 return 0
             fi
         fi
-        
+
         rm -f "$temp_file" 2>/dev/null
         retry_count=$((retry_count + 1))
     done
-    
+
     debug_log "DEBUG" "Google translation failed after ${API_MAX_RETRIES} attempts"
     return 1
 }
