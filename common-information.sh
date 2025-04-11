@@ -61,25 +61,52 @@ API_MAX_RETRIES="${API_MAX_RETRIES:-3}"
 API_MAX_REDIRECTS="${API_MAX_REDIRECTS:-2}"
 TIMEZONE_API_SOURCE=""
 
-# wgetの機能検出関数
+# wgetの機能を検出する関数
 detect_wget_capabilities() {
+    local tmp_file="/tmp/wget_test.tmp"
+    local capability="basic"
+    local redirect_support=0
+    local https_support=0
+    
     debug_log "DEBUG" "Detecting wget capabilities"
     
-    # 一時ファイルを作成
-    local tmp_file=$(mktemp -t wget_test.XXXXXX)
-    
-    # -Lオプションサポートチェック
+    # -Lオプション（リダイレクト機能）のサポート検出
     if wget -L --help 2>&1 | grep -q "unrecognized option"; then
         debug_log "DEBUG" "wget does not support -L option (BusyBox detected)"
-        rm -f "$tmp_file" 2>/dev/null
-        echo "busybox"
-        return 1
+        redirect_support=0
     else
-        debug_log "DEBUG" "wget supports -L option (full wget detected)"
-        rm -f "$tmp_file" 2>/dev/null
-        echo "full"
-        return 0
+        debug_log "DEBUG" "wget supports -L option (full wget)"
+        redirect_support=1
     fi
+    
+    # HTTPS直接アクセスのサポート検出
+    if wget --no-check-certificate -q -O "$tmp_file" "https://ipinfo.io" >/dev/null 2>&1; then
+        if [ -s "$tmp_file" ]; then
+            debug_log "DEBUG" "wget supports HTTPS connections"
+            https_support=1
+        else
+            debug_log "DEBUG" "wget HTTPS test returned empty file"
+            https_support=0
+        fi
+    else
+        debug_log "DEBUG" "wget HTTPS test failed"
+        https_support=0
+    fi
+    
+    # 一時ファイルのクリーンアップ
+    rm -f "$tmp_file" 2>/dev/null
+    
+    # 機能に基づいて種類を判定
+    if [ $redirect_support -eq 1 ] && [ $https_support -eq 1 ]; then
+        capability="full"
+    elif [ $https_support -eq 1 ]; then
+        capability="https_only"
+    else
+        capability="basic"
+    fi
+    
+    debug_log "DEBUG" "wget capability detected: $capability"
+    echo "$capability"
 }
 
 # 検出した地域情報を表示する共通関数
@@ -141,23 +168,42 @@ get_country_ipapi() {
     local network_type="$2"  # ネットワークタイプ
     local api_name="$3"      # API名（ログ用）
     
-    # ローカルでwgetコマンドを設定（リダイレクト対応）
-    local wget_cmd="wget --no-check-certificate -q -L --max-redirect=${API_MAX_REDIRECTS:-2}"
+    # wgetの機能を検出
+    local wget_capability=$(detect_wget_capabilities)
+    
+    # 環境に応じたwgetコマンドを構築
+    local wget_cmd=""
+    local used_api_url="$api_name"
+    
+    case "$wget_capability" in
+        "full")
+            # フル機能wgetの場合
+            wget_cmd="wget --no-check-certificate -q -L --max-redirect=${API_MAX_REDIRECTS:-2}"
+            debug_log "DEBUG" "Using full wget with redirect support"
+            ;;
+        "https_only"|"basic")
+            # BusyBox wgetの場合
+            wget_cmd="wget --no-check-certificate -q"
+            # HTTPSを直接指定（リダイレクトを回避）
+            used_api_url=$(echo "$api_name" | sed 's|^http:|https:|')
+            debug_log "DEBUG" "Using BusyBox wget ($wget_capability), forcing HTTPS URL: $used_api_url"
+            ;;
+    esac
     
     local retry_count=0
     local success=0
     
-    # スピナー更新メッセージ - a=のパラメータをapi_nameから取得
-    local api_domain=$(echo "$api_name" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
-    [ -z "$api_domain" ] && api_domain="$api_name"
+    # スピナー更新メッセージ - a=のパラメータをused_api_urlから取得
+    local api_domain=$(echo "$used_api_url" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+    [ -z "$api_domain" ] && api_domain="$used_api_url"
     local country_msg=$(get_message "MSG_QUERY_INFO" "t=country+timezone" "a=${api_domain}" "n=$network_type")
     update_spinner "$(color "blue" "$country_msg")" "yellow"
     
     debug_log "DEBUG" "Querying country and timezone from $api_domain"
     
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        # リダイレクト対応のwgetコマンドを使用
-        $wget_cmd -O "$tmp_file" "$api_name" -T $API_TIMEOUT 2>/dev/null
+        # 検出した機能に基づいてwgetを実行
+        $wget_cmd -O "$tmp_file" "$used_api_url" -T $API_TIMEOUT 2>/dev/null
         local wget_status=$?
         debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
         
@@ -166,7 +212,7 @@ get_country_ipapi() {
             SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
             SELECT_ZONENAME=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//')
             
-            # ISP情報も抽出（追加）
+            # ISP情報も抽出
             ISP_NAME=$(grep -o '"isp":"[^"]*' "$tmp_file" | sed 's/"isp":"//')
             ISP_AS=$(grep -o '"as":"[^"]*' "$tmp_file" | sed 's/"as":"//')
             ISP_ORG=$(grep -o '"org":"[^"]*' "$tmp_file" | sed 's/"org":"//')
@@ -186,7 +232,7 @@ get_country_ipapi() {
             debug_log "DEBUG" "Failed to download data from $api_domain (status: $wget_status)"
         fi
         
-        debug_log "DEBUG" "$api_domain query attempt $((retry_count+1)) failed"
+        debug_log "DEBUG" "API query attempt $((retry_count+1)) failed"
         retry_count=$((retry_count + 1))
         [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
     done
@@ -199,7 +245,7 @@ get_country_ipapi() {
     fi
 }
 
-# get_country_ipinfo関数を修正
+# ipinfo.ioから国コードとタイムゾーン情報を取得する関数
 get_country_ipinfo() {
     local tmp_file="$1"      # 一時ファイルパス
     local network_type="$2"  # ネットワークタイプ
@@ -208,21 +254,83 @@ get_country_ipinfo() {
     # wgetの機能を検出
     local wget_capability=$(detect_wget_capabilities)
     
-    # 環境に応じたwgetコマンドを設定
-    local wget_cmd
-    if [ "$wget_capability" = "full" ]; then
-        # フル機能wgetの場合
-        wget_cmd="wget --no-check-certificate -q -L --max-redirect=${API_MAX_REDIRECTS:-2}"
-        debug_log "DEBUG" "Using full wget with redirect support"
-    else
-        # BusyBox wgetの場合
-        wget_cmd="wget --no-check-certificate -q"
-        # HTTPSを直接指定（リダイレクトを回避）
-        api_name=$(echo "$api_name" | sed 's|^http:|https:|')
-        debug_log "DEBUG" "Using BusyBox wget, forcing HTTPS for $api_name"
-    fi
+    # 環境に応じたwgetコマンドを構築
+    local wget_cmd=""
+    local used_api_url="$api_name"
     
-    # 以下、既存のコードと同様...
+    case "$wget_capability" in
+        "full")
+            # フル機能wgetの場合
+            wget_cmd="wget --no-check-certificate -q -L --max-redirect=${API_MAX_REDIRECTS:-2}"
+            debug_log "DEBUG" "Using full wget with redirect support"
+            ;;
+        "https_only"|"basic")
+            # BusyBox wgetの場合
+            wget_cmd="wget --no-check-certificate -q"
+            # HTTPSを直接指定（リダイレクトを回避）
+            used_api_url=$(echo "$api_name" | sed 's|^http:|https:|')
+            debug_log "DEBUG" "Using BusyBox wget ($wget_capability), forcing HTTPS URL: $used_api_url"
+            ;;
+    esac
+    
+    local retry_count=0
+    local success=0
+    
+    # スピナー更新メッセージ - a=のパラメータをused_api_urlから取得
+    local api_domain=$(echo "$used_api_url" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+    [ -z "$api_domain" ] && api_domain="$used_api_url"
+    local country_msg=$(get_message "MSG_QUERY_INFO" "t=country+timezone" "a=${api_domain}" "n=$network_type")
+    update_spinner "$(color "blue" "$country_msg")" "yellow"
+    
+    debug_log "DEBUG" "Querying country and timezone from $api_domain"
+    
+    while [ $retry_count -lt $API_MAX_RETRIES ]; do
+        # 検出した機能に基づいてwgetを実行
+        $wget_cmd -O "$tmp_file" "$used_api_url" -T $API_TIMEOUT 2>/dev/null
+        local wget_status=$?
+        debug_log "DEBUG" "wget exit code: $wget_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
+        
+        if [ $wget_status -eq 0 ] && [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+            # JSONデータから国コードとタイムゾーン情報を抽出（スペースを許容するパターン）
+            SELECT_COUNTRY=$(grep -o '"country"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"country"[[:space:]]*:[[:space:]]*"//')
+            SELECT_ZONENAME=$(grep -o '"timezone"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"timezone"[[:space:]]*:[[:space:]]*"//')
+            
+            # ISP情報も抽出
+            local org_raw=$(grep -o '"org"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"org"[[:space:]]*:[[:space:]]*"//')
+            
+            # orgフィールドからAS番号とISP名を分離
+            if [ -n "$org_raw" ]; then
+                ISP_AS=$(echo "$org_raw" | awk '{print $1}')
+                ISP_NAME=$(echo "$org_raw" | cut -d' ' -f2-)
+                ISP_ORG="$ISP_NAME"
+            fi
+            
+            # データが正常に取得できたか確認
+            if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
+                debug_log "DEBUG" "Retrieved from $api_domain - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
+                if [ -n "$ISP_NAME" ]; then
+                    debug_log "DEBUG" "Retrieved ISP info - Name: $ISP_NAME, AS: $ISP_AS"
+                fi
+                success=1
+                break
+            else
+                debug_log "DEBUG" "Incomplete country/timezone data from $api_domain"
+            fi
+        else
+            debug_log "DEBUG" "Failed to download data from $api_domain (status: $wget_status)"
+        fi
+        
+        debug_log "DEBUG" "API query attempt $((retry_count+1)) failed"
+        retry_count=$((retry_count + 1))
+        [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
+    done
+    
+    # 成功した場合は0を、失敗した場合は1を返す
+    if [ $success -eq 1 ]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 # 国コード・タイムゾーン情報を取得する関数
