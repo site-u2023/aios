@@ -236,6 +236,11 @@ feed_package() {
   return 0
 }
 
+#########################################################################
+# feed_package_release: リリースAPI用パッケージ取得関数
+# 使用対象：リリースベース構造（例：lisaac/luci-app-diskman, jerrykuku/luci-theme-argon）
+# 必要引数：REPO_OWNER REPO_NAME
+#########################################################################
 feed_package_release() {
   local confirm_install="no"
   local skip_lang_pack="no"
