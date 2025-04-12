@@ -65,7 +65,7 @@ packages() {
     install_package ttyd yn hidden
     install_package openssh-sftp-server yn hidden
     install_package coreutils yn hidden
-    install_package bash yn hidden
+    #install_package bash yn hidden
     
     # === システム管理 ===
     print_section_header "PKG_SECTION_SYSADMIN"
@@ -109,8 +109,6 @@ packages() {
     # === ユーティリティ ===
     print_section_header "PKG_SECTION_UTILITY"
     install_package attendedsysupgrade-common yn hidden
-    install_package usleep yn hidden
-    install_package git yn hidden
     
     debug_log "DEBUG" "Standard packages installation process completed"
     return 0
@@ -170,8 +168,6 @@ packages_19() {
     # === ユーティリティ ===
     print_section_header "PKG_SECTION_UTILITY"
     install_package attendedsysupgrade-common yn hidden
-    install_package usleep yn hidden
-    install_package git yn hidden
     
     # === 追加機能（デフォルトで無効） ===
     print_section_header "PKG_SECTION_ADDITION"
@@ -232,8 +228,6 @@ packages_snaphot() {
     # === ユーティリティ ===
     print_section_header "PKG_SECTION_UTILITY"
     install_package attendedsysupgrade-common yn hidden
-    install_package usleep yn hidden
-    install_package git yn hidden
     
     debug_log "DEBUG" "SNAPSHOT specific packages installation process completed"
     return 0
