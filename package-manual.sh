@@ -71,7 +71,7 @@ packages() {
     print_section_header "PKG_SECTION_SYSADMIN"
     install_package irqbalance yn hidden
     install_package luci-mod-dashboard yn hidden
-    feed_package_release lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid / btrfs-raid / btrfs-snapshot"
+    feed_package lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid / btrfs-raid / btrfs-snapshot"
     
     # === ネットワーク管理 ===
     print_section_header "PKG_SECTION_NETWORK"
@@ -104,7 +104,7 @@ packages() {
     # === テーマおよび見た目 ===
     print_section_header "PKG_SECTION_THEME"
     install_package luci-theme-openwrt yn hidden
-    feed_package_release jerrykuku luci-theme-argon yn hidden disabled "desc=Argon is a clean and tidy OpenWrt LuCI theme that allows users to customize their login interface with images or videos. It also supports automatic and manual switching between light and dark modes."
+    feed_package jerrykuku luci-theme-argon yn hidden disabled "desc=Argon is a clean and tidy OpenWrt LuCI theme that allows users to customize their login interface with images or videos. It also supports automatic and manual switching between light and dark modes."
 
     # === ユーティリティ ===
     print_section_header "PKG_SECTION_UTILITY"
@@ -171,7 +171,7 @@ packages_19() {
     
     # === 追加機能（デフォルトで無効） ===
     print_section_header "PKG_SECTION_ADDITION"
-    feed_package_release lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid / btrfs-raid / btrfs-snapshot"
+    feed_package lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid / btrfs-raid / btrfs-snapshot"
     
     debug_log "DEBUG" "19.07 specific packages installation process completed"
     return 0
