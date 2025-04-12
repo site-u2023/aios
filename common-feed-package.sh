@@ -149,11 +149,11 @@ feed_package() {
   fi
 
   # インストール
-  debug_log "DEBUG" "Installing required packages: jq and git"
-  install_package git hidden
-  install_package git-http hidden
-  install_package jq hidden
-  install_package ca-certificates hidden
+  debug_log "DEBUG" "Installing required packages: git, git-http, jq, ca-certificates"
+  install_package git silent
+  install_package git-http silent
+  install_package jq silent
+  install_package ca-certificates silent
 
   local REPO_OWNER="$1"
   local REPO_NAME="$2"
