@@ -150,8 +150,6 @@ feed_package() {
 
   # インストール
   debug_log "DEBUG" "Installing required packages: git, git-http, jq, ca-certificates"
-  install_package git silent
-  install_package git-http silent
   install_package jq silent
   install_package ca-certificates silent
 
