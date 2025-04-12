@@ -71,7 +71,6 @@ packages() {
     print_section_header "PKG_SECTION_SYSADMIN"
     install_package irqbalance yn hidden
     install_package luci-mod-dashboard yn hidden
-    feed_package_release lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid / btrfs-raid / btrfs-snapshot"
     
     # === ネットワーク管理 ===
     print_section_header "PKG_SECTION_NETWORK"
@@ -109,6 +108,10 @@ packages() {
     # === ユーティリティ ===
     print_section_header "PKG_SECTION_UTILITY"
     install_package attendedsysupgrade-common yn hidden
+    feed_package_release lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid / btrfs-raid / btrfs-snapshot"
+
+    # === 追加機能（デフォルトで無効） ===
+    #print_section_header "PKG_SECTION_ADDITION"
     
     debug_log "DEBUG" "Standard packages installation process completed"
     return 0
@@ -168,10 +171,10 @@ packages_19() {
     # === ユーティリティ ===
     print_section_header "PKG_SECTION_UTILITY"
     install_package attendedsysupgrade-common yn hidden
+    feed_package_release lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid / btrfs-raid / btrfs-snapshot"
     
     # === 追加機能（デフォルトで無効） ===
-    print_section_header "PKG_SECTION_ADDITION"
-    feed_package_release lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid / btrfs-raid / btrfs-snapshot"
+    #print_section_header "PKG_SECTION_ADDITION"
     
     debug_log "DEBUG" "19.07 specific packages installation process completed"
     return 0
