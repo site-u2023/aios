@@ -311,7 +311,12 @@ feed_package_release() {
       debug_log "DEBUG" "File not found or empty: ${CACHE_DIR}/extension.ch"
       return 1
   fi
-  
+
+  # インストール
+  debug_log "DEBUG" "Installing required packages: jq and ca-certificates"
+  install_package jq silent
+  install_package ca-certificates silent
+
   local REPO_OWNER="$1"
   local REPO_NAME="$2"
   local PKG_PREFIX="${REPO_NAME}"
