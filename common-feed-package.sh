@@ -54,6 +54,33 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 PACKAGE_EXTENSION="${PACKAGE_EXTENSION:-ipk}"
 
 #########################################################################
+# Last Update: 2025-04-12 05:18:15 (UTC) 🚀
+# feed_package: コンテンツAPI用パッケージ取得関数
+# 使用対象：通常のディレクトリ構造を持つリポジトリ（例：gSpotx2f/packages-openwrt）
+#
+# 必要引数：
+#   $1 : リポジトリ所有者 (例: gSpotx2f)
+#   $2 : リポジトリ名 (例: packages-openwrt)
+#   $3 : ディレクトリパス (例: current)
+#   $4 : パッケージ名のプレフィックス (例: luci-app-cpu-perf)
+#
+# オプション:
+#   yn          - インストール前に確認ダイアログを表示
+#   disabled    - サービスの自動設定をスキップ
+#   hidden      - 一部の通知メッセージを表示しない
+#   silent      - 進捗・通知メッセージを全て抑制
+#   desc="説明" - パッケージの説明文を指定
+#
+# 使用例:
+#   feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn
+#   feed_package yn hidden gSpotx2f packages-openwrt current luci-app-cpu-perf
+#
+# 機能:
+#   1. 指定されたディレクトリパスが空の場合、リポジトリのトップディレクトリを探索
+#   2. パッケージ名のプレフィックスに一致する最新のファイルを取得
+#   3. 取得したファイルをダウンロードしてインストール
+#########################################################################
+#########################################################################
 # Last Update: 2025-04-12 05:16:23 (UTC) 🚀
 # feed_package: コンテンツAPI用パッケージ取得関数
 # 使用対象：通常のディレクトリ構造を持つリポジトリ（例：gSpotx2f/packages-openwrt）
