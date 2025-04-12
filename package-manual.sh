@@ -71,7 +71,7 @@ packages() {
     print_section_header "PKG_SECTION_SYSADMIN"
     install_package irqbalance yn hidden
     install_package luci-mod-dashboard yn hidden
-    feed_package lisaac luci-app-diskman yn hidden "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid / btrfs-raid / btrfs-snapshot"
+    feed_package lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid / btrfs-raid / btrfs-snapshot"
     
     # === ネットワーク管理 ===
     print_section_header "PKG_SECTION_NETWORK"
