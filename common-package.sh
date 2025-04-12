@@ -52,22 +52,73 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
 #########################################################################
-# Last Update: 2025-03-14 06:00:00 (JST) 🚀
-# install_package: パッケージのインストール処理 (OpenWrt / Alpine Linux)
+# Last Update: 2025-04-12 05:21:33 (UTC) 🚀
+# install_package: パッケージインストール処理関数
+# 使用対象：OpenWrtとAlpine Linuxシステム向け
 #
-# 【概要】
-# 指定されたパッケージをインストールし、オプションに応じて以下の処理を実行する。
-# ✅ OpenWrt / Alpine の `opkg update` / `apk update` を適用（条件付き）
-# ✅ 言語パッケージ・設定ファイル (`local-package.db`) の適用
+# 【主な機能】
+#  ✅ パッケージインストールとリポジトリ更新
+#  ✅ 言語パッケージの自動処理
+#  ✅ サービスの自動設定
+#  ✅ インストール前の確認ダイアログ表示
 #
-# 【フロー】
-# 1️⃣ デバイスにパッケージがインストール済みか確認
-# 2️⃣ `update.ch` のキャッシュをチェックし、`opkg update / apk update` を実行
-# 3️⃣ インストール確認（yn オプションが指定された場合）
-# 4️⃣ パッケージのインストールを実行
-# 5️⃣ 言語パッケージの適用（nolang オプションでスキップ可能）
-# 6️⃣ `local-package.db` の適用（notpack オプションでスキップ可能）
-# 7️⃣ 設定の有効化（デフォルト enabled、disabled オプションで無効化）
+# 【基本構文】
+#   install_package [オプション...] <パッケージ名>
+#
+# 【オプション一覧】
+#   yn          - インストール前に確認ダイアログを表示
+#                 例: install_package yn luci-app-statistics
+#
+#   nolang      - 言語パッケージのインストールをスキップ
+#                 例: install_package nolang luci-app-firewall
+#
+#   force       - パッケージの強制再インストール
+#                 例: install_package force luci-app-opkg
+#
+#   notpack     - local-package.dbの設定適用をスキップ
+#                 例: install_package notpack htop
+#
+#   disabled    - サービスの自動設定をスキップ
+#                 ※パッケージは通常通りインストールし、サービス開始のみスキップ
+#                 例: install_package disabled irqbalance
+#
+#   hidden      - 一部の通知メッセージを表示しない
+#                 例: install_package hidden luci-i18n-base
+#
+#   silent      - 進捗・通知メッセージを全て抑制（エラー以外）
+#                 例: install_package silent htop
+#
+#   test        - テストモード（インストール前チェックをスキップ）
+#                 例: install_package test luci-app-opkg
+#
+#   desc="説明" - パッケージの説明文を指定
+#                 例: install_package yn luci-app-statistics "desc=統計情報を表示"
+#
+#   update      - パッケージリストの更新のみ実行
+#                 例: install_package update
+#
+#   list        - インストール済みパッケージの一覧表示
+#                 例: install_package list
+#
+# 【オプション組み合わせ例】
+#   確認ダイアログ付き通知抑制:
+#     install_package yn hidden luci-app-statistics
+#
+#   説明付き確認とサービス自動設定スキップ:
+#     install_package yn disabled luci-app-banip "desc=IPブロックツール"
+#
+#   完全サイレントモード（通知なし・確認なし）:
+#     install_package silent luci-i18n-base
+#
+# 【重要な動作特性】
+#  1. オプションは順不同で指定可能
+#  2. disabled: サービスの自動設定のみをスキップ（インストールは実行）
+#  3. silent: yn指定があっても確認ダイアログを表示しない
+#  4. hidden: 既にインストール済みの場合のメッセージなど一部通知のみ非表示
+#
+# 【返り値】
+#   0: 成功 または ユーザーがインストールをキャンセル
+#   1: エラー発生
 #########################################################################
 
 # インストール後のパッケージリストを表示
