@@ -52,7 +52,7 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
 #########################################################################
-# Last Update: 2025-04-12 05:21:33 (UTC) 🚀
+# Last Update: 2025-04-12 05:23:31 (UTC) 🚀
 # install_package: パッケージインストール処理関数
 # 使用対象：OpenWrtとAlpine Linuxシステム向け
 #
