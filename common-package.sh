@@ -122,6 +122,7 @@ check_install_list() {
 
 # パッケージリストの更新
 update_package_list() {
+    local silent_mode="$1"  # silentモードパラメータを追加
     local update_cache="${CACHE_DIR}/update.ch"
     local package_cache="${CACHE_DIR}/package_list.ch"
     local current_time
@@ -153,10 +154,12 @@ update_package_list() {
         return 0
     fi
 
-    printf "  %s\n"
-
-    # スピナー開始
-    start_spinner "$(color blue "$(get_message "MSG_RUNNING_UPDATE")")"
+    # silent モードでない場合のみ表示
+    if [ "$silent_mode" != "yes" ]; then
+        printf "  %s\n"
+        # スピナー開始
+        start_spinner "$(color blue "$(get_message "MSG_RUNNING_UPDATE")")"
+    fi
 
     # PACKAGE_MANAGERを取得
     if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
@@ -170,7 +173,12 @@ update_package_list() {
         debug_log "DEBUG" "Running opkg update"
         opkg update > "${LOG_DIR}/opkg_update.log" 2>&1
         if [ $? -ne 0 ]; then
-            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            if [ "$silent_mode" != "yes" ]; then
+                stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            else
+                # エラー時はsilentモードでもエラーメッセージを表示
+                printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            fi
             debug_log "ERROR" "Failed to update package lists with opkg"
             # タイムスタンプファイルを削除して、次回も更新を試みるようにする
             rm -f "$update_cache" 2>/dev/null
@@ -180,7 +188,12 @@ update_package_list() {
         debug_log "DEBUG" "Saving package list to $package_cache"
         opkg list > "$package_cache" 2>/dev/null
         if [ $? -ne 0 ] || [ ! -s "$package_cache" ]; then
-            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            if [ "$silent_mode" != "yes" ]; then
+                stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            else
+                # エラー時はsilentモードでもエラーメッセージを表示
+                printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            fi
             debug_log "ERROR" "Failed to save package list to $package_cache"
             # タイムスタンプファイルを削除して、次回も更新を試みるようにする
             rm -f "$update_cache" 2>/dev/null
@@ -190,7 +203,12 @@ update_package_list() {
         debug_log "DEBUG" "Running apk update"
         apk update > "${LOG_DIR}/apk_update.log" 2>&1
         if [ $? -ne 0 ]; then
-            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            if [ "$silent_mode" != "yes" ]; then
+                stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            else
+                # エラー時はsilentモードでもエラーメッセージを表示
+                printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            fi
             debug_log "ERROR" "Failed to update package lists with apk"
             # タイムスタンプファイルを削除して、次回も更新を試みるようにする
             rm -f "$update_cache" 2>/dev/null
@@ -200,22 +218,34 @@ update_package_list() {
         debug_log "DEBUG" "Saving package list to $package_cache"
         apk search > "$package_cache" 2>/dev/null
         if [ $? -ne 0 ] || [ ! -s "$package_cache" ]; then
-            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            if [ "$silent_mode" != "yes" ]; then
+                stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            else
+                # エラー時はsilentモードでもエラーメッセージを表示
+                printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            fi
             debug_log "ERROR" "Failed to save package list to $package_cache"
             # タイムスタンプファイルを削除して、次回も更新を試みるようにする
             rm -f "$update_cache" 2>/dev/null
             return 1
         fi
     else
-        stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+        if [ "$silent_mode" != "yes" ]; then
+            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+        else
+            # エラー時はsilentモードでもエラーメッセージを表示
+            printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+        fi
         debug_log "ERROR" "Unknown package manager: $PACKAGE_MANAGER"
         # タイムスタンプファイルを削除して、次回も更新を試みるようにする
         rm -f "$update_cache" 2>/dev/null
         return 1
     fi
 
-    # スピナー停止 (成功メッセージを表示)
-    stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
+    # スピナー停止（成功メッセージを表示）- silent モードでなければ表示
+    if [ "$silent_mode" != "yes" ]; then
+        stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
+    fi
     
     # キャッシュのタイムスタンプを更新
     touch "$update_cache" 2>/dev/null
@@ -789,8 +819,10 @@ install_package() {
     fi
     
     # インストール一覧表示モードの場合（silentモードでなければ表示）
-    if [ "$PKG_OPTIONS_LIST" = "yes" ] && [ "$PKG_OPTIONS_SILENT" != "yes" ]; then
-        check_install_list
+    if [ "$PKG_OPTIONS_LIST" = "yes" ]; then
+        if [ "$PKG_OPTIONS_SILENT" != "yes" ]; then
+            check_install_list
+        fi
         return 0
     fi
     
@@ -804,12 +836,8 @@ install_package() {
     # update オプション処理
     if [ "$PKG_OPTIONS_UPDATE" = "yes" ]; then
         debug_log "DEBUG" "Updating package lists"
-        # silentモードの場合、update_package_listの出力を抑制
-        if [ "$PKG_OPTIONS_SILENT" = "yes" ]; then
-            update_package_list >/dev/null 2>&1
-        else
-            update_package_list
-        fi
+        # silentモードを渡して更新を実行
+        update_package_list "$PKG_OPTIONS_SILENT"
         return $?
     fi
 
@@ -819,12 +847,8 @@ install_package() {
         return 1
     fi
 
-    # **パッケージリスト更新** - silentモードでは出力を抑制
-    if [ "$PKG_OPTIONS_SILENT" = "yes" ]; then
-        update_package_list >/dev/null 2>&1 || return 1
-    else
-        update_package_list || return 1
-    fi
+    # **パッケージリスト更新** - silentモードを引数として渡す
+    update_package_list "$PKG_OPTIONS_SILENT" || return 1
 
     # 言語コード取得
     local lang_code
