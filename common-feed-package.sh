@@ -148,10 +148,12 @@ feed_package() {
       return 1
   fi
 
-  # jqとgitのインストールを確認
+  # インストール
   debug_log "DEBUG" "Installing required packages: jq and git"
-  install_package jq hidden
   install_package git hidden
+  install_package git-http hidden
+  install_package jq hidden
+  install_package ca-certificates hidden
 
   local REPO_OWNER="$1"
   local REPO_NAME="$2"
