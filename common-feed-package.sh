@@ -149,7 +149,7 @@ feed_package() {
   fi
 
   # インストール
-  debug_log "DEBUG" "Installing required packages: git, git-http, jq, ca-certificates"
+  debug_log "DEBUG" "Installing required packages: jq and ca-certificates"
   install_package jq silent
   install_package ca-certificates silent
 
