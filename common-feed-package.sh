@@ -54,39 +54,25 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 PACKAGE_EXTENSION="${PACKAGE_EXTENSION:-ipk}"
 
 #########################################################################
-# Last Update: 2025-03-04 10:00:00 (JST) 🚀
-# install_build: Package build processing (OpenWrt / Alpine Linux)
-# Script to retrieve the latest files for a specified package using the GitHub API
-# Function: feed_package
-# Description:
-#   Uses the GitHub API to retrieve a list of files from a specific directory in a specified repository,
-#   matching the package name prefix, and saves the alphabetically last one (assumed to be the latest)
-#   to the download destination.
-#   If DIR_PATH is not specified, it automatically explores the repository's top directory,
-#   and automatically selects the appropriate directory.
+# Last Update: 2025-04-12 05:16:23 (UTC) 🚀
+# feed_package: コンテンツAPI用パッケージ取得関数
+# 使用対象：通常のディレクトリ構造を持つリポジトリ（例：gSpotx2f/packages-openwrt）
 #
-# Arguments:
-#   $1 : Repository owner (e.g., gSpotx2f)
-#   $2 : Repository name (e.g., packages-openwrt)
-#   $3 : Directory path (e.g., current)
-#   $4 : Package name prefix (e.g., luci-app-cpu-perf)
-#   $5 : Output file after download (e.g., /tmp/luci-app-cpu-perf_all.ipk)
+# 必要引数：
+#   $1 : リポジトリ所有者 (例: gSpotx2f)
+#   $2 : リポジトリ名 (例: packages-openwrt)
+#   $3 : ディレクトリパス (例: current)
+#   $4 : パッケージ名のプレフィックス (例: luci-app-cpu-perf)
 #
-# Usage:
-# feed_package ["yn"] ["hidden"] "repository_owner" "repository_name" "directory" "package_name"
-# Example: Default (install without confirmation)
-# feed_package "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
-# Example: Install with confirmation
-# feed_package "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
-# Example: No message if already installed
-# feed_package "hidden" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
-# Example: Specify `yn` and `hidden` in any order
-# feed_package "hidden" "yn" "gSpotx2f" "packages-openwrt" "current" "luci-app-cpu-perf"
+# オプション:
+#   yn          - インストール前に確認ダイアログを表示
+#   disabled    - サービスの自動設定をスキップ
+#   hidden      - 一部の通知メッセージを表示しない
+#   silent      - 進捗・通知メッセージを全て抑制
+#   desc="説明" - パッケージの説明文を指定
 #
-# New specifications:
-# 1. If DIR_PATH is empty, explore the repository's top directory and automatically select the optimal directory.
-# 2. Handle additional arguments for options (yn, hidden, force, disabled, etc.).
-# 3. Retrieve the latest package information from GitHub API, download and install.
+# 使用例:
+#   feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn
 #########################################################################
 feed_package() {
   local confirm_install="no"
@@ -237,9 +223,24 @@ feed_package() {
 }
 
 #########################################################################
+# Last Update: 2025-04-12 05:16:23 (UTC) 🚀
 # feed_package_release: リリースAPI用パッケージ取得関数
-# 使用対象：リリースベース構造（例：lisaac/luci-app-diskman, jerrykuku/luci-theme-argon）
-# 必要引数：REPO_OWNER REPO_NAME
+# 使用対象：リリースベースの構造を持つリポジトリ
+#          （例：lisaac/luci-app-diskman, jerrykuku/luci-theme-argon）
+#
+# 必要引数：
+#   $1 : リポジトリ所有者 (例: lisaac)
+#   $2 : リポジトリ名 (例: luci-app-diskman)
+#
+# オプション:
+#   yn          - インストール前に確認ダイアログを表示
+#   disabled    - サービスの自動設定をスキップ
+#   hidden      - 一部の通知メッセージを表示しない
+#   silent      - 進捗・通知メッセージを全て抑制
+#   desc="説明" - パッケージの説明文を指定
+#
+# 使用例:
+#   feed_package_release lisaac luci-app-diskman yn disabled
 #########################################################################
 feed_package_release() {
   local confirm_install="no"
