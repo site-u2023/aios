@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.14-02-00"
+SCRIPT_VERSION="2025.04.12-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -344,6 +344,7 @@ package_pre_install() {
 install_normal_package() {
     local package_name="$1"
     local force_install="$2"
+    local silent_mode="$3"
     
     # 表示用の名前を作成（パスと拡張子を除去）
     local display_name
@@ -353,35 +354,62 @@ install_normal_package() {
     debug_log "DEBUG" "Starting installation process for: $package_name"
     debug_log "DEBUG" "Display name for messages: $display_name"
 
-    start_spinner "$(color blue "$display_name $(get_message "MSG_INSTALLING_PACKAGE")")"
+    # silent モードが有効でない場合のみスピナーを開始
+    if [ "$silent_mode" != "yes" ]; then
+        start_spinner "$(color blue "$display_name $(get_message "MSG_INSTALLING_PACKAGE")")"
+    fi
 
     if [ "$force_install" = "yes" ]; then
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
             opkg install --force-reinstall "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "Failed to install package $display_name")"
+                # エラーの場合はsilentモードでもメッセージを表示
+                if [ "$silent_mode" != "yes" ]; then
+                    stop_spinner "$(color red "Failed to install package $display_name")"
+                else
+                    printf "%s\n" "$(color red "Failed to install package $display_name")"
+                fi
                 return 1
             }
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
             apk add --force-reinstall "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "Failed to install package $display_name")"
+                # エラーの場合はsilentモードでもメッセージを表示
+                if [ "$silent_mode" != "yes" ]; then
+                    stop_spinner "$(color red "Failed to install package $display_name")"
+                else
+                    printf "%s\n" "$(color red "Failed to install package $display_name")"
+                fi
                 return 1
             }
         fi
     else
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
             opkg install "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "Failed to install package $display_name")"
+                # エラーの場合はsilentモードでもメッセージを表示
+                if [ "$silent_mode" != "yes" ]; then
+                    stop_spinner "$(color red "Failed to install package $display_name")"
+                else
+                    printf "%s\n" "$(color red "Failed to install package $display_name")"
+                fi
                 return 1
             }
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
             apk add "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "Failed to install package $display_name")"
+                # エラーの場合はsilentモードでもメッセージを表示
+                if [ "$silent_mode" != "yes" ]; then
+                    stop_spinner "$(color red "Failed to install package $display_name")"
+                else
+                    printf "%s\n" "$(color red "Failed to install package $display_name")"
+                fi
                 return 1
             }
         fi
     fi
 
-    stop_spinner "$(color green "$display_name $(get_message "MSG_INSTALL_SUCCESS")")"
+    # silent モードが有効でない場合のみスピナーを停止
+    if [ "$silent_mode" != "yes" ]; then
+        stop_spinner "$(color green "$display_name $(get_message "MSG_INSTALL_SUCCESS")")"
+    fi
+    
     return 0
 }
 
@@ -468,36 +496,46 @@ parse_package_options() {
     PKG_OPTIONS_UNFORCE="no"
     PKG_OPTIONS_LIST="no"
     PKG_OPTIONS_PACKAGE_NAME=""
+    PKG_OPTIONS_SILENT="no"
     
-    # 新しい変数：説明文用
+    # 変数初期化：説明文用
     PKG_OPTIONS_DESCRIPTION=""
+
+    # 引数のデバッグ出力
+    debug_log "DEBUG" "parse_package_options: 受け取った引数 ($#): $*"
     
     # オプション解析
     while [ $# -gt 0 ]; do
+        # 現在処理中の引数をデバッグ出力
+        debug_log "DEBUG" "parse_package_options: 処理中の引数: $1"
+        
         case "$1" in
-            yn) PKG_OPTIONS_CONFIRM="yes" ;;
-            nolang) PKG_OPTIONS_SKIP_LANG="yes" ;;
-            force) PKG_OPTIONS_FORCE="yes" ;;
-            notpack) PKG_OPTIONS_SKIP_PACKAGE_DB="yes" ;;
-            disabled) PKG_OPTIONS_DISABLED="yes" ;;
-            hidden) PKG_OPTIONS_HIDDEN="yes" ;;
-            test) PKG_OPTIONS_TEST="yes" ;;
+            yn) PKG_OPTIONS_CONFIRM="yes"; debug_log "DEBUG" "Option: confirm=yes" ;;
+            nolang) PKG_OPTIONS_SKIP_LANG="yes"; debug_log "DEBUG" "Option: skip_lang=yes" ;;
+            force) PKG_OPTIONS_FORCE="yes"; debug_log "DEBUG" "Option: force=yes" ;;
+            notpack) PKG_OPTIONS_SKIP_PACKAGE_DB="yes"; debug_log "DEBUG" "Option: skip_package_db=yes" ;;
+            disabled) PKG_OPTIONS_DISABLED="yes"; debug_log "DEBUG" "Option: disabled=yes" ;;
+            hidden) PKG_OPTIONS_HIDDEN="yes"; debug_log "DEBUG" "Option: hidden=yes" ;;
+            test) PKG_OPTIONS_TEST="yes"; debug_log "DEBUG" "Option: test=yes" ;;
+            silent) PKG_OPTIONS_SILENT="yes"; debug_log "DEBUG" "Option: silent=yes" ;;  # silent オプションの追加
             desc=*) 
                 # 説明文オプション処理 - "desc=" 以降の文字列を取得
                 PKG_OPTIONS_DESCRIPTION="${1#desc=}"
-                debug_log "DEBUG" "Package description set to: $PKG_OPTIONS_DESCRIPTION" 
+                debug_log "DEBUG" "Option: description=$PKG_OPTIONS_DESCRIPTION" 
                 ;;
             update)
                 PKG_OPTIONS_UPDATE="yes"
+                debug_log "DEBUG" "Option: update=yes"
                 shift
                 if [ $# -gt 0 ]; then
                     PKG_OPTIONS_PACKAGE_UPDATE="$1"
+                    debug_log "DEBUG" "Package update: $PKG_OPTIONS_PACKAGE_UPDATE"
                     shift
                 fi
                 continue
                 ;;
-            unforce) PKG_OPTIONS_UNFORCE="yes" ;;
-            list) PKG_OPTIONS_LIST="yes" ;;
+            unforce) PKG_OPTIONS_UNFORCE="yes"; debug_log "DEBUG" "Option: unforce=yes" ;;
+            list) PKG_OPTIONS_LIST="yes"; debug_log "DEBUG" "Option: list=yes" ;;
             -*) 
                 debug_log "ERROR" "Unknown option: $1"
                 return 1 
@@ -505,10 +543,12 @@ parse_package_options() {
             *)
                 if [ -z "$PKG_OPTIONS_PACKAGE_NAME" ]; then
                     PKG_OPTIONS_PACKAGE_NAME="$1"
+                    debug_log "DEBUG" "Package name: $PKG_OPTIONS_PACKAGE_NAME"
                 else
+                    debug_log "DEBUG" "Additional argument after package name: $1"
                     # 既に説明文が設定されている場合は追加の引数として処理しない
                     if [ -n "$PKG_OPTIONS_DESCRIPTION" ]; then
-                        debug_log "DEBUG" "Ignoring unexpected additional argument: $1"
+                        debug_log "DEBUG" "Description already set, ignoring: $1"
                     else
                         # 追加の引数を説明文として扱う（旧動作との互換性のため）
                         debug_log "DEBUG" "Additional argument will be treated as description: $1"
@@ -525,6 +565,9 @@ parse_package_options() {
         debug_log "ERROR" "No package name specified"
         return 1
     fi
+    
+    # オプションに関する情報を出力
+    debug_log "DEBUG" "Options parsed: confirm=$PKG_OPTIONS_CONFIRM, force=$PKG_OPTIONS_FORCE, silent=$PKG_OPTIONS_SILENT, description='$PKG_OPTIONS_DESCRIPTION', package=$PKG_OPTIONS_PACKAGE_NAME"
     
     return 0
 }
@@ -659,7 +702,8 @@ process_package() {
     local set_disabled="$6"
     local test_mode="$7"
     local lang_code="$8"
-    local description="$9"  # 9番目の引数として説明文を直接受け取る
+    local description="$9"
+    local silent_mode="${10}"
 
     # 言語パッケージか通常パッケージかを判別
     case "$base_name" in
@@ -680,8 +724,8 @@ process_package() {
         debug_log "DEBUG" "Test mode enabled, skipping pre-install checks"
     fi
     
-    # YN確認 (オプションで有効時のみ)
-    if [ "$confirm_install" = "yes" ]; then
+    # YN確認 (オプションで有効時のみ、silentモードでない場合)
+    if [ "$confirm_install" = "yes" ] && [ "$silent_mode" != "yes" ]; then
         # パッケージ名からパスと拡張子を除去した表示用の名前を作成
         local display_name
         display_name=$(basename "$package_name")
@@ -721,92 +765,8 @@ process_package() {
         fi
     fi
      
-    # パッケージのインストール
-    if ! install_normal_package "$package_name" "$force_install"; then
-        debug_log "DEBUG" "Failed to install package: $package_name"
-        return 1
-    fi
-
-    # **ローカルパッケージDBの適用 (インストール成功後に実行)**
-    if [ "$skip_package_db" != "yes" ]; then
-        local_package_db "$base_name"
-    else
-        debug_log "DEBUG" "Skipping local-package.db application for $package_name"
-    fi
-    
-    return 0
-}
-
-# パッケージ処理メイン部分
-OK_process_package() {
-    local package_name="$1"
-    local base_name="$2"
-    local confirm_install="$3"
-    local force_install="$4"
-    local skip_package_db="$5"
-    local set_disabled="$6"
-    local test_mode="$7"
-    local lang_code="$8"
-    local description="$9"  # 9番目の引数として説明文を直接受け取る
-
-    # 言語パッケージか通常パッケージかを判別
-    case "$base_name" in
-        luci-i18n-*)
-            # 言語パッケージの場合、package_name に言語コードを追加
-            package_name="${base_name}-${lang_code}"
-            debug_log "DEBUG" "Language package detected, using: $package_name"
-            ;;
-    esac
-
-    # test_mode が有効でなければパッケージの事前チェックを行う
-    if [ "$test_mode" != "yes" ]; then
-        if ! package_pre_install "$package_name"; then
-            debug_log "DEBUG" "Package $package_name is already installed or not found"
-            return 1
-        fi
-    else
-        debug_log "DEBUG" "Test mode enabled, skipping pre-install checks"
-    fi
-    
-    # YN確認 (オプションで有効時のみ)
-    if [ "$confirm_install" = "yes" ]; then
-        # パッケージ名からパスと拡張子を除去した表示用の名前を作成
-        local display_name
-        display_name=$(basename "$package_name")
-        display_name=${display_name%.*}  # 拡張子を除去
-
-        debug_log "DEBUG" "Original package name: $package_name"
-        debug_log "DEBUG" "Displaying package name: $display_name"
-    
-        # 説明文の優先順位：
-        # 1. 関数の9番目の引数として指定された説明文を優先
-        # 2. なければパッケージリストから取得
-        if [ -n "$description" ]; then
-            debug_log "DEBUG" "Using provided description: $description"
-        else
-            # パッケージリストから説明を取得
-            description=$(get_package_description "$package_name")
-            debug_log "DEBUG" "Using repository description: $description"
-        fi
-        
-        # 説明文があれば専用のメッセージキーを使用
-        if [ -n "$description" ]; then
-            # 説明文付きの確認メッセージ
-            if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg=$display_name" "desc=$description"; then
-                debug_log "DEBUG" "User declined installation of $display_name with description"
-                return 0
-            fi
-        else
-            # 通常の確認メッセージ
-            if ! confirm "MSG_CONFIRM_INSTALL" "pkg=$display_name"; then
-                debug_log "DEBUG" "User declined installation of $display_name"
-                return 0
-            fi
-        fi
-    fi
-     
-    # パッケージのインストール
-    if ! install_normal_package "$package_name" "$force_install"; then
+    # パッケージのインストール - silent モードを渡す
+    if ! install_normal_package "$package_name" "$force_install" "$silent_mode"; then
         debug_log "DEBUG" "Failed to install package: $package_name"
         return 1
     fi
@@ -828,8 +788,8 @@ install_package() {
         return 1
     fi
     
-    # インストール一覧表示モードの場合
-    if [ "$PKG_OPTIONS_LIST" = "yes" ]; then
+    # インストール一覧表示モードの場合（silentモードでなければ表示）
+    if [ "$PKG_OPTIONS_LIST" = "yes" ] && [ "$PKG_OPTIONS_SILENT" != "yes" ]; then
         check_install_list
         return 0
     fi
@@ -844,7 +804,12 @@ install_package() {
     # update オプション処理
     if [ "$PKG_OPTIONS_UPDATE" = "yes" ]; then
         debug_log "DEBUG" "Updating package lists"
-        update_package_list
+        # silentモードの場合、update_package_listの出力を抑制
+        if [ "$PKG_OPTIONS_SILENT" = "yes" ]; then
+            update_package_list >/dev/null 2>&1
+        else
+            update_package_list
+        fi
         return $?
     fi
 
@@ -854,14 +819,18 @@ install_package() {
         return 1
     fi
 
-    # **パッケージリスト更新**
-    update_package_list || return 1
+    # **パッケージリスト更新** - silentモードでは出力を抑制
+    if [ "$PKG_OPTIONS_SILENT" = "yes" ]; then
+        update_package_list >/dev/null 2>&1 || return 1
+    else
+        update_package_list || return 1
+    fi
 
     # 言語コード取得
     local lang_code
     lang_code=$(get_language_code)
     
-    # パッケージ処理 - 説明文も渡す
+    # パッケージ処理 - silentモードもパラメータとして渡す
     if ! process_package \
             "$PKG_OPTIONS_PACKAGE_NAME" \
             "$BASE_NAME" \
@@ -871,70 +840,8 @@ install_package() {
             "$PKG_OPTIONS_DISABLED" \
             "$PKG_OPTIONS_TEST" \
             "$lang_code" \
-            "$PKG_OPTIONS_DESCRIPTION"; then
-        return 1
-    fi
-
-    # サービス関連の処理（disabled オプションが有効な場合は全スキップ）
-    if [ "$PKG_OPTIONS_DISABLED" != "yes" ]; then
-        configure_service "$PKG_OPTIONS_PACKAGE_NAME" "$BASE_NAME"
-    else
-        debug_log "DEBUG" "Skipping service handling for $PKG_OPTIONS_PACKAGE_NAME due to disabled option"
-    fi
-    
-    return 0
-}
-
-# **パッケージインストールのメイン関数**
-OK_install_package() {
-    # オプション解析
-    if ! parse_package_options "$@"; then
-        return 1
-    fi
-    
-    # インストール一覧表示モードの場合
-    if [ "$PKG_OPTIONS_LIST" = "yes" ]; then
-        check_install_list
-        return 0
-    fi
-    
-    # **ベースネームを取得**
-    local BASE_NAME
-    if [ -n "$PKG_OPTIONS_PACKAGE_NAME" ]; then
-        BASE_NAME=$(basename "$PKG_OPTIONS_PACKAGE_NAME" .ipk)
-        BASE_NAME=$(basename "$BASE_NAME" .apk)
-    fi
-
-    # update オプション処理
-    if [ "$PKG_OPTIONS_UPDATE" = "yes" ]; then
-        debug_log "DEBUG" "Updating package lists"
-        update_package_list
-        return $?
-    fi
-
-    # パッケージマネージャー確認
-    if ! verify_package_manager; then
-        debug_log "ERROR" "Failed to verify package manager"
-        return 1
-    fi
-
-    # **パッケージリスト更新**
-    update_package_list || return 1
-
-    # 言語コード取得
-    local lang_code
-    lang_code=$(get_language_code)
-    
-    # パッケージ処理
-    if ! process_package \
-            "$PKG_OPTIONS_PACKAGE_NAME" \
-            "$BASE_NAME" \
-            "$PKG_OPTIONS_CONFIRM" \
-            "$PKG_OPTIONS_FORCE" \
-            "$PKG_OPTIONS_SKIP_PACKAGE_DB" \
-            "$PKG_OPTIONS_DISABLED" \
-            "$PKG_OPTIONS_TEST" \
-            "$lang_code"; then
+            "$PKG_OPTIONS_DESCRIPTION" \
+            "$PKG_OPTIONS_SILENT"; then
         return 1
     fi
 
