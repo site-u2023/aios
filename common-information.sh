@@ -120,7 +120,7 @@ display_detected_location() {
 }
 
 # Cloudflare Workerから地域情報を取得する関数 (ファイルチェック強化版)
-get_country_cloudflare() {
+get_country_cloudflare() { 
     local tmp_file="$1" # 一時ファイルパス
     local api_name="Cloudflare Worker (api-relay-worker.site-u.workers.dev)" # ログ用
 
