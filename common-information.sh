@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.13-00-05"
+SCRIPT_VERSION="2025.04.13-00-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX準拠シェルスクリプト
@@ -119,7 +119,7 @@ display_detected_location() {
     debug_log "DEBUG" "Location information displayed successfully"
 }
 
-# Cloudflare Workerから地域情報を取得する関数 (ファイル内容表示テスト付き・完全版)
+# Cloudflare Workerから地域情報を取得する関数 (grep/sedパターン修正版)
 get_country_cloudflare() {
     local tmp_file="$1" # 一時ファイルパス
     local api_name="Cloudflare Worker (api-relay-worker.site-u.workers.dev)" # ログ用
@@ -145,38 +145,26 @@ get_country_cloudflare() {
         local request_status=$?
         debug_log "DEBUG" "Cloudflare Worker request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
 
-        # --- テストコード挿入 ---
-        echo "--- Start of tmp_file content (Attempt: $((retry_count+1))) ---" >&2
-        if [ -f "$tmp_file" ]; then
-             # 一時ファイルの内容をそのまま標準エラー出力へ
-             cat "$tmp_file" >&2
-             echo "" >&2 # 改行を追加
-        else
-             echo "tmp_file not found!" >&2
-        fi
-        echo "--- End of tmp_file content ---" >&2
-        # --- テストコード挿入ここまで ---
-
         # make_api_request の結果とファイルの状態を厳密にチェック
         if [ $request_status -eq 0 ] && [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
             # 成功した場合のみJSON解析へ進む
             debug_log "DEBUG" "make_api_request successful and tmp_file exists and is not empty."
 
-            # JSONが取得できたか、statusがsuccessか確認
-            local json_status=$(grep -o '"status":"[^"]*' "$tmp_file" | sed 's/"status":"//')
+            # JSONが取得できたか、statusがsuccessか確認 (スペースありパターンに修正)
+            local json_status=$(grep -o '"status": "[^"]*' "$tmp_file" | sed 's/"status": "//')
             debug_log "DEBUG" "Extracted JSON status: '$json_status'"
 
             if [ "$json_status" = "success" ]; then
                 debug_log "DEBUG" "JSON status is 'success'. Proceeding with field extraction."
 
-                # JSONデータから情報を抽出
-                SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
-                SELECT_ZONENAME=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//')
-                ISP_NAME=$(grep -o '"isp":"[^"]*' "$tmp_file" | sed 's/"isp":"//')
-                ISP_AS=$(grep -o '"as":"[^"]*' "$tmp_file" | sed 's/"as":"//')
+                # JSONデータから情報を抽出 (スペースありパターンに修正)
+                SELECT_COUNTRY=$(grep -o '"countryCode": "[^"]*' "$tmp_file" | sed 's/"countryCode": "//')
+                SELECT_ZONENAME=$(grep -o '"timezone": "[^"]*' "$tmp_file" | sed 's/"timezone": "//')
+                ISP_NAME=$(grep -o '"isp": "[^"]*' "$tmp_file" | sed 's/"isp": "//')
+                ISP_AS=$(grep -o '"as": "[^"]*' "$tmp_file" | sed 's/"as": "//')
                 [ -n "$ISP_NAME" ] && ISP_ORG="$ISP_NAME"
-                SELECT_REGION_NAME=$(grep -o '"regionName":"[^"]*' "$tmp_file" | sed 's/"regionName":"//')
-                SELECT_REGION_CODE=$(grep -o '"region":"[^"]*' "$tmp_file" | sed 's/"region":"//')
+                SELECT_REGION_NAME=$(grep -o '"regionName": "[^"]*' "$tmp_file" | sed 's/"regionName": "//')
+                SELECT_REGION_CODE=$(grep -o '"region": "[^"]*' "$tmp_file" | sed 's/"region": "//')
 
                 # 必須情報が取得できたか確認 (国コードとタイムゾーン名)
                 if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
@@ -189,7 +177,7 @@ get_country_cloudflare() {
                 fi
             else
                 # JSONのstatusが"fail" または statusフィールドがない場合
-                local fail_message=$(grep -o '"message":"[^"]*' "$tmp_file" | sed 's/"message":"//')
+                local fail_message=$(grep -o '"message": "[^"]*' "$tmp_file" | sed 's/"message": "//') # failメッセージもスペースありパターンに
                 debug_log "DEBUG" "Cloudflare Worker returned status '$json_status'. Message: '$fail_message'"
                 # status:failの場合はリトライしても無駄な可能性が高いのでループを抜けるか検討。ここではリトライする。
             fi
