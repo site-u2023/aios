@@ -142,9 +142,8 @@ get_country_ipinfo() {
     debug_log "DEBUG" "Constructed Worker URL: $full_worker_url"
 
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        # 修正: Worker URL、Worker経由フラグ("true")、IPバージョン("4")を指定
-        # IPv6を試したい場合は最後の引数を "6" に変更
-        make_api_request "$full_worker_url" "$tmp_file" "$API_TIMEOUT" "IPINFO" "true" "4"
+        # 修正: Worker URL、Worker経由フラグ("true")、IPバージョン("6")を指定 (IPv6優先)
+        make_api_request "$full_worker_url" "$tmp_file" "$API_TIMEOUT" "IPINFO" "true" "6"
         local request_status=$?
         debug_log "DEBUG" "Worker API request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
 
