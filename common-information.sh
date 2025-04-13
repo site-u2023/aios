@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.13-00-01"
+SCRIPT_VERSION="2025.04.13-00-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX準拠シェルスクリプト
@@ -61,6 +61,10 @@ API_MAX_RETRIES="${API_MAX_RETRIES:-3}"
 API_MAX_REDIRECTS="${API_MAX_REDIRECTS:-2}"
 TIMEZONE_API_SOURCE=""
 
+SELECT_POSIX_TZ=""
+SELECT_REGION_NAME=""
+SELECT_REGION_CODE=""
+
 # 検出した地域情報を表示する共通関数
 display_detected_location() {
     local detection_source="$1"
@@ -114,145 +118,81 @@ display_detected_location() {
     debug_log "DEBUG" "Location information displayed successfully"
 }
 
-# ipinfo.ioから国コードとタイムゾーン情報を取得する関数 (Worker経由)
-get_country_ipinfo() {
-    local tmp_file="$1"      # 一時ファイルパス
-    # local network_type="$2" # この引数は使われなくなる
-    local api_name="$3"      # API名（ログ用、元のAPI URL: https://ipinfo.io）
+# Cloudflare Workerから地域情報を取得する関数
+get_country_cloudflare() {
+    local tmp_file="$1" # 一時ファイルパス
+    local api_name="Cloudflare Worker (api-relay-worker.site-u.workers.dev)" # ログ用
 
     local retry_count=0
     local success=0
-    local worker_url="https://api-relay-worker.site-u.workers.dev/" # Worker URL
+    local worker_url="https://api-relay-worker.site-u.workers.dev" # Worker URL
 
-    # API名からドメイン名を抽出 (ログ用)
-    local api_domain=$(echo "$api_name" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
-    [ -z "$api_domain" ] && api_domain="$api_name"
+    debug_log "DEBUG" "Querying location from $api_name"
 
-    debug_log "DEBUG" "Querying country and timezone from $api_domain via Worker"
-
-    # Workerに渡すために元のAPI URLをエンコード
-    local encoded_target=$(echo "$api_name" | sed \
-        -e 's|%|%25|g' \
-        -e 's|:|%3A|g' \
-        -e 's|/|%2F|g' \
-        -e 's|?|%3F|g' \
-        -e 's|=|%3D|g' \
-        -e 's|&|%26|g')
-    local full_worker_url="${worker_url}?target=${encoded_target}"
-    debug_log "DEBUG" "Constructed Worker URL: $full_worker_url"
+    # グローバル変数を初期化 (関数内で使うものを明示的に初期化)
+    SELECT_COUNTRY=""
+    SELECT_ZONENAME=""
+    ISP_NAME=""
+    ISP_AS=""
+    ISP_ORG="" # Workerからは直接取れないので空のまま
+    SELECT_REGION_NAME=""
+    SELECT_REGION_CODE=""
 
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        # 修正: Worker URL、Worker経由フラグ("true")、IPバージョン("6")を指定 (IPv6優先)
-        make_api_request "$full_worker_url" "$tmp_file" "$API_TIMEOUT" "IPINFO" "true" "6"
+        # Worker URLを直接呼び出す (use_workerフラグ不要, IPバージョン指定なし)
+        make_api_request "$worker_url" "$tmp_file" "$API_TIMEOUT" "CLOUDFLARE" # Debug Tag変更
         local request_status=$?
-        debug_log "DEBUG" "Worker API request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
+        debug_log "DEBUG" "Cloudflare Worker request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
 
         if [ $request_status -eq 0 ]; then
-            # JSONデータの解析部分は変更なし
-            SELECT_COUNTRY=$(grep -o '"country"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"country"[[:space:]]*:[[:space:]]*"//')
-            SELECT_ZONENAME=$(grep -o '"timezone"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"timezone"[[:space:]]*:[[:space:]]*"//')
-            local org_raw=$(grep -o '"org"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"org"[[:space:]]*:[[:space:]]*"//')
-            if [ -n "$org_raw" ]; then
-                ISP_AS=$(echo "$org_raw" | awk '{print $1}')
-                ISP_NAME=$(echo "$org_raw" | cut -d' ' -f2-)
-                ISP_ORG="$ISP_NAME"
-            fi
+            # JSONが取得できたか、statusがsuccessか確認
+            local json_status=$(grep -o '"status":"[^"]*' "$tmp_file" | sed 's/"status":"//')
 
-            if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
-                debug_log "DEBUG" "Retrieved from $api_domain via Worker - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
-                if [ -n "$ISP_NAME" ]; then
-                    debug_log "DEBUG" "Retrieved ISP info - Name: $ISP_NAME, AS: $ISP_AS"
+            if [ "$json_status" = "success" ]; then
+                # JSONデータから情報を抽出
+                SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
+                SELECT_ZONENAME=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//') # Workerの'timezone'をZoneNameとして扱う
+                ISP_NAME=$(grep -o '"isp":"[^"]*' "$tmp_file" | sed 's/"isp":"//')
+                ISP_AS=$(grep -o '"as":"[^"]*' "$tmp_file" | sed 's/"as":"//')
+                # ISP_ORG はWorkerからは取得できないため、ISP_NAMEで代用するか空にする。ここではISP_NAMEを流用。
+                [ -n "$ISP_NAME" ] && ISP_ORG="$ISP_NAME"
+                SELECT_REGION_NAME=$(grep -o '"regionName":"[^"]*' "$tmp_file" | sed 's/"regionName":"//')
+                SELECT_REGION_CODE=$(grep -o '"region":"[^"]*' "$tmp_file" | sed 's/"region":"//') # Workerの'region'をRegionCodeとして扱う
+
+                # 必須情報が取得できたか確認 (国コードとタイムゾーン名)
+                if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
+                    debug_log "DEBUG" "Retrieved from $api_name - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME, Region: $SELECT_REGION_NAME ($SELECT_REGION_CODE)"
+                    if [ -n "$ISP_NAME" ]; then
+                        debug_log "DEBUG" "Retrieved ISP info - Name: $ISP_NAME, AS: $ISP_AS"
+                    fi
+                    success=1
+                    break # 成功したのでループを抜ける
+                else
+                    debug_log "DEBUG" "Incomplete country/timezone data from $api_name (JSON status was success, but fields missing)"
+                    # status:successでも中身が欠けている場合があるのでリトライへ
                 fi
-                success=1
-                break
             else
-                debug_log "DEBUG" "Incomplete country/timezone data from $api_domain via Worker"
+                # JSONのstatusが"fail" または statusフィールドがない場合
+                local fail_message=$(grep -o '"message":"[^"]*' "$tmp_file" | sed 's/"message":"//')
+                debug_log "DEBUG" "Cloudflare Worker returned status '$json_status'. Message: '$fail_message'"
+                # status:failの場合はリトライしても無駄な可能性が高いのでループを抜けるか検討。ここではリトライする。
             fi
         else
-            debug_log "DEBUG" "Failed to download data from $api_domain via Worker"
+            debug_log "DEBUG" "Failed to download data from $api_name (wget status: $request_status)"
         fi
 
-        debug_log "DEBUG" "API query attempt $((retry_count+1)) failed via Worker"
-        retry_count=$((retry_count + 1))
-         if [ $retry_count -lt $API_MAX_RETRIES ]; then
-             debug_log "DEBUG" "Sleeping for 1 second before retry." # Sleep time can be adjusted
-             sleep 1
-        fi
-    done
-
-    # 成功した場合は0を、失敗した場合は1を返す
-    if [ $success -eq 1 ]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-# ip-api.comから国コードとタイムゾーン情報を取得する関数 (Worker経由)
-get_country_ipapi() {
-    local tmp_file="$1"      # 一時ファイルパス
-    # local network_type="$2" # この引数は使われなくなる
-    local api_name="$3"      # API名（ログ用、元のAPI URL: http://ip-api.com/json）
-
-    local retry_count=0
-    local success=0
-    local worker_url="https://api-relay-worker.site-u.workers.dev/" # Worker URL
-
-    # API名からドメイン名を抽出 (ログ用)
-    local api_domain=$(echo "$api_name" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
-    [ -z "$api_domain" ] && api_domain="$api_name"
-
-    debug_log "DEBUG" "Querying country and timezone from $api_domain via Worker"
-
-    # Workerに渡すために元のAPI URLをエンコード
-    local encoded_target=$(echo "$api_name" | sed \
-        -e 's|%|%25|g' \
-        -e 's|:|%3A|g' \
-        -e 's|/|%2F|g' \
-        -e 's|?|%3F|g' \
-        -e 's|=|%3D|g' \
-        -e 's|&|%26|g')
-    local full_worker_url="${worker_url}?target=${encoded_target}"
-    debug_log "DEBUG" "Constructed Worker URL: $full_worker_url"
-
-    while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        # 修正: Worker URL、Worker経由フラグ("true")、IPバージョン("6")を指定 (IPv6優先)
-        make_api_request "$full_worker_url" "$tmp_file" "$API_TIMEOUT" "IPAPI" "true" "6"
-        local request_status=$?
-        debug_log "DEBUG" "Worker API request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
-
-        if [ $request_status -eq 0 ]; then
-            # JSONデータの解析部分は変更なし
-            SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
-            SELECT_ZONENAME=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//')
-            ISP_NAME=$(grep -o '"isp":"[^"]*' "$tmp_file" | sed 's/"isp":"//')
-            ISP_AS=$(grep -o '"as":"[^"]*' "$tmp_file" | sed 's/"as":"//')
-            ISP_ORG=$(grep -o '"org":"[^"]*' "$tmp_file" | sed 's/"org":"//')
-
-            if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
-                debug_log "DEBUG" "Retrieved from $api_domain via Worker - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
-                if [ -n "$ISP_NAME" ]; then
-                    debug_log "DEBUG" "Retrieved ISP info - Name: $ISP_NAME, AS: $ISP_AS"
-                fi
-                success=1
-                break
-            else
-                debug_log "DEBUG" "Incomplete country/timezone data from $api_domain via Worker"
-            fi
-        else
-            debug_log "DEBUG" "Failed to download data from $api_domain via Worker"
-        fi
-
-        debug_log "DEBUG" "API query attempt $((retry_count+1)) failed via Worker"
+        debug_log "DEBUG" "API query attempt $((retry_count+1)) failed"
         retry_count=$((retry_count + 1))
         if [ $retry_count -lt $API_MAX_RETRIES ]; then
-             debug_log "DEBUG" "Sleeping for 1 second before retry." # Sleep time can be adjusted
-             sleep 1
+            debug_log "DEBUG" "Sleeping for 1 second before retry."
+            sleep 1
         fi
     done
 
     # 成功した場合は0を、失敗した場合は1を返す
     if [ $success -eq 1 ]; then
+        # タイムゾーンAPIソース名をグローバル変数に設定 (表示用)
+        TIMEZONE_API_SOURCE="Cloudflare Worker" # 固定値
         return 0
     else
         return 1
@@ -260,7 +200,7 @@ get_country_ipapi() {
 }
 
 # ip-api.comから国コードとタイムゾーン情報を取得する関数
-OK_get_country_ipapi() {
+get_country_ipapi() {
     local tmp_file="$1"      # 一時ファイルパス
     local network_type="$2"  # ネットワークタイプ
     local api_name="$3"      # API名（ログ用）
@@ -319,7 +259,7 @@ OK_get_country_ipapi() {
 }
 
 # ipinfo.ioから国コードとタイムゾーン情報を取得する関数
-OK_get_country_ipinfo() {
+get_country_ipinfo() {
     local tmp_file="$1"      # 一時ファイルパス
     local network_type="$2"  # ネットワークタイプ
     local api_name="$3"      # API名（ログ用）
@@ -382,80 +322,8 @@ OK_get_country_ipinfo() {
     fi
 }
 
-# APIリクエストを実行する共通関数（Worker経由指定、IPバージョン指定対応）
-# Arguments:
-#   $1: url         - The target API URL (or Worker URL if use_worker is true)
-#   $2: tmp_file    - Path to the temporary file for the response
-#   $3: timeout     - Request timeout in seconds
-#   $4: debug_tag   - Tag for debug logs (e.g., "IPAPI", "IPINFO")
-#   $5: use_worker  - "true" to indicate the URL ($1) is already the Worker URL
-#   $6: ip_version  - "4" to force IPv4, "6" to force IPv6, empty/other for default
-make_api_request() {
-    local url="$1"
-    local tmp_file="$2"
-    local timeout="${3:-$API_TIMEOUT}"
-    local debug_tag="${4:-API}"
-    local use_worker="${5:-false}" # Default to false
-    local ip_version="$6"       # Default to empty
-    local user_agent="aios-script/${SCRIPT_VERSION}"
-    local status=1 # Default to failure
-    local final_url="$url" # The URL wget will actually use
-
-    debug_log "DEBUG" "[$debug_tag] make_api_request called. URL: $url, Use Worker Flag: $use_worker, IP Version: ${ip_version:-default}"
-
-    # wgetの基本コマンド構築
-    local wget_command="wget --no-check-certificate -q -U \"$user_agent\" -O \"$tmp_file\" -T \"$timeout\""
-
-    # IPバージョン強制を追加
-    if [ "$ip_version" = "4" ]; then
-        wget_command="$wget_command -4"
-        debug_log "DEBUG" "[$debug_tag] Forcing IPv4."
-    elif [ "$ip_version" = "6" ]; then
-        wget_command="$wget_command -6"
-        debug_log "DEBUG" "[$debug_tag] Forcing IPv6."
-    fi
-
-    # Worker経由かどうかのログを追加
-    if [ "$use_worker" = "true" ]; then
-         debug_log "DEBUG" "[$debug_tag] Request is routed via Worker (URL should already be Worker URL)."
-         # Worker経由の場合、クライアント側でのリダイレクト処理は不要
-    else
-         debug_log "DEBUG" "[$debug_tag] Making direct request (Not via Worker)."
-         # 直接接続の場合の既存ロジック（必要ならここに記述）
-         local wget_capability=$(detect_wget_capabilities) # Assuming this exists
-         case "$wget_capability" in
-             "full")
-                 # wget_command="$wget_command -L --max-redirect=${API_MAX_REDIRECTS:-2}"
-                 debug_log "DEBUG" "[$debug_tag] Full wget detected for direct call."
-                 ;;
-             "https_only"|"basic")
-                 # if echo "$url" | grep -q '^http:'; then
-                 #     final_url=$(echo "$url" | sed 's|^http:|https:|')
-                 #     debug_log "DEBUG" "[$debug_tag] Basic wget detected, forcing HTTPS for direct call: $final_url"
-                 # fi
-                 debug_log "DEBUG" "[$debug_tag] Basic wget detected for direct call."
-                 ;;
-         esac
-    fi
-
-    # コマンド実行 (evalを使用)
-    debug_log "DEBUG" "[$debug_tag] Executing: eval $wget_command \"$final_url\""
-    eval "$wget_command \"$final_url\""
-    status=$?
-
-    if [ $status -eq 0 ] && [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-        debug_log "DEBUG" "[$debug_tag] API request successful (Status: $status)"
-        return 0
-    else
-        debug_log "DEBUG" "[$debug_tag] API request failed (Status: $status, File Size: $(ls -l "$tmp_file" 2>/dev/null | awk '{print $5}') )"
-        # Ensure tmp_file is empty on failure
-        echo "" > "$tmp_file"
-        return $status
-    fi
-}
-
 # APIリクエストを実行する共通関数（ネットワークオプション対応版）
-OK_make_api_request() {
+make_api_request() {
     # パラメータ
     local url="$1"
     local tmp_file="$2"
@@ -499,6 +367,293 @@ OK_make_api_request() {
 }
 
 get_country_code() {
+    # 変数宣言
+    local tmp_file=""
+    local spinner_active=0
+    local api_success=1 # 初期値を失敗(1)に設定
+
+    # グローバル変数の初期化
+    SELECT_ZONE="" # Workerからは取得できない
+    SELECT_ZONENAME="" # 例: Asia/Tokyo
+    # SELECT_TIMEZONE="" # 略称は使用しない
+    SELECT_COUNTRY=""
+    SELECT_POSIX_TZ="" # 例: JST-9 (country.dbから取得)
+    SELECT_REGION_NAME="" # 追加
+    SELECT_REGION_CODE="" # 追加
+    ISP_NAME=""
+    ISP_AS=""
+    ISP_ORG=""
+    TIMEZONE_API_SOURCE="Cloudflare Worker" # 固定
+
+    # キャッシュディレクトリの確認
+    [ -d "${CACHE_DIR}" ] || mkdir -p "${CACHE_DIR}"
+
+    # ネットワーク接続状況の取得 (元のコードをそのまま流用)
+    if [ -f "${CACHE_DIR}/network.ch" ]; then
+        network_type=$(cat "${CACHE_DIR}/network.ch")
+        debug_log "DEBUG" "Network connectivity type detected: $network_type"
+    else
+        debug_log "DEBUG" "Network connectivity information not available, running check"
+        check_network_connectivity # この関数が存在する前提
+
+        if [ -f "${CACHE_DIR}/network.ch" ]; then
+            network_type=$(cat "${CACHE_DIR}/network.ch")
+            debug_log "DEBUG" "Network type after check: $network_type"
+        else
+            network_type="unknown"
+            debug_log "DEBUG" "Network type still unknown after check"
+        fi
+    fi
+
+    # 接続がない場合は早期リターン (元のコードをそのまま流用)
+    if [ -z "$network_type" ]; then
+        debug_log "DEBUG" "No network connectivity, cannot proceed"
+        return 1
+    fi
+
+    # スピナー開始
+    start_spinner "$(color "blue" "Currently querying: Cloudflare Worker")" "yellow"
+    spinner_active=1
+    debug_log "DEBUG" "Starting location detection process using Cloudflare Worker"
+
+    # --- プライマリ試行: Cloudflare Worker ---
+    tmp_file="$(mktemp -t location.XXXXXX)"
+    debug_log "DEBUG" "Calling get_country_cloudflare (Primary Attempt)" # 関数名変更
+    get_country_cloudflare "$tmp_file" # 関数名変更
+    api_success=$?
+    rm -f "$tmp_file" 2>/dev/null
+    # --- プライマリ試行ここまで ---
+
+    # --- フォールバック処理: 再度 Cloudflare Worker ---
+    # プライマリが失敗した場合、再度同じWorkerに試行する枠組み
+    if [ $api_success -ne 0 ]; then
+        debug_log "DEBUG" "Primary Cloudflare Worker query failed, attempting fallback (retry)."
+        update_spinner "$(color "blue" "Retrying query: Cloudflare Worker")" "yellow"
+
+        tmp_file="$(mktemp -t location_fallback.XXXXXX)"
+        debug_log "DEBUG" "Calling get_country_cloudflare (Fallback Attempt)" # 関数名変更
+        get_country_cloudflare "$tmp_file" # 関数名変更
+        api_success=$?
+        rm -f "$tmp_file" 2>/dev/null
+    fi
+    # --- フォールバック処理ここまで ---
+
+    # --- country.db 検索 (POSIXタイムゾーン取得) ---
+    # API呼び出しが成功し、ZoneNameが取得できた場合のみ実行
+    if [ $api_success -eq 0 ] && [ -n "$SELECT_ZONENAME" ]; then
+        debug_log "DEBUG" "Worker query successful. Processing ZoneName: $SELECT_ZONENAME"
+
+        # country.db から POSIXタイムゾーン (SELECT_POSIX_TZ) の取得
+        debug_log "DEBUG" "Trying to map ZoneName to POSIX timezone using country.db"
+        local db_file="${BASE_DIR}/country.db"
+        SELECT_POSIX_TZ="" # 事前にクリア
+
+        if [ -f "$db_file" ]; then
+            debug_log "DEBUG" "Searching country.db for ZoneName: $SELECT_ZONENAME"
+            local matched_line=$(grep "$SELECT_ZONENAME" "$db_file" | head -1)
+
+            if [ -n "$matched_line" ]; then
+                local zone_pairs=$(echo "$matched_line" | cut -d' ' -f5-)
+                local found_tz=""
+
+                for pair in $zone_pairs; do
+                    # ゾーン名とPOSIX TZがカンマ区切りになっているか確認 (前方一致)
+                    if echo "$pair" | grep -q "^$SELECT_ZONENAME,"; then
+                        found_tz=$(echo "$pair" | cut -d',' -f2)
+                        break
+                    fi
+                done
+
+                if [ -n "$found_tz" ]; then
+                    SELECT_POSIX_TZ="$found_tz"
+                    debug_log "DEBUG" "Found POSIX timezone in country.db: $SELECT_POSIX_TZ"
+                else
+                    debug_log "DEBUG" "No matching POSIX timezone pair found in country.db for: $SELECT_ZONENAME"
+                fi
+            else
+                debug_log "DEBUG" "No matching line found in country.db for: $SELECT_ZONENAME"
+            fi
+        else
+            debug_log "DEBUG" "country.db not found at: $db_file. Cannot retrieve POSIX timezone."
+        fi
+    else
+        # Workerからの情報取得失敗、またはZoneNameが空の場合
+        if [ $api_success -ne 0 ]; then
+             debug_log "DEBUG" "Worker query failed. Cannot process timezone."
+        else
+             debug_log "DEBUG" "ZoneName is empty. Cannot process timezone."
+        fi
+        SELECT_POSIX_TZ="" # 確実に空にする
+    fi
+    # --- country.db 検索ここまで ---
+
+    # ISP情報をキャッシュに保存 (元のコードと同じロジック, Worker関数で設定された値を使う)
+    if [ -n "$ISP_NAME" ] || [ -n "$ISP_AS" ]; then
+        local cache_file="${CACHE_DIR}/isp_info.ch"
+        echo "$ISP_NAME" > "$cache_file"
+        echo "$ISP_AS" >> "$cache_file"
+        echo "$ISP_ORG" >> "$cache_file" # ISP_ORGはISP_NAMEと同じ値が入る想定
+        debug_log "DEBUG" "Saved ISP information to cache"
+    else
+        # キャッシュファイルが存在すれば削除 (古い情報を残さないため)
+        rm -f "${CACHE_DIR}/isp_info.ch" 2>/dev/null
+    fi
+
+    # 結果のチェックとスピナー停止
+    if [ $spinner_active -eq 1 ]; then
+        # 成功条件: 国コードとタイムゾーン名(IANA)が取得できていること
+        if [ $api_success -eq 0 ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
+            local success_msg=$(get_message "MSG_LOCATION_RESULT" "s=successfully")
+            stop_spinner "$success_msg" "success"
+            debug_log "DEBUG" "Location information retrieved and processed successfully"
+            [ -z "$SELECT_POSIX_TZ" ] && debug_log "WARN" "POSIX timezone could not be determined from country.db for $SELECT_ZONENAME"
+            return 0 # 成功
+        else
+            local fail_msg=$(get_message "MSG_LOCATION_RESULT" "s=failed")
+            stop_spinner "$fail_msg" "failed"
+            debug_log "DEBUG" "Location information retrieval or processing failed"
+            return 1 # 失敗
+        fi
+    fi
+
+    # スピナーがアクティブでなかった場合 (念のため)
+    if [ $api_success -eq 0 ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
+        return 0 # 成功
+    else
+        return 1 # 失敗
+    fi
+}
+
+OK_get_country_code() {
+    # 変数宣言
+    local tmp_file=""
+    local spinner_active=0
+    local api_success=1 # 初期値を失敗(1)に設定
+
+    # グローバル変数の初期化
+    SELECT_ZONE="" # Workerからは取得できない
+    SELECT_ZONENAME="" # 例: Asia/Tokyo
+    # SELECT_TIMEZONE="" # 略称は使用しない
+    SELECT_COUNTRY=""
+    SELECT_POSIX_TZ="" # 例: JST-9 (country.dbから取得)
+    SELECT_REGION_NAME="" # 追加
+    SELECT_REGION_CODE="" # 追加
+    ISP_NAME=""
+    ISP_AS=""
+    ISP_ORG=""
+    TIMEZONE_API_SOURCE="Cloudflare Worker" # 固定
+
+    # キャッシュディレクトリの確認
+    [ -d "${CACHE_DIR}" ] || mkdir -p "${CACHE_DIR}"
+
+    # ネットワーク接続チェック (省略)
+
+    # スピナー開始
+    start_spinner "$(color "blue" "Currently querying: Cloudflare Worker")" "yellow"
+    spinner_active=1
+    debug_log "DEBUG" "Starting location detection process using Cloudflare Worker"
+
+    # --- プライマリ試行 ---
+    tmp_file="$(mktemp -t location.XXXXXX)"
+    debug_log "DEBUG" "Calling get_location_from_cloudflare_worker (Primary Attempt)"
+    get_location_from_cloudflare_worker "$tmp_file"
+    api_success=$?
+    rm -f "$tmp_file" 2>/dev/null
+    # --- プライマリ試行ここまで ---
+
+    # --- フォールバック処理 ---
+    if [ $api_success -ne 0 ]; then
+        debug_log "DEBUG" "Primary Cloudflare Worker query failed, attempting fallback (retry)."
+        update_spinner "$(color "blue" "Retrying query: Cloudflare Worker")" "yellow"
+
+        tmp_file="$(mktemp -t location_fallback.XXXXXX)"
+        debug_log "DEBUG" "Calling get_location_from_cloudflare_worker (Fallback Attempt)"
+        get_location_from_cloudflare_worker "$tmp_file"
+        api_success=$?
+        rm -f "$tmp_file" 2>/dev/null
+    fi
+    # --- フォールバック処理ここまで ---
+
+    # --- country.db 検索 (POSIXタイムゾーン取得) ---
+    # API呼び出しが成功し、ZoneNameが取得できた場合のみ実行
+    if [ $api_success -eq 0 ] && [ -n "$SELECT_ZONENAME" ]; then
+        debug_log "DEBUG" "Worker query successful. Processing ZoneName: $SELECT_ZONENAME"
+
+        # country.db から POSIXタイムゾーン (SELECT_POSIX_TZ) の取得
+        debug_log "DEBUG" "Trying to map ZoneName to POSIX timezone using country.db"
+        local db_file="${BASE_DIR}/country.db"
+        SELECT_POSIX_TZ="" # 事前にクリア
+
+        if [ -f "$db_file" ]; then
+            debug_log "DEBUG" "Searching country.db for ZoneName: $SELECT_ZONENAME"
+            local matched_line=$(grep "$SELECT_ZONENAME" "$db_file" | head -1)
+
+            if [ -n "$matched_line" ]; then
+                local zone_pairs=$(echo "$matched_line" | cut -d' ' -f5-)
+                local found_tz=""
+
+                for pair in $zone_pairs; do
+                    # ゾーン名とPOSIX TZがカンマ区切りになっているか確認 (前方一致)
+                    if echo "$pair" | grep -q "^$SELECT_ZONENAME,"; then
+                        found_tz=$(echo "$pair" | cut -d',' -f2)
+                        break
+                    fi
+                done
+
+                if [ -n "$found_tz" ]; then
+                    SELECT_POSIX_TZ="$found_tz"
+                    debug_log "DEBUG" "Found POSIX timezone in country.db: $SELECT_POSIX_TZ"
+                else
+                    debug_log "DEBUG" "No matching POSIX timezone pair found in country.db for: $SELECT_ZONENAME"
+                fi
+            else
+                debug_log "DEBUG" "No matching line found in country.db for: $SELECT_ZONENAME"
+            fi
+        else
+            debug_log "DEBUG" "country.db not found at: $db_file. Cannot retrieve POSIX timezone."
+        fi
+    else
+        # Workerからの情報取得失敗、またはZoneNameが空の場合
+        if [ $api_success -ne 0 ]; then
+             debug_log "DEBUG" "Worker query failed. Cannot process timezone."
+        else
+             debug_log "DEBUG" "ZoneName is empty. Cannot process timezone."
+        fi
+        SELECT_POSIX_TZ="" # 確実に空にする
+    fi
+    # --- country.db 検索ここまで ---
+
+    # ISP情報をキャッシュに保存 (省略)
+    # ... (前回の提案と同じ) ...
+
+    # 結果のチェックとスピナー停止
+    if [ $spinner_active -eq 1 ]; then
+        # 成功条件: 国コードとタイムゾーン名(IANA)が取得できていること
+        # POSIX TZがなくても、Workerからの情報取得が成功していれば全体としては成功とする
+        if [ $api_success -eq 0 ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
+            local success_msg=$(get_message "MSG_LOCATION_RESULT" "s=successfully")
+            stop_spinner "$success_msg" "success"
+            debug_log "DEBUG" "Location information retrieved and processed successfully"
+            # POSIX TZが見つからなかった場合に警告ログを出す (オプション)
+            [ -z "$SELECT_POSIX_TZ" ] && debug_log "WARN" "POSIX timezone could not be determined from country.db for $SELECT_ZONENAME"
+            return 0 # 成功
+        else
+            local fail_msg=$(get_message "MSG_LOCATION_RESULT" "s=failed")
+            stop_spinner "$fail_msg" "failed"
+            debug_log "DEBUG" "Location information retrieval or processing failed"
+            return 1 # 失敗
+        fi
+    fi
+
+    # スピナーがアクティブでなかった場合 (念のため)
+    if [ $api_success -eq 0 ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
+        return 0 # 成功
+    else
+        return 1 # 失敗
+    fi
+}
+
+OK_get_country_code() {
     # 変数宣言
     local network_type=""
     local tmp_file=""
@@ -712,6 +867,74 @@ get_country_code() {
 
 # IPアドレスから地域情報を取得しキャッシュファイルに保存する関数
 process_location_info() {
+    local skip_retrieval=0
+
+    # パラメータ処理（オプション） - グローバル変数をチェック (SELECT_ZONENAMEを必須とする)
+    if [ "$1" = "use_cached" ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
+        skip_retrieval=1
+        debug_log "DEBUG: Using already retrieved location information"
+    fi
+
+    # 必要な場合のみget_country_code関数を呼び出し
+    if [ $skip_retrieval -eq 0 ]; then
+        debug_log "DEBUG: Starting IP-based location information retrieval"
+        get_country_code || {
+            debug_log "ERROR: get_country_code failed to retrieve location information"
+            return 1
+        }
+    fi
+
+    debug_log "DEBUG: Processing location data - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME, PosixTZ: $SELECT_POSIX_TZ, Region: $SELECT_REGION_NAME ($SELECT_REGION_CODE)"
+
+    # キャッシュファイルのパス定義
+    local tmp_country="${CACHE_DIR}/ip_country.tmp"
+    local tmp_timezone="${CACHE_DIR}/ip_timezone.tmp" # POSIX TZ
+    local tmp_zonename="${CACHE_DIR}/ip_zonename.tmp" # 例: Asia/Tokyo
+    local tmp_region_name="${CACHE_DIR}/ip_region_name.tmp" # 追加
+    local tmp_region_code="${CACHE_DIR}/ip_region_code.tmp" # 追加
+    local tmp_isp="${CACHE_DIR}/ip_isp.tmp"
+    local tmp_as="${CACHE_DIR}/ip_as.tmp"
+
+    # キャッシュに必要な重要情報が揃っているか確認 (国、ゾーン名)
+    # POSIX TZは無くてもキャッシュは可能とする
+    if [ -z "$SELECT_COUNTRY" ] || [ -z "$SELECT_ZONENAME" ]; then
+        debug_log "ERROR: Incomplete location data - required information missing for cache (Country or ZoneName)"
+        # 既存のファイルを削除してクリーンな状態を確保
+        rm -f "$tmp_country" "$tmp_timezone" "$tmp_zonename" "$tmp_region_name" "$tmp_region_code" "$tmp_isp" "$tmp_as" 2>/dev/null
+        return 1
+    fi
+
+    debug_log "DEBUG: All required location data available, saving to cache files"
+
+    # 各情報をキャッシュファイルに保存 (存在しない場合はファイルを削除)
+    if [ -n "$SELECT_COUNTRY" ]; then echo "$SELECT_COUNTRY" > "$tmp_country"; else rm -f "$tmp_country" 2>/dev/null; fi
+    debug_log "DEBUG: Country code cache updated: $(cat "$tmp_country" 2>/dev/null || echo 'empty')"
+
+    if [ -n "$SELECT_ZONENAME" ]; then echo "$SELECT_ZONENAME" > "$tmp_zonename"; else rm -f "$tmp_zonename" 2>/dev/null; fi
+    debug_log "DEBUG: Zone name cache updated: $(cat "$tmp_zonename" 2>/dev/null || echo 'empty')"
+
+    # POSIXタイムゾーン文字列を保存 (空の場合もある)
+    if [ -n "$SELECT_POSIX_TZ" ]; then echo "$SELECT_POSIX_TZ" > "$tmp_timezone"; else rm -f "$tmp_timezone" 2>/dev/null; fi
+    debug_log "DEBUG: POSIX timezone cache updated: $(cat "$tmp_timezone" 2>/dev/null || echo 'empty')"
+
+    if [ -n "$SELECT_REGION_NAME" ]; then echo "$SELECT_REGION_NAME" > "$tmp_region_name"; else rm -f "$tmp_region_name" 2>/dev/null; fi
+    debug_log "DEBUG: Region name cache updated: $(cat "$tmp_region_name" 2>/dev/null || echo 'empty')"
+
+    if [ -n "$SELECT_REGION_CODE" ]; then echo "$SELECT_REGION_CODE" > "$tmp_region_code"; else rm -f "$tmp_region_code" 2>/dev/null; fi
+    debug_log "DEBUG: Region code cache updated: $(cat "$tmp_region_code" 2>/dev/null || echo 'empty')"
+
+    if [ -n "$ISP_NAME" ]; then echo "$ISP_NAME" > "$tmp_isp"; else rm -f "$tmp_isp" 2>/dev/null; fi
+    debug_log "DEBUG: ISP name cache updated: $(cat "$tmp_isp" 2>/dev/null || echo 'empty')"
+
+    if [ -n "$ISP_AS" ]; then echo "$ISP_AS" > "$tmp_as"; else rm -f "$tmp_as" 2>/dev/null; fi
+    debug_log "DEBUG: AS number cache updated: $(cat "$tmp_as" 2>/dev/null || echo 'empty')"
+
+    debug_log "DEBUG: Location information cache process completed successfully"
+    return 0
+}
+
+# IPアドレスから地域情報を取得しキャッシュファイルに保存する関数
+OK_process_location_info() {
     local skip_retrieval=0
     
     # パラメータ処理（オプション）
