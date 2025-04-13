@@ -114,8 +114,154 @@ display_detected_location() {
     debug_log "DEBUG" "Location information displayed successfully"
 }
 
-# ip-api.comから国コードとタイムゾーン情報を取得する関数
+# ipinfo.ioから国コードとタイムゾーン情報を取得する関数 (Worker経由)
+get_country_ipinfo() {
+    local tmp_file="$1"      # 一時ファイルパス
+    # local network_type="$2" # この引数は使われなくなる
+    local api_name="$3"      # API名（ログ用、元のAPI URL: https://ipinfo.io）
+
+    local retry_count=0
+    local success=0
+    local worker_url="https://api-relay-worker.site-u.workers.dev/" # Worker URL
+
+    # API名からドメイン名を抽出 (ログ用)
+    local api_domain=$(echo "$api_name" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+    [ -z "$api_domain" ] && api_domain="$api_name"
+
+    debug_log "DEBUG" "Querying country and timezone from $api_domain via Worker"
+
+    # Workerに渡すために元のAPI URLをエンコード
+    local encoded_target=$(echo "$api_name" | sed \
+        -e 's|%|%25|g' \
+        -e 's|:|%3A|g' \
+        -e 's|/|%2F|g' \
+        -e 's|?|%3F|g' \
+        -e 's|=|%3D|g' \
+        -e 's|&|%26|g')
+    local full_worker_url="${worker_url}?target=${encoded_target}"
+    debug_log "DEBUG" "Constructed Worker URL: $full_worker_url"
+
+    while [ $retry_count -lt $API_MAX_RETRIES ]; do
+        # 修正: Worker URLとIPバージョン(IPv4優先)を指定して共通関数を呼び出す
+        # IPv6を試したい場合は最後の引数を "6" に変更
+        make_api_request "$full_worker_url" "$tmp_file" "$API_TIMEOUT" "IPINFO" "4"
+        local request_status=$?
+        debug_log "DEBUG" "Worker API request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
+
+        if [ $request_status -eq 0 ]; then
+            # JSONデータの解析部分は変更なし
+            SELECT_COUNTRY=$(grep -o '"country"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"country"[[:space:]]*:[[:space:]]*"//')
+            SELECT_ZONENAME=$(grep -o '"timezone"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"timezone"[[:space:]]*:[[:space:]]*"//')
+            local org_raw=$(grep -o '"org"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"org"[[:space:]]*:[[:space:]]*"//')
+            if [ -n "$org_raw" ]; then
+                ISP_AS=$(echo "$org_raw" | awk '{print $1}')
+                ISP_NAME=$(echo "$org_raw" | cut -d' ' -f2-)
+                ISP_ORG="$ISP_NAME"
+            fi
+
+            if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
+                debug_log "DEBUG" "Retrieved from $api_domain via Worker - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
+                if [ -n "$ISP_NAME" ]; then
+                    debug_log "DEBUG" "Retrieved ISP info - Name: $ISP_NAME, AS: $ISP_AS"
+                fi
+                success=1
+                break
+            else
+                debug_log "DEBUG" "Incomplete country/timezone data from $api_domain via Worker"
+            fi
+        else
+            debug_log "DEBUG" "Failed to download data from $api_domain via Worker"
+        fi
+
+        debug_log "DEBUG" "API query attempt $((retry_count+1)) failed via Worker"
+        retry_count=$((retry_count + 1))
+         if [ $retry_count -lt $API_MAX_RETRIES ]; then
+             debug_log "DEBUG" "Sleeping for 1 second before retry." # Sleep time can be adjusted
+             sleep 1
+        fi
+    done
+
+    # 成功した場合は0を、失敗した場合は1を返す
+    if [ $success -eq 1 ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# ip-api.comから国コードとタイムゾーン情報を取得する関数 (Worker経由)
 get_country_ipapi() {
+    local tmp_file="$1"      # 一時ファイルパス
+    # local network_type="$2" # この引数は使われなくなる
+    local api_name="$3"      # API名（ログ用、元のAPI URL: http://ip-api.com/json）
+
+    local retry_count=0
+    local success=0
+    local worker_url="https://api-relay-worker.site-u.workers.dev/" # Worker URL
+
+    # API名からドメイン名を抽出 (ログ用)
+    local api_domain=$(echo "$api_name" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+    [ -z "$api_domain" ] && api_domain="$api_name"
+
+    debug_log "DEBUG" "Querying country and timezone from $api_domain via Worker"
+
+    # Workerに渡すために元のAPI URLをエンコード
+    local encoded_target=$(echo "$api_name" | sed \
+        -e 's|%|%25|g' \
+        -e 's|:|%3A|g' \
+        -e 's|/|%2F|g' \
+        -e 's|?|%3F|g' \
+        -e 's|=|%3D|g' \
+        -e 's|&|%26|g')
+    local full_worker_url="${worker_url}?target=${encoded_target}"
+    debug_log "DEBUG" "Constructed Worker URL: $full_worker_url"
+
+    while [ $retry_count -lt $API_MAX_RETRIES ]; do
+        # 修正: Worker URLとIPバージョン(IPv4優先)を指定して共通関数を呼び出す
+        make_api_request "$full_worker_url" "$tmp_file" "$API_TIMEOUT" "IPAPI" "4"
+        local request_status=$?
+        debug_log "DEBUG" "Worker API request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
+
+        if [ $request_status -eq 0 ]; then
+            # JSONデータの解析部分は変更なし
+            SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
+            SELECT_ZONENAME=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//')
+            ISP_NAME=$(grep -o '"isp":"[^"]*' "$tmp_file" | sed 's/"isp":"//')
+            ISP_AS=$(grep -o '"as":"[^"]*' "$tmp_file" | sed 's/"as":"//')
+            ISP_ORG=$(grep -o '"org":"[^"]*' "$tmp_file" | sed 's/"org":"//')
+
+            if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
+                debug_log "DEBUG" "Retrieved from $api_domain via Worker - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
+                if [ -n "$ISP_NAME" ]; then
+                    debug_log "DEBUG" "Retrieved ISP info - Name: $ISP_NAME, AS: $ISP_AS"
+                fi
+                success=1
+                break
+            else
+                debug_log "DEBUG" "Incomplete country/timezone data from $api_domain via Worker"
+            fi
+        else
+            debug_log "DEBUG" "Failed to download data from $api_domain via Worker"
+        fi
+
+        debug_log "DEBUG" "API query attempt $((retry_count+1)) failed via Worker"
+        retry_count=$((retry_count + 1))
+        if [ $retry_count -lt $API_MAX_RETRIES ]; then
+             debug_log "DEBUG" "Sleeping for 1 second before retry." # Sleep time can be adjusted
+             sleep 1
+        fi
+    done
+
+    # 成功した場合は0を、失敗した場合は1を返す
+    if [ $success -eq 1 ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# ip-api.comから国コードとタイムゾーン情報を取得する関数
+OK_get_country_ipapi() {
     local tmp_file="$1"      # 一時ファイルパス
     local network_type="$2"  # ネットワークタイプ
     local api_name="$3"      # API名（ログ用）
@@ -174,7 +320,7 @@ get_country_ipapi() {
 }
 
 # ipinfo.ioから国コードとタイムゾーン情報を取得する関数
-get_country_ipinfo() {
+OK_get_country_ipinfo() {
     local tmp_file="$1"      # 一時ファイルパス
     local network_type="$2"  # ネットワークタイプ
     local api_name="$3"      # API名（ログ用）
@@ -237,8 +383,96 @@ get_country_ipinfo() {
     fi
 }
 
-# APIリクエストを実行する共通関数（ネットワークオプション対応版）
+# Function to make an API request, optionally via Cloudflare Worker
+# Arguments:
+#   $1: url         - The target API URL
+#   $2: tmp_file    - Path to the temporary file for the response
+#   $3: timeout     - Request timeout in seconds
+#   $4: debug_tag   - Tag for debug logs (e.g., "IPAPI", "IPINFO")
+#   $5: use_worker  - "true" to route via Cloudflare Worker, otherwise direct call
+#   $6: ip_version  - "4" to force IPv4, "6" to force IPv6, empty for default
 make_api_request() {
+    local url="$1"
+    local tmp_file="$2"
+    local timeout="${3:-$API_TIMEOUT}"
+    local debug_tag="${4:-API}"
+    local use_worker="${5:-false}" # Default to false (direct call)
+    local ip_version="$6"
+    local worker_url="https://api-relay-worker.site-u.workers.dev/" # Your Cloudflare Worker URL
+    local user_agent="aios-script/${SCRIPT_VERSION}" # Simple user agent
+    local wget_base_command=""
+    local final_url=""
+    local status=1 # Default to failure
+
+    debug_log "DEBUG" "[$debug_tag] make_api_request called. URL: $url, Use Worker: $use_worker, IP Version: $ip_version"
+
+    # Build base wget command with common options and IP version forcing
+    wget_base_command="wget --no-check-certificate -q -U \"$user_agent\" -O \"$tmp_file\" -T \"$timeout\""
+    if [ "$ip_version" = "4" ]; then
+        wget_base_command="$wget_base_command -4"
+        debug_log "DEBUG" "[$debug_tag] Forcing IPv4."
+    elif [ "$ip_version" = "6" ]; then
+        wget_base_command="$wget_base_command -6"
+        debug_log "DEBUG" "[$debug_tag] Forcing IPv6."
+    fi
+
+    # Determine the final URL and add Worker logic if needed
+    if [ "$use_worker" = "true" ]; then
+        debug_log "DEBUG" "[$debug_tag] Routing request via Cloudflare Worker."
+        # URL encode the original target URL
+        local encoded_target=$(echo "$url" | sed \
+            -e 's|%|%25|g' \
+            -e 's|:|%3A|g' \
+            -e 's|/|%2F|g' \
+            -e 's|?|%3F|g' \
+            -e 's|=|%3D|g' \
+            -e 's|&|%26|g')
+        final_url="${worker_url}?target=${encoded_target}"
+        debug_log "DEBUG" "[$debug_tag] Worker URL constructed: $final_url"
+    else
+        debug_log "DEBUG" "[$debug_tag] Making direct request."
+        # Check wget capabilities for direct calls (existing logic might be here or adapt)
+        local wget_capability=$(detect_wget_capabilities) # Assuming this function exists
+        case "$wget_capability" in
+            "full")
+                # Add options for full wget if needed (e.g., redirects)
+                wget_base_command="$wget_base_command -L --max-redirect=${API_MAX_REDIRECTS:-2}"
+                final_url="$url"
+                ;;
+            "https_only"|"basic")
+                # Force HTTPS for basic wget if original URL is HTTP
+                if echo "$url" | grep -q '^http:'; then
+                    final_url=$(echo "$url" | sed 's|^http:|https:|')
+                    debug_log "DEBUG" "[$debug_tag] Basic wget detected, forcing HTTPS for direct call: $final_url"
+                else
+                    final_url="$url"
+                fi
+                ;;
+            *) # Default case if detect_wget_capabilities is not used/available
+               final_url="$url"
+               ;;
+        esac
+    fi
+
+    # Execute the wget command using eval for proper quoting
+    debug_log "DEBUG" "[$debug_tag] Executing: eval $wget_base_command \"$final_url\""
+    eval "$wget_base_command \"$final_url\""
+    status=$?
+
+    # Check result
+    if [ $status -eq 0 ] && [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+        debug_log "DEBUG" "[$debug_tag] API request successful (Status: $status)"
+        return 0 # Success
+    else
+        debug_log "DEBUG" "[$debug_tag] API request failed (Status: $status, File Size: $(ls -l "$tmp_file" 2>/dev/null | awk '{print $5}') )"
+        # Ensure tmp_file is empty on failure
+        echo "" > "$tmp_file"
+        return $status # Failure, return wget exit code
+    fi
+}
+
+# APIリクエストを実行する共通関数（ネットワークオプション対応版）
+OK_make_api_request() {
     # パラメータ
     local url="$1"
     local tmp_file="$2"
