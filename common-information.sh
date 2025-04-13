@@ -752,13 +752,12 @@ OK_get_country_code() {
     return 1
 }
 
-# IPアドレスから地域情報を取得しキャッシュファイルに保存する関数 (変数参照修正版)
+# IPアドレスから地域情報を取得しキャッシュファイルに保存する関数 (SELECT_TIMEZONE 参照に戻す版)
 process_location_info() {
     local skip_retrieval=0
 
-    # パラメータ処理（オプション）
-    # SELECT_POSIX_TZ もチェックに加える
-    if [ "$1" = "use_cached" ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_POSIX_TZ" ] && [ -n "$SELECT_ZONENAME" ]; then
+    # パラメータ処理（オプション） - SELECT_TIMEZONE をチェックするように戻す
+    if [ "$1" = "use_cached" ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_TIMEZONE" ] && [ -n "$SELECT_ZONENAME" ]; then
         skip_retrieval=1
         debug_log "DEBUG: Using already retrieved location information"
     fi
@@ -772,25 +771,23 @@ process_location_info() {
         }
     fi
 
-    # デバッグログで SELECT_POSIX_TZ も表示するように修正
-    debug_log "DEBUG: Processing location data - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME, POSIX TZ: $SELECT_POSIX_TZ"
+    # デバッグログ - Timezone と $SELECT_TIMEZONE を表示するように戻す
+    debug_log "DEBUG: Processing location data - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME, Timezone: $SELECT_TIMEZONE"
 
     # キャッシュファイルのパス定義
     local tmp_country="${CACHE_DIR}/ip_country.tmp"
-    # local tmp_zone="${CACHE_DIR}/ip_zone.tmp" # SELECT_ZONE は Cloudflare Worker から取得しないので不要
+    # local tmp_zone="${CACHE_DIR}/ip_zone.tmp" # 不要
     local tmp_timezone="${CACHE_DIR}/ip_timezone.tmp"
     local tmp_zonename="${CACHE_DIR}/ip_zonename.tmp"
     local tmp_isp="${CACHE_DIR}/ip_isp.tmp"
     local tmp_as="${CACHE_DIR}/ip_as.tmp"
-    local tmp_region_name="${CACHE_DIR}/ip_region_name.tmp" # 追加
-    local tmp_region_code="${CACHE_DIR}/ip_region_code.tmp" # 追加
+    local tmp_region_name="${CACHE_DIR}/ip_region_name.tmp"
+    local tmp_region_code="${CACHE_DIR}/ip_region_code.tmp"
 
-    # 必須情報 (国コード, POSIXタイムゾーン, IANAゾーン名) が揃っているか確認 (SELECT_TIMEZONE -> SELECT_POSIX_TZ に変更)
-    if [ -z "$SELECT_COUNTRY" ] || [ -z "$SELECT_POSIX_TZ" ] || [ -z "$SELECT_ZONENAME" ]; then
-        # POSIXタイムゾーンが見つからない場合でも、国とZoneNameがあれば処理を続けたい場合もあるが、
-        # ここではPOSIXタイムゾーンも必須とする。country.dbが見つからない場合は get_country_code が失敗する想定。
-        # もしPOSIX TZが必須でないなら、ここの条件から SELECT_POSIX_TZ を外す。
-        debug_log "ERROR: Incomplete location data - required information missing (Country, POSIX TZ, or ZoneName)"
+    # 必須情報 (国コード, タイムゾーン, IANAゾーン名) が揃っているか確認 - SELECT_TIMEZONE をチェックするように戻す
+    if [ -z "$SELECT_COUNTRY" ] || [ -z "$SELECT_TIMEZONE" ] || [ -z "$SELECT_ZONENAME" ]; then
+        # エラーメッセージも Timezone に戻す
+        debug_log "ERROR: Incomplete location data - required information missing (Country, Timezone, or ZoneName)"
         # 既存のファイルを削除してクリーンな状態を確保
         rm -f "$tmp_country" "$tmp_timezone" "$tmp_zonename" "$tmp_isp" "$tmp_as" "$tmp_region_name" "$tmp_region_code" 2>/dev/null
         return 1
@@ -802,30 +799,30 @@ process_location_info() {
     echo "$SELECT_COUNTRY" > "$tmp_country"
     debug_log "DEBUG: Country code saved to cache: $SELECT_COUNTRY"
 
-    # ゾーンネームをキャッシュに保存（例：Asia/Tokyo）
+    # ゾーンネームをキャッシュに保存
     echo "$SELECT_ZONENAME" > "$tmp_zonename"
     debug_log "DEBUG: Zone name saved to cache: $SELECT_ZONENAME"
 
-    # POSIXタイムゾーン文字列をキャッシュに保存（例：JST-9）
-    echo "$SELECT_POSIX_TZ" > "$tmp_timezone"
-    debug_log "DEBUG: POSIX timezone saved to cache: $SELECT_POSIX_TZ"
+    # POSIXタイムゾーン文字列をキャッシュに保存 - SELECT_TIMEZONE を書き込むように戻す
+    echo "$SELECT_TIMEZONE" > "$tmp_timezone"
+    debug_log "DEBUG: Timezone saved to cache: $SELECT_TIMEZONE"
 
     # ISP情報をキャッシュに保存
     if [ -n "$ISP_NAME" ]; then
         echo "$ISP_NAME" > "$tmp_isp"
         debug_log "DEBUG: ISP name saved to cache: $ISP_NAME"
     else
-        rm -f "$tmp_isp" 2>/dev/null # 空ならファイルを削除
+        rm -f "$tmp_isp" 2>/dev/null
     fi
 
     if [ -n "$ISP_AS" ]; then
         echo "$ISP_AS" > "$tmp_as"
         debug_log "DEBUG: AS number saved to cache: $ISP_AS"
     else
-        rm -f "$tmp_as" 2>/dev/null # 空ならファイルを削除
+        rm -f "$tmp_as" 2>/dev/null
     fi
 
-    # 地域情報をキャッシュに保存 (追加)
+    # 地域情報をキャッシュに保存
     if [ -n "$SELECT_REGION_NAME" ]; then
         echo "$SELECT_REGION_NAME" > "$tmp_region_name"
         debug_log "DEBUG: Region name saved to cache: $SELECT_REGION_NAME"
@@ -839,8 +836,7 @@ process_location_info() {
         rm -f "$tmp_region_code" 2>/dev/null
     fi
 
-    # 不要になったSELECT_ZONE関連の処理と、POSIXタイムゾーンのフォールバック生成ロジックを削除
-    # (get_country_code で SELECT_POSIX_TZ が設定されるため)
+    # 不要になったフォールバックロジックは削除されたままにする
 
     debug_log "DEBUG: Location information cache process completed successfully"
     return 0
