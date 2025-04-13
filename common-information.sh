@@ -506,10 +506,10 @@ get_country_code() {
     
     # API URLの定数化
     local API_IPINFO="https://ipinfo.io"
-    local API_IPAPI="https://ip-api.com/json"
+    local API_IPAPI="http://ip-api.com/json"
     
     # パラメータ（タイムゾーンAPIの種類）
-    local timezone_api="${1:-$API_IPINFO}"
+    local timezone_api="${1:-$API_IPAPI}"
     TIMEZONE_API_SOURCE="$timezone_api"
     
     # タイムゾーンAPIと関数のマッピング
