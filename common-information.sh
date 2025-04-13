@@ -287,7 +287,7 @@ make_api_request() {
     fi
 }
 
-# Cloudflare Workerから地域情報を取得する関数 (grep/sedパターン修正版)
+# Cloudflare Workerから地域情報を取得する関数 (ISP_ASにAS番号のみ格納版)
 get_country_cloudflare() {
     local tmp_file="$1" # 一時ファイルパス
     local api_name="Cloudflare Worker (api-relay-worker.site-u.workers.dev)" # ログ用
@@ -308,60 +308,57 @@ get_country_cloudflare() {
     SELECT_REGION_CODE=""
 
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        # Worker URLを直接呼び出す
         make_api_request "$worker_url" "$tmp_file" "$API_TIMEOUT" "CLOUDFLARE"
         local request_status=$?
         debug_log "DEBUG" "Cloudflare Worker request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
 
-        # make_api_request の結果とファイルの状態を厳密にチェック
         if [ $request_status -eq 0 ] && [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-            # 成功した場合のみJSON解析へ進む
             debug_log "DEBUG" "make_api_request successful and tmp_file exists and is not empty."
-
-            # JSONが取得できたか、statusがsuccessか確認 (スペースありパターンに修正)
             local json_status=$(grep -o '"status": "[^"]*' "$tmp_file" | sed 's/"status": "//')
             debug_log "DEBUG" "Extracted JSON status: '$json_status'"
 
             if [ "$json_status" = "success" ]; then
                 debug_log "DEBUG" "JSON status is 'success'. Proceeding with field extraction."
 
-                # JSONデータから情報を抽出 (スペースありパターンに修正)
                 SELECT_COUNTRY=$(grep -o '"countryCode": "[^"]*' "$tmp_file" | sed 's/"countryCode": "//')
                 SELECT_ZONENAME=$(grep -o '"timezone": "[^"]*' "$tmp_file" | sed 's/"timezone": "//')
                 ISP_NAME=$(grep -o '"isp": "[^"]*' "$tmp_file" | sed 's/"isp": "//')
-                ISP_AS=$(grep -o '"as": "[^"]*' "$tmp_file" | sed 's/"as": "//')
+                # *** 修正点: asフィールドからAS番号のみを抽出して ISP_AS に格納 ***
+                local as_raw=$(grep -o '"as": "[^"]*' "$tmp_file" | sed 's/"as": "//')
+                if [ -n "$as_raw" ]; then
+                    ISP_AS=$(echo "$as_raw" | awk '{print $1}') # AS番号のみ抽出
+                    debug_log "DEBUG" "Extracted AS number and stored in ISP_AS: '$ISP_AS' from raw value: '$as_raw'"
+                else
+                    ISP_AS="" # 見つからない場合は空にする
+                    debug_log "DEBUG" "AS field ('as') not found or empty in Cloudflare Worker response."
+                fi
+                # *** 修正点ここまで ***
+                # ISP_ORG は ISP_NAME を使う (Cloudflare Workerレスポンスにorgフィールドはないため)
                 [ -n "$ISP_NAME" ] && ISP_ORG="$ISP_NAME"
                 SELECT_REGION_NAME=$(grep -o '"regionName": "[^"]*' "$tmp_file" | sed 's/"regionName": "//')
                 SELECT_REGION_CODE=$(grep -o '"region": "[^"]*' "$tmp_file" | sed 's/"region": "//')
 
-                # 必須情報が取得できたか確認 (国コードとタイムゾーン名)
                 if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
                     debug_log "DEBUG" "Required fields (Country & ZoneName) extracted successfully."
                     success=1
-                    break # 成功したのでループを抜ける
+                    break
                 else
                     debug_log "DEBUG" "Extraction failed for required fields (Country or ZoneName)."
-                    # status:successでも中身が欠けている場合があるのでリトライへ
                 fi
             else
-                # JSONのstatusが"fail" または statusフィールドがない場合
-                local fail_message=$(grep -o '"message": "[^"]*' "$tmp_file" | sed 's/"message": "//') # failメッセージもスペースありパターンに
+                local fail_message=$(grep -o '"message": "[^"]*' "$tmp_file" | sed 's/"message": "//')
                 debug_log "DEBUG" "Cloudflare Worker returned status '$json_status'. Message: '$fail_message'"
-                # status:failの場合はリトライしても無駄な可能性が高いのでループを抜けるか検討。ここではリトライする。
             fi
         else
-            # make_api_request失敗、またはファイルに問題がある場合のログを強化
-            if [ $request_status -ne 0 ]; then
+             if [ $request_status -ne 0 ]; then
                  debug_log "DEBUG" "make_api_request failed with status: $request_status"
-            elif [ ! -f "$tmp_file" ]; then
+             elif [ ! -f "$tmp_file" ]; then
                  debug_log "DEBUG" "make_api_request succeeded but tmp_file '$tmp_file' not found."
-            elif [ ! -s "$tmp_file" ]; then
+             elif [ ! -s "$tmp_file" ]; then
                  debug_log "DEBUG" "make_api_request succeeded but tmp_file '$tmp_file' is empty."
-            fi
-            # リトライ処理へ進む
+             fi
         fi
 
-        # リトライ処理
         debug_log "DEBUG" "API query attempt $((retry_count+1)) failed, proceeding to retry or exit."
         retry_count=$((retry_count + 1))
         if [ $retry_count -lt $API_MAX_RETRIES ]; then
@@ -370,7 +367,6 @@ get_country_cloudflare() {
         fi
     done
 
-    # 成功した場合は0を、失敗した場合は1を返す
     if [ $success -eq 1 ]; then
         TIMEZONE_API_SOURCE="Cloudflare Worker"
         debug_log "DEBUG" "get_country_cloudflare finished successfully."
