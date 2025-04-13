@@ -119,8 +119,8 @@ display_detected_location() {
     debug_log "DEBUG" "Location information displayed successfully"
 }
 
-# Cloudflare Workerから地域情報を取得する関数 (ファイルチェック強化版)
-get_country_cloudflare() { 
+# Cloudflare Workerから地域情報を取得する関数 (ファイル内容表示テスト付き)
+get_country_cloudflare() {
     local tmp_file="$1" # 一時ファイルパス
     local api_name="Cloudflare Worker (api-relay-worker.site-u.workers.dev)" # ログ用
 
@@ -145,6 +145,18 @@ get_country_cloudflare() {
         local request_status=$?
         debug_log "DEBUG" "Cloudflare Worker request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
 
+        # --- テストコード挿入 ---
+        echo "--- Start of tmp_file content (Attempt: $((retry_count+1))) ---" >&2
+        if [ -f "$tmp_file" ]; then
+             # 一時ファイルの内容をそのまま標準エラー出力へ
+             cat "$tmp_file" >&2
+             echo "" >&2 # 改行を追加
+        else
+             echo "tmp_file not found!" >&2
+        fi
+        echo "--- End of tmp_file content ---" >&2
+        # --- テストコード挿入ここまで ---
+
         # make_api_request の結果とファイルの状態を厳密にチェック
         if [ $request_status -eq 0 ] && [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
             # 成功した場合のみJSON解析へ進む
@@ -154,62 +166,20 @@ get_country_cloudflare() {
             debug_log "DEBUG" "Extracted JSON status: '$json_status'"
 
             if [ "$json_status" = "success" ]; then
-                debug_log "DEBUG" "JSON status is 'success'. Proceeding with field extraction."
-
-                # JSONデータから情報を抽出 (以前のコードと同じ)
-                SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
-                SELECT_ZONENAME=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//')
-                ISP_NAME=$(grep -o '"isp":"[^"]*' "$tmp_file" | sed 's/"isp":"//')
-                ISP_AS=$(grep -o '"as":"[^"]*' "$tmp_file" | sed 's/"as":"//')
-                [ -n "$ISP_NAME" ] && ISP_ORG="$ISP_NAME"
-                SELECT_REGION_NAME=$(grep -o '"regionName":"[^"]*' "$tmp_file" | sed 's/"regionName":"//')
-                SELECT_REGION_CODE=$(grep -o '"region":"[^"]*' "$tmp_file" | sed 's/"region":"//')
-
-                # 必須情報が取得できたか確認
-                if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
-                    debug_log "DEBUG" "Required fields (Country & ZoneName) extracted successfully."
-                    success=1
-                    break # 成功したのでループを抜ける
-                else
-                    debug_log "DEBUG" "Extraction failed for required fields (Country or ZoneName)."
-                    # status:successでも中身が欠けている場合があるのでリトライへ
-                fi
+                # ... (省略) ...
+                success=1
+                break
             else
-                # JSONのstatusが"fail" または statusフィールドがない場合
-                local fail_message=$(grep -o '"message":"[^"]*' "$tmp_file" | sed 's/"message":"//')
-                debug_log "DEBUG" "Cloudflare Worker returned status '$json_status'. Message: '$fail_message'"
-                # status:failの場合はリトライしても無駄な可能性が高いのでループを抜けるか検討。ここではリトライする。
+                # ... (省略) ...
             fi
         else
-            # make_api_request失敗、またはファイルに問題がある場合のログを強化
-            if [ $request_status -ne 0 ]; then
-                 debug_log "DEBUG" "make_api_request failed with status: $request_status"
-            elif [ ! -f "$tmp_file" ]; then
-                 debug_log "DEBUG" "make_api_request succeeded but tmp_file '$tmp_file' not found."
-            elif [ ! -s "$tmp_file" ]; then
-                 debug_log "DEBUG" "make_api_request succeeded but tmp_file '$tmp_file' is empty."
-            fi
-            # リトライ処理へ進む
+            # ... (省略) ...
         fi
 
-        # リトライ処理
-        debug_log "DEBUG" "API query attempt $((retry_count+1)) failed, proceeding to retry or exit."
-        retry_count=$((retry_count + 1))
-        if [ $retry_count -lt $API_MAX_RETRIES ]; then
-            debug_log "DEBUG" "Sleeping for 1 second before retry."
-            sleep 1
-        fi
+        # ... (省略) ...
     done
 
-    # 成功した場合は0を、失敗した場合は1を返す
-    if [ $success -eq 1 ]; then
-        TIMEZONE_API_SOURCE="Cloudflare Worker"
-        debug_log "DEBUG" "get_country_cloudflare finished successfully."
-        return 0
-    else
-        debug_log "DEBUG" "get_country_cloudflare finished with failure."
-        return 1
-    fi
+    # ... (省略) ...
 }
 
 # ip-api.comから国コードとタイムゾーン情報を取得する関数
