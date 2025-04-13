@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.13-00-07"
+SCRIPT_VERSION="2025.04.14-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX準拠シェルスクリプト
@@ -381,6 +381,7 @@ get_country_cloudflare() {
     fi
 }
 
+# IPアドレスから地域情報を取得するメイン関数 (SELECT_TIMEZONE へ直接格納版)
 get_country_code() {
     # 変数宣言
     local tmp_file=""
@@ -390,9 +391,9 @@ get_country_code() {
     # グローバル変数の初期化
     SELECT_ZONE="" # Workerからは取得できない
     SELECT_ZONENAME="" # 例: Asia/Tokyo
-    # SELECT_TIMEZONE="" # 略称は使用しない
+    SELECT_TIMEZONE="" # process_location_info が期待する変数 (POSIX TZをここに直接格納)
     SELECT_COUNTRY=""
-    SELECT_POSIX_TZ="" # 例: JST-9 (country.dbから取得)
+    # SELECT_POSIX_TZ は使用しない
     SELECT_REGION_NAME="" # 追加
     SELECT_REGION_CODE="" # 追加
     ISP_NAME=""
@@ -404,6 +405,7 @@ get_country_code() {
     [ -d "${CACHE_DIR}" ] || mkdir -p "${CACHE_DIR}"
 
     # ネットワーク接続状況の取得 (元のコードをそのまま流用)
+    local network_type=""
     if [ -f "${CACHE_DIR}/network.ch" ]; then
         network_type=$(cat "${CACHE_DIR}/network.ch")
         debug_log "DEBUG" "Network connectivity type detected: $network_type"
@@ -420,9 +422,9 @@ get_country_code() {
         fi
     fi
 
-    # 接続がない場合は早期リターン (元のコードをそのまま流用)
-    if [ -z "$network_type" ]; then
-        debug_log "DEBUG" "No network connectivity, cannot proceed"
+    # 接続がない場合は早期リターン
+    if [ "$network_type" = "none" ] || [ "$network_type" = "unknown" ] || [ -z "$network_type" ]; then
+        debug_log "DEBUG" "No network connectivity or unknown type ('$network_type'), cannot proceed with IP-based location"
         return 1
     fi
 
@@ -433,55 +435,56 @@ get_country_code() {
 
     # --- プライマリ試行: Cloudflare Worker ---
     tmp_file="$(mktemp -t location.XXXXXX)"
-    debug_log "DEBUG" "Calling get_country_cloudflare (Primary Attempt)" # 関数名変更
-    get_country_cloudflare "$tmp_file" # 関数名変更
+    debug_log "DEBUG" "Calling get_country_cloudflare (Primary Attempt)"
+    get_country_cloudflare "$tmp_file"
     api_success=$?
-    rm -f "$tmp_file" 2>/dev/null
     # --- プライマリ試行ここまで ---
 
     # --- フォールバック処理: 再度 Cloudflare Worker ---
-    # プライマリが失敗した場合、再度同じWorkerに試行する枠組み
     if [ $api_success -ne 0 ]; then
         debug_log "DEBUG" "Primary Cloudflare Worker query failed, attempting fallback (retry)."
         update_spinner "$(color "blue" "Retrying query: Cloudflare Worker")" "yellow"
-
-        tmp_file="$(mktemp -t location_fallback.XXXXXX)"
-        debug_log "DEBUG" "Calling get_country_cloudflare (Fallback Attempt)" # 関数名変更
-        get_country_cloudflare "$tmp_file" # 関数名変更
+        debug_log "DEBUG" "Calling get_country_cloudflare (Fallback Attempt)"
+        get_country_cloudflare "$tmp_file"
         api_success=$?
-        rm -f "$tmp_file" 2>/dev/null
     fi
     # --- フォールバック処理ここまで ---
+
+    # 一時ファイルを削除
+    rm -f "$tmp_file" 2>/dev/null
 
     # --- country.db 検索 (POSIXタイムゾーン取得) ---
     # API呼び出しが成功し、ZoneNameが取得できた場合のみ実行
     if [ $api_success -eq 0 ] && [ -n "$SELECT_ZONENAME" ]; then
         debug_log "DEBUG" "Worker query successful. Processing ZoneName: $SELECT_ZONENAME"
 
-        # country.db から POSIXタイムゾーン (SELECT_POSIX_TZ) の取得
+        # country.db から POSIXタイムゾーン (SELECT_TIMEZONE) の取得
         debug_log "DEBUG" "Trying to map ZoneName to POSIX timezone using country.db"
         local db_file="${BASE_DIR}/country.db"
-        SELECT_POSIX_TZ="" # 事前にクリア
+        SELECT_TIMEZONE="" # 事前にクリア
 
         if [ -f "$db_file" ]; then
             debug_log "DEBUG" "Searching country.db for ZoneName: $SELECT_ZONENAME"
-            local matched_line=$(grep "$SELECT_ZONENAME" "$db_file" | head -1)
+            local matched_line=$(grep -F "$SELECT_ZONENAME" "$db_file" | head -1)
 
             if [ -n "$matched_line" ]; then
                 local zone_pairs=$(echo "$matched_line" | cut -d' ' -f5-)
+                local pair=""
                 local found_tz=""
 
                 for pair in $zone_pairs; do
-                    # ゾーン名とPOSIX TZがカンマ区切りになっているか確認 (前方一致)
-                    if echo "$pair" | grep -q "^$SELECT_ZONENAME,"; then
-                        found_tz=$(echo "$pair" | cut -d',' -f2)
-                        break
-                    fi
+                    case "$pair" in
+                        "$SELECT_ZONENAME,"*)
+                            found_tz=$(echo "$pair" | cut -d',' -f2)
+                            break
+                            ;;
+                    esac
                 done
 
                 if [ -n "$found_tz" ]; then
-                    SELECT_POSIX_TZ="$found_tz"
-                    debug_log "DEBUG" "Found POSIX timezone in country.db: $SELECT_POSIX_TZ"
+                    # *** 修正点: SELECT_TIMEZONE に直接格納 ***
+                    SELECT_TIMEZONE="$found_tz"
+                    debug_log "DEBUG" "Found POSIX timezone in country.db and stored in SELECT_TIMEZONE: $SELECT_TIMEZONE"
                 else
                     debug_log "DEBUG" "No matching POSIX timezone pair found in country.db for: $SELECT_ZONENAME"
                 fi
@@ -492,46 +495,44 @@ get_country_code() {
             debug_log "DEBUG" "country.db not found at: $db_file. Cannot retrieve POSIX timezone."
         fi
     else
-        # Workerからの情報取得失敗、またはZoneNameが空の場合
         if [ $api_success -ne 0 ]; then
              debug_log "DEBUG" "Worker query failed. Cannot process timezone."
         else
              debug_log "DEBUG" "ZoneName is empty. Cannot process timezone."
         fi
-        SELECT_POSIX_TZ="" # 確実に空にする
+        SELECT_TIMEZONE="" # 確実に空にする
     fi
     # --- country.db 検索ここまで ---
 
-    # ISP情報をキャッシュに保存 (元のコードと同じロジック, Worker関数で設定された値を使う)
+    # ISP情報をキャッシュに保存
     if [ -n "$ISP_NAME" ] || [ -n "$ISP_AS" ]; then
         local cache_file="${CACHE_DIR}/isp_info.ch"
         echo "$ISP_NAME" > "$cache_file"
         echo "$ISP_AS" >> "$cache_file"
-        echo "$ISP_ORG" >> "$cache_file" # ISP_ORGはISP_NAMEと同じ値が入る想定
+        echo "$ISP_ORG" >> "$cache_file"
         debug_log "DEBUG" "Saved ISP information to cache"
     else
-        # キャッシュファイルが存在すれば削除 (古い情報を残さないため)
         rm -f "${CACHE_DIR}/isp_info.ch" 2>/dev/null
     fi
 
     # 結果のチェックとスピナー停止
     if [ $spinner_active -eq 1 ]; then
         # 成功条件: 国コードとタイムゾーン名(IANA)が取得できていること
+        # SELECT_TIMEZONE (POSIX TZ) の有無はここでは問わない
         if [ $api_success -eq 0 ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
             local success_msg=$(get_message "MSG_LOCATION_RESULT" "s=successfully")
             stop_spinner "$success_msg" "success"
-            debug_log "DEBUG" "Location information retrieved and processed successfully"
-            [ -z "$SELECT_POSIX_TZ" ] && debug_log "WARN" "POSIX timezone could not be determined from country.db for $SELECT_ZONENAME"
+            debug_log "DEBUG" "Location information retrieved successfully by get_country_code"
             return 0 # 成功
         else
             local fail_msg=$(get_message "MSG_LOCATION_RESULT" "s=failed")
             stop_spinner "$fail_msg" "failed"
-            debug_log "DEBUG" "Location information retrieval or processing failed"
+            debug_log "DEBUG" "Location information retrieval or processing failed within get_country_code"
             return 1 # 失敗
         fi
     fi
 
-    # スピナーがアクティブでなかった場合 (念のため)
+    # スピナーがアクティブでなかった場合
     if [ $api_success -eq 0 ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
         return 0 # 成功
     else
