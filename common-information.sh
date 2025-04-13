@@ -142,9 +142,9 @@ get_country_ipinfo() {
     debug_log "DEBUG" "Constructed Worker URL: $full_worker_url"
 
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        # 修正: Worker URLとIPバージョン(IPv4優先)を指定して共通関数を呼び出す
+        # 修正: Worker URL、Worker経由フラグ("true")、IPバージョン("4")を指定
         # IPv6を試したい場合は最後の引数を "6" に変更
-        make_api_request "$full_worker_url" "$tmp_file" "$API_TIMEOUT" "IPINFO" "4"
+        make_api_request "$full_worker_url" "$tmp_file" "$API_TIMEOUT" "IPINFO" "true" "4"
         local request_status=$?
         debug_log "DEBUG" "Worker API request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
 
@@ -217,8 +217,8 @@ get_country_ipapi() {
     debug_log "DEBUG" "Constructed Worker URL: $full_worker_url"
 
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        # 修正: Worker URLとIPバージョン(IPv4優先)を指定して共通関数を呼び出す
-        make_api_request "$full_worker_url" "$tmp_file" "$API_TIMEOUT" "IPAPI" "4"
+        # 修正: Worker URL、Worker経由フラグ("true")、IPバージョン("4")を指定
+        make_api_request "$full_worker_url" "$tmp_file" "$API_TIMEOUT" "IPAPI" "true" "4"
         local request_status=$?
         debug_log "DEBUG" "Worker API request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
 
@@ -383,91 +383,75 @@ OK_get_country_ipinfo() {
     fi
 }
 
-# Function to make an API request, optionally via Cloudflare Worker
+# APIリクエストを実行する共通関数（Worker経由指定、IPバージョン指定対応）
 # Arguments:
-#   $1: url         - The target API URL
+#   $1: url         - The target API URL (or Worker URL if use_worker is true)
 #   $2: tmp_file    - Path to the temporary file for the response
 #   $3: timeout     - Request timeout in seconds
 #   $4: debug_tag   - Tag for debug logs (e.g., "IPAPI", "IPINFO")
-#   $5: use_worker  - "true" to route via Cloudflare Worker, otherwise direct call
-#   $6: ip_version  - "4" to force IPv4, "6" to force IPv6, empty for default
+#   $5: use_worker  - "true" to indicate the URL ($1) is already the Worker URL
+#   $6: ip_version  - "4" to force IPv4, "6" to force IPv6, empty/other for default
 make_api_request() {
     local url="$1"
     local tmp_file="$2"
     local timeout="${3:-$API_TIMEOUT}"
     local debug_tag="${4:-API}"
-    local use_worker="${5:-false}" # Default to false (direct call)
-    local ip_version="$6"
-    local worker_url="https://api-relay-worker.site-u.workers.dev/" # Your Cloudflare Worker URL
-    local user_agent="aios-script/${SCRIPT_VERSION}" # Simple user agent
-    local wget_base_command=""
-    local final_url=""
+    local use_worker="${5:-false}" # Default to false
+    local ip_version="$6"       # Default to empty
+    local user_agent="aios-script/${SCRIPT_VERSION}"
     local status=1 # Default to failure
+    local final_url="$url" # The URL wget will actually use
 
-    debug_log "DEBUG" "[$debug_tag] make_api_request called. URL: $url, Use Worker: $use_worker, IP Version: $ip_version"
+    debug_log "DEBUG" "[$debug_tag] make_api_request called. URL: $url, Use Worker Flag: $use_worker, IP Version: ${ip_version:-default}"
 
-    # Build base wget command with common options and IP version forcing
-    wget_base_command="wget --no-check-certificate -q -U \"$user_agent\" -O \"$tmp_file\" -T \"$timeout\""
+    # wgetの基本コマンド構築
+    local wget_command="wget --no-check-certificate -q -U \"$user_agent\" -O \"$tmp_file\" -T \"$timeout\""
+
+    # IPバージョン強制を追加
     if [ "$ip_version" = "4" ]; then
-        wget_base_command="$wget_base_command -4"
+        wget_command="$wget_command -4"
         debug_log "DEBUG" "[$debug_tag] Forcing IPv4."
     elif [ "$ip_version" = "6" ]; then
-        wget_base_command="$wget_base_command -6"
+        wget_command="$wget_command -6"
         debug_log "DEBUG" "[$debug_tag] Forcing IPv6."
     fi
 
-    # Determine the final URL and add Worker logic if needed
+    # Worker経由かどうかのログを追加
     if [ "$use_worker" = "true" ]; then
-        debug_log "DEBUG" "[$debug_tag] Routing request via Cloudflare Worker."
-        # URL encode the original target URL
-        local encoded_target=$(echo "$url" | sed \
-            -e 's|%|%25|g' \
-            -e 's|:|%3A|g' \
-            -e 's|/|%2F|g' \
-            -e 's|?|%3F|g' \
-            -e 's|=|%3D|g' \
-            -e 's|&|%26|g')
-        final_url="${worker_url}?target=${encoded_target}"
-        debug_log "DEBUG" "[$debug_tag] Worker URL constructed: $final_url"
+         debug_log "DEBUG" "[$debug_tag] Request is routed via Worker (URL should already be Worker URL)."
+         # Worker経由の場合、クライアント側でのリダイレクト処理は不要
     else
-        debug_log "DEBUG" "[$debug_tag] Making direct request."
-        # Check wget capabilities for direct calls (existing logic might be here or adapt)
-        local wget_capability=$(detect_wget_capabilities) # Assuming this function exists
-        case "$wget_capability" in
-            "full")
-                # Add options for full wget if needed (e.g., redirects)
-                wget_base_command="$wget_base_command -L --max-redirect=${API_MAX_REDIRECTS:-2}"
-                final_url="$url"
-                ;;
-            "https_only"|"basic")
-                # Force HTTPS for basic wget if original URL is HTTP
-                if echo "$url" | grep -q '^http:'; then
-                    final_url=$(echo "$url" | sed 's|^http:|https:|')
-                    debug_log "DEBUG" "[$debug_tag] Basic wget detected, forcing HTTPS for direct call: $final_url"
-                else
-                    final_url="$url"
-                fi
-                ;;
-            *) # Default case if detect_wget_capabilities is not used/available
-               final_url="$url"
-               ;;
-        esac
+         debug_log "DEBUG" "[$debug_tag] Making direct request (Not via Worker)."
+         # 直接接続の場合の既存ロジック（必要ならここに記述）
+         local wget_capability=$(detect_wget_capabilities) # Assuming this exists
+         case "$wget_capability" in
+             "full")
+                 # wget_command="$wget_command -L --max-redirect=${API_MAX_REDIRECTS:-2}"
+                 debug_log "DEBUG" "[$debug_tag] Full wget detected for direct call."
+                 ;;
+             "https_only"|"basic")
+                 # if echo "$url" | grep -q '^http:'; then
+                 #     final_url=$(echo "$url" | sed 's|^http:|https:|')
+                 #     debug_log "DEBUG" "[$debug_tag] Basic wget detected, forcing HTTPS for direct call: $final_url"
+                 # fi
+                 debug_log "DEBUG" "[$debug_tag] Basic wget detected for direct call."
+                 ;;
+         esac
     fi
 
-    # Execute the wget command using eval for proper quoting
-    debug_log "DEBUG" "[$debug_tag] Executing: eval $wget_base_command \"$final_url\""
-    eval "$wget_base_command \"$final_url\""
+    # コマンド実行 (evalを使用)
+    debug_log "DEBUG" "[$debug_tag] Executing: eval $wget_command \"$final_url\""
+    eval "$wget_command \"$final_url\""
     status=$?
 
-    # Check result
     if [ $status -eq 0 ] && [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
         debug_log "DEBUG" "[$debug_tag] API request successful (Status: $status)"
-        return 0 # Success
+        return 0
     else
         debug_log "DEBUG" "[$debug_tag] API request failed (Status: $status, File Size: $(ls -l "$tmp_file" 2>/dev/null | awk '{print $5}') )"
         # Ensure tmp_file is empty on failure
         echo "" > "$tmp_file"
-        return $status # Failure, return wget exit code
+        return $status
     fi
 }
 
