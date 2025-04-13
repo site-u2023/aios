@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.13-00-03"
+SCRIPT_VERSION="2025.04.13-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX準拠シェルスクリプト
@@ -60,6 +60,7 @@ API_TIMEOUT="${API_TIMEOUT:-5}"
 API_MAX_RETRIES="${API_MAX_RETRIES:-3}"
 API_MAX_REDIRECTS="${API_MAX_REDIRECTS:-2}"
 TIMEZONE_API_SOURCE=""
+USER_AGENT="aios-script/${SCRIPT_VERSION:-unknown}"
 
 SELECT_POSIX_TZ=""
 SELECT_REGION_NAME=""
