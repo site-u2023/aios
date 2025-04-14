@@ -518,7 +518,7 @@ detect_wget_capabilities() {
     fi
     
     # HTTPS直接アクセスのサポート検出（User-Agentを追加）
-    if wget --no-check-certificate -q -U "${USER_AGENT}" -O "$tmp_file" "https://ipinfo.io" >/dev/null 2>&1; then
+    if wget --no-check-certificate -q -U "${USER_AGENT}" -O "$tmp_file" "https://location-api-worker.site-u.workers.dev" >/dev/null 2>&1; then
         if [ -s "$tmp_file" ]; then
             debug_log "DEBUG" "wget supports HTTPS connections"
             https_support=1
