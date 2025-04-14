@@ -243,22 +243,41 @@ get_country_ipinfo() {
     fi
 }
 
-# APIリクエストを実行する共通関数（ネットワークオプション対応版）
+# APIリクエストを実行する共通関数（wget能力判定を効率化）
 make_api_request() {
     # パラメータ
     local url="$1"
     local tmp_file="$2"
     local timeout="${3:-$API_TIMEOUT}"
     local debug_tag="${4:-API}"
-    
-    # wgetの機能検出
-    local wget_capability=$(detect_wget_capabilities)
+
+    # wget能力のキャッシュファイルパス
+    local capability_cache_file="${CACHE_DIR}/wget_capability.ch"
+    local wget_capability=""
+
+    # --- wget能力の判定 (関数呼び出し前に一度だけ行う) ---
+    if [ -f "$capability_cache_file" ]; then
+        # キャッシュが存在すれば読み込む
+        wget_capability=$(cat "$capability_cache_file")
+        debug_log "DEBUG" "[$debug_tag] Using cached wget capability: $wget_capability"
+    else
+        # キャッシュがなければ検出関数を呼び出す
+        debug_log "DEBUG" "[$debug_tag] wget capability cache not found, detecting..."
+        wget_capability=$(detect_wget_capabilities) # この関数内でキャッシュが作成される
+        # 念のため、検出結果が空でないか確認
+        if [ -z "$wget_capability" ]; then
+             debug_log "ERROR" "[$debug_tag] Failed to detect wget capability. Assuming basic."
+             wget_capability="basic" # 安全のためのフォールバック
+        fi
+    fi
+    # --- wget能力の判定ここまで ---
+
     local used_url="$url"
     local status=0
-    
+
     debug_log "DEBUG" "[$debug_tag] Making API request to: $url"
-    
-    # コマンド構築と実行
+
+    # コマンド構築と実行 (判定結果の変数を使用)
     case "$wget_capability" in
         "full")
             # 完全なwgetの場合
@@ -270,19 +289,31 @@ make_api_request() {
             ;;
         "https_only"|"basic")
             # 基本wgetの場合（HTTPSを直接指定）
+            # BusyBox wgetはリダイレクトに追従しないため、http->https変換のみ行う
             used_url=$(echo "$url" | sed 's|^http:|https:|')
-            debug_log "DEBUG" "[$debug_tag] Using BusyBox wget, forcing HTTPS URL: $used_url"
+            debug_log "DEBUG" "[$debug_tag] Using BusyBox wget capability '$wget_capability', forcing HTTPS URL: $used_url"
             wget --no-check-certificate -q -U "${USER_AGENT}" \
                 -O "$tmp_file" "$used_url" -T "$timeout" 2>/dev/null
             status=$?
             ;;
+        *)
+            # 未知のcapabilityの場合 (フォールバック)
+             debug_log "ERROR" "[$debug_tag] Unknown wget capability '$wget_capability'. Assuming basic HTTPS."
+             used_url=$(echo "$url" | sed 's|^http:|https:|')
+             wget --no-check-certificate -q -U "${USER_AGENT}" \
+                 -O "$tmp_file" "$used_url" -T "$timeout" 2>/dev/null
+             status=$?
+             ;;
     esac
-    
+
     if [ $status -eq 0 ] && [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
         debug_log "DEBUG" "[$debug_tag] API request successful"
         return 0
     else
         debug_log "DEBUG" "[$debug_tag] API request failed with status: $status"
+        # 失敗した場合もステータスコードを返す
+        # statusが0だがファイルがない/空の場合も考慮し、失敗を示す1を返す
+        [ $status -eq 0 ] && return 1
         return $status
     fi
 }
