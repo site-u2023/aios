@@ -236,8 +236,7 @@ is_east_japan() {
 # Outputs: "Provider Name|AFTR Address|Region Text" on success, empty on failure
 _detect_provider_internal() {
     local isp_as="" region="" detected_provider="" detected_aftr="" detected_region_text=""
-    local error_prefix="\033[31mError: " reset_color="\033[0m"
-    if command -v color >/dev/null 2>&1; then error_prefix=$(color red "Error: "); fi
+    # Note: error_prefix and reset_color variables are removed as color function handles reset.
 
     local cache_as_file="${CACHE_DIR}/ip_as.tmp"
     local cache_region_code_file="${CACHE_DIR}/ip_region_code.tmp"
@@ -248,14 +247,16 @@ _detect_provider_internal() {
     if [ -z "$region" ] && [ -f "$cache_region_name_file" ]; then region=$(cat "$cache_region_name_file"); fi
 
     if [ -z "$isp_as" ]; then
-        printf "%sISP AS information cache file not found (%s). Cannot auto-detect.%s\n" "$error_prefix" "$cache_as_file" "$reset_color" >&2
+        # Use get_message for error reporting
+        printf "%s\n" "$(color red "$(get_message MSG_DSLITE_ERR_NO_AS cache_file="$cache_as_file")")" >&2
         return 1
     fi
 
     case "$isp_as" in
         "$AS_TRANS")
             if [ -z "$region" ]; then
-                 printf "%sTransix detected, but region information is missing. Cannot determine East/West.%s\n" "$error_prefix" "$reset_color" >&2
+                 # Use get_message for error reporting
+                 printf "%s\n" "$(color red "$(get_message MSG_DSLITE_ERR_NO_REGION)")" >&2
                  return 1
             fi
             is_east_japan "$region"
@@ -265,7 +266,8 @@ _detect_provider_internal() {
             elif [ $region_result -eq 1 ]; then
                 detected_provider="Transix (West Japan)"; detected_aftr="$AFTR_TRANS_WEST"; detected_region_text="West Japan"
             else
-                printf "%sTransix detected, but could not determine East/West from region '%s'.%s\n" "$error_prefix" "$region" "$reset_color" >&2
+                # Use get_message for error reporting
+                printf "%s\n" "$(color red "$(get_message MSG_DSLITE_ERR_REGION_UNKNOWN region="$region")")" >&2
                 return 1
             fi
             ;;
@@ -276,7 +278,8 @@ _detect_provider_internal() {
             detected_provider="v6 connect"; detected_aftr="$AFTR_V6CONNECT"
             ;;
         *)
-            printf "%sNo known DS-Lite provider matches AS number '%s'.%s\n" "$error_prefix" "$isp_as" "$reset_color" >&2
+            # Use get_message for error reporting
+            printf "%s\n" "$(color red "$(get_message MSG_DSLITE_ERR_PROVIDER_UNKNOWN as_number="$isp_as")")" >&2
             return 1
             ;;
     esac
@@ -287,9 +290,10 @@ _detect_provider_internal() {
 
 # --- Auto Detect and Apply Function (Called from menu.db) ---
 auto_detect_and_apply() {
-    local msg_prefix="" error_prefix="\033[31mError: " reset_color="\033[0m"
+    local msg_prefix="" error_prefix="\033[31mError: " reset_color="\033[0m" # Keep error_prefix for cache check
     if command -v color >/dev/null 2>&1; then
         msg_prefix=$(color blue "- ") error_prefix=$(color red "Error: ")
+        # Note: warning_prefix and reset_color variables are removed or unused in this part
     fi
 
     # 1. Check for cached location information
@@ -298,15 +302,19 @@ auto_detect_and_apply() {
     local cache_region_name_file="${CACHE_DIR}/ip_region_name.tmp"
 
     if [ ! -f "$cache_as_file" ]; then
+         # Error message for cache failure (remains red)
          if command -v get_message >/dev/null 2>&1; then
-              printf "%s%s%s\n" "$error_prefix" "$(get_message MSG_DSLITE_CACHE_FAIL)" "$reset_color"
+              printf "%s\n" "$(color red "$(get_message MSG_DSLITE_CACHE_FAIL)")"
          else
-              printf "%sRequired cache information not found. Cannot auto-detect.%s\n" "$error_prefix" "$reset_color"
+              # Fallback if get_message is not available (keep using error_prefix)
+              printf "%sRequired cache information not found. Cannot auto-detect.%s\n" "$error_prefix" "$reset_color" # reset_color needed here for fallback
          fi
+         # Warning message for cancellation (changed to yellow)
          if command -v get_message >/dev/null 2>&1; then
-             printf "%s%s%s\n" "$msg_prefix" "$(get_message MSG_DSLITE_AUTO_CANCELLED_FAILED)" "$reset_color"
+             printf "%s\n" "$(color yellow "$(get_message MSG_DSLITE_AUTO_CANCELLED_FAILED)")"
          else
-             printf "%sAuto-configuration cancelled or failed. Returning to DS-Lite menu.%s\n" "$msg_prefix" "$reset_color"
+             # Fallback if get_message is not available (use yellow color code directly)
+             printf "\033[33mAuto-configuration cancelled or failed. Returning to DS-Lite menu.\033[0m\n"
          fi
          return 1
     fi
@@ -317,10 +325,12 @@ auto_detect_and_apply() {
     local detection_status=$?
 
     if [ $detection_status -ne 0 ]; then
+        # Warning message for cancellation/failure (changed to yellow)
         if command -v get_message >/dev/null 2>&1; then
-            printf "%s%s%s\n" "$msg_prefix" "$(get_message MSG_DSLITE_AUTO_CANCELLED_FAILED)" "$reset_color"
+            printf "%s\n" "$(color yellow "$(get_message MSG_DSLITE_AUTO_CANCELLED_FAILED)")"
         else
-            printf "%sAuto-configuration cancelled or failed. Returning to DS-Lite menu.%s\n" "$msg_prefix" "$reset_color"
+            # Fallback if get_message is not available (use yellow color code directly)
+            printf "\033[33mAuto-configuration cancelled or failed. Returning to DS-Lite menu.\033[0m\n"
         fi
         return 1
     fi
@@ -353,10 +363,12 @@ auto_detect_and_apply() {
         apply_dslite_settings "$detected_aftr" "$detected_provider"
         return $?
     else # No or Return
+         # Warning message for cancellation (changed to yellow)
          if command -v get_message >/dev/null 2>&1; then
-            printf "%s%s%s\n" "$msg_prefix" "$(get_message MSG_DSLITE_AUTO_CANCELLED_FAILED)" "$reset_color"
+            printf "%s\n" "$(color yellow "$(get_message MSG_DSLITE_AUTO_CANCELLED_FAILED)")"
          else
-            printf "%sAuto-configuration cancelled or failed. Returning to DS-Lite menu.%s\n" "$msg_prefix" "$reset_color"
+            # Fallback if get_message is not available (use yellow color code directly)
+            printf "\033[33mAuto-configuration cancelled or failed. Returning to DS-Lite menu.\033[0m\n"
          fi
         return 1
     fi
