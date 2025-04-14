@@ -1263,9 +1263,29 @@ EOF
     prefix38_hex=$(printf 0x%x "$PREFIX38")
     echo "[DEBUG] Processing prefix31=$prefix31_hex, prefix38=$prefix38_hex"
 
-    # IPv4アドレスと各種パラメータの決定 (bash版と同じ優先順序)
+    # IPv4アドレスと各種パラメータの決定 (bash版/JS版と同じ優先順序: 38_20 -> 38 -> 31)
     local octet1 octet2 octet3 octet4 octet
-    if [ -n "$(get_ruleprefix38_value "$prefix38_hex")" ]; then
+    # --- ここから if/elif の順序を変更 ---
+    if [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
+        octet="$(get_ruleprefix38_20_value "$prefix38_hex")"
+        echo "[DEBUG] Matched ruleprefix38_20: $octet"
+        IFS=',' read -r octet1 octet2 octet3 <<EOF
+$octet
+EOF
+        local temp1=$(( HEXTET2 & 960 ))    # 0x03c0
+        local temp2=$(( temp1 >> 6 ))
+        octet3=$(( octet3 | temp2 ))
+        local temp3=$(( HEXTET2 & 63 ))     # 0x003f
+        local temp4=$(( temp3 << 2 ))
+        local temp5=$(( HEXTET3 & 49152 ))  # 0xc000
+        local temp6=$(( temp5 >> 14 ))
+        octet4=$(( temp4 | temp6 ))
+
+        IPV4="${octet1}.${octet2}.${octet3}.${octet4}" # bash版の変数名
+        IP6PREFIXLEN=38
+        PSIDLEN=6
+        OFFSET=6 # ruleprefix38_20では offset=6 を使用 (bash版も同様)
+    elif [ -n "$(get_ruleprefix38_value "$prefix38_hex")" ]; then
         octet="$(get_ruleprefix38_value "$prefix38_hex")"
         echo "[DEBUG] Matched ruleprefix38: $octet"
         IFS=',' read -r octet1 octet2 octet3 <<EOF
@@ -1295,25 +1315,7 @@ EOF
         IP6PREFIXLEN=31
         PSIDLEN=8
         OFFSET=4
-    elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
-        octet="$(get_ruleprefix38_20_value "$prefix38_hex")"
-        echo "[DEBUG] Matched ruleprefix38_20: $octet"
-        IFS=',' read -r octet1 octet2 octet3 <<EOF
-$octet
-EOF
-        local temp1=$(( HEXTET2 & 960 ))    # 0x03c0
-        local temp2=$(( temp1 >> 6 ))
-        octet3=$(( octet3 | temp2 ))
-        local temp3=$(( HEXTET2 & 63 ))     # 0x003f
-        local temp4=$(( temp3 << 2 ))
-        local temp5=$(( HEXTET3 & 49152 ))  # 0xc000
-        local temp6=$(( temp5 >> 14 ))
-        octet4=$(( temp4 | temp6 ))
-
-        IPV4="${octet1}.${octet2}.${octet3}.${octet4}" # bash版の変数名
-        IP6PREFIXLEN=38
-        PSIDLEN=6
-        OFFSET=6 # ruleprefix38_20では offset=6 を使用 (bash版も同様)
+    # --- ここまで if/elif の順序を変更 ---
     else
         # get_message 関数が存在すると仮定
         echo "$(get_message "unsupported_prefix")"
