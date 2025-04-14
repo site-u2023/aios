@@ -47,14 +47,6 @@ network_find_wan6 NET_IF6
 network_get_ipaddr6 NET_ADDR6 "${NET_IF6}"
 NEW_IP6_PREFIX=${NET_ADDR6}
 
-# デバッグメッセージ出力関数
-debug_log() {
-    local level="$1"
-    local message="$2"
-    # 標準エラー出力にデバッグメッセージを出力
-    echo "[$level] $message" >&2
-}
-
 # プレフィックスに対応するIPv4ベースアドレスを取得（prefix31用）
 get_ruleprefix31_value() {
     local prefix="$1"
