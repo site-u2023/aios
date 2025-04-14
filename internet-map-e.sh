@@ -1192,7 +1192,7 @@ get_ruleprefix38_20_value() {
     esac
 }
 
-# MAP-E情報取得と計算 (ash互換 + bash版の変数名に合わせる + エラー処理追加)
+# MAP-E情報取得と計算 (ash互換 + bash版の変数名に合わせる + エラー処理修正)
 mape_mold() {
     debug_log "DEBUG" "Entering mape_mold() function"
 
@@ -1204,9 +1204,8 @@ mape_mold() {
 
     # Check if IPv6 prefix was obtained
     if [ -z "$NEW_IP6_PREFIX" ]; then
-        # (修正) ハードコードされたエラーメッセージ
+        # (修正) シンプルなハードコードエラーメッセージ (1行)
         printf "%s\n" "$(color red "Error: Failed to get IPv6 prefix.")"
-        printf "%s\n" "$(color yellow "Check WAN connection and DHCPv6 settings.")"
         debug_log "ERROR" "Failed to get IPv6 prefix from interface '$NET_IF6' in mape_mold()"
         return 1
     fi
@@ -1235,9 +1234,8 @@ EOF
 
         debug_log "DEBUG" "Parsed IPv6 prefix HEXTETs: HEXTET0=$HEXTET0, HEXTET1=$HEXTET1, HEXTET2=$HEXTET2, HEXTET3=$HEXTET3"
     else
-        # (修正) ハードコードされたエラーメッセージ
+        # (修正) シンプルなハードコードエラーメッセージ (1行)
         printf "%s\n" "$(color red "Error: Failed to parse IPv6 prefix.")"
-        printf "%s\n" "$(color yellow "Is the device connected directly to ONU?")"
         debug_log "ERROR" "Failed to parse IPv6 prefix '$ip6_prefix_tmp' in mape_mold()"
         return 1
     fi
@@ -1329,9 +1327,8 @@ EOF
         PSIDLEN=8
         OFFSET=4
     else
-        # (修正) ハードコードされたエラーメッセージ
+        # (修正) シンプルなハードコードエラーメッセージ (1行)
         printf "%s\n" "$(color red "Error: Unsupported IPv6 prefix.")"
-        printf "%s\n" "$(color yellow "No matching MAP-E rule found.")"
         debug_log "ERROR" "No matching ruleprefix found for prefix31=$prefix31_hex or prefix38=$prefix38_hex in mape_mold()"
         return 1
     fi
@@ -1634,10 +1631,16 @@ debug_mape_values() {
 }
 
 # 実行
-mape_mold
+if ! mape_mold; then
+    # mape_mold failed, error message already printed inside the function.
+    debug_log "ERROR" "mape_mold function failed. Exiting script."
+    exit 1 # Exit script with error status
+fi
+
 mape_display
 # mape_config
 
-echo "再起動します"
-sleep 3
+printf "%s\n" "$(color green "MAP-E parameters calculated successfully.")"
 #reboot
+
+exit 0 # Explicitly exit with success status
