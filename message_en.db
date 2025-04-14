@@ -16,6 +16,23 @@ ar|MSG_UNDER_TEST=👽 تحت الاختبار
 es|MSG_UNDER_TEST=👽 En prueba
 
 # =======================
+# internet-ds-lite.sh
+# =======================
+en|MSG_DSLITE_APPLYING_SETTINGS=Applying DS-Lite settings for {service}
+en|MSG_DSLITE_APPLY_SUCCESS=DS-Lite settings applied successfully for {service}
+en|MSG_DSLITE_RESTORING_SETTINGS=Restoring previous DS-Lite settings
+en|MSG_DSLITE_RESTORE_SUCCESS=Previous DS-Lite settings restored successfully
+en|MSG_DSLITE_DONE_MENU=Operation complete. Returning to menu
+en|MSG_DSLITE_DONE_REBOOT_LATER=Operation complete. A reboot is needed to take effect
+en|MSG_DSLITE_AUTO_PROVIDER_LABEL=Provider
+en|MSG_DSLITE_AUTO_REGION_LABEL=Region
+en|MSG_DSLITE_AUTO_AFTR_LABEL=AFTR Address
+en|MSG_DSLITE_AUTO_CANCELLED_FAILED=Auto-configuration cancelled or failed. Returning to DS-Lite menu
+en|MSG_DSLITE_CACHE_FAIL=Required cache information not found. Cannot auto-detect
+en|MSG_CONFIRM_AUTO_SETTINGS=Apply the automatically detected settings?
+en|MSG_CONFIRM_RESTORE=Restore previous settings?
+
+# =======================
 # internet-map-e.sh
 # =======================
 en|MENU_INTERNET_PPPOE=PPPoE
@@ -72,7 +89,7 @@ en|MSG_INSTALL_COMPLETED=Package installation completed successfully
 # =======================
 # package-manual.sh
 # =======================
-en|MSG_CONFIRM_INSTALL_PACKAGES=Do you want to install this package? {yn}{:}
+en|MSG_CONFIRM_INSTALL_PACKAGES=Do you want to install this package {yn}{:}
 en|PKG_SECTION_BASIC=Basic System Functions
 en|PKG_SECTION_SYSADMIN=System Administration
 en|PKG_SECTION_NETWORK=Network Management
@@ -119,7 +136,7 @@ en|MENU_V&MIG=IPv6 Migration Standard Provisioning
 en|CONFIG_MAIN_SELECT_PROMPT=Please select a number (1-{0}, 10, 00){;} 
 en|CONFIG_SUB_SELECT_PROMPT=Please select a number (1-{0}, 0, 10){;} 
 en|CONFIG_ERROR_NOT_NUMBER=Please enter a valid number
-en|CONFIG_CONFIRM_DELETE=Do you want to delete this script and related directories? {yn}{:}
+en|CONFIG_CONFIRM_DELETE=Do you want to delete this script and related directories {yn}{:}
 en|CONFIG_DELETE_CONFIRMED=Script and related directories have been deleted. Goodbye!
 en|CONFIG_DELETE_CANCELED=Deletion canceled. Returning to menu
 en|CONFIG_EXIT_CONFIRMED=Script closed. Goodbye!
