@@ -1192,15 +1192,30 @@ get_ruleprefix38_20_value() {
     esac
 }
 
-# MAP-E情報取得と計算 (ash互換 + bash版の変数名に合わせる)
+# MAP-E情報取得と計算 (ash互換 + bash版の変数名に合わせる + エラー処理追加)
 mape_mold() {
-    debug_log "DEBUG" "Entering mape_mold() function" 
+    debug_log "DEBUG" "Entering mape_mold() function"
+
+    # IPv6プレフィックス取得 (追加: 取得失敗チェック)
+    network_flush_cache
+    network_find_wan6 NET_IF6
+    network_get_ipaddr6 NET_ADDR6 "${NET_IF6}"
+    NEW_IP6_PREFIX=${NET_ADDR6}
+
+    # Check if IPv6 prefix was obtained
+    if [ -z "$NEW_IP6_PREFIX" ]; then
+        # (修正) ハードコードされたエラーメッセージ
+        printf "%s\n" "$(color red "Error: Failed to get IPv6 prefix.")"
+        printf "%s\n" "$(color yellow "Check WAN connection and DHCPv6 settings.")"
+        debug_log "ERROR" "Failed to get IPv6 prefix from interface '$NET_IF6' in mape_mold()"
+        return 1
+    fi
 
     local ip6_prefix_tmp
     # bash文字列置換をsedに修正
     ip6_prefix_tmp=$(echo "$NEW_IP6_PREFIX" | sed 's/::/:0::/')
 
-    debug_log "DEBUG" "NEW_IP6_PREFIX=${NEW_IP6_PREFIX}, ip6_prefix_tmp=${ip6_prefix_tmp}" 
+    debug_log "DEBUG" "NEW_IP6_PREFIX=${NEW_IP6_PREFIX}, ip6_prefix_tmp=${ip6_prefix_tmp}"
 
     # grepとsedを使ったHEXTET抽出 (ash互換)
     local HEXTET0 HEXTET1 HEXTET2 HEXTET3
@@ -1218,13 +1233,12 @@ EOF
         HEXTET2=$(printf %d "0x${h2_str:-0}")
         HEXTET3=$(printf %d "0x${h3_str:-0}")
 
-        debug_log "DEBUG" "Parsed IPv6 prefix HEXTETs: HEXTET0=$HEXTET0, HEXTET1=$HEXTET1, HEXTET2=$HEXTET2, HEXTET3=$HEXTET3" 
+        debug_log "DEBUG" "Parsed IPv6 prefix HEXTETs: HEXTET0=$HEXTET0, HEXTET1=$HEXTET1, HEXTET2=$HEXTET2, HEXTET3=$HEXTET3"
     else
-        # get_message 関数が存在すると仮定
-        echo "$(get_message "prefix_not_recognized")"
-        echo "$(get_message "direct_onu_connection")"
-        echo "$(get_message "exiting")"
-        debug_log "ERROR" "Failed to parse IPv6 prefix in mape_mold()"  # ERRORレベルもdebug_logに
+        # (修正) ハードコードされたエラーメッセージ
+        printf "%s\n" "$(color red "Error: Failed to parse IPv6 prefix.")"
+        printf "%s\n" "$(color yellow "Is the device connected directly to ONU?")"
+        debug_log "ERROR" "Failed to parse IPv6 prefix '$ip6_prefix_tmp' in mape_mold()"
         return 1
     fi
 
@@ -1240,7 +1254,7 @@ EOF
     local h2_shift=$(( h2_masked >> 8 ))
     PREFIX38=$(( h0_mul2 + h1_mul + h2_shift ))
 
-    debug_log "DEBUG" "Calculated PREFIX31=$PREFIX31, PREFIX38=$PREFIX38" 
+    debug_log "DEBUG" "Calculated PREFIX31=$PREFIX31, PREFIX38=$PREFIX38"
 
     # グローバル変数として設定するパラメータの初期化
     OFFSET=6  # デフォルト値
@@ -1261,13 +1275,13 @@ EOF
     prefix31_hex=$(printf 0x%x "$PREFIX31")
     local prefix38_hex
     prefix38_hex=$(printf 0x%x "$PREFIX38")
-    debug_log "DEBUG" "Processing prefix31=$prefix31_hex, prefix38=$prefix38_hex" 
+    debug_log "DEBUG" "Processing prefix31=$prefix31_hex, prefix38=$prefix38_hex"
 
     # IPv4アドレスと各種パラメータの決定 (bash版/JS版と同じ優先順序: 38_20 -> 38 -> 31)
     local octet1 octet2 octet3 octet4 octet
     if [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
         octet="$(get_ruleprefix38_20_value "$prefix38_hex")"
-        debug_log "DEBUG" "Matched ruleprefix38_20: $octet" 
+        debug_log "DEBUG" "Matched ruleprefix38_20: $octet"
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
@@ -1286,7 +1300,7 @@ EOF
         OFFSET=6 # ruleprefix38_20では offset=6 を使用 (bash版も同様)
     elif [ -n "$(get_ruleprefix38_value "$prefix38_hex")" ]; then
         octet="$(get_ruleprefix38_value "$prefix38_hex")"
-        debug_log "DEBUG" "Matched ruleprefix38: $octet" 
+        debug_log "DEBUG" "Matched ruleprefix38: $octet"
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
@@ -1301,7 +1315,7 @@ EOF
         OFFSET=4
     elif [ -n "$(get_ruleprefix31_value "$prefix31_hex")" ]; then
         octet="$(get_ruleprefix31_value "$prefix31_hex")"
-        debug_log "DEBUG" "Matched ruleprefix31: $octet" 
+        debug_log "DEBUG" "Matched ruleprefix31: $octet"
         IFS=',' read -r octet1 octet2 <<EOF
 $octet
 EOF
@@ -1315,28 +1329,29 @@ EOF
         PSIDLEN=8
         OFFSET=4
     else
-        # get_message 関数が存在すると仮定
-        echo "$(get_message "unsupported_prefix")"
-        debug_log "ERROR" "No matching ruleprefix found in mape_mold()"  # ERRORレベルもdebug_logに
+        # (修正) ハードコードされたエラーメッセージ
+        printf "%s\n" "$(color red "Error: Unsupported IPv6 prefix.")"
+        printf "%s\n" "$(color yellow "No matching MAP-E rule found.")"
+        debug_log "ERROR" "No matching ruleprefix found for prefix31=$prefix31_hex or prefix38=$prefix38_hex in mape_mold()"
         return 1
     fi
 
     # PSID計算 (bash版と同じ)
     if [ "$PSIDLEN" -eq 8 ]; then
         PSID=$(( (HEXTET3 & 65280) >> 8 )) # 0xff00
-        debug_log "DEBUG" "PSID calculation for PSIDLEN=8: $PSID" 
+        debug_log "DEBUG" "PSID calculation for PSIDLEN=8: $PSID"
     elif [ "$PSIDLEN" -eq 6 ]; then
         PSID=$(( (HEXTET3 & 16128) >> 8 )) # 0x3f00
-        debug_log "DEBUG" "PSID calculation for PSIDLEN=6: $PSID" 
+        debug_log "DEBUG" "PSID calculation for PSIDLEN=6: $PSID"
     else
         PSID=0 # フォールバック
-        debug_log "DEBUG" "PSIDLEN ($PSIDLEN) is not 8 or 6, PSID set to 0" 
+        debug_log "DEBUG" "PSIDLEN ($PSIDLEN) is not 8 or 6, PSID set to 0"
     fi
 
     # ポート範囲の計算 (bash版と同じ)
     PORTS=""
     local AMAX=$(( (1 << OFFSET) - 1 ))
-    debug_log "DEBUG" "Calculating port ranges: AMAX=$AMAX, OFFSET=$OFFSET, PSIDLEN=$PSIDLEN, PSID=$PSID" 
+    debug_log "DEBUG" "Calculating port ranges: AMAX=$AMAX, OFFSET=$OFFSET, PSIDLEN=$PSIDLEN, PSID=$PSID"
 
     local A
     for A in $(seq 1 "$AMAX"); do
@@ -1345,7 +1360,7 @@ EOF
         local psid_shift=$(( 16 - OFFSET - PSIDLEN ))
         # psid_shift が負になるケースを避ける (PSIDLENが不明な場合など)
         if [ "$psid_shift" -lt 0 ]; then
-            debug_log "ERROR" "Invalid calculation: psid_shift is negative ($psid_shift). Check OFFSET and PSIDLEN."  # ERRORレベルもdebug_logに
+            debug_log "ERROR" "Invalid calculation: psid_shift is negative ($psid_shift). Check OFFSET and PSIDLEN."
             psid_shift=0 # エラーを防ぐため0にする
         fi
         local psid_part=$(( PSID << psid_shift ))
@@ -1353,7 +1368,7 @@ EOF
         # port_range_size が0にならないようにする
         local port_range_size=$(( 1 << psid_shift ))
         if [ "$port_range_size" -le 0 ]; then
-             debug_log "ERROR" "Invalid calculation: port_range_size is not positive ($port_range_size)."  # ERRORレベルもdebug_logに
+             debug_log "ERROR" "Invalid calculation: port_range_size is not positive ($port_range_size)."
              port_range_size=1 # エラーを防ぐため1にする
         fi
         local port_end=$(( port + port_range_size - 1 ))
@@ -1381,13 +1396,13 @@ EOF
     # bash版のCEアドレス計算ロジック (RFCフラグはfalse固定)
     if [ "$RFC" = "true" ]; then
         # このブロックはRFC=falseのため通常実行されないが、bash版に合わせて記述
-        debug_log "DEBUG" "Calculating CE Address (RFC mode - unexpected)" 
+        debug_log "DEBUG" "Calculating CE Address (RFC mode - unexpected)"
         CE_HEXTET4=0
         CE_HEXTET5=$(( (octet1 << 8) | octet2 ))
         CE_HEXTET6=$(( (octet3 << 8) | octet4 ))
         CE_HEXTET7=$PSID
     else
-        debug_log "DEBUG" "Calculating CE Address (Non-RFC mode)" 
+        debug_log "DEBUG" "Calculating CE Address (Non-RFC mode)"
         CE_HEXTET4=$octet1
         CE_HEXTET5=$(( (octet2 << 8) | octet3 ))
         CE_HEXTET6=$(( octet4 << 8 ))
@@ -1405,12 +1420,12 @@ EOF
     CE6=$(printf %04x "$CE_HEXTET6")
     CE7=$(printf %04x "$CE_HEXTET7")
     CE_ADDR="${CE0}:${CE1}:${CE2}:${CE3}:${CE4}:${CE5}:${CE6}:${CE7}" # bash版の変数名
-    debug_log "DEBUG" "Generated CE address (CE_ADDR): $CE_ADDR" 
+    debug_log "DEBUG" "Generated CE address (CE_ADDR): $CE_ADDR"
 
     # EALENとプレフィックス長の計算 (bash版と同じ)
     EALEN=$(( 56 - IP6PREFIXLEN ))
     IP4PREFIXLEN=$(( 32 - (EALEN - PSIDLEN) ))
-    debug_log "DEBUG" "EALEN=$EALEN, IP4PREFIXLEN=$IP4PREFIXLEN" 
+    debug_log "DEBUG" "EALEN=$EALEN, IP4PREFIXLEN=$IP4PREFIXLEN"
 
     # IPv6プレフィックスの計算 (bash版の変数名 IP6PFX)
     local IP6PFX0 IP6PFX1 IP6PFX2
@@ -1429,9 +1444,9 @@ EOF
         IP6PFX="${IP6PFX0}:${IP6PFX1}" # bash版の変数名
     else
         IP6PFX="" # フォールバック
-        debug_log "WARNING" "Could not determine IP6PFX for IP6PREFIXLEN=$IP6PREFIXLEN"  # WARNINGレベルもdebug_logに
+        debug_log "WARNING" "Could not determine IP6PFX for IP6PREFIXLEN=$IP6PREFIXLEN"
     fi
-    debug_log "DEBUG" "Generated IPv6 prefix (IP6PFX): $IP6PFX" 
+    debug_log "DEBUG" "Generated IPv6 prefix (IP6PFX): $IP6PFX"
 
     # ブロードバンドルーターアドレス(BR/Peer)の判定 (bash版の変数名 BR)
     BR="" # bash版の変数名
@@ -1449,12 +1464,12 @@ EOF
          { [ "$PREFIX31" -ge 604512848 ] && [ "$PREFIX31" -lt 604512852 ]; }; then
         BR="2404:9200:225:100::64"
     fi
-    debug_log "DEBUG" "Selected peer address (BR): $BR" 
+    debug_log "DEBUG" "Selected peer address (BR): $BR"
 
     # グローバル変数として設定 (mape_display, mape_config で参照される)
     # IPV4, BR, IP6PFX, CE_ADDR, IP4PREFIXLEN, IP6PREFIXLEN, EALEN, PSIDLEN, OFFSET, PSID, PORTS
 
-    debug_log "DEBUG" "Exiting mape_mold() function" 
+    debug_log "DEBUG" "Exiting mape_mold() function successfully"
     return 0
 }
 
