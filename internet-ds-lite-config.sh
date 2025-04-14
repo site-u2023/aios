@@ -312,7 +312,7 @@ auto_detect_and_apply() {
             printf "\033[33mProvider detection failed. Returning to DS-Lite menu.\033[0m\n"
         fi
         # Log the failure for debugging
-        debug_log "WARN" "DS-Lite auto-detection failed (exit code: $detection_status). Check previous specific errors."
+        debug_log "DEBUG" "DS-Lite auto-detection failed (exit code: $detection_status). Check previous specific errors."
         return 1
     fi
 
