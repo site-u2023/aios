@@ -1438,7 +1438,7 @@ EOF
         IP6PFX="${IP6PFX0}:${IP6PFX1}" # bash版の変数名
     else
         IP6PFX="" # フォールバック
-        debug_log "WARNING" "Could not determine IP6PFX for IP6PREFIXLEN=$IP6PREFIXLEN"  (WARNINGレベルもdebug_logに)
+        debug_log "WARNING" "Could not determine IP6PFX for IP6PREFIXLEN=$IP6PREFIXLEN"  # WARNINGレベルもdebug_logに
     fi
     debug_log "DEBUG" "Generated IPv6 prefix (IP6PFX): $IP6PFX" 
 
