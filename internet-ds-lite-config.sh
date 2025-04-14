@@ -290,16 +290,15 @@ _detect_provider_internal() {
 
 # --- Auto Detect and Apply Function (Called from menu.db) ---
 auto_detect_and_apply() {
-    local msg_prefix="" error_prefix="\033[31mError: " reset_color="\033[0m" # Keep error_prefix for cache check
+    local msg_prefix="" error_prefix="\033[31mError: " reset_color="\033[0m" # Keep error_prefix for cache check fallback
     if command -v color >/dev/null 2>&1; then
         msg_prefix=$(color blue "- ") error_prefix=$(color red "Error: ")
-        # Note: warning_prefix and reset_color variables are removed or unused in this part
+        # Note: reset_color variable is removed or unused when color function is available
     fi
 
     # 1. Check for cached location information
     local cache_as_file="${CACHE_DIR}/ip_as.tmp"
-    local cache_region_code_file="${CACHE_DIR}/ip_region_code.tmp"
-    local cache_region_name_file="${CACHE_DIR}/ip_region_name.tmp"
+    # No need to check region files here, _detect_provider_internal handles missing region for Transix
 
     if [ ! -f "$cache_as_file" ]; then
          # Error message for cache failure (remains red)
@@ -309,12 +308,12 @@ auto_detect_and_apply() {
               # Fallback if get_message is not available (keep using error_prefix)
               printf "%sRequired cache information not found. Cannot auto-detect.%s\n" "$error_prefix" "$reset_color" # reset_color needed here for fallback
          fi
-         # Warning message for cancellation (changed to yellow)
+         # Warning message for failure (using new key)
          if command -v get_message >/dev/null 2>&1; then
-             printf "%s\n" "$(color yellow "$(get_message MSG_DSLITE_AUTO_CANCELLED_FAILED)")"
+             printf "%s\n" "$(color yellow "$(get_message MSG_DSLITE_AUTO_CONFIG_FAILED)")"
          else
              # Fallback if get_message is not available (use yellow color code directly)
-             printf "\033[33mAuto-configuration cancelled or failed. Returning to DS-Lite menu.\033[0m\n"
+             printf "\033[33mAuto-configuration failed. Returning to DS-Lite menu.\033[0m\n"
          fi
          return 1
     fi
@@ -325,12 +324,12 @@ auto_detect_and_apply() {
     local detection_status=$?
 
     if [ $detection_status -ne 0 ]; then
-        # Warning message for cancellation/failure (changed to yellow)
+        # Warning message for failure (using new key)
         if command -v get_message >/dev/null 2>&1; then
-            printf "%s\n" "$(color yellow "$(get_message MSG_DSLITE_AUTO_CANCELLED_FAILED)")"
+            printf "%s\n" "$(color yellow "$(get_message MSG_DSLITE_AUTO_CONFIG_FAILED)")"
         else
             # Fallback if get_message is not available (use yellow color code directly)
-            printf "\033[33mAuto-configuration cancelled or failed. Returning to DS-Lite menu.\033[0m\n"
+            printf "\033[33mAuto-configuration failed. Returning to DS-Lite menu.\033[0m\n"
         fi
         return 1
     fi
@@ -363,12 +362,12 @@ auto_detect_and_apply() {
         apply_dslite_settings "$detected_aftr" "$detected_provider"
         return $?
     else # No or Return
-         # Warning message for cancellation (changed to yellow)
+         # Warning message for user rejection (using new key)
          if command -v get_message >/dev/null 2>&1; then
-            printf "%s\n" "$(color yellow "$(get_message MSG_DSLITE_AUTO_CANCELLED_FAILED)")"
+            printf "%s\n" "$(color yellow "$(get_message MSG_DSLITE_AUTO_CONFIG_REJECTED)")"
          else
             # Fallback if get_message is not available (use yellow color code directly)
-            printf "\033[33mAuto-configuration cancelled or failed. Returning to DS-Lite menu.\033[0m\n"
+            printf "\033[33mAuto-configuration cancelled by user. Returning to DS-Lite menu.\033[0m\n"
          fi
         return 1
     fi
