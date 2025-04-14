@@ -240,13 +240,15 @@ handle_menu_error() {
     local main_menu="$4"     # メインメニュー名
     local error_msg="$5"     # エラーメッセージキー（オプション）
 
-    debug_log "ERROR" "$error_type in section [$section_name]"
-    
-    # エラーメッセージ表示
-    local msg_key="${error_msg:-MSG_ERROR_OCCURRED}"
-    printf "%s\n" "$(color red "$(get_message "$msg_key")")"
-    
-    # エラー時にメニューに戻る処理
+    # 変更点1: ログレベルを DEBUG に変更 (再確認)
+    debug_log "DEBUG" "$error_type in section [$section_name]"
+
+    # 変更点2: error_msg が指定され、かつ MSG_ERROR_OCCURRED でない場合のみ表示
+    if [ -n "$error_msg" ] && [ "$error_msg" != "MSG_ERROR_OCCURRED" ]; then
+         printf "%s\n" "$(color red "$(get_message "$error_msg")")"
+    fi
+
+    # エラー時にメニューに戻る処理 (変更なし)
     if [ "$section_name" = "$main_menu" ]; then
         # メインメニューの場合は再表示（ループ）
         debug_log "DEBUG" "Main menu $error_type, reloading main menu"
