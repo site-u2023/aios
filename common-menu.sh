@@ -1,6 +1,6 @@
 #!/bin/sh
 
-COMMON_VERSION="2025.04.14-00-00"
+COMMON_VERSION="2025.04.15-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -248,79 +248,164 @@ handle_menu_error() {
     return 0
 }
 
-# Handle user selection - Return 0 on command failure to keep selector loop running (with added debug log)
+# Handle user selection - Corrected arguments, prompt, read check, and history push
 handle_user_selection() {
-    local selection="$1"
-    local section_name="$2"
-    local main_menu="$3"
-    local temp_file="$4"
-    local prev_menu="$5" # Previous menu name passed to selector
+    # Correct argument list matching the call from selector
+    local section_name="$1"        # Current menu section name
+    local is_main_menu="$2"        # 1 if main menu, 0 otherwise
+    local menu_count="$3"          # Total menu items (including special)
+    local num_normal_choices="$4"  # Number of normal choices (1 to N)
+    local menu_keys_file="$5"      # Temp file with menu keys
+    local menu_displays_file="$6"  # Temp file with display strings (unused here)
+    local menu_commands_file="$7"  # Temp file with commands
+    local menu_colors_file="$8"    # Temp file with colors
+    local main_menu="$9"           # Main menu section name
 
-    # --- Input Validation ---
-    case "$selection" in
+    # --- Display Prompt ---
+    local selection_prompt=""
+    if [ "$is_main_menu" -eq 1 ]; then
+        selection_prompt=$(get_message "CONFIG_MAIN_SELECT_PROMPT")
+        selection_prompt=$(echo "$selection_prompt" | sed "s/{0}/$num_normal_choices/g")
+    else
+        selection_prompt=$(get_message "CONFIG_SUB_SELECT_PROMPT")
+        selection_prompt=$(echo "$selection_prompt" | sed "s/{0}/$num_normal_choices/g")
+    fi
+    printf "%s" "$(color white "$selection_prompt")" # Display prompt before read
+
+    # --- Read User Input with Failure Check ---
+    local choice=""
+    if ! read -r choice; then
+        # read failed (e.g., EOF, error)
+        debug_log "ERROR" "Failed to read user input in section [$section_name]. Returning 1 to stop loop."
+        # Return non-zero to break the selector loop
+        return 1
+    fi
+    # Normalize input if available (optional)
+    if command -v normalize_input >/dev/null 2>&1; then
+        choice=$(normalize_input "$choice" 2>/dev/null || echo "$choice")
+    fi
+    debug_log "DEBUG" "User input: '$choice'"
+
+    # --- Input Validation (Numeric Check) ---
+    case "$choice" in
         ''|*[!0-9]*)
             printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
-            debug_log "DEBUG" "Invalid input '$selection' in section [$section_name]. Returning 0." # Add debug
-            return 0
+            debug_log "DEBUG" "Invalid input (not a number): '$choice' in section [$section_name]. Returning 0 to retry."
+            return 0 # Return 0 to allow retry
             ;;
     esac
 
     # --- Handle Special Selections (0, 10, 00) ---
-    if [ "$selection" -eq 0 ]; then
-        debug_log "DEBUG" "User selected 0 (Go Back) in section [$section_name]." # Add debug
+    if [ "$choice" -eq 0 ]; then
+        # '0' (Back) is only valid in submenus
+        if [ "$is_main_menu" -eq 1 ]; then
+             printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_INVALID_NUMBER")")"
+             debug_log "DEBUG" "'0' selected in main menu [$section_name]. Invalid. Returning 0 to retry."
+             return 0
+        fi
+        debug_log "DEBUG" "User selected 0 (Go Back) in section [$section_name]."
         go_back_menu
         local go_back_status=$?
-        debug_log "DEBUG" "go_back_menu returned status: $go_back_status" # Add debug
-        return $go_back_status
+        debug_log "DEBUG" "go_back_menu returned status: $go_back_status"
+        return $go_back_status # Propagate status from go_back_menu
     fi
-    if [ "$selection" -eq 10 ]; then
-        debug_log "DEBUG" "User selected 10 (Exit) in section [$section_name]." # Add debug
-        exit_script 0
-        return 0
+    if [ "$choice" -eq 10 ]; then
+        # '10' (Exit) is valid everywhere
+        debug_log "DEBUG" "User selected 10 (Exit) in section [$section_name]."
+        menu_exit # Use the dedicated exit function
+        return 0 # Should not be reached if menu_exit works
     fi
-    if [ "$selection" -eq 00 ] && [ "$section_name" = "$main_menu" ]; then
-        debug_log "DEBUG" "User selected 00 (Exit & Delete) in section [$section_name]." # Add debug
-        exit_delete_script
-        return 0
+    if [ "$choice" -eq 00 ]; then
+        # '00' (Exit & Delete) is only valid in main menu
+        if [ "$is_main_menu" -eq 0 ]; then
+             printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_INVALID_NUMBER")")"
+             debug_log "DEBUG" "'00' selected in submenu [$section_name]. Invalid. Returning 0 to retry."
+             return 0
+        fi
+        debug_log "DEBUG" "User selected 00 (Exit & Delete) in section [$section_name]."
+        remove_exit # Use the dedicated remove function
+        local remove_status=$? # remove_exit might return status if cancelled
+        debug_log "DEBUG" "remove_exit returned status: $remove_status"
+        return $remove_status # Propagate status (e.g., if cancelled)
     fi
 
-    # --- Get Action from Temp File ---
-    local action_line=$(awk -F "$MENU_DB_SEPARATOR" -v sel="$selection" '$1 == sel { print $0 }' "$temp_file")
-    if [ -z "$action_line" ]; then
+    # --- Handle Normal Selections (1 to N) ---
+    # Check if choice is within the range of normal items
+    if [ "$choice" -lt 1 ] || [ "$choice" -gt "$num_normal_choices" ]; then
          printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_INVALID_NUMBER")")"
-         debug_log "DEBUG" "Invalid selection number '$selection' in section [$section_name]. Returning 0." # Add debug
+         debug_log "DEBUG" "Selection '$choice' out of range (1-$num_normal_choices) in section [$section_name]. Returning 0 to retry."
          return 0
     fi
-    local action=$(echo "$action_line" | cut -d "$MENU_DB_SEPARATOR" -f 2)
-    local type=$(echo "$action_line" | cut -d "$MENU_DB_SEPARATOR" -f 3)
+
+    # --- Get Action Details from Temp Files using the choice number ---
+    # Use awk to get the Nth line (where N = choice) from command, key, and color files
+    local action=$(awk "NR==$choice" "$menu_commands_file")
+    local selected_key=$(awk "NR==$choice" "$menu_keys_file")
+    local selected_color=$(awk "NR==$choice" "$menu_colors_file")
+    # Determine type based on action (simple check for 'selector')
+    local type="command"
+    if echo "$action" | grep -q "^selector "; then
+        type="menu"
+        # Extract the target section name from the action
+        action=$(echo "$action" | sed 's/^selector //')
+    fi
+
+    # Validate that we got necessary info
+    if [ -z "$action" ] || [ -z "$selected_key" ] || [ -z "$selected_color" ]; then
+        debug_log "ERROR" "Failed to retrieve action details for choice '$choice' from temp files in section [$section_name]."
+        printf "%s\n" "$(color red "$(get_message "MSG_INTERNAL_ERROR_RETRY")")" # Use appropriate message key
+        return 0 # Return 0 to retry
+    fi
+
+    debug_log "DEBUG" "Choice '$choice' mapped to: Key='$selected_key', Color='$selected_color', Action='$action', Type='$type'"
 
     # --- Execute Action ---
     if [ "$type" = "menu" ]; then
-        debug_log "DEBUG" "User selected submenu '$action' from section [$section_name]." # Add debug
-        selector "$action" "$section_name"
+        debug_log "DEBUG" "User selected submenu '$action' from section [$section_name]."
+        # Push history *before* calling the submenu selector
+        push_menu_history "$selected_key" "$selected_color"
+        # Call selector for the submenu
+        selector "$action" # Only pass section name, selector doesn't use parent name
         local submenu_status=$?
-        debug_log "DEBUG" "Submenu selector '$action' returned status: $submenu_status" # Add debug
+        debug_log "DEBUG" "Submenu selector '$action' returned status: $submenu_status"
+        # Propagate the status from the submenu. If it's 0, the calling selector's loop continues (which is wrong).
+        # If submenu returns non-zero (e.g., user exited from there), propagate it.
+        # If submenu returns 0 (e.g., command failed there and it looped), what should happen here?
+        # Let's assume non-zero means exit this level, 0 means stay? No, selector loop handles 0. Propagate status.
         return $submenu_status
     elif [ "$type" = "command" ]; then
         debug_log "DEBUG" "Executing command: $action from section [$section_name]"
-        if $action; then
-            # Command succeeded
+        # Check for menu_yn option before execution
+        local processed_action=""
+        if ! processed_action=$(process_menu_yn "$action"); then
+             # User cancelled in process_menu_yn
+             debug_log "DEBUG" "Command cancelled by user via menu_yn confirmation."
+             return 0 # Return 0 to redisplay current menu
+        fi
+        action="$processed_action" # Use the potentially cleaned command
+
+        # Execute the command
+        (eval "$action") # Use subshell and eval for safety and complex commands
+        local cmd_status=$?
+
+        if [ $cmd_status -eq 0 ]; then
             debug_log "DEBUG" "Command '$action' succeeded in section [$section_name]."
-            debug_log "DEBUG" "Returning 0 from handle_user_selection (command success case) for section [$section_name]." # Add debug
-            return 0
+            # Optionally add success message here if desired
+            # printf "%s\n" "$(color green "$(get_message "MSG_COMMAND_SUCCESS")")"
+            debug_log "DEBUG" "Returning 0 from handle_user_selection (command success case) for section [$section_name]."
+            return 0 # Return 0 to redisplay current menu
         else
-            # Command failed
-            local exit_status=$?
-            debug_log "DEBUG" "Command '$action' failed with status $exit_status in section [$section_name]."
-            # *** Add debug log before returning 0 ***
+            debug_log "DEBUG" "Command '$action' failed with status $cmd_status in section [$section_name]."
+            # Display a generic failure message (Needs message key MSG_COMMAND_FAILED_RETRY)
+            printf "%s\n" "$(color yellow "$(get_message "MSG_COMMAND_FAILED_RETRY")")"
             debug_log "DEBUG" "Returning 0 from handle_user_selection (command failed case) for section [$section_name]."
-            return 0
+            return 0 # Return 0 to redisplay current menu
         fi
     else
-        # Unknown type in menu definition
-        debug_log "ERROR" "Unknown menu type '$type' for action '$action' in section [$section_name]. Check menu.db."
-        debug_log "DEBUG" "Returning 0 from handle_user_selection (unknown type case) for section [$section_name]." # Add debug
-        return 0
+        # This case should not be reached if type detection is correct
+        debug_log "ERROR" "Internal error: Unknown action type detected for choice '$choice' in section [$section_name]."
+        printf "%s\n" "$(color red "$(get_message "MSG_INTERNAL_ERROR_RETRY")")" # Use appropriate message key
+        return 0 # Return 0 to retry
     fi
 }
 
