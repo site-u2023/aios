@@ -114,8 +114,6 @@ translate_with_lingva() {
     local wget_options=""
     local retry_count=0
     
-    debug_log "DEBUG" "Starting Lingva Translate API request" "true"
-    
     # ネットワーク接続状態を一度だけ確認
     [ ! -f "$ip_check_file" ] && check_network_connectivity
     
@@ -176,11 +174,8 @@ translate_with_google() {
     local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
     local api_url=""
 
-    debug_log "DEBUG" "Starting Google Translate API request" "true"
-
     # wgetの機能を検出（キャッシュ対応版）
     local wget_capability=$(detect_wget_capabilities)
-    debug_log "DEBUG" "Using wget capability: ${wget_capability}"
 
     # 必要なディレクトリを確保
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
@@ -359,7 +354,6 @@ EOF
                 local translated=$(cat "$cache_file")
                 # APIから取得した言語コードを使用
                 printf "%s|%s=%s\n" "$api_lang" "$key" "$translated" >> "$output_db"
-                debug_log "DEBUG" "Using cached translation for key: ${key}"
                 continue
             fi
             
