@@ -19,8 +19,10 @@ MENU_INTERNET_PPPOE download "internet-pppoe.sh" "chmod" "load"
 
 [MENU_INTERNET_MAPE]
 MENU_INTERNET_MAPE download "internet-map-e.sh" "chmod" "load"
-MENU_INTERNET_NURO_MAPE download "internet-map-e-nuro.sh" "chmod" "load"
 MENU_INTERNET_MAPE_BASH_CONFIG download "map-e-bash.sh" "chmod" "load" "bash"
+
+[MENU_INTERNET_NURO_MAPE]
+MENU_INTERNET_NURO_MAPE download "internet-map-e-nuro.sh" "chmod" "load"
 
 [MENU_INTERNET_DSLITE]
 MENU_DSLITE_AUTO download "internet-ds-lite-config.sh" "chmod"; auto_detect_and_apply # Run auto-detection function
