@@ -1233,7 +1233,7 @@ EOF
         echo "$(get_message "prefix_not_recognized")"
         echo "$(get_message "direct_onu_connection")"
         echo "$(get_message "exiting")"
-        debug_log "ERROR" "Failed to parse IPv6 prefix in mape_mold()"  #(ERRORレベルもdebug_logに)
+        debug_log "ERROR" "Failed to parse IPv6 prefix in mape_mold()"  # ERRORレベルもdebug_logに
         return 1
     fi
 
@@ -1354,7 +1354,7 @@ EOF
         local psid_shift=$(( 16 - OFFSET - PSIDLEN ))
         # psid_shift が負になるケースを避ける (PSIDLENが不明な場合など)
         if [ "$psid_shift" -lt 0 ]; then
-            debug_log "ERROR" "Invalid calculation: psid_shift is negative ($psid_shift). Check OFFSET and PSIDLEN."  (ERRORレベルもdebug_logに)
+            debug_log "ERROR" "Invalid calculation: psid_shift is negative ($psid_shift). Check OFFSET and PSIDLEN."  # ERRORレベルもdebug_logに
             psid_shift=0 # エラーを防ぐため0にする
         fi
         local psid_part=$(( PSID << psid_shift ))
@@ -1362,7 +1362,7 @@ EOF
         # port_range_size が0にならないようにする
         local port_range_size=$(( 1 << psid_shift ))
         if [ "$port_range_size" -le 0 ]; then
-             debug_log "ERROR" "Invalid calculation: port_range_size is not positive ($port_range_size)."  (ERRORレベルもdebug_logに)
+             debug_log "ERROR" "Invalid calculation: port_range_size is not positive ($port_range_size)."  # ERRORレベルもdebug_logに
              port_range_size=1 # エラーを防ぐため1にする
         fi
         local port_end=$(( port + port_range_size - 1 ))
