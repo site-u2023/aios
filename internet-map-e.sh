@@ -1233,7 +1233,7 @@ EOF
         echo "$(get_message "prefix_not_recognized")"
         echo "$(get_message "direct_onu_connection")"
         echo "$(get_message "exiting")"
-        debug_log "ERROR" "Failed to parse IPv6 prefix in mape_mold()"  (ERRORレベルもdebug_logに)
+        debug_log "ERROR" "Failed to parse IPv6 prefix in mape_mold()"  #(ERRORレベルもdebug_logに)
         return 1
     fi
 
