@@ -1,4 +1,5 @@
 #!/bin/sh
+# this script based http://ipv4.web.fc2.com/map-e.html
 
 SCRIPT_VERSION="2025.04.14-00-00"
 
