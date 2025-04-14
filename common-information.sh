@@ -368,7 +368,7 @@ get_country_cloudflare() {
     done
 
     if [ $success -eq 1 ]; then
-        TIMEZONE_API_SOURCE="Cloudflare Worker"
+        TIMEZONE_API_SOURCE="Cloudflare"
         debug_log "DEBUG" "get_country_cloudflare finished successfully."
         return 0
     else
