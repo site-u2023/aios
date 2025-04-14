@@ -1326,7 +1326,7 @@ EOF
     else
         # get_message 関数が存在すると仮定
         echo "$(get_message "unsupported_prefix")"
-        debug_log "ERROR" "No matching ruleprefix found in mape_mold()"  (ERRORレベルもdebug_logに)
+        debug_log "ERROR" "No matching ruleprefix found in mape_mold()"  # ERRORレベルもdebug_logに
         return 1
     fi
 
