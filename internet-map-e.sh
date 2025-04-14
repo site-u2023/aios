@@ -1193,7 +1193,6 @@ get_ruleprefix38_20_value() {
 }
 
 # MAP-E情報取得と計算 (ash互換 + bash版の変数名に合わせる)
-# MAP-E情報取得と計算 (ash互換 + bash版の変数名に合わせる)
 mape_mold() {
     debug_log "DEBUG" "Entering mape_mold() function" 
 
