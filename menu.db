@@ -23,7 +23,18 @@ MENU_INTERNET_NURO_MAPE download "internet-map-e-nuro.sh" "chmod" "load"
 MENU_INTERNET_MAPE_BASH_CONFIG download "map-e-bash.sh" "chmod" "load" "bash"
 
 [MENU_INTERNET_DSLITE]
-MENU_INTERNET_DSLITE download "internet-dslite.sh" "chmod" "load"
+MENU_DSLITE_AUTO download "ds-lite-config.sh" "chmod"; auto_detect_and_apply # Run auto-detection function
+MENU_DSLITE_MANUAL selector MENU_INTERNET_DSLITE_MANUAL # Go to manual ISP selection
+MENU_DSLITE_RESTORE download "ds-lite-config.sh" "chmod"; restore_dslite_settings # Run restore function
+
+[MENU_INTERNET_DSLITE_MANUAL]
+MENU_DSLITE_TRANS selector MENU_DSLITE_TRANS_MANUAL # Select Transix East/West
+MENU_DSLITE_XPASS download "ds-lite-config.sh" "chmod"; apply_dslite_settings "$AFTR_XPASS" "Cross Pass"
+MENU_DSLITE_V6CONNECT download "ds-lite-config.sh" "chmod"; apply_dslite_settings "$AFTR_V6CONNECT" "v6 connect"
+
+ [MENU_DSLITE_TRANS_MANUAL]
+ MENU_DSLITE_TRANS_EAST download "ds-lite-config.sh" "chmod"; apply_dslite_settings "$AFTR_TRANS_EAST" "Transix (East Japan)" # Apply Transix East
+ MENU_DSLITE_TRANS_WEST download "ds-lite-config.sh" "chmod"; apply_dslite_settings "$AFTR_TRANS_WEST" "Transix (West Japan)" # Apply Transix West
 
 [MENU_SYSTEM]
 MENU_HOSTNAME selector system-hostname
