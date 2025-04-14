@@ -248,7 +248,7 @@ handle_menu_error() {
     return 0
 }
 
-# Handle user selection - Corrected arguments, prompt, read check, and history push
+# Handle user selection - Removed the unwanted generic failure message display
 handle_user_selection() {
     # Correct argument list matching the call from selector
     local section_name="$1"        # Current menu section name
@@ -275,12 +275,9 @@ handle_user_selection() {
     # --- Read User Input with Failure Check ---
     local choice=""
     if ! read -r choice; then
-        # read failed (e.g., EOF, error)
         debug_log "ERROR" "Failed to read user input in section [$section_name]. Returning 1 to stop loop."
-        # Return non-zero to break the selector loop
         return 1
     fi
-    # Normalize input if available (optional)
     if command -v normalize_input >/dev/null 2>&1; then
         choice=$(normalize_input "$choice" 2>/dev/null || echo "$choice")
     fi
@@ -291,13 +288,12 @@ handle_user_selection() {
         ''|*[!0-9]*)
             printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
             debug_log "DEBUG" "Invalid input (not a number): '$choice' in section [$section_name]. Returning 0 to retry."
-            return 0 # Return 0 to allow retry
+            return 0
             ;;
     esac
 
     # --- Handle Special Selections (0, 10, 00) ---
     if [ "$choice" -eq 0 ]; then
-        # '0' (Back) is only valid in submenus
         if [ "$is_main_menu" -eq 1 ]; then
              printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_INVALID_NUMBER")")"
              debug_log "DEBUG" "'0' selected in main menu [$section_name]. Invalid. Returning 0 to retry."
@@ -307,30 +303,27 @@ handle_user_selection() {
         go_back_menu
         local go_back_status=$?
         debug_log "DEBUG" "go_back_menu returned status: $go_back_status"
-        return $go_back_status # Propagate status from go_back_menu
+        return $go_back_status
     fi
     if [ "$choice" -eq 10 ]; then
-        # '10' (Exit) is valid everywhere
         debug_log "DEBUG" "User selected 10 (Exit) in section [$section_name]."
-        menu_exit # Use the dedicated exit function
-        return 0 # Should not be reached if menu_exit works
+        menu_exit
+        return 0
     fi
     if [ "$choice" -eq 00 ]; then
-        # '00' (Exit & Delete) is only valid in main menu
         if [ "$is_main_menu" -eq 0 ]; then
              printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_INVALID_NUMBER")")"
              debug_log "DEBUG" "'00' selected in submenu [$section_name]. Invalid. Returning 0 to retry."
              return 0
         fi
         debug_log "DEBUG" "User selected 00 (Exit & Delete) in section [$section_name]."
-        remove_exit # Use the dedicated remove function
-        local remove_status=$? # remove_exit might return status if cancelled
+        remove_exit
+        local remove_status=$?
         debug_log "DEBUG" "remove_exit returned status: $remove_status"
-        return $remove_status # Propagate status (e.g., if cancelled)
+        return $remove_status
     fi
 
     # --- Handle Normal Selections (1 to N) ---
-    # Check if choice is within the range of normal items
     if [ "$choice" -lt 1 ] || [ "$choice" -gt "$num_normal_choices" ]; then
          printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_INVALID_NUMBER")")"
          debug_log "DEBUG" "Selection '$choice' out of range (1-$num_normal_choices) in section [$section_name]. Returning 0 to retry."
@@ -338,23 +331,19 @@ handle_user_selection() {
     fi
 
     # --- Get Action Details from Temp Files using the choice number ---
-    # Use awk to get the Nth line (where N = choice) from command, key, and color files
     local action=$(awk "NR==$choice" "$menu_commands_file")
     local selected_key=$(awk "NR==$choice" "$menu_keys_file")
     local selected_color=$(awk "NR==$choice" "$menu_colors_file")
-    # Determine type based on action (simple check for 'selector')
     local type="command"
     if echo "$action" | grep -q "^selector "; then
         type="menu"
-        # Extract the target section name from the action
         action=$(echo "$action" | sed 's/^selector //')
     fi
 
-    # Validate that we got necessary info
     if [ -z "$action" ] || [ -z "$selected_key" ] || [ -z "$selected_color" ]; then
         debug_log "ERROR" "Failed to retrieve action details for choice '$choice' from temp files in section [$section_name]."
-        printf "%s\n" "$(color red "$(get_message "MSG_INTERNAL_ERROR_RETRY")")" # Use appropriate message key
-        return 0 # Return 0 to retry
+        # No generic message here either
+        return 0
     fi
 
     debug_log "DEBUG" "Choice '$choice' mapped to: Key='$selected_key', Color='$selected_color', Action='$action', Type='$type'"
@@ -362,50 +351,37 @@ handle_user_selection() {
     # --- Execute Action ---
     if [ "$type" = "menu" ]; then
         debug_log "DEBUG" "User selected submenu '$action' from section [$section_name]."
-        # Push history *before* calling the submenu selector
         push_menu_history "$selected_key" "$selected_color"
-        # Call selector for the submenu
-        selector "$action" # Only pass section name, selector doesn't use parent name
+        selector "$action"
         local submenu_status=$?
         debug_log "DEBUG" "Submenu selector '$action' returned status: $submenu_status"
-        # Propagate the status from the submenu. If it's 0, the calling selector's loop continues (which is wrong).
-        # If submenu returns non-zero (e.g., user exited from there), propagate it.
-        # If submenu returns 0 (e.g., command failed there and it looped), what should happen here?
-        # Let's assume non-zero means exit this level, 0 means stay? No, selector loop handles 0. Propagate status.
         return $submenu_status
     elif [ "$type" = "command" ]; then
         debug_log "DEBUG" "Executing command: $action from section [$section_name]"
-        # Check for menu_yn option before execution
         local processed_action=""
         if ! processed_action=$(process_menu_yn "$action"); then
-             # User cancelled in process_menu_yn
              debug_log "DEBUG" "Command cancelled by user via menu_yn confirmation."
-             return 0 # Return 0 to redisplay current menu
+             return 0
         fi
-        action="$processed_action" # Use the potentially cleaned command
+        action="$processed_action"
 
-        # Execute the command
-        (eval "$action") # Use subshell and eval for safety and complex commands
+        (eval "$action")
         local cmd_status=$?
 
         if [ $cmd_status -eq 0 ]; then
             debug_log "DEBUG" "Command '$action' succeeded in section [$section_name]."
-            # Optionally add success message here if desired
-            # printf "%s\n" "$(color green "$(get_message "MSG_COMMAND_SUCCESS")")"
             debug_log "DEBUG" "Returning 0 from handle_user_selection (command success case) for section [$section_name]."
-            return 0 # Return 0 to redisplay current menu
+            return 0
         else
             debug_log "DEBUG" "Command '$action' failed with status $cmd_status in section [$section_name]."
-            # Display a generic failure message (Needs message key MSG_COMMAND_FAILED_RETRY)
-            printf "%s\n" "$(color yellow "$(get_message "MSG_COMMAND_FAILED_RETRY")")"
+            # *** REMOVED the printf line for MSG_COMMAND_FAILED_RETRY ***
             debug_log "DEBUG" "Returning 0 from handle_user_selection (command failed case) for section [$section_name]."
-            return 0 # Return 0 to redisplay current menu
+            return 0
         fi
     else
-        # This case should not be reached if type detection is correct
         debug_log "ERROR" "Internal error: Unknown action type detected for choice '$choice' in section [$section_name]."
-        printf "%s\n" "$(color red "$(get_message "MSG_INTERNAL_ERROR_RETRY")")" # Use appropriate message key
-        return 0 # Return 0 to retry
+        # No generic message here either
+        return 0
     fi
 }
 
