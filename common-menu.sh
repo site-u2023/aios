@@ -248,7 +248,7 @@ handle_menu_error() {
     return 0
 }
 
-# Handle user selection - Return 0 on command failure to keep selector loop running
+# Handle user selection - Return 0 on command failure to keep selector loop running (with added debug log)
 handle_user_selection() {
     local selection="$1"
     local section_name="$2"
@@ -257,69 +257,69 @@ handle_user_selection() {
     local prev_menu="$5" # Previous menu name passed to selector
 
     # --- Input Validation ---
-    # Check if selection is a number
     case "$selection" in
         ''|*[!0-9]*)
-            # Use get_message for user-facing validation errors
             printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
-            # Return 0 to continue selector loop and redisplay menu
+            debug_log "DEBUG" "Invalid input '$selection' in section [$section_name]. Returning 0." # Add debug
             return 0
             ;;
     esac
 
     # --- Handle Special Selections (0, 10, 00) ---
-    # Handle '0' (Go Back)
     if [ "$selection" -eq 0 ]; then
-        go_back_menu # Assumes go_back_menu calls selector and returns status
-        return $?    # Propagate exit status from go_back_menu/selector
+        debug_log "DEBUG" "User selected 0 (Go Back) in section [$section_name]." # Add debug
+        go_back_menu
+        local go_back_status=$?
+        debug_log "DEBUG" "go_back_menu returned status: $go_back_status" # Add debug
+        return $go_back_status
     fi
-    # Handle '10' (Exit)
     if [ "$selection" -eq 10 ]; then
-        exit_script 0 # Terminates the script
-        return 0 # Should not be reached
+        debug_log "DEBUG" "User selected 10 (Exit) in section [$section_name]." # Add debug
+        exit_script 0
+        return 0
     fi
-     # Handle '00' (Exit & Delete) - Only in main menu
     if [ "$selection" -eq 00 ] && [ "$section_name" = "$main_menu" ]; then
-        exit_delete_script # Terminates the script
-        return 0 # Should not be reached
+        debug_log "DEBUG" "User selected 00 (Exit & Delete) in section [$section_name]." # Add debug
+        exit_delete_script
+        return 0
     fi
 
     # --- Get Action from Temp File ---
     local action_line=$(awk -F "$MENU_DB_SEPARATOR" -v sel="$selection" '$1 == sel { print $0 }' "$temp_file")
     if [ -z "$action_line" ]; then
-         # Invalid selection number (not defined in temp file)
          printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_INVALID_NUMBER")")"
-         # Return 0 to continue selector loop and redisplay menu
+         debug_log "DEBUG" "Invalid selection number '$selection' in section [$section_name]. Returning 0." # Add debug
          return 0
     fi
     local action=$(echo "$action_line" | cut -d "$MENU_DB_SEPARATOR" -f 2)
     local type=$(echo "$action_line" | cut -d "$MENU_DB_SEPARATOR" -f 3)
 
-
     # --- Execute Action ---
     if [ "$type" = "menu" ]; then
-        # Navigate to submenu - selector call handles the rest
-        selector "$action" "$section_name" # Pass current section as prev_menu
-        return $? # Propagate exit status from the submenu selector
+        debug_log "DEBUG" "User selected submenu '$action' from section [$section_name]." # Add debug
+        selector "$action" "$section_name"
+        local submenu_status=$?
+        debug_log "DEBUG" "Submenu selector '$action' returned status: $submenu_status" # Add debug
+        return $submenu_status
     elif [ "$type" = "command" ]; then
-        # Execute command
         debug_log "DEBUG" "Executing command: $action from section [$section_name]"
         if $action; then
             # Command succeeded
-            debug_log "DEBUG" "Command '$action' succeeded. Returning to selector loop for section [$section_name]."
-            # Return 0, selector loop will handle redisplay
+            debug_log "DEBUG" "Command '$action' succeeded in section [$section_name]."
+            debug_log "DEBUG" "Returning 0 from handle_user_selection (command success case) for section [$section_name]." # Add debug
             return 0
         else
             # Command failed
             local exit_status=$?
-            debug_log "DEBUG" "Command '$action' failed with status $exit_status in section [$section_name]." # Log directly
-            # *** CRITICAL CHANGE: Return 0 to ensure selector loop continues ***
+            debug_log "DEBUG" "Command '$action' failed with status $exit_status in section [$section_name]."
+            # *** Add debug log before returning 0 ***
+            debug_log "DEBUG" "Returning 0 from handle_user_selection (command failed case) for section [$section_name]."
             return 0
         fi
     else
         # Unknown type in menu definition
-        debug_log "ERROR" "Unknown menu type '$type' for action '$action' in section [$section_name]. Check menu.db." # Log directly (as ERROR)
-        # Return 0 to ensure selector loop continues
+        debug_log "ERROR" "Unknown menu type '$type' for action '$action' in section [$section_name]. Check menu.db."
+        debug_log "DEBUG" "Returning 0 from handle_user_selection (unknown type case) for section [$section_name]." # Add debug
         return 0
     fi
 }
@@ -788,7 +788,7 @@ handle_user_selection() {
     return $cmd_status
 }
 
-# Selector function - Revised loop structure to avoid recursion
+# Selector function - Revised loop structure (with added/modified debug logs) - FULL VERSION
 selector() {
     local section_name="$1"
     local parent_display_text="$2" # Unused, kept for compatibility
@@ -797,14 +797,13 @@ selector() {
     section_name="${section_name:-$MAIN_MENU}"
     debug_log "DEBUG" "Entering selector for section: [$section_name]"
 
-    # Get main menu name (assuming MAIN_MENU is global or sourced)
     local main_menu="${MAIN_MENU}"
 
     # --- Main loop for the current menu section ---
     while true; do
         # --- Prepare and display menu at the start of each loop iteration ---
         printf "\n"
-        CURRENT_MENU="$section_name" # Update current menu context
+        CURRENT_MENU="$section_name"
 
         # History management (only if skip_history is not 1)
         if [ "$skip_history" != "1" ]; then
@@ -816,8 +815,10 @@ selector() {
             debug_log "DEBUG" "Menu [$section_name] display loop. History push depends on user action."
         else
             debug_log "DEBUG" "Skipping potential history update due to skip_history=1 (likely from go_back_menu)"
-            # Reset skip_history for the next iteration if needed? No, go_back_menu needs it.
+            # Reset skip_history for the next iteration? No, go_back_menu needs it.
         fi
+        # Set skip_history back to 0 for the next loop iteration, unless go_back_menu sets it again
+        skip_history=0 # Reset for the next potential iteration
 
         local is_main_menu=0
         [ "$section_name" = "$main_menu" ] && is_main_menu=1
@@ -842,9 +843,9 @@ selector() {
 
         # Check if menu has items
         if [ $menu_count -eq 0 ]; then
-            debug_log "ERROR" "No menu items found for section [$section_name]. Exiting selector."
-            rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file" # Clean up
-            return 1 # Indicate error
+            debug_log "ERROR" "No menu items found for section [$section_name]. Returning 1 from selector." # Modify log
+            rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
+            return 1
         fi
 
         # Display breadcrumbs
@@ -854,12 +855,11 @@ selector() {
         if [ -s "$menu_displays_file" ]; then
             cat "$menu_displays_file"
         else
-            debug_log "ERROR" "Menu display file is empty for section [$section_name]. Exiting selector."
-            rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file" # Clean up
-            return 1 # Indicate error
+            debug_log "ERROR" "Menu display file is empty for section [$section_name]. Returning 1 from selector." # Modify log
+            rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
+            return 1
         fi
 
-        # Calculate number of selectable normal choices
         local menu_choices=$((menu_count - special_items_count))
 
         # --- Handle user input at the end of the loop iteration ---
@@ -867,20 +867,21 @@ selector() {
             "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file" "$main_menu"
 
         local selection_status=$?
+        # *** Modify/Add debug logs for status check ***
         debug_log "DEBUG" "handle_user_selection for [$section_name] returned status: $selection_status"
 
         # Clean up temporary files after handling selection
         rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
 
-        # If status is non-zero, break the loop (e.g., exit, go back, submenu exit)
+        # If status is non-zero, return the status to exit this selector instance
         if [ $selection_status -ne 0 ]; then
-            debug_log "DEBUG" "Non-zero status ($selection_status), breaking selector loop for section [$section_name]."
-            return $selection_status # Propagate the non-zero status
+            debug_log "DEBUG" "Selector for [$section_name] received non-zero status ($selection_status). Returning status $selection_status."
+            return $selection_status
         fi
 
-        # If status is 0, continue the loop (redisplay current menu)
-        debug_log "DEBUG" "Zero status, continuing selector loop for section [$section_name]."
-        # Implicitly continues to the next iteration of the while loop
+        # If status is 0, continue the loop to redisplay the current menu
+        debug_log "DEBUG" "Selector for [$section_name] received zero status. Continuing loop (redisplaying menu)."
+        # Implicitly continues to the next iteration
 
     done # End of while true loop
 }
