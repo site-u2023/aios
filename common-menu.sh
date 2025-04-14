@@ -1,6 +1,6 @@
 #!/bin/sh
 
-COMMON_VERSION="2025.03.19-05-00"
+COMMON_VERSION="2025.04.14-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
