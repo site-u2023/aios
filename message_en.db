@@ -27,7 +27,10 @@ en|MSG_DSLITE_DONE_REBOOT_LATER=Operation complete. A reboot is needed to take e
 en|MSG_DSLITE_AUTO_PROVIDER_LABEL=Provider
 en|MSG_DSLITE_AUTO_REGION_LABEL=Region
 en|MSG_DSLITE_AUTO_AFTR_LABEL=AFTR Address
-en|MSG_DSLITE_AUTO_CANCELLED_FAILED=Auto-configuration cancelled or failed. Returning to DS-Lite menu
+
+en|MSG_DSLITE_AUTO_CONFIG_FAILED=Auto-configuration failed. Returning to DS-Lite menu.
+en|MSG_DSLITE_AUTO_CONFIG_REJECTED=Auto-configuration cancelled by user. Returning to DS-Lite menu.
+
 en|MSG_DSLITE_CACHE_FAIL=Required cache information not found. Cannot auto-detect
 en|MSG_CONFIRM_AUTO_SETTINGS=Apply the automatically detected settings # Removed '?'
 
