@@ -1623,6 +1623,6 @@ mape_mold
 mape_display
 # mape_config
 
-echo "3秒後に再起動します..."
-#sleep 3
+echo "再起動します"
+sleep 3
 #reboot
