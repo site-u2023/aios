@@ -60,6 +60,7 @@ normalize_input() {
     # 入力前処理 - スペースの削除（先に実行）
     output=$(echo "$output" | sed 's/　//g')  # 全角スペースを削除
     output=$(echo "$output" | sed 's/ //g')   # 半角スペースを削除
+    output=$(echo "$output" | sed 's/\t//g')  # タブ文字を削除
     
     # 変換テーブル（各行はsedコマンドの負荷を分散するため分割）
     
