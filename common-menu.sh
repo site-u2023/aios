@@ -232,42 +232,70 @@ display_breadcrumbs() {
     debug_log "DEBUG" "Displayed breadcrumb for submenu with single newline"
 }
 
-# エラーハンドリング関数 - 一元化された処理 (エラー時、現在のメニューを再表示する修正版)
+# エラーハンドリング関数 - エラータイプに応じてメッセージ表示を制御する修正版
 handle_menu_error() {
-    local error_type="$1"    # エラータイプ (例: "command_failed")
-    local section_name="$2"  # エラーが発生したメニュー名 (例: "MENU_INTERNET_DSLITE")
-    # local previous_menu="$3" # 呼び出し元からの引数は使用せず
-    local main_menu="$4"     # メインメニュー名 (例: "MENU_MAIN")
-    local error_msg="$5"     # エラーメッセージキー (例: "MSG_ERROR_OCCURRED")
+    local error_type="$1"    # エラータイプ (例: "command_failed", "no_items", "invalid_selection")
+    local section_name="$2"  # エラーが発生したメニュー名
+    # local previous_menu="$3" # 未使用
+    local main_menu="$4"     # メインメニュー名
+    local error_msg_key="$5" # 呼び出し元から渡されるメッセージキー (現在は主に MSG_ERROR_OCCURRED)
 
-    # 1. ログレベルは DEBUG に (冗長な ERROR ログ抑制のため)
-    debug_log "DEBUG" "$error_type in section [$section_name]"
+    # 1. ログレベルは DEBUG に (常に記録)
+    debug_log "DEBUG" "Handling error type '$error_type' in section [$section_name]"
 
-    # 2. メッセージ表示条件 (MSG_ERROR_OCCURRED は表示しない)
-    if [ -n "$error_msg" ] && [ "$error_msg" != "MSG_ERROR_OCCURRED" ]; then
-         printf "%s\n" "$(color red "$(get_message "$error_msg")")"
+    # 2. エラータイプに基づいたメッセージ表示処理
+    local msg_to_display=""
+    case "$error_type" in
+        command_failed)
+            # コマンド実行失敗: メッセージは表示しない (呼び出し元が表示)
+            debug_log "DEBUG" "Command failed, message display skipped in handle_menu_error."
+            ;;
+        no_items)
+            # menu.db に項目がない
+            msg_to_display=$(get_message "MSG_ERR_MENU_NO_ITEMS") # 要新規メッセージ
+            debug_log "ERROR" "No menu items found for section: $section_name. Check menu.db."
+            ;;
+        empty_display)
+            # 表示データが空 (通常発生しないはずだが念のため)
+            msg_to_display=$(get_message "MSG_ERR_MENU_DISPLAY_EMPTY") # 要新規メッセージ
+            debug_log "ERROR" "Menu display data became empty for section: $section_name."
+            ;;
+        read_input)
+            # 入力読み取り失敗 (Ctrl+D など)
+            msg_to_display=$(get_message "MSG_ERR_READ_INPUT") # 要新規メッセージ
+            debug_log "WARN" "Error reading user input."
+            ;;
+        invalid_selection)
+            # 内部的な選択エラー (キー/コマンド不一致など)
+            msg_to_display=$(get_message "MSG_ERR_INVALID_INTERNAL_SELECTION") # 要新規メッセージ
+            debug_log "ERROR" "Internal error processing selection for section: $section_name."
+            ;;
+        *)
+            # 未知のエラータイプ (フォールバック)
+            msg_to_display=$(get_message "MSG_ERR_UNKNOWN_MENU_ERROR") # 要新規メッセージ
+            debug_log "ERROR" "Unknown menu error type '$error_type' occurred in section: $section_name"
+            # 予期せぬエラーなので、渡されたキーも表示を試みる
+            if [ -n "$error_msg_key" ] && [ "$error_msg_key" != "MSG_ERROR_OCCURRED" ]; then
+                 local fallback_msg=$(get_message "$error_msg_key")
+                 [ -n "$fallback_msg" ] && msg_to_display="$msg_to_display ($fallback_msg)"
+            fi
+            ;;
+    esac
+
+    # 決定されたメッセージがあれば表示
+    if [ -n "$msg_to_display" ]; then
+        printf "%s\n" "$(color red "$msg_to_display")"
     fi
 
-    # 3. メニュー遷移ロジックの修正
+    # 3. メニュー遷移ロジック (現在のメニューを再表示)
     if [ "$section_name" = "$main_menu" ]; then
-        # メインメニューでエラーが発生した場合は、メインメニューを再読み込み
-        debug_log "DEBUG" "Main menu $error_type, reloading main menu"
-        MENU_HISTORY="" # メインメニュー再読み込み時は履歴をクリア
+        debug_log "DEBUG" "Main menu error, reloading main menu"
+        MENU_HISTORY=""
         selector "$main_menu" "" 1
         return $?
     else
-        # サブメニューでエラーが発生した場合は、**現在のメニューを再表示する**
-        debug_log "DEBUG" "Error occurred in submenu, reloading current menu: $section_name"
-
-        # ★重要★: 履歴スタックから現在の（失敗した）エントリを削除する必要があるか検討
-        # selector を skip_history=1 で呼び出すため、通常は不要だが、
-        # 念のため pop_menu_history を呼び出して整合性を保つ方が安全かもしれない。
-        # ただし、pop_menu_history が意図しない動作をする可能性も考慮。
-        # → 一旦 pop_menu_history は呼び出さずに試す。
-        # local popped_menu=$(pop_menu_history)
-        # debug_log "DEBUG" "Popped potentially incorrect history entry '$popped_menu' before reloading."
-
-        # 現在のメニューを再表示 (skip_history=1 を指定して履歴の重複追加を防ぐ)
+        debug_log "DEBUG" "Submenu error, reloading current menu: $section_name"
+        # 現在のメニューを再表示 (skip_history=1 で履歴重複を防ぐ)
         selector "$section_name" "" 1
         return $?
     fi
