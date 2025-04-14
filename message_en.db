@@ -32,12 +32,12 @@ en|MSG_DSLITE_CACHE_FAIL=Required cache information not found. Cannot auto-detec
 en|MSG_CONFIRM_AUTO_SETTINGS=Apply the automatically detected settings # Removed '?'
 
 # =======================
-# internet-map-e.sh
+# menu.db
 # =======================
 en|MENU_INTERNET_PPPOE=PPPoE
-en|MENU_INTERNET_MAPE=IPoE (MAP-E: OCN / v6 plus)
-en|MENU_INTERNET_NURO_MAPE=IPoE (MAP-E: NURO Hikari)
-en|MENU_INTERNET_DSLITE=IPoE (DS-Lite: transix / cross pass / v6 connect)
+en|MENU_INTERNET_MAPE=MAP-E: OCN / v6 plus
+en|MENU_INTERNET_NURO_MAPE=MAP-E: NURO
+en|MENU_INTERNET_DSLITE=DS-Lite: transix / cross pass / v6 connect
 
 # =======================
 # internet-auto-config.sh
