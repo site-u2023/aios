@@ -248,7 +248,7 @@ handle_menu_error() {
     return 0
 }
 
-# Revised handle_user_selection - Calls handle_menu_error for logging, returns 0 on command failure
+# Handle user selection - Return 0 on command failure to keep selector loop running
 handle_user_selection() {
     local selection="$1"
     local section_name="$2"
@@ -257,63 +257,69 @@ handle_user_selection() {
     local prev_menu="$5" # Previous menu name passed to selector
 
     # --- Input Validation ---
+    # Check if selection is a number
     case "$selection" in
         ''|*[!0-9]*)
+            # Use get_message for user-facing validation errors
             printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
-            return 0 # Return 0 to continue selector loop and redisplay menu
+            # Return 0 to continue selector loop and redisplay menu
+            return 0
             ;;
     esac
 
     # --- Handle Special Selections (0, 10, 00) ---
+    # Handle '0' (Go Back)
     if [ "$selection" -eq 0 ]; then
-        go_back_menu
-        return $? # Propagate status from go_back_menu/selector
+        go_back_menu # Assumes go_back_menu calls selector and returns status
+        return $?    # Propagate exit status from go_back_menu/selector
     fi
+    # Handle '10' (Exit)
     if [ "$selection" -eq 10 ]; then
-        exit_script 0
-        return 0
+        exit_script 0 # Terminates the script
+        return 0 # Should not be reached
     fi
+     # Handle '00' (Exit & Delete) - Only in main menu
     if [ "$selection" -eq 00 ] && [ "$section_name" = "$main_menu" ]; then
-        exit_delete_script
-        return 0
+        exit_delete_script # Terminates the script
+        return 0 # Should not be reached
     fi
 
     # --- Get Action from Temp File ---
     local action_line=$(awk -F "$MENU_DB_SEPARATOR" -v sel="$selection" '$1 == sel { print $0 }' "$temp_file")
     if [ -z "$action_line" ]; then
+         # Invalid selection number (not defined in temp file)
          printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_INVALID_NUMBER")")"
-         return 0 # Return 0 to continue selector loop and redisplay menu
+         # Return 0 to continue selector loop and redisplay menu
+         return 0
     fi
     local action=$(echo "$action_line" | cut -d "$MENU_DB_SEPARATOR" -f 2)
     local type=$(echo "$action_line" | cut -d "$MENU_DB_SEPARATOR" -f 3)
 
+
     # --- Execute Action ---
     if [ "$type" = "menu" ]; then
-        selector "$action" "$section_name" # Navigate to submenu
-        return $? # Propagate status from submenu selector
+        # Navigate to submenu - selector call handles the rest
+        selector "$action" "$section_name" # Pass current section as prev_menu
+        return $? # Propagate exit status from the submenu selector
     elif [ "$type" = "command" ]; then
+        # Execute command
         debug_log "DEBUG" "Executing command: $action from section [$section_name]"
         if $action; then
             # Command succeeded
-            debug_log "DEBUG" "Command '$action' succeeded."
-            # Return 0, selector loop will redisplay the current menu
+            debug_log "DEBUG" "Command '$action' succeeded. Returning to selector loop for section [$section_name]."
+            # Return 0, selector loop will handle redisplay
             return 0
         else
             # Command failed
             local exit_status=$?
-            debug_log "DEBUG" "Command '$action' failed with status $exit_status."
-            # Log the error via handle_menu_error (for debug log only)
-            handle_menu_error "command_failed" "$section_name" # Pass only necessary args
+            debug_log "DEBUG" "Command '$action' failed with status $exit_status in section [$section_name]." # Log directly
             # *** CRITICAL CHANGE: Return 0 to ensure selector loop continues ***
-            # The command itself should have printed the user-facing error message.
             return 0
         fi
     else
         # Unknown type in menu definition
-        debug_log "ERROR" "Unknown menu type '$type' for action '$action' in section [$section_name]. Check menu.db."
-        # Log the error via handle_menu_error
-        handle_menu_error "invalid_selection" "$section_name" # Pass only necessary args
-        # Return 0 to continue selector loop and redisplay menu
+        debug_log "ERROR" "Unknown menu type '$type' for action '$action' in section [$section_name]. Check menu.db." # Log directly (as ERROR)
+        # Return 0 to ensure selector loop continues
         return 0
     fi
 }
@@ -782,122 +788,101 @@ handle_user_selection() {
     return $cmd_status
 }
 
-# メインのセレクター関数（リファクタリング版）
+# Selector function - Revised loop structure to avoid recursion
 selector() {
-    local section_name="$1"        # 表示するセクション名
-    local parent_display_text="$2" # 未使用（後方互換性のため残す）
-    local skip_history="$3"        # 履歴に追加しない場合は1
+    local section_name="$1"
+    local parent_display_text="$2" # Unused, kept for compatibility
+    local skip_history="$3"        # 1 if history update should be skipped
 
-    # セクション名が指定されていない場合はメインメニューを使用
     section_name="${section_name:-$MAIN_MENU}"
+    debug_log "DEBUG" "Entering selector for section: [$section_name]"
 
-    debug_log "DEBUG" "Starting menu selector with section: $section_name"
-
-    printf "\n"
-
-    # 現在のセクションを記録
-    CURRENT_MENU="$section_name"
-
-    # メインメニューに戻る場合はパンくずの色履歴をクリア
-    if [ "$section_name" = "$MAIN_MENU" ] && [ "$skip_history" != "1" ]; then
-        local breadcrumb_colors_file="${CACHE_DIR}/breadcrumb_colors.tmp"
-        [ -f "$breadcrumb_colors_file" ] && > "$breadcrumb_colors_file"
-        debug_log "DEBUG" "Reset breadcrumb colors for main menu"
-    fi
-
-    # 履歴管理（skipが指定されていない場合のみ）
-    if [ "$skip_history" != "1" ]; then
-        # メインメニューに戻る場合は履歴をクリア
-        if [ "$section_name" = "$MAIN_MENU" ]; then
-            MENU_HISTORY=""
-            debug_log "DEBUG" "Cleared menu history for main menu"
-        fi
-            # セクション名を履歴に追加（色情報はhandle_user_selection内で追加）
-            # ここでは色情報を追加しない - 二重登録防止のため
-            debug_log "DEBUG" "Menu $section_name will be added to history when color is selected"
-    else
-        debug_log "DEBUG" "Skipping history update due to skip_history flag"
-    fi
-
-    # メインメニュー名を取得
+    # Get main menu name (assuming MAIN_MENU is global or sourced)
     local main_menu="${MAIN_MENU}"
 
-    # メインメニューかどうかの判定
-    local is_main_menu=0
-    if [ "$section_name" = "$main_menu" ]; then
-        is_main_menu=1
-        debug_log "DEBUG" "Current section is the main menu"
-    else
-        debug_log "DEBUG" "Current section is a sub-menu"
-    fi
-
-    # キャッシュファイルの初期化
-    local menu_keys_file="${CACHE_DIR}/menu_keys.tmp"
-    local menu_displays_file="${CACHE_DIR}/menu_displays.tmp"
-    local menu_commands_file="${CACHE_DIR}/menu_commands.tmp"
-    local menu_colors_file="${CACHE_DIR}/menu_colors.tmp"
-
-    rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
-    touch "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
-
-    # メニュー項目の処理
-    local menu_count=$(process_menu_items "$section_name" "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file")
-
-    # 特殊メニュー項目の追加
-    local special_result=$(add_special_menu_items "$section_name" "$is_main_menu" "$menu_count" "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file")
-    local special_items_count=$(echo "$special_result" | cut -d' ' -f1)
-    menu_count=$(echo "$special_result" | cut -d' ' -f2)
-
-    debug_log "DEBUG" "Total menu items after adding special items: $menu_count"
-
-    # メニュー項目の確認
-    if [ $menu_count -eq 0 ]; then
-        # エラーハンドラーを呼び出し
-        handle_menu_error "no_items" "$section_name" "" "$main_menu" ""
-        return $?
-    fi
-
-    # タイトルヘッダーを表示
-    local menu_title_template=$(get_message "MENU_TITLE")
-    local menu_title=$(echo "$menu_title_template" | sed "s/{0}/$section_name/g")
-
-    # パンくずリストを表示
-    display_breadcrumbs
-
-    # メニュー項目を表示
-    if [ -s "$menu_displays_file" ]; then
-        cat "$menu_displays_file"
-    else
-        # エラーハンドラーを呼び出し
-        handle_menu_error "empty_display" "$section_name" "" "$main_menu" "MSG_ERROR_OCCURRED"
-        return $?
-    fi
-
-    # 通常メニュー項目数（特殊項目を除く）
-    local menu_choices=$((menu_count - special_items_count))
-
-    # ユーザー選択の処理（リトライのためのループ）
+    # --- Main loop for the current menu section ---
     while true; do
-        # ユーザー選択処理を呼び出し
+        # --- Prepare and display menu at the start of each loop iteration ---
+        printf "\n"
+        CURRENT_MENU="$section_name" # Update current menu context
+
+        # History management (only if skip_history is not 1)
+        if [ "$skip_history" != "1" ]; then
+            if [ "$section_name" = "$main_menu" ]; then
+                MENU_HISTORY="" # Clear history when entering main menu
+                debug_log "DEBUG" "Cleared menu history for main menu"
+            fi
+            # Note: Actual history push (with color) happens in handle_user_selection on submenu selection
+            debug_log "DEBUG" "Menu [$section_name] display loop. History push depends on user action."
+        else
+            debug_log "DEBUG" "Skipping potential history update due to skip_history=1 (likely from go_back_menu)"
+            # Reset skip_history for the next iteration if needed? No, go_back_menu needs it.
+        fi
+
+        local is_main_menu=0
+        [ "$section_name" = "$main_menu" ] && is_main_menu=1
+
+        # Initialize temporary files
+        local menu_keys_file="${CACHE_DIR}/menu_keys.tmp"
+        local menu_displays_file="${CACHE_DIR}/menu_displays.tmp"
+        local menu_commands_file="${CACHE_DIR}/menu_commands.tmp"
+        local menu_colors_file="${CACHE_DIR}/menu_colors.tmp"
+        rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
+        touch "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
+
+        # Process menu items from menu.db
+        local menu_count=$(process_menu_items "$section_name" "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file")
+
+        # Add special menu items (Back/Exit/Remove)
+        local special_result=$(add_special_menu_items "$section_name" "$is_main_menu" "$menu_count" "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file")
+        local special_items_count=$(echo "$special_result" | cut -d' ' -f1)
+        menu_count=$(echo "$special_result" | cut -d' ' -f2) # Total count including special items
+
+        debug_log "DEBUG" "Total items for section [$section_name]: $menu_count ($special_items_count special)"
+
+        # Check if menu has items
+        if [ $menu_count -eq 0 ]; then
+            debug_log "ERROR" "No menu items found for section [$section_name]. Exiting selector."
+            rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file" # Clean up
+            return 1 # Indicate error
+        fi
+
+        # Display breadcrumbs
+        display_breadcrumbs
+
+        # Display menu items
+        if [ -s "$menu_displays_file" ]; then
+            cat "$menu_displays_file"
+        else
+            debug_log "ERROR" "Menu display file is empty for section [$section_name]. Exiting selector."
+            rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file" # Clean up
+            return 1 # Indicate error
+        fi
+
+        # Calculate number of selectable normal choices
+        local menu_choices=$((menu_count - special_items_count))
+
+        # --- Handle user input at the end of the loop iteration ---
         handle_user_selection "$section_name" "$is_main_menu" "$menu_count" "$menu_choices" \
             "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file" "$main_menu"
 
         local selection_status=$?
+        debug_log "DEBUG" "handle_user_selection for [$section_name] returned status: $selection_status"
 
-        # リターンコードが0の場合はリトライ
+        # Clean up temporary files after handling selection
+        rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
+
+        # If status is non-zero, break the loop (e.g., exit, go back, submenu exit)
         if [ $selection_status -ne 0 ]; then
-            break
+            debug_log "DEBUG" "Non-zero status ($selection_status), breaking selector loop for section [$section_name]."
+            return $selection_status # Propagate the non-zero status
         fi
 
-        # リトライの場合は現在のメニューを再表示
-        selector "$section_name" "" 1
-        return $?
-    done
+        # If status is 0, continue the loop (redisplay current menu)
+        debug_log "DEBUG" "Zero status, continuing selector loop for section [$section_name]."
+        # Implicitly continues to the next iteration of the while loop
 
-    # 一時ファイル削除
-    rm -f "$menu_keys_file" "$menu_displays_file" "$menu_commands_file" "$menu_colors_file"
-
-    return $selection_status
+    done # End of while true loop
 }
 
 # メニュー履歴にエントリを追加する関数（完全修正版）
