@@ -18,18 +18,23 @@ es|MSG_UNDER_TEST=👽 En prueba
 # =======================
 # internet-ds-lite.sh
 # =======================
-en|MSG_DSLITE_APPLYING_SETTINGS=Applying DS-Lite settings for {service}...
-en|MSG_DSLITE_APPLY_SUCCESS=DS-Lite settings applied successfully for {service}.
-en|MSG_DSLITE_RESTORING_SETTINGS=Restoring previous DS-Lite settings...
-en|MSG_DSLITE_RESTORE_SUCCESS=Previous DS-Lite settings restored successfully.
-en|MSG_DSLITE_DONE_MENU=Operation complete. Returning to menu.
-en|MSG_DSLITE_DONE_REBOOT_LATER=Operation complete. A reboot is needed to take effect.
+en|MSG_DSLITE_APPLYING_SETTINGS=Applying DS-Lite settings for {service}
+en|MSG_DSLITE_APPLY_SUCCESS=DS-Lite settings applied successfully for {service}
+en|MSG_DSLITE_RESTORING_SETTINGS=Restoring previous DS-Lite settings
+en|MSG_DSLITE_RESTORE_SUCCESS=Previous DS-Lite settings restored successfully
+en|MSG_DSLITE_DONE_MENU=Operation complete. Returning to menu
+en|MSG_DSLITE_DONE_REBOOT_LATER=Operation complete. A reboot is needed to take effect
 en|MSG_DSLITE_AUTO_PROVIDER_LABEL=Provider
 en|MSG_DSLITE_AUTO_REGION_LABEL=Region
 en|MSG_DSLITE_AUTO_AFTR_LABEL=AFTR Address
-en|MSG_DSLITE_AUTO_CANCELLED_FAILED=Auto-configuration cancelled or failed. Returning to DS-Lite menu.
-en|MSG_DSLITE_CACHE_FAIL=Required cache information not found. Cannot auto-detect.
+en|MSG_DSLITE_AUTO_CANCELLED_FAILED=Auto-configuration cancelled or failed. Returning to DS-Lite menu
+en|MSG_DSLITE_CACHE_FAIL=Required cache information not found. Cannot auto-detect
 en|MSG_CONFIRM_AUTO_SETTINGS=Apply the automatically detected settings # Removed '?'
+
+en|MSG_DSLITE_ERR_NO_AS=ISP AS information cache file not found ({cache_file}). Cannot auto-detect
+en|MSG_DSLITE_ERR_NO_REGION=Transix detected, but region information is missing. Cannot determine East/West
+en|MSG_DSLITE_ERR_REGION_UNKNOWN=Transix detected, but could not determine East/West from region '{region}'
+en|MSG_DSLITE_ERR_PROVIDER_UNKNOWN=No known DS-Lite provider matches AS number '{as_number}'
 
 # =======================
 # menu.db
