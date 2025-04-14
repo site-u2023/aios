@@ -245,7 +245,7 @@ handle_menu_error() {
     case "$error_type" in
         no_items | invalid_selection | *)
             # Critical errors indicating configuration issues or internal bugs
-            log_level="ERROR"
+            log_level="DEBUG"
             debug_log "$log_level" "Error type '$error_type' occurred in section [$section_name]. Check logs and configuration/script logic."
             ;;
         command_failed | read_input | empty_display)
