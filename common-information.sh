@@ -290,7 +290,7 @@ make_api_request() {
 # Cloudflare Workerから地域情報を取得する関数 (ISP_ASにAS番号のみ格納版)
 get_country_cloudflare() {
     local tmp_file="$1" # 一時ファイルパス
-    local api_name="Cloudflare Worker (api-relay-worker.site-u.workers.dev)" # ログ用
+    local api_name="Cloudflare Worker (location-api-worker.site-u.workers.dev)" # ログ用
 
     local retry_count=0
     local success=0
