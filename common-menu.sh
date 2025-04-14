@@ -232,36 +232,46 @@ display_breadcrumbs() {
     debug_log "DEBUG" "Displayed breadcrumb for submenu with single newline"
 }
 
-# エラーハンドリング関数 - 一元化された処理
+# エラーハンドリング関数 - 一元化された処理 (元の動作復元＋メッセージ抑制版)
 handle_menu_error() {
-    local error_type="$1"    # エラータイプ
-    local section_name="$2"  # 現在のセクション名
-    local previous_menu="$3" # 前のメニュー名
-    local main_menu="$4"     # メインメニュー名
-    local error_msg="$5"     # エラーメッセージキー（オプション）
+    local error_type="$1"    # エラータイプ (例: "command_failed")
+    local section_name="$2"  # エラーが発生したメニュー名 (例: "MENU_INTERNET_DSLITE")
+    # local previous_menu="$3" # 呼び出し元からの引数は使用せず、内部で取得
+    local main_menu="$4"     # メインメニュー名 (例: "MENU_MAIN")
+    local error_msg="$5"     # エラーメッセージキー (例: "MSG_ERROR_OCCURRED")
 
-    # 変更点1: ログレベルを DEBUG に変更 (再確認)
+    # 1. ログレベルは DEBUG に (冗長な ERROR ログ抑制のため)
     debug_log "DEBUG" "$error_type in section [$section_name]"
 
-    # 変更点2: error_msg が指定され、かつ MSG_ERROR_OCCURRED でない場合のみ表示
+    # 2. メッセージ表示条件 (MSG_ERROR_OCCURRED は表示しない)
     if [ -n "$error_msg" ] && [ "$error_msg" != "MSG_ERROR_OCCURRED" ]; then
          printf "%s\n" "$(color red "$(get_message "$error_msg")")"
     fi
 
-    # エラー時にメニューに戻る処理 (変更なし)
+    # 3. メニュー遷移ロジック (元の「一つ前に戻る」動作を復元)
     if [ "$section_name" = "$main_menu" ]; then
-        # メインメニューの場合は再表示（ループ）
+        # メインメニューでエラーが発生した場合は、メインメニューを再読み込み
         debug_log "DEBUG" "Main menu $error_type, reloading main menu"
-        # 履歴をクリア
-        MENU_HISTORY=""
+        MENU_HISTORY="" # メインメニュー再読み込み時は履歴をクリア
         selector "$main_menu" "" 1
         return $?
     else
-        # サブメニューの場合は前のメニューに戻る
+        # サブメニューでエラーが発生した場合は、**一つ前のメニューに戻る**
         debug_log "DEBUG" "Returning to previous menu after $error_type"
-        local prev_menu=$(pop_menu_history)
-        [ -z "$prev_menu" ] && prev_menu="$main_menu"
-        selector "$prev_menu" "" 1
+
+        # 戻るべき「前のメニュー」を取得 (履歴スタックは変更しない)
+        local prev_menu_to_return_to=$(get_previous_menu)
+
+        # もし前のメニューが取得できない場合 (念のため)、メインメニューにフォールバック
+        [ -z "$prev_menu_to_return_to" ] && prev_menu_to_return_to="$main_menu"
+
+        # ★重要★: 前のメニューに戻る前に、現在の（失敗した）メニューを履歴から取り除く
+        # これを行わないと、戻った後に再度同じエラーメニューに進むと履歴がおかしくなる可能性がある
+        local popped_menu=$(pop_menu_history)
+        debug_log "DEBUG" "Popped failed menu '$popped_menu' before returning to '$prev_menu_to_return_to'."
+
+        # 特定した「前のメニュー」を表示
+        selector "$prev_menu_to_return_to" "" 1
         return $?
     fi
 }
