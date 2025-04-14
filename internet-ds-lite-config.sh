@@ -1,6 +1,6 @@
 #!/bin/sh
 # POSIX-compliant script for configuring DS-Lite on OpenWrt with auto-detection
-# Version: 2025.04.14-04-00 (Final based on discussion)
+# Version: 2025.04.14-06-00 (Final minimal version, no restore confirmation)
 
 # --- Source common functions if available ---
 # Assume aios structure
@@ -158,7 +158,7 @@ EOF
     fi
 }
 
-# Restore original settings
+# Restore original settings (No confirmation before execution)
 restore_dslite_settings() {
     local proto_script="/lib/netifd/proto/dslite.sh"
     local msg_prefix="" error_prefix="\033[31mError: " warning_prefix="\033[33mWarning: " success_prefix="\033[32m" reset_color="\033[0m"
@@ -346,7 +346,7 @@ auto_detect_and_apply() {
     printf "%s: %s\n" "$(color blue "$label_aftr")" "$detected_aftr"
 
     local confirm_auto=1
-    confirm "MSG_CONFIRM_AUTO_SETTINGS" # Use specific key
+    confirm "MSG_CONFIRM_AUTO_SETTINGS" # Use specific key (without '?')
     confirm_auto=$?
 
     if [ $confirm_auto -eq 0 ]; then # Yes
