@@ -499,7 +499,6 @@ detect_wget_capabilities() {
     # キャッシュファイルがある場合はそれを使用して即時返す
     if [ -f "$cache_file" ]; then
         capability=$(cat "$cache_file")
-        debug_log "DEBUG" "Using cached wget capability: $capability"
         echo "$capability"
         return 0
     fi
