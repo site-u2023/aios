@@ -242,7 +242,7 @@ get_country_ipinfo() {
         return 1
     fi
 }
-
+ 
 # APIリクエストを実行する共通関数（wget能力判定を効率化）
 make_api_request() {
     # パラメータ
