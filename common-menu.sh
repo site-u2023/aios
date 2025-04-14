@@ -70,22 +70,44 @@ MAIN_MENU="${MAIN_MENU:-MAIN_MENU_NAME}"
 # メニュー履歴にエントリを追加する関数
 pop_menu_history() {
     debug_log "DEBUG" "Popping from menu history"
-    
-    # 最後のメニュー名とテキストを取得（履歴の末尾2項目を削除）
-    local history_len=$(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c)
-    local menu_count=$((history_len / 2 + 1))  # メニュー数
-    
-    if [ "$menu_count" -le 1 ]; then
-        # 残り1つの場合は全履歴をクリア
-        local result="$MENU_HISTORY"
+
+    # 履歴が空か確認
+    if [ -z "$MENU_HISTORY" ]; then
+        debug_log "DEBUG" "History is already empty, nothing to pop"
+        echo ""
+        return
+    fi
+
+    # 履歴のペア数をカウント (メニュー名:色)
+    local pair_count=1
+    if echo "$MENU_HISTORY" | grep -q "$MENU_HISTORY_SEPARATOR"; then
+        local separator_count=$(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c)
+        pair_count=$(( (separator_count + 1) / 2 ))
+    fi
+    debug_log "DEBUG" "Current history pairs: $pair_count"
+
+    if [ "$pair_count" -le 1 ]; then
+        # ペアが1つ以下の場合は全履歴をクリアし、最初のメニュー名（最後のエントリ）を返す
+        local last_menu=$(echo "$MENU_HISTORY" | cut -d"$MENU_HISTORY_SEPARATOR" -f1)
         MENU_HISTORY=""
-        debug_log "DEBUG" "Popped last entry from history, now empty"
-        echo "$result" | cut -d"$MENU_HISTORY_SEPARATOR" -f1
+        debug_log "DEBUG" "Popped last pair from history, now empty"
+        echo "$last_menu"
     else
-        # 最後の2項目（メニュー名:テキスト）を削除
-        local last_menu=$(echo "$MENU_HISTORY" | rev | cut -d"$MENU_HISTORY_SEPARATOR" -f3 | rev)
-        MENU_HISTORY=$(echo "$MENU_HISTORY" | rev | cut -d"$MENU_HISTORY_SEPARATOR" -f3- | rev)
-        debug_log "DEBUG" "Popped last entry, remaining history: $MENU_HISTORY"
+        # ペアが2つ以上の場合
+        # 最後から2番目のメニュー名を取得（awk を使用）
+        local last_menu=$(echo "$MENU_HISTORY" | awk -F"$MENU_HISTORY_SEPARATOR" '{print $(NF-1)}')
+
+        # 最後のペア（2項目）を削除（awk を使用）
+        MENU_HISTORY=$(echo "$MENU_HISTORY" | awk -v sep="$MENU_HISTORY_SEPARATOR" -F"$MENU_HISTORY_SEPARATOR" '{
+            result = ""
+            # NF-2 個のフィールドまでを再結合
+            for (i = 1; i <= NF - 2; i++) {
+                result = result (i > 1 ? sep : "") $i
+            }
+            print result
+        }')
+
+        debug_log "DEBUG" "Popped last pair, remaining history: $MENU_HISTORY"
         echo "$last_menu"
     fi
 }
