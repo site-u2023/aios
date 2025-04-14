@@ -232,70 +232,60 @@ display_breadcrumbs() {
     debug_log "DEBUG" "Displayed breadcrumb for submenu with single newline"
 }
 
-# エラーハンドリング関数 - エラータイプに応じてメッセージ表示を制御する修正版
+# Error handling function - Further simplified, minimal user messages, focus on debug logs
 handle_menu_error() {
-    local error_type="$1"    # エラータイプ (例: "command_failed", "no_items", "invalid_selection")
-    local section_name="$2"  # エラーが発生したメニュー名
-    # local previous_menu="$3" # 未使用
-    local main_menu="$4"     # メインメニュー名
-    local error_msg_key="$5" # 呼び出し元から渡されるメッセージキー (現在は主に MSG_ERROR_OCCURRED)
+    local error_type="$1"    # Error type (e.g., "command_failed", "no_items")
+    local section_name="$2"  # Menu section where the error occurred
+    # local previous_menu="$3" # Unused argument
+    local main_menu="$4"     # Main menu section name
+    # local error_msg_key="$5" # Argument kept for compatibility
 
-    # 1. ログレベルは DEBUG に (常に記録)
+    # 1. Log the error type and section for debugging (Always use DEBUG level initially)
     debug_log "DEBUG" "Handling error type '$error_type' in section [$section_name]"
 
-    # 2. エラータイプに基づいたメッセージ表示処理
+    # 2. Minimal message display, primarily rely on debug logs
     local msg_to_display=""
     case "$error_type" in
-        command_failed)
-            # コマンド実行失敗: メッセージは表示しない (呼び出し元が表示)
-            debug_log "DEBUG" "Command failed, message display skipped in handle_menu_error."
-            ;;
         no_items)
-            # menu.db に項目がない
-            msg_to_display=$(get_message "MSG_ERR_MENU_NO_ITEMS") # 要新規メッセージ
-            debug_log "ERROR" "No menu items found for section: $section_name. Check menu.db."
-            ;;
-        empty_display)
-            # 表示データが空 (通常発生しないはずだが念のため)
-            msg_to_display=$(get_message "MSG_ERR_MENU_DISPLAY_EMPTY") # 要新規メッセージ
-            debug_log "ERROR" "Menu display data became empty for section: $section_name."
-            ;;
-        read_input)
-            # 入力読み取り失敗 (Ctrl+D など)
-            msg_to_display=$(get_message "MSG_ERR_READ_INPUT") # 要新規メッセージ
-            debug_log "WARN" "Error reading user input."
+            # menu.db section is missing or empty - Indicates a configuration issue
+            msg_to_display="Error: Menu configuration issue detected." # Concise message
+            debug_log "ERROR" "No menu items found for section: $section_name. Check menu.db configuration."
             ;;
         invalid_selection)
-            # 内部的な選択エラー (キー/コマンド不一致など)
-            msg_to_display=$(get_message "MSG_ERR_INVALID_INTERNAL_SELECTION") # 要新規メッセージ
-            debug_log "ERROR" "Internal error processing selection for section: $section_name."
+            # Internal selection processing error - Indicates a script bug
+            msg_to_display="Error: Internal menu error detected." # Concise message
+            debug_log "ERROR" "Internal error processing selection for section: $section_name. Check temporary files or logic."
+            ;;
+        command_failed | read_input | empty_display)
+            # Command failure, input error, or empty display data: Log only, no user message
+            debug_log "DEBUG" "Non-critical error type '$error_type' occurred in section [$section_name]. No user message displayed."
+            # Specific command failure messages should be handled by the command itself.
+            # Input errors or empty display usually just require a menu refresh.
             ;;
         *)
-            # 未知のエラータイプ (フォールバック)
-            msg_to_display=$(get_message "MSG_ERR_UNKNOWN_MENU_ERROR") # 要新規メッセージ
-            debug_log "ERROR" "Unknown menu error type '$error_type' occurred in section: $section_name"
-            # 予期せぬエラーなので、渡されたキーも表示を試みる
-            if [ -n "$error_msg_key" ] && [ "$error_msg_key" != "MSG_ERROR_OCCURRED" ]; then
-                 local fallback_msg=$(get_message "$error_msg_key")
-                 [ -n "$fallback_msg" ] && msg_to_display="$msg_to_display ($fallback_msg)"
-            fi
+            # Unknown error type - Indicates a potential script bug
+            msg_to_display="Error: Unknown internal menu error detected ('$error_type')." # Concise message
+            debug_log "ERROR" "Unknown menu error type '$error_type' occurred in section [$section_name]. Investigation needed."
             ;;
     esac
 
-    # 決定されたメッセージがあれば表示
+    # Display the determined (minimal) message if any (in red color)
     if [ -n "$msg_to_display" ]; then
         printf "%s\n" "$(color red "$msg_to_display")"
     fi
 
-    # 3. メニュー遷移ロジック (現在のメニューを再表示)
+    # 3. Menu navigation logic (Reload the current menu) - Unchanged
+    debug_log "DEBUG" "Preparing to reload menu for section [$section_name] after handling error type '$error_type'."
     if [ "$section_name" = "$main_menu" ]; then
-        debug_log "DEBUG" "Main menu error, reloading main menu"
-        MENU_HISTORY=""
+        # If error occurred in the main menu, reload the main menu
+        debug_log "DEBUG" "Reloading main menu: $main_menu"
+        MENU_HISTORY="" # Clear history when reloading main menu
         selector "$main_menu" "" 1
         return $?
     else
-        debug_log "DEBUG" "Submenu error, reloading current menu: $section_name"
-        # 現在のメニューを再表示 (skip_history=1 で履歴重複を防ぐ)
+        # If error occurred in a submenu, reload the current menu
+        debug_log "DEBUG" "Reloading current submenu: $section_name"
+        # Reload the current menu (use skip_history=1 to prevent duplicate history entries)
         selector "$section_name" "" 1
         return $?
     fi
