@@ -496,13 +496,6 @@ detect_wget_capabilities() {
     local https_support=0
     local cache_file="${CACHE_DIR}/wget_capability.ch"
     
-    # キャッシュファイルがある場合はそれを使用して即時返す
-    if [ -f "$cache_file" ]; then
-        capability=$(cat "$cache_file")
-        echo "$capability"
-        return 0
-    fi
-    
     debug_log "DEBUG" "Detecting wget capabilities"
     
     # キャッシュディレクトリ確認
