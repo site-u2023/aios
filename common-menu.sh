@@ -1049,7 +1049,7 @@ remove_exit() {
         debug_log "DEBUG" "User confirmed deletion, proceeding with removal"
         printf "%s\n\n" "$(color green "$(get_message "CONFIG_DELETE_CONFIRMED")")"
         [ -f "$BIN_PATH" ] && rm -f "$BIN_PATH"
-        [ -d "$BASE_DIR" ] && rm -rf "$BASE_DIR"
+        [ -d "$BASE_DIR" ] && rm -rf "$BASE_DIR" 
         exit 0
     else
         debug_log "DEBUG" "User canceled deletion, returning to menu"
