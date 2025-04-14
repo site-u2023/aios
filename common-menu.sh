@@ -232,37 +232,23 @@ display_breadcrumbs() {
     debug_log "DEBUG" "Displayed breadcrumb for submenu with single newline"
 }
 
-# Error handling function - Logs errors, returns status, DOES NOT reload menu
+# Error handling function - Logs errors ONLY, always returns 0, uses DEBUG level
 handle_menu_error() {
     local error_type="$1"    # Error type (e.g., "command_failed", "no_items")
     local section_name="$2"  # Menu section where the error occurred
     # local previous_menu="$3" # Unused argument
-    local main_menu="$4"     # Main menu section name
+    # local main_menu="$4"     # Unused argument in this simplified version
     # local error_msg_key="$5" # Argument kept for compatibility
 
-    # 1. Log the error based on its type for debugging
-    local log_level="DEBUG" # Default log level
-    case "$error_type" in
-        no_items | invalid_selection | *)
-            # Critical errors indicating configuration issues or internal bugs
-            log_level="DEBUG"
-            debug_log "$log_level" "Error type '$error_type' occurred in section [$section_name]. Check logs and configuration/script logic."
-            ;;
-        command_failed | read_input | empty_display)
-            # Non-critical or expected failures/interruptions
-            log_level="DEBUG"
-            debug_log "$log_level" "Error type '$error_type' occurred in section [$section_name]. No user message displayed. Loop will redisplay menu."
-            ;;
-    esac
+    # Always log as DEBUG, regardless of error type
+    debug_log "DEBUG" "Handling error type '$error_type' in section [$section_name]."
 
-    # 2. NO USER MESSAGE DISPLAYED FROM THIS FUNCTION
-    # 3. DO NOT RELOAD MENU HERE
-
-    # Return a non-zero status to indicate an error was handled
-    return 1
+    # Return 0 to indicate the handler itself completed successfully
+    # and should not disrupt the calling flow (e.g., selector loop)
+    return 0
 }
 
-# Revised handle_user_selection - Calls handle_menu_error for logging only, returns status
+# Revised handle_user_selection - Calls handle_menu_error for logging, returns 0 on command failure
 handle_user_selection() {
     local selection="$1"
     local section_name="$2"
@@ -271,57 +257,45 @@ handle_user_selection() {
     local prev_menu="$5" # Previous menu name passed to selector
 
     # --- Input Validation ---
-    # Check if selection is a number
     case "$selection" in
         ''|*[!0-9]*)
-            # Use get_message for user-facing validation errors
             printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
-            # Log via handle_menu_error for consistency? Or keep printf? Keep printf for direct feedback.
-            # handle_menu_error "invalid_input" "$section_name" "$prev_menu" "$main_menu" # Maybe a new type?
-            return 1 # Indicate error, selector loop continues
+            return 0 # Return 0 to continue selector loop and redisplay menu
             ;;
     esac
 
     # --- Handle Special Selections (0, 10, 00) ---
-    # Handle '0' (Go Back)
     if [ "$selection" -eq 0 ]; then
-        go_back_menu # Assumes go_back_menu calls selector and returns status
-        return $?    # Propagate exit status from go_back_menu/selector
+        go_back_menu
+        return $? # Propagate status from go_back_menu/selector
     fi
-    # Handle '10' (Exit)
     if [ "$selection" -eq 10 ]; then
-        exit_script 0 # Terminates the script
-        return 0 # Should not be reached
+        exit_script 0
+        return 0
     fi
-     # Handle '00' (Exit & Delete) - Only in main menu
     if [ "$selection" -eq 00 ] && [ "$section_name" = "$main_menu" ]; then
-        exit_delete_script # Terminates the script
-        return 0 # Should not be reached
+        exit_delete_script
+        return 0
     fi
 
     # --- Get Action from Temp File ---
     local action_line=$(awk -F "$MENU_DB_SEPARATOR" -v sel="$selection" '$1 == sel { print $0 }' "$temp_file")
     if [ -z "$action_line" ]; then
-         # Invalid selection number (not defined in temp file)
          printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_INVALID_NUMBER")")"
-         # Log error? Maybe not necessary if message is shown.
-         return 1 # Indicate error, selector loop continues
+         return 0 # Return 0 to continue selector loop and redisplay menu
     fi
     local action=$(echo "$action_line" | cut -d "$MENU_DB_SEPARATOR" -f 2)
     local type=$(echo "$action_line" | cut -d "$MENU_DB_SEPARATOR" -f 3)
 
-
     # --- Execute Action ---
     if [ "$type" = "menu" ]; then
-        # Navigate to submenu - selector call handles the rest
-        selector "$action" "$section_name" # Pass current section as prev_menu
-        return $? # Propagate exit status from the submenu selector
+        selector "$action" "$section_name" # Navigate to submenu
+        return $? # Propagate status from submenu selector
     elif [ "$type" = "command" ]; then
-        # Execute command
         debug_log "DEBUG" "Executing command: $action from section [$section_name]"
         if $action; then
             # Command succeeded
-            debug_log "DEBUG" "Command '$action' succeeded. Returning to selector loop for section [$section_name]."
+            debug_log "DEBUG" "Command '$action' succeeded."
             # Return 0, selector loop will redisplay the current menu
             return 0
         else
@@ -329,18 +303,18 @@ handle_user_selection() {
             local exit_status=$?
             debug_log "DEBUG" "Command '$action' failed with status $exit_status."
             # Log the error via handle_menu_error (for debug log only)
-            handle_menu_error "command_failed" "$section_name" "$prev_menu" "$main_menu"
-            # Return non-zero status, selector loop will redisplay the current menu
+            handle_menu_error "command_failed" "$section_name" # Pass only necessary args
+            # *** CRITICAL CHANGE: Return 0 to ensure selector loop continues ***
             # The command itself should have printed the user-facing error message.
-            return $exit_status
+            return 0
         fi
     else
         # Unknown type in menu definition
         debug_log "ERROR" "Unknown menu type '$type' for action '$action' in section [$section_name]. Check menu.db."
         # Log the error via handle_menu_error
-        handle_menu_error "invalid_selection" "$section_name" "$prev_menu" "$main_menu"
-        # Return non-zero status, selector loop will redisplay the current menu
-        return 1
+        handle_menu_error "invalid_selection" "$section_name" # Pass only necessary args
+        # Return 0 to continue selector loop and redisplay menu
+        return 0
     fi
 }
 
