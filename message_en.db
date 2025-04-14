@@ -1,9 +1,27 @@
 SCRIPT_VERSION="2025-03-31-00-00"
 
 # =======================
-# デバッグテスト
+# debug test
 # =======================
 en|MSG_UNDER_TEST=👽 Under test
+ja|MSG_UNDER_TEST=👽 テスト
+zh-CN|MSG_UNDER_TEST=👽 测试中
+zh-TW|MSG_UNDER_TEST=👹 測試中
+ko|MSG_UNDER_TEST=👽 테스트 중
+de|MSG_UNDER_TEST=👽 Im Test
+ru|MSG_UNDER_TEST=👽 Тестирование
+fr|MSG_UNDER_TEST=👽 En test
+id|MSG_UNDER_TEST=👽 Dalam pengujian
+ar|MSG_UNDER_TEST=👽 تحت الاختبار
+es|MSG_UNDER_TEST=👽 En prueba
+
+# =======================
+# internet-map-e.sh
+# =======================
+en|MENU_INTERNET_PPPOE=PPPoE
+en|MENU_INTERNET_MAPE=IPoE (MAP-E: OCN / v6 plus)
+en|MENU_INTERNET_NURO_MAPE=IPoE (MAP-E: NURO Hikari)
+en|MENU_INTERNET_DSLITE=IPoE (DS-Lite: transix / cross pass / v6 connect)
 
 # =======================
 # internet-auto-config.sh
