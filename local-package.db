@@ -40,14 +40,6 @@ uci add_list ttyd.@ttyd[-1].client_option='titleFixed=aios'
 
 uci commit ttyd
 
-target_line='procd_set_param env LANG=C'
-init_script='/etc/init.d/ttyd'
-anchor_pattern='procd_append_param command \$command'
-
-if ! grep -q -F "$target_line" "$init_script"; then
-  sed -i "/${anchor_pattern}/a\\$(printf '\t%s' "$target_line")" "$init_script"
-fi
-
 [irqbalance]
 uci set irqbalance.irqbalance=irqbalance
 uci set irqbalance.irqbalance.enabled='1'
