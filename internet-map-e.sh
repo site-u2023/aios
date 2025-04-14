@@ -1510,7 +1510,7 @@ mape_config() {
     local zone_no='1'       # WANが属するファイアウォールゾーンのインデックス (環境依存の可能性あり、通常は1)
 
     # mapパッケージのインストール確認 (関数化されていると仮定)
-    # install_package map # 必要であればコメント解除
+    install_package map
 
     # 設定のバックアップ作成 (既存のコードを流用)
     debug_log "DEBUG" "Backing up configuration files..." 
