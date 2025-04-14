@@ -1,6 +1,6 @@
 #!/bin/sh
 # POSIX-compliant script for configuring DS-Lite on OpenWrt with auto-detection
-# Version: 2025.04.14-03-00 (Final version based on discussion)
+# Version: 2025.04.14-04-00 (Final based on discussion)
 
 # --- Source common functions if available ---
 # Assume aios structure
@@ -78,36 +78,20 @@ apply_dslite_settings() {
     local aftr_address="$1"
     local service_name="$2"
     local proto_script="/lib/netifd/proto/dslite.sh"
-
-    # Use color function if available for messages
-    local msg_prefix=""
-    local error_prefix="\033[31mError: " # Red color for errors
-    local warning_prefix="\033[33mWarning: " # Yellow for warnings
-    local success_prefix="\033[32m" # Green for success
-    local reset_color="\033[0m"
-
-    # Check if color function exists before using it
+    local msg_prefix="" error_prefix="\033[31mError: " warning_prefix="\033[33mWarning: " success_prefix="\033[32m" reset_color="\033[0m"
     if command -v color >/dev/null 2>&1; then
-        msg_prefix=$(color blue "- ") # Example: Blue prefix for info
-        error_prefix=$(color red "Error: ")
-        warning_prefix=$(color yellow "Warning: ")
-        success_prefix=$(color green "") # Green text for success message
+        msg_prefix=$(color blue "- ") error_prefix=$(color red "Error: ") warning_prefix=$(color yellow "Warning: ") success_prefix=$(color green "")
     fi
 
-    # Messages in English
-    printf "%sApplying settings for %s...%s\n" "$msg_prefix" "$service_name" "$reset_color"
+    printf "%s%s%s\n" "$msg_prefix" "$(get_message MSG_DSLITE_APPLYING_SETTINGS service="$service_name")" "$reset_color"
 
     # 1. Install ds-lite package silently
-    printf "%sInstalling/Verifying ds-lite package...%s\n" "$msg_prefix" "$reset_color"
     if ! install_package ds-lite silent; then
         printf "%sFailed to install ds-lite package.%s\n" "$error_prefix" "$reset_color"
         return 1
-    else
-         printf "%sds-lite package installation/verification complete.%s\n" "$msg_prefix" "$reset_color"
     fi
 
-    # 2. Backup original files
-    printf "%sBacking up configuration files...%s\n" "$msg_prefix" "$reset_color"
+    # 2. Backup original files (No explicit message)
     cp /etc/config/network "$NETWORK_BACKUP" 2>/dev/null
     if [ -f "$proto_script" ] && [ ! -f "$PROTO_BACKUP" ]; then
         cp "$proto_script" "$PROTO_BACKUP" 2>/dev/null
@@ -115,8 +99,7 @@ apply_dslite_settings() {
          printf "%sProtocol script %s not found.%s\n" "$warning_prefix" "$proto_script" "$reset_color"
     fi
 
-    # 3. Configure UCI settings
-    printf "%sConfiguring network settings...%s\n" "$msg_prefix" "$reset_color"
+    # 3. Configure UCI settings (No explicit message)
     uci -q batch <<EOF
 set network.wan.auto='0'
 set dhcp.lan.ra='relay'
@@ -130,14 +113,13 @@ set dhcp.wan6.master='1'
 set dhcp.wan6.ra='relay'
 set dhcp.wan6.dhcpv6='relay'
 set dhcp.wan6.ndp='relay'
-delete network.ds_lite # Delete existing section first to avoid duplicates
+delete network.ds_lite
 set network.ds_lite=interface
 set network.ds_lite.proto='dslite'
 set network.ds_lite.peeraddr='$aftr_address'
 set network.ds_lite.mtu='1460'
-# Check if ds_lite is already in the zone before adding
 local fw_networks=\$(uci -q get firewall.@zone[$FW_ZONE_INDEX].network)
-if ! echo "\$fw_networks" | grep -qw "ds_lite"; then # Use -w for whole word match
+if ! echo "\$fw_networks" | grep -qw "ds_lite"; then
     add_list firewall.@zone[$FW_ZONE_INDEX].network='ds_lite'
 fi
 commit dhcp
@@ -146,97 +128,72 @@ commit firewall
 EOF
     if [ $? -ne 0 ]; then
          printf "%sFailed to apply UCI settings.%s\n" "$error_prefix" "$reset_color"
-         # Attempt to restore backups if UCI fails? For now, just error out.
          return 1
     fi
 
-    # 4. Modify proto script MTU
+    # 4. Modify proto script MTU (No explicit message)
     if [ -f "$proto_script" ]; then
-        printf "%sAdjusting protocol script MTU...%s\n" "$msg_prefix" "$reset_color"
         if grep -q "mtu:-1280" "$proto_script"; then
             sed -i -e "s/mtu:-1280/mtu:-1460/g" "$proto_script"
-            if [ $? -ne 0 ]; then
-                 printf "%sFailed to modify protocol script.%s\n" "$error_prefix" "$reset_color"
-            fi
-        else
-            printf "%sProtocol script MTU already adjusted or pattern not found.%s\n" "$msg_prefix" "$reset_color"
+            if [ $? -ne 0 ]; then printf "%sFailed to modify protocol script.%s\n" "$error_prefix" "$reset_color"; fi
+        # else: No message if already adjusted or pattern not found
         fi
     fi
 
-    printf "%sSettings for %s applied successfully.%s\n" "$success_prefix" "$service_name" "$reset_color"
-    printf "A reboot is required to activate the settings.\n" # Plain English message
+    printf "%s%s%s\n" "$success_prefix" "$(get_message MSG_DSLITE_APPLY_SUCCESS service="$service_name")" "$reset_color"
+    printf "%s\n" "$(get_message MSG_REBOOT_REQUIRED)" # Use existing key
 
-    # Use aios confirm function with message key
     local confirm_reboot=1
-    confirm "MSG_CONFIRM_REBOOT" # Assumes key exists in message DB
+    confirm "MSG_CONFIRM_REBOOT" # Use existing key
     confirm_reboot=$?
-
-    if [ $confirm_reboot -eq 0 ]; then # Yes
-        printf "%sRebooting now...%s\n" "$msg_prefix" "$reset_color"
-        reboot
-        exit 0 # Exit after initiating reboot
-    elif [ $confirm_reboot -eq 2 ]; then # Return
-         printf "%sSettings saved. Returning to menu.%s\n" "$msg_prefix" "$reset_color"
-         return 0 # Return to the calling menu/function (likely the selector)
-    else # No
-        printf "%sSettings saved, but a reboot is needed to take effect.%s\n" "$msg_prefix" "$reset_color"
+    if [ $confirm_reboot -eq 0 ]; then
+        printf "%s%s%s\n" "$msg_prefix" "$(get_message MSG_REBOOTING)" "$reset_color" # Use existing key
+        reboot; exit 0
+    elif [ $confirm_reboot -eq 2 ]; then
+         printf "%s%s%s\n" "$msg_prefix" "$(get_message MSG_DSLITE_DONE_MENU)" "$reset_color"
+         return 0
+    else
+        printf "%s%s%s\n" "$msg_prefix" "$(get_message MSG_DSLITE_DONE_REBOOT_LATER)" "$reset_color"
         return 0
     fi
 }
 
-# Restore original settings (Renamed for menu.db consistency)
+# Restore original settings
 restore_dslite_settings() {
     local proto_script="/lib/netifd/proto/dslite.sh"
-    local msg_prefix=""
-    local error_prefix="\033[31mError: "
-    local warning_prefix="\033[33mWarning: "
-    local success_prefix="\033[32m"
-    local reset_color="\033[0m"
-
+    local msg_prefix="" error_prefix="\033[31mError: " warning_prefix="\033[33mWarning: " success_prefix="\033[32m" reset_color="\033[0m"
     if command -v color >/dev/null 2>&1; then
-        msg_prefix=$(color blue "- ")
-        error_prefix=$(color red "Error: ")
-        warning_prefix=$(color yellow "Warning: ")
-        success_prefix=$(color green "")
+        msg_prefix=$(color blue "- ") error_prefix=$(color red "Error: ") warning_prefix=$(color yellow "Warning: ") success_prefix=$(color green "")
     fi
 
-    # Messages in English
-    printf "%sRestoring previous settings...%s\n" "$msg_prefix" "$reset_color"
+    printf "%s%s%s\n" "$msg_prefix" "$(get_message MSG_DSLITE_RESTORING_SETTINGS)" "$reset_color"
 
-    # 1. Restore network config
+    # 1. Restore network config (No message on success)
     if [ -f "$NETWORK_BACKUP" ]; then
-        cp "$NETWORK_BACKUP" /etc/config/network
-        rm "$NETWORK_BACKUP"
-        printf "%sNetwork configuration restored.%s\n" "$msg_prefix" "$reset_color"
+        cp "$NETWORK_BACKUP" /etc/config/network; rm "$NETWORK_BACKUP"
     else
         printf "%sNetwork configuration backup not found.%s\n" "$warning_prefix" "$reset_color"
     fi
 
-    # 2. Restore proto script
+    # 2. Restore proto script (No message on success)
     if [ -f "$PROTO_BACKUP" ]; then
-        cp "$PROTO_BACKUP" "$proto_script"
-        rm "$PROTO_BACKUP"
-        printf "%sProtocol script restored.%s\n" "$msg_prefix" "$reset_color"
+        cp "$PROTO_BACKUP" "$proto_script"; rm "$PROTO_BACKUP"
     elif [ -f "$proto_script" ]; then
-         # Attempt to revert MTU change if backup is missing
          if grep -q "mtu:-1460" "$proto_script"; then
               sed -i -e "s/mtu:-1460/mtu:-1280/g" "$proto_script"
-              printf "%sReverted protocol script MTU to default (estimated).%s\n" "$msg_prefix" "$reset_color"
+              # No message for estimated revert
          fi
     fi
 
-    # 3. Remove ds_lite interface and firewall entry
-    printf "%sRemoving DS-Lite interface and firewall rules...%s\n" "$msg_prefix" "$reset_color"
+    # 3. Remove ds_lite interface and firewall entry (No explicit message)
     uci -q batch <<EOF
 delete network.ds_lite
-# Remove ds_lite from firewall zone (safer loop)
 local zone_count=\$(uci show firewall | grep -c "@zone\[")
 local i=0
 while [ \$i -lt \$zone_count ]; do
     local networks=\$(uci -q get firewall.@zone[\$i].network)
-    if echo "\$networks" | grep -qw "ds_lite"; then # Use -w for whole word match
+    if echo "\$networks" | grep -qw "ds_lite"; then
          del_list firewall.@zone[\$i].network='ds_lite'
-         printf "%sRemoved ds_lite from firewall zone %s.%s\n" "$msg_prefix" "\$i" "$reset_color"
     fi
     i=\$((i + 1))
 done
@@ -244,23 +201,20 @@ commit network
 commit firewall
 EOF
 
-    printf "%sSettings restored successfully.%s\n" "$success_prefix" "$reset_color"
-    printf "A reboot is required for changes to take effect.\n" # English message
+    printf "%s%s%s\n" "$success_prefix" "$(get_message MSG_DSLITE_RESTORE_SUCCESS)" "$reset_color"
+    printf "%s\n" "$(get_message MSG_REBOOT_REQUIRED)" # Use existing key
 
-    # Use aios confirm function with message key
     local confirm_reboot=1
-    confirm "MSG_CONFIRM_REBOOT" # Assumes key exists
+    confirm "MSG_CONFIRM_REBOOT" # Use existing key
     confirm_reboot=$?
-
-    if [ $confirm_reboot -eq 0 ]; then # Yes
-        printf "%sRebooting now...%s\n" "$msg_prefix" "$reset_color"
-        reboot
-        exit 0 # Exit after initiating reboot
-    elif [ $confirm_reboot -eq 2 ]; then # Return
-         printf "%sSettings restored. Returning to menu.%s\n" "$msg_prefix" "$reset_color"
-         return 0 # Return to the calling menu/function
-    else # No
-        printf "%sSettings restored, but a reboot is needed to take effect.%s\n" "$msg_prefix" "$reset_color"
+    if [ $confirm_reboot -eq 0 ]; then
+        printf "%s%s%s\n" "$msg_prefix" "$(get_message MSG_REBOOTING)" "$reset_color" # Use existing key
+        reboot; exit 0
+    elif [ $confirm_reboot -eq 2 ]; then
+         printf "%s%s%s\n" "$msg_prefix" "$(get_message MSG_DSLITE_DONE_MENU)" "$reset_color"
+         return 0
+    else
+        printf "%s%s%s\n" "$msg_prefix" "$(get_message MSG_DSLITE_DONE_REBOOT_LATER)" "$reset_color"
         return 0
     fi
 }
@@ -269,18 +223,12 @@ EOF
 # Returns 0 if East Japan, 1 if West Japan, 2 if Unknown
 is_east_japan() {
     local region_input="$1"
-    # Lists remain the same
     local east_prefs="Hokkaido Aomori Iwate Miyagi Akita Yamagata Fukushima Ibaraki Tochigi Gunma Saitama Chiba Tokyo Kanagawa Niigata Yamanashi Nagano Shizuoka"
     local west_prefs="Toyama Ishikawa Fukui Gifu Aichi Mie Shiga Kyoto Osaka Hyogo Nara Wakayama Tottori Shimane Okayama Hiroshima Yamaguchi Tokushima Kagawa Ehime Kochi Fukuoka Saga Nagasaki Kumamoto Oita Miyazaki Kagoshima Okinawa"
     local east_codes="JP-01 JP-02 JP-03 JP-04 JP-05 JP-06 JP-07 JP-08 JP-09 JP-10 JP-11 JP-12 JP-13 JP-14 JP-15 JP-19 JP-20 JP-22"
     local west_codes="JP-16 JP-17 JP-18 JP-21 JP-23 JP-24 JP-25 JP-26 JP-27 JP-28 JP-29 JP-30 JP-31 JP-32 JP-33 JP-34 JP-35 JP-36 JP-37 JP-38 JP-39 JP-40 JP-41 JP-42 JP-43 JP-44 JP-45 JP-46 JP-47"
-
-    for pref in $east_prefs $east_codes; do
-        if [ "$region_input" = "$pref" ]; then return 0; fi
-    done
-    for pref in $west_prefs $west_codes; do
-        if [ "$region_input" = "$pref" ]; then return 1; fi
-    done
+    for pref in $east_prefs $east_codes; do if [ "$region_input" = "$pref" ]; then return 0; fi; done
+    for pref in $west_prefs $west_codes; do if [ "$region_input" = "$pref" ]; then return 1; fi; done
     return 2
 }
 
@@ -291,23 +239,19 @@ _detect_provider_internal() {
     local error_prefix="\033[31mError: " reset_color="\033[0m"
     if command -v color >/dev/null 2>&1; then error_prefix=$(color red "Error: "); fi
 
-    # Read directly from cache files
     local cache_as_file="${CACHE_DIR}/ip_as.tmp"
     local cache_region_code_file="${CACHE_DIR}/ip_region_code.tmp"
     local cache_region_name_file="${CACHE_DIR}/ip_region_name.tmp"
 
     if [ -f "$cache_as_file" ]; then isp_as=$(cat "$cache_as_file"); fi
     if [ -f "$cache_region_code_file" ]; then region=$(cat "$cache_region_code_file"); fi
-    # Fallback to region name if code is not available
     if [ -z "$region" ] && [ -f "$cache_region_name_file" ]; then region=$(cat "$cache_region_name_file"); fi
 
     if [ -z "$isp_as" ]; then
-        # Error message in English, sent to stderr
         printf "%sISP AS information cache file not found (%s). Cannot auto-detect.%s\n" "$error_prefix" "$cache_as_file" "$reset_color" >&2
         return 1
     fi
 
-    # Detection logic remains the same
     case "$isp_as" in
         "$AS_TRANS")
             if [ -z "$region" ]; then
@@ -337,7 +281,6 @@ _detect_provider_internal() {
             ;;
     esac
 
-    # Output result separated by pipe for easy parsing
     echo "${detected_provider}|${detected_aftr}|${detected_region_text}"
     return 0
 }
@@ -349,39 +292,37 @@ auto_detect_and_apply() {
         msg_prefix=$(color blue "- ") error_prefix=$(color red "Error: ")
     fi
 
-    # 1. Check for cached location information (No process_location_info call)
+    # 1. Check for cached location information
     local cache_as_file="${CACHE_DIR}/ip_as.tmp"
     local cache_region_code_file="${CACHE_DIR}/ip_region_code.tmp"
     local cache_region_name_file="${CACHE_DIR}/ip_region_name.tmp"
 
     if [ ! -f "$cache_as_file" ]; then
-         if [ ! -f "$cache_region_code_file" ] && [ ! -f "$cache_region_name_file" ]; then
-              printf "%sLocation information cache files not found. Please run initial setup or check network.%s\n" "$error_prefix" "$reset_color"
-         else
-              printf "%sISP AS information cache file not found (%s). Cannot auto-detect.%s\n" "$error_prefix" "$cache_as_file" "$reset_color"
-         fi
-         # Display message and return to the main DS-Lite menu
          if command -v get_message >/dev/null 2>&1; then
-             printf "%s%s%s\n" "$msg_prefix" "$(get_message MSG_AUTO_DETECT_FAILED)" "$reset_color"
+              printf "%s%s%s\n" "$error_prefix" "$(get_message MSG_DSLITE_CACHE_FAIL)" "$reset_color"
          else
-             printf "%sAuto-detection failed. Returning to DS-Lite menu.%s\n" "$msg_prefix" "$reset_color"
+              printf "%sRequired cache information not found. Cannot auto-detect.%s\n" "$error_prefix" "$reset_color"
          fi
-         return 1 # Return failure to menu system
+         if command -v get_message >/dev/null 2>&1; then
+             printf "%s%s%s\n" "$msg_prefix" "$(get_message MSG_DSLITE_AUTO_CANCELLED_FAILED)" "$reset_color"
+         else
+             printf "%sAuto-configuration cancelled or failed. Returning to DS-Lite menu.%s\n" "$msg_prefix" "$reset_color"
+         fi
+         return 1
     fi
 
     # 2. Perform internal detection using cached info
     local detection_result
-    detection_result=$(_detect_provider_internal)
+    detection_result=$(_detect_provider_internal) # Errors printed to stderr within function
     local detection_status=$?
 
     if [ $detection_status -ne 0 ]; then
-        # Error message already printed by _detect_provider_internal to stderr
         if command -v get_message >/dev/null 2>&1; then
-            printf "%s%s%s\n" "$msg_prefix" "$(get_message MSG_AUTO_DETECT_FAILED)" "$reset_color"
+            printf "%s%s%s\n" "$msg_prefix" "$(get_message MSG_DSLITE_AUTO_CANCELLED_FAILED)" "$reset_color"
         else
-            printf "%sAuto-detection failed. Returning to DS-Lite menu.%s\n" "$msg_prefix" "$reset_color"
+            printf "%sAuto-configuration cancelled or failed. Returning to DS-Lite menu.%s\n" "$msg_prefix" "$reset_color"
         fi
-        return 1 # Return failure to menu system
+        return 1
     fi
 
     # Parse detection result
@@ -389,31 +330,35 @@ auto_detect_and_apply() {
     local detected_aftr=$(echo "$detection_result" | cut -d'|' -f2)
     local detected_region_text=$(echo "$detection_result" | cut -d'|' -f3)
 
-    # 3. Display result and confirm with user
-    printf "\n--- Auto Detection Result ---\n"
-    printf " Provider    : %s\n" "$detected_provider"
-    if [ -n "$detected_region_text" ]; then printf " Region      : %s\n" "$detected_region_text"; fi
-    printf " AFTR Address: %s\n" "$detected_aftr"
-    printf "---------------------------\n"
+    # 3. Display result and confirm with user (Revised format)
+    printf "\n" # Add a blank line before the results
+
+    # Get labels using get_message (assuming color function is available)
+    local label_provider=$(get_message MSG_DSLITE_AUTO_PROVIDER_LABEL)
+    local label_region=$(get_message MSG_DSLITE_AUTO_REGION_LABEL)
+    local label_aftr=$(get_message MSG_DSLITE_AUTO_AFTR_LABEL)
+
+    # Display results with blue labels
+    printf "%s: %s\n" "$(color blue "$label_provider")" "$detected_provider"
+    if [ -n "$detected_region_text" ]; then
+        printf "%s: %s\n" "$(color blue "$label_region")" "$detected_region_text"
+    fi
+    printf "%s: %s\n" "$(color blue "$label_aftr")" "$detected_aftr"
 
     local confirm_auto=1
-    confirm "MSG_CONFIRM_AUTO_SETTINGS" # Assumes key exists in message DB
+    confirm "MSG_CONFIRM_AUTO_SETTINGS" # Use specific key
     confirm_auto=$?
 
     if [ $confirm_auto -eq 0 ]; then # Yes
-        # Apply settings
         apply_dslite_settings "$detected_aftr" "$detected_provider"
-        # apply_dslite_settings handles reboot/exit or returns 0
-        # If it returns 0, we also return 0 to indicate success without reboot yet
         return $?
     else # No or Return
-        # User cancelled, display message and return failure to menu system
          if command -v get_message >/dev/null 2>&1; then
-            printf "%s%s%s\n" "$msg_prefix" "$(get_message MSG_AUTO_DETECT_FAILED)" "$reset_color"
-        else
-            printf "%sAuto-detection cancelled. Returning to DS-Lite menu.%s\n" "$msg_prefix" "$reset_color"
-        fi
-        return 1 # Return failure to menu system (will show DS-Lite menu again)
+            printf "%s%s%s\n" "$msg_prefix" "$(get_message MSG_DSLITE_AUTO_CANCELLED_FAILED)" "$reset_color"
+         else
+            printf "%sAuto-configuration cancelled or failed. Returning to DS-Lite menu.%s\n" "$msg_prefix" "$reset_color"
+         fi
+        return 1
     fi
 }
 
