@@ -294,7 +294,7 @@ get_country_cloudflare() {
 
     local retry_count=0
     local success=0
-    local worker_url="https://api-relay-worker.site-u.workers.dev" # Worker URL
+    local worker_url="https://location-api-worker.site-u.workers.dev" # Worker URL
 
     debug_log "DEBUG" "Querying location from $api_name"
 
