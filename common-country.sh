@@ -269,15 +269,16 @@ confirm() {
 show_invalid_input_error() {
     local input_type="$1"
     local error_msg
-    
+    local options_str="" # オプション文字列用変数
+
     if [ "$input_type" = "ynr" ]; then
-        # YNRモード用のプレースホルダー置換
-        error_msg=$(get_message "MSG_INVALID_INPUT" "ynr=(y/n/r)")
+        options_str="(y/n/r)" # y/n/r モードの時のオプション文字列
+        error_msg=$(get_message "MSG_INVALID_INPUT" "op=$options_str") # 変更: 新しいプレースホルダ名 'op' を使用
     else
-        # YNモード用のプレースホルダー置換
-        error_msg=$(get_message "MSG_INVALID_INPUT" "yn=(y/n)")
+        options_str="(y/n)"   # y/n モードの時のオプション文字列
+        error_msg=$(get_message "MSG_INVALID_INPUT" "op=$options_str") # 変更: 新しいプレースホルダ名 'op' を使用
     fi
-    
+
     printf "%s\n" "$(color red "$error_msg")"
 }
 
