@@ -32,9 +32,9 @@ MENU_DSLITE_TRANS selector MENU_DSLITE_TRANS_MANUAL # Select Transix East/West
 MENU_DSLITE_XPASS download "ds-lite-config.sh" "chmod"; apply_dslite_settings "$AFTR_XPASS" "Cross Pass"
 MENU_DSLITE_V6CONNECT download "ds-lite-config.sh" "chmod"; apply_dslite_settings "$AFTR_V6CONNECT" "v6 connect"
 
- [MENU_DSLITE_TRANS_MANUAL]
- MENU_DSLITE_TRANS_EAST download "ds-lite-config.sh" "chmod"; apply_dslite_settings "$AFTR_TRANS_EAST" "Transix (East Japan)" # Apply Transix East
- MENU_DSLITE_TRANS_WEST download "ds-lite-config.sh" "chmod"; apply_dslite_settings "$AFTR_TRANS_WEST" "Transix (West Japan)" # Apply Transix West
+[MENU_DSLITE_TRANS_MANUAL]
+MENU_DSLITE_TRANS_EAST download "ds-lite-config.sh" "chmod"; apply_dslite_settings "$AFTR_TRANS_EAST" "Transix (East Japan)" # Apply Transix East
+MENU_DSLITE_TRANS_WEST download "ds-lite-config.sh" "chmod"; apply_dslite_settings "$AFTR_TRANS_WEST" "Transix (West Japan)" # Apply Transix West
 
 [MENU_SYSTEM]
 MENU_HOSTNAME selector system-hostname
