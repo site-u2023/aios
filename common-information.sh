@@ -162,9 +162,9 @@ make_api_request() {
 }
 
 get_country_ipapi() {
-    local tmp_file="$1"      # 一時ファイルパス
-    local network_type="$2"  # ネットワークタイプ
-    local api_name="$3"      # API名（ログ用）
+    local tmp_file="$1"
+    local network_type="$2"
+    local api_name="$3"
 
     local retry_count=0
     local success=0
@@ -177,7 +177,7 @@ get_country_ipapi() {
 
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
         # 共通関数を使用してAPIリクエストを実行
-        make_api_request "$api_name" "$tmp_file" "$API_TIMEOUT" "IPAPI"
+        make_api_request "$api_name" "$tmp_file" "$API_TIMEOUT" "IPAPI" "$USER_AGENT"
         local request_status=$?
         debug_log "DEBUG" "API request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
 
@@ -237,7 +237,7 @@ get_country_ipinfo() {
 
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
         # 共通関数を使用してAPIリクエストを実行
-        make_api_request "$api_name" "$tmp_file" "$API_TIMEOUT" "IPINFO"
+        make_api_request "$api_name" "$tmp_file" "$API_TIMEOUT" "IPINFO" "$USER_AGENT"
         local request_status=$?
         debug_log "DEBUG" "API request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
 
@@ -276,7 +276,8 @@ get_country_ipinfo() {
         debug_log "DEBUG" "get_country_ipinfo succeeded"
         return 0
     else
-        debug_log "DEBUG" "get_country_ipinfo failed"　
+        debug_log "DEBUG" "get_country_ipinfo failed"
+        # 　＜＜途中で切れてるけど？
         return 1
     fi
 }
@@ -301,7 +302,7 @@ get_country_cloudflare() {
     SELECT_REGION_NAME=""
 
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        make_api_request "$api_name" "$tmp_file" "$API_TIMEOUT" "CLOUDFLARE"
+        make_api_request "$api_name" "$tmp_file" "$API_TIMEOUT" "CLOUDFLARE" "$USER_AGENT"
         local request_status=$?
         debug_log "DEBUG" "Cloudflare Worker request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
 
