@@ -252,9 +252,9 @@ EOF
 is_east_japan() {
     local region_input="$1"
     local east_prefs="Hokkaido Aomori Iwate Miyagi Akita Yamagata Fukushima Ibaraki Tochigi Gunma Saitama Chiba Tokyo Kanagawa Niigata Yamanashi Nagano Shizuoka"
-    local west_prefs="Toyama Ishikawa Fukui Gifu Aichi Mie Shiga Kyoto Osaka Hyogo Nara Wakayama Tottori Shimane Okayama Hiroshima Yamaguchi Tokushima Kagawa Ehime Kochi Fukuoka Saga Nagasaki Kumamoto[...]
+    local west_prefs="Toyama Ishikawa Fukui Gifu Aichi Mie Shiga Kyoto Osaka Hyogo Nara Wakayama Tottori Shimane Okayama Hiroshima Yamaguchi Tokushima Kagawa Ehime Kochi Fukuoka Saga Nagasaki Kumamoto Oita Miyazaki Kagoshima Okinawa"
     local east_codes="JP-01 JP-02 JP-03 JP-04 JP-05 JP-06 JP-07 JP-08 JP-09 JP-10 JP-11 JP-12 JP-13 JP-14 JP-15 JP-19 JP-20 JP-22"
-    local west_codes="JP-16 JP-17 JP-18 JP-21 JP-23 JP-24 JP-25 JP-26 JP-27 JP-28 JP-29 JP-30 JP-31 JP-32 JP-33 JP-34 JP-35 JP-36 JP-37 JP-38 JP-39 JP-40 JP-41 JP-42 JP-43 JP-44 JP-45 JP-46 JP-47"
+    local west_codes="JP-16 JP-17 JP-18 JP-21 JP-23 JP-24 JP-25 JP-26 JP-27 JP-28 JP-29 JP-30 JP-31 JP-32 JP-33 JP-34 JP-35 JP-36 JP-37 JP-38 JP-39 JP-40 JP-41 JP-42 JP-43 JP-44 JP-45 JP-46 JP-47" # JP-47 Okinawa を追加
     for pref in $east_prefs $east_codes; do if [ "$region_input" = "$pref" ]; then return 0; fi; done
     for pref in $west_prefs $west_codes; do if [ "$region_input" = "$pref" ]; then return 1; fi; done
     return 2
