@@ -383,6 +383,8 @@ get_country_code() {
     local tmp_file=""
     local spinner_active=0
     local api_success=1 # 初期値を失敗(1)に設定
+    local api_provider="" # APIプロバイダーを追跡
+    local providers=""
 
     # グローバル変数の初期化
     SELECT_ZONE="" # Workerからは取得できない
@@ -395,7 +397,11 @@ get_country_code() {
     ISP_NAME=""
     ISP_AS=""
     ISP_ORG=""
-    TIMEZONE_API_SOURCE="Cloudflare Worker"
+    TIMEZONE_API_SOURCE="" # APIソースは動的に決定
+
+    # ユーザーが指定するAPIプロバイダー (デフォルトはcloudflare)
+    API_PROVIDERS="${API_PROVIDERS:-get_country_cloudflare}"
+    debug_log "DEBUG" "API_PROVIDERS set to: $API_PROVIDERS"
 
     # キャッシュディレクトリの確認
     [ -d "${CACHE_DIR}" ] || mkdir -p "${CACHE_DIR}"
@@ -425,26 +431,33 @@ get_country_code() {
     fi
 
     # スピナー開始
-    start_spinner "$(color "blue" "Currently querying: Cloudflare Worker")" "yellow"
+    start_spinner "$(color "blue" "Currently querying: $API_PROVIDERS")" "yellow"
     spinner_active=1
-    debug_log "DEBUG" "Starting location detection process using Cloudflare Worker"
+    debug_log "DEBUG" "Starting location detection process with providers: $API_PROVIDERS"
 
-    # --- プライマリ試行: Cloudflare Worker ---
-    tmp_file="$(mktemp -t location.XXXXXX)"
-    debug_log "DEBUG" "Calling get_country_cloudflare (Primary Attempt)"
-    get_country_cloudflare "$tmp_file"
-    api_success=$?
-    # --- プライマリ試行ここまで ---
+    # APIプロバイダーを順番に処理
+    for api_provider in $API_PROVIDERS; do
+        # 関数が存在するか確認
+        if ! command -v "$api_provider" >/dev/null 2>&1; then
+            debug_log "ERROR" "Invalid API provider function: $api_provider"
+            api_success=1 # 失敗として扱う
+            continue # 次のプロバイダーを試す
+        fi
 
-    # --- フォールバック処理: 再度 Cloudflare Worker ---
-    if [ $api_success -ne 0 ]; then
-        debug_log "DEBUG" "Primary Cloudflare Worker query failed, attempting fallback (retry)."
-        update_spinner "$(color "blue" "Retrying query: Cloudflare Worker")" "yellow"
-        debug_log "DEBUG" "Calling get_country_cloudflare (Fallback Attempt)"
-        get_country_cloudflare "$tmp_file"
+        # APIプロバイダーの関数を呼び出す
+        debug_log "DEBUG" "Calling API provider function: $api_provider"
+        # TIMEZONE_API_SOURCE は関数内で設定
+        ${api_provider} "$tmp_file" "$network_type"
         api_success=$?
-    fi
-    # --- フォールバック処理ここまで ---
+
+        # 成功したらループを抜ける
+        if [ "$api_success" -eq 0 ]; then
+            debug_log "DEBUG" "API query succeeded with $TIMEZONE_API_SOURCE, breaking loop"
+            break
+        else
+            debug_log "DEBUG" "API query failed with $api_provider, trying next provider"
+        fi
+    done
 
     # 一時ファイルを削除
     rm -f "$tmp_file" 2>/dev/null
@@ -452,7 +465,7 @@ get_country_code() {
     # --- country.db 検索 (POSIXタイムゾーン取得) ---
     # API呼び出しが成功し、ZoneNameが取得できた場合のみ実行
     if [ $api_success -eq 0 ] && [ -n "$SELECT_ZONENAME" ]; then
-        debug_log "DEBUG" "Worker query successful. Processing ZoneName: $SELECT_ZONENAME"
+        debug_log "DEBUG" "API query successful. Processing ZoneName: $SELECT_ZONENAME"
 
         # country.db から POSIXタイムゾーン (SELECT_TIMEZONE) の取得
         debug_log "DEBUG" "Trying to map ZoneName to POSIX timezone using country.db"
@@ -492,7 +505,7 @@ get_country_code() {
         fi
     else
         if [ $api_success -ne 0 ]; then
-             debug_log "DEBUG" "Worker query failed. Cannot process timezone."
+             debug_log "DEBUG" "All API queries failed. Cannot process timezone."
         else
              debug_log "DEBUG" "ZoneName is empty. Cannot process timezone."
         fi
@@ -504,8 +517,8 @@ get_country_code() {
     if [ -n "$ISP_NAME" ] || [ -n "$ISP_AS" ]; then
         local cache_file="${CACHE_DIR}/isp_info.ch"
         echo "$ISP_NAME" > "$cache_file"
-        echo "$ISP_AS" >> "$cache_file"
-        echo "$ISP_ORG" >> "$cache_file"
+        echo "$ISP_AS" > "$cache_file"
+        echo "$ISP_ORG" > "$cache_file"
         debug_log "DEBUG" "Saved ISP information to cache"
     else
         rm -f "${CACHE_DIR}/isp_info.ch" 2>/dev/null
