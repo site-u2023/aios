@@ -1,32 +1,44 @@
 #!/bin/sh
 
+# OpenWrt ash用 共通翻訳スクリプト（API Worker対応・DB書き出しあり）
 
+# メッセージ取得
+get_message() {
+    key="$1"
+    shift
+    dbfile="$MESSAGE_DB"
+    [ -z "$dbfile" ] && dbfile="/tmp/aios/message_ja.db"
+    lang=$(basename "$dbfile" | sed -n 's/^message_\([a-z][a-z]\)\.db$/\1/p')
+    val=$(grep "^${lang}|${key}=" "$dbfile" 2>/dev/null | head -n1 | sed "s/^${lang}|${key}=//")
+    [ -z "$val" ] && val="$key"
+    i=1
+    while [ $# -gt 0 ]; do
+        val=$(echo "$val" | sed "s/%$i/$1/g")
+        shift
+        i=$((i+1))
+    done
+    echo "$val"
+}
 
-# 翻訳API Workerへリクエストを投げる（最大100件）
+# API Workerへリクエスト
 translate_api_worker_chunk() {
-    local val_file="$1"
-    local src_lang="$2"
-    local tgt_lang="$3"
-    local resp_file="$4"
-    local API_URL="https://translate-api-worker.site-u.workers.dev/translate"
+    val_file="$1"
+    src_lang="$2"
+    tgt_lang="$3"
+    resp_file="$4"
+    API_URL="https://translate-api-worker.site-u.workers.dev/translate"
 
-    # 値リストをJSON配列に変換
-    local texts_json
     texts_json=$(awk 'BEGIN{ORS="";print "["} {gsub(/\\/,"\\\\",$0);gsub(/"/,"\\\"",$0);printf("%s\"%s\"", NR==1?"":",",$0)} END{print "]"}' "$val_file")
-
-    # JSONボディ組み立て
-    local post_body
     post_body="{\"texts\":${texts_json},\"source\":\"${src_lang}\",\"target\":\"${tgt_lang}\"}"
 
-    # APIコール
     wget --header="Content-Type: application/json" \
          --post-data="$post_body" \
          -O "$resp_file" -T 20 -q "$API_URL"
 }
 
-# APIレスポンスからtranslations配列を抽出
+# translations配列抽出
 extract_translations() {
-    # $1: APIレスポンスファイル
+    resp_file="$1"
     awk '
     BEGIN { inarray=0 }
     /"translations"[ ]*:/ { inarray=1; sub(/.*"translations"[ ]*:[ ]*\[/, ""); }
@@ -42,53 +54,41 @@ extract_translations() {
         }
         if(match($0,/\]/)){ exit }
     }
-    ' "$1"
+    ' "$resp_file"
 }
 
-# 共通翻訳メイン関数
+# メイン処理
 common_translation_main() {
-    # $1: キーリストファイル
-    # $2: 値リストファイル
-    # $3: 出力先DBファイル
-    # $4: ソース言語
-    # $5: ターゲット言語
+    keyfile="$1"
+    valfile="$2"
+    out_db="$3"
+    src_lang="$4"
+    tgt_lang="$5"
+    MESSAGE_DB="$out_db"
 
-    local keyfile="$1"
-    local valfile="$2"
-    local out_db="$3"
-    local src_lang="$4"
-    local tgt_lang="$5"
-    MESSAGE_DB="$out_db" # get_message用
-
-    # 入力ファイル存在チェック
     [ ! -f "$keyfile" ] && { echo "$(get_message "MSG_FILE_NOT_FOUND" "i=$keyfile")" >&2; exit 1; }
     [ ! -f "$valfile" ] && { echo "$(get_message "MSG_FILE_NOT_FOUND" "i=$valfile")" >&2; exit 1; }
 
-    # 一時ファイル
-    local tmp_val="/tmp/aios/val_chunk.txt"
-    local tmp_resp="/tmp/aios/api_resp.json"
-    local tmp_trans="/tmp/aios/trans_chunk.txt"
+    tmp_val="/tmp/aios/val_chunk.txt"
+    tmp_resp="/tmp/aios/api_resp.json"
+    tmp_trans="/tmp/aios/trans_chunk.txt"
 
     cp "$valfile" "$tmp_val"
-    # API呼び出し
     translate_api_worker_chunk "$tmp_val" "$src_lang" "$tgt_lang" "$tmp_resp"
-
-    # 結果抽出
     extract_translations "$tmp_resp" > "$tmp_trans"
 
-    # DB書き出し
-    paste -d'|' "$keyfile" "$tmp_trans" | awk -v lang="$tgt_lang" -F'|' '{print lang "|" $1 "=" $2}' > "$out_db"
+    # DBファイル書き出し（従来通り）
+    paste -d'|' "$keyfile" "$tmp_trans" | awk -F'|' -v lang="$tgt_lang" '{print lang "|" $1 "=" $2}' > "$out_db"
 
-    # クリーンアップ
     rm -f "$tmp_val" "$tmp_resp" "$tmp_trans"
 
     echo "$(get_message "MSG_TRANSLATION_COMPLETE" "f=$out_db")"
 }
 
-# 例: メッセージDBに最低限のMSG_FILE_NOT_FOUND, MSG_TRANSLATION_COMPLETE定義が必要
+# 必要なメッセージ例（message_ja.dbなど）:
 # ja|MSG_FILE_NOT_FOUND=ファイルが見つかりません: %i
 # ja|MSG_TRANSLATION_COMPLETE=翻訳完了: %f
 
-# 親スクリプトから以下のように呼び出してください
+# 使い方例:
 # . /tmp/aios/common-translation.sh
 # common_translation_main "/tmp/aios/keylist.txt" "/tmp/aios/vallist.txt" "/tmp/aios/message_ja.db" "en" "ja"
