@@ -161,7 +161,6 @@ make_api_request() {
     fi
 }
 
-# ip-api.comから国コードとタイムゾーン情報を取得する関数
 get_country_ipapi() {
     local tmp_file="$1"      # 一時ファイルパス
     local network_type="$2"  # ネットワークタイプ
@@ -176,11 +175,11 @@ get_country_ipapi() {
 
     debug_log "DEBUG" "Querying country and timezone from $api_domain"
 
-    while [ $retry_count -lt 3 ]; do
+    while [ $retry_count -lt $API_MAX_RETRIES ]; do
         # 共通関数を使用してAPIリクエストを実行
-        wget --no-check-certificate -q -O "$tmp_file" "$api_name"
+        make_api_request "$api_name" "$tmp_file" "$API_TIMEOUT" "IPAPI"
         local request_status=$?
-        debug_log "DEBUG" "API request status: $request_status (attempt: $((retry_count+1))/3)"
+        debug_log "DEBUG" "API request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
 
         if [ $request_status -eq 0 ]; then
             # JSONデータから国コードとタイムゾーン情報を抽出
@@ -194,18 +193,26 @@ get_country_ipapi() {
                 break
             else
                 debug_log "DEBUG" "Incomplete country/timezone data from $api_domain"
+                # エラー内容をファイルから抽出
+                error_message=$(grep -o '"message":[^}]*' "$tmp_file")
+                if [ -n "$error_message" ]; then
+                  debug_log "DEBUG" "API Error: $error_message"
+                fi
             fi
         else
             debug_log "DEBUG" "Failed to download data from $api_domain"
+             # wgetのエラーコードを表示
+            debug_log "DEBUG" "wget exit code: $request_status"
         fi
 
         debug_log "DEBUG" "API query attempt $((retry_count+1)) failed"
         retry_count=$((retry_count + 1))
-        [ $retry_count -lt 3 ] && sleep 1
+        [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
     done
 
     # 成功した場合は0を、失敗した場合は1を返す
     if [ $success -eq 1 ]; then
+        TIMEZONE_API_SOURCE=$api_domain
         debug_log "DEBUG" "get_country_ipapi succeeded"
         return 0
     else
