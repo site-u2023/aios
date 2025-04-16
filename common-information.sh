@@ -119,121 +119,6 @@ display_detected_location() {
     debug_log "DEBUG" "Location information displayed successfully"
 }
 
-
-# ip-api.comから国コードとタイムゾーン情報を取得する関数
-get_country_ipapi() {
-    local tmp_file="$1"      # 一時ファイルパス
-    local network_type="$2"  # ネットワークタイプ
-    local api_name="$3"      # API名（ログ用）
-
-    local retry_count=0
-    local success=0
-
-    # API名からドメイン名を抽出
-    local api_domain=$(echo "$api_name" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
-    [ -z "$api_domain" ] && api_domain="$api_name"
-
-    echo "---"
-    echo "DEBUG: Querying country and timezone from $api_domain"
-
-    while [ $retry_count -lt 3 ]; do
-        # 共通関数を使用してAPIリクエストを実行
-        wget --no-check-certificate -q -O "$tmp_file" "$api_name"
-        local request_status=$?
-        echo "DEBUG: API request status: $request_status (attempt: $((retry_count+1))/3)"
-
-        if [ $request_status -eq 0 ]; then
-            # JSONデータから国コードとタイムゾーン情報を抽出
-            SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
-            SELECT_ZONENAME=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//')
-
-            # データが正常に取得できたか確認
-            if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
-                echo "DEBUG: Retrieved from $api_domain - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
-                success=1
-                break
-            else
-                echo "DEBUG: Incomplete country/timezone data from $api_domain"
-                # エラーメッセージを詳細にする
-                echo "DEBUG: SELECT_COUNTRY is empty: [${SELECT_COUNTRY}]"
-                echo "DEBUG: SELECT_ZONENAME is empty: [${SELECT_ZONENAME}]"
-            fi
-        else
-            echo "DEBUG: Failed to download data from $api_domain"
-        fi
-
-        echo "DEBUG: API query attempt $((retry_count+1)) failed"
-        retry_count=$((retry_count + 1))
-        [ $retry_count -lt 3 ] && sleep 1
-    done
-
-    # 成功した場合は0を、失敗した場合は1を返す
-    if [ $success -eq 1 ]; then
-        echo "DEBUG: get_country_ipapi succeeded"
-        return 0
-    else
-        echo "DEBUG: get_country_ipapi failed"
-        return 1
-    fi
-}
-
-# ipinfo.ioから国コードとタイムゾーン情報を取得する関数
-get_country_ipinfo() {
-    local tmp_file="$1"      # 一時ファイルパス
-    local network_type="$2"  # ネットワークタイプ
-    local api_name="$3"      # API名（ログ用）
-
-    local retry_count=0
-    local success=0
-
-    # API名からドメイン名を抽出
-    local api_domain=$(echo "$api_name" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
-    [ -z "$api_domain" ] && api_domain="$api_name"
-
-    echo "---"
-    echo "DEBUG: Querying country and timezone from $api_domain"
-
-    while [ $retry_count -lt 3 ]; do
-        # 共通関数を使用してAPIリクエストを実行
-        wget --no-check-certificate -q -O "$tmp_file" "$api_name"
-        local request_status=$?
-        echo "DEBUG: API request status: $request_status (attempt: $((retry_count+1))/3)"
-
-        if [ $request_status -eq 0 ]; then
-            # JSONデータから国コードとタイムゾーン情報を抽出
-            SELECT_COUNTRY=$(grep -o '"country"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"country"[[:space:]]*:[[:space:]]*"//')
-            SELECT_ZONENAME=$(grep -o '"timezone"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"timezone"[[:space:]]*:[[:space:]]*"//')
-
-            # データが正常に取得できたか確認
-            if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
-                echo "DEBUG: Retrieved from $api_domain - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
-                success=1
-                break
-            else
-                echo "DEBUG: Incomplete country/timezone data from $api_domain"
-                # エラーメッセージを詳細にする
-                echo "DEBUG: SELECT_COUNTRY is empty: [${SELECT_COUNTRY}]"
-                echo "DEBUG: SELECT_ZONENAME is empty: [${SELECT_ZONENAME}]"
-            fi
-        else
-            echo "DEBUG: Failed to download data from $api_domain"
-        fi
-
-        echo "DEBUG: API query attempt $((retry_count+1)) failed"
-        retry_count=$((retry_count + 1))
-        [ $retry_count -lt 3 ] && sleep 1
-    done
-
-    # 成功した場合は0を、失敗した場合は1を返す
-    if [ $success -eq 1 ]; then
-        echo "DEBUG: get_country_ipinfo succeeded"
-        return 0
-    else
-        echo "DEBUG: get_country_ipinfo failed"
-        return 1
-    fi
-}
-
 # APIリクエストを実行する共通関数（ネットワークオプション対応版）
 make_api_request() {
     # パラメータ
@@ -275,6 +160,112 @@ make_api_request() {
     else
         debug_log "DEBUG" "[$debug_tag] API request failed with status: $status"
         return $status
+    fi
+}
+
+# ip-api.comから国コードとタイムゾーン情報を取得する関数
+get_country_ipapi() {
+    local tmp_file="$1"      # 一時ファイルパス
+    local network_type="$2"  # ネットワークタイプ
+    local api_name="$3"      # API名（ログ用）
+
+    local retry_count=0
+    local success=0
+
+    # API名からドメイン名を抽出
+    local api_domain=$(echo "$api_name" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+    [ -z "$api_domain" ] && api_domain="$api_name"
+
+    echo "DEBUG: Querying country and timezone from $api_domain"
+
+    while [ $retry_count -lt 3 ]; do
+        # 共通関数を使用してAPIリクエストを実行
+        wget --no-check-certificate -q -O "$tmp_file" "$api_name"
+        local request_status=$?
+        echo "DEBUG: API request status: $request_status (attempt: $((retry_count+1))/3)"
+
+        if [ $request_status -eq 0 ]; then
+            # JSONデータから国コードとタイムゾーン情報を抽出
+            SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
+            SELECT_ZONENAME=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//')
+
+            # データが正常に取得できたか確認
+            if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
+                echo "DEBUG: Retrieved from $api_domain - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
+                success=1
+                break
+            else
+                echo "DEBUG: Incomplete country/timezone data from $api_domain"
+            fi
+        else
+            echo "DEBUG: Failed to download data from $api_domain"
+        fi
+
+        echo "DEBUG: API query attempt $((retry_count+1)) failed"
+        retry_count=$((retry_count + 1))
+        [ $retry_count -lt 3 ] && sleep 1
+    done
+
+    # 成功した場合は0を、失敗した場合は1を返す
+    if [ $success -eq 1 ]; then
+        echo "DEBUG: get_country_ipapi succeeded"
+        return 0
+    else
+        echo "DEBUG: get_country_ipapi failed"
+        return 1
+    fi
+}
+
+# ipinfo.ioから国コードとタイムゾーン情報を取得する関数
+get_country_ipinfo() {
+    local tmp_file="$1"      # 一時ファイルパス
+    local network_type="$2"  # ネットワークタイプ
+    local api_name="$3"      # API名（ログ用）
+
+    local retry_count=0
+    local success=0
+
+    # API名からドメイン名を抽出
+    local api_domain=$(echo "$api_name" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+    [ -z "$api_domain" ] && api_domain="$api_name"
+
+    echo "DEBUG: Querying country and timezone from $api_domain"
+
+    while [ $retry_count -lt 3 ]; do
+        # 共通関数を使用してAPIリクエストを実行
+        wget --no-check-certificate -q -O "$tmp_file" "$api_name"
+        local request_status=$?
+        echo "DEBUG: API request status: $request_status (attempt: $((retry_count+1))/3)"
+
+        if [ $request_status -eq 0 ]; then
+            # JSONデータから国コードとタイムゾーン情報を抽出（スペースを許容するパターン）
+            SELECT_COUNTRY=$(grep -o '"country"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"country"[[:space:]]*:[[:space:]]*"//')
+            SELECT_ZONENAME=$(grep -o '"timezone"[[:space:]]*:[[:space:]]*"[^"]*' "$tmp_file" | sed 's/"timezone"[[:space:]]*:[[:space:]]*"//')
+
+            # データが正常に取得できたか確認
+            if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
+                echo "DEBUG: Retrieved from $api_domain - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
+                success=1
+                break
+            else
+                echo "DEBUG: Incomplete country/timezone data from $api_domain"
+            fi
+        else
+            echo "DEBUG: Failed to download data from $api_domain"
+        fi
+
+        echo "DEBUG: API query attempt $((retry_count+1)) failed"
+        retry_count=$((retry_count + 1))
+        [ $retry_count -lt 3 ] && sleep 1
+    done
+
+    # 成功した場合は0を、失敗した場合は1を返す
+    if [ $success -eq 1 ]; then
+        echo "DEBUG: get_country_ipinfo succeeded"
+        return 0
+    else
+        echo "DEBUG: get_country_ipinfo failed"
+        return 1
     fi
 }
 
@@ -391,7 +382,8 @@ get_country_code() {
     TIMEZONE_API_SOURCE="" # APIソースは動的に決定
 
     # ユーザーが指定するAPIプロバイダー (デフォルトはcloudflare)
-    API_PROVIDERS="${API_PROVIDERS:-get_country_cloudflare}"
+    API_PROVIDERS="${API_PROVIDERS:-get_country_ipapi get_country_ipinfo}"
+    # API_PROVIDERS="${API_PROVIDERS:-get_country_cloudflare}"
     debug_log "DEBUG" "API_PROVIDERS set to: $API_PROVIDERS"
 
     # キャッシュディレクトリの確認
