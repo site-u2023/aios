@@ -287,7 +287,7 @@ get_country_cloudflare() {
     ISP_AS=""
     ISP_ORG=""
     SELECT_REGION_NAME=""
-    SELECT_REGION_CODE=""
+    # SELECT_REGION_CODE="" # 削除
 
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
         make_api_request "$worker_url" "$tmp_file" "$API_TIMEOUT" "CLOUDFLARE"
@@ -318,7 +318,7 @@ get_country_cloudflare() {
                 # ISP_ORG は ISP_NAME を使う (Cloudflare Workerレスポンスにorgフィールドはないため)
                 [ -n "$ISP_NAME" ] && ISP_ORG="$ISP_NAME"
                 SELECT_REGION_NAME=$(grep -o '"regionName": "[^"]*' "$tmp_file" | sed 's/"regionName": "//')
-                SELECT_REGION_CODE=$(grep -o '"region": "[^"]*' "$tmp_file" | sed 's/"region": "//')
+                # SELECT_REGION_CODE=$(grep -o '"region": "[^"]*' "$tmp_file" | sed 's/"region": "//') # 削除
 
                 if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
                     debug_log "DEBUG" "Required fields (Country & ZoneName) extracted successfully."
@@ -532,7 +532,7 @@ get_country_code() {
     fi
 }
 
-# IPアドレスから地域情報を取得しキャッシュファイルに保存する関数 (SELECT_TIMEZONE 参照に戻す版)
+# IPアドレスから地域情報を取得しキャッシュファイルに保存する関数
 process_location_info() {
     local skip_retrieval=0
 
@@ -562,15 +562,30 @@ process_location_info() {
     local tmp_isp="${CACHE_DIR}/ip_isp.tmp"
     local tmp_as="${CACHE_DIR}/ip_as.tmp"
     local tmp_region_name="${CACHE_DIR}/ip_region_name.tmp"
-    local tmp_region_code="${CACHE_DIR}/ip_region_code.tmp"
+    # local tmp_region_code="${CACHE_DIR}/ip_region_code.tmp" # 削除
 
     # 必須情報 (国コード, タイムゾーン, IANAゾーン名) が揃っているか確認 - SELECT_TIMEZONE をチェックするように戻す
     if [ -z "$SELECT_COUNTRY" ] || [ -z "$SELECT_TIMEZONE" ] || [ -z "$SELECT_ZONENAME" ]; then
         # エラーメッセージも Timezone に戻す
         debug_log "ERROR: Incomplete location data - required information missing (Country, Timezone, or ZoneName)"
         # 既存のファイルを削除してクリーンな状態を確保
-        rm -f "$tmp_country" "$tmp_timezone" "$tmp_zonename" "$tmp_isp" "$tmp_as" "$tmp_region_name" "$tmp_region_code" 2>/dev/null
-        return 1
+        rm -f "$tmp_country" "$tmp_timezone" "$tmp_zonename" "$tmp_isp" "$tmp_as" "$tmp_region_name" # "tmp_region_code" 削除 2>/dev/null
+
+        # フォールバックロジック: 以前に取得した地域情報を使用する
+        if [ -f "$tmp_country" ] && [ -f "$tmp_timezone" ] && [ -f "$tmp_zonename" ]; then
+            debug_log "DEBUG: Using previously cached location information as fallback"
+            SELECT_COUNTRY=$(cat "$tmp_country")
+            SELECT_TIMEZONE=$(cat "$tmp_timezone")
+            SELECT_ZONENAME=$(cat "$tmp_zonename")
+            ISP_NAME=$(cat "$tmp_isp")
+            ISP_AS=$(cat "$tmp_as")
+            SELECT_REGION_NAME=$(cat "$tmp_region_name")
+            # SELECT_REGION_CODE=$(cat "$tmp_region_code") # 削除
+            debug_log "DEBUG: Fallback location data - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME, Timezone: $SELECT_TIMEZONE"
+        else
+            debug_log "ERROR: No previously cached location information available for fallback"
+            return 1
+        fi
     fi
 
     debug_log "DEBUG: All required location data available, saving to cache files"
@@ -609,12 +624,12 @@ process_location_info() {
     else
         rm -f "$tmp_region_name" 2>/dev/null
     fi
-    if [ -n "$SELECT_REGION_CODE" ]; then
-        echo "$SELECT_REGION_CODE" > "$tmp_region_code"
-        debug_log "DEBUG: Region code saved to cache: $SELECT_REGION_CODE"
-    else
-        rm -f "$tmp_region_code" 2>/dev/null
-    fi
+    # if [ -n "$SELECT_REGION_CODE" ]; then # 削除
+    #     echo "$SELECT_REGION_CODE" > "$tmp_region_code"
+    #     debug_log "DEBUG: Region code saved to cache: $SELECT_REGION_CODE"
+    # else
+    #     rm -f "$tmp_region_code" 2>/dev/null
+    # fi
 
     # 不要になったフォールバックロジックは削除されたままにする
 
