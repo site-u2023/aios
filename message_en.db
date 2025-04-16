@@ -71,7 +71,7 @@ en|MSG_ISP_INFO_FAILED=Failed to retrieve ISP informatio
 
 en|MSG_QUERY_INFO=Querying {t}{:} {a} via {n}
 en|MSG_LOCATION_RESULT=Location information retrieved {s}
-en|MSG_TIMEZONE_API=Timezone Source{:} {a}
+en|MSG_TIMEZONE_API=Zone Source{:} {a}
 en|CONFIG_DOWNLOAD_SUCCESS=Downloaded{:}
 en|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{:}
 
