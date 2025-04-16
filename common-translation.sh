@@ -1,25 +1,6 @@
 #!/bin/sh
 
-# 共通メッセージ取得関数
-get_message() {
-    # $1: メッセージキー
-    # $2...: 置換パラメータ
-    local key="$1"
-    shift
-    local dbfile="$MESSAGE_DB"
-    [ -z "$dbfile" ] && dbfile="/tmp/aios/message_ja.db"
-    local lang="$(basename "$dbfile" | sed -n 's/^message_\([a-z][a-z]\)\.db$/\1/p')"
-    local val
-    val="$(grep "^${lang}|${key}=" "$dbfile" 2>/dev/null | head -n1 | sed "s/^${lang}|${key}=//")"
-    [ -z "$val" ] && val="$key"
-    local i=1
-    while [ $# -gt 0 ]; do
-        val=$(echo "$val" | sed "s/%$i/$1/g")
-        shift
-        i=$((i+1))
-    done
-    echo "$val"
-}
+
 
 # 翻訳API Workerへリクエストを投げる（最大100件）
 translate_api_worker_chunk() {
