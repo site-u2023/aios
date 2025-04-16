@@ -176,13 +176,13 @@ get_country_ipapi() {
     local api_domain=$(echo "$api_name" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
     [ -z "$api_domain" ] && api_domain="$api_name"
 
-    echo "DEBUG: Querying country and timezone from $api_domain"
+    debug_log "DEBUG" "Querying country and timezone from $api_domain"
 
     while [ $retry_count -lt 3 ]; do
         # 共通関数を使用してAPIリクエストを実行
         wget --no-check-certificate -q -O "$tmp_file" "$api_name"
         local request_status=$?
-        echo "DEBUG: API request status: $request_status (attempt: $((retry_count+1))/3)"
+        debug_log "DEBUG" "API request status: $request_status (attempt: $((retry_count+1))/3)"
 
         if [ $request_status -eq 0 ]; then
             # JSONデータから国コードとタイムゾーン情報を抽出
@@ -191,27 +191,27 @@ get_country_ipapi() {
 
             # データが正常に取得できたか確認
             if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
-                echo "DEBUG: Retrieved from $api_domain - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
+                debug_log "DEBUG" "Retrieved from $api_domain - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
                 success=1
                 break
             else
-                echo "DEBUG: Incomplete country/timezone data from $api_domain"
+                debug_log "DEBUG" "Incomplete country/timezone data from $api_domain"
             fi
         else
-            echo "DEBUG: Failed to download data from $api_domain"
+            debug_log "DEBUG" "Failed to download data from $api_domain"
         fi
 
-        echo "DEBUG: API query attempt $((retry_count+1)) failed"
+        debug_log "DEBUG" "API query attempt $((retry_count+1)) failed"
         retry_count=$((retry_count + 1))
         [ $retry_count -lt 3 ] && sleep 1
     done
 
     # 成功した場合は0を、失敗した場合は1を返す
     if [ $success -eq 1 ]; then
-        echo "DEBUG: get_country_ipapi succeeded"
+        debug_log "DEBUG" "get_country_ipapi succeeded"
         return 0
     else
-        echo "DEBUG: get_country_ipapi failed"
+        debug_log "DEBUG" "get_country_ipapi failed"
         return 1
     fi
 }
@@ -229,13 +229,13 @@ get_country_ipinfo() {
     local api_domain=$(echo "$api_name" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
     [ -z "$api_domain" ] && api_domain="$api_name"
 
-    echo "DEBUG: Querying country and timezone from $api_domain"
+    debug_log "DEBUG" "Querying country and timezone from $api_domain"
 
     while [ $retry_count -lt 3 ]; do
         # 共通関数を使用してAPIリクエストを実行
         wget --no-check-certificate -q -O "$tmp_file" "$api_name"
         local request_status=$?
-        echo "DEBUG: API request status: $request_status (attempt: $((retry_count+1))/3)"
+        debug_log "DEBUG" "API request status: $request_status (attempt: $((retry_count+1))/3)"
 
         if [ $request_status -eq 0 ]; then
             # JSONデータから国コードとタイムゾーン情報を抽出（スペースを許容するパターン）
@@ -244,27 +244,27 @@ get_country_ipinfo() {
 
             # データが正常に取得できたか確認
             if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
-                echo "DEBUG: Retrieved from $api_domain - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
+                debug_log "DEBUG" "Retrieved from $api_domain - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
                 success=1
                 break
             else
-                echo "DEBUG: Incomplete country/timezone data from $api_domain"
+                debug_log "DEBUG" "Incomplete country/timezone data from $api_domain"
             fi
         else
-            echo "DEBUG: Failed to download data from $api_domain"
+            debug_log "DEBUG" "Failed to download data from $api_domain"
         fi
 
-        echo "DEBUG: API query attempt $((retry_count+1)) failed"
+        debug_log "DEBUG" "API query attempt $((retry_count+1)) failed"
         retry_count=$((retry_count + 1))
         [ $retry_count -lt 3 ] && sleep 1
     done
 
     # 成功した場合は0を、失敗した場合は1を返す
     if [ $success -eq 1 ]; then
-        echo "DEBUG: get_country_ipinfo succeeded"
+        debug_log "DEBUG" "get_country_ipinfo succeeded"
         return 0
     else
-        echo "DEBUG: get_country_ipinfo failed"
+        debug_log "DEBUG" "get_country_ipinfo failed"
         return 1
     fi
 }
