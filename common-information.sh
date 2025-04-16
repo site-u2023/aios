@@ -423,7 +423,7 @@ get_country_code() {
     for api_provider in $API_PROVIDERS; do
         # 関数が存在するか確認
         if ! command -v "$api_provider" >/dev/null 2>&1; then
-            debug_log "ERROR" "Invalid API provider function: $api_provider"
+            debug_log "DEBUG" "Invalid API provider function: $api_provider"
             api_success=1 # 失敗として扱う
             continue # 次のプロバイダーを試す
         fi
