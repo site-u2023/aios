@@ -1204,8 +1204,7 @@ mape_mold() {
 
     # Check if IPv6 prefix was obtained
     if [ -z "$NEW_IP6_PREFIX" ]; then
-        # (修正) シンプルなハードコードエラーメッセージ (1行)
-        printf "%s\n" "$(color red "Error: Failed to get IPv6 prefix.")"
+        printf "%s\n" "$(color red "$(get_message "MSG_MAPE_IPV6_PREFIX_FAILED")")"
         debug_log "DEBUG" "Failed to get IPv6 prefix from interface '$NET_IF6' in mape_mold()"
         return 1
     fi
