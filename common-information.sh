@@ -276,7 +276,7 @@ get_country_ipinfo() {
         debug_log "DEBUG" "get_country_ipinfo succeeded"
         return 0
     else
-        debug_log "DEBUG" "get_country_ipinfo failed"
+        debug_log "DEBUG" "get_country_ipinfo failed"　
         return 1
     fi
 }
