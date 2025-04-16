@@ -423,7 +423,7 @@ get_country_code() {
     for api_provider in $API_PROVIDERS; do
         # 関数が存在するか確認
         if ! command -v "$api_provider" >/dev/null 2>&1; then
-            debug_log "DEBUG" "Invalid API provider function: $api_provider"
+            debug_log "ERROR" "Invalid API provider function: $api_provider"
             api_success=1 # 失敗として扱う
             continue # 次のプロバイダーを試す
         fi
@@ -464,6 +464,10 @@ get_country_code() {
         # 成功したらループを抜ける
         if [ "$api_success" -eq 0 ]; then
             debug_log "DEBUG" "API query succeeded with $TIMEZONE_API_SOURCE, breaking loop"
+            # *** 修正点: グローバル変数に値を設定 ***
+            SELECT_COUNTRY=$(grep -o '"countryCode":"[^"]*' "$tmp_file" | sed 's/"countryCode":"//')
+            SELECT_ZONENAME=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//')
+            # *** 修正点ここまで ***
             break
         else
             debug_log "DEBUG" "API query failed with $api_provider, trying next provider"
@@ -559,7 +563,6 @@ get_country_code() {
         return 1 # 失敗
     fi
 }
-
 process_location_info() {
     local skip_retrieval=0
 
