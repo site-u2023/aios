@@ -1206,7 +1206,7 @@ mape_mold() {
     if [ -z "$NEW_IP6_PREFIX" ]; then
         # (修正) シンプルなハードコードエラーメッセージ (1行)
         printf "%s\n" "$(color red "Error: Failed to get IPv6 prefix.")"
-        debug_log "ERROR" "Failed to get IPv6 prefix from interface '$NET_IF6' in mape_mold()"
+        debug_log "DEBUG" "Failed to get IPv6 prefix from interface '$NET_IF6' in mape_mold()"
         return 1
     fi
 
@@ -1236,7 +1236,7 @@ EOF
     else
         # (修正) シンプルなハードコードエラーメッセージ (1行)
         printf "%s\n" "$(color red "Error: Failed to parse IPv6 prefix.")"
-        debug_log "ERROR" "Failed to parse IPv6 prefix '$ip6_prefix_tmp' in mape_mold()"
+        debug_log "DEBUG" "Failed to parse IPv6 prefix '$ip6_prefix_tmp' in mape_mold()"
         return 1
     fi
 
@@ -1329,7 +1329,7 @@ EOF
     else
         # (修正) シンプルなハードコードエラーメッセージ (1行)
         printf "%s\n" "$(color red "Error: Unsupported IPv6 prefix.")"
-        debug_log "ERROR" "No matching ruleprefix found for prefix31=$prefix31_hex or prefix38=$prefix38_hex in mape_mold()"
+        debug_log "DEBUG" "No matching ruleprefix found for prefix31=$prefix31_hex or prefix38=$prefix38_hex in mape_mold()"
         return 1
     fi
 
@@ -1357,7 +1357,7 @@ EOF
         local psid_shift=$(( 16 - OFFSET - PSIDLEN ))
         # psid_shift が負になるケースを避ける (PSIDLENが不明な場合など)
         if [ "$psid_shift" -lt 0 ]; then
-            debug_log "ERROR" "Invalid calculation: psid_shift is negative ($psid_shift). Check OFFSET and PSIDLEN."
+            debug_log "DEBUG" "Invalid calculation: psid_shift is negative ($psid_shift). Check OFFSET and PSIDLEN."
             psid_shift=0 # エラーを防ぐため0にする
         fi
         local psid_part=$(( PSID << psid_shift ))
@@ -1365,7 +1365,7 @@ EOF
         # port_range_size が0にならないようにする
         local port_range_size=$(( 1 << psid_shift ))
         if [ "$port_range_size" -le 0 ]; then
-             debug_log "ERROR" "Invalid calculation: port_range_size is not positive ($port_range_size)."
+             debug_log "DEBUG" "Invalid calculation: port_range_size is not positive ($port_range_size)."
              port_range_size=1 # エラーを防ぐため1にする
         fi
         local port_end=$(( port + port_range_size - 1 ))
@@ -1526,9 +1526,9 @@ mape_config() {
 
     # 設定のバックアップ作成 (既存のコードを流用)
     debug_log "DEBUG" "Backing up configuration files..." 
-    cp /etc/config/network /etc/config/network.map-e.old && debug_log "DEBUG" "network backup created." || debug_log "ERROR" "Failed to backup network config." 
-    cp /etc/config/dhcp /etc/config/dhcp.map-e.old && debug_log "DEBUG" "dhcp backup created." || debug_log "ERROR" "Failed to backup dhcp config." 
-    cp /etc/config/firewall /etc/config/firewall.map-e.old && debug_log "DEBUG" "firewall backup created." || debug_log "ERROR" "Failed to backup firewall config." 
+    cp /etc/config/network /etc/config/network.map-e.old && debug_log "DEBUG" "network backup created." || debug_log "DEBUG" "Failed to backup network config." 
+    cp /etc/config/dhcp /etc/config/dhcp.map-e.old && debug_log "DEBUG" "dhcp backup created." || debug_log "DEBUG" "Failed to backup dhcp config." 
+    cp /etc/config/firewall /etc/config/firewall.map-e.old && debug_log "DEBUG" "firewall backup created." || debug_log "DEBUG" "Failed to backup firewall config." 
 
     # --- UCI設定 ---
     debug_log "DEBUG" "Applying MAP-E configuration using UCI..." 
@@ -1585,9 +1585,9 @@ mape_config() {
 
     # 設定の保存
     debug_log "DEBUG" "Committing changes..." 
-    uci commit network && debug_log "DEBUG" "UCI network committed." || debug_log "ERROR" "Failed to commit network." 
-    uci commit dhcp && debug_log "DEBUG" "UCI dhcp committed." || debug_log "ERROR" "Failed to commit dhcp." 
-    uci commit firewall && debug_log "DEBUG" "UCI firewall committed." || debug_log "ERROR" "Failed to commit firewall." 
+    uci commit network && debug_log "DEBUG" "UCI network committed." || debug_log "DEBUG" "Failed to commit network." 
+    uci commit dhcp && debug_log "DEBUG" "UCI dhcp committed." || debug_log "DEBUG" "Failed to commit dhcp." 
+    uci commit firewall && debug_log "DEBUG" "UCI firewall committed." || debug_log "DEBUG" "Failed to commit firewall." 
 
     # 設定情報の表示 (printfを使用 - これはユーザー向けなので変更しない)
     echo ""
@@ -1633,7 +1633,7 @@ debug_mape_values() {
 # 実行
 if ! mape_mold; then
     # mape_mold failed, error message already printed inside the function.
-    debug_log "ERROR" "mape_mold function failed. Exiting script."
+    debug_log "DEBUG" "mape_mold function failed. Exiting script."
     exit 1 # Exit script with error status
 fi
 
