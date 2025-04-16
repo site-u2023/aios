@@ -98,44 +98,31 @@ urlencode() {
     printf "%s\n" "$encoded"
 }
 
-# API Workerを利用する翻訳関数（差し替え）
 translate_with_api_worker() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
-    local temp_req="${TRANSLATION_CACHE_DIR}/api_worker_req.txt"
-    local temp_resp="${TRANSLATION_CACHE_DIR}/api_worker_resp.json"
+    local temp_req="/tmp/aios/translations/api_worker_req.json"
+    local temp_resp="/tmp/aios/translations/api_worker_resp.json"
     local result=""
-    local api_url="https://translate-api-worker.site-u.workers.dev/translate"
 
-    mkdir -p "$(dirname "$temp_req")" 2>/dev/null
-    printf "%s\n" "$text" > "$temp_req"
+    mkdir -p "/tmp/aios/translations"
 
-    # texts配列形式のJSON生成
-    local texts_json
-    texts_json=$(awk 'BEGIN{ORS="";print "["} {gsub(/\\/,"\\\\",$0);gsub(/"/,"\\\"",$0);printf("%s\"%s\"", NR==1?"":",",$0)} END{print "]"}' "$temp_req")
-    local post_body="{\"texts\":${texts_json},\"source\":\"${source_lang}\",\"target\":\"${target_lang}\"}"
+    # texts配列形式のJSON生成（1件のみ対応）
+    printf '{"texts":["%s"],"source":"%s","target":"%s"}' \
+        "$text" "$source_lang" "$target_lang" > "$temp_req"
 
-    $BASE_WGET --header="Content-Type: application/json" \
-        --post-data="$post_body" \
-        -O "$temp_resp" -T $API_TIMEOUT "$api_url"
+    # BusyBox wgetのみでPOST（Content-Typeヘッダーなし）
+    wget --no-check-certificate --post-data="$(cat "$temp_req")" \
+        -O "$temp_resp" "https://translate-api-worker.site-u.workers.dev/translate"
 
-    # translations配列から1つ目を抽出
-    result=$(awk 'BEGIN { inarray=0 }
-        /"translations"[ ]*:/ { inarray=1; sub(/.*"translations"[ ]*:[ ]*\[/, ""); }
-        inarray {
-            gsub(/\r/,"");
-            while(match($0, /("[^"]*"|null)/)) {
-                val=substr($0, RSTART, RLENGTH)
-                gsub(/^"/,"",val)
-                gsub(/"$/,"",val)
-                if(val=="null") print ""; else print val
-                exit
-            }
-            if(match($0,/\]/)){ exit }
-        }' "$temp_resp")
+    # translations配列から一つ目を抽出（JSON最小パース）
+    if [ -s "$temp_resp" ]; then
+        result=$(sed -n 's/.*"translations"[ ]*:[ ]*\["\([^"]*\)".*/\1/p' "$temp_resp")
+        # 念のためエスケープ解除（\uXXXX等の特殊ケース除く）
+        result=$(printf "%s" "$result" | sed 's/\\n/\n/g; s/\\"/"/g')
+    fi
 
-    rm -f "$temp_req" "$temp_resp"
     printf "%s\n" "$result"
 }
 
