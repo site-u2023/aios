@@ -314,6 +314,7 @@ create_language_db() {
     local current_api=""
     local ip_check_file="${CACHE_DIR}/network.ch"
     local pn=2
+    local lockfile="/tmp/aios/lock_translate_db"
 
     debug_log "DEBUG" "Creating language DB for target ${target_lang} with API language code ${api_lang}"
 
@@ -363,10 +364,8 @@ EOF
 
     start_spinner "$(color blue "Currently translating: $current_api")"
 
+    # サブプロセスによる直接追記＋排他制御
     local j=0
-    local tmp_dir="/tmp/aios/translate_tmp_$$"
-    mkdir -p "$tmp_dir"
-
     grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
         (
             debug_log "DEBUG" "Start line $j: $line"
@@ -378,16 +377,23 @@ EOF
                 cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
                 if [ -f "$cache_file" ]; then
                     local translated=$(cat "$cache_file")
-                    printf "%s|%s=%s\n" "$api_lang" "$key" "$translated" > "$tmp_dir/$j.txt"
+                    # 排他制御
+                    while ! mkdir "$lockfile" 2>/dev/null; do sleep 0.01; done
+                    printf "%s|%s=%s\n" "$api_lang" "$key" "$translated" >> "$output_db"
+                    rmdir "$lockfile"
                 else
                     cleaned_translation=$(translate_text "$value" "$DEFAULT_LANGUAGE" "$api_lang")
                     if [ -n "$cleaned_translation" ]; then
                         decoded="$cleaned_translation"
                         mkdir -p "$(dirname "$cache_file")"
                         printf "%s\n" "$decoded" > "$cache_file"
-                        printf "%s|%s=%s\n" "$api_lang" "$key" "$decoded" > "$tmp_dir/$j.txt"
+                        while ! mkdir "$lockfile" 2>/dev/null; do sleep 0.01; done
+                        printf "%s|%s=%s\n" "$api_lang" "$key" "$decoded" >> "$output_db"
+                        rmdir "$lockfile"
                     else
-                        printf "%s|%s=%s\n" "$api_lang" "$key" "$value" > "$tmp_dir/$j.txt"
+                        while ! mkdir "$lockfile" 2>/dev/null; do sleep 0.01; done
+                        printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
+                        rmdir "$lockfile"
                         debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}"
                     fi
                 fi
@@ -400,12 +406,6 @@ EOF
         fi
     done
     wait
-
-    # 一時ファイルを結合
-    for n in $(seq 0 $((j - 1))); do
-        [ -f "$tmp_dir/$n.txt" ] && cat "$tmp_dir/$n.txt" >> "$output_db"
-    done
-    rm -rf "$tmp_dir"
 
     stop_spinner "Language file created successfully" "success"
     debug_log "DEBUG" "Language DB creation completed for ${api_lang}"
