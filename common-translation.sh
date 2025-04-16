@@ -322,6 +322,114 @@ create_language_db() {
         pn=$(cat /tmp/aios/cache/cpu_core.ch)
     fi
 
+    if [ ! -f "$base_db" ]; then
+        debug_log "DEBUG" "Base message DB not found"
+        return 1
+    fi
+
+    cat > "$output_db" << EOF
+SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
+EOF
+
+    if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
+        debug_log "DEBUG" "Online translation disabled, using original text"
+        grep "^${DEFAULT_LANGUAGE}|" "$base_db" | sed "s/^${DEFAULT_LANGUAGE}|/${api_lang}|/" >> "$output_db"
+        return 0
+    fi
+
+    printf "\n"
+
+    if [ ! -f "$ip_check_file" ]; then
+        debug_log "DEBUG" "Network status file not found, checking connectivity"
+        check_network_connectivity
+    fi
+
+    local network_status=""
+    if [ -f "$ip_check_file" ]; then
+        network_status=$(cat "$ip_check_file")
+        debug_log "DEBUG" "Network status: ${network_status}"
+    else
+        debug_log "DEBUG" "Could not determine network status"
+    fi
+
+    translate_text "dummy" "$DEFAULT_LANGUAGE" "$api_lang" > /dev/null 2>&1
+
+    current_api="$API_NAME"
+    if [ -z "$current_api" ]; then
+        current_api="Translation API"
+    fi
+
+    debug_log "DEBUG" "Using API from translate_text mapping: $current_api"
+
+    start_spinner "$(color blue "Currently translating: $current_api")"
+
+    local j=0
+    local tmp_dir="/tmp/aios/translate_tmp_$$"
+    mkdir -p "$tmp_dir"
+
+    grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
+        (
+            debug_log "DEBUG" "Start line $j: $line"
+            local key value cache_key cache_file cleaned_translation decoded
+            key=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|\([^=]*\)=.*/\1/p")
+            value=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|[^=]*=\(.*\)/\1/p")
+            if [ -n "$key" ] && [ -n "$value" ]; then
+                cache_key=$(printf "%s%s%s" "$key" "$value" "$api_lang" | md5sum | cut -d' ' -f1)
+                cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
+                if [ -f "$cache_file" ]; then
+                    local translated=$(cat "$cache_file")
+                    printf "%s|%s=%s\n" "$api_lang" "$key" "$translated" > "$tmp_dir/$j.txt"
+                else
+                    cleaned_translation=$(translate_text "$value" "$DEFAULT_LANGUAGE" "$api_lang")
+                    if [ -n "$cleaned_translation" ]; then
+                        decoded="$cleaned_translation"
+                        mkdir -p "$(dirname "$cache_file")"
+                        printf "%s\n" "$decoded" > "$cache_file"
+                        printf "%s|%s=%s\n" "$api_lang" "$key" "$decoded" > "$tmp_dir/$j.txt"
+                    else
+                        printf "%s|%s=%s\n" "$api_lang" "$key" "$value" > "$tmp_dir/$j.txt"
+                        debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}"
+                    fi
+                fi
+            fi
+            debug_log "DEBUG" "End line $j"
+        ) &
+        j=$((j + 1))
+        if [ $((j % pn)) -eq 0 ]; then
+            wait
+        fi
+    done
+    wait
+
+    # 一時ファイルを結合
+    for n in $(seq 0 $((j - 1))); do
+        [ -f "$tmp_dir/$n.txt" ] && cat "$tmp_dir/$n.txt" >> "$output_db"
+    done
+    rm -rf "$tmp_dir"
+
+    stop_spinner "Language file created successfully" "success"
+    debug_log "DEBUG" "Language DB creation completed for ${api_lang}"
+    return 0
+}
+
+OK_create_language_db() {
+    local target_lang="$1"
+    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
+    local api_lang=$(get_api_lang_code)
+    local output_db="${BASE_DIR}/message_${api_lang}.db"
+    local temp_file="${TRANSLATION_CACHE_DIR}/translation_output.tmp"
+    local cleaned_translation=""
+    local current_api=""
+    local ip_check_file="${CACHE_DIR}/network.ch"
+    local pn=2
+
+    debug_log "DEBUG" "Creating language DB for target ${target_lang} with API language code ${api_lang}"
+
+    # 並列数設定
+    if [ -f /tmp/aios/cache/cpu_core.ch ]; then
+        pn=$(cat /tmp/aios/cache/cpu_core.ch)
+    fi
+
     # ベースDBファイル確認
     if [ ! -f "$base_db" ]; then
         debug_log "DEBUG" "Base message DB not found"
