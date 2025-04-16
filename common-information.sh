@@ -389,8 +389,8 @@ get_country_code() {
     TIMEZONE_API_SOURCE="" # APIソースは動的に決定
 
     # ユーザーが指定するAPIプロバイダー (デフォルトはget_country_ipapi)
-    API_PROVIDERS="${API_PROVIDERS:-get_country_ipapi}"
-    # API_PROVIDERS="${API_PROVIDERS:-get_country_cloudflare}"
+    #API_PROVIDERS="${API_PROVIDERS:-get_country_ipapi}"
+    API_PROVIDERS="${API_PROVIDERS:-get_country_cloudflare}"
     debug_log "DEBUG" "API_PROVIDERS set to: $API_PROVIDERS"
 
     # キャッシュディレクトリの確認
