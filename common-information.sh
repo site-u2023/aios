@@ -62,9 +62,7 @@ API_MAX_REDIRECTS="${API_MAX_REDIRECTS:-2}"
 TIMEZONE_API_SOURCE=""
 USER_AGENT="aios-script/${SCRIPT_VERSION:-unknown}"
 
-SELECT_POSIX_TZ=""
 SELECT_REGION_NAME=""
-SELECT_REGION_CODE=""
 
 # 検出した地域情報を表示する共通関数
 display_detected_location() {
@@ -287,7 +285,6 @@ get_country_cloudflare() {
     ISP_AS=""
     ISP_ORG=""
     SELECT_REGION_NAME=""
-    # SELECT_REGION_CODE="" # 削除
 
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
         make_api_request "$worker_url" "$tmp_file" "$API_TIMEOUT" "CLOUDFLARE"
@@ -318,8 +315,7 @@ get_country_cloudflare() {
                 # ISP_ORG は ISP_NAME を使う (Cloudflare Workerレスポンスにorgフィールドはないため)
                 [ -n "$ISP_NAME" ] && ISP_ORG="$ISP_NAME"
                 SELECT_REGION_NAME=$(grep -o '"regionName": "[^"]*' "$tmp_file" | sed 's/"regionName": "//')
-                # SELECT_REGION_CODE=$(grep -o '"region": "[^"]*' "$tmp_file" | sed 's/"region": "//') # 削除
-
+            
                 if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
                     debug_log "DEBUG" "Required fields (Country & ZoneName) extracted successfully."
                     success=1
@@ -373,9 +369,7 @@ get_country_code() {
     SELECT_ZONENAME="" # 例: Asia/Tokyo
     SELECT_TIMEZONE="" # process_location_info が期待する変数 (POSIX TZをここに直接格納)
     SELECT_COUNTRY=""
-    # SELECT_POSIX_TZ は使用しない
     SELECT_REGION_NAME="" # 追加
-    SELECT_REGION_CODE="" # 追加
     ISP_NAME=""
     ISP_AS=""
     ISP_ORG=""
@@ -580,7 +574,6 @@ process_location_info() {
             ISP_NAME=$(cat "$tmp_isp")
             ISP_AS=$(cat "$tmp_as")
             SELECT_REGION_NAME=$(cat "$tmp_region_name")
-            # SELECT_REGION_CODE=$(cat "$tmp_region_code") # 削除
             debug_log "DEBUG: Fallback location data - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME, Timezone: $SELECT_TIMEZONE"
         else
             debug_log "ERROR: No previously cached location information available for fallback"
@@ -624,14 +617,6 @@ process_location_info() {
     else
         rm -f "$tmp_region_name" 2>/dev/null
     fi
-    # if [ -n "$SELECT_REGION_CODE" ]; then # 削除
-    #     echo "$SELECT_REGION_CODE" > "$tmp_region_code"
-    #     debug_log "DEBUG: Region code saved to cache: $SELECT_REGION_CODE"
-    # else
-    #     rm -f "$tmp_region_code" 2>/dev/null
-    # fi
-
-    # 不要になったフォールバックロジックは削除されたままにする
 
     debug_log "DEBUG: Location information cache process completed successfully"
     return 0
