@@ -17,12 +17,7 @@ load_common_script() {
     if [ -f "$script_path" ]; then
         # shellcheck source=/dev/null
         . "$script_path"
-        if command -v debug_log >/dev/null 2>&1; then
-            debug_log "DEBUG" "Loaded common script: $script_name"
-        else
-            # Provide a basic English message if debug_log isn't available yet
-            printf "Loaded common script: %s\n" "$script_name"
-        fi
+        debug_log "DEBUG" "Loaded common script: $script_name"
         return 0
     else
         # Error message in English as common scripts are essential
@@ -224,7 +219,7 @@ EOF
 is_east_japan() {
     local region_input="$1"
     local east_prefs="Hokkaido Aomori Iwate Miyagi Akita Yamagata Fukushima Ibaraki Tochigi Gunma Saitama Chiba Tokyo Kanagawa Niigata Yamanashi Nagano Shizuoka"
-    local west_prefs="Toyama Ishikawa Fukui Gifu Aichi Mie Shiga Kyoto Osaka Hyogo Nara Wakayama Tottori Shimane Okayama Hiroshima Yamaguchi Tokushima Kagawa Ehime Kochi Fukuoka Saga Nagasaki Kumamoto Oita Miyazaki Kagoshima Okinawa"
+    local west_prefs="Toyama Ishikawa Fukui Gifu Aichi Mie Shiga Kyoto Osaka Hyogo Nara Wakayama Tottori Shimane Okayama Hiroshima Yamaguchi Tokushima Kagawa Ehime Kochi Fukuoka Saga Nagasaki Kumamoto[...]
     local east_codes="JP-01 JP-02 JP-03 JP-04 JP-05 JP-06 JP-07 JP-08 JP-09 JP-10 JP-11 JP-12 JP-13 JP-14 JP-15 JP-19 JP-20 JP-22"
     local west_codes="JP-16 JP-17 JP-18 JP-21 JP-23 JP-24 JP-25 JP-26 JP-27 JP-28 JP-29 JP-30 JP-31 JP-32 JP-33 JP-34 JP-35 JP-36 JP-37 JP-38 JP-39 JP-40 JP-41 JP-42 JP-43 JP-44 JP-45 JP-46 JP-47"
     for pref in $east_prefs $east_codes; do if [ "$region_input" = "$pref" ]; then return 0; fi; done
@@ -234,7 +229,7 @@ is_east_japan() {
 
 # --- Auto Detection Provider Function (Internal) ---
 # Outputs: "Provider Name|AFTR Address|Region Text" on success, empty on failure
-_detect_provider_internal() {
+detect_provider_internal() {
     local isp_as="" region="" detected_provider="" detected_aftr="" detected_region_text=""
     # Note: error_prefix and reset_color variables are removed as color function handles reset.
 
@@ -288,7 +283,6 @@ _detect_provider_internal() {
     return 0
 }
 
-# --- Auto Detect and Apply Function (Called from menu.db) ---
 auto_detect_and_apply() {
     local msg_prefix="" error_prefix="\033[31mError: " reset_color="\033[0m" # Keep for fallback if color not available
     if command -v color >/dev/null 2>&1; then
@@ -296,21 +290,16 @@ auto_detect_and_apply() {
         # Note: reset_color variable is removed or unused when color function is available
     fi
 
-    # 1. Cache check removed - Assuming cache exists or _detect_provider_internal handles it.
+    # 1. Cache check removed - Assuming cache exists or detect_provider_internal handles it.
 
     # 2. Perform internal detection using cached info
     local detection_result
-    detection_result=$(_detect_provider_internal) # Specific errors (red) printed to stderr within this function
+    detection_result=$(detect_provider_internal) # Specific errors (red) printed to stderr within this function
     local detection_status=$?
 
     if [ $detection_status -ne 0 ]; then
         # Warning message for detection failure (using new key)
-        if command -v get_message >/dev/null 2>&1; then
-            printf "%s\n" "$(color yellow "$(get_message MSG_DSLITE_AUTO_DETECT_FAILED)")"
-        else
-            # Fallback if get_message is not available (use yellow color code directly)
-            printf "\033[33mProvider detection failed. Returning to DS-Lite menu.\033[0m\n"
-        fi
+        printf "%s\n" "$(color yellow "$(get_message MSG_DSLITE_AUTO_DETECT_FAILED)")"
         # Log the failure for debugging
         debug_log "DEBUG" "DS-Lite auto-detection failed (exit code: $detection_status). Check previous specific errors."
         return 1
@@ -345,12 +334,7 @@ auto_detect_and_apply() {
         return $?
     else # No or Return
          # Warning message for user rejection (using existing key)
-         if command -v get_message >/dev/null 2>&1; then
-            printf "%s\n" "$(color yellow "$(get_message MSG_DSLITE_AUTO_CONFIG_REJECTED)")"
-         else
-            # Fallback if get_message is not available (use yellow color code directly)
-            printf "\033[33mAuto-configuration cancelled by user. Returning to DS-Lite menu.\033[0m\n"
-         fi
+         printf "%s\n" "$(color yellow "$(get_message MSG_DSLITE_AUTO_CONFIG_REJECTED)")"
          # Log the user cancellation
          debug_log "INFO" "DS-Lite auto-configuration rejected by user."
         return 1
