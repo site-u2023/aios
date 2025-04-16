@@ -384,11 +384,9 @@ get_country_cloudflare() {
 
 get_country_code() {
     # 変数宣言
-    local tmp_file=""
     local spinner_active=0
     local api_success=1 # 初期値を失敗(1)に設定
     local api_provider="" # APIプロバイダーを追跡
-    local providers=""
 
     # グローバル変数の初期化
     SELECT_ZONE="" # Workerからは取得できない
@@ -401,15 +399,14 @@ get_country_code() {
     ISP_ORG=""
     TIMEZONE_API_SOURCE="" # APIソースは動的に決定
 
-    # ユーザーが指定するAPIプロバイダー (デフォルトはget_country_ipapi)
-    #API_PROVIDERS="${API_PROVIDERS:-get_country_ipapi}"
+    # ユーザーが指定するAPIプロバイダー (デフォルトはget_country_cloudflare)
     API_PROVIDERS="${API_PROVIDERS:-get_country_cloudflare}"
     debug_log "DEBUG" "API_PROVIDERS set to: $API_PROVIDERS"
 
     # キャッシュディレクトリの確認
     [ -d "${CACHE_DIR}" ] || mkdir -p "${CACHE_DIR}"
 
-    # ネットワーク接続状況の取得 (元のコードをそのまま流用)
+    # ネットワーク接続状況の取得
     local network_type=""
     if [ -f "${CACHE_DIR}/network.ch" ]; then
         network_type=$(cat "${CACHE_DIR}/network.ch")
@@ -447,13 +444,17 @@ get_country_code() {
             continue # 次のプロバイダーを試す
         fi
 
+        # forループ内でAPIごとにユニークな一時ファイル名を生成
+        local tmp_file="${CACHE_DIR}/${api_provider}_tmp_$$.json"
+
         # APIプロバイダーの関数を呼び出す
         debug_log "DEBUG" "Calling API provider function: $api_provider"
-
-        # TIMEZONE_API_SOURCE は関数内で設定
         ${api_provider} "$tmp_file" "$network_type"
 
         api_success=$?
+
+        # 一時ファイル削除（都度クリーンアップ）
+        rm -f "$tmp_file" 2>/dev/null
 
         # 成功したらループを抜ける
         if [ "$api_success" -eq 0 ]; then
@@ -463,9 +464,6 @@ get_country_code() {
             debug_log "DEBUG" "API query failed with $api_provider, trying next provider"
         fi
     done
-
-    # 一時ファイルを削除
-    rm -f "$tmp_file" 2>/dev/null
 
     # --- country.db 検索 (POSIXタイムゾーン取得) ---
     # API呼び出しが成功し、ZoneNameが取得できた場合のみ実行
@@ -496,7 +494,6 @@ get_country_code() {
                 done
 
                 if [ -n "$found_tz" ]; then
-                    # *** 修正点: SELECT_TIMEZONE に直接格納 ***
                     SELECT_TIMEZONE="$found_tz"
                     debug_log "DEBUG" "Found POSIX timezone in country.db and stored in SELECT_TIMEZONE: $SELECT_TIMEZONE"
                 else
@@ -522,8 +519,8 @@ get_country_code() {
     if [ -n "$ISP_NAME" ] || [ -n "$ISP_AS" ]; then
         local cache_file="${CACHE_DIR}/isp_info.ch"
         echo "$ISP_NAME" > "$cache_file"
-        echo "$ISP_AS" > "$cache_file"
-        echo "$ISP_ORG" > "$cache_file"
+        echo "$ISP_AS" >> "$cache_file"
+        echo "$ISP_ORG" >> "$cache_file"
         debug_log "DEBUG" "Saved ISP information to cache"
     else
         rm -f "${CACHE_DIR}/isp_info.ch" 2>/dev/null
@@ -532,7 +529,6 @@ get_country_code() {
     # 結果のチェックとスピナー停止
     if [ $spinner_active -eq 1 ]; then
         # 成功条件: 国コードとタイムゾーン名(IANA)が取得できていること
-        # SELECT_TIMEZONE (POSIX TZ) の有無はここでは問わない
         if [ $api_success -eq 0 ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
             local success_msg=$(get_message "MSG_LOCATION_RESULT" "s=successfully")
             stop_spinner "$success_msg" "success"
