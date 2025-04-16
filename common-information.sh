@@ -164,7 +164,7 @@ make_api_request() {
 get_country_ipapi() {
     local tmp_file="$1"      # 一時ファイルパス
     local network_type="$2"  # ネットワークタイプ
-    local api_name="$3"      # API名（ログ用）
+    local api_name="$3"      # API URL
 
     local retry_count=0
     local success=0
@@ -225,7 +225,7 @@ get_country_ipapi() {
 get_country_ipinfo() {
     local tmp_file="$1"      # 一時ファイルパス
     local network_type="$2"  # ネットワークタイプ
-    local api_name="$3"      # API名（ログ用）
+    local api_name="$3"      # API URL
 
     local retry_count=0
     local success=0
@@ -277,7 +277,8 @@ get_country_ipinfo() {
 # Cloudflare Workerから地域情報を取得する関数 (ISP_ASにAS番号のみ格納版)
 get_country_cloudflare() {
     local tmp_file="$1" # 一時ファイルパス
-    local api_name="Cloudflare Worker (location-api-worker.site-u.workers.dev)" # ログ用
+    local network_type="$2"  # ネットワークタイプ
+    local api_name="$3"      # API URL
 
     local retry_count=0
     local success=0
@@ -362,7 +363,6 @@ get_country_cloudflare() {
     fi
 }
 
-# IPアドレスから地域情報を取得するメイン関数 (SELECT_TIMEZONE へ直接格納版)
 get_country_code() {
     # 変数宣言
     local tmp_file=""
@@ -430,8 +430,35 @@ get_country_code() {
 
         # APIプロバイダーの関数を呼び出す
         debug_log "DEBUG" "Calling API provider function: $api_provider"
+
+        # API URL を設定
+        local api_url=""
+        case "$api_provider" in
+            "get_country_ipapi")
+                api_url="http://ip-api.com/json"
+                ;;
+            "get_country_ipinfo")
+                api_url="https://ipinfo.io"
+                ;;
+            "get_country_cloudflare")
+                api_url="https://location-api-worker.site-u.workers.dev"
+                ;;
+            *)
+                debug_log "ERROR: Invalid API provider: $api_provider"
+                api_success=1
+                continue
+                ;;
+        esac
+
+        # API URL が空の場合、エラーメッセージを出力
+        if [ -z "$api_url" ]; then
+            debug_log "ERROR: API URL is empty for provider: $api_provider"
+            api_success=1
+            continue
+        fi
+
         # TIMEZONE_API_SOURCE は関数内で設定
-        ${api_provider} "$tmp_file" "$network_type"
+        ${api_provider} "$tmp_file" "$network_type" "$api_url"
         api_success=$?
 
         # 成功したらループを抜ける
