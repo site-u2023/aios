@@ -16,6 +16,11 @@ ar|MSG_UNDER_TEST=👽 تحت الاختبار
 es|MSG_UNDER_TEST=👽 En prueba
 
 # =======================
+# internet-map-e.sh
+# =======================
+en|MSG_MAPE_IPV6_PREFIX_FAILED=Failed to get IPv6 prefix
+
+# =======================
 # internet-ds-lite.sh
 # =======================
 en|MSG_DSLITE_APPLYING_SETTINGS=Applying DS-Lite settings for {service}
