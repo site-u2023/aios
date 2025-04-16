@@ -124,34 +124,39 @@ make_api_request() {
     local tmp_file="$2"
     local timeout="${3:-$API_TIMEOUT}"
     local debug_tag="${4:-API}"
-    
+    local user_agent="$5"
+
+    # UAが空の場合はグローバルを使う
+    if [ -z "$user_agent" ]; then
+        user_agent="$USER_AGENT"
+    fi
+
     # wgetの機能検出
     local wget_capability=$(detect_wget_capabilities)
     local used_url="$url"
     local status=0
-    
+
     debug_log "DEBUG" "[$debug_tag] Making API request to: $url"
-    
+    debug_log "DEBUG" "[$debug_tag] Using User-Agent: $user_agent"
+
     # コマンド構築と実行
     case "$wget_capability" in
         "full")
-            # 完全なwgetの場合
             debug_log "DEBUG" "[$debug_tag] Using full wget with redirect support"
             wget --no-check-certificate -q -L --max-redirect="${API_MAX_REDIRECTS:-2}" \
-                -U "${USER_AGENT}" \
+                -U "$user_agent" \
                 -O "$tmp_file" "$used_url" -T "$timeout" 2>/dev/null
             status=$?
             ;;
         "https_only"|"basic")
-            # 基本wgetの場合（HTTPSを直接指定）
             used_url=$(echo "$url" | sed 's|^http:|https:|')
             debug_log "DEBUG" "[$debug_tag] Using BusyBox wget, forcing HTTPS URL: $used_url"
-            wget --no-check-certificate -q -U "${USER_AGENT}" \
+            wget --no-check-certificate -q -U "$user_agent" \
                 -O "$tmp_file" "$used_url" -T "$timeout" 2>/dev/null
             status=$?
             ;;
     esac
-    
+
     if [ $status -eq 0 ] && [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
         debug_log "DEBUG" "[$debug_tag] API request successful"
         return 0
