@@ -256,8 +256,8 @@ get_country_ipinfo() {
         debug_log "DEBUG" "API request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
 
         if [ $request_status -eq 0 ]; then
-            SELECT_COUNTRY=$(sed -n 's/.*"country":"\([^"]*\)".*/\1/p' "$tmp_file")
-            SELECT_ZONENAME=$(sed -n 's/.*"timezone":"\([^"]*\)".*/\1/p' "$tmp_file")
+            SELECT_COUNTRY=$(grep -o '"country":"[^"]*' "$tmp_file" | sed 's/"country":"//')
+            SELECT_ZONENAME=$(grep -o '"timezone":"[^"]*' "$tmp_file" | sed 's/"timezone":"//')
 
             if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
                 debug_log "DEBUG" "Retrieved from $api_domain - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
