@@ -433,6 +433,10 @@ get_country_code() {
 
     debug_log "DEBUG" "Starting location detection process with providers: $API_PROVIDERS"
 
+    local success_msg=$(get_message "MSG_LOCATION_RESULT" "s=successfully")
+    local fail_msg=$(get_message "MSG_LOCATION_RESULT" "s=failed")
+    local api_found=0
+
     # APIプロバイダーを順番に処理
     for api_provider in $API_PROVIDERS; do
         # 関数が存在するか確認
@@ -452,25 +456,32 @@ get_country_code() {
         # APIプロバイダーの関数を呼び出す
         debug_log "DEBUG" "Calling API provider function: $api_provider"
         ${api_provider} "$tmp_file" "$network_type"
-
         api_success=$?
-
-        # スピナー停止（都度停止）
-        stop_spinner "" ""
-        spinner_active=0
 
         # 一時ファイル削除（都度クリーンアップ）
         rm -f "$tmp_file" 2>/dev/null
 
-        # 成功したらループを抜ける
-        if [ "$api_success" -eq 0 ]; then
+        # 成功したらメッセージ付きでスピナー停止＆ループ脱出
+        if [ "$api_success" -eq 0 ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
+            stop_spinner "$success_msg" "success"
+            spinner_active=0
             debug_log "DEBUG" "API query succeeded with $TIMEZONE_API_SOURCE, breaking loop"
+            api_found=1
             break
         else
+            # 失敗時はスピナーだけ止めて次へ
+            stop_spinner "" ""
+            spinner_active=0
             debug_log "DEBUG" "API query failed with $api_provider, trying next provider"
         fi
     done
-    
+
+    # すべて失敗した場合のみ、失敗メッセージ表示
+    if [ $api_found -eq 0 ]; then
+        stop_spinner "$fail_msg" "failed"
+        spinner_active=0
+    fi
+
     # --- country.db 検索 (POSIXタイムゾーン取得) ---
     # API呼び出しが成功し、ZoneNameが取得できた場合のみ実行
     if [ $api_success -eq 0 ] && [ -n "$SELECT_ZONENAME" ]; then
@@ -532,27 +543,13 @@ get_country_code() {
         rm -f "${CACHE_DIR}/isp_info.ch" 2>/dev/null
     fi
 
-    # 結果のチェックとスピナー停止
-    if [ $spinner_active -eq 1 ]; then
-        # 成功条件: 国コードとタイムゾーン名(IANA)が取得できていること
-        if [ $api_success -eq 0 ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
-            local success_msg=$(get_message "MSG_LOCATION_RESULT" "s=successfully")
-            stop_spinner "$success_msg" "success"
-            debug_log "DEBUG" "Location information retrieved successfully by get_country_code"
-            return 0 # 成功
-        else
-            local fail_msg=$(get_message "MSG_LOCATION_RESULT" "s=failed")
-            stop_spinner "$fail_msg" "failed"
-            debug_log "DEBUG" "Location information retrieval or processing failed within get_country_code"
-            return 1 # 失敗
-        fi
-    fi
-
-    # スピナーがアクティブでなかった場合
+    # 最終的な成功・失敗でリターン
     if [ $api_success -eq 0 ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
-        return 0 # 成功
+        debug_log "DEBUG" "Location information retrieved successfully by get_country_code"
+        return 0
     else
-        return 1 # 失敗
+        debug_log "DEBUG" "Location information retrieval or processing failed within get_country_code"
+        return 1
     fi
 }
 
