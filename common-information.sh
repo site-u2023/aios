@@ -533,7 +533,6 @@ get_country_code() {
     fi
 }
 
-# IPアドレスから地域情報を取得しキャッシュファイルに保存する関数
 process_location_info() {
     local skip_retrieval=0
 
@@ -543,6 +542,12 @@ process_location_info() {
         debug_log "DEBUG: Using already retrieved location information"
     fi
 
+    # デバッグログの追加
+    debug_log "DEBUG: process_location_info() called"
+    debug_log "DEBUG: SELECT_COUNTRY: $SELECT_COUNTRY"
+    debug_log "DEBUG: SELECT_TIMEZONE: $SELECT_TIMEZONE"
+    debug_log "DEBUG: SELECT_ZONENAME: $SELECT_ZONENAME"
+
     # 必要な場合のみget_country_code関数を呼び出し
     if [ $skip_retrieval -eq 0 ]; then
         debug_log "DEBUG: Starting IP-based location information retrieval"
@@ -550,6 +555,9 @@ process_location_info() {
             debug_log "ERROR: get_country_code failed to retrieve location information"
             return 1
         }
+        # get_country_code() 関数の戻り値を確認
+        local result=$?
+        debug_log "DEBUG: get_country_code() returned: $result"
     fi
 
     # デバッグログ - Timezone と $SELECT_TIMEZONE を表示するように戻す
