@@ -431,9 +431,6 @@ get_country_code() {
         return 1
     fi
 
-    # スピナー開始
-    start_spinner "$(color "blue" "Currently querying: $API_PROVIDERS")" "yellow"
-    spinner_active=1
     debug_log "DEBUG" "Starting location detection process with providers: $API_PROVIDERS"
 
     # APIプロバイダーを順番に処理
@@ -448,11 +445,19 @@ get_country_code() {
         # forループ内でAPIごとにユニークな一時ファイル名を生成
         local tmp_file="${CACHE_DIR}/${api_provider}_tmp_$$.json"
 
+        # スピナー開始：今のAPIのみ表示
+        start_spinner "$(color "blue" "Currently querying: $api_provider")" "yellow"
+        spinner_active=1
+
         # APIプロバイダーの関数を呼び出す
         debug_log "DEBUG" "Calling API provider function: $api_provider"
         ${api_provider} "$tmp_file" "$network_type"
 
         api_success=$?
+
+        # スピナー停止（都度停止）
+        stop_spinner "" ""
+        spinner_active=0
 
         # 一時ファイル削除（都度クリーンアップ）
         rm -f "$tmp_file" 2>/dev/null
@@ -465,7 +470,7 @@ get_country_code() {
             debug_log "DEBUG" "API query failed with $api_provider, trying next provider"
         fi
     done
-
+    
     # --- country.db 検索 (POSIXタイムゾーン取得) ---
     # API呼び出しが成功し、ZoneNameが取得できた場合のみ実行
     if [ $api_success -eq 0 ] && [ -n "$SELECT_ZONENAME" ]; then
