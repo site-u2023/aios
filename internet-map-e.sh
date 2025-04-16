@@ -1192,7 +1192,6 @@ get_ruleprefix38_20_value() {
     esac
 }
 
-# MAP-E情報取得と計算 (ash互換 + bash版の変数名に合わせる + エラー処理修正)
 mape_mold() {
     debug_log "DEBUG" "Entering mape_mold() function"
 
@@ -1210,7 +1209,6 @@ mape_mold() {
     fi
 
     local ip6_prefix_tmp
-    # bash文字列置換をsedに修正
     ip6_prefix_tmp=$(echo "$NEW_IP6_PREFIX" | sed 's/::/:0::/')
 
     debug_log "DEBUG" "NEW_IP6_PREFIX=${NEW_IP6_PREFIX}, ip6_prefix_tmp=${ip6_prefix_tmp}"
@@ -1239,7 +1237,7 @@ EOF
         return 1
     fi
 
-    # 各種計算 (複雑なネスト計算を分割) - bash版と同じ
+    # 各種計算 (複雑なネスト計算を分割) 
     local PREFIX31 PREFIX38
     local h0_mul=$(( HEXTET0 * 65536 ))    # 0x10000
     local h1_masked=$(( HEXTET1 & 65534 )) # 0xfffe
@@ -1255,7 +1253,7 @@ EOF
 
     # グローバル変数として設定するパラメータの初期化
     OFFSET=6  # デフォルト値
-    RFC=false # デフォルト値 (bash版に合わせてfalse)
+    RFC=false # デフォルト値
     IP6PREFIXLEN=""
     PSIDLEN=""
     IPV4=""
@@ -1274,7 +1272,7 @@ EOF
     prefix38_hex=$(printf 0x%x "$PREFIX38")
     debug_log "DEBUG" "Processing prefix31=$prefix31_hex, prefix38=$prefix38_hex"
 
-    # IPv4アドレスと各種パラメータの決定 (bash版/JS版と同じ優先順序: 38_20 -> 38 -> 31)
+    # IPv4アドレスと各種パラメータの決定
     local octet1 octet2 octet3 octet4 octet
     if [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
         octet="$(get_ruleprefix38_20_value "$prefix38_hex")"
@@ -1291,10 +1289,10 @@ EOF
         local temp6=$(( temp5 >> 14 ))
         octet4=$(( temp4 | temp6 ))
 
-        IPV4="${octet1}.${octet2}.${octet3}.${octet4}" # bash版の変数名
+        IPV4="${octet1}.${octet2}.${octet3}.${octet4}"
         IP6PREFIXLEN=38
         PSIDLEN=6
-        OFFSET=6 # ruleprefix38_20では offset=6 を使用 (bash版も同様)
+        OFFSET=6 # ruleprefix38_20では offset=6 を使用
     elif [ -n "$(get_ruleprefix38_value "$prefix38_hex")" ]; then
         octet="$(get_ruleprefix38_value "$prefix38_hex")"
         debug_log "DEBUG" "Matched ruleprefix38: $octet"
@@ -1306,7 +1304,7 @@ EOF
         octet3=$(( octet3 | temp2 ))
         octet4=$(( HEXTET2 & 255 ))         # 0x00ff
 
-        IPV4="${octet1}.${octet2}.${octet3}.${octet4}" # bash版の変数名
+        IPV4="${octet1}.${octet2}.${octet3}.${octet4}"
         IP6PREFIXLEN=38
         PSIDLEN=8
         OFFSET=4
@@ -1321,7 +1319,7 @@ EOF
         octet3=$(( temp1 >> 8 ))
         octet4=$(( HEXTET2 & 255 ))         # 0x00ff
 
-        IPV4="${octet1}.${octet2}.${octet3}.${octet4}" # bash版の変数名
+        IPV4="${octet1}.${octet2}.${octet3}.${octet4}"
         IP6PREFIXLEN=31
         PSIDLEN=8
         OFFSET=4
@@ -1332,7 +1330,7 @@ EOF
         return 1
     fi
 
-    # PSID計算 (bash版と同じ)
+    # PSID計算
     if [ "$PSIDLEN" -eq 8 ]; then
         PSID=$(( (HEXTET3 & 65280) >> 8 )) # 0xff00
         debug_log "DEBUG" "PSID calculation for PSIDLEN=8: $PSID"
@@ -1344,7 +1342,7 @@ EOF
         debug_log "DEBUG" "PSIDLEN ($PSIDLEN) is not 8 or 6, PSID set to 0"
     fi
 
-    # ポート範囲の計算 (bash版と同じ)
+    # ポート範囲の計算
     PORTS=""
     local AMAX=$(( (1 << OFFSET) - 1 ))
     debug_log "DEBUG" "Calculating port ranges: AMAX=$AMAX, OFFSET=$OFFSET, PSIDLEN=$PSIDLEN, PSID=$PSID"
@@ -1381,17 +1379,17 @@ EOF
     done
     # debug_log "DEBUG" "Calculated PORTS string (first 100 chars): $(echo "$PORTS" | cut -c 1-100)" # 必要ならコメント解除
 
-    # CEアドレス計算用のHEXTETを準備 (bash版に合わせる)
+    # CEアドレス計算用のHEXTETを準備
     local CE_HEXTET0 CE_HEXTET1 CE_HEXTET2 CE_HEXTET3 CE_HEXTET4 CE_HEXTET5 CE_HEXTET6 CE_HEXTET7
     CE_HEXTET0=$HEXTET0
     CE_HEXTET1=$HEXTET1
     CE_HEXTET2=$HEXTET2
-    # hextet[3]=$((${hextet[3]} & 0xff00)) in bash script
+    # hextet[3]=$((${hextet[3]} & 0xff00)) 
     CE_HEXTET3=$(( HEXTET3 & 65280 )) # 上位バイトのみ保持 (0xff00)
 
-    # bash版のCEアドレス計算ロジック (RFCフラグはfalse固定)
+    # CEアドレス計算ロジック (RFCフラグはfalse固定)
     if [ "$RFC" = "true" ]; then
-        # このブロックはRFC=falseのため通常実行されないが、bash版に合わせて記述
+        # このブロックはRFC=falseのため通常実行されない
         debug_log "DEBUG" "Calculating CE Address (RFC mode - unexpected)"
         CE_HEXTET4=0
         CE_HEXTET5=$(( (octet1 << 8) | octet2 ))
@@ -1405,7 +1403,7 @@ EOF
         CE_HEXTET7=$(( PSID << 8 ))
     fi
 
-    # CEアドレス文字列の生成 (bash版の変数名 CE_ADDR)
+    # CEアドレス文字列の生成
     local CE0 CE1 CE2 CE3 CE4 CE5 CE6 CE7
     CE0=$(printf %04x "$CE_HEXTET0")
     CE1=$(printf %04x "$CE_HEXTET1")
@@ -1415,37 +1413,35 @@ EOF
     CE5=$(printf %04x "$CE_HEXTET5")
     CE6=$(printf %04x "$CE_HEXTET6")
     CE7=$(printf %04x "$CE_HEXTET7")
-    CE_ADDR="${CE0}:${CE1}:${CE2}:${CE3}:${CE4}:${CE5}:${CE6}:${CE7}" # bash版の変数名
+    CE_ADDR="${CE0}:${CE1}:${CE2}:${CE3}:${CE4}:${CE5}:${CE6}:${CE7}"
     debug_log "DEBUG" "Generated CE address (CE_ADDR): $CE_ADDR"
 
-    # EALENとプレフィックス長の計算 (bash版と同じ)
+    # EALENとプレフィックス長の計算
     EALEN=$(( 56 - IP6PREFIXLEN ))
     IP4PREFIXLEN=$(( 32 - (EALEN - PSIDLEN) ))
     debug_log "DEBUG" "EALEN=$EALEN, IP4PREFIXLEN=$IP4PREFIXLEN"
 
-    # IPv6プレフィックスの計算 (bash版の変数名 IP6PFX)
+    # IPv6プレフィックスの計算
     local IP6PFX0 IP6PFX1 IP6PFX2
     if [ "$IP6PREFIXLEN" -eq 38 ]; then
-        # hextet2[2]=$(( ${hextet[2]} & 0xfc00)) in bash script
         local hextet2_2=$(( HEXTET2 & 64512 ))  # 0xfc00
         IP6PFX0=$(printf %x "$HEXTET0")
         IP6PFX1=$(printf %x "$HEXTET1")
         IP6PFX2=$(printf %x "$hextet2_2")
-        IP6PFX="${IP6PFX0}:${IP6PFX1}:${IP6PFX2}" # bash版の変数名
+        IP6PFX="${IP6PFX0}:${IP6PFX1}:${IP6PFX2}"
     elif [ "$IP6PREFIXLEN" -eq 31 ]; then
-        # hextet2[1]=$(( ${hextet[1]} & 0xfffe )) in bash script
         local hextet2_1=$(( HEXTET1 & 65534 ))  # 0xfffe
         IP6PFX0=$(printf %x "$HEXTET0")
         IP6PFX1=$(printf %x "$hextet2_1")
-        IP6PFX="${IP6PFX0}:${IP6PFX1}" # bash版の変数名
+        IP6PFX="${IP6PFX0}:${IP6PFX1}"
     else
         IP6PFX="" # フォールバック
         debug_log "WARNING" "Could not determine IP6PFX for IP6PREFIXLEN=$IP6PREFIXLEN"
     fi
     debug_log "DEBUG" "Generated IPv6 prefix (IP6PFX): $IP6PFX"
 
-    # ブロードバンドルーターアドレス(BR/Peer)の判定 (bash版の変数名 BR)
-    BR="" # bash版の変数名
+    # ブロードバンドルーターアドレス(BR/Peer)の判定
+    BR=""
     # 10進数で比較
     # 0x24047a80 = 604240512, 0x24047a84 = 604240516, 0x24047a88 = 604240520
     # 0x240b0010 = 604512272, 0x240b0014 = 604512276
@@ -1490,13 +1486,11 @@ mape_display() {
     echo "  option ealen '$EALEN'"
     echo "  option psidlen '$PSIDLEN'"
     echo "  option offset '$OFFSET'"
-    # echo "  export LEGACY=1" # これはuci設定ではないためコメントアウト推奨
+    echo "  export LEGACY=1"
 
-    # 利用可能なポート範囲の計算 (表示用、bash版にはないが有用な情報)
-    local max_port_blocks=$(( (1 << OFFSET) )) # bash版のAmax+1相当だが、ループ外なので直接計算
+    # 利用可能なポート範囲の計算 (表示用)
+    local max_port_blocks=$(( (1 << OFFSET) ))
     local ports_per_block=$(( 1 << (16 - OFFSET - PSIDLEN) ))
-    # bash版の $lp は Amax なので、ブロック数は $lp = (1 << OFFSET) - 1 ではなく (1 << OFFSET)
-    # ただし、ポート範囲の計算自体は A=1 から Amax までなので、利用可能なブロック数は Amax 個
     local total_ports=$(( ports_per_block * ((1 << OFFSET) - 1) )) # A=1..AMax の合計ポート数
     local port_start=$(( (1 << (16 - OFFSET)) | (PSID << (16 - OFFSET - PSIDLEN)) )) # A=1 の時のポート開始値
 
@@ -1505,7 +1499,6 @@ mape_display() {
     echo ""
     echo "Port Information:" # "ポート情報:"
     echo "  Available Ports: $total_ports" # "  利用可能なポート数: $total_ports"
-    # echo "  Base Port Start: $port_start" # 基本ポート開始値は誤解を招く可能性があるのでコメントアウト推奨
 
     # ポート範囲を表示 (printfを使用)
     echo ""
@@ -1517,70 +1510,76 @@ mape_display() {
 
 # MAP-E設定を適用する関数
 mape_config() {
-    local wanmap='wanmap' # 設定セクション名
+    local WANMAPE='wanmape' # 設定セクション名
     local zone_no='1'       # WANが属するファイアウォールゾーンのインデックス (環境依存の可能性あり、通常は1)
 
-    # mapパッケージのインストール確認 (関数化されていると仮定)
+    # mapパッケージのインストール確認
     install_package map
 
-    # 設定のバックアップ作成 (既存のコードを流用)
+    # 設定のバックアップ作成 
     debug_log "DEBUG" "Backing up configuration files..." 
     cp /etc/config/network /etc/config/network.map-e.old && debug_log "DEBUG" "network backup created." || debug_log "DEBUG" "Failed to backup network config." 
-    cp /etc/config/dhcp /etc/config/dhcp.map-e.old && debug_log "DEBUG" "dhcp backup created." || debug_log "DEBUG" "Failed to backup dhcp config." 
+    cp /etc/config/dhcp /etc/config/dhcp.map-e.old && debug_log "DEBUG" "Failed to backup dhcp config." || debug_log "DEBUG" "Failed to backup dhcp config." 
     cp /etc/config/firewall /etc/config/firewall.map-e.old && debug_log "DEBUG" "firewall backup created." || debug_log "DEBUG" "Failed to backup firewall config." 
 
     # --- UCI設定 ---
-    debug_log "DEBUG" "Applying MAP-E configuration using UCI..." 
+    debug_log "DEBUG" "Applying MAP-E configuration using UCI" 
 
-    # WAN設定
     uci set network.wan.auto='0'
 
-    # DHCP LAN設定
+    # DHCP LAN
     uci set dhcp.lan.ra='relay'
     uci set dhcp.lan.dhcpv6='relay'
     uci set dhcp.lan.ndp='relay'
-    # uci set dhcp.lan.force='1' # forceは通常不要、問題があればコメント解除
+    uci set dhcp.lan.force='1'
 
-    # DHCP WAN6設定 (wan6インターフェースがDHCPv6クライアントとして動作する場合)
-    # uci delete dhcp.wan6 # 既存の設定を削除してから追加する方が安全な場合がある
+    # DHCP WAN6        
     uci set dhcp.wan6=dhcp
-    uci set dhcp.wan6.interface='wan6' # 対象インターフェースを明示
-    uci set dhcp.wan6.master='1'      # LAN側へのリレーに必要
+    uci set dhcp.wan6.master='1'
     uci set dhcp.wan6.ra='relay'
     uci set dhcp.wan6.dhcpv6='relay'
     uci set dhcp.wan6.ndp='relay'
-    # uci set dhcp.wan6.ignore='1' # MAP-Eが有効な場合、wan6でのDHCPv6処理を無視する (OpenWrt 21.02以降?)
 
-    # WAN6インターフェース設定 (DHCPv6クライアント)
+    # WAN6
     uci set network.wan6.proto='dhcpv6'
-    uci set network.wan6.reqaddress='try'  # アドレス要求 (必須ではない場合も)
-    uci set network.wan6.reqprefix='auto' # プレフィックス委譲要求
-    # uci set network.wan6.ip6prefix=${CE_ADDR}::/64 # これはMAP-Eインターフェースではなく、wan6に設定すべきではない
+    uci set network.wan6.reqaddress='try'
+    uci set network.wan6.reqprefix='auto'
+    uci set network.wan6.ip6prefix=${CE}::/64
 
-    # WANMAPインターフェース設定
-    # uci delete network.${wanmap} # 既存の設定を削除してから追加する方が安全な場合がある
-    uci set network.${wanmap}=interface
-    uci set network.${wanmap}.proto='map'
-    uci set network.${wanmap}.maptype='map-e'
-    uci set network.${wanmap}.peeraddr="${BR}"       # 変数をクォート
-    uci set network.${wanmap}.ipaddr="${IPV4}"       # 変数をクォート
-    uci set network.${wanmap}.ip4prefixlen="${IP4PREFIXLEN}" # 変数をクォート
-    uci set network.${wanmap}.ip6prefix="${IP6PFX}::" # 変数をクォート
-    uci set network.${wanmap}.ip6prefixlen="${IP6PREFIXLEN}" # 変数をクォート
-    uci set network.${wanmap}.ealen="${EALEN}"       # 変数をクォート
-    uci set network.${wanmap}.psidlen="${PSIDLEN}"     # 変数をクォート
-    uci set network.${wanmap}.offset="${OFFSET}"     # 変数をクォート
-    uci set network.${wanmap}.mtu='1460' # 一般的なMAP-EのMTU
-    uci set network.${wanmap}.encaplimit='ignore'
-    uci set network.${wanmap}.tunlink='wan6' # トンネルのリンク先
-    
-    local current_networks=$(uci get firewall.@zone[${zone_no}].network 2>/dev/null)
-    if ! echo "$current_networks" | grep -q "$wanma"; then
-        uci add_list firewall.@zone[${zone_no}].network="${wanmap}"
-        debug_log "DEBUG" "Added '$wanma' to firewall zone $zone_no." 
+    # WANMAPE
+    uci set network.${WANMAPE}=interface
+    uci set network.${WANMAPE}.proto='map'
+    uci set network.${WANMAPE}.maptype='map-e'
+    uci set network.${WANMAPE}.peeraddr=${BR}
+    uci set network.${WANMAPE}.ipaddr=${IPV4}
+    uci set network.${WANMAPE}.ip4prefixlen=${IP4PREFIXLEN}
+    uci set network.${WANMAPE}.ip6prefix=${IP6PFX}::
+    uci set network.${WANMAPE}.ip6prefixlen=${IP6PREFIXLEN}
+    uci set network.${WANMAPE}.ealen=${EALEN}
+    uci set network.${WANMAPE}.psidlen=${PSIDLEN}
+    uci set network.${WANMAPE}.offset=${OFFSET}
+    uci set network.${WANMAPE}.mtu='1460'
+    uci set network.${WANMAPE}.encaplimit='ignore'
+
+    # FW
+    ZOON_NO='1'
+    uci del_list firewall.@zone[${ZOON_NO}].network='wan'
+    uci add_list firewall.@zone[${ZOON_NO}].network=${WANMAPE}
+
+    # Version-specific settings
+    local osversion
+    osversion=$(cat "${CACHE_DIR}/osversion.ch")
+
+    if [ "$osversion" = "19" ]; then
+        uci add_list network.${WANMAPE}.tunlink='wan6'
     else
-        debug_log "DEBUG" "'$wanma' already exists in firewall zone $zone_no." 
+        uci set dhcp.wan6.interface='wan6'
+        uci set dhcp.wan6.ignore='1'
+        uci set network.${WANMAPE}.legacymap='1'
+        uci set network.${WANMAPE}.tunlink='wan6'
     fi
+
+    uci commit
 
     # 設定の保存
     debug_log "DEBUG" "Committing changes..." 
@@ -1593,17 +1592,17 @@ mape_config() {
     echo "[INFO] Applied Configuration:" # INFOレベルだがユーザー向けなのでそのまま
     printf "  wan ipaddr6: \033[1;33m%s\033[0m\n" "${NET_ADDR6}"
     # printf "  wan6 ip6prefix: %s::/64\n" "${CE_ADDR}" # wan6には設定しない
-    printf "  %s peeraddr: \033[1;32m%s\033[0m\n" "${wanmap}" "${BR}"
-    printf "  %s ipaddr: \033[1;32m%s\033[0m\n" "${wanmap}" "${IPV4}" # IPV4を表示
-    printf "  %s ip4prefixlen: \033[1;32m%s\033[0m\n" "${wanmap}" "${IP4PREFIXLEN}"
-    printf "  %s ip6prefix: \033[1;32m%s::\033[0m\n" "${wanmap}" "${IP6PFX}" # IP6PFXを表示
-    printf "  %s ip6prefixlen: \033[1;32m%s\033[0m\n" "${wanmap}" "${IP6PREFIXLEN}"
-    printf "  %s ealen: \033[1;32m%s\033[0m\n" "${wanmap}" "${EALEN}"
-    printf "  %s psidlen: \033[1;32m%s\033[0m\n" "${wanmap}" "${PSIDLEN}"
-    printf "  %s offset: \033[1;32m%s\033[0m\n" "${wanmap}" "${OFFSET}"
+    printf "  %s peeraddr: \033[1;32m%s\033[0m\n" "${WANMAPE}" "${BR}"
+    printf "  %s ipaddr: \033[1;32m%s\033[0m\n" "${WANMAPE}" "${IPV4}" # IPV4を表示
+    printf "  %s ip4prefixlen: \033[1;32m%s\033[0m\n" "${WANMAPE}" "${IP4PREFIXLEN}"
+    printf "  %s ip6prefix: \033[1;32m%s::\033[0m\n" "${WANMAPE}" "${IP6PFX}" # IP6PFXを表示
+    printf "  %s ip6prefixlen: \033[1;32m%s\033[0m\n" "${WANMAPE}" "${IP6PREFIXLEN}"
+    printf "  %s ealen: \033[1;32m%s\033[0m\n" "${WANMAPE}" "${EALEN}"
+    printf "  %s psidlen: \033[1;32m%s\033[0m\n" "${WANMAPE}" "${PSIDLEN}"
+    printf "  %s offset: \033[1;32m%s\033[0m\n" "${WANMAPE}" "${OFFSET}"
 
     echo ""
-    echo "MAP-E configuration completed. Please reboot the system." # ユーザー向けメッセージなのでそのまま
+    echo "MAP-E configuration completed. Please reboot the system" # ユーザー向けメッセージなのでそのまま
 
     return 0
 }
