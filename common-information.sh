@@ -636,7 +636,7 @@ process_location_info() {
     # ISP情報をキャッシュに保存
     if [ -n "$ISP_NAME" ]; then
         echo "$ISP_NAME" > "$tmp_isp"
-        debug_log "DEBUG: ISP name saved to cache: $ISP_NAME"
+        debug_log "DEBUG: ISP name saved to cache: $ISP_NAME" 
     else
         rm -f "$tmp_isp" 2>/dev/null
     fi
