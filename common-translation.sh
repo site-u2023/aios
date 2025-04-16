@@ -2,24 +2,6 @@
 
 # OpenWrt ash用 共通翻訳スクリプト（API Worker対応・DB書き出しあり）
 
-# メッセージ取得
-get_message() {
-    key="$1"
-    shift
-    dbfile="$MESSAGE_DB"
-    [ -z "$dbfile" ] && dbfile="/tmp/aios/message_ja.db"
-    lang=$(basename "$dbfile" | sed -n 's/^message_\([a-z][a-z]\)\.db$/\1/p')
-    val=$(grep "^${lang}|${key}=" "$dbfile" 2>/dev/null | head -n1 | sed "s/^${lang}|${key}=//")
-    [ -z "$val" ] && val="$key"
-    i=1
-    while [ $# -gt 0 ]; do
-        val=$(echo "$val" | sed "s/%$i/$1/g")
-        shift
-        i=$((i+1))
-    done
-    echo "$val"
-}
-
 # API Workerへリクエスト
 translate_api_worker_chunk() {
     val_file="$1"
