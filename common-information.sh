@@ -329,7 +329,7 @@ get_country_cloudflare() {
 
             if [ "$json_status" = "success" ]; then
                 debug_log "DEBUG" "JSON status is 'success'. Proceeding with field extraction."
-                SELECT_COUNTRY=$(grep -o '"countryCode": "[^"]*' "$tmp_file" | sed 's/"countryCode": "//')
+                SELECT_COUNTRY=$(grep -o '"country": "[^"]*' "$tmp_file" | sed 's/"country": "//')
                 SELECT_ZONENAME=$(grep -o '"timezone": "[^"]*' "$tmp_file" | sed 's/"timezone": "//')
                 ISP_NAME=$(grep -o '"isp": "[^"]*' "$tmp_file" | sed 's/"isp": "//')
                 local as_raw=$(grep -o '"as": "[^"]*' "$tmp_file" | sed 's/"as": "//')
