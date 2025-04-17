@@ -230,7 +230,7 @@ update_package_list() {
                 # エラー時はsilentモードでもエラーメッセージを表示
                 printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
             fi
-            debug_log "ERROR" "Failed to update package lists with opkg"
+            debug_log "DEBUG" "Failed to update package lists with opkg"
             # タイムスタンプファイルを削除して、次回も更新を試みるようにする
             rm -f "$update_cache" 2>/dev/null
             return 1
@@ -245,7 +245,7 @@ update_package_list() {
                 # エラー時はsilentモードでもエラーメッセージを表示
                 printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
             fi
-            debug_log "ERROR" "Failed to save package list to $package_cache"
+            debug_log "DEBUG" "Failed to save package list to $package_cache"
             # タイムスタンプファイルを削除して、次回も更新を試みるようにする
             rm -f "$update_cache" 2>/dev/null
             return 1
@@ -260,7 +260,7 @@ update_package_list() {
                 # エラー時はsilentモードでもエラーメッセージを表示
                 printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
             fi
-            debug_log "ERROR" "Failed to update package lists with apk"
+            debug_log "DEBUG" "Failed to update package lists with apk"
             # タイムスタンプファイルを削除して、次回も更新を試みるようにする
             rm -f "$update_cache" 2>/dev/null
             return 1
@@ -275,7 +275,7 @@ update_package_list() {
                 # エラー時はsilentモードでもエラーメッセージを表示
                 printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
             fi
-            debug_log "ERROR" "Failed to save package list to $package_cache"
+            debug_log "DEBUG" "Failed to save package list to $package_cache"
             # タイムスタンプファイルを削除して、次回も更新を試みるようにする
             rm -f "$update_cache" 2>/dev/null
             return 1
@@ -287,7 +287,7 @@ update_package_list() {
             # エラー時はsilentモードでもエラーメッセージを表示
             printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
         fi
-        debug_log "ERROR" "Unknown package manager: $PACKAGE_MANAGER"
+        debug_log "DEBUG" "Unknown package manager: $PACKAGE_MANAGER"
         # タイムスタンプファイルを削除して、次回も更新を試みるようにする
         rm -f "$update_cache" 2>/dev/null
         return 1
@@ -301,7 +301,7 @@ update_package_list() {
     # キャッシュのタイムスタンプを更新
     touch "$update_cache" 2>/dev/null
     if [ $? -ne 0 ]; then
-        debug_log "ERROR" "Failed to create/update cache file: $update_cache"
+        debug_log "DEBUG" "Failed to create/update cache file: $update_cache"
         # パッケージリストは更新できているのでエラー扱いはしない
         debug_log "WARN" "Cache timestamp could not be updated, next run will force update"
     else
@@ -383,12 +383,12 @@ local_package_db() {
     local exit_status=$? # ★ サブシェルの終了ステータスを取得
 
     if [ $exit_status -ne 0 ]; then
-        debug_log "ERROR" "Error executing commands from $commands_file for package $package_name (Exit status: $exit_status)"
+        debug_log "DEBUG" "Error executing commands from $commands_file for package $package_name (Exit status: $exit_status)"
         # ★★★ 修正点: エラー発生時に commands.ch の内容を再度ログ出力 ★★★
-        debug_log "ERROR" "Content of $commands_file that caused the error:"
+        debug_log "DEBUG" "Content of $commands_file that caused the error:"
         # 各行の先頭に "E> " を付けてログ出力
         while IFS= read -r line; do
-            debug_log "ERROR" "E> $line"
+            debug_log "DEBUG" "E> $line"
         done < "$commands_file"
         rm -f "$commands_file" # ★ エラー時はファイルを削除
         return 1 # ★ エラーが発生した場合は 1 を返す
@@ -468,7 +468,7 @@ package_pre_install() {
 
     # リポジトリにもローカルファイルとしても存在しない場合
     if [ "$found_in_repo" = "no" ] && [ "$found_locally" = "no" ]; then
-        debug_log "ERROR" "Package $package_name not found in repository or as a local file. Cannot install."
+        debug_log "DEBUG" "Package $package_name not found in repository or as a local file. Cannot install."
         # ★ 修正: 存在しない場合は 1 を返す
         return 1
     fi
@@ -559,7 +559,7 @@ verify_package_manager() {
         debug_log "DEBUG" "Package manager detected: $PACKAGE_MANAGER"
         return 0
     else
-        debug_log "ERROR" "Cannot determine package manager. File not found: ${CACHE_DIR}/package_manager.ch"
+        debug_log "DEBUG" "Cannot determine package manager. File not found: ${CACHE_DIR}/package_manager.ch"
         return 1
     fi
 }
@@ -587,10 +587,10 @@ get_language_code() {
                 lang_code=$(head -n 1 "$luci_cache" | awk '{print $1}')
                 debug_log "DEBUG" "Retrieved language code after generating luci.ch: $lang_code"
             else
-                debug_log "ERROR" "Failed to generate luci.ch, using default language: en"
+                debug_log "DEBUG" "Failed to generate luci.ch, using default language: en"
             fi
         else
-            debug_log "ERROR" "get_available_language_packages() function not available"
+            debug_log "DEBUG" "get_available_language_packages() function not available"
         fi
     fi
     
@@ -676,7 +676,7 @@ parse_package_options() {
             unforce) PKG_OPTIONS_UNFORCE="yes"; debug_log "DEBUG" "Option: unforce=yes" ;;
             list) PKG_OPTIONS_LIST="yes"; debug_log "DEBUG" "Option: list=yes" ;;
             -*) 
-                debug_log "ERROR" "Unknown option: $1"
+                debug_log "DEBUG" "Unknown option: $1"
                 return 1 
                 ;;
             *)
@@ -701,7 +701,7 @@ parse_package_options() {
     
     # パッケージ名が指定されていない場合の処理
     if [ -z "$PKG_OPTIONS_PACKAGE_NAME" ] && [ "$PKG_OPTIONS_LIST" != "yes" ] && [ "$PKG_OPTIONS_UPDATE" != "yes" ]; then
-        debug_log "ERROR" "No package name specified"
+        debug_log "DEBUG" "No package name specified"
         return 1
     fi
     
@@ -779,10 +779,10 @@ process_package() {
     # ★ 修正: pre_install_status に応じて処理を分岐
     if [ "$pre_install_status" -eq 1 ]; then
         # エラーの場合 (リポジトリにない等)
-        debug_log "ERROR" "Pre-install check failed for $package_name (status: 1). Aborting installation."
+        debug_log "DEBUG" "Pre-install check failed for $package_name (status: 1). Aborting installation."
         # 必要であればユーザーにエラーメッセージを表示 (silent モードでない場合)
         if [ "$silent_mode" != "yes" ]; then
-             printf "%s\n" "$(color red "Package $package_name not found or invalid.")"
+            printf "%s\n" "$(color yellow "Package $package_name could not be installed.")"     
         fi
         return 1 # エラー終了
     elif [ "$pre_install_status" -eq 2 ]; then
@@ -846,7 +846,7 @@ process_package() {
 
     # パッケージのインストール - silent モードを渡す
     if ! install_normal_package "$package_name" "$force_install" "$silent_mode"; then
-        debug_log "ERROR" "Failed to install package: $package_name"
+        debug_log "DEBUG" "Failed to install package: $package_name"
         # エラーメッセージは install_normal_package 内で表示される想定
         return 1 # インストール失敗はエラー終了
     fi
@@ -896,7 +896,7 @@ install_package() {
 
     # パッケージマネージャー確認
     if ! verify_package_manager; then
-        debug_log "ERROR" "Failed to verify package manager"
+        debug_log "DEBUG" "Failed to verify package manager"
         return 1
     fi
 
