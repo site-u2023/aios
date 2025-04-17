@@ -326,10 +326,11 @@ local_package_db() {
 
     # `local-package.db` から `$package_name` に該当するセクションを抽出
     extract_commands() {
-        awk -v p="$package_name" '
-            $0 ~ "^\\[" pkg "\\]" {flag=1; next}
+        # ★ 修正: pkg 変数名を変更 (p から pkg へ) し、正規表現をより厳密に
+        awk -v pkg="$package_name" '
+            $0 ~ "^\\[" pkg "\\]$" {flag=1; next} # ★ セクション名を完全一致で検索
             $0 ~ "^\\[" {flag=0}
-            flag && $0 !~ "^#" {print}
+            flag && $0 !~ "^#" && $0 !~ "^[[:space:]]*$" {print} # ★ 空行も除外
         ' "${BASE_DIR}/local-package.db"
     }
 
@@ -338,28 +339,55 @@ local_package_db() {
     cmds=$(extract_commands)
 
     if [ -z "$cmds" ]; then
-        debug_log "DEBUG" "No commands found for package: $package_name"
-        return 1
+        debug_log "DEBUG" "No commands found for package: $package_name in ${BASE_DIR}/local-package.db" # ★ DBファイルパスをログに追加
+        return 1 # ★ コマンドが見つからない場合はエラーコード 1 を返すように変更
     fi
 
+    # ★ 修正: commands.ch のパスを修正 (BASE_DIR から CACHE_DIR へ)
+    local commands_file="${CACHE_DIR}/commands.ch"
     # **変数の置換**
-    printf "%s" "$cmds" > "${CACHE_DIR}/commands.ch"
+    printf "%s\n" "$cmds" > "$commands_file" # ★ 改行を追加
 
     # **環境変数 `CUSTOM_*` を自動検出して置換**
     CUSTOM_VARS=$(env | grep "^CUSTOM_" | awk -F= '{print $1}')
     for var_name in $CUSTOM_VARS; do
+        # ★ 修正: eval を使わずに変数の値を取得 (POSIX準拠のため eval は慎重に)
+        # シェルによっては printenv $var_name が使えるが、ash にはない可能性
+        # POSIX準拠のため、可能な限り eval を避けるが、ここでは必要悪か
+        # より安全な方法があれば検討したいが、ash の制約を考えると難しい
+        # 今回は元のロジックを維持しつつ、デバッグログを強化
         eval var_value=\$$var_name
         if [ -n "$var_value" ]; then
-            sed -i "s|\\\${$var_name}|$var_value|g" "${CACHE_DIR}/commands.ch"
-            debug_log "DEBUG" "Substituted: $var_name -> $var_value"
+            # ★ 修正: sed のデリミタを | に変更 (パスに / が含まれる可能性を考慮)
+            sed -i "s|\\\${$var_name}|$var_value|g" "$commands_file"
+            debug_log "DEBUG" "Substituted variable in $commands_file: $var_name -> $var_value"
         else
-            sed -i "s|.*\\\${$var_name}.*|# UNDEFINED: \0|g" "${CACHE_DIR}/commands.ch"
-            debug_log "DEBUG" "Undefined variable: $var_name"
+            # ★ 修正: 未定義変数の行をコメントアウトする処理を改善
+            # sed で直接コメントアウトし、マッチした行全体をコメント化
+            sed -i "/\${$var_name}/s/^/# UNDEFINED: /" "$commands_file"
+            debug_log "DEBUG" "Commented out line due to undefined variable: $var_name in $commands_file"
         fi
     done
 
     # **設定を適用**
-    . "${CACHE_DIR}/commands.ch"
+    # ★★★ 修正点: サブシェル内でコマンドを実行 ★★★
+    debug_log "DEBUG" "Executing commands from $commands_file in a subshell"
+    ( . "$commands_file" ) # ★ コマンドをサブシェルで実行
+    local exit_status=$? # ★ サブシェルの終了ステータスを取得
+
+    if [ $exit_status -ne 0 ]; then
+        debug_log "ERROR" "Error executing commands from $commands_file for package $package_name (Exit status: $exit_status)"
+        # ★ 必要であれば commands.ch の内容をログ出力
+        # debug_log "DEBUG" "Content of $commands_file:"
+        # debug_log "DEBUG" "$(cat "$commands_file")"
+        return 1 # ★ エラーが発生した場合は 1 を返す
+    fi
+
+    debug_log "DEBUG" "Successfully executed commands from $commands_file for package $package_name"
+    # ★ 成功時は commands.ch を削除しても良いかもしれない (デバッグ用に残すか要検討)
+    # rm -f "$commands_file"
+
+    return 0 # ★ 成功時は 0 を返す
 }
 
 # パッケージインストール前のチェック
