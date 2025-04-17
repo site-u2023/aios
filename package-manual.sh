@@ -62,7 +62,7 @@ packages() {
     # === 基本システム機能 ===
     print_section_header "PKG_SECTION_BASIC"
     install_package luci-i18n-base yn hidden
-    install_package ttyd yn hidden
+    install_package ttyd yn hidden disabled
     install_package openssh-sftp-server yn hidden
     install_package coreutils yn hidden
     #install_package bash yn hidden
@@ -129,7 +129,7 @@ packages_19() {
     print_section_header "PKG_SECTION_BASIC"
     install_package wget yn hidden
     install_package luci-i18n-base yn hidden
-    install_package ttyd yn hidden
+    install_package ttyd yn hidden disabled
     install_package openssh-sftp-server yn hidden
     install_package coreutils yn hidden
     
@@ -192,7 +192,7 @@ packages_snaphot() {
     print_section_header "PKG_SECTION_BASIC"
     install_package luci yn hidden
     install_package luci-i18n-base yn hidden
-    install_package ttyd yn hidden
+    install_package ttyd yn hidden disabled
     install_package openssh-sftp-server yn hidden
     install_package coreutils yn hidden
     
