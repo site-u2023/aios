@@ -402,6 +402,9 @@ local_package_db() {
 }
 
 # パッケージインストール前のチェック
+# Returns: 0 - Ready to install (found in repository or FEED_DIR)
+#          1 - Already installed on device
+#          2 - Not found in repository or FEED_DIR (skip installation)
 package_pre_install() {
     local package_name="$1"
     local package_cache="${CACHE_DIR}/package_list.ch"
@@ -425,14 +428,14 @@ package_pre_install() {
             return 1  # 既にインストールされている場合は終了
         fi
     fi
-  
+
     # リポジトリ内パッケージ確認
     debug_log "DEBUG" "Checking repository for package: $check_extension"
 
     if [ ! -f "$package_cache" ]; then
         debug_log "DEBUG" "Package cache not found. Attempting to update."
         update_package_list >/dev/null 2>&1
-        
+
         # 更新後も存在しない場合は警告を出すが処理は継続
         if [ ! -f "$package_cache" ]; then
             debug_log "WARNING" "Package cache still not available after update attempt"
@@ -457,7 +460,7 @@ package_pre_install() {
 
     debug_log "DEBUG" "Package $package_name not found in repository or FEED_DIR"
     # リポジトリにもFEED_DIRにも存在しないパッケージはスキップする
-    return 1  # 修正: 0から1に変更
+    return 2  # ★ 変更: 1から2に変更 (Not found)
 }
 
 # 通常パッケージのインストール処理
@@ -735,6 +738,8 @@ process_package() {
     local test_mode="$7"
     local lang_code="$8"
     local description="$9"  # 9番目の引数として説明文を直接受け取る
+    # ★ 追加: silentモードを受け取るための引数 (install_packageから渡される想定)
+    local silent_mode="${10}"
 
     # 言語パッケージか通常パッケージかを判別
     case "$base_name" in
@@ -745,18 +750,52 @@ process_package() {
             ;;
     esac
 
-    # test_mode が有効でなければパッケージの事前チェックを行う
+    # ★ 変更: パッケージの事前チェックと結果処理を case 文に変更
+    local pre_install_status
     if [ "$test_mode" != "yes" ]; then
-        if ! package_pre_install "$package_name"; then
-            debug_log "DEBUG" "Package $package_name is already installed or not found"
-            return 1
-        fi
+        package_pre_install "$package_name"
+        pre_install_status=$? # 戻り値を取得
+
+        case $pre_install_status in
+            0) # Ready to install
+                debug_log "DEBUG" "Package $package_name is ready for installation."
+                # 何もせず case 文を抜けて後続処理へ
+                ;;
+            1) # Already installed
+                # silent モードでない場合のみメッセージ表示
+                if [ "$PKG_OPTIONS_HIDDEN" != "yes" ] && [ "$silent_mode" != "yes" ]; then
+                    # ★ 修正: 表示用の名前を取得
+                    local display_name
+                    display_name=$(basename "$package_name")
+                    display_name=${display_name%.*}
+                    printf "  %s: %s\n" "$(color blue "$display_name")" "$(get_message "MSG_ALREADY_INSTALLED")"
+                fi
+                debug_log "DEBUG" "Package $package_name is already installed."
+                return 0 # ★ 変更: スキップして成功扱い
+                ;;
+            2) # Not found
+                # silent モードでない場合のみメッセージ表示
+                if [ "$PKG_OPTIONS_HIDDEN" != "yes" ] && [ "$silent_mode" != "yes" ]; then
+                    # ★ 修正: 表示用の名前を取得
+                    local display_name
+                    display_name=$(basename "$package_name")
+                    display_name=${display_name%.*}
+                    printf "  %s: %s\n" "$(color yellow "$display_name")" "$(get_message "MSG_NOT_FOUND_SKIP")"
+                fi
+                debug_log "DEBUG" "Package $package_name not found, skipping installation."
+                return 0 # ★ 変更: スキップして成功扱い (要件)
+                ;;
+            *) # Unexpected status
+                debug_log "WARNING" "Unexpected status $pre_install_status from package_pre_install for $package_name."
+                return 1 # 予期せぬエラーは失敗扱い
+                ;;
+        esac
     else
         debug_log "DEBUG" "Test mode enabled, skipping pre-install checks"
     fi
-    
-    # YN確認 (オプションで有効時のみ)
-    if [ "$confirm_install" = "yes" ]; then
+
+    # YN確認 (オプションで有効時のみ) - ★ 変更: silent モードの考慮を追加
+    if [ "$confirm_install" = "yes" ] && [ "$silent_mode" != "yes" ]; then
         # パッケージ名からパスと拡張子を除去した表示用の名前を作成
         local display_name
         display_name=$(basename "$package_name")
@@ -764,7 +803,7 @@ process_package() {
 
         debug_log "DEBUG" "Original package name: $package_name"
         debug_log "DEBUG" "Displaying package name: $display_name"
-    
+
         # 説明文の優先順位：
         # 1. 関数の9番目の引数として指定された説明文を優先
         # 2. なければパッケージリストから取得
@@ -775,11 +814,11 @@ process_package() {
             description=$(get_package_description "$package_name")
             debug_log "DEBUG" "Using repository description: $description"
         fi
-        
+
         # パッケージ名を青色で表示するため、color関数で囲む
         local colored_name
         colored_name=$(color blue "$display_name")
-        
+
         # 説明文があれば専用のメッセージキーを使用
         if [ -n "$description" ]; then
             # 説明文付きの確認メッセージ - パッケージ名を青色で表示
@@ -794,10 +833,13 @@ process_package() {
                 return 0
             fi
         fi
+    elif [ "$confirm_install" = "yes" ] && [ "$silent_mode" = "yes" ]; then
+        # silent モードが有効な場合は確認をスキップ
+        debug_log "DEBUG" "Silent mode enabled, skipping confirmation for $package_name"
     fi
-     
-    # パッケージのインストール
-    if ! install_normal_package "$package_name" "$force_install"; then
+
+    # パッケージのインストール - ★ 変更: silent モードを install_normal_package に渡す
+    if ! install_normal_package "$package_name" "$force_install" "$silent_mode"; then
         debug_log "DEBUG" "Failed to install package: $package_name"
         return 1
     fi
@@ -808,7 +850,7 @@ process_package() {
     else
         debug_log "DEBUG" "Skipping local-package.db application for $package_name"
     fi
-    
+
     return 0
 }
 
