@@ -406,58 +406,77 @@ package_pre_install() {
     local package_name="$1"
     local package_cache="${CACHE_DIR}/package_list.ch"
 
-    debug_log "DEBUG" "Checking package: $package_name"
+    debug_log "DEBUG" "Pre-install check for package: $package_name"
 
     # デバイス内パッケージ確認
-    local check_extension=$(basename "$package_name" .ipk)
-    check_extension=$(basename "$check_extension" .apk)
+    local check_extension # パッケージ名から拡張子を除いた名前
+    # .ipk や .apk などの拡張子を除去
+    check_extension=$(basename "$package_name")
+    check_extension=${check_extension%.ipk}
+    check_extension=${check_extension%.apk}
+    debug_log "DEBUG" "Checking device for installed package: $check_extension"
 
+    local installed_output=""
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        output=$(opkg list-installed "$check_extension" 2>&1)
-        if [ -n "$output" ]; then  # 出力があった場合
-            debug_log "DEBUG" "Package \"$check_extension\" is already installed on the device"
-            return 1  # 既にインストールされている場合は終了
-        fi
+        installed_output=$(opkg list-installed "$check_extension" 2>/dev/null) # エラー出力を抑制
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        output=$(apk info "$check_extension" 2>&1)
-        if [ -n "$output" ]; then  # 出力があった場合
-            debug_log "DEBUG" "Package \"$check_extension\" is already installed on the device"
-            return 1  # 既にインストールされている場合は終了
-        fi
+        # apk info はパッケージが存在しない場合もエラーコード 0 を返すことがあるため、出力内容で判断
+        installed_output=$(apk info "$check_extension" 2>/dev/null) # エラー出力を抑制
     fi
-  
+
+    if [ -n "$installed_output" ]; then
+        # ★ 修正: 既にインストールされている場合は 2 を返す
+        debug_log "DEBUG" "Package \"$check_extension\" is already installed on the device. Skipping installation."
+        return 2
+    fi
+
     # リポジトリ内パッケージ確認
-    debug_log "DEBUG" "Checking repository for package: $check_extension"
+    debug_log "DEBUG" "Checking repository for package: $package_name"
 
+    # パッケージキャッシュが存在するか確認、なければ更新試行
     if [ ! -f "$package_cache" ]; then
-        debug_log "DEBUG" "Package cache not found. Attempting to update."
-        update_package_list >/dev/null 2>&1
-        
-        # 更新後も存在しない場合は警告を出すが処理は継続
+        debug_log "DEBUG" "Package cache ($package_cache) not found. Attempting to update."
+        # update_package_list は silent モードで呼び出すべきか検討
+        # ここではエラーを許容し、キャッシュがなくても続行する可能性がある
+        update_package_list "silent" # silentモードで更新
         if [ ! -f "$package_cache" ]; then
-            debug_log "WARNING" "Package cache still not available after update attempt"
-            # キャッシュがなくてもインストール処理は続行（ローカルファイル等の場合）
+            debug_log "WARNING" "Package cache still not available after update attempt. Cannot verify package existence in repository."
+            # キャッシュがない場合、ローカルファイルとして存在する可能性もあるため、ここではまだエラーとしない
         fi
     fi
 
-    # パッケージキャッシュが存在する場合のみチェック
+    # パッケージキャッシュが存在する場合のみリポジトリチェック
+    local found_in_repo="no"
     if [ -f "$package_cache" ]; then
-        # パッケージがキャッシュ内に存在するか確認
-        if grep -q "^$package_name " "$package_cache"; then
-            debug_log "DEBUG" "Package $package_name found in repository"
-            return 0  # パッケージが存在するのでOK
+        # パッケージがキャッシュ内に存在するか確認 (パッケージ名とスペースで始まる行)
+        # grep の -q オプションは ash では使えない場合があるので注意 -> BusyBox grep は -q をサポート
+        if grep -q "^${package_name} " "$package_cache"; then
+            debug_log "DEBUG" "Package $package_name found in repository cache ($package_cache)."
+            found_in_repo="yes"
+        else
+             debug_log "DEBUG" "Package $package_name not found in repository cache ($package_cache)."
         fi
     fi
 
-    # キャッシュに存在しない場合、FEED_DIR内を探してみる
+    # ローカルファイルとして存在するか確認 (例: feed_package から渡された場合)
+    local found_locally="no"
+    # package_name がフルパスである可能性も考慮
     if [ -f "$package_name" ]; then
-        debug_log "DEBUG" "Package $package_name found in FEED_DIR: $FEED_DIR"
-        return 0  # FEED_DIR内にパッケージが見つかったのでOK
+        debug_log "DEBUG" "Package $package_name found as a local file."
+        found_locally="yes"
     fi
 
-    debug_log "DEBUG" "Package $package_name not found in repository or FEED_DIR"
-    # リポジトリにもFEED_DIRにも存在しないパッケージはスキップする
-    return 1  # 修正: 0から1に変更
+    # リポジトリにもローカルファイルとしても存在しない場合
+    if [ "$found_in_repo" = "no" ] && [ "$found_locally" = "no" ]; then
+        debug_log "ERROR" "Package $package_name not found in repository or as a local file. Cannot install."
+        # ★ 修正: 存在しない場合は 1 を返す
+        return 1
+    fi
+
+    # インストールが必要な場合 (リポジトリにあるかローカルファイルとして存在し、まだインストールされていない)
+    debug_log "DEBUG" "Package $package_name is ready for installation."
+    # ★ 修正: インストール可能な場合は 0 を返す
+    return 0
 }
 
 # 通常パッケージのインストール処理
@@ -741,76 +760,108 @@ process_package() {
     case "$base_name" in
         luci-i18n-*)
             # 言語パッケージの場合、package_name に言語コードを追加
+            local original_package_name="$package_name" # 元の名前を保持
             package_name="${base_name}-${lang_code}"
-            debug_log "DEBUG" "Language package detected, using: $package_name"
+            debug_log "DEBUG" "Language package detected, adjusting name from $original_package_name to: $package_name"
             ;;
     esac
 
     # test_mode が有効でなければパッケージの事前チェックを行う
+    local pre_install_status=0 # デフォルトはインストール可能
     if [ "$test_mode" != "yes" ]; then
-        if ! package_pre_install "$package_name"; then
-            debug_log "DEBUG" "Package $package_name is already installed or not found"
-            return 1
-        fi
+        package_pre_install "$package_name"
+        pre_install_status=$? # package_pre_install の戻り値を取得
+        debug_log "DEBUG" "Pre-install check status for $package_name: $pre_install_status (0=install, 1=error, 2=installed)"
     else
-        debug_log "DEBUG" "Test mode enabled, skipping pre-install checks"
+        debug_log "DEBUG" "Test mode enabled, skipping pre-install checks for $package_name"
     fi
-    
+
+    # ★ 修正: pre_install_status に応じて処理を分岐
+    if [ "$pre_install_status" -eq 1 ]; then
+        # エラーの場合 (リポジトリにない等)
+        debug_log "ERROR" "Pre-install check failed for $package_name (status: 1). Aborting installation."
+        # 必要であればユーザーにエラーメッセージを表示 (silent モードでない場合)
+        if [ "$silent_mode" != "yes" ]; then
+             printf "%s\n" "$(color red "Package $package_name not found or invalid.")"
+        fi
+        return 1 # エラー終了
+    elif [ "$pre_install_status" -eq 2 ]; then
+        # 既にインストール済みの場合
+        debug_log "DEBUG" "Package $package_name is already installed (status: 2). Skipping installation."
+        # ★★★ 既にインストール済みでも local_package_db は適用する ★★★
+        # 依存関係のインストールはスキップされたが、設定適用は必要かもしれないため
+        if [ "$skip_package_db" != "yes" ]; then
+            debug_log "DEBUG" "Applying local-package.db for already installed package $base_name"
+            local_package_db "$base_name"
+            # local_package_db のエラーは呼び出し元でハンドリングされる想定
+            # ここでは local_package_db の戻り値は無視する (エラーがあっても続行)
+        else
+            debug_log "DEBUG" "Skipping local-package.db application for already installed package $base_name"
+        fi
+        return 0 # 正常終了 (インストールはスキップ)
+    fi
+
+    # インストールが必要な場合 (pre_install_status == 0)
+
     # YN確認 (オプションで有効時のみ、silentモードでない場合)
     if [ "$confirm_install" = "yes" ] && [ "$silent_mode" != "yes" ]; then
-        # パッケージ名からパスと拡張子を除去した表示用の名前を作成
+        # 表示用の名前を作成（パスと拡張子を除去）
         local display_name
         display_name=$(basename "$package_name")
-        display_name=${display_name%.*}  # 拡張子を除去
+        # .ipk や .apk などの拡張子を除去
+        display_name=${display_name%.ipk}
+        display_name=${display_name%.apk}
 
-        debug_log "DEBUG" "Original package name: $package_name"
-        debug_log "DEBUG" "Displaying package name: $display_name"
-    
-        # 説明文の優先順位：
-        # 1. 関数の9番目の引数として指定された説明文を優先
-        # 2. なければパッケージリストから取得
-        if [ -n "$description" ]; then
-            debug_log "DEBUG" "Using provided description: $description"
+        debug_log "DEBUG" "Confirming installation for display name: $display_name (original: $package_name)"
+
+        # 説明文の取得 (get_package_description は package_name で検索する必要がある)
+        local current_description="$description" # 引数で渡された説明を優先
+        if [ -z "$current_description" ]; then
+            # リポジトリから取得 (言語コードが付与された名前で検索)
+            current_description=$(get_package_description "$package_name")
+            # 見つからなければ元のベース名でも試す (フォールバック)
+            if [ -z "$current_description" ] && [ "$package_name" != "$base_name" ]; then
+                 current_description=$(get_package_description "$base_name")
+            fi
+            debug_log "DEBUG" "Retrieved repository description for $package_name: $current_description"
         else
-            # パッケージリストから説明を取得
-            description=$(get_package_description "$package_name")
-            debug_log "DEBUG" "Using repository description: $description"
+             debug_log "DEBUG" "Using provided description: $current_description"
         fi
-        
-        # パッケージ名を青色で表示するため、color関数で囲む
+
         local colored_name
         colored_name=$(color blue "$display_name")
-        
-        # 説明文があれば専用のメッセージキーを使用
-        if [ -n "$description" ]; then
-            # 説明文付きの確認メッセージ - パッケージ名を青色で表示
-            if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg=$colored_name" "desc=$description"; then
-                debug_log "DEBUG" "User declined installation of $display_name with description"
-                return 0
+
+        if [ -n "$current_description" ]; then
+            if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg=$colored_name" "desc=$current_description"; then
+                debug_log "DEBUG" "User declined installation of $display_name"
+                return 0 # ユーザーキャンセルは正常終了
             fi
         else
-            # 通常の確認メッセージ - パッケージ名を青色で表示
             if ! confirm "MSG_CONFIRM_INSTALL" "pkg=$colored_name"; then
                 debug_log "DEBUG" "User declined installation of $display_name"
-                return 0
+                return 0 # ユーザーキャンセルは正常終了
             fi
         fi
     fi
-     
+
     # パッケージのインストール - silent モードを渡す
     if ! install_normal_package "$package_name" "$force_install" "$silent_mode"; then
-        debug_log "DEBUG" "Failed to install package: $package_name"
-        return 1
+        debug_log "ERROR" "Failed to install package: $package_name"
+        # エラーメッセージは install_normal_package 内で表示される想定
+        return 1 # インストール失敗はエラー終了
     fi
 
     # **ローカルパッケージDBの適用 (インストール成功後に実行)**
     if [ "$skip_package_db" != "yes" ]; then
+        debug_log "DEBUG" "Applying local-package.db for installed package $base_name"
         local_package_db "$base_name"
+        # local_package_db のエラーは呼び出し元でハンドリングされる想定
+        # ここでは local_package_db の戻り値は無視する (エラーがあっても続行)
     else
-        debug_log "DEBUG" "Skipping local-package.db application for $package_name"
+        debug_log "DEBUG" "Skipping local-package.db application for installed package $base_name"
     fi
-    
-    return 0
+
+    return 0 # 正常終了
 }
 
 # **パッケージインストールのメイン関数**
