@@ -372,20 +372,31 @@ local_package_db() {
     # **設定を適用**
     # ★★★ 修正点: サブシェル内でコマンドを実行 ★★★
     debug_log "DEBUG" "Executing commands from $commands_file in a subshell"
+    # ★ 修正点: commands.ch の内容をログに出力（デバッグ用）
+    debug_log "DEBUG" "Content of $commands_file before execution:"
+    # 各行の先頭に "> " を付けてログ出力
+    while IFS= read -r line; do
+        debug_log "DEBUG" "> $line"
+    done < "$commands_file"
+
     ( . "$commands_file" ) # ★ コマンドをサブシェルで実行
     local exit_status=$? # ★ サブシェルの終了ステータスを取得
 
     if [ $exit_status -ne 0 ]; then
         debug_log "ERROR" "Error executing commands from $commands_file for package $package_name (Exit status: $exit_status)"
-        # ★ 必要であれば commands.ch の内容をログ出力
-        # debug_log "DEBUG" "Content of $commands_file:"
-        # debug_log "DEBUG" "$(cat "$commands_file")"
+        # ★★★ 修正点: エラー発生時に commands.ch の内容を再度ログ出力 ★★★
+        debug_log "ERROR" "Content of $commands_file that caused the error:"
+        # 各行の先頭に "E> " を付けてログ出力
+        while IFS= read -r line; do
+            debug_log "ERROR" "E> $line"
+        done < "$commands_file"
+        rm -f "$commands_file" # ★ エラー時はファイルを削除
         return 1 # ★ エラーが発生した場合は 1 を返す
     fi
 
     debug_log "DEBUG" "Successfully executed commands from $commands_file for package $package_name"
     # ★ 成功時は commands.ch を削除しても良いかもしれない (デバッグ用に残すか要検討)
-    # rm -f "$commands_file"
+    rm -f "$commands_file" # ★ 成功時もファイルを削除
 
     return 0 # ★ 成功時は 0 を返す
 }
