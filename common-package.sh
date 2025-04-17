@@ -734,11 +734,11 @@ process_package() {
     local confirm_install="$3"
     local force_install="$4"
     local skip_package_db="$5"
-    local set_disabled="$6"
+    local set_disabled="$6" # ★ 注意: この変数は現在この関数内では使用されていません
     local test_mode="$7"
     local lang_code="$8"
-    local description="$9"  # 9番目の引数として説明文を直接受け取る
-    # ★ 追加: silentモードを受け取るための引数 (install_packageから渡される想定)
+    local description="$9"
+    # ★ 変更: 10番目の引数を silent_mode として受け取る
     local silent_mode="${10}"
 
     # 言語パッケージか通常パッケージかを判別
@@ -762,26 +762,12 @@ process_package() {
                 # 何もせず case 文を抜けて後続処理へ
                 ;;
             1) # Already installed
-                # silent モードでない場合のみメッセージ表示
-                if [ "$PKG_OPTIONS_HIDDEN" != "yes" ] && [ "$silent_mode" != "yes" ]; then
-                    # ★ 修正: 表示用の名前を取得
-                    local display_name
-                    display_name=$(basename "$package_name")
-                    display_name=${display_name%.*}
-                    printf "  %s: %s\n" "$(color blue "$display_name")" "$(get_message "MSG_ALREADY_INSTALLED")"
-                fi
+                # ★ 変更: デバッグログのみ出力 (ユーザー向けメッセージは表示しない)
                 debug_log "DEBUG" "Package $package_name is already installed."
                 return 0 # ★ 変更: スキップして成功扱い
                 ;;
             2) # Not found
-                # silent モードでない場合のみメッセージ表示
-                if [ "$PKG_OPTIONS_HIDDEN" != "yes" ] && [ "$silent_mode" != "yes" ]; then
-                    # ★ 修正: 表示用の名前を取得
-                    local display_name
-                    display_name=$(basename "$package_name")
-                    display_name=${display_name%.*}
-                    printf "  %s: %s\n" "$(color yellow "$display_name")" "$(get_message "MSG_NOT_FOUND_SKIP")"
-                fi
+                # ★ 変更: デバッグログのみ出力 (ユーザー向けメッセージは表示しない)
                 debug_log "DEBUG" "Package $package_name not found, skipping installation."
                 return 0 # ★ 変更: スキップして成功扱い (要件)
                 ;;
@@ -838,13 +824,14 @@ process_package() {
         debug_log "DEBUG" "Silent mode enabled, skipping confirmation for $package_name"
     fi
 
-    # パッケージのインストール - ★ 変更: silent モードを install_normal_package に渡す
+    # パッケージのインストール - ★ 変更: silent モードを install_normal_package に渡す (3引数呼び出し)
     if ! install_normal_package "$package_name" "$force_install" "$silent_mode"; then
         debug_log "DEBUG" "Failed to install package: $package_name"
         return 1
     fi
 
     # **ローカルパッケージDBの適用 (インストール成功後に実行)**
+    # ★ 変更なし: 2番目の引数 ($base_name) で呼び出す
     if [ "$skip_package_db" != "yes" ]; then
         local_package_db "$base_name"
     else
