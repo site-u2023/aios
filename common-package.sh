@@ -780,21 +780,18 @@ process_package() {
     if [ "$pre_install_status" -eq 1 ]; then
         # エラーの場合 (リポジトリにない等)
         debug_log "DEBUG" "Pre-install check failed for $package_name (status: 1). Aborting installation."
-        # 必要であればユーザーにエラーメッセージを表示 (silent モードでない場合)
-        if [ "$silent_mode" != "yes" ]; then
-            printf "%s\n" "$(color yellow "Package $package_name could not be installed.")"     
-        fi
+        # ★ 修正: ユーザー向けエラーメッセージ表示を削除
+        # if [ "$silent_mode" != "yes" ]; then
+        #    printf "%s\n" "$(color yellow "Package $package_name could not be installed.")"
+        # fi
         return 1 # エラー終了
     elif [ "$pre_install_status" -eq 2 ]; then
         # 既にインストール済みの場合
         debug_log "DEBUG" "Package $package_name is already installed (status: 2). Skipping installation."
         # ★★★ 既にインストール済みでも local_package_db は適用する ★★★
-        # 依存関係のインストールはスキップされたが、設定適用は必要かもしれないため
         if [ "$skip_package_db" != "yes" ]; then
             debug_log "DEBUG" "Applying local-package.db for already installed package $base_name"
             local_package_db "$base_name"
-            # local_package_db のエラーは呼び出し元でハンドリングされる想定
-            # ここでは local_package_db の戻り値は無視する (エラーがあっても続行)
         else
             debug_log "DEBUG" "Skipping local-package.db application for already installed package $base_name"
         fi
@@ -805,21 +802,14 @@ process_package() {
 
     # YN確認 (オプションで有効時のみ、silentモードでない場合)
     if [ "$confirm_install" = "yes" ] && [ "$silent_mode" != "yes" ]; then
-        # 表示用の名前を作成（パスと拡張子を除去）
         local display_name
         display_name=$(basename "$package_name")
-        # .ipk や .apk などの拡張子を除去
         display_name=${display_name%.ipk}
         display_name=${display_name%.apk}
-
         debug_log "DEBUG" "Confirming installation for display name: $display_name (original: $package_name)"
-
-        # 説明文の取得 (get_package_description は package_name で検索する必要がある)
-        local current_description="$description" # 引数で渡された説明を優先
+        local current_description="$description"
         if [ -z "$current_description" ]; then
-            # リポジトリから取得 (言語コードが付与された名前で検索)
             current_description=$(get_package_description "$package_name")
-            # 見つからなければ元のベース名でも試す (フォールバック)
             if [ -z "$current_description" ] && [ "$package_name" != "$base_name" ]; then
                  current_description=$(get_package_description "$base_name")
             fi
@@ -827,41 +817,36 @@ process_package() {
         else
              debug_log "DEBUG" "Using provided description: $current_description"
         fi
-
         local colored_name
         colored_name=$(color blue "$display_name")
-
         if [ -n "$current_description" ]; then
             if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg=$colored_name" "desc=$current_description"; then
                 debug_log "DEBUG" "User declined installation of $display_name"
-                return 0 # ユーザーキャンセルは正常終了
+                return 0
             fi
         else
             if ! confirm "MSG_CONFIRM_INSTALL" "pkg=$colored_name"; then
                 debug_log "DEBUG" "User declined installation of $display_name"
-                return 0 # ユーザーキャンセルは正常終了
+                return 0
             fi
         fi
     fi
 
-    # パッケージのインストール - silent モードを渡す
+    # パッケージのインストール
     if ! install_normal_package "$package_name" "$force_install" "$silent_mode"; then
         debug_log "DEBUG" "Failed to install package: $package_name"
-        # エラーメッセージは install_normal_package 内で表示される想定
-        return 1 # インストール失敗はエラー終了
+        return 1
     fi
 
-    # **ローカルパッケージDBの適用 (インストール成功後に実行)**
+    # ローカルパッケージDBの適用
     if [ "$skip_package_db" != "yes" ]; then
         debug_log "DEBUG" "Applying local-package.db for installed package $base_name"
         local_package_db "$base_name"
-        # local_package_db のエラーは呼び出し元でハンドリングされる想定
-        # ここでは local_package_db の戻り値は無視する (エラーがあっても続行)
     else
         debug_log "DEBUG" "Skipping local-package.db application for installed package $base_name"
     fi
 
-    return 0 # 正常終了
+    return 0
 }
 
 # **パッケージインストールのメイン関数**
