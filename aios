@@ -56,6 +56,7 @@ SCRIPT_VERSION="2025.04.09-00-00"
 # システム制御
 DEV_NULL="${DEV_NULL:-on}"       # サイレントモード制御（on=有効, unset=無効）
 DEBUG_MODE="${DEBUG_MODE:-false}" # デバッグモード（true=有効, false=無効）
+DOWNLOAD_METHOD="${DOWNLOAD_METHOD:-api}" # 追加: ダウンロード方式 (api/direct)
 
 # パス・ファイル関連
 INTERPRETER="${INTERPRETER:-ash}"  # デフォルトインタープリタ
@@ -1261,188 +1262,218 @@ clean_version_string() {
     fi
 }
 
-# コミット情報取得関数の改良版
+# コミット情報取得関数
 get_commit_version() {
     local file_path="$1"
     local force_refresh="$2"  # キャッシュ強制更新フラグ
-    local temp_file="${CACHE_DIR}/commit_info.tmp" 
-    local direct_file="${CACHE_DIR}/direct_file.tmp"
-
-    # キャッシュ使用時、まずキャッシュから情報を取得
-    if [ "$SKIP_CACHE" != "true" ] && [ "$force_refresh" != "true" ] && [ "$FORCE" != "true" ]; then
-        get_commit_from_cache "$file_path"
-        if [ $? -eq 0 ]; then
-            return 0  # キャッシュからの情報取得に成功した場合終了
-        fi
-    fi
-
-    # リポジトリ情報
-    local repo_owner="site-u2023"
+    local temp_file="${CACHE_DIR}/commit_info.tmp"
+    local direct_file="${CACHE_DIR}/direct_file_$(echo "$file_path" | tr '/' '_').tmp" # ファイルごとに一意な一時ファイル名
+    local repo_owner="site-u2023" # リポジトリ情報はローカル変数として定義
     local repo_name="aios"
-    local api_url="repos/${repo_owner}/${repo_name}/commits?path=${file_path}&per_page=1"
-    local auth_method="direct"
-    local retry_count=0
-    local max_retries=2
-    
-    # トークン取得とAPIリクエスト
-    local token="$(get_github_token)"
-    
-    # API呼び出しを試行（リトライロジック付き）
-    while [ $retry_count -le $max_retries ]; do
-        if [ $retry_count -gt 0 ]; then
-            debug_log "DEBUG" "Retry attempt $retry_count for commit version request: $file_path"
-            sleep 1  # リトライ間隔
-        fi
-        
-        # 認証方法に応じたAPI呼び出し
-        if [ -n "$token" ] && [ "$API_AUTH_METHOD" != "direct" ]; then
-            if [ "$API_AUTH_METHOD" = "token" ] || [ "$WGET_CAPABILITY" = "header" ]; then
-                # トークン認証でGitHub APIにアクセス
-                wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$temp_file" --header="Authorization: token $token" \
-                     "https://api.github.com/$api_url" 2>/dev/null
-                auth_method="token"
-            elif [ "$API_AUTH_METHOD" = "basic" ] || [ "$WGET_CAPABILITY" = "basic" ]; then
-                # 基本認証でGitHub APIにアクセス
-                wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$temp_file" --user="$token" --password="x-oauth-basic" \
-                     "https://api.github.com/$api_url" 2>/dev/null
-                auth_method="basic"
-            else
-                # 認証なしでアクセス
-                wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
-                auth_method="direct"
+
+    # --- 追加: DOWNLOAD_METHOD による分岐 ---
+    if [ "$DOWNLOAD_METHOD" = "direct" ]; then
+        debug_log "DEBUG" "Direct download mode enabled for $file_path. Skipping cache and API calls."
+
+        # --- 直接ダウンロード処理 ---
+        local retry_count=0
+        local direct_download_success=0
+        while [ $retry_count -le 1 ]; do # リトライは最大1回 (計2試行)
+            local current_wget_opt="$WGET_IPV_OPT"
+            if [ $retry_count -eq 1 ] && [ -f "${CACHE_DIR}/network.ch" ]; then
+                 local current_network=$(cat "${CACHE_DIR}/network.ch")
+                 if [ "$current_network" = "v4v6" ]; then
+                      if [ "$WGET_IPV_OPT" = "-6" ]; then current_wget_opt=""; else current_wget_opt="-6"; fi
+                      debug_log "DEBUG" "Switching IP preference for direct download retry: $current_wget_opt"
+                 fi
             fi
-        else
-            # 認証なしでアクセス
-            wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
-            auth_method="direct"
-        fi
-        
-        # 応答チェック
-        if [ -s "$temp_file" ] && ! grep -q "API rate limit exceeded\|Not Found" "$temp_file"; then
-            debug_log "DEBUG" "Successfully retrieved commit information"
-            break  # 成功したらループを抜ける
-        fi
-        
-        # リトライ時の接続方法を変更
-        if [ $retry_count -eq 0 ] && [ -f "${CACHE_DIR}/network.ch" ]; then
-            local current_network=$(cat "${CACHE_DIR}/network.ch")
-            
-            if [ "$current_network" = "v4v6" ]; then
-                # IPv6を試す
-                WGET_IPV_OPT="-6"
-                BASE_WGET="wget --no-check-certificate -q ${WGET_IPV_OPT} -O"
-                debug_log "DEBUG" "Switching to IPv6 for retry"
-            elif [ "$current_network" = "v4" ] || [ "$current_network" = "v6" ]; then
-                # シングルスタックの場合は直接ダウンロードを試す
-                debug_log "DEBUG" "Switching to direct file download"
-                break
-            fi
-        fi
-        
-        retry_count=$((retry_count + 1))
-    done
-    
-    # APIでの取得に失敗した場合は直接ファイルダウンロードを試行
-    if [ ! -s "$temp_file" ] || grep -q "API rate limit exceeded\|Not Found" "$temp_file"; then
-        debug_log "DEBUG" "API call failed, falling back to direct file check"
-        
-        # 直接ファイルダウンロードもIPv4/IPv6両方を試す
-        retry_count=0
-        while [ $retry_count -le 1 ]; do
-            if wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
+
+            rm -f "$direct_file" 2>/dev/null # ダウンロード前に一時ファイルを削除
+            if wget -q --no-check-certificate ${current_wget_opt} -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
                 if [ -s "$direct_file" ]; then
-                    # ファイルからハッシュを生成
                     local file_hash=$(sha256sum "$direct_file" 2>/dev/null | cut -c1-7)
-                    rm -f "$direct_file" "$temp_file" 2>/dev/null
+                    rm -f "$direct_file" 2>/dev/null # ハッシュ取得後に一時ファイルを削除
                     local today=$(date +%Y.%m.%d)
-                    
-                    # バージョン情報を取得
                     local version="$today-$file_hash"
-                    auth_method="direct"
-                    
-                    # wget設定を元に戻す
-                    setup_wget_options
-                    
-                    # キャッシュに保存
-                    save_commit_to_cache "$file_path" "$version" "$auth_method"
-                    
+                    local auth_method="direct"
+                    direct_download_success=1
+
+                    setup_wget_options # wget設定を元に戻す
+                    save_commit_to_cache "$file_path" "$version" "$auth_method" # キャッシュには保存する
                     echo "$version $auth_method"
                     return 0
                 fi
             fi
-            
-            # 直接ダウンロードのリトライも接続方法を変更
-            if [ $retry_count -eq 0 ] && [ -f "${CACHE_DIR}/network.ch" ]; then
-                local current_network=$(cat "${CACHE_DIR}/network.ch")
-                if [ "$current_network" = "v4v6" ]; then
-                    WGET_IPV_OPT="-6"
-                    BASE_WGET="wget --no-check-certificate -q ${WGET_IPV_OPT} -O"
-                    debug_log "DEBUG" "Switching to IPv6 for direct file download retry"
-                fi
-            fi
-            
             retry_count=$((retry_count + 1))
         done
-        
-        debug_log "ERROR" "Failed to download file: $file_path"
-        rm -f "$direct_file" "$temp_file" 2>/dev/null
-        
-        # wget設定を元に戻す
+
+        # 直接ダウンロード失敗時の処理
+        debug_log "ERROR" "Failed to download file directly: $file_path"
+        rm -f "$direct_file" 2>/dev/null
         setup_wget_options
-        echo "$(date +%Y.%m.%d)-unknown $auth_method"
+        echo "$(date +%Y.%m.%d)-unknown direct" # 認証方法は "direct" とする
         return 1
+        # --- 直接ダウンロード処理ここまで ---
+
     fi
-    
-    # APIレスポンスからコミット情報を抽出
+    # --- DOWNLOAD_METHOD による分岐ここまで ---
+
+    # --- 以下、DOWNLOAD_METHOD = "api" の場合の従来の処理 ---
+    debug_log "DEBUG" "API download mode enabled for $file_path."
+
+    # キャッシュ使用時、まずキャッシュから情報を取得
+    if [ "$SKIP_CACHE" != "true" ] && [ "$force_refresh" != "true" ] && [ "$FORCE" != "true" ]; then
+        local cache_result=$(get_commit_from_cache "$file_path")
+        if [ $? -eq 0 ]; then
+            echo "$cache_result" # キャッシュヒット時はそのまま返す
+            return 0
+        fi
+    fi
+
+    # API URL と認証方法の初期化
+    local api_url="repos/${repo_owner}/${repo_name}/commits?path=${file_path}&per_page=1"
+    local auth_method="direct" # APIモードでも最初は direct から試す可能性がある
+    local retry_count=0
+    local max_retries=2
+    local token="$(get_github_token)"
+
+    # API呼び出しを試行（リトライロジック付き）
+    while [ $retry_count -le $max_retries ]; do
+        if [ $retry_count -gt 0 ]; then
+            debug_log "DEBUG" "Retry attempt $retry_count for commit version request: $file_path"
+            sleep 1
+        fi
+
+        # 認証方法に応じたAPI呼び出し (従来のロジック)
+        rm -f "$temp_file" 2>/dev/null # API呼び出し前に一時ファイルを削除
+        if [ -n "$token" ] && [ "$API_AUTH_METHOD" != "direct" ]; then
+             if [ "$API_AUTH_METHOD" = "token" ] || [ "$WGET_CAPABILITY" = "header" ]; then
+                 wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$temp_file" --header="Authorization: token $token" \
+                      "https://api.github.com/$api_url" 2>/dev/null
+                 auth_method="token"
+             elif [ "$API_AUTH_METHOD" = "basic" ] || [ "$WGET_CAPABILITY" = "basic" ]; then
+                 wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$temp_file" --user="$token" --password="x-oauth-basic" \
+                      "https://api.github.com/$api_url" 2>/dev/null
+                 auth_method="basic"
+             else
+                 wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
+                 auth_method="direct" # フォールバック
+             fi
+        else
+            wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
+            auth_method="direct"
+        fi
+
+        # 応答チェック
+        if [ -s "$temp_file" ] && ! grep -q "API rate limit exceeded\|Not Found" "$temp_file"; then
+            debug_log "DEBUG" "Successfully retrieved commit information via API"
+            break  # 成功したらループを抜ける
+        fi
+
+        # リトライ時の接続方法を変更 (従来のロジック)
+        if [ $retry_count -eq 0 ] && [ -f "${CACHE_DIR}/network.ch" ]; then
+            local current_network=$(cat "${CACHE_DIR}/network.ch")
+            if [ "$current_network" = "v4v6" ]; then
+                WGET_IPV_OPT="-6"
+                BASE_WGET="wget --no-check-certificate -q ${WGET_IPV_OPT} -O" # BASE_WGETも更新すべきか？ setup_wget_optionsで戻るはず
+                debug_log "DEBUG" "Switching to IPv6 for API retry"
+            elif [ "$current_network" = "v4" ] || [ "$current_network" = "v6" ]; then
+                debug_log "DEBUG" "API retry failed on single stack, will try direct download fallback"
+                break # ループを抜けてフォールバックへ
+            fi
+        fi
+        retry_count=$((retry_count + 1))
+    done
+
+    # APIでの取得に失敗した場合は直接ファイルダウンロードを試行 (APIモードのフォールバック)
+    if [ ! -s "$temp_file" ] || grep -q "API rate limit exceeded\|Not Found" "$temp_file"; then
+        debug_log "DEBUG" "API call failed or skipped, falling back to direct file check for $file_path (API mode fallback)"
+        rm -f "$temp_file" 2>/dev/null # 不要なAPI応答ファイルを削除
+
+        # --- 直接ダウンロード処理 (APIフォールバック用、directモードとほぼ同じ) ---
+        retry_count=0
+        local direct_download_success=0
+        while [ $retry_count -le 1 ]; do
+            local current_wget_opt="$WGET_IPV_OPT"
+            if [ $retry_count -eq 1 ] && [ -f "${CACHE_DIR}/network.ch" ]; then
+                 local current_network=$(cat "${CACHE_DIR}/network.ch")
+                 if [ "$current_network" = "v4v6" ]; then
+                      if [ "$WGET_IPV_OPT" = "-6" ]; then current_wget_opt=""; else current_wget_opt="-6"; fi
+                      debug_log "DEBUG" "Switching IP preference for direct download retry (API fallback): $current_wget_opt"
+                 fi
+            fi
+
+            rm -f "$direct_file" 2>/dev/null
+            if wget -q --no-check-certificate ${current_wget_opt} -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
+                if [ -s "$direct_file" ]; then
+                    local file_hash=$(sha256sum "$direct_file" 2>/dev/null | cut -c1-7)
+                    rm -f "$direct_file" 2>/dev/null
+                    local today=$(date +%Y.%m.%d)
+                    local version="$today-$file_hash"
+                    # フォールバック時は API モード中の direct アクセスなので auth_method は direct
+                    auth_method="direct"
+                    direct_download_success=1
+
+                    setup_wget_options
+                    save_commit_to_cache "$file_path" "$version" "$auth_method"
+                    echo "$version $auth_method"
+                    return 0
+                fi
+            fi
+            retry_count=$((retry_count + 1))
+        done
+
+        # 直接ダウンロードも失敗した場合 (APIフォールバック)
+        debug_log "ERROR" "Failed to download file directly (API fallback): $file_path"
+        rm -f "$direct_file" "$temp_file" 2>/dev/null
+        setup_wget_options
+        echo "$(date +%Y.%m.%d)-unknown direct" # フォールバック失敗時は direct とする
+        return 1
+        # --- 直接ダウンロード処理 (APIフォールバック用) ここまで ---
+    fi
+
+    # --- API呼び出し成功時の処理 ---
+    # APIレスポンスからコミット情報を抽出 (従来のロジック)
     local commit_date=""
     local commit_sha=""
-    
-    # SHA情報の抽出（複数パターン対応）
+
     commit_sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\+' "$temp_file" | head -1 | grep -o '[a-f0-9]\{7,40\}' | head -c 7)
     if [ -z "$commit_sha" ]; then
         commit_sha=$(grep -o '[a-f0-9]\{40\}' "$temp_file" | head -1 | head -c 7)
     fi
-    
-    # 日付情報の抽出（複数パターン対応）
+
     commit_date=$(grep -o '"date"[[:space:]]*:[[:space:]]*"[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' "$temp_file" | head -1 | grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}')
     if [ -z "$commit_date" ]; then
         commit_date=$(grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}Z' "$temp_file" | head -1 | grep -o '^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}')
     fi
-    
-    # 情報が取得できない場合はフォールバック
+
+    # 情報が取得できない場合はフォールバック (従来のロジック)
     if [ -z "$commit_date" ] || [ -z "$commit_sha" ]; then
-        debug_log "WARN" "Failed to extract commit information. Using fallback method."
+        debug_log "WARN" "Failed to extract commit information from API response. Using fallback method."
         commit_sha=$(tr -cd 'a-f0-9' < "$temp_file" | grep -o '[a-f0-9]\{40\}' | head -1 | head -c 7)
         commit_date=$(grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' "$temp_file" | head -1)
-        
+
         [ -z "$commit_sha" ] && commit_sha="unknown"
         [ -z "$commit_date" ] && commit_date=$(date +%Y-%m-%d)
     fi
-    
-    # 結果の組み立て
+
+    # 結果の組み立て (従来のロジック)
     if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
-        # 日付フォーマットを変換
         local formatted_date=$(echo "$commit_date" | tr '-' '.')
         local version="${formatted_date}-${commit_sha}"
-        
+
         rm -f "$temp_file" 2>/dev/null
-        
-        # wget設定を元に戻す
         setup_wget_options
-        
-        # キャッシュに保存
-        save_commit_to_cache "$file_path" "$version" "$auth_method"
-        
+        save_commit_to_cache "$file_path" "$version" "$auth_method" # API成功時の認証方法を使う
         echo "$version $auth_method"
         return 0
     fi
-    
-    # 全ての方法が失敗した場合
+
+    # 全ての方法が失敗した場合 (APIモード)
     rm -f "$temp_file" 2>/dev/null
-    
-    # wget設定を元に戻す
     setup_wget_options
-    echo "$(date +%Y.%m.%d)-fallback $auth_method" 
+    # APIモードでの最終的な失敗時は、認証方法を特定できない可能性があるため fallback とする
+    echo "$(date +%Y.%m.%d)-fallback fallback"
     return 1
 }
 
