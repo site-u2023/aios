@@ -490,25 +490,19 @@ process_language_translation() {
         debug_log "DEBUG" "No language code found in message.ch, using default"
         lang_code="$DEFAULT_LANGUAGE"
     fi
-    
-    # 選択言語とデフォルト言語の一致フラグ
-    local is_default_language=false
-    if [ "$lang_code" = "$DEFAULT_LANGUAGE" ]; then
-        is_default_language=true
-        debug_log "DEBUG" "Selected language is the default language (${lang_code})"
-    fi
-    
+
     # デフォルト言語以外の場合のみ翻訳DBを作成
-    if [ "$is_default_language" = "false" ]; then
+    if [ "$lang_code" != "$DEFAULT_LANGUAGE" ]; then
+        debug_log "DEBUG" "Target language (${lang_code}) is different from default (${DEFAULT_LANGUAGE}), creating DB."
         # 翻訳DBを作成
         create_language_db "$lang_code"
-        
+
         # 翻訳情報表示（成功メッセージなし）
         display_detected_translation "false"
     else
         # デフォルト言語の場合はDB作成をスキップ
         debug_log "DEBUG" "Skipping DB creation for default language: ${lang_code}"
-        
+
         # 表示は1回だけ行う（静的フラグを使用）
         if [ "${DEFAULT_LANG_DISPLAYED:-false}" = "false" ]; then
             debug_log "DEBUG" "Displaying information for default language once"
@@ -519,9 +513,9 @@ process_language_translation() {
             debug_log "DEBUG" "Default language info already displayed, skipping"
         fi
     fi
-    
+
     printf "\n"
-    
+
     return 0
 }
 
