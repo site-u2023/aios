@@ -163,8 +163,165 @@ translate_with_lingva() {
     return 1
 }
 
-# Google翻訳APIを使用した翻訳関数 (高効率版:54秒)
+# Google Translate APIを使用してテキストを翻訳する関数（リトライ、IPバージョン切り替え、wget能力対応）
+# $1: 翻訳対象のキー (デバッグ用)
+# $2: ターゲット言語コード (例: "ja")
+# $3: ソース言語コード (例: "en")
+# $4: Google Apps Script API URL
+# 出力: 成功時は翻訳結果を標準出力、失敗時は空文字列を出力し、ステータスコード1を返す
 translate_with_google() {
+    local key="$1"
+    local target_lang="$2"
+    local source_lang="$3"
+    local api_url="$4"
+
+    debug_log "DEBUG" "translate_with_google called for key: '${key}', target: ${target_lang}, source: ${source_lang}"
+
+    # ネットワーク接続タイプを取得
+    local network_type=""
+    if [ -f "${CACHE_DIR}/network.ch" ]; then
+        network_type=$(cat "${CACHE_DIR}/network.ch")
+    fi
+    debug_log "DEBUG" "Network type from cache: ${network_type}"
+
+    # wgetオプションの初期化 (-4 or -6 or empty)
+    local wget_options=""
+    if [ "$network_type" = "v4v6" ] || [ "$network_type" = "v4" ]; then
+        wget_options="-4" # Prefer IPv4 for dual-stack or IPv4-only
+    elif [ "$network_type" = "v6" ]; then
+        wget_options="-6"
+    fi
+    debug_log "DEBUG" "Initial wget options: ${wget_options}"
+
+    # リトライ時にIPバージョンを切り替えるかどうかを事前に判定
+    local can_alternate_ip=false
+    if [ "$network_type" = "v4v6" ]; then
+        can_alternate_ip=true
+        debug_log "DEBUG" "IP alternation enabled for v4v6 network"
+    fi
+
+    # 一時ファイルの準備
+    local temp_file="${TMP_DIR}/translation_result.$$"
+    # Ensure temp file is cleaned up on exit, error, or interrupt
+    trap 'rm -f "$temp_file"' EXIT INT TERM HUP
+
+    # リトライカウンター
+    local retry_count=0
+    local wget_status=1 # Initialize wget status to indicate failure
+    local translated_text=""
+
+    # wget機能に基づいて処理を分岐
+    case "$WGET_CAPABILITY_DETECTED" in
+        "full")
+            debug_log "DEBUG" "Using full wget capabilities (-L enabled)"
+            # --- Full wget リトライループ ---
+            while [ $retry_count -lt $API_MAX_RETRIES ]; do
+                debug_log "DEBUG" "[Full wget] Translation attempt ${retry_count} for key: ${key}"
+
+                # v4v6の場合のみネットワークタイプを切り替え (リトライ時)
+                if [ $retry_count -gt 0 ] && [ "$can_alternate_ip" = true ]; then
+                    case "$wget_options" in
+                        *-4*) wget_options="-6" ;;
+                        *)    wget_options="-4" ;;
+                    esac
+                    debug_log "DEBUG" "[Full wget] Alternating IP, retrying with wget option: $wget_options"
+                fi
+
+                # wgetコマンドの実行 (-L を含む)
+                debug_log "DEBUG" "[Full wget] Executing: wget --no-check-certificate ${wget_options} -L -T ${API_TIMEOUT} -q -O \"${temp_file}\" --user-agent=\"...\" \"${api_url}\""
+                wget --no-check-certificate $wget_options -L -T $API_TIMEOUT -q -O "$temp_file" \
+                    --user-agent="Mozilla/5.0" \
+                    "$api_url" 2>/dev/null
+                wget_status=$?
+                debug_log "DEBUG" "[Full wget] wget exit status: ${wget_status}"
+
+                # レスポンスチェックと結果処理
+                if [ $wget_status -eq 0 ] && [ -s "$temp_file" ]; then
+                    sed '1s/^\xEF\xBB\xBF//' "$temp_file" | \
+                    jq -r '.[0][0][0]' 2>/dev/null | {
+                        read translated_text || true # Read jq output
+                    }
+                    if [ -n "$translated_text" ] && [ "$translated_text" != "null" ]; then
+                        debug_log "DEBUG" "[Full wget] Translation successful for key '${key}': ${translated_text}"
+                        printf "%s\n" "$translated_text"
+                        rm -f "$temp_file"
+                        trap - EXIT INT TERM HUP # Remove trap before successful return
+                        return 0 # 成功
+                    else
+                        debug_log "WARNING" "[Full wget] Translation failed or empty result for key '${key}'. Response content:"
+                        debug_log "WARNING" "$(cat "$temp_file")"
+                    fi
+                else
+                    debug_log "WARNING" "[Full wget] wget failed (status: ${wget_status}) or temp file empty for key '${key}'."
+                fi
+
+                # リトライ準備
+                retry_count=$((retry_count + 1))
+                debug_log "DEBUG" "[Full wget] Translation failed, preparing for retry ${retry_count} of ${API_MAX_RETRIES}"
+                sleep 1
+            done
+            ;; # --- End of Full wget リトライループ ---
+
+        *) # Includes "basic", "https_only", and fallback/error cases
+            debug_log "DEBUG" "Using basic wget capabilities (-L disabled)"
+            # --- Basic wget リトライループ ---
+            while [ $retry_count -lt $API_MAX_RETRIES ]; do
+                debug_log "DEBUG" "[Basic wget] Translation attempt ${retry_count} for key: ${key}"
+
+                # v4v6の場合のみネットワークタイプを切り替え (リトライ時)
+                if [ $retry_count -gt 0 ] && [ "$can_alternate_ip" = true ]; then
+                    case "$wget_options" in
+                        *-4*) wget_options="-6" ;;
+                        *)    wget_options="-4" ;;
+                    esac
+                    debug_log "DEBUG" "[Basic wget] Alternating IP, retrying with wget option: $wget_options"
+                fi
+
+                # wgetコマンドの実行 (-L を含まない)
+                debug_log "DEBUG" "[Basic wget] Executing: wget --no-check-certificate ${wget_options} -T ${API_TIMEOUT} -q -O \"${temp_file}\" --user-agent=\"...\" \"${api_url}\""
+                wget --no-check-certificate $wget_options -T $API_TIMEOUT -q -O "$temp_file" \
+                    --user-agent="Mozilla/5.0" \
+                    "$api_url" 2>/dev/null
+                wget_status=$?
+                debug_log "DEBUG" "[Basic wget] wget exit status: ${wget_status}"
+
+                # レスポンスチェックと結果処理 (Full wget と同じロジック)
+                if [ $wget_status -eq 0 ] && [ -s "$temp_file" ]; then
+                    sed '1s/^\xEF\xBB\xBF//' "$temp_file" | \
+                    jq -r '.[0][0][0]' 2>/dev/null | {
+                        read translated_text || true # Read jq output
+                    }
+                    if [ -n "$translated_text" ] && [ "$translated_text" != "null" ]; then
+                        debug_log "DEBUG" "[Basic wget] Translation successful for key '${key}': ${translated_text}"
+                        printf "%s\n" "$translated_text"
+                        rm -f "$temp_file"
+                        trap - EXIT INT TERM HUP # Remove trap before successful return
+                        return 0 # 成功
+                    else
+                        debug_log "WARNING" "[Basic wget] Translation failed or empty result for key '${key}'. Response content:"
+                        debug_log "WARNING" "$(cat "$temp_file")"
+                    fi
+                else
+                    debug_log "WARNING" "[Basic wget] wget failed (status: ${wget_status}) or temp file empty for key '${key}'."
+                fi
+
+                # リトライ準備
+                retry_count=$((retry_count + 1))
+                debug_log "DEBUG" "[Basic wget] Translation failed, preparing for retry ${retry_count} of ${API_MAX_RETRIES}"
+                sleep 1
+            done
+            ;; # --- End of Basic wget リトライループ ---
+    esac
+
+    # 最大リトライ回数を超えた場合 (どちらのケースでもここに到達する可能性あり)
+    debug_log "ERROR" "Translation failed for key '${key}' after ${API_MAX_RETRIES} retries."
+    rm -f "$temp_file"
+    trap - EXIT INT TERM HUP # Remove trap before returning failure
+    return 1
+}
+
+# Google翻訳APIを使用した翻訳関数 (高効率版:54秒)
+OK_translate_with_google() {
     local text="$1"
     local source_lang="$2"
     local target_lang="$3"
