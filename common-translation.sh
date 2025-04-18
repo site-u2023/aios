@@ -377,9 +377,10 @@ EOF
     
     # 言語エントリを抽出して翻訳ループ
     grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
-        # キーと値を抽出
-        local key=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|\([^=]*\)=.*/\1/p")
-        local value=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|[^=]*=\(.*\)/\1/p")
+        # キーと値を抽出 (シェル組み込み文字列操作を使用)
+        local line_content=${line#*|} # "en|" の部分を除去
+        local key=${line_content%%=*}   # 最初の "=" より前の部分をキーとして取得
+        local value=${line_content#*=}  # 最初の "=" より後の部分を値として取得
         
         if [ -n "$key" ] && [ -n "$value" ]; then
             # キャッシュキー生成
