@@ -82,38 +82,85 @@ normalize_ipv6() {
     local prefix="$1"
     local normalized=""
     local cn=0
-    
+
+    # 入力値からプレフィックス長を除去 (念のため)
+    prefix=$(echo "$prefix" | cut -d'/' -f1)
+
     debug_log "Normalizing IPv6: $prefix"
-    
-    # 基本的な形式チェック
-    if ! expr "$prefix" : '[[:xdigit:]:]\{2,\}$' > /dev/null; then
-        print_error "無効なIPv6形式です"
+
+    # 基本的な形式チェックを緩和 (コロンが含まれているか程度)
+    if ! echo "$prefix" | grep -q ':'; then
+        print_error "無効なIPv6形式です (Invalid IPv6 format: no colon found)"
         return 1
     fi
-    
+
     # コロンの数をカウント
-    cn=$(echo "$prefix" | grep -o ":" | wc -l)
-    
+    # POSIX準拠のため、grep -o を使用
+    cn=$(echo "$prefix" | grep -o ':' | wc -l)
+
     if [ $cn -lt 2 ] || [ $cn -gt 7 ]; then
-        print_error "IPv6形式が不正です"
+        print_error "IPv6形式が不正です (Invalid IPv6 format: incorrect number of colons)"
         return 1
     fi
-    
-    # 正規化処理
-    normalized=$(echo "$prefix" | sed '
-        s/^:/0000:/
-        s/:$/:0000/
-        s/.*/:&:/
-        :add0
-        s/:\([^:]\{1,3\}\):/:0\1:/g
-        t add0
-        s/:\(.*\):/\1/')
-    
-    if echo "$normalized" | grep -q "::"; then
-        local zeros=$(echo -n :::::: | tail -c $((8-cn)) | sed 's/:/0000:/g')
-        normalized=$(echo "$normalized" | sed "s/::/:$zeros/")
+
+    # 正規化処理 (旧バージョンの sed ロジックをベースに)
+    normalized=$(echo "$prefix" | sed -e 's/^:/0000:/' \
+                                     -e 's/:$/:0000/' \
+                                     -e 's/.*/:&:/' \
+                                     -e ':add0' \
+                                     -e 's/:\([^:]\{1,3\}\):/:0\1:/g' \
+                                     -e 't add0' \
+                                     -e 's/:\{4,\}/::/g' \
+                                     -e 's/:::/:0000::/g' \
+                                     -e 's/:::/::0000/g' \
+                                     -e 's/:0\{1,3\}/:/g' \
+                                     -e 's/:\(.*\):/\1/')
+
+    # :: の展開処理
+    if echo "$normalized" | grep -q '::'; then
+        local current_colons=$(echo "$normalized" | grep -o ':' | wc -l)
+        local needed_zeros=$((7 - current_colons)) # :: を含めて7つのコロンが必要
+        local zeros_block=""
+        local i=0
+        while [ $i -lt $needed_zeros ]; do
+            zeros_block="${zeros_block}:0000"
+            i=$((i + 1))
+        done
+        # 先頭または末尾の :: に対応しつつ展開
+        normalized=$(echo "$normalized" | sed -e "s/^::/0000${zeros_block}:/" \
+                                             -e "s/::$/:${zeros_block}0000/" \
+                                             -e "s/::/${zeros_block}:/")
+        # 再度、各セクションを4桁に整形
+        normalized=$(echo "$normalized" | sed -e 's/.*/:&:/' \
+                                         -e ':add0_final' \
+                                         -e 's/:\([^:]\{1,3\}\):/:0\1:/g' \
+                                         -e 't add0_final' \
+                                         -e 's/:\{4,\}/::/g' \
+                                         -e 's/:::/:0000::/g' \
+                                         -e 's/:::/::0000/g' \
+                                         -e 's/:0\{1,3\}/:/g' \
+                                         -e 's/:0000/:/g' \
+                                         -e 's/:/ /g' | awk '{for(i=1;i<=NF;i++) printf "%04s:", $i}' | sed 's/:$//')
+
+    # 各セクションを4桁に整形 (:: がない場合)
+    else
+         normalized=$(echo "$normalized" | sed -e 's/.*/:&:/' \
+                                         -e ':add0_final_no_double_colon' \
+                                         -e 's/:\([^:]\{1,3\}\):/:0\1:/g' \
+                                         -e 't add0_final_no_double_colon' \
+                                         -e 's/:0\{1,3\}/:/g' \
+                                         -e 's/:0000/:/g' \
+                                         -e 's/:/ /g' | awk '{for(i=1;i<=NF;i++) printf "%04s:", $i}' | sed 's/:$//')
     fi
-    
+
+
+    # 最終的な形式チェック (8つのヘクステットになっているか)
+    if [ $(echo "$normalized" | grep -o ':' | wc -l) -ne 7 ]; then
+         print_error "IPv6正規化に失敗しました (Normalization failed: final format check)"
+         debug_log "Normalization result before final check: $normalized"
+         return 1
+    fi
+
     echo "$normalized"
     debug_log "Normalized IPv6: $normalized"
     return 0
@@ -123,32 +170,39 @@ normalize_ipv6() {
 get_ipv6_address() {
     local ipv6_addr=""
     local net_if6=""
-    
+
     debug_log "Retrieving IPv6 address"
-    
+
     # OpenWrtネットワーク関数を利用
     if load_network_libs; then
         network_find_wan6 net_if6
-        network_get_prefix6 ipv6_addr "$net_if6"
-        
-        if [ -n "$ipv6_addr" ]; then
-            debug_log "Got IPv6 prefix: $ipv6_addr"
-            echo "$ipv6_addr"
-            return 0
+        if [ -n "$net_if6" ]; then
+            # network_get_prefix6 はプレフィックスを返すことがある
+            network_get_prefix6 ipv6_addr "$net_if6"
+            # プレフィックス長を除去
+            ipv6_addr=$(echo "$ipv6_addr" | cut -d'/' -f1)
+            debug_log "Got IPv6 prefix using network_get_prefix6: $ipv6_addr"
         fi
     fi
-    
-    # 代替方法
-    ipv6_addr=$(ip -6 addr show dev "$WAN6_IFACE" scope global | grep inet6 | head -n1 | awk '{print $2}' | cut -d/ -f1)
-    
+
+    # network_get_prefix6 で取得できなかった場合、または空の場合に ip コマンドを試す
+    if [ -z "$ipv6_addr" ]; then
+        debug_log "network_get_prefix6 failed or returned empty, trying ip command"
+        # ip コマンドでグローバルスコープのアドレスを取得し、プレフィックス長を除去
+        ipv6_addr=$(ip -6 addr show dev "$WAN6_IFACE" scope global | grep 'inet6' | head -n1 | awk '{print $2}' | cut -d'/' -f1)
+
+        if [ -n "$ipv6_addr" ]; then
+            debug_log "Got IPv6 address with ip command: $ipv6_addr"
+        fi
+    fi
+
     if [ -n "$ipv6_addr" ]; then
-        debug_log "Got IPv6 address with ip command: $ipv6_addr"
         echo "$ipv6_addr"
         return 0
+    else
+        print_error "IPv6アドレスを取得できませんでした (Could not retrieve IPv6 address)"
+        return 1
     fi
-    
-    print_error "IPv6アドレスを取得できませんでした"
-    return 1
 }
 
 # NURO光MAP-Eパターンの判定
@@ -519,7 +573,7 @@ check_ports() {
 }
 
 # メイン関数
-main() {
+map_e_nuro_main() {
     print_info "=== NURO光 MAP-E設定スクリプト v$VERSION ==="
     
     # 初期化と必須コマンド確認
@@ -615,4 +669,4 @@ main() {
 }
 
 # スクリプト実行
-main "$@"
+map_e_nuro_main "$@"
