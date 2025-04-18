@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-12-00-05"
+SCRIPT_VERSION="2025-04-18-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -282,7 +282,7 @@ create_language_db() {
     local output_db="${BASE_DIR}/message_${api_lang}.db"
     local temp_file="${TRANSLATION_CACHE_DIR}/translation_output.tmp"
     local cleaned_translation=""
-    local current_api=""
+    local current_api="" # Initialize current_api
     local ip_check_file="${CACHE_DIR}/network.ch"
     
     debug_log "DEBUG" "Creating language DB for target ${target_lang} with API language code ${api_lang}"
@@ -311,7 +311,13 @@ EOF
     # ネットワーク接続状態を確認
     if [ ! -f "$ip_check_file" ]; then
         debug_log "DEBUG" "Network status file not found, checking connectivity"
-        check_network_connectivity
+        # Ensure check_network_connectivity is defined in common-system.sh and loaded
+        if type check_network_connectivity >/dev/null 2>&1; then
+            check_network_connectivity
+        else
+            debug_log "ERROR" "check_network_connectivity function not found"
+            # Proceed assuming no network or handle error appropriately
+        fi
     fi
     
     # ネットワーク接続状態を取得
@@ -323,21 +329,36 @@ EOF
         debug_log "DEBUG" "Could not determine network status"
     fi
     
-    # API_NAMEをtranslate_text()を呼び出して設定（ダミー呼び出し）
-    translate_text "dummy" "$DEFAULT_LANGUAGE" "$api_lang" > /dev/null 2>&1
+    # --- Optimization Start ---
+    # API名をAPI_LISTに基づいて直接設定
+    case "$API_LIST" in
+        google)
+            current_api="translate.googleapis.com"
+            ;;
+        lingva)
+            current_api="lingva.ml"
+            ;;
+        *)
+            # デフォルトでGoogleを使用
+            current_api="translate.googleapis.com"
+            ;;
+    esac
     
-    # グローバル変数から取得したAPI_NAMEを使用
-    current_api="$API_NAME"
     if [ -z "$current_api" ]; then
-        current_api="Translation API"
+        current_api="Translation API" # Fallback name
     fi
-    
-    debug_log "DEBUG" "Using API from translate_text mapping: $current_api"
+    debug_log "DEBUG" "Using API based on API_LIST: $current_api"
+    # --- Optimization End ---
 
     # スピナーを開始し、使用中のAPIを表示
-    start_spinner "$(color blue "Currently translating: $current_api")"
+    # Ensure start_spinner is defined in common-color.sh or similar and loaded
+    if type start_spinner >/dev/null 2>&1; then
+        start_spinner "$(color blue "Currently translating: $current_api")"
+    else
+        debug_log "WARNING" "start_spinner function not found, spinner not started"
+    fi
     
-    # 言語エントリを抽出
+    # 言語エントリを抽出して翻訳ループ
     grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
         # キーと値を抽出
         local key=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|\([^=]*\)=.*/\1/p")
@@ -353,12 +374,12 @@ EOF
                 local translated=$(cat "$cache_file")
                 # APIから取得した言語コードを使用
                 printf "%s|%s=%s\n" "$api_lang" "$key" "$translated" >> "$output_db"
-                continue
+                continue # 次の行へ
             fi
             
-            # ネットワーク接続確認
+            # ネットワーク接続確認と翻訳
             if [ -n "$network_status" ] && [ "$network_status" != "" ]; then
-                # ここで実際に翻訳APIを呼び出す（修正部分）
+                # ここで実際に翻訳APIを呼び出す
                 cleaned_translation=$(translate_text "$value" "$DEFAULT_LANGUAGE" "$api_lang")
                 
                 # 翻訳結果処理
@@ -375,7 +396,7 @@ EOF
                 else
                     # 翻訳失敗時は原文をそのまま使用
                     printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
-                    debug_log "DEBUG" "All translation APIs failed, using original text for key: ${key}" 
+                    debug_log "DEBUG" "Translation failed for key: ${key}, using original text" 
                 fi
             else
                 # ネットワーク接続がない場合は原文を使用
@@ -386,7 +407,14 @@ EOF
     done
     
     # スピナー停止
-    stop_spinner "Language file created successfully" "success"
+    # Ensure stop_spinner is defined and loaded
+    if type stop_spinner >/dev/null 2>&1; then
+        stop_spinner "Language file created successfully" "success"
+    else
+        debug_log "INFO" "Language file creation process finished (spinner function not found)"
+        # Optionally print the success message directly if spinner isn't available
+        printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_SUCCESS" "default=Language file created successfully")")"
+    fi
     
     # 翻訳処理終了
     debug_log "DEBUG" "Language DB creation completed for ${api_lang}"
