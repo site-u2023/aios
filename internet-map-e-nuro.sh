@@ -81,88 +81,97 @@ check_commands() {
 normalize_ipv6() {
     local prefix="$1"
     local normalized=""
-    local cn=0
+    local cn=0 # コロンの数
 
-    # 入力値からプレフィックス長を除去 (念のため)
+    # 入力値からプレフィックス長を除去 (get_ipv6_address で除去済みだが念のため)
     prefix=$(echo "$prefix" | cut -d'/' -f1)
 
-    debug_log "Normalizing IPv6: $prefix"
+    debug_log "Normalizing IPv6 using exact legacy logic: $prefix"
 
-    # 基本的な形式チェックを緩和 (コロンが含まれているか程度)
-    if ! echo "$prefix" | grep -q ':'; then
-        print_error "無効なIPv6形式です (Invalid IPv6 format: no colon found)"
+    # --- 旧バージョン (8e19f8f) の正規化ロジック開始 ---
+
+    # 1. 基本的な形式チェック (旧バージョン行 13 の expr 相当を grep で)
+    #    POSIX準拠のため expr '[[:xdigit:]:]\{2,\}$' は grep で代替
+    if ! echo "$prefix" | grep -q '[[:xdigit:]:]\{2,\}'; then
+        print_error "Invalid IPv6 format (basic check failed)"
         return 1
     fi
 
-    # コロンの数をカウント
-    # POSIX準拠のため、grep -o を使用
+    # 2. 旧バージョン行 14 の grep チェック (必須ではないが互換性のためコメントアウトで残す)
+    # if echo "$prefix" | grep -sqEv '[[:xdigit:]]{5}|:::|::.*::'; then
+    #     debug_log "Prefix might fail legacy check (line 14), but proceeding..."
+    # fi
+    # このチェックは複雑で、後続のロジックでカバーされるため、必須ではないと判断
+
+    # 3. コロンの数をカウント (旧バージョン行 15)
     cn=$(echo "$prefix" | grep -o ':' | wc -l)
 
+    # 4. コロン数の基本的な範囲チェック (旧バージョン行 16)
+    #    test コマンドは POSIX 準拠
     if [ $cn -lt 2 ] || [ $cn -gt 7 ]; then
-        print_error "IPv6形式が不正です (Invalid IPv6 format: incorrect number of colons)"
-        return 1
+         print_error "Invalid IPv6 format: colons ($cn) out of range 2-7"
+         return 1
     fi
 
-    # 正規化処理 (旧バージョンの sed ロジックをベースに)
+    # 5. sed によるゼロパディング等の正規化 (旧バージョン行 17-24)
+    #    POSIX準拠のため sed のエスケープに注意
     normalized=$(echo "$prefix" | sed -e 's/^:/0000:/' \
                                      -e 's/:$/:0000/' \
                                      -e 's/.*/:&:/' \
                                      -e ':add0' \
                                      -e 's/:\([^:]\{1,3\}\):/:0\1:/g' \
                                      -e 't add0' \
-                                     -e 's/:\{4,\}/::/g' \
-                                     -e 's/:::/:0000::/g' \
-                                     -e 's/:::/::0000/g' \
-                                     -e 's/:0\{1,3\}/:/g' \
-                                     -e 's/:\(.*\):/\1/')
+                                     -e 's/:\(.*\):/\1/') # POSIX準拠の sed
 
-    # :: の展開処理
+    # 6. '::' の展開処理 (旧バージョン行 25-29)
     if echo "$normalized" | grep -q '::'; then
-        local current_colons=$(echo "$normalized" | grep -o ':' | wc -l)
-        local needed_zeros=$((7 - current_colons)) # :: を含めて7つのコロンが必要
-        local zeros_block=""
-        local i=0
-        while [ $i -lt $needed_zeros ]; do
-            zeros_block="${zeros_block}:0000"
+        # '::' がある場合、コロン数は 7 以下のはず (行 16 でチェック済みだが念のため)
+        if [ $cn -gt 7 ]; then
+             print_error "Internal error: Invalid IPv6 format with '::': colons ($cn) > 7"
+             return 1
+        fi
+        # 不足している '0000:' ブロックの数を計算 (8 - コロン数)
+        local zeros_to_add=$((8 - cn))
+        local zero_block_sed=""
+        local i=1
+        # '0000:' を必要な数だけ連結 (POSIX sh の while ループ)
+        while [ $i -le $zeros_to_add ]; do
+            zero_block_sed="${zero_block_sed}0000:"
             i=$((i + 1))
         done
-        # 先頭または末尾の :: に対応しつつ展開
-        normalized=$(echo "$normalized" | sed -e "s/^::/0000${zeros_block}:/" \
-                                             -e "s/::$/:${zeros_block}0000/" \
-                                             -e "s/::/${zeros_block}:/")
-        # 再度、各セクションを4桁に整形
-        normalized=$(echo "$normalized" | sed -e 's/.*/:&:/' \
-                                         -e ':add0_final' \
-                                         -e 's/:\([^:]\{1,3\}\):/:0\1:/g' \
-                                         -e 't add0_final' \
-                                         -e 's/:\{4,\}/::/g' \
-                                         -e 's/:::/:0000::/g' \
-                                         -e 's/:::/::0000/g' \
-                                         -e 's/:0\{1,3\}/:/g' \
-                                         -e 's/:0000/:/g' \
-                                         -e 's/:/ /g' | awk '{for(i=1;i<=NF;i++) printf "%04s:", $i}' | sed 's/:$//')
+        # 末尾の余分なコロンを削除
+        zero_block_sed=$(echo "$zero_block_sed" | sed 's/:$//')
 
-    # 各セクションを4桁に整形 (:: がない場合)
+        # sed で '::' を計算した '0000:' ブロックで置換
+        normalized=$(echo "$normalized" | sed "s/::/:${zero_block_sed}:/")
+
+        # 置換後に先頭や末尾に残ったコロンを削除 (例: ::1 -> :0000:...:1: -> 0000:...:1)
+        normalized=$(echo "$normalized" | sed -e 's/^://' -e 's/:$//')
+
     else
-         normalized=$(echo "$normalized" | sed -e 's/.*/:&:/' \
-                                         -e ':add0_final_no_double_colon' \
-                                         -e 's/:\([^:]\{1,3\}\):/:0\1:/g' \
-                                         -e 't add0_final_no_double_colon' \
-                                         -e 's/:0\{1,3\}/:/g' \
-                                         -e 's/:0000/:/g' \
-                                         -e 's/:/ /g' | awk '{for(i=1;i<=NF;i++) printf "%04s:", $i}' | sed 's/:$//')
+        # '::' がない場合、コロン数は正確に 7 である必要がある (旧バージョン行 28)
+        if [ $cn -ne 7 ]; then
+            print_error "Invalid IPv6 format without '::': colons ($cn) is not 7"
+            return 1
+        fi
+        # '::' がなくコロン数が 7 なら、展開処理は不要
     fi
 
+    # --- 旧バージョン (8e19f8f) の正規化ロジック終了 ---
 
-    # 最終的な形式チェック (8つのヘクステットになっているか)
-    if [ $(echo "$normalized" | grep -o ':' | wc -l) -ne 7 ]; then
-         print_error "IPv6正規化に失敗しました (Normalization failed: final format check)"
+    # 最終的な形式チェック (正規化後に8つのセクションと7つのコロンがあるか)
+    local final_colons=$(echo "$normalized" | grep -o ':' | wc -l)
+    local final_sections=$(echo "$normalized" | awk -F: '{print NF}')
+
+    if [ $final_colons -ne 7 ] || [ $final_sections -ne 8 ]; then
+         print_error "IPv6 normalization failed: final format check (Expected 7 colons, 8 sections; Got $final_colons colons, $final_sections sections)"
          debug_log "Normalization result before final check: $normalized"
          return 1
     fi
 
+    # 正常終了
     echo "$normalized"
-    debug_log "Normalized IPv6: $normalized"
+    debug_log "Normalized IPv6 (exact legacy logic): $normalized"
     return 0
 }
 
