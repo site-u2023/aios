@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-18-00-03"
+SCRIPT_VERSION="2025-04-18-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -163,101 +163,52 @@ translate_with_lingva() {
     return 1
 }
 
-# 翻訳試行を行うヘルパー関数 (translate_with_google から呼ばれる)
-# $1: wget_capability ("full" or "basic")
-# $2: current_wget_options ("-4", "-6", or "")
-# $3: api_url
-# $4: temp_file path
-# $5: key (for debug logging)
-# 出力: 成功時は翻訳結果を標準出力、失敗時は空文字列を出力
-# 戻り値: 成功時は0、失敗時は1
-attempt_google_translation() {
-    local wget_capability="$1"
-    local current_wget_options="$2"
-    local api_url="$3"
-    local temp_file="$4"
-    local key="$5"
-    local wget_cmd_base=""
-    local wget_status=1
-    local translated_text="" # Renamed from 'translated'
-
-    debug_log "DEBUG" "[Attempt] Executing attempt for key: ${key}"
-    debug_log "DEBUG" "[Attempt] Capability: ${wget_capability}, Options: ${current_wget_options}"
-
-    # wgetコマンドの基本部分を決定 (-L の有無)
-    case "$wget_capability" in
-        "full")
-            wget_cmd_base="wget --no-check-certificate ${current_wget_options} -L -T ${API_TIMEOUT} -q -O"
-            debug_log "DEBUG" "[Attempt] Using wget with -L"
-            ;;
-        *) # basic, https_only, etc.
-            wget_cmd_base="wget --no-check-certificate ${current_wget_options} -T ${API_TIMEOUT} -q -O"
-            debug_log "DEBUG" "[Attempt] Using wget without -L"
-            ;;
-    esac
-
-    # wgetコマンドの実行
-    debug_log "DEBUG" "[Attempt] Executing: ${wget_cmd_base} \"${temp_file}\" --user-agent=\"Mozilla/5.0\" \"${api_url}\""
-    ${wget_cmd_base} "${temp_file}" --user-agent="Mozilla/5.0" "${api_url}" 2>/dev/null
-    wget_status=$?
-    debug_log "DEBUG" "[Attempt] wget exit status: ${wget_status}"
-
-    # レスポンスチェックと結果処理 (OK_translate_with_google と同等の sed ロジック)
-    if [ $wget_status -eq 0 ] && [ -s "$temp_file" ]; then
-        # 柔軟なレスポンスチェック（grepでJSON配列の開始を確認）
-        if grep -q '\[' "$temp_file"; then
-            # sedで翻訳テキスト抽出とエスケープ解除
-            translated_text=$(sed 's/\[\[\["//; s/",".*//; s/\\u003d/=/g; s/\\u003c/</g; s/\\u003e/>/g; s/\\u0026/\&/g; s/\\"/"/g; s/\\n/\n/g; s/\\r//g' "$temp_file")
-
-            if [ -n "$translated_text" ] && [ "$translated_text" != "null" ]; then
-                debug_log "DEBUG" "[Attempt] Translation successful for key '${key}'"
-                printf "%s\n" "$translated_text" # 成功時、結果を標準出力へ
-                return 0 # 成功
-            else
-                debug_log "WARNING" "[Attempt] Translation extraction failed or empty/null result for key '${key}'. Response content:"
-                debug_log "WARNING" "$(cat "$temp_file")"
-                return 1 # 失敗 (抽出エラー)
-            fi
-        else
-            debug_log "WARNING" "[Attempt] Unexpected response format (no '[' found) for key '${key}'. Response content:"
-            debug_log "WARNING" "$(cat "$temp_file")"
-            return 1 # 失敗 (形式エラー)
-        fi
-    else
-        debug_log "WARNING" "[Attempt] wget failed (status: ${wget_status}) or temp file empty for key '${key}'."
-        return 1 # 失敗 (wgetエラー)
-    fi
-}
-
-# Google Translate APIを使用してテキストを翻訳する関数（リトライ、IPバージョン切り替え、wget能力対応、ヘルパー関数使用）
-# $1: 翻訳対象のキー (デバッグ用)
-# $2: ターゲット言語コード (例: "ja")
-# $3: ソース言語コード (例: "en")
-# $4: Google Apps Script API URL (または Google Translate API URL)
+# Google Translate APIを使用してテキストを翻訳する関数（OK_translate_with_google と同仕様、ループ外分岐）
+# $1: text (翻訳対象のテキスト)
+# $2: source_lang (翻訳元の言語コード)
+# $3: target_lang (翻訳先の言語コード)
 # 出力: 成功時は翻訳結果を標準出力、失敗時は空文字列を出力し、ステータスコード1を返す
 translate_with_google() {
-    local key="$1"
-    local target_lang="$2"
-    local source_lang="$3"
-    local api_url="$4" # This could be Apps Script URL or direct Google Translate URL
-
-    debug_log "DEBUG" "translate_with_google called for key: '${key}', target: ${target_lang}, source: ${source_lang}"
-    debug_log "DEBUG" "Using API URL: ${api_url}"
-
-    # ネットワーク接続タイプを取得
+    local text="$1"
+    local source_lang="$2"
+    local target_lang="$3"
+    local ip_check_file="${CACHE_DIR}/network.ch"
+    local wget_options=""
+    local retry_count=0
     local network_type=""
-    if [ -f "${CACHE_DIR}/network.ch" ]; then
-        network_type=$(cat "${CACHE_DIR}/network.ch")
+    # 一時ファイルの準備 (TMP_DIR を使用)
+    local TMP_DIR="${TMP_DIR:-/tmp}"
+    local temp_file="${TMP_DIR}/google_response.$$" # Use unique temp file name per call
+    local api_url=""
+    local wget_status=1
+    local translated="" # Variable to hold translated text
+
+    debug_log "DEBUG" "translate_with_google (Loop-outside branch) called for text: '${text}', source: ${source_lang}, target: ${target_lang}"
+
+    # 必要なディレクトリを確保
+    mkdir -p "$TMP_DIR" 2>/dev/null
+    mkdir -p "$(dirname "$temp_file")" 2>/dev/null # Ensure temp dir exists (redundant if TMP_DIR is used, but safe)
+    # Ensure temp file is cleaned up on exit, error, or interrupt
+    trap 'rm -f "$temp_file"' EXIT INT TERM HUP
+
+    # ネットワーク接続状態を確認 (OK_translate_with_google と同様)
+    if [ ! -f "$ip_check_file" ]; then
+         if type check_network_connectivity >/dev/null 2>&1; then
+            check_network_connectivity
+         else
+             debug_log "ERROR" "check_network_connectivity function not found."
+         fi
     fi
+    network_type=$(cat "$ip_check_file" 2>/dev/null || echo "v4") # Default to v4 if file missing
     debug_log "DEBUG" "Network type from cache: ${network_type}"
 
-    # wgetオプションの初期化 (-4 or -6 or empty)
-    local wget_options=""
-    if [ "$network_type" = "v4v6" ] || [ "$network_type" = "v4" ]; then
-        wget_options="-4"
-    elif [ "$network_type" = "v6" ]; then
-        wget_options="-6"
-    fi
+    # ネットワークタイプに基づいてwgetオプションを設定 (OK_translate_with_google と同様)
+    case "$network_type" in
+        "v4") wget_options="-4" ;;
+        "v6") wget_options="-6" ;;
+        "v4v6") wget_options="-4" ;; # Prefer IPv4 initially for dual-stack
+        *) wget_options="" ;;
+    esac
     debug_log "DEBUG" "Initial wget options: ${wget_options}"
 
     # リトライ時にIPバージョンを切り替えるかどうかを事前に判定
@@ -267,57 +218,126 @@ translate_with_google() {
         debug_log "DEBUG" "IP alternation enabled for v4v6 network"
     fi
 
-    # 一時ファイルの準備 (TMP_DIR を使用)
-    local TMP_DIR="${TMP_DIR:-/tmp}"
-    local temp_file="${TMP_DIR}/translation_result.$$"
-    mkdir -p "$TMP_DIR" 2>/dev/null
-    trap 'rm -f "$temp_file"' EXIT INT TERM HUP
+    # URLエンコードとAPI URLを事前に構築 (OK_translate_with_google と同様)
+    local encoded_text=$(urlencode "$text")
+    # Use GOOGLE_TRANSLATE_URL variable if defined, otherwise default
+    local base_api_url="${GOOGLE_TRANSLATE_URL:-https://translate.googleapis.com/translate_a/single}"
+    api_url="${base_api_url}?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}"
+    debug_log "DEBUG" "Constructed API URL: ${api_url}"
 
-    # リトライカウンター
-    local retry_count=0
-    local attempt_status=1
-    local translated_text=""
+    # wget機能に基づいて処理を分岐 (ループの外側)
+    case "$WGET_CAPABILITY_DETECTED" in # WGET_CAPABILITY_DETECTED は init_translation で設定される想定
+        "full")
+            debug_log "DEBUG" "Using full wget capabilities (-L enabled)"
+            # --- Full wget リトライループ ---
+            while [ $retry_count -lt $API_MAX_RETRIES ]; do
+                debug_log "DEBUG" "[Full wget] Translation attempt ${retry_count} for text: ${text}"
 
-    # リトライループ
-    while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        debug_log "DEBUG" "Translation attempt ${retry_count} for key: ${key}"
+                # v4v6の場合のみネットワークタイプを切り替え (リトライ時)
+                if [ $retry_count -gt 0 ] && [ "$can_alternate_ip" = true ]; then
+                    case "$wget_options" in
+                        *-4*) wget_options="-6" ;;
+                        *)    wget_options="-4" ;;
+                    esac
+                    debug_log "DEBUG" "[Full wget] Alternating IP, retrying with wget option: $wget_options"
+                fi
 
-        # v4v6の場合のみネットワークタイプを切り替え (リトライ時)
-        if [ $retry_count -gt 0 ] && [ "$can_alternate_ip" = true ]; then
-            case "$wget_options" in
-                *-4*) wget_options="-6" ;;
-                *)    wget_options="-4" ;;
-            esac
-            debug_log "DEBUG" "Alternating IP, retrying with wget option: $wget_options"
-        fi
+                # wgetコマンドの実行 (-L を含む)
+                debug_log "DEBUG" "[Full wget] Executing: wget --no-check-certificate ${wget_options} -L -T ${API_TIMEOUT} -q -O \"${temp_file}\" --user-agent=\"Mozilla/5.0\" \"${api_url}\""
+                wget --no-check-certificate $wget_options -L -T $API_TIMEOUT -q -O "$temp_file" \
+                    --user-agent="Mozilla/5.0" \
+                    "$api_url" 2>/dev/null
+                wget_status=$?
+                debug_log "DEBUG" "[Full wget] wget exit status: ${wget_status}"
 
-        # ヘルパー関数を呼び出して翻訳を試行し、結果とステータスを取得
-        # WGET_CAPABILITY_DETECTED は init_translation で設定されている想定
-        translated_text=$(attempt_google_translation "$WGET_CAPABILITY_DETECTED" "$wget_options" "$api_url" "$temp_file" "$key")
-        attempt_status=$?
+                # レスポンス処理 (OK_translate_with_google と同様)
+                if [ $wget_status -eq 0 ] && [ -s "$temp_file" ]; then
+                    if grep -q '\[' "$temp_file"; then
+                        # Extract translation, handle potential escapes
+                        translated=$(sed 's/\[\[\["//; s/",".*//; s/\\u003d/=/g; s/\\u003c/</g; s/\\u003e/>/g; s/\\u0026/\&/g; s/\\"/"/g; s/\\n/\n/g; s/\\r//g' "$temp_file")
 
-        # 試行結果を確認
-        if [ $attempt_status -eq 0 ]; then
-            # ヘルパー関数が成功 (戻り値 0)
-            debug_log "DEBUG" "Translation successful on attempt ${retry_count} for key '${key}'"
-            # ヘルパー関数が標準出力した翻訳結果をそのまま出力
-            printf "%s\n" "$translated_text"
-            # rm -f "$temp_file" # Trap will handle cleanup
-            trap - EXIT INT TERM HUP # Remove trap before successful return
-            return 0 # 成功
-        else
-            # ヘルパー関数が失敗 (戻り値 1)
-            debug_log "DEBUG" "Attempt ${retry_count} failed for key '${key}'"
-        fi
+                        if [ -n "$translated" ] && [ "$translated" != "null" ]; then # Check for non-empty and not "null" string
+                            debug_log "DEBUG" "[Full wget] Translation successful: ${translated}"
+                            printf "%s\n" "$translated"
+                            # rm -f "$temp_file" # Trap handles cleanup
+                            trap - EXIT INT TERM HUP # Remove trap before successful return
+                            return 0 # 成功
+                        else
+                            debug_log "WARNING" "[Full wget] Translation extraction failed or empty/null result. Response content:"
+                            debug_log "WARNING" "$(cat "$temp_file")"
+                        fi
+                    else
+                         debug_log "WARNING" "[Full wget] Unexpected response format (no '[' found). Response content:"
+                         debug_log "WARNING" "$(cat "$temp_file")"
+                    fi
+                else
+                    debug_log "WARNING" "[Full wget] wget failed (status: ${wget_status}) or temp file empty."
+                fi
 
-        # リトライ準備
-        retry_count=$((retry_count + 1))
-        debug_log "DEBUG" "Preparing for retry ${retry_count} of ${API_MAX_RETRIES}"
-        sleep 1
-    done
+                # リトライ準備
+                retry_count=$((retry_count + 1))
+                debug_log "DEBUG" "[Full wget] Translation failed, preparing for retry ${retry_count} of ${API_MAX_RETRIES}"
+                sleep 1
+            done
+            ;; # --- End of Full wget リトライループ ---
 
-    # 最大リトライ回数を超えた場合
-    debug_log "ERROR" "Translation failed for key '${key}' after ${API_MAX_RETRIES} retries."
+        *) # Includes "basic", "https_only", and fallback/error cases
+            debug_log "DEBUG" "Using basic wget capabilities (-L disabled)"
+            # --- Basic wget リトライループ (重複コード) ---
+            while [ $retry_count -lt $API_MAX_RETRIES ]; do
+                debug_log "DEBUG" "[Basic wget] Translation attempt ${retry_count} for text: ${text}"
+
+                # v4v6の場合のみネットワークタイプを切り替え (リトライ時)
+                if [ $retry_count -gt 0 ] && [ "$can_alternate_ip" = true ]; then
+                    case "$wget_options" in
+                        *-4*) wget_options="-6" ;;
+                        *)    wget_options="-4" ;;
+                    esac
+                    debug_log "DEBUG" "[Basic wget] Alternating IP, retrying with wget option: $wget_options"
+                fi
+
+                # wgetコマンドの実行 (-L を含まない)
+                debug_log "DEBUG" "[Basic wget] Executing: wget --no-check-certificate ${wget_options} -T ${API_TIMEOUT} -q -O \"${temp_file}\" --user-agent=\"Mozilla/5.0\" \"${api_url}\""
+                wget --no-check-certificate $wget_options -T $API_TIMEOUT -q -O "$temp_file" \
+                    --user-agent="Mozilla/5.0" \
+                    "$api_url" 2>/dev/null
+                wget_status=$?
+                debug_log "DEBUG" "[Basic wget] wget exit status: ${wget_status}"
+
+                # レスポンス処理 (OK_translate_with_google と同様)
+                if [ $wget_status -eq 0 ] && [ -s "$temp_file" ]; then
+                     if grep -q '\[' "$temp_file"; then
+                        # Extract translation, handle potential escapes
+                        translated=$(sed 's/\[\[\["//; s/",".*//; s/\\u003d/=/g; s/\\u003c/</g; s/\\u003e/>/g; s/\\u0026/\&/g; s/\\"/"/g; s/\\n/\n/g; s/\\r//g' "$temp_file")
+
+                        if [ -n "$translated" ] && [ "$translated" != "null" ]; then # Check for non-empty and not "null" string
+                            debug_log "DEBUG" "[Basic wget] Translation successful: ${translated}"
+                            printf "%s\n" "$translated"
+                            # rm -f "$temp_file" # Trap handles cleanup
+                            trap - EXIT INT TERM HUP # Remove trap before successful return
+                            return 0 # 成功
+                        else
+                            debug_log "WARNING" "[Basic wget] Translation extraction failed or empty/null result. Response content:"
+                            debug_log "WARNING" "$(cat "$temp_file")"
+                        fi
+                    else
+                         debug_log "WARNING" "[Basic wget] Unexpected response format (no '[' found). Response content:"
+                         debug_log "WARNING" "$(cat "$temp_file")"
+                    fi
+                else
+                    debug_log "WARNING" "[Basic wget] wget failed (status: ${wget_status}) or temp file empty."
+                fi
+
+                # リトライ準備
+                retry_count=$((retry_count + 1))
+                debug_log "DEBUG" "[Basic wget] Translation failed, preparing for retry ${retry_count} of ${API_MAX_RETRIES}"
+                sleep 1
+            done
+            ;; # --- End of Basic wget リトライループ ---
+    esac
+
+    # 最大リトライ回数を超えた場合 (どちらのケースでもここに到達する可能性あり)
+    debug_log "ERROR" "Translation failed for text '${text}' after ${API_MAX_RETRIES} retries."
     # rm -f "$temp_file" # Trap will handle cleanup
     # trap - EXIT INT TERM HUP # Trap will be removed on exit anyway
     return 1
