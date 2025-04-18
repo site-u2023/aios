@@ -167,15 +167,16 @@ translate_with_lingva() {
 # $1: 翻訳対象のキー (デバッグ用)
 # $2: ターゲット言語コード (例: "ja")
 # $3: ソース言語コード (例: "en")
-# $4: Google Apps Script API URL
+# $4: Google Apps Script API URL (または Google Translate API URL)
 # 出力: 成功時は翻訳結果を標準出力、失敗時は空文字列を出力し、ステータスコード1を返す
 translate_with_google() {
     local key="$1"
     local target_lang="$2"
     local source_lang="$3"
-    local api_url="$4"
+    local api_url="$4" # This could be Apps Script URL or direct Google Translate URL
 
     debug_log "DEBUG" "translate_with_google called for key: '${key}', target: ${target_lang}, source: ${source_lang}"
+    debug_log "DEBUG" "Using API URL: ${api_url}" # Log the actual API URL being used
 
     # ネットワーク接続タイプを取得
     local network_type=""
@@ -200,17 +201,20 @@ translate_with_google() {
         debug_log "DEBUG" "IP alternation enabled for v4v6 network"
     fi
 
-    # 一時ファイルの準備
+    # 一時ファイルの準備 (TMP_DIR を使用)
+    # Ensure TMP_DIR is defined, default to /tmp if not
+    local TMP_DIR="${TMP_DIR:-/tmp}"
     local temp_file="${TMP_DIR}/translation_result.$$"
+    mkdir -p "$TMP_DIR" 2>/dev/null # Ensure TMP_DIR exists
     # Ensure temp file is cleaned up on exit, error, or interrupt
     trap 'rm -f "$temp_file"' EXIT INT TERM HUP
 
     # リトライカウンター
     local retry_count=0
     local wget_status=1 # Initialize wget status to indicate failure
-    local translated_text=""
+    local translated_text="" # Renamed from 'translated' for clarity
 
-    # wget機能に基づいて処理を分岐
+    # wget機能に基づいて処理を分岐 (WGET_CAPABILITY_DETECTED は init_translation で設定される想定)
     case "$WGET_CAPABILITY_DETECTED" in
         "full")
             debug_log "DEBUG" "Using full wget capabilities (-L enabled)"
@@ -228,27 +232,35 @@ translate_with_google() {
                 fi
 
                 # wgetコマンドの実行 (-L を含む)
-                debug_log "DEBUG" "[Full wget] Executing: wget --no-check-certificate ${wget_options} -L -T ${API_TIMEOUT} -q -O \"${temp_file}\" --user-agent=\"...\" \"${api_url}\""
+                debug_log "DEBUG" "[Full wget] Executing: wget --no-check-certificate ${wget_options} -L -T ${API_TIMEOUT} -q -O \"${temp_file}\" --user-agent=\"Mozilla/5.0\" \"${api_url}\""
                 wget --no-check-certificate $wget_options -L -T $API_TIMEOUT -q -O "$temp_file" \
                     --user-agent="Mozilla/5.0" \
                     "$api_url" 2>/dev/null
                 wget_status=$?
                 debug_log "DEBUG" "[Full wget] wget exit status: ${wget_status}"
 
-                # レスポンスチェックと結果処理
+                # レスポンスチェックと結果処理 (OK_translate_with_google と同等の sed ロジックを使用)
                 if [ $wget_status -eq 0 ] && [ -s "$temp_file" ]; then
-                    sed '1s/^\xEF\xBB\xBF//' "$temp_file" | \
-                    jq -r '.[0][0][0]' 2>/dev/null | {
-                        read translated_text || true # Read jq output
-                    }
-                    if [ -n "$translated_text" ] && [ "$translated_text" != "null" ]; then
-                        debug_log "DEBUG" "[Full wget] Translation successful for key '${key}': ${translated_text}"
-                        printf "%s\n" "$translated_text"
-                        rm -f "$temp_file"
-                        trap - EXIT INT TERM HUP # Remove trap before successful return
-                        return 0 # 成功
+                    # 柔軟なレスポンスチェック（grepでJSON配列の開始を確認）
+                    if grep -q '\[' "$temp_file"; then
+                        # sedで翻訳テキスト抽出とエスケープ解除
+                        # Original sed logic from OK_translate_with_google
+                        translated_text=$(sed 's/\[\[\["//; s/",".*//; s/\\u003d/=/g; s/\\u003c/</g; s/\\u003e/>/g; s/\\u0026/\&/g; s/\\"/"/g; s/\\n/\n/g; s/\\r//g' "$temp_file")
+
+                        if [ -n "$translated_text" ] && [ "$translated_text" != "null" ]; then # Check for non-empty and not "null" string
+                            debug_log "DEBUG" "[Full wget] Translation successful for key '${key}': ${translated_text}"
+                            printf "%s\n" "$translated_text"
+                            rm -f "$temp_file" 2>/dev/null
+                            trap - EXIT INT TERM HUP # Remove trap before successful return
+                            return 0 # 成功
+                        else
+                            # sedで抽出できなかった、または結果が空か"null"だった場合
+                            debug_log "WARNING" "[Full wget] Translation extraction failed or empty/null result for key '${key}'. Response content:"
+                            debug_log "WARNING" "$(cat "$temp_file")"
+                        fi
                     else
-                        debug_log "WARNING" "[Full wget] Translation failed or empty result for key '${key}'. Response content:"
+                        # grepで '[' が見つからなかった場合 (予期せぬレスポンス形式)
+                        debug_log "WARNING" "[Full wget] Unexpected response format (no '[' found) for key '${key}'. Response content:"
                         debug_log "WARNING" "$(cat "$temp_file")"
                     fi
                 else
@@ -258,6 +270,7 @@ translate_with_google() {
                 # リトライ準備
                 retry_count=$((retry_count + 1))
                 debug_log "DEBUG" "[Full wget] Translation failed, preparing for retry ${retry_count} of ${API_MAX_RETRIES}"
+                # Add sleep inside the loop for retries
                 sleep 1
             done
             ;; # --- End of Full wget リトライループ ---
@@ -278,27 +291,35 @@ translate_with_google() {
                 fi
 
                 # wgetコマンドの実行 (-L を含まない)
-                debug_log "DEBUG" "[Basic wget] Executing: wget --no-check-certificate ${wget_options} -T ${API_TIMEOUT} -q -O \"${temp_file}\" --user-agent=\"...\" \"${api_url}\""
+                debug_log "DEBUG" "[Basic wget] Executing: wget --no-check-certificate ${wget_options} -T ${API_TIMEOUT} -q -O \"${temp_file}\" --user-agent=\"Mozilla/5.0\" \"${api_url}\""
                 wget --no-check-certificate $wget_options -T $API_TIMEOUT -q -O "$temp_file" \
                     --user-agent="Mozilla/5.0" \
                     "$api_url" 2>/dev/null
                 wget_status=$?
                 debug_log "DEBUG" "[Basic wget] wget exit status: ${wget_status}"
 
-                # レスポンスチェックと結果処理 (Full wget と同じロジック)
+                # レスポンスチェックと結果処理 (OK_translate_with_google と同等の sed ロジックを使用)
                 if [ $wget_status -eq 0 ] && [ -s "$temp_file" ]; then
-                    sed '1s/^\xEF\xBB\xBF//' "$temp_file" | \
-                    jq -r '.[0][0][0]' 2>/dev/null | {
-                        read translated_text || true # Read jq output
-                    }
-                    if [ -n "$translated_text" ] && [ "$translated_text" != "null" ]; then
-                        debug_log "DEBUG" "[Basic wget] Translation successful for key '${key}': ${translated_text}"
-                        printf "%s\n" "$translated_text"
-                        rm -f "$temp_file"
-                        trap - EXIT INT TERM HUP # Remove trap before successful return
-                        return 0 # 成功
+                    # 柔軟なレスポンスチェック（grepでJSON配列の開始を確認）
+                    if grep -q '\[' "$temp_file"; then
+                        # sedで翻訳テキスト抽出とエスケープ解除
+                        # Original sed logic from OK_translate_with_google
+                        translated_text=$(sed 's/\[\[\["//; s/",".*//; s/\\u003d/=/g; s/\\u003c/</g; s/\\u003e/>/g; s/\\u0026/\&/g; s/\\"/"/g; s/\\n/\n/g; s/\\r//g' "$temp_file")
+
+                        if [ -n "$translated_text" ] && [ "$translated_text" != "null" ]; then # Check for non-empty and not "null" string
+                            debug_log "DEBUG" "[Basic wget] Translation successful for key '${key}': ${translated_text}"
+                            printf "%s\n" "$translated_text"
+                            rm -f "$temp_file" 2>/dev/null
+                            trap - EXIT INT TERM HUP # Remove trap before successful return
+                            return 0 # 成功
+                        else
+                            # sedで抽出できなかった、または結果が空か"null"だった場合
+                            debug_log "WARNING" "[Basic wget] Translation extraction failed or empty/null result for key '${key}'. Response content:"
+                            debug_log "WARNING" "$(cat "$temp_file")"
+                        fi
                     else
-                        debug_log "WARNING" "[Basic wget] Translation failed or empty result for key '${key}'. Response content:"
+                        # grepで '[' が見つからなかった場合 (予期せぬレスポンス形式)
+                        debug_log "WARNING" "[Basic wget] Unexpected response format (no '[' found) for key '${key}'. Response content:"
                         debug_log "WARNING" "$(cat "$temp_file")"
                     fi
                 else
@@ -308,6 +329,7 @@ translate_with_google() {
                 # リトライ準備
                 retry_count=$((retry_count + 1))
                 debug_log "DEBUG" "[Basic wget] Translation failed, preparing for retry ${retry_count} of ${API_MAX_RETRIES}"
+                # Add sleep inside the loop for retries
                 sleep 1
             done
             ;; # --- End of Basic wget リトライループ ---
@@ -315,8 +337,8 @@ translate_with_google() {
 
     # 最大リトライ回数を超えた場合 (どちらのケースでもここに到達する可能性あり)
     debug_log "ERROR" "Translation failed for key '${key}' after ${API_MAX_RETRIES} retries."
-    rm -f "$temp_file"
-    trap - EXIT INT TERM HUP # Remove trap before returning failure
+    # rm -f "$temp_file" # Trap will handle cleanup
+    # trap - EXIT INT TERM HUP # Trap will be removed on exit anyway
     return 1
 }
 
