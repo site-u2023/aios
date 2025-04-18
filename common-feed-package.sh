@@ -83,9 +83,9 @@ PACKAGE_EXTENSION="${PACKAGE_EXTENSION:-ipk}"
 # feed_package 関数の修正案 (変更箇所に ★★★ を付与)
 feed_package() {
   local confirm_install="no"
-  local skip_lang_pack="no"
-  local force_install="no"
-  local skip_package_db="no" # ★★★ notpack オプションを判定するために必要
+  # local skip_lang_pack="no" # Currently unused option in this context
+  # local force_install="no"  # Passed via opts
+  local skip_package_db="no"
   local set_disabled="no"
   local hidden="no"
   local opts=""
@@ -97,156 +97,188 @@ feed_package() {
   while [ $# -gt 0 ]; do
     case "$1" in
       yn) confirm_install="yes"; opts="$opts yn" ;;
-      nolang) skip_lang_pack="yes"; opts="$opts nolang" ;;
-      force) force_install="yes"; opts="$opts force" ;;
-      notpack) skip_package_db="yes"; opts="$opts notpack" ;; # ★★★ notpack を opts に追加
+      nolang) opts="$opts nolang" ;; # Pass nolang if provided
+      force) opts="$opts force" ;;   # Pass force if provided
+      notpack) skip_package_db="yes"; opts="$opts notpack" ;;
       disabled) set_disabled="yes"; opts="$opts disabled" ;;
       hidden) hidden="yes"; opts="$opts hidden" ;;
       desc=*)
         desc_flag="yes"
         desc_value="${1#desc=}"
+        # Ensure desc= value is properly passed to install_package later
         ;;
       *)
-        if [ "$desc_flag" = "yes" ]; then
-          desc_value="$desc_value $1"
-        else
-          args="$args $1"
-        fi
+        # Collect positional arguments first
+        args="$args $1"
         ;;
     esac
     shift
   done
 
+  # Re-set positional arguments
   set -- $args
   if [ "$#" -ne 4 ]; then
-    debug_log "DEBUG" "Required arguments (REPO_OWNER, REPO_NAME, DIR_PATH, PKG_PREFIX) are missing." >&2
+    debug_log "ERROR" "Usage: feed_package [opts] REPO_OWNER REPO_NAME DIR_PATH PKG_PREFIX" >&2
     return 1
   fi
 
-  # ★★★ 変数名を明確化 ★★★
   local repo_owner="$1"
   local repo_name="$2"
   local dir_path="$3"
-  local pkg_prefix="$4" # ★★★ local_package_db で使用するキー
+  local pkg_prefix="$4"
 
   PACKAGE_EXTENSION=$(cat "${CACHE_DIR}/extension.ch")
 
   if [ -z "$PACKAGE_EXTENSION" ]; then
-      debug_log "DEBUG" "File not found or empty: ${CACHE_DIR}/extension.ch"
+      debug_log "ERROR" "Package extension cache file not found or empty: ${CACHE_DIR}/extension.ch"
       return 1
   fi
-  # 将来的に削除される予定のルーチン
   if [ "$PACKAGE_EXTENSION" != "ipk" ]; then
-      printf "%s\n" "$(color yellow "Currently not supported for apk.")"
+      printf "%s\n" "$(color yellow "feed_package currently only supports .ipk")"
+      return 1 # Not an error, just unsupported for now
+  fi
+
+  # Install prerequisites (jq, ca-certificates)
+  debug_log "DEBUG" "Checking/Installing required packages: jq and ca-certificates"
+  # Use 'test' option to avoid redundant checks if already installed
+  # Use 'silent' to suppress output unless there's an error
+  if ! install_package jq silent test; then
+      debug_log "ERROR" "Failed to install required package: jq"
+      printf "%s\n" "$(color red "Error: Failed to install prerequisite jq.")"
+      return 1
+  fi
+  if ! install_package ca-certificates silent test; then
+      debug_log "ERROR" "Failed to install required package: ca-certificates"
+      printf "%s\n" "$(color red "Error: Failed to install prerequisite ca-certificates.")"
       return 1
   fi
 
-  debug_log "DEBUG" "Installing required packages: jq and ca-certificates"
-  install_package jq silent
-  install_package ca-certificates silent
-
-  local output_file="${FEED_DIR}/${pkg_prefix}.${PACKAGE_EXTENSION}" # ★★★ 変数名修正
-  local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/${dir_path}" # ★★★ 変数名修正
-
-  debug_log "DEBUG" "Fetching data from GitHub API: $api_url" # ★★★ 変数名修正
-
-  if [ -z "$dir_path" ]; then # ★★★ 変数名修正
-    api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents/" # ★★★ 変数名修正
-    debug_log "DEBUG" "DIR_PATH not specified, exploring repository's top directory"
+  # Check if jq is actually available after installation attempt
+  if ! command -v jq >/dev/null 2>&1; then
+      debug_log "ERROR" "jq command not found or not executable after installation attempt."
+      printf "%s\n" "$(color red "Error: jq command is required but not available.")"
+      return 1
   fi
+
+  local output_file="${FEED_DIR}/${pkg_prefix}.${PACKAGE_EXTENSION}"
+  local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents"
+  if [ -n "$dir_path" ]; then # Append dir_path only if it's not empty
+      api_url="${api_url}/${dir_path}"
+  fi
+
+  debug_log "DEBUG" "Fetching package list from GitHub API: $api_url"
 
   local JSON
-  JSON=$(wget --no-check-certificate -q -U "aios-pkg/1.0" -O- "$api_url") # ★★★ 変数名修正
+  JSON=$(wget --no-check-certificate -q -U "aios-pkg/1.0" -O- "$api_url")
 
   if [ -z "$JSON" ]; then
-    debug_log "DEBUG" "Could not retrieve data from API for package: $pkg_prefix from $repo_owner/$repo_name" # ★★★ 変数名修正
-    printf "%s\n" "$(color yellow "Failed to retrieve package $pkg_prefix: API connection error")" # ★★★ 変数名修正
-    return 1 # ★★★ エラー時は 1 を返すように変更
+    debug_log "ERROR" "Could not retrieve data from API: $api_url"
+    printf "%s\n" "$(color red "Failed to retrieve package list for $pkg_prefix: API connection error")"
+    return 1
   fi
 
   if echo "$JSON" | grep -q "API rate limit exceeded"; then
-    debug_log "DEBUG" "GitHub API rate limit exceeded when fetching package: $pkg_prefix" # ★★★ 変数名修正
-    printf "%s\n" "$(color yellow "Failed to retrieve package $pkg_prefix: GitHub API rate limit exceeded")" # ★★★ 変数名修正
-    return 1 # ★★★ エラー時は 1 を返すように変更
+    debug_log "ERROR" "GitHub API rate limit exceeded: $api_url"
+    printf "%s\n" "$(color red "Failed to retrieve package list for $pkg_prefix: GitHub API rate limit exceeded")"
+    return 1
   fi
 
-  if echo "$JSON" | grep -q "Not Found"; then
-    debug_log "DEBUG" "Repository or path not found: $repo_owner/$repo_name/$dir_path" # ★★★ 変数名修正
-    printf "%s\n" "$(color yellow "Failed to retrieve package $pkg_prefix: Repository or path not found")" # ★★★ 変数名修正
-    return 1 # ★★★ エラー時は 1 を返すように変更
-  fi
-
-  local pkg_file # ★★★ 変数名修正
-  pkg_file=$(echo "$JSON" | jq -r '.[].name' | grep "^${pkg_prefix}_" | sort | tail -n 1) # ★★★ 変数名修正
-
-  if [ -z "$pkg_file" ]; then # ★★★ 変数名修正
-    debug_log "DEBUG" "Package $pkg_prefix not found in repository $repo_owner/$repo_name" # ★★★ 変数名修正
-    [ "$hidden" != "yes" ] && printf "%s\n" "$(color yellow "Package $pkg_prefix not found in repository")" # ★★★ 変数名修正
-    return 1 # ★★★ パッケージが見つからない場合もエラーとして 1 を返す
-  fi
-
-  debug_log "DEBUG" "NEW PACKAGE: $pkg_file" # ★★★ 変数名修正
-
-  local download_url # ★★★ 変数名修正
-  download_url=$(echo "$JSON" | jq -r --arg PKG "$pkg_file" '.[] | select(.name == $PKG) | .download_url') # ★★★ 変数名修正
-
-  if [ -z "$download_url" ]; then # ★★★ 変数名修正
-    debug_log "DEBUG" "Failed to retrieve download URL for package: $pkg_prefix" # ★★★ 変数名修正
-    printf "%s\n" "$(color yellow "Failed to retrieve download URL for package $pkg_prefix")" # ★★★ 変数名修正
-    return 1 # ★★★ エラー時は 1 を返すように変更
-  fi
-
-  debug_log "DEBUG" "OUTPUT FILE: $output_file" # ★★★ 変数名修正
-  debug_log "DEBUG" "DOWNLOAD URL: $download_url" # ★★★ 変数名修正
-
-  eval "$BASE_WGET" -O "$output_file" "$download_url" || return 1 # ★★★ wget失敗時も 1 を返す
-
-  debug_log "DEBUG" "$(ls -lh "$output_file")" # ★★★ 変数名修正
-
-  local install_success="no"
-  # 説明文がある場合はdesc=を追加してインストール
-  if [ "$desc_flag" = "yes" ] && [ -n "$desc_value" ]; then
-    debug_log "DEBUG" "Installing package $output_file with description: $desc_value" # ★★★ 変数名修正
-    if install_package "$output_file" $opts "desc=$desc_value"; then # ★★★ 変数名修正
-      install_success="yes"
-    fi
-  else
-    debug_log "DEBUG" "Installing package $output_file without description" # ★★★ 変数名修正
-    if install_package "$output_file" $opts; then # ★★★ 変数名修正
-      install_success="yes"
-    fi
-  fi
-
-  # ★★★ 修正箇所: インストール成功後に local_package_db を呼び出す ★★★
-  if [ "$install_success" = "yes" ] && [ "$skip_package_db" != "yes" ]; then
-    # common-package.sh の local_package_db 関数が存在するか確認
-    if type local_package_db >/dev/null 2>&1; then
-        debug_log "DEBUG" "Applying local-package.db settings for $pkg_prefix" # ★★★ 変数名修正
-        # pkg_prefix を引数として local_package_db を呼び出す
-        local_package_db "$pkg_prefix" # ★★★ 変数名修正
-    else
-        debug_log "WARNING" "local_package_db function not found. Cannot apply settings for $pkg_prefix." # ★★★ 変数名修正
-    fi
-  elif [ "$install_success" = "yes" ] && [ "$skip_package_db" = "yes" ]; then
-    debug_log "DEBUG" "Skipping local-package.db application for $pkg_prefix due to notpack option." # ★★★ 変数名修正
-  fi
-  # ★★★ 修正箇所ここまで ★★★
-
-  if [ "$install_success" = "yes" ]; then
-      return 0
-  else
-      # インストール失敗メッセージは install_package 内で表示される想定
-      debug_log "DEBUG" "Installation or post-install step failed for $pkg_prefix" # ★★★ 変数名修正
+  # Check for "Not Found" or other potential JSON error messages
+  # A simple "Not Found" string check might be too broad if the JSON itself contains it.
+  # Check if the result is a valid JSON array using jq. If not, it's likely an error message.
+  if ! echo "$JSON" | jq -e '.[0]' > /dev/null 2>&1; then
+      local error_message=$(echo "$JSON" | jq -r '.message? // "Unknown API error"')
+      debug_log "ERROR" "API Error for $api_url: $error_message"
+      printf "%s\n" "$(color red "Failed to retrieve package list for $pkg_prefix: $error_message")"
       return 1
   fi
+
+  # Find the latest package file matching the prefix
+  local pkg_file
+  # Ensure grep handles pkg_prefix correctly, especially if it contains special regex chars
+  # Using fixed string grep (-F) might be safer if pkg_prefix is literal
+  # Sorting needs to handle version numbers correctly (-V if available and needed)
+  pkg_file=$(echo "$JSON" | jq -r '.[].name' | grep "^${pkg_prefix}_.*\.${PACKAGE_EXTENSION}$" | sort -V | tail -n 1)
+
+  if [ -z "$pkg_file" ]; then
+    debug_log "DEBUG" "Package file matching prefix '$pkg_prefix' not found in $repo_owner/$repo_name/$dir_path"
+    [ "$hidden" != "yes" ] && printf "%s\n" "$(color yellow "Package $pkg_prefix not found in feed repository.")"
+    return 0 # Package not found in feed is not necessarily an error for the script flow
+  fi
+
+  debug_log "DEBUG" "Latest package file found: $pkg_file"
+
+  local download_url
+  download_url=$(echo "$JSON" | jq -r --arg PKG "$pkg_file" '.[] | select(.name == $PKG) | .download_url')
+
+  if [ -z "$download_url" ] || [ "$download_url" = "null" ]; then # Check for empty or literal "null"
+    debug_log "ERROR" "Failed to retrieve download URL for file: $pkg_file"
+    printf "%s\n" "$(color red "Failed to retrieve download URL for package $pkg_prefix")"
+    return 1
+  fi
+
+  debug_log "DEBUG" "Package download URL: $download_url"
+  debug_log "DEBUG" "Output file path: $output_file"
+
+  # Ensure FEED_DIR exists
+  mkdir -p "$FEED_DIR"
+
+  # Download the package file
+  # Use eval carefully, consider alternatives if possible, but might be needed for $BASE_WGET
+  eval "$BASE_WGET" -O "$output_file" "$download_url"
+  if [ $? -ne 0 ]; then
+      debug_log "ERROR" "Failed to download package from $download_url"
+      printf "%s\n" "$(color red "Failed to download package $pkg_prefix")"
+      rm -f "$output_file" # Clean up partial download
+      return 1
+  fi
+
+  debug_log "DEBUG" "Package downloaded successfully: $(ls -lh "$output_file")"
+
+  # ★★★ install_package を呼び出し、戻り値を取得 ★★★
+  local install_status=0
+  # Pass collected opts and potentially desc= value
+  if [ "$desc_flag" = "yes" ] && [ -n "$desc_value" ]; then
+    debug_log "DEBUG" "Calling install_package for $output_file with opts '$opts' and desc '$desc_value'"
+    install_package "$output_file" $opts "desc=$desc_value"
+    install_status=$?
+  else
+    debug_log "DEBUG" "Calling install_package for $output_file with opts '$opts'"
+    install_package "$output_file" $opts
+    install_status=$?
+  fi
+
+  debug_log "DEBUG" "install_package finished for feed package $pkg_prefix with status: $install_status"
+
+  # ★★★ local_package_db の呼び出しを削除 ★★★
+  # The logic is now handled within install_package/process_package
+
+  # ★★★ 最終的な戻り値を決定 ★★★
+  # 0 (Skipped), 3 (New Install Success) -> Overall Success (0)
+  # 1 (Error), 2 (User Cancelled) -> Overall Failure (1)
+  case $install_status in
+      0|3)
+          debug_log "DEBUG" "feed_package completed successfully for $pkg_prefix (Status: $install_status)"
+          return 0 # Overall success
+          ;;
+      1|2)
+          debug_log "DEBUG" "feed_package failed or was cancelled for $pkg_prefix (Status: $install_status)"
+          # Error/Cancellation message should have been displayed by install_package
+          return 1 # Overall failure/cancellation
+          ;;
+      *)
+          debug_log "ERROR" "Unexpected status $install_status from install_package for $pkg_prefix"
+          return 1 # Treat unexpected as failure
+          ;;
+  esac
 }
 
 # feed_package_release 関数の修正案 (変更箇所に ★★★ を付与)
 feed_package_release() {
   local confirm_install="no"
-  local skip_lang_pack="no"
-  local force_install="no"
-  local skip_package_db="no" # ★★★ notpack オプションを判定するために必要
+  # local skip_lang_pack="no" # Currently unused option in this context
+  # local force_install="no"  # Passed via opts
+  local skip_package_db="no"
   local set_disabled="no"
   local hidden="no"
   local opts=""
@@ -254,146 +286,182 @@ feed_package_release() {
   local desc_flag="no"
   local desc_value=""
 
+  # 引数を処理
   while [ $# -gt 0 ]; do
     case "$1" in
       yn) confirm_install="yes"; opts="$opts yn" ;;
-      nolang) skip_lang_pack="yes"; opts="$opts nolang" ;;
-      force) force_install="yes"; opts="$opts force" ;;
-      notpack) skip_package_db="yes"; opts="$opts notpack" ;; # ★★★ notpack を opts に追加
+      nolang) opts="$opts nolang" ;; # Pass nolang if provided
+      force) opts="$opts force" ;;   # Pass force if provided
+      notpack) skip_package_db="yes"; opts="$opts notpack" ;;
       disabled) set_disabled="yes"; opts="$opts disabled" ;;
       hidden) hidden="yes"; opts="$opts hidden" ;;
       desc=*)
         desc_flag="yes"
         desc_value="${1#desc=}"
+        # Ensure desc= value is properly passed to install_package later
         ;;
       *)
-        if [ "$desc_flag" = "yes" ]; then
-          desc_value="$desc_value $1"
-        else
-          args="$args $1"
-        fi
+        # Collect positional arguments first
+        args="$args $1"
         ;;
     esac
     shift
   done
 
+  # Re-set positional arguments
   set -- $args
   if [ "$#" -lt 2 ]; then
-    debug_log "DEBUG" "Required arguments (REPO_OWNER, REPO_NAME) are missing." >&2
+    debug_log "ERROR" "Usage: feed_package_release [opts] REPO_OWNER REPO_NAME [PKG_PREFIX]" >&2
     return 1
   fi
 
-  # ★★★ 変数名を明確化 ★★★
   local repo_owner="$1"
   local repo_name="$2"
-  local pkg_prefix="${repo_name}" # ★★★ local_package_db で使用するキー
+  # Use third argument as pkg_prefix if provided, otherwise default to repo_name
+  local pkg_prefix="${3:-$repo_name}"
 
   PACKAGE_EXTENSION=$(cat "${CACHE_DIR}/extension.ch")
 
   if [ -z "$PACKAGE_EXTENSION" ]; then
-      debug_log "DEBUG" "File not found or empty: ${CACHE_DIR}/extension.ch"
+      debug_log "ERROR" "Package extension cache file not found or empty: ${CACHE_DIR}/extension.ch"
       return 1
   fi
-  # 将来的に削除される予定のルーチン
   if [ "$PACKAGE_EXTENSION" != "ipk" ]; then
-      printf "%s\n" "$(color yellow "Currently not supported for apk.")"
+      printf "%s\n" "$(color yellow "feed_package_release currently only supports .ipk")"
+      return 1 # Not an error, just unsupported for now
+  fi
+
+  # Install prerequisites (jq, ca-certificates)
+  debug_log "DEBUG" "Checking/Installing required packages: jq and ca-certificates"
+  if ! install_package jq silent test; then
+      debug_log "ERROR" "Failed to install required package: jq"
+      printf "%s\n" "$(color red "Error: Failed to install prerequisite jq.")"
+      return 1
+  fi
+  if ! install_package ca-certificates silent test; then
+      debug_log "ERROR" "Failed to install required package: ca-certificates"
+      printf "%s\n" "$(color red "Error: Failed to install prerequisite ca-certificates.")"
       return 1
   fi
 
-  debug_log "DEBUG" "Installing required packages: jq and ca-certificates"
-  install_package jq silent
-  install_package ca-certificates silent
+  # Check if jq is actually available after installation attempt
+  if ! command -v jq >/dev/null 2>&1; then
+      debug_log "ERROR" "jq command not found or not executable after installation attempt."
+      printf "%s\n" "$(color red "Error: jq command is required but not available.")"
+      return 1
+  fi
 
-  local output_file="${FEED_DIR}/${pkg_prefix}.${PACKAGE_EXTENSION}" # ★★★ 変数名修正
-  local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/releases" # ★★★ 変数名修正
+  local output_file="${FEED_DIR}/${pkg_prefix}.${PACKAGE_EXTENSION}"
+  local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/releases"
 
-  debug_log "DEBUG" "Fetching data from GitHub API: $api_url" # ★★★ 変数名修正
+  debug_log "DEBUG" "Fetching release list from GitHub API: $api_url"
 
   local JSON
-  JSON=$(wget --no-check-certificate -q -U "aios-pkg/1.0" -O- "$api_url") # ★★★ 変数名修正
+  JSON=$(wget --no-check-certificate -q -U "aios-pkg/1.0" -O- "$api_url")
 
   if [ -z "$JSON" ];then
-    debug_log "DEBUG" "Could not retrieve data from API for release: $repo_owner/$repo_name" # ★★★ 変数名修正
-    printf "%s\n" "$(color yellow "Could not retrieve release data from API.")"
-    return 1 # ★★★ エラー時は 1 を返すように変更
-  fi
-
-  # ★★★ レート制限と Not Found のチェックを追加 ★★★
-  if echo "$JSON" | grep -q "API rate limit exceeded"; then
-    debug_log "DEBUG" "GitHub API rate limit exceeded when fetching release: $repo_owner/$repo_name" # ★★★ 変数名修正
-    printf "%s\n" "$(color yellow "Failed to retrieve release $repo_owner/$repo_name: GitHub API rate limit exceeded")" # ★★★ 変数名修正
+    debug_log "ERROR" "Could not retrieve data from API: $api_url"
+    printf "%s\n" "$(color red "Could not retrieve release data for $repo_owner/$repo_name: API connection error.")"
     return 1
   fi
-  if echo "$JSON" | grep -q "Not Found"; then
-      # 404の場合、リリースがない可能性もあるので、警告にとどめるか要検討
-      debug_log "DEBUG" "Repository or releases not found: $repo_owner/$repo_name" # ★★★ 変数名修正
-      printf "%s\n" "$(color yellow "Failed to retrieve release $repo_owner/$repo_name: Repository or releases not found")" # ★★★ 変数名修正
-      return 1
+
+  if echo "$JSON" | grep -q "API rate limit exceeded"; then
+    debug_log "ERROR" "GitHub API rate limit exceeded: $api_url"
+    printf "%s\n" "$(color red "Failed to retrieve releases for $repo_owner/$repo_name: GitHub API rate limit exceeded")"
+    return 1
   fi
 
-  local pkg_file # ★★★ 変数名修正
-  # ★★★ .ipk 拡張子でフィルタリングを追加 ★★★
+  # Check for "Not Found" or other potential JSON error messages
+  if ! echo "$JSON" | jq -e '.[0]' > /dev/null 2>&1; then
+      # Handle case where there are no releases (empty array '[]'), which is valid JSON but means no assets
+      if [ "$(echo "$JSON" | jq -r 'length')" = "0" ]; then
+          debug_log "DEBUG" "No releases found for $repo_owner/$repo_name."
+          [ "$hidden" != "yes" ] && printf "%s\n" "$(color yellow "No releases found for $repo_owner/$repo_name.")"
+          return 0 # No releases is not an error
+      else
+          local error_message=$(echo "$JSON" | jq -r '.message? // "Unknown API error"')
+          debug_log "ERROR" "API Error for $api_url: $error_message"
+          printf "%s\n" "$(color red "Failed to retrieve releases for $repo_owner/$repo_name: $error_message")"
+          return 1
+      fi
+  fi
+
+  # Find the latest package file from assets across all releases
+  local pkg_file
   pkg_file=$(echo "$JSON" | jq -r --arg PKG_PREFIX "$pkg_prefix" --arg EXT ".${PACKAGE_EXTENSION}" \
     '.[] | .assets[]? | select(.name? | startswith($PKG_PREFIX) and endswith($EXT)) | .name' \
-    | sort -V | tail -n 1) # ★★★ jq のエラー抑制(?)とバージョンソート(-V)を追加
+    | sort -V | tail -n 1)
 
-  if [ -z "$pkg_file" ];then # ★★★ 変数名修正
-    debug_log "DEBUG" "Package file with prefix $pkg_prefix and extension .$PACKAGE_EXTENSION not found in releases for $repo_owner/$repo_name." # ★★★ 変数名修正
-    [ "$hidden" != "yes" ] && printf "%s\n" "$(color yellow "Package $pkg_prefix not found in releases.")" # ★★★ 変数名修正
-    return 1 # ★★★ パッケージが見つからない場合もエラーとして 1 を返す
+  if [ -z "$pkg_file" ];then
+    debug_log "DEBUG" "Package file matching prefix '$pkg_prefix' and extension '.$PACKAGE_EXTENSION' not found in releases for $repo_owner/$repo_name."
+    [ "$hidden" != "yes" ] && printf "%s\n" "$(color yellow "Package $pkg_prefix not found in releases.")"
+    return 0 # Package not found in releases is not an error
   fi
 
-  debug_log "DEBUG" "NEW PACKAGE: $pkg_file" # ★★★ 変数名修正
+  debug_log "DEBUG" "Latest package file found in releases: $pkg_file"
 
-  local download_url # ★★★ 変数名修正
-  download_url=$(echo "$JSON" | jq -r --arg PKG "$pkg_file" '.[] | .assets[]? | select(.name == $PKG) | .browser_download_url') # ★★★ jq のエラー抑制(?)を追加
+  local download_url
+  # Find the download URL for the specific pkg_file across all assets
+  download_url=$(echo "$JSON" | jq -r --arg PKG "$pkg_file" \
+      '.[] | .assets[]? | select(.name == $PKG) | .browser_download_url' | head -n 1) # Use head -n 1 just in case of duplicates
 
-  if [ -z "$download_url" ];then # ★★★ 変数名修正
-    debug_log "DEBUG" "Failed to retrieve download URL for package: $pkg_file" # ★★★ 変数名修正
-    printf "%s\n" "$(color yellow "Failed to retrieve download URL for package $pkg_file")" # ★★★ 変数名修正
-    return 1 # ★★★ エラー時は 1 を返すように変更
+  if [ -z "$download_url" ] || [ "$download_url" = "null" ]; then
+    debug_log "ERROR" "Failed to retrieve download URL for file: $pkg_file"
+    printf "%s\n" "$(color red "Failed to retrieve download URL for package $pkg_prefix")"
+    return 1
   fi
 
-  debug_log "DEBUG" "OUTPUT FILE: $output_file" # ★★★ 変数名修正
-  debug_log "DEBUG" "DOWNLOAD URL: $download_url" # ★★★ 変数名修正
+  debug_log "DEBUG" "Package download URL: $download_url"
+  debug_log "DEBUG" "Output file path: $output_file"
 
-  eval "$BASE_WGET" -O "$output_file" "$download_url" || return 1 # ★★★ wget失敗時も 1 を返す
+  # Ensure FEED_DIR exists
+  mkdir -p "$FEED_DIR"
 
-  debug_log "DEBUG" "$(ls -lh "$output_file")" # ★★★ 変数名修正
-
-  local install_success="no"
-  # 説明文がある場合はdesc=を追加してインストール
-  if [ "$desc_flag" = "yes" ] && [ -n "$desc_value" ]; then
-    debug_log "DEBUG" "Installing release package $output_file with description: $desc_value" # ★★★ 変数名修正
-    if install_package "$output_file" $opts "desc=$desc_value"; then # ★★★ 変数名修正
-      install_success="yes"
-    fi
-  else
-    debug_log "DEBUG" "Installing release package $output_file without description" # ★★★ 変数名修正
-    if install_package "$output_file" $opts; then # ★★★ 変数名修正
-      install_success="yes"
-    fi
-  fi
-
-  # ★★★ 修正箇所: インストール成功後に local_package_db を呼び出す ★★★
-  if [ "$install_success" = "yes" ] && [ "$skip_package_db" != "yes" ]; then
-    # common-package.sh の local_package_db 関数が存在するか確認
-    if type local_package_db >/dev/null 2>&1; then
-        debug_log "DEBUG" "Applying local-package.db settings for $pkg_prefix" # ★★★ 変数名修正
-        # pkg_prefix を引数として local_package_db を呼び出す
-        local_package_db "$pkg_prefix" # ★★★ 変数名修正
-    else
-        debug_log "WARNING" "local_package_db function not found. Cannot apply settings for $pkg_prefix." # ★★★ 変数名修正
-    fi
-  elif [ "$install_success" = "yes" ] && [ "$skip_package_db" = "yes" ]; then
-      debug_log "DEBUG" "Skipping local-package.db application for $pkg_prefix due to notpack option." # ★★★ 変数名修正
-  fi
-  # ★★★ 修正箇所ここまで ★★★
-
-  if [ "$install_success" = "yes" ]; then
-      return 0
-  else
-      debug_log "DEBUG" "Installation or post-install step failed for $pkg_prefix" # ★★★ 変数名修正
+  # Download the package file
+  eval "$BASE_WGET" -O "$output_file" "$download_url"
+  if [ $? -ne 0 ]; then
+      debug_log "ERROR" "Failed to download package from $download_url"
+      printf "%s\n" "$(color red "Failed to download package $pkg_prefix")"
+      rm -f "$output_file" # Clean up partial download
       return 1
   fi
+
+  debug_log "DEBUG" "Package downloaded successfully: $(ls -lh "$output_file")"
+
+  # ★★★ install_package を呼び出し、戻り値を取得 ★★★
+  local install_status=0
+  # Pass collected opts and potentially desc= value
+  if [ "$desc_flag" = "yes" ] && [ -n "$desc_value" ]; then
+    debug_log "DEBUG" "Calling install_package for $output_file with opts '$opts' and desc '$desc_value'"
+    install_package "$output_file" $opts "desc=$desc_value"
+    install_status=$?
+  else
+    debug_log "DEBUG" "Calling install_package for $output_file with opts '$opts'"
+    install_package "$output_file" $opts
+    install_status=$?
+  fi
+
+  debug_log "DEBUG" "install_package finished for release package $pkg_prefix with status: $install_status"
+
+  # ★★★ local_package_db の呼び出しを削除 ★★★
+  # The logic is now handled within install_package/process_package
+
+  # ★★★ 最終的な戻り値を決定 ★★★
+  # 0 (Skipped), 3 (New Install Success) -> Overall Success (0)
+  # 1 (Error), 2 (User Cancelled) -> Overall Failure (1)
+  case $install_status in
+      0|3)
+          debug_log "DEBUG" "feed_package_release completed successfully for $pkg_prefix (Status: $install_status)"
+          return 0 # Overall success
+          ;;
+      1|2)
+          debug_log "DEBUG" "feed_package_release failed or was cancelled for $pkg_prefix (Status: $install_status)"
+          # Error/Cancellation message should have been displayed by install_package
+          return 1 # Overall failure/cancellation
+          ;;
+      *)
+          debug_log "ERROR" "Unexpected status $install_status from install_package for $pkg_prefix"
+          return 1 # Treat unexpected as failure
+          ;;
+  esac
 }
