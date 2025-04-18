@@ -171,36 +171,42 @@ get_ipv6_address() {
     local ipv6_addr=""
     local net_if6=""
 
-    debug_log "Retrieving IPv6 address"
+    debug_log "Retrieving IPv6 address using network_get_prefix6"
 
-    # OpenWrtネットワーク関数を利用
-    if load_network_libs; then
-        network_find_wan6 net_if6
-        if [ -n "$net_if6" ]; then
-            # network_get_prefix6 はプレフィックスを返すことがある
-            network_get_prefix6 ipv6_addr "$net_if6"
-            # プレフィックス長を除去
-            ipv6_addr=$(echo "$ipv6_addr" | cut -d'/' -f1)
-            debug_log "Got IPv6 prefix using network_get_prefix6: $ipv6_addr"
+    # Load network libs if not already done (assuming load_network_libs checks itself)
+    load_network_libs || return 1
+
+    network_find_wan6 net_if6
+    if [ -z "$net_if6" ]; then
+        print_error "WAN6 interface not found"
+        # Try default wan6 if not found
+        net_if6="wan6"
+        debug_log "WAN6 interface not found, trying default 'wan6'"
+        # Check if default wan6 exists
+        if ! ip link show "$net_if6" > /dev/null 2>&1; then
+             print_error "Default WAN6 interface '$net_if6' does not exist either."
+             return 1
         fi
     fi
 
-    # network_get_prefix6 で取得できなかった場合、または空の場合に ip コマンドを試す
+    debug_log "Using WAN6 interface: $net_if6"
+    network_get_prefix6 ipv6_addr "$net_if6"
+
     if [ -z "$ipv6_addr" ]; then
-        debug_log "network_get_prefix6 failed or returned empty, trying ip command"
-        # ip コマンドでグローバルスコープのアドレスを取得し、プレフィックス長を除去
-        ipv6_addr=$(ip -6 addr show dev "$WAN6_IFACE" scope global | grep 'inet6' | head -n1 | awk '{print $2}' | cut -d'/' -f1)
-
-        if [ -n "$ipv6_addr" ]; then
-            debug_log "Got IPv6 address with ip command: $ipv6_addr"
-        fi
+        print_error "Could not retrieve IPv6 prefix using network_get_prefix6 for interface $net_if6"
+        return 1
     fi
+
+    # Remove prefix length (e.g., /64)
+    ipv6_addr=$(echo "$ipv6_addr" | cut -d'/' -f1)
+    debug_log "Got IPv6 prefix (stripped): $ipv6_addr"
 
     if [ -n "$ipv6_addr" ]; then
         echo "$ipv6_addr"
         return 0
     else
-        print_error "IPv6アドレスを取得できませんでした (Could not retrieve IPv6 address)"
+        # This case should theoretically not be reached if network_get_prefix6 succeeded
+        print_error "Failed to extract IPv6 address after stripping prefix length"
         return 1
     fi
 }
