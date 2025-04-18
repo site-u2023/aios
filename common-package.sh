@@ -728,17 +728,21 @@ get_package_description() {
 }
 
 # パッケージ処理メイン部分
+# Returns:
+#   0: Success (Already installed / Not found / User declined non-critical step)
+#   1: Error (Installation failed, local_package_db failed, etc.)
+#   2: User cancelled (Declined 'yn' prompt)
+#   3: New install success (Package installed and local_package_db applied successfully)
 process_package() {
     local package_name="$1"
     local base_name="$2"
     local confirm_install="$3"
     local force_install="$4"
     local skip_package_db="$5"
-    local set_disabled="$6" # ★ 注意: この変数は現在この関数内では使用されていません
+    # local set_disabled="$6" # This variable is currently unused within this function
     local test_mode="$7"
     local lang_code="$8"
     local description="$9"
-    # ★ 変更: 10番目の引数を silent_mode として受け取る
     local silent_mode="${10}"
 
     # 言語パッケージか通常パッケージかを判別
@@ -750,8 +754,8 @@ process_package() {
             ;;
     esac
 
-    # ★ 変更: パッケージの事前チェックと結果処理を case 文に変更
-    local pre_install_status
+    # パッケージの事前チェック (test_mode でなければ実行)
+    local pre_install_status=0 # Default to 0 (Ready to install) if test_mode=yes
     if [ "$test_mode" != "yes" ]; then
         package_pre_install "$package_name"
         pre_install_status=$? # 戻り値を取得
@@ -759,105 +763,115 @@ process_package() {
         case $pre_install_status in
             0) # Ready to install
                 debug_log "DEBUG" "Package $package_name is ready for installation."
-                # 何もせず case 文を抜けて後続処理へ
+                # Proceed
                 ;;
             1) # Already installed
-                # ★ 変更: デバッグログのみ出力 (ユーザー向けメッセージは表示しない)
-                debug_log "DEBUG" "Package $package_name is already installed."
-                return 0 # ★ 変更: スキップして成功扱い
+                debug_log "DEBUG" "Package $package_name is already installed. Skipping."
+                return 0 # Skip as success
                 ;;
             2) # Not found
-                # ★ 変更: デバッグログのみ出力 (ユーザー向けメッセージは表示しない)
                 debug_log "DEBUG" "Package $package_name not found, skipping installation."
-                return 0 # ★ 変更: スキップして成功扱い (要件)
+                return 0 # Skip as success (as per requirement)
                 ;;
             *) # Unexpected status
                 debug_log "WARNING" "Unexpected status $pre_install_status from package_pre_install for $package_name."
-                return 1 # 予期せぬエラーは失敗扱い
+                return 1 # Treat unexpected status as error
                 ;;
         esac
     else
-        debug_log "DEBUG" "Test mode enabled, skipping pre-install checks"
+        debug_log "DEBUG" "Test mode enabled, skipping pre-install checks for $package_name"
     fi
 
-    # YN確認 (オプションで有効時のみ) - ★ 変更: silent モードの考慮を追加
+    # YN確認 (オプションで有効時のみ、かつ silent モードでない場合)
     if [ "$confirm_install" = "yes" ] && [ "$silent_mode" != "yes" ]; then
-        # パッケージ名からパスと拡張子を除去した表示用の名前を作成
         local display_name
         display_name=$(basename "$package_name")
-        display_name=${display_name%.*}  # 拡張子を除去
+        display_name=${display_name%.*}
 
-        debug_log "DEBUG" "Original package name: $package_name"
-        debug_log "DEBUG" "Displaying package name: $display_name"
+        debug_log "DEBUG" "Confirming installation for display name: $display_name"
 
-        # 説明文の優先順位：
-        # 1. 関数の9番目の引数として指定された説明文を優先
-        # 2. なければパッケージリストから取得
-        if [ -n "$description" ]; then
-            debug_log "DEBUG" "Using provided description: $description"
-        else
-            # パッケージリストから説明を取得
+        # 説明文取得 (引数優先、なければリポジトリから)
+        if [ -z "$description" ]; then
             description=$(get_package_description "$package_name")
             debug_log "DEBUG" "Using repository description: $description"
+        else
+            debug_log "DEBUG" "Using provided description: $description"
         fi
 
-        # パッケージ名を青色で表示するため、color関数で囲む
         local colored_name
         colored_name=$(color blue "$display_name")
 
-        # 説明文があれば専用のメッセージキーを使用
+        local confirm_result=0
         if [ -n "$description" ]; then
-            # 説明文付きの確認メッセージ - パッケージ名を青色で表示
             if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg=$colored_name" "desc=$description"; then
-                debug_log "DEBUG" "User declined installation of $display_name with description"
-                return 0
+                confirm_result=1
             fi
         else
-            # 通常の確認メッセージ - パッケージ名を青色で表示
             if ! confirm "MSG_CONFIRM_INSTALL" "pkg=$colored_name"; then
-                debug_log "DEBUG" "User declined installation of $display_name"
-                return 0
+                confirm_result=1
             fi
         fi
+
+        # ★★★ ユーザーがキャンセルした場合 ★★★
+        if [ $confirm_result -ne 0 ]; then
+            debug_log "DEBUG" "User declined installation of $display_name"
+            return 2 # Return 2 for user cancellation
+        fi
     elif [ "$confirm_install" = "yes" ] && [ "$silent_mode" = "yes" ]; then
-        # silent モードが有効な場合は確認をスキップ
         debug_log "DEBUG" "Silent mode enabled, skipping confirmation for $package_name"
     fi
 
-    # パッケージのインストール - ★ 変更: silent モードを install_normal_package に渡す (3引数呼び出し)
+    # パッケージのインストール
     if ! install_normal_package "$package_name" "$force_install" "$silent_mode"; then
-        debug_log "DEBUG" "Failed to install package: $package_name"
-        return 1
+        debug_log "ERROR" "Failed to install package: $package_name" # Changed DEBUG to ERROR
+        return 1 # Return 1 on installation failure
     fi
 
-    # **ローカルパッケージDBの適用 (インストール成功後に実行)**
-    # ★ 変更なし: 2番目の引数 ($base_name) で呼び出す
+    # ★★★ ローカルパッケージDBの適用 (インストール成功後、かつ skip_package_db でない場合) ★★★
     if [ "$skip_package_db" != "yes" ]; then
-        local_package_db "$base_name"
+        # local_package_db を base_name で呼び出す
+        if ! local_package_db "$base_name"; then
+            # local_package_db が 1 (コマンド無し含む) または他のエラーを返した場合
+            debug_log "WARNING" "local_package_db application failed or skipped for $base_name. Continuing..."
+            # local_package_db の失敗はパッケージインストール自体の失敗とはしないため、ここでは return 1 しない
+            # ただし、新規インストール成功とは言えないので、戻り値は 0 とする
+            return 0
+        else
+             debug_log "DEBUG" "local_package_db applied successfully for $base_name"
+        fi
     else
-        debug_log "DEBUG" "Skipping local-package.db application for $package_name"
+        debug_log "DEBUG" "Skipping local-package.db application for $base_name due to notpack option"
     fi
 
-    return 0
+    # ★★★ 新規インストール成功 ★★★
+    # ここまで到達した場合、インストールと (必要なら) local_package_db 適用が成功した
+    debug_log "DEBUG" "Package $package_name processed successfully (New Install)."
+    return 3 # Return 3 for new install success
 }
 
 # **パッケージインストールのメイン関数**
+# Returns:
+#   0: Success (Already installed / Not found / User declined / DB apply skipped/failed)
+#   1: Error (Prerequisite failed, Installation failed)
+#   2: User cancelled ('yn' prompt declined)
+#   3: New install success (Package installed, DB applied, Service configured/skipped)
 install_package() {
     # オプション解析
     if ! parse_package_options "$@"; then
-        return 1
+        debug_log "ERROR" "Failed to parse package options." # Added error log
+        return 1 # Return 1 on option parsing failure
     fi
-    
-    # インストール一覧表示モードの場合（silentモードでなければ表示）
+
+    # インストール一覧表示モード
     if [ "$PKG_OPTIONS_LIST" = "yes" ]; then
         if [ "$PKG_OPTIONS_SILENT" != "yes" ]; then
             check_install_list
         fi
-        return 0
+        return 0 # list is considered a success
     fi
-    
-    # **ベースネームを取得**
-    local BASE_NAME
+
+    # ベースネームを取得
+    local BASE_NAME="" # Initialize BASE_NAME
     if [ -n "$PKG_OPTIONS_PACKAGE_NAME" ]; then
         BASE_NAME=$(basename "$PKG_OPTIONS_PACKAGE_NAME" .ipk)
         BASE_NAME=$(basename "$BASE_NAME" .apk)
@@ -865,27 +879,31 @@ install_package() {
 
     # update オプション処理
     if [ "$PKG_OPTIONS_UPDATE" = "yes" ]; then
-        debug_log "DEBUG" "Updating package lists"
-        # silentモードを渡して更新を実行
+        debug_log "DEBUG" "Executing package list update"
+        # update_package_list の戻り値をそのまま返す
         update_package_list "$PKG_OPTIONS_SILENT"
         return $?
     fi
 
     # パッケージマネージャー確認
     if ! verify_package_manager; then
-        debug_log "DEBUG" "Failed to verify package manager"
-        return 1
+        debug_log "ERROR" "Failed to verify package manager." # Changed DEBUG to ERROR
+        return 1 # Return 1 if verification fails
     fi
 
-    # **パッケージリスト更新** - silentモードを引数として渡す
-    update_package_list "$PKG_OPTIONS_SILENT" || return 1
+    # パッケージリスト更新 (エラー時は 1 を返す)
+    if ! update_package_list "$PKG_OPTIONS_SILENT"; then
+         debug_log "ERROR" "Failed to update package list." # Changed DEBUG to ERROR
+         return 1 # Return 1 if update fails
+    fi
 
     # 言語コード取得
     local lang_code
     lang_code=$(get_language_code)
-    
-    # パッケージ処理 - silentモードもパラメータとして渡す
-    if ! process_package \
+
+    # ★★★ パッケージ処理と戻り値の取得 ★★★
+    local process_status=0
+    process_package \
             "$PKG_OPTIONS_PACKAGE_NAME" \
             "$BASE_NAME" \
             "$PKG_OPTIONS_CONFIRM" \
@@ -895,16 +913,42 @@ install_package() {
             "$PKG_OPTIONS_TEST" \
             "$lang_code" \
             "$PKG_OPTIONS_DESCRIPTION" \
-            "$PKG_OPTIONS_SILENT"; then
-        return 1
-    fi
+            "$PKG_OPTIONS_SILENT"
+    process_status=$? # process_package の戻り値を取得
 
-    # サービス関連の処理（disabled オプションが有効な場合は全スキップ）
-    if [ "$PKG_OPTIONS_DISABLED" != "yes" ]; then
-        configure_service "$PKG_OPTIONS_PACKAGE_NAME" "$BASE_NAME"
-    else
-        debug_log "DEBUG" "Skipping service handling for $PKG_OPTIONS_PACKAGE_NAME due to disabled option"
-    fi
-    
-    return 0
+    debug_log "DEBUG" "process_package finished for $BASE_NAME with status: $process_status"
+
+    # ★★★ process_package の戻り値に基づく後処理 ★★★
+    case $process_status in
+        0) # Success (Skipped, DB failed/skipped) or handled internally
+           # No special action needed here, will return 0
+           ;;
+        1) # Error during processing
+           debug_log "ERROR" "Error occurred during package processing for $BASE_NAME."
+           return 1 # Propagate error
+           ;;
+        2) # User cancelled
+           debug_log "DEBUG" "User cancelled installation for $BASE_NAME."
+           return 2 # Propagate user cancellation
+           ;;
+        3) # New install success
+           debug_log "DEBUG" "New installation successful for $BASE_NAME. Proceeding to service configuration."
+           # サービス関連の処理 (新規インストール成功時 かつ disabled でない場合)
+           if [ "$PKG_OPTIONS_DISABLED" != "yes" ]; then
+               configure_service "$PKG_OPTIONS_PACKAGE_NAME" "$BASE_NAME"
+               # configure_service の失敗は install_package 全体の失敗とはしない (ログは内部で出力)
+           else
+               debug_log "DEBUG" "Skipping service handling for $BASE_NAME due to disabled option."
+           fi
+           # Fall through to return 3
+           ;;
+        *) # Unexpected status from process_package
+           debug_log "ERROR" "Unexpected status $process_status received from process_package for $BASE_NAME."
+           return 1 # Treat unexpected as error
+           ;;
+    esac
+
+    # ★★★ 最終的な戻り値を返す ★★★
+    # process_status が 0, 1, 2, 3 のいずれかになる想定
+    return $process_status
 }
