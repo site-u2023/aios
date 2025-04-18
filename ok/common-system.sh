@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.01-00-00"
+SCRIPT_VERSION="2025.04.07-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX準拠シェルスクリプト
@@ -60,6 +60,8 @@ LOCATION_API_TIMEOUT="${LOCATION_API_TIMEOUT:-5}"
 # リトライ回数の設定
 LOCATION_API_MAX_RETRIES="${LOCATION_API_MAX_RETRIES:-5}"
 
+USER_AGENT="${USER_AGENT:-curl/7.74.0}"
+
 # ネットワーク接続状態を確認する関数
 check_network_connectivity() {
     local ip_check_file="${CACHE_DIR}/network.ch"
@@ -67,11 +69,13 @@ check_network_connectivity() {
     local ret6=1
 
     debug_log "DEBUG: Checking IPv4 connectivity"
-    ping -c 1 -w 3 8.8.8.8 >/dev/null 2>&1
+    # ping -c 1 -w 3 8.8.8.8 >/dev/null 2>&1
+    ping -4 -c 1 -w 3 one.one.one.one >/dev/null 2>&1
     ret4=$?
 
     debug_log "DEBUG: Checking IPv6 connectivity"
-    ping6 -c 1 -w 3 2001:4860:4860::8888 >/dev/null 2>&1
+    # ping6 -c 1 -w 3 2001:4860:4860::8888 >/dev/null 2>&1
+    ping -6  -c 1 -w 3 one.one.one.one >/dev/null 2>&1
     ret6=$?
 
     if [ "$ret4" -eq 0 ] && [ "$ret6" -eq 0 ]; then
@@ -391,6 +395,30 @@ detect_and_save_package_manager() {
     fi
 }
 
+# OpenWrtでシステムのCPU数を検出する関数
+detect_cpu_cores() {
+    local cpu_count=1
+    
+    # OpenWrtでは/proc/cpuinfoからプロセッサ数を取得
+    if [ -f /proc/cpuinfo ]; then
+        cpu_count=$(grep -c "^processor" /proc/cpuinfo)
+    fi
+    
+    # 不正な値の場合はデフォルト値を使用
+    if [ "$cpu_count" -lt 1 ]; then
+        cpu_count=1
+    fi
+    
+    # グローバル変数にセット
+    CPU_CORES="$cpu_count"
+    
+    # キャッシュファイルに保存
+    mkdir -p "$CACHE_DIR" 2>/dev/null
+    printf "%s\n" "$cpu_count" > "${CACHE_DIR}/cpu_core.ch"
+    
+    debug_log "DEGUB" "Detected CPU cores: ${cpu_count}"
+}
+
 # 端末の表示能力を検出する関数
 detect_terminal_capability() {
     # 環境変数による明示的指定を最優先
@@ -460,6 +488,68 @@ detect_terminal_capability() {
     echo "$STYLE"
 }
 
+# wgetの機能を検出する関数（キャッシュ対応版）
+detect_wget_capabilities() {
+    local tmp_file="/tmp/wget_test.tmp"
+    local capability="basic"
+    local redirect_support=0
+    local https_support=0
+    local cache_file="${CACHE_DIR}/wget_capability.ch"
+
+    # キャッシュファイルがある場合はそれを使用して即時返す
+    if [ -f "$cache_file" ]; then
+        capability=$(cat "$cache_file")
+        echo "$capability"
+        return 0
+    fi
+
+    debug_log "DEBUG" "Detecting wget capabilities"
+    
+    # キャッシュディレクトリ確認
+    mkdir -p "$CACHE_DIR" 2>/dev/null
+    
+    # -Lオプション（リダイレクト機能）のサポート検出
+    if wget -L --help 2>&1 | grep -q "unrecognized option"; then
+        debug_log "DEBUG" "wget does not support -L option (BusyBox detected)"
+        redirect_support=0
+    else
+        debug_log "DEBUG" "wget supports -L option (full wget)"
+        redirect_support=1
+    fi
+    
+    # HTTPS直接アクセスのサポート検出（User-Agentを追加）
+    if wget --no-check-certificate -q -U "${USER_AGENT}" -O "$tmp_file" "https://location-api-worker.site-u.workers.dev" >/dev/null 2>&1; then
+        if [ -s "$tmp_file" ]; then
+            debug_log "DEBUG" "wget supports HTTPS connections"
+            https_support=1
+        else
+            debug_log "DEBUG" "wget HTTPS test returned empty file"
+            https_support=0
+        fi
+    else
+        debug_log "DEBUG" "wget HTTPS test failed"
+        https_support=0
+    fi
+    
+    # 一時ファイルのクリーンアップ
+    rm -f "$tmp_file" 2>/dev/null
+    
+    # 機能に基づいて種類を判定
+    if [ $redirect_support -eq 1 ] && [ $https_support -eq 1 ]; then
+        capability="full"
+    elif [ $https_support -eq 1 ]; then
+        capability="https_only"
+    else
+        capability="basic"
+    fi
+    
+    # 検出結果をキャッシュに保存
+    echo "$capability" > "$cache_file"
+    debug_log "DEBUG" "wget capability detected and cached: $capability"
+    
+    echo "$capability"
+}
+
 # 📌 デバッグヘルパー関数
 debug_info() {
     if [ "$DEBUG_MODE" = "true" ]; then
@@ -474,12 +564,13 @@ debug_info() {
 }
 
 # メイン処理
-dynamic_system_info_main() {
-    check_network_connectivity
+common_system_main() {
+    detect_cpu_cores
     init_device_cache
     get_usb_devices
+    check_network_connectivity
     detect_and_save_package_manager
 }
 
 # スクリプトの実行
-dynamic_system_info_main "$@"
+common_system_main "$@"
