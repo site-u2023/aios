@@ -583,26 +583,45 @@ get_language_code() {
 }
 
 # サービス設定
+# Handles starting and enabling services after installation.
+# Special handling for LuCI packages (restarts rpcd).
+# Other packages are started and enabled.
 configure_service() {
-    local package_name="$1"
-    local base_name="$2"
-    
-    debug_log "DEBUG" "Configuring service for: $package_name"
-    
-    # サービスが存在するかチェックし、処理を分岐
+    local package_name="$1" # Full package name/path, potentially unused here but passed for context
+    local base_name="$2"    # Base name of the package used for service script
+
+    debug_log "DEBUG" "Configuring service for: $package_name (Base: $base_name)"
+
+    # Check if the service script exists and is executable
     if [ -x "/etc/init.d/$base_name" ]; then
         if echo "$base_name" | grep -q "^luci-"; then
-            # Luci関連のパッケージの場合はrpcdを再起動
-            /etc/init.d/rpcd restart
-            debug_log "DEBUG" "$package_name is a LuCI package, rpcd has been restarted"
+            # LuCI packages require restarting rpcd to be recognized by the UI
+            debug_log "DEBUG" "$base_name is a LuCI package, restarting rpcd."
+            /etc/init.d/rpcd restart >/dev/null 2>&1
+            # We don't check rpcd restart status critically here, assume it works or logs errors itself
         else
-            /etc/init.d/"$base_name" restart
-            /etc/init.d/"$base_name" enable
-            debug_log "DEBUG" "$package_name has been restarted and enabled"
+            # ★★★ For non-LuCI packages, use start and enable ★★★
+            debug_log "DEBUG" "Starting service $base_name."
+            /etc/init.d/"$base_name" start >/dev/null 2>&1
+            local start_status=$?
+
+            debug_log "DEBUG" "Enabling service $base_name."
+            /etc/init.d/"$base_name" enable >/dev/null 2>&1
+            local enable_status=$?
+
+            if [ $start_status -eq 0 ] && [ $enable_status -eq 0 ]; then
+                 debug_log "DEBUG" "Service $base_name started and enabled successfully."
+            else
+                 # Log a warning if start or enable failed, but don't treat as critical error for install_package
+                 debug_log "WARNING" "Service $base_name start (status: $start_status) or enable (status: $enable_status) might have failed."
+            fi
         fi
     else
-        debug_log "DEBUG" "$package_name is not a service or the service script is not found"
+        # If no service script found, just log and continue
+        debug_log "DEBUG" "No executable service script found at /etc/init.d/$base_name, skipping service configuration."
     fi
+    # Always return 0, as service configuration failure is not treated as install_package failure
+    return 0
 }
 
 # オプション解析
