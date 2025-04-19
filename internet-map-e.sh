@@ -1367,7 +1367,7 @@ mape_config() {
 
 # --- Main Execution Logic ---
 
-main() {
+internet_main() {
     if [ $# -eq 0 ]; then
         echo "Usage: $0 <user_ipv6_prefix>"
         echo "Example: $0 240b:10:a0e0:1234::1"
@@ -1398,4 +1398,4 @@ main() {
 }
 
 # Call main function with script arguments
-main "$@"
+internet_main "$@"
