@@ -512,14 +512,21 @@ extract_ipv6_bits() {
     local value=0
     local bits_in_segment=16
 
+    log_msg D "extract_ipv6_bits: Called with start_bit=$start_bit, length=$length, dec_segments='$dec_segments'"
+
     if [ "$start_bit" -lt 0 ] || [ "$length" -le 0 ] || [ "$end_bit" -gt 128 ]; then
-        log_msg E "extract_ipv6_bits: Invalid bit range ($start_bit, $length)"
+        log_msg E "extract_ipv6_bits: Invalid bit range (start=$start_bit, length=$length, end=$end_bit > 128)"
+        echo "" # Return empty string on error
         return 1
     fi
+
     # Use multiplication for combining results to potentially avoid shift limits
     local use_multiplication_combine=1
     if [ "$length" -gt 32 ]; then
-        log_msg D "extract_ipv6_bits: Warning - Extracting more than 32 bits ($length) might have precision issues."
+        # BusyBox ash (used in OpenWrt) generally supports 64-bit integers if compiled with them.
+        # However, excessive bit shifts can still be problematic or slow.
+        # Multiplication is often safer for combining large bit parts.
+        log_msg D "extract_ipv6_bits: Extracting more than 32 bits ($length). Using multiplication combine method."
     fi
 
     local start_seg_idx=$((start_bit / bits_in_segment))
@@ -530,47 +537,100 @@ extract_ipv6_bits() {
 
     local i=$start_seg_idx
     while [ $i -le $end_seg_idx ] && [ $bits_remaining_to_extract -gt 0 ]; do
+        # Extract the i-th segment (0-indexed internally, 1-indexed for cut)
         local segment_val=$(echo "$dec_segments" | cut -d' ' -f $((i + 1)) 2>/dev/null)
-        if [ -z "$segment_val" ]; then # Error handling
-            log_msg E "extract_ipv6_bits: Error accessing segment $((i+1))"
+
+        # Validate segment value
+        if [ -z "$segment_val" ] || ! expr "$segment_val" + 0 > /dev/null 2>&1; then
+            log_msg E "extract_ipv6_bits: Error accessing or invalid segment value at index $((i + 1)). Segment: '$segment_val'"
+            echo "" # Return empty string on error
             return 1
         fi
+        log_msg D "extract_ipv6_bits: Loop i=$i, segment_val=$segment_val, bits_remaining=$bits_remaining_to_extract"
 
         local bit_offset_in_seg=$((current_pos % bits_in_segment))
         local bits_to_extract_from_seg=$((bits_in_segment - bit_offset_in_seg))
         if [ $bits_to_extract_from_seg -gt $bits_remaining_to_extract ]; then
             bits_to_extract_from_seg=$bits_remaining_to_extract
         fi
+        log_msg D "extract_ipv6_bits: Loop i=$i, bit_offset_in_seg=$bit_offset_in_seg, bits_to_extract_from_seg=$bits_to_extract_from_seg"
 
+        # Calculate the right shift amount
+        # Example: 16 bits total, offset 4, extract 8 => shift right by (16 - 4 - 8) = 4
         local shift_right=$((bits_in_segment - bit_offset_in_seg - bits_to_extract_from_seg))
+        if [ "$shift_right" -lt 0 ]; then
+             # This should not happen with correct logic, but check for safety
+             log_msg E "extract_ipv6_bits: Internal error - negative shift_right ($shift_right)"
+             echo ""
+             return 1
+        fi
         local extracted_part=$((segment_val >> shift_right))
+        log_msg D "extract_ipv6_bits: Loop i=$i, shift_right=$shift_right, pre_mask_extracted_part=$extracted_part"
 
+        # Create a mask for the bits we want to keep
+        # Example: bits_to_extract_from_seg = 8 => mask = (1 << 8) - 1 = 255
         local mask=$(( (1 << bits_to_extract_from_seg) - 1 ))
-        if [ "$bits_to_extract_from_seg" -eq 16 ]; then mask=65535;
+        # Handle edge cases for mask calculation with large shifts
+        if [ "$bits_to_extract_from_seg" -eq 16 ]; then mask=65535; # 0xFFFF
         elif [ "$bits_to_extract_from_seg" -le 0 ]; then mask=0;
-        elif [ "$bits_to_extract_from_seg" -ge 31 ]; then mask=$(( ( (1 << ($bits_to_extract_from_seg - 1)) - 1 ) * 2 + 1 ));
+        elif [ "$bits_to_extract_from_seg" -ge 31 ]; then
+             # For 31 bits or more, standard shift might overflow. Calculate differently.
+             # Create a full mask by calculation or known value if needed.
+             # For simplicity, assume 64-bit support allows large shifts for now.
+             # If issues arise, refine mask calculation for >31 bits.
+             mask=$(( ( (1 << ($bits_to_extract_from_seg - 1)) - 1 ) * 2 + 1 )) # Safer way for large numbers potentially
+             log_msg D "extract_ipv6_bits: Calculated large mask for $bits_to_extract_from_seg bits: $mask"
         fi
         extracted_part=$((extracted_part & mask))
+        log_msg D "extract_ipv6_bits: Loop i=$i, mask=$mask, final_extracted_part=$extracted_part"
 
+        # Combine the extracted part with the current value
         if [ "$use_multiplication_combine" -eq 1 ]; then
+            # Calculate multiplier: 2 ^ bits_to_extract_from_seg
             local multiplier=1
             local j=0
+            # Use a loop for multiplier calculation to avoid large shifts in the multiplier itself
             while [ $j -lt $bits_to_extract_from_seg ]; do
                 multiplier=$((multiplier * 2))
+                # Check for potential overflow in multiplier (though unlikely for <= 16 bits)
+                 if ! expr "$multiplier" + 0 > /dev/null 2>&1; then
+                      log_msg E "extract_ipv6_bits: Multiplier overflow during calculation."
+                      echo ""
+                      return 1
+                 fi
                 j=$((j + 1))
             done
+            log_msg D "extract_ipv6_bits: Loop i=$i, combine_multiplier=$multiplier"
+            # Combine: value = (value * multiplier) + extracted_part
             value=$(( (value * multiplier) + extracted_part ))
         else
-             # Original shift approach (might hit limits sooner):
+             # Original shift approach (might hit limits sooner for large 'value'):
              value=$(( (value << bits_to_extract_from_seg) | extracted_part ))
         fi
+        # Validate intermediate value
+        if ! expr "$value" + 0 > /dev/null 2>&1; then
+             log_msg E "extract_ipv6_bits: Intermediate value became non-numeric after combining."
+             echo ""
+             return 1
+        fi
+        log_msg D "extract_ipv6_bits: Loop i=$i, intermediate_combined_value=$value"
 
         bits_remaining_to_extract=$((bits_remaining_to_extract - bits_to_extract_from_seg))
         current_pos=$((current_pos + bits_to_extract_from_seg))
         i=$((i + 1))
     done
 
-    echo "$value"
+    # --- Final Validation ---
+    log_msg D "extract_ipv6_bits: Final calculated value before validation: $value"
+    if expr "$value" + 0 > /dev/null 2>&1; then
+        log_msg D "extract_ipv6_bits: Succeeded. Returning value: $value"
+        echo "$value"
+        return 0
+    else
+        log_msg E "extract_ipv6_bits: Final calculated value '$value' is not a valid number."
+        echo "" # Return empty string on error
+        return 1
+    fi
 }
 
 # --- End of IPv6 Helper Functions ---
