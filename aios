@@ -56,8 +56,8 @@ SCRIPT_VERSION="2025.04.19-00-00"
 # システム制御
 DEV_NULL="${DEV_NULL:-on}"       # サイレントモード制御（on=有効, unset=無効）
 DEBUG_MODE="${DEBUG_MODE:-false}" # デバッグモード（true=有効, false=無効）
-# DOWNLOAD_METHOD="${DOWNLOAD_METHOD:-api}" # 追加: ダウンロード方式 (api/direct)
-DOWNLOAD_METHOD="${DOWNLOAD_METHOD:-direct}" # 追加: ダウンロード方式 (api/direct)
+DOWNLOAD_METHOD="${DOWNLOAD_METHOD:-api}" # ダウンロード方式 (api/direct)
+# DOWNLOAD_METHOD="${DOWNLOAD_METHOD:-direct}" # ダウンロード方式 (api/direct)
 
 # パス・ファイル関連
 INTERPRETER="${INTERPRETER:-ash}"  # デフォルトインタープリタ
