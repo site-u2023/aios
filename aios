@@ -2074,7 +2074,7 @@ check_common() {
             download "common-information.sh" "hidden" "chmod" "load"
             download "common-color.sh" "hidden" "chmod" "load"
             download "common-country.sh" "hidden" "chmod" "load"
-            download "common-country.sh" "hidden" "chmod" "load"
+            download "common-menu.sh" "hidden" "chmod" "load"
             download "common-package.sh" "hidden" "chmod" "load"
             download "common-feed-package.sh" "hidden" "chmod" "load"
             download "menu.db" "hidden"
