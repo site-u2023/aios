@@ -1606,9 +1606,9 @@ download_check_version() {
     # バージョン情報の取得
     local remote_version_info=$(get_commit_version "$file_name")
     local remote_version=$(printf "%s" "$remote_version_info" | cut -d' ' -f1)
-    local auth_method=$(printf "%s" "$remote_version_info" | cut -d' ' -f2)
+    local auth_method=$(printf "%s" "$remote_version_info" | cut -d' ' -f2) # get_commit_version が返した認証方法を取得
     local local_version=""
-    
+
     # ローカルバージョンの取得
     if [ -f "$script_file" ]; then
         local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
@@ -1618,12 +1618,28 @@ download_check_version() {
     local clean_remote_version=$(clean_version_string "$remote_version")
     local clean_local_version=$(clean_version_string "$local_version")
 
-    # APIレート制限情報の取得（元の表示に戻す）
-    local api_status=$(check_api_rate_limit)
-    
-    # バージョン比較とダウンロード判断
+    # --- APIレート制限情報の取得 (direct モード時はスキップ) ---
+    local api_status=""
+    if [ "$DOWNLOAD_METHOD" = "direct" ]; then
+        # direct モードの場合は API チェックをスキップし、固定値を設定
+        # auth_method が 'direct' であることも確認 (get_commit_version が期待通り動作しているか)
+        if [ "$auth_method" = "direct" ]; then
+             api_status="API: N/A (Direct)"
+             debug_log "DEBUG" "Direct download mode: Skipping API rate limit check for $file_name"
+        else
+             # direct モードなのに auth_method が direct でない場合は警告
+             api_status="API: ??? (Inconsistent)"
+             debug_log "WARN" "Inconsistent state: DOWNLOAD_METHOD=direct but auth_method=$auth_method for $file_name"
+        fi
+    else
+        # api モードの場合は従来通りチェック
+        api_status=$(check_api_rate_limit)
+    fi
+    # --- APIレート制限情報の取得ここまで ---
+
+    # バージョン比較とダウンロード判断 (変更なし)
     local update_required=false
-    
+
     if [ "$local_version" = "$dummy_version" ]; then
         debug_log "DEBUG" "First download: $file_name"
         update_required=true
@@ -1641,11 +1657,12 @@ download_check_version() {
             update_required=false
         fi
     fi
-    
+
     debug_log "DEBUG" "Remote version: $file_name - $clean_remote_version"
     debug_log "DEBUG" "Local version: $file_name - $clean_local_version"
-    debug_log "DEBUG" "API status: $api_status"
-    
+    # ログに auth_method を追加して、get_commit_version の動作を確認しやすくする
+    debug_log "DEBUG" "API status: $api_status (Auth method from get_commit_version: $auth_method)"
+
     # 結果を返す
     echo "${update_required}|${clean_remote_version}|${clean_local_version}|${api_status}"
     return 0
