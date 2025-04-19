@@ -1,5 +1,5 @@
 #!/bin/sh
-# this script based http://ipv4.web.fc2.com/map-e.html
+# this script based https://github.com/missing233/map-e
 
 SCRIPT_VERSION="2025.04.14-00-02"
 
