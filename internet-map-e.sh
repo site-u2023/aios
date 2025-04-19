@@ -757,6 +757,8 @@ bitwise_or_ipv6() {
 
 # --- Start of Revised mape_mold Function (incorporating fixed mapping) ---
 
+# --- Start of Revised mape_mold Function (incorporating fixed mapping and scope fix) ---
+
 mape_mold() {
     local user_ip6_raw="$1"
     local norm_user_ip6=""
@@ -769,6 +771,7 @@ mape_mold() {
     local match_result=""
     local fixed_ipv4=""
     local fixed_mapping_found=1 # 0 if found, 1 if not found
+    local rule_ip4prefixlen="" # <<< MODIFIED: Declared local variable here
 
     # Reset global status and variables
     MAPE_STATUS="fail"
@@ -834,7 +837,7 @@ mape_mold() {
         log_msg D "mape_mold: Retrieving parameters for generic rule: $RULE_NAME"
         BR=$(get_rule_br "$RULE_NAME")
         IP6PREFIXLEN=$(get_rule_ip6prefixlen "$RULE_NAME")
-        local rule_ip4prefixlen=$(get_rule_ip4prefixlen "$RULE_NAME")
+        rule_ip4prefixlen=$(get_rule_ip4prefixlen "$RULE_NAME") # <<< MODIFIED: Removed 'local' keyword
         PSIDLEN=$(get_rule_psidlen "$RULE_NAME")
         OFFSET=$(get_rule_offset "$RULE_NAME")
         RFC=$(get_rule_rfc "$RULE_NAME")
@@ -855,6 +858,11 @@ mape_mold() {
     fi
 
     # --- 5. Calculate EALEN and PSID (Needed for Port, CE calc, and generic IPv4 calc) ---
+    # Check if rule_ip4prefixlen is set before using it
+    if [ -z "$rule_ip4prefixlen" ]; then
+         log_msg E "mape_mold: Internal error - rule_ip4prefixlen is not set before EALEN calculation."
+         return 1
+    fi
     EALEN=$((128 - IP6PREFIXLEN - rule_ip4prefixlen))
     log_msg D "mape_mold: Calculated EALen=$EALEN"
 
@@ -918,12 +926,17 @@ mape_mold() {
         log_msg D "mape_mold: Generic - Extracted user IPv4 part from User IPv6: $user_ipv4_part_dec (length $user_ipv4_part_len)"
 
         # Combine: (shared_ipv4 << (32-rule_ip4prefixlen)) | (user_ipv4_suffix << psidlen) | psid
-        local shift1=$((32 - rule_ip4prefixlen))
+        local shift1=$((32 - rule_ip4prefixlen)) # Now rule_ip4prefixlen should be accessible
         local shift2=$PSIDLEN
         local part1_shifted=0; local part2_shifted=0; local part3=$PSID
 
         if [ "$shift1" -ge 0 ] && [ "$shift1" -lt 32 ]; then part1_shifted=$((shared_ipv4_part_dec << shift1)); fi
         if [ "$shift2" -ge 0 ] && [ "$shift2" -lt 32 ]; then part2_shifted=$((user_ipv4_part_dec << shift2)); fi
+
+        # Perform the OR operation carefully, ensuring variables are valid numbers
+        if ! expr "$part1_shifted" + 0 > /dev/null 2>&1; then part1_shifted=0; log_msg W "mape_mold: Invalid part1_shifted for OR."; fi
+        if ! expr "$part2_shifted" + 0 > /dev/null 2>&1; then part2_shifted=0; log_msg W "mape_mold: Invalid part2_shifted for OR."; fi
+        if ! expr "$part3" + 0 > /dev/null 2>&1; then part3=0; log_msg W "mape_mold: Invalid part3 (PSID) for OR."; fi
 
         local user_ipv4_full_dec=$((part1_shifted | part2_shifted | part3))
         log_msg D "mape_mold: Generic - Combined IPv4 decimal value: $user_ipv4_full_dec ( $part1_shifted | $part2_shifted | $part3 )"
@@ -943,6 +956,11 @@ mape_mold() {
         # Check if OFFSET is valid before shifting
         if [ "$OFFSET" -lt 0 ] || [ "$OFFSET" -gt 16 ]; then
              log_msg E "mape_mold: Invalid OFFSET ($OFFSET) for port calculation."
+             return 1
+        fi
+        # Ensure PSID is a valid number before shifting
+        if ! expr "$PSID" + 0 > /dev/null 2>&1; then
+             log_msg E "mape_mold: Invalid PSID value ($PSID) for port calculation."
              return 1
         fi
         local psid_shifted_right=$((PSID >> OFFSET))
