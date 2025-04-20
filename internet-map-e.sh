@@ -933,7 +933,7 @@ bitwise_or_ipv6() {
 # --- End of New Helper Functions ---
 
 
-# --- Start of Revised mape_mold Function (incorporating fixed mapping, scope fix, numerical checks, and debug logs) ---
+# --- Start of Revised mape_mold Function ---
 
 mape_mold() {
     local user_ip6_raw="$1"
@@ -947,7 +947,7 @@ mape_mold() {
     local match_result=""
     local fixed_ipv4=""
     local fixed_mapping_found=1 # 0 if found, 1 if not found
-    local rule_ip4prefixlen="" # <<< MODIFIED: Declared local variable here
+    local rule_ip4prefixlen="" # Rule's IPv4 prefix length
 
     # Reset global status and variables
     MAPE_STATUS="fail"
@@ -983,11 +983,13 @@ mape_mold() {
                  log_msg E "mape_mold: Invalid CIDR format '$cidr' for rule $rule_id"
                  continue
             fi
-            # Validate rule_cidr_len is numeric before use
-            if ! expr "$rule_cidr_len" + 0 > /dev/null 2>&1; then
-                 log_msg E "mape_mold: Invalid non-numeric CIDR length '$rule_cidr_len' for rule $rule_id"
-                 continue
-            fi
+            # Validate rule_cidr_len is numeric before use (using case for POSIX)
+            case "$rule_cidr_len" in
+                ''|*[!0-9]*)
+                     log_msg E "mape_mold: Invalid non-numeric CIDR length '$rule_cidr_len' for rule $rule_id"
+                     continue ;;
+                *) ;; # Is numeric
+            esac
             log_msg D "mape_mold: Matching '$norm_user_ip6' against CIDR '$rule_ip6_prefix/$rule_cidr_len'"
             match_result=$(ipv6_cidr_match "$norm_user_ip6" "$rule_ip6_prefix" "$rule_cidr_len")
             if [ "$match_result" = "true" ]; then
@@ -1019,18 +1021,18 @@ mape_mold() {
         log_msg D "mape_mold: Retrieving parameters for generic rule: $RULE_NAME"
         BR=$(get_rule_br "$RULE_NAME")
         IP6PREFIXLEN=$(get_rule_ip6prefixlen "$RULE_NAME")
-        rule_ip4prefixlen=$(get_rule_ip4prefixlen "$RULE_NAME") # <<< MODIFIED: Removed 'local' keyword
+        rule_ip4prefixlen=$(get_rule_ip4prefixlen "$RULE_NAME") # Rule's IPv4 prefix length
         PSIDLEN=$(get_rule_psidlen "$RULE_NAME")
         OFFSET=$(get_rule_offset "$RULE_NAME")
         RFC=$(get_rule_rfc "$RULE_NAME")
 
-        # Validate retrieved parameters are non-empty and numeric where expected
+        # Validate retrieved parameters are non-empty and numeric where expected (using case for POSIX)
         local param_error=0
         if [ -z "$BR" ]; then log_msg E "mape_mold: Parameter BR is empty for rule $RULE_NAME"; param_error=1; fi
-        if [ -z "$IP6PREFIXLEN" ] || ! expr "$IP6PREFIXLEN" + 0 > /dev/null 2>&1; then log_msg E "mape_mold: Parameter IP6PREFIXLEN ('$IP6PREFIXLEN') is invalid for rule $RULE_NAME"; param_error=1; fi
-        if [ -z "$rule_ip4prefixlen" ] || ! expr "$rule_ip4prefixlen" + 0 > /dev/null 2>&1; then log_msg E "mape_mold: Parameter rule_ip4prefixlen ('$rule_ip4prefixlen') is invalid for rule $RULE_NAME"; param_error=1; fi
-        if [ -z "$PSIDLEN" ] || ! expr "$PSIDLEN" + 0 > /dev/null 2>&1; then log_msg E "mape_mold: Parameter PSIDLEN ('$PSIDLEN') is invalid for rule $RULE_NAME"; param_error=1; fi
-        if [ -z "$OFFSET" ] || ! expr "$OFFSET" + 0 > /dev/null 2>&1; then log_msg E "mape_mold: Parameter OFFSET ('$OFFSET') is invalid for rule $RULE_NAME"; param_error=1; fi
+        case "$IP6PREFIXLEN" in ''|*[!0-9]*) log_msg E "mape_mold: Parameter IP6PREFIXLEN ('$IP6PREFIXLEN') is invalid for rule $RULE_NAME"; param_error=1;; *) ;; esac
+        case "$rule_ip4prefixlen" in ''|*[!0-9]*) log_msg E "mape_mold: Parameter rule_ip4prefixlen ('$rule_ip4prefixlen') is invalid for rule $RULE_NAME"; param_error=1;; *) ;; esac
+        case "$PSIDLEN" in ''|*[!0-9]*) log_msg E "mape_mold: Parameter PSIDLEN ('$PSIDLEN') is invalid for rule $RULE_NAME"; param_error=1;; *) ;; esac
+        case "$OFFSET" in ''|*[!0-9]*) log_msg E "mape_mold: Parameter OFFSET ('$OFFSET') is invalid for rule $RULE_NAME"; param_error=1;; *) ;; esac
         if [ -z "$RFC" ]; then log_msg E "mape_mold: Parameter RFC is empty for rule $RULE_NAME"; param_error=1; fi
 
         if [ "$param_error" -eq 1 ]; then
@@ -1053,10 +1055,12 @@ mape_mold() {
     log_msg D "mape_mold: Calculating EALEN = 128 - IP6PREFIXLEN($IP6PREFIXLEN) - rule_ip4prefixlen($rule_ip4prefixlen)"
     EALEN=$((128 - IP6PREFIXLEN - rule_ip4prefixlen))
     # Validate EALEN calculation result
-    if ! expr "$EALEN" + 0 > /dev/null 2>&1; then
-         log_msg E "mape_mold: Failed to calculate EALEN (result '$EALEN' is not a number)."
-         return 1
-    fi
+    case "$EALEN" in
+        ''|*[!0-9-]*) # Allow minus sign for validation, but check range below
+             log_msg E "mape_mold: Failed to calculate EALEN (result '$EALEN' is not a number)."
+             return 1;;
+        *) ;;
+    esac
     log_msg D "mape_mold: Calculated EALen=$EALEN"
 
     # Basic validation for EALEN logic (PSIDLEN is validated numeric above)
@@ -1069,23 +1073,15 @@ mape_mold() {
     if [ "$PSIDLEN" -gt 0 ]; then
         local psid_start_bit=$((IP6PREFIXLEN + EALEN - PSIDLEN))
         # Validate psid_start_bit calculation
-        if ! expr "$psid_start_bit" + 0 > /dev/null 2>&1; then
-             log_msg E "mape_mold: Failed calculation for psid_start_bit ('$psid_start_bit' is not a number)."
-             return 1
-        fi
+        case "$psid_start_bit" in ''|*[!0-9]*) log_msg E "mape_mold: Failed calculation for psid_start_bit ('$psid_start_bit' is not a number)."; return 1;; *) ;; esac
         log_msg D "mape_mold: Extracting PSID: start_bit=$psid_start_bit, length=$PSIDLEN"
         PSID=$(extract_ipv6_bits $psid_start_bit $PSIDLEN "$user_ip6_dec")
-        # extract_ipv6_bits now returns 1 and empty echo on error, and ensures numeric output on success
         if [ $? -ne 0 ]; then
              log_msg E "mape_mold: Failed to extract PSID (extract_ipv6_bits returned error)."
-             # PSID will be empty from echo "" in extract_ipv6_bits
              return 1
         fi
-        # Double check PSID is numeric just in case (should be guaranteed by extract_ipv6_bits now)
-         if ! expr "$PSID" + 0 > /dev/null 2>&1; then
-              log_msg E "mape_mold: Extracted PSID ('$PSID') is unexpectedly non-numeric."
-              return 1
-         fi
+        # Double check PSID is numeric (should be guaranteed by extract_ipv6_bits)
+        case "$PSID" in ''|*[!0-9]*) log_msg E "mape_mold: Extracted PSID ('$PSID') is unexpectedly non-numeric."; return 1;; *) ;; esac
         log_msg D "mape_mold: Calculated PSID: $PSID"
     else
         PSID=0
@@ -1096,34 +1092,43 @@ mape_mold() {
     if [ "$fixed_mapping_found" -eq 0 ]; then
         # --- 6a. Fixed Mapping Found ---
         log_msg I "mape_mold: Using fixed IPv4 mapping result."
-        # Validate fixed_ipv4 looks like an IPv4 address? Optional.
+        # Basic validation if fixed_ipv4 looks like an IPv4 address
+        if ! echo "$fixed_ipv4" | grep -qE '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'; then
+             log_msg E "mape_mold: Fixed mapping result '$fixed_ipv4' does not look like a valid IPv4 address."
+             return 1
+        fi
         IPV4="$fixed_ipv4"
-        IP4PREFIXLEN=32 # Fixed mappings imply /32
+        # Set /32 for fixed mappings (display/config use)
+        IP4PREFIXLEN=32
         log_msg I "mape_mold: Set User IPv4: $IPV4/$IP4PREFIXLEN (from fixed mapping)"
 
     else
         # --- 6b. No Fixed Mapping - Use Generic Calculation ---
         log_msg I "mape_mold: No fixed mapping found. Using generic calculation for IPv4."
-        # Calculate User's effective IPv4 prefix length for generic case
+
+        # Calculate ealen_minus_psidlen which is needed for IPv4 calculation
         # EALEN and PSIDLEN are validated numeric above
         local ealen_minus_psidlen=$((EALEN - PSIDLEN))
-        if ! expr "$ealen_minus_psidlen" + 0 > /dev/null 2>&1; then
-             log_msg E "mape_mold: Failed calculation for IP4PREFIXLEN (EALEN-PSIDLEN = '$ealen_minus_psidlen' is not a number)."
-             return 1
-        fi
-        IP4PREFIXLEN=$((32 - ealen_minus_psidlen))
-        # Validate IP4PREFIXLEN calculation
-        if ! expr "$IP4PREFIXLEN" + 0 > /dev/null 2>&1; then
-             log_msg E "mape_mold: Failed calculation for IP4PREFIXLEN (result '$IP4PREFIXLEN' is not a number)."
-             return 1
-        fi
-        log_msg D "mape_mold: Calculated UserIP4Len=$IP4PREFIXLEN for generic case (32 - (EALEN($EALEN) - PSIDLEN($PSIDLEN)))"
+        # Validate the intermediate calculation
+        case "$ealen_minus_psidlen" in
+            ''|*[!0-9-]*) # Allow negative sign for intermediate check
+                 log_msg E "mape_mold: Failed calculation for ealen_minus_psidlen (EALEN-PSIDLEN = '$ealen_minus_psidlen' is not a number)."
+                 return 1
+                 ;;
+            *) # It's a number (potentially negative)
+                 log_msg D "mape_mold: Calculated ealen_minus_psidlen = $ealen_minus_psidlen"
+                 ;;
+        esac
 
-        # Validate UserIP4Len logic
-        if [ "$IP4PREFIXLEN" -lt 0 ] || [ "$IP4PREFIXLEN" -gt 32 ]; then
-            log_msg E "mape_mold: Invalid calculated UserIP4Len ($IP4PREFIXLEN) for generic rule $RULE_NAME."
-            return 1
-        fi
+        # <<< MODIFIED: Removed original IP4PREFIXLEN calculation and validation >>>
+
+        # <<< MODIFIED: Set IP4PREFIXLEN to 32 for generic case (for display/config consistency) >>>
+        IP4PREFIXLEN=32
+        log_msg D "mape_mold: Setting User IP4PREFIXLEN to $IP4PREFIXLEN for display/config purposes (generic case)."
+
+        # Use ealen_minus_psidlen directly for IPv4 calculation logic
+        local user_ipv4_part_len=$ealen_minus_psidlen
+        log_msg D "mape_mold: Using user_ipv4_part_len (EALEN - PSIDLEN) = $user_ipv4_part_len for address calculation"
 
         # Perform Generic IPv4 Calculation
         log_msg D "mape_mold: Normalizing BR '$BR'"
@@ -1139,17 +1144,13 @@ mape_mold() {
             log_msg E "mape_mold: Failed to extract shared IPv4 part from BR (extract_ipv6_bits returned error)."
             return 1
         fi
-        # Check numeric (should be guaranteed by extract_ipv6_bits)
-         if ! expr "$shared_ipv4_part_dec" + 0 > /dev/null 2>&1; then
-              log_msg E "mape_mold: Extracted shared_ipv4_part_dec ('$shared_ipv4_part_dec') is unexpectedly non-numeric."
-              return 1
-         fi
+        case "$shared_ipv4_part_dec" in ''|*[!0-9]*) log_msg E "Extracted shared_ipv4_part_dec ('$shared_ipv4_part_dec') invalid"; return 1;; *) : ;; esac
         log_msg D "mape_mold: Generic - Extracted shared IPv4 part from BR: $shared_ipv4_part_dec"
 
         # Extract user_ipv4_suffix part from User IPv6
-        # user_ipv4_part_len (ealen_minus_psidlen) validated numeric
-        local user_ipv4_part_len=$ealen_minus_psidlen
+        # user_ipv4_part_len comes from ealen_minus_psidlen (validated numeric-like)
         local user_ipv4_part_dec=0
+        # <<< MODIFIED: Check if user_ipv4_part_len is positive before extracting >>>
         if [ "$user_ipv4_part_len" -gt 0 ]; then
              # IP6PREFIXLEN validated numeric
              log_msg D "mape_mold: Extracting user IPv4 part from User IPv6: start_bit=$IP6PREFIXLEN, length=$user_ipv4_part_len"
@@ -1158,24 +1159,22 @@ mape_mold() {
                  log_msg E "mape_mold: Failed to extract user IPv4 part from User IPv6 (extract_ipv6_bits returned error)."
                  return 1
              fi
-             # Check numeric (should be guaranteed by extract_ipv6_bits)
-              if ! expr "$user_ipv4_part_dec" + 0 > /dev/null 2>&1; then
-                   log_msg E "mape_mold: Extracted user_ipv4_part_dec ('$user_ipv4_part_dec') is unexpectedly non-numeric."
-                   return 1
-              fi
+             case "$user_ipv4_part_dec" in ''|*[!0-9]*) log_msg E "Extracted user_ipv4_part_dec ('$user_ipv4_part_dec') invalid"; return 1;; *) : ;; esac
              log_msg D "mape_mold: Generic - Extracted user IPv4 part from User IPv6: $user_ipv4_part_dec (length $user_ipv4_part_len)"
-        else
-             log_msg D "mape_mold: Generic - User IPv4 part length is 0 or less, skipping extraction."
+        # <<< MODIFIED: Handle non-positive length case >>>
+        elif [ "$user_ipv4_part_len" -eq 0 ]; then
+             log_msg D "mape_mold: Generic - User IPv4 part length is 0, skipping extraction."
              user_ipv4_part_dec=0
+        else # user_ipv4_part_len < 0
+             log_msg E "mape_mold: Calculated user_ipv4_part_len ($user_ipv4_part_len) is negative. Cannot proceed with IPv4 calculation."
+             return 1
         fi
 
         # Combine the parts using bit shifts and OR
         # shift1 = 32 - rule_ip4prefixlen (rule_ip4prefixlen validated numeric)
         local shift1=$((32 - rule_ip4prefixlen))
-        if ! expr "$shift1" + 0 > /dev/null 2>&1; then
-             log_msg E "mape_mold: Failed calculation for shift1 (32 - rule_ip4prefixlen = '$shift1' is not a number)."
-             return 1
-        fi
+        case "$shift1" in ''|*[!0-9-]*) log_msg E "Shift1 calc invalid ('$shift1')"; return 1;; *) : ;; esac
+
         # shift2 = PSIDLEN (validated numeric)
         local shift2=$PSIDLEN
 
@@ -1184,13 +1183,10 @@ mape_mold() {
         local part3=$PSID # Validated numeric
 
         log_msg D "mape_mold: Calculating part1_shifted = shared_ipv4_part_dec($shared_ipv4_part_dec) << shift1($shift1)"
-        if [ "$shift1" -ge 0 ] && [ "$shift1" -lt 64 ]; then # Allow shifts up to 63 for 64-bit systems
-             # shared_ipv4_part_dec is validated numeric
+        # Validate shift1 range before shifting
+        if [ "$shift1" -ge 0 ] && [ "$shift1" -lt 64 ]; then # Assuming 64-bit capable shell for safety
              part1_shifted=$((shared_ipv4_part_dec << shift1))
-             if ! expr "$part1_shifted" + 0 > /dev/null 2>&1; then
-                  log_msg E "mape_mold: part1_shifted ('$part1_shifted') became non-numeric after shift."
-                  return 1
-             fi
+             case "$part1_shifted" in ''|*[!0-9]*) log_msg E "mape_mold: part1_shifted ('$part1_shifted') became non-numeric after shift."; return 1;; *) : ;; esac
         elif [ "$shift1" -ge 64 ]; then
              log_msg W "mape_mold: shift1 ($shift1) is >= 64, part1_shifted will be 0."
              part1_shifted=0
@@ -1201,13 +1197,10 @@ mape_mold() {
         log_msg D "mape_mold: part1_shifted = $part1_shifted"
 
         log_msg D "mape_mold: Calculating part2_shifted = user_ipv4_part_dec($user_ipv4_part_dec) << shift2($shift2)"
-        if [ "$shift2" -ge 0 ] && [ "$shift2" -lt 64 ]; then # Allow shifts up to 63
-             # user_ipv4_part_dec is validated numeric
+        # Validate shift2 range before shifting
+        if [ "$shift2" -ge 0 ] && [ "$shift2" -lt 64 ]; then # Assuming 64-bit capable shell
              part2_shifted=$((user_ipv4_part_dec << shift2))
-              if ! expr "$part2_shifted" + 0 > /dev/null 2>&1; then
-                   log_msg E "mape_mold: part2_shifted ('$part2_shifted') became non-numeric after shift."
-                   return 1
-              fi
+             case "$part2_shifted" in ''|*[!0-9]*) log_msg E "mape_mold: part2_shifted ('$part2_shifted') became non-numeric after shift."; return 1;; *) : ;; esac
         elif [ "$shift2" -ge 64 ]; then
              log_msg W "mape_mold: shift2 ($shift2) is >= 64, part2_shifted will be 0."
              part2_shifted=0
@@ -1218,18 +1211,22 @@ mape_mold() {
         log_msg D "mape_mold: part2_shifted = $part2_shifted"
         log_msg D "mape_mold: part3 (PSID) = $part3"
 
-        # Perform the final OR operation (Error occurred here - line 633 in original)
+        # Perform the final OR operation
         log_msg D "mape_mold: Combining parts: user_ipv4_full_dec = part1_shifted($part1_shifted) | part2_shifted($part2_shifted) | part3($part3)"
         # Ensure all parts are numbers before the OR operation (already validated individually above)
         local user_ipv4_full_dec=$((part1_shifted | part2_shifted | part3))
         # Validate the final result
-         if ! expr "$user_ipv4_full_dec" + 0 > /dev/null 2>&1; then
-              log_msg E "mape_mold: Final combined IPv4 decimal value '$user_ipv4_full_dec' is not a number."
-              return 1
-         fi
+        case "$user_ipv4_full_dec" in
+             ''|*[!0-9]*)
+                  log_msg E "mape_mold: Final combined IPv4 decimal value '$user_ipv4_full_dec' is not a number."
+                  return 1
+                  ;;
+             *) ;;
+        esac
         log_msg D "mape_mold: Generic - Combined IPv4 decimal value: $user_ipv4_full_dec"
 
         IPV4=$(dec_to_ipv4 "$user_ipv4_full_dec")
+        # Use the IP4PREFIXLEN set earlier (e.g., 32) for the log message
         log_msg I "mape_mold: Calculated User IPv4: $IPV4/$IP4PREFIXLEN (generic calculation)"
     fi
 
@@ -1249,10 +1246,7 @@ mape_mold() {
         if [ "$port_shift_right_amount" -lt 0 ]; then port_shift_right_amount=0; fi
         log_msg D "mape_mold: Calculating psid_shifted_right = PSID('$PSID') >> port_shift_right_amount('$port_shift_right_amount')"
         local psid_shifted_right=$((PSID >> port_shift_right_amount))
-         if ! expr "$psid_shifted_right" + 0 > /dev/null 2>&1; then
-              log_msg E "mape_mold: psid_shifted_right ('$psid_shifted_right') became non-numeric after shift."
-              return 1
-         fi
+        case "$psid_shifted_right" in ''|*[!0-9]*) log_msg E "psid_shifted_right invalid"; return 1;; *) ;; esac
         log_msg D "mape_mold: psid_shifted_right = '$psid_shifted_right'"
 
         local port_shift_left_amount=$((16 - OFFSET))
@@ -1260,64 +1254,95 @@ mape_mold() {
         log_msg D "mape_mold: port_shift_left_amount (16 - Offset) = '$port_shift_left_amount'"
         local port_multiplier=1
         if [ "$port_shift_left_amount" -gt 0 ]; then
+             # Validate shift amount before calculating multiplier
+             if [ "$port_shift_left_amount" -ge 64 ]; then
+                 log_msg E "mape_mold: port_shift_left_amount ($port_shift_left_amount) too large for multiplier calculation."
+                 return 1
+             fi
              log_msg D "mape_mold: Calculating port_multiplier = 1 << port_shift_left_amount('$port_shift_left_amount')"
              port_multiplier=$((1 << port_shift_left_amount))
-             if ! expr "$port_multiplier" + 0 > /dev/null 2>&1; then
-                  log_msg E "mape_mold: port_multiplier ('$port_multiplier') became non-numeric after shift."
-                  return 1
-             fi
+             case "$port_multiplier" in ''|*[!0-9]*) log_msg E "port_multiplier invalid"; return 1;; *) ;; esac
         fi
         log_msg D "mape_mold: port_multiplier = '$port_multiplier'"
 
-        # Calculate initial range using expr
+        # Calculate initial range using expr for potentially larger intermediate values
         log_msg D "mape_mold: Calculating port_start using expr: psid_shifted_right('$psid_shifted_right') * port_multiplier('$port_multiplier')"
+        # Ensure operands are numbers before calling expr
+        case "$psid_shifted_right$port_multiplier" in *[!0-9]*) log_msg E "Invalid operands for expr multiplication"; return 1;; *) ;; esac
         port_start=$(expr "$psid_shifted_right" \* "$port_multiplier" 2>/dev/null) # Use \* to escape *
-        if [ $? -ne 0 ] || ! expr "$port_start" + 0 > /dev/null 2>&1; then
-             log_msg E "mape_mold: Port start calculation using expr failed or resulted in non-numeric value. start='$port_start'"
+        # Validate expr result and check if numeric
+        if [ $? -ne 0 ]; then
+             log_msg E "mape_mold: Port start calculation using expr failed. cmd='expr $psid_shifted_right \* $port_multiplier'"
              return 1
         fi
+        case "$port_start" in ''|*[!0-9]*) log_msg E "Port start from expr ('$port_start') is not numeric."; return 1;; *) ;; esac
         log_msg D "mape_mold: Calculated port_start = '$port_start'"
 
         log_msg D "mape_mold: Calculating port_end using expr: port_start('$port_start') + port_multiplier('$port_multiplier') - 1"
+        # Ensure operands are numbers
+        case "$port_start$port_multiplier" in *[!0-9]*) log_msg E "Invalid operands for expr addition"; return 1;; *) ;; esac
         local port_end_tmp1=$(expr "$port_start" + "$port_multiplier" 2>/dev/null)
-        if [ $? -ne 0 ] || ! expr "$port_end_tmp1" + 0 > /dev/null 2>&1; then
-             log_msg E "mape_mold: Port end calculation using expr failed at step 1 (start + multiplier). tmp1='$port_end_tmp1'"
+        if [ $? -ne 0 ]; then
+             log_msg E "mape_mold: Port end calculation using expr failed at step 1 (start + multiplier). cmd='expr $port_start + $port_multiplier'"
              return 1
         fi
+        case "$port_end_tmp1" in ''|*[!0-9]*) log_msg E "Port end step 1 from expr ('$port_end_tmp1') is not numeric."; return 1;; *) ;; esac
+
         port_end=$(expr "$port_end_tmp1" - 1 2>/dev/null)
-        if [ $? -ne 0 ] || ! expr "$port_end" + 0 > /dev/null 2>&1; then
-             # Log error but continue to final clamping/check, reset port_end
-             log_msg E "mape_mold: Port end calculation using expr failed at step 2 (tmp1 - 1) or resulted in non-numeric value. end='$port_end'"
-             port_end="" # Reset to ensure checks below handle it
-             # return 1 # Optionally return immediately
+        if [ $? -ne 0 ]; then
+             log_msg E "mape_mold: Port end calculation using expr failed at step 2 (tmp1 - 1). cmd='expr $port_end_tmp1 - 1'"
+             # Reset port_end to ensure checks below handle it
+             port_end=""
+             # Optionally return immediately: return 1
         fi
+        # Validate final port_end
+        case "$port_end" in
+            ''|*[!0-9]*)
+                 log_msg E "mape_mold: Final port end from expr ('$port_end') is not numeric."
+                 port_end="" # Reset if invalid
+                 ;;
+            *) ;;
+        esac
         log_msg D "mape_mold: Calculated port_end = '$port_end'"
-        # The original 'if ! expr "$port_end" + 0' check is implicitly covered by the checks above now.
-        # If expr failed, port_end might be empty or non-numeric here.
         log_msg D "mape_mold: Initial calculated port range (using expr): $port_start-$port_end"
 
         # Clamp port range
         log_msg D "mape_mold: Clamping port range: start='$port_start', end='$port_end'"
         # Ensure port_start and port_end are valid numbers before clamping comparison
-        if expr "$port_start" + 0 > /dev/null 2>&1 && [ "$port_start" -lt 1024 ]; then port_start=1024; log_msg D "mape_mold: Clamped port_start to 1024"; fi
-        if expr "$port_end" + 0 > /dev/null 2>&1 && [ "$port_end" -gt 65535 ]; then port_end=65535; log_msg D "mape_mold: Clamped port_end to 65535"; fi
+        case "$port_start" in *[!0-9]*) ;; *) if [ "$port_start" -lt 1024 ]; then port_start=1024; log_msg D "mape_mold: Clamped port_start to 1024"; fi ;; esac
+        case "$port_end" in *[!0-9]*) ;; *) if [ "$port_end" -gt 65535 ]; then port_end=65535; log_msg D "mape_mold: Clamped port_end to 65535"; fi ;; esac
         log_msg D "mape_mold: Clamped port range result: start='$port_start', end='$port_end'"
 
         # Final check for validity (ensure both are numbers before comparing)
-        if ! expr "$port_start" + 0 > /dev/null 2>&1 || ! expr "$port_end" + 0 > /dev/null 2>&1 || [ "$port_start" -gt "$port_end" ]; then
-             log_msg E "mape_mold: Invalid port range after clamping (start '$port_start' > end '$port_end' or non-numeric). Setting empty."
-             port_start=0; port_end=0; PORTS=""
+        local port_range_valid=0
+        case "$port_start$port_end" in
+             *[!0-9]*) # If either contains non-digits, it's invalid
+                  log_msg E "mape_mold: Port range invalid due to non-numeric start ('$port_start') or end ('$port_end')."
+                  ;;
+             *) # Both are potentially numbers, compare them
+                  if [ "$port_start" -gt "$port_end" ]; then
+                       log_msg E "mape_mold: Invalid port range after clamping (start '$port_start' > end '$port_end')."
+                  else
+                       port_range_valid=1
+                  fi
+                  ;;
+        esac
+        if [ "$port_range_valid" -eq 0 ]; then
+             port_start=0; port_end=0; PORTS="" # Reset if invalid
         fi
     fi
 
-    # Final assignment to PORTS (ensure start/end are valid numbers)
-    if expr "$port_start" + 0 > /dev/null 2>&1 && expr "$port_end" + 0 > /dev/null 2>&1 && [ "$port_start" -le "$port_end" ] && [ "$port_end" -gt 0 ]; then
-         PORTS="${port_start}-${port_end}"
-    else
-         PORTS=""
-         log_msg W "mape_mold: Resulting port range is invalid or empty after all checks."
-         # return 1 # Option: uncomment if empty ports are fatal
-    fi
+    # Final assignment to PORTS (ensure start/end are valid numbers and range is correct)
+    case "$port_start$port_end" in
+         *[!0-9]*) PORTS=""; log_msg W "Resulting PORTS invalid (non-numeric)." ;;
+         *) if [ "$port_start" -le "$port_end" ] && [ "$port_end" -gt 0 ]; then
+                 PORTS="${port_start}-${port_end}"
+            else
+                 PORTS=""
+                 log_msg W "mape_mold: Resulting port range is invalid or empty after all checks."
+            fi
+            ;;
+    esac
     log_msg I "mape_mold: Calculated Port Range: $PORTS"
 
     # --- 8. Calculate CE Address ---
@@ -1330,7 +1355,6 @@ mape_mold() {
         # IP6PREFIXLEN is validated numeric
         log_msg D "mape_mold: Applying mask $IP6PREFIXLEN to user_ip6_dec '$user_ip6_dec'"
         local net_dec=$(apply_ipv6_mask "$user_ip6_dec" "$IP6PREFIXLEN")
-        # Assume apply_ipv6_mask returns valid space-separated numbers or empty on error
         if [ $? -ne 0 ] || [ -z "$net_dec" ]; then log_msg E "mape_mold: Failed to apply mask for CE Address."; return 1; fi
         log_msg D "mape_mold: CE Addr - Network part (dec): '$net_dec'"
 
@@ -1339,7 +1363,6 @@ mape_mold() {
              # PSID, IP6PREFIXLEN, PSIDLEN are validated numeric
              log_msg D "mape_mold: Shifting PSID($PSID) to position: start_bit=$IP6PREFIXLEN, length=$PSIDLEN"
              psid_shifted_dec=$(shift_value_to_ipv6_position "$PSID" "$IP6PREFIXLEN" "$PSIDLEN")
-             # Assume shift_value_to_ipv6_position returns valid space-separated numbers or empty on error
              if [ $? -ne 0 ] || [ -z "$psid_shifted_dec" ]; then log_msg E "mape_mold: Failed to shift PSID for CE Address."; return 1; fi
         fi
         log_msg D "mape_mold: CE Addr - Shifted PSID part (dec): '$psid_shifted_dec'"
@@ -1348,13 +1371,11 @@ mape_mold() {
 
         log_msg D "mape_mold: ORing Network part and Shifted PSID part"
         local ce_base_dec=$(bitwise_or_ipv6 "$net_dec" "$psid_shifted_dec")
-        # Assume bitwise_or_ipv6 returns valid space-separated numbers or empty on error
         if [ $? -ne 0 ] || [ -z "$ce_base_dec" ]; then log_msg E "mape_mold: Failed to OR Network and PSID for CE Address."; return 1; fi
         log_msg D "mape_mold: CE Addr - Base after OR (dec): '$ce_base_dec'"
 
         log_msg D "mape_mold: ORing Base part and Suffix ::1"
         local ce_final_dec=$(bitwise_or_ipv6 "$ce_base_dec" "$suffix_1_dec")
-         # Assume bitwise_or_ipv6 returns valid space-separated numbers or empty on error
          if [ $? -ne 0 ] || [ -z "$ce_final_dec" ]; then log_msg E "mape_mold: Failed to OR Suffix ::1 for CE Address."; return 1; fi
         log_msg D "mape_mold: CE Addr - Final segments with ::1 (dec): '$ce_final_dec'"
 
@@ -1368,11 +1389,12 @@ mape_mold() {
     local final_check_ok=1
     if [ -z "$RULE_NAME" ]; then log_msg E "Final Check Fail: RULE_NAME is empty"; final_check_ok=0; fi
     if [ -z "$IPV4" ]; then log_msg E "Final Check Fail: IPV4 is empty"; final_check_ok=0; fi
-    # IP4PREFIXLEN should have been validated numeric during calculation if generic
-    if [ -z "$IP4PREFIXLEN" ] || ! expr "$IP4PREFIXLEN" + 0 > /dev/null 2>&1; then log_msg E "Final Check Fail: IP4PREFIXLEN ('$IP4PREFIXLEN') is invalid"; final_check_ok=0; fi
+    # IP4PREFIXLEN should be 32 now and numeric
+    case "$IP4PREFIXLEN" in ''|*[!0-9]*) log_msg E "Final Check Fail: IP4PREFIXLEN ('$IP4PREFIXLEN') is invalid"; final_check_ok=0;; *) ;; esac
     if [ -z "$CE_ADDR" ]; then log_msg E "Final Check Fail: CE_ADDR is empty"; final_check_ok=0; fi
     if [ -z "$BR" ]; then log_msg E "Final Check Fail: BR is empty"; final_check_ok=0; fi
-    if [ -z "$PORTS" ]; then log_msg E "Final Check Fail: PORTS is empty"; final_check_ok=0; fi
+    # Check PORTS is not empty (it might be validly empty for some rules/configs?)
+    if [ -z "$PORTS" ]; then log_msg W "Final Check Warning: PORTS is empty"; fi # Changed to Warning
 
     if [ "$final_check_ok" -eq 1 ]; then
         MAPE_STATUS="success"
