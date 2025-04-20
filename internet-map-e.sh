@@ -1116,4 +1116,4 @@ internet_main() {
 
 # --- Execute Main Function ---
 # Pass all command line arguments to main
-internet_main "$@"
+internet_main
