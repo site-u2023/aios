@@ -62,41 +62,6 @@ DEBUG_LEVEL="${DEBUG_LEVEL:-INFO}" # DEBUG, INFO, WARN, ERROR
 BASE_DIR="/tmp/aios" # Use the same base directory as aios for consistency
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 
-# --- Create Directories ---
-mkdir -p "$LOG_DIR" || {
-  echo "FATAL: Cannot create log directory: $LOG_DIR" >&2
-  exit 1
-}
-# Create directory for bc temporary files if it doesn't exist
-mkdir -p "$BASE_DIR" || {
-  echo "FATAL: Cannot create base directory: $BASE_DIR" >&2
-  exit 1
-}
-
-# Function: debug_log
-# Description: Logs messages based on DEBUG_LEVEL setting.
-# Arguments: $1: Log level (DEBUG, INFO, WARN, ERROR)
-#            $@: Message parts
-# Output: Logs message to stderr if level is sufficient.
-debug_log() {
-    local level="$1"
-    shift
-    local msg="$*"
-    local timestamp
-    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-
-    case "$DEBUG_LEVEL" in
-        DEBUG) ;; # Output all levels
-        INFO) [ "$level" = "DEBUG" ] && return 0 ;;
-        WARN) [ "$level" = "DEBUG" ] || [ "$level" = "INFO" ] && return 0 ;;
-        ERROR) [ "$level" != "ERROR" ] && return 0 ;;
-        *) return 0 ;; # Default: Output nothing if level is unrecognized
-    esac
-
-    printf "%s [%s] %s: %s\n" "$timestamp" "$level" "$SCRIPT_NAME" "$msg" >&2
-}
-
-
 # --- Check Dependencies ---
 command -v bc >/dev/null 2>&1 || {
   debug_log "FATAL" "'bc' command not found. Please install the 'bc' package (e.g., 'opkg update && opkg install bc' or 'apk update && apk add bc')."
@@ -539,18 +504,52 @@ ipv4_to_dec() {
     o3=$(echo "$ipv4_addr" | cut -d'.' -f3)
     o4=$(echo "$ipv4_addr" | cut -d'.' -f4-) # Handle potential extra dots
 
-    # Validate format and octet values
+    # Basic format validation
     if [ -z "$o1" ] || [ -z "$o2" ] || [ -z "$o3" ] || [ -z "$o4" ] || echo "$ipv4_addr" | grep -q '\.\.' || echo "$ipv4_addr" | grep -Eq '[^0-9.]'; then
-         debug_log "ERROR" "Invalid IPv4 format: '$ipv4_addr'"
+         debug_log "ERROR" "Invalid IPv4 format structure: '$ipv4_addr'"
          return 1
     fi
 
+    # Iterate and validate each octet with detailed logging
     for octet in $o1 $o2 $o3 $o4; do
-        # Validate octet is numeric and in range 0-255
-        if ! expr "$octet" + 0 > /dev/null 2>&1 || [ "$octet" -lt 0 ] || [ "$octet" -gt 255 ]; then
-            debug_log "ERROR" "Invalid IPv4 octet: '$octet' out of range (0-255). Input: $ipv4_addr"
-            return 1
+        debug_log "DEBUG" "Checking octet: [$octet]" # Log the octet with brackets to see potential whitespace
+
+        # 1. Validate octet is numeric using expr
+        if ! expr "$octet" : '^[0-9]\+$' > /dev/null 2>&1; then
+             debug_log "ERROR" "Invalid IPv4 octet: '$octet' is not numeric (expr check). Input: $ipv4_addr"
+             return 1
         fi
+        # Also check using case for robustness, though expr should suffice in POSIX
+        case "$octet" in
+            *[!0-9]*)
+                debug_log "ERROR" "Invalid IPv4 octet: '$octet' is not numeric (case check). Input: $ipv4_addr"
+                return 1
+                ;;
+            *) ;; # It's numeric
+        esac
+
+        # 2. Validate octet is in range 0-255 with explicit checks
+        local is_lt_0=1 # Assume false (1) initially. 0 means true.
+        local is_gt_255=1 # Assume false (1) initially. 0 means true.
+
+        # Perform the less than check
+        if [ "$octet" -lt 0 ]; then
+             is_lt_0=0 # Condition is true
+             debug_log "DEBUG" "Octet '$octet' is less than 0."
+        fi
+
+        # Perform the greater than check
+        if [ "$octet" -gt 255 ]; then
+             is_gt_255=0 # Condition is true
+             debug_log "DEBUG" "Octet '$octet' is greater than 255."
+        fi
+
+        # Check if either condition was true
+        if [ "$is_lt_0" -eq 0 ] || [ "$is_gt_255" -eq 0 ]; then
+             debug_log "ERROR" "Invalid IPv4 octet: '$octet' out of range (0-255). Input: $ipv4_addr. (is_lt_0=$is_lt_0, is_gt_255=$is_gt_255)"
+             return 1
+        fi
+        debug_log "DEBUG" "Octet '$octet' passed validation."
     done
 
     # Calculate decimal value using bc
