@@ -66,6 +66,7 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 # Load OpenWrt function libraries required by this script
 . /lib/functions.sh # Load if specific functions like 'logger' are needed later
 . /lib/functions/network.sh # Load if network functions are needed later
+# . /lib/netifd/netifd-proto.sh # Keep commented unless explicitly needed
 
 # --- Create Directories ---
 mkdir -p "$LOG_DIR" || {
