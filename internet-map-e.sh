@@ -1461,5 +1461,3 @@ internet_main() {
     exit 0
 }
 
-# Call main function with script arguments
-internet_main "$@"
