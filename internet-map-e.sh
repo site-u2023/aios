@@ -518,15 +518,23 @@ extract_ipv6_bits() {
 
     log_msg D "extract_ipv6_bits: Called with start_bit=$start_bit, length=$length, dec_segments='$dec_segments'"
 
+    # --- Check for bc availability ---
+    if ! command -v bc > /dev/null 2>&1; then
+        log_msg E "extract_ipv6_bits: 'bc' command not found. This function requires 'bc' for large number calculations."
+        log_msg E "Please install 'bc' package: opkg update && opkg install bc"
+        echo ""
+        return 1
+    fi
+
     if [ "$start_bit" -lt 0 ] || [ "$length" -le 0 ] || [ "$end_bit" -gt 128 ]; then
         log_msg E "extract_ipv6_bits: Invalid bit range (start=$start_bit, length=$length, end=$end_bit > 128)"
-        echo "" # Return empty string on error
+        echo ""
         return 1
     fi
 
     local use_multiplication_combine=1
     if [ "$length" -gt 32 ]; then
-        log_msg D "extract_ipv6_bits: Extracting more than 32 bits ($length). Using multiplication combine method."
+        log_msg D "extract_ipv6_bits: Extracting more than 32 bits ($length). Using multiplication combine method with bc."
     fi
 
     local start_seg_idx=$((start_bit / bits_in_segment))
@@ -542,8 +550,6 @@ extract_ipv6_bits() {
         # Trim leading/trailing whitespace (POSIX compliant)
         local segment_val=$(echo "$segment_val_raw" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
         log_msg D "extract_ipv6_bits: Loop i=$i, segment_val_raw='$segment_val_raw', segment_val_trimmed='$segment_val'"
-
-        # Validate segment value (POSIX compliant case statement)
         case "$segment_val" in
             ''|*[!0-9]*) # Check if empty or contains non-digit characters
                 log_msg E "extract_ipv6_bits: Error accessing or invalid segment value at index $((i + 1)). Segment: '$segment_val'"
@@ -570,6 +576,7 @@ extract_ipv6_bits() {
              return 1
         fi
 
+        # Using standard shell shift which is safe for segment-level numbers
         local extracted_part=$((segment_val >> shift_right))
         # Validate after shift
         case "$extracted_part" in
@@ -586,23 +593,21 @@ extract_ipv6_bits() {
         local mask_calc_base=1
         local mask_shift=$bits_to_extract_from_seg
         if [ "$mask_shift" -lt 0 ]; then mask_shift=0; fi
-
-        # Calculate mask (handle potentially large shifts carefully)
-        if [ "$mask_shift" -ge 31 ]; then
-             if [ "$bits_to_extract_from_seg" -ge 16 ]; then
-                  mask=65535
-             else
+        # Calculate mask (handle potentially large shifts carefully within shell limits)
+        if [ "$mask_shift" -ge 31 ]; then # Check against 31 for standard shell shift safety
+             if [ "$bits_to_extract_from_seg" -ge 16 ]; then mask=65535; else
                   # Loop calculation for robustness if large shifts are problematic
-                  mask=0
-                  local k=0
+                  mask=0; local k=0
                   while [ $k -lt "$bits_to_extract_from_seg" ]; do
+                      # Use standard shell ops which are safe for mask calculation range
                       mask=$(( (mask << 1) | 1 ))
-                      case "$mask" in ''|*[!0-9]*) log_msg E "Mask calc loop error at k=$k, mask='$mask'"; echo ""; return 1;; *) : ;; esac
+                      case "$mask" in ''|*[!0-9]*) log_msg E "Mask calc loop error k=$k, mask='$mask'"; echo ""; return 1;; *) : ;; esac
                       k=$((k + 1))
                   done
              fi
              log_msg D "extract_ipv6_bits: Calculated large mask for $bits_to_extract_from_seg bits: '$mask'"
         elif [ "$mask_shift" -gt 0 ]; then
+             # Standard shell shift is safe here
              mask=$(( (mask_calc_base << mask_shift) - 1 ))
         else
              mask=0
@@ -617,7 +622,7 @@ extract_ipv6_bits() {
              *) log_msg D "extract_ipv6_bits: Loop i=$i, mask=$mask" ;;
         esac
 
-        # Apply mask
+        # Apply mask using standard shell bitwise AND
         extracted_part=$((extracted_part & mask))
         # Validate after mask
         case "$extracted_part" in
@@ -629,63 +634,82 @@ extract_ipv6_bits() {
             *) log_msg D "extract_ipv6_bits: Loop i=$i, final_extracted_part=$extracted_part" ;;
         esac
 
-        # --- Combine Extracted Part with Value ---
+        # --- Combine Extracted Part with Value using bc ---
         if [ "$use_multiplication_combine" -eq 1 ]; then
-            # Calculate multiplier = 2 ^ bits_to_extract_from_seg
-            local multiplier=1
-            local j=0
-            while [ $j -lt $bits_to_extract_from_seg ]; do
-                multiplier=$((multiplier * 2))
-                 # Validate multiplier inside loop
-                 case "$multiplier" in
-                      ''|*[!0-9]*)
-                           log_msg E "extract_ipv6_bits: Multiplier ('$multiplier') overflow or non-numeric at j=$j (bits=$bits_to_extract_from_seg)."
-                           echo ""
-                           return 1
-                           ;;
-                      *) : ;;
-                 esac
-                j=$((j + 1))
-            done
-            log_msg D "extract_ipv6_bits: Loop i=$i, combine_multiplier='$multiplier'"
+            # Calculate multiplier = 2 ^ bits_to_extract_from_seg using bc
+            local multiplier
+            # Validate bits_to_extract_from_seg before using in bc expression
+            case "$bits_to_extract_from_seg" in
+                ''|*[!0-9]*)
+                     log_msg E "extract_ipv6_bits: Invalid bits_to_extract_from_seg ('$bits_to_extract_from_seg') for multiplier calculation."
+                     echo ""
+                     return 1
+                     ;;
+                *) ;;
+            esac
+            # Ensure non-negative exponent for bc
+            local exponent=$bits_to_extract_from_seg
+            if [ "$exponent" -lt 0 ]; then exponent=0; fi
 
-            # Pre-combination validation
+            multiplier=$(echo "2^$exponent" | bc)
+
+            # Validate multiplier from bc
+            case "$multiplier" in
+                ''|*[!0-9.]*) # Allow decimal point in bc output, though not expected here
+                     log_msg E "extract_ipv6_bits: Multiplier from bc ('$multiplier') is invalid or bc failed. Expression: '2^$exponent'"
+                     echo ""
+                     return 1
+                     ;;
+                *) ;;
+            esac
+            log_msg D "extract_ipv6_bits: Loop i=$i, combine_multiplier='$multiplier' (from bc)"
+
+            # Pre-combination validation (ensure operands are numeric strings for bc)
             local valid_combine="yes"
-            case "$value" in ''|*[!0-9]*) log_msg E "Value '$value' is non-numeric before combine."; valid_combine="no";; *) : ;; esac
-            case "$extracted_part" in ''|*[!0-9]*) log_msg E "Extracted part '$extracted_part' is non-numeric before combine."; valid_combine="no";; *) : ;; esac
-            case "$multiplier" in ''|*[!0-9]*) log_msg E "Multiplier '$multiplier' is non-numeric before combine."; valid_combine="no";; *) : ;; esac
+            case "$value" in ''|*[!0-9.]*) log_msg E "Value '$value' non-numeric before bc"; valid_combine="no";; *) : ;; esac
+            case "$extracted_part" in ''|*[!0-9.]*) log_msg E "Extracted part '$extracted_part' non-numeric before bc"; valid_combine="no";; *) : ;; esac
+            case "$multiplier" in ''|*[!0-9.]*) log_msg E "Multiplier '$multiplier' non-numeric before bc"; valid_combine="no";; *) : ;; esac
 
             if [ "$valid_combine" = "no" ]; then
-                log_msg E "extract_ipv6_bits: Pre-combination validation failed."
+                log_msg E "extract_ipv6_bits: Pre-bc validation failed."
                 echo ""
                 return 1
             fi
 
-            # Log values right before the calculation that caused the error
-            log_msg D "extract_ipv6_bits: Combining: value='$value', multiplier='$multiplier', extracted_part='$extracted_part'"
-            local value_before_combine="$value" # Store value before calculation for potential error log
+            # Log values right before the calculation
+            log_msg D "extract_ipv6_bits: Combining using bc: value='$value', multiplier='$multiplier', extracted_part='$extracted_part'"
+            local value_before_combine="$value"
+            # Ensure bc sees integer values if they contain .0 (though unlikely here)
+            local bc_val=$(printf "%.0f" "$value_before_combine")
+            local bc_mult=$(printf "%.0f" "$multiplier")
+            local bc_part=$(printf "%.0f" "$extracted_part")
+            local bc_expression="${bc_val} * ${bc_mult} + ${bc_part}"
 
-            # Perform the combine operation
-            value=$(( (value * multiplier) + extracted_part ))
+            # Perform the combine operation using bc
+            value=$(echo "$bc_expression" | bc)
 
-            # Validate immediately after combine
+            # Validate the result from bc
             case "$value" in
-                ''|*[!0-9]*)
-                     log_msg E "extract_ipv6_bits: Value ('$value') became non-numeric immediately after combine operation."
-                     # Log the expression components that likely caused the failure
-                     log_msg E "extract_ipv6_bits: Failed expression components: value_before='$value_before_combine', multiplier='$multiplier', extracted_part='$extracted_part'"
+                ''|*[!0-9.]*) # Allow decimal point in bc output
+                     log_msg E "extract_ipv6_bits: Value from bc ('$value') is invalid or bc failed."
+                     log_msg E "extract_ipv6_bits: Failed bc expression: '$bc_expression'"
                      echo ""
                      return 1
                      ;;
-                 *) log_msg D "extract_ipv6_bits: Loop i=$i, intermediate_combined_value='$value'" ;;
+                 *) log_msg D "extract_ipv6_bits: Loop i=$i, intermediate_combined_value='$value' (from bc)" ;;
             esac
 
-        else # Shift combine method (less likely used)
+        else # Shift combine method (less likely used, might also need bc)
+             # Keep old method for now, add validation
              local shift_amount=$bits_to_extract_from_seg
              if [ "$shift_amount" -lt 0 ]; then shift_amount=0; fi
-             # Similar validation needed here if this path is taken
+             # Check if shell shift might overflow before attempting
+             # This check is heuristic and might not be perfect
+             if [ "$length" -gt 32 ]; then # If total length suggests potential overflow
+                  log_msg W "extract_ipv6_bits: Shift combine method used for potentially large value (length=$length). Consider using bc here too if issues arise."
+             fi
              value=$(( (value << shift_amount) | extracted_part ))
-             case "$value" in ''|*[!0-9]*) log_msg E "Value non-numeric after shift combine"; echo ""; return 1;; *) : ;; esac
+             case "$value" in ''|*[!0-9-]*) log_msg E "Value non-numeric after shift combine"; echo ""; return 1;; *) : ;; esac
              log_msg D "extract_ipv6_bits: Loop i=$i, intermediate_combined_value='$value' (shift method)"
         fi
 
@@ -698,14 +722,15 @@ extract_ipv6_bits() {
     # --- Final Validation and Return ---
     log_msg D "extract_ipv6_bits: Final calculated value before validation: '$value'"
     case "$value" in
-         ''|*[!0-9]*)
+         ''|*[!0-9.]*) # Allow decimal point from bc
             log_msg E "extract_ipv6_bits: Final calculated value '$value' is not a valid number."
             echo ""
             return 1
             ;;
          *)
             log_msg D "extract_ipv6_bits: Succeeded. Returning value: $value"
-            echo "$value"
+            # Ensure integer output using printf (POSIX compliant)
+            printf "%.0f\n" "$value"
             return 0
             ;;
     esac
