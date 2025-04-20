@@ -918,48 +918,66 @@ bitwise_or_ipv6() {
     local segments2="$2"
     local result_segments=""
     local i=1
-    # Use temporary arrays to avoid issues with modifying $@ directly if called nested
-    local arr1_tmp arr2_tmp
+    local seg1 seg2 or_result val1 val2
+    # Temporary strings to hold sanitized/padded segments
+    local s1_sanitized=""
+    local s2_sanitized=""
 
-    log_msg D "bitwise_or_ipv6: Called with segments1='$segments1', segments2='$segments2'" # Log inputs
+    log_msg D "bitwise_or_ipv6: Called with segments1='$segments1', segments2='$segments2'"
 
-    local old_ifs="$IFS"
-    IFS=' '
-    # Read segments into temporary arrays carefully, handle potential extra spaces
-    arr1_tmp=($segments1); log_msg D "bitwise_or_ipv6: Read arr1_tmp=(${arr1_tmp[*]}) count=${#arr1_tmp[@]}" # Log array content and count
-    arr2_tmp=($segments2); log_msg D "bitwise_or_ipv6: Read arr2_tmp=(${arr2_tmp[*]}) count=${#arr2_tmp[@]}" # Log array content and count
-    IFS="$old_ifs"
-
-    # Ensure arrays have exactly 8 elements, padding with 0 if needed
-    local arr1=() arr2=()
-    local j=0
-    while [ $j -lt 8 ]; do
-        local val1=${arr1_tmp[$j]:-0}
-        local val2=${arr2_tmp[$j]:-0}
-        # Validate and sanitize each element before adding to final arrays
-        case "$val1" in ''|*[!0-9]*) log_msg W "bitwise_or_ipv6: Sanitizing invalid element arr1_tmp[$j]='$val1' to 0"; val1=0;; *) ;; esac
-        case "$val2" in ''|*[!0-9]*) log_msg W "bitwise_or_ipv6: Sanitizing invalid element arr2_tmp[$j]='$val2' to 0"; val2=0;; *) ;; esac
-        arr1+=("$val1")
-        arr2+=("$val2")
+    # --- Sanitize and Pad Input Strings to 8 segments ---
+    local old_ifs="$IFS"; IFS=' '; set -- $segments1; IFS="$old_ifs"
+    local count1=$#
+    local j=1
+    while [ $j -le 8 ]; do
+        if [ $j -le $count1 ]; then
+            val1=$(eval echo "\$$j") # Get positional parameter
+            # Validate and sanitize
+            case "$val1" in ''|*[!0-9]*) log_msg W "bitwise_or_ipv6: Sanitizing invalid element \$${j} in segments1 ('$val1') to 0"; val1=0;; *) ;; esac
+        else
+            val1=0 # Pad with 0
+        fi
+        s1_sanitized="${s1_sanitized}${val1} "
         j=$((j + 1))
     done
-    log_msg D "bitwise_or_ipv6: Sanitized/Padded arr1=(${arr1[*]})" # Log final arrays
-    log_msg D "bitwise_or_ipv6: Sanitized/Padded arr2=(${arr2[*]})" # Log final arrays
+    s1_sanitized="${s1_sanitized% }" # Remove trailing space
+    log_msg D "bitwise_or_ipv6: Sanitized/Padded s1_sanitized='$s1_sanitized'"
 
-    # Loop through the 8 guaranteed elements
+    old_ifs="$IFS"; IFS=' '; set -- $segments2; IFS="$old_ifs"
+    local count2=$#
+    j=1
+    while [ $j -le 8 ]; do
+        if [ $j -le $count2 ]; then
+            val2=$(eval echo "\$$j") # Get positional parameter
+            # Validate and sanitize
+            case "$val2" in ''|*[!0-9]*) log_msg W "bitwise_or_ipv6: Sanitizing invalid element \$${j} in segments2 ('$val2') to 0"; val2=0;; *) ;; esac
+        else
+            val2=0 # Pad with 0
+        fi
+        s2_sanitized="${s2_sanitized}${val2} "
+        j=$((j + 1))
+    done
+    s2_sanitized="${s2_sanitized% }" # Remove trailing space
+    log_msg D "bitwise_or_ipv6: Sanitized/Padded s2_sanitized='$s2_sanitized'"
+
+    # --- Perform OR operation segment by segment using cut ---
     while [ $i -le 8 ]; do
-        local idx=$((i-1))
-        local seg1=${arr1[$idx]} # No need for :-0 here as array is guaranteed to have 8 numeric elements
-        local seg2=${arr2[$idx]}
+        # Extract segment using cut (1-based index)
+        seg1=$(echo "$s1_sanitized" | cut -d' ' -f$i)
+        seg2=$(echo "$s2_sanitized" | cut -d' ' -f$i)
 
-        log_msg D "bitwise_or_ipv6: Loop i=$i, idx=$idx, seg1='$seg1', seg2='$seg2'" # Log values before OR
+        # Redundant validation (should be numeric after sanitization, but for safety)
+        case "$seg1" in ''|*[!0-9]*) log_msg E "bitwise_or_ipv6: Invalid seg1 ('$seg1') obtained from cut at index $i."; echo ""; return 1;; *) ;; esac
+        case "$seg2" in ''|*[!0-9]*) log_msg E "bitwise_or_ipv6: Invalid seg2 ('$seg2') obtained from cut at index $i."; echo ""; return 1;; *) ;; esac
+
+        log_msg D "bitwise_or_ipv6: Loop i=$i, seg1='$seg1', seg2='$seg2'" # Log values before OR
 
         # Perform OR operation
-        local or_result=$((seg1 | seg2))
+        or_result=$((seg1 | seg2))
 
         # Validate the result of the OR operation
         case "$or_result" in
-            ''|*[!0-9]*) # Should not happen if seg1/seg2 are valid numbers, but check for safety
+            ''|*[!0-9]*) # Should not happen if seg1/seg2 are valid numbers
                  log_msg E "bitwise_or_ipv6: Non-numeric result ('$or_result') from OR operation ($seg1 | $seg2) at index $i."
                  echo "" # Return empty on error
                  return 1
