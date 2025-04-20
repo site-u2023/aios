@@ -746,7 +746,8 @@ shift_value_to_ipv6_position() {
     local value="$1"
     local start_bit="$2"
     local length="$3"
-    local segments_array=(0 0 0 0 0 0 0 0)
+    # POSIX-compliant replacement for array: Use individual variables
+    local seg0=0 seg1=0 seg2=0 seg3=0 seg4=0 seg5=0 seg6=0 seg7=0
     local bits_in_segment=16
 
     if [ "$length" -le 0 ]; then
@@ -780,19 +781,33 @@ shift_value_to_ipv6_position() {
     local target_seg_part=$((value & target_seg_mask))
 
     local target_shift_left=$((bit_offset_in_target_seg - bits_in_target + 1))
+    local target_seg_val=0 # Initialize segment value
     # Check shift bounds
     if [ "$target_shift_left" -ge 0 ] && [ "$target_shift_left" -lt 16 ]; then
-         segments_array[$target_seg_idx]=$((target_seg_part << target_shift_left))
+         target_seg_val=$((target_seg_part << target_shift_left))
     elif [ "$target_shift_left" -lt 0 ]; then # Handle case where bits span across segment boundary leftwards (should be handled by loop below)
          log_msg D "shift_value_to_ipv6_position: Negative target_shift_left ($target_shift_left), handled by loop."
          # The initial segment might be partially filled by the loop later.
-         # Set segment to 0 initially if shift is negative.
-         segments_array[$target_seg_idx]=0
+         target_seg_val=0 # Set segment to 0 initially if shift is negative.
     else # Shift >= 16
          log_msg E "shift_value_to_ipv6_position: Calculated target_shift_left ($target_shift_left) >= 16."
-         segments_array[$target_seg_idx]=0 # Or handle error differently
+         target_seg_val=0 # Or handle error differently
     fi
 
+    # Assign to the correct segment variable using eval (or a case statement if preferred)
+    # Using eval is concise but use with caution. Case statement is safer.
+    # Let's use case statement for safety and POSIX compatibility.
+    case "$target_seg_idx" in
+        0) seg0=$target_seg_val ;;
+        1) seg1=$target_seg_val ;;
+        2) seg2=$target_seg_val ;;
+        3) seg3=$target_seg_val ;;
+        4) seg4=$target_seg_val ;;
+        5) seg5=$target_seg_val ;;
+        6) seg6=$target_seg_val ;;
+        7) seg7=$target_seg_val ;;
+        *) log_msg E "shift_value_to_ipv6_position: Invalid target_seg_idx $target_seg_idx in case statement." ;;
+    esac
 
     local bits_remaining=$((length - bits_in_target))
     local current_value_part=$((value >> bits_in_target))
@@ -812,13 +827,27 @@ shift_value_to_ipv6_position() {
         local current_seg_part=$((current_value_part & current_seg_mask))
 
         local current_shift_left=$((bits_in_segment - bits_to_take))
+        local current_seg_val=0 # Initialize segment value
          # Check shift bounds
          if [ "$current_shift_left" -ge 0 ] && [ "$current_shift_left" -lt 16 ]; then
-             segments_array[$current_seg_idx]=$((current_seg_part << current_shift_left))
+             current_seg_val=$((current_seg_part << current_shift_left))
          else
              log_msg E "shift_value_to_ipv6_position: Calculated current_shift_left ($current_shift_left) out of bounds [0-15]."
-             segments_array[$current_seg_idx]=0 # Or handle error
+             current_seg_val=0 # Or handle error
          fi
+
+        # Assign to the correct segment variable using case statement
+        case "$current_seg_idx" in
+            0) seg0=$current_seg_val ;;
+            1) seg1=$current_seg_val ;;
+            2) seg2=$current_seg_val ;;
+            3) seg3=$current_seg_val ;;
+            4) seg4=$current_seg_val ;;
+            5) seg5=$current_seg_val ;;
+            6) seg6=$current_seg_val ;;
+            # Index 7 is handled by the initial part, loop stops before reaching it again.
+            *) log_msg E "shift_value_to_ipv6_position: Invalid current_seg_idx $current_seg_idx in loop case statement." ;;
+        esac
 
         current_value_part=$((current_value_part >> bits_to_take))
         bits_remaining=$((bits_remaining - bits_to_take))
@@ -833,10 +862,9 @@ shift_value_to_ipv6_position() {
          return 1
     fi
 
-
-    echo "${segments_array[*]}"
+    # Return the space-separated segment values
+    echo "$seg0 $seg1 $seg2 $seg3 $seg4 $seg5 $seg6 $seg7"
 }
-
 
 bitwise_or_ipv6() {
     local segments1="$1"
@@ -1169,6 +1197,158 @@ mape_mold() {
         log_msg I "mape_mold: Calculated User IPv4: $IPV4/$IP4PREFIXLEN (generic calculation)"
     fi
 
+    # --- 7. Calculate Port Range ---
+    local port_start=0
+    local port_end=0
+    log_msg D "mape_mold: Calculating Port Range: PSIDLen=$PSIDLEN, Offset=$OFFSET"
+    # PSIDLEN and OFFSET are validated numeric
+    if [ "$PSIDLEN" -le "$OFFSET" ]; then
+        port_start=1024
+        port_end=65535
+        log_msg D "mape_mold: Port calculation: PSIDLen <= Offset, using default ports 1024-65535"
+    else
+        # PSID is validated numeric
+        log_msg D "mape_mold: Port calculation: PSIDLen > Offset. PSID=$PSID, Offset=$OFFSET"
+        local port_shift_right_amount=$OFFSET
+        if [ "$port_shift_right_amount" -lt 0 ]; then port_shift_right_amount=0; fi
+        log_msg D "mape_mold: Calculating psid_shifted_right = PSID('$PSID') >> port_shift_right_amount('$port_shift_right_amount')"
+        local psid_shifted_right=$((PSID >> port_shift_right_amount))
+         if ! expr "$psid_shifted_right" + 0 > /dev/null 2>&1; then
+              log_msg E "mape_mold: psid_shifted_right ('$psid_shifted_right') became non-numeric after shift."
+              return 1
+         fi
+        log_msg D "mape_mold: psid_shifted_right = '$psid_shifted_right'"
+
+        local port_shift_left_amount=$((16 - OFFSET))
+        if [ "$port_shift_left_amount" -lt 0 ]; then port_shift_left_amount=0; fi
+        log_msg D "mape_mold: port_shift_left_amount (16 - Offset) = '$port_shift_left_amount'"
+        local port_multiplier=1
+        if [ "$port_shift_left_amount" -gt 0 ]; then
+             log_msg D "mape_mold: Calculating port_multiplier = 1 << port_shift_left_amount('$port_shift_left_amount')"
+             port_multiplier=$((1 << port_shift_left_amount))
+             if ! expr "$port_multiplier" + 0 > /dev/null 2>&1; then
+                  log_msg E "mape_mold: port_multiplier ('$port_multiplier') became non-numeric after shift."
+                  return 1
+             fi
+        fi
+        log_msg D "mape_mold: port_multiplier = '$port_multiplier'"
+
+        # Calculate initial range using expr
+        log_msg D "mape_mold: Calculating port_start using expr: psid_shifted_right('$psid_shifted_right') * port_multiplier('$port_multiplier')"
+        port_start=$(expr "$psid_shifted_right" \* "$port_multiplier" 2>/dev/null) # Use \* to escape *
+        if [ $? -ne 0 ] || ! expr "$port_start" + 0 > /dev/null 2>&1; then
+             log_msg E "mape_mold: Port start calculation using expr failed or resulted in non-numeric value. start='$port_start'"
+             return 1
+        fi
+        log_msg D "mape_mold: Calculated port_start = '$port_start'"
+
+        log_msg D "mape_mold: Calculating port_end using expr: port_start('$port_start') + port_multiplier('$port_multiplier') - 1"
+        local port_end_tmp1=$(expr "$port_start" + "$port_multiplier" 2>/dev/null)
+        if [ $? -ne 0 ] || ! expr "$port_end_tmp1" + 0 > /dev/null 2>&1; then
+             log_msg E "mape_mold: Port end calculation using expr failed at step 1 (start + multiplier). tmp1='$port_end_tmp1'"
+             return 1
+        fi
+        port_end=$(expr "$port_end_tmp1" - 1 2>/dev/null)
+        if [ $? -ne 0 ] || ! expr "$port_end" + 0 > /dev/null 2>&1; then
+             # Log error but continue to final clamping/check, reset port_end
+             log_msg E "mape_mold: Port end calculation using expr failed at step 2 (tmp1 - 1) or resulted in non-numeric value. end='$port_end'"
+             port_end="" # Reset to ensure checks below handle it
+             # return 1 # Optionally return immediately
+        fi
+        log_msg D "mape_mold: Calculated port_end = '$port_end'"
+        # The original 'if ! expr "$port_end" + 0' check is implicitly covered by the checks above now.
+        # If expr failed, port_end might be empty or non-numeric here.
+        log_msg D "mape_mold: Initial calculated port range (using expr): $port_start-$port_end"
+
+        # Clamp port range
+        log_msg D "mape_mold: Clamping port range: start='$port_start', end='$port_end'"
+        # Ensure port_start and port_end are valid numbers before clamping comparison
+        if expr "$port_start" + 0 > /dev/null 2>&1 && [ "$port_start" -lt 1024 ]; then port_start=1024; log_msg D "mape_mold: Clamped port_start to 1024"; fi
+        if expr "$port_end" + 0 > /dev/null 2>&1 && [ "$port_end" -gt 65535 ]; then port_end=65535; log_msg D "mape_mold: Clamped port_end to 65535"; fi
+        log_msg D "mape_mold: Clamped port range result: start='$port_start', end='$port_end'"
+
+        # Final check for validity (ensure both are numbers before comparing)
+        if ! expr "$port_start" + 0 > /dev/null 2>&1 || ! expr "$port_end" + 0 > /dev/null 2>&1 || [ "$port_start" -gt "$port_end" ]; then
+             log_msg E "mape_mold: Invalid port range after clamping (start '$port_start' > end '$port_end' or non-numeric). Setting empty."
+             port_start=0; port_end=0; PORTS=""
+        fi
+    fi
+
+    # Final assignment to PORTS (ensure start/end are valid numbers)
+    if expr "$port_start" + 0 > /dev/null 2>&1 && expr "$port_end" + 0 > /dev/null 2>&1 && [ "$port_start" -le "$port_end" ] && [ "$port_end" -gt 0 ]; then
+         PORTS="${port_start}-${port_end}"
+    else
+         PORTS=""
+         log_msg W "mape_mold: Resulting port range is invalid or empty after all checks."
+         # return 1 # Option: uncomment if empty ports are fatal
+    fi
+    log_msg I "mape_mold: Calculated Port Range: $PORTS"
+
+    # --- 8. Calculate CE Address ---
+    log_msg D "mape_mold: Calculating CE Address. RFC=$RFC"
+    if [ "$RFC" = "true" ]; then
+        CE_ADDR="$norm_user_ip6"
+        log_msg D "mape_mold: CE Address (RFC=true): $CE_ADDR"
+    else
+        log_msg D "mape_mold: Calculating non-RFC CE Address (NetworkPrefix:PSID::1)..."
+        # IP6PREFIXLEN is validated numeric
+        log_msg D "mape_mold: Applying mask $IP6PREFIXLEN to user_ip6_dec '$user_ip6_dec'"
+        local net_dec=$(apply_ipv6_mask "$user_ip6_dec" "$IP6PREFIXLEN")
+        # Assume apply_ipv6_mask returns valid space-separated numbers or empty on error
+        if [ $? -ne 0 ] || [ -z "$net_dec" ]; then log_msg E "mape_mold: Failed to apply mask for CE Address."; return 1; fi
+        log_msg D "mape_mold: CE Addr - Network part (dec): '$net_dec'"
+
+        local psid_shifted_dec="0 0 0 0 0 0 0 0" # Default if PSIDLen is 0
+        if [ "$PSIDLEN" -gt 0 ]; then
+             # PSID, IP6PREFIXLEN, PSIDLEN are validated numeric
+             log_msg D "mape_mold: Shifting PSID($PSID) to position: start_bit=$IP6PREFIXLEN, length=$PSIDLEN"
+             psid_shifted_dec=$(shift_value_to_ipv6_position "$PSID" "$IP6PREFIXLEN" "$PSIDLEN")
+             # Assume shift_value_to_ipv6_position returns valid space-separated numbers or empty on error
+             if [ $? -ne 0 ] || [ -z "$psid_shifted_dec" ]; then log_msg E "mape_mold: Failed to shift PSID for CE Address."; return 1; fi
+        fi
+        log_msg D "mape_mold: CE Addr - Shifted PSID part (dec): '$psid_shifted_dec'"
+
+        local suffix_1_dec="0 0 0 0 0 0 0 1"
+
+        log_msg D "mape_mold: ORing Network part and Shifted PSID part"
+        local ce_base_dec=$(bitwise_or_ipv6 "$net_dec" "$psid_shifted_dec")
+        # Assume bitwise_or_ipv6 returns valid space-separated numbers or empty on error
+        if [ $? -ne 0 ] || [ -z "$ce_base_dec" ]; then log_msg E "mape_mold: Failed to OR Network and PSID for CE Address."; return 1; fi
+        log_msg D "mape_mold: CE Addr - Base after OR (dec): '$ce_base_dec'"
+
+        log_msg D "mape_mold: ORing Base part and Suffix ::1"
+        local ce_final_dec=$(bitwise_or_ipv6 "$ce_base_dec" "$suffix_1_dec")
+         # Assume bitwise_or_ipv6 returns valid space-separated numbers or empty on error
+         if [ $? -ne 0 ] || [ -z "$ce_final_dec" ]; then log_msg E "mape_mold: Failed to OR Suffix ::1 for CE Address."; return 1; fi
+        log_msg D "mape_mold: CE Addr - Final segments with ::1 (dec): '$ce_final_dec'"
+
+        CE_ADDR=$(dec_segments_to_ipv6 "$ce_final_dec")
+        log_msg D "mape_mold: CE Address (RFC=false): $CE_ADDR"
+    fi
+    log_msg I "mape_mold: Calculated CE IPv6 Address: $CE_ADDR"
+
+    # --- 9. Final Status ---
+    log_msg D "mape_mold: Performing final status check..."
+    local final_check_ok=1
+    if [ -z "$RULE_NAME" ]; then log_msg E "Final Check Fail: RULE_NAME is empty"; final_check_ok=0; fi
+    if [ -z "$IPV4" ]; then log_msg E "Final Check Fail: IPV4 is empty"; final_check_ok=0; fi
+    # IP4PREFIXLEN should have been validated numeric during calculation if generic
+    if [ -z "$IP4PREFIXLEN" ] || ! expr "$IP4PREFIXLEN" + 0 > /dev/null 2>&1; then log_msg E "Final Check Fail: IP4PREFIXLEN ('$IP4PREFIXLEN') is invalid"; final_check_ok=0; fi
+    if [ -z "$CE_ADDR" ]; then log_msg E "Final Check Fail: CE_ADDR is empty"; final_check_ok=0; fi
+    if [ -z "$BR" ]; then log_msg E "Final Check Fail: BR is empty"; final_check_ok=0; fi
+    if [ -z "$PORTS" ]; then log_msg E "Final Check Fail: PORTS is empty"; final_check_ok=0; fi
+
+    if [ "$final_check_ok" -eq 1 ]; then
+        MAPE_STATUS="success"
+        log_msg I "mape_mold: MAP-E calculation successful for rule $RULE_NAME."
+        return 0
+    else
+        log_msg E "mape_mold: Failed final check - one or more required MAP-E parameters are invalid."
+        MAPE_STATUS="fail"
+        # Explicitly clear globals on failure
+        RULE_NAME="" IPV4="" BR="" IP6PFX="" CE_ADDR="" IP4PREFIXLEN="" IP6PREFIXLEN="" EALEN="" PSIDLEN="" OFFSET="" PSID="" PORTS="" RFC=""
+        return 1
+    fi
 }
 
 # --- End of Revised mape_mold Function ---
