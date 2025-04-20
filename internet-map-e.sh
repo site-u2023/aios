@@ -1432,13 +1432,45 @@ mape_config() {
 # --- Main Execution Logic ---
 
 internet_main() {
-    if [ $# -eq 0 ]; then
-        echo "Usage: $0 <user_ipv6_prefix>"
-        echo "Example: $0 240b:10:a0e0:1234::1"
-        exit 1
+    # Load OpenWrt functions if not already loaded (optional safeguard)
+    # Assuming these are loaded globally by AIOS or the calling environment might be safer
+    # If not, uncomment these lines:
+    # [ -z "$(type network_find_wan6)" ] && . /lib/functions.sh
+    # [ -z "$(type network_get_ipaddr6)" ] && . /lib/functions/network.sh
+
+    local NET_IF6=""
+    local NET_ADDR6=""
+    local user_prefix="" # Variable to hold the final prefix
+
+    log_msg I "internet_main: Attempting to automatically obtain IPv6 prefix..."
+
+    # Get IPv6 prefix using specified OpenWrt functions
+    network_flush_cache
+    network_find_wan6 NET_IF6
+    if [ -z "$NET_IF6" ]; then
+        log_msg E "internet_main: Could not find WAN6 interface (network_find_wan6 failed)."
+        # Display error to user?
+        echo "Error: Could not find WAN6 interface." >&2
+        return 1 # Return error status
+    fi
+    log_msg D "internet_main: Found WAN6 interface: ${NET_IF6}"
+
+    # Get the IPv6 address/prefix
+    network_get_ipaddr6 NET_ADDR6 "${NET_IF6}"
+    if [ -z "$NET_ADDR6" ]; then
+        log_msg E "internet_main: Could not get IPv6 address from interface ${NET_IF6} (network_get_ipaddr6 failed)."
+        # Display error to user?
+        echo "Error: Could not get IPv6 address/prefix from ${NET_IF6}." >&2
+        return 1 # Return error status
     fi
 
-    local user_prefix="$1"
+    # Use the obtained address/prefix
+    # Note: network_get_ipaddr6 might return address/prefixlen.
+    # Assuming mape_mold can handle the format returned by network_get_ipaddr6.
+    user_prefix="${NET_ADDR6}"
+    log_msg I "internet_main: Using automatically obtained IPv6 prefix/address: ${user_prefix}"
+
+    # --- Original logic continues below ---
 
     log_msg I "Starting MAP-E calculation for prefix: $user_prefix"
 
@@ -1454,10 +1486,12 @@ internet_main() {
         mape_config
     else
         log_msg E "MAP-E calculation failed. Configuration not applied."
-        exit 1
+        return 1 # Return error status
     fi
 
     log_msg I "MAP-E script finished."
-    exit 0
+    return 0 # Return success status
 }
 
+# Call main function when sourced
+internet_main
