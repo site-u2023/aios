@@ -98,8 +98,8 @@ MAPE_BR_IPV6=""      # Store final formatted BR IPv6 string
 MAPE_EA_LEN=""       # Effective EA length (derived if needed)
 
 # Function: bc_extract_bits
-# Description: Calls the bc 'extract_bits' function to extract bits from IPv6 decimal segments.
-#              Uses bc for arbitrary precision arithmetic to match map-e.js logic.
+# Description: Extracts a range of bits from IPv6 decimal segments using bc for calculations.
+#              Attempts simpler bc syntax (while loop, no braces for loops/ifs) for compatibility.
 # Arguments:
 #   $1: Start bit (0-indexed)
 #   $2: Length of bits to extract
@@ -110,10 +110,9 @@ bc_extract_bits() {
     local start_bit="$1"
     local length="$2"
     local dec_segments="$3"
-    local bc_script bc_input result seg_count i seg_val bc_exit_code bc_stderr
+    local bc_input="" result seg_count i=0 seg_val bc_exit_code bc_stderr
 
     # --- Input validation ---
-    # (Input validation remains the same)
     if ! expr "$start_bit" + 0 > /dev/null 2>&1 || \
        ! expr "$length" + 0 > /dev/null 2>&1 || \
        [ "$start_bit" -lt 0 ] || [ "$length" -le 0 ] || [ $((start_bit + length)) -gt 128 ]; then
@@ -125,91 +124,22 @@ bc_extract_bits() {
         return 1
     fi
 
-    # --- Prepare bc script with function definition (using # for comments) ---
-    # Use printf for multi-line assignment to handle potential special characters better
-    bc_script=$(printf "%s\n" '
-scale=0 # Ensure integer arithmetic for all calculations within bc
+    # --- Prepare bc input string (assignments and calculation logic using while loop, no braces) ---
+    bc_input="scale=0;" # Ensure integer arithmetic
 
-# Function to extract a range of bits from an IPv6 address represented by 8 decimal segments
-# segs[]: Array containing the 8 decimal values (16 bits each)
-# start: The starting bit position (0-indexed, from the most significant bit)
-# length: The number of bits to extract
-define extract_bits(segs[], start, length) {
-    auto value, i, seg_idx, bit_offset_in_seg, bits_to_extract_from_seg
-    auto shift_right, mask_power, extracted_part
-    auto current_pos, bits_remaining, bits_in_segment, segment_val
+    # Assign start and length to bc variables
+    bc_input="${bc_input}start=${start_bit};length=${length};"
 
-    value = 0           # Initialize the result value
-    bits_in_segment = 16 # Number of bits per segment
-
-    # Calculate the index of the segment where extraction starts (0-based)
-    start_seg_idx = start / bits_in_segment
-    # Calculate the index of the segment where extraction ends (0-based)
-    end_seg_idx = (start + length - 1) / bits_in_segment
-
-    current_pos = start      # Track the current global bit position being processed
-    bits_remaining = length  # Track how many bits are left to extract
-
-    # Loop through the relevant segments
-    for (i = start_seg_idx; i <= end_seg_idx; i++) {
-        if (bits_remaining <= 0) { break } # Exit loop if all required bits have been extracted
-
-        # Get the decimal value of the current segment (bc arrays are 0-indexed)
-        segment_val = segs[i]
-
-        # Calculate the bit position within the current segment where extraction should start
-        # Example: If global start bit is 20, and i=1 (segment 1, bits 16-31), offset is 20 % 16 = 4
-        bit_offset_in_seg = current_pos % bits_in_segment
-
-        # Determine how many bits can be extracted from the current segment
-        # It is the minimum of the bits remaining in the segment from the offset, and the total bits remaining to be extracted
-        bits_to_extract_from_seg = bits_in_segment - bit_offset_in_seg
-        if (bits_to_extract_from_seg > bits_remaining) {
-            bits_to_extract_from_seg = bits_remaining
-        }
-
-        # Calculate the amount to right-shift the segment value to align the desired bits to the rightmost position
-        # Example: Segment=ABCD, Offset=4, Length=8. We want bits at pos 4-11.
-        # Shift right by (16 - 4 - 8) = 4 bits. Result = 0000ABCD >> 4 = 00000ABC
-        shift_right = bits_in_segment - bit_offset_in_seg - bits_to_extract_from_seg
-        if (shift_right < 0) { shift_right = 0 } # Safety check, should not happen
-
-        # Perform the right shift using integer division
-        extracted_part = segment_val / (2 ^ shift_right)
-
-        # Create a mask to isolate the extracted bits (2^N - 1)
-        # Example: If bits_to_extract_from_seg = 8, mask_power = 2^8 = 256. Mask is 255 (11111111b).
-        mask_power = 2 ^ bits_to_extract_from_seg
-        # Apply the mask using the modulo operator
-        extracted_part = extracted_part % mask_power
-
-        # Append the extracted bits to the overall result value
-        # Shift the current result left by the number of bits just extracted, then add the new part
-        value = value * mask_power # Left shift the existing value
-        value = value + extracted_part # Add the newly extracted part
-
-        # Update loop variables for the next iteration
-        bits_remaining -= bits_to_extract_from_seg
-        current_pos += bits_to_extract_from_seg
-    }
-
-    return value # Return the final calculated decimal value
-}
-')
-
-    # --- Prepare bc input: Assign segments to bc array and call function ---
-    bc_input=""
-    i=0
+    # Assign decimal segments to individual bc variables (s0 to s7)
     seg_count=0
-    # Loop through shell segments and create bc array assignments
     for seg_val in $dec_segments; do
          # Validate segment value is numeric before passing to bc
          if ! expr "$seg_val" + 0 > /dev/null 2>&1; then
               debug_log "ERROR" "bc_extract_bits: Invalid non-numeric segment value '$seg_val' at index $i."
               return 1
          fi
-         # Assign to bc array 'segs' (0-indexed)
-         bc_input="${bc_input}segs[${i}]=${seg_val};"
+         # Assign to bc variable s0, s1, ...
+         bc_input="${bc_input}s${i}=${seg_val};"
          i=$((i + 1))
          seg_count=$((seg_count + 1))
     done
@@ -220,15 +150,66 @@ define extract_bits(segs[], start, length) {
          return 1
     fi
 
-    # Add the function call to the bc input string
-    # Use 'print' to output the result from bc
-    bc_input="${bc_input}print extract_bits(segs, ${start_bit}, ${length});"
+    # Append the calculation logic (POSIX bc style - while loop, no braces, careful with semicolons/newlines)
+    # Each statement should ideally be on its own line or separated by semicolons.
+    # Using a while loop and avoiding braces for potentially better compatibility.
+    bc_input="${bc_input}"'
+value = 0
+bits_in_segment = 16
+
+start_seg_idx = start / bits_in_segment
+end_seg_idx = (start + length - 1) / bits_in_segment
+current_pos = start
+bits_remaining = length
+
+i = start_seg_idx # Initialize loop counter
+
+# Use a while loop style
+while (i <= end_seg_idx && bits_remaining > 0) {
+
+    # Select segment value based on loop index i
+    segment_val = 0 # Default
+    if (i == 0) segment_val = s0
+    if (i == 1) segment_val = s1
+    if (i == 2) segment_val = s2
+    if (i == 3) segment_val = s3
+    if (i == 4) segment_val = s4
+    if (i == 5) segment_val = s5
+    if (i == 6) segment_val = s6
+    if (i == 7) segment_val = s7
+
+    bit_offset_in_seg = current_pos % bits_in_segment
+    bits_to_extract_from_seg = bits_in_segment - bit_offset_in_seg
+    if (bits_to_extract_from_seg > bits_remaining) bits_to_extract_from_seg = bits_remaining
+
+    shift_right = bits_in_segment - bit_offset_in_seg - bits_to_extract_from_seg
+    if (shift_right < 0) shift_right = 0
+
+    # Perform right shift using integer division
+    extracted_part = segment_val / (2 ^ shift_right)
+
+    # Create mask and apply it
+    mask_power = 2 ^ bits_to_extract_from_seg
+    extracted_part = extracted_part % mask_power
+
+    # Append extracted bits to the result
+    value = value * mask_power
+    value = value + extracted_part
+
+    # Update loop variables
+    bits_remaining -= bits_to_extract_from_seg
+    current_pos += bits_to_extract_from_seg
+
+    i += 1 # Increment loop counter
+}
+print value
+' # End of bc calculation logic string
 
     # --- Execute bc ---
     debug_log "DEBUG" "bc_extract_bits: Calling bc for start=$start_bit, length=$length"
-    # Combine script and input using printf, pipe to bc, capture stdout and stderr
+    # Use printf to ensure newlines are preserved, pipe to bc, capture stdout and stderr
     local stderr_file="${BASE_DIR}/${SCRIPT_NAME}_bcextract_stderr.$$"
-    result=$(printf "%s\n%s\n" "$bc_script" "$bc_input" | bc 2> "$stderr_file")
+    result=$(printf "%s\n" "$bc_input" | bc 2> "$stderr_file")
     bc_exit_code=$?
     # Read stderr content if the file exists
     if [ -f "$stderr_file" ]; then
@@ -238,24 +219,17 @@ define extract_bits(segs[], start, length) {
         bc_stderr=""
     fi
 
-
     # --- Error Handling and Result Validation ---
     # Check exit code OR if bc produced any standard error output
     if [ "$bc_exit_code" -ne 0 ] || [ -n "$bc_stderr" ]; then
-        # Log detailed error information
         debug_log "ERROR" "bc_extract_bits: bc execution failed (Exit Code: $bc_exit_code). stderr: ${bc_stderr:-<none>}"
-        # Log the input that caused the error for debugging
-        debug_log "DEBUG" "bc_extract_bits: Failed bc script:\n${bc_script}"
-        debug_log "DEBUG" "bc_extract_bits: Failed bc input was: ${bc_input}"
+        debug_log "DEBUG" "bc_extract_bits: Failed bc input was:\n${bc_input}" # Log the input
         return 1
     fi
 
     # Validate the result from bc is a valid number
     if ! expr "$result" + 0 > /dev/null 2>&1; then
-        # Handle potential empty result if bc outputs nothing on success for 0
         if [ -z "$result" ]; then
-            # If the expected result could legitimately be 0, treat empty as 0.
-            # We might need more context here, but for bit extraction, 0 is possible.
             debug_log "WARN" "bc_extract_bits: bc returned empty result, assuming 0."
             result="0"
         else
