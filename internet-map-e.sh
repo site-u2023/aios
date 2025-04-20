@@ -1432,11 +1432,7 @@ mape_config() {
 # --- Main Execution Logic ---
 
 internet_main() {
-    # Load OpenWrt functions if not already loaded (optional safeguard)
-    # Assuming these are loaded globally by AIOS or the calling environment might be safer
-    # If not, uncomment these lines:
-    # [ -z "$(type network_find_wan6)" ] && . /lib/functions.sh
-    # [ -z "$(type network_get_ipaddr6)" ] && . /lib/functions/network.sh
+    # Assume OpenWrt functions (network_*, log_msg) are available in the environment
 
     local NET_IF6=""
     local NET_ADDR6=""
@@ -1444,12 +1440,11 @@ internet_main() {
 
     log_msg I "internet_main: Attempting to automatically obtain IPv6 prefix..."
 
-    # Get IPv6 prefix using specified OpenWrt functions
+    # Get IPv6 prefix using specified OpenWrt functions (assuming they are available)
     network_flush_cache
     network_find_wan6 NET_IF6
     if [ -z "$NET_IF6" ]; then
         log_msg E "internet_main: Could not find WAN6 interface (network_find_wan6 failed)."
-        # Display error to user?
         echo "Error: Could not find WAN6 interface." >&2
         return 1 # Return error status
     fi
@@ -1459,7 +1454,6 @@ internet_main() {
     network_get_ipaddr6 NET_ADDR6 "${NET_IF6}"
     if [ -z "$NET_ADDR6" ]; then
         log_msg E "internet_main: Could not get IPv6 address from interface ${NET_IF6} (network_get_ipaddr6 failed)."
-        # Display error to user?
         echo "Error: Could not get IPv6 address/prefix from ${NET_IF6}." >&2
         return 1 # Return error status
     fi
@@ -1474,14 +1468,11 @@ internet_main() {
 
     log_msg I "Starting MAP-E calculation for prefix: $user_prefix"
 
-    # Run the calculation
     mape_mold "$user_prefix"
     local result=$?
 
-    # Display results
     mape_display
 
-    # Apply configuration if successful
     if [ "$result" -eq 0 ]; then
         mape_config
     else
