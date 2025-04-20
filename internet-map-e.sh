@@ -524,12 +524,8 @@ extract_ipv6_bits() {
         return 1
     fi
 
-    # Use multiplication for combining results to potentially avoid shift limits
     local use_multiplication_combine=1
     if [ "$length" -gt 32 ]; then
-        # BusyBox ash (used in OpenWrt) generally supports 64-bit integers if compiled with them.
-        # However, excessive bit shifts can still be problematic or slow.
-        # Multiplication is often safer for combining large bit parts.
         log_msg D "extract_ipv6_bits: Extracting more than 32 bits ($length). Using multiplication combine method."
     fi
 
@@ -541,17 +537,25 @@ extract_ipv6_bits() {
 
     local i=$start_seg_idx
     while [ $i -le $end_seg_idx ] && [ $bits_remaining_to_extract -gt 0 ]; do
-        # Extract the i-th segment (0-indexed internally, 1-indexed for cut)
-        local segment_val=$(echo "$dec_segments" | cut -d' ' -f $((i + 1)) 2>/dev/null)
+        # --- Segment Extraction and Validation ---
+        local segment_val_raw=$(echo "$dec_segments" | cut -d' ' -f $((i + 1)) 2>/dev/null)
+        # Trim leading/trailing whitespace (POSIX compliant)
+        local segment_val=$(echo "$segment_val_raw" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        log_msg D "extract_ipv6_bits: Loop i=$i, segment_val_raw='$segment_val_raw', segment_val_trimmed='$segment_val'"
 
-        # Validate segment value
-        if [ -z "$segment_val" ] || ! expr "$segment_val" + 0 > /dev/null 2>&1; then
-            log_msg E "extract_ipv6_bits: Error accessing or invalid segment value at index $((i + 1)). Segment: '$segment_val'"
-            echo "" # Return empty string on error
-            return 1
-        fi
-        log_msg D "extract_ipv6_bits: Loop i=$i, segment_val=$segment_val, bits_remaining=$bits_remaining_to_extract"
+        # Validate segment value (POSIX compliant case statement)
+        case "$segment_val" in
+            ''|*[!0-9]*) # Check if empty or contains non-digit characters
+                log_msg E "extract_ipv6_bits: Error accessing or invalid segment value at index $((i + 1)). Segment: '$segment_val'"
+                echo ""
+                return 1
+                ;;
+            *) # It's a valid non-negative integer string
+                log_msg D "extract_ipv6_bits: Loop i=$i, segment_val=$segment_val, bits_remaining=$bits_remaining_to_extract"
+                ;;
+        esac
 
+        # --- Bit Extraction Logic ---
         local bit_offset_in_seg=$((current_pos % bits_in_segment))
         local bits_to_extract_from_seg=$((bits_in_segment - bit_offset_in_seg))
         if [ $bits_to_extract_from_seg -gt $bits_remaining_to_extract ]; then
@@ -559,138 +563,152 @@ extract_ipv6_bits() {
         fi
         log_msg D "extract_ipv6_bits: Loop i=$i, bit_offset_in_seg=$bit_offset_in_seg, bits_to_extract_from_seg=$bits_to_extract_from_seg"
 
-        # Calculate the right shift amount
-        # Example: 16 bits total, offset 4, extract 8 => shift right by (16 - 4 - 8) = 4
         local shift_right=$((bits_in_segment - bit_offset_in_seg - bits_to_extract_from_seg))
         if [ "$shift_right" -lt 0 ]; then
-             # This should not happen with correct logic, but check for safety
              log_msg E "extract_ipv6_bits: Internal error - negative shift_right ($shift_right)"
              echo ""
              return 1
         fi
+
         local extracted_part=$((segment_val >> shift_right))
-        # Validate extracted_part after shift
-        if ! expr "$extracted_part" + 0 > /dev/null 2>&1; then
-             log_msg E "extract_ipv6_bits: extracted_part ('$extracted_part') became non-numeric after shift."
-             echo ""
-             return 1
-        fi
-        log_msg D "extract_ipv6_bits: Loop i=$i, shift_right=$shift_right, pre_mask_extracted_part=$extracted_part"
-
-        # Create a mask for the bits we want to keep
-        # Example: bits_to_extract_from_seg = 8 => mask = (1 << 8) - 1 = 255
-        local mask
-        # Use temporary variable for mask calculation to check intermediates
-        local mask_calc_base=1
-        local mask_shift=$bits_to_extract_from_seg
-        if [ "$mask_shift" -lt 0 ]; then mask_shift=0; fi # Avoid negative shift
-
-        # Check if shift amount is too large for standard $((1 << N))
-        if [ "$mask_shift" -ge 31 ]; then
-             # If shift is large, calculate mask carefully or use known value
-             if [ "$mask_shift" -ge 63 ]; then # Assuming 64-bit arithmetic max
-                  # For very large shifts, result might be full bits or overflow
-                  # Let's assume full 16 bits if shift >= 16 for segment extraction context
-                  if [ "$bits_to_extract_from_seg" -ge 16 ]; then
-                       mask=65535
-                  else
-                       # Handle potentially very large but < 64 bit masks if needed
-                       # Fallback to loop calculation for robustness if direct large shift is unreliable
-                       mask=0
-                       local k=0
-                       while [ $k -lt "$bits_to_extract_from_seg" ]; do
-                           mask=$(( (mask << 1) | 1 ))
-                           k=$((k + 1))
-                       done
-                  fi
-             else
-                  # Try direct calculation for large shifts < 63, validate later
-                  mask=$(( ( (1 << ($mask_shift - 1)) - 1 ) * 2 + 1 ))
-             fi
-             log_msg D "extract_ipv6_bits: Calculated large mask for $bits_to_extract_from_seg bits: $mask"
-        elif [ "$mask_shift" -gt 0 ]; then
-             mask=$(( (mask_calc_base << mask_shift) - 1 ))
-        else # mask_shift is 0
-             mask=0
-        fi
-        # Validate calculated mask
-        if ! expr "$mask" + 0 > /dev/null 2>&1; then
-             log_msg E "extract_ipv6_bits: Calculated mask ('$mask') is not a valid number."
-             echo ""
-             return 1
-        fi
-
-        extracted_part=$((extracted_part & mask))
-        # Validate extracted_part after mask
-        if ! expr "$extracted_part" + 0 > /dev/null 2>&1; then
-             log_msg E "extract_ipv6_bits: extracted_part ('$extracted_part') became non-numeric after mask."
-             echo ""
-             return 1
-        fi
-        log_msg D "extract_ipv6_bits: Loop i=$i, mask=$mask, final_extracted_part=$extracted_part"
-
-        # Combine the extracted part with the current value
-        if [ "$use_multiplication_combine" -eq 1 ]; then
-            # Calculate multiplier: 2 ^ bits_to_extract_from_seg
-            local multiplier=1
-            local j=0
-            # Use a loop for multiplier calculation to avoid large shifts in the multiplier itself
-            while [ $j -lt $bits_to_extract_from_seg ]; do
-                multiplier=$((multiplier * 2))
-                # Check for potential overflow in multiplier
-                 if ! expr "$multiplier" + 0 > /dev/null 2>&1; then
-                      log_msg E "extract_ipv6_bits: Multiplier ('$multiplier') overflow during calculation."
-                      echo ""
-                      return 1
-                 fi
-                j=$((j + 1))
-            done
-            log_msg D "extract_ipv6_bits: Loop i=$i, combine_multiplier=$multiplier"
-            # Combine: value = (value * multiplier) + extracted_part
-            # Validate value and extracted_part before combining
-            if ! expr "$value" + 0 > /dev/null 2>&1 || ! expr "$extracted_part" + 0 > /dev/null 2>&1; then
-                 log_msg E "extract_ipv6_bits: Non-numeric value before multiplication combine. value='$value', extracted_part='$extracted_part'"
+        # Validate after shift
+        case "$extracted_part" in
+            ''|*[!0-9]*)
+                 log_msg E "extract_ipv6_bits: extracted_part ('$extracted_part') became non-numeric after shift."
                  echo ""
                  return 1
-            fi
-            value=$(( (value * multiplier) + extracted_part ))
-        else
-             # Original shift approach (might hit limits sooner for large 'value'):
-             # Validate value and extracted_part before combining
-             local shift_amount=$bits_to_extract_from_seg
-             if [ "$shift_amount" -lt 0 ]; then shift_amount=0; fi # Avoid negative shift
-             if ! expr "$value" + 0 > /dev/null 2>&1 || ! expr "$extracted_part" + 0 > /dev/null 2>&1; then
-                  log_msg E "extract_ipv6_bits: Non-numeric value before shift combine. value='$value', extracted_part='$extracted_part'"
-                  echo ""
-                  return 1
-             fi
-             # Check shift amount validity if needed (e.g., < 64)
-             value=$(( (value << shift_amount) | extracted_part ))
-        fi
-        # Validate intermediate value
-        if ! expr "$value" + 0 > /dev/null 2>&1; then
-             log_msg E "extract_ipv6_bits: Intermediate value ('$value') became non-numeric after combining."
-             echo ""
-             return 1
-        fi
-        log_msg D "extract_ipv6_bits: Loop i=$i, intermediate_combined_value=$value"
+                 ;;
+            *) log_msg D "extract_ipv6_bits: Loop i=$i, shift_right=$shift_right, pre_mask_extracted_part=$extracted_part" ;;
+        esac
 
+        # --- Mask Calculation and Application ---
+        local mask
+        local mask_calc_base=1
+        local mask_shift=$bits_to_extract_from_seg
+        if [ "$mask_shift" -lt 0 ]; then mask_shift=0; fi
+
+        # Calculate mask (handle potentially large shifts carefully)
+        if [ "$mask_shift" -ge 31 ]; then
+             if [ "$bits_to_extract_from_seg" -ge 16 ]; then
+                  mask=65535
+             else
+                  # Loop calculation for robustness if large shifts are problematic
+                  mask=0
+                  local k=0
+                  while [ $k -lt "$bits_to_extract_from_seg" ]; do
+                      mask=$(( (mask << 1) | 1 ))
+                      case "$mask" in ''|*[!0-9]*) log_msg E "Mask calc loop error at k=$k, mask='$mask'"; echo ""; return 1;; *) : ;; esac
+                      k=$((k + 1))
+                  done
+             fi
+             log_msg D "extract_ipv6_bits: Calculated large mask for $bits_to_extract_from_seg bits: '$mask'"
+        elif [ "$mask_shift" -gt 0 ]; then
+             mask=$(( (mask_calc_base << mask_shift) - 1 ))
+        else
+             mask=0
+        fi
+        # Validate mask
+        case "$mask" in
+            ''|*[!0-9]*)
+                 log_msg E "extract_ipv6_bits: Calculated mask ('$mask') is not a valid number."
+                 echo ""
+                 return 1
+                 ;;
+             *) log_msg D "extract_ipv6_bits: Loop i=$i, mask=$mask" ;;
+        esac
+
+        # Apply mask
+        extracted_part=$((extracted_part & mask))
+        # Validate after mask
+        case "$extracted_part" in
+            ''|*[!0-9]*)
+                 log_msg E "extract_ipv6_bits: extracted_part ('$extracted_part') became non-numeric after mask."
+                 echo ""
+                 return 1
+                 ;;
+            *) log_msg D "extract_ipv6_bits: Loop i=$i, final_extracted_part=$extracted_part" ;;
+        esac
+
+        # --- Combine Extracted Part with Value ---
+        if [ "$use_multiplication_combine" -eq 1 ]; then
+            # Calculate multiplier = 2 ^ bits_to_extract_from_seg
+            local multiplier=1
+            local j=0
+            while [ $j -lt $bits_to_extract_from_seg ]; do
+                multiplier=$((multiplier * 2))
+                 # Validate multiplier inside loop
+                 case "$multiplier" in
+                      ''|*[!0-9]*)
+                           log_msg E "extract_ipv6_bits: Multiplier ('$multiplier') overflow or non-numeric at j=$j (bits=$bits_to_extract_from_seg)."
+                           echo ""
+                           return 1
+                           ;;
+                      *) : ;;
+                 esac
+                j=$((j + 1))
+            done
+            log_msg D "extract_ipv6_bits: Loop i=$i, combine_multiplier='$multiplier'"
+
+            # Pre-combination validation
+            local valid_combine="yes"
+            case "$value" in ''|*[!0-9]*) log_msg E "Value '$value' is non-numeric before combine."; valid_combine="no";; *) : ;; esac
+            case "$extracted_part" in ''|*[!0-9]*) log_msg E "Extracted part '$extracted_part' is non-numeric before combine."; valid_combine="no";; *) : ;; esac
+            case "$multiplier" in ''|*[!0-9]*) log_msg E "Multiplier '$multiplier' is non-numeric before combine."; valid_combine="no";; *) : ;; esac
+
+            if [ "$valid_combine" = "no" ]; then
+                log_msg E "extract_ipv6_bits: Pre-combination validation failed."
+                echo ""
+                return 1
+            fi
+
+            # Log values right before the calculation that caused the error
+            log_msg D "extract_ipv6_bits: Combining: value='$value', multiplier='$multiplier', extracted_part='$extracted_part'"
+            local value_before_combine="$value" # Store value before calculation for potential error log
+
+            # Perform the combine operation
+            value=$(( (value * multiplier) + extracted_part ))
+
+            # Validate immediately after combine
+            case "$value" in
+                ''|*[!0-9]*)
+                     log_msg E "extract_ipv6_bits: Value ('$value') became non-numeric immediately after combine operation."
+                     # Log the expression components that likely caused the failure
+                     log_msg E "extract_ipv6_bits: Failed expression components: value_before='$value_before_combine', multiplier='$multiplier', extracted_part='$extracted_part'"
+                     echo ""
+                     return 1
+                     ;;
+                 *) log_msg D "extract_ipv6_bits: Loop i=$i, intermediate_combined_value='$value'" ;;
+            esac
+
+        else # Shift combine method (less likely used)
+             local shift_amount=$bits_to_extract_from_seg
+             if [ "$shift_amount" -lt 0 ]; then shift_amount=0; fi
+             # Similar validation needed here if this path is taken
+             value=$(( (value << shift_amount) | extracted_part ))
+             case "$value" in ''|*[!0-9]*) log_msg E "Value non-numeric after shift combine"; echo ""; return 1;; *) : ;; esac
+             log_msg D "extract_ipv6_bits: Loop i=$i, intermediate_combined_value='$value' (shift method)"
+        fi
+
+        # --- Update Loop Variables ---
         bits_remaining_to_extract=$((bits_remaining_to_extract - bits_to_extract_from_seg))
         current_pos=$((current_pos + bits_to_extract_from_seg))
         i=$((i + 1))
     done
 
-    # --- Final Validation ---
+    # --- Final Validation and Return ---
     log_msg D "extract_ipv6_bits: Final calculated value before validation: '$value'"
-    if expr "$value" + 0 > /dev/null 2>&1; then
-        log_msg D "extract_ipv6_bits: Succeeded. Returning value: $value"
-        echo "$value"
-        return 0
-    else
-        log_msg E "extract_ipv6_bits: Final calculated value '$value' is not a valid number."
-        echo "" # Return empty string on error
-        return 1
-    fi
+    case "$value" in
+         ''|*[!0-9]*)
+            log_msg E "extract_ipv6_bits: Final calculated value '$value' is not a valid number."
+            echo ""
+            return 1
+            ;;
+         *)
+            log_msg D "extract_ipv6_bits: Succeeded. Returning value: $value"
+            echo "$value"
+            return 0
+            ;;
+    esac
 }
 
 # --- End of IPv6 Helper Functions ---
