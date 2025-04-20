@@ -1169,30 +1169,6 @@ mape_mold() {
         log_msg I "mape_mold: Calculated User IPv4: $IPV4/$IP4PREFIXLEN (generic calculation)"
     fi
 
-
-
-    # --- 9. Final Status ---
-    log_msg D "mape_mold: Performing final status check..."
-    local final_check_ok=1
-    if [ -z "$RULE_NAME" ]; then log_msg E "Final Check Fail: RULE_NAME is empty"; final_check_ok=0; fi
-    if [ -z "$IPV4" ]; then log_msg E "Final Check Fail: IPV4 is empty"; final_check_ok=0; fi
-    # IP4PREFIXLEN should have been validated numeric during calculation if generic
-    if [ -z "$IP4PREFIXLEN" ] || ! expr "$IP4PREFIXLEN" + 0 > /dev/null 2>&1; then log_msg E "Final Check Fail: IP4PREFIXLEN ('$IP4PREFIXLEN') is invalid"; final_check_ok=0; fi
-    if [ -z "$CE_ADDR" ]; then log_msg E "Final Check Fail: CE_ADDR is empty"; final_check_ok=0; fi
-    if [ -z "$BR" ]; then log_msg E "Final Check Fail: BR is empty"; final_check_ok=0; fi
-    if [ -z "$PORTS" ]; then log_msg E "Final Check Fail: PORTS is empty"; final_check_ok=0; fi
-
-    if [ "$final_check_ok" -eq 1 ]; then
-        MAPE_STATUS="success"
-        log_msg I "mape_mold: MAP-E calculation successful for rule $RULE_NAME."
-        return 0
-    else
-        log_msg E "mape_mold: Failed final check - one or more required MAP-E parameters are invalid."
-        MAPE_STATUS="fail"
-        # Explicitly clear globals on failure
-        RULE_NAME="" IPV4="" BR="" IP6PFX="" CE_ADDR="" IP4PREFIXLEN="" IP6PREFIXLEN="" EALEN="" PSIDLEN="" OFFSET="" PSID="" PORTS="" RFC=""
-        return 1
-    fi
 }
 
 # --- End of Revised mape_mold Function ---
