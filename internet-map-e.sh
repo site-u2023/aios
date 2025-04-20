@@ -1169,48 +1169,7 @@ mape_mold() {
         log_msg I "mape_mold: Calculated User IPv4: $IPV4/$IP4PREFIXLEN (generic calculation)"
     fi
 
-    # --- 8. Calculate CE Address ---
-    log_msg D "mape_mold: Calculating CE Address. RFC=$RFC"
-    if [ "$RFC" = "true" ]; then
-        CE_ADDR="$norm_user_ip6"
-        log_msg D "mape_mold: CE Address (RFC=true): $CE_ADDR"
-    else
-        log_msg D "mape_mold: Calculating non-RFC CE Address (NetworkPrefix:PSID::1)..."
-        # IP6PREFIXLEN is validated numeric
-        log_msg D "mape_mold: Applying mask $IP6PREFIXLEN to user_ip6_dec '$user_ip6_dec'"
-        local net_dec=$(apply_ipv6_mask "$user_ip6_dec" "$IP6PREFIXLEN")
-        # Assume apply_ipv6_mask returns valid space-separated numbers or empty on error
-        if [ $? -ne 0 ] || [ -z "$net_dec" ]; then log_msg E "mape_mold: Failed to apply mask for CE Address."; return 1; fi
-        log_msg D "mape_mold: CE Addr - Network part (dec): '$net_dec'"
 
-        local psid_shifted_dec="0 0 0 0 0 0 0 0" # Default if PSIDLen is 0
-        if [ "$PSIDLEN" -gt 0 ]; then
-             # PSID, IP6PREFIXLEN, PSIDLEN are validated numeric
-             log_msg D "mape_mold: Shifting PSID($PSID) to position: start_bit=$IP6PREFIXLEN, length=$PSIDLEN"
-             psid_shifted_dec=$(shift_value_to_ipv6_position "$PSID" "$IP6PREFIXLEN" "$PSIDLEN")
-             # Assume shift_value_to_ipv6_position returns valid space-separated numbers or empty on error
-             if [ $? -ne 0 ] || [ -z "$psid_shifted_dec" ]; then log_msg E "mape_mold: Failed to shift PSID for CE Address."; return 1; fi
-        fi
-        log_msg D "mape_mold: CE Addr - Shifted PSID part (dec): '$psid_shifted_dec'"
-
-        local suffix_1_dec="0 0 0 0 0 0 0 1"
-
-        log_msg D "mape_mold: ORing Network part and Shifted PSID part"
-        local ce_base_dec=$(bitwise_or_ipv6 "$net_dec" "$psid_shifted_dec")
-        # Assume bitwise_or_ipv6 returns valid space-separated numbers or empty on error
-        if [ $? -ne 0 ] || [ -z "$ce_base_dec" ]; then log_msg E "mape_mold: Failed to OR Network and PSID for CE Address."; return 1; fi
-        log_msg D "mape_mold: CE Addr - Base after OR (dec): '$ce_base_dec'"
-
-        log_msg D "mape_mold: ORing Base part and Suffix ::1"
-        local ce_final_dec=$(bitwise_or_ipv6 "$ce_base_dec" "$suffix_1_dec")
-         # Assume bitwise_or_ipv6 returns valid space-separated numbers or empty on error
-         if [ $? -ne 0 ] || [ -z "$ce_final_dec" ]; then log_msg E "mape_mold: Failed to OR Suffix ::1 for CE Address."; return 1; fi
-        log_msg D "mape_mold: CE Addr - Final segments with ::1 (dec): '$ce_final_dec'"
-
-        CE_ADDR=$(dec_segments_to_ipv6 "$ce_final_dec")
-        log_msg D "mape_mold: CE Address (RFC=false): $CE_ADDR"
-    fi
-    log_msg I "mape_mold: Calculated CE IPv6 Address: $CE_ADDR"
 
     # --- 9. Final Status ---
     log_msg D "mape_mold: Performing final status check..."
