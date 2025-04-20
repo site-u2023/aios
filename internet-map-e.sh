@@ -871,27 +871,41 @@ bitwise_or_ipv6() {
     local segments2="$2"
     local result_segments=""
     local i=1
-    local seg1 seg2 arr1 arr2
+    local seg1 seg2 res
 
-    local old_ifs="$IFS"
-    IFS=' '
-    # Read segments into arrays carefully
-    set -- $segments1; arr1=($@)
-    set -- $segments2; arr2=($@)
-    IFS="$old_ifs"
-
-    # Pad arrays with 0 if they have less than 8 elements
-    while [ ${#arr1[@]} -lt 8 ]; do arr1+=(0); done
-    while [ ${#arr2[@]} -lt 8 ]; do arr2+=(0); done
-
+    # Loop through 8 potential segments
     while [ $i -le 8 ]; do
-        seg1=${arr1[$((i-1))]:-0} # Use :-0 default for safety
-        seg2=${arr2[$((i-1))]:-0}
-        result_segments="${result_segments}$((seg1 | seg2)) "
+        # Extract the i-th segment from each string using cut. Default to 0 if missing.
+        seg1=$(echo "$segments1" | cut -d' ' -f$i 2>/dev/null)
+        seg2=$(echo "$segments2" | cut -d' ' -f$i 2>/dev/null)
+
+        # Use default value 0 if segment is empty or non-numeric
+        if ! expr "$seg1" + 0 > /dev/null 2>&1; then seg1=0; fi
+        if ! expr "$seg2" + 0 > /dev/null 2>&1; then seg2=0; fi
+
+        # Perform bitwise OR
+        res=$((seg1 | seg2))
+        # Validate result (optional but good practice)
+        if ! expr "$res" + 0 > /dev/null 2>&1; then
+             log_msg E "bitwise_or_ipv6: Non-numeric result ($res) from OR operation ($seg1 | $seg2) at index $i."
+             # Handle error: return empty string and error code?
+             echo ""
+             return 1
+        fi
+
+
+        # Append result to the string, adding space except for the first element
+        if [ $i -eq 1 ]; then
+            result_segments="$res"
+        else
+            result_segments="${result_segments} $res"
+        fi
+
         i=$((i + 1))
     done
 
-    echo "${result_segments% }"
+    echo "$result_segments"
+    return 0 # Indicate success
 }
 
 # --- End of New Helper Functions ---
