@@ -328,7 +328,7 @@ bc_calc() {
 # Function: ipv6_to_dec_segments
 # Description: Converts an IPv6 address string (including compressed format)
 #              to a space-separated string of 8 decimal segments.
-# Arguments: $1: IPv6 address string (e.g., "2400:4151::1", "::1")
+# Arguments: $1: IPv6 address string (e.g., "2400:4151::1", "::1", "2400:4151::")
 # Output: Prints space-separated decimal segments (e.g., "9216 16721 0 0 0 0 0 1")
 # Returns: 0 on success, 1 on invalid input format
 ipv6_to_dec_segments() {
@@ -344,36 +344,56 @@ ipv6_to_dec_segments() {
 
     # 1. Expand "::" if present
     if echo "$ipv6_addr" | grep -q "::"; then
-        # Count segments before and after "::"
-        local segments_before=$(echo "$ipv6_addr" | sed 's/::.*//' | tr -cd ':' | wc -c)
-        local segments_after=$(echo "$ipv6_addr" | sed 's/.*:://' | tr -cd ':' | wc -c)
+        local before_colon=""
+        local after_colon=""
 
-        # Adjust counts if "::" is at the beginning or end
-        if ! echo "$ipv6_addr" | grep -q '^::'; then segments_before=$((segments_before + 1)); fi
-        if ! echo "$ipv6_addr" | grep -q '::$'; then segments_after=$((segments_after + 1)); fi
+        # Special case: "::"
+        if [ "$ipv6_addr" = "::" ]; then
+            full_ipv6="0:0:0:0:0:0:0:0"
+        else
+            before_colon=$(echo "$ipv6_addr" | sed 's/::.*//')
+            after_colon=$(echo "$ipv6_addr" | sed 's/.*:://')
 
-        num_segments=$((segments_before + segments_after))
-        if [ "$num_segments" -gt 8 ]; then # Should not happen for valid IPv6
-             debug_log "ERROR" "Invalid IPv6 format detected during expansion: $ipv6_addr"
-             return 1
+            local segments_before=0
+            local segments_after=0
+
+            # Count segments before "::"
+            if [ -n "$before_colon" ]; then
+                segments_before=$(($(echo "$before_colon" | tr -cd ':' | wc -c) + 1))
+            fi
+            # Count segments after "::"
+            if [ -n "$after_colon" ]; then
+                segments_after=$(($(echo "$after_colon" | tr -cd ':' | wc -c) + 1))
+            fi
+
+            num_segments=$((segments_before + segments_after))
+            if [ "$num_segments" -gt 7 ]; then # Max 7 segments around '::'
+                debug_log "ERROR" "Invalid IPv6 format detected during expansion: $ipv6_addr"
+                return 1
+            fi
+            num_zeros=$((8 - num_segments))
+
+            # Create zero padding string (e.g., "0:0:0")
+            local zero_padding=""
+            i=1
+            while [ "$i" -le "$num_zeros" ]; do
+                if [ "$i" -eq 1 ]; then
+                    zero_padding="0"
+                else
+                    zero_padding="${zero_padding}:0"
+                fi
+                i=$((i + 1))
+            done
+
+            # Construct the full IPv6 string
+            if [ -z "$before_colon" ]; then # Starts with "::"
+                full_ipv6="${zero_padding}:${after_colon}"
+            elif [ -z "$after_colon" ]; then # Ends with "::"
+                full_ipv6="${before_colon}:${zero_padding}"
+            else # "::" is in the middle
+                full_ipv6="${before_colon}:${zero_padding}:${after_colon}"
+            fi
         fi
-        num_zeros=$((8 - num_segments))
-
-        # Create zero padding string (e.g., ":0:0:0")
-        local zero_padding=""
-        i=0
-        while [ "$i" -lt "$num_zeros" ]; do
-            zero_padding="${zero_padding}:0"
-            i=$((i + 1))
-        done
-        # Remove leading colon if "::" was at the start
-        if echo "$ipv6_addr" | grep -q '^::'; then zero_padding=$(echo "$zero_padding" | cut -c2-); fi
-
-        # Replace "::" with the zero padding, ensuring correct colons
-        full_ipv6=$(echo "$ipv6_addr" | sed "s/::/:${zero_padding}:/" | sed 's/:\{3,\}/::/g' | sed 's/^://' | sed 's/:$//')
-        # Handle the special case of "::" -> "0:0:0:0:0:0:0:0"
-        if [ "$ipv6_addr" = "::" ]; then full_ipv6="0:0:0:0:0:0:0:0"; fi
-
     else
         full_ipv6="$ipv6_addr"
         # Validate non-compressed format has 7 colons (8 segments)
