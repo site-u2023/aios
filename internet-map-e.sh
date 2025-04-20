@@ -918,43 +918,67 @@ bitwise_or_ipv6() {
     local segments2="$2"
     local result_segments=""
     local i=1
-    local seg1 seg2 res
+    # Use temporary arrays to avoid issues with modifying $@ directly if called nested
+    local arr1_tmp arr2_tmp
 
-    # Loop through 8 potential segments
+    log_msg D "bitwise_or_ipv6: Called with segments1='$segments1', segments2='$segments2'" # Log inputs
+
+    local old_ifs="$IFS"
+    IFS=' '
+    # Read segments into temporary arrays carefully, handle potential extra spaces
+    arr1_tmp=($segments1); log_msg D "bitwise_or_ipv6: Read arr1_tmp=(${arr1_tmp[*]}) count=${#arr1_tmp[@]}" # Log array content and count
+    arr2_tmp=($segments2); log_msg D "bitwise_or_ipv6: Read arr2_tmp=(${arr2_tmp[*]}) count=${#arr2_tmp[@]}" # Log array content and count
+    IFS="$old_ifs"
+
+    # Ensure arrays have exactly 8 elements, padding with 0 if needed
+    local arr1=() arr2=()
+    local j=0
+    while [ $j -lt 8 ]; do
+        local val1=${arr1_tmp[$j]:-0}
+        local val2=${arr2_tmp[$j]:-0}
+        # Validate and sanitize each element before adding to final arrays
+        case "$val1" in ''|*[!0-9]*) log_msg W "bitwise_or_ipv6: Sanitizing invalid element arr1_tmp[$j]='$val1' to 0"; val1=0;; *) ;; esac
+        case "$val2" in ''|*[!0-9]*) log_msg W "bitwise_or_ipv6: Sanitizing invalid element arr2_tmp[$j]='$val2' to 0"; val2=0;; *) ;; esac
+        arr1+=("$val1")
+        arr2+=("$val2")
+        j=$((j + 1))
+    done
+    log_msg D "bitwise_or_ipv6: Sanitized/Padded arr1=(${arr1[*]})" # Log final arrays
+    log_msg D "bitwise_or_ipv6: Sanitized/Padded arr2=(${arr2[*]})" # Log final arrays
+
+    # Loop through the 8 guaranteed elements
     while [ $i -le 8 ]; do
-        # Extract the i-th segment from each string using cut. Default to 0 if missing.
-        seg1=$(echo "$segments1" | cut -d' ' -f$i 2>/dev/null)
-        seg2=$(echo "$segments2" | cut -d' ' -f$i 2>/dev/null)
+        local idx=$((i-1))
+        local seg1=${arr1[$idx]} # No need for :-0 here as array is guaranteed to have 8 numeric elements
+        local seg2=${arr2[$idx]}
 
-        # Use default value 0 if segment is empty or non-numeric
-        if ! expr "$seg1" + 0 > /dev/null 2>&1; then seg1=0; fi
-        if ! expr "$seg2" + 0 > /dev/null 2>&1; then seg2=0; fi
+        log_msg D "bitwise_or_ipv6: Loop i=$i, idx=$idx, seg1='$seg1', seg2='$seg2'" # Log values before OR
 
-        # Perform bitwise OR
-        res=$((seg1 | seg2))
-        # Validate result (optional but good practice)
-        if ! expr "$res" + 0 > /dev/null 2>&1; then
-             log_msg E "bitwise_or_ipv6: Non-numeric result ($res) from OR operation ($seg1 | $seg2) at index $i."
-             # Handle error: return empty string and error code?
-             echo ""
-             return 1
-        fi
+        # Perform OR operation
+        local or_result=$((seg1 | seg2))
 
-
-        # Append result to the string, adding space except for the first element
-        if [ $i -eq 1 ]; then
-            result_segments="$res"
-        else
-            result_segments="${result_segments} $res"
-        fi
+        # Validate the result of the OR operation
+        case "$or_result" in
+            ''|*[!0-9]*) # Should not happen if seg1/seg2 are valid numbers, but check for safety
+                 log_msg E "bitwise_or_ipv6: Non-numeric result ('$or_result') from OR operation ($seg1 | $seg2) at index $i."
+                 echo "" # Return empty on error
+                 return 1
+                 ;;
+            *)
+                 result_segments="${result_segments}${or_result} "
+                 log_msg D "bitwise_or_ipv6: Loop i=$i, or_result='$or_result', result_segments='$result_segments'" # Log intermediate result
+                 ;;
+        esac
 
         i=$((i + 1))
     done
 
-    echo "$result_segments"
-    return 0 # Indicate success
+    log_msg D "bitwise_or_ipv6: Final result_segments before trim: '$result_segments'"
+    local final_result="${result_segments% }" # Remove trailing space
+    log_msg D "bitwise_or_ipv6: Returning: '$final_result'"
+    echo "$final_result"
+    return 0
 }
-
 # --- End of New Helper Functions ---
 
 
