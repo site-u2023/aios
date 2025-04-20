@@ -1032,40 +1032,38 @@ internet_main() {
     local matched_rule=""
     local NET_IF6=""
     local NET_ADDR6=""
+    # script_basename variable is no longer needed
 
-    # --- Argument Parsing or Dynamic IPv6 Fetching ---
-    if [ "$#" -eq 1 ]; then
-        user_ipv6_str="$1"
-        debug_log "INFO" "Using provided IPv6 address: $user_ipv6_str"
-    elif [ "$#" -eq 0 ]; then
-        debug_log "INFO" "No IPv6 address provided, attempting to fetch from WAN interface..."
-        if ! type network_find_wan6 > /dev/null 2>&1 || ! type network_get_ipaddr6 > /dev/null 2>&1 ; then
-             debug_log "ERROR" "OpenWrt network functions (network_find_wan6, network_get_ipaddr6) not found. Cannot fetch WAN IPv6."
-             printf "Error: OpenWrt network functions not available.\n" >&2
-             return 1
-        fi
-        network_flush_cache
-        network_find_wan6 NET_IF6
-        if [ -z "$NET_IF6" ]; then
-            debug_log "ERROR" "Could not find WAN6 interface (network_find_wan6)."
-            printf "Error: Could not find WAN6 interface.\n" >&2
-            return 1
-        fi
-        debug_log "DEBUG" "Found WAN6 interface: $NET_IF6"
-        network_get_ipaddr6 NET_ADDR6 "${NET_IF6}"
-        if [ -z "$NET_ADDR6" ]; then
-            debug_log "ERROR" "Could not get IPv6 address from interface '$NET_IF6' (network_get_ipaddr6)."
-            printf "Error: Could not get IPv6 address from interface '%s'.\n" "$NET_IF6" >&2
-            return 1
-        fi
-        user_ipv6_str=$(echo "$NET_ADDR6" | cut -d'/' -f1)
-        debug_log "INFO" "Fetched IPv6 address from WAN ($NET_IF6): $user_ipv6_str"
-    else
-        debug_log "ERROR" "Invalid arguments. Usage: $SCRIPT_NAME [ipv6_address]"
-        printf "Usage: %s [ipv6_address]\n" "$SCRIPT_NAME" >&2
-        return 1
+    # --- Get WAN IPv6 Address using OpenWrt functions ---
+    debug_log "INFO" "Attempting to fetch IPv6 address from WAN interface..."
+
+    # Ensure network functions are available (basic check)
+    if ! type network_find_wan6 > /dev/null 2>&1 || ! type network_get_ipaddr6 > /dev/null 2>&1 ; then
+         debug_log "ERROR" "OpenWrt network functions (network_find_wan6, network_get_ipaddr6) not found. Cannot fetch WAN IPv6."
+         printf "Error: OpenWrt network functions not available.\n" >&2
+         return 1
     fi
 
+    network_flush_cache # Recommended before finding interfaces
+    network_find_wan6 NET_IF6 # Find the WAN6 interface logical name
+    if [ -z "$NET_IF6" ]; then
+        debug_log "ERROR" "Could not find WAN6 interface (network_find_wan6)."
+        printf "Error: Could not find WAN6 interface.\n" >&2
+        return 1
+    fi
+    debug_log "DEBUG" "Found WAN6 interface: $NET_IF6"
+
+    network_get_ipaddr6 NET_ADDR6 "${NET_IF6}" # Get the IPv6 address
+    if [ -z "$NET_ADDR6" ]; then
+        debug_log "ERROR" "Could not get IPv6 address from interface '$NET_IF6' (network_get_ipaddr6)."
+        printf "Error: Could not get IPv6 address from interface '%s'.\n" "$NET_IF6" >&2
+        return 1
+    fi
+    # network_get_ipaddr6 might return address with prefix length, remove it if present
+    user_ipv6_str=$(echo "$NET_ADDR6" | cut -d'/' -f1)
+    debug_log "INFO" "Fetched IPv6 address from WAN ($NET_IF6): $user_ipv6_str"
+
+    # --- Proceed with calculation using fetched IPv6 ---
     debug_log "INFO" "Starting MAP-E calculation for IPv6: $user_ipv6_str"
 
     # --- Load Rules ---
@@ -1077,8 +1075,8 @@ internet_main() {
     # --- Validate and Convert User IPv6 ---
     user_ipv6_segs=$(ipv6_to_dec_segments "$user_ipv6_str")
     if [ $? -ne 0 ]; then
-        debug_log "ERROR" "Invalid IPv6 address format used for calculation: $user_ipv6_str"
-        printf "Error: Invalid IPv6 address format ('%s').\n" "$user_ipv6_str" >&2
+        debug_log "ERROR" "Invalid IPv6 address format obtained from WAN: $user_ipv6_str"
+        printf "Error: Invalid IPv6 address format obtained ('%s').\n" "$user_ipv6_str" >&2
         return 1
     fi
     debug_log "DEBUG" "User IPv6 decimal segments: $user_ipv6_segs"
