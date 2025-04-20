@@ -1,1597 +1,1432 @@
-#!/bin/sh
-# Load OpenWrt function libraries required by this script
-. /lib/functions.sh
-. /lib/functions/network.sh
-# . /lib/netifd/netifd-proto.sh # Keep commented unless explicitly needed later by other functions
+#!/bin/ash
+# internet-map-e.sh - MAP-E parameter calculation script (fc2 compatible logic)
+# Copyright (C) 2025 site-u2023 <your_email>
+# License: CC0 (Public Domain)
 
-# internet-map-e.sh
-# Calculates MAP-E parameters based on user IPv6 prefix, aiming for 100% compatibility
-# with the logic from https://github.com/missing233/map-e/blob/master/map-e.js
+SCRIPT_VERSION="2025.04.20-13-30" # Updated version for fc2 logic completion
+
+# =========================================================
+# 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
+# 🚀 Last Update: 2025-04-20
+#
+# 🏷️ License: CC0 (Public Domain)
+# 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
+#
+# ⚠️ IMPORTANT NOTICE:
+# OpenWrt OS exclusively uses **Almquist Shell (ash)** and
+# is **NOT** compatible with Bourne-Again Shell (bash).
+#
+# 📢 POSIX Compliance Guidelines:
+# ✅ Use `[` instead of `[[` for conditions
+# ✅ Use $(command) instead of backticks `command`
+# ✅ Use $(( )) for arithmetic instead of let
+# ✅ Define functions as func_name() {} (no function keyword)
+# ✅ No associative arrays (declare -A is NOT supported)
+# ✅ No here-strings (<<< is NOT supported)
+# ✅ No -v flag in test or [[
+# ✅ Avoid bash-specific string operations like ${var:0:3}
+# ✅ Avoid arrays entirely when possible (even indexed arrays can be problematic)
+# ✅ Use printf followed by read instead of read -p
+# ✅ Use printf instead of echo -e for portable formatting
+# ✅ Avoid process substitution <() and >()
+# ✅ Prefer case statements over complex if/elif chains
+# ✅ Use command -v instead of which or type for command existence checks
+# ✅ Keep scripts modular with small, focused functions
+# ✅ Use simple error handling instead of complex traps
+# ✅ Test scripts with ash/dash explicitly, not just bash
+#
+# 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
+### =========================================================
+### 📌 AI Assistance Request: POSIX-Compliant Debugging Guide
+###
+### When debugging or fixing errors in this POSIX shell script:
+###
+### 1️⃣ Create a minimal reproducible test case (avoid bash features)
+### 2️⃣ Test with ash/dash explicitly: dash ./test.sh
+### 3️⃣ Use portable debugging methods: echo, printf, or set -x
+### 4️⃣ Validate fixes against all POSIX compliance guidelines
+### 5️⃣ Ensure the solution works in resource-constrained OpenWrt
+###
+### ⚠️ IMPORTANT:
+### - Avoid suggesting bash-specific solutions
+### - Always test fixes with ash/dash before implementation
+### - Prefer simple solutions over complex ones
+### - Do not modify production code without test verification
+###
+### 🛠️ Keep debugging simple, focused, and POSIX-compliant!
+### =========================================================
+
+# --- Configuration ---
+SCRIPT_NAME=$(basename "$0")
+DEBUG_LEVEL="${DEBUG_LEVEL:-INFO}" # DEBUG, INFO, WARN, ERROR
+BASE_DIR="/tmp/aios" # Use the same base directory as aios for consistency
+LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
+
+# --- Load Libraries ---
+# Load OpenWrt function libraries required by this script
+. /lib/functions.sh # Load if specific functions like 'logger' are needed later
+. /lib/functions/network.sh # Load if network functions are needed later
+
+# --- Create Directories ---
+mkdir -p "$LOG_DIR" || {
+  echo "FATAL: Cannot create log directory: $LOG_DIR" >&2
+  exit 1
+}
+# Create directory for bc temporary files if it doesn't exist
+mkdir -p "$BASE_DIR" || {
+  echo "FATAL: Cannot create base directory: $BASE_DIR" >&2
+  exit 1
+}
+
+
+# --- Check Dependencies ---
+command -v bc >/dev/null 2>&1 || {
+  # Use echo for initial fatal error as debug_log might not be defined yet
+  echo "$(date '+%Y-%m-%d %H:%M:%S') [FATAL] ${SCRIPT_NAME}: 'bc' command not found. Please install the 'bc' package (e.g., 'opkg update && opkg install bc' or 'apk update && apk add bc')." >&2
+  exit 1
+}
 
 # --- Global Variables ---
-# Set by mape_mold, used by mape_display/mape_config
-MAPE_STATUS="init" # Status: init, success, fail
-RULE_NAME=""       # Matched rule name (e.g., "v6plus_jpne")
-IPV4=""            # Calculated user shared IPv4 address
-BR=""              # Border Relay IPv6 address
-IP6PFX=""          # User's normalized IPv6 prefix used for calculation
-CE_ADDR=""         # Calculated CE IPv6 address
-IP4PREFIXLEN=""    # User's effective IPv4 prefix length (e.g., 32 for /32)
-IP6PREFIXLEN=""    # Rule's IPv6 prefix length (e.g., 32, 48)
-EALEN=""           # Calculated EA-bits length
-PSIDLEN=""         # Rule's PSID length
-OFFSET=""          # Rule's offset (a-bits)
-PSID=""            # Calculated PSID value
-PORTS=""           # Calculated port range string (e.g., "1024-2047")
-RFC=""             # Rule's RFC flag (true/false)
+# Rule Definitions (Global Variables)
+# Parameters for the 'fc2_ocn' rule based on https://ipv4.web.fc2.com/map-e.html logic
+RULE_FC2_OCN_NAME="fc2_ocn"
+RULE_FC2_OCN_IP6PREFIX_STR="2400:4151::" # Rule's IPv6 prefix string
+RULE_FC2_OCN_IP6PREFIXLEN="32"
+RULE_FC2_OCN_PSIDLEN="6"
+RULE_FC2_OCN_OFFSET="6" # a-bits
+RULE_FC2_OCN_BR_IPV4_STR="2.37.0.1" # Base IPv4 string for calculation
+RULE_FC2_OCN_RULE_IP4MASK_DEC="4294967232" # Decimal for 0xFFFFFFC0 (/26 mask)
+RULE_FC2_OCN_IS_RFC="0" # 0 for false, 1 for true
+RULE_FC2_OCN_PEERADDR_STR="2404:9200:225:100::64" # BR IPv6 address string
 
-# --- Logging ---
-DEBUG=0 # Set to 1 to enable debug messages
-log_msg() {
-    local level="$1"
-    shift
-    local msg="$*"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    case "$level" in
-        "I") echo "$timestamp [INFO] MAP-E: $msg" ;;
-        "E") echo "$timestamp [ERROR] MAP-E: $msg" >&2 ;;
-        "D") [ "$DEBUG" -eq 1 ] && echo "$timestamp [DEBUG] MAP-E: $msg" ;;
-        *) echo "$timestamp [UNKN] MAP-E: $msg" ;;
-    esac
+# Pre-calculated/converted values for the rule (populated by load_rules)
+RULE_FC2_OCN_IP6PREFIX_SEGS="" # Rule's IPv6 prefix as decimal segments
+RULE_FC2_OCN_IP6NETWORK_SEGS="" # Rule's Network address as decimal segments
+RULE_FC2_OCN_BR_IPV4_DEC="" # Rule's Base IPv4 as decimal number
+
+# Global Variables for Calculated Parameters
+MAPE_USER_PREFIX_SEGS=""
+MAPE_RULE_NAME=""
+MAPE_PSID=""
+MAPE_IPV4=""
+MAPE_CE_IPV6_SEGS="" # Store CE IPv6 as decimal segments initially
+MAPE_CE_IPV6=""      # Store final formatted CE IPv6 string
+MAPE_PORT_RANGE=""
+MAPE_BR_IPV6=""      # Store final formatted BR IPv6 string
+MAPE_EA_LEN=""       # Effective EA length (derived if needed)
+
+
+# Function: bc_calc
+# Description: Executes calculation using bc with basic error checking
+# Arguments: $1: Calculation string to pass to bc
+# Output: Prints the result of the calculation to stdout
+# Returns: 0 on success, 1 on error (e.g., bc error)
+bc_calc() {
+  local expression="$1"
+  local result=""
+  local bc_stderr=""
+  local exit_code=0
+  # Use BASE_DIR for temporary file location
+  local stderr_file="${BASE_DIR}/${SCRIPT_NAME}_bc_stderr.$$"
+
+  # Ensure BASE_DIR exists (redundant if created at start, but safe)
+  mkdir -p "$BASE_DIR" 2>/dev/null
+
+  debug_log "DEBUG" "bc_calc: Executing: echo \"$expression\" | bc"
+
+  # Execute bc, capture stdout and stderr separately
+  result=$(echo "$expression" | bc 2> "$stderr_file")
+  exit_code=$?
+  # Check if stderr file was created and has content
+  if [ -f "$stderr_file" ]; then
+    bc_stderr=$(cat "$stderr_file")
+    rm -f "$stderr_file"
+  else
+    bc_stderr="" # Ensure bc_stderr is empty if file wasn't created
+ fi
+
+  # Check exit code OR if bc produced any stderr output
+  if [ "$exit_code" -ne 0 ] || [ -n "$bc_stderr" ]; then
+    # Use debug_log for error reporting
+    debug_log "ERROR" "bc calculation failed (Exit Code: $exit_code) for expression: '${expression}'. bc stderr: ${bc_stderr:-<none>}"
+    return 1
+  fi
+
+  # POSIX way to check if result is empty or only whitespace
+  # Check if result contains non-whitespace characters
+  if printf "%s" "$result" | grep -q '[^[:space:]]'; then
+      printf "%s\n" "$result" # Use printf for potentially multi-line results
+  else
+      # Handle cases where bc might return empty string or only whitespace for valid inputs (e.g., "0")
+      # If expression was likely to produce 0, let's return 0
+      # This is a heuristic, might need refinement depending on bc usage
+      if echo "$expression" | grep -q "^0"; then # Simple check if expression starts with 0
+          printf "0\n"
+      else
+          debug_log "WARN" "bc returned empty or whitespace result for expression: '${expression}'"
+          # Decide if empty result is an error or valid (e.g., 0)
+          # Let's return success but print nothing, caller should handle
+          # Or return error? Let's return error for now.
+          # return 1
+          # Update: Let's return success but print the potentially empty result. Caller decides.
+          printf "%s\n" "$result"
+      fi
+  fi
+
+  return 0
 }
 
-# --- Start of Rule Definition Functions ---
-# Fully implemented based on map-e.js rules array
+# Function: ipv6_to_dec_segments
+# Description: Converts an IPv6 address string (including compressed format)
+#              to a space-separated string of 8 decimal segments.
+# Arguments: $1: IPv6 address string (e.g., "2400:4151::1", "::1")
+# Output: Prints space-separated decimal segments (e.g., "9216 16721 0 0 0 0 0 1")
+# Returns: 0 on success, 1 on invalid input format
+ipv6_to_dec_segments() {
+    local ipv6_addr="$1"
+    local full_ipv6=""
+    local segment=""
+    local dec_segments=""
+    local i=0
+    local num_segments=0
+    local num_zeros=0
 
-get_rule_ids() {
-    echo "v6plus_jpne \
-ocn_v1 \
-ocn_v2 \
-transix_ipv4_provider_fix \
-transix_ipv4_provider_var \
-transix_dsbn_fix \
-iijmio_fiberaccess_f \
-v6connect_fixed_ip \
-v6connect_dynamic_ip \
-cross_pass \
-v6option \
-ocn_for_docomo_net"
-}
+    debug_log "DEBUG" "ipv6_to_dec_segments: Input IPv6: $ipv6_addr"
 
-get_rule_ipv6_cidrs() {
-    local rule_id="$1"
-    case "$rule_id" in
-        "v6plus_jpne") echo "240b:10::/32 240b:11::/32 240b:12::/32 240b:13::/32 240b:250::/32 240b:251::/32 240b:252::/32 240b:253::/32" ;;
-        "ocn_v1") echo "2400:4050::/32 2400:4051::/32 2400:4052::/32 2400:4053::/32 2400:4150::/32 2400:4151::/32 2400:4152::/32 2400:4153::/32" ;;
-        "ocn_v2") echo "2400:4050::/31 2400:4052::/31 2400:4150::/31 2400:4152::/31" ;;
-        "transix_ipv4_provider_fix") echo "240e:10::/32 240e:11::/32 240e:12::/32 240e:13::/32 240e:80::/32 240e:81::/32 240e:82::/32 240e:83::/32 240e:2f0::/32 240e:2f1::/32 240e:2f2::/32 240e:2f3::/32 240e:300::/32 240e:301::/32 240e:302::/32 240e:303::/32 240e:400::/32 240e:401::/32 240e:402::/32 240e:403::/32" ;;
-        "transix_ipv4_provider_var") echo "240e:10::/32 240e:11::/32 240e:12::/32 240e:13::/32 240e:80::/32 240e:81::/32 240e:82::/32 240e:83::/32 240e:2f0::/32 240e:2f1::/32 240e:2f2::/32 240e:2f3::/32 240e:300::/32 240e:301::/32 240e:302::/32 240e:303::/32 240e:400::/32 240e:401::/32 240e:402::/32 240e:403::/32" ;;
-        "transix_dsbn_fix") echo "2404:7a80::/32" ;;
-        "iijmio_fiberaccess_f") echo "2400:2650::/32 2400:2651::/32 2400:2652::/32 2400:2653::/32" ;;
-        "v6connect_fixed_ip") echo "240d:1a::/32 240d:1b::/32 240d:1c::/32 240d:1d::/32" ;;
-        "v6connect_dynamic_ip") echo "240d:1a::/32 240d:1b::/32 240d:1c::/32 240d:1d::/32" ;;
-        "cross_pass") echo "2409:10::/32 2409:11::/32 2409:12::/32 2409:13::/32 2409:250::/32 2409:251::/32 2409:252::/32 2409:253::/32" ;;
-        "v6option") echo "2403:8940::/31" ;;
-        "ocn_for_docomo_net") echo "2400:4030::/31" ;;
-        *) echo "" ;;
-    esac
-}
+    # 1. Expand "::" if present
+    if echo "$ipv6_addr" | grep -q "::"; then
+        local part1=$(echo "$ipv6_addr" | cut -d':' -f1)
+        local part2=$(echo "$ipv6_addr" | cut -d':' -f2-) # Get the rest after first colon
 
-get_rule_br() {
-    local rule_id="$1"
-    case "$rule_id" in
-        "v6plus_jpne") echo "240b:10:a0e0::1" ;; # Note: Multiple BRs exist, map-e.js uses this one. Consider logic if specific BR matching is needed.
-        "ocn_v1") echo "2404:9200:225:100::64" ;;
-        "ocn_v2") echo "2404:9200:225:100::64" ;;
-        "transix_ipv4_provider_fix") echo "240e:fffd::1" ;;
-        "transix_ipv4_provider_var") echo "240e:fffd::1" ;;
-        "transix_dsbn_fix") echo "2404:7a80:fffd::1" ;;
-        "iijmio_fiberaccess_f") echo "2400:2600:10a::1" ;;
-        "v6connect_fixed_ip") echo "240d:1a:fffd::1" ;;
-        "v6connect_dynamic_ip") echo "240d:1a:fffd::1" ;;
-        "cross_pass") echo "2409:10:a0e0::1" ;; # Note: Multiple BRs exist, map-e.js uses this one.
-        "v6option") echo "2403:8940:ffff::1" ;;
-        "ocn_for_docomo_net") echo "2404:9200:225:100::64" ;;
-        *) echo "" ;;
-    esac
-}
+        # Count existing segments before and after "::"
+        local segments_before=$(echo "$ipv6_addr" | sed 's/::.*//' | tr -cd ':' | wc -c)
+        local segments_after=$(echo "$ipv6_addr" | sed 's/.*:://' | tr -cd ':' | wc -c)
 
-get_rule_ip6prefixlen() {
-    local rule_id="$1"
-    case "$rule_id" in
-        "v6plus_jpne") echo "32" ;;
-        "ocn_v1") echo "32" ;;
-        "ocn_v2") echo "48" ;; # Note: map-e.js uses 48 for calculation despite /31 range
-        "transix_ipv4_provider_fix") echo "32" ;;
-        "transix_ipv4_provider_var") echo "48" ;; # Note: map-e.js uses 48 for calculation despite /32 range
-        "transix_dsbn_fix") echo "48" ;; # Note: map-e.js uses 48 for calculation despite /32 range
-        "iijmio_fiberaccess_f") echo "32" ;;
-        "v6connect_fixed_ip") echo "48" ;; # Note: map-e.js uses 48 for calculation despite /32 range
-        "v6connect_dynamic_ip") echo "48" ;; # Note: map-e.js uses 48 for calculation despite /32 range
-        "cross_pass") echo "32" ;;
-        "v6option") echo "48" ;; # Note: map-e.js uses 48 for calculation despite /31 range
-        "ocn_for_docomo_net") echo "48" ;; # Note: map-e.js uses 48 for calculation despite /31 range
-        *) echo "" ;;
-    esac
-}
+        # Adjust count if starts or ends with ":" (which happens with :: at start/end)
+        if echo "$ipv6_addr" | grep -q '^::'; then segments_before=0; else segments_before=$((segments_before + 1)); fi
+        if echo "$ipv6_addr" | grep -q '::$'; then segments_after=0; else segments_after=$((segments_after + 1)); fi
 
-get_rule_ip4prefixlen() {
-    local rule_id="$1"
-    case "$rule_id" in
-        "v6plus_jpne") echo "21" ;;
-        "ocn_v1") echo "20" ;;
-        "ocn_v2") echo "20" ;;
-        "transix_ipv4_provider_fix") echo "24" ;;
-        "transix_ipv4_provider_var") echo "24" ;;
-        "transix_dsbn_fix") echo "24" ;;
-        "iijmio_fiberaccess_f") echo "23" ;;
-        "v6connect_fixed_ip") echo "24" ;;
-        "v6connect_dynamic_ip") echo "24" ;;
-        "cross_pass") echo "21" ;;
-        "v6option") echo "24" ;;
-        "ocn_for_docomo_net") echo "20" ;;
-        *) echo "" ;;
-    esac
-}
+        num_segments=$((segments_before + segments_after))
+        num_zeros=$((8 - num_segments))
 
-get_rule_psidlen() {
-    local rule_id="$1"
-    case "$rule_id" in
-        "v6plus_jpne") echo "8" ;;
-        "ocn_v1") echo "6" ;;
-        "ocn_v2") echo "6" ;;
-        "transix_ipv4_provider_fix") echo "0" ;;
-        "transix_ipv4_provider_var") echo "12" ;;
-        "transix_dsbn_fix") echo "0" ;;
-        "iijmio_fiberaccess_f") echo "8" ;;
-        "v6connect_fixed_ip") echo "0" ;;
-        "v6connect_dynamic_ip") echo "12" ;;
-        "cross_pass") echo "8" ;;
-        "v6option") echo "12" ;;
-        "ocn_for_docomo_net") echo "6" ;;
-        *) echo "" ;;
-    esac
-}
-
-get_rule_offset() {
-    local rule_id="$1"
-    case "$rule_id" in
-        "v6plus_jpne") echo "4" ;;
-        "ocn_v1") echo "6" ;;
-        "ocn_v2") echo "6" ;;
-        "transix_ipv4_provider_fix") echo "0" ;;
-        "transix_ipv4_provider_var") echo "6" ;;
-        "transix_dsbn_fix") echo "0" ;;
-        "iijmio_fiberaccess_f") echo "7" ;;
-        "v6connect_fixed_ip") echo "0" ;;
-        "v6connect_dynamic_ip") echo "6" ;;
-        "cross_pass") echo "4" ;;
-        "v6option") echo "6" ;;
-        "ocn_for_docomo_net") echo "6" ;;
-        *) echo "" ;;
-    esac
-}
-
-get_rule_rfc() {
-    local rule_id="$1"
-    case "$rule_id" in
-        "v6plus_jpne") echo "false" ;;
-        "ocn_v1") echo "false" ;;
-        "ocn_v2") echo "false" ;;
-        "transix_ipv4_provider_fix") echo "true" ;;
-        "transix_ipv4_provider_var") echo "true" ;;
-        "transix_dsbn_fix") echo "true" ;;
-        "iijmio_fiberaccess_f") echo "false" ;;
-        "v6connect_fixed_ip") echo "true" ;;
-        "v6connect_dynamic_ip") echo "true" ;;
-        "cross_pass") echo "false" ;;
-        "v6option") echo "true" ;;
-        "ocn_for_docomo_net") echo "false" ;;
-        *) echo "false" ;; # Default to false
-    esac
-}
-
-# --- End of Rule Definition Functions ---
-
-# --- Start of Fixed IPv4 Mapping Helper Function ---
-
-# Checks if the given IPv6 prefix matches any fixed mapping rules (ruleprefixXX from map-e.js).
-# Usage: get_fixed_ipv4_mapping <user_ipv6_dec_segments>
-# Returns: The mapped IPv4 address string if a match is found, otherwise empty string.
-# Note: This function assumes extract_ipv6_bits is available and works correctly.
-get_fixed_ipv4_mapping() {
-    local user_ip6_dec="$1"
-    local prefix31_val prefix38_val
-    local mapped_ipv4=""
-
-    # --- 1. Extract Prefix Bits ---
-    # Extract first 31 bits
-    prefix31_val=$(extract_ipv6_bits 0 31 "$user_ip6_dec")
-    if [ $? -ne 0 ]; then
-        log_msg E "get_fixed_ipv4_mapping: Failed to extract first 31 bits."
-        # Decide if we should proceed to 38-bit check or return error
-        # Let's try 38-bit check for now.
-    fi
-
-    # Extract first 38 bits
-    prefix38_val=$(extract_ipv6_bits 0 38 "$user_ip6_dec")
-     if [ $? -ne 0 ]; then
-        log_msg E "get_fixed_ipv4_mapping: Failed to extract first 38 bits."
-        # If both extractions fail, return empty
-        if [ -z "$prefix31_val" ]; then
-             echo ""
-             return 1
-        fi
-    fi
-
-    log_msg D "get_fixed_ipv4_mapping: Extracted prefix values - 31bit=$prefix31_val, 38bit=$prefix38_val"
-
-    # --- 2. Check ruleprefix31 ---
-    # Keys are decimal representations of the first 31 bits (hex values from map-e.js converted)
-    # 0x240b0010 -> 604700688
-    # 0x240b0012 -> 604700690
-    # 0x240b0250 -> 604701264
-    # 0x240b0252 -> 604701266
-    # 0x24047a80 -> 604257920
-    # 0x24047a84 -> 604257924
-    if [ -n "$prefix31_val" ]; then
-        case "$prefix31_val" in
-            "604700688") mapped_ipv4="106.72.x.x" ;; # Special format, needs handling later
-            "604700690") mapped_ipv4="14.8.x.x" ;;   # Special format
-            "604701264") mapped_ipv4="14.10.x.x" ;;  # Special format
-            "604701266") mapped_ipv4="14.12.x.x" ;;  # Special format
-            "604257920") mapped_ipv4="133.200.x.x" ;; # Special format
-            "604257924") mapped_ipv4="133.206.x.x" ;; # Special format
-        esac
-    fi
-
-    # If ruleprefix31 matched, return the partial IPv4. The caller needs to complete it.
-    # map-e.js logic seems to overwrite with ruleprefix38 if both match. Let's follow that.
-    # So, we don't return here, just potentially set mapped_ipv4.
-
-    # --- 3. Check ruleprefix38 and ruleprefix38_20 ---
-    # Keys are decimal representations of the first 38 bits
-    # 0x24047a8200 -> 154688721920
-    # 0x24047a8204 -> 154688721924
-    # ... (Need to convert all keys)
-    # Note: 38-bit numbers likely exceed standard 32-bit integer limits in ash.
-    # extract_ipv6_bits might return large numbers as strings or handle them inconsistently.
-    # Comparison using standard shell arithmetic might fail.
-    # Workaround: Use string comparison if extract_ipv6_bits returns consistent strings for large numbers.
-    # Or, if extract_ipv6_bits handles large numbers correctly, direct comparison might work on some ash versions.
-    # Let's try direct numeric comparison first, assuming extract_ipv6_bits works.
-
-    if [ -n "$prefix38_val" ]; then
-        # Convert hex keys from map-e.js to decimal for comparison
-        # Example: 0x24047a8200 -> 154688721920
-        # Example: 0x24047a8204 -> 154688721924
-        # Example: 0x24047a8218 -> 154688721944
-        # Example: 0x24047a821c -> 154688721948
-        # Example: 0x24047a8220 -> 154688721952 (ruleprefix38_20 start)
-        # Example: 0x24047a8224 -> 154688721956
-        # Example: 0x24047a8228 -> 154688721960
-        # Example: 0x24047a822c -> 154688721964
-        # Example: 0x24047a8230 -> 154688721968
-        # Example: 0x24047a8234 -> 154688721972
-        # Example: 0x24047a8238 -> 154688721976
-        # Example: 0x24047a823c -> 154688721980
-
-        # Note: These large decimal values MUST be handled correctly by the shell's arithmetic.
-        # Using string comparison might be safer if arithmetic is limited.
-        # Let's use case with string comparison for robustness.
-        case "$prefix38_val" in
-            # ruleprefix38
-            "154688721920") mapped_ipv4="125.196.208.$(extract_ipv6_bits 48 8 "$user_ip6_dec")" ;; # Combine with bits 48-55
-            "154688721924") mapped_ipv4="125.196.212.$(extract_ipv6_bits 48 8 "$user_ip6_dec")" ;;
-            "154688721928") mapped_ipv4="125.198.140.$(extract_ipv6_bits 48 8 "$user_ip6_dec")" ;; # 0x...a8208
-            "154688721932") mapped_ipv4="125.198.144.$(extract_ipv6_bits 48 8 "$user_ip6_dec")" ;; # 0x...a820c
-            "154688721936") mapped_ipv4="125.198.212.$(extract_ipv6_bits 48 8 "$user_ip6_dec")" ;; # 0x...a8210
-            "154688721940") mapped_ipv4="125.198.244.$(extract_ipv6_bits 48 8 "$user_ip6_dec")" ;; # 0x...a8214
-            "154688721944") mapped_ipv4="122.131.104.$(extract_ipv6_bits 48 8 "$user_ip6_dec")" ;; # 0x...a8218
-            "154688721948") mapped_ipv4="122.131.108.$(extract_ipv6_bits 48 8 "$user_ip6_dec")" ;; # 0x...a821c
-            # ruleprefix38_20
-            "154688721952") mapped_ipv4="125.196.209.$(extract_ipv6_bits 48 8 "$user_ip6_dec")" ;; # 0x...a8220
-            "154688721956") mapped_ipv4="125.196.213.$(extract_ipv6_bits 48 8 "$user_ip6_dec")" ;; # 0x...a8224
-            "154688721960") mapped_ipv4="125.198.141.$(extract_ipv6_bits 48 8 "$user_ip6_dec")" ;; # 0x...a8228
-            "154688721964") mapped_ipv4="125.198.145.$(extract_ipv6_bits 48 8 "$user_ip6_dec")" ;; # 0x...a822c
-            "154688721968") mapped_ipv4="125.198.213.$(extract_ipv6_bits 48 8 "$user_ip6_dec")" ;; # 0x...a8230
-            "154688721972") mapped_ipv4="125.198.245.$(extract_ipv6_bits 48 8 "$user_ip6_dec")" ;; # 0x...a8234
-            "154688721976") mapped_ipv4="122.131.105.$(extract_ipv6_bits 48 8 "$user_ip6_dec")" ;; # 0x...a8238
-            "154688721980") mapped_ipv4="122.131.109.$(extract_ipv6_bits 48 8 "$user_ip6_dec")" ;; # 0x...a823c
-        esac
-    fi
-
-    # --- 4. Handle ruleprefix31 special format ---
-    # If ruleprefix38 didn't match but ruleprefix31 did, complete the IPv4
-    if [ -z "$mapped_ipv4" ] && echo "$prefix31_val" | grep -qE '^(604700688|604700690|604701264|604701266|604257920|604257924)$'; then
-         log_msg D "get_fixed_ipv4_mapping: ruleprefix31 matched, completing IPv4."
-         local octet3 octet4
-         # map-e.js uses bits 32-39 for octet3 and 40-47 for octet4
-         octet3=$(extract_ipv6_bits 32 8 "$user_ip6_dec")
-         octet4=$(extract_ipv6_bits 40 8 "$user_ip6_dec")
-          if [ $? -ne 0 ] || [ -z "$octet3" ] || [ -z "$octet4" ]; then
-              log_msg E "get_fixed_ipv4_mapping: Failed to extract octet 3/4 for ruleprefix31 completion."
-              echo "" # Return empty on error
-              return 1
-          fi
-
-         # Reconstruct mapped_ipv4 based on the initial match
-         case "$prefix31_val" in
-            "604700688") mapped_ipv4="106.72.$octet3.$octet4" ;;
-            "604700690") mapped_ipv4="14.8.$octet3.$octet4" ;;
-            "604701264") mapped_ipv4="14.10.$octet3.$octet4" ;;
-            "604701266") mapped_ipv4="14.12.$octet3.$octet4" ;;
-            "604257920") mapped_ipv4="133.200.$octet3.$octet4" ;;
-            "604257924") mapped_ipv4="133.206.$octet3.$octet4" ;;
-         esac
-    elif echo "$mapped_ipv4" | grep -q '\.x\.x$'; then
-         # This case should not be reached if ruleprefix38 check is done correctly after ruleprefix31
-         log_msg W "get_fixed_ipv4_mapping: Partial IPv4 from ruleprefix31 was not overridden or completed."
-         mapped_ipv4="" # Reset if it's still partial
-    fi
-
-
-    # --- 5. Return result ---
-    if [ -n "$mapped_ipv4" ]; then
-        log_msg I "get_fixed_ipv4_mapping: Found fixed mapping: $mapped_ipv4"
-        echo "$mapped_ipv4"
-        return 0
-    else
-        log_msg D "get_fixed_ipv4_mapping: No fixed mapping rule matched."
-        echo ""
-        return 1 # Indicate no match found (using return code)
-    fi
-}
-
-# --- End of Fixed IPv4 Mapping Helper Function ---
-
-# --- Start of IPv6 Helper Functions ---
-
-calculate_ipv6_bitmask() {
-    local num_bits="$1"
-    local mask=0
-    if [ "$num_bits" -le 0 ]; then
-        echo 0
-    elif [ "$num_bits" -ge 16 ]; then
-        echo 65535 # 0xFFFF
-    else
-        mask=$(( 0xFFFF >> (16 - num_bits) ))
-        mask=$(( mask << (16 - num_bits) ))
-        mask=$(( mask & 0xFFFF ))
-        echo "$mask"
-    fi
-}
-
-normalize_ipv6() {
-    local ip="$1"
-    local expanded_ip=""
-    local num_segments=$(echo "$ip" | awk -F':' '{print NF}')
-    local num_colons=$((num_segments - 1))
-
-    if echo "$ip" | grep -q '::'; then
-        local segments_to_add=$((8 - num_segments + 1))
-        local zero_block=""
-        local i=0
-        while [ $i -lt $segments_to_add ]; do
-            if [ $i -eq 0 ]; then
-                zero_block="0000"
-            else
-                zero_block="${zero_block}:0000"
-            fi
+        # Build the zero string
+        local zero_padding=""
+        i=0
+        while [ "$i" -lt "$num_zeros" ]; do
+            zero_padding="${zero_padding}:0"
             i=$((i + 1))
         done
-        case "$ip" in
-            "::"*) ip=$(echo "$ip" | sed "s/::/$zero_block/") ;;
-            *"::") ip=$(echo "$ip" | sed "s/::/:$zero_block/") ;;
-            *) ip=$(echo "$ip" | sed "s/::/:$zero_block:/") ;;
-        esac
-        num_segments=$(echo "$ip" | awk -F':' '{print NF}')
+        # Remove leading ":" if ipv6_addr started with "::"
+        if echo "$ipv6_addr" | grep -q '^::'; then zero_padding=$(echo "$zero_padding" | cut -c2-); fi
+
+        # Replace "::" with the zero padding
+        full_ipv6=$(echo "$ipv6_addr" | sed "s/::/${zero_padding}:/" | sed 's/:$//') # Replace :: and remove trailing : if any
+        # Handle case where input was exactly "::"
+        if [ "$ipv6_addr" = "::" ]; then full_ipv6="0:0:0:0:0:0:0:0"; fi
+
+    else
+        full_ipv6="$ipv6_addr"
+        # Validate that a non-compressed address has 8 segments (7 colons)
+        if [ "$(echo "$full_ipv6" | tr -cd ':' | wc -c)" -ne 7 ]; then
+             debug_log "ERROR" "Invalid non-compressed IPv6 format: $ipv6_addr"
+             return 1
+        fi
     fi
 
-    local old_ifs="$IFS"
+    # 2. Convert each hex segment to decimal
+    # Use Internal Field Separator (IFS) to split by colon
+    local OLD_IFS="$IFS"
     IFS=':'
-    set -- $ip
-    num_segments=$#
-    local current_segment=1
-    expanded_ip=""
-    while [ $current_segment -le 8 ]; do
-        local segment_val="0000"
-        if [ $current_segment -le $num_segments ] && [ -n "$1" ]; then
-             local current_seg_val="$1"
-             local padded_seg=$(printf "%04s" "$current_seg_val" | awk '{gsub(/ /,"0"); print}')
-             segment_val="$padded_seg"
+    set -- $full_ipv6 # Set positional parameters to segments
+    IFS="$OLD_IFS"
+
+    i=1
+    while [ "$i" -le 8 ]; do
+        eval segment=\$$i # Get segment using eval (POSIX compliant)
+        # Handle empty segment (e.g., if expansion logic had issues, fallback to 0)
+        [ -z "$segment" ] && segment="0"
+
+        # Validate hex format (basic check)
+        if ! printf "%s" "$segment" | grep -q '^[0-9a-fA-F]\{1,4\}$'; then
+             debug_log "ERROR" "Invalid hex segment '$segment' in IPv6: $full_ipv6"
+             return 1
         fi
 
-        if [ $current_segment -lt 8 ]; then
-             expanded_ip="${expanded_ip}${segment_val}:"
+        # Convert hex to decimal (handle potential errors)
+        local dec_val
+        # Use printf for hex to decimal conversion
+        dec_val=$(printf "%d" "0x${segment}" 2>/dev/null)
+        if [ $? -ne 0 ] || [ -z "$dec_val" ] && [ "$segment" != "0" ]; then # Allow dec_val to be empty only if segment was "0"
+            debug_log "ERROR" "Failed to convert hex segment '$segment' to decimal."
+            return 1
+        fi
+        # Handle case where segment is 0, printf "%d" "0x0" outputs "0"
+        [ "$segment" = "0" ] && dec_val="0"
+
+
+        # Append decimal segment to the result string
+        if [ -z "$dec_segments" ]; then
+            dec_segments="$dec_val"
         else
-             expanded_ip="${expanded_ip}${segment_val}"
+            dec_segments="$dec_segments $dec_val"
         fi
-
-        if [ $current_segment -le $num_segments ]; then
-            shift
-        fi
-        current_segment=$((current_segment + 1))
+        i=$((i + 1))
     done
-    IFS="$old_ifs"
 
-    echo "$expanded_ip"
+    # Ensure we have exactly 8 segments
+     # Count spaces + 1 gives the number of segments
+    local segment_count=$(($(echo "$dec_segments" | tr -cd ' ' | wc -c) + 1))
+    if [ "$segment_count" -ne 8 ]; then
+        debug_log "ERROR" "Conversion resulted in $segment_count segments, expected 8. Input: $ipv6_addr, Full: $full_ipv6, Dec: $dec_segments"
+        return 1
+    fi
+
+
+    debug_log "DEBUG" "ipv6_to_dec_segments: Output Decimal: $dec_segments"
+    printf "%s\n" "$dec_segments"
+    return 0
 }
 
-ipv6_to_dec_segments() {
-    local norm_ip="$1"
-    local dec_segments=""
-    local old_ifs="$IFS"
-    IFS=':'
-    set -- $norm_ip
-    while [ $# -gt 0 ]; do
-        local dec_val=$(printf "%d" "0x$1")
-        dec_segments="${dec_segments}${dec_val} "
-        shift
-    done
-    IFS="$old_ifs"
-    echo "${dec_segments% }"
-}
-
+# Function: dec_segments_to_ipv6
+# Description: Converts a space-separated string of 8 decimal IPv6 segments
+#              to a colon-separated string of 8 hexadecimal segments (no compression).
+# Arguments: $1: Space-separated decimal segments (e.g., "9216 16721 0 0 0 0 0 1")
+# Output: Prints colon-separated hexadecimal IPv6 address (e.g., "2400:4151:0:0:0:0:0:1")
+# Returns: 0 on success, 1 on invalid input format
 dec_segments_to_ipv6() {
     local dec_segments="$1"
-    local norm_ip=""
-    local old_ifs="$IFS"
-    IFS=' '
-    set -- $dec_segments
-    local count=0
-    while [ $# -gt 0 ] && [ $count -lt 8 ]; do
-        # Handle potential empty arguments if input string has multiple spaces
-        if [ -z "$1" ]; then
-            shift
-            continue
-        fi
-        local hex_val=$(printf "%04x" "$1")
-        norm_ip="${norm_ip}${hex_val}"
-        count=$((count + 1))
-        if [ $count -lt 8 ]; then
-            norm_ip="${norm_ip}:"
-        fi
-        shift
-    done
-    IFS="$old_ifs"
-    echo "$norm_ip"
-}
-
-
-ipv6_cidr_match() {
-    local ip1_raw="$1"
-    local ip2_raw="$2"
-    local prefix_len="$3"
-    local ip1_norm ip2_norm
-    local ip1_dec ip2_dec
-    local seg1 seg2
-    local full_segments=$((prefix_len / 16))
-    local remaining_bits=$((prefix_len % 16))
+    local hex_ipv6=""
+    local segment=""
     local i=1
-    local match="true"
 
-    if [ -z "$ip1_raw" ] || [ -z "$ip2_raw" ] || [ -z "$prefix_len" ] || [ "$prefix_len" -lt 0 ] || [ "$prefix_len" -gt 128 ]; then
-        echo "false"
+    debug_log "DEBUG" "dec_segments_to_ipv6: Input Decimal: $dec_segments"
+
+    # Use Internal Field Separator (IFS) to split by space
+    local OLD_IFS="$IFS"
+    IFS=' '
+    set -- $dec_segments # Set positional parameters to segments
+    IFS="$OLD_IFS"
+
+    # Check if we have exactly 8 segments
+    if [ "$#" -ne 8 ]; then
+        debug_log "ERROR" "Invalid input: Expected 8 decimal segments, got $#. Input: $dec_segments"
         return 1
     fi
 
-    ip1_norm=$(normalize_ipv6 "$ip1_raw")
-    ip2_norm=$(normalize_ipv6 "$ip2_raw")
-    ip1_dec=$(ipv6_to_dec_segments "$ip1_norm")
-    ip2_dec=$(ipv6_to_dec_segments "$ip2_norm")
+    while [ "$i" -le 8 ]; do
+        eval segment=\$$i # Get segment using eval
 
-    while [ $i -le $full_segments ]; do
-        seg1=$(echo "$ip1_dec" | cut -d' ' -f$i)
-        seg2=$(echo "$ip2_dec" | cut -d' ' -f$i)
-        if [ "$seg1" -ne "$seg2" ]; then
-            match="false"
-            break
+        # Validate decimal format (basic check for non-negative integer)
+        if ! printf "%s" "$segment" | grep -q '^[0-9]\+$'; then
+             debug_log "ERROR" "Invalid decimal segment '$segment'. Input: $dec_segments"
+             return 1
         fi
-        i=$((i + 1))
-    done
-
-    if [ "$match" = "true" ] && [ $remaining_bits -gt 0 ]; then
-        # Check if segment index $i exists before accessing
-        seg1=$(echo "$ip1_dec" | cut -d' ' -f$i 2>/dev/null)
-        seg2=$(echo "$ip2_dec" | cut -d' ' -f$i 2>/dev/null)
-        if [ -z "$seg1" ] || [ -z "$seg2" ]; then # Should not happen with normalized IPs
-             match="false"
-        else
-            local mask=$(calculate_ipv6_bitmask "$remaining_bits")
-            if [ $((seg1 & mask)) -ne $((seg2 & mask)) ]; then
-                match="false"
-            fi
-        fi
-    fi
-
-    echo "$match"
-}
-
-extract_ipv6_bits() {
-    local start_bit="$1"
-    local length="$2"
-    local dec_segments="$3"
-    local end_bit=$((start_bit + length))
-    local value=0
-    local bits_in_segment=16
-
-    log_msg D "extract_ipv6_bits: Called with start_bit=$start_bit, length=$length, dec_segments='$dec_segments'"
-
-    # --- Check for bc availability ---
-    if ! command -v bc > /dev/null 2>&1; then
-        log_msg E "extract_ipv6_bits: 'bc' command not found. This function requires 'bc' for large number calculations."
-        log_msg E "Please install 'bc' package: opkg update && opkg install bc"
-        echo ""
-        return 1
-    fi
-
-    if [ "$start_bit" -lt 0 ] || [ "$length" -le 0 ] || [ "$end_bit" -gt 128 ]; then
-        log_msg E "extract_ipv6_bits: Invalid bit range (start=$start_bit, length=$length, end=$end_bit > 128)"
-        echo ""
-        return 1
-    fi
-
-    local use_multiplication_combine=1
-    if [ "$length" -gt 32 ]; then
-        log_msg D "extract_ipv6_bits: Extracting more than 32 bits ($length). Using multiplication combine method with bc."
-    fi
-
-    local start_seg_idx=$((start_bit / bits_in_segment))
-    local end_seg_idx=$(( (end_bit - 1) / bits_in_segment ))
-
-    local current_pos=$start_bit
-    local bits_remaining_to_extract=$length
-
-    local i=$start_seg_idx
-    while [ $i -le $end_seg_idx ] && [ $bits_remaining_to_extract -gt 0 ]; do
-        # --- Segment Extraction and Validation ---
-        local segment_val_raw=$(echo "$dec_segments" | cut -d' ' -f $((i + 1)) 2>/dev/null)
-        # Trim leading/trailing whitespace (POSIX compliant)
-        local segment_val=$(echo "$segment_val_raw" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-        log_msg D "extract_ipv6_bits: Loop i=$i, segment_val_raw='$segment_val_raw', segment_val_trimmed='$segment_val'"
-        case "$segment_val" in
-            ''|*[!0-9]*) # Check if empty or contains non-digit characters
-                log_msg E "extract_ipv6_bits: Error accessing or invalid segment value at index $((i + 1)). Segment: '$segment_val'"
-                echo ""
-                return 1
-                ;;
-            *) # It's a valid non-negative integer string
-                log_msg D "extract_ipv6_bits: Loop i=$i, segment_val=$segment_val, bits_remaining=$bits_remaining_to_extract"
-                ;;
-        esac
-
-        # --- Bit Extraction Logic ---
-        local bit_offset_in_seg=$((current_pos % bits_in_segment))
-        local bits_to_extract_from_seg=$((bits_in_segment - bit_offset_in_seg))
-        if [ $bits_to_extract_from_seg -gt $bits_remaining_to_extract ]; then
-            bits_to_extract_from_seg=$bits_remaining_to_extract
-        fi
-        log_msg D "extract_ipv6_bits: Loop i=$i, bit_offset_in_seg=$bit_offset_in_seg, bits_to_extract_from_seg=$bits_to_extract_from_seg"
-
-        local shift_right=$((bits_in_segment - bit_offset_in_seg - bits_to_extract_from_seg))
-        if [ "$shift_right" -lt 0 ]; then
-             log_msg E "extract_ipv6_bits: Internal error - negative shift_right ($shift_right)"
-             echo ""
+        # Validate range (0-65535)
+        if [ "$segment" -lt 0 ] || [ "$segment" -gt 65535 ]; then
+             debug_log "ERROR" "Decimal segment '$segment' out of range (0-65535). Input: $dec_segments"
              return 1
         fi
 
-        # Using standard shell shift which is safe for segment-level numbers
-        local extracted_part=$((segment_val >> shift_right))
-        # Validate after shift
-        case "$extracted_part" in
-            ''|*[!0-9]*)
-                 log_msg E "extract_ipv6_bits: extracted_part ('$extracted_part') became non-numeric after shift."
-                 echo ""
-                 return 1
-                 ;;
-            *) log_msg D "extract_ipv6_bits: Loop i=$i, shift_right=$shift_right, pre_mask_extracted_part=$extracted_part" ;;
-        esac
+        # Convert decimal to hex (lowercase, no padding needed by printf %x)
+        local hex_val
+        hex_val=$(printf "%x" "$segment" 2>/dev/null)
+         if [ $? -ne 0 ] || [ -z "$hex_val" ] && [ "$segment" != "0" ]; then # Allow empty hex_val only if segment was 0
+            debug_log "ERROR" "Failed to convert decimal segment '$segment' to hex."
+            return 1
+        fi
+        # Handle case where segment is 0, printf "%x" 0 outputs "0"
+        # No padding needed here, IPv6 standard format doesn't require 4 digits per segment
 
-        # --- Mask Calculation and Application ---
-        local mask
-        local mask_calc_base=1
-        local mask_shift=$bits_to_extract_from_seg
-        if [ "$mask_shift" -lt 0 ]; then mask_shift=0; fi
-        # Calculate mask (handle potentially large shifts carefully within shell limits)
-        if [ "$mask_shift" -ge 31 ]; then # Check against 31 for standard shell shift safety
-             if [ "$bits_to_extract_from_seg" -ge 16 ]; then mask=65535; else
-                  # Loop calculation for robustness if large shifts are problematic
-                  mask=0; local k=0
-                  while [ $k -lt "$bits_to_extract_from_seg" ]; do
-                      # Use standard shell ops which are safe for mask calculation range
-                      mask=$(( (mask << 1) | 1 ))
-                      case "$mask" in ''|*[!0-9]*) log_msg E "Mask calc loop error k=$k, mask='$mask'"; echo ""; return 1;; *) : ;; esac
-                      k=$((k + 1))
-                  done
-             fi
-             log_msg D "extract_ipv6_bits: Calculated large mask for $bits_to_extract_from_seg bits: '$mask'"
-        elif [ "$mask_shift" -gt 0 ]; then
-             # Standard shell shift is safe here
-             mask=$(( (mask_calc_base << mask_shift) - 1 ))
+        # Append hex segment to the result string
+        if [ -z "$hex_ipv6" ]; then
+            hex_ipv6="$hex_val"
         else
-             mask=0
+            hex_ipv6="${hex_ipv6}:${hex_val}"
         fi
-        # Validate mask
-        case "$mask" in
-            ''|*[!0-9]*)
-                 log_msg E "extract_ipv6_bits: Calculated mask ('$mask') is not a valid number."
-                 echo ""
-                 return 1
-                 ;;
-             *) log_msg D "extract_ipv6_bits: Loop i=$i, mask=$mask" ;;
-        esac
-
-        # Apply mask using standard shell bitwise AND
-        extracted_part=$((extracted_part & mask))
-        # Validate after mask
-        case "$extracted_part" in
-            ''|*[!0-9]*)
-                 log_msg E "extract_ipv6_bits: extracted_part ('$extracted_part') became non-numeric after mask."
-                 echo ""
-                 return 1
-                 ;;
-            *) log_msg D "extract_ipv6_bits: Loop i=$i, final_extracted_part=$extracted_part" ;;
-        esac
-
-        # --- Combine Extracted Part with Value using bc ---
-        if [ "$use_multiplication_combine" -eq 1 ]; then
-            # Calculate multiplier = 2 ^ bits_to_extract_from_seg using bc
-            local multiplier
-            # Validate bits_to_extract_from_seg before using in bc expression
-            case "$bits_to_extract_from_seg" in
-                ''|*[!0-9]*)
-                     log_msg E "extract_ipv6_bits: Invalid bits_to_extract_from_seg ('$bits_to_extract_from_seg') for multiplier calculation."
-                     echo ""
-                     return 1
-                     ;;
-                *) ;;
-            esac
-            # Ensure non-negative exponent for bc
-            local exponent=$bits_to_extract_from_seg
-            if [ "$exponent" -lt 0 ]; then exponent=0; fi
-
-            multiplier=$(echo "2^$exponent" | bc)
-
-            # Validate multiplier from bc
-            case "$multiplier" in
-                ''|*[!0-9.]*) # Allow decimal point in bc output, though not expected here
-                     log_msg E "extract_ipv6_bits: Multiplier from bc ('$multiplier') is invalid or bc failed. Expression: '2^$exponent'"
-                     echo ""
-                     return 1
-                     ;;
-                *) ;;
-            esac
-            log_msg D "extract_ipv6_bits: Loop i=$i, combine_multiplier='$multiplier' (from bc)"
-
-            # Pre-combination validation (ensure operands are numeric strings for bc)
-            local valid_combine="yes"
-            case "$value" in ''|*[!0-9.]*) log_msg E "Value '$value' non-numeric before bc"; valid_combine="no";; *) : ;; esac
-            case "$extracted_part" in ''|*[!0-9.]*) log_msg E "Extracted part '$extracted_part' non-numeric before bc"; valid_combine="no";; *) : ;; esac
-            case "$multiplier" in ''|*[!0-9.]*) log_msg E "Multiplier '$multiplier' non-numeric before bc"; valid_combine="no";; *) : ;; esac
-
-            if [ "$valid_combine" = "no" ]; then
-                log_msg E "extract_ipv6_bits: Pre-bc validation failed."
-                echo ""
-                return 1
-            fi
-
-            # Log values right before the calculation
-            log_msg D "extract_ipv6_bits: Combining using bc: value='$value', multiplier='$multiplier', extracted_part='$extracted_part'"
-            local value_before_combine="$value"
-            # Ensure bc sees integer values if they contain .0 (though unlikely here)
-            local bc_val=$(printf "%.0f" "$value_before_combine")
-            local bc_mult=$(printf "%.0f" "$multiplier")
-            local bc_part=$(printf "%.0f" "$extracted_part")
-            local bc_expression="${bc_val} * ${bc_mult} + ${bc_part}"
-
-            # Perform the combine operation using bc
-            value=$(echo "$bc_expression" | bc)
-
-            # Validate the result from bc
-            case "$value" in
-                ''|*[!0-9.]*) # Allow decimal point in bc output
-                     log_msg E "extract_ipv6_bits: Value from bc ('$value') is invalid or bc failed."
-                     log_msg E "extract_ipv6_bits: Failed bc expression: '$bc_expression'"
-                     echo ""
-                     return 1
-                     ;;
-                 *) log_msg D "extract_ipv6_bits: Loop i=$i, intermediate_combined_value='$value' (from bc)" ;;
-            esac
-
-        else # Shift combine method (less likely used, might also need bc)
-             # Keep old method for now, add validation
-             local shift_amount=$bits_to_extract_from_seg
-             if [ "$shift_amount" -lt 0 ]; then shift_amount=0; fi
-             # Check if shell shift might overflow before attempting
-             # This check is heuristic and might not be perfect
-             if [ "$length" -gt 32 ]; then # If total length suggests potential overflow
-                  log_msg W "extract_ipv6_bits: Shift combine method used for potentially large value (length=$length). Consider using bc here too if issues arise."
-             fi
-             value=$(( (value << shift_amount) | extracted_part ))
-             case "$value" in ''|*[!0-9-]*) log_msg E "Value non-numeric after shift combine"; echo ""; return 1;; *) : ;; esac
-             log_msg D "extract_ipv6_bits: Loop i=$i, intermediate_combined_value='$value' (shift method)"
-        fi
-
-        # --- Update Loop Variables ---
-        bits_remaining_to_extract=$((bits_remaining_to_extract - bits_to_extract_from_seg))
-        current_pos=$((current_pos + bits_to_extract_from_seg))
         i=$((i + 1))
     done
 
-    # --- Final Validation and Return ---
-    log_msg D "extract_ipv6_bits: Final calculated value before validation: '$value'"
-    case "$value" in
-         ''|*[!0-9.]*) # Allow decimal point from bc
-            log_msg E "extract_ipv6_bits: Final calculated value '$value' is not a valid number."
-            echo ""
-            return 1
-            ;;
-         *)
-            log_msg D "extract_ipv6_bits: Succeeded. Returning value: $value"
-            # Ensure integer output using printf (POSIX compliant)
-            printf "%.0f\n" "$value"
-            return 0
-            ;;
-    esac
+    debug_log "DEBUG" "dec_segments_to_ipv6: Output IPv6: $hex_ipv6"
+    printf "%s\n" "$hex_ipv6"
+    return 0
 }
 
-# --- End of IPv6 Helper Functions ---
+# Function: ipv4_to_dec
+# Description: Converts an IPv4 address string ("A.B.C.D") to its decimal representation.
+# Arguments: $1: IPv4 address string (e.g., "192.168.1.1")
+# Output: Prints the decimal value as a string.
+# Returns: 0 on success, 1 on invalid input format or calculation error
+ipv4_to_dec() {
+    local ipv4_addr="$1"
+    local o1 o2 o3 o4
+    local dec_val=""
 
+    debug_log "DEBUG" "ipv4_to_dec: Input IPv4: $ipv4_addr"
 
-# --- Start of New Helper Functions for mape_mold ---
+    # Validate basic IPv4 format and extract octets using IFS
+    local OLD_IFS="$IFS"
+    IFS='.'
+    set -- $ipv4_addr
+    IFS="$OLD_IFS"
 
+    if [ "$#" -ne 4 ]; then
+        debug_log "ERROR" "Invalid IPv4 format: Expected 4 octets, got $#. Input: $ipv4_addr"
+        return 1
+    fi
+    o1=$1; o2=$2; o3=$3; o4=$4
+
+    # Validate each octet (numeric, 0-255)
+    for octet in $o1 $o2 $o3 $o4; do
+        if ! printf "%s" "$octet" | grep -q '^[0-9]\+$'; then
+            debug_log "ERROR" "Invalid IPv4 octet: '$octet' is not numeric. Input: $ipv4_addr"
+            return 1
+        fi
+        if [ "$octet" -lt 0 ] || [ "$octet" -gt 255 ]; then
+            debug_log "ERROR" "Invalid IPv4 octet: '$octet' out of range (0-255). Input: $ipv4_addr"
+            return 1
+        fi
+    done
+
+    # Calculate decimal value using bc
+    local scale_24=$((2**24)) # Pre-calculate powers of 2 if possible, but bc handles **
+    local scale_16=$((2**16))
+    local scale_8=$((2**8))
+
+    # bc expression: o1 * (2^24) + o2 * (2^16) + o3 * (2^8) + o4
+    local expression="${o1} * (2^24) + ${o2} * (2^16) + ${o3} * (2^8) + ${o4}"
+
+    dec_val=$(bc_calc "$expression")
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "bc calculation failed during IPv4 to decimal conversion."
+        return 1
+    fi
+
+    debug_log "DEBUG" "ipv4_to_dec: Output Decimal: $dec_val"
+    printf "%s\n" "$dec_val"
+    return 0
+}
+
+# Function: dec_to_ipv4
+# Description: Converts a decimal number string to its IPv4 address representation ("A.B.C.D").
+# Arguments: $1: Decimal number string (e.g., "3232235777")
+# Output: Prints the IPv4 address string.
+# Returns: 0 on success, 1 on invalid input or calculation error
 dec_to_ipv4() {
     local dec_val="$1"
-    local octet1 octet2 octet3 octet4
+    local o1 o2 o3 o4
+    local ipv4_addr=""
 
-    octet1=$(( (dec_val >> 24) & 255 ))
-    octet2=$(( (dec_val >> 16) & 255 ))
-    octet3=$(( (dec_val >> 8) & 255 ))
-    octet4=$(( dec_val & 255 ))
+    debug_log "DEBUG" "dec_to_ipv4: Input Decimal: $dec_val"
 
-    echo "${octet1}.${octet2}.${octet3}.${octet4}"
-}
-
-apply_ipv6_mask() {
-    local dec_segments="$1"
-    local prefix_len="$2"
-    local masked_segments=""
-    local full_segments=$((prefix_len / 16))
-    local remaining_bits=$((prefix_len % 16))
-    local i=1
-    local segment_val mask
-
-    local old_ifs="$IFS"
-    IFS=' '
-    set -- $dec_segments
-
-    while [ $i -le $full_segments ] && [ $# -gt 0 ]; do
-        masked_segments="${masked_segments}$1 "
-        shift
-        i=$((i + 1))
-    done
-
-    if [ $remaining_bits -gt 0 ] && [ $# -gt 0 ]; then
-        segment_val="$1"
-        mask=$(calculate_ipv6_bitmask "$remaining_bits")
-        masked_segments="${masked_segments}$((segment_val & mask)) "
-        shift
-        i=$((i + 1))
+    # Validate input (non-negative integer)
+    if ! printf "%s" "$dec_val" | grep -q '^[0-9]\+$'; then
+        debug_log "ERROR" "Invalid input: '$dec_val' is not a non-negative integer."
+        return 1
     fi
 
-    while [ $i -le 8 ]; do
-        masked_segments="${masked_segments}0 "
+    # Validate range (0 to 2^32 - 1)
+    local max_ipv4_dec="4294967295" # 2^32 - 1
+    # Use bc for large number comparison
+    local is_in_range=$(bc_calc "${dec_val} >= 0 && ${dec_val} <= ${max_ipv4_dec}")
+    if [ "$is_in_range" != "1" ]; then
+         debug_log "ERROR" "Invalid input: Decimal value '$dec_val' out of range for IPv4 (0-${max_ipv4_dec})."
+         return 1
+    fi
+
+
+    # Calculate octets using bc
+    # Need to ensure integer division
+    # o1 = dec_val / (2^24)
+    # o2 = (dec_val % (2^24)) / (2^16)
+    # o3 = (dec_val % (2^16)) / (2^8)
+    # o4 = dec_val % (2^8)
+
+    # bc script for all octets at once
+    local bc_script="
+scale=0;
+pow24 = 2^24;
+pow16 = 2^16;
+pow8  = 2^8;
+dec = ${dec_val};
+
+o1 = dec / pow24;
+o2 = (dec % pow24) / pow16;
+o3 = (dec % pow16) / pow8;
+o4 = dec % pow8;
+
+print o1, \" \", o2, \" \", o3, \" \", o4, \"\n\";
+"
+    local octets_str=$(bc_calc "$bc_script")
+    if [ $? -ne 0 ] || [ -z "$octets_str" ]; then
+        debug_log "ERROR" "bc calculation failed during decimal to IPv4 conversion."
+        return 1
+    fi
+
+    # Parse the space-separated octets
+    # Use IFS again
+    local OLD_IFS="$IFS"
+    IFS=' '
+    set -- $octets_str
+    IFS="$OLD_IFS"
+
+    if [ "$#" -ne 4 ]; then
+         debug_log "ERROR" "bc did not return 4 octets. bc output: '$octets_str'"
+         return 1
+    fi
+    o1=$1; o2=$2; o3=$3; o4=$4
+
+    ipv4_addr="${o1}.${o2}.${o3}.${o4}"
+
+    debug_log "DEBUG" "dec_to_ipv4: Output IPv4: $ipv4_addr"
+    printf "%s\n" "$ipv4_addr"
+    return 0
+}
+
+# Function: bc_bitwise_and
+# Description: Simulates bitwise AND operation using bc.
+# Arguments: $1: First non-negative integer string
+#            $2: Second non-negative integer string
+# Output: Prints the result of ( $1 AND $2 ) to stdout.
+# Returns: 0 on success, 1 on bc error or invalid input.
+bc_bitwise_and() {
+    local num1="$1"
+    local num2="$2"
+    local result=""
+
+    # Input validation (non-negative integers)
+    if ! printf "%s" "$num1" | grep -q '^[0-9]\+$' || ! printf "%s" "$num2" | grep -q '^[0-9]\+$'; then
+        debug_log "ERROR" "bc_bitwise_and: Invalid input - requires two non-negative integers. Got '$num1', '$num2'."
+        return 1
+    fi
+
+    debug_log "DEBUG" "bc_bitwise_and: Calculating $num1 & $num2"
+
+    # bc function definition for bitwise AND
+    # Iterates through bits of both numbers
+    # define band(n1, n2) {
+    #   auto r, p;
+    #   r = 0; p = 1; # result and power_of_2
+    #   while (n1 > 0 && n2 > 0) {
+    #     if ((n1 % 2) == 1 && (n2 % 2) == 1) {
+    #       r = r + p;
+    #     }
+    #     n1 = n1 / 2; # integer division (scale=0)
+    #     n2 = n2 / 2; # integer division (scale=0)
+    #     p = p * 2;
+    #   }
+    #   return r;
+    # }
+    # print band(num1, num2);
+    local bc_script="
+scale=0;
+define band(n1, n2) {
+    auto r, p;
+    r = 0; p = 1;
+    while (n1 > 0 && n2 > 0) {
+        if ((n1 % 2) == 1 && (n2 % 2) == 1) {
+            r = r + p;
+        }
+        n1 = n1 / 2;
+        n2 = n2 / 2;
+        p = p * 2;
+    }
+    return r;
+}
+print band(${num1}, ${num2});
+"
+    result=$(bc_calc "$bc_script")
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "bc_bitwise_and: bc calculation failed."
+        return 1
+    fi
+
+    printf "%s\n" "$result"
+    return 0
+}
+
+# Function: bc_bitwise_or
+# Description: Simulates bitwise OR operation using bc.
+# Arguments: $1: First non-negative integer string
+#            $2: Second non-negative integer string
+# Output: Prints the result of ( $1 OR $2 ) to stdout.
+# Returns: 0 on success, 1 on bc error or invalid input.
+bc_bitwise_or() {
+    local num1="$1"
+    local num2="$2"
+    local result=""
+
+    # Input validation (non-negative integers)
+    if ! printf "%s" "$num1" | grep -q '^[0-9]\+$' || ! printf "%s" "$num2" | grep -q '^[0-9]\+$'; then
+        debug_log "ERROR" "bc_bitwise_or: Invalid input - requires two non-negative integers. Got '$num1', '$num2'."
+        return 1
+    fi
+
+    debug_log "DEBUG" "bc_bitwise_or: Calculating $num1 | $num2"
+
+    # bc function definition for bitwise OR
+    # define bor(n1, n2) {
+    #   auto r, p;
+    #   r = 0; p = 1; # result and power_of_2
+    #   while (n1 > 0 || n2 > 0) { # Loop until both are zero
+    #     if ((n1 % 2) == 1 || (n2 % 2) == 1) {
+    #       r = r + p;
+    #     }
+    #     n1 = n1 / 2; # integer division (scale=0)
+    #     n2 = n2 / 2; # integer division (scale=0)
+    #     p = p * 2;
+    #   }
+    #   return r;
+    # }
+    # print bor(num1, num2);
+    local bc_script="
+scale=0;
+define bor(n1, n2) {
+    auto r, p;
+    r = 0; p = 1;
+    while (n1 > 0 || n2 > 0) {
+        if ((n1 % 2) == 1 || (n2 % 2) == 1) {
+            r = r + p;
+        }
+        n1 = n1 / 2;
+        n2 = n2 / 2;
+        p = p * 2;
+    }
+    return r;
+}
+print bor(${num1}, ${num2});
+"
+    result=$(bc_calc "$bc_script")
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "bc_bitwise_or: bc calculation failed."
+        return 1
+    fi
+
+    printf "%s\n" "$result"
+    return 0
+}
+
+# Function: bc_shift_left
+# Description: Performs bitwise left shift using bc (multiplication by power of 2).
+# Arguments: $1: Non-negative integer string (number to shift)
+#            $2: Non-negative integer string (shift amount)
+# Output: Prints the result of ( $1 << $2 ) to stdout.
+# Returns: 0 on success, 1 on bc error or invalid input.
+bc_shift_left() {
+    local num="$1"
+    local shift_amount="$2"
+    local result=""
+
+    # Input validation (non-negative integers)
+    if ! printf "%s" "$num" | grep -q '^[0-9]\+$' || ! printf "%s" "$shift_amount" | grep -q '^[0-9]\+$'; then
+        debug_log "ERROR" "bc_shift_left: Invalid input - requires two non-negative integers. Got '$num', '$shift_amount'."
+        return 1
+    fi
+
+    debug_log "DEBUG" "bc_shift_left: Calculating $num << $shift_amount"
+
+    local expression="${num} * (2^${shift_amount})"
+
+    result=$(bc_calc "$expression")
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "bc_shift_left: bc calculation failed."
+        return 1
+    fi
+
+    printf "%s\n" "$result"
+    return 0
+}
+
+# Function: bc_shift_right
+# Description: Performs bitwise right shift using bc (integer division by power of 2).
+# Arguments: $1: Non-negative integer string (number to shift)
+#            $2: Non-negative integer string (shift amount)
+# Output: Prints the result of ( $1 >> $2 ) to stdout.
+# Returns: 0 on success, 1 on bc error or invalid input.
+bc_shift_right() {
+    local num="$1"
+    local shift_amount="$2"
+    local result=""
+
+    # Input validation (non-negative integers)
+    if ! printf "%s" "$num" | grep -q '^[0-9]\+$' || ! printf "%s" "$shift_amount" | grep -q '^[0-9]\+$'; then
+        debug_log "ERROR" "bc_shift_right: Invalid input - requires two non-negative integers. Got '$num', '$shift_amount'."
+        return 1
+    fi
+
+    debug_log "DEBUG" "bc_shift_right: Calculating $num >> $shift_amount"
+
+    # Use scale=0 for integer division
+    local expression="scale=0; ${num} / (2^${shift_amount})"
+
+    result=$(bc_calc "$expression")
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "bc_shift_right: bc calculation failed."
+        return 1
+    fi
+
+    printf "%s\n" "$result"
+    return 0
+}
+
+# Function: dec_segments_to_large_dec
+# Description: Converts 8 space-separated decimal IPv6 segments into a single
+#              large decimal number string representing the 128-bit value.
+# Arguments: $1: Space-separated decimal segments (e.g., "9216 16721 0 0 0 0 0 1")
+# Output: Prints the large decimal number string.
+# Returns: 0 on success, 1 on invalid input or bc error.
+dec_segments_to_large_dec() {
+    local dec_segments="$1"
+    local large_dec="0"
+    local segment=""
+    local i=0
+
+    debug_log "DEBUG" "dec_segments_to_large_dec: Input Decimal Segments: $dec_segments"
+
+    # Use Internal Field Separator (IFS) to split by space
+    local OLD_IFS="$IFS"
+    IFS=' '
+    set -- $dec_segments # Set positional parameters to segments
+    IFS="$OLD_IFS"
+
+    # Check if we have exactly 8 segments
+    if [ "$#" -ne 8 ]; then
+        debug_log "ERROR" "Invalid input: Expected 8 decimal segments, got $#. Input: $dec_segments"
+        return 1
+    fi
+
+    # Build the bc expression: seg0*(2^112) + seg1*(2^96) + ... + seg7*(2^0)
+    local expression="scale=0" # Ensure integer arithmetic
+    i=0
+    while [ "$i" -lt 8 ]; do
+        eval segment=\$$((i + 1)) # Get segment using eval (index is 1-based)
+
+        # Validate segment (already done in ipv6_to_dec_segments, but double-check is safe)
+        if ! printf "%s" "$segment" | grep -q '^[0-9]\+$' || [ "$segment" -lt 0 ] || [ "$segment" -gt 65535 ]; then
+             debug_log "ERROR" "Invalid decimal segment '$segment' at index $i. Input: $dec_segments"
+             return 1
+        fi
+
+        # Calculate shift amount (112, 96, ..., 0)
+        local shift_val=$(( (7 - i) * 16 ))
+        expression="${expression} + ${segment} * (2^${shift_val})"
         i=$((i + 1))
     done
 
-    IFS="$old_ifs"
-    echo "${masked_segments% }"
+    large_dec=$(bc_calc "$expression")
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "bc calculation failed during decimal segments to large decimal conversion."
+        return 1
+    fi
+
+    debug_log "DEBUG" "dec_segments_to_large_dec: Output Large Decimal: $large_dec"
+    printf "%s\n" "$large_dec"
+    return 0
 }
 
-shift_value_to_ipv6_position() {
-    local value="$1"
+# Function: ipv6_mask_dec_segments
+# Description: Generates an IPv6 network mask based on a prefix length.
+# Arguments: $1: Prefix length (0-128)
+# Output: Prints the mask as 8 space-separated decimal segments.
+# Returns: 0 on success, 1 on invalid prefix length or bc error.
+ipv6_mask_dec_segments() {
+    local prefixlen="$1"
+    local mask_segments=""
+    local i=0
+    local segment_mask_dec=""
+
+    debug_log "DEBUG" "ipv6_mask_dec_segments: Input Prefix Length: $prefixlen"
+
+    # Validate prefix length
+    if ! printf "%s" "$prefixlen" | grep -q '^[0-9]\+$' || [ "$prefixlen" -lt 0 ] || [ "$prefixlen" -gt 128 ]; then
+        debug_log "ERROR" "Invalid prefix length: '$prefixlen'. Must be between 0 and 128."
+        return 1
+    fi
+
+    i=0
+    while [ "$i" -lt 8 ]; do
+        local segment_start_bit=$(( i * 16 ))
+        local segment_end_bit=$(( (i + 1) * 16 - 1 ))
+        segment_mask_dec="0" # Default to 0
+
+        if [ "$prefixlen" -ge "$((segment_end_bit + 1))" ]; then
+            # Full segment mask (all 1s)
+            segment_mask_dec="65535"
+        elif [ "$prefixlen" -gt "$segment_start_bit" ]; then
+            # Partial segment mask
+            local bits_in_segment=$(( prefixlen - segment_start_bit ))
+            # Calculate mask: (2^16) - (2^(16 - bits_in_segment)) using bc
+            local expression="(2^16) - (2^(16 - ${bits_in_segment}))"
+            segment_mask_dec=$(bc_calc "$expression")
+            if [ $? -ne 0 ]; then
+                debug_log "ERROR" "bc calculation failed for partial mask segment $i (prefixlen: $prefixlen)."
+                return 1
+            fi
+        fi
+        # else: prefixlen <= segment_start_bit, mask is 0 (already default)
+
+        # Append segment mask to the result string
+        if [ -z "$mask_segments" ]; then
+            mask_segments="$segment_mask_dec"
+        else
+            mask_segments="$mask_segments $segment_mask_dec"
+        fi
+        i=$((i + 1))
+    done
+
+    debug_log "DEBUG" "ipv6_mask_dec_segments: Output Mask Segments: $mask_segments"
+    printf "%s\n" "$mask_segments"
+    return 0
+}
+
+# Function: ipv6_network_dec_segments
+# Description: Calculates the network address for a given IPv6 address and prefix length.
+# Arguments: $1: IPv6 address as 8 space-separated decimal segments
+#            $2: Prefix length (0-128)
+# Output: Prints the network address as 8 space-separated decimal segments.
+# Returns: 0 on success, 1 on error (e.g., from called functions).
+ipv6_network_dec_segments() {
+    local addr_segments="$1"
+    local prefixlen="$2"
+    local mask_segments=""
+    local network_segments=""
+    local addr_seg=""
+    local mask_seg=""
+    local result_seg=""
+    local i=1
+
+    debug_log "DEBUG" "ipv6_network_dec_segments: Input Address Segments: $addr_segments, Prefix Length: $prefixlen"
+
+    # Generate the mask segments
+    mask_segments=$(ipv6_mask_dec_segments "$prefixlen")
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "Failed to generate mask for prefix length $prefixlen."
+        return 1
+    fi
+
+    # Split address and mask segments using IFS
+    local OLD_IFS="$IFS"
+    IFS=' '
+    set -- $addr_segments # Address segments are now $1, $2, ... $8
+    local addr_segs="$@" # Store them temporarily
+
+    set -- $mask_segments # Mask segments are now $1, $2, ... $8
+    local mask_segs="$@" # Store them temporarily
+    IFS="$OLD_IFS"
+
+    # Check counts (should be guaranteed by ipv6_mask_dec_segments, but safety check)
+    # Assuming addr_segments is also validated to have 8 segments before calling this
+    # local addr_count=$(echo $addr_segs | wc -w)
+    # local mask_count=$(echo $mask_segs | wc -w)
+    # if [ "$addr_count" -ne 8 ] || [ "$mask_count" -ne 8 ]; then
+    #     debug_log "ERROR" "Internal error: Incorrect segment count during network calculation."
+    #     return 1
+    # fi
+
+    # Perform bitwise AND for each segment pair
+    # Reset IFS for loop
+    IFS=' '
+    set -- $addr_segs # Restore address segments to $1..$8
+    i=1
+    for mask_seg in $mask_segs; do # Iterate through mask segments
+        eval addr_seg=\$$i # Get corresponding address segment
+
+        result_seg=$(bc_bitwise_and "$addr_seg" "$mask_seg")
+        if [ $? -ne 0 ]; then
+            debug_log "ERROR" "bc_bitwise_and failed for segment $i (addr=$addr_seg, mask=$mask_seg)."
+            IFS="$OLD_IFS" # Restore IFS before returning
+            return 1
+        fi
+
+        # Append result segment
+        if [ -z "$network_segments" ]; then
+            network_segments="$result_seg"
+        else
+            network_segments="$network_segments $result_seg"
+        fi
+        i=$((i + 1))
+    done
+    IFS="$OLD_IFS" # Restore IFS after loop
+
+    debug_log "DEBUG" "ipv6_network_dec_segments: Output Network Segments: $network_segments"
+    printf "%s\n" "$network_segments"
+    return 0
+}
+
+# Function: extract_ipv6_bits_dec
+# Description: Extracts a sequence of bits from an IPv6 address and returns
+#              the result as a decimal number string.
+# Arguments: $1: IPv6 address as 8 space-separated decimal segments
+#            $2: Start bit position (0-127, from left/most significant bit)
+#            $3: Length of bits to extract (1-128)
+# Output: Prints the extracted bits as a decimal number string.
+# Returns: 0 on success, 1 on invalid input or calculation error.
+extract_ipv6_bits_dec() {
+    local addr_segments="$1"
     local start_bit="$2"
     local length="$3"
-    # POSIX-compliant replacement for array: Use individual variables
-    local seg0=0 seg1=0 seg2=0 seg3=0 seg4=0 seg5=0 seg6=0 seg7=0
-    local bits_in_segment=16
+    local large_addr_dec=""
+    local shifted_val=""
+    local mask_val=""
+    local result_dec=""
 
-    if [ "$length" -le 0 ]; then
-        echo "0 0 0 0 0 0 0 0"
-        return
-    fi
-     if [ "$length" -gt 32 ]; then
-         log_msg D "shift_value_to_ipv6_position: Warning - Shifting values longer than 32 bits ($length) might have precision issues."
-     fi
+    debug_log "DEBUG" "extract_ipv6_bits_dec: Input Segments: $addr_segments, Start: $start_bit, Length: $length"
 
-    local lsb_target_pos=$((start_bit + length - 1))
-    local target_seg_idx=$((lsb_target_pos / bits_in_segment))
-    local bit_offset_in_target_seg=$((lsb_target_pos % bits_in_segment))
-
-    if [ "$target_seg_idx" -ge 8 ] || [ "$target_seg_idx" -lt 0 ]; then # Basic bounds check
-         log_msg E "shift_value_to_ipv6_position: Calculated target segment index ($target_seg_idx) out of bounds."
-         echo "0 0 0 0 0 0 0 0" # Return zero segments on error
-         return 1
-    fi
-
-    local bits_in_target=$((bit_offset_in_target_seg + 1))
-    if [ $bits_in_target -gt $length ]; then
-        bits_in_target=$length
-    fi
-
-    local target_seg_mask=$(( (1 << bits_in_target) - 1 ))
-     if [ "$bits_in_target" -eq 16 ]; then target_seg_mask=65535;
-     elif [ "$bits_in_target" -le 0 ]; then target_seg_mask=0;
-     elif [ "$bits_in_target" -ge 31 ]; then target_seg_mask=$(( ( (1 << ($bits_in_target - 1)) - 1 ) * 2 + 1 ));
-     fi
-    local target_seg_part=$((value & target_seg_mask))
-
-    local target_shift_left=$((bit_offset_in_target_seg - bits_in_target + 1))
-    local target_seg_val=0 # Initialize segment value
-    # Check shift bounds
-    if [ "$target_shift_left" -ge 0 ] && [ "$target_shift_left" -lt 16 ]; then
-         target_seg_val=$((target_seg_part << target_shift_left))
-    elif [ "$target_shift_left" -lt 0 ]; then # Handle case where bits span across segment boundary leftwards (should be handled by loop below)
-         log_msg D "shift_value_to_ipv6_position: Negative target_shift_left ($target_shift_left), handled by loop."
-         # The initial segment might be partially filled by the loop later.
-         target_seg_val=0 # Set segment to 0 initially if shift is negative.
-    else # Shift >= 16
-         log_msg E "shift_value_to_ipv6_position: Calculated target_shift_left ($target_shift_left) >= 16."
-         target_seg_val=0 # Or handle error differently
-    fi
-
-    # Assign to the correct segment variable using eval (or a case statement if preferred)
-    # Using eval is concise but use with caution. Case statement is safer.
-    # Let's use case statement for safety and POSIX compatibility.
-    case "$target_seg_idx" in
-        0) seg0=$target_seg_val ;;
-        1) seg1=$target_seg_val ;;
-        2) seg2=$target_seg_val ;;
-        3) seg3=$target_seg_val ;;
-        4) seg4=$target_seg_val ;;
-        5) seg5=$target_seg_val ;;
-        6) seg6=$target_seg_val ;;
-        7) seg7=$target_seg_val ;;
-        *) log_msg E "shift_value_to_ipv6_position: Invalid target_seg_idx $target_seg_idx in case statement." ;;
-    esac
-
-    local bits_remaining=$((length - bits_in_target))
-    local current_value_part=$((value >> bits_in_target))
-    local current_seg_idx=$((target_seg_idx - 1))
-
-    while [ $bits_remaining -gt 0 ] && [ $current_seg_idx -ge 0 ]; do
-        local bits_to_take=$bits_in_segment
-        if [ $bits_to_take -gt $bits_remaining ]; then
-            bits_to_take=$bits_remaining
-        fi
-
-        local current_seg_mask=$(( (1 << bits_to_take) - 1 ))
-         if [ "$bits_to_take" -eq 16 ]; then current_seg_mask=65535;
-         elif [ "$bits_to_take" -le 0 ]; then current_seg_mask=0;
-         elif [ "$bits_to_take" -ge 31 ]; then current_seg_mask=$(( ( (1 << ($bits_to_take - 1)) - 1 ) * 2 + 1 ));
-         fi
-        local current_seg_part=$((current_value_part & current_seg_mask))
-
-        local current_shift_left=$((bits_in_segment - bits_to_take))
-        local current_seg_val=0 # Initialize segment value
-         # Check shift bounds
-         if [ "$current_shift_left" -ge 0 ] && [ "$current_shift_left" -lt 16 ]; then
-             current_seg_val=$((current_seg_part << current_shift_left))
-         else
-             log_msg E "shift_value_to_ipv6_position: Calculated current_shift_left ($current_shift_left) out of bounds [0-15]."
-             current_seg_val=0 # Or handle error
-         fi
-
-        # Assign to the correct segment variable using case statement
-        case "$current_seg_idx" in
-            0) seg0=$current_seg_val ;;
-            1) seg1=$current_seg_val ;;
-            2) seg2=$current_seg_val ;;
-            3) seg3=$current_seg_val ;;
-            4) seg4=$current_seg_val ;;
-            5) seg5=$current_seg_val ;;
-            6) seg6=$current_seg_val ;;
-            # Index 7 is handled by the initial part, loop stops before reaching it again.
-            *) log_msg E "shift_value_to_ipv6_position: Invalid current_seg_idx $current_seg_idx in loop case statement." ;;
-        esac
-
-        current_value_part=$((current_value_part >> bits_to_take))
-        bits_remaining=$((bits_remaining - bits_to_take))
-        current_seg_idx=$((current_seg_idx - 1))
-    done
-
-    # If bits still remain after filling all segments down to index 0, it's an error (value too large for position)
-    if [ "$bits_remaining" -gt 0 ]; then
-         log_msg E "shift_value_to_ipv6_position: Value too large ($length bits) to fit starting at bit $start_bit."
-         # Return zero segments or handle error
-         echo "0 0 0 0 0 0 0 0"
-         return 1
-    fi
-
-    # Return the space-separated segment values
-    echo "$seg0 $seg1 $seg2 $seg3 $seg4 $seg5 $seg6 $seg7"
-}
-
-bitwise_or_ipv6() {
-    local segments1="$1"
-    local segments2="$2"
-    local result_segments=""
-    local i=1
-    local seg1 seg2 or_result val1 val2
-    # Temporary strings to hold sanitized/padded segments
-    local s1_sanitized=""
-    local s2_sanitized=""
-
-    log_msg D "bitwise_or_ipv6: Called with segments1='$segments1', segments2='$segments2'"
-
-    # --- Sanitize and Pad Input Strings to 8 segments ---
-    local old_ifs="$IFS"; IFS=' '; set -- $segments1; IFS="$old_ifs"
-    local count1=$#
-    local j=1
-    while [ $j -le 8 ]; do
-        if [ $j -le $count1 ]; then
-            val1=$(eval echo "\$$j") # Get positional parameter
-            # Validate and sanitize
-            case "$val1" in ''|*[!0-9]*) log_msg W "bitwise_or_ipv6: Sanitizing invalid element \$${j} in segments1 ('$val1') to 0"; val1=0;; *) ;; esac
-        else
-            val1=0 # Pad with 0
-        fi
-        s1_sanitized="${s1_sanitized}${val1} "
-        j=$((j + 1))
-    done
-    s1_sanitized="${s1_sanitized% }" # Remove trailing space
-    log_msg D "bitwise_or_ipv6: Sanitized/Padded s1_sanitized='$s1_sanitized'"
-
-    old_ifs="$IFS"; IFS=' '; set -- $segments2; IFS="$old_ifs"
-    local count2=$#
-    j=1
-    while [ $j -le 8 ]; do
-        if [ $j -le $count2 ]; then
-            val2=$(eval echo "\$$j") # Get positional parameter
-            # Validate and sanitize
-            case "$val2" in ''|*[!0-9]*) log_msg W "bitwise_or_ipv6: Sanitizing invalid element \$${j} in segments2 ('$val2') to 0"; val2=0;; *) ;; esac
-        else
-            val2=0 # Pad with 0
-        fi
-        s2_sanitized="${s2_sanitized}${val2} "
-        j=$((j + 1))
-    done
-    s2_sanitized="${s2_sanitized% }" # Remove trailing space
-    log_msg D "bitwise_or_ipv6: Sanitized/Padded s2_sanitized='$s2_sanitized'"
-
-    # --- Perform OR operation segment by segment using cut ---
-    while [ $i -le 8 ]; do
-        # Extract segment using cut (1-based index)
-        seg1=$(echo "$s1_sanitized" | cut -d' ' -f$i)
-        seg2=$(echo "$s2_sanitized" | cut -d' ' -f$i)
-
-        # Redundant validation (should be numeric after sanitization, but for safety)
-        case "$seg1" in ''|*[!0-9]*) log_msg E "bitwise_or_ipv6: Invalid seg1 ('$seg1') obtained from cut at index $i."; echo ""; return 1;; *) ;; esac
-        case "$seg2" in ''|*[!0-9]*) log_msg E "bitwise_or_ipv6: Invalid seg2 ('$seg2') obtained from cut at index $i."; echo ""; return 1;; *) ;; esac
-
-        log_msg D "bitwise_or_ipv6: Loop i=$i, seg1='$seg1', seg2='$seg2'" # Log values before OR
-
-        # Perform OR operation
-        or_result=$((seg1 | seg2))
-
-        # Validate the result of the OR operation
-        case "$or_result" in
-            ''|*[!0-9]*) # Should not happen if seg1/seg2 are valid numbers
-                 log_msg E "bitwise_or_ipv6: Non-numeric result ('$or_result') from OR operation ($seg1 | $seg2) at index $i."
-                 echo "" # Return empty on error
-                 return 1
-                 ;;
-            *)
-                 result_segments="${result_segments}${or_result} "
-                 log_msg D "bitwise_or_ipv6: Loop i=$i, or_result='$or_result', result_segments='$result_segments'" # Log intermediate result
-                 ;;
-        esac
-
-        i=$((i + 1))
-    done
-
-    log_msg D "bitwise_or_ipv6: Final result_segments before trim: '$result_segments'"
-    local final_result="${result_segments% }" # Remove trailing space
-    log_msg D "bitwise_or_ipv6: Returning: '$final_result'"
-    echo "$final_result"
-    return 0
-}
-# --- End of New Helper Functions ---
-
-
-# --- Start of Revised mape_mold Function ---
-
-mape_mold() {
-    local user_ip6_raw="$1"
-    local norm_user_ip6=""
-    local user_ip6_dec=""
-    local matched_rule_id=""
-    local rule_ipv6_cidrs=""
-    local cidr=""
-    local rule_ip6_prefix=""
-    local rule_cidr_len=""
-    local match_result=""
-    local fixed_ipv4=""
-    local fixed_mapping_found=1 # 0 if found, 1 if not found
-    local rule_ip4prefixlen="" # Rule's IPv4 prefix length
-
-    # Reset global status and variables
-    MAPE_STATUS="fail"
-    RULE_NAME="" IPV4="" BR="" IP6PFX="" CE_ADDR="" IP4PREFIXLEN="" IP6PREFIXLEN=""
-    EALEN="" PSIDLEN="" OFFSET="" PSID="" PORTS="" RFC=""
-
-    log_msg D "mape_mold: Starting calculation for user_ip6_raw='$user_ip6_raw'"
-
-    # --- 1. Input Validation and Normalization ---
-    if [ -z "$user_ip6_raw" ]; then
-        log_msg E "mape_mold: User IPv6 prefix is empty."
+    # Validate start_bit and length
+    if ! printf "%s" "$start_bit" | grep -q '^[0-9]\+$' || [ "$start_bit" -lt 0 ] || [ "$start_bit" -gt 127 ]; then
+        debug_log "ERROR" "Invalid start bit: '$start_bit'. Must be between 0 and 127."
         return 1
     fi
-    norm_user_ip6=$(normalize_ipv6 "$user_ip6_raw")
-    if [ -z "$norm_user_ip6" ]; then
-         log_msg E "mape_mold: Failed to normalize IPv6 prefix: $user_ip6_raw"
+    if ! printf "%s" "$length" | grep -q '^[1-9][0-9]*$' || [ "$length" -lt 1 ] || [ "$length" -gt 128 ]; then
+         # Also check length > 0 (using regex ^[1-9])
+        debug_log "ERROR" "Invalid length: '$length'. Must be between 1 and 128."
+        return 1
+    fi
+    if [ $((start_bit + length)) -gt 128 ]; then
+        debug_log "ERROR" "Invalid range: Start bit ($start_bit) + length ($length) exceeds 128."
+        return 1
+    fi
+
+    # 1. Convert address segments to a single large decimal number
+    large_addr_dec=$(dec_segments_to_large_dec "$addr_segments")
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "Failed to convert address segments to large decimal."
+        return 1
+    fi
+
+    # 2. Calculate right shift amount to align the desired bits to the right
+    # The rightmost bit of the desired sequence should end up at position 0.
+    # The sequence starts at 'start_bit' and has 'length' bits.
+    # The end position (inclusive) is 'start_bit + length - 1'.
+    # The number of bits to the right of this sequence is '128 - (start_bit + length)'.
+    local shift_right_amount=$(( 128 - start_bit - length ))
+    debug_log "DEBUG" "Calculated right shift amount: $shift_right_amount"
+
+    shifted_val=$(bc_shift_right "$large_addr_dec" "$shift_right_amount")
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "bc_shift_right failed during bit extraction."
+        return 1
+    fi
+    debug_log "DEBUG" "Value after right shift: $shifted_val"
+
+
+    # 3. Create a mask for the desired length (2^length - 1)
+    local mask_expr="(2^${length}) - 1"
+    mask_val=$(bc_calc "$mask_expr")
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "bc calculation failed creating mask for length $length."
+        return 1
+    fi
+    debug_log "DEBUG" "Calculated mask for length $length: $mask_val"
+
+
+    # 4. Apply the mask using bitwise AND
+    result_dec=$(bc_bitwise_and "$shifted_val" "$mask_val")
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "bc_bitwise_and failed applying mask during bit extraction."
+        return 1
+    fi
+
+    debug_log "DEBUG" "extract_ipv6_bits_dec: Output Result Decimal: $result_dec"
+    printf "%s\n" "$result_dec"
+    return 0
+}
+
+# Function: load_rules
+# Description: Initializes and pre-calculates values for defined MAP-E rules.
+#              Currently hardcoded for the 'fc2_ocn' rule.
+# Arguments: None
+# Output: None (sets global rule variables)
+# Returns: 0 on success, 1 on error during pre-calculation.
+load_rules() {
+    local rule_name="fc2_ocn" # Hardcoded for now
+    debug_log "DEBUG" "Loading rules... (Currently only '$rule_name')"
+
+    # --- Pre-calculate for fc2_ocn rule ---
+    debug_log "DEBUG" "Pre-calculating values for rule: $rule_name"
+
+    # Convert Rule IPv6 Prefix to Decimal Segments
+    RULE_FC2_OCN_IP6PREFIX_SEGS=$(ipv6_to_dec_segments "$RULE_FC2_OCN_IP6PREFIX_STR")
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "Failed to convert rule prefix '$RULE_FC2_OCN_IP6PREFIX_STR' to decimal segments for rule '$rule_name'."
+        return 1
+    fi
+    debug_log "DEBUG" "Rule '$rule_name' - IP6PREFIX_SEGS: $RULE_FC2_OCN_IP6PREFIX_SEGS"
+
+    # Calculate Rule Network Address in Decimal Segments
+    RULE_FC2_OCN_IP6NETWORK_SEGS=$(ipv6_network_dec_segments "$RULE_FC2_OCN_IP6PREFIX_SEGS" "$RULE_FC2_OCN_IP6PREFIXLEN")
+     if [ $? -ne 0 ]; then
+        debug_log "ERROR" "Failed to calculate rule network address for rule '$rule_name'."
+        return 1
+    fi
+    debug_log "DEBUG" "Rule '$rule_name' - IP6NETWORK_SEGS: $RULE_FC2_OCN_IP6NETWORK_SEGS"
+
+    # Convert Rule Base IPv4 to Decimal
+    RULE_FC2_OCN_BR_IPV4_DEC=$(ipv4_to_dec "$RULE_FC2_OCN_BR_IPV4_STR")
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "Failed to convert rule base IPv4 '$RULE_FC2_OCN_BR_IPV4_STR' to decimal for rule '$rule_name'."
+        return 1
+    fi
+    debug_log "DEBUG" "Rule '$rule_name' - BR_IPV4_DEC: $RULE_FC2_OCN_BR_IPV4_DEC"
+
+    # Add more rules here in the future if needed
+
+    debug_log "DEBUG" "Rules loaded successfully."
+    return 0
+}
+
+# Function: find_matching_rule
+# Description: Finds the MAP-E rule that matches the user's IPv6 address prefix.
+# Arguments: $1: User's IPv6 address as 8 space-separated decimal segments
+# Output: Prints the name of the matching rule (e.g., "fc2_ocn") if found,
+#         otherwise prints nothing.
+# Returns: 0 if a match is found, 1 if no match is found or an error occurs.
+find_matching_rule() {
+    local user_addr_segs="$1"
+    local user_network_segs=""
+    local matched_rule_name=""
+
+    debug_log "DEBUG" "find_matching_rule: Searching for rule matching user address segments: $user_addr_segs"
+
+    # --- Check fc2_ocn rule ---
+    local rule_name="fc2_ocn" # Hardcoded for now
+    local rule_prefixlen="$RULE_FC2_OCN_IP6PREFIXLEN"
+    local rule_network_segs="$RULE_FC2_OCN_IP6NETWORK_SEGS" # Use pre-calculated value
+
+    # Ensure rule network segments are loaded
+    if [ -z "$rule_network_segs" ]; then
+         debug_log "ERROR" "Rule '$rule_name' network address is not loaded. Run load_rules first."
          return 1
     fi
-    user_ip6_dec=$(ipv6_to_dec_segments "$norm_user_ip6")
-    log_msg D "mape_mold: Normalized User IPv6: $norm_user_ip6 ($user_ip6_dec)"
-    IP6PFX="$norm_user_ip6" # Set global
 
-    # --- 2. Rule Matching (Find Generic Rule) ---
-    log_msg D "mape_mold: Starting rule matching for generic rule..."
-    local all_rule_ids=$(get_rule_ids)
-    for rule_id in $all_rule_ids; do
-        log_msg D "mape_mold: Checking rule: $rule_id"
-        rule_ipv6_cidrs=$(get_rule_ipv6_cidrs "$rule_id")
-        for cidr in $rule_ipv6_cidrs; do
-            rule_ip6_prefix=$(echo "$cidr" | cut -d'/' -f1)
-            rule_cidr_len=$(echo "$cidr" | cut -d'/' -f2)
-            if [ -z "$rule_ip6_prefix" ] || [ -z "$rule_cidr_len" ]; then
-                 log_msg E "mape_mold: Invalid CIDR format '$cidr' for rule $rule_id"
-                 continue
-            fi
-            # Validate rule_cidr_len is numeric before use (using case for POSIX)
-            case "$rule_cidr_len" in
-                ''|*[!0-9]*)
-                     log_msg E "mape_mold: Invalid non-numeric CIDR length '$rule_cidr_len' for rule $rule_id"
-                     continue ;;
-                *) ;; # Is numeric
-            esac
-            log_msg D "mape_mold: Matching '$norm_user_ip6' against CIDR '$rule_ip6_prefix/$rule_cidr_len'"
-            match_result=$(ipv6_cidr_match "$norm_user_ip6" "$rule_ip6_prefix" "$rule_cidr_len")
-            if [ "$match_result" = "true" ]; then
-                log_msg D "mape_mold: Match found! Generic Rule: $rule_id, CIDR: $cidr"
-                matched_rule_id="$rule_id"
-                break
-            fi
-        done
-        if [ -n "$matched_rule_id" ]; then
-            break
-        fi
-    done
-
-    if [ -z "$matched_rule_id" ]; then
-        # Allow proceeding to fixed mapping check even if no generic rule found
-        log_msg W "mape_mold: No matching generic MAP-E rule found for $norm_user_ip6. Proceeding to check fixed mapping."
+    # Calculate user's network address based on the rule's prefix length
+    user_network_segs=$(ipv6_network_dec_segments "$user_addr_segs" "$rule_prefixlen")
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "Failed to calculate user network address for prefix length $rule_prefixlen."
+        return 1
     fi
-    RULE_NAME="$matched_rule_id" # Set RULE_NAME (might be empty)
+    debug_log "DEBUG" "Calculated User Network Segments (for rule '$rule_name'): $user_network_segs"
+    debug_log "DEBUG" "Comparing with Rule '$rule_name' Network Segments: $rule_network_segs"
 
-    # --- 3. Check for Fixed IPv4 Mapping ---
-    log_msg D "mape_mold: Checking for fixed IPv4 mapping rules..."
-    fixed_ipv4=$(get_fixed_ipv4_mapping "$user_ip6_dec")
-    fixed_mapping_found=$? # 0 if found, 1 if not found
-    log_msg D "mape_mold: Fixed mapping check result: fixed_mapping_found=$fixed_mapping_found, fixed_ipv4='$fixed_ipv4'"
-
-    # --- 4. Parameter Retrieval ---
-    # Need rule parameters even if fixed mapping is used (for PSID, Port, CE calc)
-    if [ -n "$RULE_NAME" ]; then
-        log_msg D "mape_mold: Retrieving parameters for generic rule: $RULE_NAME"
-        BR=$(get_rule_br "$RULE_NAME")
-        IP6PREFIXLEN=$(get_rule_ip6prefixlen "$RULE_NAME")
-        rule_ip4prefixlen=$(get_rule_ip4prefixlen "$RULE_NAME") # Rule's IPv4 prefix length
-        PSIDLEN=$(get_rule_psidlen "$RULE_NAME")
-        OFFSET=$(get_rule_offset "$RULE_NAME")
-        RFC=$(get_rule_rfc "$RULE_NAME")
-
-        # Validate retrieved parameters are non-empty and numeric where expected (using case for POSIX)
-        local param_error=0
-        if [ -z "$BR" ]; then log_msg E "mape_mold: Parameter BR is empty for rule $RULE_NAME"; param_error=1; fi
-        case "$IP6PREFIXLEN" in ''|*[!0-9]*) log_msg E "mape_mold: Parameter IP6PREFIXLEN ('$IP6PREFIXLEN') is invalid for rule $RULE_NAME"; param_error=1;; *) ;; esac
-        case "$rule_ip4prefixlen" in ''|*[!0-9]*) log_msg E "mape_mold: Parameter rule_ip4prefixlen ('$rule_ip4prefixlen') is invalid for rule $RULE_NAME"; param_error=1;; *) ;; esac
-        case "$PSIDLEN" in ''|*[!0-9]*) log_msg E "mape_mold: Parameter PSIDLEN ('$PSIDLEN') is invalid for rule $RULE_NAME"; param_error=1;; *) ;; esac
-        case "$OFFSET" in ''|*[!0-9]*) log_msg E "mape_mold: Parameter OFFSET ('$OFFSET') is invalid for rule $RULE_NAME"; param_error=1;; *) ;; esac
-        if [ -z "$RFC" ]; then log_msg E "mape_mold: Parameter RFC is empty for rule $RULE_NAME"; param_error=1; fi
-
-        if [ "$param_error" -eq 1 ]; then
-            log_msg E "mape_mold: Failed to retrieve one or more valid parameters for rule $RULE_NAME."
-            return 1
-        fi
-        log_msg D "mape_mold: Rule Params - BR=$BR, IP6Len=$IP6PREFIXLEN, RuleIP4Len=$rule_ip4prefixlen, PSIDLen=$PSIDLEN, Offset=$OFFSET, RFC=$RFC"
-    elif [ "$fixed_mapping_found" -eq 0 ]; then
-         # Fixed mapping found, but no generic rule matched.
-         log_msg E "mape_mold: Fixed IPv4 mapping found, but no matching generic rule to determine parameters (PSIDLen, Offset, RFC, etc.). Cannot proceed."
-         return 1
-    else
-         # No generic rule and no fixed mapping found.
-         log_msg E "mape_mold: No generic rule matched and no fixed mapping found for $norm_user_ip6."
-         return 1
+    # Compare user's network address with the rule's network address
+    if [ "$user_network_segs" = "$rule_network_segs" ]; then
+        debug_log "INFO" "Found matching rule: $rule_name"
+        matched_rule_name="$rule_name"
+        # Break loop if we had multiple rules
     fi
 
-    # --- 5. Calculate EALEN and PSID ---
-    # Parameters IP6PREFIXLEN and rule_ip4prefixlen are validated numeric above
-    log_msg D "mape_mold: Calculating EALEN = 128 - IP6PREFIXLEN($IP6PREFIXLEN) - rule_ip4prefixlen($rule_ip4prefixlen)"
-    EALEN=$((128 - IP6PREFIXLEN - rule_ip4prefixlen))
-    # Validate EALEN calculation result
-    case "$EALEN" in
-        ''|*[!0-9-]*) # Allow minus sign for validation, but check range below
-             log_msg E "mape_mold: Failed to calculate EALEN (result '$EALEN' is not a number)."
-             return 1;;
-        *) ;;
-    esac
-    log_msg D "mape_mold: Calculated EALen=$EALEN"
+    # --- Add checks for other rules here in the future ---
 
-    # Basic validation for EALEN logic (PSIDLEN is validated numeric above)
-    if [ "$EALEN" -lt "$PSIDLEN" ] || [ "$EALEN" -lt 0 ]; then
-         log_msg E "mape_mold: Invalid calculated EALEN ($EALEN) based on rule params (IP6Len=$IP6PREFIXLEN, RuleIP4Len=$rule_ip4prefixlen, PSIDLen=$PSIDLEN)."
-         return 1
-    fi
 
-    # Calculate PSID
-    if [ "$PSIDLEN" -gt 0 ]; then
-        local psid_start_bit=$((IP6PREFIXLEN + EALEN - PSIDLEN))
-        # Validate psid_start_bit calculation
-        case "$psid_start_bit" in ''|*[!0-9]*) log_msg E "mape_mold: Failed calculation for psid_start_bit ('$psid_start_bit' is not a number)."; return 1;; *) ;; esac
-        log_msg D "mape_mold: Extracting PSID: start_bit=$psid_start_bit, length=$PSIDLEN"
-        PSID=$(extract_ipv6_bits $psid_start_bit $PSIDLEN "$user_ip6_dec")
-        if [ $? -ne 0 ]; then
-             log_msg E "mape_mold: Failed to extract PSID (extract_ipv6_bits returned error)."
-             return 1
-        fi
-        # Double check PSID is numeric (should be guaranteed by extract_ipv6_bits)
-        case "$PSID" in ''|*[!0-9]*) log_msg E "mape_mold: Extracted PSID ('$PSID') is unexpectedly non-numeric."; return 1;; *) ;; esac
-        log_msg D "mape_mold: Calculated PSID: $PSID"
-    else
-        PSID=0
-        log_msg D "mape_mold: PSID is 0 for this rule (PSIDLen=0)."
-    fi
-
-    # --- 6. Determine IPv4 Address and Prefix Length ---
-    if [ "$fixed_mapping_found" -eq 0 ]; then
-        # --- 6a. Fixed Mapping Found ---
-        log_msg I "mape_mold: Using fixed IPv4 mapping result."
-        # Basic validation if fixed_ipv4 looks like an IPv4 address
-        if ! echo "$fixed_ipv4" | grep -qE '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'; then
-             log_msg E "mape_mold: Fixed mapping result '$fixed_ipv4' does not look like a valid IPv4 address."
-             return 1
-        fi
-        IPV4="$fixed_ipv4"
-        # Set /32 for fixed mappings (display/config use)
-        IP4PREFIXLEN=32
-        log_msg I "mape_mold: Set User IPv4: $IPV4/$IP4PREFIXLEN (from fixed mapping)"
-
-    else
-        # --- 6b. No Fixed Mapping - Use Generic Calculation ---
-        log_msg I "mape_mold: No fixed mapping found. Using generic calculation for IPv4."
-
-        # Calculate ealen_minus_psidlen which is needed for IPv4 calculation
-        # EALEN and PSIDLEN are validated numeric above
-        local ealen_minus_psidlen=$((EALEN - PSIDLEN))
-        # Validate the intermediate calculation
-        case "$ealen_minus_psidlen" in
-            ''|*[!0-9-]*) # Allow negative sign for intermediate check
-                 log_msg E "mape_mold: Failed calculation for ealen_minus_psidlen (EALEN-PSIDLEN = '$ealen_minus_psidlen' is not a number)."
-                 return 1
-                 ;;
-            *) # It's a number (potentially negative)
-                 log_msg D "mape_mold: Calculated ealen_minus_psidlen = $ealen_minus_psidlen"
-                 ;;
-        esac
-
-        # <<< MODIFIED: Removed original IP4PREFIXLEN calculation and validation >>>
-
-        # <<< MODIFIED: Set IP4PREFIXLEN to 32 for generic case (for display/config consistency) >>>
-        IP4PREFIXLEN=32
-        log_msg D "mape_mold: Setting User IP4PREFIXLEN to $IP4PREFIXLEN for display/config purposes (generic case)."
-
-        # Use ealen_minus_psidlen directly for IPv4 calculation logic
-        local user_ipv4_part_len=$ealen_minus_psidlen
-        log_msg D "mape_mold: Using user_ipv4_part_len (EALEN - PSIDLEN) = $user_ipv4_part_len for address calculation"
-
-        # Perform Generic IPv4 Calculation
-        log_msg D "mape_mold: Normalizing BR '$BR'"
-        local br_norm=$(normalize_ipv6 "$BR")
-        if [ -z "$br_norm" ]; then log_msg E "mape_mold: Failed to normalize BR '$BR'"; return 1; fi
-        local br_dec=$(ipv6_to_dec_segments "$br_norm")
-        log_msg D "mape_mold: Normalized BR: $br_norm ($br_dec)"
-
-        # Extract shared_ipv4 part from BR (rule_ip4prefixlen validated numeric)
-        log_msg D "mape_mold: Extracting shared IPv4 part from BR: start_bit=32, length=$rule_ip4prefixlen"
-        local shared_ipv4_part_dec=$(extract_ipv6_bits 32 $rule_ip4prefixlen "$br_dec")
-        if [ $? -ne 0 ]; then
-            log_msg E "mape_mold: Failed to extract shared IPv4 part from BR (extract_ipv6_bits returned error)."
-            return 1
-        fi
-        case "$shared_ipv4_part_dec" in ''|*[!0-9]*) log_msg E "Extracted shared_ipv4_part_dec ('$shared_ipv4_part_dec') invalid"; return 1;; *) : ;; esac
-        log_msg D "mape_mold: Generic - Extracted shared IPv4 part from BR: $shared_ipv4_part_dec"
-
-        # Extract user_ipv4_suffix part from User IPv6
-        # user_ipv4_part_len comes from ealen_minus_psidlen (validated numeric-like)
-        local user_ipv4_part_dec=0
-        # <<< MODIFIED: Check if user_ipv4_part_len is positive before extracting >>>
-        if [ "$user_ipv4_part_len" -gt 0 ]; then
-             # IP6PREFIXLEN validated numeric
-             log_msg D "mape_mold: Extracting user IPv4 part from User IPv6: start_bit=$IP6PREFIXLEN, length=$user_ipv4_part_len"
-             user_ipv4_part_dec=$(extract_ipv6_bits $IP6PREFIXLEN $user_ipv4_part_len "$user_ip6_dec")
-             if [ $? -ne 0 ]; then
-                 log_msg E "mape_mold: Failed to extract user IPv4 part from User IPv6 (extract_ipv6_bits returned error)."
-                 return 1
-             fi
-             case "$user_ipv4_part_dec" in ''|*[!0-9]*) log_msg E "Extracted user_ipv4_part_dec ('$user_ipv4_part_dec') invalid"; return 1;; *) : ;; esac
-             log_msg D "mape_mold: Generic - Extracted user IPv4 part from User IPv6: $user_ipv4_part_dec (length $user_ipv4_part_len)"
-        # <<< MODIFIED: Handle non-positive length case >>>
-        elif [ "$user_ipv4_part_len" -eq 0 ]; then
-             log_msg D "mape_mold: Generic - User IPv4 part length is 0, skipping extraction."
-             user_ipv4_part_dec=0
-        else # user_ipv4_part_len < 0
-             log_msg E "mape_mold: Calculated user_ipv4_part_len ($user_ipv4_part_len) is negative. Cannot proceed with IPv4 calculation."
-             return 1
-        fi
-
-        # Combine the parts using bit shifts and OR
-        # shift1 = 32 - rule_ip4prefixlen (rule_ip4prefixlen validated numeric)
-        local shift1=$((32 - rule_ip4prefixlen))
-        case "$shift1" in ''|*[!0-9-]*) log_msg E "Shift1 calc invalid ('$shift1')"; return 1;; *) : ;; esac
-
-        # shift2 = PSIDLEN (validated numeric)
-        local shift2=$PSIDLEN
-
-        local part1_shifted=0
-        local part2_shifted=0
-        local part3=$PSID # Validated numeric
-
-        log_msg D "mape_mold: Calculating part1_shifted = shared_ipv4_part_dec($shared_ipv4_part_dec) << shift1($shift1)"
-        # Validate shift1 range before shifting
-        if [ "$shift1" -ge 0 ] && [ "$shift1" -lt 64 ]; then # Assuming 64-bit capable shell for safety
-             part1_shifted=$((shared_ipv4_part_dec << shift1))
-             case "$part1_shifted" in ''|*[!0-9]*) log_msg E "mape_mold: part1_shifted ('$part1_shifted') became non-numeric after shift."; return 1;; *) : ;; esac
-        elif [ "$shift1" -ge 64 ]; then
-             log_msg W "mape_mold: shift1 ($shift1) is >= 64, part1_shifted will be 0."
-             part1_shifted=0
-        else # shift1 < 0
-             log_msg E "mape_mold: Invalid negative shift1 ($shift1) calculated."
-             return 1
-        fi
-        log_msg D "mape_mold: part1_shifted = $part1_shifted"
-
-        log_msg D "mape_mold: Calculating part2_shifted = user_ipv4_part_dec($user_ipv4_part_dec) << shift2($shift2)"
-        # Validate shift2 range before shifting
-        if [ "$shift2" -ge 0 ] && [ "$shift2" -lt 64 ]; then # Assuming 64-bit capable shell
-             part2_shifted=$((user_ipv4_part_dec << shift2))
-             case "$part2_shifted" in ''|*[!0-9]*) log_msg E "mape_mold: part2_shifted ('$part2_shifted') became non-numeric after shift."; return 1;; *) : ;; esac
-        elif [ "$shift2" -ge 64 ]; then
-             log_msg W "mape_mold: shift2 ($shift2) is >= 64, part2_shifted will be 0."
-             part2_shifted=0
-        else # shift2 < 0 (PSIDLEN should not be negative)
-             log_msg E "mape_mold: Invalid negative shift2 ($shift2) calculated."
-             return 1
-        fi
-        log_msg D "mape_mold: part2_shifted = $part2_shifted"
-        log_msg D "mape_mold: part3 (PSID) = $part3"
-
-        # Perform the final OR operation
-        log_msg D "mape_mold: Combining parts: user_ipv4_full_dec = part1_shifted($part1_shifted) | part2_shifted($part2_shifted) | part3($part3)"
-        # Ensure all parts are numbers before the OR operation (already validated individually above)
-        local user_ipv4_full_dec=$((part1_shifted | part2_shifted | part3))
-        # Validate the final result
-        case "$user_ipv4_full_dec" in
-             ''|*[!0-9]*)
-                  log_msg E "mape_mold: Final combined IPv4 decimal value '$user_ipv4_full_dec' is not a number."
-                  return 1
-                  ;;
-             *) ;;
-        esac
-        log_msg D "mape_mold: Generic - Combined IPv4 decimal value: $user_ipv4_full_dec"
-
-        IPV4=$(dec_to_ipv4 "$user_ipv4_full_dec")
-        # Use the IP4PREFIXLEN set earlier (e.g., 32) for the log message
-        log_msg I "mape_mold: Calculated User IPv4: $IPV4/$IP4PREFIXLEN (generic calculation)"
-    fi
-
-    # --- 7. Calculate Port Range ---
-    local port_start=0
-    local port_end=0
-    log_msg D "mape_mold: Calculating Port Range: PSIDLen=$PSIDLEN, Offset=$OFFSET"
-    # PSIDLEN and OFFSET are validated numeric
-    if [ "$PSIDLEN" -le "$OFFSET" ]; then
-        port_start=1024
-        port_end=65535
-        log_msg D "mape_mold: Port calculation: PSIDLen <= Offset, using default ports 1024-65535"
-    else
-        # PSID is validated numeric
-        log_msg D "mape_mold: Port calculation: PSIDLen > Offset. PSID=$PSID, Offset=$OFFSET"
-        local port_shift_right_amount=$OFFSET
-        if [ "$port_shift_right_amount" -lt 0 ]; then port_shift_right_amount=0; fi
-        log_msg D "mape_mold: Calculating psid_shifted_right = PSID('$PSID') >> port_shift_right_amount('$port_shift_right_amount')"
-        local psid_shifted_right=$((PSID >> port_shift_right_amount))
-        case "$psid_shifted_right" in ''|*[!0-9]*) log_msg E "psid_shifted_right invalid"; return 1;; *) ;; esac
-        log_msg D "mape_mold: psid_shifted_right = '$psid_shifted_right'"
-
-        local port_shift_left_amount=$((16 - OFFSET))
-        if [ "$port_shift_left_amount" -lt 0 ]; then port_shift_left_amount=0; fi
-        log_msg D "mape_mold: port_shift_left_amount (16 - Offset) = '$port_shift_left_amount'"
-        local port_multiplier=1
-        if [ "$port_shift_left_amount" -gt 0 ]; then
-             # Validate shift amount before calculating multiplier
-             if [ "$port_shift_left_amount" -ge 64 ]; then
-                 log_msg E "mape_mold: port_shift_left_amount ($port_shift_left_amount) too large for multiplier calculation."
-                 return 1
-             fi
-             log_msg D "mape_mold: Calculating port_multiplier = 1 << port_shift_left_amount('$port_shift_left_amount')"
-             port_multiplier=$((1 << port_shift_left_amount))
-             case "$port_multiplier" in ''|*[!0-9]*) log_msg E "port_multiplier invalid"; return 1;; *) ;; esac
-        fi
-        log_msg D "mape_mold: port_multiplier = '$port_multiplier'"
-
-        # Calculate initial range using expr for potentially larger intermediate values
-        log_msg D "mape_mold: Calculating port_start using expr: psid_shifted_right('$psid_shifted_right') * port_multiplier('$port_multiplier')"
-        # Ensure operands are numbers before calling expr
-        case "$psid_shifted_right$port_multiplier" in *[!0-9]*) log_msg E "Invalid operands for expr multiplication"; return 1;; *) ;; esac
-        port_start=$(expr "$psid_shifted_right" \* "$port_multiplier" 2>/dev/null) # Use \* to escape *
-        # Validate expr result and check if numeric
-        if [ $? -ne 0 ]; then
-             log_msg E "mape_mold: Port start calculation using expr failed. cmd='expr $psid_shifted_right \* $port_multiplier'"
-             return 1
-        fi
-        case "$port_start" in ''|*[!0-9]*) log_msg E "Port start from expr ('$port_start') is not numeric."; return 1;; *) ;; esac
-        log_msg D "mape_mold: Calculated port_start = '$port_start'"
-
-        log_msg D "mape_mold: Calculating port_end using expr: port_start('$port_start') + port_multiplier('$port_multiplier') - 1"
-        # Ensure operands are numbers
-        case "$port_start$port_multiplier" in *[!0-9]*) log_msg E "Invalid operands for expr addition"; return 1;; *) ;; esac
-        local port_end_tmp1=$(expr "$port_start" + "$port_multiplier" 2>/dev/null)
-        if [ $? -ne 0 ]; then
-             log_msg E "mape_mold: Port end calculation using expr failed at step 1 (start + multiplier). cmd='expr $port_start + $port_multiplier'"
-             return 1
-        fi
-        case "$port_end_tmp1" in ''|*[!0-9]*) log_msg E "Port end step 1 from expr ('$port_end_tmp1') is not numeric."; return 1;; *) ;; esac
-
-        port_end=$(expr "$port_end_tmp1" - 1 2>/dev/null)
-        if [ $? -ne 0 ]; then
-             log_msg E "mape_mold: Port end calculation using expr failed at step 2 (tmp1 - 1). cmd='expr $port_end_tmp1 - 1'"
-             # Reset port_end to ensure checks below handle it
-             port_end=""
-             # Optionally return immediately: return 1
-        fi
-        # Validate final port_end
-        case "$port_end" in
-            ''|*[!0-9]*)
-                 log_msg E "mape_mold: Final port end from expr ('$port_end') is not numeric."
-                 port_end="" # Reset if invalid
-                 ;;
-            *) ;;
-        esac
-        log_msg D "mape_mold: Calculated port_end = '$port_end'"
-        log_msg D "mape_mold: Initial calculated port range (using expr): $port_start-$port_end"
-
-        # Clamp port range
-        log_msg D "mape_mold: Clamping port range: start='$port_start', end='$port_end'"
-        # Ensure port_start and port_end are valid numbers before clamping comparison
-        case "$port_start" in *[!0-9]*) ;; *) if [ "$port_start" -lt 1024 ]; then port_start=1024; log_msg D "mape_mold: Clamped port_start to 1024"; fi ;; esac
-        case "$port_end" in *[!0-9]*) ;; *) if [ "$port_end" -gt 65535 ]; then port_end=65535; log_msg D "mape_mold: Clamped port_end to 65535"; fi ;; esac
-        log_msg D "mape_mold: Clamped port range result: start='$port_start', end='$port_end'"
-
-        # Final check for validity (ensure both are numbers before comparing)
-        local port_range_valid=0
-        case "$port_start$port_end" in
-             *[!0-9]*) # If either contains non-digits, it's invalid
-                  log_msg E "mape_mold: Port range invalid due to non-numeric start ('$port_start') or end ('$port_end')."
-                  ;;
-             *) # Both are potentially numbers, compare them
-                  if [ "$port_start" -gt "$port_end" ]; then
-                       log_msg E "mape_mold: Invalid port range after clamping (start '$port_start' > end '$port_end')."
-                  else
-                       port_range_valid=1
-                  fi
-                  ;;
-        esac
-        if [ "$port_range_valid" -eq 0 ]; then
-             port_start=0; port_end=0; PORTS="" # Reset if invalid
-        fi
-    fi
-
-    # Final assignment to PORTS (ensure start/end are valid numbers and range is correct)
-    case "$port_start$port_end" in
-         *[!0-9]*) PORTS=""; log_msg W "Resulting PORTS invalid (non-numeric)." ;;
-         *) if [ "$port_start" -le "$port_end" ] && [ "$port_end" -gt 0 ]; then
-                 PORTS="${port_start}-${port_end}"
-            else
-                 PORTS=""
-                 log_msg W "mape_mold: Resulting port range is invalid or empty after all checks."
-            fi
-            ;;
-    esac
-    log_msg I "mape_mold: Calculated Port Range: $PORTS"
-
-    # --- 8. Calculate CE Address ---
-    log_msg D "mape_mold: Calculating CE Address. RFC=$RFC"
-    if [ "$RFC" = "true" ]; then
-        CE_ADDR="$norm_user_ip6"
-        log_msg D "mape_mold: CE Address (RFC=true): $CE_ADDR"
-    else
-        log_msg D "mape_mold: Calculating non-RFC CE Address (NetworkPrefix:PSID::1)..."
-        # IP6PREFIXLEN is validated numeric
-        log_msg D "mape_mold: Applying mask $IP6PREFIXLEN to user_ip6_dec '$user_ip6_dec'"
-        local net_dec=$(apply_ipv6_mask "$user_ip6_dec" "$IP6PREFIXLEN")
-        if [ $? -ne 0 ] || [ -z "$net_dec" ]; then log_msg E "mape_mold: Failed to apply mask for CE Address."; return 1; fi
-        log_msg D "mape_mold: CE Addr - Network part (dec): '$net_dec'"
-
-        local psid_shifted_dec="0 0 0 0 0 0 0 0" # Default if PSIDLen is 0
-        if [ "$PSIDLEN" -gt 0 ]; then
-             # PSID, IP6PREFIXLEN, PSIDLEN are validated numeric
-             log_msg D "mape_mold: Shifting PSID($PSID) to position: start_bit=$IP6PREFIXLEN, length=$PSIDLEN"
-             psid_shifted_dec=$(shift_value_to_ipv6_position "$PSID" "$IP6PREFIXLEN" "$PSIDLEN")
-             if [ $? -ne 0 ] || [ -z "$psid_shifted_dec" ]; then log_msg E "mape_mold: Failed to shift PSID for CE Address."; return 1; fi
-        fi
-        log_msg D "mape_mold: CE Addr - Shifted PSID part (dec): '$psid_shifted_dec'"
-
-        local suffix_1_dec="0 0 0 0 0 0 0 1"
-
-        log_msg D "mape_mold: ORing Network part and Shifted PSID part"
-        local ce_base_dec=$(bitwise_or_ipv6 "$net_dec" "$psid_shifted_dec")
-        if [ $? -ne 0 ] || [ -z "$ce_base_dec" ]; then log_msg E "mape_mold: Failed to OR Network and PSID for CE Address."; return 1; fi
-        log_msg D "mape_mold: CE Addr - Base after OR (dec): '$ce_base_dec'"
-
-        log_msg D "mape_mold: ORing Base part and Suffix ::1"
-        local ce_final_dec=$(bitwise_or_ipv6 "$ce_base_dec" "$suffix_1_dec")
-         if [ $? -ne 0 ] || [ -z "$ce_final_dec" ]; then log_msg E "mape_mold: Failed to OR Suffix ::1 for CE Address."; return 1; fi
-        log_msg D "mape_mold: CE Addr - Final segments with ::1 (dec): '$ce_final_dec'"
-
-        CE_ADDR=$(dec_segments_to_ipv6 "$ce_final_dec")
-        log_msg D "mape_mold: CE Address (RFC=false): $CE_ADDR"
-    fi
-    log_msg I "mape_mold: Calculated CE IPv6 Address: $CE_ADDR"
-
-    # --- 9. Final Status ---
-    log_msg D "mape_mold: Performing final status check..."
-    local final_check_ok=1
-    if [ -z "$RULE_NAME" ]; then log_msg E "Final Check Fail: RULE_NAME is empty"; final_check_ok=0; fi
-    if [ -z "$IPV4" ]; then log_msg E "Final Check Fail: IPV4 is empty"; final_check_ok=0; fi
-    # IP4PREFIXLEN should be 32 now and numeric
-    case "$IP4PREFIXLEN" in ''|*[!0-9]*) log_msg E "Final Check Fail: IP4PREFIXLEN ('$IP4PREFIXLEN') is invalid"; final_check_ok=0;; *) ;; esac
-    if [ -z "$CE_ADDR" ]; then log_msg E "Final Check Fail: CE_ADDR is empty"; final_check_ok=0; fi
-    if [ -z "$BR" ]; then log_msg E "Final Check Fail: BR is empty"; final_check_ok=0; fi
-    # Check PORTS is not empty (it might be validly empty for some rules/configs?)
-    if [ -z "$PORTS" ]; then log_msg W "Final Check Warning: PORTS is empty"; fi # Changed to Warning
-
-    if [ "$final_check_ok" -eq 1 ]; then
-        MAPE_STATUS="success"
-        log_msg I "mape_mold: MAP-E calculation successful for rule $RULE_NAME."
+    # Output the matched rule name and return status
+    if [ -n "$matched_rule_name" ]; then
+        printf "%s\n" "$matched_rule_name"
         return 0
     else
-        log_msg E "mape_mold: Failed final check - one or more required MAP-E parameters are invalid."
-        MAPE_STATUS="fail"
-        # Explicitly clear globals on failure
-        RULE_NAME="" IPV4="" BR="" IP6PFX="" CE_ADDR="" IP4PREFIXLEN="" IP6PREFIXLEN="" EALEN="" PSIDLEN="" OFFSET="" PSID="" PORTS="" RFC=""
-        return 1
+        debug_log "WARN" "No matching MAP-E rule found for the provided IPv6 address."
+        # Print nothing to stdout
+        return 1 # Indicate no match found
     fi
 }
 
-# --- End of Revised mape_mold Function ---
+# Function: large_dec_to_dec_segments
+# Description: Converts a single large decimal number string (representing a 128-bit value)
+#              back into 8 space-separated decimal IPv6 segments.
+# Arguments: $1: Large decimal number string
+# Output: Prints 8 space-separated decimal segments.
+# Returns: 0 on success, 1 on invalid input or bc error.
+large_dec_to_dec_segments() {
+    local large_dec="$1"
+    local dec_segments=""
+    local segment=""
+    local i=0
 
+    debug_log "DEBUG" "large_dec_to_dec_segments: Input Large Decimal: $large_dec"
 
-# --- Placeholder for User Functions ---
-# These functions need to be implemented or adapted based on the original script's logic.
-
-# Displays the calculated MAP-E parameters.
-# Uses global variables set by mape_mold.
-mape_display() {
-    log_msg I "--- MAP-E Parameters ---"
-    if [ "$MAPE_STATUS" = "success" ]; then
-        echo "Status: $MAPE_STATUS"
-        echo "Rule Name: $RULE_NAME"
-        echo "User IPv6 Prefix: $IP6PFX"
-        echo "Border Relay (BR): $BR"
-        echo "Shared IPv4: $IPV4 / $IP4PREFIXLEN"
-        echo "CE IPv6 Address: $CE_ADDR"
-        echo "Port Range: $PORTS"
-        echo "EA Length: $EALEN bits"
-        echo "PSID Length: $PSIDLEN bits"
-        echo "Offset (a-bits): $OFFSET bits"
-        echo "PSID Value: $PSID"
-        echo "RFC Compliant: $RFC"
-    else
-        echo "Status: $MAPE_STATUS"
-        echo "Calculation failed. Check logs for details."
-    fi
-    log_msg I "------------------------"
-}
-
-# Configures the system (e.g., using UCI) with the calculated MAP-E parameters.
-# Uses global variables set by mape_mold.
-# !!! This function requires specific implementation based on OpenWrt UCI commands !!!
-mape_config() {
-    log_msg I "Applying MAP-E configuration (Placeholder)..."
-    if [ "$MAPE_STATUS" != "success" ]; then
-        log_msg E "mape_config: Cannot configure, calculation was not successful."
+    # Validate input (non-negative integer)
+    if ! printf "%s" "$large_dec" | grep -q '^[0-9]\+$'; then
+        debug_log "ERROR" "Invalid input: '$large_dec' is not a non-negative integer."
         return 1
     fi
 
-    # Example UCI commands (adjust path/options as needed):
-    # uci set network.wan6.map_ipv4addr="$IPV4"
-    # uci set network.wan6.map_ipv6prefix="$CE_ADDR/64" # Assuming /64 for CE, adjust if needed
-    # uci set network.wan6.map_peeraddr="$BR"
-    # uci set network.wan6.map_psid="$PSID"
-    # uci set network.wan6.map_psid_offset="$OFFSET" # Check if UCI uses offset or length directly
-    # uci set network.wan6.map_rule_ipv6prefixlen="$IP6PREFIXLEN" # Custom? Or derived?
-    # uci set network.wan6.map_rule_ipv4prefixlen="$rule_ip4prefixlen" # Need rule_ip4prefixlen here
-    # uci set network.wan6.map_ealen="$EALEN" # Custom? Or derived?
-    # uci commit network
-    # /etc/init.d/network reload
+    # Validate range (0 to 2^128 - 1) - Approx check is difficult in POSIX bc
+    # We assume input comes from valid calculations within the script
+    # A full 2^128 check is complex, let's rely on calculation correctness
 
-    log_msg I "mape_config: Placeholder - UCI commands would go here."
-    log_msg I "mape_config: Rule=$RULE_NAME, IPv4=$IPV4/$IP4PREFIXLEN, BR=$BR, CE=$CE_ADDR, Ports=$PORTS, PSID=$PSID"
+    # bc script to extract segments
+    # seg0 = large_dec / (2^112)
+    # seg1 = (large_dec % (2^112)) / (2^96)
+    # ...
+    # seg7 = large_dec % (2^16)
+    local bc_script="
+scale=0;
+pow112 = 2^112; pow96 = 2^96; pow80 = 2^80; pow64 = 2^64;
+pow48 = 2^48; pow32 = 2^32; pow16 = 2^16;
+val = ${large_dec};
 
-    # Add actual UCI commands here based on your OpenWrt map-e package configuration
+seg0 = val / pow112;
+rem0 = val % pow112;
+seg1 = rem0 / pow96;
+rem1 = rem0 % pow96;
+seg2 = rem1 / pow80;
+rem2 = rem1 % pow80;
+seg3 = rem2 / pow64;
+rem3 = rem2 % pow64;
+seg4 = rem3 / pow48;
+rem4 = rem3 % pow48;
+seg5 = rem4 / pow32;
+rem5 = rem4 % pow32;
+seg6 = rem5 / pow16;
+seg7 = rem5 % pow16;
 
-    log_msg I "Configuration applied (Placeholder)."
+print seg0, \" \", seg1, \" \", seg2, \" \", seg3, \" \", seg4, \" \", seg5, \" \", seg6, \" \", seg7, \"\n\";
+"
+    dec_segments=$(bc_calc "$bc_script")
+    if [ $? -ne 0 ] || [ -z "$dec_segments" ]; then
+        debug_log "ERROR" "bc calculation failed during large decimal to decimal segments conversion."
+        return 1
+    fi
+
+    # Basic validation on the output format (should be 8 numbers)
+    local segment_count=$(($(echo "$dec_segments" | tr -cd ' ' | wc -c) + 0)) # Count spaces
+    if [ "$segment_count" -ne 7 ]; then # 8 segments means 7 spaces
+         debug_log "ERROR" "Conversion resulted in unexpected number of segments. bc output: '$dec_segments'"
+         # Attempt to fix if possible (e.g., leading/trailing spaces)
+         dec_segments=$(echo "$dec_segments" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+         segment_count=$(($(echo "$dec_segments" | tr -cd ' ' | wc -c) + 0))
+         if [ "$segment_count" -ne 7 ]; then
+            debug_log "ERROR" "Still incorrect segment count after cleanup: $segment_count spaces."
+            return 1
+         fi
+    fi
+
+
+    debug_log "DEBUG" "large_dec_to_dec_segments: Output Decimal Segments: $dec_segments"
+    printf "%s\n" "$dec_segments"
     return 0
 }
 
-# --- End of Placeholder User Functions ---
+# Function: calculate_mape_params
+# Description: Calculates MAP-E parameters based on the user's IPv6 address
+#              and the matched rule. Stores results in global MAPE_* variables.
+# Arguments: $1: User's IPv6 address as 8 space-separated decimal segments
+#            $2: Name of the matching rule (e.g., "fc2_ocn")
+# Output: None (sets global MAPE_* variables)
+# Returns: 0 on success, 1 on error (unknown rule or calculation failure).
+calculate_mape_params() {
+    local user_addr_segs="$1"
+    local rule_name="$2"
 
+    debug_log "INFO" "Calculating MAP-E parameters for rule: $rule_name"
+    MAPE_USER_PREFIX_SEGS="$user_addr_segs" # Store user address segments globally
+    MAPE_RULE_NAME="$rule_name"
 
-# --- Main Execution Logic ---
-
-internet_main() {
-    # Assume OpenWrt functions (network_*, log_msg) are available due to script-level sourcing
-
-    local NET_IF6=""
-    local NET_ADDR6=""
-    local user_prefix="" # Variable to hold the final prefix
-
-    log_msg I "internet_main: Attempting to automatically obtain IPv6 prefix..."
-
-    # Get IPv6 prefix using specified OpenWrt functions
-    network_flush_cache
-    network_find_wan6 NET_IF6
-    if [ -z "$NET_IF6" ]; then
-        log_msg E "internet_main: Could not find WAN6 interface (network_find_wan6 failed)."
-        echo "Error: Could not find WAN6 interface." >&2
-        return 1 # Return error status
-    fi
-    log_msg D "internet_main: Found WAN6 interface: ${NET_IF6}"
-
-    # Get the IPv6 address/prefix
-    network_get_ipaddr6 NET_ADDR6 "${NET_IF6}"
-    if [ -z "$NET_ADDR6" ]; then
-        log_msg E "internet_main: Could not get IPv6 address from interface ${NET_IF6} (network_get_ipaddr6 failed)."
-        echo "Error: Could not get IPv6 address/prefix from ${NET_IF6}." >&2
-        return 1 # Return error status
+    # --- Retrieve Rule Parameters based on rule_name ---
+    # Currently only 'fc2_ocn' is supported
+    if [ "$rule_name" != "fc2_ocn" ]; then
+        debug_log "ERROR" "Unsupported rule name: $rule_name"
+        return 1
     fi
 
-    # Use the obtained address/prefix
-    user_prefix="${NET_ADDR6}"
-    log_msg I "internet_main: Using automatically obtained IPv6 prefix/address: ${user_prefix}"
+    # Use variables specific to the matched rule
+    local psidlen="$RULE_FC2_OCN_PSIDLEN"
+    local offset="$RULE_FC2_OCN_OFFSET"
+    local rule_br_ipv4_dec="$RULE_FC2_OCN_BR_IPV4_DEC"
+    local rule_ip4mask_dec="$RULE_FC2_OCN_RULE_IP4MASK_DEC"
+    local is_rfc="$RULE_FC2_OCN_IS_RFC" # 0=false, 1=true
+    local rule_ip6prefixlen="$RULE_FC2_OCN_IP6PREFIXLEN"
+    local rule_br_ipv6_str="$RULE_FC2_OCN_PEERADDR_STR"
 
-    # --- Original logic continues below ---
+    # --- 1. Calculate PSID ---
+    # fc2 logic: extract bits starting from bit 64 (0-indexed)
+    local psid_start_bit=64
+    debug_log "DEBUG" "Calculating PSID (Start Bit: $psid_start_bit, Length: $psidlen)"
+    MAPE_PSID=$(extract_ipv6_bits_dec "$user_addr_segs" "$psid_start_bit" "$psidlen")
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "Failed to calculate PSID."
+        return 1
+    fi
+    debug_log "INFO" "Calculated PSID: $MAPE_PSID"
 
-    log_msg I "Starting MAP-E calculation for prefix: $user_prefix"
+    # --- 2. Calculate IPv4 Address ---
+    # fc2 logic: ((br_ipv4_dec & rule_ip4mask_dec) | (PSID << offset))
+    debug_log "DEBUG" "Calculating IPv4 Address..."
+    local term1 term2 ipv4_dec
+    # term1 = br_ipv4_dec & rule_ip4mask_dec
+    term1=$(bc_bitwise_and "$rule_br_ipv4_dec" "$rule_ip4mask_dec")
+    if [ $? -ne 0 ]; then debug_log "ERROR" "IPv4 calc failed at term1 (AND)"; return 1; fi
+    debug_log "DEBUG" "IPv4 Term1 (BR_IPv4 & Mask): $term1"
 
-    mape_mold "$user_prefix"
-    local result=$?
+    # term2 = PSID << offset
+    term2=$(bc_shift_left "$MAPE_PSID" "$offset")
+    if [ $? -ne 0 ]; then debug_log "ERROR" "IPv4 calc failed at term2 (Shift)"; return 1; fi
+    debug_log "DEBUG" "IPv4 Term2 (PSID << Offset): $term2"
 
-    mape_display
 
-    if [ "$result" -eq 0 ]; then
-        mape_config
+    # ipv4_dec = term1 | term2
+    ipv4_dec=$(bc_bitwise_or "$term1" "$term2")
+    if [ $? -ne 0 ]; then debug_log "ERROR" "IPv4 calc failed at final OR"; return 1; fi
+    debug_log "DEBUG" "IPv4 Decimal Result: $ipv4_dec"
+
+
+    # Convert decimal result back to IPv4 string
+    MAPE_IPV4=$(dec_to_ipv4 "$ipv4_dec")
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "Failed to convert calculated decimal '$ipv4_dec' back to IPv4 string."
+        return 1
+    fi
+    debug_log "INFO" "Calculated IPv4 Address: $MAPE_IPV4"
+
+
+    # --- 3. Calculate CE IPv6 Address ---
+    # fc2 logic (non-RFC): (UserIP6_large & Mask_large) | (PSID << shift_amount) | 1
+    debug_log "DEBUG" "Calculating CE IPv6 Address (is_rfc=$is_rfc)..."
+    if [ "$is_rfc" = "0" ]; then
+        # Non-RFC Calculation
+        local user_large_dec mask_large_dec psid_shift_amount psid_shifted termA termB ce_ipv6_large_dec
+
+        # Convert user address to large decimal
+        user_large_dec=$(dec_segments_to_large_dec "$user_addr_segs")
+        if [ $? -ne 0 ]; then debug_log "ERROR" "CE IPv6 calc failed converting user addr"; return 1; fi
+
+        # Generate mask for prefix length and convert to large decimal
+        local mask_segs=$(ipv6_mask_dec_segments "$rule_ip6prefixlen")
+        if [ $? -ne 0 ]; then debug_log "ERROR" "CE IPv6 calc failed generating mask"; return 1; fi
+        mask_large_dec=$(dec_segments_to_large_dec "$mask_segs")
+         if [ $? -ne 0 ]; then debug_log "ERROR" "CE IPv6 calc failed converting mask"; return 1; fi
+
+        # Calculate PSID shift amount: 128 - prefixlen - psidlen
+        psid_shift_amount=$(( 128 - rule_ip6prefixlen - psidlen ))
+        debug_log "DEBUG" "CE IPv6 PSID Shift Amount: $psid_shift_amount"
+
+        # Calculate Term A: (UserIP6_large & Mask_large)
+        termA=$(bc_bitwise_and "$user_large_dec" "$mask_large_dec")
+        if [ $? -ne 0 ]; then debug_log "ERROR" "CE IPv6 calc failed at termA (AND)"; return 1; fi
+        debug_log "DEBUG" "CE IPv6 TermA (User & Mask): $termA"
+
+
+        # Calculate Term B: (PSID << shift_amount)
+        psid_shifted=$(bc_shift_left "$MAPE_PSID" "$psid_shift_amount")
+        if [ $? -ne 0 ]; then debug_log "ERROR" "CE IPv6 calc failed shifting PSID"; return 1; fi
+        debug_log "DEBUG" "CE IPv6 TermB (PSID << Shift): $psid_shifted"
+
+
+        # Calculate Term A | Term B
+        termB=$(bc_bitwise_or "$termA" "$psid_shifted")
+         if [ $? -ne 0 ]; then debug_log "ERROR" "CE IPv6 calc failed at OR (A|B)"; return 1; fi
+         debug_log "DEBUG" "CE IPv6 Result (A | B): $termB"
+
+
+        # Calculate (A | B) | 1 (Set the last bit)
+        ce_ipv6_large_dec=$(bc_bitwise_or "$termB" "1")
+        if [ $? -ne 0 ]; then debug_log "ERROR" "CE IPv6 calc failed at final OR with 1"; return 1; fi
+        debug_log "DEBUG" "CE IPv6 Large Decimal Result: $ce_ipv6_large_dec"
+
+
+        # Convert large decimal back to decimal segments
+        MAPE_CE_IPV6_SEGS=$(large_dec_to_dec_segments "$ce_ipv6_large_dec")
+        if [ $? -ne 0 ]; then
+            debug_log "ERROR" "Failed to convert calculated CE IPv6 large decimal back to segments."
+            return 1
+        fi
+
     else
-        log_msg E "MAP-E calculation failed. Configuration not applied."
-        return 1 # Return error status
+        # RFC 6052 Calculation (Placeholder - Not needed for fc2_ocn)
+        debug_log "WARN" "RFC compliant CE IPv6 calculation is not implemented yet."
+        # Implement RFC logic here if needed for other rules
+        # Example: prefix:suffix:psid::
+        MAPE_CE_IPV6_SEGS="0 0 0 0 0 0 0 0" # Placeholder
+        # return 1 # Or return error until implemented
     fi
 
-    log_msg I "MAP-E script finished."
-    return 0 # Return success status
+    # Convert CE IPv6 segments to final string format
+    MAPE_CE_IPV6=$(dec_segments_to_ipv6 "$MAPE_CE_IPV6_SEGS")
+     if [ $? -ne 0 ]; then
+        debug_log "ERROR" "Failed to format CE IPv6 segments '$MAPE_CE_IPV6_SEGS' to string."
+        # Don't fail the whole calculation, but log error. Keep segments.
+        MAPE_CE_IPV6="" # Clear the string version if formatting failed
+    fi
+    debug_log "INFO" "Calculated CE IPv6 Segments: $MAPE_CE_IPV6_SEGS"
+    debug_log "INFO" "Calculated CE IPv6 Address: $MAPE_CE_IPV6"
+
+
+    # --- 4. Calculate Port Range ---
+    # fc2 logic: if psidlen <= offset, range is 1024-65535
+    debug_log "DEBUG" "Calculating Port Range (psidlen=$psidlen, offset=$offset)..."
+    if [ "$psidlen" -le "$offset" ]; then
+        MAPE_PORT_RANGE="1024-65535"
+    else
+        # Standard MAP-E port calculation (Placeholder - Not fully defined in fc2 JS for this case?)
+        # Need to implement the algorithm based on psid, offset, psidlen if needed
+        debug_log "WARN" "Standard MAP-E port calculation (psidlen > offset) is not implemented yet."
+        MAPE_PORT_RANGE="N/A (Not Implemented)"
+        # Example of standard algo bits:
+        # num_ports = 2^(16 - offset - psidlen)
+        # ports_per_psid = num_ports
+        # start_port = 1024 + (PSID * ports_per_psid) # Simplified, needs proper bit shifting/masking
+        # end_port = start_port + ports_per_psid - 1
+    fi
+    debug_log "INFO" "Calculated Port Range: $MAPE_PORT_RANGE"
+
+    # --- 5. Set BR IPv6 Address ---
+    # Convert from rule string to formatted string (handles compression etc.)
+    # First convert to segments, then back to string for consistent formatting
+    local br_segs br_ipv6_formatted
+    br_segs=$(ipv6_to_dec_segments "$rule_br_ipv6_str")
+    if [ $? -eq 0 ]; then
+        br_ipv6_formatted=$(dec_segments_to_ipv6 "$br_segs")
+         if [ $? -eq 0 ]; then
+             MAPE_BR_IPV6="$br_ipv6_formatted"
+         else
+             debug_log "WARN" "Failed to format BR IPv6 string '$rule_br_ipv6_str'. Using original."
+             MAPE_BR_IPV6="$rule_br_ipv6_str" # Fallback to original string
+         fi
+    else
+         debug_log "WARN" "Failed to parse BR IPv6 string '$rule_br_ipv6_str'. Using original."
+         MAPE_BR_IPV6="$rule_br_ipv6_str" # Fallback to original string
+    fi
+    debug_log "INFO" "BR IPv6 Address: $MAPE_BR_IPV6"
+
+
+    # --- 6. Calculate EA Length (Optional/Derived) ---
+    # EA-bits = 128 - rule_ip6prefixlen - psidlen
+    MAPE_EA_LEN=$(( 128 - rule_ip6prefixlen - psidlen ))
+    debug_log "INFO" "Derived EA Length: $MAPE_EA_LEN"
+
+
+    debug_log "INFO" "MAP-E parameter calculation completed successfully."
+    return 0
 }
 
-# Call main function when sourced
-internet_main
+# Function: display_results
+# Description: Displays the calculated MAP-E parameters stored in global variables.
+# Arguments: None
+# Output: Prints formatted MAP-E parameters to stdout.
+# Returns: 0 (always, as it just prints)
+display_results() {
+    debug_log "DEBUG" "Displaying calculated MAP-E parameters."
+
+    # Check if essential parameters were calculated (basic validation)
+    if [ -z "$MAPE_RULE_NAME" ] || [ -z "$MAPE_IPV4" ] || [ -z "$MAPE_CE_IPV6" ] || [ -z "$MAPE_PSID" ]; then
+        debug_log "ERROR" "Cannot display results: Essential parameters are missing."
+        # Optionally print an error message to stdout as well?
+        # printf "Error: Calculation failed, cannot display results.\n" >&2
+        return 1 # Indicate an issue
+    fi
+
+    printf "\n--- MAP-E Parameters (Rule: %s) ---\n" "$MAPE_RULE_NAME"
+    printf "  User IPv6 Prefix (Dec): %s\n" "$MAPE_USER_PREFIX_SEGS" # Display the input segments used
+    printf "  Rule Matched:           %s\n" "$MAPE_RULE_NAME"
+    printf "  PSID (Decimal):         %s\n" "$MAPE_PSID"
+    printf "  IPv4 Address:           %s\n" "$MAPE_IPV4"
+    printf "  CE IPv6 Address:        %s\n" "$MAPE_CE_IPV6"
+    # Optional: Display CE IPv6 segments if needed for debugging
+    # printf "  CE IPv6 Segments (Dec): %s\n" "$MAPE_CE_IPV6_SEGS"
+    printf "  Port Range:             %s\n" "$MAPE_PORT_RANGE"
+    printf "  BR IPv6 Address:        %s\n" "$MAPE_BR_IPV6"
+    printf "  EA Length (bits):       %s\n" "$MAPE_EA_LEN"
+    printf "-------------------------------------\n\n"
+
+    return 0
+}
+
+# Function: main
+# Description: Main entry point of the script. Parses arguments, orchestrates
+#              rule loading, calculation, and result display.
+# Arguments: $@: Command line arguments (expects one IPv6 address)
+# Output: Prints results or error messages.
+# Returns: 0 on success, non-zero on error.
+internet_main() {
+    local user_ipv6_str=""
+    local user_ipv6_segs=""
+    local matched_rule=""
+    local NET_IF6=""
+    local NET_ADDR6=""
+
+    # --- Argument Parsing or Dynamic IPv6 Fetching ---
+    if [ "$#" -eq 1 ]; then
+        # Use command line argument if provided
+        user_ipv6_str="$1"
+        debug_log "INFO" "Using provided IPv6 address: $user_ipv6_str"
+    elif [ "$#" -eq 0 ]; then
+        # No argument provided, try to get WAN IPv6 address using OpenWrt functions
+        debug_log "INFO" "No IPv6 address provided, attempting to fetch from WAN interface..."
+
+        # Ensure network functions are available (basic check)
+        if ! type network_find_wan6 > /dev/null 2>&1 || ! type network_get_ipaddr6 > /dev/null 2>&1 ; then
+             debug_log "ERROR" "OpenWrt network functions (network_find_wan6, network_get_ipaddr6) not found. Cannot fetch WAN IPv6."
+             printf "Error: OpenWrt network functions not available.\n" >&2
+             return 1
+        fi
+
+        network_flush_cache # Recommended before finding interfaces
+        network_find_wan6 NET_IF6 # Find the WAN6 interface logical name
+        if [ -z "$NET_IF6" ]; then
+            debug_log "ERROR" "Could not find WAN6 interface (network_find_wan6)."
+            printf "Error: Could not find WAN6 interface.\n" >&2
+            return 1
+        fi
+        debug_log "DEBUG" "Found WAN6 interface: $NET_IF6"
+
+        network_get_ipaddr6 NET_ADDR6 "${NET_IF6}" # Get the IPv6 address
+        if [ -z "$NET_ADDR6" ]; then
+            debug_log "ERROR" "Could not get IPv6 address from interface '$NET_IF6' (network_get_ipaddr6)."
+            printf "Error: Could not get IPv6 address from interface '%s'.\n" "$NET_IF6" >&2
+            return 1
+        fi
+        # network_get_ipaddr6 might return address with prefix length, remove it if present
+        user_ipv6_str=$(echo "$NET_ADDR6" | cut -d'/' -f1)
+        debug_log "INFO" "Fetched IPv6 address from WAN ($NET_IF6): $user_ipv6_str"
+
+    else
+        # Invalid number of arguments
+        debug_log "ERROR" "Invalid arguments. Usage: $SCRIPT_NAME [ipv6_address]"
+        printf "Usage: %s [ipv6_address]\n" "$SCRIPT_NAME" >&2
+        return 1
+    fi
+
+    debug_log "INFO" "Starting MAP-E calculation for IPv6: $user_ipv6_str"
+
+    # --- Load Rules ---
+    if ! load_rules; then
+        debug_log "ERROR" "Failed to load MAP-E rules."
+        return 1
+    fi
+
+    # --- Validate and Convert User IPv6 ---
+    user_ipv6_segs=$(ipv6_to_dec_segments "$user_ipv6_str")
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "Invalid IPv6 address format used for calculation: $user_ipv6_str"
+        printf "Error: Invalid IPv6 address format ('%s').\n" "$user_ipv6_str" >&2
+        return 1
+    fi
+    debug_log "DEBUG" "User IPv6 decimal segments: $user_ipv6_segs"
+
+    # --- Find Matching Rule ---
+    matched_rule=$(find_matching_rule "$user_ipv6_segs")
+    if [ $? -ne 0 ] || [ -z "$matched_rule" ]; then
+        # find_matching_rule logs the warning internally if no match
+        printf "Error: No matching MAP-E rule found for IPv6 address: %s\n" "$user_ipv6_str" >&2
+        return 1
+    fi
+
+    # --- Calculate Parameters ---
+    if ! calculate_mape_params "$user_ipv6_segs" "$matched_rule"; then
+        debug_log "ERROR" "Failed to calculate MAP-E parameters."
+        printf "Error: Calculation failed for rule '%s'. Check logs for details.\n" "$matched_rule" >&2
+        return 1
+    fi
+
+    # --- Display Results ---
+    if ! display_results; then
+         debug_log "ERROR" "Failed to display results (likely due to missing parameters)."
+         # Error message already printed by display_results or calculate_mape_params
+         return 1
+    fi
+
+    debug_log "INFO" "Script finished successfully."
+    return 0
+}
+
+# --- Execute Main Function ---
+# Pass all command line arguments to main
+internet_main "$@"
