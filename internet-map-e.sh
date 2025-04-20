@@ -1,4 +1,8 @@
 #!/bin/sh
+# Load OpenWrt function libraries required by this script
+. /lib/functions.sh
+. /lib/functions/network.sh
+# . /lib/netifd/netifd-proto.sh # Keep commented unless explicitly needed later by other functions
 
 # internet-map-e.sh
 # Calculates MAP-E parameters based on user IPv6 prefix, aiming for 100% compatibility
@@ -1432,7 +1436,7 @@ mape_config() {
 # --- Main Execution Logic ---
 
 internet_main() {
-    # Assume OpenWrt functions (network_*, log_msg) are available in the environment
+    # Assume OpenWrt functions (network_*, log_msg) are available due to script-level sourcing
 
     local NET_IF6=""
     local NET_ADDR6=""
@@ -1440,7 +1444,7 @@ internet_main() {
 
     log_msg I "internet_main: Attempting to automatically obtain IPv6 prefix..."
 
-    # Get IPv6 prefix using specified OpenWrt functions (assuming they are available)
+    # Get IPv6 prefix using specified OpenWrt functions
     network_flush_cache
     network_find_wan6 NET_IF6
     if [ -z "$NET_IF6" ]; then
@@ -1459,8 +1463,6 @@ internet_main() {
     fi
 
     # Use the obtained address/prefix
-    # Note: network_get_ipaddr6 might return address/prefixlen.
-    # Assuming mape_mold can handle the format returned by network_get_ipaddr6.
     user_prefix="${NET_ADDR6}"
     log_msg I "internet_main: Using automatically obtained IPv6 prefix/address: ${user_prefix}"
 
