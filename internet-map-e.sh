@@ -1181,24 +1181,21 @@ mape_mold() {
     else
         # PSID is validated numeric
         log_msg D "mape_mold: Port calculation: PSIDLen > Offset. PSID=$PSID, Offset=$OFFSET"
-        local port_shift_right_amount=$OFFSET # 0 <= OFFSET < PSIDLEN <= 16 (usually)
-        if [ "$port_shift_right_amount" -lt 0 ]; then port_shift_right_amount=0; fi # Safety
-        # <<< DEBUG LOG ADDED: Log value before shift calculation >>>
+        local port_shift_right_amount=$OFFSET
+        if [ "$port_shift_right_amount" -lt 0 ]; then port_shift_right_amount=0; fi
         log_msg D "mape_mold: Calculating psid_shifted_right = PSID('$PSID') >> port_shift_right_amount('$port_shift_right_amount')"
         local psid_shifted_right=$((PSID >> port_shift_right_amount))
          if ! expr "$psid_shifted_right" + 0 > /dev/null 2>&1; then
               log_msg E "mape_mold: psid_shifted_right ('$psid_shifted_right') became non-numeric after shift."
               return 1
          fi
-        # <<< DEBUG LOG ADDED: Log value after shift calculation >>>
         log_msg D "mape_mold: psid_shifted_right = '$psid_shifted_right'"
 
-        local port_shift_left_amount=$((16 - OFFSET)) # 0 < port_shift_left_amount <= 16
-        if [ "$port_shift_left_amount" -lt 0 ]; then port_shift_left_amount=0; fi # Safety
+        local port_shift_left_amount=$((16 - OFFSET))
+        if [ "$port_shift_left_amount" -lt 0 ]; then port_shift_left_amount=0; fi
         log_msg D "mape_mold: port_shift_left_amount (16 - Offset) = '$port_shift_left_amount'"
         local port_multiplier=1
         if [ "$port_shift_left_amount" -gt 0 ]; then
-             # <<< DEBUG LOG ADDED: Log value before shift calculation >>>
              log_msg D "mape_mold: Calculating port_multiplier = 1 << port_shift_left_amount('$port_shift_left_amount')"
              port_multiplier=$((1 << port_shift_left_amount))
              if ! expr "$port_multiplier" + 0 > /dev/null 2>&1; then
@@ -1206,52 +1203,55 @@ mape_mold() {
                   return 1
              fi
         fi
-        # <<< DEBUG LOG ADDED: Log value after shift calculation >>>
         log_msg D "mape_mold: port_multiplier = '$port_multiplier'"
 
-        # Calculate initial range
-        # <<< DEBUG LOG ADDED: Log values before port_start calculation >>>
-        log_msg D "mape_mold: Calculating port_start = psid_shifted_right('$psid_shifted_right') * port_multiplier('$port_multiplier')"
-        port_start=$((psid_shifted_right * port_multiplier))
-        # Validate calculations
-        if ! expr "$port_start" + 0 > /dev/null 2>&1; then # Check immediately after calculation
-             log_msg E "mape_mold: Port start calculation resulted in non-numeric value. start='$port_start'"
+        # Calculate initial range using expr
+        log_msg D "mape_mold: Calculating port_start using expr: psid_shifted_right('$psid_shifted_right') * port_multiplier('$port_multiplier')"
+        port_start=$(expr "$psid_shifted_right" \* "$port_multiplier" 2>/dev/null) # Use \* to escape *
+        if [ $? -ne 0 ] || ! expr "$port_start" + 0 > /dev/null 2>&1; then
+             log_msg E "mape_mold: Port start calculation using expr failed or resulted in non-numeric value. start='$port_start'"
              return 1
         fi
-        # <<< DEBUG LOG ADDED: Log value after port_start calculation >>>
         log_msg D "mape_mold: Calculated port_start = '$port_start'"
 
-        # <<< DEBUG LOG ADDED: Log values before port_end calculation >>>
-        log_msg D "mape_mold: Calculating port_end = port_start('$port_start') + port_multiplier('$port_multiplier') - 1"
-        port_end=$((port_start + port_multiplier - 1))
-        # Validate calculations (Error reported around here - line 749 in modified script)
-        if ! expr "$port_end" + 0 > /dev/null 2>&1; then # <<< This is likely line 749 now
-             log_msg E "mape_mold: Port end calculation resulted in non-numeric value. end='$port_end'"
+        log_msg D "mape_mold: Calculating port_end using expr: port_start('$port_start') + port_multiplier('$port_multiplier') - 1"
+        local port_end_tmp1=$(expr "$port_start" + "$port_multiplier" 2>/dev/null)
+        if [ $? -ne 0 ] || ! expr "$port_end_tmp1" + 0 > /dev/null 2>&1; then
+             log_msg E "mape_mold: Port end calculation using expr failed at step 1 (start + multiplier). tmp1='$port_end_tmp1'"
              return 1
         fi
-        # <<< DEBUG LOG ADDED: Log value after port_end calculation >>>
+        port_end=$(expr "$port_end_tmp1" - 1 2>/dev/null)
+        if [ $? -ne 0 ] || ! expr "$port_end" + 0 > /dev/null 2>&1; then
+             # Log error but continue to final clamping/check, reset port_end
+             log_msg E "mape_mold: Port end calculation using expr failed at step 2 (tmp1 - 1) or resulted in non-numeric value. end='$port_end'"
+             port_end="" # Reset to ensure checks below handle it
+             # return 1 # Optionally return immediately
+        fi
         log_msg D "mape_mold: Calculated port_end = '$port_end'"
-        log_msg D "mape_mold: Initial calculated port range: $port_start-$port_end"
+        # The original 'if ! expr "$port_end" + 0' check is implicitly covered by the checks above now.
+        # If expr failed, port_end might be empty or non-numeric here.
+        log_msg D "mape_mold: Initial calculated port range (using expr): $port_start-$port_end"
 
         # Clamp port range
-        # <<< DEBUG LOG ADDED: Log values before clamping >>>
         log_msg D "mape_mold: Clamping port range: start='$port_start', end='$port_end'"
-        if [ "$port_start" -lt 1024 ]; then port_start=1024; log_msg D "mape_mold: Clamped port_start to 1024"; fi
-        if [ "$port_end" -gt 65535 ]; then port_end=65535; log_msg D "mape_mold: Clamped port_end to 65535"; fi
-        # <<< DEBUG LOG ADDED: Log values after clamping >>>
+        # Ensure port_start and port_end are valid numbers before clamping comparison
+        if expr "$port_start" + 0 > /dev/null 2>&1 && [ "$port_start" -lt 1024 ]; then port_start=1024; log_msg D "mape_mold: Clamped port_start to 1024"; fi
+        if expr "$port_end" + 0 > /dev/null 2>&1 && [ "$port_end" -gt 65535 ]; then port_end=65535; log_msg D "mape_mold: Clamped port_end to 65535"; fi
         log_msg D "mape_mold: Clamped port range result: start='$port_start', end='$port_end'"
 
-        # Final check for validity
-        if [ "$port_start" -gt "$port_end" ]; then
-             log_msg E "mape_mold: Invalid port range calculated (start '$port_start' > end '$port_end'). Setting empty."
+        # Final check for validity (ensure both are numbers before comparing)
+        if ! expr "$port_start" + 0 > /dev/null 2>&1 || ! expr "$port_end" + 0 > /dev/null 2>&1 || [ "$port_start" -gt "$port_end" ]; then
+             log_msg E "mape_mold: Invalid port range after clamping (start '$port_start' > end '$port_end' or non-numeric). Setting empty."
              port_start=0; port_end=0; PORTS=""
         fi
     fi
-    if [ "$port_start" -le "$port_end" ] && [ "$port_end" -gt 0 ]; then
+
+    # Final assignment to PORTS (ensure start/end are valid numbers)
+    if expr "$port_start" + 0 > /dev/null 2>&1 && expr "$port_end" + 0 > /dev/null 2>&1 && [ "$port_start" -le "$port_end" ] && [ "$port_end" -gt 0 ]; then
          PORTS="${port_start}-${port_end}"
     else
          PORTS=""
-         log_msg W "mape_mold: Resulting port range is invalid or empty."
+         log_msg W "mape_mold: Resulting port range is invalid or empty after all checks."
          # return 1 # Option: uncomment if empty ports are fatal
     fi
     log_msg I "mape_mold: Calculated Port Range: $PORTS"
