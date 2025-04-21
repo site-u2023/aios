@@ -116,24 +116,24 @@ confirm() {
     local input_type="yn"  # デフォルトの入力タイプ
     local msg=""
     local yn=""
-    
+
     # メッセージの取得
     if [ -n "$msg_key" ]; then
         # 最初に基本メッセージを取得
         msg=$(get_message "$msg_key")
-        
+
         # パラメータの処理
         shift
         while [ $# -gt 0 ]; do
             local param="$1"
-            
+
             # パラメータ形式の判定（name=value または input_type）
             case "$param" in
                 *=*)
                     # name=value形式のパラメータ
                     local param_name=$(echo "$param" | cut -d'=' -f1)
                     local param_value=$(echo "$param" | cut -d'=' -f2-)
-                    
+
                     if [ -n "$param_name" ] && [ -n "$param_value" ]; then
                         local safe_value=$(echo "$param_value" | sed 's/[\/&]/\\&/g')
                         msg=$(echo "$msg" | sed "s|{$param_name}|$safe_value|g")
@@ -149,51 +149,52 @@ confirm() {
                     debug_log "DEBUG" "Ignoring unknown parameter: $param"
                     ;;
             esac
-            
+
             shift
         done
     else
         debug_log "ERROR" "No message key specified for confirmation"
         return 1
     fi
-    
+
     # 入力タイプに基づき適切な表示形式に置き換え
     if [ "$input_type" = "ynr" ]; then
         # (y/n/r)を表示用メッセージに追加
         msg=$(echo "$msg" | sed 's/{ynr}/(y\/n\/r)/g')
-        debug_log "DEBUG" "Running in YNR mode with message: $msg_key" 
+        debug_log "DEBUG" "Running in YNR mode with message: $msg_key"
     else
         # (y/n)を表示用メッセージに追加
         msg=$(echo "$msg" | sed 's/{yn}/(y\/n)/g')
         debug_log "DEBUG" "Running in YN mode with message: $msg_key"
     fi
-    
+
     # ユーザー入力ループ
     while true; do
         # プロンプト表示（改行対応 - printf %bを使用）
-        printf "%b " "$(color white "$msg")"
-        
+        # ★★★ 変更点: 末尾の不要なスペースを削除 ★★★
+        printf "%b" "$(color white "$msg")"
+
         # 入力を読み取り
         if ! read -r yn; then
             debug_log "ERROR" "Failed to read user input"
             return 1
         fi
-        
+
         # 入力の正規化
         yn=$(normalize_input "$yn")
         debug_log "DEBUG" "Processing user input: $yn"
-        
+
         # 入力検証
         case "$yn" in
-            [Yy]|[Yy][Ee][Ss]|はい|ハイ|ﾊｲ) 
+            [Yy]|[Yy][Ee][Ss]|はい|ハイ|ﾊｲ)
                 debug_log "DEBUG" "User confirmed: Yes"
                 CONFIRM_RESULT="Y"
-                return 0 
+                return 0
                 ;;
             [Nn]|[Nn][Oo]|いいえ|イイエ|ｲｲｴ)
                 debug_log "DEBUG" "User confirmed: No"
                 CONFIRM_RESULT="N"
-                return 1 
+                return 1
                 ;;
             [Rr]|[Rr][Ee][Tt][Uu][Rr][Nn]|戻る|モドル|ﾓﾄﾞﾙ)
                 # YNRモードの場合のみRを許可
