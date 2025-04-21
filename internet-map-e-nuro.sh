@@ -3,14 +3,14 @@
 # NURO光 MAP-E設定スクリプト (POSIX準拠・aios連携版)
 #
 # 機能: NURO光向けMAP-E接続の自動設定と管理 (aios フレームワーク対応)
-# バージョン: 2.1.1 (2025-04-21)
+# バージョン: 2.1.2 (2025-04-21) # バージョン更新
 # 元ソース: site-u2023/config-software/map-e-nuro.sh (Commit: 643a0a40)
 #
 # このスクリプトはPOSIX準拠でOpenWrtのash環境で動作します。
 # aios の共通関数とメニューシステムを利用します。
 #===============================================================================
 
-SCRIPT_VERSION="2.1.1" # このスクリプトのバージョン
+SCRIPT_VERSION="2.1.2" # このスクリプトのバージョン
 
 # --- aios 環境変数の確認 (aios から引き継がれる想定) ---
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
@@ -35,7 +35,7 @@ else
     if command -v debug_log >/dev/null 2>&1; then
         debug_log "ERROR" "OpenWrt network library not found: $AIOS_NETWORK_LIB"
     fi
-    exit 1
+    # exit 1 # load されるスクリプト内での exit は避ける方が無難な場合がある
 fi
 
 # --- グローバル変数 (パターン判定で設定) ---
@@ -276,6 +276,7 @@ setup_nuro_mape() {
     fi
 
     # mapパッケージのインストール確認
+    # install_package は aios の関数と仮定
     if ! install_package map silent; then
         debug_log "ERROR" "Failed to install 'map' package."
         printf "%sFailed to install 'map' package.%s\n" "$error_prefix" "$reset_color" >&2
@@ -347,7 +348,6 @@ setup_nuro_mape() {
     else
         # OpenWrt 19 以外 (または不明): NURO用設定
         debug_log "DEBUG" "Applying OpenWrt non-19 specific UCI settings."
-        # uci set dhcp.wan6.interface='wan6' # internet-map-e.sh のロジックだが、元ソースにはないので適用しない
         uci set dhcp.wan6.ignore='1'
         uci set network.${WANMAP}.legacymap='1'
         uci set network.${WANMAP}.tunlink='wan6'
@@ -415,11 +415,13 @@ setup_nuro_mape() {
     if command -v color >/dev/null 2>&1; then msg_prefix=$(color blue "- "); fi
 
     local confirm_reboot=1
+    # confirm は aios の関数と仮定
     confirm "MSG_NURO_CONFIRM_REBOOT" # {yn} プレースホルダは confirm が処理
     confirm_reboot=$?
 
     if [ $confirm_reboot -eq 0 ]; then # Yes
         printf "%s%s\n" "$msg_prefix" "$(get_message "MSG_NURO_REBOOTING")"
+        # reboot は aios の関数と仮定
         reboot # 即時再起動
         exit 0 # reboot が失敗した場合に備えて exit
     elif [ $confirm_reboot -eq 2 ]; then # Return
@@ -564,15 +566,12 @@ setup_multisession_patch() {
         # Version 19以外 (または osversion.ch が空だった場合もこちら)
         patch_url="${patch_url_base}/map.sh.new"
         debug_log "DEBUG" "Selected patch URL for OpenWrt non-19 (or unknown)."
-        # 不明なバージョンに対する警告は不要 (19以外は同じURLを使うため)
-        # if [ -z "$osversion" ]; then
-        #    debug_log "WARN" "OS version was empty in cache file, using default patch URL."
-        # fi
     fi
     debug_log "DEBUG" "Using patch URL: $patch_url"
 
     # Download patch file using aios wget options
     # WGET_IPV_OPT is assumed to be set by aios main script
+    # wget は aios の関数と仮定
     if ! wget -q --no-check-certificate ${WGET_IPV_OPT:-} -O "$map_sh_path" "$patch_url" 2>/dev/null; then
         debug_log "ERROR" "Failed to download multi-session patch script from $patch_url."
         printf "%s%s%s\n" "$error_prefix" "$(get_message "MSG_NURO_MSPATCH_DOWNLOAD_FAIL")" "$reset_color" >&2
@@ -619,7 +618,7 @@ restore_multisession_patch() {
     local warning_prefix="\033[33mWarning: "
     local reset_color="\033[0m"
 
-    # debug_log, color, get_message are assumed available
+    # debug_log, color, get_message は利用可能と仮定
     printf "%s\n" "$(color blue "$(get_message "MSG_NURO_MSPATCH_RESTORE_START")")"
     debug_log "INFO" "Restoring original map.sh from backup..."
 
@@ -669,10 +668,10 @@ check_multisession_ports() {
     local msg_prefix=""
     # Error/Warning prefixes (hardcoded English)
     local error_prefix="\033[31mError: "
-    local warning_prefix="\033[33mWarning: "
+    # local warning_prefix="\033[33mWarning: " # 未使用
     local reset_color="\033[0m"
 
-    # debug_log, color, get_message are assumed available
+    # debug_log, color, get_message は利用可能と仮定
     debug_log "DEBUG" "Checking available ports from $rules_file..."
 
     # Check if rules file exists
@@ -751,4 +750,5 @@ nuro_mape_main() {
     return 0
 }
 
+# --- スクリプト末尾でメイン関数を呼び出す ---
 nuro_mape_main
