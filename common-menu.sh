@@ -440,27 +440,27 @@ process_menu_items() {
     local menu_displays_file="$3"
     local menu_commands_file="$4"
     local menu_colors_file="$5"
-    
+
     debug_log "DEBUG" "Processing menu items for section: $section_name"
-    
+
     local menu_count=0
     local total_normal_items=0
     local in_section=0
-    
+
     # まず、セクション内の通常項目数をカウント（特殊項目を除く）
     while IFS= read -r line || [ -n "$line" ]; do
         # コメントと空行をスキップ
         case "$line" in
             \#*|"") continue ;;
         esac
-        
+
         # セクション開始をチェック
         if echo "$line" | grep -q "^\[$section_name\]"; then
             in_section=1
             debug_log "DEBUG" "Found target section for counting: [$section_name]"
             continue
         fi
-        
+
         # 別のセクション開始で終了
         if echo "$line" | grep -q "^\[.*\]"; then
             if [ $in_section -eq 1 ]; then
@@ -469,31 +469,31 @@ process_menu_items() {
             fi
             continue
         fi
-        
+
         # セクション内の項目をカウント
         if [ $in_section -eq 1 ]; then
             total_normal_items=$((total_normal_items+1))
         fi
     done < "${BASE_DIR}/menu.db"
-    
+
     debug_log "DEBUG" "Total normal menu items in section [$section_name]: $total_normal_items"
-    
+
     # セクション検索（2回目）- 項目を処理
     in_section=0
-    
+
     while IFS= read -r line || [ -n "$line" ]; do
         # コメントと空行をスキップ
         case "$line" in
             \#*|"") continue ;;
         esac
-        
+
         # セクション開始をチェック
         if echo "$line" | grep -q "^\[$section_name\]"; then
             in_section=1
             debug_log "DEBUG" "Found target section for processing: [$section_name]"
             continue
         fi
-        
+
         # 別のセクション開始で終了
         if echo "$line" | grep -q "^\[.*\]"; then
             if [ $in_section -eq 1 ]; then
@@ -502,54 +502,41 @@ process_menu_items() {
             fi
             continue
         fi
-        
+
         # セクション内の項目を処理
         if [ $in_section -eq 1 ]; then
             # カウンターをインクリメント
             menu_count=$((menu_count+1))
-            
+
             # 色指定の有無をチェック
-            # 先頭が「色名 キー」の形式か「キー」だけか判断
             if echo "$line" | grep -q -E "^[a-z_]+[ ]"; then
-                # 色指定あり: 色、キー、コマンドを分離
                 local color_name=$(echo "$line" | cut -d' ' -f1)
                 local key=$(echo "$line" | cut -d' ' -f2)
                 local cmd=$(echo "$line" | cut -d' ' -f3-)
-                
                 debug_log "DEBUG" "Color specified in line: color=$color_name, key=$key, cmd=$cmd"
             else
-                # 色指定なし: キーとコマンドを分離
                 local key=$(echo "$line" | cut -d' ' -f1)
                 local cmd=$(echo "$line" | cut -d' ' -f2-)
-                
-                # 自動色割り当て - 位置と総項目数を渡す
                 local color_name=$(get_auto_color "$menu_count" "$total_normal_items")
-                
                 debug_log "DEBUG" "No color specified, auto-assigned: color=$color_name, key=$key, cmd=$cmd"
             fi
-            
+
             # 各ファイルに情報を保存
             echo "$key" >> "$menu_keys_file"
             echo "$cmd" >> "$menu_commands_file"
             echo "$color_name" >> "$menu_colors_file"
-            
-            # メッセージキーの変換処理の修正
-            local display_text=""
 
-            # メッセージファイルから言語設定を直接取得（キャッシュ優先）
+            # メッセージキーの変換処理
+            local display_text=""
             local current_lang=""
             if [ -f "${CACHE_DIR}/message.ch" ]; then
                 current_lang=$(cat "${CACHE_DIR}/message.ch")
             fi
-
             debug_log "DEBUG" "Using language code for menu display: $current_lang"
-            
-            # メッセージファイルから直接検索（特殊文字対応）
             debug_log "DEBUG" "Direct search for message key: $key"
-            
+
             for msg_file in "${BASE_DIR}"/message_*.db; do
                 if [ -f "$msg_file" ]; then
-                    # -Fオプションで特殊文字をリテラルとして扱う
                     local msg_value=$(grep -F "$current_lang|$key=" "$msg_file" 2>/dev/null | cut -d'=' -f2-)
                     if [ -n "$msg_value" ]; then
                         display_text="$msg_value"
@@ -558,22 +545,26 @@ process_menu_items() {
                     fi
                 fi
             done
-            
+
             # 変換が見つからない場合はキーをそのまま使用
             if [ -z "$display_text" ]; then
                 display_text="$key"
                 debug_log "DEBUG" "No message found for key: $key, using key as display text"
             fi
-            
-            # 表示テキストを保存（[数字] 形式） - 数字と表示の間に空白を入れる
-            printf "%s\n" "$(color "$color_name" "[${menu_count}] ${display_text}")" >> "$menu_displays_file" 2>/dev/null
-            
+
+            # ★ 修正点: 表示テキストを normalize_message で正規化する (存在確認なし)
+            local normalized_display_text=$(normalize_message "$display_text" "$current_lang")
+            debug_log "DEBUG" "Normalized display text: $normalized_display_text"
+
+            # 表示テキストを保存（[数字] 形式） - 正規化後のテキストを使用
+            printf "%s\n" "$(color "$color_name" "[${menu_count}] ${normalized_display_text}")" >> "$menu_displays_file" 2>/dev/null
+
             debug_log "DEBUG" "Added menu item $menu_count: [$key] -> [$cmd] with color: $color_name"
         fi
     done < "${BASE_DIR}/menu.db"
-    
+
     debug_log "DEBUG" "Read $menu_count regular menu items from menu.db"
-    
+
     # 処理したメニュー項目数を返す
     echo "$menu_count"
 }
