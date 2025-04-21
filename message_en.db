@@ -33,7 +33,7 @@ en|MSG_MAPE_IPV6_PREFIX_FAILED=Failed to get IPv6 prefix
 en|MSG_DSLITE_APPLY_SUCCESS=DS-Lite settings applied successfully for {sp}
 en|MSG_DSLITE_RESTORE_SUCCESS=Previous DS-Lite settings restored successfully
 en|MSG_DSLITE_AUTO_DETECT_FAILED=Provider detection failed
-en|MSG_DSLITE_AUTO_DETECT_UNSUPPORTED=DS-Lite auto-detection{:} {rsn}
+en|MSG_DSLITE_AUTO_DETECT_UNSUPPORTED=DS-Lite Not supported{:} {rsn}
 
 # =======================
 # menu.db
