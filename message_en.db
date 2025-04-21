@@ -38,7 +38,7 @@ en|MSG_DSLITE_AUTO_DETECT_UNSUPPORTED=DS-Lite Not supported{:} {rsn}
 # =======================
 # menu.db
 # =======================
-en|MENU_INTERNET_AUTO=Internet Auto Config{:} MAP-E / DS-LITE
+en|MENU_INTERNET_AUTO=Auto Config{:} MAP-E / DS-LITE
 en|MENU_INTERNET_MAPE=MAP-E{:} OCN / v6 plus
 en|MENU_INTERNET_NURO_MAPE=MAP-E{:} NURO
 en|MENU_INTERNET_DSLITE=DS-Lite{:} transix / cross pass / v6 connect
