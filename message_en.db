@@ -48,7 +48,7 @@ en|MENU_INTERNET_PPPOE=PPPoE
 # internet-auto-config.sh
 # =======================
 en|MSG_AUTO_CONFIG_RESULT=Automatic detection result{:} {sp} ({tp})
-en|MSG_AUTO_CONFIG_CONFIRM=Apply these settings {yn}
+en|MSG_AUTO_CONFIG_CONFIRM=Apply these settings {yn}{:}
 en|MSG_AUTO_CONFIG_UNKNOWN=ASN {as} unsupported{:} Manual setup required
 
 # =======================
