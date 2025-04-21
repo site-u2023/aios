@@ -705,48 +705,50 @@ check_multisession_ports() {
     return 0 # Always return to menu
 }
 
-# --- メインエントリポイント (menu.db から呼び出される想定) ---
-# This function is intended to be called from menu.db like:
-# download ... load; nuro_mape_main
+# --- メイン処理関数 (ロード時に末尾から呼ばれる) ---
 nuro_mape_main() {
-    # debug_log, color, get_message are assumed available
-    debug_log "INFO" "Executing nuro_mape_main function..."
+    # debug_log, color, get_message は利用可能と仮定
+    debug_log "INFO" "Executing nuro_mape_main function (called from script end)..."
+
+    # ローカル変数を定義 (POSIX準拠のため、関数内でlocal宣言)
+    local ipv6_raw=""
+    local ipv6_normalized=""
+    # BR_ADDR, IPV6_PREFIX, IPV4_PREFIX は detect_nuro_pattern でグローバル変数として設定される
 
     # 1. Get IPv6 address
     printf "%s\n" "$(color blue "$(get_message "MSG_NURO_GET_IPV6_START")")"
-    local ipv6_raw
     ipv6_raw=$(get_ipv6_prefix_from_wan6)
     if [ $? -ne 0 ] || [ -z "$ipv6_raw" ]; then
-        debug_log "ERROR" "Failed to retrieve IPv6 address."
+        debug_log "ERROR" "Failed to retrieve IPv6 address. Aborting nuro_mape_main."
         printf "%s%s%s\n" "$(color red "$(get_message "MSG_NURO_GET_IPV6_FAIL")")" >&2
-        return 1 # Fail and exit menu
+        return 1 # 関数からエラー終了
     fi
 
     # 2. Normalize IPv6 address
-    local ipv6_normalized
     ipv6_normalized=$(normalize_ipv6 "$ipv6_raw")
     if [ $? -ne 0 ] || [ -z "$ipv6_normalized" ]; then
-        debug_log "ERROR" "Failed to normalize IPv6 address: $ipv6_raw"
+        debug_log "ERROR" "Failed to normalize IPv6 address: $ipv6_raw. Aborting nuro_mape_main."
         printf "%s%s%s\n" "$(color red "$(get_message "MSG_NURO_NORM_IPV6_FAIL")")" >&2
-        return 1 # Fail and exit menu
+        return 1 # 関数からエラー終了
     fi
     printf "%s: %s\n" "$(get_message "MSG_NURO_IPV6_ADDRESS")" "$ipv6_normalized"
 
     # 3. Detect NURO pattern
     printf "%s\n" "$(color blue "$(get_message "MSG_NURO_DETECT_START")")"
     if ! detect_nuro_pattern "$ipv6_normalized"; then
-        debug_log "ERROR" "This IPv6 address does not match known NURO patterns: $ipv6_normalized"
+        debug_log "ERROR" "This IPv6 address does not match known NURO patterns: $ipv6_normalized. Aborting nuro_mape_main."
         printf "%s%s%s\n" "$(color red "$(get_message "MSG_NURO_DETECT_FAIL")")" >&2
-        return 1 # Fail and exit menu
+        return 1 # 関数からエラー終了
     fi
     printf "%s\n" "$(color green "$(get_message "MSG_NURO_DETECT_SUCCESS")")"
     printf "  BR: %s, IPv6: %s::/36, IPv4: %s/20\n" "$BR_ADDR" "$IPV6_PREFIX" "$IPV4_PREFIX" # Simple display
 
     # 4. Apply settings (calls setup_nuro_mape)
-    # setup_nuro_mape handles reboot confirmation and returns 0 or 1
+    # setup_nuro_mape は内部で reboot/return 0 を処理する
     setup_nuro_mape
-    return $? # Return the status from setup_nuro_mape
+    # setup_nuro_mape の戻り値に関わらず、nuro_mape_main としては正常終了扱いとする
+    # (エラーは setup_nuro_mape 内で表示される)
+    return 0
 }
 
-# スクリプトの最後にダミーコマンドを置く (直接実行防止)
-:
+nuro_mape_main
