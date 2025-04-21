@@ -48,7 +48,7 @@ en|MENU_INTERNET_PPPOE=PPPoE
 # internet-auto-config.sh
 # =======================
 en|MSG_AUTO_CONFIG_RESULT=Automatic detection result{:} {sp} ({tp})
-en|MSG_AUTO_CONFIG_CONFIRM=Apply these settings {yn}{:}
+en|MSG_AUTO_CONFIG_CONFIRM=Apply these settings {yn}{;}
 en|MSG_AUTO_CONFIG_UNKNOWN=ASN {as} unsupported{:} Manual setup required
 
 # =======================
@@ -91,7 +91,7 @@ en|MSG_INSTALL_COMPLETED=Package installation completed successfully
 # =======================
 # package-manual.sh
 # =======================
-en|MSG_CONFIRM_INSTALL_PACKAGES=Do you want to install this package {yn}{:}
+en|MSG_CONFIRM_INSTALL_PACKAGES=Do you want to install this package {yn}{;}
 en|PKG_SECTION_BASIC=Basic System Functions
 en|PKG_SECTION_SYSADMIN=System Administration
 en|PKG_SECTION_NETWORK=Network Management
@@ -138,7 +138,7 @@ en|MENU_V&MIG=IPv6 Migration Standard Provisioning
 en|CONFIG_MAIN_SELECT_PROMPT=Please select a number (1-{0}, 10, 00){;} 
 en|CONFIG_SUB_SELECT_PROMPT=Please select a number (1-{0}, 0, 10){;} 
 en|CONFIG_ERROR_NOT_NUMBER=Please enter a valid number
-en|CONFIG_CONFIRM_DELETE=Do you want to delete this script and related directories {yn}{:}
+en|CONFIG_CONFIRM_DELETE=Do you want to delete this script and related directories {yn}{;}
 en|CONFIG_DELETE_CONFIRMED=Script and related directories have been deleted. Goodbye!
 en|CONFIG_DELETE_CANCELED=Deletion canceled. Returning to menu
 en|CONFIG_EXIT_CONFIRMED=Script closed. Goodbye!
@@ -189,8 +189,8 @@ en|MSG_CACHE_ENABLED=Cache enabled: Using cached version information when availa
 # =======================
 en|MSG_CONFIRM_USE_SETTINGS=Do you want to use these location and timezone settings?
 
-en|MSG_CONFIRM_DEFAULT=Confirm {yn}{:}
-en|MSG_CONFIRM_SELECT=Confirm this selection {ynr}{:}
+en|MSG_CONFIRM_DEFAULT=Confirm {yn}{;}
+en|MSG_CONFIRM_SELECT=Confirm this selection {ynr}{;}
 en|MSG_SINGLE_MATCH_FOUND=Found single match{:} {0}
 
 en|MSG_INVALID_INPUT=Invalid input. Please enter {op}
@@ -203,7 +203,7 @@ en|MSG_USE_DETECTED_INFORMATION=Country Sources{:} {i}
 en|MSG_DETECTED_COUNTRY=Country code{:}
 en|MSG_DETECTED_TIMEZONE=Time zone{:}
 en|MSG_DETECTED_ZONENAME=Zone name{:}
-en|MSG_CONFIRM_ONLY_YN=Confirm {yn}{:}
+en|MSG_CONFIRM_ONLY_YN=Confirm {yn}{;}
 en|MSG_TIMEZONE_SUCCESS=Zone selection completed successfully
 en|MSG_INVALID_COUNTRY_NUMBER=Invalid country number. Please try again
 en|MSG_INVALID_ZONE_NUMBER=Invalid zone number. Please try again
@@ -250,10 +250,10 @@ en|MSG_ENTER_DEVICE_NAME=Enter the new device name{:}
 en|MSG_ERROR_EMPTY_INPUT=Input cannot be empty
 en|MSG_ENTER_NEW_PASSWORD=Enter the new password{:}
 en|MSG_ERROR_PASSWORD_LENGTH=Password must be at least 8 characters long
-en|MSG_CONFIRM_SETTINGS_PREVIEW=Please confirm the following settings{:}
+en|MSG_CONFIRM_SETTINGS_PREVIEW=Please confirm the following settings{;}
 en|MSG_PREVIEW_DEVICE_NAME=Device Name{:} {name}
 en|MSG_PREVIEW_PASSWORD=Password{:} {password}
-en|MSG_CONFIRM_DEVICE_SETTINGS=Are these settings correct? {yn}{:}
+en|MSG_CONFIRM_DEVICE_SETTINGS=Are these settings correct? {yn}{;}
 en|MSG_UPDATE_CANCELLED=Operation has been canceled
 en|MSG_UPDATE_FAILED_PASSWORD=Failed to update password
 en|MSG_UPDATE_FAILED_DEVICE=Failed to update device name
@@ -272,7 +272,7 @@ en|MSG_PASSWORD_TOO_SHORT=Password is too short. Please enter at least 8 charact
 en|MSG_WIFI_CONFIG_PREVIEW=WiFi Configuration Preview{:}
 en|MSG_WIFI_BAND_INFO=Band Type{:} {band}
 en|MSG_WIFI_HTMODE_INFO=Channel Width Mode{:} {mode}
-en|MSG_CONFIRM_WIFI_SETTINGS=Configuration{:} SSID = {ssid}, Password = {password}. Is this correct? {yn}{:}
+en|MSG_CONFIRM_WIFI_SETTINGS=Configuration{:} SSID = {ssid}, Password = {password}. Is this correct? {yn}{;}
 en|MSG_REENTER_INFO=Please re-enter the information
 en|MSG_INVALID_YN=Invalid input. Please enter 'y' or 'n'
 en|MSG_PRESS_KEY_REBOOT=Press any key to reboot the device
