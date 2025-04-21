@@ -1208,14 +1208,14 @@ mape_mold() {
         return 1
     fi
 
-    # --- BEGIN IPv6 HEXTET Parsing Correction (POSIX awk compliant) ---
+    # --- BEGIN IPv6 HEXTET Parsing Correction (POSIX awk compliant, space output) ---
     local ipv6_addr="$NEW_IP6_PREFIX"
     local h0_str h1_str h2_str h3_str # Shell variables to hold hex strings
 
     # Use awk for robust :: expansion and extraction of first 4 hextets (POSIX compliant)
     local awk_output
     awk_output=$(echo "$ipv6_addr" | awk '
-    BEGIN { FS=":"; OFS=":" }
+    BEGIN { FS=":"; OFS=":" } # Keep OFS=":" for sub(), but print explicitly spaced
     {
         num_fields = NF
         if ($0 ~ /::/) {
@@ -1227,8 +1227,8 @@ mape_mold() {
             sub(/::/, zeros)
             if ($1 == "") $1 = "0"
             # Need to recalculate NF after sub for trailing :: check
-            if ($NF == "" && NF == 8) $NF = "0" 
-            if (NF == 1 && $1 == "") $1 = "0" 
+            if ($NF == "" && NF == 8) $NF = "0"
+            if (NF == 1 && $1 == "") $1 = "0"
         }
 
         # Extract first 4 fields, defaulting to "0" if empty (POSIX awk compliant)
@@ -1237,8 +1237,8 @@ mape_mold() {
         h2 = $3; if (h2 == "") h2 = "0"
         h3 = $4; if (h3 == "") h3 = "0"
 
-        # Print the first 4 hex strings, space-separated
-        print h0, h1, h2, h3
+        # Print the first 4 hex strings, explicitly space-separated
+        print h0 " " h1 " " h2 " " h3
     }')
 
     # Read the space-separated hex strings output by awk into shell variables
@@ -1380,14 +1380,14 @@ EOF
         local psid_shift=$(( 16 - OFFSET - PSIDLEN ))
         if [ "$psid_shift" -lt 0 ]; then
             # debug_log "DEBUG" "Invalid calculation: psid_shift is negative ($psid_shift). Check OFFSET and PSIDLEN." # If debug_log exists
-            psid_shift=0 
+            psid_shift=0
         fi
         local psid_part=$(( PSID << psid_shift ))
         local port=$(( port_base | psid_part ))
         local port_range_size=$(( 1 << psid_shift ))
         if [ "$port_range_size" -le 0 ]; then
              # debug_log "DEBUG" "Invalid calculation: port_range_size is not positive ($port_range_size)." # If debug_log exists
-             port_range_size=1 
+             port_range_size=1
         fi
         local port_end=$(( port + port_range_size - 1 ))
 
@@ -1395,7 +1395,7 @@ EOF
 
         if [ "$A" -lt "$AMAX" ]; then
             if [ $(( A % 3 )) -eq 0 ]; then
-                PORTS="${PORTS}\\n" 
+                PORTS="${PORTS}\\n"
             else
                 PORTS="${PORTS} "
             fi
