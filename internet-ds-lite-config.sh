@@ -179,7 +179,7 @@ detect_provider_internal() {
 auto_detect_and_apply() {
     debug_log "DEBUG" "Starting DS-Lite auto-detection and application process."
 
-    # Perform internal detection and capture stdout (reason string)
+    # Perform internal detection and capture stdout (reason string on failure, result on success)
     local detection_result=""
     local reason_str=""
     # Use command substitution and check status code
@@ -188,13 +188,15 @@ auto_detect_and_apply() {
 
     # --- Error Handling Block ---
     if [ $detection_status -ne 0 ]; then
-        # Specific error message should have been printed to stderr by detect_provider_internal
+        # Specific error message should have been logged by detect_provider_internal
         debug_log "DEBUG" "DS-Lite auto-detection failed (detect_provider_internal returned status $detection_status)."
         # The reason string is in $detection_result on failure
         reason_str="$detection_result"
+        # Log the reason string for debugging
         debug_log "DEBUG" "Reason for failure: $reason_str"
 
-        # Display the "unsupported" message using the reason string
+        # Display the error message using the existing key and {rsn} placeholder.
+        # As per user instruction, {:} in the message definition requires no special handling here.
         printf "\n%s\n" "$(color red "$(get_message "MSG_DSLITE_AUTO_DETECT_UNSUPPORTED" rsn="$reason_str")")"
 
         # Return failure status to the menu handler
@@ -223,12 +225,12 @@ auto_detect_and_apply() {
         apply_dslite_settings "$detected_aftr" "$detected_provider"
         return $?
     else # No or Return
-         debug_log "DEBUG" "User declined to apply DS-Lite settings."
-         # Return failure status to the menu handler (no user message for cancellation)
-        return 1
-    fi
-}
-
+          debug_log "DEBUG" "User declined to apply DS-Lite settings."
+          # Return failure status to the menu handler (no user message for cancellation)
+         return 1
+     fi
+ }
+ 
 # Apply DS-Lite settings using UCI and sed
 # $1: AFTR Address
 # $2: Service Provider Name (for {sp} placeholder)
