@@ -1527,11 +1527,11 @@ mape_display() {
 
 # MAP-E設定を適用する関数
 mape_config() {
-    local WANMAPE='wanmape' # 設定セクション名
+    local WANMAP='wanmap' # 設定セクション名
     local zone_no='1'       # WANが属するファイアウォールゾーンのインデックス (環境依存の可能性あり、通常は1)
 
     # mapパッケージのインストール確認
-    install_package map
+    install_package map silent
 
     # 設定のバックアップ作成 
     debug_log "DEBUG" "Backing up configuration files..." 
@@ -1563,37 +1563,37 @@ mape_config() {
     uci set network.wan6.reqprefix='auto'
     uci set network.wan6.ip6prefix=${CE}::/64
 
-    # WANMAPE
-    uci set network.${WANMAPE}=interface
-    uci set network.${WANMAPE}.proto='map'
-    uci set network.${WANMAPE}.maptype='map-e'
-    uci set network.${WANMAPE}.peeraddr=${BR}
-    uci set network.${WANMAPE}.ipaddr=${IPV4}
-    uci set network.${WANMAPE}.ip4prefixlen=${IP4PREFIXLEN}
-    uci set network.${WANMAPE}.ip6prefix=${IP6PFX}::
-    uci set network.${WANMAPE}.ip6prefixlen=${IP6PREFIXLEN}
-    uci set network.${WANMAPE}.ealen=${EALEN}
-    uci set network.${WANMAPE}.psidlen=${PSIDLEN}
-    uci set network.${WANMAPE}.offset=${OFFSET}
-    uci set network.${WANMAPE}.mtu='1460'
-    uci set network.${WANMAPE}.encaplimit='ignore'
+    # WANMAP
+    uci set network.${WANMAP}=interface
+    uci set network.${WANMAP}.proto='map'
+    uci set network.${WANMAP}.maptype='map-e'
+    uci set network.${WANMAP}.peeraddr=${BR}
+    uci set network.${WANMAP}.ipaddr=${IPV4}
+    uci set network.${WANMAP}.ip4prefixlen=${IP4PREFIXLEN}
+    uci set network.${WANMAP}.ip6prefix=${IP6PFX}::
+    uci set network.${WANMAP}.ip6prefixlen=${IP6PREFIXLEN}
+    uci set network.${WANMAP}.ealen=${EALEN}
+    uci set network.${WANMAP}.psidlen=${PSIDLEN}
+    uci set network.${WANMAP}.offset=${OFFSET}
+    uci set network.${WANMAP}.mtu='1460'
+    uci set network.${WANMAP}.encaplimit='ignore'
 
     # FW
     ZOON_NO='1'
     uci del_list firewall.@zone[${ZOON_NO}].network='wan'
-    uci add_list firewall.@zone[${ZOON_NO}].network=${WANMAPE}
+    uci add_list firewall.@zone[${ZOON_NO}].network=${WANMAP}
 
     # Version-specific settings
     local osversion
     osversion=$(cat "${CACHE_DIR}/osversion.ch")
 
     if [ "$osversion" = "19" ]; then
-        uci add_list network.${WANMAPE}.tunlink='wan6'
+        uci add_list network.${WANMAP}.tunlink='wan6'
     else
         uci set dhcp.wan6.interface='wan6'
         uci set dhcp.wan6.ignore='1'
-        uci set network.${WANMAPE}.legacymap='1'
-        uci set network.${WANMAPE}.tunlink='wan6'
+        uci set network.${WANMAP}.legacymap='1'
+        uci set network.${WANMAP}.tunlink='wan6'
     fi
 
     uci commit
@@ -1609,14 +1609,14 @@ mape_config() {
     echo "[INFO] Applied Configuration:" # INFOレベルだがユーザー向けなのでそのまま
     printf "  wan ipaddr6: \033[1;33m%s\033[0m\n" "${NET_ADDR6}"
     # printf "  wan6 ip6prefix: %s::/64\n" "${CE_ADDR}" # wan6には設定しない
-    printf "  %s peeraddr: \033[1;32m%s\033[0m\n" "${WANMAPE}" "${BR}"
-    printf "  %s ipaddr: \033[1;32m%s\033[0m\n" "${WANMAPE}" "${IPV4}" # IPV4を表示
-    printf "  %s ip4prefixlen: \033[1;32m%s\033[0m\n" "${WANMAPE}" "${IP4PREFIXLEN}"
-    printf "  %s ip6prefix: \033[1;32m%s::\033[0m\n" "${WANMAPE}" "${IP6PFX}" # IP6PFXを表示
-    printf "  %s ip6prefixlen: \033[1;32m%s\033[0m\n" "${WANMAPE}" "${IP6PREFIXLEN}"
-    printf "  %s ealen: \033[1;32m%s\033[0m\n" "${WANMAPE}" "${EALEN}"
-    printf "  %s psidlen: \033[1;32m%s\033[0m\n" "${WANMAPE}" "${PSIDLEN}"
-    printf "  %s offset: \033[1;32m%s\033[0m\n" "${WANMAPE}" "${OFFSET}"
+    printf "  %s peeraddr: \033[1;32m%s\033[0m\n" "${WANMAP}" "${BR}"
+    printf "  %s ipaddr: \033[1;32m%s\033[0m\n" "${WANMAP}" "${IPV4}" # IPV4を表示
+    printf "  %s ip4prefixlen: \033[1;32m%s\033[0m\n" "${WANMAP}" "${IP4PREFIXLEN}"
+    printf "  %s ip6prefix: \033[1;32m%s::\033[0m\n" "${WANMAP}" "${IP6PFX}" # IP6PFXを表示
+    printf "  %s ip6prefixlen: \033[1;32m%s\033[0m\n" "${WANMAP}" "${IP6PREFIXLEN}"
+    printf "  %s ealen: \033[1;32m%s\033[0m\n" "${WANMAP}" "${EALEN}"
+    printf "  %s psidlen: \033[1;32m%s\033[0m\n" "${WANMAP}" "${PSIDLEN}"
+    printf "  %s offset: \033[1;32m%s\033[0m\n" "${WANMAP}" "${OFFSET}"
 
     echo ""
     echo "MAP-E configuration completed. Please reboot the system" # ユーザー向けメッセージなのでそのまま
