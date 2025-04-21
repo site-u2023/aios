@@ -87,7 +87,7 @@ EOF
 # --- Auto Detection Provider Function (Internal) ---
 # Outputs:
 #   On Success: "Provider Display Name|AFTR Address|Region Text" to stdout, returns 0.
-#   On Failure: Short reason string to stdout, prints specific error details to stderr, returns 1.
+#   On Failure: Short reason string to stdout, logs debug message, returns 1.
 detect_provider_internal() {
     local isp_as="" region=""
     local provider_data=""
@@ -103,15 +103,16 @@ detect_provider_internal() {
 
     # Read AS number from cache
     if [ ! -f "$cache_as_file" ] || ! isp_as=$(cat "$cache_as_file" | sed 's/^AS//i'); then
-        # Hardcoded specific error to stderr
-        printf "\033[31mError: AS Number cache file not found or empty: %s\033[0m\n" "$cache_as_file" >&2
+        # Log debug message instead of printing to stderr
+        debug_log "DEBUG" "detect_provider_internal: AS Number cache file not found or empty: $cache_as_file"
         reason_str="Required AS cache not found"
         echo "$reason_str" # Output reason to stdout
         return 1
     fi
     # Handle empty isp_as after sed
     if [ -z "$isp_as" ]; then
-        printf "\033[31mError: Failed to read AS Number from cache file: %s\033[0m\n" "$cache_as_file" >&2
+        # Log debug message instead of printing to stderr
+        debug_log "DEBUG" "detect_provider_internal: Failed to read AS Number from cache file: $cache_as_file"
         reason_str="Failed to read AS Number from cache"
         echo "$reason_str" # Output reason to stdout
         return 1
@@ -121,8 +122,8 @@ detect_provider_internal() {
     # Get provider data
     provider_data=$(get_dslite_provider_data_by_as "$isp_as")
     if [ $? -ne 0 ] || [ -z "$provider_data" ]; then
-        # Hardcoded specific error to stderr
-        printf "\033[31mError: Could not find DS-Lite provider data for AS %s.\033[0m\n" "$isp_as" >&2
+        # Log debug message instead of printing to stderr
+        debug_log "DEBUG" "detect_provider_internal: Could not find DS-Lite provider data for AS $isp_as."
         reason_str="Unsupported ISP AS ${isp_as}"
         echo "$reason_str" # Output reason to stdout
         return 1
@@ -143,8 +144,8 @@ detect_provider_internal() {
         if [ -z "$region" ] && [ -f "$cache_region_name_file" ]; then region=$(cat "$cache_region_name_file"); fi
 
         if [ -z "$region" ]; then
-            # Hardcoded specific error to stderr
-            printf "\033[31mError: Required region information not found in cache for Transix detection.\033[0m\n" >&2
+            # Log debug message instead of printing to stderr
+            debug_log "DEBUG" "detect_provider_internal: Required region information not found in cache for Transix detection."
             reason_str="Required region cache not found for Transix"
             echo "$reason_str" # Output reason to stdout
             return 1
@@ -163,8 +164,8 @@ detect_provider_internal() {
             aftr_address="$AFTR_TRANS_WEST"
             region_text="West Japan"
         else
-            # Hardcoded specific error to stderr (Revised message)
-            printf "\033[31mError: Failed to determine required region (East/West) for Transix using '%s'.\033[0m\n" "$region" >&2
+            # Log debug message instead of printing to stderr
+            debug_log "DEBUG" "detect_provider_internal: Failed to determine required region (East/West) for Transix using '$region'."
             reason_str="Region determination failed for Transix ('${region}')"
             echo "$reason_str" # Output reason to stdout
             return 1
