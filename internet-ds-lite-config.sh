@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.21-00-06" # Updated version reflecting changes
+SCRIPT_VERSION="2025.04.21-08-20" # Updated version reflecting message key reduction
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -52,6 +52,8 @@ if ! command -v debug_log >/dev/null 2>&1; then
     debug_log() {
         local level="$1"
         local message="$2"
+        # Per user request, default to DEBUG level for non-essential logs
+        [ "$level" = "INFO" ] && level="DEBUG"
         echo "${level}: ${message}" >&2
     }
     debug_log "WARN" "debug_log function not found initially, using basic fallback."
@@ -149,6 +151,7 @@ EOF
 
 # --- Auto Detection Provider Function (Internal) ---
 # Outputs: "Provider Display Name|AFTR Address|Region Text" on success, empty on failure
+# Errors are printed to stderr directly (hardcoded English).
 detect_provider_internal() {
     local isp_as="" region=""
     local provider_data=""
@@ -166,6 +169,7 @@ detect_provider_internal() {
         isp_as=$(cat "$cache_as_file" | sed 's/^AS//i') # Remove AS prefix
     fi
     if [ -z "$isp_as" ]; then
+        # Hardcoded error message
         printf "\033[31mError: AS Number cache file not found or empty: %s\033[0m\n" "$cache_as_file" >&2
         return 1
     fi
@@ -174,6 +178,7 @@ detect_provider_internal() {
     # Get provider data
     provider_data=$(get_dslite_provider_data_by_as "$isp_as")
     if [ $? -ne 0 ] || [ -z "$provider_data" ]; then
+        # Hardcoded error message
         printf "\033[31mError: Could not find DS-Lite provider data for AS %s.\033[0m\n" "$isp_as" >&2
         return 1
     fi
@@ -193,6 +198,7 @@ detect_provider_internal() {
         if [ -z "$region" ] && [ -f "$cache_region_name_file" ]; then region=$(cat "$cache_region_name_file"); fi
 
         if [ -z "$region" ]; then
+            # Hardcoded error message
             printf "\033[31mError: Region information not found in cache for Transix detection.\033[0m\n" >&2
             return 1
         fi
@@ -210,6 +216,7 @@ detect_provider_internal() {
             aftr_address="$AFTR_TRANS_WEST"
             region_text="West Japan"
         else
+            # Hardcoded error message
             printf "\033[31mError: Could not determine region (East/West) for Transix: %s\033[0m\n" "$region" >&2
             return 1
         fi
@@ -223,8 +230,9 @@ detect_provider_internal() {
 
 # --- Auto Detect and Apply DS-Lite Settings ---
 # Called by menu.db or internet-auto-config.sh
+# Uses get_message for result and failure summary, hardcoded English for confirmation.
 auto_detect_and_apply() {
-    debug_log "INFO" "Starting DS-Lite auto-detection and application process."
+    debug_log "DEBUG" "Starting DS-Lite auto-detection and application process." # Changed INFO to DEBUG
 
     # Perform internal detection
     local detection_result
@@ -232,36 +240,39 @@ auto_detect_and_apply() {
     local detection_status=$?
 
     if [ $detection_status -ne 0 ]; then
-        # Specific error already printed by detect_provider_internal
-        debug_log "ERROR" "DS-Lite auto-detection failed."
-        # No generic failure message needed, return error to menu
+        # Specific error already printed by detect_provider_internal (hardcoded English)
+        debug_log "ERROR" "DS-Lite auto-detection failed (detailed error above)."
+        # Use get_message for generic failure summary
+        printf "\n%s\n" "$(color red "$(get_message "MSG_DSLITE_AUTO_DETECT_FAILED")")" >&2
         return 1
     fi
 
     # Parse detection result
     local detected_provider=$(echo "$detection_result" | cut -d'|' -f1)
     local detected_aftr=$(echo "$detection_result" | cut -d'|' -f2)
-    # local detected_region_text=$(echo "$detection_result" | cut -d'|' -f3) # Region text not used in final message
+    # local detected_region_text=$(echo "$detection_result" | cut -d'|' -f3) # Region text not used
 
-    # Display result using the single message key
+    # Display result using get_message
     # Placeholders: sp (Service Provider), tp (Type)
     printf "\n%s\n" "$(color green "$(get_message "MSG_AUTO_CONFIG_RESULT" sp="$detected_provider" tp="DS-Lite")")"
 
-    # Confirm with the user
+    # Confirm with the user (hardcoded English question)
     local confirm_auto=1
-    confirm "MSG_AUTO_CONFIG_CONFIRM" # Uses 'yn' by default
+    # confirm function expects message key, but we use hardcoded string here
+    # Assuming confirm can handle a direct string if the key lookup fails or is modified.
+    # If confirm strictly requires a key, this needs adjustment in common-menu.sh or here.
+    confirm "Apply these settings? {ynr}" # Hardcoded English
     confirm_auto=$?
 
     if [ $confirm_auto -eq 0 ]; then # Yes
         debug_log "DEBUG" "User confirmed applying DS-Lite settings for $detected_provider."
         printf "\n" # Newline before applying settings
         # Pass AFTR and Provider Name (or key) to apply_dslite_settings
-        # The second argument is mainly for internal use now (e.g., backup filenames)
         apply_dslite_settings "$detected_aftr" "$detected_provider"
         return $? # Return the status of apply_dslite_settings
     else # No or Return
-         debug_log "INFO" "User declined to apply DS-Lite settings."
-         # No cancellation message needed, return error to menu
+         debug_log "DEBUG" "User declined to apply DS-Lite settings." # Changed INFO to DEBUG
+         # No cancellation message to user, return error to menu
         return 1
     fi
 }
@@ -269,6 +280,7 @@ auto_detect_and_apply() {
 # Apply DS-Lite settings using UCI and sed
 # $1: AFTR Address
 # $2: Service Name/Key (Internal use, not displayed to user)
+# Uses get_message for success and reboot messages, hardcoded English for errors.
 apply_dslite_settings() {
     local aftr_address="$1"
     local service_key="$2" # Use key for potential internal logic if needed
@@ -279,11 +291,13 @@ apply_dslite_settings() {
     local reset_color="\033[0m"
     local msg_prefix="" # For reboot messages
 
-    debug_log "INFO" "Applying DS-Lite settings for AFTR: $aftr_address (Key: $service_key)"
+    debug_log "DEBUG" "Applying DS-Lite settings for AFTR: $aftr_address (Key: $service_key)" # Changed INFO to DEBUG
+    printf "%s\n" "$(color blue "Applying DS-Lite settings...")" # Hardcoded English
 
     # 1. Install ds-lite package silently
     # Assuming install_package handles its own errors/messages if not silent
     if ! install_package ds-lite silent; then
+        # Hardcoded error message
         printf "%sFailed to install ds-lite package.%s\n" "$error_prefix" "$reset_color" >&2
         return 1
     fi
@@ -334,6 +348,7 @@ commit network
 commit firewall
 EOF
     if [ $? -ne 0 ]; then
+         # Hardcoded error message
          printf "%sFailed to apply UCI settings.%s\n" "$error_prefix" "$reset_color" >&2
          return 1
     fi
@@ -356,32 +371,34 @@ EOF
         debug_log "WARN" "Protocol script $proto_script not found after package install. Cannot modify MTU."
     fi
 
-    # 5. Reboot Confirmation (Messages via get_message)
-    printf "%s\n" "$(get_message MSG_REBOOT_REQUIRED)" # Use existing key
+    # 5. Success Message (using get_message)
+    printf "\n%s\n" "$(color green "$(get_message "MSG_DSLITE_APPLY_SUCCESS")")"
+
+    # 6. Reboot Confirmation (using common get_message keys)
+    printf "%s\n" "$(get_message MSG_REBOOT_REQUIRED)" # Use existing common key
 
     # Setup msg_prefix for confirm messages if color is available
     if command -v color >/dev/null 2>&1; then msg_prefix=$(color blue "- "); fi
 
     local confirm_reboot=1
-    confirm "MSG_CONFIRM_REBOOT" # Use existing key
+    confirm "MSG_CONFIRM_REBOOT" # Use existing common key
     confirm_reboot=$?
     if [ $confirm_reboot -eq 0 ]; then # Yes
-        printf "%s%s\n" "$msg_prefix" "$(get_message MSG_REBOOTING)" # Use existing key
+        printf "%s%s\n" "$msg_prefix" "$(get_message MSG_REBOOTING)" # Use existing common key
         reboot; exit 0 # Exit script after initiating reboot
     elif [ $confirm_reboot -eq 2 ]; then # Return
-         # Message key MSG_DSLITE_DONE_MENU seems specific, using a generic one if possible,
-         # but keeping it for now if it exists and is intended.
-         printf "%s%s\n" "$msg_prefix" "$(get_message MSG_DSLITE_DONE_MENU)" # Use existing key
+         # Hardcoded English message
+         printf "%sReturning to menu.\n" "$msg_prefix"
          return 0 # Return success to menu
     else # No
-        # Message key MSG_DSLITE_DONE_REBOOT_LATER seems specific, using a generic one if possible,
-        # but keeping it for now if it exists and is intended.
-        printf "%s%s\n" "$msg_prefix" "$(get_message MSG_DSLITE_DONE_REBOOT_LATER)" # Use existing key
+        # Hardcoded English message
+        printf "%sSettings applied. Please reboot the device later.\n" "$msg_prefix"
         return 0 # Return success to menu
     fi
 }
 
 # Restore original settings
+# Uses get_message for success and reboot messages, hardcoded English for errors/warnings.
 restore_dslite_settings() {
     local proto_script="/lib/netifd/proto/dslite.sh"
     # Error/Warning prefixes for hardcoded messages
@@ -390,7 +407,8 @@ restore_dslite_settings() {
     local reset_color="\033[0m"
     local msg_prefix="" # For reboot messages
 
-    debug_log "INFO" "Restoring settings before DS-Lite configuration."
+    debug_log "DEBUG" "Restoring settings before DS-Lite configuration." # Changed INFO to DEBUG
+    printf "%s\n" "$(color blue "Restoring previous DS-Lite settings...")" # Hardcoded English
 
     # 1. Restore network config (No user message on success)
     debug_log "DEBUG" "Checking for network backup: $NETWORK_BACKUP"
@@ -400,6 +418,8 @@ restore_dslite_settings() {
         if cp "$NETWORK_BACKUP" /etc/config/network; then
             rm "$NETWORK_BACKUP"
         else
+             # Hardcoded warning message
+             printf "%sFailed to copy network config from backup. Backup not removed.%s\n" "$warning_prefix" "$reset_color" >&2
              debug_log "ERROR" "Failed to copy network config from backup. Backup not removed."
              # Continue restoration attempt
         fi
@@ -415,6 +435,8 @@ restore_dslite_settings() {
         if cp "$PROTO_BACKUP" "$proto_script"; then
             rm "$PROTO_BACKUP"
         else
+             # Hardcoded warning message
+             printf "%sFailed to copy protocol script from backup. Backup not removed.%s\n" "$warning_prefix" "$reset_color" >&2
              debug_log "ERROR" "Failed to copy protocol script from backup. Backup not removed."
              # Continue restoration attempt
         fi
@@ -471,23 +493,28 @@ EOF
     fi
     debug_log "DEBUG" "UCI commands for removal executed."
 
-    # 4. Reboot Confirmation (Messages via get_message)
-    printf "%s\n" "$(get_message MSG_REBOOT_REQUIRED)" # Use existing key
+    # 4. Success Message (using get_message)
+    printf "\n%s\n" "$(color green "$(get_message "MSG_DSLITE_RESTORE_SUCCESS")")"
+
+    # 5. Reboot Confirmation (using common get_message keys)
+    printf "%s\n" "$(get_message MSG_REBOOT_REQUIRED)" # Use existing common key
 
     # Setup msg_prefix for confirm messages if color is available
     if command -v color >/dev/null 2>&1; then msg_prefix=$(color blue "- "); fi
 
     local confirm_reboot=1
-    confirm "MSG_CONFIRM_REBOOT" # Use existing key
+    confirm "MSG_CONFIRM_REBOOT" # Use existing common key
     confirm_reboot=$?
     if [ $confirm_reboot -eq 0 ]; then # Yes
-        printf "%s%s\n" "$msg_prefix" "$(get_message MSG_REBOOTING)" # Use existing key
+        printf "%s%s\n" "$msg_prefix" "$(get_message MSG_REBOOTING)" # Use existing common key
         reboot; exit 0 # Exit script after initiating reboot
     elif [ $confirm_reboot -eq 2 ]; then # Return
-         printf "%s%s\n" "$msg_prefix" "$(get_message MSG_DSLITE_DONE_MENU)" # Use existing key
+         # Hardcoded English message
+         printf "%sReturning to menu.\n" "$msg_prefix"
          return 0 # Return success to menu
     else # No
-        printf "%s%s\n" "$msg_prefix" "$(get_message MSG_DSLITE_DONE_REBOOT_LATER)" # Use existing key
+        # Hardcoded English message
+        printf "%sSettings restored. Please reboot the device later.\n" "$msg_prefix"
         return 0 # Return success to menu
     fi
 }
