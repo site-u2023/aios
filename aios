@@ -341,49 +341,52 @@ check_message_cache() {
     return 0
 }
 
-# プレースホルダー文字列の正規化関数
 normalize_message() {
     local input="$1"
     local lang="$2"  # 言語コードを受け取るパラメータ
-    
-    # LC_ALL=Cを関数スコープでグローバルに設定
-    local saved_locale="$LC_ALL"
-    LC_ALL=C
-    
+
     local output="$input"
-    
-    # 中括弧{} のノーマライズ
+    local saved_locale="$LC_ALL" # 元のロケールを保存
+
+    # === マルチバイト文字の処理 (LC_ALL=C の前に実行) ===
+    # 中括弧{} のノーマライズ (全角→半角)
     output=$(echo "$output" | sed 's/｛/{/g; s/｝/}/g')
-    
-    # コロン : のノーマライズ
+
+    # 全角コロン前後の空白を除去
+    output=$(echo "$output" | sed 's/[[:space:]]*：[[:space:]]*/：/g')
+
+    # コロン : のノーマライズ (全角→半角)
     output=$(echo "$output" | sed 's/：/:/g; s/∶/:/g; s/꞉/:/g; s/ː/:/g')
-    
-    # セミコロン ; のノーマライズ
+
+    # セミコロン ; のノーマライズ (全角→半角)
     output=$(echo "$output" | sed 's/；/;/g')
-    
-    # 全角スペースは半角に変換（先に行う）
+
+    # 全角スペースは半角に変換
     output=$(echo "$output" | sed 's/　/ /g')
-    
+
     # 全角アットマーク＠を半角@に変換
     output=$(echo "$output" | sed 's/＠/@/g')
-    
+
     # バックスラッシュのノーマライズ（全角→半角）
     output=$(echo "$output" | sed 's/＼/\\/g')
-    
-    # プレースホルダー前後の空白を除去
+
+    # === ここから LC_ALL=C を設定 ===
+    LC_ALL=C
+
+    # プレースホルダー前後の空白を除去 ([[:space:]] は LC_ALL=C の影響を受ける可能性があるため、ここで処理)
     output=$(echo "$output" | sed 's/{[[:space:]]*\([^{}]*\)[[:space:]]*}/{\1}/g')
-    
+
     # プレースホルダー内部の空白を除去（内部の空白がなくなるまで繰り返し）
     while echo "$output" | grep -q '{[^{}]*[[:space:]][^{}]*}'; do
         output=$(echo "$output" | sed 's/\({[^{}]*\)[[:space:]]\([^{}]*}\)/\1\2/g')
     done
-    
+
     # 特殊プレースホルダー{@}を改行に変換
     output=$(echo "$output" | sed 's/{@}/\\n/g')
-    
+
     # 特殊プレースホルダー{:}を:に変換
     output=$(echo "$output" | sed 's/{:}/:/g')
-    
+
     # 特殊プレースホルダー{;}を末尾位置の:に変換 - 文字列末尾に移動
     if echo "$output" | grep -q '{;}'; then
         # 末尾の空白を一時的に削除
@@ -393,10 +396,16 @@ normalize_message() {
         # 末尾にコロンを追加
         output="${output}:"
     fi
-    
+
+    # === ここまで LC_ALL=C の影響範囲 ===
+
+    # LC_ALL を元に戻す
+    LC_ALL="$saved_locale"
+
+    # === 言語コード別の処理 (ロケール依存の可能性があるため LC_ALL=C の外で処理) ===
     # 言語コードの先頭部分を取得（例: zh-TWからzh）
     local lang_prefix="${lang%%-*}"
-    
+
     # 言語コード別の数字変換
     case "${lang_prefix}" in
         # CJK言語グループ
@@ -404,66 +413,39 @@ normalize_message() {
             # 全角数字の変換
             output=$(echo "$output" | sed 's/０/0/g; s/１/1/g; s/２/2/g; s/３/3/g; s/４/4/g; s/５/5/g; s/６/6/g; s/７/7/g; s/８/8/g; s/９/9/g')
             ;;
-            
-        # アラビア語圏
+        # ... (以下、他の言語の数字変換処理は省略) ...
         ar|ur|ckb)
-            # アラビア数字の変換
             output=$(echo "$output" | sed 's/٠/0/g; s/١/1/g; s/٢/2/g; s/٣/3/g; s/٤/4/g; s/٥/5/g; s/٦/6/g; s/٧/7/g; s/٨/8/g; s/٩/9/g')
             ;;
-            
-        # ペルシア語圏
         fa|ps)
-            # ペルシア数字の変換
             output=$(echo "$output" | sed 's/۰/0/g; s/۱/1/g; s/۲/2/g; s/۳/3/g; s/۴/4/g; s/۵/5/g; s/۶/6/g; s/۷/7/g; s/۸/8/g; s/۹/9/g')
             ;;
-            
-        # インド系主要言語
         hi|bn|ta|mr|ne|gu|pa)
-            # デーヴァナーガリー数字の変換
             output=$(echo "$output" | sed 's/०/0/g; s/१/1/g; s/२/2/g; s/३/3/g; s/४/4/g; s/५/5/g; s/६/6/g; s/७/7/g; s/८/8/g; s/९/9/g')
-            
-            # ベンガル数字の変換
             output=$(echo "$output" | sed 's/০/0/g; s/১/1/g; s/২/2/g; s/৩/3/g; s/৪/4/g; s/৫/5/g; s/৬/6/g; s/৭/7/g; s/৮/8/g; s/৯/9/g')
-            
-            # グジャラート・パンジャブ数字の変換
             output=$(echo "$output" | sed 's/૦/0/g; s/૧/1/g; s/૨/2/g; s/૩/3/g; s/૪/4/g; s/૫/5/g; s/૬/6/g; s/૭/7/g; s/૮/8/g; s/૯/9/g')
             output=$(echo "$output" | sed 's/੦/0/g; s/੧/1/g; s/੨/2/g; s/੩/3/g; s/੪/4/g; s/੫/5/g; s/੬/6/g; s/੭/7/g; s/੮/8/g; s/੯/9/g')
             ;;
-            
-        # タイ語・東南アジア
         th|lo|km|my)
-            # タイ・ミャンマー数字の変換
             output=$(echo "$output" | sed 's/๐/0/g; s/๑/1/g; s/๒/2/g; s/๓/3/g; s/๔/4/g; s/๕/5/g; s/๖/6/g; s/๗/7/g; s/๘/8/g; s/๙/9/g')
             output=$(echo "$output" | sed 's/၀/0/g; s/၁/1/g; s/၂/2/g; s/၃/3/g; s/၄/4/g; s/၅/5/g; s/၆/6/g; s/၇/7/g; s/၈/8/g; s/၉/9/g')
             ;;
-            
-        # ロシア語・キリル文字圏
         ru|uk|be|bg|mk|sr|kk)
-            # キリル文字のラテン文字変換
             output=$(echo "$output" | sed 's/а/a/g; s/б/b/g; s/в/v/g; s/г/g/g; s/д/d/g; s/е/e/g; s/ё/e/g; s/ж/zh/g; s/з/z/g; s/и/i/g; s/й/i/g; s/к/k/g; s/л/l/g; s/м/m/g; s/н/n/g; s/о/o/g; s/п/p/g; s/р/r/g; s/с/s/g; s/т/t/g; s/у/u/g; s/ф/f/g; s/х/h/g; s/ц/ts/g; s/ч/ch/g; s/ш/sh/g; s/щ/shch/g; s/ъ//g; s/ы/y/g; s/ь//g; s/э/e/g; s/ю/yu/g; s/я/ya/g')
             output=$(echo "$output" | sed 's/А/A/g; s/Б/B/g; s/В/V/g; s/Г/G/g; s/Д/D/g; s/Е/E/g; s/Ё/E/g; s/Ж/ZH/g; s/З/Z/g; s/И/I/g; s/Й/I/g; s/К/K/g; s/Л/L/g; s/М/M/g; s/Н/N/g; s/О/O/g; s/П/P/g; s/Р/R/g; s/С/S/g; s/Т/T/g; s/У/U/g; s/Ф/F/g; s/Х/H/g; s/Ц/TS/g; s/Ч/CH/g; s/Ш/SH/g; s/Щ/SHCH/g; s/Ъ//g; s/Ы/Y/g; s/Ь//g; s/Э/E/g; s/Ю/YU/g; s/Я/YA/g')
             ;;
-            
-        # 欧州言語（ラテン文字拡張）
         pl|cs|hu|ro|sk|sl)
-            # 東欧特殊文字の変換
             output=$(echo "$output" | sed 's/ą/a/g; s/ć/c/g; s/ę/e/g; s/ł/l/g; s/ń/n/g; s/ó/o/g; s/ś/s/g; s/ź/z/g; s/ż/z/g')
             output=$(echo "$output" | sed 's/á/a/g; s/č/c/g; s/ď/d/g; s/é/e/g; s/ě/e/g; s/í/i/g; s/ň/n/g; s/ř/r/g; s/š/s/g; s/ť/t/g; s/ú/u/g; s/ů/u/g; s/ý/y/g; s/ž/z/g')
             ;;
-            
-        # 西欧・北欧言語
         fr|es|de|it|pt|nl|sv|da|no|fi)
-            # 基本的なアクセント記号の変換
             output=$(echo "$output" | sed 's/[áàâäã]/a/g; s/[éèêë]/e/g; s/[íìîï]/i/g; s/[óòôöõ]/o/g; s/[úùûü]/u/g; s/[ýÿ]/y/g; s/ñ/n/g; s/ç/c/g')
             output=$(echo "$output" | sed 's/[ÁÀÂÄÃ]/A/g; s/[ÉÈÊË]/E/g; s/[ÍÌÎÏ]/I/g; s/[ÓÒÔÖÕ]/O/g; s/[ÚÙÛÜ]/U/g; s/[ÝŸ]/Y/g; s/Ñ/N/g; s/Ç/C/g')
             output=$(echo "$output" | sed 's/å/a/g; s/ä/a/g; s/ö/o/g; s/ø/o/g; s/æ/ae/g')
             output=$(echo "$output" | sed 's/Å/A/g; s/Ä/A/g; s/Ö/O/g; s/Ø/O/g; s/Æ/AE/g')
             ;;
     esac
-    
-    # ロケールを元に戻す
-    LC_ALL="$saved_locale"
-    
+
     # 正規化した結果のみを返す
     printf '%s' "$output"
     return 0
