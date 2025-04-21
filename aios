@@ -347,7 +347,7 @@ normalize_message() {
 
     # --- 追加: 大文字化機能のON/OFFスイッチ ---
     # 1 = ON (英語を全て大文字化), 0 = OFF
-    local _normalize_force_uppercase=1 # デフォルトはON
+    local _normalize_force_uppercase=0 # デフォルトはON
 
     local output="$input"
     local saved_locale="$LC_ALL" # 元のロケールを保存
