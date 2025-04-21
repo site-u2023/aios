@@ -3,14 +3,14 @@
 # NURO光 MAP-E設定スクリプト (POSIX準拠・aios連携版)
 #
 # 機能: NURO光向けMAP-E接続の自動設定と管理 (aios フレームワーク対応)
-# バージョン: 2.1.2 (2025-04-21) # バージョン更新
+# バージョン: 2.1.3 (2025-04-21) # メッセージ処理を簡略化
 # 元ソース: site-u2023/config-software/map-e-nuro.sh (Commit: 643a0a40)
 #
 # このスクリプトはPOSIX準拠でOpenWrtのash環境で動作します。
 # aios の共通関数とメニューシステムを利用します。
 #===============================================================================
 
-SCRIPT_VERSION="2.1.2" # このスクリプトのバージョン
+SCRIPT_VERSION="2.1.3" # このスクリプトのバージョン
 
 # --- aios 環境変数の確認 (aios から引き継がれる想定) ---
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
@@ -158,7 +158,8 @@ get_ipv6_prefix_from_wan6() {
         # デフォルトインターフェースが存在するか確認
         if ! ip link show "$net_if6" > /dev/null 2>&1; then
              debug_log "ERROR" "WAN6 interface not found and default '$net_if6' does not exist."
-             printf "\033[31mError: WAN6 interface not found and default '%s' does not exist.\033[0m\n" "$net_if6" >&2
+             # エラーメッセージは呼び出し元で get_message を使う
+             # printf "\033[31mError: WAN6 interface not found and default '%s' does not exist.\033[0m\n" "$net_if6" >&2
              return 1
         fi
     fi
@@ -169,7 +170,8 @@ get_ipv6_prefix_from_wan6() {
 
     if [ -z "$ipv6_pfx" ]; then
         debug_log "ERROR" "Failed to get IPv6 prefix using network_get_prefix6 for interface '$net_if6'."
-        printf "\033[31mError: Failed to get IPv6 prefix using network_get_prefix6 for interface '%s'.\033[0m\n" "$net_if6" >&2
+        # エラーメッセージは呼び出し元で get_message を使う
+        # printf "\033[31mError: Failed to get IPv6 prefix using network_get_prefix6 for interface '%s'.\033[0m\n" "$net_if6" >&2
         return 1
     fi
 
@@ -179,7 +181,8 @@ get_ipv6_prefix_from_wan6() {
     if [ -z "$ipv6_pfx" ]; then
         # このケースは通常発生しないはずだが念のため
         debug_log "ERROR" "Failed to extract IPv6 prefix after stripping length."
-        printf "\033[31mError: Failed to extract IPv6 prefix after stripping length.\033[0m\n" >&2
+        # エラーメッセージは呼び出し元で get_message を使う
+        # printf "\033[31mError: Failed to extract IPv6 prefix after stripping length.\033[0m\n" >&2
         return 1
     fi
 
@@ -203,16 +206,11 @@ detect_nuro_pattern() {
         return 1
     fi
 
-    # IPv6プレフィックスの最初の11文字を取得 (例: 240d:000f:0)
-    # 元ソースは区切り文字なしの 11 文字 (240d:000f:0) を比較しているため、それに合わせる
-    # normalize_ipv6 でゼロパディングされている前提
-    nuro_prefix=$(echo "$normalized_ipv6" | cut -d':' -f1-3) # 最初の3セクションを取得
-    # 3番目のセクションの先頭のゼロと末尾のゼロを除去して比較用プレフィックスを作成
+    # IPv6プレフィックスの最初の3セクションを取得してNUROパターン比較用の形式に整形
+    nuro_prefix=$(echo "$normalized_ipv6" | cut -d':' -f1-3)
     local section3=$(echo "$nuro_prefix" | cut -d':' -f3)
     local simplified_section3=$(echo "$section3" | sed 's/^0*//; s/0*$//')
-    # simplified_section3 が空の場合は '0' とする
     [ -z "$simplified_section3" ] && simplified_section3="0"
-
     nuro_prefix=$(echo "$nuro_prefix" | cut -d':' -f1-2):${simplified_section3}
     debug_log "DEBUG" "NURO prefix for pattern matching: $nuro_prefix (from $normalized_ipv6)"
 
@@ -221,29 +219,29 @@ detect_nuro_pattern() {
     IPV6_PREFIX=""
     IPV4_PREFIX=""
 
-    # パターンマッチング (元ソースの case 文に相当)
+    # パターンマッチング (元ソースの case 文に相当、ハードコード)
     case "$nuro_prefix" in
-        "240d:000f:0") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:0000"; IPV4_PREFIX="219.104.128.0"; debug_log "DEBUG" "Matched NURO pattern 0";;
-        "240d:000f:1") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:1000"; IPV4_PREFIX="219.104.144.0"; debug_log "DEBUG" "Matched NURO pattern 1";;
-        "240d:000f:2") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:2000"; IPV4_PREFIX="219.104.160.0"; debug_log "DEBUG" "Matched NURO pattern 2";;
-        "240d:000f:3") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:3000"; IPV4_PREFIX="219.104.176.0"; debug_log "DEBUG" "Matched NURO pattern 3";;
-        "240d:000f:4") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:4000"; IPV4_PREFIX="219.104.192.0"; debug_log "DEBUG" "Matched NURO pattern 4";;
-        "240d:000f:5") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:5000"; IPV4_PREFIX="219.104.208.0"; debug_log "DEBUG" "Matched NURO pattern 5";;
-        "240d:000f:6") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:6000"; IPV4_PREFIX="219.104.224.0"; debug_log "DEBUG" "Matched NURO pattern 6";;
-        "240d:000f:7") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:7000"; IPV4_PREFIX="219.104.240.0"; debug_log "DEBUG" "Matched NURO pattern 7";;
-        "240d:000f:8") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:8000"; IPV4_PREFIX="219.105.0.0"; debug_log "DEBUG" "Matched NURO pattern 8";;
-        "240d:000f:9") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:9000"; IPV4_PREFIX="219.105.16.0"; debug_log "DEBUG" "Matched NURO pattern 9";;
-        "240d:000f:a") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:a000"; IPV4_PREFIX="219.105.32.0"; debug_log "DEBUG" "Matched NURO pattern a";;
-        "240d:000f:b") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:b000"; IPV4_PREFIX="219.105.48.0"; debug_log "DEBUG" "Matched NURO pattern b";;
-        "240d:000f:c") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:c000"; IPV4_PREFIX="219.105.64.0"; debug_log "DEBUG" "Matched NURO pattern c";;
-        "240d:000f:d") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:d000"; IPV4_PREFIX="219.105.80.0"; debug_log "DEBUG" "Matched NURO pattern d";;
-        "240d:000f:e") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:e000"; IPV4_PREFIX="219.105.96.0"; debug_log "DEBUG" "Matched NURO pattern e";;
-        "240d:000f:f") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:f000"; IPV4_PREFIX="219.105.112.0"; debug_log "DEBUG" "Matched NURO pattern f";;
-        "240d:0010:0") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:0010:0000"; IPV4_PREFIX="219.105.128.0"; debug_log "DEBUG" "Matched NURO pattern 10_0";;
-        "240d:0010:1") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:0010:1000"; IPV4_PREFIX="219.105.144.0"; debug_log "DEBUG" "Matched NURO pattern 10_1";;
+        "240d:f:0") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:0000"; IPV4_PREFIX="219.104.128.0"; debug_log "DEBUG" "Matched NURO pattern 0";;
+        "240d:f:1") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:1000"; IPV4_PREFIX="219.104.144.0"; debug_log "DEBUG" "Matched NURO pattern 1";;
+        "240d:f:2") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:2000"; IPV4_PREFIX="219.104.160.0"; debug_log "DEBUG" "Matched NURO pattern 2";;
+        "240d:f:3") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:3000"; IPV4_PREFIX="219.104.176.0"; debug_log "DEBUG" "Matched NURO pattern 3";;
+        "240d:f:4") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:4000"; IPV4_PREFIX="219.104.192.0"; debug_log "DEBUG" "Matched NURO pattern 4";;
+        "240d:f:5") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:5000"; IPV4_PREFIX="219.104.208.0"; debug_log "DEBUG" "Matched NURO pattern 5";;
+        "240d:f:6") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:6000"; IPV4_PREFIX="219.104.224.0"; debug_log "DEBUG" "Matched NURO pattern 6";;
+        "240d:f:7") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:7000"; IPV4_PREFIX="219.104.240.0"; debug_log "DEBUG" "Matched NURO pattern 7";;
+        "240d:f:8") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:8000"; IPV4_PREFIX="219.105.0.0"; debug_log "DEBUG" "Matched NURO pattern 8";;
+        "240d:f:9") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:9000"; IPV4_PREFIX="219.105.16.0"; debug_log "DEBUG" "Matched NURO pattern 9";;
+        "240d:f:a") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:a000"; IPV4_PREFIX="219.105.32.0"; debug_log "DEBUG" "Matched NURO pattern a";;
+        "240d:f:b") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:b000"; IPV4_PREFIX="219.105.48.0"; debug_log "DEBUG" "Matched NURO pattern b";;
+        "240d:f:c") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:c000"; IPV4_PREFIX="219.105.64.0"; debug_log "DEBUG" "Matched NURO pattern c";;
+        "240d:f:d") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:d000"; IPV4_PREFIX="219.105.80.0"; debug_log "DEBUG" "Matched NURO pattern d";;
+        "240d:f:e") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:e000"; IPV4_PREFIX="219.105.96.0"; debug_log "DEBUG" "Matched NURO pattern e";;
+        "240d:f:f") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:000f:f000"; IPV4_PREFIX="219.105.112.0"; debug_log "DEBUG" "Matched NURO pattern f";;
+        "240d:10:0") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:0010:0000"; IPV4_PREFIX="219.105.128.0"; debug_log "DEBUG" "Matched NURO pattern 10_0";;
+        "240d:10:1") BR_ADDR="2001:3b8:200:ff9::1"; IPV6_PREFIX="240d:0010:1000"; IPV4_PREFIX="219.105.144.0"; debug_log "DEBUG" "Matched NURO pattern 10_1";;
         *)
             debug_log "WARN" "Unknown NURO IPv6 prefix pattern: $nuro_prefix"
-            printf "\033[31mError: No matching NURO pattern found for %s.\033[0m\n" "$nuro_prefix" >&2
+            printf "\033[31mError: This IPv6 address does not match known NURO patterns: %s.\033[0m\n" "$nuro_prefix" >&2
             return 1
             ;;
     esac
@@ -265,7 +263,7 @@ setup_nuro_mape() {
     local msg_prefix="" # confirm/reboot メッセージ用
 
     # debug_log, color, get_message は利用可能と仮定
-    printf "%s\n" "$(color blue "$(get_message "MSG_NURO_APPLY_START")")"
+    printf "%s\n" "$(color blue "Applying NURO MAP-E settings...")" # ハードコード
     debug_log "INFO" "Applying NURO MAP-E settings..."
 
     # 必須グローバル変数のチェック
@@ -398,37 +396,36 @@ setup_nuro_mape() {
         # 失敗した場合も続行する（元ソースにはエラーチェックがない）
     fi
 
-    # --- 完了メッセージと情報表示 ---
-    printf "\n%s\n" "$(color green "$(get_message "MSG_NURO_APPLY_COMPLETE")")"
-    printf "%s\n" "$(color cyan "$(get_message "MSG_NURO_APPLY_INFO_HEADER")")"
-    printf "%s\n" "$(get_message "MSG_NURO_APPLY_INFO_BR" br_addr="$BR_ADDR")"
-    printf "%s\n" "$(get_message "MSG_NURO_APPLY_INFO_IPV6" ipv6_prefix="$IPV6_PREFIX")"
-    printf "%s\n" "$(get_message "MSG_NURO_APPLY_INFO_IPV4" ipv4_prefix="$IPV4_PREFIX")"
-    printf "%s\n" "$(get_message "MSG_NURO_APPLY_INFO_EA")"
-    printf "%s\n" "$(get_message "MSG_NURO_APPLY_INFO_PSID")"
-    printf "%s\n" "$(get_message "MSG_NURO_APPLY_INFO_OFFSET")"
-    printf "%s\n" "$(get_message "MSG_NURO_APPLY_INFO_MTU")"
+    # --- 完了メッセージと情報表示 (一部ハードコード化) ---
+    printf "\n%s\n" "$(color green "$(get_message "MSG_NURO_APPLY_SUCCESS")")" # 設定完了＆再起動要求
+    printf "%s\n" "$(color cyan "Applied MAP-E Parameters:")" # ハードコード
+    printf "  Border Relay (BR): %s\n" "$BR_ADDR" # ハードコード
+    printf "  IPv6 Prefix (Rule): %s::/36\n" "$IPV6_PREFIX" # ハードコード
+    printf "  IPv4 Prefix (Rule): %s/20\n" "$IPV4_PREFIX" # ハードコード
+    printf "  EA-bits length: 20\n" # ハードコード
+    printf "  PSID length: 8\n" # ハードコード
+    printf "  PSID offset: 4\n" # ハードコード
+    printf "  MTU: 1452\n" # ハードコード
     printf "\n"
 
-    # --- 再起動確認 ---
-    printf "%s\n" "$(get_message "MSG_NURO_REBOOT_REQUIRED")"
+    # --- 再起動確認 (confirm の引数をハードコード化) ---
     if command -v color >/dev/null 2>&1; then msg_prefix=$(color blue "- "); fi
 
     local confirm_reboot=1
-    # confirm は aios の関数と仮定
-    confirm "MSG_NURO_CONFIRM_REBOOT" # {yn} プレースホルダは confirm が処理
+    # confirm は aios の関数と仮定 (質問文はハードコード)
+    confirm "Do you want to reboot now? {ynr}" # ハードコード
     confirm_reboot=$?
 
     if [ $confirm_reboot -eq 0 ]; then # Yes
-        printf "%s%s\n" "$msg_prefix" "$(get_message "MSG_NURO_REBOOTING")"
+        printf "%sRebooting the device...\n" "$msg_prefix" # ハードコード
         # reboot は aios の関数と仮定
         reboot # 即時再起動
         exit 0 # reboot が失敗した場合に備えて exit
     elif [ $confirm_reboot -eq 2 ]; then # Return
-         printf "%s%s\n" "$msg_prefix" "$(get_message "MSG_NURO_DONE_MENU")"
+         printf "%sReturning to menu.\n" "$msg_prefix" # ハードコード
          return 0 # メニューに戻る (成功扱い)
     else # No
-        printf "%s%s\n" "$msg_prefix" "$(get_message "MSG_NURO_DONE_REBOOT_LATER")"
+        printf "%sSettings applied. Please reboot the device later.\n" "$msg_prefix" # ハードコード
         return 0 # メニューに戻る (成功扱い)
     fi
 }
@@ -443,7 +440,7 @@ restore_mape_nuro_settings() {
     local reset_color="\033[0m"
 
     # debug_log, color, get_message は利用可能と仮定
-    printf "%s\n" "$(color blue "$(get_message "MSG_NURO_RESTORE_START")")"
+    printf "%s\n" "$(color blue "Restoring previous settings from NURO backup...")" # ハードコード
     debug_log "INFO" "Attempting to restore configuration from NURO backups..."
 
     local network_bak="/etc/config/network.nuro.bak"
@@ -454,7 +451,7 @@ restore_mape_nuro_settings() {
     # バックアップファイルの存在確認
     if [ ! -f "$network_bak" ] && [ ! -f "$dhcp_bak" ] && [ ! -f "$firewall_bak" ]; then
         debug_log "ERROR" "Backup files (.nuro.bak) not found. Cannot restore."
-        printf "%s%s%s\n" "$error_prefix" "$(get_message "MSG_NURO_RESTORE_FAIL_NOBAK")" "$reset_color" >&2
+        printf "%sBackup files (.nuro.bak) not found. Cannot restore.%s\n" "$error_prefix" "$reset_color" >&2 # ハードコード
         return 1 # 失敗としてメニュー終了
     fi
 
@@ -488,28 +485,28 @@ restore_mape_nuro_settings() {
     fi
 
     if [ $restore_failed -eq 0 ]; then
-        printf "%s\n" "$(color green "$(get_message "MSG_NURO_RESTORE_COMPLETE")")"
+        printf "%s\n" "$(color green "Previous settings restored successfully.")" # ハードコード
     else
-        printf "%s\n" "$(color yellow "$(get_message "MSG_NURO_RESTORE_COMPLETE_WARN")")" # 部分的失敗を示すメッセージキーが必要
+        printf "%s\n" "$(color yellow "Previous settings partially restored. Check logs for details.")" # ハードコード
     fi
 
-    # --- 再起動確認 ---
-    printf "\n%s\n" "$(get_message "MSG_NURO_REBOOT_REQUIRED")"
+    # --- 再起動確認 (confirm の引数をハードコード化) ---
+    printf "\nReboot is required to apply the settings.\n" # ハードコード
     if command -v color >/dev/null 2>&1; then msg_prefix=$(color blue "- "); fi
 
     local confirm_reboot=1
-    confirm "MSG_NURO_CONFIRM_REBOOT"
+    confirm "Do you want to reboot now? {ynr}" # ハードコード
     confirm_reboot=$?
 
     if [ $confirm_reboot -eq 0 ]; then # Yes
-        printf "%s%s\n" "$msg_prefix" "$(get_message "MSG_NURO_REBOOTING")"
+        printf "%sRebooting the device...\n" "$msg_prefix" # ハードコード
         reboot
         exit 0
     elif [ $confirm_reboot -eq 2 ]; then # Return
-         printf "%s%s\n" "$msg_prefix" "$(get_message "MSG_NURO_DONE_MENU")"
+         printf "%sReturning to menu.\n" "$msg_prefix" # ハードコード
          return 0 # メニューに戻る
     else # No
-        printf "%s%s\n" "$msg_prefix" "$(get_message "MSG_NURO_DONE_REBOOT_LATER")"
+        printf "%sSettings restored. Please reboot the device later.\n" "$msg_prefix" # ハードコード
         return 0 # メニューに戻る
     fi
 }
@@ -528,7 +525,7 @@ setup_multisession_patch() {
     local reset_color="\033[0m"
 
     # debug_log, color, get_message は利用可能と仮定
-    printf "%s\n" "$(color blue "$(get_message "MSG_NURO_MSPATCH_START")")"
+    printf "%s\n" "$(color blue "Applying multi-session patch (map.sh)...")" # ハードコード
     debug_log "INFO" "Applying multi-session patch (map.sh)..."
 
     # 元ファイルのバックアップ
@@ -574,7 +571,7 @@ setup_multisession_patch() {
     # wget は aios の関数と仮定
     if ! wget -q --no-check-certificate ${WGET_IPV_OPT:-} -O "$map_sh_path" "$patch_url" 2>/dev/null; then
         debug_log "ERROR" "Failed to download multi-session patch script from $patch_url."
-        printf "%s%s%s\n" "$error_prefix" "$(get_message "MSG_NURO_MSPATCH_DOWNLOAD_FAIL")" "$reset_color" >&2
+        printf "%sFailed to download multi-session patch.%s\n" "$error_prefix" "$reset_color" >&2 # ハードコード
         # Try restoring from backup if download failed
         if [ -f "$map_sh_bak" ]; then
              cp "$map_sh_bak" "$map_sh_path" 2>/dev/null
@@ -584,25 +581,25 @@ setup_multisession_patch() {
     fi
 
     # Success message
-    printf "%s\n" "$(color green "$(get_message "MSG_NURO_MSPATCH_COMPLETE")")"
+    printf "%s\n" "$(color green "Multi-session patch applied successfully.")" # ハードコード
 
-    # --- Reboot confirmation ---
-    printf "\n%s\n" "$(get_message "MSG_NURO_REBOOT_REQUIRED")"
+    # --- Reboot confirmation (confirm の引数をハードコード化) ---
+    printf "\nReboot is required to apply the settings.\n" # ハードコード
     if command -v color >/dev/null 2>&1; then msg_prefix=$(color blue "- "); fi
 
     local confirm_reboot=1
-    confirm "MSG_NURO_CONFIRM_REBOOT"
+    confirm "Do you want to reboot now? {ynr}" # ハードコード
     confirm_reboot=$?
 
     if [ $confirm_reboot -eq 0 ]; then # Yes
-        printf "%s%s\n" "$msg_prefix" "$(get_message "MSG_NURO_REBOOTING")"
+        printf "%sRebooting the device...\n" "$msg_prefix" # ハードコード
         reboot
         exit 0
     elif [ $confirm_reboot -eq 2 ]; then # Return
-         printf "%s%s\n" "$msg_prefix" "$(get_message "MSG_NURO_DONE_MENU")"
+         printf "%sReturning to menu.\n" "$msg_prefix" # ハードコード
          return 0 # Return to menu
     else # No
-        printf "%s%s\n" "$msg_prefix" "$(get_message "MSG_NURO_DONE_REBOOT_LATER")"
+        printf "%sPatch applied. Please reboot the device later.\n" "$msg_prefix" # ハードコード
         return 0 # Return to menu
     fi
 }
@@ -619,19 +616,19 @@ restore_multisession_patch() {
     local reset_color="\033[0m"
 
     # debug_log, color, get_message は利用可能と仮定
-    printf "%s\n" "$(color blue "$(get_message "MSG_NURO_MSPATCH_RESTORE_START")")"
+    printf "%s\n" "$(color blue "Restoring original map.sh from backup...")" # ハードコード
     debug_log "INFO" "Restoring original map.sh from backup..."
 
     # Check if backup file exists
     if [ ! -f "$map_sh_bak" ]; then
         debug_log "ERROR" "Backup file ($map_sh_bak) not found. Cannot restore."
-        printf "%s%s%s\n" "$error_prefix" "$(get_message "MSG_NURO_MSPATCH_RESTORE_FAIL_NOBAK")" "$reset_color" >&2
+        printf "%sBackup file (map.sh.old) not found. Cannot restore.%s\n" "$error_prefix" "$reset_color" >&2 # ハードコード
         return 1 # Fail and exit menu
     fi
 
     # Restore from backup
     if cp "$map_sh_bak" "$map_sh_path"; then
-        printf "%s\n" "$(color green "$(get_message "MSG_NURO_MSPATCH_RESTORE_COMPLETE")")"
+        printf "%s\n" "$(color green "Original map.sh restored successfully.")" # ハードコード
         debug_log "DEBUG" "Restored $map_sh_path from $map_sh_bak"
     else
         debug_log "ERROR" "Failed to restore $map_sh_path from backup $map_sh_bak."
@@ -639,23 +636,23 @@ restore_multisession_patch() {
         return 1 # Fail and exit menu
     fi
 
-    # --- Reboot confirmation ---
-    printf "\n%s\n" "$(get_message "MSG_NURO_REBOOT_REQUIRED")"
+    # --- Reboot confirmation (confirm の引数をハードコード化) ---
+    printf "\nReboot is required to apply the settings.\n" # ハードコード
     if command -v color >/dev/null 2>&1; then msg_prefix=$(color blue "- "); fi
 
     local confirm_reboot=1
-    confirm "MSG_NURO_CONFIRM_REBOOT"
+    confirm "Do you want to reboot now? {ynr}" # ハードコード
     confirm_reboot=$?
 
     if [ $confirm_reboot -eq 0 ]; then # Yes
-        printf "%s%s\n" "$msg_prefix" "$(get_message "MSG_NURO_REBOOTING")"
+        printf "%sRebooting the device...\n" "$msg_prefix" # ハードコード
         reboot
         exit 0
     elif [ $confirm_reboot -eq 2 ]; then # Return
-         printf "%s%s\n" "$msg_prefix" "$(get_message "MSG_NURO_DONE_MENU")"
+         printf "%sReturning to menu.\n" "$msg_prefix" # ハードコード
          return 0 # Return to menu
     else # No
-        printf "%s%s\n" "$msg_prefix" "$(get_message "MSG_NURO_DONE_REBOOT_LATER")"
+        printf "%sOriginal map.sh restored. Please reboot the device later.\n" "$msg_prefix" # ハードコード
         return 0 # Return to menu
     fi
 }
@@ -677,9 +674,9 @@ check_multisession_ports() {
     # Check if rules file exists
     if [ ! -f "$rules_file" ]; then
         debug_log "WARN" "MAP-E rules file ($rules_file) not found. Apply MAP-E settings first."
-        printf "%s%s%s\n" "$error_prefix" "$(get_message "MSG_NURO_PORTS_NOT_FOUND_FILE")" "$reset_color" >&2
+        printf "%sMAP-E rules file not found. Apply MAP-E settings first.%s\n" "$error_prefix" "$reset_color" >&2 # ハードコード
         # Prompt user to press Enter to return to menu
-        printf "\n%s" "$(get_message "MSG_NURO_PORTS_CONTINUE")"
+        printf "\nPress Enter to return to the menu..." # ハードコード
         read -r _ # Discard input
         return 0 # Return to menu
     fi
@@ -687,19 +684,19 @@ check_multisession_ports() {
     # Extract port information
     port_info=$(cat "$rules_file" | grep 'PORTSETS' 2>/dev/null)
 
-    printf "\n%s\n" "$(color cyan "$(get_message "MSG_NURO_PORTS_HEADER")")"
+    printf "\n%s\n" "$(color cyan "Available MAP-E Ports:")" # ハードコード
     if [ -n "$port_info" ]; then
         # Port info found, display it
-        printf "%s\n" "$(get_message "MSG_NURO_PORTS_FOUND" port_info="$port_info")"
+        printf "%s\n" "$port_info" # 変数を直接表示
         debug_log "DEBUG" "Port information found: $port_info"
     else
         # Port info not found in the file
-        printf "%s\n" "$(color yellow "$(get_message "MSG_NURO_PORTS_NOT_FOUND_INFO")")"
+        printf "%s\n" "$(color yellow "No port information (PORTSETS) found in the rules file.")" # ハードコード
         debug_log "DEBUG" "No PORTSETS line found in $rules_file"
     fi
 
     # Prompt user to press Enter to return to menu
-    printf "\n%s" "$(get_message "MSG_NURO_PORTS_CONTINUE")"
+    printf "\nPress Enter to return to the menu..." # ハードコード
     read -r _ # Discard input
     return 0 # Always return to menu
 }
@@ -715,11 +712,11 @@ nuro_mape_main() {
     # BR_ADDR, IPV6_PREFIX, IPV4_PREFIX は detect_nuro_pattern でグローバル変数として設定される
 
     # 1. Get IPv6 address
-    printf "%s\n" "$(color blue "$(get_message "MSG_NURO_GET_IPV6_START")")"
+    printf "%s\n" "$(color blue "Getting IPv6 prefix from WAN interface...")" # ハードコード
     ipv6_raw=$(get_ipv6_prefix_from_wan6)
     if [ $? -ne 0 ] || [ -z "$ipv6_raw" ]; then
         debug_log "ERROR" "Failed to retrieve IPv6 address. Aborting nuro_mape_main."
-        printf "%s%s%s\n" "$(color red "$(get_message "MSG_NURO_GET_IPV6_FAIL")")" >&2
+        printf "%s%s%s\n" "$(color red "$(get_message "MSG_NURO_GET_IPV6_FAIL")")" >&2 # get_message 使用
         return 1 # 関数からエラー終了
     fi
 
@@ -727,20 +724,21 @@ nuro_mape_main() {
     ipv6_normalized=$(normalize_ipv6 "$ipv6_raw")
     if [ $? -ne 0 ] || [ -z "$ipv6_normalized" ]; then
         debug_log "ERROR" "Failed to normalize IPv6 address: $ipv6_raw. Aborting nuro_mape_main."
-        printf "%s%s%s\n" "$(color red "$(get_message "MSG_NURO_NORM_IPV6_FAIL")")" >&2
+        printf "\033[31mError: Failed to normalize IPv6 address.\033[0m\n" >&2 # ハードコード
         return 1 # 関数からエラー終了
     fi
-    printf "%s: %s\n" "$(get_message "MSG_NURO_IPV6_ADDRESS")" "$ipv6_normalized"
+    printf "Detected IPv6 Address: %s\n" "$ipv6_normalized" # ハードコード
 
     # 3. Detect NURO pattern
-    printf "%s\n" "$(color blue "$(get_message "MSG_NURO_DETECT_START")")"
+    printf "%s\n" "$(color blue "Detecting NURO MAP-E pattern...")" # ハードコード
     if ! detect_nuro_pattern "$ipv6_normalized"; then
+        # エラーメッセージは detect_nuro_pattern 内で表示済み
         debug_log "ERROR" "This IPv6 address does not match known NURO patterns: $ipv6_normalized. Aborting nuro_mape_main."
-        printf "%s%s%s\n" "$(color red "$(get_message "MSG_NURO_DETECT_FAIL")")" >&2
+        # printf "%s%s%s\n" "$(color red "This IPv6 address does not match known NURO patterns.")" >&2 # ハードコード
         return 1 # 関数からエラー終了
     fi
-    printf "%s\n" "$(color green "$(get_message "MSG_NURO_DETECT_SUCCESS")")"
-    printf "  BR: %s, IPv6: %s::/36, IPv4: %s/20\n" "$BR_ADDR" "$IPV6_PREFIX" "$IPV4_PREFIX" # Simple display
+    printf "%s\n" "$(color green "NURO MAP-E pattern detected successfully.")" # ハードコード
+    printf "  BR: %s, IPv6: %s::/36, IPv4: %s/20\n" "$BR_ADDR" "$IPV6_PREFIX" "$IPV4_PREFIX" # Simple display (ハードコード)
 
     # 4. Apply settings (calls setup_nuro_mape)
     # setup_nuro_mape は内部で reboot/return 0 を処理する
