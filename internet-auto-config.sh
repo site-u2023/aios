@@ -386,4 +386,4 @@ internet_auto_config_main() {
 # Example test (uncomment to run directly after sourcing):
 # internet_auto_config_main
 
-: # No-op at the end
+internet_auto_config_main
