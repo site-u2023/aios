@@ -392,6 +392,10 @@ normalize_message() {
     # {:} を : に変換 (単純置換)
     output=$(echo "$output" | sed 's/{:}/:/g')
 
+    # ★★★ 変更点: 半角コロン前の空白を除去する処理を追加 ★★★
+    # 翻訳によって `{:} ` の前にスペースが入る場合などに対応
+    output=$(echo "$output" | sed 's/[[:space:]]*:/:/g')
+
     # {@} を改行コード (\n) に変換
     output=$(echo "$output" | sed 's/{@}/\\n/g')
 
