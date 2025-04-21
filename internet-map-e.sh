@@ -1,7 +1,7 @@
 #!/bin/sh
 # this script based https://github.com/missing233/map-e
 
-SCRIPT_VERSION="2025.04.14-00-02"
+SCRIPT_VERSION="2025.04.21-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX準拠シェルスクリプト
