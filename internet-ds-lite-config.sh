@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.21-09-15" # Reflecting error handling, log levels, and message key reduction
+SCRIPT_VERSION="2025.04.21-10:15" # Reflecting updated error handling and message keys
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -85,8 +85,9 @@ EOF
 }
 
 # --- Auto Detection Provider Function (Internal) ---
-# Outputs: "Provider Display Name|AFTR Address|Region Text" on success, empty on failure.
-# Prints specific error details to stderr (hardcoded English) on failure.
+# Outputs:
+#   On Success: "Provider Display Name|AFTR Address|Region Text" to stdout, returns 0.
+#   On Failure: Short reason string to stdout, prints specific error details to stderr, returns 1.
 detect_provider_internal() {
     local isp_as="" region=""
     local provider_data=""
@@ -94,6 +95,7 @@ detect_provider_internal() {
     local display_name=""
     local aftr_address=""
     local region_text="" # Keep region_text for output consistency
+    local reason_str="" # For outputting failure reason
 
     local cache_as_file="${CACHE_DIR}/ip_as.tmp"
     local cache_region_code_file="${CACHE_DIR}/ip_region_code.tmp"
@@ -103,11 +105,15 @@ detect_provider_internal() {
     if [ ! -f "$cache_as_file" ] || ! isp_as=$(cat "$cache_as_file" | sed 's/^AS//i'); then
         # Hardcoded specific error to stderr
         printf "\033[31mError: AS Number cache file not found or empty: %s\033[0m\n" "$cache_as_file" >&2
+        reason_str="Required AS cache not found"
+        echo "$reason_str" # Output reason to stdout
         return 1
     fi
     # Handle empty isp_as after sed
     if [ -z "$isp_as" ]; then
         printf "\033[31mError: Failed to read AS Number from cache file: %s\033[0m\n" "$cache_as_file" >&2
+        reason_str="Failed to read AS Number from cache"
+        echo "$reason_str" # Output reason to stdout
         return 1
     fi
     debug_log "DEBUG" "detect_provider_internal: Using AS Number $isp_as"
@@ -117,6 +123,8 @@ detect_provider_internal() {
     if [ $? -ne 0 ] || [ -z "$provider_data" ]; then
         # Hardcoded specific error to stderr
         printf "\033[31mError: Could not find DS-Lite provider data for AS %s.\033[0m\n" "$isp_as" >&2
+        reason_str="Unsupported ISP AS ${isp_as}"
+        echo "$reason_str" # Output reason to stdout
         return 1
     fi
 
@@ -137,6 +145,8 @@ detect_provider_internal() {
         if [ -z "$region" ]; then
             # Hardcoded specific error to stderr
             printf "\033[31mError: Required region information not found in cache for Transix detection.\033[0m\n" >&2
+            reason_str="Required region cache not found for Transix"
+            echo "$reason_str" # Output reason to stdout
             return 1
         fi
         debug_log "DEBUG" "detect_provider_internal: Using region info '$region' for Transix."
@@ -155,6 +165,8 @@ detect_provider_internal() {
         else
             # Hardcoded specific error to stderr (Revised message)
             printf "\033[31mError: Failed to determine required region (East/West) for Transix using '%s'.\033[0m\n" "$region" >&2
+            reason_str="Region determination failed for Transix ('${region}')"
+            echo "$reason_str" # Output reason to stdout
             return 1
         fi
         debug_log "DEBUG" "detect_provider_internal: Transix region resolved - Name=$display_name, AFTR=$aftr_address, Region=$region_text"
@@ -167,62 +179,71 @@ detect_provider_internal() {
 
 # --- Auto Detect and Apply DS-Lite Settings ---
 # Called by menu.db or internet-auto-config.sh
-# Uses get_message for result and failure summary, hardcoded English for confirmation.
+# Uses get_message for success result and unsupported reason, hardcoded English for confirmation.
 auto_detect_and_apply() {
     debug_log "DEBUG" "Starting DS-Lite auto-detection and application process."
 
-    # Perform internal detection
-    local detection_result
+    # Perform internal detection and capture stdout (reason string)
+    local detection_result=""
+    local reason_str=""
+    # Use command substitution and check status code
     detection_result=$(detect_provider_internal)
     local detection_status=$?
 
+    # --- Error Handling Block ---
     if [ $detection_status -ne 0 ]; then
-        # Specific error already printed to stderr by detect_provider_internal
-        debug_log "DEBUG" "DS-Lite auto-detection failed (detailed error above)." # Changed ERROR to DEBUG
-        # Use get_message for generic failure summary to stdout
-        printf "\n%s\n" "$(color red "$(get_message "MSG_DSLITE_AUTO_DETECT_FAILED")")"
-        return 1 # Return failure to menu handler
-    fi
+        # Specific error message should have been printed to stderr by detect_provider_internal
+        debug_log "DEBUG" "DS-Lite auto-detection failed (detect_provider_internal returned status $detection_status)."
+        # The reason string is in $detection_result on failure
+        reason_str="$detection_result"
+        debug_log "DEBUG" "Reason for failure: $reason_str"
 
-    # Parse detection result
+        # Display the "unsupported" message using the reason string
+        printf "\n%s\n" "$(color red "$(get_message "MSG_DSLITE_AUTO_DETECT_UNSUPPORTED" rsn="$reason_str")")"
+
+        # Return failure status to the menu handler
+        return 1
+    fi
+    # --- End of Error Handling Block ---
+
+    # --- Success Path ---
+    # Parse success detection result (Provider|AFTR|Region)
     local detected_provider=$(echo "$detection_result" | cut -d'|' -f1)
     local detected_aftr=$(echo "$detection_result" | cut -d'|' -f2)
     # local detected_region_text=$(echo "$detection_result" | cut -d'|' -f3) # Region text not used
 
-    # Display result using get_message to stdout
-    # Placeholders: sp (Service Provider), tp (Type)
+    # Display success result using get_message to stdout
     printf "\n%s\n" "$(color green "$(get_message "MSG_AUTO_CONFIG_RESULT" sp="$detected_provider" tp="DS-Lite")")"
 
     # Confirm with the user (hardcoded English question)
     local confirm_auto=1
-    # Assuming confirm handles direct string if key lookup fails or is modified.
     confirm "Apply these settings? {ynr}" # Hardcoded English
     confirm_auto=$?
 
     if [ $confirm_auto -eq 0 ]; then # Yes
         debug_log "DEBUG" "User confirmed applying DS-Lite settings for $detected_provider."
-        printf "\n" # Newline before applying settings message
-        # Pass AFTR and Provider Name to apply_dslite_settings
+        printf "\n"
+        # Pass AFTR and Provider Name (for {sp}) to apply_dslite_settings
         apply_dslite_settings "$detected_aftr" "$detected_provider"
-        return $? # Return the status of apply_dslite_settings
+        return $?
     else # No or Return
          debug_log "DEBUG" "User declined to apply DS-Lite settings."
-         # No cancellation message to user, return failure to menu handler
+         # Return failure status to the menu handler (no user message for cancellation)
         return 1
     fi
 }
 
 # Apply DS-Lite settings using UCI and sed
 # $1: AFTR Address
-# $2: Service Name/Key (used for logging)
+# $2: Service Provider Name (for {sp} placeholder)
 # Uses get_message for success and reboot messages, hardcoded English for errors/start.
 apply_dslite_settings() {
     local aftr_address="$1"
-    local service_key="$2" # Used for logging
+    local service_provider_name="$2" # Renamed for clarity with {sp}
     local proto_script="/lib/netifd/proto/dslite.sh"
     local msg_prefix="" # For reboot messages
 
-    debug_log "DEBUG" "Applying DS-Lite settings for AFTR: $aftr_address (Key: $service_key)"
+    debug_log "DEBUG" "Applying DS-Lite settings for AFTR: $aftr_address (Provider: $service_provider_name)"
     printf "%s\n" "$(color blue "Applying DS-Lite settings...")" # Hardcoded English start message
 
     # 1. Install ds-lite package silently
@@ -244,7 +265,7 @@ apply_dslite_settings() {
             debug_log "DEBUG" "Protocol script backup $PROTO_BACKUP already exists."
         fi
     else
-         debug_log "DEBUG" "Protocol script $proto_script not found, cannot back up." # Changed WARN to DEBUG
+         debug_log "DEBUG" "Protocol script $proto_script not found, cannot back up."
          # Continue without backup
     fi
 
@@ -292,17 +313,17 @@ EOF
             sed -i -e "s/mtu:-1280/mtu:-1460/g" "$proto_script"
             if [ $? -ne 0 ]; then
                 # Log debug but don't fail the whole process
-                debug_log "DEBUG" "Failed to modify protocol script MTU, but continuing." # Changed WARN to DEBUG
+                debug_log "DEBUG" "Failed to modify protocol script MTU, but continuing."
             fi
         else
             debug_log "DEBUG" "MTU in $proto_script does not need modification or was already changed."
         fi
     else
-        debug_log "DEBUG" "Protocol script $proto_script not found after package install. Cannot modify MTU." # Changed WARN to DEBUG
+        debug_log "DEBUG" "Protocol script $proto_script not found after package install. Cannot modify MTU."
     fi
 
-    # 5. Success Message (using get_message) to stdout
-    printf "\n%s\n" "$(color green "$(get_message "MSG_DSLITE_APPLY_SUCCESS")")"
+    # 5. Success Message (using get_message with {sp}) to stdout
+    printf "\n%s\n" "$(color green "$(get_message "MSG_DSLITE_APPLY_SUCCESS" sp="$service_provider_name")")"
 
     # 6. Reboot Confirmation (using common get_message keys)
     printf "%s\n" "$(get_message MSG_REBOOT_REQUIRED)" # Use existing common key
@@ -346,11 +367,11 @@ restore_dslite_settings() {
         else
              # Hardcoded specific warning to stderr (non-fatal)
              printf "\033[33mWarning: Failed to restore /etc/config/network from backup. Backup not removed.\033[0m\n" >&2
-             debug_log "DEBUG" "Failed to copy network config from backup. Backup not removed." # Changed ERROR to DEBUG
+             debug_log "DEBUG" "Failed to copy network config from backup. Backup not removed."
              # Continue restoration attempt
         fi
     else
-        debug_log "DEBUG" "Network configuration backup $NETWORK_BACKUP not found." # Changed WARN to DEBUG
+        debug_log "DEBUG" "Network configuration backup $NETWORK_BACKUP not found."
     fi
 
     # 2. Restore proto script (No user message on success)
@@ -363,7 +384,7 @@ restore_dslite_settings() {
         else
              # Hardcoded specific warning to stderr (non-fatal)
              printf "\033[33mWarning: Failed to restore %s from backup. Backup not removed.\033[0m\n" "$proto_script" >&2
-             debug_log "DEBUG" "Failed to copy protocol script from backup. Backup not removed." # Changed ERROR to DEBUG
+             debug_log "DEBUG" "Failed to copy protocol script from backup. Backup not removed."
              # Continue restoration attempt
         fi
     elif [ -f "$proto_script" ]; then
@@ -376,7 +397,7 @@ restore_dslite_settings() {
               debug_log "DEBUG" "MTU in $proto_script does not appear to need reverting."
          fi
     else
-         debug_log "DEBUG" "Protocol script $proto_script not found, cannot restore or revert." # Changed WARN to DEBUG
+         debug_log "DEBUG" "Protocol script $proto_script not found, cannot restore or revert."
     fi
 
     # 3. Remove ds_lite interface and firewall entry (No user message)
@@ -415,7 +436,7 @@ commit firewall
 EOF
     if [ $? -ne 0 ]; then
         # Log debug but don't fail the whole process
-        debug_log "DEBUG" "UCI commands to remove ds_lite interface/firewall entries might have failed." # Changed WARN to DEBUG
+        debug_log "DEBUG" "UCI commands to remove ds_lite interface/firewall entries might have failed."
     fi
     debug_log "DEBUG" "UCI commands for removal executed."
 
