@@ -121,7 +121,7 @@ detect_provider_internal() {
     provider_data=$(get_dslite_provider_data_by_as "$isp_as")
     if [ $? -ne 0 ] || [ -z "$provider_data" ]; then
         debug_log "DEBUG" "detect_provider_internal: Could not find DS-Lite provider data for AS $isp_as."
-        reason_str="Unsupported ISP AS ${isp_as}"
+        reason_str="ISP AS ${isp_as}"
         echo "$reason_str" # Output reason to stdout
         return 1
     fi
