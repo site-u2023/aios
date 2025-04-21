@@ -1,10 +1,14 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.21-00-02" # Version for this script
+SCRIPT_VERSION="2025.04.21-00-05" # Version for this script
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
 # 🚀 Last Update: 2025-04-21
+#
+# Description: Automatically detects IPoE connection type (MAP-E/DS-Lite)
+#              based on AS number, confirms with the user, and applies
+#              the corresponding configuration by calling other scripts.
 #
 # ... (Header comments omitted for brevity) ...
 #
@@ -31,6 +35,7 @@ AIOS_COMMON_INFO="${BASE_DIR}/common-information.sh"
 AIOS_COMMON_SYSTEM="${BASE_DIR}/common-system.sh"
 AIOS_COMMON_COLOR="${BASE_DIR}/common-color.sh"
 AIOS_COMMON_MESSAGE_LOADER="${BASE_DIR}/common-message-loader.sh" # Assuming message loader exists
+AIOS_COMMON_COUNTRY="${BASE_DIR}/common-country.sh" # Needed for confirm()
 
 # --- Debug Logging Function (should be loaded by aios) ---
 # Fallback logger (should not be needed if aios is loaded correctly)
@@ -47,12 +52,8 @@ fi
 # If not, it indicates a problem, but we don't re-load aios here.
 if ! command -v download >/dev/null 2>&1; then
     debug_log "ERROR" "Core 'download' function from aios not found. Cannot proceed."
-    # Provide a user-facing error message if message functions are available
-    if command -v get_message >/dev/null 2>&1 && command -v color >/dev/null 2>&1; then
-         printf "%s\n" "$(color red "$(get_message "ERR_AIOS_CORE_MISSING")")" >&2
-    else
-         printf "\033[31mError: Core aios functions are missing. Cannot run %s.\033[0m\n" "$SCRIPT_NAME" >&2
-    fi
+    # Error messages are hardcoded in English
+    printf "\033[31mError: Core aios functions are missing. Cannot run %s.\033[0m\n" "$SCRIPT_NAME" >&2
     exit 1
 fi
 # Check for get_message as well, crucial for user feedback
@@ -61,69 +62,60 @@ if ! command -v get_message >/dev/null 2>&1; then
      # Basic fallback for get_message
      get_message() { echo "$1"; }
 fi
-
+# Check for confirm function, load common-country if needed
+if ! command -v confirm >/dev/null 2>&1; then
+     debug_log "WARN" "'confirm' function not found. Attempting to load from common-country.sh"
+     if [ -f "$AIOS_COMMON_COUNTRY" ]; then
+          # shellcheck source=/dev/null
+          . "$AIOS_COMMON_COUNTRY"
+          if ! command -v confirm >/dev/null 2>&1; then
+               debug_log "ERROR" "Failed to load 'confirm' function from common-country.sh. Cannot proceed."
+               printf "\033[31mError: Required 'confirm' function is missing.\033[0m\n" >&2
+               exit 1
+          fi
+     else
+          debug_log "ERROR" "common-country.sh not found. Cannot load 'confirm' function."
+          printf "\033[31mError: Required 'confirm' function is missing.\033[0m\n" >&2
+          exit 1
+     fi
+fi
+# Check for color function, load if needed
+if ! command -v color >/dev/null 2>&1; then
+     debug_log "WARN" "'color' function not found. Attempting to load from common-color.sh"
+     if [ -f "$AIOS_COMMON_COLOR" ]; then
+          # shellcheck source=/dev/null
+          . "$AIOS_COMMON_COLOR"
+     else
+          debug_log "ERROR" "common-color.sh not found. Color output disabled."
+          # Basic fallback for color
+          color() { printf "%s" "$2"; }
+     fi
+fi
 
 # --- Function Definitions ---
 
-# --- Function to determine connection type and details based on AS Number ---
-determine_connection_by_as() {
-    local asn="$1"
-    local result="unknown||" # Default to unknown format: type|key|aftr
+# --- Function to retrieve provider data based on AS Number ---
+# This function acts like an internal database stored in a here-document.
+# Arguments: $1: AS Number (numeric, without "AS" prefix)
+# Output: Space-separated string: AS_NUM INTERNAL_KEY "DISPLAY_NAME" CONNECTION_TYPE AFTR_ADDRESS
+#         (e.g., 4713 ocn "OCN Virtual Connect" map-e "")
+# Returns: 0 if found, 1 if not found.
+get_provider_data_by_as() {
+    local search_asn="$1"
+    local result=""
 
-    debug_log "DEBUG" "Determining connection type for ASN: $asn"
+    # --- Provider Database (Here Document) ---
+    # Format: AS_NUM INTERNAL_KEY "DISPLAY_NAME" CONNECTION_TYPE AFTR_ADDRESS
+    # AFTR_ADDRESS is empty for MAP-E. DISPLAY_NAME must be quoted.
+    local provider_db=$(cat <<-'EOF'
+4713 ocn "OCN Virtual Connect" map-e ""
+2518 v6plus "v6 Plus" map-e ""
+2519 transix "transix" ds-lite "gw.transix.jp"
+2527 cross "Cross Pass" ds-lite "2001:f60:0:200::1:1"
+4737 v6connect "v6 Connect" ds-lite "gw.v6connect.net"
+EOF
+)
+    # --- End of Database ---
 
-    # Check if ASN is provided
-    if [ -z "$asn" ]; then
-        debug_log "WARN" "ASN is empty, cannot determine connection type."
-        echo "$result"
-        return 1
-    fi
-
-    # Remove "AS" prefix if present
-    asn=$(echo "$asn" | sed 's/^AS//i')
-
-    # Determine connection based on ASN using case statement
-    case "$asn" in
-        "4713") # OCN
-            result="map-e|ocn|"
-            debug_log "DEBUG" "ASN $asn matches OCN (MAP-E)"
-            ;;
-        "2518") # v6プラス (JPNE)
-            result="map-e|v6plus|"
-            debug_log "DEBUG" "ASN $asn matches v6plus (MAP-E)"
-            ;;
-        "2519") # Transix (MF)
-            result="ds-lite|transix|gw.transix.jp"
-            debug_log "DEBUG" "ASN $asn matches Transix (DS-Lite)"
-            ;;
-        "2527") # Cross Pass (ARTERIA) - Determined as DS-Lite based on discussion
-            result="ds-lite|cross|2001:f60:0:200::1:1"
-            debug_log "DEBUG" "ASN $asn matches Cross Pass (DS-Lite)"
-            ;;
-        "4737") # v6 コネクト (Asahi Net)
-            result="ds-lite|v6connect|gw.v6connect.net"
-            debug_log "DEBUG" "ASN $asn matches v6 connect (DS-Lite)"
-            ;;
-        *)      # Unknown ASN
-            debug_log "DEBUG" "ASN $asn does not match known providers."
-            result="unknown||"
-            ;;
-    esac
-
-    echo "$result"
-    return 0
-}
-
-# internet_auto_config_main() { ... } # To be added later
-
-
-# --- Script Execution ---
-# This script primarily defines functions to be called by other parts of aios (e.g., a menu).
-# For testing, you can call the functions directly after sourcing the script.
-# Example test:
-# . /tmp/aios/internet-auto-config.sh
-# determine_connection_by_as "AS4713"
-# determine_connection_by_as "2519"
-# determine_connection_by_as "9999"
-
-: # No-op at the end
+    # Search for the AS number in the database (first column match)
+    # Use grep and head -n
