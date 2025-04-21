@@ -48,7 +48,12 @@ fi
 if ! command -v download >/dev/null 2>&1; then
     debug_log "ERROR" "Core 'download' function from aios not found. Cannot proceed."
     # Error messages are hardcoded in English
-    printf "\033[31mError: Core aios functions are missing. Cannot run %s.\033[0m\n" "$SCRIPT_NAME" >&2
+    # Use color function if available for error message
+    if command -v color >/dev/null 2>&1; then
+        printf "%s\n" "$(color red "Error: Core aios functions are missing. Cannot run $SCRIPT_NAME.")" >&2
+    else
+        printf "Error: Core aios functions are missing. Cannot run %s.\n" "$SCRIPT_NAME" >&2
+    fi
     exit 1
 fi
 # Check for get_message as well, crucial for user feedback
@@ -65,12 +70,20 @@ if ! command -v confirm >/dev/null 2>&1; then
           . "$AIOS_COMMON_COUNTRY"
           if ! command -v confirm >/dev/null 2>&1; then
                debug_log "ERROR" "Failed to load 'confirm' function from common-country.sh. Cannot proceed."
-               printf "\033[31mError: Required 'confirm' function is missing.\033[0m\n" >&2
+               if command -v color >/dev/null 2>&1; then
+                   printf "%s\n" "$(color red "Error: Required 'confirm' function is missing.")" >&2
+               else
+                   printf "Error: Required 'confirm' function is missing.\n" >&2
+               fi
                exit 1
           fi
      else
           debug_log "ERROR" "common-country.sh not found. Cannot load 'confirm' function."
-          printf "\033[31mError: Required 'confirm' function is missing.\033[0m\n" >&2
+          if command -v color >/dev/null 2>&1; then
+              printf "%s\n" "$(color red "Error: Required 'confirm' function is missing.")" >&2
+          else
+              printf "Error: Required 'confirm' function is missing.\n" >&2
+          fi
           exit 1
      fi
 fi
@@ -172,6 +185,7 @@ determine_connection_by_as() {
     return 0 # Return 0 whether found or not, as the function's job is to determine
 }
 
+
 # --- Main function for automatic internet configuration ---
 internet_auto_config_main() {
     local network_status=""
@@ -190,12 +204,12 @@ internet_auto_config_main() {
     # Check for required cache files
     if [ ! -f "${CACHE_DIR}/network.ch" ]; then
         debug_log "DEBUG" "Network status cache file not found: ${CACHE_DIR}/network.ch" # ERROR -> DEBUG
-        printf "\033[31mError: Required cache file 'network.ch' not found.\033[0m\n" >&2
+        printf "%s\n" "$(color red "Error: Required cache file 'network.ch' not found.")" >&2 # MODIFIED: Use color()
         return 1
     fi
     if [ ! -f "${CACHE_DIR}/ip_as.tmp" ]; then
         debug_log "DEBUG" "AS number cache file not found: ${CACHE_DIR}/ip_as.tmp" # ERROR -> DEBUG
-        printf "\033[31mError: Required cache file 'ip_as.tmp' not found.\033[0m\n" >&2
+        printf "%s\n" "$(color red "Error: Required cache file 'ip_as.tmp' not found.")" >&2 # MODIFIED: Use color()
         return 1
     fi
 
@@ -206,7 +220,7 @@ internet_auto_config_main() {
         download "$MAP_E_SCRIPT_NAME" "chmod" "hidden" # Download, set executable, hide verbose output
         if [ ! -f "$MAP_E_SCRIPT" ]; then
             debug_log "DEBUG" "Failed to download MAP-E script: $MAP_E_SCRIPT_NAME" # ERROR -> DEBUG
-            printf "\033[31mError: Failed to download required script '%s'.\033[0m\n" "$MAP_E_SCRIPT_NAME" >&2
+            printf "%s\n" "$(color red "Error: Failed to download required script '$MAP_E_SCRIPT_NAME'.")" >&2 # MODIFIED: Use color()
             return 1
         fi
     fi
@@ -215,7 +229,7 @@ internet_auto_config_main() {
         download "$DS_LITE_SCRIPT_NAME" "chmod" "hidden" # Download, set executable, hide verbose output
         if [ ! -f "$DS_LITE_SCRIPT" ]; then
             debug_log "DEBUG" "Failed to download DS-Lite script: $DS_LITE_SCRIPT_NAME" # ERROR -> DEBUG
-            printf "\033[31mError: Failed to download required script '%s'.\033[0m\n" "$DS_LITE_SCRIPT_NAME" >&2
+            printf "%s\n" "$(color red "Error: Failed to download required script '$DS_LITE_SCRIPT_NAME'.")" >&2 # MODIFIED: Use color()
             return 1
         fi
     fi
@@ -229,7 +243,7 @@ internet_auto_config_main() {
             ;;
         *)
             debug_log "DEBUG" "IPv6 connectivity not available ($network_status). Cannot proceed with IPoE configuration." # ERROR -> DEBUG
-            printf "\033[31mError: IPv6 connectivity not available. Cannot proceed with IPoE auto-configuration.\033[0m\n" >&2
+            printf "%s\n" "$(color red "Error: IPv6 connectivity not available. Cannot proceed with IPoE auto-configuration.")" >&2 # MODIFIED: Use color()
             return 1
             ;;
     esac
@@ -239,7 +253,7 @@ internet_auto_config_main() {
     asn=$(cat "${CACHE_DIR}/ip_as.tmp")
     if [ -z "$asn" ]; then
         debug_log "DEBUG" "Failed to retrieve AS number from cache." # ERROR -> DEBUG
-        printf "\033[31mError: Could not retrieve AS number for automatic detection.\033[0m\n" >&2
+        printf "%s\n" "$(color red "Error: Could not retrieve AS number for automatic detection.")" >&2 # MODIFIED: Use color()
         return 1
     fi
     debug_log "DEBUG" "Detected AS Number: $asn" # INFO -> DEBUG
@@ -281,6 +295,8 @@ internet_auto_config_main() {
 
         # Confirm with the user using MSG_AUTO_CONFIG_CONFIRM
         local confirm_apply=1
+        # Use the corrected message key for confirmation
+        # ja|MSG_AUTO_CONFIG_CONFIRM=これらの設定を適用します {yn}
         confirm "MSG_AUTO_CONFIG_CONFIRM" # confirm uses 'yn' by default
         confirm_apply=$?
 
@@ -311,17 +327,17 @@ internet_auto_config_main() {
                        # No explicit success message needed
                     else
                        debug_log "DEBUG" "MAP-E script execution failed." # ERROR -> DEBUG
-                       printf "\033[31mError: Execution of script '%s' failed.\033[0m\n" "$MAP_E_SCRIPT_NAME" >&2
+                       printf "%s\n" "$(color red "Error: Execution of script '$MAP_E_SCRIPT_NAME' failed.")" >&2 # MODIFIED: Use color()
                        exit_code=1
                     fi
                 else
                     debug_log "DEBUG" "Function 'internet_main' not found in $MAP_E_SCRIPT_NAME." # ERROR -> DEBUG
-                    printf "\033[31mError: Required function 'internet_main' not found in script '%s'.\033[0m\n" "$MAP_E_SCRIPT_NAME" >&2
+                    printf "%s\n" "$(color red "Error: Required function 'internet_main' not found in script '$MAP_E_SCRIPT_NAME'.")" >&2 # MODIFIED: Use color()
                     exit_code=1
                 fi
             else
                 debug_log "DEBUG" "Failed to source MAP-E script: $MAP_E_SCRIPT_NAME" # ERROR -> DEBUG
-                printf "\033[31mError: Failed to load script '%s'.\033[0m\n" "$MAP_E_SCRIPT_NAME" >&2
+                printf "%s\n" "$(color red "Error: Failed to load script '$MAP_E_SCRIPT_NAME'.")" >&2 # MODIFIED: Use color()
                 exit_code=1
             fi
             ;;
@@ -340,17 +356,17 @@ internet_auto_config_main() {
                         # No explicit success message needed
                     else
                         debug_log "DEBUG" "DS-Lite script execution failed." # ERROR -> DEBUG
-                        printf "\033[31mError: Execution of script '%s' failed.\033[0m\n" "$DS_LITE_SCRIPT_NAME" >&2
+                        printf "%s\n" "$(color red "Error: Execution of script '$DS_LITE_SCRIPT_NAME' failed.")" >&2 # MODIFIED: Use color()
                         exit_code=1
                     fi
                 else
                     debug_log "DEBUG" "Function 'apply_dslite_settings' not found in $DS_LITE_SCRIPT_NAME." # ERROR -> DEBUG
-                    printf "\033[31mError: Required function 'apply_dslite_settings' not found in script '%s'.\033[0m\n" "$DS_LITE_SCRIPT_NAME" >&2
+                    printf "%s\n" "$(color red "Error: Required function 'apply_dslite_settings' not found in script '$DS_LITE_SCRIPT_NAME'.")" >&2 # MODIFIED: Use color()
                     exit_code=1
                 fi
             else
                 debug_log "DEBUG" "Failed to source DS-Lite script: $DS_LITE_SCRIPT_NAME" # ERROR -> DEBUG
-                printf "\033[31mError: Failed to load script '%s'.\033[0m\n" "$DS_LITE_SCRIPT_NAME" >&2
+                printf "%s\n" "$(color red "Error: Failed to load script '$DS_LITE_SCRIPT_NAME'.")" >&2 # MODIFIED: Use color()
                 exit_code=1
             fi
             ;;
@@ -363,7 +379,7 @@ internet_auto_config_main() {
             ;;
         *) # Should not happen
             debug_log "DEBUG" "Unexpected connection type returned: $connection_type" # ERROR -> DEBUG
-            printf "\033[31mError: Unexpected value encountered: %s\033[0m\n" "$connection_type" >&2
+            printf "%s\n" "$(color red "Error: Unexpected value encountered: $connection_type")" >&2 # MODIFIED: Use color()
             exit_code=1
             ;;
     esac
@@ -376,6 +392,7 @@ internet_auto_config_main() {
 
     return $exit_code
 }
+
 
 # --- Script Execution ---
 # This script primarily defines functions to be called by other parts of aios (e.g., a menu).
