@@ -172,7 +172,6 @@ determine_connection_by_as() {
     return 0 # Return 0 whether found or not, as the function's job is to determine
 }
 
-
 # --- Main function for automatic internet configuration ---
 internet_auto_config_main() {
     local network_status=""
@@ -377,7 +376,6 @@ internet_auto_config_main() {
 
     return $exit_code
 }
-
 
 # --- Script Execution ---
 # This script primarily defines functions to be called by other parts of aios (e.g., a menu).
