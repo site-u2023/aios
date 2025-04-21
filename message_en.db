@@ -56,11 +56,9 @@ en|MENU_INTERNET_DSLITE=DS-Lite: transix / cross pass / v6 connect
 # =======================
 # internet-auto-config.sh
 # =======================
-en|MSG_PROVIDER_ISP_TYPE=Detecting ISP provider
-en|MSG_PROVIDER_INFO_SUCCESS=ISP provider successfully identified
-en|MSG_PROVIDER_INFO_FAILED=Failed to identify ISP provider
-en|MSG_ISP_INFO_SOURCE=Information source{:} {s}
-en|MSG_ISP_TYPE=Connection type{:}
+en|MSG_AUTO_CONFIG_RESULT: "Automatic detection result: {sp} ({tp})"
+en|MSG_AUTO_CONFIG_CONFIRM: "Apply these settings? {yn}"
+en|MSG_AUTO_CONFIG_UNKNOWN: "Warning: Could not automatically determine IPoE connection type for ASN {as}. Manual configuration may be required."
 
 # =======================
 # common-information.sh
