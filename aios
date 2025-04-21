@@ -345,9 +345,9 @@ normalize_message() {
     local input="$1"
     local lang="$2"  # 言語コードを受け取るパラメータ
 
-    # --- 追加: 大文字化機能のON/OFFスイッチ ---
-    # 1 = ON (英語を全て大文字化), 0 = OFF
-    local _normalize_force_uppercase=0 # デフォルトはON
+    # --- 変更: ローカル変数名を force_uppercase に変更、値を "ON"/"OFF" に ---
+    # "ON" = 英文字を全て大文字化, "OFF" = 大文字化しない
+    local force_uppercase="ON" # デフォルトはON
 
     local output="$input"
     local saved_locale="$LC_ALL" # 元のロケールを保存
@@ -386,24 +386,21 @@ normalize_message() {
     output=$(echo "$output" | sed 's/{;}/: /g')
 
     # === 大文字化処理 (スイッチによる制御) ===
-    # スイッチがON (1) で、かつ言語が英語 (en*) の場合のみ実行
-    local lang_prefix="${lang%%-*}" # en-USなども考慮しプレフィックスで判定
-    if [ "$_normalize_force_uppercase" -eq 1 ] && [ "$lang_prefix" = "en" ]; then
-        debug_log "DEBUG" "Force Uppercase enabled for English message. Original: [$output]"
+    # --- 変更: 言語コードのチェックを削除 ---
+    # スイッチが "ON" の場合のみ実行
+    if [ "$force_uppercase" = "ON" ]; then
+        debug_log "DEBUG" "Force Uppercase enabled. Original: [$output]"
         # POSIX準拠のため、echoではなくprintf + tr を使用
         output=$(printf '%s' "$output" | tr '[:lower:]' '[:upper:]')
         debug_log "DEBUG" "Force Uppercase applied. Result: [$output]"
     else
-        if [ "$lang_prefix" != "en" ]; then
-            debug_log "DEBUG" "Force Uppercase skipped: Language is not English ($lang)."
-        else
-             debug_log "DEBUG" "Force Uppercase skipped: Switch is OFF ($_normalize_force_uppercase)."
-        fi
+         # --- 変更: 不要な言語チェックのデバッグログを削除 ---
+         debug_log "DEBUG" "Force Uppercase skipped: Switch is $force_uppercase."
     fi
 
     # === 言語コード別の処理 (ロケール依存の可能性があるため LC_ALL=C の外で処理) ===
     # 数字変換など (大文字化処理の後に行う)
-    case "${lang_prefix}" in
+    case "${lang%%-*}" in # lang_prefix の定義が不要になったため直接 lang を使用
         ar)
             output=$(echo "$output" | sed 's/٠/0/g; s/١/1/g; s/٢/2/g; s/٣/3/g; s/٤/4/g; s/٥/5/g; s/٦/6/g; s/٧/7/g; s/٨/8/g; s/٩/9/g') ;;
         fa)
@@ -427,48 +424,59 @@ get_message() {
     shift  # 最初の引数（キー）を除去
     local lang="$DEFAULT_LANGUAGE"
     local message=""
-    
+
     # 言語コードの取得
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang=$(cat "${CACHE_DIR}/message.ch")
     fi
-    
+
     # DBからメッセージ取得
     local db_file="$(check_message_cache "$lang")"
     if [ -n "$db_file" ] && [ -f "$db_file" ]; then
         message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
         if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
-            message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+            # デフォルト言語のDBからも試す (db_file は言語固有DBの場合があるため再指定)
+            local default_db_file="$(check_message_cache "$DEFAULT_LANGUAGE")"
+            if [ -n "$default_db_file" ] && [ -f "$default_db_file" ]; then
+                message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$default_db_file" 2>/dev/null | cut -d'=' -f2-)
+            fi
         fi
     else
+        # DBファイルが見つからない場合、メモリキャッシュを試す
         if [ "$MSG_MEMORY_INITIALIZED" != "true" ]; then
-            into_memory_message
+            into_memory_message # メモリキャッシュが初期化されていなければ初期化
         fi
         if [ -n "$MSG_MEMORY" ]; then
+             # メモリキャッシュからデフォルト言語で検索
             message=$(echo "$MSG_MEMORY" | grep "^${DEFAULT_LANGUAGE}|${key}=" 2>/dev/null | cut -d'=' -f2-)
         fi
     fi
-    
+
     # メッセージが見つからない場合はキーをそのまま返す
     if [ -z "$message" ]; then
         debug_log "DEBUG: Message not found for key: $key"
         message="$key"
     fi
-    
-    # normalize_message関数を使用して文字列を正規化 (言語コードを渡す)
-    message=$(normalize_message "$message" "$lang")
-    
-    # パラメータ置換処理
+
+    # ★★★ 変更点: パラメータ置換処理を先に実行 ★★★
     for param in "$@"; do
         param_name=$(echo "$param" | cut -d'=' -f1)
         param_value=$(echo "$param" | cut -d'=' -f2-)
-        
+
+        # パラメータ値内の特殊文字をsed用にエスケープする処理を追加
+        # '/' と '&' をエスケープ (POSIX準拠のsed)
+        local escaped_value=$(echo "$param_value" | sed -e 's/[\/&]/\\&/g')
+
         if [ -n "$param_name" ] && [ -n "$param_value" ]; then
-            message=$(echo "$message" | sed "s|{$param_name}|$param_value|g")
-            debug_log "DEBUG: Replaced {$param_name} with $param_value"
+             # 変更点: エスケープされた値を使用
+            message=$(echo "$message" | sed "s|{$param_name}|$escaped_value|g")
+            debug_log "DEBUG: Replaced {$param_name} with $param_value (escaped: $escaped_value)"
         fi
     done
-    
+
+    # ★★★ 変更点: normalize_message の呼び出しをパラメータ置換後に移動 ★★★
+    message=$(normalize_message "$message" "$lang")
+
     # 出力
     printf "%b" "$message"
     return 0
