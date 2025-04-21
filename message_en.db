@@ -38,6 +38,7 @@ en|MSG_DSLITE_AUTO_DETECT_UNSUPPORTED=DS-Lite Not supported{:} {rsn}
 # =======================
 # menu.db
 # =======================
+en|MENU_INTERNET_AUTO=Internet Auto Config
 en|MENU_INTERNET_PPPOE=PPPoE
 en|MENU_INTERNET_MAPE=MAP-E: OCN / v6 plus
 en|MENU_INTERNET_NURO_MAPE=MAP-E: NURO
