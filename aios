@@ -395,14 +395,14 @@ normalize_message() {
     # {@} を改行コード (\n) に変換
     output=$(echo "$output" | sed 's/{@}/\\n/g')
 
-    # {;} を末尾のコロンに変換
+    # {;} を末尾のコロンとスペースに変換
     if echo "$output" | grep -q '{;}'; then
         # 末尾の空白を一時的に削除
         output=$(echo "$output" | sed 's/[[:space:]]*$//')
         # {;}を削除
         output=$(echo "$output" | sed 's/{;}//g')
-        # 末尾にコロンを追加
-        output="${output}:"
+        # 末尾にコロンと半角スペースを追加
+        output="${output}: "
     fi
 
     # === 言語コード別の処理 (ロケール依存の可能性があるため LC_ALL=C の外で処理) ===
