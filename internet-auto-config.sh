@@ -46,14 +46,14 @@ fi
 # --- Check if essential functions from aios are loaded ---
 # If not, it indicates a problem, but we don't re-load aios here.
 if ! command -v download >/dev/null 2>&1; then
-    debug_log "DEBUG" "Core 'download' function from aios not found. Cannot proceed."
+    debug_log "ERROR" "Core 'download' function from aios not found. Cannot proceed."
     # Error messages are hardcoded in English
     printf "\033[31mError: Core aios functions are missing. Cannot run %s.\033[0m\n" "$SCRIPT_NAME" >&2
     exit 1
 fi
 # Check for get_message as well, crucial for user feedback
 if ! command -v get_message >/dev/null 2>&1; then
-     debug_log "DEBUG" "Core 'get_message' function from aios not found. User messages will be limited."
+     debug_log "ERROR" "Core 'get_message' function from aios not found. User messages will be limited."
      # Basic fallback for get_message
      get_message() { echo "$1"; }
 fi
@@ -64,12 +64,12 @@ if ! command -v confirm >/dev/null 2>&1; then
           # shellcheck source=/dev/null
           . "$AIOS_COMMON_COUNTRY"
           if ! command -v confirm >/dev/null 2>&1; then
-               debug_log "DEBUG" "Failed to load 'confirm' function from common-country.sh. Cannot proceed."
+               debug_log "ERROR" "Failed to load 'confirm' function from common-country.sh. Cannot proceed."
                printf "\033[31mError: Required 'confirm' function is missing.\033[0m\n" >&2
                exit 1
           fi
      else
-          debug_log "DEBUG" "common-country.sh not found. Cannot load 'confirm' function."
+          debug_log "ERROR" "common-country.sh not found. Cannot load 'confirm' function."
           printf "\033[31mError: Required 'confirm' function is missing.\033[0m\n" >&2
           exit 1
      fi
@@ -81,7 +81,7 @@ if ! command -v color >/dev/null 2>&1; then
           # shellcheck source=/dev/null
           . "$AIOS_COMMON_COLOR"
      else
-          debug_log "DEBUG" "common-color.sh not found. Color output disabled."
+          debug_log "ERROR" "common-color.sh not found. Color output disabled."
           # Basic fallback for color
           color() { printf "%s" "$2"; }
      fi
@@ -90,31 +90,30 @@ fi
 # --- Function Definitions ---
 
 # --- Function to retrieve provider data based on AS Number ---
-# This function acts like an internal database stored in a here-document.
 # Arguments: $1: AS Number (numeric, without "AS" prefix)
-# Output: Space-separated string: AS_NUM INTERNAL_KEY "DISPLAY_NAME" CONNECTION_TYPE AFTR_ADDRESS
-#         (e.g., 4713 ocn "OCN Virtual Connect" map-e "")
+# Output: Pipe-separated string: AS_NUM|INTERNAL_KEY|DISPLAY_NAME|CONNECTION_TYPE|AFTR_ADDRESS
+#         (e.g., 4713|ocn|OCN Virtual Connect|map-e|)
 # Returns: 0 if found, 1 if not found.
 get_provider_data_by_as() {
     local search_asn="$1"
     local result=""
 
     # --- Provider Database (Here Document) ---
-    # Format: AS_NUM INTERNAL_KEY "DISPLAY_NAME" CONNECTION_TYPE AFTR_ADDRESS
-    # AFTR_ADDRESS is empty for MAP-E. DISPLAY_NAME must be quoted.
+    # Format: AS_NUM|INTERNAL_KEY|DISPLAY_NAME|CONNECTION_TYPE|AFTR_ADDRESS
+    # AFTR_ADDRESS is empty for MAP-E. DISPLAY_NAME does NOT need quotes.
     local provider_db=$(cat <<-'EOF'
-4713 ocn "OCN Virtual Connect" map-e ""
-2518 v6plus "v6 Plus" map-e ""
-2519 transix "transix" ds-lite "gw.transix.jp"
-2527 cross "Cross Pass" ds-lite "2001:f60:0:200::1:1"
-4737 v6connect "v6 Connect" ds-lite "gw.v6connect.net"
+4713|ocn|OCN Virtual Connect|map-e|
+2518|v6plus|v6 Plus|map-e|
+2519|transix|transix|ds-lite|gw.transix.jp
+2527|cross|Cross Pass|ds-lite|2001:f60:0:200::1:1
+4737|v6connect|v6 Connect|ds-lite|gw.v6connect.net
 EOF
 )
     # --- End of Database ---
 
-    # Search for the AS number in the database (first column match)
+    # Search for the AS number in the database (first column match using pipe delimiter)
     # Use grep and head -n 1 to find the first matching line
-    result=$(echo "$provider_db" | grep "^${search_asn} " | head -n 1)
+    result=$(echo "$provider_db" | grep "^${search_asn}|" | head -n 1) # Use pipe in grep
 
     if [ -n "$result" ]; then
         debug_log "DEBUG" "get_provider_data_by_as: Found data for ASN $search_asn: $result"
@@ -152,16 +151,15 @@ determine_connection_by_as() {
     # Remove "AS" prefix if present
     numeric_asn=$(echo "$input_asn" | sed 's/^AS//i')
 
-    # Get provider data using the new function
+    # Get provider data using the modified function (pipe-separated)
     provider_data=$(get_provider_data_by_as "$numeric_asn")
 
-    # Parse the result from get_provider_data_by_as
+    # Parse the pipe-separated result using cut
     if [ $? -eq 0 ] && [ -n "$provider_data" ]; then
-        # Use awk to handle potential spaces in quoted display name
-        # Field 4: CONNECTION_TYPE, Field 2: INTERNAL_KEY, Field 5: AFTR_ADDRESS
-        conn_type=$(echo "$provider_data" | awk '{print $4}')
-        internal_key=$(echo "$provider_data" | awk '{print $2}')
-        aftr_addr=$(echo "$provider_data" | awk '{print $5}') # Might be empty
+        # Fields: 1:AS, 2:KEY, 3:NAME, 4:TYPE, 5:AFTR
+        conn_type=$(echo "$provider_data" | cut -d'|' -f4)
+        internal_key=$(echo "$provider_data" | cut -d'|' -f2)
+        aftr_addr=$(echo "$provider_data" | cut -d'|' -f5) # Might be empty
 
         debug_log "DEBUG" "Parsed data: Type=$conn_type, Key=$internal_key, AFTR=$aftr_addr"
     else
@@ -185,19 +183,19 @@ internet_auto_config_main() {
     local aftr_address=""
     local exit_code=0
 
-    debug_log "DEBUG" "Starting automatic internet configuration process..."
+    debug_log "DEBUG" "Starting automatic internet configuration process..." # INFO -> DEBUG
 
     # --- 1. Prerequisite Checks & Downloads ---
     debug_log "DEBUG" "Checking prerequisites..."
 
     # Check for required cache files
     if [ ! -f "${CACHE_DIR}/network.ch" ]; then
-        debug_log "DEBUG" "Network status cache file not found: ${CACHE_DIR}/network.ch"
+        debug_log "DEBUG" "Network status cache file not found: ${CACHE_DIR}/network.ch" # ERROR -> DEBUG
         printf "\033[31mError: Required cache file 'network.ch' not found.\033[0m\n" >&2
         return 1
     fi
     if [ ! -f "${CACHE_DIR}/ip_as.tmp" ]; then
-        debug_log "DEBUG" "AS number cache file not found: ${CACHE_DIR}/ip_as.tmp"
+        debug_log "DEBUG" "AS number cache file not found: ${CACHE_DIR}/ip_as.tmp" # ERROR -> DEBUG
         printf "\033[31mError: Required cache file 'ip_as.tmp' not found.\033[0m\n" >&2
         return 1
     fi
@@ -205,19 +203,19 @@ internet_auto_config_main() {
     # Check and download dependent scripts if missing
     # Using download function inherited from aios
     if [ ! -f "$MAP_E_SCRIPT" ]; then
-        debug_log "DEBUG" "MAP-E script not found, attempting download..."
+        debug_log "DEBUG" "MAP-E script not found, attempting download..." # INFO -> DEBUG
         download "$MAP_E_SCRIPT_NAME" "chmod" "hidden" # Download, set executable, hide verbose output
         if [ ! -f "$MAP_E_SCRIPT" ]; then
-            debug_log "DEBUG" "Failed to download MAP-E script: $MAP_E_SCRIPT_NAME"
+            debug_log "DEBUG" "Failed to download MAP-E script: $MAP_E_SCRIPT_NAME" # ERROR -> DEBUG
             printf "\033[31mError: Failed to download required script '%s'.\033[0m\n" "$MAP_E_SCRIPT_NAME" >&2
             return 1
         fi
     fi
      if [ ! -f "$DS_LITE_SCRIPT" ]; then
-        debug_log "DEBUG" "DS-Lite script not found, attempting download..."
+        debug_log "DEBUG" "DS-Lite script not found, attempting download..." # INFO -> DEBUG
         download "$DS_LITE_SCRIPT_NAME" "chmod" "hidden" # Download, set executable, hide verbose output
         if [ ! -f "$DS_LITE_SCRIPT" ]; then
-            debug_log "DEBUG" "Failed to download DS-Lite script: $DS_LITE_SCRIPT_NAME"
+            debug_log "DEBUG" "Failed to download DS-Lite script: $DS_LITE_SCRIPT_NAME" # ERROR -> DEBUG
             printf "\033[31mError: Failed to download required script '%s'.\033[0m\n" "$DS_LITE_SCRIPT_NAME" >&2
             return 1
         fi
@@ -231,7 +229,7 @@ internet_auto_config_main() {
             debug_log "DEBUG" "IPv6 connectivity confirmed ($network_status)."
             ;;
         *)
-            debug_log "DEBUG" "IPv6 connectivity not available ($network_status). Cannot proceed with IPoE configuration."
+            debug_log "DEBUG" "IPv6 connectivity not available ($network_status). Cannot proceed with IPoE configuration." # ERROR -> DEBUG
             printf "\033[31mError: IPv6 connectivity not available. Cannot proceed with IPoE auto-configuration.\033[0m\n" >&2
             return 1
             ;;
@@ -241,11 +239,11 @@ internet_auto_config_main() {
     debug_log "DEBUG" "Retrieving AS number..."
     asn=$(cat "${CACHE_DIR}/ip_as.tmp")
     if [ -z "$asn" ]; then
-        debug_log "DEBUG" "Failed to retrieve AS number from cache."
+        debug_log "DEBUG" "Failed to retrieve AS number from cache." # ERROR -> DEBUG
         printf "\033[31mError: Could not retrieve AS number for automatic detection.\033[0m\n" >&2
         return 1
     fi
-    debug_log "DEBUG" "Detected AS Number: $asn"
+    debug_log "DEBUG" "Detected AS Number: $asn" # INFO -> DEBUG
 
     # --- 4. Determine Connection Type ---
     debug_log "DEBUG" "Determining connection type using ASN..."
@@ -254,7 +252,7 @@ internet_auto_config_main() {
     provider_key=$(echo "$connection_info" | cut -d'|' -f2)
     aftr_address=$(echo "$connection_info" | cut -d'|' -f3)
 
-    debug_log "DEBUG" "Determined connection type: $connection_type, Provider key: $provider_key, AFTR: $aftr_address"
+    debug_log "DEBUG" "Determined connection type: $connection_type, Provider key: $provider_key, AFTR: $aftr_address" # INFO -> DEBUG
 
     # --- 4a. Get Display Info and Confirm with User (Skip for 'unknown') ---
     if [ "$connection_type" != "unknown" ]; then
@@ -263,12 +261,12 @@ internet_auto_config_main() {
         local display_conn_type=""
         local numeric_asn=$(echo "$asn" | sed 's/^AS//i') # Need numeric ASN for lookup
 
+        # Get provider data using the modified function (pipe-separated)
         provider_data=$(get_provider_data_by_as "$numeric_asn")
         if [ $? -eq 0 ] && [ -n "$provider_data" ]; then
-            # Use awk to extract quoted display name (field 3) and connection type (field 4)
-            # Remove surrounding quotes from display name
-            display_isp_name=$(echo "$provider_data" | awk -F '"' '{print $2}')
-            display_conn_type=$(echo "$provider_data" | awk '{print $4}')
+            # Use cut to extract display name (field 3) and connection type (field 4)
+            display_isp_name=$(echo "$provider_data" | cut -d'|' -f3)
+            display_conn_type=$(echo "$provider_data" | cut -d'|' -f4)
         fi
 
         # Fallback if display info couldn't be retrieved
@@ -288,7 +286,7 @@ internet_auto_config_main() {
         confirm_apply=$?
 
         if [ $confirm_apply -ne 0 ]; then # User selected No (1) or Return (2)
-            debug_log "DEBUG" "User declined to apply the automatically detected settings."
+            debug_log "DEBUG" "User declined to apply the automatically detected settings." # INFO -> DEBUG
             # No cancellation message needed as per request
             return 0 # Exit gracefully, not an error state
         fi
@@ -301,7 +299,7 @@ internet_auto_config_main() {
     case "$connection_type" in
         "map-e")
             # MAP-E 設定処理 (引数なしで呼び出し)
-            debug_log "DEBUG" "MAP-E connection confirmed. Loading MAP-E script..."
+            debug_log "DEBUG" "MAP-E connection confirmed. Loading MAP-E script..." # INFO -> DEBUG
             # Source the MAP-E script to make its functions available
             # shellcheck source=/dev/null
             if . "$MAP_E_SCRIPT"; then
@@ -310,27 +308,27 @@ internet_auto_config_main() {
                     debug_log "DEBUG" "Executing internet_main function from $MAP_E_SCRIPT_NAME"
                     # Execute the main function from internet-map-e.sh (no arguments needed)
                     if internet_main; then
-                       debug_log "DEBUG" "MAP-E script executed successfully."
+                       debug_log "DEBUG" "MAP-E script executed successfully." # INFO -> DEBUG
                        # No explicit success message needed
                     else
-                       debug_log "DEBUG" "MAP-E script execution failed."
+                       debug_log "DEBUG" "MAP-E script execution failed." # ERROR -> DEBUG
                        printf "\033[31mError: Execution of script '%s' failed.\033[0m\n" "$MAP_E_SCRIPT_NAME" >&2
                        exit_code=1
                     fi
                 else
-                    debug_log "DEBUG" "Function 'internet_main' not found in $MAP_E_SCRIPT_NAME."
+                    debug_log "DEBUG" "Function 'internet_main' not found in $MAP_E_SCRIPT_NAME." # ERROR -> DEBUG
                     printf "\033[31mError: Required function 'internet_main' not found in script '%s'.\033[0m\n" "$MAP_E_SCRIPT_NAME" >&2
                     exit_code=1
                 fi
             else
-                debug_log "DEBUG" "Failed to source MAP-E script: $MAP_E_SCRIPT_NAME"
+                debug_log "DEBUG" "Failed to source MAP-E script: $MAP_E_SCRIPT_NAME" # ERROR -> DEBUG
                 printf "\033[31mError: Failed to load script '%s'.\033[0m\n" "$MAP_E_SCRIPT_NAME" >&2
                 exit_code=1
             fi
             ;;
         "ds-lite")
             # DS-Lite 設定処理 (AFTRとキーを渡して呼び出し)
-            debug_log "DEBUG" "DS-Lite connection confirmed. Loading DS-Lite script..."
+            debug_log "DEBUG" "DS-Lite connection confirmed. Loading DS-Lite script..." # INFO -> DEBUG
             # Source the DS-Lite script
             # shellcheck source=/dev/null
             if . "$DS_LITE_SCRIPT"; then
@@ -339,20 +337,20 @@ internet_auto_config_main() {
                     debug_log "DEBUG" "Executing apply_dslite_settings function from $DS_LITE_SCRIPT_NAME with AFTR: $aftr_address, Key: $provider_key"
                     # Execute the configuration function from internet-ds-lite-config.sh
                     if apply_dslite_settings "$aftr_address" "$provider_key"; then
-                        debug_log "DEBUG" "DS-Lite script executed successfully."
+                        debug_log "DEBUG" "DS-Lite script executed successfully." # INFO -> DEBUG
                         # No explicit success message needed
                     else
-                        debug_log "DEBUG" "DS-Lite script execution failed."
+                        debug_log "DEBUG" "DS-Lite script execution failed." # ERROR -> DEBUG
                         printf "\033[31mError: Execution of script '%s' failed.\033[0m\n" "$DS_LITE_SCRIPT_NAME" >&2
                         exit_code=1
                     fi
                 else
-                    debug_log "DEBUG" "Function 'apply_dslite_settings' not found in $DS_LITE_SCRIPT_NAME."
+                    debug_log "DEBUG" "Function 'apply_dslite_settings' not found in $DS_LITE_SCRIPT_NAME." # ERROR -> DEBUG
                     printf "\033[31mError: Required function 'apply_dslite_settings' not found in script '%s'.\033[0m\n" "$DS_LITE_SCRIPT_NAME" >&2
                     exit_code=1
                 fi
             else
-                debug_log "DEBUG" "Failed to source DS-Lite script: $DS_LITE_SCRIPT_NAME"
+                debug_log "DEBUG" "Failed to source DS-Lite script: $DS_LITE_SCRIPT_NAME" # ERROR -> DEBUG
                 printf "\033[31mError: Failed to load script '%s'.\033[0m\n" "$DS_LITE_SCRIPT_NAME" >&2
                 exit_code=1
             fi
@@ -365,14 +363,14 @@ internet_auto_config_main() {
             exit_code=1 # Indicate failure or inability to auto-configure
             ;;
         *) # Should not happen
-            debug_log "DEBUG" "Unexpected connection type returned: $connection_type"
+            debug_log "DEBUG" "Unexpected connection type returned: $connection_type" # ERROR -> DEBUG
             printf "\033[31mError: Unexpected value encountered: %s\033[0m\n" "$connection_type" >&2
             exit_code=1
             ;;
     esac
 
     if [ "$exit_code" -eq 0 ]; then
-        debug_log "DEBUG" "Automatic internet configuration process completed."
+        debug_log "DEBUG" "Automatic internet configuration process completed." # INFO -> DEBUG
     else
         debug_log "WARN" "Automatic internet configuration process finished with errors or was unable to complete."
     fi
@@ -384,6 +382,4 @@ internet_auto_config_main() {
 # --- Script Execution ---
 # This script primarily defines functions to be called by other parts of aios (e.g., a menu).
 # Example test (uncomment to run directly after sourcing):
-# internet_auto_config_main
-
 internet_auto_config_main
