@@ -196,7 +196,7 @@ internet_auto_config_main() {
     local aftr_address=""
     local exit_code=0
 
-    debug_log "DEBUG" "Starting automatic internet configuration process..." # INFO -> DEBUG
+    debug_log "DEBUG" "Starting automatic internet configuration process..." 
 
     # --- 1. Prerequisite Checks & Downloads ---
     debug_log "DEBUG" "Checking prerequisites..."
@@ -216,7 +216,7 @@ internet_auto_config_main() {
     # Check and download dependent scripts if missing
     # Using download function inherited from aios
     if [ ! -f "$MAP_E_SCRIPT" ]; then
-        debug_log "DEBUG" "MAP-E script not found, attempting download..." # INFO -> DEBUG
+        debug_log "DEBUG" "MAP-E script not found, attempting download..." 
         download "$MAP_E_SCRIPT_NAME" "chmod" "hidden" # Download, set executable, hide verbose output
         if [ ! -f "$MAP_E_SCRIPT" ]; then
             debug_log "DEBUG" "Failed to download MAP-E script: $MAP_E_SCRIPT_NAME" # ERROR -> DEBUG
@@ -225,7 +225,7 @@ internet_auto_config_main() {
         fi
     fi
      if [ ! -f "$DS_LITE_SCRIPT" ]; then
-        debug_log "DEBUG" "DS-Lite script not found, attempting download..." # INFO -> DEBUG
+        debug_log "DEBUG" "DS-Lite script not found, attempting download..." 
         download "$DS_LITE_SCRIPT_NAME" "chmod" "hidden" # Download, set executable, hide verbose output
         if [ ! -f "$DS_LITE_SCRIPT" ]; then
             debug_log "DEBUG" "Failed to download DS-Lite script: $DS_LITE_SCRIPT_NAME" # ERROR -> DEBUG
@@ -256,7 +256,7 @@ internet_auto_config_main() {
         printf "%s\n" "$(color red "Error: Could not retrieve AS number for automatic detection.")" >&2 # MODIFIED: Use color()
         return 1
     fi
-    debug_log "DEBUG" "Detected AS Number: $asn" # INFO -> DEBUG
+    debug_log "DEBUG" "Detected AS Number: $asn" 
 
     # --- 4. Determine Connection Type ---
     debug_log "DEBUG" "Determining connection type using ASN..."
@@ -265,7 +265,7 @@ internet_auto_config_main() {
     provider_key=$(echo "$connection_info" | cut -d'|' -f2)
     aftr_address=$(echo "$connection_info" | cut -d'|' -f3)
 
-    debug_log "DEBUG" "Determined connection type: $connection_type, Provider key: $provider_key, AFTR: $aftr_address" # INFO -> DEBUG
+    debug_log "DEBUG" "Determined connection type: $connection_type, Provider key: $provider_key, AFTR: $aftr_address" 
 
     # --- 4a. Get Display Info and Confirm with User (Skip for 'unknown') ---
     if [ "$connection_type" != "unknown" ]; then
@@ -301,7 +301,7 @@ internet_auto_config_main() {
         confirm_apply=$?
 
         if [ $confirm_apply -ne 0 ]; then # User selected No (1) or Return (2)
-            debug_log "DEBUG" "User declined to apply the automatically detected settings." # INFO -> DEBUG
+            debug_log "DEBUG" "User declined to apply the automatically detected settings." 
             # No cancellation message needed as per request
             return 0 # Exit gracefully, not an error state
         fi
@@ -314,7 +314,7 @@ internet_auto_config_main() {
     case "$connection_type" in
         "map-e")
             # MAP-E 設定処理 (引数なしで呼び出し)
-            debug_log "DEBUG" "MAP-E connection confirmed. Loading MAP-E script..." # INFO -> DEBUG
+            debug_log "DEBUG" "MAP-E connection confirmed. Loading MAP-E script..." 
             # Source the MAP-E script to make its functions available
             # shellcheck source=/dev/null
             if . "$MAP_E_SCRIPT"; then
@@ -323,7 +323,7 @@ internet_auto_config_main() {
                     debug_log "DEBUG" "Executing internet_main function from $MAP_E_SCRIPT_NAME"
                     # Execute the main function from internet-map-e.sh (no arguments needed)
                     if internet_main; then
-                       debug_log "DEBUG" "MAP-E script executed successfully." # INFO -> DEBUG
+                       debug_log "DEBUG" "MAP-E script executed successfully." 
                        # No explicit success message needed
                     else
                        debug_log "DEBUG" "MAP-E script execution failed." # ERROR -> DEBUG
@@ -343,7 +343,7 @@ internet_auto_config_main() {
             ;;
         "ds-lite")
             # DS-Lite 設定処理 (AFTRとキーを渡して呼び出し)
-            debug_log "DEBUG" "DS-Lite connection confirmed. Loading DS-Lite script..." # INFO -> DEBUG
+            debug_log "DEBUG" "DS-Lite connection confirmed. Loading DS-Lite script..." 
             # Source the DS-Lite script
             # shellcheck source=/dev/null
             if . "$DS_LITE_SCRIPT"; then
@@ -352,7 +352,7 @@ internet_auto_config_main() {
                     debug_log "DEBUG" "Executing apply_dslite_settings function from $DS_LITE_SCRIPT_NAME with AFTR: $aftr_address, Key: $provider_key"
                     # Execute the configuration function from internet-ds-lite-config.sh
                     if apply_dslite_settings "$aftr_address" "$provider_key"; then
-                        debug_log "DEBUG" "DS-Lite script executed successfully." # INFO -> DEBUG
+                        debug_log "DEBUG" "DS-Lite script executed successfully." 
                         # No explicit success message needed
                     else
                         debug_log "DEBUG" "DS-Lite script execution failed." # ERROR -> DEBUG
@@ -385,7 +385,7 @@ internet_auto_config_main() {
     esac
 
     if [ "$exit_code" -eq 0 ]; then
-        debug_log "DEBUG" "Automatic internet configuration process completed." # INFO -> DEBUG
+        debug_log "DEBUG" "Automatic internet configuration process completed." 
     else
         debug_log "DEBUG" "Automatic internet configuration process finished with errors or was unable to complete."
     fi
