@@ -9,14 +9,11 @@ MENU_ACCESSPOINT download "accesspoint-setup.sh" "chmod" "load"
 MENU_OTHERS download "other-utilities.sh" "chmod" "load"
 
 [MENU_INTERNET]
-MENU_INTERNET_AUTO selector MENU_INTERNET_AUTO
+MENU_INTERNET_AUTO download "internet-auto-config.sh" "chmod" "load"
 MENU_INTERNET_PPPOE selector MENU_INTERNET_PPPOE
 MENU_INTERNET_MAPE selector MENU_INTERNET_MAPE
 MENU_INTERNET_NURO_MAPE selector MENU_INTERNET_NURO_MAPE
 MENU_INTERNET_DSLITE selector MENU_INTERNET_DSLITE
-
-[MENU_INTERNET_AUTO]
-MENU_INTERNET_AUTO download "internet-auto-config.sh" "chmod" "load"
 
 [MENU_INTERNET_PPPOE]
 MENU_INTERNET_PPPOE download "internet-pppoe.sh" "chmod" "load"
@@ -43,20 +40,10 @@ MENU_DSLITE_TRANS_EAST download "internet-ds-lite-config.sh" "chmod" "load"; app
 MENU_DSLITE_TRANS_WEST download "internet-ds-lite-config.sh" "chmod" "load"; apply_dslite_settings "$AFTR_TRANS_WEST" "Transix (West Japan)" # Apply Transix West
 
 [MENU_SYSTEM]
-MENU_HOSTNAME selector system-hostname
-MENU_PASSWORD selector system-password
-MENU_WIFI selector system-wifi
-MENU_TIMEZONE selector system-timezone
-MENU_LED selector system-led
-MENU_REBOOT selector system-reboot
+MENU_SYSTEM printf "%s\n" "$(color yellow "Coming soon")"
 
 [MENU_PACKAGES]
-MENU_PACKAGES_AUTO_INSTALL selector MENU_PACKAGES_AUTO_INSTALL
+MENU_PACKAGES_AUTO_INSTALL download "package-auto.sh" "chmod" "load"; detect_and_run_installer standard
 MENU_PACKAGES_MANUAL_INSTALL download "package-manual.sh" "chmod" "load"; package_manual_main
 MENU_PACKAGES_SAMBA download "package-manual.sh" "chmod" "load"; package_samba
 MENU_PACKAGES_LIST download "package-manual.sh" "chmod" "load"; package_list
-
-[MENU_PACKAGES_AUTO_INSTALL]
-MENU_PACKAGE_STANDARD download "package-auto.sh" "chmod" "load"; detect_and_run_installer standard
-MENU_PACKAGE_MINIMAL download "package-auto.sh" "chmod" "load"; detect_and_run_installer minimal
-MENU_PACKAGE_FULL download "package-auto.sh" "chmod" "load"; detect_and_run_installer full
