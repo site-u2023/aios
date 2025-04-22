@@ -803,3 +803,4 @@ menu_exit() {
     printf "%s\n\n" "$(color green "$(get_message "CONFIG_EXIT_CONFIRMED")")"
     exit 0
 }
+ 
