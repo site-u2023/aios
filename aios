@@ -899,7 +899,7 @@ save_version_to_cache() {
 
     # バージョンが空でないかチェック
     if [ -z "$version" ]; then
-        debug_log "ERROR" "save_version_to_cache: Received empty version for file '$file_name'. Aborting cache save."
+        debug_log "DEBUG" "save_version_to_cache: Received empty version for file '$file_name'. Aborting cache save."
         return 1 # バージョンが空なら書き込みしない
     fi
 
@@ -914,7 +914,7 @@ save_version_to_cache() {
             debug_log "DEBUG" "save_version_to_cache: Successfully filtered '$script_file' to '$tmp_file'."
         else
             local grep_status=$?
-            debug_log "ERROR" "save_version_to_cache: grep command failed with status $grep_status for '$script_file'."
+            debug_log "DEBUG" "save_version_to_cache: grep command failed with status $grep_status for '$script_file'."
             # grep失敗時は一時ファイルを削除して終了（安全策）
             rm -f "$tmp_file" 2>/dev/null
             return 1
@@ -935,7 +935,7 @@ save_version_to_cache() {
             debug_log "DEBUG" "save_version_to_cache: Successfully moved '$tmp_file' to '$script_file'."
         else
             local mv_status=$?
-            debug_log "ERROR" "save_version_to_cache: mv command failed with status $mv_status. Failed to update '$script_file'."
+            debug_log "DEBUG" "save_version_to_cache: mv command failed with status $mv_status. Failed to update '$script_file'."
             # mv失敗時も一時ファイルを削除
             rm -f "$tmp_file" 2>/dev/null
             return 1
@@ -948,7 +948,7 @@ save_version_to_cache() {
              debug_log "DEBUG" "save_version_to_cache: Successfully created '$script_file' with initial version."
         else
              local echo_status=$?
-             debug_log "ERROR" "save_version_to_cache: echo command failed with status $echo_status. Failed to create '$script_file'."
+             debug_log "DEBUG" "save_version_to_cache: echo command failed with status $echo_status. Failed to create '$script_file'."
              return 1
         fi
     fi
@@ -1436,19 +1436,19 @@ get_commit_version() {
                     echo "$version $auth_method" # 最終的な出力
                     return 0
                 else
-                    debug_log "WARN" "get_commit_version(direct): wget command succeeded but '$direct_file' is empty or not found after download."
+                    debug_log "DEBUG" "get_commit_version(direct): wget command succeeded but '$direct_file' is empty or not found after download."
                     rm -f "$direct_file" 2>/dev/null
                 fi
             else
                 local wget_status=$?
-                debug_log "WARN" "get_commit_version(direct): wget command failed with status $wget_status for '$direct_file'."
+                debug_log "DEBUG" "get_commit_version(direct): wget command failed with status $wget_status for '$direct_file'."
             fi
             retry_count=$((retry_count + 1))
             if [ $retry_count -le 1 ]; then sleep 1; fi # リトライ前に待機
         done # direct モードの while ループの終わり
 
         # 直接ダウンロード失敗時の処理
-        debug_log "ERROR" "get_commit_version(direct): Failed to download file directly after retries: $file_path"
+        debug_log "DEBUG" "get_commit_version(direct): Failed to download file directly after retries: $file_path"
         rm -f "$direct_file" 2>/dev/null
         setup_wget_options
         version="$(date +%Y.%m.%d)-unknown" # version 変数を設定
@@ -1485,7 +1485,7 @@ get_commit_version() {
                  debug_log "DEBUG" "get_commit_version(api): Cache miss or invalid for '$file_path' (status: $cache_status)."
             elif [ -z "$cache_result" ]; then
                  # ステータスは0だが結果が空だった場合 (本来は起こらないはずだが念のため)
-                 debug_log "WARN" "get_commit_version(api): Cache status was 0 but result was empty for '$file_path'. Treating as cache miss."
+                 debug_log "DEBUG" "get_commit_version(api): Cache status was 0 but result was empty for '$file_path'. Treating as cache miss."
             fi
             proceed_to_api="true" # API呼び出しに進む
         fi
@@ -1549,13 +1549,13 @@ get_commit_version() {
                     api_call_successful="true"
                     break # 成功したらループを抜ける
                 else
-                    debug_log "WARN" "get_commit_version(api): API response file '$temp_file' contains error messages."
+                    debug_log "DEBUG" "get_commit_version(api): API response file '$temp_file' contains error messages."
                     # エラー内容をログに出力
-                    grep "message" "$temp_file" | while IFS= read -r line; do debug_log "WARN" "  API Error: $line"; done
+                    grep "message" "$temp_file" | while IFS= read -r line; do debug_log "DEBUG" "  API Error: $line"; done
                     # grep ループの後には fi は不要
                 fi # grep エラーチェックの if の終わり
             else
-                 debug_log "WARN" "get_commit_version(api): API response file '$temp_file' is empty or not found after wget call."
+                 debug_log "DEBUG" "get_commit_version(api): API response file '$temp_file' is empty or not found after wget call."
             fi # 応答チェックの if の終わり
 
             # リトライ時の接続方法を変更 (従来のロジック)
@@ -1602,14 +1602,14 @@ get_commit_version() {
 
             # 情報が取得できない場合はフォールバック
             if [ -z "$commit_date" ] || [ -z "$commit_sha" ]; then
-                debug_log "WARN" "get_commit_version(api): Failed to extract commit SHA ('$commit_sha') or Date ('$commit_date') from API response. Using fallback values."
+                debug_log "DEBUG" "get_commit_version(api): Failed to extract commit SHA ('$commit_sha') or Date ('$commit_date') from API response. Using fallback values."
                 # 念のため再度試行
                 [ -z "$commit_sha" ] && commit_sha=$(tr -cd 'a-f0-9' < "$temp_file" | grep -o '[a-f0-9]\{40\}' | head -1 | head -c 7)
                 [ -z "$commit_date" ] && commit_date=$(grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' "$temp_file" | head -1)
 
                 [ -z "$commit_sha" ] && commit_sha="unknownsha" # より明確なフォールバック値
                 [ -z "$commit_date" ] && commit_date=$(date +%Y-%m-%d)
-                debug_log "WARN" "get_commit_version(api): Using fallback SHA='$commit_sha', Date='$commit_date'."
+                debug_log "DEBUG" "get_commit_version(api): Using fallback SHA='$commit_sha', Date='$commit_date'."
                 # 抽出失敗時は認証方法を fallback とする
                 auth_method="fallback"
             fi # 抽出失敗チェックの if の終わり
@@ -1627,7 +1627,7 @@ get_commit_version() {
                 return 0
             else
                 # このポイントに到達することは通常ないはずだが、念のためエラーログ
-                debug_log "ERROR" "get_commit_version(api): Reached unexpected point after API success processing (date or sha empty). SHA='$commit_sha', Date='$commit_date'."
+                debug_log "DEBUG" "get_commit_version(api): Reached unexpected point after API success processing (date or sha empty). SHA='$commit_sha', Date='$commit_date'."
                 # ここで return せずに下の API 失敗処理に進む方が安全かもしれない
             fi # バージョン生成チェックの if/else の終わり
         fi # api_call_successful = true の if の終わり
@@ -1637,7 +1637,7 @@ get_commit_version() {
         if [ "$api_call_successful" = "false" ] || { [ "$api_call_successful" = "true" ] && [ -z "$version" ]; }; then
             # API成功でも version が空の場合のログを追加
             if [ "$api_call_successful" = "true" ] && [ -z "$version" ]; then
-                 debug_log "WARN" "get_commit_version(api): API call was successful but version generation failed. Falling back to direct download."
+                 debug_log "DEBUG" "get_commit_version(api): API call was successful but version generation failed. Falling back to direct download."
             fi
 
             debug_log "DEBUG" "get_commit_version(api): API call failed or version gen failed, falling back to direct file check for $file_path (API mode fallback)"
@@ -1675,19 +1675,19 @@ get_commit_version() {
                         echo "$version $auth_method" # 最終的な出力
                         return 0
                     else
-                        debug_log "WARN" "get_commit_version(api-fallback): wget succeeded but '$direct_file' is empty or not found."
+                        debug_log "DEBUG" "get_commit_version(api-fallback): wget succeeded but '$direct_file' is empty or not found."
                         rm -f "$direct_file" 2>/dev/null
                     fi # ファイル存在チェックの if/else の終わり
                 else
                      local wget_fb_status=$?
-                     debug_log "WARN" "get_commit_version(api-fallback): wget command failed with status $wget_fb_status for '$direct_file'."
+                     debug_log "DEBUG" "get_commit_version(api-fallback): wget command failed with status $wget_fb_status for '$direct_file'."
                 fi # wget 成功チェックの if/else の終わり
                 retry_count=$((retry_count + 1))
                 if [ $retry_count -le 1 ]; then sleep 1; fi # リトライ前に待機
             done # Direct フォールバックリトライの while の終わり
 
             # 直接ダウンロードも失敗した場合 (APIフォールバック)
-            debug_log "ERROR" "get_commit_version(api-fallback): Failed to download file directly after retries: $file_path"
+            debug_log "DEBUG" "get_commit_version(api-fallback): Failed to download file directly after retries: $file_path"
             rm -f "$direct_file" "$temp_file" 2>/dev/null
             setup_wget_options
             version="$(date +%Y.%m.%d)-apifail" # version 変数を設定
@@ -1701,7 +1701,7 @@ get_commit_version() {
 
     # --- 全ての方法が失敗した場合 (通常ここには到達しないはず) ---
     # proceed_to_api が false (キャッシュヒットしたが return されなかった場合など、異常系)
-    debug_log "CRITICAL" "get_commit_version: Reached end of function unexpectedly for file '$file_path'. This should not happen."
+    debug_log "DEBUG" "get_commit_version: Reached end of function unexpectedly for file '$file_path'. This should not happen."
     rm -f "$temp_file" "$direct_file" 2>/dev/null
     setup_wget_options
     version="$(date +%Y.%m.%d)-critical" # version 変数を設定
@@ -1719,7 +1719,7 @@ download() {
     
     # 空ファイル名のチェック
     if [ -z "$file_name" ]; then
-        debug_log "ERROR" "Empty filename detected in download function call"
+        debug_log "DEBUG" "Empty filename detected in download function call"
         return 1
     fi
 
@@ -1756,7 +1756,7 @@ download() {
                 chmod)  chmod_mode="true" ;;
                 load)   load_mode="true" ;;
                 # 不明オプション
-                *)      debug_log "WARN" "Unknown option: $1, ignoring" ;;
+                *)      debug_log "DEBUG" "Unknown option: $1, ignoring" ;;
             esac
         fi
         shift
@@ -1801,7 +1801,7 @@ download() {
     if [ "$update_required" = "true" ] || [ "$file_exists" = "false" ]; then
         debug_log "DEBUG" "Executing download_fetch_file for ${file_name}"
         if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode"; then
-            debug_log "ERROR" "Download process failed for $file_name"
+            debug_log "DEBUG" "Download process failed for $file_name"
             return 1
         fi
         status_type="success"
@@ -1818,7 +1818,7 @@ download() {
     
     # ファイルの存在を再確認
     if [ ! -f "${BASE_DIR}/$file_name" ]; then
-        debug_log "ERROR" "File not found after download attempt: $file_name"
+        debug_log "DEBUG" "File not found after download attempt: $file_name"
         return 1
     fi
 
