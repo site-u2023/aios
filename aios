@@ -418,7 +418,7 @@ normalize_message() {
     debug_log "DEBUG" "normalize_message: Entering LC_ALL=C block for space removal"
     local before_space_removal="$output"
     output=$(echo "$output" | sed 's/[[:space:]]\+{/{/g') # Space before {
-    output=$(echo "$output" | sed 's/}[[:space:]]\+/}/g') # Space after }
+    # output=$(echo "$output" | sed 's/}[[:space:]]\+/}/g') # Space after }
     output=$(echo "$output" | sed 's/{[[:space:]]\+/{/g') # Space after { (inside)
     output=$(echo "$output" | sed 's/[[:space:]]\+}/}/g') # Space before } (inside)
     if [ "$output" != "$before_space_removal" ]; then
