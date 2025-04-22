@@ -133,11 +133,11 @@ handle_error() {
     error_message=$(echo "$error_message" | sed -e "s/{file}/$file/g" -e "s/{version}/$version/g")
 
     # ログ記録 & 表示
-    debug_log "ERROR" "$error_message"
+    debug_log "DEBUG" "$error_message"
     echo -e "$(color red "$error_message")"
 
     if [ "$exit_required" = "yes" ]; then
-        debug_log "ERROR" "Critical error occurred, exiting: $error_message"
+        debug_log "DEBUG" "Critical error occurred, exiting: $error_message"
         exit 1
     else
         debug_log "DEBUG" "Non-critical error: $error_message"
@@ -646,7 +646,7 @@ get_commit_from_cache() {
     
     # 必須変数が設定されているか確認
     if [ -z "$VERSION" ] || [ -z "$TIMESTAMP" ] || [ -z "$TTL" ]; then
-        debug_log "WARN" "Invalid cache file for $file_path"
+        debug_log "DEBUG" "Invalid cache file for $file_path"
         return 1
     fi
     
@@ -811,20 +811,20 @@ github_api_request() {
     
     # リトライ後の最終結果確認
     if [ -z "$response" ]; then
-        debug_log "WARN" "Empty response from API request after $max_retries retries"
+        debug_log "DEBUG" "Empty response from API request after $max_retries retries"
         rm -f "$temp_file" 2>/dev/null
         return 1
     fi
     
     if echo "$response" | grep -q '"message":"API rate limit exceeded'; then
-        debug_log "WARN" "GitHub API rate limit exceeded"
+        debug_log "DEBUG" "GitHub API rate limit exceeded"
         rm -f "$temp_file" 2>/dev/null
         return 1
     fi
     
     # 認証エラーチェック
     if echo "$response" | grep -q '"message":"Bad credentials"'; then
-        debug_log "ERROR" "GitHub API authentication failed: Bad credentials"
+        debug_log "DEBUG" "GitHub API authentication failed: Bad credentials"
         rm -f "$temp_file" 2>/dev/null
         return 2
     fi
@@ -832,7 +832,7 @@ github_api_request() {
     # その他エラーチェック
     if echo "$response" | grep -q '"message":"'; then
         local error_msg=$(echo "$response" | grep -o '"message":"[^"]*"' | cut -d':' -f2- | tr -d '"')
-        debug_log "ERROR" "GitHub API error: $error_msg"
+        debug_log "DEBUG" "GitHub API error: $error_msg"
         rm -f "$temp_file" 2>/dev/null
         return 3
     fi
@@ -850,7 +850,7 @@ save_github_token() {
     token="$1"
     
     if [ -z "$token" ]; then
-        debug_log "ERROR" "Empty token provided, cannot save"
+        debug_log "DEBUG" "Empty token provided, cannot save"
         return 1
     fi
     
@@ -862,7 +862,7 @@ save_github_token() {
         debug_log "DEBUG" "GitHub token saved to $GITHUB_TOKEN_FILE"
         return 0
     else
-        debug_log "ERROR" "Failed to save token to $GITHUB_TOKEN_FILE"
+        debug_log "DEBUG" "Failed to save token to $GITHUB_TOKEN_FILE"
         return 1
     fi
 }
@@ -898,7 +898,6 @@ save_version_to_cache() {
 
     # バージョンが空でないかチェック
     if [ -z "$version" ]; then
-        # --- 修正: ERROR を DEBUG に変更 ---
         debug_log "DEBUG" "save_version_to_cache: Received empty version for file '$file_name'. Aborting cache save."
         return 1 # バージョンが空なら書き込みしない
     fi
@@ -935,7 +934,6 @@ save_version_to_cache() {
             debug_log "DEBUG" "save_version_to_cache: Successfully moved '$tmp_file' to '$script_file'."
         else
             local mv_status=$?
-            # --- 修正: ERROR を DEBUG に変更 ---
             debug_log "DEBUG" "save_version_to_cache: mv command failed with status $mv_status. Failed to update '$script_file'."
             # mv失敗時も一時ファイルを削除
             rm -f "$tmp_file" 2>/dev/null
@@ -1389,9 +1387,6 @@ clean_version_string() {
     fi
 }
 
-# (aios ファイル内の他の部分は変更しない)
-
-# コミット情報取得関数 (ログレベルをDEBUGに統一)
 get_commit_version() {
     local file_path="$1"
     local force_refresh="$2"  # キャッシュ強制更新フラグ
@@ -1438,7 +1433,6 @@ get_commit_version() {
         done # direct モードの while ループの終わり
 
         # 直接ダウンロード失敗時の処理
-        # --- 修正: ERROR を DEBUG に変更 ---
         debug_log "DEBUG" "get_commit_version(direct): Failed to download file directly after retries: $file_path"
         rm -f "$direct_file" 2>/dev/null
         setup_wget_options
@@ -1514,6 +1508,7 @@ get_commit_version() {
         # --- API呼び出し成功時の処理 ---
         if [ "$api_call_successful" = "true" ]; then
             debug_log "DEBUG" "get_commit_version(api): Processing successful API response from '$temp_file'."
+            # ... (SHA, 日付抽出ロジックは変更なし) ...
 
             if [ -z "$commit_date" ] || [ -z "$commit_sha" ]; then
                 debug_log "DEBUG" "get_commit_version(api): Failed to extract commit SHA ('$commit_sha') or Date ('$commit_date') from API response. Using fallback values."
@@ -1561,13 +1556,11 @@ get_commit_version() {
                         echo "$version $auth_method"
                         return 0
                     else
-                        # --- 修正: WARN を DEBUG に変更 ---
                         debug_log "DEBUG" "get_commit_version(api-fallback): wget succeeded but '$direct_file' is empty or not found."
                         rm -f "$direct_file" 2>/dev/null
                     fi
                 else
                      local wget_fb_status=$?
-                     # --- 修正: WARN を DEBUG に変更 ---
                      debug_log "DEBUG" "get_commit_version(api-fallback): wget command failed with status $wget_fb_status for '$direct_file'."
                 fi
                 retry_count=$((retry_count + 1))
@@ -1575,7 +1568,6 @@ get_commit_version() {
             done # Direct フォールバックリトライの while の終わり
 
             # 直接ダウンロードも失敗した場合 (APIフォールバック)
-            # --- 修正: ERROR を DEBUG に変更 ---
             debug_log "DEBUG" "get_commit_version(api-fallback): Failed to download file directly after retries: $file_path"
             rm -f "$direct_file" "$temp_file" 2>/dev/null
             setup_wget_options
@@ -1607,7 +1599,7 @@ download() {
     
     # 空ファイル名のチェック
     if [ -z "$file_name" ]; then
-        debug_log "ERROR" "Empty filename detected in download function call"
+        debug_log "DEBUG" "Empty filename detected in download function call"
         return 1
     fi
 
@@ -1644,7 +1636,7 @@ download() {
                 chmod)  chmod_mode="true" ;;
                 load)   load_mode="true" ;;
                 # 不明オプション
-                *)      debug_log "WARN" "Unknown option: $1, ignoring" ;;
+                *)      debug_log "DEBUG" "Unknown option: $1, ignoring" ;;
             esac
         fi
         shift
@@ -1689,7 +1681,7 @@ download() {
     if [ "$update_required" = "true" ] || [ "$file_exists" = "false" ]; then
         debug_log "DEBUG" "Executing download_fetch_file for ${file_name}"
         if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode"; then
-            debug_log "ERROR" "Download process failed for $file_name"
+            debug_log "DEBUG" "Download process failed for $file_name"
             return 1
         fi
         status_type="success"
@@ -1706,7 +1698,7 @@ download() {
     
     # ファイルの存在を再確認
     if [ ! -f "${BASE_DIR}/$file_name" ]; then
-        debug_log "ERROR" "File not found after download attempt: $file_name"
+        debug_log "DEBUG" "File not found after download attempt: $file_name"
         return 1
     fi
 
@@ -1749,7 +1741,7 @@ download_check_version() {
         else
              # direct モードなのに auth_method が direct でない場合は警告
              api_status="API: ??? (Inconsistent)"
-             debug_log "WARN" "Inconsistent state: DOWNLOAD_METHOD=direct but auth_method=$auth_method for $file_name"
+             debug_log "DEBUG" "Inconsistent state: DOWNLOAD_METHOD=direct but auth_method=$auth_method for $file_name"
         fi
     else
         # api モードの場合は従来通りチェック
@@ -1814,18 +1806,18 @@ download_fetch_file() {
     
     # BusyBox wget向けに最適化した明示的なコマンド構文
     if ! wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$install_path" "$remote_url" 2>/dev/null; then
-        debug_log "ERROR" "Download failed: $file_name"
+        debug_log "DEBUG" "Download failed: $file_name"
         return 1
     fi
     
     # ファイル検証
     if [ ! -f "$install_path" ]; then
-        debug_log "ERROR" "Downloaded file not found: $file_name"
+        debug_log "DEBUG" "Downloaded file not found: $file_name"
         return 1
     fi
     
     if [ ! -s "$install_path" ]; then
-        debug_log "ERROR" "Downloaded file is empty: $file_name"
+        debug_log "DEBUG" "Downloaded file is empty: $file_name"
         return 1
     fi
     
@@ -1857,7 +1849,7 @@ download_finalize() {
     
     # ファイルが実際に存在するか確認
     if [ ! -f "${BASE_DIR}/${file_name}" ]; then
-        debug_log "ERROR" "File not found: ${BASE_DIR}/${file_name}"
+        debug_log "DEBUG" "File not found: ${BASE_DIR}/${file_name}"
         return 1
     fi
     
@@ -1917,7 +1909,7 @@ download_finalize() {
                 . "${BASE_DIR}/${file_name}"
             fi
         else
-            debug_log "ERROR" "Cannot load empty file: ${file_name}"
+            debug_log "DEBUG" "Cannot load empty file: ${file_name}"
             return 1
         fi
     fi
@@ -1952,7 +1944,7 @@ print_banner() {
             ;;
         *)
             # 不明なスタイルの場合はASCIIにフォールバック
-            debug_log "WARN" "Unknown banner style: $BANNER_STYLE, using ASCII fallback"
+            debug_log "DEBUG" "Unknown banner style: $BANNER_STYLE, using ASCII fallback"
             print_banner_ascii
             ;;
     esac
@@ -2163,13 +2155,13 @@ check_common() {
     case "$mode" in
         reset|return)
             if ! rm -rf "${CACHE_DIR}"; then
-                debug_log "ERROR" "Failed to remove cache directory: ${CACHE_DIR}"
+                debug_log "DEBUG" "Failed to remove cache directory: ${CACHE_DIR}"
                 printf "%s%s%s\n" "$(color yellow "Reset failed: Could not remove cache directory.")"
                 return 1
             fi
             # キャッシュディレクトリを再作成
             mkdir -p "${CACHE_DIR}" || {
-                debug_log "ERROR" "Failed to recreate cache directory: ${CACHE_DIR}"
+                debug_log "DEBUG" "Failed to recreate cache directory: ${CACHE_DIR}"
                 printf "%s%s%s\n" "$(color yellow "Reset partially failed: Cache removed but could not be recreated.")"
             }
             printf "%s%s%s\n" "$(color yellow "$(get_message "MSG_RESET_COMPLETE")")"
@@ -2177,13 +2169,13 @@ check_common() {
             ;;
         delete)
             if ! rm -rf "${BASE_DIR}"; then
-                debug_log "ERROR" "Failed to remove base directory: ${BASE_DIR}"
+                debug_log "DEBUG" "Failed to remove base directory: ${BASE_DIR}"
                 printf "%s%s%s\n" "$(color yellow "Reset failed: Could not remove base directory.")"
                 return 1
             fi
             # キャッシュディレクトリを再作成
             mkdir -p "${BASE_DIR}" || {
-                debug_log "ERROR" "Failed to recreate base directory: ${CACHE_DIR}"
+                debug_log "DEBUG" "Failed to recreate base directory: ${CACHE_DIR}"
                 printf "%s%s%s\n" "$(color yellow "Reset partially failed: Base removed but could not be recreated.")"
             }
             printf "%s%s%s\n" "$(color yellow "$(get_message "MSG_DELETE_COMPLETE")")"
@@ -2247,7 +2239,7 @@ check_common() {
 # 実行権限の設定
 chmod_aios() {
     if ! chmod +x "$BIN_PATH"; then
-        debug_log "ERROR" "Failed to set execute permission"
+        debug_log "DEBUG" "Failed to set execute permission"
         return 1
     fi
     return 0
@@ -2256,7 +2248,7 @@ chmod_aios() {
 # ディレクトリ削除処理
 delete_aios() {
     if ! rm -rf "${BASE_DIR}"; then
-        debug_log "ERROR" "Failed to delete $BASE_DIR"
+        debug_log "DEBUG" "Failed to delete $BASE_DIR"
         return 1
     fi
     return 0
@@ -2265,7 +2257,7 @@ delete_aios() {
 # 必要ディレクトリ作成
 make_directory() {
     if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR" "${CACHE_DIR}/commits"; then
-        debug_log "ERROR" "Failed to create required directories"
+        debug_log "DEBUG" "Failed to create required directories"
         return 1
     fi
     
@@ -2328,13 +2320,13 @@ check_update() {
 main() {
     # 実行権限を設定
     if ! chmod_aios; then
-        debug_log "ERROR" "Failed to set execute permission"
+        debug_log "DEBUG" "Failed to set execute permission"
         return 1
     fi
 
     # 必要なディレクトリを作成
     if ! make_directory; then
-        debug_log "ERROR" "Failed to create required directories"
+        debug_log "DEBUG" "Failed to create required directories"
         return 1
     fi
 
