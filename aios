@@ -341,6 +341,61 @@ check_message_cache() {
     return 0
 }
 
+# Function to format strings based on specified type
+# Usage: format_string <format_type> <input_string>
+# format_type: "upper" (all uppercase), "capitalize" (first letter uppercase, rest lowercase)
+# Default: returns original string if type is unknown or empty
+format_string() {
+    local format_type="$1"
+    local input_string="$2"
+    local output_string=""
+
+    # Check if input string is empty
+    if [ -z "$input_string" ]; then
+        echo ""
+        return 0
+    fi
+
+    case "$format_type" in
+        "upper")
+            # Convert entire string to uppercase using sed
+            debug_log "DEBUG" "format_string: Formatting to uppercase"
+            output_string=$(echo "$input_string" | sed \
+                -e 's/a/A/g' -e 's/b/B/g' -e 's/c/C/g' -e 's/d/D/g' -e 's/e/E/g' \
+                -e 's/f/F/g' -e 's/g/G/g' -e 's/h/H/g' -e 's/i/I/g' -e 's/j/J/g' \
+                -e 's/k/K/g' -e 's/l/L/g' -e 's/m/M/g' -e 's/n/N/g' -e 's/o/O/g' \
+                -e 's/p/P/g' -e 's/q/Q/g' -e 's/r/R/g' -e 's/s/S/g' -e 's/t/T/g' \
+                -e 's/u/U/g' -e 's/v/V/g' -e 's/w/W/g' -e 's/x/X/g' -e 's/y/Y/g' \
+                -e 's/z/Z/g')
+            ;;
+        "capitalize")
+            # Convert first letter to uppercase, rest to lowercase
+            debug_log "DEBUG" "format_string: Formatting to capitalize"
+            # Extract first character
+            local first_char=$(echo "$input_string" | cut -c1)
+            # Extract rest of the string
+            local rest_string=$(echo "$input_string" | cut -c2-)
+
+            # Convert first char to uppercase
+            local first_char_upper=$(echo "$first_char" | tr '[:lower:]' '[:upper:]')
+            # Convert rest of the string to lowercase
+            local rest_string_lower=$(echo "$rest_string" | tr '[:upper:]' '[:lower:]')
+
+            # Combine them
+            output_string="${first_char_upper}${rest_string_lower}"
+            ;;
+        *)
+            # Unknown or empty format type, return original string
+            debug_log "DEBUG" "format_string: Unknown format type '$format_type', returning original string"
+            output_string="$input_string"
+            ;;
+    esac
+
+    # Return the formatted string
+    printf '%s' "$output_string"
+    return 0
+}
+
 normalize_message() {
     local input="$1"
     local lang="$2"
