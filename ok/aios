@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.09-00-00"
+SCRIPT_VERSION="2025.04.22-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -56,6 +56,8 @@ SCRIPT_VERSION="2025.04.09-00-00"
 # システム制御
 DEV_NULL="${DEV_NULL:-on}"       # サイレントモード制御（on=有効, unset=無効）
 DEBUG_MODE="${DEBUG_MODE:-false}" # デバッグモード（true=有効, false=無効）
+DOWNLOAD_METHOD="${DOWNLOAD_METHOD:-api}" # ダウンロード方式 (api/direct)
+# DOWNLOAD_METHOD="${DOWNLOAD_METHOD:-direct}" # ダウンロード方式 (api/direct)
 
 # パス・ファイル関連
 INTERPRETER="${INTERPRETER:-ash}"  # デフォルトインタープリタ
@@ -87,6 +89,11 @@ DEFAULT_LANGUAGE="${DEFAULT_LANGUAGE:-en}"  # デフォルト言語
 MSG_MEMORY=""                          # メッセージキャッシュ
 MSG_MEMORY_INITIALIZED="false"         # メモリキャッシュ初期化フラグ
 MSG_MEMORY_LANG=""                     # メモリキャッシュの言語
+
+# String Formatting Control within get_message function
+GET_MESSAGE_FORMATTING_ENABLED="true"   # get_message 内でのフォーマット処理全体を有効にするか (true/false)
+FORMAT_TYPE_UPPER_ENABLED="true"        # 'upper' (大文字) フォーマットを有効にするか (true/false)
+FORMAT_TYPE_CAPITALIZE_ENABLED="true"   # 'capitalize' (先頭大文字) フォーマットを有効にするか (true/false)
 
 # メッセージキャッシュ
 MSG_MEMORY=""
@@ -126,11 +133,11 @@ handle_error() {
     error_message=$(echo "$error_message" | sed -e "s/{file}/$file/g" -e "s/{version}/$version/g")
 
     # ログ記録 & 表示
-    debug_log "ERROR" "$error_message"
+    debug_log "DEBUG" "$error_message"
     echo -e "$(color red "$error_message")"
 
     if [ "$exit_required" = "yes" ]; then
-        debug_log "ERROR" "Critical error occurred, exiting: $error_message"
+        debug_log "DEBUG" "Critical error occurred, exiting: $error_message"
         exit 1
     else
         debug_log "DEBUG" "Non-critical error: $error_message"
@@ -339,182 +346,249 @@ check_message_cache() {
     return 0
 }
 
-# プレースホルダー文字列の正規化関数
-normalize_message() {
-    local input="$1"
-    local lang="$2"  # 言語コードを受け取るパラメータ
-    
-    # LC_ALL=Cを関数スコープでグローバルに設定
-    local saved_locale="$LC_ALL"
-    LC_ALL=C
-    
-    local output="$input"
-    
-    # 中括弧{} のノーマライズ
-    output=$(echo "$output" | sed 's/｛/{/g; s/｝/}/g')
-    
-    # コロン : のノーマライズ
-    output=$(echo "$output" | sed 's/：/:/g; s/∶/:/g; s/꞉/:/g; s/ː/:/g')
-    
-    # セミコロン ; のノーマライズ
-    output=$(echo "$output" | sed 's/；/;/g')
-    
-    # 全角スペースは半角に変換（先に行う）
-    output=$(echo "$output" | sed 's/　/ /g')
-    
-    # 全角アットマーク＠を半角@に変換
-    output=$(echo "$output" | sed 's/＠/@/g')
-    
-    # バックスラッシュのノーマライズ（全角→半角）
-    output=$(echo "$output" | sed 's/＼/\\/g')
-    
-    # プレースホルダー前後の空白を除去
-    output=$(echo "$output" | sed 's/{[[:space:]]*\([^{}]*\)[[:space:]]*}/{\1}/g')
-    
-    # プレースホルダー内部の空白を除去（内部の空白がなくなるまで繰り返し）
-    while echo "$output" | grep -q '{[^{}]*[[:space:]][^{}]*}'; do
-        output=$(echo "$output" | sed 's/\({[^{}]*\)[[:space:]]\([^{}]*}\)/\1\2/g')
-    done
-    
-    # 特殊プレースホルダー{@}を改行に変換
-    output=$(echo "$output" | sed 's/{@}/\\n/g')
-    
-    # 特殊プレースホルダー{:}を:に変換
-    output=$(echo "$output" | sed 's/{:}/:/g')
-    
-    # 特殊プレースホルダー{;}を末尾位置の:に変換 - 文字列末尾に移動
-    if echo "$output" | grep -q '{;}'; then
-        # 末尾の空白を一時的に削除
-        output=$(echo "$output" | sed 's/[[:space:]]*$//')
-        # {;}を削除
-        output=$(echo "$output" | sed 's/{;}//g')
-        # 末尾にコロンを追加
-        output="${output}:"
+# Function to format strings based on specified type
+# Usage: format_string <format_type> <input_string>
+# format_type: "upper" (all uppercase), "capitalize" (first letter uppercase, rest lowercase)
+# Default: returns original string if type is unknown or empty
+format_string() {
+    local format_type="$1"
+    local input_string="$2"
+    local output_string=""
+
+    # Check if input string is empty
+    if [ -z "$input_string" ]; then
+        echo ""
+        return 0
     fi
-    
-    # 言語コードの先頭部分を取得（例: zh-TWからzh）
-    local lang_prefix="${lang%%-*}"
-    
-    # 言語コード別の数字変換
-    case "${lang_prefix}" in
-        # CJK言語グループ
-        ja|zh|ko)
-            # 全角数字の変換
-            output=$(echo "$output" | sed 's/０/0/g; s/１/1/g; s/２/2/g; s/３/3/g; s/４/4/g; s/５/5/g; s/６/6/g; s/７/7/g; s/８/8/g; s/９/9/g')
+
+    case "$format_type" in
+        "upper")
+            # Convert entire string to uppercase using sed
+            debug_log "DEBUG" "format_string: Formatting to uppercase"
+            output_string=$(echo "$input_string" | sed \
+                -e 's/a/A/g' -e 's/b/B/g' -e 's/c/C/g' -e 's/d/D/g' -e 's/e/E/g' \
+                -e 's/f/F/g' -e 's/g/G/g' -e 's/h/H/g' -e 's/i/I/g' -e 's/j/J/g' \
+                -e 's/k/K/g' -e 's/l/L/g' -e 's/m/M/g' -e 's/n/N/g' -e 's/o/O/g' \
+                -e 's/p/P/g' -e 's/q/Q/g' -e 's/r/R/g' -e 's/s/S/g' -e 's/t/T/g' \
+                -e 's/u/U/g' -e 's/v/V/g' -e 's/w/W/g' -e 's/x/X/g' -e 's/y/Y/g' \
+                -e 's/z/Z/g')
             ;;
-            
-        # アラビア語圏
-        ar|ur|ckb)
-            # アラビア数字の変換
-            output=$(echo "$output" | sed 's/٠/0/g; s/١/1/g; s/٢/2/g; s/٣/3/g; s/٤/4/g; s/٥/5/g; s/٦/6/g; s/٧/7/g; s/٨/8/g; s/٩/9/g')
+        "capitalize")
+            # Convert first letter to uppercase, rest to lowercase
+            debug_log "DEBUG" "format_string: Formatting to capitalize"
+            # Extract first character
+            local first_char=$(echo "$input_string" | cut -c1)
+            # Extract rest of the string
+            local rest_string=$(echo "$input_string" | cut -c2-)
+
+            # Convert first char to uppercase
+            local first_char_upper=$(echo "$first_char" | tr '[:lower:]' '[:upper:]')
+            # Convert rest of the string to lowercase
+            local rest_string_lower=$(echo "$rest_string" | tr '[:upper:]' '[:lower:]')
+
+            # Combine them
+            output_string="${first_char_upper}${rest_string_lower}"
             ;;
-            
-        # ペルシア語圏
-        fa|ps)
-            # ペルシア数字の変換
-            output=$(echo "$output" | sed 's/۰/0/g; s/۱/1/g; s/۲/2/g; s/۳/3/g; s/۴/4/g; s/۵/5/g; s/۶/6/g; s/۷/7/g; s/۸/8/g; s/۹/9/g')
-            ;;
-            
-        # インド系主要言語
-        hi|bn|ta|mr|ne|gu|pa)
-            # デーヴァナーガリー数字の変換
-            output=$(echo "$output" | sed 's/०/0/g; s/१/1/g; s/२/2/g; s/३/3/g; s/४/4/g; s/५/5/g; s/६/6/g; s/७/7/g; s/८/8/g; s/९/9/g')
-            
-            # ベンガル数字の変換
-            output=$(echo "$output" | sed 's/০/0/g; s/১/1/g; s/২/2/g; s/৩/3/g; s/৪/4/g; s/৫/5/g; s/৬/6/g; s/৭/7/g; s/৮/8/g; s/৯/9/g')
-            
-            # グジャラート・パンジャブ数字の変換
-            output=$(echo "$output" | sed 's/૦/0/g; s/૧/1/g; s/૨/2/g; s/૩/3/g; s/૪/4/g; s/૫/5/g; s/૬/6/g; s/૭/7/g; s/૮/8/g; s/૯/9/g')
-            output=$(echo "$output" | sed 's/੦/0/g; s/੧/1/g; s/੨/2/g; s/੩/3/g; s/੪/4/g; s/੫/5/g; s/੬/6/g; s/੭/7/g; s/੮/8/g; s/੯/9/g')
-            ;;
-            
-        # タイ語・東南アジア
-        th|lo|km|my)
-            # タイ・ミャンマー数字の変換
-            output=$(echo "$output" | sed 's/๐/0/g; s/๑/1/g; s/๒/2/g; s/๓/3/g; s/๔/4/g; s/๕/5/g; s/๖/6/g; s/๗/7/g; s/๘/8/g; s/๙/9/g')
-            output=$(echo "$output" | sed 's/၀/0/g; s/၁/1/g; s/၂/2/g; s/၃/3/g; s/၄/4/g; s/၅/5/g; s/၆/6/g; s/၇/7/g; s/၈/8/g; s/၉/9/g')
-            ;;
-            
-        # ロシア語・キリル文字圏
-        ru|uk|be|bg|mk|sr|kk)
-            # キリル文字のラテン文字変換
-            output=$(echo "$output" | sed 's/а/a/g; s/б/b/g; s/в/v/g; s/г/g/g; s/д/d/g; s/е/e/g; s/ё/e/g; s/ж/zh/g; s/з/z/g; s/и/i/g; s/й/i/g; s/к/k/g; s/л/l/g; s/м/m/g; s/н/n/g; s/о/o/g; s/п/p/g; s/р/r/g; s/с/s/g; s/т/t/g; s/у/u/g; s/ф/f/g; s/х/h/g; s/ц/ts/g; s/ч/ch/g; s/ш/sh/g; s/щ/shch/g; s/ъ//g; s/ы/y/g; s/ь//g; s/э/e/g; s/ю/yu/g; s/я/ya/g')
-            output=$(echo "$output" | sed 's/А/A/g; s/Б/B/g; s/В/V/g; s/Г/G/g; s/Д/D/g; s/Е/E/g; s/Ё/E/g; s/Ж/ZH/g; s/З/Z/g; s/И/I/g; s/Й/I/g; s/К/K/g; s/Л/L/g; s/М/M/g; s/Н/N/g; s/О/O/g; s/П/P/g; s/Р/R/g; s/С/S/g; s/Т/T/g; s/У/U/g; s/Ф/F/g; s/Х/H/g; s/Ц/TS/g; s/Ч/CH/g; s/Ш/SH/g; s/Щ/SHCH/g; s/Ъ//g; s/Ы/Y/g; s/Ь//g; s/Э/E/g; s/Ю/YU/g; s/Я/YA/g')
-            ;;
-            
-        # 欧州言語（ラテン文字拡張）
-        pl|cs|hu|ro|sk|sl)
-            # 東欧特殊文字の変換
-            output=$(echo "$output" | sed 's/ą/a/g; s/ć/c/g; s/ę/e/g; s/ł/l/g; s/ń/n/g; s/ó/o/g; s/ś/s/g; s/ź/z/g; s/ż/z/g')
-            output=$(echo "$output" | sed 's/á/a/g; s/č/c/g; s/ď/d/g; s/é/e/g; s/ě/e/g; s/í/i/g; s/ň/n/g; s/ř/r/g; s/š/s/g; s/ť/t/g; s/ú/u/g; s/ů/u/g; s/ý/y/g; s/ž/z/g')
-            ;;
-            
-        # 西欧・北欧言語
-        fr|es|de|it|pt|nl|sv|da|no|fi)
-            # 基本的なアクセント記号の変換
-            output=$(echo "$output" | sed 's/[áàâäã]/a/g; s/[éèêë]/e/g; s/[íìîï]/i/g; s/[óòôöõ]/o/g; s/[úùûü]/u/g; s/[ýÿ]/y/g; s/ñ/n/g; s/ç/c/g')
-            output=$(echo "$output" | sed 's/[ÁÀÂÄÃ]/A/g; s/[ÉÈÊË]/E/g; s/[ÍÌÎÏ]/I/g; s/[ÓÒÔÖÕ]/O/g; s/[ÚÙÛÜ]/U/g; s/[ÝŸ]/Y/g; s/Ñ/N/g; s/Ç/C/g')
-            output=$(echo "$output" | sed 's/å/a/g; s/ä/a/g; s/ö/o/g; s/ø/o/g; s/æ/ae/g')
-            output=$(echo "$output" | sed 's/Å/A/g; s/Ä/A/g; s/Ö/O/g; s/Ø/O/g; s/Æ/AE/g')
+        *)
+            # Unknown or empty format type, return original string
+            debug_log "DEBUG" "format_string: Unknown format type '$format_type', returning original string"
+            output_string="$input_string"
             ;;
     esac
-    
-    # ロケールを元に戻す
-    LC_ALL="$saved_locale"
-    
-    # 正規化した結果のみを返す
-    printf '%s' "$output"
+
+    # Return the formatted string
+    printf '%s' "$output_string"
     return 0
 }
 
+normalize_message() {
+    local input="$1"
+    local lang="$2"
+    local output="$input"
+    local saved_locale="$LC_ALL"
+
+    debug_log "DEBUG" "normalize_message: Input = [$input]"
+
+    # Full-width to half-width normalization
+    output=$(echo "$output" | sed 's/｛/{/g; s/｝/}/g')
+    output=$(echo "$output" | sed 's/：/:/g; s/∶/:/g; s/꞉/:/g; s/ː/:/g')
+    output=$(echo "$output" | sed 's/；/;/g')
+    output=$(echo "$output" | sed 's/　/ /g')
+    output=$(echo "$output" | sed 's/＠/@/g')
+    output=$(echo "$output" | sed 's/＼/\\/g')
+    debug_log "DEBUG" "normalize_message: After full-width normalization = [$output]"
+
+    # Placeholder space removal (using LC_ALL=C for safety)
+    LC_ALL=C
+    debug_log "DEBUG" "normalize_message: Entering LC_ALL=C block for space removal"
+    local before_space_removal="$output"
+    output=$(echo "$output" | sed 's/[[:space:]]\+{/{/g') # Space before {
+    # output=$(echo "$output" | sed 's/}[[:space:]]\+/}/g') # Space after }
+    output=$(echo "$output" | sed 's/{[[:space:]]\+/{/g') # Space after { (inside)
+    output=$(echo "$output" | sed 's/[[:space:]]\+}/}/g') # Space before } (inside)
+    if [ "$output" != "$before_space_removal" ]; then
+        debug_log "DEBUG" "normalize_message: Placeholder space removal applied. Result = [$output]"
+    fi
+    debug_log "DEBUG" "normalize_message: Exiting LC_ALL=C block. Result = [$output]"
+    LC_ALL="$saved_locale"
+
+    # Special placeholder replacement ( {;} is NOT replaced here )
+    local before_special_replace="$output"
+    output=$(echo "$output" | sed 's/{:}/:/g') # {:} -> :
+    if [ "$output" != "$before_special_replace" ]; then
+         debug_log "DEBUG" "normalize_message: Replaced {:} with :. Result = [$output]"
+    fi
+    before_special_replace="$output"
+    output=$(echo "$output" | sed 's/{@}/\\n/g') # {@} -> newline (\n)
+     if [ "$output" != "$before_special_replace" ]; then
+         debug_log "DEBUG" "normalize_message: Replaced {@} with \\n. Result = [$output]"
+    fi
+
+    # Language-specific number normalization
+    local before_num_norm="$output"
+    case "${lang%%-*}" in
+        ar) output=$(echo "$output" | sed 's/٠/0/g; s/١/1/g; s/٢/2/g; s/٣/3/g; s/٤/4/g; s/٥/5/g; s/٦/6/g; s/٧/7/g; s/٨/8/g; s/٩/9/g') ;;
+        fa) output=$(echo "$output" | sed 's/۰/0/g; s/۱/1/g; s/۲/2/g; s/۳/3/g; s/۴/4/g; s/۵/5/g; s/۶/6/g; s/۷/7/g; s/۸/8/g; s/۹/9/g') ;;
+        bn) output=$(echo "$output" | sed 's/০/0/g; s/۱/1/g; s/২/2/g; s/৩/3/g; s/৪/4/g; s/৫/5/g; s/৬/6/g; s/৭/7/g; s/৮/8/g; s/৯/9/g') ;;
+        hi|mr|ne) output=$(echo "$output" | sed 's/०/0/g; s/१/1/g; s/२/2/g; s/३/3/g; s/४/4/g; s/५/5/g; s/६/6/g; s/७/7/g; s/८/8/g; s/९/9/g') ;;
+        ja|zh|ko) output=$(echo "$output" | sed 's/０/0/g; s/１/1/g; s/２/2/g; s/３/3/g; s/４/4/g; s/５/5/g; s/６/6/g; s/７/7/g; s/８/8/g; s/９/9/g') ;;
+    esac
+
+    # Consolidated log output for number normalization
+    if [ "$output" != "$before_num_norm" ]; then
+        debug_log "DEBUG" "normalize_message: Applied number normalization for '$lang'. Result = [$output]"
+    fi
+
+    debug_log "DEBUG" "normalize_message: Final Output = [$output]"
+    printf '%s' "$output" # 出力は %s のまま
+    return 0
+}
+
+# メッセージを取得し、パラメータ置換とフォーマットを行う関数
+# Usage: get_message <key> [format_type] [param1=value1] [param2=value2] ...
+# format_type: "upper", "capitalize", "none" (default)
+# Reads global variables: GET_MESSAGE_FORMATTING_ENABLED, FORMAT_TYPE_UPPER_ENABLED, FORMAT_TYPE_CAPITALIZE_ENABLED
 get_message() {
     local key="$1"
-    shift  # 最初の引数（キー）を除去
+    local format_type="none" # デフォルトのフォーマットタイプ
+    local shift_count=1      # デフォルトはキーのみを shift する
+
+    # 第2引数が存在し、かつそれがフォーマットタイプ指定子であるか確認
+    if [ $# -ge 2 ]; then
+        case "$2" in
+            upper|capitalize|none)
+                format_type="$2"
+                shift_count=2
+                debug_log "DEBUG" "get_message: Format type '$format_type' provided for key '$key'."
+                ;;
+            *)
+                debug_log "DEBUG" "get_message: Second argument '$2' is not a format type, assuming parameter for key '$key'."
+                ;;
+        esac
+    else
+        debug_log "DEBUG" "get_message: No second argument provided for key '$key'."
+    fi
+
+    # 判定結果に基づいて shift を実行
+    shift "$shift_count"
+
     local lang="$DEFAULT_LANGUAGE"
     local message=""
-    
+    local add_colon="false"
+
     # 言語コードの取得
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang=$(cat "${CACHE_DIR}/message.ch")
     fi
-    
-    # DBからメッセージ取得
+
+    # 1. DBからメッセージ取得
     local db_file="$(check_message_cache "$lang")"
     if [ -n "$db_file" ] && [ -f "$db_file" ]; then
         message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
         if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
-            message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+            local default_db_file="$(check_message_cache "$DEFAULT_LANGUAGE")"
+            if [ -n "$default_db_file" ] && [ -f "$default_db_file" ]; then
+                message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$default_db_file" 2>/dev/null | cut -d'=' -f2-)
+            fi
         fi
-    else
-        if [ "$MSG_MEMORY_INITIALIZED" != "true" ]; then
+    fi
+
+    # 2. メモリキャッシュを試す
+    if [ -z "$message" ]; then
+        if [ "$MSG_MEMORY_INITIALIZED" != "true" ] || [ "$MSG_MEMORY_LANG" != "$lang" ]; then
             into_memory_message
         fi
         if [ -n "$MSG_MEMORY" ]; then
-            message=$(echo "$MSG_MEMORY" | grep "^${DEFAULT_LANGUAGE}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+            message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+            if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
+                 message=$(echo "$MSG_MEMORY" | grep "^${DEFAULT_LANGUAGE}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+            fi
         fi
     fi
-    
-    # メッセージが見つからない場合はキーをそのまま返す
+
+    # 3. フォールバック
     if [ -z "$message" ]; then
-        debug_log "DEBUG: Message not found for key: $key"
         message="$key"
     fi
-    
-    # normalize_message関数を使用して文字列を正規化 (言語コードを渡す)
-    message=$(normalize_message "$message" "$lang")
-    
-    # パラメータ置換処理
+
+    # 4. {;} 検出
+    if echo "$message" | grep -q '{;}'; then
+        message=$(echo "$message" | sed 's/{;}//g')
+        add_colon="true"
+    fi
+
+    # 5. パラメータ置換 ($@ は shift 済み)
     for param in "$@"; do
         param_name=$(echo "$param" | cut -d'=' -f1)
         param_value=$(echo "$param" | cut -d'=' -f2-)
-        
-        if [ -n "$param_name" ] && [ -n "$param_value" ]; then
-            message=$(echo "$message" | sed "s|{$param_name}|$param_value|g")
-            debug_log "DEBUG: Replaced {$param_name} with $param_value"
+        local escaped_value=$(printf '%s\n' "$param_value" | sed -e 's/[\\#]/\\&/g')
+        if [ -n "$param_name" ] ; then
+             message=$(echo "$message" | sed "s#{$param_name}#$escaped_value#g")
+             debug_log "DEBUG" "get_message: Replaced {$param_name} for key '$key'"
         fi
     done
-    
-    # 出力
+
+    # 6. normalize_message
+    message=$(normalize_message "$message" "$lang")
+
+    # --- 変更箇所 ここから ---
+    # 7. フォーマット処理 (グローバル変数による制御付き)
+    if [ "$GET_MESSAGE_FORMATTING_ENABLED" = "true" ]; then
+        # フォーマット処理が全体的に有効な場合のみ実行
+        case "$format_type" in
+            "upper")
+                # 'upper' タイプが有効かチェック
+                if [ "$FORMAT_TYPE_UPPER_ENABLED" = "true" ]; then
+                    debug_log "DEBUG" "get_message: Applying 'upper' format (enabled) for key '$key'"
+                    message=$(format_string "upper" "$message")
+                else
+                    debug_log "DEBUG" "get_message: 'upper' format is disabled (FORMAT_TYPE_UPPER_ENABLED=false) for key '$key'"
+                fi
+                ;;
+            "capitalize")
+                # 'capitalize' タイプが有効かチェック
+                if [ "$FORMAT_TYPE_CAPITALIZE_ENABLED" = "true" ]; then
+                    debug_log "DEBUG" "get_message: Applying 'capitalize' format (enabled) for key '$key'"
+                    message=$(format_string "capitalize" "$message")
+                else
+                    debug_log "DEBUG" "get_message: 'capitalize' format is disabled (FORMAT_TYPE_CAPITALIZE_ENABLED=false) for key '$key'"
+                fi
+                ;;
+            "none"|*)
+                # "none" または未知のタイプの場合は何もしない
+                debug_log "DEBUG" "get_message: No formatting applied (type: '$format_type') for key '$key'"
+                ;;
+        esac
+    else
+        # フォーマット処理が全体的に無効な場合
+        debug_log "DEBUG" "get_message: Formatting globally disabled (GET_MESSAGE_FORMATTING_ENABLED=false) for key '$key'"
+    fi
+    # --- 変更箇所 ここまで ---
+
+    # 8. コロン追加
+    if [ "$add_colon" = "true" ]; then message="${message}: "; fi
+
+    # 9. 出力
     printf "%b" "$message"
     return 0
 }
@@ -572,7 +646,7 @@ get_commit_from_cache() {
     
     # 必須変数が設定されているか確認
     if [ -z "$VERSION" ] || [ -z "$TIMESTAMP" ] || [ -z "$TTL" ]; then
-        debug_log "WARN" "Invalid cache file for $file_path"
+        debug_log "DEBUG" "Invalid cache file for $file_path"
         return 1
     fi
     
@@ -737,20 +811,20 @@ github_api_request() {
     
     # リトライ後の最終結果確認
     if [ -z "$response" ]; then
-        debug_log "WARN" "Empty response from API request after $max_retries retries"
+        debug_log "DEBUG" "Empty response from API request after $max_retries retries"
         rm -f "$temp_file" 2>/dev/null
         return 1
     fi
     
     if echo "$response" | grep -q '"message":"API rate limit exceeded'; then
-        debug_log "WARN" "GitHub API rate limit exceeded"
+        debug_log "DEBUG" "GitHub API rate limit exceeded"
         rm -f "$temp_file" 2>/dev/null
         return 1
     fi
     
     # 認証エラーチェック
     if echo "$response" | grep -q '"message":"Bad credentials"'; then
-        debug_log "ERROR" "GitHub API authentication failed: Bad credentials"
+        debug_log "DEBUG" "GitHub API authentication failed: Bad credentials"
         rm -f "$temp_file" 2>/dev/null
         return 2
     fi
@@ -758,7 +832,7 @@ github_api_request() {
     # その他エラーチェック
     if echo "$response" | grep -q '"message":"'; then
         local error_msg=$(echo "$response" | grep -o '"message":"[^"]*"' | cut -d':' -f2- | tr -d '"')
-        debug_log "ERROR" "GitHub API error: $error_msg"
+        debug_log "DEBUG" "GitHub API error: $error_msg"
         rm -f "$temp_file" 2>/dev/null
         return 3
     fi
@@ -776,7 +850,7 @@ save_github_token() {
     token="$1"
     
     if [ -z "$token" ]; then
-        debug_log "ERROR" "Empty token provided, cannot save"
+        debug_log "DEBUG" "Empty token provided, cannot save"
         return 1
     fi
     
@@ -788,7 +862,7 @@ save_github_token() {
         debug_log "DEBUG" "GitHub token saved to $GITHUB_TOKEN_FILE"
         return 0
     else
-        debug_log "ERROR" "Failed to save token to $GITHUB_TOKEN_FILE"
+        debug_log "DEBUG" "Failed to save token to $GITHUB_TOKEN_FILE"
         return 1
     fi
 }
@@ -814,19 +888,72 @@ get_github_token() {
     return 1
 }
 
+# オリジナルの save_version_to_cache 関数
 save_version_to_cache() {
     local file_name="$1"
     local version="$2"
     local script_file="$3"
-    
-    # tmpファイルを使用して置き換える（古いsedでも動作）
-    if [ -f "$script_file" ]; then
-        grep -v "^${file_name}=" "$script_file" > "${script_file}.tmp"
-        echo "${file_name}=${version}" >> "${script_file}.tmp"
-        mv "${script_file}.tmp" "$script_file"
-    else
-        echo "${file_name}=${version}" > "$script_file"
+    local tmp_file="${script_file}.tmp" # 一時ファイル名を変数に
+
+    debug_log "DEBUG" "save_version_to_cache: Called for file='$file_name', version='$version', script_file='$script_file'"
+
+    # バージョンが空でないかチェック
+    if [ -z "$version" ]; then
+        debug_log "DEBUG" "save_version_to_cache: Received empty version for file '$file_name'. Aborting cache save."
+        return 1 # バージョンが空なら書き込みしない
     fi
+
+    # tmpファイルを確実に削除しておく
+    rm -f "$tmp_file" 2>/dev/null
+
+    # script_file が存在する場合の処理
+    if [ -f "$script_file" ]; then
+        debug_log "DEBUG" "save_version_to_cache: File '$script_file' exists. Filtering existing entry for '$file_name'."
+        # grep の実行と結果確認
+        if grep -v "^${file_name}=" "$script_file" > "$tmp_file"; then
+            debug_log "DEBUG" "save_version_to_cache: Successfully filtered '$script_file' to '$tmp_file'."
+        else
+            local grep_status=$?
+            debug_log "DEBUG" "save_version_to_cache: grep command failed with status $grep_status for '$script_file'."
+            # grep失敗時は一時ファイルを削除して終了（安全策）
+            rm -f "$tmp_file" 2>/dev/null
+            return 1
+        fi
+
+        # 新しいバージョン情報を追記
+        debug_log "DEBUG" "save_version_to_cache: Appending new version '$version' for '$file_name' to '$tmp_file'."
+        echo "${file_name}=${version}" >> "$tmp_file"
+
+        # 一時ファイルの内容をデバッグログに出力（確認用）
+        debug_log "DEBUG" "save_version_to_cache: Content of '$tmp_file' before move:"
+        while IFS= read -r line || [ -n "$line" ]; do
+             debug_log "DEBUG" "  | $line"
+        done < "$tmp_file"
+
+        # mv の実行と結果確認
+        if mv "$tmp_file" "$script_file"; then
+            debug_log "DEBUG" "save_version_to_cache: Successfully moved '$tmp_file' to '$script_file'."
+        else
+            local mv_status=$?
+            debug_log "DEBUG" "save_version_to_cache: mv command failed with status $mv_status. Failed to update '$script_file'."
+            # mv失敗時も一時ファイルを削除
+            rm -f "$tmp_file" 2>/dev/null
+            return 1
+        fi
+    else
+        # script_file が存在しない場合の処理
+        debug_log "DEBUG" "save_version_to_cache: File '$script_file' does not exist. Creating new file."
+        # echo の実行と結果確認
+        if echo "${file_name}=${version}" > "$script_file"; then
+             debug_log "DEBUG" "save_version_to_cache: Successfully created '$script_file' with initial version."
+        else
+             local echo_status=$?
+             debug_log "DEBUG" "save_version_to_cache: echo command failed with status $echo_status. Failed to create '$script_file'."
+             return 1
+        fi
+    fi
+
+    return 0 # 成功
 }
 
 # トークンセットアップ関数の改善版
@@ -1261,188 +1388,325 @@ clean_version_string() {
     fi
 }
 
-# コミット情報取得関数の改良版
+# オリジナルの get_commit_version 関数
 get_commit_version() {
     local file_path="$1"
     local force_refresh="$2"  # キャッシュ強制更新フラグ
-    local temp_file="${CACHE_DIR}/commit_info.tmp" 
-    local direct_file="${CACHE_DIR}/direct_file.tmp"
-
-    # キャッシュ使用時、まずキャッシュから情報を取得
-    if [ "$SKIP_CACHE" != "true" ] && [ "$force_refresh" != "true" ] && [ "$FORCE" != "true" ]; then
-        get_commit_from_cache "$file_path"
-        if [ $? -eq 0 ]; then
-            return 0  # キャッシュからの情報取得に成功した場合終了
-        fi
-    fi
-
-    # リポジトリ情報
-    local repo_owner="site-u2023"
+    local temp_file="${CACHE_DIR}/commit_info_$(echo "$file_path" | tr '/' '_').tmp" # ファイルごとに一意なAPI一時ファイル名
+    local direct_file="${CACHE_DIR}/direct_file_$(echo "$file_path" | tr '/' '_').tmp" # ファイルごとに一意なDirect一時ファイル名
+    local repo_owner="site-u2023" # リポジトリ情報はローカル変数として定義
     local repo_name="aios"
-    local api_url="repos/${repo_owner}/${repo_name}/commits?path=${file_path}&per_page=1"
-    local auth_method="direct"
-    local retry_count=0
-    local max_retries=2
-    
-    # トークン取得とAPIリクエスト
-    local token="$(get_github_token)"
-    
-    # API呼び出しを試行（リトライロジック付き）
-    while [ $retry_count -le $max_retries ]; do
-        if [ $retry_count -gt 0 ]; then
-            debug_log "DEBUG" "Retry attempt $retry_count for commit version request: $file_path"
-            sleep 1  # リトライ間隔
-        fi
-        
-        # 認証方法に応じたAPI呼び出し
-        if [ -n "$token" ] && [ "$API_AUTH_METHOD" != "direct" ]; then
-            if [ "$API_AUTH_METHOD" = "token" ] || [ "$WGET_CAPABILITY" = "header" ]; then
-                # トークン認証でGitHub APIにアクセス
-                wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$temp_file" --header="Authorization: token $token" \
-                     "https://api.github.com/$api_url" 2>/dev/null
-                auth_method="token"
-            elif [ "$API_AUTH_METHOD" = "basic" ] || [ "$WGET_CAPABILITY" = "basic" ]; then
-                # 基本認証でGitHub APIにアクセス
-                wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$temp_file" --user="$token" --password="x-oauth-basic" \
-                     "https://api.github.com/$api_url" 2>/dev/null
-                auth_method="basic"
-            else
-                # 認証なしでアクセス
-                wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
-                auth_method="direct"
-            fi
-        else
-            # 認証なしでアクセス
-            wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
-            auth_method="direct"
-        fi
-        
-        # 応答チェック
-        if [ -s "$temp_file" ] && ! grep -q "API rate limit exceeded\|Not Found" "$temp_file"; then
-            debug_log "DEBUG" "Successfully retrieved commit information"
-            break  # 成功したらループを抜ける
-        fi
-        
-        # リトライ時の接続方法を変更
-        if [ $retry_count -eq 0 ] && [ -f "${CACHE_DIR}/network.ch" ]; then
-            local current_network=$(cat "${CACHE_DIR}/network.ch")
-            
-            if [ "$current_network" = "v4v6" ]; then
-                # IPv6を試す
-                WGET_IPV_OPT="-6"
-                BASE_WGET="wget --no-check-certificate -q ${WGET_IPV_OPT} -O"
-                debug_log "DEBUG" "Switching to IPv6 for retry"
-            elif [ "$current_network" = "v4" ] || [ "$current_network" = "v6" ]; then
-                # シングルスタックの場合は直接ダウンロードを試す
-                debug_log "DEBUG" "Switching to direct file download"
-                break
-            fi
-        fi
-        
-        retry_count=$((retry_count + 1))
-    done
-    
-    # APIでの取得に失敗した場合は直接ファイルダウンロードを試行
-    if [ ! -s "$temp_file" ] || grep -q "API rate limit exceeded\|Not Found" "$temp_file"; then
-        debug_log "DEBUG" "API call failed, falling back to direct file check"
-        
-        # 直接ファイルダウンロードもIPv4/IPv6両方を試す
-        retry_count=0
+    local version="EMPTY_VERSION" # デバッグ用の初期値
+    local auth_method="unknown"   # デバッグ用の初期値
+
+    debug_log "DEBUG" "get_commit_version: Starting for file='$file_path', force_refresh='$force_refresh', DOWNLOAD_METHOD='$DOWNLOAD_METHOD', SKIP_CACHE='$SKIP_CACHE'"
+
+    # --- DOWNLOAD_METHOD による分岐 ---
+    if [ "$DOWNLOAD_METHOD" = "direct" ]; then
+        debug_log "DEBUG" "get_commit_version: Direct download mode enabled for $file_path."
+
+        # --- 直接ダウンロード処理 ---
+        local retry_count=0
+        local direct_download_success=0
         while [ $retry_count -le 1 ]; do
-            if wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
-                if [ -s "$direct_file" ]; then
-                    # ファイルからハッシュを生成
-                    local file_hash=$(sha256sum "$direct_file" 2>/dev/null | cut -c1-7)
-                    rm -f "$direct_file" "$temp_file" 2>/dev/null
-                    local today=$(date +%Y.%m.%d)
-                    
-                    # バージョン情報を取得
-                    local version="$today-$file_hash"
-                    auth_method="direct"
-                    
-                    # wget設定を元に戻す
-                    setup_wget_options
-                    
-                    # キャッシュに保存
-                    save_commit_to_cache "$file_path" "$version" "$auth_method"
-                    
-                    echo "$version $auth_method"
-                    return 0
-                fi
+            local current_wget_opt="$WGET_IPV_OPT"
+            if [ $retry_count -eq 1 ] && [ -f "${CACHE_DIR}/network.ch" ]; then
+                 local current_network=$(cat "${CACHE_DIR}/network.ch")
+                 if [ "$current_network" = "v4v6" ]; then
+                      if [ "$WGET_IPV_OPT" = "-6" ]; then current_wget_opt=""; else current_wget_opt="-6"; fi
+                      debug_log "DEBUG" "get_commit_version(direct): Switching IP preference for retry: $current_wget_opt"
+                 fi
             fi
-            
-            # 直接ダウンロードのリトライも接続方法を変更
+
+            rm -f "$direct_file" 2>/dev/null # ダウンロード前に一時ファイルを削除
+            debug_log "DEBUG" "get_commit_version(direct): Attempting download with wget opt '$current_wget_opt' to '$direct_file'"
+            if wget -q --no-check-certificate ${current_wget_opt} -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
+                debug_log "DEBUG" "get_commit_version(direct): wget command finished for '$direct_file'."
+                if [ -s "$direct_file" ]; then
+                    debug_log "DEBUG" "get_commit_version(direct): File '$direct_file' downloaded successfully and is not empty. Calculating hash."
+                    local file_hash=$(sha256sum "$direct_file" 2>/dev/null | cut -c1-7)
+                    rm -f "$direct_file" 2>/dev/null # ハッシュ取得後に一時ファイルを削除
+                    local today=$(date +%Y.%m.%d)
+                    version="$today-$file_hash" # version 変数を設定
+                    auth_method="direct"        # auth_method 変数を設定
+                    direct_download_success=1
+                    debug_log "DEBUG" "get_commit_version(direct): Hash calculated: '$file_hash'. Generated version: '$version'. Auth: '$auth_method'."
+
+                    setup_wget_options # wget設定を元に戻す
+                    echo "$version $auth_method" # 最終的な出力
+                    return 0
+                else
+                    debug_log "DEBUG" "get_commit_version(direct): wget command succeeded but '$direct_file' is empty or not found after download."
+                    rm -f "$direct_file" 2>/dev/null
+                fi
+            else
+                local wget_status=$?
+                debug_log "DEBUG" "get_commit_version(direct): wget command failed with status $wget_status for '$direct_file'."
+            fi
+            retry_count=$((retry_count + 1))
+            if [ $retry_count -le 1 ]; then sleep 1; fi # リトライ前に待機
+        done # direct モードの while ループの終わり
+
+        # 直接ダウンロード失敗時の処理
+        debug_log "DEBUG" "get_commit_version(direct): Failed to download file directly after retries: $file_path"
+        rm -f "$direct_file" 2>/dev/null
+        setup_wget_options
+        version="$(date +%Y.%m.%d)-unknown" # version 変数を設定
+        auth_method="direct"                # auth_method 変数を設定
+        debug_log "DEBUG" "get_commit_version(direct): Returning fallback version: '$version $auth_method'"
+        echo "$version $auth_method" # 最終的な出力
+        return 1
+        # --- 直接ダウンロード処理ここまで ---
+
+    fi # DOWNLOAD_METHOD = "direct" の if の終わり
+    # --- DOWNLOAD_METHOD による分岐ここまで ---
+
+    # --- 以下、DOWNLOAD_METHOD = "api" の場合の処理 ---
+    debug_log "DEBUG" "get_commit_version(api): API download mode enabled for $file_path."
+
+    # --- キャッシュチェック処理 ---
+    local cache_checked="false"
+    local proceed_to_api="true" # デフォルトはAPI呼び出しに進む
+
+    if [ "$SKIP_CACHE" != "true" ] && [ "$force_refresh" != "true" ] && [ "$FORCE" != "true" ]; then
+        cache_checked="true"
+        debug_log "DEBUG" "get_commit_version(api): Attempting to retrieve from commit cache for '$file_path'."
+        local cache_result=$(get_commit_from_cache "$file_path")
+        local cache_status=$? # get_commit_from_cache の終了ステータス
+
+        # キャッシュヒットの判定: ステータスが0 かつ 結果が空でないこと
+        if [ $cache_status -eq 0 ] && [ -n "$cache_result" ]; then
+            debug_log "DEBUG" "get_commit_version(api): Valid cache hit for '$file_path'. Returning cached value: '$cache_result'"
+            echo "$cache_result"
+            return 0 # キャッシュヒット、ここで終了
+        else
+            # キャッシュミスまたは無効なキャッシュの場合のログ
+            if [ $cache_status -ne 0 ]; then
+                 debug_log "DEBUG" "get_commit_version(api): Cache miss or invalid for '$file_path' (status: $cache_status)."
+            elif [ -z "$cache_result" ]; then
+                 # ステータスは0だが結果が空だった場合 (本来は起こらないはずだが念のため)
+                 debug_log "DEBUG" "get_commit_version(api): Cache status was 0 but result was empty for '$file_path'. Treating as cache miss."
+            fi
+            proceed_to_api="true" # API呼び出しに進む
+        fi
+    else
+         debug_log "DEBUG" "get_commit_version(api): Cache skipped for '$file_path' due to flags."
+         proceed_to_api="true" # API呼び出しに進む
+    fi # キャッシュチェックの if の終わり
+    # --- キャッシュチェック処理ここまで ---
+
+    # --- API呼び出しに進む場合のみ以下の処理を実行 ---
+    if [ "$proceed_to_api" = "true" ]; then
+        # API URL と認証方法の初期化
+        local api_url="repos/${repo_owner}/${repo_name}/commits?path=${file_path}&per_page=1"
+        auth_method="direct" # APIモードでも最初は direct から試す可能性がある (初期値)
+        local retry_count=0
+        local max_retries=2
+        local token="$(get_github_token)"
+        local api_call_successful="false" # API呼び出し成功フラグ
+
+        # API呼び出しを試行（リトライロジック付き）
+        while [ $retry_count -le $max_retries ]; do
+            if [ $retry_count -gt 0 ]; then
+                debug_log "DEBUG" "get_commit_version(api): Retry attempt $retry_count for API request: $file_path"
+                sleep 1
+            fi
+
+            # 認証方法に応じたAPI呼び出し
+            rm -f "$temp_file" 2>/dev/null # API呼び出し前に一時ファイルを削除
+            local current_api_auth_method="direct" # この試行での認証方法
+            debug_log "DEBUG" "get_commit_version(api): Attempting API call. Token available: $( [ -n "$token" ] && echo "yes" || echo "no" ). WGET_CAPABILITY: '$WGET_CAPABILITY'. API_AUTH_METHOD (cached): '$API_AUTH_METHOD'."
+
+            if [ -n "$token" ] && [ "$API_AUTH_METHOD" != "direct" ]; then # トークンがあり、キャッシュされた認証方法が direct 以外
+                 if [ "$API_AUTH_METHOD" = "token" ] || [ "$WGET_CAPABILITY" = "header" ]; then
+                     debug_log "DEBUG" "get_commit_version(api): Trying wget with token header auth."
+                     wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$temp_file" --header="Authorization: token $token" "https://api.github.com/$api_url" 2>/dev/null
+                     current_api_auth_method="token"
+                 elif [ "$API_AUTH_METHOD" = "basic" ] || [ "$WGET_CAPABILITY" = "basic" ]; then
+                     debug_log "DEBUG" "get_commit_version(api): Trying wget with basic auth."
+                     wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$temp_file" --user="$token" --password="x-oauth-basic" "https://api.github.com/$api_url" 2>/dev/null
+                     current_api_auth_method="basic"
+                 else
+                     debug_log "DEBUG" "get_commit_version(api): Token available but no supported auth method found in cache/capability. Trying direct."
+                     wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
+                     current_api_auth_method="direct" # フォールバック
+                 fi
+            else # トークンがない、またはキャッシュされた認証方法が direct
+                debug_log "DEBUG" "get_commit_version(api): Trying wget with direct API call (no auth)."
+                wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$temp_file" "https://api.github.com/$api_url" 2>/dev/null
+                current_api_auth_method="direct"
+            fi # 認証方法分岐の if の終わり
+            local wget_api_status=$?
+            debug_log "DEBUG" "get_commit_version(api): wget API call finished with status $wget_api_status. Auth method tried: $current_api_auth_method."
+
+            # 応答チェック
+            if [ -s "$temp_file" ]; then
+                debug_log "DEBUG" "get_commit_version(api): API response file '$temp_file' exists and is not empty."
+                # エラーメッセージが含まれていないか確認
+                if ! grep -q "API rate limit exceeded\|Not Found\|Bad credentials" "$temp_file"; then
+                    debug_log "DEBUG" "get_commit_version(api): Successfully retrieved valid commit information via API."
+                    auth_method=$current_api_auth_method # 成功した認証方法を保存
+                    api_call_successful="true"
+                    break # 成功したらループを抜ける
+                else
+                    debug_log "DEBUG" "get_commit_version(api): API response file '$temp_file' contains error messages."
+                    # エラー内容をログに出力
+                    grep "message" "$temp_file" | while IFS= read -r line; do debug_log "DEBUG" "  API Error: $line"; done
+                    # grep ループの後には fi は不要
+                fi # grep エラーチェックの if の終わり
+            else
+                 debug_log "DEBUG" "get_commit_version(api): API response file '$temp_file' is empty or not found after wget call."
+            fi # 応答チェックの if の終わり
+
+            # リトライ時の接続方法を変更 (従来のロジック)
             if [ $retry_count -eq 0 ] && [ -f "${CACHE_DIR}/network.ch" ]; then
                 local current_network=$(cat "${CACHE_DIR}/network.ch")
                 if [ "$current_network" = "v4v6" ]; then
-                    WGET_IPV_OPT="-6"
+                    local original_wget_ipv_opt=$WGET_IPV_OPT # 元の設定を保存
+                    if [ "$WGET_IPV_OPT" = "-6" ]; then WGET_IPV_OPT=""; else WGET_IPV_OPT="-6"; fi # トグル
                     BASE_WGET="wget --no-check-certificate -q ${WGET_IPV_OPT} -O"
-                    debug_log "DEBUG" "Switching to IPv6 for direct file download retry"
-                fi
-            fi
-            
+                    debug_log "DEBUG" "get_commit_version(api): Switching IP preference for API retry: '$WGET_IPV_OPT'"
+                    # リトライ後に元に戻す必要があるため注意（setup_wget_optionsで戻るはず）
+                elif [ "$current_network" = "v4" ] || [ "$current_network" = "v6" ]; then
+                    debug_log "DEBUG" "get_commit_version(api): API retry failed on single stack, will try direct download fallback if retries exhausted."
+                    # シングルスタックではIP切り替え不可なので何もしない
+                fi # current_network チェックの if/elif の終わり
+            fi # リトライIP切り替えの if の終わり
             retry_count=$((retry_count + 1))
-        done
-        
-        debug_log "ERROR" "Failed to download file: $file_path"
-        rm -f "$direct_file" "$temp_file" 2>/dev/null
-        
-        # wget設定を元に戻す
-        setup_wget_options
-        echo "$(date +%Y.%m.%d)-unknown $auth_method"
-        return 1
-    fi
-    
-    # APIレスポンスからコミット情報を抽出
-    local commit_date=""
-    local commit_sha=""
-    
-    # SHA情報の抽出（複数パターン対応）
-    commit_sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\+' "$temp_file" | head -1 | grep -o '[a-f0-9]\{7,40\}' | head -c 7)
-    if [ -z "$commit_sha" ]; then
-        commit_sha=$(grep -o '[a-f0-9]\{40\}' "$temp_file" | head -1 | head -c 7)
-    fi
-    
-    # 日付情報の抽出（複数パターン対応）
-    commit_date=$(grep -o '"date"[[:space:]]*:[[:space:]]*"[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' "$temp_file" | head -1 | grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}')
-    if [ -z "$commit_date" ]; then
-        commit_date=$(grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}Z' "$temp_file" | head -1 | grep -o '^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}')
-    fi
-    
-    # 情報が取得できない場合はフォールバック
-    if [ -z "$commit_date" ] || [ -z "$commit_sha" ]; then
-        debug_log "WARN" "Failed to extract commit information. Using fallback method."
-        commit_sha=$(tr -cd 'a-f0-9' < "$temp_file" | grep -o '[a-f0-9]\{40\}' | head -1 | head -c 7)
-        commit_date=$(grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' "$temp_file" | head -1)
-        
-        [ -z "$commit_sha" ] && commit_sha="unknown"
-        [ -z "$commit_date" ] && commit_date=$(date +%Y-%m-%d)
-    fi
-    
-    # 結果の組み立て
-    if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
-        # 日付フォーマットを変換
-        local formatted_date=$(echo "$commit_date" | tr '-' '.')
-        local version="${formatted_date}-${commit_sha}"
-        
-        rm -f "$temp_file" 2>/dev/null
-        
-        # wget設定を元に戻す
-        setup_wget_options
-        
-        # キャッシュに保存
-        save_commit_to_cache "$file_path" "$version" "$auth_method"
-        
-        echo "$version $auth_method"
-        return 0
-    fi
-    
-    # 全ての方法が失敗した場合
-    rm -f "$temp_file" 2>/dev/null
-    
-    # wget設定を元に戻す
+        done # API 呼び出しリトライの while の終わり
+
+        # --- API呼び出し成功時の処理 ---
+        if [ "$api_call_successful" = "true" ]; then
+            debug_log "DEBUG" "get_commit_version(api): Processing successful API response from '$temp_file'."
+            # APIレスポンスからコミット情報を抽出
+            local commit_date=""
+            local commit_sha=""
+
+            # SHA抽出 (より堅牢な方法を試みる)
+            commit_sha=$(grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\{7,40\}"' "$temp_file" | head -1 | cut -d'"' -f4 | head -c 7)
+            if [ -z "$commit_sha" ]; then # 最初のgrepが失敗した場合のフォールバック
+                 commit_sha=$(grep -o '[a-f0-9]\{40\}' "$temp_file" | head -1 | head -c 7)
+                 if [ -n "$commit_sha" ]; then debug_log "DEBUG" "get_commit_version(api): Extracted SHA using fallback grep: '$commit_sha'"; fi
+            else
+                 debug_log "DEBUG" "get_commit_version(api): Extracted SHA using primary grep: '$commit_sha'"
+            fi # SHA抽出の if/else の終わり
+
+            # 日付抽出 (より堅牢な方法を試みる)
+            commit_date=$(grep -o '"date"[[:space:]]*:[[:space:]]*"[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T' "$temp_file" | head -1 | cut -d'"' -f4 | cut -dT -f1)
+            if [ -z "$commit_date" ]; then # 最初のgrepが失敗した場合のフォールバック
+                commit_date=$(grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}Z' "$temp_file" | head -1 | cut -dT -f1)
+                 if [ -n "$commit_date" ]; then debug_log "DEBUG" "get_commit_version(api): Extracted Date using fallback grep: '$commit_date'"; fi
+            else
+                debug_log "DEBUG" "get_commit_version(api): Extracted Date using primary grep: '$commit_date'"
+            fi # 日付抽出の if/else の終わり
+
+            # 情報が取得できない場合はフォールバック
+            if [ -z "$commit_date" ] || [ -z "$commit_sha" ]; then
+                debug_log "DEBUG" "get_commit_version(api): Failed to extract commit SHA ('$commit_sha') or Date ('$commit_date') from API response. Using fallback values."
+                # 念のため再度試行
+                [ -z "$commit_sha" ] && commit_sha=$(tr -cd 'a-f0-9' < "$temp_file" | grep -o '[a-f0-9]\{40\}' | head -1 | head -c 7)
+                [ -z "$commit_date" ] && commit_date=$(grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' "$temp_file" | head -1)
+
+                [ -z "$commit_sha" ] && commit_sha="unknownsha" # より明確なフォールバック値
+                [ -z "$commit_date" ] && commit_date=$(date +%Y-%m-%d)
+                debug_log "DEBUG" "get_commit_version(api): Using fallback SHA='$commit_sha', Date='$commit_date'."
+                # 抽出失敗時は認証方法を fallback とする
+                auth_method="fallback"
+            fi # 抽出失敗チェックの if の終わり
+
+            # 結果の組み立て
+            if [ -n "$commit_date" ] && [ -n "$commit_sha" ]; then
+                local formatted_date=$(echo "$commit_date" | tr '-' '.')
+                version="${formatted_date}-${commit_sha}" # version 変数を設定
+                debug_log "DEBUG" "get_commit_version(api): Successfully generated version: '$version'. Auth: '$auth_method'."
+
+                rm -f "$temp_file" 2>/dev/null
+                setup_wget_options # ここで wget オプションを戻す
+                save_commit_to_cache "$file_path" "$version" "$auth_method" # API成功時の認証方法を使う
+                echo "$version $auth_method" # 最終的な出力
+                return 0
+            else
+                # このポイントに到達することは通常ないはずだが、念のためエラーログ
+                debug_log "DEBUG" "get_commit_version(api): Reached unexpected point after API success processing (date or sha empty). SHA='$commit_sha', Date='$commit_date'."
+                # ここで return せずに下の API 失敗処理に進む方が安全かもしれない
+            fi # バージョン生成チェックの if/else の終わり
+        fi # api_call_successful = true の if の終わり
+
+        # --- APIでの取得に失敗した場合: 直接ファイルダウンロードを試行 (APIモードのフォールバック) ---
+        # api_call_successful が false の場合、または true だったが情報抽出・生成に失敗した場合
+        if [ "$api_call_successful" = "false" ] || { [ "$api_call_successful" = "true" ] && [ -z "$version" ]; }; then
+            # API成功でも version が空の場合のログを追加
+            if [ "$api_call_successful" = "true" ] && [ -z "$version" ]; then
+                 debug_log "DEBUG" "get_commit_version(api): API call was successful but version generation failed. Falling back to direct download."
+            fi
+
+            debug_log "DEBUG" "get_commit_version(api): API call failed or version gen failed, falling back to direct file check for $file_path (API mode fallback)"
+            rm -f "$temp_file" 2>/dev/null # 不要なAPI応答ファイルを削除
+
+            # --- 直接ダウンロード処理 (APIフォールバック用) ---
+            retry_count=0 # リトライカウントをリセット
+            local direct_download_fallback_success=0
+            while [ $retry_count -le 1 ]; do
+                local current_wget_opt="$WGET_IPV_OPT"
+                if [ $retry_count -eq 1 ] && [ -f "${CACHE_DIR}/network.ch" ]; then
+                     local current_network=$(cat "${CACHE_DIR}/network.ch")
+                     if [ "$current_network" = "v4v6" ]; then
+                          if [ "$WGET_IPV_OPT" = "-6" ]; then current_wget_opt=""; else current_wget_opt="-6"; fi
+                          debug_log "DEBUG" "get_commit_version(api-fallback): Switching IP preference for direct download retry: $current_wget_opt"
+                     fi
+                fi
+
+                rm -f "$direct_file" 2>/dev/null
+                debug_log "DEBUG" "get_commit_version(api-fallback): Attempting download with wget opt '$current_wget_opt' to '$direct_file'"
+                if wget -q --no-check-certificate ${current_wget_opt} -O "$direct_file" "https://raw.githubusercontent.com/$repo_owner/$repo_name/main/$file_path" 2>/dev/null; then
+                    debug_log "DEBUG" "get_commit_version(api-fallback): wget command finished for '$direct_file'."
+                    if [ -s "$direct_file" ]; then
+                        debug_log "DEBUG" "get_commit_version(api-fallback): File '$direct_file' downloaded successfully. Calculating hash."
+                        local file_hash=$(sha256sum "$direct_file" 2>/dev/null | cut -c1-7)
+                        rm -f "$direct_file" 2>/dev/null
+                        local today=$(date +%Y.%m.%d)
+                        version="$today-$file_hash" # version 変数を設定
+                        auth_method="directfallback" # APIフォールバックでのdirectアクセスを示す
+                        direct_download_fallback_success=1
+                        debug_log "DEBUG" "get_commit_version(api-fallback): Hash calculated: '$file_hash'. Generated version: '$version'. Auth: '$auth_method'."
+
+                        setup_wget_options
+                        save_commit_to_cache "$file_path" "$version" "$auth_method" # API失敗->Direct成功時もキャッシュ
+                        echo "$version $auth_method" # 最終的な出力
+                        return 0
+                    else
+                        debug_log "DEBUG" "get_commit_version(api-fallback): wget succeeded but '$direct_file' is empty or not found."
+                        rm -f "$direct_file" 2>/dev/null
+                    fi # ファイル存在チェックの if/else の終わり
+                else
+                     local wget_fb_status=$?
+                     debug_log "DEBUG" "get_commit_version(api-fallback): wget command failed with status $wget_fb_status for '$direct_file'."
+                fi # wget 成功チェックの if/else の終わり
+                retry_count=$((retry_count + 1))
+                if [ $retry_count -le 1 ]; then sleep 1; fi # リトライ前に待機
+            done # Direct フォールバックリトライの while の終わり
+
+            # 直接ダウンロードも失敗した場合 (APIフォールバック)
+            debug_log "DEBUG" "get_commit_version(api-fallback): Failed to download file directly after retries: $file_path"
+            rm -f "$direct_file" "$temp_file" 2>/dev/null
+            setup_wget_options
+            version="$(date +%Y.%m.%d)-apifail" # version 変数を設定
+            auth_method="apifail"             # auth_method 変数を設定
+            debug_log "DEBUG" "get_commit_version(api-fallback): Returning fallback version: '$version $auth_method'"
+            echo "$version $auth_method" # 最終的な出力
+            return 1
+            # --- 直接ダウンロード処理 (APIフォールバック用) ここまで ---
+        fi # API失敗 or version生成失敗の if の終わり
+    fi # proceed_to_api = true の if の終わり
+
+    # --- 全ての方法が失敗した場合 (通常ここには到達しないはず) ---
+    # proceed_to_api が false (キャッシュヒットしたが return されなかった場合など、異常系)
+    debug_log "DEBUG" "get_commit_version: Reached end of function unexpectedly for file '$file_path'. This should not happen."
+    rm -f "$temp_file" "$direct_file" 2>/dev/null
     setup_wget_options
-    echo "$(date +%Y.%m.%d)-fallback $auth_method" 
+    version="$(date +%Y.%m.%d)-critical" # version 変数を設定
+    auth_method="critical"             # auth_method 変数を設定
+    echo "$version $auth_method" # 念のための最終出力
     return 1
 }
 
@@ -1455,7 +1719,7 @@ download() {
     
     # 空ファイル名のチェック
     if [ -z "$file_name" ]; then
-        debug_log "ERROR" "Empty filename detected in download function call"
+        debug_log "DEBUG" "Empty filename detected in download function call"
         return 1
     fi
 
@@ -1492,7 +1756,7 @@ download() {
                 chmod)  chmod_mode="true" ;;
                 load)   load_mode="true" ;;
                 # 不明オプション
-                *)      debug_log "WARN" "Unknown option: $1, ignoring" ;;
+                *)      debug_log "DEBUG" "Unknown option: $1, ignoring" ;;
             esac
         fi
         shift
@@ -1537,7 +1801,7 @@ download() {
     if [ "$update_required" = "true" ] || [ "$file_exists" = "false" ]; then
         debug_log "DEBUG" "Executing download_fetch_file for ${file_name}"
         if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode"; then
-            debug_log "ERROR" "Download process failed for $file_name"
+            debug_log "DEBUG" "Download process failed for $file_name"
             return 1
         fi
         status_type="success"
@@ -1554,7 +1818,7 @@ download() {
     
     # ファイルの存在を再確認
     if [ ! -f "${BASE_DIR}/$file_name" ]; then
-        debug_log "ERROR" "File not found after download attempt: $file_name"
+        debug_log "DEBUG" "File not found after download attempt: $file_name"
         return 1
     fi
 
@@ -1574,9 +1838,9 @@ download_check_version() {
     # バージョン情報の取得
     local remote_version_info=$(get_commit_version "$file_name")
     local remote_version=$(printf "%s" "$remote_version_info" | cut -d' ' -f1)
-    local auth_method=$(printf "%s" "$remote_version_info" | cut -d' ' -f2)
+    local auth_method=$(printf "%s" "$remote_version_info" | cut -d' ' -f2) # get_commit_version が返した認証方法を取得
     local local_version=""
-    
+
     # ローカルバージョンの取得
     if [ -f "$script_file" ]; then
         local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
@@ -1586,12 +1850,28 @@ download_check_version() {
     local clean_remote_version=$(clean_version_string "$remote_version")
     local clean_local_version=$(clean_version_string "$local_version")
 
-    # APIレート制限情報の取得（元の表示に戻す）
-    local api_status=$(check_api_rate_limit)
-    
-    # バージョン比較とダウンロード判断
+    # --- APIレート制限情報の取得 (direct モード時はスキップ) ---
+    local api_status=""
+    if [ "$DOWNLOAD_METHOD" = "direct" ]; then
+        # direct モードの場合は API チェックをスキップし、固定値を設定
+        # auth_method が 'direct' であることも確認 (get_commit_version が期待通り動作しているか)
+        if [ "$auth_method" = "direct" ]; then
+             api_status="API: N/A (Direct)"
+             debug_log "DEBUG" "Direct download mode: Skipping API rate limit check for $file_name"
+        else
+             # direct モードなのに auth_method が direct でない場合は警告
+             api_status="API: ??? (Inconsistent)"
+             debug_log "DEBUG" "Inconsistent state: DOWNLOAD_METHOD=direct but auth_method=$auth_method for $file_name"
+        fi
+    else
+        # api モードの場合は従来通りチェック
+        api_status=$(check_api_rate_limit)
+    fi
+    # --- APIレート制限情報の取得ここまで ---
+
+    # バージョン比較とダウンロード判断 (変更なし)
     local update_required=false
-    
+
     if [ "$local_version" = "$dummy_version" ]; then
         debug_log "DEBUG" "First download: $file_name"
         update_required=true
@@ -1609,11 +1889,12 @@ download_check_version() {
             update_required=false
         fi
     fi
-    
+
     debug_log "DEBUG" "Remote version: $file_name - $clean_remote_version"
     debug_log "DEBUG" "Local version: $file_name - $clean_local_version"
-    debug_log "DEBUG" "API status: $api_status"
-    
+    # ログに auth_method を追加して、get_commit_version の動作を確認しやすくする
+    debug_log "DEBUG" "API status: $api_status (Auth method from get_commit_version: $auth_method)"
+
     # 結果を返す
     echo "${update_required}|${clean_remote_version}|${clean_local_version}|${api_status}"
     return 0
@@ -1645,18 +1926,18 @@ download_fetch_file() {
     
     # BusyBox wget向けに最適化した明示的なコマンド構文
     if ! wget -q --no-check-certificate ${WGET_IPV_OPT} -O "$install_path" "$remote_url" 2>/dev/null; then
-        debug_log "ERROR" "Download failed: $file_name"
+        debug_log "DEBUG" "Download failed: $file_name"
         return 1
     fi
     
     # ファイル検証
     if [ ! -f "$install_path" ]; then
-        debug_log "ERROR" "Downloaded file not found: $file_name"
+        debug_log "DEBUG" "Downloaded file not found: $file_name"
         return 1
     fi
     
     if [ ! -s "$install_path" ]; then
-        debug_log "ERROR" "Downloaded file is empty: $file_name"
+        debug_log "DEBUG" "Downloaded file is empty: $file_name"
         return 1
     fi
     
@@ -1688,7 +1969,7 @@ download_finalize() {
     
     # ファイルが実際に存在するか確認
     if [ ! -f "${BASE_DIR}/${file_name}" ]; then
-        debug_log "ERROR" "File not found: ${BASE_DIR}/${file_name}"
+        debug_log "DEBUG" "File not found: ${BASE_DIR}/${file_name}"
         return 1
     fi
     
@@ -1748,7 +2029,7 @@ download_finalize() {
                 . "${BASE_DIR}/${file_name}"
             fi
         else
-            debug_log "ERROR" "Cannot load empty file: ${file_name}"
+            debug_log "DEBUG" "Cannot load empty file: ${file_name}"
             return 1
         fi
     fi
@@ -1783,7 +2064,7 @@ print_banner() {
             ;;
         *)
             # 不明なスタイルの場合はASCIIにフォールバック
-            debug_log "WARN" "Unknown banner style: $BANNER_STYLE, using ASCII fallback"
+            debug_log "DEBUG" "Unknown banner style: $BANNER_STYLE, using ASCII fallback"
             print_banner_ascii
             ;;
     esac
@@ -1994,13 +2275,13 @@ check_common() {
     case "$mode" in
         reset|return)
             if ! rm -rf "${CACHE_DIR}"; then
-                debug_log "ERROR" "Failed to remove cache directory: ${CACHE_DIR}"
+                debug_log "DEBUG" "Failed to remove cache directory: ${CACHE_DIR}"
                 printf "%s%s%s\n" "$(color yellow "Reset failed: Could not remove cache directory.")"
                 return 1
             fi
             # キャッシュディレクトリを再作成
             mkdir -p "${CACHE_DIR}" || {
-                debug_log "ERROR" "Failed to recreate cache directory: ${CACHE_DIR}"
+                debug_log "DEBUG" "Failed to recreate cache directory: ${CACHE_DIR}"
                 printf "%s%s%s\n" "$(color yellow "Reset partially failed: Cache removed but could not be recreated.")"
             }
             printf "%s%s%s\n" "$(color yellow "$(get_message "MSG_RESET_COMPLETE")")"
@@ -2008,13 +2289,13 @@ check_common() {
             ;;
         delete)
             if ! rm -rf "${BASE_DIR}"; then
-                debug_log "ERROR" "Failed to remove base directory: ${BASE_DIR}"
+                debug_log "DEBUG" "Failed to remove base directory: ${BASE_DIR}"
                 printf "%s%s%s\n" "$(color yellow "Reset failed: Could not remove base directory.")"
                 return 1
             fi
             # キャッシュディレクトリを再作成
             mkdir -p "${BASE_DIR}" || {
-                debug_log "ERROR" "Failed to recreate base directory: ${CACHE_DIR}"
+                debug_log "DEBUG" "Failed to recreate base directory: ${CACHE_DIR}"
                 printf "%s%s%s\n" "$(color yellow "Reset partially failed: Base removed but could not be recreated.")"
             }
             printf "%s%s%s\n" "$(color yellow "$(get_message "MSG_DELETE_COMPLETE")")"
@@ -2025,7 +2306,7 @@ check_common() {
             download "common-information.sh" "hidden" "chmod" "load"
             download "common-color.sh" "hidden" "chmod" "load"
             download "common-country.sh" "hidden" "chmod" "load"
-            download "common-country.sh" "hidden" "chmod" "load"
+            download "common-menu.sh" "hidden" "chmod" "load"
             download "common-package.sh" "hidden" "chmod" "load"
             download "common-feed-package.sh" "hidden" "chmod" "load"
             download "menu.db" "hidden"
@@ -2078,7 +2359,7 @@ check_common() {
 # 実行権限の設定
 chmod_aios() {
     if ! chmod +x "$BIN_PATH"; then
-        debug_log "ERROR" "Failed to set execute permission"
+        debug_log "DEBUG" "Failed to set execute permission"
         return 1
     fi
     return 0
@@ -2087,7 +2368,7 @@ chmod_aios() {
 # ディレクトリ削除処理
 delete_aios() {
     if ! rm -rf "${BASE_DIR}"; then
-        debug_log "ERROR" "Failed to delete $BASE_DIR"
+        debug_log "DEBUG" "Failed to delete $BASE_DIR"
         return 1
     fi
     return 0
@@ -2096,7 +2377,7 @@ delete_aios() {
 # 必要ディレクトリ作成
 make_directory() {
     if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR" "${CACHE_DIR}/commits"; then
-        debug_log "ERROR" "Failed to create required directories"
+        debug_log "DEBUG" "Failed to create required directories"
         return 1
     fi
     
@@ -2108,22 +2389,22 @@ make_directory() {
     return 0
 }
 
-# アップデート状態確認
+# オリジナルの check_update 関数
 check_update() {
     # デフォルトモードの設定（引数がなくても動作するように）
     local lang_code="$SELECTED_LANGUAGE"
     MODE="${MODE:-update}"
-    
+
     # 全引数を処理
     local all_args="$@"
     local has_args=0
-    
+
     # 引数があるかチェック
     [ $# -gt 0 ] && has_args=1
-    
+
     # アップデート関連オプションのみをフィルタリング
     local filtered_args=""
-    
+
     # 引数がある場合のみ処理
     if [ $has_args -eq 1 ]; then
         while [ $# -gt 0 ]; do
@@ -2139,10 +2420,10 @@ check_update() {
             shift
         done
     fi
-    
+
     debug_log "DEBUG" "Original args: $all_args"
     debug_log "DEBUG" "Filtered args: $filtered_args"
-    
+
     # ダウンロード実行
     download "aios" "chmod"
     MODE="full"
@@ -2159,13 +2440,13 @@ check_update() {
 main() {
     # 実行権限を設定
     if ! chmod_aios; then
-        debug_log "ERROR" "Failed to set execute permission"
+        debug_log "DEBUG" "Failed to set execute permission"
         return 1
     fi
 
     # 必要なディレクトリを作成
     if ! make_directory; then
-        debug_log "ERROR" "Failed to create required directories"
+        debug_log "DEBUG" "Failed to create required directories"
         return 1
     fi
 
@@ -2180,3 +2461,4 @@ main() {
 
 # スクリプト実行
 main "$@"
+ 
