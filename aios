@@ -399,7 +399,6 @@ format_string() {
 normalize_message() {
     local input="$1"
     local lang="$2"
-    local force_uppercase="OFF"
     local output="$input"
     local saved_locale="$LC_ALL"
 
@@ -438,23 +437,6 @@ normalize_message() {
     output=$(echo "$output" | sed 's/{@}/\\n/g') # {@} -> newline (\n)
      if [ "$output" != "$before_special_replace" ]; then
          debug_log "DEBUG" "normalize_message: Replaced {@} with \\n. Result = [$output]"
-    fi
-    # ★★★ 変更点: {;} を ": " に変換する処理を削除 ★★★
-    # sed 's/{;}/: /g' の行を削除しました。
-
-    # Uppercase conversion using multiple sed s///g
-    if [ "$force_uppercase" = "ON" ]; then
-        debug_log "DEBUG" "normalize_message: Force Uppercase enabled. Before: [$output]"
-        output=$(echo "$output" | sed \
-            -e 's/a/A/g' -e 's/b/B/g' -e 's/c/C/g' -e 's/d/D/g' -e 's/e/E/g' \
-            -e 's/f/F/g' -e 's/g/G/g' -e 's/h/H/g' -e 's/i/I/g' -e 's/j/J/g' \
-            -e 's/k/K/g' -e 's/l/L/g' -e 's/m/M/g' -e 's/n/N/g' -e 's/o/O/g' \
-            -e 's/p/P/g' -e 's/q/Q/g' -e 's/r/R/g' -e 's/s/S/g' -e 's/t/T/g' \
-            -e 's/u/U/g' -e 's/v/V/g' -e 's/w/W/g' -e 's/x/X/g' -e 's/y/Y/g' \
-            -e 's/z/Z/g')
-        debug_log "DEBUG" "normalize_message: Force Uppercase applied using multiple sed s///g. Result = [$output]"
-    else
-         debug_log "DEBUG" "normalize_message: Force Uppercase skipped."
     fi
 
     # Language-specific number normalization
