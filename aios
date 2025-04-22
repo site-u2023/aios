@@ -1527,7 +1527,7 @@ get_commit_version() {
             fi
             retry_count=$((retry_count + 1))
             if [ $retry_count -le 1 ]; then sleep 1; fi # リトライ前に待機
-        done
+        fi
 
         # 直接ダウンロード失敗時の処理
         debug_log "ERROR" "get_commit_version(direct): Failed to download file directly after retries: $file_path"
