@@ -341,84 +341,6 @@ check_message_cache() {
     return 0
 }
 
-normalize_message() {
-    local input="$1"
-    local lang="$2"  # 言語コードを受け取るパラメータ
-
-    # --- 変更: ローカル変数名を force_uppercase に変更、値を "ON"/"OFF" に ---
-    # "ON" = 英文字を全て大文字化, "OFF" = 大文字化しない
-    local force_uppercase="ON" # デフォルトはON
-
-    local output="$input"
-    local saved_locale="$LC_ALL" # 元のロケールを保存
-
-    # === 翻訳結果に含まれうるマルチバイト/全角文字の正規化 (LC_ALL=C の前に実行) ===
-    # 中括弧{} のノーマライズ (全角→半角)
-    output=$(echo "$output" | sed 's/｛/{/g; s/｝/}/g')
-    # コロン : のノーマライズ (全角→半角, および類似文字)
-    output=$(echo "$output" | sed 's/：/:/g; s/∶/:/g; s/꞉/:/g; s/ː/:/g')
-    # セミコロン ; のノーマライズ (全角→半角)
-    output=$(echo "$output" | sed 's/；/;/g')
-    # 全角スペースは半角に変換
-    output=$(echo "$output" | sed 's/　/ /g')
-    # 全角アットマーク＠を半角@に変換
-    output=$(echo "$output" | sed 's/＠/@/g')
-    # バックスラッシュのノーマライズ（全角→半角）
-    output=$(echo "$output" | sed 's/＼/\\/g')
-
-    # === ここから LC_ALL=C を設定 ===
-    LC_ALL=C
-    # プレースホルダー前後の空白を除去 ([[:space:]] は LC_ALL=C 環境下で処理)
-    output=$(echo "$output" | sed 's/{[[:space:]]*\([^{}]*\)[[:space:]]*}/{\1}/g')
-    # プレースホルダー内部の空白を除去（内部の空白がなくなるまで繰り返し）
-    while echo "$output" | grep -q '{[^{}]*[[:space:]][^{}]*}'; do
-        output=$(echo "$output" | sed 's/\({[^{}]*\)[[:space:]]\([^{}]*}\)/\1\2/g')
-    done
-    # === ここまで LC_ALL=C の影響範囲 ===
-    LC_ALL="$saved_locale"
-
-    # === 特殊プレースホルダーの置換 ===
-    # {:} を ":" (コロンのみ) に変換
-    output=$(echo "$output" | sed 's/{:}/:/g')
-    # {@} を改行コード (\n) に変換
-    output=$(echo "$output" | sed 's/{@}/\\n/g')
-    # {;} を ": " (コロン+スペース) に変換
-    output=$(echo "$output" | sed 's/{;}/: /g')
-
-    # === 大文字化処理 (スイッチによる制御) ===
-    # --- 変更: 言語コードのチェックを削除 ---
-    # スイッチが "ON" の場合のみ実行
-    if [ "$force_uppercase" = "ON" ]; then
-        debug_log "DEBUG" "Force Uppercase enabled. Original: [$output]"
-        # POSIX準拠のため、echoではなくprintf + tr を使用
-        output=$(printf '%s' "$output" | tr '[:lower:]' '[:upper:]')
-        debug_log "DEBUG" "Force Uppercase applied. Result: [$output]"
-    else
-         # --- 変更: 不要な言語チェックのデバッグログを削除 ---
-         debug_log "DEBUG" "Force Uppercase skipped: Switch is $force_uppercase."
-    fi
-
-    # === 言語コード別の処理 (ロケール依存の可能性があるため LC_ALL=C の外で処理) ===
-    # 数字変換など (大文字化処理の後に行う)
-    case "${lang%%-*}" in # lang_prefix の定義が不要になったため直接 lang を使用
-        ar)
-            output=$(echo "$output" | sed 's/٠/0/g; s/١/1/g; s/٢/2/g; s/٣/3/g; s/٤/4/g; s/٥/5/g; s/٦/6/g; s/٧/7/g; s/٨/8/g; s/٩/9/g') ;;
-        fa)
-            output=$(echo "$output" | sed 's/۰/0/g; s/۱/1/g; s/۲/2/g; s/۳/3/g; s/۴/4/g; s/۵/5/g; s/۶/6/g; s/۷/7/g; s/۸/8/g; s/۹/9/g') ;;
-        bn)
-            output=$(echo "$output" | sed 's/০/0/g; s/১/1/g; s/২/2/g; s/৩/3/g; s/৪/4/g; s/৫/5/g; s/৬/6/g; s/৭/7/g; s/৮/8/g; s/৯/9/g') ;;
-        hi|mr|ne)
-            output=$(echo "$output" | sed 's/०/0/g; s/१/1/g; s/२/2/g; s/३/3/g; s/४/4/g; s/५/5/g; s/६/6/g; s/७/7/g; s/८/8/g; s/९/9/g') ;;
-        ja|zh|ko)
-            # 全角数字をASCII数字に変換 (大文字化の影響を受けないように最後の方で処理)
-            output=$(echo "$output" | sed 's/０/0/g; s/１/1/g; s/２/2/g; s/３/3/g; s/４/4/g; s/５/5/g; s/６/6/g; s/７/7/g; s/８/8/g; s/９/9/g') ;;
-    esac
-
-    # 正規化した結果のみを返す
-    printf '%s' "$output"
-    return 0
-}
-
 get_message() {
     local key="$1"
     shift  # 最初の引数（キー）を除去
@@ -458,27 +380,82 @@ get_message() {
         message="$key"
     fi
 
-    # ★★★ 変更点: パラメータ置換処理を先に実行 ★★★
+    # パラメータ置換処理を先に実行
     for param in "$@"; do
         param_name=$(echo "$param" | cut -d'=' -f1)
         param_value=$(echo "$param" | cut -d'=' -f2-)
 
         # パラメータ値内の特殊文字をsed用にエスケープする処理を追加
-        # '/' と '&' をエスケープ (POSIX準拠のsed)
         local escaped_value=$(echo "$param_value" | sed -e 's/[\/&]/\\&/g')
 
         if [ -n "$param_name" ] && [ -n "$param_value" ]; then
-             # 変更点: エスケープされた値を使用
             message=$(echo "$message" | sed "s|{$param_name}|$escaped_value|g")
             debug_log "DEBUG: Replaced {$param_name} with $param_value (escaped: $escaped_value)"
         fi
     done
 
-    # ★★★ 変更点: normalize_message の呼び出しをパラメータ置換後に移動 ★★★
+    # normalize_message の呼び出しをパラメータ置換後に移動
     message=$(normalize_message "$message" "$lang")
+
+    # ★★★ 追加点: {;} の置換をここで行う ★★★
+    message=$(echo "$message" | sed 's/{;}/: /g')
 
     # 出力
     printf "%b" "$message"
+    return 0
+}
+
+normalize_message() {
+    local input="$1"
+    local lang="$2"  # 言語コードを受け取るパラメータ
+
+    # 大文字化スイッチ
+    local force_uppercase="ON" # デフォルトはON
+
+    local output="$input"
+    local saved_locale="$LC_ALL" # 元のロケールを保存
+
+    # === マルチバイト/全角文字の正規化 ===
+    output=$(echo "$output" | sed 's/｛/{/g; s/｝/}/g')
+    output=$(echo "$output" | sed 's/：/:/g; s/∶/:/g; s/꞉/:/g; s/ː/:/g')
+    output=$(echo "$output" | sed 's/；/;/g')
+    output=$(echo "$output" | sed 's/　/ /g')
+    output=$(echo "$output" | sed 's/＠/@/g')
+    output=$(echo "$output" | sed 's/＼/\\/g')
+
+    # === LC_ALL=C での処理 ===
+    LC_ALL=C
+    output=$(echo "$output" | sed 's/{[[:space:]]*\([^{}]*\)[[:space:]]*}/{\1}/g')
+    while echo "$output" | grep -q '{[^{}]*[[:space:]][^{}]*}'; do
+        output=$(echo "$output" | sed 's/\({[^{}]*\)[[:space:]]\([^{}]*}\)/\1\2/g')
+    done
+    LC_ALL="$saved_locale"
+
+    # === 特殊プレースホルダーの置換 ({;} は削除) ===
+    output=$(echo "$output" | sed 's/{:}/:/g')
+    output=$(echo "$output" | sed 's/{@}/\\n/g')
+    # ★★★ 削除点: 以下の行を削除 ★★★
+    # output=$(echo "$output" | sed 's/{;}/: /g')
+
+    # === 大文字化処理 ===
+    if [ "$force_uppercase" = "ON" ]; then
+        debug_log "DEBUG" "Force Uppercase enabled. Original: [$output]"
+        output=$(printf '%s' "$output" | tr '[:lower:]' '[:upper:]')
+        debug_log "DEBUG" "Force Uppercase applied. Result: [$output]"
+    else
+         debug_log "DEBUG" "Force Uppercase skipped: Switch is $force_uppercase."
+    fi
+
+    # === 言語コード別の処理 ===
+    case "${lang%%-*}" in
+        ar) output=$(echo "$output" | sed 's/٠/0/g; s/١/1/g; s/٢/2/g; s/٣/3/g; s/٤/4/g; s/٥/5/g; s/٦/6/g; s/٧/7/g; s/٨/8/g; s/٩/9/g') ;;
+        fa) output=$(echo "$output" | sed 's/۰/0/g; s/۱/1/g; s/۲/2/g; s/۳/3/g; s/۴/4/g; s/۵/5/g; s/۶/6/g; s/۷/7/g; s/۸/8/g; s/۹/9/g') ;;
+        bn) output=$(echo "$output" | sed 's/০/0/g; s/১/1/g; s/২/2/g; s/৩/3/g; s/৪/4/g; s/৫/5/g; s/৬/6/g; s/৭/7/g; s/৮/8/g; s/৯/9/g') ;;
+        hi|mr|ne) output=$(echo "$output" | sed 's/०/0/g; s/१/1/g; s/२/2/g; s/३/3/g; s/४/4/g; s/५/5/g; s/६/6/g; s/७/7/g; s/८/8/g; s/९/9/g') ;;
+        ja|zh|ko) output=$(echo "$output" | sed 's/０/0/g; s/１/1/g; s/２/2/g; s/３/3/g; s/４/4/g; s/５/5/g; s/６/6/g; s/７/7/g; s/８/8/g; s/９/9/g') ;;
+    esac
+
+    printf '%s' "$output"
     return 0
 }
 
