@@ -40,7 +40,7 @@ MENU_DSLITE_TRANS_EAST download "internet-ds-lite-config.sh" "chmod" "load"; app
 MENU_DSLITE_TRANS_WEST download "internet-ds-lite-config.sh" "chmod" "load"; apply_dslite_settings "$AFTR_TRANS_WEST" "Transix (West Japan)" # Apply Transix West
 
 [MENU_SYSTEM]
-MENU_SYSTEM printf "%s\n" "$(color yellow "Coming soon")"
+MENU_SYSTEM printf "\n%s\n" "$(color yellow "Coming soon")"
 
 [MENU_PACKAGES]
 MENU_PACKAGES_AUTO_INSTALL download "package-auto.sh" "chmod" "load"; detect_and_run_installer standard
