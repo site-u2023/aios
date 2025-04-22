@@ -459,107 +459,109 @@ normalize_message() {
     return 0
 }
 
+# メッセージを取得し、パラメータ置換とフォーマットを行う関数
+# Usage: get_message <key> [format_type] [param1=value1] [param2=value2] ...
+# format_type: "upper", "capitalize", "none" (default)
 get_message() {
     local key="$1"
-    # ★★★ 変更点: 第2引数をフォーマットタイプとして取得 (デフォルト: none) ★★★
-    local format_type="${2:-none}"
-    shift 2 # キーとフォーマットタイプの引数を除去し、残りをパラメータ置換用 ($@) とする
+    local format_type="none" # デフォルトのフォーマットタイプ
+    local shift_count=1      # デフォルトはキーのみを shift する
 
+    # 第2引数が存在し、かつそれがフォーマットタイプ指定子であるか確認
+    if [ $# -ge 2 ]; then
+        case "$2" in
+            upper|capitalize|none)
+                # 第2引数がフォーマットタイプ指定子の場合
+                format_type="$2"
+                shift_count=2 # キーとフォーマットタイプを shift する
+                debug_log "DEBUG" "get_message: Format type '$format_type' provided for key '$key'."
+                ;;
+            *)
+                # 第2引数がフォーマットタイプ指定子でない場合は、パラメータとみなす
+                debug_log "DEBUG" "get_message: Second argument '$2' is not a format type, assuming parameter for key '$key'."
+                # format_type は "none", shift_count は 1 のまま
+                ;;
+        esac
+    else
+        # 第2引数が存在しない場合
+        debug_log "DEBUG" "get_message: No second argument provided for key '$key'."
+        # format_type は "none", shift_count は 1 のまま
+    fi
+
+    # 判定結果に基づいて shift を実行
+    shift "$shift_count"
+
+    # --- 以降の処理はパラメータ置換を含め、以前の提案と同じ ---
     local lang="$DEFAULT_LANGUAGE"
     local message=""
     local add_colon="false"
 
-    # 言語コードの取得
+    # 言語コードの取得 (変更なし)
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang=$(cat "${CACHE_DIR}/message.ch")
     fi
 
-    # 1. DBからメッセージ取得を試みる (変更なし)
+    # 1. DBからメッセージ取得 (変更なし)
     local db_file="$(check_message_cache "$lang")"
     if [ -n "$db_file" ] && [ -f "$db_file" ]; then
-        debug_log "DEBUG" "get_message: Attempting to get key '$key' from DB: $db_file"
         message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
         if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
             local default_db_file="$(check_message_cache "$DEFAULT_LANGUAGE")"
             if [ -n "$default_db_file" ] && [ -f "$default_db_file" ]; then
-                debug_log "DEBUG" "get_message: Key '$key' not in '$lang' DB, trying default DB: $default_db_file"
                 message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$default_db_file" 2>/dev/null | cut -d'=' -f2-)
             fi
         fi
-    else
-        debug_log "DEBUG" "get_message: Message DB file not found or not specified for lang '$lang'. Will try memory cache."
     fi
 
-    # 2. DBで見つからなかった場合、メモリキャッシュを試す (変更なし)
+    # 2. メモリキャッシュを試す (変更なし)
     if [ -z "$message" ]; then
-        debug_log "DEBUG" "get_message: Key '$key' not found in DB, trying memory cache (Lang: $MSG_MEMORY_LANG, Initialized: $MSG_MEMORY_INITIALIZED)"
         if [ "$MSG_MEMORY_INITIALIZED" != "true" ] || [ "$MSG_MEMORY_LANG" != "$lang" ]; then
-            debug_log "DEBUG" "get_message: Initializing memory message cache for lang '$lang'"
             into_memory_message
         fi
         if [ -n "$MSG_MEMORY" ]; then
             message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
             if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
-                 debug_log "DEBUG" "get_message: Key '$key' not in memory cache for '$lang', trying default lang '$DEFAULT_LANGUAGE'"
                  message=$(echo "$MSG_MEMORY" | grep "^${DEFAULT_LANGUAGE}|${key}=" 2>/dev/null | cut -d'=' -f2-)
             fi
         fi
     fi
 
-    # 3. それでもメッセージが見つからない場合はキーをそのまま返す (変更なし)
+    # 3. フォールバック (変更なし)
     if [ -z "$message" ]; then
-        debug_log "WARN" "get_message: Message not found for key '$key' in DB or memory cache. Using key as message."
         message="$key"
-    else
-        debug_log "DEBUG" "get_message: Found message for key '$key': [$message]"
     fi
 
-    # 4. {;} の検出と削除、フラグ設定 (パラメータ置換前) (変更なし)
+    # 4. {;} 検出 (変更なし)
     if echo "$message" | grep -q '{;}'; then
         message=$(echo "$message" | sed 's/{;}//g')
         add_colon="true"
-        debug_log "DEBUG" "get_message: Found and removed {;} placeholder for key '$key'. Colon will be added later."
     fi
 
-    # 5. パラメータ置換処理 ($@ は shift 2 済みなので、パラメータのみが残っている) (変更なし)
+    # 5. パラメータ置換 ($@ は shift 済み) (変更なし - sed 区切り文字 # を使用)
     for param in "$@"; do
         param_name=$(echo "$param" | cut -d'=' -f1)
         param_value=$(echo "$param" | cut -d'=' -f2-)
-        local escaped_value=$(echo "$param_value" | sed -e 's/[\/&\]/\\&/g' -e 's/\[/\\[/g')
-        if [ -n "$param_name" ] && [ -n "$param_value" ]; then
-            message=$(echo "$message" | sed "s|{$param_name}|$escaped_value|g")
-            debug_log "DEBUG" "get_message: Replaced {$param_name} with value (escaped: $escaped_value) for key '$key'"
+        # POSIX準拠のエスケープ (sed の区切り文字に依存しないように)
+        local escaped_value=$(printf '%s\n' "$param_value" | sed -e 's/[\\#]/\\&/g') # 区切り文字 # をエスケープ
+        if [ -n "$param_name" ] ; then # 値が空でも置換できるように修正
+             message=$(echo "$message" | sed "s#{$param_name}#$escaped_value#g")
+             debug_log "DEBUG" "get_message: Replaced {$param_name} for key '$key'"
         fi
     done
 
-    # 6. normalize_message の呼び出し (変更なし)
+    # 6. normalize_message (変更なし)
     message=$(normalize_message "$message" "$lang")
-    debug_log "DEBUG" "get_message: Message after normalization for key '$key': [$message]"
 
-    # ★★★ 変更点: フォーマットタイプに基づいて format_string を呼び出す ★★★
+    # 7. format_string 呼び出し (変更なし)
     case "$format_type" in
-        "upper")
-            debug_log "DEBUG" "get_message: Applying 'upper' format for key '$key'"
-            message=$(format_string "upper" "$message")
-            ;;
-        "capitalize")
-            debug_log "DEBUG" "get_message: Applying 'capitalize' format for key '$key'"
-            message=$(format_string "capitalize" "$message")
-            ;;
-        "none"|*)
-            # デフォルト ("none") または未知のタイプの場合は何もしない
-            debug_log "DEBUG" "get_message: No formatting applied (type: '$format_type') for key '$key'"
-            ;;
+        "upper") message=$(format_string "upper" "$message") ;;
+        "capitalize") message=$(format_string "capitalize" "$message") ;;
     esac
-    # ★★★ 変更点ここまで ★★★
 
-    # 7. フラグに基づき末尾に ": " を追加 (normalize_message と format_string の後) (変更なし)
-    if [ "$add_colon" = "true" ]; then
-        message="${message}: "
-        debug_log "DEBUG" "get_message: Appended ': ' based on {;} flag for key '$key'."
-    fi
+    # 8. コロン追加 (変更なし)
+    if [ "$add_colon" = "true" ]; then message="${message}: "; fi
 
-    # 8. 最終的なメッセージを出力 (printf %b で \n などを解釈) (変更なし)
+    # 9. 出力 (変更なし)
     printf "%b" "$message"
     return 0
 }
