@@ -373,19 +373,21 @@ normalize_message() {
     debug_log "DEBUG" "normalize_message: Exiting LC_ALL=C block. Result = [$output]"
     LC_ALL="$saved_locale"
 
-    # Special placeholder replacement ({;} is not replaced here)
+    # Special placeholder replacement ( {;} is NOT replaced here )
     local before_special_replace="$output"
     output=$(echo "$output" | sed 's/{:}/:/g') # {:} -> :
     if [ "$output" != "$before_special_replace" ]; then
          debug_log "DEBUG" "normalize_message: Replaced {:} with :. Result = [$output]"
     fi
     before_special_replace="$output"
-    output=$(echo "$output" | sed 's/{@}/\\n/g') # {@} -> newline
+    output=$(echo "$output" | sed 's/{@}/\\n/g') # {@} -> newline (\n)
      if [ "$output" != "$before_special_replace" ]; then
          debug_log "DEBUG" "normalize_message: Replaced {@} with \\n. Result = [$output]"
     fi
+    # ★★★ 変更点: {;} を ": " に変換する処理を削除 ★★★
+    # sed 's/{;}/: /g' の行を削除しました。
 
-    # Uppercase conversion using multiple sed s///g (more portable)
+    # Uppercase conversion using multiple sed s///g
     if [ "$force_uppercase" = "ON" ]; then
         debug_log "DEBUG" "normalize_message: Force Uppercase enabled. Before: [$output]"
         output=$(echo "$output" | sed \
@@ -403,21 +405,11 @@ normalize_message() {
     # Language-specific number normalization
     local before_num_norm="$output"
     case "${lang%%-*}" in
-        ar)
-            output=$(echo "$output" | sed 's/٠/0/g; s/١/1/g; s/٢/2/g; s/٣/3/g; s/٤/4/g; s/٥/5/g; s/٦/6/g; s/٧/7/g; s/٨/8/g; s/٩/9/g')
-            ;;
-        fa)
-            output=$(echo "$output" | sed 's/۰/0/g; s/۱/1/g; s/۲/2/g; s/۳/3/g; s/۴/4/g; s/۵/5/g; s/۶/6/g; s/۷/7/g; s/۸/8/g; s/۹/9/g')
-            ;;
-        bn)
-            output=$(echo "$output" | sed 's/০/0/g; s/১/1/g; s/২/2/g; s/৩/3/g; s/৪/4/g; s/৫/5/g; s/৬/6/g; s/৭/7/g; s/৮/8/g; s/৯/9/g')
-            ;;
-        hi|mr|ne)
-            output=$(echo "$output" | sed 's/०/0/g; s/१/1/g; s/२/2/g; s/३/3/g; s/४/4/g; s/५/5/g; s/६/6/g; s/७/7/g; s/८/8/g; s/९/9/g')
-            ;;
-        ja|zh|ko)
-            output=$(echo "$output" | sed 's/０/0/g; s/１/1/g; s/２/2/g; s/３/3/g; s/４/4/g; s/５/5/g; s/６/6/g; s/７/7/g; s/８/8/g; s/９/9/g')
-            ;;
+        ar) output=$(echo "$output" | sed 's/٠/0/g; s/١/1/g; s/٢/2/g; s/٣/3/g; s/٤/4/g; s/٥/5/g; s/٦/6/g; s/٧/7/g; s/٨/8/g; s/٩/9/g') ;;
+        fa) output=$(echo "$output" | sed 's/۰/0/g; s/۱/1/g; s/۲/2/g; s/۳/3/g; s/۴/4/g; s/۵/5/g; s/۶/6/g; s/۷/7/g; s/۸/8/g; s/۹/9/g') ;;
+        bn) output=$(echo "$output" | sed 's/০/0/g; s/۱/1/g; s/২/2/g; s/৩/3/g; s/৪/4/g; s/৫/5/g; s/৬/6/g; s/৭/7/g; s/৮/8/g; s/৯/9/g') ;;
+        hi|mr|ne) output=$(echo "$output" | sed 's/०/0/g; s/१/1/g; s/२/2/g; s/३/3/g; s/४/4/g; s/५/5/g; s/६/6/g; s/७/7/g; s/८/8/g; s/९/9/g') ;;
+        ja|zh|ko) output=$(echo "$output" | sed 's/０/0/g; s/１/1/g; s/２/2/g; s/３/3/g; s/４/4/g; s/５/5/g; s/６/6/g; s/７/7/g; s/８/8/g; s/９/9/g') ;;
     esac
 
     # Consolidated log output for number normalization
@@ -426,88 +418,93 @@ normalize_message() {
     fi
 
     debug_log "DEBUG" "normalize_message: Final Output = [$output]"
-    printf '%s' "$output"
+    printf '%s' "$output" # 出力は %s のまま
     return 0
 }
 
 get_message() {
-    local msg_key="$1"
-    shift # msg_key を引数リストから削除
-    local lang_code=""
-    local default_lang="en"
+    local key="$1"
+    shift  # 最初の引数（キー）を除去
+    local lang="$DEFAULT_LANGUAGE"
     local message=""
-    local msg_file=""
-    local placeholder_present="false"
-    local add_colon="false"
+    local add_colon="false" # ★★★ 追加: コロン追加用フラグ ★★★
 
-    # キャッシュから言語コード読み込み
+    # 言語コードの取得
     if [ -f "${CACHE_DIR}/message.ch" ]; then
-        lang_code=$(cat "${CACHE_DIR}/message.ch")
-    fi
-    lang_code="${lang_code:-$default_lang}" # デフォルトは英語
-
-    msg_file="${BASE_DIR}/message_${lang_code}.db"
-    debug_log "DEBUG" "get_message: Using message file: $msg_file for key: $msg_key"
-
-    # メッセージファイルからキーに対応するメッセージを取得
-    if [ -f "$msg_file" ]; then
-        # 行頭が "lang_code|" で始まり、その後に "key=" が続く行を検索
-        message=$(grep "^${lang_code}|${msg_key}=" "$msg_file" | cut -d'=' -f2-)
+        lang=$(cat "${CACHE_DIR}/message.ch")
     fi
 
-    # メッセージが見つからない場合、英語で再試行
-    if [ -z "$message" ] && [ "$lang_code" != "$default_lang" ]; then
-        debug_log "DEBUG" "get_message: Message not found in $lang_code, trying $default_lang for key: $msg_key"
-        msg_file="${BASE_DIR}/message_${default_lang}.db"
-        if [ -f "$msg_file" ]; then
-            message=$(grep "^${default_lang}|${msg_key}=" "$msg_file" | cut -d'=' -f2-)
+    # 1. DBからメッセージ取得を試みる
+    local db_file="$(check_message_cache "$lang")"
+    if [ -n "$db_file" ] && [ -f "$db_file" ]; then
+        debug_log "DEBUG" "get_message: Attempting to get key '$key' from DB: $db_file"
+        message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
+            local default_db_file="$(check_message_cache "$DEFAULT_LANGUAGE")"
+            if [ -n "$default_db_file" ] && [ -f "$default_db_file" ]; then
+                debug_log "DEBUG" "get_message: Key '$key' not in '$lang' DB, trying default DB: $default_db_file"
+                message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$default_db_file" 2>/dev/null | cut -d'=' -f2-)
+            fi
+        fi
+    else
+        debug_log "DEBUG" "get_message: Message DB file not found or not specified for lang '$lang'. Will try memory cache."
+    fi
+
+    # 2. DBで見つからなかった場合、メモリキャッシュを試す
+    if [ -z "$message" ]; then
+        debug_log "DEBUG" "get_message: Key '$key' not found in DB, trying memory cache (Lang: $MSG_MEMORY_LANG, Initialized: $MSG_MEMORY_INITIALIZED)"
+        if [ "$MSG_MEMORY_INITIALIZED" != "true" ] || [ "$MSG_MEMORY_LANG" != "$lang" ]; then
+            debug_log "DEBUG" "get_message: Initializing memory message cache for lang '$lang'"
+            into_memory_message
+        fi
+        if [ -n "$MSG_MEMORY" ]; then
+            message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+            if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
+                 debug_log "DEBUG" "get_message: Key '$key' not in memory cache for '$lang', trying default lang '$DEFAULT_LANGUAGE'"
+                 message=$(echo "$MSG_MEMORY" | grep "^${DEFAULT_LANGUAGE}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+            fi
         fi
     fi
 
-    # それでも見つからない場合はキー名をそのまま使用
+    # 3. それでもメッセージが見つからない場合はキーをそのまま返す
     if [ -z "$message" ]; then
-        debug_log "WARN" "get_message: Message key '$msg_key' not found in $lang_code or $default_lang. Using key as message."
-        message="$msg_key"
+        debug_log "WARN" "get_message: Message not found for key '$key' in DB or memory cache. Using key as message."
+        message="$key"
+    else
+        debug_log "DEBUG" "get_message: Found message for key '$key': [$message]"
     fi
 
-    # {;} が存在するかチェックし、存在すれば削除してコロン追加フラグを立てる
+    # ★★★ 追加/復活: {;} の検出と削除、フラグ設定 (パラメータ置換前) ★★★
     if echo "$message" | grep -q '{;}'; then
         message=$(echo "$message" | sed 's/{;}//g')
         add_colon="true"
-        debug_log "DEBUG" "get_message: Found and removed {;} placeholder for key '$msg_key'. Colon will be added."
+        debug_log "DEBUG" "get_message: Found and removed {;} placeholder for key '$key'. Colon will be added later."
     fi
 
-    # パラメータ置換ループ
-    while [ $# -gt 0 ]; do
-        local param="$1"
-        # name=value 形式かチェック
-        if echo "$param" | grep -q '='; then
-            local name=$(echo "$param" | cut -d'=' -f1)
-            local value=$(echo "$param" | cut -d'=' -f2-)
-            # プレースホルダー {name} を value で置換 (sed のエスケープ処理を含む)
-            local escaped_value=$(printf '%s' "$value" | sed 's/[&/\]/\\&/g') # & / \ をエスケープ
-            message=$(echo "$message" | sed "s|{$name}|$escaped_value|g")
-            placeholder_present="true" # プレースホルダーがあったことを記録
-            debug_log "DEBUG" "get_message: Replaced placeholder {$name} with value [$value] for key '$msg_key'"
-        else
-            debug_log "WARN" "get_message: Invalid parameter format '$param' for key '$msg_key'. Expected name=value."
+    # 4. パラメータ置換処理
+    for param in "$@"; do
+        param_name=$(echo "$param" | cut -d'=' -f1)
+        param_value=$(echo "$param" | cut -d'=' -f2-)
+        local escaped_value=$(echo "$param_value" | sed -e 's/[\/&\]/\\&/g' -e 's/\[/\\[/g')
+        if [ -n "$param_name" ] && [ -n "$param_value" ]; then
+            message=$(echo "$message" | sed "s|{$param_name}|$escaped_value|g")
+            debug_log "DEBUG" "get_message: Replaced {$param_name} with value (escaped: $escaped_value) for key '$key'"
         fi
-        shift
     done
 
-    # normalize_message を呼び出してメッセージを正規化
-    # normalize_message は言語コードを必要とする場合があるため、$lang_code を渡す
-    message=$(normalize_message "$message" "$lang_code")
-    debug_log "DEBUG" "get_message: Message after normalization for key '$msg_key': [$message]"
+    # 5. normalize_message の呼び出し
+    message=$(normalize_message "$message" "$lang")
+    debug_log "DEBUG" "get_message: Message after normalization for key '$key': [$message]"
 
-    # コロン追加フラグが立っていれば末尾に ": " を追加
+    # ★★★ 追加/復活: フラグに基づき末尾に ": " を追加 (normalize_message の後) ★★★
     if [ "$add_colon" = "true" ]; then
         message="${message}: "
-        debug_log "DEBUG" "get_message: Appended ': ' for key '$msg_key'."
+        debug_log "DEBUG" "get_message: Appended ': ' based on {;} flag for key '$key'."
     fi
 
-    # 最終的なメッセージを出力
-    printf '%s' "$message"
+    # 7. 最終的なメッセージを出力 (printf %b で \n などを解釈)
+    printf "%b" "$message"
+    return 0
 }
 
 # 🔴　メッセージ系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
