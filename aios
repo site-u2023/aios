@@ -892,6 +892,73 @@ save_version_to_cache() {
     local file_name="$1"
     local version="$2"
     local script_file="$3"
+    local tmp_file="${script_file}.tmp" # 一時ファイル名を変数に
+
+    debug_log "DEBUG" "save_version_to_cache: Called for file='$file_name', version='$version', script_file='$script_file'"
+
+    # バージョンが空でないかチェック
+    if [ -z "$version" ]; then
+        debug_log "ERROR" "save_version_to_cache: Received empty version for file '$file_name'. Aborting cache save."
+        return 1 # バージョンが空なら書き込みしない
+    fi
+
+    # tmpファイルを確実に削除しておく
+    rm -f "$tmp_file" 2>/dev/null
+
+    # script_file が存在する場合の処理
+    if [ -f "$script_file" ]; then
+        debug_log "DEBUG" "save_version_to_cache: File '$script_file' exists. Filtering existing entry for '$file_name'."
+        # grep の実行と結果確認
+        if grep -v "^${file_name}=" "$script_file" > "$tmp_file"; then
+            debug_log "DEBUG" "save_version_to_cache: Successfully filtered '$script_file' to '$tmp_file'."
+        else
+            local grep_status=$?
+            debug_log "ERROR" "save_version_to_cache: grep command failed with status $grep_status for '$script_file'."
+            # grep失敗時は一時ファイルを削除して終了（安全策）
+            rm -f "$tmp_file" 2>/dev/null
+            return 1
+        fi
+
+        # 新しいバージョン情報を追記
+        debug_log "DEBUG" "save_version_to_cache: Appending new version '$version' for '$file_name' to '$tmp_file'."
+        echo "${file_name}=${version}" >> "$tmp_file"
+
+        # 一時ファイルの内容をデバッグログに出力（確認用）
+        debug_log "DEBUG" "save_version_to_cache: Content of '$tmp_file' before move:"
+        while IFS= read -r line || [ -n "$line" ]; do
+             debug_log "DEBUG" "  | $line"
+        done < "$tmp_file"
+
+        # mv の実行と結果確認
+        if mv "$tmp_file" "$script_file"; then
+            debug_log "DEBUG" "save_version_to_cache: Successfully moved '$tmp_file' to '$script_file'."
+        else
+            local mv_status=$?
+            debug_log "ERROR" "save_version_to_cache: mv command failed with status $mv_status. Failed to update '$script_file'."
+            # mv失敗時も一時ファイルを削除
+            rm -f "$tmp_file" 2>/dev/null
+            return 1
+        fi
+    else
+        # script_file が存在しない場合の処理
+        debug_log "DEBUG" "save_version_to_cache: File '$script_file' does not exist. Creating new file."
+        # echo の実行と結果確認
+        if echo "${file_name}=${version}" > "$script_file"; then
+             debug_log "DEBUG" "save_version_to_cache: Successfully created '$script_file' with initial version."
+        else
+             local echo_status=$?
+             debug_log "ERROR" "save_version_to_cache: echo command failed with status $echo_status. Failed to create '$script_file'."
+             return 1
+        fi
+    fi
+
+    return 0 # 成功
+}
+
+OK_save_version_to_cache() {
+    local file_name="$1"
+    local version="$2"
+    local script_file="$3"
     
     # tmpファイルを使用して置き換える（古いsedでも動作）
     if [ -f "$script_file" ]; then
