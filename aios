@@ -1776,10 +1776,10 @@ download() {
     fi
     
     # デバッグモード時は常にダウンロード
-    if [ "$DEBUG_MODE" = "true" ]; then
-        debug_log "DEBUG" "Debug mode enabled, forcing download for ${file_name}"
-        update_required="true"
-    fi
+    #if [ "$DEBUG_MODE" = "true" ]; then
+    #    debug_log "DEBUG" "Debug mode enabled, forcing download for ${file_name}"
+    #    update_required="true"
+    #fi
     
     # ファイルダウンロード処理
     local status_type="no_update"
