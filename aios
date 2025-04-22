@@ -344,7 +344,7 @@ check_message_cache() {
 normalize_message() {
     local input="$1"
     local lang="$2"
-    local force_uppercase="ON"
+    local force_uppercase="OFF"
     local output="$input"
     local saved_locale="$LC_ALL"
 
