@@ -40,7 +40,7 @@ if ! command -v debug_log >/dev/null 2>&1; then
         local message="$2"
         echo "${level}: ${message}" >&2
     }
-    debug_log "WARN" "debug_log function not found initially, using basic fallback. This might indicate an issue loading 'aios'."
+    debug_log "DEBUG" "debug_log function not found initially, using basic fallback. This might indicate an issue loading 'aios'."
 fi
 
 # --- Check if essential functions from aios are loaded ---
@@ -64,7 +64,7 @@ if ! command -v get_message >/dev/null 2>&1; then
 fi
 # Check for confirm function, load common-country if needed
 if ! command -v confirm >/dev/null 2>&1; then
-     debug_log "WARN" "'confirm' function not found. Attempting to load from common-country.sh"
+     debug_log "DEBUG" "'confirm' function not found. Attempting to load from common-country.sh"
      if [ -f "$AIOS_COMMON_COUNTRY" ]; then
           # shellcheck source=/dev/null
           . "$AIOS_COMMON_COUNTRY"
@@ -89,7 +89,7 @@ if ! command -v confirm >/dev/null 2>&1; then
 fi
 # Check for color function, load if needed
 if ! command -v color >/dev/null 2>&1; then
-     debug_log "WARN" "'color' function not found. Attempting to load from common-color.sh"
+     debug_log "DEBUG" "'color' function not found. Attempting to load from common-color.sh"
      if [ -f "$AIOS_COMMON_COLOR" ]; then
           # shellcheck source=/dev/null
           . "$AIOS_COMMON_COLOR"
@@ -156,7 +156,7 @@ determine_connection_by_as() {
 
     # Check if ASN is provided
     if [ -z "$input_asn" ]; then
-        debug_log "WARN" "ASN is empty, cannot determine connection type."
+        debug_log "DEBUG" "ASN is empty, cannot determine connection type."
         echo "unknown||"
         return 1 # Indicate error due to missing input
     fi
@@ -284,7 +284,7 @@ internet_auto_config_main() {
 
         # Fallback if display info couldn't be retrieved
         if [ -z "$display_isp_name" ]; then
-            debug_log "WARN" "Could not get valid display info for ASN '$numeric_asn'. Using key/type as fallback."
+            debug_log "DEBUG" "Could not get valid display info for ASN '$numeric_asn'. Using key/type as fallback."
             display_isp_name="$provider_key" # Use the key as fallback name
             display_conn_type="$connection_type"
         fi
@@ -372,7 +372,7 @@ internet_auto_config_main() {
             ;;
         "unknown")
             # Unknown 処理 (get_message を使用)
-            debug_log "WARN" "Could not automatically determine the IPoE connection type for ASN $asn."
+            debug_log "DEBUG" "Could not automatically determine the IPoE connection type for ASN $asn."
             # Placeholder: as (AS Number)
             printf "%s\n" "$(color yellow "$(get_message "MSG_AUTO_CONFIG_UNKNOWN" as="$asn")")"
             exit_code=1 # Indicate failure or inability to auto-configure
@@ -387,7 +387,7 @@ internet_auto_config_main() {
     if [ "$exit_code" -eq 0 ]; then
         debug_log "DEBUG" "Automatic internet configuration process completed." # INFO -> DEBUG
     else
-        debug_log "WARN" "Automatic internet configuration process finished with errors or was unable to complete."
+        debug_log "DEBUG" "Automatic internet configuration process finished with errors or was unable to complete."
     fi
 
     return $exit_code
