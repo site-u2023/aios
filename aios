@@ -955,21 +955,6 @@ save_version_to_cache() {
     return 0 # 成功
 }
 
-OK_save_version_to_cache() {
-    local file_name="$1"
-    local version="$2"
-    local script_file="$3"
-    
-    # tmpファイルを使用して置き換える（古いsedでも動作）
-    if [ -f "$script_file" ]; then
-        grep -v "^${file_name}=" "$script_file" > "${script_file}.tmp"
-        echo "${file_name}=${version}" >> "${script_file}.tmp"
-        mv "${script_file}.tmp" "$script_file"
-    else
-        echo "${file_name}=${version}" > "$script_file"
-    fi
-}
-
 # トークンセットアップ関数の改善版
 setup_github_token() {
     echo "GitHub API Token Setup"
@@ -1402,8 +1387,6 @@ clean_version_string() {
     fi
 }
 
-# (aios ファイル内の他の部分は変更しない)
-
 # コミット情報取得関数 (構文再確認版)
 get_commit_version() {
     local file_path="$1"
@@ -1726,8 +1709,6 @@ get_commit_version() {
     return 1
 }
 
-# (aios ファイル内の他の部分は変更しない)
-
 download() {
     # ファイル名を最初の引数として処理
     local file_name="$1"
@@ -1807,10 +1788,10 @@ download() {
     fi
     
     # デバッグモード時は常にダウンロード
-    #if [ "$DEBUG_MODE" = "true" ]; then
-    #    debug_log "DEBUG" "Debug mode enabled, forcing download for ${file_name}"
-    #    update_required="true"
-    #fi
+    if [ "$DEBUG_MODE" = "true" ]; then
+        debug_log "DEBUG" "Debug mode enabled, forcing download for ${file_name}"
+        update_required="true"
+    fi
     
     # ファイルダウンロード処理
     local status_type="no_update"
