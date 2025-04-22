@@ -130,7 +130,7 @@ display_breadcrumbs() {
     debug_log "DEBUG" "Building breadcrumb navigation with proper order and colors"
     local main_menu_key="MAIN_MENU_NAME"
     # ★★★ 変更点: get_message に "capitalize" を追加 ★★★
-    local main_menu_text=$(get_message "$main_menu_key" "capitalize")
+    local main_menu_text=$(get_message "$main_menu_key" "upper")
     # get_message 内部でフォールバックされ、キーが返った場合も capitalize で処理される想定
 
     local main_color="white_gray"; local separator=" > " # 元のコードの変数を維持
@@ -151,7 +151,7 @@ display_breadcrumbs() {
     i=0
     for menu in $menu_items; do # 元の変数名 $menu
         # ★★★ 変更点: get_message に "capitalize" を追加 ★★★
-        local display_text=$(get_message "$menu" "capitalize")
+        local display_text=$(get_message "$menu" "upper")
         # get_message 内部でフォールバックされ、キーが返った場合も capitalize で処理される想定
 
         # 色取得 (変更なし)
