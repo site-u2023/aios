@@ -238,7 +238,7 @@ en|MSG_CONFIRM_INSTALL_WITH_DESC=Package{:} {pkg}{@}Description{:} {desc}{@}Inst
 # =======================
 en|MSG_INFO_NET_COUNTRY=IP location
 en|MSG_INFO_NETWORK=IP Type{:} {i}
-en|MSG_INFO_CPUCORE=CPU Core{:} {i}
+en|MSG_INFO_CPUCORE=CPU Core Count{:} {i}
 en|MSG_INFO_ARCHITECTURE=Architecture{:} {i}
 en|MSG_INFO_OSVERSION=OS Version{:} {i}
 en|MSG_INFO_PACKAGEMANAGER=Package manager{:} {i}
