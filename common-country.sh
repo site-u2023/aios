@@ -40,7 +40,7 @@ DEV_NULL="${DEV_NULL:-on}"
 # 通常モード
 # unset DEV_NULL
 
-# 基本定数の設定 
+# 基本定数の設定
 BASE_WGET="wget --no-check-certificate -q"
 # BASE_WGET="wget -O"
 DEBUG_MODE="${DEBUG_MODE:-false}"
@@ -53,52 +53,52 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 normalize_input() {
     local input="$1"
     local output="$input"
-    
+
     # デバッグメッセージを標準エラー出力へリダイレクト
     [ "$DEBUG_MODE" = "true" ] && printf "DEBUG: Starting character normalization for input text\n" >&2
-    
+
     # 入力前処理 - スペースの削除（先に実行）
     output=$(echo "$output" | sed 's/　//g')  # 全角スペースを削除
     output=$(echo "$output" | sed 's/ //g')   # 半角スペースを削除
     output=$(echo "$output" | sed 's/\t//g')  # タブ文字を削除
-    
+
     # 変換テーブル（各行はsedコマンドの負荷を分散するため分割）
-    
+
     # 数字（0-9）: 日本語、中国語（簡体字・繁体字）、韓国語で共通
     output=$(echo "$output" | sed 's/０/0/g; s/１/1/g; s/２/2/g; s/３/3/g; s/４/4/g')
     output=$(echo "$output" | sed 's/５/5/g; s/６/6/g; s/７/7/g; s/８/8/g; s/９/9/g')
-    
+
     # アルファベット大文字（A-Z）: 各国共通の全角英字
     output=$(echo "$output" | sed 's/Ａ/A/g; s/Ｂ/B/g; s/Ｃ/C/g; s/Ｄ/D/g; s/Ｅ/E/g')
     output=$(echo "$output" | sed 's/Ｆ/F/g; s/Ｇ/G/g; s/Ｈ/H/g; s/Ｉ/I/g; s/Ｊ/J/g')
     output=$(echo "$output" | sed 's/Ｋ/K/g; s/Ｌ/L/g; s/Ｍ/M/g; s/Ｎ/N/g; s/Ｏ/O/g')
     output=$(echo "$output" | sed 's/Ｐ/P/g; s/Ｑ/Q/g; s/Ｒ/R/g; s/Ｓ/S/g; s/Ｔ/T/g')
     output=$(echo "$output" | sed 's/Ｕ/U/g; s/Ｖ/V/g; s/Ｗ/W/g; s/Ｘ/X/g; s/Ｙ/Y/g; s/Ｚ/Z/g')
-    
+
     # アルファベット小文字（a-z）: 各国共通の全角英字
     output=$(echo "$output" | sed 's/ａ/a/g; s/ｂ/b/g; s/ｃ/c/g; s/ｄ/d/g; s/ｅ/e/g')
     output=$(echo "$output" | sed 's/ｆ/f/g; s/ｇ/g/g; s/ｈ/h/g; s/ｉ/i/g; s/ｊ/j/g')
     output=$(echo "$output" | sed 's/ｋ/k/g; s/ｌ/l/g; s/ｍ/m/g; s/ｎ/n/g; s/ｏ/o/g')
     output=$(echo "$output" | sed 's/ｐ/p/g; s/ｑ/q/g; s/ｒ/r/g; s/ｓ/s/g; s/ｔ/t/g')
     output=$(echo "$output" | sed 's/ｕ/u/g; s/ｖ/v/g; s/ｗ/w/g; s/ｘ/x/g; s/ｙ/y/g; s/ｚ/z/g')
-    
+
     # 主要な記号（日本語、中国語、韓国語で共通使用される記号）
     output=$(echo "$output" | sed 's/！/!/g; s/＂/"/g; s/＃/#/g; s/＄/$/g; s/％/%/g')
     output=$(echo "$output" | sed 's/＆/\&/g; s/＇/'\''/g; s/（/(/g; s/）/)/g; s/＊/*/g')
     output=$(echo "$output" | sed 's/＋/+/g; s/，/,/g; s/－/-/g; s/．/./g; s/／/\//g')
-    
+
     # 主要な記号（続き）
     output=$(echo "$output" | sed 's/：/:/g; s/；/;/g; s/＜/</g; s/＝/=/g; s/＞/>/g')
     output=$(echo "$output" | sed 's/？/?/g; s/＠/@/g; s/［/[/g; s/＼/\\/g; s/］/]/g')
     output=$(echo "$output" | sed 's/＾/^/g; s/＿/_/g; s/｀/`/g; s/｛/{/g; s/｜/|/g')
     output=$(echo "$output" | sed 's/｝/}/g; s/～/~/g')
-    
+
     # 韓国語特有の全角記号
     output=$(echo "$output" | sed 's/￦/\\/g; s/￥/\\/g')
-    
+
     # デバッグメッセージを標準エラー出力へリダイレクト
     [ "$DEBUG_MODE" = "true" ] && printf "DEBUG: Character normalization completed\n" >&2
-    
+
     # 正規化した結果のみを返す（デバッグ情報なし）
     printf '%s' "$output"
 }
@@ -239,9 +239,9 @@ select_list() {
     local select_list="$1"
     local tmp_file="$2"
     local type="$3"
-    
+
     debug_log "DEBUG" "Running select_list() with t=$type"
-    
+
     # メッセージキー設定
     local prompt_msg_key=""
     case "$type" in
@@ -249,37 +249,37 @@ select_list() {
         zone)    prompt_msg_key="MSG_SELECT_ZONE_NUMBER" ;;
         *)       prompt_msg_key="MSG_SELECT_NUMBER" ;;
     esac
-    
+
     # リストの行数を計算
     local total_items=$(echo "$select_list" | wc -l)
     debug_log "DEBUG" "Total items in list: $total_items"
-    
+
     # 項目が1つだけなら自動選択
     if [ "$total_items" -eq 1 ]; then
         debug_log "DEBUG" "Only one item available, auto-selecting"
         echo "1" > "$tmp_file"
         return 0
     fi
-    
+
     # 選択肢を表示
     local display_count=1
     echo "$select_list" | while IFS= read -r line; do
         printf "[%d] %s\n" "$display_count" "$line"
         display_count=$((display_count + 1))
     done
-    
+
     # 選択ループ
     local prompt_msg=$(get_message "$prompt_msg_key")
-    
+
     while true; do
         # プロンプト表示
         printf "%s " "$(color white "$prompt_msg")"
-        
+
         # 入力読み取り
         read -r number
         number=$(normalize_input "$number")
         debug_log "DEBUG" "User entered: $number"
-        
+
         # 数値チェック
         if ! echo "$number" | grep -q '^[0-9]\+$'; then
             # エラーの前は行間詰め
@@ -287,7 +287,7 @@ select_list() {
             debug_log "DEBUG" "Invalid input: not a number"
             continue
         fi
-        
+
         # 範囲チェック
         if [ "$number" -lt 1 ] || [ "$number" -gt "$total_items" ]; then
             # エラーの前は行間詰め
@@ -295,26 +295,21 @@ select_list() {
             debug_log "DEBUG" "Invalid input: number out of range (1-$total_items)"
             continue
         fi
-        
+
         # 選択項目を取得
         local selected_item=$(echo "$select_list" | sed -n "${number}p")
         debug_log "DEBUG" "Selected item: $selected_item"
-        
-        # 確認メッセージを表示
-        local msg_selected=""
-        case "$type" in
-            country) msg_selected=$(get_message "MSG_SELECTED_COUNTRY") ;;
-            zone)    msg_selected=$(get_message "MSG_SELECTED_ZONE") ;;
-            *)       msg_selected=$(get_message "MSG_SELECTED_ITEM") ;;
-        esac
-        
-        # confirm関数内での使用
-        printf "%s\n" "$(color white "$(get_message "$message_key" "i=$selected_item")")"
+
+        # 確認メッセージを表示 (get_message を使って動的に生成)
+        local confirm_msg_key="MSG_CONFIRM_SELECT" # 共通の確認メッセージキー
+        local confirm_prompt=$(get_message "$confirm_msg_key" "i=$selected_item") # プレースホルダ {i} を置換
 
         # 確認（YNRモードで）
-        confirm "MSG_CONFIRM_SELECT" "ynr"
+        # confirm 関数内でメッセージキーとパラメータを処理するように修正済みのため、
+        # ここでは get_message を使って生成したメッセージではなく、キーとパラメータを渡す
+        confirm "$confirm_msg_key" "ynr" "i=$selected_item"
         local ret=$?
-        
+
         case $ret in
             0)  # Yes
                 debug_log "DEBUG" "Selection confirmed for item #$number"
@@ -339,14 +334,7 @@ escape_for_sed() {
     printf '%s' "$input" | sed 's/[\/&.*[\]^$]/\\&/g'
 }
 
-# システムの地域情報を検出し設定する関数
-# 引数: $1: 
-#      "skip-cache" - cache情報の検出をスキップ
-#      "skip_device" - デバイス内情報の検出をスキップ
-#      "skip_ip" - IP検索をスキップ
-#      "skip_cache-device" - cache情報とデバイス内情報の検出をスキップ
-#      "skip_all" - すべての検出をスキップ
-#      未指定の場合はすべての検出方法を試行
+# --- ▼▼▼ 変更点 (detect_and_set_location) ▼▼▼ ---
 # システムの地域情報を検出し設定する関数
 detect_and_set_location() {
     # デバッグログ出力 (末尾の [...] を削除)
@@ -358,7 +346,7 @@ detect_and_set_location() {
     local detected_zonename=""
     local country_data=""
     local detection_source=""
-    local preview_applied="false"
+    local preview_applied="false" # 現在未使用だが、将来的なプレビュー機能のために残す
     local skip_confirmation="false"
     local detected_isp="" # ISP/AS情報を関数内で初期化
     local detected_as=""
@@ -411,21 +399,22 @@ detect_and_set_location() {
                 # キャッシュ使用時も言語処理を確実に実行
                 debug_log "DEBUG" "Ensuring language processing for cached location"
 
-                # 国情報を一時ファイルに書き出し
+                # 国情報を一時ファイルに書き出し (country_write のために必要)
                 if [ -n "$country_data" ]; then
                     echo "$country_data" > "${CACHE_DIR}/country.tmp"
+                    # country_write は翻訳初期化も行うため呼び出す
+                    country_write || {
+                        debug_log "ERROR" "Failed to initialize translation via country_write for cache"
+                        # 翻訳失敗は致命的ではないかもしれないが、ログは残す
+                    }
                 fi
 
-                # --- ▼▼▼ 変更点 ▼▼▼ ---
-                # 共通関数を使用して検出情報のみを表示 (成功メッセージは非表示)
-                display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "false" "$detected_isp" "$detected_as" # 5番目の引数を "false" に変更
-                # --- ▲▲▲ 変更点 ▲▲▲ ---
+                # 共通関数を使用して検出情報のみを表示 (成功メッセージ表示引数削除)
+                display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "$detected_isp" "$detected_as"
 
-                # --- ▼▼▼ 変更点 ▼▼▼ ---
-                # デバッグメッセージも修正
+                # キャッシュ利用時は成功メッセージを表示しない
                 debug_log "DEBUG" "Cache-based location settings have been applied successfully (messages suppressed)"
-                # --- ▲▲▲ 変更点 ▲▲▲ ---
-                return 0
+                return 0 # キャッシュ適用成功
             else
                 debug_log "DEBUG" "One or more cache values are empty despite files existing"
             fi
@@ -440,7 +429,8 @@ detect_and_set_location() {
     if [ -z "$detected_country" ] && [ "$SKIP_IP_DETECTION" != "true" ]; then
         debug_log "DEBUG" "Attempting IP-based location detection"
 
-        if [ -f "$BASE_DIR/common-information.sh" ]; then # common-information.sh に process_location_info があるか確認
+        # common-information.sh を source する (process_location_info を使うため)
+        if [ -f "$BASE_DIR/common-information.sh" ]; then
              if ! command -v process_location_info >/dev/null 2>&1; then
                  debug_log "DEBUG" "Loading common-information.sh for IP detection"
                  . "$BASE_DIR/common-information.sh"
@@ -450,6 +440,7 @@ detect_and_set_location() {
                  if process_location_info; then
                      debug_log "DEBUG" "Successfully retrieved and cached location data via process_location_info"
 
+                     # process_location_info が一時ファイルに書き込む想定
                      if [ -f "${CACHE_DIR}/ip_country.tmp" ] && [ -f "${CACHE_DIR}/ip_timezone.tmp" ] && [ -f "${CACHE_DIR}/ip_zonename.tmp" ]; then
                          detected_country=$(cat "${CACHE_DIR}/ip_country.tmp" 2>/dev/null)
                          detected_timezone=$(cat "${CACHE_DIR}/ip_timezone.tmp" 2>/dev/null) # POSIX TZ
@@ -479,15 +470,15 @@ detect_and_set_location() {
         fi
     fi
 
-    # 検出した情報の処理（検出ソースに関わらず共通処理）
-    if [ -n "$detected_country" ] && [ -n "$detected_timezone" ] && [ -n "$detected_zonename" ]; then
+    # 検出した情報の処理（検出ソースがLocationの場合）
+    if [ "$detection_source" = "Location" ] && [ -n "$detected_country" ] && [ -n "$detected_timezone" ] && [ -n "$detected_zonename" ]; then
         country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
 
         if [ -n "$country_data" ]; then
             debug_log "DEBUG" "Before display - source: $detection_source, country: $detected_country, skip_confirmation: $skip_confirmation"
 
-            # 共通関数を使用して検出情報を表示（成功メッセージなし）
-            display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "false" "$detected_isp" "$detected_as"
+            # 共通関数を使用して検出情報を表示（成功メッセージ表示引数削除）
+            display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "$detected_isp" "$detected_as"
 
             # 情報表示の後に空行を追加
             printf "\n"
@@ -495,64 +486,49 @@ detect_and_set_location() {
             # ユーザーに確認
             local proceed_with_settings="false"
 
-            if [ "$skip_confirmation" = "true" ]; then
-                # キャッシュの場合は自動承認 (プロンプト不要) - このパスは通らないはずだが念のため残す
+            # IP検出の場合はユーザーに確認
+            # 短縮プロンプト用の新しいメッセージキーを使用
+            if confirm "MSG_CONFIRM_USE_SETTINGS_SHORT"; then
                 proceed_with_settings="true"
-                debug_log "DEBUG" "Cache-based location settings automatically applied without confirmation (unexpected path)"
+                debug_log "DEBUG" "User accepted $detection_source-based location settings"
             else
-                # キャッシュ以外の場合はユーザーに確認
-                # 短縮プロンプト用の新しいメッセージキーを使用
-                if confirm "MSG_CONFIRM_USE_SETTINGS_SHORT"; then
-                    proceed_with_settings="true"
-                    debug_log "DEBUG" "User accepted $detection_source-based location settings"
-                else
-                    debug_log "DEBUG" "User declined $detection_source-based location settings"
-                fi
+                debug_log "DEBUG" "User declined $detection_source-based location settings"
             fi
 
             # 設定の適用処理（承認された場合）
             if [ "$proceed_with_settings" = "true" ]; then
-                # キャッシュ以外の場合に設定を適用（キャッシュの場合は display_detected_location で既に適用済み）
-                if [ "$detection_source" != "Cache" ]; then
-                    debug_log "DEBUG" "Writing country data to temporary file"
-                    echo "$country_data" > "${CACHE_DIR}/country.tmp"
-                    debug_log "DEBUG" "Calling country_write() with suppress_message flag"
-                    country_write true || { # メッセージ抑制して書き込み
-                        debug_log "ERROR" "Failed to write country data"
-                        return 1
-                    }
+                debug_log "DEBUG" "Writing country data to temporary file"
+                echo "$country_data" > "${CACHE_DIR}/country.tmp"
 
-                    # タイムゾーン設定
-                    local timezone_str="${detected_zonename},${detected_timezone}"
-                    debug_log "DEBUG" "Created combined timezone string: ${timezone_str}"
-                    zone_write "$timezone_str" || { # 引数で渡して書き込み
-                        debug_log "ERROR" "Failed to write timezone data"
-                        return 1
-                    }
+                # country_write を呼び出し (メッセージ表示はここでしない)
+                country_write || {
+                    debug_log "ERROR" "Failed to write country data"
+                    return 1
+                }
 
-                    # 国と言語、タイムゾーンの選択完了メッセージを表示
-                    printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
-                    printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
-                    EXTRA_SPACING_NEEDED="yes" # 後続処理のためのフラグ
-                fi
+                # タイムゾーン設定
+                local timezone_str="${detected_zonename},${detected_timezone}"
+                debug_log "DEBUG" "Created combined timezone string: ${timezone_str}"
+                zone_write "$timezone_str" || {
+                    debug_log "ERROR" "Failed to write timezone data"
+                    return 1
+                }
+
+                # 国と言語、タイムゾーンの選択完了メッセージをここで表示
+                printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
+                printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+                EXTRA_SPACING_NEEDED="yes" # 後続処理のためのフラグ
 
                 debug_log "DEBUG" "$detection_source-based location settings have been applied successfully"
                 return 0 # 正常終了
             else
                 # 拒否された場合は一時的な言語設定をクリア（プレビューで適用済みなら）
-                # ※現状プレビュー適用はしていないので、この部分は不要かもしれないが、念のため残す
-                if [ "$preview_applied" = "true" ]; then
+                if [ "$preview_applied" = "true" ]; then # preview_applied は現状 false のはず
                     debug_log "DEBUG" "Cleaning up preview settings (if any)"
                     rm -f "${CACHE_DIR}/language.ch" "${CACHE_DIR}/message.ch" "${CACHE_DIR}/country.tmp" 2>/dev/null
                 fi
 
-                # リセットして次の検出方法に進む（手動入力へ）
-                detected_country=""
-                detected_timezone=""
-                detected_zonename=""
-                detection_source=""
-                preview_applied="false"
-                skip_confirmation="false"
+                # リセットして手動入力へ移行
                 debug_log "DEBUG" "User declined settings, proceeding to manual selection if needed"
                 return 1 # 手動選択へ移行するため失敗(1)を返す
             fi
@@ -562,11 +538,13 @@ detect_and_set_location() {
         fi
     fi
 
-    # すべての自動検出が失敗した場合
+    # すべての自動検出が失敗または拒否された場合
     debug_log "DEBUG" "All automatic detection methods failed or were declined, proceeding with manual input"
     return 1 # 手動選択へ移行するため失敗(1)を返す
 }
+# --- ▲▲▲ 変更点 (detect_and_set_location) ▲▲▲ ---
 
+# --- ▼▼▼ 変更点 (select_country) ▼▼▼ ---
 # ユーザーに国の選択を促す関数
 select_country() {
     debug_log "DEBUG" "Running select_country() function with arg='$1'"
@@ -577,48 +555,43 @@ select_country() {
     # 1. 引数で短縮国名（JP、USなど）が指定されている場合（最優先）
     if [ -n "$input_lang" ]; then
         debug_log "DEBUG" "Language argument provided: $input_lang"
-        
+
         # 短縮国名（$5）と完全一致するエントリを検索
         local lang_match=$(awk -v lang="$input_lang" '$5 == lang {print $0; exit}' "$BASE_DIR/country.db")
-        
+
         if [ -n "$lang_match" ]; then
             debug_log "DEBUG" "Exact language code match found: $lang_match"
-            
+
             # 一時ファイルに書き込み
             echo "$lang_match" > "${CACHE_DIR}/country.tmp"
-            
-            # country_write関数に処理を委譲（成功メッセージをスキップ）
-            country_write true || {
+
+            # country_write関数に処理を委譲 (メッセージ表示はここでしない)
+            country_write || {
                 debug_log "ERROR" "Failed to write country data from language argument"
                 return 1
             }
-            
+
+            # 国選択完了メッセージを表示
+            printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
+
             # 言語に対応するタイムゾーン情報を取得
-            echo "$(echo "$lang_match" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone.tmp"
-            
-            # zone_write関数に処理を委譲
-            zone_write || {
-                debug_log "ERROR" "Failed to write timezone data from language argument"
-                return 1
-            }
-            
+            # zone_write は select_zone 内で呼ばれるため、ここでは不要
+            # echo "$(echo "$lang_match" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone.tmp"
+            # zone_write || { ... }
+
             debug_log "DEBUG" "Language selected via command argument: $input_lang"
-            
-            # ここで1回だけ成功メッセージを表示
-            # country_write関数に処理を委譲（メッセージ表示あり）
-            country_write false || {
-                debug_log "ERROR" "Failed to write country data from language argument"
-                return 1
-            }
-            
+
             # 選択されたタイムゾーンのゾーン情報からゾーンを選択
             select_zone
             local zone_result=$?
-            
+
             # ゾーン選択の結果を処理
             case $zone_result in
                 0) # 正常終了
-                    debug_log "DEBUG" "Timezone selection completed successfully"
+                    # ゾーン選択完了メッセージを表示
+                    printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+                    EXTRA_SPACING_NEEDED="yes"
+                    debug_log "DEBUG" "Timezone selection completed successfully after argument selection"
                     return 0
                     ;;
                 2) # 「戻る」が選択された
@@ -626,19 +599,17 @@ select_country() {
                     # 次の処理へ（言語引数は無効にして再選択）
                     input_lang=""
                     # country_write関数の結果をクリア
-                    rm -f "${CACHE_DIR}/country.ch" 2>/dev/null
-                    rm -f "${CACHE_DIR}/language.ch" 2>/dev/null
-                    rm -f "${CACHE_DIR}/zone.tmp" 2>/dev/null
+                    rm -f "${CACHE_DIR}/country.ch" "${CACHE_DIR}/language.ch" "${CACHE_DIR}/message.ch" 2>/dev/null
+                    rm -f "${CACHE_DIR}/zone.tmp" 2>/dev/null # zone.tmp もクリア
                     # 続行して通常の国選択へ
                     ;;
                 *) # エラーまたはキャンセル
-                    debug_log "ERROR" "Timezone selection failed or cancelled"
+                    debug_log "ERROR" "Timezone selection failed or cancelled after argument selection"
                     return 1
                     ;;
             esac
         else
             debug_log "DEBUG" "No exact language code match for: $input_lang, proceeding to next selection method"
-            # 引数一致しない場合は次へ進む（メッセージ表示なし）
             input_lang=""  # 引数をクリア
         fi
     fi
@@ -646,7 +617,8 @@ select_country() {
     # 2. 自動検出処理を実行（キャッシュチェックも内部で行われる）
     detect_and_set_location
     if [ $? -eq 0 ]; then
-        debug_log "DEBUG" "Location detection successful, applying settings"
+        # detect_and_set_location 内で成功メッセージ表示済み (非キャッシュ時)
+        debug_log "DEBUG" "Location detection successful, settings applied by detect_and_set_location"
         return 0
     fi
 
@@ -669,7 +641,7 @@ select_country() {
         fi
 
         printf "\n"
-            
+
         # 空の入力をチェック
         if [ -z "$input_lang" ]; then
             debug_log "DEBUG" "Empty search keyword"
@@ -701,51 +673,53 @@ select_country() {
             local msg=$(get_message "MSG_SINGLE_MATCH_FOUND")
             local msg_prefix=${msg%%\{0\}*}
             local msg_suffix=${msg#*\{0\}}
-            
-            printf "%s%s%s" "$(color white "$msg_prefix" "$country_name" "$msg_suffix")"
+
+            printf "%s%s%s" "$(color white "$msg_prefix")" "$(color yellow "$country_name")" "$(color white "$msg_suffix")"
 
             printf "\n"
-            
+
             # 確認（confirm関数使用）
             if confirm "MSG_CONFIRM_ONLY_YN"; then
                 echo "$full_results" > "${CACHE_DIR}/country.tmp"
 
-                # country_write関数に処理を委譲
+                # country_write関数に処理を委譲 (メッセージ表示はここでしない)
                 country_write || {
                     debug_log "ERROR" "Failed to write country data"
                     return 1
                 }
-                
-                # zone_write関数に処理を委譲
-                echo "$(echo "$full_results" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone.tmp"
-                zone_write || {
-                    debug_log "ERROR" "Failed to write timezone data"
-                    return 1
-                }
+
+                # 国選択完了メッセージを表示
+                printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
+
+                # zone_write は select_zone 内で呼ばれる
+                # echo "$(echo "$full_results" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone.tmp"
+                # zone_write || { ... }
 
                 debug_log "DEBUG" "Country selected from single match: $country_name"
-                
+
                 # ゾーン選択を実行
                 select_zone
                 local zone_result=$?
-                
+
                 # ゾーン選択の結果を処理
                 case $zone_result in
                     0) # 正常終了
-                        debug_log "DEBUG" "Timezone selection completed successfully"
+                        # ゾーン選択完了メッセージを表示
+                        printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+                        EXTRA_SPACING_NEEDED="yes"
+                        debug_log "DEBUG" "Timezone selection completed successfully after single match"
                         return 0
                         ;;
                     2) # 「戻る」が選択された
                         debug_log "DEBUG" "User requested to return to country selection from single match"
                         # 一時キャッシュをクリアして国選択からやり直し
-                        rm -f "${CACHE_DIR}/country.ch" 2>/dev/null
-                        rm -f "${CACHE_DIR}/language.ch" 2>/dev/null
+                        rm -f "${CACHE_DIR}/country.ch" "${CACHE_DIR}/language.ch" "${CACHE_DIR}/message.ch" 2>/dev/null
                         rm -f "${CACHE_DIR}/zone.tmp" 2>/dev/null
                         input_lang=""
                         continue
                         ;;
                     *) # エラーまたはキャンセル
-                        debug_log "ERROR" "Timezone selection failed or cancelled"
+                        debug_log "ERROR" "Timezone selection failed or cancelled after single match"
                         return 1
                         ;;
                 esac
@@ -761,11 +735,11 @@ select_country() {
         # 表示用リスト作成（国名のみ抽出）
         local display_list=$(echo "$full_results" | awk '{print $2, $3}')
         local number_file="${CACHE_DIR}/number_selection.tmp"
-        
+
         # select_list関数を呼び出し
         select_list "$display_list" "$number_file" "country"
         local select_result=$?
-        
+
         # 選択結果処理
         case $select_result in
             0) # 選択成功
@@ -774,68 +748,69 @@ select_country() {
                     debug_log "ERROR" "Country selection number file not found"
                     return 1
                 fi
-                
+
                 local selected_number=$(cat "$number_file")
                 debug_log "DEBUG" "User selected number: $selected_number"
-                
+
                 # 選択された行を取得
                 local selected_full=$(echo "$full_results" | sed -n "${selected_number}p")
                 local selected_country=$(echo "$selected_full" | awk '{print $2, $3}')
-                
+
                 debug_log "DEBUG" "Selected country: $selected_country"
-                
+
                 # 一時ファイルに書き込み
                 echo "$selected_full" > "${CACHE_DIR}/country.tmp"
-                
-                # country_write関数に処理を委譲
+
+                # country_write関数に処理を委譲 (メッセージ表示はここでしない)
                 country_write || {
                     debug_log "ERROR" "Failed to write country data"
                     return 1
                 }
-                
-                # zone_write関数に処理を委譲
-                echo "$(echo "$selected_full" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone.tmp"
-                zone_write || {
-                    debug_log "ERROR" "Failed to write timezone data"
-                    return 1
-                }
-                
+
+                # 国選択完了メッセージを表示
+                printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
+
+                # zone_write は select_zone 内で呼ばれる
+                # echo "$(echo "$selected_full" | cut -d ' ' -f 6-)" > "${CACHE_DIR}/zone.tmp"
+                # zone_write || { ... }
+
                 debug_log "DEBUG" "Country selected from multiple choices: $selected_country"
-                
+
                 # ゾーン選択を実行
                 select_zone
                 local zone_result=$?
-                
+
                 # ゾーン選択の結果を処理
                 case $zone_result in
                     0) # 正常終了
-                        debug_log "DEBUG" "Timezone selection completed successfully"
+                        # ゾーン選択完了メッセージを表示
+                        printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+                        EXTRA_SPACING_NEEDED="yes"
+                        debug_log "DEBUG" "Timezone selection completed successfully after multiple choices"
                         return 0
                         ;;
                     2) # 「戻る」が選択された
                         debug_log "DEBUG" "User requested to return to country selection from multiple choices"
                         # 一時キャッシュをクリアして国選択からやり直し
-                        rm -f "${CACHE_DIR}/country.ch" 2>/dev/null
-                        rm -f "${CACHE_DIR}/language.ch" 2>/dev/null
+                        rm -f "${CACHE_DIR}/country.ch" "${CACHE_DIR}/language.ch" "${CACHE_DIR}/message.ch" 2>/dev/null
                         rm -f "${CACHE_DIR}/zone.tmp" 2>/dev/null
                         input_lang=""
                         continue
                         ;;
                     *) # エラーまたはキャンセル
-                        debug_log "ERROR" "Timezone selection failed or cancelled"
+                        debug_log "ERROR" "Timezone selection failed or cancelled after multiple choices"
                         return 1
                         ;;
                 esac
                 ;;
-                
+
             2) # 「戻る」が選択された（国選択でRボタンが押された場合）
                 debug_log "DEBUG" "User requested to return from country selection list"
                 input_lang=""
                 continue
                 ;;
-                
+
             *) # キャンセルまたはエラー
-                # 選択がキャンセルされた場合
                 debug_log "DEBUG" "User cancelled country selection"
                 input_lang=""
                 continue
@@ -843,20 +818,22 @@ select_country() {
         esac
     done
 }
+# --- ▲▲▲ 変更点 (select_country) ▲▲▲ ---
 
+# --- ▼▼▼ 変更点 (select_zone) ▼▼▼ ---
 # タイムゾーンの選択を処理する関数
 select_zone() {
     debug_log "DEBUG" "Running select_zone() function"
-    
-    local skip_message="${1:-false}"
-    
+
+    # local skip_message="${1:-false}" # 引数削除
+
     # 選択された国の情報を取得
     local selected_country_file="${CACHE_DIR}/country.ch"
     if [ ! -f "$selected_country_file" ]; then
         debug_log "ERROR" "Country selection file not found"
         return 1
     fi
-    
+
     # 国のタイムゾーン情報を抽出（6列目以降がタイムゾーン情報）
     local zone_list=$(awk '{for(i=6;i<=NF;i++) print $i}' "$selected_country_file")
     if [ -z "$zone_list" ]; then
@@ -864,40 +841,40 @@ select_zone() {
         return 1
     fi
     debug_log "DEBUG" "Extracted timezone list for selected country"
-    
+
     # タイムゾーン数を数える
     local zone_count=$(echo "$zone_list" | wc -l)
     debug_log "DEBUG" "Found $zone_count timezone(s) for selected country"
-    
+
     # タイムゾーンが1つだけの場合は自動選択
     if [ "$zone_count" -eq 1 ]; then
         local selected=$(echo "$zone_list")
         debug_log "DEBUG" "Only one timezone available: $selected - auto selecting"
-        
+
         # zone_write関数に処理を委譲（直接引数として渡す）
         zone_write "$selected" || {
             debug_log "ERROR" "Failed to write timezone data"
             return 1
         }
-        
-        # メッセージを表示（スキップフラグが設定されていない場合のみ）
-        if [ "$skip_message" = "false" ]; then
-            printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
-        fi
-        
+
+        # メッセージは呼び出し元 (select_country) で表示する
+        # if [ "$skip_message" = "false" ]; then
+        #     printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+        # fi
+
         return 0
     fi
 
     # 複数のタイムゾーンがある場合は選択肢を表示
     printf "\n%s\n" "$(color white "$(get_message "MSG_SELECT_TIMEZONE")")"
-    
+
     # 番号付きリスト表示 - select_list関数を使用
     local number_file="${CACHE_DIR}/zone_selection.tmp"
-    
+
     # select_list関数を呼び出す
     select_list "$zone_list" "$number_file" "zone"
     local select_result=$?
-    
+
     # 戻り値に応じた処理
     case $select_result in
         0) # 選択成功
@@ -906,65 +883,67 @@ select_zone() {
                 debug_log "ERROR" "Zone selection number file not found"
                 return 1
             fi
-            
+
             local number=$(cat "$number_file")
             if [ -z "$number" ]; then
                 debug_log "ERROR" "Empty zone selection number"
                 return 1
             fi
-            
+
             # 選択されたタイムゾーンの取得
             local selected=$(echo "$zone_list" | sed -n "${number}p")
             debug_log "DEBUG" "Selected timezone: $selected"
-            
+
             # zone_write関数に処理を委譲（直接引数として渡す）
             zone_write "$selected" || {
                 debug_log "ERROR" "Failed to write timezone data"
                 return 1
             }
-            
-            # 成功メッセージを表示
-            printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
+
+            # 成功メッセージは呼び出し元 (select_country) で表示する
+            # printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
             return 0
             ;;
-            
+
         2) # 「戻る」が選択された
             debug_log "DEBUG" "User requested to return to previous step"
             return 2  # この戻り値2を上位関数で処理する
             ;;
-            
+
         *) # キャンセルまたはエラー
             debug_log "DEBUG" "Zone selection cancelled or error occurred"
             return 1
             ;;
     esac
 }
+# --- ▲▲▲ 変更点 (select_zone) ▲▲▲ ---
 
-# 国コード情報を書き込む関数（言語正規化機能付き）
+# --- ▼▼▼ 変更点 (country_write) ▼▼▼ ---
+# 国コード情報を書き込む関数（言語正規化、翻訳初期化）
 country_write() {
-    local skip_message="${1:-false}"  # 成功メッセージをスキップするかのフラグ
-    
-    debug_log "DEBUG" "Entering country_write() with skip_message=$skip_message"
-    
+    # local skip_message="${1:-false}" # 引数削除
+
+    debug_log "DEBUG" "Entering country_write()" # 引数表示削除
+
     # 一時ファイルのパス
     local tmp_country="${CACHE_DIR}/country.tmp"
-    
+
     # 出力先ファイルのパス
     local cache_country="${CACHE_DIR}/country.ch"
     local cache_language="${CACHE_DIR}/language.ch"
     local cache_luci="${CACHE_DIR}/luci.ch"
-    local cache_message="${CACHE_DIR}/message.ch"  # message.chのパスを追加
-    
+    local cache_message="${CACHE_DIR}/message.ch"
+
     # 一時ファイルが存在するか確認
     if [ ! -f "$tmp_country" ]; then
         debug_log "ERROR" "File not found: $tmp_country"
         return 1
     fi
-    
+
     # 一時ファイルから国情報をキャッシュに保存
     cat "$tmp_country" > "$cache_country"
     debug_log "DEBUG" "Country information written to cache"
-    
+
     # 選択された国と言語情報を抽出
     local selected_country=$(awk '{print $2, $3}' "$cache_country")
     debug_log "DEBUG" "Selected country: $selected_country"
@@ -972,42 +951,46 @@ country_write() {
     # 選択された国の言語コードを取得（5列目）
     local selected_lang_code=$(awk '{print $5}' "$cache_country")
     debug_log "DEBUG" "Selected language code: $selected_lang_code"
-    
+
     # 言語設定をキャッシュに保存
     echo "$selected_lang_code" > "$cache_language"
     debug_log "DEBUG" "Language code written to cache"
-    
+
     # LuCIインターフェース用言語コードを取得（4列目）
     local luci_code=$(awk '{print $4}' "$cache_country")
     debug_log "DEBUG" "LuCI interface language code: $luci_code"
-    
+
     # LuCI言語コードをキャッシュに保存
     echo "$luci_code" > "$cache_luci"
     debug_log "DEBUG" "LuCI language code written to cache: $luci_code"
-    
+
     # メッセージ言語コードを保存（LuCI言語コードと同じ）
     echo "$luci_code" > "$cache_message"
     debug_log "DEBUG" "Message language code written to cache: $luci_code"
 
-    # 翻訳処理
-    init_translation
-    
-    # 成功メッセージを表示（スキップフラグが設定されていない場合のみ）
-    if [ "$skip_message" = "false" ]; then
-        # 国と言語の選択完了メッセージを表示
-        printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
+    # 翻訳処理 (common-translation.sh が source されている前提)
+    if command -v init_translation >/dev/null 2>&1; then
+        init_translation
+    else
+        debug_log "WARNING" "init_translation function not found. Skipping translation initialization."
     fi
-    
+
+    # 成功メッセージは呼び出し元 (detect_and_set_location, select_country) で表示する
+    # if [ "$skip_message" = "false" ]; then
+    #     printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
+    # fi
+
     return 0
 }
+# --- ▲▲▲ 変更点 (country_write) ▲▲▲ ---
 
 zone_write() {
     debug_log "DEBUG" "Entering zone_write()"
-    
+
     # 引数またはファイルからタイムゾーン情報を取得
     local timezone_str=""
     local tmp_zone="${CACHE_DIR}/zone.tmp"
-    
+
     if [ -n "$1" ]; then
         # 引数が提供された場合、それを使用
         timezone_str="$1"
@@ -1023,29 +1006,29 @@ zone_write() {
         debug_log "ERROR" "File not found: $safe_filename"
         return 1
     fi
-    
+
     # タイムゾーン情報を分割して保存
     if [ -n "$timezone_str" ]; then
         local zonename=""
         local timezone=""
-        
+
         if echo "$timezone_str" | grep -q ","; then
             # カンマで区切られている場合は分割
             zonename=$(echo "$timezone_str" | cut -d ',' -f 1)
             timezone=$(echo "$timezone_str" | cut -d ',' -f 2)
             debug_log "DEBUG" "Parsed comma-separated timezone: zonename=$zonename, timezone=$timezone"
         else
-            # カンマがない場合はそのまま使用
+            # カンマがない場合はそのまま使用 (形式がおかしい可能性もあるが、そのまま保存)
             zonename="$timezone_str"
-            timezone="GMT0"
-            debug_log "DEBUG" "Using simple timezone format: zonename=$zonename, timezone=$timezone"
+            timezone="GMT0" # デフォルト値？ またはエラー処理が必要か検討
+            debug_log "WARNING" "Using simple timezone format (no comma): zonename=$zonename, assuming timezone=$timezone"
         fi
-        
+
         # キャッシュに書き込み
         echo "$zonename" > "${CACHE_DIR}/zonename.ch"
         echo "$timezone" > "${CACHE_DIR}/timezone.ch"
-        echo "$timezone_str" > "${CACHE_DIR}/zone.ch"
-        
+        echo "$timezone_str" > "${CACHE_DIR}/zone.ch" # 元の文字列も保存しておく
+
         debug_log "DEBUG" "Timezone information written to cache successfully"
         return 0
     else
@@ -1058,14 +1041,15 @@ zone_write() {
 # スクリプト情報表示（デバッグモード有効時）
 if [ "$DEBUG_MODE" = "true" ]; then
     debug_log "DEBUG" "common-country.sh loaded with BASE_DIR=$BASE_DIR"
-    if type get_device_architecture >/dev/null 2>&1; then
-        debug_log "DEBUG" "common-system.sh loaded successfully"
-    else
-        debug_log "DEBUG" "common-system.sh not loaded or functions not available"
-    fi
-    
+    # common-system.sh のロード確認は不要かもしれない (依存関係による)
+    # if type get_device_architecture >/dev/null 2>&1; then
+    #     debug_log "DEBUG" "common-system.sh seems loaded"
+    # else
+    #     debug_log "DEBUG" "common-system.sh not loaded or functions not available"
+    # fi
+
     # セキュリティとコード改善に関するデバッグメッセージ
     debug_log "DEBUG" "Added escape_for_sed function to safely handle special characters in user inputs"
     debug_log "DEBUG" "Enhanced zone_write function to centralize timezone data processing"
-    debug_log "DEBUG" "Improved code efficiency by reducing duplicate timezone parsing logic"
+    # debug_log "DEBUG" "Improved code efficiency by reducing duplicate timezone parsing logic" # これは今回の変更ではない
 fi
