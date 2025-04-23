@@ -317,40 +317,25 @@ get_country_ipinfo() {
 }
 
 get_country_cloudflare() {
-    local tmp_file="$1"      # 一時ファイルパス
-    local network_type="$2"  # ネットワークタイプ
-    local api_name="$3"      # API名（カスタムURL等）
+    local tmp_file="$1"
+    local network_type="$2"
+
+    local api_url="https://location-api-worker.site-u.workers.dev"
+    local api_domain=""
 
     local retry_count=0
     local success=0
-    local api_domain=""      # ★★★ 追加: ドメイン名格納用変数 ★★★
 
-    # --- ▼▼▼ APIエンドポイント設定 ▼▼▼ ---
-    local api_url=""
-    if [ -n "$api_name" ]; then
-        api_url="$api_name"
-    else
-        api_url="https://location-api-worker.site-u.workers.dev"
-    fi
-    # ---------------------------------------
-
-    # ★★★ 追加: API URLからドメイン名を抽出 ★★★
     api_domain=$(echo "$api_url" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
-    # ドメイン名が取得できなかった場合のフォールバック (URL自体を使う)
     [ -z "$api_domain" ] && api_domain="$api_url"
-    debug_log "DEBUG" "Using API domain for Cloudflare: $api_domain"
+    debug_log "DEBUG" "Using API URL for Cloudflare: $api_url (Domain: $api_domain)"
 
-    debug_log "DEBUG" "Querying location from $api_url"
-
-    # 変数の初期化
     SELECT_COUNTRY=""
     SELECT_ZONENAME=""
     ISP_NAME=""
     ISP_AS=""
     ISP_ORG=""
     SELECT_REGION_NAME=""
-    # ★★★ 削除: TIMEZONE_API_SOURCE の初期化は get_country_code で行う ★★★
-    # TIMEZONE_API_SOURCE=""
 
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
         make_api_request "$api_url" "$tmp_file" "$API_TIMEOUT" "CLOUDFLARE" "$USER_AGENT"
@@ -358,31 +343,20 @@ get_country_cloudflare() {
         debug_log "DEBUG" "Cloudflare Worker request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
 
         if [ $request_status -eq 0 ] && [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
-            debug_log "DEBUG" "make_api_request successful and tmp_file exists and is not empty."
             local json_status=$(grep -o '"status": *"[^"]*"' "$tmp_file" | sed 's/"status": "//;s/"//')
-            debug_log "DEBUG" "Extracted JSON status: '$json_status'"
-
             if [ "$json_status" = "success" ]; then
-                debug_log "DEBUG" "JSON status is 'success'. Proceeding with field extraction."
                 SELECT_COUNTRY=$(grep -o '"country": *"[^"]*"' "$tmp_file" | sed 's/"country": "//;s/"//')
                 SELECT_ZONENAME=$(grep -o '"timezone": *"[^"]*"' "$tmp_file" | sed 's/"timezone": "//;s/"//')
                 ISP_NAME=$(grep -o '"isp": *"[^"]*"' "$tmp_file" | sed 's/"isp": "//;s/"//')
                 local as_raw=$(grep -o '"as": *"[^"]*"' "$tmp_file" | sed 's/"as": "//;s/"//')
-                if [ -n "$as_raw" ]; then
-                    ISP_AS=$(echo "$as_raw" | awk '{print $1}')
-                     debug_log "DEBUG" "Extracted AS number and stored in ISP_AS: '$ISP_AS' from raw value: '$as_raw'"
-                else
-                     ISP_AS=""
-                     debug_log "DEBUG" "AS field ('as') not found or empty in Cloudflare Worker response."
-                fi
+                if [ -n "$as_raw" ]; then ISP_AS=$(echo "$as_raw" | awk '{print $1}'); else ISP_AS=""; fi
                 [ -n "$ISP_NAME" ] && ISP_ORG="$ISP_NAME"
                 SELECT_REGION_NAME=$(grep -o '"regionName": *"[^"]*"' "$tmp_file" | sed 's/"regionName": "//;s/"//')
 
                 if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
                     debug_log "DEBUG" "Required fields (Country & ZoneName) extracted successfully."
                     success=1
-                    # ★★★ 変更点: 成功時に API ドメイン名を TIMEZONE_API_SOURCE に設定 ★★★
-                    TIMEZONE_API_SOURCE="$api_domain"
+                    TIMEZONE_API_SOURCE="$api_domain" # ★★★ 成功時に設定 ★★★
                     break
                 else
                     debug_log "DEBUG" "Extraction failed for required fields (Country or ZoneName)."
@@ -401,30 +375,16 @@ get_country_cloudflare() {
              fi
         fi
 
-        debug_log "DEBUG" "API query attempt $((retry_count+1)) failed, proceeding to retry or exit."
         retry_count=$((retry_count + 1))
-        if [ $retry_count -lt $API_MAX_RETRIES ]; then
-            debug_log "DEBUG" "Sleeping for 1 second before retry."
-            sleep 1
-        fi
+        [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
     done
 
-    # ★★★ 削除: 成功時の TIMEZONE_API_SOURCE 設定 (ループ内で実施済) ★★★
-    # if [ $success -eq 1 ]; then
-    #     TIMEZONE_API_SOURCE="Cloudflare"
-    #     debug_log "DEBUG" "get_country_cloudflare finished successfully."
-    #     return 0
-    # else
-    #     debug_log "DEBUG" "get_country_cloudflare finished with failure."
-    #     return 1
-    # fi
-    # ★★★ 変更点: 戻り値のみ返す ★★★
     if [ $success -eq 1 ]; then
         debug_log "DEBUG" "get_country_cloudflare finished successfully."
-        return 0
+        return 0 # ★★★ 戻り値 0 (成功) ★★★
     else
         debug_log "DEBUG" "get_country_cloudflare finished with failure."
-        return 1
+        return 1 # ★★★ 戻り値 1 (失敗) ★★★
     fi
 }
 
