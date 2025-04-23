@@ -428,38 +428,34 @@ get_country_cloudflare() {
 }
 
 get_country_code() {
-    # 変数宣言
+    # State variables
     local spinner_active=0
-    local api_success=1 # 初期値を失敗(1)に設定
-    local api_provider="" # APIプロバイダーを追跡
+    local api_success=1 # Default to failure (1)
+    local api_provider="" # Holds the API provider function name
+    local display_domain="" # ★★★ Added: Domain name for spinner display ★★★
 
-    # グローバル変数の初期化
-    SELECT_ZONE="" # Workerからは取得できない
-    SELECT_ZONENAME="" # 例: Asia/Tokyo
-    SELECT_TIMEZONE="" # process_location_info が期待する変数 (POSIX TZをここに直接格納)
+    # Initialize variables
+    SELECT_ZONE="" # Result from Worker
+    SELECT_ZONENAME="" # e.g., Asia/Tokyo
+    SELECT_TIMEZONE="" # Set in process_location_info (POSIX TZ format)
     SELECT_COUNTRY=""
-    SELECT_REGION_NAME="" # 追加
+    SELECT_REGION_NAME="" # Region name
     ISP_NAME=""
     ISP_AS=""
     ISP_ORG=""
-    TIMEZONE_API_SOURCE="" # APIソースは動的に決定
+    TIMEZONE_API_SOURCE="" # For recording the API provider (set by successful API function)
 
-    # APIプロバイダー (デフォルトはget_country_cloudflare)
-    API_PROVIDERS="${API_PROVIDERS:-get_country_cloudflare get_country_ipapi get_country_ipinfo}"
-    debug_log "DEBUG" "API_PROVIDERS set to: $API_PROVIDERS"
-
-    # キャッシュディレクトリの確認
+    # Check cache directory
     [ -d "${CACHE_DIR}" ] || mkdir -p "${CACHE_DIR}"
 
-    # ネットワーク接続状況の取得
+    # Check network type
     local network_type=""
     if [ -f "${CACHE_DIR}/network.ch" ]; then
         network_type=$(cat "${CACHE_DIR}/network.ch")
         debug_log "DEBUG" "Network connectivity type detected: $network_type"
     else
         debug_log "DEBUG" "Network connectivity information not available, running check"
-        check_network_connectivity # この関数が存在する前提
-
+        check_network_connectivity # Run if not available
         if [ -f "${CACHE_DIR}/network.ch" ]; then
             network_type=$(cat "${CACHE_DIR}/network.ch")
             debug_log "DEBUG" "Network type after check: $network_type"
@@ -469,7 +465,7 @@ get_country_code() {
         fi
     fi
 
-    # 接続がない場合は早期リターン
+    # Exit if no connectivity
     if [ "$network_type" = "none" ] || [ "$network_type" = "unknown" ] || [ -z "$network_type" ]; then
         debug_log "DEBUG" "No network connectivity or unknown type ('$network_type'), cannot proceed with IP-based location"
         return 1
@@ -477,91 +473,141 @@ get_country_code() {
 
     debug_log "DEBUG" "Starting location detection process with providers: $API_PROVIDERS"
 
-    local success_msg=$(get_message "MSG_LOCATION_RESULT" "s=successfully")
-    local fail_msg=$(get_message "MSG_LOCATION_RESULT" "s=failed")
+    # ★★★ Removed: success_msg and fail_msg are now generated dynamically ★★★
+    # local success_msg=$(get_message "MSG_LOCATION_RESULT" "s=successfully")
+    # local fail_msg=$(get_message "MSG_LOCATION_RESULT" "s=failed")
     local api_found=0
 
-    # APIプロバイダーを順番に処理
+    # Try API providers sequentially
     for api_provider in $API_PROVIDERS; do
-        # 関数が存在するか確認
+        # Check if the function exists
         if ! command -v "$api_provider" >/dev/null 2>&1; then
             debug_log "ERROR" "Invalid API provider function: $api_provider"
-            api_success=1 # 失敗として扱う
-            continue # 次のプロバイダーを試す
+            api_success=1 # Treat as failure and continue
+            continue # Next provider
         fi
 
-        # forループ内でAPIごとにユニークな一時ファイル名を生成
+        # ★★★ Added: Get domain name for display ★★★
+        # Determine the domain name based on the API provider function name
+        case "$api_provider" in
+            get_country_cloudflare)
+                # Assuming default URL if not overridden
+                local default_url="https://location-api-worker.site-u.workers.dev"
+                display_domain=$(echo "$default_url" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+                [ -z "$display_domain" ] && display_domain="$default_url"
+                ;;
+            get_country_ipapi)
+                local default_url="https://ipapi.co/json"
+                display_domain=$(echo "$default_url" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+                [ -z "$display_domain" ] && display_domain="$default_url"
+                ;;
+            get_country_ipinfo)
+                local default_url="https://ipinfo.io/json"
+                display_domain=$(echo "$default_url" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+                [ -z "$display_domain" ] && display_domain="$default_url"
+                ;;
+            *)
+                display_domain="$api_provider" # Fallback to function name if unknown
+                ;;
+        esac
+        debug_log "DEBUG" "Domain for spinner display: $display_domain"
+
+        # Temporary file path for API execution in the loop
         local tmp_file="${CACHE_DIR}/${api_provider}_tmp_$$.json"
 
-        # スピナー開始：今のAPIのみ表示
-        start_spinner "$(color "blue" "Currently querying: $api_provider")" "yellow"
+        # ★★★ Modified: Use domain name in spinner message ★★★
+        start_spinner "$(color "blue" "Currently querying: $display_domain")" "yellow"
         spinner_active=1
 
-        # APIプロバイダーの関数を呼び出す
+        # Execute the API provider function
         debug_log "DEBUG" "Calling API provider function: $api_provider"
-        ${api_provider} "$tmp_file" "$network_type"
+        # The API function should set TIMEZONE_API_SOURCE on success
+        $api_provider "$tmp_file" "$network_type"
         api_success=$?
 
-        # 一時ファイル削除（都度クリーンアップ）
+        # Remove temporary file (even on error)
         rm -f "$tmp_file" 2>/dev/null
 
-        # 成功したらメッセージ付きでスピナー停止＆ループ脱出
+        # ★★★ Modified: Generate stop_spinner message dynamically ★★★
+        local stop_message=""
+        local stop_status=""
+        if [ "$api_success" -eq 0 ]; then
+            # Success: Use TIMEZONE_API_SOURCE (should be set by the API function)
+            # Provide a fallback to display_domain just in case TIMEZONE_API_SOURCE wasn't set
+            local source_name="${TIMEZONE_API_SOURCE:-$display_domain}"
+            stop_message=$(get_message "MSG_LOCATION_RESULT_API" "s=successfully" "a=$source_name")
+            stop_status="success"
+        else
+            # Failure: Use the display_domain determined earlier
+            stop_message=$(get_message "MSG_LOCATION_RESULT_API" "s=failed" "a=$display_domain")
+            stop_status="failed"
+        fi
+        stop_spinner "$stop_message" "$stop_status"
+        spinner_active=0
+
+        # Break the loop if successful and required information is obtained
         if [ "$api_success" -eq 0 ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
-            stop_spinner "$success_msg" "success"
-            spinner_active=0
-            debug_log "DEBUG" "API query succeeded with $TIMEZONE_API_SOURCE, breaking loop"
+            debug_log "DEBUG" "API query succeeded with ${TIMEZONE_API_SOURCE:-$display_domain}, breaking loop"
             api_found=1
             break
         else
-            # 失敗時はスピナーだけ止めて次へ
-            stop_spinner "" ""
-            spinner_active=0
             debug_log "DEBUG" "API query failed with $api_provider, trying next provider"
         fi
     done
 
-    # すべて失敗した場合のみ、失敗メッセージ表示
-    if [ $api_found -eq 0 ]; then
-        stop_spinner "$fail_msg" "failed"
+    # Stop spinner if still active (if all APIs failed)
+    if [ $spinner_active -eq 1 ]; then
+        # ★★★ Modified: Use display_domain for the last attempted API ★★★
+        local stop_message=$(get_message "MSG_LOCATION_RESULT_API" "s=failed" "a=$display_domain")
+        stop_spinner "$stop_message" "failed"
         spinner_active=0
     fi
 
-    # --- country.db 検索 (POSIXタイムゾーン取得) ---
-    # API呼び出しが成功し、ZoneNameが取得できた場合のみ実行
+    # --- country.db processing (Get POSIX timezone) ---
+    # After API execution, map ZoneName to POSIX timezone if successful
     if [ $api_success -eq 0 ] && [ -n "$SELECT_ZONENAME" ]; then
         debug_log "DEBUG" "API query successful. Processing ZoneName: $SELECT_ZONENAME"
 
-        # country.db から POSIXタイムゾーン (SELECT_TIMEZONE) の取得
+        # Get POSIX timezone (SELECT_TIMEZONE) from country.db
         debug_log "DEBUG" "Trying to map ZoneName to POSIX timezone using country.db"
         local db_file="${BASE_DIR}/country.db"
-        SELECT_TIMEZONE="" # 事前にクリア
+        SELECT_TIMEZONE="" # Initialize
 
         if [ -f "$db_file" ]; then
             debug_log "DEBUG" "Searching country.db for ZoneName: $SELECT_ZONENAME"
-            local matched_line=$(grep -F "$SELECT_ZONENAME" "$db_file" | head -1)
+            # Find the first line containing the exact ZoneName followed by a comma
+            # This assumes ZoneName doesn't contain spaces or commas
+            local matched_line=$(grep -F "$SELECT_ZONENAME," "$db_file" | head -1)
 
             if [ -n "$matched_line" ]; then
-                local zone_pairs=$(echo "$matched_line" | cut -d' ' -f5-)
-                local pair=""
-                local found_tz=""
+                 # Extract pairs from the 6th field onwards
+                 local zone_pairs=$(echo "$matched_line" | cut -d' ' -f6-)
+                 local pair=""
+                 local found_tz=""
 
-                for pair in $zone_pairs; do
-                    case "$pair" in
-                        "$SELECT_ZONENAME,"*)
-                            found_tz=$(echo "$pair" | cut -d',' -f2)
-                            break
-                            ;;
-                    esac
-                done
+                 # Loop through space-separated pairs (e.g., Asia/Tokyo,JST-9 Europe/London,GMT0BST)
+                 # Use 'for' loop which splits by spaces/tabs/newlines (POSIX standard)
+                 for pair in $zone_pairs; do
+                     # Check if the pair contains a comma
+                     if echo "$pair" | grep -q ','; then
+                         local current_zonename=$(echo "$pair" | cut -d',' -f1)
+                         if [ "$current_zonename" = "$SELECT_ZONENAME" ]; then
+                             found_tz=$(echo "$pair" | cut -d',' -f2)
+                             debug_log "DEBUG" "Found matching pair: $pair"
+                             break
+                         fi
+                     fi
+                 done
 
-                if [ -n "$found_tz" ]; then
-                    SELECT_TIMEZONE="$found_tz"
-                    debug_log "DEBUG" "Found POSIX timezone in country.db and stored in SELECT_TIMEZONE: $SELECT_TIMEZONE"
-                else
-                    debug_log "DEBUG" "No matching POSIX timezone pair found in country.db for: $SELECT_ZONENAME"
-                fi
+                 if [ -n "$found_tz" ]; then
+                     SELECT_TIMEZONE="$found_tz"
+                     debug_log "DEBUG" "Found POSIX timezone in country.db and stored in SELECT_TIMEZONE: $SELECT_TIMEZONE"
+                 else
+                     debug_log "DEBUG" "No matching POSIX timezone pair found in country.db for: $SELECT_ZONENAME in line: $matched_line"
+                     # Consider if SELECT_TIMEZONE should be set to a default or error handled
+                 fi
             else
-                debug_log "DEBUG" "No matching line found in country.db for: $SELECT_ZONENAME"
+                 debug_log "DEBUG" "No matching line found in country.db containing '$SELECT_ZONENAME,'"
             fi
         else
             debug_log "DEBUG" "country.db not found at: $db_file. Cannot retrieve POSIX timezone."
@@ -572,24 +618,23 @@ get_country_code() {
         else
              debug_log "DEBUG" "ZoneName is empty. Cannot process timezone."
         fi
-        SELECT_TIMEZONE="" # 確実に空にする
+        SELECT_TIMEZONE="" # Clear just in case
     fi
-    # --- country.db 検索ここまで ---
+    # --- country.db processing complete ---
 
-    # ISP情報をキャッシュに保存
+    # Save ISP information to cache
     if [ -n "$ISP_NAME" ] || [ -n "$ISP_AS" ]; then
         local cache_file="${CACHE_DIR}/isp_info.ch"
         echo "$ISP_NAME" > "$cache_file"
         echo "$ISP_AS" >> "$cache_file"
-        echo "$ISP_ORG" >> "$cache_file"
+        # ISP_ORG is the same as ISP_NAME, no need to duplicate
         debug_log "DEBUG" "Saved ISP information to cache"
     else
         rm -f "${CACHE_DIR}/isp_info.ch" 2>/dev/null
     fi
 
-    # 最終的な成功・失敗でリターン
-    # <<< 修正: 最終判定で SELECT_TIMEZONE も必須条件に含める >>>
-    if [ $api_success -eq 0 ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ] && [ -n "$SELECT_TIMEZONE" ]; then
+    # Final result determination and cache writing
+    if [ $api_success -eq 0 ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_TIMEZONE" ] && [ -n "$SELECT_ZONENAME" ]; then
         debug_log "DEBUG" "Location information retrieved successfully by get_country_code"
         return 0
     else
