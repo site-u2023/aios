@@ -2316,7 +2316,7 @@ check_common() {
             download "custom-package.db" "hidden"
             print_banner
             print_information
-            information_main "$lang_code"
+            information_main
             country_main "$lang_code"
             translate_main
             install_package update
@@ -2338,7 +2338,7 @@ check_common() {
             download "custom-package.db"
             print_banner
             print_information
-            information_main "$lang_code"
+            information_main
             country_main "$lang_code"
             translate_main
             install_package update
