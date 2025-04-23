@@ -803,69 +803,123 @@ display_detected_location() {
     debug_log "DEBUG" "Location information displayed successfully"
 }
 
-# キャッシュされたロケーション情報を表示する関数
 information_main() {
-    debug_log "DEBUG" "Entering information_main() to display cached location"
+    local arg_country_code="$1" # aios から渡される想定の引数 (例: TW)
+    local display_country_code=""
+    local display_zone_name=""
+    local display_timezone=""
+    local display_isp_provider=""
+    local display_isp_as=""
+    local display_source_label="" # 表示するソースラベル用
 
-    # 必要なキャッシュファイルのパス
-    local cache_lang_file="${CACHE_DIR}/language.ch"
-    local cache_zone_file="${CACHE_DIR}/zonename.ch"
-    local cache_tz_file="${CACHE_DIR}/timezone.ch"
-    local cache_isp_file="${CACHE_DIR}/isp_info.ch"
+    # --- 基本情報表示 (変更なし) ---
+    display_ip_type
+    display_cpu_info
+    display_architecture
+    display_os_version
+    display_package_manager
+    display_usb_devices
 
-    # 必須キャッシュファイルの存在と中身をチェック
-    if [ -s "$cache_lang_file" ] && [ -s "$cache_zone_file" ] && [ -s "$cache_tz_file" ]; then
-        # キャッシュから情報を読み込み
-        local cached_lang=$(cat "$cache_lang_file" 2>/dev/null)
-        local cached_zone=$(cat "$cache_zone_file" 2>/dev/null)
-        local cached_tz=$(cat "$cache_tz_file" 2>/dev/null)
-        local cached_isp=""
-        local cached_as=""
+    # --- 国・ISP情報表示ロジック ---
+    if [ -n "$arg_country_code" ]; then
+        # --- 引数が指定された場合の処理 ---
+        debug_log "DEBUG" "information_main: Argument provided: $arg_country_code. Fetching ISP from cache and Country from db."
+        display_source_label="Country code" # ソースラベルを直接設定
 
-        # ISP情報があれば読み込み
-        if [ -s "$cache_isp_file" ]; then
-            cached_isp=$(sed -n '1p' "$cache_isp_file" 2>/dev/null)
-            cached_as=$(sed -n '2p' "$cache_isp_file" 2>/dev/null)
-            # 値が空文字列の場合に備えてデフォルト値を設定 (念のため)
-            [ -z "$cached_isp" ] && cached_isp=$(get_message MSG_UNKNOWN)
-            [ -z "$cached_as" ] && cached_as=$(get_message MSG_UNKNOWN)
+        # ISP情報はキャッシュからロード試行
+        if load_isp_cache; then
+            display_isp_provider="$ISP_NAME"
+            display_isp_as="$ISP_AS"
+            debug_log "DEBUG" "information_main: ISP info loaded from cache: $display_isp_provider ($display_isp_as)"
         else
-             cached_isp=$(get_message MSG_UNKNOWN)
-             cached_as=$(get_message MSG_UNKNOWN)
+            display_isp_provider=$(get_message MSG_UNKNOWN)
+            display_isp_as=$(get_message MSG_UNKNOWN)
+            debug_log "DEBUG" "information_main: ISP cache not found or failed to load."
         fi
 
-        # 読み込んだ情報が空でないことを最終確認
-        if [ -n "$cached_lang" ] && [ -n "$cached_zone" ] && [ -n "$cached_tz" ]; then
-            debug_log "DEBUG" "Valid location cache found. Displaying information using display_detected_location."
+        # 国情報は引数と country.db から取得試行
+        local upper_arg_code=$(echo "$arg_country_code" | tr '[:lower:]' '[:upper:]')
+        local country_data=$(grep "^${upper_arg_code}|" "${BASE_DIR}/country.db")
 
-            # 翻訳システムの初期化を確認/実行 (display_detected_location がメッセージキーを使うため)
-            if command -v init_translation >/dev/null 2>&1; then
-                 if [ -f "${CACHE_DIR}/message.ch" ] && [ "${MSG_MEMORY_INITIALIZED:-false}" != "true" ]; then
-                     init_translation
-                 elif [ ! -f "${CACHE_DIR}/message.ch" ]; then
-                     init_translation # デフォルト試行
-                 fi
-            else
-                 debug_log "WARNING" "init_translation function not found. Cannot ensure messages are translated."
-            fi
-
-            # 元の display_detected_location を呼び出す (引数も元の形式に戻す)
-            if command -v display_detected_location >/dev/null 2>&1; then
-                # ★★★ 変更点: 表示には display_detected_location を使う ★★★
-                # ★★★ 変更点: ソースは "Cache" 固定 ★★★
-                # ★★★ 変更点: ISP情報がない場合も考慮 (空文字列を渡す) ★★★
-                display_detected_location "$(get_message MSG_COUNTRY_SOURCE_CACHE)" "$cached_lang" "$cached_zone" "$cached_tz" "$cached_isp" "$cached_as"
-                printf "\n" # 表示後に改行を追加 (元のコードにはなかった可能性あり、要確認)
-            else
-                debug_log "ERROR" "display_detected_location function not found. Cannot display location."
-            fi
+        if [ -n "$country_data" ]; then
+            display_country_code="$upper_arg_code"
+            display_zone_name=$(echo "$country_data" | cut -d'|' -f3)
+            # タイムゾーン名はゾーン名から取得 (get_timezone_from_zone 関数を流用)
+            display_timezone=$(get_timezone_from_zone "$display_zone_name")
+            debug_log "DEBUG" "information_main: Country info retrieved from db for $upper_arg_code: $display_zone_name ($display_timezone)"
         else
-            debug_log "DEBUG" "One or more essential cached values are empty after reading. Skipping display."
+            display_country_code="$upper_arg_code ($(get_message MSG_NOT_FOUND_IN_DB))"
+            display_zone_name=$(get_message MSG_UNKNOWN)
+            display_timezone=$(get_message MSG_UNKNOWN)
+            debug_log "DEBUG" "information_main: Country code $upper_arg_code not found in country.db."
         fi
+
     else
-        debug_log "DEBUG" "Essential location cache files missing or empty. Skipping display."
+        # --- 引数が指定されなかった場合の処理 (従来のキャッシュ優先) ---
+        debug_log "DEBUG" "information_main: No argument provided. Loading info from cache."
+        if load_country_cache && load_isp_cache; then
+            display_source_label=$(get_message MSG_COUNTRY_SOURCE_CACHE) # "Cache"
+            display_country_code="$SELECT_COUNTRY"
+            display_zone_name="$SELECT_ZONENAME"
+            display_timezone="$SELECT_TIMEZONE" # キャッシュから直接ロード
+            display_isp_provider="$ISP_NAME"
+            display_isp_as="$ISP_AS"
+            debug_log "DEBUG" "information_main: All info loaded from cache."
+        elif load_country_cache; then
+            # 国キャッシュのみ成功
+            display_source_label=$(get_message MSG_COUNTRY_SOURCE_CACHE_PARTIAL) # "Cache (Country Only)"
+            display_country_code="$SELECT_COUNTRY"
+            display_zone_name="$SELECT_ZONENAME"
+            display_timezone="$SELECT_TIMEZONE"
+            display_isp_provider=$(get_message MSG_UNKNOWN)
+            display_isp_as=$(get_message MSG_UNKNOWN)
+            debug_log "DEBUG" "information_main: Only Country info loaded from cache."
+        elif load_isp_cache; then
+             # ISPキャッシュのみ成功
+            display_source_label=$(get_message MSG_COUNTRY_SOURCE_CACHE_PARTIAL) # "Cache (ISP Only)" - メッセージキーは要検討
+            display_country_code=$(get_message MSG_UNKNOWN)
+            display_zone_name=$(get_message MSG_UNKNOWN)
+            display_timezone=$(get_message MSG_UNKNOWN)
+            display_isp_provider="$ISP_NAME"
+            display_isp_as="$ISP_AS"
+            debug_log "DEBUG" "information_main: Only ISP info loaded from cache."
+        else
+            # 両方失敗
+            display_source_label=$(get_message MSG_COUNTRY_SOURCE_NONE) # "None"
+            display_country_code=$(get_message MSG_UNKNOWN)
+            display_zone_name=$(get_message MSG_UNKNOWN)
+            display_timezone=$(get_message MSG_UNKNOWN)
+            display_isp_provider=$(get_message MSG_UNKNOWN)
+            display_isp_as=$(get_message MSG_UNKNOWN)
+            debug_log "DEBUG" "information_main: Failed to load any cache."
+        fi
     fi
 
-    debug_log "DEBUG" "Exiting information_main()"
-    return 0
+    # --- 情報を整形して表示 ---
+    echo # 空行
+    printf "%-20s: %s\n" "$(get_message MSG_COUNTRY_SOURCE)" "$display_source_label"
+    printf "%-20s: %s\n" "$(get_message MSG_ISP_PROVIDER)" "$display_isp_provider"
+    printf "%-20s: %s\n" "$(get_message MSG_ISP_AS)" "$display_isp_as"
+    printf "%-20s: %s\n" "$(get_message MSG_COUNTRY_CODE)" "$display_country_code"
+    printf "%-20s: %s\n" "$(get_message MSG_ZONE_NAME)" "$display_zone_name"
+    printf "%-20s: %s\n" "$(get_message MSG_TIMEZONE)" "$display_timezone"
+    echo # 空行
 }
+
+# 依存する可能性のある関数 (common-country.sh または common-information.sh 内にある想定)
+# load_isp_cache() { ... }
+# load_country_cache() { ... }
+# get_timezone_from_zone() { ... } # SELECT_ZONENAME を引数に取り、タイムゾーン文字列 (例: JST-9) を返す関数
+
+# 必要なメッセージキー (例)
+# MSG_COUNTRY_SOURCE="カントリーソース" (変更なし)
+# MSG_ISP_PROVIDER="ISPプロバイダー" (変更なし)
+# MSG_ISP_AS="自律システム番号" (変更なし)
+# MSG_COUNTRY_CODE="カントリーコード" (変更なし)
+# MSG_ZONE_NAME="ゾーン名" (変更なし)
+# MSG_TIMEZONE="タイムゾーン" (変更なし)
+# MSG_UNKNOWN="不明" (変更なし)
+# MSG_NOT_FOUND_IN_DB="データベースにありません" (新規または既存)
+# MSG_COUNTRY_SOURCE_CACHE="Cache" (既存)
+# MSG_COUNTRY_SOURCE_CACHE_PARTIAL="Cache (Partial)" (新規または既存) # 部分キャッシュ用
+# MSG_COUNTRY_SOURCE_NONE="None" (既存)
