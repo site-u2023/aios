@@ -301,3 +301,8 @@ en|MSG_GENERATING_REPORT=Generating system report...
 en|MSG_REPORT_GENERATED=System report generated{:} {file}
 en|MSG_DEBUG_INFO_HEADER=System Debug Information
 en|MSG_DEBUG_INFO_FOOTER=End of Debug Information
+
+# =======================
+# end marker
+# =======================
+en|AIOS_TRANSLATION_COMPLETE_MARKER=EOF
