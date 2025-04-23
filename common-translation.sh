@@ -167,7 +167,7 @@ translate_with_lingva() {
         fi
     done
 
-    debug_log "ERROR" "translate_with_lingva: Translation failed after ${API_MAX_RETRIES} attempts for text starting with: $(echo "$source_text" | cut -c 1-50)"
+    debug_log "DEBUG" "translate_with_lingva: Translation failed after ${API_MAX_RETRIES} attempts for text starting with: $(echo "$source_text" | cut -c 1-50)"
     rm -f "$temp_file" 2>/dev/null
     printf "" # Output empty string on failure
     return 1 # Failure
@@ -255,7 +255,7 @@ translate_with_google() {
         fi
     done
 
-    debug_log "ERROR" "translate_with_google: Translation failed after ${API_MAX_RETRIES} attempts for text starting with: $(echo "$source_text" | cut -c 1-50)"
+    debug_log "DEBUG" "translate_with_google: Translation failed after ${API_MAX_RETRIES} attempts for text starting with: $(echo "$source_text" | cut -c 1-50)"
     rm -f "$temp_file" 2>/dev/null
     printf "" # Output empty string on failure
     return 1 # Failure
@@ -281,7 +281,7 @@ create_language_db() {
     debug_log "DEBUG" "Creating language DB for target '${target_lang_code}' using function '${aip_function_name}' with domain '${domain_name}'"
 
     if [ ! -f "$base_db" ]; then
-        debug_log "ERROR" "Base message DB not found: $base_db. Cannot create target DB."
+        debug_log "DEBUG" "Base message DB not found: $base_db. Cannot create target DB."
         # --- 変更点 ---
         # 1. display_message 呼び出しを削除
         # 2. エラーキー MSG_TRANSLATION_FAILED を使用
@@ -449,15 +449,15 @@ translate_main() {
 
     if [ -f "$target_db" ]; then
         if grep -q "^${lang_code}|${marker_key}=true$" "$target_db" >/dev/null 2>&1; then
-             debug_log "INFO" "translate_main: Target DB '${target_db}' exists and is complete for '${lang_code}'."
+             debug_log "DEBUG" "translate_main: Target DB '${target_db}' exists and is complete for '${lang_code}'."
              # --- 修正 --- 既存DBが完了している場合にのみ表示
              display_detected_translation
              return 0 # <<< Early return: DB exists and is complete
         else
-             debug_log "INFO" "translate_main: Target DB '${target_db}' exists but is incomplete for '${lang_code}'. Proceeding with creation."
+             debug_log "DEBUG" "translate_main: Target DB '${target_db}' exists but is incomplete for '${lang_code}'. Proceeding with creation."
         fi
     else
-        debug_log "INFO" "translate_main: Target DB '${target_db}' does not exist. Proceeding with creation."
+        debug_log "DEBUG" "translate_main: Target DB '${target_db}' does not exist. Proceeding with creation."
     fi
 
     # --- Proceed with Translation Process ---
@@ -466,7 +466,7 @@ translate_main() {
     local selected_func=""
     local func_name=""
     if [ -z "$AI_TRANSLATION_FUNCTIONS" ]; then
-         debug_log "ERROR" "translate_main: AI_TRANSLATION_FUNCTIONS global variable is not set or empty."
+         debug_log "DEBUG" "translate_main: AI_TRANSLATION_FUNCTIONS global variable is not set or empty."
          display_message "error" "$(get_message "MSG_ERR_NO_TRANS_FUNC_VAR")"
          return 1
     fi
@@ -475,11 +475,11 @@ translate_main() {
         if type "$func_name" >/dev/null 2>&1; then selected_func="$func_name"; break; fi
     done
     if [ -z "$selected_func" ]; then
-        debug_log "ERROR" "translate_main: No available translation functions found from list: '${AI_TRANSLATION_FUNCTIONS}'."
+        debug_log "DEBUG" "translate_main: No available translation functions found from list: '${AI_TRANSLATION_FUNCTIONS}'."
         display_message "error" "$(get_message "MSG_ERR_NO_TRANS_FUNC_AVAIL" "list=$AI_TRANSLATION_FUNCTIONS")"
         return 1
     fi
-    debug_log "INFO" "translate_main: Selected translation function: ${selected_func}"
+    debug_log "DEBUG" "translate_main: Selected translation function: ${selected_func}"
 
     # 5. Determine API URL and Domain Name for spinner...
     local api_endpoint_url=""
@@ -487,7 +487,7 @@ translate_main() {
     case "$selected_func" in
         "translate_with_google") api_endpoint_url="..."; domain_name="translate.googleapis.com" ;;
         "translate_with_lingva") api_endpoint_url="..."; domain_name="lingva.ml" ;;
-        *) debug_log "ERROR" "..."; api_endpoint_url="N/A"; domain_name="$selected_func" ;;
+        *) debug_log "DEBUG" "..."; api_endpoint_url="N/A"; domain_name="$selected_func" ;;
     esac
     debug_log "DEBUG" "translate_main: Using Domain '${domain_name}' for spinner..."
 
@@ -500,12 +500,12 @@ translate_main() {
 
     # 7. Handle Result and Display Info ONLY on Success
     if [ "$db_creation_result" -eq 0 ]; then
-        debug_log "INFO" "translate_main: Language DB creation successful for ${lang_code}."
+        debug_log "DEBUG" "translate_main: Language DB creation successful for ${lang_code}."
         # --- 修正 --- DB作成成功後にのみ表示
         display_detected_translation
         return 0 # Success
     else
-        debug_log "ERROR" "translate_main: Language DB creation failed for ${lang_code} (Exit status: ${db_creation_result})."
+        debug_log "DEBUG" "translate_main: Language DB creation failed for ${lang_code} (Exit status: ${db_creation_result})."
         # --- 修正 --- 失敗時はエラーメッセージのみ表示 (display_messageは元々あった)
         if [ "$db_creation_result" -ne 1 ]; then # Avoid duplicate if base DB missing
              display_message "error" "$(get_message "MSG_ERR_TRANSLATION_FAILED" "lang=$lang_code")"
