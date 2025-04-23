@@ -284,7 +284,7 @@ create_language_db() {
         debug_log "ERROR" "Base message DB not found: $base_db. Cannot create target DB."
         # --- 変更点 ---
         # 1. display_message 呼び出しを削除
-        # 2. 新規キー MSG_TRANSLATION_FAILED を使用
+        # 2. エラーキー MSG_TRANSLATION_FAILED を使用
         # 3. printf と color/get_message で標準エラー出力に表示
         printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED")")" >&2
         # ---------------
@@ -293,8 +293,12 @@ create_language_db() {
 
     # Start spinner before the loop
     if type start_spinner >/dev/null 2>&1; then
-        # Assuming MSG_TRANSLATING_VIA exists elsewhere (e.g., common-information.sh)
-        start_spinner "$(color blue "$(get_message "MSG_TRANSLATING_VIA" "domain=$domain_name")")" "blue"
+        # --- 変更点 ---
+        # 1. ベタ書きメッセージまたは存在しないキーの使用を削除
+        # 2. 新規キー MSG_TRANSLATING_CURRENTLY を使用
+        # 3. パラメータとして api=$domain_name を渡す
+        start_spinner "$(color blue "$(get_message "MSG_TRANSLATING_CURRENTLY" "api=$domain_name")")" "blue"
+        # ---------------
         spinner_started="true"
         debug_log "DEBUG" "Spinner started for domain: ${domain_name}"
     else
@@ -345,7 +349,12 @@ EOF
     # Stop spinner after the loop
     if [ "$spinner_started" = "true" ]; then
         if type stop_spinner >/dev/null 2>&1; then
-            stop_spinner "" "" # Stop with default message
+            # --- 変更点 ---
+            # 1. ベタ書きメッセージまたは空メッセージを削除
+            # 2. 新規キー MSG_TRANSLATING_CREATED を使用
+            # 3. 2番目の引数 "success" は維持
+            stop_spinner "$(get_message "MSG_TRANSLATING_CREATED")" "success"
+            # ---------------
             debug_log "DEBUG" "Spinner stopped."
         else
             debug_log "WARN" "stop_spinner function not found."
@@ -360,7 +369,6 @@ EOF
     debug_log "DEBUG" "Language DB creation process completed for ${target_lang_code}"
     return "$overall_success" # Return 0 for success, potentially 2 for partial
 }
-
 # 翻訳情報を表示する関数
 display_detected_translation() {
     local lang_code=""
@@ -426,7 +434,8 @@ translate_main() {
         debug_log "DEBUG" "translate_main: Target language is the default language (${lang_code}). No translation needed."
         if [ "${TRANSLATION_INFO_DISPLAYED_DEFAULT:-false}" = "false" ]; then
             debug_log "DEBUG" "translate_main: Displaying info for default language."
-            display_detected_translation # Uses existing keys like MSG_TRANSLATION_SOURCE_ORIGINAL etc.
+            # display_detected_translation は既存キーを使用するため変更なし
+            display_detected_translation
             TRANSLATION_INFO_DISPLAYED_DEFAULT=true
         fi
         return 0
@@ -443,7 +452,8 @@ translate_main() {
              debug_log "INFO" "translate_main: Target DB '${target_db}' exists and contains the completion marker. Assuming translation is complete."
              if [ "${TRANSLATION_INFO_DISPLAYED_TARGET:-false}" = "false" ]; then
                  debug_log "DEBUG" "translate_main: Displaying info for existing target DB."
-                 display_detected_translation # Uses existing keys like MSG_TRANSLATION_SOURCE_CURRENT etc.
+                 # display_detected_translation は既存キーを使用するため変更なし
+                 display_detected_translation
                  TRANSLATION_INFO_DISPLAYED_TARGET=true
              fi
              return 0
@@ -463,7 +473,7 @@ translate_main() {
          debug_log "ERROR" "translate_main: AI_TRANSLATION_FUNCTIONS global variable is not set or empty."
          # --- 変更点 ---
          # 1. display_message 呼び出しを削除
-         # 2. 新規キー MSG_TRANSLATION_FAILED を使用
+         # 2. エラーキー MSG_TRANSLATION_FAILED を使用
          # 3. printf と color/get_message で標準エラー出力に表示
          printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED")")" >&2
          # ---------------
@@ -489,7 +499,7 @@ translate_main() {
         debug_log "ERROR" "translate_main: No available translation functions found from list: '${AI_TRANSLATION_FUNCTIONS}'."
         # --- 変更点 ---
         # 1. display_message 呼び出しを削除
-        # 2. 新規キー MSG_TRANSLATION_FAILED を使用
+        # 2. エラーキー MSG_TRANSLATION_FAILED を使用
         # 3. printf と color/get_message で標準エラー出力に表示
         printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED")")" >&2
         # ---------------
@@ -530,12 +540,14 @@ translate_main() {
         debug_log "INFO" "translate_main: Language DB creation successful for ${lang_code} using ${selected_func}."
         # --- 変更点 ---
         # 1. 既存キー MSG_TRANSLATION_SUCCESS を使用して成功メッセージを表示
+        # 2. printf と color/get_message で標準出力に表示
         printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_SUCCESS")")"
         # ---------------
 
         if [ "${TRANSLATION_INFO_DISPLAYED_TARGET:-false}" = "false" ]; then
              debug_log "DEBUG" "translate_main: Displaying info after successful DB creation."
-             display_detected_translation # Uses existing keys like MSG_TRANSLATION_SOURCE_CURRENT etc.
+             # display_detected_translation は既存キーを使用するため変更なし
+             display_detected_translation
              TRANSLATION_INFO_DISPLAYED_TARGET=true
         fi
         return 0 # Success
@@ -545,14 +557,15 @@ translate_main() {
         if [ "$db_creation_result" -ne 1 ]; then # Avoid duplicate message if base DB was missing
              # --- 変更点 ---
              # 1. display_message 呼び出しを削除
-             # 2. 新規キー MSG_TRANSLATION_FAILED を使用
+             # 2. エラーキー MSG_TRANSLATION_FAILED を使用
              # 3. printf と color/get_message で標準エラー出力に表示
              printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED")")" >&2
              # ---------------
         fi
         # Display info even on failure, might show default lang info
         if [ "${TRANSLATION_INFO_DISPLAYED_TARGET:-false}" = "false" ] && [ "${TRANSLATION_INFO_DISPLAYED_DEFAULT:-false}" = "false" ]; then
-             display_detected_translation # Uses existing keys like MSG_TRANSLATION_SOURCE_ORIGINAL etc.
+             # display_detected_translation は既存キーを使用するため変更なし
+             display_detected_translation
              # Set flags to prevent re-display
              TRANSLATION_INFO_DISPLAYED_TARGET=true
              TRANSLATION_INFO_DISPLAYED_DEFAULT=true
