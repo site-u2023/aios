@@ -450,7 +450,19 @@ get_country_code() {
 
     # Check network type
     local network_type=""
-    # ... (ネットワークチェック処理は変更なし) ...
+    if [ -f "${CACHE_DIR}/network.ch" ]; then
+        network_type=$(cat "${CACHE_DIR}/network.ch")
+        debug_log "DEBUG" "Network connectivity type detected: $network_type"
+    else
+        check_network_connectivity
+        if [ -f "${CACHE_DIR}/network.ch" ]; then
+            network_type=$(cat "${CACHE_DIR}/network.ch")
+        else
+            network_type="unknown"
+        fi
+        debug_log "DEBUG" "Network type after check: $network_type"
+    fi
+
     if [ "$network_type" = "none" ] || [ "$network_type" = "unknown" ] || [ -z "$network_type" ]; then
         debug_log "DEBUG" "No network connectivity or unknown type ('$network_type'), cannot proceed with IP-based location"
         return 1
@@ -458,18 +470,16 @@ get_country_code() {
 
     # グローバル変数 API_PROVIDERS を参照
     if [ -z "$API_PROVIDERS" ]; then
+         # デバッグログのみ出力し、return 1
          debug_log "CRITICAL" "Global API_PROVIDERS variable is empty! Cannot perform auto-detection. Check script configuration."
-         # グローバル変数が空の場合のエラー処理 (念のため残す)
-         if command -v init_translation >/dev/null 2>&1 && [ "${MSG_MEMORY_INITIALIZED:-false}" != "true" ]; then init_translation >/dev/null 2>&1; fi
-         printf "%s\n" "$(color red "$(get_message "MSG_ERR_API_PROVIDERS_EMPTY")")" # メッセージキーは必要なら追加
-         printf "\n"
          return 1
     fi
     debug_log "DEBUG" "Starting location detection process using global providers: $API_PROVIDERS"
 
     local api_found=0
-    local success_msg=$(get_message "MSG_LOCATION_RESULT" "s=successfully") # 汎用成功メッセージ
-    local fail_msg=$(get_message "MSG_LOCATION_RESULT" "s=failed")       # 汎用失敗メッセージ
+    # 汎用メッセージ取得 (従来通り)
+    local success_msg=$(get_message "MSG_LOCATION_RESULT" "s=successfully")
+    local fail_msg=$(get_message "MSG_LOCATION_RESULT" "s=failed")
 
     # Try API provider functions sequentially
     for api_provider in $API_PROVIDERS; do
@@ -490,7 +500,7 @@ get_country_code() {
 
         # API関数実行 (引数は2つ)
         "$api_provider" "$tmp_file" "$network_type"
-        api_success=$?
+        api_success=$? # API関数の戻り値 (0 or 1)
 
         rm -f "$tmp_file" 2>/dev/null
 
@@ -512,32 +522,91 @@ get_country_code() {
         fi
     done
 
-    # ループが異常終了した場合のスピナー停止
+    # ループが異常終了した場合のスピナー停止 (念のため)
     if [ $spinner_active -eq 1 ]; then
         stop_spinner "$fail_msg" "failed"
         spinner_active=0
     fi
 
-    # ★★★ 追加: 全てのAPIが失敗した場合のユーザー向けエラー表示 ★★★
+    # ★★★ 修正: 全てのAPIが失敗した場合の特別な printf エラー表示を削除 ★★★
+    # if [ $api_found -eq 0 ]; then
+    #     # printf "%s\n" "$(color red "$(get_message "MSG_ALL_APIS_FAILED")")" # この部分を削除
+    #     debug_log "ERROR" "All API providers failed to retrieve location information."
+    #     # printf "\n" # この部分を削除
+    # fi
+    # デバッグログは残しても良いかもしれない
     if [ $api_found -eq 0 ]; then
-        # 翻訳初期化確認 (念のため)
-        if command -v init_translation >/dev/null 2>&1 && [ "${MSG_MEMORY_INITIALIZED:-false}" != "true" ]; then
-             init_translation >/dev/null 2>&1
-        fi
-        # 赤色でエラーメッセージを表示
-        printf "%s\n" "$(color red "$(get_message "MSG_ALL_APIS_FAILED")")"
         debug_log "ERROR" "All API providers failed to retrieve location information."
-        # 表示後に改行を追加
-        printf "\n"
     fi
 
-    # Final result determination and return status
+    # --- country.db processing (変更なし) ---
+    if [ $api_found -eq 1 ] && [ -n "$SELECT_ZONENAME" ]; then
+        debug_log "DEBUG" "API query successful. Processing ZoneName: $SELECT_ZONENAME"
+        local db_file="${BASE_DIR}/country.db"
+        SELECT_TIMEZONE=""
+
+        if [ -f "$db_file" ]; then
+            debug_log "DEBUG" "Searching country.db for ZoneName: $SELECT_ZONENAME"
+            local matched_line=$(grep -F "$SELECT_ZONENAME" "$db_file" | head -1)
+
+            if [ -n "$matched_line" ]; then
+                 local zone_pairs=$(echo "$matched_line" | cut -d' ' -f6-)
+                 local pair=""
+                 local found_tz=""
+                 debug_log "DEBUG" "Extracted zone pairs string: $zone_pairs"
+
+                 for pair in $zone_pairs; do
+                     debug_log "DEBUG" "Checking pair: $pair"
+                     case "$pair" in
+                         "$SELECT_ZONENAME,"*)
+                             found_tz=$(echo "$pair" | cut -d',' -f2)
+                             debug_log "DEBUG" "Found matching pair with case: $pair"
+                             break
+                             ;;
+                         *)
+                             debug_log "DEBUG" "Pair '$pair' does not match required format '$SELECT_ZONENAME,***'"
+                             ;;
+                     esac
+                 done
+
+                 if [ -n "$found_tz" ]; then
+                     SELECT_TIMEZONE="$found_tz"
+                     debug_log "DEBUG" "Found POSIX timezone in country.db and stored in SELECT_TIMEZONE: $SELECT_TIMEZONE"
+                 else
+                     debug_log "DEBUG" "No matching POSIX timezone pair found starting with '$SELECT_ZONENAME,' in zone pairs: $zone_pairs"
+                 fi
+            else
+                 debug_log "DEBUG" "No matching line found in country.db containing '$SELECT_ZONENAME'"
+            fi
+        else
+            debug_log "DEBUG" "country.db not found at: $db_file. Cannot retrieve POSIX timezone."
+        fi
+    elif [ $api_found -eq 0 ]; then
+         debug_log "DEBUG" "All API queries failed. Cannot process timezone."
+    else # api_found is 1 but SELECT_ZONENAME is empty
+         debug_log "DEBUG" "ZoneName is empty even after successful API query? Cannot process timezone."
+         SELECT_TIMEZONE=""
+    fi
+    # --- country.db processing complete ---
+
+    # Save ISP information to cache (変更なし)
+    if [ -n "$ISP_NAME" ] || [ -n "$ISP_AS" ]; then
+        local cache_file="${CACHE_DIR}/isp_info.ch"
+        echo "$ISP_NAME" > "$cache_file"
+        echo "$ISP_AS" >> "$cache_file"
+        debug_log "DEBUG" "Saved ISP information to cache"
+    else
+        rm -f "${CACHE_DIR}/isp_info.ch" 2>/dev/null
+    fi
+
+    # Final result determination and return status (変更なし)
+    # この判定により、api_foundが0の場合や必須情報が欠けている場合は return 1 となる
     if [ $api_found -eq 1 ] && [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_TIMEZONE" ] && [ -n "$SELECT_ZONENAME" ]; then
         debug_log "DEBUG" "Location information retrieved successfully by get_country_code"
-        return 0
+        return 0 # 成功
     else
         debug_log "DEBUG" "Location information retrieval or processing failed within get_country_code"
-        return 1
+        return 1 # 失敗
     fi
 }
 
