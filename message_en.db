@@ -188,7 +188,7 @@ en|MSG_CACHE_ENABLED=Cache enabled: Using cached version information when availa
 # =======================
 # common-country.sh
 # =======================
-en|MSG_CONFIRM_USE_SETTINGS_SHORT=Use these location/timezone settings? {yn}:
+en|MSG_CONFIRM_USE_SETTINGS_SHORT=Use these location settings {yn}{:}
 en|MSG_CONFIRM_USE_SETTINGS=Do you want to use these location and timezone settings?
 en|MSG_CONFIRM_DEFAULT=Confirm {yn}{;}
 en|MSG_CONFIRM_SELECT=Confirm this selection {ynr}{;}
