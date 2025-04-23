@@ -322,6 +322,7 @@ get_country_cloudflare() {
 
     local retry_count=0
     local success=0
+    local api_domain=""      # ★★★ 追加: ドメイン名格納用変数 ★★★
 
     # --- ▼▼▼ APIエンドポイント設定 ▼▼▼ ---
     local api_url=""
@@ -332,6 +333,12 @@ get_country_cloudflare() {
     fi
     # ---------------------------------------
 
+    # ★★★ 追加: API URLからドメイン名を抽出 ★★★
+    api_domain=$(echo "$api_url" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+    # ドメイン名が取得できなかった場合のフォールバック (URL自体を使う)
+    [ -z "$api_domain" ] && api_domain="$api_url"
+    debug_log "DEBUG" "Using API domain for Cloudflare: $api_domain"
+
     debug_log "DEBUG" "Querying location from $api_url"
 
     # 変数の初期化
@@ -341,6 +348,8 @@ get_country_cloudflare() {
     ISP_AS=""
     ISP_ORG=""
     SELECT_REGION_NAME=""
+    # ★★★ 削除: TIMEZONE_API_SOURCE の初期化は get_country_code で行う ★★★
+    # TIMEZONE_API_SOURCE=""
 
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
         make_api_request "$api_url" "$tmp_file" "$API_TIMEOUT" "CLOUDFLARE" "$USER_AGENT"
@@ -371,6 +380,8 @@ get_country_cloudflare() {
                 if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
                     debug_log "DEBUG" "Required fields (Country & ZoneName) extracted successfully."
                     success=1
+                    # ★★★ 変更点: 成功時に API ドメイン名を TIMEZONE_API_SOURCE に設定 ★★★
+                    TIMEZONE_API_SOURCE="$api_domain"
                     break
                 else
                     debug_log "DEBUG" "Extraction failed for required fields (Country or ZoneName)."
@@ -397,8 +408,17 @@ get_country_cloudflare() {
         fi
     done
 
+    # ★★★ 削除: 成功時の TIMEZONE_API_SOURCE 設定 (ループ内で実施済) ★★★
+    # if [ $success -eq 1 ]; then
+    #     TIMEZONE_API_SOURCE="Cloudflare"
+    #     debug_log "DEBUG" "get_country_cloudflare finished successfully."
+    #     return 0
+    # else
+    #     debug_log "DEBUG" "get_country_cloudflare finished with failure."
+    #     return 1
+    # fi
+    # ★★★ 変更点: 戻り値のみ返す ★★★
     if [ $success -eq 1 ]; then
-        TIMEZONE_API_SOURCE="Cloudflare"
         debug_log "DEBUG" "get_country_cloudflare finished successfully."
         return 0
     else
