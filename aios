@@ -2317,8 +2317,8 @@ check_common() {
             print_banner
             print_information
             information_main
-            translate_main
             country_main "$lang_code"
+            translate_main
             install_package update
             selector "$MAIN_MENU" 
             ;;
@@ -2339,8 +2339,8 @@ check_common() {
             print_banner
             print_information
             information_main
-            translate_main
             country_main "$lang_code"
+            translate_main
             install_package update
             selector "$MAIN_MENU"
             ;;
