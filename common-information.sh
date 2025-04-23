@@ -763,6 +763,46 @@ process_location_info() {
     return 0
 }
 
+# display_detected_location 関数 (commit 376f236 時点)
+# この関数は information_main から呼び出されるため、併記しておきます。
+display_detected_location() {
+    local detection_source="$1"
+    local detected_country="$2"
+    local detected_zonename="$3"
+    local detected_timezone="$4"
+    # 引数番号変更 (5番目)
+    local detected_isp="${5:-}"
+    # 引数番号変更 (6番目)
+    local detected_as="${6:-}"
+
+    debug_log "DEBUG" "Displaying location information from source: $detection_source"
+
+    # 検出元情報の表示 (翻訳キーを使用)
+    printf "%-20s: %s\n" "$(get_message "MSG_COUNTRY_SOURCE")" "$detection_source"
+
+    # タイムゾーンAPIの情報（Cloudflare等、設定されていれば）
+    # (この部分は元の information_main には直接関係ないが、display_detected_location の一部)
+    if [ -n "$TIMEZONE_API_SOURCE" ]; then
+        local domain=$(echo "$TIMEZONE_API_SOURCE" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+        [ -z "$domain" ] && domain="$TIMEZONE_API_SOURCE"
+        printf "%-20s: %s\n" "$(get_message "MSG_TIMEZONE_API")" "$domain"
+    fi
+
+    # ISP情報の表示（ISP情報があれば）
+    if [ -n "$detected_isp" ]; then
+        printf "%-20s: %s\n" "$(get_message "MSG_ISP_PROVIDER")" "$detected_isp"
+    fi
+    if [ -n "$detected_as" ]; then
+        printf "%-20s: %s\n" "$(get_message "MSG_ISP_AS")" "$detected_as"
+    fi
+
+    printf "%-20s: %s\n" "$(get_message "MSG_COUNTRY_CODE")" "$detected_country"
+    printf "%-20s: %s\n" "$(get_message "MSG_ZONE_NAME")" "$detected_zonename"
+    printf "%-20s: %s\n" "$(get_message "MSG_TIMEZONE")" "$detected_timezone"
+
+    debug_log "DEBUG" "Location information displayed successfully"
+}
+
 # キャッシュされたロケーション情報を表示する関数
 information_main() {
     debug_log "DEBUG" "Entering information_main() to display cached location"
@@ -828,44 +868,4 @@ information_main() {
 
     debug_log "DEBUG" "Exiting information_main()"
     return 0
-}
-
-# display_detected_location 関数 (commit 376f236 時点)
-# この関数は information_main から呼び出されるため、併記しておきます。
-display_detected_location() {
-    local detection_source="$1"
-    local detected_country="$2"
-    local detected_zonename="$3"
-    local detected_timezone="$4"
-    # 引数番号変更 (5番目)
-    local detected_isp="${5:-}"
-    # 引数番号変更 (6番目)
-    local detected_as="${6:-}"
-
-    debug_log "DEBUG" "Displaying location information from source: $detection_source"
-
-    # 検出元情報の表示 (翻訳キーを使用)
-    printf "%-20s: %s\n" "$(get_message "MSG_COUNTRY_SOURCE")" "$detection_source"
-
-    # タイムゾーンAPIの情報（Cloudflare等、設定されていれば）
-    # (この部分は元の information_main には直接関係ないが、display_detected_location の一部)
-    if [ -n "$TIMEZONE_API_SOURCE" ]; then
-        local domain=$(echo "$TIMEZONE_API_SOURCE" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
-        [ -z "$domain" ] && domain="$TIMEZONE_API_SOURCE"
-        printf "%-20s: %s\n" "$(get_message "MSG_TIMEZONE_API")" "$domain"
-    fi
-
-    # ISP情報の表示（ISP情報があれば）
-    if [ -n "$detected_isp" ]; then
-        printf "%-20s: %s\n" "$(get_message "MSG_ISP_PROVIDER")" "$detected_isp"
-    fi
-    if [ -n "$detected_as" ]; then
-        printf "%-20s: %s\n" "$(get_message "MSG_ISP_AS")" "$detected_as"
-    fi
-
-    printf "%-20s: %s\n" "$(get_message "MSG_COUNTRY_CODE")" "$detected_country"
-    printf "%-20s: %s\n" "$(get_message "MSG_ZONE_NAME")" "$detected_zonename"
-    printf "%-20s: %s\n" "$(get_message "MSG_TIMEZONE")" "$detected_timezone"
-
-    debug_log "DEBUG" "Location information displayed successfully"
 }
