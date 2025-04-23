@@ -575,18 +575,6 @@ zone_write() {
     fi
 }
 
-# スクリプト情報表示（デバッグモード有効時）
-if [ "$DEBUG_MODE" = "true" ]; then
-    debug_log "DEBUG" "common-country.sh loaded with BASE_DIR=$BASE_DIR"
-    # common-system.sh のロード確認は不要かもしれない (依存関係による)
-    # if type get_device_architecture >/dev/null 2>&1; then
-    #     debug_log "DEBUG" "common-system.sh seems loaded"
-    # else
-    #     debug_log "DEBUG" "common-system.sh not loaded or functions not available"
-    # fi
-
-    # セキュリティとコード改善に関するデバッグメッセージ
-
 # =========================================================
 # ヘルパー関数: 手動選択による設定試行
 # 戻り値: 0 (成功), 1 (失敗またはユーザーによるキャンセル)
