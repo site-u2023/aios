@@ -1089,5 +1089,3 @@ country_main() {
 }
     debug_log "DEBUG" "Added escape_for_sed function to safely handle special characters in user inputs"
     debug_log "DEBUG" "Enhanced zone_write function to centralize timezone data processing"
-    # debug_log "DEBUG" "Improved code efficiency by reducing duplicate timezone parsing logic" # これは今回の変更ではない
-fi
