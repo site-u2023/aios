@@ -875,67 +875,63 @@ try_detect_from_cache() {
 
     debug_log "DEBUG" "Checking location cache using check_location_cache()"
 
+    # check_location_cache は language.ch, timezone.ch, zonename.ch の存在と中身を確認する想定
     if ! check_location_cache; then
-        debug_log "DEBUG" "Cache check failed (check_location_cache returned non-zero)"
+        debug_log "DEBUG" "Cache check failed (check_location_cache returned non-zero or required files missing/empty)"
         return 1
     fi
 
-    debug_log "DEBUG" "Valid location cache found, loading cache data"
+    debug_log "DEBUG" "Valid location cache found, proceeding with cache initialization"
 
-    # キャッシュファイルのパス定義
+    # キャッシュファイルのパス定義 (読み込み用)
     local cache_language="${CACHE_DIR}/language.ch"
-    local cache_timezone="${CACHE_DIR}/timezone.ch"
-    local cache_zonename="${CACHE_DIR}/zonename.ch"
-    local detected_country=""
-    local detected_timezone=""
-    local detected_zonename=""
-    local detected_isp=""
-    local detected_as=""
+    # ★★★ 注意: country.ch は country_write で作成されるため、ここでは読み込まない ★★★
+    # local cache_country="${CACHE_DIR}/country.ch" # 不要
+    # local cache_timezone="${CACHE_DIR}/timezone.ch" # 不要 (country_write/zone_write で設定される)
+    # local cache_zonename="${CACHE_DIR}/zonename.ch" # 不要 (country_write/zone_write で設定される)
 
-    # キャッシュからデータ読み込み
+    # キャッシュから国コード(言語コード)を読み込み (翻訳初期化に必要)
+    local detected_country_code=""
     if [ -s "$cache_language" ]; then
-        detected_country=$(cat "$cache_language" 2>/dev/null)
-    fi
-    detected_timezone=$(cat "$cache_timezone" 2>/dev/null)
-    detected_zonename=$(cat "$cache_zonename" 2>/dev/null)
-
-    # ISP情報の取得を追加
-    if [ -f "${CACHE_DIR}/isp_info.ch" ]; then
-        detected_isp=$(sed -n '1p' "${CACHE_DIR}/isp_info.ch" 2>/dev/null)
-        detected_as=$(sed -n '2p' "${CACHE_DIR}/isp_info.ch" 2>/dev/null)
+        detected_country_code=$(cat "$cache_language" 2>/dev/null)
     fi
 
-    debug_log "DEBUG" "Cache data - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename, isp: $detected_isp, as: $detected_as"
-
-    # 検出データの検証
-    if [ -z "$detected_country" ] || [ -z "$detected_timezone" ] || [ -z "$detected_zonename" ]; then
-        debug_log "DEBUG" "One or more required cache values are empty"
-        return 1 # 必須情報が欠けている場合は失敗
+    # 国コードがない場合は失敗
+    if [ -z "$detected_country_code" ]; then
+        debug_log "DEBUG" "Required language code cache (language.ch) is empty or missing"
+        return 1
     fi
+
+    debug_log "DEBUG" "Cache data - language code (country code): $detected_country_code"
 
     # 国データをDBから取得 (翻訳初期化のために country_write が必要)
-    local country_data=$(awk -v code="$detected_country" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
+    local country_data=$(awk -v code="$detected_country_code" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
     if [ -z "$country_data" ]; then
-         debug_log "ERROR" "Could not find country data in DB for cached country: $detected_country"
-         # 致命的ではないかもしれないが、失敗として扱う
+         debug_log "ERROR" "Could not find country data in DB for cached country code: $detected_country_code"
+         # 翻訳初期化ができないため失敗として扱う
          return 1
     fi
 
-    # 国情報を一時ファイルに書き出し
+    # 国情報を一時ファイルに書き出し (country_write が読み込むため)
     echo "$country_data" > "${CACHE_DIR}/country.tmp"
 
     # country_write を呼び出し (翻訳初期化のため、メッセージ表示はしない)
     country_write || {
         debug_log "ERROR" "Failed to initialize translation via country_write for cache"
-        # 失敗しても続行するかもしれないが、ログは残す
+        rm -f "${CACHE_DIR}/country.tmp" 2>/dev/null # エラー時は一時ファイルを削除
+        # 失敗しても続行するかもしれないが、ログは残す -> 失敗として扱うべき
+        return 1
     }
+    # country_write が成功したら一時ファイルは不要
+    rm -f "${CACHE_DIR}/country.tmp" 2>/dev/null
 
-    # 検出情報を表示 (成功メッセージなし)
-    display_detected_location "Cache" "$detected_country" "$detected_zonename" "$detected_timezone" "$detected_isp" "$detected_as"
+    # ★★★ 削除: 検出情報の表示処理 ★★★
+    # display_detected_location "Cache" "$detected_country" "$detected_zonename" "$detected_timezone" "$detected_isp" "$detected_as"
 
     # キャッシュ利用時は成功メッセージを表示しない
-    debug_log "DEBUG" "Cache-based location settings applied (messages suppressed)"
-    return 0 # キャッシュ適用成功
+    debug_log "DEBUG" "Cache-based initialization (translation) completed successfully"
+    # ★★★ 変更点: 戻り値を成功(0)にする ★★★
+    return 0 # キャッシュからの初期化（主に翻訳）成功
 }
 
 # =========================================================
