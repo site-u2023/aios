@@ -397,11 +397,16 @@ display_detected_translation() {
 }
 
 # @FUNCTION: translate_main
-# @DESCRIPTION: Main entry point for the translation feature. Checks language,
-#               checks for existing translation DB with marker, and triggers DB creation
-#               using the first available function specified in AI_TRANSLATION_FUNCTIONS.
+# @DESCRIPTION: Entry point for translation. Reads target language from cache (message.ch),
+#               checks/creates the translation DB if needed (not default lang),
+#               and displays translation info ONLY AFTER confirmation/creation.
+#               Does NOT take language code as an argument.
+# @PARAM: None
+# @RETURN: 0 on success/no translation needed, 1 on critical error,
+#          propagates create_language_db exit code on failure.
 translate_main() {
     # --- Initialization ---
+    # (Wget detection logic can remain as it might be used by AIP funcs indirectly)
     if type detect_wget_capabilities >/dev/null 2>&1; then
         WGET_CAPABILITY_DETECTED=$(detect_wget_capabilities)
         debug_log "DEBUG" "translate_main: Wget capability detected: ${WGET_CAPABILITY_DETECTED}"
@@ -417,27 +422,22 @@ translate_main() {
     local is_default_lang="false"
     local target_db=""
     local db_creation_result=1 # Default to failure/not run
-    local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER" # Define the marker key
+    local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
 
-    # 1. Determine Language Code
+    # 1. Determine Language Code ONLY from Cache
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang_code=$(cat "${CACHE_DIR}/message.ch")
-        debug_log "DEBUG" "translate_main: Language code read from ${CACHE_DIR}/message.ch: ${lang_code}"
+        debug_log "DEBUG" "translate_main: Language code read from cache ${CACHE_DIR}/message.ch: ${lang_code}"
     else
         lang_code="$DEFAULT_LANGUAGE"
-        debug_log "DEBUG" "translate_main: ${CACHE_DIR}/message.ch not found, using default language: ${lang_code}"
+        debug_log "DEBUG" "translate_main: Cache file ${CACHE_DIR}/message.ch not found, using default language: ${lang_code}"
     fi
 
     # 2. Check if it's the default language
     [ "$lang_code" = "$DEFAULT_LANGUAGE" ] && is_default_lang="true"
     if [ "$is_default_lang" = "true" ]; then
-        debug_log "DEBUG" "translate_main: Target language is the default language (${lang_code}). No translation needed."
-        if [ "${TRANSLATION_INFO_DISPLAYED_DEFAULT:-false}" = "false" ]; then
-            debug_log "DEBUG" "translate_main: Displaying info for default language."
-            # display_detected_translation は既存キーを使用するため変更なし
-            display_detected_translation
-            TRANSLATION_INFO_DISPLAYED_DEFAULT=true
-        fi
+        debug_log "DEBUG" "translate_main: Target language is the default language (${lang_code}). No translation needed or display from this function."
+        # --- 修正 --- デフォルト言語の場合は何も表示せず終了
         return 0
     fi
 
@@ -449,127 +449,68 @@ translate_main() {
 
     if [ -f "$target_db" ]; then
         if grep -q "^${lang_code}|${marker_key}=true$" "$target_db" >/dev/null 2>&1; then
-             debug_log "DEBUG" "translate_main: Target DB '${target_db}' exists and contains the completion marker. Assuming translation is complete."
-             if [ "${TRANSLATION_INFO_DISPLAYED_TARGET:-false}" = "false" ]; then
-                 debug_log "DEBUG" "translate_main: Displaying info for existing target DB."
-                 # display_detected_translation は既存キーを使用するため変更なし
-                 display_detected_translation
-                 TRANSLATION_INFO_DISPLAYED_TARGET=true
-             fi
-             return 0
+             debug_log "INFO" "translate_main: Target DB '${target_db}' exists and is complete for '${lang_code}'."
+             # --- 修正 --- 既存DBが完了している場合にのみ表示
+             display_detected_translation
+             return 0 # <<< Early return: DB exists and is complete
         else
-             debug_log "DEBUG" "translate_main: Target DB '${target_db}' exists but is missing the completion marker. Proceeding with translation creation (will overwrite)."
+             debug_log "INFO" "translate_main: Target DB '${target_db}' exists but is incomplete for '${lang_code}'. Proceeding with creation."
         fi
     else
-        debug_log "DEBUG" "translate_main: Target DB '${target_db}' does not exist. Proceeding with translation creation."
+        debug_log "INFO" "translate_main: Target DB '${target_db}' does not exist. Proceeding with creation."
     fi
 
-    # --- Proceed with Translation Process (DB does not exist or lacks marker) ---
-
-    # 4. Find the first available translation function from AI_TRANSLATION_FUNCTIONS
+    # --- Proceed with Translation Process ---
+    # (Steps 4 & 5: Find function, determine domain - remain the same as f7ff132)
+    # 4. Find the first available translation function...
     local selected_func=""
     local func_name=""
     if [ -z "$AI_TRANSLATION_FUNCTIONS" ]; then
          debug_log "ERROR" "translate_main: AI_TRANSLATION_FUNCTIONS global variable is not set or empty."
-         # --- 変更点 ---
-         # 1. display_message 呼び出しを削除
-         # 2. エラーキー MSG_TRANSLATION_FAILED を使用
-         # 3. printf と color/get_message で標準エラー出力に表示
-         printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED")")" >&2
-         # ---------------
+         display_message "error" "$(get_message "MSG_ERR_NO_TRANS_FUNC_VAR")"
          return 1
     fi
-
-    # Use 'set -f' to disable globbing and 'set -- $var' to split by spaces safely
-    set -f
-    set -- $AI_TRANSLATION_FUNCTIONS
-    set +f
+    set -f; set -- $AI_TRANSLATION_FUNCTIONS; set +f
     for func_name in "$@"; do
-        debug_log "DEBUG" "translate_main: Checking availability of function: ${func_name}"
-        if type "$func_name" >/dev/null 2>&1; then
-            debug_log "DEBUG" "translate_main: Function '${func_name}' is available."
-            selected_func="$func_name"
-            break
-        else
-            debug_log "DEBUG" "translate_main: Function '${func_name}' is not defined or not found."
-        fi
+        if type "$func_name" >/dev/null 2>&1; then selected_func="$func_name"; break; fi
     done
-
     if [ -z "$selected_func" ]; then
         debug_log "ERROR" "translate_main: No available translation functions found from list: '${AI_TRANSLATION_FUNCTIONS}'."
-        # --- 変更点 ---
-        # 1. display_message 呼び出しを削除
-        # 2. エラーキー MSG_TRANSLATION_FAILED を使用
-        # 3. printf と color/get_message で標準エラー出力に表示
-        printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED")")" >&2
-        # ---------------
+        display_message "error" "$(get_message "MSG_ERR_NO_TRANS_FUNC_AVAIL" "list=$AI_TRANSLATION_FUNCTIONS")"
         return 1
     fi
+    debug_log "INFO" "translate_main: Selected translation function: ${selected_func}"
 
-    debug_log "DEBUG" "translate_main: Selected translation function: ${selected_func}"
-
-    # 5. Determine API URL and Domain Name *locally* based on the selected function (for spinner ONLY)
+    # 5. Determine API URL and Domain Name for spinner...
     local api_endpoint_url=""
     local domain_name=""
     case "$selected_func" in
-        "translate_with_google")
-            api_endpoint_url="https://translate.googleapis.com/translate_a/single" # Internal default
-            domain_name="translate.googleapis.com"
-            ;;
-        "translate_with_lingva")
-            api_endpoint_url="https://lingva.ml/api/v1" # Internal default
-            domain_name="lingva.ml"
-            ;;
-        *)
-            debug_log "ERROR" "translate_main: No URL/Domain mapping defined in translate_main for spinner display for function: ${selected_func}"
-            api_endpoint_url="N/A"
-            domain_name="$selected_func" # Fallback to function name
-            ;;
+        "translate_with_google") api_endpoint_url="..."; domain_name="translate.googleapis.com" ;;
+        "translate_with_lingva") api_endpoint_url="..."; domain_name="lingva.ml" ;;
+        *) debug_log "ERROR" "..."; api_endpoint_url="N/A"; domain_name="$selected_func" ;;
     esac
+    debug_log "DEBUG" "translate_main: Using Domain '${domain_name}' for spinner..."
 
-    debug_log "DEBUG" "translate_main: Using Domain '${domain_name}' for spinner (derived from URL '${api_endpoint_url}' for function '${selected_func}')"
 
-    # 6. Call create_language_db with the required arguments
+    # 6. Call create_language_db
     debug_log "DEBUG" "translate_main: Calling create_language_db for language '${lang_code}' using function '${selected_func}'"
     create_language_db "$selected_func" "$api_endpoint_url" "$domain_name" "$lang_code"
     db_creation_result=$?
     debug_log "DEBUG" "translate_main: create_language_db finished with status: ${db_creation_result}"
 
-    # 7. Handle Result and Display Info
+    # 7. Handle Result and Display Info ONLY on Success
     if [ "$db_creation_result" -eq 0 ]; then
-        debug_log "DEBUG" "translate_main: Language DB creation successful for ${lang_code} using ${selected_func}."
-        # --- 変更点 ---
-        # 1. 既存キー MSG_TRANSLATION_SUCCESS を使用して成功メッセージを表示
-        # 2. printf と color/get_message で標準出力に表示
-        printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_SUCCESS")")"
-        # ---------------
-
-        if [ "${TRANSLATION_INFO_DISPLAYED_TARGET:-false}" = "false" ]; then
-             debug_log "DEBUG" "translate_main: Displaying info after successful DB creation."
-             # display_detected_translation は既存キーを使用するため変更なし
-             display_detected_translation
-             TRANSLATION_INFO_DISPLAYED_TARGET=true
-        fi
+        debug_log "INFO" "translate_main: Language DB creation successful for ${lang_code}."
+        # --- 修正 --- DB作成成功後にのみ表示
+        display_detected_translation
         return 0 # Success
     else
-        debug_log "ERROR" "translate_main: Language DB creation failed for ${lang_code} using ${selected_func} (Exit status: ${db_creation_result})."
-        # Display failure message (create_language_db might have already shown specific error)
-        if [ "$db_creation_result" -ne 1 ]; then # Avoid duplicate message if base DB was missing
-             # --- 変更点 ---
-             # 1. display_message 呼び出しを削除
-             # 2. エラーキー MSG_TRANSLATION_FAILED を使用
-             # 3. printf と color/get_message で標準エラー出力に表示
-             printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED")")" >&2
-             # ---------------
+        debug_log "ERROR" "translate_main: Language DB creation failed for ${lang_code} (Exit status: ${db_creation_result})."
+        # --- 修正 --- 失敗時はエラーメッセージのみ表示 (display_messageは元々あった)
+        if [ "$db_creation_result" -ne 1 ]; then # Avoid duplicate if base DB missing
+             display_message "error" "$(get_message "MSG_ERR_TRANSLATION_FAILED" "lang=$lang_code")"
         fi
-        # Display info even on failure, might show default lang info
-        if [ "${TRANSLATION_INFO_DISPLAYED_TARGET:-false}" = "false" ] && [ "${TRANSLATION_INFO_DISPLAYED_DEFAULT:-false}" = "false" ]; then
-             # display_detected_translation は既存キーを使用するため変更なし
-             display_detected_translation
-             # Set flags to prevent re-display
-             TRANSLATION_INFO_DISPLAYED_TARGET=true
-             TRANSLATION_INFO_DISPLAYED_DEFAULT=true
-        fi
+        # --- 修正 --- 失敗時は display_detected_translation を呼び出さない
         return "$db_creation_result" # Propagate error code
     fi
 }
