@@ -867,71 +867,61 @@ try_detect_from_ip() {
 # 戻り値: 0 (成功), 1 (失敗またはスキップ)
 # =========================================================
 try_detect_from_cache() {
-    # キャッシュ関連スキップフラグのチェック
+    # キャッシュ関連スキップフラグのチェック (変更なし)
     if [ "$SKIP_CACHE_DETECTION" = "true" ] || [ "$SKIP_CACHE_DEVICE_DETECTION" = "true" ]; then
         debug_log "DEBUG" "Cache detection skipped due to flag settings"
         return 1
     fi
 
+    # ★★★ 変更点: check_location_cache() の呼び出しを復元 ★★★
     debug_log "DEBUG" "Checking location cache using check_location_cache()"
-
-    # check_location_cache は language.ch, timezone.ch, zonename.ch の存在と中身を確認する想定
+    # check_location_cache は元のロジック (5ファイルチェック) のまま呼び出す
     if ! check_location_cache; then
-        debug_log "DEBUG" "Cache check failed (check_location_cache returned non-zero or required files missing/empty)"
+        debug_log "DEBUG" "Cache check failed (check_location_cache returned non-zero)"
         return 1
     fi
+    # ★★★ check_location_cache() 呼び出し復元ここまで ★★★
 
-    debug_log "DEBUG" "Valid location cache found, proceeding with cache initialization"
+    debug_log "DEBUG" "Valid location cache found (based on check_location_cache), proceeding with cache initialization (translation)"
 
-    # キャッシュファイルのパス定義 (読み込み用)
+    # ★★★ 変更点: language.ch から国コードを読み込むロジックを復元 ★★★
     local cache_language="${CACHE_DIR}/language.ch"
-    # ★★★ 注意: country.ch は country_write で作成されるため、ここでは読み込まない ★★★
-    # local cache_country="${CACHE_DIR}/country.ch" # 不要
-    # local cache_timezone="${CACHE_DIR}/timezone.ch" # 不要 (country_write/zone_write で設定される)
-    # local cache_zonename="${CACHE_DIR}/zonename.ch" # 不要 (country_write/zone_write で設定される)
-
-    # キャッシュから国コード(言語コード)を読み込み (翻訳初期化に必要)
     local detected_country_code=""
     if [ -s "$cache_language" ]; then
         detected_country_code=$(cat "$cache_language" 2>/dev/null)
     fi
 
-    # 国コードがない場合は失敗
+    # 国コードがない場合は失敗 (check_location_cache が成功していれば通常ありえないはずだが念のため)
     if [ -z "$detected_country_code" ]; then
-        debug_log "DEBUG" "Required language code cache (language.ch) is empty or missing"
+        debug_log "ERROR" "Required language code cache (language.ch) is empty or missing even after check_location_cache succeeded? Aborting cache use."
         return 1
     fi
 
     debug_log "DEBUG" "Cache data - language code (country code): $detected_country_code"
 
-    # 国データをDBから取得 (翻訳初期化のために country_write が必要)
+    # ★★★ 変更点: country.db から国データを取得するロジックを復元 ★★★
     local country_data=$(awk -v code="$detected_country_code" '$5 == code {print $0; exit}' "$BASE_DIR/country.db")
     if [ -z "$country_data" ]; then
-         debug_log "ERROR" "Could not find country data in DB for cached country code: $detected_country_code"
+         debug_log "ERROR" "Could not find country data in DB for cached country code: $detected_country_code. Aborting cache use."
          # 翻訳初期化ができないため失敗として扱う
          return 1
     fi
 
-    # 国情報を一時ファイルに書き出し (country_write が読み込むため)
+    # 国情報を一時ファイルに書き出し (country_write が読み込むため - 変更なし)
     echo "$country_data" > "${CACHE_DIR}/country.tmp"
 
-    # country_write を呼び出し (翻訳初期化のため、メッセージ表示はしない)
-    country_write || {
-        debug_log "ERROR" "Failed to initialize translation via country_write for cache"
-        rm -f "${CACHE_DIR}/country.tmp" 2>/dev/null # エラー時は一時ファイルを削除
-        # 失敗しても続行するかもしれないが、ログは残す -> 失敗として扱うべき
-        return 1
-    }
+    # country_write を呼び出し (翻訳初期化のため、メッセージ表示はしない - 変更なし)
+    if ! country_write; then
+         # country_write 失敗時は return 1 (変更なし)
+         debug_log "ERROR" "Failed to initialize translation via country_write for cache (indicates broken state). Aborting cache use."
+         rm -f "${CACHE_DIR}/country.tmp" 2>/dev/null # エラー時は一時ファイルを削除
+         return 1 # 失敗として IP 検出に進む
+    fi
     # country_write が成功したら一時ファイルは不要
     rm -f "${CACHE_DIR}/country.tmp" 2>/dev/null
 
-    # ★★★ 削除: 検出情報の表示処理 ★★★
-    # display_detected_location "Cache" "$detected_country" "$detected_zonename" "$detected_timezone" "$detected_isp" "$detected_as"
-
-    # キャッシュ利用時は成功メッセージを表示しない
     debug_log "DEBUG" "Cache-based initialization (translation) completed successfully"
-    # ★★★ 変更点: 戻り値を成功(0)にする ★★★
-    return 0 # キャッシュからの初期化（主に翻訳）成功
+    return 0 # キャッシュからの初期化成功
 }
 
 # =========================================================
