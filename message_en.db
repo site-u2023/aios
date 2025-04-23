@@ -67,6 +67,7 @@ en|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{:}
 # =======================
 # common-translation.sh
 # =======================
+en|MSG_TRANSLATING=Translating messages
 en|MSG_TRANSLATION_SOURCE_ORIGINAL=Original Language file{:} {i}
 en|MSG_TRANSLATION_SOURCE_CURRENT=Translated Language file{:} {i}
 en|MSG_LANGUAGE_SOURCE=Original language code{:} {i}
