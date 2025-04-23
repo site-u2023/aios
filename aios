@@ -2132,7 +2132,7 @@ print_information() {
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_OSVERSION" "i=$osversion")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_PACKAGEMANAGER" "i=$package_manager")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_USBDEVICE" "i=$usbdevice")")"
-    # printf "\n"
+    printf "\n"
 }
 
 # 🔴　バナー・デバイス情報　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
