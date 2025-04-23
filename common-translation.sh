@@ -464,6 +464,7 @@ process_language_translation() {
     # --- 翻訳処理と表示 ---
     local translation_occurred="false" # 翻訳が行われたかのフラグ
     local spinner_started="false"    # スピナーが開始されたかのフラグ
+    local current_api=""             # API名を保持する変数
 
     if [ "$is_default_lang" = "false" ]; then
         debug_log "DEBUG" "Target language (${lang_code}) is different from default (${DEFAULT_LANGUAGE}), attempting translation."
@@ -476,8 +477,18 @@ process_language_translation() {
 
         # ネットワークがあり、オンライン翻訳が有効な場合のみスピナー開始
         if [ -n "$network_status" ] && [ "$network_status" != "" ] && [ "$ONLINE_TRANSLATION_ENABLED" = "yes" ]; then
+            # API名を決定 (create_language_db 内のロジックをここに移動)
+            case "$API_LIST" in
+                google) current_api="translate.googleapis.com" ;;
+                lingva) current_api="lingva.ml" ;;
+                *) current_api="translate.googleapis.com" ;;
+            esac
+            [ -z "$current_api" ] && current_api="Translation API"
+            debug_log "DEBUG" "Determined API for spinner: $current_api"
+
             if type start_spinner >/dev/null 2>&1; then
-                start_spinner "$(color blue "$(get_message "MSG_TRANSLATING")")"
+                # ★★★ 変更点: get_message に api=$current_api を追加し、全体を color blue で囲む ★★★
+                start_spinner "$(color blue "$(get_message "MSG_TRANSLATING" "api=$current_api")")" "blue"
                 spinner_started="true"
             else
                 debug_log "WARNING" "start_spinner function not found, spinner not started"
@@ -503,7 +514,7 @@ process_language_translation() {
         debug_log "DEBUG" "Skipping translation for default language: ${lang_code}"
     fi
 
-    # --- メッセージ表示ロジック ---
+    # --- メッセージ表示ロジック (変更なし) ---
     # 1. 翻訳が実際に行われた場合
     if [ "$translation_occurred" = "true" ]; then
         printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_SUCCESS")")"
