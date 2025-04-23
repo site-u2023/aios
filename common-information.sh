@@ -644,3 +644,64 @@ process_location_info() {
     debug_log "DEBUG: Location information cache process completed successfully"
     return 0
 }
+
+# キャッシュされたロケーション情報を表示する関数
+information_main() {
+    debug_log "DEBUG" "Entering information_main() to display cached location"
+
+    # 必要なキャッシュファイルのパス
+    local cache_lang_file="${CACHE_DIR}/language.ch"
+    local cache_zone_file="${CACHE_DIR}/zonename.ch"
+    local cache_tz_file="${CACHE_DIR}/timezone.ch"
+    local cache_isp_file="${CACHE_DIR}/isp_info.ch"
+
+    # 必須キャッシュファイルの存在と中身をチェック
+    if [ -s "$cache_lang_file" ] && [ -s "$cache_zone_file" ] && [ -s "$cache_tz_file" ]; then
+        # キャッシュから情報を読み込み
+        local cached_lang=$(cat "$cache_lang_file" 2>/dev/null)
+        local cached_zone=$(cat "$cache_zone_file" 2>/dev/null)
+        local cached_tz=$(cat "$cache_tz_file" 2>/dev/null)
+        local cached_isp=""
+        local cached_as=""
+
+        # ISP情報があれば読み込み
+        if [ -s "$cache_isp_file" ]; then
+            cached_isp=$(sed -n '1p' "$cache_isp_file" 2>/dev/null)
+            cached_as=$(sed -n '2p' "$cache_isp_file" 2>/dev/null)
+        fi
+
+        # 読み込んだ情報が空でないことを最終確認
+        if [ -n "$cached_lang" ] && [ -n "$cached_zone" ] && [ -n "$cached_tz" ]; then
+            debug_log "DEBUG" "Valid location cache found. Displaying information."
+
+            # 翻訳システムの初期化を確認/実行 (display_detected_location がメッセージキーを使うため)
+            # check_common 内で common-translation.sh が source されていれば不要かもしれないが念のため
+            if command -v init_translation >/dev/null 2>&1; then
+                 # message.ch が存在し、メモリキャッシュが初期化されていなければ初期化
+                 if [ -f "${CACHE_DIR}/message.ch" ] && [ "${MSG_MEMORY_INITIALIZED:-false}" != "true" ]; then
+                     init_translation
+                 elif [ ! -f "${CACHE_DIR}/message.ch" ]; then
+                     # message.ch がなければデフォルトで初期化試行
+                     init_translation
+                 fi
+            else
+                 debug_log "WARNING" "init_translation function not found. Cannot ensure messages are translated."
+            fi
+
+            # common-information.sh の display_detected_location を呼び出す
+            if command -v display_detected_location >/dev/null 2>&1; then
+                display_detected_location "Cache" "$cached_lang" "$cached_zone" "$cached_tz" "$cached_isp" "$cached_as"
+                printf "\n" # 表示後に改行を追加
+            else
+                debug_log "ERROR" "display_detected_location function not found. Cannot display location."
+            fi
+        else
+            debug_log "DEBUG" "One or more essential cached values are empty after reading. Skipping display."
+        fi
+    else
+        debug_log "DEBUG" "Essential location cache files missing or empty. Skipping display."
+    fi
+
+    debug_log "DEBUG" "Exiting information_main()"
+    return 0
+}
