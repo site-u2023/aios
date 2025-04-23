@@ -90,7 +90,7 @@ urlencode() {
     printf "%s\n" "$encoded"
 }
 
-# Lingva Translate APIを使用した翻訳関数 (AIP専用関数)
+# Lingva Translate APIを使用した翻訳関数 (内部ロジックを ok/ 版に戻したもの)
 # @param $1: source_text (string) - The text to translate.
 # @param $2: target_lang_code (string) - The target language code (e.g., "ja").
 # @stdout: Translated text on success. Empty string on failure.
@@ -100,56 +100,83 @@ translate_with_lingva() {
     local target_lang_code="$2"
     local source_lang="$DEFAULT_LANGUAGE" # Use the global default language
 
+    local ip_check_file="${CACHE_DIR}/network.ch" # ok/版で使用
+    local wget_options="" # ok/版で使用
     local retry_count=0
-    local temp_file="${BASE_DIR}/lingva_response_$$.tmp" # Use PID for temp file uniqueness
+    local network_type="" # ok/版で使用
+    local temp_file="${BASE_DIR}/lingva_response_$$.tmp" # Use PID for temp file uniqueness (current version style)
     local api_url=""
-    local translated_text=""
-    local wget_base_cmd=""
+    local translated_text="" # Renamed from 'translated' in ok/ version for clarity
 
-    debug_log "DEBUG" "translate_with_lingva: Translating to '${target_lang_code}'"
+    # --- ok/版のロジック開始 ---
+    # 必要なディレクトリを確保
+    mkdir -p "$(dirname "$temp_file")" 2>/dev/null
 
-    # --- Define API URL internally ---
-    # Using the standard public Lingva instance URL as the default
-    # This function does NOT take URL as an argument or read API-specific global vars for it.
-    local base_lingva_url="https://lingva.ml/api/v1"
-    # --- End Internal URL Definition ---
+    # ネットワーク接続状態を確認 (check_network_connectivity は common-system.sh 等で定義・ロードされている前提)
+    if [ ! -f "$ip_check_file" ]; then
+         if type check_network_connectivity >/dev/null 2>&1; then
+            check_network_connectivity
+         else
+             debug_log "ERROR" "translate_with_lingva: check_network_connectivity function not found."
+             network_type="v4" # デフォルト
+         fi
+    fi
+    network_type=$(cat "$ip_check_file" 2>/dev/null || echo "v4")
+    debug_log "DEBUG" "translate_with_lingva: Determined network type: ${network_type}"
 
+    # ネットワークタイプに基づいてwgetオプションを設定 (ok/版のロジック)
+    case "$network_type" in
+        "v4") wget_options="-4" ;;
+        "v6") wget_options="-6" ;;
+        "v4v6") wget_options="-4" ;; # 初期値は -4
+        *) wget_options="" ;;
+    esac
+    debug_log "DEBUG" "translate_with_lingva: Initial wget options based on network type: ${wget_options}"
+
+    # URLエンコードとAPI URLを事前に構築
     local encoded_text=$(urlencode "$source_text")
-    # Construct the full API URL
+    # API URL は ok/ 版と同じ LINGVA_URL グローバル変数を使用する想定だが、
+    # 現在の構造では内部定義が推奨されるため、内部定義URLを使用する。
+    local base_lingva_url="https://lingva.ml/api/v1" # Current version's internal URL
     api_url="${base_lingva_url}/${source_lang}/${target_lang_code}/${encoded_text}"
     debug_log "DEBUG" "translate_with_lingva: API URL: ${api_url}"
 
-    mkdir -p "$(dirname "$temp_file")" 2>/dev/null
+    # リトライループ (ok/版は <= だったが、 < の方が一般的)
+    while [ $retry_count -lt $API_MAX_RETRIES ]; do
+        debug_log "DEBUG" "translate_with_lingva: Attempting download (Try $((retry_count + 1))/${API_MAX_RETRIES}) with options '${wget_options}'"
 
-    # Basic wget command - Simplified, no complex capability checks or v4/v6 forcing
-    wget_base_cmd="wget --no-check-certificate -T $API_TIMEOUT -q -O \"$temp_file\" --user-agent=\"Mozilla/5.0 (Linux; OpenWrt)\""
+        # v4v6の場合のみネットワークタイプを切り替え (ok/版のロジック)
+        # ok/版は retry_count > 0 で切り替えていた
+        if [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ]; then
+             if echo "$wget_options" | grep -q -- "-4"; then
+                 wget_options="-6"
+             else
+                 wget_options="-4"
+             fi
+             debug_log "DEBUG" "translate_with_lingva: Retrying with wget option: $wget_options for v4v6 network"
+        fi
 
-    # Retry loop
-    while [ $retry_count -lt "$API_MAX_RETRIES" ]; do
-        debug_log "DEBUG" "translate_with_lingva: Attempting download (Try $((retry_count + 1))/${API_MAX_RETRIES})"
-        # Execute wget command using eval
-        eval "$wget_base_cmd \"$api_url\""
+        # wget コマンド実行 (ok/版のオプションを使用、eval は不要)
+        # ok/版は --tries=1 を指定していたが、ループで制御するため不要か？念のため残す
+        wget --no-check-certificate $wget_options -T $API_TIMEOUT --tries=1 -q -O "$temp_file" \
+             --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
+             "$api_url"
         local wget_exit_code=$?
 
+        # レスポンスチェック (ok/版のロジック)
         if [ "$wget_exit_code" -eq 0 ] && [ -s "$temp_file" ]; then
             debug_log "DEBUG" "translate_with_lingva: Download successful."
-            # Extract translation using sed (adjust pattern based on actual Lingva response)
-            # Assuming Lingva returns JSON like {"translation": "..."}
+            # ok/版の grep 条件と sed 抽出
             if grep -q '"translation"' "$temp_file"; then
-                translated_text=$(sed -n 's/.*"translation"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$temp_file")
-
-                # Basic unescaping (Lingva might need different/less unescaping than Google)
-                translated_text=$(echo "$translated_text" | sed \
-                    -e 's/\\"/"/g' \
-                    -e 's/\\\\/\\/g') # Handle escaped backslash and quote
+                translated_text=$(sed -n 's/.*"translation"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$temp_file" | sed -e 's/\\"/"/g' -e 's/\\\\/\\/g') # ok/版は sed 1つだったが分割
 
                 if [ -n "$translated_text" ]; then
                     debug_log "DEBUG" "translate_with_lingva: Translation extracted successfully."
-                    printf "%s\n" "$translated_text" # Output to stdout
                     rm -f "$temp_file" 2>/dev/null
+                    printf "%s\n" "$translated_text" # ok/版は printf "%s"
                     return 0 # Success
                 else
-                    debug_log "DEBUG" "translate_with_lingva: Failed to extract translation from response."
+                    debug_log "DEBUG" "translate_with_lingva: Failed to extract translation using sed."
                 fi
             else
                  debug_log "DEBUG" "translate_with_lingva: Response does not contain 'translation' key."
@@ -158,22 +185,24 @@ translate_with_lingva() {
         else
             debug_log "DEBUG" "translate_with_lingva: wget failed (Exit code: $wget_exit_code) or temp file is empty."
         fi
+        # --- ok/版のロジック終了 ---
 
+        # ファイル削除とリトライカウント増加、スリープ
         rm -f "$temp_file" 2>/dev/null
         retry_count=$((retry_count + 1))
-        if [ $retry_count -lt "$API_MAX_RETRIES" ]; then
+        if [ $retry_count -lt $API_MAX_RETRIES ]; then
             debug_log "DEBUG" "translate_with_lingva: Retrying after sleep..."
             sleep 1
         fi
     done
 
-    debug_log "DEBUG" "translate_with_lingva: Translation failed after ${API_MAX_RETRIES} attempts for text starting with: $(echo "$source_text" | cut -c 1-50)"
+    debug_log "ERROR" "translate_with_lingva: Translation failed after ${API_MAX_RETRIES} attempts for text starting with: $(echo "$source_text" | cut -c 1-50)"
     rm -f "$temp_file" 2>/dev/null
     printf "" # Output empty string on failure
     return 1 # Failure
 }
 
-# Google翻訳APIを使用した翻訳関数 (AIP専用関数)
+# Google翻訳APIを使用した翻訳関数 (内部ロジックを ok/ 版に戻したもの)
 # @param $1: source_text (string) - The text to translate.
 # @param $2: target_lang_code (string) - The target language code (e.g., "ja").
 # @stdout: Translated text on success. Empty string on failure.
@@ -183,80 +212,120 @@ translate_with_google() {
     local target_lang_code="$2"
     local source_lang="$DEFAULT_LANGUAGE" # Use the global default language
 
+    local ip_check_file="${CACHE_DIR}/network.ch"
+    local wget_options=""
     local retry_count=0
-    local temp_file="${BASE_DIR}/google_response_$$.tmp" # Use PID for temp file uniqueness
+    local network_type=""
+    local temp_file="${BASE_DIR}/google_response_$$.tmp" # Use PID for temp file uniqueness (current version style)
     local api_url=""
-    local translated_text=""
-    local wget_base_cmd=""
+    local translated_text="" # Renamed from 'translated' in ok/ version for clarity
 
-    debug_log "DEBUG" "translate_with_google: Translating to '${target_lang_code}'"
-
-    # --- Define API URL internally ---
-    # Using the standard public Google Translate URL as the default
-    # This function does NOT take URL as an argument or read API-specific global vars for it.
-    local base_google_url="https://translate.googleapis.com/translate_a/single"
-    # --- End Internal URL Definition ---
-
-    local encoded_text=$(urlencode "$source_text")
-    # Construct the full API URL
-    api_url="${base_google_url}?client=gtx&sl=${source_lang}&tl=${target_lang_code}&dt=t&q=${encoded_text}"
-    debug_log "DEBUG" "translate_with_google: API URL: ${api_url}"
-
+    # --- ok/版のロジック開始 ---
+    # 必要なディレクトリを確保
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
 
-    # Basic wget command - Simplified
-    wget_base_cmd="wget --no-check-certificate -T $API_TIMEOUT -q -O \"$temp_file\" --user-agent=\"Mozilla/5.0\""
+    # ネットワーク接続状態を確認 (check_network_connectivity は common-system.sh 等で定義・ロードされている前提)
+    if [ ! -f "$ip_check_file" ]; then
+         if type check_network_connectivity >/dev/null 2>&1; then
+            check_network_connectivity
+         else
+             debug_log "ERROR" "translate_with_google: check_network_connectivity function not found."
+             # ネットワークチェック関数がない場合の処理 (例: v4 をデフォルトとする)
+             network_type="v4"
+         fi
+    fi
+    # ファイルが存在する場合、または check_network_connectivity が実行された後に読み込む
+    # ファイルがない場合や読み取り失敗時は v4 をデフォルトとする
+    network_type=$(cat "$ip_check_file" 2>/dev/null || echo "v4")
+    debug_log "DEBUG" "translate_with_google: Determined network type: ${network_type}"
 
-    # Retry loop
-    while [ $retry_count -lt "$API_MAX_RETRIES" ]; do
-        debug_log "DEBUG" "translate_with_google: Attempting download (Try $((retry_count + 1))/${API_MAX_RETRIES})"
-        # Execute wget command using eval
-        eval "$wget_base_cmd \"$api_url\""
+    # ネットワークタイプに基づいてwgetオプションを設定
+    case "$network_type" in
+        "v4") wget_options="-4" ;;
+        "v6") wget_options="-6" ;;
+        "v4v6") wget_options="-4" ;; # v4v6 の初期値は -4
+        *) wget_options="" ;; # 不明な場合はオプションなし
+    esac
+    debug_log "DEBUG" "translate_with_google: Initial wget options based on network type: ${wget_options}"
+
+    # URLエンコードとAPI URLを事前に構築
+    local encoded_text=$(urlencode "$source_text")
+    # API URL は ok/ 版と同じものを直接使用 (現在の内部定義 URL と同じはず)
+    api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang_code}&dt=t&q=${encoded_text}"
+    debug_log "DEBUG" "translate_with_google: API URL: ${api_url}"
+
+    # リトライループ
+    while [ $retry_count -lt $API_MAX_RETRIES ]; do
+        debug_log "DEBUG" "translate_with_google: Attempting download (Try $((retry_count + 1))/${API_MAX_RETRIES}) with options '${wget_options}'"
+
+        # v4v6の場合のみネットワークタイプを切り替え (ok/版のロジック)
+        if [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ]; then
+             if echo "$wget_options" | grep -q -- "-4"; then
+                 wget_options="-6"
+             else
+                 wget_options="-4"
+             fi
+             debug_log "DEBUG" "translate_with_google: Retrying with wget option: $wget_options for v4v6 network"
+        fi
+
+        # wget機能に基づいてコマンドを構築 (グローバル変数 WGET_CAPABILITY_DETECTED を使用)
+        local wget_cmd="" # wget コマンド全体を格納する変数
+        case "$WGET_CAPABILITY_DETECTED" in
+            "full")
+                # 完全版wgetの場合 (-L は Google Translate では通常不要だが ok/版に合わせておく)
+                wget_cmd="wget --no-check-certificate $wget_options -L -T $API_TIMEOUT -q -O \"$temp_file\" --user-agent=\"Mozilla/5.0\" \"$api_url\""
+                ;;
+            *) # "basic", "https_only", 不明な場合
+                # BusyBox wgetの場合
+                wget_cmd="wget --no-check-certificate $wget_options -T $API_TIMEOUT -q -O \"$temp_file\" --user-agent=\"Mozilla/5.0\" \"$api_url\""
+                ;;
+        esac
+        debug_log "DEBUG" "translate_with_google: Executing wget command: ${wget_cmd}"
+
+        # wget コマンドを実行 (eval を使用)
+        eval "$wget_cmd"
         local wget_exit_code=$?
 
+        # レスポンス処理 (ok/版のロジック)
         if [ "$wget_exit_code" -eq 0 ] && [ -s "$temp_file" ]; then
-            debug_log "DEBUG" "translate_with_google: Download successful."
-            # Check if the response looks like a valid Google Translate JSON array start
+            debug_log "DEBUG" "translate_with_google: Download successful (wget exit code: 0, file size > 0)."
+            # 柔軟なレスポンスチェック（ok/版では '[' の存在を確認していたが、現在の '[[[' 開始の方が確実性が高い可能性もある。ok/版に合わせるなら '[' チェック）
+            # ここでは ok/版の sed ロジックを採用する前提で、より確実な '[[[' 開始チェックを維持する (sed はどちらでも動くはず)
             if grep -q '^\s*\[\[\["' "$temp_file"; then
-                translated_text=$(sed -n 's/^\s*\[\[\["\([^"]*\)".*/\1/p' "$temp_file")
-
-                # Basic unescaping
-                translated_text=$(echo "$translated_text" | sed \
-                    -e 's/\\u003d/=/g' \
-                    -e 's/\\u003c/</g' \
-                    -e 's/\\u003e/>/g' \
-                    -e 's/\\u0026/\&/g' \
-                    -e 's/\\"/"/g' \
-                    -e 's/\\n/\n/g' \
-                    -e 's/\\r//g' \
-                    -e 's/\\\\/\\/g') # Handle escaped backslash
+                debug_log "DEBUG" "translate_with_google: Response seems valid (starts with '[[[\"')."
+                # ok/版の sed 抽出・エスケープ解除ロジック
+                # 注: ok/版の sed は一つの長いコマンドだったが、可読性のため少し分割。動作は同じはず。
+                translated_text=$(sed -e 's/^\s*\[\[\["//' -e 's/",".*//' "$temp_file" | sed -e 's/\\u003d/=/g' -e 's/\\u003c/</g' -e 's/\\u003e/>/g' -e 's/\\u0026/\&/g' -e 's/\\"/"/g' -e 's/\\n/\n/g' -e 's/\\r//g' -e 's/\\\\/\\/g')
 
                 if [ -n "$translated_text" ]; then
                     debug_log "DEBUG" "translate_with_google: Translation extracted successfully."
-                    printf "%s\n" "$translated_text" # Output to stdout
                     rm -f "$temp_file" 2>/dev/null
+                    printf "%s\n" "$translated_text" # ok/版は printf "%s" だったが、改行が必要な場合もあるため \n 付きが良い場合が多い
                     return 0 # Success
                 else
-                    debug_log "DEBUG" "translate_with_google: Failed to extract translation from response."
+                    debug_log "DEBUG" "translate_with_google: Failed to extract translation using sed from response."
                 fi
             else
-                debug_log "DEBUG" "translate_with_google: Response does not look like valid Google Translate JSON."
-                # head -n 3 "$temp_file" | while IFS= read -r log_line; do debug_log "DEBUG" "Response line: $log_line"; done
+                 debug_log "DEBUG" "translate_with_google: Response does not look like valid Google Translate JSON (missing '[[[\"')."
+                 # 必要ならレスポンス内容をログ出力
+                 # head -n 3 "$temp_file" | while IFS= read -r log_line; do debug_log "DEBUG" "Response line: $log_line"; done
             fi
         else
-            debug_log "DEBUG" "translate_with_google: wget failed (Exit code: $wget_exit_code) or temp file is empty."
+            debug_log "DEBUG" "translate_with_google: wget failed (Exit code: $wget_exit_code) or temp file is empty/not created."
         fi
+        # --- ok/版のロジック終了 ---
 
+        # ファイル削除とリトライカウント増加、スリープ (ok/版のループ構造に合わせる)
         rm -f "$temp_file" 2>/dev/null
         retry_count=$((retry_count + 1))
-        if [ $retry_count -lt "$API_MAX_RETRIES" ]; then
+        if [ $retry_count -lt $API_MAX_RETRIES ]; then
             debug_log "DEBUG" "translate_with_google: Retrying after sleep..."
-            sleep 1
+            sleep 1 # ok/版ではループの外にあったが、リトライ前に sleep するのが一般的
         fi
     done
 
-    debug_log "DEBUG" "translate_with_google: Translation failed after ${API_MAX_RETRIES} attempts for text starting with: $(echo "$source_text" | cut -c 1-50)"
-    rm -f "$temp_file" 2>/dev/null
+    debug_log "ERROR" "translate_with_google: Translation failed after ${API_MAX_RETRIES} attempts for text starting with: $(echo "$source_text" | cut -c 1-50)"
+    rm -f "$temp_file" 2>/dev/null # 念のため削除
     printf "" # Output empty string on failure
     return 1 # Failure
 }
