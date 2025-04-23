@@ -561,9 +561,7 @@ process_location_info() {
 
     # デバイス情報の表示とキャッシュ
     debug_log "DEBUG: process_location_info() called"
-    debug_log "DEBUG: SELECT_COUNTRY: $SELECT_COUNTRY"
-    debug_log "DEBUG: SELECT_TIMEZONE: $SELECT_TIMEZONE"
-    debug_log "DEBUG: SELECT_ZONENAME: $SELECT_ZONENAME"
+    # ★★★ 変更点: 変数確認のデバッグログを get_country_code 後に移動 ★★★
 
     # 位置情報取得処理（スキップフラグが0の場合）
     if [ $skip_retrieval -eq 0 ]; then
@@ -575,79 +573,73 @@ process_location_info() {
         # get_country_code() の戻り値
         local result=$?
         debug_log "DEBUG: get_country_code() returned: $result"
+
+        # ★★★ 追加: get_country_code 後の変数確認 ★★★
+        debug_log "DEBUG: After get_country_code - SELECT_COUNTRY: $SELECT_COUNTRY"
+        debug_log "DEBUG: After get_country_code - SELECT_TIMEZONE: $SELECT_TIMEZONE"
+        debug_log "DEBUG: After get_country_code - SELECT_ZONENAME: $SELECT_ZONENAME"
+        debug_log "DEBUG: After get_country_code - ISP_NAME: $ISP_NAME"
+        debug_log "DEBUG: After get_country_code - ISP_AS: $ISP_AS"
+        debug_log "DEBUG: After get_country_code - SELECT_REGION_NAME: $SELECT_REGION_NAME"
+
+        # ★★★ 変更点: get_country_code が失敗したら即時リターン ★★★
+        if [ $result -ne 0 ]; then
+            debug_log "ERROR: get_country_code failed, cannot process location info"
+            return 1
+        fi
+    else
+        # スキップした場合も変数確認
+        debug_log "DEBUG: Using skipped/cached - SELECT_COUNTRY: $SELECT_COUNTRY"
+        debug_log "DEBUG: Using skipped/cached - SELECT_TIMEZONE: $SELECT_TIMEZONE"
+        debug_log "DEBUG: Using skipped/cached - SELECT_ZONENAME: $SELECT_ZONENAME"
     fi
 
     # 必須情報（国、タイムゾーン、ゾーン名）が揃っているか最終確認
     debug_log "DEBUG: Processing location data - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME, Timezone: $SELECT_TIMEZONE"
 
-    # キャッシュファイルパス
-    local tmp_country="${CACHE_DIR}/ip_country.tmp"
-    local tmp_timezone="${CACHE_DIR}/ip_timezone.tmp"
-    local tmp_zonename="${CACHE_DIR}/ip_zonename.tmp"
-    local tmp_isp="${CACHE_DIR}/ip_isp.tmp"
-    local tmp_as="${CACHE_DIR}/ip_as.tmp"
-    local tmp_region_name="${CACHE_DIR}/ip_region_name.tmp"
+    # ★★★ 削除: 一時キャッシュファイルパスの定義 ★★★
+    # local tmp_country="${CACHE_DIR}/ip_country.tmp"
+    # local tmp_timezone="${CACHE_DIR}/ip_timezone.tmp"
+    # local tmp_zonename="${CACHE_DIR}/ip_zonename.tmp"
+    # local tmp_isp="${CACHE_DIR}/ip_isp.tmp"
+    # local tmp_as="${CACHE_DIR}/ip_as.tmp"
+    # local tmp_region_name="${CACHE_DIR}/ip_region_name.tmp"
 
     # 必須情報が空でないかチェック
     if [ -z "$SELECT_COUNTRY" ] || [ -z "$SELECT_TIMEZONE" ] || [ -z "$SELECT_ZONENAME" ]; then
         debug_log "ERROR: Incomplete location data - required information missing (Country, Timezone, or ZoneName)"
-        # 古いキャッシュファイルがあれば削除
-        rm -f "$tmp_country" "$tmp_timezone" "$tmp_zonename" "$tmp_isp" "$tmp_as" "$tmp_region_name" 2>/dev/null
+        # ★★★ 削除: 古い一時キャッシュファイルの削除 ★★★
+        # rm -f "$tmp_country" "$tmp_timezone" "$tmp_zonename" "$tmp_isp" "$tmp_as" "$tmp_region_name" 2>/dev/null
 
-        # フォールバックとして以前のキャッシュを使用試行
-        if [ -f "$tmp_country" ] && [ -f "$tmp_timezone" ] && [ -f "$tmp_zonename" ]; then
-            debug_log "DEBUG: Using previously cached location information as fallback"
-            SELECT_COUNTRY=$(cat "$tmp_country")
-            SELECT_TIMEZONE=$(cat "$tmp_timezone")
-            SELECT_ZONENAME=$(cat "$tmp_zonename")
-            ISP_NAME=$(cat "$tmp_isp")
-            ISP_AS=$(cat "$tmp_as")
-            SELECT_REGION_NAME=$(cat "$tmp_region_name")
-            debug_log "DEBUG: Fallback location data - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME, Timezone: $SELECT_TIMEZONE"
-        else
-            debug_log "ERROR: No previously cached location information available for fallback"
-            return 1
-        fi
+        # ★★★ 削除: 一時キャッシュからのフォールバック処理 ★★★
+        # (一時キャッシュを使わないため不要)
+
+        # 必須情報がない場合はエラーで終了
+        return 1
     fi
 
-    debug_log "DEBUG: All required location data available, saving to cache files"
+    # ★★★ 削除: 一時キャッシュへの書き込み処理 ★★★
+    # echo "$SELECT_COUNTRY" > "$tmp_country"
+    # echo "$SELECT_ZONENAME" > "$tmp_zonename"
+    # echo "$SELECT_TIMEZONE" > "$tmp_timezone"
+    # if [ -n "$ISP_NAME" ]; then echo "$ISP_NAME" > "$tmp_isp"; else rm -f "$tmp_isp" 2>/dev/null; fi
+    # if [ -n "$ISP_AS" ]; then echo "$ISP_AS" > "$tmp_as"; else rm -f "$tmp_as" 2>/dev/null; fi
+    # if [ -n "$SELECT_REGION_NAME" ]; then echo "$SELECT_REGION_NAME" > "$tmp_region_name"; else rm -f "$tmp_region_name" 2>/dev/null; fi
 
-    # 国コードをキャッシュに保存
-    echo "$SELECT_COUNTRY" > "$tmp_country"
-    debug_log "DEBUG: Country code saved to cache: $SELECT_COUNTRY"
-
-    # ゾーン名をキャッシュに保存
-    echo "$SELECT_ZONENAME" > "$tmp_zonename"
-    debug_log "DEBUG: Zone name saved to cache: $SELECT_ZONENAME"
-
-    # POSIXタイムゾーンをキャッシュに保存
-    echo "$SELECT_TIMEZONE" > "$tmp_timezone"
-    debug_log "DEBUG: Timezone saved to cache: $SELECT_TIMEZONE"
-
-    # ISP情報をキャッシュに保存
-    if [ -n "$ISP_NAME" ]; then
-        echo "$ISP_NAME" > "$tmp_isp"
-        debug_log "DEBUG: ISP name saved to cache: $ISP_NAME"
+    # ★★★ 維持: ISP情報の永続キャッシュへの書き込み ★★★
+    # (common-information.sh 内で行うのが自然なため維持)
+    if [ -n "$ISP_NAME" ] || [ -n "$ISP_AS" ]; then
+        local isp_cache_file="${CACHE_DIR}/isp_info.ch"
+        echo "$ISP_NAME" > "$isp_cache_file"
+        echo "$ISP_AS" >> "$isp_cache_file"
+        # ★★★ 修正: ISP_ORG は ISP_NAME と同じ値が入るので不要 ★★★
+        # echo "$ISP_ORG" >> "$isp_cache_file"
+        debug_log "DEBUG" "Saved ISP information to permanent cache: $isp_cache_file"
     else
-        rm -f "$tmp_isp" 2>/dev/null
+        rm -f "${CACHE_DIR}/isp_info.ch" 2>/dev/null
     fi
 
-    if [ -n "$ISP_AS" ]; then
-        echo "$ISP_AS" > "$tmp_as"
-        debug_log "DEBUG: AS number saved to cache: $ISP_AS"
-    else
-        rm -f "$tmp_as" 2>/dev/null
-    fi
-
-    # 地域名をキャッシュに保存
-    if [ -n "$SELECT_REGION_NAME" ]; then
-        echo "$SELECT_REGION_NAME" > "$tmp_region_name"
-        debug_log "DEBUG: Region name saved to cache: $SELECT_REGION_NAME"
-    else
-        rm -f "$tmp_region_name" 2>/dev/null
-    fi
-
-    debug_log "DEBUG: Location information cache process completed successfully"
+    debug_log "DEBUG: Location information processing completed successfully in process_location_info"
     return 0
 }
 
