@@ -167,13 +167,16 @@ make_api_request() {
 get_country_ipapi() {
     local tmp_file="$1"
     local network_type="$2"
-    local api_name="$3"
+    local api_name="$3" # Optional API URL override
 
     local retry_count=0
     local success=0
-    local api_domain=""      # ★★★ 追加: ドメイン名格納用変数 ★★★
+    local api_domain=""
+    local wget_options="" # wget options based on network_type
+    local wget_exit_code=0
 
-    # APIエンドポイント設定
+    # --- v4/v6 制御ロジック開始 ---
+    # APIエンドポイント設定 (引数があれば優先、なければデフォルト)
     local api_url=""
     if [ -n "$api_name" ]; then
         api_url="$api_name"
@@ -181,75 +184,105 @@ get_country_ipapi() {
         api_url="https://ipapi.co/json"
     fi
 
-    # ★★★ 追加: API URLからドメイン名を抽出 ★★★
+    # API URLからドメイン名を抽出 (表示用)
     api_domain=$(echo "$api_url" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
-    # ドメイン名が取得できなかった場合のフォールバック (URL自体を使う)
-    [ -z "$api_domain" ] && api_domain="$api_url"
-    debug_log "DEBUG" "Using API domain for IPAPI: $api_domain"
+    [ -z "$api_domain" ] && api_domain="$api_url" # フォールバック
+    debug_log "DEBUG" "get_country_ipapi: Using API domain: $api_domain"
 
-    debug_log "DEBUG" "Querying country and timezone from $api_domain"
+    # ネットワークタイプに基づいてwgetオプションを設定
+    case "$network_type" in
+        "v4") wget_options="-4" ;;
+        "v6") wget_options="-6" ;;
+        "v4v6") wget_options="-4" ;; # 初期値 -4
+        *) wget_options="" ;;
+    esac
+    debug_log "DEBUG" "get_country_ipapi: Initial wget options: ${wget_options}"
+    # --- v4/v6 制御ロジックここまで ---
 
+    debug_log "DEBUG" "get_country_ipapi: Querying country and timezone from $api_domain"
+
+    # --- make_api_request の代わりに直接 wget を実行するループ ---
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        make_api_request "$api_url" "$tmp_file" "$API_TIMEOUT" "IPAPI" "$USER_AGENT"
-        local request_status=$?
-        debug_log "DEBUG" "API request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
+        debug_log "DEBUG" "get_country_ipapi: Attempt (Try $((retry_count + 1))/${API_MAX_RETRIES}) options: '${wget_options}' URL: '${api_url}'"
 
-        if [ $request_status -eq 0 ]; then
+        # v4v6の場合、リトライ時にネットワークタイプを切り替え
+        if [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ]; then
+             if echo "$wget_options" | grep -q -- "-4"; then
+                 wget_options="-6"
+             else
+                 wget_options="-4"
+             fi
+             debug_log "DEBUG" "get_country_ipapi: Retrying with wget option: $wget_options for v4v6"
+        fi
+
+        # wget コマンド実行 (証明書無視、タイムアウト、リトライ1回、UA指定、静音、出力ファイル)
+        # -L (リダイレクト) は ipapi.co では通常不要だが念のため付けておく (ok/ 版 translation 準拠)
+        wget --no-check-certificate $wget_options -L -T "$API_TIMEOUT" --tries=1 -q -O "$tmp_file" \
+             -U "$USER_AGENT" \
+             "$api_url"
+        wget_exit_code=$?
+        debug_log "DEBUG" "get_country_ipapi: wget executed (code: $wget_exit_code)"
+
+        # レスポンスチェック
+        if [ "$wget_exit_code" -eq 0 ] && [ -s "$tmp_file" ]; then
+            debug_log "DEBUG" "get_country_ipapi: Download successful (code: 0, size > 0)."
+            # 必要な情報を抽出 (ok/ 版 translation 準拠の sed)
             SELECT_COUNTRY=$(grep '"country"' "$tmp_file" | sed -n 's/.*"country": *"\([^"]*\)".*/\1/p')
             SELECT_ZONENAME=$(grep '"timezone"' "$tmp_file" | sed -n 's/.*"timezone": *"\([^"]*\)".*/\1/p')
 
+            # 必須情報が取得できたか確認
             if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
-                debug_log "DEBUG" "Retrieved from $api_domain - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
+                debug_log "DEBUG" "get_country_ipapi: Retrieved from $api_domain - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
                 success=1
-                # ★★★ 変更点: 成功時に API ドメイン名を TIMEZONE_API_SOURCE に設定 ★★★
-                TIMEZONE_API_SOURCE="$api_domain"
-                break
+                TIMEZONE_API_SOURCE="$api_domain" # 成功時にAPIソースを設定
+                break # 成功したのでループを抜ける
             else
-                debug_log "DEBUG" "Incomplete country/timezone data from $api_domain"
-                error_message=$(grep -o '"message":[^\}]*' "$tmp_file")
-                if [ -n "$error_message" ]; then
-                  debug_log "DEBUG" "API Error: $error_message"
-                fi
+                # 抽出失敗
+                debug_log "DEBUG" "get_country_ipapi: Incomplete country/timezone data from $api_domain response."
+                # エラーメッセージがあればログ出力
+                local error_message=$(grep -o '"message":[^\}]*' "$tmp_file")
+                [ -n "$error_message" ] && debug_log "DEBUG" "get_country_ipapi: API Error message found: $error_message"
             fi
         else
-            debug_log "DEBUG" "Failed to download data from $api_domain"
-            debug_log "DEBUG" "wget exit code: $request_status"
+            # wget 失敗またはファイル空
+            debug_log "DEBUG" "get_country_ipapi: wget failed (code: $wget_exit_code) or temp file is empty."
         fi
 
-        debug_log "DEBUG" "API query attempt $((retry_count+1)) failed"
+        # リトライ前の処理
+        rm -f "$tmp_file" 2>/dev/null # 次のリトライに備えて一時ファイルを削除
         retry_count=$((retry_count + 1))
-        [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
+        if [ $retry_count -lt $API_MAX_RETRIES ]; then
+            debug_log "DEBUG" "get_country_ipapi: Retrying after 1 second sleep..."
+            sleep 1
+        fi
     done
+    # --- ループ終了 ---
 
-    # ★★★ 削除: 成功時の TIMEZONE_API_SOURCE 設定 (ループ内で実施済) ★★★
-    # if [ $success -eq 1 ]; then
-    #     TIMEZONE_API_SOURCE="$api_domain"
-    #     debug_log "DEBUG" "get_country_ipapi succeeded"
-    #     return 0
-    # else
-    #     debug_log "DEBUG" "get_country_ipapi failed"
-    #     return 1
-    # fi
-    # ★★★ 変更点: 戻り値のみ返す ★★★
+    # 最終的な成功/失敗の判定と戻り値
     if [ $success -eq 1 ]; then
         debug_log "DEBUG" "get_country_ipapi finished successfully."
-        return 0
+        return 0 # 成功
     else
-        debug_log "DEBUG" "get_country_ipapi finished with failure."
-        return 1
+        debug_log "DEBUG" "get_country_ipapi finished with failure after ${API_MAX_RETRIES} attempts."
+        # 失敗した場合も念のため一時ファイルを削除
+        rm -f "$tmp_file" 2>/dev/null
+        return 1 # 失敗
     fi
 }
 
 get_country_ipinfo() {
     local tmp_file="$1"
     local network_type="$2"
-    local api_name="$3"
+    local api_name="$3" # Optional API URL override
 
     local retry_count=0
     local success=0
-    local api_domain=""      # ★★★ 追加: ドメイン名格納用変数 ★★★
+    local api_domain=""
+    local wget_options="" # wget options based on network_type
+    local wget_exit_code=0
 
-    # APIエンドポイント設定
+    # --- v4/v6 制御ロジック開始 ---
+    # APIエンドポイント設定 (引数があれば優先、なければデフォルト)
     local api_url=""
     if [ -n "$api_name" ]; then
         api_url="$api_name"
@@ -257,79 +290,121 @@ get_country_ipinfo() {
         api_url="https://ipinfo.io/json"
     fi
 
-    # ★★★ 追加: API URLからドメイン名を抽出 ★★★
+    # API URLからドメイン名を抽出 (表示用)
     api_domain=$(echo "$api_url" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
-    # ドメイン名が取得できなかった場合のフォールバック (URL自体を使う)
-    [ -z "$api_domain" ] && api_domain="$api_url"
-    debug_log "DEBUG" "Using API domain for IPINFO: $api_domain"
+    [ -z "$api_domain" ] && api_domain="$api_url" # フォールバック
+    debug_log "DEBUG" "get_country_ipinfo: Using API domain: $api_domain"
 
-    debug_log "DEBUG" "Querying country and timezone from $api_domain"
+    # ネットワークタイプに基づいてwgetオプションを設定
+    case "$network_type" in
+        "v4") wget_options="-4" ;;
+        "v6") wget_options="-6" ;;
+        "v4v6") wget_options="-4" ;; # 初期値 -4
+        *) wget_options="" ;;
+    esac
+    debug_log "DEBUG" "get_country_ipinfo: Initial wget options: ${wget_options}"
+    # --- v4/v6 制御ロジックここまで ---
 
+    debug_log "DEBUG" "get_country_ipinfo: Querying country and timezone from $api_domain"
+
+    # --- make_api_request の代わりに直接 wget を実行するループ ---
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        make_api_request "$api_url" "$tmp_file" "$API_TIMEOUT" "IPINFO" "$USER_AGENT"
-        local request_status=$?
-        debug_log "DEBUG" "API request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
+        debug_log "DEBUG" "get_country_ipinfo: Attempt (Try $((retry_count + 1))/${API_MAX_RETRIES}) options: '${wget_options}' URL: '${api_url}'"
 
-        if [ $request_status -eq 0 ]; then
+        # v4v6の場合、リトライ時にネットワークタイプを切り替え
+        if [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ]; then
+             if echo "$wget_options" | grep -q -- "-4"; then
+                 wget_options="-6"
+             else
+                 wget_options="-4"
+             fi
+             debug_log "DEBUG" "get_country_ipinfo: Retrying with wget option: $wget_options for v4v6"
+        fi
+
+        # wget コマンド実行 (証明書無視、タイムアウト、リトライ1回、UA指定、静音、出力ファイル)
+        # -L (リダイレクト) は ipinfo.io では通常不要だが念のため付けておく
+        wget --no-check-certificate $wget_options -L -T "$API_TIMEOUT" --tries=1 -q -O "$tmp_file" \
+             -U "$USER_AGENT" \
+             "$api_url"
+        wget_exit_code=$?
+        debug_log "DEBUG" "get_country_ipinfo: wget executed (code: $wget_exit_code)"
+
+        # レスポンスチェック
+        if [ "$wget_exit_code" -eq 0 ] && [ -s "$tmp_file" ]; then
+            debug_log "DEBUG" "get_country_ipinfo: Download successful (code: 0, size > 0)."
+            # 必要な情報を抽出
             SELECT_COUNTRY=$(grep '"country"' "$tmp_file" | sed -n 's/.*"country": *"\([^"]*\)".*/\1/p')
             SELECT_ZONENAME=$(grep '"timezone"' "$tmp_file" | sed -n 's/.*"timezone": *"\([^"]*\)".*/\1/p')
 
+            # 必須情報が取得できたか確認
             if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
-                debug_log "DEBUG" "Retrieved from $api_domain - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
+                debug_log "DEBUG" "get_country_ipinfo: Retrieved from $api_domain - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
                 success=1
-                # ★★★ 変更点: 成功時に API ドメイン名を TIMEZONE_API_SOURCE に設定 ★★★
-                TIMEZONE_API_SOURCE="$api_domain"
-                break
+                TIMEZONE_API_SOURCE="$api_domain" # 成功時にAPIソースを設定
+                break # 成功したのでループを抜ける
             else
-                debug_log "DEBUG" "Incomplete country/timezone data from $api_domain"
-                error_message=$(grep -o '"message":[^\}]*' "$tmp_file")
-                if [ -n "$error_message" ]; then
-                  debug_log "DEBUG" "API Error: $error_message"
-                fi
+                # 抽出失敗
+                debug_log "DEBUG" "get_country_ipinfo: Incomplete country/timezone data from $api_domain response."
+                local error_message=$(grep -o '"message":[^\}]*' "$tmp_file")
+                [ -n "$error_message" ] && debug_log "DEBUG" "get_country_ipinfo: API Error message found: $error_message"
             fi
         else
-            debug_log "DEBUG" "Failed to download data from $api_domain"
-            debug_log "DEBUG" "wget exit code: $request_status"
+            # wget 失敗またはファイル空
+            debug_log "DEBUG" "get_country_ipinfo: wget failed (code: $wget_exit_code) or temp file is empty."
         fi
 
-        debug_log "DEBUG" "API query attempt $((retry_count+1)) failed"
+        # リトライ前の処理
+        rm -f "$tmp_file" 2>/dev/null
         retry_count=$((retry_count + 1))
-        [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
+        if [ $retry_count -lt $API_MAX_RETRIES ]; then
+            debug_log "DEBUG" "get_country_ipinfo: Retrying after 1 second sleep..."
+            sleep 1
+        fi
     done
+    # --- ループ終了 ---
 
-    # ★★★ 削除: 成功時の TIMEZONE_API_SOURCE 設定 (ループ内で実施済) ★★★
-    # if [ $success -eq 1 ]; then
-    #     TIMEZONE_API_SOURCE="$api_domain"
-    #     debug_log "DEBUG" "get_country_ipinfo succeeded"
-    #     return 0
-    # else
-    #     debug_log "DEBUG" "get_country_ipinfo failed"
-    #     return 1
-    # fi
-    # ★★★ 変更点: 戻り値のみ返す ★★★
+    # 最終的な成功/失敗の判定と戻り値
     if [ $success -eq 1 ]; then
         debug_log "DEBUG" "get_country_ipinfo finished successfully."
-        return 0
+        return 0 # 成功
     else
-        debug_log "DEBUG" "get_country_ipinfo finished with failure."
-        return 1
+        debug_log "DEBUG" "get_country_ipinfo finished with failure after ${API_MAX_RETRIES} attempts."
+        rm -f "$tmp_file" 2>/dev/null
+        return 1 # 失敗
     fi
 }
 
 get_country_cloudflare() {
     local tmp_file="$1"
     local network_type="$2"
+    # この関数は特定の URL を使うため api_name 引数は無視する
 
-    local api_url="https://location-api-worker.site-u.workers.dev"
+    local api_url="https://location-api-worker.site-u.workers.dev" # 固定 URL
     local api_domain=""
-
     local retry_count=0
     local success=0
+    local wget_options="" # wget options based on network_type
+    local wget_exit_code=0
 
+    # --- v4/v6 制御ロジック開始 ---
+    # API URLからドメイン名を抽出 (表示用)
     api_domain=$(echo "$api_url" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
-    [ -z "$api_domain" ] && api_domain="$api_url"
-    debug_log "DEBUG" "Using API URL for Cloudflare: $api_url (Domain: $api_domain)"
+    [ -z "$api_domain" ] && api_domain="$api_url" # フォールバック
+    debug_log "DEBUG" "get_country_cloudflare: Using API domain: $api_domain"
 
+    # ネットワークタイプに基づいてwgetオプションを設定
+    case "$network_type" in
+        "v4") wget_options="-4" ;;
+        "v6") wget_options="-6" ;;
+        "v4v6") wget_options="-4" ;; # 初期値 -4
+        *) wget_options="" ;;
+    esac
+    debug_log "DEBUG" "get_country_cloudflare: Initial wget options: ${wget_options}"
+    # --- v4/v6 制御ロジックここまで ---
+
+    debug_log "DEBUG" "get_country_cloudflare: Querying location from $api_domain"
+
+    # グローバル変数を初期化 (この関数が他の情報も取得するため)
     SELECT_COUNTRY=""
     SELECT_ZONENAME=""
     ISP_NAME=""
@@ -337,54 +412,81 @@ get_country_cloudflare() {
     ISP_ORG=""
     SELECT_REGION_NAME=""
 
+    # --- make_api_request の代わりに直接 wget を実行するループ ---
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        make_api_request "$api_url" "$tmp_file" "$API_TIMEOUT" "CLOUDFLARE" "$USER_AGENT"
-        local request_status=$?
-        debug_log "DEBUG" "Cloudflare Worker request status: $request_status (attempt: $((retry_count+1))/$API_MAX_RETRIES)"
+        debug_log "DEBUG" "get_country_cloudflare: Attempt (Try $((retry_count + 1))/${API_MAX_RETRIES}) options: '${wget_options}' URL: '${api_url}'"
 
-        if [ $request_status -eq 0 ] && [ -f "$tmp_file" ] && [ -s "$tmp_file" ]; then
+        # v4v6の場合、リトライ時にネットワークタイプを切り替え
+        if [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ]; then
+             if echo "$wget_options" | grep -q -- "-4"; then
+                 wget_options="-6"
+             else
+                 wget_options="-4"
+             fi
+             debug_log "DEBUG" "get_country_cloudflare: Retrying with wget option: $wget_options for v4v6"
+        fi
+
+        # wget コマンド実行 (Cloudflare Worker はリダイレクトしない前提で -L なし)
+        wget --no-check-certificate $wget_options -T "$API_TIMEOUT" --tries=1 -q -O "$tmp_file" \
+             -U "$USER_AGENT" \
+             "$api_url"
+        wget_exit_code=$?
+        debug_log "DEBUG" "get_country_cloudflare: wget executed (code: $wget_exit_code)"
+
+        # レスポンスチェック
+        if [ "$wget_exit_code" -eq 0 ] && [ -s "$tmp_file" ]; then
+            debug_log "DEBUG" "get_country_cloudflare: Download successful (code: 0, size > 0)."
+            # JSON レスポンスのステータスを確認
             local json_status=$(grep -o '"status": *"[^"]*"' "$tmp_file" | sed 's/"status": "//;s/"//')
             if [ "$json_status" = "success" ]; then
+                debug_log "DEBUG" "get_country_cloudflare: API status is 'success'. Extracting data."
+                # 必要な情報を抽出
                 SELECT_COUNTRY=$(grep -o '"country": *"[^"]*"' "$tmp_file" | sed 's/"country": "//;s/"//')
                 SELECT_ZONENAME=$(grep -o '"timezone": *"[^"]*"' "$tmp_file" | sed 's/"timezone": "//;s/"//')
                 ISP_NAME=$(grep -o '"isp": *"[^"]*"' "$tmp_file" | sed 's/"isp": "//;s/"//')
                 local as_raw=$(grep -o '"as": *"[^"]*"' "$tmp_file" | sed 's/"as": "//;s/"//')
                 if [ -n "$as_raw" ]; then ISP_AS=$(echo "$as_raw" | awk '{print $1}'); else ISP_AS=""; fi
-                [ -n "$ISP_NAME" ] && ISP_ORG="$ISP_NAME"
+                [ -n "$ISP_NAME" ] && ISP_ORG="$ISP_NAME" # ISP_ORG は ISP_NAME と同じ値
                 SELECT_REGION_NAME=$(grep -o '"regionName": *"[^"]*"' "$tmp_file" | sed 's/"regionName": "//;s/"//')
 
+                # 必須情報 (国とタイムゾーン名) が取得できたか確認
                 if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
-                    debug_log "DEBUG" "Required fields (Country & ZoneName) extracted successfully."
+                    debug_log "DEBUG" "get_country_cloudflare: Required fields extracted successfully."
                     success=1
-                    TIMEZONE_API_SOURCE="$api_domain" # ★★★ 成功時に設定 ★★★
-                    break
+                    TIMEZONE_API_SOURCE="$api_domain" # 成功時にAPIソースを設定
+                    break # 成功したのでループを抜ける
                 else
-                    debug_log "DEBUG" "Extraction failed for required fields (Country or ZoneName)."
+                    # 抽出失敗
+                    debug_log "DEBUG" "get_country_cloudflare: Extraction failed for required fields (Country or ZoneName) despite success status."
                 fi
             else
+                 # API ステータスが success 以外
                  local fail_message=$(grep -o '"message": *"[^"]*"' "$tmp_file" | sed 's/"message": "//;s/"//')
-                 debug_log "DEBUG" "Cloudflare Worker returned status '$json_status'. Message: '$fail_message'"
+                 debug_log "DEBUG" "get_country_cloudflare: Cloudflare Worker returned status '$json_status'. Message: '$fail_message'"
             fi
         else
-             if [ $request_status -ne 0 ]; then
-                 debug_log "DEBUG" "make_api_request failed with status: $request_status"
-             elif [ ! -f "$tmp_file" ]; then
-                 debug_log "DEBUG" "make_api_request succeeded but tmp_file '$tmp_file' not found."
-             elif [ ! -s "$tmp_file" ]; then
-                 debug_log "DEBUG" "make_api_request succeeded but tmp_file '$tmp_file' is empty."
-             fi
+            # wget 失敗またはファイル空
+            debug_log "DEBUG" "get_country_cloudflare: wget failed (code: $wget_exit_code) or temp file is empty."
         fi
 
+        # リトライ前の処理
+        rm -f "$tmp_file" 2>/dev/null
         retry_count=$((retry_count + 1))
-        [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
+        if [ $retry_count -lt $API_MAX_RETRIES ]; then
+            debug_log "DEBUG" "get_country_cloudflare: Retrying after 1 second sleep..."
+            sleep 1
+        fi
     done
+    # --- ループ終了 ---
 
+    # 最終的な成功/失敗の判定と戻り値
     if [ $success -eq 1 ]; then
         debug_log "DEBUG" "get_country_cloudflare finished successfully."
-        return 0 # ★★★ 戻り値 0 (成功) ★★★
+        return 0 # 成功
     else
-        debug_log "DEBUG" "get_country_cloudflare finished with failure."
-        return 1 # ★★★ 戻り値 1 (失敗) ★★★
+        debug_log "DEBUG" "get_country_cloudflare finished with failure after ${API_MAX_RETRIES} attempts."
+        rm -f "$tmp_file" 2>/dev/null
+        return 1 # 失敗
     fi
 }
 
