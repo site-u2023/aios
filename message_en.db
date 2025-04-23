@@ -73,6 +73,7 @@ en|MSG_TRANSLATION_SOURCE_CURRENT=Translated Language file{:} {i}
 en|MSG_LANGUAGE_SOURCE=Original language code{:} {i}
 en|MSG_LANGUAGE_CODE=Translation language code{:} {i}
 en|MSG_TRANSLATION_SUCCESS=Translation completed
+en|MSG_TRANSLATION_FAILED=Translation process failed.
 
 # =======================
 # package_auto.sh
