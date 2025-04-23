@@ -396,6 +396,10 @@ get_country_code() {
     ISP_ORG=""
     TIMEZONE_API_SOURCE="" # APIプロバイダーの記録用
 
+    # APIプロバイダー (デフォルトはget_country_cloudflare)
+    API_PROVIDERS="${API_PROVIDERS:-get_country_cloudflare get_country_ipapi get_country_ipinfo}"
+    debug_log "DEBUG" "API_PROVIDERS set to: $API_PROVIDERS"
+
     # キャッシュディレクトリ確認
     [ -d "${CACHE_DIR}" ] || mkdir -p "${CACHE_DIR}"
 
