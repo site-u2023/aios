@@ -350,7 +350,7 @@ escape_for_sed() {
 # システムの地域情報を検出し設定する関数
 detect_and_set_location() {
     # デバッグログ出力
-    debug_log "DEBUG" "Running detect_and_set_location() with skip flags: cache=$SKIP_CACHE_DETECTION, device=$SKIP_DEVICE_DETECTION, cache-device=$SKIP_CACHE_DEVICE_DETECTION, ip=$SKIP_IP_DETECTION, [...]
+    debug_log "DEBUG" "Running detect_and_set_location() with skip flags: cache=$SKIP_CACHE_DETECTION, device=$SKIP_DEVICE_DETECTION, cache-device=$SKIP_CACHE_DEVICE_DETECTION, ip=$SKIP_IP_DETECTION"
 
     # 共通変数の宣言
     local detected_country=""
