@@ -64,16 +64,16 @@ USER_AGENT="aios-script/${SCRIPT_VERSION:-unknown}"
 
 SELECT_REGION_NAME=""
 
-# --- ▼▼▼ 変更点 (display_detected_location) ▼▼▼ ---
-# 検出された場所情報を表示する関数 (成功メッセージ表示ロジック削除)
+# 検出された場所情報を表示する関数
 display_detected_location() {
     local detection_source="$1"
     local detected_country="$2"
     local detected_zonename="$3"
     local detected_timezone="$4"
-    # local show_success_message="${5:-false}" # 引数削除
-    local detected_isp="${5:-}" # 引数番号変更 (5番目)
-    local detected_as="${6:-}"  # 引数番号変更 (6番目)
+    # 引数番号変更 (5番目)
+    local detected_isp="${5:-}"
+    # 引数番号変更 (6番目)
+    local detected_as="${6:-}"
 
     debug_log "DEBUG" "Displaying location information from source: $detection_source"
 
@@ -107,17 +107,12 @@ display_detected_location() {
     printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONENAME")")" "$(color white "$detected_zonename")"
     printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color white "$detected_timezone")"
 
-    # 成功メッセージの表示ロジックを削除
-    # if [ "$show_success_message" = "true" ]; then
-    #     printf "%s\n" "$(color green "$(get_message "MSG_COUNTRY_SUCCESS")")"
-    #     printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
-    #     EXTRA_SPACING_NEEDED="yes"
-    #     debug_log "DEBUG" "Success messages displayed"
-    # fi
+    # --- 削除 ---
+    # 成功メッセージの表示ロジック
+    # -------------
 
     debug_log "DEBUG" "Location information displayed successfully"
 }
-# --- ▲▲▲ 変更点 (display_detected_location) ▲▲▲ ---
 
 # APIリクエストを実行する関数（リダイレクト、タイムアウト、リトライ対応）
 make_api_request() {
