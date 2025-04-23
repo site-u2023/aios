@@ -507,17 +507,6 @@ country_write() {
     echo "$luci_code" > "$cache_message"
     debug_log "DEBUG" "Message language code written to cache: $luci_code"
 
-    # 翻訳処理 (common-translation.sh が source されている前提)
-    if command -v translate_main >/dev/null 2>&1; then
-        translate_main
-    else
-        debug_log "WARNING" "translate_main function not found. Skipping translation initialization."
-    fi
-
-    # --- 削除 ---
-    # 成功メッセージ表示ロジック
-    # -------------
-
     return 0
 }
 
