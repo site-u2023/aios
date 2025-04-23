@@ -1087,5 +1087,3 @@ country_main() {
         return 1
     fi
 }
-    debug_log "DEBUG" "Added escape_for_sed function to safely handle special characters in user inputs"
-    debug_log "DEBUG" "Enhanced zone_write function to centralize timezone data processing"
