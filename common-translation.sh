@@ -514,12 +514,11 @@ process_language_translation() {
         debug_log "DEBUG" "Skipping translation for default language: ${lang_code}"
     fi
 
-    # --- メッセージ表示ロジック (変更なし) ---
+    # --- メッセージ表示ロジック  ---
     # 1. 翻訳が実際に行われた場合
     if [ "$translation_occurred" = "true" ]; then
         printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_SUCCESS")")"
         display_detected_translation # 翻訳情報を表示
-        printf "\n" # 翻訳情報表示後に改行を追加
         # 表示済みフラグも立てる
         TRANSLATION_INFO_DISPLAYED=true
     # 2. デフォルト言語、または翻訳が行われなかった場合 (キャッシュヒットのみなど)
@@ -527,7 +526,6 @@ process_language_translation() {
     elif [ "${TRANSLATION_INFO_DISPLAYED:-false}" = "false" ]; then
         debug_log "DEBUG" "Displaying translation info once (default lang or cache hit)"
         display_detected_translation
-        printf "\n" # 翻訳情報表示後に改行を追加
         # グローバル変数としてフラグを設定
         TRANSLATION_INFO_DISPLAYED=true
     else
