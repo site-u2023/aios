@@ -525,7 +525,10 @@ stop_spinner() {
     local status="${2:-success}"
 
     if [ "$ANIMATION_ENABLED" -eq "0" ]; then
-        printf "%s\n" "$message"
+        # アニメーション無効時はメッセージがあれば表示 (改行あり)
+        if [ -n "$message" ]; then
+            printf "%s\n" "$message"
+        fi
         return
     fi
 
@@ -547,19 +550,39 @@ stop_spinner() {
             wait "$SPINNER_PID" 2>/dev/null || true
             unset SPINNER_PID
             printf "\r\033[K"  # 行をクリア
-            
-            # 成功/失敗に応じたメッセージカラー
-            if [ "$status" = "success" ]; then
-                printf "%s\n" "$(color green "$message")"
-            else
-                printf "%s\n" "$(color yellow "$message")"
+
+            # ▼▼▼ 変更点 ▼▼▼
+            # メッセージが空でない場合のみ表示 (改行あり)
+            if [ -n "$message" ]; then
+                # 成功/失敗に応じたメッセージカラー
+                if [ "$status" = "success" ]; then
+                    printf "%s\n" "$(color green "$message")"
+                else
+                    printf "%s\n" "$(color yellow "$message")"
+                fi
             fi
+            # ▲▲▲ 変更点 ▲▲▲
         else
             debug_log "DEBUG: Process not found for PID: $SPINNER_PID"
             unset SPINNER_PID
+            # プロセスが見つからなくても、メッセージがあれば表示 (改行あり)
+            if [ -n "$message" ]; then
+                 if [ "$status" = "success" ]; then
+                     printf "%s\n" "$(color green "$message")"
+                 else
+                     printf "%s\n" "$(color yellow "$message")"
+                 fi
+            fi
+        fi
+    # SPINNER_PID がない場合でも、メッセージがあれば表示 (改行あり)
+    elif [ -n "$message" ]; then
+        if [ "$status" = "success" ]; then
+            printf "%s\n" "$(color green "$message")"
+        else
+            printf "%s\n" "$(color yellow "$message")"
         fi
     fi
-    
+
     # カーソル表示
     printf "\033[?25h"
 }
