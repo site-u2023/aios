@@ -170,6 +170,7 @@ get_country_ipapi() {
 
     local retry_count=0
     local success=0
+    local api_domain=""      # ★★★ 追加: ドメイン名格納用変数 ★★★
 
     # APIエンドポイント設定
     local api_url=""
@@ -179,9 +180,11 @@ get_country_ipapi() {
         api_url="https://ipapi.co/json"
     fi
 
-    # APIドメインを抽出して記録
-    local api_domain=$(echo "$api_url" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+    # ★★★ 追加: API URLからドメイン名を抽出 ★★★
+    api_domain=$(echo "$api_url" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+    # ドメイン名が取得できなかった場合のフォールバック (URL自体を使う)
     [ -z "$api_domain" ] && api_domain="$api_url"
+    debug_log "DEBUG" "Using API domain for IPAPI: $api_domain"
 
     debug_log "DEBUG" "Querying country and timezone from $api_domain"
 
@@ -197,6 +200,8 @@ get_country_ipapi() {
             if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
                 debug_log "DEBUG" "Retrieved from $api_domain - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
                 success=1
+                # ★★★ 変更点: 成功時に API ドメイン名を TIMEZONE_API_SOURCE に設定 ★★★
+                TIMEZONE_API_SOURCE="$api_domain"
                 break
             else
                 debug_log "DEBUG" "Incomplete country/timezone data from $api_domain"
@@ -215,12 +220,21 @@ get_country_ipapi() {
         [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
     done
 
+    # ★★★ 削除: 成功時の TIMEZONE_API_SOURCE 設定 (ループ内で実施済) ★★★
+    # if [ $success -eq 1 ]; then
+    #     TIMEZONE_API_SOURCE="$api_domain"
+    #     debug_log "DEBUG" "get_country_ipapi succeeded"
+    #     return 0
+    # else
+    #     debug_log "DEBUG" "get_country_ipapi failed"
+    #     return 1
+    # fi
+    # ★★★ 変更点: 戻り値のみ返す ★★★
     if [ $success -eq 1 ]; then
-        TIMEZONE_API_SOURCE="$api_domain"
-        debug_log "DEBUG" "get_country_ipapi succeeded"
+        debug_log "DEBUG" "get_country_ipapi finished successfully."
         return 0
     else
-        debug_log "DEBUG" "get_country_ipapi failed"
+        debug_log "DEBUG" "get_country_ipapi finished with failure."
         return 1
     fi
 }
@@ -232,6 +246,7 @@ get_country_ipinfo() {
 
     local retry_count=0
     local success=0
+    local api_domain=""      # ★★★ 追加: ドメイン名格納用変数 ★★★
 
     # APIエンドポイント設定
     local api_url=""
@@ -241,9 +256,11 @@ get_country_ipinfo() {
         api_url="https://ipinfo.io/json"
     fi
 
-    # APIドメインを抽出して記録
-    local api_domain=$(echo "$api_url" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+    # ★★★ 追加: API URLからドメイン名を抽出 ★★★
+    api_domain=$(echo "$api_url" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+    # ドメイン名が取得できなかった場合のフォールバック (URL自体を使う)
     [ -z "$api_domain" ] && api_domain="$api_url"
+    debug_log "DEBUG" "Using API domain for IPINFO: $api_domain"
 
     debug_log "DEBUG" "Querying country and timezone from $api_domain"
 
@@ -259,6 +276,8 @@ get_country_ipinfo() {
             if [ -n "$SELECT_COUNTRY" ] && [ -n "$SELECT_ZONENAME" ]; then
                 debug_log "DEBUG" "Retrieved from $api_domain - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME"
                 success=1
+                # ★★★ 変更点: 成功時に API ドメイン名を TIMEZONE_API_SOURCE に設定 ★★★
+                TIMEZONE_API_SOURCE="$api_domain"
                 break
             else
                 debug_log "DEBUG" "Incomplete country/timezone data from $api_domain"
@@ -277,12 +296,21 @@ get_country_ipinfo() {
         [ $retry_count -lt $API_MAX_RETRIES ] && sleep 1
     done
 
+    # ★★★ 削除: 成功時の TIMEZONE_API_SOURCE 設定 (ループ内で実施済) ★★★
+    # if [ $success -eq 1 ]; then
+    #     TIMEZONE_API_SOURCE="$api_domain"
+    #     debug_log "DEBUG" "get_country_ipinfo succeeded"
+    #     return 0
+    # else
+    #     debug_log "DEBUG" "get_country_ipinfo failed"
+    #     return 1
+    # fi
+    # ★★★ 変更点: 戻り値のみ返す ★★★
     if [ $success -eq 1 ]; then
-        TIMEZONE_API_SOURCE="$api_domain"
-        debug_log "DEBUG" "get_country_ipinfo succeeded"
+        debug_log "DEBUG" "get_country_ipinfo finished successfully."
         return 0
     else
-        debug_log "DEBUG" "get_country_ipinfo failed"
+        debug_log "DEBUG" "get_country_ipinfo finished with failure."
         return 1
     fi
 }
