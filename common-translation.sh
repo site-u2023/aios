@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-23-00-00"
+SCRIPT_VERSION="2025-04-18-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -308,7 +308,7 @@ create_language_db() {
     # ベースDBファイル確認
     if [ ! -f "$base_db" ]; then
         debug_log "DEBUG" "Base message DB not found: $base_db"
-        return 1
+        return 1 # Indicate failure
     fi
 
     # DBファイル作成 (常に新規作成・上書き)
@@ -320,13 +320,10 @@ EOF
     if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
         debug_log "DEBUG" "Online translation disabled, using original text"
         grep "^${DEFAULT_LANGUAGE}|" "$base_db" | sed "s/^${DEFAULT_LANGUAGE}|/${api_lang}|/" >> "$output_db"
-        return 0 # DB作成は成功
+        return 1 # Indicate that translation was not performed
     fi
 
-    # 翻訳処理開始
-    printf "\n"
-
-    # ネットワーク接続状態を確認
+    # --- ネットワークチェックとAPI準備 (スピナー関連削除) ---
     if [ ! -f "$ip_check_file" ]; then
         debug_log "DEBUG" "Network status file not found, checking connectivity"
         if type check_network_connectivity >/dev/null 2>&1; then
@@ -335,8 +332,6 @@ EOF
             debug_log "ERROR" "check_network_connectivity function not found"
         fi
     fi
-
-    # ネットワーク接続状態を取得
     local network_status=""
     if [ -f "$ip_check_file" ]; then
         network_status=$(cat "$ip_check_file")
@@ -344,8 +339,6 @@ EOF
     else
         debug_log "DEBUG" "Could not determine network status"
     fi
-
-    # API名をAPI_LISTに基づいて直接設定
     case "$API_LIST" in
         google) current_api="translate.googleapis.com" ;;
         lingva) current_api="lingva.ml" ;;
@@ -353,84 +346,58 @@ EOF
     esac
     [ -z "$current_api" ] && current_api="Translation API"
     debug_log "DEBUG" "Using API based on API_LIST: $current_api"
+    # --- ネットワークチェックとAPI準備ここまで ---
 
-    # スピナーを開始し、使用中のAPIを表示 (翻訳が必要な場合のみ)
-    local spinner_started="false"
-    if [ -n "$network_status" ] && [ "$network_status" != "" ]; then
-        if type start_spinner >/dev/null 2>&1; then
-            start_spinner "$(get_message "MSG_TRANSLATING" "api=$current_api" "default=Translating with: $current_api...")" "blue" # Added default
-            spinner_started="true"
-        else
-            debug_log "WARNING" "start_spinner function not found, spinner not started"
-        fi
-    fi
+    # --- Translation Loop ---
+    local translation_success_count=0
+    local translation_fail_count=0
+    local cache_hit_count=0
 
-    # 言語エントリを抽出して翻訳ループ
     while IFS= read -r line; do
-        # Skip empty lines or comments
         case "$line" in \#*|"") continue ;; esac
+        if ! echo "$line" | grep -q "^${DEFAULT_LANGUAGE}|"; then continue; fi
+        local line_content=${line#*|}
+        local key=${line_content%%=*}
+        local value=${line_content#*=}
+        if [ -z "$key" ] || [ -z "$value" ]; then continue; fi
 
-        # キーと値を抽出 (シェル組み込み文字列操作を使用)
-        if ! echo "$line" | grep -q "^${DEFAULT_LANGUAGE}|"; then continue; fi # Ensure it's the default lang line
-        local line_content=${line#*|} # Remove "en|"
-        local key=${line_content%%=*}   # Get key before first "="
-        local value=${line_content#*=}  # Get value after first "="
+        local cache_key=$(printf "%s%s%s" "$key" "$value" "$api_lang" | md5sum | cut -d' ' -f1)
+        local cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
 
-        if [ -n "$key" ] && [ -n "$value" ]; then
-            # キャッシュキー生成
-            local cache_key=$(printf "%s%s%s" "$key" "$value" "$api_lang" | md5sum | cut -d' ' -f1)
-            local cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
+        if [ -f "$cache_file" ]; then
+            local translated=$(cat "$cache_file")
+            printf "%s|%s=%s\n" "$api_lang" "$key" "$translated" >> "$output_db"
+            cache_hit_count=$((cache_hit_count + 1))
+            continue
+        fi
 
-            # キャッシュを確認
-            if [ -f "$cache_file" ]; then
-                local translated=$(cat "$cache_file")
-                printf "%s|%s=%s\n" "$api_lang" "$key" "$translated" >> "$output_db"
-                continue # 次の行へ
-            fi
+        if [ -n "$network_status" ] && [ "$network_status" != "" ]; then
+            translation_performed="true" # 翻訳が試行されたことをマーク
+            cleaned_translation=$(translate_text "$value" "$DEFAULT_LANGUAGE" "$api_lang")
 
-            # ネットワーク接続確認と翻訳
-            if [ -n "$network_status" ] && [ "$network_status" != "" ]; then
-                translation_performed="true" # Mark that translation was attempted/done
-                cleaned_translation=$(translate_text "$value" "$DEFAULT_LANGUAGE" "$api_lang")
-
-                # 翻訳結果処理
-                if [ -n "$cleaned_translation" ]; then
-                    # 基本的なエスケープシーケンスの処理
-                    local decoded="$cleaned_translation"
-                    # キャッシュに保存
-                    mkdir -p "$(dirname "$cache_file")"
-                    printf "%s\n" "$decoded" > "$cache_file"
-                    # DBに追加
-                    printf "%s|%s=%s\n" "$api_lang" "$key" "$decoded" >> "$output_db"
-                else
-                    # 翻訳失敗時は原文をそのまま使用
-                    printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
-                    debug_log "DEBUG" "Translation failed for key: ${key}, using original text"
-                fi
+            if [ -n "$cleaned_translation" ]; then
+                local decoded="$cleaned_translation"
+                mkdir -p "$(dirname "$cache_file")"
+                printf "%s\n" "$decoded" > "$cache_file"
+                printf "%s|%s=%s\n" "$api_lang" "$key" "$decoded" >> "$output_db"
+                translation_success_count=$((translation_success_count + 1))
             else
-                # ネットワーク接続がない場合は原文を使用
                 printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
-                debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
+                debug_log "DEBUG" "Translation failed for key: ${key}, using original text"
+                translation_fail_count=$((translation_fail_count + 1))
             fi
-        fi
-    done < "$base_db" # Read from base_db
-
-    # スピナー停止 (翻訳が行われた場合のみ)
-    if [ "$spinner_started" = "true" ]; then
-        if type stop_spinner >/dev/null 2>&1; then
-            # ★★★ 変更点: 成功メッセージ表示を削除 ★★★
-            # stop_spinner "Language file created successfully" "success"
-            # 代わりに単に行クリアとカーソル表示のみ行う
-             printf "\r\033[K"
-             printf "\033[?25h"
         else
-            debug_log "INFO" "Language file creation process finished (spinner function not found)"
+            printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
+            debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
+            translation_fail_count=$((translation_fail_count + 1))
         fi
-    fi
+    done < "$base_db"
+    # --- End Translation Loop ---
 
+    debug_log "DEBUG" "Translation stats: Success=$translation_success_count, Fail/Skipped=$translation_fail_count, CacheHit=$cache_hit_count"
     debug_log "DEBUG" "Language DB creation completed for ${api_lang}"
 
-    # 翻訳が実際に行われたかどうかを返す (0: Yes, 1: No/Skipped)
+    # 戻り値: 翻訳が行われた場合は 0、そうでなければ 1
     if [ "$translation_performed" = "true" ]; then
         return 0
     else
@@ -441,8 +408,8 @@ EOF
 # 翻訳情報を表示する関数
 display_detected_translation() {
     # 引数の取得
-    local show_success_message="${1:-false}"  # 成功メッセージ表示フラグ (未使用に変更)
-
+    local show_success_message="${1:-false}"  # 成功メッセージ表示フラグ
+    
     # 言語コードの取得
     local lang_code=""
     if [ -f "${CACHE_DIR}/message.ch" ]; then
@@ -450,31 +417,31 @@ display_detected_translation() {
     else
         lang_code="$DEFAULT_LANGUAGE"
     fi
-
+    
     local source_lang="$DEFAULT_LANGUAGE"  # ソース言語
     local source_db="message_${source_lang}.db"
     local target_db="message_${lang_code}.db"
-
+    
     debug_log "DEBUG" "Displaying translation information for language code: ${lang_code}"
-
+    
     # 同じ言語でDB作成をスキップする場合もチェック
     if [ "$source_lang" = "$lang_code" ] && [ "$source_db" = "$target_db" ]; then
         debug_log "DEBUG" "Source and target languages are identical: ${lang_code}"
     fi
-
-    # ★★★ 変更点: 成功メッセージ表示を削除 ★★★
-    # if [ "$show_success_message" = "true" ]; then
-    #     printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_SUCCESS")")"
-    # fi
-
+    
+    # 成功メッセージの表示（オプション）
+    if [ "$show_success_message" = "true" ]; then
+        printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_SUCCESS")")"
+    fi
+    
     # 翻訳ソース情報表示
     printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE_ORIGINAL" "i=$source_db")")"
     printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE_CURRENT" "i=$target_db")")"
-
+    
     # 言語コード情報表示
     printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SOURCE" "i=$source_lang")")"
     printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_CODE" "i=$lang_code")")"
-
+    
     debug_log "DEBUG" "Translation information display completed for ${lang_code}"
 }
 
@@ -494,42 +461,67 @@ process_language_translation() {
     local is_default_lang="false"
     [ "$lang_code" = "$DEFAULT_LANGUAGE" ] && is_default_lang="true"
 
-    # 翻訳DB作成処理
-    local db_created="false"
-    local translation_occurred="false"
+    # --- 翻訳処理と表示 ---
+    local translation_occurred="false" # 翻訳が行われたかのフラグ
+    local spinner_started="false"    # スピナーが開始されたかのフラグ
+
     if [ "$is_default_lang" = "false" ]; then
-        debug_log "DEBUG" "Target language (${lang_code}) is different from default (${DEFAULT_LANGUAGE}), creating DB if needed."
+        debug_log "DEBUG" "Target language (${lang_code}) is different from default (${DEFAULT_LANGUAGE}), attempting translation."
+
+        # ネットワーク接続があるか事前に確認 (スピナー表示のため)
+        local network_status=""
+        if [ -f "${CACHE_DIR}/network.ch" ]; then
+            network_status=$(cat "${CACHE_DIR}/network.ch")
+        fi
+
+        # ネットワークがあり、オンライン翻訳が有効な場合のみスピナー開始
+        if [ -n "$network_status" ] && [ "$network_status" != "" ] && [ "$ONLINE_TRANSLATION_ENABLED" = "yes" ]; then
+            if type start_spinner >/dev/null 2>&1; then
+                start_spinner "$(get_message "MSG_TRANSLATING")" "blue"
+                spinner_started="true"
+            else
+                debug_log "WARNING" "start_spinner function not found, spinner not started"
+            fi
+        fi
+
         # 翻訳DBを作成 (戻り値で翻訳が行われたか確認)
         if create_language_db "$lang_code"; then
              translation_occurred="true" # Translation happened
         fi
-        db_created="true"
+
+        # スピナーを停止 (開始されていた場合のみ)
+        if [ "$spinner_started" = "true" ]; then
+            if type stop_spinner >/dev/null 2>&1; then
+                # 翻訳成功メッセージはここでは表示しない
+                stop_spinner "" ""
+            else
+                debug_log "INFO" "Translation process finished (spinner function not found)"
+            fi
+        fi
+
     else
-        debug_log "DEBUG" "Skipping DB creation for default language: ${lang_code}"
+        debug_log "DEBUG" "Skipping translation for default language: ${lang_code}"
     fi
 
     # --- メッセージ表示ロジック ---
-    # 1. 翻訳が実際に行われた場合 (create_language_db が 0 を返した場合)
+    # 1. 翻訳が実際に行われた場合
     if [ "$translation_occurred" = "true" ]; then
         printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_SUCCESS")")"
         display_detected_translation # 翻訳情報を表示
         printf "\n" # 翻訳情報表示後に改行を追加
-    # 2. DB作成は試みたが、翻訳は行われなかった場合 (キャッシュ利用など)
-    #    または、デフォルト言語の場合
-    elif [ "$db_created" = "true" ] || [ "$is_default_lang" = "true" ]; then
-        # デフォルト言語の場合、またはDB作成済みだが翻訳なしの場合、
-        # 翻訳情報は一度だけ表示する (フラグ管理)
-        if [ "${TRANSLATION_INFO_DISPLAYED:-false}" = "false" ]; then
-            debug_log "DEBUG" "Displaying translation info once (default lang or cache hit)"
-            display_detected_translation
-            printf "\n" # 翻訳情報表示後に改行を追加
-            # グローバル変数としてフラグを設定 (ashではexport不要)
-            TRANSLATION_INFO_DISPLAYED=true
-        else
-            debug_log "DEBUG" "Translation info already displayed, skipping"
-        fi
+        # 表示済みフラグも立てる
+        TRANSLATION_INFO_DISPLAYED=true
+    # 2. デフォルト言語、または翻訳が行われなかった場合 (キャッシュヒットのみなど)
+    #    かつ、まだ表示されていない場合のみ、翻訳情報を表示
+    elif [ "${TRANSLATION_INFO_DISPLAYED:-false}" = "false" ]; then
+        debug_log "DEBUG" "Displaying translation info once (default lang or cache hit)"
+        display_detected_translation
+        printf "\n" # 翻訳情報表示後に改行を追加
+        # グローバル変数としてフラグを設定
+        TRANSLATION_INFO_DISPLAYED=true
+    else
+        debug_log "DEBUG" "Translation info already displayed or not applicable, skipping display"
     fi
-    # DB作成も試みられなかった場合は何も表示しない
 
     return 0
 }
