@@ -783,36 +783,19 @@ try_detect_from_ip() {
         fi
     fi
 
-    # IP位置情報の取得
+    # IP位置情報の取得 (結果はグローバル変数 SELECT_*, ISP_*, TIMEZONE_API_SOURCE に格納される)
     if ! process_location_info; then
-        debug_log "DEBUG" "process_location_info() failed to retrieve location data"
+        debug_log "DEBUG" "process_location_info() failed to retrieve or process location data"
         return 1
     fi
 
-    debug_log "DEBUG" "process_location_info() succeeded. Reading data from temporary files."
-
-    # 一時ファイルからデータを読み込む
-    local detected_country=""
-    local detected_timezone=""
-    local detected_zonename=""
-    local detected_isp=""
-    local detected_as=""
-
-    if [ -f "${CACHE_DIR}/ip_country.tmp" ]; then
-        detected_country=$(cat "${CACHE_DIR}/ip_country.tmp" 2>/dev/null)
-    fi
-    if [ -f "${CACHE_DIR}/ip_timezone.tmp" ]; then
-        detected_timezone=$(cat "${CACHE_DIR}/ip_timezone.tmp" 2>/dev/null) # POSIX TZ
-    fi
-    if [ -f "${CACHE_DIR}/ip_zonename.tmp" ]; then
-        detected_zonename=$(cat "${CACHE_DIR}/ip_zonename.tmp" 2>/dev/null) # IANA Zone Name
-    fi
-    if [ -f "${CACHE_DIR}/ip_isp.tmp" ]; then
-        detected_isp=$(cat "${CACHE_DIR}/ip_isp.tmp" 2>/dev/null)
-    fi
-    if [ -f "${CACHE_DIR}/ip_as.tmp" ]; then
-        detected_as=$(cat "${CACHE_DIR}/ip_as.tmp" 2>/dev/null)
-    fi
+    # ★★★ 変更点: process_location_info は一時ファイルを使わなくなったため、読み込み処理は不要 ★★★
+    # detected_ 変数への代入は process_location_info から取得したグローバル変数を使用
+    local detected_country="$SELECT_COUNTRY"
+    local detected_timezone="$SELECT_TIMEZONE" # POSIX TZ
+    local detected_zonename="$SELECT_ZONENAME" # IANA Zone Name
+    local detected_isp="$ISP_NAME"
+    local detected_as="$ISP_AS"
 
     debug_log "DEBUG" "IP detection results - country: $detected_country, timezone: $detected_timezone, zonename: $detected_zonename, isp: $detected_isp, as: $detected_as"
 
@@ -830,7 +813,7 @@ try_detect_from_ip() {
     fi
 
     # 検出情報を表示 (成功メッセージなし)
-    display_detected_location "Location" "$detected_country" "$detected_zonename" "$detected_timezone" "$detected_isp" "$detected_as"
+    display_detected_location "IP Address" "$detected_country" "$detected_zonename" "$detected_timezone" "$detected_isp" "$detected_as"
 
     # 情報表示の後に空行を追加
     printf "\n"
@@ -838,29 +821,35 @@ try_detect_from_ip() {
     # ユーザーに確認 (短縮プロンプト)
     if ! confirm "MSG_CONFIRM_USE_SETTINGS_SHORT"; then
         debug_log "DEBUG" "User declined IP-based location settings"
-        # 拒否された場合は一時ファイルをクリーンアップする必要があるか？
-        # process_location_info が作成した一時ファイルは残る可能性がある
+        # ★★★ 削除: 一時ファイルのクリーンアップ処理 (一時ファイルを使わないため不要) ★★★
         # rm -f "${CACHE_DIR}/ip_"*.tmp 2>/dev/null
         return 1 # ユーザー拒否
     fi
 
     debug_log "DEBUG" "User accepted IP-based location settings"
 
-    # 設定の適用
-    debug_log "DEBUG" "Writing country data to temporary file for country_write"
-    echo "$country_data" > "${CACHE_DIR}/country.tmp"
+    # ★★★ 変更点: 設定の適用 (永続キャッシュへの直接書き込み) ★★★
+    debug_log "DEBUG" "Applying IP-based settings to permanent cache"
 
-    # country_write を呼び出し (メッセージ表示はここでしない)
+    # 1. 国設定の適用 (country_write を使用)
+    debug_log "DEBUG" "Writing country data to temporary file for country_write"
+    echo "$country_data" > "${CACHE_DIR}/country.tmp" # country_write は一時ファイルを読み込む仕様のため
+
     country_write || {
-        debug_log "ERROR" "Failed to write country data"
+        debug_log "ERROR" "Failed to write country data via country_write"
+        rm -f "${CACHE_DIR}/country.tmp" 2>/dev/null # エラー時は一時ファイルを削除
         return 1
     }
+    # country_write が成功したら一時ファイルは不要
+    rm -f "${CACHE_DIR}/country.tmp" 2>/dev/null
 
-    # タイムゾーン設定
+    # 2. タイムゾーン設定の適用 (zone_write を使用)
     local timezone_str="${detected_zonename},${detected_timezone}"
-    debug_log "DEBUG" "Created combined timezone string: ${timezone_str}"
+    debug_log "DEBUG" "Created combined timezone string for zone_write: ${timezone_str}"
     zone_write "$timezone_str" || {
-        debug_log "ERROR" "Failed to write timezone data"
+        debug_log "ERROR" "Failed to write timezone data via zone_write"
+        # 国設定は既に書き込まれているが、タイムゾーン設定に失敗した
+        # 必要であればロールバック処理を追加する (今回はエラーリターンのみ)
         return 1
     }
 
@@ -869,7 +858,7 @@ try_detect_from_ip() {
     printf "%s\n" "$(color green "$(get_message "MSG_TIMEZONE_SUCCESS")")"
     EXTRA_SPACING_NEEDED="yes" # 後続処理のためのフラグ
 
-    debug_log "DEBUG" "IP-based location settings applied successfully"
+    debug_log "DEBUG" "IP-based location settings applied successfully to permanent cache"
     return 0 # 成功
 }
 
