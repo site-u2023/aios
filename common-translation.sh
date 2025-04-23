@@ -1,6 +1,7 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-23-12-47" # Updated version based on request time
+# SCRIPT_VERSION="2025-04-23-12-47" # Original version marker - Updated below
+SCRIPT_VERSION="2025-04-23-14-32" # Updated version based on last interaction time
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -21,13 +22,13 @@ SCRIPT_VERSION="2025-04-23-12-47" # Updated version based on request time
 # ✅ No associative arrays (declare -A is NOT supported)
 # ✅ No here-strings (<<< is NOT supported)
 # ✅ No -v flag in test or [[
-# ✅ Avoid bash-specific string operations like ${var:0:3}　
+# ✅ Avoid bash-specific string operations like ${var:0:3}
 # ✅ Avoid arrays entirely when possible (even indexed arrays can be problematic)
 # ✅ Use printf followed by read instead of read -p
 # ✅ Use printf instead of echo -e for portable formatting
 # ✅ Avoid process substitution <() and >()
 # ✅ Prefer case statements over complex if/elif chains
-# ✅ Use command -v instead of which or type for command existence checks
+# ✅ Use type command (POSIX) instead of command -v, which, or type -t for command existence checks
 # ✅ Keep scripts modular with small, focused functions
 # ✅ Use simple error handling instead of complex traps
 # ✅ Test scripts with ash/dash explicitly, not just bash
@@ -43,234 +44,248 @@ BIN_DIR="$(dirname "$BIN_PATH")"
 BIN_FILE="$(basename "$BIN_PATH")"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
-CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
+CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}" # Used for message.ch, network.ch etc.
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 
-# オンライン翻訳を有効化
+# オンライン翻訳を有効化 (create_language_db logic removed reliance on this, but keep for potential external checks)
 ONLINE_TRANSLATION_ENABLED="yes"
 
-# API設定
+# API設定 (Global defaults)
 API_TIMEOUT="${API_TIMEOUT:-5}"
 API_MAX_RETRIES="${API_MAX_RETRIES:-3}"
-TRANSLATION_CACHE_DIR="${BASE_DIR}/translations"
-CURRENT_API="" # This will be set within translate_main now
+# AI_TRANSLATION_FUNCTIONS should be defined globally (e.g., in main script or config)
+# Example: AI_TRANSLATION_FUNCTIONS="translate_with_google translate_with_lingva"
 
-# API設定追加
-GOOGLE_TRANSLATE_URL="${GOOGLE_TRANSLATE_URL:-https://translate.googleapis.com/translate_a/single}"
-LINGVA_URL="${LINGVA_URL:-https://lingva.ml/api/v1}"
-API_LIST="${API_LIST:-google}"
-WGET_CAPABILITY_DETECTED="" # wget capabilities - Initialized by translate_main
-
-# 翻訳キャッシュの初期化 (translate_mainから呼ばれるヘルパー関数)
-init_translation_cache() {
-    mkdir -p "${TRANSLATION_CACHE_DIR}"
-    debug_log "DEBUG" "Translation cache directory initialized by init_translation_cache"
-}
-
-# 言語コード取得（APIのため）
-get_api_lang_code() {
-    if [ -f "${CACHE_DIR}/message.ch" ]; then
-        local api_lang=$(cat "${CACHE_DIR}/message.ch")
-        debug_log "DEBUG" "Using language code from message.ch: ${api_lang}"
-        printf "%s\n" "$api_lang"
-        return 0
-    fi
-    debug_log "DEBUG" "No message.ch found, defaulting to en"
-    printf "en\n"
-}
+# WGET Capability - Optional, AIP functions simplified to not rely heavily on it
+WGET_CAPABILITY_DETECTED="" # Initialized by translate_main if detect_wget_capabilities exists
 
 # URL安全エンコード関数（seqを使わない最適化版）
+# @param $1: string - The string to encode.
+# @stdout: URL-encoded string.
 urlencode() {
     local string="$1"
     local encoded=""
+    local char
     local i=0
-    local c=""
-    local length=${#string}
+    local length=${#string} # POSIX compliant way to get length
 
-    while [ $i -lt $length ]; do
-        c="${string:$i:1}"
-        case "$c" in
-            [a-zA-Z0-9.~_-]) encoded="${encoded}$c" ;;
+    while [ "$i" -lt "$length" ]; do
+        # Extract character at index i (POSIX compliant)
+        char=$(expr "x$string" : "x.\{$i\}\(.\)")
+
+        case "$char" in
+            [a-zA-Z0-9.~_-]) encoded="${encoded}$char" ;;
             " ") encoded="${encoded}%20" ;;
-            *) encoded="${encoded}$(printf "%%%02X" "'$c")" ;;
+            *)
+                # POSIX printf for hex encoding
+                # shellcheck disable=SC2059 # We need variable format specifier width
+                encoded="${encoded}$(printf '%%%02X' "'$char")"
+                ;;
         esac
         i=$((i + 1))
     done
     printf "%s\n" "$encoded"
 }
 
-# Lingva Translate APIを使用した翻訳関数
+# Lingva Translate APIを使用した翻訳関数 (AIP専用関数)
+# @param $1: source_text (string) - The text to translate.
+# @param $2: target_lang_code (string) - The target language code (e.g., "ja").
+# @stdout: Translated text on success. Empty string on failure.
+# @return: 0 on success, non-zero on failure.
 translate_with_lingva() {
-    local text="$1"
-    local source_lang="$2"
-    local target_lang="$3"
-    local ip_check_file="${CACHE_DIR}/network.ch"
-    local wget_options=""
+    local source_text="$1"
+    local target_lang_code="$2"
+    local source_lang="$DEFAULT_LANGUAGE" # Use the global default language
+
     local retry_count=0
-    local network_type=""
-
-    # Network check performed by caller (translate_main)
-    if [ -f "$ip_check_file" ]; then
-        network_type=$(cat "$ip_check_file")
-    fi
-
-    case "$network_type" in
-        "v4") wget_options="-4" ;;
-        "v6") wget_options="-6" ;;
-        *) wget_options="" ;;
-    esac
-
-    local encoded_text=$(urlencode "$text")
-    local temp_file="${TRANSLATION_CACHE_DIR}/lingva_response.tmp"
-    mkdir -p "$(dirname "$temp_file")" 2>/dev/null
-
-    while [ $retry_count -le $API_MAX_RETRIES ]; do
-        if [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ]; then
-            wget_options=$([ "$wget_options" = "-4" ] && echo "-6" || echo "-4")
-            debug_log "DEBUG" "Retrying Lingva with wget option: $wget_options"
-        fi
-
-        $BASE_WGET $wget_options -T $API_TIMEOUT --tries=1 -O "$temp_file" \
-             --user-agent="Mozilla/5.0 (Linux; OpenWrt)" \
-             "${LINGVA_URL}/$source_lang/$target_lang/$encoded_text" 2>/dev/null
-
-        if [ -s "$temp_file" ] && grep -q "translation" "$temp_file"; then
-            local translated=$(sed 's/.*"translation"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/g' "$temp_file" | sed 's/\\"/"/g')
-            if [ -n "$translated" ]; then
-                rm -f "$temp_file" 2>/dev/null
-                printf "%s\n" "$translated"
-                return 0
-            fi
-        fi
-        rm -f "$temp_file" 2>/dev/null
-        retry_count=$((retry_count + 1))
-        sleep 1
-    done
-    debug_log "DEBUG" "Lingva translation failed after ${API_MAX_RETRIES} attempts for text: $text"
-    return 1
-}
-
-# Google翻訳APIを使用した翻訳関数 (高効率版)
-translate_with_google() {
-    local text="$1"
-    local source_lang="$2"
-    local target_lang="$3"
-    local ip_check_file="${CACHE_DIR}/network.ch"
-    local wget_options=""
-    local retry_count=0
-    local network_type=""
-    local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
+    local temp_file="${BASE_DIR}/lingva_response_$$.tmp" # Use PID for temp file uniqueness
     local api_url=""
+    local translated_text=""
+    local wget_base_cmd=""
 
-    # Network check performed by caller (translate_main)
-    if [ -f "$ip_check_file" ]; then
-        network_type=$(cat "$ip_check_file")
-    fi
+    debug_log "DEBUG" "translate_with_lingva: Translating to '${target_lang_code}'"
 
-    case "$network_type" in
-        "v4") wget_options="-4" ;;
-        "v6") wget_options="-6" ;;
-        *) wget_options="" ;;
-    esac
+    # --- Define API URL internally ---
+    # Using the standard public Lingva instance URL as the default
+    # This function does NOT take URL as an argument or read API-specific global vars for it.
+    local base_lingva_url="https://lingva.ml/api/v1"
+    # --- End Internal URL Definition ---
+
+    local encoded_text=$(urlencode "$source_text")
+    # Construct the full API URL
+    api_url="${base_lingva_url}/${source_lang}/${target_lang_code}/${encoded_text}"
+    debug_log "DEBUG" "translate_with_lingva: API URL: ${api_url}"
 
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
-    local encoded_text=$(urlencode "$text")
-    api_url="${GOOGLE_TRANSLATE_URL}?client=gtx&sl=${source_lang}&tl=${target_lang}&dt=t&q=${encoded_text}"
 
-    while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        if [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ]; then
-            if echo "$wget_options" | grep -q -- "-4"; then
-                 wget_options="-6"
-            else
-                 wget_options="-4"
-            fi
-            debug_log "DEBUG" "Retrying Google with wget option: $wget_options"
-        fi
+    # Basic wget command - Simplified, no complex capability checks or v4/v6 forcing
+    wget_base_cmd="wget --no-check-certificate -T $API_TIMEOUT -q -O \"$temp_file\" --user-agent=\"Mozilla/5.0 (Linux; OpenWrt)\""
 
-        case "$WGET_CAPABILITY_DETECTED" in
-            "full")
-                wget --no-check-certificate $wget_options -L -T $API_TIMEOUT -q -O "$temp_file" \
-                    --user-agent="Mozilla/5.0" "$api_url" 2>/dev/null
-                ;;
-            *) # basic, https_only, fallback
-                wget --no-check-certificate $wget_options -T $API_TIMEOUT -q -O "$temp_file" \
-                    "$api_url" 2>/dev/null
-                ;;
-        esac
+    # Retry loop
+    while [ $retry_count -lt "$API_MAX_RETRIES" ]; do
+        debug_log "DEBUG" "translate_with_lingva: Attempting download (Try $((retry_count + 1))/${API_MAX_RETRIES})"
+        # Execute wget command using eval
+        eval "$wget_base_cmd \"$api_url\""
+        local wget_exit_code=$?
 
-        if [ -s "$temp_file" ]; then
-            if grep -q '\[' "$temp_file"; then
-                local translated=$(sed 's/\[\[\["//; s/",".*//; s/\\u003d/=/g; s/\\u003c/</g; s/\\u003e/>/g; s/\\u0026/\&/g; s/\\"/"/g; s/\\n/\n/g; s/\\r//g' "$temp_file")
-                if [ -n "$translated" ]; then
+        if [ "$wget_exit_code" -eq 0 ] && [ -s "$temp_file" ]; then
+            debug_log "DEBUG" "translate_with_lingva: Download successful."
+            # Extract translation using sed (adjust pattern based on actual Lingva response)
+            # Assuming Lingva returns JSON like {"translation": "..."}
+            if grep -q '"translation"' "$temp_file"; then
+                translated_text=$(sed -n 's/.*"translation"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$temp_file")
+
+                # Basic unescaping (Lingva might need different/less unescaping than Google)
+                translated_text=$(echo "$translated_text" | sed \
+                    -e 's/\\"/"/g' \
+                    -e 's/\\\\/\\/g') # Handle escaped backslash and quote
+
+                if [ -n "$translated_text" ]; then
+                    debug_log "DEBUG" "translate_with_lingva: Translation extracted successfully."
+                    printf "%s\n" "$translated_text" # Output to stdout
                     rm -f "$temp_file" 2>/dev/null
-                    printf "%s\n" "$translated"
-                    return 0
+                    return 0 # Success
+                else
+                    debug_log "DEBUG" "translate_with_lingva: Failed to extract translation from response."
                 fi
+            else
+                 debug_log "DEBUG" "translate_with_lingva: Response does not contain 'translation' key."
+                 # head -n 3 "$temp_file" | while IFS= read -r log_line; do debug_log "DEBUG" "Response line: $log_line"; done
             fi
+        else
+            debug_log "DEBUG" "translate_with_lingva: wget failed (Exit code: $wget_exit_code) or temp file is empty."
         fi
+
         rm -f "$temp_file" 2>/dev/null
         retry_count=$((retry_count + 1))
-        sleep 1
+        if [ $retry_count -lt "$API_MAX_RETRIES" ]; then
+            debug_log "DEBUG" "translate_with_lingva: Retrying after sleep..."
+            sleep 1
+        fi
     done
-    debug_log "DEBUG" "Google translation failed after ${API_MAX_RETRIES} attempts for text: $text"
-    return 1
+
+    debug_log "ERROR" "translate_with_lingva: Translation failed after ${API_MAX_RETRIES} attempts for text starting with: $(echo "$source_text" | cut -c 1-50)"
+    rm -f "$temp_file" 2>/dev/null
+    printf "" # Output empty string on failure
+    return 1 # Failure
 }
 
-# 翻訳API呼び出しラッパー
-translate_text() {
-    local text="$1"
-    local source_lang="$2"
-    local target_lang="$3"
-    local result=""
+# Google翻訳APIを使用した翻訳関数 (AIP専用関数)
+# @param $1: source_text (string) - The text to translate.
+# @param $2: target_lang_code (string) - The target language code (e.g., "ja").
+# @stdout: Translated text on success. Empty string on failure.
+# @return: 0 on success, non-zero on failure.
+translate_with_google() {
+    local source_text="$1"
+    local target_lang_code="$2"
+    local source_lang="$DEFAULT_LANGUAGE" # Use the global default language
 
-    # API selection is done in translate_main, just call the appropriate function
-    case "$API_LIST" in
-        google)
-            result=$(translate_with_google "$text" "$source_lang" "$target_lang")
-            ;;
-        lingva)
-            result=$(translate_with_lingva "$text" "$source_lang" "$target_lang")
-            ;;
-        *) # Default to Google
-            result=$(translate_with_google "$text" "$source_lang" "$target_lang")
-            ;;
-    esac
+    local retry_count=0
+    local temp_file="${BASE_DIR}/google_response_$$.tmp" # Use PID for temp file uniqueness
+    local api_url=""
+    local translated_text=""
+    local wget_base_cmd=""
 
-    if [ -n "$result" ]; then
-        printf "%s" "$result"
-        return 0
-    else
-        return 1
-    fi
+    debug_log "DEBUG" "translate_with_google: Translating to '${target_lang_code}'"
+
+    # --- Define API URL internally ---
+    # Using the standard public Google Translate URL as the default
+    # This function does NOT take URL as an argument or read API-specific global vars for it.
+    local base_google_url="https://translate.googleapis.com/translate_a/single"
+    # --- End Internal URL Definition ---
+
+    local encoded_text=$(urlencode "$source_text")
+    # Construct the full API URL
+    api_url="${base_google_url}?client=gtx&sl=${source_lang}&tl=${target_lang_code}&dt=t&q=${encoded_text}"
+    debug_log "DEBUG" "translate_with_google: API URL: ${api_url}"
+
+    mkdir -p "$(dirname "$temp_file")" 2>/dev/null
+
+    # Basic wget command - Simplified
+    wget_base_cmd="wget --no-check-certificate -T $API_TIMEOUT -q -O \"$temp_file\" --user-agent=\"Mozilla/5.0\""
+
+    # Retry loop
+    while [ $retry_count -lt "$API_MAX_RETRIES" ]; do
+        debug_log "DEBUG" "translate_with_google: Attempting download (Try $((retry_count + 1))/${API_MAX_RETRIES})"
+        # Execute wget command using eval
+        eval "$wget_base_cmd \"$api_url\""
+        local wget_exit_code=$?
+
+        if [ "$wget_exit_code" -eq 0 ] && [ -s "$temp_file" ]; then
+            debug_log "DEBUG" "translate_with_google: Download successful."
+            # Check if the response looks like a valid Google Translate JSON array start
+            if grep -q '^\s*\[\[\["' "$temp_file"; then
+                translated_text=$(sed -n 's/^\s*\[\[\["\([^"]*\)".*/\1/p' "$temp_file")
+
+                # Basic unescaping
+                translated_text=$(echo "$translated_text" | sed \
+                    -e 's/\\u003d/=/g' \
+                    -e 's/\\u003c/</g' \
+                    -e 's/\\u003e/>/g' \
+                    -e 's/\\u0026/\&/g' \
+                    -e 's/\\"/"/g' \
+                    -e 's/\\n/\n/g' \
+                    -e 's/\\r//g' \
+                    -e 's/\\\\/\\/g') # Handle escaped backslash
+
+                if [ -n "$translated_text" ]; then
+                    debug_log "DEBUG" "translate_with_google: Translation extracted successfully."
+                    printf "%s\n" "$translated_text" # Output to stdout
+                    rm -f "$temp_file" 2>/dev/null
+                    return 0 # Success
+                else
+                    debug_log "DEBUG" "translate_with_google: Failed to extract translation from response."
+                fi
+            else
+                debug_log "DEBUG" "translate_with_google: Response does not look like valid Google Translate JSON."
+                # head -n 3 "$temp_file" | while IFS= read -r log_line; do debug_log "DEBUG" "Response line: $log_line"; done
+            fi
+        else
+            debug_log "DEBUG" "translate_with_google: wget failed (Exit code: $wget_exit_code) or temp file is empty."
+        fi
+
+        rm -f "$temp_file" 2>/dev/null
+        retry_count=$((retry_count + 1))
+        if [ $retry_count -lt "$API_MAX_RETRIES" ]; then
+            debug_log "DEBUG" "translate_with_google: Retrying after sleep..."
+            sleep 1
+        fi
+    done
+
+    debug_log "ERROR" "translate_with_google: Translation failed after ${API_MAX_RETRIES} attempts for text starting with: $(echo "$source_text" | cut -c 1-50)"
+    rm -f "$temp_file" 2>/dev/null
+    printf "" # Output empty string on failure
+    return 1 # Failure
 }
 
-# 翻訳DB作成関数 (責務: DBファイル作成、AIP関数呼び出し)
+# 翻訳DB作成関数 (責務: DBファイル作成、AIP関数呼び出し、スピナー制御)
 # @param $1: aip_function_name (string) - The name of the AIP function to call (e.g., "translate_with_google")
-# @param $2: api_endpoint_url (string) - The base API endpoint URL (currently unused here, but passed for potential future use or consistency)
+# @param $2: api_endpoint_url (string) - The base API endpoint URL (used ONLY for spinner display via domain_name extraction, NOT passed to AIP func)
 # @param $3: domain_name (string) - The domain name for spinner display (e.g., "translate.googleapis.com")
 # @param $4: target_lang_code (string) - The target language code (e.g., "ja")
+# @return: 0 on success, 1 on base DB not found, 2 if AIP function fails consistently (though it writes original text)
 create_language_db() {
     local aip_function_name="$1"
-    local api_endpoint_url="$2" # Currently unused in this function
-    local domain_name="$3"
-    local target_lang_code="$4" # Renamed from api_lang for clarity
+    local api_endpoint_url="$2" # Passed URL for context/potential future use, but mainly for domain name below
+    local domain_name="$3"      # Explicitly passed domain name for spinner
+    local target_lang_code="$4"
 
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
     local output_db="${BASE_DIR}/message_${target_lang_code}.db"
     local spinner_started="false"
+    local overall_success=0 # Assume success initially
 
     debug_log "DEBUG" "Creating language DB for target '${target_lang_code}' using function '${aip_function_name}' with domain '${domain_name}'"
 
     if [ ! -f "$base_db" ]; then
         debug_log "ERROR" "Base message DB not found: $base_db. Cannot create target DB."
-        display_message "error" "$(get_message "MSG_ERR_BASE_DB_NOT_FOUND" "db=$base_db")" # Use a specific message key if available
+        display_message "error" "$(get_message "MSG_ERR_BASE_DB_NOT_FOUND" "db=$base_db")"
         return 1
     fi
 
     # Start spinner before the loop
     if type start_spinner >/dev/null 2>&1; then
-        # Using a generic translating message, including the domain
         start_spinner "$(color blue "$(get_message "MSG_TRANSLATING_VIA" "domain=$domain_name")")" "blue"
         spinner_started="true"
         debug_log "DEBUG" "Spinner started for domain: ${domain_name}"
@@ -279,7 +294,6 @@ create_language_db() {
     fi
 
     # Create/overwrite the output DB with the header
-    # Note: SCRIPT_VERSION might need adjustment if it's defined elsewhere now
     cat > "$output_db" << EOF
 SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
 # Translation generated using: ${aip_function_name}
@@ -288,12 +302,9 @@ EOF
 
     # Loop through the base DB entries
     while IFS= read -r line; do
-        # Skip comments and empty lines
         case "$line" in \#*|"") continue ;; esac
-        # Process only lines starting with the default language code
         if ! echo "$line" | grep -q "^${DEFAULT_LANGUAGE}|"; then continue; fi
 
-        # Extract key and value
         local line_content=${line#*|}
         local key=${line_content%%=*}
         local value=${line_content#*=}
@@ -307,24 +318,22 @@ EOF
         local exit_code=1 # Default to failure
 
         debug_log "DEBUG" "Attempting translation for key '${key}' using '${aip_function_name}'"
-        # Call the AIP function dynamically, capture stdout and exit code
+        # Call the AIP function dynamically with only text and target lang
         translated_text=$("$aip_function_name" "$value" "$target_lang_code")
         exit_code=$?
 
         if [ "$exit_code" -eq 0 ] && [ -n "$translated_text" ]; then
-            # Translation successful
             debug_log "DEBUG" "Translation successful for key '${key}'"
-            # Write the translated key-value pair to the output DB
             printf "%s|%s=%s\n" "$target_lang_code" "$key" "$translated_text" >> "$output_db"
         else
-            # Translation failed or returned empty string
             debug_log "DEBUG" "Translation failed (Exit code: $exit_code) or returned empty for key '${key}'. Using original text."
-            # Write the original key-value pair to the output DB
             printf "%s|%s=%s\n" "$target_lang_code" "$key" "$value" >> "$output_db"
+            # Optionally track if any translation failed
+            # overall_success=2 # Indicate partial failure if needed
         fi
         # --- End AIP function call ---
 
-    done < "$base_db" # Read from the base DB
+    done < "$base_db"
 
     # Stop spinner after the loop
     if [ "$spinner_started" = "true" ]; then
@@ -342,7 +351,7 @@ EOF
     debug_log "DEBUG" "Completion marker added to ${output_db}"
 
     debug_log "DEBUG" "Language DB creation process completed for ${target_lang_code}"
-    return 0 # Return success
+    return "$overall_success" # Return 0 for success, potentially 2 for partial
 }
 
 # 翻訳情報を表示する関数
@@ -356,12 +365,16 @@ display_detected_translation() {
 
     local source_lang="$DEFAULT_LANGUAGE"
     local source_db="message_${source_lang}.db"
-    local target_db="message_${lang_code}.db"
+    local target_db="message_${lang_code}.db" # This might not exist if creation failed
 
     debug_log "DEBUG" "Displaying translation information for language code: ${lang_code}"
 
     printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE_ORIGINAL" "i=$source_db")")"
-    printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE_CURRENT" "i=$target_db")")"
+    if [ -f "${BASE_DIR}/${target_db}" ]; then
+        printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE_CURRENT" "i=$target_db")")"
+    else
+        printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_SOURCE_MISSING" "i=$target_db")")"
+    fi
     printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SOURCE" "i=$source_lang")")"
     printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_CODE" "i=$lang_code")")"
 
@@ -370,20 +383,17 @@ display_detected_translation() {
 
 # @FUNCTION: translate_main
 # @DESCRIPTION: Main entry point for the translation feature. Checks language,
-#               checks for existing translation DB, and triggers DB creation
+#               checks for existing translation DB with marker, and triggers DB creation
 #               using the first available function specified in AI_TRANSLATION_FUNCTIONS.
 translate_main() {
     # --- Initialization ---
-    # Wget capability detection (AIP functions might need this global variable)
+    # Optional: Detect wget capabilities if AIP functions need it (though simplified now)
     if type detect_wget_capabilities >/dev/null 2>&1; then
         WGET_CAPABILITY_DETECTED=$(detect_wget_capabilities)
         debug_log "DEBUG" "translate_main: Wget capability detected: ${WGET_CAPABILITY_DETECTED}"
     else
-        # Log error but don't necessarily exit, AIP function might handle basic wget
-        debug_log "ERROR" "translate_main: detect_wget_capabilities function not found."
-        # Displaying message here might be too verbose, let AIP function fail if needed
-        # display_message "error" "$(get_message "MSG_ERR_FUNC_NOT_FOUND" "func=detect_wget_capabilities")"
-        WGET_CAPABILITY_DETECTED="basic" # Assume basic capability
+        debug_log "DEBUG" "translate_main: detect_wget_capabilities function not found. Assuming basic wget."
+        WGET_CAPABILITY_DETECTED="basic"
     fi
     debug_log "DEBUG" "translate_main: Initialization part complete."
     # --- End Initialization ---
@@ -392,7 +402,8 @@ translate_main() {
     local lang_code=""
     local is_default_lang="false"
     local target_db=""
-    local db_creation_result=1 # Default to failure
+    local db_creation_result=1 # Default to failure/not run
+    local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER" # Define the marker key
 
     # 1. Determine Language Code
     if [ -f "${CACHE_DIR}/message.ch" ]; then
@@ -407,11 +418,9 @@ translate_main() {
     [ "$lang_code" = "$DEFAULT_LANGUAGE" ] && is_default_lang="true"
     if [ "$is_default_lang" = "true" ]; then
         debug_log "DEBUG" "translate_main: Target language is the default language (${lang_code}). No translation needed."
-        # Display info only once if it's the default language
-        # Use a simple flag to avoid repeated display in the same script run
         if [ "${TRANSLATION_INFO_DISPLAYED_DEFAULT:-false}" = "false" ]; then
             debug_log "DEBUG" "translate_main: Displaying info for default language."
-            display_detected_translation # Display default language info
+            display_detected_translation
             TRANSLATION_INFO_DISPLAYED_DEFAULT=true
         fi
         return 0
@@ -419,30 +428,43 @@ translate_main() {
 
     debug_log "DEBUG" "translate_main: Target language (${lang_code}) requires processing."
 
-    # 3. Check if target DB already exists (Simple file check)
+    # 3. Check if target DB exists AND contains the completion marker
     target_db="${BASE_DIR}/message_${lang_code}.db"
-    debug_log "DEBUG" "translate_main: Checking for existing target DB: ${target_db}"
+    debug_log "DEBUG" "translate_main: Checking for existing target DB with marker: ${target_db}"
 
     if [ -f "$target_db" ]; then
-        debug_log "INFO" "translate_main: Target DB '${target_db}' already exists. Assuming translation is complete."
-        # Display info only once if using existing DB
-        if [ "${TRANSLATION_INFO_DISPLAYED_TARGET:-false}" = "false" ]; then
-            debug_log "DEBUG" "translate_main: Displaying info for existing target DB."
-            display_detected_translation
-            TRANSLATION_INFO_DISPLAYED_TARGET=true
+        # Check if the last non-empty, non-comment line contains the marker key=true
+        if grep -q "^${target_lang_code}|${marker_key}=true$" "$target_db" >/dev/null 2>&1; then
+             debug_log "INFO" "translate_main: Target DB '${target_db}' exists and contains the completion marker. Assuming translation is complete."
+             if [ "${TRANSLATION_INFO_DISPLAYED_TARGET:-false}" = "false" ]; then
+                 debug_log "DEBUG" "translate_main: Displaying info for existing target DB."
+                 display_detected_translation
+                 TRANSLATION_INFO_DISPLAYED_TARGET=true
+             fi
+             return 0 # <<< Early return: DB exists and is marked complete
+        else
+             debug_log "INFO" "translate_main: Target DB '${target_db}' exists but is missing the completion marker. Proceeding with translation creation (will overwrite)."
         fi
-        return 0 # <<< Early return: DB exists
+    else
+        debug_log "INFO" "translate_main: Target DB '${target_db}' does not exist. Proceeding with translation creation."
     fi
 
-    debug_log "INFO" "translate_main: Target DB '${target_db}' does not exist. Proceeding with translation creation."
+    # --- Proceed with Translation Process (DB does not exist or lacks marker) ---
 
-    # --- Proceed with Translation Process (DB does not exist) ---
-
-    # 4. Find the first available translation function
+    # 4. Find the first available translation function from AI_TRANSLATION_FUNCTIONS
     local selected_func=""
     local func_name=""
-    # Read functions from global variable (space-separated)
-    for func_name in $AI_TRANSLATION_FUNCTIONS; do
+    if [ -z "$AI_TRANSLATION_FUNCTIONS" ]; then
+         debug_log "ERROR" "translate_main: AI_TRANSLATION_FUNCTIONS global variable is not set or empty."
+         display_message "error" "$(get_message "MSG_ERR_NO_TRANS_FUNC_VAR")"
+         return 1
+    fi
+
+    # Use 'set -f' to disable globbing and 'set -- $var' to split by spaces safely
+    set -f
+    set -- $AI_TRANSLATION_FUNCTIONS
+    set +f
+    for func_name in "$@"; do
         debug_log "DEBUG" "translate_main: Checking availability of function: ${func_name}"
         # Check if the function is defined using POSIX compliant 'type'
         if type "$func_name" >/dev/null 2>&1; then
@@ -454,52 +476,40 @@ translate_main() {
         fi
     done
 
-    # Check if a function was selected
     if [ -z "$selected_func" ]; then
-        debug_log "ERROR" "translate_main: No available translation functions found in AI_TRANSLATION_FUNCTIONS ('${AI_TRANSLATION_FUNCTIONS}')."
-        display_message "error" "$(get_message "MSG_ERR_NO_TRANS_FUNC")"
+        debug_log "ERROR" "translate_main: No available translation functions found from list: '${AI_TRANSLATION_FUNCTIONS}'."
+        display_message "error" "$(get_message "MSG_ERR_NO_TRANS_FUNC_AVAIL" "list=$AI_TRANSLATION_FUNCTIONS")"
         return 1
     fi
 
     debug_log "INFO" "translate_main: Selected translation function: ${selected_func}"
 
-    # 5. Determine API URL and Domain Name based on the selected function
+    # 5. Determine API URL and Domain Name *locally* based on the selected function (for spinner ONLY)
     local api_endpoint_url=""
     local domain_name=""
     case "$selected_func" in
         "translate_with_google")
-            # Use the global variable for the base URL if defined, otherwise default
-            api_endpoint_url="${GOOGLE_TRANSLATE_URL:-https://translate.googleapis.com/translate_a/single}"
-            # Extract domain name (simple sed)
-            domain_name=$(echo "$api_endpoint_url" | sed -e 's|^[^/]*//||' -e 's|/.*$||')
+            # URL needed only to extract domain for spinner
+            api_endpoint_url="https://translate.googleapis.com/translate_a/single" # Internal default
+            domain_name="translate.googleapis.com"
             ;;
         "translate_with_lingva")
-            api_endpoint_url="${LINGVA_URL:-https://lingva.ml/api/v1}"
-            domain_name=$(echo "$api_endpoint_url" | sed -e 's|^[^/]*//||' -e 's|/.*$||')
+            api_endpoint_url="https://lingva.ml/api/v1" # Internal default
+            domain_name="lingva.ml"
             ;;
         # Add cases for other potential AIP functions here
-        # "translate_openai")
-        #     api_endpoint_url="${OPENAI_API_URL:-https://api.openai.com/v1/...}" # Adjust URL
-        #     domain_name="api.openai.com"
-        #     ;;
         *)
-            debug_log "ERROR" "translate_main: No URL/Domain mapping defined for selected function: ${selected_func}"
-            display_message "error" "$(get_message "MSG_ERR_NO_URL_MAPPING" "func=$selected_func")"
-            return 1
+            debug_log "ERROR" "translate_main: No URL/Domain mapping defined in translate_main for spinner display for function: ${selected_func}"
+            # Use function name as fallback domain? Or display generic message?
+            api_endpoint_url="N/A"
+            domain_name="$selected_func" # Fallback to function name
             ;;
     esac
 
-    if [ -z "$api_endpoint_url" ] || [ -z "$domain_name" ]; then
-         debug_log "ERROR" "translate_main: Failed to determine URL or Domain Name for function ${selected_func}."
-         # Message already displayed in case block
-         return 1
-    fi
+    debug_log "DEBUG" "translate_main: Using Domain '${domain_name}' for spinner (derived from URL '${api_endpoint_url}' for function '${selected_func}')"
 
-    debug_log "DEBUG" "translate_main: Using URL '${api_endpoint_url}' and Domain '${domain_name}' for function '${selected_func}'"
-
-    # 6. Call create_language_db with the new arguments
+    # 6. Call create_language_db with the required arguments
     debug_log "DEBUG" "translate_main: Calling create_language_db for language '${lang_code}' using function '${selected_func}'"
-    # Pass function name, API URL, domain name, and language code
     create_language_db "$selected_func" "$api_endpoint_url" "$domain_name" "$lang_code"
     db_creation_result=$?
     debug_log "DEBUG" "translate_main: create_language_db finished with status: ${db_creation_result}"
@@ -507,10 +517,9 @@ translate_main() {
     # 7. Handle Result and Display Info
     if [ "$db_creation_result" -eq 0 ]; then
         debug_log "INFO" "translate_main: Language DB creation successful for ${lang_code} using ${selected_func}."
-        # Display success message (optional, could be verbose)
+        # Display success message (optional)
         # display_message "success" "$(get_message "MSG_TRANSLATION_SUCCESS" "lang=$lang_code")"
 
-        # Display translation info (only once per target language)
         if [ "${TRANSLATION_INFO_DISPLAYED_TARGET:-false}" = "false" ]; then
              debug_log "DEBUG" "translate_main: Displaying info after successful DB creation."
              display_detected_translation
@@ -519,18 +528,33 @@ translate_main() {
         return 0 # Success
     else
         debug_log "ERROR" "translate_main: Language DB creation failed for ${lang_code} using ${selected_func} (Exit status: ${db_creation_result})."
-        # Display failure message
-        display_message "error" "$(get_message "MSG_ERR_TRANSLATION_FAILED" "lang=$lang_code")"
+        # Display failure message (create_language_db might have already shown specific error)
+        if [ "$db_creation_result" -ne 1 ]; then # Avoid duplicate message if base DB was missing
+             display_message "error" "$(get_message "MSG_ERR_TRANSLATION_FAILED" "lang=$lang_code")"
+        fi
+        # Attempt to display info even on failure, might show default lang info
+        if [ "${TRANSLATION_INFO_DISPLAYED_TARGET:-false}" = "false" ] && [ "${TRANSLATION_INFO_DISPLAYED_DEFAULT:-false}" = "false" ]; then
+             display_detected_translation
+             # Set flags to prevent re-display
+             TRANSLATION_INFO_DISPLAYED_TARGET=true
+             TRANSLATION_INFO_DISPLAYED_DEFAULT=true
+        fi
         return "$db_creation_result" # Propagate error code
     fi
 }
 
-# ★★★ 削除: この関数は不要になりました ★★★
-# process_language_translation() { ... }
+# --- Removed Functions ---
+# translate_text() was removed as create_language_db calls AIP functions directly.
+# init_translation_cache() was removed as translation cache logic was removed.
+# get_api_lang_code() was removed as translate_main handles language code detection.
 
-# ★★★ 削除: この関数は translate_main にリネーム・統合されました ★★★
-# init_translation() { ... }
+# --- Removed Global Variables ---
+# API_LIST was removed (replaced by AI_TRANSLATION_FUNCTIONS).
+# CURRENT_API was removed.
+# TRANSLATION_CACHE_DIR was removed.
+# GOOGLE_TRANSLATE_URL is no longer read by translate_with_google (URL defined internally).
+# LINGVA_URL is no longer read by translate_with_lingva (URL defined internally).
 
-# スクリプト初期化（自動実行）
-# translate_main # This line should be present in the main script (e.g., aios.sh) that sources this file.
-                 # Do not call translate_main automatically within this library file itself.
+# Note: The main script (e.g., aios.sh) should source this file and
+# potentially call translate_main at an appropriate point.
+# It should also define AI_TRANSLATION_FUNCTIONS and DEFAULT_LANGUAGE.
