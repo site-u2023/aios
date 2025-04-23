@@ -342,47 +342,53 @@ display_detected_translation() {
     debug_log "DEBUG" "Translation information display completed for ${lang_code}"
 }
 
-# ★★★ 修正: init_translation をリネームし、初期化と制御ロジックを統合 ★★★
-# 翻訳機能のメイン入口関数 (初期化と制御を担当)
+# @FUNCTION: translate_main
+# @DESCRIPTION: Main entry point for the translation feature. Initializes, checks language,
+#               checks for existing complete translation DB based on a marker, and triggers
+#               translation creation if necessary.
 translate_main() {
-    # --- 初期化処理 (旧 init_translation の内容) ---
-    init_translation_cache # キャッシュディレクトリ初期化
-
-    # wget機能の検出
+    # --- Initialization ---
+    init_translation_cache
     if type detect_wget_capabilities >/dev/null 2>&1; then
         WGET_CAPABILITY_DETECTED=$(detect_wget_capabilities)
-        debug_log "DEBUG" "Wget capability set globally: ${WGET_CAPABILITY_DETECTED}"
+        debug_log "DEBUG" "translate_main: Wget capability set globally: ${WGET_CAPABILITY_DETECTED}"
     else
-        debug_log "ERROR" "detect_wget_capabilities function not found. Wget capability detection skipped."
-        WGET_CAPABILITY_DETECTED="basic" # Fallback
+        debug_log "ERROR" "translate_main: detect_wget_capabilities function not found."
+        display_message "error" "$(get_message "MSG_ERR_FUNC_NOT_FOUND" "func=detect_wget_capabilities")"
+        return 1
     fi
-    debug_log "DEBUG" "Translation module initialization part complete."
-    # --- 初期化処理ここまで ---
+    debug_log "DEBUG" "translate_main: Translation module initialization part complete."
+    # --- End Initialization ---
 
-    # --- 翻訳制御ロジック (旧 translate_main の内容) ---
+    # --- Translation Control Logic ---
     local lang_code=""
     local is_default_lang="false"
-    local online_translation_needed="false"
+    local online_translation_needed="false" # Assume offline/cache is sufficient initially
     local spinner_started="false"
-    local current_api="" # API name for display
-    local db_creation_result=1 # Default to 1 (no online translation attempted)
+    local db_creation_result=1 # Default to failure
+    local base_db=""
+    local target_db=""
+    local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER" # Define the marker key
+    local target_last_line=""
+    local target_last_key=""
 
-    # 1. 言語コード決定
+    # 1. Determine Language Code
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang_code=$(cat "${CACHE_DIR}/message.ch")
-        debug_log "DEBUG" "translate_main: Using language code from message.ch: ${lang_code}"
+        debug_log "DEBUG" "translate_main: Language code read from ${CACHE_DIR}/message.ch: ${lang_code}"
     else
-        debug_log "DEBUG" "translate_main: No message.ch found, using default language"
         lang_code="$DEFAULT_LANGUAGE"
+        debug_log "DEBUG" "translate_main: ${CACHE_DIR}/message.ch not found, using default language: ${lang_code}"
     fi
 
-    # 2. デフォルト言語か判定
+    # 2. Check if it's the default language
     [ "$lang_code" = "$DEFAULT_LANGUAGE" ] && is_default_lang="true"
     if [ "$is_default_lang" = "true" ]; then
-        debug_log "DEBUG" "translate_main: Target language is default (${lang_code}). Skipping online translation checks."
+        debug_log "DEBUG" "translate_main: Target language is the default language (${lang_code}). No translation needed."
+        # Display info only once if it's the default language
         if [ "${TRANSLATION_INFO_DISPLAYED:-false}" = "false" ]; then
             debug_log "DEBUG" "translate_main: Displaying info for default language."
-            display_detected_translation
+            display_detected_translation # Display default language info
             TRANSLATION_INFO_DISPLAYED=true
         fi
         return 0
@@ -390,109 +396,142 @@ translate_main() {
 
     debug_log "DEBUG" "translate_main: Target language (${lang_code}) requires processing."
 
-    # 3. オンライン翻訳が必要か事前確認 (ネットワーク、設定、キャッシュ)
-    local network_status=""
-    local ip_check_file="${CACHE_DIR}/network.ch"
-    if [ ! -f "$ip_check_file" ]; then
-        if type check_network_connectivity >/dev/null 2>&1; then
-             check_network_connectivity
-        else
-             debug_log "ERROR" "translate_main: check_network_connectivity function not found."
-             network_status="" # Assume no network
-        fi
-    fi
-    if [ -f "$ip_check_file" ]; then
-        network_status=$(cat "$ip_check_file")
-    fi
+    # ★★★ START: New Cache Check Logic using Marker ★★★
+    base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
+    target_db="${BASE_DIR}/message_${lang_code}.db"
+    debug_log "DEBUG" "translate_main: Checking for existing target DB: ${target_db}"
+    debug_log "DEBUG" "translate_main: Base DB for comparison: ${base_db}"
 
-    if [ -n "$network_status" ] && [ "$network_status" != "" ] && [ "$ONLINE_TRANSLATION_ENABLED" = "yes" ]; then
-        debug_log "DEBUG" "translate_main: Network available and online translation enabled. Checking cache..."
-        local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
-        local api_lang="$lang_code"
+    if [ -f "$target_db" ] && [ -f "$base_db" ]; then
+        debug_log "DEBUG" "translate_main: Both target DB and base DB exist. Checking marker key..."
+        # Get the last non-comment, non-empty line from the target DB
+        target_last_line=$(grep -v '^[[:space:]]*#\|^[[:space:]]*$' "$target_db" | tail -n 1)
+        if [ -n "$target_last_line" ]; then
+            # Extract the key part (between | and =)
+            target_last_key=$(echo "$target_last_line" | sed -n 's/^[^|]*|\([^=]*\)=.*/\1/p')
+            debug_log "DEBUG" "translate_main: Extracted last key from target DB: '${target_last_key}'"
 
-        if [ -f "$base_db" ]; then
-            # --- Cache Check Loop ---
-            while IFS= read -r line; do
-                case "$line" in \#*|"") continue ;; esac
-                if ! echo "$line" | grep -q "^${DEFAULT_LANGUAGE}|"; then continue; fi
-                local line_content=${line#*|}
-                local key=${line_content%%=*}
-                local value=${line_content#*=}
-                if [ -z "$key" ] || [ -z "$value" ]; then continue; fi
-
-                local cache_key=$(printf "%s%s%s" "$key" "$value" "$api_lang" | md5sum | cut -d' ' -f1)
-                local cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
-
-                if [ ! -f "$cache_file" ]; then
-                    debug_log "DEBUG" "translate_main: Cache miss for key '${key}'. Online translation needed."
-                    online_translation_needed="true"
-                    break
+            if [ -n "$target_last_key" ] && [ "$target_last_key" = "$marker_key" ]; then
+                # Marker key found at the end of the target DB
+                debug_log "INFO" "translate_main: Target DB '${target_db}' exists and ends with the marker key ('${marker_key}'). Translation assumed complete."
+                # Display info only once if using cached/existing DB
+                if [ "${TRANSLATION_INFO_DISPLAYED:-false}" = "false" ]; then
+                    debug_log "DEBUG" "translate_main: Displaying info for existing target DB."
+                    display_detected_translation
+                    TRANSLATION_INFO_DISPLAYED=true
                 fi
-            done < "$base_db"
-            # --- End Cache Check Loop ---
-            if [ "$online_translation_needed" = "false" ]; then
-                 debug_log "DEBUG" "translate_main: All translations found in cache."
+                return 0 # <<< Early return: Cache is valid
+            else
+                debug_log "INFO" "translate_main: Target DB exists, but the last key ('${target_last_key}') does not match the marker key ('${marker_key}') or key extraction failed. Proceeding with translation."
             fi
         else
-            debug_log "WARNING" "translate_main: Base message DB not found ($base_db). Assuming online translation might be needed."
-            online_translation_needed="true"
+            debug_log "WARN" "translate_main: Target DB '${target_db}' exists but appears to be empty or contains only comments/blank lines. Proceeding with translation."
         fi
     else
-        debug_log "DEBUG" "translate_main: Network unavailable or online translation disabled. Skipping online translation."
-        online_translation_needed="false"
+        if [ ! -f "$target_db" ]; then
+            debug_log "INFO" "translate_main: Target DB '${target_db}' does not exist. Proceeding with translation."
+        fi
+        if [ ! -f "$base_db" ]; then
+             # This case should ideally not happen if default DB is always present, but good to log.
+            debug_log "WARN" "translate_main: Base DB '${base_db}' does not exist. Cannot perform marker check. Proceeding with translation."
+        fi
+    fi
+    # ★★★ END: New Cache Check Logic using Marker ★★★
+
+    # --- Proceed with Translation Process (only if cache check failed or DBs were missing) ---
+
+    # 4. Pre-check if online translation is likely needed (Network, Settings, Cache)
+    debug_log "DEBUG" "translate_main: Performing pre-check for online translation necessity."
+    if ! check_network_connectivity; then
+        debug_log "WARN" "translate_main: Network connectivity check failed."
+        # Network is down, but check if all required keys are already cached
+        if ! check_all_keys_in_cache "$lang_code"; then
+            debug_log "ERROR" "translate_main: Network is down AND required keys are missing from cache for ${lang_code}."
+            display_message "error" "$(get_message "MSG_ERR_NETWORK_AND_CACHE_MISS" "lang=$lang_code")"
+            return 1 # Cannot proceed without network and cache
+        else
+            debug_log "INFO" "translate_main: Network is down, but all required keys found in cache for ${lang_code}. Proceeding with offline DB creation."
+            online_translation_needed="false" # Force offline mode
+        fi
+    elif [ "$(config_get "$CONFIG_SECTION" "translation_mode" "$DEFAULT_TRANSLATION_MODE")" = "offline" ]; then
+        debug_log "INFO" "translate_main: Translation mode set to 'offline'."
+        # Offline mode, check cache
+        if ! check_all_keys_in_cache "$lang_code"; then
+            debug_log "ERROR" "translate_main: Offline mode is active AND required keys are missing from cache for ${lang_code}."
+            display_message "error" "$(get_message "MSG_ERR_OFFLINE_AND_CACHE_MISS" "lang=$lang_code")"
+            return 1 # Cannot proceed in offline mode without cache
+        else
+            debug_log "INFO" "translate_main: Offline mode is active, and all required keys found in cache for ${lang_code}. Proceeding with offline DB creation."
+            online_translation_needed="false" # Ensure offline mode
+        fi
+    else
+        # Online mode and network is up, check if cache is sufficient
+        if check_all_keys_in_cache "$lang_code"; then
+            debug_log "INFO" "translate_main: Online mode, network up, and all required keys found in cache for ${lang_code}. Proceeding with offline DB creation."
+            online_translation_needed="false" # Cache is sufficient
+        else
+            debug_log "INFO" "translate_main: Online mode, network up, but required keys are missing from cache for ${lang_code}. Online translation will be attempted."
+            online_translation_needed="true" # Cache miss, online needed
+        fi
     fi
 
-    # 4. スピナー制御 (オンライン翻訳が必要な場合のみ)
+    # 5. Start Spinner (only if online translation is needed)
     if [ "$online_translation_needed" = "true" ]; then
-        case "$API_LIST" in
-            google) current_api="translate.googleapis.com" ;;
-            lingva) current_api="lingva.ml" ;;
-            *) current_api="translate.googleapis.com" ;;
-        esac
-        [ -z "$current_api" ] && current_api="Translation API"
-        debug_log "DEBUG" "translate_main: Starting spinner for API: $current_api"
-
+        local current_api
+        current_api=$(config_get "$CONFIG_SECTION" "translation_api" "$DEFAULT_TRANSLATION_API")
+        debug_log "DEBUG" "translate_main: Online translation needed. Attempting API: ${current_api}"
         if type start_spinner >/dev/null 2>&1; then
             start_spinner "$(color blue "$(get_message "MSG_TRANSLATING" "api=$current_api")")" "blue"
             spinner_started="true"
+            debug_log "DEBUG" "translate_main: Spinner started."
         else
-            debug_log "WARNING" "translate_main: start_spinner function not found."
+            debug_log "WARN" "translate_main: start_spinner function not found. Spinner not shown."
         fi
     fi
 
-    # 5. 翻訳DB作成指示
+    # 6. Create/Update Language DB
+    debug_log "DEBUG" "translate_main: Calling create_language_db for language: ${lang_code}"
     create_language_db "$lang_code"
-    db_creation_result=$? # Capture return value (0 if online attempted, 1 otherwise)
+    db_creation_result=$?
+    debug_log "DEBUG" "translate_main: create_language_db finished with status: ${db_creation_result}"
 
-    # 6. スピナー停止 (開始されていた場合のみ)
+    # 7. Stop Spinner (if started)
     if [ "$spinner_started" = "true" ]; then
         if type stop_spinner >/dev/null 2>&1; then
-            stop_spinner "" "" # Success message handled below
+            stop_spinner "" "" # Stop with default message (or none)
+            debug_log "DEBUG" "translate_main: Spinner stopped."
         else
-            debug_log "INFO" "translate_main: Translation process finished (stop_spinner function not found)."
+            debug_log "WARN" "translate_main: stop_spinner function not found."
         fi
     fi
 
-    # 7. 結果表示制御
-    local show_success_msg="false"
-    if [ "$online_translation_needed" = "true" ] && [ "$db_creation_result" -eq 0 ]; then
-        show_success_msg="true"
-    fi
-
-    if [ "${TRANSLATION_INFO_DISPLAYED:-false}" = "false" ]; then
-         debug_log "DEBUG" "translate_main: Displaying translation info."
-         if [ "$show_success_msg" = "true" ]; then
-              printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_SUCCESS")")"
-         fi
-         display_detected_translation
-         TRANSLATION_INFO_DISPLAYED=true
+    # 8. Handle Result and Display Info
+    if [ "$db_creation_result" -eq 0 ]; then
+        debug_log "INFO" "translate_main: Language DB creation/update successful for ${lang_code}."
+        # Display success message only if online translation was attempted and succeeded
+        if [ "$online_translation_needed" = "true" ]; then
+             # Check if the API call was actually successful within create_language_db
+             # We might need a more robust way to check this, e.g., a global var set by create_language_db
+             # For now, assume db_creation_result=0 after online attempt means success.
+             display_message "success" "$(get_message "MSG_TRANSLATION_SUCCESS" "lang=$lang_code")"
+        fi
+         # Display translation info regardless of online/offline, but only once
+        if [ "${TRANSLATION_INFO_DISPLAYED:-false}" = "false" ]; then
+             debug_log "DEBUG" "translate_main: Displaying info after successful DB creation."
+             display_detected_translation
+             TRANSLATION_INFO_DISPLAYED=true
+        fi
     else
-         debug_log "DEBUG" "translate_main: Translation info already displayed, skipping."
+        debug_log "ERROR" "translate_main: Language DB creation/update failed for ${lang_code} (Exit status: ${db_creation_result})."
+        # Display failure message (get_message should handle default if specific key missing)
+        display_message "error" "$(get_message "MSG_ERR_TRANSLATION_FAILED" "lang=$lang_code")"
+        # Optionally, attempt to load default language messages as a fallback?
+        # Or just return the error code.
+        return "$db_creation_result"
     fi
-    # --- 翻訳制御ロジックここまで ---
 
-    debug_log "DEBUG" "translate_main function finished."
-    return 0 # translate_main itself succeeded
+    debug_log "DEBUG" "translate_main: Function finished."
+    return 0
 }
 
 # ★★★ 削除: この関数は不要になりました ★★★
