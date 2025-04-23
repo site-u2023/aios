@@ -358,7 +358,7 @@ EOF
     local spinner_started="false"
     if [ -n "$network_status" ] && [ "$network_status" != "" ]; then
         if type start_spinner >/dev/null 2>&1; then
-            start_spinner "$(get_message "MSG_TRANSLATING_WITH" "api=$current_api" "default=Translating with: $current_api...")" "blue" # Added default
+            start_spinner "$(get_message "MSG_TRANSLATING" "api=$current_api" "default=Translating with: $current_api...")" "blue" # Added default
             spinner_started="true"
         else
             debug_log "WARNING" "start_spinner function not found, spinner not started"
