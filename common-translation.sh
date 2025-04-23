@@ -477,7 +477,7 @@ process_language_translation() {
         # ネットワークがあり、オンライン翻訳が有効な場合のみスピナー開始
         if [ -n "$network_status" ] && [ "$network_status" != "" ] && [ "$ONLINE_TRANSLATION_ENABLED" = "yes" ]; then
             if type start_spinner >/dev/null 2>&1; then
-                start_spinner "$(get_message "MSG_TRANSLATING")" "blue"
+                start_spinner "$(color blue "$(get_message "MSG_TRANSLATING")")"
                 spinner_started="true"
             else
                 debug_log "WARNING" "start_spinner function not found, spinner not started"
