@@ -858,8 +858,8 @@ information_main() {
                 # ★★★ 変更点: 表示には display_detected_location を使う ★★★
                 # ★★★ 変更点: ソースは "Cache" 固定 ★★★
                 # ★★★ 変更点: ISP情報がない場合も考慮 (空文字列を渡す) ★★★
-                display_detected_location "$(get_message MSG_COUNTRY_SOURCE_CACHE)" "$cached_lang" "$cached_zone" "$cached_tz" "$cached_isp" "$cached_as"
-                printf "\n" # 表示後に改行を追加 (元のコードにはなかった可能性あり、要確認)
+                display_detected_location "Cache" "$cached_lang" "$cached_zone" "$cached_tz" "$cached_isp" "$cached_as"
+                # printf "\n" # 表示後に改行を追加 (元のコードにはなかった可能性あり、要確認)
             else
                 debug_log "ERROR" "display_detected_location function not found. Cannot display location."
             fi
