@@ -763,156 +763,109 @@ process_location_info() {
     return 0
 }
 
-# キャッシュされたロケーション情報、または引数に基づいた情報を表示する関数
+# キャッシュされたロケーション情報を表示する関数
 information_main() {
-    local arg_country_code="$1" # aios スクリプトから渡される引数 (例: TW)
-    local display_source_label=""
-    local display_isp_provider=""
-    local display_isp_as=""
-    local display_country_code=""
-    local display_zone_name=""
-    local display_timezone=""
+    debug_log "DEBUG" "Entering information_main() to display cached location"
 
-    # --- 基本情報表示 (変更なし、既存のコードを流用) ---
-    # display_ip_type, display_cpu_info などがここにある想定 (現状の information_main には無いので注意)
-    # もしこれらの表示が information_main の責務なら、ここに追加する必要があります。
-    # 現状のコード(376f236)を見る限り、information_main はロケーション情報表示に特化しているため、
-    # 基本情報表示は別途行われていると仮定します。
+    # 必要なキャッシュファイルのパス
+    local cache_lang_file="${CACHE_DIR}/language.ch"
+    local cache_zone_file="${CACHE_DIR}/zonename.ch"
+    local cache_tz_file="${CACHE_DIR}/timezone.ch"
+    local cache_isp_file="${CACHE_DIR}/isp_info.ch"
 
-    debug_log "DEBUG" "Entering information_main() with argument: '$arg_country_code'"
+    # 必須キャッシュファイルの存在と中身をチェック
+    if [ -s "$cache_lang_file" ] && [ -s "$cache_zone_file" ] && [ -s "$cache_tz_file" ]; then
+        # キャッシュから情報を読み込み
+        local cached_lang=$(cat "$cache_lang_file" 2>/dev/null)
+        local cached_zone=$(cat "$cache_zone_file" 2>/dev/null)
+        local cached_tz=$(cat "$cache_tz_file" 2>/dev/null)
+        local cached_isp=""
+        local cached_as=""
 
-    # --- 国・ISP情報表示ロジック ---
-    if [ -n "$arg_country_code" ]; then
-        # --- 引数が指定された場合の処理 ---
-        debug_log "DEBUG" "information_main: Argument '$arg_country_code' provided. Using 'Country code' source."
-        # ★★★ ソースラベルを直接設定 (翻訳不要な固定文字列) ★★★
-        display_source_label="Country code"
-
-        # ISP情報はキャッシュから直接読み込み試行
-        local cache_isp_file="${CACHE_DIR}/isp_info.ch"
+        # ISP情報があれば読み込み
         if [ -s "$cache_isp_file" ]; then
-            display_isp_provider=$(sed -n '1p' "$cache_isp_file" 2>/dev/null)
-            display_isp_as=$(sed -n '2p' "$cache_isp_file" 2>/dev/null)
-            # 値が空文字列の場合に備えてデフォルト値を設定
-            [ -z "$display_isp_provider" ] && display_isp_provider=$(get_message MSG_UNKNOWN)
-            [ -z "$display_isp_as" ] && display_isp_as=$(get_message MSG_UNKNOWN)
-            debug_log "DEBUG" "information_main: ISP info read from cache: Provider='$display_isp_provider', AS='$display_isp_as'"
+            cached_isp=$(sed -n '1p' "$cache_isp_file" 2>/dev/null)
+            cached_as=$(sed -n '2p' "$cache_isp_file" 2>/dev/null)
+            # 値が空文字列の場合に備えてデフォルト値を設定 (念のため)
+            [ -z "$cached_isp" ] && cached_isp=$(get_message MSG_UNKNOWN)
+            [ -z "$cached_as" ] && cached_as=$(get_message MSG_UNKNOWN)
         else
-            display_isp_provider=$(get_message MSG_UNKNOWN)
-            display_isp_as=$(get_message MSG_UNKNOWN)
-            debug_log "DEBUG" "information_main: ISP cache '$cache_isp_file' not found or empty."
+             cached_isp=$(get_message MSG_UNKNOWN)
+             cached_as=$(get_message MSG_UNKNOWN)
         fi
 
-        # 国情報は引数と country.db から取得試行
-        local upper_arg_code=$(echo "$arg_country_code" | tr '[:lower:]' '[:upper:]')
-        local db_file="${BASE_DIR}/country.db"
+        # 読み込んだ情報が空でないことを最終確認
+        if [ -n "$cached_lang" ] && [ -n "$cached_zone" ] && [ -n "$cached_tz" ]; then
+            debug_log "DEBUG" "Valid location cache found. Displaying information using display_detected_location."
 
-        if [ -f "$db_file" ]; then
-            # country.db から該当行を検索
-            local country_data=$(grep "^${upper_arg_code}|" "$db_file")
-            if [ -n "$country_data" ]; then
-                display_country_code="$upper_arg_code"
-                # ゾーン名を抽出 (3番目のフィールド)
-                display_zone_name=$(echo "$country_data" | cut -d'|' -f3)
-
-                # タイムゾーン名をゾーン名から取得 (get_timezone_from_zone 関数を呼び出す)
-                if command -v get_timezone_from_zone >/dev/null 2>&1; then
-                    display_timezone=$(get_timezone_from_zone "$display_zone_name")
-                    # 取得失敗時のフォールバック
-                    [ -z "$display_timezone" ] && display_timezone=$(get_message MSG_UNKNOWN)
-                else
-                    display_timezone=$(get_message MSG_UNKNOWN)
-                    debug_log "WARNING" "information_main: get_timezone_from_zone function not found."
-                fi
-                debug_log "DEBUG" "information_main: Country info retrieved from db for '$upper_arg_code': Zone='$display_zone_name', TZ='$display_timezone'"
+            # 翻訳システムの初期化を確認/実行 (display_detected_location がメッセージキーを使うため)
+            if command -v init_translation >/dev/null 2>&1; then
+                 if [ -f "${CACHE_DIR}/message.ch" ] && [ "${MSG_MEMORY_INITIALIZED:-false}" != "true" ]; then
+                     init_translation
+                 elif [ ! -f "${CACHE_DIR}/message.ch" ]; then
+                     init_translation # デフォルト試行
+                 fi
             else
-                # country.db に該当コードなし
-                display_country_code="$upper_arg_code ($(get_message MSG_NOT_FOUND_IN_DB))"
-                display_zone_name=$(get_message MSG_UNKNOWN)
-                display_timezone=$(get_message MSG_UNKNOWN)
-                debug_log "DEBUG" "information_main: Country code '$upper_arg_code' not found in '$db_file'."
+                 debug_log "WARNING" "init_translation function not found. Cannot ensure messages are translated."
+            fi
+
+            # 元の display_detected_location を呼び出す (引数も元の形式に戻す)
+            if command -v display_detected_location >/dev/null 2>&1; then
+                # ★★★ 変更点: 表示には display_detected_location を使う ★★★
+                # ★★★ 変更点: ソースは "Cache" 固定 ★★★
+                # ★★★ 変更点: ISP情報がない場合も考慮 (空文字列を渡す) ★★★
+                display_detected_location "$(get_message MSG_COUNTRY_SOURCE_CACHE)" "$cached_lang" "$cached_zone" "$cached_tz" "$cached_isp" "$cached_as"
+                printf "\n" # 表示後に改行を追加 (元のコードにはなかった可能性あり、要確認)
+            else
+                debug_log "ERROR" "display_detected_location function not found. Cannot display location."
             fi
         else
-            # country.db が存在しない
-            display_country_code="$upper_arg_code ($(get_message MSG_DB_NOT_FOUND))" # 新規MSGキー例
-            display_zone_name=$(get_message MSG_UNKNOWN)
-            display_timezone=$(get_message MSG_UNKNOWN)
-            debug_log "ERROR" "information_main: Country database '$db_file' not found."
+            debug_log "DEBUG" "One or more essential cached values are empty after reading. Skipping display."
         fi
-
     else
-        # --- 引数が指定されなかった場合の処理 (従来のキャッシュ優先) ---
-        debug_log "DEBUG" "information_main: No argument provided. Loading info from cache files."
-        local cache_lang_file="${CACHE_DIR}/language.ch"
-        local cache_zone_file="${CACHE_DIR}/zonename.ch"
-        local cache_tz_file="${CACHE_DIR}/timezone.ch"
-        local cache_isp_file="${CACHE_DIR}/isp_info.ch"
-
-        # 必須キャッシュファイルの存在と中身をチェック
-        if [ -s "$cache_lang_file" ] && [ -s "$cache_zone_file" ] && [ -s "$cache_tz_file" ]; then
-            display_country_code=$(cat "$cache_lang_file" 2>/dev/null)
-            display_zone_name=$(cat "$cache_zone_file" 2>/dev/null)
-            display_timezone=$(cat "$cache_tz_file" 2>/dev/null)
-
-            # 読み込んだ必須情報が空でないか確認
-            if [ -n "$display_country_code" ] && [ -n "$display_zone_name" ] && [ -n "$display_timezone" ]; then
-                display_source_label=$(get_message MSG_COUNTRY_SOURCE_CACHE) # "Cache"
-
-                # ISP情報があれば読み込み
-                if [ -s "$cache_isp_file" ]; then
-                    display_isp_provider=$(sed -n '1p' "$cache_isp_file" 2>/dev/null)
-                    display_isp_as=$(sed -n '2p' "$cache_isp_file" 2>/dev/null)
-                    [ -z "$display_isp_provider" ] && display_isp_provider=$(get_message MSG_UNKNOWN)
-                    [ -z "$display_isp_as" ] && display_isp_as=$(get_message MSG_UNKNOWN)
-                else
-                    display_isp_provider=$(get_message MSG_UNKNOWN)
-                    display_isp_as=$(get_message MSG_UNKNOWN)
-                fi
-                debug_log "DEBUG" "information_main: All info loaded from cache."
-            else
-                # 必須キャッシュの中身が空だった場合
-                display_source_label=$(get_message MSG_COUNTRY_SOURCE_NONE) # "None" または "Error"
-                display_country_code=$(get_message MSG_UNKNOWN)
-                display_zone_name=$(get_message MSG_UNKNOWN)
-                display_timezone=$(get_message MSG_UNKNOWN)
-                display_isp_provider=$(get_message MSG_UNKNOWN)
-                display_isp_as=$(get_message MSG_UNKNOWN)
-                debug_log "WARNING" "information_main: Essential cache files exist but contain empty values."
-            fi
-        else
-            # 必須キャッシュファイルが存在しないか空の場合
-            display_source_label=$(get_message MSG_COUNTRY_SOURCE_NONE) # "None"
-            display_country_code=$(get_message MSG_UNKNOWN)
-            display_zone_name=$(get_message MSG_UNKNOWN)
-            display_timezone=$(get_message MSG_UNKNOWN)
-            display_isp_provider=$(get_message MSG_UNKNOWN)
-            display_isp_as=$(get_message MSG_UNKNOWN)
-            debug_log "DEBUG" "information_main: Essential cache files missing or empty. Cannot display cached info."
-        fi
+        debug_log "DEBUG" "Essential location cache files missing or empty. Skipping display."
     fi
-
-    # --- 情報を整形して表示 ---
-    # 翻訳システムの初期化を確認 (get_message を使うため)
-    if command -v init_translation >/dev/null 2>&1; then
-         if [ -f "${CACHE_DIR}/message.ch" ] && [ "${MSG_MEMORY_INITIALIZED:-false}" != "true" ]; then
-             init_translation
-         elif [ ! -f "${CACHE_DIR}/message.ch" ]; then
-             init_translation # デフォルト試行
-         fi
-    else
-         debug_log "WARNING" "information_main: init_translation function not found. Message keys may not be translated."
-    fi
-
-    echo # 空行
-    # ★★★ ソースラベルは display_source_label を使用 ★★★
-    printf "%-20s: %s\n" "$(get_message MSG_COUNTRY_SOURCE)" "$display_source_label"
-    printf "%-20s: %s\n" "$(get_message MSG_ISP_PROVIDER)" "$display_isp_provider"
-    printf "%-20s: %s\n" "$(get_message MSG_ISP_AS)" "$display_isp_as"
-    printf "%-20s: %s\n" "$(get_message MSG_COUNTRY_CODE)" "$display_country_code"
-    printf "%-20s: %s\n" "$(get_message MSG_ZONE_NAME)" "$display_zone_name"
-    printf "%-20s: %s\n" "$(get_message MSG_TIMEZONE)" "$display_timezone"
-    echo # 空行
 
     debug_log "DEBUG" "Exiting information_main()"
     return 0
+}
+
+# display_detected_location 関数 (commit 376f236 時点)
+# この関数は information_main から呼び出されるため、併記しておきます。
+display_detected_location() {
+    local detection_source="$1"
+    local detected_country="$2"
+    local detected_zonename="$3"
+    local detected_timezone="$4"
+    # 引数番号変更 (5番目)
+    local detected_isp="${5:-}"
+    # 引数番号変更 (6番目)
+    local detected_as="${6:-}"
+
+    debug_log "DEBUG" "Displaying location information from source: $detection_source"
+
+    # 検出元情報の表示 (翻訳キーを使用)
+    printf "%-20s: %s\n" "$(get_message "MSG_COUNTRY_SOURCE")" "$detection_source"
+
+    # タイムゾーンAPIの情報（Cloudflare等、設定されていれば）
+    # (この部分は元の information_main には直接関係ないが、display_detected_location の一部)
+    if [ -n "$TIMEZONE_API_SOURCE" ]; then
+        local domain=$(echo "$TIMEZONE_API_SOURCE" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
+        [ -z "$domain" ] && domain="$TIMEZONE_API_SOURCE"
+        printf "%-20s: %s\n" "$(get_message "MSG_TIMEZONE_API")" "$domain"
+    fi
+
+    # ISP情報の表示（ISP情報があれば）
+    if [ -n "$detected_isp" ]; then
+        printf "%-20s: %s\n" "$(get_message "MSG_ISP_PROVIDER")" "$detected_isp"
+    fi
+    if [ -n "$detected_as" ]; then
+        printf "%-20s: %s\n" "$(get_message "MSG_ISP_AS")" "$detected_as"
+    fi
+
+    printf "%-20s: %s\n" "$(get_message "MSG_COUNTRY_CODE")" "$detected_country"
+    printf "%-20s: %s\n" "$(get_message "MSG_ZONE_NAME")" "$detected_zonename"
+    printf "%-20s: %s\n" "$(get_message "MSG_TIMEZONE")" "$detected_timezone"
+
+    debug_log "DEBUG" "Location information displayed successfully"
 }
