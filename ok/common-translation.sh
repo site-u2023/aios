@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-18-00-00"
+SCRIPT_VERSION="2025-04-18-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -61,6 +61,7 @@ GOOGLE_TRANSLATE_URL="${GOOGLE_TRANSLATE_URL:-https://translate.googleapis.com/t
 LINGVA_URL="${LINGVA_URL:-https://lingva.ml/api/v1}"
 # API_LIST="${API_LIST:-lingva}"
 API_LIST="${API_LIST:-google}"
+WGET_CAPABILITY_DETECTED="" # wget capabilities (basic, https_only, full) - Initialized by init_translation
 
 # 翻訳キャッシュの初期化
 init_translation_cache() {
@@ -174,21 +175,29 @@ translate_with_google() {
     local temp_file="${TRANSLATION_CACHE_DIR}/google_response.tmp"
     local api_url=""
 
-    # wgetの機能を検出（キャッシュ対応版）
-    local wget_capability=$(detect_wget_capabilities)
+    # wgetの機能を検出（キャッシュ対応版） - この行を削除
+    # local wget_capability=$(detect_wget_capabilities) # Removed: Use global WGET_CAPABILITY_DETECTED instead
 
     # 必要なディレクトリを確保
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
 
     # ネットワーク接続状態を確認
-    [ ! -f "$ip_check_file" ] && check_network_connectivity
-    network_type=$(cat "$ip_check_file" 2>/dev/null || echo "v4")
+    # Ensure check_network_connectivity is defined (likely in common-system.sh) and loaded
+    if [ ! -f "$ip_check_file" ]; then
+         if type check_network_connectivity >/dev/null 2>&1; then
+            check_network_connectivity
+         else
+             debug_log "ERROR" "check_network_connectivity function not found."
+             # Decide how to handle missing network check function
+         fi
+    fi
+    network_type=$(cat "$ip_check_file" 2>/dev/null || echo "v4") # Default to v4 if file missing
 
     # ネットワークタイプに基づいてwgetオプションを設定
     case "$network_type" in
         "v4") wget_options="-4" ;;
         "v6") wget_options="-6" ;;
-        *) wget_options="" ;;
+        *) wget_options="" ;; # Includes v4v6, let wget decide or alternate later
     esac
 
     # URLエンコードとAPI URLを事前に構築
@@ -199,19 +208,25 @@ translate_with_google() {
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
         # v4v6の場合のみネットワークタイプを切り替え
         if [ $retry_count -gt 0 ] && [ "$network_type" = "v4v6" ]; then
-            wget_options=$(echo "$wget_options" | sed 's/-4/-6/;s/-6/-4/')
+            # Alternate between -4 and -6 for v4v6
+             if echo "$wget_options" | grep -q -- "-4"; then
+                 wget_options="-6"
+             else
+                 wget_options="-4"
+             fi
+             debug_log "DEBUG" "Retrying with wget option: $wget_options"
         fi
 
-        # wget機能に基づいてコマンドを構築
-        case "$wget_capability" in
+        # wget機能に基づいてコマンドを構築 (グローバル変数 WGET_CAPABILITY_DETECTED を使用)
+        case "$WGET_CAPABILITY_DETECTED" in # Changed from _WGET_CAPABILITY
             "full")
                 # 完全版wgetの場合、リダイレクトフォローを有効化
                 wget --no-check-certificate $wget_options -L -T $API_TIMEOUT -q -O "$temp_file" \
                     --user-agent="Mozilla/5.0" \
                     "$api_url" 2>/dev/null
                 ;;
-            *)
-                # BusyBox wgetの場合、最小限のオプションのみ使用
+            *) # Includes "basic", "https_only", and fallback/error cases
+                # BusyBox wgetの場合、最小限のオプションのみ使用 (-L は使わない)
                 wget --no-check-certificate $wget_options -T $API_TIMEOUT -q -O "$temp_file" \
                     "$api_url" 2>/dev/null
                 ;;
@@ -221,11 +236,12 @@ translate_with_google() {
         if [ -s "$temp_file" ]; then
             # 柔軟なレスポンスチェック（両方のwget出力に対応）
             if grep -q '\[' "$temp_file"; then
-                local translated=$(sed 's/\[\[\["//;s/",".*//;s/\\u003d/=/g;s/\\u003c/</g;s/\\u003e/>/g;s/\\u0026/\&/g;s/\\"/"/g' "$temp_file")
-                
+                # Extract translation, handle potential escapes
+                local translated=$(sed 's/\[\[\["//; s/",".*//; s/\\u003d/=/g; s/\\u003c/</g; s/\\u003e/>/g; s/\\u0026/\&/g; s/\\"/"/g; s/\\n/\n/g; s/\\r//g' "$temp_file")
+
                 if [ -n "$translated" ]; then
                     rm -f "$temp_file" 2>/dev/null
-                    printf "%s\n" "$translated"
+                    printf "%s\n" "$translated" # Use printf for better newline handling
                     return 0
                 fi
             fi
@@ -233,10 +249,11 @@ translate_with_google() {
 
         rm -f "$temp_file" 2>/dev/null
         retry_count=$((retry_count + 1))
-        sleep 1  # 短い待機でAPI制限回避
+        # Add a small delay before retrying? (e.g., sleep 1) - Already present below? No, it was outside the loop before. Consider adding it here.
+        sleep 1 # Short sleep to potentially avoid API rate limits on retries
     done
 
-    debug_log "DEBUG" "Google translation failed after ${API_MAX_RETRIES} attempts"
+    debug_log "DEBUG" "Google translation failed after ${API_MAX_RETRIES} attempts for text: $text" # Log the text for debugging
     return 1
 }
 
@@ -360,9 +377,10 @@ EOF
     
     # 言語エントリを抽出して翻訳ループ
     grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
-        # キーと値を抽出
-        local key=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|\([^=]*\)=.*/\1/p")
-        local value=$(printf "%s" "$line" | sed -n "s/^${DEFAULT_LANGUAGE}|[^=]*=\(.*\)/\1/p")
+        # キーと値を抽出 (シェル組み込み文字列操作を使用)
+        local line_content=${line#*|} # "en|" の部分を除去
+        local key=${line_content%%=*}   # 最初の "=" より前の部分をキーとして取得
+        local value=${line_content#*=}  # 最初の "=" より後の部分を値として取得
         
         if [ -n "$key" ] && [ -n "$value" ]; then
             # キャッシュキー生成
@@ -472,25 +490,19 @@ process_language_translation() {
         debug_log "DEBUG" "No language code found in message.ch, using default"
         lang_code="$DEFAULT_LANGUAGE"
     fi
-    
-    # 選択言語とデフォルト言語の一致フラグ
-    local is_default_language=false
-    if [ "$lang_code" = "$DEFAULT_LANGUAGE" ]; then
-        is_default_language=true
-        debug_log "DEBUG" "Selected language is the default language (${lang_code})"
-    fi
-    
+
     # デフォルト言語以外の場合のみ翻訳DBを作成
-    if [ "$is_default_language" = "false" ]; then
+    if [ "$lang_code" != "$DEFAULT_LANGUAGE" ]; then
+        debug_log "DEBUG" "Target language (${lang_code}) is different from default (${DEFAULT_LANGUAGE}), creating DB."
         # 翻訳DBを作成
         create_language_db "$lang_code"
-        
+
         # 翻訳情報表示（成功メッセージなし）
         display_detected_translation "false"
     else
         # デフォルト言語の場合はDB作成をスキップ
         debug_log "DEBUG" "Skipping DB creation for default language: ${lang_code}"
-        
+
         # 表示は1回だけ行う（静的フラグを使用）
         if [ "${DEFAULT_LANG_DISPLAYED:-false}" = "false" ]; then
             debug_log "DEBUG" "Displaying information for default language once"
@@ -501,9 +513,9 @@ process_language_translation() {
             debug_log "DEBUG" "Default language info already displayed, skipping"
         fi
     fi
-    
+
     printf "\n"
-    
+
     return 0
 }
 
@@ -512,11 +524,22 @@ init_translation() {
     # キャッシュディレクトリ初期化
     init_translation_cache
     
+    # --- Optimization Start ---
+    # Detect wget capabilities once and store in global variable
+    # Ensure detect_wget_capabilities is defined (likely in common-system.sh) and loaded
+    if type detect_wget_capabilities >/dev/null 2>&1; then
+        WGET_CAPABILITY_DETECTED=$(detect_wget_capabilities) # Changed variable name
+        debug_log "DEBUG" "Wget capability set globally: ${WGET_CAPABILITY_DETECTED}" # Changed variable name
+    else
+        debug_log "ERROR" "detect_wget_capabilities function not found. Wget capability detection skipped."
+        WGET_CAPABILITY_DETECTED="basic" # Fallback to basic if function not found, Changed variable name
+    fi
+    # --- Optimization End ---
+    
     # 言語翻訳処理を実行
     process_language_translation
     
     debug_log "DEBUG" "Translation module initialized with language processing"
 }
-
 # スクリプト初期化（自動実行）
 # init_translation
