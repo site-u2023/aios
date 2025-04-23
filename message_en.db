@@ -67,6 +67,8 @@ en|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{:}
 # =======================
 # common-translation.sh
 # =======================
+en|MSG_TRANSLATING=_CURRENTLY_TRANSLATING=Currently translating: {api}
+en|MSG_TRANSLATING=_LANG_FILE_CREATED=Language file created successfully.
 en|MSG_TRANSLATING=Translating messages{:} {api}
 en|MSG_TRANSLATION_SOURCE_ORIGINAL=Original Language file{:} {i}
 en|MSG_TRANSLATION_SOURCE_CURRENT=Translated Language file{:} {i}
