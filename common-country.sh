@@ -349,7 +349,7 @@ escape_for_sed() {
 #      未指定の場合はすべての検出方法を試行
 # システムの地域情報を検出し設定する関数
 detect_and_set_location() {
-    # デバッグログ出力
+    # デバッグログ出力 (末尾の [...] を削除)
     debug_log "DEBUG" "Running detect_and_set_location() with skip flags: cache=$SKIP_CACHE_DETECTION, device=$SKIP_DEVICE_DETECTION, cache-device=$SKIP_CACHE_DEVICE_DETECTION, ip=$SKIP_IP_DETECTION"
 
     # 共通変数の宣言
@@ -416,11 +416,15 @@ detect_and_set_location() {
                     echo "$country_data" > "${CACHE_DIR}/country.tmp"
                 fi
 
-                # 共通関数を使用して検出情報と成功メッセージを表示
-                # キャッシュの場合は成功メッセージも表示 (true)
-                display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "true" "$detected_isp" "$detected_as"
+                # --- ▼▼▼ 変更点 ▼▼▼ ---
+                # 共通関数を使用して検出情報のみを表示 (成功メッセージは非表示)
+                display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "false" "$detected_isp" "$detected_as" # 5番目の引数を "false" に変更
+                # --- ▲▲▲ 変更点 ▲▲▲ ---
 
-                debug_log "DEBUG" "Cache-based location settings have been applied successfully"
+                # --- ▼▼▼ 変更点 ▼▼▼ ---
+                # デバッグメッセージも修正
+                debug_log "DEBUG" "Cache-based location settings have been applied successfully (messages suppressed)"
+                # --- ▲▲▲ 変更点 ▲▲▲ ---
                 return 0
             else
                 debug_log "DEBUG" "One or more cache values are empty despite files existing"
@@ -485,7 +489,6 @@ detect_and_set_location() {
             # 共通関数を使用して検出情報を表示（成功メッセージなし）
             display_detected_location "$detection_source" "$detected_country" "$detected_zonename" "$detected_timezone" "false" "$detected_isp" "$detected_as"
 
-            # --- ▼▼▼ 変更点 ▼▼▼ ---
             # 情報表示の後に空行を追加
             printf "\n"
 
@@ -493,9 +496,9 @@ detect_and_set_location() {
             local proceed_with_settings="false"
 
             if [ "$skip_confirmation" = "true" ]; then
-                # キャッシュの場合は自動承認 (プロンプト不要)
+                # キャッシュの場合は自動承認 (プロンプト不要) - このパスは通らないはずだが念のため残す
                 proceed_with_settings="true"
-                debug_log "DEBUG" "Cache-based location settings automatically applied without confirmation"
+                debug_log "DEBUG" "Cache-based location settings automatically applied without confirmation (unexpected path)"
             else
                 # キャッシュ以外の場合はユーザーに確認
                 # 短縮プロンプト用の新しいメッセージキーを使用
@@ -506,7 +509,6 @@ detect_and_set_location() {
                     debug_log "DEBUG" "User declined $detection_source-based location settings"
                 fi
             fi
-            # --- ▲▲▲ 変更点 ▲▲▲ ---
 
             # 設定の適用処理（承認された場合）
             if [ "$proceed_with_settings" = "true" ]; then
