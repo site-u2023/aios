@@ -245,78 +245,104 @@ translate_text() {
     fi
 }
 
-# 翻訳DB作成関数 (責務: DBファイル作成のみ)
+# 翻訳DB作成関数 (責務: DBファイル作成、AIP関数呼び出し)
+# @param $1: aip_function_name (string) - The name of the AIP function to call (e.g., "translate_with_google")
+# @param $2: api_endpoint_url (string) - The base API endpoint URL (currently unused here, but passed for potential future use or consistency)
+# @param $3: domain_name (string) - The domain name for spinner display (e.g., "translate.googleapis.com")
+# @param $4: target_lang_code (string) - The target language code (e.g., "ja")
 create_language_db() {
-    local target_lang="$1"
-    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
-    local api_lang="$target_lang"
-    local output_db="${BASE_DIR}/message_${api_lang}.db"
-    local cleaned_translation=""
-    local translation_attempted="false"
+    local aip_function_name="$1"
+    local api_endpoint_url="$2" # Currently unused in this function
+    local domain_name="$3"
+    local target_lang_code="$4" # Renamed from api_lang for clarity
 
-    debug_log "DEBUG" "Creating language DB for target ${target_lang} (API lang code ${api_lang})"
+    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
+    local output_db="${BASE_DIR}/message_${target_lang_code}.db"
+    local spinner_started="false"
+
+    debug_log "DEBUG" "Creating language DB for target '${target_lang_code}' using function '${aip_function_name}' with domain '${domain_name}'"
 
     if [ ! -f "$base_db" ]; then
         debug_log "ERROR" "Base message DB not found: $base_db. Cannot create target DB."
+        display_message "error" "$(get_message "MSG_ERR_BASE_DB_NOT_FOUND" "db=$base_db")" # Use a specific message key if available
         return 1
     fi
 
+    # Start spinner before the loop
+    if type start_spinner >/dev/null 2>&1; then
+        # Using a generic translating message, including the domain
+        start_spinner "$(color blue "$(get_message "MSG_TRANSLATING_VIA" "domain=$domain_name")")" "blue"
+        spinner_started="true"
+        debug_log "DEBUG" "Spinner started for domain: ${domain_name}"
+    else
+        debug_log "WARN" "start_spinner function not found. Spinner not shown."
+    fi
+
+    # Create/overwrite the output DB with the header
+    # Note: SCRIPT_VERSION might need adjustment if it's defined elsewhere now
     cat > "$output_db" << EOF
 SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
+# Translation generated using: ${aip_function_name}
+# Target Language: ${target_lang_code}
 EOF
 
-    if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
-        debug_log "DEBUG" "Online translation disabled in create_language_db, copying original text."
-        grep "^${DEFAULT_LANGUAGE}|" "$base_db" | sed "s/^${DEFAULT_LANGUAGE}|/${api_lang}|/" >> "$output_db"
-        return 1
-    fi
-
-    local translation_success_count=0
-    local translation_fail_count=0
-    local cache_hit_count=0
-
+    # Loop through the base DB entries
     while IFS= read -r line; do
+        # Skip comments and empty lines
         case "$line" in \#*|"") continue ;; esac
+        # Process only lines starting with the default language code
         if ! echo "$line" | grep -q "^${DEFAULT_LANGUAGE}|"; then continue; fi
+
+        # Extract key and value
         local line_content=${line#*|}
         local key=${line_content%%=*}
         local value=${line_content#*=}
-        if [ -z "$key" ] || [ -z "$value" ]; then continue; fi
-
-        local cache_key=$(printf "%s%s%s" "$key" "$value" "$api_lang" | md5sum | cut -d' ' -f1)
-        local cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
-
-        if [ -f "$cache_file" ]; then
-            local translated=$(cat "$cache_file")
-            printf "%s|%s=%s\n" "$api_lang" "$key" "$translated" >> "$output_db"
-            cache_hit_count=$((cache_hit_count + 1))
+        if [ -z "$key" ] || [ -z "$value" ]; then
+            debug_log "DEBUG" "Skipping invalid line in base DB: $line"
             continue
         fi
 
-        translation_attempted="true"
-        cleaned_translation=$(translate_text "$value" "$DEFAULT_LANGUAGE" "$api_lang")
+        # --- Directly call the AIP function ---
+        local translated_text=""
+        local exit_code=1 # Default to failure
 
-        if [ -n "$cleaned_translation" ]; then
-            local decoded="$cleaned_translation"
-            mkdir -p "$(dirname "$cache_file")"
-            printf "%s\n" "$decoded" > "$cache_file"
-            printf "%s|%s=%s\n" "$api_lang" "$key" "$decoded" >> "$output_db"
-            translation_success_count=$((translation_success_count + 1))
+        debug_log "DEBUG" "Attempting translation for key '${key}' using '${aip_function_name}'"
+        # Call the AIP function dynamically, capture stdout and exit code
+        translated_text=$("$aip_function_name" "$value" "$target_lang_code")
+        exit_code=$?
+
+        if [ "$exit_code" -eq 0 ] && [ -n "$translated_text" ]; then
+            # Translation successful
+            debug_log "DEBUG" "Translation successful for key '${key}'"
+            # Write the translated key-value pair to the output DB
+            printf "%s|%s=%s\n" "$target_lang_code" "$key" "$translated_text" >> "$output_db"
         else
-            printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
-            debug_log "DEBUG" "Online translation failed for key: ${key}, using original text."
-            translation_fail_count=$((translation_fail_count + 1))
+            # Translation failed or returned empty string
+            debug_log "DEBUG" "Translation failed (Exit code: $exit_code) or returned empty for key '${key}'. Using original text."
+            # Write the original key-value pair to the output DB
+            printf "%s|%s=%s\n" "$target_lang_code" "$key" "$value" >> "$output_db"
         fi
-    done < "$base_db"
+        # --- End AIP function call ---
 
-    debug_log "DEBUG" "Translation stats for ${api_lang}: Success=$translation_success_count, Fail/Skipped=$translation_fail_count, CacheHit=$cache_hit_count"
-    debug_log "DEBUG" "Language DB creation process completed for ${api_lang}"
+    done < "$base_db" # Read from the base DB
 
-    if [ "$translation_attempted" = "true" ]; then
-        return 0
-    else
-        return 1
+    # Stop spinner after the loop
+    if [ "$spinner_started" = "true" ]; then
+        if type stop_spinner >/dev/null 2>&1; then
+            stop_spinner "" "" # Stop with default message
+            debug_log "DEBUG" "Spinner stopped."
+        else
+            debug_log "WARN" "stop_spinner function not found."
+        fi
     fi
+
+    # Add the completion marker key at the end of the file
+    local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
+    printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$output_db"
+    debug_log "DEBUG" "Completion marker added to ${output_db}"
+
+    debug_log "DEBUG" "Language DB creation process completed for ${target_lang_code}"
+    return 0 # Return success
 }
 
 # 翻訳情報を表示する関数
