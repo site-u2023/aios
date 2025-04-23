@@ -215,15 +215,14 @@ get_country_ipapi() {
              debug_log "DEBUG" "get_country_ipapi: Retrying with wget option: $wget_options for v4v6"
         fi
 
-        # wget コマンド実行 (証明書無視、タイムアウト、リトライ1回、UA指定、静音、出力ファイル)
-        # -L (リダイレクト) は ipapi.co では通常不要だが念のため付けておく (ok/ 版 translation 準拠)
-        wget --no-check-certificate $wget_options -L -T "$API_TIMEOUT" --tries=1 -q -O "$tmp_file" \
+        # wget コマンド実行 (不正なオプション --tries=1 と -L を削除)
+        wget --no-check-certificate $wget_options -T "$API_TIMEOUT" -q -O "$tmp_file" \
              -U "$USER_AGENT" \
              "$api_url"
         wget_exit_code=$?
         debug_log "DEBUG" "get_country_ipapi: wget executed (code: $wget_exit_code)"
 
-        # レスポンスチェック
+        # レスポンスチェック (変更なし)
         if [ "$wget_exit_code" -eq 0 ] && [ -s "$tmp_file" ]; then
             debug_log "DEBUG" "get_country_ipapi: Download successful (code: 0, size > 0)."
             # 必要な情報を抽出 (ok/ 版 translation 準拠の sed)
@@ -248,7 +247,7 @@ get_country_ipapi() {
             debug_log "DEBUG" "get_country_ipapi: wget failed (code: $wget_exit_code) or temp file is empty."
         fi
 
-        # リトライ前の処理
+        # リトライ前の処理 (変更なし)
         rm -f "$tmp_file" 2>/dev/null # 次のリトライに備えて一時ファイルを削除
         retry_count=$((retry_count + 1))
         if [ $retry_count -lt $API_MAX_RETRIES ]; then
@@ -258,7 +257,7 @@ get_country_ipapi() {
     done
     # --- ループ終了 ---
 
-    # 最終的な成功/失敗の判定と戻り値
+    # 最終的な成功/失敗の判定と戻り値 (変更なし)
     if [ $success -eq 1 ]; then
         debug_log "DEBUG" "get_country_ipapi finished successfully."
         return 0 # 成功
@@ -321,15 +320,14 @@ get_country_ipinfo() {
              debug_log "DEBUG" "get_country_ipinfo: Retrying with wget option: $wget_options for v4v6"
         fi
 
-        # wget コマンド実行 (証明書無視、タイムアウト、リトライ1回、UA指定、静音、出力ファイル)
-        # -L (リダイレクト) は ipinfo.io では通常不要だが念のため付けておく
-        wget --no-check-certificate $wget_options -L -T "$API_TIMEOUT" --tries=1 -q -O "$tmp_file" \
+        # wget コマンド実行 (不正なオプション --tries=1 と -L を削除)
+        wget --no-check-certificate $wget_options -T "$API_TIMEOUT" -q -O "$tmp_file" \
              -U "$USER_AGENT" \
              "$api_url"
         wget_exit_code=$?
         debug_log "DEBUG" "get_country_ipinfo: wget executed (code: $wget_exit_code)"
 
-        # レスポンスチェック
+        # レスポンスチェック (変更なし)
         if [ "$wget_exit_code" -eq 0 ] && [ -s "$tmp_file" ]; then
             debug_log "DEBUG" "get_country_ipinfo: Download successful (code: 0, size > 0)."
             # 必要な情報を抽出
@@ -353,7 +351,7 @@ get_country_ipinfo() {
             debug_log "DEBUG" "get_country_ipinfo: wget failed (code: $wget_exit_code) or temp file is empty."
         fi
 
-        # リトライ前の処理
+        # リトライ前の処理 (変更なし)
         rm -f "$tmp_file" 2>/dev/null
         retry_count=$((retry_count + 1))
         if [ $retry_count -lt $API_MAX_RETRIES ]; then
@@ -363,7 +361,7 @@ get_country_ipinfo() {
     done
     # --- ループ終了 ---
 
-    # 最終的な成功/失敗の判定と戻り値
+    # 最終的な成功/失敗の判定と戻り値 (変更なし)
     if [ $success -eq 1 ]; then
         debug_log "DEBUG" "get_country_ipinfo finished successfully."
         return 0 # 成功
@@ -404,7 +402,7 @@ get_country_cloudflare() {
 
     debug_log "DEBUG" "get_country_cloudflare: Querying location from $api_domain"
 
-    # グローバル変数を初期化 (この関数が他の情報も取得するため)
+    # グローバル変数を初期化 (変更なし)
     SELECT_COUNTRY=""
     SELECT_ZONENAME=""
     ISP_NAME=""
@@ -426,14 +424,14 @@ get_country_cloudflare() {
              debug_log "DEBUG" "get_country_cloudflare: Retrying with wget option: $wget_options for v4v6"
         fi
 
-        # wget コマンド実行 (Cloudflare Worker はリダイレクトしない前提で -L なし)
-        wget --no-check-certificate $wget_options -T "$API_TIMEOUT" --tries=1 -q -O "$tmp_file" \
+        # wget コマンド実行 (不正なオプション --tries=1 を削除, -L は元々なかった)
+        wget --no-check-certificate $wget_options -T "$API_TIMEOUT" -q -O "$tmp_file" \
              -U "$USER_AGENT" \
              "$api_url"
         wget_exit_code=$?
         debug_log "DEBUG" "get_country_cloudflare: wget executed (code: $wget_exit_code)"
 
-        # レスポンスチェック
+        # レスポンスチェック (変更なし)
         if [ "$wget_exit_code" -eq 0 ] && [ -s "$tmp_file" ]; then
             debug_log "DEBUG" "get_country_cloudflare: Download successful (code: 0, size > 0)."
             # JSON レスポンスのステータスを確認
@@ -469,7 +467,7 @@ get_country_cloudflare() {
             debug_log "DEBUG" "get_country_cloudflare: wget failed (code: $wget_exit_code) or temp file is empty."
         fi
 
-        # リトライ前の処理
+        # リトライ前の処理 (変更なし)
         rm -f "$tmp_file" 2>/dev/null
         retry_count=$((retry_count + 1))
         if [ $retry_count -lt $API_MAX_RETRIES ]; then
@@ -479,7 +477,7 @@ get_country_cloudflare() {
     done
     # --- ループ終了 ---
 
-    # 最終的な成功/失敗の判定と戻り値
+    # 最終的な成功/失敗の判定と戻り値 (変更なし)
     if [ $success -eq 1 ]; then
         debug_log "DEBUG" "get_country_cloudflare finished successfully."
         return 0 # 成功
