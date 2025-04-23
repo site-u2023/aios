@@ -449,7 +449,7 @@ translate_main() {
 
     if [ -f "$target_db" ]; then
         if grep -q "^${lang_code}|${marker_key}=true$" "$target_db" >/dev/null 2>&1; then
-             debug_log "INFO" "translate_main: Target DB '${target_db}' exists and contains the completion marker. Assuming translation is complete."
+             debug_log "DEBUG" "translate_main: Target DB '${target_db}' exists and contains the completion marker. Assuming translation is complete."
              if [ "${TRANSLATION_INFO_DISPLAYED_TARGET:-false}" = "false" ]; then
                  debug_log "DEBUG" "translate_main: Displaying info for existing target DB."
                  # display_detected_translation は既存キーを使用するため変更なし
@@ -458,10 +458,10 @@ translate_main() {
              fi
              return 0
         else
-             debug_log "INFO" "translate_main: Target DB '${target_db}' exists but is missing the completion marker. Proceeding with translation creation (will overwrite)."
+             debug_log "DEBUG" "translate_main: Target DB '${target_db}' exists but is missing the completion marker. Proceeding with translation creation (will overwrite)."
         fi
     else
-        debug_log "INFO" "translate_main: Target DB '${target_db}' does not exist. Proceeding with translation creation."
+        debug_log "DEBUG" "translate_main: Target DB '${target_db}' does not exist. Proceeding with translation creation."
     fi
 
     # --- Proceed with Translation Process (DB does not exist or lacks marker) ---
@@ -506,7 +506,7 @@ translate_main() {
         return 1
     fi
 
-    debug_log "INFO" "translate_main: Selected translation function: ${selected_func}"
+    debug_log "DEBUG" "translate_main: Selected translation function: ${selected_func}"
 
     # 5. Determine API URL and Domain Name *locally* based on the selected function (for spinner ONLY)
     local api_endpoint_url=""
@@ -537,7 +537,7 @@ translate_main() {
 
     # 7. Handle Result and Display Info
     if [ "$db_creation_result" -eq 0 ]; then
-        debug_log "INFO" "translate_main: Language DB creation successful for ${lang_code} using ${selected_func}."
+        debug_log "DEBUG" "translate_main: Language DB creation successful for ${lang_code} using ${selected_func}."
         # --- 変更点 ---
         # 1. 既存キー MSG_TRANSLATION_SUCCESS を使用して成功メッセージを表示
         # 2. printf と color/get_message で標準出力に表示
