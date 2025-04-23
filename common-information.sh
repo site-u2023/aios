@@ -763,42 +763,46 @@ process_location_info() {
     return 0
 }
 
-# display_detected_location 関数 (commit 376f236 時点)
-# この関数は information_main から呼び出されるため、併記しておきます。
+# display_detected_location 関数 (commit 0c929a84 時点)
+# This is the version from the commit *before* 376f236...
 display_detected_location() {
     local detection_source="$1"
     local detected_country="$2"
     local detected_zonename="$3"
     local detected_timezone="$4"
-    # 引数番号変更 (5番目)
+    # 引数5: ISP
     local detected_isp="${5:-}"
-    # 引数番号変更 (6番目)
+    # 引数6: AS
     local detected_as="${6:-}"
 
     debug_log "DEBUG" "Displaying location information from source: $detection_source"
 
-    # 検出元情報の表示 (翻訳キーを使用)
-    printf "%-20s: %s\n" "$(get_message "MSG_COUNTRY_SOURCE")" "$detection_source"
+    # 検出元情報の表示 (キー: MSG_USE_DETECTED_INFORMATION)
+    # This key exists in the provided message_en.db (commit 376f236)
+    printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_INFORMATION" "i=$detection_source")")"
 
-    # タイムゾーンAPIの情報（Cloudflare等、設定されていれば）
-    # (この部分は元の information_main には直接関係ないが、display_detected_location の一部)
+    # タイムゾーンAPIの情報 (キー: MSG_TIMEZONE_API)
+    # This key exists in the provided message_en.db (commit 376f236)
     if [ -n "$TIMEZONE_API_SOURCE" ]; then
         local domain=$(echo "$TIMEZONE_API_SOURCE" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
         [ -z "$domain" ] && domain="$TIMEZONE_API_SOURCE"
-        printf "%-20s: %s\n" "$(get_message "MSG_TIMEZONE_API")" "$domain"
+        printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_API" "a=$domain")")"
     fi
 
-    # ISP情報の表示（ISP情報があれば）
+    # ISP情報の表示 (キー: MSG_DETECTED_ISP, MSG_ISP_AS)
+    # These keys exist in the provided message_en.db (commit 376f236)
     if [ -n "$detected_isp" ]; then
-        printf "%-20s: %s\n" "$(get_message "MSG_ISP_PROVIDER")" "$detected_isp"
+        printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ISP")")" "$(color white "$detected_isp")"
     fi
     if [ -n "$detected_as" ]; then
-        printf "%-20s: %s\n" "$(get_message "MSG_ISP_AS")" "$detected_as"
+        printf "%s %s\n" "$(color white "$(get_message "MSG_ISP_AS")")" "$(color white "$detected_as")"
     fi
 
-    printf "%-20s: %s\n" "$(get_message "MSG_COUNTRY_CODE")" "$detected_country"
-    printf "%-20s: %s\n" "$(get_message "MSG_ZONE_NAME")" "$detected_zonename"
-    printf "%-20s: %s\n" "$(get_message "MSG_TIMEZONE")" "$detected_timezone"
+    # 国、ゾーン名、タイムゾーンの表示 (キー: MSG_DETECTED_COUNTRY, MSG_DETECTED_ZONENAME, MSG_DETECTED_TIMEZONE)
+    # These keys exist in the provided message_en.db (commit 376f236)
+    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$detected_country")"
+    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONENAME")")" "$(color white "$detected_zonename")"
+    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color white "$detected_timezone")"
 
     debug_log "DEBUG" "Location information displayed successfully"
 }
