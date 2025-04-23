@@ -563,7 +563,7 @@ get_country_code() {
         spinner_active=0
     fi
 
-    # --- country.db processing (Get POSIX timezone) ---
+# --- country.db processing (Get POSIX timezone) ---
     # After API execution, map ZoneName to POSIX timezone if successful
     if [ $api_success -eq 0 ] && [ -n "$SELECT_ZONENAME" ]; then
         debug_log "DEBUG" "API query successful. Processing ZoneName: $SELECT_ZONENAME"
@@ -575,39 +575,46 @@ get_country_code() {
 
         if [ -f "$db_file" ]; then
             debug_log "DEBUG" "Searching country.db for ZoneName: $SELECT_ZONENAME"
-            # Find the first line containing the exact ZoneName followed by a comma
-            # This assumes ZoneName doesn't contain spaces or commas
-            local matched_line=$(grep -F "$SELECT_ZONENAME," "$db_file" | head -1)
+            # ★★★ 変更点: grep で行全体を検索し、後で case で絞り込む方式に戻す ★★★
+            # Find the first line containing the ZoneName (more robust)
+            local matched_line=$(grep -F "$SELECT_ZONENAME" "$db_file" | head -1)
 
             if [ -n "$matched_line" ]; then
+                 # ★★★ 変更点: cut は -f6- を使用 ★★★
                  # Extract pairs from the 6th field onwards
                  local zone_pairs=$(echo "$matched_line" | cut -d' ' -f6-)
                  local pair=""
                  local found_tz=""
 
-                 # Loop through space-separated pairs (e.g., Asia/Tokyo,JST-9 Europe/London,GMT0BST)
-                 # Use 'for' loop which splits by spaces/tabs/newlines (POSIX standard)
+                 debug_log "DEBUG" "Extracted zone pairs string: $zone_pairs"
+
+                 # ★★★ 変更点: ループと case 文によるマッチングに戻す ★★★
+                 # Loop through space-separated pairs using 'for'
                  for pair in $zone_pairs; do
-                     # Check if the pair contains a comma
-                     if echo "$pair" | grep -q ','; then
-                         local current_zonename=$(echo "$pair" | cut -d',' -f1)
-                         if [ "$current_zonename" = "$SELECT_ZONENAME" ]; then
+                     debug_log "DEBUG" "Checking pair: $pair"
+                     # Use case statement for robust matching (starts with ZoneName,)
+                     case "$pair" in
+                         "$SELECT_ZONENAME,"*)
                              found_tz=$(echo "$pair" | cut -d',' -f2)
-                             debug_log "DEBUG" "Found matching pair: $pair"
-                             break
-                         fi
-                     fi
+                             debug_log "DEBUG" "Found matching pair with case: $pair"
+                             break # Exit loop once found
+                             ;;
+                         *)
+                             # No match for this pair, continue loop
+                             debug_log "DEBUG" "Pair '$pair' does not match required format '$SELECT_ZONENAME,***'"
+                             ;;
+                     esac
                  done
 
                  if [ -n "$found_tz" ]; then
                      SELECT_TIMEZONE="$found_tz"
                      debug_log "DEBUG" "Found POSIX timezone in country.db and stored in SELECT_TIMEZONE: $SELECT_TIMEZONE"
                  else
-                     debug_log "DEBUG" "No matching POSIX timezone pair found in country.db for: $SELECT_ZONENAME in line: $matched_line"
+                     debug_log "DEBUG" "No matching POSIX timezone pair found starting with '$SELECT_ZONENAME,' in zone pairs: $zone_pairs"
                      # Consider if SELECT_TIMEZONE should be set to a default or error handled
                  fi
             else
-                 debug_log "DEBUG" "No matching line found in country.db containing '$SELECT_ZONENAME,'"
+                 debug_log "DEBUG" "No matching line found in country.db containing '$SELECT_ZONENAME'"
             fi
         else
             debug_log "DEBUG" "country.db not found at: $db_file. Cannot retrieve POSIX timezone."
