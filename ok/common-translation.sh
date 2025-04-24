@@ -292,149 +292,111 @@ translate_text() {
     fi
 }
 
+# 翻訳DB作成関数 (責務: DBファイル作成、AIP関数呼び出し、スピナー制御、時間計測)
+# @param $1: aip_function_name (string) - The name of the AIP function to call (e.g., "translate_with_google")
+# @param $2: api_endpoint_url (string) - The base API endpoint URL (used ONLY for spinner display via domain_name extraction, NOT passed to AIP func)
+# @param $3: domain_name (string) - The domain name for spinner display (e.g., "translate.googleapis.com")
+# @param $4: target_lang_code (string) - The target language code (e.g., "ja")
+# @return: 0 on success, 1 on base DB not found, 2 if AIP function fails consistently (though it writes original text)
 create_language_db() {
-    local target_lang="$1"
+    local aip_function_name="$1"
+    local api_endpoint_url="$2" # Passed URL for context/potential future use, but mainly for domain name below
+    local domain_name="$3"      # Explicitly passed domain name for spinner
+    local target_lang_code="$4"
+
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
-    local api_lang=$(get_api_lang_code)
-    local output_db="${BASE_DIR}/message_${api_lang}.db"
-    local temp_file="${TRANSLATION_CACHE_DIR}/translation_output.tmp"
-    local cleaned_translation=""
-    local current_api="" # Initialize current_api
-    local ip_check_file="${CACHE_DIR}/network.ch"
-    
-    debug_log "DEBUG" "Creating language DB for target ${target_lang} with API language code ${api_lang}"
-    
-    # ベースDBファイル確認
+    local output_db="${BASE_DIR}/message_${target_lang_code}.db"
+    local spinner_started="false"
+    local overall_success=0 # Assume success initially
+    # --- 時間計測用変数 ---
+    local start_time=""
+    local end_time=""
+    local elapsed_seconds=""
+    # ---------------------
+
+    debug_log "DEBUG" "Creating language DB for target '${target_lang_code}' using function '${aip_function_name}' with domain '${domain_name}'"
+
     if [ ! -f "$base_db" ]; then
-        debug_log "DEBUG" "Base message DB not found"
+        debug_log "DEBUG" "Base message DB not found: $base_db. Cannot create target DB."
+        printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED")")" >&2
         return 1
     fi
-    
-    # DBファイル作成 (常に新規作成・上書き)
+
+    # --- 計測開始 ---
+    start_time=$(date +%s)
+    # ---------------
+
+    # Start spinner before the loop
+    if type start_spinner >/dev/null 2>&1; then
+        start_spinner "$(color blue "$(get_message "MSG_TRANSLATING_CURRENTLY" "api=$domain_name")")" "blue"
+        spinner_started="true"
+        debug_log "DEBUG" "Spinner started for domain: ${domain_name}"
+    else
+        debug_log "DEBUG" "start_spinner function not found. Spinner not shown."
+    fi
+
+    # Create/overwrite the output DB with the header
     cat > "$output_db" << EOF
 SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
+# Translation generated using: ${aip_function_name}
+# Target Language: ${target_lang_code}
 EOF
-    
-    # オンライン翻訳が無効なら翻訳せず置換するだけ
-    if [ "$ONLINE_TRANSLATION_ENABLED" != "yes" ]; then
-        debug_log "DEBUG" "Online translation disabled, using original text"
-        grep "^${DEFAULT_LANGUAGE}|" "$base_db" | sed "s/^${DEFAULT_LANGUAGE}|/${api_lang}|/" >> "$output_db"
-        return 0
-    fi
-    
-    # 翻訳処理開始
-    printf "\n"
-    
-    # ネットワーク接続状態を確認
-    if [ ! -f "$ip_check_file" ]; then
-        debug_log "DEBUG" "Network status file not found, checking connectivity"
-        # Ensure check_network_connectivity is defined in common-system.sh and loaded
-        if type check_network_connectivity >/dev/null 2>&1; then
-            check_network_connectivity
-        else
-            debug_log "ERROR" "check_network_connectivity function not found"
-            # Proceed assuming no network or handle error appropriately
-        fi
-    fi
-    
-    # ネットワーク接続状態を取得
-    local network_status=""
-    if [ -f "$ip_check_file" ]; then
-        network_status=$(cat "$ip_check_file")
-        debug_log "DEBUG" "Network status: ${network_status}"
-    else
-        debug_log "DEBUG" "Could not determine network status"
-    fi
-    
-    # --- Optimization Start ---
-    # API名をAPI_LISTに基づいて直接設定
-    case "$API_LIST" in
-        google)
-            current_api="translate.googleapis.com"
-            ;;
-        lingva)
-            current_api="lingva.ml"
-            ;;
-        *)
-            # デフォルトでGoogleを使用
-            current_api="translate.googleapis.com"
-            ;;
-    esac
-    
-    if [ -z "$current_api" ]; then
-        current_api="Translation API" # Fallback name
-    fi
-    debug_log "DEBUG" "Using API based on API_LIST: $current_api"
-    # --- Optimization End ---
 
-    # スピナーを開始し、使用中のAPIを表示
-    # Ensure start_spinner is defined in common-color.sh or similar and loaded
-    if type start_spinner >/dev/null 2>&1; then
-        start_spinner "$(color blue "Currently translating: $current_api")"
-    else
-        debug_log "WARNING" "start_spinner function not found, spinner not started"
-    fi
-    
-    # 言語エントリを抽出して翻訳ループ
-    grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
-        # キーと値を抽出 (シェル組み込み文字列操作を使用)
-        local line_content=${line#*|} # "en|" の部分を除去
-        local key=${line_content%%=*}   # 最初の "=" より前の部分をキーとして取得
-        local value=${line_content#*=}  # 最初の "=" より後の部分を値として取得
-        
-        if [ -n "$key" ] && [ -n "$value" ]; then
-            # キャッシュキー生成
-            local cache_key=$(printf "%s%s%s" "$key" "$value" "$api_lang" | md5sum | cut -d' ' -f1)
-            local cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
-            
-            # キャッシュを確認
-            if [ -f "$cache_file" ]; then
-                local translated=$(cat "$cache_file")
-                # APIから取得した言語コードを使用
-                printf "%s|%s=%s\n" "$api_lang" "$key" "$translated" >> "$output_db"
-                continue # 次の行へ
-            fi
-            
-            # ネットワーク接続確認と翻訳
-            if [ -n "$network_status" ] && [ "$network_status" != "" ]; then
-                # ここで実際に翻訳APIを呼び出す
-                cleaned_translation=$(translate_text "$value" "$DEFAULT_LANGUAGE" "$api_lang")
-                
-                # 翻訳結果処理
-                if [ -n "$cleaned_translation" ]; then
-                    # 基本的なエスケープシーケンスの処理
-                    local decoded="$cleaned_translation"
-                    
-                    # キャッシュに保存
-                    mkdir -p "$(dirname "$cache_file")"
-                    printf "%s\n" "$decoded" > "$cache_file"
-                    
-                    # APIから取得した言語コードを使用してDBに追加
-                    printf "%s|%s=%s\n" "$api_lang" "$key" "$decoded" >> "$output_db"
-                else
-                    # 翻訳失敗時は原文をそのまま使用
-                    printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
-                fi
-            else
-                # ネットワーク接続がない場合は原文を使用
-                printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
-            fi
+    # Loop through the base DB entries
+    while IFS= read -r line; do
+        case "$line" in \#*|"") continue ;; esac
+        if ! echo "$line" | grep -q "^${DEFAULT_LANGUAGE}|"; then continue; fi
+
+        local line_content=${line#*|}
+        local key=${line_content%%=*}
+        local value=${line_content#*=}
+        if [ -z "$key" ] || [ -z "$value" ]; then
+            continue
         fi
-    done
-    
-    # スピナー停止
-    # Ensure stop_spinner is defined and loaded
-    if type stop_spinner >/dev/null 2>&1; then
-        stop_spinner "Language file created successfully" "success"
-    else
-        debug_log "INFO" "Language file creation process finished (spinner function not found)"
-        # Optionally print the success message directly if spinner isn't available
-        printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_SUCCESS" "default=Language file created successfully")")"
+
+        local translated_text=""
+        local exit_code=1
+        translated_text=$("$aip_function_name" "$value" "$target_lang_code")
+        exit_code=$?
+
+        if [ "$exit_code" -eq 0 ] && [ -n "$translated_text" ]; then
+            printf "%s|%s=%s\n" "$target_lang_code" "$key" "$translated_text" >> "$output_db"
+        else
+            printf "%s|%s=%s\n" "$target_lang_code" "$key" "$value" >> "$output_db"
+        fi
+
+    done < "$base_db"
+
+    # --- 計測終了 & 計算 ---
+    end_time=$(date +%s)
+    elapsed_seconds=$((end_time - start_time))
+    # ----------------------
+
+    # Stop spinner after the loop
+    if [ "$spinner_started" = "true" ]; then
+        if type stop_spinner >/dev/null 2>&1; then
+            local final_success_message=""
+            if [ "$overall_success" -eq 0 ]; then
+                final_success_message=$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds")
+            else
+                final_success_message=$(get_message "MSG_TRANSLATING_CREATED")
+            fi
+
+            stop_spinner "$final_success_message" "success"
+            # -----------------------------------------------------------------
+            debug_log "DEBUG" "Translation task completed in ${elapsed_seconds} seconds."
+        else
+            debug_log "DEBUG" "stop_spinner function not found."
+        fi
     fi
-    
-    # 翻訳処理終了
-    debug_log "DEBUG" "Language DB creation completed for ${api_lang}"
-    return 0
+
+    # Add the completion marker key at the end of the file
+    local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
+    printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$output_db"
+    debug_log "DEBUG" "Completion marker added to ${output_db}"
+
+    debug_log "DEBUG" "Language DB creation process completed for ${target_lang_code}"
+    return "$overall_success" # Return 0 for success, potentially 2 for partial
 }
 
 # 翻訳情報を表示する関数
