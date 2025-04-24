@@ -67,6 +67,7 @@ en|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{:}
 # =======================
 # common-translation.sh
 # =======================
+en|MSG_TRANSLATION_TIME_TAKEN="Translation completed{:} {s} s"
 en|MSG_TRANSLATING_CURRENTLY=Currently translating: {api}
 en|MSG_TRANSLATING_CREATED=Language file created successfully
 en|MSG_TRANSLATION_FAILED=Translation process failed
