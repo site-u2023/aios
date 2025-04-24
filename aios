@@ -793,9 +793,8 @@ get_message() {
     local add_colon="false"
     local lang_code
     local awk_script
-    local awk_params="" # Initialize awk parameter string
     local param_count=0 # Initialize parameter counter
-    local last_arg=""   # To store the last argument for format check
+    local arg_count=$#  # Total number of remaining arguments ($@)
 
     # Determine the language code from the environment variable or default to 'en'
     lang_code="${AIOS_LANG_CODE:-en}"
@@ -811,8 +810,6 @@ get_message() {
             echo "$key" # Return key as fallback
             return 1
         fi
-        # Optionally, log the fallback event
-        # log_event "warning" "Message file for lang '$lang_code' not found, falling back to 'en'."
     fi
 
     # 2. Retrieve the message line from the file
@@ -825,14 +822,12 @@ get_message() {
         message_line_en=$(grep -m 1 "^en|${key}=" "${AIOS_CACHE_DIR}/message_en.db")
         if [ -n "$message_line_en" ]; then
             message="${message_line_en#*=}"
-            # log_event "info" "Message key '$key' not found for lang '$lang_code', using English fallback."
         else
-            # log_event "warning" "Message key '$key' not found in English fallback either."
             message="$key"
         fi
     fi
 
-    # 4. Detect and handle colon marker {;} using case (More robust for multi-language)
+    # 4. Detect and handle colon marker {;} using case
     add_colon="false"
     case "$message" in
         *'{;}'*)
@@ -844,50 +839,54 @@ get_message() {
     # 5. Normalize message (braces, special markers) before replacement
     message=$(normalize_message "$message")
 
-    # --- MODIFIED: Process arguments without arrays for POSIX compliance ---
-    # 6. Iterate through remaining arguments ($@) to build awk params and check for format=
-    local current_param_index=1
-    local arg
-    for arg in "$@"; do
-        # Escape potential single quotes for safety within the awk script string
-        local p_escaped=$(echo "$arg" | sed "s/'/'\\\\''/g")
-        # Build the awk parameter string like -v params[1]='value1' -v params[2]='value2'
-        awk_params="${awk_params} -v params[${current_param_index}]='${p_escaped}'"
-        param_count=$((param_count + 1))
-        last_arg="$arg" # Keep track of the last argument
-        current_param_index=$((current_param_index + 1))
-    done
+    # --- MODIFIED: Determine format and actual parameter count without arrays ---
+    # 6. Check the last argument for 'format='
+    param_count=$arg_count # Assume all arguments are parameters initially
+    if [ "$arg_count" -gt 0 ]; then
+        # Get the last argument using a loop (POSIX compliant way)
+        local last_arg=""
+        local arg
+        for arg in "$@"; do
+            last_arg="$arg"
+        done
 
-    # 7. Check if the last argument was a format specifier
-    case "$last_arg" in
-        format=*)
-            format="${last_arg#format=}"
-            # If format was found, it's not a real message parameter, so decrement count
-            param_count=$((param_count - 1))
-            # Also, remove the format part from the awk_params string (optional, but cleaner)
-            # This part is tricky to do reliably without array manipulation.
-            # A simpler approach is to let awk ignore the extra param if format is set.
-            # Or, rebuild awk_params excluding the last one if format is detected.
-            # For simplicity, we'll let awk handle it; it won't use params[last] if count is correct.
-            ;;
-    esac
+        case "$last_arg" in
+            format=*)
+                format="${last_arg#format=}"
+                # If format was found, it's not a real message parameter
+                param_count=$((param_count - 1))
+                ;;
+        esac
+    fi
     # --- END MODIFIED ---
 
-    # 8. Replace placeholders and apply formatting using awk
+    # 7. Replace placeholders and apply formatting using awk (if params exist)
+    #    Pass template via stdin, format/count via env vars, params via ARGV
     if [ "$param_count" -gt 0 ]; then
-        # awk script remains largely the same, uses param_count passed via -v
         awk_script='
         # Function definitions (tolower_str, toupper_str, capitalize_str) - Keep these inline
         function tolower_str(str,        i, char, lower_char, result) { result = ""; for (i = 1; i <= length(str); i++) { char = substr(str, i, 1); lower_char = tolower(char); result = result lower_char } return result }
         function toupper_str(str,        i, char, upper_char, result) { result = ""; for (i = 1; i <= length(str); i++) { char = substr(str, i, 1); upper_char = toupper(char); result = result upper_char } return result }
         function capitalize_str(str,     first_char, rest_str) { if (length(str) == 0) return ""; first_char = substr(str, 1, 1); rest_str = substr(str, 2); return toupper_str(first_char) tolower_str(rest_str) }
 
-        BEGIN { FS = ""; msg = message_template; format_type = format_spec }
-        {
-            # Placeholder replacement loop (uses param_count from shell)
-            for (i = 1; i <= param_count; i++) {
-                placeholder = "{" (i-1) "}"
-                gsub(placeholder, params[i], msg)
+        # Get format and param_count from environment variables
+        BEGIN {
+            FS = "" # Not strictly needed for getline, but good practice
+            format_type = ENVIRON["AWK_FORMAT_SPEC"]
+            # Ensure param_count is treated as a number
+            p_count = ENVIRON["AWK_PARAM_COUNT"] + 0
+        }
+
+        # Process the first line of input as the message template
+        NR == 1 {
+            msg = $0 # Read the message template from stdin
+
+            # Placeholder replacement loop (uses p_count from env var)
+            # ARGV[0] is "awk", parameters start from ARGV[1]
+            for (i = 1; i <= p_count; i++) {
+                placeholder = "{" (i-1) "}" # {0}, {1}, ...
+                # Use ARGV[i] for replacement value
+                gsub(placeholder, ARGV[i], msg)
             }
 
             # Apply formatting if specified
@@ -895,27 +894,32 @@ get_message() {
             else if (format_type == "lower") { msg = tolower_str(msg) }
             else if (format_type == "capitalize") { msg = capitalize_str(msg) }
 
-            # Case-insensitive placeholder replacement (uses param_count)
-             for (i = 1; i <= param_count; i++) {
-                 placeholder_lower = "{" tolower_str(params[i]) "}"
-                 placeholder_upper = "{" toupper_str(params[i]) "}"
-                 placeholder_cap   = "{" capitalize_str(params[i]) "}"
-                 gsub(placeholder_lower, params[i], msg)
-                 gsub(placeholder_upper, params[i], msg)
-                 gsub(placeholder_cap, params[i], msg)
+            # Case-insensitive placeholder replacement (uses p_count)
+             for (i = 1; i <= p_count; i++) {
+                 placeholder_lower = "{" tolower_str(ARGV[i]) "}"
+                 placeholder_upper = "{" toupper_str(ARGV[i]) "}"
+                 placeholder_cap   = "{" capitalize_str(ARGV[i]) "}"
+                 gsub(placeholder_lower, ARGV[i], msg)
+                 gsub(placeholder_upper, ARGV[i], msg)
+                 gsub(placeholder_cap, ARGV[i], msg)
             }
-            print msg
+            print msg # Output the final processed message
+            exit # Process only the first line (the template)
         }
         '
-        # Execute awk, passing the built awk_params string
-        message=$(echo "" | awk \
-            -v message_template="$message" \
-            -v format_spec="$format" \
-            -v param_count="$param_count" \
-            $awk_params \
-            "$awk_script")
+        # Export environment variables for awk
+        export AWK_FORMAT_SPEC="$format"
+        export AWK_PARAM_COUNT="$param_count"
 
-    # 9. Apply formatting if *no* parameters were present but format was specified
+        # Execute awk: pipe template, pass params as arguments
+        # $@ contains all original arguments after the key
+        message=$(echo "$message" | awk "$awk_script" "$@")
+
+        # Unset environment variables after use
+        unset AWK_FORMAT_SPEC
+        unset AWK_PARAM_COUNT
+
+    # 8. Apply formatting if *no* parameters were present but format was specified
     elif [ "$param_count" -eq 0 ] && [ -n "$format" ]; then
          # awk script for formatting only (no parameter replacement needed)
          awk_script_format_only='
@@ -924,26 +928,28 @@ get_message() {
          function toupper_str(str,        i, char, upper_char, result) { result = ""; for (i = 1; i <= length(str); i++) { char = substr(str, i, 1); upper_char = toupper(char); result = result upper_char } return result }
          function capitalize_str(str,     first_char, rest_str) { if (length(str) == 0) return ""; first_char = substr(str, 1, 1); rest_str = substr(str, 2); return toupper_str(first_char) tolower_str(rest_str) }
 
-         BEGIN { msg = message_template; format_type = format_spec }
-         {
+         BEGIN { format_type = ENVIRON["AWK_FORMAT_SPEC"] }
+         NR == 1 {
+            msg = $0
             if (format_type == "upper") { msg = toupper_str(msg) }
             else if (format_type == "lower") { msg = tolower_str(msg) }
             else if (format_type == "capitalize") { msg = capitalize_str(msg) }
             print msg
+            exit
          }
          '
-         message=$(echo "" | awk \
-             -v message_template="$message" \
-             -v format_spec="$format" \
-             "$awk_script_format_only")
+         # Export format specifier
+         export AWK_FORMAT_SPEC="$format"
+         message=$(echo "$message" | awk "$awk_script_format_only")
+         unset AWK_FORMAT_SPEC
     fi
 
-    # 10. Append colon if marker {;} was present
+    # 9. Append colon if marker {;} was present
     if [ "$add_colon" = "true" ]; then
         message="${message}: " # Add colon and space
     fi
 
-    # 11. Output the final message
+    # 10. Output the final message
     echo "$message"
 }
 
