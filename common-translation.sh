@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # SCRIPT_VERSION="2025-04-23-12-47" # Original version marker - Updated below
-SCRIPT_VERSION="2025-04-24-00-04" # Updated version based on last interaction time
+SCRIPT_VERSION="2025-04-24-00-05" # Updated version based on last interaction time
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -210,31 +210,34 @@ process_translation_batch() {
     local batch_values="$4"
     local output_db="$5"
 
+    # --- DEBUG: Log input parameters ---
+    printf "DEBUG: [process_translation_batch] START\n" >&2
+    printf "DEBUG:   aip_function_name: %s\n" "$aip_function_name" >&2
+    printf "DEBUG:   target_lang_code: %s\n" "$target_lang_code" >&2
+    printf "DEBUG:   output_db: %s\n" "$output_db" >&2
+    printf "DEBUG:   batch_keys:\n<<<\n%s\n>>>\n" "$batch_keys" >&2
+    printf "DEBUG:   batch_values:\n<<<\n%s\n>>>\n" "$batch_values" >&2
+    # --- End DEBUG ---
+
     local translated_batch=""
-    local exit_code=1
+    local exit_code=1 # Default to failure
     local awk_result=""
     local final_batch_status=2 # Default to failure/mismatch
 
     # --- Call AIP function for the entire batch ---
     if [ -n "$batch_values" ]; then
-        # printf "DEBUG: process_translation_batch: Calling %s for batch...\n" "$aip_function_name" >&2 # Basic Debug
+        printf "DEBUG: [process_translation_batch] Calling %s for batch...\n" "$aip_function_name" >&2
         translated_batch=$("$aip_function_name" "$batch_values" "$target_lang_code")
         exit_code=$?
-        # printf "DEBUG: process_translation_batch: %s exited with %s\n" "$aip_function_name" "$exit_code" >&2 # Basic Debug
+        printf "DEBUG: [process_translation_batch] %s exited with %s\n" "$aip_function_name" "$exit_code" >&2
+        printf "DEBUG: [process_translation_batch] translated_batch content:\n<<<\n%s\n>>>\n" "$translated_batch" >&2
     else
-        # printf "DEBUG: process_translation_batch: Empty batch, skipping API call.\n" >&2 # Basic Debug
+        printf "DEBUG: [process_translation_batch] Empty batch_values, skipping API call.\n" >&2
         return 0 # Empty batch, nothing to do
     fi
 
-    # --- Process the result using awk (Simplified & Robust) ---
-    # awk script:
-    # - Splits keys, original values, and translated results by newline.
-    # - Checks if translation succeeded (exit_code == 0) AND translated text is not empty.
-    # - If successful, splits translated text and compares line count with key count.
-    # - If counts match, uses translated text.
-    # - Otherwise (API failed, empty result, or count mismatch), uses ORIGINAL text and sets status to 2.
-    # - Outputs lines in the target DB format.
-    # - Outputs a final line indicating success (0) or partial failure (2).
+    # --- Process the result using awk (Revised for robustness) ---
+    printf "DEBUG: [process_translation_batch] Preparing to call awk...\n" >&2
     awk_result=$(awk -v t_lang="$target_lang_code" \
                      -v keys="$batch_keys" \
                      -v originals="$batch_values" \
@@ -242,51 +245,88 @@ process_translation_batch() {
                      -v trans_ok="$exit_code" \
     'BEGIN {
         FS = "\n"; RS = "\n"; OFS = "\n"; # Set field/record separators
+        # DEBUG: Print awk input variables
+        printf "AWK_DEBUG: START\n" > "/dev/stderr";
+        printf "AWK_DEBUG:   t_lang=%s\n", t_lang > "/dev/stderr";
+        printf "AWK_DEBUG:   trans_ok=%s\n", trans_ok > "/dev/stderr";
+        printf "AWK_DEBUG:   keys:\n<<<\n%s\n>>>\n", keys > "/dev/stderr";
+        printf "AWK_DEBUG:   originals:\n<<<\n%s\n>>>\n", originals > "/dev/stderr";
+        printf "AWK_DEBUG:   translated:\n<<<\n%s\n>>>\n", translated > "/dev/stderr";
+
+        # Split inputs, handle potential empty trailing lines from split in some awk versions if needed
         num_keys = split(keys, key_arr);
-        num_originals = split(originals, orig_arr); # Should match num_keys
-        num_translated = 0;
+        num_originals = split(originals, orig_arr);
+        num_translated = 0; # Initialize
+        if (translated != "") {
+             num_translated = split(translated, trans_arr);
+        }
+
+        printf "AWK_DEBUG:   num_keys=%d, num_originals=%d, num_translated=%d\n", num_keys, num_originals, num_translated > "/dev/stderr";
+
         batch_status = 0; # Assume success initially
         use_translated = 0; # Flag to indicate if translated text should be used
 
-        # Check if translation API call was successful and returned something
-        if (trans_ok == 0 && translated != "") {
-            num_translated = split(translated, trans_arr);
-            # Check if the number of translated lines matches the number of keys
+        # Check if translation API call was successful AND returned something AND counts match
+        if (trans_ok == 0 && translated != "" && num_translated > 0) {
             if (num_translated == num_keys) {
                 use_translated = 1;
+                printf "AWK_DEBUG: Translation OK and line counts match (%d). Setting use_translated=1.\n", num_keys > "/dev/stderr";
             } else {
-                # printf "AWK: Line count mismatch (Keys: %d, Translated: %d). Using original text.\n", num_keys, num_translated > "/dev/stderr"; # Basic Debug
+                printf "AWK_DEBUG: Line count mismatch (Keys: %d, Translated: %d). Using original text.\n", num_keys, num_translated > "/dev/stderr";
                 batch_status = 2; # Mark as partial failure due to mismatch
             }
         } else {
-            # Translation API failed or returned empty result
-            # if (trans_ok != 0) { printf "AWK: Translation function failed (code %d). Using original text.\n", trans_ok > "/dev/stderr"; } # Basic Debug
-            # if (translated == "") { printf "AWK: Translation function returned empty. Using original text.\n" > "/dev/stderr"; } # Basic Debug
+            # Translation API failed, returned empty, or split resulted in zero lines
+            if (trans_ok != 0) { printf "AWK_DEBUG: Translation function failed (code %d). Using original text.\n", trans_ok > "/dev/stderr"; }
+            if (translated == "") { printf "AWK_DEBUG: Translation function returned empty. Using original text.\n" > "/dev/stderr"; }
+            if (num_translated == 0 && translated != "") { printf "AWK_DEBUG: split(translated) resulted in 0 lines. Using original text.\n" > "/dev/stderr"; }
             batch_status = 2; # Mark as partial failure
         }
 
-        # Loop through keys and print either translated or original text
+        # Loop through keys and print either translated or original text WITH BOUNDS CHECKING
         for (i = 1; i <= num_keys; ++i) {
-            # Ensure the key exists
+            # Ensure the key exists and is within bounds (already checked by loop condition i <= num_keys)
             if (key_arr[i] != "") {
-                if (use_translated == 1 && trans_arr[i] != "") {
-                    # Use translated text if available and flag is set
-                    printf "%s|%s=%s\n", t_lang, key_arr[i], trans_arr[i];
-                } else {
-                    # Use original text if translation failed, mismatched, or specific translated line is empty
-                    printf "%s|%s=%s\n", t_lang, key_arr[i], orig_arr[i];
-                    # If we intended to use translated but it was empty, still mark as partial failure
-                    if (use_translated == 1 && trans_arr[i] == "") {
-                         # printf "AWK: Translated line %d was empty. Used original.\n", i > "/dev/stderr"; # Basic Debug
-                         batch_status = 2;
-                    }
-                }
-            } # else { printf "AWK: Skipping empty key at index %d.\n", i > "/dev/stderr"; } # Basic Debug
+                 printf "AWK_DEBUG: Processing index %d, key: %s\n", i, key_arr[i] > "/dev/stderr";
+                 # Check if we should use translated text AND if the index is valid for trans_arr
+                 if (use_translated == 1 && i <= num_translated && trans_arr[i] != "") {
+                     # Use translated text if available and flag is set and index valid
+                     printf "AWK_DEBUG:   Using translated: %s\n", trans_arr[i] > "/dev/stderr";
+                     printf "%s|%s=%s\n", t_lang, key_arr[i], trans_arr[i];
+                 } else {
+                     # Use original text if translation failed, mismatched, index invalid, or specific translated line is empty
+                     # Check if index is valid for orig_arr before accessing
+                     if (i <= num_originals) {
+                         printf "AWK_DEBUG:   Using original: %s (Reason: use_translated=%d, i=%d<=num_translated=%d check failed OR trans_arr[i] empty OR i=%d<=num_originals=%d check passed)\n", orig_arr[i], use_translated, i, num_translated, i, num_originals > "/dev/stderr";
+                         printf "%s|%s=%s\n", t_lang, key_arr[i], orig_arr[i];
+                     } else {
+                         # This case should ideally not happen if num_keys == num_originals
+                         printf "AWK_DEBUG:   ERROR: Index %d out of bounds for originals array (size %d)! Skipping key %s.\n", i, num_originals, key_arr[i] > "/dev/stderr";
+                         batch_status = 2; # Mark failure
+                     }
+
+                     # If we intended to use translated but fell back, ensure status is failure
+                     if (use_translated == 1) {
+                          if (i > num_translated) { printf "AWK_DEBUG:   Fell back because index %d > num_translated %d\n", i, num_translated > "/dev/stderr"; }
+                          else if (trans_arr[i] == "") { printf "AWK_DEBUG:   Fell back because translated line %d was empty.\n", i > "/dev/stderr"; }
+                          batch_status = 2;
+                     }
+                 }
+            } else {
+                 printf "AWK_DEBUG: Skipping empty key at index %d.\n", i > "/dev/stderr";
+            }
         }
         # Print the final batch status
+        printf "AWK_DEBUG: Final batch_status=%d\n", batch_status > "/dev/stderr";
         print batch_status;
+        printf "AWK_DEBUG: END\n" > "/dev/stderr";
     }')
     # --- End of awk script ---
+
+    # --- DEBUG: Log awk result ---
+    printf "DEBUG: [process_translation_batch] awk script finished.\n" >&2
+    printf "DEBUG: [process_translation_batch] awk_result:\n<<<\n%s\n>>>\n" "$awk_result" >&2
+    # --- End DEBUG ---
 
     # Extract the batch status code (last line of awk_result)
     final_batch_status=$(printf "%s\n" "$awk_result" | tail -n 1)
@@ -295,19 +335,22 @@ process_translation_batch() {
 
     # Append the processed lines to the output DB
     if [ -n "$lines_to_write" ]; then
-        # printf "DEBUG: process_translation_batch: Appending lines to %s\n" "$output_db" >&2 # Basic Debug
+        printf "DEBUG: [process_translation_batch] Appending lines to %s:\n<<<\n%s\n>>>\n" "$output_db" "$lines_to_write" >&2
         printf "%s\n" "$lines_to_write" >> "$output_db"
-    # else
-        # printf "DEBUG: process_translation_batch: No lines to append.\n" >&2 # Basic Debug
+    else
+        printf "DEBUG: [process_translation_batch] No lines to append to DB.\n" >&2
     fi
 
     # Return the status code from awk
+    printf "DEBUG: [process_translation_batch] Returning final_batch_status: %s\n" "$final_batch_status" >&2
     if [ "$final_batch_status" = "2" ]; then
-        # printf "DEBUG: process_translation_batch: Returning status 2 (Partial Failure/Mismatch).\n" >&2 # Basic Debug
         return 2
-    else
-        # printf "DEBUG: process_translation_batch: Returning status 0 (Success).\n" >&2 # Basic Debug
+    elif [ "$final_batch_status" = "0" ]; then
         return 0
+    else
+        # Should not happen if awk script is correct, but return failure just in case
+        printf "DEBUG: [process_translation_batch] WARNING: Unexpected final_batch_status '%s'. Returning 2.\n" "$final_batch_status" >&2
+        return 2
     fi
 }
 
