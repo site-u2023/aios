@@ -662,9 +662,10 @@ process_location_info() {
         debug_log "DEBUG: Using skipped/cached - SELECT_COUNTRY: $SELECT_COUNTRY"
         debug_log "DEBUG: Using skipped/cached - SELECT_TIMEZONE: $SELECT_TIMEZONE"
         debug_log "DEBUG: Using skipped/cached - SELECT_ZONENAME: $SELECT_ZONENAME"
-        # Skip/cache does not guarantee ISP info is present, check specifically if needed
+        # Skip/cache does not guarantee ISP/Region info is present, check specifically if needed
         debug_log "DEBUG: Using skipped/cached - ISP_NAME: ${ISP_NAME:-[Not available in cache]}"
         debug_log "DEBUG: Using skipped/cached - ISP_AS: ${ISP_AS:-[Not available in cache]}"
+        debug_log "DEBUG: Using skipped/cached - SELECT_REGION_NAME: ${SELECT_REGION_NAME:-[Not available in cache]}"
     fi
 
     # 必須情報（国、タイムゾーン、ゾーン名）が揃っているか最終確認
@@ -689,7 +690,7 @@ process_location_info() {
     # ★★★ 削除: 一時キャッシュへの書き込み処理 ★★★
     # (No longer needed)
 
-    # --- START MODIFICATION ---
+    # --- START MODIFICATION (AS Cache) ---
     # Save AS number to its own persistent cache file
     local as_cache_file="${CACHE_DIR}/isp_as.ch"
     if [ -n "$ISP_AS" ]; then
@@ -702,7 +703,22 @@ process_location_info() {
         rm -f "$as_cache_file" 2>/dev/null
         debug_log "DEBUG" "ISP_AS is empty, removed AS number cache file (if it existed): $as_cache_file"
     fi
-    # --- END MODIFICATION ---
+    # --- END MODIFICATION (AS Cache) ---
+
+    # --- START NEW MODIFICATION (Region Name Cache) ---
+    # Save Region Name to its own persistent cache file
+    local region_cache_file="${CACHE_DIR}/region_name.ch"
+    if [ -n "$SELECT_REGION_NAME" ]; then
+        # Ensure CACHE_DIR exists before writing
+        [ -d "$CACHE_DIR" ] || mkdir -p "$CACHE_DIR"
+        echo "$SELECT_REGION_NAME" > "$region_cache_file"
+        debug_log "DEBUG" "Saved Region Name to persistent cache: $region_cache_file"
+    else
+        # If SELECT_REGION_NAME is empty, remove the cache file if it exists
+        rm -f "$region_cache_file" 2>/dev/null
+        debug_log "DEBUG" "SELECT_REGION_NAME is empty, removed Region Name cache file (if it existed): $region_cache_file"
+    fi
+    # --- END NEW MODIFICATION (Region Name Cache) ---
 
     # ★★★ 維持: ISP情報の永続キャッシュへの書き込み (isp_info.ch) ★★★
     # (common-information.sh 内で行うのが自然なため維持)
