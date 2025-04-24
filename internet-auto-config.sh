@@ -207,9 +207,9 @@ internet_auto_config_main() {
         printf "%s\n" "$(color red "Error: Required cache file 'network.ch' not found.")" >&2 # MODIFIED: Use color()
         return 1
     fi
-    if [ ! -f "${CACHE_DIR}/ip_as.tmp" ]; then
-        debug_log "DEBUG" "AS number cache file not found: ${CACHE_DIR}/ip_as.tmp" # ERROR -> DEBUG
-        printf "%s\n" "$(color red "Error: Required cache file 'ip_as.tmp' not found.")" >&2 # MODIFIED: Use color()
+    if [ ! -f "${CACHE_DIR}/isp_as.ch" ]; then
+        debug_log "DEBUG" "AS number cache file not found: ${CACHE_DIR}/isp_as.ch" # ERROR -> DEBUG
+        printf "%s\n" "$(color red "Error: Required cache file 'isp_as.ch' not found.")" >&2 # MODIFIED: Use color()
         return 1
     fi
 
@@ -250,7 +250,7 @@ internet_auto_config_main() {
 
     # --- 3. Get AS Number ---
     debug_log "DEBUG" "Retrieving AS number..."
-    asn=$(cat "${CACHE_DIR}/ip_as.tmp")
+    asn=$(cat "${CACHE_DIR}/isp_as.ch")
     if [ -z "$asn" ]; then
         debug_log "DEBUG" "Failed to retrieve AS number from cache." # ERROR -> DEBUG
         printf "%s\n" "$(color red "Error: Could not retrieve AS number for automatic detection.")" >&2 # MODIFIED: Use color()
