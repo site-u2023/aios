@@ -318,20 +318,20 @@ SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
 # Target Language: ${target_lang_code}
 EOF
 
-    # Loop through the base DB entries
-    while IFS= read -r line; do
-        case "$line" in \#*|"") continue ;; esac
-        if ! echo "$line" | grep -q "^${DEFAULT_LANGUAGE}|"; then continue; fi
+    grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
 
-        local line_content=${line#*|}
-        local key=${line_content%%=*}
-        local value=${line_content#*=}
+        local line_content=${line#*|} # Remove "en|" prefix
+        local key=${line_content%%=*}   # Get key before '='
+        local value=${line_content#*=}  # Get value after '='
+
         if [ -z "$key" ] || [ -z "$value" ]; then
             continue
         fi
 
+        # --- Directly call the AIP function ---
         local translated_text=""
-        local exit_code=1
+        local exit_code=1 # Default to failure
+
         translated_text=$("$aip_function_name" "$value" "$target_lang_code")
         exit_code=$?
 
@@ -339,10 +339,10 @@ EOF
             printf "%s|%s=%s\n" "$target_lang_code" "$key" "$translated_text" >> "$output_db"
         else
             printf "%s|%s=%s\n" "$target_lang_code" "$key" "$value" >> "$output_db"
-            # overall_success=2 # Uncomment if specific tracking is needed
         fi
+        # --- End AIP function call ---
 
-    done < "$base_db"
+    done
 
     # --- 計測終了 & 計算 ---
     end_time=$(date +%s)
