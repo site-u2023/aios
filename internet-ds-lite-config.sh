@@ -99,7 +99,7 @@ detect_provider_internal() {
     local aftr_address=""
     local region_text="" # Keep region_text for output consistency
 
-    local cache_as_file="${CACHE_DIR}/ip_as.tmp"
+    local cache_as_file="${CACHE_DIR}/isp_as.ch"
     local cache_region_code_file="${CACHE_DIR}/ip_region_code.tmp"
     local cache_region_name_file="${CACHE_DIR}/ip_region_name.tmp"
 
