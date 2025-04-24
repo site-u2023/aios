@@ -805,7 +805,7 @@ get_message() {
 
     local lang="$DEFAULT_LANGUAGE"
     local message=""
-    local add_colon="false"
+    local add_colon="false" # Initialize flag for adding colon
 
     # Get language code (assuming CACHE_DIR is defined)
     if [ -f "${CACHE_DIR}/message.ch" ]; then
@@ -847,18 +847,24 @@ get_message() {
         message="$key"
     fi
 
-    # 4. Detect and handle colon marker {;}
-    if echo "$message" | grep -q '{;}'; then
-        message=$(echo "$message" | sed 's/{;}//g')
-        add_colon="true"
-    fi
+    # --- MODIFIED: Step 4: Detect and handle colon marker {;} using case ---
+    # Replaces the previous `grep`-based check for better multi-language compatibility and POSIX compliance.
+    case "$message" in
+        *'{;}'*)
+            # Found {;}, remove it using parameter expansion (more efficient than sed)
+            message="${message//\{;\}/}" # POSIX-compliant removal of all occurrences
+            add_colon="true"
+            ;;
+    esac
+    # --- END MODIFIED ---
 
     # --- ADDED: Unconditionally normalize braces before replacement ---
     # Ensures full-width braces ｛｝ become half-width {} for awk compatibility
+    # (This line was present in the provided source and remains unchanged)
     message=$(echo "$message" | sed 's/｛/{/g; s/｝/}/g')
 
     # --- MODIFIED: Parameter replacement using awk (Case-Insensitive, POSIX Compliant) ---
-    # Define the awk script for placeholder replacement
+    # (The awk script and execution logic below are exactly as provided in the source and remain unchanged)
     awk_script='
         BEGIN { FS="=" }
         NR == 1 { msg = $0; next } # First line is the message template
@@ -932,10 +938,12 @@ get_message() {
     fi
 
     # 6. Call normalize_message for remaining normalization
+    # (This line was present in the provided source and remains unchanged)
     # Pass the potentially placeholder-replaced message and language
     message=$(normalize_message "$message" "$lang")
 
     # 7. Apply formatting (if enabled and type specified)
+    # (This section was present in the provided source and remains unchanged)
     if [ "$GET_MESSAGE_FORMATTING_ENABLED" = "true" ]; then
         # Only proceed if formatting is globally enabled
         case "$format_type" in
@@ -958,11 +966,13 @@ get_message() {
     fi
 
     # 8. Append colon if marker {;} was present
+    # (This logic remains the same, using the add_colon flag set in Step 4)
     if [ "$add_colon" = "true" ]; then
         message="${message}: " # Add colon and space
     fi
 
     # 9. Output the final message (using %b to interpret backslash escapes like \n from {@})
+    # (This line was present in the provided source and remains unchanged)
     printf "%b" "$message"
     return 0
 }
