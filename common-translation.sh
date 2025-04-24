@@ -247,7 +247,23 @@ translate_with_google() {
 
         if [ "$wget_exit_code" -eq 0 ] && [ -s "$temp_file" ]; then
             if grep -q '^\s*\[\[\["' "$temp_file"; then
-                translated_text=$(sed -e 's/^\s*\[\[\["//' -e 's/",".*//' "$temp_file" | sed -e 's/\\u003d/=/g' -e 's/\\u003c/</g' -e 's/\\u003e/>/g' -e 's/\\u0026/\&/g' -e 's/\\"/"/g' -e 's/\\n/\n/g' -e 's/\\r//g' -e 's/\\\\/\\/g')
+            
+                translated_text=$(sed -n \
+                    -e 's/^\s*\[\[\["\(.*\)",".*$/\1/' \
+                    -e 't decode' \
+                    -e 'b' \
+                    -e ':decode' \
+                    -e 's/\\u003d/=/g' \
+                    -e 's/\\u003c/</g' \
+                    -e 's/\\u003e/>/g' \
+                    -e 's/\\u0026/\&/g' \
+                    -e 's/\\"/"/g' \
+                    -e 's/\\n/\
+/g' \
+                    -e 's/\\r//g' \
+                    -e 's/\\\\/\\/g' \
+                    -e 'p' "$temp_file")
+
                 if [ -n "$translated_text" ]; then
                     rm -f "$temp_file" 2>/dev/null
                     printf "%s\n" "$translated_text"
