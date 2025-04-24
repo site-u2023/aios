@@ -268,7 +268,7 @@ translate_with_google() {
     return 1 # Failure
 }
 
-# 翻訳DB作成関数 (責務: DBファイル作成、AIP関数呼び出し、スピナー制御)
+# 翻訳DB作成関数 (責務: DBファイル作成、AIP関数呼び出し、スピナー制御、時間計測)
 # @param $1: aip_function_name (string) - The name of the AIP function to call (e.g., "translate_with_google")
 # @param $2: api_endpoint_url (string) - The base API endpoint URL (used ONLY for spinner display via domain_name extraction, NOT passed to AIP func)
 # @param $3: domain_name (string) - The domain name for spinner display (e.g., "translate.googleapis.com")
@@ -284,28 +284,27 @@ create_language_db() {
     local output_db="${BASE_DIR}/message_${target_lang_code}.db"
     local spinner_started="false"
     local overall_success=0 # Assume success initially
+    # --- 時間計測用変数 ---
+    local start_time=""
+    local end_time=""
+    local elapsed_seconds=""
+    # ---------------------
 
     debug_log "DEBUG" "Creating language DB for target '${target_lang_code}' using function '${aip_function_name}' with domain '${domain_name}'"
 
     if [ ! -f "$base_db" ]; then
         debug_log "DEBUG" "Base message DB not found: $base_db. Cannot create target DB."
-        # --- 変更点 ---
-        # 1. display_message 呼び出しを削除
-        # 2. エラーキー MSG_TRANSLATION_FAILED を使用
-        # 3. printf と color/get_message で標準エラー出力に表示
         printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED")")" >&2
-        # ---------------
         return 1
     fi
 
+    # --- 計測開始 ---
+    start_time=$(date +%s)
+    # ---------------
+
     # Start spinner before the loop
     if type start_spinner >/dev/null 2>&1; then
-        # --- 変更点 ---
-        # 1. ベタ書きメッセージまたは存在しないキーの使用を削除
-        # 2. 新規キー MSG_TRANSLATING_CURRENTLY を使用
-        # 3. パラメータとして api=$domain_name を渡す
         start_spinner "$(color blue "$(get_message "MSG_TRANSLATING_CURRENTLY" "api=$domain_name")")" "blue"
-        # ---------------
         spinner_started="true"
         debug_log "DEBUG" "Spinner started for domain: ${domain_name}"
     else
@@ -322,51 +321,47 @@ EOF
     # Loop through the base DB entries
     while IFS= read -r line; do
         case "$line" in \#*|"") continue ;; esac
-        # Ensure the line starts with the default language code and a pipe
         if ! echo "$line" | grep -q "^${DEFAULT_LANGUAGE}|"; then continue; fi
 
         local line_content=${line#*|}
         local key=${line_content%%=*}
         local value=${line_content#*=}
         if [ -z "$key" ] || [ -z "$value" ]; then
-            # ★★★ 変更点: ループ内の debug_log を削除 ★★★
-            # debug_log "DEBUG" "Skipping invalid line in base DB: $line"
             continue
         fi
 
-        # --- Directly call the AIP function ---
         local translated_text=""
-        local exit_code=1 # Default to failure
-
-        # ★★★ 変更点: ループ内の debug_log を削除 ★★★
-        # debug_log "DEBUG" "Attempting translation for key '${key}' using '${aip_function_name}'"
+        local exit_code=1
         translated_text=$("$aip_function_name" "$value" "$target_lang_code")
         exit_code=$?
 
         if [ "$exit_code" -eq 0 ] && [ -n "$translated_text" ]; then
-            # ★★★ 変更点: ループ内の debug_log を削除 ★★★
-            # debug_log "DEBUG" "Translation successful for key '${key}'"
             printf "%s|%s=%s\n" "$target_lang_code" "$key" "$translated_text" >> "$output_db"
         else
-            # ★★★ 変更点: ループ内の debug_log を削除 ★★★
-            # debug_log "DEBUG" "Translation failed (Exit code: $exit_code) or returned empty for key '${key}'. Using original text."
             printf "%s|%s=%s\n" "$target_lang_code" "$key" "$value" >> "$output_db"
-            # overall_success=2 # Indicate partial failure if needed (Uncomment if specific tracking is needed)
+            # overall_success=2 # Uncomment if specific tracking is needed
         fi
-        # --- End AIP function call ---
 
     done < "$base_db"
+
+    # --- 計測終了 & 計算 ---
+    end_time=$(date +%s)
+    elapsed_seconds=$((end_time - start_time))
+    # ----------------------
 
     # Stop spinner after the loop
     if [ "$spinner_started" = "true" ]; then
         if type stop_spinner >/dev/null 2>&1; then
-            # --- 変更点 ---
-            # 1. ベタ書きメッセージまたは空メッセージを削除
-            # 2. 新規キー MSG_TRANSLATING_CREATED を使用
-            # 3. 2番目の引数 "success" は維持
             stop_spinner "$(get_message "MSG_TRANSLATING_CREATED")" "success"
-            # ---------------
             debug_log "DEBUG" "Spinner stopped."
+
+            # --- 経過時間の表示 (成功時のみ) ---
+            if [ "$overall_success" -eq 0 ]; then
+                time_taken_message=$(get_message MSG_TRANSLATION_TIME_TAKEN "s=$elapsed_seconds")
+                printf "%s\n" "$time_taken_message" >&2
+                debug_log "INFO" "Translation task completed in ${elapsed_seconds} seconds." # Added INFO log
+            fi
+            # ---------------------------------
         else
             debug_log "WARN" "stop_spinner function not found."
         fi
