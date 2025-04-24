@@ -1044,7 +1044,8 @@ translate_main() {
     local func_name=""
     if [ -z "$AI_TRANSLATION_FUNCTIONS" ]; then
          debug_log "DEBUG" "translate_main: AI_TRANSLATION_FUNCTIONS global variable is not set or empty."
-         display_message "error" "$(get_message "MSG_ERR_NO_TRANS_FUNC_VAR")"
+         printf "%s\n" "$(color red "$(get_message "MSG_ERR_NO_TRANS_FUNC_VAR")")"
+         
          return 1
     fi
     set -f; set -- $AI_TRANSLATION_FUNCTIONS; set +f
@@ -1053,7 +1054,7 @@ translate_main() {
     done
     if [ -z "$selected_func" ]; then
         debug_log "DEBUG" "translate_main: No available translation functions found from list: '${AI_TRANSLATION_FUNCTIONS}'."
-        display_message "error" "$(get_message "MSG_ERR_NO_TRANS_FUNC_AVAIL" "list=$AI_TRANSLATION_FUNCTIONS")"
+        printf "%s\n" "$(color red "$(get_message "MSG_ERR_NO_TRANS_FUNC_AVAIL" "list=$AI_TRANSLATION_FUNCTIONS")")"
         return 1
     fi
     debug_log "DEBUG" "translate_main: Selected translation function: ${selected_func}"
@@ -1083,9 +1084,8 @@ translate_main() {
         return 0 # Success
     else
         debug_log "DEBUG" "translate_main: Language DB creation failed for ${lang_code} (Exit status: ${db_creation_result})."
-        # --- 修正 --- 失敗時はエラーメッセージのみ表示 (display_messageは元々あった)
         if [ "$db_creation_result" -ne 1 ]; then # Avoid duplicate if base DB missing
-             display_message "error" "$(get_message "MSG_ERR_TRANSLATION_FAILED" "lang=$lang_code")"
+             printf "%s\n" "$(color red "$(get_message "MSG_ERR_TRANSLATION_FAILED" "lang=$lang_code")")"
         fi
         # --- 修正 --- 失敗時は display_detected_translation を呼び出さない
         return "$db_creation_result" # Propagate error code
