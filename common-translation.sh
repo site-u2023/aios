@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # SCRIPT_VERSION="2025-04-23-12-47" # Original version marker - Updated below
-SCRIPT_VERSION="2025-04-24-00-05" # Updated version based on last interaction time
+SCRIPT_VERSION="2025-04-24-00-06" # Updated version based on last interaction time
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -561,6 +561,12 @@ translate_with_google() {
     local api_url=""
     local translated_text="" # Renamed from 'translated' in ok/ version for clarity
 
+    # --- DEBUG: Log input parameters ---
+    printf "DEBUG: [translate_with_google] START\n" >&2
+    printf "DEBUG:   target_lang_code: %s\n" "$target_lang_code" >&2
+    printf "DEBUG:   source_text (raw input):\n<<<\n%s\n>>>\n" "$source_text" >&2
+    # --- End DEBUG ---
+    
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
 
     if [ ! -f "$ip_check_file" ]; then
