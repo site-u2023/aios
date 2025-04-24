@@ -847,12 +847,19 @@ get_message() {
         message="$key"
     fi
 
-    # --- MODIFIED: Step 4: Detect and handle colon marker {;} using case ---
-    # Replaces the previous `grep`-based check for better multi-language compatibility and POSIX compliance.
+    # --- MODIFIED: Step 4: Detect and handle various colon markers ---
+    # Handles {;}, {؛}, ｛;｝, and ｛؛｝ for multi-language and full-width support.
     case "$message" in
-        *'{;}'*)
-            # Found {;}, remove it using parameter expansion (more efficient than sed)
-            message="${message//\{;\}/}" # POSIX-compliant removal of all occurrences
+        *'{;}'*|*'{؛}'*|*'｛;｝'*|*'｛؛｝'*)
+            # Found one of the markers. Remove all possible occurrences.
+            # Remove standard half-width marker
+            message="${message//\{;\}/}"
+            # Remove Arabic semicolon marker
+            message="${message//\{؛\}/}"
+            # Remove full-width brace + half-width semicolon marker
+            message="${message//｛;｝/}"
+            # Remove full-width brace + Arabic semicolon marker
+            message="${message//｛؛｝/}"
             add_colon="true"
             ;;
     esac
