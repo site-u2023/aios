@@ -414,12 +414,10 @@ EOF
                 else
                     # 翻訳失敗時は原文をそのまま使用
                     printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
-                    debug_log "DEBUG" "Translation failed for key: ${key}, using original text" 
                 fi
             else
                 # ネットワーク接続がない場合は原文を使用
                 printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
-                debug_log "DEBUG" "Network unavailable, using original text for key: ${key}"
             fi
         fi
     done
