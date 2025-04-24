@@ -352,16 +352,25 @@ EOF
     # Stop spinner after the loop
     if [ "$spinner_started" = "true" ]; then
         if type stop_spinner >/dev/null 2>&1; then
-            stop_spinner "$(get_message "MSG_TRANSLATING_CREATED")" "success"
-            debug_log "DEBUG" "Spinner stopped."
-
-            # --- 経過時間の表示 (成功時のみ) ---
+            # --- 変更点: 成功メッセージに時間を埋め込んでから stop_spinner に渡す ---
+            local final_success_message=""
             if [ "$overall_success" -eq 0 ]; then
-                time_taken_message=$(get_message MSG_TRANSLATION_TIME_TAKEN "s=$elapsed_seconds")
-                printf "%s\n" "$time_taken_message" >&2
-                debug_log "INFO" "Translation task completed in ${elapsed_seconds} seconds." # Added INFO log
+                 # get_message にパラメータ "s=$elapsed_seconds" を渡して時間を埋め込む
+                final_success_message=$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds")
+            else
+                 # 失敗時は元のメッセージキー（時間なし）を使うか、別の失敗キーを使う (ここでは元のキーを使用)
+                 # もし失敗時も時間を表示したい場合は、上の if ブロックの外で final_success_message を設定する
+                final_success_message=$(get_message "MSG_TRANSLATING_CREATED") # 時間プレースホルダーは置換されない
             fi
-            # ---------------------------------
+
+            # stop_spinner の第1引数に最終的なメッセージを渡す
+            # 第2引数は成功/失敗の状態を示す (ここでは "success" 固定だが、overall_successに応じて変えることも可能)
+            stop_spinner "$final_success_message" "success" # "success" はスピナーの見た目（色やアイコン）に影響する想定
+            # -----------------------------------------------------------------
+            debug_log "DEBUG" "Spinner stopped."
+            debug_log "INFO" "Translation task completed in ${elapsed_seconds} seconds." # INFOログはそのまま
+
+            # --- 変更点: 以前提案した printf での別行表示は不要なため削除済み ---
         else
             debug_log "WARN" "stop_spinner function not found."
         fi
