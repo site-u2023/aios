@@ -268,34 +268,34 @@ translate_with_google() {
     return 1 # Failure
 }
 
-# Function to create language-specific message database
-# Arguments:
-#   $1: target_lang (e.g., "ja") - ignored if ONLINE_TRANSLATION_ENABLED=yes
+# 翻訳DB作成関数 (責務: DBファイル作成、AIP関数呼び出し、スピナー制御、時間計測)
+# @param $1: aip_function_name (string) - The name of the AIP function to call (e.g., "translate_with_google")
+# @param $2: api_endpoint_url (string) - The base API endpoint URL (Currently unused, kept for potential future compatibility or logging)
+# @param $3: domain_name (string) - The domain name for spinner display (e.g., "translate.googleapis.com")
+# @param $4: target_lang_code (string) - The target language code (e.g., "ja")
+# @return: 0 on success, 1 on base DB not found, 2 if any translation fails (writes original text for failures)
 create_language_db() {
-    local target_lang="$1" # Parameter is kept for potential future use, but api_lang is used for output filename and processing
+    local aip_function_name="$1"
+    local api_endpoint_url="$2" # Unused in current logic, passed for context
+    local domain_name="$3"      # Explicitly passed domain name for spinner
+    local target_lang_code="$4"
+
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
-    local api_lang=$(get_api_lang_code) # Use the API-compatible language code
-    local output_db="${BASE_DIR}/message_${api_lang}.db"
-    local temp_file="${TRANSLATION_CACHE_DIR}/translation_output.tmp" # Check if this is still needed
-    local cleaned_translation=""
-    local current_api="" # Initialize current_api
-    local ip_check_file="${CACHE_DIR}/network.ch"
-    local network_status=""
-    local aip_function_name="" # To store the selected AIP function name
+    local output_db="${BASE_DIR}/message_${target_lang_code}.db"
+    local spinner_started="false"
+    local overall_success=0 # Assume success initially, 2 indicates at least one translation failed
     # --- 時間計測用変数 ---
     local start_time=""
     local end_time=""
     local elapsed_seconds=""
     # ---------------------
-    local spinner_started="false" # To track if spinner was started
-    local overall_success=0 # Track overall success (0=success)
 
-    debug_log "DEBUG" "Creating language DB for target ${target_lang} using API language code ${api_lang}"
+    debug_log "DEBUG" "Creating language DB for target '${target_lang_code}' using function '${aip_function_name}' with domain '${domain_name}'"
 
-    # Check base DB file
     if [ ! -f "$base_db" ]; then
-        debug_log "DEBUG" "Base message DB not found: ${base_db}"
-        printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED")")" >&2
+        debug_log "DEBUG" "Base message DB not found: $base_db. Cannot create target DB."
+        # Ensure get_message exists and handles missing keys gracefully
+        printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED" "default=Translation process failed")")" >&2
         return 1
     fi
 
@@ -303,169 +303,83 @@ create_language_db() {
     start_time=$(date +%s)
     # ---------------
 
-    # --- Determine which AIP function to use ---
-    # This logic should ideally be centralized if used elsewhere
-    # (Assuming API_LIST is set externally or has a default)
-    local domain_name="" # Domain name for spinner
-    case "$API_LIST" in
-        google)
-            aip_function_name="aip_google_translate"
-            domain_name="translate.googleapis.com"
-            ;;
-        lingva)
-            aip_function_name="aip_lingva_translate"
-            domain_name="lingva.ml"
-            ;;
-        *)
-            # Default to Google if API_LIST is not set or invalid
-            aip_function_name="aip_google_translate"
-            domain_name="translate.googleapis.com"
-            ;;
-    esac
-
-    if [ -z "$aip_function_name" ] || ! type "$aip_function_name" >/dev/null 2>&1; then
-         debug_log "ERROR" "Selected AIP function '$aip_function_name' is not available. Falling back to original text."
-         # Set overall_success or handle error as needed
-         overall_success=2 # Indicate partial failure/fallback
-         # Fallback logic: Copy original text instead of translating
-         # This part needs careful consideration based on desired behavior
-         # For now, let's assume we proceed but use original text (handled below)
-         ONLINE_TRANSLATION_ENABLED="no" # Force offline mode if function is missing
-    else
-         debug_log "DEBUG" "Using AIP function: $aip_function_name ($domain_name)"
-    fi
-    # --- End AIP function determination ---
-
-
-    # Start spinner if available
+    # Start spinner before the loop
     if type start_spinner >/dev/null 2>&1; then
-        # Use the determined domain_name for the spinner message
-        start_spinner "$(color blue "$(get_message "MSG_TRANSLATING_CURRENTLY" "api=$domain_name")")" "blue"
+        # Ensure get_message exists
+        start_spinner "$(color blue "$(get_message "MSG_TRANSLATING_CURRENTLY" "api=$domain_name" "default=Currently translating: $domain_name")")" "blue"
         spinner_started="true"
         debug_log "DEBUG" "Spinner started for domain: ${domain_name}"
     else
         debug_log "DEBUG" "start_spinner function not found. Spinner not shown."
-        # Display message directly if spinner is not available
-        printf "%s\n" "$(color blue "$(get_message "MSG_TRANSLATING_CURRENTLY" "api=$domain_name")")"
+         # Display message directly if spinner is not available
+         printf "%s\n" "$(color blue "$(get_message "MSG_TRANSLATING_CURRENTLY" "api=$domain_name" "default=Currently translating: $domain_name")")"
     fi
 
-
-    # Create/overwrite the output DB file with header
-    # Use api_lang for the output filename
+    # Create/overwrite the output DB with the header
     cat > "$output_db" << EOF
 SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
 # Translation generated using: ${aip_function_name}
-# Target Language: ${api_lang}
+# Target Language: ${target_lang_code}
 EOF
 
-
-    # Check network connectivity only if online translation is intended
-    if [ "$ONLINE_TRANSLATION_ENABLED" = "yes" ]; then
-        if [ ! -f "$ip_check_file" ]; then
-            debug_log "DEBUG" "Network status file not found, checking connectivity"
-            if type check_network_connectivity >/dev/null 2>&1; then
-                check_network_connectivity
-            else
-                debug_log "ERROR" "check_network_connectivity function not found, cannot check network"
-                 network_status="" # Assume no network
-            fi
-        fi
-        # Get network status if file exists
-        if [ -f "$ip_check_file" ]; then
-            network_status=$(cat "$ip_check_file")
-            debug_log "DEBUG" "Network status: ${network_status}"
-        else
-            debug_log "DEBUG" "Could not determine network status, assuming offline"
-            network_status="" # Assume offline if file check failed or function was missing
-        fi
-        # If no network, force offline mode for the rest of the function
-        if [ -z "$network_status" ]; then
-            debug_log "INFO" "Network unavailable, proceeding in offline mode (using original text)."
-            ONLINE_TRANSLATION_ENABLED="no"
-        fi
-    fi
-
-
-    # Loop through the base DB entries using redirection (more efficient than pipe)
+    # Loop through the base DB using efficient redirection and case statements
     while IFS= read -r line; do
         # Skip comment lines and empty lines efficiently
         case "$line" in \#*|"") continue ;; esac
 
-        # --- MODIFIED PART: Use case statement for efficient language/other line check ---
+        # Skip lines not starting with the default language prefix (e.g., SCRIPT_VERSION)
         case "$line" in
             "${DEFAULT_LANGUAGE}|"*)
                 # Line starts with the default language prefix, proceed
                 ;;
             *)
-                # Line does NOT start with the default language prefix (e.g., SCRIPT_VERSION), skip
+                # Line does NOT start with the default language prefix, skip
                 continue
                 ;;
         esac
-        # --- END MODIFIED PART ---
 
-        # Extract key and value using shell parameter expansion (efficient)
-        # Assumes format "LANG|KEY=VALUE" and we've already filtered for DEFAULT_LANGUAGE
-        local line_content=${line#*|}   # Remove "LANG|" prefix
-        local key=${line_content%%=*}    # Extract key before first '='
-        local value=${line_content#*=}   # Extract value after first '='
+        # Extract key and value using shell parameter expansion
+        local line_content=${line#*|} # Remove "LANG|" prefix
+        local key=${line_content%%=*}   # Get key before '='
+        local value=${line_content#*=}  # Get value after '='
 
-        # Skip if key or value extraction failed (e.g., line format issue)
+        # Skip if key or value extraction failed (basic check)
         if [ -z "$key" ] || [ -z "$value" ]; then
-            debug_log "WARNING" "Skipping malformed line: $line"
+             debug_log "WARNING" "Skipping malformed line: $line"
             continue
         fi
 
-        # --- Translation or Original Text Logic ---
+        # --- Directly call the provided AIP function ---
         local translated_text=""
         local exit_code=1 # Default to failure
 
-        # Only attempt online translation if enabled and function is valid
-        if [ "$ONLINE_TRANSLATION_ENABLED" = "yes" ] && [ "$overall_success" -ne 2 ]; then # Check overall_success in case function was invalid
-            # Generate cache key
-            local cache_key=$(printf "%s%s%s" "$key" "$value" "$api_lang" | md5sum | cut -d' ' -f1)
-            local cache_file="${TRANSLATION_CACHE_DIR}/${api_lang}_${cache_key}.txt"
-
-            # Check cache first
-            if [ -f "$cache_file" ]; then
-                translated_text=$(cat "$cache_file")
-                exit_code=0 # Cache hit is success
-                debug_log "DEBUG" "Cache hit for key '$key'"
-            else
-                # Cache miss, call the AIP function
-                translated_text=$("$aip_function_name" "$value" "$api_lang") # Pass api_lang as target
-                exit_code=$?
-                debug_log "DEBUG" "API call for key '$key' (Exit code: $exit_code)"
-
-                # Save to cache if successful and result is not empty
-                if [ "$exit_code" -eq 0 ] && [ -n "$translated_text" ]; then
-                    mkdir -p "$(dirname "$cache_file")"
-                    printf "%s\n" "$translated_text" > "$cache_file"
-                fi
-            fi
+        # Check if the function actually exists before calling (optional safety)
+        if type "$aip_function_name" >/dev/null 2>&1; then
+            translated_text=$("$aip_function_name" "$value" "$target_lang_code")
+            exit_code=$?
         else
-            # Offline mode or AIP function failed initialization, use original value
-            translated_text="$value"
-            exit_code=0 # Using original text is considered "successful" for this line's processing
-            if [ "$overall_success" -ne 2 ]; then # Avoid redundant log if function failed init
-                 debug_log "DEBUG" "Using original text for key '$key' (Offline mode or network unavailable)"
-            fi
+            # This case should ideally not happen if the caller checks, but as a fallback
+            debug_log "ERROR" "AIP function '$aip_function_name' not found during loop execution."
+            exit_code=1 # Mark as failure
+            overall_success=2 # Mark overall as partial failure
         fi
 
         # --- Output Line ---
-        # Always output a line, either translated or original
         if [ "$exit_code" -eq 0 ] && [ -n "$translated_text" ]; then
-            # Basic unescaping might be needed depending on API output, handle here if necessary
-            # local decoded=$(printf "%b" "$translated_text")
-            printf "%s|%s=%s\n" "$api_lang" "$key" "$translated_text" >> "$output_db"
+            printf "%s|%s=%s\n" "$target_lang_code" "$key" "$translated_text" >> "$output_db"
         else
-            # Log failure and use original value if translation failed and wasn't handled by offline mode
-             debug_log "WARNING" "Translation failed (Code: $exit_code) or empty result for key '$key'. Using original value."
-             overall_success=2 # Mark as partial failure if an online attempt failed
-            printf "%s|%s=%s\n" "$api_lang" "$key" "$value" >> "$output_db"
+             # Log failure and use original value
+             if [ "$exit_code" -ne 0 ]; then # Log only if the function call failed
+                 debug_log "WARNING" "Translation failed (Exit code: $exit_code) for key '$key'. Using original value."
+             else # Log if result was empty
+                 debug_log "WARNING" "Translation resulted in empty string for key '$key'. Using original value."
+             fi
+             overall_success=2 # Mark as partial failure
+            printf "%s|%s=%s\n" "$target_lang_code" "$key" "$value" >> "$output_db"
         fi
         # --- End Output Line ---
 
-    done < "$base_db" # Read from the base DB file
+    done < "$base_db" # Read directly from the base DB
 
     # --- 計測終了 & 計算 ---
     end_time=$(date +%s)
@@ -476,44 +390,37 @@ EOF
     if [ "$spinner_started" = "true" ]; then
         if type stop_spinner >/dev/null 2>&1; then
             local final_message=""
-            local spinner_status="success" # Default to success color/icon
+            local spinner_status="success" # Default: success
 
             if [ "$overall_success" -eq 0 ]; then
-                final_message=$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds")
-            elif [ "$overall_success" -eq 2 ]; then
-                # Partial failure (some translations failed, or AIP function invalid)
-                final_message=$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds") # Assuming a partial success key exists
-                spinner_status="warning" # Use a warning color/icon
-            else
-                # Complete failure (e.g., base DB not found - handled earlier, but as fallback)
-                final_message=$(get_message "MSG_TRANSLATION_FAILED")
-                spinner_status="failure"
-            fi
-            # Fallback if message key doesn't exist or get_message fails
-            if [ -z "$final_message" ]; then
-                final_message="Translation process finished (${elapsed_seconds}s)."
+                # Success: Use MSG_TRANSLATING_CREATED with time
+                final_message=$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")
+            else # overall_success is 2 (partial failure)
+                # Partial Failure: Use MSG_TRANSLATION_PARTIAL with time (assuming this key exists)
+                final_message=$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")
+                spinner_status="warning" # Indicate warning state
             fi
 
             stop_spinner "$final_message" "$spinner_status"
             debug_log "INFO" "Translation task completed in ${elapsed_seconds} seconds. Status: ${spinner_status}"
         else
             debug_log "DEBUG" "stop_spinner function not found."
-            # Print final status directly if spinner stop is unavailable
-            if [ "$overall_success" -eq 0 ]; then
-                 printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Translation created (${elapsed_seconds}s)")")"
-            else
-                 printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")")" # Assuming partial key
-            fi
+             # Print final status directly if spinner stop is unavailable
+             if [ "$overall_success" -eq 0 ]; then
+                 printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")")"
+             else
+                 printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")")"
+             fi
         fi
     fi
 
     # Add the completion marker key at the end of the file
     local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
-    printf "%s|%s=%s\n" "$api_lang" "$marker_key" "true" >> "$output_db"
+    printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$output_db"
     debug_log "DEBUG" "Completion marker added to ${output_db}"
 
-    debug_log "DEBUG" "Language DB creation process completed for ${api_lang}"
-    return "$overall_success" # Return 0 for full success, 1 for critical fail, 2 for partial
+    debug_log "DEBUG" "Language DB creation process completed for ${target_lang_code}"
+    return "$overall_success" # Return 0 for success, 2 for partial failure
 }
 
 # 翻訳DB作成関数 (責務: DBファイル作成、AIP関数呼び出し、スピナー制御)
