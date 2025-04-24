@@ -65,56 +65,6 @@ API_PROVIDERS="get_country_cloudflare get_country_ipapi get_country_ipinfo"
 
 SELECT_REGION_NAME=""
 
-# 検出された場所情報を表示する関数
-display_detected_location() {
-    local detection_source="$1"
-    local detected_country="$2"
-    local detected_zonename="$3"
-    local detected_timezone="$4"
-    # 引数番号変更 (5番目)
-    local detected_isp="${5:-}"
-    # 引数番号変更 (6番目)
-    local detected_as="${6:-}"
-
-    debug_log "DEBUG" "Displaying location information from source: $detection_source"
-
-    # 検出元情報の表示
-    printf "%s\n" "$(color white "$(get_message "MSG_USE_DETECTED_INFORMATION" "i=$detection_source")")"
-
-    # タイムゾーンAPIの情報（Cloudflare等、設定されていれば）
-    if [ -n "$TIMEZONE_API_SOURCE" ]; then
-        # APIのURLからドメイン名を抽出
-        local domain=$(echo "$TIMEZONE_API_SOURCE" | sed -n 's|^https\?://\([^/]*\).*|\1|p')
-
-        if [ -z "$domain" ]; then
-             # URLがなければそのまま使用
-             domain="$TIMEZONE_API_SOURCE"
-        fi
-
-        # タイムゾーン取得元の情報（プロバイダー名等）を表示
-        printf "%s\n" "$(color white "$(get_message "MSG_TIMEZONE_API" "a=$domain")")"
-    fi
-
-    # ISP情報の表示（ISP情報があれば）
-    if [ -n "$detected_isp" ]; then
-        printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ISP")")" "$(color white "$detected_isp")"
-    fi
-
-    if [ -n "$detected_as" ]; then
-        printf "%s %s\n" "$(color white "$(get_message "MSG_ISP_AS")")" "$(color white "$detected_as")"
-    fi
-
-    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_COUNTRY")")" "$(color white "$detected_country")"
-    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_ZONENAME")")" "$(color white "$detected_zonename")"
-    printf "%s %s\n" "$(color white "$(get_message "MSG_DETECTED_TIMEZONE")")" "$(color white "$detected_timezone")"
-
-    # --- 削除 ---
-    # 成功メッセージの表示ロジック
-    # -------------
-
-    debug_log "DEBUG" "Location information displayed successfully"
-}
-
 # APIリクエストを実行する関数（リダイレクト、タイムアウト、リトライ対応）
 make_api_request() {
     # パラメータ
@@ -712,48 +662,57 @@ process_location_info() {
         debug_log "DEBUG: Using skipped/cached - SELECT_COUNTRY: $SELECT_COUNTRY"
         debug_log "DEBUG: Using skipped/cached - SELECT_TIMEZONE: $SELECT_TIMEZONE"
         debug_log "DEBUG: Using skipped/cached - SELECT_ZONENAME: $SELECT_ZONENAME"
+        # Skip/cache does not guarantee ISP info is present, check specifically if needed
+        debug_log "DEBUG: Using skipped/cached - ISP_NAME: ${ISP_NAME:-[Not available in cache]}"
+        debug_log "DEBUG: Using skipped/cached - ISP_AS: ${ISP_AS:-[Not available in cache]}"
     fi
 
     # 必須情報（国、タイムゾーン、ゾーン名）が揃っているか最終確認
     debug_log "DEBUG: Processing location data - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME, Timezone: $SELECT_TIMEZONE"
 
     # ★★★ 削除: 一時キャッシュファイルパスの定義 ★★★
-    # local tmp_country="${CACHE_DIR}/ip_country.tmp"
-    # local tmp_timezone="${CACHE_DIR}/ip_timezone.tmp"
-    # local tmp_zonename="${CACHE_DIR}/ip_zonename.tmp"
-    # local tmp_isp="${CACHE_DIR}/ip_isp.tmp"
-    # local tmp_as="${CACHE_DIR}/ip_as.tmp"
-    # local tmp_region_name="${CACHE_DIR}/ip_region_name.tmp"
+    # (No longer needed)
 
     # 必須情報が空でないかチェック
     if [ -z "$SELECT_COUNTRY" ] || [ -z "$SELECT_TIMEZONE" ] || [ -z "$SELECT_ZONENAME" ]; then
         debug_log "ERROR: Incomplete location data - required information missing (Country, Timezone, or ZoneName)"
         # ★★★ 削除: 古い一時キャッシュファイルの削除 ★★★
-        # rm -f "$tmp_country" "$tmp_timezone" "$tmp_zonename" "$tmp_isp" "$tmp_as" "$tmp_region_name" 2>/dev/null
+        # (No longer needed)
 
         # ★★★ 削除: 一時キャッシュからのフォールバック処理 ★★★
-        # (一時キャッシュを使わないため不要)
+        # (No longer needed)
 
         # 必須情報がない場合はエラーで終了
         return 1
     fi
 
     # ★★★ 削除: 一時キャッシュへの書き込み処理 ★★★
-    # echo "$SELECT_COUNTRY" > "$tmp_country"
-    # echo "$SELECT_ZONENAME" > "$tmp_zonename"
-    # echo "$SELECT_TIMEZONE" > "$tmp_timezone"
-    # if [ -n "$ISP_NAME" ]; then echo "$ISP_NAME" > "$tmp_isp"; else rm -f "$tmp_isp" 2>/dev/null; fi
-    # if [ -n "$ISP_AS" ]; then echo "$ISP_AS" > "$tmp_as"; else rm -f "$tmp_as" 2>/dev/null; fi
-    # if [ -n "$SELECT_REGION_NAME" ]; then echo "$SELECT_REGION_NAME" > "$tmp_region_name"; else rm -f "$tmp_region_name" 2>/dev/null; fi
+    # (No longer needed)
 
-    # ★★★ 維持: ISP情報の永続キャッシュへの書き込み ★★★
+    # --- START MODIFICATION ---
+    # Save AS number to its own persistent cache file
+    local as_cache_file="${CACHE_DIR}/isp_as.ch"
+    if [ -n "$ISP_AS" ]; then
+        # Ensure CACHE_DIR exists before writing
+        [ -d "$CACHE_DIR" ] || mkdir -p "$CACHE_DIR"
+        echo "$ISP_AS" > "$as_cache_file"
+        debug_log "DEBUG" "Saved AS number to persistent cache: $as_cache_file"
+    else
+        # If ISP_AS is empty, remove the cache file if it exists
+        rm -f "$as_cache_file" 2>/dev/null
+        debug_log "DEBUG" "ISP_AS is empty, removed AS number cache file (if it existed): $as_cache_file"
+    fi
+    # --- END MODIFICATION ---
+
+    # ★★★ 維持: ISP情報の永続キャッシュへの書き込み (isp_info.ch) ★★★
     # (common-information.sh 内で行うのが自然なため維持)
     if [ -n "$ISP_NAME" ] || [ -n "$ISP_AS" ]; then
         local isp_cache_file="${CACHE_DIR}/isp_info.ch"
+        # Ensure CACHE_DIR exists before writing
+        [ -d "$CACHE_DIR" ] || mkdir -p "$CACHE_DIR"
         echo "$ISP_NAME" > "$isp_cache_file"
         echo "$ISP_AS" >> "$isp_cache_file"
         # ★★★ 修正: ISP_ORG は ISP_NAME と同じ値が入るので不要 ★★★
-        # echo "$ISP_ORG" >> "$isp_cache_file"
         debug_log "DEBUG" "Saved ISP information to permanent cache: $isp_cache_file"
     else
         rm -f "${CACHE_DIR}/isp_info.ch" 2>/dev/null
