@@ -64,16 +64,16 @@ AI_TRANSLATION_FUNCTIONS="translate_with_google translate_with_lingva" # 使用�
 
 #----------------------------------------------------------------------------------------------------
 
-# 翻訳DB作成関数 (責務: DBファイル作成、AIP関数呼び出し、スピナー制御、時間計測) - バッチ処理版
+# 翻訳DB作成関数 (責務: DBファイル作成、AIP関数呼び出し、時間計測) - バッチ処理版
 # @param $1: aip_function_name (string) - The name of the AIP function to call (e.g., "translate_with_google")
-# @param $2: api_endpoint_url (string) - The base API endpoint URL (Currently unused, kept for potential future compatibility or logging)
-# @param $3: domain_name (string) - The domain name for spinner display (e.g., "translate.googleapis.com")
+# @param $2: api_endpoint_url (string) - The base API endpoint URL (Currently unused)
+# @param $3: domain_name (string) - The domain name for basic progress display (e.g., "translate.googleapis.com")
 # @param $4: target_lang_code (string) - The target language code (e.g., "ja")
 # @return: 0 on success, 1 on base DB not found, 2 if any translation fails or mismatch occurs (writes original text for failures)
 create_language_db() {
     local aip_function_name="$1"
-    local api_endpoint_url="$2" # Unused in current logic, passed for context
-    local domain_name="$3"      # Explicitly passed domain name for spinner
+    local api_endpoint_url="$2" # Unused
+    local domain_name="$3"      # Used for simple message
     local target_lang_code="$4"
 
     # --- バッチサイズ設定 (ここで変更可能) ---
@@ -82,7 +82,6 @@ create_language_db() {
 
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
     local output_db="${BASE_DIR}/message_${target_lang_code}.db"
-    local spinner_started="false"
     local overall_success=0 # Assume success initially, 2 indicates at least one translation failed/mismatched
     # --- 時間計測用変数 ---
     local start_time=""
@@ -95,11 +94,11 @@ create_language_db() {
     local line_count=0
     # ----------------------------------
 
-    debug_log "DEBUG" "Creating language DB (Batch Mode, Size=${BATCH_SIZE}) for target '${target_lang_code}' using function '${aip_function_name}' with domain '${domain_name}'"
+    # printf "DEBUG: Creating language DB (Batch Mode, Size=%s) for target '%s' using function '%s' with domain '%s'\n" "$BATCH_SIZE" "$target_lang_code" "$aip_function_name" "$domain_name" >&2 # Basic Debug
 
     if [ ! -f "$base_db" ]; then
-        debug_log "DEBUG" "Base message DB not found: $base_db. Cannot create target DB."
-        printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED" "default=Translation process failed")")" >&2
+        # printf "DEBUG: Base message DB not found: %s. Cannot create target DB.\n" "$base_db" >&2 # Basic Debug
+        printf "ERROR: Translation process failed: Base DB not found at %s\n" "$base_db" >&2
         return 1
     fi
 
@@ -107,22 +106,16 @@ create_language_db() {
     start_time=$(date +%s)
     # ---------------
 
-    # Start spinner (Assuming start_spinner is available)
-    if type start_spinner >/dev/null 2>&1; then
-        start_spinner "$(color blue "$(get_message "MSG_TRANSLATING_CURRENTLY" "api=$domain_name" "default=Currently translating: $domain_name")")"
-        spinner_started="true"
-        debug_log "DEBUG" "Spinner started for domain: ${domain_name}"
-    else
-        debug_log "DEBUG" "start_spinner function not found. Spinner not shown."
-        printf "%s\n" "$(color blue "$(get_message "MSG_TRANSLATING_CURRENTLY" "api=$domain_name" "default=Currently translating: $domain_name")")"
-    fi
+    # Basic progress message (instead of spinner)
+    printf "INFO: Currently translating: %s (Batch Size: %s)...\n" "$domain_name" "$BATCH_SIZE"
 
     # Create/overwrite the output DB with the header
-    cat > "$output_db" << EOF
-SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
-# Translation generated using: ${aip_function_name} (Batch Size: ${BATCH_SIZE})
-# Target Language: ${target_lang_code}
-EOF
+    # POSIX compliant way to write multiple lines
+    {
+        printf "SCRIPT_VERSION=\"%s\"\n" "$(date +%Y.%m.%d-%H-%M)"
+        printf "# Translation generated using: %s (Batch Size: %s)\n" "$aip_function_name" "$BATCH_SIZE"
+        printf "# Target Language: %s\n" "$target_lang_code"
+    } > "$output_db"
 
     # Loop through the base DB
     while IFS= read -r line; do
@@ -136,14 +129,13 @@ EOF
         local key=${line_content%%=*}
         local value=${line_content#*=}
 
-        # Skip if key or value extraction failed (basic check)
-        if [ -z "$key" ] || [ -z "$value" ]; then
-            debug_log "DEBUG" "Skipping malformed line: $line"
+        # Skip if key or value extraction failed
+        if [ -z "$key" ]; then # Value can be empty, key cannot
+            # printf "DEBUG: Skipping malformed line (empty key): %s\n" "$line" >&2 # Basic Debug
             continue
         fi
 
         # Append key and value to batch variables (newline separated)
-        # Use printf for reliable newline handling
         if [ -z "$batch_keys" ]; then
             batch_keys="$key"
             batch_values="$value"
@@ -155,31 +147,29 @@ EOF
 
         # Process batch if it reaches BATCH_SIZE
         if [ "$line_count" -ge "$BATCH_SIZE" ]; then
-            # debug_log "DEBUG" "Processing batch of ${line_count} lines..." # Optional detailed log
-            # Call the helper function to process the batch
+            # printf "DEBUG: Processing batch of %s lines...\n" "$line_count" >&2 # Basic Debug
             process_translation_batch "$aip_function_name" "$target_lang_code" "$batch_keys" "$batch_values" "$output_db"
             local batch_result=$?
-            # Update overall success status if the batch failed/mismatched
             if [ "$batch_result" -ne 0 ]; then
                 overall_success=2 # Mark overall process as partially failed
-                debug_log "DEBUG" "Batch processing reported failure/mismatch (Status: $batch_result). Overall status set to partial failure."
+                # printf "DEBUG: Batch processing reported failure/mismatch (Status: %s). Overall status set to partial failure.\n" "$batch_result" >&2 # Basic Debug
             fi
-            # Reset batch variables for the next batch
+            # Reset batch variables
             batch_keys=""
             batch_values=""
             line_count=0
         fi
 
-    done < "$base_db" # Read directly from the base DB
+    done < "$base_db"
 
-    # Process any remaining lines in the last batch (if line_count > 0)
+    # Process any remaining lines in the last batch
     if [ "$line_count" -gt 0 ]; then
-        debug_log "DEBUG" "Processing final batch of ${line_count} lines..."
+        # printf "DEBUG: Processing final batch of %s lines...\n" "$line_count" >&2 # Basic Debug
         process_translation_batch "$aip_function_name" "$target_lang_code" "$batch_keys" "$batch_values" "$output_db"
         local batch_result=$?
         if [ "$batch_result" -ne 0 ]; then
-            overall_success=2 # Mark overall process as partially failed
-             debug_log "DEBUG" "Final batch processing reported failure/mismatch (Status: $batch_result). Overall status set to partial failure."
+            overall_success=2
+             # printf "DEBUG: Final batch processing reported failure/mismatch (Status: %s). Overall status set to partial failure.\n" "$batch_result" >&2 # Basic Debug
         fi
     fi
 
@@ -188,46 +178,19 @@ EOF
     elapsed_seconds=$((end_time - start_time))
     # ----------------------
 
-    # Stop spinner (Assuming stop_spinner is available)
-    if [ "$spinner_started" = "true" ]; then
-        if type stop_spinner >/dev/null 2>&1; then
-            local final_message=""
-            local spinner_status="success"
-
-            if [ "$overall_success" -eq 0 ]; then
-                final_message=$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")
-            else
-                # Use a different message key if available, or modify the default
-                final_message=$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")
-                spinner_status="warning" # Indicate warning state
-            fi
-
-            stop_spinner "$final_message" "$spinner_status"
-            debug_log "DEBUG" "Translation task completed in ${elapsed_seconds} seconds. Status: ${spinner_status}"
-        else
-            debug_log "DEBUG" "stop_spinner function not found."
-             # Print final status directly if spinner stop is unavailable
-             if [ "$overall_success" -eq 0 ]; then
-                 printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")")"
-             else
-                 printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")")"
-             fi
-        fi
-    # This else block is for the case where start_spinner wasn't found/failed
-    elif [ "$spinner_started" = "false" ]; then
-         if [ "$overall_success" -eq 0 ]; then
-             printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")")"
-         else
-             printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")")"
-         fi
+    # Final status message (instead of spinner stop)
+    if [ "$overall_success" -eq 0 ]; then
+        printf "INFO: Language file created successfully (%s seconds)\n" "$elapsed_seconds"
+    else
+        printf "WARN: Translation partially completed (%s seconds). Some entries might use original text.\n" "$elapsed_seconds"
     fi
 
     # Add the completion marker key at the end of the file
     local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
     printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$output_db"
-    debug_log "DEBUG" "Completion marker added to ${output_db}"
+    # printf "DEBUG: Completion marker added to %s\n" "$output_db" >&2 # Basic Debug
 
-    debug_log "DEBUG" "Language DB creation process completed for ${target_lang_code}"
+    # printf "DEBUG: Language DB creation process completed for %s\n" "$target_lang_code" >&2 # Basic Debug
     return "$overall_success" # Return 0 for success, 2 for partial failure/mismatch
 }
 
@@ -238,108 +201,112 @@ EOF
 # @param $4: batch_values (string) - Newline-separated values to translate
 # @param $5: output_db (string) - Path to the output database file
 # @stdout: None (writes directly to output_db)
-# @return: 0 if all lines in batch translated successfully, 2 if any translation failed or result mismatch
+# @return: 0 if all lines in batch translated successfully and counts match,
+#          2 if any translation failed OR line counts mismatch (uses original text)
 process_translation_batch() {
     local aip_function_name="$1"
     local target_lang_code="$2"
     local batch_keys="$3"
     local batch_values="$4"
     local output_db="$5"
-    local batch_success=0 # 0 = success, 2 = partial/failed
 
     local translated_batch=""
     local exit_code=1
+    local awk_result=""
+    local final_batch_status=2 # Default to failure/mismatch
 
     # --- Call AIP function for the entire batch ---
     if [ -n "$batch_values" ]; then
-        # Assuming $aip_function_name points to an existing function
-        # debug_log "DEBUG" "process_translation_batch: Calling ${aip_function_name} for batch..." # Optional detailed log
+        # printf "DEBUG: process_translation_batch: Calling %s for batch...\n" "$aip_function_name" >&2 # Basic Debug
         translated_batch=$("$aip_function_name" "$batch_values" "$target_lang_code")
         exit_code=$?
-        # debug_log "DEBUG" "process_translation_batch: ${aip_function_name} exited with ${exit_code}" # Optional detailed log
+        # printf "DEBUG: process_translation_batch: %s exited with %s\n" "$aip_function_name" "$exit_code" >&2 # Basic Debug
     else
-        # debug_log "DEBUG" "process_translation_batch: Empty batch, skipping API call."
+        # printf "DEBUG: process_translation_batch: Empty batch, skipping API call.\n" >&2 # Basic Debug
         return 0 # Empty batch, nothing to do
     fi
 
-    # --- Process the result using awk ---
+    # --- Process the result using awk (Simplified & Robust) ---
     # awk script:
     # - Splits keys, original values, and translated results by newline.
-    # - Compares the number of translated lines to the number of keys.
-    # - If counts match AND translation succeeded, prints translated lines with keys.
-    # - Otherwise (counts mismatch OR translation failed), prints ORIGINAL values with keys and sets batch_success=2.
+    # - Checks if translation succeeded (exit_code == 0) AND translated text is not empty.
+    # - If successful, splits translated text and compares line count with key count.
+    # - If counts match, uses translated text.
+    # - Otherwise (API failed, empty result, or count mismatch), uses ORIGINAL text and sets status to 2.
     # - Outputs lines in the target DB format.
     # - Outputs a final line indicating success (0) or partial failure (2).
-    local awk_result
-    # debug_log "DEBUG" "process_translation_batch: Processing result with awk..." # Optional detailed log
-    # debug_log "DEBUG" "process_translation_batch: AWK Input Keys: $(echo "$batch_keys" | wc -l), Originals: $(echo "$batch_values" | wc -l), Translated Raw: $(echo "$translated_batch" | wc -l), Exit Code: $exit_code" # Optional detailed log
-    awk_result=$(awk -v t_lang="$target_lang_code" -v keys="$batch_keys" -v originals="$batch_values" -v translated="$translated_batch" -v trans_ok="$exit_code" '
-    BEGIN {
+    awk_result=$(awk -v t_lang="$target_lang_code" \
+                     -v keys="$batch_keys" \
+                     -v originals="$batch_values" \
+                     -v translated="$translated_batch" \
+                     -v trans_ok="$exit_code" \
+    'BEGIN {
         FS = "\n"; RS = "\n"; OFS = "\n"; # Set field/record separators
         num_keys = split(keys, key_arr);
         num_originals = split(originals, orig_arr); # Should match num_keys
         num_translated = 0;
-        batch_status = 0; # Assume success
+        batch_status = 0; # Assume success initially
+        use_translated = 0; # Flag to indicate if translated text should be used
 
-        # Only attempt to split translated if the API call was successful and result not empty
+        # Check if translation API call was successful and returned something
         if (trans_ok == 0 && translated != "") {
             num_translated = split(translated, trans_arr);
-        }
-
-        # Check if translation succeeded AND line counts match
-        if (trans_ok == 0 && num_translated == num_keys) {
-            # Counts match, use translated text
-            # print "AWK: Counts match (" num_keys "), using translated." > "/dev/stderr"; # Debug for awk stderr
-            for (i = 1; i <= num_keys; ++i) {
-                # Basic check for non-empty key and translated line
-                if (key_arr[i] != "" && trans_arr[i] != "") {
-                    printf "%s|%s=%s\n", t_lang, key_arr[i], trans_arr[i];
-                } else {
-                    # Fallback to original if key or translated line is empty (defensive)
-                    # print "AWK: Empty key or translation for index " i ", using original." > "/dev/stderr"; # Debug for awk stderr
-                    printf "%s|%s=%s\n", t_lang, key_arr[i], orig_arr[i];
-                    batch_status = 2; # Mark as partial failure
-                }
+            # Check if the number of translated lines matches the number of keys
+            if (num_translated == num_keys) {
+                use_translated = 1;
+            } else {
+                # printf "AWK: Line count mismatch (Keys: %d, Translated: %d). Using original text.\n", num_keys, num_translated > "/dev/stderr"; # Basic Debug
+                batch_status = 2; # Mark as partial failure due to mismatch
             }
         } else {
-            # Translation failed OR line counts mismatch, use original text
+            # Translation API failed or returned empty result
+            # if (trans_ok != 0) { printf "AWK: Translation function failed (code %d). Using original text.\n", trans_ok > "/dev/stderr"; } # Basic Debug
+            # if (translated == "") { printf "AWK: Translation function returned empty. Using original text.\n" > "/dev/stderr"; } # Basic Debug
             batch_status = 2; # Mark as partial failure
-            # if (trans_ok != 0) { print "AWK: Translation function failed (code " trans_ok ")." > "/dev/stderr"; } # Debug for awk stderr
-            # if (num_translated != num_keys) { print "AWK: Line count mismatch (Keys: " num_keys ", Translated: " num_translated ")." > "/dev/stderr"; } # Debug for awk stderr
-            # print "AWK: Using original values for batch." > "/dev/stderr"; # Debug for awk stderr
-            for (i = 1; i <= num_keys; ++i) {
-                 # Ensure original key exists before printing
-                 if (key_arr[i] != "") {
-                    printf "%s|%s=%s\n", t_lang, key_arr[i], orig_arr[i];
-                 } else {
-                    # print "AWK: Skipping empty key at index " i " in fallback." > "/dev/stderr"; # Debug for awk stderr
-                 }
-            }
         }
-        # Print the batch status at the end for the calling function to capture
+
+        # Loop through keys and print either translated or original text
+        for (i = 1; i <= num_keys; ++i) {
+            # Ensure the key exists
+            if (key_arr[i] != "") {
+                if (use_translated == 1 && trans_arr[i] != "") {
+                    # Use translated text if available and flag is set
+                    printf "%s|%s=%s\n", t_lang, key_arr[i], trans_arr[i];
+                } else {
+                    # Use original text if translation failed, mismatched, or specific translated line is empty
+                    printf "%s|%s=%s\n", t_lang, key_arr[i], orig_arr[i];
+                    # If we intended to use translated but it was empty, still mark as partial failure
+                    if (use_translated == 1 && trans_arr[i] == "") {
+                         # printf "AWK: Translated line %d was empty. Used original.\n", i > "/dev/stderr"; # Basic Debug
+                         batch_status = 2;
+                    }
+                }
+            } # else { printf "AWK: Skipping empty key at index %d.\n", i > "/dev/stderr"; } # Basic Debug
+        }
+        # Print the final batch status
         print batch_status;
-    }
-    ' 2>/dev/null) # Redirect potential awk stderr to avoid cluttering output
+    }')
+    # --- End of awk script ---
 
     # Extract the batch status code (last line of awk_result)
-    local final_batch_status=$(printf "%s\n" "$awk_result" | tail -n 1)
+    final_batch_status=$(printf "%s\n" "$awk_result" | tail -n 1)
     # Extract the lines to be written to the DB (all lines except the last)
     local lines_to_write=$(printf "%s\n" "$awk_result" | head -n -1)
 
     # Append the processed lines to the output DB
     if [ -n "$lines_to_write" ]; then
-        # debug_log "DEBUG" "process_translation_batch: Appending $(echo "$lines_to_write" | wc -l) lines to ${output_db}" # Optional detailed log
+        # printf "DEBUG: process_translation_batch: Appending lines to %s\n" "$output_db" >&2 # Basic Debug
         printf "%s\n" "$lines_to_write" >> "$output_db"
     # else
-        # debug_log "DEBUG" "process_translation_batch: No lines to append to ${output_db}" # Optional detailed log
+        # printf "DEBUG: process_translation_batch: No lines to append.\n" >&2 # Basic Debug
     fi
 
     # Return the status code from awk
     if [ "$final_batch_status" = "2" ]; then
-        # debug_log "DEBUG" "process_translation_batch: Returning status 2 (Partial Failure/Mismatch)."
+        # printf "DEBUG: process_translation_batch: Returning status 2 (Partial Failure/Mismatch).\n" >&2 # Basic Debug
         return 2
     else
-        # debug_log "DEBUG" "process_translation_batch: Returning status 0 (Success)."
+        # printf "DEBUG: process_translation_batch: Returning status 0 (Success).\n" >&2 # Basic Debug
         return 0
     fi
 }
