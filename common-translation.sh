@@ -114,7 +114,7 @@ translate_with_lingva() {
          if type check_network_connectivity >/dev/null 2>&1; then
             check_network_connectivity
          else
-             debug_log "ERROR" "translate_with_lingva: check_network_connectivity function not found."
+             debug_log "DEBUG" "translate_with_lingva: check_network_connectivity function not found."
              network_type="v4" # デフォルト
          fi
     fi
@@ -192,7 +192,7 @@ translate_with_lingva() {
         fi
     done
 
-    debug_log "ERROR" "translate_with_lingva: Translation failed after ${API_MAX_RETRIES} attempts for text starting with: $(echo "$source_text" | cut -c 1-50)"
+    debug_log "DEBUG" "translate_with_lingva: Translation failed after ${API_MAX_RETRIES} attempts for text starting with: $(echo "$source_text" | cut -c 1-50)"
     rm -f "$temp_file" 2>/dev/null
     printf "" # Output empty string on failure
     return 1 # Failure
@@ -222,7 +222,7 @@ translate_with_google() {
          if type check_network_connectivity >/dev/null 2>&1; then
             check_network_connectivity
          else
-             debug_log "ERROR" "translate_with_google: check_network_connectivity function not found."
+             debug_log "DEBUG" "translate_with_google: check_network_connectivity function not found."
              network_type="v4"
          fi
     fi
@@ -262,7 +262,7 @@ translate_with_google() {
         fi
     done
 
-    debug_log "ERROR" "translate_with_google: Translation failed after ${API_MAX_RETRIES} attempts for text starting with: $(echo "$source_text" | cut -c 1-50)"
+    debug_log "DEBUG" "translate_with_google: Translation failed after ${API_MAX_RETRIES} attempts for text starting with: $(echo "$source_text" | cut -c 1-50)"
     rm -f "$temp_file" 2>/dev/null # 念のため削除
     printf "" # Output empty string on failure
     return 1 # Failure
@@ -308,7 +308,7 @@ create_language_db() {
         spinner_started="true"
         debug_log "DEBUG" "Spinner started for domain: ${domain_name}"
     else
-        debug_log "WARN" "start_spinner function not found. Spinner not shown."
+        debug_log "DEBUG" "start_spinner function not found. Spinner not shown."
     fi
 
     # Create/overwrite the output DB with the header
@@ -367,12 +367,11 @@ EOF
             # 第2引数は成功/失敗の状態を示す (ここでは "success" 固定だが、overall_successに応じて変えることも可能)
             stop_spinner "$final_success_message" "success" # "success" はスピナーの見た目（色やアイコン）に影響する想定
             # -----------------------------------------------------------------
-            debug_log "DEBUG" "Spinner stopped."
-            debug_log "INFO" "Translation task completed in ${elapsed_seconds} seconds." # INFOログはそのまま
+            debug_log "DEBUG" "Translation task completed in ${elapsed_seconds} seconds." # INFOログはそのまま
 
             # --- 変更点: 以前提案した printf での別行表示は不要なため削除済み ---
         else
-            debug_log "WARN" "stop_spinner function not found."
+            debug_log "DEBUG" "stop_spinner function not found."
         fi
     fi
 
