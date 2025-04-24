@@ -857,7 +857,7 @@ get_message() {
     # Ensures full-width braces ｛｝ become half-width {} for awk compatibility
     message=$(echo "$message" | sed 's/｛/{/g; s/｝/}/g')
 
-    # --- MODIFIED: Parameter replacement using awk ---
+    # --- MODIFIED: Parameter replacement using awk (Case-Insensitive, POSIX Compliant) ---
     # Define the awk script for placeholder replacement
     awk_script='
         BEGIN { FS="=" }
@@ -866,21 +866,49 @@ get_message() {
             p_name = $1
             # Correctly get raw value even if it contains =
             p_value = substr($0, index($0, "=") + 1)
-            params[p_name] = p_value # Store param in array
+            params[p_name] = p_value # Store param in array (key is original case from input)
         }
         END {
             # Iterate through parameters to perform replacements
             for (p_name in params) {
-                # Prepare the regex: escape { and } for awk gsub
-                regex = "\\{" p_name "\\}"
+                # --- MODIFIED: Build case-insensitive regex dynamically ---
+                regex_ci = "\\{" # Start regex with escaped {
+                for (i = 1; i <= length(p_name); ++i) {
+                    char = substr(p_name, i, 1)
+                    lc = tolower(char)
+                    uc = toupper(char)
+                    # If char is not a letter (lc == uc), append it directly.
+                    # Otherwise, append [lL] character class.
+                    if (lc == uc) {
+                        # Handle potential regex special characters within the name itself
+                        # If char is a regex metacharacter that needs escaping, escape it.
+                        # Basic example for backslash, extend if needed for ., *, +, ?, etc.
+                        if (char == "\\") {
+                             regex_ci = regex_ci "\\\\" # Append escaped backslash
+                        } else if (char == "[") {
+                             regex_ci = regex_ci "\\[" # Append escaped [
+                        } else if (char == "]") {
+                             regex_ci = regex_ci "\\]" # Append escaped ]
+                        # Add other metacharacters like ., *, +, ?, ^, $, | if needed
+                        } else {
+                            regex_ci = regex_ci char # Append other non-letter chars directly
+                        }
+                    } else {
+                        # Append character class for letters, e.g., [vV]
+                        regex_ci = regex_ci "[" lc uc "]"
+                    }
+                }
+                regex_ci = regex_ci "\\}" # End regex with escaped }
+                # Example: if p_name is "Value1", regex_ci becomes "\{[vV][aA][lL][uU][eE]1\}"
+                # --- END MODIFIED ---
 
                 # Prepare the replacement value: escape \ and & for gsub
                 current_value = params[p_name]
                 gsub(/\\/, "\\\\", current_value) # Escape backslashes first
                 gsub(/&/, "\\&", current_value)   # Escape ampersands
 
-                # Perform the global substitution on the message string
-                gsub(regex, current_value, msg)
+                # Perform the global substitution using the dynamically generated case-insensitive regex
+                gsub(regex_ci, current_value, msg)
             }
             print msg # Output the final message
         }
