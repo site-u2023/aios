@@ -384,7 +384,7 @@ EOF
         fi
 
         stop_spinner "$final_message" "$spinner_status"
-         "Translation task completed in ${elapsed_seconds} seconds. Status: ${spinner_status}"
+        debug_log "DEBUG" "Translation task completed in ${elapsed_seconds} seconds. Status: ${spinner_status}"
         # If stop_spinner wasn't found, script would likely error here
     else
         # This else block handles the case where the spinner wasn't started
