@@ -274,7 +274,7 @@ translate_with_google() {
 # @param $3: domain_name (string) - The domain name for spinner display (e.g., "translate.googleapis.com")
 # @param $4: target_lang_code (string) - The target language code (e.g., "ja")
 # @return: 0 on success, 1 on base DB not found, 2 if any translation fails (writes original text for failures)
-create_language_db() {
+CASE_create_language_db() {
     local aip_function_name="$1"
     local api_endpoint_url="$2" # Unused in current logic, passed for context
     local domain_name="$3"      # Explicitly passed domain name for spinner
@@ -345,7 +345,7 @@ EOF
 
         # Skip if key or value extraction failed (basic check)
         if [ -z "$key" ] || [ -z "$value" ]; then
-             debug_log "WARNING" "Skipping malformed line: $line"
+             debug_log "DEBUG" "Skipping malformed line: $line"
             continue
         fi
 
@@ -359,7 +359,7 @@ EOF
             exit_code=$?
         else
             # This case should ideally not happen if the caller checks, but as a fallback
-            debug_log "ERROR" "AIP function '$aip_function_name' not found during loop execution."
+             "AIP function '$aip_function_name' not found during loop execution."
             exit_code=1 # Mark as failure
             overall_success=2 # Mark overall as partial failure
         fi
@@ -368,11 +368,10 @@ EOF
         if [ "$exit_code" -eq 0 ] && [ -n "$translated_text" ]; then
             printf "%s|%s=%s\n" "$target_lang_code" "$key" "$translated_text" >> "$output_db"
         else
-             # Log failure and use original value
              if [ "$exit_code" -ne 0 ]; then # Log only if the function call failed
-                 debug_log "WARNING" "Translation failed (Exit code: $exit_code) for key '$key'. Using original value."
-             else # Log if result was empty
-                 debug_log "WARNING" "Translation resulted in empty string for key '$key'. Using original value."
+                 debug_log "DEBUG" "Translation failed (Exit code: $exit_code) for key '$key'. Using original value."
+             else
+                 debug_log "DEBUG" "Translation resulted in empty string for key '$key'. Using original value."
              fi
              overall_success=2 # Mark as partial failure
             printf "%s|%s=%s\n" "$target_lang_code" "$key" "$value" >> "$output_db"
@@ -393,16 +392,14 @@ EOF
             local spinner_status="success" # Default: success
 
             if [ "$overall_success" -eq 0 ]; then
-                # Success: Use MSG_TRANSLATING_CREATED with time
                 final_message=$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")
-            else # overall_success is 2 (partial failure)
-                # Partial Failure: Use MSG_TRANSLATION_PARTIAL with time (assuming this key exists)
+            else
                 final_message=$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")
                 spinner_status="warning" # Indicate warning state
             fi
 
             stop_spinner "$final_message" "$spinner_status"
-            debug_log "INFO" "Translation task completed in ${elapsed_seconds} seconds. Status: ${spinner_status}"
+             "Translation task completed in ${elapsed_seconds} seconds. Status: ${spinner_status}"
         else
             debug_log "DEBUG" "stop_spinner function not found."
              # Print final status directly if spinner stop is unavailable
@@ -467,16 +464,12 @@ EOF
     # --- 変更点: ループ処理を ok/ 版の grep | while 形式に変更 ---
     # Loop through the base DB entries (using grep | while like ok/ version)
     grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
-        # ok/版のループ内には case "$line" in \#*|"") continue ;; や grep チェックがなかったので、それに倣う
-        # ただし、キー・バリュー抽出の失敗チェックは残す
 
         local line_content=${line#*|} # Remove "en|" prefix
         local key=${line_content%%=*}   # Get key before '='
         local value=${line_content#*=}  # Get value after '='
 
         if [ -z "$key" ] || [ -z "$value" ]; then
-            # ★★★ 変更点: ループ内の debug_log を削除 ★★★ (元ソースに準拠)
-            # debug_log "DEBUG" "Skipping invalid line from grep output: $line"
             continue
         fi
 
@@ -484,20 +477,13 @@ EOF
         local translated_text=""
         local exit_code=1 # Default to failure
 
-        # ★★★ 変更点: ループ内の debug_log を削除 ★★★ (元ソースに準拠)
-        # debug_log "DEBUG" "Attempting translation for key '${key}' using '${aip_function_name}'"
         translated_text=$("$aip_function_name" "$value" "$target_lang_code")
         exit_code=$?
 
         if [ "$exit_code" -eq 0 ] && [ -n "$translated_text" ]; then
-            # ★★★ 変更点: ループ内の debug_log を削除 ★★★ (元ソースに準拠)
-            # debug_log "DEBUG" "Translation successful for key '${key}'"
             printf "%s|%s=%s\n" "$target_lang_code" "$key" "$translated_text" >> "$output_db"
         else
-            # ★★★ 変更点: ループ内の debug_log を削除 ★★★ (元ソースに準拠)
-            # debug_log "DEBUG" "Translation failed (Exit code: $exit_code) or returned empty for key '${key}'. Using original text."
             printf "%s|%s=%s\n" "$target_lang_code" "$key" "$value" >> "$output_db"
-            # overall_success=2 # Indicate partial failure if needed (Uncomment if specific tracking is needed)
         fi
         # --- End AIP function call ---
 
@@ -529,7 +515,7 @@ EOF
 # @param $3: domain_name (string) - The domain name for spinner display (e.g., "translate.googleapis.com")
 # @param $4: target_lang_code (string) - The target language code (e.g., "ja")
 # @return: 0 on success, 1 on base DB not found, 2 if AIP function fails consistently (though it writes original text)
-OK_create_language_db() {
+create_language_db() {
     local aip_function_name="$1"
     local api_endpoint_url="$2" # Passed URL for context/potential future use, but mainly for domain name below
     local domain_name="$3"      # Explicitly passed domain name for spinner
