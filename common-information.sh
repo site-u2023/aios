@@ -555,7 +555,7 @@ get_country_code() {
         tmp_file="${CACHE_DIR}/${api_provider}_tmp_$$.json"
 
         # スピナー開始 (関数名を表示)
-        start_spinner "$(color "blue" "Currently querying: $api_provider")" "yellow"
+        start_spinner "$(color "blue" "Currently querying: $api_provider")"
         spinner_active=1
 
         # API関数実行 (引数は2つ)
