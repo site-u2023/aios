@@ -306,7 +306,7 @@ create_language_db() {
 
     # Start spinner before the loop (Removed type check)
     # Assuming start_spinner is always available
-    start_spinner "$(color blue "$(get_message "MSG_TRANSLATING_CURRENTLY" "api=$domain_name" "default=Currently translating: $domain_name")")" "blue"
+    start_spinner "$(color blue "$(get_message "MSG_TRANSLATING_CURRENTLY" "api=$domain_name" "default=Currently translating: $domain_name")")" "blue_on_white"
     spinner_started="true"
     debug_log "DEBUG" "Spinner started for domain: ${domain_name}"
     # If start_spinner wasn't found, script would likely error here or previously
@@ -446,7 +446,7 @@ CASE_create_language_db() {
     # Start spinner before the loop
     if type start_spinner >/dev/null 2>&1; then
         # Ensure get_message exists
-        start_spinner "$(color blue "$(get_message "MSG_TRANSLATING_CURRENTLY" "api=$domain_name" "default=Currently translating: $domain_name")")" "blue"
+        start_spinner "$(color blue "$(get_message "MSG_TRANSLATING_CURRENTLY" "api=$domain_name" "default=Currently translating: $domain_name")")" "blue_on_white"
         spinner_started="true"
         debug_log "DEBUG" "Spinner started for domain: ${domain_name}"
     else
@@ -582,7 +582,7 @@ GREP_create_language_db() {
 
     # Start spinner before the loop
     if type start_spinner >/dev/null 2>&1; then
-        start_spinner "$(color blue "$(get_message "MSG_TRANSLATING_CURRENTLY" "api=$domain_name")")" "blue"
+        start_spinner "$(color blue "$(get_message "MSG_TRANSLATING_CURRENTLY" "api=$domain_name")")" "blue_on_white"
         spinner_started="true"
         debug_log "DEBUG" "Spinner started for domain: ${domain_name}"
     else
