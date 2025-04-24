@@ -545,7 +545,7 @@ OK_format_string() {
     return 0
 }
 
-normalize_message() {
+OK_normalize_message() {
     local input="$1"
     local lang="$2"
     local output="$input"
@@ -608,11 +608,220 @@ normalize_message() {
     return 0
 }
 
+# Function to normalize message strings (e.g., full-width to half-width)
+# Arguments:
+#   $1: Input string
+#   $2: Language code (e.g., "en", "ja-JP")
+# Outputs:
+#   Normalized string to stdout
+normalize_message() {
+    local input="$1"
+    local lang="$2"
+    local output="$input"
+    local saved_locale="$LC_ALL"
+
+    debug_log "DEBUG" "normalize_message: Input = [$input], Lang = [$lang]"
+
+    # --- Removed global full-width/symbol normalization (except backslash) ---
+    # output=$(echo "$output" | sed 's/｛/{/g; s/｝/}/g') # Moved to case block
+    # output=$(echo "$output" | sed 's/：/:/g; s/∶/:/g; s/꞉/:/g; s/ː/:/g') # Moved to case block
+    # output=$(echo "$output" | sed 's/；/;/g') # Moved to case block
+    # output=$(echo "$output" | sed 's/　/ /g') # Moved to case block
+    # output=$(echo "$output" | sed 's/＠/@/g') # Moved to case block
+    output=$(echo "$output" | sed 's/＼/\\/g') # Keep backslash normalization global
+
+    # --- Language-specific symbol and number normalization ---
+    local before_lang_norm="$output" # Renamed variable for clarity
+    case "${lang%%-*}" in
+        ar)
+            # Normalize Arabic symbols/space first, then Arabic semicolon, then numbers
+            output=$(echo "$output" | sed \
+                -e 's/：/:/g' -e 's/；/;/g' -e 's/＠/@/g' -e 's/｛/{/g' -e 's/｝/}/g' -e 's/　/ /g' \
+                -e 's/؛/;/g' \
+                -e 's/٠/0/g' -e 's/١/1/g' -e 's/٢/2/g' -e 's/٣/3/g' -e 's/٤/4/g' \
+                -e 's/٥/5/g' -e 's/٦/6/g' -e 's/٧/7/g' -e 's/٨/8/g' -e 's/٩/9/g' )
+            ;;
+        fa)
+            # Normalize Persian symbols/space first, then Arabic semicolon, then numbers
+            output=$(echo "$output" | sed \
+                -e 's/：/:/g' -e 's/；/;/g' -e 's/＠/@/g' -e 's/｛/{/g' -e 's/｝/}/g' -e 's/　/ /g' \
+                -e 's/؛/;/g' \
+                -e 's/۰/0/g' -e 's/۱/1/g' -e 's/۲/2/g' -e 's/۳/3/g' -e 's/۴/4/g' \
+                -e 's/۵/5/g' -e 's/۶/6/g' -e 's/۷/7/g' -e 's/۸/8/g' -e 's/۹/9/g' )
+            ;;
+        bn)
+            # Normalize Bengali symbols/space first, then numbers
+            output=$(echo "$output" | sed \
+                -e 's/：/:/g' -e 's/；/;/g' -e 's/＠/@/g' -e 's/｛/{/g' -e 's/｝/}/g' -e 's/　/ /g' \
+                -e 's/০/0/g' -e 's/১/1/g' -e 's/২/2/g' -e 's/৩/3/g' -e 's/৪/4/g' \
+                -e 's/৫/5/g' -e 's/৬/6/g' -e 's/৭/7/g' -e 's/৮/8/g' -e 's/৯/9/g' )
+            ;;
+        hi|mr|ne)
+            # Normalize Devanagari symbols/space first, then numbers
+            output=$(echo "$output" | sed \
+                -e 's/：/:/g' -e 's/；/;/g' -e 's/＠/@/g' -e 's/｛/{/g' -e 's/｝/}/g' -e 's/　/ /g' \
+                -e 's/०/0/g' -e 's/१/1/g' -e 's/२/2/g' -e 's/३/3/g' -e 's/४/4/g' \
+                -e 's/५/5/g' -e 's/६/6/g' -e 's/७/7/g' -e 's/८/8/g' -e 's/९/9/g' )
+            ;;
+        ja|zh|ko)
+            # Normalize CJK symbols/space first, then numbers
+            output=$(echo "$output" | sed \
+                -e 's/：/:/g' -e 's/；/;/g' -e 's/＠/@/g' -e 's/｛/{/g' -e 's/｝/}/g' -e 's/　/ /g' \
+                -e 's/０/0/g' -e 's/１/1/g' -e 's/２/2/g' -e 's/３/3/g' -e 's/４/4/g' \
+                -e 's/５/5/g' -e 's/６/6/g' -e 's/７/7/g' -e 's/８/8/g' -e 's/９/9/g' )
+            ;;
+    esac
+
+    # Consolidated log output for language-specific normalization
+    if [ "$output" != "$before_lang_norm" ]; then
+        debug_log "DEBUG" "normalize_message: Applied language-specific normalization for '$lang'. Result = [$output]"
+    fi
+
+    # Locale-dependent character class normalization (e.g., whitespace)
+    LC_ALL=C
+    output=$(echo "$output" | sed 's/[[:space:]]\+/ /g' | sed 's/^ //; s/ $//') # Trim leading/trailing and collapse spaces
+    LC_ALL="$saved_locale"
+
+    debug_log "DEBUG" "normalize_message: Final Output = [$output]"
+    echo "$output"
+}
+
 # メッセージを取得し、パラメータ置換とフォーマットを行う関数
 # Usage: get_message <key> [format_type] [param1=value1] [param2=value2] ...
 # format_type: "upper", "capitalize", "none" (default)
 # Reads global variables: GET_MESSAGE_FORMATTING_ENABLED, FORMAT_TYPE_UPPER_ENABLED, FORMAT_TYPE_CAPITALIZE_ENABLED
 get_message() {
+    local key="$1"
+    local format_type="none" # デフォルトのフォーマットタイプ
+    local shift_count=1      # デフォルトはキーのみを shift する
+
+    # 第2引数が存在し、かつそれがフォーマットタイプ指定子であるか確認
+    if [ $# -ge 2 ]; then
+        case "$2" in
+            upper|capitalize|none)
+                format_type="$2"
+                shift_count=2
+                debug_log "DEBUG" "get_message: Format type '$format_type' provided for key '$key'."
+                ;;
+            *)
+                debug_log "DEBUG" "get_message: Second argument '$2' is not a format type, assuming parameter for key '$key'."
+                ;;
+        esac
+    else
+        debug_log "DEBUG" "get_message: No second argument provided for key '$key'."
+    fi
+
+    # 判定結果に基づいて shift を実行
+    shift "$shift_count"
+
+    local lang="$DEFAULT_LANGUAGE"
+    local message=""
+    local add_colon="false"
+
+    # 言語コードの取得
+    if [ -f "${CACHE_DIR}/message.ch" ]; then
+        lang=$(cat "${CACHE_DIR}/message.ch")
+    fi
+
+    # 1. DBからメッセージ取得
+    local db_file="$(check_message_cache "$lang")"
+    if [ -n "$db_file" ] && [ -f "$db_file" ]; then
+        message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
+            local default_db_file="$(check_message_cache "$DEFAULT_LANGUAGE")"
+            if [ -n "$default_db_file" ] && [ -f "$default_db_file" ]; then
+                message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$default_db_file" 2>/dev/null | cut -d'=' -f2-)
+            fi
+        fi
+    fi
+
+    # 2. メモリキャッシュを試す
+    if [ -z "$message" ]; then
+        if [ "$MSG_MEMORY_INITIALIZED" != "true" ] || [ "$MSG_MEMORY_LANG" != "$lang" ]; then
+            into_memory_message
+        fi
+        if [ -n "$MSG_MEMORY" ]; then
+            message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+            if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
+                 message=$(echo "$MSG_MEMORY" | grep "^${DEFAULT_LANGUAGE}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+            fi
+        fi
+    fi
+
+    # 3. フォールバック
+    if [ -z "$message" ]; then
+        message="$key"
+    fi
+
+    # 4. {;} 検出
+    if echo "$message" | grep -q '{;}'; then
+        message=$(echo "$message" | sed 's/{;}//g')
+        add_colon="true"
+    fi
+
+    # --- 変更箇所 ここから (パラメータ置換) ---
+    # 5. パラメータ置換 ($@ は shift 済み)
+    for param in "$@"; do
+        param_name=$(echo "$param" | cut -d'=' -f1)
+        param_value=$(echo "$param" | cut -d'=' -f2-)
+        # Escape backslashes and hash marks robustly for sed replacement value
+        local escaped_value=$(printf '%s\n' "$param_value" | sed -e 's/[\\#]/\\&/g')
+        if [ -n "$param_name" ] ; then
+             # Use 'gi' flags for case-insensitive global replacement of placeholders
+             message=$(echo "$message" | sed "s#{$param_name}#$escaped_value#gi")
+             debug_log "DEBUG" "get_message: Replaced {$param_name} for key '$key' (case-insensitive)"
+        fi
+    done
+    # --- 変更箇所 ここまで ---
+
+    # 6. normalize_message (パラメータ置換後に実行)
+    message=$(normalize_message "$message" "$lang")
+
+    # 7. フォーマット処理 (グローバル変数による制御付き)
+    if [ "$GET_MESSAGE_FORMATTING_ENABLED" = "true" ]; then
+        # フォーマット処理が全体的に有効な場合のみ実行
+        case "$format_type" in
+            "upper")
+                # 'upper' タイプが有効かチェック
+                if [ "$FORMAT_TYPE_UPPER_ENABLED" = "true" ]; then
+                    debug_log "DEBUG" "get_message: Applying 'upper' format (enabled) for key '$key'"
+                    message=$(format_string "upper" "$message")
+                else
+                    debug_log "DEBUG" "get_message: 'upper' format is disabled (FORMAT_TYPE_UPPER_ENABLED=false) for key '$key'"
+                fi
+                ;;
+            "capitalize")
+                # 'capitalize' タイプが有効かチェック
+                if [ "$FORMAT_TYPE_CAPITALIZE_ENABLED" = "true" ]; then
+                    debug_log "DEBUG" "get_message: Applying 'capitalize' format (enabled) for key '$key'"
+                    message=$(format_string "capitalize" "$message")
+                else
+                    debug_log "DEBUG" "get_message: 'capitalize' format is disabled (FORMAT_TYPE_CAPITALIZE_ENABLED=false) for key '$key'"
+                fi
+                ;;
+            "none"|*)
+                # "none" または未知のタイプの場合は何もしない
+                debug_log "DEBUG" "get_message: No formatting applied (type: '$format_type') for key '$key'"
+                ;;
+        esac
+    else
+        # フォーマット処理が全体的に無効な場合
+        debug_log "DEBUG" "get_message: Formatting globally disabled (GET_MESSAGE_FORMATTING_ENABLED=false) for key '$key'"
+    fi
+
+    # 8. コロン追加
+    if [ "$add_colon" = "true" ]; then message="${message}: "; fi
+
+    # 9. 出力
+    printf "%b" "$message"
+    return 0
+}
+
+# メッセージを取得し、パラメータ置換とフォーマットを行う関数
+# Usage: get_message <key> [format_type] [param1=value1] [param2=value2] ...
+# format_type: "upper", "capitalize", "none" (default)
+# Reads global variables: GET_MESSAGE_FORMATTING_ENABLED, FORMAT_TYPE_UPPER_ENABLED, FORMAT_TYPE_CAPITALIZE_ENABLED
+OK_get_message() {
     local key="$1"
     local format_type="none" # デフォルトのフォーマットタイプ
     local shift_count=1      # デフォルトはキーのみを shift する
