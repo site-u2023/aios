@@ -303,6 +303,145 @@ create_language_db() {
     start_time=$(date +%s)
     # ---------------
 
+    # Start spinner before the loop (Removed type check)
+    # Assuming start_spinner is always available
+    start_spinner "$(color blue "$(get_message "MSG_TRANSLATING_CURRENTLY" "api=$domain_name" "default=Currently translating: $domain_name")")" "blue"
+    spinner_started="true"
+    debug_log "DEBUG" "Spinner started for domain: ${domain_name}"
+    # If start_spinner wasn't found, script would likely error here or previously
+
+    # Create/overwrite the output DB with the header
+    cat > "$output_db" << EOF
+SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
+# Translation generated using: ${aip_function_name}
+# Target Language: ${target_lang_code}
+EOF
+
+    # Loop through the base DB using efficient redirection and case statements
+    while IFS= read -r line; do
+        case "$line" in \#*|"") continue ;; esac
+
+        case "$line" in
+            "${DEFAULT_LANGUAGE}|"*)
+                ;;
+            *)
+                continue
+                ;;
+        esac
+
+        # Extract key and value using shell parameter expansion
+        local line_content=${line#*|} # Remove "LANG|" prefix
+        local key=${line_content%%=*}   # Get key before '='
+        local value=${line_content#*=}  # Get value after '='
+
+        # Skip if key or value extraction failed (basic check)
+        if [ -z "$key" ] || [ -z "$value" ]; then
+             debug_log "DEBUG" "Skipping malformed line: $line"
+            continue
+        fi
+
+        # --- Directly call the provided AIP function (Removed type check) ---
+        local translated_text=""
+        local exit_code=1 # Default to failure
+
+        # Assuming $aip_function_name points to an existing function
+        translated_text=$("$aip_function_name" "$value" "$target_lang_code")
+        exit_code=$?
+        # If $aip_function_name was invalid, script errors here
+
+        # --- Output Line ---
+        if [ "$exit_code" -eq 0 ] && [ -n "$translated_text" ]; then
+            printf "%s|%s=%s\n" "$target_lang_code" "$key" "$translated_text" >> "$output_db"
+        else
+             if [ "$exit_code" -ne 0 ]; then # Log only if the function call failed
+                 debug_log "DEBUG" "Translation failed (Exit code: $exit_code) for key '$key'. Using original value."
+             else
+                 debug_log "DEBUG" "Translation resulted in empty string for key '$key'. Using original value."
+             fi
+             overall_success=2 # Mark as partial failure
+            printf "%s|%s=%s\n" "$target_lang_code" "$key" "$value" >> "$output_db"
+        fi
+        # --- End Output Line ---
+
+    done < "$base_db" # Read directly from the base DB
+
+    # --- 計測終了 & 計算 ---
+    end_time=$(date +%s)
+    elapsed_seconds=$((end_time - start_time))
+    # ----------------------
+
+    # Stop spinner after the loop (Removed type check)
+    if [ "$spinner_started" = "true" ]; then
+        # Assuming stop_spinner is always available
+        local final_message=""
+        local spinner_status="success" # Default: success
+
+        if [ "$overall_success" -eq 0 ]; then
+            final_message=$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")
+        else
+            final_message=$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")
+            spinner_status="warning" # Indicate warning state
+        fi
+
+        stop_spinner "$final_message" "$spinner_status"
+         "Translation task completed in ${elapsed_seconds} seconds. Status: ${spinner_status}"
+        # If stop_spinner wasn't found, script would likely error here
+    else
+        # This else block handles the case where the spinner wasn't started
+        # (which shouldn't happen now without the type check failure path,
+        # unless start_spinner itself fails internally).
+        # Print final status directly if spinner wasn't started (or stop_spinner unavailable)
+         if [ "$overall_success" -eq 0 ]; then
+             printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")")"
+         else
+             printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")")"
+         fi
+    fi
+
+    # Add the completion marker key at the end of the file
+    local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
+    printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$output_db"
+    debug_log "DEBUG" "Completion marker added to ${output_db}"
+
+    debug_log "DEBUG" "Language DB creation process completed for ${target_lang_code}"
+    return "$overall_success" # Return 0 for success, 2 for partial failure
+}
+
+# 翻訳DB作成関数 (責務: DBファイル作成、AIP関数呼び出し、スピナー制御、時間計測)
+# @param $1: aip_function_name (string) - The name of the AIP function to call (e.g., "translate_with_google")
+# @param $2: api_endpoint_url (string) - The base API endpoint URL (Currently unused, kept for potential future compatibility or logging)
+# @param $3: domain_name (string) - The domain name for spinner display (e.g., "translate.googleapis.com")
+# @param $4: target_lang_code (string) - The target language code (e.g., "ja")
+# @return: 0 on success, 1 on base DB not found, 2 if any translation fails (writes original text for failures)
+CASE_create_language_db() {
+    local aip_function_name="$1"
+    local api_endpoint_url="$2" # Unused in current logic, passed for context
+    local domain_name="$3"      # Explicitly passed domain name for spinner
+    local target_lang_code="$4"
+
+    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
+    local output_db="${BASE_DIR}/message_${target_lang_code}.db"
+    local spinner_started="false"
+    local overall_success=0 # Assume success initially, 2 indicates at least one translation failed
+    # --- 時間計測用変数 ---
+    local start_time=""
+    local end_time=""
+    local elapsed_seconds=""
+    # ---------------------
+
+    debug_log "DEBUG" "Creating language DB for target '${target_lang_code}' using function '${aip_function_name}' with domain '${domain_name}'"
+
+    if [ ! -f "$base_db" ]; then
+        debug_log "DEBUG" "Base message DB not found: $base_db. Cannot create target DB."
+        # Ensure get_message exists and handles missing keys gracefully
+        printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED" "default=Translation process failed")")" >&2
+        return 1
+    fi
+
+    # --- 計測開始 ---
+    start_time=$(date +%s)
+    # ---------------
+
     # Start spinner before the loop
     if type start_spinner >/dev/null 2>&1; then
         # Ensure get_message exists
