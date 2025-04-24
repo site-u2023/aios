@@ -779,178 +779,192 @@ normalize_message() {
     return 0
 }
 
-# Function to retrieve a message by key, apply formatting, and replace placeholders
-# Usage: get_message <key> [param1] [param2] ... [format=upper|capitalize|lower]
-# Example: msg=$(get_message "CONFIG_DOWNLOADING" "aios")
-# Example: msg=$(get_message "MAIN_MENU_NAME" format=upper)
-# Example: msg=$(get_message "CONFIG_MAIN_SELECT_PROMPT" "6" format=capitalize)
+# --- get_message function (Handles message retrieval, normalization, and formatting) ---
+# Usage: get_message <key> [format_type] [param1=value1] [param2=value2] ...
+# format_type: "upper", "capitalize", "none" (default)
+# Reads global variables: DEFAULT_LANGUAGE, CACHE_DIR, MSG_MEMORY_INITIALIZED, MSG_MEMORY_LANG, MSG_MEMORY,
+#                         GET_MESSAGE_FORMATTING_ENABLED, FORMAT_TYPE_UPPER_ENABLED, FORMAT_TYPE_CAPITALIZE_ENABLED
 get_message() {
     local key="$1"
-    shift # Remove the key from the argument list ($@ now contains only params and optional format)
-    local format=""
-    local message
-    local message_file
-    local add_colon="false"
-    local lang_code
-    local awk_script
-    local param_count=0 # Initialize parameter counter
-    local arg_count=$#  # Total number of remaining arguments ($@)
+    local format_type="none" # Default format type
+    local shift_count=1      # Default shift count (only key)
+    local awk_script         # Local variable for awk script
 
-    # Determine the language code from the environment variable or default to 'en'
-    lang_code="${AIOS_LANG_CODE:-en}"
-
-    # Construct the message file path
-    message_file="${AIOS_CACHE_DIR}/message_${lang_code}.db"
-
-    # 1. Check if the message file exists and is readable
-    if [ ! -f "$message_file" ] || [ ! -r "$message_file" ]; then
-        message_file="${AIOS_CACHE_DIR}/message_en.db" # Fallback to English
-        if [ ! -f "$message_file" ] || [ ! -r "$message_file" ]; then
-            echo "Error: Message file not found or not readable: ${AIOS_CACHE_DIR}/message_en.db" >&2
-            echo "$key" # Return key as fallback
-            return 1
-        fi
-    fi
-
-    # 2. Retrieve the message line from the file
-    message_line=$(grep -m 1 "^${lang_code}|${key}=" "$message_file")
-
-    # 3. Extract the message value
-    if [ -n "$message_line" ]; then
-        message="${message_line#*=}"
-    else
-        message_line_en=$(grep -m 1 "^en|${key}=" "${AIOS_CACHE_DIR}/message_en.db")
-        if [ -n "$message_line_en" ]; then
-            message="${message_line_en#*=}"
-        else
-            message="$key"
-        fi
-    fi
-
-    # 4. Detect and handle colon marker {;} using case
-    add_colon="false"
-    case "$message" in
-        *'{;}'*)
-            message=$(echo "$message" | sed 's/{;}//g')
-            add_colon="true"
-            ;;
-    esac
-
-    # 5. Normalize message (braces, special markers) before replacement
-    message=$(normalize_message "$message")
-
-    # --- MODIFIED: Determine format and actual parameter count without arrays ---
-    # 6. Check the last argument for 'format='
-    param_count=$arg_count # Assume all arguments are parameters initially
-    if [ "$arg_count" -gt 0 ]; then
-        # Get the last argument using a loop (POSIX compliant way)
-        local last_arg=""
-        local arg
-        for arg in "$@"; do
-            last_arg="$arg"
-        done
-
-        case "$last_arg" in
-            format=*)
-                format="${last_arg#format=}"
-                # If format was found, it's not a real message parameter
-                param_count=$((param_count - 1))
+    # Check if the second argument is a format type specifier
+    if [ $# -ge 2 ]; then
+        case "$2" in
+            upper|capitalize|none)
+                format_type="$2"
+                shift_count=2
                 ;;
         esac
     fi
-    # --- END MODIFIED ---
 
-    # 7. Replace placeholders and apply formatting using awk (if params exist)
-    #    Pass template via stdin, format/count via env vars, params via ARGV
-    if [ "$param_count" -gt 0 ]; then
-        awk_script='
-        # Function definitions (tolower_str, toupper_str, capitalize_str) - Keep these inline
-        function tolower_str(str,        i, char, lower_char, result) { result = ""; for (i = 1; i <= length(str); i++) { char = substr(str, i, 1); lower_char = tolower(char); result = result lower_char } return result }
-        function toupper_str(str,        i, char, upper_char, result) { result = ""; for (i = 1; i <= length(str); i++) { char = substr(str, i, 1); upper_char = toupper(char); result = result upper_char } return result }
-        function capitalize_str(str,     first_char, rest_str) { if (length(str) == 0) return ""; first_char = substr(str, 1, 1); rest_str = substr(str, 2); return toupper_str(first_char) tolower_str(rest_str) }
+    # Shift arguments based on whether format type was provided
+    shift "$shift_count"
 
-        # Get format and param_count from environment variables
-        BEGIN {
-            FS = "" # Not strictly needed for getline, but good practice
-            format_type = ENVIRON["AWK_FORMAT_SPEC"]
-            # Ensure param_count is treated as a number
-            p_count = ENVIRON["AWK_PARAM_COUNT"] + 0
-        }
+    local lang="$DEFAULT_LANGUAGE"
+    local message=""
+    local add_colon="false"
 
-        # Process the first line of input as the message template
-        NR == 1 {
-            msg = $0 # Read the message template from stdin
-
-            # Placeholder replacement loop (uses p_count from env var)
-            # ARGV[0] is "awk", parameters start from ARGV[1]
-            for (i = 1; i <= p_count; i++) {
-                placeholder = "{" (i-1) "}" # {0}, {1}, ...
-                # Use ARGV[i] for replacement value
-                gsub(placeholder, ARGV[i], msg)
-            }
-
-            # Apply formatting if specified
-            if (format_type == "upper") { msg = toupper_str(msg) }
-            else if (format_type == "lower") { msg = tolower_str(msg) }
-            else if (format_type == "capitalize") { msg = capitalize_str(msg) }
-
-            # Case-insensitive placeholder replacement (uses p_count)
-             for (i = 1; i <= p_count; i++) {
-                 placeholder_lower = "{" tolower_str(ARGV[i]) "}"
-                 placeholder_upper = "{" toupper_str(ARGV[i]) "}"
-                 placeholder_cap   = "{" capitalize_str(ARGV[i]) "}"
-                 gsub(placeholder_lower, ARGV[i], msg)
-                 gsub(placeholder_upper, ARGV[i], msg)
-                 gsub(placeholder_cap, ARGV[i], msg)
-            }
-            print msg # Output the final processed message
-            exit # Process only the first line (the template)
-        }
-        '
-        # Export environment variables for awk
-        export AWK_FORMAT_SPEC="$format"
-        export AWK_PARAM_COUNT="$param_count"
-
-        # Execute awk: pipe template, pass params as arguments
-        # $@ contains all original arguments after the key
-        message=$(echo "$message" | awk "$awk_script" "$@")
-
-        # Unset environment variables after use
-        unset AWK_FORMAT_SPEC
-        unset AWK_PARAM_COUNT
-
-    # 8. Apply formatting if *no* parameters were present but format was specified
-    elif [ "$param_count" -eq 0 ] && [ -n "$format" ]; then
-         # awk script for formatting only (no parameter replacement needed)
-         awk_script_format_only='
-         # Function definitions (tolower_str, toupper_str, capitalize_str) - Keep these inline
-         function tolower_str(str,        i, char, lower_char, result) { result = ""; for (i = 1; i <= length(str); i++) { char = substr(str, i, 1); lower_char = tolower(char); result = result lower_char } return result }
-         function toupper_str(str,        i, char, upper_char, result) { result = ""; for (i = 1; i <= length(str); i++) { char = substr(str, i, 1); upper_char = toupper(char); result = result upper_char } return result }
-         function capitalize_str(str,     first_char, rest_str) { if (length(str) == 0) return ""; first_char = substr(str, 1, 1); rest_str = substr(str, 2); return toupper_str(first_char) tolower_str(rest_str) }
-
-         BEGIN { format_type = ENVIRON["AWK_FORMAT_SPEC"] }
-         NR == 1 {
-            msg = $0
-            if (format_type == "upper") { msg = toupper_str(msg) }
-            else if (format_type == "lower") { msg = tolower_str(msg) }
-            else if (format_type == "capitalize") { msg = capitalize_str(msg) }
-            print msg
-            exit
-         }
-         '
-         # Export format specifier
-         export AWK_FORMAT_SPEC="$format"
-         message=$(echo "$message" | awk "$awk_script_format_only")
-         unset AWK_FORMAT_SPEC
+    # Get language code (assuming CACHE_DIR is defined)
+    if [ -f "${CACHE_DIR}/message.ch" ]; then
+        lang=$(cat "${CACHE_DIR}/message.ch")
     fi
 
-    # 9. Append colon if marker {;} was present
+    # 1. Get message from DB file cache
+    local db_file="$(check_message_cache "$lang")" # Assumes check_message_cache exists
+    if [ -n "$db_file" ] && [ -f "$db_file" ]; then
+        # Retrieve message for the specific language and key
+        message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        # Fallback to default language if message not found for current language
+        if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
+            local default_db_file="$(check_message_cache "$DEFAULT_LANGUAGE")"
+            if [ -n "$default_db_file" ] && [ -f "$default_db_file" ]; then
+                message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$default_db_file" 2>/dev/null | cut -d'=' -f2-)
+            fi
+        fi
+    fi
+
+    # 2. Try memory cache if DB file cache failed
+    if [ -z "$message" ]; then
+        # Initialize memory cache if needed (assuming into_memory_message exists)
+        if [ "$MSG_MEMORY_INITIALIZED" != "true" ] || [ "$MSG_MEMORY_LANG" != "$lang" ]; then
+            into_memory_message
+        fi
+        # Retrieve message from memory cache
+        if [ -n "$MSG_MEMORY" ]; then
+            message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+            # Fallback to default language in memory cache
+            if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
+                 message=$(echo "$MSG_MEMORY" | grep "^${DEFAULT_LANGUAGE}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+            fi
+        fi
+    fi
+
+    # 3. Fallback to key itself if message not found
+    if [ -z "$message" ]; then
+        message="$key"
+    fi
+
+    # 4. Detect and handle colon marker {;}
+    if echo "$message" | grep -q '{;}'; then
+        message=$(echo "$message" | sed 's/{;}//g')
+        add_colon="true"
+    fi
+
+    # --- ADDED: Unconditionally normalize braces before replacement ---
+    # Ensures full-width braces ｛｝ become half-width {} for awk compatibility
+    message=$(echo "$message" | sed 's/｛/{/g; s/｝/}/g')
+
+    # --- MODIFIED: Parameter replacement using awk (Case-Insensitive, POSIX Compliant) ---
+    # Define the awk script for placeholder replacement
+    awk_script='
+        BEGIN { FS="=" }
+        NR == 1 { msg = $0; next } # First line is the message template
+        NR > 1 { # Subsequent lines are parameters name=value
+            p_name = $1
+            # Correctly get raw value even if it contains =
+            p_value = substr($0, index($0, "=") + 1)
+            params[p_name] = p_value # Store param in array (key is original case from input)
+        }
+        END {
+            # Iterate through parameters to perform replacements
+            for (p_name in params) {
+                # --- MODIFIED: Build case-insensitive regex dynamically ---
+                regex_ci = "\\{" # Start regex with escaped {
+                for (i = 1; i <= length(p_name); ++i) {
+                    char = substr(p_name, i, 1)
+                    lc = tolower(char)
+                    uc = toupper(char)
+                    # If char is not a letter (lc == uc), append it directly.
+                    # Otherwise, append [lL] character class.
+                    if (lc == uc) {
+                        # Handle potential regex special characters within the name itself
+                        # If char is a regex metacharacter that needs escaping, escape it.
+                        # Basic example for backslash, extend if needed for ., *, +, ?, etc.
+                        if (char == "\\") {
+                             regex_ci = regex_ci "\\\\" # Append escaped backslash
+                        } else if (char == "[") {
+                             regex_ci = regex_ci "\\[" # Append escaped [
+                        } else if (char == "]") {
+                             regex_ci = regex_ci "\\]" # Append escaped ]
+                        # Add other metacharacters like ., *, +, ?, ^, $, | if needed
+                        } else {
+                            regex_ci = regex_ci char # Append other non-letter chars directly
+                        }
+                    } else {
+                        # Append character class for letters, e.g., [vV]
+                        regex_ci = regex_ci "[" lc uc "]"
+                    }
+                }
+                regex_ci = regex_ci "\\}" # End regex with escaped }
+                # Example: if p_name is "Value1", regex_ci becomes "\{[vV][aA][lL][uU][eE]1\}"
+                # --- END MODIFIED ---
+
+                # Prepare the replacement value: escape \ and & for gsub
+                current_value = params[p_name]
+                gsub(/\\/, "\\\\", current_value) # Escape backslashes first
+                gsub(/&/, "\\&", current_value)   # Escape ampersands
+
+                # Perform the global substitution using the dynamically generated case-insensitive regex
+                gsub(regex_ci, current_value, msg)
+            }
+            print msg # Output the final message
+        }
+    '
+    # Execute awk script only if parameters are provided ($@ contains params after shift)
+    if [ $# -gt 0 ]; then
+        message=$( \
+            ( \
+                printf "%s\n" "$message"; \
+                local param param_name param_value; \
+                # Pass parameters to awk, one per line, handling '=' in value
+                for param in "$@"; do \
+                    param_name=$(echo "$param" | cut -d'=' -f1); \
+                    param_value=$(echo "$param" | cut -d'=' -f2-); \
+                    if [ -n "$param_name" ]; then \
+                        printf "%s=%s\n" "$param_name" "$param_value"; \
+                    fi; \
+                done \
+            ) | awk "$awk_script" \
+        )
+    fi
+
+    # 6. Call normalize_message for remaining normalization
+    # Pass the potentially placeholder-replaced message and language
+    message=$(normalize_message "$message" "$lang")
+
+    # 7. Apply formatting (if enabled and type specified)
+    if [ "$GET_MESSAGE_FORMATTING_ENABLED" = "true" ]; then
+        # Only proceed if formatting is globally enabled
+        case "$format_type" in
+            "upper")
+                # Check if 'upper' format type is enabled
+                if [ "$FORMAT_TYPE_UPPER_ENABLED" = "true" ]; then
+                    message=$(format_string "upper" "$message") # Assumes format_string exists
+                fi
+                ;;
+            "capitalize")
+                # Check if 'capitalize' format type is enabled
+                if [ "$FORMAT_TYPE_CAPITALIZE_ENABLED" = "true" ]; then
+                    message=$(format_string "capitalize" "$message") # Assumes format_string exists
+                fi
+                ;;
+            "none"|*)
+                # Do nothing for "none" or unknown types
+                ;;
+        esac
+    fi
+
+    # 8. Append colon if marker {;} was present
     if [ "$add_colon" = "true" ]; then
         message="${message}: " # Add colon and space
     fi
 
-    # 10. Output the final message
-    echo "$message"
+    # 9. Output the final message (using %b to interpret backslash escapes like \n from {@})
+    printf "%b" "$message"
+    return 0
 }
 
 # 🔴　メッセージ系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
