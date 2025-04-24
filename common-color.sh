@@ -413,7 +413,7 @@ repeat_char() {
 start_spinner() {
     local message="$1"
     local spinner_color="${2:-$SPINNER_COLOR}"
-    local anim_type="${3:-moon}" 
+    local anim_type="${3:-figure}" 
     
     # グローバル変数を設定
     SPINNER_MESSAGE="$message"
@@ -448,15 +448,25 @@ start_spinner() {
         bar)
             SPINNER_CHARS="[=] => ->"
             ;;
+        figure)
+            SPINNER_CHARS="0 1 2 3 4 5 6 7 8 9"
+            ;;
         pulse)
+            # 環境依存
             SPINNER_CHARS="◯ ◎"
             ;;
         emoji)
+            # 環境依存
             SPINNER_CHARS="💩 👺 😀 👽 😈 💀"
             ;;
         moon)
+            # 環境依存
             SPINNER_CHARS="🌑 🌘 🌗 🌖 🌝 🌔 🌓 🌒"
             # SPINNER_CHARS="🌕 🌖 🌗 🌘 🌑 🌒 🌓 🌔"
+            ;;
+        bloc)
+            # 環境依存
+            SPINNER_CHARS="⢿ ⣻ ⣽ ⣾ ⣷ ⣯ ⣟ ⡿"
             ;;
         *)
             SPINNER_CHARS="- \\ | /"
