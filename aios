@@ -786,14 +786,16 @@ normalize_message() {
 # Example: msg=$(get_message "CONFIG_MAIN_SELECT_PROMPT" "6" format=capitalize)
 get_message() {
     local key="$1"
-    shift
-    local params=("$@")
+    shift # Remove the key from the argument list ($@ now contains only params and optional format)
     local format=""
     local message
     local message_file
     local add_colon="false"
     local lang_code
     local awk_script
+    local awk_params="" # Initialize awk parameter string
+    local param_count=0 # Initialize parameter counter
+    local last_arg=""   # To store the last argument for format check
 
     # Determine the language code from the environment variable or default to 'en'
     lang_code="${AIOS_LANG_CODE:-en}"
@@ -814,157 +816,110 @@ get_message() {
     fi
 
     # 2. Retrieve the message line from the file
-    # Use grep with -m 1 for efficiency, handle cases where key might not be found
     message_line=$(grep -m 1 "^${lang_code}|${key}=" "$message_file")
 
     # 3. Extract the message value
     if [ -n "$message_line" ]; then
-        # Use parameter expansion to remove the prefix up to the first '='
         message="${message_line#*=}"
     else
-        # Fallback: Try retrieving from the English file if the key wasn't found in the selected language
         message_line_en=$(grep -m 1 "^en|${key}=" "${AIOS_CACHE_DIR}/message_en.db")
         if [ -n "$message_line_en" ]; then
             message="${message_line_en#*=}"
-            # Optionally, log the key fallback event
             # log_event "info" "Message key '$key' not found for lang '$lang_code', using English fallback."
         else
-            # If key is not found even in English, return the key itself
             # log_event "warning" "Message key '$key' not found in English fallback either."
             message="$key"
         fi
     fi
 
-    # --- MODIFIED: Step 4: Detect and handle colon marker {;} using case ---
-    add_colon="false" # Initialize flag
+    # 4. Detect and handle colon marker {;} using case (More robust for multi-language)
+    add_colon="false"
     case "$message" in
         *'{;}'*)
-            # Found {;}, remove it using sed and set flag
             message=$(echo "$message" | sed 's/{;}//g')
             add_colon="true"
             ;;
     esac
+
+    # 5. Normalize message (braces, special markers) before replacement
+    message=$(normalize_message "$message")
+
+    # --- MODIFIED: Process arguments without arrays for POSIX compliance ---
+    # 6. Iterate through remaining arguments ($@) to build awk params and check for format=
+    local current_param_index=1
+    local arg
+    for arg in "$@"; do
+        # Escape potential single quotes for safety within the awk script string
+        local p_escaped=$(echo "$arg" | sed "s/'/'\\\\''/g")
+        # Build the awk parameter string like -v params[1]='value1' -v params[2]='value2'
+        awk_params="${awk_params} -v params[${current_param_index}]='${p_escaped}'"
+        param_count=$((param_count + 1))
+        last_arg="$arg" # Keep track of the last argument
+        current_param_index=$((current_param_index + 1))
+    done
+
+    # 7. Check if the last argument was a format specifier
+    case "$last_arg" in
+        format=*)
+            format="${last_arg#format=}"
+            # If format was found, it's not a real message parameter, so decrement count
+            param_count=$((param_count - 1))
+            # Also, remove the format part from the awk_params string (optional, but cleaner)
+            # This part is tricky to do reliably without array manipulation.
+            # A simpler approach is to let awk ignore the extra param if format is set.
+            # Or, rebuild awk_params excluding the last one if format is detected.
+            # For simplicity, we'll let awk handle it; it won't use params[last] if count is correct.
+            ;;
+    esac
     # --- END MODIFIED ---
 
-    # --- ADDED: Unconditionally normalize braces before replacement ---
-    # Ensures full-width braces ｛｝ become half-width {} for awk compatibility
-    # Also handles other normalizations like {:}, {@}, {yn}
-    message=$(normalize_message "$message")
-    # --- END ADDED ---
-
-    # 5. Extract format if present (must be the last parameter and start with format=)
-    local last_param_index=$(($#))
-    if [ $last_param_index -gt 0 ]; then
-        local last_param="${params[$((last_param_index - 1))]}"
-        case "$last_param" in
-            format=*)
-                format="${last_param#format=}"
-                # Remove the format parameter from the params array
-                unset 'params[$((last_param_index - 1))]'
-                ;;
-        esac
-    fi
-
-    # 6. Replace placeholders {0}, {1}, etc. with parameters using awk
-    #    Also handles case conversion within awk for efficiency
-    if [ ${#params[@]} -gt 0 ]; then
-        # --- MODIFIED: Inline awk script for placeholder replacement and case conversion ---
+    # 8. Replace placeholders and apply formatting using awk
+    if [ "$param_count" -gt 0 ]; then
+        # awk script remains largely the same, uses param_count passed via -v
         awk_script='
-        # Function to convert string to lowercase (POSIX compliant)
-        function tolower_str(str,        i, char, lower_char, result) {
-            result = ""
-            for (i = 1; i <= length(str); i++) {
-                char = substr(str, i, 1)
-                lower_char = tolower(char) # Standard awk tolower() handles single chars
-                result = result lower_char
-            }
-            return result
-        }
+        # Function definitions (tolower_str, toupper_str, capitalize_str) - Keep these inline
+        function tolower_str(str,        i, char, lower_char, result) { result = ""; for (i = 1; i <= length(str); i++) { char = substr(str, i, 1); lower_char = tolower(char); result = result lower_char } return result }
+        function toupper_str(str,        i, char, upper_char, result) { result = ""; for (i = 1; i <= length(str); i++) { char = substr(str, i, 1); upper_char = toupper(char); result = result upper_char } return result }
+        function capitalize_str(str,     first_char, rest_str) { if (length(str) == 0) return ""; first_char = substr(str, 1, 1); rest_str = substr(str, 2); return toupper_str(first_char) tolower_str(rest_str) }
 
-        # Function to convert string to uppercase (POSIX compliant)
-        function toupper_str(str,        i, char, upper_char, result) {
-            result = ""
-            for (i = 1; i <= length(str); i++) {
-                char = substr(str, i, 1)
-                upper_char = toupper(char) # Standard awk toupper() handles single chars
-                result = result upper_char
-            }
-            return result
-        }
-
-        # Function to capitalize string (first letter upper, rest lower)
-        function capitalize_str(str,     first_char, rest_str) {
-             if (length(str) == 0) return ""
-             first_char = substr(str, 1, 1)
-             rest_str = substr(str, 2)
-             return toupper_str(first_char) tolower_str(rest_str)
-        }
-
-        BEGIN { FS = ""; msg = message_template; format_type = format_spec } # Initialize from shell variables
-
+        BEGIN { FS = ""; msg = message_template; format_type = format_spec }
         {
-            # Placeholder replacement loop
+            # Placeholder replacement loop (uses param_count from shell)
             for (i = 1; i <= param_count; i++) {
-                placeholder = "{" (i-1) "}" # Construct placeholder like {0}, {1}
-                # Use gsub for global replacement within the message
+                placeholder = "{" (i-1) "}"
                 gsub(placeholder, params[i], msg)
             }
 
             # Apply formatting if specified
-            if (format_type == "upper") {
-                msg = toupper_str(msg)
-            } else if (format_type == "lower") {
-                msg = tolower_str(msg)
-            } else if (format_type == "capitalize") {
-                # Simple capitalization of the whole string
-                # More complex sentence capitalization would require more logic
-                 msg = capitalize_str(msg)
-            }
-             # --- ADDED: Case-insensitive placeholder replacement ---
-             # Iterate through parameters again for case-insensitive replacement
-             for (i = 1; i <= param_count; i++) {
-                 placeholder_lower = "{" tolower_str(params[i]) "}" # e.g., {yes}
-                 placeholder_upper = "{" toupper_str(params[i]) "}" # e.g., {YES}
-                 placeholder_cap   = "{" capitalize_str(params[i]) "}" # e.g., {Yes}
+            if (format_type == "upper") { msg = toupper_str(msg) }
+            else if (format_type == "lower") { msg = tolower_str(msg) }
+            else if (format_type == "capitalize") { msg = capitalize_str(msg) }
 
-                 # Replace case variations with the original parameter value
+            # Case-insensitive placeholder replacement (uses param_count)
+             for (i = 1; i <= param_count; i++) {
+                 placeholder_lower = "{" tolower_str(params[i]) "}"
+                 placeholder_upper = "{" toupper_str(params[i]) "}"
+                 placeholder_cap   = "{" capitalize_str(params[i]) "}"
                  gsub(placeholder_lower, params[i], msg)
                  gsub(placeholder_upper, params[i], msg)
                  gsub(placeholder_cap, params[i], msg)
             }
-            # --- END ADDED ---
-
-            print msg # Output the final processed message
+            print msg
         }
         '
-        # Prepare parameters for awk
-        local awk_params=""
-        local i=1
-        for p in "${params[@]}"; do
-            # Escape potential single quotes in parameters for safety within the awk script string
-            p_escaped=$(echo "$p" | sed "s/'/'\\\\''/g")
-            awk_params="$awk_params -v params[$i]='$p_escaped'"
-            i=$((i + 1))
-        done
-
-        # Execute awk
-        # Pass message template, format, and parameters count as variables
-        # Use echo "" | awk ... to provide empty input, triggering BEGIN and END blocks
+        # Execute awk, passing the built awk_params string
         message=$(echo "" | awk \
             -v message_template="$message" \
             -v format_spec="$format" \
-            -v param_count="${#params[@]}" \
+            -v param_count="$param_count" \
             $awk_params \
             "$awk_script")
-        # --- END MODIFIED ---
-    fi
 
-    # 7. Apply formatting if no parameters were present but format was specified
-    #    This handles cases like get_message "MAIN_MENU_NAME" format=upper
-    if [ ${#params[@]} -eq 0 ] && [ -n "$format" ]; then
-         # --- ADDED: Use the same awk script for formatting only ---
+    # 9. Apply formatting if *no* parameters were present but format was specified
+    elif [ "$param_count" -eq 0 ] && [ -n "$format" ]; then
+         # awk script for formatting only (no parameter replacement needed)
          awk_script_format_only='
-         # Function definitions (tolower_str, toupper_str, capitalize_str) are the same as above
+         # Function definitions (tolower_str, toupper_str, capitalize_str) - Keep these inline
          function tolower_str(str,        i, char, lower_char, result) { result = ""; for (i = 1; i <= length(str); i++) { char = substr(str, i, 1); lower_char = tolower(char); result = result lower_char } return result }
          function toupper_str(str,        i, char, upper_char, result) { result = ""; for (i = 1; i <= length(str); i++) { char = substr(str, i, 1); upper_char = toupper(char); result = result upper_char } return result }
          function capitalize_str(str,     first_char, rest_str) { if (length(str) == 0) return ""; first_char = substr(str, 1, 1); rest_str = substr(str, 2); return toupper_str(first_char) tolower_str(rest_str) }
@@ -981,15 +936,14 @@ get_message() {
              -v message_template="$message" \
              -v format_spec="$format" \
              "$awk_script_format_only")
-         # --- END ADDED ---
     fi
 
-    # 8. Append colon if marker {;} was present
+    # 10. Append colon if marker {;} was present
     if [ "$add_colon" = "true" ]; then
         message="${message}: " # Add colon and space
     fi
 
-    # 9. Output the final message
+    # 11. Output the final message
     echo "$message"
 }
 
