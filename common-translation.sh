@@ -77,7 +77,7 @@ create_language_db() {
     local target_lang_code="$4"
 
     # --- バッチサイズ設定 (ここで変更可能) ---
-    local readonly BATCH_SIZE=2 # Process 2 lines at a time
+    local readonly BATCH_SIZE= # Process 2 lines at a time
     # ----------------------------------
 
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
