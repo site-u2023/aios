@@ -52,147 +52,54 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 
 normalize_input() {
     local input="$1"
-    local preprocessed_input=""
-    local output=""
-    local char=""
-    local i=0
-    local length=0
+    local output="$input"
 
     # デバッグメッセージを標準エラー出力へリダイレクト
-    [ "$DEBUG_MODE" = "true" ] && printf "DEBUG: Starting character normalization for input text (using loop method)\n" >&2
+    [ "$DEBUG_MODE" = "true" ] && printf "DEBUG: Starting character normalization for input text\n" >&2
 
-    # 入力前処理 - スペースとタブの削除（sedを維持）
-    # Use printf and pipe to avoid subshell for 'output=$(echo ...)'
-    preprocessed_input=$(printf '%s' "$input" | sed 's/[　 \t]//g')
+    # 入力前処理 - スペースの削除（先に実行）
+    output=$(echo "$output" | sed 's/　//g')  # 全角スペースを削除
+    output=$(echo "$output" | sed 's/ //g')   # 半角スペースを削除
+    output=$(echo "$output" | sed 's/\t//g')  # タブ文字を削除
 
-    # 文字列長を取得 (POSIX準拠)
-    length=${#preprocessed_input}
+    # 変換テーブル（各行はsedコマンドの負荷を分散するため分割）
 
-    # ループによる文字単位の処理
-    while [ "$i" -lt "$length" ]; do
-        # 1文字取得 (ash/bash 拡張)
-        char="${preprocessed_input:$i:1}"
+    # 数字（0-9）: 日本語、中国語（簡体字・繁体字）、韓国語で共通
+    output=$(echo "$output" | sed 's/０/0/g; s/１/1/g; s/２/2/g; s/３/3/g; s/４/4/g')
+    output=$(echo "$output" | sed 's/５/5/g; s/６/6/g; s/７/7/g; s/８/8/g; s/９/9/g')
 
-        # case文で文字を判定・変換
-        case "$char" in
-            # 数字 (全角 -> 半角)
-            ０) output="${output}0" ;;
-            １) output="${output}1" ;;
-            ２) output="${output}2" ;;
-            ３) output="${output}3" ;;
-            ４) output="${output}4" ;;
-            ５) output="${output}5" ;;
-            ６) output="${output}6" ;;
-            ７) output="${output}7" ;;
-            ８) output="${output}8" ;;
-            ９) output="${output}9" ;;
+    # アルファベット大文字（A-Z）: 各国共通の全角英字
+    output=$(echo "$output" | sed 's/Ａ/A/g; s/Ｂ/B/g; s/Ｃ/C/g; s/Ｄ/D/g; s/Ｅ/E/g')
+    output=$(echo "$output" | sed 's/Ｆ/F/g; s/Ｇ/G/g; s/Ｈ/H/g; s/Ｉ/I/g; s/Ｊ/J/g')
+    output=$(echo "$output" | sed 's/Ｋ/K/g; s/Ｌ/L/g; s/Ｍ/M/g; s/Ｎ/N/g; s/Ｏ/O/g')
+    output=$(echo "$output" | sed 's/Ｐ/P/g; s/Ｑ/Q/g; s/Ｒ/R/g; s/Ｓ/S/g; s/Ｔ/T/g')
+    output=$(echo "$output" | sed 's/Ｕ/U/g; s/Ｖ/V/g; s/Ｗ/W/g; s/Ｘ/X/g; s/Ｙ/Y/g; s/Ｚ/Z/g')
 
-            # アルファベット大文字 (全角 -> 半角)
-            Ａ) output="${output}A" ;;
-            Ｂ) output="${output}B" ;;
-            Ｃ) output="${output}C" ;;
-            Ｄ) output="${output}D" ;;
-            Ｅ) output="${output}E" ;;
-            Ｆ) output="${output}F" ;;
-            Ｇ) output="${output}G" ;;
-            Ｈ) output="${output}H" ;;
-            Ｉ) output="${output}I" ;;
-            Ｊ) output="${output}J" ;;
-            Ｋ) output="${output}K" ;;
-            Ｌ) output="${output}L" ;;
-            Ｍ) output="${output}M" ;;
-            Ｎ) output="${output}N" ;;
-            Ｏ) output="${output}O" ;;
-            Ｐ) output="${output}P" ;;
-            Ｑ) output="${output}Q" ;;
-            Ｒ) output="${output}R" ;;
-            Ｓ) output="${output}S" ;;
-            Ｔ) output="${output}T" ;;
-            Ｕ) output="${output}U" ;;
-            Ｖ) output="${output}V" ;;
-            Ｗ) output="${output}W" ;;
-            Ｘ) output="${output}X" ;;
-            Ｙ) output="${output}Y" ;;
-            Ｚ) output="${output}Z" ;;
+    # アルファベット小文字（a-z）: 各国共通の全角英字
+    output=$(echo "$output" | sed 's/ａ/a/g; s/ｂ/b/g; s/ｃ/c/g; s/ｄ/d/g; s/ｅ/e/g')
+    output=$(echo "$output" | sed 's/ｆ/f/g; s/ｇ/g/g; s/ｈ/h/g; s/ｉ/i/g; s/ｊ/j/g')
+    output=$(echo "$output" | sed 's/ｋ/k/g; s/ｌ/l/g; s/ｍ/m/g; s/ｎ/n/g; s/ｏ/o/g')
+    output=$(echo "$output" | sed 's/ｐ/p/g; s/ｑ/q/g; s/ｒ/r/g; s/ｓ/s/g; s/ｔ/t/g')
+    output=$(echo "$output" | sed 's/ｕ/u/g; s/ｖ/v/g; s/ｗ/w/g; s/ｘ/x/g; s/ｙ/y/g; s/ｚ/z/g')
 
-            # アルファベット小文字 (全角 -> 半角)
-            ａ) output="${output}a" ;;
-            ｂ) output="${output}b" ;;
-            ｃ) output="${output}c" ;;
-            ｄ) output="${output}d" ;;
-            ｅ) output="${output}e" ;;
-            ｆ) output="${output}f" ;;
-            ｇ) output="${output}g" ;;
-            ｈ) output="${output}h" ;;
-            ｉ) output="${output}i" ;;
-            ｊ) output="${output}j" ;;
-            ｋ) output="${output}k" ;;
-            ｌ) output="${output}l" ;;
-            ｍ) output="${output}m" ;;
-            ｎ) output="${output}n" ;;
-            ｏ) output="${output}o" ;;
-            ｐ) output="${output}p" ;;
-            ｑ) output="${output}q" ;;
-            ｒ) output="${output}r" ;;
-            ｓ) output="${output}s" ;;
-            ｔ) output="${output}t" ;;
-            ｕ) output="${output}u" ;;
-            ｖ) output="${output}v" ;;
-            ｗ) output="${output}w" ;;
-            ｘ) output="${output}x" ;;
-            ｙ) output="${output}y" ;;
-            ｚ) output="${output}z" ;;
+    # 主要な記号（日本語、中国語、韓国語で共通使用される記号）
+    output=$(echo "$output" | sed 's/！/!/g; s/＂/"/g; s/＃/#/g; s/＄/$/g; s/％/%/g')
+    output=$(echo "$output" | sed 's/＆/\&/g; s/＇/'\''/g; s/（/(/g; s/）/)/g; s/＊/*/g')
+    output=$(echo "$output" | sed 's/＋/+/g; s/，/,/g; s/－/-/g; s/．/./g; s/／/\//g')
 
-            # 主要な記号 (全角 -> 半角)
-            ！) output="${output}!" ;;
-            ＂) output="${output}\"" ;; # ダブルクォートはエスケープ
-            ＃) output="${output}#" ;;
-            ＄) output="${output}\$" ;; # ドル記号はエスケープ
-            ％) output="${output}%" ;;
-            ＆) output="${output}&" ;;
-            ＇) output="${output}'" ;;
-            （) output="${output}(" ;;
-            ）) output="${output})" ;;
-            ＊) output="${output}*" ;;
-            ＋) output="${output}+" ;;
-            ，) output="${output}," ;;
-            －) output="${output}-" ;;
-            ．) output="${output}." ;;
-            ／) output="${output}/" ;;
-            ：) output="${output}:" ;;
-            ；) output="${output};" ;;
-            ＜) output="${output}<" ;;
-            ＝) output="${output}=" ;;
-            ＞) output="${output}>" ;;
-            ？) output="${output}?" ;;
-            ＠) output="${output}@" ;;
-            ［) output="${output}[" ;;
-            ＼) output="${output}\\" ;; # バックスラッシュはエスケープ
-            ］) output="${output}]" ;;
-            ＾) output="${output}^" ;;
-            ＿) output="${output}_" ;;
-            ｀) output="${output}\`" ;; # バッククォートはエスケープ
-            ｛) output="${output}{" ;;
-            ｜) output="${output}|" ;;
-            ｝) output="${output}}" ;;
-            ～) output="${output}~" ;;
+    # 主要な記号（続き）
+    output=$(echo "$output" | sed 's/：/:/g; s/；/;/g; s/＜/</g; s/＝/=/g; s/＞/>/g')
+    output=$(echo "$output" | sed 's/？/?/g; s/＠/@/g; s/［/[/g; s/＼/\\/g; s/］/]/g')
+    output=$(echo "$output" | sed 's/＾/^/g; s/＿/_/g; s/｀/`/g; s/｛/{/g; s/｜/|/g')
+    output=$(echo "$output" | sed 's/｝/}/g; s/～/~/g')
 
-            # 韓国語特有の全角記号 (バックスラッシュに統一)
-            ￦) output="${output}\\" ;; # バックスラッシュはエスケープ
-            ￥) output="${output}\\" ;; # バックスラッシュはエスケープ
-
-            # 上記以外はそのまま追加
-            *) output="${output}${char}" ;;
-        esac
-
-        # インデックスを進める
-        i=$((i + 1))
-    done
+    # 韓国語特有の全角記号
+    output=$(echo "$output" | sed 's/￦/\\/g; s/￥/\\/g')
 
     # デバッグメッセージを標準エラー出力へリダイレクト
-    [ "$DEBUG_MODE" = "true" ] && printf "DEBUG: Character normalization completed (using loop method)\n" >&2
+    [ "$DEBUG_MODE" = "true" ] && printf "DEBUG: Character normalization completed\n" >&2
 
-    # 正規化した結果のみを返す
+    # 正規化した結果のみを返す（デバッグ情報なし）
     printf '%s' "$output"
 }
 
