@@ -318,7 +318,7 @@ SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
 # Target Language: ${target_lang_code}
 EOF
 
-    grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
+    LC_ALL=C grep "^${DEFAULT_LANGUAGE}|" "$base_db" | while IFS= read -r line; do
 
         local line_content=${line#*|} # Remove "en|" prefix
         local key=${line_content%%=*}   # Get key before '='
