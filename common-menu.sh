@@ -230,7 +230,7 @@ handle_user_selection() {
     # --- Handle Special Selections (0, 10, 00) ---
     if [ "$choice" -eq 0 ]; then
         if [ "$is_main_menu" -eq 1 ]; then
-             printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_INVALID_NUMBER")")"
+             printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
              debug_log "DEBUG" "'0' selected in main menu [$section_name]. Invalid. Returning 0 to retry."
              return 0
         fi
@@ -247,7 +247,7 @@ handle_user_selection() {
     fi
     if [ "$choice" -eq 00 ]; then
         if [ "$is_main_menu" -eq 0 ]; then
-             printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_INVALID_NUMBER")")"
+             printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
              debug_log "DEBUG" "'00' selected in submenu [$section_name]. Invalid. Returning 0 to retry."
              return 0
         fi
@@ -260,7 +260,7 @@ handle_user_selection() {
 
     # --- Handle Normal Selections (1 to N) ---
     if [ "$choice" -lt 1 ] || [ "$choice" -gt "$num_normal_choices" ]; then
-         printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_INVALID_NUMBER")")"
+         printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
          debug_log "DEBUG" "Selection '$choice' out of range (1-$num_normal_choices) in section [$section_name]. Returning 0 to retry."
          return 0
     fi
