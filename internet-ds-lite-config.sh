@@ -99,14 +99,23 @@ detect_provider_internal() {
     local aftr_address=""
     local region_text="" # Keep region_text for output consistency
 
+    # --- START MODIFICATION (Cache File Paths) ---
+    # Use persistent cache file for AS number
     local cache_as_file="${CACHE_DIR}/isp_as.ch"
-    local cache_region_code_file="${CACHE_DIR}/ip_region_code.tmp"
-    local cache_region_name_file="${CACHE_DIR}/ip_region_name.tmp"
+    # Use persistent cache file for Region Name
+    local cache_region_file="${CACHE_DIR}/region_name.ch"
+    # Remove old temporary cache file definitions
+    # local cache_region_code_file="${CACHE_DIR}/ip_region_code.tmp" # REMOVED
+    # local cache_region_name_file="${CACHE_DIR}/ip_region_name.tmp" # REMOVED
+    # --- END MODIFICATION (Cache File Paths) ---
 
     # Read AS number from cache (POSIX compliant checks)
     if [ ! -f "$cache_as_file" ]; then
         reason_str="AS cache missing"
+        # --- START MODIFICATION (Error Message) ---
+        # Update file name in error log
         debug_log "DEBUG" "detect_provider_internal: Error - AS Number cache file not found: $cache_as_file"
+        # --- END MODIFICATION (Error Message) ---
         echo "$reason_str"
         return 1
     fi
@@ -115,7 +124,10 @@ detect_provider_internal() {
     # Handle empty isp_as after sed or read failure (POSIX compliant check)
     if [ -z "$isp_as" ]; then
         reason_str="AS cache read error"
+        # --- START MODIFICATION (Error Message) ---
+        # Update file name in error log
         debug_log "DEBUG" "detect_provider_internal: Error - Failed to read AS Number from cache file: $cache_as_file"
+        # --- END MODIFICATION (Error Message) ---
         echo "$reason_str"
         return 1
     fi
@@ -141,9 +153,14 @@ detect_provider_internal() {
     # Handle Transix region check if needed (POSIX compliant checks)
     if [ "$internal_key" = "transix" ] && [ "$aftr_address" = "USE_REGION" ]; then
         debug_log "DEBUG" "detect_provider_internal: Transix detected, checking region."
-        # Read region from cache (try both code and name) - POSIX compliant
-        if [ -f "$cache_region_code_file" ]; then region=$(cat "$cache_region_code_file"); fi
-        if [ -z "$region" ] && [ -f "$cache_region_name_file" ]; then region=$(cat "$cache_region_name_file"); fi
+        # --- START MODIFICATION (Region Reading) ---
+        # Read region from persistent cache - POSIX compliant
+        if [ -f "$cache_region_file" ]; then
+            region=$(cat "$cache_region_file")
+        fi
+        # Remove old region reading logic
+        # if [ -z "$region" ] && [ -f "$cache_region_name_file" ]; then region=$(cat "$cache_region_name_file"); fi # REMOVED
+        # --- END MODIFICATION (Region Reading) ---
 
         if [ -z "$region" ]; then
             reason_str="No region info for Transix"
