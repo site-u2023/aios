@@ -2,7 +2,7 @@
 #!/bin/sh
 
 # SCRIPT_VERSION="2025-04-23-12-47" # Original version marker - Updated below
-SCRIPT_VERSION="2025-04-25-00-00" # Updated version based on last interaction time
+SCRIPT_VERSION="2025-04-25-00-01" # Updated version based on last interaction time
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -50,7 +50,7 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 
 # Number of parallel translation tasks to run concurrently
-MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-1}" # Default to 1 for initial testing
+MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-2}" # Default to 1 for initial testing
 
 # オンライン翻訳を有効化 (create_language_db logic removed reliance on this, but keep for potential external checks)
 ONLINE_TRANSLATION_ENABLED="yes"
