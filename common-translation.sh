@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-26-00-01" # Updated version based on last interaction time
+SCRIPT_VERSION="2025-04-26-00-02" # Updated version based on last interaction time
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
