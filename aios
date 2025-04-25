@@ -61,9 +61,11 @@ DOWNLOAD_METHOD="${DOWNLOAD_METHOD:-api}" # ダウンロード方式 (api/direct
 
 # パス・ファイル関連
 INTERPRETER="${INTERPRETER:-ash}"  # デフォルトインタープリタ
-BIN_PATH="$(readlink "$0")"   # 実行ファイルの絶対パス
-BIN_DIR="$(dirname "$BIN_PATH")" # 実行ファイルのディレクトリ
-BIN_FILE="$(basename "$BIN_PATH")" # 実行ファイル名
+script_dir="$( cd "$(dirname "$0")" >/dev/null 2>&1 && pwd )"
+script_path="${script_dir}/$(basename "$0")"
+BIN_DIR="$script_dir"    # ディレクトリの絶対パス
+BIN_PATH="$script_path"  # スクリプトファイルの絶対パス
+BIN_FILE="$(basename "$0")" # スクリプトファイル名
 
 # ベースディレクトリ設定
 BASE_DIR="${BASE_DIR:-/tmp/aios}"      # 基本ディレクトリ
