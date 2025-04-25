@@ -50,7 +50,7 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 TR_DIR="${TR_DIR:-$BASE_DIR/translation}"
 
 # Number of parallel translation tasks to run concurrently
-MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-1}" # Default to 1 for initial testing
+MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-2}" # Default to 1 for initial testing
 
 MESSAGE_DB="${MESSAGE_D:-message_en.db}"
 
