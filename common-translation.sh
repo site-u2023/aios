@@ -52,7 +52,7 @@ TR_DIR="${TR_DIR:-$BASE_DIR/translation}"
 # Number of parallel translation tasks to run concurrently
 MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-4}"
 
-MESSAGE_DB="${MESSAGE_D:-message_en.db}"
+MESSAGE_DB="${MESSAGE_DB:-message_en.db}"
 
 # オンライン翻訳を有効化 (create_language_db logic removed reliance on this, but keep for potential external checks)
 ONLINE_TRANSLATION_ENABLED="yes"
