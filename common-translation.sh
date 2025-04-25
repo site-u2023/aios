@@ -208,142 +208,7 @@ translate_with_google() {
     return 1 # Failure
 }
 
-# Function to process a chunk of the base DB and write translated lines to a temporary output file
-# Usage: create_language_db <input_tmp_file> <output_tmp_file> <target_lang_code> <api_function_name>
-create_language_db() {
-    local input_file="$1"
-    local output_file="$2"
-    local target_lang_code="$3"
-    local api_func="$4"
-    local line=""
-    local msg_key=""
-    local source_text=""
-    local translated_text=""
-    local output_line=""
-    local line_num=0
-    local exit_status=0 # 0:success, 1:critical error, 2:partial success (some translations failed)
-
-    # --- Argument Checks ---
-    if [ -z "$input_file" ] || [ -z "$output_file" ] || [ -z "$target_lang_code" ] || [ -z "$api_func" ]; then
-        debug_log "ERROR" "create_language_db - Missing required arguments."
-        return 1 # Critical error
-    fi
-    if [ ! -f "$input_file" ]; then
-        # This might happen legitimately if a split resulted in an empty file
-        debug_log "INFO" "create_language_db - Input file not found or empty, skipping: $input_file"
-        # Ensure output file exists even if empty
-        touch "$output_file" || { debug_log "ERROR" "create_language_db - Failed to touch output file: $output_file"; return 1; } # Critical error
-        return 0 # Success (empty input is not an error)
-    fi
-     if [ ! -r "$input_file" ]; then
-        debug_log "ERROR" "create_language_db - Input file not readable: $input_file"
-        return 1 # Critical error
-     fi
-    # Output file should have been created by the caller, check if writable directory
-    local output_dir=$(dirname "$output_file")
-     if [ ! -w "$output_dir" ]; then
-        debug_log "ERROR" "create_language_db - Output directory not writable: $output_dir"
-        return 1 # Critical error
-     fi
-     # Ensure output file exists and is writable (or can be created)
-     # The caller (create_language_db_parallel) already creates it, but check again.
-     touch "$output_file" || { debug_log "ERROR" "create_language_db - Failed to touch/ensure output file: $output_file"; return 1; } # Critical error
-
-
-    debug_log "DEBUG" "create_language_db - Processing chunk: Input='$input_file', Output='$output_file', Lang='$target_lang_code', API='$api_func'"
-
-    # --- Process Input File Line by Line ---
-    while IFS= read -r line || [ -n "$line" ]; do
-        line_num=$(($line_num + 1))
-
-        # --- CHANGE START ---
-        # Skip comment lines (starting with #) and empty lines immediately
-        case "$line" in
-            \#* | '')
-                debug_log "DEBUG" "create_language_db - Skipping comment or empty line $line_num"
-                continue
-                ;;
-        esac
-        # --- CHANGE END ---
-
-        debug_log "DEBUG" "create_language_db - Reading line $line_num: $line"
-
-        # Skip lines not containing '=' (likely invalid format after comment/empty check)
-        # We still need the '|' check for the expected format.
-        if ! echo "$line" | grep -q '='; then
-            debug_log "WARN" "create_language_db - Skipping line $line_num (no '=' found): $line"
-            continue
-        fi
-
-        # Extract message key and source text
-        # Expected format: xx|MSG_KEY=Source Text (xx| might be missing in base en.db)
-        # Use parameter expansion for POSIX compliance
-        local key_part=""
-        local lang_prefix="" # Variable to hold potential language prefix
-
-        # Check if '|' exists and split accordingly
-        if echo "$line" | grep -q '|'; then
-            lang_prefix="${line%%|*}" # Extract potential lang prefix (e.g., en)
-            key_part="${line#*|}"     # Part after the first '|' (e.g., MSG_KEY=Source Text)
-        else
-            # If no '|', assume it's the base language file format (KEY=Value)
-            debug_log "DEBUG" "create_language_db - No '|' found on line $line_num, assuming base format."
-            key_part="$line"
-            lang_prefix="" # No prefix
-        fi
-
-        # Now extract key and value from key_part
-        msg_key="${key_part%%=*}"    # Extract key (e.g., MSG_KEY)
-        source_text="${key_part#*=}" # Extract value (e.g., Source Text)
-
-        if [ -z "$msg_key" ] || [ "$key_part" = "$msg_key" ]; then # Check if '=' was present after key
-            debug_log "WARN" "create_language_db - Invalid line format (missing '=' or empty key) on line $line_num: $line"
-            continue
-        fi
-
-        # --- Call Translation API ---
-        debug_log "DEBUG" "create_language_db - Translating key '$msg_key' for lang '$target_lang_code'"
-        # Use eval carefully to call the dynamic function name
-        # Ensure api_func is validated or sourced from a controlled list if possible
-        # Assuming api_func is safe here based on how it's passed
-        if command -v "$api_func" > /dev/null 2>&1; then
-            translated_text=$("$api_func" "$source_text" "$target_lang_code")
-            local translate_exit_status=$?
-            if [ $translate_exit_status -ne 0 ]; then
-                debug_log "WARN" "create_language_db - API function '$api_func' failed for key '$msg_key' (exit status $translate_exit_status). Using original text."
-                translated_text="$source_text" # Use original text on failure
-                # If translation fails, mark as partial success (status 2) unless already critical (status 1)
-                [ "$exit_status" -eq 0 ] && exit_status=2
-            elif [ -z "$translated_text" ]; then
-                 debug_log "WARN" "create_language_db - API function '$api_func' returned empty for key '$msg_key'. Using original text."
-                 translated_text="$source_text" # Use original text if API returns empty
-                 # Consider empty return also a partial success
-                 [ "$exit_status" -eq 0 ] && exit_status=2
-            fi
-        else
-            debug_log "ERROR" "create_language_db - API function '$api_func' not found."
-            translated_text="$source_text" # Use original text if function not found
-            exit_status=1 # Function not found is a critical error for this worker
-            break # Stop processing this chunk if API function is missing
-        fi
-
-        # --- Write Output Line ---
-        output_line="${target_lang_code}|${msg_key}=${translated_text}"
-        debug_log "DEBUG" "create_language_db - Writing output line: $output_line"
-        echo "$output_line" >> "$output_file"
-        if [ $? -ne 0 ]; then
-            debug_log "ERROR" "create_language_db - Failed to write to output file: $output_file"
-            exit_status=1 # Treat write failure as critical
-            break # Stop processing this chunk on write error
-        fi
-
-    done < "$input_file"
-
-    debug_log "DEBUG" "create_language_db - Finished processing chunk: $input_file with status $exit_status"
-    return $exit_status # Return accumulated status (0, 1, or 2)
-}
-
-# Function to create language DB by processing base DB in parallel (with spinner and timing)
+# Function to create language DB by processing base DB in parallel (with spinner and timing - Revised Spinner Keys)
 # Usage: create_language_db_parallel <aip_function_name> <api_endpoint_url> <domain_name> <target_lang_code>
 create_language_db_parallel() {
     local aip_function_name="$1"
@@ -389,7 +254,7 @@ create_language_db_parallel() {
     mkdir -p "$TR_DIR" || { debug_log "ERROR" "Failed to create temporary directory: $TR_DIR"; return 1; }
     mkdir -p "$final_output_dir" || { debug_log "ERROR" "Failed to create final output directory: $final_output_dir"; return 1; }
 
-    # Trap for file cleanup on INT, TERM, or EXIT (keeps spinner running until explicitly stopped)
+    # Trap for file cleanup on INT, TERM, or EXIT
     # shellcheck disable=SC2064
     trap "debug_log 'DEBUG' 'Trap cleanup: Removing temporary files...'; rm -f ${tmp_input_prefix}* ${tmp_output_prefix}*" INT TERM EXIT
 
@@ -402,22 +267,21 @@ create_language_db_parallel() {
 
     # --- Start Timing and Spinner ---
     start_time=$(date +%s)
-    local spinner_msg_key="MSG_TRANSLATING_CURRENTLY_PARALLEL"
-    local spinner_default_msg="Currently translating in parallel ($MAX_PARALLEL_TASKS tasks)..."
-    if [ -n "$domain_name" ]; then
-        spinner_default_msg="Currently translating via $domain_name in parallel ($MAX_PARALLEL_TASKS tasks)..."
-    fi
-    start_spinner "$(color blue "$(get_message "$spinner_msg_key" "api=$domain_name" "tasks=$MAX_PARALLEL_TASKS" "default=$spinner_default_msg")")"
-    spinner_started="true" # Set flag *after* successful start
+    # --- CHANGE: Use MSG_TRANSLATING_CURRENTLY from old function ---
+    local spinner_msg_key="MSG_TRANSLATING_CURRENTLY"
+    local spinner_default_msg="Currently translating: $domain_name" # Default matches old function
+    # Use 'api' parameter name consistent with old function's get_message call
+    start_spinner "$(color blue "$(get_message "$spinner_msg_key" "api=$domain_name" "default=$spinner_default_msg")")"
+    # -----------------------------------------------------------
+    spinner_started="true"
     # --------------------------------
 
     # --- Split Base DB ---
     debug_log "INFO" "Splitting base DB into $MAX_PARALLEL_TASKS parts..."
-    # Count lines excluding the first line (header) using awk for reliability
     total_lines=$(awk 'NR>1{c++} END{print c}' "$base_db")
     if [ "$total_lines" -le 0 ]; then
         debug_log "INFO" "No lines to translate (excluding header)."
-        # Write header only and exit successfully
+        # Write header only
         cat > "$final_output_file" <<-EOF
 SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
 # Translation generated using: ${aip_function_name}
@@ -427,7 +291,6 @@ EOF
              debug_log "ERROR" "Failed to write header to $final_output_file"
              exit_status=1
         fi
-        # Proceed to final spinner stop and return
     else
         # Calculate lines per task
         lines_per_task=$((total_lines / MAX_PARALLEL_TASKS))
@@ -437,7 +300,7 @@ EOF
             debug_log "WARN" "Fewer lines ($total_lines) than tasks ($MAX_PARALLEL_TASKS). Adjusting tasks."
         fi
 
-        # awk splitting logic (NR>1 ensures header is skipped)
+        # awk splitting logic
         awk -v num_tasks="$MAX_PARALLEL_TASKS" \
             -v prefix="$tmp_input_prefix" \
             'NR > 1 {
@@ -446,14 +309,12 @@ EOF
             }' "$base_db"
         if [ $? -ne 0 ]; then
             debug_log "ERROR" "Failed to split base DB using awk."
-            exit_status=1 # Mark critical error
-            # --- Stop spinner before early exit ---
+            exit_status=1
             if [ "$spinner_started" = "true" ]; then
-                # Use a specific message key or a default one
+                # Use a specific message key or a default one for split failure
                 stop_spinner "$(get_message "MSG_TRANSLATION_FAILED_SPLIT" "default=Translation failed during DB split.")" "error"
             fi
-            return 1 # Early exit
-            # --------------------------------------------
+            return 1
         fi
         debug_log "INFO" "Base DB split complete."
     fi
@@ -470,22 +331,22 @@ EOF
             if [ ! -f "$tmp_input_file" ]; then
                  debug_log "DEBUG" "Temporary input file ${tmp_input_file} not found (likely no lines for this task), skipping task $i."
                  i=$(($i + 1))
-                 continue # Skip launching this task
+                 continue
             fi
-            # Ensure temp output file exists and is empty
             >"$tmp_output_file" || {
                 debug_log "ERROR" "Failed to create temporary output file: $tmp_output_file";
-                exit_status=1; # Mark critical error
-                # --- Stop spinner before early exit ---
+                exit_status=1;
                 if [ "$spinner_started" = "true" ]; then
                     stop_spinner "$(get_message "MSG_TRANSLATION_FAILED_TMPFILE" "default=Translation failed creating temporary file.")" "error"
                 fi
-                return 1 # Early exit
-                # --------------------------------------------
-                break; # Exit loop although return already exits function
+                return 1
+                break;
             }
 
-            # Launch create_language_db in the background
+            # Launch create_language_db in the background (Child process)
+            # Ensure the child function receives the arguments it expects
+            # Original child expected: base_db, output_db, target_lang, api_func
+            # Here we pass the chunk files as base_db and output_db for the child
             create_language_db "$tmp_input_file" "$tmp_output_file" "$target_lang_code" "$aip_function_name" &
             pid=$!
             pids="$pids $pid"
@@ -493,7 +354,7 @@ EOF
             i=$(($i + 1))
         done
 
-        # --- Wait for tasks only if any were launched ---
+        # --- Wait for tasks ---
         if [ -n "$pids" ]; then
              debug_log "INFO" "Waiting for launched tasks to complete..."
              for pid in $pids; do
@@ -502,10 +363,10 @@ EOF
                  if [ "$task_exit_status" -ne 0 ]; then
                      if [ "$task_exit_status" -ne 2 ]; then
                          debug_log "ERROR" "Task with PID $pid failed with critical exit status $task_exit_status."
-                         exit_status=1 # Set overall critical failure
+                         exit_status=1
                      else
                           debug_log "WARN" "Task with PID $pid completed with partial success (exit status 2)."
-                          [ "$exit_status" -eq 0 ] && exit_status=2 # Set partial if not already critical
+                          [ "$exit_status" -eq 0 ] && exit_status=2
                      fi
                  else
                      debug_log "DEBUG" "Task with PID $pid completed successfully (exit status 0)."
@@ -513,18 +374,16 @@ EOF
              done
              debug_log "INFO" "All launched tasks completed (Overall status: $exit_status)."
         else
-             debug_log "INFO" "No tasks were launched (likely due to line count vs task count or split failure)."
-             # If split failed, exit_status is already 1. If no lines, status is 0.
+             debug_log "INFO" "No tasks were launched."
         fi
     fi
     # -------------------------------------------------
 
     # --- Combine results if no critical error occurred ---
     if [ "$exit_status" -ne 1 ]; then
-        # Only combine if there were lines to translate
         if [ "$total_lines" -gt 0 ]; then
             debug_log "INFO" "Combining results into final output file: $final_output_file"
-            # Write header using cat << EOF (from old function) - Overwrites file
+            # Write header using cat << EOF
             cat > "$final_output_file" <<-EOF
 SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
 # Translation generated using: ${aip_function_name}
@@ -532,22 +391,20 @@ SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
 EOF
             if [ $? -ne 0 ]; then
                  debug_log "ERROR" "Failed to write header to $final_output_file"
-                 exit_status=1 # Critical error
+                 exit_status=1
             else
-                # Append results from all temp output files using find and cat
+                # Append results
                 find "$TR_DIR" -name "message_${target_lang_code}.tmp.out.*" -print0 | xargs -0 -r cat >> "$final_output_file"
                 if [ $? -ne 0 ]; then
                      debug_log "ERROR" "Failed to combine temporary output files into $final_output_file"
-                     # Elevate to critical only if previously success
                      if [ "$exit_status" -eq 0 ]; then exit_status=1; fi
                 else
                      debug_log "DEBUG" "Successfully combined results."
-                     # Add completion marker only if combine was successful
+                     # Add completion marker
                      printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
                      debug_log "DEBUG" "Completion marker added to ${final_output_file}"
                 fi
             fi
-        # else: If total_lines was 0, header was already written, nothing to combine.
         elif [ "$exit_status" -eq 0 ]; then
              debug_log "INFO" "No lines were translated, final file contains only header."
         fi
@@ -556,48 +413,134 @@ EOF
 
     # --- Stop Timing and Spinner (Final step before return) ---
     end_time=$(date +%s)
-    # Calculate elapsed time, handle case where start_time might not be set (e.g., very early error before start_time)
     if [ -n "$start_time" ]; then
         elapsed_seconds=$((end_time - start_time))
     else
-        elapsed_seconds=0 # Should not happen in normal flow
+        elapsed_seconds=0
     fi
 
     if [ "$spinner_started" = "true" ]; then
         local final_message=""
-        local spinner_status="success" # Default: success
+        local spinner_status="success"
 
+        # --- CHANGE: Use message keys from old function ---
         if [ "$exit_status" -eq 0 ]; then
-             # Adjust message if no lines were translated
              if [ "$total_lines" -gt 0 ]; then
+                 # Use MSG_TRANSLATING_CREATED for success
                  final_message=$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")
              else
+                 # Keep specific message for zero lines case
                  final_message=$(get_message "MSG_TRANSLATION_NO_LINES_COMPLETE" "s=$elapsed_seconds" "default=Translation finished: No lines needed translation (${elapsed_seconds}s)")
              fi
         elif [ "$exit_status" -eq 2 ]; then
+            # Use MSG_TRANSLATION_PARTIAL for partial success
             final_message=$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")
             spinner_status="warning"
         else # exit_status is 1 (critical error)
-            final_message=$(get_message "MSG_TRANSLATION_FAILED_CRITICAL" "s=$elapsed_seconds" "default=Translation failed critically after ${elapsed_seconds}s.")
+            # Use a generic failure key or keep the specific critical one
+            # Using MSG_TRANSLATION_FAILED as a generic failure message from old context
+            final_message=$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")
             spinner_status="error"
         fi
+        # ----------------------------------------------------
         stop_spinner "$final_message" "$spinner_status"
         debug_log "DEBUG" "Parallel translation task completed in ${elapsed_seconds} seconds. Overall Status: ${exit_status}"
     else
-        # Fallback print if spinner wasn't started (e.g., error before start_spinner)
-        # This path should ideally not be reached if pre-checks are robust.
+        # Fallback print (remains the same, uses corrected keys)
          if [ "$exit_status" -eq 0 ]; then
              printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")")"
          elif [ "$exit_status" -eq 2 ]; then
              printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")")"
          else
-             printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED_CRITICAL" "s=$elapsed_seconds" "default=Translation failed critically after ${elapsed_seconds}s.")")"
+             printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")")"
          fi
     fi
     # -------------------------------
 
-    # Cleanup is handled by trap on EXIT
-    return "$exit_status" # Return final status (0, 1, or 2)
+    return "$exit_status"
+}
+
+# Child function called by create_language_db_parallel (Revised: Loop logs removed)
+# This function now processes a *chunk* of the base DB.
+# @param $1: input_chunk_file (string) - Path to the temporary input file containing a chunk of lines.
+# @param $2: output_chunk_file (string) - Path to the temporary output file for this chunk.
+# @param $3: target_lang_code (string) - The target language code (e.g., "ja").
+# @param $4: aip_function_name (string) - The name of the AIP function to call (e.g., "translate_with_google").
+# @return: 0 on success, 2 if any translation fails within this chunk. Critical errors (e.g., cannot write output) should ideally cause exit 1, but current logic returns 2.
+create_language_db() {
+    local input_chunk_file="$1"
+    local output_chunk_file="$2"
+    local target_lang_code="$3"
+    local aip_function_name="$4"
+
+    local overall_success=0 # Assume success initially for this chunk, 2 indicates at least one translation failed
+
+    # --- No spinner or timing needed in child ---
+    # --- No header needed in child output ---
+
+    # Check if input file exists (though parent should ensure this)
+    if [ ! -f "$input_chunk_file" ]; then
+        debug_log "ERROR" "Child process: Input chunk file not found: $input_chunk_file"
+        return 1 # Critical error for this child
+    fi
+
+    # Loop through the input chunk file
+    while IFS= read -r line; do
+        # Skip comments and empty lines
+        case "$line" in \#*|"") continue ;; esac
+
+        # --- Ensure line starts with the default language prefix ---
+        # This check might be redundant if the parent already filters, but good for robustness
+        case "$line" in
+            "${DEFAULT_LANGUAGE}|"*)
+                ;; # Line format is potentially correct
+            *)
+                 # Log unexpected format? Parent should handle this ideally.
+                 # debug_log "WARN" "Child: Skipping line with unexpected format: $line" # Optional: Add if needed
+                continue
+                ;;
+        esac
+        # ----------------------------------------------------------
+
+        # Extract key and value
+        local line_content=${line#*|} # Remove "LANG|" prefix
+        local key=${line_content%%=*}   # Get key before '='
+        local value=${line_content#*=}  # Get value after '='
+
+        # Skip if key or value extraction failed
+        if [ -z "$key" ] || [ -z "$value" ]; then
+             # --- CHANGE: debug_log removed ---
+            continue
+        fi
+
+        # Call the provided AIP function
+        local translated_text=""
+        local exit_code=1 # Default to failure
+
+        translated_text=$("$aip_function_name" "$value" "$target_lang_code")
+        exit_code=$?
+
+        # Write output line to the chunk's output file
+        if [ "$exit_code" -eq 0 ] && [ -n "$translated_text" ]; then
+            printf "%s|%s=%s\n" "$target_lang_code" "$key" "$translated_text" >> "$output_chunk_file"
+        else
+             # --- CHANGE: debug_log calls removed ---
+             overall_success=2 # Mark as partial failure for this chunk
+            # Write original value on failure
+            printf "%s|%s=%s\n" "$target_lang_code" "$key" "$value" >> "$output_chunk_file"
+        fi
+
+        # Check write status (optional, adds overhead)
+        # if [ $? -ne 0 ]; then
+        #     debug_log "ERROR" "Child: Failed to write to output chunk file: $output_chunk_file"
+        #     return 1 # Critical error for this child
+        # fi
+
+    done < "$input_chunk_file" # Read from the chunk input file
+
+    # --- No spinner stop or marker needed in child ---
+    # Return 0 for success, 2 for partial failure within this chunk
+    return "$overall_success"
 }
 
 # 翻訳情報を表示する関数
