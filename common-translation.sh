@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-25-00-05" # Updated version based on last interaction time
+SCRIPT_VERSION="2025-04-25-00-06" # Updated version based on last interaction time
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -93,7 +93,7 @@ urlencode() {
     printf "%s\n" "$encoded"
 }
 
-# Google翻訳APIを使用した翻訳関数 (修正版 - デバッグログ完全削除)
+# Google翻訳APIを使用した翻訳関数 (修正版 - ファイル存在チェック追加)
 # @param $1: source_text (string) - The text to translate.
 # @param $2: target_lang_code (string) - The target language code (e.g., "ja").
 # @stdout: Translated text on success. Empty string on failure.
@@ -107,54 +107,113 @@ translate_with_google() {
     local wget_options=""
     local retry_count=0
     local network_type=""
-    local temp_file="${BASE_DIR}/google_response_$$.tmp" # Use PID for temp file uniqueness (current version style)
+    # Use a more robust temp file naming convention (PID + random element if needed, but PID is usually sufficient for parallel shell processes)
+    local temp_file="${BASE_DIR}/google_response_$$.tmp"
     local api_url=""
-    local translated_text="" # Renamed from 'translated' in ok/ version for clarity
+    local translated_text=""
+    local wget_exit_code=0
 
-    mkdir -p "$(dirname "$temp_file")" 2>/dev/null
+    # Ensure BASE_DIR exists (important for temp file creation)
+    mkdir -p "$BASE_DIR" 2>/dev/null || { debug_log "ERROR" "translate_with_google: Failed to create base directory $BASE_DIR"; return 1; }
 
+    # --- Network Type Detection ---
     if [ ! -f "$ip_check_file" ]; then
          if type check_network_connectivity >/dev/null 2>&1; then
+            debug_log "DEBUG" "translate_with_google: Running check_network_connectivity"
             check_network_connectivity
          else
+             debug_log "DEBUG" "translate_with_google: check_network_connectivity not found, assuming v4"
              network_type="v4"
+             # Optionally create the cache file with the default
+             # echo "v4" > "$ip_check_file"
          fi
     fi
-    network_type=$(cat "$ip_check_file" 2>/dev/null || echo "v4")
+    # Read network type, default to v4 if file read fails or file is empty
+    network_type=$(cat "$ip_check_file" 2>/dev/null)
+    if [ -z "$network_type" ]; then
+        debug_log "WARN" "translate_with_google: Could not read network type from $ip_check_file or file is empty, defaulting to v4."
+        network_type="v4"
+    fi
+    debug_log "DEBUG" "translate_with_google: Detected network type: $network_type"
 
     case "$network_type" in
-        "v4"|"v4v6") wget_options="-4" ;; # Treat v4v6 the same as v4
+        "v4"|"v4v6") wget_options="-4" ;; # Treat v4v6 the same as v4 for wget preference
         "v6") wget_options="-6" ;;
-        *) wget_options="" ;; # 不明な場合はオプションなし
+        *)
+           debug_log "WARN" "translate_with_google: Unknown network type '$network_type', using no specific IP version."
+           wget_options="" ;;
     esac
+    # --- End Network Type Detection ---
 
     local encoded_text=$(urlencode "$source_text")
+    # Ensure source_lang and target_lang_code are set
+    if [ -z "$source_lang" ] || [ -z "$target_lang_code" ]; then
+        debug_log "ERROR" "translate_with_google: Source or target language code is empty (source='$source_lang', target='$target_lang_code')."
+        return 1
+    fi
     api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang_code}&dt=t&q=${encoded_text}"
+    debug_log "DEBUG" "translate_with_google: API URL: $api_url"
+
 
     # リトライループ
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        wget --no-check-certificate $wget_options -T $API_TIMEOUT -q -O "$temp_file" --user-agent="Mozilla/5.0" "$api_url"
-        local wget_exit_code=$?
+        debug_log "DEBUG" "translate_with_google: Attempt $(($retry_count + 1))/$API_MAX_RETRIES for '$source_text'"
+        # Ensure temp file is removed before wget attempts to write to it
+        rm -f "$temp_file" 2>/dev/null
 
-        if [ "$wget_exit_code" -eq 0 ] && [ -s "$temp_file" ]; then
+        # Execute wget
+        wget --no-check-certificate $wget_options -T $API_TIMEOUT -q -O "$temp_file" --user-agent="Mozilla/5.0" "$api_url"
+        wget_exit_code=$?
+
+        debug_log "DEBUG" "translate_with_google: wget exited with code $wget_exit_code for $temp_file"
+
+        # --- CHANGE START ---
+        # Check if wget succeeded AND the temp file exists AND is not empty before processing
+        if [ "$wget_exit_code" -eq 0 ] && [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+            debug_log "DEBUG" "translate_with_google: wget success, processing file $temp_file"
+            # Check if the content looks like a valid Google Translate response
             if grep -q '^\s*\[\[\["' "$temp_file"; then
+                debug_log "DEBUG" "translate_with_google: Found valid response pattern in $temp_file"
+                # Extract and decode the translated text
                 translated_text=$(sed -e 's/^\s*\[\[\["//' -e 's/",".*//' "$temp_file" | sed -e 's/\\u003d/=/g' -e 's/\\u003c/</g' -e 's/\\u003e/>/g' -e 's/\\u0026/\&/g' -e 's/\\"/"/g' -e 's/\\n/\n/g' -e 's/\\r//g' -e 's/\\\\/\\/g')
 
                 if [ -n "$translated_text" ]; then
-                    rm -f "$temp_file" 2>/dev/null
+                    debug_log "DEBUG" "translate_with_google: Successfully extracted translation: $translated_text"
+                    rm -f "$temp_file" 2>/dev/null # Clean up successful file
                     printf "%s\n" "$translated_text"
                     return 0 # Success
+                else
+                    debug_log "WARN" "translate_with_google: Extracted text was empty from $temp_file"
+                    # Consider this a failure case for the current attempt
                 fi
+            else
+                debug_log "WARN" "translate_with_google: Response pattern not found in $temp_file. Content: $(head -n 1 "$temp_file")"
+                # Consider this a failure case for the current attempt
             fi
+        # --- CHANGE END ---
+        else
+            # Log wget failure or file issue
+            if [ "$wget_exit_code" -ne 0 ]; then
+                debug_log "WARN" "translate_with_google: wget failed with exit code $wget_exit_code"
+            elif [ ! -f "$temp_file" ]; then
+                debug_log "WARN" "translate_with_google: wget succeeded (code 0) but temp file $temp_file not found!" # Should be rare
+            elif [ ! -s "$temp_file" ]; then
+                 debug_log "WARN" "translate_with_google: wget succeeded (code 0) but temp file $temp_file is empty!"
+            fi
+            # Fall through to retry logic
         fi
-        rm -f "$temp_file" 2>/dev/null
+
+        # Increment retry counter and sleep if not the last attempt
         retry_count=$((retry_count + 1))
         if [ $retry_count -lt $API_MAX_RETRIES ]; then
+            debug_log "DEBUG" "translate_with_google: Retrying in 1 second..."
             sleep 1
         fi
     done
 
-    rm -f "$temp_file" 2>/dev/null # 念のため削除
+    # Cleanup even after failed attempts
+    rm -f "$temp_file" 2>/dev/null
+    debug_log "ERROR" "translate_with_google: Failed to translate '$source_text' after $API_MAX_RETRIES attempts."
     printf "" # Output empty string on failure
     return 1 # Failure
 }
