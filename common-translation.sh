@@ -71,9 +71,8 @@ determined_default_tasks=$(determine_default_parallel_tasks)
 # Number of parallel translation tasks to run concurrently.
 # Use environment variable if set, otherwise use the determined default.
 MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-$determined_default_tasks}"
-debug_log "INFO" "MAX_PARALLEL_TASKS is set to $MAX_PARALLEL_TASKS (determined default: $determined_default_tasks)"
+debug_log "DEBUG" "MAX_PARALLEL_TASKS is set to $MAX_PARALLEL_TASKS (determined default: $determined_default_tasks)"
 # Optional: Add exit code to log if captured:
-# debug_log "INFO" "MAX_PARALLEL_TASKS is set to $MAX_PARALLEL_TASKS (determined default: $determined_default_tasks, exit code: $determined_tasks_exit_code)"
 
 # Function to determine the default number of parallel tasks based on cached CPU cores
 # @stdout: Prints the determined default number of tasks (cores or 1).
