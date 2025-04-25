@@ -269,10 +269,12 @@ create_language_db() {
 }
 
 # Function to create language DB by processing base DB in parallel
-# Usage: create_language_db_parallel <target_lang_code> <api_function_name>
+# Usage: create_language_db_parallel <aip_function_name> <target_lang_code>
 create_language_db_parallel() {
-    local target_lang_code="$1"
-    local api_func="$2"
+    # --- 引数の順番を元の create_language_db に合わせる ---
+    local aip_function_name="$1" # 第1引数: AIP関数名
+    local target_lang_code="$2"  # 第2引数: ターゲット言語コード
+    # ----------------------------------------------------
     local base_db="${BASE_DIR}/${MESSAGE_DB}"
     local final_output_dir="/tmp/aios"
     local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
@@ -292,14 +294,16 @@ create_language_db_parallel() {
         debug_log "ERROR" "Base DB file not found: $base_db"
         return 1
     fi
+    # --- 引数チェック: 修正後の引数名を使用 ---
+    if [ -z "$aip_function_name" ]; then
+        debug_log "ERROR" "AIP function name is empty."
+        return 1
+    fi
     if [ -z "$target_lang_code" ]; then
         debug_log "ERROR" "Target language code is empty."
         return 1
     fi
-    if [ -z "$api_func" ]; then
-        debug_log "ERROR" "API function name is empty."
-        return 1
-    fi
+    # ------------------------------------------
 
     # --- Prepare directories and cleanup ---
     mkdir -p "$TR_DIR" || { debug_log "ERROR" "Failed to create temporary directory: $TR_DIR"; return 1; }
@@ -309,7 +313,9 @@ create_language_db_parallel() {
     # shellcheck disable=SC2064 # We want $tmp_input_prefix and $tmp_output_prefix to expand now
     trap "debug_log 'INFO' 'Cleaning up temporary files...'; rm -f ${tmp_input_prefix}* ${tmp_output_prefix}*; exit \$exit_status" INT TERM EXIT
 
-    debug_log "INFO" "Starting parallel translation for language '$target_lang_code' using '$api_func'."
+    # --- ログ出力: 修正後の引数名を使用 ---
+    debug_log "INFO" "Starting parallel translation for language '$target_lang_code' using '$aip_function_name'."
+    # -------------------------------------
     debug_log "INFO" "Base DB: $base_db"
     debug_log "INFO" "Temporary file directory: $TR_DIR"
     debug_log "INFO" "Final output file: $final_output_file"
@@ -319,36 +325,25 @@ create_language_db_parallel() {
     header=$(head -n 1 "$base_db")
     if [ -z "$header" ]; then
        debug_log "WARN" "Base DB might be empty or header could not be read."
-       # Optionally create a default header if needed based on target_lang_code
-       # header="${target_lang_code}|# Created on $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
     fi
 
     # --- Split Base DB (excluding header) using awk ---
     debug_log "INFO" "Splitting base DB into $MAX_PARALLEL_TASKS parts..."
-    # Count lines excluding header
     total_lines=$(($(wc -l < "$base_db") - 1))
     if [ "$total_lines" -le 0 ]; then
         debug_log "INFO" "No lines to translate (excluding header)."
-        # Write only header to final file and exit successfully
         echo "$header" > "$final_output_file"
-        # Cleanup trap will run on exit
         return 0
     fi
 
-    # Basic calculation for lines per file (integer division)
     lines_per_task=$(($total_lines / $MAX_PARALLEL_TASKS))
     extra_lines=$(($total_lines % $MAX_PARALLEL_TASKS))
 
-    # Ensure lines_per_task is at least 1 if total_lines > 0
     if [ "$lines_per_task" -eq 0 ] && [ "$total_lines" -gt 0 ]; then
         lines_per_task=1
-        # Adjust MAX_PARALLEL_TASKS if fewer lines than tasks? Or let awk handle empty files?
-        # Let's proceed, awk will create empty files for tasks > total_lines if needed.
         debug_log "WARN" "Fewer lines ($total_lines) than tasks ($MAX_PARALLEL_TASKS). Some tasks might process few or no lines."
     fi
 
-    # Use awk to split the file (NR>1 skips header)
-    # Assigns lines round-robin to output files
     awk -v num_tasks="$MAX_PARALLEL_TASKS" \
         -v prefix="$tmp_input_prefix" \
         'NR > 1 {
@@ -358,7 +353,6 @@ create_language_db_parallel() {
 
     if [ $? -ne 0 ]; then
         debug_log "ERROR" "Failed to split base DB using awk."
-        # Cleanup trap will run on exit
         return 1
     fi
     debug_log "INFO" "Base DB split complete."
@@ -370,14 +364,14 @@ create_language_db_parallel() {
         local tmp_input_file="${tmp_input_prefix}${i}"
         local tmp_output_file="${tmp_output_prefix}${i}"
 
-        # Ensure temp input file exists before launching task, even if empty (awk creates it)
-        touch "$tmp_input_file" || { debug_log "ERROR" "Failed to touch temporary input file: $tmp_input_file"; exit_status=1; break; } # Exit loop on error
-        # Create empty output file initially
-        >"$tmp_output_file" || { debug_log "ERROR" "Failed to create temporary output file: $tmp_output_file"; exit_status=1; break; } # Exit loop on error
+        touch "$tmp_input_file" || { debug_log "ERROR" "Failed to touch temporary input file: $tmp_input_file"; exit_status=1; break; }
+        >"$tmp_output_file" || { debug_log "ERROR" "Failed to create temporary output file: $tmp_output_file"; exit_status=1; break; }
 
-        # Launch create_language_db in the background
-        # Pass input file, output file, lang code, api func
-        create_language_db "$tmp_input_file" "$tmp_output_file" "$target_lang_code" "$api_func" &
+        # --- Launch create_language_db (子プロセス) in the background ---
+        # 子プロセスが期待する引数の順番 (tmp_in, tmp_out, lang_code, api_func) で渡す
+        # 親プロセスが受け取った $aip_function_name と $target_lang_code を使用
+        create_language_db "$tmp_input_file" "$tmp_output_file" "$target_lang_code" "$aip_function_name" &
+        # ----------------------------------------------------------------
         pid=$!
         pids="$pids $pid"
         debug_log "DEBUG" "Launched task $i (PID: $pid) for input $tmp_input_file"
@@ -392,7 +386,6 @@ create_language_db_parallel() {
         local task_exit_status=$?
         if [ "$task_exit_status" -ne 0 ]; then
             debug_log "ERROR" "Task with PID $pid failed with exit status $task_exit_status."
-            # Set overall exit status to failure, but let other tasks finish/cleanup run
             exit_status=1
         else
             debug_log "DEBUG" "Task with PID $pid completed successfully."
@@ -401,7 +394,6 @@ create_language_db_parallel() {
 
     if [ "$exit_status" -ne 0 ]; then
          debug_log "ERROR" "One or more translation tasks failed."
-         # Cleanup trap will run on exit
          return 1
     fi
 
@@ -409,23 +401,25 @@ create_language_db_parallel() {
 
     # --- Combine results ---
     debug_log "INFO" "Combining results into final output file: $final_output_file"
-    # Write header first (overwrite file)
-    echo "$header" > "$final_output_file" || { debug_log "ERROR" "Failed to write header to $final_output_file"; exit_status=1; return 1; } # Cleanup trap runs on return
+    # Write header first (overwrite file) - このヘッダー部分は後で元の関数に合わせて修正が必要
+    echo "$header" > "$final_output_file" || { debug_log "ERROR" "Failed to write header to $final_output_file"; exit_status=1; return 1; }
 
     # Append results from all temp output files
-    # Use find to handle cases where some temp files might not be created if MAX_PARALLEL_TASKS > total_lines
     find "$TR_DIR" -name "message_${target_lang_code}.tmp.out.*" -print0 | xargs -0 cat >> "$final_output_file"
     if [ $? -ne 0 ]; then
          debug_log "ERROR" "Failed to combine temporary output files into $final_output_file"
          exit_status=1
-         # Cleanup trap will run on exit
          return 1
     fi
 
-    debug_log "INFO" "Successfully created language DB: $final_output_file"
+    # --- 完了マーカーの追加 (後で実装) ---
+    # --- 時間計測・スピナー制御 (後で実装) ---
+
+    debug_log "INFO" "Successfully created language DB (basic combination): $final_output_file"
 
     # Cleanup is handled by trap on EXIT
-    return 0
+    # --- 戻り値 (後で元の関数に合わせて修正が必要) ---
+    return "$exit_status" # 現状は 0 (成功) or 1 (タスク失敗/結合失敗)
 }
 
 # 翻訳情報を表示する関数
