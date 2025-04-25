@@ -366,7 +366,7 @@ display_detected_translation() {
 #               Does NOT take language code as an argument.
 # @PARAM: None
 # @RETURN: 0 on success/no translation needed, 1 on critical error,
-#          propagates create_language_db exit code on failure.
+#          propagates create_language_db_parallel exit code on failure.
 translate_main() {
     # --- Initialization ---
     # (Wget detection logic remains the same)
@@ -377,7 +377,6 @@ translate_main() {
         debug_log "DEBUG" "translate_main: detect_wget_capabilities function not found. Assuming basic wget."
         WGET_CAPABILITY_DETECTED="basic"
     fi
-    # debug_log "DEBUG" "translate_main: Initialization part complete." # Reduced log
     # --- End Initialization ---
 
     # --- Translation Control Logic ---
@@ -385,7 +384,6 @@ translate_main() {
     local is_default_lang="false"
     local target_db=""
     local db_creation_result=1 # Default to failure/not run
-    # local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER" # REMOVED: Marker logic removed
 
     # 1. Determine Language Code ONLY from Cache
     if [ -f "${CACHE_DIR}/message.ch" ]; then
@@ -410,7 +408,6 @@ translate_main() {
     target_db="${BASE_DIR}/message_${lang_code}.db"
     debug_log "DEBUG" "translate_main: Checking for existing target DB: ${target_db}"
 
-    # MODIFIED: Check only for file existence (-f)
     if [ -f "$target_db" ]; then
         debug_log "DEBUG" "translate_main: Target DB '${target_db}' exists for '${lang_code}'. Assuming valid and displaying info."
         # If file exists, display info and return success
@@ -419,10 +416,9 @@ translate_main() {
     else
         debug_log "DEBUG" "translate_main: Target DB '${target_db}' does not exist. Proceeding with creation."
     fi
-    # --- End MODIFIED check ---
+    # --- End DB check ---
 
     # --- Proceed with Translation Process ---
-    # (Steps 4 & 5: Find function, determine domain - remain the same)
     # 4. Find the first available translation function...
     local selected_func=""
     local func_name=""
@@ -442,23 +438,22 @@ translate_main() {
     fi
     debug_log "DEBUG" "translate_main: Selected translation function: ${selected_func}"
 
-    # 5. Determine API URL and Domain Name for spinner...
+    # 5. Determine API URL and Domain Name (for context, currently unused in called functions)
     local api_endpoint_url=""
     local domain_name=""
     case "$selected_func" in
-        "translate_with_google") api_endpoint_url="..."; domain_name="translate.googleapis.com" ;;
-        "translate_with_lingva") api_endpoint_url="..."; domain_name="lingva.ml" ;;
-        *) debug_log "DEBUG" "..."; api_endpoint_url="N/A"; domain_name="$selected_func" ;;
+        "translate_with_google") api_endpoint_url="https://translate.googleapis.com/translate_a/single"; domain_name="translate.googleapis.com" ;;
+        "translate_with_lingva") api_endpoint_url="https://lingva.ml/api/v1/"; domain_name="lingva.ml" ;;
+        *) debug_log "DEBUG" "translate_main: Unknown function ${selected_func}, setting placeholder API info."; api_endpoint_url="N/A"; domain_name="$selected_func" ;;
     esac
-    debug_log "DEBUG" "translate_main: Using Domain '${domain_name}' for spinner..."
+    debug_log "DEBUG" "translate_main: Using API info context: URL='${api_endpoint_url}', Domain='${domain_name}'"
 
 
-    # 6. Call create_language_db (MODIFIED function name)
-    # Assuming create_language_db will be the new parallel function
-    debug_log "DEBUG" "translate_main: Calling create_language_db for language '${lang_code}' using function '${selected_func}'"
-    create_language_db "$selected_func" "$api_endpoint_url" "$domain_name" "$lang_code" # MODIFIED: Call the parallel version with the new name
+    # 6. Call create_language_db_parallel (MODIFIED)
+    debug_log "DEBUG" "translate_main: Calling create_language_db_parallel for language '${lang_code}' using function '${selected_func}'"
+    create_language_db_parallel "$selected_func" "$api_endpoint_url" "$domain_name" "$lang_code" # MODIFIED: Call the parallel control function
     db_creation_result=$?
-    debug_log "DEBUG" "translate_main: create_language_db finished with status: ${db_creation_result}"
+    debug_log "DEBUG" "translate_main: create_language_db_parallel finished with status: ${db_creation_result}"
 
     # 7. Handle Result and Display Info ONLY on Success
     if [ "$db_creation_result" -eq 0 ]; then
@@ -468,10 +463,15 @@ translate_main() {
         return 0 # Success
     else
         debug_log "DEBUG" "translate_main: Language DB creation failed for ${lang_code} (Exit status: ${db_creation_result})."
-        if [ "$db_creation_result" -ne 1 ]; then # Avoid duplicate message if base DB was missing
+        # Propagate specific create_language_db errors if possible (e.g., base DB missing),
+        # otherwise show general failure. create_language_db_parallel returns 0 or 2.
+        # create_language_db returns 1 if base DB missing. Parallel wrapper doesn't pass this up.
+        # So we only check for the overall failure (status 2) from the parallel function.
+        if [ "$db_creation_result" -eq 2 ]; then
              printf "%s\n" "$(color yellow "$(get_message "MSG_ERR_TRANSLATION_FAILED" "lang=$lang_code")")"
+        # else: Could add handling for other potential non-zero codes if the parallel function changes
         fi
         # Do not display info on failure
-        return "$db_creation_result" # Propagate error code
+        return "$db_creation_result" # Propagate error code (likely 2 from parallel func)
     fi
 }
