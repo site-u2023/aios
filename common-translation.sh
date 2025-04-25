@@ -413,10 +413,10 @@ EOF
     # --- Cleanup ---
     # Remove the temporary awk script file
     rm -f "$awk_script_file"
-    if [ -d "$tmp_dir" ]; then
-        debug_log "DEBUG" "Removing temporary directory: $tmp_dir"
-        rm -rf "$tmp_dir"
-    fi
+    # if [ -d "$tmp_dir" ]; then
+    #     debug_log "DEBUG" "Removing temporary directory: $tmp_dir"
+    #     rm -rf "$tmp_dir"
+    # fi
 
     debug_log "INFO" "Finished parallel DB creation for domain '$domain'. Final return code: $return_code"
     return "$return_code"
