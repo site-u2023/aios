@@ -404,29 +404,23 @@ EOF
     return "$return_code" # Return the code from the parallel logic
 }
 
-# URL安全エンコード関数（seqを使わない最適化版）
-# @param $1: string - The string to encode.
-# @stdout: URL-encoded string.
+# --- urlencode function (ensure it's available or include it) ---
+# Simple urlencode function (may need refinement for specific edge cases)
 urlencode() {
-    local string="$1"
+    local string="${1}"
+    local strlen=${#string}
     local encoded=""
-    local char # This variable is no longer needed with the direct slicing
-    local i=0
-    local length=${#string} # POSIX compliant way to get length
+    local pos c o
 
-    while [ "$i" -lt "$length" ]; do
-        char="${string:$i:1}"
-
-        case "$char" in
-            [a-zA-Z0-9.~_-]) encoded="${encoded}$char" ;;
-            " ") encoded="${encoded}%20" ;;
-            *)
-                encoded="${encoded}$(printf '%%%02X' "'$char")"
-                ;;
+    for (( pos=0 ; pos<strlen ; pos++ )); do
+        c=${string:$pos:1}
+        case "$c" in
+            [-_.~a-zA-Z0-9]) o="${c}" ;;
+            *) printf -v o '%%%02x' "'$c" ;;
         esac
-        i=$((i + 1))
+        encoded+="${o}"
     done
-    printf "%s\n" "$encoded"
+    printf "%s" "${encoded}"
 }
 
 # Lingva Translate APIを使用した翻訳関数 (修正版)
@@ -540,7 +534,7 @@ translate_with_lingva() {
     return 1 # Failure
 }
 
-# Google翻訳APIを使用した翻訳関数 (修正版 - ループ内デバッグログ削除)
+# Google翻訳APIを使用した翻訳関数 (修正版 - デバッグを標準エラー出力へ)
 # @param $1: source_text (string) - The text to translate.
 # @param $2: target_lang_code (string) - The target language code (e.g., "ja").
 # @stdout: Translated text on success. Empty string on failure.
@@ -548,66 +542,131 @@ translate_with_lingva() {
 translate_with_google() {
     local source_text="$1"
     local target_lang_code="$2"
-    local source_lang="$DEFAULT_LANGUAGE" # Use the global default language
+    local source_lang="$DEFAULT_LANGUAGE"
 
     local ip_check_file="${CACHE_DIR}/network.ch"
     local wget_options=""
     local retry_count=0
     local network_type=""
-    local temp_file="${BASE_DIR}/google_response_$$.tmp" # Use PID for temp file uniqueness (current version style)
+    # --- Modified: Ensure PID uniqueness even in subshells, use nanoseconds for higher chance of uniqueness ---
+    # --- NOTE: Using $$ might be problematic in subshells if parent PID is desired. Using date +%N for now. ---
+    local temp_file="${BASE_DIR}/google_response_$(date +%s%N).tmp" # Changed filename generation
+    # --- Modification End ---
     local api_url=""
-    local translated_text="" # Renamed from 'translated' in ok/ version for clarity
+    local translated_text=""
+    # Removed wget_log_file definition, will redirect stderr directly if needed
 
+    # --- Ensure base directory exists ---
     mkdir -p "$(dirname "$temp_file")" 2>/dev/null
+    echo "[DEBUG][translate_with_google] Ensured directory exists: $(dirname "$temp_file")" >&2 # Output to stderr
 
     if [ ! -f "$ip_check_file" ]; then
          if type check_network_connectivity >/dev/null 2>&1; then
             check_network_connectivity
          else
-             debug_log "DEBUG" "translate_with_google: check_network_connectivity function not found."
+             echo "[DEBUG][translate_with_google] check_network_connectivity function not found. Assuming v4." >&2
              network_type="v4"
          fi
     fi
     network_type=$(cat "$ip_check_file" 2>/dev/null || echo "v4")
-    debug_log "DEBUG" "translate_with_google: Determined network type: ${network_type}"
+    echo "[DEBUG][translate_with_google] Determined network type: ${network_type}" >&2
 
     case "$network_type" in
-        "v4"|"v4v6") wget_options="-4" ;; # Treat v4v6 the same as v4
+        "v4"|"v4v6") wget_options="-4" ;;
         "v6") wget_options="-6" ;;
-        *) wget_options="" ;; # 不明な場合はオプションなし
+        *) wget_options="" ;;
     esac
-    debug_log "DEBUG" "translate_with_google: Initial wget options based on network type: ${wget_options}"
+    echo "[DEBUG][translate_with_google] Initial wget options: ${wget_options}" >&2
 
     local encoded_text=$(urlencode "$source_text")
     api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang_code}&dt=t&q=${encoded_text}"
-    debug_log "DEBUG" "translate_with_google: API URL: ${api_url}"
+    echo "[DEBUG][translate_with_google] Constructed API URL (first 100 chars): $(echo "$api_url" | cut -c 1-100)" >&2
 
     # リトライループ
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        wget --no-check-certificate $wget_options -T $API_TIMEOUT -q -O "$temp_file" --user-agent="Mozilla/5.0" "$api_url"
-        local wget_exit_code=$?
+        local current_try=$((retry_count + 1))
+        echo "[DEBUG][translate_with_google TRY ${current_try}] Temp file target: ${temp_file}" >&2
 
-        if [ "$wget_exit_code" -eq 0 ] && [ -s "$temp_file" ]; then
-            if grep -q '^\s*\[\[\["' "$temp_file"; then
-                translated_text=$(sed -e 's/^\s*\[\[\["//' -e 's/",".*//' "$temp_file" | sed -e 's/\\u003d/=/g' -e 's/\\u003c/</g' -e 's/\\u003e/>/g' -e 's/\\u0026/\&/g' -e 's/\\"/"/g' -e 's/\\n/\n/g' -e 's/\\r//g' -e 's/\\\\/\\/g')
-
-                if [ -n "$translated_text" ]; then
-                    rm -f "$temp_file" 2>/dev/null
-                    printf "%s\n" "$translated_text"
-                    return 0 # Success
-                fi
-            fi
-        fi
+        # --- Added: Remove potential leftover file before wget ---
         rm -f "$temp_file" 2>/dev/null
+        echo "[DEBUG][translate_with_google TRY ${current_try}] Removed potential leftover file: $temp_file" >&2
+        # --- Addition End ---
+
+        # wget実行 - redirect stderr to /dev/null to avoid clutter, capture exit code
+        echo "[DEBUG][translate_with_google TRY ${current_try}] Executing wget..." >&2
+        wget --no-check-certificate $wget_options -T $API_TIMEOUT -q -O "$temp_file" --user-agent="Mozilla/5.0" "$api_url" 2>/dev/null
+        local wget_exit_code=$?
+        echo "[DEBUG][translate_with_google TRY ${current_try}] wget exit code: $wget_exit_code" >&2
+
+        # --- Check file existence and details immediately after wget ---
+        echo "[DEBUG][translate_with_google TRY ${current_try}] Checking file existence after wget: ${temp_file}" >&2
+        if [ -f "$temp_file" ]; then
+            echo "[DEBUG][translate_with_google TRY ${current_try}] File EXISTS. Details: $(ls -l "$temp_file")" >&2
+            # Check if file has size
+            if [ -s "$temp_file" ]; then
+                echo "[DEBUG][translate_with_google TRY ${current_try}] File has size. Checking content..." >&2
+
+                # --- Check file existence before grep ---
+                echo "[DEBUG][translate_with_google TRY ${current_try}] Checking file existence before grep: ${temp_file}" >&2
+                if [ ! -f "$temp_file" ]; then
+                     echo "[ERROR][translate_with_google TRY ${current_try}] File DISAPPEARED before grep: ${temp_file}" >&2
+                     # Continue to next retry iteration
+                     retry_count=$((retry_count + 1))
+                     rm -f "$temp_file" 2>/dev/null # Clean up just in case
+                     if [ $retry_count -lt $API_MAX_RETRIES ]; then sleep 1; fi
+                     continue
+                fi
+                # --- Addition End ---
+
+                # Check if the response looks like a valid Google Translate response
+                if grep -q '^\s*\[\[\["' "$temp_file"; then
+                    echo "[DEBUG][translate_with_google TRY ${current_try}] Found valid response pattern. Extracting..." >&2
+                    # Extraction logic
+                    # --- Check file existence before sed ---
+                    echo "[DEBUG][translate_with_google TRY ${current_try}] Checking file existence before sed: ${temp_file}" >&2
+                    if [ ! -f "$temp_file" ]; then
+                         echo "[ERROR][translate_with_google TRY ${current_try}] File DISAPPEARED before sed: ${temp_file}" >&2
+                         retry_count=$((retry_count + 1))
+                         rm -f "$temp_file" 2>/dev/null
+                         if [ $retry_count -lt $API_MAX_RETRIES ]; then sleep 1; fi
+                         continue
+                    fi
+                    # --- Addition End ---
+                    translated_text=$(sed -e 's/^\s*\[\[\["//' -e 's/",".*//' "$temp_file" | sed -e 's/\\u003d/=/g' -e 's/\\u003c/</g' -e 's/\\u003e/>/g' -e 's/\\u0026/\&/g' -e 's/\\"/"/g' -e 's/\\n/\n/g' -e 's/\\r//g' -e 's/\\\\/\\/g')
+
+                    if [ -n "$translated_text" ]; then
+                        echo "[INFO][translate_with_google TRY ${current_try}] Translation extracted successfully." >&2
+                        rm -f "$temp_file" 2>/dev/null
+                        printf "%s\n" "$translated_text" # Output translation to stdout
+                        return 0 # Success
+                    else
+                        echo "[WARN][translate_with_google TRY ${current_try}] Failed to extract translation from valid-looking response. Temp file: $temp_file" >&2
+                    fi
+                else
+                    echo "[WARN][translate_with_google TRY ${current_try}] wget success, but response pattern not matched. Temp file: $temp_file File content head:" >&2
+                    head -n 5 "$temp_file" | while IFS= read -r line; do echo "[DEBUG]  Response line: $line" >&2; done
+                fi
+            else
+                # File exists but is empty
+                echo "[WARN][translate_with_google TRY ${current_try}] wget succeeded (code 0) but output file is EMPTY: ${temp_file}" >&2
+            fi
+        else
+            # File does not exist after wget
+             echo "[WARN][translate_with_google TRY ${current_try}] File DOES NOT EXIST after wget (code: $wget_exit_code): ${temp_file}" >&2
+             # No need to check wget log if stderr was redirected to /dev/null, exit code is the indicator
+        fi
+
+        # Cleanup and retry prep
+        rm -f "$temp_file" 2>/dev/null # Clean up for the next retry or final failure
         retry_count=$((retry_count + 1))
         if [ $retry_count -lt $API_MAX_RETRIES ]; then
+            echo "[DEBUG][translate_with_google TRY ${current_try}] Retrying after 1 second..." >&2
             sleep 1
         fi
     done
 
-    debug_log "DEBUG" "translate_with_google: Translation failed after ${API_MAX_RETRIES} attempts for text starting with: $(echo "$source_text" | cut -c 1-50)"
-    rm -f "$temp_file" 2>/dev/null # 念のため削除
-    printf "" # Output empty string on failure
+    echo "[ERROR][translate_with_google] Translation failed after ${API_MAX_RETRIES} attempts. Text starts with: $(echo "$source_text" | cut -c 1-50)" >&2
+    printf "" # Output empty string on failure (to stdout)
     return 1 # Failure
 }
 
