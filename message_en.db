@@ -308,4 +308,4 @@ en|MSG_DEBUG_INFO_FOOTER=End of Debug Information
 # =======================
 # end marker
 # =======================
-en|AIOS_TRANSLATION_COMPLETE_MARKER=EOF
+# en|AIOS_TRANSLATION_COMPLETE_MARKER=EOF
