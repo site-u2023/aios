@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-26-01-04"
+SCRIPT_VERSION="2025-04-26-02-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -460,6 +460,92 @@ EOF
     return "$exit_status"
 }
 
+# Child function called by create_language_db_parallel (Revised: I/O Buffering)
+# This function now processes a *chunk* of the base DB and writes output once.
+# @param $1: input_chunk_file (string) - Path to the temporary input file containing a chunk of lines.
+# @param $2: output_chunk_file (string) - Path to the temporary output file for this chunk.
+# @param $3: target_lang_code (string) - The target language code (e.g., "ja").
+# @param $4: aip_function_name (string) - The name of the AIP function to call (e.g., "translate_with_google").
+# @return: 0 on success, 1 on critical error (read/write failure), 2 if any translation fails within this chunk (but write succeeded).
+create_language_db() {
+    local input_chunk_file="$1"
+    local output_chunk_file="$2"
+    local target_lang_code="$3"
+    local aip_function_name="$4"
+
+    local overall_success=0 # Assume success initially for this chunk, 2 indicates at least one translation failed
+    local output_buffer=""  # --- CHANGE: Initialize buffer variable ---
+
+    # Check if input file exists
+    if [ ! -f "$input_chunk_file" ]; then
+        debug_log "DEBUG" "Child process: Input chunk file not found: $input_chunk_file"
+        return 1 # Critical error for this child
+    fi
+
+    # Loop through the input chunk file
+    while IFS= read -r line; do
+        # Skip comments and empty lines
+        case "$line" in \#*|"") continue ;; esac
+
+        # Ensure line starts with the default language prefix
+        case "$line" in
+            "${DEFAULT_LANGUAGE}|"*)
+                ;;
+            *)
+                continue
+                ;;
+        esac
+
+        # Extract key and value
+        local line_content=${line#*|}
+        local key=${line_content%%=*}
+        local value=${line_content#*=}
+
+        if [ -z "$key" ] || [ -z "$value" ]; then
+            continue
+        fi
+
+        # Call the provided AIP function
+        local translated_text=""
+        local exit_code=1
+
+        translated_text=$("$aip_function_name" "$value" "$target_lang_code")
+        exit_code=$?
+
+        # --- CHANGE: Append result to buffer instead of writing to file ---
+        local output_line=""
+        if [ "$exit_code" -eq 0 ] && [ -n "$translated_text" ]; then
+            # Format successful translation
+            output_line=$(printf "%s|%s=%s\n" "$target_lang_code" "$key" "$translated_text")
+        else
+            # Mark partial failure for the chunk
+            overall_success=2
+            # Format original value on failure
+            output_line=$(printf "%s|%s=%s\n" "$target_lang_code" "$key" "$value")
+        fi
+        # Append the formatted line to the buffer
+        output_buffer="${output_buffer}${output_line}"
+        # -----------------------------------------------------------------
+
+    # Check read status after loop (less common, but possible)
+    # Shellcheck might warn about read exit code; often ignored in simple loops.
+    # We rely on the final write check primarily.
+
+    done < "$input_chunk_file" # Read from the chunk input file
+
+    # --- CHANGE: Write the entire buffer to the output file at once ---
+    printf "%s" "$output_buffer" > "$output_chunk_file"
+    local write_status=$?
+    if [ "$write_status" -ne 0 ]; then
+        debug_log "ERROR" "Child: Failed to write buffer to output chunk file: $output_chunk_file (Exit code: $write_status)"
+        return 1 # Critical error for this child
+    fi
+    # ----------------------------------------------------------------
+
+    # Return overall status (0 or 2) only if write was successful
+    return "$overall_success"
+}
+
 # Child function called by create_language_db_parallel (Revised: Loop logs removed)
 # This function now processes a *chunk* of the base DB.
 # @param $1: input_chunk_file (string) - Path to the temporary input file containing a chunk of lines.
@@ -467,7 +553,7 @@ EOF
 # @param $3: target_lang_code (string) - The target language code (e.g., "ja").
 # @param $4: aip_function_name (string) - The name of the AIP function to call (e.g., "translate_with_google").
 # @return: 0 on success, 2 if any translation fails within this chunk. Critical errors (e.g., cannot write output) should ideally cause exit 1, but current logic returns 2.
-create_language_db() {
+OK_create_language_db() {
     local input_chunk_file="$1"
     local output_chunk_file="$2"
     local target_lang_code="$3"
