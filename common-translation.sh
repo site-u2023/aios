@@ -102,7 +102,7 @@ parallel_translate_task() {
     fi
 }
 
-# ... (他の関数や設定) ...
+# ... (ファイル内の他の関数定義) ...
 
 # =========================================================
 # Parallel Language Database Creation
@@ -197,7 +197,7 @@ create_language_db_parallel() {
              }
              msgid_block = ""; next;
         }
-        { } END { }
+        # Removed empty action block and empty END block for ash awk compatibility
         ' "$source_db" | while IFS='|' read -r prefix item_id source_text target_l result_f trans_f rest; do
         # Use IFS='|' to correctly parse pipe-delimited fields
 
@@ -415,9 +415,6 @@ create_language_db_parallel() {
     debug_log "INFO" "Finished parallel DB creation for domain '$domain'. Final return code: $return_code"
     return "$return_code"
 }
-
-# ... (parallel_translate_task function should be here too) ...
-
 
 # ---------------------------------------------------------------------------------------------
 
