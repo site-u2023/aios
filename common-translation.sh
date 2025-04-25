@@ -88,7 +88,7 @@ determine_default_parallel_tasks() {
         cores=$(head -n 1 "$cache_file")
         case "$cores" in
             *[!0-9]* | "" | 0) # Contains non-digit, is empty, or is zero
-                debug_log "WARNING" "Invalid content in $cache_file ('$cores'). Using default tasks: $default_tasks"
+                debug_log "DEBUG" "Invalid content in $cache_file ('$cores'). Using default tasks: $default_tasks"
                 ;;
             *) # Looks like a valid positive integer
                 default_tasks=$cores
@@ -97,7 +97,7 @@ determine_default_parallel_tasks() {
                 ;;
         esac
     else
-        debug_log "INFO" "CPU core cache file not found: $cache_file. Using default tasks: $default_tasks"
+        debug_log "DEBUG" "CPU core cache file not found: $cache_file. Using default tasks: $default_tasks"
         # Keep result_code=1 as we are using the fallback default
     fi
 
