@@ -64,6 +64,7 @@ AI_TRANSLATION_FUNCTIONS="translate_with_google translate_with_lingva" # 使用�
 
 # parallel_translate_task: Executes the specified translation function in the background.
 # Assumes debug_log and the target translation function (e.g., translate_with_google) are available.
+# Assumes the caller (create_language_db_parallel) has already verified the translation function exists.
 # @param $1: item_id (Unique identifier, e.g., "Line-123")
 # @param $2: source_text (The actual text to translate)
 # @param $3: target_lang_code (e.g., "ja")
@@ -81,12 +82,7 @@ parallel_translate_task() {
     local translated_text=""
     local exit_code=1 # Assume failure initially
 
-    # Check if the specified translation function exists
-    if ! type "$translation_function_name" >/dev/null 2>&1; then
-        debug_log "ERROR" "  [TASK $item_id] Translation function '$translation_function_name' not found!"
-        printf "%s\n" "$source_text" > "$result_file" # Write original text
-        return 1
-    fi
+    # NOTE: Existence check for translation_function_name removed as it's done by the caller.
 
     debug_log "DEBUG" "  [TASK $item_id] Starting '$translation_function_name' for: \"$(echo "$source_text" | cut -c 1-30)...\""
 
@@ -105,7 +101,6 @@ parallel_translate_task() {
         return 1 # Task failure (but we still write original text)
     fi
 }
-
 # ---------------------------------------------------------------------------------------------
 
 # URL安全エンコード関数（seqを使わない最適化版）
