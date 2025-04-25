@@ -161,7 +161,7 @@ create_language_db_parallel() {
 
     local source_dir="${BASE_DIR}/locale/${source_lang_code}"
     local target_dir="${BASE_DIR}/locale/${target_lang_code}"
-    local source_db="${source_dir}/messages.db" # Assuming domain is always 'messages' for now
+    local source_db="${BASE_DIR}/message_${source_lang_code}.db" # Assuming domain is always 'messages' for now
     local target_db="${target_dir}/messages.db"
     local target_db_tmp="${target_db}.tmp" # Use simpler .tmp extension
     # local marker_file="${target_db}.completed" # Marker file logic removed from translate_main
