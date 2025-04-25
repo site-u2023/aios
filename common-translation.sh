@@ -327,15 +327,15 @@ display_detected_translation() {
 
 # @FUNCTION: translate_main
 # @DESCRIPTION: Entry point for translation. Reads target language from cache (message.ch),
-#               checks/creates the translation DB if needed (not default lang),
-#               and displays translation info ONLY AFTER confirmation/creation.
+#               checks if the translation DB already exists (simple file existence check).
+#               If it exists, displays info. If not, creates it using the parallel function.
 #               Does NOT take language code as an argument.
 # @PARAM: None
 # @RETURN: 0 on success/no translation needed, 1 on critical error,
-#          propagates create_language_db exit code on failure.
+#          propagates create_language_db_parallel exit code on failure.
 translate_main() {
     # --- Initialization ---
-    # (Wget detection logic can remain as it might be used by AIP funcs indirectly)
+    # (Wget detection logic remains the same)
     if type detect_wget_capabilities >/dev/null 2>&1; then
         WGET_CAPABILITY_DETECTED=$(detect_wget_capabilities)
         debug_log "DEBUG" "translate_main: Wget capability detected: ${WGET_CAPABILITY_DETECTED}"
@@ -343,7 +343,7 @@ translate_main() {
         debug_log "DEBUG" "translate_main: detect_wget_capabilities function not found. Assuming basic wget."
         WGET_CAPABILITY_DETECTED="basic"
     fi
-    debug_log "DEBUG" "translate_main: Initialization part complete."
+    # debug_log "DEBUG" "translate_main: Initialization part complete." # Reduced log
     # --- End Initialization ---
 
     # --- Translation Control Logic ---
@@ -351,7 +351,7 @@ translate_main() {
     local is_default_lang="false"
     local target_db=""
     local db_creation_result=1 # Default to failure/not run
-    local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
+    # local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER" # REMOVED: Marker logic removed
 
     # 1. Determine Language Code ONLY from Cache
     if [ -f "${CACHE_DIR}/message.ch" ]; then
@@ -366,31 +366,29 @@ translate_main() {
     [ "$lang_code" = "$DEFAULT_LANGUAGE" ] && is_default_lang="true"
     if [ "$is_default_lang" = "true" ]; then
         debug_log "DEBUG" "translate_main: Target language is the default language (${lang_code}). No translation needed or display from this function."
-        # --- 修正 --- デフォルト言語の場合は何も表示せず終了
+        # Default language: display nothing and exit successfully
         return 0
     fi
 
     debug_log "DEBUG" "translate_main: Target language (${lang_code}) requires processing."
 
-    # 3. Check if target DB exists AND contains the completion marker
+    # 3. Check if target DB exists (Simple file existence check)
     target_db="${BASE_DIR}/message_${lang_code}.db"
-    debug_log "DEBUG" "translate_main: Checking for existing target DB with marker: ${target_db}"
+    debug_log "DEBUG" "translate_main: Checking for existing target DB: ${target_db}"
 
+    # MODIFIED: Check only for file existence (-f)
     if [ -f "$target_db" ]; then
-        if grep -q "^${lang_code}|${marker_key}=true$" "$target_db" >/dev/null 2>&1; then
-             debug_log "DEBUG" "translate_main: Target DB '${target_db}' exists and is complete for '${lang_code}'."
-             # --- 修正 --- 既存DBが完了している場合にのみ表示
-             display_detected_translation
-             return 0 # <<< Early return: DB exists and is complete
-        else
-             debug_log "DEBUG" "translate_main: Target DB '${target_db}' exists but is incomplete for '${lang_code}'. Proceeding with creation."
-        fi
+        debug_log "DEBUG" "translate_main: Target DB '${target_db}' exists for '${lang_code}'. Assuming valid and displaying info."
+        # If file exists, display info and return success
+        display_detected_translation
+        return 0 # <<< Early return: DB exists
     else
         debug_log "DEBUG" "translate_main: Target DB '${target_db}' does not exist. Proceeding with creation."
     fi
+    # --- End MODIFIED check ---
 
     # --- Proceed with Translation Process ---
-    # (Steps 4 & 5: Find function, determine domain - remain the same as f7ff132)
+    # (Steps 4 & 5: Find function, determine domain - remain the same)
     # 4. Find the first available translation function...
     local selected_func=""
     local func_name=""
@@ -421,24 +419,25 @@ translate_main() {
     debug_log "DEBUG" "translate_main: Using Domain '${domain_name}' for spinner..."
 
 
-    # 6. Call create_language_db
-    debug_log "DEBUG" "translate_main: Calling create_language_db for language '${lang_code}' using function '${selected_func}'"
-    create_language_db "$selected_func" "$api_endpoint_url" "$domain_name" "$lang_code"
+    # 6. Call create_language_db_parallel (MODIFIED function name)
+    # Assuming create_language_db_parallel will be the new parallel function
+    debug_log "DEBUG" "translate_main: Calling create_language_db_parallel for language '${lang_code}' using function '${selected_func}'"
+    create_language_db_parallel "$selected_func" "$api_endpoint_url" "$domain_name" "$lang_code" # MODIFIED: Call the parallel version with the new name
     db_creation_result=$?
-    debug_log "DEBUG" "translate_main: create_language_db finished with status: ${db_creation_result}"
+    debug_log "DEBUG" "translate_main: create_language_db_parallel finished with status: ${db_creation_result}"
 
     # 7. Handle Result and Display Info ONLY on Success
     if [ "$db_creation_result" -eq 0 ]; then
         debug_log "DEBUG" "translate_main: Language DB creation successful for ${lang_code}."
-        # --- 修正 --- DB作成成功後にのみ表示
+        # Display info only after successful creation
         display_detected_translation
         return 0 # Success
     else
         debug_log "DEBUG" "translate_main: Language DB creation failed for ${lang_code} (Exit status: ${db_creation_result})."
-        if [ "$db_creation_result" -ne 1 ]; then # Avoid duplicate if base DB missing
+        if [ "$db_creation_result" -ne 1 ]; then # Avoid duplicate message if base DB was missing
              printf "%s\n" "$(color yellow "$(get_message "MSG_ERR_TRANSLATION_FAILED" "lang=$lang_code")")"
         fi
-        # --- 修正 --- 失敗時は display_detected_translation を呼び出さない
+        # Do not display info on failure
         return "$db_creation_result" # Propagate error code
     fi
 }
