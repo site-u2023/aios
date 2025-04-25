@@ -93,7 +93,7 @@ urlencode() {
     printf "%s\n" "$encoded"
 }
 
-# Google翻訳APIを使用した翻訳関数 (修正版 - ファイル確認ループとリトライロジック強化)
+# Google翻訳APIを使用した翻訳関数 (修正版 - 一時ファイル不使用、変数経由処理)
 # @param $1: source_text (string) - The text to translate.
 # @param $2: target_lang_code (string) - The target language code (e.g., "ja").
 # @stdout: Translated text on success. Empty string on failure.
@@ -107,14 +107,14 @@ translate_with_google() {
     local wget_options=""
     local retry_count=0
     local network_type=""
-    local temp_file="${BASE_DIR}/google_response_$$.tmp"
+    # --- CHANGE: temp_file related variables removed ---
+    # local temp_file="${BASE_DIR}/google_response_$$.tmp"
     local api_url=""
     local translated_text=""
     local wget_exit_code=0
-    local file_check_count=0 # Counter for file existence check loop
-    local file_ready=0 # Flag indicating file is ready (exists and not empty)
+    local response_data="" # Variable to store wget output
 
-    # Ensure BASE_DIR exists
+    # Ensure BASE_DIR exists (still needed for potential cache files, etc.)
     mkdir -p "$BASE_DIR" 2>/dev/null || { debug_log "ERROR" "translate_with_google: Failed to create base directory $BASE_DIR"; return 1; }
 
     # --- Network Type Detection (remains the same) ---
@@ -153,59 +153,45 @@ translate_with_google() {
     # リトライループ
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
         debug_log "DEBUG" "translate_with_google: Attempt $(($retry_count + 1))/$API_MAX_RETRIES for '$source_text'"
-        # Ensure temp file is removed before wget attempts to write to it
-        rm -f "$temp_file" 2>/dev/null
-
-        # Execute wget
-        wget --no-check-certificate $wget_options -T $API_TIMEOUT -q -O "$temp_file" --user-agent="Mozilla/5.0" "$api_url"
+        # --- CHANGE: Execute wget and capture output to variable ---
+        response_data="" # Clear variable before attempt
+        response_data=$(wget --no-check-certificate $wget_options -T $API_TIMEOUT -q -O - --user-agent="Mozilla/5.0" "$api_url")
         wget_exit_code=$?
-        debug_log "DEBUG" "translate_with_google: wget exited with code $wget_exit_code for $temp_file"
+        # -----------------------------------------------------------
+        debug_log "DEBUG" "translate_with_google: wget exited with code $wget_exit_code"
 
-        # --- wget Success Check and File Readiness Check ---
-        file_ready=0 # Reset flag for this attempt
-        if [ "$wget_exit_code" -eq 0 ]; then
-            # --- CHANGE START: File Check Loop ---
-            file_check_count=0
-            while [ $file_check_count -lt 5 ]; do
-                if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-                    debug_log "DEBUG" "translate_with_google: Temp file $temp_file confirmed ready."
-                    file_ready=1
-                    break # File is ready, exit check loop
-                fi
-                file_check_count=$(($file_check_count + 1))
-                # No sleep needed for quick checks, or use sleep 1 if delays are longer
-                # sleep 1 # Uncomment if delays are suspected to be longer
-            done
-            # --- CHANGE END ---
+        # --- Process Response Data (if wget succeeded and response is not empty) ---
+        if [ "$wget_exit_code" -eq 0 ] && [ -n "$response_data" ]; then
+            debug_log "DEBUG" "translate_with_google: wget success, processing response data."
+            # Check if the content looks like a valid Google Translate response
+            # Use echo and pipe instead of temp file
+            if echo "$response_data" | grep -q '^\s*\[\[\["'; then
+                debug_log "DEBUG" "translate_with_google: Found valid response pattern in data."
+                # Extract and decode the translated text using echo and pipe
+                translated_text=$(echo "$response_data" | sed -e 's/^\s*\[\[\["//' -e 's/",".*//' | sed -e 's/\\u003d/=/g' -e 's/\\u003c/</g' -e 's/\\u003e/>/g' -e 's/\\u0026/\&/g' -e 's/\\"/"/g' -e 's/\\n/\n/g' -e 's/\\r//g' -e 's/\\\\/\\/g')
 
-            if [ "$file_ready" -eq 1 ]; then
-                # --- Process File Content ---
-                debug_log "DEBUG" "translate_with_google: Processing file content $temp_file"
-                if grep -q '^\s*\[\[\["' "$temp_file"; then
-                    debug_log "DEBUG" "translate_with_google: Found valid response pattern in $temp_file"
-                    translated_text=$(sed -e 's/^\s*\[\[\["//' -e 's/",".*//' "$temp_file" | sed -e 's/\\u003d/=/g' -e 's/\\u003c/</g' -e 's/\\u003e/>/g' -e 's/\\u0026/\&/g' -e 's/\\"/"/g' -e 's/\\n/\n/g' -e 's/\\r//g' -e 's/\\\\/\\/g')
-
-                    if [ -n "$translated_text" ]; then
-                        debug_log "DEBUG" "translate_with_google: Successfully extracted translation: $translated_text"
-                        rm -f "$temp_file" 2>/dev/null # Clean up successful file
-                        printf "%s\n" "$translated_text"
-                        return 0 # Success
-                    else
-                        debug_log "WARN" "translate_with_google: Extracted text was empty from $temp_file"
-                        # Fall through to retry logic
-                    fi
+                if [ -n "$translated_text" ]; then
+                    debug_log "DEBUG" "translate_with_google: Successfully extracted translation: $translated_text"
+                    # --- CHANGE: No temp file to remove ---
+                    printf "%s\n" "$translated_text"
+                    return 0 # Success
                 else
-                    debug_log "WARN" "translate_with_google: Response pattern not found in $temp_file. Content: $(head -n 1 "$temp_file")"
+                    debug_log "WARN" "translate_with_google: Extracted text was empty from response data."
                     # Fall through to retry logic
                 fi
-                 # --- End Process File Content ---
             else
-                debug_log "WARN" "translate_with_google: wget succeeded (code 0) but temp file $temp_file not found or empty after checks!"
+                debug_log "WARN" "translate_with_google: Response pattern not found in data. Start of data: $(echo "$response_data" | head -c 100)" # Show beginning of data
                 # Fall through to retry logic
             fi
+        # --- End Process Response Data ---
         else
-             debug_log "WARN" "translate_with_google: wget failed with exit code $wget_exit_code"
-             # Fall through to retry logic
+            # Log wget failure or empty response
+            if [ "$wget_exit_code" -ne 0 ]; then
+                debug_log "WARN" "translate_with_google: wget failed with exit code $wget_exit_code"
+            elif [ -z "$response_data" ]; then
+                 debug_log "WARN" "translate_with_google: wget succeeded (code 0) but response data is empty!"
+            fi
+            # Fall through to retry logic
         fi
 
         # --- Retry Logic ---
@@ -216,8 +202,7 @@ translate_with_google() {
         fi
     done
 
-    # Cleanup after all failed attempts
-    rm -f "$temp_file" 2>/dev/null
+    # --- CHANGE: No temp file to remove ---
     debug_log "ERROR" "translate_with_google: Failed to translate '$source_text' after $API_MAX_RETRIES attempts."
     printf "" # Output empty string on failure
     return 1 # Failure
