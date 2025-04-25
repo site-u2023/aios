@@ -51,9 +51,9 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 TR_DIR="${TR_DIR:-$BASE_DIR/translation}"
 
 # Number of parallel translation tasks to run concurrently
-MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-2}" # Default to 1 for initial testing
+MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-1}" # Default to 1 for initial testing
 
-MESSAGE_DB="message_en.db"
+MESSAGE_DB="${MESSAGE_D:-message_en.db}"
 
 # オンライン翻訳を有効化 (create_language_db logic removed reliance on this, but keep for potential external checks)
 ONLINE_TRANSLATION_ENABLED="yes"
@@ -160,179 +160,273 @@ translate_with_google() {
     return 1 # Failure
 }
 
-# 翻訳DB作成関数 (責務: DBファイル作成、AIP関数呼び出し) - BG実行対応版 (出力/時間計測/デバッグログ完全削除)
-# @param $1: aip_function_name (string) - The name of the AIP function to call (e.g., "translate_with_google")
-# @param $2: api_endpoint_url (string) - The base API endpoint URL (Currently unused, kept for potential future compatibility or logging)
-# @param $3: domain_name (string) - The domain name for logging/context (e.g., "translate.googleapis.com") (No longer used in function body)
-# @param $4: target_lang_code (string) - The target language code (e.g., "ja")
-# @return: 0 on success, 1 on base DB not found, 2 if any translation fails (writes original text for failures). No stdout/stderr output on normal operation.
+# Function to process a chunk of the base DB and write translated lines to a temporary output file
+# Usage: create_language_db <input_tmp_file> <output_tmp_file> <target_lang_code> <api_function_name>
 create_language_db() {
-    local aip_function_name="$1"
-    local api_endpoint_url="$2" # Unused in current logic, passed for context
-    local domain_name="$3"      # Unused in current logic, passed for context
-    local target_lang_code="$4"
+    local input_file="$1"
+    local output_file="$2"
+    local target_lang_code="$3"
+    local api_func="$4"
+    local line=""
+    local msg_key=""
+    local source_text=""
+    local translated_text=""
+    local output_line=""
+    local line_num=0
+    local exit_status=0
 
-    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
-    local output_db="${BASE_DIR}/message_${target_lang_code}.db"
-    local overall_success=0 # Assume success initially, 2 indicates at least one translation failed
-
-    if [ ! -f "$base_db" ]; then
+    # --- Argument Checks ---
+    if [ -z "$input_file" ] || [ -z "$output_file" ] || [ -z "$target_lang_code" ] || [ -z "$api_func" ]; then
+        log "ERROR: create_language_db - Missing required arguments."
         return 1
     fi
+    if [ ! -f "$input_file" ]; then
+        # This might happen legitimately if a split resulted in an empty file
+        log "INFO: create_language_db - Input file not found or empty, skipping: $input_file"
+        # Ensure output file exists even if empty
+        touch "$output_file" || { log "ERROR: create_language_db - Failed to touch output file: $output_file"; return 1; }
+        return 0
+    fi
+     if [ ! -r "$input_file" ]; then
+        log "ERROR: create_language_db - Input file not readable: $input_file"
+        return 1
+    fi
+    # Output file should have been created by the caller, check if writable directory
+    local output_dir=$(dirname "$output_file")
+     if [ ! -w "$output_dir" ]; then
+        log "ERROR: create_language_db - Output directory not writable: $output_dir"
+        return 1
+     fi
+     # Ensure output file exists and is writable (or can be created)
+     # The caller (create_language_db_parallel) already creates it, but check again.
+     touch "$output_file" || { log "ERROR: create_language_db - Failed to touch/ensure output file: $output_file"; return 1; }
 
-    # Create/overwrite the output DB with the header
-    cat > "$output_db" << EOF
-SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
-# Translation generated using: ${aip_function_name}
-# Target Language: ${target_lang_code}
-EOF
 
-    # Loop through the base DB using efficient redirection and case statements
-    while IFS= read -r line; do
-        case "$line" in \#*|"") continue ;; esac
+    log "DEBUG: create_language_db - Processing chunk: Input='$input_file', Output='$output_file', Lang='$target_lang_code', API='$api_func'"
 
-        case "$line" in
-            "${DEFAULT_LANGUAGE}|"*)
-                ;;
-            *)
-                continue
-                ;;
-        esac
+    # --- Process Input File Line by Line ---
+    while IFS= read -r line || [ -n "$line" ]; do
+        line_num=$(($line_num + 1))
+        log "DEBUG: create_language_db - Reading line $line_num: $line"
 
-        # Extract key and value using shell parameter expansion
-        local line_content=${line#*|} # Remove "LANG|" prefix
-        local key=${line_content%%=*}   # Get key before '='
-        local value=${line_content#*=}  # Get value after '='
-
-        # Skip if key or value extraction failed (basic check)
-        if [ -z "$key" ] || [ -z "$value" ]; then
+        # Skip empty lines or lines not containing '=' (likely comments or invalid)
+        if [ -z "$line" ] || ! echo "$line" | grep -q '='; then
+            log "DEBUG: create_language_db - Skipping empty or invalid line $line_num: $line"
             continue
         fi
 
-        # --- Directly call the provided AIP function ---
-        local translated_text=""
-        local exit_code=1 # Default to failure
-
-        translated_text=$("$aip_function_name" "$value" "$target_lang_code")
-        exit_code=$?
-
-        # --- Output Line ---
-        if [ "$exit_code" -eq 0 ] && [ -n "$translated_text" ]; then
-            printf "%s|%s=%s\n" "$target_lang_code" "$key" "$translated_text" >> "$output_db"
-        else
-             if [ "$exit_code" -ne 0 ]; then # Log only if the function call failed
-                 : # No-op needed to avoid empty 'then' block
-             else
-                 : # No-op needed to avoid empty 'then' block
-             fi
-             overall_success=2 # Mark as partial failure
-            printf "%s|%s=%s\n" "$target_lang_code" "$key" "$value" >> "$output_db"
+        # Extract message key and source text
+        # Expected format: xx|MSG_KEY=Source Text
+        # Use parameter expansion for POSIX compliance
+        local key_part="${line#*|}" # Remove lang prefix (e.g., MSG_KEY=Source Text)
+        if [ "$key_part" = "$line" ]; then # Check if '|' was present
+             log "WARN: create_language_db - Invalid line format (missing '|') on line $line_num: $line"
+             continue
         fi
-        # --- End Output Line ---
+        msg_key="${key_part%%=*}"    # Extract key (e.g., MSG_KEY)
+        source_text="${key_part#*=}" # Extract value (e.g., Source Text)
 
-    done < "$base_db" # Read directly from the base DB
+        if [ -z "$msg_key" ] || [ "$key_part" = "$msg_key" ]; then # Check if '=' was present after key
+            log "WARN: create_language_db - Invalid line format (missing '=' or empty key) on line $line_num: $line"
+            continue
+        fi
 
-    return "$overall_success" # Return 0 for success, 2 for partial failure, 1 for base DB missing
+        # --- Call Translation API ---
+        log "DEBUG: create_language_db - Translating key '$msg_key' for lang '$target_lang_code'"
+        # Use eval carefully to call the dynamic function name
+        # Ensure api_func is validated or sourced from a controlled list if possible
+        # Assuming api_func is safe here based on how it's passed
+        if command -v "$api_func" > /dev/null 2>&1; then
+            translated_text=$("$api_func" "$source_text" "$target_lang_code")
+            local translate_exit_status=$?
+            if [ $translate_exit_status -ne 0 ]; then
+                log "WARN: create_language_db - API function '$api_func' failed for key '$msg_key' (exit status $translate_exit_status). Using original text."
+                translated_text="$source_text" # Use original text on failure
+            elif [ -z "$translated_text" ]; then
+                 log "WARN: create_language_db - API function '$api_func' returned empty for key '$msg_key'. Using original text."
+                 translated_text="$source_text" # Use original text if API returns empty
+            fi
+        else
+            log "ERROR: create_language_db - API function '$api_func' not found."
+            translated_text="$source_text" # Use original text if function not found
+            exit_status=1 # Indicate an error occurred in this worker
+        fi
+
+        # --- Write Output Line ---
+        output_line="${target_lang_code}|${msg_key}=${translated_text}"
+        log "DEBUG: create_language_db - Writing output line: $output_line"
+        echo "$output_line" >> "$output_file"
+        if [ $? -ne 0 ]; then
+            log "ERROR: create_language_db - Failed to write to output file: $output_file"
+            exit_status=1 # Indicate an error occurred
+            # Optionally break the loop or try to continue
+            break # Stop processing this chunk on write error
+        fi
+
+    done < "$input_file"
+
+    log "DEBUG: create_language_db - Finished processing chunk: $input_file"
+    return $exit_status
 }
 
-# @FUNCTION: create_language_db_parallel
-# @DESCRIPTION: Creates language DBs in parallel for a list of target languages,
-#               controlling the number of concurrent tasks using MAX_PARALLEL_TASKS.
-# @PARAM $1: aip_function_name (string) - The name of the AIP function to call (e.g., "translate_with_google")
-# @PARAM $2: api_endpoint_url (string) - The base API endpoint URL (Passed to create_language_db, currently unused there)
-# @PARAM $3: domain_name (string) - The domain name for context (Passed to create_language_db, currently unused there)
-# @PARAM $4: target_lang_codes (string) - A space-separated list of target language codes (e.g., "ja fr es de")
-# @RETURN: 0 if all translations succeed, 2 if any translation fails.
-#          Does not handle the case where the base DB is missing (create_language_db handles that per-job).
-# @DEPENDS: create_language_db, MAX_PARALLEL_TASKS (global variable)
+# Function to create language DB by processing base DB in parallel
+# Usage: create_language_db_parallel <target_lang_code> <api_function_name>
 create_language_db_parallel() {
-    local aip_function_name="$1"
-    local api_endpoint_url="$2"
-    local domain_name="$3"
-    local target_lang_codes="$4"
+    local target_lang_code="$1"
+    local api_func="$2"
+    local base_db="${BASE_DIR}/${MESSAGE_DB}"
+    local final_output_dir="/tmp/aios"
+    local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
+    local tmp_input_prefix="${TR_DIR}/message_${target_lang_code}.tmp.in."
+    local tmp_output_prefix="${TR_DIR}/message_${target_lang_code}.tmp.out."
+    local header=""
+    local total_lines=0
+    local lines_per_task=0
+    local extra_lines=0
+    local i=0
+    local pids=""
+    local pid=""
+    local exit_status=0
 
-    local overall_status=0 # 0: all success, 2: at least one failure
-    local job_pids=""      # List of background job PIDs
-    local job_count=0      # Current number of running background jobs
-    local max_tasks=1      # Default max parallel tasks
-    local target_lang_code # Loop variable
-    local pid            # PID of a background job
-    local exit_status    # Exit status of a waited job
-
-    # Validate MAX_PARALLEL_TASKS (must be a positive integer)
-    if [ -n "$MAX_PARALLEL_TASKS" ] && [ "$MAX_PARALLEL_TASKS" -gt 0 ] 2>/dev/null; then
-        max_tasks="$MAX_PARALLEL_TASKS"
-    else
-        # debug_log is not available here, maybe add a simple echo to stderr if needed
-        # echo "Warning: Invalid MAX_PARALLEL_TASKS value, defaulting to 1." >&2
-        max_tasks=1
+    # --- Pre-checks ---
+    if [ ! -f "$base_db" ]; then
+        log "ERROR: Base DB file not found: $base_db"
+        return 1
+    fi
+    if [ -z "$target_lang_code" ]; then
+        log "ERROR: Target language code is empty."
+        return 1
+    fi
+    if [ -z "$api_func" ]; then
+        log "ERROR: API function name is empty."
+        return 1
     fi
 
-    # Disable filename generation (globbing)
-    set -f
-    # Set positional parameters to the list of language codes
-    set -- $target_lang_codes
-    # Re-enable filename generation
-    set +f
+    # --- Prepare directories and cleanup ---
+    mkdir -p "$TR_DIR" || { log "ERROR: Failed to create temporary directory: $TR_DIR"; return 1; }
+    mkdir -p "$final_output_dir" || { log "ERROR: Failed to create final output directory: $final_output_dir"; return 1; }
 
-    # Loop through each target language code
-    for target_lang_code in "$@"; do
-        # Launch the create_language_db function in the background
-        create_language_db "$aip_function_name" "$api_endpoint_url" "$domain_name" "$target_lang_code" &
+    # Setup trap for cleanup
+    # shellcheck disable=SC2064 # We want $tmp_input_prefix and $tmp_output_prefix to expand now
+    trap "log 'INFO: Cleaning up temporary files...'; rm -f ${tmp_input_prefix}* ${tmp_output_prefix}*; exit \$exit_status" INT TERM EXIT
+
+    log "INFO: Starting parallel translation for language '$target_lang_code' using '$api_func'."
+    log "INFO: Base DB: $base_db"
+    log "INFO: Temporary file directory: $TR_DIR"
+    log "INFO: Final output file: $final_output_file"
+    log "INFO: Max parallel tasks: $MAX_PARALLEL_TASKS"
+
+    # --- Extract Header ---
+    header=$(head -n 1 "$base_db")
+    if [ -z "$header" ]; then
+       log "WARN: Base DB might be empty or header could not be read."
+       # Optionally create a default header if needed based on target_lang_code
+       # header="${target_lang_code}|# Created on $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+    fi
+
+    # --- Split Base DB (excluding header) using awk ---
+    log "INFO: Splitting base DB into $MAX_PARALLEL_TASKS parts..."
+    # Count lines excluding header
+    total_lines=$(($(wc -l < "$base_db") - 1))
+    if [ "$total_lines" -le 0 ]; then
+        log "INFO: No lines to translate (excluding header)."
+        # Write only header to final file and exit successfully
+        echo "$header" > "$final_output_file"
+        # Cleanup trap will run on exit
+        return 0
+    fi
+
+    # Basic calculation for lines per file (integer division)
+    lines_per_task=$(($total_lines / $MAX_PARALLEL_TASKS))
+    extra_lines=$(($total_lines % $MAX_PARALLEL_TASKS))
+
+    # Ensure lines_per_task is at least 1 if total_lines > 0
+    if [ "$lines_per_task" -eq 0 ] && [ "$total_lines" -gt 0 ]; then
+        lines_per_task=1
+        # Adjust MAX_PARALLEL_TASKS if fewer lines than tasks? Or let awk handle empty files?
+        # Let's proceed, awk will create empty files for tasks > total_lines if needed.
+        log "WARN: Fewer lines ($total_lines) than tasks ($MAX_PARALLEL_TASKS). Some tasks might process few or no lines."
+    fi
+
+    # Use awk to split the file (NR>1 skips header)
+    # Assigns lines round-robin to output files
+    awk -v num_tasks="$MAX_PARALLEL_TASKS" \
+        -v prefix="$tmp_input_prefix" \
+        'NR > 1 {
+            task_num = (NR - 2) % num_tasks + 1;
+            print $0 >> (prefix task_num);
+         }' "$base_db"
+
+    if [ $? -ne 0 ]; then
+        log "ERROR: Failed to split base DB using awk."
+        # Cleanup trap will run on exit
+        return 1
+    fi
+    log "INFO: Base DB split complete."
+
+    # --- Execute tasks in parallel ---
+    log "INFO: Launching parallel translation tasks..."
+    i=1
+    while [ "$i" -le "$MAX_PARALLEL_TASKS" ]; do
+        local tmp_input_file="${tmp_input_prefix}${i}"
+        local tmp_output_file="${tmp_output_prefix}${i}"
+
+        # Ensure temp input file exists before launching task, even if empty (awk creates it)
+        touch "$tmp_input_file" || { log "ERROR: Failed to touch temporary input file: $tmp_input_file"; exit_status=1; break; } # Exit loop on error
+        # Create empty output file initially
+        >"$tmp_output_file" || { log "ERROR: Failed to create temporary output file: $tmp_output_file"; exit_status=1; break; } # Exit loop on error
+
+        # Launch create_language_db in the background
+        # Pass input file, output file, lang code, api func
+        create_language_db "$tmp_input_file" "$tmp_output_file" "$target_lang_code" "$api_func" &
         pid=$!
-        job_pids="$job_pids $pid" # Append PID to the list
-        job_count=$((job_count + 1))
+        pids="$pids $pid"
+        log "DEBUG: Launched task $i (PID: $pid) for input $tmp_input_file"
 
-        # If the maximum number of parallel jobs is reached, wait for the oldest one to finish
-        if [ "$job_count" -ge "$max_tasks" ]; then
-            # Get the first PID from the list (oldest job)
-            # Use parameter expansion to extract the first PID
-            local first_pid=${job_pids# *} # Remove leading space if any
-            first_pid=${first_pid%% *}    # Get the part before the first space
-
-            if [ -n "$first_pid" ]; then
-                 wait "$first_pid"
-                 exit_status=$?
-                 # Update overall status if the job failed (non-zero exit)
-                 # Only set to 2 if it's not already 2
-                 if [ "$exit_status" -ne 0 ] && [ "$overall_status" -eq 0 ]; then
-                     overall_status=2
-                 fi
-                 # Remove the completed PID from the list
-                 job_pids=$(echo " $job_pids " | sed "s/ $first_pid / /") # Pad with spaces for safe removal
-                 job_pids=${job_pids# } # Remove leading space
-                 job_pids=${job_pids% } # Remove trailing space
-                 job_count=$((job_count - 1))
-            fi
-        fi
+        i=$(($i + 1))
     done
 
-    # Wait for all remaining background jobs to complete
-    # Use parameter expansion to iterate through remaining PIDs
-    local remaining_pids="$job_pids"
-    while [ -n "$remaining_pids" ]; do
-        # Get the first PID from the remaining list
-        local current_pid=${remaining_pids# *}
-        current_pid=${current_pid%% *}
-
-        if [ -n "$current_pid" ]; then
-            wait "$current_pid"
-            exit_status=$?
-            # Update overall status if the job failed
-            if [ "$exit_status" -ne 0 ] && [ "$overall_status" -eq 0 ]; then
-                overall_status=2
-            fi
-            # Remove the completed PID from the list for the next iteration
-            remaining_pids=$(echo " $remaining_pids " | sed "s/ $current_pid / /")
-            remaining_pids=${remaining_pids# }
-            remaining_pids=${remaining_pids% }
+    # --- Wait for all tasks to complete ---
+    log "INFO: Waiting for $MAX_PARALLEL_TASKS tasks to complete..."
+    for pid in $pids; do
+        wait "$pid"
+        local task_exit_status=$?
+        if [ "$task_exit_status" -ne 0 ]; then
+            log "ERROR: Task with PID $pid failed with exit status $task_exit_status."
+            # Set overall exit status to failure, but let other tasks finish/cleanup run
+            exit_status=1
         else
-            # Break if the list becomes empty unexpectedly
-            break
+            log "DEBUG: Task with PID $pid completed successfully."
         fi
     done
 
-    return "$overall_status"
+    if [ "$exit_status" -ne 0 ]; then
+         log "ERROR: One or more translation tasks failed."
+         # Cleanup trap will run on exit
+         return 1
+    fi
+
+    log "INFO: All translation tasks completed."
+
+    # --- Combine results ---
+    log "INFO: Combining results into final output file: $final_output_file"
+    # Write header first (overwrite file)
+    echo "$header" > "$final_output_file" || { log "ERROR: Failed to write header to $final_output_file"; exit_status=1; return 1; } # Cleanup trap runs on return
+
+    # Append results from all temp output files
+    # Use find to handle cases where some temp files might not be created if MAX_PARALLEL_TASKS > total_lines
+    find "$TR_DIR" -name "message_${target_lang_code}.tmp.out.*" -print0 | xargs -0 cat >> "$final_output_file"
+    if [ $? -ne 0 ]; then
+         log "ERROR: Failed to combine temporary output files into $final_output_file"
+         exit_status=1
+         # Cleanup trap will run on exit
+         return 1
+    fi
+
+    log "INFO: Successfully created language DB: $final_output_file"
+
+    # Cleanup is handled by trap on EXIT
+    return 0
 }
 
 # 翻訳情報を表示する関数
