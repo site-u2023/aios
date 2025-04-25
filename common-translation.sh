@@ -269,12 +269,14 @@ create_language_db() {
 }
 
 # Function to create language DB by processing base DB in parallel
-# Usage: create_language_db_parallel <aip_function_name> <target_lang_code>
+# Usage: create_language_db_parallel <aip_function_name> <api_endpoint_url> <domain_name> <target_lang_code>
 create_language_db_parallel() {
-    # --- 引数の順番を元の create_language_db に合わせる ---
+    # --- 引数受け取りを4つに変更 ---
     local aip_function_name="$1" # 第1引数: AIP関数名
-    local target_lang_code="$2"  # 第2引数: ターゲット言語コード
-    # ----------------------------------------------------
+    local api_endpoint_url="$2"  # 第2引数: APIエンドポイントURL (New)
+    local domain_name="$3"       # 第3引数: ドメイン名 (New)
+    local target_lang_code="$4"  # 第4引数: ターゲット言語コード
+    # ------------------------------
     local base_db="${BASE_DIR}/${MESSAGE_DB}"
     local final_output_dir="/tmp/aios"
     local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
@@ -299,6 +301,7 @@ create_language_db_parallel() {
         debug_log "ERROR" "AIP function name is empty."
         return 1
     fi
+    # api_endpoint_url and domain_name can be empty depending on the function, so no strict check here.
     if [ -z "$target_lang_code" ]; then
         debug_log "ERROR" "Target language code is empty."
         return 1
@@ -314,7 +317,7 @@ create_language_db_parallel() {
     trap "debug_log 'INFO' 'Cleaning up temporary files...'; rm -f ${tmp_input_prefix}* ${tmp_output_prefix}*; exit \$exit_status" INT TERM EXIT
 
     # --- ログ出力: 修正後の引数名を使用 ---
-    debug_log "INFO" "Starting parallel translation for language '$target_lang_code' using '$aip_function_name'."
+    debug_log "INFO" "Starting parallel translation for language '$target_lang_code' using function '$aip_function_name' (API: '$api_endpoint_url', Domain: '$domain_name')."
     # -------------------------------------
     debug_log "INFO" "Base DB: $base_db"
     debug_log "INFO" "Temporary file directory: $TR_DIR"
@@ -344,6 +347,7 @@ create_language_db_parallel() {
         debug_log "WARN" "Fewer lines ($total_lines) than tasks ($MAX_PARALLEL_TASKS). Some tasks might process few or no lines."
     fi
 
+    # --- awk splitting logic: Use target_lang_code for temp file names ---
     awk -v num_tasks="$MAX_PARALLEL_TASKS" \
         -v prefix="$tmp_input_prefix" \
         'NR > 1 {
@@ -353,8 +357,10 @@ create_language_db_parallel() {
 
     if [ $? -ne 0 ]; then
         debug_log "ERROR" "Failed to split base DB using awk."
+        # Ensure temporary files potentially created by awk are removed by the trap
         return 1
     fi
+    # ------------------------------------------------------------------
     debug_log "INFO" "Base DB split complete."
 
     # --- Execute tasks in parallel ---
@@ -364,12 +370,17 @@ create_language_db_parallel() {
         local tmp_input_file="${tmp_input_prefix}${i}"
         local tmp_output_file="${tmp_output_prefix}${i}"
 
-        touch "$tmp_input_file" || { debug_log "ERROR" "Failed to touch temporary input file: $tmp_input_file"; exit_status=1; break; }
+        # Ensure temp input file exists (awk should create it, but handle edge cases)
+        if [ ! -f "$tmp_input_file" ]; then
+             debug_log "WARN" "Temporary input file ${tmp_input_file} not found after split, creating empty file."
+             touch "$tmp_input_file" || { debug_log "ERROR" "Failed to touch temporary input file: $tmp_input_file"; exit_status=1; break; }
+        fi
+        # Ensure temp output file exists and is empty
         >"$tmp_output_file" || { debug_log "ERROR" "Failed to create temporary output file: $tmp_output_file"; exit_status=1; break; }
 
         # --- Launch create_language_db (子プロセス) in the background ---
         # 子プロセスが期待する引数の順番 (tmp_in, tmp_out, lang_code, api_func) で渡す
-        # 親プロセスが受け取った $aip_function_name と $target_lang_code を使用
+        # 親プロセスが受け取った $target_lang_code と $aip_function_name を使用
         create_language_db "$tmp_input_file" "$tmp_output_file" "$target_lang_code" "$aip_function_name" &
         # ----------------------------------------------------------------
         pid=$!
@@ -385,19 +396,27 @@ create_language_db_parallel() {
         wait "$pid"
         local task_exit_status=$?
         if [ "$task_exit_status" -ne 0 ]; then
-            debug_log "ERROR" "Task with PID $pid failed with exit status $task_exit_status."
-            exit_status=1
+            # Allow status 2 (partial success from child) without setting overall failure yet
+            if [ "$task_exit_status" -ne 2 ]; then
+                debug_log "ERROR" "Task with PID $pid failed with critical exit status $task_exit_status."
+                exit_status=1 # Set overall critical failure
+            else
+                 debug_log "WARN" "Task with PID $pid completed with partial success (exit status 2)."
+                 # If any task returns 2, set overall status to 2 (unless already 1)
+                 [ "$exit_status" -eq 0 ] && exit_status=2
+            fi
         else
-            debug_log "DEBUG" "Task with PID $pid completed successfully."
+            debug_log "DEBUG" "Task with PID $pid completed successfully (exit status 0)."
         fi
     done
 
-    if [ "$exit_status" -ne 0 ]; then
-         debug_log "ERROR" "One or more translation tasks failed."
+    # If a critical error occurred (status 1), return immediately
+    if [ "$exit_status" -eq 1 ]; then
+         debug_log "ERROR" "One or more translation tasks failed critically. Aborting combination."
          return 1
     fi
 
-    debug_log "INFO" "All translation tasks completed."
+    debug_log "INFO" "All translation tasks completed (Overall status: $exit_status)."
 
     # --- Combine results ---
     debug_log "INFO" "Combining results into final output file: $final_output_file"
@@ -405,21 +424,35 @@ create_language_db_parallel() {
     echo "$header" > "$final_output_file" || { debug_log "ERROR" "Failed to write header to $final_output_file"; exit_status=1; return 1; }
 
     # Append results from all temp output files
-    find "$TR_DIR" -name "message_${target_lang_code}.tmp.out.*" -print0 | xargs -0 cat >> "$final_output_file"
+    # Use find and cat for robustness, handle potential errors during append
+    local combined_successfully=0
+    find "$TR_DIR" -name "message_${target_lang_code}.tmp.out.*" -print0 | xargs -0 -r cat >> "$final_output_file"
     if [ $? -ne 0 ]; then
          debug_log "ERROR" "Failed to combine temporary output files into $final_output_file"
-         exit_status=1
-         return 1
+         # Even if combination fails, some parts might have succeeded, so return existing status (likely 2 if any task had partial success)
+         if [ "$exit_status" -eq 0 ]; then exit_status=1; fi # If no task error, set combination error
+         combined_successfully=1
+    fi
+
+    if [ "$combined_successfully" -ne 0 ]; then
+        return "$exit_status" # Return error status (1 or 2)
     fi
 
     # --- 完了マーカーの追加 (後で実装) ---
     # --- 時間計測・スピナー制御 (後で実装) ---
 
-    debug_log "INFO" "Successfully created language DB (basic combination): $final_output_file"
+    # If exit_status is still 0 (all tasks succeeded, combination succeeded), log success.
+    # If exit_status is 2 (some tasks had partial success, combination succeeded), log partial success.
+    if [ "$exit_status" -eq 0 ]; then
+         debug_log "INFO" "Successfully created language DB (Full Success): $final_output_file"
+    elif [ "$exit_status" -eq 2 ]; then
+         debug_log "WARN" "Created language DB with some translations potentially missing (Partial Success): $final_output_file"
+    fi
+
 
     # Cleanup is handled by trap on EXIT
-    # --- 戻り値 (後で元の関数に合わせて修正が必要) ---
-    return "$exit_status" # 現状は 0 (成功) or 1 (タスク失敗/結合失敗)
+    # --- 戻り値 (成功:0, 部分成功:2, 致命的エラー:1) ---
+    return "$exit_status"
 }
 
 # 翻訳情報を表示する関数
