@@ -61,9 +61,11 @@ DOWNLOAD_METHOD="${DOWNLOAD_METHOD:-api}" # ダウンロード方式 (api/direct
 
 # パス・ファイル関連
 INTERPRETER="${INTERPRETER:-ash}"  # デフォルトインタープリタ
-BIN_PATH="$(readlink -f "$0")"   # 実行ファイルの絶対パス
-BIN_DIR="$(dirname "$BIN_PATH")" # 実行ファイルのディレクトリ
-BIN_FILE="$(basename "$BIN_PATH")" # 実行ファイル名
+script_dir="$( cd "$(dirname "$0")" >/dev/null 2>&1 && pwd )"
+script_path="${script_dir}/$(basename "$0")"
+BIN_DIR="$script_dir"    # ディレクトリの絶対パス
+BIN_PATH="$script_path"  # スクリプトファイルの絶対パス
+BIN_FILE="$(basename "$0")" # スクリプトファイル名
 
 # ベースディレクトリ設定
 BASE_DIR="${BASE_DIR:-/tmp/aios}"      # 基本ディレクトリ
@@ -354,6 +356,150 @@ format_string() {
     local format_type="$1"
     local input_string="$2"
     local output_string=""
+    local char=""
+    local i=0
+    local length=0
+
+    # Check if input string is empty
+    if [ -z "$input_string" ]; then
+        printf "" # Use printf instead of echo for consistency
+        return 0
+    fi
+
+    case "$format_type" in
+        "upper")
+            # Convert entire string to uppercase using shell loop and case
+            debug_log "DEBUG" "format_string: Formatting to uppercase (using loop)"
+            length=${#input_string}
+            while [ "$i" -lt "$length" ]; do
+                char="${input_string:$i:1}"
+                case "$char" in
+                    a) output_string="${output_string}A" ;;
+                    b) output_string="${output_string}B" ;;
+                    c) output_string="${output_string}C" ;;
+                    d) output_string="${output_string}D" ;;
+                    e) output_string="${output_string}E" ;;
+                    f) output_string="${output_string}F" ;;
+                    g) output_string="${output_string}G" ;;
+                    h) output_string="${output_string}H" ;;
+                    i) output_string="${output_string}I" ;;
+                    j) output_string="${output_string}J" ;;
+                    k) output_string="${output_string}K" ;;
+                    l) output_string="${output_string}L" ;;
+                    m) output_string="${output_string}M" ;;
+                    n) output_string="${output_string}N" ;;
+                    o) output_string="${output_string}O" ;;
+                    p) output_string="${output_string}P" ;;
+                    q) output_string="${output_string}Q" ;;
+                    r) output_string="${output_string}R" ;;
+                    s) output_string="${output_string}S" ;;
+                    t) output_string="${output_string}T" ;;
+                    u) output_string="${output_string}U" ;;
+                    v) output_string="${output_string}V" ;;
+                    w) output_string="${output_string}W" ;;
+                    x) output_string="${output_string}X" ;;
+                    y) output_string="${output_string}Y" ;;
+                    z) output_string="${output_string}Z" ;;
+                    *) output_string="${output_string}${char}" ;; # Append non-lowercase chars as is
+                esac
+                i=$((i + 1))
+            done
+            ;;
+        "capitalize")
+            # Convert first letter to uppercase, rest to lowercase using shell loop and case
+            debug_log "DEBUG" "format_string: Formatting to capitalize (using loop)"
+            # Extract first character and rest of the string (ash/bash extensions)
+            local first_char="${input_string:0:1}"
+            local rest_string="${input_string:1}"
+
+            # Convert first char to uppercase
+            case "$first_char" in
+                a) output_string="A" ;;
+                b) output_string="B" ;;
+                c) output_string="C" ;;
+                d) output_string="D" ;;
+                e) output_string="E" ;;
+                f) output_string="F" ;;
+                g) output_string="G" ;;
+                h) output_string="H" ;;
+                i) output_string="I" ;;
+                j) output_string="J" ;;
+                k) output_string="K" ;;
+                l) output_string="L" ;;
+                m) output_string="M" ;;
+                n) output_string="N" ;;
+                o) output_string="O" ;;
+                p) output_string="P" ;;
+                q) output_string="Q" ;;
+                r) output_string="R" ;;
+                s) output_string="S" ;;
+                t) output_string="T" ;;
+                u) output_string="U" ;;
+                v) output_string="V" ;;
+                w) output_string="W" ;;
+                x) output_string="X" ;;
+                y) output_string="Y" ;;
+                z) output_string="Z" ;;
+                *) output_string="$first_char" ;; # Append non-lowercase first char as is
+            esac
+
+            # Convert rest of the string to lowercase
+            length=${#rest_string}
+            i=0 # Reset loop counter
+            while [ "$i" -lt "$length" ]; do
+                char="${rest_string:$i:1}"
+                case "$char" in
+                    A) output_string="${output_string}a" ;;
+                    B) output_string="${output_string}b" ;;
+                    C) output_string="${output_string}c" ;;
+                    D) output_string="${output_string}d" ;;
+                    E) output_string="${output_string}e" ;;
+                    F) output_string="${output_string}f" ;;
+                    G) output_string="${output_string}g" ;;
+                    H) output_string="${output_string}h" ;;
+                    I) output_string="${output_string}i" ;;
+                    J) output_string="${output_string}j" ;;
+                    K) output_string="${output_string}k" ;;
+                    L) output_string="${output_string}l" ;;
+                    M) output_string="${output_string}m" ;;
+                    N) output_string="${output_string}n" ;;
+                    O) output_string="${output_string}o" ;;
+                    P) output_string="${output_string}p" ;;
+                    Q) output_string="${output_string}q" ;;
+                    R) output_string="${output_string}r" ;;
+                    S) output_string="${output_string}s" ;;
+                    T) output_string="${output_string}t" ;;
+                    U) output_string="${output_string}u" ;;
+                    V) output_string="${output_string}v" ;;
+                    W) output_string="${output_string}w" ;;
+                    X) output_string="${output_string}x" ;;
+                    Y) output_string="${output_string}y" ;;
+                    Z) output_string="${output_string}z" ;;
+                    *) output_string="${output_string}${char}" ;; # Append non-uppercase chars as is
+                esac
+                i=$((i + 1))
+            done
+            ;;
+        *)
+            # Unknown or empty format type, return original string
+            debug_log "DEBUG" "format_string: Unknown format type '$format_type', returning original string"
+            output_string="$input_string"
+            ;;
+    esac
+
+    # Return the formatted string
+    printf '%s' "$output_string"
+    return 0
+}
+
+# Function to format strings based on specified type
+# Usage: format_string <format_type> <input_string>
+# format_type: "upper" (all uppercase), "capitalize" (first letter uppercase, rest lowercase)
+# Default: returns original string if type is unknown or empty
+OK_format_string() {
+    local format_type="$1"
+    local input_string="$2"
+    local output_string=""
 
     # Check if input string is empty
     if [ -z "$input_string" ]; then
@@ -401,7 +547,7 @@ format_string() {
     return 0
 }
 
-normalize_message() {
+OK_normalize_message() {
     local input="$1"
     local lang="$2"
     local output="$input"
@@ -468,7 +614,7 @@ normalize_message() {
 # Usage: get_message <key> [format_type] [param1=value1] [param2=value2] ...
 # format_type: "upper", "capitalize", "none" (default)
 # Reads global variables: GET_MESSAGE_FORMATTING_ENABLED, FORMAT_TYPE_UPPER_ENABLED, FORMAT_TYPE_CAPITALIZE_ENABLED
-get_message() {
+OK_get_message() {
     local key="$1"
     local format_type="none" # デフォルトのフォーマットタイプ
     local shift_count=1      # デフォルトはキーのみを shift する
@@ -589,6 +735,253 @@ get_message() {
     if [ "$add_colon" = "true" ]; then message="${message}: "; fi
 
     # 9. 出力
+    printf "%b" "$message"
+    return 0
+}
+
+# --- normalize_message function (Handles normalization EXCEPT braces) ---
+# Arguments: $1: Input string, $2: Language code
+normalize_message() {
+    local input="$1"
+    local lang="$2"
+    local output="$input"
+    local saved_locale="$LC_ALL"
+
+    # Full-width to half-width normalization (Braces are handled in get_message)
+    # output=$(echo "$output" | sed 's/｛/{/g; s/｝/}/g') # REMOVED - Handled by get_message
+    output=$(echo "$output" | sed 's/：/:/g; s/∶/:/g; s/꞉/:/g; s/ː/:/g')
+    output=$(echo "$output" | sed 's/；/;/g')
+    output=$(echo "$output" | sed 's/　/ /g')
+    output=$(echo "$output" | sed 's/＠/@/g')
+    output=$(echo "$output" | sed 's/＼/\\/g') # Normalize full-width backslash
+
+    # Placeholder space removal (using LC_ALL=C for safety)
+    LC_ALL=C
+    output=$(echo "$output" | sed 's/[[:space:]]\+{/{/g') # Space before {
+    # output=$(echo "$output" | sed 's/}[[:space:]]\+/}/g') # Space after } (Keep commented out as per original)
+    output=$(echo "$output" | sed 's/{[[:space:]]\+/{/g') # Space after { (inside)
+    output=$(echo "$output" | sed 's/[[:space:]]\+}/}/g') # Space before } (inside)
+    LC_ALL="$saved_locale"
+
+    # Special placeholder replacement ( {;} is NOT replaced here )
+    output=$(echo "$output" | sed 's/{:}/:/g') # {:} -> :
+    output=$(echo "$output" | sed 's/{@}/\\n/g') # {@} -> newline (\n) - printf %b will interpret this
+
+    # Language-specific number normalization
+    case "${lang%%-*}" in
+        ar) output=$(echo "$output" | sed 's/٠/0/g; s/١/1/g; s/٢/2/g; s/٣/3/g; s/٤/4/g; s/٥/5/g; s/٦/6/g; s/٧/7/g; s/٨/8/g; s/٩/9/g') ;;
+        fa) output=$(echo "$output" | sed 's/۰/0/g; s/۱/1/g; s/۲/2/g; s/۳/3/g; s/۴/4/g; s/۵/5/g; s/۶/6/g; s/۷/7/g; s/۸/8/g; s/۹/9/g') ;;
+        bn) output=$(echo "$output" | sed 's/০/0/g; s/۱/1/g; s/২/2/g; s/৩/3/g; s/৪/4/g; s/৫/5/g; s/৬/6/g; s/৭/7/g; s/৮/8/g; s/৯/9/g') ;;
+        hi|mr|ne) output=$(echo "$output" | sed 's/०/0/g; s/१/1/g; s/२/2/g; s/३/3/g; s/४/4/g; s/५/5/g; s/६/6/g; s/७/7/g; s/८/8/g; s/९/9/g') ;;
+        ja|zh|ko) output=$(echo "$output" | sed 's/０/0/g; s/１/1/g; s/２/2/g; s/３/3/g; s/４/4/g; s/５/5/g; s/６/6/g; s/７/7/g; s/８/8/g; s/９/9/g') ;;
+    esac
+
+    # Output using printf %s as per original function's behavior
+    printf '%s' "$output"
+    return 0
+}
+
+# --- get_message function (Handles message retrieval, normalization, and formatting) ---
+# Usage: get_message <key> [format_type] [param1=value1] [param2=value2] ...
+# format_type: "upper", "capitalize", "none" (default)
+# Reads global variables: DEFAULT_LANGUAGE, CACHE_DIR, MSG_MEMORY_INITIALIZED, MSG_MEMORY_LANG, MSG_MEMORY,
+#                         GET_MESSAGE_FORMATTING_ENABLED, FORMAT_TYPE_UPPER_ENABLED, FORMAT_TYPE_CAPITALIZE_ENABLED
+get_message() {
+    local key="$1"
+    local format_type="none" # Default format type
+    local shift_count=1      # Default shift count (only key)
+    local awk_script         # Local variable for awk script
+
+    # Check if the second argument is a format type specifier
+    if [ $# -ge 2 ]; then
+        case "$2" in
+            upper|capitalize|none)
+                format_type="$2"
+                shift_count=2
+                ;;
+        esac
+    fi
+
+    # Shift arguments based on whether format type was provided
+    shift "$shift_count"
+
+    local lang="$DEFAULT_LANGUAGE"
+    local message=""
+    local add_colon="false" # Initialize flag for adding colon
+
+    # Get language code (assuming CACHE_DIR is defined)
+    if [ -f "${CACHE_DIR}/message.ch" ]; then
+        lang=$(cat "${CACHE_DIR}/message.ch")
+    fi
+
+    # 1. Get message from DB file cache
+    local db_file="$(check_message_cache "$lang")" # Assumes check_message_cache exists
+    if [ -n "$db_file" ] && [ -f "$db_file" ]; then
+        # Retrieve message for the specific language and key
+        message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        # Fallback to default language if message not found for current language
+        if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
+            local default_db_file="$(check_message_cache "$DEFAULT_LANGUAGE")"
+            if [ -n "$default_db_file" ] && [ -f "$default_db_file" ]; then
+                message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$default_db_file" 2>/dev/null | cut -d'=' -f2-)
+            fi
+        fi
+    fi
+
+    # 2. Try memory cache if DB file cache failed
+    if [ -z "$message" ]; then
+        # Initialize memory cache if needed (assuming into_memory_message exists)
+        if [ "$MSG_MEMORY_INITIALIZED" != "true" ] || [ "$MSG_MEMORY_LANG" != "$lang" ]; then
+            into_memory_message
+        fi
+        # Retrieve message from memory cache
+        if [ -n "$MSG_MEMORY" ]; then
+            message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+            # Fallback to default language in memory cache
+            if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
+                 message=$(echo "$MSG_MEMORY" | grep "^${DEFAULT_LANGUAGE}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+            fi
+        fi
+    fi
+
+    # 3. Fallback to key itself if message not found
+    if [ -z "$message" ]; then
+        message="$key"
+    fi
+
+    # --- MODIFIED: Step 4: Detect and handle various colon markers ---
+    # Handles {;}, {؛}, ｛;｝, and ｛؛｝ for multi-language and full-width support.
+    case "$message" in
+        *'{;}'*|*'{؛}'*|*'｛;｝'*|*'｛؛｝'*)
+            # Found one of the markers. Remove all possible occurrences.
+            # Remove standard half-width marker
+            message="${message//\{;\}/}"
+            # Remove Arabic semicolon marker
+            message="${message//\{؛\}/}"
+            # Remove full-width brace + half-width semicolon marker
+            message="${message//｛;｝/}"
+            # Remove full-width brace + Arabic semicolon marker
+            message="${message//｛؛｝/}"
+            add_colon="true"
+            ;;
+    esac
+    # --- END MODIFIED ---
+
+    # --- ADDED: Unconditionally normalize braces before replacement ---
+    # Ensures full-width braces ｛｝ become half-width {} for awk compatibility
+    # (This line was present in the provided source and remains unchanged)
+    message=$(echo "$message" | sed 's/｛/{/g; s/｝/}/g')
+
+    # --- MODIFIED: Parameter replacement using awk (Case-Insensitive, POSIX Compliant) ---
+    # (The awk script and execution logic below are exactly as provided in the source and remain unchanged)
+    awk_script='
+        BEGIN { FS="=" }
+        NR == 1 { msg = $0; next } # First line is the message template
+        NR > 1 { # Subsequent lines are parameters name=value
+            p_name = $1
+            # Correctly get raw value even if it contains =
+            p_value = substr($0, index($0, "=") + 1)
+            params[p_name] = p_value # Store param in array (key is original case from input)
+        }
+        END {
+            # Iterate through parameters to perform replacements
+            for (p_name in params) {
+                # --- MODIFIED: Build case-insensitive regex dynamically ---
+                regex_ci = "\\{" # Start regex with escaped {
+                for (i = 1; i <= length(p_name); ++i) {
+                    char = substr(p_name, i, 1)
+                    lc = tolower(char)
+                    uc = toupper(char)
+                    # If char is not a letter (lc == uc), append it directly.
+                    # Otherwise, append [lL] character class.
+                    if (lc == uc) {
+                        # Handle potential regex special characters within the name itself
+                        # If char is a regex metacharacter that needs escaping, escape it.
+                        # Basic example for backslash, extend if needed for ., *, +, ?, etc.
+                        if (char == "\\") {
+                             regex_ci = regex_ci "\\\\" # Append escaped backslash
+                        } else if (char == "[") {
+                             regex_ci = regex_ci "\\[" # Append escaped [
+                        } else if (char == "]") {
+                             regex_ci = regex_ci "\\]" # Append escaped ]
+                        # Add other metacharacters like ., *, +, ?, ^, $, | if needed
+                        } else {
+                            regex_ci = regex_ci char # Append other non-letter chars directly
+                        }
+                    } else {
+                        # Append character class for letters, e.g., [vV]
+                        regex_ci = regex_ci "[" lc uc "]"
+                    }
+                }
+                regex_ci = regex_ci "\\}" # End regex with escaped }
+                # Example: if p_name is "Value1", regex_ci becomes "\{[vV][aA][lL][uU][eE]1\}"
+                # --- END MODIFIED ---
+
+                # Prepare the replacement value: escape \ and & for gsub
+                current_value = params[p_name]
+                gsub(/\\/, "\\\\", current_value) # Escape backslashes first
+                gsub(/&/, "\\&", current_value)   # Escape ampersands
+
+                # Perform the global substitution using the dynamically generated case-insensitive regex
+                gsub(regex_ci, current_value, msg)
+            }
+            print msg # Output the final message
+        }
+    '
+    # Execute awk script only if parameters are provided ($@ contains params after shift)
+    if [ $# -gt 0 ]; then
+        message=$( \
+            ( \
+                printf "%s\n" "$message"; \
+                local param param_name param_value; \
+                # Pass parameters to awk, one per line, handling '=' in value
+                for param in "$@"; do \
+                    param_name=$(echo "$param" | cut -d'=' -f1); \
+                    param_value=$(echo "$param" | cut -d'=' -f2-); \
+                    if [ -n "$param_name" ]; then \
+                        printf "%s=%s\n" "$param_name" "$param_value"; \
+                    fi; \
+                done \
+            ) | awk "$awk_script" \
+        )
+    fi
+
+    # 6. Call normalize_message for remaining normalization
+    # (This line was present in the provided source and remains unchanged)
+    # Pass the potentially placeholder-replaced message and language
+    message=$(normalize_message "$message" "$lang")
+
+    # 7. Apply formatting (if enabled and type specified)
+    # (This section was present in the provided source and remains unchanged)
+    if [ "$GET_MESSAGE_FORMATTING_ENABLED" = "true" ]; then
+        # Only proceed if formatting is globally enabled
+        case "$format_type" in
+            "upper")
+                # Check if 'upper' format type is enabled
+                if [ "$FORMAT_TYPE_UPPER_ENABLED" = "true" ]; then
+                    message=$(format_string "upper" "$message") # Assumes format_string exists
+                fi
+                ;;
+            "capitalize")
+                # Check if 'capitalize' format type is enabled
+                if [ "$FORMAT_TYPE_CAPITALIZE_ENABLED" = "true" ]; then
+                    message=$(format_string "capitalize" "$message") # Assumes format_string exists
+                fi
+                ;;
+            "none"|*)
+                # Do nothing for "none" or unknown types
+                ;;
+        esac
+    fi
+
+    # 8. Append colon if marker {;} was present
+    # (This logic remains the same, using the add_colon flag set in Step 4)
+    if [ "$add_colon" = "true" ]; then
+        message="${message}: " # Add colon and space
+    fi
+
+    # 9. Output the final message (using %b to interpret backslash escapes like \n from {@})
+    # (This line was present in the provided source and remains unchanged)
     printf "%b" "$message"
     return 0
 }
@@ -2316,7 +2709,9 @@ check_common() {
             download "custom-package.db" "hidden"
             print_banner
             print_information
-            select_country "$lang_code"
+            information_main
+            country_main "$lang_code"
+            translate_main
             install_package update
             selector "$MAIN_MENU" 
             ;;
@@ -2336,7 +2731,9 @@ check_common() {
             download "custom-package.db"
             print_banner
             print_information
-            select_country "$lang_code"
+            information_main
+            country_main "$lang_code"
+            translate_main
             install_package update
             selector "$MAIN_MENU"
             ;;
