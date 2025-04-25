@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-26-02-00"
+SCRIPT_VERSION="2025-04-26-03-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -460,8 +460,8 @@ EOF
     return "$exit_status"
 }
 
-# Child function called by create_language_db_parallel (Revised: I/O Buffering)
-# This function now processes a *chunk* of the base DB and writes output once.
+# Child function called by create_language_db_parallel (Revised: I/O Buffering with %b)
+# This function now processes a *chunk* of the base DB and writes output once using %b.
 # @param $1: input_chunk_file (string) - Path to the temporary input file containing a chunk of lines.
 # @param $2: output_chunk_file (string) - Path to the temporary output file for this chunk.
 # @param $3: target_lang_code (string) - The target language code (e.g., "ja").
@@ -474,11 +474,11 @@ create_language_db() {
     local aip_function_name="$4"
 
     local overall_success=0 # Assume success initially for this chunk, 2 indicates at least one translation failed
-    local output_buffer=""  # --- CHANGE: Initialize buffer variable ---
+    local output_buffer=""  # Initialize buffer variable
 
     # Check if input file exists
     if [ ! -f "$input_chunk_file" ]; then
-        debug_log "DEBUG" "Child process: Input chunk file not found: $input_chunk_file"
+        debug_log "ERROR" "Child process: Input chunk file not found: $input_chunk_file"
         return 1 # Critical error for this child
     fi
 
@@ -512,35 +512,30 @@ create_language_db() {
         translated_text=$("$aip_function_name" "$value" "$target_lang_code")
         exit_code=$?
 
-        # --- CHANGE: Append result to buffer instead of writing to file ---
+        # --- CHANGE: Format line WITHOUT trailing \n, append literal '\n' to buffer ---
         local output_line=""
         if [ "$exit_code" -eq 0 ] && [ -n "$translated_text" ]; then
-            # Format successful translation
-            output_line=$(printf "%s|%s=%s\n" "$target_lang_code" "$key" "$translated_text")
+            # Format successful translation *without* newline
+            output_line=$(printf "%s|%s=%s" "$target_lang_code" "$key" "$translated_text")
         else
-            # Mark partial failure for the chunk
             overall_success=2
-            # Format original value on failure
-            output_line=$(printf "%s|%s=%s\n" "$target_lang_code" "$key" "$value")
+            # Format original value *without* newline
+            output_line=$(printf "%s|%s=%s" "$target_lang_code" "$key" "$value")
         fi
-        # Append the formatted line to the buffer
-        output_buffer="${output_buffer}${output_line}"
-        # -----------------------------------------------------------------
-
-    # Check read status after loop (less common, but possible)
-    # Shellcheck might warn about read exit code; often ignored in simple loops.
-    # We rely on the final write check primarily.
+        # Append the formatted line and a literal '\n' sequence to the buffer
+        output_buffer="${output_buffer}${output_line}\\n"
+        # -------------------------------------------------------------------------
 
     done < "$input_chunk_file" # Read from the chunk input file
 
-    # --- CHANGE: Write the entire buffer to the output file at once ---
-    printf "%s" "$output_buffer" > "$output_chunk_file"
+    # --- CHANGE: Write the entire buffer using printf %b to interpret \n ---
+    printf "%b" "$output_buffer" > "$output_chunk_file"
     local write_status=$?
     if [ "$write_status" -ne 0 ]; then
-        debug_log "ERROR" "Child: Failed to write buffer to output chunk file: $output_chunk_file (Exit code: $write_status)"
+        debug_log "ERROR" "Child: Failed to write buffer using %%b to output chunk file: $output_chunk_file (Exit code: $write_status)"
         return 1 # Critical error for this child
     fi
-    # ----------------------------------------------------------------
+    # ----------------------------------------------------------------------
 
     # Return overall status (0 or 2) only if write was successful
     return "$overall_success"
