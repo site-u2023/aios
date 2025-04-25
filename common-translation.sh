@@ -61,18 +61,17 @@ AI_TRANSLATION_FUNCTIONS="translate_with_google translate_with_lingva" # 使用�
 # ------------------------------------------------------------------------------------------------
 
 # =========================================================
-# Single Translation Task (for Parallel Execution)
+# Single Translation Task (for Parallel Execution) - Latest
 # =========================================================
 # parallel_translate_task: Executes a single translation using a specified function.
-# Writes the result (or original text on failure) to a result file.
-# Creates a .done marker file upon successful completion of writing the result file.
+# Writes the result as a DB entry (msgid + msgstr) to a result file.
 # Assumes debug_log is available and sourced.
 # @param $1: item_id (Unique identifier for the task, e.g., "Line-123")
-# @param $2: source_text (Text to translate)
+# @param $2: source_text (Text to translate - the msgid content)
 # @param $3: target_lang_code (e.g., "ja")
-# @param $4: result_file (Path to write the translation result)
-# @param $5: translation_function_name (Name of the function to call for translation, e.g., "translate_with_google")
-# @stdout: None directly. Writes result to $result_file and creates $result_file.done.
+# @param $4: result_file (Path to write the DB entry)
+# @param $5: translation_function_name (Name of the function to call for translation)
+# @stdout: None directly. Writes DB entry to $result_file.
 # @stderr: Logs progress using debug_log.
 # @return: 0 on successful translation and file writing, 1 on translation failure, 2 on file writing failure.
 parallel_translate_task() {
@@ -81,59 +80,66 @@ parallel_translate_task() {
     local target_lang_code="$3"
     local result_file="$4"
     local translation_function_name="$5"
-    local marker_file="${result_file}.done" # Marker file path
 
-    local translated_text=""
-    local exit_code=1 # Default to failure
+    local translated_content=""
+    local translation_exit_code=1
 
     debug_log "DEBUG" "  [TASK $item_id] Starting '$translation_function_name' for: \"$(echo "$source_text" | cut -c 1-30)...\""
 
-    # Execute the translation function; capture output and exit code
-    # Use a subshell to capture output reliably
-    translated_text=$("$translation_function_name" "$source_text" "$target_lang_code")
-    exit_code=$?
+    # Execute the translation function
+    # Ensure source_text is passed correctly, handle potential quoting issues if necessary
+    translated_content=$("$translation_function_name" "$source_text" "$target_lang_code")
+    translation_exit_code=$?
 
-    # Check translation result
-    if [ "$exit_code" -eq 0 ] && [ -n "$translated_text" ]; then
+    local final_msgstr_content=""
+
+    # Determine msgstr content based on translation result
+    if [ "$translation_exit_code" -eq 0 ] && [ -n "$translated_content" ]; then
         debug_log "DEBUG" "  [TASK $item_id] Translation successful via '$translation_function_name'."
-        # Write result to file
-        printf '%s\n' "$translated_text" > "$result_file"
-        if [ $? -ne 0 ]; then
-            debug_log "ERROR" "  [TASK $item_id] Failed to write result to $result_file."
-            return 2 # Indicate file writing failure
-        fi
-        # --- 追加: Create marker file on successful write ---
-        touch "$marker_file"
-        if [ $? -ne 0 ]; then
-             debug_log "ERROR" "  [TASK $item_id] Failed to create marker file $marker_file."
-             # Even if marker fails, result might be written. Task technically failed synchronization.
-             return 2 # Indicate marker file creation failure as well
-        fi
-        # --- 追加終了 ---
-        return 0 # Success
+        final_msgstr_content="$translated_content"
     else
-        debug_log "WARN" "  [TASK $item_id] Translation failed via '$translation_function_name' (Exit code: $exit_code). Using original text."
-        # Write original text to file on failure
-        printf '%s\n' "$source_text" > "$result_file"
-        if [ $? -ne 0 ]; then
-            debug_log "ERROR" "  [TASK $item_id] Failed to write original text to $result_file on translation failure."
-            return 2 # Indicate file writing failure
+        debug_log "WARN" "  [TASK $item_id] Translation failed via '$translation_function_name' (Exit code: $translation_exit_code). Using original text for msgstr."
+        final_msgstr_content="$source_text" # Use original source text as msgstr on failure
+        # Update exit code if translation was technically successful but empty
+        if [ "$translation_exit_code" -eq 0 ] && [ -z "$translated_content" ]; then
+            translation_exit_code=1 # Treat empty success as failure for return code
         fi
-        # --- 追加: Create marker file even on translation failure (as file is written) ---
-        touch "$marker_file"
-         if [ $? -ne 0 ]; then
-             debug_log "ERROR" "  [TASK $item_id] Failed to create marker file $marker_file after writing original text."
-             return 2 # Indicate marker file creation failure
-        fi
-        # --- 追加終了 ---
-        # Return the original translation function's exit code if it failed (usually 1)
-        # If translation produced empty text but exit code was 0, return 1 as well.
-        if [ "$exit_code" -eq 0 ] && [ -z "$translated_text" ]; then
-            return 1
-        fi
-        return "$exit_code" # Return original failure code (e.g., 1)
     fi
+
+    # Escape potential backslashes and double quotes in msgid and msgstr content
+    # Use simple sed, avoid complex regex if possible for BusyBox compatibility
+    local escaped_msgid=$(echo "$source_text" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+    local escaped_msgstr=$(echo "$final_msgstr_content" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+
+    # Write the complete entry to the result file
+    # Overwrite result file first with msgid
+    printf "msgid \"%s\"\n" "$escaped_msgid" > "$result_file"
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "  [TASK $item_id] Failed to write msgid to $result_file."
+        return 2 # File writing failure
+    fi
+    # Append msgstr to the result file
+    printf "msgstr \"%s\"\n" "$escaped_msgstr" >> "$result_file"
+     if [ $? -ne 0 ]; then
+        debug_log "ERROR" "  [TASK $item_id] Failed to write msgstr to $result_file."
+        # Consider removing the partially written file?
+        # rm -f "$result_file"
+        return 2 # File writing failure
+    fi
+
+    # Return the original translation exit code (0 for success, 1 for failure/empty)
+    # This exit code is NOT currently captured by the caller function in the simplified design.
+    return "$translation_exit_code"
 }
+
+# --- Ensure the rest of common-translation.sh is also up-to-date ---
+# ... (other functions like debug_log, translate_with_google etc.) ...
+
+# create_language_db_parallel function (as provided in the previous correct version)
+# =========================================================
+# Parallel Language Database Creation - Revised (grep exit code fix)
+# =========================================================
+# ... (The rest of the create_language_db_parallel function) ...
 
 # =========================================================
 # Parallel Language Database Creation - Revised (grep exit code fix)
