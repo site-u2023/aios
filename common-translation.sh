@@ -232,31 +232,104 @@ EOF
     return "$overall_success" # Return 0 for success, 2 for partial failure, 1 for base DB missing
 }
 
-# 翻訳情報を表示する関数 (変更なし)
-display_detected_translation() {
-    local lang_code=""
-    if [ -f "${CACHE_DIR}/message.ch" ]; then
-        lang_code=$(cat "${CACHE_DIR}/message.ch")
+# @FUNCTION: create_language_db_parallel
+# @DESCRIPTION: Creates language DBs in parallel for a list of target languages,
+#               controlling the number of concurrent tasks using MAX_PARALLEL_TASKS.
+# @PARAM $1: aip_function_name (string) - The name of the AIP function to call (e.g., "translate_with_google")
+# @PARAM $2: api_endpoint_url (string) - The base API endpoint URL (Passed to create_language_db, currently unused there)
+# @PARAM $3: domain_name (string) - The domain name for context (Passed to create_language_db, currently unused there)
+# @PARAM $4: target_lang_codes (string) - A space-separated list of target language codes (e.g., "ja fr es de")
+# @RETURN: 0 if all translations succeed, 2 if any translation fails.
+#          Does not handle the case where the base DB is missing (create_language_db handles that per-job).
+# @DEPENDS: create_language_db, MAX_PARALLEL_TASKS (global variable)
+create_language_db_parallel() {
+    local aip_function_name="$1"
+    local api_endpoint_url="$2"
+    local domain_name="$3"
+    local target_lang_codes="$4"
+
+    local overall_status=0 # 0: all success, 2: at least one failure
+    local job_pids=""      # List of background job PIDs
+    local job_count=0      # Current number of running background jobs
+    local max_tasks=1      # Default max parallel tasks
+    local target_lang_code # Loop variable
+    local pid            # PID of a background job
+    local exit_status    # Exit status of a waited job
+
+    # Validate MAX_PARALLEL_TASKS (must be a positive integer)
+    if [ -n "$MAX_PARALLEL_TASKS" ] && [ "$MAX_PARALLEL_TASKS" -gt 0 ] 2>/dev/null; then
+        max_tasks="$MAX_PARALLEL_TASKS"
     else
-        lang_code="$DEFAULT_LANGUAGE"
+        # debug_log is not available here, maybe add a simple echo to stderr if needed
+        # echo "Warning: Invalid MAX_PARALLEL_TASKS value, defaulting to 1." >&2
+        max_tasks=1
     fi
 
-    local source_lang="$DEFAULT_LANGUAGE"
-    local source_db="message_${source_lang}.db"
-    local target_db="message_${lang_code}.db" # This might not exist if creation failed
+    # Disable filename generation (globbing)
+    set -f
+    # Set positional parameters to the list of language codes
+    set -- $target_lang_codes
+    # Re-enable filename generation
+    set +f
 
-    debug_log "DEBUG" "Displaying translation information for language code: ${lang_code}"
+    # Loop through each target language code
+    for target_lang_code in "$@"; do
+        # Launch the create_language_db function in the background
+        create_language_db "$aip_function_name" "$api_endpoint_url" "$domain_name" "$target_lang_code" &
+        pid=$!
+        job_pids="$job_pids $pid" # Append PID to the list
+        job_count=$((job_count + 1))
 
-    printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE_ORIGINAL" "i=$source_db")")"
-    if [ -f "${BASE_DIR}/${target_db}" ]; then
-        printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE_CURRENT" "i=$target_db")")"
-    else
-        printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_SOURCE_MISSING" "i=$target_db")")"
-    fi
-    printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SOURCE" "i=$source_lang")")"
-    printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_CODE" "i=$lang_code")")"
+        # If the maximum number of parallel jobs is reached, wait for the oldest one to finish
+        if [ "$job_count" -ge "$max_tasks" ]; then
+            # Get the first PID from the list (oldest job)
+            # Use parameter expansion to extract the first PID
+            local first_pid=${job_pids# *} # Remove leading space if any
+            first_pid=${first_pid%% *}    # Get the part before the first space
 
-    debug_log "DEBUG" "Translation information display completed for ${lang_code}"
+            if [ -n "$first_pid" ]; then
+                 wait "$first_pid"
+                 exit_status=$?
+                 # Update overall status if the job failed (non-zero exit)
+                 # Only set to 2 if it's not already 2
+                 if [ "$exit_status" -ne 0 ] && [ "$overall_status" -eq 0 ]; then
+                     overall_status=2
+                 fi
+                 # Remove the completed PID from the list
+                 job_pids=$(echo " $job_pids " | sed "s/ $first_pid / /") # Pad with spaces for safe removal
+                 job_pids=${job_pids# } # Remove leading space
+                 job_pids=${job_pids% } # Remove trailing space
+                 job_count=$((job_count - 1))
+            fi
+        fi
+    done
+
+    # Wait for all remaining background jobs to complete
+    # Use parameter expansion to iterate through remaining PIDs
+    local remaining_pids="$job_pids"
+    while [ -n "$remaining_pids" ]; do
+        # Get the first PID from the remaining list
+        local current_pid=${remaining_pids# *}
+        current_pid=${current_pid%% *}
+
+        if [ -n "$current_pid" ]; then
+            wait "$current_pid"
+            exit_status=$?
+            # Update overall status if the job failed
+            if [ "$exit_status" -ne 0 ] && [ "$overall_status" -eq 0 ]; then
+                overall_status=2
+            fi
+            # Remove the completed PID from the list for the next iteration
+            remaining_pids=$(echo " $remaining_pids " | sed "s/ $current_pid / /")
+            remaining_pids=${remaining_pids# }
+            remaining_pids=${remaining_pids% }
+        else
+            # Break if the list becomes empty unexpectedly
+            break
+        fi
+    done
+
+    return "$overall_status"
 }
 
 # 翻訳情報を表示する関数
