@@ -136,10 +136,10 @@ parallel_translate_task() {
 }
 
 # =========================================================
-# Parallel Language Database Creation - Revised (task_count fix)
+# Parallel Language Database Creation - Revised (Pre-count task_count)
 # =========================================================
 # create_language_db_parallel: Creates a language DB file by translating msgids in parallel.
-# Correctly counts launched tasks using a subshell.
+# Pre-counts tasks and uses a for loop for launching.
 # Waits for the expected number of result files before assembly.
 # Final DB is assembled by concatenating temporary files (order not preserved).
 # Integrity is checked by comparing source msgid count with generated msgid count.
@@ -170,7 +170,7 @@ create_language_db_parallel() {
     local return_code=0 # 0=success, 1=critical error, 2=partial (task failure - simplified check)
 
     # --- Pre-checks ---
-    debug_log "INFO" "Starting parallel DB creation (task_count fix) for domain '$domain', target '$target_lang_code' using '$translation_function_name'."
+    debug_log "INFO" "Starting parallel DB creation (pre-count task_count) for domain '$domain', target '$target_lang_code' using '$translation_function_name'."
 
     if [ ! -d "$target_dir" ]; then
         mkdir -p "$target_dir" || { debug_log "ERROR" "Failed to create target directory: $target_dir"; return 1; }
@@ -199,7 +199,7 @@ create_language_db_parallel() {
     fi
     debug_log "DEBUG" "Created temporary directory for results: $tmp_dir"
 
-    # --- Create AWK script file ---
+    # --- Create AWK script file (remains the same) ---
     local awk_script_file="${tmp_dir}/parse_db.awk"
     cat > "$awk_script_file" << 'EOF'
 BEGIN { msgid_block = ""; line_num = 0 }
@@ -220,78 +220,75 @@ BEGIN { msgid_block = ""; line_num = 0 }
 /^msgstr[ \t]+""$/ {
      if (msgid_block != "" && msgid_block != "\"\"") {
          item_id = "Line-" line_num
-         printf "EXECUTE:|%s|%s|%s|%s/%s.txt|%s\n", item_id, msgid_block, target_lang, tmp_dir, item_id, trans_func
+         # Output format: item_id|source_text|result_file
+         printf "%s|%s|%s/%s.txt\n", item_id, msgid_block, tmp_dir, item_id
      }
      msgid_block = ""; next;
 }
 EOF
     # --- End AWK script file creation ---
 
-    local task_count=0 # Initialize task_count
+    # --- 修正: Pre-generate task list and count tasks ---
+    local task_list=""
+    local task_count=0
+    debug_log "INFO" "Generating task list..."
+    # Use awk to generate the list: item_id|source_text|result_file
+    task_list=$(awk -f "$awk_script_file" -v tmp_dir="$tmp_dir" "$source_db")
+    if [ $? -ne 0 ]; then
+        debug_log "ERROR" "Failed to generate task list using awk."
+        if [ -n "$tmp_dir" ] && [ -d "$tmp_dir" ]; then rm -rf "$tmp_dir"; fi
+        return 1
+    fi
+
+    # Count tasks by counting lines in the generated list (if not empty)
+    if [ -n "$task_list" ]; then
+         task_count=$(echo "$task_list" | wc -l)
+    else
+         task_count=0
+    fi
+    debug_log "INFO" "Generated task list with $task_count tasks."
+    # --- 修正終了 ---
 
     # Clean previous temporary output and marker files
     rm -f "$target_db_tmp" "$marker_file"
 
-    # --- Launch Background Translation Tasks and Count ---
-    debug_log "INFO" "Parsing source DB, launching translation tasks, and counting..."
-    # --- 修正: Use subshell to capture task_count ---
-    task_count=$(
-        # Initialize count inside subshell
-        sub_task_count=0
-        awk -f "$awk_script_file" \
-            -v tmp_dir="$tmp_dir" \
-            -v target_lang="$target_lang_code" \
-            -v trans_func="$translation_function_name" \
-            "$source_db" | while IFS='|' read -r prefix item_id source_text target_l result_f trans_f rest; do
-
-            if [ "$prefix" = "EXECUTE:" ] && [ -n "$item_id" ] && [ -n "$source_text" ] && [ -n "$target_l" ] && [ -n "$result_f" ] && [ -n "$trans_f" ]; then
-                    # Limit concurrency
-                    while [ "$(jobs -p | wc -l)" -ge "$MAX_PARALLEL_TASKS" ]; do
-                        sleep 1
-                    done
-                    # Use debug_log from the parent shell environment (should be available)
-                    debug_log "DEBUG" "Launching task $item_id for source text starting with: $(echo "$source_text" | cut -c 1-30)..."
-                    # Launch task in background relative to the subshell
-                    parallel_translate_task "$item_id" "$source_text" "$target_l" "$result_f" "$trans_f" &
-                    sub_task_count=$((sub_task_count + 1)) # Increment count inside subshell
+    # --- 修正: Launch Background Translation Tasks using for loop ---
+    debug_log "INFO" "Launching $task_count translation tasks..."
+    if [ "$task_count" -gt 0 ]; then
+        # Use printf '%s\n' to handle potential newlines in task_list safely
+        printf '%s\n' "$task_list" | while IFS='|' read -r item_id source_text result_f; do
+            # Check if read was successful and variables are not empty
+            if [ -n "$item_id" ] && [ -n "$source_text" ] && [ -n "$result_f" ]; then
+                # Limit concurrency
+                while [ "$(jobs -p | wc -l)" -ge "$MAX_PARALLEL_TASKS" ]; do
+                    sleep 1
+                done
+                debug_log "DEBUG" "Launching task $item_id for source text starting with: $(echo "$source_text" | cut -c 1-30)..."
+                parallel_translate_task "$item_id" "$source_text" "$target_lang_code" "$result_f" "$translation_function_name" &
             else
-                    # Need to handle potential logging from parent shell scope
-                    full_line="${prefix}${IFS}${item_id}${IFS}${source_text}${IFS}${target_l}${IFS}${result_f}${IFS}${trans_f}${IFS}${rest}"
-                    if [ -n "$full_line" ] && [ "$full_line" != "EXECUTE:" ]; then
-                         debug_log "WARN" "Unexpected line format from awk or read error: $full_line"
-                    fi
+                 debug_log "WARN" "Skipping invalid line from task list: $item_id|$source_text|$result_f"
             fi
         done
-        # --- 修正: Wait for background jobs launched within this subshell ---
-        debug_log "DEBUG" "Subshell: Waiting for background tasks (${sub_task_count}) to complete..."
-        wait
-        debug_log "DEBUG" "Subshell: Background tasks complete."
-        # --- 修正終了 ---
-        # Output the final count from the subshell
-        echo "$sub_task_count"
-    )
-    # --- 修正終了 ---
-
-    # Check if task_count is a valid number
-    if ! echo "$task_count" | grep -qE '^[0-9]+$'; then
-        debug_log "ERROR" "Failed to get valid task count. Subshell output: '$task_count'"
-        if [ -n "$tmp_dir" ] && [ -d "$tmp_dir" ]; then rm -rf "$tmp_dir"; fi
-        return 1
     fi
-    debug_log "INFO" "Successfully launched and counted $task_count tasks."
+    debug_log "INFO" "Finished launching tasks."
+    # --- 修正終了 ---
 
     # --- Wait for all result files to be created ---
     local current_file_count=0
-    # Adjust timeout based on the correctly captured task_count
     local wait_timeout=$(( task_count * 2 + 10 ))
     local wait_start_time=$(date +%s)
     local elapsed_time=0
 
-    # Proceed only if tasks were expected
     if [ "$task_count" -gt 0 ]; then
         debug_log "INFO" "Waiting for $task_count result files to appear in $tmp_dir (timeout: ${wait_timeout}s)..."
         while [ "$current_file_count" -lt "$task_count" ]; do
+            # Count .txt files safely
             current_file_count=$(ls "$tmp_dir"/*.txt 2>/dev/null | wc -l)
+            # Ensure count is a number, default to 0 if ls fails or finds nothing
+            if ! echo "$current_file_count" | grep -qE '^[0-9]+$'; then
+                 current_file_count=0
+            fi
+
             elapsed_time=$(( $(date +%s) - wait_start_time ))
             if [ "$elapsed_time" -ge "$wait_timeout" ]; then
                 debug_log "ERROR" "Timeout waiting for result files. Expected $task_count, found $current_file_count after ${elapsed_time}s."
@@ -389,6 +386,7 @@ EOF
     debug_log "INFO" "Finished parallel DB creation for domain '$domain'. Final return code: $return_code"
     return "$return_code"
 }
+
 # ---------------------------------------------------------------------------------------------
 
 # URL安全エンコード関数（seqを使わない最適化版）
