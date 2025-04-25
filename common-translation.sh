@@ -129,7 +129,7 @@ translate_with_google() {
     fi
     network_type=$(cat "$ip_check_file" 2>/dev/null)
     if [ -z "$network_type" ]; then
-        debug_log "WARN" "translate_with_google: Could not read network type from $ip_check_file or file is empty, defaulting to v4."
+        debug_log "DEBUG" "translate_with_google: Could not read network type from $ip_check_file or file is empty, defaulting to v4."
         network_type="v4"
     fi
     debug_log "DEBUG" "translate_with_google: Detected network type: $network_type"
@@ -137,7 +137,7 @@ translate_with_google() {
         "v4"|"v4v6") wget_options="-4" ;;
         "v6") wget_options="-6" ;;
         *)
-           debug_log "WARN" "translate_with_google: Unknown network type '$network_type', using no specific IP version."
+           debug_log "DEBUG" "translate_with_google: Unknown network type '$network_type', using no specific IP version."
            wget_options="" ;;
     esac
     # --- End Network Type Detection ---
@@ -176,20 +176,20 @@ translate_with_google() {
                     printf "%s\n" "$translated_text"
                     return 0 # Success
                 else
-                    debug_log "WARN" "translate_with_google: Extracted text was empty from response data."
+                    debug_log "DEBUG" "translate_with_google: Extracted text was empty from response data."
                     # Fall through to retry logic
                 fi
             else
-                debug_log "WARN" "translate_with_google: Response pattern not found in data. Start of data: $(echo "$response_data" | head -c 100)" # Show beginning of data
+                debug_log "DEBUG" "translate_with_google: Response pattern not found in data. Start of data: $(echo "$response_data" | head -c 100)" # Show beginning of data
                 # Fall through to retry logic
             fi
         # --- End Process Response Data ---
         else
             # Log wget failure or empty response
             if [ "$wget_exit_code" -ne 0 ]; then
-                debug_log "WARN" "translate_with_google: wget failed with exit code $wget_exit_code"
+                debug_log "DEBUG" "translate_with_google: wget failed with exit code $wget_exit_code"
             elif [ -z "$response_data" ]; then
-                 debug_log "WARN" "translate_with_google: wget succeeded (code 0) but response data is empty!"
+                 debug_log "DEBUG" "translate_with_google: wget succeeded (code 0) but response data is empty!"
             fi
             # Fall through to retry logic
         fi
@@ -297,7 +297,7 @@ EOF
         extra_lines=$((total_lines % MAX_PARALLEL_TASKS))
         if [ "$lines_per_task" -eq 0 ] && [ "$total_lines" -gt 0 ]; then
             lines_per_task=1
-            debug_log "WARN" "Fewer lines ($total_lines) than tasks ($MAX_PARALLEL_TASKS). Adjusting tasks."
+            debug_log "DEBUG" "Fewer lines ($total_lines) than tasks ($MAX_PARALLEL_TASKS). Adjusting tasks."
         fi
 
         # awk splitting logic
@@ -365,7 +365,7 @@ EOF
                          debug_log "DEBUG" "Task with PID $pid failed with critical exit status $task_exit_status."
                          exit_status=1
                      else
-                          debug_log "WARN" "Task with PID $pid completed with partial success (exit status 2)."
+                          debug_log "DEBUG" "Task with PID $pid completed with partial success (exit status 2)."
                           [ "$exit_status" -eq 0 ] && exit_status=2
                      fi
                  else
@@ -582,7 +582,7 @@ OK_create_language_db() {
                 ;; # Line format is potentially correct
             *)
                  # Log unexpected format? Parent should handle this ideally.
-                 # debug_log "WARN" "Child: Skipping line with unexpected format: $line" # Optional: Add if needed
+                 # debug_log "DEBUG" "Child: Skipping line with unexpected format: $line" # Optional: Add if needed
                 continue
                 ;;
         esac
