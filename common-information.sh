@@ -805,12 +805,9 @@ information_main() {
         if [ -s "$cache_isp_file" ]; then
             cached_isp=$(sed -n '1p' "$cache_isp_file" 2>/dev/null)
             cached_as=$(sed -n '2p' "$cache_isp_file" 2>/dev/null)
-            # 値が空文字列の場合に備えてデフォルト値を設定 (念のため)
-            [ -z "$cached_isp" ] && cached_isp=$(get_message MSG_UNKNOWN)
-            [ -z "$cached_as" ] && cached_as=$(get_message MSG_UNKNOWN)
         else
-             cached_isp=$(get_message MSG_UNKNOWN)
-             cached_as=$(get_message MSG_UNKNOWN)
+             cached_isp=$(get_message MSG_ISP_INFO_UNKNOWN)
+             cached_as=$(get_message MSG_ISP_INFO_UNKNOWN)
         fi
 
         # 読み込んだ情報が空でないことを最終確認
