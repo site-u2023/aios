@@ -46,12 +46,6 @@ BASE_WGET="wget --no-check-certificate -q"
 # BASE_WGET="wget -O"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 # パス・ファイル関連
-INTERPRETER="${INTERPRETER:-ash}"  # デフォルトインタープリタ
-script_dir="$( cd "$(dirname "$0")" >/dev/null 2>&1 && pwd )"
-script_path="${script_dir}/$(basename "$0")"
-BIN_DIR="$script_dir"    # ディレクトリの絶対パス
-BIN_PATH="$script_path"  # スクリプトファイルの絶対パス
-BIN_FILE="$(basename "$0")" # スクリプトファイル名
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
