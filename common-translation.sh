@@ -64,44 +64,7 @@ WGET_CAPABILITY_DETECTED="" # Initialized by translate_main if detect_wget_capab
 AI_TRANSLATION_FUNCTIONS="translate_with_google" # 使用したい関数名を空白区切りで列挙
 
 # --- Set MAX_PARALLEL_TASKS ---
-# Determine the default based on CPU cores by calling the function
-determined_default_tasks=$(determine_default_parallel_tasks)
-# determined_tasks_exit_code=$? # Optional: capture exit code if needed for logging/logic
-
-# Number of parallel translation tasks to run concurrently.
-# Use environment variable if set, otherwise use the determined default.
-MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-$determined_default_tasks}"
-echo $MAX_PARALLEL_TASKS
-# Function to determine the default number of parallel tasks based on cached CPU cores
-# @stdout: Prints the determined default number of tasks (cores or 1).
-# @return: Always returns 0 (success).
-determine_default_parallel_tasks() {
-    local default_tasks=1 # Safe default if detection fails
-    local cache_file="${CACHE_DIR}/cpu_core.ch"
-    local cores=""
-    # Removed: local result_code=1
-
-    if [ -r "$cache_file" ]; then
-        cores=$(head -n 1 "$cache_file")
-        case "$cores" in
-            *[!0-9]* | "" | 0) # Contains non-digit, is empty, or is zero
-                # CHANGED: Log level to DEBUG
-                debug_log "DEBUG" "Invalid content in $cache_file ('$cores'). Using default tasks: $default_tasks"
-                ;;
-            *) # Looks like a valid positive integer
-                default_tasks=$cores
-                debug_log "DEBUG" "Detected $cores CPU cores from cache. Setting default tasks to $default_tasks."
-                # Removed: result_code=0
-                ;;
-        esac
-    else
-        # CHANGED: Log level to DEBUG (if it wasn't already)
-        debug_log "DEBUG" "CPU core cache file not found: $cache_file. Using default tasks: $default_tasks"
-    fi
-
-    printf "%s\n" "$default_tasks"
-    return 0 # CHANGED: Always return 0 to indicate printf succeeded
-}
+MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-$(head "${CACHE_DIR}/cpu_core.ch")}"
 
 # URL安全エンコード関数（seqを使わない最適化版）
 # @param $1: string - The string to encode.
