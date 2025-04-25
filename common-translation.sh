@@ -102,6 +102,8 @@ parallel_translate_task() {
     fi
 }
 
+# ... (他の関数や設定) ...
+
 # =========================================================
 # Parallel Language Database Creation
 # =========================================================
@@ -148,9 +150,6 @@ create_language_db_parallel() {
         return 1
     fi
 
-    # NOTE: Existence checks for translation_function_name and parallel_translate_task removed.
-    # Caller is responsible for ensuring they are available/sourced.
-
     # --- Prepare for Parallel Processing ---
     local tmp_dir=$(mktemp -d -p "${TMP_DIR:-/tmp}" "parallel_translate_${domain}_XXXXXX")
     if [ -z "$tmp_dir" ] || [ ! -d "$tmp_dir" ]; then
@@ -167,69 +166,43 @@ create_language_db_parallel() {
 
     # --- Launch Background Translation Tasks ---
     debug_log "INFO" "Parsing source DB and launching translation tasks..."
-    # Use awk to parse the source .db file and output commands for the shell loop.
-    # Output format: "EXECUTE:item_id|source_text|target_lang|result_file|translation_function"
     awk -v tmp_dir="$tmp_dir" \
         -v target_lang="$target_lang_code" \
         -v trans_func="$translation_function_name" \
         '
         BEGIN { msgid_block = ""; line_num = 0 }
-
-        # Skip comments and empty lines for task generation
         /^[ \t]*#/ || /^[ \t]*$/ { next }
-
-        # Start of msgid
         /^msgid[ \t]+".*"$/ {
-            if (msgid_block != "") {
-                 # Handle previous incomplete msgid block (should not happen in valid files)
-                 # Outputting it directly might be better handled in the final assembly phase.
-                 msgid_block = "" # Reset just in case
-            }
+            if (msgid_block != "") { msgid_block = "" }
             gsub(/^msgid[ \t]+"/, ""); gsub(/"$/, "");
             msgid_block = $0;
-            line_num = NR # Store line number of msgid start
-            next;
+            line_num = NR; next;
         }
-
-        # Continuation of msgid (multiline)
         /^".*"$/ {
              if (msgid_block != "") {
                  gsub(/^"/, ""); gsub(/"$/, "");
+                 # Append with newline for potential multiline representation if needed later,
+                 # but for task argument, just concatenate.
                  msgid_block = msgid_block $0;
              }
              next;
         }
-
-        # End of msgid block, start of empty msgstr (trigger task)
         /^msgstr[ \t]+""$/ {
              if (msgid_block != "") {
-                 item_id = "Line-" line_num # Use start line number for unique ID
+                 item_id = "Line-" line_num
                  result_file = tmp_dir "/" item_id ".txt"
-                 # Output command for shell to execute the translation task
+                 # Ensure msgid_block content doesn't contain pipes if passed raw
+                 # (Assume simple content for now, or needs escaping)
                  print "EXECUTE:" item_id "|" msgid_block "|" target_lang "|" result_file "|" trans_func
              }
-             msgid_block = ""; # Reset msgid block
-             next;
+             msgid_block = ""; next;
         }
+        { } END { }
+        ' "$source_db" | while IFS='|' read -r prefix item_id source_text target_l result_f trans_f rest; do
+        # Use IFS='|' to correctly parse pipe-delimited fields
 
-        # Ignore other lines during task generation phase
-        { }
-
-        END {
-             # No special handling needed at END for task generation
-        }
-        ' "$source_db" | while IFS= read -r line; do
-        # Read output from awk and launch background tasks
-
-        case "$line" in
-            EXECUTE:*)
-                # Extract parameters for parallel_translate_task
-                # Format: EXECUTE:item_id|source_text|target_lang|result_file|translation_function
-                item_id=$(echo "$line" | cut -d'|' -f2)
-                source_text=$(echo "$line" | cut -d'|' -f3)
-                target_l=$(echo "$line" | cut -d'|' -f4)
-                result_f=$(echo "$line" | cut -d'|' -f5)
-                trans_f=$(echo "$line" | cut -d'|' -f6)
+        # Check if the line starts with EXECUTE: and has the expected number of fields
+        if [ "$prefix" = "EXECUTE:" ] && [ -n "$item_id" ] && [ -n "$source_text" ] && [ -n "$target_l" ] && [ -n "$result_f" ] && [ -n "$trans_f" ]; then
 
                 # Limit parallel processes
                 while [ "$(jobs -p | wc -l)" -ge "$MAX_PARALLEL_TASKS" ]; do
@@ -237,28 +210,34 @@ create_language_db_parallel() {
                 done
 
                 # Launch the task in the background
-                debug_log "DEBUG" "Launching task $item_id..."
+                debug_log "DEBUG" "Launching task $item_id for source text starting with: $(echo "$source_text" | cut -c 1-30)..."
+                # Pass arguments correctly quoted
                 parallel_translate_task "$item_id" "$source_text" "$target_l" "$result_f" "$trans_f" &
                 pids="$pids $!" # Store the PID
                 task_count=$((task_count + 1))
-                ;;
-            *)
-                debug_log "WARN" "Unexpected line from awk during task launch: $line"
-                ;;
-        esac
+        else
+                # Read might have failed or line format was unexpected
+                # Handle potential full line read if IFS didn't match
+                local full_line="${prefix}${IFS}${item_id}${IFS}${source_text}${IFS}${target_l}${IFS}${result_f}${IFS}${trans_f}${IFS}${rest}"
+                if [ -n "$full_line" ]; then # Avoid logging empty lines from potential read failures
+                     debug_log "WARN" "Unexpected line format from awk or read error: $full_line"
+                fi
+        fi
     done
 
     # --- Wait for all background tasks to complete ---
     debug_log "INFO" "Launched $task_count tasks. Waiting for completion..."
     local failed_tasks=0
     if [ -n "$pids" ]; then
+        # Trim leading space from pids if necessary
+        pids=$(echo "$pids" | sed 's/^ //')
         for pid in $pids; do
             wait "$pid"
             local task_exit_code=$?
             if [ "$task_exit_code" -ne 0 ]; then
                 failed_tasks=$((failed_tasks + 1))
-                # Note: We know a task failed, but not which specific item_id without more tracking.
-                # This is usually acceptable as we mark the whole process as partial success.
+                # Log which PID failed for better debugging, though mapping PID to item_id is complex here
+                debug_log "WARN" "Task with PID $pid failed with exit code $task_exit_code."
             fi
         done
         debug_log "INFO" "All tasks completed. Number of failed tasks: $failed_tasks"
@@ -272,6 +251,7 @@ create_language_db_parallel() {
     local current_msgid_content=""
     local msgid_line_start=0
     local line_num=0
+    local in_msgid_block=0 # Flag to track if we are inside a msgid block
 
     ( # Use subshell to handle file reading redirection properly
     while IFS= read -r src_line || [ -n "$src_line" ]; do
@@ -280,72 +260,112 @@ create_language_db_parallel() {
         # Preserve comments and empty lines
         if echo "$src_line" | grep -qE '^[ \t]*#|^[ \t]*$'; then
             printf "%s\n" "$src_line"
+            # If we were in a msgid block, it ended unexpectedly. Write it out.
+            if [ "$in_msgid_block" -eq 1 ] && [ -n "$current_msgid_content" ]; then
+                 printf "msgid \"%s\"\n" "$current_msgid_content"
+                 printf "msgstr \"\"\n" # Write empty msgstr
+                 debug_log "WARN" "msgid block starting line $msgid_line_start ended unexpectedly by comment/empty line $line_num."
+                 current_msgid_content=""
+                 in_msgid_block=0
+            fi
             continue
         fi
 
         # Start of msgid block
         if echo "$src_line" | grep -q '^msgid[ \t]'; then
-            # Handle potential previous unterminated msgid block (error case)
-            if [ -n "$current_msgid_content" ]; then
+            # If previous msgid block exists, write it with empty msgstr (error case)
+            if [ "$in_msgid_block" -eq 1 ] && [ -n "$current_msgid_content" ]; then
                 printf "msgid \"%s\"\n" "$current_msgid_content"
                 printf "msgstr \"\"\n" # Write empty msgstr for previous block
+                debug_log "WARN" "New msgid block started line $line_num before previous block (line $msgid_line_start) had msgstr."
             fi
             # Extract content, removing msgid " and trailing "
             current_msgid_content=$(echo "$src_line" | sed -e 's/^msgid[ \t]*"//' -e 's/"$//')
             msgid_line_start=$line_num # Record the starting line number
+            in_msgid_block=1
             continue # Continue reading lines for potential multiline msgid/msgstr
         fi
 
         # Continuation of msgid (multiline)
         if echo "$src_line" | grep -q '^"'; then
-             if [ -n "$current_msgid_content" ]; then
+             if [ "$in_msgid_block" -eq 1 ]; then
                  # Append content, removing leading/trailing "
-                 current_msgid_content="$current_msgid_content$(echo "$src_line" | sed -e 's/^"//' -e 's/"$//')"
+                 # Add a literal newline character for correct multiline representation
+                 current_msgid_content="${current_msgid_content}\\n$(echo "$src_line" | sed -e 's/^"//' -e 's/"$//')"
              else
-                 printf "%s\n" "$src_line" # Stray continuation line without preceding msgid
+                 # Stray continuation line without preceding msgid - write directly? Or error?
+                 printf "%s\n" "$src_line"
+                 debug_log "WARN" "Stray continuation line found at line $line_num: $src_line"
              fi
              continue
         fi
 
         # msgstr line - This indicates end of msgid block; time to write results
         if echo "$src_line" | grep -q '^msgstr[ \t]'; then
-             if [ -n "$current_msgid_content" ]; then
+             if [ "$in_msgid_block" -eq 1 ] && [ -n "$current_msgid_content" ]; then
                  local item_id="Line-${msgid_line_start}" # Reconstruct item_id based on msgid start line
                  local result_file="${tmp_dir}/${item_id}.txt"
 
                  # Write the collected msgid block (potentially multiline)
-                 printf "msgid \"%s\"\n" "$current_msgid_content"
+                 # Use printf to handle the embedded \n correctly if needed by target format,
+                 # but .db usually expects literal newlines within quotes.
+                 # Let's ensure printf interprets \n.
+                 printf "msgid \""
+                 # Need to escape quotes within the msgid content if any
+                 printf "%b" "$current_msgid_content" | sed 's/"/\\"/g'
+                 printf "\"\n"
 
                  # Read the corresponding result file if it exists
                  if [ -f "$result_file" ]; then
-                     local result_content=$(cat "$result_file")
-                     # Simple printf; assumes result_content doesn't contain problematic characters
-                     # For robustness, escaping might be needed depending on translation API output.
-                     printf "msgstr \"%s\"\n" "$result_content" # Write the translated msgstr
+                     # Read entire file content, potentially multiple lines
+                     result_content=$(cat "$result_file")
+                     # Escape quotes and backslashes in the result content for .db format
+                     escaped_result_content=$(echo "$result_content" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+                     # Handle potential newlines in result content - represent as \n ? .db usually expects literal newlines.
+                     # Assuming result file contains the final string representation.
+                     printf "msgstr \"%s\"\n" "$escaped_result_content" # Write the translated msgstr
                  else
                      debug_log "WARN" "Result file not found for $item_id (msgid starting line $msgid_line_start). Writing empty msgstr."
                      printf "msgstr \"\"\n" # Write empty msgstr if result file is missing
-                     # Consider incrementing failed_tasks here if missing result file is critical
                  fi
+             elif echo "$src_line" | grep -q '^msgstr[ \t]+""$'; then
+                 # Original source had msgid "" and msgstr "" - preserve it
+                 printf "msgid \"\"\n"
+                 printf "msgstr \"\"\n"
              else
-                 # msgstr line without a preceding msgid block (error in source file)
-                 printf "msgid \"\"\n" # Write empty msgid
+                 # msgstr line without a preceding valid msgid block (error in source file?)
+                 # Or maybe a non-empty msgstr in the source? Preserve it.
+                 printf "msgid \"\"\n" # Assume missing msgid
                  printf "%s\n" "$src_line" # Write the original msgstr line
+                 debug_log "WARN" "msgstr line found at $line_num without a preceding msgid block."
              fi
              current_msgid_content="" # Reset for the next block
              msgid_line_start=0
+             in_msgid_block=0
              continue
         fi
 
-        # Any other unexpected lines - write them directly to preserve structure
+        # Any other unexpected lines - write them directly to preserve structure? Or log error?
         printf "%s\n" "$src_line"
+        debug_log "WARN" "Unexpected line format encountered at line $line_num: $src_line"
+        # If we were in a msgid block, it ended unexpectedly.
+         if [ "$in_msgid_block" -eq 1 ] && [ -n "$current_msgid_content" ]; then
+              printf "msgid \"%s\"\n" "$current_msgid_content"
+              printf "msgstr \"\"\n" # Write empty msgstr
+              debug_log "WARN" "msgid block starting line $msgid_line_start ended unexpectedly by unknown line format $line_num."
+              current_msgid_content=""
+              in_msgid_block=0
+         fi
 
     done < "$source_db" # Read from the original source DB
 
     # Handle potential last msgid block if the file ends without a final msgstr
-    if [ -n "$current_msgid_content" ]; then
-        printf "msgid \"%s\"\n" "$current_msgid_content"
+    if [ "$in_msgid_block" -eq 1 ] && [ -n "$current_msgid_content" ]; then
+        printf "msgid \""
+        printf "%b" "$current_msgid_content" | sed 's/"/\\"/g'
+        printf "\"\n"
         printf "msgstr \"\"\n"
+        debug_log "WARN" "File ended while still in msgid block starting line $msgid_line_start."
     fi
     ) > "$target_db_tmp" # Write the assembled output to the temporary file
 
@@ -354,21 +374,32 @@ create_language_db_parallel() {
         debug_log "WARN" "Parallel DB creation completed with $failed_tasks failed translation task(s)."
         return_code=2 # Partial success
     else
+        # Check if any result files were actually expected but missing (logged during assembly)
+        # For now, assume 0 failed tasks means full success.
         debug_log "INFO" "Parallel DB creation completed successfully."
         return_code=0 # Full success
     fi
 
     # Move final file into place
     if [ -f "$target_db_tmp" ]; then
-        mv "$target_db_tmp" "$target_db"
-        if [ $? -eq 0 ]; then
-            debug_log "INFO" "Successfully created target DB: $target_db"
-            # Create marker file only on full or partial success
-            touch "$marker_file"
+        # Check if tmp file is empty - might indicate total failure despite exit codes
+        if [ ! -s "$target_db_tmp" ] && [ "$task_count" -gt 0 ]; then
+             debug_log "ERROR" "Final temporary DB file ($target_db_tmp) is empty after assembly. Critical error likely occurred."
+             rm -f "$target_db_tmp"
+             return_code=1
         else
-            debug_log "ERROR" "Failed to move temporary DB file to $target_db"
-            rm -f "$target_db_tmp" # Clean up temp file on move failure
-            return_code=1 # Critical error
+            mv "$target_db_tmp" "$target_db"
+            if [ $? -eq 0 ]; then
+                debug_log "INFO" "Successfully created target DB: $target_db"
+                # Create marker file only on full or partial success (adjust as needed)
+                if [ "$return_code" -eq 0 ] || [ "$return_code" -eq 2 ]; then
+                    touch "$marker_file"
+                fi
+            else
+                debug_log "ERROR" "Failed to move temporary DB file to $target_db"
+                rm -f "$target_db_tmp" # Clean up temp file on move failure
+                return_code=1 # Critical error
+            fi
         fi
     else
         debug_log "ERROR" "Final temporary DB file ($target_db_tmp) not found after assembly."
@@ -384,6 +415,9 @@ create_language_db_parallel() {
     debug_log "INFO" "Finished parallel DB creation for domain '$domain'. Final return code: $return_code"
     return "$return_code"
 }
+
+# ... (parallel_translate_task function should be here too) ...
+
 
 # ---------------------------------------------------------------------------------------------
 
