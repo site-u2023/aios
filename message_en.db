@@ -57,6 +57,7 @@ en|MSG_AUTO_CONFIG_UNKNOWN=ASN {as} unsupported{:} Manual setup required
 en|MSG_FETCHING_ISP_INFO=Retrieving ISP information
 en|MSG_ISP_INFO_SUCCESS=ISP information retrieved successfully
 en|MSG_ISP_INFO_FAILED=Failed to retrieve ISP informatio
+en|MSG_ISP_INFO_UNKNOWN=Unknoun
 
 en|MSG_QUERY_INFO=Querying {t}{:} {a} via {n}
 en|MSG_LOCATION_RESULT=Location information retrieved {s}
