@@ -52,8 +52,6 @@ TR_DIR="${TR_DIR:-$BASE_DIR/translation}"
 # Number of parallel translation tasks to run concurrently
 MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-4}"
 
-MESSAGE_DB="${MESSAGE_DB:-message_en.db}"
-
 # オンライン翻訳を有効化 (create_language_db logic removed reliance on this, but keep for potential external checks)
 ONLINE_TRANSLATION_ENABLED="yes"
 
@@ -196,7 +194,7 @@ create_language_db_parallel() {
     local domain_name="$3"       # Used for spinner message
     local target_lang_code="$4"
 
-    local base_db="${BASE_DIR}/${MESSAGE_DB}"
+    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
     local final_output_dir="/tmp/aios" # Consider making this configurable or use BASE_DIR
     local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
     local tmp_input_prefix="${TR_DIR}/message_${target_lang_code}.tmp.in."
