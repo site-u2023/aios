@@ -404,23 +404,29 @@ EOF
     return "$return_code" # Return the code from the parallel logic
 }
 
-# --- urlencode function (ensure it's available or include it) ---
-# Simple urlencode function (may need refinement for specific edge cases)
+# URL安全エンコード関数（seqを使わない最適化版）
+# @param $1: string - The string to encode.
+# @stdout: URL-encoded string.
 urlencode() {
-    local string="${1}"
-    local strlen=${#string}
+    local string="$1"
     local encoded=""
-    local pos c o
+    local char # This variable is no longer needed with the direct slicing
+    local i=0
+    local length=${#string} # POSIX compliant way to get length
 
-    for (( pos=0 ; pos<strlen ; pos++ )); do
-        c=${string:$pos:1}
-        case "$c" in
-            [-_.~a-zA-Z0-9]) o="${c}" ;;
-            *) printf -v o '%%%02x' "'$c" ;;
+    while [ "$i" -lt "$length" ]; do
+        char="${string:$i:1}"
+
+        case "$char" in
+            [a-zA-Z0-9.~_-]) encoded="${encoded}$char" ;;
+            " ") encoded="${encoded}%20" ;;
+            *)
+                encoded="${encoded}$(printf '%%%02X' "'$char")"
+                ;;
         esac
-        encoded+="${o}"
+        i=$((i + 1))
     done
-    printf "%s" "${encoded}"
+    printf "%s\n" "$encoded"
 }
 
 # Lingva Translate APIを使用した翻訳関数 (修正版)
