@@ -44,6 +44,8 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}" # Used for message.ch, network.ch etc.
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 
+MESSAGE_DB="${MESSAGE_DB:-${BASE_DIR}/message_en.db}"
+
 # Maximum number of parallel translation tasks. Can be overridden by environment variable.
 MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-2}"
 
