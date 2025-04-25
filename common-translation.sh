@@ -158,6 +158,37 @@ create_language_db_parallel() {
     fi
     debug_log "DEBUG" "Created temporary directory for results: $tmp_dir"
 
+    # --- Create AWK script file ---
+    local awk_script_file="${tmp_dir}/parse_db.awk"
+    cat > "$awk_script_file" << 'EOF'
+BEGIN { msgid_block = ""; line_num = 0 }
+/^[ \t]*#/ || /^[ \t]*$/ { next }
+/^msgid[ \t]+".*"$/ {
+    if (msgid_block != "") { msgid_block = "" }
+    gsub(/^msgid[ \t]+"/, ""); gsub(/"$/, "");
+    msgid_block = $0;
+    line_num = NR; next;
+}
+/^".*"$/ {
+     if (msgid_block != "") {
+         gsub(/^"/, ""); gsub(/"$/, "");
+         # Append with newline for potential multiline representation if needed later,
+         # but for task argument, just concatenate.
+         msgid_block = msgid_block $0;
+     }
+     next;
+}
+/^msgstr[ \t]+""$/ {
+     if (msgid_block != "") {
+         item_id = "Line-" line_num
+         # Use awk's printf for safer output formatting, especially if msgid_block contains special chars
+         printf "EXECUTE:|%s|%s|%s|%s/%s.txt|%s\n", item_id, msgid_block, target_lang, tmp_dir, item_id, trans_func
+     }
+     msgid_block = ""; next;
+}
+EOF
+    # --- End AWK script file creation ---
+
     local pids="" # Store background process IDs
     local task_count=0
 
@@ -165,42 +196,16 @@ create_language_db_parallel() {
     rm -f "$target_db_tmp" "$marker_file"
 
     # --- Launch Background Translation Tasks ---
-    debug_log "INFO" "Parsing source DB and launching translation tasks..."
-    awk -v tmp_dir="$tmp_dir" \
+    debug_log "INFO" "Parsing source DB and launching translation tasks using awk script: $awk_script_file"
+    # --- Modified AWK execution: use -f option ---
+    awk -f "$awk_script_file" \
+        -v tmp_dir="$tmp_dir" \
         -v target_lang="$target_lang_code" \
         -v trans_func="$translation_function_name" \
-        '
-        BEGIN { msgid_block = ""; line_num = 0 }
-        /^[ \t]*#/ || /^[ \t]*$/ { next }
-        /^msgid[ \t]+".*"$/ {
-            if (msgid_block != "") { msgid_block = "" }
-            gsub(/^msgid[ \t]+"/, ""); gsub(/"$/, "");
-            msgid_block = $0;
-            line_num = NR; next;
-        }
-        /^".*"$/ {
-             if (msgid_block != "") {
-                 gsub(/^"/, ""); gsub(/"$/, "");
-                 # Append with newline for potential multiline representation if needed later,
-                 # but for task argument, just concatenate.
-                 msgid_block = msgid_block $0;
-             }
-             next;
-        }
-        /^msgstr[ \t]+""$/ {
-             if (msgid_block != "") {
-                 item_id = "Line-" line_num
-                 result_file = tmp_dir "/" item_id ".txt"
-                 # Ensure msgid_block content doesn't contain pipes if passed raw
-                 # (Assume simple content for now, or needs escaping)
-                 print "EXECUTE:" item_id "|" msgid_block "|" target_lang "|" result_file "|" trans_func
-             }
-             msgid_block = ""; next;
-        }
-        # Removed empty action block and empty END block for ash awk compatibility
-        ' "$source_db" | while IFS='|' read -r prefix item_id source_text target_l result_f trans_f rest; do
-        # Use IFS='|' to correctly parse pipe-delimited fields
+        "$source_db" | while IFS='|' read -r prefix item_id source_text target_l result_f trans_f rest; do
+        # --- End Modified AWK execution ---
 
+        # Use IFS='|' to correctly parse pipe-delimited fields
         # Check if the line starts with EXECUTE: and has the expected number of fields
         if [ "$prefix" = "EXECUTE:" ] && [ -n "$item_id" ] && [ -n "$source_text" ] && [ -n "$target_l" ] && [ -n "$result_f" ] && [ -n "$trans_f" ]; then
 
@@ -220,7 +225,10 @@ create_language_db_parallel() {
                 # Handle potential full line read if IFS didn't match
                 local full_line="${prefix}${IFS}${item_id}${IFS}${source_text}${IFS}${target_l}${IFS}${result_f}${IFS}${trans_f}${IFS}${rest}"
                 if [ -n "$full_line" ]; then # Avoid logging empty lines from potential read failures
-                     debug_log "WARN" "Unexpected line format from awk or read error: $full_line"
+                     # Avoid logging if the line is just "EXECUTE:" due to printf format change
+                     if [ "$full_line" != "EXECUTE:" ]; then
+                          debug_log "WARN" "Unexpected line format from awk or read error: $full_line"
+                     fi
                 fi
         fi
     done
@@ -262,7 +270,7 @@ create_language_db_parallel() {
             printf "%s\n" "$src_line"
             # If we were in a msgid block, it ended unexpectedly. Write it out.
             if [ "$in_msgid_block" -eq 1 ] && [ -n "$current_msgid_content" ]; then
-                 printf "msgid \"%s\"\n" "$current_msgid_content"
+                 printf "msgid \"%s\"\n" "$current_msgid_content" # Consider escaping here too if needed
                  printf "msgstr \"\"\n" # Write empty msgstr
                  debug_log "WARN" "msgid block starting line $msgid_line_start ended unexpectedly by comment/empty line $line_num."
                  current_msgid_content=""
@@ -275,7 +283,7 @@ create_language_db_parallel() {
         if echo "$src_line" | grep -q '^msgid[ \t]'; then
             # If previous msgid block exists, write it with empty msgstr (error case)
             if [ "$in_msgid_block" -eq 1 ] && [ -n "$current_msgid_content" ]; then
-                printf "msgid \"%s\"\n" "$current_msgid_content"
+                printf "msgid \"%s\"\n" "$current_msgid_content" # Consider escaping here too if needed
                 printf "msgstr \"\"\n" # Write empty msgstr for previous block
                 debug_log "WARN" "New msgid block started line $line_num before previous block (line $msgid_line_start) had msgstr."
             fi
@@ -307,12 +315,9 @@ create_language_db_parallel() {
                  local result_file="${tmp_dir}/${item_id}.txt"
 
                  # Write the collected msgid block (potentially multiline)
-                 # Use printf to handle the embedded \n correctly if needed by target format,
-                 # but .db usually expects literal newlines within quotes.
-                 # Let's ensure printf interprets \n.
                  printf "msgid \""
-                 # Need to escape quotes within the msgid content if any
-                 printf "%b" "$current_msgid_content" | sed 's/"/\\"/g'
+                 # Escape quotes and backslashes within the msgid content before printing
+                 printf "%b" "$current_msgid_content" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
                  printf "\"\n"
 
                  # Read the corresponding result file if it exists
@@ -321,8 +326,6 @@ create_language_db_parallel() {
                      result_content=$(cat "$result_file")
                      # Escape quotes and backslashes in the result content for .db format
                      escaped_result_content=$(echo "$result_content" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
-                     # Handle potential newlines in result content - represent as \n ? .db usually expects literal newlines.
-                     # Assuming result file contains the final string representation.
                      printf "msgstr \"%s\"\n" "$escaped_result_content" # Write the translated msgstr
                  else
                      debug_log "WARN" "Result file not found for $item_id (msgid starting line $msgid_line_start). Writing empty msgstr."
@@ -350,7 +353,7 @@ create_language_db_parallel() {
         debug_log "WARN" "Unexpected line format encountered at line $line_num: $src_line"
         # If we were in a msgid block, it ended unexpectedly.
          if [ "$in_msgid_block" -eq 1 ] && [ -n "$current_msgid_content" ]; then
-              printf "msgid \"%s\"\n" "$current_msgid_content"
+              printf "msgid \"%s\"\n" "$current_msgid_content" # Consider escaping
               printf "msgstr \"\"\n" # Write empty msgstr
               debug_log "WARN" "msgid block starting line $msgid_line_start ended unexpectedly by unknown line format $line_num."
               current_msgid_content=""
@@ -362,7 +365,8 @@ create_language_db_parallel() {
     # Handle potential last msgid block if the file ends without a final msgstr
     if [ "$in_msgid_block" -eq 1 ] && [ -n "$current_msgid_content" ]; then
         printf "msgid \""
-        printf "%b" "$current_msgid_content" | sed 's/"/\\"/g'
+        # Escape quotes and backslashes within the msgid content before printing
+        printf "%b" "$current_msgid_content" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
         printf "\"\n"
         printf "msgstr \"\"\n"
         debug_log "WARN" "File ended while still in msgid block starting line $msgid_line_start."
@@ -407,6 +411,8 @@ create_language_db_parallel() {
     fi
 
     # --- Cleanup ---
+    # Remove the temporary awk script file
+    rm -f "$awk_script_file"
     if [ -d "$tmp_dir" ]; then
         debug_log "DEBUG" "Removing temporary directory: $tmp_dir"
         rm -rf "$tmp_dir"
@@ -415,6 +421,8 @@ create_language_db_parallel() {
     debug_log "INFO" "Finished parallel DB creation for domain '$domain'. Final return code: $return_code"
     return "$return_code"
 }
+
+# ... (ファイル内の他の関数) ...
 
 # ---------------------------------------------------------------------------------------------
 
