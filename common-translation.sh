@@ -1,7 +1,6 @@
 #!/bin/sh
 
-# SCRIPT_VERSION="2025-04-23-12-47" # Original version marker - Updated below
-SCRIPT_VERSION="2025-04-23-14-32" # Updated version based on last interaction time
+SCRIPT_VERSION="2025-04-25-00-00" # Updated version based on last interaction time
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -58,6 +57,56 @@ API_MAX_RETRIES="${API_MAX_RETRIES:-3}"
 WGET_CAPABILITY_DETECTED="" # Initialized by translate_main if detect_wget_capabilities exists
 
 AI_TRANSLATION_FUNCTIONS="translate_with_google translate_with_lingva" # 使用したい関数名を空白区切りで列挙
+
+# ------------------------------------------------------------------------------------------------
+
+# --- Helper Function for Background Translation Task ---
+
+# parallel_translate_task: Executes the specified translation function in the background.
+# Assumes debug_log and the target translation function (e.g., translate_with_google) are available.
+# @param $1: item_id (Unique identifier, e.g., "Line-123")
+# @param $2: source_text (The actual text to translate)
+# @param $3: target_lang_code (e.g., "ja")
+# @param $4: result_file_path (File to write the final text to)
+# @param $5: translation_function_name (e.g., "translate_with_google")
+# @stdout: (to result file) The translated text (on success) or original source_text (on failure).
+# @stderr: Logs progress using debug_log.
+# @return: 0 on success, 1 on translation failure.
+parallel_translate_task() {
+    local item_id="$1"
+    local source_text="$2"
+    local target_lang_code="$3"
+    local result_file="$4"
+    local translation_function_name="$5" # Function to call for translation
+    local translated_text=""
+    local exit_code=1 # Assume failure initially
+
+    # Check if the specified translation function exists
+    if ! type "$translation_function_name" >/dev/null 2>&1; then
+        debug_log "ERROR" "  [TASK $item_id] Translation function '$translation_function_name' not found!"
+        printf "%s\n" "$source_text" > "$result_file" # Write original text
+        return 1
+    fi
+
+    debug_log "DEBUG" "  [TASK $item_id] Starting '$translation_function_name' for: \"$(echo "$source_text" | cut -c 1-30)...\""
+
+    # Call the specified translation function dynamically
+    # Assuming the function takes (source_text, target_lang_code) and returns text on stdout, status code via $?
+    translated_text=$("$translation_function_name" "$source_text" "$target_lang_code")
+    exit_code=$?
+
+    if [ "$exit_code" -eq 0 ] && [ -n "$translated_text" ]; then
+        debug_log "DEBUG" "  [TASK $item_id] Translation successful via '$translation_function_name'."
+        printf "%s\n" "$translated_text" > "$result_file"
+        return 0 # Task success
+    else
+        debug_log "WARN" "  [TASK $item_id] Translation failed via '$translation_function_name' (Exit code: $exit_code). Using original text."
+        printf "%s\n" "$source_text" > "$result_file" # Write original text on failure
+        return 1 # Task failure (but we still write original text)
+    fi
+}
+
+# ---------------------------------------------------------------------------------------------
 
 # URL安全エンコード関数（seqを使わない最適化版）
 # @param $1: string - The string to encode.
