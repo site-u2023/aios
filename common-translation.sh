@@ -64,7 +64,7 @@ WGET_CAPABILITY_DETECTED="" # Initialized by translate_main if detect_wget_capab
 AI_TRANSLATION_FUNCTIONS="translate_with_google" # 使用したい関数名を空白区切りで列挙
 
 # --- Set MAX_PARALLEL_TASKS ---
-MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-$(head "${CACHE_DIR}/cpu_core.ch")}"
+MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
 
 # URL安全エンコード関数（seqを使わない最適化版）
 # @param $1: string - The string to encode.
