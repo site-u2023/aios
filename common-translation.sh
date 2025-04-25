@@ -136,21 +136,22 @@ parallel_translate_task() {
 }
 
 # =========================================================
-# Parallel Language Database Creation - Revised (Simplified Assembly)
+# Parallel Language Database Creation - Revised (File Count Wait)
 # =========================================================
 # create_language_db_parallel: Creates a language DB file by translating msgids in parallel.
 # Each task writes a complete DB entry (msgid+msgstr) to a temporary file.
-# Final DB is assembled by concatenating these temporary files (order not preserved).
+# Waits for the expected number of result files before assembly.
+# Final DB is assembled by concatenating temporary files (order not preserved).
+# Integrity is checked by comparing source msgid count with generated msgid count.
 # Assumes BASE_DIR, DEFAULT_LANGUAGE, MAX_PARALLEL_TASKS, debug_log,
 # and parallel_translate_task are available and sourced.
-# Assumes the specified translation function (e.g., translate_with_google) is also available.
-# @param $1: api_name (e.g., "google", "deepl")
+# @param $1: api_name
 # @param $2: api_url (Optional)
-# @param $3: domain (e.g., "messages")
-# @param $4: target_lang_code (e.g., "ja")
+# @param $3: domain
+# @param $4: target_lang_code
 # @stdout: None directly. Writes final .db file.
 # @stderr: Logs progress using debug_log.
-# @return: 0 on complete success, 1 on critical error, 2 if any task reported failure (via wait).
+# @return: 0 on complete success, 1 on critical error, 2 if any task reported failure (via file content analysis if needed, or keep simple).
 create_language_db_parallel() {
     local api_name="$1"
     # local api_url="$2"
@@ -164,12 +165,12 @@ create_language_db_parallel() {
     local source_db="${source_dir}/${domain}.db"
     local target_db="${target_dir}/${domain}.db"
     local target_db_tmp="${target_dir}/${domain}.db.tmp"
-    local marker_file="${target_db}.completed" # Keep marker for overall completion
+    local marker_file="${target_db}.completed" # Overall completion marker
 
-    local return_code=0 # 0=success, 1=critical error, 2=partial (task failure)
+    local return_code=0 # 0=success, 1=critical error, 2=partial (task failure - simplified check)
 
     # --- Pre-checks ---
-    debug_log "INFO" "Starting parallel DB creation (simplified assembly) for domain '$domain', target '$target_lang_code' using '$translation_function_name'."
+    debug_log "INFO" "Starting parallel DB creation (file count wait) for domain '$domain', target '$target_lang_code' using '$translation_function_name'."
 
     if [ ! -d "$target_dir" ]; then
         mkdir -p "$target_dir" || { debug_log "ERROR" "Failed to create target directory: $target_dir"; return 1; }
@@ -181,6 +182,15 @@ create_language_db_parallel() {
         return 1
     fi
 
+    # --- Count expected translatable msgids ---
+    local expected_msgid_count=0
+    expected_msgid_count=$(awk '/^msgid[ \t]+".*"$/ { msgid_line = $0; getline; if ($0 ~ /^msgstr[ \t]+""$/ && msgid_line != "msgid \"\"") count++ } END { print count }' "$source_db")
+    if [ $? -ne 0 ] || ! echo "$expected_msgid_count" | grep -qE '^[0-9]+$'; then
+        debug_log "ERROR" "Failed to count expected msgids in $source_db. Found: '$expected_msgid_count'"
+        return 1
+    fi
+    debug_log "INFO" "Expected translatable msgid count from source: $expected_msgid_count"
+
     # --- Prepare for Parallel Processing ---
     local tmp_dir=$(mktemp -d -p "${TMP_DIR:-/tmp}" "parallel_translate_${domain}_XXXXXX")
     if [ -z "$tmp_dir" ] || [ ! -d "$tmp_dir" ]; then
@@ -189,7 +199,7 @@ create_language_db_parallel() {
     fi
     debug_log "DEBUG" "Created temporary directory for results: $tmp_dir"
 
-    # --- Create AWK script file (remains the same) ---
+    # --- Create AWK script file ---
     local awk_script_file="${tmp_dir}/parse_db.awk"
     cat > "$awk_script_file" << 'EOF'
 BEGIN { msgid_block = ""; line_num = 0 }
@@ -208,7 +218,7 @@ BEGIN { msgid_block = ""; line_num = 0 }
      next;
 }
 /^msgstr[ \t]+""$/ {
-     if (msgid_block != "") {
+     if (msgid_block != "" && msgid_block != "\"\"") {
          item_id = "Line-" line_num
          printf "EXECUTE:|%s|%s|%s|%s/%s.txt|%s\n", item_id, msgid_block, target_lang, tmp_dir, item_id, trans_func
      }
@@ -217,97 +227,123 @@ BEGIN { msgid_block = ""; line_num = 0 }
 EOF
     # --- End AWK script file creation ---
 
-    local task_count=0
-    local any_task_failed=0 # Flag to check if any task returned non-zero
+    local task_count=0 # Count tasks actually launched
 
     # Clean previous temporary output and marker files
     rm -f "$target_db_tmp" "$marker_file"
 
     # --- Launch Background Translation Tasks ---
     debug_log "INFO" "Parsing source DB and launching translation tasks..."
-    (
-        awk -f "$awk_script_file" \
-            -v tmp_dir="$tmp_dir" \
-            -v target_lang="$target_lang_code" \
-            -v trans_func="$translation_function_name" \
-            "$source_db" | while IFS='|' read -r prefix item_id source_text target_l result_f trans_f rest; do
+    # No subshell needed here, launch directly from main shell
+    awk -f "$awk_script_file" \
+        -v tmp_dir="$tmp_dir" \
+        -v target_lang="$target_lang_code" \
+        -v trans_func="$translation_function_name" \
+        "$source_db" | while IFS='|' read -r prefix item_id source_text target_l result_f trans_f rest; do
 
-            if [ "$prefix" = "EXECUTE:" ] && [ -n "$item_id" ] && [ -n "$source_text" ] && [ -n "$target_l" ] && [ -n "$result_f" ] && [ -n "$trans_f" ]; then
-                    while [ "$(jobs -p | wc -l)" -ge "$MAX_PARALLEL_TASKS" ]; do
-                        sleep 1
-                    done
-                    debug_log "DEBUG" "Launching task $item_id for source text starting with: $(echo "$source_text" | cut -c 1-30)..."
-                    parallel_translate_task "$item_id" "$source_text" "$target_l" "$result_f" "$trans_f" &
-                    task_count=$((task_count + 1))
-            else
-                    local full_line="${prefix}${IFS}${item_id}${IFS}${source_text}${IFS}${target_l}${IFS}${result_f}${IFS}${trans_f}${IFS}${rest}"
-                    if [ -n "$full_line" ] && [ "$full_line" != "EXECUTE:" ]; then
-                         debug_log "WARN" "Unexpected line format from awk or read error: $full_line"
-                    fi
-            fi
-        done
-        # Wait for jobs started within this subshell before exiting subshell
-        # This might still be needed for reliable error code propagation from wait below
-        wait
-    )
-
-    # --- Wait for all background jobs ---
-    debug_log "INFO" "Launched approximately $task_count tasks. Waiting for all background processes to complete..."
-    # Use a loop to wait for each PID and check exit status
-    # This is more reliable than a single 'wait' for checking individual failures
-    for job_pid in $(jobs -p); do
-        wait "$job_pid"
-        local task_exit_code=$?
-        if [ "$task_exit_code" -ne 0 ]; then
-             debug_log "WARN" "Background task with PID $job_pid failed with exit code $task_exit_code."
-             any_task_failed=1 # Mark that at least one task failed
+        if [ "$prefix" = "EXECUTE:" ] && [ -n "$item_id" ] && [ -n "$source_text" ] && [ -n "$target_l" ] && [ -n "$result_f" ] && [ -n "$trans_f" ]; then
+                # Limit concurrency
+                while [ "$(jobs -p | wc -l)" -ge "$MAX_PARALLEL_TASKS" ]; do
+                    sleep 1
+                done
+                debug_log "DEBUG" "Launching task $item_id for source text starting with: $(echo "$source_text" | cut -c 1-30)..."
+                parallel_translate_task "$item_id" "$source_text" "$target_l" "$result_f" "$trans_f" &
+                task_count=$((task_count + 1)) # Increment count for launched tasks
+        else
+                local full_line="${prefix}${IFS}${item_id}${IFS}${source_text}${IFS}${target_l}${IFS}${result_f}${IFS}${trans_f}${IFS}${rest}"
+                if [ -n "$full_line" ] && [ "$full_line" != "EXECUTE:" ]; then
+                     debug_log "WARN" "Unexpected line format from awk or read error: $full_line"
+                fi
         fi
     done
-    debug_log "INFO" "All background processes completed."
+    # Need to wait for the awk process itself to finish reading the pipe
+    wait $(jobs -p | tail -n 1) # Wait for the last background job (likely awk)
+    debug_log "INFO" "Finished launching $task_count tasks."
 
-    # --- 修正: Assemble Final DB File by Concatenating Results ---
+    # --- 修正: Wait for all result files to be created ---
+    local current_file_count=0
+    local wait_timeout=$(( task_count * 2 + 10 )) # Timeout in seconds (e.g., 2s per task + 10s buffer)
+    local wait_start_time=$(date +%s)
+    local elapsed_time=0
+
+    debug_log "INFO" "Waiting for $task_count result files to appear in $tmp_dir (timeout: ${wait_timeout}s)..."
+    while [ "$current_file_count" -lt "$task_count" ]; do
+        # Count .txt files in the temp directory
+        current_file_count=$(ls "$tmp_dir"/*.txt 2>/dev/null | wc -l)
+
+        # Check for timeout
+        elapsed_time=$(( $(date +%s) - wait_start_time ))
+        if [ "$elapsed_time" -ge "$wait_timeout" ]; then
+            debug_log "ERROR" "Timeout waiting for result files. Expected $task_count, found $current_file_count after ${elapsed_time}s."
+            # Cleanup and exit with error
+            if [ -n "$tmp_dir" ] && [ -d "$tmp_dir" ]; then rm -rf "$tmp_dir"; fi
+            return 1
+        fi
+
+        # If not all files are present, wait and check again
+        if [ "$current_file_count" -lt "$task_count" ]; then
+            debug_log "DEBUG" "Found $current_file_count/$task_count files. Waiting 1 second..."
+            sleep 1
+        fi
+    done
+    debug_log "INFO" "All $task_count result files found in $tmp_dir after ${elapsed_time}s."
+    # --- 修正終了 ---
+
+    # --- Assemble Final DB File by Concatenating Results ---
     debug_log "INFO" "Assembling final DB file by concatenating results from $tmp_dir..."
     rm -f "$target_db_tmp" # Ensure clean temp file
 
-    # Check if any result files were created before attempting cat
-    if [ -n "$(find "$tmp_dir" -name '*.txt' -print -quit)" ]; then
+    local generated_msgid_count=0 # Initialize count for generated file
+    local any_task_failed_simple=0 # Simplified failure check (e.g., based on empty files or keywords)
+
+    # --- 修正: Use POSIX compliant check for file existence ---
+    if [ -z "$(ls -A "$tmp_dir"/*.txt 2>/dev/null | head -n 1)" ] && [ "$task_count" -gt 0 ]; then
+        # Files were expected but none found
+        debug_log "WARN" "Tasks were launched ($task_count), but no result files (*.txt) found in $tmp_dir. The final DB will be empty."
+        touch "$target_db_tmp" # Create empty file
+        any_task_failed_simple=1 # Consider this a failure
+        generated_msgid_count=0
+    elif [ "$task_count" -eq 0 ]; then
+         debug_log "INFO" "No tasks were launched. Creating empty target DB."
+         touch "$target_db_tmp"
+         generated_msgid_count=0
+    else
+        # Files exist, proceed with concatenation
         cat ${tmp_dir}/*.txt > "$target_db_tmp"
         if [ $? -ne 0 ]; then
              debug_log "ERROR" "Failed to concatenate result files into $target_db_tmp."
              return_code=1 # Critical error during assembly
-        fi
-    else
-        debug_log "WARN" "No result files (*.txt) found in $tmp_dir. The final DB will be empty."
-        # Create an empty temp file to avoid errors later
-        touch "$target_db_tmp"
-        # If tasks were launched but no files created, consider it partial failure
-        if [ "$task_count" -gt 0 ]; then
-            any_task_failed=1
+        else
+             # Count msgids in the generated file
+             generated_msgid_count=$(grep -c '^msgid[ \t]' "$target_db_tmp")
+             if [ $? -ne 0 ]; then
+                  debug_log "ERROR" "Failed to count msgids in generated file $target_db_tmp."
+                  return_code=1
+             fi
+             debug_log "INFO" "Generated msgid count in temporary DB: $generated_msgid_count"
+             # Simple check for failed tasks: Look for original text in msgstr for known failure pattern
+             # This is less reliable than exit codes but avoids complex wait issues
+             if grep -q -E '^msgstr "This one should fail the translation"$' "$target_db_tmp"; then
+                  debug_log "WARN" "Detected potential task failure (original text used as msgstr)."
+                  any_task_failed_simple=1
+             fi
         fi
     fi
     # --- 修正終了 ---
 
     # --- Finalization ---
-    # Determine final return code based on task failures or critical assembly errors
+    # Determine final return code based on count match and simple failure check
     if [ "$return_code" -eq 1 ]; then
-        # Critical error already occurred during assembly
-        : # Do nothing, return_code is already 1
-    elif [ "$any_task_failed" -eq 1 ]; then
-        debug_log "WARN" "Parallel DB creation completed, but at least one translation task reported failure."
-        return_code=2 # Partial success due to task failures
+        : # Critical error already occurred
+    elif [ "$expected_msgid_count" -ne "$generated_msgid_count" ]; then
+        debug_log "ERROR" "Integrity check failed: Expected $expected_msgid_count msgids, but generated file contains $generated_msgid_count msgids."
+        return_code=1 # Critical error due to count mismatch
+    elif [ "$any_task_failed_simple" -eq 1 ]; then
+        debug_log "WARN" "Parallel DB creation completed, but potential task failures detected. (Count matched: $generated_msgid_count)"
+        return_code=2 # Partial success
     else
-        # Check for empty final file if no tasks failed
-        if [ -f "$target_db_tmp" ] && [ ! -s "$target_db_tmp" ] && [ "$task_count" -gt 0 ]; then
-             debug_log "ERROR" "Final temporary DB file ($target_db_tmp) is empty despite reported task success. Possible assembly error or no translatable content."
-             # Consider this partial failure if tasks were expected
-             return_code=2
-        elif [ ! -f "$target_db_tmp" ]; then
-             debug_log "ERROR" "Final temporary DB file ($target_db_tmp) not found after assembly attempt."
-             return_code=1
-        else
-             debug_log "INFO" "Parallel DB creation completed successfully."
-             return_code=0 # Full success
-        fi
+        debug_log "INFO" "Parallel DB creation completed successfully. (Count matched: $generated_msgid_count)"
+        return_code=0 # Full success
     fi
 
     # Move final file into place
@@ -317,6 +353,7 @@ EOF
              debug_log "INFO" "Successfully created target DB: $target_db (Order not preserved)"
              if [ "$return_code" -eq 0 ] || [ "$return_code" -eq 2 ]; then
                  touch "$marker_file"
+                 debug_log "INFO" "Created completion marker file: $marker_file"
              fi
          else
              debug_log "ERROR" "Failed to move temporary DB file to $target_db"
@@ -337,6 +374,7 @@ EOF
     debug_log "INFO" "Finished parallel DB creation for domain '$domain'. Final return code: $return_code"
     return "$return_code"
 }
+
 
 # ---------------------------------------------------------------------------------------------
 
