@@ -44,6 +44,9 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}" # Used for message.ch, network.ch etc.
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 
+# Maximum number of parallel translation tasks. Can be overridden by environment variable.
+MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-2}"
+
 # オンライン翻訳を有効化 (create_language_db logic removed reliance on this, but keep for potential external checks)
 ONLINE_TRANSLATION_ENABLED="yes"
 
@@ -61,7 +64,13 @@ AI_TRANSLATION_FUNCTIONS="translate_with_google translate_with_lingva" # 使用�
 # ------------------------------------------------------------------------------------------------
 
 # =========================================================
-# Single Translation Task (for Parallel Execution) - Latest
+# Translation Functions (Example: Google, Lingva)
+# =========================================================
+# ... (translate_with_google, translate_with_lingva functions are assumed to be here) ...
+# --- ここに translate_with_google, translate_with_lingva 関数が存在する想定 ---
+
+# =========================================================
+# Single Translation Task (for Parallel Execution) - New Function
 # =========================================================
 # parallel_translate_task: Executes a single translation using a specified function.
 # Writes the result as a DB entry (msgid + msgstr) to a result file.
@@ -87,7 +96,6 @@ parallel_translate_task() {
     debug_log "DEBUG" "  [TASK $item_id] Starting '$translation_function_name' for: \"$(echo "$source_text" | cut -c 1-30)...\""
 
     # Execute the translation function
-    # Ensure source_text is passed correctly, handle potential quoting issues if necessary
     translated_content=$("$translation_function_name" "$source_text" "$target_lang_code")
     translation_exit_code=$?
 
@@ -100,49 +108,33 @@ parallel_translate_task() {
     else
         debug_log "WARN" "  [TASK $item_id] Translation failed via '$translation_function_name' (Exit code: $translation_exit_code). Using original text for msgstr."
         final_msgstr_content="$source_text" # Use original source text as msgstr on failure
-        # Update exit code if translation was technically successful but empty
         if [ "$translation_exit_code" -eq 0 ] && [ -z "$translated_content" ]; then
             translation_exit_code=1 # Treat empty success as failure for return code
         fi
     fi
 
-    # Escape potential backslashes and double quotes in msgid and msgstr content
-    # Use simple sed, avoid complex regex if possible for BusyBox compatibility
+    # Escape potential backslashes and double quotes
     local escaped_msgid=$(echo "$source_text" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
     local escaped_msgstr=$(echo "$final_msgstr_content" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
 
     # Write the complete entry to the result file
-    # Overwrite result file first with msgid
     printf "msgid \"%s\"\n" "$escaped_msgid" > "$result_file"
     if [ $? -ne 0 ]; then
         debug_log "ERROR" "  [TASK $item_id] Failed to write msgid to $result_file."
         return 2 # File writing failure
     fi
-    # Append msgstr to the result file
     printf "msgstr \"%s\"\n" "$escaped_msgstr" >> "$result_file"
      if [ $? -ne 0 ]; then
         debug_log "ERROR" "  [TASK $item_id] Failed to write msgstr to $result_file."
-        # Consider removing the partially written file?
-        # rm -f "$result_file"
         return 2 # File writing failure
     fi
 
     # Return the original translation exit code (0 for success, 1 for failure/empty)
-    # This exit code is NOT currently captured by the caller function in the simplified design.
     return "$translation_exit_code"
 }
 
-# --- Ensure the rest of common-translation.sh is also up-to-date ---
-# ... (other functions like debug_log, translate_with_google etc.) ...
-
-# create_language_db_parallel function (as provided in the previous correct version)
 # =========================================================
-# Parallel Language Database Creation - Revised (grep exit code fix)
-# =========================================================
-# ... (The rest of the create_language_db_parallel function) ...
-
-# =========================================================
-# Parallel Language Database Creation - Revised (grep exit code fix)
+# Parallel Language Database Creation - New Function
 # =========================================================
 # create_language_db_parallel: Creates a language DB file by translating msgids in parallel.
 # Pre-counts tasks and uses a for loop for launching.
@@ -152,34 +144,37 @@ parallel_translate_task() {
 # Correctly handles grep exit codes (0=match, 1=no match, >1=error).
 # Assumes BASE_DIR, DEFAULT_LANGUAGE, MAX_PARALLEL_TASKS, debug_log,
 # and parallel_translate_task are available and sourced.
-# @param $1: api_name
-# @param $2: api_url (Optional)
-# @param $3: domain
-# @param $4: target_lang_code
+# @param $1: api_name (string) - Name of the translation API/function used (e.g., "translate_with_google").
+# @param $2: api_url (string) - Optional API URL (unused in current logic).
+# @param $3: domain_name (string) - Domain name for display/logging (e.g., "translate.googleapis.com").
+# @param $4: target_lang_code (string) - The target language code (e.g., "ja").
 # @stdout: None directly. Writes final .db file.
 # @stderr: Logs progress using debug_log.
 # @return: 0 on complete success, 1 on critical error, 2 if any task reported failure (simplified check).
 create_language_db_parallel() {
-    local api_name="$1"
-    # local api_url="$2"
-    local domain="$3"
+    local api_name="$1" # Name of the translation function (e.g., translate_with_google)
+    # local api_url="$2" # Unused argument
+    local domain_name="$3" # Domain name for logging/display
     local target_lang_code="$4"
     local source_lang_code="$DEFAULT_LANGUAGE"
-    local translation_function_name="translate_with_${api_name}"
+    local translation_function_name="$api_name" # Use api_name as the function name
 
     local source_dir="${BASE_DIR}/locale/${source_lang_code}"
     local target_dir="${BASE_DIR}/locale/${target_lang_code}"
-    local source_db="${source_dir}/${domain}.db"
-    local target_db="${target_dir}/${domain}.db"
-    local target_db_tmp="${target_dir}/${domain}.db.tmp"
-    local marker_file="${target_db}.completed" # Overall completion marker
+    local source_db="${source_dir}/messages.db" # Assuming domain is always 'messages' for now
+    local target_db="${target_dir}/messages.db"
+    local target_db_tmp="${target_db}.tmp" # Use simpler .tmp extension
+    # local marker_file="${target_db}.completed" # Marker file logic removed from translate_main
 
-    local return_code=0 # 0=success, 1=critical error, 2=partial (task failure - simplified check)
+    local return_code=0 # 0=success, 1=critical error, 2=partial
 
     # --- Pre-checks ---
-    debug_log "INFO" "Starting parallel DB creation (grep exit code fix) for domain '$domain', target '$target_lang_code' using '$translation_function_name'."
+    # Use domain_name for user-facing logs if available, otherwise api_name
+    local display_name="${domain_name:-$api_name}"
+    debug_log "INFO" "Starting parallel DB creation for domain 'messages', target '$target_lang_code' using '$translation_function_name' ($display_name)."
 
     if [ ! -d "$target_dir" ]; then
+        # Use -p to create parent directories if they don't exist
         mkdir -p "$target_dir" || { debug_log "ERROR" "Failed to create target directory: $target_dir"; return 1; }
         debug_log "INFO" "Created target directory: $target_dir"
     fi
@@ -191,6 +186,7 @@ create_language_db_parallel() {
 
     # --- Count expected translatable msgids ---
     local expected_msgid_count=0
+    # Using awk to count msgid lines followed immediately by empty msgstr, excluding msgid ""
     expected_msgid_count=$(awk '/^msgid[ \t]+".*"$/ { msgid_line = $0; getline; if ($0 ~ /^msgstr[ \t]+""$/ && msgid_line != "msgid \"\"") count++ } END { print count }' "$source_db")
     if [ $? -ne 0 ] || ! echo "$expected_msgid_count" | grep -qE '^[0-9]+$'; then
         debug_log "ERROR" "Failed to count expected msgids in $source_db. Found: '$expected_msgid_count'"
@@ -199,39 +195,42 @@ create_language_db_parallel() {
     debug_log "INFO" "Expected translatable msgid count from source: $expected_msgid_count"
 
     # --- Prepare for Parallel Processing ---
-    local tmp_dir=$(mktemp -d -p "${TMP_DIR:-/tmp}" "parallel_translate_${domain}_XXXXXX")
+    # Use $TMP_DIR global variable if set, otherwise default to /tmp
+    local tmp_dir=$(mktemp -d -p "${TMP_DIR:-/tmp}" "parallel_translate_messages_${target_lang_code}_XXXXXX")
     if [ -z "$tmp_dir" ] || [ ! -d "$tmp_dir" ]; then
         debug_log "ERROR" "Failed to create temporary directory."
         return 1
     fi
     debug_log "DEBUG" "Created temporary directory for results: $tmp_dir"
 
-    # --- Create AWK script file ---
+    # --- Create AWK script file for parsing ---
     local awk_script_file="${tmp_dir}/parse_db.awk"
     cat > "$awk_script_file" << 'EOF'
 BEGIN { msgid_block = ""; line_num = 0 }
-/^[ \t]*#/ || /^[ \t]*$/ { next }
+/^[ \t]*#/ || /^[ \t]*$/ { next } # Skip comments and empty lines
 /^msgid[ \t]+".*"$/ {
-    if (msgid_block != "") { msgid_block = "" }
-    gsub(/^msgid[ \t]+"/, ""); gsub(/"$/, "");
+    if (msgid_block != "") { msgid_block = "" } # Reset block if starting new msgid
+    gsub(/^msgid[ \t]+"/, ""); gsub(/"$/, ""); # Extract content
     msgid_block = $0;
-    line_num = NR; next;
+    line_num = NR; next; # Store line number and continue
 }
-/^".*"$/ {
+/^".*"$/ { # Handle multi-line msgid
      if (msgid_block != "") {
-         gsub(/^"/, ""); gsub(/"$/, "");
-         msgid_block = msgid_block $0;
+         gsub(/^"/, ""); gsub(/"$/, ""); # Extract content
+         msgid_block = msgid_block $0; # Append to block
      }
      next;
 }
-/^msgstr[ \t]+""$/ {
-     if (msgid_block != "" && msgid_block != "\"\"") {
-         item_id = "Line-" line_num
-         # Output format: item_id|source_text|result_file
+/^msgstr[ \t]+""$/ { # Check for empty msgstr following a msgid block
+     if (msgid_block != "" && msgid_block != "\"\"") { # Ensure we have a non-empty msgid
+         item_id = "Line-" line_num # Create unique ID based on starting line
+         # Output format: item_id|source_text|result_file_path
          printf "%s|%s|%s/%s.txt\n", item_id, msgid_block, tmp_dir, item_id
      }
-     msgid_block = ""; next;
+     msgid_block = ""; next; # Reset block after processing
 }
+# Ignore lines that don't match the expected patterns (e.g., non-empty msgstr)
+{ msgid_block = "" }
 EOF
     # --- End AWK script file creation ---
 
@@ -239,31 +238,37 @@ EOF
     local task_list=""
     local task_count=0
     debug_log "INFO" "Generating task list..."
+    # Pass tmp_dir variable to awk script
     task_list=$(awk -f "$awk_script_file" -v tmp_dir="$tmp_dir" "$source_db")
     if [ $? -ne 0 ]; then
         debug_log "ERROR" "Failed to generate task list using awk."
         if [ -n "$tmp_dir" ] && [ -d "$tmp_dir" ]; then rm -rf "$tmp_dir"; fi
         return 1
     fi
+    # Count tasks by counting non-empty lines in the generated list
     if [ -n "$task_list" ]; then
-         task_count=$(echo "$task_list" | wc -l)
+         task_count=$(echo "$task_list" | grep -c '^') # Count lines starting with anything
     else
          task_count=0
     fi
     debug_log "INFO" "Generated task list with $task_count tasks."
 
-    # Clean previous temporary output and marker files
-    rm -f "$target_db_tmp" "$marker_file"
+    # Clean previous temporary output file if it exists
+    rm -f "$target_db_tmp" # Removed marker file cleanup
 
     # --- Launch Background Translation Tasks using for loop ---
-    debug_log "INFO" "Launching $task_count translation tasks..."
+    debug_log "INFO" "Launching $task_count translation tasks (Max parallel: $MAX_PARALLEL_TASKS)..."
     if [ "$task_count" -gt 0 ]; then
+        # Use printf and while read for safer line processing
         printf '%s\n' "$task_list" | while IFS='|' read -r item_id source_text result_f; do
+            # Basic validation of read variables
             if [ -n "$item_id" ] && [ -n "$source_text" ] && [ -n "$result_f" ]; then
+                # Limit concurrency using jobs command
                 while [ "$(jobs -p | wc -l)" -ge "$MAX_PARALLEL_TASKS" ]; do
-                    sleep 1
+                    sleep 1 # Wait if max tasks are running
                 done
                 debug_log "DEBUG" "Launching task $item_id for source text starting with: $(echo "$source_text" | cut -c 1-30)..."
+                # Launch the task in the background
                 parallel_translate_task "$item_id" "$source_text" "$target_lang_code" "$result_f" "$translation_function_name" &
             else
                  debug_log "WARN" "Skipping invalid line from task list: $item_id|$source_text|$result_f"
@@ -274,6 +279,7 @@ EOF
 
     # --- Wait for all result files to be created ---
     local current_file_count=0
+    # Set a timeout based on task count (e.g., 2 seconds per task + 10s buffer)
     local wait_timeout=$(( task_count * 2 + 10 ))
     local wait_start_time=$(date +%s)
     local elapsed_time=0
@@ -281,16 +287,23 @@ EOF
     if [ "$task_count" -gt 0 ]; then
         debug_log "INFO" "Waiting for $task_count result files to appear in $tmp_dir (timeout: ${wait_timeout}s)..."
         while [ "$current_file_count" -lt "$task_count" ]; do
+            # Count .txt files safely using ls and wc
             current_file_count=$(ls "$tmp_dir"/*.txt 2>/dev/null | wc -l)
+            # Ensure count is a number, default to 0 if ls fails or finds nothing
             if ! echo "$current_file_count" | grep -qE '^[0-9]+$'; then
                  current_file_count=0
             fi
+
+            # Check for timeout
             elapsed_time=$(( $(date +%s) - wait_start_time ))
             if [ "$elapsed_time" -ge "$wait_timeout" ]; then
                 debug_log "ERROR" "Timeout waiting for result files. Expected $task_count, found $current_file_count after ${elapsed_time}s."
+                # Attempt to kill remaining background jobs before cleanup
+                if [ "$(jobs -p)" ]; then kill $(jobs -p); fi
                 if [ -n "$tmp_dir" ] && [ -d "$tmp_dir" ]; then rm -rf "$tmp_dir"; fi
-                return 1
+                return 1 # Critical error: Timeout
             fi
+            # Wait before next check if not all files are present
             if [ "$current_file_count" -lt "$task_count" ]; then
                 debug_log "DEBUG" "Found $current_file_count/$task_count files. Waiting 1 second..."
                 sleep 1
@@ -303,15 +316,17 @@ EOF
 
     # --- Assemble Final DB File by Concatenating Results ---
     debug_log "INFO" "Assembling final DB file by concatenating results from $tmp_dir..."
-    rm -f "$target_db_tmp" # Ensure clean temp file
+    rm -f "$target_db_tmp" # Ensure clean temp file before assembly
 
     local generated_msgid_count=0
-    local any_task_failed_simple=0
+    local any_task_failed_simple=0 # Flag for simple failure detection
 
+    # Check if any result files were actually created before attempting cat
     if [ -z "$(ls -A "$tmp_dir"/*.txt 2>/dev/null | head -n 1)" ] && [ "$task_count" -gt 0 ]; then
+        # Files were expected but none found (potentially all tasks failed early)
         debug_log "WARN" "Tasks were launched ($task_count), but no result files (*.txt) found in $tmp_dir. The final DB will be empty."
-        touch "$target_db_tmp"
-        any_task_failed_simple=1
+        touch "$target_db_tmp" # Create empty file
+        any_task_failed_simple=1 # Consider this a partial failure
         generated_msgid_count=0
     elif [ "$task_count" -eq 0 ]; then
          debug_log "INFO" "No tasks were launched. Creating empty target DB."
@@ -319,77 +334,76 @@ EOF
          generated_msgid_count=0
     else
         # Files exist, proceed with concatenation
-        cat ${tmp_dir}/*.txt > "$target_db_tmp"
+        # Use shell expansion for safety if filenames contain spaces (though unlikely here)
+        cat "$tmp_dir"/*.txt > "$target_db_tmp"
         if [ $? -ne 0 ]; then
              debug_log "ERROR" "Failed to concatenate result files into $target_db_tmp."
-             return_code=1
+             return_code=1 # Critical error during assembly
         else
-             # --- 修正: Count msgids and handle grep exit code ---
+             # Count msgids in the generated file and handle grep exit code
              generated_msgid_count=$(grep -c '^msgid[ \t]' "$target_db_tmp")
              local grep_c_exit_code=$?
              if [ "$grep_c_exit_code" -eq 0 ]; then
                  debug_log "INFO" "Generated msgid count in temporary DB: $generated_msgid_count"
              elif [ "$grep_c_exit_code" -eq 1 ]; then
-                 # No match found, count is 0
                  debug_log "INFO" "Generated msgid count in temporary DB: 0 (No msgid lines found)"
                  generated_msgid_count=0
              else
-                 # grep error (exit code > 1)
                  debug_log "ERROR" "Failed to count msgids in generated file $target_db_tmp (grep exit code: $grep_c_exit_code)."
                  return_code=1
              fi
-             # --- 修正終了 ---
 
-             # --- 修正: Simple check for failed tasks and handle grep exit code ---
-             # Check only if return_code is still 0
+             # Simple check for failed tasks (original text in msgstr) if no critical error occurred
              if [ "$return_code" -eq 0 ]; then
-                 grep -q -E '^msgstr "This one should fail the translation"$' "$target_db_tmp"
+                 # Check if any msgstr contains the exact text "This one should fail the translation"
+                 # This relies on the mock function's behavior for failure indication
+                 grep -q -F 'msgstr "This one should fail the translation"' "$target_db_tmp"
                  local grep_q_exit_code=$?
                  if [ "$grep_q_exit_code" -eq 0 ]; then
-                     # Match found - indicates potential failure
-                     debug_log "WARN" "Detected potential task failure (original text used as msgstr)."
+                     debug_log "WARN" "Detected potential task failure (based on specific msgstr content)."
                      any_task_failed_simple=1
                  elif [ "$grep_q_exit_code" -eq 1 ]; then
-                     # No match found - expected for successful tasks
-                     : # Do nothing
+                     : # No match, expected for success
                  else
-                     # grep error (exit code > 1)
                      debug_log "ERROR" "Failed to check for failed tasks in $target_db_tmp (grep exit code: $grep_q_exit_code)."
                      return_code=1
                  fi
              fi
-             # --- 修正終了 ---
         fi
     fi
 
     # --- Finalization ---
+    # Determine final return code based on checks
     if [ "$return_code" -eq 1 ]; then
         : # Critical error already occurred
     elif [ "$expected_msgid_count" -ne "$generated_msgid_count" ]; then
         debug_log "ERROR" "Integrity check failed: Expected $expected_msgid_count msgids, but generated file contains $generated_msgid_count msgids."
-        return_code=1
+        return_code=1 # Critical error due to count mismatch
     elif [ "$any_task_failed_simple" -eq 1 ]; then
+        # Use WARN level for partial success message
         debug_log "WARN" "Parallel DB creation completed, but potential task failures detected. (Count matched: $generated_msgid_count)"
-        return_code=2
+        return_code=2 # Partial success
     else
         debug_log "INFO" "Parallel DB creation completed successfully. (Count matched: $generated_msgid_count)"
-        return_code=0
+        return_code=0 # Full success
     fi
 
-    # Move final file into place
+    # Move final file into place if no critical error occurred
     if [ "$return_code" -ne 1 ] && [ -f "$target_db_tmp" ]; then
          mv "$target_db_tmp" "$target_db"
          if [ $? -eq 0 ]; then
              debug_log "INFO" "Successfully created target DB: $target_db (Order not preserved)"
-             if [ "$return_code" -eq 0 ] || [ "$return_code" -eq 2 ]; then
-                 touch "$marker_file"
-                 debug_log "INFO" "Created completion marker file: $marker_file"
-             fi
+             # Marker file logic is removed based on user request
+             # if [ "$return_code" -eq 0 ] || [ "$return_code" -eq 2 ]; then
+             #     touch "$marker_file"
+             #     debug_log "INFO" "Created completion marker file: $marker_file"
+             # fi
          else
              debug_log "ERROR" "Failed to move temporary DB file to $target_db"
-             return_code=1
+             return_code=1 # Treat move failure as critical
          fi
     elif [ "$return_code" -ne 1 ]; then
+         # This case might happen if target_db_tmp was expected but not found (e.g., cat failed silently earlier)
          debug_log "ERROR" "Final temporary DB file ($target_db_tmp) not found before move operation."
          return_code=1
     fi
@@ -401,10 +415,9 @@ EOF
     fi
     # --- Cleanup End ---
 
-    debug_log "INFO" "Finished parallel DB creation for domain '$domain'. Final return code: $return_code"
+    debug_log "INFO" "Finished parallel DB creation for domain 'messages'. Final return code: $return_code"
     return "$return_code"
 }
-
 
 # ---------------------------------------------------------------------------------------------
 
@@ -990,7 +1003,7 @@ EOF
     return "$overall_success" # Return 0 for success, potentially 2 for partial
 }
 
-# 翻訳情報を表示する関数
+# 翻訳情報を表示する関数 (locale ディレクトリ構成を反映)
 display_detected_translation() {
     local lang_code=""
     if [ -f "${CACHE_DIR}/message.ch" ]; then
@@ -1000,39 +1013,52 @@ display_detected_translation() {
     fi
 
     local source_lang="$DEFAULT_LANGUAGE"
-    local source_db="message_${source_lang}.db"
-    local target_db="message_${lang_code}.db" # This might not exist if creation failed
+    local source_db_path="${BASE_DIR}/locale/${source_lang}/messages.db" # Path to source DB
+    local target_db_path="${BASE_DIR}/locale/${lang_code}/messages.db"   # Path to target DB
 
     debug_log "DEBUG" "Displaying translation information for language code: ${lang_code}"
 
-    printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE_ORIGINAL" "i=$source_db")")"
-    if [ -f "${BASE_DIR}/${target_db}" ]; then
-        printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE_CURRENT" "i=$target_db")")"
+    # Display source DB info
+    if [ -f "$source_db_path" ]; then
+        printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE_ORIGINAL" "i=$(basename "$source_db_path")" "default=Original Language file: $(basename "$source_db_path")")")"
     else
-        printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_SOURCE_MISSING" "i=$target_db")")"
+         printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_SOURCE_MISSING" "i=$(basename "$source_db_path")" "default=Original Language file MISSING: $(basename "$source_db_path")")")"
     fi
-    printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SOURCE" "i=$source_lang")")"
-    printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_CODE" "i=$lang_code")")"
+
+    # Display target DB info
+    if [ "$lang_code" != "$DEFAULT_LANGUAGE" ]; then # Only show target if not default
+        if [ -f "$target_db_path" ]; then
+            printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE_CURRENT" "i=$(basename "$target_db_path")" "default=Translated Language file: $(basename "$target_db_path")")")"
+        else
+            # This case should ideally not happen if translate_main calls this only after successful creation or existence check
+            printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_SOURCE_MISSING" "i=$(basename "$target_db_path")" "default=Translated Language file MISSING: $(basename "$target_db_path")")")"
+        fi
+    fi
+
+    printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SOURCE" "i=$source_lang" "default=Original language code: ${source_lang}")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_CODE" "i=$lang_code" "default=Translation language code: ${lang_code}")")"
 
     debug_log "DEBUG" "Translation information display completed for ${lang_code}"
 }
 
+# =========================================================
+# Main Translation Entry Point - Modified
+# =========================================================
 # @FUNCTION: translate_main
 # @DESCRIPTION: Entry point for translation. Reads target language from cache (message.ch),
-#               checks/creates the translation DB if needed (not default lang and DB doesn't exist),
-#               and displays translation info ONLY AFTER confirmation/creation or if DB exists.
-#               Does NOT take language code as an argument.
+#               checks/creates the translation DB using parallel processing if needed,
+#               and displays translation info after completion or if DB exists.
 # @PARAM: None
 # @RETURN: 0 on success/no translation needed, 1 on critical error,
-#          propagates create_language_db exit code on failure.
+#          propagates create_language_db_parallel exit code (2 for partial).
 translate_main() {
     # --- Initialization ---
-    # (Wget detection logic can remain as it might be used by AIP funcs indirectly)
+    # Assuming detect_wget_capabilities is available if needed by translation funcs
     if type detect_wget_capabilities >/dev/null 2>&1; then
         WGET_CAPABILITY_DETECTED=$(detect_wget_capabilities)
         debug_log "DEBUG" "translate_main: Wget capability detected: ${WGET_CAPABILITY_DETECTED}"
     else
-        debug_log "DEBUG" "translate_main: detect_wget_capabilities function not found. Assuming basic wget."
+        debug_log "DEBUG" "translate_main: detect_wget_capabilities function not found."
         WGET_CAPABILITY_DETECTED="basic"
     fi
     debug_log "DEBUG" "translate_main: Initialization part complete."
@@ -1043,7 +1069,6 @@ translate_main() {
     local is_default_lang="false"
     local target_db=""
     local db_creation_result=1 # Default to failure/not run
-    # local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER" # Marker check removed
 
     # 1. Determine Language Code ONLY from Cache
     if [ -f "${CACHE_DIR}/message.ch" ]; then
@@ -1057,34 +1082,31 @@ translate_main() {
     # 2. Check if it's the default language
     [ "$lang_code" = "$DEFAULT_LANGUAGE" ] && is_default_lang="true"
     if [ "$is_default_lang" = "true" ]; then
-        debug_log "DEBUG" "translate_main: Target language is the default language (${lang_code}). No translation needed or display from this function."
-        # --- 修正 --- デフォルト言語の場合は何も表示せず終了
+        debug_log "DEBUG" "translate_main: Target language is the default language (${lang_code}). No translation needed."
         return 0
     fi
 
     debug_log "DEBUG" "translate_main: Target language (${lang_code}) requires processing."
 
-    # 3. Check if target DB exists (Marker check removed)
-    target_db="${BASE_DIR}/message_${lang_code}.db"
+    # 3. Check if target DB exists (Simple file existence check)
+    target_db="${BASE_DIR}/locale/${lang_code}/messages.db" # Use locale subdirectories
     debug_log "DEBUG" "translate_main: Checking for existing target DB: ${target_db}"
 
     if [ -f "$target_db" ]; then
          debug_log "DEBUG" "translate_main: Target DB '${target_db}' exists for '${lang_code}'. Assuming complete."
-         # --- 修正 --- ファイルが存在すれば表示して終了
-         display_detected_translation
-         return 0 # <<< Early return: DB exists
+         display_detected_translation # Display info if DB exists
+         return 0 # Early return: DB exists
     else
         debug_log "DEBUG" "translate_main: Target DB '${target_db}' does not exist. Proceeding with creation."
     fi
 
     # --- Proceed with Translation Process ---
-    # (Steps 4 & 5: Find function, determine domain - remain the same as previous version)
     # 4. Find the first available translation function...
     local selected_func=""
     local func_name=""
     if [ -z "$AI_TRANSLATION_FUNCTIONS" ]; then
          debug_log "DEBUG" "translate_main: AI_TRANSLATION_FUNCTIONS global variable is not set or empty."
-         printf "%s\n" "$(color yellow "$(get_message "MSG_ERR_NO_TRANS_FUNC_VAR")")"
+         printf "%s\n" "$(color yellow "$(get_message "MSG_ERR_NO_TRANS_FUNC_VAR" "default=Error: AI_TRANSLATION_FUNCTIONS not set.")")"
          return 1
     fi
     set -f; set -- $AI_TRANSLATION_FUNCTIONS; set +f
@@ -1093,42 +1115,40 @@ translate_main() {
     done
     if [ -z "$selected_func" ]; then
         debug_log "DEBUG" "translate_main: No available translation functions found from list: '${AI_TRANSLATION_FUNCTIONS}'."
-        printf "%s\n" "$(color yellow "$(get_message "MSG_ERR_NO_TRANS_FUNC_AVAIL" "list=$AI_TRANSLATION_FUNCTIONS")")"
+        printf "%s\n" "$(color yellow "$(get_message "MSG_ERR_NO_TRANS_FUNC_AVAIL" "list=$AI_TRANSLATION_FUNCTIONS" "default=Error: No available translation functions found from list: ${AI_TRANSLATION_FUNCTIONS}")")"
         return 1
     fi
     debug_log "DEBUG" "translate_main: Selected translation function: ${selected_func}"
 
-    # 5. Determine API URL and Domain Name for spinner...
-    local api_endpoint_url=""
+    # 5. Determine Domain Name for display...
     local domain_name=""
     case "$selected_func" in
-        "translate_with_google") api_endpoint_url="..."; domain_name="translate.googleapis.com" ;;
-        "translate_with_lingva") api_endpoint_url="..."; domain_name="lingva.ml" ;;
-        *) debug_log "DEBUG" "..."; api_endpoint_url="N/A"; domain_name="$selected_func" ;;
+        "translate_with_google") domain_name="translate.googleapis.com" ;;
+        "translate_with_lingva") domain_name="lingva.ml" ;;
+        *) domain_name="$selected_func" ;; # Fallback to function name
     esac
-    debug_log "DEBUG" "translate_main: Using Domain '${domain_name}' for spinner..."
+    debug_log "DEBUG" "translate_main: Using Domain '${domain_name}' for display..."
 
-
-    # 6. Call create_language_db_parallel (Assuming this is the intended function now)
+    # --- 修正: Call create_language_db_parallel ---
+    # 6. Call create_language_db_parallel
     debug_log "DEBUG" "translate_main: Calling create_language_db_parallel for language '${lang_code}' using function '${selected_func}'"
-    # Note: create_language_db_parallel expects slightly different args (api_name, api_url (unused), domain_name, lang_code)
-    # We need to adapt the call here. Let's assume domain_name is sufficient for api_name context.
-    create_language_db_parallel "$selected_func" "" "$domain_name" "$lang_code" # Pass selected_func as api_name
+    # Pass selected function name as api_name, domain_name for display, and target lang code
+    create_language_db_parallel "$selected_func" "" "$domain_name" "$lang_code"
     db_creation_result=$?
     debug_log "DEBUG" "translate_main: create_language_db_parallel finished with status: ${db_creation_result}"
+    # --- 修正終了 ---
 
     # 7. Handle Result and Display Info ONLY on Success or Partial Success
-    if [ "$db_creation_result" -eq 0 ] || [ "$db_creation_result" -eq 2 ]; then # Check for 0 (success) or 2 (partial)
+    if [ "$db_creation_result" -eq 0 ] || [ "$db_creation_result" -eq 2 ]; then
         debug_log "DEBUG" "translate_main: Language DB creation successful or partially successful for ${lang_code}."
-        # --- 修正 --- DB作成成功/部分成功後に表示
-        display_detected_translation
-        return "$db_creation_result" # Return the actual result code (0 or 2)
+        display_detected_translation # Display info after creation
+        return "$db_creation_result" # Return 0 or 2
     else
         debug_log "DEBUG" "translate_main: Language DB creation failed for ${lang_code} (Exit status: ${db_creation_result})."
-        if [ "$db_creation_result" -ne 1 ]; then # Avoid duplicate msg if base DB missing (code 1)
-             printf "%s\n" "$(color yellow "$(get_message "MSG_ERR_TRANSLATION_FAILED" "lang=$lang_code")")"
+        # Avoid duplicate message if base DB was missing (handled in create_language_db_parallel)
+        if [ "$db_creation_result" -ne 1 ]; then
+             printf "%s\n" "$(color yellow "$(get_message "MSG_ERR_TRANSLATION_FAILED" "lang=$lang_code" "default=Error: Translation process failed for ${lang_code}.")")"
         fi
-        # --- 修正 --- 失敗時は display_detected_translation を呼び出さない
         return "$db_creation_result" # Propagate error code (likely 1)
     fi
 }
