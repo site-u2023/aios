@@ -71,7 +71,7 @@ determined_default_tasks=$(determine_default_parallel_tasks)
 # Number of parallel translation tasks to run concurrently.
 # Use environment variable if set, otherwise use the determined default.
 MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-$determined_default_tasks}"
-
+echo $MAX_PARALLEL_TASKS
 # Function to determine the default number of parallel tasks based on cached CPU cores
 # @stdout: Prints the determined default number of tasks (cores or 1).
 # @return: Always returns 0 (success).
