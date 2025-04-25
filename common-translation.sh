@@ -50,7 +50,7 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 TR_DIR="${TR_DIR:-$BASE_DIR/translation}"
 
 # Number of parallel translation tasks to run concurrently
-MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-2}" # Default to 1 for initial testing
+MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-4}" # Default to 1 for initial testing
 
 MESSAGE_DB="${MESSAGE_D:-message_en.db}"
 
@@ -172,33 +172,33 @@ create_language_db() {
     local translated_text=""
     local output_line=""
     local line_num=0
-    local exit_status=0
+    local exit_status=0 # 0:success, 1:critical error, 2:partial success (some translations failed)
 
     # --- Argument Checks ---
     if [ -z "$input_file" ] || [ -z "$output_file" ] || [ -z "$target_lang_code" ] || [ -z "$api_func" ]; then
         debug_log "ERROR" "create_language_db - Missing required arguments."
-        return 1
+        return 1 # Critical error
     fi
     if [ ! -f "$input_file" ]; then
         # This might happen legitimately if a split resulted in an empty file
         debug_log "INFO" "create_language_db - Input file not found or empty, skipping: $input_file"
         # Ensure output file exists even if empty
-        touch "$output_file" || { debug_log "ERROR" "create_language_db - Failed to touch output file: $output_file"; return 1; }
-        return 0
+        touch "$output_file" || { debug_log "ERROR" "create_language_db - Failed to touch output file: $output_file"; return 1; } # Critical error
+        return 0 # Success (empty input is not an error)
     fi
      if [ ! -r "$input_file" ]; then
         debug_log "ERROR" "create_language_db - Input file not readable: $input_file"
-        return 1
-    fi
+        return 1 # Critical error
+     fi
     # Output file should have been created by the caller, check if writable directory
     local output_dir=$(dirname "$output_file")
      if [ ! -w "$output_dir" ]; then
         debug_log "ERROR" "create_language_db - Output directory not writable: $output_dir"
-        return 1
+        return 1 # Critical error
      fi
      # Ensure output file exists and is writable (or can be created)
      # The caller (create_language_db_parallel) already creates it, but check again.
-     touch "$output_file" || { debug_log "ERROR" "create_language_db - Failed to touch/ensure output file: $output_file"; return 1; }
+     touch "$output_file" || { debug_log "ERROR" "create_language_db - Failed to touch/ensure output file: $output_file"; return 1; } # Critical error
 
 
     debug_log "DEBUG" "create_language_db - Processing chunk: Input='$input_file', Output='$output_file', Lang='$target_lang_code', API='$api_func'"
@@ -206,22 +206,44 @@ create_language_db() {
     # --- Process Input File Line by Line ---
     while IFS= read -r line || [ -n "$line" ]; do
         line_num=$(($line_num + 1))
+
+        # --- CHANGE START ---
+        # Skip comment lines (starting with #) and empty lines immediately
+        case "$line" in
+            \#* | '')
+                debug_log "DEBUG" "create_language_db - Skipping comment or empty line $line_num"
+                continue
+                ;;
+        esac
+        # --- CHANGE END ---
+
         debug_log "DEBUG" "create_language_db - Reading line $line_num: $line"
 
-        # Skip empty lines or lines not containing '=' (likely comments or invalid)
-        if [ -z "$line" ] || ! echo "$line" | grep -q '='; then
-            debug_log "DEBUG" "create_language_db - Skipping empty or invalid line $line_num: $line"
+        # Skip lines not containing '=' (likely invalid format after comment/empty check)
+        # We still need the '|' check for the expected format.
+        if ! echo "$line" | grep -q '='; then
+            debug_log "WARN" "create_language_db - Skipping line $line_num (no '=' found): $line"
             continue
         fi
 
         # Extract message key and source text
-        # Expected format: xx|MSG_KEY=Source Text
+        # Expected format: xx|MSG_KEY=Source Text (xx| might be missing in base en.db)
         # Use parameter expansion for POSIX compliance
-        local key_part="${line#*|}" # Remove lang prefix (e.g., MSG_KEY=Source Text)
-        if [ "$key_part" = "$line" ]; then # Check if '|' was present
-             debug_log "WARN" "create_language_db - Invalid line format (missing '|') on line $line_num: $line"
-             continue
+        local key_part=""
+        local lang_prefix="" # Variable to hold potential language prefix
+
+        # Check if '|' exists and split accordingly
+        if echo "$line" | grep -q '|'; then
+            lang_prefix="${line%%|*}" # Extract potential lang prefix (e.g., en)
+            key_part="${line#*|}"     # Part after the first '|' (e.g., MSG_KEY=Source Text)
+        else
+            # If no '|', assume it's the base language file format (KEY=Value)
+            debug_log "DEBUG" "create_language_db - No '|' found on line $line_num, assuming base format."
+            key_part="$line"
+            lang_prefix="" # No prefix
         fi
+
+        # Now extract key and value from key_part
         msg_key="${key_part%%=*}"    # Extract key (e.g., MSG_KEY)
         source_text="${key_part#*=}" # Extract value (e.g., Source Text)
 
@@ -241,14 +263,19 @@ create_language_db() {
             if [ $translate_exit_status -ne 0 ]; then
                 debug_log "WARN" "create_language_db - API function '$api_func' failed for key '$msg_key' (exit status $translate_exit_status). Using original text."
                 translated_text="$source_text" # Use original text on failure
+                # If translation fails, mark as partial success (status 2) unless already critical (status 1)
+                [ "$exit_status" -eq 0 ] && exit_status=2
             elif [ -z "$translated_text" ]; then
                  debug_log "WARN" "create_language_db - API function '$api_func' returned empty for key '$msg_key'. Using original text."
                  translated_text="$source_text" # Use original text if API returns empty
+                 # Consider empty return also a partial success
+                 [ "$exit_status" -eq 0 ] && exit_status=2
             fi
         else
             debug_log "ERROR" "create_language_db - API function '$api_func' not found."
             translated_text="$source_text" # Use original text if function not found
-            exit_status=1 # Indicate an error occurred in this worker
+            exit_status=1 # Function not found is a critical error for this worker
+            break # Stop processing this chunk if API function is missing
         fi
 
         # --- Write Output Line ---
@@ -257,15 +284,14 @@ create_language_db() {
         echo "$output_line" >> "$output_file"
         if [ $? -ne 0 ]; then
             debug_log "ERROR" "create_language_db - Failed to write to output file: $output_file"
-            exit_status=1 # Indicate an error occurred
-            # Optionally break the loop or try to continue
+            exit_status=1 # Treat write failure as critical
             break # Stop processing this chunk on write error
         fi
 
     done < "$input_file"
 
-    debug_log "DEBUG" "create_language_db - Finished processing chunk: $input_file"
-    return $exit_status
+    debug_log "DEBUG" "create_language_db - Finished processing chunk: $input_file with status $exit_status"
+    return $exit_status # Return accumulated status (0, 1, or 2)
 }
 
 # Function to create language DB by processing base DB in parallel
