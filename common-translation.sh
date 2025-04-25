@@ -76,33 +76,34 @@ debug_log "INFO" "MAX_PARALLEL_TASKS is set to $MAX_PARALLEL_TASKS (determined d
 # debug_log "INFO" "MAX_PARALLEL_TASKS is set to $MAX_PARALLEL_TASKS (determined default: $determined_default_tasks, exit code: $determined_tasks_exit_code)"
 
 # Function to determine the default number of parallel tasks based on cached CPU cores
-# @stdout: Prints the determined default number of tasks (e.g., "4" or "1")
-# @return: 0 if cores detected successfully, 1 if cache is invalid/not found (and default 1 is used)
+# @stdout: Prints the determined default number of tasks (cores or 1).
+# @return: Always returns 0 (success).
 determine_default_parallel_tasks() {
-    local default_tasks=1 # Safe default if detection fails (as requested)
+    local default_tasks=1 # Safe default if detection fails
     local cache_file="${CACHE_DIR}/cpu_core.ch"
     local cores=""
-    local result_code=1 # Assume failure (use default 1) initially
+    # Removed: local result_code=1
 
     if [ -r "$cache_file" ]; then
         cores=$(head -n 1 "$cache_file")
         case "$cores" in
             *[!0-9]* | "" | 0) # Contains non-digit, is empty, or is zero
+                # CHANGED: Log level to DEBUG
                 debug_log "DEBUG" "Invalid content in $cache_file ('$cores'). Using default tasks: $default_tasks"
                 ;;
             *) # Looks like a valid positive integer
                 default_tasks=$cores
                 debug_log "DEBUG" "Detected $cores CPU cores from cache. Setting default tasks to $default_tasks."
-                result_code=0 # Success (detected cores)
+                # Removed: result_code=0
                 ;;
         esac
     else
+        # CHANGED: Log level to DEBUG (if it wasn't already)
         debug_log "DEBUG" "CPU core cache file not found: $cache_file. Using default tasks: $default_tasks"
-        # Keep result_code=1 as we are using the fallback default
     fi
 
     printf "%s\n" "$default_tasks"
-    return $result_code
+    return 0 # CHANGED: Always return 0 to indicate printf succeeded
 }
 
 # URL安全エンコード関数（seqを使わない最適化版）
