@@ -1,7 +1,6 @@
 
 #!/bin/sh
 
-# SCRIPT_VERSION="2025-04-23-12-47" # Original version marker - Updated below
 SCRIPT_VERSION="2025-04-25-00-02" # Updated version based on last interaction time
 
 # =========================================================
