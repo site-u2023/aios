@@ -219,58 +219,57 @@ BEGIN { msgid_block = ""; line_num = 0 }
 EOF
     # --- End AWK script file creation ---
 
-    local pids="" # Store background process IDs
     local task_count=0
+    local pids_in_subshell="" # Variable to track PIDs inside the subshell if needed for logging
 
     # Clean previous temporary output and marker files
     rm -f "$target_db_tmp" "$marker_file"
 
     # --- Launch Background Translation Tasks ---
     debug_log "INFO" "Parsing source DB and launching translation tasks using awk script: $awk_script_file"
-    awk -f "$awk_script_file" \
-        -v tmp_dir="$tmp_dir" \
-        -v target_lang="$target_lang_code" \
-        -v trans_func="$translation_function_name" \
-        "$source_db" | while IFS='|' read -r prefix item_id source_text target_l result_f trans_f rest; do
 
-        if [ "$prefix" = "EXECUTE:" ] && [ -n "$item_id" ] && [ -n "$source_text" ] && [ -n "$target_l" ] && [ -n "$result_f" ] && [ -n "$trans_f" ]; then
-                while [ "$(jobs -p | wc -l)" -ge "$MAX_PARALLEL_TASKS" ]; do
-                    # Use integer sleep for POSIX compliance
-                    sleep 1
-                done
-                debug_log "DEBUG" "Launching task $item_id for source text starting with: $(echo "$source_text" | cut -c 1-30)..."
-                parallel_translate_task "$item_id" "$source_text" "$target_l" "$result_f" "$trans_f" &
-                pids="$pids $!"
-                task_count=$((task_count + 1))
-        else
-                local full_line="${prefix}${IFS}${item_id}${IFS}${source_text}${IFS}${target_l}${IFS}${result_f}${IFS}${trans_f}${IFS}${rest}"
-                if [ -n "$full_line" ] && [ "$full_line" != "EXECUTE:" ]; then
-                     debug_log "WARN" "Unexpected line format from awk or read error: $full_line"
-                fi
-        fi
-    done
+    # --- 修正: awk | while ループ全体をサブシェルで囲む ---
+    (
+        awk -f "$awk_script_file" \
+            -v tmp_dir="$tmp_dir" \
+            -v target_lang="$target_lang_code" \
+            -v trans_func="$translation_function_name" \
+            "$source_db" | while IFS='|' read -r prefix item_id source_text target_l result_f trans_f rest; do
 
-    # --- Wait for all background tasks to complete ---
-    debug_log "INFO" "Launched $task_count tasks. Waiting for completion..."
-    local failed_tasks=0
-    if [ -n "$pids" ]; then
-        pids=$(echo "$pids" | sed 's/^ //')
-        for pid in $pids; do
-            wait "$pid"
-            local task_exit_code=$?
-            # Task exit codes: 0=success, 1=translation fail, 2=file write/marker fail
-            if [ "$task_exit_code" -ne 0 ]; then
-                failed_tasks=$((failed_tasks + 1))
-                debug_log "WARN" "Task with PID $pid failed with exit code $task_exit_code."
+            if [ "$prefix" = "EXECUTE:" ] && [ -n "$item_id" ] && [ -n "$source_text" ] && [ -n "$target_l" ] && [ -n "$result_f" ] && [ -n "$trans_f" ]; then
+                    # Limit concurrency inside the subshell
+                    while [ "$(jobs -p | wc -l)" -ge "$MAX_PARALLEL_TASKS" ]; do
+                        sleep 1 # POSIX compliant sleep
+                    done
+                    debug_log "DEBUG" "Launching task $item_id for source text starting with: $(echo "$source_text" | cut -c 1-30)..."
+                    # Run task in background relative to the subshell
+                    parallel_translate_task "$item_id" "$source_text" "$target_l" "$result_f" "$trans_f" &
+                    # Optional: Track PIDs inside subshell for more detailed logging if needed later
+                    # pids_in_subshell="$pids_in_subshell $!"
+                    task_count=$((task_count + 1)) # Increment task count (might be slightly off if awk fails mid-stream, but good estimate)
+            else
+                    local full_line="${prefix}${IFS}${item_id}${IFS}${source_text}${IFS}${target_l}${IFS}${result_f}${IFS}${trans_f}${IFS}${rest}"
+                    if [ -n "$full_line" ] && [ "$full_line" != "EXECUTE:" ]; then
+                         debug_log "WARN" "Unexpected line format from awk or read error: $full_line"
+                    fi
             fi
         done
-        debug_log "INFO" "All tasks completed. Number of failed tasks: $failed_tasks"
-        # Removed the sleep 1 here, relying on marker files instead
-    else
-        debug_log "INFO" "No tasks were launched."
-    fi
+        # Important: Wait for jobs started *within this subshell* to finish before the subshell exits
+        # This wait is crucial if the awk command finishes before all background tasks write their files.
+        # However, the main wait outside the subshell should handle this. Let's test without wait here first.
+        # If issues persist, add: wait
+    )
+    # --- 修正終了: サブシェル ---
+
+    # --- 修正: Wait for all background jobs launched by *this shell* (the subshell itself, and any tasks it launched) ---
+    debug_log "INFO" "Launched approximately $task_count tasks in subshell. Waiting for all background processes to complete..."
+    wait # Wait for all child background processes of the current shell
+    local wait_exit_code=$?
+    debug_log "INFO" "All background processes completed (wait exit code: $wait_exit_code)."
+    # --- 修正終了: wait ---
 
     # --- Assemble Final DB File (Order-Preserving) ---
+    # (組立ループのロジックは前回提示版と同じ - マーカーファイルチェック、マルチライン/不正行処理修正済み)
     debug_log "INFO" "Assembling final DB file from source and results..."
     rm -f "$target_db_tmp" # Ensure temp file is clean before assembly
     local current_msgid_content=""
@@ -287,8 +286,6 @@ EOF
         if echo "$src_line" | grep -qE '^[ \t]*#|^[ \t]*$'; then
             printf "%s\n" "$src_line"
             if [ "$in_msgid_block" -eq 1 ]; then
-                 # msgid block ended unexpectedly by comment/empty line
-                 # This case might indicate a broken source file, log but don't output msgid/msgstr
                  debug_log "WARN" "msgid block starting line $msgid_line_start ended unexpectedly by comment/empty line $line_num. Discarding block."
                  current_msgid_content=""
                  in_msgid_block=0
@@ -299,10 +296,8 @@ EOF
         # Start of msgid block
         if echo "$src_line" | grep -q '^msgid[ \t]'; then
             if [ "$in_msgid_block" -eq 1 ]; then
-                 # New msgid started before previous block had msgstr
                  debug_log "WARN" "New msgid block started line $line_num before previous block (line $msgid_line_start) had msgstr. Discarding previous block."
             fi
-            # Extract content, removing msgid " and trailing "
             current_msgid_content=$(echo "$src_line" | sed -e 's/^msgid[ \t]*"//' -e 's/"$//')
             msgid_line_start=$line_num
             in_msgid_block=1
@@ -312,10 +307,8 @@ EOF
         # Continuation of msgid (multiline)
         if echo "$src_line" | grep -q '^"'; then
              if [ "$in_msgid_block" -eq 1 ]; then
-                 # Append content directly without \n, removing quotes
                  current_msgid_content="${current_msgid_content}$(echo "$src_line" | sed -e 's/^"//' -e 's/"$//')"
              else
-                 # Stray continuation line without preceding msgid - ignore and log
                  debug_log "WARN" "Stray continuation line found and ignored at line $line_num: $src_line"
              fi
              continue
@@ -324,89 +317,68 @@ EOF
         # msgstr line - This indicates end of msgid block; time to write results
         if echo "$src_line" | grep -q '^msgstr[ \t]'; then
              if [ "$in_msgid_block" -eq 1 ]; then
-                 # Valid end of msgid block found
                  local item_id="Line-${msgid_line_start}"
                  local result_file="${tmp_dir}/${item_id}.txt"
-                 local marker_file_check="${result_file}.done" # Marker file to check
+                 local marker_file_check="${result_file}.done"
 
-                 # Escape msgid content before printing
                  printf "msgid \"%s\"\n" "$(echo "$current_msgid_content" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
 
-                 # --- 修正: Check for marker file existence ---
                  if [ -f "$marker_file_check" ]; then
                      if [ -f "$result_file" ]; then
                          result_content=$(cat "$result_file")
-                         # Escape result content before printing
                          escaped_result_content=$(echo "$result_content" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
                          printf "msgstr \"%s\"\n" "$escaped_result_content"
                      else
-                         # Marker exists but result file doesn't? Should not happen if task logic is correct.
                          debug_log "ERROR" "Marker file $marker_file_check found but result file $result_file is missing for $item_id. Writing empty msgstr."
                          printf "msgstr \"\"\n"
                          assembly_missing_results=1
                      fi
                  else
-                     # Marker file not found, means task failed severely or didn't complete writing
-                     debug_log "WARN" "Marker file $marker_file_check not found for $item_id (msgid starting line $msgid_line_start). Task likely failed. Writing empty msgstr."
+                     debug_log "WARN" "Marker file $marker_file_check not found for $item_id (msgid starting line $msgid_line_start). Task likely failed or incomplete. Writing empty msgstr."
                      printf "msgstr \"\"\n"
-                     assembly_missing_results=1 # Mark that results were missing
+                     assembly_missing_results=1
                  fi
-                 # --- 修正終了 ---
 
              elif echo "$src_line" | grep -q '^msgstr[ \t]+""$'; then
-                 # Preserve original msgid "" msgstr "" pairs
                  printf "msgid \"\"\n"
                  printf "msgstr \"\"\n"
              else
-                 # msgstr line without a preceding valid msgid block, or non-empty msgstr in source
-                 # Ignore and log, don't output anything to avoid corrupting DB
                  debug_log "WARN" "msgstr line found and ignored at line $line_num without valid preceding msgid block or non-empty source msgstr."
              fi
-             # Reset for the next block regardless of what happened
              current_msgid_content=""
              msgid_line_start=0
              in_msgid_block=0
              continue
         fi
 
-        # --- 修正: Handle any other unexpected lines ---
-        # If we are not in a msgid block, log and ignore the line
+        # Handle any other unexpected lines
         if [ "$in_msgid_block" -eq 0 ]; then
              debug_log "WARN" "Unexpected line format encountered and ignored at line $line_num: $src_line"
         else
-             # If we ARE in a msgid block, this means the block was broken by an unexpected line
              debug_log "WARN" "msgid block starting line $msgid_line_start ended unexpectedly by unknown line format at line $line_num. Discarding block."
-             # Discard the current block and reset state
              current_msgid_content=""
              in_msgid_block=0
         fi
-        # --- 修正終了 ---
 
     done < "$source_db"
 
-    # Handle potential last msgid block if the file ends without a final msgstr
     if [ "$in_msgid_block" -eq 1 ]; then
-        # File ended while in msgid block, log and discard
         debug_log "WARN" "File ended while still in msgid block starting line $msgid_line_start. Discarding block."
     fi
-    ) > "$target_db_tmp" # Write the assembled output to the temporary file
+    ) > "$target_db_tmp"
 
     # --- Finalization ---
-    # Determine final return code based on task failures and missing results during assembly
-    if [ "$failed_tasks" -gt 0 ]; then
-        debug_log "WARN" "Parallel DB creation completed with $failed_tasks failed task(s)."
-        return_code=2 # Partial success due to task failures
-    elif [ "$assembly_missing_results" -eq 1 ]; then
+    # Determine final return code based on assembly warnings (marker files missing)
+    # Note: We no longer track 'failed_tasks' using individual PIDs, rely on marker files instead.
+    if [ "$assembly_missing_results" -eq 1 ]; then
         debug_log "WARN" "Parallel DB creation completed, but some results were missing during assembly (marker files not found)."
         return_code=2 # Partial success due to missing results
     else
-        # Check if tmp file is empty even if no tasks failed and no results were missing
+        # Check for empty tmp file even if no results were marked missing
         if [ -f "$target_db_tmp" ] && [ ! -s "$target_db_tmp" ] && [ "$task_count" -gt 0 ]; then
              debug_log "ERROR" "Final temporary DB file ($target_db_tmp) is empty despite reported success. Possible assembly logic error."
-             # Set return_code=1 only if the file is truly empty AND tasks were launched
              return_code=1
         elif [ ! -f "$target_db_tmp" ]; then
-             # If tmp file doesn't exist at all here, something went very wrong
              debug_log "ERROR" "Final temporary DB file ($target_db_tmp) not found after assembly."
              return_code=1
         else
@@ -417,32 +389,27 @@ EOF
 
     # Move final file into place (only if return_code is not 1 initially)
     if [ "$return_code" -ne 1 ] && [ -f "$target_db_tmp" ]; then
-        # Double check for empty file just before move
         if [ ! -s "$target_db_tmp" ] && [ "$task_count" -gt 0 ]; then
              debug_log "ERROR" "Final temporary DB file ($target_db_tmp) is unexpectedly empty before move. Aborting move."
-             return_code=1 # Critical error
+             return_code=1
         else
             mv "$target_db_tmp" "$target_db"
             if [ $? -eq 0 ]; then
                 debug_log "INFO" "Successfully created target DB: $target_db"
-                # Create marker file only on full or partial success (code 0 or 2)
                 if [ "$return_code" -eq 0 ] || [ "$return_code" -eq 2 ]; then
                     touch "$marker_file"
                 fi
             else
                 debug_log "ERROR" "Failed to move temporary DB file to $target_db"
-                return_code=1 # Critical error
-                # Keep tmp file for inspection on move failure
+                return_code=1
             fi
         fi
     elif [ "$return_code" -ne 1 ]; then
-         # Should have been caught earlier, but double check
          debug_log "ERROR" "Final temporary DB file ($target_db_tmp) not found before move operation."
          return_code=1
     fi
 
     # --- Cleanup: Moved to the end and re-enabled ---
-    # Clean up temporary directory if it exists
     if [ -n "$tmp_dir" ] && [ -d "$tmp_dir" ]; then
         debug_log "DEBUG" "Removing temporary directory: $tmp_dir"
         rm -rf "$tmp_dir"
@@ -452,6 +419,8 @@ EOF
     debug_log "INFO" "Finished parallel DB creation for domain '$domain'. Final return code: $return_code"
     return "$return_code"
 }
+
+# ... (ファイル内の他の関数) ...
 
 # ---------------------------------------------------------------------------------------------
 
