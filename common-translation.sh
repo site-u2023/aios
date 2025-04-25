@@ -49,9 +49,6 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 TR_DIR="${TR_DIR:-$BASE_DIR/translation}"
 
-# Number of parallel translation tasks to run concurrently
-MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-4}"
-
 # オンライン翻訳を有効化 (create_language_db logic removed reliance on this, but keep for potential external checks)
 ONLINE_TRANSLATION_ENABLED="yes"
 
@@ -65,6 +62,36 @@ API_MAX_RETRIES="${API_MAX_RETRIES:-3}"
 WGET_CAPABILITY_DETECTED="" # Initialized by translate_main if detect_wget_capabilities exists
 
 AI_TRANSLATION_FUNCTIONS="translate_with_google" # 使用したい関数名を空白区切りで列挙
+
+# Function to determine the default number of parallel tasks based on cached CPU cores
+# @stdout: Prints the determined default number of tasks (e.g., "4" or "1")
+# @return: 0 on success, 1 if cache is invalid/not found (and default 1 is used)
+determine_default_parallel_tasks() {
+    local default_tasks=1 # Safe default if detection fails
+    local cache_file="${CACHE_DIR}/cpu_core.ch"
+    local cores=""
+    local result_code=1 # Assume failure initially
+
+    if [ -r "$cache_file" ]; then
+        cores=$(head -n 1 "$cache_file")
+        case "$cores" in
+            *[!0-9]* | "" | 0)
+                debug_log "DEBUG" "Invalid content in $cache_file ('$cores'). Using default tasks: $default_tasks"
+                ;;
+            *)
+                default_tasks=$cores
+                debug_log "DEBUG" "Detected $cores CPU cores from cache. Setting default tasks to $default_tasks."
+                result_code=0 # Success
+                ;;
+        esac
+    else
+        debug_log "DEBUG" "CPU core cache file not found: $cache_file. Using default tasks: $default_tasks"
+        # Keep result_code=1 as we are using the fallback default
+    fi
+
+    printf "%s\n" "$default_tasks"
+    return $result_code
+}
 
 # URL安全エンコード関数（seqを使わない最適化版）
 # @param $1: string - The string to encode.
