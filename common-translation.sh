@@ -48,6 +48,7 @@ BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}" # Used for message.ch, network.ch etc.
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
+TR_DIR="${TR_DIR:-$BASE_DIR/translation}"
 
 # Number of parallel translation tasks to run concurrently
 MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-2}" # Default to 1 for initial testing
