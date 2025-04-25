@@ -136,13 +136,14 @@ parallel_translate_task() {
 }
 
 # =========================================================
-# Parallel Language Database Creation - Revised (Pre-count task_count)
+# Parallel Language Database Creation - Revised (grep exit code fix)
 # =========================================================
 # create_language_db_parallel: Creates a language DB file by translating msgids in parallel.
 # Pre-counts tasks and uses a for loop for launching.
 # Waits for the expected number of result files before assembly.
 # Final DB is assembled by concatenating temporary files (order not preserved).
 # Integrity is checked by comparing source msgid count with generated msgid count.
+# Correctly handles grep exit codes (0=match, 1=no match, >1=error).
 # Assumes BASE_DIR, DEFAULT_LANGUAGE, MAX_PARALLEL_TASKS, debug_log,
 # and parallel_translate_task are available and sourced.
 # @param $1: api_name
@@ -170,7 +171,7 @@ create_language_db_parallel() {
     local return_code=0 # 0=success, 1=critical error, 2=partial (task failure - simplified check)
 
     # --- Pre-checks ---
-    debug_log "INFO" "Starting parallel DB creation (pre-count task_count) for domain '$domain', target '$target_lang_code' using '$translation_function_name'."
+    debug_log "INFO" "Starting parallel DB creation (grep exit code fix) for domain '$domain', target '$target_lang_code' using '$translation_function_name'."
 
     if [ ! -d "$target_dir" ]; then
         mkdir -p "$target_dir" || { debug_log "ERROR" "Failed to create target directory: $target_dir"; return 1; }
@@ -199,7 +200,7 @@ create_language_db_parallel() {
     fi
     debug_log "DEBUG" "Created temporary directory for results: $tmp_dir"
 
-    # --- Create AWK script file (remains the same) ---
+    # --- Create AWK script file ---
     local awk_script_file="${tmp_dir}/parse_db.awk"
     cat > "$awk_script_file" << 'EOF'
 BEGIN { msgid_block = ""; line_num = 0 }
@@ -228,38 +229,31 @@ BEGIN { msgid_block = ""; line_num = 0 }
 EOF
     # --- End AWK script file creation ---
 
-    # --- 修正: Pre-generate task list and count tasks ---
+    # --- Pre-generate task list and count tasks ---
     local task_list=""
     local task_count=0
     debug_log "INFO" "Generating task list..."
-    # Use awk to generate the list: item_id|source_text|result_file
     task_list=$(awk -f "$awk_script_file" -v tmp_dir="$tmp_dir" "$source_db")
     if [ $? -ne 0 ]; then
         debug_log "ERROR" "Failed to generate task list using awk."
         if [ -n "$tmp_dir" ] && [ -d "$tmp_dir" ]; then rm -rf "$tmp_dir"; fi
         return 1
     fi
-
-    # Count tasks by counting lines in the generated list (if not empty)
     if [ -n "$task_list" ]; then
          task_count=$(echo "$task_list" | wc -l)
     else
          task_count=0
     fi
     debug_log "INFO" "Generated task list with $task_count tasks."
-    # --- 修正終了 ---
 
     # Clean previous temporary output and marker files
     rm -f "$target_db_tmp" "$marker_file"
 
-    # --- 修正: Launch Background Translation Tasks using for loop ---
+    # --- Launch Background Translation Tasks using for loop ---
     debug_log "INFO" "Launching $task_count translation tasks..."
     if [ "$task_count" -gt 0 ]; then
-        # Use printf '%s\n' to handle potential newlines in task_list safely
         printf '%s\n' "$task_list" | while IFS='|' read -r item_id source_text result_f; do
-            # Check if read was successful and variables are not empty
             if [ -n "$item_id" ] && [ -n "$source_text" ] && [ -n "$result_f" ]; then
-                # Limit concurrency
                 while [ "$(jobs -p | wc -l)" -ge "$MAX_PARALLEL_TASKS" ]; do
                     sleep 1
                 done
@@ -271,7 +265,6 @@ EOF
         done
     fi
     debug_log "INFO" "Finished launching tasks."
-    # --- 修正終了 ---
 
     # --- Wait for all result files to be created ---
     local current_file_count=0
@@ -282,13 +275,10 @@ EOF
     if [ "$task_count" -gt 0 ]; then
         debug_log "INFO" "Waiting for $task_count result files to appear in $tmp_dir (timeout: ${wait_timeout}s)..."
         while [ "$current_file_count" -lt "$task_count" ]; do
-            # Count .txt files safely
             current_file_count=$(ls "$tmp_dir"/*.txt 2>/dev/null | wc -l)
-            # Ensure count is a number, default to 0 if ls fails or finds nothing
             if ! echo "$current_file_count" | grep -qE '^[0-9]+$'; then
                  current_file_count=0
             fi
-
             elapsed_time=$(( $(date +%s) - wait_start_time ))
             if [ "$elapsed_time" -ge "$wait_timeout" ]; then
                 debug_log "ERROR" "Timeout waiting for result files. Expected $task_count, found $current_file_count after ${elapsed_time}s."
@@ -312,7 +302,6 @@ EOF
     local generated_msgid_count=0
     local any_task_failed_simple=0
 
-    # Check for existence using POSIX compliant ls/head
     if [ -z "$(ls -A "$tmp_dir"/*.txt 2>/dev/null | head -n 1)" ] && [ "$task_count" -gt 0 ]; then
         debug_log "WARN" "Tasks were launched ($task_count), but no result files (*.txt) found in $tmp_dir. The final DB will be empty."
         touch "$target_db_tmp"
@@ -329,24 +318,47 @@ EOF
              debug_log "ERROR" "Failed to concatenate result files into $target_db_tmp."
              return_code=1
         else
-             # Count msgids in the generated file
+             # --- 修正: Count msgids and handle grep exit code ---
              generated_msgid_count=$(grep -c '^msgid[ \t]' "$target_db_tmp")
-             if [ $? -ne 0 ]; then
-                  debug_log "ERROR" "Failed to count msgids in generated file $target_db_tmp."
-                  return_code=1
+             local grep_c_exit_code=$?
+             if [ "$grep_c_exit_code" -eq 0 ]; then
+                 debug_log "INFO" "Generated msgid count in temporary DB: $generated_msgid_count"
+             elif [ "$grep_c_exit_code" -eq 1 ]; then
+                 # No match found, count is 0
+                 debug_log "INFO" "Generated msgid count in temporary DB: 0 (No msgid lines found)"
+                 generated_msgid_count=0
+             else
+                 # grep error (exit code > 1)
+                 debug_log "ERROR" "Failed to count msgids in generated file $target_db_tmp (grep exit code: $grep_c_exit_code)."
+                 return_code=1
              fi
-             debug_log "INFO" "Generated msgid count in temporary DB: $generated_msgid_count"
-             # Simple check for failed tasks
-             if grep -q -E '^msgstr "This one should fail the translation"$' "$target_db_tmp"; then
-                  debug_log "WARN" "Detected potential task failure (original text used as msgstr)."
-                  any_task_failed_simple=1
+             # --- 修正終了 ---
+
+             # --- 修正: Simple check for failed tasks and handle grep exit code ---
+             # Check only if return_code is still 0
+             if [ "$return_code" -eq 0 ]; then
+                 grep -q -E '^msgstr "This one should fail the translation"$' "$target_db_tmp"
+                 local grep_q_exit_code=$?
+                 if [ "$grep_q_exit_code" -eq 0 ]; then
+                     # Match found - indicates potential failure
+                     debug_log "WARN" "Detected potential task failure (original text used as msgstr)."
+                     any_task_failed_simple=1
+                 elif [ "$grep_q_exit_code" -eq 1 ]; then
+                     # No match found - expected for successful tasks
+                     : # Do nothing
+                 else
+                     # grep error (exit code > 1)
+                     debug_log "ERROR" "Failed to check for failed tasks in $target_db_tmp (grep exit code: $grep_q_exit_code)."
+                     return_code=1
+                 fi
              fi
+             # --- 修正終了 ---
         fi
     fi
 
     # --- Finalization ---
     if [ "$return_code" -eq 1 ]; then
-        :
+        : # Critical error already occurred
     elif [ "$expected_msgid_count" -ne "$generated_msgid_count" ]; then
         debug_log "ERROR" "Integrity check failed: Expected $expected_msgid_count msgids, but generated file contains $generated_msgid_count msgids."
         return_code=1
@@ -386,6 +398,7 @@ EOF
     debug_log "INFO" "Finished parallel DB creation for domain '$domain'. Final return code: $return_code"
     return "$return_code"
 }
+
 
 # ---------------------------------------------------------------------------------------------
 
