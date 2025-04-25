@@ -39,9 +39,6 @@ SCRIPT_VERSION="2025-04-23-14-32" # Updated version based on last interaction ti
 # 基本定数の設定
 BASE_WGET="wget --no-check-certificate -q"
 DEBUG_MODE="${DEBUG_MODE:-false}"
-BIN_PATH="$(readlink "$0")"
-BIN_DIR="$(dirname "$BIN_PATH")"
-BIN_FILE="$(basename "$BIN_PATH")"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}" # Used for message.ch, network.ch etc.
