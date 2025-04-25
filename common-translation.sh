@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-26-01-03"
+SCRIPT_VERSION="2025-04-26-01-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -115,7 +115,7 @@ translate_with_google() {
     local response_data="" # Variable to store wget output
 
     # Ensure BASE_DIR exists (still needed for potential cache files, etc.)
-    mkdir -p "$BASE_DIR" 2>/dev/null || { debug_log "ERROR" "translate_with_google: Failed to create base directory $BASE_DIR"; return 1; }
+    mkdir -p "$BASE_DIR" 2>/dev/null || { debug_log "DEBUG" "translate_with_google: Failed to create base directory $BASE_DIR"; return 1; }
 
     # --- Network Type Detection (remains the same) ---
     if [ ! -f "$ip_check_file" ]; then
@@ -144,7 +144,7 @@ translate_with_google() {
 
     local encoded_text=$(urlencode "$source_text")
     if [ -z "$source_lang" ] || [ -z "$target_lang_code" ]; then
-        debug_log "ERROR" "translate_with_google: Source or target language code is empty (source='$source_lang', target='$target_lang_code')."
+        debug_log "DEBUG" "translate_with_google: Source or target language code is empty (source='$source_lang', target='$target_lang_code')."
         return 1
     fi
     api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang_code}&dt=t&q=${encoded_text}"
@@ -203,7 +203,7 @@ translate_with_google() {
     done
 
     # --- CHANGE: No temp file to remove ---
-    debug_log "ERROR" "translate_with_google: Failed to translate '$source_text' after $API_MAX_RETRIES attempts."
+    debug_log "DEBUG" "translate_with_google: Failed to translate '$source_text' after $API_MAX_RETRIES attempts."
     printf "" # Output empty string on failure
     return 1 # Failure
 }
@@ -240,30 +240,30 @@ create_language_db_parallel() {
 
     # --- Pre-checks ---
     if [ ! -f "$base_db" ]; then
-        debug_log "ERROR" "Base DB file not found: $base_db"
+        debug_log "DEBUG" "Base DB file not found: $base_db"
         printf "%s\n" "$(color red "$(get_message "MSG_ERR_BASE_DB_NOT_FOUND" "file=$base_db" "default=Base DB not found: $base_db")")" >&2
         return 1
     fi
     if [ -z "$aip_function_name" ] || [ -z "$target_lang_code" ]; then
-        debug_log "ERROR" "Missing required arguments: AIP function name or target language code."
+        debug_log "DEBUG" "Missing required arguments: AIP function name or target language code."
         printf "%s\n" "$(color red "$(get_message "MSG_ERR_MISSING_ARGS" "default=Missing required arguments for parallel translation.")")" >&2
         return 1
     fi
 
     # --- Prepare directories and cleanup ---
-    mkdir -p "$TR_DIR" || { debug_log "ERROR" "Failed to create temporary directory: $TR_DIR"; return 1; }
-    mkdir -p "$final_output_dir" || { debug_log "ERROR" "Failed to create final output directory: $final_output_dir"; return 1; }
+    mkdir -p "$TR_DIR" || { debug_log "DEBUG" "Failed to create temporary directory: $TR_DIR"; return 1; }
+    mkdir -p "$final_output_dir" || { debug_log "DEBUG" "Failed to create final output directory: $final_output_dir"; return 1; }
 
     # Trap for file cleanup on INT, TERM, or EXIT
     # shellcheck disable=SC2064
     trap "debug_log 'DEBUG' 'Trap cleanup: Removing temporary files...'; rm -f ${tmp_input_prefix}* ${tmp_output_prefix}*" INT TERM EXIT
 
     # --- Logging ---
-    debug_log "INFO" "Starting parallel translation for language '$target_lang_code' using function '$aip_function_name' (API: '$api_endpoint_url', Domain: '$domain_name')."
-    debug_log "INFO" "Base DB: $base_db"
-    debug_log "INFO" "Temporary file directory: $TR_DIR"
-    debug_log "INFO" "Final output file: $final_output_file"
-    debug_log "INFO" "Max parallel tasks: $MAX_PARALLEL_TASKS"
+    debug_log "DEBUG" "Starting parallel translation for language '$target_lang_code' using function '$aip_function_name' (API: '$api_endpoint_url', Domain: '$domain_name')."
+    debug_log "DEBUG" "Base DB: $base_db"
+    debug_log "DEBUG" "Temporary file directory: $TR_DIR"
+    debug_log "DEBUG" "Final output file: $final_output_file"
+    debug_log "DEBUG" "Max parallel tasks: $MAX_PARALLEL_TASKS"
 
     # --- Start Timing and Spinner ---
     start_time=$(date +%s)
@@ -277,10 +277,10 @@ create_language_db_parallel() {
     # --------------------------------
 
     # --- Split Base DB ---
-    debug_log "INFO" "Splitting base DB into $MAX_PARALLEL_TASKS parts..."
+    debug_log "DEBUG" "Splitting base DB into $MAX_PARALLEL_TASKS parts..."
     total_lines=$(awk 'NR>1{c++} END{print c}' "$base_db")
     if [ "$total_lines" -le 0 ]; then
-        debug_log "INFO" "No lines to translate (excluding header)."
+        debug_log "DEBUG" "No lines to translate (excluding header)."
         # Write header only
         cat > "$final_output_file" <<-EOF
 SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
@@ -288,7 +288,7 @@ SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
 # Target Language: ${target_lang_code}
 EOF
         if [ $? -ne 0 ]; then
-             debug_log "ERROR" "Failed to write header to $final_output_file"
+             debug_log "DEBUG" "Failed to write header to $final_output_file"
              exit_status=1
         fi
     else
@@ -308,7 +308,7 @@ EOF
                 print $0 >> (prefix task_num);
             }' "$base_db"
         if [ $? -ne 0 ]; then
-            debug_log "ERROR" "Failed to split base DB using awk."
+            debug_log "DEBUG" "Failed to split base DB using awk."
             exit_status=1
             if [ "$spinner_started" = "true" ]; then
                 # Use a specific message key or a default one for split failure
@@ -316,13 +316,13 @@ EOF
             fi
             return 1
         fi
-        debug_log "INFO" "Base DB split complete."
+        debug_log "DEBUG" "Base DB split complete."
     fi
     # ---------------------
 
     # --- Execute tasks only if split was successful and lines exist ---
     if [ "$exit_status" -eq 0 ] && [ "$total_lines" -gt 0 ]; then
-        debug_log "INFO" "Launching parallel translation tasks..."
+        debug_log "DEBUG" "Launching parallel translation tasks..."
         i=1
         while [ "$i" -le "$MAX_PARALLEL_TASKS" ]; do
             local tmp_input_file="${tmp_input_prefix}${i}"
@@ -334,7 +334,7 @@ EOF
                  continue
             fi
             >"$tmp_output_file" || {
-                debug_log "ERROR" "Failed to create temporary output file: $tmp_output_file";
+                debug_log "DEBUG" "Failed to create temporary output file: $tmp_output_file";
                 exit_status=1;
                 if [ "$spinner_started" = "true" ]; then
                     stop_spinner "$(get_message "MSG_TRANSLATION_FAILED_TMPFILE" "default=Translation failed creating temporary file.")" "error"
@@ -356,13 +356,13 @@ EOF
 
         # --- Wait for tasks ---
         if [ -n "$pids" ]; then
-             debug_log "INFO" "Waiting for launched tasks to complete..."
+             debug_log "DEBUG" "Waiting for launched tasks to complete..."
              for pid in $pids; do
                  wait "$pid"
                  local task_exit_status=$?
                  if [ "$task_exit_status" -ne 0 ]; then
                      if [ "$task_exit_status" -ne 2 ]; then
-                         debug_log "ERROR" "Task with PID $pid failed with critical exit status $task_exit_status."
+                         debug_log "DEBUG" "Task with PID $pid failed with critical exit status $task_exit_status."
                          exit_status=1
                      else
                           debug_log "WARN" "Task with PID $pid completed with partial success (exit status 2)."
@@ -372,9 +372,9 @@ EOF
                      debug_log "DEBUG" "Task with PID $pid completed successfully (exit status 0)."
                  fi
              done
-             debug_log "INFO" "All launched tasks completed (Overall status: $exit_status)."
+             debug_log "DEBUG" "All launched tasks completed (Overall status: $exit_status)."
         else
-             debug_log "INFO" "No tasks were launched."
+             debug_log "DEBUG" "No tasks were launched."
         fi
     fi
     # -------------------------------------------------
@@ -382,7 +382,7 @@ EOF
     # --- Combine results if no critical error occurred ---
     if [ "$exit_status" -ne 1 ]; then
         if [ "$total_lines" -gt 0 ]; then
-            debug_log "INFO" "Combining results into final output file: $final_output_file"
+            debug_log "DEBUG" "Combining results into final output file: $final_output_file"
             # Write header using cat << EOF
             cat > "$final_output_file" <<-EOF
 SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
@@ -390,13 +390,13 @@ SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
 # Target Language: ${target_lang_code}
 EOF
             if [ $? -ne 0 ]; then
-                 debug_log "ERROR" "Failed to write header to $final_output_file"
+                 debug_log "DEBUG" "Failed to write header to $final_output_file"
                  exit_status=1
             else
                 # Append results
                 find "$TR_DIR" -name "message_${target_lang_code}.tmp.out.*" -print0 | xargs -0 -r cat >> "$final_output_file"
                 if [ $? -ne 0 ]; then
-                     debug_log "ERROR" "Failed to combine temporary output files into $final_output_file"
+                     debug_log "DEBUG" "Failed to combine temporary output files into $final_output_file"
                      if [ "$exit_status" -eq 0 ]; then exit_status=1; fi
                 else
                      debug_log "DEBUG" "Successfully combined results."
@@ -406,7 +406,7 @@ EOF
                 fi
             fi
         elif [ "$exit_status" -eq 0 ]; then
-             debug_log "INFO" "No lines were translated, final file contains only header."
+             debug_log "DEBUG" "No lines were translated, final file contains only header."
         fi
     fi
     # ----------------------------------------------------
@@ -480,7 +480,7 @@ create_language_db() {
 
     # Check if input file exists (though parent should ensure this)
     if [ ! -f "$input_chunk_file" ]; then
-        debug_log "ERROR" "Child process: Input chunk file not found: $input_chunk_file"
+        debug_log "DEBUG" "Child process: Input chunk file not found: $input_chunk_file"
         return 1 # Critical error for this child
     fi
 
@@ -532,7 +532,7 @@ create_language_db() {
 
         # Check write status (optional, adds overhead)
         # if [ $? -ne 0 ]; then
-        #     debug_log "ERROR" "Child: Failed to write to output chunk file: $output_chunk_file"
+        #     debug_log "DEBUG" "Child: Failed to write to output chunk file: $output_chunk_file"
         #     return 1 # Critical error for this child
         # fi
 
