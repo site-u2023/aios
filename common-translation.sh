@@ -293,7 +293,7 @@ display_detected_translation() {
 #               Does NOT take language code as an argument.
 # @PARAM: None
 # @RETURN: 0 on success/no translation needed, 1 on critical error,
-#          propagates create_language_db_parallel exit code on failure.
+#          propagates create_language_db exit code on failure.
 translate_main() {
     # --- Initialization ---
     # (Wget detection logic remains the same)
@@ -380,12 +380,12 @@ translate_main() {
     debug_log "DEBUG" "translate_main: Using Domain '${domain_name}' for spinner..."
 
 
-    # 6. Call create_language_db_parallel (MODIFIED function name)
-    # Assuming create_language_db_parallel will be the new parallel function
-    debug_log "DEBUG" "translate_main: Calling create_language_db_parallel for language '${lang_code}' using function '${selected_func}'"
-    create_language_db_parallel "$selected_func" "$api_endpoint_url" "$domain_name" "$lang_code" # MODIFIED: Call the parallel version with the new name
+    # 6. Call create_language_db (MODIFIED function name)
+    # Assuming create_language_db will be the new parallel function
+    debug_log "DEBUG" "translate_main: Calling create_language_db for language '${lang_code}' using function '${selected_func}'"
+    create_language_db "$selected_func" "$api_endpoint_url" "$domain_name" "$lang_code" # MODIFIED: Call the parallel version with the new name
     db_creation_result=$?
-    debug_log "DEBUG" "translate_main: create_language_db_parallel finished with status: ${db_creation_result}"
+    debug_log "DEBUG" "translate_main: create_language_db finished with status: ${db_creation_result}"
 
     # 7. Handle Result and Display Info ONLY on Success
     if [ "$db_creation_result" -eq 0 ]; then
