@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-25-00-02" # Updated version based on last interaction time
+SCRIPT_VERSION="2025-04-25-00-03" # Updated version based on last interaction time
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -176,41 +176,41 @@ create_language_db() {
 
     # --- Argument Checks ---
     if [ -z "$input_file" ] || [ -z "$output_file" ] || [ -z "$target_lang_code" ] || [ -z "$api_func" ]; then
-        log "ERROR: create_language_db - Missing required arguments."
+        debug_log "ERROR" "create_language_db - Missing required arguments."
         return 1
     fi
     if [ ! -f "$input_file" ]; then
         # This might happen legitimately if a split resulted in an empty file
-        log "INFO: create_language_db - Input file not found or empty, skipping: $input_file"
+        debug_log "INFO" "create_language_db - Input file not found or empty, skipping: $input_file"
         # Ensure output file exists even if empty
-        touch "$output_file" || { log "ERROR: create_language_db - Failed to touch output file: $output_file"; return 1; }
+        touch "$output_file" || { debug_log "ERROR" "create_language_db - Failed to touch output file: $output_file"; return 1; }
         return 0
     fi
      if [ ! -r "$input_file" ]; then
-        log "ERROR: create_language_db - Input file not readable: $input_file"
+        debug_log "ERROR" "create_language_db - Input file not readable: $input_file"
         return 1
     fi
     # Output file should have been created by the caller, check if writable directory
     local output_dir=$(dirname "$output_file")
      if [ ! -w "$output_dir" ]; then
-        log "ERROR: create_language_db - Output directory not writable: $output_dir"
+        debug_log "ERROR" "create_language_db - Output directory not writable: $output_dir"
         return 1
      fi
      # Ensure output file exists and is writable (or can be created)
      # The caller (create_language_db_parallel) already creates it, but check again.
-     touch "$output_file" || { log "ERROR: create_language_db - Failed to touch/ensure output file: $output_file"; return 1; }
+     touch "$output_file" || { debug_log "ERROR" "create_language_db - Failed to touch/ensure output file: $output_file"; return 1; }
 
 
-    log "DEBUG: create_language_db - Processing chunk: Input='$input_file', Output='$output_file', Lang='$target_lang_code', API='$api_func'"
+    debug_log "DEBUG" "create_language_db - Processing chunk: Input='$input_file', Output='$output_file', Lang='$target_lang_code', API='$api_func'"
 
     # --- Process Input File Line by Line ---
     while IFS= read -r line || [ -n "$line" ]; do
         line_num=$(($line_num + 1))
-        log "DEBUG: create_language_db - Reading line $line_num: $line"
+        debug_log "DEBUG" "create_language_db - Reading line $line_num: $line"
 
         # Skip empty lines or lines not containing '=' (likely comments or invalid)
         if [ -z "$line" ] || ! echo "$line" | grep -q '='; then
-            log "DEBUG: create_language_db - Skipping empty or invalid line $line_num: $line"
+            debug_log "DEBUG" "create_language_db - Skipping empty or invalid line $line_num: $line"
             continue
         fi
 
@@ -219,19 +219,19 @@ create_language_db() {
         # Use parameter expansion for POSIX compliance
         local key_part="${line#*|}" # Remove lang prefix (e.g., MSG_KEY=Source Text)
         if [ "$key_part" = "$line" ]; then # Check if '|' was present
-             log "WARN: create_language_db - Invalid line format (missing '|') on line $line_num: $line"
+             debug_log "WARN" "create_language_db - Invalid line format (missing '|') on line $line_num: $line"
              continue
         fi
         msg_key="${key_part%%=*}"    # Extract key (e.g., MSG_KEY)
         source_text="${key_part#*=}" # Extract value (e.g., Source Text)
 
         if [ -z "$msg_key" ] || [ "$key_part" = "$msg_key" ]; then # Check if '=' was present after key
-            log "WARN: create_language_db - Invalid line format (missing '=' or empty key) on line $line_num: $line"
+            debug_log "WARN" "create_language_db - Invalid line format (missing '=' or empty key) on line $line_num: $line"
             continue
         fi
 
         # --- Call Translation API ---
-        log "DEBUG: create_language_db - Translating key '$msg_key' for lang '$target_lang_code'"
+        debug_log "DEBUG" "create_language_db - Translating key '$msg_key' for lang '$target_lang_code'"
         # Use eval carefully to call the dynamic function name
         # Ensure api_func is validated or sourced from a controlled list if possible
         # Assuming api_func is safe here based on how it's passed
@@ -239,24 +239,24 @@ create_language_db() {
             translated_text=$("$api_func" "$source_text" "$target_lang_code")
             local translate_exit_status=$?
             if [ $translate_exit_status -ne 0 ]; then
-                log "WARN: create_language_db - API function '$api_func' failed for key '$msg_key' (exit status $translate_exit_status). Using original text."
+                debug_log "WARN" "create_language_db - API function '$api_func' failed for key '$msg_key' (exit status $translate_exit_status). Using original text."
                 translated_text="$source_text" # Use original text on failure
             elif [ -z "$translated_text" ]; then
-                 log "WARN: create_language_db - API function '$api_func' returned empty for key '$msg_key'. Using original text."
+                 debug_log "WARN" "create_language_db - API function '$api_func' returned empty for key '$msg_key'. Using original text."
                  translated_text="$source_text" # Use original text if API returns empty
             fi
         else
-            log "ERROR: create_language_db - API function '$api_func' not found."
+            debug_log "ERROR" "create_language_db - API function '$api_func' not found."
             translated_text="$source_text" # Use original text if function not found
             exit_status=1 # Indicate an error occurred in this worker
         fi
 
         # --- Write Output Line ---
         output_line="${target_lang_code}|${msg_key}=${translated_text}"
-        log "DEBUG: create_language_db - Writing output line: $output_line"
+        debug_log "DEBUG" "create_language_db - Writing output line: $output_line"
         echo "$output_line" >> "$output_file"
         if [ $? -ne 0 ]; then
-            log "ERROR: create_language_db - Failed to write to output file: $output_file"
+            debug_log "ERROR" "create_language_db - Failed to write to output file: $output_file"
             exit_status=1 # Indicate an error occurred
             # Optionally break the loop or try to continue
             break # Stop processing this chunk on write error
@@ -264,7 +264,7 @@ create_language_db() {
 
     done < "$input_file"
 
-    log "DEBUG: create_language_db - Finished processing chunk: $input_file"
+    debug_log "DEBUG" "create_language_db - Finished processing chunk: $input_file"
     return $exit_status
 }
 
@@ -289,46 +289,46 @@ create_language_db_parallel() {
 
     # --- Pre-checks ---
     if [ ! -f "$base_db" ]; then
-        log "ERROR: Base DB file not found: $base_db"
+        debug_log "ERROR" "Base DB file not found: $base_db"
         return 1
     fi
     if [ -z "$target_lang_code" ]; then
-        log "ERROR: Target language code is empty."
+        debug_log "ERROR" "Target language code is empty."
         return 1
     fi
     if [ -z "$api_func" ]; then
-        log "ERROR: API function name is empty."
+        debug_log "ERROR" "API function name is empty."
         return 1
     fi
 
     # --- Prepare directories and cleanup ---
-    mkdir -p "$TR_DIR" || { log "ERROR: Failed to create temporary directory: $TR_DIR"; return 1; }
-    mkdir -p "$final_output_dir" || { log "ERROR: Failed to create final output directory: $final_output_dir"; return 1; }
+    mkdir -p "$TR_DIR" || { debug_log "ERROR" "Failed to create temporary directory: $TR_DIR"; return 1; }
+    mkdir -p "$final_output_dir" || { debug_log "ERROR" "Failed to create final output directory: $final_output_dir"; return 1; }
 
     # Setup trap for cleanup
     # shellcheck disable=SC2064 # We want $tmp_input_prefix and $tmp_output_prefix to expand now
-    trap "log 'INFO: Cleaning up temporary files...'; rm -f ${tmp_input_prefix}* ${tmp_output_prefix}*; exit \$exit_status" INT TERM EXIT
+    trap "debug_log 'INFO' 'Cleaning up temporary files...'; rm -f ${tmp_input_prefix}* ${tmp_output_prefix}*; exit \$exit_status" INT TERM EXIT
 
-    log "INFO: Starting parallel translation for language '$target_lang_code' using '$api_func'."
-    log "INFO: Base DB: $base_db"
-    log "INFO: Temporary file directory: $TR_DIR"
-    log "INFO: Final output file: $final_output_file"
-    log "INFO: Max parallel tasks: $MAX_PARALLEL_TASKS"
+    debug_log "INFO" "Starting parallel translation for language '$target_lang_code' using '$api_func'."
+    debug_log "INFO" "Base DB: $base_db"
+    debug_log "INFO" "Temporary file directory: $TR_DIR"
+    debug_log "INFO" "Final output file: $final_output_file"
+    debug_log "INFO" "Max parallel tasks: $MAX_PARALLEL_TASKS"
 
     # --- Extract Header ---
     header=$(head -n 1 "$base_db")
     if [ -z "$header" ]; then
-       log "WARN: Base DB might be empty or header could not be read."
+       debug_log "WARN" "Base DB might be empty or header could not be read."
        # Optionally create a default header if needed based on target_lang_code
        # header="${target_lang_code}|# Created on $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
     fi
 
     # --- Split Base DB (excluding header) using awk ---
-    log "INFO: Splitting base DB into $MAX_PARALLEL_TASKS parts..."
+    debug_log "INFO" "Splitting base DB into $MAX_PARALLEL_TASKS parts..."
     # Count lines excluding header
     total_lines=$(($(wc -l < "$base_db") - 1))
     if [ "$total_lines" -le 0 ]; then
-        log "INFO: No lines to translate (excluding header)."
+        debug_log "INFO" "No lines to translate (excluding header)."
         # Write only header to final file and exit successfully
         echo "$header" > "$final_output_file"
         # Cleanup trap will run on exit
@@ -344,7 +344,7 @@ create_language_db_parallel() {
         lines_per_task=1
         # Adjust MAX_PARALLEL_TASKS if fewer lines than tasks? Or let awk handle empty files?
         # Let's proceed, awk will create empty files for tasks > total_lines if needed.
-        log "WARN: Fewer lines ($total_lines) than tasks ($MAX_PARALLEL_TASKS). Some tasks might process few or no lines."
+        debug_log "WARN" "Fewer lines ($total_lines) than tasks ($MAX_PARALLEL_TASKS). Some tasks might process few or no lines."
     fi
 
     # Use awk to split the file (NR>1 skips header)
@@ -357,72 +357,72 @@ create_language_db_parallel() {
          }' "$base_db"
 
     if [ $? -ne 0 ]; then
-        log "ERROR: Failed to split base DB using awk."
+        debug_log "ERROR" "Failed to split base DB using awk."
         # Cleanup trap will run on exit
         return 1
     fi
-    log "INFO: Base DB split complete."
+    debug_log "INFO" "Base DB split complete."
 
     # --- Execute tasks in parallel ---
-    log "INFO: Launching parallel translation tasks..."
+    debug_log "INFO" "Launching parallel translation tasks..."
     i=1
     while [ "$i" -le "$MAX_PARALLEL_TASKS" ]; do
         local tmp_input_file="${tmp_input_prefix}${i}"
         local tmp_output_file="${tmp_output_prefix}${i}"
 
         # Ensure temp input file exists before launching task, even if empty (awk creates it)
-        touch "$tmp_input_file" || { log "ERROR: Failed to touch temporary input file: $tmp_input_file"; exit_status=1; break; } # Exit loop on error
+        touch "$tmp_input_file" || { debug_log "ERROR" "Failed to touch temporary input file: $tmp_input_file"; exit_status=1; break; } # Exit loop on error
         # Create empty output file initially
-        >"$tmp_output_file" || { log "ERROR: Failed to create temporary output file: $tmp_output_file"; exit_status=1; break; } # Exit loop on error
+        >"$tmp_output_file" || { debug_log "ERROR" "Failed to create temporary output file: $tmp_output_file"; exit_status=1; break; } # Exit loop on error
 
         # Launch create_language_db in the background
         # Pass input file, output file, lang code, api func
         create_language_db "$tmp_input_file" "$tmp_output_file" "$target_lang_code" "$api_func" &
         pid=$!
         pids="$pids $pid"
-        log "DEBUG: Launched task $i (PID: $pid) for input $tmp_input_file"
+        debug_log "DEBUG" "Launched task $i (PID: $pid) for input $tmp_input_file"
 
         i=$(($i + 1))
     done
 
     # --- Wait for all tasks to complete ---
-    log "INFO: Waiting for $MAX_PARALLEL_TASKS tasks to complete..."
+    debug_log "INFO" "Waiting for $MAX_PARALLEL_TASKS tasks to complete..."
     for pid in $pids; do
         wait "$pid"
         local task_exit_status=$?
         if [ "$task_exit_status" -ne 0 ]; then
-            log "ERROR: Task with PID $pid failed with exit status $task_exit_status."
+            debug_log "ERROR" "Task with PID $pid failed with exit status $task_exit_status."
             # Set overall exit status to failure, but let other tasks finish/cleanup run
             exit_status=1
         else
-            log "DEBUG: Task with PID $pid completed successfully."
+            debug_log "DEBUG" "Task with PID $pid completed successfully."
         fi
     done
 
     if [ "$exit_status" -ne 0 ]; then
-         log "ERROR: One or more translation tasks failed."
+         debug_log "ERROR" "One or more translation tasks failed."
          # Cleanup trap will run on exit
          return 1
     fi
 
-    log "INFO: All translation tasks completed."
+    debug_log "INFO" "All translation tasks completed."
 
     # --- Combine results ---
-    log "INFO: Combining results into final output file: $final_output_file"
+    debug_log "INFO" "Combining results into final output file: $final_output_file"
     # Write header first (overwrite file)
-    echo "$header" > "$final_output_file" || { log "ERROR: Failed to write header to $final_output_file"; exit_status=1; return 1; } # Cleanup trap runs on return
+    echo "$header" > "$final_output_file" || { debug_log "ERROR" "Failed to write header to $final_output_file"; exit_status=1; return 1; } # Cleanup trap runs on return
 
     # Append results from all temp output files
     # Use find to handle cases where some temp files might not be created if MAX_PARALLEL_TASKS > total_lines
     find "$TR_DIR" -name "message_${target_lang_code}.tmp.out.*" -print0 | xargs -0 cat >> "$final_output_file"
     if [ $? -ne 0 ]; then
-         log "ERROR: Failed to combine temporary output files into $final_output_file"
+         debug_log "ERROR" "Failed to combine temporary output files into $final_output_file"
          exit_status=1
          # Cleanup trap will run on exit
          return 1
     fi
 
-    log "INFO: Successfully created language DB: $final_output_file"
+    debug_log "INFO" "Successfully created language DB: $final_output_file"
 
     # Cleanup is handled by trap on EXIT
     return 0
