@@ -61,7 +61,7 @@ DOWNLOAD_METHOD="${DOWNLOAD_METHOD:-api}" # ダウンロード方式 (api/direct
 
 # パス・ファイル関連
 INTERPRETER="${INTERPRETER:-ash}"  # デフォルトインタープリタ
-BIN_PATH="$(readlink -f "$0")"   # 実行ファイルの絶対パス
+BIN_PATH="$(readlink "$0")"   # 実行ファイルの絶対パス
 BIN_DIR="$(dirname "$BIN_PATH")" # 実行ファイルのディレクトリ
 BIN_FILE="$(basename "$BIN_PATH")" # 実行ファイル名
 
