@@ -2086,6 +2086,136 @@ download() {
     # ファイル名を最初の引数として処理
     local file_name="$1"
     shift
+
+    # 空ファイル名のチェック
+    if [ -z "$file_name" ]; then
+        return 1 # エラーを示す非ゼロ値を返す
+    fi
+
+    # 設定変数の初期化
+    local hidden_mode="false" # この変数は download_parallel で管理されるため、ここでは不要になる可能性あり
+    local quiet_mode="${QUIET_MODE:-false}" # quiet_mode も表示を行わないため不要になる可能性あり
+    local chmod_mode="false"
+    local load_mode="false"
+    local interpreter_name=""  # デフォルト値を空に
+
+    # オプション引数の処理
+    while [ $# -gt 0 ]; do
+        local option="$1"
+        local value="true"
+
+        # キー=値形式の場合は分解処理
+        if echo "$option" | grep -q "="; then
+            value=$(echo "$option" | cut -d'=' -f2)
+            option=$(echo "$option" | cut -d'=' -f1)
+        fi
+
+        # オプション判定（値がtrueの場合のみ処理）
+        if [ "$value" = "true" ]; then
+            case "$option" in
+                # インタプリタオプション
+                bash)   interpreter_name="bash" ;;
+                python3) interpreter_name="python" ;; # python3 ではなく python が一般的か
+                node)   interpreter_name="node" ;;
+                perl)   interpreter_name="perl" ;;
+                # モードオプション
+                hidden) hidden_mode="true" ;; # 表示しないので影響なし
+                quiet)  quiet_mode="true" ;; # 表示しないので影響なし
+                debug)  DEBUG_MODE="true" ;;
+                chmod)  chmod_mode="true" ;;
+                load)   load_mode="true" ;;
+                # 不明オプション
+                *) ;;
+            esac
+        fi
+        shift
+    done
+
+    # インタプリタが設定されていなければデフォルト値を設定
+    [ -z "$interpreter_name" ] && interpreter_name="ash"
+
+    # バージョン情報取得
+    local version_data
+    version_data=$(download_check_version "$file_name")
+    if [ $? -ne 0 ]; then
+        return 1 # エラー
+    fi
+
+    local update_required=$(echo "$version_data" | cut -d'|' -f1)
+    local clean_remote_version=$(echo "$version_data" | cut -d'|' -f2)
+    # local clean_local_version=$(echo "$version_data" | cut -d'|' -f3) # 使われていない
+    # local api_status=$(echo "$version_data" | cut -d'|' -f4) # 使われていない
+
+    # ファイルの存在確認
+    local file_path="${BASE_DIR}/$file_name"
+    local file_exists="true"
+    if [ ! -f "$file_path" ] || [ ! -s "$file_path" ]; then
+        file_exists="false"
+        update_required="true"
+    fi
+
+    # デバッグモード時は常にダウンロード
+    if [ "$DEBUG_MODE" = "true" ]; then
+        update_required="true"
+    fi
+
+    # ファイルダウンロード処理
+    if [ "$update_required" = "true" ] || [ "$file_exists" = "false" ]; then
+        if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode"; then
+            return 1 # エラー
+        fi
+
+        # aiosファイルは常に実行権限を設定
+        if [ "$file_name" = "aios" ]; then
+            if ! chmod +x "$file_path"; then
+                 # 続行はするが警告は出す
+            fi
+        fi
+    fi
+
+    # --- download_finalize から移設した load 処理 ---
+    if [ "$load_mode" = "true" ]; then
+
+        # ファイルが存在し、空でないことを確認
+        if [ -f "$file_path" ] && [ -s "$file_path" ]; then
+            # インタプリタが存在するか確認
+            if [ "$interpreter_name" != "$INTERPRETER" ]; then # $INTERPRETER は ash を想定
+                if ! command -v "$interpreter_name" > /dev/null 2>&1; then
+                    # インタプリタが見つからない場合のエラー処理（パッケージインストールはここでは行わない方が良いか？）
+                    # install_package は対話的要素を含む可能性があり、BG実行には不向き
+                    return 1 # エラー
+                else
+                    # 指定されたインタプリタで実行
+                    debug_log "DEBUG" "download: Executing with specified interpreter: ${interpreter_name} ${file_path}"
+                    if ! "$interpreter_name" "$file_path"; then
+                        debug_log "ERROR" "download: Failed to load ${file_name} with interpreter ${interpreter_name}."
+                        return 1 # エラー
+                    fi
+                fi
+            else
+                # デフォルトのシェル (ash) で source する
+                debug_log "DEBUG" "download: Sourcing file: . ${file_path}"
+                if ! . "$file_path"; then
+                    debug_log "ERROR" "download: Failed to source ${file_name}."
+                    return 1 # エラー
+                fi
+            fi
+        else
+            debug_log "ERROR" "download: Cannot load non-existent or empty file: ${file_path}"
+            return 1 # エラー
+        fi
+    fi
+    # --- load 処理移設ここまで ---
+
+    # 成功終了
+    debug_log "INFO" "download: Successfully processed ${file_name}."
+    return 0
+}
+
+OK_download() {
+    # ファイル名を最初の引数として処理
+    local file_name="$1"
+    shift
     
     # 空ファイル名のチェック
     if [ -z "$file_name" ]; then
