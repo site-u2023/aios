@@ -2413,7 +2413,7 @@ download() {
             return 1
         fi
         status_type="success"
-        status_message="$(get_message "CONFIG_DOWNLOAD_SUCCESS")"
+        # status_message="$(get_message "CONFIG_DOWNLOAD_SUCCESS")"
         
         # aiosファイルは常に実行権限を設定する（追加）
         if [ "$file_name" = "aios" ]; then
@@ -2427,7 +2427,7 @@ download() {
     fi
 
     # 結果表示とファイル読み込み
-    download_finalize "$file_name" "$status_message" "$clean_remote_version" "$api_status" "$load_mode" "$hidden_mode" "$status_type" "$interpreter_name"
+    # download_finalize "$file_name" "$status_message" "$clean_remote_version" "$api_status" "$load_mode" "$hidden_mode" "$status_type" "$interpreter_name"
     
     return 0
 }
