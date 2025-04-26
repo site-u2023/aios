@@ -73,6 +73,7 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}" # キャッシュディレクトリ
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}" # フィードディレクトリ
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"   # ログディレクトリ
 TR_DIR="${TR_DIR:-$BASE_DIR/translation}"
+DR_DIR="${DR_DIR:-$BASE_DIR/download}"
 
 # スピナーデフォルト設定
 SPINNER_DELAY="1" # デフォルトは秒単位
@@ -2898,21 +2899,22 @@ check_option() {
 }
 
 download_files() {
-    download "common-system.sh" "chmod" "load"
-    download "common-information.sh" "chmod" "load"
-    download "common-translation.sh" "chmod" "load"
-    download "common-color.sh" "chmod" "load"
-    download "common-country.sh" "chmod" "load"
-    download "common-menu.sh" "chmod" "load"
-    download "common-package.sh" "chmod" "load"
-    download "common-feed-package.sh" "chmod" "load"
+     "common-system.sh" "chmod" "load"
+     "common-information.sh" "chmod" "load"
+     "common-translation.sh" "chmod" "load"
+     "common-color.sh" "chmod" "load"
+     "common-country.sh" "chmod" "load"
+     "common-menu.sh" "chmod" "load"
+     "common-package.sh" "chmod" "load"
+     "common-feed-package.sh" "chmod" "load"
 
-    download "menu.db"
-    download "country.db"
-    download "message_${DEFAULT_LANGUAGE}.db"
-    download "local-package.db"
-    download "custom-package.db"
+     "menu.db"
+     "country.db"
+     "message_${DEFAULT_LANGUAGE}.db"
+     "local-package.db"
+     "custom-package.db"
 }
+
 
 check_common() {
     local lang_code="$SELECTED_LANGUAGE"
