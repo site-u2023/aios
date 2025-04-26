@@ -2868,22 +2868,21 @@ check_option() {
 }
 
 download_files() {
-     "common-system.sh" "chmod" "load"
-     "common-information.sh" "chmod" "load"
-     "common-translation.sh" "chmod" "load"
-     "common-color.sh" "chmod" "load"
-     "common-country.sh" "chmod" "load"
-     "common-menu.sh" "chmod" "load"
-     "common-package.sh" "chmod" "load"
-     "common-feed-package.sh" "chmod" "load"
+    download "common-system.sh" "chmod" "load"
+    download "common-information.sh" "chmod" "load"
+    download "common-translation.sh" "chmod" "load"
+    download "common-color.sh" "chmod" "load"
+    download "common-country.sh" "chmod" "load"
+    download "common-menu.sh" "chmod" "load"
+    download "common-package.sh" "chmod" "load"
+    download "common-feed-package.sh" "chmod" "load"
 
-     "menu.db"
-     "country.db"
-     "message_${DEFAULT_LANGUAGE}.db"
-     "local-package.db"
-     "custom-package.db"
+    download "menu.db"
+    download "country.db"
+    download "message_${DEFAULT_LANGUAGE}.db"
+    download "local-package.db"
+    download "custom-package.db"
 }
-
 
 check_common() {
     local lang_code="$SELECTED_LANGUAGE"
