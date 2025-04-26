@@ -73,7 +73,7 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}" # キャッシュディレクトリ
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}" # フィードディレクトリ
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"   # ログディレクトリ
 TR_DIR="${TR_DIR:-$BASE_DIR/translation}"
-DR_DIR="${DR_DIR:-$BASE_DIR/download}"
+DL_DIR="${DL_DIR:-$BASE_DIR/download}"
 
 # スピナーデフォルト設定
 SPINNER_DELAY="1" # デフォルトは秒単位
@@ -2136,14 +2136,6 @@ download() {
         fi
     fi
 
-    # --- ディレクトリ準備 ---
-    DR_DIR="${DR_DIR:-$BASE_DIR/download}"
-    if ! mkdir -p "$DR_DIR"; then
-        if [ ! -d "$DR_DIR" ]; then
-             # No logging here
-             return 1
-        fi
-    fi
     local file_path="${DR_DIR}/${file_name}" # Define full path
 
     # --- バージョン情報取得 ---
