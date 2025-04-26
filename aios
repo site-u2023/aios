@@ -2514,11 +2514,10 @@ download() {
     local file_name="$1"
     local url="$2"
     local expected_checksum="$3"
-    # Corrected: Use DL_DIR for target path as per user context
     local target_path="${DL_DIR}/${file_name}"
     local current_checksum=""
-    local curl_exit_code
-    # Corrected: Define path for version cache file
+    # Corrected: Use wget exit code variable
+    local wget_exit_code
     local version_cache_file="${CACHE_DIR}/${file_name}.ver"
 
     # Input validation
@@ -2534,25 +2533,29 @@ download() {
         current_checksum=$(sha256sum "$target_path" | cut -d' ' -f1)
         if [ "$current_checksum" = "$expected_checksum" ]; then
             log "INFO_download" "$file_name" "File already exists and checksum matches. Skipping download."
-            # Corrected: Restore version cache update logic on match
             log "DEBUG_download" "$file_name" "Updating version cache: $version_cache_file"
-            echo "$expected_checksum" > "$version_cache_file" # Update .ver file
+            echo "$expected_checksum" > "$version_cache_file"
             return 0 # Indicate success (already present)
         else
             log "WARN_download" "$file_name" "File exists but checksum MISMATCH (Expected: $expected_checksum, Found: $current_checksum). Re-downloading."
-            rm -f "$target_path" "$version_cache_file" # Remove corrupted/outdated file and its .ver file
+            rm -f "$target_path" "$version_cache_file"
         fi
     fi
 
-    # Download the file
-    log "INFO_download" "$file_name" "Downloading from $url..."
+    # Download the file using wget
+    log "INFO_download" "$file_name" "Downloading from $url using wget..."
     # Ensure target directory exists
     mkdir -p "$(dirname "$target_path")"
-    curl -L -s -o "$target_path" "$url"
-    curl_exit_code=$?
+    # Corrected: Use wget with appropriate options
+    # -q: quiet mode (like curl -s)
+    # -O: output to specified file (like curl -o)
+    # wget follows redirects by default (like curl -L)
+    wget -q -O "$target_path" "$url"
+    wget_exit_code=$?
 
-    if [ "$curl_exit_code" -ne 0 ]; then
-        log "ERROR_download" "$file_name" "Download failed (curl exit code: $curl_exit_code)."
+    # Corrected: Check wget exit code
+    if [ "$wget_exit_code" -ne 0 ]; then
+        log "ERROR_download" "$file_name" "Download failed (wget exit code: $wget_exit_code)."
         rm -f "$target_path" # Clean up potentially incomplete file
         return 1 # Indicate failure
     fi
@@ -2561,13 +2564,12 @@ download() {
     current_checksum=$(sha256sum "$target_path" | cut -d' ' -f1)
     if [ "$current_checksum" = "$expected_checksum" ]; then
         log "INFO_download" "$file_name" "Download successful and checksum VERIFIED."
-        # Corrected: Restore version cache update logic on successful download
         log "DEBUG_download" "$file_name" "Updating version cache: $version_cache_file"
-        echo "$expected_checksum" > "$version_cache_file" # Create/Update .ver file
+        echo "$expected_checksum" > "$version_cache_file"
         return 0 # Indicate success
     else
         log "ERROR_download" "$file_name" "Checksum verification FAILED after download (Expected: $expected_checksum, Found: $current_checksum)."
-        rm -f "$target_path" "$version_cache_file" # Clean up corrupted file and remove potentially incorrect .ver file
+        rm -f "$target_path" "$version_cache_file"
         return 1 # Indicate failure
     fi
 }
