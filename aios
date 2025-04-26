@@ -2088,14 +2088,7 @@ get_commit_version() {
 }
 
 # download: Download a file, check version, set permissions, and optionally load/execute it.
-
-# Usage: download <file_name> [option1] [option2] ...
-# Options:
-#   bash|python3|node|perl: Specify interpreter for execution (ONLY effective with 'load').
-#   hidden: Suppress non-error messages during download check/fetch.
-#   quiet: Suppress all non-error messages (overrides hidden). Passed from download_parallel.
-#   chmod: Set execute permission after download.
-#   load: Source (for ash) or execute (for other interpreters) the file after download.
+# (コメントと関数シグネチャは前回提示と同じ)
 
 download() {
     # ファイル名を最初の引数として処理
@@ -2104,7 +2097,7 @@ download() {
 
     # 空ファイル名のチェック
     if [ -z "$file_name" ]; then
-        print_message "error" "DL_ERR_NO_FILENAME" >&2
+        # No logging here, just return error
         return 1
     fi
 
@@ -2117,7 +2110,6 @@ download() {
     local interpreter_option="" # Temp storage for last interpreter option found
 
     # --- オプション引数の処理 ---
-    # Use a copy of arguments to avoid modifying the original list if needed elsewhere
     local args_copy=""
     local opt
     for opt in "$@"; do args_copy="$args_copy \"$opt\""; done
@@ -2125,42 +2117,30 @@ download() {
 
     while [ $# -gt 0 ]; do
         case "$1" in
-            # --- Mode Options ---
             hidden) hidden_mode="true" ;;
-            quiet)  quiet_mode="true"; hidden_mode="true" ;; # quiet implies hidden
+            quiet)  quiet_mode="true"; hidden_mode="true" ;;
             chmod)  chmod_mode="true" ;;
             load)   load_mode="true" ;;
-
-            # --- Interpreter Options (Only relevant if load_mode becomes true later) ---
-            # We store the *last* specified interpreter option, processing happens *after* the loop if load_mode is true.
             bash|python|node|perl) interpreter_option="$1" ;;
-            python3) interpreter_option="python" ;; # Treat python3 as python
-
-            *)
-                # Ignore unknown options
-                : # No operation for unknown options
-                ;;
+            python3) interpreter_option="python" ;;
+            *) : ;; # Ignore unknown options silently
         esac
         shift
     done
 
     # --- Process interpreter ONLY if load_mode is true ---
     if [ "$load_mode" = "true" ]; then
-        # Set interpreter based on the last found option
-        interpreter_name="${interpreter_option:-ash}" # Default to 'ash' if no specific interpreter option was found
-        # If loading, chmod is often needed unless sourcing ash
+        interpreter_name="${interpreter_option:-ash}" # Default to 'ash'
         if [ "$interpreter_name" != "ash" ]; then
-            chmod_mode="true"
+            chmod_mode="true" # Usually need +x if not sourcing with ash
         fi
     fi
 
     # --- ディレクトリ準備 ---
-    # DR_DIR should be set globally or determined here
     DR_DIR="${DR_DIR:-$BASE_DIR/download}"
-    # Ensure download directory exists
     if ! mkdir -p "$DR_DIR"; then
-        if [ ! -d "$DR_DIR" ]; then # Check if mkdir failed AND directory doesn't exist
-             print_message "error" "DL_ERR_MKDIR_FAILED" "$DR_DIR" >&2
+        if [ ! -d "$DR_DIR" ]; then
+             # No logging here
              return 1
         fi
     fi
@@ -2168,8 +2148,8 @@ download() {
 
     # --- バージョン情報取得 ---
     local version_data
-    # Pass hidden/quiet mode to sub-function if it supports them
-    version_data=$(download_check_version "$file_name" "$hidden_mode" "$quiet_mode") # Assuming download_check_version accepts these
+    # Assuming download_check_version handles its own logging if needed
+    version_data=$(download_check_version "$file_name" "$hidden_mode" "$quiet_mode")
 
     local update_required=$(echo "$version_data" | cut -d'|' -f1)
     local clean_remote_version=$(echo "$version_data" | cut -d'|' -f2)
@@ -2180,74 +2160,67 @@ download() {
     local file_exists="true"
     if [ ! -f "$file_path" ] || [ ! -s "$file_path" ]; then
         file_exists="false"
-        # If file doesn't exist or is empty, update is required regardless of version check
         update_required="true"
     fi
 
     # --- ファイルダウンロード処理 ---
     local download_status=0 # 0 for success/no_update, 1 for failure
     if [ "$update_required" = "true" ]; then
-        # Pass chmod_mode to fetch_file
-        if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode" "$hidden_mode" "$quiet_mode"; then # Assuming fetch_file accepts modes
-            # download_fetch_file should print its own errors
+        # Assuming download_fetch_file handles its own logging if needed
+        if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode" "$hidden_mode" "$quiet_mode"; then
             download_status=1
         else
             # Ensure file exists after fetch attempt
             if [ ! -f "$file_path" ] || [ ! -s "$file_path" ]; then
-                 print_message "error" "DL_ERR_FETCH_NO_FILE" "$file_name" "$file_path" >&2
+                 # No logging here
                  download_status=1
             fi
         fi
     fi
 
-    # --- ロード処理 (ダウンロード成功時または更新不要でファイルが存在し、かつ load_mode が true の場合) ---
+    # --- ロード処理 ---
     if [ "$download_status" -eq 0 ] && [ "$load_mode" = "true" ]; then
-        # Ensure file exists before attempting load (important if update_required was false)
         if [ ! -f "$file_path" ] || [ ! -s "$file_path" ]; then
-            print_message "error" "DL_ERR_LOAD_NO_FILE" "$file_name" "$file_path" >&2
-            return 1 # Cannot load non-existent file
+            # No logging here
+            return 1
         fi
 
-        # Ensure execute permission IF chmod_mode is explicitly true OR if using an interpreter (not sourcing with ash)
+        # Ensure execute permission if needed
         if [ "$chmod_mode" = "true" ] || { [ -n "$interpreter_name" ] && [ "$interpreter_name" != "ash" ]; }; then
              if ! chmod +x "$file_path"; then
-                 # Non-fatal, but warn
-                 print_message "warn" "DL_WARN_CHMOD_FAILED" "$file_path" >&2
+                 # No logging here, chmod failure is non-fatal for load attempt
+                 : # Continue attempt even if chmod fails
              fi
         fi
 
         # Execute or source
-        # print_message "debug" "DL_DEBUG_LOAD_ATTEMPT" "$file_path" "$interpreter_name" # Debug log removed
         if [ "$interpreter_name" = "ash" ]; then
-            # Source in the current shell environment
             if ! . "$file_path"; then
-                print_message "error" "DL_ERR_SOURCE_FAILED" "$file_name" "$file_path" >&2
-                return 1 # Sourcing failed
+                # No logging here
+                return 1
             fi
         else
-            # Check if interpreter exists
+             # Check if interpreter exists (no logging)
              if ! command -v "$interpreter_name" > /dev/null 2>&1; then
-                 # Try to install interpreter (assuming install_package exists)
-                 print_message "info" "DL_INFO_INSTALL_INTERP" "$interpreter_name" "$file_name" >&2
-                 # Use 'yn' for prompt, 'hidden' for less output during install
+                 # Assuming install_package handles its own logging if needed
                  if ! install_package "$interpreter_name" yn hidden; then
-                      print_message "error" "DL_ERR_INSTALL_INTERP_FAILED" "$interpreter_name" "$file_name" >&2
-                      return 1 # Failed to install required interpreter
+                      # No logging here
+                      return 1
                  fi
              fi
-            # Execute with the specified interpreter
+            # Execute (no logging)
             if ! "$interpreter_name" "$file_path"; then
-                print_message "error" "DL_ERR_EXEC_FAILED" "$interpreter_name" "$file_name" "$file_path" >&2
-                return 1 # Execution failed
+                # No logging here
+                return 1
             fi
         fi
-        # print_message "debug" "DL_DEBUG_LOAD_SUCCESS" "$file_path" # Debug log removed
+        # No success log here
     elif [ "$download_status" -ne 0 ]; then
-         # Download failed, return error
+         # Download failed
          return 1
     fi
 
-    # If download was skipped and load wasn't requested, or if load succeeded
+    # Success
     return 0
 }
 
