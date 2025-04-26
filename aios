@@ -2087,6 +2087,16 @@ get_commit_version() {
     return 1
 }
 
+# download: Download a file, check version, set permissions, and optionally load/execute it.
+
+# Usage: download <file_name> [option1] [option2] ...
+# Options:
+#   bash|python3|node|perl: Specify interpreter for execution (ONLY effective with 'load').
+#   hidden: Suppress non-error messages during download check/fetch.
+#   quiet: Suppress all non-error messages (overrides hidden). Passed from download_parallel.
+#   chmod: Set execute permission after download.
+#   load: Source (for ash) or execute (for other interpreters) the file after download.
+
 download() {
     # ファイル名を最初の引数として処理
     local file_name="$1"
@@ -2094,278 +2104,309 @@ download() {
 
     # 空ファイル名のチェック
     if [ -z "$file_name" ]; then
+        print_message "error" "DL_ERR_NO_FILENAME" >&2
         return 1
     fi
 
-    # 設定変数の初期化
+    # --- オプションと設定変数の初期化 ---
     local hidden_mode="false"
-    local quiet_mode="${QUIET_MODE:-false}"
+    local quiet_mode="${QUIET_MODE:-false}" # QUIET_MODE is potentially global
     local chmod_mode="false"
     local load_mode="false"
-    local interpreter_name=""  # デフォルト値を空に
+    local interpreter_name="" # Set only if load_mode is true
+    local interpreter_option="" # Temp storage for last interpreter option found
 
-    # オプション引数の処理（改善版）
+    # --- オプション引数の処理 ---
+    # Use a copy of arguments to avoid modifying the original list if needed elsewhere
+    local args_copy=""
+    local opt
+    for opt in "$@"; do args_copy="$args_copy \"$opt\""; done
+    eval "set -- $args_copy" # Restore arguments safely
+
     while [ $# -gt 0 ]; do
-        local option="$1"
-        local value="true"
+        case "$1" in
+            # --- Mode Options ---
+            hidden) hidden_mode="true" ;;
+            quiet)  quiet_mode="true"; hidden_mode="true" ;; # quiet implies hidden
+            chmod)  chmod_mode="true" ;;
+            load)   load_mode="true" ;;
 
-        # キー=値形式の場合は分解処理
-        if echo "$option" | grep -q "="; then
-            value=$(echo "$option" | cut -d'=' -f2)
-            option=$(echo "$option" | cut -d'=' -f1)
-        fi
+            # --- Interpreter Options (Only relevant if load_mode becomes true later) ---
+            # We store the *last* specified interpreter option, processing happens *after* the loop if load_mode is true.
+            bash|python|node|perl) interpreter_option="$1" ;;
+            python3) interpreter_option="python" ;; # Treat python3 as python
 
-        # オプション判定（値がtrueの場合のみ処理）
-        if [ "$value" = "true" ]; then
-            case "$option" in
-                # インタプリタオプション
-                bash)   interpreter_name="bash" ;;
-                python3) interpreter_name="python" ;;
-                node)   interpreter_name="node" ;;
-                perl)   interpreter_name="perl" ;;
-                # モードオプション
-                hidden) hidden_mode="true" ;;
-                quiet)  quiet_mode="true" ;;
-                debug)  DEBUG_MODE="true" ;;
-                chmod)  chmod_mode="true" ;;
-                load)   load_mode="true" ;;
-                # 不明オプション
-                *) ;;
-            esac
-        fi
+            *)
+                # Ignore unknown options
+                : # No operation for unknown options
+                ;;
+        esac
         shift
     done
 
-    # インタプリタが設定されていなければデフォルト値を設定
-    [ -z "$interpreter_name" ] && interpreter_name="ash"
+    # --- Process interpreter ONLY if load_mode is true ---
+    if [ "$load_mode" = "true" ]; then
+        # Set interpreter based on the last found option
+        interpreter_name="${interpreter_option:-ash}" # Default to 'ash' if no specific interpreter option was found
+        # If loading, chmod is often needed unless sourcing ash
+        if [ "$interpreter_name" != "ash" ]; then
+            chmod_mode="true"
+        fi
+    fi
 
-    # バージョン情報取得
+    # --- ディレクトリ準備 ---
+    # DR_DIR should be set globally or determined here
+    DR_DIR="${DR_DIR:-$BASE_DIR/download}"
+    # Ensure download directory exists
+    if ! mkdir -p "$DR_DIR"; then
+        if [ ! -d "$DR_DIR" ]; then # Check if mkdir failed AND directory doesn't exist
+             print_message "error" "DL_ERR_MKDIR_FAILED" "$DR_DIR" >&2
+             return 1
+        fi
+    fi
+    local file_path="${DR_DIR}/${file_name}" # Define full path
+
+    # --- バージョン情報取得 ---
     local version_data
-    version_data=$(download_check_version "$file_name")
+    # Pass hidden/quiet mode to sub-function if it supports them
+    version_data=$(download_check_version "$file_name" "$hidden_mode" "$quiet_mode") # Assuming download_check_version accepts these
 
     local update_required=$(echo "$version_data" | cut -d'|' -f1)
     local clean_remote_version=$(echo "$version_data" | cut -d'|' -f2)
-    local clean_local_version=$(echo "$version_data" | cut -d'|' -f3) # この変数は現状未使用ですが元ソースにあったため維持
-    local api_status=$(echo "$version_data" | cut -d'|' -f4)       # この変数も現状未使用ですが元ソースにあったため維持
+    # local clean_local_version=$(echo "$version_data" | cut -d'|' -f3) # Unused
+    # local api_status=$(echo "$version_data" | cut -d'|' -f4)       # Unused
 
-    # ファイルの存在確認を追加
+    # --- ファイル存在確認 ---
     local file_exists="true"
-    if [ ! -f "${BASE_DIR}/$file_name" ]; then
+    if [ ! -f "$file_path" ] || [ ! -s "$file_path" ]; then
         file_exists="false"
-        update_required="true"
-    elif [ ! -s "${BASE_DIR}/$file_name" ]; then
-        file_exists="false"
+        # If file doesn't exist or is empty, update is required regardless of version check
         update_required="true"
     fi
 
-    # デバッグモード時は常にダウンロード
-    if [ "$DEBUG_MODE" = "true" ]; then
-        update_required="true"
-    fi
-
-    # ファイルダウンロード処理
-    # status_type 変数は削除せず維持（呼び出し元で詳細な状態を知りたい場合に利用できる可能性があるため）
-    local status_type="no_update"
-
-    if [ "$update_required" = "true" ] || [ "$file_exists" = "false" ]; then
-        if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode"; then
-            return 1 # download_fetch_file の失敗時はエラー終了
-        fi
-        status_type="success" # ダウンロード成功時は status_type を更新
-
-        # aiosファイルは常に実行権限を設定する（元ソースのロジック維持）
-        if [ "$file_name" = "aios" ]; then
-            # chmod の失敗はエラーとせず続行する（元ソースの挙動を踏襲）
-            chmod +x "${BASE_DIR}/${file_name}"
+    # --- ファイルダウンロード処理 ---
+    local download_status=0 # 0 for success/no_update, 1 for failure
+    if [ "$update_required" = "true" ]; then
+        # Pass chmod_mode to fetch_file
+        if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode" "$hidden_mode" "$quiet_mode"; then # Assuming fetch_file accepts modes
+            # download_fetch_file should print its own errors
+            download_status=1
+        else
+            # Ensure file exists after fetch attempt
+            if [ ! -f "$file_path" ] || [ ! -s "$file_path" ]; then
+                 print_message "error" "DL_ERR_FETCH_NO_FILE" "$file_name" "$file_path" >&2
+                 download_status=1
+            fi
         fi
     fi
 
-    # ファイルの存在を再確認（ダウンロード後にも確認）
-    if [ ! -f "${BASE_DIR}/$file_name" ]; then
-        return 1 # ファイルが存在しない場合はエラー終了
+    # --- ロード処理 (ダウンロード成功時または更新不要でファイルが存在し、かつ load_mode が true の場合) ---
+    if [ "$download_status" -eq 0 ] && [ "$load_mode" = "true" ]; then
+        # Ensure file exists before attempting load (important if update_required was false)
+        if [ ! -f "$file_path" ] || [ ! -s "$file_path" ]; then
+            print_message "error" "DL_ERR_LOAD_NO_FILE" "$file_name" "$file_path" >&2
+            return 1 # Cannot load non-existent file
+        fi
+
+        # Ensure execute permission IF chmod_mode is explicitly true OR if using an interpreter (not sourcing with ash)
+        if [ "$chmod_mode" = "true" ] || { [ -n "$interpreter_name" ] && [ "$interpreter_name" != "ash" ]; }; then
+             if ! chmod +x "$file_path"; then
+                 # Non-fatal, but warn
+                 print_message "warn" "DL_WARN_CHMOD_FAILED" "$file_path" >&2
+             fi
+        fi
+
+        # Execute or source
+        # print_message "debug" "DL_DEBUG_LOAD_ATTEMPT" "$file_path" "$interpreter_name" # Debug log removed
+        if [ "$interpreter_name" = "ash" ]; then
+            # Source in the current shell environment
+            if ! . "$file_path"; then
+                print_message "error" "DL_ERR_SOURCE_FAILED" "$file_name" "$file_path" >&2
+                return 1 # Sourcing failed
+            fi
+        else
+            # Check if interpreter exists
+             if ! command -v "$interpreter_name" > /dev/null 2>&1; then
+                 # Try to install interpreter (assuming install_package exists)
+                 print_message "info" "DL_INFO_INSTALL_INTERP" "$interpreter_name" "$file_name" >&2
+                 # Use 'yn' for prompt, 'hidden' for less output during install
+                 if ! install_package "$interpreter_name" yn hidden; then
+                      print_message "error" "DL_ERR_INSTALL_INTERP_FAILED" "$interpreter_name" "$file_name" >&2
+                      return 1 # Failed to install required interpreter
+                 fi
+             fi
+            # Execute with the specified interpreter
+            if ! "$interpreter_name" "$file_path"; then
+                print_message "error" "DL_ERR_EXEC_FAILED" "$interpreter_name" "$file_name" "$file_path" >&2
+                return 1 # Execution failed
+            fi
+        fi
+        # print_message "debug" "DL_DEBUG_LOAD_SUCCESS" "$file_path" # Debug log removed
+    elif [ "$download_status" -ne 0 ]; then
+         # Download failed, return error
+         return 1
     fi
 
-    # download_finalize 呼び出しは削除済み
-
-    # 成功終了
+    # If download was skipped and load wasn't requested, or if load succeeded
     return 0
 }
 
+# download_parallel: Downloads files listed in download_files() definition in parallel.
+
+# Usage: download_parallel
+
 download_parallel() {
+    local func_def
+    local total_lines
+    local lines_per_task
+    local remainder
+    local task_count=0
+    local max_parallel
     local pids=""
-    local load_files="" # Format: "filename|interpreter|pid "
-    local download_failed="false"
-    local load_failed="false"
-    local file_args=""
-    local current_file=""
-    local current_interpreter=""
-    local has_load_opt="false"
+    local overall_status=0 # 0: success, 1: failure
+    local tmp_dir="${DR_DIR:-$BASE_DIR/download}/tmp" # Temporary directory for task files
+    local all_tasks_file="${tmp_dir}/dl_all_tasks.tmp"
+    local task_file_prefix="${tmp_dir}/dl_task_"
+    local pid job_index=0
 
-    # 1. 引数を解析し、各ファイルに対して download をバックグラウンドで実行
-    while [ $# -gt 0 ]; do
-        # ファイル名を取得
-        current_file="$1"
-        shift
-        file_args="$current_file" # 最初の引数はファイル名
-        has_load_opt="false"
-        current_interpreter=""
+    # --- 設定と準備 ---
+    # Get max parallel tasks from env or CPU cores, default to 4
+    max_parallel="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
+    if ! [ "$max_parallel" -gt 0 ] 2>/dev/null; then
+        max_parallel=4
+        print_message "warn" "DP_WARN_MAX_TASKS" "$max_parallel" >&2
+    fi
+    debug_log "Max parallel download tasks: %s" "$max_parallel"
 
-        # ファイル名に続くオプションを収集 (次のファイル名または引数終了まで)
-        while [ $# -gt 0 ] && [ "$1" != "--" ]; do
-            file_args="$file_args $1" # オプションを追記
-            # load オプションとインタプリタを特定
-            if [ "$1" = "load" ]; then
-                has_load_opt="true"
-            fi
-            # インタプリタ指定オプションをチェック (python3 は python として扱う)
-            case "$1" in
-                bash|python|node|perl) current_interpreter="$1" ;;
-                 # python3) current_interpreter="python" ;; # download側でpythonに変換される想定だが念のため
-            esac
-            shift
-        done
+    # Create temporary directory
+    if ! mkdir -p "$tmp_dir"; then
+         if [ ! -d "$tmp_dir" ]; then
+            print_message "error" "DP_ERR_MKDIR_FAILED" "$tmp_dir" >&2
+            return 1
+         fi
+    fi
+    # Clean up previous temporary task files
+    rm -f "${task_file_prefix}"*.tmp "$all_tasks_file" 2>/dev/null
 
-        # デフォルトインタプリタを設定 (load 時のみ)
-        if [ "$has_load_opt" = "true" ] && [ -z "$current_interpreter" ]; then
-             # download 関数内で設定されるデフォルト 'ash' を想定
-             # ここでは load_files 格納用に明示しないでおくか、$INTERPRETER を使う
-             # download 側で ash が使われるので、ここでは空のままにしておくのが整合性取れるか
-             : # current_interpreter は空のまま
-        fi
+    # --- スピナー開始 ---
+    # Use a generic message key or text
+    spinner_start "$(get_message 'CONFIG_DOWNLOAD_START' 'Downloading essential files...')"
 
-        # download をバックグラウンドで実行
-        # download 関数は file_args をスペース区切りで受け取る想定
-        # printf "Debug: Launching download %s\n" "$file_args" >&2 # デバッグ用 (標準エラー出力へ)
-        download $file_args &
-        local pid=$!
-        pids="$pids $pid"
-
-        # load オプションがあった場合、関連情報を保存
-        if [ "$has_load_opt" = "true" ]; then
-            # 区切り文字にはパイプを使用 (ファイル名にパイプが含まれない前提)
-            load_files="$load_files$current_file|$current_interpreter|$pid "
-        fi
-
-        # 区切り文字 '--' があればスキップ
-        if [ $# -gt 0 ] && [ "$1" = "--" ]; then
-            shift
-        fi
-    done
-
-    # 2. 全ての download プロセスの完了を待機し、失敗をチェック
-    local exit_status
-    local pid_to_check
-    # pids 文字列をスペースで区切りながらループ (POSIX準拠)
-    set -- $pids # 位置パラメータにPIDリストを設定
-    while [ $# -gt 0 ]; do
-        pid_to_check=$1
-        shift
-        wait "$pid_to_check"
-        exit_status=$?
-        if [ $exit_status -ne 0 ]; then
-            # どのファイルが失敗したか特定するのは難しいが、エラーがあったことだけ記録
-            # printf "Error: Download process with PID %s failed with status %s.\n" "$pid_to_check" "$exit_status" >&2 # エラーメッセージ (英語)
-            download_failed="true"
-            # load対象から失敗したPIDを除く (より安全な実装)
-            local temp_load_files=""
-            local load_entry
-            local load_pid
-            set -- $load_files # load_files を位置パラメータに設定
-            while [ $# -gt 0 ]; do
-                load_entry=$1
-                shift
-                load_pid=$(echo "$load_entry" | cut -d'|' -f3)
-                if [ "$load_pid" != "$pid_to_check" ]; then
-                    temp_load_files="$temp_load_files$load_entry "
-                # else
-                    # printf "Debug: Removing failed PID %s from load list for file %s\n" "$pid_to_check" "$(echo "$load_entry" | cut -d'|' -f1)" >&2 # デバッグ用 (標準エラー出力へ)
-                fi
-            done
-            load_files=$temp_load_files
-        fi
-    done
-
-    # 3. load オプションが指定されたファイルの処理
-    if [ "$download_failed" = "false" ]; then # 全てのダウンロードが成功した場合のみロード処理に進む (より安全)
-        local load_entry
-        local load_file
-        local load_interpreter
-        local file_path
-        # load_files 文字列をスペースで区切りながらループ
-        set -- $load_files # load_files を位置パラメータに設定
-        while [ $# -gt 0 ]; do
-            load_entry=$1
-            shift
-
-            load_file=$(echo "$load_entry" | cut -d'|' -f1)
-            load_interpreter=$(echo "$load_entry" | cut -d'|' -f2)
-            file_path="${BASE_DIR}/${load_file}" # BASE_DIR はグローバル変数想定
-
-            # デフォルトインタプリタ (ash) を設定
-            if [ -z "$load_interpreter" ]; then
-                # $INTERPRETER グローバル変数を使うか、'ash' を直接指定
-                load_interpreter="${INTERPRETER:-ash}"
-            fi
-
-            # printf "Debug: Processing load for %s with interpreter %s\n" "$load_file" "$load_interpreter" >&2 # デバッグ用 (標準エラー出力へ)
-
-            # ファイルが存在し、空でないことを確認 (念のため)
-            if [ ! -f "$file_path" ] || [ ! -s "$file_path" ]; then
-                printf "Error: Cannot load non-existent or empty file: %s\n" "$file_path" >&2 # エラーメッセージ (英語)
-                load_failed="true"
-                continue # 次のファイルへ
-            fi
-
-            # インタプリタが必要か確認 (デフォルトシェル以外の場合)
-            if [ "$load_interpreter" != "${INTERPRETER:-ash}" ]; then
-                # インタプリタの存在確認
-                if ! command -v "$load_interpreter" > /dev/null 2>&1; then
-                    # printf "Info: Interpreter '%s' not found. Attempting installation...\n" "$load_interpreter" >&2 # 情報メッセージ (英語)
-                    # インタプリタのインストール試行
-                    if ! install_package "$load_interpreter" yn hidden; then
-                        printf "Error: Failed to install interpreter '%s' for file '%s'. Skipping load.\n" "$load_interpreter" "$load_file" >&2 # エラーメッセージ (英語)
-                        load_failed="true"
-                        continue # 次のファイルへ
-                    fi
-                    # printf "Info: Interpreter '%s' installed successfully.\n" "$load_interpreter" >&2 # 情報メッセージ (英語)
-                fi
-            fi
-
-            # ファイルの実行 または source
-            # printf "Debug: Attempting to load %s using %s\n" "$file_path" "$load_interpreter" >&2 # デバッグ用 (標準エラー出力へ)
-            if [ "$load_interpreter" = "${INTERPRETER:-ash}" ]; then
-                # デフォルトシェルで source
-                if ! . "$file_path"; then
-                    printf "Error: Failed to source file: %s\n" "$file_path" >&2 # エラーメッセージ (英語)
-                    load_failed="true"
-                fi
-            else
-                # 指定されたインタプリタで実行
-                if ! "$load_interpreter" "$file_path"; then
-                    printf "Error: Failed to execute file '%s' with interpreter '%s'.\n" "$file_path" "$load_interpreter" >&2 # エラーメッセージ (英語)
-                    load_failed="true"
-                fi
-            fi
-        done
-    elif [ -n "$load_files" ]; then
-        # ダウンロードが失敗したがロード対象があった場合
-        printf "Warning: Skipping load process due to download failures.\n" >&2 # 警告メッセージ (英語)
-        load_failed="true" # ロードも失敗扱いとする
+    # --- download_files 関数の定義を取得し、download行を抽出 ---
+    if ! func_def=$(type download_files 2>/dev/null); then
+        spinner_stop 1
+        print_message "error" "DP_ERR_FUNC_NOT_FOUND" "download_files" >&2
+        return 1
     fi
 
-    # 4. 最終的な終了ステータスとメッセージを返す
-    if [ "$download_failed" = "true" ] || [ "$load_failed" = "true" ]; then
-        return 1 # 何らかのエラーが発生した場合
-    else
-        # 全て成功した場合、成功メッセージを出力 (スピナー用)
-        local success_message
-        success_message=$(get_message "CONFIG_DOWNLOAD_SUCCESS") # 既存キーを使用
-        if [ -n "$success_message" ]; then
-            printf "%s\n" "$success_message" # 標準出力へ
+    # Extract lines starting with 'download ' (potentially indented) between '{' and '}'
+    # This assumes download_files has the structure: func() { \n download ... \n }
+    # Using awk for potentially more robust parsing than sed '1d;$d'
+    echo "$func_def" | awk '/^[^{]*\{/{flag=1; next} /^\}/{flag=0} flag && /^[[:space:]]*download /' > "$all_tasks_file"
+
+    if [ ! -s "$all_tasks_file" ]; then
+        spinner_stop 1 # Indicate failure if no tasks found
+        print_message "error" "DP_ERR_NO_TASKS_FOUND" "download_files" >&2
+        rm -f "$all_tasks_file" # Clean up empty file
+        return 1 # Or maybe 0 if it's valid for download_files to be empty? Assuming error.
+    fi
+
+    # --- 行数を計算し、タスクファイルを生成 ---
+    total_lines=$(wc -l < "$all_tasks_file")
+    if [ "$total_lines" -eq 0 ]; then
+         spinner_stop 0 # No tasks is not an error itself
+         print_message "info" "DP_INFO_NO_TASKS" "download_files" >&2
+         rm -f "$all_tasks_file"
+         return 0
+    fi
+
+    # Calculate lines per task file, ensuring at least 1 task file is created
+    lines_per_task=$(( (total_lines + max_parallel - 1) / max_parallel ))
+    [ "$lines_per_task" -eq 0 ] && lines_per_task=1 # Avoid division by zero or infinite loop if total_lines < max_parallel
+
+    debug_log "Total tasks: %s, Lines per task file: %s" "$total_lines" "$lines_per_task"
+
+    # Split the tasks into temporary files using awk (more portable than split --filter)
+    awk -v lpt="$lines_per_task" -v prefix="$task_file_prefix" '{
+        task_num = int((NR-1)/lpt)
+        filename = sprintf("%s%03d.tmp", prefix, task_num)
+        print >> filename
+    }' "$all_tasks_file"
+    rm -f "$all_tasks_file" # Remove the intermediate file
+
+    # Count how many task files were actually created
+    task_count=$(ls "${task_file_prefix}"*.tmp 2>/dev/null | wc -l)
+    debug_log "Created %s task files." "$task_count"
+
+    if [ "$task_count" -eq 0 ]; then
+        spinner_stop 1 # Should not happen if total_lines > 0, but check anyway
+        print_message "error" "DP_ERR_SPLIT_FAILED" >&2
+        return 1
+    fi
+
+    # --- タスクファイルを並列実行 ---
+    pids=""
+    job_index=0
+    for task_file in "${task_file_prefix}"*.tmp; do
+        debug_log "Starting task file: %s" "$task_file"
+        # Execute the task file in a subshell to run the download commands
+        ( . "$task_file" ) &
+        pid=$!
+        pids="$pids $pid"
+        job_index=$((job_index + 1))
+
+        # Wait if max parallel jobs reached
+        if [ "$job_index" -ge "$max_parallel" ] && [ "$job_index" -lt "$task_count" ]; then # Don't wait on the very last batch
+             debug_log "Max parallel tasks (%s) reached, waiting..." "$max_parallel"
+             # Wait for the oldest PID in the current batch to finish
+             # Simple approach: wait for any PID to finish if 'wait -n' isn't available
+             # More robust: track PIDs in this batch and wait for the first one added
+             # Simpler POSIX way: just wait for *any* background job of the current shell
+             wait -p wait_pid # Wait for any child process, get its PID in wait_pid (Bash extension? Check ash)
+             # Fallback POSIX: Just 'wait', might wait longer than necessary if other bg jobs exist
+             # Let's try a simple wait first, assuming only these PIDs are relevant bg jobs
+             local first_pid=$(echo "$pids" | cut -d' ' -f2) # Get first PID added
+             wait "$first_pid"
+             proc_status=$?
+             debug_log "PID %s finished with status %s. Continuing..." "$first_pid" "$proc_status"
+             if [ $proc_status -ne 0 ]; then
+                 overall_status=1 # Mark failure
+                 print_message "error" "DP_ERR_TASK_FAILED" "$first_pid" "$proc_status" >&2
+             fi
+             # Remove the finished PID from the list
+             pids=$(echo "$pids" | sed "s/ $first_pid//")
+             job_index=$((job_index - 1)) # Decrement job count as one finished
         fi
-        return 0 # 全て成功した場合
+    done
+
+    # --- 全てのジョブの完了を待機 ---
+    debug_log "Waiting for remaining background jobs: [%s]" "$pids"
+    for pid in $pids; do
+        wait "$pid"
+        proc_status=$?
+        if [ $proc_status -ne 0 ]; then
+            overall_status=1 # Mark failure
+            print_message "error" "DP_ERR_TASK_FAILED" "$pid" "$proc_status" >&2
+        fi
+        debug_log "PID %s finished with status %s." "$pid" "$proc_status"
+    done
+
+    # --- クリーンアップと終了処理 ---
+    rm -f "${task_file_prefix}"*.tmp # Clean up task files
+
+    spinner_stop $overall_status # Stop spinner with final status
+
+    if [ $overall_status -eq 0 ]; then
+        # Use existing success message key if available
+        print_message "info" "$(get_message 'CONFIG_DOWNLOAD_SUCCESS' 'Essential files downloaded successfully.')"
+        return 0
+    else
+        # Use a generic error message key or text
+        print_message "error" "$(get_message 'CONFIG_DOWNLOAD_FAILED' 'Errors occurred during download.')" >&2
+        return 1
     fi
 }
+
 
 OK_download() {
     # ファイル名を最初の引数として処理
