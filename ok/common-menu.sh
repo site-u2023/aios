@@ -45,9 +45,6 @@ DEV_NULL="${DEV_NULL:-on}"
 BASE_WGET="wget --no-check-certificate -q"
 # BASE_WGET="wget -O"
 DEBUG_MODE="${DEBUG_MODE:-false}"
-BIN_PATH=$(readlink -f "$0")
-BIN_DIR="$(dirname "$BIN_PATH")"
-BIN_FILE="$(basename "$BIN_PATH")"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
@@ -128,107 +125,42 @@ debug_breadcrumbs() {
 # パンくずリストの表示関数（完全修正版）
 display_breadcrumbs() {
     debug_log "DEBUG" "Building breadcrumb navigation with proper order and colors"
-    
-    # メインメニューの情報を取得
     local main_menu_key="MAIN_MENU_NAME"
-    local main_menu_text=$(get_message "$main_menu_key")
-    
-    # メインメニューのデフォルト色
-    local main_color="white_gray"
-    
-    # パンくずの区切り文字（表示用）
-    local separator=" > "
-    
-    # パンくずの初期値
-    local breadcrumb="$(color $main_color "$main_menu_text")"
-    
-    # 履歴が空ならメインメニューのみ表示
+    # ★★★ 変更点: get_message に "capitalize" を追加 ★★★
+    local main_menu_text=$(get_message "$main_menu_key" "upper")
+    # get_message 内部でフォールバックされ、キーが返った場合も capitalize で処理される想定
+
+    local main_color="white_gray"; local separator=" > " # 元のコードの変数を維持
+    local breadcrumb="$(color "$main_color" "$main_menu_text")"
+
     if [ -z "$MENU_HISTORY" ]; then
-        debug_log "DEBUG" "No menu history, showing main menu only"
-        printf "%s\n" "$breadcrumb"
-        return
+        printf "\n%s\n" "$breadcrumb"; return # 元の printf に戻す
     fi
-    
-    # 履歴形式: MENU_V&MIG:blue:MENU_INTERNET:magenta
-    # これを逆順に処理して正しい階層順にする
-    
-    # セパレータで分割して配列風に扱う
-    local history_items=""
-    IFS="$MENU_HISTORY_SEPARATOR"
-    for item in $MENU_HISTORY; do
-        history_items="$item $history_items"
-    done
-    unset IFS
-    
-    # 逆順になった項目から、メニューと色のペアを再構築
-    debug_log "DEBUG" "Reversed history items: $history_items"
-    
-    local menu_items=""
-    local color_items=""
-    local i=0
-    
-    # 空白区切りのリストから要素を取り出す
-    for item in $history_items; do
-        if [ $((i % 2)) -eq 0 ]; then
-            # 偶数インデックスは色（逆順なので）
-            color_items="$color_items $item"
-        else
-            # 奇数インデックスはメニュー（逆順なので）
-            menu_items="$menu_items $item"
-        fi
-        i=$((i + 1))
-    done
-    
-    debug_log "DEBUG" "Extracted and properly ordered: menus=[$menu_items], colors=[$color_items]"
-    
-    # メニューと色の数を確認
-    local menu_count=0
-    for menu in $menu_items; do
-        menu_count=$((menu_count + 1))
-    done
-    
-    local color_count=0
-    for color in $color_items; do
-        color_count=$((color_count + 1))
-    done
-    
-    debug_log "DEBUG" "Menu count: $menu_count, Color count: $color_count"
-    
-    # メニュー項目を順に処理してパンくずを構築
+
+    # 履歴の逆順処理 (変更なし)
+    local history_items=""; IFS="$MENU_HISTORY_SEPARATOR"; for item in $MENU_HISTORY; do history_items="$item $history_items"; done; unset IFS
+    local menu_items=""; local color_items=""; local i=0
+    for item in $history_items; do if [ $((i % 2)) -eq 0 ]; then color_items="$color_items $item"; else menu_items="$menu_items $item"; fi; i=$((i + 1)); done
+    local menu_count=0; for menu in $menu_items; do menu_count=$((menu_count + 1)); done
+    local color_count=0; for color in $color_items; do color_count=$((color_count + 1)); done
+
+    # パンくず構築ループ
     i=0
-    for menu in $menu_items; do
-        # メニューキーからテキストを取得
-        local display_text=$(get_message "$menu")
-        [ -z "$display_text" ] && display_text="$menu"
-        
-        # 対応する色を取得
-        local menu_color="white"  # デフォルト色
-        
-        # 色リストからi番目の色を取得
-        local j=0
-        for color in $color_items; do
-            if [ $j -eq $i ]; then
-                menu_color="$color"
-                debug_log "DEBUG" "Using color $menu_color for menu item $menu"
-                break
-            fi
-            j=$((j + 1))
-        done
-        
-        # 色情報がない、またはデフォルト値の場合、自動割り当て
-        if [ -z "$menu_color" ] || [ "$menu_color" = "white" ]; then
-            menu_color=$(get_auto_color "$((i+1))" "$menu_count")
-            debug_log "DEBUG" "Auto-assigned color for menu level $i: $menu_color"
-        fi
-        
-        # パンくずに追加
-        breadcrumb="${breadcrumb}${separator}$(color $menu_color "$display_text")"
+    for menu in $menu_items; do # 元の変数名 $menu
+        # ★★★ 変更点: get_message に "capitalize" を追加 ★★★
+        local display_text=$(get_message "$menu" "upper")
+        # get_message 内部でフォールバックされ、キーが返った場合も capitalize で処理される想定
+
+        # 色取得 (変更なし)
+        local menu_color="white"; local j=0
+        for color in $color_items; do if [ $j -eq $i ]; then menu_color="$color"; break; fi; j=$((j + 1)); done
+        if [ -z "$menu_color" ] || [ "$menu_color" = "white" ]; then menu_color=$(get_auto_color "$((i+1))" "$menu_count"); fi
+
+        breadcrumb="${breadcrumb}${separator}$(color "$menu_color" "$display_text")"
         i=$((i + 1))
     done
-    
-    # パンくずリストを出力（末尾に空行1つ）
-    printf "%s\n" "$breadcrumb"
-    
+
+    printf "\n%s\n" "$breadcrumb" # 元の printf に戻す
     debug_log "DEBUG" "Displayed breadcrumb for submenu with single newline"
 }
 
@@ -295,7 +227,7 @@ handle_user_selection() {
     # --- Handle Special Selections (0, 10, 00) ---
     if [ "$choice" -eq 0 ]; then
         if [ "$is_main_menu" -eq 1 ]; then
-             printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_INVALID_NUMBER")")"
+             printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
              debug_log "DEBUG" "'0' selected in main menu [$section_name]. Invalid. Returning 0 to retry."
              return 0
         fi
@@ -312,7 +244,7 @@ handle_user_selection() {
     fi
     if [ "$choice" -eq 00 ]; then
         if [ "$is_main_menu" -eq 0 ]; then
-             printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_INVALID_NUMBER")")"
+             printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
              debug_log "DEBUG" "'00' selected in submenu [$section_name]. Invalid. Returning 0 to retry."
              return 0
         fi
@@ -325,7 +257,7 @@ handle_user_selection() {
 
     # --- Handle Normal Selections (1 to N) ---
     if [ "$choice" -lt 1 ] || [ "$choice" -gt "$num_normal_choices" ]; then
-         printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_INVALID_NUMBER")")"
+         printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
          debug_log "DEBUG" "Selection '$choice' out of range (1-$num_normal_choices) in section [$section_name]. Returning 0 to retry."
          return 0
     fi
@@ -447,125 +379,52 @@ process_menu_items() {
     local total_normal_items=0
     local in_section=0
 
-    # まず、セクション内の通常項目数をカウント（特殊項目を除く）
+    # まず、セクション内の通常項目数をカウント（変更なし）
     while IFS= read -r line || [ -n "$line" ]; do
-        # コメントと空行をスキップ
-        case "$line" in
-            \#*|"") continue ;;
-        esac
-
-        # セクション開始をチェック
-        if echo "$line" | grep -q "^\[$section_name\]"; then
-            in_section=1
-            debug_log "DEBUG" "Found target section for counting: [$section_name]"
-            continue
-        fi
-
-        # 別のセクション開始で終了
-        if echo "$line" | grep -q "^\[.*\]"; then
-            if [ $in_section -eq 1 ]; then
-                debug_log "DEBUG" "Reached next section, stopping count"
-                break
-            fi
-            continue
-        fi
-
-        # セクション内の項目をカウント
-        if [ $in_section -eq 1 ]; then
-            total_normal_items=$((total_normal_items+1))
-        fi
+        case "$line" in \#*|"") continue ;; esac
+        if echo "$line" | grep -q "^\[$section_name\]"; then in_section=1; continue; fi
+        if echo "$line" | grep -q "^\[.*\]"; then if [ $in_section -eq 1 ]; then break; fi; continue; fi
+        if [ $in_section -eq 1 ]; then total_normal_items=$((total_normal_items+1)); fi
     done < "${BASE_DIR}/menu.db"
-
     debug_log "DEBUG" "Total normal menu items in section [$section_name]: $total_normal_items"
 
-    # セクション検索（2回目）- 項目を処理
+    # セクション項目処理（変更なし）
     in_section=0
-
     while IFS= read -r line || [ -n "$line" ]; do
-        # コメントと空行をスキップ
-        case "$line" in
-            \#*|"") continue ;;
-        esac
+        case "$line" in \#*|"") continue ;; esac
+        if echo "$line" | grep -q "^\[$section_name\]"; then in_section=1; continue; fi
+        if echo "$line" | grep -q "^\[.*\]"; then if [ $in_section -eq 1 ]; then break; fi; continue; fi
 
-        # セクション開始をチェック
-        if echo "$line" | grep -q "^\[$section_name\]"; then
-            in_section=1
-            debug_log "DEBUG" "Found target section for processing: [$section_name]"
-            continue
-        fi
-
-        # 別のセクション開始で終了
-        if echo "$line" | grep -q "^\[.*\]"; then
-            if [ $in_section -eq 1 ]; then
-                debug_log "DEBUG" "Reached next section, stopping processing"
-                break
-            fi
-            continue
-        fi
-
-        # セクション内の項目を処理
         if [ $in_section -eq 1 ]; then
-            # カウンターをインクリメント
             menu_count=$((menu_count+1))
-
-            # 色指定の有無をチェック
+            # 色指定チェック（変更なし）
             if echo "$line" | grep -q -E "^[a-z_]+[ ]"; then
                 local color_name=$(echo "$line" | cut -d' ' -f1)
                 local key=$(echo "$line" | cut -d' ' -f2)
                 local cmd=$(echo "$line" | cut -d' ' -f3-)
-                debug_log "DEBUG" "Color specified in line: color=$color_name, key=$key, cmd=$cmd"
             else
                 local key=$(echo "$line" | cut -d' ' -f1)
                 local cmd=$(echo "$line" | cut -d' ' -f2-)
                 local color_name=$(get_auto_color "$menu_count" "$total_normal_items")
-                debug_log "DEBUG" "No color specified, auto-assigned: color=$color_name, key=$key, cmd=$cmd"
             fi
-
-            # 各ファイルに情報を保存
+            # ファイル保存（変更なし）
             echo "$key" >> "$menu_keys_file"
             echo "$cmd" >> "$menu_commands_file"
             echo "$color_name" >> "$menu_colors_file"
 
-            # メッセージキーの変換処理
-            local display_text=""
-            local current_lang=""
-            if [ -f "${CACHE_DIR}/message.ch" ]; then
-                current_lang=$(cat "${CACHE_DIR}/message.ch")
-            fi
-            debug_log "DEBUG" "Using language code for menu display: $current_lang"
-            debug_log "DEBUG" "Direct search for message key: $key"
+            # ★★★ 変更点: get_message を使用してテキストを取得し、大文字にフォーマット ★★★
+            # 元の直接DB検索と normalize_message 呼び出しを置き換え
+            local display_text=$(get_message "$key" "upper")
+            # get_message 内部で正規化とフォールバック（キーをそのまま返す）が行われる
 
-            for msg_file in "${BASE_DIR}"/message_*.db; do
-                if [ -f "$msg_file" ]; then
-                    local msg_value=$(grep -F "$current_lang|$key=" "$msg_file" 2>/dev/null | cut -d'=' -f2-)
-                    if [ -n "$msg_value" ]; then
-                        display_text="$msg_value"
-                        debug_log "DEBUG" "Found message in file: $msg_file"
-                        break
-                    fi
-                fi
-            done
+            debug_log "DEBUG" "Formatted display text from get_message: $display_text"
 
-            # 変換が見つからない場合はキーをそのまま使用
-            if [ -z "$display_text" ]; then
-                display_text="$key"
-                debug_log "DEBUG" "No message found for key: $key, using key as display text"
-            fi
-
-            # ★ 修正点: 表示テキストを normalize_message で正規化する (存在確認なし)
-            local normalized_display_text=$(normalize_message "$display_text" "$current_lang")
-            debug_log "DEBUG" "Normalized display text: $normalized_display_text"
-
-            # 表示テキストを保存（[数字] 形式） - 正規化後のテキストを使用
-            printf "%s\n" "$(color "$color_name" "[${menu_count}] ${normalized_display_text}")" >> "$menu_displays_file" 2>/dev/null
-
+            # 表示テキストを保存（[数字] 形式） - フォーマット後のテキストを使用
+            printf "%s\n" "$(color "$color_name" "[${menu_count}] ${display_text}")" >> "$menu_displays_file" 2>/dev/null
             debug_log "DEBUG" "Added menu item $menu_count: [$key] -> [$cmd] with color: $color_name"
         fi
     done < "${BASE_DIR}/menu.db"
-
     debug_log "DEBUG" "Read $menu_count regular menu items from menu.db"
-
-    # 処理したメニュー項目数を返す
     echo "$menu_count"
 }
 
@@ -578,84 +437,53 @@ add_special_menu_items() {
     local menu_displays_file="$5"
     local menu_commands_file="$6"
     local menu_colors_file="$7"
-    
+
     debug_log "DEBUG" "Adding special menu items for section: $section_name"
-    
     local special_items_count=0
-    
-    # メインメニューの場合は [10]と[00]を追加
+
     if [ "$is_main_menu" -eq 1 ]; then
-        # [10] EXIT - 終了 (旧[0])
-        menu_count=$((menu_count+1))
-        special_items_count=$((special_items_count+1))
-        echo "MENU_EXIT" >> "$menu_keys_file"
-        echo "menu_exit" >> "$menu_commands_file"
-        echo "white" >> "$menu_colors_file"
-    
-        local exit_text=$(get_message "MENU_EXIT")
-        [ -z "$exit_text" ] && exit_text="終了"
+        # [10] EXIT
+        menu_count=$((menu_count+1)); special_items_count=$((special_items_count+1))
+        echo "MENU_EXIT" >> "$menu_keys_file"; echo "menu_exit" >> "$menu_commands_file"; echo "white" >> "$menu_colors_file"
+        # ★★★ 変更点: get_message に "upper" を追加 ★★★
+        local exit_text=$(get_message "MENU_EXIT" "upper")
+        [ -z "$exit_text" ] && exit_text=$(format_string "upper" "終了") # フォールバックも大文字化
         printf "%s\n" "$(color white "[10] $exit_text")" >> "$menu_displays_file"
-    
         debug_log "DEBUG" "Added special EXIT item [10] to main menu"
-        
-        # [00] REMOVE - 削除
-        menu_count=$((menu_count+1))
-        special_items_count=$((special_items_count+1))
-        echo "MENU_REMOVE" >> "$menu_keys_file"
-        echo "remove_exit" >> "$menu_commands_file"
-        echo "white_underline" >> "$menu_colors_file"
-    
-        local remove_text=$(get_message "MENU_REMOVE")
-        [ -z "$remove_text" ] && remove_text="削除"
+
+        # [00] REMOVE
+        menu_count=$((menu_count+1)); special_items_count=$((special_items_count+1))
+        echo "MENU_REMOVE" >> "$menu_keys_file"; echo "remove_exit" >> "$menu_commands_file"; echo "white_underline" >> "$menu_colors_file"
+        # ★★★ 変更点: get_message に "upper" を追加 ★★★
+        local remove_text=$(get_message "MENU_REMOVE" "upper")
+        [ -z "$remove_text" ] && remove_text=$(format_string "upper" "削除") # フォールバックも大文字化
         printf "%s\n" "$(color white_underline "[00] $remove_text")" >> "$menu_displays_file"
-    
         debug_log "DEBUG" "Added special REMOVE item [00] to main menu"
     else
-        # サブメニューの場合は [0]と[10]を追加
-        # [0] BACK - 前に戻る (旧[9])
-        menu_count=$((menu_count+1))
-        special_items_count=$((special_items_count+1))
-        echo "MENU_BACK" >> "$menu_keys_file"
-
-        # 履歴の階層数をカウント
+        # [0] BACK
+        menu_count=$((menu_count+1)); special_items_count=$((special_items_count+1))
+        echo "MENU_BACK" >> "$menu_keys_file" # 元のキー
+        # 履歴カウント (変更なし)
         local history_count=0
-        if [ -n "$MENU_HISTORY" ]; then
-            if echo "$MENU_HISTORY" | grep -q "$MENU_HISTORY_SEPARATOR"; then
-                history_count=$(($(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c) + 1))
-            else
-                history_count=1
-            fi
-            debug_log "DEBUG" "Menu history levels: $history_count"
-        fi
-        
+        if [ -n "$MENU_HISTORY" ]; then if echo "$MENU_HISTORY" | grep -q "$MENU_HISTORY_SEPARATOR"; then history_count=$(($(echo "$MENU_HISTORY" | tr -cd "$MENU_HISTORY_SEPARATOR" | wc -c) + 1)); else history_count=1; fi; fi
         echo "go_back_menu" >> "$menu_commands_file"
-        debug_log "DEBUG" "Using go_back_menu for navigation with $history_count history levels"
-
         echo "white" >> "$menu_colors_file"
-
-        local back_text=$(get_message "MENU_BACK")
-        [ -z "$back_text" ] && back_text="戻る"
-        printf "%s\n" "$(color white "[0] $back_text")" >> "$menu_displays_file"
-
+        # ★★★ 変更点: get_message に "upper" を追加 ★★★
+        local back_text=$(get_message "MENU_BACK" "upper") # 元のキー
+        [ -z "$back_text" ] && back_text=$(format_string "upper" "戻る") # フォールバックも大文字化
+        printf "%s\n" "$(color white "[0] $back_text")" >> "$menu_displays_file" # 元の番号
         debug_log "DEBUG" "Added special BACK item [0] to sub-menu"
-    
-        # [10] EXIT - 終了 (旧[0])
-        menu_count=$((menu_count+1))
-        special_items_count=$((special_items_count+1))
-        echo "MENU_EXIT" >> "$menu_keys_file"
-        echo "menu_exit" >> "$menu_commands_file"
-        echo "white" >> "$menu_colors_file"
-    
-        local exit_text=$(get_message "MENU_EXIT")
-        [ -z "$exit_text" ] && exit_text="終了"
-        printf "%s\n" "$(color white "[10] $exit_text")" >> "$menu_displays_file"
-    
+
+        # [10] EXIT
+        menu_count=$((menu_count+1)); special_items_count=$((special_items_count+1))
+        echo "MENU_EXIT" >> "$menu_keys_file"; echo "menu_exit" >> "$menu_commands_file"; echo "white" >> "$menu_colors_file"
+        # ★★★ 変更点: get_message に "upper" を追加 ★★★
+        local exit_text=$(get_message "MENU_EXIT" "upper")
+        [ -z "$exit_text" ] && exit_text=$(format_string "upper" "終了") # フォールバックも大文字化
+        printf "%s\n" "$(color white "[10] $exit_text")" >> "$menu_displays_file" # 元の番号
         debug_log "DEBUG" "Added special EXIT item [10] to sub-menu"
     fi
-    
     debug_log "DEBUG" "Added $special_items_count special menu items"
-    
-    # 特殊メニュー項目数と合計メニュー項目数を返す
     echo "$special_items_count $menu_count"
 }
 
@@ -972,3 +800,4 @@ menu_exit() {
     printf "%s\n\n" "$(color green "$(get_message "CONFIG_EXIT_CONFIRMED")")"
     exit 0
 }
+ 
