@@ -2329,141 +2329,86 @@ get_commit_version() {
 }
 
 download() {
-    local url="$1"
-    local output_path="$2"
-    local use_cache="${3:-true}"
-    local check_version="${4:-true}"
-    local cache_dir="${CACHE_DIR}/downloads"
-    local cache_file="${cache_dir}/$(sanitize_filename "$(basename "$url")")"
-    local version_file="${CACHE_DIR}/versions.json"
-    local commit_file="${CACHE_DIR}/commits.json"
-    local headers_file="${WORK_DIR}/headers_$(sanitize_filename "$(basename "$url")").txt"
-    local etag=""
-    local last_modified=""
-    local current_version=""
-    local current_commit=""
-    local file_type="blob"
+    local file_name="$1"
+    shift
 
-    mkdir -p "$(dirname "$output_path")" "$cache_dir" "$WORK_DIR" 2>/dev/null
-
-    local is_github_api=false
-    local is_raw_content=false
-    if echo "$url" | grep -q "api.github.com/repos/.*/contents/"; then
-        is_github_api=true
-        file_type="blob"
-    elif echo "$url" | grep -q "raw.githubusercontent.com"; then
-        is_raw_content=true
-        file_type="raw"
-    elif echo "$url" | grep -q "github.com/.*/blob/"; then
-        local raw_url=$(echo "$url" | sed 's#github.com#raw.githubusercontent.com#; s#/blob/#/#')
-        url="$raw_url"
-        is_raw_content=true
-        file_type="raw"
-    elif echo "$url" | grep -q "api.github.com/repos/.*/tarball/" || echo "$url" | grep -q "api.github.com/repos/.*/zipball/"; then
-        is_github_api=true
-        file_type="archive"
-    elif echo "$url" | grep -q "api.github.com/repos/.*/commits/"; then
-        is_github_api=true
-        file_type="commit"
-    fi
-
-    if [ "$use_cache" = "true" ] && [ -f "$cache_file" ]; then
-        local cached_version=$(jq -r ".[\"$url\"] // \"\"" "$version_file" 2>/dev/null)
-        local cached_commit=$(jq -r ".[\"$url\"] // \"\"" "$commit_file" 2>/dev/null)
-
-        if [ "$check_version" = "true" ]; then
-            if ! headers_output=$(call_api "$url" "HEAD"); then
-                 cp "$cache_file" "$output_path"
-                 return 0
-            fi
-
-            etag=$(echo "$headers_output" | grep -i '^ETag:' | sed 's/ETag: //i' | tr -d '"' | tr -d '\r' | head -n 1)
-            last_modified=$(echo "$headers_output" | grep -i '^Last-Modified:' | sed 's/Last-Modified: //i' | tr -d '\r' | head -n 1)
-            current_version="${etag:-${last_modified}}"
-
-            if [ "$file_type" = "commit" ]; then
-                 current_commit="$current_version"
-            fi
-
-            local version_match=false
-            if [ "$file_type" = "commit" ] && [ -n "$cached_commit" ] && [ "$cached_commit" = "$current_commit" ]; then
-                version_match=true
-            elif [ "$file_type" != "commit" ] && [ -n "$cached_version" ] && [ "$cached_version" = "$current_version" ]; then
-                version_match=true
-            fi
-
-            if [ "$version_match" = "true" ]; then
-                cp "$cache_file" "$output_path"
-                return 0
-            fi
-        else
-            cp "$cache_file" "$output_path"
-            return 0
-        fi
-    fi
-
-    local success=false
-    local download_output=""
-    local http_status=0
-
-    if download_output=$(call_api "$url" "GET" "$headers_file"); then
-        http_status=$(grep '^HTTP/' "$headers_file" | tail -n 1 | awk '{print $2}')
-
-        if [ "$http_status" -ge 200 ] && [ "$http_status" -lt 300 ]; then
-            if [ "$is_github_api" = "true" ] && [ "$file_type" = "blob" ]; then
-                local content=$(echo "$download_output" | jq -r '.content')
-                if [ "$content" = "null" ] || [ -z "$content" ]; then
-                    rm -f "$headers_file"
-                    return 1
-                fi
-                if ! echo "$content" | base64 -d > "$output_path"; then
-                    rm -f "$output_path" "$headers_file"
-                    return 1
-                fi
-                success=true
-            elif [ "$is_github_api" = "true" ] && [ "$file_type" = "commit" ]; then
-                echo "$download_output" > "$output_path"
-                success=true
-                current_commit=$(echo "$download_output" | jq -r '.sha // ""')
-                current_version="$current_commit"
-            else
-                echo "$download_output" > "$output_path"
-                success=true
-            fi
-
-            if [ "$use_cache" = "true" ]; then
-                cp "$output_path" "$cache_file"
-
-                etag=$(grep -i '^ETag:' "$headers_file" | sed 's/ETag: //i' | tr -d '"' | tr -d '\r' | head -n 1)
-                last_modified=$(grep -i '^Last-Modified:' "$headers_file" | sed 's/Last-Modified: //i' | tr -d '\r' | head -n 1)
-                [ "$file_type" != "commit" ] && current_version="${etag:-${last_modified}}"
-
-                if [ -n "$current_version" ]; then
-                    local tmp_version_file="${version_file}.tmp"
-                    [ ! -f "$version_file" ] || [ ! -s "$version_file" ] && echo "{}" > "$version_file"
-                    jq --arg url "$url" --arg version "$current_version" '.[$url] = $version' "$version_file" > "$tmp_version_file" && mv "$tmp_version_file" "$version_file" || true
-                fi
-
-                if [ "$file_type" = "commit" ] && [ -n "$current_commit" ]; then
-                     local tmp_commit_file="${commit_file}.tmp"
-                    [ ! -f "$commit_file" ] || [ ! -s "$commit_file" ] && echo "{}" > "$commit_file"
-                    jq --arg url "$url" --arg commit "$current_commit" '.[$url] = $commit' "$commit_file" > "$tmp_commit_file" && mv "$tmp_commit_file" "$commit_file" || true
-                fi
-            fi
-        else
-            success=false
-        fi
-    else
-        success=false
-    fi
-
-    rm -f "$headers_file"
-
-    if [ "$success" = "true" ]; then
-        return 0
-    else
+    if [ -z "$file_name" ]; then
         return 1
     fi
+
+    local hidden_mode="false"
+    local quiet_mode="${QUIET_MODE:-false}"
+    local chmod_mode="false"
+    local load_mode="false"
+    local interpreter_name=""
+
+    while [ $# -gt 0 ]; do
+        local option="$1"
+        local value="true"
+
+        if echo "$option" | grep -q "="; then
+            value=$(echo "$option" | cut -d'=' -f2)
+            option=$(echo "$option" | cut -d'=' -f1)
+        fi
+
+        if [ "$value" = "true" ]; then
+            case "$option" in
+                bash)   interpreter_name="bash" ;;
+                python3) interpreter_name="python" ;;
+                node)   interpreter_name="node" ;;
+                perl)   interpreter_name="perl" ;;
+                hidden) hidden_mode="true" ;;
+                quiet)  quiet_mode="true" ;;
+                debug)  DEBUG_MODE="true" ;;
+                chmod)  chmod_mode="true" ;;
+                load)   load_mode="true" ;;
+                *)      : ;; # Unknown options are ignored silently
+            esac
+        fi
+        shift
+    done
+
+    [ -z "$interpreter_name" ] && interpreter_name="ash"
+
+    local version_data
+    version_data=$(download_check_version "$file_name")
+
+    local update_required=$(echo "$version_data" | cut -d'|' -f1)
+    local clean_remote_version=$(echo "$version_data" | cut -d'|' -f2)
+    local clean_local_version=$(echo "$version_data" | cut -d'|' -f3)
+    # api_status extraction removed as it was only for finalize display
+
+    local file_exists="true"
+    if [ ! -f "${BASE_DIR}/$file_name" ]; then
+        file_exists="false"
+        update_required="true"
+    elif [ ! -s "${BASE_DIR}/$file_name" ]; then
+        file_exists="false"
+        update_required="true"
+    fi
+
+    if [ "$DEBUG_MODE" = "true" ]; then
+        update_required="true"
+    fi
+
+    # status_type and status_message variables and logic removed
+    if [ "$update_required" = "true" ] || [ "$file_exists" = "false" ]; then
+        if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode"; then
+            return 1
+        fi
+
+        if [ "$file_name" = "aios" ]; then
+            chmod +x "${BASE_DIR}/${file_name}"
+        fi
+    fi
+
+    if [ ! -f "${BASE_DIR}/$file_name" ]; then
+        return 1
+    fi
+
+    # download_finalize call removed
+
+    return 0
 }
 
 download_check_version() {
