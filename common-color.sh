@@ -1,10 +1,10 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.26-00-00" # Updated version
+SCRIPT_VERSION="2025.03.14-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
-# 🚀 Last Update: 2025-04-26
+# 🚀 Last Update: 2025-02-21
 #
 # 🏷️ License: CC0 (Public Domain)
 # 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
@@ -13,7 +13,7 @@ SCRIPT_VERSION="2025.04.26-00-00" # Updated version
 # OpenWrt OS exclusively uses **Almquist Shell (ash)** and
 # is **NOT** compatible with Bourne-Again Shell (bash).
 #
-# 📢 POSIX Compliance Guidelines: (Guidelines remain the same)
+# 📢 POSIX Compliance Guidelines:
 # ✅ Use `[` instead of `[[` for conditions
 # ✅ Use $(command) instead of backticks `command`
 # ✅ Use $(( )) for arithmetic instead of let
@@ -35,274 +35,368 @@ SCRIPT_VERSION="2025.04.26-00-00" # Updated version
 # 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
 ### =========================================================
 
-# DEV_NULL and other basic constants might be defined in aios or another common script
-# DEV_NULL="${DEV_NULL:-on}"
+DEV_NULL="${DEV_NULL:-on}"
+# サイレントモード
+# export DEV_NULL="on"
+# 通常モード
+# unset DEV_NULL
+
+# 基本定数の設定 
+BASE_WGET="wget --no-check-certificate -q"
+# BASE_WGET="wget -O"
 DEBUG_MODE="${DEBUG_MODE:-false}"
+# パス・ファイル関連
+BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
+BASE_DIR="${BASE_DIR:-/tmp/aios}"
+CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
+FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
+LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 
-# 表示スタイル設定のデフォルト値 (These might be controlled globally by aios)
-DISPLAY_MODE="${DISPLAY_MODE:-normal}" # 表示モード (normal/fancy/box/minimal)
-COLOR_ENABLED="${COLOR_ENABLED:-1}"    # 色表示有効/無効
-BOLD_ENABLED="${BOLD_ENABLED:-0}"     # 太字表示有効/無効
-UNDERLINE_ENABLED="${UNDERLINE_ENABLED:-0}" # 下線表示有効/無効
-BOX_ENABLED="${BOX_ENABLED:-0}"      # ボックス表示有効/無効
+# 表示スタイル設定のデフォルト値
+DISPLAY_MODE="normal"   # 表示モード (normal/fancy/box/minimal)
+COLOR_ENABLED="1"       # 色表示有効/無効
+BOLD_ENABLED="0"        # 太字表示有効/無効
+UNDERLINE_ENABLED="0"   # 下線表示有効/無効
+BOX_ENABLED="0"         # ボックス表示有効/無効
 
-# --- Spinner related variables and functions REMOVED ---
-
-# コマンドラインオプション処理関数 (aios側で制御される可能性あり)
-# process_display_options() { ... } # This function might be removed if options are handled solely in aios
+# コマンドラインオプション処理関数
+process_display_options() {
+    debug_log "DEBUG" "Processing display options"
+    
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -d|--display)
+                shift
+                [ $# -gt 0 ] && DISPLAY_MODE="$1"
+                debug_log "DEBUG" "Display mode set to: $DISPLAY_MODE"
+                ;;
+            -c|--color)
+                shift
+                if [ $# -gt 0 ]; then
+                    case "$1" in
+                        on|1|yes) COLOR_ENABLED="1" ;;
+                        off|0|no) COLOR_ENABLED="0" ;;
+                    esac
+                    debug_log "DEBUG" "Color display set to: $COLOR_ENABLED"
+                fi
+                ;;
+            -b|--bold)
+                BOLD_ENABLED="1"
+                debug_log "DEBUG" "Bold text enabled"
+                ;;
+            -u|--underline)
+                UNDERLINE_ENABLED="1"
+                debug_log "DEBUG" "Underlined text enabled"
+                ;;
+            --box)
+                BOX_ENABLED="1"
+                debug_log "DEBUG" "Box display enabled"
+                ;;
+            --plain)
+                # すべての装飾を無効化
+                COLOR_ENABLED="0"
+                BOLD_ENABLED="0"
+                UNDERLINE_ENABLED="0"
+                BOX_ENABLED="0"
+                DISPLAY_MODE="minimal"
+                debug_log "DEBUG" "Plain mode enabled (all decorations disabled)"
+                ;;
+        esac
+        shift
+    done
+}
 
 # 拡張カラーコードマップ関数
-# @param $1: color (string) - Color name (e.g., "red", "red_underline", "black_on_white")
-# @param $2: weight (string) - "bold" or "normal"
 color_code_map() {
     local color="$1"
     local weight="$2"  # "bold" または "normal"
-    local esc_seq=""   # Escape sequence accumulator
-
-    # Check if color is enabled globally
-    if [ "${COLOR_ENABLED:-1}" = "0" ]; then
-        # If disabled, return reset sequence or empty based on color name
-        [ "$color" = "reset" ] && printf "\033[0m" || printf ""
-        return
+    
+    # 太字プレフィックス
+    local bold_prefix=""
+    [ "$weight" = "bold" ] && bold_prefix="1;"
+    
+    # 下線プレフィックス（UNDERLINE_ENABLEDが設定されている場合）
+    local underline_prefix=""
+    if [ "$UNDERLINE_ENABLED" = "1" ] && ! echo "$color" | grep -q "_underline"; then
+        underline_prefix="4;"
     fi
-
-    # Determine prefixes based on global settings and weight
-    local style_prefix=""
-    [ "$weight" = "bold" ] && style_prefix="1;"
-    [ "${UNDERLINE_ENABLED:-0}" = "1" ] && ! echo "$color" | grep -q "_underline" && style_prefix="${style_prefix}4;"
-
-    # Handle reset separately
-    if [ "$color" = "reset" ]; then
-        printf "\033[0m"
-        return
-    fi
-
-    # Handle specific color formats
+    
     case "$color" in
-        # Basic colors
-        "red") esc_seq="38;5;196" ;;
-        "orange") esc_seq="38;5;208" ;;
-        "yellow") esc_seq="38;5;226" ;;
-        "green") esc_seq="38;5;46" ;;
-        "cyan") esc_seq="38;5;51" ;;
-        "blue") esc_seq="38;5;33" ;;
-        "indigo") esc_seq="38;5;57" ;;
-        "purple") esc_seq="38;5;129" ;;
-        "magenta") esc_seq="38;5;201" ;;
-        "white") esc_seq="37" ;;
-        "black") esc_seq="30" ;;
-        "gray") esc_seq="38;5;240" ;;
-
-        # Underlined colors
-        *_underline)
+        # 基本色（9色+黒+グレー）
+        "red") printf "\033[${underline_prefix}${bold_prefix}38;5;196m" ;;
+        "orange") printf "\033[${underline_prefix}${bold_prefix}38;5;208m" ;;
+        "yellow") printf "\033[${underline_prefix}${bold_prefix}38;5;226m" ;;
+        "green") printf "\033[${underline_prefix}${bold_prefix}38;5;46m" ;;
+        "cyan") printf "\033[${underline_prefix}${bold_prefix}38;5;51m" ;;
+        "blue") printf "\033[${underline_prefix}${bold_prefix}38;5;33m" ;;
+        "indigo") printf "\033[${underline_prefix}${bold_prefix}38;5;57m" ;;
+        "purple") printf "\033[${underline_prefix}${bold_prefix}38;5;129m" ;;
+        "magenta") printf "\033[${underline_prefix}${bold_prefix}38;5;201m" ;;
+        "white") printf "\033[${underline_prefix}${bold_prefix}37m" ;;  # 白色
+        "black") printf "\033[${underline_prefix}${bold_prefix}30m" ;;  # 黒色
+        "gray") printf "\033[${underline_prefix}${bold_prefix}38;5;240m" ;;  # グレー色追加
+        
+        # 下線付き
+        *"_underline")
             local base_color=$(echo "$color" | sed 's/_underline//g')
-            # Add underline code (4) if not already added by global setting
-            echo "$style_prefix" | grep -q "4;" || style_prefix="${style_prefix}4;"
-            # Recursively call for base color code (prevent infinite loop by checking _underline)
-            if [ "$base_color" != "$color" ]; then
-                 esc_seq=$(color_code_map "$base_color" "normal") # Get base color code without style
-                 # Extract the numeric part of the base color code
-                 esc_seq=$(echo "$esc_seq" | sed 's/\x1b\[//; s/m$//')
-            else
-                 esc_seq="37" # Fallback to white if extraction fails
-            fi
+            case "$base_color" in
+                "red") printf "\033[4;${bold_prefix}38;5;196m" ;;
+                "orange") printf "\033[4;${bold_prefix}38;5;208m" ;;
+                "yellow") printf "\033[4;${bold_prefix}38;5;226m" ;;
+                "green") printf "\033[4;${bold_prefix}38;5;46m" ;;
+                "cyan") printf "\033[4;${bold_prefix}38;5;51m" ;;
+                "blue") printf "\033[4;${bold_prefix}38;5;33m" ;;
+                "indigo") printf "\033[4;${bold_prefix}38;5;57m" ;;
+                "purple") printf "\033[4;${bold_prefix}38;5;129m" ;;
+                "magenta") printf "\033[4;${bold_prefix}38;5;201m" ;;
+                "white") printf "\033[4;${bold_prefix}37m" ;;  # 白色下線
+                "black") printf "\033[4;${bold_prefix}30m" ;;  # 黒色下線
+                "gray") printf "\033[4;${bold_prefix}38;5;240m" ;;  # グレー色下線追加
+                *) printf "\033[4;${bold_prefix}37m" ;;  # デフォルト
+            esac
             ;;
-
-        # Background colors (fg_on_bg)
-        *_on_*)
+            
+        # 背景色付き（black_on_white など）
+        *"_on_"*)
             local fg=$(echo "$color" | cut -d'_' -f1)
             local bg=$(echo "$color" | cut -d'_' -f3)
-            local fg_code=$(color_code_map "$fg" "normal" | sed 's/\x1b\[//; s/m$//') # Get fg code numeric part
-            local bg_code=""
-            case "$bg" in # Map background name to code
-                "black") bg_code="40" ;; "red") bg_code="48;5;196" ;; "orange") bg_code="48;5;208" ;;
-                "yellow") bg_code="48;5;226" ;; "green") bg_code="48;5;46" ;; "cyan") bg_code="48;5;51" ;;
-                "blue") bg_code="48;5;33" ;; "indigo") bg_code="48;5;57" ;; "purple") bg_code="48;5;129" ;;
-                "magenta") bg_code="48;5;201" ;; "white") bg_code="47" ;; "gray") bg_code="48;5;240" ;;
-                *) bg_code="40" ;; # Default background black
+            
+            # 前景色コード
+            local fg_code=""
+            case "$fg" in
+                "black") fg_code="30" ;;
+                "red") fg_code="38;5;196" ;;
+                "orange") fg_code="38;5;208" ;;
+                "yellow") fg_code="38;5;226" ;;
+                "green") fg_code="38;5;46" ;;
+                "cyan") fg_code="38;5;51" ;;
+                "blue") fg_code="38;5;33" ;;
+                "indigo") fg_code="38;5;57" ;;
+                "purple") fg_code="38;5;129" ;;
+                "magenta") fg_code="38;5;201" ;;
+                "white") fg_code="37" ;;
+                "gray") fg_code="38;5;240" ;;  # グレー色追加
+                *) fg_code="37" ;;  # デフォルトは白
             esac
-            esc_seq="${fg_code};${bg_code}"
+            
+            # 背景色コード
+            local bg_code=""
+            case "$bg" in
+                "black") bg_code="40" ;;
+                "red") bg_code="48;5;196" ;;
+                "orange") bg_code="48;5;208" ;;
+                "yellow") bg_code="48;5;226" ;;
+                "green") bg_code="48;5;46" ;;
+                "cyan") bg_code="48;5;51" ;;
+                "blue") bg_code="48;5;33" ;;
+                "indigo") bg_code="48;5;57" ;;
+                "purple") bg_code="48;5;129" ;;
+                "magenta") bg_code="48;5;201" ;;
+                "white") bg_code="47" ;;
+                "gray") bg_code="48;5;240" ;;  # グレー背景色追加
+                *) bg_code="40" ;;  # デフォルトは黒
+            esac
+            
+            printf "\033[${underline_prefix}${bold_prefix}${fg_code};${bg_code}m"
             ;;
-
-        # Fallback for fg_bg (treated as fg_on_bg with potential ambiguity)
-        # Consider deprecating this format if fg_on_bg is preferred
-        *_*)
-            if ! echo "$color" | grep -q "_on_" && ! echo "$color" | grep -q "_underline"; then
+            
+        # 反転表示（white_black など）
+        *"_"*)
+            if echo "$color" | grep -q -v "_on_" && echo "$color" | grep -q -v "_underline"; then
                 local fg=$(echo "$color" | cut -d'_' -f1)
-                local bg=$(echo "$color" | cut -d'_' -f2) # Assume second part is background
-                local fg_code=$(color_code_map "$fg" "normal" | sed 's/\x1b\[//; s/m$//')
-                local bg_code=""
-                case "$bg" in # Map background name to code
-                    "black") bg_code="40" ;; "red") bg_code="48;5;196" ;; "orange") bg_code="48;5;208" ;;
-                    "yellow") bg_code="48;5;226" ;; "green") bg_code="48;5;46" ;; "cyan") bg_code="48;5;51" ;;
-                    "blue") bg_code="48;5;33" ;; "indigo") bg_code="48;5;57" ;; "purple") bg_code="48;5;129" ;;
-                    "magenta") bg_code="48;5;201" ;; "white") bg_code="47" ;; "gray") bg_code="48;5;240" ;;
-                    *) bg_code="40" ;; # Default background black
+                local bg=$(echo "$color" | cut -d'_' -f2)
+                
+                # fg/bgの組み合わせで反転表示
+                local fg_code=""
+                case "$fg" in
+                    "black") fg_code="30" ;;
+                    "red") fg_code="38;5;196" ;;
+                    "orange") fg_code="38;5;208" ;;
+                    "yellow") fg_code="38;5;226" ;;
+                    "green") fg_code="38;5;46" ;;
+                    "cyan") fg_code="38;5;51" ;;
+                    "blue") fg_code="38;5;33" ;;
+                    "indigo") fg_code="38;5;57" ;;
+                    "purple") fg_code="38;5;129" ;;
+                    "magenta") fg_code="38;5;201" ;;
+                    "white") fg_code="37" ;;
+                    "gray") fg_code="38;5;240" ;;  # グレー色追加
+                    *) fg_code="37" ;;  # デフォルトは白
                 esac
-                esc_seq="${fg_code};${bg_code}"
+                
+                local bg_code=""
+                case "$bg" in
+                    "black") bg_code="40" ;;
+                    "red") bg_code="48;5;196" ;;
+                    "orange") bg_code="48;5;208" ;;
+                    "yellow") bg_code="48;5;226" ;;
+                    "green") bg_code="48;5;46" ;;
+                    "cyan") bg_code="48;5;51" ;;
+                    "blue") bg_code="48;5;33" ;;
+                    "indigo") bg_code="48;5;57" ;;
+                    "purple") bg_code="48;5;129" ;;
+                    "magenta") bg_code="48;5;201" ;;
+                    "white") bg_code="47" ;;
+                    "gray") bg_code="48;5;240" ;;  # グレー背景色追加
+                    *) bg_code="40" ;;  # デフォルトは黒
+                esac
+                
+                printf "\033[${underline_prefix}${bold_prefix}${fg_code};${bg_code}m"
             else
-                # If it contains _on_ or _underline, it was handled above or is invalid
-                esc_seq="37" # Default to white foreground
+                # マッチしなかった場合はデフォルト
+                printf "\033[${underline_prefix}${bold_prefix}37m"
             fi
             ;;
-
-        # Default: Unknown color name treated as white
-        *) esc_seq="37" ;;
+            
+        # リセット
+        "reset") printf "\033[0m" ;;
+        
+        # デフォルト
+        *) printf "\033[${underline_prefix}${bold_prefix}37m" ;;
     esac
-
-    # Combine style prefix and color code
-    printf "\033[${style_prefix}%sm" "$esc_seq"
 }
 
-
 # 拡張カラー表示関数
-# @param $1: color_name (string) - e.g., "red", "green_underline", "white_on_blue"
-# @param $2...: text (string) - Text to display
 color() {
     # 色表示が無効の場合はプレーンテキストを返す
-    if [ "${COLOR_ENABLED:-1}" = "0" ]; then
+    if [ "$COLOR_ENABLED" = "0" ]; then
         shift
-        # POSIX準拠: echo "$*" は引数間のスペースを保持しない場合があるため、printfを使用
-        printf "%s\n" "$*"
+        echo "$*"
         return
     fi
-
+    
     local color_name="$1"
     local param=""
-    shift # Shift color_name
-
-    # Check for optional parameter (-b for bold, -u for underline)
-    case "$1" in
-        -b) param="bold"; shift ;;
-        -u) param="underline"; shift ;;
-    esac
-
-    # Remaining arguments are the text
-    local text="$*"
-
-    # Determine weight based on param and global BOLD_ENABLED
-    local weight="normal"
-    if [ "$param" = "bold" ] || [ "${BOLD_ENABLED:-0}" = "1" ]; then
-        weight="bold"
+    local text=""
+    
+    # オプションの解析
+    if [ "$2" = "-b" ]; then
+        param="bold"
+        shift 2
+        text="$*"
+    elif [ "$2" = "-u" ]; then
+        param="underline"
+        shift 2
+        text="$*"
+    else
+        shift
+        text="$*"
     fi
-
-    # Handle underline param or global UNDERLINE_ENABLED
-    # Add _underline suffix if needed, avoiding double addition
-    if { [ "$param" = "underline" ] || [ "${UNDERLINE_ENABLED:-0}" = "1" ]; } && ! echo "$color_name" | grep -q "_underline"; then
-        color_name="${color_name}_underline"
-    fi
-
-    # DISPLAY_MODE specific adjustments (e.g., box, fancy)
-    case "${DISPLAY_MODE:-normal}" in
+    
+    # 表示モードに基づく処理
+    case "$DISPLAY_MODE" in
         box)
-            if [ "${BOX_ENABLED:-0}" = "1" ]; then
-                display_boxed_text "$color_name" "$text" "$param" # Pass param for potential bolding inside box
-                return # Box function handles output
+            if [ "$BOX_ENABLED" = "1" ]; then
+                display_boxed_text "$color_name" "$text" "$param"
+                return
             fi
             ;;
         fancy)
-            # Fancy mode implies bold unless explicitly normal (though param handling above covers -b)
-            [ "$weight" = "normal" ] && weight="bold" # Ensure bold for fancy
+            # fancyモードでは下線や太字を自動適用
+            if [ "$param" != "underline" ] && [ "$UNDERLINE_ENABLED" = "1" ]; then
+                color_name="${color_name}_underline"
+            fi
+            if [ "$param" != "bold" ]; then
+                param="bold"  # fancyモードでは自動的に太字適用
+            fi
             ;;
-        # minimal or normal: No special adjustments here, rely on param and global flags
     esac
-
-    # Get color codes
+    
+    # パラメータに基づいて重みを設定
+    local weight="normal"
+    if [ "$param" = "bold" ] || [ "$BOLD_ENABLED" = "1" ]; then
+        weight="bold"
+    fi
+    
+    # 下線パラメータの処理
+    if [ "$param" = "underline" ] && ! echo "$color_name" | grep -q "_underline"; then
+        color_name="${color_name}_underline"
+    fi
+    
+    # 色コードを取得して表示
     local color_code=$(color_code_map "$color_name" "$weight")
-    local reset_code=$(color_code_map "reset" "normal")
-
-    # Output the colored text using printf %b to handle potential escapes in text if needed
-    # Using %s for text is safer if text shouldn't be interpreted
-    printf "%b%s%b\n" "$color_code" "$text" "$reset_code"
+    printf "%b%s%b" "$color_code" "$text" "$(color_code_map reset normal)"
 }
 
 # ボックス表示関数
-# @param $1: color_name
-# @param $2: text
-# @param $3: param ("bold", "underline", or empty)
 display_boxed_text() {
     local color_name="$1"
     local text="$2"
     local param="$3"
-    local text_len=$(printf "%s" "$text" | wc -c) # Get byte count for width calculation
-    local width=$((text_len + 4))
-
-    # Determine weight
+    local width=$((${#text} + 4))
+    
+    # 太字判定
     local weight="normal"
-    if [ "$param" = "bold" ] || [ "${BOLD_ENABLED:-0}" = "1" ]; then
+    if [ "$param" = "bold" ] || [ "$BOLD_ENABLED" = "1" ]; then
         weight="bold"
     fi
-
-    # Handle underline (add suffix if needed)
-    if { [ "$param" = "underline" ] || [ "${UNDERLINE_ENABLED:-0}" = "1" ]; } && ! echo "$color_name" | grep -q "_underline"; then
-        color_name="${color_name}_underline"
-    fi
-
-    # Get color codes
+    
+    # 色コードを取得
     local color_code=$(color_code_map "$color_name" "$weight")
     local reset_code=$(color_code_map reset normal)
-
-    # Draw box using POSIX utilities
-    local border_line=$(printf "%${width}s" "" | tr ' ' '-') # Create line of dashes
-    local top_border="┌${border_line%??}┐" # Replace last two dashes
-    local bottom_border="└${border_line%??}┘"
-
-    printf "%b%s%b\n" "$color_code" "$top_border" "$reset_code"
-    printf "%b│ %s │%b\n" "$color_code" "$text" "$reset_code" # Add spaces around text
-    printf "%b%s%b\n" "$color_code" "$bottom_border" "$reset_code"
+    
+    # 上の罫線
+    printf "%b┌" "$color_code"
+    local i=1
+    while [ $i -lt $((width-1)) ]; do
+        printf "─"
+        i=$((i + 1))
+    done
+    printf "┐%b\n" "$reset_code"
+    
+    # テキスト行
+    printf "%b│ %s │%b\n" "$color_code" "$text" "$reset_code"
+    
+    # 下の罫線
+    printf "%b└" "$color_code"
+    i=1
+    while [ $i -lt $((width-1)) ]; do
+        printf "─"
+        i=$((i + 1))
+    done
+    printf "┘%b\n" "$reset_code"
 }
 
-# 装飾メニューヘッダー表示関数 (Remains the same logic, uses updated color/display_boxed_text)
-# @param $1: title
-# @param $2: color_name (optional, default: blue)
+# 装飾メニューヘッダー表示関数
 fancy_header() {
     local title="$1"
     local color_name="${2:-blue}"
-    local title_len=$(printf "%s" "$title" | wc -c)
-
-    case "${DISPLAY_MODE:-normal}" in
+    
+    case "$DISPLAY_MODE" in
         box)
-            if [ "${BOX_ENABLED:-0}" = "1" ]; then
-                display_boxed_text "$color_name" "$title" "bold" # Use bold param for box
+            if [ "$BOX_ENABLED" = "1" ]; then
+                display_boxed_text "$color_name" "$title" "bold"
                 return
             fi
-            # Fall through if box not enabled
-            ;& # POSIX equivalent for fallthrough is not direct, simulate by repeating default logic
+            ;;
         fancy)
-            printf "\n%s\n" "$(color "$color_name" -b "$title")" # Use -b for bold
-            printf "%s\n\n" "$(color "$color_name" "$(repeat_char "=" "$title_len")")"
+            printf "\n%s\n" "$(color "$color_name" -b "$title")"
+            printf "%s\n\n" "$(color "$color_name" "$(repeat_char "=" ${#title})")"
             return
             ;;
         minimal)
-            printf "\n%s\n\n" "$(color "$color_name" "$title")" # No bold, no underline
+            printf "\n%s\n\n" "$(color "$color_name" "$title")"
             return
             ;;
-        *) # Default 'normal' mode
-            printf "\n%s\n" "$(color "$color_name" -b "$title")" # Use -b for bold
-            printf "%s\n\n" "$(color "$color_name" "$(repeat_char "-" "$title_len")")"
+        *)
+            # 通常表示
+            printf "\n%s\n" "$(color "$color_name" -b "$title")"
+            printf "%s\n\n" "$(color "$color_name" "$(repeat_char "-" ${#title})")"
             ;;
     esac
 }
 
-# 文字繰り返し関数 (POSIX compliant)
-# @param $1: char
-# @param $2: count
+# 文字繰り返し関数
 repeat_char() {
     local char="$1"
     local count="$2"
     local result=""
     local i=0
-
-    # Handle non-numeric or zero count
-    if ! [ "$count" -gt 0 ] 2>/dev/null; then
-        printf ""
-        return
-    fi
-
+    
     while [ $i -lt $count ]; do
         result="${result}${char}"
         i=$((i + 1))
     done
-
-    printf "%s" "$result" # Use printf without newline
+    
+    echo "$result"
 }
