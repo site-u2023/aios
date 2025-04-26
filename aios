@@ -73,12 +73,6 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}" # キャッシュディレクトリ
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}" # フィードディレクトリ
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"   # ログディレクトリ
 
-# スピナーデフォルト設定
-SPINNER_DELAY="1" # デフォルトは秒単位
-SPINNER_USLEEP_VALUE="1000000" # 1秒（マイクロ秒）
-SPINNER_COLOR="white" # デフォルトのスピナー色
-ANIMATION_ENABLED="1" # アニメーション有効/無効フラグ
-
 # ダウンロード関連設定
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}" # 基本URL
 CACHE_BUST="?cache_bust=$(date +%s)" # キャッシュバスティングパラメータ
@@ -159,7 +153,7 @@ debug_log() {
     local file="$3"
     local version="$4"
     local debug_level="${DEBUG_LEVEL:-ERROR}"  # デフォルト値を設定
-    
+
     # レベル判定のシンプル化
     case "$level" in
         "DEBUG"|"INFO"|"WARN"|"ERROR") ;;
@@ -498,69 +492,6 @@ format_string() {
     return 0
 }
 
-OK_normalize_message() {
-    local input="$1"
-    local lang="$2"
-    local output="$input"
-    local saved_locale="$LC_ALL"
-
-    debug_log "DEBUG" "normalize_message: Input = [$input]"
-
-    # Full-width to half-width normalization
-    output=$(echo "$output" | sed 's/｛/{/g; s/｝/}/g')
-    output=$(echo "$output" | sed 's/：/:/g; s/∶/:/g; s/꞉/:/g; s/ː/:/g')
-    output=$(echo "$output" | sed 's/；/;/g')
-    output=$(echo "$output" | sed 's/　/ /g')
-    output=$(echo "$output" | sed 's/＠/@/g')
-    output=$(echo "$output" | sed 's/＼/\\/g')
-    debug_log "DEBUG" "normalize_message: After full-width normalization = [$output]"
-
-    # Placeholder space removal (using LC_ALL=C for safety)
-    LC_ALL=C
-    debug_log "DEBUG" "normalize_message: Entering LC_ALL=C block for space removal"
-    local before_space_removal="$output"
-    output=$(echo "$output" | sed 's/[[:space:]]\+{/{/g') # Space before {
-    # output=$(echo "$output" | sed 's/}[[:space:]]\+/}/g') # Space after }
-    output=$(echo "$output" | sed 's/{[[:space:]]\+/{/g') # Space after { (inside)
-    output=$(echo "$output" | sed 's/[[:space:]]\+}/}/g') # Space before } (inside)
-    if [ "$output" != "$before_space_removal" ]; then
-        debug_log "DEBUG" "normalize_message: Placeholder space removal applied. Result = [$output]"
-    fi
-    debug_log "DEBUG" "normalize_message: Exiting LC_ALL=C block. Result = [$output]"
-    LC_ALL="$saved_locale"
-
-    # Special placeholder replacement ( {;} is NOT replaced here )
-    local before_special_replace="$output"
-    output=$(echo "$output" | sed 's/{:}/:/g') # {:} -> :
-    if [ "$output" != "$before_special_replace" ]; then
-         debug_log "DEBUG" "normalize_message: Replaced {:} with :. Result = [$output]"
-    fi
-    before_special_replace="$output"
-    output=$(echo "$output" | sed 's/{@}/\\n/g') # {@} -> newline (\n)
-     if [ "$output" != "$before_special_replace" ]; then
-         debug_log "DEBUG" "normalize_message: Replaced {@} with \\n. Result = [$output]"
-    fi
-
-    # Language-specific number normalization
-    local before_num_norm="$output"
-    case "${lang%%-*}" in
-        ar) output=$(echo "$output" | sed 's/٠/0/g; s/١/1/g; s/٢/2/g; s/٣/3/g; s/٤/4/g; s/٥/5/g; s/٦/6/g; s/٧/7/g; s/٨/8/g; s/٩/9/g') ;;
-        fa) output=$(echo "$output" | sed 's/۰/0/g; s/۱/1/g; s/۲/2/g; s/۳/3/g; s/۴/4/g; s/۵/5/g; s/۶/6/g; s/۷/7/g; s/۸/8/g; s/۹/9/g') ;;
-        bn) output=$(echo "$output" | sed 's/০/0/g; s/۱/1/g; s/২/2/g; s/৩/3/g; s/৪/4/g; s/৫/5/g; s/৬/6/g; s/৭/7/g; s/৮/8/g; s/৯/9/g') ;;
-        hi|mr|ne) output=$(echo "$output" | sed 's/०/0/g; s/१/1/g; s/२/2/g; s/३/3/g; s/४/4/g; s/५/5/g; s/६/6/g; s/७/7/g; s/८/8/g; s/९/9/g') ;;
-        ja|zh|ko) output=$(echo "$output" | sed 's/０/0/g; s/１/1/g; s/２/2/g; s/３/3/g; s/４/4/g; s/５/5/g; s/６/6/g; s/７/7/g; s/８/8/g; s/９/9/g') ;;
-    esac
-
-    # Consolidated log output for number normalization
-    if [ "$output" != "$before_num_norm" ]; then
-        debug_log "DEBUG" "normalize_message: Applied number normalization for '$lang'. Result = [$output]"
-    fi
-
-    debug_log "DEBUG" "normalize_message: Final Output = [$output]"
-    printf '%s' "$output" # 出力は %s のまま
-    return 0
-}
-
 # --- normalize_message function (Handles normalization EXCEPT braces) ---
 # Arguments: $1: Input string, $2: Language code
 normalize_message() {
@@ -809,225 +740,6 @@ get_message() {
 }
 
 # 🔴　メッセージ系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
-
-# 🔵　スピナー系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
-
-# スピナー開始関数
-start_spinner() {
-    local message="$1"
-    local spinner_color="${2:-$SPINNER_COLOR}"
-    local anim_type="${3:-figure}" 
-    
-    # グローバル変数を設定
-    SPINNER_MESSAGE="$message"
-    SPINNER_TYPE="$anim_type"
-    SPINNER_COLOR="$spinner_color"
-    
-    if [ "$ANIMATION_ENABLED" -eq "0" ]; then
-        debug_log "DEBUG: Animation disabled, showing static message"
-        return
-    fi
-
-    if command -v usleep >/dev/null 2>&1; then
-        SPINNER_USLEEP_VALUE="300000"  # 300000マイクロ秒 = 0.3秒
-        SPINNER_DELAY="300000"         # アニメーションディレイ値
-        debug_log "DEBUG: Using fast animation mode (0.3s) with usleep"
-    else
-        SPINNER_DELAY="1"              # アニメーションディレイ値（秒）
-        debug_log "DEBUG: Using standard animation mode (1s)"
-    fi
-
-    # カーソル非表示
-    printf "\033[?25l"
-
-    # アニメーションタイプに応じた文字セット
-    case "$anim_type" in
-        spinner)
-            SPINNER_CHARS="- \\ | /"
-            ;;
-        dot)
-            SPINNER_CHARS=". .. ... .... ....."
-            ;;
-        bar)
-            SPINNER_CHARS="[=] => ->"
-            ;;
-        figure)
-            SPINNER_CHARS="0 1 2 3 4 5 6 7 8 9"
-            ;;
-        pulse)
-            # 環境依存
-            SPINNER_CHARS="◯ ◎"
-            ;;
-        emoji)
-            # 環境依存
-            SPINNER_CHARS="💩 👺 😀 👽 😈 💀"
-            ;;
-        moon)
-            # 環境依存
-            SPINNER_CHARS="🌑 🌘 🌗 🌖 🌝 🌔 🌓 🌒"
-            # SPINNER_CHARS="🌕 🌖 🌗 🌘 🌑 🌒 🌓 🌔"
-            ;;
-        bloc)
-            # 環境依存
-            SPINNER_CHARS="⢿ ⣻ ⣽ ⣾ ⣷ ⣯ ⣟ ⡿"
-            ;;
-        *)
-            SPINNER_CHARS="- \\ | /"
-            ;;
-    esac
-
-    debug_log "DEBUG: Starting spinner with message: $message, type: $anim_type, delay: $SPINNER_DELAY"
-
-    # 直前のスピナープロセスがまだ実行中の場合は停止
-    if [ -n "$SPINNER_PID" ]; then
-        ps | grep -v grep | grep -q "$SPINNER_PID" 2>/dev/null
-        if [ $? -eq 0 ]; then
-            debug_log "DEBUG: Stopping previous spinner process PID: $SPINNER_PID"
-            kill "$SPINNER_PID" >/dev/null 2>&1
-            wait "$SPINNER_PID" 2>/dev/null || true
-        fi
-    fi
-
-    # メッセージファイルの設定
-    SPINNER_MSG_FILE="${CACHE_DIR}/spinner_msg_$$.tmp"
-    mkdir -p "${CACHE_DIR}" 2>/dev/null
-    printf "%s" "$message" > "$SPINNER_MSG_FILE"
-    debug_log "DEBUG: Created spinner message file: $SPINNER_MSG_FILE"
-
-    # バックグラウンドでスピナーを実行
-    (
-        i=0
-        local curr_msg="$message"
-        
-        while true; do
-            # ファイルから新しいメッセージを読み取る
-            if [ -f "$SPINNER_MSG_FILE" ]; then
-                new_msg=$(cat "$SPINNER_MSG_FILE" 2>/dev/null)
-                if [ -n "$new_msg" ] && [ "$new_msg" != "$curr_msg" ]; then
-                    curr_msg="$new_msg"
-                fi
-            fi
-            
-            for char in $SPINNER_CHARS; do
-                printf "\r\033[K%s %s" "$curr_msg" "$(color "$SPINNER_COLOR" "$char")"
-
-                if command -v usleep >/dev/null 2>&1; then
-                    usleep "$SPINNER_USLEEP_VALUE"  # マイクロ秒単位のディレイ
-                else
-                    sleep "$SPINNER_DELAY"  # 秒単位のディレイ
-                fi
-                
-                # アニメーションサイクル中のメッセージ更新チェック
-                if [ -f "$SPINNER_MSG_FILE" ]; then
-                    new_msg=$(cat "$SPINNER_MSG_FILE" 2>/dev/null)
-                    if [ -n "$new_msg" ] && [ "$new_msg" != "$curr_msg" ]; then
-                        curr_msg="$new_msg"
-                        break  # 新しいメッセージがあれば次のサイクルへ
-                    fi
-                fi
-            done
-        done
-    ) &
-    SPINNER_PID=$!
-    debug_log "DEBUG: Spinner started with PID: $SPINNER_PID"
-}
-
-# スピナー停止関数
-stop_spinner() {
-    local message="$1"
-    local status="${2:-success}"
-
-    if [ "$ANIMATION_ENABLED" -eq "0" ]; then
-        # アニメーション無効時はメッセージがあれば表示 (改行あり)
-        if [ -n "$message" ]; then
-            printf "%s\n" "$message"
-        fi
-        return
-    fi
-
-    debug_log "DEBUG: Stopping spinner with message: $message, status: $status"
-
-    # メッセージファイルを削除
-    if [ -f "$SPINNER_MSG_FILE" ]; then
-        rm -f "$SPINNER_MSG_FILE" 2>/dev/null
-        debug_log "DEBUG: Removed spinner message file: $SPINNER_MSG_FILE"
-    fi
-
-    # プロセスが存在するか確認
-    if [ -n "$SPINNER_PID" ]; then
-        # プロセスが実際に存在するか確認
-        ps | grep -v grep | grep -q "$SPINNER_PID" 2>/dev/null
-        if [ $? -eq 0 ]; then
-            debug_log "DEBUG: Process found, killing PID: $SPINNER_PID"
-            kill "$SPINNER_PID" >/dev/null 2>&1
-            wait "$SPINNER_PID" 2>/dev/null || true
-            unset SPINNER_PID
-            printf "\r\033[K"  # 行をクリア
-
-            # ▼▼▼ 変更点 ▼▼▼
-            # メッセージが空でない場合のみ表示 (改行あり)
-            if [ -n "$message" ]; then
-                # 成功/失敗に応じたメッセージカラー
-                if [ "$status" = "success" ]; then
-                    printf "%s\n" "$(color green "$message")"
-                else
-                    printf "%s\n" "$(color yellow "$message")"
-                fi
-            fi
-            # ▲▲▲ 変更点 ▲▲▲
-        else
-            debug_log "DEBUG: Process not found for PID: $SPINNER_PID"
-            unset SPINNER_PID
-            # プロセスが見つからなくても、メッセージがあれば表示 (改行あり)
-            if [ -n "$message" ]; then
-                 if [ "$status" = "success" ]; then
-                     printf "%s\n" "$(color green "$message")"
-                 else
-                     printf "%s\n" "$(color yellow "$message")"
-                 fi
-            fi
-        fi
-    # SPINNER_PID がない場合でも、メッセージがあれば表示 (改行あり)
-    elif [ -n "$message" ]; then
-        if [ "$status" = "success" ]; then
-            printf "%s\n" "$(color green "$message")"
-        else
-            printf "%s\n" "$(color yellow "$message")"
-        fi
-    fi
-
-    # カーソル表示
-    printf "\033[?25h"
-}
-
-# スピナーメッセージ更新関数
-update_spinner() {
-    local message="$1"
-    local spinner_color="${2:-$SPINNER_COLOR}"
-    
-    if [ "$ANIMATION_ENABLED" -eq "0" ]; then
-        debug_log "DEBUG: Animation disabled, not updating spinner message"
-        return
-    fi
-    
-    # メッセージと色を更新
-    SPINNER_MESSAGE="$message"
-    
-    # 色が指定されている場合のみ更新
-    if [ -n "$spinner_color" ]; then
-        SPINNER_COLOR="$spinner_color"
-    fi
-    
-    # メッセージファイルを更新
-    if [ -f "$SPINNER_MSG_FILE" ]; then
-        printf "%s" "$message" > "$SPINNER_MSG_FILE"
-        debug_log "DEBUG: Updated spinner message file with: $message"
-    else
-        debug_log "DEBUG: Spinner message file not found: $SPINNER_MSG_FILE"
-    fi
-}
-
-# 🔴　スピナー系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
 
 # 🔵　トークン系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -2148,9 +1860,12 @@ download() {
     # ファイル名を最初の引数として処理
     local file_name="$1"
     shift
+
+    debug_log "DEBUG" "Download function called for f='${file_name}'"
     
     # 空ファイル名のチェック
     if [ -z "$file_name" ]; then
+        debug_log "DEBUG" "Empty filename detected in download function call"
         return 1
     fi
 
@@ -2187,7 +1902,7 @@ download() {
                 chmod)  chmod_mode="true" ;;
                 load)   load_mode="true" ;;
                 # 不明オプション
-                *) ;;
+                *)      debug_log "DEBUG" "Unknown option: $1, ignoring" ;;
             esac
         fi
         shift
@@ -2195,6 +1910,8 @@ download() {
 
     # インタプリタが設定されていなければデフォルト値を設定
     [ -z "$interpreter_name" ] && interpreter_name="ash"
+
+    debug_log "DEBUG" "Processing with options: hidden=${hidden_mode}, quiet=${quiet_mode}, chmod=${chmod_mode}, load=${load_mode}, interpreter=${interpreter_name}"
 
     # バージョン情報取得
     local version_data
@@ -2208,15 +1925,18 @@ download() {
     # ファイルの存在確認を追加
     local file_exists="true"
     if [ ! -f "${BASE_DIR}/$file_name" ]; then
+        debug_log "DEBUG" "File ${BASE_DIR}/$file_name does not exist, forcing download"
         file_exists="false"
         update_required="true"
     elif [ ! -s "${BASE_DIR}/$file_name" ]; then
+        debug_log "DEBUG" "File ${BASE_DIR}/$file_name exists but is empty, forcing download"
         file_exists="false"
         update_required="true"
     fi
     
     # デバッグモード時は常にダウンロード
     if [ "$DEBUG_MODE" = "true" ]; then
+        debug_log "DEBUG" "Debug mode enabled, forcing download for ${file_name}"
         update_required="true"
     fi
     
@@ -2225,96 +1945,34 @@ download() {
     local status_message="$(get_message "CONFIG_DOWNLOAD_UNNECESSARY")"
     
     if [ "$update_required" = "true" ] || [ "$file_exists" = "false" ]; then
+        debug_log "DEBUG" "Executing download_fetch_file for ${file_name}"
         if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode"; then
+            debug_log "DEBUG" "Download process failed for $file_name"
             return 1
         fi
         status_type="success"
-        # status_message="$(get_message "CONFIG_DOWNLOAD_SUCCESS")"
+        status_message="$(get_message "CONFIG_DOWNLOAD_SUCCESS")"
         
         # aiosファイルは常に実行権限を設定する（追加）
         if [ "$file_name" = "aios" ]; then
+            debug_log "DEBUG" "Special handling: Setting execute permission for aios file"
             chmod +x "${BASE_DIR}/${file_name}"
         fi
+    else
+        debug_log "DEBUG" "Skipping download for ${file_name} (not needed)"
     fi
     
     # ファイルの存在を再確認
     if [ ! -f "${BASE_DIR}/$file_name" ]; then
+        debug_log "DEBUG" "File not found after download attempt: $file_name"
         return 1
     fi
 
+    debug_log "DEBUG" "Calling download_finalize with f=${file_name}, status=${status_type}, interpreter=${interpreter_name}"
+
     # 結果表示とファイル読み込み
-    # download_finalize "$file_name" "$status_message" "$clean_remote_version" "$api_status" "$load_mode" "$hidden_mode" "$status_type" "$interpreter_name"
+    download_finalize "$file_name" "$status_message" "$clean_remote_version" "$api_status" "$load_mode" "$hidden_mode" "$status_type" "$interpreter_name"
     
-    return 0
-}
-
-download_check_version() {
-    local file_name="$1"
-    local script_file="${CACHE_DIR}/script.ch"
-    local dummy_version="No version control"
-
-    # バージョン情報の取得
-    local remote_version_info=$(get_commit_version "$file_name")
-    local remote_version=$(printf "%s" "$remote_version_info" | cut -d' ' -f1)
-    local auth_method=$(printf "%s" "$remote_version_info" | cut -d' ' -f2) # get_commit_version が返した認証方法を取得
-    local local_version=""
-
-    # ローカルバージョンの取得
-    if [ -f "$script_file" ]; then
-        local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
-    fi
-    [ -z "$local_version" ] && local_version="$dummy_version"
-
-    local clean_remote_version=$(clean_version_string "$remote_version")
-    local clean_local_version=$(clean_version_string "$local_version")
-
-    # --- APIレート制限情報の取得 (direct モード時はスキップ) ---
-    local api_status=""
-    if [ "$DOWNLOAD_METHOD" = "direct" ]; then
-        # direct モードの場合は API チェックをスキップし、固定値を設定
-        # auth_method が 'direct' であることも確認 (get_commit_version が期待通り動作しているか)
-        if [ "$auth_method" = "direct" ]; then
-             api_status="API: N/A (Direct)"
-             debug_log "DEBUG" "Direct download mode: Skipping API rate limit check for $file_name"
-        else
-             # direct モードなのに auth_method が direct でない場合は警告
-             api_status="API: ??? (Inconsistent)"
-             debug_log "DEBUG" "Inconsistent state: DOWNLOAD_METHOD=direct but auth_method=$auth_method for $file_name"
-        fi
-    else
-        # api モードの場合は従来通りチェック
-        api_status=$(check_api_rate_limit)
-    fi
-    # --- APIレート制限情報の取得ここまで ---
-
-    # バージョン比較とダウンロード判断 (変更なし)
-    local update_required=false
-
-    if [ "$local_version" = "$dummy_version" ]; then
-        debug_log "DEBUG" "First download: $file_name"
-        update_required=true
-    elif [ "$clean_remote_version" = "$clean_local_version" ]; then
-        debug_log "DEBUG" "Exact match: No update needed for $file_name"
-        update_required=false
-    else
-        debug_log "DEBUG" "Starting version comparison: $file_name"
-        version_is_newer "$clean_remote_version" "$clean_local_version"
-        if [ $? -eq 0 ]; then
-            debug_log "DEBUG" "New version detected: Update required for $file_name"
-            update_required=true
-        else
-            debug_log "DEBUG" "Existing version: No update needed for $file_name"
-            update_required=false
-        fi
-    fi
-
-    debug_log "DEBUG" "Remote version: $file_name - $clean_remote_version"
-    debug_log "DEBUG" "Local version: $file_name - $clean_local_version"
-    # ログに auth_method を追加して、get_commit_version の動作を確認しやすくする
-    debug_log "DEBUG" "API status: $api_status (Auth method from get_commit_version: $auth_method)"
-
-    # 結果を返す
-    echo "${update_required}|${clean_remote_version}|${clean_local_version}|${api_status}"
     return 0
 }
 
