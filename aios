@@ -73,6 +73,13 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}" # キャッシュディレクトリ
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}" # フィードディレクトリ
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"   # ログディレクトリ
 
+# 表示スタイル設定のデフォルト値
+DISPLAY_MODE="normal"   # 表示モード (normal/fancy/box/minimal)
+COLOR_ENABLED="1"       # 色表示有効/無効
+BOLD_ENABLED="0"        # 太字表示有効/無効
+UNDERLINE_ENABLED="0"   # 下線表示有効/無効
+BOX_ENABLED="0"         # ボックス表示有効/無効
+
 # ダウンロード関連設定
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}" # 基本URL
 CACHE_BUST="?cache_bust=$(date +%s)" # キャッシュバスティングパラメータ
