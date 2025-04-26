@@ -3041,7 +3041,7 @@ delete_aios() {
 
 # 必要ディレクトリ作成
 make_directory() {
-    if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$FEED_DIR" "${CACHE_DIR}/commits"; then
+    if ! mkdir -p "${BASE_DIR}" "$CACHE_DIR" "$LOG_DIR" "$DL_DIR" "$TR_DIR" "$FEED_DIR" "${CACHE_DIR}/commits"; then
         debug_log "DEBUG" "Failed to create required directories"
         return 1
     fi
