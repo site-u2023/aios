@@ -2197,7 +2197,7 @@ download_parallel() {
     local max_jobs=${1:-4} # Default parallel jobs (informational)
     local dl_list_file="${CACHE_DIR}/dl_list.tmp"
     local chmod_list_file="${CACHE_DIR}/chmod_list.tmp"
-    local load_list_file="${CACHE_DIR}/load_list.tmp" # Changed name for clarity
+    local load_list_file="${CACHE_DIR}/load_list.tmp"
     local awk_script
     local download_files_content
     local exit_code=0
@@ -2205,17 +2205,21 @@ download_parallel() {
     local awk_exit_code=0
     local pids="" # Variable to store PIDs of background jobs
     local pid # Loop variable for PID
+    local file_to_dl file_to_chmod file_to_load # Loop variables
+    local full_path # File path variable
+    local chmod_exit_code source_exit_code status # Exit code variables
+    local extract_exit_code wait_status=0 # Status variables
+
+    # --- Start: Export required variables for subshells ---
+    debug_log "DEBUG" "DownloadParallel: Exporting variables for subshells..."
+    export DL_DIR DL_URL_BASE CACHE_DIR CHECKSUM_FILE DEFAULT_LANGUAGE # Ensure download() has needed env vars
+    # --- End: Export required variables ---
 
     # --- Start: Cleanup and Parsing Logic ---
     debug_log "DEBUG" "DownloadParallel: Cleaning up temporary files..."
     rm -f "$dl_list_file" "$chmod_list_file" "$load_list_file" 2>/dev/null
 
-    # awk script:
-    # 1. Check if $1 is "download".
-    # 2. Extract filename from $2.
-    # 3. Print filename to dl_list_file.
-    # 4. Check $3 for "chmod" flag. If yes, print filename to chmod_list_file.
-    # 5. Check last field ($NF) for "load" flag. If yes, print filename to load_list_file.
+    # awk script to parse download_files()
     awk_script='
     {
         if ($1 != "download") { next }
@@ -2235,17 +2239,15 @@ download_parallel() {
             gsub(/^"|"$/, "", arg3)
             if (arg3 == "chmod") {
                 print file >> "'"$chmod_list_file"'"
-                chmod_flag = 1 # Mark that $3 was chmod
+                chmod_flag = 1
             }
         }
 
         # Check for load flag in the last field ($NF)
-        # It could be $3 if only "download file load" or $4 if "download file chmod load"
         if (NF >= 3) {
             last_arg = $NF
             gsub(/^"|"$/, "", last_arg)
             if (last_arg == "load") {
-                 # Only print to load list if $NF is "load"
                  print file >> "'"$load_list_file"'"
             }
         }
@@ -2253,11 +2255,12 @@ download_parallel() {
     '
 
     debug_log "DEBUG" "DownloadParallel: Extracting download_files() content..."
-    download_files_content=$(awk '/^download_files\(\) \{/,/^\}/' "$0" | sed '1d;$d') # More robust extraction
+    # Extract content between 'download_files() {' and '}'
+    download_files_content=$(awk '/^download_files\(\) \{/,/^\}/' "$0" | sed '1d;$d')
     extract_exit_code=$?
     debug_log "DEBUG" "DownloadParallel: Extraction finished (awk exit code: ${extract_exit_code})."
 
-    if [ $((extract_exit_code)) -ne 0 ] || [ -z "$download_files_content" ]; then
+    if [ $extract_exit_code -ne 0 ] || [ -z "$download_files_content" ]; then
         debug_log "ERROR" "DownloadParallel: Could not extract download_files() content."
         return 1
     fi
@@ -2267,7 +2270,7 @@ download_parallel() {
     awk_exit_code=$?
     debug_log "DEBUG" "DownloadParallel: Parsing finished (awk exit code: ${awk_exit_code})."
 
-    if [ $((awk_exit_code)) -ne 0 ]; then
+    if [ $awk_exit_code -ne 0 ]; then
          debug_log "ERROR" "DownloadParallel: Failed during awk processing (exit code: ${awk_exit_code})."
          rm -f "$dl_list_file" "$chmod_list_file" "$load_list_file" 2>/dev/null
          return 1
@@ -2276,22 +2279,27 @@ download_parallel() {
 
     # --- Start: Parallel Download Execution ---
     if [ ! -s "$dl_list_file" ]; then
-        debug_log "INFO" "DownloadParallel: No download tasks found."
-        # Proceed to check load list even if no downloads, maybe files exist already
+        debug_log "INFO" "DownloadParallel: No download tasks found in $dl_list_file."
     else
         debug_log "INFO" "DownloadParallel: Starting parallel downloads (max ${max_jobs})..."
         while IFS= read -r file_to_dl || [ -n "$file_to_dl" ]; do # Handle last line without newline
             if [ -z "$file_to_dl" ]; then continue; fi
-            debug_log "DEBUG" "DownloadParallel: Starting download for: ${file_to_dl}"
-            # Execute download in background
-            download "$file_to_dl" &
+            # Construct filename considering potential variable expansion
+            eval "expanded_file_to_dl=\"$file_to_dl\"" # Evaluate potential variables like ${DEFAULT_LANGUAGE}
+            if [ -z "$expanded_file_to_dl" ]; then
+                debug_log "WARN" "DownloadParallel: Skipping download for empty expanded filename from: ${file_to_dl}"
+                continue
+            fi
+            debug_log "DEBUG" "DownloadParallel: Starting download for: ${expanded_file_to_dl}"
+            # Execute download in background with ONLY the filename argument
+            download "$expanded_file_to_dl" &
             pid=$! # Get PID of the last background process
             pids="$pids $pid" # Append PID to the list
-            debug_log "DEBUG" "DownloadParallel: Background PID: ${pid}"
+            debug_log "DEBUG" "DownloadParallel: Background PID: ${pid} for file ${expanded_file_to_dl}"
         done < "$dl_list_file"
 
         debug_log "INFO" "DownloadParallel: Waiting for all downloads to complete..."
-        local wait_status=0
+        wait_status=0
         for pid in $pids; do
             wait "$pid"
             status=$?
@@ -2304,7 +2312,7 @@ download_parallel() {
         done
 
         if [ $wait_status -ne 0 ]; then
-             debug_log "WARN" "DownloadParallel: One or more download processes reported errors. Continuing with checks..."
+             debug_log "WARN" "DownloadParallel: One or more download processes reported errors. Continuing with file existence checks..."
              # Do not set overall_status yet, rely on file existence checks later
         else
              debug_log "INFO" "DownloadParallel: All download processes completed."
@@ -2317,12 +2325,17 @@ download_parallel() {
         debug_log "INFO" "DownloadParallel: Starting chmod operations..."
         while IFS= read -r file_to_chmod || [ -n "$file_to_chmod" ]; do
             if [ -z "$file_to_chmod" ]; then continue; fi
-            local full_path="${DL_DIR}/${file_to_chmod}"
+            eval "expanded_file_to_chmod=\"$file_to_chmod\"" # Evaluate potential variables
+            if [ -z "$expanded_file_to_chmod" ]; then
+                debug_log "WARN" "DownloadParallel: Skipping chmod for empty expanded filename from: ${file_to_chmod}"
+                continue
+            fi
+            full_path="${DL_DIR}/${expanded_file_to_chmod}"
             if [ -f "$full_path" ]; then # Check if file actually exists (download succeeded)
                 debug_log "DEBUG" "DownloadParallel: Applying chmod 755 to: ${full_path}"
                 chmod 755 "$full_path"
                 chmod_exit_code=$?
-                if [ $((chmod_exit_code)) -ne 0 ]; then
+                if [ $chmod_exit_code -ne 0 ]; then
                     debug_log "ERROR" "DownloadParallel: chmod failed for ${full_path} (exit code: ${chmod_exit_code})"
                     overall_status=1
                 fi
@@ -2333,7 +2346,7 @@ download_parallel() {
         done < "$chmod_list_file"
         debug_log "INFO" "DownloadParallel: Chmod operations finished."
     else
-         debug_log "INFO" "DownloadParallel: No chmod tasks found or specified."
+         debug_log "INFO" "DownloadParallel: No chmod tasks found in $chmod_list_file."
     fi
     # --- End: Sequential chmod Execution ---
 
@@ -2342,15 +2355,22 @@ download_parallel() {
         debug_log "INFO" "DownloadParallel: Starting file loading (sourcing)..."
         while IFS= read -r file_to_load || [ -n "$file_to_load" ]; do
             if [ -z "$file_to_load" ]; then continue; fi
-            local full_path="${DL_DIR}/${file_to_load}"
+            eval "expanded_file_to_load=\"$file_to_load\"" # Evaluate potential variables
+            if [ -z "$expanded_file_to_load" ]; then
+                debug_log "WARN" "DownloadParallel: Skipping load for empty expanded filename from: ${file_to_load}"
+                continue
+            fi
+            full_path="${DL_DIR}/${expanded_file_to_load}"
             if [ -f "$full_path" ]; then # Check if file exists
                  debug_log "DEBUG" "DownloadParallel: Sourcing file: ${full_path}"
                  # Execute source in a subshell to isolate potential errors/exit calls
                  ( . "$full_path" )
                  source_exit_code=$?
-                 if [ $((source_exit_code)) -ne 0 ]; then
+                 if [ $source_exit_code -ne 0 ]; then
                      debug_log "ERROR" "DownloadParallel: Sourcing file failed: ${full_path} (exit code: ${source_exit_code})"
                      overall_status=1
+                 else
+                     debug_log "DEBUG" "DownloadParallel: Sourcing file successful: ${full_path}"
                  fi
             else
                  debug_log "ERROR" "DownloadParallel: Skipping load for non-existent file: ${full_path}"
@@ -2359,7 +2379,7 @@ download_parallel() {
         done < "$load_list_file"
         debug_log "INFO" "DownloadParallel: File loading finished."
     else
-        debug_log "INFO" "DownloadParallel: No load tasks found or specified."
+        debug_log "INFO" "DownloadParallel: No load tasks found in $load_list_file."
     fi
     # --- End: Sequential Load Execution ---
 
@@ -2368,7 +2388,7 @@ download_parallel() {
     rm -f "$dl_list_file" "$chmod_list_file" "$load_list_file" 2>/dev/null
     # --- End: Cleanup ---
 
-    if [ $((overall_status)) -eq 0 ]; then
+    if [ $overall_status -eq 0 ]; then
         debug_log "INFO" "DownloadParallel: All operations completed successfully."
     else
         debug_log "ERROR" "DownloadParallel: One or more operations failed. Check logs above."
