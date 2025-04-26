@@ -2089,17 +2089,17 @@ download() {
 
     # 空ファイル名のチェック
     if [ -z "$file_name" ]; then
-        return 1 # エラーを示す非ゼロ値を返す
+        return 1
     fi
 
     # 設定変数の初期化
-    local hidden_mode="false" # この変数は download_parallel で管理されるため、ここでは不要になる可能性あり
-    local quiet_mode="${QUIET_MODE:-false}" # quiet_mode も表示を行わないため不要になる可能性あり
+    local hidden_mode="false"
+    local quiet_mode="${QUIET_MODE:-false}"
     local chmod_mode="false"
     local load_mode="false"
     local interpreter_name=""  # デフォルト値を空に
 
-    # オプション引数の処理
+    # オプション引数の処理（改善版）
     while [ $# -gt 0 ]; do
         local option="$1"
         local value="true"
@@ -2115,12 +2115,12 @@ download() {
             case "$option" in
                 # インタプリタオプション
                 bash)   interpreter_name="bash" ;;
-                python3) interpreter_name="python" ;; # python3 ではなく python が一般的か
+                python3) interpreter_name="python" ;;
                 node)   interpreter_name="node" ;;
                 perl)   interpreter_name="perl" ;;
                 # モードオプション
-                hidden) hidden_mode="true" ;; # 表示しないので影響なし
-                quiet)  quiet_mode="true" ;; # 表示しないので影響なし
+                hidden) hidden_mode="true" ;;
+                quiet)  quiet_mode="true" ;;
                 debug)  DEBUG_MODE="true" ;;
                 chmod)  chmod_mode="true" ;;
                 load)   load_mode="true" ;;
@@ -2137,19 +2137,18 @@ download() {
     # バージョン情報取得
     local version_data
     version_data=$(download_check_version "$file_name")
-    if [ $? -ne 0 ]; then
-        return 1 # エラー
-    fi
 
     local update_required=$(echo "$version_data" | cut -d'|' -f1)
     local clean_remote_version=$(echo "$version_data" | cut -d'|' -f2)
-    # local clean_local_version=$(echo "$version_data" | cut -d'|' -f3) # 使われていない
-    # local api_status=$(echo "$version_data" | cut -d'|' -f4) # 使われていない
+    local clean_local_version=$(echo "$version_data" | cut -d'|' -f3) # この変数は現状未使用ですが元ソースにあったため維持
+    local api_status=$(echo "$version_data" | cut -d'|' -f4)       # この変数も現状未使用ですが元ソースにあったため維持
 
-    # ファイルの存在確認
-    local file_path="${BASE_DIR}/$file_name"
+    # ファイルの存在確認を追加
     local file_exists="true"
-    if [ ! -f "$file_path" ] || [ ! -s "$file_path" ]; then
+    if [ ! -f "${BASE_DIR}/$file_name" ]; then
+        file_exists="false"
+        update_required="true"
+    elif [ ! -s "${BASE_DIR}/$file_name" ]; then
         file_exists="false"
         update_required="true"
     fi
@@ -2160,56 +2159,207 @@ download() {
     fi
 
     # ファイルダウンロード処理
+    # status_type 変数は削除せず維持（呼び出し元で詳細な状態を知りたい場合に利用できる可能性があるため）
+    local status_type="no_update"
+
     if [ "$update_required" = "true" ] || [ "$file_exists" = "false" ]; then
         if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode"; then
-            return 1 # エラー
+            return 1 # download_fetch_file の失敗時はエラー終了
         fi
+        status_type="success" # ダウンロード成功時は status_type を更新
 
-        # aiosファイルは常に実行権限を設定
+        # aiosファイルは常に実行権限を設定する（元ソースのロジック維持）
         if [ "$file_name" = "aios" ]; then
-            if ! chmod +x "$file_path"; then
-                 # 続行はするが警告は出す
-            fi
+            # chmod の失敗はエラーとせず続行する（元ソースの挙動を踏襲）
+            chmod +x "${BASE_DIR}/${file_name}"
         fi
     fi
 
-    # --- download_finalize から移設した load 処理 ---
-    if [ "$load_mode" = "true" ]; then
-
-        # ファイルが存在し、空でないことを確認
-        if [ -f "$file_path" ] && [ -s "$file_path" ]; then
-            # インタプリタが存在するか確認
-            if [ "$interpreter_name" != "$INTERPRETER" ]; then # $INTERPRETER は ash を想定
-                if ! command -v "$interpreter_name" > /dev/null 2>&1; then
-                    # インタプリタが見つからない場合のエラー処理（パッケージインストールはここでは行わない方が良いか？）
-                    # install_package は対話的要素を含む可能性があり、BG実行には不向き
-                    return 1 # エラー
-                else
-                    # 指定されたインタプリタで実行
-                    debug_log "DEBUG" "download: Executing with specified interpreter: ${interpreter_name} ${file_path}"
-                    if ! "$interpreter_name" "$file_path"; then
-                        debug_log "ERROR" "download: Failed to load ${file_name} with interpreter ${interpreter_name}."
-                        return 1 # エラー
-                    fi
-                fi
-            else
-                # デフォルトのシェル (ash) で source する
-                debug_log "DEBUG" "download: Sourcing file: . ${file_path}"
-                if ! . "$file_path"; then
-                    debug_log "ERROR" "download: Failed to source ${file_name}."
-                    return 1 # エラー
-                fi
-            fi
-        else
-            debug_log "ERROR" "download: Cannot load non-existent or empty file: ${file_path}"
-            return 1 # エラー
-        fi
+    # ファイルの存在を再確認（ダウンロード後にも確認）
+    if [ ! -f "${BASE_DIR}/$file_name" ]; then
+        return 1 # ファイルが存在しない場合はエラー終了
     fi
-    # --- load 処理移設ここまで ---
+
+    # download_finalize 呼び出しは削除済み
 
     # 成功終了
-    debug_log "INFO" "download: Successfully processed ${file_name}."
     return 0
+}
+
+download_parallel() {
+    local pids=""
+    local load_files="" # Format: "filename|interpreter|pid "
+    local download_failed="false"
+    local load_failed="false"
+    local file_args=""
+    local current_file=""
+    local current_interpreter=""
+    local has_load_opt="false"
+
+    # 1. 引数を解析し、各ファイルに対して download をバックグラウンドで実行
+    while [ $# -gt 0 ]; do
+        # ファイル名を取得
+        current_file="$1"
+        shift
+        file_args="$current_file" # 最初の引数はファイル名
+        has_load_opt="false"
+        current_interpreter=""
+
+        # ファイル名に続くオプションを収集 (次のファイル名または引数終了まで)
+        while [ $# -gt 0 ] && [ "$1" != "--" ]; do
+            file_args="$file_args $1" # オプションを追記
+            # load オプションとインタプリタを特定
+            if [ "$1" = "load" ]; then
+                has_load_opt="true"
+            fi
+            # インタプリタ指定オプションをチェック (python3 は python として扱う)
+            case "$1" in
+                bash|python|node|perl) current_interpreter="$1" ;;
+                 # python3) current_interpreter="python" ;; # download側でpythonに変換される想定だが念のため
+            esac
+            shift
+        done
+
+        # デフォルトインタプリタを設定 (load 時のみ)
+        if [ "$has_load_opt" = "true" ] && [ -z "$current_interpreter" ]; then
+             # download 関数内で設定されるデフォルト 'ash' を想定
+             # ここでは load_files 格納用に明示しないでおくか、$INTERPRETER を使う
+             # download 側で ash が使われるので、ここでは空のままにしておくのが整合性取れるか
+             : # current_interpreter は空のまま
+        fi
+
+        # download をバックグラウンドで実行
+        # download 関数は file_args をスペース区切りで受け取る想定
+        # printf "Debug: Launching download %s\n" "$file_args" >&2 # デバッグ用 (標準エラー出力へ)
+        download $file_args &
+        local pid=$!
+        pids="$pids $pid"
+
+        # load オプションがあった場合、関連情報を保存
+        if [ "$has_load_opt" = "true" ]; then
+            # 区切り文字にはパイプを使用 (ファイル名にパイプが含まれない前提)
+            load_files="$load_files$current_file|$current_interpreter|$pid "
+        fi
+
+        # 区切り文字 '--' があればスキップ
+        if [ $# -gt 0 ] && [ "$1" = "--" ]; then
+            shift
+        fi
+    done
+
+    # 2. 全ての download プロセスの完了を待機し、失敗をチェック
+    local exit_status
+    local pid_to_check
+    # pids 文字列をスペースで区切りながらループ (POSIX準拠)
+    set -- $pids # 位置パラメータにPIDリストを設定
+    while [ $# -gt 0 ]; do
+        pid_to_check=$1
+        shift
+        wait "$pid_to_check"
+        exit_status=$?
+        if [ $exit_status -ne 0 ]; then
+            # どのファイルが失敗したか特定するのは難しいが、エラーがあったことだけ記録
+            # printf "Error: Download process with PID %s failed with status %s.\n" "$pid_to_check" "$exit_status" >&2 # エラーメッセージ (英語)
+            download_failed="true"
+            # load対象から失敗したPIDを除く (より安全な実装)
+            local temp_load_files=""
+            local load_entry
+            local load_pid
+            set -- $load_files # load_files を位置パラメータに設定
+            while [ $# -gt 0 ]; do
+                load_entry=$1
+                shift
+                load_pid=$(echo "$load_entry" | cut -d'|' -f3)
+                if [ "$load_pid" != "$pid_to_check" ]; then
+                    temp_load_files="$temp_load_files$load_entry "
+                # else
+                    # printf "Debug: Removing failed PID %s from load list for file %s\n" "$pid_to_check" "$(echo "$load_entry" | cut -d'|' -f1)" >&2 # デバッグ用 (標準エラー出力へ)
+                fi
+            done
+            load_files=$temp_load_files
+        fi
+    done
+
+    # 3. load オプションが指定されたファイルの処理
+    if [ "$download_failed" = "false" ]; then # 全てのダウンロードが成功した場合のみロード処理に進む (より安全)
+        local load_entry
+        local load_file
+        local load_interpreter
+        local file_path
+        # load_files 文字列をスペースで区切りながらループ
+        set -- $load_files # load_files を位置パラメータに設定
+        while [ $# -gt 0 ]; do
+            load_entry=$1
+            shift
+
+            load_file=$(echo "$load_entry" | cut -d'|' -f1)
+            load_interpreter=$(echo "$load_entry" | cut -d'|' -f2)
+            file_path="${BASE_DIR}/${load_file}" # BASE_DIR はグローバル変数想定
+
+            # デフォルトインタプリタ (ash) を設定
+            if [ -z "$load_interpreter" ]; then
+                # $INTERPRETER グローバル変数を使うか、'ash' を直接指定
+                load_interpreter="${INTERPRETER:-ash}"
+            fi
+
+            # printf "Debug: Processing load for %s with interpreter %s\n" "$load_file" "$load_interpreter" >&2 # デバッグ用 (標準エラー出力へ)
+
+            # ファイルが存在し、空でないことを確認 (念のため)
+            if [ ! -f "$file_path" ] || [ ! -s "$file_path" ]; then
+                printf "Error: Cannot load non-existent or empty file: %s\n" "$file_path" >&2 # エラーメッセージ (英語)
+                load_failed="true"
+                continue # 次のファイルへ
+            fi
+
+            # インタプリタが必要か確認 (デフォルトシェル以外の場合)
+            if [ "$load_interpreter" != "${INTERPRETER:-ash}" ]; then
+                # インタプリタの存在確認
+                if ! command -v "$load_interpreter" > /dev/null 2>&1; then
+                    # printf "Info: Interpreter '%s' not found. Attempting installation...\n" "$load_interpreter" >&2 # 情報メッセージ (英語)
+                    # インタプリタのインストール試行
+                    if ! install_package "$load_interpreter" yn hidden; then
+                        printf "Error: Failed to install interpreter '%s' for file '%s'. Skipping load.\n" "$load_interpreter" "$load_file" >&2 # エラーメッセージ (英語)
+                        load_failed="true"
+                        continue # 次のファイルへ
+                    fi
+                    # printf "Info: Interpreter '%s' installed successfully.\n" "$load_interpreter" >&2 # 情報メッセージ (英語)
+                fi
+            fi
+
+            # ファイルの実行 または source
+            # printf "Debug: Attempting to load %s using %s\n" "$file_path" "$load_interpreter" >&2 # デバッグ用 (標準エラー出力へ)
+            if [ "$load_interpreter" = "${INTERPRETER:-ash}" ]; then
+                # デフォルトシェルで source
+                if ! . "$file_path"; then
+                    printf "Error: Failed to source file: %s\n" "$file_path" >&2 # エラーメッセージ (英語)
+                    load_failed="true"
+                fi
+            else
+                # 指定されたインタプリタで実行
+                if ! "$load_interpreter" "$file_path"; then
+                    printf "Error: Failed to execute file '%s' with interpreter '%s'.\n" "$file_path" "$load_interpreter" >&2 # エラーメッセージ (英語)
+                    load_failed="true"
+                fi
+            fi
+        done
+    elif [ -n "$load_files" ]; then
+        # ダウンロードが失敗したがロード対象があった場合
+        printf "Warning: Skipping load process due to download failures.\n" >&2 # 警告メッセージ (英語)
+        load_failed="true" # ロードも失敗扱いとする
+    fi
+
+    # 4. 最終的な終了ステータスとメッセージを返す
+    if [ "$download_failed" = "true" ] || [ "$load_failed" = "true" ]; then
+        return 1 # 何らかのエラーが発生した場合
+    else
+        # 全て成功した場合、成功メッセージを出力 (スピナー用)
+        local success_message
+        success_message=$(get_message "CONFIG_DOWNLOAD_SUCCESS") # 既存キーを使用
+        if [ -n "$success_message" ]; then
+            printf "%s\n" "$success_message" # 標準出力へ
+        fi
+        return 0 # 全て成功した場合
+    fi
 }
 
 OK_download() {
@@ -2441,7 +2591,7 @@ download_fetch_file() {
     return 0
 }
 
-download_finalize() {
+OK_download_finalize() {
     local file_name="$1"
     local status_message="$2" 
     local clean_remote_version="$3"
