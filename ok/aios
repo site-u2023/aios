@@ -153,7 +153,7 @@ debug_log() {
     local file="$3"
     local version="$4"
     local debug_level="${DEBUG_LEVEL:-ERROR}"  # デフォルト値を設定
-    
+
     # レベル判定のシンプル化
     case "$level" in
         "DEBUG"|"INFO"|"WARN"|"ERROR") ;;
@@ -2104,122 +2104,85 @@ get_commit_version() {
 }
 
 download() {
-    # ファイル名を最初の引数として処理
     local file_name="$1"
     shift
 
-    debug_log "DEBUG" "Download function called for f='${file_name}'"
-    
-    # 空ファイル名のチェック
     if [ -z "$file_name" ]; then
-        debug_log "DEBUG" "Empty filename detected in download function call"
         return 1
     fi
 
-    # 設定変数の初期化
     local hidden_mode="false"
     local quiet_mode="${QUIET_MODE:-false}"
     local chmod_mode="false"
     local load_mode="false"
-    local interpreter_name=""  # デフォルト値を空に
-    
-    # オプション引数の処理（改善版）
+    local interpreter_name=""
+
     while [ $# -gt 0 ]; do
         local option="$1"
         local value="true"
-        
-        # キー=値形式の場合は分解処理
+
         if echo "$option" | grep -q "="; then
             value=$(echo "$option" | cut -d'=' -f2)
             option=$(echo "$option" | cut -d'=' -f1)
         fi
-        
-        # オプション判定（値がtrueの場合のみ処理）
+
         if [ "$value" = "true" ]; then
             case "$option" in
-                # インタプリタオプション
                 bash)   interpreter_name="bash" ;;
                 python3) interpreter_name="python" ;;
                 node)   interpreter_name="node" ;;
                 perl)   interpreter_name="perl" ;;
-                # モードオプション
                 hidden) hidden_mode="true" ;;
                 quiet)  quiet_mode="true" ;;
                 debug)  DEBUG_MODE="true" ;;
                 chmod)  chmod_mode="true" ;;
                 load)   load_mode="true" ;;
-                # 不明オプション
-                *)      debug_log "DEBUG" "Unknown option: $1, ignoring" ;;
+                *)      : ;; # Unknown options are ignored silently
             esac
         fi
         shift
     done
 
-    # インタプリタが設定されていなければデフォルト値を設定
     [ -z "$interpreter_name" ] && interpreter_name="ash"
 
-    debug_log "DEBUG" "Processing with options: hidden=${hidden_mode}, quiet=${quiet_mode}, chmod=${chmod_mode}, load=${load_mode}, interpreter=${interpreter_name}"
-
-    # バージョン情報取得
     local version_data
     version_data=$(download_check_version "$file_name")
-    
+
     local update_required=$(echo "$version_data" | cut -d'|' -f1)
     local clean_remote_version=$(echo "$version_data" | cut -d'|' -f2)
     local clean_local_version=$(echo "$version_data" | cut -d'|' -f3)
-    local api_status=$(echo "$version_data" | cut -d'|' -f4)
-    
-    # ファイルの存在確認を追加
+    # api_status extraction removed as it was only for finalize display
+
     local file_exists="true"
     if [ ! -f "${BASE_DIR}/$file_name" ]; then
-        debug_log "DEBUG" "File ${BASE_DIR}/$file_name does not exist, forcing download"
         file_exists="false"
         update_required="true"
     elif [ ! -s "${BASE_DIR}/$file_name" ]; then
-        debug_log "DEBUG" "File ${BASE_DIR}/$file_name exists but is empty, forcing download"
         file_exists="false"
         update_required="true"
     fi
-    
-    # デバッグモード時は常にダウンロード
+
     if [ "$DEBUG_MODE" = "true" ]; then
-        debug_log "DEBUG" "Debug mode enabled, forcing download for ${file_name}"
         update_required="true"
     fi
-    
-    # ファイルダウンロード処理
-    local status_type="no_update"
-    local status_message="$(get_message "CONFIG_DOWNLOAD_UNNECESSARY")"
-    
+
+    # status_type and status_message variables and logic removed
     if [ "$update_required" = "true" ] || [ "$file_exists" = "false" ]; then
-        debug_log "DEBUG" "Executing download_fetch_file for ${file_name}"
         if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode"; then
-            debug_log "DEBUG" "Download process failed for $file_name"
             return 1
         fi
-        status_type="success"
-        status_message="$(get_message "CONFIG_DOWNLOAD_SUCCESS")"
-        
-        # aiosファイルは常に実行権限を設定する（追加）
+
         if [ "$file_name" = "aios" ]; then
-            debug_log "DEBUG" "Special handling: Setting execute permission for aios file"
             chmod +x "${BASE_DIR}/${file_name}"
         fi
-    else
-        debug_log "DEBUG" "Skipping download for ${file_name} (not needed)"
     fi
-    
-    # ファイルの存在を再確認
+
     if [ ! -f "${BASE_DIR}/$file_name" ]; then
-        debug_log "DEBUG" "File not found after download attempt: $file_name"
         return 1
     fi
 
-    debug_log "DEBUG" "Calling download_finalize with f=${file_name}, status=${status_type}, interpreter=${interpreter_name}"
+    # download_finalize call removed
 
-    # 結果表示とファイル読み込み
-    download_finalize "$file_name" "$status_message" "$clean_remote_version" "$api_status" "$load_mode" "$hidden_mode" "$status_type" "$interpreter_name"
-    
     return 0
 }
 
