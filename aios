@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.22-00-00"
+SCRIPT_VERSION="2025.04.26-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -2200,10 +2200,6 @@ download() {
     return 0
 }
 
-# download_parallel: Downloads files listed in download_files() definition in parallel.
-
-# Usage: download_parallel
-
 download_parallel() {
     local func_def
     local total_lines
@@ -2213,83 +2209,79 @@ download_parallel() {
     local max_parallel
     local pids=""
     local overall_status=0 # 0: success, 1: failure
-    local tmp_dir="${DR_DIR:-$BASE_DIR/download}/tmp" # Temporary directory for task files
+    # ▼▼▼ 変更点 ▼▼▼
+    # 一時ディレクトリの場所を CACHE_DIR 配下にする (前回提案のまま)
+    local tmp_dir="${CACHE_DIR}/dl_tmp" # Temporary directory inside CACHE_DIR
+    # ▲▲▲ 変更点 ▲▲▲
     local all_tasks_file="${tmp_dir}/dl_all_tasks.tmp"
     local task_file_prefix="${tmp_dir}/dl_task_"
-    local pid job_index=0
+    local pid job_index=0 wait_pid proc_status task_file
+    local success_message failure_message spinner_message
 
     # --- 設定と準備 ---
-    # Get max parallel tasks from env or CPU cores, default to 4
     max_parallel="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
     if ! [ "$max_parallel" -gt 0 ] 2>/dev/null; then
         max_parallel=4
-        print_message "warn" "DP_WARN_MAX_TASKS" "$max_parallel" >&2
+        debug_log "WARN" "DP_WARN_MAX_TASKS: Invalid MAX_PARALLEL_TASKS. Using default: $max_parallel" >&2
     fi
-    debug_log "Max parallel download tasks: %s" "$max_parallel"
+    debug_log "DEBUG" "Max parallel download tasks: $max_parallel"
 
-    # Create temporary directory
+    # Use CACHE_DIR for temporary task files
     if ! mkdir -p "$tmp_dir"; then
          if [ ! -d "$tmp_dir" ]; then
-            print_message "error" "DP_ERR_MKDIR_FAILED" "$tmp_dir" >&2
+            debug_log "ERROR" "DP_ERR_MKDIR_FAILED: Failed to create temporary directory: $tmp_dir" >&2
             return 1
          fi
     fi
-    # Clean up previous temporary task files
     rm -f "${task_file_prefix}"*.tmp "$all_tasks_file" 2>/dev/null
 
     # --- スピナー開始 ---
-    # Use a generic message key or text
-    spinner_start "$(get_message 'CONFIG_DOWNLOAD_START' 'Downloading essential files...')"
+    spinner_message="$(get_message 'CONFIG_DOWNLOAD_START' 'Downloading essential files...')"
+    start_spinner "$spinner_message"
 
     # --- download_files 関数の定義を取得し、download行を抽出 ---
     if ! func_def=$(type download_files 2>/dev/null); then
-        spinner_stop 1
-        print_message "error" "DP_ERR_FUNC_NOT_FOUND" "download_files" >&2
+        stop_spinner "$(get_message 'DP_ERR_FUNC_NOT_FOUND' 'Error: download_files function not found.')" "failure"
+        debug_log "ERROR" "DP_ERR_FUNC_NOT_FOUND: Function download_files not found." >&2
         return 1
     fi
 
-    # Extract lines starting with 'download ' (potentially indented) between '{' and '}'
-    # This assumes download_files has the structure: func() { \n download ... \n }
-    # Using awk for potentially more robust parsing than sed '1d;$d'
     echo "$func_def" | awk '/^[^{]*\{/{flag=1; next} /^\}/{flag=0} flag && /^[[:space:]]*download /' > "$all_tasks_file"
 
     if [ ! -s "$all_tasks_file" ]; then
-        spinner_stop 1 # Indicate failure if no tasks found
-        print_message "error" "DP_ERR_NO_TASKS_FOUND" "download_files" >&2
-        rm -f "$all_tasks_file" # Clean up empty file
-        return 1 # Or maybe 0 if it's valid for download_files to be empty? Assuming error.
+        stop_spinner "$(get_message 'DP_ERR_NO_TASKS_FOUND' 'Error: No download tasks found in download_files.')" "failure"
+        debug_log "ERROR" "DP_ERR_NO_TASKS_FOUND: No tasks found in download_files function." >&2
+        rm -f "$all_tasks_file"
+        return 1
     fi
 
     # --- 行数を計算し、タスクファイルを生成 ---
     total_lines=$(wc -l < "$all_tasks_file")
     if [ "$total_lines" -eq 0 ]; then
-         spinner_stop 0 # No tasks is not an error itself
-         print_message "info" "DP_INFO_NO_TASKS" "download_files" >&2
+         stop_spinner "$(get_message 'DP_INFO_NO_TASKS' 'No download tasks to process.')" "success"
+         debug_log "INFO" "DP_INFO_NO_TASKS: download_files function is empty." >&2
          rm -f "$all_tasks_file"
          return 0
     fi
 
-    # Calculate lines per task file, ensuring at least 1 task file is created
     lines_per_task=$(( (total_lines + max_parallel - 1) / max_parallel ))
-    [ "$lines_per_task" -eq 0 ] && lines_per_task=1 # Avoid division by zero or infinite loop if total_lines < max_parallel
+    [ "$lines_per_task" -eq 0 ] && lines_per_task=1
 
-    debug_log "Total tasks: %s, Lines per task file: %s" "$total_lines" "$lines_per_task"
+    debug_log "DEBUG" "Total tasks: $total_lines, Lines per task file: $lines_per_task"
 
-    # Split the tasks into temporary files using awk (more portable than split --filter)
     awk -v lpt="$lines_per_task" -v prefix="$task_file_prefix" '{
         task_num = int((NR-1)/lpt)
         filename = sprintf("%s%03d.tmp", prefix, task_num)
         print >> filename
     }' "$all_tasks_file"
-    rm -f "$all_tasks_file" # Remove the intermediate file
+    rm -f "$all_tasks_file"
 
-    # Count how many task files were actually created
     task_count=$(ls "${task_file_prefix}"*.tmp 2>/dev/null | wc -l)
-    debug_log "Created %s task files." "$task_count"
+    debug_log "DEBUG" "Created $task_count task files."
 
     if [ "$task_count" -eq 0 ]; then
-        spinner_stop 1 # Should not happen if total_lines > 0, but check anyway
-        print_message "error" "DP_ERR_SPLIT_FAILED" >&2
+        stop_spinner "$(get_message 'DP_ERR_SPLIT_FAILED' 'Error: Failed to split tasks into files.')" "failure"
+        debug_log "ERROR" "DP_ERR_SPLIT_FAILED: Failed to create task files." >&2
         return 1
     fi
 
@@ -2297,65 +2289,52 @@ download_parallel() {
     pids=""
     job_index=0
     for task_file in "${task_file_prefix}"*.tmp; do
-        debug_log "Starting task file: %s" "$task_file"
-        # Execute the task file in a subshell to run the download commands
+        debug_log "DEBUG" "Starting task file: $task_file"
         ( . "$task_file" ) &
         pid=$!
         pids="$pids $pid"
         job_index=$((job_index + 1))
 
-        # Wait if max parallel jobs reached
-        if [ "$job_index" -ge "$max_parallel" ] && [ "$job_index" -lt "$task_count" ]; then # Don't wait on the very last batch
-             debug_log "Max parallel tasks (%s) reached, waiting..." "$max_parallel"
-             # Wait for the oldest PID in the current batch to finish
-             # Simple approach: wait for any PID to finish if 'wait -n' isn't available
-             # More robust: track PIDs in this batch and wait for the first one added
-             # Simpler POSIX way: just wait for *any* background job of the current shell
-             wait -p wait_pid # Wait for any child process, get its PID in wait_pid (Bash extension? Check ash)
-             # Fallback POSIX: Just 'wait', might wait longer than necessary if other bg jobs exist
-             # Let's try a simple wait first, assuming only these PIDs are relevant bg jobs
-             local first_pid=$(echo "$pids" | cut -d' ' -f2) # Get first PID added
-             wait "$first_pid"
-             proc_status=$?
-             debug_log "PID %s finished with status %s. Continuing..." "$first_pid" "$proc_status"
-             if [ $proc_status -ne 0 ]; then
-                 overall_status=1 # Mark failure
-                 print_message "error" "DP_ERR_TASK_FAILED" "$first_pid" "$proc_status" >&2
+        if [ "$job_index" -ge "$max_parallel" ]; then
+             debug_log "DEBUG" "Max parallel tasks ($max_parallel) reached, waiting for one to finish..."
+             local first_pid_in_batch=$(echo "$pids" | cut -d' ' -f2)
+             if wait "$first_pid_in_batch"; then
+                 debug_log "DEBUG" "PID $first_pid_in_batch finished successfully. Continuing..."
+             else
+                 proc_status=$?
+                 debug_log "ERROR" "DP_ERR_TASK_FAILED: Background task (PID $first_pid_in_batch) failed with status $proc_status." >&2
+                 overall_status=1
              fi
-             # Remove the finished PID from the list
-             pids=$(echo "$pids" | sed "s/ $first_pid//")
-             job_index=$((job_index - 1)) # Decrement job count as one finished
+             pids=$(echo "$pids" | sed "s/ $first_pid_in_batch//")
+             job_index=$((job_index - 1))
         fi
     done
 
     # --- 全てのジョブの完了を待機 ---
-    debug_log "Waiting for remaining background jobs: [%s]" "$pids"
+    debug_log "DEBUG" "Waiting for remaining background jobs: [$pids]"
     for pid in $pids; do
-        wait "$pid"
-        proc_status=$?
-        if [ $proc_status -ne 0 ]; then
-            overall_status=1 # Mark failure
-            print_message "error" "DP_ERR_TASK_FAILED" "$pid" "$proc_status" >&2
+        if wait "$pid"; then
+            debug_log "DEBUG" "PID $pid finished successfully."
+        else
+            proc_status=$?
+            debug_log "ERROR" "DP_ERR_TASK_FAILED: Background task (PID $pid) failed with status $proc_status." >&2
+            overall_status=1
         fi
-        debug_log "PID %s finished with status %s." "$pid" "$proc_status"
     done
 
     # --- クリーンアップと終了処理 ---
-    rm -f "${task_file_prefix}"*.tmp # Clean up task files
-
-    spinner_stop $overall_status # Stop spinner with final status
+    rm -f "${task_file_prefix}"*.tmp
 
     if [ $overall_status -eq 0 ]; then
-        # Use existing success message key if available
-        print_message "info" "$(get_message 'CONFIG_DOWNLOAD_SUCCESS' 'Essential files downloaded successfully.')"
+        success_message="$(get_message 'CONFIG_DOWNLOAD_SUCCESS' 'Essential files downloaded successfully.')"
+        stop_spinner "$success_message" "success"
         return 0
     else
-        # Use a generic error message key or text
-        print_message "error" "$(get_message 'CONFIG_DOWNLOAD_FAILED' 'Errors occurred during download.')" >&2
+        failure_message="$(get_message 'CONFIG_DOWNLOAD_FAILED' 'Errors occurred during download.')"
+        stop_spinner "$failure_message" "failure"
         return 1
     fi
 }
-
 
 OK_download() {
     # ファイル名を最初の引数として処理
