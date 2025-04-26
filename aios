@@ -2204,33 +2204,59 @@ download_parallel() {
     local exit_code=0
     local overall_download_status=0 # 0 for success, non-zero for any failure
 
-    # --- Start: Parsing logic (Unchanged from previous version) ---
+    # --- Start: Parsing logic (awk script regex updated) ---
     rm -f "$task_file" "$load_list_file" 2>/dev/null
+
+    # Corrected: Updated awk script with stricter regex to avoid misinterpreting non-download lines
     awk_script='
-    /^[[:space:]]*download[[:space:]]+/{
-        if (match($0, /"([^"]+)"[[:space:]]+"([^"]+)"[[:space:]]+"([^"]+)"([[:space:]]+"load")?/)) {
-             match($0, /"([^"]+)"/)
-             file = substr($0, RSTART + 1, RLENGTH - 2)
-             url_start = RSTART + RLENGTH + 1
-             match(substr($0, url_start), /"([^"]+)"/)
-             url = substr(substr($0, url_start), RSTART + 1, RLENGTH - 2)
-             csum_start = url_start + RSTART + RLENGTH + 1
-             match(substr($0, csum_start), /"([^"]+)"/)
-             csum = substr(substr($0, csum_start), RSTART + 1, RLENGTH - 2)
-             load_flag_start = csum_start + RSTART + RLENGTH
-             load_flag=0
-             if (match(substr($0, load_flag_start), /[[:space:]]+"load"/)) {
-                  load_flag=1
-             }
-             if (load_flag == 1 && file != "") {
-                 print file >> "'"$load_list_file"'"
-                 printf "download \"%s\" \"%s\" \"%s\"\n", file, url, csum >> "'"$task_file"'"
-             } else if (file != "") {
-                 printf "download \"%s\" \"%s\" \"%s\"\n", file, url, csum >> "'"$task_file"'"
-             }
+    # Match lines starting with optional space, download, space, then exactly 3 quoted arguments, optionally followed by "load"
+    /^[[:space:]]*download[[:space:]]+"([^"]+)"[[:space:]]+"([^"]+)"[[:space:]]+"([^"]+)"([[:space:]]+"load")?[[:space:]]*$/ {
+        # Store the full matched line for easier substring matching
+        line = $0
+
+        # Extract file (first quoted string)
+        match(line, /"([^"]+)"/)
+        file = substr(line, RSTART + 1, RLENGTH - 2)
+        # Remember end position of file string for next match
+        next_start = RSTART + RLENGTH
+
+        # Extract url (second quoted string after the first)
+        match(substr(line, next_start), /[[:space:]]+"([^"]+)"/)
+        url = substr(substr(line, next_start), RSTART + 1 + 1, RLENGTH - 2 - 1) # +1 for space, +1 for quote, -1 for quote, -1 for space? No, just +1 for quote, -2 for quotes
+        url = substr(substr(line, next_start), RSTART + 1, RLENGTH - 2) # Corrected: Simpler extraction relative to match start
+        # Remember end position of url string
+        next_start = next_start + RSTART + RLENGTH
+
+        # Extract checksum (third quoted string after the second)
+        match(substr(line, next_start), /[[:space:]]+"([^"]+)"/)
+        csum = substr(substr(line, next_start), RSTART + 1, RLENGTH - 2) # Corrected: Simpler extraction relative to match start
+        # Remember end position of checksum string
+        next_start = next_start + RSTART + RLENGTH
+
+        # Check for optional "load" flag after the third argument
+        load_flag=0
+        if (match(substr(line, next_start), /^[[:space:]]+"load"[[:space:]]*$/)) {
+             load_flag=1
+        }
+
+        # Proceed only if file, url, and csum were likely extracted (basic check)
+        if (file != "" && url != "" && csum != "") {
+            if (load_flag == 1) {
+                # Add filename to load list
+                print file >> "'"$load_list_file"'"
+                # Output the download command *without* load flag to the task file
+                printf "download \"%s\" \"%s\" \"%s\"\n", file, url, csum >> "'"$task_file"'"
+            } else {
+                # Output the download command as is to the task file
+                printf "download \"%s\" \"%s\" \"%s\"\n", file, url, csum >> "'"$task_file"'"
+            }
+        } else {
+             # Optional: Log if parsing seemed to fail despite initial line match (should not happen with strict regex)
+             # print "Warning: Could not parse arguments from line: " line > "/dev/stderr"
         }
     }
     '
+    # Rest of the parsing logic remains the same
     download_files_content=$(awk '
         /^download_files\(\) \{/ { in_func=1; next }
         /^\}/ { if (in_func) { in_func=0; next } }
@@ -2249,52 +2275,42 @@ download_parallel() {
     fi
     # --- End: Parsing logic ---
 
-    # Check if the task file was created and is not empty
+    # --- Start: Sequential execution logic (Unchanged from previous version) ---
     if [ ! -s "$task_file" ]; then
         debug_log "INFO" "DownloadParallel: No download tasks found in ${task_file}."
          if [ -f "$load_list_file" ]; then
              debug_log "INFO" "DownloadParallel: Proceeding to load files..."
              # Fall through to loading section
          else
-             rm -f "$task_file" 2>/dev/null # Remove empty task file if exists
-            return 0 # Nothing to download or load
+             rm -f "$task_file" 2>/dev/null
+            return 0
          fi
     else
-        # --- Start: Sequential execution logic (replaces xargs -P) ---
         debug_log "INFO" "DownloadParallel: Starting sequential download using task file: ${task_file}"
         while IFS= read -r download_command; do
-            # Ensure the line is not empty
             if [ -z "$download_command" ]; then
                 continue
             fi
-            # Execute the download command using eval
-            # Use debug_log to show which command is being executed
             debug_log "DEBUG" "DownloadParallel: Executing: ${download_command}"
             eval "$download_command"
-            # Corrected: Use POSIX compliant arithmetic expansion
             command_exit_code=$?
             if [ $((command_exit_code)) -ne 0 ]; then
                 debug_log "ERROR" "DownloadParallel: Download command failed (exit code: ${command_exit_code}): ${download_command}"
-                overall_download_status=$command_exit_code # Record the first error
-                # Optionally break the loop on first error, or continue trying others
+                overall_download_status=$command_exit_code
                 # break # Uncomment to stop on first error
             fi
         done < "$task_file"
-
-        # Check overall download status
-        # Corrected: Use POSIX compliant arithmetic expansion
         if [ $((overall_download_status)) -ne 0 ]; then
             debug_log "ERROR" "DownloadParallel: One or more downloads failed. Check logs above."
-            rm -f "$task_file" 2>/dev/null # Clean up task file on failure
-            # Keep load_list_file? Removing for now.
+            rm -f "$task_file" 2>/dev/null
             # rm -f "$load_list_file"
-            return $overall_download_status # Return the first non-zero exit code
+            return $overall_download_status
         else
             debug_log "INFO" "DownloadParallel: All downloads completed successfully."
-            rm -f "$task_file" 2>/dev/null # Clean up task file after successful download
+            rm -f "$task_file" 2>/dev/null
         fi
-        # --- End: Sequential execution logic ---
     fi
+    # --- End: Sequential execution logic ---
 
     # --- Start: Loading files logic (Unchanged from previous version) ---
     if [ -f "$load_list_file" ]; then
@@ -2307,7 +2323,7 @@ download_parallel() {
                  source_exit_code=$?
                  if [ $((source_exit_code)) -ne 0 ]; then
                      debug_log "ERROR" "DownloadParallel: Failed to source file: ${full_path} (exit code: ${source_exit_code})"
-                     exit_code=1 # Record failure, but continue
+                     exit_code=1
                  fi
              else
                  debug_log "ERROR" "DownloadParallel: File specified in load list not found: ${full_path}"
@@ -2326,7 +2342,6 @@ download_parallel() {
     fi
     # --- End: Loading files logic ---
 
-    # Return final status (0 if everything succeeded)
     return $overall_download_status
 }
 
