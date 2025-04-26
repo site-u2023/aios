@@ -2613,6 +2613,17 @@ check_option() {
     check_common "$SELECTED_LANGUAGE" "$MODE"
 }
 
+download_files() {
+    download "common-system.sh" "chmod" "load"
+    download "common-information.sh" "chmod" "load"
+    download "common-translation.sh" "chmod" "load"
+    download "common-color.sh" "chmod" "load"
+    download "common-country.sh" "chmod" "load"
+    download "common-menu.sh" "chmod" "load"
+    download "common-package.sh" "chmod" "load"
+    download "common-feed-package.sh" "chmod" "load"
+}
+
 check_common() {
     local lang_code="$SELECTED_LANGUAGE"
     local mode="$MODE"
@@ -2679,14 +2690,7 @@ check_common() {
             selector "$MAIN_MENU" 
             ;;
         full)
-            download "common-system.sh" "chmod" "load"
-            download "common-information.sh" "chmod" "load"
-            download "common-translation.sh" "chmod" "load"
-            download "common-color.sh" "chmod" "load"
-            download "common-country.sh" "chmod" "load"
-            download "common-menu.sh" "chmod" "load"
-            download "common-package.sh" "chmod" "load"
-            download "common-feed-package.sh" "chmod" "load"
+            download_files
             download "menu.db"
             download "country.db"
             download "message_${DEFAULT_LANGUAGE}.db"
