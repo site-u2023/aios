@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.26-00-00"
+SCRIPT_VERSION="2025.04.26-00-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -2211,33 +2211,36 @@ download_parallel() {
     local success_message failure_message spinner_message
     local script_path="$0" # Store the script path
 
-    # --- 設定と準備 ---
+    # --- Configuration and Preparation ---
     max_parallel="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
     if ! [ "$max_parallel" -gt 0 ] 2>/dev/null; then
         max_parallel=4
-        debug_log "WARN" "DP_WARN_MAX_TASKS: Invalid MAX_PARALLEL_TASKS. Using default: $max_parallel" >&2
+        debug_log "WARN" "Invalid MAX_PARALLEL_TASKS. Using default: $max_parallel" >&2
     fi
     debug_log "DEBUG" "Max parallel download tasks: $max_parallel"
 
     # Use CACHE_DIR for temporary task files
     if ! mkdir -p "$tmp_dir"; then
          if [ ! -d "$tmp_dir" ]; then
-            debug_log "ERROR" "DP_ERR_MKDIR_FAILED: Failed to create temporary directory: $tmp_dir" >&2
+            debug_log "ERROR" "Failed to create temporary directory: $tmp_dir" >&2
+            # ▼▼▼ Use new FAILED message key ▼▼▼
+            stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Setup failed.')" "failure"
             return 1
          fi
     fi
     rm -f "${task_file_prefix}"*.tmp "$all_tasks_file" 2>/dev/null
 
-    # --- スピナー開始 ---
-    spinner_message="$(get_message 'CONFIG_DOWNLOAD_START' 'Downloading essential files...')"
+    # --- Start Spinner ---
+    # ▼▼▼ Use new START message key ▼▼▼
+    spinner_message="$(get_message 'DOWNLOAD_PARALLEL_START' 'Downloading essential files in parallel...')"
     start_spinner "$spinner_message"
 
-    # --- ▼▼▼ 変更点: スクリプトファイルを直接解析して download_files 関数の内容を抽出 ▼▼▼ ---
-    # IMPORTANT: This assumes the script is run from a file, so $0 contains the script path.
+    # --- Extract Commands from download_files() using cat | awk ---
     debug_log "DEBUG" "Parsing script file '$script_path' for download_files() function..."
     if [ ! -f "$script_path" ]; then
-        stop_spinner "$(get_message 'DP_ERR_SCRIPT_NOT_FOUND' 'Error: Script file not found for parsing.')" "failure"
-        debug_log "ERROR" "DP_ERR_SCRIPT_NOT_FOUND: Script path '$script_path' is not a valid file." >&2
+        # ▼▼▼ Use new FAILED message key ▼▼▼
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Script file not found for parsing.')" "failure"
+        debug_log "ERROR" "Script path '$script_path' is not a valid file." >&2
         rm -rf "$tmp_dir" 2>/dev/null
         return 1
     fi
@@ -2253,7 +2256,6 @@ download_parallel() {
         /^}/ {
             if (in_func) {
                 in_func=0
-                # Do not exit, continue processing the rest of the file if needed (though we stop printing)
             }
         }
         # If inside the function and not a blank or comment line
@@ -2263,27 +2265,31 @@ download_parallel() {
         }
     ' > "$all_tasks_file"; then
         cat_awk_status=$?
-        stop_spinner "$(get_message 'DP_ERR_PARSE_FAILED' 'Error: Failed during script parsing (cat | awk).')" "failure"
-        printf "ERROR: cat | awk command failed with status %s while parsing '%s'.\n" "$cat_awk_status" "$script_path" >&2
+        # ▼▼▼ Use new FAILED message key ▼▼▼
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed during script parsing.')" "failure"
+        debug_log "ERROR" "cat | awk command failed with status $cat_awk_status while parsing '$script_path'." >&2
         rm -rf "$tmp_dir" 2>/dev/null
         return 1
     fi
-    # --- ▲▲▲ 変更点ここまで ▲▲▲ ---
 
+    # --- Check if tasks were extracted ---
     if [ ! -s "$all_tasks_file" ]; then
-        # Allow empty function as non-fatal, but log it.
-        stop_spinner "$(get_message 'DP_INFO_NO_TASKS' 'No download tasks found in download_files().')" "success" # Changed from failure to success/info
-        debug_log "INFO" "DP_INFO_NO_TASKS_FOUND: No executable tasks found in download_files function in '$script_path'." >&2
-        rm -rf "$tmp_dir" 2>/dev/null # Clean up tmp dir even if no tasks
+        # No tasks found is considered success, but use a specific message if needed
+        # Here, we stop the initial spinner and report success (as no downloads failed)
+        # ▼▼▼ Use new SUCCESS message key (or a specific INFO key if available/desired) ▼▼▼
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'No download tasks found.')" "success"
+        debug_log "INFO" "No executable tasks found in download_files function in '$script_path'." >&2
+        rm -rf "$tmp_dir" 2>/dev/null
         return 0 # Return success as there are no tasks to fail
     fi
 
-    # --- 行数を計算し、タスクファイルを生成 ---
+    # --- Calculate lines and generate task files ---
     total_lines=$(wc -l < "$all_tasks_file")
-    # This check is redundant now due to the ! -s check above, but kept for safety.
+    # Redundant check, kept for safety
     if [ "$total_lines" -eq 0 ]; then
-         stop_spinner "$(get_message 'DP_INFO_NO_TASKS' 'No download tasks to process.')" "success"
-         debug_log "INFO" "DP_INFO_NO_TASKS: download_files function is empty after parsing." >&2
+         # ▼▼▼ Use new SUCCESS message key (or a specific INFO key if available/desired) ▼▼▼
+         stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'No download tasks to process.')" "success"
+         debug_log "INFO" "download_files function is empty after parsing." >&2
          rm -rf "$tmp_dir" 2>/dev/null
          return 0
     fi
@@ -2297,35 +2303,35 @@ download_parallel() {
     if ! awk -v lpt="$lines_per_task" -v prefix="$task_file_prefix" '{
         task_num = int((NR-1)/lpt)
         filename = sprintf("%s%03d.tmp", prefix, task_num)
-        print $0 >> filename # Use $0 to print the whole line
+        print $0 >> filename
     }' "$all_tasks_file"; then
         split_status=$?
-        stop_spinner "$(get_message 'DP_ERR_SPLIT_FAILED' 'Error: Failed to split tasks into files.')" "failure"
-        printf "ERROR: awk splitting command failed with status %s.\n" "$split_status" >&2
-        rm -f "$all_tasks_file" # Clean up the main temp file
+        # ▼▼▼ Use new FAILED message key ▼▼▼
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed to split tasks into files.')" "failure"
+        debug_log "ERROR" "awk splitting command failed with status $split_status." >&2
+        rm -f "$all_tasks_file"
         rm -rf "$tmp_dir" 2>/dev/null
         return 1
     fi
-    rm -f "$all_tasks_file" # Remove intermediate file after successful split
+    rm -f "$all_tasks_file"
 
     task_count=$(ls "${task_file_prefix}"*.tmp 2>/dev/null | wc -l)
     debug_log "DEBUG" "Created $task_count task files."
 
     if [ "$task_count" -eq 0 ]; then
-        stop_spinner "$(get_message 'DP_ERR_SPLIT_FAILED_NO_FILES' 'Error: Failed to split tasks (no files created).')" "failure"
-        debug_log "ERROR" "DP_ERR_SPLIT_FAILED_NO_FILES: Failed to create task files after splitting." >&2
+        # ▼▼▼ Use new FAILED message key ▼▼▼
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed to split tasks (no files created).')" "failure"
+        debug_log "ERROR" "Failed to create task files after splitting." >&2
         rm -rf "$tmp_dir" 2>/dev/null
         return 1
     fi
 
-    # --- タスクファイルを並列実行 ---
+    # --- Execute Task Files in Parallel ---
     pids=""
     job_index=0
     for task_file in "${task_file_prefix}"*.tmp; do
         debug_log "DEBUG" "Starting task file: $task_file"
-        # Execute the content of the task file in a subshell
         (
-            # Source the task file to execute the download commands within it
             if . "$task_file"; then
                 exit 0 # Success
             else
@@ -2337,53 +2343,51 @@ download_parallel() {
         job_index=$((job_index + 1))
         debug_log "DEBUG" "Background PID $pid started for task file $task_file"
 
-        # Wait for a process if we've reached the max parallel limit
         if [ "$job_index" -ge "$max_parallel" ]; then
              debug_log "DEBUG" "Max parallel tasks ($max_parallel) reached, waiting for one to finish..."
-             # Use 'wait -n' if available and desired for efficiency, but 'wait $pid' is more portable
-             local first_pid_in_batch=$(echo "$pids" | sed 's/^ *//' | cut -d' ' -f1) # Get the first PID in the list
+             local first_pid_in_batch=$(echo "$pids" | sed 's/^ *//' | cut -d' ' -f1)
              if [ -n "$first_pid_in_batch" ]; then
                  if wait "$first_pid_in_batch"; then
                      debug_log "DEBUG" "PID $first_pid_in_batch finished successfully. Continuing..."
                  else
                      proc_status=$?
-                     debug_log "ERROR" "DP_ERR_TASK_FAILED: Background task (PID $first_pid_in_batch) failed with status $proc_status." >&2
+                     debug_log "ERROR" "Background task (PID $first_pid_in_batch) failed with status $proc_status." >&2
                      overall_status=1 # Mark overall failure
                  fi
-                 # Remove the completed PID from the list
                  pids=$(echo "$pids" | sed "s/ $first_pid_in_batch / /; s/^$first_pid_in_batch //; s/ $first_pid_in_batch$//")
                  job_index=$((job_index - 1))
              else
-                 debug_log "WARN" "Could not determine first PID to wait for." # Should not happen normally
+                 debug_log "WARN" "Could not determine first PID to wait for."
              fi
         fi
     done
 
-    # --- 全てのジョブの完了を待機 ---
+    # --- Wait for All Remaining Jobs ---
     debug_log "DEBUG" "Waiting for remaining background jobs: [$pids]"
     for pid in $pids; do
-        # Ensure pid is a valid number before waiting
         if [ "$pid" -gt 0 ] 2>/dev/null; then
             if wait "$pid"; then
                 debug_log "DEBUG" "PID $pid finished successfully."
             else
                 proc_status=$?
-                debug_log "ERROR" "DP_ERR_TASK_FAILED: Background task (PID $pid) failed with status $proc_status." >&2
+                debug_log "ERROR" "Background task (PID $pid) failed with status $proc_status." >&2
                 overall_status=1 # Mark overall failure
             fi
         fi
     done
 
-    # --- クリーンアップと終了処理 ---
+    # --- Cleanup and Final Status ---
     debug_log "DEBUG" "Cleaning up temporary directory: $tmp_dir"
     rm -rf "$tmp_dir" 2>/dev/null
 
     if [ $overall_status -eq 0 ]; then
-        success_message="$(get_message 'CONFIG_DOWNLOAD_SUCCESS' 'Essential files downloaded successfully.')"
+        # ▼▼▼ Use new SUCCESS message key ▼▼▼
+        success_message="$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'Essential files downloaded successfully.')"
         stop_spinner "$success_message" "success"
         return 0
     else
-        failure_message="$(get_message 'CONFIG_DOWNLOAD_FAILED' 'Errors occurred during download.')"
+        # ▼▼▼ Use new FAILED message key ▼▼▼
+        failure_message="$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Errors occurred during parallel download.')"
         stop_spinner "$failure_message" "failure"
         return 1
     fi
