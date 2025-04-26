@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.26-00-07"
+SCRIPT_VERSION="2025.04.26-00-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1045,14 +1045,19 @@ get_github_token() {
     return 1
 }
 
-# オリジナルの save_version_to_cache 関数
+# オリジナルの save_version_to_cache 関数を修正
+# 変更点:
+# 1. 一時ファイル名にプロセスID ($$) を追加して競合を回避 (tmp_file="${script_file}.tmp.$$")
+# 2. 関数内の自動的な一時ファイル削除 (rm -f "$tmp_file") をすべて削除
 save_version_to_cache() {
     local file_name="$1"
     local version="$2"
     local script_file="$3"
-    local tmp_file="${script_file}.tmp" # 一時ファイル名を変数に
+    # ▼▼▼ 変更点: 一時ファイル名にプロセスIDを追加 ▼▼▼
+    local tmp_file="${script_file}.tmp.$$" # プロセス固有の一時ファイル名
+    # ▲▲▲ 変更点ここまで ▲▲▲
 
-    debug_log "DEBUG" "save_version_to_cache: Called for file='$file_name', version='$version', script_file='$script_file'"
+    debug_log "DEBUG" "save_version_to_cache: Called for file='$file_name', version='$version', script_file='$script_file', tmp_file='$tmp_file'" # DEBUGログにtmp_file追加
 
     # バージョンが空でないかチェック
     if [ -z "$version" ]; then
@@ -1060,47 +1065,51 @@ save_version_to_cache() {
         return 1 # バージョンが空なら書き込みしない
     fi
 
-    # tmpファイルを確実に削除しておく
-    rm -f "$tmp_file" 2>/dev/null
+    # ▼▼▼ 変更点: 事前の一時ファイル削除を削除 ▼▼▼
+    # rm -f "$tmp_file" 2>/dev/null # 削除
+    # ▲▲▲ 変更点ここまで ▲▲▲
 
     # script_file が存在する場合の処理
     if [ -f "$script_file" ]; then
         debug_log "DEBUG" "save_version_to_cache: File '$script_file' exists. Filtering existing entry for '$file_name'."
-        # grep の実行と結果確認
+        # grep の実行と結果確認 (プロセス固有の一時ファイルへ出力)
         if grep -v "^${file_name}=" "$script_file" > "$tmp_file"; then
             debug_log "DEBUG" "save_version_to_cache: Successfully filtered '$script_file' to '$tmp_file'."
         else
             local grep_status=$?
             debug_log "DEBUG" "save_version_to_cache: grep command failed with status $grep_status for '$script_file'."
-            # grep失敗時は一時ファイルを削除して終了（安全策）
-            rm -f "$tmp_file" 2>/dev/null
+            # ▼▼▼ 変更点: grep失敗時の一時ファイル削除を削除 ▼▼▼
+            # rm -f "$tmp_file" 2>/dev/null # 削除
+            # ▲▲▲ 変更点ここまで ▲▲▲
             return 1
         fi
 
-        # 新しいバージョン情報を追記
+        # 新しいバージョン情報を追記 (プロセス固有の一時ファイルへ)
         debug_log "DEBUG" "save_version_to_cache: Appending new version '$version' for '$file_name' to '$tmp_file'."
         echo "${file_name}=${version}" >> "$tmp_file"
 
         # 一時ファイルの内容をデバッグログに出力（確認用）
         debug_log "DEBUG" "save_version_to_cache: Content of '$tmp_file' before move:"
+        # POSIX準拠のため while read ループを使用
         while IFS= read -r line || [ -n "$line" ]; do
              debug_log "DEBUG" "  | $line"
         done < "$tmp_file"
 
-        # mv の実行と結果確認
+        # mv の実行と結果確認 (プロセス固有の一時ファイルからリネーム)
         if mv "$tmp_file" "$script_file"; then
             debug_log "DEBUG" "save_version_to_cache: Successfully moved '$tmp_file' to '$script_file'."
         else
             local mv_status=$?
             debug_log "DEBUG" "save_version_to_cache: mv command failed with status $mv_status. Failed to update '$script_file'."
-            # mv失敗時も一時ファイルを削除
-            rm -f "$tmp_file" 2>/dev/null
+            # ▼▼▼ 変更点: mv失敗時の一時ファイル削除を削除 ▼▼▼
+            # rm -f "$tmp_file" 2>/dev/null # 削除
+            # ▲▲▲ 変更点ここまで ▲▲▲
             return 1
         fi
     else
         # script_file が存在しない場合の処理
         debug_log "DEBUG" "save_version_to_cache: File '$script_file' does not exist. Creating new file."
-        # echo の実行と結果確認
+        # echo の実行と結果確認 (直接 script_file へ書き込み - ここは一時ファイル不要)
         if echo "${file_name}=${version}" > "$script_file"; then
              debug_log "DEBUG" "save_version_to_cache: Successfully created '$script_file' with initial version."
         else
