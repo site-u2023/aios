@@ -2399,8 +2399,8 @@ download_parallel() {
     if [ $overall_status -eq 0 ]; then
         debug_log "DEBUG" "All tasks successful. Cleaning up temporary task definitions in $tmp_dir and logs in $LOG_DIR"
         # ▼▼▼ 変更点: 成功時にタスク定義ファイルとログファイルを削除 ▼▼▼
-        rm -rf "$tmp_dir" 2>/dev/null # Remove task definition temp dir ($DL_DIR/dl_tmp)
-        rm -f "${log_file_prefix}"*.stdout.log "${log_file_prefix}"*.stderr.log 2>/dev/null # Remove task logs from $LOG_DIR
+        # rm -rf "$tmp_dir" 2>/dev/null # Remove task definition temp dir ($DL_DIR/dl_tmp)
+        # rm -f "${log_file_prefix}"*.stdout.log "${log_file_prefix}"*.stderr.log 2>/dev/null # Remove task logs from $LOG_DIR
         # ▲▲▲ 変更点ここまで ▲▲▲
     else
         debug_log "ERROR" "One or more tasks failed. Task definition files kept in $tmp_dir, logs kept in $LOG_DIR for inspection."
