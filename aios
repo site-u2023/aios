@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.26-00-03"
+SCRIPT_VERSION="2025.04.26-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -2210,6 +2210,7 @@ download_parallel() {
     local pid job_index=0 wait_pid proc_status task_file
     local success_message failure_message spinner_message
     local script_path="$0" # Store the script path
+    local task_base_name # For log file naming
 
     # --- Configuration and Preparation ---
     max_parallel="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
@@ -2217,11 +2218,10 @@ download_parallel() {
         max_parallel=4
         debug_log "WARN" "Invalid MAX_PARALLEL_TASKS. Using default: $max_parallel" >&2
     fi
-    debug_log "DEBUG" "Initial max parallel download tasks: $max_parallel"
-
-    # ▼▼▼ 変更点: 競合回避のため並列度を1に強制 (コメント解除) ▼▼▼
-    max_parallel=1
-    debug_log "WARN" "Forcing sequential execution (max_parallel=1) to avoid potential race conditions." >&2
+    # ▼▼▼ 変更点: 強制的な max_parallel=1 設定を削除 ▼▼▼
+    # max_parallel=1 # This line is removed
+    # debug_log "WARN" "Forcing sequential execution (max_parallel=1)..." # This line is removed
+    debug_log "DEBUG" "Effective max parallel download tasks: $max_parallel" # Adjusted log message
     # ▲▲▲ 変更点ここまで ▲▲▲
 
     # Use CACHE_DIR for temporary task files
@@ -2232,10 +2232,11 @@ download_parallel() {
             return 1
          fi
     fi
-    rm -f "${task_file_prefix}"*.tmp "$all_tasks_file" 2>/dev/null
+    # Clean up previous logs as well
+    rm -f "${task_file_prefix}"*.tmp "${task_file_prefix}"*.stdout.log "${task_file_prefix}"*.stderr.log "$all_tasks_file" 2>/dev/null
 
     # --- Start Spinner ---
-    spinner_message="$(get_message 'DOWNLOAD_PARALLEL_START' 'Downloading essential files...')" # Adjusted default message
+    spinner_message="$(get_message 'DOWNLOAD_PARALLEL_START' 'Downloading essential files...')"
     start_spinner "$spinner_message"
 
     # --- Extract Commands from download_files() using cat | awk ---
@@ -2277,13 +2278,12 @@ download_parallel() {
          return 0
     fi
 
-    # Since max_parallel is 1, lines_per_task will be total_lines
     lines_per_task=$(( (total_lines + max_parallel - 1) / max_parallel ))
     [ "$lines_per_task" -eq 0 ] && lines_per_task=1
 
     debug_log "DEBUG" "Total tasks: $total_lines, Max parallel: $max_parallel, Lines per task file: $lines_per_task"
 
-    # Use awk to split the tasks into multiple files (will create one file if max_parallel=1)
+    # Use awk to split the tasks into multiple files
     if ! awk -v lpt="$lines_per_task" -v prefix="$task_file_prefix" '{
         task_num = int((NR-1)/lpt)
         filename = sprintf("%s%03d.tmp", prefix, task_num)
@@ -2299,7 +2299,7 @@ download_parallel() {
     rm -f "$all_tasks_file"
 
     task_count=$(ls "${task_file_prefix}"*.tmp 2>/dev/null | wc -l)
-    debug_log "DEBUG" "Created $task_count task files." # Should be 1 if max_parallel=1 and tasks exist
+    debug_log "DEBUG" "Created $task_count task files."
 
     if [ "$task_count" -eq 0 ]; then
         stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed to split tasks (no files created).')" "failure"
@@ -2308,68 +2308,89 @@ download_parallel() {
         return 1
     fi
 
-    # --- Execute Task Files Sequentially (due to max_parallel=1) ---
+    # --- Execute Task Files in Parallel ---
     pids=""
     job_index=0
     overall_status=0 # Reset status before starting tasks
     for task_file in "${task_file_prefix}"*.tmp; do
-        debug_log "DEBUG" "Starting task file: $task_file (stderr redirected to /dev/null)"
+        # ▼▼▼ 変更点: 標準出力と標準エラー出力を個別のログファイルにリダイレクト ▼▼▼
+        task_base_name=$(basename "$task_file" .tmp) # e.g., dl_task_000
+        stdout_log="${tmp_dir}/${task_base_name}.stdout.log"
+        stderr_log="${tmp_dir}/${task_base_name}.stderr.log"
+        debug_log "DEBUG" "Starting task file: $task_file (stdout: $stdout_log, stderr: $stderr_log)"
         (
+            # Source the task file to execute commands within it
             if . "$task_file"; then
                 exit 0 # Success
             else
+                # Exit status 1 will be caught by 'wait'.
+                # stderr content will be in the log file.
                 exit 1 # Failure
             fi
-        ) > /dev/null 2>&1 & # Redirect stdout and stderr of the subshell
+        ) > "$stdout_log" 2> "$stderr_log" & # Redirect stdout and stderr of the subshell
+        # ▲▲▲ 変更点ここまで ▲▲▲
         pid=$!
         pids="$pids $pid"
         job_index=$((job_index + 1))
         debug_log "DEBUG" "Background PID $pid started for task file $task_file"
 
-        # Wait immediately since max_parallel is 1
-        # The check 'if [ "$max_parallel" -gt 1 ]...' is removed/modified
-        # Always wait for the started process before proceeding to the next (if any)
-        debug_log "DEBUG" "Sequential execution (max_parallel=1), waiting for PID $pid..."
-        if wait "$pid"; then
-            debug_log "DEBUG" "PID $pid finished successfully. Continuing..."
-        else
-            proc_status=$?
-            debug_log "ERROR" "Task (PID $pid) failed with status $proc_status. Check task logic for errors." >&2
-            overall_status=1 # Mark overall failure
-            # Optionally: break here if one failure means total failure
-            # break
+        # Wait for a process if we've reached the max parallel limit
+        if [ "$job_index" -ge "$max_parallel" ]; then
+             debug_log "DEBUG" "Max parallel tasks ($max_parallel) reached, waiting for one to finish..."
+             local first_pid_in_batch=$(echo "$pids" | sed 's/^ *//' | cut -d' ' -f1)
+             local first_task_stderr_log="${tmp_dir}/$(basename "$(ls "${task_file_prefix}"* | grep "$first_pid_in_batch")" .tmp).stderr.log" # Find corresponding log
+             if [ -n "$first_pid_in_batch" ]; then
+                 if wait "$first_pid_in_batch"; then
+                     debug_log "DEBUG" "PID $first_pid_in_batch finished successfully. Continuing..."
+                 else
+                     proc_status=$?
+                     debug_log "ERROR" "Background task (PID $first_pid_in_batch) failed with status $proc_status. Check $stderr_log for details." >&2
+                     overall_status=1 # Mark overall failure
+                 fi
+                 pids=$(echo "$pids" | sed "s/ $first_pid_in_batch / /; s/^$first_pid_in_batch //; s/ $first_pid_in_batch$//")
+                 job_index=$((job_index - 1))
+             else
+                 debug_log "WARN" "Could not determine first PID to wait for."
+             fi
         fi
-        # No need to manage pids list or job_index for sequential execution like in parallel case
-        pids="" # Reset pids after waiting
-        job_index=0 # Reset job index
-
     done
 
-    # --- Wait for All Remaining Jobs (Should be none if loop completed) ---
-    # This loop might be redundant for strict sequential execution, but kept for safety
-    debug_log "DEBUG" "Waiting for any remaining background jobs: [$pids]"
+    # --- Wait for All Remaining Jobs ---
+    debug_log "DEBUG" "Waiting for remaining background jobs: [$pids]"
     for pid in $pids; do
         if [ "$pid" -gt 0 ] 2>/dev/null; then
+            # Attempt to find the stderr log for the specific PID (may be complex if task_file mapping isn't straightforward)
+            # Simplified: Just report the PID failure and suggest checking logs
+            local current_stderr_log # Placeholder - finding exact log might need better tracking if PIDs don't map easily
+            current_stderr_log="${tmp_dir}/task_*.stderr.log" # Generic pattern as fallback
+
             if wait "$pid"; then
                 debug_log "DEBUG" "PID $pid finished successfully."
             else
                 proc_status=$?
-                debug_log "ERROR" "Background task (PID $pid) failed with status $proc_status. Check task logic for errors." >&2
+                debug_log "ERROR" "Background task (PID $pid) failed with status $proc_status. Check corresponding stderr log in $tmp_dir for details." >&2
                 overall_status=1 # Mark overall failure
             fi
         fi
     done
 
     # --- Cleanup and Final Status ---
-    debug_log "DEBUG" "Cleaning up temporary directory: $tmp_dir"
-    rm -rf "$tmp_dir" 2>/dev/null
+    # Optionally keep logs on failure:
+    if [ $overall_status -eq 0 ]; then
+        debug_log "DEBUG" "All tasks successful. Cleaning up temporary directory: $tmp_dir"
+        rm -rf "$tmp_dir" 2>/dev/null
+    else
+        debug_log "ERROR" "One or more tasks failed. Temporary directory with logs kept for inspection: $tmp_dir"
+        # Keep tmp_dir for inspection, remove only the task definition files
+        rm -f "${task_file_prefix}"*.tmp 2>/dev/null
+    fi
 
     if [ $overall_status -eq 0 ]; then
         success_message="$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'Essential files downloaded successfully.')"
         stop_spinner "$success_message" "success"
         return 0
     else
-        failure_message="$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Errors occurred during download.')" # Adjusted message
+        failure_message="$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Errors occurred during parallel download. Check logs in $tmp_dir')" # Adjusted message
         stop_spinner "$failure_message" "failure"
         return 1
     fi
