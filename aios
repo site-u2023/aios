@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.27-00-00"
+SCRIPT_VERSION="2025.04.27-01-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -2204,52 +2204,54 @@ download_parallel() {
     local overall_download_status=0 # 0 for success, non-zero for any failure
     local awk_exit_code=0 # Initialize awk exit code
 
-    # --- Start: Parsing logic (Simplified using grep + simpler awk, added debug logs) ---
+    # --- Start: Parsing logic (Based on actual download_files structure provided by user) ---
     rm -f "$task_file" "$load_list_file" 2>/dev/null
 
-    # Simplified awk script focusing on extracting quoted arguments sequentially
-    # Assumes input lines are pre-filtered by grep to start with 'download'
+    # awk script:
+    # 1. Check if $1 is "download".
+    # 2. If yes, extract $2 (file), ignoring $3 ("chmod", etc.).
+    # 3. Generate task: download "$file" (single argument).
+    # 4. Check if last field ($NF) is "load" and add file to load list.
+    # 5. If $1 is not "download", ignore the line.
     awk_script='
     {
-        line = $0
-        file = ""
-        url = ""
-        csum = ""
-        load_flag = 0
-        prev_end = 0 # Track end position of the previous match
-
-        # Extract file (first quoted string)
-        if (match(substr(line, prev_end + 1), /"([^"]+)"/)) {
-            file = substr(substr(line, prev_end + 1), RSTART + 1, RLENGTH - 2)
-            prev_end = prev_end + RSTART + RLENGTH
-        } else { next } # Skip line if first argument not found
-
-        # Extract url (second quoted string)
-        if (match(substr(line, prev_end + 1), /"([^"]+)"/)) {
-            url = substr(substr(line, prev_end + 1), RSTART + 1, RLENGTH - 2)
-            prev_end = prev_end + RSTART + RLENGTH
-        } else { next } # Skip line if second argument not found
-
-        # Extract checksum (third quoted string)
-        if (match(substr(line, prev_end + 1), /"([^"]+)"/)) {
-            csum = substr(substr(line, prev_end + 1), RSTART + 1, RLENGTH - 2)
-            prev_end = prev_end + RSTART + RLENGTH
-        } else { next } # Skip line if third argument not found
-
-        # Check for optional "load" flag after the third argument
-        # Look for optional space then "load" at the end or followed by space/comment
-        if (match(substr(line, prev_end + 1), /^[[:space:]]+"load"([[:space:]]|$)/)) {
-             load_flag = 1
+        # Only process lines where the first field is exactly "download"
+        if ($1 != "download") {
+            next # Skip this line
         }
 
-        # Output if all three arguments were found
-        if (file != "" && url != "" && csum != "") {
-            if (load_flag == 1) {
-                print file >> "'"$load_list_file"'"
-                printf "download \"%s\" \"%s\" \"%s\"\n", file, url, csum >> "'"$task_file"'"
-            } else {
-                printf "download \"%s\" \"%s\" \"%s\"\n", file, url, csum >> "'"$task_file"'"
+        # Check if we have enough fields (download file ...)
+        if (NF < 2) {
+             # Log potential malformed line if debugging is needed later
+             # print "Skipping line (too few fields): " $0 > "/dev/stderr"
+             next
+        }
+
+        # Extract filename from the second field ($2), removing quotes
+        file = $2
+        gsub(/^"|"$/, "", file)
+
+        # Check if filename is empty after removing quotes
+        if (file == "") {
+            # print "Skipping line (empty filename after quote removal): " $0 > "/dev/stderr"
+            next
+        }
+
+        # Generate the download task with only the filename as argument
+        printf "download \"%s\"\n", file >> "'"$task_file"'"
+
+        # Check if the last argument is "load" (quoted or unquoted)
+        load_flag = 0
+        if (NF >= 3) { # Need at least 3 fields for a potential load flag
+            last_arg = $NF
+            gsub(/^"|"$/, "", last_arg) # Remove quotes from last arg for comparison
+            if (last_arg == "load") {
+                load_flag = 1
             }
+        }
+
+        if (load_flag == 1) {
+            print file >> "'"$load_list_file"'"
         }
     }
     '
@@ -2273,14 +2275,14 @@ download_parallel() {
     fi
 
     # Added Debug Log
-    debug_log "DEBUG" "DownloadParallel: Filtering and parsing extracted download_files() content..."
-    # Pipe extracted content through grep first, then the simplified awk script
+    debug_log "DEBUG" "DownloadParallel: Parsing extracted download_files() content with corrected awk logic (ignores \$3)..."
+    # Pipe extracted content through the corrected awk script
     # Capture stderr from awk to see potential errors
     awk_stderr_file="${CACHE_DIR}/awk_stderr.log"
-    echo "$download_files_content" | grep '^[[:space:]]*download[[:space:]]' | awk "$awk_script" 2> "$awk_stderr_file"
+    echo "$download_files_content" | awk "$awk_script" 2> "$awk_stderr_file"
     awk_exit_code=$?
     # Added Debug Log
-    debug_log "DEBUG" "DownloadParallel: Parsing finished (grep+awk exit code: ${awk_exit_code}). Task file exists: $( [ -f "$task_file" ] && echo true || echo false ), Load list exists: $( [ -f "$load_list_file" ] && echo true || echo false )"
+    debug_log "DEBUG" "DownloadParallel: Parsing finished (awk exit code: ${awk_exit_code}). Task file exists: $( [ -f "$task_file" ] && echo true || echo false ), Load list exists: $( [ -f "$load_list_file" ] && echo true || echo false )"
     if [ -s "$awk_stderr_file" ]; then
         debug_log "WARN" "DownloadParallel: awk produced stderr output:"
         # Log awk stderr content (might be large, consider limiting)
@@ -2290,22 +2292,19 @@ download_parallel() {
 
     # Check awk exit code *after* the debug log
     if [ $((awk_exit_code)) -ne 0 ]; then
-         debug_log "ERROR" "DownloadParallel: Failed during grep/awk processing (exit code: ${awk_exit_code})."
+         debug_log "ERROR" "DownloadParallel: Failed during awk processing (exit code: ${awk_exit_code})."
          rm -f "$task_file" "$load_list_file" 2>/dev/null
          return 1
     fi
     # --- End: Parsing logic ---
 
-    # --- Start: Sequential execution logic (Unchanged from previous version) ---
+    # --- Start: Sequential execution logic (Unchanged) ---
     if [ ! -s "$task_file" ]; then
-        # This log might now indicate successful parsing but no *valid* download commands found
-        debug_log "INFO" "DownloadParallel: No valid download tasks found after filtering and parsing."
+        debug_log "INFO" "DownloadParallel: No valid 'download' tasks found in download_files()."
          if [ -f "$load_list_file" ]; then
-             debug_log "INFO" "DownloadParallel: Proceeding to load files..."
-             # Fall through to loading section
+             debug_log "INFO" "DownloadParallel: Proceeding to load files specified with 'load' flag..."
          else
              rm -f "$task_file" 2>/dev/null
-            # If no tasks AND no load list, return success (nothing to do)
             return 0
          fi
     else
@@ -2315,6 +2314,7 @@ download_parallel() {
                 continue
             fi
             debug_log "DEBUG" "DownloadParallel: Executing: ${download_command}"
+            # IMPORTANT: Ensure the actual 'download' function is defined and handles a single filename argument correctly.
             eval "$download_command"
             command_exit_code=$?
             if [ $((command_exit_code)) -ne 0 ]; then
@@ -2326,7 +2326,6 @@ download_parallel() {
         if [ $((overall_download_status)) -ne 0 ]; then
             debug_log "ERROR" "DownloadParallel: One or more downloads failed. Check logs above."
             rm -f "$task_file" 2>/dev/null
-            # rm -f "$load_list_file"
             return $overall_download_status
         else
             debug_log "INFO" "DownloadParallel: All downloads completed successfully."
@@ -2335,17 +2334,17 @@ download_parallel() {
     fi
     # --- End: Sequential execution logic ---
 
-    # --- Start: Loading files logic (Unchanged from previous version) ---
+    # --- Start: Loading files logic (Unchanged) ---
     if [ -f "$load_list_file" ]; then
         debug_log "INFO" "DownloadParallel: Loading specified files from ${load_list_file}..."
         while IFS= read -r file_to_load; do
             local full_path="${DL_DIR}/${file_to_load}"
              if [ -f "$full_path" ]; then
                  debug_log "DEBUG" "DownloadParallel: Sourcing file: ${full_path}"
-                 . "$full_path"
+                 ( . "$full_path" )
                  source_exit_code=$?
                  if [ $((source_exit_code)) -ne 0 ]; then
-                     debug_log "ERROR" "DownloadParallel: Failed to source file: ${full_path} (exit code: ${source_exit_code})"
+                     debug_log "ERROR" "DownloadParallel: Sourcing file failed: ${full_path} (exit code: ${source_exit_code})"
                      exit_code=1
                  fi
              else
@@ -2358,7 +2357,6 @@ download_parallel() {
              debug_log "INFO" "DownloadParallel: All specified files loaded successfully."
         else
              debug_log "WARN" "DownloadParallel: Some files specified for loading could not be processed. Check logs above."
-             # Return the load error status if downloads were ok
              if [ $((overall_download_status)) -eq 0 ]; then
                  overall_download_status=$exit_code
              fi
