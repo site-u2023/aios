@@ -2195,7 +2195,6 @@ OK_save_version_to_cache() {
 # Argument $1: (Optional) Placeholder for potential future use (like max_jobs, though not used for parallel now)
 # Note: Parallel execution (-P) removed due to BusyBox xargs limitations. Downloads are now sequential.
 download_parallel() {
-    # Retain max_jobs argument for potential future compatibility, but it's not used for parallel execution now.
     local max_jobs=${1:-1} # Default to 1, effectively sequential
     local task_file="${CACHE_DIR}/dl_tasks.tmp"
     local load_list_file="${DL_DIR}/load_files.list"
@@ -2205,52 +2204,53 @@ download_parallel() {
     local overall_download_status=0 # 0 for success, non-zero for any failure
     local awk_exit_code=0 # Initialize awk exit code
 
-    # --- Start: Parsing logic (awk script regex updated, added debug logs) ---
+    # --- Start: Parsing logic (Simplified using grep + simpler awk, added debug logs) ---
     rm -f "$task_file" "$load_list_file" 2>/dev/null
 
-    # Corrected: Revised awk script with less strict regex for spaces between args
-    # Still requires the download "file" "url" "checksum" structure
+    # Simplified awk script focusing on extracting quoted arguments sequentially
+    # Assumes input lines are pre-filtered by grep to start with 'download'
     awk_script='
-    # Match lines starting with optional space + download + space
-    /^[[:space:]]*download[[:space:]]+/ {
+    {
         line = $0
-        # Look for 3 quoted arguments sequentially, allowing variable spaces between them
-        if (match(line, /"([^"]+)"[[:space:]]*"([^"]+)"[[:space:]]*"([^"]+)"/)) {
-            # Extract file (first capture group relative to start of line)
-            match(line, /"([^"]+)"/)
-            file = substr(line, RSTART + 1, RLENGTH - 2)
-            arg1_end = RSTART + RLENGTH
+        file = ""
+        url = ""
+        csum = ""
+        load_flag = 0
+        prev_end = 0 # Track end position of the previous match
 
-            # Extract url (find next quoted string after the first)
-            match(substr(line, arg1_end), /"([^"]+)"/)
-            url = substr(substr(line, arg1_end), RSTART + 1, RLENGTH - 2)
-            arg2_end = arg1_end + RSTART + RLENGTH
+        # Extract file (first quoted string)
+        if (match(substr(line, prev_end + 1), /"([^"]+)"/)) {
+            file = substr(substr(line, prev_end + 1), RSTART + 1, RLENGTH - 2)
+            prev_end = prev_end + RSTART + RLENGTH
+        } else { next } # Skip line if first argument not found
 
-            # Extract checksum (find next quoted string after the second)
-            match(substr(line, arg2_end), /"([^"]+)"/)
-            csum = substr(substr(line, arg2_end), RSTART + 1, RLENGTH - 2)
-            arg3_end = arg2_end + RSTART + RLENGTH
+        # Extract url (second quoted string)
+        if (match(substr(line, prev_end + 1), /"([^"]+)"/)) {
+            url = substr(substr(line, prev_end + 1), RSTART + 1, RLENGTH - 2)
+            prev_end = prev_end + RSTART + RLENGTH
+        } else { next } # Skip line if second argument not found
 
-            # Check for optional "load" flag after the third argument
-            load_flag=0
-            # Look for optional space then "load" at the end or followed by space/comment
-            if (match(substr(line, arg3_end), /^[[:space:]]+"load"([[:space:]]|$)/)) {
-                 load_flag=1
+        # Extract checksum (third quoted string)
+        if (match(substr(line, prev_end + 1), /"([^"]+)"/)) {
+            csum = substr(substr(line, prev_end + 1), RSTART + 1, RLENGTH - 2)
+            prev_end = prev_end + RSTART + RLENGTH
+        } else { next } # Skip line if third argument not found
+
+        # Check for optional "load" flag after the third argument
+        # Look for optional space then "load" at the end or followed by space/comment
+        if (match(substr(line, prev_end + 1), /^[[:space:]]+"load"([[:space:]]|$)/)) {
+             load_flag = 1
+        }
+
+        # Output if all three arguments were found
+        if (file != "" && url != "" && csum != "") {
+            if (load_flag == 1) {
+                print file >> "'"$load_list_file"'"
+                printf "download \"%s\" \"%s\" \"%s\"\n", file, url, csum >> "'"$task_file"'"
+            } else {
+                printf "download \"%s\" \"%s\" \"%s\"\n", file, url, csum >> "'"$task_file"'"
             }
-
-            # Basic validation
-            if (file != "" && url != "" && csum != "") {
-                if (load_flag == 1) {
-                    # Add filename to load list
-                    print file >> "'"$load_list_file"'"
-                    # Output the download command *without* load flag to the task file
-                    printf "download \"%s\" \"%s\" \"%s\"\n", file, url, csum >> "'"$task_file"'"
-                } else {
-                    # Output the download command as is to the task file
-                    printf "download \"%s\" \"%s\" \"%s\"\n", file, url, csum >> "'"$task_file"'"
-                }
-            } # else: parsing likely failed for this line (e.g., missing quotes)
-        } # else: line did not match the basic download "arg" "arg" "arg" pattern
+        }
     }
     '
 
@@ -2273,18 +2273,24 @@ download_parallel() {
     fi
 
     # Added Debug Log
-    # Avoid logging potentially large content directly, maybe show first few lines if needed later
-    debug_log "DEBUG" "DownloadParallel: Parsing extracted download_files() content..."
-    # Parse the extracted content and generate the single task file and load list
-    echo "$download_files_content" | awk "$awk_script"
+    debug_log "DEBUG" "DownloadParallel: Filtering and parsing extracted download_files() content..."
+    # Pipe extracted content through grep first, then the simplified awk script
+    # Capture stderr from awk to see potential errors
+    awk_stderr_file="${CACHE_DIR}/awk_stderr.log"
+    echo "$download_files_content" | grep '^[[:space:]]*download[[:space:]]' | awk "$awk_script" 2> "$awk_stderr_file"
     awk_exit_code=$?
     # Added Debug Log
-    debug_log "DEBUG" "DownloadParallel: Parsing finished (awk exit code: ${awk_exit_code}). Task file exists: $( [ -f "$task_file" ] && echo true || echo false ), Load list exists: $( [ -f "$load_list_file" ] && echo true || echo false )"
-
+    debug_log "DEBUG" "DownloadParallel: Parsing finished (grep+awk exit code: ${awk_exit_code}). Task file exists: $( [ -f "$task_file" ] && echo true || echo false ), Load list exists: $( [ -f "$load_list_file" ] && echo true || echo false )"
+    if [ -s "$awk_stderr_file" ]; then
+        debug_log "WARN" "DownloadParallel: awk produced stderr output:"
+        # Log awk stderr content (might be large, consider limiting)
+        cat "$awk_stderr_file" # Or use head/tail if needed
+    fi
+    rm -f "$awk_stderr_file" # Clean up stderr log
 
     # Check awk exit code *after* the debug log
     if [ $((awk_exit_code)) -ne 0 ]; then
-         debug_log "ERROR" "DownloadParallel: Failed to parse download_files() or create task/load files using awk (exit code: ${awk_exit_code})."
+         debug_log "ERROR" "DownloadParallel: Failed during grep/awk processing (exit code: ${awk_exit_code})."
          rm -f "$task_file" "$load_list_file" 2>/dev/null
          return 1
     fi
@@ -2293,7 +2299,7 @@ download_parallel() {
     # --- Start: Sequential execution logic (Unchanged from previous version) ---
     if [ ! -s "$task_file" ]; then
         # This log might now indicate successful parsing but no *valid* download commands found
-        debug_log "INFO" "DownloadParallel: No valid download tasks found in generated task file: ${task_file}."
+        debug_log "INFO" "DownloadParallel: No valid download tasks found after filtering and parsing."
          if [ -f "$load_list_file" ]; then
              debug_log "INFO" "DownloadParallel: Proceeding to load files..."
              # Fall through to loading section
