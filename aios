@@ -2902,6 +2902,12 @@ download_files() {
     download "common-menu.sh" "chmod" "load"
     download "common-package.sh" "chmod" "load"
     download "common-feed-package.sh" "chmod" "load"
+
+    download "menu.db"
+    download "country.db"
+    download "message_${DEFAULT_LANGUAGE}.db"
+    download "local-package.db"
+    download "custom-package.db"
 }
 
 check_common() {
@@ -2971,11 +2977,6 @@ check_common() {
             ;;
         full)
             download_parallel
-            download "menu.db"
-            download "country.db"
-            download "message_${DEFAULT_LANGUAGE}.db"
-            download "local-package.db"
-            download "custom-package.db"
             print_banner
             print_information
             information_main
