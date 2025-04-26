@@ -2087,9 +2087,6 @@ get_commit_version() {
     return 1
 }
 
-# download: Download a file, check version, set permissions, and optionally load/execute it.
-# (コメントと関数シグネチャは前回提示と同じ)
-
 download() {
     # ファイル名を最初の引数として処理
     local file_name="$1"
@@ -2097,23 +2094,22 @@ download() {
 
     # 空ファイル名のチェック
     if [ -z "$file_name" ]; then
-        # No logging here, just return error
         return 1
     fi
 
     # --- オプションと設定変数の初期化 ---
     local hidden_mode="false"
-    local quiet_mode="${QUIET_MODE:-false}" # QUIET_MODE is potentially global
+    local quiet_mode="${QUIET_MODE:-false}"
     local chmod_mode="false"
     local load_mode="false"
-    local interpreter_name="" # Set only if load_mode is true
-    local interpreter_option="" # Temp storage for last interpreter option found
+    local interpreter_name=""
+    local interpreter_option=""
 
     # --- オプション引数の処理 ---
     local args_copy=""
     local opt
     for opt in "$@"; do args_copy="$args_copy \"$opt\""; done
-    eval "set -- $args_copy" # Restore arguments safely
+    eval "set -- $args_copy"
 
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -2123,24 +2119,23 @@ download() {
             load)   load_mode="true" ;;
             bash|python|node|perl) interpreter_option="$1" ;;
             python3) interpreter_option="python" ;;
-            *) : ;; # Ignore unknown options silently
+            *) : ;;
         esac
         shift
     done
 
     # --- Process interpreter ONLY if load_mode is true ---
     if [ "$load_mode" = "true" ]; then
-        interpreter_name="${interpreter_option:-ash}" # Default to 'ash'
+        interpreter_name="${interpreter_option:-ash}"
         if [ "$interpreter_name" != "ash" ]; then
-            chmod_mode="true" # Usually need +x if not sourcing with ash
+            chmod_mode="true"
         fi
     fi
 
-    local file_path="${DR_DIR}/${file_name}" # Define full path
+    local file_path="${DL_DIR}/${file_name}" # Define full path using DL_DIR
 
     # --- バージョン情報取得 ---
     local version_data
-    # Assuming download_check_version handles its own logging if needed
     version_data=$(download_check_version "$file_name" "$hidden_mode" "$quiet_mode")
 
     local update_required=$(echo "$version_data" | cut -d'|' -f1)
@@ -2156,15 +2151,16 @@ download() {
     fi
 
     # --- ファイルダウンロード処理 ---
-    local download_status=0 # 0 for success/no_update, 1 for failure
+    local download_status=0
     if [ "$update_required" = "true" ]; then
-        # Assuming download_fetch_file handles its own logging if needed
+        # download_fetch_file が DL_DIR を基準に動作すると想定
+        # ▼▼▼ 変更点 ▼▼▼
+        # download_fetch_file に DL_DIR を渡す必要があれば修正が必要 (現状は download_fetch_file が DL_DIR を参照すると仮定)
         if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode" "$hidden_mode" "$quiet_mode"; then
+        # ▲▲▲ 変更点 ▲▲▲
             download_status=1
         else
-            # Ensure file exists after fetch attempt
             if [ ! -f "$file_path" ] || [ ! -s "$file_path" ]; then
-                 # No logging here
                  download_status=1
             fi
         fi
@@ -2173,42 +2169,30 @@ download() {
     # --- ロード処理 ---
     if [ "$download_status" -eq 0 ] && [ "$load_mode" = "true" ]; then
         if [ ! -f "$file_path" ] || [ ! -s "$file_path" ]; then
-            # No logging here
             return 1
         fi
 
-        # Ensure execute permission if needed
         if [ "$chmod_mode" = "true" ] || { [ -n "$interpreter_name" ] && [ "$interpreter_name" != "ash" ]; }; then
              if ! chmod +x "$file_path"; then
-                 # No logging here, chmod failure is non-fatal for load attempt
                  : # Continue attempt even if chmod fails
              fi
         fi
 
-        # Execute or source
         if [ "$interpreter_name" = "ash" ]; then
             if ! . "$file_path"; then
-                # No logging here
                 return 1
             fi
         else
-             # Check if interpreter exists (no logging)
              if ! command -v "$interpreter_name" > /dev/null 2>&1; then
-                 # Assuming install_package handles its own logging if needed
                  if ! install_package "$interpreter_name" yn hidden; then
-                      # No logging here
                       return 1
                  fi
              fi
-            # Execute (no logging)
             if ! "$interpreter_name" "$file_path"; then
-                # No logging here
                 return 1
             fi
         fi
-        # No success log here
     elif [ "$download_status" -ne 0 ]; then
-         # Download failed
          return 1
     fi
 
