@@ -2191,30 +2191,24 @@ OK_save_version_to_cache() {
     return $return_status
 }
 
-# Function to download files in parallel and handle loading
-# Takes the number of parallel jobs as the first argument
+# Function to download files sequentially and handle loading
+# Argument $1: (Optional) Placeholder for potential future use (like max_jobs, though not used for parallel now)
+# Note: Parallel execution (-P) removed due to BusyBox xargs limitations. Downloads are now sequential.
 download_parallel() {
-    local max_jobs=${1:-4} # Default to 4 parallel jobs if not specified
-    # Use a single task file, no split command needed
+    # Retain max_jobs argument for potential future compatibility, but it's not used for parallel execution now.
+    local max_jobs=${1:-1} # Default to 1, effectively sequential
     local task_file="${CACHE_DIR}/dl_tasks.tmp"
     local load_list_file="${DL_DIR}/load_files.list"
     local awk_script
     local download_files_content
     local exit_code=0
+    local overall_download_status=0 # 0 for success, non-zero for any failure
 
-    # --- Start: Parsing logic (split command and fallback removed) ---
-    # Clear previous temporary files
+    # --- Start: Parsing logic (Unchanged from previous version) ---
     rm -f "$task_file" "$load_list_file" 2>/dev/null
-
-    # Define awk script to parse download_files()
-    # - Extracts download commands based on strict format
-    # - Separates commands with "load" flag into load_list_file (filename only)
-    # - Writes other download commands (without "load") to the single task_file
     awk_script='
     /^[[:space:]]*download[[:space:]]+/{
-        # Attempt to parse strict format: "file" "url" "checksum" ["load"]
         if (match($0, /"([^"]+)"[[:space:]]+"([^"]+)"[[:space:]]+"([^"]+)"([[:space:]]+"load")?/)) {
-             # Extract file, URL, checksum, removing quotes
              match($0, /"([^"]+)"/)
              file = substr($0, RSTART + 1, RLENGTH - 2)
              url_start = RSTART + RLENGTH + 1
@@ -2224,47 +2218,31 @@ download_parallel() {
              match(substr($0, csum_start), /"([^"]+)"/)
              csum = substr(substr($0, csum_start), RSTART + 1, RLENGTH - 2)
              load_flag_start = csum_start + RSTART + RLENGTH
-             load_flag=0 # Default to no load flag
+             load_flag=0
              if (match(substr($0, load_flag_start), /[[:space:]]+"load"/)) {
                   load_flag=1
              }
-
              if (load_flag == 1 && file != "") {
-                 # Add filename to load list
                  print file >> "'"$load_list_file"'"
-                 # Output the download command *without* load flag to the task file
                  printf "download \"%s\" \"%s\" \"%s\"\n", file, url, csum >> "'"$task_file"'"
              } else if (file != "") {
-                 # Output the download command as is to the task file
                  printf "download \"%s\" \"%s\" \"%s\"\n", file, url, csum >> "'"$task_file"'"
              }
         }
-        # Corrected: Removed the else block (fallback logic)
     }
     '
-
-    # Extract download_files() content from the main script ($0)
-    # Use POSIX compliant command substitution
     download_files_content=$(awk '
         /^download_files\(\) \{/ { in_func=1; next }
         /^\}/ { if (in_func) { in_func=0; next } }
         in_func { print }
     ' "$0")
-
-    # Check if download_files() content was extracted
     if [ -z "$download_files_content" ]; then
-        # Corrected: Use debug_log
         debug_log "ERROR" "DownloadParallel: Could not extract download_files() content from '$0'."
         return 1
     fi
-
-    # Parse the extracted content and generate the single task file and load list
     echo "$download_files_content" | awk "$awk_script"
-    # Error check for awk execution (might not be fully reliable for all awk errors)
-    # Corrected: Use POSIX compliant arithmetic expansion
     awk_exit_code=$?
     if [ $((awk_exit_code)) -ne 0 ]; then
-         # Corrected: Use debug_log
          debug_log "ERROR" "DownloadParallel: Failed to parse download_files() or create task/load files using awk (exit code: ${awk_exit_code})."
          rm -f "$task_file" "$load_list_file" 2>/dev/null
          return 1
@@ -2273,89 +2251,83 @@ download_parallel() {
 
     # Check if the task file was created and is not empty
     if [ ! -s "$task_file" ]; then
-        # Corrected: Use debug_log
         debug_log "INFO" "DownloadParallel: No download tasks found in ${task_file}."
-        # Check if there are files to load even if no downloads needed
          if [ -f "$load_list_file" ]; then
-             # Corrected: Use debug_log
-             debug_log "INFO" "DownloadParallel: Processing files to load..."
-             # Proceed to load files section
+             debug_log "INFO" "DownloadParallel: Proceeding to load files..."
+             # Fall through to loading section
          else
-             rm -f "$task_file" # Remove empty task file
+             rm -f "$task_file" 2>/dev/null # Remove empty task file if exists
             return 0 # Nothing to download or load
          fi
     else
-        # --- Start: Parallel execution logic (using single task file) ---
-        # Corrected: Use debug_log
-        debug_log "INFO" "DownloadParallel: Starting parallel download (Max ${max_jobs} jobs) using task file: ${task_file}"
-        # Read task file line by line and pass to xargs
-        # Using sh -c '. "$0"; eval "$1"' to handle quoted arguments correctly in the subshell
-        # eval is used carefully here assuming task_file contains only trusted 'download "arg1" "arg2" "arg3"' lines
-        < "$task_file" xargs -P "$max_jobs" -I {} sh -c '. "$0"; eval "$1"' "$0" || exit_code=$?
+        # --- Start: Sequential execution logic (replaces xargs -P) ---
+        debug_log "INFO" "DownloadParallel: Starting sequential download using task file: ${task_file}"
+        while IFS= read -r download_command; do
+            # Ensure the line is not empty
+            if [ -z "$download_command" ]; then
+                continue
+            fi
+            # Execute the download command using eval
+            # Use debug_log to show which command is being executed
+            debug_log "DEBUG" "DownloadParallel: Executing: ${download_command}"
+            eval "$download_command"
+            # Corrected: Use POSIX compliant arithmetic expansion
+            command_exit_code=$?
+            if [ $((command_exit_code)) -ne 0 ]; then
+                debug_log "ERROR" "DownloadParallel: Download command failed (exit code: ${command_exit_code}): ${download_command}"
+                overall_download_status=$command_exit_code # Record the first error
+                # Optionally break the loop on first error, or continue trying others
+                # break # Uncomment to stop on first error
+            fi
+        done < "$task_file"
 
-        # Check exit code from xargs
+        # Check overall download status
         # Corrected: Use POSIX compliant arithmetic expansion
-        if [ $((exit_code)) -ne 0 ]; then
-            # Corrected: Use debug_log
-            debug_log "ERROR" "DownloadParallel: One or more downloads failed (xargs exit code: ${exit_code}). Check logs above."
-            rm -f "$task_file" # Clean up task file on failure
-            # Keep load_list_file on failure? Consider user preference. Removing for now.
+        if [ $((overall_download_status)) -ne 0 ]; then
+            debug_log "ERROR" "DownloadParallel: One or more downloads failed. Check logs above."
+            rm -f "$task_file" 2>/dev/null # Clean up task file on failure
+            # Keep load_list_file? Removing for now.
             # rm -f "$load_list_file"
-            return 1
+            return $overall_download_status # Return the first non-zero exit code
         else
-            # Corrected: Use debug_log
             debug_log "INFO" "DownloadParallel: All downloads completed successfully."
-            # Clean up task file after successful download
-            rm -f "$task_file"
+            rm -f "$task_file" 2>/dev/null # Clean up task file after successful download
         fi
-        # --- End: Parallel execution logic ---
+        # --- End: Sequential execution logic ---
     fi
 
-    # --- Start: Loading files logic ---
+    # --- Start: Loading files logic (Unchanged from previous version) ---
     if [ -f "$load_list_file" ]; then
-        # Corrected: Use debug_log
         debug_log "INFO" "DownloadParallel: Loading specified files from ${load_list_file}..."
         while IFS= read -r file_to_load; do
             local full_path="${DL_DIR}/${file_to_load}"
              if [ -f "$full_path" ]; then
-                 # Corrected: Use debug_log
                  debug_log "DEBUG" "DownloadParallel: Sourcing file: ${full_path}"
-                 # Use POSIX compliant source command '.'
                  . "$full_path"
-                 # Corrected: Use POSIX compliant arithmetic expansion
                  source_exit_code=$?
                  if [ $((source_exit_code)) -ne 0 ]; then
-                     # Corrected: Use debug_log
                      debug_log "ERROR" "DownloadParallel: Failed to source file: ${full_path} (exit code: ${source_exit_code})"
-                     exit_code=1 # Record failure, but continue trying other files
+                     exit_code=1 # Record failure, but continue
                  fi
              else
-                 # Corrected: Use debug_log
                  debug_log "ERROR" "DownloadParallel: File specified in load list not found: ${full_path}"
-                 exit_code=1 # Record failure
+                 exit_code=1
              fi
         done < "$load_list_file"
-
-        # Clean up load list file
-        rm -f "$load_list_file"
-
-        # Corrected: Use POSIX compliant arithmetic expansion
+        rm -f "$load_list_file" 2>/dev/null
         if [ $((exit_code)) -eq 0 ]; then
-             # Corrected: Use debug_log
              debug_log "INFO" "DownloadParallel: All specified files loaded successfully."
         else
-             # Corrected: Use debug_log
              debug_log "WARN" "DownloadParallel: Some files specified for loading could not be processed. Check logs above."
-             return $exit_code # Return non-zero if any loading failed
+             return $exit_code
         fi
     else
-        # Corrected: Use debug_log
         debug_log "INFO" "DownloadParallel: No files specified for loading."
     fi
     # --- End: Loading files logic ---
 
-    # Return final exit code (0 if all downloads and loads succeeded)
-    return $exit_code
+    # Return final status (0 if everything succeeded)
+    return $overall_download_status
 }
 
 # download_parallel 関数を修正
