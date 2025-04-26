@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.26-02-00"
+SCRIPT_VERSION="2025.04.26-03-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -2111,14 +2111,18 @@ get_commit_version() {
 # 変更点:
 # 1. download_fetch_file 後の各ステップ (chmod, save_version_to_cache, .) の終了ステータスをチェック
 # 2. いずれかのステップで失敗した場合、具体的なエラーログを出力し、return 1 するように変更
+# --- 2025-04-26 修正 ---
+# 3. 誤って導入された get_local_version 呼び出しを、キャッシュファイル読み取り処理に置き換え
+# 4. 誤って導入された display_api_status 呼び出しを、check_api_rate_limit + debug_log 処理に置き換え
+# 5. file_path の定義を $DL_DIR から $BASE_DIR に修正
 download() {
     local file_name="$1"
     local chmod_flag="$2" # "chmod" or ""
     local load_flag="$3"  # "load" or ""
     local force_refresh="${4:-}" # "force" or "" (optional, used by get_commit_version)
 
-    local remote_version local_version download_url file_path save_path
-    local dl_method skip_cache_flag
+    local remote_version_info remote_version local_version download_url file_path save_path
+    local dl_method skip_cache_flag auth_method_used script_file api_status_msg
 
     # Use global settings or defaults
     dl_method="${DOWNLOAD_METHOD:-api}"
@@ -2126,28 +2130,41 @@ download() {
 
     debug_log "DEBUG" "download: Starting for '$file_name', chmod='$chmod_flag', load='$load_flag', force='$force_refresh', method='$dl_method', skip_cache='$skip_cache_flag'"
 
-    # 1. Get Remote and Local Version Info
-    remote_version=$(get_commit_version "$file_name" "$force_refresh" "$dl_method" "$skip_cache_flag")
+    # 1. Get Remote Version Info
+    remote_version_info=$(get_commit_version "$file_name" "$force_refresh" "$dl_method" "$skip_cache_flag")
     local get_version_status=$?
-    if [ "$get_version_status" -ne 0 ] || [ -z "$remote_version" ]; then
-        debug_log "ERROR" "download: Failed to get remote version for '$file_name'. Status: $get_version_status, Version: '$remote_version'"
+    if [ "$get_version_status" -ne 0 ] || [ -z "$remote_version_info" ]; then
+        debug_log "ERROR" "download: Failed to get remote version for '$file_name'. Status: $get_version_status, VersionInfo: '$remote_version_info'"
         return 1 # Exit if version check fails
     fi
+    remote_version=$(echo "$remote_version_info" | cut -d' ' -f1)
+    auth_method_used=$(echo "$remote_version_info" | cut -d' ' -f2) # Store auth method used by get_commit_version
 
-    file_path="${DL_DIR}/${file_name}"
-    local_version=$(get_local_version "$file_name" "$file_path")
+    # --- ▼▼▼ 修正点 1: get_local_version 呼び出しをキャッシュ読み取り処理に置き換え ▼▼▼ ---
+    # Get Local Version Info
+    script_file="${CACHE_DIR}/script.ch"
+    if [ -f "$script_file" ]; then
+        local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
+    fi
+    # If not found in cache or cache doesn't exist, set empty (or a default like "No version control")
+    [ -z "$local_version" ] && local_version="" # Using empty string as default
+    # --- ▲▲▲ 修正点 1 ここまで ▲▲▲ ---
 
-    debug_log "DEBUG" "download: Remote version: $file_name - $remote_version"
+    # --- ▼▼▼ 修正点 3: file_path の定義を $BASE_DIR に修正 ▼▼▼ ---
+    file_path="${BASE_DIR}/${file_name}"
+    # --- ▲▲▲ 修正点 3 ここまで ▲▲▲ ---
+
+    debug_log "DEBUG" "download: Remote version: $file_name - $remote_version (Auth: $auth_method_used)"
     debug_log "DEBUG" "download: Local version: $file_name - $local_version"
 
     # 2. Check if Download is Needed
+    # Use version_is_newer for comparison, handling cleaned versions internally if needed
     if [ "$remote_version" = "$local_version" ] && [ "$force_refresh" != "force" ] && [ -f "$file_path" ]; then
         debug_log "INFO" "download: Local version of '$file_name' is up-to-date ($local_version). Skipping download."
         # If load flag is set, still try to load the existing file
         if [ "$load_flag" = "load" ]; then
             if [ -f "$file_path" ]; then
                 debug_log "DEBUG" "download: Loading existing up-to-date file: $file_path"
-                # ▼▼▼ 変更点: . コマンドの終了ステータスをチェック ▼▼▼
                 if . "$file_path"; then
                     debug_log "DEBUG" "download: Successfully loaded existing file '$file_path'."
                 else
@@ -2155,9 +2172,7 @@ download() {
                     debug_log "ERROR" "download: Failed to load existing file '$file_path'. Status: $load_status"
                     return 1 # load失敗時はエラーとする
                 fi
-                # ▲▲▲ 変更点ここまで ▲▲▲
             else
-                # This case should ideally not happen if version matches and file exists check passed earlier
                 debug_log "WARN" "download: File '$file_path' not found for loading despite version match."
                 return 1 # Treat as error if file expected but not found
             fi
@@ -2166,17 +2181,19 @@ download() {
     fi
 
     # 3. Download File
+    # --- ▼▼▼ 修正点 2: display_api_status 呼び出しを check_api_rate_limit + debug_log に置き換え ▼▼▼ ---
     # Display API rate limit info before download attempt
-    display_api_status "(Auth method from get_commit_version: $AUTH_METHOD_USED)" # Display status with source
+    api_status_msg=$(check_api_rate_limit)
+    debug_log "DEBUG" "download: API Status before fetch: $api_status_msg (Version check auth: $auth_method_used)"
+    # --- ▲▲▲ 修正点 2 ここまで ▲▲▲ ---
 
-    save_path="$file_path" # Default save path
+    save_path="$file_path" # Use the corrected file_path
     if ! download_fetch_file "$file_name" "$save_path"; then
         debug_log "ERROR" "download: download_fetch_file failed for '$file_name'."
         return 1 # Exit if download fails
     fi
 
     # 4. Post-Download Actions
-    # ▼▼▼ 変更点: chmod, save_version_to_cache, load のステータスチェックを追加 ▼▼▼
     if [ "$chmod_flag" = "chmod" ]; then
         if chmod +x "$save_path"; then
             debug_log "DEBUG" "download: chmod +x applied to $file_name"
@@ -2189,16 +2206,15 @@ download() {
 
     # Save version only if remote_version is not empty (get_commit_version succeeded)
     if [ -n "$remote_version" ]; then
-        if save_version_to_cache "$file_name" "$remote_version" "${CACHE_DIR}/script.ch"; then
-             debug_log "DEBUG" "download: Version saved to cache for '$file_name'."
+        # Use the auth_method returned by get_commit_version for saving cache
+        if save_version_to_cache "$file_name" "$remote_version" "${CACHE_DIR}/script.ch" "$auth_method_used"; then
+             debug_log "DEBUG" "download: Version saved to cache for '$file_name' (Auth: $auth_method_used)."
         else
              local save_cache_status=$?
-             # Lock取得失敗(status 0)はエラー扱いしないが、それ以外の失敗(status 1)はエラー
              if [ "$save_cache_status" -ne 0 ]; then
                  debug_log "ERROR" "download: save_version_to_cache failed for '$file_name' with status $save_cache_status."
-                 return 1 # save_version_to_cache の致命的エラー時はエラー
+                 return 1
              else
-                 # Lock取得失敗(status 0)の場合は警告ログが save_version_to_cache 内で出力される
                  debug_log "DEBUG" "download: save_version_to_cache skipped for '$file_name' due to lock contention (status $save_cache_status)."
              fi
         fi
@@ -2214,7 +2230,6 @@ download() {
              return 1 # load失敗時はエラー
         fi
     fi
-    # ▲▲▲ 変更点ここまで ▲▲▲
 
     return 0 # All steps successful
 }
