@@ -2191,182 +2191,190 @@ OK_save_version_to_cache() {
     return $return_status
 }
 
-# Function to download files sequentially and handle loading
-# Argument $1: (Optional) Placeholder for potential future use (like max_jobs, though not used for parallel now)
-# Note: Parallel execution (-P) removed due to BusyBox xargs limitations. Downloads are now sequential.
+# Function to download files in parallel and handle chmod/loading sequentially
+# Argument $1: (Optional) Maximum number of parallel jobs (currently informational, not strictly enforced by wait)
 download_parallel() {
-    local max_jobs=${1:-1} # Default to 1, effectively sequential
-    local task_file="${CACHE_DIR}/dl_tasks.tmp"
-    local load_list_file="${DL_DIR}/load_files.list"
+    local max_jobs=${1:-4} # Default parallel jobs (informational)
+    local dl_list_file="${CACHE_DIR}/dl_list.tmp"
+    local chmod_list_file="${CACHE_DIR}/chmod_list.tmp"
+    local load_list_file="${CACHE_DIR}/load_list.tmp" # Changed name for clarity
     local awk_script
     local download_files_content
     local exit_code=0
-    local overall_download_status=0 # 0 for success, non-zero for any failure
-    local awk_exit_code=0 # Initialize awk exit code
+    local overall_status=0 # 0 for success, non-zero for any failure
+    local awk_exit_code=0
+    local pids="" # Variable to store PIDs of background jobs
+    local pid # Loop variable for PID
 
-    # --- Start: Parsing logic (Based on actual download_files structure provided by user) ---
-    rm -f "$task_file" "$load_list_file" 2>/dev/null
+    # --- Start: Cleanup and Parsing Logic ---
+    debug_log "DEBUG" "DownloadParallel: Cleaning up temporary files..."
+    rm -f "$dl_list_file" "$chmod_list_file" "$load_list_file" 2>/dev/null
 
     # awk script:
     # 1. Check if $1 is "download".
-    # 2. If yes, extract $2 (file), ignoring $3 ("chmod", etc.).
-    # 3. Generate task: download "$file" (single argument).
-    # 4. Check if last field ($NF) is "load" and add file to load list.
-    # 5. If $1 is not "download", ignore the line.
+    # 2. Extract filename from $2.
+    # 3. Print filename to dl_list_file.
+    # 4. Check $3 for "chmod" flag. If yes, print filename to chmod_list_file.
+    # 5. Check last field ($NF) for "load" flag. If yes, print filename to load_list_file.
     awk_script='
     {
-        # Only process lines where the first field is exactly "download"
-        if ($1 != "download") {
-            next # Skip this line
-        }
+        if ($1 != "download") { next }
+        if (NF < 2) { next }
 
-        # Check if we have enough fields (download file ...)
-        if (NF < 2) {
-             # Log potential malformed line if debugging is needed later
-             # print "Skipping line (too few fields): " $0 > "/dev/stderr"
-             next
-        }
-
-        # Extract filename from the second field ($2), removing quotes
         file = $2
         gsub(/^"|"$/, "", file)
+        if (file == "") { next }
 
-        # Check if filename is empty after removing quotes
-        if (file == "") {
-            # print "Skipping line (empty filename after quote removal): " $0 > "/dev/stderr"
-            next
-        }
+        # Always add to download list
+        print file >> "'"$dl_list_file"'"
 
-        # Generate the download task with only the filename as argument
-        printf "download \"%s\"\n", file >> "'"$task_file"'"
-
-        # Check if the last argument is "load" (quoted or unquoted)
-        load_flag = 0
-        if (NF >= 3) { # Need at least 3 fields for a potential load flag
-            last_arg = $NF
-            gsub(/^"|"$/, "", last_arg) # Remove quotes from last arg for comparison
-            if (last_arg == "load") {
-                load_flag = 1
+        # Check for chmod flag in $3
+        chmod_flag = 0
+        if (NF >= 3) {
+            arg3 = $3
+            gsub(/^"|"$/, "", arg3)
+            if (arg3 == "chmod") {
+                print file >> "'"$chmod_list_file"'"
+                chmod_flag = 1 # Mark that $3 was chmod
             }
         }
 
-        if (load_flag == 1) {
-            print file >> "'"$load_list_file"'"
+        # Check for load flag in the last field ($NF)
+        # It could be $3 if only "download file load" or $4 if "download file chmod load"
+        if (NF >= 3) {
+            last_arg = $NF
+            gsub(/^"|"$/, "", last_arg)
+            if (last_arg == "load") {
+                 # Only print to load list if $NF is "load"
+                 print file >> "'"$load_list_file"'"
+            }
         }
     }
     '
 
-    # Added Debug Log
-    debug_log "DEBUG" "DownloadParallel: Starting download_files() content extraction..."
-    # Extract download_files() content from the main script ($0)
-    download_files_content=$(awk '
-        /^download_files\(\) \{/ { in_func=1; next }
-        /^\}/ { if (in_func) { in_func=0; next } }
-        in_func { print }
-    ' "$0")
+    debug_log "DEBUG" "DownloadParallel: Extracting download_files() content..."
+    download_files_content=$(awk '/^download_files\(\) \{/,/^\}/' "$0" | sed '1d;$d') # More robust extraction
     extract_exit_code=$?
-    # Added Debug Log
-    debug_log "DEBUG" "DownloadParallel: download_files() content extraction finished (awk exit code: ${extract_exit_code})."
+    debug_log "DEBUG" "DownloadParallel: Extraction finished (awk exit code: ${extract_exit_code})."
 
-    # Check if download_files() content was extracted
     if [ $((extract_exit_code)) -ne 0 ] || [ -z "$download_files_content" ]; then
-        debug_log "ERROR" "DownloadParallel: Could not extract download_files() content from '$0' (awk exit: ${extract_exit_code}, content empty: $( [ -z "$download_files_content" ] && echo true || echo false ))."
+        debug_log "ERROR" "DownloadParallel: Could not extract download_files() content."
         return 1
     fi
 
-    # Added Debug Log
-    debug_log "DEBUG" "DownloadParallel: Parsing extracted download_files() content with corrected awk logic (ignores \$3)..."
-    # Pipe extracted content through the corrected awk script
-    # Capture stderr from awk to see potential errors
-    awk_stderr_file="${CACHE_DIR}/awk_stderr.log"
-    echo "$download_files_content" | awk "$awk_script" 2> "$awk_stderr_file"
+    debug_log "DEBUG" "DownloadParallel: Parsing download_files() content..."
+    echo "$download_files_content" | awk "$awk_script"
     awk_exit_code=$?
-    # Added Debug Log
-    debug_log "DEBUG" "DownloadParallel: Parsing finished (awk exit code: ${awk_exit_code}). Task file exists: $( [ -f "$task_file" ] && echo true || echo false ), Load list exists: $( [ -f "$load_list_file" ] && echo true || echo false )"
-    if [ -s "$awk_stderr_file" ]; then
-        debug_log "WARN" "DownloadParallel: awk produced stderr output:"
-        # Log awk stderr content (might be large, consider limiting)
-        cat "$awk_stderr_file" # Or use head/tail if needed
-    fi
-    rm -f "$awk_stderr_file" # Clean up stderr log
+    debug_log "DEBUG" "DownloadParallel: Parsing finished (awk exit code: ${awk_exit_code})."
 
-    # Check awk exit code *after* the debug log
     if [ $((awk_exit_code)) -ne 0 ]; then
          debug_log "ERROR" "DownloadParallel: Failed during awk processing (exit code: ${awk_exit_code})."
-         rm -f "$task_file" "$load_list_file" 2>/dev/null
+         rm -f "$dl_list_file" "$chmod_list_file" "$load_list_file" 2>/dev/null
          return 1
     fi
-    # --- End: Parsing logic ---
+    # --- End: Parsing Logic ---
 
-    # --- Start: Sequential execution logic (Unchanged) ---
-    if [ ! -s "$task_file" ]; then
-        debug_log "INFO" "DownloadParallel: No valid 'download' tasks found in download_files()."
-         if [ -f "$load_list_file" ]; then
-             debug_log "INFO" "DownloadParallel: Proceeding to load files specified with 'load' flag..."
-         else
-             rm -f "$task_file" 2>/dev/null
-            return 0
-         fi
+    # --- Start: Parallel Download Execution ---
+    if [ ! -s "$dl_list_file" ]; then
+        debug_log "INFO" "DownloadParallel: No download tasks found."
+        # Proceed to check load list even if no downloads, maybe files exist already
     else
-        debug_log "INFO" "DownloadParallel: Starting sequential download using task file: ${task_file}"
-        while IFS= read -r download_command; do
-            if [ -z "$download_command" ]; then
-                continue
+        debug_log "INFO" "DownloadParallel: Starting parallel downloads (max ${max_jobs})..."
+        while IFS= read -r file_to_dl || [ -n "$file_to_dl" ]; do # Handle last line without newline
+            if [ -z "$file_to_dl" ]; then continue; fi
+            debug_log "DEBUG" "DownloadParallel: Starting download for: ${file_to_dl}"
+            # Execute download in background
+            download "$file_to_dl" &
+            pid=$! # Get PID of the last background process
+            pids="$pids $pid" # Append PID to the list
+            debug_log "DEBUG" "DownloadParallel: Background PID: ${pid}"
+        done < "$dl_list_file"
+
+        debug_log "INFO" "DownloadParallel: Waiting for all downloads to complete..."
+        local wait_status=0
+        for pid in $pids; do
+            wait "$pid"
+            status=$?
+            if [ $status -ne 0 ]; then
+                debug_log "WARN" "DownloadParallel: Background download PID ${pid} exited with status ${status}."
+                wait_status=1 # Mark that at least one download might have failed
+            else
+                 debug_log "DEBUG" "DownloadParallel: Background download PID ${pid} completed successfully."
             fi
-            debug_log "DEBUG" "DownloadParallel: Executing: ${download_command}"
-            # IMPORTANT: Ensure the actual 'download' function is defined and handles a single filename argument correctly.
-            eval "$download_command"
-            command_exit_code=$?
-            if [ $((command_exit_code)) -ne 0 ]; then
-                debug_log "ERROR" "DownloadParallel: Download command failed (exit code: ${command_exit_code}): ${download_command}"
-                overall_download_status=$command_exit_code
-                # break # Uncomment to stop on first error
-            fi
-        done < "$task_file"
-        if [ $((overall_download_status)) -ne 0 ]; then
-            debug_log "ERROR" "DownloadParallel: One or more downloads failed. Check logs above."
-            rm -f "$task_file" 2>/dev/null
-            return $overall_download_status
+        done
+
+        if [ $wait_status -ne 0 ]; then
+             debug_log "WARN" "DownloadParallel: One or more download processes reported errors. Continuing with checks..."
+             # Do not set overall_status yet, rely on file existence checks later
         else
-            debug_log "INFO" "DownloadParallel: All downloads completed successfully."
-            rm -f "$task_file" 2>/dev/null
+             debug_log "INFO" "DownloadParallel: All download processes completed."
         fi
     fi
-    # --- End: Sequential execution logic ---
+    # --- End: Parallel Download Execution ---
 
-    # --- Start: Loading files logic (Unchanged) ---
+    # --- Start: Sequential chmod Execution ---
+    if [ -f "$chmod_list_file" ]; then
+        debug_log "INFO" "DownloadParallel: Starting chmod operations..."
+        while IFS= read -r file_to_chmod || [ -n "$file_to_chmod" ]; do
+            if [ -z "$file_to_chmod" ]; then continue; fi
+            local full_path="${DL_DIR}/${file_to_chmod}"
+            if [ -f "$full_path" ]; then # Check if file actually exists (download succeeded)
+                debug_log "DEBUG" "DownloadParallel: Applying chmod 755 to: ${full_path}"
+                chmod 755 "$full_path"
+                chmod_exit_code=$?
+                if [ $((chmod_exit_code)) -ne 0 ]; then
+                    debug_log "ERROR" "DownloadParallel: chmod failed for ${full_path} (exit code: ${chmod_exit_code})"
+                    overall_status=1
+                fi
+            else
+                debug_log "WARN" "DownloadParallel: Skipping chmod for non-existent file (download failed?): ${full_path}"
+                overall_status=1 # Mark as error if chmod was requested but file missing
+            fi
+        done < "$chmod_list_file"
+        debug_log "INFO" "DownloadParallel: Chmod operations finished."
+    else
+         debug_log "INFO" "DownloadParallel: No chmod tasks found or specified."
+    fi
+    # --- End: Sequential chmod Execution ---
+
+    # --- Start: Sequential Load Execution ---
     if [ -f "$load_list_file" ]; then
-        debug_log "INFO" "DownloadParallel: Loading specified files from ${load_list_file}..."
-        while IFS= read -r file_to_load; do
+        debug_log "INFO" "DownloadParallel: Starting file loading (sourcing)..."
+        while IFS= read -r file_to_load || [ -n "$file_to_load" ]; do
+            if [ -z "$file_to_load" ]; then continue; fi
             local full_path="${DL_DIR}/${file_to_load}"
-             if [ -f "$full_path" ]; then
+            if [ -f "$full_path" ]; then # Check if file exists
                  debug_log "DEBUG" "DownloadParallel: Sourcing file: ${full_path}"
+                 # Execute source in a subshell to isolate potential errors/exit calls
                  ( . "$full_path" )
                  source_exit_code=$?
                  if [ $((source_exit_code)) -ne 0 ]; then
                      debug_log "ERROR" "DownloadParallel: Sourcing file failed: ${full_path} (exit code: ${source_exit_code})"
-                     exit_code=1
+                     overall_status=1
                  fi
-             else
-                 debug_log "ERROR" "DownloadParallel: File specified in load list not found: ${full_path}"
-                 exit_code=1
-             fi
+            else
+                 debug_log "ERROR" "DownloadParallel: Skipping load for non-existent file: ${full_path}"
+                 overall_status=1 # Mark as error if load was requested but file missing
+            fi
         done < "$load_list_file"
-        rm -f "$load_list_file" 2>/dev/null
-        if [ $((exit_code)) -eq 0 ]; then
-             debug_log "INFO" "DownloadParallel: All specified files loaded successfully."
-        else
-             debug_log "WARN" "DownloadParallel: Some files specified for loading could not be processed. Check logs above."
-             if [ $((overall_download_status)) -eq 0 ]; then
-                 overall_download_status=$exit_code
-             fi
-        fi
+        debug_log "INFO" "DownloadParallel: File loading finished."
     else
-        debug_log "INFO" "DownloadParallel: No files specified for loading."
+        debug_log "INFO" "DownloadParallel: No load tasks found or specified."
     fi
-    # --- End: Loading files logic ---
+    # --- End: Sequential Load Execution ---
 
-    return $overall_download_status
+    # --- Start: Cleanup ---
+    debug_log "DEBUG" "DownloadParallel: Final cleanup of temporary files..."
+    rm -f "$dl_list_file" "$chmod_list_file" "$load_list_file" 2>/dev/null
+    # --- End: Cleanup ---
+
+    if [ $((overall_status)) -eq 0 ]; then
+        debug_log "INFO" "DownloadParallel: All operations completed successfully."
+    else
+        debug_log "ERROR" "DownloadParallel: One or more operations failed. Check logs above."
+    fi
+
+    return $overall_status
 }
 
 # download_parallel 関数を修正
