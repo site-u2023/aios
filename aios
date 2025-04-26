@@ -2332,12 +2332,9 @@ download() {
     # ファイル名を最初の引数として処理
     local file_name="$1"
     shift
-
-    debug_log "DEBUG" "Download function called for f='${file_name}'"
     
     # 空ファイル名のチェック
     if [ -z "$file_name" ]; then
-        debug_log "DEBUG" "Empty filename detected in download function call"
         return 1
     fi
 
@@ -2374,7 +2371,7 @@ download() {
                 chmod)  chmod_mode="true" ;;
                 load)   load_mode="true" ;;
                 # 不明オプション
-                *)      debug_log "DEBUG" "Unknown option: $1, ignoring" ;;
+                *) ;;
             esac
         fi
         shift
@@ -2382,8 +2379,6 @@ download() {
 
     # インタプリタが設定されていなければデフォルト値を設定
     [ -z "$interpreter_name" ] && interpreter_name="ash"
-
-    debug_log "DEBUG" "Processing with options: hidden=${hidden_mode}, quiet=${quiet_mode}, chmod=${chmod_mode}, load=${load_mode}, interpreter=${interpreter_name}"
 
     # バージョン情報取得
     local version_data
@@ -2397,18 +2392,15 @@ download() {
     # ファイルの存在確認を追加
     local file_exists="true"
     if [ ! -f "${BASE_DIR}/$file_name" ]; then
-        debug_log "DEBUG" "File ${BASE_DIR}/$file_name does not exist, forcing download"
         file_exists="false"
         update_required="true"
     elif [ ! -s "${BASE_DIR}/$file_name" ]; then
-        debug_log "DEBUG" "File ${BASE_DIR}/$file_name exists but is empty, forcing download"
         file_exists="false"
         update_required="true"
     fi
     
     # デバッグモード時は常にダウンロード
     if [ "$DEBUG_MODE" = "true" ]; then
-        debug_log "DEBUG" "Debug mode enabled, forcing download for ${file_name}"
         update_required="true"
     fi
     
@@ -2417,9 +2409,7 @@ download() {
     local status_message="$(get_message "CONFIG_DOWNLOAD_UNNECESSARY")"
     
     if [ "$update_required" = "true" ] || [ "$file_exists" = "false" ]; then
-        debug_log "DEBUG" "Executing download_fetch_file for ${file_name}"
         if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode"; then
-            debug_log "DEBUG" "Download process failed for $file_name"
             return 1
         fi
         status_type="success"
@@ -2427,20 +2417,14 @@ download() {
         
         # aiosファイルは常に実行権限を設定する（追加）
         if [ "$file_name" = "aios" ]; then
-            debug_log "DEBUG" "Special handling: Setting execute permission for aios file"
             chmod +x "${BASE_DIR}/${file_name}"
         fi
-    else
-        debug_log "DEBUG" "Skipping download for ${file_name} (not needed)"
     fi
     
     # ファイルの存在を再確認
     if [ ! -f "${BASE_DIR}/$file_name" ]; then
-        debug_log "DEBUG" "File not found after download attempt: $file_name"
         return 1
     fi
-
-    debug_log "DEBUG" "Calling download_finalize with f=${file_name}, status=${status_type}, interpreter=${interpreter_name}"
 
     # 結果表示とファイル読み込み
     download_finalize "$file_name" "$status_message" "$clean_remote_version" "$api_status" "$load_mode" "$hidden_mode" "$status_type" "$interpreter_name"
