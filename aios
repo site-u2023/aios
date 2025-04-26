@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.26-01-02"
+SCRIPT_VERSION="2025.04.26-01-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1047,7 +1047,7 @@ get_github_token() {
 
 # save_version_to_cache 関数を修正
 # 変更点:
-# 1. mv コマンドの直前に ls デバッグコマンドを追加
+# 1. mv 直前のデバッグ方法を変更: ls の結果を変数に格納し、debug_log 関数で出力
 save_version_to_cache() {
     local file_name="$1"
     local version="$2"
@@ -1080,10 +1080,23 @@ save_version_to_cache() {
              debug_log "DEBUG" "  | $line"
         done < "$tmp_file"
 
-        # ▼▼▼ 変更点: mv の直前にデバッグコマンドを追加 ▼▼▼
+        # ▼▼▼ 変更点: mv の直前のデバッグ方法を変更 ▼▼▼
         debug_log "DEBUG" "save_version_to_cache: Checking existence and permissions before move:"
-        ls -al "$tmp_file" >> "$DEBUG_LOG" 2>&1 # 移動元ファイルの情報をデバッグログへ
-        ls -al "$(dirname "$script_file")" >> "$DEBUG_LOG" 2>&1 # 移動先ディレクトリの情報をデバッグログへ
+        # 移動元ファイルの情報を取得してログ出力
+        local ls_tmp_output
+        local ls_tmp_status
+        ls_tmp_output=$(ls -al "$tmp_file" 2>&1) # 標準出力とエラーを変数に格納
+        ls_tmp_status=$?                       # ls コマンドの終了ステータス
+        debug_log "DEBUG" "save_version_to_cache: ls -al tmp_file (status: $ls_tmp_status): $ls_tmp_output"
+
+        # 移動先ディレクトリの情報を取得してログ出力
+        local ls_dir_output
+        local ls_dir_status
+        local script_dir
+        script_dir=$(dirname "$script_file")
+        ls_dir_output=$(ls -al "$script_dir" 2>&1) # 標準出力とエラーを変数に格納
+        ls_dir_status=$?                        # ls コマンドの終了ステータス
+        debug_log "DEBUG" "save_version_to_cache: ls -al script_dir (status: $ls_dir_status): $ls_dir_output"
         # ▲▲▲ 変更点ここまで ▲▲▲
 
         # mv の実行と結果確認
@@ -1096,7 +1109,7 @@ save_version_to_cache() {
             return 1
         fi
     else
-        # script_file が存在しない場合の処理
+        # script_file が存在しない場合の処理 (変更なし)
         debug_log "DEBUG" "save_version_to_cache: File '$script_file' does not exist. Creating new file."
         if echo "${file_name}=${version}" > "$script_file"; then
              debug_log "DEBUG" "save_version_to_cache: Successfully created '$script_file' with initial version."
