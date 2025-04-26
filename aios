@@ -2347,10 +2347,12 @@ download_parallel() {
     fi
 }
 
-# download 関数 (誤った save_version_to_cache 呼び出し削除)
+# download 関数 (save_version_to_cache 呼び出し修正)
 # 変更点:
-# 1. chmod +x 処理の直後にあった、誤った引数 (バージョン文字列の代わりにファイルパス) で
-#    save_version_to_cache を呼び出していた箇所を削除。
+# 1. save_version_to_cache の呼び出し時に渡していた不要な4番目の引数 ($auth_method_used) を削除。
+# 2. save_version_to_cache の終了ステータスハンドリングを修正。
+#    - 終了ステータスが 0 (成功またはスキップ) の場合はデバッグログのみ出力。
+#    - 終了ステータスが 1 (内部エラー) の場合はエラーログを出力し、return 1 する。
 download() {
     local file_name="$1"
     local chmod_flag="$2" # "chmod" or ""
@@ -2376,14 +2378,13 @@ download() {
     remote_version=$(echo "$remote_version_info" | cut -d' ' -f1)
     auth_method_used=$(echo "$remote_version_info" | cut -d' ' -f2) # Store auth method used by get_commit_version
 
-    # Get Local Version Info from cache
+    # Get Local Version Info
     script_file="${CACHE_DIR}/script.ch"
     if [ -f "$script_file" ]; then
         local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
     fi
     [ -z "$local_version" ] && local_version="" # Using empty string as default
 
-    # Define file path using BASE_DIR
     file_path="${BASE_DIR}/${file_name}"
 
     debug_log "DEBUG" "download: Remote version: $file_name - $remote_version (Auth: $auth_method_used)"
@@ -2431,22 +2432,21 @@ download() {
         fi
     fi
 
-    # --- ▼▼▼ 誤った save_version_to_cache 呼び出しを削除 ▼▼▼ ---
-    # (以前ここにあった誤った呼び出しを削除しました)
-    # --- ▲▲▲ 誤った save_version_to_cache 呼び出しを削除 ここまで ▲▲▲ ---
-
-    # Save version only if remote_version is not empty (get_commit_version succeeded)
+    # Save version only if remote_version is not empty
     if [ -n "$remote_version" ]; then
-        # Call save_version_to_cache with correct arguments
+        # --- ▼▼▼ save_version_to_cache 呼び出しとハンドリング修正 ▼▼▼ ---
         save_version_to_cache "$file_name" "$remote_version" "${CACHE_DIR}/script.ch"
         local save_cache_status=$?
 
         if [ "$save_cache_status" -eq 0 ]; then
+             # 終了ステータス 0 は成功またはスキップ (ロック競合)
              debug_log "DEBUG" "download: save_version_to_cache completed for '$file_name' (Status 0: Success or Skipped)."
         else
+             # 終了ステータス 1 は内部エラー
              debug_log "ERROR" "download: save_version_to_cache failed for '$file_name' with internal error (Status $save_cache_status)."
-             return 1
+             return 1 # 内部エラーの場合はスクリプト実行を中断
         fi
+        # --- ▲▲▲ save_version_to_cache 呼び出しとハンドリング修正 ここまで ▲▲▲ ---
     fi
 
     if [ "$load_flag" = "load" ]; then
