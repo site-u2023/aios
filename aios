@@ -2970,7 +2970,7 @@ check_common() {
             selector "$MAIN_MENU" 
             ;;
         full)
-            download_files
+            download_parallel
             download "menu.db"
             download "country.db"
             download "message_${DEFAULT_LANGUAGE}.db"
