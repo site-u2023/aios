@@ -988,6 +988,225 @@ get_message() {
 
 # 🔴　メッセージ系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
 
+# 🔵　スピナー系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
+
+# スピナー開始関数
+start_spinner() {
+    local message="$1"
+    local spinner_color="${2:-$SPINNER_COLOR}"
+    local anim_type="${3:-figure}" 
+    
+    # グローバル変数を設定
+    SPINNER_MESSAGE="$message"
+    SPINNER_TYPE="$anim_type"
+    SPINNER_COLOR="$spinner_color"
+    
+    if [ "$ANIMATION_ENABLED" -eq "0" ]; then
+        debug_log "DEBUG: Animation disabled, showing static message"
+        return
+    fi
+
+    if command -v usleep >/dev/null 2>&1; then
+        SPINNER_USLEEP_VALUE="300000"  # 300000マイクロ秒 = 0.3秒
+        SPINNER_DELAY="300000"         # アニメーションディレイ値
+        debug_log "DEBUG: Using fast animation mode (0.3s) with usleep"
+    else
+        SPINNER_DELAY="1"              # アニメーションディレイ値（秒）
+        debug_log "DEBUG: Using standard animation mode (1s)"
+    fi
+
+    # カーソル非表示
+    printf "\033[?25l"
+
+    # アニメーションタイプに応じた文字セット
+    case "$anim_type" in
+        spinner)
+            SPINNER_CHARS="- \\ | /"
+            ;;
+        dot)
+            SPINNER_CHARS=". .. ... .... ....."
+            ;;
+        bar)
+            SPINNER_CHARS="[=] => ->"
+            ;;
+        figure)
+            SPINNER_CHARS="0 1 2 3 4 5 6 7 8 9"
+            ;;
+        pulse)
+            # 環境依存
+            SPINNER_CHARS="◯ ◎"
+            ;;
+        emoji)
+            # 環境依存
+            SPINNER_CHARS="💩 👺 😀 👽 😈 💀"
+            ;;
+        moon)
+            # 環境依存
+            SPINNER_CHARS="🌑 🌘 🌗 🌖 🌝 🌔 🌓 🌒"
+            # SPINNER_CHARS="🌕 🌖 🌗 🌘 🌑 🌒 🌓 🌔"
+            ;;
+        bloc)
+            # 環境依存
+            SPINNER_CHARS="⢿ ⣻ ⣽ ⣾ ⣷ ⣯ ⣟ ⡿"
+            ;;
+        *)
+            SPINNER_CHARS="- \\ | /"
+            ;;
+    esac
+
+    debug_log "DEBUG: Starting spinner with message: $message, type: $anim_type, delay: $SPINNER_DELAY"
+
+    # 直前のスピナープロセスがまだ実行中の場合は停止
+    if [ -n "$SPINNER_PID" ]; then
+        ps | grep -v grep | grep -q "$SPINNER_PID" 2>/dev/null
+        if [ $? -eq 0 ]; then
+            debug_log "DEBUG: Stopping previous spinner process PID: $SPINNER_PID"
+            kill "$SPINNER_PID" >/dev/null 2>&1
+            wait "$SPINNER_PID" 2>/dev/null || true
+        fi
+    fi
+
+    # メッセージファイルの設定
+    SPINNER_MSG_FILE="${CACHE_DIR}/spinner_msg_$$.tmp"
+    mkdir -p "${CACHE_DIR}" 2>/dev/null
+    printf "%s" "$message" > "$SPINNER_MSG_FILE"
+    debug_log "DEBUG: Created spinner message file: $SPINNER_MSG_FILE"
+
+    # バックグラウンドでスピナーを実行
+    (
+        i=0
+        local curr_msg="$message"
+        
+        while true; do
+            # ファイルから新しいメッセージを読み取る
+            if [ -f "$SPINNER_MSG_FILE" ]; then
+                new_msg=$(cat "$SPINNER_MSG_FILE" 2>/dev/null)
+                if [ -n "$new_msg" ] && [ "$new_msg" != "$curr_msg" ]; then
+                    curr_msg="$new_msg"
+                fi
+            fi
+            
+            for char in $SPINNER_CHARS; do
+                printf "\r\033[K%s %s" "$curr_msg" "$(color "$SPINNER_COLOR" "$char")"
+
+                if command -v usleep >/dev/null 2>&1; then
+                    usleep "$SPINNER_USLEEP_VALUE"  # マイクロ秒単位のディレイ
+                else
+                    sleep "$SPINNER_DELAY"  # 秒単位のディレイ
+                fi
+                
+                # アニメーションサイクル中のメッセージ更新チェック
+                if [ -f "$SPINNER_MSG_FILE" ]; then
+                    new_msg=$(cat "$SPINNER_MSG_FILE" 2>/dev/null)
+                    if [ -n "$new_msg" ] && [ "$new_msg" != "$curr_msg" ]; then
+                        curr_msg="$new_msg"
+                        break  # 新しいメッセージがあれば次のサイクルへ
+                    fi
+                fi
+            done
+        done
+    ) &
+    SPINNER_PID=$!
+    debug_log "DEBUG: Spinner started with PID: $SPINNER_PID"
+}
+
+# スピナー停止関数
+stop_spinner() {
+    local message="$1"
+    local status="${2:-success}"
+
+    if [ "$ANIMATION_ENABLED" -eq "0" ]; then
+        # アニメーション無効時はメッセージがあれば表示 (改行あり)
+        if [ -n "$message" ]; then
+            printf "%s\n" "$message"
+        fi
+        return
+    fi
+
+    debug_log "DEBUG: Stopping spinner with message: $message, status: $status"
+
+    # メッセージファイルを削除
+    if [ -f "$SPINNER_MSG_FILE" ]; then
+        rm -f "$SPINNER_MSG_FILE" 2>/dev/null
+        debug_log "DEBUG: Removed spinner message file: $SPINNER_MSG_FILE"
+    fi
+
+    # プロセスが存在するか確認
+    if [ -n "$SPINNER_PID" ]; then
+        # プロセスが実際に存在するか確認
+        ps | grep -v grep | grep -q "$SPINNER_PID" 2>/dev/null
+        if [ $? -eq 0 ]; then
+            debug_log "DEBUG: Process found, killing PID: $SPINNER_PID"
+            kill "$SPINNER_PID" >/dev/null 2>&1
+            wait "$SPINNER_PID" 2>/dev/null || true
+            unset SPINNER_PID
+            printf "\r\033[K"  # 行をクリア
+
+            # ▼▼▼ 変更点 ▼▼▼
+            # メッセージが空でない場合のみ表示 (改行あり)
+            if [ -n "$message" ]; then
+                # 成功/失敗に応じたメッセージカラー
+                if [ "$status" = "success" ]; then
+                    printf "%s\n" "$(color green "$message")"
+                else
+                    printf "%s\n" "$(color yellow "$message")"
+                fi
+            fi
+            # ▲▲▲ 変更点 ▲▲▲
+        else
+            debug_log "DEBUG: Process not found for PID: $SPINNER_PID"
+            unset SPINNER_PID
+            # プロセスが見つからなくても、メッセージがあれば表示 (改行あり)
+            if [ -n "$message" ]; then
+                 if [ "$status" = "success" ]; then
+                     printf "%s\n" "$(color green "$message")"
+                 else
+                     printf "%s\n" "$(color yellow "$message")"
+                 fi
+            fi
+        fi
+    # SPINNER_PID がない場合でも、メッセージがあれば表示 (改行あり)
+    elif [ -n "$message" ]; then
+        if [ "$status" = "success" ]; then
+            printf "%s\n" "$(color green "$message")"
+        else
+            printf "%s\n" "$(color yellow "$message")"
+        fi
+    fi
+
+    # カーソル表示
+    printf "\033[?25h"
+}
+
+# スピナーメッセージ更新関数
+update_spinner() {
+    local message="$1"
+    local spinner_color="${2:-$SPINNER_COLOR}"
+    
+    if [ "$ANIMATION_ENABLED" -eq "0" ]; then
+        debug_log "DEBUG: Animation disabled, not updating spinner message"
+        return
+    fi
+    
+    # メッセージと色を更新
+    SPINNER_MESSAGE="$message"
+    
+    # 色が指定されている場合のみ更新
+    if [ -n "$spinner_color" ]; then
+        SPINNER_COLOR="$spinner_color"
+    fi
+    
+    # メッセージファイルを更新
+    if [ -f "$SPINNER_MSG_FILE" ]; then
+        printf "%s" "$message" > "$SPINNER_MSG_FILE"
+        debug_log "DEBUG: Updated spinner message file with: $message"
+    else
+        debug_log "DEBUG: Spinner message file not found: $SPINNER_MSG_FILE"
+    fi
+}
+
+# 🔴　スピナー系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
+
 # 🔵　トークン系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # コミット情報をキャッシュに保存する関数
