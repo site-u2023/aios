@@ -2246,8 +2246,8 @@ download_parallel() {
         return 1
     fi
 
-    echo "$func_def" | awk '/^[^{]*\{/{flag=1; next} /^\}/{flag=0} flag && /^[[:space:]]*download /' > "$all_tasks_file"
-
+    echo "$func_def" | awk '/^[^{]*\{/{flag=1; next} /^\}/{flag=0} flag && !/^[[:space:]]*#|^[[:space:]]*$/' > "$all_tasks_file"
+    
     if [ ! -s "$all_tasks_file" ]; then
         stop_spinner "$(get_message 'DP_ERR_NO_TASKS_FOUND' 'Error: No download tasks found in download_files.')" "failure"
         debug_log "ERROR" "DP_ERR_NO_TASKS_FOUND: No tasks found in download_files function." >&2
