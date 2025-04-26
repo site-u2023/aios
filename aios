@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.26-05-00"
+SCRIPT_VERSION="2025.04.27-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -2195,30 +2195,24 @@ OK_save_version_to_cache() {
 # Takes the number of parallel jobs as the first argument
 download_parallel() {
     local max_jobs=${1:-4} # Default to 4 parallel jobs if not specified
-    # Corrected: Use a single task file, no split command needed
+    # Use a single task file, no split command needed
     local task_file="${CACHE_DIR}/dl_tasks.tmp"
     local load_list_file="${DL_DIR}/load_files.list"
     local awk_script
     local download_files_content
     local exit_code=0
 
-    # --- Start: Parsing logic (split command removed) ---
+    # --- Start: Parsing logic (split command and fallback removed) ---
     # Clear previous temporary files
     rm -f "$task_file" "$load_list_file" 2>/dev/null
 
     # Define awk script to parse download_files()
-    # - Extracts download commands
+    # - Extracts download commands based on strict format
     # - Separates commands with "load" flag into load_list_file (filename only)
     # - Writes other download commands (without "load") to the single task_file
     awk_script='
     /^[[:space:]]*download[[:space:]]+/{
-        # Extract arguments, handling quotes carefully
-        gsub(/^[[:space:]]*download[[:space:]]+/, "")
-        file=""
-        url=""
-        csum=""
-        load_flag=0
-        # Simplified parsing logic (assumes "file" "url" "checksum" ["load"] format)
+        # Attempt to parse strict format: "file" "url" "checksum" ["load"]
         if (match($0, /"([^"]+)"[[:space:]]+"([^"]+)"[[:space:]]+"([^"]+)"([[:space:]]+"load")?/)) {
              # Extract file, URL, checksum, removing quotes
              match($0, /"([^"]+)"/)
@@ -2230,33 +2224,27 @@ download_parallel() {
              match(substr($0, csum_start), /"([^"]+)"/)
              csum = substr(substr($0, csum_start), RSTART + 1, RLENGTH - 2)
              load_flag_start = csum_start + RSTART + RLENGTH
+             load_flag=0 # Default to no load flag
              if (match(substr($0, load_flag_start), /[[:space:]]+"load"/)) {
                   load_flag=1
-             } else {
-                  load_flag=0
              }
-        } else {
-             # Fallback for potentially different formats (less robust)
-             n=split($0, args, /[[:space:]]+/)
-             if (n >= 1) file = args[1]; gsub(/^"|"$/, "", file)
-             if (n >= 2) url = args[2]; gsub(/^"|"$/, "", url)
-             if (n >= 3) csum = args[3]; gsub(/^"|"$/, "", csum)
-             if ( (args[n] == "\"load\"") || (args[n] == "load") ) { load_flag=1 }
-        }
 
-        if (load_flag == 1 && file != "") {
-            # Add filename to load list
-            print file >> "'"$load_list_file"'"
-            # Output the download command *without* load flag to the task file
-            printf "download \"%s\" \"%s\" \"%s\"\n", file, url, csum >> "'"$task_file"'"
-        } else if (file != "") {
-            # Output the download command as is to the task file
-            printf "download \"%s\" \"%s\" \"%s\"\n", file, url, csum >> "'"$task_file"'"
+             if (load_flag == 1 && file != "") {
+                 # Add filename to load list
+                 print file >> "'"$load_list_file"'"
+                 # Output the download command *without* load flag to the task file
+                 printf "download \"%s\" \"%s\" \"%s\"\n", file, url, csum >> "'"$task_file"'"
+             } else if (file != "") {
+                 # Output the download command as is to the task file
+                 printf "download \"%s\" \"%s\" \"%s\"\n", file, url, csum >> "'"$task_file"'"
+             }
         }
+        # Corrected: Removed the else block (fallback logic)
     }
     '
 
     # Extract download_files() content from the main script ($0)
+    # Use POSIX compliant command substitution
     download_files_content=$(awk '
         /^download_files\(\) \{/ { in_func=1; next }
         /^\}/ { if (in_func) { in_func=0; next } }
@@ -2265,15 +2253,19 @@ download_parallel() {
 
     # Check if download_files() content was extracted
     if [ -z "$download_files_content" ]; then
-        log "ERROR" "Could not extract download_files() content from '$0'."
+        # Corrected: Use debug_log
+        debug_log "ERROR" "DownloadParallel: Could not extract download_files() content from '$0'."
         return 1
     fi
 
     # Parse the extracted content and generate the single task file and load list
     echo "$download_files_content" | awk "$awk_script"
-    # Corrected: Error check for awk execution (though awk errors might not set $? reliably in all shells)
-    if [ $? -ne 0 ]; then
-         log "ERROR" "Failed to parse download_files() or create task/load files using awk."
+    # Error check for awk execution (might not be fully reliable for all awk errors)
+    # Corrected: Use POSIX compliant arithmetic expansion
+    awk_exit_code=$?
+    if [ $((awk_exit_code)) -ne 0 ]; then
+         # Corrected: Use debug_log
+         debug_log "ERROR" "DownloadParallel: Failed to parse download_files() or create task/load files using awk (exit code: ${awk_exit_code})."
          rm -f "$task_file" "$load_list_file" 2>/dev/null
          return 1
     fi
@@ -2281,10 +2273,12 @@ download_parallel() {
 
     # Check if the task file was created and is not empty
     if [ ! -s "$task_file" ]; then
-        log "INFO" "No download tasks found in $task_file."
+        # Corrected: Use debug_log
+        debug_log "INFO" "DownloadParallel: No download tasks found in ${task_file}."
         # Check if there are files to load even if no downloads needed
          if [ -f "$load_list_file" ]; then
-             log "INFO" "Processing files to load..."
+             # Corrected: Use debug_log
+             debug_log "INFO" "DownloadParallel: Processing files to load..."
              # Proceed to load files section
          else
              rm -f "$task_file" # Remove empty task file
@@ -2292,64 +2286,76 @@ download_parallel() {
          fi
     else
         # --- Start: Parallel execution logic (using single task file) ---
-        log "INFO" "Starting parallel download (Max ${max_jobs} jobs) using task file: $task_file"
+        # Corrected: Use debug_log
+        debug_log "INFO" "DownloadParallel: Starting parallel download (Max ${max_jobs} jobs) using task file: ${task_file}"
         # Read task file line by line and pass to xargs
-        # Each line should be 'download "file" "url" "checksum"'
-        # Using cat and pipe instead of find for a single file
         # Using sh -c '. "$0"; eval "$1"' to handle quoted arguments correctly in the subshell
         # eval is used carefully here assuming task_file contains only trusted 'download "arg1" "arg2" "arg3"' lines
-        < "$task_file" xargs -P "$max_jobs" -I {} sh -c '. "$0"; eval "{}"' "$0" || exit_code=$?
-        # xargs -I passes the whole line as a single argument to sh -c
-        # eval "{}" executes the 'download "..." "..." "..."' command within the sourced subshell
+        < "$task_file" xargs -P "$max_jobs" -I {} sh -c '. "$0"; eval "$1"' "$0" || exit_code=$?
 
         # Check exit code from xargs
-        if [ "$exit_code" -ne 0 ]; then
-            log "ERROR" "One or more downloads failed (xargs exit code: $exit_code). Check logs above."
+        # Corrected: Use POSIX compliant arithmetic expansion
+        if [ $((exit_code)) -ne 0 ]; then
+            # Corrected: Use debug_log
+            debug_log "ERROR" "DownloadParallel: One or more downloads failed (xargs exit code: ${exit_code}). Check logs above."
             rm -f "$task_file" # Clean up task file on failure
-            # Keep load_list_file on failure? Removing for now.
+            # Keep load_list_file on failure? Consider user preference. Removing for now.
             # rm -f "$load_list_file"
             return 1
         else
-            log "INFO" "All downloads completed successfully."
+            # Corrected: Use debug_log
+            debug_log "INFO" "DownloadParallel: All downloads completed successfully."
             # Clean up task file after successful download
             rm -f "$task_file"
         fi
         # --- End: Parallel execution logic ---
     fi
 
-    # --- Start: Loading files logic (unchanged from previous version) ---
+    # --- Start: Loading files logic ---
     if [ -f "$load_list_file" ]; then
-        log "INFO" "Loading specified files from $load_list_file..."
+        # Corrected: Use debug_log
+        debug_log "INFO" "DownloadParallel: Loading specified files from ${load_list_file}..."
         while IFS= read -r file_to_load; do
             local full_path="${DL_DIR}/${file_to_load}"
              if [ -f "$full_path" ]; then
-                 log "DEBUG" "Sourcing file: $full_path"
+                 # Corrected: Use debug_log
+                 debug_log "DEBUG" "DownloadParallel: Sourcing file: ${full_path}"
+                 # Use POSIX compliant source command '.'
                  . "$full_path"
-                 if [ $? -ne 0 ]; then
-                     log "ERROR" "Failed to source file: $full_path"
-                     exit_code=1
+                 # Corrected: Use POSIX compliant arithmetic expansion
+                 source_exit_code=$?
+                 if [ $((source_exit_code)) -ne 0 ]; then
+                     # Corrected: Use debug_log
+                     debug_log "ERROR" "DownloadParallel: Failed to source file: ${full_path} (exit code: ${source_exit_code})"
+                     exit_code=1 # Record failure, but continue trying other files
                  fi
              else
-                 log "ERROR" "File specified in load list not found: $full_path"
-                 exit_code=1
+                 # Corrected: Use debug_log
+                 debug_log "ERROR" "DownloadParallel: File specified in load list not found: ${full_path}"
+                 exit_code=1 # Record failure
              fi
         done < "$load_list_file"
 
         # Clean up load list file
         rm -f "$load_list_file"
 
-        if [ "$exit_code" -eq 0 ]; then
-             log "INFO" "All specified files loaded successfully."
+        # Corrected: Use POSIX compliant arithmetic expansion
+        if [ $((exit_code)) -eq 0 ]; then
+             # Corrected: Use debug_log
+             debug_log "INFO" "DownloadParallel: All specified files loaded successfully."
         else
-             log "WARN" "Some files specified for loading could not be processed. Check logs above."
-             return $exit_code
+             # Corrected: Use debug_log
+             debug_log "WARN" "DownloadParallel: Some files specified for loading could not be processed. Check logs above."
+             return $exit_code # Return non-zero if any loading failed
         fi
     else
-        log "INFO" "No files specified for loading."
+        # Corrected: Use debug_log
+        debug_log "INFO" "DownloadParallel: No files specified for loading."
     fi
     # --- End: Loading files logic ---
 
-    return 0
+    # Return final exit code (0 if all downloads and loads succeeded)
+    return $exit_code
 }
 
 # download_parallel 関数を修正
@@ -2514,61 +2520,72 @@ download() {
     local file_name="$1"
     local url="$2"
     local expected_checksum="$3"
+    # Use DL_DIR for target path
     local target_path="${DL_DIR}/${file_name}"
     local current_checksum=""
-    # Corrected: Use wget exit code variable
+    # Use wget exit code variable
     local wget_exit_code
     local version_cache_file="${CACHE_DIR}/${file_name}.ver"
 
     # Input validation
     if [ -z "$file_name" ] || [ -z "$url" ] || [ -z "$expected_checksum" ]; then
-        log "ERROR_download" "$file_name" "Invalid arguments provided to download function."
+        # Corrected: Use debug_log with adjusted message format
+        debug_log "ERROR" "Download: ${file_name}: Invalid arguments provided to download function."
         return 1 # Indicate failure
     fi
 
-    log "INFO_download" "$file_name" "Processing..."
+    # Corrected: Use debug_log with adjusted message format
+    debug_log "INFO" "Download: ${file_name}: Processing..."
 
     # Check if file exists and checksum matches
     if [ -f "$target_path" ]; then
+        # Use POSIX compliant command substitution
         current_checksum=$(sha256sum "$target_path" | cut -d' ' -f1)
         if [ "$current_checksum" = "$expected_checksum" ]; then
-            log "INFO_download" "$file_name" "File already exists and checksum matches. Skipping download."
-            log "DEBUG_download" "$file_name" "Updating version cache: $version_cache_file"
+            # Corrected: Use debug_log
+            debug_log "INFO" "Download: ${file_name}: File already exists and checksum matches. Skipping download."
+            # Corrected: Use debug_log
+            debug_log "DEBUG" "Download: ${file_name}: Updating version cache: ${version_cache_file}"
             echo "$expected_checksum" > "$version_cache_file"
             return 0 # Indicate success (already present)
         else
-            log "WARN_download" "$file_name" "File exists but checksum MISMATCH (Expected: $expected_checksum, Found: $current_checksum). Re-downloading."
+            # Corrected: Use debug_log
+            debug_log "WARN" "Download: ${file_name}: File exists but checksum MISMATCH (Expected: ${expected_checksum}, Found: ${current_checksum}). Re-downloading."
             rm -f "$target_path" "$version_cache_file"
         fi
     fi
 
     # Download the file using wget
-    log "INFO_download" "$file_name" "Downloading from $url using wget..."
+    # Corrected: Use debug_log
+    debug_log "INFO" "Download: ${file_name}: Downloading from ${url} using wget..."
     # Ensure target directory exists
     mkdir -p "$(dirname "$target_path")"
     # Corrected: Use wget with appropriate options
-    # -q: quiet mode (like curl -s)
-    # -O: output to specified file (like curl -o)
-    # wget follows redirects by default (like curl -L)
     wget -q -O "$target_path" "$url"
     wget_exit_code=$?
 
     # Corrected: Check wget exit code
-    if [ "$wget_exit_code" -ne 0 ]; then
-        log "ERROR_download" "$file_name" "Download failed (wget exit code: $wget_exit_code)."
+    # Corrected: Use POSIX compliant arithmetic expansion
+    if [ $((wget_exit_code)) -ne 0 ]; then
+        # Corrected: Use debug_log
+        debug_log "ERROR" "Download: ${file_name}: Download failed (wget exit code: ${wget_exit_code})."
         rm -f "$target_path" # Clean up potentially incomplete file
         return 1 # Indicate failure
     fi
 
     # Verify checksum after download
+    # Use POSIX compliant command substitution
     current_checksum=$(sha256sum "$target_path" | cut -d' ' -f1)
     if [ "$current_checksum" = "$expected_checksum" ]; then
-        log "INFO_download" "$file_name" "Download successful and checksum VERIFIED."
-        log "DEBUG_download" "$file_name" "Updating version cache: $version_cache_file"
+        # Corrected: Use debug_log
+        debug_log "INFO" "Download: ${file_name}: Download successful and checksum VERIFIED."
+        # Corrected: Use debug_log
+        debug_log "DEBUG" "Download: ${file_name}: Updating version cache: ${version_cache_file}"
         echo "$expected_checksum" > "$version_cache_file"
         return 0 # Indicate success
     else
-        log "ERROR_download" "$file_name" "Checksum verification FAILED after download (Expected: $expected_checksum, Found: $current_checksum)."
+        # Corrected: Use debug_log
+        debug_log "ERROR" "Download: ${file_name}: Checksum verification FAILED after download (Expected: ${expected_checksum}, Found: ${current_checksum})."
         rm -f "$target_path" "$version_cache_file"
         return 1 # Indicate failure
     fi
