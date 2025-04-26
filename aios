@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.26-00-05"
+SCRIPT_VERSION="2025.04.26-00-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -2204,16 +2204,17 @@ download_parallel() {
     local max_parallel
     local pids=""
     local overall_status=0 # 0: success, 1: failure
-    local tmp_dir="${CACHE_DIR}/dl_tmp" # Temporary directory for task *definition* files
+    # ▼▼▼ 変更点: タスク定義ファイル用の一時ディレクトリを $DL_DIR/dl_tmp に ▼▼▼
+    local tmp_dir="${DL_DIR}/dl_tmp" # Temporary directory for task *definition* files inside DL_DIR
     local all_tasks_file="${tmp_dir}/dl_all_tasks.tmp"
     local task_file_prefix="${tmp_dir}/dl_task_"
+    # ▲▲▲ 変更点ここまで ▲▲▲
     local pid job_index=0 wait_pid proc_status task_file
     local success_message failure_message spinner_message
     local script_path="$0" # Store the script path
     local task_base_name # For log file naming
-    # ▼▼▼ 変更点: ログファイル用変数定義 ▼▼▼
+    # ログファイル用変数は $LOG_DIR ベースのまま
     local stdout_log stderr_log log_file_prefix="${LOG_DIR}/download_parallel_task_" # Prefix for logs in LOG_DIR
-    # ▲▲▲ 変更点ここまで ▲▲▲
 
     # --- Configuration and Preparation ---
     max_parallel="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
@@ -2223,25 +2224,27 @@ download_parallel() {
     fi
     debug_log "DEBUG" "Effective max parallel download tasks: $max_parallel"
 
+    # ▼▼▼ 変更点: タスク定義用ディレクトリ ($DL_DIR/dl_tmp) の作成 ▼▼▼
     # Create temporary directory for task *definition* files
     if ! mkdir -p "$tmp_dir"; then
          if [ ! -d "$tmp_dir" ]; then
-            debug_log "ERROR" "Failed to create temporary directory: $tmp_dir" >&2
+            debug_log "ERROR" "Failed to create temporary directory for task definitions: $tmp_dir" >&2
             stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Setup failed.')" "failure"
             return 1
          fi
     fi
-    # ▼▼▼ 変更点: LOG_DIR作成と古いログの削除 ▼▼▼
-    # Create LOG_DIR if it doesn't exist
+    # ▲▲▲ 変更点ここまで ▲▲▲
+    # ログ用ディレクトリ ($LOG_DIR) の作成 (前回修正通り)
     if ! mkdir -p "$LOG_DIR"; then
         if [ ! -d "$LOG_DIR" ]; then
            debug_log "ERROR" "Failed to create log directory: $LOG_DIR" >&2
            # Continue, but logging might fail
         fi
     fi
+    # ▼▼▼ 変更点: 古いタスク定義ファイルとログファイルの削除 ▼▼▼
     # Clean up previous task *definition* files and *log* files
-    rm -f "${task_file_prefix}"*.tmp "$all_tasks_file" 2>/dev/null
-    rm -f "${log_file_prefix}"*.stdout.log "${log_file_prefix}"*.stderr.log 2>/dev/null
+    rm -f "${task_file_prefix}"*.tmp "$all_tasks_file" 2>/dev/null # Remove old task defs from $DL_DIR/dl_tmp
+    rm -f "${log_file_prefix}"*.stdout.log "${log_file_prefix}"*.stderr.log 2>/dev/null # Remove old logs from $LOG_DIR
     debug_log "DEBUG" "Cleaned up previous task definition files in $tmp_dir and log files in $LOG_DIR"
     # ▲▲▲ 変更点ここまで ▲▲▲
 
@@ -2295,7 +2298,7 @@ download_parallel() {
 
     debug_log "DEBUG" "Total tasks: $total_lines, Max parallel: $max_parallel, Lines per task file: $lines_per_task"
 
-    # Use POSIX awk to split the tasks into multiple files
+    # Use POSIX awk to split the tasks into multiple files (using task_file_prefix for $DL_DIR/dl_tmp)
     if ! awk -v lpt="$lines_per_task" -v prefix="$task_file_prefix" '{
         # POSIX compliant integer division for task_num
         task_num = int((NR-1)/lpt)
@@ -2313,7 +2316,8 @@ download_parallel() {
     fi
     rm -f "$all_tasks_file" # Remove the combined task file
 
-    task_count=$(find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" | wc -l) # POSIX compliant way to count files
+    # Count task files in $DL_DIR/dl_tmp
+    task_count=$(find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" 2>/dev/null | wc -l) # POSIX compliant way to count files
     debug_log "DEBUG" "Created $task_count task files in $tmp_dir."
 
     if [ "$task_count" -eq 0 ]; then
@@ -2327,58 +2331,44 @@ download_parallel() {
     pids=""
     job_index=0
     overall_status=0 # Reset status before starting tasks
-    # POSIX compliant loop over files
+    # Loop over task definition files in $DL_DIR/dl_tmp
     find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" | sort | while IFS= read -r task_file; do
-        # ▼▼▼ 変更点: ログファイルのパスを $LOG_DIR 基準に変更 ▼▼▼
+        # ログファイルのパスは $LOG_DIR ベースのまま (前回修正通り)
         task_base_name=$(basename "$task_file" .tmp) # e.g., dl_task_000
         stdout_log="${log_file_prefix}${task_base_name}.stdout.log" # Use log_file_prefix for LOG_DIR
         stderr_log="${log_file_prefix}${task_base_name}.stderr.log" # Use log_file_prefix for LOG_DIR
         debug_log "DEBUG" "Starting task file: $task_file (stdout: $stdout_log, stderr: $stderr_log)"
         (
             # Source the task file to execute commands within it
-            # Ensure functions and variables are available in the subshell
             if . "$task_file"; then
                 exit 0 # Success
             else
-                # Exit status 1 will be caught by 'wait'.
-                # stderr content will be in the log file.
                 exit 1 # Failure
             fi
-        ) > "$stdout_log" 2> "$stderr_log" & # Redirect stdout and stderr of the subshell to LOG_DIR
-        # ▲▲▲ 変更点ここまで ▲▲▲
+        ) > "$stdout_log" 2> "$stderr_log" & # Redirect stdout/stderr to LOG_DIR
         pid=$!
         pids="$pids $pid"
         job_index=$((job_index + 1))
         debug_log "DEBUG" "Background PID $pid started for task file $task_file"
 
-        # Wait for a process if we've reached the max parallel limit
-        # POSIX arithmetic and command substitution
+        # Wait logic remains the same, referencing logs in $LOG_DIR
         if [ "$job_index" -ge "$max_parallel" ]; then
              debug_log "DEBUG" "Max parallel tasks ($max_parallel) reached, waiting for one to finish..."
-             # POSIX compliant way to get first PID
              first_pid_in_batch=$(echo "$pids" | awk '{print $1}')
 
              if [ -n "$first_pid_in_batch" ]; then
-                 # Find the corresponding stderr log file (more robustly if needed)
-                 # Assuming task_base_name logic holds, but might need adjustment
-                 # For simplicity, just reference the PID in the error message
-                 local first_task_stderr_log="${log_file_prefix}*_$first_pid_in_batch.stderr.log" # Pattern might be too broad
-
                  if wait "$first_pid_in_batch"; then
                      debug_log "DEBUG" "PID $first_pid_in_batch finished successfully. Continuing..."
                  else
                      proc_status=$?
-                     # ▼▼▼ 変更点: エラーログ参照先を $LOG_DIR に ▼▼▼
+                     # エラーログ参照先は $LOG_DIR のまま (前回修正通り)
                      debug_log "ERROR" "Background task (PID $first_pid_in_batch) failed with status $proc_status. Check corresponding stderr log in $LOG_DIR for details." >&2
-                     # ▲▲▲ 変更点ここまで ▲▲▲
                      overall_status=1 # Mark overall failure
                  fi
-                 # POSIX compliant way to remove PID from list
                  pids=$(echo "$pids" | sed "s/^$first_pid_in_batch //; s/ $first_pid_in_batch / /; s/ $first_pid_in_batch$//")
                  job_index=$((job_index - 1))
              else
                  debug_log "WARN" "Could not determine first PID to wait for."
-                 # Avoid infinite loop if PID extraction fails
                  sleep 1
              fi
         fi
@@ -2387,45 +2377,42 @@ download_parallel() {
     # --- Wait for All Remaining Jobs ---
     debug_log "DEBUG" "Waiting for remaining background jobs: [$pids]"
     for pid in $pids; do
-        # Check if pid is a valid number (POSIX)
         if expr "$pid" : '^[0-9]*$' > /dev/null && [ "$pid" -gt 0 ]; then
-            # Simplified: Just report the PID failure and suggest checking logs in LOG_DIR
             if wait "$pid"; then
                 debug_log "DEBUG" "PID $pid finished successfully."
             else
                 proc_status=$?
-                # ▼▼▼ 変更点: エラーログ参照先を $LOG_DIR に ▼▼▼
+                # エラーログ参照先は $LOG_DIR のまま (前回修正通り)
                 debug_log "ERROR" "Background task (PID $pid) failed with status $proc_status. Check corresponding stderr log in $LOG_DIR for details." >&2
-                # ▲▲▲ 変更点ここまで ▲▲▲
                 overall_status=1 # Mark overall failure
             fi
         fi
     done
 
     # --- Cleanup and Final Status ---
+    # ▼▼▼ 変更点: 終了時のクリーンアップ対象 ▼▼▼
     if [ $overall_status -eq 0 ]; then
         debug_log "DEBUG" "All tasks successful. Cleaning up temporary task definitions in $tmp_dir and logs in $LOG_DIR"
-        rm -rf "$tmp_dir" 2>/dev/null # Remove task definition temp dir
-        # ▼▼▼ 変更点: 成功時に $LOG_DIR のタスクログを削除 ▼▼▼
-        rm -f "${log_file_prefix}"*.stdout.log "${log_file_prefix}"*.stderr.log 2>/dev/null # Remove task logs from LOG_DIR
-        # ▲▲▲ 変更点ここまで ▲▲▲
+        rm -rf "$tmp_dir" 2>/dev/null # Remove task definition temp dir ($DL_DIR/dl_tmp)
+        # 成功時に $LOG_DIR のタスクログを削除 (前回修正通り)
+        rm -f "${log_file_prefix}"*.stdout.log "${log_file_prefix}"*.stderr.log 2>/dev/null
     else
         debug_log "ERROR" "One or more tasks failed. Temporary task definitions kept in $tmp_dir, logs kept in $LOG_DIR for inspection."
-        # Keep tmp_dir and LOG_DIR logs for inspection
-        # Remove only the task *definition* files from tmp_dir, keep the directory itself if needed?
-        # Keeping tmp_dir might be confusing, let's just keep logs in LOG_DIR and remove tmp_dir
-        # rm -f "${task_file_prefix}"*.tmp 2>/dev/null # Original logic kept tmp_dir
-        rm -rf "$tmp_dir" 2>/dev/null # Let's remove tmp_dir for simplicity, logs are in LOG_DIR
+        # 失敗時は $DL_DIR/dl_tmp を削除しない (タスク定義ファイル確認のため)
+        # 失敗時は $LOG_DIR のログも削除しない (エラー確認のため)
+        # rm -rf "$tmp_dir" 2>/dev/null # 失敗時は削除しないように変更
+        debug_log "ERROR" "Task definition files are in $tmp_dir" # 場所を明示
+        debug_log "ERROR" "Task logs are in $LOG_DIR" # 場所を明示
     fi
+    # ▲▲▲ 変更点ここまで ▲▲▲
 
     if [ $overall_status -eq 0 ]; then
         success_message="$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'Essential files downloaded successfully.')"
         stop_spinner "$success_message" "success"
         return 0
     else
-        # ▼▼▼ 変更点: エラーメッセージのログ参照先を $LOG_DIR に ▼▼▼
-        failure_message="$(get_message 'DOWNLOAD_PARALLEL_FAILED' "Errors occurred during parallel download. Check logs in $LOG_DIR")"
-        # ▲▲▲ 変更点ここまで ▲▲▲
+        # エラーメッセージのログ参照先は $LOG_DIR のまま (前回修正通り)
+        failure_message="$(get_message 'DOWNLOAD_PARALLEL_FAILED' "Errors occurred during parallel download. Check logs in $LOG_DIR and task files in $tmp_dir")" # tmp_dirも追記
         stop_spinner "$failure_message" "failure"
         return 1
     fi
