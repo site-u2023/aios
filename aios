@@ -2329,123 +2329,141 @@ get_commit_version() {
 }
 
 download() {
-    # ファイル名を最初の引数として処理
-    local file_name="$1"
-    shift
+    local url="$1"
+    local output_path="$2"
+    local use_cache="${3:-true}"
+    local check_version="${4:-true}"
+    local cache_dir="${CACHE_DIR}/downloads"
+    local cache_file="${cache_dir}/$(sanitize_filename "$(basename "$url")")"
+    local version_file="${CACHE_DIR}/versions.json"
+    local commit_file="${CACHE_DIR}/commits.json"
+    local headers_file="${WORK_DIR}/headers_$(sanitize_filename "$(basename "$url")").txt"
+    local etag=""
+    local last_modified=""
+    local current_version=""
+    local current_commit=""
+    local file_type="blob"
 
-    debug_log "DEBUG" "Download function called for f='${file_name}'"
-    
-    # 空ファイル名のチェック
-    if [ -z "$file_name" ]; then
-        debug_log "DEBUG" "Empty filename detected in download function call"
-        return 1
+    mkdir -p "$(dirname "$output_path")" "$cache_dir" "$WORK_DIR" 2>/dev/null
+
+    local is_github_api=false
+    local is_raw_content=false
+    if echo "$url" | grep -q "api.github.com/repos/.*/contents/"; then
+        is_github_api=true
+        file_type="blob"
+    elif echo "$url" | grep -q "raw.githubusercontent.com"; then
+        is_raw_content=true
+        file_type="raw"
+    elif echo "$url" | grep -q "github.com/.*/blob/"; then
+        local raw_url=$(echo "$url" | sed 's#github.com#raw.githubusercontent.com#; s#/blob/#/#')
+        url="$raw_url"
+        is_raw_content=true
+        file_type="raw"
+    elif echo "$url" | grep -q "api.github.com/repos/.*/tarball/" || echo "$url" | grep -q "api.github.com/repos/.*/zipball/"; then
+        is_github_api=true
+        file_type="archive"
+    elif echo "$url" | grep -q "api.github.com/repos/.*/commits/"; then
+        is_github_api=true
+        file_type="commit"
     fi
 
-    # 設定変数の初期化
-    local hidden_mode="false"
-    local quiet_mode="${QUIET_MODE:-false}"
-    local chmod_mode="false"
-    local load_mode="false"
-    local interpreter_name=""  # デフォルト値を空に
-    
-    # オプション引数の処理（改善版）
-    while [ $# -gt 0 ]; do
-        local option="$1"
-        local value="true"
-        
-        # キー=値形式の場合は分解処理
-        if echo "$option" | grep -q "="; then
-            value=$(echo "$option" | cut -d'=' -f2)
-            option=$(echo "$option" | cut -d'=' -f1)
+    if [ "$use_cache" = "true" ] && [ -f "$cache_file" ]; then
+        local cached_version=$(jq -r ".[\"$url\"] // \"\"" "$version_file" 2>/dev/null)
+        local cached_commit=$(jq -r ".[\"$url\"] // \"\"" "$commit_file" 2>/dev/null)
+
+        if [ "$check_version" = "true" ]; then
+            if ! headers_output=$(call_api "$url" "HEAD"); then
+                 cp "$cache_file" "$output_path"
+                 return 0
+            fi
+
+            etag=$(echo "$headers_output" | grep -i '^ETag:' | sed 's/ETag: //i' | tr -d '"' | tr -d '\r' | head -n 1)
+            last_modified=$(echo "$headers_output" | grep -i '^Last-Modified:' | sed 's/Last-Modified: //i' | tr -d '\r' | head -n 1)
+            current_version="${etag:-${last_modified}}"
+
+            if [ "$file_type" = "commit" ]; then
+                 current_commit="$current_version"
+            fi
+
+            local version_match=false
+            if [ "$file_type" = "commit" ] && [ -n "$cached_commit" ] && [ "$cached_commit" = "$current_commit" ]; then
+                version_match=true
+            elif [ "$file_type" != "commit" ] && [ -n "$cached_version" ] && [ "$cached_version" = "$current_version" ]; then
+                version_match=true
+            fi
+
+            if [ "$version_match" = "true" ]; then
+                cp "$cache_file" "$output_path"
+                return 0
+            fi
+        else
+            cp "$cache_file" "$output_path"
+            return 0
         fi
-        
-        # オプション判定（値がtrueの場合のみ処理）
-        if [ "$value" = "true" ]; then
-            case "$option" in
-                # インタプリタオプション
-                bash)   interpreter_name="bash" ;;
-                python3) interpreter_name="python" ;;
-                node)   interpreter_name="node" ;;
-                perl)   interpreter_name="perl" ;;
-                # モードオプション
-                hidden) hidden_mode="true" ;;
-                quiet)  quiet_mode="true" ;;
-                debug)  DEBUG_MODE="true" ;;
-                chmod)  chmod_mode="true" ;;
-                load)   load_mode="true" ;;
-                # 不明オプション
-                *)      debug_log "DEBUG" "Unknown option: $1, ignoring" ;;
-            esac
-        fi
-        shift
-    done
-
-    # インタプリタが設定されていなければデフォルト値を設定
-    [ -z "$interpreter_name" ] && interpreter_name="ash"
-
-    debug_log "DEBUG" "Processing with options: hidden=${hidden_mode}, quiet=${quiet_mode}, chmod=${chmod_mode}, load=${load_mode}, interpreter=${interpreter_name}"
-
-    # バージョン情報取得
-    local version_data
-    version_data=$(download_check_version "$file_name")
-    
-    local update_required=$(echo "$version_data" | cut -d'|' -f1)
-    local clean_remote_version=$(echo "$version_data" | cut -d'|' -f2)
-    local clean_local_version=$(echo "$version_data" | cut -d'|' -f3)
-    local api_status=$(echo "$version_data" | cut -d'|' -f4)
-    
-    # ファイルの存在確認を追加
-    local file_exists="true"
-    if [ ! -f "${BASE_DIR}/$file_name" ]; then
-        debug_log "DEBUG" "File ${BASE_DIR}/$file_name does not exist, forcing download"
-        file_exists="false"
-        update_required="true"
-    elif [ ! -s "${BASE_DIR}/$file_name" ]; then
-        debug_log "DEBUG" "File ${BASE_DIR}/$file_name exists but is empty, forcing download"
-        file_exists="false"
-        update_required="true"
     fi
-    
-    # デバッグモード時は常にダウンロード
-    if [ "$DEBUG_MODE" = "true" ]; then
-        debug_log "DEBUG" "Debug mode enabled, forcing download for ${file_name}"
-        update_required="true"
-    fi
-    
-    # ファイルダウンロード処理
-    local status_type="no_update"
-    local status_message="$(get_message "CONFIG_DOWNLOAD_UNNECESSARY")"
-    
-    if [ "$update_required" = "true" ] || [ "$file_exists" = "false" ]; then
-        debug_log "DEBUG" "Executing download_fetch_file for ${file_name}"
-        if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode"; then
-            debug_log "DEBUG" "Download process failed for $file_name"
-            return 1
-        fi
-        status_type="success"
-        status_message="$(get_message "CONFIG_DOWNLOAD_SUCCESS")"
-        
-        # aiosファイルは常に実行権限を設定する（追加）
-        if [ "$file_name" = "aios" ]; then
-            debug_log "DEBUG" "Special handling: Setting execute permission for aios file"
-            chmod +x "${BASE_DIR}/${file_name}"
+
+    local success=false
+    local download_output=""
+    local http_status=0
+
+    if download_output=$(call_api "$url" "GET" "$headers_file"); then
+        http_status=$(grep '^HTTP/' "$headers_file" | tail -n 1 | awk '{print $2}')
+
+        if [ "$http_status" -ge 200 ] && [ "$http_status" -lt 300 ]; then
+            if [ "$is_github_api" = "true" ] && [ "$file_type" = "blob" ]; then
+                local content=$(echo "$download_output" | jq -r '.content')
+                if [ "$content" = "null" ] || [ -z "$content" ]; then
+                    rm -f "$headers_file"
+                    return 1
+                fi
+                if ! echo "$content" | base64 -d > "$output_path"; then
+                    rm -f "$output_path" "$headers_file"
+                    return 1
+                fi
+                success=true
+            elif [ "$is_github_api" = "true" ] && [ "$file_type" = "commit" ]; then
+                echo "$download_output" > "$output_path"
+                success=true
+                current_commit=$(echo "$download_output" | jq -r '.sha // ""')
+                current_version="$current_commit"
+            else
+                echo "$download_output" > "$output_path"
+                success=true
+            fi
+
+            if [ "$use_cache" = "true" ]; then
+                cp "$output_path" "$cache_file"
+
+                etag=$(grep -i '^ETag:' "$headers_file" | sed 's/ETag: //i' | tr -d '"' | tr -d '\r' | head -n 1)
+                last_modified=$(grep -i '^Last-Modified:' "$headers_file" | sed 's/Last-Modified: //i' | tr -d '\r' | head -n 1)
+                [ "$file_type" != "commit" ] && current_version="${etag:-${last_modified}}"
+
+                if [ -n "$current_version" ]; then
+                    local tmp_version_file="${version_file}.tmp"
+                    [ ! -f "$version_file" ] || [ ! -s "$version_file" ] && echo "{}" > "$version_file"
+                    jq --arg url "$url" --arg version "$current_version" '.[$url] = $version' "$version_file" > "$tmp_version_file" && mv "$tmp_version_file" "$version_file" || true
+                fi
+
+                if [ "$file_type" = "commit" ] && [ -n "$current_commit" ]; then
+                     local tmp_commit_file="${commit_file}.tmp"
+                    [ ! -f "$commit_file" ] || [ ! -s "$commit_file" ] && echo "{}" > "$commit_file"
+                    jq --arg url "$url" --arg commit "$current_commit" '.[$url] = $commit' "$commit_file" > "$tmp_commit_file" && mv "$tmp_commit_file" "$commit_file" || true
+                fi
+            fi
+        else
+            success=false
         fi
     else
-        debug_log "DEBUG" "Skipping download for ${file_name} (not needed)"
+        success=false
     fi
-    
-    # ファイルの存在を再確認
-    if [ ! -f "${BASE_DIR}/$file_name" ]; then
-        debug_log "DEBUG" "File not found after download attempt: $file_name"
+
+    rm -f "$headers_file"
+
+    if [ "$success" = "true" ]; then
+        return 0
+    else
         return 1
     fi
-
-    debug_log "DEBUG" "Calling download_finalize with f=${file_name}, status=${status_type}, interpreter=${interpreter_name}"
-
-    # 結果表示とファイル読み込み
-    download_finalize "$file_name" "$status_message" "$clean_remote_version" "$api_status" "$load_mode" "$hidden_mode" "$status_type" "$interpreter_name"
-    
-    return 0
 }
 
 download_check_version() {
