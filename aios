@@ -2196,7 +2196,8 @@ OK_save_version_to_cache() {
 download_parallel() {
     local max_jobs=${1:-4} # Default to 4 parallel jobs if not specified
     local task_file_base="${CACHE_DIR}/dl_task_"
-    local load_list_file="${CACHE_DIR}/load_files.list"
+    # Corrected: Use DL_DIR for load list file as per user instruction
+    local load_list_file="${DL_DIR}/load_files.list"
     local awk_script
     local download_files_content
     local exit_code=0
@@ -2213,14 +2214,13 @@ download_parallel() {
     /^[[:space:]]*download[[:space:]]+/{
         # Extract arguments, handling quotes carefully
         # This is a simplified parser; assumes well-formed commands
-        # It might need refinement for complex quoting or variable expansions within download_files()
         gsub(/^[[:space:]]*download[[:space:]]+/, "")
         file=""
         url=""
         csum=""
         load_flag=0
         n=split($0, args, /[[:space:]]+/) # Simple split, may fail with quoted spaces
-        
+
         # Heuristic to find filename (usually first arg) and load flag (usually last)
         if (n >= 1) file = args[1] # Assuming first arg is filename
         if (n >= 2) url = args[2] # Assuming second is URL (might not always be true)
@@ -2232,31 +2232,32 @@ download_parallel() {
         # Refine extraction if possible (example using pattern matching)
         # Match "file" "url" "checksum" ["load"] pattern
         if (match($0, /"([^"]+)"[[:space:]]+"([^"]+)"[[:space:]]+"([^"]+)"([[:space:]]+"load")?/)) {
-             file = substr($0, RSTART + 1, RLENGTH - 2) # Extract file from first quotes
-             # Re-match to get URL and checksum positions correctly
-             match($0, /"([^"]+)"[[:space:]]+"([^"]+)"/) # Match up to URL
+             # Extract file from first quotes, remove quotes
+             match($0, /"([^"]+)"/)
+             file = substr($0, RSTART + 1, RLENGTH - 2)
+
+             # Extract URL from second quotes, remove quotes
              url_start = RSTART + RLENGTH + 1 # Position after space after file
              match(substr($0, url_start), /"([^"]+)"/) # Match URL
              url = substr(substr($0, url_start), RSTART + 1, RLENGTH - 2)
-             
+
+             # Extract checksum from third quotes, remove quotes
              csum_start = url_start + RSTART + RLENGTH + 1 # Position after space after URL
              match(substr($0, csum_start), /"([^"]+)"/) # Match checksum
              csum = substr(substr($0, csum_start), RSTART + 1, RLENGTH - 2)
 
+             # Check for "load" flag after checksum
              load_flag_start = csum_start + RSTART + RLENGTH
              if (match(substr($0, load_flag_start), /[[:space:]]+"load"/)) {
                   load_flag=1
              } else {
                   load_flag=0
              }
-             gsub(/^"|"$/, "", file) # Remove surrounding quotes if present
-             gsub(/^"|"$/, "", url)
-             gsub(/^"|"$/, "", csum)
         }
 
 
         if (load_flag == 1 && file != "") {
-            # Add filename to load list
+            # Add filename to load list (Corrected path)
             print file >> "'"$load_list_file"'"
             # Output the download command *without* the load flag for the task file
             # Ensure proper quoting for the download command arguments
@@ -2271,7 +2272,6 @@ download_parallel() {
     '
 
     # Extract download_files() content from the main script ($0)
-    # Using a flag-based approach for awk to avoid regex issues
     download_files_content=$(awk '
         /^download_files\(\) \{/ { in_func=1; next }
         /^\}/ { if (in_func) { in_func=0; next } }
@@ -2285,8 +2285,7 @@ download_parallel() {
     fi
 
     # Parse the extracted content and generate task files
-    # Split tasks into multiple files for better parallel distribution (optional but good practice)
-    echo "$download_files_content" | awk "$awk_script" | split -l 10 -d -a 3 - "${task_file_base}" # Split into files dl_task_000.tmp, dl_task_001.tmp, etc.
+    echo "$download_files_content" | awk "$awk_script" | split -l 10 -d -a 3 - "${task_file_base}"
     if [ $? -ne 0 ]; then
          log "ERROR" "Failed to parse download_files() or create task files."
          rm -f "${task_file_base}"*.tmp "$load_list_file" 2>/dev/null
@@ -2297,7 +2296,7 @@ download_parallel() {
     # Check if any task files were created
     if ! ls "${task_file_base}"*.tmp > /dev/null 2>&1; then
         log "INFO" "No download tasks found."
-        # Check if there are files to load even if no downloads needed (e.g., already cached)
+        # Check if there are files to load even if no downloads needed
          if [ -f "$load_list_file" ]; then
              log "INFO" "Processing files to load..."
              # Proceed to load files section
@@ -2307,18 +2306,13 @@ download_parallel() {
     else
         # --- Start: Existing parallel execution logic (slightly adapted) ---
         log "INFO" "Starting parallel download (Max ${max_jobs} jobs)..."
-        # Find all task files and pass them to xargs
-        # Each line in the task files is a 'download "file" "url" "checksum"' command
         find "$CACHE_DIR" -name 'dl_task_*.tmp' -print0 | \
             xargs -0 -P "$max_jobs" -n 1 sh -c '. "$0"; download "$1" "$2" "$3"' "$0" || exit_code=$?
-        # Note: We source the main script '$0' in the subshell to make the 'download' function available
-        # Arguments are passed positionally: $1=file, $2=url, $3=checksum
 
         # Check exit code from xargs
         if [ "$exit_code" -ne 0 ]; then
             log "ERROR" "One or more downloads failed. Check logs above."
-            # Clean up temporary files even on failure
-            rm -f "${task_file_base}"*.tmp # Keep load_list_file for potential partial loading or debugging? Or remove? Let's remove for now.
+            rm -f "${task_file_base}"*.tmp # Keep load_list_file on failure? Removing for now.
             # rm -f "$load_list_file"
             return 1
         else
@@ -2333,21 +2327,20 @@ download_parallel() {
     if [ -f "$load_list_file" ]; then
         log "INFO" "Loading specified files..."
         while IFS= read -r file_to_load; do
-            local full_path="${SCRIPT_DIR}/${file_to_load}"
-             # Check if the downloaded file actually exists before sourcing
+            # Corrected: Use DL_DIR as base for loaded files as well? Assuming yes for consistency.
+            # If loaded files are elsewhere (e.g., SCRIPT_DIR), adjust this path.
+            # Using DL_DIR for now based on the context.
+            local full_path="${DL_DIR}/${file_to_load}"
              if [ -f "$full_path" ]; then
                  log "DEBUG" "Sourcing file: $full_path"
-                 # Source the file in the current shell environment
                  . "$full_path"
                  if [ $? -ne 0 ]; then
                      log "ERROR" "Failed to source file: $full_path"
-                     # Decide if failure to source one file should stop the process
-                     # For now, log error and continue
-                     exit_code=1 # Mark that at least one sourcing failed
+                     exit_code=1
                  fi
              else
                  log "ERROR" "File specified in load list not found: $full_path"
-                 exit_code=1 # Mark that a required file was missing
+                 exit_code=1
              fi
         done < "$load_list_file"
 
@@ -2358,14 +2351,14 @@ download_parallel() {
              log "INFO" "All specified files loaded successfully."
         else
              log "WARN" "Some files specified for loading could not be processed. Check logs above."
-             return $exit_code # Return non-zero if loading had issues
+             return $exit_code
         fi
     else
         log "INFO" "No files specified for loading."
     fi
     # --- End: Added logic for loading files ---
 
-    return 0 # Return success if downloads and loading (if any) were successful
+    return 0
 }
 
 # download_parallel 関数を修正
@@ -2526,14 +2519,16 @@ OK2_download_parallel() {
 
 # Function to download a single file with checksum verification
 # Arguments: $1=filename, $2=url, $3=checksum
-# Note: The "load" argument is no longer processed here.
 download() {
     local file_name="$1"
     local url="$2"
     local expected_checksum="$3"
-    local target_path="${SCRIPT_DIR}/${file_name}"
+    # Corrected: Use DL_DIR for target path as per user context
+    local target_path="${DL_DIR}/${file_name}"
     local current_checksum=""
     local curl_exit_code
+    # Corrected: Define path for version cache file
+    local version_cache_file="${CACHE_DIR}/${file_name}.ver"
 
     # Input validation
     if [ -z "$file_name" ] || [ -z "$url" ] || [ -z "$expected_checksum" ]; then
@@ -2548,16 +2543,20 @@ download() {
         current_checksum=$(sha256sum "$target_path" | cut -d' ' -f1)
         if [ "$current_checksum" = "$expected_checksum" ]; then
             log "INFO_download" "$file_name" "File already exists and checksum matches. Skipping download."
-            # --- Removed version cache update logic here, should be handled elsewhere if needed ---
+            # Corrected: Restore version cache update logic on match
+            log "DEBUG_download" "$file_name" "Updating version cache: $version_cache_file"
+            echo "$expected_checksum" > "$version_cache_file" # Update .ver file
             return 0 # Indicate success (already present)
         else
             log "WARN_download" "$file_name" "File exists but checksum MISMATCH (Expected: $expected_checksum, Found: $current_checksum). Re-downloading."
-            rm -f "$target_path" # Remove corrupted/outdated file
+            rm -f "$target_path" "$version_cache_file" # Remove corrupted/outdated file and its .ver file
         fi
     fi
 
     # Download the file
     log "INFO_download" "$file_name" "Downloading from $url..."
+    # Ensure target directory exists
+    mkdir -p "$(dirname "$target_path")"
     curl -L -s -o "$target_path" "$url"
     curl_exit_code=$?
 
@@ -2571,11 +2570,13 @@ download() {
     current_checksum=$(sha256sum "$target_path" | cut -d' ' -f1)
     if [ "$current_checksum" = "$expected_checksum" ]; then
         log "INFO_download" "$file_name" "Download successful and checksum VERIFIED."
-        # --- Removed version cache update logic here, should be handled elsewhere if needed ---
+        # Corrected: Restore version cache update logic on successful download
+        log "DEBUG_download" "$file_name" "Updating version cache: $version_cache_file"
+        echo "$expected_checksum" > "$version_cache_file" # Create/Update .ver file
         return 0 # Indicate success
     else
         log "ERROR_download" "$file_name" "Checksum verification FAILED after download (Expected: $expected_checksum, Found: $current_checksum)."
-        rm -f "$target_path" # Clean up corrupted file
+        rm -f "$target_path" "$version_cache_file" # Clean up corrupted file and remove potentially incorrect .ver file
         return 1 # Indicate failure
     fi
 }
@@ -3132,169 +3133,6 @@ OK_download_finalize() {
     fi
     
     return 0
-}
-
-# Function to manage the download process including task preparation,
-# parallel download execution, and sourcing necessary files.
-# Returns 0 on success, 1 on failure.
-download_main() {
-    local download_files_content=""
-    local line=""
-    local task_lines=0
-    local task_file_index=0
-    local task_file_base="${DL_TASK_DIR}/dl_task_"
-    local files_to_source=""
-    local current_task_file=""
-    local lines_per_task_file="${MAX_LINES_PER_TASK_FILE:-10}" # Default if not set
-    local max_parallel_tasks="${MAX_PARALLEL_TASKS:-5}" # Default if not set
-    local total_task_files=0
-    local _command=""
-    local _file_name=""
-    local _arg3=""
-    local _arg4=""
-    local file_to_load=""
-    local source_path=""
-    local source_status=0
-    local download_status=0
-
-    debug_log "DEBUG" "Entering download_main function..."
-
-    # --- 1. Parse download_files() from the main script ($0) ---
-    debug_log "DEBUG" "Parsing script file '$0' for download_files() function..."
-    # Extract the download_files function content (POSIX compliant)
-    # Use awk for safer parsing than sed with potentially complex patterns
-    download_files_content=$(awk '/^download_files\(\) \{/,/^\}/ {if (!/^{$|^}$/) print}' "$0")
-    if [ -z "$download_files_content" ]; then
-        debug_log "ERROR" "Could not extract download_files() content from '$0'."
-        return 1
-    fi
-    debug_log "DEBUG" "Extracted download_files content."
-
-    # --- 2. Prepare task files and identify files to source ---
-    debug_log "DEBUG" "Preparing download task files in '$DL_TASK_DIR'..."
-    # Ensure task directory exists
-    if ! mkdir -p "$DL_TASK_DIR"; then
-        debug_log "ERROR" "Failed to create task directory: $DL_TASK_DIR"
-        return 1
-    fi
-    # Clean up previous task files
-    rm -f "${task_file_base}"*.tmp
-    debug_log "DEBUG" "Cleaned up previous task files."
-
-    # Reset counters and lists
-    task_lines=0
-    task_file_index=0
-    files_to_source=""
-
-    # POSIX compliant way to read lines and parse
-    echo "$download_files_content" | while IFS= read -r line; do
-        # Trim leading/trailing whitespace (POSIX compliant)
-        line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-
-        # Skip empty lines and comments
-        [ -z "$line" ] && continue
-        case "$line" in \#*) continue ;; esac
-
-        # Basic check if the line starts with 'download '
-        if echo "$line" | grep -q '^download '; then
-            # Simple word splitting (assumes no spaces within quoted arguments in download_files)
-            set -- $line # Split line into words based on spaces
-            _command="$1" # Should be "download"
-            # Remove quotes using sed (safer than eval)
-            _file_name=$(echo "$2" | sed 's/"//g')
-            _arg3=$(echo "$3" | sed 's/"//g')
-            _arg4=$(echo "$4" | sed 's/"//g')
-
-            # Check if the third or fourth argument is "load"
-            if [ "$_arg3" = "load" ] || [ "$_arg4" = "load" ]; then
-                # Add filename to the list, ensuring leading space for easy iteration later
-                files_to_source="${files_to_source} ${_file_name}"
-                debug_log "DEBUG" "Marked '$_file_name' for sourcing."
-            fi
-
-            # Calculate task file index and write to task file
-            current_task_file=$(printf "%s%03d.tmp" "$task_file_base" $task_file_index)
-            echo "$line" >> "$current_task_file"
-            task_lines=$((task_lines + 1))
-
-            # Rotate task file if max lines per file reached
-            # Ensure lines_per_task_file is defined and greater than 0
-            if [ "$lines_per_task_file" -gt 0 ] && [ $((task_lines % lines_per_task_file)) -eq 0 ]; then
-                task_file_index=$((task_file_index + 1))
-            fi
-        else
-             debug_log "WARN" "Skipping non-download line in download_files(): $line"
-        fi
-    done
-
-    # Calculate total number of task files created
-    if [ "$task_lines" -eq 0 ]; then
-        total_task_files=0
-    elif [ "$lines_per_task_file" -gt 0 ] && [ $((task_lines % lines_per_task_file)) -ne 0 ]; then
-         total_task_files=$((task_file_index + 1))
-    else
-         total_task_files=$task_file_index
-    fi
-
-    # Trim leading space from files_to_source if it exists
-    files_to_source=$(echo "$files_to_source" | sed 's/^ //')
-    debug_log "DEBUG" "Created $total_task_files task files."
-    debug_log "DEBUG" "Files marked for sourcing after download: '$files_to_source'"
-
-    # --- 3. Execute parallel download ---
-    debug_log "DEBUG" "Executing download_parallel with $max_parallel_tasks parallel tasks..."
-    if [ "$total_task_files" -eq 0 ]; then
-        debug_log "INFO" "No download tasks found. Skipping parallel download."
-        download_status=0 # Consider this success as there's nothing to download
-    elif download_parallel "$DL_TASK_DIR" "$max_parallel_tasks"; then
-        debug_log "INFO" "download_parallel completed successfully."
-        download_status=0
-    else
-        debug_log "ERROR" "download_parallel failed."
-        download_status=1
-        # Do not return yet, cleanup might be needed, or partial sourcing desired?
-        # For now, we proceed to sourcing attempt even if download failed,
-        # but sourcing might fail if files are missing.
-        # Let's return immediately on download failure for cleaner logic.
-        return 1
-    fi
-
-    # --- 4. Source files marked with "load" flag ---
-    # Proceed only if download was successful (or skipped)
-    if [ "$download_status" -eq 0 ]; then
-        if [ -n "$files_to_source" ]; then
-            debug_log "DEBUG" "Sourcing files marked with 'load' flag..."
-            # POSIX-compliant loop over space-separated words
-            for file_to_load in $files_to_source; do
-                source_path="${BASE_DIR}/${file_to_load}"
-                if [ -f "$source_path" ]; then
-                    debug_log "DEBUG" "Sourcing: $source_path"
-                    # Execute source in the current shell process
-                    . "$source_path"
-                    source_status=$?
-                    if [ "$source_status" -ne 0 ]; then
-                        debug_log "ERROR" "Failed to source '$source_path'. Status: $source_status"
-                        # If sourcing fails for any file, consider the whole process failed.
-                        return 1
-                    fi
-                else
-                    debug_log "ERROR" "File to source not found after download: $source_path"
-                    # If a required file is missing, it's a failure.
-                    return 1
-                fi
-            done
-            debug_log "DEBUG" "Finished sourcing files."
-        else
-            debug_log "DEBUG" "No files marked with 'load' flag to source."
-        fi
-    else
-        # This part is technically unreachable due to 'return 1' above on download failure
-        debug_log "WARN" "Skipping sourcing due to download failure."
-        return 1 # Ensure failure status is returned
-    fi
-
-    debug_log "DEBUG" "Exiting download_main function successfully."
-    return 0 # Overall success
 }
 
 # 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
