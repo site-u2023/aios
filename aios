@@ -2181,7 +2181,7 @@ download() {
     fi
 
     # 結果表示とファイル読み込み
-    # download_finalize "$file_name" "$status_message" "$clean_remote_version" "$api_status" "$load_mode" "$hidden_mode" "$status_type" "$interpreter_name"
+    download_finalize "$file_name" "$status_message" "$clean_remote_version" "$api_status" "$load_mode" "$hidden_mode" "$status_type" "$interpreter_name"
     
     return 0
 }
