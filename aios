@@ -2206,6 +2206,13 @@ download() {
     return 0
 }
 
+# download_parallel 関数を修正
+# 変更点:
+# 1. MAX_PARALLEL_TASKS の数値チェックを expr から case 文に変更 (POSIX互換性警告対応)
+# 2. バックグラウンド実行のサブシェル内処理を変更:
+#    - タスクファイル内のコマンドを1行ずつ eval で実行
+#    - いずれかのコマンドが失敗したら、サブシェル全体が即座に exit 1 するように変更
+# 3. 成功時のクリーンアップ処理 (rm コマンド) を削除 (「テンプは削除しない」要件対応)
 download_parallel() {
     local total_lines
     local lines_per_task
@@ -2224,10 +2231,20 @@ download_parallel() {
 
     # --- Configuration and Preparation ---
     max_parallel="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
-    if ! expr "$max_parallel" : '^[0-9]*$' > /dev/null || [ "$max_parallel" -le 0 ]; then
-        max_parallel=4
-        debug_log "WARN" "Invalid MAX_PARALLEL_TASKS. Using default: $max_parallel" >&2
-    fi
+    # ▼▼▼ 変更点: expr を case 文に置き換え ▼▼▼
+    case "$max_parallel" in
+        *[!0-9]* | "") # 数字以外が含まれるか、空文字列の場合
+            max_parallel=4
+            debug_log "WARN" "Invalid MAX_PARALLEL_TASKS. Using default: $max_parallel" >&2
+            ;;
+        *) # 数字のみの場合
+            if [ "$max_parallel" -le 0 ]; then
+                max_parallel=4
+                debug_log "WARN" "Invalid MAX_PARALLEL_TASKS (must be > 0). Using default: $max_parallel" >&2
+            fi
+            ;;
+    esac
+    # ▲▲▲ 変更点ここまで ▲▲▲
     debug_log "DEBUG" "Effective max parallel download tasks: $max_parallel"
 
     # Create temporary directory for task *definition* files ($DL_DIR/dl_tmp)
@@ -2245,14 +2262,8 @@ download_parallel() {
            # Continue, but logging might fail
         fi
     fi
-    # ▼▼▼ 変更点: 関数開始時の自動ファイル削除処理を削除 ▼▼▼
-    # # Clean up previous task *definition* files and *log* files (REMOVED as per user request)
-    # rm -f "${task_file_prefix}"*.tmp "$all_tasks_file" 2>/dev/null # REMOVED
-    # rm -f "${log_file_prefix}"*.stdout.log "${log_file_prefix}"*.stderr.log 2>/dev/null # REMOVED
-    # debug_log "DEBUG" "Cleaned up previous task definition files in $tmp_dir and log files in $LOG_DIR" # REMOVED debug log for cleanup
-    debug_log "DEBUG" "Using task definition directory: $tmp_dir" # Added debug log
-    debug_log "DEBUG" "Using log directory: $LOG_DIR" # Added debug log
-    # ▲▲▲ 変更点ここまで ▲▲▲
+    debug_log "DEBUG" "Using task definition directory: $tmp_dir"
+    debug_log "DEBUG" "Using log directory: $LOG_DIR"
 
     # --- Start Spinner ---
     spinner_message="$(get_message 'DOWNLOAD_PARALLEL_START' 'Downloading essential files...')"
@@ -2263,22 +2274,19 @@ download_parallel() {
     if [ ! -f "$script_path" ]; then
         stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Script file not found for parsing.')" "failure"
         debug_log "ERROR" "Script path '$script_path' is not a valid file." >&2
-        # rm -rf "$tmp_dir" 2>/dev/null # Cleanup tmp_dir only if we created it and failed *here*? No, keep it for potential debug.
         return 1
     fi
 
     # POSIX awk compliant extraction
-    # Overwrite the combined task file each time
     if ! cat "$script_path" | awk '
         BEGIN { in_func=0 }
         /^download_files\(\) *\{/ { in_func=1; next }
         /^}/ { if (in_func) { in_func=0 } }
         in_func && !/^[ \t]*$/ && !/^[ \t]*#/ { print }
-    ' > "$all_tasks_file"; then # Overwrite existing file if it exists
+    ' > "$all_tasks_file"; then
         cat_awk_status=$?
         stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed during script parsing.')" "failure"
         debug_log "ERROR" "cat | awk command failed with status $cat_awk_status while parsing '$script_path'." >&2
-        # Keep tmp_dir and potentially broken all_tasks_file for debug
         return 1
     fi
 
@@ -2286,8 +2294,7 @@ download_parallel() {
     if ! [ -s "$all_tasks_file" ]; then
         stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'No download tasks found.')" "success"
         debug_log "INFO" "No executable tasks found in download_files function in '$script_path'." >&2
-        rm -f "$all_tasks_file" # Remove empty combined file
-        # Keep tmp_dir as it might contain old files user wants to see
+        rm -f "$all_tasks_file"
         return 0
     fi
 
@@ -2296,25 +2303,18 @@ download_parallel() {
     if [ "$total_lines" -eq 0 ]; then
          stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'No download tasks to process.')" "success"
          debug_log "INFO" "download_files function is empty after parsing." >&2
-         rm -f "$all_tasks_file" # Remove empty combined file
-         # Keep tmp_dir
+         rm -f "$all_tasks_file"
          return 0
     fi
 
-    # POSIX arithmetic
     lines_per_task=$(( (total_lines + max_parallel - 1) / max_parallel ))
     [ "$lines_per_task" -eq 0 ] && lines_per_task=1
 
     debug_log "DEBUG" "Total tasks: $total_lines, Max parallel: $max_parallel, Lines per task file: $lines_per_task"
 
-    # ▼▼▼ 変更点: 分割前に古いタスクファイルを削除 ▼▼▼
-    # Remove only the specific task files we are about to create/overwrite
-    # This avoids deleting unrelated files if tmp_dir is reused or contains leftovers
     rm -f "${task_file_prefix}"*.tmp 2>/dev/null
     debug_log "DEBUG" "Removed existing task split files (${task_file_prefix}*.tmp) before splitting."
-    # ▲▲▲ 変更点ここまで ▲▲▲
 
-    # Use POSIX awk to split the tasks into multiple files
     if ! awk -v lpt="$lines_per_task" -v prefix="$task_file_prefix" '{
         task_num = int((NR-1)/lpt)
         filename = sprintf("%s%03d.tmp", prefix, task_num)
@@ -2324,20 +2324,17 @@ download_parallel() {
         split_status=$?
         stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed to split tasks into files.')" "failure"
         debug_log "ERROR" "awk splitting command failed with status $split_status." >&2
-        rm -f "$all_tasks_file" # Remove combined file
-        # Keep tmp_dir and potentially partially created task files for debug
+        rm -f "$all_tasks_file"
         return 1
     fi
-    rm -f "$all_tasks_file" # Remove the combined task file now that splitting is done
+    rm -f "$all_tasks_file"
 
     task_count=$(find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" 2>/dev/null | wc -l)
     debug_log "DEBUG" "Created/updated $task_count task files in $tmp_dir."
 
     if [ "$task_count" -eq 0 ]; then
-        # This case should ideally not happen if total_lines > 0, but handle defensively
         stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed to split tasks (no files created).')" "failure"
         debug_log "ERROR" "Failed to create task files after splitting, although tasks were found." >&2
-        # Keep tmp_dir
         return 1
     fi
 
@@ -2350,14 +2347,31 @@ download_parallel() {
         stdout_log="${log_file_prefix}${task_base_name}.stdout.log"
         stderr_log="${log_file_prefix}${task_base_name}.stderr.log"
         debug_log "DEBUG" "Starting task file: $task_file (stdout: $stdout_log, stderr: $stderr_log)"
-        # Overwrite existing log files for this specific task run
+        # ▼▼▼ 変更点: バックグラウンド実行のサブシェル内処理を変更 ▼▼▼
         (
-            if . "$task_file"; then
-                exit 0
-            else
-                exit 1
-            fi
-        ) > "$stdout_log" 2> "$stderr_log" & # Overwrite logs for this run
+            # タスクファイル内の各行を読み込んで実行
+            while IFS= read -r command_line || [ -n "$command_line" ]; do
+                # 空行やコメント行をスキップ
+                case "$command_line" in
+                    "" | \#*) continue ;;
+                esac
+
+                # デバッグログ（実行するコマンド）
+                debug_log "DEBUG" "Executing command from task file '$task_file': $command_line"
+
+                # コマンドを実行し、失敗したら即座に exit 1
+                # 注意: eval はセキュリティリスクを含む可能性があるが、
+                # download_files() から抽出した信頼できるコマンドのみを想定
+                if ! eval "$command_line"; then
+                    eval_status=$?
+                    debug_log "ERROR" "Command failed with status $eval_status in task file '$task_file': $command_line" >&2
+                    exit 1 # サブシェルを失敗ステータスで終了
+                fi
+            done < "$task_file"
+            # すべてのコマンドが成功したら exit 0
+            exit 0
+        ) > "$stdout_log" 2> "$stderr_log" & # 標準出力・エラーをログファイルへ上書き
+        # ▲▲▲ 変更点ここまで ▲▲▲
         pid=$!
         pids="$pids $pid"
         job_index=$((job_index + 1))
@@ -2370,21 +2384,16 @@ download_parallel() {
              if [ -n "$first_pid_in_batch" ]; then
                  if wait "$first_pid_in_batch"; then
                      debug_log "DEBUG" "PID $first_pid_in_batch finished successfully. Continuing..."
-                     # ▼▼▼ 変更点: 成功時に対応するログファイルを削除 ▼▼▼
-                     # Find the logs associated with the completed PID - this is tricky, need task_base_name
-                     # Let's postpone log deletion until the very end if all successful
-                     # rm -f "${log_file_prefix}*_$first_pid_in_batch.stdout.log" "${log_file_prefix}*_$first_pid_in_batch.stderr.log" 2>/dev/null
-                     # ▲▲▲ 変更点ここまで ▲▲▲
                  else
                      proc_status=$?
                      debug_log "ERROR" "Background task (PID $first_pid_in_batch) failed with status $proc_status. Check corresponding stderr log in $LOG_DIR for details." >&2
-                     overall_status=1
+                     overall_status=1 # いずれか一つでも失敗したら全体を失敗とする
                  fi
                  pids=$(echo "$pids" | sed "s/^$first_pid_in_batch //; s/ $first_pid_in_batch / /; s/ $first_pid_in_batch$//")
                  job_index=$((job_index - 1))
              else
                  debug_log "WARN" "Could not determine first PID to wait for."
-                 sleep 1
+                 sleep 1 # 念のため少し待つ
              fi
         fi
     done # End of loop for task files
@@ -2392,37 +2401,41 @@ download_parallel() {
     # --- Wait for All Remaining Jobs ---
     debug_log "DEBUG" "Waiting for remaining background jobs: [$pids]"
     for pid in $pids; do
-        if expr "$pid" : '^[0-9]*$' > /dev/null && [ "$pid" -gt 0 ]; then
-            if wait "$pid"; then
-                debug_log "DEBUG" "PID $pid finished successfully."
-                # Postpone log deletion
-            else
-                proc_status=$?
-                debug_log "ERROR" "Background task (PID $pid) failed with status $proc_status. Check corresponding stderr log in $LOG_DIR for details." >&2
-                overall_status=1
-            fi
+        # PIDが数字であり、かつ0より大きいかチェック (より堅牢に)
+        case "$pid" in
+            *[!0-9]* | "" | 0) continue ;; # 数字以外、空、0はスキップ
+        esac
+        if wait "$pid"; then
+            debug_log "DEBUG" "PID $pid finished successfully."
+        else
+            proc_status=$?
+            debug_log "ERROR" "Background task (PID $pid) failed with status $proc_status. Check corresponding stderr log in $LOG_DIR for details." >&2
+            overall_status=1 # いずれか一つでも失敗したら全体を失敗とする
         fi
     done
 
-    # --- Cleanup and Final Status ---
+    # --- Final Status (Cleanup removed) ---
+    # ▼▼▼ 変更点: 成功時のクリーンアップ処理 (rm) を削除 ▼▼▼
     if [ $overall_status -eq 0 ]; then
-        debug_log "DEBUG" "All tasks successful. Cleaning up temporary task definitions in $tmp_dir and logs in $LOG_DIR"
-        # ▼▼▼ 変更点: 成功時にタスク定義ファイルとログファイルを削除 ▼▼▼
-        # rm -rf "$tmp_dir" 2>/dev/null # Remove task definition temp dir ($DL_DIR/dl_tmp)
-        # rm -f "${log_file_prefix}"*.stdout.log "${log_file_prefix}"*.stderr.log 2>/dev/null # Remove task logs from $LOG_DIR
-        # ▲▲▲ 変更点ここまで ▲▲▲
+        # debug_log "DEBUG" "All tasks successful. Cleaning up temporary task definitions in $tmp_dir and logs in $LOG_DIR" # 元のログメッセージ削除
+        debug_log "DEBUG" "All tasks successful. Task definitions kept in $tmp_dir, logs kept in $LOG_DIR." # 新しいログメッセージ
+        # rm -rf "$tmp_dir" 2>/dev/null # 削除
+        # rm -f "${log_file_prefix}"*.stdout.log "${log_file_prefix}"*.stderr.log 2>/dev/null # 削除
     else
         debug_log "ERROR" "One or more tasks failed. Task definition files kept in $tmp_dir, logs kept in $LOG_DIR for inspection."
-        # 失敗時は $DL_DIR/dl_tmp と $LOG_DIR のログを削除しない (前回修正通り)
+        # 失敗時は元々削除しないので変更なし
         debug_log "ERROR" "Task definition files are in $tmp_dir"
         debug_log "ERROR" "Task logs are in $LOG_DIR"
     fi
+    # ▲▲▲ 変更点ここまで ▲▲▲
 
+    # 最終的なステータス表示
     if [ $overall_status -eq 0 ]; then
         success_message="$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'Essential files downloaded successfully.')"
         stop_spinner "$success_message" "success"
         return 0
     else
+        # 失敗メッセージにログとタスク定義の場所を含める (元々含まれていたが念のため確認)
         failure_message="$(get_message 'DOWNLOAD_PARALLEL_FAILED' "Errors occurred during parallel download. Check logs in $LOG_DIR and task files in $tmp_dir")"
         stop_spinner "$failure_message" "failure"
         return 1
