@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.26-01-03"
+SCRIPT_VERSION="2025.04.26-02-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -1047,80 +1047,90 @@ get_github_token() {
 
 # save_version_to_cache 関数を修正
 # 変更点:
-# 1. mv 直前のデバッグ方法を変更: ls の結果を変数に格納し、debug_log 関数で出力
+# 1. mkdir を利用したディレクトリロック機構を追加
+# 2. ロック取得失敗時は警告ログを出力し、更新をスキップ (戻り値 0)
+# 3. ロック取得成功時は、処理完了後またはエラー発生時に rmdir でロックを解放
+# (mv 直前のデバッグ用 ls は削除)
 save_version_to_cache() {
     local file_name="$1"
     local version="$2"
     local script_file="$3"
     local tmp_file="${script_file}.tmp.$$" # プロセス固有の一時ファイル名
+    local lock_dir="${script_file}.lock"  # ロック用ディレクトリパス
+    local lock_acquired=0                 # ロック取得フラグ (0: 未取得, 1: 取得済)
 
-    debug_log "DEBUG" "save_version_to_cache: Called for file='$file_name', version='$version', script_file='$script_file', tmp_file='$tmp_file'"
+    debug_log "DEBUG" "save_version_to_cache: Called for file='$file_name', version='$version', script_file='$script_file', tmp_file='$tmp_file', lock_dir='$lock_dir'"
 
     if [ -z "$version" ]; then
         debug_log "DEBUG" "save_version_to_cache: Received empty version for file '$file_name'. Aborting cache save."
-        return 1
+        return 1 # バージョンが空なら失敗
     fi
+
+    # --- ロック取得試行 ---
+    if mkdir "$lock_dir" 2>/dev/null; then
+        lock_acquired=1
+        debug_log "DEBUG" "save_version_to_cache: Lock acquired: $lock_dir"
+    else
+        debug_log "WARN" "save_version_to_cache: Could not acquire lock '$lock_dir', another process might be updating. Skipping cache update for '$file_name'."
+        return 0 # ロック失敗は致命的エラーではないため成功として扱う (更新スキップ)
+    fi
+
+    # --- クリティカルセクション (ロック取得時のみ実行) ---
+    local return_status=0 # このセクション内での処理ステータス
 
     # script_file が存在する場合の処理
     if [ -f "$script_file" ]; then
-        debug_log "DEBUG" "save_version_to_cache: File '$script_file' exists. Filtering existing entry for '$file_name'."
+        debug_log "DEBUG" "save_version_to_cache [Lock acquired]: File '$script_file' exists. Filtering existing entry for '$file_name'."
         if grep -v "^${file_name}=" "$script_file" > "$tmp_file"; then
-            debug_log "DEBUG" "save_version_to_cache: Successfully filtered '$script_file' to '$tmp_file'."
+            debug_log "DEBUG" "save_version_to_cache [Lock acquired]: Successfully filtered '$script_file' to '$tmp_file'."
         else
             local grep_status=$?
-            debug_log "DEBUG" "save_version_to_cache: grep command failed with status $grep_status for '$script_file'."
-            return 1
+            debug_log "ERROR" "save_version_to_cache [Lock acquired]: grep command failed with status $grep_status for '$script_file'."
+            return_status=1 # 失敗ステータスを設定
         fi
 
-        debug_log "DEBUG" "save_version_to_cache: Appending new version '$version' for '$file_name' to '$tmp_file'."
-        echo "${file_name}=${version}" >> "$tmp_file"
+        if [ "$return_status" -eq 0 ]; then
+            debug_log "DEBUG" "save_version_to_cache [Lock acquired]: Appending new version '$version' for '$file_name' to '$tmp_file'."
+            echo "${file_name}=${version}" >> "$tmp_file"
 
-        debug_log "DEBUG" "save_version_to_cache: Content of '$tmp_file' before move:"
-        while IFS= read -r line || [ -n "$line" ]; do
-             debug_log "DEBUG" "  | $line"
-        done < "$tmp_file"
+            # ▼▼▼ 注意: mv 直前のデバッグ用 ls は削除しました ▼▼▼
+            # debug_log "DEBUG" "save_version_to_cache: Checking existence..."
+            # ... (削除された ls コマンド) ...
 
-        # ▼▼▼ 変更点: mv の直前のデバッグ方法を変更 ▼▼▼
-        debug_log "DEBUG" "save_version_to_cache: Checking existence and permissions before move:"
-        # 移動元ファイルの情報を取得してログ出力
-        local ls_tmp_output
-        local ls_tmp_status
-        ls_tmp_output=$(ls -al "$tmp_file" 2>&1) # 標準出力とエラーを変数に格納
-        ls_tmp_status=$?                       # ls コマンドの終了ステータス
-        debug_log "DEBUG" "save_version_to_cache: ls -al tmp_file (status: $ls_tmp_status): $ls_tmp_output"
-
-        # 移動先ディレクトリの情報を取得してログ出力
-        local ls_dir_output
-        local ls_dir_status
-        local script_dir
-        script_dir=$(dirname "$script_file")
-        ls_dir_output=$(ls -al "$script_dir" 2>&1) # 標準出力とエラーを変数に格納
-        ls_dir_status=$?                        # ls コマンドの終了ステータス
-        debug_log "DEBUG" "save_version_to_cache: ls -al script_dir (status: $ls_dir_status): $ls_dir_output"
-        # ▲▲▲ 変更点ここまで ▲▲▲
-
-        # mv の実行と結果確認
-        if mv "$tmp_file" "$script_file"; then
-            debug_log "DEBUG" "save_version_to_cache: Successfully moved '$tmp_file' to '$script_file'."
-        else
-            local mv_status=$?
-            debug_log "DEBUG" "save_version_to_cache: mv command failed with status $mv_status. Failed to update '$script_file'."
-            # mv失敗時も一時ファイルは削除しない (以前の修正通り)
-            return 1
+            # mv の実行と結果確認
+            if mv "$tmp_file" "$script_file"; then
+                debug_log "DEBUG" "save_version_to_cache [Lock acquired]: Successfully moved '$tmp_file' to '$script_file'."
+            else
+                local mv_status=$?
+                debug_log "ERROR" "save_version_to_cache [Lock acquired]: mv command failed with status $mv_status. Failed to update '$script_file'."
+                # mv 失敗時も一時ファイルは削除しない
+                return_status=1 # 失敗ステータスを設定
+            fi
         fi
     else
-        # script_file が存在しない場合の処理 (変更なし)
-        debug_log "DEBUG" "save_version_to_cache: File '$script_file' does not exist. Creating new file."
+        # script_file が存在しない場合の処理
+        debug_log "DEBUG" "save_version_to_cache [Lock acquired]: File '$script_file' does not exist. Creating new file."
         if echo "${file_name}=${version}" > "$script_file"; then
-             debug_log "DEBUG" "save_version_to_cache: Successfully created '$script_file' with initial version."
+             debug_log "DEBUG" "save_version_to_cache [Lock acquired]: Successfully created '$script_file' with initial version."
         else
              local echo_status=$?
-             debug_log "DEBUG" "save_version_to_cache: echo command failed with status $echo_status. Failed to create '$script_file'."
-             return 1
+             debug_log "ERROR" "save_version_to_cache [Lock acquired]: echo command failed with status $echo_status. Failed to create '$script_file'."
+             return_status=1 # 失敗ステータスを設定
         fi
     fi
 
-    return 0 # 成功
+    # --- ロック解放 ---
+    if [ "$lock_acquired" -eq 1 ]; then
+        if rmdir "$lock_dir"; then
+            debug_log "DEBUG" "save_version_to_cache: Lock released: $lock_dir"
+        else
+            # 通常ここには来ないはずだが、念のため
+            debug_log "ERROR" "save_version_to_cache: Failed to release lock '$lock_dir'. Manual cleanup might be needed."
+            # ロック解除失敗は関数の成否には影響させない
+        fi
+    fi
+
+    return $return_status
 }
 
 # トークンセットアップ関数の改善版
@@ -2097,114 +2107,116 @@ get_commit_version() {
     return 1
 }
 
+# download 関数を修正
+# 変更点:
+# 1. download_fetch_file 後の各ステップ (chmod, save_version_to_cache, .) の終了ステータスをチェック
+# 2. いずれかのステップで失敗した場合、具体的なエラーログを出力し、return 1 するように変更
 download() {
-    # ファイル名を最初の引数として処理
     local file_name="$1"
-    shift
+    local chmod_flag="$2" # "chmod" or ""
+    local load_flag="$3"  # "load" or ""
+    local force_refresh="${4:-}" # "force" or "" (optional, used by get_commit_version)
 
-    # 空ファイル名のチェック
-    if [ -z "$file_name" ]; then
-        return 1
+    local remote_version local_version download_url file_path save_path
+    local dl_method skip_cache_flag
+
+    # Use global settings or defaults
+    dl_method="${DOWNLOAD_METHOD:-api}"
+    skip_cache_flag="${SKIP_CACHE:-false}"
+
+    debug_log "DEBUG" "download: Starting for '$file_name', chmod='$chmod_flag', load='$load_flag', force='$force_refresh', method='$dl_method', skip_cache='$skip_cache_flag'"
+
+    # 1. Get Remote and Local Version Info
+    remote_version=$(get_commit_version "$file_name" "$force_refresh" "$dl_method" "$skip_cache_flag")
+    local get_version_status=$?
+    if [ "$get_version_status" -ne 0 ] || [ -z "$remote_version" ]; then
+        debug_log "ERROR" "download: Failed to get remote version for '$file_name'. Status: $get_version_status, Version: '$remote_version'"
+        return 1 # Exit if version check fails
     fi
 
-    # --- オプションと設定変数の初期化 ---
-    local hidden_mode="false"
-    local quiet_mode="${QUIET_MODE:-false}"
-    local chmod_mode="false"
-    local load_mode="false"
-    local interpreter_name=""
-    local interpreter_option=""
+    file_path="${DL_DIR}/${file_name}"
+    local_version=$(get_local_version "$file_name" "$file_path")
 
-    # --- オプション引数の処理 ---
-    local args_copy=""
-    local opt
-    for opt in "$@"; do args_copy="$args_copy \"$opt\""; done
-    eval "set -- $args_copy"
+    debug_log "DEBUG" "download: Remote version: $file_name - $remote_version"
+    debug_log "DEBUG" "download: Local version: $file_name - $local_version"
 
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            hidden) hidden_mode="true" ;;
-            quiet)  quiet_mode="true"; hidden_mode="true" ;;
-            chmod)  chmod_mode="true" ;;
-            load)   load_mode="true" ;;
-            bash|python|node|perl) interpreter_option="$1" ;;
-            python3) interpreter_option="python" ;;
-            *) : ;;
-        esac
-        shift
-    done
-
-    # --- Process interpreter ONLY if load_mode is true ---
-    if [ "$load_mode" = "true" ]; then
-        interpreter_name="${interpreter_option:-ash}"
-        if [ "$interpreter_name" != "ash" ]; then
-            chmod_mode="true"
-        fi
-    fi
-
-    local file_path="${DL_DIR}/${file_name}" # Define full path using DL_DIR
-
-    # --- バージョン情報取得 ---
-    local version_data
-    version_data=$(download_check_version "$file_name" "$hidden_mode" "$quiet_mode")
-
-    local update_required=$(echo "$version_data" | cut -d'|' -f1)
-    local clean_remote_version=$(echo "$version_data" | cut -d'|' -f2)
-    # local clean_local_version=$(echo "$version_data" | cut -d'|' -f3) # Unused
-    # local api_status=$(echo "$version_data" | cut -d'|' -f4)       # Unused
-
-    # --- ファイル存在確認 ---
-    local file_exists="true"
-    if [ ! -f "$file_path" ] || [ ! -s "$file_path" ]; then
-        file_exists="false"
-        update_required="true"
-    fi
-
-    # --- ファイルダウンロード処理 ---
-    local download_status=0
-    if [ "$update_required" = "true" ]; then
-        # download_fetch_file が DL_DIR を基準に動作すると想定
-        if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode" "$hidden_mode" "$quiet_mode"; then
-            download_status=1
-        else
-            if [ ! -f "$file_path" ] || [ ! -s "$file_path" ]; then
-                 download_status=1
+    # 2. Check if Download is Needed
+    if [ "$remote_version" = "$local_version" ] && [ "$force_refresh" != "force" ] && [ -f "$file_path" ]; then
+        debug_log "INFO" "download: Local version of '$file_name' is up-to-date ($local_version). Skipping download."
+        # If load flag is set, still try to load the existing file
+        if [ "$load_flag" = "load" ]; then
+            if [ -f "$file_path" ]; then
+                debug_log "DEBUG" "download: Loading existing up-to-date file: $file_path"
+                # ▼▼▼ 変更点: . コマンドの終了ステータスをチェック ▼▼▼
+                if . "$file_path"; then
+                    debug_log "DEBUG" "download: Successfully loaded existing file '$file_path'."
+                else
+                    local load_status=$?
+                    debug_log "ERROR" "download: Failed to load existing file '$file_path'. Status: $load_status"
+                    return 1 # load失敗時はエラーとする
+                fi
+                # ▲▲▲ 変更点ここまで ▲▲▲
+            else
+                # This case should ideally not happen if version matches and file exists check passed earlier
+                debug_log "WARN" "download: File '$file_path' not found for loading despite version match."
+                return 1 # Treat as error if file expected but not found
             fi
         fi
+        return 0 # Up-to-date, no download needed (or load succeeded/not requested)
     fi
 
-    # --- ロード処理 ---
-    if [ "$download_status" -eq 0 ] && [ "$load_mode" = "true" ]; then
-        if [ ! -f "$file_path" ] || [ ! -s "$file_path" ]; then
-            return 1
-        fi
+    # 3. Download File
+    # Display API rate limit info before download attempt
+    display_api_status "(Auth method from get_commit_version: $AUTH_METHOD_USED)" # Display status with source
 
-        if [ "$chmod_mode" = "true" ] || { [ -n "$interpreter_name" ] && [ "$interpreter_name" != "ash" ]; }; then
-             if ! chmod +x "$file_path"; then
-                 : # Continue attempt even if chmod fails
+    save_path="$file_path" # Default save path
+    if ! download_fetch_file "$file_name" "$save_path"; then
+        debug_log "ERROR" "download: download_fetch_file failed for '$file_name'."
+        return 1 # Exit if download fails
+    fi
+
+    # 4. Post-Download Actions
+    # ▼▼▼ 変更点: chmod, save_version_to_cache, load のステータスチェックを追加 ▼▼▼
+    if [ "$chmod_flag" = "chmod" ]; then
+        if chmod +x "$save_path"; then
+            debug_log "DEBUG" "download: chmod +x applied to $file_name"
+        else
+            local chmod_status=$?
+            debug_log "ERROR" "download: Failed to apply chmod +x to '$save_path'. Status: $chmod_status"
+            return 1 # chmod 失敗時はエラー
+        fi
+    fi
+
+    # Save version only if remote_version is not empty (get_commit_version succeeded)
+    if [ -n "$remote_version" ]; then
+        if save_version_to_cache "$file_name" "$remote_version" "${CACHE_DIR}/script.ch"; then
+             debug_log "DEBUG" "download: Version saved to cache for '$file_name'."
+        else
+             local save_cache_status=$?
+             # Lock取得失敗(status 0)はエラー扱いしないが、それ以外の失敗(status 1)はエラー
+             if [ "$save_cache_status" -ne 0 ]; then
+                 debug_log "ERROR" "download: save_version_to_cache failed for '$file_name' with status $save_cache_status."
+                 return 1 # save_version_to_cache の致命的エラー時はエラー
+             else
+                 # Lock取得失敗(status 0)の場合は警告ログが save_version_to_cache 内で出力される
+                 debug_log "DEBUG" "download: save_version_to_cache skipped for '$file_name' due to lock contention (status $save_cache_status)."
              fi
         fi
-
-        if [ "$interpreter_name" = "ash" ]; then
-            if ! . "$file_path"; then
-                return 1
-            fi
-        else
-             if ! command -v "$interpreter_name" > /dev/null 2>&1; then
-                 if ! install_package "$interpreter_name" yn hidden; then
-                      return 1
-                 fi
-             fi
-            if ! "$interpreter_name" "$file_path"; then
-                return 1
-            fi
-        fi
-    elif [ "$download_status" -ne 0 ]; then
-         return 1
     fi
 
-    # Success
-    return 0
+    if [ "$load_flag" = "load" ]; then
+        debug_log "DEBUG" "download: Loading downloaded file: $save_path"
+        if . "$save_path"; then
+             debug_log "DEBUG" "download: Successfully loaded downloaded file '$save_path'."
+        else
+             local load_status=$?
+             debug_log "ERROR" "download: Failed to load downloaded file '$save_path'. Status: $load_status"
+             return 1 # load失敗時はエラー
+        fi
+    fi
+    # ▲▲▲ 変更点ここまで ▲▲▲
+
+    return 0 # All steps successful
 }
 
 # download_parallel 関数を修正
