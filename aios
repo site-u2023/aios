@@ -2160,7 +2160,7 @@ download() {
     
     # ファイルダウンロード処理
     local status_type="no_update"
-    local status_message="$(get_message "CONFIG_DOWNLOAD_UNNECESSARY")"
+    # local status_message="$(get_message "CONFIG_DOWNLOAD_UNNECESSARY")"
     
     if [ "$update_required" = "true" ] || [ "$file_exists" = "false" ]; then
         if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode"; then
