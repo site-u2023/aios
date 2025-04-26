@@ -2195,78 +2195,63 @@ OK_save_version_to_cache() {
 # Takes the number of parallel jobs as the first argument
 download_parallel() {
     local max_jobs=${1:-4} # Default to 4 parallel jobs if not specified
-    local task_file_base="${CACHE_DIR}/dl_task_"
-    # Corrected: Use DL_DIR for load list file as per user instruction
+    # Corrected: Use a single task file, no split command needed
+    local task_file="${CACHE_DIR}/dl_tasks.tmp"
     local load_list_file="${DL_DIR}/load_files.list"
     local awk_script
     local download_files_content
     local exit_code=0
 
-    # --- Start: Added logic for parsing download_files() and creating tasks/load_list ---
+    # --- Start: Parsing logic (split command removed) ---
     # Clear previous temporary files
-    rm -f "${task_file_base}"*.tmp "$load_list_file" 2>/dev/null
+    rm -f "$task_file" "$load_list_file" 2>/dev/null
 
     # Define awk script to parse download_files()
     # - Extracts download commands
     # - Separates commands with "load" flag into load_list_file (filename only)
-    # - Writes other download commands (without "load") to stdout for task splitting
+    # - Writes other download commands (without "load") to the single task_file
     awk_script='
     /^[[:space:]]*download[[:space:]]+/{
         # Extract arguments, handling quotes carefully
-        # This is a simplified parser; assumes well-formed commands
         gsub(/^[[:space:]]*download[[:space:]]+/, "")
         file=""
         url=""
         csum=""
         load_flag=0
-        n=split($0, args, /[[:space:]]+/) # Simple split, may fail with quoted spaces
-
-        # Heuristic to find filename (usually first arg) and load flag (usually last)
-        if (n >= 1) file = args[1] # Assuming first arg is filename
-        if (n >= 2) url = args[2] # Assuming second is URL (might not always be true)
-        if (n >= 3) csum = args[3] # Assuming third is checksum (might not always be true)
-        if (args[n] == "\"load\"" || args[n] == "load") { # Check last argument for load flag
-             load_flag=1
-        }
-
-        # Refine extraction if possible (example using pattern matching)
-        # Match "file" "url" "checksum" ["load"] pattern
+        # Simplified parsing logic (assumes "file" "url" "checksum" ["load"] format)
         if (match($0, /"([^"]+)"[[:space:]]+"([^"]+)"[[:space:]]+"([^"]+)"([[:space:]]+"load")?/)) {
-             # Extract file from first quotes, remove quotes
+             # Extract file, URL, checksum, removing quotes
              match($0, /"([^"]+)"/)
              file = substr($0, RSTART + 1, RLENGTH - 2)
-
-             # Extract URL from second quotes, remove quotes
-             url_start = RSTART + RLENGTH + 1 # Position after space after file
-             match(substr($0, url_start), /"([^"]+)"/) # Match URL
+             url_start = RSTART + RLENGTH + 1
+             match(substr($0, url_start), /"([^"]+)"/)
              url = substr(substr($0, url_start), RSTART + 1, RLENGTH - 2)
-
-             # Extract checksum from third quotes, remove quotes
-             csum_start = url_start + RSTART + RLENGTH + 1 # Position after space after URL
-             match(substr($0, csum_start), /"([^"]+)"/) # Match checksum
+             csum_start = url_start + RSTART + RLENGTH + 1
+             match(substr($0, csum_start), /"([^"]+)"/)
              csum = substr(substr($0, csum_start), RSTART + 1, RLENGTH - 2)
-
-             # Check for "load" flag after checksum
              load_flag_start = csum_start + RSTART + RLENGTH
              if (match(substr($0, load_flag_start), /[[:space:]]+"load"/)) {
                   load_flag=1
              } else {
                   load_flag=0
              }
+        } else {
+             # Fallback for potentially different formats (less robust)
+             n=split($0, args, /[[:space:]]+/)
+             if (n >= 1) file = args[1]; gsub(/^"|"$/, "", file)
+             if (n >= 2) url = args[2]; gsub(/^"|"$/, "", url)
+             if (n >= 3) csum = args[3]; gsub(/^"|"$/, "", csum)
+             if ( (args[n] == "\"load\"") || (args[n] == "load") ) { load_flag=1 }
         }
 
-
         if (load_flag == 1 && file != "") {
-            # Add filename to load list (Corrected path)
+            # Add filename to load list
             print file >> "'"$load_list_file"'"
-            # Output the download command *without* the load flag for the task file
-            # Ensure proper quoting for the download command arguments
-             printf "download \"%s\" \"%s\" \"%s\"\n", file, url, csum
-
+            # Output the download command *without* load flag to the task file
+            printf "download \"%s\" \"%s\" \"%s\"\n", file, url, csum >> "'"$task_file"'"
         } else if (file != "") {
-            # Output the download command as is for the task file
-            # Ensure proper quoting for the download command arguments
-             printf "download \"%s\" \"%s\" \"%s\"\n", file, url, csum
+            # Output the download command as is to the task file
+            printf "download \"%s\" \"%s\" \"%s\"\n", file, url, csum >> "'"$task_file"'"
         }
     }
     '
@@ -2284,52 +2269,58 @@ download_parallel() {
         return 1
     fi
 
-    # Parse the extracted content and generate task files
-    echo "$download_files_content" | awk "$awk_script" | split -l 10 -d -a 3 - "${task_file_base}"
+    # Parse the extracted content and generate the single task file and load list
+    echo "$download_files_content" | awk "$awk_script"
+    # Corrected: Error check for awk execution (though awk errors might not set $? reliably in all shells)
     if [ $? -ne 0 ]; then
-         log "ERROR" "Failed to parse download_files() or create task files."
-         rm -f "${task_file_base}"*.tmp "$load_list_file" 2>/dev/null
+         log "ERROR" "Failed to parse download_files() or create task/load files using awk."
+         rm -f "$task_file" "$load_list_file" 2>/dev/null
          return 1
     fi
-    # --- End: Added logic ---
+    # --- End: Parsing logic ---
 
-    # Check if any task files were created
-    if ! ls "${task_file_base}"*.tmp > /dev/null 2>&1; then
-        log "INFO" "No download tasks found."
+    # Check if the task file was created and is not empty
+    if [ ! -s "$task_file" ]; then
+        log "INFO" "No download tasks found in $task_file."
         # Check if there are files to load even if no downloads needed
          if [ -f "$load_list_file" ]; then
              log "INFO" "Processing files to load..."
              # Proceed to load files section
          else
+             rm -f "$task_file" # Remove empty task file
             return 0 # Nothing to download or load
          fi
     else
-        # --- Start: Existing parallel execution logic (slightly adapted) ---
-        log "INFO" "Starting parallel download (Max ${max_jobs} jobs)..."
-        find "$CACHE_DIR" -name 'dl_task_*.tmp' -print0 | \
-            xargs -0 -P "$max_jobs" -n 1 sh -c '. "$0"; download "$1" "$2" "$3"' "$0" || exit_code=$?
+        # --- Start: Parallel execution logic (using single task file) ---
+        log "INFO" "Starting parallel download (Max ${max_jobs} jobs) using task file: $task_file"
+        # Read task file line by line and pass to xargs
+        # Each line should be 'download "file" "url" "checksum"'
+        # Using cat and pipe instead of find for a single file
+        # Using sh -c '. "$0"; eval "$1"' to handle quoted arguments correctly in the subshell
+        # eval is used carefully here assuming task_file contains only trusted 'download "arg1" "arg2" "arg3"' lines
+        < "$task_file" xargs -P "$max_jobs" -I {} sh -c '. "$0"; eval "{}"' "$0" || exit_code=$?
+        # xargs -I passes the whole line as a single argument to sh -c
+        # eval "{}" executes the 'download "..." "..." "..."' command within the sourced subshell
 
         # Check exit code from xargs
         if [ "$exit_code" -ne 0 ]; then
-            log "ERROR" "One or more downloads failed. Check logs above."
-            rm -f "${task_file_base}"*.tmp # Keep load_list_file on failure? Removing for now.
+            log "ERROR" "One or more downloads failed (xargs exit code: $exit_code). Check logs above."
+            rm -f "$task_file" # Clean up task file on failure
+            # Keep load_list_file on failure? Removing for now.
             # rm -f "$load_list_file"
             return 1
         else
             log "INFO" "All downloads completed successfully."
-            # Clean up task files after successful download
-            rm -f "${task_file_base}"*.tmp
+            # Clean up task file after successful download
+            rm -f "$task_file"
         fi
-        # --- End: Existing parallel execution logic ---
+        # --- End: Parallel execution logic ---
     fi
 
-    # --- Start: Added logic for loading files ---
+    # --- Start: Loading files logic (unchanged from previous version) ---
     if [ -f "$load_list_file" ]; then
-        log "INFO" "Loading specified files..."
+        log "INFO" "Loading specified files from $load_list_file..."
         while IFS= read -r file_to_load; do
-            # Corrected: Use DL_DIR as base for loaded files as well? Assuming yes for consistency.
-            # If loaded files are elsewhere (e.g., SCRIPT_DIR), adjust this path.
-            # Using DL_DIR for now based on the context.
             local full_path="${DL_DIR}/${file_to_load}"
              if [ -f "$full_path" ]; then
                  log "DEBUG" "Sourcing file: $full_path"
@@ -2356,7 +2347,7 @@ download_parallel() {
     else
         log "INFO" "No files specified for loading."
     fi
-    # --- End: Added logic for loading files ---
+    # --- End: Loading files logic ---
 
     return 0
 }
