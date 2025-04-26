@@ -2901,6 +2901,169 @@ OK_download_finalize() {
     return 0
 }
 
+# Function to manage the download process including task preparation,
+# parallel download execution, and sourcing necessary files.
+# Returns 0 on success, 1 on failure.
+download_main() {
+    local download_files_content=""
+    local line=""
+    local task_lines=0
+    local task_file_index=0
+    local task_file_base="${DL_TASK_DIR}/dl_task_"
+    local files_to_source=""
+    local current_task_file=""
+    local lines_per_task_file="${MAX_LINES_PER_TASK_FILE:-10}" # Default if not set
+    local max_parallel_tasks="${MAX_PARALLEL_TASKS:-5}" # Default if not set
+    local total_task_files=0
+    local _command=""
+    local _file_name=""
+    local _arg3=""
+    local _arg4=""
+    local file_to_load=""
+    local source_path=""
+    local source_status=0
+    local download_status=0
+
+    debug_log "DEBUG" "Entering download_main function..."
+
+    # --- 1. Parse download_files() from the main script ($0) ---
+    debug_log "DEBUG" "Parsing script file '$0' for download_files() function..."
+    # Extract the download_files function content (POSIX compliant)
+    # Use awk for safer parsing than sed with potentially complex patterns
+    download_files_content=$(awk '/^download_files\(\) \{/,/^\}/ {if (!/^{$|^}$/) print}' "$0")
+    if [ -z "$download_files_content" ]; then
+        debug_log "ERROR" "Could not extract download_files() content from '$0'."
+        return 1
+    fi
+    debug_log "DEBUG" "Extracted download_files content."
+
+    # --- 2. Prepare task files and identify files to source ---
+    debug_log "DEBUG" "Preparing download task files in '$DL_TASK_DIR'..."
+    # Ensure task directory exists
+    if ! mkdir -p "$DL_TASK_DIR"; then
+        debug_log "ERROR" "Failed to create task directory: $DL_TASK_DIR"
+        return 1
+    fi
+    # Clean up previous task files
+    rm -f "${task_file_base}"*.tmp
+    debug_log "DEBUG" "Cleaned up previous task files."
+
+    # Reset counters and lists
+    task_lines=0
+    task_file_index=0
+    files_to_source=""
+
+    # POSIX compliant way to read lines and parse
+    echo "$download_files_content" | while IFS= read -r line; do
+        # Trim leading/trailing whitespace (POSIX compliant)
+        line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+        # Skip empty lines and comments
+        [ -z "$line" ] && continue
+        case "$line" in \#*) continue ;; esac
+
+        # Basic check if the line starts with 'download '
+        if echo "$line" | grep -q '^download '; then
+            # Simple word splitting (assumes no spaces within quoted arguments in download_files)
+            set -- $line # Split line into words based on spaces
+            _command="$1" # Should be "download"
+            # Remove quotes using sed (safer than eval)
+            _file_name=$(echo "$2" | sed 's/"//g')
+            _arg3=$(echo "$3" | sed 's/"//g')
+            _arg4=$(echo "$4" | sed 's/"//g')
+
+            # Check if the third or fourth argument is "load"
+            if [ "$_arg3" = "load" ] || [ "$_arg4" = "load" ]; then
+                # Add filename to the list, ensuring leading space for easy iteration later
+                files_to_source="${files_to_source} ${_file_name}"
+                debug_log "DEBUG" "Marked '$_file_name' for sourcing."
+            fi
+
+            # Calculate task file index and write to task file
+            current_task_file=$(printf "%s%03d.tmp" "$task_file_base" $task_file_index)
+            echo "$line" >> "$current_task_file"
+            task_lines=$((task_lines + 1))
+
+            # Rotate task file if max lines per file reached
+            # Ensure lines_per_task_file is defined and greater than 0
+            if [ "$lines_per_task_file" -gt 0 ] && [ $((task_lines % lines_per_task_file)) -eq 0 ]; then
+                task_file_index=$((task_file_index + 1))
+            fi
+        else
+             debug_log "WARN" "Skipping non-download line in download_files(): $line"
+        fi
+    done
+
+    # Calculate total number of task files created
+    if [ "$task_lines" -eq 0 ]; then
+        total_task_files=0
+    elif [ "$lines_per_task_file" -gt 0 ] && [ $((task_lines % lines_per_task_file)) -ne 0 ]; then
+         total_task_files=$((task_file_index + 1))
+    else
+         total_task_files=$task_file_index
+    fi
+
+    # Trim leading space from files_to_source if it exists
+    files_to_source=$(echo "$files_to_source" | sed 's/^ //')
+    debug_log "DEBUG" "Created $total_task_files task files."
+    debug_log "DEBUG" "Files marked for sourcing after download: '$files_to_source'"
+
+    # --- 3. Execute parallel download ---
+    debug_log "DEBUG" "Executing download_parallel with $max_parallel_tasks parallel tasks..."
+    if [ "$total_task_files" -eq 0 ]; then
+        debug_log "INFO" "No download tasks found. Skipping parallel download."
+        download_status=0 # Consider this success as there's nothing to download
+    elif download_parallel "$DL_TASK_DIR" "$max_parallel_tasks"; then
+        debug_log "INFO" "download_parallel completed successfully."
+        download_status=0
+    else
+        debug_log "ERROR" "download_parallel failed."
+        download_status=1
+        # Do not return yet, cleanup might be needed, or partial sourcing desired?
+        # For now, we proceed to sourcing attempt even if download failed,
+        # but sourcing might fail if files are missing.
+        # Let's return immediately on download failure for cleaner logic.
+        return 1
+    fi
+
+    # --- 4. Source files marked with "load" flag ---
+    # Proceed only if download was successful (or skipped)
+    if [ "$download_status" -eq 0 ]; then
+        if [ -n "$files_to_source" ]; then
+            debug_log "DEBUG" "Sourcing files marked with 'load' flag..."
+            # POSIX-compliant loop over space-separated words
+            for file_to_load in $files_to_source; do
+                source_path="${BASE_DIR}/${file_to_load}"
+                if [ -f "$source_path" ]; then
+                    debug_log "DEBUG" "Sourcing: $source_path"
+                    # Execute source in the current shell process
+                    . "$source_path"
+                    source_status=$?
+                    if [ "$source_status" -ne 0 ]; then
+                        debug_log "ERROR" "Failed to source '$source_path'. Status: $source_status"
+                        # If sourcing fails for any file, consider the whole process failed.
+                        return 1
+                    fi
+                else
+                    debug_log "ERROR" "File to source not found after download: $source_path"
+                    # If a required file is missing, it's a failure.
+                    return 1
+                fi
+            done
+            debug_log "DEBUG" "Finished sourcing files."
+        else
+            debug_log "DEBUG" "No files marked with 'load' flag to source."
+        fi
+    else
+        # This part is technically unreachable due to 'return 1' above on download failure
+        debug_log "WARN" "Skipping sourcing due to download failure."
+        return 1 # Ensure failure status is returned
+    fi
+
+    debug_log "DEBUG" "Exiting download_main function successfully."
+    return 0 # Overall success
+}
+
 # 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # 🔵　バナー・デバイス情報　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
@@ -3204,7 +3367,7 @@ check_common() {
             selector "$MAIN_MENU" 
             ;;
         full)
-            download_parallel
+            download_main
             print_banner
             print_information
             information_main
