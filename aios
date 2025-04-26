@@ -3367,7 +3367,7 @@ check_common() {
             selector "$MAIN_MENU" 
             ;;
         full)
-            download_main
+            download_finalize
             print_banner
             print_information
             information_main
