@@ -2143,12 +2143,11 @@ download_parallel() {
     rm -f "$fail_flag_file" "$load_targets_file" 2>/dev/null
 
     # --- スピナー ---
-    spinner_message="Downloading essential files"
-    start_spinner "$(color blue "$(get_message "DOWNLOAD_PARALLEL_START" "$spinner_message")")"
+    start_spinner "$(color blue "$(get_message 'DOWNLOAD_PARALLEL_START')")"
 
     # --- download_files()のコマンド抽出 ---
     debug_log "DEBUG" "Parsing script file '$script_path' for download_files() function..."
-    if [ ! -f "$script_path" ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Script file not found for parsing.')" "failure"; debug_log "DEBUG" "Script path '$script_path' is not found"; return 1; fi
+    if [ ! -f "$script_path" ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"; debug_log "DEBUG" "Script path '$script_path' is not found"; return 1; fi
     # download_files()の各行を抜き出す
     if ! awk '
         BEGIN { in_func=0; }
@@ -2156,19 +2155,19 @@ download_parallel() {
         /^}/ { if(in_func){in_func=0} }
         in_func && !/^[ \t]*$/ && !/^[ \t]*#/ { print }
     ' "$script_path" > "$all_tasks_file"; then
-        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed to extract download_files() commands.')" "failure"
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"
         debug_log "DEBUG" "Failed to extract download_files() commands"
         return 1
     fi
     if ! [ -s "$all_tasks_file" ]; then
-        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'No download tasks found.')" "success"
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')" "success"
         debug_log "DEBUG" "No executable tasks found in download_files function"
         return 0
     fi
 
     # --- コマンド分割＆ロード対象記録（ここを改修） ---
     total_lines=$(wc -l < "$all_tasks_file")
-    [ "$total_lines" -eq 0 ] && stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'No download tasks to process.')" "success" && debug_log "DEBUG" "download_files() is empty" && return 0
+    [ "$total_lines" -eq 0 ] && stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')" "success" && debug_log "DEBUG" "download_files() is empty" && return 0
     lines_per_task=$(( (total_lines + max_parallel - 1) / max_parallel )); [ "$lines_per_task" -eq 0 ] && lines_per_task=1
     debug_log "DEBUG" "Total tasks: $total_lines, Max parallel: $max_parallel, Lines per task file: $lines_per_task"
     rm -f "${task_file_prefix}"*.tmp 2>/dev/null; debug_log "DEBUG" "Removed existing task split files (${task_file_prefix}*.tmp) before splitting."
@@ -2207,7 +2206,7 @@ download_parallel() {
     task_count=$(find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" 2>/dev/null | wc -l)
     debug_log "DEBUG" "Created/updated $task_count task files in $tmp_dir."
     if [ "$task_count" -eq 0 ]; then
-        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed to split tasks (no files created).')" "failure"
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"
         debug_log "DEBUG" "Failed to create task files"
         return 1
     fi
