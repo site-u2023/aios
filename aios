@@ -2265,14 +2265,16 @@ download_parallel() {
         line_index=$((line_index + 1))
     done < "$all_tasks_file"
 
-    # 2. ロード対象ファイル生成（awk/sedなし、シェル組み込みのみ）
+    # 2. ロード対象ファイル生成（インデント無視、POSIXシェル組み込みのみ）
     > "$load_targets_file"
     while IFS= read -r task_line || [ -n "$task_line" ]; do
-        case "$task_line" in
+        # 行頭空白除去
+        trimmed_line=${task_line#"${task_line%%[![:space:]]*}"}
+        case "$trimmed_line" in
             download*)
-                case "$task_line" in
+                case "$trimmed_line" in
                     *'"load"')
-                        set -- $task_line
+                        set -- $trimmed_line
                         load_fname=$2
                         load_fname=${load_fname#\"}
                         load_fname=${load_fname%\"}
