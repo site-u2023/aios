@@ -2224,7 +2224,7 @@ download() {
     fi
 
     # <<< Add: Source the file if load_mode is true after successful download
-    if [ "$load_mode" = "true" ]; then
+    if [ "$load_mode" = "true" ] && [ "$IN_PARALLEL_DOWNLOAD" != "true" ]; then
         if [ -f "$file_path" ]; then
             debug_log "DEBUG" "download: Sourcing downloaded file due to load option: $file_path"
             . "$file_path"
