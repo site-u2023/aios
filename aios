@@ -2269,7 +2269,7 @@ download_parallel() {
     # --- download_files()のコマンド抽出 ---
     debug_log "DEBUG" "Parsing script file '$script_path' for download_files() function..."
     if [ ! -f "$script_path" ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"; debug_log "DEBUG" "Script path '$script_path' is not found"; return 1; fi
-    # download_files()の各行を抜き出す
+    # download_files()の各行を抜き出す (Keep original awk structure)
     if ! awk '
         BEGIN { in_func=0; }
         /^download_files\(\) *\{/ { in_func=1; next }
@@ -2342,6 +2342,64 @@ download_parallel() {
     job_index=0
     export IN_PARALLEL_DOWNLOAD="true"
     export $exported_vars # 他の変数もエクスポート
+
+    # --- ADDED: Define subshell task as a temporary function for ash compatibility ---
+    # This function encapsulates the logic previously run inside the subshell (...)
+    _run_sub_task_internal() {
+        # Arguments passed to the function
+        local _task_file_path="$1"
+        local _stderr_log="$2"
+        local _error_info_file="$3"
+        local _task_base="$4"
+
+        local sub_task_failed=0 # サブタスク失敗フラグ
+        local failed_command="" # Store the failed command line
+        local line_num=0 # Line number counter for debugging
+
+        while IFS= read -r command_line || [ -n "$command_line" ]; do
+            line_num=$((line_num + 1)) # Increment line number
+            case "$command_line" in "" | \#*) continue ;; esac
+
+            local eval_command=$(echo "$command_line" | sed 's/"load"//g')
+            # Add line number to debug log for better tracking
+            debug_log "DEBUG" "[Subshell/Func $$][$_task_base] Line $line_num: Executing: $eval_command"
+
+            eval "$eval_command"
+            local cmd_status=$?
+
+            if [ "$cmd_status" -ne 0 ]; then
+                # Add line number to debug log
+                debug_log "DEBUG" "[Subshell/Func $$][$_task_base] Line $line_num: Command failed with status $cmd_status: $command_line" >&2
+                sub_task_failed=1
+                failed_command="$command_line"
+                break
+            else
+                 # Add line number to debug log
+                debug_log "DEBUG" "[Subshell/Func $$][$_task_base] Line $line_num: Command succeeded: $command_line"
+            fi
+        done < "$_task_file_path"
+
+        # Error reporting logic (same as before, now inside the function)
+        if [ "$sub_task_failed" -eq 1 ]; then
+            debug_log "DEBUG" "[Subshell/Func $$][$_task_base] Task failed. Writing error info to $_error_info_file"
+            local error_detail="Unknown error"
+            if [ -f "$_stderr_log" ] && [ -s "$_stderr_log" ]; then
+                error_detail=$(grep -v '^[[:space:]]*$' "$_stderr_log" | head -n 1)
+                if [ -z "$error_detail" ]; then error_detail=$(head -n 1 "$_stderr_log"); fi
+            else
+                error_detail="No error output captured"
+            fi
+            [ -z "$error_detail" ] && error_detail="See $_stderr_log"
+            { echo "$_task_base"; echo "$error_detail"; } > "$_error_info_file" 2>/dev/null
+            debug_log "DEBUG" "[Subshell/Func $$][$_task_base] Exiting with status 1."
+            exit 1
+        else
+            debug_log "DEBUG" "[Subshell/Func $$][$_task_base] All tasks in $_task_file_path completed successfully. Exiting with status 0."
+            exit 0
+        fi
+    }
+    # --- END ADDED ---
+
     find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" -type f | sort | while IFS= read -r task_file; do # Ensure only files processed
         task_base_name=$(basename "$task_file" .tmp)
         stdout_log="${log_file_prefix}${task_base_name}.stdout.log"
@@ -2350,60 +2408,9 @@ download_parallel() {
         sub_error_info_file="${error_info_file_prefix}${task_base_name}.txt"
         # --- END ADDED ---
         debug_log "DEBUG" "Starting task file: $task_file (stdout: $stdout_log, stderr: $stderr_log)"
-        (
-            # --- ADDED: Receive arguments passed from parent ---
-            # Use different local variable names to avoid potential conflicts
-            local _task_file_path="$1"
-            local _stderr_log="$2"
-            local _error_info_file="$3"
-            local _task_base="$4"
-            # --- END ADDED ---
-            local sub_task_failed=0 # サブタスク失敗フラグ
-            local failed_command="" # Store the failed command line
-            while IFS= read -r command_line || [ -n "$command_line" ]; do # Read from _task_file_path later
-                case "$command_line" in "" | \#*) continue ;; esac
-
-                # loadオプションは無効化
-                local eval_command=$(echo "$command_line" | sed 's/"load"//g')
-                debug_log "DEBUG" "[Subshell $$] Executing: $eval_command" # Keep original log format
-
-                # eval で実行し、その終了ステータスを確認
-                eval "$eval_command"
-                local cmd_status=$?
-
-                if [ "$cmd_status" -ne 0 ]; then
-                    # download コマンド自体が失敗した場合
-                    debug_log "DEBUG" "[Subshell $$] Command failed with status $cmd_status in task file '$task_file': $command_line" >&2 # Keep original log format
-                    sub_task_failed=1
-                    failed_command="$command_line" # Store the command
-                    break # このサブシェルのループを抜ける
-                else
-                    debug_log "DEBUG" "[Subshell $$] Command succeeded for: $command_line" # Keep original log format
-                fi
-            done < "$_task_file_path" # Read from passed path
-
-            # --- ADDED: Write error info to file if a task failed ---
-            if [ "$sub_task_failed" -eq 1 ]; then
-                debug_log "DEBUG" "[Subshell $$][$_task_base] Task failed. Writing error info to $_error_info_file"
-                local error_detail="Unknown error" # Default
-                if [ -f "$_stderr_log" ] && [ -s "$_stderr_log" ]; then
-                    error_detail=$(grep -v '^[[:space:]]*$' "$_stderr_log" | head -n 1)
-                    if [ -z "$error_detail" ]; then error_detail=$(head -n 1 "$_stderr_log"); fi
-                else
-                    error_detail="No error output captured"
-                fi
-                [ -z "$error_detail" ] && error_detail="See $_stderr_log"
-                # Write task name (line 1) and error detail (line 2)
-                { echo "$_task_base"; echo "$error_detail"; } > "$_error_info_file" 2>/dev/null
-                debug_log "DEBUG" "[Subshell $$][$_task_base] Exiting with status 1."
-                exit 1
-            else
-                debug_log "DEBUG" "[Subshell $$] All tasks in $task_file completed successfully. Exiting with status 0." # Keep original message format
-                exit 0
-            fi
-            # --- END ADDED ---
-        # --- MODIFIED: Pass necessary variables as arguments to the subshell ---
-        ) "$task_file" "$stderr_log" "$sub_error_info_file" "$task_base_name" > "$stdout_log" 2> "$stderr_log" &
+        # --- MODIFIED: Call the temporary function in the background instead of using (...) ---
+        # Ensure arguments are properly quoted for safety
+        _run_sub_task_internal "$task_file" "$stderr_log" "$sub_error_info_file" "$task_base_name" > "$stdout_log" 2> "$stderr_log" &
         # --- END MODIFIED ---
         pid=$!
         pids="$pids $pid"
