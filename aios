@@ -2476,8 +2476,11 @@ download_parallel() {
                 case "$command_line" in "" | \#*) continue ;; esac
 
                 local result_line
-                # Execute download, capture its stdout (result line)
-                result_line=$(eval "$(echo "$command_line" | sed 's/"load"//g')")
+                # --- ▼▼▼ 修正: silent オプションを強制的に追加 ▼▼▼ ---
+                # 元のコマンドから "load" を削除し、末尾に "silent" を追加
+                local modified_command_line=$(echo "$command_line" | sed 's/"load"//g')
+                result_line=$(eval "$modified_command_line silent")
+                # --- ▲▲▲ 修正 ここまで ▲▲▲ ---
                 local cmd_status=$?
 
                 # Append result line to shared log file with lock
@@ -2506,6 +2509,7 @@ download_parallel() {
         job_index=$((job_index + 1))
         debug_log "DEBUG" "Background PID $pid started for task file $task_file"
 
+        # --- Job control logic (unchanged) ---
         if [ "$job_index" -ge "$max_parallel" ]; then
              debug_log "DEBUG" "Max parallel tasks ($max_parallel) reached, waiting for one to finish..."
              first_pid_in_batch=$(echo "$pids" | awk '{print $1}')
@@ -2526,7 +2530,7 @@ download_parallel() {
         fi
     done
 
-    # --- 残ジョブ待機 ---
+    # --- 残ジョブ待機 (unchanged) ---
     debug_log "DEBUG" "Waiting for remaining background jobs: [$pids]"
     for pid in $pids; do
         case "$pid" in *[!0-9]* | "" | 0) continue ;; esac
@@ -2539,14 +2543,14 @@ download_parallel() {
         fi
     done
 
-    # --- 失敗判定 ---
+    # --- 失敗判定 (unchanged) ---
     if [ -f "$fail_flag_file" ]; then
         debug_log "DEBUG" "Failure flag file '$fail_flag_file' detected. Setting overall status to failure."
         overall_status=1
         rm -f "$fail_flag_file"
     fi
 
-    # --- DL完了後、ロード対象を親シェルでsource ---
+    # --- DL完了後、ロード対象を親シェルでsource (unchanged) ---
     if [ -f "$load_targets_file" ]; then
         debug_log "DEBUG" "Sourcing load targets from $load_targets_file"
         while IFS= read -r load_file; do
@@ -2563,7 +2567,7 @@ download_parallel() {
         debug_log "DEBUG" "No load targets to source"
     fi
 
-    # --- 結果表示 ---
+    # --- 結果表示 (unchanged) ---
     stop_spinner "" # Stop spinner before displaying results list
     if [ -f "$results_log_file" ]; then
         display_detected_download "$results_log_file"
@@ -2575,16 +2579,13 @@ download_parallel() {
         fi
     fi
 
-    # Final status message based on overall_status
+    # Final status message based on overall_status (unchanged)
     if [ $overall_status -eq 0 ]; then
-        # Success message is now implicitly shown by display_detected_download
         debug_log "DEBUG" "download_parallel finished successfully."
-        # Optionally clean up tmp_dir on success
-        # rm -rf "$tmp_dir"
         return 0
     else
         failure_message="$(get_message 'DOWNLOAD_PARALLEL_FAILED')"
-        printf "%s\n" "$(color red "$failure_message Check logs in $LOG_DIR")" # Simplified error message
+        printf "%s\n" "$(color red "$failure_message Check logs in $LOG_DIR")"
         debug_log "DEBUG" "download_parallel finished with errors."
         return 1
     fi
