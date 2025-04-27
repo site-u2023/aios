@@ -2249,13 +2249,13 @@ download_parallel() {
     local first_error_message=""
     local error_info_file_prefix="${tmp_dir}/error_info_" # Prefix for error info files
     # --- END MODIFIED ---
-    local exported_vars="BASE_DIR CACHE_DIR DL_DIR LOG_DIR DOWNLOAD_METHOD SKIP_CACHE DEBUG_MODE DEFAULT_LANGUAGE BASE_URL GITHUB_TOKEN_FILE COMMIT_CACHE_DIR COMMIT_CACHE_TTL FORCE IN_PARALLEL_DOWNLOA[...]
+    local exported_vars="BASE_DIR CACHE_DIR DL_DIR LOG_DIR DOWNLOAD_METHOD SKIP_CACHE DEBUG_MODE DEFAULT_LANGUAGE BASE_URL GITHUB_TOKEN_FILE COMMIT_CACHE_DIR COMMIT_CACHE_TTL FORCE IN_PARALLEL_DOWNLOAD" # Added IN_PARALLEL_DOWNLOAD
 
     # --- 準備 ---
     max_parallel="${MAX_PARALLEL_TASKS:-1}"
     debug_log "DEBUG" "Effective max parallel download tasks: $max_parallel"
 
-    if ! mkdir -p "$tmp_dir"; then if [ ! -d "$tmp_dir" ]; then debug_log "DEBUG" "Failed to create temporary directory for task definitions: $tmp_dir" >&2; stop_spinner "$(get_message 'DOWNLOAD_PARAL[...]
+    if ! mkdir -p "$tmp_dir"; then if [ ! -d "$tmp_dir" ]; then debug_log "DEBUG" "Failed to create temporary directory for task definitions: $tmp_dir" >&2; stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"; return 1; fi; fi # Error handling improved
     if ! mkdir -p "$LOG_DIR"; then if [ ! -d "$LOG_DIR" ]; then debug_log "DEBUG" "Failed to create log directory: $LOG_DIR" >&2; fi; fi
     debug_log "DEBUG" "Using task definition directory: $tmp_dir"
     debug_log "DEBUG" "Using log directory: $LOG_DIR"
@@ -2268,7 +2268,7 @@ download_parallel() {
 
     # --- download_files()のコマンド抽出 ---
     debug_log "DEBUG" "Parsing script file '$script_path' for download_files() function..."
-    if [ ! -f "$script_path" ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'f=script' 'e=not found')" "failure"; debug_log "DEBUG" "Script path '$script_path' is not found"; return[...]
+    if [ ! -f "$script_path" ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"; debug_log "DEBUG" "Script path '$script_path' is not found"; return 1; fi
     # download_files()の各行を抜き出す
     if ! awk '
         BEGIN { in_func=0; }
