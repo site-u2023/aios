@@ -2143,8 +2143,8 @@ download_parallel() {
     rm -f "$fail_flag_file" "$load_targets_file" 2>/dev/null
 
     # --- スピナー ---
-    spinner_message="$(get_message 'DOWNLOAD_PARALLEL_START' 'Downloading essential files')"
-    start_spinner "$spinner_message"
+    spinner_message="Downloading essential files"
+    start_spinner "$(color blue "$(get_message "DOWNLOAD_PARALLEL_START" "$spinner_message")")"
 
     # --- download_files()のコマンド抽出 ---
     debug_log "DEBUG" "Parsing script file '$script_path' for download_files() function..."
