@@ -3095,20 +3095,20 @@ check_option() {
 }
 
 download_files() {
-    download "common-system.sh" "chmod" "load"
-    download "common-information.sh" "chmod" "load"
-    download "common-translation.sh" "chmod" "load"
-    download "common-color.sh" "chmod" "load"
-    download "common-country.sh" "chmod" "load"
-    download "common-menu.sh" "chmod" "load"
-    download "common-package.sh" "chmod" "load"
-    download "common-feed-package.sh" "chmod" "load"
+    download_task "common-system.sh" "chmod" "load"
+    download_task "common-information.sh" "chmod" "load"
+    download_task "common-translation.sh" "chmod" "load"
+    download_task "common-color.sh" "chmod" "load"
+    download_task "common-country.sh" "chmod" "load"
+    download_task "common-menu.sh" "chmod" "load"
+    download_task "common-package.sh" "chmod" "load"
+    download_task "common-feed-package.sh" "chmod" "load"
 
-    download "menu.db"
-    download "country.db"
-    download "message_${DEFAULT_LANGUAGE}.db"
-    download "local-package.db"
-    download "custom-package.db"
+    download_task "menu.db"
+    download_task "country.db"
+    download_task "message_${DEFAULT_LANGUAGE}.db"
+    download_task "local-package.db"
+    download_task "custom-package.db"
 }
 
 check_common() {
